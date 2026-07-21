@@ -9,7 +9,21 @@ public sealed record StepOutcome(int StepOrder, string Label, string ActionType,
 public sealed record RunResult(bool Ok, string WorkflowId, IReadOnlyList<StepOutcome> Steps, string Error)
 {
     public int Completed => Steps.Count(s => s.Ok);
+
+    /// <summary>
+    /// True si hubo que alinearse conscientemente (abrir/enfocar la app) porque no estábamos en la
+    /// superficie del workflow. El caller usa esto para APRENDER: prepend del step de alineación al
+    /// workflow, así la próxima vez corre entero por el sistema subconsciente. Es el loop consciente→subconsciente.
+    /// </summary>
+    public bool AlignedConsciously { get; init; }
 }
+
+/// <summary>
+/// Lleva el foco a la superficie donde nació el workflow (<paramref name="targetOrigin"/>), consultando
+/// <paramref name="currentOrigin"/> para confirmar. Lo implementa el cliente (AppAligner): enfocar o
+/// abrir la app. Devuelve true si al terminar estamos en el origin.
+/// </summary>
+public delegate Task<bool> SurfaceAligner(string targetOrigin, Func<string> currentOrigin, CancellationToken ct);
 
 /// <summary>
 /// Ejecuta un workflow de Graph sobre la superficie que toque.
@@ -31,6 +45,13 @@ public sealed class WorkflowPlayer
 
     /// <summary>Se dispara por cada paso ejecutado.</summary>
     public event EventHandler<StepOutcome>? StepDone;
+
+    /// <summary>
+    /// Opcional: si está y detectamos que no estamos en la superficie del workflow, en vez de fallar
+    /// se intenta alinear conscientemente (abrir/enfocar la app) y recién ahí ejecutar. Lo pone el
+    /// cliente (AppAligner.EnsureAsync). Sin él, el comportamiento es el de antes: fallar con el mismatch.
+    /// </summary>
+    public SurfaceAligner? Aligner { get; set; }
 
     public WorkflowPlayer(GraphClient graph, GraphConfig config, params IUiSurface[] surfaces)
     {
@@ -67,20 +88,43 @@ public sealed class WorkflowPlayer
             return new RunResult(false, workflowId, Array.Empty<StepOutcome>(),
                 "Graph no devolvió ningún paso ejecutable para este workflow.");
 
-        // La superficie se deduce del selector del primer paso, no de una config: el workflow sabe
-        // dónde nació.
-        IUiSurface? surface = SurfaceFor(plan.Steps[0].Selector);
+        // La superficie se deduce del primer paso REAL, no de una config: el workflow sabe dónde nació.
+        // Los steps de alineación (`app:`) no pertenecen a ninguna superficie de ejecución — los
+        // resuelve el Aligner —, así que se saltan al elegir la superficie.
+        bool hasAlignmentStep = plan.Steps.Any(IsAlignmentStep);
+        PlanStep? firstReal = plan.Steps.OrderBy(s => s.StepOrder).FirstOrDefault(s => !IsAlignmentStep(s));
+        IUiSurface? surface = firstReal != null ? SurfaceFor(firstReal.Selector) : null;
         if (surface == null)
             return new RunResult(false, workflowId, Array.Empty<StepOutcome>(),
-                $"Este workflow se grabó en una superficie que este cliente no maneja ({plan.Steps[0].Selector}).");
+                $"Este workflow se grabó en una superficie que este cliente no maneja ({firstReal?.Selector ?? plan.Steps[0].Selector}).");
 
         var availability = surface.Check();
         if (!availability.Available)
             return new RunResult(false, workflowId, Array.Empty<StepOutcome>(), availability.Reason);
 
-        if (strictSurface)
+        // Si el workflow YA aprendió a alinearse (tiene un step `app:`), no se hace el pre-check: ese
+        // step, al ejecutarse primero, lleva el foco a la superficie. Solo se aprende (pre-check +
+        // prepend) cuando aún NO tiene el step de alineación.
+        bool alignedConsciously = false;
+        if (strictSurface && !hasAlignmentStep)
         {
             string? mismatch = SurfaceMismatch(surface.Identity(), plan);
+            if (mismatch != null && Aligner != null && !string.IsNullOrWhiteSpace(plan.SourceOrigin))
+            {
+                // No estamos donde nació el workflow: alinearse conscientemente (abrir/enfocar la app)
+                // y reintentar la comprobación. Este es el eslabón consciente del loop.
+                bool reached = await Aligner(plan.SourceOrigin, () => surface.Identity().Origin, ct);
+                string? after = SurfaceMismatch(surface.Identity(), plan);
+                if (reached && after == null)
+                {
+                    alignedConsciously = true;
+                    mismatch = null;
+                }
+                else
+                {
+                    mismatch = after ?? mismatch;
+                }
+            }
             if (mismatch != null)
                 return new RunResult(false, workflowId, Array.Empty<StepOutcome>(), mismatch);
         }
@@ -90,6 +134,20 @@ public sealed class WorkflowPlayer
         {
             if (ct.IsCancellationRequested)
                 return new RunResult(false, workflowId, outcomes, "Ejecución cancelada.");
+
+            // Step de alineación (`app:`): no lo ejecuta una superficie, lo resuelve el Aligner
+            // (abrir/enfocar la app). Idempotente: si ya estamos ahí, no hace nada.
+            if (IsAlignmentStep(step))
+            {
+                bool reached = Aligner != null
+                    && await Aligner(plan.SourceOrigin, () => surface.Identity().Origin, ct);
+                if (!reached) reached = SurfaceMismatch(surface.Identity(), plan) == null;
+                if (!Report(step, reached, reached ? "" : "no me pude alinear con la superficie del workflow", outcomes))
+                    return new RunResult(false, workflowId, outcomes,
+                        $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}");
+                await Task.Delay(Math.Clamp(_config.StepDelayMs, 0, 5000), ct);
+                continue;
+            }
 
             // Un workflow puede cruzar superficies (empieza en UIA, sigue en SAP): se reelige por paso.
             IUiSurface? target = SurfaceFor(step.Selector) ?? surface;
@@ -120,7 +178,7 @@ public sealed class WorkflowPlayer
             await Task.Delay(Math.Clamp(_config.StepDelayMs, 0, 5000), ct);
         }
 
-        return new RunResult(true, workflowId, outcomes, "");
+        return new RunResult(true, workflowId, outcomes, "") { AlignedConsciously = alignedConsciously };
     }
 
     private bool Report(PlanStep step, bool ok, string error, List<StepOutcome> acc)
@@ -133,6 +191,10 @@ public sealed class WorkflowPlayer
 
     private static string Reason(string error) =>
         string.IsNullOrWhiteSpace(error) ? "el paso no se pudo ejecutar" : error;
+
+    /// <summary>Un step de alineación de superficie (lo antepone el aprendizaje consciente→subconsciente).</summary>
+    private static bool IsAlignmentStep(PlanStep step) =>
+        (step.Selector ?? "").StartsWith("app:", StringComparison.OrdinalIgnoreCase);
 
     private IUiSurface? SurfaceFor(string selector)
     {

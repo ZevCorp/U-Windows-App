@@ -45,7 +45,10 @@ public partial class WorkflowLibraryWindow : Window
         _userId = userId;
 
         _graphClient = new GraphClient(_graphConfig);
-        _player = new WorkflowPlayer(_graphClient, _graphConfig, _uia, _sap);
+        _player = new WorkflowPlayer(_graphClient, _graphConfig, _uia, _sap)
+        {
+            Aligner = U.WindowsClient.Uia.AppAligner.EnsureAsync
+        };
         _player.StepDone += (_, outcome) => Dispatcher.Invoke(() => AppendProgress(outcome));
 
         _noteDebounce = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(700) };
@@ -68,7 +71,10 @@ public partial class WorkflowLibraryWindow : Window
         _graphConfig.Save();
         // GraphClient fija el header X-API-Key al construirse: si la key cambió, hay que recrearlo.
         _graphClient = new GraphClient(_graphConfig);
-        _player = new WorkflowPlayer(_graphClient, _graphConfig, _uia, _sap);
+        _player = new WorkflowPlayer(_graphClient, _graphConfig, _uia, _sap)
+        {
+            Aligner = U.WindowsClient.Uia.AppAligner.EnsureAsync
+        };
         _player.StepDone += (_, outcome) => Dispatcher.Invoke(() => AppendProgress(outcome));
         ConnStatus.Text = "Guardado.";
     }
@@ -206,8 +212,12 @@ public partial class WorkflowLibraryWindow : Window
         {
             RunResult result = await _player.RunAsync(wf.Id, null, ForceSurface.IsChecked != true, _runCts.Token);
             StatusLine.Text = result.Ok
-                ? $"«{wf.Title}» terminó bien: {result.Completed}/{result.Steps.Count} pasos."
+                ? (result.AlignedConsciously
+                    ? $"«{wf.Title}» terminó bien (me alineé abriendo la app): {result.Completed}/{result.Steps.Count} pasos."
+                    : $"«{wf.Title}» terminó bien: {result.Completed}/{result.Steps.Count} pasos.")
                 : $"«{wf.Title}» se detuvo: {result.Error}";
+            if (result.Ok && result.AlignedConsciously)
+                _ = _graphClient.PrependAlignmentStepAsync(wf.Id, _runCts.Token); // aprende a alcanzar su superficie
         }
         catch (Exception ex)
         {

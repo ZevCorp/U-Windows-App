@@ -83,6 +83,20 @@ public sealed class GraphClient
         return res.Workflows;
     }
 
+    /// <summary>
+    /// Enseña al workflow a alcanzar su propia superficie: prepend de un step de alineación (abrir/enfocar
+    /// la app) en orden 0, para que la próxima vez arranque solo. Graph deriva la app del sourceOrigin ya
+    /// guardado del workflow. Best-effort: si el backend aún no lo soporta, no interrumpe nada.
+    /// </summary>
+    public async Task PrependAlignmentStepAsync(string workflowId, CancellationToken ct)
+    {
+        try
+        {
+            await PostAsync<JsonElement>($"/api/v1/workflows/{Escape(workflowId)}/prepend-alignment", new { }, ct);
+        }
+        catch { /* aprendizaje best-effort */ }
+    }
+
     /// <summary>Pide el plan ejecutable. Graph ya filtra los steps no ejecutables.</summary>
     public async Task<ExecutionPlan> GetPlanAsync(
         string workflowId, Dictionary<string, string>? variables, Dictionary<string, string>? intent,

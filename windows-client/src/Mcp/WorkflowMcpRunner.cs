@@ -1,6 +1,7 @@
 using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Agent;
+using U.WindowsClient.Uia;
 
 namespace U.WindowsClient.Mcp;
 
@@ -32,7 +33,11 @@ public sealed class WorkflowMcpRunner
             return "workflows no disponibles: falta la API key de Graph (graph.json)";
 
         var graph = new GraphClient(_graphConfig);
-        var player = new WorkflowPlayer(graph, _graphConfig, _uia, _sap);
+        var player = new WorkflowPlayer(graph, _graphConfig, _uia, _sap)
+        {
+            // Alineación consciente: si no estamos en la superficie del workflow, abrir/enfocar la app.
+            Aligner = AppAligner.EnsureAsync
+        };
         player.StepDone += (_, outcome) =>
             _voice.Narrate(outcome.Ok ? $"✓ {outcome.Label}" : $"✗ {outcome.Label}: {outcome.Error}");
 
@@ -41,8 +46,14 @@ public sealed class WorkflowMcpRunner
             : new Dictionary<string, string> { ["context"] = context };
 
         // strictSurface: el cerebro eligió este workflow porque ESTA superficie coincide; si al
-        // ejecutarse ya no coincide (el usuario navegó), mejor parar que tocar la pantalla equivocada.
+        // ejecutarse ya no coincide (el usuario navegó), el Aligner se alinea antes de tocar nada.
         RunResult result = await player.RunAsync(workflowId, variables, strictSurface: true, ct);
+        if (result.Ok && result.AlignedConsciously)
+        {
+            // APRENDIZAJE: me tuve que alinear conscientemente. Enseñárselo al workflow para que la
+            // próxima vez arranque solo desde el principio (loop consciente→subconsciente).
+            _ = graph.PrependAlignmentStepAsync(workflowId, ct);
+        }
         return result.Ok
             ? $"ok — workflow completado ({result.Completed} pasos)"
             : $"el workflow falló: {result.Error}";
