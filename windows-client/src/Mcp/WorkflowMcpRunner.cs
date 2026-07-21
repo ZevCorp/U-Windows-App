@@ -1,6 +1,7 @@
 using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Agent;
+using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Uia;
 
 namespace U.WindowsClient.Mcp;
@@ -27,6 +28,7 @@ public sealed class WorkflowMcpRunner
 
     public async Task<string> RunAsync(string workflowId, string context, CancellationToken ct)
     {
+        LogBus.Log("workflow", $"MCP invoca workflow_id='{workflowId}' context='{context}'");
         if (string.IsNullOrWhiteSpace(workflowId))
             return "la llamada al workflow no trajo workflow_id";
         if (!_graphConfig.IsConfigured)
@@ -36,7 +38,8 @@ public sealed class WorkflowMcpRunner
         var player = new WorkflowPlayer(graph, _graphConfig, _uia, _sap)
         {
             // Alineación consciente: si no estamos en la superficie del workflow, abrir/enfocar la app.
-            Aligner = AppAligner.EnsureAsync
+            Aligner = AppAligner.EnsureAsync,
+            Log = s => LogBus.Log("workflow", s)
         };
         player.StepDone += (_, outcome) =>
             _voice.Narrate(outcome.Ok ? $"✓ {outcome.Label}" : $"✗ {outcome.Label}: {outcome.Error}");
@@ -48,10 +51,12 @@ public sealed class WorkflowMcpRunner
         // strictSurface: el cerebro eligió este workflow porque ESTA superficie coincide; si al
         // ejecutarse ya no coincide (el usuario navegó), el Aligner se alinea antes de tocar nada.
         RunResult result = await player.RunAsync(workflowId, variables, strictSurface: true, ct);
+        LogBus.Log("workflow", $"resultado: ok={result.Ok} · pasos={result.Completed}/{result.Steps.Count} · alineado={result.AlignedConsciously}{(result.Ok ? "" : " · error=" + result.Error)}");
         if (result.Ok && result.AlignedConsciously)
         {
             // APRENDIZAJE: me tuve que alinear conscientemente. Enseñárselo al workflow para que la
             // próxima vez arranque solo desde el principio (loop consciente→subconsciente).
+            LogBus.Log("workflow", $"aprendiendo alineación → prepend en {workflowId}");
             _ = graph.PrependAlignmentStepAsync(workflowId, ct);
         }
         return result.Ok

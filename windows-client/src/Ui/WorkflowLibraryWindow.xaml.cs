@@ -47,7 +47,8 @@ public partial class WorkflowLibraryWindow : Window
         _graphClient = new GraphClient(_graphConfig);
         _player = new WorkflowPlayer(_graphClient, _graphConfig, _uia, _sap)
         {
-            Aligner = U.WindowsClient.Uia.AppAligner.EnsureAsync
+            Aligner = U.WindowsClient.Uia.AppAligner.EnsureAsync,
+            Log = s => LogBus.Log("workflow", s)
         };
         _player.StepDone += (_, outcome) => Dispatcher.Invoke(() => AppendProgress(outcome));
 
@@ -73,7 +74,8 @@ public partial class WorkflowLibraryWindow : Window
         _graphClient = new GraphClient(_graphConfig);
         _player = new WorkflowPlayer(_graphClient, _graphConfig, _uia, _sap)
         {
-            Aligner = U.WindowsClient.Uia.AppAligner.EnsureAsync
+            Aligner = U.WindowsClient.Uia.AppAligner.EnsureAsync,
+            Log = s => LogBus.Log("workflow", s)
         };
         _player.StepDone += (_, outcome) => Dispatcher.Invoke(() => AppendProgress(outcome));
         ConnStatus.Text = "Guardado.";

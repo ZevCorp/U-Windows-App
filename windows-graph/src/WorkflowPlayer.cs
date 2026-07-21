@@ -47,6 +47,14 @@ public sealed class WorkflowPlayer
     public event EventHandler<StepOutcome>? StepDone;
 
     /// <summary>
+    /// Log de diagnóstico (opcional). windows-graph no depende de windows-client, así que el cliente
+    /// enchufa aquí su LogBus. Registra las decisiones de superficie/alineación/steps — el punto ciego
+    /// que hacía difícil ver por qué un run se alineaba y el siguiente no.
+    /// </summary>
+    public Action<string>? Log { get; set; }
+    private void L(string msg) { try { Log?.Invoke(msg); } catch { } }
+
+    /// <summary>
     /// Opcional: si está y detectamos que no estamos en la superficie del workflow, en vez de fallar
     /// se intenta alinear conscientemente (abrir/enfocar la app) y recién ahí ejecutar. Lo pone el
     /// cliente (AppAligner.EnsureAsync). Sin él, el comportamiento es el de antes: fallar con el mismatch.
@@ -84,6 +92,10 @@ public sealed class WorkflowPlayer
             return new RunResult(false, workflowId, Array.Empty<StepOutcome>(), e.Message);
         }
 
+        L($"plan {workflowId}: {plan.Steps.Count} steps · sourceOrigin='{plan.SourceOrigin}' pathname='{plan.SourcePathname}'");
+        for (int i = 0; i < plan.Steps.Count; i++)
+            L($"  step[{plan.Steps[i].StepOrder}] {plan.Steps[i].ActionType} · sel='{plan.Steps[i].Selector}' · '{plan.Steps[i].Label}'");
+
         if (plan.Steps.Count == 0)
             return new RunResult(false, workflowId, Array.Empty<StepOutcome>(),
                 "Graph no devolvió ningún paso ejecutable para este workflow.");
@@ -105,16 +117,20 @@ public sealed class WorkflowPlayer
         // Si el workflow YA aprendió a alinearse (tiene un step `app:`), no se hace el pre-check: ese
         // step, al ejecutarse primero, lleva el foco a la superficie. Solo se aprende (pre-check +
         // prepend) cuando aún NO tiene el step de alineación.
+        L($"superficie actual: origin='{surface.Identity().Origin}' pathname='{surface.Identity().Pathname}' · hasAlignmentStep={hasAlignmentStep} · strictSurface={strictSurface}");
         bool alignedConsciously = false;
         if (strictSurface && !hasAlignmentStep)
         {
             string? mismatch = SurfaceMismatch(surface.Identity(), plan);
+            L(mismatch == null ? "pre-check: ya estamos en la superficie" : $"pre-check mismatch: {mismatch}");
             if (mismatch != null && Aligner != null && !string.IsNullOrWhiteSpace(plan.SourceOrigin))
             {
                 // No estamos donde nació el workflow: alinearse conscientemente (abrir/enfocar la app)
                 // y reintentar la comprobación. Este es el eslabón consciente del loop.
+                L($"alineando conscientemente → {plan.SourceOrigin}");
                 bool reached = await Aligner(plan.SourceOrigin, () => surface.Identity().Origin, ct);
                 string? after = SurfaceMismatch(surface.Identity(), plan);
+                L($"aligner reached={reached} · post-align mismatch={(after ?? "ninguno")}");
                 if (reached && after == null)
                 {
                     alignedConsciously = true;
@@ -124,6 +140,10 @@ public sealed class WorkflowPlayer
                 {
                     mismatch = after ?? mismatch;
                 }
+            }
+            else if (mismatch != null)
+            {
+                L($"NO se intenta alinear (Aligner={(Aligner != null)}, sourceOrigin='{plan.SourceOrigin}')");
             }
             if (mismatch != null)
                 return new RunResult(false, workflowId, Array.Empty<StepOutcome>(), mismatch);
@@ -139,9 +159,11 @@ public sealed class WorkflowPlayer
             // (abrir/enfocar la app). Idempotente: si ya estamos ahí, no hace nada.
             if (IsAlignmentStep(step))
             {
+                L($"step alineación '{step.Selector}' → objetivo '{plan.SourceOrigin}', actual '{surface.Identity().Origin}'");
                 bool reached = Aligner != null
                     && await Aligner(plan.SourceOrigin, () => surface.Identity().Origin, ct);
                 if (!reached) reached = SurfaceMismatch(surface.Identity(), plan) == null;
+                L($"step alineación resultado: reached={reached}");
                 if (!Report(step, reached, reached ? "" : "no me pude alinear con la superficie del workflow", outcomes))
                     return new RunResult(false, workflowId, outcomes,
                         $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}");
@@ -185,6 +207,7 @@ public sealed class WorkflowPlayer
     {
         var outcome = new StepOutcome(step.StepOrder, step.Label ?? "", step.ActionType, ok, error);
         acc.Add(outcome);
+        L($"step[{step.StepOrder}] {(ok ? "OK" : "FALLÓ")} '{step.Label}'{(ok ? "" : " · " + error)}");
         try { StepDone?.Invoke(this, outcome); } catch { }
         return ok;
     }

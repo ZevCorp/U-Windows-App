@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using U.WindowsClient.Diagnostics;
 using U.WindowsClient.SystemApi;
 
 namespace U.WindowsClient.Uia;
@@ -37,20 +38,33 @@ public static class AppAligner
     /// </summary>
     public static async Task<bool> EnsureAsync(string targetOrigin, Func<string> currentOrigin, CancellationToken ct)
     {
-        if (Matches(currentOrigin(), targetOrigin)) return true;
-        if (!targetOrigin.StartsWith("uia://", StringComparison.OrdinalIgnoreCase)) return false;
+        string current = currentOrigin();
+        LogBus.Log("align", $"EnsureAsync target='{targetOrigin}' actual='{current}'");
+        if (Matches(current, targetOrigin)) { LogBus.Log("align", "ya alineado (no toco nada)"); return true; }
+        if (!targetOrigin.StartsWith("uia://", StringComparison.OrdinalIgnoreCase))
+        {
+            LogBus.Log("align", $"origin no es uia:// — no sé abrir esta superficie ({targetOrigin})");
+            return false;
+        }
 
         string proc = ProcessFromOrigin(targetOrigin);
-        if (string.IsNullOrWhiteSpace(proc)) return false;
+        if (string.IsNullOrWhiteSpace(proc)) { LogBus.Log("align", "no pude derivar el proceso del origin"); return false; }
 
-        if (!FocusOrLaunch(proc)) return false;
+        bool focused = FocusOrLaunch(proc);
+        LogBus.Log("align", $"proceso='{proc}' · FocusOrLaunch={focused}");
+        if (!focused) return false;
 
         // Esperar a que el foco realmente cambie (lanzar una app tarda; enfocar es rápido).
         for (int i = 0; i < 24 && !ct.IsCancellationRequested; i++)
         {
             await Task.Delay(250, ct);
-            if (Matches(currentOrigin(), targetOrigin)) return true;
+            if (Matches(currentOrigin(), targetOrigin))
+            {
+                LogBus.Log("align", $"confirmado tras ~{(i + 1) * 250} ms");
+                return true;
+            }
         }
+        LogBus.Log("align", $"NO confirmó tras 6s · actual='{currentOrigin()}' (esperaba '{targetOrigin}')");
         return Matches(currentOrigin(), targetOrigin);
     }
 
