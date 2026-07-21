@@ -1,0 +1,18 @@
+# Secretos: nunca commitear claves
+.env
+.env.*
+*.local
+
+# .NET
+bin/
+obj/
+*.user
+
+# Node (backend legacy)
+node_modules/
+.vercel/
+
+# Artefactos
+out/
+release/
+*.log
