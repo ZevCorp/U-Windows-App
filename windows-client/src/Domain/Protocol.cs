@@ -16,6 +16,14 @@ public sealed class ScreenState
     [JsonPropertyName("screenshot")] public string? Screenshot { get; set; }
     /// <summary>Apps instaladas conocidas (resuelve list_apps y alimenta el prompt del cerebro).</summary>
     [JsonPropertyName("apps")] public string[]? Apps { get; set; }
+
+    /// <summary>
+    /// El "URL de Windows" del SurfaceLocator: dónde está parado el usuario. Con esto el cerebro
+    /// scopea los workflows que declara por MCP (solo los de esta superficie). Opcionales.
+    /// </summary>
+    [JsonPropertyName("surfaceId")] public string? SurfaceId { get; set; }
+    [JsonPropertyName("surfaceOrigin")] public string? SurfaceOrigin { get; set; }
+    [JsonPropertyName("surfacePathname")] public string? SurfacePathname { get; set; }
 }
 
 /// <summary>Petición a POST /api/agent/turn.</summary>

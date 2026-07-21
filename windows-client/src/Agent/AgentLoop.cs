@@ -34,10 +34,13 @@ public sealed class AgentLoop
     private readonly IVoice _voice;
     private readonly IUserChannel _user;
     private readonly Func<string[]> _installedApps;
+    private readonly Func<SurfaceLocator.SurfaceLocation?>? _surface;
+    private readonly WorkflowMcpRunner? _workflows;
     private readonly int _maxTurns;
 
     public AgentLoop(BackendClient backend, UiaReader uia, LocalMcp mcp, IVoice voice, IUserChannel user,
-        Func<string[]> installedApps, int maxTurns = 40)
+        Func<string[]> installedApps, Func<SurfaceLocator.SurfaceLocation?>? surface = null,
+        WorkflowMcpRunner? workflows = null, int maxTurns = 40)
     {
         _backend = backend;
         _uia = uia;
@@ -45,6 +48,8 @@ public sealed class AgentLoop
         _voice = voice;
         _user = user;
         _installedApps = installedApps;
+        _surface = surface;
+        _workflows = workflows;
         _maxTurns = maxTurns;
     }
 
@@ -101,7 +106,7 @@ public sealed class AgentLoop
                 if (ct.IsCancellationRequested) break;
                 if (i < resp.Intents.Count && !string.IsNullOrWhiteSpace(resp.Intents[i]))
                     _voice.Narrate(resp.Intents[i]);
-                outResults.Add(Execute(resp.Actions[i]));
+                outResults.Add(await ExecuteAsync(resp.Actions[i], ct));
                 actions++;
                 if (resp.Actions.Count > 1) await Task.Delay(350, ct);
             }
@@ -134,13 +139,31 @@ public sealed class AgentLoop
         // UIA puede bloquear; se corre fuera del hilo de UI.
         var state = await Task.Run(() => _uia.Read());
         state.Apps = _installedApps();
+        // El "URL de Windows": con esto el cerebro scopea qué workflows declara por MCP este turno.
+        var loc = _surface?.Invoke();
+        if (loc != null)
+        {
+            state.SurfaceId = loc.Id;
+            state.SurfaceOrigin = loc.Origin;
+            state.SurfacePathname = loc.Path;
+        }
         if (withScreenshot)
             state.Screenshot = await Task.Run(Screenshotter.CaptureBase64Png);
         return state;
     }
 
-    private string Execute(AgentAction a)
+    private async Task<string> ExecuteAsync(AgentAction a, CancellationToken ct)
     {
+        // Workflows (subconsciente invocado desde el consciente): el cerebro inyectó workflow_id en
+        // los args; se ejecutan con el WorkflowPlayer, no con el registro MCP local.
+        if (a.Kind == "mcp" && _workflows != null &&
+            (a.Tool ?? "").StartsWith("workflow_", StringComparison.OrdinalIgnoreCase))
+        {
+            string id = a.Args != null && a.Args.TryGetValue("workflow_id", out var wid) ? wid : "";
+            string context = a.Args != null && a.Args.TryGetValue("context", out var c) ? c : "";
+            return await _workflows.RunAsync(id, context, ct);
+        }
+
         return a.Kind switch
         {
             "tap" => InputExecutor.Tap(a.X, a.Y) ? "ok" : "no se pudo ejecutar la acción",
@@ -148,15 +171,15 @@ public sealed class AgentLoop
             "scroll" => InputExecutor.Scroll(a.Down) ? "ok" : "no se pudo ejecutar la acción",
             "swipe" => InputExecutor.Swipe(a.X1, a.Y1, a.X2, a.Y2, a.Ms) ? "ok" : "no se pudo ejecutar la acción",
             "key" => InputExecutor.Key(a.Key ?? "") ? "ok" : "no se pudo ejecutar la acción",
-            "wait" => Wait(a.Ms),
+            "wait" => await WaitAsync(a.Ms, ct),
             "mcp" => _mcp.Call(a.Tool ?? "", a.Args ?? new Dictionary<string, string>()),
             _ => $"acción desconocida: {a.Kind}",
         };
     }
 
-    private static string Wait(int ms)
+    private static async Task<string> WaitAsync(int ms, CancellationToken ct)
     {
-        Thread.Sleep(Math.Clamp(ms, 0, 10000));
+        await Task.Delay(Math.Clamp(ms, 0, 10000), ct);
         return "ok";
     }
 }

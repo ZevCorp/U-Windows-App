@@ -35,6 +35,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private WorkflowLibraryWindow? _workflowWindow;
     private TeachSession? _teachSession;
     private bool _teaching;
+    private UiInspector? _inspector;
+    private SurfaceLocator? _locator;
+    private LocatorBadge? _badge;
+    private WorkflowMcpRunner? _workflowRunner;
 
     // Para resolver preguntas del asistente desde la caja de texto.
     private TaskCompletionSource<string>? _pendingAnswer;
@@ -56,14 +60,31 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         SizeChanged += OnSizeChanged;
 
         BackendUrl.Text = _config.BackendUrl;
-        ClientToken.Text = _config.ClientToken ?? "";
         SetMuted(_config.Muted); // si lo silenciaron en una sesión anterior, sigue mudo
+        Closed += (_, __) =>
+        {
+            _inspector?.Dispose(); // suelta el hook global de mouse al cerrar
+            _locator?.Dispose();
+            _badge?.Close();
+        };
+
+        // El "location bar de Windows": arranca encendido mostrando el ID de superficie arriba a la
+        // derecha. Es la base del scoping de workflows (mismo formato que source_url en Graph).
+        _badge = new LocatorBadge();
+        _badge.Show();
+        _locator = new SurfaceLocator();
+        _locator.Changed += loc => Dispatcher.Invoke(() => _badge?.SetText(loc.Id));
+        _locator.Start();
 
         var mcp = new LocalMcp(_uia);
         // El backend es Graph: la credencial (X-API-Key) sale del MISMO GraphConfig que usa la
         // ventana de workflows — una sola fuente de key para toda la app.
         _backend = new BackendClient(_config, _graphConfig);
-        _loop = new AgentLoop(_backend, _uia, mcp, this, this, InstalledApps.List);
+        // La superficie actual viaja en cada turno (scoping de workflows) y las llamadas
+        // workflow_* del cerebro se ejecutan con el WorkflowPlayer (subconsciente).
+        _workflowRunner = new WorkflowMcpRunner(_graphConfig, this);
+        _loop = new AgentLoop(_backend, _uia, mcp, this, this, InstalledApps.List,
+            () => _locator?.Current, _workflowRunner);
 
         Header.MouseLeftButtonDown += (_, ev) => { if (ev.ButtonState == MouseButtonState.Pressed) DragMove(); };
 
@@ -310,14 +331,46 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void OnSaveConfig(object sender, RoutedEventArgs e)
     {
         _config.BackendUrl = BackendUrl.Text.Trim();
-        _config.ClientToken = string.IsNullOrWhiteSpace(ClientToken.Text) ? null : ClientToken.Text.Trim();
         _config.Save();
-        // Recablea el cliente con la nueva URL/token (el token solo aplica contra el backend viejo;
-        // contra Graph la key sale de graph.json).
+        // Recablea el cliente con la nueva URL (la credencial contra Graph sale de graph.json,
+        // vía X-API-Key; el ClientToken legacy ya no se expone en la UI).
         var mcp = new LocalMcp(_uia);
         _backend = new BackendClient(_config, _graphConfig);
-        _loop = new AgentLoop(_backend, _uia, mcp, this, this, InstalledApps.List);
+        _loop = new AgentLoop(_backend, _uia, mcp, this, this, InstalledApps.List,
+            () => _locator?.Current, _workflowRunner);
         SetStatus("Backend guardado");
+    }
+
+    /// <summary>
+    /// Enciende/apaga el inspector visual de elementos (overlay click-through con recuadros +
+    /// diagnóstico de clic amarillo/rojo). Ver <see cref="UiInspector"/>.
+    /// </summary>
+    private void OnToggleInspector(object sender, RoutedEventArgs e)
+    {
+        _inspector ??= new UiInspector();
+        bool on = _inspector.Toggle();
+        InspectorBtn.Content = on ? "🔍 Inspector activo — clic para apagar" : "🔍 Inspector de elementos";
+        SetStatus(on ? "Inspector de elementos activo" : "Inspector apagado");
+    }
+
+    /// <summary>Muestra/oculta el ID de superficie (badge arriba a la derecha). Ver <see cref="SurfaceLocator"/>.</summary>
+    private void OnToggleLocator(object sender, RoutedEventArgs e)
+    {
+        if (_locator == null || _badge == null) return;
+        if (_locator.Active)
+        {
+            _locator.Stop();
+            _badge.Hide();
+            LocatorBtn.Content = "📍 ID de superficie";
+            SetStatus("Localizador apagado");
+        }
+        else
+        {
+            _locator.Start();
+            _badge.Show();
+            LocatorBtn.Content = "📍 ID visible — clic para ocultar";
+            SetStatus("Localizador activo");
+        }
     }
 
     private async Task StartGoal(string goal)
