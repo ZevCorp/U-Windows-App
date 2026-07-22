@@ -1,0 +1,79 @@
+name: Windows release
+
+# Disparado por Graph (Provider Studio → "Distribuir App"). Reproduce en CI
+# los mismos pasos de windows-client/scripts/publish-release.ps1, y agrega
+# la subida automática a Supabase (`vpk upload s3`) que ese script hoy deja
+# manual. Ver RELEASING-WINDOWS.md para el flujo de referencia.
+
+run-name: "Windows release ${{ inputs.version }} (${{ inputs.request_id }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "SemVer a empaquetar, ej. 1.0.4 (lo calcula Graph)"
+        required: true
+        type: string
+      request_id:
+        description: "Id de correlación que usa Graph para encontrar este run"
+        required: true
+        type: string
+      dry_run:
+        description: "Solo probar el pipeline (sin publish/pack/upload reales)"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Instalar vpk
+        if: ${{ inputs.dry_run != true }}
+        run: dotnet tool install -g vpk
+
+      - name: Publicar U.exe
+        if: ${{ inputs.dry_run != true }}
+        run: >
+          dotnet publish windows-client\WindowsClient.csproj
+          -c Release -r win-x64 --self-contained true -o out\assistant
+
+      - name: Empaquetar con Velopack
+        if: ${{ inputs.dry_run != true }}
+        run: >
+          vpk pack -u U -v ${{ inputs.version }} -p out\assistant -e U.exe
+          -o out\releases --icon windows-client\U.ico
+
+      - name: Subir a Supabase (compatible con S3)
+        if: ${{ inputs.dry_run != true }}
+        env:
+          VPK_S3_ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
+          VPK_S3_REGION: ${{ secrets.SUPABASE_S3_REGION }}
+          VPK_S3_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
+          VPK_S3_SECRET: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
+        run: >
+          vpk upload s3 -o out\releases -c win --bucket windows
+          --endpoint $env:VPK_S3_ENDPOINT --region $env:VPK_S3_REGION
+          --keyId $env:VPK_S3_KEY_ID --secret $env:VPK_S3_SECRET
+
+      - name: Smoke test (dry run)
+        if: ${{ inputs.dry_run == true }}
+        run: Write-Host "Dry run OK — version ${{ inputs.version }}, request ${{ inputs.request_id }}"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ inputs.dry_run != true }}
+        with:
+          name: windows-release-${{ inputs.version }}
+          path: out/releases/**
+          if-no-files-found: error
