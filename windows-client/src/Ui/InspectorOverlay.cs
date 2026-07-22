@@ -26,15 +26,24 @@ public sealed class InspectorOverlay : Window
     private readonly Canvas _canvas = new();
     private Matrix _fromDevice = Matrix.Identity;
     private readonly List<Rect> _neutral = new();
+    private readonly List<(Rect box, string caption, bool shell)> _sap = new();
     private (Rect clicked, Rect? intended, bool mismatch)? _flash;
 
-    // Paleta: neutro (todo lo detectado), amarillo (clic que coincide con lo que el asistente tocaría),
-    // rojo (mismatch — se marcan AMBOS: sólido lo que cliqueaste, punteado lo que el asistente tocaría).
+    // Paleta: neutro (todo lo detectado por UIA), amarillo (clic que coincide con lo que el asistente
+    // tocaría), rojo (mismatch — se marcan AMBOS: sólido lo que cliqueaste, punteado lo que el asistente
+    // tocaría). SAP va aparte en cian (campos/botones) y ámbar (shells: árbol, grid) para que se vea de
+    // un vistazo qué llega por Scripting y qué por UIA.
     private static readonly Brush NeutralStroke = Frozen(0x66, 0xFF, 0xFF, 0xFF);
     private static readonly Brush YellowStroke = Frozen(0xFF, 0xF2, 0xC2, 0x00);
     private static readonly Brush YellowFill = Frozen(0x33, 0xF2, 0xC2, 0x00);
     private static readonly Brush RedStroke = Frozen(0xFF, 0xE5, 0x53, 0x4B);
     private static readonly Brush RedFill = Frozen(0x2E, 0xE5, 0x53, 0x4B);
+    private static readonly Brush SapStroke = Frozen(0xCC, 0x25, 0xC8, 0xE0);
+    private static readonly Brush SapFill = Frozen(0x1E, 0x25, 0xC8, 0xE0);
+    private static readonly Brush SapShellStroke = Frozen(0xFF, 0xFF, 0xA5, 0x1F);
+    private static readonly Brush SapShellFill = Frozen(0x22, 0xFF, 0xA5, 0x1F);
+    private static readonly Brush CaptionBg = Frozen(0xE0, 0x1A, 0x1A, 0x1A);
+    private static readonly Brush CaptionFg = Frozen(0xFF, 0xFF, 0xFF, 0xFF);
 
     private static Brush Frozen(byte a, byte r, byte g, byte b)
     {
@@ -49,6 +58,7 @@ public sealed class InspectorOverlay : Window
         AllowsTransparency = true;
         Background = Brushes.Transparent;
         Topmost = true;
+        ShowActivated = false; // no robar el foco a la app de abajo (SAP): el overlay solo dibuja
         ShowInTaskbar = false;
         ResizeMode = ResizeMode.NoResize;
         IsHitTestVisible = false;
@@ -72,11 +82,22 @@ public sealed class InspectorOverlay : Window
         if (src?.CompositionTarget != null) _fromDevice = src.CompositionTarget.TransformFromDevice;
     }
 
-    /// <summary>Recuadros persistentes de todos los elementos accionables detectados.</summary>
+    /// <summary>Recuadros persistentes de todos los elementos accionables detectados por UIA.</summary>
     public void SetNeutral(IEnumerable<Rect> physicalRects)
     {
         _neutral.Clear();
         _neutral.AddRange(physicalRects);
+        Redraw();
+    }
+
+    /// <summary>
+    /// Recuadros de los elementos SAP leídos por Scripting (van en cian; los shells —árbol, grid— en
+    /// ámbar con rótulo). Se dibujan JUNTO a los de UIA: es la razón de ser del inspector doble.
+    /// </summary>
+    public void SetSap(IEnumerable<(Rect box, string caption, bool shell)> boxes)
+    {
+        _sap.Clear();
+        _sap.AddRange(boxes);
         Redraw();
     }
 
@@ -107,6 +128,16 @@ public sealed class InspectorOverlay : Window
     {
         _canvas.Children.Clear();
         foreach (var r in _neutral) AddBox(r, NeutralStroke, null, 1.0, false);
+
+        // SAP encima del neutro de UIA: los shells (árbol/grid) primero para que sus rótulos no queden
+        // tapados por las cajas de campos que caen dentro.
+        foreach (var s in _sap.Where(s => s.shell))
+        {
+            AddBox(s.box, SapShellStroke, SapShellFill, 2.0, false);
+            if (!string.IsNullOrWhiteSpace(s.caption)) AddCaption(s.box, s.caption);
+        }
+        foreach (var s in _sap.Where(s => !s.shell))
+            AddBox(s.box, SapStroke, SapFill, 1.2, false);
 
         if (_flash is { } f)
         {
@@ -140,5 +171,30 @@ public sealed class InspectorOverlay : Window
         Canvas.SetLeft(box, r.X);
         Canvas.SetTop(box, r.Y);
         _canvas.Children.Add(box);
+    }
+
+    /// <summary>Rótulo pegado a la esquina superior izquierda de una caja (para nombrar shells SAP).</summary>
+    private void AddCaption(Rect physical, string text)
+    {
+        Rect r = ToDip(physical);
+        if (r.Width <= 0 || r.Height <= 0 || double.IsInfinity(r.Width)) return;
+
+        var label = new Border
+        {
+            Background = CaptionBg,
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(4, 1, 4, 1),
+            Child = new TextBlock
+            {
+                Text = text.Length > 60 ? text.Substring(0, 59) + "…" : text,
+                Foreground = CaptionFg,
+                FontSize = 11,
+            },
+        };
+        // Encima del borde superior; si no cabe arriba (pegado al techo), lo mete justo dentro.
+        double top = r.Y - 18 >= 0 ? r.Y - 18 : r.Y + 1;
+        Canvas.SetLeft(label, r.X);
+        Canvas.SetTop(label, top);
+        _canvas.Children.Add(label);
     }
 }

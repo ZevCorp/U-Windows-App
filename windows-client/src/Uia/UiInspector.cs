@@ -40,6 +40,8 @@ public sealed class UiInspector : IDisposable
     // Un lector por rol para no compartir el estado mutable (Elements) entre el refresco periódico y el clic.
     private readonly UiaReader _refreshReader = new();
     private readonly UiaReader _clickReader = new();
+    // Mitad SAP del inspector: lee por Scripting lo que UIA no ve dentro de SAP GUI (árbol, barra, dynpro).
+    private readonly SapInspectorReader _sapReader = new();
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
 
     private InspectorOverlay? _overlay;
@@ -93,11 +95,38 @@ public sealed class UiInspector : IDisposable
             {
                 _refreshReader.Read();
                 var rects = _refreshReader.Elements.Select(e => e.Bounds).ToList();
-                _dispatcher.BeginInvoke(new Action(() => _overlay?.SetNeutral(rects)));
+
+                // Además de UIA, si SAP GUI está delante, léelo por Scripting y pinta sus elementos. La
+                // compuerta por proceso evita fantasmas: las coordenadas SAP son absolutas de pantalla,
+                // así que sin SAP en primer plano dibujaríamos cajas sobre otra app.
+                var sapBoxes = new List<(System.Windows.Rect, string, bool)>();
+                if (IsSapForeground(_refreshReader.ForegroundProcess))
+                {
+                    try
+                    {
+                        foreach (var b in _sapReader.Read())
+                            sapBoxes.Add((b.Bounds, b.Caption, b.IsShell));
+                    }
+                    catch { /* COM de SAP inestable: no romper el refresco de UIA */ }
+                }
+
+                _dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _overlay?.SetNeutral(rects);
+                    _overlay?.SetSap(sapBoxes);
+                }));
             }
             catch { /* UIA puede lanzar en árboles inestables */ }
         });
     }
+
+    /// <summary>
+    /// ¿La app en primer plano es SAP GUI? El front-end de SAP GUI for Windows corre bajo
+    /// <c>saplogon.exe</c> (y variantes históricas <c>sapgui</c>/<c>saplgpad</c>). Basta el prefijo
+    /// "sap" para cubrirlas sin listar versiones.
+    /// </summary>
+    private static bool IsSapForeground(string proc) =>
+        !string.IsNullOrEmpty(proc) && proc.StartsWith("sap", StringComparison.OrdinalIgnoreCase);
 
     private IntPtr HookCallback(int code, IntPtr wParam, IntPtr lParam)
     {

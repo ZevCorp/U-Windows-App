@@ -30,6 +30,9 @@ public sealed class UiaReader
     /// <summary>Snapshot de accionables del último <see cref="Read"/>. Sirve para taps por etiqueta.</summary>
     public IReadOnlyList<UiElement> Elements { get; private set; } = Array.Empty<UiElement>();
 
+    /// <summary>Nombre del proceso en primer plano en el último <see cref="Read"/> (p.ej. "saplogon", "notepad").</summary>
+    public string ForegroundProcess { get; private set; } = "";
+
     private static readonly HashSet<ControlType> Actionable = new()
     {
         ControlType.Button, ControlType.MenuItem, ControlType.ListItem, ControlType.TreeItem,
@@ -55,10 +58,12 @@ public sealed class UiaReader
             state.Screen = "escritorio";
             state.UiContext = "Escritorio de Windows (sin ventana en primer plano).";
             Elements = Array.Empty<UiElement>();
+            ForegroundProcess = "";
             return state;
         }
 
         string proc = ProcessName(hwnd);
+        ForegroundProcess = proc;
         AutomationElement? root = SafeFromHandle(hwnd);
         string title = root?.Current.Name ?? "";
         state.Screen = string.IsNullOrWhiteSpace(title) ? proc : $"{proc} · {title}";

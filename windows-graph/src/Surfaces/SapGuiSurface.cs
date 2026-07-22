@@ -196,6 +196,170 @@ public sealed class SapGuiSurface : IUiSurface
         return fields;
     }
 
+    // ── Lectura VISUAL (inspector) ─────────────────────────────────────────────
+
+    /// <summary>
+    /// SubTypes de shell que son LAYOUT puro (no contenido): no se enmarcan, solo se recorren para
+    /// llegar a sus hijos. El resto de shells (Tree, GridView, TextEdit, Picture, HTMLViewer…) SÍ son
+    /// contenido que el usuario ve y toca, y se enmarcan como una caja.
+    /// </summary>
+    private static readonly HashSet<string> LayoutShellSubTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Splitter", "Container", "Docking", "Dockshell",
+    };
+
+    /// <summary>
+    /// TODO lo visible de la pantalla SAP activa, con su geometría de PANTALLA, para el inspector visual.
+    /// A diferencia de <see cref="ReadFields"/> (que solo mira <c>wnd[0]/usr</c> y los campos de
+    /// formulario), esto recorre la ventana ENTERA (<c>session.ActiveWindow</c>): barra de herramientas,
+    /// código OK, títulos, y los shells como el árbol de SAP Easy Access. Es la mitad SAP de lo que el
+    /// overlay pinta; la otra mitad la pone UIA. Nunca lanza: si SAP/scripting no está, devuelve vacío.
+    /// </summary>
+    public IReadOnlyList<SapVisualElement> ReadVisibleElements()
+    {
+        var acc = new List<SapVisualElement>();
+        dynamic? session;
+        try { session = Session(); } catch { return acc; }
+        if (session == null) return acc;
+
+        dynamic? root = null;
+        try { root = session.ActiveWindow; } catch { }
+        if (root == null) { try { root = session.FindById("wnd[0]", false); } catch { } }
+        if (root == null) return acc;
+
+        try { WalkVisual(root, acc, 0); } catch { /* la pantalla puede cambiar bajo los pies */ }
+        return acc;
+    }
+
+    private static void WalkVisual(dynamic node, List<SapVisualElement> acc, int depth)
+    {
+        if (depth > 30 || acc.Count > 700) return;
+
+        string type; try { type = Str(node.Type); } catch { type = ""; }
+        bool isContainer; try { isContainer = (bool)node.ContainerType; } catch { isContainer = false; }
+        string subType = SubTypeOf(node);
+        bool isContentShell = subType.Length > 0 && !LayoutShellSubTypes.Contains(subType);
+
+        // Emitir HOJAS (botones, campos, labels, código OK, panes…) y SHELLS de contenido (árbol, grid…).
+        // Los contenedores estructurales (ventana, área de usuario, splitters) no se enmarcan: solo se
+        // recorren para alcanzar a sus hijos.
+        if (isContentShell || !isContainer)
+        {
+            // Tipado explícito a propósito: node es dynamic, así que la llamada se resuelve en runtime;
+            // sin esto, el compilador infiere `dynamic` y el `with` de abajo no compila (CS8858).
+            SapVisualElement? el = DescribeVisual(node, type, subType);
+            if (el != null)
+            {
+                if (IsTreeSubType(subType))
+                {
+                    List<SapVisualElement> nodes = EnumerateTreeNodes(node, el.Id);
+                    acc.Add(el with { Label = $"{el.Label} · {nodes.Count} nodos", ChildCount = nodes.Count });
+                    acc.AddRange(nodes);
+                }
+                else acc.Add(el);
+            }
+        }
+
+        if (!isContainer) return;
+
+        dynamic children; int count;
+        try { children = node.Children; count = (int)children.Count; } catch { return; }
+        for (int i = 0; i < count; i++)
+        {
+            dynamic child;
+            try { child = children.ElementAt(i); } catch { continue; }
+            try { WalkVisual(child, acc, depth + 1); } catch { }
+        }
+    }
+
+    /// <summary>Solo los shells exponen SubType; en el resto la propiedad no existe y devolvemos "".</summary>
+    private static string SubTypeOf(dynamic node)
+    {
+        try { return Str(node.SubType); } catch { return ""; }
+    }
+
+    private static bool IsTreeSubType(string subType) =>
+        subType.IndexOf("Tree", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private static SapVisualElement? DescribeVisual(dynamic node, string type, string subType)
+    {
+        string id; try { id = Str(node.Id); } catch { return null; }
+        if (id.Length == 0) return null;
+
+        int left, top, w, h;
+        try
+        {
+            left = (int)node.ScreenLeft;
+            top = (int)node.ScreenTop;
+            w = (int)node.Width;
+            h = (int)node.Height;
+        }
+        catch { return null; } // sin geometría no hay caja que dibujar
+
+        // Descarta lo degenerado o fuera de pantalla: la barra de menú principal, por ejemplo, reporta
+        // width/height/top negativos cuando no está desplegada (documentado en la comunidad SAP).
+        bool boundsKnown = w > 1 && h > 1 && left > -30000 && top > -30000 && w < 20000 && h < 20000;
+        if (!boundsKnown) return null;
+
+        string label = LabelOf(node);
+        if (label.Length == 0) label = subType.Length > 0 ? subType : type;
+
+        return new SapVisualElement(
+            Id: id,
+            Type: type,
+            SubType: subType,
+            Label: label,
+            Value: ValueOf(node, type),
+            ScreenLeft: left, ScreenTop: top, Width: w, Height: h,
+            BoundsKnown: true,
+            ActionType: ActionTypeFor(type),
+            ControlType: GraphControlType(type),
+            IsNode: false,
+            ParentId: null);
+    }
+
+    /// <summary>
+    /// Los nodos de un árbol SAP como elementos LÓGICOS. La Scripting API da sus claves y textos, pero
+    /// NINGUNA coordenada por nodo (verificado contra la spec oficial), así que van sin bounds: el
+    /// cerebro los ve y puede accionarlos por clave, pero el overlay solo enmarca el árbol entero.
+    /// </summary>
+    private static List<SapVisualElement> EnumerateTreeNodes(dynamic tree, string treeId)
+    {
+        var nodes = new List<SapVisualElement>();
+        dynamic keys;
+        try { keys = tree.GetNodesCol(); }
+        catch { return nodes; }
+
+        int count;
+        try { count = (int)keys.Count; } catch { return nodes; }
+
+        for (int i = 0; i < count && nodes.Count < 400; i++)
+        {
+            string key;
+            try { key = Str(keys.ElementAt(i)); } catch { continue; }
+            if (key.Length == 0) continue;
+
+            string text;
+            try { text = Str(tree.GetNodeTextByKey(key)); } catch { text = ""; }
+            if (text.Trim().Length == 0) continue;
+
+            nodes.Add(new SapVisualElement(
+                Id: treeId,
+                Type: "GuiTreeNode",
+                SubType: "",
+                Label: text.Trim(),
+                Value: key,
+                ScreenLeft: 0, ScreenTop: 0, Width: 0, Height: 0,
+                BoundsKnown: false,
+                ActionType: "click",
+                ControlType: "treeitem",
+                IsNode: true,
+                ParentId: treeId,
+                NodeKey: key));
+        }
+        return nodes;
+    }
+
     private static void Walk(dynamic node, List<dynamic> acc, int depth)
     {
         if (depth > 20 || acc.Count > 300) return;
