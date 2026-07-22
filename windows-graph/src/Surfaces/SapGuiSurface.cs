@@ -370,42 +370,109 @@ public sealed class SapGuiSurface : IUiSurface
     /// Los nodos de un árbol SAP como elementos LÓGICOS. La Scripting API da sus claves y textos, pero
     /// NINGUNA coordenada por nodo (verificado contra la spec oficial), así que van sin bounds: el
     /// cerebro los ve y puede accionarlos por clave, pero el overlay solo enmarca el árbol entero.
+    ///
+    /// RECORRIDO EN ANCHURA por clave, no una sola pasada: <c>GetNodesCol</c> devuelve, según el control,
+    /// solo los nodos RAÍZ (en SAP Easy Access, "Favoritos" y "Menú SAP" → dos). Para capturar todo lo
+    /// CARGADO hay que bajar por <c>GetSubNodesCol</c> desde cada clave, deduplicando (si una versión sí
+    /// devuelve todo de golpe, el HashSet evita repetir). Las carpetas colapsadas cuyos hijos aún no se
+    /// han traído del servidor no aparecen — es correcto: no los expandimos pasivamente; el agente los
+    /// desplegará cuando navegue.
     /// </summary>
     private static List<SapVisualElement> EnumerateTreeNodes(dynamic tree, string treeId)
     {
         var nodes = new List<SapVisualElement>();
-        dynamic keys;
-        try { keys = tree.GetNodesCol(); }
-        catch { return nodes; }
+        var seen = new HashSet<string>();
+        var queue = new Queue<string>();
 
-        int count;
-        try { count = (int)keys.Count; } catch { return nodes; }
+        foreach (string k in TreeKeys(tree, null))
+            if (seen.Add(k)) queue.Enqueue(k);
 
-        for (int i = 0; i < count && nodes.Count < 400; i++)
+        // Nombres de columna una sola vez: en árboles de columnas el texto visible vive en un ITEM
+        // (GetItemText), no en el nodo (GetNodeTextByKey devuelve vacío). Se prueban ambos.
+        var columns = TreeColumnNames(tree);
+
+        while (queue.Count > 0 && nodes.Count < 600)
         {
-            string key;
-            try { key = Str(keys.ElementAt(i)); } catch { continue; }
-            if (key.Length == 0) continue;
+            string key = queue.Dequeue();
 
-            string text;
-            try { text = Str(tree.GetNodeTextByKey(key)); } catch { text = ""; }
-            if (text.Trim().Length == 0) continue;
+            string text = NodeText(tree, key, columns);
+            if (text.Length > 0)
+            {
+                nodes.Add(new SapVisualElement(
+                    Id: treeId,
+                    Type: "GuiTreeNode",
+                    SubType: "",
+                    Label: text,
+                    Value: key,
+                    ScreenLeft: 0, ScreenTop: 0, Width: 0, Height: 0,
+                    BoundsKnown: false,
+                    ActionType: "click",
+                    ControlType: "treeitem",
+                    IsNode: true,
+                    ParentId: treeId,
+                    NodeKey: key));
+            }
 
-            nodes.Add(new SapVisualElement(
-                Id: treeId,
-                Type: "GuiTreeNode",
-                SubType: "",
-                Label: text.Trim(),
-                Value: key,
-                ScreenLeft: 0, ScreenTop: 0, Width: 0, Height: 0,
-                BoundsKnown: false,
-                ActionType: "click",
-                ControlType: "treeitem",
-                IsNode: true,
-                ParentId: treeId,
-                NodeKey: key));
+            if (seen.Count < 800)
+                foreach (string child in TreeKeys(tree, key))
+                    if (seen.Add(child)) queue.Enqueue(child);
         }
         return nodes;
+    }
+
+    /// <summary>Claves de los nodos raíz (<paramref name="parentKey"/> null) o de los hijos de un nodo.</summary>
+    private static List<string> TreeKeys(dynamic tree, string? parentKey)
+    {
+        var keys = new List<string>();
+        dynamic col;
+        try { col = parentKey == null ? tree.GetNodesCol() : tree.GetSubNodesCol(parentKey); }
+        catch { return keys; }
+
+        int count;
+        try { count = (int)col.Count; } catch { return keys; }
+
+        for (int i = 0; i < count; i++)
+        {
+            try
+            {
+                string k = Str(col.ElementAt(i));
+                if (k.Length > 0) keys.Add(k);
+            }
+            catch { }
+        }
+        return keys;
+    }
+
+    private static List<string> TreeColumnNames(dynamic tree)
+    {
+        var names = new List<string>();
+        dynamic col;
+        try { col = tree.GetColumnNames(); }
+        catch { return names; }
+
+        int count;
+        try { count = (int)col.Count; } catch { return names; }
+
+        for (int i = 0; i < count && names.Count < 20; i++)
+        {
+            try { string n = Str(col.ElementAt(i)); if (n.Length > 0) names.Add(n); }
+            catch { }
+        }
+        return names;
+    }
+
+    /// <summary>Texto de un nodo: primero el del nodo; si vacío, el primer item de columna no vacío.</summary>
+    private static string NodeText(dynamic tree, string key, List<string> columns)
+    {
+        try { string t = Str(tree.GetNodeTextByKey(key)).Trim(); if (t.Length > 0) return t; }
+        catch { }
+
+        foreach (string col in columns)
+        {
+            try { string t = Str(tree.GetItemText(key, col)).Trim(); if (t.Length > 0) return t; }
+            catch { }
+        }
+        return "";
     }
 
     private static void Walk(dynamic node, List<dynamic> acc, int depth)
