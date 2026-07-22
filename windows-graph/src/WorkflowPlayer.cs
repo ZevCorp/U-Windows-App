@@ -236,7 +236,13 @@ public sealed class WorkflowPlayer
             !string.Equals(now.Origin, plan.SourceOrigin, StringComparison.OrdinalIgnoreCase))
             return $"Este workflow se grabó en {plan.SourceOrigin} y ahora estás en {now.Origin}.";
 
-        if (!string.IsNullOrWhiteSpace(plan.SourcePathname) &&
+        // El pathname SOLO acota superficies con ruta ESTABLE (web: URL, sapgui: transacción). En una
+        // app nativa (uia://) el pathname es el TÍTULO de la ventana = el documento abierto: es
+        // instancia, no identidad. Un workflow de "escribir en Notepad" debe servir en CUALQUIER nota,
+        // no solo en la que se grabó. Por eso, en uia://, se scopea por app y se ignora el pathname
+        // (misma razón por la que el título nunca acotó).
+        bool pathnameScopes = !(plan.SourceOrigin ?? "").StartsWith("uia://", StringComparison.OrdinalIgnoreCase);
+        if (pathnameScopes && !string.IsNullOrWhiteSpace(plan.SourcePathname) &&
             !string.Equals(now.Pathname, plan.SourcePathname, StringComparison.OrdinalIgnoreCase))
             return $"Este workflow se grabó en {plan.SourcePathname} y ahora estás en {now.Pathname}.";
 
