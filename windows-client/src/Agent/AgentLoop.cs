@@ -36,6 +36,7 @@ public sealed class AgentLoop
     private readonly Func<string[]> _installedApps;
     private readonly Func<SurfaceLocator.SurfaceLocation?>? _surface;
     private readonly WorkflowMcpRunner? _workflows;
+    private readonly SapContextReader _sapContext = new();
     private readonly int _maxTurns;
 
     public AgentLoop(BackendClient backend, UiaReader uia, LocalMcp mcp, IVoice voice, IUserChannel user,
@@ -147,6 +148,17 @@ public sealed class AgentLoop
             state.SurfaceOrigin = loc.Origin;
             state.SurfacePathname = loc.Path;
         }
+
+        // SAP GUI Scripting SE AÑADE al árbol de lectura (UIA apenas ve dentro de SAP): si la app en
+        // foco es SAP, el cerebro recibe además los campos reales de la pantalla SAP.
+        string proc = loc != null ? AppAligner.ProcessFromOrigin(loc.Origin) : "";
+        if (proc.StartsWith("sap", StringComparison.OrdinalIgnoreCase))
+        {
+            string? sap = await Task.Run(() => _sapContext.Read());
+            if (!string.IsNullOrWhiteSpace(sap))
+                state.UiContext = $"{state.UiContext}\n\n{sap}";
+        }
+
         if (withScreenshot)
             state.Screenshot = await Task.Run(Screenshotter.CaptureBase64Png);
         return state;

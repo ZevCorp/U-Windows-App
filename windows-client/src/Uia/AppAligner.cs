@@ -72,7 +72,8 @@ public static class AppAligner
         !string.IsNullOrWhiteSpace(current) &&
         string.Equals(current.TrimEnd('/'), target.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 
-    private static bool FocusOrLaunch(string proc)
+    /// <summary>Enfoca la app si ya está abierta; si no, la lanza. También lo usa launch_app (LocalMcp).</summary>
+    public static bool FocusOrLaunch(string proc)
     {
         var open = Process.GetProcessesByName(proc).FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
         if (open != null)

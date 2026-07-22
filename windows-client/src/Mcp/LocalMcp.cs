@@ -38,7 +38,9 @@ public sealed class LocalMcp
             "scroll_menu" => InputExecutor.Scroll(A("direction") != "up"),
 
             // --- Acciones del sistema ---
-            "launch_app" => WindowsSystemApi.LaunchApp(A("app")),
+            // Enfocar-antes-de-lanzar: si la app ya está abierta se trae al frente (relanzar falla o
+            // abre otra instancia); si no está, AppAligner cae a LaunchApp (shell resuelve el nombre).
+            "launch_app" => AppAligner.FocusOrLaunch(A("app").Replace(".exe", "", StringComparison.OrdinalIgnoreCase)),
             "set_alarm" => WindowsSystemApi.SetAlarm(I("hour", 8), I("minute", 0), A("message")),
             "set_timer" => WindowsSystemApi.SetTimer(I("seconds", 60), A("message")),
             "create_event" => WindowsSystemApi.CreateEvent(A("title"), A("start"), A("location")),
