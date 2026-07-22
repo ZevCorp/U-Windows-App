@@ -92,19 +92,21 @@ public sealed class WorkflowPlayer
             return new RunResult(false, workflowId, Array.Empty<StepOutcome>(), e.Message);
         }
 
-        L($"plan {workflowId}: {plan.Steps.Count} steps · sourceOrigin='{plan.SourceOrigin}' pathname='{plan.SourcePathname}'");
-        for (int i = 0; i < plan.Steps.Count; i++)
-            L($"  step[{plan.Steps[i].StepOrder}] {plan.Steps[i].ActionType} · sel='{plan.Steps[i].Selector}' · '{plan.Steps[i].Label}'");
-
         if (plan.Steps.Count == 0)
             return new RunResult(false, workflowId, Array.Empty<StepOutcome>(),
                 "Graph no devolvió ningún paso ejecutable para este workflow.");
 
+        // Varios `input` seguidos al MISMO campo son snapshots del tecleo (SetValue reemplaza el valor):
+        // se colapsan al último. Escritura instantánea (1 SetValue en vez de N) y log limpio, sin tocar
+        // el workflow guardado. (La deduplicación "de verdad" la hará el LLM organizador; esto es la red.)
+        var steps = CollapseInputRuns(plan.Steps.OrderBy(s => s.StepOrder).ToList());
+        L($"plan {workflowId}: {steps.Count} pasos (de {plan.Steps.Count} grabados) · origin='{plan.SourceOrigin}'");
+
         // La superficie se deduce del primer paso REAL, no de una config: el workflow sabe dónde nació.
         // Los steps de alineación (`app:`) no pertenecen a ninguna superficie de ejecución — los
         // resuelve el Aligner —, así que se saltan al elegir la superficie.
-        bool hasAlignmentStep = plan.Steps.Any(IsAlignmentStep);
-        PlanStep? firstReal = plan.Steps.OrderBy(s => s.StepOrder).FirstOrDefault(s => !IsAlignmentStep(s));
+        bool hasAlignmentStep = steps.Any(IsAlignmentStep);
+        PlanStep? firstReal = steps.FirstOrDefault(s => !IsAlignmentStep(s));
         IUiSurface? surface = firstReal != null ? SurfaceFor(firstReal.Selector) : null;
         if (surface == null)
             return new RunResult(false, workflowId, Array.Empty<StepOutcome>(),
@@ -150,7 +152,7 @@ public sealed class WorkflowPlayer
         }
 
         var outcomes = new List<StepOutcome>();
-        foreach (PlanStep step in plan.Steps.OrderBy(s => s.StepOrder))
+        foreach (PlanStep step in steps)
         {
             if (ct.IsCancellationRequested)
                 return new RunResult(false, workflowId, outcomes, "Ejecución cancelada.");
@@ -167,7 +169,7 @@ public sealed class WorkflowPlayer
                 if (!Report(step, reached, reached ? "" : "no me pude alinear con la superficie del workflow", outcomes))
                     return new RunResult(false, workflowId, outcomes,
                         $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}");
-                await Task.Delay(Math.Clamp(_config.StepDelayMs, 0, 5000), ct);
+                await Task.Delay(40, ct);
                 continue;
             }
 
@@ -197,7 +199,7 @@ public sealed class WorkflowPlayer
                 return new RunResult(false, workflowId, outcomes,
                     $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}");
 
-            await Task.Delay(Math.Clamp(_config.StepDelayMs, 0, 5000), ct);
+            await Task.Delay(PauseMs(target), ct);
         }
 
         return new RunResult(true, workflowId, outcomes, "") { AlignedConsciously = alignedConsciously };
@@ -207,13 +209,54 @@ public sealed class WorkflowPlayer
     {
         var outcome = new StepOutcome(step.StepOrder, step.Label ?? "", step.ActionType, ok, error);
         acc.Add(outcome);
-        L($"step[{step.StepOrder}] {(ok ? "OK" : "FALLÓ")} '{step.Label}'{(ok ? "" : " · " + error)}");
+        L(LogLineFor(step, ok, error));
         try { StepDone?.Invoke(this, outcome); } catch { }
         return ok;
     }
 
+    /// <summary>Log terse por acción (nada de una línea por tecla): "escribió", "clic en X", "abrió/enfocó X".</summary>
+    private static string LogLineFor(PlanStep step, bool ok, string error)
+    {
+        string what = IsAlignmentStep(step) ? $"abrió/enfocó la app"
+            : step.ActionType == "input" ? "escribió"
+            : step.ActionType == "select" ? $"eligió «{step.Label}»"
+            : step.ActionType == "click" ? $"clic en «{step.Label}»"
+            : $"«{step.Label}»";
+        return ok ? $"✓ {what}" : $"✗ {what} · {error}";
+    }
+
     private static string Reason(string error) =>
         string.IsNullOrWhiteSpace(error) ? "el paso no se pudo ejecutar" : error;
+
+    /// <summary>
+    /// Colapsa runs de `input` consecutivos al MISMO selector, dejando solo el último. Como el input
+    /// se ejecuta con ValuePattern.SetValue (reemplaza el valor completo), los intermedios son snapshots
+    /// del tecleo y no aportan nada. Efecto: escritura instantánea y un solo log por bloque de escritura.
+    /// </summary>
+    private static List<PlanStep> CollapseInputRuns(List<PlanStep> steps)
+    {
+        var result = new List<PlanStep>();
+        for (int i = 0; i < steps.Count; i++)
+        {
+            if (steps[i].ActionType == "input")
+            {
+                int j = i;
+                while (j + 1 < steps.Count && steps[j + 1].ActionType == "input"
+                       && string.Equals(steps[j + 1].Selector, steps[i].Selector, StringComparison.OrdinalIgnoreCase))
+                    j++;
+                result.Add(steps[j]); // solo el valor final del bloque de escritura
+                i = j;
+            }
+            else result.Add(steps[i]);
+        }
+        return result;
+    }
+
+    /// <summary>Pausa entre pasos: UIA nativo es síncrono y no necesita respirar (snappy); SAP sí.</summary>
+    private int PauseMs(IUiSurface surface) =>
+        string.Equals(surface.Name, "uia", StringComparison.OrdinalIgnoreCase)
+            ? Math.Min(Math.Clamp(_config.StepDelayMs, 0, 5000), 40)
+            : Math.Clamp(_config.StepDelayMs, 0, 5000);
 
     /// <summary>Un step de alineación de superficie (lo antepone el aprendizaje consciente→subconsciente).</summary>
     private static bool IsAlignmentStep(PlanStep step) =>
