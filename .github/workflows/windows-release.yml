@@ -59,9 +59,15 @@ jobs:
 
       - name: Empaquetar con Velopack
         if: ${{ inputs.dry_run != true }}
-        run: >
-          vpk pack -u U -v ${{ inputs.version }} -p out\assistant -e U.exe
-          -o out\releases --icon windows-client\U.ico
+        shell: pwsh
+        run: |
+          $packArgs = @('-u','U','-v','${{ inputs.version }}','-p','out\assistant','-e','U.exe','-o','out\releases')
+          if (Test-Path 'windows-client\U.ico') {
+            $packArgs += @('--icon','windows-client\U.ico')
+          } else {
+            Write-Host 'U.ico no está commiteado en el repo; se empaqueta sin icono personalizado.'
+          }
+          vpk pack @packArgs
 
       - name: Subir a Supabase (compatible con S3)
         if: ${{ inputs.dry_run != true }}
