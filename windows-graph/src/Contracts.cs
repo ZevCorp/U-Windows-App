@@ -199,6 +199,14 @@ public sealed class PlanStep
     /// <summary>Vuelve tal cual la mandamos al grabar. De aquí salen los alternativeTargets.</summary>
     [JsonPropertyName("surfaceHints")] public JsonElement? SurfaceHints { get; set; }
 
+    /// <summary>
+    /// Cómo coincidir el valor al reejecutar (los 3 escenarios): fixed (exacto, default), dynamic
+    /// (por contexto; bindTo lo ata a otra variable) o flexible (best-effort: si no resuelve, se salta
+    /// sin romper el workflow). Lo fija el LLM organizador. Ver doc coincidencia-superficie-estado.
+    /// </summary>
+    [JsonPropertyName("valueMode")] public string? ValueMode { get; set; }
+    [JsonPropertyName("bindTo")] public string? BindTo { get; set; }
+
     /// <summary>Selectores de respaldo si el principal no resuelve. Convención de Graph.</summary>
     public IReadOnlyList<string> AlternativeTargets()
     {

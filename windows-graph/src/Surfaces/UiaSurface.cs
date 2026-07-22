@@ -237,6 +237,9 @@ public sealed class UiaSurface : IUiSurface
     public bool Execute(PlanStep step, out string error)
     {
         error = "";
+        // flexible: el valor/elemento exacto no importa (ej. "la pestaña nueva"). Best-effort: si no
+        // resuelve, el step se salta sin romper el workflow. Ver doc coincidencia-superficie-estado.
+        bool flexible = string.Equals(step.ValueMode, "flexible", StringComparison.OrdinalIgnoreCase);
         var candidates = new List<string> { step.Selector };
         candidates.AddRange(step.AlternativeTargets().Where(UiaSelector.Owns));
 
@@ -249,19 +252,22 @@ public sealed class UiaSurface : IUiSurface
 
         if (el == null)
         {
+            if (flexible) { error = ""; return true; }
             error = $"no se encontró el elemento «{step.Label}» ({step.Selector})";
             return false;
         }
 
         try
         {
-            return step.ActionType switch
+            bool ok = step.ActionType switch
             {
                 "input" => SetValue(el, step.Value ?? "", out error),
                 "select" => Select(el, step.SelectedValue ?? step.Value ?? "", out error),
                 "click" => Click(el, out error),
                 _ => Fail($"actionType no soportado en UIA: {step.ActionType}", out error),
             };
+            if (!ok && flexible) { error = ""; return true; }
+            return ok;
         }
         catch (Exception e)
         {
