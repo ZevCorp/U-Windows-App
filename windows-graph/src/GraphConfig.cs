@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 
 namespace U.Graph;
@@ -9,9 +10,11 @@ namespace U.Graph;
 /// Se persiste en %APPDATA%\U\graph.json, SEPARADO del config.json del asistente: son dos backends
 /// distintos con credenciales distintas, y mezclarlos ataría este módulo al resto de la app.
 ///
-/// La key NO tiene default hardcodeado a propósito. Un token en el código fuente queda en el binario
-/// (y en el historial de Git) para siempre; cualquiera que descompile U.exe se lo lleva. Se configura
-/// en la máquina del cliente, o por la variable de entorno GRAPH_API_KEY.
+/// La key NO se hardcodea en el CÓDIGO (quedaría en el historial de Git para siempre). Prioridad de
+/// resolución: %APPDATA%\U\graph.json  >  env GRAPH_API_KEY  >  key embebida en el BUILD de
+/// distribución (AssemblyMetadata GraphDefaultApiKey, que el CI inyecta desde un secreto; VACÍA en los
+/// builds del repo). Así el Setup.exe distribuido llega conectado sin intervención del usuario, pero
+/// nada de eso vive en el código fuente. Ver GraphWorkflows.csproj.
 /// </summary>
 public sealed class GraphConfig
 {
@@ -48,9 +51,15 @@ public sealed class GraphConfig
             cfg = new GraphConfig();
         }
 
-        // La variable de entorno gana: permite instalar sin escribir la key en disco.
+        // La variable de entorno gana sobre el disco: permite instalar sin escribir la key en disco.
         string? fromEnv = Environment.GetEnvironmentVariable("GRAPH_API_KEY");
         if (!string.IsNullOrWhiteSpace(fromEnv)) cfg.ApiKey = fromEnv.Trim();
+
+        // Último recurso: la key embebida en el build de distribución (el CI la inyecta; vacía en los
+        // builds del repo). Es lo que hace que el exe distribuido funcione "de fábrica" sin que el
+        // usuario ponga nada; graph.json o GRAPH_API_KEY la sobreescriben en la máquina.
+        if (string.IsNullOrWhiteSpace(cfg.ApiKey) && !string.IsNullOrWhiteSpace(BakedDefaultApiKey))
+            cfg.ApiKey = BakedDefaultApiKey;
 
         // Migración silenciosa: los graph.json guardados antes del cambio de dominio traen el deploy
         // degradado (graph-five-orpin) persistido, y sin esto ninguna instalación existente se
@@ -76,4 +85,10 @@ public sealed class GraphConfig
     }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(BaseUrl) && !string.IsNullOrWhiteSpace(ApiKey);
+
+    /// <summary>Key embebida en el build de distribución (AssemblyMetadata). Vacía en los builds del repo.</summary>
+    private static string BakedDefaultApiKey =>
+        Assembly.GetExecutingAssembly()
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => a.Key == "GraphDefaultApiKey")?.Value?.Trim() ?? "";
 }

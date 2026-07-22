@@ -45,6 +45,14 @@ jobs:
 
       - name: Publicar U.exe
         if: ${{ inputs.dry_run != true }}
+        env:
+          # Key de Graph embebida en el build de distribución (X-API-Key). MSBuild la lee como
+          # propiedad (GraphWorkflows.csproj → AssemblyMetadata GraphDefaultApiKey), de modo que el
+          # Setup.exe distribuido llega CONECTADO sin que el usuario final ponga nada. Configura el
+          # secreto en el repo: Settings → Secrets and variables → Actions → GRAPH_DEFAULT_API_KEY
+          # (una key miracle_ generada en Provider Studio → API keys). Si el secreto no existe, el
+          # build sigue funcionando pero sin key embebida (el usuario tendría que ponerla a mano).
+          GraphDefaultApiKey: ${{ secrets.GRAPH_DEFAULT_API_KEY }}
         run: >
           dotnet publish windows-client\WindowsClient.csproj
           -c Release -r win-x64 --self-contained true -o out\assistant
