@@ -22,30 +22,42 @@ public sealed class SapInspectorReader
     /// <summary>Un recuadro SAP para el overlay. <paramref name="Bounds"/> va en píxeles físicos.</summary>
     public sealed record SapBox(Rect Bounds, string Caption, bool IsShell);
 
-    /// <summary>Cajas de todos los elementos SAP visibles con geometría, o vacío si SAP/scripting no está.</summary>
-    public IReadOnlyList<SapBox> Read()
+    /// <summary>
+    /// TODOS los elementos SAP visibles (con y sin geometría: los nodos de árbol no traen rect). Es la
+    /// forma cruda que usa el diagnóstico de clic; <see cref="Read"/> la envuelve para el overlay. Vacío
+    /// si SAP/scripting no está. Nunca lanza.
+    /// </summary>
+    public IReadOnlyList<SapVisualElement> ReadElements()
     {
         try
         {
-            if (!_sap.Check().Available) return Array.Empty<SapBox>();
-
-            var elements = _sap.ReadVisibleElements();
-            var boxes = new List<SapBox>(elements.Count);
-            foreach (var e in elements)
-            {
-                if (!e.BoundsKnown) continue; // los nodos de árbol no traen rect: se detectan, no se enmarcan
-                bool shell = e.SubType.Length > 0;
-                // Solo los shells (árbol, grid…) llevan rótulo: son pocos y es donde el rótulo ayuda
-                // ("Favoritos · 20 nodos"). Enmarcar cada campo con texto saturaría la pantalla.
-                string caption = shell ? e.Label : "";
-                boxes.Add(new SapBox(new Rect(e.ScreenLeft, e.ScreenTop, e.Width, e.Height), caption, shell));
-            }
-            return boxes;
+            if (!_sap.Check().Available) return Array.Empty<SapVisualElement>();
+            return _sap.ReadVisibleElements();
         }
         catch (Exception ex)
         {
             LogBus.Log("sap", $"inspector SAP falló: {ex.Message}");
-            return Array.Empty<SapBox>();
+            return Array.Empty<SapVisualElement>();
         }
     }
+
+    /// <summary>Cajas de todos los elementos SAP visibles con geometría, o vacío si SAP/scripting no está.</summary>
+    public IReadOnlyList<SapBox> Read()
+    {
+        var elements = ReadElements();
+        var boxes = new List<SapBox>(elements.Count);
+        foreach (var e in elements)
+        {
+            if (!e.BoundsKnown) continue; // los nodos de árbol no traen rect: se detectan, no se enmarcan
+            bool shell = e.SubType.Length > 0;
+            // Solo los shells (árbol, grid…) llevan rótulo: son pocos y es donde el rótulo ayuda
+            // ("Favoritos · 20 nodos"). Enmarcar cada campo con texto saturaría la pantalla.
+            string caption = shell ? e.Label : "";
+            boxes.Add(new SapBox(new Rect(e.ScreenLeft, e.ScreenTop, e.Width, e.Height), caption, shell));
+        }
+        return boxes;
+    }
+
+    /// <summary>Qué componente SAP hay bajo un punto de pantalla (hit-test nativo), o null.</summary>
+    public string? HitTest(int screenX, int screenY) => _sap.HitTest(screenX, screenY);
 }

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
+using U.Graph.Surfaces;
 using U.WindowsClient.Ui;
 
 namespace U.WindowsClient.Uia;
@@ -145,32 +146,83 @@ public sealed class UiInspector : IDisposable
         {
             try
             {
+                // El _clickReader.Read() actualiza también ForegroundProcess. Si SAP está delante,
+                // diagnostica por Scripting (UIA no ve nada dentro de SAP GUI); si ahí no hay nada SAP
+                // en ese punto (p.ej. cliqueaste el marco de la ventana), cae al diagnóstico de UIA.
                 _clickReader.Read();
-                var els = _clickReader.Elements;
-
-                // Elemento cliqueado: el accionable de MENOR área que contiene el punto.
-                var clicked = els
-                    .Where(e => !e.Bounds.IsEmpty && !double.IsInfinity(e.Bounds.Width) && e.Bounds.Contains(px, py))
-                    .OrderBy(e => e.Bounds.Width * e.Bounds.Height)
-                    .FirstOrDefault();
-                if (clicked == null) return;
-
-                // Lo que el asistente resolvería: el PRIMER elemento con la misma etiqueta (igual que UiaReader).
-                var intended = els.FirstOrDefault(e =>
-                    string.Equals(e.Label.Trim(), clicked.Label.Trim(), StringComparison.OrdinalIgnoreCase));
-
-                bool mismatch = intended != null && intended.Bounds != clicked.Bounds;
-                Rect c = clicked.Bounds;
-                Rect? it = intended?.Bounds;
-
-                _dispatcher.BeginInvoke(new Action(() =>
-                {
-                    _overlay?.Flash(c, it, mismatch);
-                    ScheduleClear(mismatch ? 3000 : 1600);
-                }));
+                if (IsSapForeground(_clickReader.ForegroundProcess) && DiagnoseSap(px, py)) return;
+                DiagnoseUia(_clickReader.Elements, px, py);
             }
             catch { }
         });
+    }
+
+    /// <summary>Diagnóstico UIA (el original): amarillo si coincide, rojo si hay ambigüedad por etiqueta.</summary>
+    private void DiagnoseUia(IReadOnlyList<UiaReader.UiElement> els, int px, int py)
+    {
+        // Elemento cliqueado: el accionable de MENOR área que contiene el punto.
+        var clicked = els
+            .Where(e => !e.Bounds.IsEmpty && !double.IsInfinity(e.Bounds.Width) && e.Bounds.Contains(px, py))
+            .OrderBy(e => e.Bounds.Width * e.Bounds.Height)
+            .FirstOrDefault();
+        if (clicked == null) return;
+
+        // Lo que el asistente resolvería: el PRIMER elemento con la misma etiqueta (igual que UiaReader).
+        var intended = els.FirstOrDefault(e =>
+            string.Equals(e.Label.Trim(), clicked.Label.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        bool mismatch = intended != null && intended.Bounds != clicked.Bounds;
+        Rect c = clicked.Bounds;
+        Rect? it = intended?.Bounds;
+        FlashOn(c, it, mismatch);
+    }
+
+    /// <summary>
+    /// Diagnóstico SAP: usa el hit-test nativo (FindByPosition) como verdad de terreno de qué componente
+    /// tocaste, y comprueba si el asistente, resolviendo por ETIQUETA, resolvería el MISMO (amarillo) o
+    /// uno distinto con la misma etiqueta (rojo — ambigüedad, p.ej. dos favoritos con el mismo texto).
+    /// A diferencia de UIA, la comparación es por <c>Id</c> de SAP (el selector real), no por bounds.
+    /// Devuelve false si no hay ningún elemento SAP con caja bajo el punto (para caer a UIA).
+    /// </summary>
+    private bool DiagnoseSap(int px, int py)
+    {
+        var els = _sapReader.ReadElements();
+        if (els.Count == 0) return false;
+
+        // Verdad de terreno: hit-test nativo de SAP; si falla, la caja más pequeña que contiene el punto.
+        string? hitId = _sapReader.HitTest(px, py);
+        SapVisualElement? clicked =
+            (hitId != null ? els.FirstOrDefault(e => e.BoundsKnown && e.Id == hitId) : null)
+            ?? els.Where(e => e.BoundsKnown && Contains(e, px, py))
+                  .OrderBy(e => (long)e.Width * e.Height)
+                  .FirstOrDefault();
+        if (clicked == null) return false;
+
+        // Lo que el asistente resolvería si apuntara por etiqueta: el primer elemento con esa etiqueta.
+        var intended = els.FirstOrDefault(e => e.BoundsKnown &&
+            string.Equals(e.Label.Trim(), clicked.Label.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        bool mismatch = intended != null && intended.Id != clicked.Id;
+        Rect c = BoxOf(clicked);
+        Rect? it = (mismatch && intended != null) ? BoxOf(intended) : (Rect?)null;
+        FlashOn(c, it, mismatch);
+        return true;
+    }
+
+    private static bool Contains(SapVisualElement e, int px, int py) =>
+        px >= e.ScreenLeft && px < e.ScreenLeft + e.Width &&
+        py >= e.ScreenTop && py < e.ScreenTop + e.Height;
+
+    private static Rect BoxOf(SapVisualElement e) =>
+        new(e.ScreenLeft, e.ScreenTop, e.Width, e.Height);
+
+    private void FlashOn(Rect clicked, Rect? intended, bool mismatch)
+    {
+        _dispatcher.BeginInvoke(new Action(() =>
+        {
+            _overlay?.Flash(clicked, intended, mismatch);
+            ScheduleClear(mismatch ? 3000 : 1600);
+        }));
     }
 
     private void ScheduleClear(int ms)

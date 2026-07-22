@@ -231,6 +231,28 @@ public sealed class SapGuiSurface : IUiSurface
         return acc;
     }
 
+    /// <summary>
+    /// Hit-test nativo de SAP: qué componente hay bajo un punto de PANTALLA. Es la verdad de terreno
+    /// del inspector — SAP sabe exactamente qué control cae en ese píxel, mejor que adivinar por la caja
+    /// más pequeña que lo contiene. Firma oficial: <c>findByPosition(x, y, raise=True) As GuiComponent</c>,
+    /// con x/y en coordenadas de pantalla; con <c>raise=false</c> devuelve null en vez de lanzar cuando
+    /// no hay nada. Devuelve el <c>Id</c> del componente, o null si SAP no está o no hay componente ahí.
+    /// </summary>
+    public string? HitTest(int screenX, int screenY)
+    {
+        dynamic? session;
+        try { session = Session(); } catch { return null; }
+        if (session == null) return null;
+
+        try
+        {
+            dynamic comp = session.FindByPosition(screenX, screenY, false);
+            if (comp == null) return null;
+            return Str(comp.Id);
+        }
+        catch { return null; }
+    }
+
     private static void WalkVisual(dynamic node, List<SapVisualElement> acc, int depth)
     {
         if (depth > 30 || acc.Count > 700) return;
