@@ -5,7 +5,7 @@ name: Windows release
 # la subida automática a Supabase (`vpk upload s3`) que ese script hoy deja
 # manual. Ver RELEASING-WINDOWS.md para el flujo de referencia.
 
-run-name: "Windows release ${{ inputs.version }} (${{ inputs.request_id }})"
+run-name: "Windows release ${{ inputs.version }} (${{ inputs.request_id }}) [${{ inputs.dry_run == true && 'dry-run' || 'real' }}]"
 
 on:
   workflow_dispatch:
