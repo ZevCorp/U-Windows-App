@@ -102,12 +102,38 @@ public sealed class SapGuiSurface : IUiSurface
         "SapROTWr.CSapROTWrapper",  // nombre histórico/de clase C++, por si alguna versión lo registra
     };
 
+    // ── Cache del motor: attach UNA vez, no en cada lectura ─────────────────────
+    // SAP GUI dispara su aviso de seguridad ("un script está intentando acceder a SAP GUI") en CADA
+    // attach al motor de scripting. El inspector lee cada 700 ms y en cada clic; si resolviéramos el
+    // motor de cero cada vez (attach nuevo), el aviso reaparecería sin parar. Cacheamos el motor a nivel
+    // de proceso: se hace attach una sola vez y se reutiliza mientras siga vivo. Si SAP se cierra o el
+    // proxy muere, la sonda de liveness falla, se invalida y se re-resuelve (nuevo attach → nuevo aviso,
+    // pero solo tras un fallo real). El observador de grabación NO usa el cache: sus sinks COM exigen
+    // resolver la sesión en su propio hilo STA — ver PumpMain, que llama con useCache:false.
+    private static readonly object _engineGate = new();
+    private static object? _cachedEngine;
+
     /// <summary>
-    /// El motor de scripting, por la Running Object Table. Es el camino estándar desde .NET:
-    /// SapROTWr.SapROTWrapper → GetROTEntry("SAPGUI") → GetScriptingEngine.
-    /// Devuelve null si SAP GUI no está corriendo (o no está instalado).
+    /// El motor de scripting, por la Running Object Table (SapROTWr.SapROTWrapper → GetROTEntry("SAPGUI")
+    /// → GetScriptingEngine). Con <paramref name="useCache"/> reutiliza el motor ya enganchado en vez de
+    /// hacer attach de nuevo. Devuelve null si SAP GUI no está corriendo (o no está instalado).
     /// </summary>
-    private static object? ScriptingEngine()
+    private static object? ScriptingEngine(bool useCache = true)
+    {
+        if (!useCache) return ResolveEngine();
+
+        lock (_engineGate)
+        {
+            if (_cachedEngine != null)
+            {
+                try { _ = (int)((dynamic)_cachedEngine).Connections.Count; return _cachedEngine; }
+                catch { _cachedEngine = null; } // proxy muerto (SAP se cerró): re-resolver abajo
+            }
+            return _cachedEngine = ResolveEngine();
+        }
+    }
+
+    private static object? ResolveEngine()
     {
         Type? wrapperType = null;
         foreach (string progId in RotWrapperProgIds)
@@ -129,9 +155,9 @@ public sealed class SapGuiSurface : IUiSurface
     }
 
     /// <summary>La sesión con la que trabajamos: la primera de la primera conexión.</summary>
-    private static dynamic? Session()
+    private static dynamic? Session(bool useCache = true)
     {
-        object? engine = ScriptingEngine();
+        object? engine = ScriptingEngine(useCache);
         if (engine == null) return null;
 
         dynamic app = engine;
@@ -660,7 +686,9 @@ public sealed class SapGuiSurface : IUiSurface
             _pumpDispatcher = Dispatcher.CurrentDispatcher;
 
             dynamic? session;
-            try { session = Session(); }
+            // useCache:false a propósito: los sinks COM del observador exigen la sesión resuelta EN este
+            // hilo STA. El cache del inspector (resuelto en otro hilo) rompería el enganche de eventos.
+            try { session = Session(useCache: false); }
             catch (Exception e)
             {
                 _startupError = $"no se pudo resolver la sesión SAP en el hilo de observación: {e.Message}";
