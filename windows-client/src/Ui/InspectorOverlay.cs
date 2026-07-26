@@ -26,7 +26,7 @@ public sealed class InspectorOverlay : Window
     private readonly Canvas _canvas = new();
     private Matrix _fromDevice = Matrix.Identity;
     private readonly List<Rect> _neutral = new();
-    private readonly List<(Rect box, string caption, bool shell)> _sap = new();
+    private readonly List<(Rect box, string caption, bool shell, bool mapped)> _sap = new();
     private (Rect clicked, Rect? intended, bool mismatch)? _flash;
 
     // Paleta: neutro (todo lo detectado por UIA), amarillo (clic que coincide con lo que el asistente
@@ -42,6 +42,11 @@ public sealed class InspectorOverlay : Window
     private static readonly Brush SapFill = Frozen(0x1E, 0x25, 0xC8, 0xE0);
     private static readonly Brush SapShellStroke = Frozen(0xFF, 0xFF, 0xA5, 0x1F);
     private static readonly Brush SapShellFill = Frozen(0x22, 0xFF, 0xA5, 0x1F);
+    // Shell MAPEADO (árbol con filas enumeradas por clave): ya no es territorio desconocido, así que
+    // nada de ámbar de alarma — gris neutro, apenas más marcado que las cajas de UIA para que el rótulo
+    // se siga leyendo. El ámbar queda reservado a lo que sigue opaco (grids, toolbars).
+    private static readonly Brush SapMappedStroke = Frozen(0xAA, 0xC9, 0xC9, 0xC9);
+    private static readonly Brush SapMappedFill = Frozen(0x12, 0xC9, 0xC9, 0xC9);
     private static readonly Brush CaptionBg = Frozen(0xE0, 0x1A, 0x1A, 0x1A);
     private static readonly Brush CaptionFg = Frozen(0xFF, 0xFF, 0xFF, 0xFF);
 
@@ -94,7 +99,7 @@ public sealed class InspectorOverlay : Window
     /// Recuadros de los elementos SAP leídos por Scripting (van en cian; los shells —árbol, grid— en
     /// ámbar con rótulo). Se dibujan JUNTO a los de UIA: es la razón de ser del inspector doble.
     /// </summary>
-    public void SetSap(IEnumerable<(Rect box, string caption, bool shell)> boxes)
+    public void SetSap(IEnumerable<(Rect box, string caption, bool shell, bool mapped)> boxes)
     {
         _sap.Clear();
         _sap.AddRange(boxes);
@@ -133,7 +138,11 @@ public sealed class InspectorOverlay : Window
         // tapados por las cajas de campos que caen dentro.
         foreach (var s in _sap.Where(s => s.shell))
         {
-            AddBox(s.box, SapShellStroke, SapShellFill, 2.0, false);
+            // Mapeado = gris neutro; sin mapear = ámbar de alarma. Ver SapBox.IsMapped.
+            AddBox(s.box,
+                s.mapped ? SapMappedStroke : SapShellStroke,
+                s.mapped ? SapMappedFill : SapShellFill,
+                2.0, false);
             if (!string.IsNullOrWhiteSpace(s.caption)) AddCaption(s.box, s.caption);
         }
         foreach (var s in _sap.Where(s => !s.shell))

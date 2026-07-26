@@ -100,13 +100,13 @@ public sealed class UiInspector : IDisposable
                 // Además de UIA, si SAP GUI está delante, léelo por Scripting y pinta sus elementos. La
                 // compuerta por proceso evita fantasmas: las coordenadas SAP son absolutas de pantalla,
                 // así que sin SAP en primer plano dibujaríamos cajas sobre otra app.
-                var sapBoxes = new List<(System.Windows.Rect, string, bool)>();
+                var sapBoxes = new List<(System.Windows.Rect, string, bool, bool)>();
                 if (IsSapForeground(_refreshReader.ForegroundProcess))
                 {
                     try
                     {
                         foreach (var b in _sapReader.Read())
-                            sapBoxes.Add((b.Bounds, b.Caption, b.IsShell));
+                            sapBoxes.Add((b.Bounds, b.Caption, b.IsShell, b.IsMapped));
                     }
                     catch { /* COM de SAP inestable: no romper el refresco de UIA */ }
                 }
