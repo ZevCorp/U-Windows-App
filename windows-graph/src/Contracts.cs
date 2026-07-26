@@ -207,6 +207,41 @@ public sealed class PlanStep
     [JsonPropertyName("valueMode")] public string? ValueMode { get; set; }
     [JsonPropertyName("bindTo")] public string? BindTo { get; set; }
 
+    /// <summary>
+    /// La superficie (URL de Windows) donde se GRABÓ este paso, si la grabación la anotó (grabaciones
+    /// nuevas). Es el "nodo" del paso: el player la usa para reanudar en cualquier punto del workflow.
+    /// Vacío en workflows viejos → arranque desde el principio como siempre.
+    /// </summary>
+    public string Surface()
+    {
+        if (SurfaceHints is not { ValueKind: JsonValueKind.Object } hints) return "";
+        if (hints.TryGetProperty("observedSurface", out var s) && s.ValueKind == JsonValueKind.String)
+            return s.GetString() ?? "";
+        return "";
+    }
+
+    /// <summary>Meta de carga del nodo (nº de elementos interactivos listos al grabar). 0 = sin métrica.
+    /// La usa el motor de carga para esperar a que la UI cargue antes de ejecutar el paso.</summary>
+    public int ReadinessCount()
+    {
+        if (SurfaceHints is not { ValueKind: JsonValueKind.Object } hints) return 0;
+        if (!hints.TryGetProperty("readiness", out var r)) return 0;
+        if (r.ValueKind == JsonValueKind.Number) return r.GetInt32();
+        if (r.ValueKind == JsonValueKind.String && int.TryParse(r.GetString(), out int n)) return n;
+        return 0;
+    }
+
+    /// <summary>Posición del clic relativa a la ventana ("relX,relY"), o null si no se grabó. Fallback para
+    /// clics cuyo elemento no resuelve (id volátil de paneles SAP).</summary>
+    public (int RelX, int RelY)? ClickPos()
+    {
+        if (SurfaceHints is not { ValueKind: JsonValueKind.Object } hints) return null;
+        if (!hints.TryGetProperty("clickPos", out var p) || p.ValueKind != JsonValueKind.String) return null;
+        string[] xy = (p.GetString() ?? "").Split(',');
+        if (xy.Length == 2 && int.TryParse(xy[0], out int x) && int.TryParse(xy[1], out int y)) return (x, y);
+        return null;
+    }
+
     /// <summary>Selectores de respaldo si el principal no resuelve. Convención de Graph.</summary>
     public IReadOnlyList<string> AlternativeTargets()
     {

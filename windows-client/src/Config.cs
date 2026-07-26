@@ -37,11 +37,43 @@ public sealed class Config
     public string UserId { get; set; } = "anon";
 
     /// <summary>
+    /// Identidad del usuario capturada al instalar (popup de nombre+correo, ver
+    /// <see cref="Ui.OnboardingWindow"/>). El CORREO es la clave canónica en el backend
+    /// ("Windows Live"): mismo correo = mismo usuario. <see cref="UserId"/> se fija al correo
+    /// para que el scoping de workflows y la telemetría hablen de la misma persona.
+    /// </summary>
+    public string DisplayName { get; set; } = "";
+    public string Email { get; set; } = "";
+
+    /// <summary>
+    /// Identificador estable de ESTA instalación (GUID, se genera una sola vez). Un usuario (correo)
+    /// puede tener varias instalaciones; esto las distingue sin romper la identidad por correo.
+    /// </summary>
+    public string InstallId { get; set; } = "";
+
+    /// <summary>¿Ya se capturó nombre+correo? Evita re-preguntar en cada arranque.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Onboarded => !string.IsNullOrWhiteSpace(Email);
+
+    /// <summary>
     /// Asistente mudo (botón 🔇 de la carita). Se persiste a propósito: quien lo silencia suele estar
     /// en una consulta o una reunión, y que volviera a hablar solo por reiniciar Ü sería justo el
     /// problema que el botón viene a resolver.
     /// </summary>
     public bool Muted { get; set; }
+
+    /// <summary>
+    /// Al enseñar, ¿mandar el video al LLM para resumirlo (contexto del workflow)? Ese paso es el que da
+    /// timeout (504) en Vercel. Con esto en false, la enseñanza NO procesa el video con IA —el video
+    /// igual se graba a disco y se ve en 🎞 Videos, y el workflow se guarda con sus pasos—. Default true.
+    /// </summary>
+    public bool ProcessTeachVideo { get; set; } = true;
+
+    /// <summary>
+    /// Tema de la carita (claro/oscuro), que se alterna manteniéndola oprimida. Se persiste para que
+    /// arranque en el modo que el usuario dejó. Valores: "Light" o "Dark" (ver <see cref="Ui.FaceTheme"/>).
+    /// </summary>
+    public string FaceTheme { get; set; } = "Light";
 
     /// <summary>
     /// De dónde baja la carita sus propias actualizaciones (ver <see cref="Update.Updater"/> y

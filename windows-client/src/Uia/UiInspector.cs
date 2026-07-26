@@ -172,6 +172,7 @@ public sealed class UiInspector : IDisposable
             string.Equals(e.Label.Trim(), clicked.Label.Trim(), StringComparison.OrdinalIgnoreCase));
 
         bool mismatch = intended != null && intended.Bounds != clicked.Bounds;
+        InspectorDiagnostics.LogUia(px, py, clicked, intended, els, mismatch);
         Rect c = clicked.Bounds;
         Rect? it = intended?.Bounds;
         FlashOn(c, it, mismatch);
@@ -203,6 +204,13 @@ public sealed class UiInspector : IDisposable
             string.Equals(e.Label.Trim(), clicked.Label.Trim(), StringComparison.OrdinalIgnoreCase));
 
         bool mismatch = intended != null && intended.Id != clicked.Id;
+        InspectorDiagnostics.LogSap(px, py, hitId, clicked, intended, els, mismatch);
+
+        // Clic dentro de un árbol: el shell no es la unidad accionable — la FILA sí. Como los nodos no
+        // traen geometría (§1.6), se resuelve leyendo la selección del árbol y se registra qué fila fue.
+        if (clicked.SubType.IndexOf("Tree", StringComparison.OrdinalIgnoreCase) >= 0)
+            InspectorDiagnostics.LogSapTreeNode(clicked, _sapReader.SelectedTreeNode(clicked.Id));
+
         Rect c = BoxOf(clicked);
         Rect? it = (mismatch && intended != null) ? BoxOf(intended) : (Rect?)null;
         FlashOn(c, it, mismatch);

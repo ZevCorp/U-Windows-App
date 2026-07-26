@@ -191,6 +191,13 @@ public sealed class SapGuiSurface : IUiSurface
         catch { return SurfaceIdentity.Unknown; }
     }
 
+    /// <summary>Métrica de carga: SAP GUI aún no la aporta (la navegación por scripting es síncrona).
+    /// 0 = sin métrica → el motor de carga se salta esta superficie. Mejora futura.</summary>
+    public int ReadinessCount() => 0;
+
+    /// <summary>Sin gate de carga en SAP scripting (navegación síncrona): siempre listo.</summary>
+    public bool IsStepReady(PlanStep step) => true;
+
     // ── Lectura ──────────────────────────────────────────────────────────────
 
     public IReadOnlyList<DetectedField> ReadFields()
@@ -277,6 +284,58 @@ public sealed class SapGuiSurface : IUiSurface
             return Str(comp.Id);
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// El nodo actualmente SELECCIONADO de un árbol SAP (por Id del shell), o null. Los nodos de árbol
+    /// NO tienen geometría propia (§1.6 de la investigación), así que <see cref="HitTest"/> por píxel
+    /// solo devuelve el shell entero, nunca la fila. La forma coordinate-free de saber QUÉ FILA tocó el
+    /// usuario es leer la selección del árbol justo después del clic: un clic simple selecciona el nodo,
+    /// y su clave es lo que luego acciona el asistente (<c>doubleClickNode</c>/<c>selectNode</c>).
+    ///
+    /// Distintos controles de árbol (GuiTree simple, de columnas, de lista) exponen getters de selección
+    /// distintos, así que se prueban en orden. Nunca lanza: si nada devuelve una clave, da null y quien
+    /// llama degrada (registra que hay que capturar la fila por el evento Change/commandArray al grabar).
+    /// </summary>
+    public (string Key, string Text)? SelectedTreeNode(string treeId)
+    {
+        dynamic? session; try { session = Session(); } catch { return null; }
+        if (session == null) return null;
+
+        dynamic? tree; try { tree = session.FindById(treeId, false); } catch { return null; }
+        if (tree == null) return null;
+
+        string? key = TrySelectedNodeKey(tree);
+        if (string.IsNullOrEmpty(key)) return null;
+
+        string text = NodeText(tree, key!, TreeColumnNames(tree));
+        return (key!, text);
+    }
+
+    /// <summary>Clave del nodo seleccionado probando las variantes de la API de árbol. "" si ninguna responde.</summary>
+    private static string? TrySelectedNodeKey(dynamic tree)
+    {
+        // 1. GetSelectedNodes() → GuiCollection de claves (árboles de columnas / lista, multi-selección).
+        try
+        {
+            dynamic sel = tree.GetSelectedNodes();
+            int n = (int)sel.Count;
+            if (n > 0) { string k = Str(sel.ElementAt(0)); if (k.Length > 0) return k; }
+        }
+        catch { }
+
+        // 2. Propiedad de clave única (árboles simples). El casing exacto varía entre controles: se
+        //    prueban las formas documentadas por enlace tardío, tolerando la ausencia de cada una.
+        foreach (string prop in new[] { "selectedNode", "SelectedNode", "GetSelectedNode", "topNode" })
+        {
+            try
+            {
+                string k = Str(tree.GetType().InvokeMember(prop, BindingFlags.GetProperty, null, tree, null)).Trim();
+                if (k.Length > 0) return k;
+            }
+            catch { }
+        }
+        return null;
     }
 
     private static void WalkVisual(dynamic node, List<SapVisualElement> acc, int depth)

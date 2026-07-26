@@ -57,47 +57,15 @@ public partial class WorkflowLibraryWindow : Window
 
         Loaded += (_, _) =>
         {
-            GraphUrl.Text = _graphConfig.BaseUrl;
-            GraphApiKey.Text = _graphConfig.ApiKey ?? "";
+            string host = _graphConfig.BaseUrl.Replace("https://", "").Replace("http://", "").TrimEnd('/');
+            ConnStatus.Text = _graphConfig.IsConfigured
+                ? $"✓ Conectado a {host}"
+                : "⚠ Sin API key. Una sola vez en dev: setx GRAPH_API_KEY \"tu_key\" y reinicia Ü.";
             _ = ReloadWorkflowsAsync();
         };
     }
 
     // ── Conexión ─────────────────────────────────────────────────────────────
-
-    private void OnSaveConnection(object sender, RoutedEventArgs e)
-    {
-        _graphConfig.BaseUrl = GraphUrl.Text.Trim();
-        _graphConfig.ApiKey = string.IsNullOrWhiteSpace(GraphApiKey.Text) ? null : GraphApiKey.Text.Trim();
-        _graphConfig.Save();
-        // GraphClient fija el header X-API-Key al construirse: si la key cambió, hay que recrearlo.
-        _graphClient = new GraphClient(_graphConfig);
-        _player = new WorkflowPlayer(_graphClient, _graphConfig, _uia, _sap)
-        {
-            Aligner = U.WindowsClient.Uia.AppAligner.EnsureAsync,
-            Log = s => LogBus.Log("workflow", s)
-        };
-        _player.StepDone += (_, outcome) => Dispatcher.Invoke(() => AppendProgress(outcome));
-        ConnStatus.Text = "Guardado.";
-    }
-
-    private async void OnTestConnection(object sender, RoutedEventArgs e)
-    {
-        TestConnBtn.IsEnabled = false;
-        ConnStatus.Text = "Probando…";
-        try
-        {
-            JsonElement manifest = await _graphClient.ManifestAsync(CancellationToken.None);
-            ConnStatus.Text = $"OK — {manifest}";
-            LogBus.Log("workflow-ui", $"ManifestAsync OK: {manifest}");
-        }
-        catch (Exception ex)
-        {
-            ConnStatus.Text = $"Falló: {ex.Message}";
-            LogBus.Log("workflow-ui", $"ManifestAsync falló: {ex}");
-        }
-        finally { TestConnBtn.IsEnabled = true; }
-    }
 
     // ── Enseñar ──────────────────────────────────────────────────────────────
 
@@ -109,12 +77,8 @@ public partial class WorkflowLibraryWindow : Window
 
     private async Task StartTeachingAsync()
     {
+        // El título ya NO es obligatorio: si va vacío, se autogenera al final desde lo aprendido (Graph).
         string description = TeachDescription.Text.Trim();
-        if (description.Length == 0)
-        {
-            StatusLine.Text = "Escribe una descripción corta del workflow antes de enseñar.";
-            return;
-        }
 
         _teachSession = new WorkflowTeachSession(
             _graphClient, _graphConfig, _uia, _sap, _backend, _videoLibrary, _userId);

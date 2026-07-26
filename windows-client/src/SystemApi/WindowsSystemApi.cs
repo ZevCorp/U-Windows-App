@@ -17,7 +17,10 @@ public static class WindowsSystemApi
     public static bool LaunchApp(string app)
     {
         if (string.IsNullOrWhiteSpace(app)) return false;
-        // Intenta ejecutable directo; si falla, deja que el shell lo resuelva (nombre, .lnk del menú Inicio).
+        // 1) Acceso directo del menú Inicio: resuelve NOMBRES VISIBLES ("Google Chrome" → chrome.exe) que
+        //    el shell no encuentra como comando. Es lo que el cerebro suele pasar a launch_app.
+        if (StartMenuLauncher.TryLaunch(app)) return true;
+        // 2) Fallback: ejecutable directo o que el shell resuelva el nombre (comando del PATH, protocolo).
         return Shell(app) || Shell("cmd", $"/c start \"\" \"{app}\"");
     }
 

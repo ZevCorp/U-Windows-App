@@ -17,6 +17,9 @@
     <RootNamespace>U.WindowsClient</RootNamespace>
     <AssemblyName>U</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Ícono del .exe (y, por tanto, de los accesos directos): la MISMA carita/logo de la app Android
+         (adaptive icon portado a .ico multi-resolución). -->
+    <ApplicationIcon>U.ico</ApplicationIcon>
     <!-- Velopack (auto-update) exige que VelopackApp.Build().Run() sea lo PRIMERO del proceso, antes de
          levantar WPF: cuando el updater relanza el .exe con sus hooks, el proceso debe atenderlos y
          salir sin abrir ventana. WPF genera su propio Main a partir de App.xaml, así que se apunta el
@@ -33,6 +36,13 @@
          competiría con el nuestro. InitializeComponent() sigue existiendo y StartupUri sigue funcionando. -->
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Sonidos de la carita (los MISMOS WAV de la app Android): tick al hacer clic, carrillón al
+         activar el micrófono con doble clic. Van embebidos como recurso WPF y se cargan por stream. -->
+    <Resource Include="assets\tick.wav" />
+    <Resource Include="assets\mic_chime.wav" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,6 +2,7 @@ using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Agent;
 using U.WindowsClient.Diagnostics;
+using U.WindowsClient.Telemetry;
 using U.WindowsClient.Uia;
 
 namespace U.WindowsClient.Mcp;
@@ -29,6 +30,9 @@ public sealed class WorkflowMcpRunner
     public async Task<string> RunAsync(string workflowId, string context, CancellationToken ct)
     {
         LogBus.Log("workflow", $"MCP invoca workflow_id='{workflowId}' context='{context}'");
+        // Telemetría "Windows Live": corrida de workflow (subconsciente). runId correlaciona sus pasos.
+        string runId = TelemetryBus.NewRunId();
+        TelemetryBus.Emit("workflow_start", workflowId: workflowId, runId: runId, label: context);
         if (string.IsNullOrWhiteSpace(workflowId))
             return "la llamada al workflow no trajo workflow_id";
         if (!_graphConfig.IsConfigured)
@@ -42,7 +46,11 @@ public sealed class WorkflowMcpRunner
             Log = s => LogBus.Log("workflow", s)
         };
         player.StepDone += (_, outcome) =>
+        {
             _voice.Narrate(outcome.Ok ? $"✓ {outcome.Label}" : $"✗ {outcome.Label}: {outcome.Error}");
+            TelemetryBus.Emit("workflow_step", workflowId: workflowId, runId: runId,
+                phase: outcome.Ok ? "ok" : "error", label: outcome.Label);
+        };
 
         var variables = string.IsNullOrWhiteSpace(context)
             ? null
@@ -52,6 +60,10 @@ public sealed class WorkflowMcpRunner
         // ejecutarse ya no coincide (el usuario navegó), el Aligner se alinea antes de tocar nada.
         RunResult result = await player.RunAsync(workflowId, variables, strictSurface: true, ct);
         LogBus.Log("workflow", $"resultado: ok={result.Ok} · pasos={result.Completed}/{result.Steps.Count} · alineado={result.AlignedConsciously}{(result.Ok ? "" : " · error=" + result.Error)}");
+        TelemetryBus.Emit("workflow_end", workflowId: workflowId, runId: runId,
+            phase: result.Ok ? "ok" : "error",
+            label: result.Ok ? $"completado ({result.Completed} pasos)" : result.Error,
+            detail: new { completed = result.Completed, steps = result.Steps.Count, aligned = result.AlignedConsciously });
         if (result.Ok && result.AlignedConsciously)
         {
             // APRENDIZAJE: me tuve que alinear conscientemente. Enseñárselo al workflow para que la

@@ -16,13 +16,109 @@ public sealed class UiaSurface : IUiSurface
 {
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
+    private const uint GW_HWNDNEXT = 2;
+
+    /// <summary>El origin canónico del ESCRITORIO de Windows. Es una superficie de primera clase, distinta
+    /// del Explorador de archivos (ambos son explorer.exe): así el navegador la alcanza con "mostrar
+    /// escritorio" (Win+D) y nunca abre una ventana del Explorador por error. Ver DesktopStrategy.</summary>
+    public const string DesktopOrigin = "uia://desktop";
+
+    // Hook global de mouse: la captura de clics FIABLE (posición → elemento por UIA), el MISMO mecanismo
+    // que el UiInspector. Reemplaza a InvokePattern.InvokedEvent, que solo disparaba para ciertos
+    // controles y exigía que algo (el inspector) mantuviera vivo el canal UIA. Ahora la grabación NO
+    // depende del inspector, captura clics en CUALQUIER app (cross-app) y excluye la propia UI de Ü.
+    private delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
+    [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+    [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hhk, int code, IntPtr wParam, IntPtr lParam);
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto)] private static extern IntPtr GetModuleHandle(string? lpModuleName);
+    private const int WH_MOUSE_LL = 14;
+    private const int WM_LBUTTONDOWN = 0x0201;
+    private const int WM_MOUSEWHEEL = 0x020A;
+
+    // Hook de teclado: para grabar teclas de ACCIÓN (Enter y, más adelante, Tab/Esc). El tecleo de texto
+    // ya lo capta ValueProperty; esto es solo el gesto que envía/confirma, que UIA no expone como paso.
+    private const int WH_KEYBOARD_LL = 13;
+    private const int WM_KEYDOWN = 0x0100;
+    private const byte VK_RETURN = 0x0D;
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+    [DllImport("user32.dll")] private static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KBDLLHOOKSTRUCT { public uint vkCode; public uint scanCode; public uint flags; public uint time; public IntPtr dwExtraInfo; }
+
+    // Clic REAL: mover el cursor y hacer un clic físico (visible, y funciona en shell/escritorio/taskbar
+    // donde InvokePattern no hace nada). Se usa mouse_event por consistencia con keybd_event del resto
+    // del código. La ejecución por coordenadas es el espejo de cómo se graba (por posición).
+    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, IntPtr dwExtraInfo);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
+    private const uint MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004, MOUSEEVENTF_WHEEL = 0x0800;
+
+    /// <summary>El cursor automatizado, frame a frame: la carita colapsada lo escucha para SEGUIRLO
+    /// (se ve "quién" está haciendo los clics). Estático a propósito: hay una sola automatización viva.</summary>
+    public static event Action<int, int>? CursorMoved;
+
+    /// <summary>
+    /// Mueve el cursor con curva de aceleración (ease-in cúbica: arranque lento → aceleración fuerte) en
+    /// vez de teletransportarlo. Duración según la distancia, acotada para que se sienta fluidamente rápido.
+    /// </summary>
+    private static void SmoothMove(int toX, int toY)
+    {
+        if (!GetCursorPos(out POINT from)) { SetCursorPos(toX, toY); return; }
+        double dist = Math.Sqrt(Math.Pow(toX - from.X, 2) + Math.Pow(toY - from.Y, 2));
+        if (dist < 4) { SetCursorPos(toX, toY); return; }
+
+        int ms = (int)Math.Clamp(dist * 0.35, 110, 380);
+        int frames = Math.Max(2, ms / 12);
+        for (int i = 1; i <= frames; i++)
+        {
+            double t = (double)i / frames;
+            double e = t * t * t; // la curva "brusca": lenta al inicio, fuerte al final
+            int x = (int)Math.Round(from.X + (toX - from.X) * e);
+            int y = (int)Math.Round(from.Y + (toY - from.Y) * e);
+            SetCursorPos(x, y);
+            try { CursorMoved?.Invoke(x, y); } catch { }
+            Thread.Sleep(12);
+        }
+        SetCursorPos(toX, toY);
+        try { CursorMoved?.Invoke(toX, toY); } catch { }
+    }
+
+    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X; public int Y; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData; public uint flags; public uint time; public IntPtr dwExtraInfo; }
 
     public string Name => "uia";
 
+    /// <summary>
+    /// Log de diagnóstico (opcional). windows-graph no depende de windows-client, así que el cliente
+    /// enchufa aquí su LogBus (tag "uia"). Es el ojo dentro de la resolución y el clic — el punto ciego
+    /// donde antes no veíamos por qué un paso decía ✓ sin pasar nada en pantalla.
+    /// </summary>
+    public Action<string>? Log { get; set; }
+    private void L(string msg) { try { Log?.Invoke(msg); } catch { } }
+
     public event EventHandler<ObservedStep>? StepObserved;
 
-    private AutomationElement? _observedRoot;
-    private AutomationEventHandler? _invoked;
+    private IntPtr _hook = IntPtr.Zero;
+    private HookProc? _hookProc;                 // referencia viva: si el GC lo recoge, el hook revienta
+    private IntPtr _keyHook = IntPtr.Zero;
+    private HookProc? _keyHookProc;              // idem para el hook de teclado
+
+    // Scroll: se ACUMULA el delta de rueda y, tras una pausa, se publica UN paso "scroll" (no uno por
+    // notch). Así un gesto de deslizar hasta el final es un solo paso con el delta total.
+    private int _scrollAccum, _scrollX, _scrollY;
+    private System.Threading.Timer? _scrollTimer;
+    private readonly object _scrollGate = new();
+    private AutomationElement? _valueRoot;       // ventana donde escuchamos cambios de valor (tecleo/select)
+    private IntPtr _valueRootHwnd = IntPtr.Zero; // para re-anclar solo cuando cambia de ventana
     private AutomationPropertyChangedEventHandler? _propertyChanged;
     private bool _observing;
     private readonly object _gate = new();
@@ -42,12 +138,51 @@ public sealed class UiaSurface : IUiSurface
 
     public SurfaceIdentity Identity()
     {
-        IntPtr hwnd = GetForegroundWindow();
+        IntPtr hwnd = RealForegroundWindow();
         if (hwnd == IntPtr.Zero) return SurfaceIdentity.Unknown;
+
+        // El ESCRITORIO es su propia superficie, no "explorer.exe". Windows lo dibuja con la ventana
+        // shell Progman (y a veces WorkerW cuando hay fondo activo): ambas son el escritorio. Detectarlo
+        // por CLASE de ventana es lo auténtico —el título "Program Manager" es solo su nombre interno—.
+        if (IsDesktopWindow(hwnd))
+            return new SurfaceIdentity(DesktopOrigin, "/", "Escritorio");
 
         string proc = ProcessName(hwnd);
         string title = Root(hwnd)?.Current.Name ?? "";
         return new SurfaceIdentity($"uia://{proc}", "/" + title.Trim(), title.Trim());
+    }
+
+    /// <summary>¿Es la ventana del escritorio (no una ventana del Explorador de archivos)? Por clase.</summary>
+    private static bool IsDesktopWindow(IntPtr hwnd)
+    {
+        var sb = new System.Text.StringBuilder(64);
+        if (GetClassName(hwnd, sb, sb.Capacity) == 0) return false;
+        string cls = sb.ToString();
+        return cls == "Progman" || cls == "WorkerW";
+    }
+
+    /// <summary>
+    /// La ventana "real" en foco, SALTANDO la propia UI de Ü. La carita es un overlay topmost que suele
+    /// quedar como foreground; si se toma su ventana como superficie, el workflow nace con home
+    /// <c>uia://U.exe</c> —nunca alcanzable ni alineable—, el pre-check siempre pasa ("ya estamos ahí")
+    /// y el SurfaceNavigator jamás va a buscar el sitio de arranque real. Se baja por el orden-Z hasta la
+    /// primera ventana visible y con título que no sea de Ü (el escritorio o la app que estabas usando).
+    /// </summary>
+    private static IntPtr RealForegroundWindow()
+    {
+        IntPtr hwnd = GetForegroundWindow();
+        for (int i = 0; i < 50 && hwnd != IntPtr.Zero; i++)
+        {
+            if (IsWindowVisible(hwnd) && !IsOwnWindow(hwnd) && HasTitle(hwnd)) return hwnd;
+            hwnd = GetWindow(hwnd, GW_HWNDNEXT);
+        }
+        return GetForegroundWindow(); // si no hallamos otra, la original: mejor algo que Unknown
+    }
+
+    private static bool HasTitle(IntPtr hwnd)
+    {
+        var sb = new System.Text.StringBuilder(64);
+        return GetWindowText(hwnd, sb, sb.Capacity) > 0;
     }
 
     // ── Lectura ──────────────────────────────────────────────────────────────
@@ -70,6 +205,57 @@ public sealed class UiaSurface : IUiSurface
             if (field != null) { fields.Add(field); order++; }
         }
         return fields;
+    }
+
+    /// <summary>
+    /// Métrica del motor de carga (SurfaceReadiness): número de elementos interactivos VISIBLES y
+    /// HABILITADOS en la pantalla. Mientras la UI carga, pocos están on-screen/enabled; ya cargada, todos.
+    /// Al grabar es la "meta" (100%); al ejecutar se compara el actual para saber el % cargado.
+    /// </summary>
+    public int ReadinessCount()
+    {
+        IntPtr hwnd = GetForegroundWindow();
+        AutomationElement? root = hwnd == IntPtr.Zero ? null : Root(hwnd);
+        if (root == null) return 0;
+        var found = new List<(AutomationElement, List<int>)>();
+        try { Walk(root, found, new List<int>(), 0); } catch { }
+        return found.Count;
+    }
+
+    /// <summary>
+    /// Corto-circuito del motor de carga: ¿el elemento del paso ya está presente Y habilitado? Si sí, se
+    /// ejecuta YA sin esperar el % global (que es inestable en listas como las de SAP). Tecla/scroll no
+    /// tienen elemento → listos siempre.
+    /// </summary>
+    public bool IsStepReady(PlanStep step)
+    {
+        string at = step.ActionType ?? "";
+        if (at.Equals("key", StringComparison.OrdinalIgnoreCase) || at.Equals("scroll", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var candidates = new List<string> { step.Selector };
+        candidates.AddRange(step.AlternativeTargets().Where(UiaSelector.Owns));
+        foreach (string sel in candidates.Where(UiaSelector.Owns))
+        {
+            var el = Resolve(sel);
+            if (el == null) continue;
+            try { if (el.Current.IsEnabled) return true; } // presente Y habilitado = listo
+            catch { return true; } // si no podemos leer IsEnabled, no bloquear
+        }
+        return false;
+    }
+
+    // Cache por-superficie para no recorrer el árbol en CADA paso al grabar (solo al cambiar de pantalla).
+    private string _readyCacheUrl = "";
+    private int _readyCacheCount = -1;
+    private int CachedReadinessCount()
+    {
+        string url = Identity().Url;
+        if (url == _readyCacheUrl && _readyCacheCount >= 0) return _readyCacheCount;
+        int c = ReadinessCount();
+        _readyCacheUrl = url;
+        _readyCacheCount = c;
+        return c;
     }
 
     private static void Walk(AutomationElement node, List<(AutomationElement, List<int>)> acc, List<int> path, int depth)
@@ -237,25 +423,69 @@ public sealed class UiaSurface : IUiSurface
     public bool Execute(PlanStep step, out string error)
     {
         error = "";
+
+        // Tecla de acción (Enter…): no resuelve un elemento, va al foco. Se maneja antes de la resolución.
+        if (string.Equals(step.ActionType, "key", StringComparison.OrdinalIgnoreCase))
+            return SendKey(step, out error);
+
+        // Scroll: la rueda al panel bajo la posición grabada, con el mismo delta → mismo punto.
+        if (string.Equals(step.ActionType, "scroll", StringComparison.OrdinalIgnoreCase))
+            return DoScroll(step, out error);
+
         // flexible: el valor/elemento exacto no importa (ej. "la pestaña nueva"). Best-effort: si no
         // resuelve, el step se salta sin romper el workflow. Ver doc coincidencia-superficie-estado.
         bool flexible = string.Equals(step.ValueMode, "flexible", StringComparison.OrdinalIgnoreCase);
         var candidates = new List<string> { step.Selector };
         candidates.AddRange(step.AlternativeTargets().Where(UiaSelector.Owns));
 
+        L($"Execute «{step.Label}» · {step.ActionType} · valueMode={step.ValueMode ?? "-"}{(flexible ? " (flexible)" : "")} · foreground='{Identity().Url}'");
+        L($"  selectores candidatos: [{string.Join(" | ", candidates.Where(UiaSelector.Owns))}]");
+
+        // Las UIs tardan en pintarse (a veces poco, a veces un poco más): si el elemento no aparece a la
+        // primera, se reintenta unos milisegundos antes de rendirse. No son segundos a propósito — la
+        // espera larga de apps que abren en frío es trabajo del navegador/alineación, no de cada paso.
         AutomationElement? el = null;
-        foreach (string sel in candidates.Where(UiaSelector.Owns))
+        string hitSelector = "";
+        int attempts = 0;
+        for (int attempt = 0; attempt < 5 && el == null; attempt++)
         {
-            el = Resolve(sel);
-            if (el != null) break;
+            attempts = attempt + 1;
+            if (attempt > 0) Thread.Sleep(200);
+            foreach (string sel in candidates.Where(UiaSelector.Owns))
+            {
+                el = Resolve(sel);
+                if (el != null) { hitSelector = sel; break; }
+            }
         }
 
         if (el == null)
         {
+            // Fallback por POSICIÓN: si es un clic y grabamos dónde ocurrió, se clickea ahí (relativo a la
+            // ventana). Salva los paneles SAP con id volátil que nunca resuelven por selector.
+            if (string.Equals(step.ActionType, "click", StringComparison.OrdinalIgnoreCase) &&
+                step.ClickPos() is { } rel)
+            {
+                var (winL, winT) = WindowOrigin();
+                int x = winL + rel.RelX, y = winT + rel.RelY;
+                L($"  selector no resolvió → fallback por POSICIÓN: clic en ({x},{y}) [ventana+({rel.RelX},{rel.RelY})]");
+                try
+                {
+                    SmoothMove(x, y);
+                    Thread.Sleep(20);
+                    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
+                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
+                    return true;
+                }
+                catch (Exception e) { error = $"fallback por posición falló: {e.Message}"; }
+            }
+
+            L($"  ✗ NO resuelto tras {attempts} intento(s) · {(flexible ? "flexible → se salta (ok)" : "falla")}");
             if (flexible) { error = ""; return true; }
             error = $"no se encontró el elemento «{step.Label}» ({step.Selector})";
             return false;
         }
+
+        L($"  ✓ resuelto en {attempts} intento(s) con '{hitSelector}' → name='{Safe(() => el.Current.Name)}' ct={Safe(() => el.Current.ControlType.ProgrammaticName)} rect={Safe(() => el.Current.BoundingRectangle.ToString())} ventana='{WindowLabel(el)}'");
 
         try
         {
@@ -263,14 +493,16 @@ public sealed class UiaSurface : IUiSurface
             {
                 "input" => SetValue(el, step.Value ?? "", out error),
                 "select" => Select(el, step.SelectedValue ?? step.Value ?? "", out error),
-                "click" => Click(el, out error),
+                "click" => RealClick(el, out error),
                 _ => Fail($"actionType no soportado en UIA: {step.ActionType}", out error),
             };
-            if (!ok && flexible) { error = ""; return true; }
+            L($"  resultado acción: ok={ok}{(ok ? "" : $" · motivo='{error}'")}");
+            if (!ok && flexible) { L("  flexible → se salta pese al fallo (ok)"); error = ""; return true; }
             return ok;
         }
         catch (Exception e)
         {
+            L($"  ✗ excepción ejecutando: {e.Message}");
             error = $"UIA falló ejecutando «{step.Label}»: {e.Message}";
             return false;
         }
@@ -278,18 +510,109 @@ public sealed class UiaSurface : IUiSurface
 
     private static bool Fail(string reason, out string error) { error = reason; return false; }
 
+    /// <summary>Envía una tecla de acción al elemento con foco. Hoy solo Enter; el patrón deja agregar
+    /// Tab/Esc trivialmente cuando las pruebas lo pidan.</summary>
+    private bool SendKey(PlanStep step, out string error)
+    {
+        error = "";
+        string key = (step.Value ?? step.Label ?? "").Trim();
+        L($"SendKey «{key}» al foco '{Identity().Url}'");
+        if (key.Equals("Enter", StringComparison.OrdinalIgnoreCase) || key.Equals("Return", StringComparison.OrdinalIgnoreCase))
+        {
+            keybd_event(VK_RETURN, 0, 0, IntPtr.Zero);
+            keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, IntPtr.Zero);
+            return true;
+        }
+        error = $"tecla no soportada aún: «{key}»";
+        return false;
+    }
+
+    /// <summary>
+    /// Reproduce un scroll: mueve el cursor al panel grabado (posición) y envía la rueda con el MISMO
+    /// delta total, en trozos de un notch (120) para que el control lo procese como scroll real. "Mismo
+    /// punto" = mismo delta desde el inicio (asume que el panel arranca en la misma posición de scroll,
+    /// que es el caso al cargar una pantalla; el scroll ABSOLUTO por barra es una mejora posterior).
+    /// </summary>
+    private bool DoScroll(PlanStep step, out string error)
+    {
+        error = "";
+        (int x, int y) = ParseScrollPos(step.Selector);
+        int delta = int.TryParse(step.Value, out int d) ? d : 0;
+        L($"DoScroll delta={delta} en ({x},{y})");
+        if (delta == 0) return true;
+
+        if (x != 0 || y != 0) { SmoothMove(x, y); Thread.Sleep(30); }
+        int notch = delta > 0 ? 120 : -120, remaining = delta, guard = 0;
+        while (Math.Abs(remaining) >= 120 && guard++ < 400)
+        {
+            mouse_event(MOUSEEVENTF_WHEEL, 0, 0, (uint)notch, IntPtr.Zero);
+            Thread.Sleep(12);
+            remaining -= notch;
+        }
+        if (remaining != 0) mouse_event(MOUSEEVENTF_WHEEL, 0, 0, (uint)remaining, IntPtr.Zero);
+        return true;
+    }
+
+    /// <summary>Parsea el selector sintético "scroll:x,y" a coordenadas de pantalla.</summary>
+    private static (int, int) ParseScrollPos(string selector)
+    {
+        try
+        {
+            int c = (selector ?? "").IndexOf(':');
+            string[] xy = selector![(c + 1)..].Split(',');
+            return (int.Parse(xy[0]), int.Parse(xy[1]));
+        }
+        catch { return (0, 0); }
+    }
+
+    /// <summary>
+    /// Resuelve el selector a un elemento vivo. Antes solo miraba la ventana en primer plano (que al
+    /// ejecutar suele ser Ü) y por eso "encontraba" cosas falsas o nada. Ahora: 1) intenta la ventana en
+    /// foco (rápido, caso común); 2) si no, barre las ventanas de nivel superior —taskbar, escritorio,
+    /// otra app— EXCLUYENDO a Ü, para alcanzar elementos de shell/cross-app. Los selectores por PATH son
+    /// relativos a su ventana original, así que solo aplican al intento de la ventana en foco.
+    /// </summary>
     private AutomationElement? Resolve(string selector)
     {
-        IntPtr hwnd = GetForegroundWindow();
-        AutomationElement? root = hwnd == IntPtr.Zero ? null : Root(hwnd);
-        if (root == null) return null;
-
         var parts = UiaSelector.Parse(selector);
+        bool byPath = parts.TryGetValue("path", out string? raw) && !string.IsNullOrWhiteSpace(raw);
+        Condition? condition = byPath ? null : UiaSelector.ConditionFor(parts);
+        if (!byPath && condition == null) return null;
 
-        if (parts.TryGetValue("path", out string? raw) && !string.IsNullOrWhiteSpace(raw))
-            return ByPath(root, raw);
+        // 1) Ventana en primer plano (si no es la propia Ü).
+        IntPtr fg = GetForegroundWindow();
+        if (fg != IntPtr.Zero && !IsOwnWindow(fg))
+        {
+            var hit = FindIn(Root(fg), byPath, raw, condition);
+            if (hit != null) { L($"    ✓ '{selector}' en la ventana en foco ('{WindowLabel(hit)}')"); return hit; }
+        }
 
-        var condition = UiaSelector.ConditionFor(parts);
+        // 2) Barrido de ventanas de nivel superior (shell/otras apps), saltando a Ü. Solo por condición.
+        if (!byPath && condition != null)
+        {
+            try
+            {
+                var walker = TreeWalker.ControlViewWalker;
+                var child = walker.GetFirstChild(AutomationElement.RootElement);
+                while (child != null)
+                {
+                    if (!IsOwnUi(child))
+                    {
+                        try { var hit = child.FindFirst(TreeScope.Descendants, condition); if (hit != null) { L($"    ⚠ '{selector}' NO estaba en foco — hallado por barrido en '{WindowLabel(hit)}' (elemento de otra ventana/escritorio; puede estar tapado)"); return hit; } }
+                        catch { }
+                    }
+                    child = walker.GetNextSibling(child);
+                }
+            }
+            catch { }
+        }
+        return null;
+    }
+
+    private static AutomationElement? FindIn(AutomationElement? root, bool byPath, string? raw, Condition? condition)
+    {
+        if (root == null) return null;
+        if (byPath) return ByPath(root, raw!);
         if (condition == null) return null;
         try { return root.FindFirst(TreeScope.Descendants, condition); }
         catch { return null; }
@@ -321,6 +644,10 @@ public sealed class UiaSurface : IUiSurface
         {
             if (v.Current.IsReadOnly) { error = "el campo es de solo lectura"; return false; }
             v.SetValue(value);
+            // Dejar el FOCO de teclado en el campo recién escrito. SetValue no enfoca, así que sin esto un
+            // Enter posterior (keybd_event) iría a otra ventana y no submitearía —era el bug de SAP: se
+            // escribía la transacción pero el Enter no navegaba—. Best-effort: si el control no enfoca, ni modo.
+            try { el.SetFocus(); } catch { }
             return true;
         }
         error = "el campo no soporta ValuePattern (no se puede escribir por UIA)";
@@ -380,21 +707,94 @@ public sealed class UiaSurface : IUiSurface
         return false;
     }
 
+    /// <summary>
+    /// Clic REAL: trae al frente la ventana del elemento, mueve el cursor a su centro y hace un clic
+    /// físico. Es VISIBLE (ves el mouse moverse) y funciona donde InvokePattern no —iconos de escritorio,
+    /// taskbar, Chrome—. Si el elemento no expone una caja usable, cae al Invoke de UIA (invisible pero
+    /// mejor que nada). Espejo de cómo se graba: por posición en pantalla.
+    /// </summary>
+    private bool RealClick(AutomationElement el, out string error)
+    {
+        error = "";
+        try
+        {
+            var r = el.Current.BoundingRectangle;
+            if (!r.IsEmpty && !double.IsInfinity(r.Width) && r.Width >= 1 && r.Height >= 1)
+            {
+                IntPtr win = TopLevelWindow(el);
+                if (win != IntPtr.Zero) { try { SetForegroundWindow(win); } catch { } }
+                Thread.Sleep(40); // dar tiempo a que la ventana suba antes de comprobar visibilidad
+
+                double cx = r.Left + r.Width / 2, cy = r.Top + r.Height / 2;
+                L($"    RealClick: rect={r} centro=({(int)cx},{(int)cy}) ventana='{WindowLabel(el)}'{(IsDesktopWindow(win) ? " (ESCRITORIO)" : "")}");
+                L($"    → clic físico en ({(int)cx},{(int)cy})");
+                SmoothMove((int)cx, (int)cy);
+                Thread.Sleep(20);
+                mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
+                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
+                return true;
+            }
+            L($"    RealClick: sin caja usable (rect={r}) → respaldo a Invoke por UIA (INVISIBLE)");
+        }
+        catch (Exception e) { L($"    RealClick excepción: {e.Message} → respaldo a Invoke"); error = e.Message; }
+
+        // Sin caja usable → respaldo a la invocación por UIA.
+        bool invoked = Click(el, out error);
+        L($"    Invoke UIA: ok={invoked}{(invoked ? "" : $" · {error}")}");
+        return invoked;
+    }
+
+    // ── Ayudas de logging (no cambian comportamiento) ─────────────────────────
+    private static string Safe(Func<object?> f) { try { return f()?.ToString() ?? ""; } catch { return "?"; } }
+
+    /// <summary>Etiqueta corta de la ventana de un elemento, para logs: su título, o (escritorio)/(sin título).</summary>
+    private static string WindowLabel(AutomationElement? el)
+    {
+        if (el == null) return "(nada)";
+        try
+        {
+            IntPtr h = TopLevelWindow(el);
+            if (h == IntPtr.Zero) return "?";
+            var sb = new System.Text.StringBuilder(120);
+            GetWindowText(h, sb, sb.Capacity);
+            if (sb.Length > 0) return sb.ToString();
+            return IsDesktopWindow(h) ? "(escritorio)" : "(sin título)";
+        }
+        catch { return "?"; }
+    }
+
+    /// <summary>La ventana (hwnd) que contiene al elemento, subiendo hasta el primer ancestro con handle.</summary>
+    private static IntPtr TopLevelWindow(AutomationElement el)
+    {
+        try
+        {
+            var node = el;
+            while (node != null)
+            {
+                int h = node.Current.NativeWindowHandle;
+                if (h != 0) return new IntPtr(h);
+                node = TreeWalker.ControlViewWalker.GetParent(node);
+            }
+        }
+        catch { }
+        return IntPtr.Zero;
+    }
+
     // ── Observación ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Engancha los eventos de UIA sobre la ventana en primer plano. El ámbito es esa ventana y no el
-    /// escritorio a propósito: suscribirse a TreeScope.Descendants del root es una forma conocida de
-    /// ahogar el proceso y la app observada.
+    /// Empieza a grabar. Dos vías complementarias:
+    ///   • CLICS — un hook global de mouse (WH_MOUSE_LL). En cada clic izquierdo se resuelve el elemento
+    ///     bajo el cursor con UIA (FromPoint) y se publica. Es fiable (capta CUALQUIER clic, no solo los
+    ///     controles que disparan InvokedEvent), cross-app (hook global + coordenadas de pantalla) y NO
+    ///     depende de que el inspector esté encendido.
+    ///   • TECLEO/SELECCIÓN — eventos de propiedad de UIA (ValueProperty/Toggle/SelectionItem) anclados a
+    ///     la ventana en foco; se RE-ANCLAN al cambiar de ventana (ReanchorValueEvents) para seguir al
+    ///     usuario por la app / entre apps.
+    /// En ambas vías se excluye la propia UI de Ü: sus botones (Enseñar/Detener, la carita…) nunca son
+    /// parte de un workflow.
     ///
-    /// Sobre el handler: Microsoft documenta que SÍ es seguro llamar a UIA desde dentro de un handler
-    /// de eventos de UIA ("It is safe to make UI Automation calls in a UI Automation event handler").
-    /// Aun así aquí solo se arma el ObservedStep y se publica: el consumidor (WorkflowRecorder) hace
-    /// HTTP, y ESO no puede colgar del hilo de eventos de la app observada.
-    ///
-    /// LÍMITE CONOCIDO: esto NO captura el tecleo. UIA no expone pulsaciones, y ValueProperty llega
-    /// como cambio ya consolidado, no por tecla. Para grabar escritura de verdad hace falta sumar
-    /// WinEvents (EVENT_OBJECT_VALUECHANGE), que va en su propio hilo con su propia bomba de mensajes.
+    /// LÍMITE CONOCIDO: el tecleo llega por ValueProperty como cambio ya consolidado, no por tecla.
     /// </summary>
     public void StartObserving()
     {
@@ -402,29 +802,19 @@ public sealed class UiaSurface : IUiSurface
         {
             if (_observing) return;
 
+            _hookProc = HookCallback; // guardar la referencia viva: el hook la usa por siempre
+            _hook = SetWindowsHookEx(WH_MOUSE_LL, _hookProc, GetModuleHandle(null), 0);
+            _keyHookProc = KeyHookCallback;
+            _keyHook = SetWindowsHookEx(WH_KEYBOARD_LL, _keyHookProc, GetModuleHandle(null), 0);
+            _scrollTimer = new System.Threading.Timer(_ => FlushScroll(), null,
+                System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+
+            // Ancla inicial del tecleo a la ventana objetivo actual (tras el countdown, el foreground ya
+            // es la app a enseñar). Si aún es Ü, se anclará en el primer clic real sobre la app.
             IntPtr hwnd = GetForegroundWindow();
-            _observedRoot = hwnd == IntPtr.Zero ? null : Root(hwnd);
-            if (_observedRoot == null) return;
+            if (hwnd != IntPtr.Zero && !IsOwnWindow(hwnd)) AttachValueEvents(hwnd);
 
-            _invoked = OnInvoked;
-            _propertyChanged = OnPropertyChanged;
-
-            try
-            {
-                Automation.AddAutomationEventHandler(
-                    InvokePattern.InvokedEvent, _observedRoot, TreeScope.Subtree, _invoked);
-
-                Automation.AddAutomationPropertyChangedEventHandler(
-                    _observedRoot, TreeScope.Subtree, _propertyChanged,
-                    ValuePattern.ValueProperty, TogglePattern.ToggleStateProperty,
-                    SelectionItemPattern.IsSelectedProperty);
-
-                _observing = true;
-            }
-            catch
-            {
-                StopObserving();
-            }
+            _observing = true;
         }
     }
 
@@ -432,26 +822,166 @@ public sealed class UiaSurface : IUiSurface
     {
         lock (_gate)
         {
-            try
-            {
-                if (_invoked != null && _observedRoot != null)
-                    Automation.RemoveAutomationEventHandler(InvokePattern.InvokedEvent, _observedRoot, _invoked);
-                if (_propertyChanged != null && _observedRoot != null)
-                    Automation.RemoveAutomationPropertyChangedEventHandler(_observedRoot, _propertyChanged);
-            }
-            catch { /* la ventana pudo morir antes que nosotros */ }
-
-            _invoked = null;
-            _propertyChanged = null;
-            _observedRoot = null;
+            if (_hook != IntPtr.Zero) { try { UnhookWindowsHookEx(_hook); } catch { } _hook = IntPtr.Zero; }
+            if (_keyHook != IntPtr.Zero) { try { UnhookWindowsHookEx(_keyHook); } catch { } _keyHook = IntPtr.Zero; }
+            _hookProc = null;
+            _keyHookProc = null;
+            FlushScroll(); // publicar el último scroll pendiente antes de cerrar
+            _scrollTimer?.Dispose();
+            _scrollTimer = null;
+            DetachValueEvents();
+            _valueRootHwnd = IntPtr.Zero;
             _observing = false;
         }
     }
 
-    private void OnInvoked(object? sender, AutomationEventArgs e)
+    /// <summary>El hook corre en el hilo que lo instaló: devolver YA y hacer el trabajo UIA en un hilo de
+    /// fondo, para no ahogar el input de todo el sistema.</summary>
+    private IntPtr HookCallback(int code, IntPtr wParam, IntPtr lParam)
     {
-        if (sender is not AutomationElement el) return;
-        Publish(el, "click", null);
+        if (code >= 0)
+        {
+            int msg = (int)wParam;
+            if (msg == WM_LBUTTONDOWN)
+            {
+                var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                int px = data.pt.X, py = data.pt.Y;
+                Task.Run(() => OnHookClick(px, py));
+            }
+            else if (msg == WM_MOUSEWHEEL)
+            {
+                var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                short delta = (short)(data.mouseData >> 16); // el delta va en el word alto de mouseData
+                lock (_scrollGate) { _scrollAccum += delta; _scrollX = data.pt.X; _scrollY = data.pt.Y; }
+                _scrollTimer?.Change(350, System.Threading.Timeout.Infinite); // debounce: publica al parar
+            }
+        }
+        return CallNextHookEx(_hook, code, wParam, lParam);
+    }
+
+    /// <summary>Publica el scroll acumulado como UN paso, anclado a la posición del panel. Se llama por el
+    /// debounce (al dejar de deslizar) y al detener la grabación (para no perder el último gesto).</summary>
+    private void FlushScroll()
+    {
+        int delta, x, y;
+        lock (_scrollGate) { delta = _scrollAccum; x = _scrollX; y = _scrollY; _scrollAccum = 0; }
+        if (delta == 0) return;
+        if (IsOwnWindow(GetForegroundWindow())) return; // scroll dentro de Ü no es parte del workflow
+
+        var step = new ObservedStep(
+            ActionType: "scroll",
+            Selector: $"scroll:{x},{y}",   // el panel a scrollear va por posición (la rueda va al foco bajo el cursor)
+            Label: delta < 0 ? "Scroll abajo" : "Scroll arriba",
+            ControlType: "scroll",
+            Value: delta.ToString(),       // delta total (múltiplos de 120 por notch)
+            AllowedOptions: null,
+            SelectedValue: null,
+            SelectedLabel: null,
+            SurfaceSection: null,
+            AlternativeTargets: Array.Empty<string>())
+        {
+            Surface = Identity().Url,
+            Readiness = CachedReadinessCount().ToString(),
+        };
+        L($"observado: scroll delta={delta} en ({x},{y}) · '{step.Surface}'");
+        try { StepObserved?.Invoke(this, step); } catch { }
+    }
+
+    private void OnHookClick(int px, int py)
+    {
+        AutomationElement? el;
+        try { el = AutomationElement.FromPoint(new System.Windows.Point(px, py)); }
+        catch { return; }
+        if (el == null || IsOwnUi(el)) return; // los clics sobre la propia UI de Ü no son un paso
+
+        // Posición del clic RELATIVA a la ventana: fallback para elementos sin selector estable (paneles
+        // SAP con id volátil, sin nombre). Tras un scroll al mismo punto, la fila está en el mismo lugar.
+        var (winL, winT) = WindowOrigin();
+        Publish(el, "click", null, $"{px - winL},{py - winT}");
+        ReanchorValueEvents(); // seguir el tecleo en la ventana recién activada
+    }
+
+    /// <summary>Esquina superior-izquierda de la ventana real en foco (para coordenadas relativas).</summary>
+    private static (int L, int T) WindowOrigin()
+    {
+        try { if (GetWindowRect(RealForegroundWindow(), out RECT r)) return (r.Left, r.Top); } catch { }
+        return (0, 0);
+    }
+
+    /// <summary>Hook de teclado: solo nos interesan las teclas de ACCIÓN (hoy Enter). El tecleo de texto
+    /// ya llega por ValueProperty, así que no se graba tecla por tecla.</summary>
+    private IntPtr KeyHookCallback(int code, IntPtr wParam, IntPtr lParam)
+    {
+        if (code >= 0 && (int)wParam == WM_KEYDOWN)
+        {
+            var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+            if (data.vkCode == VK_RETURN) Task.Run(PublishEnter);
+        }
+        return CallNextHookEx(_keyHook, code, wParam, lParam);
+    }
+
+    /// <summary>Graba un paso "key" para Enter, anclado al foco (no a un elemento). Se excluye la UI de Ü.</summary>
+    private void PublishEnter()
+    {
+        if (IsOwnWindow(GetForegroundWindow())) return; // Enter dentro de Ü no es parte del workflow
+        var step = new ObservedStep(
+            ActionType: "key",
+            Selector: "key:enter",   // selector sintético: el paso va al foco, no a un elemento resuelto
+            Label: "Enter",
+            ControlType: "key",
+            Value: "Enter",
+            AllowedOptions: null,
+            SelectedValue: null,
+            SelectedLabel: null,
+            SurfaceSection: null,
+            AlternativeTargets: Array.Empty<string>())
+        {
+            Surface = Identity().Url,
+            Readiness = CachedReadinessCount().ToString(),
+        };
+        L($"observado: tecla Enter en '{step.Surface}'");
+        try { StepObserved?.Invoke(this, step); } catch { }
+    }
+
+    /// <summary>Re-ancla la escucha de cambios de valor a la ventana en foco si cambió (y no es Ü).</summary>
+    private void ReanchorValueEvents()
+    {
+        IntPtr hwnd = GetForegroundWindow();
+        if (hwnd == IntPtr.Zero || hwnd == _valueRootHwnd || IsOwnWindow(hwnd)) return;
+        lock (_gate)
+        {
+            DetachValueEvents();
+            AttachValueEvents(hwnd);
+        }
+    }
+
+    private void AttachValueEvents(IntPtr hwnd)
+    {
+        var root = Root(hwnd);
+        if (root == null) return;
+        _propertyChanged = OnPropertyChanged;
+        try
+        {
+            Automation.AddAutomationPropertyChangedEventHandler(
+                root, TreeScope.Subtree, _propertyChanged,
+                ValuePattern.ValueProperty, TogglePattern.ToggleStateProperty,
+                SelectionItemPattern.IsSelectedProperty);
+            _valueRoot = root;
+            _valueRootHwnd = hwnd;
+        }
+        catch { _valueRoot = null; _valueRootHwnd = IntPtr.Zero; }
+    }
+
+    private void DetachValueEvents()
+    {
+        try
+        {
+            if (_propertyChanged != null && _valueRoot != null)
+                Automation.RemoveAutomationPropertyChangedEventHandler(_valueRoot, _propertyChanged);
+        }
+        catch { /* la ventana pudo morir antes que nosotros */ }
+        _propertyChanged = null;
+        _valueRoot = null;
     }
 
     private void OnPropertyChanged(object? sender, AutomationPropertyChangedEventArgs e)
@@ -466,8 +996,24 @@ public sealed class UiaSurface : IUiSurface
             Publish(el, "select", el.Current.Name);
     }
 
-    private void Publish(AutomationElement el, string actionType, string? value)
+    /// <summary>¿El elemento pertenece a la propia app Ü? Sus controles nunca son parte de un workflow.</summary>
+    private static bool IsOwnUi(AutomationElement el)
     {
+        try { using var p = Process.GetProcessById(el.Current.ProcessId); return IsOwnProcName(p.ProcessName); }
+        catch { return false; }
+    }
+
+    private static bool IsOwnWindow(IntPtr hwnd)
+    {
+        try { GetWindowThreadProcessId(hwnd, out uint pid); using var p = Process.GetProcessById((int)pid); return IsOwnProcName(p.ProcessName); }
+        catch { return false; }
+    }
+
+    private static bool IsOwnProcName(string proc) => proc.Equals("U", StringComparison.OrdinalIgnoreCase);
+
+    private void Publish(AutomationElement el, string actionType, string? value, string clickPos = "")
+    {
+        if (IsOwnUi(el)) return; // choke point: nunca grabar la UI de Ü (venga de clic o de cambio de valor)
         ObservedStep step;
         try
         {
@@ -489,7 +1035,14 @@ public sealed class UiaSurface : IUiSurface
                 SelectedValue: actionType == "select" ? value : null,
                 SelectedLabel: actionType == "select" ? value : null,
                 SurfaceSection: null,
-                AlternativeTargets: selectors.Skip(1).ToList());
+                AlternativeTargets: selectors.Skip(1).ToList())
+            {
+                // El NODO del paso: dónde estamos parados al hacerlo. Cuanto más detalle, mejor se ubica
+                // el player para reanudar. Ver Identity() (detecta escritorio, navegador, etc.).
+                Surface = Identity().Url,
+                Readiness = CachedReadinessCount().ToString(), // meta de carga del nodo (motor de carga)
+                ClickPos = clickPos,                           // posición del clic (fallback por id volátil)
+            };
         }
         catch { return; }
 

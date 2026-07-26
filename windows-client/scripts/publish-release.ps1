@@ -37,7 +37,9 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish falló" }
 
 Write-Host "==> Empaquetando version $Version..." -ForegroundColor Cyan
 # Sin --channel: el default en Windows es "win", que es el que el cliente pide (releases.win.json).
-vpk pack -u U -v $Version -p $publishDir -e U.exe -o $releaseDir
+# --icon: la carita/logo (mismo de Android) para Setup.exe y los accesos directos.
+$iconPath = Join-Path $clientDir "U.ico"
+vpk pack -u U -v $Version -p $publishDir -e U.exe -o $releaseDir --icon $iconPath
 if ($LASTEXITCODE -ne 0) { throw "vpk pack falló" }
 
 Write-Host ""

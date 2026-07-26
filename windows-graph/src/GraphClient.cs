@@ -130,6 +130,18 @@ public sealed class GraphClient
     public async Task<JsonElement> ManifestAsync(CancellationToken ct) =>
         await GetAsync<JsonElement>("/api/v1", ct);
 
+    /// <summary>Borra un workflow (desde el carrusel del panel Backend). 404 si ya no existe.</summary>
+    public async Task DeleteWorkflowAsync(string workflowId, CancellationToken ct)
+    {
+        using var res = await SendAsync(
+            () => new HttpRequestMessage(HttpMethod.Delete, Url($"/api/v1/workflows/{Escape(workflowId)}")), ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            string text = await res.Content.ReadAsStringAsync(ct);
+            throw new GraphException(ErrorFrom(text, res.StatusCode), (int)res.StatusCode);
+        }
+    }
+
     // ── HTTP ─────────────────────────────────────────────────────────────────
 
     private static string Escape(string segment) => Uri.EscapeDataString(segment ?? "");

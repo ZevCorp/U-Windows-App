@@ -28,8 +28,20 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
     private WorkflowRecorder? _recorder;
     private TeachSession? _teach;
 
+    // Pantallazo por paso (meta visual para el computer-use). Ver StepShotCamera.
+    private IUiSurface? _shotSurface;
+    private EventHandler<ObservedStep>? _shotHandler;
+    private int _shotCount;
+
     /// <summary>Progreso legible para la UI: countdown, superficie detectada, pasos enviados, errores.</summary>
     public event EventHandler<string>? StatusChanged;
+
+    /// <summary>
+    /// ¿Procesar el video con el LLM al detener? Si es false, el video se graba y guarda igual (visible
+    /// en 🎞 Videos) pero NO se sube al LLM para resumir — se salta el paso que da timeout (504). Lo fija
+    /// la UI desde el toggle del panel Backend (Config.ProcessTeachVideo). Ver StopAsync.
+    /// </summary>
+    public bool ProcessVideo { get; set; } = true;
 
     public bool IsRecording => _recorder != null;
 
@@ -77,8 +89,20 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
             $"Grabando pasos… {status.StepsSent} enviados" +
             (status.LastError != null ? $" (último error: {status.LastError})" : ""));
 
-        await recorder.StartAsync(description, ct);
+        string workflowId = await recorder.StartAsync(description, ct);
         _recorder = recorder;
+
+        // Pantallazo por paso: cada step queda con su "meta visual" en disco, consumible por el
+        // computer-use cuando tenga que concatenar/retomar un workflow fallido. La numeración sigue el
+        // orden de llegada, el mismo con el que Graph numera los steps.
+        _shotCount = 0;
+        _shotSurface = surface;
+        _shotHandler = (_, _) =>
+        {
+            int n = Interlocked.Increment(ref _shotCount);
+            Task.Run(() => StepShotCamera.Capture(workflowId, n));
+        };
+        surface.StepObserved += _shotHandler;
 
         var teach = new TeachSession(_backend, _videoLibrary, _userId);
         teach.StatusChanged += (_, msg) => StatusChanged?.Invoke(this, msg);
@@ -92,6 +116,7 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
             // El video es parte del requisito ("UIA + video en paralelo"): si no arranca, no dejamos una
             // grabación de pasos a medias sin su contexto — se aborta todo y se reporta el motivo real.
             LogBus.Log("workflow-teach", $"el video no arrancó, se cancela la grabación de pasos: {ex.Message}");
+            DetachShots();
             await recorder.StopAsync(CancellationToken.None);
             _recorder = null;
             throw;
@@ -104,15 +129,25 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
         if (_recorder == null) throw new InvalidOperationException("No hay ninguna enseñanza de workflow en curso.");
         WorkflowRecorder recorder = _recorder;
         _recorder = null;
+        DetachShots();
 
         string? summary = null;
         if (_teach != null)
         {
             try
             {
-                await _teach.StopAsync();
-                StatusChanged?.Invoke(this, "Procesando video de contexto…");
-                summary = await _teach.ProcessAsync(ct);
+                await _teach.StopAsync(); // finaliza el mp4 en disco → visible en 🎞 Videos, se procese o no
+
+                if (ProcessVideo)
+                {
+                    StatusChanged?.Invoke(this, "Procesando video de contexto…");
+                    summary = await _teach.ProcessAsync(ct);
+                }
+                else
+                {
+                    LogBus.Log("workflow-teach", "procesamiento de video con IA DESACTIVADO: se graba el video pero no se manda al LLM");
+                    StatusChanged?.Invoke(this, "Video guardado sin procesar con IA (míralo en 🎞 Videos).");
+                }
             }
             catch (Exception ex)
             {
@@ -139,8 +174,17 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
         return await recorder.StopAsync(ct);
     }
 
+    /// <summary>Suelta la cámara de pasos (idempotente).</summary>
+    private void DetachShots()
+    {
+        if (_shotSurface != null && _shotHandler != null) _shotSurface.StepObserved -= _shotHandler;
+        _shotSurface = null;
+        _shotHandler = null;
+    }
+
     public async ValueTask DisposeAsync()
     {
+        DetachShots();
         if (_teach != null) { await _teach.DisposeAsync(); _teach = null; }
         if (_recorder != null) { await _recorder.DisposeAsync(); _recorder = null; }
     }

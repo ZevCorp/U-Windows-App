@@ -60,4 +60,14 @@ public sealed class SapInspectorReader
 
     /// <summary>Qué componente SAP hay bajo un punto de pantalla (hit-test nativo), o null.</summary>
     public string? HitTest(int screenX, int screenY) => _sap.HitTest(screenX, screenY);
+
+    /// <summary>
+    /// El nodo seleccionado de un árbol (por Id del shell), o null. Coordinate-free: como los nodos no
+    /// traen geometría, es la única forma de saber qué FILA tocó el usuario dentro de un árbol SAP.
+    /// </summary>
+    public (string Key, string Text)? SelectedTreeNode(string treeId)
+    {
+        try { return _sap.SelectedTreeNode(treeId); }
+        catch { return null; }
+    }
 }

@@ -180,10 +180,20 @@ public sealed class WorkflowRecorder : IAsyncDisposable
         SelectedLabel = step.SelectedLabel,
         AllowedOptions = step.AllowedOptions?.ToList(),
         SurfaceSection = step.SurfaceSection,
-        SurfaceHints = step.AlternativeTargets.Count > 0
-            ? new Dictionary<string, object> { ["alternativeTargets"] = step.AlternativeTargets }
-            : null,
+        SurfaceHints = BuildHints(step),
     };
+
+    /// <summary>surfaceHints del step: los selectores de respaldo + la SUPERFICIE donde ocurrió (su nodo),
+    /// para que el player pueda reanudar en cualquier punto. Ambos son opcionales; null si no hay nada.</summary>
+    private static Dictionary<string, object>? BuildHints(ObservedStep step)
+    {
+        var hints = new Dictionary<string, object>();
+        if (step.AlternativeTargets.Count > 0) hints["alternativeTargets"] = step.AlternativeTargets;
+        if (!string.IsNullOrWhiteSpace(step.Surface)) hints["observedSurface"] = step.Surface;
+        if (!string.IsNullOrWhiteSpace(step.Readiness)) hints["readiness"] = step.Readiness; // meta de carga
+        if (!string.IsNullOrWhiteSpace(step.ClickPos)) hints["clickPos"] = step.ClickPos;     // fallback por posición
+        return hints.Count > 0 ? hints : null;
+    }
 
     public async ValueTask DisposeAsync()
     {

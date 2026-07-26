@@ -27,7 +27,20 @@ public sealed record ObservedStep(
     string? SelectedValue,
     string? SelectedLabel,
     string? SurfaceSection,
-    IReadOnlyList<string> AlternativeTargets);
+    IReadOnlyList<string> AlternativeTargets)
+{
+    /// <summary>La superficie (URL de Windows) donde ocurrió el paso — su "nodo". Aditivo: la usa el
+    /// player para reanudar en cualquier punto del workflow. Vacío = sin dato (comportamiento viejo).</summary>
+    public string Surface { get; init; } = "";
+
+    /// <summary>Meta de carga del nodo: nº de elementos interactivos listos al grabar (100%). La usa el
+    /// motor de carga para esperar a que la UI cargue antes de ejecutar. Vacío/0 = sin métrica.</summary>
+    public string Readiness { get; init; } = "";
+
+    /// <summary>Posición del clic RELATIVA a la ventana ("relX,relY"): fallback cuando el elemento no tiene
+    /// selector estable (paneles SAP con id volátil). Vacío para inputs/selects. Ver UiaSurface.Execute.</summary>
+    public string ClickPos { get; init; } = "";
+}
 
 /// <summary>Por qué una superficie no está disponible. Se le enseña al operador tal cual.</summary>
 public sealed record SurfaceAvailability(bool Available, string Reason)
@@ -59,6 +72,20 @@ public interface IUiSurface : IDisposable
 
     /// <summary>Qué pantalla está delante ahora mismo.</summary>
     SurfaceIdentity Identity();
+
+    /// <summary>
+    /// "Cuánto está cargada" la pantalla: nº de elementos interactivos listos (visibles+habilitados). Es
+    /// la métrica del motor de carga (<see cref="U.Graph.SurfaceReadiness"/>): al grabar se guarda como
+    /// meta, al ejecutar se compara para esperar a que la UI cargue antes de actuar. 0 = sin métrica.
+    /// </summary>
+    int ReadinessCount();
+
+    /// <summary>
+    /// ¿El elemento objetivo del paso ya está LISTO para actuar (presente y habilitado)? Es el
+    /// corto-circuito del motor de carga: en cuanto es true se ejecuta, sin esperar el % global (que es
+    /// inestable). Los pasos sin elemento resoluble (tecla/scroll) devuelven true (no hay nada que esperar).
+    /// </summary>
+    bool IsStepReady(PlanStep step);
 
     /// <summary>
     /// Los campos accionables visibles, en el shape que Graph espera para autofill. El stepOrder es

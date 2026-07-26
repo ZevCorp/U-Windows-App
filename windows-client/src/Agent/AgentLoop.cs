@@ -3,6 +3,7 @@ using U.WindowsClient.Backend;
 using U.WindowsClient.Capture;
 using U.WindowsClient.Domain;
 using U.WindowsClient.Mcp;
+using U.WindowsClient.Telemetry;
 using U.WindowsClient.Uia;
 
 namespace U.WindowsClient.Agent;
@@ -58,6 +59,9 @@ public sealed class AgentLoop
     public async Task<string> RunAsync(string goal, CancellationToken ct)
     {
         _voice.Narrate($"¡Vamos! {goal}");
+        // Telemetría "Windows Live": esta corrida consciente entera se correlaciona por runId.
+        string runId = TelemetryBus.NewRunId();
+        TelemetryBus.Emit("conscious_run_start", runId: runId, label: goal);
         string? session = null;
         string[] results = Array.Empty<string>();
         string? inform = null; // respuesta pendiente a una pregunta del asistente (ask_user)
@@ -68,7 +72,7 @@ public sealed class AgentLoop
         for (int turn = 0; turn < _maxTurns && !ct.IsCancellationRequested; turn++)
         {
             // 1) Capturar el estado (texto por UIA; screenshot solo si el cerebro lo pidió).
-            var state = await ReadStateAsync(wantShot);
+            var state = await ReadStateAsync(wantShot, runId);
 
             // 2) Pedir la decisión al backend.
             var req = new TurnRequest
@@ -89,6 +93,7 @@ public sealed class AgentLoop
             catch (Exception e)
             {
                 _voice.Speak("No pude contactar con el cerebro. Revisa la conexión.");
+                TelemetryBus.Emit("conscious_run_end", phase: "error", runId: runId, label: e.Message);
                 return $"error de backend: {e.Message}";
             }
 
@@ -107,7 +112,7 @@ public sealed class AgentLoop
                 if (ct.IsCancellationRequested) break;
                 if (i < resp.Intents.Count && !string.IsNullOrWhiteSpace(resp.Intents[i]))
                     _voice.Narrate(resp.Intents[i]);
-                outResults.Add(await ExecuteAsync(resp.Actions[i], ct));
+                outResults.Add(await ExecuteAsync(resp.Actions[i], ct, runId));
                 actions++;
                 if (resp.Actions.Count > 1) await Task.Delay(350, ct);
             }
@@ -132,10 +137,11 @@ public sealed class AgentLoop
             _voice.Speak(summary);
         }
         _voice.Narrate("¡Listo! 🎉");
+        TelemetryBus.Emit("conscious_run_end", runId: runId, label: summary);
         return string.IsNullOrWhiteSpace(summary) ? "Hecho" : summary;
     }
 
-    private async Task<ScreenState> ReadStateAsync(bool withScreenshot)
+    private async Task<ScreenState> ReadStateAsync(bool withScreenshot, string runId = "")
     {
         // UIA puede bloquear; se corre fuera del hilo de UI.
         var state = await Task.Run(() => _uia.Read());
@@ -148,6 +154,10 @@ public sealed class AgentLoop
             state.SurfaceOrigin = loc.Origin;
             state.SurfacePathname = loc.Path;
         }
+        // Telemetría: "analiza la pantalla" (pulso del consciente hacia el nodo Analizar).
+        TelemetryBus.Emit("analyze", runId: runId,
+            appId: loc != null ? AppAligner.ProcessFromOrigin(loc.Origin) : "",
+            surfaceUrl: loc?.Id ?? "");
 
         // SAP GUI Scripting SE AÑADE al árbol de lectura (UIA apenas ve dentro de SAP): si la app en
         // foco es SAP, el cerebro recibe además los campos reales de la pantalla SAP.
@@ -164,10 +174,11 @@ public sealed class AgentLoop
         return state;
     }
 
-    private async Task<string> ExecuteAsync(AgentAction a, CancellationToken ct)
+    private async Task<string> ExecuteAsync(AgentAction a, CancellationToken ct, string runId = "")
     {
         // Workflows (subconsciente invocado desde el consciente): el cerebro inyectó workflow_id en
-        // los args; se ejecutan con el WorkflowPlayer, no con el registro MCP local.
+        // los args; se ejecutan con el WorkflowPlayer, no con el registro MCP local. La telemetría del
+        // workflow la emite WorkflowMcpRunner (workflow_start/step/end), no aquí.
         if (a.Kind == "mcp" && _workflows != null &&
             (a.Tool ?? "").StartsWith("workflow_", StringComparison.OrdinalIgnoreCase))
         {
@@ -175,6 +186,12 @@ public sealed class AgentLoop
             string context = a.Args != null && a.Args.TryGetValue("context", out var c) ? c : "";
             return await _workflows.RunAsync(id, context, ct);
         }
+
+        // Telemetría: acción en pantalla (pulso del consciente hacia el nodo Clic) o consulta MCP.
+        if (a.Kind == "mcp")
+            TelemetryBus.Emit("mcp", runId: runId, label: a.Tool ?? "");
+        else if (a.Kind is "tap" or "type" or "scroll" or "swipe" or "key")
+            TelemetryBus.Emit("action", runId: runId, label: a.Kind, detail: new { x = a.X, y = a.Y });
 
         return a.Kind switch
         {
