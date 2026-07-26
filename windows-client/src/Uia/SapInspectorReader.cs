@@ -20,7 +20,12 @@ public sealed class SapInspectorReader
     private readonly SapGuiSurface _sap = new();
 
     /// <summary>Un recuadro SAP para el overlay. <paramref name="Bounds"/> va en píxeles físicos.</summary>
-    public sealed record SapBox(Rect Bounds, string Caption, bool IsShell);
+    /// <summary>
+    /// <paramref name="IsMapped"/>: el shell está MAPEADO — sabemos qué hay dentro y cómo accionarlo
+    /// (hoy: árboles con filas enumeradas por clave). Un shell mapeado ya no es territorio desconocido
+    /// y el overlay lo pinta neutro; el ámbar queda reservado para lo que sigue opaco (grids, toolbars).
+    /// </summary>
+    public sealed record SapBox(Rect Bounds, string Caption, bool IsShell, bool IsMapped = false);
 
     /// <summary>
     /// TODOS los elementos SAP visibles (con y sin geometría: los nodos de árbol no traen rect). Es la
@@ -50,10 +55,13 @@ public sealed class SapInspectorReader
         {
             if (!e.BoundsKnown) continue; // los nodos de árbol no traen rect: se detectan, no se enmarcan
             bool shell = e.SubType.Length > 0;
+            // Un árbol con filas enumeradas está MAPEADO: cada fila tiene clave y ruta, se puede
+            // enseñar y reproducir. Ya no se marca en ámbar de "no mapeado".
+            bool mapped = shell && e.ChildCount > 0;
             // Solo los shells (árbol, grid…) llevan rótulo: son pocos y es donde el rótulo ayuda
             // ("Favoritos · 20 nodos"). Enmarcar cada campo con texto saturaría la pantalla.
-            string caption = shell ? e.Label : "";
-            boxes.Add(new SapBox(new Rect(e.ScreenLeft, e.ScreenTop, e.Width, e.Height), caption, shell));
+            string caption = shell ? (mapped ? $"{e.Label} · mapeado" : e.Label) : "";
+            boxes.Add(new SapBox(new Rect(e.ScreenLeft, e.ScreenTop, e.Width, e.Height), caption, shell, mapped));
         }
         return boxes;
     }

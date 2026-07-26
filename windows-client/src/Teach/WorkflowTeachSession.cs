@@ -77,7 +77,12 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
             await Task.Delay(1000, ct);
         }
 
-        IUiSurface surface = SurfaceDetector.Detect(_uia, _sap);
+        // La decisión de superficie SIEMPRE queda en el registro: una enseñanza sobre SAP grabada por
+        // UIA produce pasos "clic en el panel" inservibles, y sin esta línea es indistinguible de un
+        // bug del grabador (pasó: wf_1785096110817).
+        IUiSurface surface = SurfaceDetector.Detect(_uia, _sap, out string why);
+        LogBus.Log("workflow-teach", $"superficie elegida: «{surface.Name}» — {why}");
+
         var availability = surface.Check();
         if (!availability.Available)
             throw new InvalidOperationException($"[{surface.Name}] {availability.Reason}");

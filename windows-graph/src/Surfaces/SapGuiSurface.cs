@@ -52,6 +52,7 @@ public sealed class SapGuiSurface : IUiSurface
     private string? _startupError;
     private SapComEvents? _comEvents;
     private DispatcherTimer? _pollTimer;
+    private DispatcherTimer? _treeTimer;
     private Dictionary<string, string?> _lastSnapshot = new();
 
     // ── Disponibilidad ───────────────────────────────────────────────────────
@@ -1254,6 +1255,20 @@ public sealed class SapGuiSurface : IUiSurface
                 _pollTimer.Start();
             }
 
+            // La selección de una fila de árbol se sondea SIEMPRE, en AMBOS modos, con su propio
+            // reloj. Por qué no basta con los eventos COM: seleccionar una fila NO viaja al servidor
+            // (Change no dispara), y cuando el doble clic SÍ viaja, al llegar el evento la pantalla ya
+            // navegó y el árbol no existe — el paso se perdía justo cuando importaba. El sondeo es
+            // barato (solo shells de árbol, sin releer el dynpro) y el clic queda capturado ENTRE la
+            // selección y la navegación.
+            //
+            // Línea base primero: lo que ya estaba seleccionado ANTES de enseñar no es un paso del
+            // operador — sin esto, el primer tick emitiría un clic fantasma.
+            _lastTreeSelection = SafeReadTreeSelections().ToDictionary(s => s.TreeId, s => s.Key);
+            _treeTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(400) };
+            _treeTimer.Tick += (_, __) => { if (!SessionBusy(session)) PublishTreeSelections(); };
+            _treeTimer.Start();
+
             _ready.Set();
             Dispatcher.Run(); // bombea hasta que StopObserving llame InvokeShutdown()
         }
@@ -1413,6 +1428,12 @@ public sealed class SapGuiSurface : IUiSurface
                 {
                     _pollTimer?.Stop();
                     _pollTimer = null;
+                    _treeTimer?.Stop();
+                    _treeTimer = null;
+                    // Descarga final: el último clic del operador puede haber caído DESPUÉS del último
+                    // tick del reloj (típico: clic en la fila e inmediatamente "detener enseñanza").
+                    // Sin esta lectura, el paso final del workflow se pierde en silencio.
+                    try { PublishTreeSelections(); } catch { }
                     _comEvents?.Unhook();
                 });
             }
@@ -1430,6 +1451,16 @@ public sealed class SapGuiSurface : IUiSurface
     }
 
     // ── Utilidades ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// ¿La sesión está en medio de un round-trip? Cualquier llamada al scripting con Busy=true se
+    /// bloquea SIN retorno (spec oficial, ver INVESTIGACION-SAPGUI-UIA.md) — los relojes deben saltarse
+    /// ese tick en vez de colgar el hilo de bombeo.
+    /// </summary>
+    private static bool SessionBusy(dynamic session)
+    {
+        try { return (bool)session.Busy; } catch { return false; }
+    }
 
     private static string Str(object? v) => v?.ToString() ?? "";
 
