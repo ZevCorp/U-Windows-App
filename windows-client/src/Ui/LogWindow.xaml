@@ -14,6 +14,9 @@
                     Background="#22FFFFFF" Foreground="White" BorderThickness="0" Padding="10,0"/>
             <Button x:Name="CopyBtn" Content="📋 Copiar" Click="OnCopy" DockPanel.Dock="Right" Height="26"
                     Margin="0,0,8,0" Background="#22FFFFFF" Foreground="White" BorderThickness="0" Padding="10,0"/>
+            <Button x:Name="ProbeBtn" Content="🧭 Sondear SAP" Click="OnProbeSap" DockPanel.Dock="Right" Height="26"
+                    Margin="0,0,8,0" Background="#22FFFFFF" Foreground="White" BorderThickness="0" Padding="10,0"
+                    ToolTip="Barre el árbol SAP visible con el hit-test nativo (solo lectura) y vuelca las bandas aquí. Requiere una sesión SAP abierta con la pantalla del árbol en primer plano."/>
         </DockPanel>
         <ListBox x:Name="List" Background="#18FFFFFF" Foreground="#DDFFFFFF" BorderThickness="0"
                  FontFamily="Consolas" FontSize="12"/>

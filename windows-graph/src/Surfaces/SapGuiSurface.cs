@@ -260,23 +260,72 @@ public sealed class SapGuiSurface : IUiSurface
     /// <summary>
     /// Hit-test nativo de SAP: qué componente hay bajo un punto de PANTALLA. Es la verdad de terreno
     /// del inspector — SAP sabe exactamente qué control cae en ese píxel, mejor que adivinar por la caja
-    /// más pequeña que lo contiene. Firma oficial: <c>findByPosition(x, y, raise=True) As GuiComponent</c>,
-    /// con x/y en coordenadas de pantalla; con <c>raise=false</c> devuelve null en vez de lanzar cuando
-    /// no hay nada. Devuelve el <c>Id</c> del componente, o null si SAP no está o no hay componente ahí.
+    /// más pequeña que lo contiene. Devuelve el <c>Id</c> del componente, o null si SAP no está o no
+    /// hay componente ahí. Para el detalle completo (inner object, forma COM) ver
+    /// <see cref="HitTestDetailed"/>.
     /// </summary>
-    public string? HitTest(int screenX, int screenY)
+    public string? HitTest(int screenX, int screenY) => HitTestDetailed(screenX, screenY)?.Id;
+
+    /// <summary>
+    /// Hit-test nativo con TODO lo que la API devolvió. El contrato de <c>FindByPosition</c> está en
+    /// disputa dentro del propio repo: el código histórico asumía un GuiComponent con <c>.Id</c>, la
+    /// spec citada en INVESTIGACION-SAPGUI-UIA.md documenta una GuiCollection de 2 strings ([0] Id,
+    /// [1] inner object). Si la verdad es la colección, la versión anterior lanzaba SIEMPRE al pedir
+    /// <c>.Id</c> y el diagnóstico de clic caía en silencio al fallback "caja más pequeña" — por eso
+    /// aquí se aceptan AMBAS formas y <see cref="SapHit.ComShape"/> registra cuál llegó, para zanjar
+    /// la contradicción con datos de un SAP real. El inner object [1] es además la única pista nativa
+    /// de QUÉ fila/botón interno de un shell (árbol, toolbar, grid) hay bajo el punto — la pieza clave
+    /// del mapeo del scrolleable (ver SONDA-MAPEO-ARBOL.md).
+    /// </summary>
+    public SapHit? HitTestDetailed(int screenX, int screenY)
     {
         dynamic? session;
         try { session = Session(); } catch { return null; }
         if (session == null) return null;
 
+        object? raw;
+        try { raw = session.FindByPosition(screenX, screenY, false); }
+        catch { return null; }
+        if (raw == null) return null;
+
+        return InterpretHit(raw);
+    }
+
+    private static SapHit? InterpretHit(object raw)
+    {
+        dynamic d = raw;
+
+        // Forma A: GuiComponent con .Id (lo que asumía el código histórico).
         try
         {
-            dynamic comp = session.FindByPosition(screenX, screenY, false);
-            if (comp == null) return null;
-            return Str(comp.Id);
+            string id = Str(d.Id);
+            if (id.Length > 0) return new SapHit(id, null, "component");
         }
-        catch { return null; }
+        catch { /* no es un componente: probar como colección */ }
+
+        // Forma B: GuiCollection de strings — [0] Id, [1] descripción del inner object (spec oficial).
+        try
+        {
+            int count = (int)d.Count;
+            string id = count > 0 ? Str(d.ElementAt(0)) : "";
+            string inner = count > 1 ? Str(d.ElementAt(1)) : "";
+            if (id.Length > 0)
+                return new SapHit(id, inner.Length > 0 ? inner : null, $"collection[{count}]");
+        }
+        catch { /* sin ElementAt: probar el indexador */ }
+
+        // Forma C: colecciones COM que solo exponen el indexador Item(i).
+        try
+        {
+            int count = (int)d.Count;
+            string id = count > 0 ? Str(d.Item(0)) : "";
+            string inner = count > 1 ? Str(d.Item(1)) : "";
+            if (id.Length > 0)
+                return new SapHit(id, inner.Length > 0 ? inner : null, $"collection-item[{count}]");
+        }
+        catch { /* forma desconocida: se reporta null y el caller cae a su fallback */ }
+
+        return null;
     }
 
     private static void WalkVisual(dynamic node, List<SapVisualElement> acc, int depth)
@@ -857,6 +906,126 @@ public sealed class SapGuiSurface : IUiSurface
             _pumpThread = null;
             _observing = false;
         }
+    }
+
+    // ── Sonda de mapeo del árbol (experimento — ver SONDA-MAPEO-ARBOL.md) ────
+
+    /// <summary>
+    /// EXPERIMENTO del mapeo de botones de un scrolleable de árbol (p.ej. el "Entorno de trabajo" del
+    /// SAP del hospital). La Scripting API no expone coordenadas por nodo (límite de SAP verificado
+    /// contra la spec), así que la única vía nativa de saber QUÉ nodo ocupa QUÉ franja de pantalla es
+    /// preguntarle a SAP punto por punto con el hit-test (<see cref="HitTestDetailed"/> — llamadas COM
+    /// locales, sin round-trips al servidor). Esta sonda barre dos columnas verticales dentro de cada
+    /// shell de árbol visible y vuelca las bandas CRUDAS que SAP devuelve, para decidir con datos
+    /// reales si el inner object identifica el nodo (clave/fila/texto) o no — de eso depende si el
+    /// mapeo definitivo es determinista o hay que caer a accesibilidad/OCR.
+    ///
+    /// Deliberadamente de SOLO LECTURA y bajo demanda (botón en la ventana de registro): jamás corre
+    /// en el timer del inspector. Devuelve líneas listas para el LogBus.
+    /// </summary>
+    public IReadOnlyList<string> ProbeTreeMapping()
+    {
+        var lines = new List<string>();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        dynamic? session;
+        try { session = Session(); }
+        catch (Exception e) { lines.Add($"sonda: SAP no responde: {e.Message}"); return lines; }
+        if (session == null) { lines.Add("sonda: no hay ninguna sesión de SAP GUI abierta"); return lines; }
+
+        // Nunca llamar al scripting con la sesión ocupada: la llamada se bloquea SIN retorno
+        // (documentado en INVESTIGACION-SAPGUI-UIA.md). Mejor pedir reintento que colgar el hilo.
+        try
+        {
+            if ((bool)session.Busy)
+            {
+                lines.Add("sonda: session.Busy=true — espera a que SAP termine el round-trip y reintenta");
+                return lines;
+            }
+        }
+        catch { lines.Add("sonda: session.Busy no legible; se continúa"); }
+
+        var els = ReadVisibleElements();
+        var trees = els.Where(e => !e.IsNode && IsTreeSubType(e.SubType) && e.BoundsKnown).ToList();
+        int logicalNodes = els.Count(e => e.IsNode);
+        lines.Add($"sonda: {trees.Count} shell(s) de árbol visibles · {logicalNodes} nodos lógicos · {els.Count} elementos totales");
+
+        foreach (var tree in trees)
+        {
+            lines.Add($"── árbol {tree.Id}");
+            lines.Add($"   rect: left={tree.ScreenLeft} top={tree.ScreenTop} w={tree.Width} h={tree.Height} · «{tree.Label}»");
+
+            // TopNode: clave del primer nodo visible según la API. Con él (más el orden de los nodos
+            // expandidos) se correlaciona cada banda del barrido con su nodo lógico en la fase 2.
+            try
+            {
+                dynamic node = session.FindById(tree.Id, false);
+                if (node != null) lines.Add($"   TopNode={Str(node.TopNode)}");
+            }
+            catch (Exception e) { lines.Add($"   TopNode no legible: {e.Message}"); }
+
+            // Dos columnas: A cerca del borde izquierdo (flechas de expandir / iconos) y B sobre la
+            // zona de textos/botones. Si el inner object difiere entre columnas, el formato trae
+            // información de sub-partes de la fila — dato importante para el parseo.
+            int xa = tree.ScreenLeft + Math.Min(24, Math.Max(4, tree.Width / 20));
+            int xb = tree.ScreenLeft + Math.Min(tree.Width - 8, Math.Max(60, tree.Width * 35 / 100));
+            SweepColumn(lines, "colA", xa, tree);
+            SweepColumn(lines, "colB", xb, tree);
+        }
+
+        // Muestra de nodos lógicos por árbol: contra esto se casan las bandas (¿la clave? ¿el texto?).
+        foreach (var group in els.Where(e => e.IsNode).GroupBy(e => e.ParentId ?? ""))
+        {
+            lines.Add($"── nodos lógicos de {group.Key} (primeros 15 de {group.Count()}):");
+            foreach (var n in group.Take(15))
+                lines.Add($"   key={n.NodeKey} · «{n.Label}»");
+        }
+
+        lines.Add($"sonda: fin en {sw.ElapsedMilliseconds} ms");
+        return lines;
+    }
+
+    /// <summary>
+    /// Barre una columna vertical de puntos sobre un shell y compacta los resultados idénticos en
+    /// bandas (y-desde..y-hasta → mismo hit). Una banda por fila visible es el resultado ideal.
+    /// </summary>
+    private void SweepColumn(List<string> lines, string name, int x, SapVisualElement tree)
+    {
+        const int step = 8;      // px entre muestras: fino de sobra para filas de ~20-30 px
+        const int maxLines = 80; // techo por columna: el LogBus retiene 500 entradas en total
+
+        int calls = 0, emitted = 0;
+        string? band = null;
+        int bandStart = 0;
+
+        void CloseBand(int yEnd)
+        {
+            if (band == null) return;
+            if (emitted < maxLines) { lines.Add($"   {name} y={bandStart}..{yEnd}: {band}"); emitted++; }
+            else if (emitted == maxLines) { lines.Add($"   {name}: …bandas restantes omitidas (techo {maxLines})"); emitted++; }
+        }
+
+        int yFrom = tree.ScreenTop + 2;
+        int yTo = tree.ScreenTop + tree.Height - 2;
+        for (int y = yFrom; y <= yTo; y += step)
+        {
+            SapHit? hit;
+            try { hit = HitTestDetailed(x, y); } catch { hit = null; }
+            calls++;
+
+            string current = hit == null
+                ? "(null)"
+                : $"id={hit.Id} · inner={hit.InnerObject ?? "-"} · {hit.ComShape}";
+
+            if (current != band)
+            {
+                CloseBand(y - 1);
+                band = current;
+                bandStart = y;
+            }
+        }
+        CloseBand(yTo);
+        lines.Add($"   {name}: x={x} · {calls} llamadas");
     }
 
     // ── Utilidades ───────────────────────────────────────────────────────────

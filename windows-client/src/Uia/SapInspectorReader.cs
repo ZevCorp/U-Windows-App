@@ -60,4 +60,26 @@ public sealed class SapInspectorReader
 
     /// <summary>Qué componente SAP hay bajo un punto de pantalla (hit-test nativo), o null.</summary>
     public string? HitTest(int screenX, int screenY) => _sap.HitTest(screenX, screenY);
+
+    /// <summary>Hit-test nativo con el detalle completo (Id + inner object + forma COM), o null.</summary>
+    public SapHit? HitTestDetailed(int screenX, int screenY) => _sap.HitTestDetailed(screenX, screenY);
+
+    /// <summary>
+    /// Corre la sonda de mapeo de árbol (<see cref="SapGuiSurface.ProbeTreeMapping"/>) con la misma
+    /// protección que el resto del lector: si SAP/scripting no está, lo dice en vez de lanzar. Es de
+    /// solo lectura; el llamador decide dónde volcar las líneas (LogBus).
+    /// </summary>
+    public IReadOnlyList<string> ProbeTreeMapping()
+    {
+        try
+        {
+            var check = _sap.Check();
+            if (!check.Available) return new[] { $"sonda: SAP no disponible: {check.Reason}" };
+            return _sap.ProbeTreeMapping();
+        }
+        catch (Exception ex)
+        {
+            return new[] { $"sonda: falló: {ex.Message}" };
+        }
+    }
 }

@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
 using U.Graph.Surfaces;
+using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Ui;
 
 namespace U.WindowsClient.Uia;
@@ -190,7 +191,16 @@ public sealed class UiInspector : IDisposable
         if (els.Count == 0) return false;
 
         // Verdad de terreno: hit-test nativo de SAP; si falla, la caja más pequeña que contiene el punto.
-        string? hitId = _sapReader.HitTest(px, py);
+        SapHit? hit = _sapReader.HitTestDetailed(px, py);
+
+        // Evidencia para el mapeo del scrolleable: qué forma COM devuelve FindByPosition en ESTE SAP y
+        // si el inner object identifica la fila/botón interno (ver SONDA-MAPEO-ARBOL.md). Una línea por
+        // clic con el inspector activo — barato, y es justo el dato que hoy nadie está registrando.
+        LogBus.Log("sap", hit == null
+            ? $"hit-test ({px},{py}): null"
+            : $"hit-test ({px},{py}): id={hit.Id} · inner={hit.InnerObject ?? "-"} · {hit.ComShape}");
+
+        string? hitId = hit?.Id;
         SapVisualElement? clicked =
             (hitId != null ? els.FirstOrDefault(e => e.BoundsKnown && e.Id == hitId) : null)
             ?? els.Where(e => e.BoundsKnown && Contains(e, px, py))
