@@ -27,26 +27,39 @@ public sealed class InspectorOverlay : Window
     private Matrix _fromDevice = Matrix.Identity;
     private readonly List<Rect> _neutral = new();
     private readonly List<(Rect box, string caption, bool shell, bool mapped)> _sap = new();
+    private readonly List<(Rect box, string text, bool isFolder)> _sapRows = new();
     private (Rect clicked, Rect? intended, bool mismatch)? _flash;
 
-    // Paleta: neutro (todo lo detectado por UIA), amarillo (clic que coincide con lo que el asistente
+    // Paleta: neutro (todo lo detectado por UIA), VIOLETA (clic que coincide con lo que el asistente
     // tocaría), rojo (mismatch — se marcan AMBOS: sólido lo que cliqueaste, punteado lo que el asistente
-    // tocaría). SAP va aparte en cian (campos/botones) y ámbar (shells: árbol, grid) para que se vea de
-    // un vistazo qué llega por Scripting y qué por UIA.
+    // tocaría). SAP va aparte en cian (campos/botones), ámbar (shells sin mapear) y verde (shells
+    // mapeados) para que se vea de un vistazo qué llega por Scripting y qué por UIA.
+    //
+    // El destello de coincidencia era AMARILLO (0xF2C200) y resultaba indistinguible del ámbar de "shell
+    // sin mapear" (0xFFA51F). Sobre un árbol se notaba muchísimo: una fila no tiene geometría propia, así
+    // que el destello enmarca el SHELL ENTERO durante 1,6 s — el árbol pasaba de verde a un naranja
+    // idéntico al de "no mapeado" en cada clic, y parecía que el mapeo se caía. Violeta no colisiona con
+    // ningún otro color de la paleta.
     private static readonly Brush NeutralStroke = Frozen(0x66, 0xFF, 0xFF, 0xFF);
-    private static readonly Brush YellowStroke = Frozen(0xFF, 0xF2, 0xC2, 0x00);
-    private static readonly Brush YellowFill = Frozen(0x33, 0xF2, 0xC2, 0x00);
+    private static readonly Brush MatchStroke = Frozen(0xFF, 0xA9, 0x6B, 0xF6);
+    private static readonly Brush MatchFill = Frozen(0x33, 0xA9, 0x6B, 0xF6);
     private static readonly Brush RedStroke = Frozen(0xFF, 0xE5, 0x53, 0x4B);
     private static readonly Brush RedFill = Frozen(0x2E, 0xE5, 0x53, 0x4B);
     private static readonly Brush SapStroke = Frozen(0xCC, 0x25, 0xC8, 0xE0);
     private static readonly Brush SapFill = Frozen(0x1E, 0x25, 0xC8, 0xE0);
     private static readonly Brush SapShellStroke = Frozen(0xFF, 0xFF, 0xA5, 0x1F);
     private static readonly Brush SapShellFill = Frozen(0x22, 0xFF, 0xA5, 0x1F);
-    // Shell MAPEADO (árbol con filas enumeradas por clave): ya no es territorio desconocido, así que
-    // nada de ámbar de alarma — gris neutro, apenas más marcado que las cajas de UIA para que el rótulo
-    // se siga leyendo. El ámbar queda reservado a lo que sigue opaco (grids, toolbars).
-    private static readonly Brush SapMappedStroke = Frozen(0xAA, 0xC9, 0xC9, 0xC9);
-    private static readonly Brush SapMappedFill = Frozen(0x12, 0xC9, 0xC9, 0xC9);
+    // Shell MAPEADO (árbol con filas enumeradas por clave): ya no es territorio desconocido. VERDE, no
+    // gris: el gris neutro anterior era casi indistinguible del ámbar sobre el azul del árbol de SAP, y
+    // con dos shells solapados no había forma de decir a simple vista cuál caja había pintado cuál rama
+    // del color. Verde=mapeado / ámbar=sin mapear se lee de un vistazo y sin ambigüedad.
+    private static readonly Brush SapMappedStroke = Frozen(0xFF, 0x3F, 0xBF, 0x6F);
+    private static readonly Brush SapMappedFill = Frozen(0x1E, 0x3F, 0xBF, 0x6F);
+    // FILAS de un árbol mapeado. Verde tenue, emparentado con el verde del shell que las contiene: son su
+    // contenido. Trazo fino y sin relleno porque son muchas y contiguas — con relleno la lista entera se
+    // convierte en una mancha y deja de leerse el texto de SAP debajo.
+    private static readonly Brush SapRowStroke = Frozen(0x99, 0x3F, 0xBF, 0x6F);
+    private static readonly Brush SapRowFolderStroke = Frozen(0xCC, 0x5C, 0xD6, 0x8A);
     private static readonly Brush CaptionBg = Frozen(0xE0, 0x1A, 0x1A, 0x1A);
     private static readonly Brush CaptionFg = Frozen(0xFF, 0xFF, 0xFF, 0xFF);
 
@@ -107,8 +120,20 @@ public sealed class InspectorOverlay : Window
     }
 
     /// <summary>
-    /// Destello al hacer clic: amarillo si el elemento cliqueado es el mismo que el asistente
-    /// resolvería; si no (mismatch), rojo en el cliqueado (sólido) y en el que el asistente tocaría (punteado).
+    /// Recuadros de las FILAS visibles de los árboles SAP. Sus cajas las da SAP fila a fila
+    /// (<c>GetItemTop</c>/<c>GetItemHeight</c> con columna), así que son exactas y siguen solas al DPI, al
+    /// zoom de SAP y al tema de fuente. Ver <c>SapGuiSurface.VisibleTreeRows</c>.
+    /// </summary>
+    public void SetSapRows(IEnumerable<(Rect box, string text, bool isFolder)> rows)
+    {
+        _sapRows.Clear();
+        _sapRows.AddRange(rows);
+        Redraw();
+    }
+
+    /// <summary>
+    /// Destello al hacer clic: violeta si el elemento cliqueado es el mismo que el asistente resolvería;
+    /// si no (mismatch), rojo en el cliqueado (sólido) y en el que el asistente tocaría (punteado).
     /// </summary>
     public void Flash(Rect clickedPhysical, Rect? intendedPhysical, bool mismatch)
     {
@@ -136,15 +161,26 @@ public sealed class InspectorOverlay : Window
 
         // SAP encima del neutro de UIA: los shells (árbol/grid) primero para que sus rótulos no queden
         // tapados por las cajas de campos que caen dentro.
-        foreach (var s in _sap.Where(s => s.shell))
+        //
+        // Dentro de los shells, los SIN MAPEAR van antes que los mapeados. En SAP los shells se anidan
+        // (ids tipo shellcont/shell/shellcont[1]/shell), así que un ancestro sin mapear puede tener casi
+        // el mismo rectángulo que el árbol que envuelve; dibujándolo después, su ámbar se pintaba justo
+        // encima del trazo del árbol y el árbol se veía sin mapear aunque no lo estuviera. El mapeado
+        // manda: se pinta último y gana la superposición.
+        foreach (var s in _sap.Where(s => s.shell).OrderBy(s => s.mapped ? 1 : 0))
         {
-            // Mapeado = gris neutro; sin mapear = ámbar de alarma. Ver SapBox.IsMapped.
+            // Mapeado = verde; sin mapear = ámbar de alarma. Ver SapBox.IsMapped.
             AddBox(s.box,
                 s.mapped ? SapMappedStroke : SapShellStroke,
                 s.mapped ? SapMappedFill : SapShellFill,
                 2.0, false);
             if (!string.IsNullOrWhiteSpace(s.caption)) AddCaption(s.box, s.caption);
         }
+        // Filas de árbol entre el shell y los campos: van DENTRO del shell (que ya está pintado) y no deben
+        // tapar las cajas de campos, que son las accionables por selector directo.
+        foreach (var r in _sapRows)
+            AddBox(r.box, r.isFolder ? SapRowFolderStroke : SapRowStroke, null, 1.0, false);
+
         foreach (var s in _sap.Where(s => !s.shell))
             AddBox(s.box, SapStroke, SapFill, 1.2, false);
 
@@ -157,7 +193,7 @@ public sealed class InspectorOverlay : Window
             }
             else
             {
-                AddBox(f.clicked, YellowStroke, YellowFill, 2.5, false);
+                AddBox(f.clicked, MatchStroke, MatchFill, 2.5, false);
             }
         }
     }

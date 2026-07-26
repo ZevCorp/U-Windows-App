@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
 using U.Graph.Surfaces;
+using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Ui;
 
 namespace U.WindowsClient.Uia;
@@ -47,6 +48,7 @@ public sealed class UiInspector : IDisposable
 
     private InspectorOverlay? _overlay;
     private DispatcherTimer? _refresh;
+    private int _refreshing; // 0 = libre. Compuerta anti-solapamiento; ver RefreshBoxes.
     private DispatcherTimer? _clearFlash;
     private IntPtr _hook = IntPtr.Zero;
     private HookProc? _proc; // referencia viva: si el GC lo recoge, el hook revienta.
@@ -69,7 +71,10 @@ public sealed class UiInspector : IDisposable
         _proc = HookCallback;
         _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(null), 0);
 
-        _refresh = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
+        // Tick corto para que los recuadros sigan a la pantalla. Puede ser corto porque los refrescos ya
+        // no se solapan (ver RefreshBoxes): si una lectura tarda más que el intervalo, los ticks de en
+        // medio se descartan en vez de acumularse, así que el coste techo lo pone la lectura, no el timer.
+        _refresh = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _refresh.Tick += (_, __) => RefreshBoxes();
         _refresh.Start();
         RefreshBoxes();
@@ -90,6 +95,12 @@ public sealed class UiInspector : IDisposable
 
     private void RefreshBoxes()
     {
+        // UN refresco a la vez. El tick es más corto que lo que puede tardar una lectura (UIA sobre un
+        // árbol grande, o el COM de SAP con la pantalla ocupada), así que sin esta compuerta los Task.Run
+        // se apilaban: cada uno competía por el mismo COM de SAP y el overlay se iba quedando cada vez más
+        // atrás — el síntoma era justo el contrario de lo que sugiere un timer rápido. Descartar el tick
+        // mientras hay uno en vuelo mantiene el overlay pegado al último estado leído.
+        if (Interlocked.Exchange(ref _refreshing, 1) == 1) return;
         Task.Run(() =>
         {
             try
@@ -101,12 +112,16 @@ public sealed class UiInspector : IDisposable
                 // compuerta por proceso evita fantasmas: las coordenadas SAP son absolutas de pantalla,
                 // así que sin SAP en primer plano dibujaríamos cajas sobre otra app.
                 var sapBoxes = new List<(System.Windows.Rect, string, bool, bool)>();
+                var sapRows = new List<(System.Windows.Rect, string, bool)>();
                 if (IsSapForeground(_refreshReader.ForegroundProcess))
                 {
                     try
                     {
-                        foreach (var b in _sapReader.Read())
+                        var els = _sapReader.ReadElements();
+                        foreach (var b in _sapReader.Read(els))
                             sapBoxes.Add((b.Bounds, b.Caption, b.IsShell, b.IsMapped));
+                        foreach (var r in _sapReader.ReadTreeRowBoxes(els))
+                            sapRows.Add((r.Box, r.Text, r.IsFolder));
                     }
                     catch { /* COM de SAP inestable: no romper el refresco de UIA */ }
                 }
@@ -115,9 +130,11 @@ public sealed class UiInspector : IDisposable
                 {
                     _overlay?.SetNeutral(rects);
                     _overlay?.SetSap(sapBoxes);
+                    _overlay?.SetSapRows(sapRows);
                 }));
             }
             catch { /* UIA puede lanzar en árboles inestables */ }
+            finally { Interlocked.Exchange(ref _refreshing, 0); }
         });
     }
 
@@ -203,18 +220,111 @@ public sealed class UiInspector : IDisposable
         var intended = els.FirstOrDefault(e => e.BoundsKnown &&
             string.Equals(e.Label.Trim(), clicked.Label.Trim(), StringComparison.OrdinalIgnoreCase));
 
-        bool mismatch = intended != null && intended.Id != clicked.Id;
-        InspectorDiagnostics.LogSap(px, py, hitId, clicked, intended, els, mismatch);
+        // Un SHELL (árbol, grid, imagen, toolbar) no se acciona por etiqueta: se acciona por su Id, que es
+        // único y que ya tenemos. Su Label es un relleno genérico —literalmente «shell»— sin ninguna
+        // información, así que juzgar "¿resolvería el asistente lo mismo?" comparando etiquetas es aplicar un
+        // criterio que la ejecución real no usa: los tres shells de esta pantalla comparten «shell» y el
+        // veredicto salía MISMATCH en CADA clic sobre cualquiera de ellos. Peor aún, el recuadro punteado de
+        // "lo que el asistente tocaría" se dibujaba sobre OTRO shell —el árbol— haciéndolo parecer culpable
+        // de un problema que no tenía.
+        //
+        // El veredicto correcto para un shell: se conoce su Id, así que el asistente lo apunta exacto y no hay
+        // ambigüedad. Para un ÁRBOL hay además una condición real —haber identificado la FILA— que se evalúa
+        // más abajo, porque la fila es la unidad accionable y se acciona por clave.
+        bool isShell = clicked.SubType.Length > 0;
+        bool isTree = clicked.SubType.IndexOf("Tree", StringComparison.OrdinalIgnoreCase) >= 0;
+        bool mismatch = !isShell && intended != null && intended.Id != clicked.Id;
+        if (isShell) intended = null;
 
-        // Clic dentro de un árbol: el shell no es la unidad accionable — la FILA sí. Como los nodos no
-        // traen geometría (§1.6), se resuelve leyendo la selección del árbol y se registra qué fila fue.
-        if (clicked.SubType.IndexOf("Tree", StringComparison.OrdinalIgnoreCase) >= 0)
-            InspectorDiagnostics.LogSapTreeNode(clicked, _sapReader.SelectedTreeNode(clicked.Id));
+        if (!isShell) InspectorDiagnostics.LogSap(px, py, hitId, clicked, intended, els, mismatch);
+        else if (!isTree)
+            LogBus.Log("inspector",
+                $"✓ OK @({px},{py}) [{clicked.Type}] shell subType={clicked.SubType} — se acciona por Id, " +
+                "no por etiqueta, así que no hay ambigüedad posible que señalar.");
 
-        Rect c = BoxOf(clicked);
+        // Clic dentro de un árbol: el shell no es la unidad accionable — la FILA sí, y se acciona por CLAVE
+        // (doubleClickNode), no por etiqueta. Así que el veredicto de arriba, que compara resolución por
+        // etiqueta, NO aplica aquí: los tres shells de la pantalla comparten la etiqueta genérica «shell»,
+        // de modo que la comparación por etiqueta daba mismatch —rojo— en TODOS los clics de árbol aunque la
+        // reproducción fuera perfecta. Se juzgaba con un criterio que la ejecución real no usa.
+        //
+        // Para un árbol el criterio correcto es: ¿se identificó la fila? Si sí, el asistente la reproduce con
+        // su clave y no hay ambigüedad posible; si no, entonces sí hay un problema real que señalar.
+        // Caja de la FILA para el destello, si se puede saber. Antes el destello enmarcaba el shell entero
+        // (454×589 px) porque no había geometría por fila: iluminaba media pantalla para no decir cuál fila.
+        Rect? rowBox = null;
+
+        if (isTree)
+        {
+            var row = SelectedRowAfterClick(clicked.Id, out string why);
+            InspectorDiagnostics.LogSapTreeNode(clicked, row, why);
+
+            mismatch = row == null;
+
+            if (row is { } r)
+            {
+                // CONTRASTE contra la realidad: se conoce la y del clic y la clave de la fila tocada, así que
+                // se le pregunta a SAP por la geometría de ESA clave. Si el top que devuelve, trasladado a
+                // pantalla, contiene la y del clic, entonces GetItemTop es la posición real del nodo y las
+                // cajas se pueden confiar. Si no, es un valor por índice y no sirve para enmarcar.
+                if (_sapReader.ItemGeometry(clicked.Id, r.Key, out int itemTop, out int itemHeight))
+                {
+                    double screenTop = clicked.ScreenTop + itemTop;
+                    bool contains = py >= screenTop && py < screenTop + itemHeight;
+                    LogBus.Log("inspector",
+                        $"   ↳ CONTRASTE geometría · clic y={py} · SAP dice top={itemTop} alto={itemHeight} " +
+                        $"→ en pantalla [{screenTop:0}, {screenTop + itemHeight:0}) · " +
+                        $"{(contains ? "CUADRA: el top es real por nodo" : "NO CUADRA: el top no corresponde a esta fila")}");
+
+                    // Si CUADRA no hay nada que corregir: el top crudo ya sitúa la fila. El contraste se deja
+                    // como aserción viva — si algún día una pantalla o un DPI distinto dice NO CUADRA, se verá
+                    // en el registro en vez de manifestarse como cajas torcidas sin explicación.
+                    //
+                    // Y solo si CUADRA se usa esa caja para el destello: si el contraste falla, marcar la fila
+                    // señalaría el sitio equivocado, y para eso es mejor el shell entero (impreciso pero cierto).
+                    if (contains)
+                    {
+                        // El clic también dice DÓNDE dentro de la banda está el texto, que es lo que alinea el
+                        // recuadro verticalmente. Ver SapInspectorReader.ObserveRowClick.
+                        _sapReader.ObserveRowClick(py, screenTop, itemHeight);
+                        rowBox = new Rect(clicked.ScreenLeft + 1, screenTop,
+                                          Math.Max(0, clicked.Width - 2), itemHeight);
+                    }
+                }
+                else
+                {
+                    LogBus.Log("inspector", "   ↳ CONTRASTE geometría · SAP no dio geometría para la fila clicada");
+                }
+            }
+        }
+
+        Rect c = rowBox ?? BoxOf(clicked);
         Rect? it = (mismatch && intended != null) ? BoxOf(intended) : (Rect?)null;
         FlashOn(c, it, mismatch);
         return true;
+    }
+
+    /// <summary>
+    /// La fila seleccionada del árbol, esperando a que SAP procese el clic.
+    ///
+    /// El hook de ratón dispara en <c>WM_LBUTTONDOWN</c>: cuando se llega aquí SAP todavía no ha atendido
+    /// el clic —menos aún su viaje al servidor—, así que preguntar la selección en ese instante devuelve
+    /// vacío casi siempre. Por eso el registro decía "no se pudo leer la fila bajo el clic" en TODOS los
+    /// clics de árbol, que hacía parecer que los getters de selección no servían cuando el problema era
+    /// llegar antes de tiempo. Se sondea hasta que SAP contesta, con techo para no bloquear el hilo de
+    /// fondo si de verdad no hay fila seleccionada (clic en el fondo del árbol, p.ej.).
+    /// </summary>
+    private (string Key, string Text, string Via)? SelectedRowAfterClick(string treeId, out string reason)
+    {
+        reason = "";
+        for (int i = 0; i < 12; i++)
+        {
+            var row = _sapReader.SelectedTreeNode(treeId, out reason);
+            if (row != null) return row;
+            Thread.Sleep(50);
+        }
+
+        return null;
     }
 
     private static bool Contains(SapVisualElement e, int px, int py) =>

@@ -90,16 +90,22 @@ internal static class InspectorDiagnostics
     /// asistente la reproduciría (<c>doubleClickNode(key)</c>). Si la selección no se pudo leer, se dice
     /// explícitamente qué hace falta (grabar por evento Change) para no confundirlo con "no pasó nada".
     /// </summary>
-    public static void LogSapTreeNode(SapVisualElement tree, (string Key, string Text)? node)
+    /// <param name="reason">
+    /// Por qué NO se pudo leer la fila, tal cual lo reporta la superficie. Antes esta rama decía siempre
+    /// "los getters de selección no respondieron", que era una conclusión y no un hecho: el mismo mensaje
+    /// salía cuando el árbol ni se había resuelto. Nombrar el paso que falló es la diferencia entre
+    /// diagnosticar y adivinar.
+    /// </param>
+    public static void LogSapTreeNode(
+        SapVisualElement tree, (string Key, string Text, string Via)? node, string reason)
     {
         if (node is { } n)
             LogBus.Log(Tag,
-                $"   ↳ ÁRBOL {Short(tree.Id)} · fila seleccionada {Q(n.Text)} key={Q(n.Key)} → el asistente la " +
-                "ejecutaría con doubleClickNode(key). la fila no tiene caja: SAP no expone geometría por nodo (§1.6).");
+                $"   ↳ ÁRBOL {Short(tree.Id)} · fila seleccionada {Q(n.Text)} key={Q(n.Key)} vía {n.Via} → el " +
+                "asistente la ejecutaría con doubleClickNode(key), que no depende de píxeles.");
         else
             LogBus.Log(Tag,
-                $"   ↳ ÁRBOL {Short(tree.Id)} · no se pudo leer la fila bajo el clic (getters de selección sin " +
-                "resultado). para capturarla hay que grabar por el evento Change/commandArray, no por hit-test de píxel.");
+                $"   ↳ ÁRBOL {Short(tree.Id)} · no se pudo leer la fila bajo el clic — {reason}.");
     }
 
     // ── UIA ──────────────────────────────────────────────────────────────────

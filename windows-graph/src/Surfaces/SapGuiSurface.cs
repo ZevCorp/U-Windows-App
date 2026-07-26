@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text;
 using System.Windows.Threading;
 
@@ -399,49 +399,222 @@ public sealed class SapGuiSurface : IUiSurface
     /// distintos, así que se prueban en orden. Nunca lanza: si nada devuelve una clave, da null y quien
     /// llama degrada (registra que hay que capturar la fila por el evento Change/commandArray al grabar).
     /// </summary>
-    public (string Key, string Text)? SelectedTreeNode(string treeId)
+    public (string Key, string Text, string Via)? SelectedTreeNode(string treeId, out string reason)
     {
-        dynamic? session; try { session = Session(); } catch { return null; }
-        if (session == null) return null;
+        dynamic? session;
+        try { session = Session(); } catch { reason = "sin sesión SAP"; return null; }
+        if (session == null) { reason = "sin sesión SAP"; return null; }
 
-        dynamic? tree; try { tree = session.FindById(treeId, false); } catch { return null; }
-        if (tree == null) return null;
+        // El id de los elementos del inspector es ABSOLUTO (/app/con[0]/ses[0]/wnd[0]/…), pero FindById de
+        // la SESIÓN resuelve rutas relativas a ella (ver SapSelector). Pasarle el absoluto devolvía null y
+        // se salía de aquí sin probar ni un getter — el registro culpaba a los getters de selección de algo
+        // que nunca llegaron a intentar. Se prueba normalizado y, por si algún id ya viniera relativo, tal cual.
+        dynamic? tree = null;
+        string relative = SapSelector.Normalize(treeId);
+        try { tree = session.FindById(relative, false); } catch { }
+        if (tree == null) { try { tree = session.FindById(treeId, false); } catch { } }
+        if (tree == null)
+        {
+            reason = $"árbol no resuelto por FindById (probado «{relative}» y el absoluto)";
+            return null;
+        }
 
-        string? key = TrySelectedNodeKey(tree);
-        if (string.IsNullOrEmpty(key)) return null;
+        string? key = TrySelectedNodeKey(tree, out string via);
+        if (string.IsNullOrEmpty(key))
+        {
+            reason = "árbol resuelto, pero ningún getter de selección respondió";
+            return null;
+        }
 
+        reason = "";
         string text = NodeText(tree, key!, TreeColumnNames(tree));
-        return (key!, text);
+        return (key!, text, via);
     }
 
-    /// <summary>Clave del nodo seleccionado probando las variantes de la API de árbol. "" si ninguna responde.</summary>
-    private static string? TrySelectedNodeKey(dynamic tree)
+    // ── Filas VISIBLES del árbol (para enmarcar fila a fila) ──────────────────
+
+    /// <summary>
+    /// Una fila VISIBLE del árbol, con la posición que SAP le atribuye. <paramref name="Top"/> va relativo
+    /// al borde del árbol y <paramref name="Height"/> en píxeles: ambos LEÍDOS, nunca estimados.
+    /// </summary>
+    public sealed record TreeRow(string Key, string Text, int Top, int Height, bool IsFolder);
+
+    /// <summary>
+    /// Geometría REAL de una fila, si SAP la suelta. Devuelve alto 0 si no.
+    ///
+    /// El repo daba por comprobado que <c>GetItemTop/GetItemHeight</c> devuelven 0 «para cualquier clave».
+    /// Pero en un árbol de COLUMNAS estos getters toman DOS argumentos —<c>(clave, columna)</c>— igual que
+    /// <c>GetItemText(key, col)</c>, que sí responde y es lo que hace funcionar a <see cref="NodeText"/>.
+    /// Llamados con un solo argumento fallan por ARIDAD, que desde fuera es indistinguible de "no existe":
+    /// de ahí, probablemente, la conclusión de que no hay geometría por nodo. Se prueba con columna y, si
+    /// responde, las cajas del inspector salen exactas y sin calibrar nada.
+    /// </summary>
+    private static void ItemGeometry(
+        dynamic tree, string key, List<string> columns, out int itemTop, out int itemHeight)
+    {
+        // out y no tupla: tree es dynamic, así que la llamada se resuelve en runtime y el resultado sería
+        // dynamic — no deconstruible (CS8133). Mismo motivo por el que los descartes de este archivo llevan
+        // el tipo escrito.
+        itemTop = 0;
+        itemHeight = 0;
+        foreach (string col in columns)
+        {
+            int h = TreeInt(tree, "GetItemHeight", key, col);
+            if (h <= 0) continue;
+            itemHeight = h;
+            itemTop = TreeInt(tree, "GetItemTop", key, col);
+            return;
+        }
+    }
+
+    /// <summary>
+    /// La geometría que SAP atribuye a UNA fila concreta. Existe para poder CONTRASTARLA con la realidad:
+    /// tras un clic se conoce la y de pantalla y la clave de la fila tocada, así que preguntar aquí por esa
+    /// misma clave dice si <c>GetItemTop</c> devuelve la posición REAL de ese nodo o algo derivado del índice.
+    /// La sospecha viene de haber visto dos árboles distintos —de 589 y 129 px de alto— reportar la misma
+    /// secuencia 43/73/103/133, que es lo que haría un valor por slot y no por nodo.
+    /// </summary>
+    public bool TreeItemGeometry(string treeId, string nodeKey, out int itemTop, out int itemHeight)
+    {
+        itemTop = 0;
+        itemHeight = 0;
+
+        dynamic? session;
+        try { session = Session(); } catch { return false; }
+        if (session == null) return false;
+
+        dynamic? tree = null;
+        try { tree = session.FindById(SapSelector.Normalize(treeId), false); } catch { }
+        if (tree == null) { try { tree = session.FindById(treeId, false); } catch { } }
+        if (tree == null) return false;
+
+        ItemGeometry(tree, nodeKey, TreeColumnNames(tree), out itemTop, out itemHeight);
+        return itemHeight > 0;
+    }
+
+    /// <summary>Un getter entero del árbol por enlace tardío con (clave, columna). 0 si no responde.</summary>
+    private static int TreeInt(dynamic tree, string method, string key, string column)
+    {
+        try
+        {
+            object? r = tree.GetType().InvokeMember(
+                method, BindingFlags.InvokeMethod, null, tree, new object[] { key, column });
+            return r == null ? 0 : Convert.ToInt32(r);
+        }
+        catch { return 0; }
+    }
+
+
+    /// <summary>
+    /// Las filas VISIBLES del árbol, preguntándole a SAP dónde está cada una. UNA sola regla:
+    ///
+    ///   <c>si el top que SAP da para la clave cae dentro del alto del árbol, la fila se ve — y su caja es
+    ///   exactamente ese top con ese alto.</c>
+    ///
+    /// POR QUÉ ASÍ: antes esto reconstruía lo visible a partir de <c>topNode</c> (el scroll) + un recorrido
+    /// en profundidad respetando el plegado + un alto de fila calibrado con clics. Tres capas, cada una con
+    /// su propio modo de fallo, y todas existían para compensar una limitación que resultó no existir: la
+    /// creencia de que SAP no da geometría por nodo venía de llamar <c>GetItemTop/GetItemHeight</c> con UN
+    /// argumento cuando piden DOS (clave y columna). Verificado contra el SAP real —cuatro clics, los cuatro
+    /// dentro de la banda que predice el top crudo—, así que las tres capas se borraron: no hay orden que
+    /// acertar, ni scroll que localizar, ni nada que estimar, y por tanto nada que pueda desalinearse.
+    /// Se adapta solo a DPI, zoom de SAP y tema de fuente, porque todo eso ya viene dentro de la respuesta.
+    ///
+    /// EL COSTE es preguntar por todas las claves y no solo por las ~20 visibles. Es la contrapartida
+    /// aceptada a cambio de quitar los supuestos; quien llama debe espaciar las llamadas (no en cada cuadro).
+    ///
+    /// POSICIONES REPETIDAS: dos filas no pueden ocupar la misma y. Si un mismo top aparece en más de dos
+    /// claves, no es una posición sino un valor centinela que SAP devuelve para lo que no está visible
+    /// (típicamente 0), así que ese grupo se descarta en bloque. Es la regla que evita confundir "invisible"
+    /// con "primera fila" sin tener que adivinar cuál es el centinela.
+    /// </summary>
+    public IReadOnlyList<TreeRow> VisibleTreeRows(string treeId, int treeHeight, out string reason)
+    {
+        var rows = new List<TreeRow>();
+        dynamic? session;
+        try { session = Session(); } catch { reason = "sin sesión SAP"; return rows; }
+        if (session == null) { reason = "sin sesión SAP"; return rows; }
+
+        dynamic? tree = null;
+        try { tree = session.FindById(SapSelector.Normalize(treeId), false); } catch { }
+        if (tree == null) { try { tree = session.FindById(treeId, false); } catch { } }
+        if (tree == null) { reason = "árbol no resuelto por FindById"; return rows; }
+
+        var columns = TreeColumnNames(tree);
+        var keys = AllTreeKeys(tree);
+        if (keys.Count == 0) { reason = "el árbol no devolvió ninguna clave"; return rows; }
+
+        // Paso 1: solo geometría (2 llamadas COM por clave). El texto y el tipo de nodo se piden DESPUÉS y
+        // únicamente para las que se ven, que son un puñado — describir las 525 sería el derroche que ya
+        // hizo parpadear el inspector una vez.
+        var placed = new List<(string Key, int Top, int Height)>();
+        foreach (string key in keys)
+        {
+            ItemGeometry(tree, key, columns, out int itemTop, out int itemHeight);
+            if (itemHeight <= 0) continue;
+            if (itemTop < 0 || itemTop >= treeHeight) continue;
+            placed.Add((key, itemTop, itemHeight));
+        }
+
+        // Paso 2: descartar los tops compartidos por más de dos claves (centinelas, no posiciones).
+        var bogus = placed.GroupBy(p => p.Top).Where(g => g.Count() > 2).Select(g => g.Key).ToHashSet();
+        int dropped = placed.Count(p => bogus.Contains(p.Top));
+
+        foreach (var p in placed.Where(p => !bogus.Contains(p.Top)).OrderBy(p => p.Top))
+            rows.Add(new TreeRow(
+                p.Key, NodeText(tree, p.Key, columns), p.Top, p.Height, BoolOf(tree, "IsFolder", p.Key)));
+
+        reason = $"{rows.Count} filas visibles de {keys.Count} claves" +
+                 (dropped > 0 ? $"; {dropped} descartadas por compartir posición (centinela)" : "");
+        return rows;
+    }
+
+    /// <summary>
+    /// Clave del nodo seleccionado probando las variantes de la API de árbol. null si ninguna responde.
+    /// <paramref name="via"/> dice QUÉ getter contestó (o "ninguno"), para que el registro lo nombre: sin
+    /// eso, un árbol que no suelta su selección es indistinguible de un árbol sin fila seleccionada.
+    /// </summary>
+    private static string? TrySelectedNodeKey(dynamic tree, out string via)
     {
         // 1. GetSelectedNodes() → GuiCollection de claves (árboles de columnas / lista, multi-selección).
         try
         {
             dynamic sel = tree.GetSelectedNodes();
             int n = (int)sel.Count;
-            if (n > 0) { string k = Str(sel.ElementAt(0)); if (k.Length > 0) return k; }
+            if (n > 0)
+            {
+                string k = Str(sel.ElementAt(0));
+                if (k.Length > 0) { via = "GetSelectedNodes"; return k; }
+            }
         }
         catch { }
 
-        // 2. Propiedad de clave única (árboles simples). El casing exacto varía entre controles: se
-        //    prueban las formas documentadas por enlace tardío, tolerando la ausencia de cada una.
+        // 2. Propiedad de clave única. El casing exacto varía entre controles: se prueban las formas
+        //    documentadas por enlace tardío, tolerando la ausencia de cada una.
+        //
+        //    selectedItemNode va PRIMERO y es el que faltaba. En un ÁRBOL DE COLUMNAS —el de SAP Easy
+        //    Access— lo que se selecciona al clicar una fila es un ITEM de columna, no un nodo, así que
+        //    selectedNode queda vacío y la fila parecía imposible de leer: el registro decía "getters de
+        //    selección sin resultado" en cada clic de árbol, incluso sondeando 600 ms. La clave del nodo
+        //    dueño de ese item vive en selectedItemNode (su columna, en selectedItemColumn, que no nos
+        //    hace falta: accionamos la FILA).
         //
         //    OJO: aquí NO va topNode. Es la primera fila VISIBLE (la posición del scroll), no la
         //    seleccionada — comprobado contra el SAP real, donde con selectedNode vacío topNode valía
         //    vw00722. Tomarlo como selección hacía que cada scroll pareciera un clic: la grabación
         //    habría inventado un paso por cada rueda de ratón sobre el árbol.
-        foreach (string prop in new[] { "selectedNode", "SelectedNode", "GetSelectedNode" })
+        foreach (string prop in new[]
+                 { "selectedItemNode", "SelectedItemNode", "selectedNode", "SelectedNode", "GetSelectedNode" })
         {
             try
             {
                 string k = Str(tree.GetType().InvokeMember(prop, BindingFlags.GetProperty, null, tree, null)).Trim();
-                if (k.Length > 0) return k;
+                if (k.Length > 0) { via = prop; return k; }
             }
             catch { }
         }
+
+        via = "ninguno";
         return null;
     }
 
@@ -466,9 +639,17 @@ public sealed class SapGuiSurface : IUiSurface
             {
                 if (IsTreeSubType(subType))
                 {
-                    List<SapVisualElement> nodes = EnumerateTreeNodes(node, el.Id);
-                    acc.Add(el with { Label = $"{el.Label} · {nodes.Count} nodos", ChildCount = nodes.Count });
-                    acc.AddRange(nodes);
+                    // Solo el RECUENTO de filas, no su descripción. El inspector pinta la caja del árbol
+                    // con la geometría del shell y un rótulo con el número; cada nodo que se describía se
+                    // tiraba acto seguido (SapInspectorReader.Read salta todo lo que no trae bounds, y los
+                    // nodos nunca traen). Describir fila a fila costaba GetNodeTextByKey + un GetItemText
+                    // por columna + GetNodePathByKey + IsFolder + IsFolderExpanded —hasta ~24 viajes COM
+                    // por nodo, miles en un árbol clínico, en cada refresco— para conservar solo el número.
+                    // Quien SÍ necesita la fila (grabar y reproducir) la pide por clave en el momento: ver
+                    // ObserveTreeSelection y ResolveNodeKey.
+                    // Solo el DATO (cuántas filas). El rótulo lo compone el cliente, que además sostiene el
+                    // último recuento bueno si SAP falla en un refresco: ver SapInspectorReader.Read.
+                    acc.Add(el with { ChildCount = CountTreeNodes(node) });
                 }
                 else acc.Add(el);
             }
@@ -541,54 +722,41 @@ public sealed class SapGuiSurface : IUiSurface
     private const int MaxTreeNodes = 20000;
 
     /// <summary>
-    /// Los nodos de un árbol SAP como elementos LÓGICOS. La Scripting API da sus claves, textos y RUTA,
-    /// pero NINGUNA coordenada por nodo (verificado por sonda: GetItemLeft/Top/Width/Height y
-    /// GetNodeHeight devuelven 0), así que van sin bounds: el cerebro los ve y los acciona por clave,
-    /// mientras el overlay solo enmarca el árbol entero.
+    /// CUÁNTAS filas tiene el árbol, sin describir ninguna. Es todo lo que el inspector necesita del
+    /// contenido de un árbol: la caja se dibuja con la geometría del shell, el rótulo solo dice el número
+    /// ("Favoritos · 20 nodos"), y un recuento &gt; 0 es lo que lo marca como MAPEADO — gris neutro en vez
+    /// de ámbar de "territorio desconocido" (ver <c>SapInspectorReader.SapBox.IsMapped</c>).
     ///
-    /// DE UNA SOLA LLAMADA cuando se puede: <c>GetAllNodeKeys()</c> devuelve TODAS las claves cargadas
-    /// de golpe (1197 en el árbol clínico real). El recorrido en anchura por <c>GetNodesCol</c> +
-    /// <c>GetSubNodesCol</c> queda de RESPALDO para controles que no expongan GetAllNodeKeys: da el
-    /// mismo resultado pero con una llamada COM por nodo, que sobre un árbol de mil nodos se nota.
+    /// DE UNA SOLA LLAMADA cuando se puede: <c>GetAllNodeKeys()</c> devuelve TODAS las claves cargadas de
+    /// golpe (1197 en el árbol clínico real). El recorrido en anchura por <c>GetNodesCol</c> +
+    /// <c>GetSubNodesCol</c> queda de RESPALDO para controles que no expongan GetAllNodeKeys.
     ///
-    /// Las carpetas colapsadas cuyos hijos aún no se han traído del servidor no aparecen — es correcto:
-    /// no las expandimos pasivamente (expandir dispara un viaje al servidor y, en un SAP clínico, puede
+    /// Cuenta CLAVES, no textos legibles. Antes se construía un elemento por fila y se descartaban las
+    /// que no soltaban texto, así que un árbol cuyo texto vive en un item de columna que no responde daba
+    /// 0 y salía en ámbar de "sin mapear" — aunque sus claves estuvieran ahí y fueran perfectamente
+    /// accionables por <c>doubleClickNode</c>. La clave ES la identidad que se acciona; el texto es
+    /// decoración del rótulo.
+    ///
+    /// Las carpetas colapsadas cuyos hijos aún no se han traído del servidor no cuentan — es correcto: no
+    /// las expandimos pasivamente (expandir dispara un viaje al servidor y, en un SAP clínico, puede
     /// disparar lógica de negocio); el agente las desplegará cuando navegue.
     /// </summary>
-    private static List<SapVisualElement> EnumerateTreeNodes(dynamic tree, string treeId)
+    private static int CountTreeNodes(dynamic tree)
     {
-        // Nombres de columna una sola vez: en árboles de columnas el texto visible vive en un ITEM
-        // (GetItemText), no en el nodo. En el árbol clínico real GetNodeTextByKey solo responde en 140
-        // de 1197 claves (las carpetas) y GetItemText en las 1197 — sin este respaldo se pierden justo
-        // las HOJAS, que son las accionables.
-        var columns = TreeColumnNames(tree);
-
-        var nodes = new List<SapVisualElement>();
-        foreach (string key in AllTreeKeys(tree))
+        // El TAMAÑO de la colección, en UNA llamada COM. Traer las claves una por una (ElementAt) costaba
+        // una llamada por fila —361 en SAP Easy Access, con el refresco cada 200 ms son ~1.800 llamadas
+        // por segundo— y era la causa del parpadeo verde/ámbar: con SAP ocupado alguna de esas cientos de
+        // llamadas fallaba, el recuento se caía a 0 y la caja se repintaba como "sin mapear". Para colorear
+        // y rotular basta cuántas hay; las claves solo se piden cuando de verdad se va a accionar una fila.
+        try
         {
-            if (nodes.Count >= MaxTreeNodes) break;
-
-            string text = NodeText(tree, key, columns);
-            if (text.Length == 0) continue;
-
-            nodes.Add(new SapVisualElement(
-                Id: treeId,
-                Type: "GuiTreeNode",
-                SubType: "",
-                Label: text,
-                Value: key,
-                ScreenLeft: 0, ScreenTop: 0, Width: 0, Height: 0,
-                BoundsKnown: false,
-                ActionType: "click",
-                ControlType: "treeitem",
-                IsNode: true,
-                ParentId: treeId,
-                NodeKey: key,
-                NodePath: NodePathOf(tree, key),
-                IsFolder: BoolOf(tree, "IsFolder", key),
-                IsExpanded: BoolOf(tree, "IsFolderExpanded", key)));
+            dynamic col = tree.GetAllNodeKeys();
+            int n = (int)col.Count;
+            if (n > 0) return n;
         }
-        return nodes;
+        catch { /* el control no expone GetAllNodeKeys: respaldo abajo */ }
+
+        return AllTreeKeys(tree).Count;
     }
 
     /// <summary>
@@ -1426,7 +1594,9 @@ public sealed class SapGuiSurface : IUiSurface
             try { id = Str(tree.Id); } catch { continue; }
             if (id.Length == 0) continue;
 
-            string? key = TrySelectedNodeKey(tree);
+            // Tipo explícito en el descarte: tree es dynamic, así que la llamada se resuelve en runtime y
+            // un `out _` sin tipo no se puede deducir (CS8183).
+            string? key = TrySelectedNodeKey(tree, out string _);
             if (string.IsNullOrEmpty(key)) continue;
 
             found.Add((SapSelector.Normalize(id), key!,
