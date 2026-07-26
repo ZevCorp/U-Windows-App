@@ -171,6 +171,20 @@ public sealed class SapGuiSurface : IUiSurface
 
     // ── Identidad ────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Dónde estamos. El pathname lleva TRANSACCIÓN / PROGRAMA / Nº DE DYNPRO, no solo la transacción.
+    ///
+    /// POR QUÉ LOS TRES: una transacción SAP no es una pantalla, es una secuencia de ellas. En NV2000
+    /// («Triage: Acceso») el usuario pasa por los dynpros 100, 200, 300… todos con la MISMA transacción.
+    /// Con el pathname en solo <c>/NV2000</c>, las tres pantallas tenían identidad idéntica, así que el
+    /// sistema de ubicaciones era literalmente incapaz de notar que había navegado: <c>SamePlace</c>
+    /// daba true en todas, la ubicación ANTES/DESPUÉS del log salía igual, y el motor de carga no tenía
+    /// contra qué esperar. De ahí el "dice que cargó el 100% y es completamente mentira".
+    ///
+    /// El ORIGIN no cambia (<c>sapgui://QAS</c>): es la app, y es lo que usa el alineador para saber a
+    /// qué programa traer el foco. Todo el detalle nuevo va en el pathname, que es lo que distingue
+    /// nodos DENTRO de la app.
+    /// </summary>
     public SurfaceIdentity Identity()
     {
         try
@@ -179,24 +193,111 @@ public sealed class SapGuiSurface : IUiSurface
             if (session == null) return SurfaceIdentity.Unknown;
 
             dynamic info = session.Info;
-            string system = Str(info.SystemName);            // p.ej. PRD
-            string tcode = Str(info.Transaction);            // p.ej. VA01
-            string title = Str(session.FindById("wnd[0]").Text);
+            string system = Str(info.SystemName);            // p.ej. QAS
+            string tcode = Str(info.Transaction);            // p.ej. NV2000
+            string program = "";                             // p.ej. SAPMNPA10
+            string screen = "";                              // p.ej. 0100
+            try { program = Str(info.Program).Trim(); } catch { }
+            try { screen = Str(info.ScreenNumber).Trim(); } catch { }
+
+            string title = "";
+            try { title = Str(session.FindById("wnd[0]").Text); } catch { }
+
+            var path = new System.Text.StringBuilder("/").Append(tcode);
+            if (program.Length > 0) path.Append('/').Append(program);
+            // A 4 dígitos: SAP nombra los dynpros así (0100), y sin normalizar "100" y "0100"
+            // parecerían pantallas distintas según de dónde venga el dato.
+            if (screen.Length > 0) path.Append('/').Append(int.TryParse(screen, out int n) ? n.ToString("D4") : screen);
 
             return new SurfaceIdentity(
                 Origin: $"sapgui://{(system.Length > 0 ? system : "sap")}",
-                Pathname: "/" + tcode,
+                Pathname: path.ToString(),
                 Title: title);
         }
         catch { return SurfaceIdentity.Unknown; }
     }
 
-    /// <summary>Métrica de carga: SAP GUI aún no la aporta (la navegación por scripting es síncrona).
-    /// 0 = sin métrica → el motor de carga se salta esta superficie. Mejora futura.</summary>
-    public int ReadinessCount() => 0;
+    /// <summary>
+    /// Cuántos componentes accionables tiene la pantalla activa. Es la métrica del motor de carga.
+    ///
+    /// Antes devolvía 0 con la excusa de que "la navegación por scripting es síncrona". No lo es: SAP
+    /// pinta el dynpro nuevo después del round-trip, y devolver 0 apagaba el respaldo por porcentaje
+    /// justo en la superficie donde más falta hacía. Se cuenta sobre la ventana ACTIVA (que puede ser un
+    /// modal), no sobre <c>wnd[0]/usr</c>, porque un popup es una pantalla distinta que hay que esperar
+    /// igual.
+    /// </summary>
+    public int ReadinessCount()
+    {
+        dynamic? session;
+        try { session = Session(); } catch { return 0; }
+        if (session == null) return 0;
 
-    /// <summary>Sin gate de carga en SAP scripting (navegación síncrona): siempre listo.</summary>
-    public bool IsStepReady(PlanStep step) => true;
+        dynamic? root = null;
+        try { root = session.ActiveWindow; } catch { }
+        if (root == null) { try { root = session.FindById("wnd[0]", false); } catch { } }
+        if (root == null) return 0;
+
+        var acc = new List<dynamic>();
+        try { Walk(root, acc, 0); } catch { }
+        return acc.Count;
+    }
+
+    /// <summary>
+    /// ¿Está SAP a mitad de un viaje al servidor? <c>GuiSession.Busy</c> es la señal NATIVA de carga —
+    /// mejor que cualquier heurística de conteo, porque la pone el propio SAP GUI. Si la propiedad no
+    /// existe en esta versión, se responde false (no bloquear por no saber).
+    /// </summary>
+    public bool IsBusy()
+    {
+        try
+        {
+            dynamic? session = Session();
+            if (session == null) return false;
+            return (bool)session.Busy;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// ¿El elemento del paso existe YA y se puede tocar? Antes esto devolvía <c>true</c> siempre, lo que
+    /// hacía que <see cref="U.Graph.SurfaceReadiness"/> retornara en la primera iteración sin esperar
+    /// nada: el motor de carga estaba inerte en SAP y se actuaba sobre la pantalla anterior.
+    ///
+    /// Se comprueba de verdad: que SAP siga ocupado cuenta como NO listo; que el id resuelva; y, si el
+    /// paso apunta a una fila de árbol, que la clave (o su ruta) siga existiendo en el árbol.
+    /// </summary>
+    public bool IsStepReady(PlanStep step)
+    {
+        if (IsBusy()) return false;
+
+        // Pasos sin elemento propio (tecla, alineación): no hay nada que resolver.
+        if (!SapSelector.Owns(step.Selector)) return true;
+
+        dynamic? session;
+        try { session = Session(); } catch { return false; }
+        if (session == null) return false;
+
+        string id = SapSelector.IdOf(step.Selector);
+        if (id.Length == 0) return true;
+
+        dynamic? node;
+        try { node = session.FindById(id, false); }
+        catch { return false; }
+        if (node == null) return false;
+
+        string? nodeKey = step.NodeKey ?? SapSelector.NodeKeyOf(step.Selector);
+        if (!string.IsNullOrEmpty(nodeKey))
+        {
+            // Fila de árbol: el árbol puede existir y estar todavía vacío tras navegar.
+            try { return ResolveNodeKey(node, nodeKey!, step) != null; }
+            catch { return false; }
+        }
+
+        // Un control presente pero aún no modificable es exactamente el caso de "no se puede habilitar
+        // el elemento". Changeable no existe en todos los tipos: si no está, basta con que resuelva.
+        try { return (bool)node.Changeable; }
+        catch { return true; }
+    }
 
     // ── Lectura ──────────────────────────────────────────────────────────────
 
@@ -750,7 +851,14 @@ public sealed class SapGuiSurface : IUiSurface
 
         if (session == null) { error = "no hay ninguna sesión de SAP GUI abierta"; return false; }
 
-        var candidates = new List<string> { step.Selector };
+        // Pasos de TECLA (`key:down`, `key:enter`, `key:f3`…). Iban al foco, no a un elemento, así que
+        // el bucle de abajo —que filtra por SapSelector.Owns— los descartaba y SAP respondía "no se
+        // encontró el campo". Resultado: ninguna tecla se ejecutaba nunca sobre SAP, ni siquiera Enter.
+        string selectorOfStep = step.Selector ?? "";
+        if (selectorOfStep.StartsWith("key:", StringComparison.OrdinalIgnoreCase))
+            return SendKey(session, step, out error);
+
+        var candidates = new List<string> { selectorOfStep };
         candidates.AddRange(step.AlternativeTargets());
 
         foreach (string selector in candidates.Where(SapSelector.Owns))
@@ -828,6 +936,85 @@ public sealed class SapGuiSurface : IUiSurface
                 error = $"actionType no soportado en SAP: {step.ActionType}";
                 return false;
         }
+    }
+
+    // ── Teclas ───────────────────────────────────────────────────────────────
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
+
+    private const uint KeyUp = 0x0002, KeyExtended = 0x0001;
+
+    /// <summary>
+    /// Teclas que SAP entiende como COMANDO propio: se mandan por <c>sendVKey</c>, la vía nativa, que
+    /// dispara el round-trip al servidor igual que si el usuario las pulsara. Es más fiable que simular
+    /// la tecla física, porque no depende de quién tenga el foco.
+    /// </summary>
+    private static readonly Dictionary<string, int> SapVKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Enter"] = 0, ["Return"] = 0,
+        ["F1"] = 1, ["F2"] = 2, ["F3"] = 3, ["F4"] = 4, ["F5"] = 5, ["F6"] = 6,
+        ["F7"] = 7, ["F8"] = 8, ["F9"] = 9, ["F10"] = 10, ["F11"] = 11, ["F12"] = 12,
+    };
+
+    /// <summary>
+    /// Teclas de NAVEGACIÓN dentro de un control. SAP no las expone como VKey (no son comandos suyos:
+    /// las procesa el control que tiene el foco), así que aquí sí hay que enviar la tecla física.
+    /// </summary>
+    private static readonly Dictionary<string, byte> NavKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Left"] = 0x25, ["Up"] = 0x26, ["Right"] = 0x27, ["Down"] = 0x28,
+        ["Home"] = 0x24, ["End"] = 0x23, ["PageUp"] = 0x21, ["PageDown"] = 0x22,
+        ["Tab"] = 0x09, ["Esc"] = 0x1B, ["Delete"] = 0x2E, ["Backspace"] = 0x08,
+    };
+
+    /// <summary>
+    /// Ejecuta un paso de tecla contra SAP. Acepta repetidor (<c>"Down x7"</c>) para no llenar el
+    /// workflow con siete pasos idénticos al bajar por una lista con la flecha.
+    /// </summary>
+    private static bool SendKey(dynamic session, PlanStep step, out string error)
+    {
+        error = "";
+        string raw = (step.Value ?? step.Label ?? step.Selector.Substring(4)).Trim();
+
+        int times = 1;
+        int x = raw.LastIndexOf(" x", StringComparison.OrdinalIgnoreCase);
+        if (x > 0 && int.TryParse(raw[(x + 2)..].Trim(), out int n) && n > 0)
+        {
+            times = Math.Clamp(n, 1, 200);
+            raw = raw[..x].Trim();
+        }
+
+        if (SapVKeys.TryGetValue(raw, out int vkey))
+        {
+            try
+            {
+                dynamic wnd = session.FindById("wnd[0]");
+                for (int i = 0; i < times; i++) wnd.SendVKey(vkey);
+                return true;
+            }
+            catch (Exception e) { error = $"SAP rechazó la tecla «{raw}» (VKey {vkey}): {e.Message}"; return false; }
+        }
+
+        if (NavKeys.TryGetValue(raw, out byte vk))
+        {
+            // La tecla va a quien tenga el foco: hay que asegurarse de que sea SAP y no la carita.
+            // SetFocus, NUNCA Maximize: redimensionar la ventana de SAP de un cliente para poder
+            // teclear sería un efecto secundario visible que nadie pidió.
+            try { session.FindById("wnd[0]").SetFocus(); } catch { }
+            uint ext = vk is 0x25 or 0x26 or 0x27 or 0x28 or 0x24 or 0x23 or 0x21 or 0x22 or 0x2E
+                ? KeyExtended : 0;
+            for (int i = 0; i < times; i++)
+            {
+                keybd_event(vk, 0, ext, IntPtr.Zero);
+                keybd_event(vk, 0, ext | KeyUp, IntPtr.Zero);
+                Thread.Sleep(30); // que el control procese cada pulsación como una de verdad
+            }
+            return true;
+        }
+
+        error = $"tecla no soportada en SAP: «{raw}»";
+        return false;
     }
 
     // ── Filas de árbol (GuiTree) ─────────────────────────────────────────────

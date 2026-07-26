@@ -48,6 +48,9 @@ public sealed class UiaSurface : IUiSurface
     private const int WM_KEYDOWN = 0x0100;
     private const byte VK_RETURN = 0x0D;
     private const uint KEYEVENTF_KEYUP = 0x0002;
+    /// <summary>Sin este flag, Windows entrega las flechas/Inicio/Fin/Re-Av Pág como las del teclado
+    /// numérico y el destino recibe otra tecla. Ver <see cref="IsExtendedKey"/>.</summary>
+    private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     [DllImport("user32.dll")] private static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
     [StructLayout(LayoutKind.Sequential)]
     private struct KBDLLHOOKSTRUCT { public uint vkCode; public uint scanCode; public uint flags; public uint time; public IntPtr dwExtraInfo; }
@@ -510,22 +513,54 @@ public sealed class UiaSurface : IUiSurface
 
     private static bool Fail(string reason, out string error) { error = reason; return false; }
 
-    /// <summary>Envía una tecla de acción al elemento con foco. Hoy solo Enter; el patrón deja agregar
-    /// Tab/Esc trivialmente cuando las pruebas lo pidan.</summary>
+    /// <summary>
+    /// Envía una tecla de acción al elemento con FOCO. Soporta todo <see cref="ActionKeys"/> (Enter,
+    /// Tab, Esc, flechas, Home/End, Re/Av Pág, Supr, Retroceso y F1–F12).
+    ///
+    /// El paso puede traer un repetidor en <c>Value</c> (<c>"Down x7"</c>): navegar una lista con
+    /// flechas son N pulsaciones iguales, y grabarlas como N pasos llenaría el workflow de ruido.
+    /// Las teclas EXTENDIDAS (flechas, Inicio/Fin, Re/Av Pág, Supr) necesitan su flag: sin él, Windows
+    /// las entrega como las del teclado numérico y el destino recibe otra cosa.
+    /// </summary>
     private bool SendKey(PlanStep step, out string error)
     {
         error = "";
-        string key = (step.Value ?? step.Label ?? "").Trim();
-        L($"SendKey «{key}» al foco '{Identity().Url}'");
-        if (key.Equals("Enter", StringComparison.OrdinalIgnoreCase) || key.Equals("Return", StringComparison.OrdinalIgnoreCase))
+        string raw = (step.Value ?? step.Label ?? "").Trim();
+        (string key, int times) = ParseKeySpec(raw);
+
+        if (key.Equals("Return", StringComparison.OrdinalIgnoreCase)) key = "Enter";
+        if (!KeyCodes.TryGetValue(key, out byte vk))
         {
-            keybd_event(VK_RETURN, 0, 0, IntPtr.Zero);
-            keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, IntPtr.Zero);
-            return true;
+            error = $"tecla no soportada: «{raw}»";
+            return false;
         }
-        error = $"tecla no soportada aún: «{key}»";
-        return false;
+
+        L($"SendKey «{key}»{(times > 1 ? $" x{times}" : "")} al foco '{Identity().Url}'");
+        uint extended = IsExtendedKey(vk) ? KEYEVENTF_EXTENDEDKEY : 0;
+        for (int i = 0; i < times; i++)
+        {
+            keybd_event(vk, 0, extended, IntPtr.Zero);
+            keybd_event(vk, 0, extended | KEYEVENTF_KEYUP, IntPtr.Zero);
+            if (times > 1) Thread.Sleep(25); // que el destino procese cada pulsación como una de verdad
+        }
+        return true;
     }
+
+    /// <summary>"Down x7" → ("Down", 7). Sin repetidor, ("Down", 1). El contador se acota para que un
+    /// valor corrupto no deje la app tecleando miles de veces contra el SAP de un cliente.</summary>
+    private static (string Key, int Times) ParseKeySpec(string raw)
+    {
+        int x = raw.LastIndexOf(" x", StringComparison.OrdinalIgnoreCase);
+        if (x > 0 && int.TryParse(raw[(x + 2)..].Trim(), out int n) && n > 0)
+            return (raw[..x].Trim(), Math.Clamp(n, 1, 200));
+        return (raw, 1);
+    }
+
+    private static bool IsExtendedKey(byte vk) =>
+        vk is 0x25 or 0x26 or 0x27 or 0x28    // flechas
+           or 0x24 or 0x23                     // Inicio / Fin
+           or 0x21 or 0x22                     // Re Pág / Av Pág
+           or 0x2E;                            // Supr
 
     /// <summary>
     /// Reproduce un scroll: mueve el cursor al panel grabado (posición) y envía la rueda con el MISMO
@@ -908,28 +943,52 @@ public sealed class UiaSurface : IUiSurface
         return (0, 0);
     }
 
-    /// <summary>Hook de teclado: solo nos interesan las teclas de ACCIÓN (hoy Enter). El tecleo de texto
-    /// ya llega por ValueProperty, así que no se graba tecla por tecla.</summary>
+    /// <summary>
+    /// Teclas de ACCIÓN que se graban y se saben reproducir. El tecleo de TEXTO no entra aquí: ese llega
+    /// por ValueProperty, y grabarlo letra a letra duplicaría cada campo.
+    ///
+    /// Las FLECHAS están porque son la forma de navegar controles que no se dejan accionar de otro modo
+    /// —un árbol o una tabla donde el elemento no resuelve— y hasta ahora el botón enseñar era ciego a
+    /// ellas: el usuario las pulsaba, no pasaba nada, y el workflow quedaba incompleto sin avisar.
+    /// Las F1–F12 están porque en SAP son la interfaz de verdad (F3 volver, F8 ejecutar…).
+    /// </summary>
+    private static readonly Dictionary<int, string> ActionKeys = new()
+    {
+        [0x0D] = "Enter",     [0x09] = "Tab",      [0x1B] = "Esc",
+        [0x25] = "Left",      [0x26] = "Up",       [0x27] = "Right",   [0x28] = "Down",
+        [0x24] = "Home",      [0x23] = "End",      [0x21] = "PageUp",  [0x22] = "PageDown",
+        [0x2E] = "Delete",    [0x08] = "Backspace",
+        [0x70] = "F1", [0x71] = "F2", [0x72] = "F3", [0x73] = "F4",
+        [0x74] = "F5", [0x75] = "F6", [0x76] = "F7", [0x77] = "F8",
+        [0x78] = "F9", [0x79] = "F10", [0x7A] = "F11", [0x7B] = "F12",
+    };
+
+    /// <summary>Nombre → código, para reproducir. Se construye del mapa de arriba: una sola fuente.</summary>
+    private static readonly Dictionary<string, byte> KeyCodes =
+        ActionKeys.ToDictionary(kv => kv.Value, kv => (byte)kv.Key, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Hook de teclado: graba las teclas de ACCIÓN (<see cref="ActionKeys"/>), no el texto.</summary>
     private IntPtr KeyHookCallback(int code, IntPtr wParam, IntPtr lParam)
     {
         if (code >= 0 && (int)wParam == WM_KEYDOWN)
         {
             var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-            if (data.vkCode == VK_RETURN) Task.Run(PublishEnter);
+            if (ActionKeys.TryGetValue((int)data.vkCode, out string? name))
+                Task.Run(() => PublishKey(name));
         }
         return CallNextHookEx(_keyHook, code, wParam, lParam);
     }
 
-    /// <summary>Graba un paso "key" para Enter, anclado al foco (no a un elemento). Se excluye la UI de Ü.</summary>
-    private void PublishEnter()
+    /// <summary>Graba un paso "key", anclado al FOCO (no a un elemento). Se excluye la UI de Ü.</summary>
+    private void PublishKey(string keyName)
     {
-        if (IsOwnWindow(GetForegroundWindow())) return; // Enter dentro de Ü no es parte del workflow
+        if (IsOwnWindow(GetForegroundWindow())) return; // una tecla dentro de Ü no es parte del workflow
         var step = new ObservedStep(
             ActionType: "key",
-            Selector: "key:enter",   // selector sintético: el paso va al foco, no a un elemento resuelto
-            Label: "Enter",
+            Selector: $"key:{keyName.ToLowerInvariant()}", // sintético: va al foco, no a un elemento resuelto
+            Label: keyName,
             ControlType: "key",
-            Value: "Enter",
+            Value: keyName,
             AllowedOptions: null,
             SelectedValue: null,
             SelectedLabel: null,
@@ -939,7 +998,7 @@ public sealed class UiaSurface : IUiSurface
             Surface = Identity().Url,
             Readiness = CachedReadinessCount().ToString(),
         };
-        L($"observado: tecla Enter en '{step.Surface}'");
+        L($"observado: tecla {keyName} en '{step.Surface}'");
         try { StepObserved?.Invoke(this, step); } catch { }
     }
 

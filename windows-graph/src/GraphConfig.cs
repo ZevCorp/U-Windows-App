@@ -55,6 +55,13 @@ public sealed class GraphConfig
         string? fromEnv = Environment.GetEnvironmentVariable("GRAPH_API_KEY");
         if (!string.IsNullOrWhiteSpace(fromEnv)) cfg.ApiKey = fromEnv.Trim();
 
+        // Igual que GRAPH_API_KEY pero para la BASE: `set GRAPH_BASE_URL=http://localhost:3000` apunta
+        // el módulo de workflows a un Graph local sin tocar %APPDATA% ni recompilar. Existe para poder
+        // probar cliente y backend juntos en la misma máquina: el asistente ya tenía su equivalente
+        // (U_BACKEND_URL) y este módulo no, así que la mitad de la app seguía yendo al Graph remoto.
+        string? baseFromEnv = Environment.GetEnvironmentVariable("GRAPH_BASE_URL");
+        if (!string.IsNullOrWhiteSpace(baseFromEnv)) cfg.BaseUrl = baseFromEnv.Trim().TrimEnd('/');
+
         // Último recurso: la key embebida en el build de distribución (el CI la inyecta; vacía en los
         // builds del repo). Es lo que hace que el exe distribuido funcione "de fábrica" sin que el
         // usuario ponga nada; graph.json o GRAPH_API_KEY la sobreescriben en la máquina.

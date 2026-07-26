@@ -400,26 +400,63 @@ public sealed class WorkflowPlayer
         !string.IsNullOrWhiteSpace(now.Origin) &&
         string.Equals(now.Origin.TrimEnd('/'), OriginOf(recordedUrl).TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>¿Mismo LUGAR exacto (origin + pathname normalizado)? Falso si el paso no trae nodo.</summary>
+    /// <summary>¿Mismo LUGAR (origin + pathname normalizado)? Falso si el paso no trae nodo.</summary>
     private static bool SamePlace(SurfaceIdentity now, string recordedUrl)
     {
         if (string.IsNullOrWhiteSpace(recordedUrl) || !SameOrigin(now, recordedUrl)) return false;
-        string a = NormalizePlace(now.Pathname);
-        string b = NormalizePlace(PathnameOf(recordedUrl));
-        return a.Length > 0 && a == b;
+
+        bool structural = HasStructuralPath(now.Origin);
+        string a = NormalizePlace(now.Pathname, structural);
+        string b = NormalizePlace(PathnameOf(recordedUrl), structural);
+        if (a.Length == 0 || b.Length == 0) return false;
+        if (a == b) return true;
+
+        // Grabación MENOS específica que la lectura actual: la identidad SAP pasó de /nv2000 a
+        // /nv2000/sapmnpa10/0100, y sin esto ninguna grabación anterior al cambio volvería a casar.
+        // Solo en rutas estructurales, y exigiendo el separador (/nv2000 no debe casar con /nv20001).
+        return structural && a.StartsWith(b + "/", StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// Normaliza un pathname para comparar LUGARES, no instantes: minúsculas y solo letras (los dígitos
-    /// y signos se van porque los títulos traen contadores/estado vivo — "Inbox (1,956)" ≠ texto pero
-    /// = lugar que "Inbox (1,988)").
+    /// ¿El pathname de esta superficie es un IDENTIFICADOR estructural o un título vivo?
+    ///
+    /// En <c>uia://</c> el pathname es el TÍTULO de la ventana: trae contadores y estado ("Inbox
+    /// (1,956)"), así que hay que limpiarlo para comparar lugares y no instantes. En <c>sapgui://</c>
+    /// es transacción/programa/dynpro, donde los DÍGITOS son la identidad — borrarlos hacía que NV2000
+    /// y NV3000 se normalizaran ambos a "nv" y el sistema los tomara por la misma pantalla.
     /// </summary>
-    private static string NormalizePlace(string pathname)
+    /// <summary>
+    /// ¿La ruta GRABADA cubre la actual? Igual, o la grabada es un prefijo jerárquico de la actual.
+    /// Lo segundo importa porque el pathname de SAP se volvió más específico (transacción → +programa
+    /// +dynpro): un workflow grabado como <c>/NV2000</c> sigue siendo válido estando en
+    /// <c>/NV2000/SAPMNPA10/0100</c>. Al revés no: si la grabación exige el dynpro, se exige.
+    /// </summary>
+    private static bool PathnameCovers(string recorded, string now)
     {
-        var sb = new System.Text.StringBuilder((pathname ?? "").Length);
-        foreach (char c in (pathname ?? "").ToLowerInvariant())
-            if (char.IsLetter(c)) sb.Append(c);
-        return sb.ToString();
+        string a = (recorded ?? "").TrimEnd('/');
+        string b = (now ?? "").TrimEnd('/');
+        if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+        return b.StartsWith(a + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasStructuralPath(string origin) =>
+        (origin ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Normaliza un pathname para comparar LUGARES. Con <paramref name="structural"/> se conserva todo
+    /// lo significativo (alfanumérico y las barras de la jerarquía); sin él se deja solo letras, porque
+    /// el pathname es un título de ventana con estado vivo dentro.
+    /// </summary>
+    private static string NormalizePlace(string pathname, bool structural)
+    {
+        string p = (pathname ?? "").ToLowerInvariant();
+        var sb = new System.Text.StringBuilder(p.Length);
+        foreach (char c in p)
+        {
+            if (structural) { if (char.IsLetterOrDigit(c) || c == '/') sb.Append(c); }
+            else if (char.IsLetter(c)) sb.Append(c);
+        }
+        return sb.ToString().TrimEnd('/');
     }
 
     private IUiSurface? SurfaceFor(string selector)
@@ -446,7 +483,7 @@ public sealed class WorkflowPlayer
         // (misma razón por la que el título nunca acotó).
         bool pathnameScopes = !(plan.SourceOrigin ?? "").StartsWith("uia://", StringComparison.OrdinalIgnoreCase);
         if (pathnameScopes && !string.IsNullOrWhiteSpace(plan.SourcePathname) &&
-            !string.Equals(now.Pathname, plan.SourcePathname, StringComparison.OrdinalIgnoreCase))
+            !PathnameCovers(plan.SourcePathname, now.Pathname))
             return $"Este workflow se grabó en {plan.SourcePathname} y ahora estás en {now.Pathname}.";
 
         return null;
