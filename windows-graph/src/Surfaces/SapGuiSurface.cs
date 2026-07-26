@@ -326,7 +326,12 @@ public sealed class SapGuiSurface : IUiSurface
 
         // 2. Propiedad de clave única (árboles simples). El casing exacto varía entre controles: se
         //    prueban las formas documentadas por enlace tardío, tolerando la ausencia de cada una.
-        foreach (string prop in new[] { "selectedNode", "SelectedNode", "GetSelectedNode", "topNode" })
+        //
+        //    OJO: aquí NO va topNode. Es la primera fila VISIBLE (la posición del scroll), no la
+        //    seleccionada — comprobado contra el SAP real, donde con selectedNode vacío topNode valía
+        //    vw00722. Tomarlo como selección hacía que cada scroll pareciera un clic: la grabación
+        //    habría inventado un paso por cada rueda de ratón sobre el árbol.
+        foreach (string prop in new[] { "selectedNode", "SelectedNode", "GetSelectedNode" })
         {
             try
             {
@@ -426,57 +431,124 @@ public sealed class SapGuiSurface : IUiSurface
     }
 
     /// <summary>
-    /// Los nodos de un árbol SAP como elementos LÓGICOS. La Scripting API da sus claves y textos, pero
-    /// NINGUNA coordenada por nodo (verificado contra la spec oficial), así que van sin bounds: el
-    /// cerebro los ve y puede accionarlos por clave, pero el overlay solo enmarca el árbol entero.
+    /// Tope de nodos por árbol. Alto a propósito: un árbol clínico real (transacción NWP1) trae 1197
+    /// nodos y el de favoritos 916, así que el viejo tope de 600 TRUNCABA la mitad del árbol en
+    /// silencio — y el rótulo del overlay decía "600 nodos" como si esa fuera la realidad. Esto ya no
+    /// es un límite operativo sino una red de seguridad contra un árbol patológico.
+    /// </summary>
+    private const int MaxTreeNodes = 20000;
+
+    /// <summary>
+    /// Los nodos de un árbol SAP como elementos LÓGICOS. La Scripting API da sus claves, textos y RUTA,
+    /// pero NINGUNA coordenada por nodo (verificado por sonda: GetItemLeft/Top/Width/Height y
+    /// GetNodeHeight devuelven 0), así que van sin bounds: el cerebro los ve y los acciona por clave,
+    /// mientras el overlay solo enmarca el árbol entero.
     ///
-    /// RECORRIDO EN ANCHURA por clave, no una sola pasada: <c>GetNodesCol</c> devuelve, según el control,
-    /// solo los nodos RAÍZ (en SAP Easy Access, "Favoritos" y "Menú SAP" → dos). Para capturar todo lo
-    /// CARGADO hay que bajar por <c>GetSubNodesCol</c> desde cada clave, deduplicando (si una versión sí
-    /// devuelve todo de golpe, el HashSet evita repetir). Las carpetas colapsadas cuyos hijos aún no se
-    /// han traído del servidor no aparecen — es correcto: no los expandimos pasivamente; el agente los
-    /// desplegará cuando navegue.
+    /// DE UNA SOLA LLAMADA cuando se puede: <c>GetAllNodeKeys()</c> devuelve TODAS las claves cargadas
+    /// de golpe (1197 en el árbol clínico real). El recorrido en anchura por <c>GetNodesCol</c> +
+    /// <c>GetSubNodesCol</c> queda de RESPALDO para controles que no expongan GetAllNodeKeys: da el
+    /// mismo resultado pero con una llamada COM por nodo, que sobre un árbol de mil nodos se nota.
+    ///
+    /// Las carpetas colapsadas cuyos hijos aún no se han traído del servidor no aparecen — es correcto:
+    /// no las expandimos pasivamente (expandir dispara un viaje al servidor y, en un SAP clínico, puede
+    /// disparar lógica de negocio); el agente las desplegará cuando navegue.
     /// </summary>
     private static List<SapVisualElement> EnumerateTreeNodes(dynamic tree, string treeId)
     {
+        // Nombres de columna una sola vez: en árboles de columnas el texto visible vive en un ITEM
+        // (GetItemText), no en el nodo. En el árbol clínico real GetNodeTextByKey solo responde en 140
+        // de 1197 claves (las carpetas) y GetItemText en las 1197 — sin este respaldo se pierden justo
+        // las HOJAS, que son las accionables.
+        var columns = TreeColumnNames(tree);
+
         var nodes = new List<SapVisualElement>();
+        foreach (string key in AllTreeKeys(tree))
+        {
+            if (nodes.Count >= MaxTreeNodes) break;
+
+            string text = NodeText(tree, key, columns);
+            if (text.Length == 0) continue;
+
+            nodes.Add(new SapVisualElement(
+                Id: treeId,
+                Type: "GuiTreeNode",
+                SubType: "",
+                Label: text,
+                Value: key,
+                ScreenLeft: 0, ScreenTop: 0, Width: 0, Height: 0,
+                BoundsKnown: false,
+                ActionType: "click",
+                ControlType: "treeitem",
+                IsNode: true,
+                ParentId: treeId,
+                NodeKey: key,
+                NodePath: NodePathOf(tree, key),
+                IsFolder: BoolOf(tree, "IsFolder", key),
+                IsExpanded: BoolOf(tree, "IsFolderExpanded", key)));
+        }
+        return nodes;
+    }
+
+    /// <summary>
+    /// TODAS las claves del árbol. Prueba <c>GetAllNodeKeys()</c> (una llamada) y, si el control no la
+    /// expone o devuelve vacío, cae al recorrido en anchura por <c>GetSubNodesCol</c>.
+    /// </summary>
+    private static List<string> AllTreeKeys(dynamic tree)
+    {
+        try
+        {
+            dynamic col = tree.GetAllNodeKeys();
+            int count = (int)col.Count;
+            if (count > 0)
+            {
+                var all = new List<string>(count);
+                for (int i = 0; i < count && all.Count < MaxTreeNodes; i++)
+                {
+                    try { string k = Str(col.ElementAt(i)); if (k.Length > 0) all.Add(k); }
+                    catch { }
+                }
+                if (all.Count > 0) return all;
+            }
+        }
+        catch { /* el control no expone GetAllNodeKeys: respaldo abajo */ }
+
+        var keys = new List<string>();
         var seen = new HashSet<string>();
         var queue = new Queue<string>();
-
         foreach (string k in TreeKeys(tree, null))
             if (seen.Add(k)) queue.Enqueue(k);
 
-        // Nombres de columna una sola vez: en árboles de columnas el texto visible vive en un ITEM
-        // (GetItemText), no en el nodo (GetNodeTextByKey devuelve vacío). Se prueban ambos.
-        var columns = TreeColumnNames(tree);
-
-        while (queue.Count > 0 && nodes.Count < 600)
+        while (queue.Count > 0 && keys.Count < MaxTreeNodes)
         {
             string key = queue.Dequeue();
-
-            string text = NodeText(tree, key, columns);
-            if (text.Length > 0)
-            {
-                nodes.Add(new SapVisualElement(
-                    Id: treeId,
-                    Type: "GuiTreeNode",
-                    SubType: "",
-                    Label: text,
-                    Value: key,
-                    ScreenLeft: 0, ScreenTop: 0, Width: 0, Height: 0,
-                    BoundsKnown: false,
-                    ActionType: "click",
-                    ControlType: "treeitem",
-                    IsNode: true,
-                    ParentId: treeId,
-                    NodeKey: key));
-            }
-
-            if (seen.Count < 800)
-                foreach (string child in TreeKeys(tree, key))
-                    if (seen.Add(child)) queue.Enqueue(child);
+            keys.Add(key);
+            foreach (string child in TreeKeys(tree, key))
+                if (seen.Add(child)) queue.Enqueue(child);
         }
-        return nodes;
+        return keys;
+    }
+
+    /// <summary>Ruta jerárquica del nodo (p.ej. <c>1\2</c>), o null si el control no la expone.</summary>
+    private static string? NodePathOf(dynamic tree, string key)
+    {
+        try
+        {
+            string p = Str(tree.GetNodePathByKey(key)).Trim();
+            return p.Length > 0 ? p : null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Un predicado del árbol por enlace tardío (IsFolder, IsFolderExpanded). false si no existe.</summary>
+    private static bool BoolOf(dynamic tree, string method, string key)
+    {
+        try
+        {
+            object? r = tree.GetType().InvokeMember(
+                method, BindingFlags.InvokeMethod, null, tree, new object[] { key });
+            return r is bool b ? b : Convert.ToBoolean(r);
+        }
+        catch { return false; }
     }
 
     /// <summary>Claves de los nodos raíz (<paramref name="parentKey"/> null) o de los hijos de un nodo.</summary>
@@ -689,6 +761,18 @@ public sealed class SapGuiSurface : IUiSurface
             catch { continue; }
             if (node == null) continue;
 
+            // Una fila de árbol no es un componente: el id resuelve al ÁRBOL y la fila viaja aparte.
+            string? nodeKey = step.NodeKey ?? SapSelector.NodeKeyOf(selector);
+            if (!string.IsNullOrEmpty(nodeKey))
+            {
+                try { return ApplyToNode(node, nodeKey!, step, out error); }
+                catch (Exception e)
+                {
+                    error = $"SAP rechazó la acción sobre la fila «{step.Label}» ({id}): {e.Message}";
+                    return false;
+                }
+            }
+
             try { return Apply(node, step, out error); }
             catch (Exception e)
             {
@@ -744,6 +828,142 @@ public sealed class SapGuiSurface : IUiSurface
                 error = $"actionType no soportado en SAP: {step.ActionType}";
                 return false;
         }
+    }
+
+    // ── Filas de árbol (GuiTree) ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Acciona una FILA de un árbol SAP. Es el equivalente exacto del clic humano: SAP hace su viaje al
+    /// servidor igual que si el usuario hubiera pinchado la fila. NO se usa el ratón ni coordenadas —
+    /// una fila no tiene rectángulo (§ <see cref="SapVisualElement"/>) y además puede estar fuera del
+    /// área visible del scroll, cosa que a la Scripting API le da igual.
+    ///
+    /// Antes de accionar se pone la fila a la vista con <c>topNode</c>: es el scroll NATIVO del control
+    /// (mueve el árbol hasta esa clave), y deja la pantalla en un estado que el operador reconoce en vez
+    /// de disparar acciones sobre filas que nunca vio.
+    /// </summary>
+    private static bool ApplyToNode(dynamic tree, string recordedKey, PlanStep step, out string error)
+    {
+        error = "";
+
+        string? key = ResolveNodeKey(tree, recordedKey, step);
+        if (key == null)
+        {
+            error = $"la fila «{step.Label}» ya no está en el árbol " +
+                    $"(clave grabada {recordedKey}, ruta {step.NodePath ?? "?"}). " +
+                    "Si cuelga de una carpeta plegada, hay que expandirla antes.";
+            return false;
+        }
+
+        TrySetProp(tree, "topNode", key);          // scroll nativo hasta la fila
+        if (!TryInvoke(tree, "selectNode", key))   // no todos los controles la exponen
+            TrySetProp(tree, "selectedNode", key);
+
+        // Carpeta → desplegar/plegar. Hoja → activar (doble clic), que es como SAP lanza la entrada.
+        bool isFolder = BoolOf(tree, "IsFolder", key);
+        string mode = (step.Value ?? "").Trim().ToLowerInvariant();
+
+        if (mode.Length == 0) mode = isFolder ? "toggle" : "activate";
+
+        switch (mode)
+        {
+            case "select":
+                return true; // ya seleccionada arriba
+
+            case "expand":
+                if (!TryInvoke(tree, "expandNode", key)) { error = "el árbol no permite expandir esa fila"; return false; }
+                return true;
+
+            case "collapse":
+                if (!TryInvoke(tree, "collapseNode", key)) { error = "el árbol no permite plegar esa fila"; return false; }
+                return true;
+
+            case "toggle":
+                bool expanded = BoolOf(tree, "IsFolderExpanded", key);
+                if (!TryInvoke(tree, expanded ? "collapseNode" : "expandNode", key))
+                { error = "el árbol no permite desplegar esa carpeta"; return false; }
+                return true;
+
+            default: // "activate" y cualquier cosa que venga de un click normal
+                if (TryInvoke(tree, "doubleClickNode", key)) return true;
+                // Árboles de columnas: la activación va por ITEM, no por nodo.
+                foreach (string col in TreeColumnNames(tree))
+                    if (TryInvoke(tree, "doubleClickItem", key, col)) return true;
+                error = "el árbol no aceptó doubleClickNode ni doubleClickItem sobre esa fila";
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Qué clave accionar de verdad. Las claves de SAP (<c>vw00073</c>) son de la CARGA del árbol, no
+    /// del negocio: pueden moverse entre sesiones. Y el texto no desambigua — en el árbol clínico real
+    /// "Órdenes Clínicas" aparece 17 veces, una por servicio. Así que se prueba, en orden de fiabilidad:
+    ///
+    ///   1. la clave grabada, si sigue existiendo Y su texto coincide con el grabado;
+    ///   2. la RUTA jerárquica (<c>GetNodePathByKey</c>), que describe la posición y sobrevive al recargue;
+    ///   3. el texto, SOLO si es único en todo el árbol (si no, se prefiere fallar a clicar otra cosa).
+    ///
+    /// Devuelve null si nada resuelve: en un SAP clínico, accionar la fila equivocada es peor que no
+    /// accionar ninguna.
+    /// </summary>
+    private static string? ResolveNodeKey(dynamic tree, string recordedKey, PlanStep step)
+    {
+        var columns = TreeColumnNames(tree);
+        string wanted = (step.Label ?? "").Trim();
+
+        // 1. La clave tal cual.
+        string current = NodeText(tree, recordedKey, columns);
+        if (current.Length > 0 &&
+            (wanted.Length == 0 || current.Equals(wanted, StringComparison.OrdinalIgnoreCase)))
+            return recordedKey;
+
+        var keys = AllTreeKeys(tree);
+
+        // 2. Por ruta jerárquica.
+        if (!string.IsNullOrWhiteSpace(step.NodePath))
+        {
+            foreach (string k in keys)
+                if (string.Equals(NodePathOf(tree, k), step.NodePath, StringComparison.OrdinalIgnoreCase))
+                    return k;
+        }
+
+        // 3. Por texto, solo si es inequívoco.
+        if (wanted.Length > 0)
+        {
+            string? only = null;
+            foreach (string k in keys)
+            {
+                if (!NodeText(tree, k, columns).Equals(wanted, StringComparison.OrdinalIgnoreCase)) continue;
+                if (only != null) return null; // ambiguo: mejor fallar que adivinar
+                only = k;
+            }
+            if (only != null) return only;
+        }
+
+        // La clave existía aunque el texto no cuadre: último recurso antes de rendirse.
+        return current.Length > 0 ? recordedKey : null;
+    }
+
+    /// <summary>Llama un método del árbol por enlace tardío. false si no existe o SAP lo rechaza.</summary>
+    private static bool TryInvoke(dynamic tree, string method, params object[] args)
+    {
+        try
+        {
+            tree.GetType().InvokeMember(method, BindingFlags.InvokeMethod, null, tree, args);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Fija una propiedad del árbol por enlace tardío. false si no existe o SAP la rechaza.</summary>
+    private static bool TrySetProp(dynamic tree, string prop, object value)
+    {
+        try
+        {
+            tree.GetType().InvokeMember(prop, BindingFlags.SetProperty, null, tree, new[] { value });
+            return true;
+        }
+        catch { return false; }
     }
 
     // ── Observación ──────────────────────────────────────────────────────────
@@ -883,6 +1103,110 @@ public sealed class SapGuiSurface : IUiSurface
                 AlternativeTargets: Array.Empty<string>()));
         }
         _lastSnapshot = current.ToDictionary(f => f.Selector, f => f.CurrentValue);
+
+        PublishTreeSelections();
+    }
+
+    /// <summary>Última fila seleccionada por árbol, para detectar el cambio (Id del árbol → clave).</summary>
+    private Dictionary<string, string> _lastTreeSelection = new();
+
+    /// <summary>
+    /// Publica un paso cuando el usuario selecciona una FILA de un árbol. Hace falta aparte porque
+    /// <see cref="PublishChangedFields"/> relee <c>wnd[0]/usr</c> — los campos del dynpro — y un árbol
+    /// vive en un shell fuera de ahí: un clic en el árbol no cambiaba NINGÚN campo, así que la grabación
+    /// no veía nada y el paso se perdía entero.
+    ///
+    /// La identidad de la fila viaja en el selector (<c>sap:…/shell#node=clave</c>) más la RUTA en
+    /// <see cref="ObservedStep.NodePath"/>. No se acciona nada aquí: solo se lee la selección que el
+    /// clic del usuario ya provocó.
+    /// </summary>
+    private void PublishTreeSelections()
+    {
+        var seen = new Dictionary<string, string>();
+
+        foreach (var sel in SafeReadTreeSelections())
+        {
+            seen[sel.TreeId] = sel.Key;
+            if (_lastTreeSelection.TryGetValue(sel.TreeId, out string? prev) && prev == sel.Key) continue;
+
+            StepObserved?.Invoke(this, new ObservedStep(
+                ActionType: "click",
+                Selector: SapSelector.ByNode(sel.TreeId, sel.Key),
+                Label: sel.Text,
+                ControlType: "treeitem",
+                Value: null,
+                AllowedOptions: null,
+                SelectedValue: null,
+                SelectedLabel: null,
+                SurfaceSection: null,
+                AlternativeTargets: Array.Empty<string>())
+            {
+                NodePath = sel.Path ?? "",
+            });
+        }
+
+        _lastTreeSelection = seen;
+    }
+
+    private IReadOnlyList<(string TreeId, string Key, string Text, string? Path)> SafeReadTreeSelections()
+    {
+        try { return ReadTreeSelections(); }
+        catch { return Array.Empty<(string, string, string, string?)>(); }
+    }
+
+    /// <summary>
+    /// La fila seleccionada de CADA árbol de la pantalla activa. Es la vía coordinate-free de saber qué
+    /// fila tocó el usuario: como los nodos no tienen geometría, el hit-test por píxel solo devuelve el
+    /// shell entero, nunca la fila.
+    /// </summary>
+    public IReadOnlyList<(string TreeId, string Key, string Text, string? Path)> ReadTreeSelections()
+    {
+        var found = new List<(string, string, string, string?)>();
+
+        dynamic? session;
+        try { session = Session(); } catch { return found; }
+        if (session == null) return found;
+
+        dynamic? root = null;
+        try { root = session.ActiveWindow; } catch { }
+        if (root == null) { try { root = session.FindById("wnd[0]", false); } catch { } }
+        if (root == null) return found;
+
+        var trees = new List<dynamic>();
+        try { CollectTrees(root, trees, 0); } catch { }
+
+        foreach (dynamic tree in trees)
+        {
+            string id;
+            try { id = Str(tree.Id); } catch { continue; }
+            if (id.Length == 0) continue;
+
+            string? key = TrySelectedNodeKey(tree);
+            if (string.IsNullOrEmpty(key)) continue;
+
+            found.Add((SapSelector.Normalize(id), key!,
+                       NodeText(tree, key!, TreeColumnNames(tree)), NodePathOf(tree, key!)));
+        }
+        return found;
+    }
+
+    /// <summary>Todos los shells de tipo árbol colgando de un componente.</summary>
+    private static void CollectTrees(dynamic node, List<dynamic> acc, int depth)
+    {
+        if (depth > 30 || acc.Count > 20) return;
+
+        if (IsTreeSubType(SubTypeOf(node))) acc.Add(node);
+
+        bool isContainer;
+        try { isContainer = (bool)node.ContainerType; } catch { return; }
+        if (!isContainer) return;
+
+        dynamic children; int count;
+        try { children = node.Children; count = (int)children.Count; } catch { return; }
+        for (int i = 0; i < count; i++)
+        {
+            try { CollectTrees(children.ElementAt(i), acc, depth + 1); } catch { }
+        }
     }
 
     private IReadOnlyList<DetectedField> SafeReadFields()

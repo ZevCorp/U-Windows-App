@@ -196,6 +196,41 @@ public sealed class PlanStep
     [JsonPropertyName("semanticTarget")] public string? SemanticTarget { get; set; }
     [JsonPropertyName("surfaceSection")] public string? SurfaceSection { get; set; }
 
+    /// <summary>
+    /// Fila de un árbol SAP (GuiTree). Una fila no tiene id propio — su id ES el del árbol — así que
+    /// sin esto un "clic en Órdenes Clínicas" solo podía resolverse al árbol entero y acababa en un
+    /// SetFocus() al panel. La clave es la que SAP usa en <c>selectNode</c>/<c>doubleClickNode</c>.
+    ///
+    /// Va DUPLICADA en el selector (<c>sap:…/shell#node=vw00073</c>) a propósito: el selector viaja
+    /// solo por sitios donde el PlanStep entero no llega.
+    /// </summary>
+    [JsonPropertyName("nodeKey")] public string? NodeKey { get; set; }
+
+    /// <summary>
+    /// Ruta jerárquica de la fila (<c>GetNodePathByKey</c>, p.ej. <c>1\2</c>). Es el ancla ESTABLE: la
+    /// clave puede cambiar entre sesiones y el texto NO distingue (en el árbol clínico real "Órdenes
+    /// Clínicas" aparece 17 veces, una por servicio). Al reejecutar se prueba clave → ruta → texto.
+    ///
+    /// Se graba dentro de <c>surfaceHints.nodePath</c> (Graph los pasa opacos, así que sobrevive al
+    /// viaje sin tocar el backend); el getter mira primero el campo propio y luego los hints.
+    /// </summary>
+    [JsonPropertyName("nodePath")]
+    public string? NodePath
+    {
+        get => _nodePath ?? HintString("nodePath");
+        set => _nodePath = value;
+    }
+    private string? _nodePath;
+
+    /// <summary>Una cadena de surfaceHints, o null si no está.</summary>
+    private string? HintString(string name)
+    {
+        if (SurfaceHints is not { ValueKind: JsonValueKind.Object } hints) return null;
+        if (!hints.TryGetProperty(name, out var v) || v.ValueKind != JsonValueKind.String) return null;
+        string s = v.GetString() ?? "";
+        return s.Length > 0 ? s : null;
+    }
+
     /// <summary>Vuelve tal cual la mandamos al grabar. De aquí salen los alternativeTargets.</summary>
     [JsonPropertyName("surfaceHints")] public JsonElement? SurfaceHints { get; set; }
 

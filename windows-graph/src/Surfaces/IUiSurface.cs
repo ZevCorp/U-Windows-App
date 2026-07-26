@@ -37,6 +37,14 @@ public sealed record ObservedStep(
     /// motor de carga para esperar a que la UI cargue antes de ejecutar. Vacío/0 = sin métrica.</summary>
     public string Readiness { get; init; } = "";
 
+    /// <summary>
+    /// Ruta jerárquica de la fila, si el paso fue sobre un árbol SAP (<c>GetNodePathByKey</c>, p.ej.
+    /// <c>1\2</c>). La CLAVE del nodo viaja dentro de <see cref="Selector"/>
+    /// (<c>sap:…/shell#node=vw00073</c>); esto es el ancla estable que la acompaña, porque la clave
+    /// puede cambiar entre sesiones y el texto no desambigua. Vacío = el paso no fue sobre un árbol.
+    /// </summary>
+    public string NodePath { get; init; } = "";
+
     /// <summary>Posición del clic RELATIVA a la ventana ("relX,relY"): fallback cuando el elemento no tiene
     /// selector estable (paneles SAP con id volátil). Vacío para inputs/selects. Ver UiaSurface.Execute.</summary>
     public string ClickPos { get; init; } = "";

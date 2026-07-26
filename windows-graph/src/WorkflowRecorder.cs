@@ -192,6 +192,10 @@ public sealed class WorkflowRecorder : IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(step.Surface)) hints["observedSurface"] = step.Surface;
         if (!string.IsNullOrWhiteSpace(step.Readiness)) hints["readiness"] = step.Readiness; // meta de carga
         if (!string.IsNullOrWhiteSpace(step.ClickPos)) hints["clickPos"] = step.ClickPos;     // fallback por posición
+        // Fila de árbol SAP: la CLAVE ya viaja en el selector; esto es la ruta jerárquica que la ancla
+        // cuando la clave cambia entre sesiones. Va en hints porque Graph los pasa tal cual (opacos),
+        // así que no hace falta tocar el backend para que sobreviva al viaje.
+        if (!string.IsNullOrWhiteSpace(step.NodePath)) hints["nodePath"] = step.NodePath;
         return hints.Count > 0 ? hints : null;
     }
 
