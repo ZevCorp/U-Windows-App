@@ -95,7 +95,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _badge = new LocatorBadge();
         _badge.Show();
         _locator = new SurfaceLocator();
-        _locator.Changed += loc => Dispatcher.Invoke(() => _badge?.SetText(loc.Id));
+        _locator.Changed += loc => Dispatcher.Invoke(() =>
+        {
+            _badge?.SetText(loc.Id);
+            // El inspector visual se SUSCRIBE a la ubicación en vez de descubrir el cambio por su
+            // cuenta 700 ms después: así los recuadros no quedan dibujados sobre la pantalla anterior.
+            // Es no-op si el inspector está apagado.
+            _inspector?.InvalidateNow();
+        });
         _locator.Start();
 
         var mcp = new LocalMcp(_uia);

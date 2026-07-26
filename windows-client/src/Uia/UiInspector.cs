@@ -122,6 +122,23 @@ public sealed class UiInspector : IDisposable
     }
 
     /// <summary>
+    /// La superficie cambió: los recuadros dibujados son de la pantalla ANTERIOR. Se borran YA y se
+    /// vuelve a leer, sin esperar al refresco periódico de 700 ms. Lo llama <see cref="SurfaceLocator"/>
+    /// vía su evento Changed, que a su vez cuelga de los eventos de ventana de Windows.
+    ///
+    /// Borrar antes de leer es deliberado: enumerar el árbol UIA tarda, y cajas viejas encima de una
+    /// pantalla nueva se leen como "el sistema está perdido". Un instante sin cajas es más honesto que
+    /// un instante de cajas equivocadas.
+    /// </summary>
+    public void InvalidateNow()
+    {
+        if (!Active) return;
+        _overlay?.SetNeutral(Array.Empty<Rect>());
+        _overlay?.SetSap(Array.Empty<(Rect, string, bool)>());
+        RefreshBoxes();
+    }
+
+    /// <summary>
     /// ¿La app en primer plano es SAP GUI? El front-end de SAP GUI for Windows corre bajo
     /// <c>saplogon.exe</c> (y variantes históricas <c>sapgui</c>/<c>saplgpad</c>). Basta el prefijo
     /// "sap" para cubrirlas sin listar versiones.
