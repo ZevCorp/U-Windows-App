@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Threading;
 using U.Graph.Surfaces;
+using U.WindowsClient.Diagnostics;
 
 namespace U.WindowsClient.Uia;
 
@@ -35,6 +36,32 @@ public sealed class SurfaceLocator : IDisposable
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+
+    // ── MEDICIÓN (temporal) ──────────────────────────────────────────────────
+    // Windows YA avisa cuando cambia la ventana en foco (EVENT_SYSTEM_FOREGROUND). Este locator no lo
+    // escucha: sondea con un reloj de 800 ms, así que descubre tarde algo que el sistema sabía al
+    // instante. Ese retraso es el que se ve como desfase en el inspector visual (recuadros de la
+    // pantalla anterior sobre la pantalla nueva).
+    //
+    // Esto NO cambia el comportamiento: solo engancha el evento para MEDIR cuánto tarda el reloj en
+    // enterarse. Con el número medido se decide promover el hook de sonda a FUENTE (disparar Probe()
+    // desde OnForegroundChanged y dejar el timer como red de seguridad) — una línea.
+    [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(
+        uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventProc lpfnWinEventProc,
+        uint idProcess, uint idThread, uint dwFlags);
+    [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+    private delegate void WinEventProc(IntPtr hook, uint ev, IntPtr hwnd, int idObject, int idChild, uint thread, uint time);
+
+    private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    private const uint WINEVENT_OUTOFCONTEXT = 0x0000;   // callback en NUESTRO hilo, sin inyectar DLL
+    private const uint WINEVENT_SKIPOWNPROCESS = 0x0002; // las ventanas de Ü no son superficie
+    private const int OBJID_WINDOW = 0;                  // el resto (menús, cursor, caret) no es la ventana
+
+    private IntPtr _winEventHook;
+    private WinEventProc? _winEventProc; // referencia viva: si el GC lo recoge, el hook revienta.
+    private IntPtr _eventHwnd;
+    private long _eventAtMs;
+    private bool _primed; // la primera sonda tras Start() siempre "cambia": no es una medición válida
 
     private readonly DispatcherTimer _timer;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
@@ -81,6 +108,17 @@ public sealed class SurfaceLocator : IDisposable
         if (Active) return;
         Active = true;
         _lastHwnd = IntPtr.Zero; // fuerza recomputar ya
+        _primed = false;
+
+        // El hook se instala desde el hilo de UI (tiene bomba de mensajes): con WINEVENT_OUTOFCONTEXT
+        // el callback llega a ESTE hilo, así que puede tocar los campos sin sincronización.
+        _winEventProc = OnForegroundChanged;
+        _winEventHook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+            IntPtr.Zero, _winEventProc, 0, 0,
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        if (_winEventHook == IntPtr.Zero) LogBus.Log("locator-lag", "no se pudo enganchar EVENT_SYSTEM_FOREGROUND (sin medición)");
+
         _timer.Start();
         Probe();
     }
@@ -89,6 +127,48 @@ public sealed class SurfaceLocator : IDisposable
     {
         Active = false;
         _timer.Stop();
+        if (_winEventHook != IntPtr.Zero) { UnhookWinEvent(_winEventHook); _winEventHook = IntPtr.Zero; }
+        _winEventProc = null;
+    }
+
+    /// <summary>
+    /// Windows acaba de cambiar la ventana en primer plano. HOY solo se anota la hora para medir
+    /// cuánto tarda el reloj en descubrir lo mismo. Para PROMOVERLO a fuente: llamar aquí a Probe().
+    /// </summary>
+    private void OnForegroundChanged(IntPtr hook, uint ev, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
+    {
+        if (idObject != OBJID_WINDOW || hwnd == IntPtr.Zero) return;
+        _eventHwnd = hwnd;
+        _eventAtMs = Environment.TickCount64;
+    }
+
+    /// <summary>
+    /// ¿Cuánto tardó el reloj en ver este cambio? Devuelve la hora del evento (0 si no hubo) para poder
+    /// medir después el total hasta publicar, que es lo que de verdad percibe el usuario.
+    /// </summary>
+    private long ConsumeEventStamp(IntPtr hwnd, bool hwndChanged)
+    {
+        if (!_primed) { _primed = true; _eventHwnd = IntPtr.Zero; _eventAtMs = 0; return 0; }
+
+        if (!hwndChanged)
+        {
+            // Mismo hwnd, otro título (abriste otro documento). Windows NO emite foreground para esto:
+            // aquí el reloj es insustituible, o hace falta además EVENT_OBJECT_NAMECHANGE.
+            LogBus.Log("locator-lag", "titulo cambiado (mismo hwnd): sin evento de foreground, solo lo ve el reloj");
+            return 0;
+        }
+
+        if (_eventHwnd == hwnd && _eventAtMs > 0)
+        {
+            long stamp = _eventAtMs;
+            LogBus.Log("locator-lag", $"foreground: el reloj tardo {Environment.TickCount64 - stamp} ms en ver lo que Windows ya sabia");
+            _eventHwnd = IntPtr.Zero;
+            _eventAtMs = 0;
+            return stamp;
+        }
+
+        LogBus.Log("locator-lag", "cambio de ventana sin evento previo (evento perdido, o ventana de otro escritorio)");
+        return 0;
     }
 
     /// <summary>Chequeo barato en el hilo de UI: solo hwnd + título. Lo caro va a un hilo de fondo.</summary>
@@ -108,6 +188,7 @@ public sealed class SurfaceLocator : IDisposable
 
         if (hwnd == _lastHwnd && title == _lastTitle) return;
         if (_computing) return;
+        long eventAtMs = ConsumeEventStamp(hwnd, hwnd != _lastHwnd);
         _lastHwnd = hwnd;
         _lastTitle = title;
         _computing = true;
@@ -136,6 +217,10 @@ public sealed class SurfaceLocator : IDisposable
             {
                 _computing = false;
                 if (loc == null || loc.Id == Current?.Id) return;
+                // El total es lo que percibe el usuario: reloj + lectura de identidad (UIA/COM). Es la
+                // cifra a comparar contra los 700 ms del refresco del inspector visual.
+                if (eventAtMs > 0)
+                    LogBus.Log("locator-lag", $"total hasta publicar '{loc.Id}': {Environment.TickCount64 - eventAtMs} ms");
                 Current = loc;
                 Changed?.Invoke(loc);
             }));
