@@ -120,6 +120,11 @@ public sealed class WorkflowPlayer
         if (!availability.Available)
             return new RunResult(false, workflowId, Array.Empty<StepOutcome>(), availability.Reason);
 
+        // MEDICIÓN de tiempos: cronómetro total + colector por paso; el resumen se loguea en CADA salida.
+        var timings = new RunTimings();
+        var runSw = System.Diagnostics.Stopwatch.StartNew();
+        RunResult Finish(RunResult r) { try { L(timings.Summary(runSw.ElapsedMilliseconds)); } catch { } return r; }
+
         // LA UBICACIÓN COMO EJE: ¿ya estás parado en la superficie de algún paso del workflow? Si sí,
         // reanuda AHÍ y salta lo previo — "ubícate en cualquier nodo y haz solo lo que falta para el
         // objetivo", no siempre desde el primer paso. Solo aplica con grabaciones que traen la superficie
@@ -138,6 +143,7 @@ public sealed class WorkflowPlayer
         // ya estamos parados en un nodo válido del workflow.
         L($"superficie actual: origin='{surface.Identity().Origin}' pathname='{surface.Identity().Pathname}' · hasAlignmentStep={hasAlignmentStep} · strictSurface={strictSurface} · resumeFrom={resumeFrom}");
         bool alignedConsciously = false;
+        var alignSw = System.Diagnostics.Stopwatch.StartNew();
         if (resumeFrom == 0 && strictSurface && !hasAlignmentStep)
         {
             string? mismatch = SurfaceMismatch(surface.Identity(), plan);
@@ -165,28 +171,31 @@ public sealed class WorkflowPlayer
                 L($"NO se intenta alinear (Aligner={(Aligner != null)}, sourceOrigin='{plan.SourceOrigin}')");
             }
             if (mismatch != null)
-                return new RunResult(false, workflowId, Array.Empty<StepOutcome>(), mismatch);
+                return Finish(new RunResult(false, workflowId, Array.Empty<StepOutcome>(), mismatch));
         }
+        timings.AlignMs = alignSw.ElapsedMilliseconds;
 
         var outcomes = new List<StepOutcome>();
         for (int idx = 0; idx < steps.Count; idx++)
         {
             PlanStep step = steps[idx];
             if (ct.IsCancellationRequested)
-                return new RunResult(false, workflowId, outcomes, "Ejecución cancelada.");
+                return Finish(new RunResult(false, workflowId, outcomes, "Ejecución cancelada."));
 
             // Step de alineación (`app:`): no lo ejecuta una superficie, lo resuelve el Aligner
             // (abrir/enfocar la app). Idempotente: si ya estamos ahí, no hace nada.
             if (IsAlignmentStep(step))
             {
+                var alignStepSw = System.Diagnostics.Stopwatch.StartNew();
                 L($"step alineación '{step.Selector}' → objetivo '{plan.SourceOrigin}', actual '{surface.Identity().Origin}'");
                 bool reached = Aligner != null
                     && await Aligner(plan.SourceOrigin, () => surface.Identity().Origin, ct);
                 if (!reached) reached = SurfaceMismatch(surface.Identity(), plan) == null;
                 L($"step alineación resultado: reached={reached}");
+                timings.Add(step.StepOrder, step.Label ?? "", "align", 0, alignStepSw.ElapsedMilliseconds);
                 if (!Report(step, reached, reached ? "" : "no me pude alinear con la superficie del workflow", outcomes))
-                    return new RunResult(false, workflowId, outcomes,
-                        $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}");
+                    return Finish(new RunResult(false, workflowId, outcomes,
+                        $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}"));
                 await Task.Delay(40, ct);
                 continue;
             }
@@ -200,18 +209,22 @@ public sealed class WorkflowPlayer
             // MOTOR DE CARGA: esperar a que el paso esté LISTO antes de actuar (evita el fallo "no se
             // puede habilitar el elemento" tras navegar). Corto-circuita en cuanto el elemento objetivo
             // está presente y habilitado; el % de carga es solo respaldo. Ver SurfaceReadiness.
+            var readySw = System.Diagnostics.Stopwatch.StartNew();
             await SurfaceReadiness.WaitAsync(target, step, L, ct);
+            long readyMs = readySw.ElapsedMilliseconds;
 
             bool ok;
             try
             {
                 // El resultado y el motivo se capturan en la MISMA llamada. Reintentar para recuperar
                 // el error ejecutaría la acción dos veces contra el SAP del cliente.
+                var execSw = System.Diagnostics.Stopwatch.StartNew();
                 (bool done, string reason) = await Task.Run(() =>
                 {
                     bool r = target.Execute(step, out string err);
                     return (r, err);
                 }, ct);
+                timings.Add(step.StepOrder, step.Label ?? "", step.ActionType ?? "", readyMs, execSw.ElapsedMilliseconds);
 
                 // El detector de fantasmas: ¿cambió la ubicación tras el paso? Un ✓ sin cambio de
                 // ubicación (cuando debería navegar) es exactamente el bug que perseguimos.
@@ -244,13 +257,13 @@ public sealed class WorkflowPlayer
             }
 
             if (!ok)
-                return new RunResult(false, workflowId, outcomes,
-                    $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}");
+                return Finish(new RunResult(false, workflowId, outcomes,
+                    $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}"));
 
             await Task.Delay(PauseMs(target), ct);
         }
 
-        return new RunResult(true, workflowId, outcomes, "") { AlignedConsciously = alignedConsciously };
+        return Finish(new RunResult(true, workflowId, outcomes, "") { AlignedConsciously = alignedConsciously });
     }
 
     private bool Report(PlanStep step, bool ok, string error, List<StepOutcome> acc)
