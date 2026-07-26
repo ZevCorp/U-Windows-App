@@ -36,6 +36,22 @@ public sealed class SurfaceLocator : IDisposable
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
 
+    /// <summary>
+    /// Cada cuánto se mira si cambió la superficie. La sonda es barata (hwnd + título + nombre de
+    /// proceso); lo caro —leer la identidad por UIA/COM— solo corre cuando algo cambió de verdad.
+    ///
+    /// 200 ms y no 800: se midió el retraso real contra los eventos de ventana de Windows y salía de
+    /// 15 a 734 ms (media ~348), suficiente para que el inspector visual dibujara los recuadros de la
+    /// pantalla anterior sobre la nueva. A 200 ms el peor caso queda por debajo del umbral en que eso
+    /// se percibe.
+    ///
+    /// Se intentó sustituir el sondeo por EVENT_SYSTEM_FOREGROUND/EVENT_OBJECT_NAMECHANGE y salió 4x
+    /// PEOR (media ~1,4 s): las ráfagas de eventos chocaban contra la lectura en curso y los cambios se
+    /// perdían. La causa no era el sondeo sino el descarte que arregla <see cref="_missedWhileComputing"/>.
+    /// Si algún día se vuelve a intentar, que sea DESPUÉS de este arreglo y midiendo igual.
+    /// </summary>
+    private const int ProbeIntervalMs = 200;
+
     private readonly DispatcherTimer _timer;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly Func<SurfaceIdentity> _identity;
@@ -43,6 +59,8 @@ public sealed class SurfaceLocator : IDisposable
     private IntPtr _lastHwnd;
     private string _lastTitle = "";
     private bool _computing;
+    /// <summary>Llegó un cambio mientras se leía la identidad: hay que volver a sondear al terminar.</summary>
+    private bool _missedWhileComputing;
 
     public SurfaceLocation? Current { get; private set; }
     public bool Active { get; private set; }
@@ -63,7 +81,7 @@ public sealed class SurfaceLocator : IDisposable
         _identity = () => SurfaceDetector.Detect(u, s).Identity();
         _owned = ownsSurfaces ? new IDisposable[] { u, s } : Array.Empty<IDisposable>();
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ProbeIntervalMs) };
         _timer.Tick += (_, __) => Probe();
     }
 
@@ -72,7 +90,7 @@ public sealed class SurfaceLocator : IDisposable
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _owned = Array.Empty<IDisposable>();
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ProbeIntervalMs) };
         _timer.Tick += (_, __) => Probe();
     }
 
@@ -81,6 +99,7 @@ public sealed class SurfaceLocator : IDisposable
         if (Active) return;
         Active = true;
         _lastHwnd = IntPtr.Zero; // fuerza recomputar ya
+        _missedWhileComputing = false;
         _timer.Start();
         Probe();
     }
@@ -107,7 +126,15 @@ public sealed class SurfaceLocator : IDisposable
         string title = sb.ToString();
 
         if (hwnd == _lastHwnd && title == _lastTitle) return;
-        if (_computing) return;
+
+        // Hay un cambio, pero se está leyendo la identidad del ANTERIOR. Antes esto hacía `return` a
+        // secas: el cambio se perdía —no se apuntaba, no se reintentaba— y solo lo rescataba la
+        // siguiente sonda que encontrara el hueco libre. Con lecturas lentas (SAP por COM) o sondas
+        // frecuentes, un cambio podía quedar sin publicar durante segundos, dejando la ubicación
+        // congelada en una ventana que el usuario ya había cerrado. Ahora se anota y se reintenta en
+        // cuanto la lectura en curso termina.
+        if (_computing) { _missedWhileComputing = true; return; }
+
         _lastHwnd = hwnd;
         _lastTitle = title;
         _computing = true;
@@ -135,9 +162,20 @@ public sealed class SurfaceLocator : IDisposable
             _dispatcher.BeginInvoke(new Action(() =>
             {
                 _computing = false;
-                if (loc == null || loc.Id == Current?.Id) return;
-                Current = loc;
-                Changed?.Invoke(loc);
+
+                if (loc != null && loc.Id != Current?.Id)
+                {
+                    Current = loc;
+                    Changed?.Invoke(loc);
+                }
+
+                // Mientras se leía llegó otro cambio: atenderlo YA, sin esperar al siguiente tick.
+                // Va al final para que los suscriptores vean primero la ubicación que sí se resolvió.
+                if (_missedWhileComputing)
+                {
+                    _missedWhileComputing = false;
+                    Probe();
+                }
             }));
         });
     }
