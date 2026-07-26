@@ -1287,10 +1287,18 @@ public sealed class SapGuiSurface : IUiSurface
     private void PublishChangedFields()
     {
         var current = SafeReadFields();
+        string node = "", readiness = "";
         foreach (DetectedField field in current)
         {
             _lastSnapshot.TryGetValue(field.Selector, out string? prev);
             if (prev == field.CurrentValue) continue;
+
+            // El NODO del paso — dónde estaba parado el usuario al hacerlo. SAP tiene la mejor
+            // identidad de todo el sistema (sapgui://SID/TCODE/PROGRAMA/DYNPRO) pero era el único
+            // motor que NO la grababa: sin observedSurface por paso, la fase de ubicación del motor
+            // de carga se saltaba entera y el player ejecutaba contra la pantalla que hubiera.
+            // Se captura una vez por lote (Identity() es un round-trip COM) y solo si hay pasos.
+            if (node.Length == 0) { node = SafeNodeUrl(); readiness = SafeReadinessMeta(); }
 
             StepObserved?.Invoke(this, new ObservedStep(
                 ActionType: field.ActionType,
@@ -1302,7 +1310,11 @@ public sealed class SapGuiSurface : IUiSurface
                 SelectedValue: field.ActionType == "select" ? field.CurrentValue : null,
                 SelectedLabel: field.ActionType == "select" ? field.CurrentValue : null,
                 SurfaceSection: null,
-                AlternativeTargets: Array.Empty<string>()));
+                AlternativeTargets: Array.Empty<string>())
+            {
+                Surface = node,
+                Readiness = readiness,
+            });
         }
         _lastSnapshot = current.ToDictionary(f => f.Selector, f => f.CurrentValue);
 
@@ -1325,11 +1337,17 @@ public sealed class SapGuiSurface : IUiSurface
     private void PublishTreeSelections()
     {
         var seen = new Dictionary<string, string>();
+        string node = "", readiness = "";
 
         foreach (var sel in SafeReadTreeSelections())
         {
             seen[sel.TreeId] = sel.Key;
             if (_lastTreeSelection.TryGetValue(sel.TreeId, out string? prev) && prev == sel.Key) continue;
+
+            // Mismo nodo por lote que en PublishChangedFields: la selección se captura ENTRE el clic
+            // y la navegación (reloj de 400 ms con guarda de Busy), así que Identity() aquí todavía
+            // es la pantalla donde el usuario clicó — el nodo correcto del paso.
+            if (node.Length == 0) { node = SafeNodeUrl(); readiness = SafeReadinessMeta(); }
 
             StepObserved?.Invoke(this, new ObservedStep(
                 ActionType: "click",
@@ -1344,10 +1362,35 @@ public sealed class SapGuiSurface : IUiSurface
                 AlternativeTargets: Array.Empty<string>())
             {
                 NodePath = sel.Path ?? "",
+                Surface = node,
+                Readiness = readiness,
             });
         }
 
         _lastTreeSelection = seen;
+    }
+
+    /// <summary>URL del nodo actual para grabar en el paso; "" si la identidad no se puede leer
+    /// (mejor sin dato — comportamiento viejo — que un nodo <c>unknown://</c> que nunca casará).</summary>
+    private string SafeNodeUrl()
+    {
+        try
+        {
+            var id = Identity();
+            return id.Origin.StartsWith("unknown", StringComparison.OrdinalIgnoreCase) ? "" : id.Url;
+        }
+        catch { return ""; }
+    }
+
+    /// <summary>Meta de carga del nodo al grabar; "" si no se pudo contar (0 apagaría el respaldo).</summary>
+    private string SafeReadinessMeta()
+    {
+        try
+        {
+            int c = ReadinessCount();
+            return c > 0 ? c.ToString() : "";
+        }
+        catch { return ""; }
     }
 
     private IReadOnlyList<(string TreeId, string Key, string Text, string? Path)> SafeReadTreeSelections()

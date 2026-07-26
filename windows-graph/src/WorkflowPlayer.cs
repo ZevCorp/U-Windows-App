@@ -210,8 +210,34 @@ public sealed class WorkflowPlayer
             // puede habilitar el elemento" tras navegar). Corto-circuita en cuanto el elemento objetivo
             // está presente y habilitado; el % de carga es solo respaldo. Ver SurfaceReadiness.
             var readySw = System.Diagnostics.Stopwatch.StartNew();
-            await SurfaceReadiness.WaitAsync(target, step, L, ct);
+            StepGateResult gate = await SurfaceReadiness.WaitAsync(target, step, L, ct);
             long readyMs = readySw.ElapsedMilliseconds;
+
+            // LA COMPUERTA ES VINCULANTE. "No se avanza en el workflow hasta estar en la superficie
+            // adecuada": si nunca se llegó al nodo del paso (y el elemento exacto tampoco resolvió),
+            // ejecutarlo actuaría sobre la pantalla equivocada — y encima reportaría ✓. Antes esto era
+            // un warning en el log y se ejecutaba igual; ese era EL bug. Última carta antes de parar:
+            // ¿la pantalla actual coincide con un paso POSTERIOR de la ruta? Entonces la UI ya pasó
+            // este punto (p.ej. una transacción saltó un dynpro) y se salta adelante en vez de romper.
+            if (!gate.ShouldExecute)
+            {
+                var here = target.Identity();
+                int jumpTo = JumpForwardIndex(steps, idx, here);
+                if (jumpTo > idx)
+                {
+                    L($"↷ la ubicación actual coincide con el paso {steps[jumpTo].StepOrder}: ya pasaste este punto — salto adelante ({jumpTo - idx - 1} paso(s) intermedios omitidos)");
+                    Report(step, true, "", outcomes); // el objetivo del paso ya está logrado por la ruta
+                    idx = jumpTo - 1; // el for lo lleva al paso de la ubicación actual
+                    continue;
+                }
+
+                timings.Add(step.StepOrder, step.Label ?? "", step.ActionType ?? "", readyMs, 0);
+                Report(step, false,
+                    $"no se llegó a la superficie del paso («{gate.Expected}»); la pantalla actual es «{gate.LastSeen}». No se ejecuta un paso sobre la pantalla equivocada.",
+                    outcomes);
+                return Finish(new RunResult(false, workflowId, outcomes,
+                    $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}"));
+            }
 
             bool ok;
             try
@@ -376,88 +402,15 @@ public sealed class WorkflowPlayer
         return -1;
     }
 
-    /// <summary>El origin de una URL de superficie: <c>uia://chrome.exe/x</c> → <c>uia://chrome.exe</c>.</summary>
-    private static string OriginOf(string url)
-    {
-        string s = (url ?? "").Trim();
-        int scheme = s.IndexOf("://", StringComparison.Ordinal);
-        if (scheme < 0) return s;
-        int slash = s.IndexOf('/', scheme + 3);
-        return slash < 0 ? s : s[..slash];
-    }
-
-    /// <summary>El pathname de una URL de superficie: <c>uia://chrome.exe/x</c> → <c>/x</c> ("" si no hay).</summary>
-    private static string PathnameOf(string url)
-    {
-        string s = (url ?? "").Trim();
-        int scheme = s.IndexOf("://", StringComparison.Ordinal);
-        if (scheme < 0) return "";
-        int slash = s.IndexOf('/', scheme + 3);
-        return slash < 0 ? "" : s[slash..];
-    }
-
+    // Comparación de lugares: TODA la lógica vive en SurfacePlace — la única vara del sistema.
+    // (Antes el player, el motor de carga y el pre-check comparaban cada uno a su manera y daban
+    // veredictos contradictorios sobre la misma pantalla.)
     private static bool SameOrigin(SurfaceIdentity now, string recordedUrl) =>
-        !string.IsNullOrWhiteSpace(now.Origin) &&
-        string.Equals(now.Origin.TrimEnd('/'), OriginOf(recordedUrl).TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+        SurfacePlace.SameOrigin(now.Url, recordedUrl);
 
     /// <summary>¿Mismo LUGAR (origin + pathname normalizado)? Falso si el paso no trae nodo.</summary>
-    private static bool SamePlace(SurfaceIdentity now, string recordedUrl)
-    {
-        if (string.IsNullOrWhiteSpace(recordedUrl) || !SameOrigin(now, recordedUrl)) return false;
-
-        bool structural = HasStructuralPath(now.Origin);
-        string a = NormalizePlace(now.Pathname, structural);
-        string b = NormalizePlace(PathnameOf(recordedUrl), structural);
-        if (a.Length == 0 || b.Length == 0) return false;
-        if (a == b) return true;
-
-        // Grabación MENOS específica que la lectura actual: la identidad SAP pasó de /nv2000 a
-        // /nv2000/sapmnpa10/0100, y sin esto ninguna grabación anterior al cambio volvería a casar.
-        // Solo en rutas estructurales, y exigiendo el separador (/nv2000 no debe casar con /nv20001).
-        return structural && a.StartsWith(b + "/", StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// ¿El pathname de esta superficie es un IDENTIFICADOR estructural o un título vivo?
-    ///
-    /// En <c>uia://</c> el pathname es el TÍTULO de la ventana: trae contadores y estado ("Inbox
-    /// (1,956)"), así que hay que limpiarlo para comparar lugares y no instantes. En <c>sapgui://</c>
-    /// es transacción/programa/dynpro, donde los DÍGITOS son la identidad — borrarlos hacía que NV2000
-    /// y NV3000 se normalizaran ambos a "nv" y el sistema los tomara por la misma pantalla.
-    /// </summary>
-    /// <summary>
-    /// ¿La ruta GRABADA cubre la actual? Igual, o la grabada es un prefijo jerárquico de la actual.
-    /// Lo segundo importa porque el pathname de SAP se volvió más específico (transacción → +programa
-    /// +dynpro): un workflow grabado como <c>/NV2000</c> sigue siendo válido estando en
-    /// <c>/NV2000/SAPMNPA10/0100</c>. Al revés no: si la grabación exige el dynpro, se exige.
-    /// </summary>
-    private static bool PathnameCovers(string recorded, string now)
-    {
-        string a = (recorded ?? "").TrimEnd('/');
-        string b = (now ?? "").TrimEnd('/');
-        if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
-        return b.StartsWith(a + "/", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool HasStructuralPath(string origin) =>
-        (origin ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Normaliza un pathname para comparar LUGARES. Con <paramref name="structural"/> se conserva todo
-    /// lo significativo (alfanumérico y las barras de la jerarquía); sin él se deja solo letras, porque
-    /// el pathname es un título de ventana con estado vivo dentro.
-    /// </summary>
-    private static string NormalizePlace(string pathname, bool structural)
-    {
-        string p = (pathname ?? "").ToLowerInvariant();
-        var sb = new System.Text.StringBuilder(p.Length);
-        foreach (char c in p)
-        {
-            if (structural) { if (char.IsLetterOrDigit(c) || c == '/') sb.Append(c); }
-            else if (char.IsLetter(c)) sb.Append(c);
-        }
-        return sb.ToString().TrimEnd('/');
-    }
+    private static bool SamePlace(SurfaceIdentity now, string recordedUrl) =>
+        SurfacePlace.Same(now, recordedUrl);
 
     private IUiSurface? SurfaceFor(string selector)
     {
@@ -483,7 +436,7 @@ public sealed class WorkflowPlayer
         // (misma razón por la que el título nunca acotó).
         bool pathnameScopes = !(plan.SourceOrigin ?? "").StartsWith("uia://", StringComparison.OrdinalIgnoreCase);
         if (pathnameScopes && !string.IsNullOrWhiteSpace(plan.SourcePathname) &&
-            !PathnameCovers(plan.SourcePathname, now.Pathname))
+            !SurfacePlace.Covers(plan.SourcePathname, now.Pathname))
             return $"Este workflow se grabó en {plan.SourcePathname} y ahora estás en {now.Pathname}.";
 
         return null;

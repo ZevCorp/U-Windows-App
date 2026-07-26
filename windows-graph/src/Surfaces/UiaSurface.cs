@@ -251,9 +251,9 @@ public sealed class UiaSurface : IUiSurface
     // Cache por-superficie para no recorrer el árbol en CADA paso al grabar (solo al cambiar de pantalla).
     private string _readyCacheUrl = "";
     private int _readyCacheCount = -1;
-    private int CachedReadinessCount()
+    private int CachedReadinessCount(string? url = null)
     {
-        string url = Identity().Url;
+        url ??= Identity().Url;
         if (url == _readyCacheUrl && _readyCacheCount >= 0) return _readyCacheCount;
         int c = ReadinessCount();
         _readyCacheUrl = url;
@@ -887,7 +887,16 @@ public sealed class UiaSurface : IUiSurface
             {
                 var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
                 short delta = (short)(data.mouseData >> 16); // el delta va en el word alto de mouseData
-                lock (_scrollGate) { _scrollAccum += delta; _scrollX = data.pt.X; _scrollY = data.pt.Y; }
+                bool firstNotch;
+                lock (_scrollGate)
+                {
+                    firstNotch = _scrollAccum == 0;
+                    _scrollAccum += delta; _scrollX = data.pt.X; _scrollY = data.pt.Y;
+                }
+                // El nodo del gesto se captura al PRIMER notch (en un hilo de fondo: el hook no puede
+                // hacer trabajo UIA), no al publicar 350 ms después — para entonces el scroll pudo
+                // haber cambiado lo que hay delante.
+                if (firstNotch) Task.Run(CaptureScrollNode);
                 _scrollTimer?.Change(350, System.Threading.Timeout.Infinite); // debounce: publica al parar
             }
         }
@@ -896,10 +905,27 @@ public sealed class UiaSurface : IUiSurface
 
     /// <summary>Publica el scroll acumulado como UN paso, anclado a la posición del panel. Se llama por el
     /// debounce (al dejar de deslizar) y al detener la grabación (para no perder el último gesto).</summary>
+    /// <summary>Nodo capturado al primer notch del gesto de scroll (bajo _scrollGate).</summary>
+    private string _scrollNodeUrl = "";
+    private string _scrollNodeReadiness = "";
+
+    private void CaptureScrollNode()
+    {
+        string url = SafeIdentityUrl();
+        string readiness = SafeCachedReadiness(url);
+        lock (_scrollGate) { _scrollNodeUrl = url; _scrollNodeReadiness = readiness; }
+    }
+
     private void FlushScroll()
     {
         int delta, x, y;
-        lock (_scrollGate) { delta = _scrollAccum; x = _scrollX; y = _scrollY; _scrollAccum = 0; }
+        string nodeUrl, nodeReadiness;
+        lock (_scrollGate)
+        {
+            delta = _scrollAccum; x = _scrollX; y = _scrollY; _scrollAccum = 0;
+            nodeUrl = _scrollNodeUrl; nodeReadiness = _scrollNodeReadiness;
+            _scrollNodeUrl = ""; _scrollNodeReadiness = "";
+        }
         if (delta == 0) return;
         if (IsOwnWindow(GetForegroundWindow())) return; // scroll dentro de Ü no es parte del workflow
 
@@ -915,8 +941,9 @@ public sealed class UiaSurface : IUiSurface
             SurfaceSection: null,
             AlternativeTargets: Array.Empty<string>())
         {
-            Surface = Identity().Url,
-            Readiness = CachedReadinessCount().ToString(),
+            // El nodo del PRIMER notch; si la captura de fondo no llegó a tiempo, se lee ahora.
+            Surface = nodeUrl.Length > 0 ? nodeUrl : Identity().Url,
+            Readiness = nodeReadiness.Length > 0 ? nodeReadiness : CachedReadinessCount().ToString(),
         };
         L($"observado: scroll delta={delta} en ({x},{y}) · '{step.Surface}'");
         try { StepObserved?.Invoke(this, step); } catch { }
@@ -924,6 +951,14 @@ public sealed class UiaSurface : IUiSurface
 
     private void OnHookClick(int px, int py)
     {
+        // El NODO del paso se captura AQUÍ, lo primero de todo: si el clic navega (un menú, un
+        // botón "Siguiente"), FromPoint/LabelOf/SelectorsFor tardan decenas de ms de trabajo UIA y
+        // la identidad leída DESPUÉS ya sería la pantalla NUEVA — el paso quedaría grabado con el
+        // nodo equivocado, y al ejecutar, la compuerta de ubicación esperaría una pantalla en la
+        // que este paso nunca ocurrió.
+        string nodeUrl = SafeIdentityUrl();
+        string nodeReadiness = SafeCachedReadiness(nodeUrl);
+
         AutomationElement? el;
         try { el = AutomationElement.FromPoint(new System.Windows.Point(px, py)); }
         catch { return; }
@@ -932,8 +967,21 @@ public sealed class UiaSurface : IUiSurface
         // Posición del clic RELATIVA a la ventana: fallback para elementos sin selector estable (paneles
         // SAP con id volátil, sin nombre). Tras un scroll al mismo punto, la fila está en el mismo lugar.
         var (winL, winT) = WindowOrigin();
-        Publish(el, "click", null, $"{px - winL},{py - winT}");
+        Publish(el, "click", null, $"{px - winL},{py - winT}", nodeUrl, nodeReadiness);
         ReanchorValueEvents(); // seguir el tecleo en la ventana recién activada
+    }
+
+    /// <summary>Identity().Url sin excepciones — para el snapshot del nodo al entrar al hook.</summary>
+    private string SafeIdentityUrl()
+    {
+        try { return Identity().Url; } catch { return ""; }
+    }
+
+    /// <summary>Meta de carga cacheada bajo la URL YA capturada (no se relee la identidad: eso
+    /// reabriría la carrera que el snapshot cierra).</summary>
+    private string SafeCachedReadiness(string url)
+    {
+        try { return CachedReadinessCount(url).ToString(); } catch { return ""; }
     }
 
     /// <summary>Esquina superior-izquierda de la ventana real en foco (para coordenadas relativas).</summary>
@@ -982,6 +1030,11 @@ public sealed class UiaSurface : IUiSurface
     /// <summary>Graba un paso "key", anclado al FOCO (no a un elemento). Se excluye la UI de Ü.</summary>
     private void PublishKey(string keyName)
     {
+        // Nodo capturado ANTES de nada: un Enter navega, y si la identidad se leyera después del
+        // round-trip el paso quedaría grabado en la pantalla de DESTINO en vez de donde se pulsó.
+        string nodeUrl = SafeIdentityUrl();
+        string nodeReadiness = SafeCachedReadiness(nodeUrl);
+
         if (IsOwnWindow(GetForegroundWindow())) return; // una tecla dentro de Ü no es parte del workflow
         var step = new ObservedStep(
             ActionType: "key",
@@ -995,8 +1048,8 @@ public sealed class UiaSurface : IUiSurface
             SurfaceSection: null,
             AlternativeTargets: Array.Empty<string>())
         {
-            Surface = Identity().Url,
-            Readiness = CachedReadinessCount().ToString(),
+            Surface = nodeUrl,
+            Readiness = nodeReadiness,
         };
         L($"observado: tecla {keyName} en '{step.Surface}'");
         try { StepObserved?.Invoke(this, step); } catch { }
@@ -1070,7 +1123,8 @@ public sealed class UiaSurface : IUiSurface
 
     private static bool IsOwnProcName(string proc) => proc.Equals("U", StringComparison.OrdinalIgnoreCase);
 
-    private void Publish(AutomationElement el, string actionType, string? value, string clickPos = "")
+    private void Publish(AutomationElement el, string actionType, string? value, string clickPos = "",
+        string? nodeUrl = null, string? nodeReadiness = null)
     {
         if (IsOwnUi(el)) return; // choke point: nunca grabar la UI de Ü (venga de clic o de cambio de valor)
         ObservedStep step;
@@ -1096,10 +1150,12 @@ public sealed class UiaSurface : IUiSurface
                 SurfaceSection: null,
                 AlternativeTargets: selectors.Skip(1).ToList())
             {
-                // El NODO del paso: dónde estamos parados al hacerlo. Cuanto más detalle, mejor se ubica
-                // el player para reanudar. Ver Identity() (detecta escritorio, navegador, etc.).
-                Surface = Identity().Url,
-                Readiness = CachedReadinessCount().ToString(), // meta de carga del nodo (motor de carga)
+                // El NODO del paso: dónde estaba parado el usuario AL HACERLO. Los clics lo traen ya
+                // capturado desde la entrada del hook (antes del trabajo UIA, que en un clic que navega
+                // tarda lo bastante como para leer la pantalla NUEVA); los cambios de valor no navegan,
+                // así que aquí leerlo en el momento es correcto.
+                Surface = nodeUrl ?? Identity().Url,
+                Readiness = nodeReadiness ?? CachedReadinessCount().ToString(), // meta de carga del nodo
                 ClickPos = clickPos,                           // posición del clic (fallback por id volátil)
             };
         }
