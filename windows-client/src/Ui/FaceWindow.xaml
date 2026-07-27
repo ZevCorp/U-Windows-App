@@ -193,9 +193,29 @@
                         <!-- Ensayo en seco: recorre el plan y dice qué pasaría, SIN tocar la pantalla.
                              Va debajo del verde y en gris a propósito: no es una acción, es una
                              comprobación — se pulsa ANTES de ejecutar, y sobre todo antes de un demo. -->
+                        <!-- Puente con la consulta del portal: se pega el código que el médico
+                             generó allá, y cuando SAP muestre una pantalla con signos vitales, Ü
+                             ofrece llenarlos. Nunca escribe sin que el operador lo apruebe. -->
+                        <TextBlock Text="Consulta del portal" Margin="0,14,0,4" FontSize="11"
+                                   Foreground="#99FFFFFF"/>
+                        <DockPanel LastChildFill="True">
+                            <Button x:Name="ClinicalPairBtn" Content="Emparejar" DockPanel.Dock="Right"
+                                    Width="86" Height="26" Margin="6,0,0,0" Click="OnClinicalPair"
+                                    Style="{StaticResource FlatBtn}" Background="#33FFFFFF"
+                                    Foreground="#CCFFFFFF" FontSize="11"/>
+                            <TextBox x:Name="ClinicalCodeBox" Height="26" MaxLength="8"
+                                     CharacterCasing="Upper" FontFamily="Consolas" FontSize="12"
+                                     VerticalContentAlignment="Center" Padding="6,0,0,0"
+                                     Background="#22FFFFFF" Foreground="White" BorderThickness="0"
+                                     ToolTip="El código de 8 caracteres que aparece en la consulta del portal."/>
+                        </DockPanel>
+                        <TextBlock x:Name="ClinicalStatus" Margin="0,4,0,0" FontSize="10"
+                                   Foreground="#99FFFFFF" TextWrapping="Wrap"
+                                   Text="Sin emparejar."/>
+
                         <!-- Paso a paso: no ejecuta distinto, ejecuta PAUSADO. Se queda encendido
                              entre corridas a propósito: si lo enciendes es porque estás depurando. -->
-                        <Button x:Name="StepModeBtn" Height="26" Margin="0,6,0,0" Click="OnToggleStepMode"
+                        <Button x:Name="StepModeBtn" Height="26" Margin="0,14,0,0" Click="OnToggleStepMode"
                                 Style="{StaticResource FlatBtn}" Background="#33FFFFFF" Foreground="#CCFFFFFF"
                                 FontSize="11"
                                 ToolTip="Ejecuta el workflow paso a paso: se detiene ANTES de cada paso y muestra el veredicto y cómo se veía la pantalla al enseñarlo."/>

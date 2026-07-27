@@ -5,6 +5,7 @@ using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Agent;
 using U.WindowsClient.Backend;
+using U.WindowsClient.Clinical;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Mcp;
 using U.WindowsClient.Navigation;
@@ -106,6 +107,20 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _locator = new SurfaceLocator();
         _locator.Changed += loc => Dispatcher.Invoke(() => _badge?.SetText(loc.Id));
         _locator.Start();
+
+        // Puente clínico: se sondea cada 3 s, no en cada cambio de pantalla. El médico
+        // puede guardar la nota DESPUÉS de que SAP ya esté en la pantalla, así que
+        // reaccionar solo al cambio de superficie perdería justo ese caso. Cuando no hay
+        // código emparejado esto no hace ni una llamada.
+        var clinicalTimer = new System.Windows.Threading.DispatcherTimer(
+            System.Windows.Threading.DispatcherPriority.Background)
+        { Interval = TimeSpan.FromSeconds(3) };
+        clinicalTimer.Tick += async (_, __) =>
+        {
+            try { await ClinicalTickAsync(); }
+            catch (Exception ex) { LogBus.Log("clinico", $"tick falló: {ex.Message}"); }
+        };
+        clinicalTimer.Start();
 
         var mcp = new LocalMcp(_uia);
         // El backend es Graph: la credencial (X-API-Key) sale del MISMO GraphConfig que usa la
@@ -746,6 +761,112 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     private bool _stepMode;
     private StepDebuggerWindow? _debugger;
+
+    // ── Puente con la consulta del portal ───────────────────────────────────────
+    private readonly ClinicalBridge _clinical = new();
+    private readonly SapGuiSurface _clinicalSap = new();
+    private bool _offering;             // ya hay un ofrecimiento en pantalla
+    private string _offeredRev = "";    // no ofrecer dos veces lo mismo
+
+    private void OnClinicalPair(object sender, RoutedEventArgs e)
+    {
+        if (_clinical.Active)
+        {
+            _clinical.Unpair();
+            ClinicalCodeBox.Text = "";
+            ClinicalPairBtn.Content = "Emparejar";
+            ClinicalStatus.Text = "Sin emparejar.";
+            return;
+        }
+
+        _clinical.Pair(ClinicalCodeBox.Text);
+        if (!_clinical.Active)
+        {
+            ClinicalStatus.Text = "El código son 8 caracteres.";
+            return;
+        }
+
+        _offeredRev = "";
+        ClinicalPairBtn.Content = "Soltar";
+        ClinicalStatus.Text = "Emparejado. Abre en SAP la pantalla con los signos vitales.";
+    }
+
+    /// <summary>
+    /// ¿Esta pantalla admite datos de la consulta? Se decide INTENTANDO emparejar los
+    /// conceptos con los campos que hay delante, no comparando la transacción contra una
+    /// lista. Es autoverificable: si en la pantalla no existen «Talla», «Peso» y compañía,
+    /// no se empareja nada y no se ofrece — sin depender de un código de transacción que
+    /// puede cambiar entre hospitales o entre versiones.
+    /// </summary>
+    private async Task ClinicalTickAsync()
+    {
+        if (!_clinical.Active || _clinical.Stopped || _offering || _teaching || _runningDirect) return;
+
+        // Solo con SAP delante. En cualquier otra app esto no tiene nada que hacer.
+        var loc = _locator?.Current;
+        if (loc == null || !loc.Origin.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)) return;
+
+        var data = await _clinical.FetchAsync(CancellationToken.None);
+        if (data.Count == 0) return;
+        if (_clinical.LastRev == _offeredRev) return;   // ya se ofreció esta versión
+
+        IReadOnlyList<DetectedField> fields;
+        try { fields = await Task.Run(() => _clinicalSap.ReadFields()); }
+        catch { return; }
+
+        var bindings = ConceptBinder.Bind(data, fields);
+        int escribibles = bindings.Count(b => !b.Occupied);
+        if (escribibles == 0)
+        {
+            LogBus.Log("clinico", bindings.Count == 0
+                ? "esta pantalla no tiene campos para estos datos — no se ofrece nada"
+                : "todos los campos ya tienen valor — no se toca nada");
+            return;
+        }
+
+        _offering = true;
+        _offeredRev = _clinical.LastRev;
+        try
+        {
+            LogBus.Log("clinico", $"ofreciendo {escribibles} dato(s) en '{loc.Id}'");
+            var preview = new FillPreviewWindow(bindings, loc.Id);
+            bool ok = await preview.AskAsync();
+            if (!ok)
+            {
+                LogBus.Log("clinico", "el operador canceló: no se escribió nada");
+                ClinicalStatus.Text = "Cancelado. Se volverá a ofrecer si la nota cambia.";
+                _offeredRev = ""; // cancelar no es rechazar para siempre
+                return;
+            }
+
+            int escritos = await Task.Run(() => Write(bindings));
+            LogBus.Log("clinico", $"escritos {escritos}/{escribibles} dato(s) en SAP");
+            ClinicalStatus.Text = $"Escritos {escritos} dato(s) en SAP.";
+        }
+        finally { _offering = false; }
+    }
+
+    /// <summary>
+    /// Escribe lo aprobado. Los ocupados NO se tocan — la regla no se comprueba solo al
+    /// mostrar: se vuelve a comprobar aquí, porque entre la vista previa y el clic el
+    /// operador pudo haber escrito en el campo.
+    /// </summary>
+    private int Write(IReadOnlyList<Binding> bindings)
+    {
+        int n = 0;
+        foreach (Binding b in bindings)
+        {
+            if (b.Occupied) continue;
+            var step = PlanStep.ForAutofill(b.Field, new FieldMatch { StepOrder = b.Field.StepOrder, Value = b.Data.Value });
+            try
+            {
+                if (_clinicalSap.Execute(step, out string err)) n++;
+                else LogBus.Log("clinico", $"«{b.FieldLabel}» no se pudo escribir: {err}");
+            }
+            catch (Exception e) { LogBus.Log("clinico", $"«{b.FieldLabel}» lanzó: {e.Message}"); }
+        }
+        return n;
+    }
 
     private void OnToggleStepMode(object sender, RoutedEventArgs e)
     {
