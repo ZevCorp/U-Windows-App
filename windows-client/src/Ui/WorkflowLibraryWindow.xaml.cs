@@ -185,8 +185,8 @@ public partial class WorkflowLibraryWindow : Window
             RunResult result = await _player.RunAsync(wf.Id, null, ForceSurface.IsChecked != true, _runCts.Token);
             StatusLine.Text = result.Ok
                 ? (result.AlignedConsciously
-                    ? $"«{wf.Title}» terminó bien (me alineé abriendo la app): {result.Completed}/{result.Steps.Count} pasos."
-                    : $"«{wf.Title}» terminó bien: {result.Completed}/{result.Steps.Count} pasos.")
+                    ? $"«{wf.Title}» terminó bien (me alineé abriendo la app): {result.Tally}."
+                    : $"«{wf.Title}» terminó bien: {result.Tally}.")
                 : $"«{wf.Title}» se detuvo: {result.Error}";
             if (result.Ok && result.AlignedConsciously)
                 _ = _graphClient.PrependAlignmentStepAsync(wf.Id, _runCts.Token); // aprende a alcanzar su superficie

@@ -3,12 +3,41 @@ using U.Graph.Surfaces;
 namespace U.Graph;
 
 /// <summary>Cómo fue un paso. La UI narra esto mientras el workflow corre.</summary>
-public sealed record StepOutcome(int StepOrder, string Label, string ActionType, bool Ok, string Error);
+public sealed record StepOutcome(int StepOrder, string Label, string ActionType, bool Ok, string Error)
+{
+    /// <summary>
+    /// El paso NO se ejecutó: se omitió a propósito (reanudación por ubicación, salto adelante, o el
+    /// operador lo saltó en el paso a paso). Omitido no es hecho, y tampoco es un fallo del workflow.
+    /// Sin esta distinción los omitidos desaparecían del recuento y «se completaron 29 de 30» era una
+    /// frase cierta sobre una lista de la que faltaban 19 pasos.
+    /// </summary>
+    public bool Omitted { get; init; }
+}
 
-/// <summary>Resultado de ejecutar un workflow entero.</summary>
+/// <summary>
+/// Resultado de ejecutar un workflow entero.
+///
+/// <see cref="Steps"/> son los pasos con VEREDICTO, que no es lo mismo que los pasos del plan: si el
+/// motor se salta unos cuantos, esos no dejaban rastro y el denominador mentía. Por eso
+/// <see cref="Planned"/> viaja aparte y es el único número que se puede usar como total.
+/// </summary>
 public sealed record RunResult(bool Ok, string WorkflowId, IReadOnlyList<StepOutcome> Steps, string Error)
 {
-    public int Completed => Steps.Count(s => s.Ok);
+    /// <summary>Ejecutados de verdad y con éxito. NUNCA incluye omitidos.</summary>
+    public int Completed => Steps.Count(s => s.Ok && !s.Omitted);
+
+    /// <summary>Registrados pero no ejecutados (reanudación, salto adelante, saltados a mano).</summary>
+    public int Omitted => Steps.Count(s => s.Omitted);
+
+    /// <summary>Cuántos pasos tenía el plan. 0 en resultados viejos → cae al recuento de veredictos.</summary>
+    public int Planned { get; init; }
+
+    /// <summary>El total honesto para mostrar: el del plan si se conoce.</summary>
+    public int Total => Planned > 0 ? Planned : Steps.Count;
+
+    /// <summary>Una línea que no se puede leer mal: siempre sobre el total del PLAN.</summary>
+    public string Tally =>
+        $"{Completed}/{Total} ejecutado(s)" + (Omitted > 0 ? $" · {Omitted} omitido(s)" : "");
 
     /// <summary>
     /// True si hubo que alinearse conscientemente (abrir/enfocar la app) porque no estábamos en la
@@ -165,19 +194,35 @@ public sealed class WorkflowPlayer
         if (!availability.Available)
             return new RunResult(false, workflowId, Array.Empty<StepOutcome>(), availability.Reason);
 
+        // El TOTAL honesto: los pasos del plan, antes de que la reanudación recorte la lista. Va aquí
+        // arriba porque Finish lo estampa en TODA salida — un resultado sin total del plan es el que
+        // permitía decir «2/2» de una corrida de 4 pasos.
+        int planned = steps.Count;
+
         // MEDICIÓN de tiempos: cronómetro total + colector por paso; el resumen se loguea en CADA salida.
         var timings = new RunTimings();
         var runSw = System.Diagnostics.Stopwatch.StartNew();
-        RunResult Finish(RunResult r) { try { L(timings.Summary(runSw.ElapsedMilliseconds)); } catch { } return r; }
+        RunResult Finish(RunResult r)
+        {
+            r = r with { Planned = planned };
+            try { L(timings.Summary(runSw.ElapsedMilliseconds)); } catch { }
+            try { L($"↩ resultado: {r.Tally}{(r.Ok ? "" : " · DETENIDO")}"); } catch { }
+            return r;
+        }
 
         // LA UBICACIÓN COMO EJE: ¿ya estás parado en la superficie de algún paso del workflow? Si sí,
         // reanuda AHÍ y salta lo previo — "ubícate en cualquier nodo y haz solo lo que falta para el
         // objetivo", no siempre desde el primer paso. Solo aplica con grabaciones que traen la superficie
         // por paso (surfaceHints.observedSurface); las viejas caen al comportamiento de siempre.
+        var skippedByResume = new List<PlanStep>();
+
         int resumeFrom = ResumeIndexFor(steps, surface.Identity());
         if (resumeFrom > 0)
         {
             L($"reanudando en el paso {steps[resumeFrom].StepOrder} — ya estás en su superficie ('{surface.Identity().Origin}'); se saltan {resumeFrom} paso(s) previos");
+            // Los saltados se registran como OMITIDOS. Antes se cortaban de la lista y desaparecían sin
+            // dejar rastro: el resultado decía «2/2» de un plan de 4 y sonaba a éxito completo.
+            skippedByResume.AddRange(steps.Take(resumeFrom));
             steps = steps.Skip(resumeFrom).ToList();
             hasAlignmentStep = steps.Any(IsAlignmentStep); // recomputar tras el corte
         }
@@ -221,6 +266,8 @@ public sealed class WorkflowPlayer
         timings.AlignMs = alignSw.ElapsedMilliseconds;
 
         var outcomes = new List<StepOutcome>();
+        foreach (PlanStep s in skippedByResume) Omit(s, "reanudado por ubicación: ya estabas más adelante", outcomes);
+
         bool stepping = OnStepPause != null;   // «Hasta el final» lo apaga sin tocar el resto del bucle
         string lastOutcome = "";
 
@@ -303,7 +350,7 @@ public sealed class WorkflowPlayer
                         // Saltado A MANO no es lo mismo que hecho: se reporta como fallo con motivo, o
                         // el resumen diría que el workflow se completó cuando el operador lo mutiló.
                         L($"⏭ paso {step.StepOrder} SALTADO por el operador");
-                        Report(step, false, "saltado a mano en el paso a paso", outcomes);
+                        Omit(step, "saltado a mano en el paso a paso", outcomes);
                         lastOutcome = $"paso {step.StepOrder} saltado a mano";
                         continue;
 
@@ -334,7 +381,7 @@ public sealed class WorkflowPlayer
                 if (jumpTo > idx)
                 {
                     L($"↷ la ubicación actual coincide con el paso {steps[jumpTo].StepOrder}: ya pasaste este punto — salto adelante ({jumpTo - idx - 1} paso(s) intermedios omitidos)");
-                    Report(step, true, "", outcomes); // el objetivo del paso ya está logrado por la ruta
+                    OmitRange(steps, idx, jumpTo, "la pantalla ya está más adelante en la ruta", outcomes);
                     idx = jumpTo - 1; // el for lo lleva al paso de la ubicación actual
                     continue;
                 }
@@ -383,7 +430,7 @@ public sealed class WorkflowPlayer
                     if (jump > idx)
                     {
                         L($"↷ la ubicación coincide con el paso {steps[jump].StepOrder}: ya pasaste este punto — salto adelante ({jump - idx - 1} paso(s) intermedios omitidos)");
-                        Report(step, true, "", outcomes); // el objetivo del paso ya está logrado por la ruta
+                        OmitRange(steps, idx, jump, "la pantalla ya está más adelante en la ruta", outcomes);
                         idx = jump - 1; // el for lo lleva al paso de la ubicación actual
                         continue;
                     }
@@ -408,6 +455,27 @@ public sealed class WorkflowPlayer
         }
 
         return Finish(new RunResult(true, workflowId, outcomes, "") { AlignedConsciously = alignedConsciously });
+    }
+
+    /// <summary>
+    /// Registra un paso como OMITIDO: queda en el resultado, con su motivo, y no cuenta como hecho.
+    ///
+    /// La alternativa era la de antes —no registrarlo— y tiene un problema que no se ve hasta que muerde:
+    /// el paso desaparece del resultado, el denominador encoge, y «2/2» describe con exactitud una
+    /// corrida que no hizo la mitad del trabajo. Un omitido silencioso es indistinguible de un éxito.
+    /// </summary>
+    private void Omit(PlanStep step, string why, List<StepOutcome> acc)
+    {
+        var outcome = new StepOutcome(step.StepOrder, step.Label ?? "", step.ActionType, false, why) { Omitted = true };
+        acc.Add(outcome);
+        try { StepDone?.Invoke(this, outcome); } catch { }
+    }
+
+    /// <summary>Omite desde <paramref name="from"/> (incluido) hasta <paramref name="to"/> (excluido).</summary>
+    private void OmitRange(IReadOnlyList<PlanStep> steps, int from, int to, string why, List<StepOutcome> acc)
+    {
+        for (int i = from; i < to && i < steps.Count; i++) Omit(steps[i], why, acc);
+        L($"   {to - from} paso(s) marcados como OMITIDOS — no cuentan como ejecutados");
     }
 
     private bool Report(PlanStep step, bool ok, string error, List<StepOutcome> acc)

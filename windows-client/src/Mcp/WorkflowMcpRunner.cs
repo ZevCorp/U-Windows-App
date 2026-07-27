@@ -63,11 +63,13 @@ public sealed class WorkflowMcpRunner
         // strictSurface: el cerebro eligió este workflow porque ESTA superficie coincide; si al
         // ejecutarse ya no coincide (el usuario navegó), el Aligner se alinea antes de tocar nada.
         RunResult result = await player.RunAsync(workflowId, variables, strictSurface: true, ct);
-        LogBus.Log("workflow", $"resultado: ok={result.Ok} · pasos={result.Completed}/{result.Steps.Count} · alineado={result.AlignedConsciously}{(result.Ok ? "" : " · error=" + result.Error)}");
+        // El total va sobre el PLAN (result.Total), no sobre los veredictos registrados: eso último es
+        // lo que dejaba pasar «2/2» en una corrida que no ejecutó la mitad. Y los omitidos se nombran.
+        LogBus.Log("workflow", $"resultado: ok={result.Ok} · {result.Tally} · alineado={result.AlignedConsciously}{(result.Ok ? "" : " · error=" + result.Error)}");
         TelemetryBus.Emit("workflow_end", workflowId: workflowId, runId: runId,
             phase: result.Ok ? "ok" : "error",
-            label: result.Ok ? $"completado ({result.Completed} pasos)" : result.Error,
-            detail: new { completed = result.Completed, steps = result.Steps.Count, aligned = result.AlignedConsciously });
+            label: result.Ok ? $"completado ({result.Tally})" : result.Error,
+            detail: new { completed = result.Completed, omitted = result.Omitted, steps = result.Total, aligned = result.AlignedConsciously });
         if (result.Ok && result.AlignedConsciously)
         {
             // APRENDIZAJE: me tuve que alinear conscientemente. Enseñárselo al workflow para que la
@@ -75,8 +77,11 @@ public sealed class WorkflowMcpRunner
             LogBus.Log("workflow", $"aprendiendo alineación → prepend en {workflowId}");
             _ = graph.PrependAlignmentStepAsync(workflowId, ct);
         }
-        return result.Ok
-            ? $"ok — workflow completado ({result.Completed} pasos)"
-            : $"el workflow falló: {result.Error}";
+        // Lo que lee el CEREBRO. Si aquí se le dice «completado» de una corrida que omitió pasos, el
+        // consciente da la tarea por buena y no la retoma — el peor final posible de los tres.
+        if (!result.Ok) return $"el workflow falló: {result.Error}";
+        return result.Omitted > 0
+            ? $"parcial — {result.Tally}. Los omitidos NO se ejecutaron; comprueba si hacían falta antes de dar la tarea por terminada."
+            : $"ok — workflow completado ({result.Tally})";
     }
 }

@@ -860,7 +860,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             RunResult result = await player.RunAsync(wf.Id, null, strictSurface: true, _cts.Token);
             SetStatus(result.Ok
-                ? $"«{wf.Title}» terminó: {result.Completed}/{result.Steps.Count} pasos."
+                ? $"«{wf.Title}» terminó: {result.Tally}."
                 : $"«{wf.Title}» se detuvo: {result.Error}");
 
             if (result.Ok && result.AlignedConsciously)
@@ -873,7 +873,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             if (!result.Ok && !_cts.IsCancellationRequested)
                 bridgeGoal =
                     $"Estaba ejecutando el workflow «{wf.Title}» y se detuvo en: {result.Error}. " +
-                    $"Ya se completaron {result.Completed} de {result.Steps.Count} pasos. " +
+                    $"Del plan: {result.Tally}. Los omitidos NO se ejecutaron. " +
                     "Retoma desde la pantalla actual y termina la tarea del workflow. Si despejas el " +
                     "obstáculo, puedes invocar de nuevo la herramienta del workflow: se reanuda solo " +
                     "desde la ubicación actual sin repetir lo ya hecho.";
