@@ -1970,9 +1970,60 @@ public sealed class SapGuiSurface : IUiSurface
     /// </summary>
     private string ClickedComponentId()
     {
-        if (_clickAt == DateTime.MinValue) return "";
-        if ((DateTime.UtcNow - _clickAt).TotalSeconds > 6) return "";
-        return HitTest(_clickX, _clickY) ?? "";
+        // Cada rama dice QUÉ paso falló, no una conclusión. La versión anterior daba un solo texto
+        // —«sin clic reciente que SAP reconozca»— para tres situaciones distintas, y con eso no se podía
+        // saber si el problema era el hook, la antigüedad del clic o el hit-test. Costó una corrida.
+        if (_clickAt == DateTime.MinValue)
+        {
+            Diagnostic?.Invoke(this, "no hay ningún clic anotado: ¿se puso el hook de ratón?");
+            return "";
+        }
+
+        double age = (DateTime.UtcNow - _clickAt).TotalSeconds;
+        if (age > 6)
+        {
+            Diagnostic?.Invoke(this, $"el último clic es de hace {age:F1}s (>6s): no se le atribuye este viaje");
+            return "";
+        }
+
+        string? byHitTest = HitTest(_clickX, _clickY);
+        if (!string.IsNullOrEmpty(byHitTest)) return byHitTest;
+
+        // FindByPosition devuelve null en este SAP —ya estaba documentado para las filas de árbol, y
+        // resulta que también para los botones. Hit-test propio con la MISMA geometría que el inspector
+        // usa para dibujar sus recuadros, que sabemos exacta porque se ve encajar en pantalla.
+        string byGeometry = ComponentAt(_clickX, _clickY);
+        Diagnostic?.Invoke(this, byGeometry.Length > 0
+            ? $"FindByPosition({_clickX},{_clickY}) dio null; por geometría → {byGeometry}"
+            : $"clic en ({_clickX},{_clickY}) hace {age:F1}s: ni FindByPosition ni la geometría "
+              + "encuentran un componente ahí (¿clic fuera de la ventana de SAP?)");
+        return byGeometry;
+    }
+
+    /// <summary>
+    /// Nuestro propio hit-test: el componente interactivo MÁS PEQUEÑO cuya caja en pantalla contiene el
+    /// punto. El más pequeño y no el primero, porque los contenedores también contienen el punto y
+    /// devolverían el panel entero en vez del botón.
+    /// </summary>
+    private string ComponentAt(int screenX, int screenY)
+    {
+        string best = "";
+        long bestArea = long.MaxValue;
+
+        foreach (SapVisualElement el in ReadVisibleElements())
+        {
+            // Sin caja conocida no se puede decidir (los nodos de árbol entran aquí), y sin caja se
+            // acabaría eligiendo un elemento por descarte. Los nodos se accionan por clave, no por píxel.
+            if (!el.BoundsKnown || el.IsNode || el.Width <= 0 || el.Height <= 0) continue;
+            if (screenX < el.ScreenLeft || screenX >= el.ScreenLeft + el.Width) continue;
+            if (screenY < el.ScreenTop || screenY >= el.ScreenTop + el.Height) continue;
+
+            long area = (long)el.Width * el.Height;
+            if (area >= bestArea) continue;
+            bestArea = area;
+            best = el.Id;
+        }
+        return best;
     }
 
     /// <summary>Los shells de la pantalla activa que tienen barra de botones propia (ALV/GridView).</summary>
