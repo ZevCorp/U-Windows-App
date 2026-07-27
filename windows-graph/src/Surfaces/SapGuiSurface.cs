@@ -83,6 +83,7 @@ public sealed class SapGuiSurface : IUiSurface
     // fuera de un round-trip, que es justo cuando la pantalla es todavía la de origen.
     private string _preNodeUrl = "";
     private string _preReadiness = "";
+    private string _preFingerprint = "";
 
     /// <summary>Lo último tecleado en el campo de comandos mientras SAP estaba ocioso. Se consume en
     /// StartRequest: para entonces SAP puede estar ya ocupado y no se le puede preguntar nada.</summary>
@@ -332,6 +333,33 @@ public sealed class SapGuiSurface : IUiSurface
         var acc = new List<dynamic>();
         try { Walk(root, acc, 0); } catch { }
         return acc.Count;
+    }
+
+    /// <summary>
+    /// Huella estructural: los IDS de los componentes interactivos de la ventana activa, ordenados y
+    /// resumidos en un hash corto. Mismo recorrido que <see cref="ReadinessCount"/> —que solo cuenta—,
+    /// pero quedándose con QUIÉNES son y no cuántos: dos pantallas distintas pueden tener 36 elementos.
+    /// </summary>
+    public string StructureFingerprint()
+    {
+        dynamic? session;
+        try { session = Session(); } catch { return ""; }
+        if (session == null) return "";
+
+        dynamic? root = null;
+        try { root = session.ActiveWindow; } catch { }
+        if (root == null) { try { root = session.FindById("wnd[0]", false); } catch { } }
+        if (root == null) return "";
+
+        var acc = new List<dynamic>();
+        try { Walk(root, acc, 0); } catch { return ""; }
+
+        var ids = new List<string>();
+        foreach (dynamic n in acc)
+        {
+            try { string id = Str(n.Id); if (id.Length > 0) ids.Add(id); } catch { }
+        }
+        return Fingerprints.Of(ids);
     }
 
     /// <summary>
@@ -1763,6 +1791,7 @@ public sealed class SapGuiSurface : IUiSurface
         {
             Surface = node,
             Readiness = node == _preNodeUrl ? _preReadiness : CachedReadinessMeta(node),
+            Fingerprint = _preFingerprint,
         });
 
         Diagnostic?.Invoke(this,
@@ -1861,8 +1890,15 @@ public sealed class SapGuiSurface : IUiSurface
         string url = SafeNodeUrl();
         if (url.Length > 0)
         {
+            bool moved = url != _preNodeUrl;
             _preNodeUrl = url;
             _preReadiness = CachedReadinessMeta(url);
+            // La huella SÍ se recalcula aunque la superficie no cambie: su razón de ser es notar que la
+            // pantalla cambió de ESTADO sin cambiar de transacción. Cachearla por URL la volvería ciega
+            // justo al caso para el que existe. Es un recorrido de la ventana por tick ocioso; si algún
+            // día pesa, el sitio donde bajarla es este y no la cadencia del reloj.
+            try { _preFingerprint = StructureFingerprint(); } catch { _preFingerprint = ""; }
+            if (moved) Diagnostic?.Invoke(this, $"pantalla '{url}' · huella {_preFingerprint}");
         }
 
         // La sombra es un ESPEJO fiel del campo, vacío incluido. La tentación es guardar solo lo no
@@ -1931,6 +1967,7 @@ public sealed class SapGuiSurface : IUiSurface
             AlternativeTargets: Array.Empty<string>())
         {
             Surface = node,
+            Fingerprint = _preFingerprint,
             Readiness = readiness,
         });
 
@@ -1948,6 +1985,7 @@ public sealed class SapGuiSurface : IUiSurface
             SurfaceSection: null,
             AlternativeTargets: Array.Empty<string>())
         {
+            Fingerprint = _preFingerprint,
             Surface = node,
             Readiness = readiness,
         });
@@ -2006,6 +2044,7 @@ public sealed class SapGuiSurface : IUiSurface
             {
                 Surface = node,
                 Readiness = readiness,
+                Fingerprint = _preFingerprint,
             });
         }
         _lastSnapshot = current.ToDictionary(f => f.Selector, f => f.CurrentValue);
@@ -2064,6 +2103,7 @@ public sealed class SapGuiSurface : IUiSurface
                 NodePath = sel.Path ?? "",
                 Surface = node,
                 Readiness = readiness,
+                Fingerprint = _preFingerprint,
             });
         }
     }

@@ -37,6 +37,9 @@ public sealed record ObservedStep(
     /// motor de carga para esperar a que la UI cargue antes de ejecutar. Vacío/0 = sin métrica.</summary>
     public string Readiness { get; init; } = "";
 
+    /// <summary>Huella estructural de la pantalla al grabar el paso. Ver <see cref="IUiSurface.StructureFingerprint"/>.</summary>
+    public string Fingerprint { get; init; } = "";
+
     /// <summary>
     /// Ruta jerárquica de la fila, si el paso fue sobre un árbol SAP (<c>GetNodePathByKey</c>, p.ej.
     /// <c>1\2</c>). La CLAVE del nodo viaja dentro de <see cref="Selector"/>
@@ -87,6 +90,18 @@ public interface IUiSurface : IDisposable
     /// meta, al ejecutar se compara para esperar a que la UI cargue antes de actuar. 0 = sin métrica.
     /// </summary>
     int ReadinessCount();
+
+    /// <summary>
+    /// Huella ESTRUCTURAL de la pantalla actual: un hash corto y estable del conjunto de ids de los
+    /// elementos interactivos. Al grabar se guarda por paso; al ejecutar se compara para detectar el
+    /// fallo que ninguna otra señal ve — que la pantalla siga siendo la misma transacción pero NO el
+    /// mismo estado, típicamente porque el paso anterior dijo ✓ sin hacer nada.
+    ///
+    /// Solo IDS, nunca valores: si entraran los datos, cada día daría distinto y la comprobación se
+    /// volvería ruido que nadie mira. "" si no se puede calcular — y entonces no se comprueba nada,
+    /// que es mejor que comparar contra una huella inventada.
+    /// </summary>
+    string StructureFingerprint();
 
     /// <summary>
     /// ¿El elemento objetivo del paso ya está LISTO para actuar (presente y habilitado)? Es el

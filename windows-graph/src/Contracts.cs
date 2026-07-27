@@ -266,6 +266,23 @@ public sealed class PlanStep
         return 0;
     }
 
+    /// <summary>
+    /// HUELLA ESTRUCTURAL de la pantalla tal como estaba al grabar este paso: un hash corto del conjunto
+    /// de ids de los elementos interactivos. "" en grabaciones viejas → sin comprobación, como antes.
+    ///
+    /// Para qué: la superficie (transacción/dynpro) no distingue dos ESTADOS de la misma pantalla. Un
+    /// clic que debía llenar un grid y no lo llenó deja la misma superficie y el mismo paso diciendo ✓.
+    /// La huella sí lo nota. Son IDS, nunca valores: la fecha, el contador de pacientes o la lista de
+    /// episodios cambian cada día y meterlos daría un falso negativo en cada corrida.
+    /// </summary>
+    public string Fingerprint()
+    {
+        if (SurfaceHints is not { ValueKind: JsonValueKind.Object } hints) return "";
+        if (hints.TryGetProperty("fingerprint", out var f) && f.ValueKind == JsonValueKind.String)
+            return f.GetString() ?? "";
+        return "";
+    }
+
     /// <summary>Posición del clic relativa a la ventana ("relX,relY"), o null si no se grabó. Fallback para
     /// clics cuyo elemento no resuelve (id volátil de paneles SAP).</summary>
     public (int RelX, int RelY)? ClickPos()

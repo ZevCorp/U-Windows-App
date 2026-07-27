@@ -70,6 +70,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // Aquí y no al crear la WorkflowTeachSession: esa se construye en CADA pulsación de «Enseñar»
         // y acumularía una suscripción por intento, multiplicando cada línea en el registro.
         _teachSapSurface.Diagnostic += (_, msg) => LogBus.Log("teach-sap", msg);
+        SetStepModeUi(); // el botón nace con su etiqueta puesta, no vacío hasta el primer clic
         Loaded += OnLoaded;
     }
 
@@ -712,6 +713,27 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
     }
 
+    private bool _stepMode;
+    private StepDebuggerWindow? _debugger;
+
+    private void OnToggleStepMode(object sender, RoutedEventArgs e)
+    {
+        _stepMode = !_stepMode;
+        SetStepModeUi();
+        SetStatus(_stepMode
+            ? "Paso a paso ACTIVO: la próxima ejecución se detendrá antes de cada paso."
+            : "Paso a paso apagado.");
+    }
+
+    private void SetStepModeUi()
+    {
+        StepModeBtn.Content = _stepMode ? "👣 Paso a paso: ACTIVO" : "👣 Paso a paso: apagado";
+        StepModeBtn.Foreground = _stepMode
+            ? System.Windows.Media.Brushes.White
+            : new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
+    }
+
     /// <summary>
     /// Ensayo en seco del workflow que apunta el slider: dice qué pasaría SIN tocar la pantalla.
     ///
@@ -792,8 +814,17 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // directo → shell). Los otros dos sitios (MCP/chat, biblioteca) siguen en AppAligner
                 // hasta validar aquí. Ver SurfaceNavigator.
                 Aligner = SurfaceNavigator.Default.EnsureAsync,
-                Log = s => LogBus.Log("workflow", s)
+                Log = s => LogBus.Log("workflow", s),
+                // Las capturas de la enseñanza llevaban tiempo guardándose sin que las usara nadie.
+                TaughtShotFor = (id, order) =>
+                    System.IO.Path.Combine(StepShotCamera.FolderFor(id), $"step_{order}.png"),
             };
+
+            if (_stepMode)
+            {
+                _debugger ??= new StepDebuggerWindow();
+                player.OnStepPause = pause => _debugger.AskAsync(pause);
+            }
             player.StepDone += (_, o) => Narrate(o.Ok ? $"✓ {o.Label}" : $"✗ {o.Label}: {o.Error}");
 
             RunResult result = await player.RunAsync(wf.Id, null, strictSurface: true, _cts.Token);
@@ -829,6 +860,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             StopBtn.Visibility = Visibility.Collapsed;
             SetThinking(false);
             _cts = null;
+            // Se oculta, no se cierra: cerrar dispara el Closing, que significa «el operador paró».
+            _debugger?.Finish();
         }
 
         // Fuera del try/finally: StartGoal crea su PROPIO _cts (adentro lo pisaría el finally).

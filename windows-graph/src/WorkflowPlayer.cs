@@ -61,6 +61,24 @@ public sealed class WorkflowPlayer
     /// </summary>
     public SurfaceAligner? Aligner { get; set; }
 
+    /// <summary>
+    /// PASO A PASO. Si está, se llama ANTES de ejecutar cada paso y se espera la decisión del operador.
+    ///
+    /// Antes y no después, a propósito: sobre un SAP clínico el momento útil para frenar es el instante
+    /// previo a la acción destructiva, no el posterior. El informe que recibe incluye el resultado del
+    /// paso ANTERIOR, así que no se pierde nada por pausar antes.
+    /// </summary>
+    public Func<StepPause, Task<StepDecision>>? OnStepPause { get; set; }
+
+    /// <summary>
+    /// Dónde está el pantallazo que se tomó de ese paso al ENSEÑARLO (workflowId, stepOrder) → ruta.
+    /// Lo pone el cliente: windows-graph no sabe de disco ni de StepShotCamera. "" si no hay.
+    ///
+    /// Esas capturas ya se venían tomando en cada enseñanza y no las usaba nadie. Puestas al lado de la
+    /// pantalla actual son la diferencia entre depurar leyendo ids y verlo.
+    /// </summary>
+    public Func<string, int, string>? TaughtShotFor { get; set; }
+
     public WorkflowPlayer(GraphClient graph, GraphConfig config, params IUiSurface[] surfaces)
     {
         _graph = graph;
@@ -203,6 +221,9 @@ public sealed class WorkflowPlayer
         timings.AlignMs = alignSw.ElapsedMilliseconds;
 
         var outcomes = new List<StepOutcome>();
+        bool stepping = OnStepPause != null;   // «Hasta el final» lo apaga sin tocar el resto del bucle
+        string lastOutcome = "";
+
         for (int idx = 0; idx < steps.Count; idx++)
         {
             PlanStep step = steps[idx];
@@ -232,6 +253,66 @@ public sealed class WorkflowPlayer
 
             string before = target.Identity().Url;
             L($"→ paso {step.StepOrder} «{step.Label}» ({step.ActionType}) · ubicación ANTES='{before}' · nodo grabado='{(string.IsNullOrWhiteSpace(step.Surface()) ? "(sin nodo)" : step.Surface())}'");
+
+            // ── HUELLA: ¿es esta la MISMA pantalla, o solo la misma transacción? ────────
+            // La superficie no distingue dos ESTADOS del mismo dynpro. Un clic que debia llenar un
+            // panel y no lo lleno deja la misma superficie, y el paso siguiente encuentra los
+            // selectores de la pantalla vieja y se ejecuta contra ellos reportando exito. Esto lo ve.
+            //
+            // AVISA, no detiene: la huella es nueva y todavia no sabemos que tan estable es en pantallas
+            // con contenido variable. Un falso positivo que PARA un workflow en un demo es peor que uno
+            // que avisa. Cuando tenga kilometros encima, se sube a bloqueante.
+            string expectedPrint = step.Fingerprint();
+            string livePrint = "";
+            if (expectedPrint.Length > 0)
+            {
+                try { livePrint = target.StructureFingerprint(); } catch { }
+                if (livePrint.Length > 0 && livePrint != expectedPrint)
+                    L($"  ⚠ HUELLA distinta · grabada={expectedPrint} · ahora={livePrint} — misma superficie "
+                      + "pero la pantalla no esta como cuando se enseño este paso");
+            }
+
+            // ── PASO A PASO ─────────────────────────────────────────────────────────────
+            if (stepping && OnStepPause != null)
+            {
+                bool ready;
+                try { ready = target.IsStepReady(step); } catch { ready = false; }
+
+                var pause = new StepPause(
+                    Index: idx + 1, Total: steps.Count, StepOrder: step.StepOrder,
+                    Label: step.Label ?? "", ActionType: step.ActionType ?? "",
+                    Selector: step.Selector ?? "", Value: step.Value ?? "",
+                    ExpectedSurface: step.Surface() ?? "", CurrentSurface: before,
+                    ElementReady: ready, PreviousOutcome: lastOutcome,
+                    TaughtShotPath: SafeShot(workflowId, step.StepOrder),
+                    ExpectedFingerprint: expectedPrint, CurrentFingerprint: livePrint);
+
+                L($"⏸ {pause.Headline} · {pause.Verdict}");
+                StepDecision decision;
+                try { decision = await OnStepPause(pause); }
+                catch (Exception e) { L($"la pausa falló ({e.Message}); se sigue sin pausar"); decision = StepDecision.HastaElFinal; }
+
+                switch (decision)
+                {
+                    case StepDecision.Parar:
+                        L($"⏹ detenido por el operador en el paso {step.StepOrder}");
+                        return Finish(new RunResult(false, workflowId, outcomes,
+                            $"Detenido a mano en el paso {step.StepOrder} («{step.Label}»)."));
+
+                    case StepDecision.Saltar:
+                        // Saltado A MANO no es lo mismo que hecho: se reporta como fallo con motivo, o
+                        // el resumen diría que el workflow se completó cuando el operador lo mutiló.
+                        L($"⏭ paso {step.StepOrder} SALTADO por el operador");
+                        Report(step, false, "saltado a mano en el paso a paso", outcomes);
+                        lastOutcome = $"paso {step.StepOrder} saltado a mano";
+                        continue;
+
+                    case StepDecision.HastaElFinal:
+                        stepping = false;
+                        L("▶▶ sin más pausas hasta el final");
+                        break;
+                }
+            }
 
             // MOTOR DE CARGA: esperar a que el paso esté LISTO antes de actuar (evita el fallo "no se
             // puede habilitar el elemento" tras navegar). Corto-circuita en cuanto el elemento objetivo
@@ -266,7 +347,8 @@ public sealed class WorkflowPlayer
                     ? $"estamos en la pantalla correcta («{gate.LastSeen}») pero el elemento del paso nunca "
                       + "estuvo presente y habilitado. No se clica un control que aún no está listo."
                     : $"no se llegó a la superficie del paso («{gate.Expected}»); la pantalla actual es "
-                      + $"«{gate.LastSeen}». No se ejecuta un paso sobre la pantalla equivocada.";
+                      + $"«{gate.LastSeen}». No se ejecuta un paso sobre la pantalla equivocada."
+                      + Culprit(steps, idx, gate.LastSeen);
                 Report(step, false, why, outcomes);
                 return Finish(new RunResult(false, workflowId, outcomes,
                     $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}"));
@@ -307,6 +389,9 @@ public sealed class WorkflowPlayer
                     }
                 }
 
+                lastOutcome = done
+                    ? $"paso {step.StepOrder} «{step.Label}» ✓ · {(before == after ? "la pantalla NO cambió" : $"la pantalla pasó a {after}")}"
+                    : $"paso {step.StepOrder} «{step.Label}» ✗ · {Reason(reason)}";
                 ok = Report(step, done, done ? "" : Reason(reason), outcomes);
             }
             catch (OperationCanceledException) { throw; }
@@ -444,6 +529,33 @@ public sealed class WorkflowPlayer
     /// <summary>¿Mismo LUGAR (origin + pathname normalizado)? Falso si el paso no trae nodo.</summary>
     private static bool SamePlace(SurfaceIdentity now, string recordedUrl) =>
         SurfacePlace.Same(now, recordedUrl);
+
+    /// <summary>Ruta del pantallazo de enseñanza de un paso; "" si el cliente no la puso o falla.</summary>
+    private string SafeShot(string workflowId, int stepOrder)
+    {
+        try { return TaughtShotFor?.Invoke(workflowId, stepOrder) ?? ""; } catch { return ""; }
+    }
+
+    /// <summary>
+    /// SEÑALAR AL CULPABLE, no al que se tropieza. Cuando un paso no llega a su pantalla y seguimos
+    /// exactamente en la del paso ANTERIOR, el que falló no es este: es el anterior, que al enseñarlo
+    /// navegaba y ahora no hizo nada — aunque haya reportado ✓.
+    ///
+    /// Costó tres rondas de diagnóstico: el mensaje culpaba al paso 5 de «no llegar a NV2000» cuando el
+    /// problema era que el paso 4 no accionaba la fila. Un error que nombra al paso equivocado manda la
+    /// investigación al sitio equivocado (aprendizaje nº2 del CLAUDE.md).
+    /// </summary>
+    private static string Culprit(IReadOnlyList<PlanStep> steps, int idx, string lastSeen)
+    {
+        if (idx <= 0) return "";
+        PlanStep prev = steps[idx - 1];
+        string prevSurface = prev.Surface() ?? "";
+        if (prevSurface.Length == 0 || lastSeen.Length == 0) return "";
+        if (!SurfacePlace.Same(lastSeen, prevSurface)) return "";
+
+        return $" Seguimos donde vivía el paso {prev.StepOrder} («{prev.Label}», {prev.ActionType}): "
+             + "al enseñarlo ESE paso cambiaba de pantalla y ahora no lo ha hecho. Mira ahí, no aquí.";
+    }
 
     private IUiSurface? SurfaceFor(string selector)
     {

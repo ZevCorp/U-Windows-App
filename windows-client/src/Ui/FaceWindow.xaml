@@ -193,6 +193,13 @@
                         <!-- Ensayo en seco: recorre el plan y dice qué pasaría, SIN tocar la pantalla.
                              Va debajo del verde y en gris a propósito: no es una acción, es una
                              comprobación — se pulsa ANTES de ejecutar, y sobre todo antes de un demo. -->
+                        <!-- Paso a paso: no ejecuta distinto, ejecuta PAUSADO. Se queda encendido
+                             entre corridas a propósito: si lo enciendes es porque estás depurando. -->
+                        <Button x:Name="StepModeBtn" Height="26" Margin="0,6,0,0" Click="OnToggleStepMode"
+                                Style="{StaticResource FlatBtn}" Background="#33FFFFFF" Foreground="#CCFFFFFF"
+                                FontSize="11"
+                                ToolTip="Ejecuta el workflow paso a paso: se detiene ANTES de cada paso y muestra el veredicto y cómo se veía la pantalla al enseñarlo."/>
+
                         <Button x:Name="DryRunBtn" Content="🧪 Ensayo en seco" Height="26" Margin="0,6,0,0"
                                 Click="OnDryRunWorkflow" Style="{StaticResource FlatBtn}" Background="#33FFFFFF"
                                 Foreground="#CCFFFFFF" FontSize="11" IsEnabled="False"

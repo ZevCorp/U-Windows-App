@@ -226,6 +226,37 @@ public sealed class UiaSurface : IUiSurface
     }
 
     /// <summary>
+    /// Huella estructural: AutomationId + tipo de cada elemento interactivo de la ventana en foco. El
+    /// AutomationId solo no basta —bajo SAP son genéricos y se repiten (1001, 200, 100)—, así que se
+    /// combina con el tipo y, si no hay id, con la RUTA, que es lo único que distingue dos controles
+    /// por lo demás idénticos. Nunca el texto: eso es dato, y cambiaría en cada corrida.
+    /// </summary>
+    public string StructureFingerprint()
+    {
+        IntPtr hwnd = GetForegroundWindow();
+        AutomationElement? root = hwnd == IntPtr.Zero ? null : Root(hwnd);
+        if (root == null) return "";
+
+        var found = new List<(AutomationElement El, List<int> Path)>();
+        try { Walk(root, found, new List<int>(), 0); } catch { return ""; }
+
+        var ids = new List<string>();
+        foreach (var (el, path) in found)
+        {
+            try
+            {
+                var info = el.Current;
+                string aid = info.AutomationId ?? "";
+                ids.Add(aid.Length > 0
+                    ? $"{aid}|{info.ControlType.ProgrammaticName}"
+                    : $"@{string.Join(".", path)}|{info.ControlType.ProgrammaticName}");
+            }
+            catch { /* nodo muerto entre la enumeración y la lectura */ }
+        }
+        return Fingerprints.Of(ids);
+    }
+
+    /// <summary>
     /// Corto-circuito del motor de carga: ¿el elemento del paso ya está presente Y habilitado? Si sí, se
     /// ejecuta YA sin esperar el % global (que es inestable en listas como las de SAP). Tecla/scroll no
     /// tienen elemento → listos siempre.
