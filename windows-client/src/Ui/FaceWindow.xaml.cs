@@ -767,6 +767,26 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private readonly SapGuiSurface _clinicalSap = new();
     private bool _offering;             // ya hay un ofrecimiento en pantalla
     private string _offeredRev = "";    // no ofrecer dos veces lo mismo
+    private string _focusedRev = "";    // no robar el foco más de una vez por versión
+    private int _clinicalStep = -1;
+
+    /// <summary>
+    /// El paso del circuito, a la vista. Sin esto el operador solo veía «Emparejado» y no
+    /// tenía forma de saber cuál de las dos condiciones faltaba —la nota guardada o la
+    /// pantalla de SAP—, que es justo lo que hay que poder mirar de un vistazo en vivo.
+    ///
+    /// Solo se escribe cuando el paso CAMBIA: repintar el mismo texto cada 3 s haría
+    /// parpadear el panel y ensuciaría el registro.
+    /// </summary>
+    private void SetClinicalStep(int step, string text)
+    {
+        if (_clinicalStep == step) return;
+        _clinicalStep = step;
+        string[] marks = { "①", "②", "③", "④" };
+        string prefix = step >= 1 && step <= 4 ? $"{marks[step - 1]} " : "";
+        Dispatcher.Invoke(() => ClinicalStatus.Text = prefix + text);
+        LogBus.Log("clinico", $"paso {step}: {text}");
+    }
 
     private void OnClinicalPair(object sender, RoutedEventArgs e)
     {
@@ -787,8 +807,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
 
         _offeredRev = "";
+        _focusedRev = "";
+        _clinicalStep = -1;
         ClinicalPairBtn.Content = "Soltar";
-        ClinicalStatus.Text = "Emparejado. Abre en SAP la pantalla con los signos vitales.";
+        SetClinicalStep(1, "Esperando a que guardes la nota en el portal.");
     }
 
     /// <summary>
@@ -802,14 +824,36 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         if (!_clinical.Active || _clinical.Stopped || _offering || _teaching || _runningDirect) return;
 
-        // Solo con SAP delante. En cualquier otra app esto no tiene nada que hacer.
-        var loc = _locator?.Current;
-        if (loc == null || !loc.Origin.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)) return;
-
+        // ── PASO 1: ¿la nota ya está guardada allá? ─────────────────────────────
         var data = await _clinical.FetchAsync(CancellationToken.None);
-        if (data.Count == 0) return;
+        if (data.Count == 0)
+        {
+            SetClinicalStep(1, "Esperando a que guardes la nota en el portal.");
+            return;
+        }
+
+        // ── PASO 2: ¿SAP está delante? ──────────────────────────────────────────
+        var loc = _locator?.Current;
+        bool enSap = loc != null && loc.Origin.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase);
+        if (!enSap)
+        {
+            // Los datos ya están; lo único que falta es SAP. Se trae al frente UNA vez
+            // por versión de la nota: insistir cada 3 s le robaría el teclado al operador
+            // mientras escribe en otro sitio, que es exactamente lo que no debe pasar.
+            SetClinicalStep(2, $"{data.Count} dato(s) listos. Abriendo SAP…");
+            if (_clinical.LastRev != _focusedRev)
+            {
+                _focusedRev = _clinical.LastRev;
+                LogBus.Log("clinico", "datos listos y SAP no está delante: se trae al frente");
+                try { await AppAligner.EnsureAsync("sapgui://", () => _locator?.Current?.Origin ?? "", CancellationToken.None); }
+                catch (Exception e) { LogBus.Log("clinico", $"no se pudo traer SAP al frente: {e.Message}"); }
+            }
+            return;
+        }
+
         if (_clinical.LastRev == _offeredRev) return;   // ya se ofreció esta versión
 
+        // ── PASO 3: ¿esta pantalla tiene los campos? ────────────────────────────
         IReadOnlyList<DetectedField> fields;
         try { fields = await Task.Run(() => _clinicalSap.ReadFields()); }
         catch { return; }
@@ -818,30 +862,37 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         int escribibles = bindings.Count(b => !b.Occupied);
         if (escribibles == 0)
         {
-            LogBus.Log("clinico", bindings.Count == 0
-                ? "esta pantalla no tiene campos para estos datos — no se ofrece nada"
-                : "todos los campos ya tienen valor — no se toca nada");
+            string why = bindings.Count == 0
+                ? "Estás en SAP, pero esta pantalla no tiene campos de signos vitales."
+                : "Todos los campos ya tienen valor: no se toca nada.";
+            SetClinicalStep(3, why);
+            LogBus.Log("clinico", $"{why} ({fields.Count} campo(s) leídos en '{loc!.Id}')");
             return;
         }
 
+        // ── PASO 4: todo listo, se pide aprobación ──────────────────────────────
         _offering = true;
         _offeredRev = _clinical.LastRev;
         try
         {
-            LogBus.Log("clinico", $"ofreciendo {escribibles} dato(s) en '{loc.Id}'");
+            SetClinicalStep(4, $"Esperando tu aprobación para {escribibles} dato(s).");
+            LogBus.Log("clinico", $"ofreciendo {escribibles} dato(s) en '{loc!.Id}'");
+
             var preview = new FillPreviewWindow(bindings, loc.Id);
             bool ok = await preview.AskAsync();
             if (!ok)
             {
                 LogBus.Log("clinico", "el operador canceló: no se escribió nada");
-                ClinicalStatus.Text = "Cancelado. Se volverá a ofrecer si la nota cambia.";
+                _clinicalStep = -1;
+                SetClinicalStep(3, "Cancelado. Se vuelve a ofrecer si cambias de pantalla o de nota.");
                 _offeredRev = ""; // cancelar no es rechazar para siempre
                 return;
             }
 
             int escritos = await Task.Run(() => Write(bindings));
             LogBus.Log("clinico", $"escritos {escritos}/{escribibles} dato(s) en SAP");
-            ClinicalStatus.Text = $"Escritos {escritos} dato(s) en SAP.";
+            _clinicalStep = -1;
+            SetClinicalStep(4, $"✓ Escritos {escritos} dato(s) en SAP.");
         }
         finally { _offering = false; }
     }
