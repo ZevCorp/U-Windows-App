@@ -77,6 +77,18 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
             await Task.Delay(1000, ct);
         }
 
+        // La cuenta atrás es un PLAZO, no una garantía. Si al vencer el foco sigue en Ü, el detector
+        // resuelve «proceso en primer plano U (no es SAP)» y elige UIA — y una enseñanza sobre SAP
+        // grabada por UIA sale inservible: un paso por PULSACIÓN («n», «nw», «nwp», «nwp1») y clics
+        // sobre el Pane opaco, porque UIA no ve dentro de SAP. Ya pasó dos veces con la misma firma
+        // (wf_1785096110817 y wf_1785110820731 del 2026-07-26). Nadie puede enseñar la ventana de Ü,
+        // así que en lugar de dar por buena una respuesta que sabemos falsa, se espera a que el foco
+        // salga — y si no sale, se dice por qué en vez de grabar basura.
+        if (!await WaitForForeignForegroundAsync(ct))
+            throw new InvalidOperationException(
+                "No se puede enseñar la ventana de Ü. Pon delante la aplicación que vas a enseñar "
+                + "(SAP, el navegador…) y vuelve a pulsar Enseñar.");
+
         // La decisión de superficie SIEMPRE queda en el registro: una enseñanza sobre SAP grabada por
         // UIA produce pasos "clic en el panel" inservibles, y sin esta línea es indistinguible de un
         // bug del grabador (pasó: wf_1785096110817).
@@ -177,6 +189,43 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
 
         StatusChanged?.Invoke(this, "Cerrando la grabación y pidiéndole a Graph que la estructure…");
         return await recorder.StopAsync(ct);
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+
+    /// <summary>
+    /// Espera a que el primer plano sea una ventana AJENA a Ü. Devuelve false si tras la gracia sigue
+    /// siendo la nuestra. La gracia es corta y el sondeo rápido: en el caso normal —el operador ya
+    /// cambió de ventana durante la cuenta atrás— esto sale en el primer sondeo y no cuesta nada.
+    /// </summary>
+    private static async Task<bool> WaitForForeignForegroundAsync(CancellationToken ct)
+    {
+        const int GraceMs = 4000, PollMs = 150;
+        int ownPid = Environment.ProcessId;
+
+        for (int waited = 0; waited <= GraceMs; waited += PollMs)
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg != IntPtr.Zero)
+            {
+                uint pid = 0;
+                try { GetWindowThreadProcessId(fg, out pid); } catch { }
+                if (pid != 0 && pid != ownPid)
+                {
+                    if (waited > 0) LogBus.Log("workflow-teach", $"el foco salió de Ü tras {waited} ms extra");
+                    return true;
+                }
+            }
+            if (waited < GraceMs) await Task.Delay(PollMs, ct);
+        }
+
+        LogBus.Log("workflow-teach",
+            $"✋ el primer plano sigue siendo Ü tras {GraceMs} ms de gracia — NO se graba: "
+            + "la detección habría elegido «uia» y una enseñanza de SAP por UIA sale inservible");
+        return false;
     }
 
     /// <summary>Suelta la cámara de pasos (idempotente).</summary>
