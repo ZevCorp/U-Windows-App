@@ -232,9 +232,15 @@ public sealed class WorkflowPlayer
                 }
 
                 timings.Add(step.StepOrder, step.Label ?? "", step.ActionType ?? "", readyMs, 0);
-                Report(step, false,
-                    $"no se llegó a la superficie del paso («{gate.Expected}»); la pantalla actual es «{gate.LastSeen}». No se ejecuta un paso sobre la pantalla equivocada.",
-                    outcomes);
+                // El motivo lo dice el VEREDICTO, no una frase fija. Son dos fallos distintos —«estoy en
+                // otra pantalla» y «estoy en la buena pero el control no está listo»— y darles el mismo
+                // texto manda la investigación al sitio equivocado (aprendizaje nº2 del CLAUDE.md).
+                string why = gate.Outcome == StepGate.ElementNotReady
+                    ? $"estamos en la pantalla correcta («{gate.LastSeen}») pero el elemento del paso nunca "
+                      + "estuvo presente y habilitado. No se clica un control que aún no está listo."
+                    : $"no se llegó a la superficie del paso («{gate.Expected}»); la pantalla actual es "
+                      + $"«{gate.LastSeen}». No se ejecuta un paso sobre la pantalla equivocada.";
+                Report(step, false, why, outcomes);
                 return Finish(new RunResult(false, workflowId, outcomes,
                     $"Se detuvo en el paso {step.StepOrder} («{step.Label}»): {outcomes[^1].Error}"));
             }

@@ -240,7 +240,15 @@ public sealed class UiaSurface : IUiSurface
         candidates.AddRange(step.AlternativeTargets().Where(UiaSelector.Owns));
         foreach (string sel in candidates.Where(UiaSelector.Owns))
         {
-            var el = Resolve(sel);
+            // foregroundOnly: LISTO significa «está en la ventana que el usuario tiene delante», no
+            // «existe en algún sitio del escritorio». Resolve() cae, si no lo encuentra en el foreground,
+            // a un barrido de TODAS las ventanas de nivel superior — y él mismo avisa de que el hallazgo
+            // «puede estar tapado». Para EJECUTAR ese respaldo tiene sentido; para la COMPUERTA no: los
+            // ids de SAP bajo UIA son genéricos (aid=1001, aid=200, aid=100 salen en cada pantalla), así
+            // que el barrido encontraba uno siempre, IsStepReady decía «listo» al instante y la espera no
+            // esperaba nada. Ese es el «clica tan rápido que el siguiente clic cae donde no existe»:
+            // no era velocidad, era una compuerta que daba luz verde contra una ventana equivocada.
+            var el = Resolve(sel, foregroundOnly: true);
             if (el == null) continue;
             try { if (el.Current.IsEnabled) return true; } // presente Y habilitado = listo
             catch { return true; } // si no podemos leer IsEnabled, no bloquear
@@ -607,7 +615,12 @@ public sealed class UiaSurface : IUiSurface
     /// otra app— EXCLUYENDO a Ü, para alcanzar elementos de shell/cross-app. Los selectores por PATH son
     /// relativos a su ventana original, así que solo aplican al intento de la ventana en foco.
     /// </summary>
-    private AutomationElement? Resolve(string selector)
+    /// <param name="foregroundOnly">
+    /// true = solo la ventana en primer plano, sin el barrido del escritorio. Lo usa la COMPUERTA
+    /// (<see cref="IsStepReady"/>): «listo» tiene que significar listo DONDE se va a clicar. El barrido
+    /// sigue disponible para EJECUTAR, que es donde nació como respaldo.
+    /// </param>
+    private AutomationElement? Resolve(string selector, bool foregroundOnly = false)
     {
         var parts = UiaSelector.Parse(selector);
         bool byPath = parts.TryGetValue("path", out string? raw) && !string.IsNullOrWhiteSpace(raw);
@@ -621,6 +634,8 @@ public sealed class UiaSurface : IUiSurface
             var hit = FindIn(Root(fg), byPath, raw, condition);
             if (hit != null) { L($"    ✓ '{selector}' en la ventana en foco ('{WindowLabel(hit)}')"); return hit; }
         }
+
+        if (foregroundOnly) return null;
 
         // 2) Barrido de ventanas de nivel superior (shell/otras apps), saltando a Ü. Solo por condición.
         if (!byPath && condition != null)

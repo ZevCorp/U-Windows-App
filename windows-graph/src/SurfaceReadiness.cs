@@ -8,9 +8,21 @@ public enum StepGate
     /// <summary>Confirmado: en la superficie del paso y con el elemento (o el % de carga) listo.</summary>
     Ready,
 
-    /// <summary>Llegamos a la superficie del paso, pero el elemento no se confirmó dentro del techo.
-    /// Se ejecuta igual (resiliente): estando en la pantalla correcta, intentar es barato y honesto.</summary>
+    /// <summary>Llegamos a la superficie del paso y el paso NO apunta a un elemento concreto (tecla,
+    /// scroll): no hay nada que confirmar, se ejecuta. Estando en la pantalla correcta es barato y honesto.</summary>
     ArrivedUnconfirmed,
+
+    /// <summary>
+    /// Estamos en la pantalla correcta, pero el ELEMENTO del paso nunca llegó a estar presente y
+    /// habilitado dentro del techo. NO se ejecuta.
+    ///
+    /// Antes esto caía en <see cref="ArrivedUnconfirmed"/> y se clicaba igual. Es la diferencia entre
+    /// «el botón todavía no está» y «el botón está listo», y clicar en el primer caso es exactamente el
+    /// síntoma que reportó el operador: el clic entra en un sitio que aún no existe, y el paso siguiente
+    /// arranca desde un estado que nadie previó. Detenerse es recuperable — el puente consciente retoma;
+    /// clicar a ciegas no lo es.
+    /// </summary>
+    ElementNotReady,
 
     /// <summary>NUNCA se llegó a la superficie del paso y el elemento exacto tampoco apareció.
     /// El paso NO debe ejecutarse: actuaría sobre la pantalla equivocada.</summary>
@@ -23,7 +35,8 @@ public enum StepGate
 /// </summary>
 public sealed record StepGateResult(StepGate Outcome, string Expected, string LastSeen)
 {
-    public bool ShouldExecute => Outcome != StepGate.NotAtLocation;
+    public bool ShouldExecute =>
+        Outcome is not (StepGate.NotAtLocation or StepGate.ElementNotReady);
 }
 
 /// <summary>
@@ -148,8 +161,30 @@ public static class SurfaceReadiness
             await Task.Delay(PollMs, ct);
         }
 
-        log?.Invoke($"  ⚠ no se confirmó que el elemento estuviera listo en {MaxWaitMs} ms — se intenta igual (estamos en la pantalla correcta)");
+        // Aquí se acabó el techo sin confirmar. La respuesta depende de si hay algo que confirmar.
+        if (TargetsAnElement(step))
+        {
+            log?.Invoke($"  ✋ el elemento «{step.Label}» no llegó a estar presente y habilitado en {MaxWaitMs} ms "
+                + "— el paso NO se ejecuta: clicar un control que aún no está listo deja la pantalla en un "
+                + "estado que el resto del workflow no espera");
+            return new StepGateResult(StepGate.ElementNotReady, expected, SafeUrl(surface));
+        }
+
+        log?.Invoke($"  ⚠ sin elemento que confirmar (paso de {step.ActionType}) — se ejecuta: estamos en la pantalla correcta");
         return new StepGateResult(StepGate.ArrivedUnconfirmed, expected, SafeUrl(surface));
+    }
+
+    /// <summary>
+    /// ¿El paso apunta a un control concreto que se pueda comprobar? Las teclas y el scroll van al FOCO,
+    /// no a un elemento resuelto: no hay nada que esperar y bloquearlos colgaría workflows legítimos.
+    /// Se decide por el prefijo del selector, que es lo que distingue los sintéticos de los reales.
+    /// </summary>
+    private static bool TargetsAnElement(PlanStep step)
+    {
+        string sel = step.Selector ?? "";
+        return sel.Length > 0
+            && !sel.StartsWith("key:", StringComparison.OrdinalIgnoreCase)
+            && !sel.StartsWith("scroll:", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool SafeReady(IUiSurface s, PlanStep step) { try { return s.IsStepReady(step); } catch { return false; } }
