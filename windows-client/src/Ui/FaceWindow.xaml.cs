@@ -615,6 +615,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             WorkflowPrev.IsEnabled = many;
             WorkflowNext.IsEnabled = many;
             RunWorkflowBtn.IsEnabled = true;
+            DryRunBtn.IsEnabled = true;
             WorkflowDeleteBtn.IsEnabled = true;
             SetDirectIndex(_directIndex);
         }
@@ -634,6 +635,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         WorkflowPrev.IsEnabled = false;
         WorkflowNext.IsEnabled = false;
         RunWorkflowBtn.IsEnabled = false;
+        DryRunBtn.IsEnabled = false;
         WorkflowDeleteBtn.IsEnabled = false;
     }
 
@@ -708,6 +710,50 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             WorkflowListBox.ScrollIntoView(wf);
             _syncingWorkflowUi = false;
         }
+    }
+
+    /// <summary>
+    /// Ensayo en seco del workflow que apunta el slider: dice qué pasaría SIN tocar la pantalla.
+    ///
+    /// Se construye el MISMO player que ejecutaría de verdad —mismas superficies, mismo plan, mismo
+    /// colapso de tecleos— porque un ensayo sobre una lista distinta de la que se ejecuta no vale nada.
+    /// El detalle va al registro; en el globo solo el veredicto, que es lo que se mira de un vistazo
+    /// cinco minutos antes de un demo.
+    /// </summary>
+    private async void OnDryRunWorkflow(object sender, RoutedEventArgs e)
+    {
+        if (_runningDirect) return;
+        if (_directIndex < 0 || _directIndex >= _directWorkflows.Count) { SetStatus("Selecciona un workflow primero."); return; }
+        var wf = _directWorkflows[_directIndex];
+
+        DryRunBtn.IsEnabled = false;
+        SetStatus($"Ensayando «{wf.Title}» en seco…");
+        try
+        {
+            _directGraph ??= new GraphClient(_graphConfig);
+            var uia = new UiaSurface { Log = s => LogBus.Log("uia", s) };
+            var sap = new SapGuiSurface();
+            sap.Diagnostic += (_, msg) => LogBus.Log("sap", msg);
+            var player = new WorkflowPlayer(_directGraph, _graphConfig, uia, sap)
+            {
+                Log = s => LogBus.Log("ensayo", s)
+            };
+
+            DryRunReport report = await player.DryRunAsync(wf.Id, null, CancellationToken.None);
+
+            string veredicto = report.Clean
+                ? $"✓ Ensayo limpio: {report.Steps} pasos, sin bloqueantes"
+                : $"✋ {report.Count(DryRunLevel.Bloqueante)} bloqueante(s) de {report.Steps} pasos";
+            int avisos = report.Count(DryRunLevel.Aviso);
+            SetStatus($"{veredicto}{(avisos > 0 ? $" · {avisos} aviso(s)" : "")} — detalle en 📜 Logs");
+            Narrate(veredicto);
+        }
+        catch (Exception ex)
+        {
+            LogBus.Log("ensayo", $"el ensayo falló: {ex}");
+            SetStatus($"El ensayo no pudo completarse: {ex.Message}");
+        }
+        finally { DryRunBtn.IsEnabled = true; }
     }
 
     /// <summary>

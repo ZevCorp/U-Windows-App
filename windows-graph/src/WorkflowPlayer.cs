@@ -72,6 +72,33 @@ public sealed class WorkflowPlayer
     /// Pide el plan a Graph y lo ejecuta. <paramref name="strictSurface"/> exige que la pantalla actual
     /// coincida con la que se grabó; ponerlo en false permite forzar la ejecución bajo tu criterio.
     /// </summary>
+    /// <summary>
+    /// Ensayo en seco: pide el plan y lo analiza SIN ejecutar nada. Ver <see cref="WorkflowDryRun"/>.
+    /// Comparte con <see cref="RunAsync"/> la carga del plan y el colapso de tecleos, para que lo
+    /// ensayado sea EXACTAMENTE lo que se ejecutaría — un ensayo sobre otra lista no vale de nada.
+    /// </summary>
+    public async Task<DryRunReport> DryRunAsync(
+        string workflowId, Dictionary<string, string>? variables, CancellationToken ct)
+    {
+        ExecutionPlan plan;
+        try
+        {
+            plan = await _graph.GetPlanAsync(workflowId, variables, new Dictionary<string, string>
+            {
+                ["source"] = "windows-u",
+                ["surface"] = "native",
+            }, ct);
+        }
+        catch (GraphException e)
+        {
+            return new DryRunReport(workflowId, 0,
+                new[] { new DryRunFinding(DryRunLevel.Bloqueante, 0, "", $"Graph no devolvió el plan: {e.Message}") });
+        }
+
+        var steps = CollapseInputRuns(plan.Steps.OrderBy(s => s.StepOrder).ToList());
+        return WorkflowDryRun.Analyze(workflowId, steps, _surfaces, L);
+    }
+
     public async Task<RunResult> RunAsync(
         string workflowId,
         Dictionary<string, string>? variables,
