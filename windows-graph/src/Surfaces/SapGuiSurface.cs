@@ -36,12 +36,29 @@ public sealed class SapGuiSurface : IUiSurface
     /// </summary>
     public event EventHandler<string>? Diagnostic;
 
-    /// <summary>Tipos de GuiComponent con los que un humano interactúa. El resto es decorado.</summary>
+    /// <summary>
+    /// Tipos de GuiComponent con los que un humano interactúa. El resto es decorado.
+    ///
+    /// <c>GuiOkCodeField</c> cuenta aquí para <see cref="ReadinessCount"/> y
+    /// <see cref="ReadVisibleElements"/>, que recorren la ventana ENTERA. Pero NO llega nunca por
+    /// <see cref="ReadFields"/>: ese arranca en <c>wnd[0]/usr</c> y el campo de comandos vive en
+    /// <c>wnd[0]/tbar[0]/okcd</c>, que es HERMANO de <c>usr</c>, no descendiente. Es deliberado —
+    /// <c>ReadFields</c> es el contrato de autofill y el campo de comandos no es un campo del
+    /// formulario. La grabación de la transacción lo lee aparte: ver <see cref="TryReadOkCode"/>.
+    /// </summary>
     private static readonly HashSet<string> Interactive = new(StringComparer.OrdinalIgnoreCase)
     {
         "GuiTextField", "GuiCTextField", "GuiPasswordField", "GuiComboBox",
         "GuiCheckBox", "GuiRadioButton", "GuiButton", "GuiOkCodeField",
     };
+
+    /// <summary>
+    /// El campo de comandos de SAP: donde el operador teclea la transacción («NWP1», «/nVA01»). Es la
+    /// puerta de entrada a CUALQUIER transacción, y hasta ahora la grabación era ciega a él — todo
+    /// workflow empezaba asumiendo que ya estabas dentro, y al reproducir desde Easy Access el primer
+    /// paso esperaba una pantalla a la que nadie había navegado.
+    /// </summary>
+    private const string OkCodeId = "wnd[0]/tbar[0]/okcd";
 
     // ── Estado de observación (hilo STA dedicado, ver StartObserving) ───────────
     private readonly object _obsGate = new();
@@ -54,6 +71,27 @@ public sealed class SapGuiSurface : IUiSurface
     private DispatcherTimer? _pollTimer;
     private DispatcherTimer? _treeTimer;
     private Dictionary<string, string?> _lastSnapshot = new();
+
+    // ── Instantánea PREVIA a la acción ──────────────────────────────────────────
+    //
+    // El nodo de un paso es DÓNDE ESTABA EL USUARIO al hacerlo, y leerlo después ya no lo dice: si la
+    // acción navegó, Identity() devuelve la pantalla de DESTINO y el paso queda sellado con una
+    // pantalla en la que nunca ocurrió — la compuerta del player espera entonces algo imposible.
+    // UiaSurface cierra esa carrera capturando el nodo lo primero de todo (ver UiaSurface.OnHookClick);
+    // aquí no se puede, porque no hay hook de clic: la acción se descubre DESPUÉS, releyendo. La
+    // equivalencia es esta sombra, refrescada en cada tick en que SAP está OCIOSO — es decir, siempre
+    // fuera de un round-trip, que es justo cuando la pantalla es todavía la de origen.
+    private string _preNodeUrl = "";
+    private string _preReadiness = "";
+
+    /// <summary>Lo último tecleado en el campo de comandos mientras SAP estaba ocioso. Se consume en
+    /// StartRequest: para entonces SAP puede estar ya ocupado y no se le puede preguntar nada.</summary>
+    private string _pendingOkCode = "";
+
+    // Readiness cacheado por superficie: recorrer la ventana entera en cada tick sería pagar un Walk
+    // completo a 2,5 Hz durante toda la grabación. Solo se recuenta al cambiar de pantalla.
+    private string _readyCacheUrl = "";
+    private int _readyCacheCount = -1;
 
     // ── Disponibilidad ───────────────────────────────────────────────────────
 
@@ -210,12 +248,65 @@ public sealed class SapGuiSurface : IUiSurface
             // parecerían pantallas distintas según de dónde venga el dato.
             if (screen.Length > 0) path.Append('/').Append(int.TryParse(screen, out int n) ? n.ToString("D4") : screen);
 
+            // El SUBDYNPRO cargado en el área de usuario, si lo hay. Sin esto la identidad es demasiado
+            // gruesa dentro del Puesto de trabajo (NWP1): abrir una fila del árbol cambia el panel
+            // derecho pero NO cambia transacción, programa ni dynpro, así que TODA la transacción tenía
+            // una sola identidad. Consecuencias medidas el 2026-07-26 en wf_1785111989995: los 20 pasos
+            // del formulario de paciente se sellaron como «NWP1/SAPLN_WP_FRAMEWORK/0100» igual que los
+            // clics del árbol, el salto-adelante del player los confundió entre sí y se saltó 19 pasos
+            // —el llenado entero del paciente— para ir directo a «Buscar», reportando 29 de 30 hechos.
+            //
+            // Un subdynpro es una pantalla de SAP con todas las de la ley (área/programa/dynpro), no
+            // maquetación: por eso califica como parte del lugar. Los demás contenedores del área de
+            // usuario NO se añaden a propósito — son layout, y meterlos haría la identidad tan
+            // quisquillosa que grabación y reproducción dejarían de casar por diferencias cosméticas.
+            // Si algún día dos paneles distintos resultan indistinguibles sin subdynpro, se extiende AQUÍ.
+            string sub = UserAreaSubscreen(session);
+            if (sub.Length > 0) path.Append('/').Append(sub);
+
             return new SurfaceIdentity(
                 Origin: $"sapgui://{(system.Length > 0 ? system : "sap")}",
                 Pathname: path.ToString(),
                 Title: title);
         }
         catch { return SurfaceIdentity.Unknown; }
+    }
+
+    /// <summary>
+    /// El subdynpro cargado directamente bajo <c>wnd[0]/usr</c> (p.ej. <c>subPATEINST:SAPLNCHD:2000</c>),
+    /// o "" si el área de usuario no tiene ninguno. Es el discriminador de PANEL dentro de una misma
+    /// transacción; ver el porqué en <see cref="Identity"/>.
+    ///
+    /// Solo los hijos DIRECTOS y solo el primero: esto corre en cada lectura de identidad —el locator,
+    /// y el motor de carga cada 120 ms— y un recorrido en profundidad aquí sería pagar el árbol entero
+    /// a esa cadencia. Tres llamadas COM es el presupuesto.
+    /// </summary>
+    private static string UserAreaSubscreen(dynamic session)
+    {
+        try
+        {
+            dynamic? area = session.FindById("wnd[0]/usr", false);
+            if (area == null) return "";
+
+            dynamic children = area.Children;
+            int count = (int)children.Count;
+            for (int i = 0; i < count && i < 12; i++)
+            {
+                string id;
+                try { id = Str(children.ElementAt(i).Id); } catch { continue; }
+                if (id.Length == 0) continue;
+
+                // «sub» Y «ssub»: SAP usa los dos prefijos (área de subdynpro dinámica y estática). Con
+                // solo «sub» esta pantalla real se escapaba —
+                // usr/ssubVIEW_SCREEN:SAPLN1LSTAMB:0007— y la identidad se quedaba corta justo en el
+                // Puesto de trabajo, que es donde hacía falta el detalle.
+                string leaf = id[(id.LastIndexOf('/') + 1)..];
+                if (leaf.StartsWith("ssub", StringComparison.OrdinalIgnoreCase) && leaf.Length > 4) return leaf;
+                if (leaf.StartsWith("sub", StringComparison.OrdinalIgnoreCase) && leaf.Length > 3) return leaf;
+            }
+        }
+        catch { /* la pantalla puede cambiar bajo los pies; sin dato es mejor que un dato inventado */ }
+        return "";
     }
 
     /// <summary>
@@ -286,7 +377,7 @@ public sealed class SapGuiSurface : IUiSurface
         catch { return false; }
         if (node == null) return false;
 
-        string? nodeKey = step.NodeKey ?? SapSelector.NodeKeyOf(step.Selector);
+        string? nodeKey = NodeKeyOf(step, step.Selector);
         if (!string.IsNullOrEmpty(nodeKey))
         {
             // Fila de árbol: el árbol puede existir y estar todavía vacío tras navegar.
@@ -862,6 +953,25 @@ public sealed class SapGuiSurface : IUiSurface
         return names;
     }
 
+    /// <summary>
+    /// Las columnas por las que intentar activar una fila, la más probable primero: la que TIENE texto
+    /// para esa clave. Es la celda que el operador ve y sobre la que hizo el doble clic; las columnas
+    /// vacías para esa fila son las que menos sentido tienen. El resto va detrás, por si acaso.
+    /// </summary>
+    private static IEnumerable<string> PreferredColumnsFor(dynamic tree, string key, List<string> columns)
+    {
+        var withText = new List<string>();
+        var rest = new List<string>();
+        foreach (string col in columns)
+        {
+            string t = "";
+            try { t = Str(tree.GetItemText(key, col)).Trim(); } catch { }
+            (t.Length > 0 ? withText : rest).Add(col);
+        }
+        foreach (string c in withText) yield return c;
+        foreach (string c in rest) yield return c;
+    }
+
     /// <summary>Texto de un nodo: primero el del nodo; si vacío, el primer item de columna no vacío.</summary>
     private static string NodeText(dynamic tree, string key, List<string> columns)
     {
@@ -1038,8 +1148,22 @@ public sealed class SapGuiSurface : IUiSurface
             catch { continue; }
             if (node == null) continue;
 
+            // Un botón de toolbar tampoco es un componente: el id resuelve al SHELL y el botón viaja
+            // en el fragmento. Se pulsa con PressToolbarButton, sin coordenadas.
+            string? tbButton = SapSelector.ToolbarButtonOf(selector);
+            if (tbButton != null)
+            {
+                if (TryInvoke(node, "PressToolbarButton", tbButton))
+                {
+                    Diagnostic?.Invoke(this, $"botón de toolbar «{step.Label}» ({tbButton}) pulsado en {id}");
+                    return true;
+                }
+                error = $"el shell {id} no aceptó PressToolbarButton(«{tbButton}») para «{step.Label}»";
+                return false;
+            }
+
             // Una fila de árbol no es un componente: el id resuelve al ÁRBOL y la fila viaja aparte.
-            string? nodeKey = step.NodeKey ?? SapSelector.NodeKeyOf(selector);
+            string? nodeKey = NodeKeyOf(step, selector);
             if (!string.IsNullOrEmpty(nodeKey))
             {
                 try { return ApplyToNode(node, nodeKey!, step, out error); }
@@ -1198,7 +1322,14 @@ public sealed class SapGuiSurface : IUiSurface
     /// (mueve el árbol hasta esa clave), y deja la pantalla en un estado que el operador reconoce en vez
     /// de disparar acciones sobre filas que nunca vio.
     /// </summary>
-    private static bool ApplyToNode(dynamic tree, string recordedKey, PlanStep step, out string error)
+    /// <summary>
+    /// Acciona una FILA de árbol. Instancia, no estática, para poder contar por <see cref="Diagnostic"/>
+    /// qué rama tomó: <c>TryInvoke</c> devuelve true cuando la llamada COM no lanzó, que NO es lo mismo
+    /// que «SAP hizo algo». Un <c>doubleClickNode</c> que SAP ignora en silencio es indistinguible de
+    /// uno que navegó — y así se ve en el registro del 2026-07-26: pasos con <c>done=True</c> y la
+    /// pantalla <c>SIN CAMBIO</c>. Sin saber qué rama corrió no se puede arreglar sin adivinar.
+    /// </summary>
+    private bool ApplyToNode(dynamic tree, string recordedKey, PlanStep step, out string error)
     {
         error = "";
 
@@ -1221,6 +1352,13 @@ public sealed class SapGuiSurface : IUiSurface
 
         if (mode.Length == 0) mode = isFolder ? "toggle" : "activate";
 
+        // OJO a esta línea cuando una fila diga ✓ sin que pase nada: la grabación NO distingue «el
+        // operador desplegó una carpeta» de «el operador la activó y SAP navegó» — ambas llegan como un
+        // click sin Value. Aquí se ADIVINA por IsFolder, y si la fila es carpeta se toma la rama toggle:
+        // despliega, devuelve true, y la pantalla no cambia. Es candidato nº1 a explicar los pasos 3/4
+        // de wf_1785109929654. No se cambia a ciegas: primero que el registro diga qué rama corrió.
+        Diagnostic?.Invoke(this, $"fila «{step.Label}» clave={key} isFolder={isFolder} → modo «{mode}»");
+
         switch (mode)
         {
             case "select":
@@ -1241,11 +1379,35 @@ public sealed class SapGuiSurface : IUiSurface
                 return true;
 
             default: // "activate" y cualquier cosa que venga de un click normal
-                if (TryInvoke(tree, "doubleClickNode", key)) return true;
-                // Árboles de columnas: la activación va por ITEM, no por nodo.
-                foreach (string col in TreeColumnNames(tree))
-                    if (TryInvoke(tree, "doubleClickItem", key, col)) return true;
-                error = "el árbol no aceptó doubleClickNode ni doubleClickItem sobre esa fila";
+                // ÁRBOL DE COLUMNAS PRIMERO. Medido el 2026-07-26 en el árbol de NWP1:
+                //   sap: fila «Triage Administrativo» clave=vw00030 isFolder=False → modo «activate»
+                //   sap: fila «Triage Administrativo»: doubleClickNode aceptado (sin excepción)
+                //   workflow: ← paso 4 ejecutado: done=True · ubicación DESPUÉS=… (SIN CAMBIO)
+                // doubleClickNode EXISTE, no lanza, y no hace nada. El orden anterior —nodo primero, item
+                // solo si el nodo LANZABA— hacía que el respaldo bueno no se probara jamás. Es la misma
+                // trampa que la aridad de los getters de geometría: en un árbol de columnas la fila no es
+                // un nodo, es un ITEM (clave, columna), y las llamadas por nodo se aceptan en vacío.
+                //
+                // Si el árbol expone columnas, se activa por item. Si no expone ninguna, no es de columnas
+                // y se va por nodo como siempre — el comportamiento viejo queda intacto donde era correcto.
+                var columns = TreeColumnNames(tree);
+                foreach (string col in PreferredColumnsFor(tree, key, columns))
+                    if (TryInvoke(tree, "doubleClickItem", key, col))
+                    {
+                        Diagnostic?.Invoke(this, $"fila «{step.Label}»: vía doubleClickItem(col={col})");
+                        return true;
+                    }
+
+                if (TryInvoke(tree, "doubleClickNode", key))
+                {
+                    Diagnostic?.Invoke(this, columns.Count == 0
+                        ? $"fila «{step.Label}»: vía doubleClickNode (el árbol no expone columnas)"
+                        : $"fila «{step.Label}»: vía doubleClickNode tras fallar los {columns.Count} item(s) "
+                          + "de columna. Aceptado ≠ ejecutado: si la pantalla no cambia, mirar aquí.");
+                    return true;
+                }
+
+                error = "el árbol no aceptó doubleClickItem ni doubleClickNode sobre esa fila";
                 return false;
         }
     }
@@ -1298,6 +1460,29 @@ public sealed class SapGuiSurface : IUiSurface
 
         // La clave existía aunque el texto no cuadre: último recurso antes de rendirse.
         return current.Length > 0 ? recordedKey : null;
+    }
+
+    /// <summary>
+    /// La CLAVE de fila del paso: la del PlanStep si trae una, y si no la del fragmento del selector
+    /// (<c>…/shell#node=vw00030</c>). Devuelve null si el paso no apunta a una fila.
+    ///
+    /// Existe por un bug que costó tres rondas de diagnóstico. Estaba escrito
+    /// <c>step.NodeKey ?? SapSelector.NodeKeyOf(selector)</c>, y <c>??</c> solo cae al respaldo cuando el
+    /// primero es NULL. Graph serializa el campo ausente como CADENA VACÍA (<c>"nodeKey":""</c>), no como
+    /// null — así que el respaldo nunca corría, la clave quedaba en "" y el paso dejaba de reconocerse
+    /// como fila de árbol. Se iba entonces por la rama de control normal: <c>Apply()</c> → un click sobre
+    /// un shell → <c>node.SetFocus()</c> → <c>return true</c>. Enfocaba el árbol, no abría nada, y
+    /// reportaba éxito. Ese era el «done=True · SIN CAMBIO» de todos los clics de árbol, y también el
+    /// motivo de que el diagnóstico de <see cref="ApplyToNode"/> nunca apareciera en el registro: ese
+    /// método jamás llegó a ejecutarse.
+    ///
+    /// Vacío y ausente son lo mismo aquí. Cualquier dato que venga de Graph merece esa lectura.
+    /// </summary>
+    private static string? NodeKeyOf(PlanStep step, string selector)
+    {
+        if (!string.IsNullOrWhiteSpace(step.NodeKey)) return step.NodeKey!.Trim();
+        string? fromSelector = SapSelector.NodeKeyOf(selector);
+        return string.IsNullOrWhiteSpace(fromSelector) ? null : fromSelector;
     }
 
     /// <summary>Llama un método del árbol por enlace tardío. false si no existe o SAP lo rechaza.</summary>
@@ -1405,9 +1590,24 @@ public sealed class SapGuiSurface : IUiSurface
                 return;
             }
 
+            // Línea base de los campos ANTES de nada, en AMBOS modos. Estaba solo en la rama de sondeo:
+            // con eventos COM no había línea base, así que el primer Change diffeaba contra un
+            // diccionario vacío y emitía un paso fantasma por CADA campo no vacío del dynpro. El camino
+            // del árbol sí tomaba la suya (más abajo); este no. Además _lastSnapshot no se limpia al
+            // parar, así que sin esta asignación una segunda grabación heredaba la de la primera.
+            _lastSnapshot = SafeReadFields().ToDictionary(f => f.Selector, f => f.CurrentValue);
+
+            _readyCacheUrl = ""; _readyCacheCount = -1;
+            RefreshPreflight(session);
+
+            // Va DESPUÉS del refresco, a propósito: lo que ya hubiera escrito en la barra de comandos
+            // antes de pulsar «Enseñar» es línea base, no un paso del operador — la misma disciplina que
+            // _lastSnapshot y _lastTreeSelection. Y sin este reset lo heredaría la siguiente grabación.
+            _pendingOkCode = "";
+
             _comEvents = new SapComEvents(session);
             _comEvents.Diagnostic += (_, msg) => Diagnostic?.Invoke(this, $"[com] {msg}");
-            _comEvents.Raised += (_, __) => PublishChangedFields();
+            _comEvents.Raised += (_, e) => OnSapEvent(session, e.Name);
 
             if (_comEvents.TryHook(out string reason))
             {
@@ -1416,8 +1616,8 @@ public sealed class SapGuiSurface : IUiSurface
             else
             {
                 Diagnostic?.Invoke(this,
-                    $"eventos COM no disponibles ({reason}); cae a sondeo (no detecta clics sin cambio de valor).");
-                _lastSnapshot = SafeReadFields().ToDictionary(f => f.Selector, f => f.CurrentValue);
+                    $"eventos COM no disponibles ({reason}); cae a sondeo (no detecta clics sin cambio de valor, "
+                    + "ni la entrada a una transacción: sin StartRequest no hay instante ANTES del viaje).");
                 _pollTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(500) };
                 _pollTimer.Tick += (_, __) => PublishChangedFields();
                 _pollTimer.Start();
@@ -1434,7 +1634,15 @@ public sealed class SapGuiSurface : IUiSurface
             // operador — sin esto, el primer tick emitiría un clic fantasma.
             _lastTreeSelection = SafeReadTreeSelections().ToDictionary(s => s.TreeId, s => s.Key);
             _treeTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(400) };
-            _treeTimer.Tick += (_, __) => { if (!SessionBusy(session)) PublishTreeSelections(); };
+            _treeTimer.Tick += (_, __) =>
+            {
+                if (SessionBusy(session)) return;
+                // El refresco va ANTES de publicar, y solo con SAP ocioso: así la sombra es siempre la
+                // pantalla de origen. Durante el round-trip este tick se salta entero, que es lo que
+                // mantiene la sombra congelada en el origen hasta que la navegación termina.
+                RefreshPreflight(session);
+                PublishTreeSelections();
+            };
             _treeTimer.Start();
 
             _ready.Set();
@@ -1445,6 +1653,323 @@ public sealed class SapGuiSurface : IUiSurface
             _startupError = $"fallo iniciando observación SAP: {e.Message}";
             _ready.Set();
         }
+    }
+
+    /// <summary>
+    /// Reparte los eventos COM de la sesión. <c>StartRequest</c> NO es uno más: es el único instante en
+    /// que la pantalla de ORIGEN sigue en pie y el campo de comandos aún conserva lo tecleado (SAP lo
+    /// vacía al ejecutar la transacción). Todo lo que haya que leer "antes del viaje" se lee aquí.
+    /// </summary>
+    private void OnSapEvent(dynamic session, string name)
+    {
+        if (!string.Equals(name, "StartRequest", StringComparison.OrdinalIgnoreCase))
+        {
+            PublishChangedFields();
+            return;
+        }
+
+        // StartRequest cae en el BORDE del round-trip. Con Busy=true cualquier llamada al scripting se
+        // bloquea SIN retorno (spec oficial, ver INVESTIGACION-SAPGUI-UIA.md) y colgaría este hilo de
+        // bombeo para siempre — la grabación moriría en silencio. Por eso se pregunta primero: si SAP ya
+        // arrancó, no se le toca y se publica solo desde la sombra, que no habla con COM.
+        bool idle = !SessionBusy(session);
+        if (idle) PublishChangedFields();
+
+        // El orden es el del operador: primero rellenó los campos, luego DISPARÓ el viaje. Y el disparo
+        // es una cosa o la otra —tecleó una transacción y pulsó Enter, o pulsó un botón—, nunca las dos.
+        if (!PublishTransactionEntry(session, idle) && idle)
+            PublishFocusedButton(session);
+    }
+
+    /// <summary>
+    /// Graba el BOTÓN que disparó el viaje al servidor, si se puede saber cuál fue.
+    ///
+    /// EL AGUJERO QUE CIERRA (medido con el vídeo del 2026-07-26): en el Puesto de trabajo, la fila del
+    /// árbol abre la lista en el panel derecho — eso sí se graba— pero lo que salta a la transacción
+    /// NV2000 es el botón «Crear Triage Administrativo» de la barra de ese panel. Un botón no cambia
+    /// ningún valor de campo, así que el diff de <see cref="PublishChangedFields"/> no lo ve, y el
+    /// workflow quedaba sin el paso que lo lleva a la pantalla siguiente: se detenía ahí siempre.
+    ///
+    /// LA APUESTA, dicha en voz alta: SAP no documenta «qué control disparó el round-trip», pero en
+    /// <c>StartRequest</c> la pantalla de origen sigue viva y el botón pulsado suele conservar el foco.
+    /// No se da por hecho que la propiedad exista: se prueban varios nombres y se DEJA EN EL REGISTRO
+    /// cuál respondió, o que ninguno lo hizo. Un catch mudo aquí volvería a hacer indistinguible «la API
+    /// no lo expone» de «lo llamamos mal», que es el error nº3 del CLAUDE.md.
+    ///
+    /// SOLO se graba si el elemento con foco es un BOTÓN. Si el foco está en un campo de texto, el
+    /// disparo fue un Enter sobre ese campo y no lo sabemos distinguir: grabar un «clic» ahí inventaría
+    /// un paso que el operador no dio. Sin dato es mejor que con dato falso.
+    /// </summary>
+    private void PublishFocusedButton(dynamic session)
+    {
+        // El foco a nivel de sesión o ventana NO EXISTE en esta API. Comprobado por introspección
+        // ITypeInfo contra el SAP real (2026-07-26): GuiSession expone FindById, SendCommand,
+        // StartTransaction, FindByPosition, GetObjectTree…, y GuiFrameWindow expone SetFocus —escribir—
+        // pero NINGÚN getter de foco. Por eso aquí ya no se prueba focusedElement y compañía: no es que
+        // fallen, es que no están, y dejar el intento haría pensar que algún día responderán.
+        //
+        // Donde SÍ hay foco es DENTRO del shell: GuiGridView expone GetToolbarFocusButton. Y es justo
+        // donde vive el botón que importa: «Crear Triage Administrativo» es el item NV44 de la barra del
+        // ALV, no un GuiButton. Ni el diff de campos ni un recorrido de componentes lo verían nunca —
+        // por eso el workflow se quedaba siempre sin el paso que salta a NV2000.
+        string shellId = "", buttonId = "", label = "";
+        foreach (dynamic grid in ToolbarShells(session))
+        {
+            string focused = "";
+            try
+            {
+                focused = Str(grid.GetType().InvokeMember(
+                    "GetToolbarFocusButton", BindingFlags.InvokeMethod, null, grid, null)).Trim();
+            }
+            catch { }
+            if (focused.Length == 0) continue;
+
+            // GetToolbarFocusButton devuelve el ÍNDICE, no la clave. Verificado contra el SAP real
+            // (2026-07-26): con «Crear Triage Administrativo» pulsado responde «3», y el 3 de esa barra
+            // es NV44. Guardar el índice como si fuera la clave daba un selector que no resolvería y una
+            // etiqueta vacía. El índice además NO es estable —depende de qué botones muestre la barra en
+            // esa pantalla y de la autorización del usuario—, así que se convierte a clave AQUÍ, al
+            // grabar, y lo que se persiste es la clave.
+            buttonId = ToolbarButtonIdAt(grid, focused);
+            if (buttonId.Length == 0) continue;
+
+            try { shellId = Str(grid.Id); } catch { }
+            label = ToolbarButtonLabel(grid, buttonId);
+            break;
+        }
+
+        if (buttonId.Length == 0 || shellId.Length == 0)
+        {
+            Diagnostic?.Invoke(this, "round-trip sin código de transacción y sin botón de toolbar con foco. "
+                + "Si fue un botón normal del dynpro, ese paso NO se graba: SAP no dice qué control disparó "
+                + "el viaje (verificado: GuiSession/GuiFrameWindow no tienen getter de foco).");
+            return;
+        }
+
+        string node = SafeNodeUrl();
+        if (node.Length == 0) node = _preNodeUrl;
+
+        StepObserved?.Invoke(this, new ObservedStep(
+            ActionType: "click",
+            Selector: SapSelector.ByToolbarButton(shellId, buttonId),
+            Label: label.Length > 0 ? label : buttonId,
+            ControlType: "button",
+            Value: null,
+            AllowedOptions: null,
+            SelectedValue: null,
+            SelectedLabel: null,
+            SurfaceSection: null,
+            AlternativeTargets: Array.Empty<string>())
+        {
+            Surface = node,
+            Readiness = node == _preNodeUrl ? _preReadiness : CachedReadinessMeta(node),
+        });
+
+        Diagnostic?.Invoke(this,
+            $"observado: botón de toolbar «{label}» ({buttonId}) en {shellId} desde '{node}'");
+    }
+
+    /// <summary>Los shells de la pantalla activa que tienen barra de botones propia (ALV/GridView).</summary>
+    private static IEnumerable<dynamic> ToolbarShells(dynamic session)
+    {
+        var acc = new List<dynamic>();
+        dynamic? root = null;
+        try { root = session.ActiveWindow; } catch { }
+        if (root == null) { try { root = session.FindById("wnd[0]", false); } catch { } }
+        if (root == null) return acc;
+
+        void Walk(dynamic node, int depth)
+        {
+            if (depth > 14 || acc.Count > 12) return;
+            int count = 0;
+            try { count = (int)node.ToolbarButtonCount; } catch { }
+            if (count > 0) acc.Add(node);
+
+            dynamic children; int n;
+            try { children = node.Children; n = (int)children.Count; } catch { return; }
+            for (int i = 0; i < n && i < 200; i++)
+            {
+                try { Walk(children.ElementAt(i), depth + 1); } catch { }
+            }
+        }
+        try { Walk(root, 0); } catch { }
+        return acc;
+    }
+
+    /// <summary>
+    /// La CLAVE del botón que ocupa esa posición de la barra (<c>3</c> → <c>NV44</c>). "" si el valor no
+    /// es un índice válido. Se acepta también que alguna versión de SAP devuelva ya la clave: en ese
+    /// caso no parsea como número y se usa tal cual, siempre que exista en la barra.
+    /// </summary>
+    private static string ToolbarButtonIdAt(dynamic shell, string focused)
+    {
+        int count = 0;
+        try { count = (int)shell.ToolbarButtonCount; } catch { return ""; }
+        if (count <= 0) return "";
+
+        if (int.TryParse(focused, out int index))
+        {
+            if (index < 0 || index >= count) return ""; // -1 = nada enfocado
+            try { return Str(shell.GetToolbarButtonId(index)).Trim(); } catch { return ""; }
+        }
+
+        for (int i = 0; i < count && i < 60; i++)
+        {
+            try
+            {
+                if (string.Equals(Str(shell.GetToolbarButtonId(i)).Trim(), focused, StringComparison.OrdinalIgnoreCase))
+                    return focused;
+            }
+            catch { }
+        }
+        return "";
+    }
+
+    /// <summary>El texto visible de un botón de toolbar, por su clave. "" si no se puede leer.</summary>
+    private static string ToolbarButtonLabel(dynamic shell, string buttonId)
+    {
+        int count = 0;
+        try { count = (int)shell.ToolbarButtonCount; } catch { return ""; }
+
+        for (int i = 0; i < count && i < 60; i++)
+        {
+            string id;
+            try { id = Str(shell.GetToolbarButtonId(i)).Trim(); } catch { continue; }
+            if (!string.Equals(id, buttonId, StringComparison.OrdinalIgnoreCase)) continue;
+
+            foreach (string getter in new[] { "GetToolbarButtonText", "GetToolbarButtonTooltip" })
+            {
+                try
+                {
+                    string v = Str(shell.GetType().InvokeMember(
+                        getter, BindingFlags.InvokeMethod, null, shell, new object[] { i })).Trim();
+                    if (v.Length > 0) return v;
+                }
+                catch { }
+            }
+            return "";
+        }
+        return "";
+    }
+
+    /// <summary>
+    /// Refresca la instantánea previa (nodo + readiness + campo de comandos). SOLO se llama con SAP
+    /// ocioso: es la garantía de que lo que guarda es la pantalla de origen y no una de tránsito.
+    /// </summary>
+    private void RefreshPreflight(dynamic session)
+    {
+        string url = SafeNodeUrl();
+        if (url.Length > 0)
+        {
+            _preNodeUrl = url;
+            _preReadiness = CachedReadinessMeta(url);
+        }
+
+        // La sombra es un ESPEJO fiel del campo, vacío incluido. La tentación es guardar solo lo no
+        // vacío (SAP limpia el okcd al ejecutar, y perder la sombra sería perder el paso), pero eso deja
+        // pegado un código que el operador escribió y luego BORRÓ: el siguiente round-trip —un clic en
+        // una fila, un botón— lo consumiría y grabaría una entrada a transacción que nunca ocurrió.
+        // El caso que la tentación protege no existe: StartRequest se dispara con el Enter, y durante el
+        // round-trip este tick no corre (guarda de Busy), así que no hay tick que pueda pisar la sombra
+        // entre que SAP la limpia y que StartRequest la consume.
+        if (TryReadOkCode(session, out string code)) _pendingOkCode = code;
+    }
+
+    /// <summary>Lee el campo de comandos. false si no resuelve (no todas las pantallas lo tienen: los
+    /// modales de SAP no llevan barra de comandos).</summary>
+    private static bool TryReadOkCode(dynamic session, out string code)
+    {
+        code = "";
+        try
+        {
+            dynamic? field = session.FindById(OkCodeId, false);
+            if (field == null) return false;
+            code = Str(field.Text).Trim();
+            return true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Graba la ENTRADA a una transacción: el operador tecleó un código en la barra de comandos y pulsó
+    /// Enter. Se emiten DOS pasos, que es literalmente lo que hizo y lo que el player ya sabe
+    /// reproducir por separado (<see cref="Apply"/> fija el texto, <see cref="SendKey"/> manda VKey 0).
+    ///
+    /// Ambos se sellan con la pantalla de ORIGEN. Ese es el punto entero: un workflow que empieza en
+    /// SAP Easy Access ahora tiene un paso 1 que ocurre EN Easy Access, así que la compuerta de
+    /// ubicación del player lo deja pasar en vez de esperar para siempre una transacción a la que nadie
+    /// ha navegado.
+    /// </summary>
+    /// <returns>true si el viaje lo disparó una transacción tecleada (y por tanto NO fue un botón).</returns>
+    private bool PublishTransactionEntry(dynamic session, bool idle)
+    {
+        // Con SAP ocioso se lee en vivo (más fresco que la sombra y todavía pre-navegación); si ya
+        // arrancó el viaje, la sombra del último tick es lo único seguro que hay.
+        // `live` se declara aparte: session es dynamic, así que la llamada se resuelve en runtime y el
+        // compilador no puede dar por asignado un `out var` dentro de una condición (CS0165).
+        string live = "";
+        string code = _pendingOkCode;
+        if (idle && TryReadOkCode(session, out live) && live.Length > 0) code = live;
+
+        _pendingOkCode = "";
+        if (code.Length == 0) return false; // el viaje vino de un botón, una fila o un Enter en un campo
+
+        string node = idle ? SafeNodeUrl() : "";
+        if (node.Length == 0) node = _preNodeUrl;
+        string readiness = node == _preNodeUrl ? _preReadiness : CachedReadinessMeta(node);
+
+        StepObserved?.Invoke(this, new ObservedStep(
+            ActionType: "input",
+            Selector: SapSelector.ById(OkCodeId),
+            Label: $"Código de transacción «{code}»",
+            ControlType: "text",
+            Value: code,
+            AllowedOptions: null,
+            SelectedValue: null,
+            SelectedLabel: null,
+            SurfaceSection: null,
+            AlternativeTargets: Array.Empty<string>())
+        {
+            Surface = node,
+            Readiness = readiness,
+        });
+
+        // El Enter va aparte y con el mismo vocabulario que emite UiaSurface.PublishKey (`key:enter`),
+        // para que el player no necesite saber de qué superficie salió el paso.
+        StepObserved?.Invoke(this, new ObservedStep(
+            ActionType: "key",
+            Selector: "key:enter",
+            Label: "Enter",
+            ControlType: "key",
+            Value: "Enter",
+            AllowedOptions: null,
+            SelectedValue: null,
+            SelectedLabel: null,
+            SurfaceSection: null,
+            AlternativeTargets: Array.Empty<string>())
+        {
+            Surface = node,
+            Readiness = readiness,
+        });
+
+        Diagnostic?.Invoke(this, $"observado: entrada a transacción «{code}» desde '{node}'");
+        return true;
+    }
+
+    /// <summary>Readiness cacheado por superficie: un Walk de la ventana entera por CAMBIO de pantalla,
+    /// no por tick. "" si no se pudo contar (0 apagaría el respaldo por porcentaje del player).</summary>
+    private string CachedReadinessMeta(string url)
+    {
+        if (url.Length > 0 && url == _readyCacheUrl && _readyCacheCount > 0) return _readyCacheCount.ToString();
+        try
+        {
+            int c = ReadinessCount();
+            if (c <= 0) return "";
+            _readyCacheUrl = url;
+            _readyCacheCount = c;
+            return c.ToString();
+        }
+        catch { return ""; }
     }
 
     /// <summary>
@@ -1461,12 +1986,11 @@ public sealed class SapGuiSurface : IUiSurface
             _lastSnapshot.TryGetValue(field.Selector, out string? prev);
             if (prev == field.CurrentValue) continue;
 
-            // El NODO del paso — dónde estaba parado el usuario al hacerlo. SAP tiene la mejor
-            // identidad de todo el sistema (sapgui://SID/TCODE/PROGRAMA/DYNPRO) pero era el único
-            // motor que NO la grababa: sin observedSurface por paso, la fase de ubicación del motor
-            // de carga se saltaba entera y el player ejecutaba contra la pantalla que hubiera.
-            // Se captura una vez por lote (Identity() es un round-trip COM) y solo si hay pasos.
-            if (node.Length == 0) { node = SafeNodeUrl(); readiness = SafeReadinessMeta(); }
+            // El NODO del paso — dónde estaba parado el usuario al hacerlo. Sale de la SOMBRA, no de
+            // un Identity() de ahora: Change llega DESPUÉS del round-trip, así que preguntar aquí
+            // devolvería la pantalla de destino y sellaría el paso con una pantalla en la que nunca
+            // ocurrió. La sombra es del último tick ocioso, es decir, de antes del viaje.
+            if (node.Length == 0) { node = PreNodeUrl(out readiness); }
 
             StepObserved?.Invoke(this, new ObservedStep(
                 ActionType: field.ActionType,
@@ -1504,18 +2028,26 @@ public sealed class SapGuiSurface : IUiSurface
     /// </summary>
     private void PublishTreeSelections()
     {
-        var seen = new Dictionary<string, string>();
         string node = "", readiness = "";
 
         foreach (var sel in SafeReadTreeSelections())
         {
-            seen[sel.TreeId] = sel.Key;
-            if (_lastTreeSelection.TryGetValue(sel.TreeId, out string? prev) && prev == sel.Key) continue;
+            // La línea base se actualiza POR ÁRBOL LEÍDO, no reemplazando el diccionario entero con lo
+            // visto en este tick. Reemplazarlo tenía este efecto: basta un tick en que el árbol no
+            // resuelva —está navegando, o los getters de selección fallan, cosa que pasa y está en el
+            // log— para que su entrada desaparezca y la MISMA fila se vuelva a publicar como nueva en el
+            // siguiente tick. Así se grabaron los pasos 3 y 4 de wf_1785109929654: idénticos, misma
+            // clave vw00030, un doble clic del operador convertido en dos pasos.
+            bool known = _lastTreeSelection.TryGetValue(sel.TreeId, out string? prev);
+            _lastTreeSelection[sel.TreeId] = sel.Key;
+            if (known && prev == sel.Key) continue;
 
-            // Mismo nodo por lote que en PublishChangedFields: la selección se captura ENTRE el clic
-            // y la navegación (reloj de 400 ms con guarda de Busy), así que Identity() aquí todavía
-            // es la pantalla donde el usuario clicó — el nodo correcto del paso.
-            if (node.Length == 0) { node = SafeNodeUrl(); readiness = SafeReadinessMeta(); }
+            // Mismo nodo por lote que en PublishChangedFields, y por el mismo motivo: de la sombra. El
+            // tick refresca ANTES de llamar aquí y solo con SAP ocioso, así que es la pantalla donde el
+            // usuario clicó. Leerlo en vivo era una apuesta al reloj de 400 ms: si la navegación ganaba
+            // la carrera, el doble clic en un favorito de Easy Access quedaba sellado con la
+            // transacción de DESTINO — un paso que dice «clica el favorito NWP1, estando en NWP1».
+            if (node.Length == 0) { node = PreNodeUrl(out readiness); }
 
             StepObserved?.Invoke(this, new ObservedStep(
                 ActionType: "click",
@@ -1534,8 +2066,6 @@ public sealed class SapGuiSurface : IUiSurface
                 Readiness = readiness,
             });
         }
-
-        _lastTreeSelection = seen;
     }
 
     /// <summary>URL del nodo actual para grabar en el paso; "" si la identidad no se puede leer
@@ -1550,15 +2080,25 @@ public sealed class SapGuiSurface : IUiSurface
         catch { return ""; }
     }
 
-    /// <summary>Meta de carga del nodo al grabar; "" si no se pudo contar (0 apagaría el respaldo).</summary>
-    private string SafeReadinessMeta()
+    /// <summary>
+    /// El nodo de la sombra: dónde estaba el usuario en el último instante ocioso. Es lo que se sella
+    /// en un paso, NUNCA un Identity() del momento de publicar (ver <see cref="RefreshPreflight"/>).
+    ///
+    /// Respaldo si la sombra está vacía (aún no corrió ningún tick, o la identidad no se pudo leer):
+    /// se lee en vivo. Es el comportamiento viejo y puede quedar sellado con la pantalla de destino,
+    /// pero un paso con nodo aproximado sigue siendo mejor que uno sin nodo, que apaga la compuerta.
+    /// </summary>
+    private string PreNodeUrl(out string readiness)
     {
-        try
+        if (_preNodeUrl.Length > 0)
         {
-            int c = ReadinessCount();
-            return c > 0 ? c.ToString() : "";
+            readiness = _preReadiness;
+            return _preNodeUrl;
         }
-        catch { return ""; }
+
+        string url = SafeNodeUrl();
+        readiness = url.Length > 0 ? CachedReadinessMeta(url) : "";
+        return url;
     }
 
     private IReadOnlyList<(string TreeId, string Key, string Text, string? Path)> SafeReadTreeSelections()

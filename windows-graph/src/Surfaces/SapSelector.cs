@@ -36,6 +36,19 @@ public static class SapSelector
     /// </summary>
     public const string NodeMark = "#node=";
 
+    /// <summary>
+    /// Separador del BOTÓN DE TOOLBAR de un shell. Los botones de la barra de un ALV/GridView no son
+    /// <c>GuiComponent</c>: no aparecen como hijos, no tienen Id propio y un recorrido del árbol de
+    /// componentes no los ve. Son items del control, con su propia clave:
+    ///
+    ///   <c>sap:wnd[0]/usr/ssubVIEW_SCREEN:SAPLN1LSTAMB:0007/cntlISH_VIEW_007/shellcont/shell#tbbtn=NV44</c>
+    ///
+    /// Comprobado contra el SAP real (2026-07-26): «Crear Triage Administrativo» es <c>NV44</c> en el
+    /// grid de NWP1, y se acciona con <c>PressToolbarButton(id)</c> — sin coordenadas, igual que las
+    /// filas del árbol. Es el paso que faltaba para que el workflow llegue a NV2000 por sí solo.
+    /// </summary>
+    public const string ToolbarMark = "#tbbtn=";
+
     /// <summary>Quita el prefijo de conexión/sesión: /app/con[0]/ses[0]/wnd[0]/... → wnd[0]/...</summary>
     private static readonly Regex AbsolutePrefix = new(
         @"^/?app/con\[\d+\]/ses\[\d+\]/", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -46,6 +59,20 @@ public static class SapSelector
     /// <summary>Selector de una FILA de árbol: el id del árbol más la clave del nodo.</summary>
     public static string ByNode(string treeId, string nodeKey) =>
         ById(treeId) + NodeMark + (nodeKey ?? "").Trim();
+
+    /// <summary>Selector de un BOTÓN DE TOOLBAR de un shell: el id del shell más la clave del botón.</summary>
+    public static string ByToolbarButton(string shellId, string buttonId) =>
+        ById(shellId) + ToolbarMark + (buttonId ?? "").Trim();
+
+    /// <summary>La clave del botón de toolbar que lleva el selector, o null si no apunta a uno.</summary>
+    public static string? ToolbarButtonOf(string selector)
+    {
+        if (!Owns(selector)) return null;
+        int cut = selector.IndexOf(ToolbarMark, StringComparison.Ordinal);
+        if (cut < 0) return null;
+        string b = selector.Substring(cut + ToolbarMark.Length).Trim();
+        return b.Length > 0 ? b : null;
+    }
 
     public static bool Owns(string selector) =>
         !string.IsNullOrWhiteSpace(selector) && selector.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase);
@@ -58,7 +85,10 @@ public static class SapSelector
     {
         if (!Owns(selector)) return "";
         string v = selector.Substring(Prefix.Length);
-        int cut = v.IndexOf(NodeMark, StringComparison.Ordinal);
+        // Cualquier fragmento, no solo el de nodo: si se olvida uno, FindById recibe el id CON el
+        // fragmento pegado, devuelve null, y el paso falla con «no se encontró el campo» — un mensaje
+        // que apunta al sitio equivocado.
+        int cut = v.IndexOf('#');
         return cut >= 0 ? v.Substring(0, cut) : v;
     }
 
