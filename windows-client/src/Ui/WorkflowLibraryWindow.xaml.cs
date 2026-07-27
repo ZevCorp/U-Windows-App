@@ -45,6 +45,12 @@ public partial class WorkflowLibraryWindow : Window
         _userId = userId;
 
         _graphClient = new GraphClient(_graphConfig);
+        // TERCERA superficie SAP del cliente, y la que usa el operador de verdad para probar: los
+        // workflows se lanzan desde esta ventana. Sin este cable, un fallo diagnosticable desde el botón
+        // de la carita era mudo desde aquí — que es donde se corre. Si aparece un cuarto sitio que
+        // construya SapGuiSurface para ejecutar, tiene que llevar este mismo cable.
+        _sap.Diagnostic += (_, msg) => LogBus.Log("sap", msg);
+
         _player = new WorkflowPlayer(_graphClient, _graphConfig, _uia, _sap)
         {
             Aligner = U.WindowsClient.Uia.AppAligner.EnsureAsync,

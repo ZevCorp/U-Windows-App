@@ -25,6 +25,10 @@ public sealed class WorkflowMcpRunner
     {
         _graphConfig = graphConfig;
         _voice = voice;
+        // Esta es la vía por la que el CEREBRO ejecuta workflows, y es la que corrió en el incidente del
+        // 2026-07-26 («MCP invoca workflow_id=…»). Su superficie SAP tiene que contar lo mismo que la de
+        // la biblioteca manual, o el mismo fallo es diagnosticable por un camino y mudo por el otro.
+        _sap.Diagnostic += (_, msg) => LogBus.Log("sap", msg);
     }
 
     public async Task<string> RunAsync(string workflowId, string context, CancellationToken ct)

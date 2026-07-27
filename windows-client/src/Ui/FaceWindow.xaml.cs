@@ -39,7 +39,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private WorkflowLibraryWindow? _workflowWindow;
     // "Enseñar" unificado: graba pasos UIA (WorkflowRecorder) + video (TeachSession) en paralelo.
     private WorkflowTeachSession? _teachSession;
-    private readonly UiaSurface _teachUiaSurface = new();
+    // Las dos superficies de la enseñanza, con su diagnóstico enchufado al registro. Sin esto sus
+    // eventos se emitían al vacío: `SapGuiSurface.Diagnostic` no tenía UN SOLO suscriptor en todo el
+    // cliente, así que la línea que dice si el enganche de eventos COM funcionó —«observando por
+    // eventos COM» vs «eventos COM no disponibles, cae a sondeo»— nunca llegó al log. Justo la que
+    // decide si la grabación puede capturar la entrada a una transacción.
+    private readonly UiaSurface _teachUiaSurface = new() { Log = s => LogBus.Log("teach-uia", s) };
     private readonly SapGuiSurface _teachSapSurface = new();
     private bool _teaching;
     private UiInspector? _inspector;
@@ -62,6 +67,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     public FaceWindow()
     {
         InitializeComponent();
+        // Aquí y no al crear la WorkflowTeachSession: esa se construye en CADA pulsación de «Enseñar»
+        // y acumularía una suscripción por intento, multiplicando cada línea en el registro.
+        _teachSapSurface.Diagnostic += (_, msg) => LogBus.Log("teach-sap", msg);
         Loaded += OnLoaded;
     }
 
@@ -727,7 +735,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // Log detallado dentro de la superficie (resolución + clic): el punto ciego donde no veíamos
             // por qué un paso decía ✓ sin pasar nada. Tag "uia" en 📜 Logs.
             var uia = new UiaSurface { Log = s => LogBus.Log("uia", s) };
-            var player = new WorkflowPlayer(_directGraph, _graphConfig, uia, new SapGuiSurface())
+            // La superficie SAP del player también habla: es la que dice qué rama tomó al accionar una
+            // fila («isFolder=… → modo …»), el dato que faltaba para saber por qué un paso decía ✓ sin
+            // que la pantalla cambiara. Antes se construía anónima y su Diagnostic no lo oía nadie.
+            var sap = new SapGuiSurface();
+            sap.Diagnostic += (_, msg) => LogBus.Log("sap", msg);
+            var player = new WorkflowPlayer(_directGraph, _graphConfig, uia, sap)
             {
                 // Banco de pruebas del motor de navegación nuevo (escalera de rutas: enfocar → acceso
                 // directo → shell). Los otros dos sitios (MCP/chat, biblioteca) siguen en AppAligner
@@ -775,9 +788,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // Fuera del try/finally: StartGoal crea su PROPIO _cts (adentro lo pisaría el finally).
         if (bridgeGoal != null)
         {
-            LogBus.Log("workflow-ui", "puente consciente: el workflow se detuvo → computer-use retoma");
+            // El workflow se detuvo ESTANDO en su aplicación, así que el origen de ahora es dónde vive
+            // la tarea. Se lo pasamos al consciente como compuerta: puede navegar todo lo que quiera
+            // DENTRO de esa app, pero no teclear en otra. Sin esto, «retoma desde la pantalla actual»
+            // se ejecutó sobre la ventana que tuviera el foco — el incidente del 2026-07-26.
+            string origin = _locator?.Current?.Origin ?? "";
+            LogBus.Log("workflow-ui", "puente consciente: el workflow se detuvo → computer-use retoma"
+                + (origin.Length > 0 ? $" (atado a «{origin}»)" : " · SIN origen conocido: va sin compuerta"));
             SetStatus("El workflow se detuvo — el modo consciente retoma…");
-            _ = StartGoal(bridgeGoal);
+            _ = StartGoal(bridgeGoal, origin);
         }
     }
 
@@ -835,7 +854,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
     }
 
-    private async Task StartGoal(string goal)
+    /// <summary>
+    /// Arranca el modo consciente. <paramref name="requireOrigin"/> ata el objetivo a una aplicación:
+    /// vacío para lo que pide el usuario a mano (el destino puede ser cualquiera), y con valor cuando
+    /// el objetivo viene del PUENTE — ahí sí se sabe dónde vive la tarea, y salirse de ahí es el bug.
+    /// </summary>
+    private async Task StartGoal(string goal, string requireOrigin = "")
     {
         _cts = new CancellationTokenSource();
         StopBtn.Visibility = Visibility.Visible;
@@ -843,7 +867,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         SetStatus("Pensando…");
         try
         {
-            string summary = await _loop.RunAsync(goal, _cts.Token);
+            string summary = await _loop.RunAsync(goal, _cts.Token, requireOrigin);
             SetStatus(summary);
         }
         catch (OperationCanceledException) { SetStatus("Detenido"); }
