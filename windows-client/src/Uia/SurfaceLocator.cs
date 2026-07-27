@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Automation;
 using System.Windows.Threading;
+using U.Graph.Surfaces;
 
 namespace U.WindowsClient.Uia;
 
@@ -10,6 +11,9 @@ namespace U.WindowsClient.Uia;
 /// legible de la superficie actual, el mismo concepto que la extensión de Chrome usa con la URL
 /// (origin + pathname con slashes) para decidir qué workflows aplican.
 ///
+///   - SAP GUI:     <c>sapgui://SID/TCODE/PROGRAMA/DYNPRO</c> — lo produce <see cref="SapGuiSurface"/>,
+///                  no este locator: es la MISMA identidad con la que se sellan los pasos al grabar, y
+///                  tener dos formas para la misma pantalla rompía la reproducción (ver <c>_sap</c>)
 ///   - App nativa:  <c>uia://proceso.exe/titulo-de-ventana-normalizado</c>
 ///   - Navegador:   <c>web://dominio/ruta/subruta</c> (la URL real leída de la barra de direcciones
 ///                  por UIA, sin query ni fragmento: esos son estado volátil, no ubicación)
@@ -37,6 +41,20 @@ public sealed class SurfaceLocator : IDisposable
     private IntPtr _lastHwnd;
     private string _lastTitle = "";
     private bool _computing;
+
+    /// <summary>
+    /// La superficie SAP, para que la ubicación de SAP la produzca QUIEN SABE de SAP.
+    ///
+    /// Antes este locator sintetizaba <c>uia://saplogon.exe/&lt;título&gt;</c> para SAP, mientras la grabación
+    /// y el reproductor usaban <c>SapGuiSurface.Identity()</c> → <c>sapgui://QAS/NWP1/SAPLN_WP_FRAMEWORK/0100</c>.
+    /// Dos nombres para la misma pantalla, y la compuerta del reproductor compara STRINGS: un paso sellado
+    /// con la forma <c>uia://</c> no casa nunca con una superficie <c>sapgui://</c> y se queda esperando para
+    /// siempre.
+    ///
+    /// La forma de SAP es además la correcta: el título depende del idioma, del cliente y del texto de la
+    /// ventana, y no distingue dos dynpros con el mismo título — el problema que ya atacó el commit 2d024c1.
+    /// </summary>
+    private readonly SapGuiSurface _sap = new();
 
     public SurfaceLocation? Current { get; private set; }
     public bool Active { get; private set; }
@@ -78,7 +96,11 @@ public sealed class SurfaceLocator : IDisposable
         GetWindowText(hwnd, sb, sb.Capacity);
         string title = sb.ToString();
 
-        if (hwnd == _lastHwnd && title == _lastTitle) return;
+        // La compuerta barata (mismo hwnd + mismo título ⇒ nada que hacer) NO VALE PARA SAP: dentro de una
+        // transacción el dynpro cambia sin que el título se mueva, así que saltarse el tick dejaba la
+        // ubicación congelada justo donde más importa. Con SAP delante se recomputa siempre y es la propia
+        // identidad de SAP la que decide si hubo cambio (la comparación por Id de más abajo).
+        if (!IsSap(proc) && hwnd == _lastHwnd && title == _lastTitle) return;
         if (_computing) return;
         _lastHwnd = hwnd;
         _lastTitle = title;
@@ -104,8 +126,30 @@ public sealed class SurfaceLocator : IDisposable
         });
     }
 
-    private static SurfaceLocation? Compute(IntPtr hwnd, string proc, string title)
+    /// <summary>
+    /// ¿El proceso en primer plano es SAP GUI? Mismo criterio que el resto del cliente
+    /// (<c>UiInspector.IsSapForeground</c>, <c>SurfaceDetector</c>): basta el prefijo «sap», que cubre
+    /// <c>saplogon</c> y las variantes históricas <c>sapgui</c>/<c>saplgpad</c> sin listar versiones.
+    /// </summary>
+    private static bool IsSap(string proc) =>
+        proc.StartsWith("sap", StringComparison.OrdinalIgnoreCase);
+
+    private SurfaceLocation? Compute(IntPtr hwnd, string proc, string title)
     {
+        // SAP responde por sí mismo: sistema + transacción + programa/dynpro, que es la pantalla DE VERDAD
+        // y el mismo string que sella la grabación. Si el scripting no está disponible se cae al esquema
+        // uia:// de abajo — degradado, pero no inventamos una identidad SAP que nadie más reconocería.
+        if (IsSap(proc))
+        {
+            try
+            {
+                var id = _sap.Identity();
+                if (id.Origin != SurfaceIdentity.Unknown.Origin && id.Url.Length > 0)
+                    return new SurfaceLocation(id.Url, id.Origin, id.Pathname);
+            }
+            catch { }
+        }
+
         if (Browsers.Contains(proc))
         {
             var url = TryReadBrowserUrl(hwnd);
