@@ -104,6 +104,51 @@ Salen de la geometría que da SAP; el detalle está en
 - **Si no hay dato, no se dibuja.** Una caja que miente sobre qué fila señala es peor que ninguna:
   invita a confiar en ella.
 
+## Las tres herramientas de diagnóstico del panel
+
+Se añadieron el 2026-07-26 y resuelven cosas distintas. Vale la pena saber cuál usar:
+
+| | Cuándo | Qué cuesta |
+|---|---|---|
+| **🧪 Ensayo en seco** | Antes de ejecutar, y siempre antes de un demo | Nada: no toca la pantalla |
+| **👣 Paso a paso** | Cuando estás construyendo o depurando un flujo | **Ejecuta de verdad**: deja datos en QAS |
+| **Huella** | Sola, en cada corrida | Un recorrido por tick ocioso al grabar |
+
+El ensayo **no navega**: solo comprueba en vivo lo que cae en la pantalla que tengas delante. Un ensayo
+limpio no garantiza una ejecución limpia — garantiza que los fallos detectables sin ejecutar no están.
+Está dicho en el propio informe para que nadie lo lea como semáforo verde.
+
+El paso a paso pone al lado **la captura de cuando enseñaste ese paso** (`StepShotCamera`, que llevaba
+meses grabando sin que nadie las mirara). Ese contraste es lo que lo hace un depurador y no un botón de
+«siguiente».
+
+## El consciente no teclea fuera de su app
+
+`AgentLoop` actúa **a coordenadas sobre la ventana en primer plano**. El 2026-07-26 un workflow se
+detuvo, el puente le entregó el control, y para cuando tecleó el código de transacción el foco ya no era
+SAP: el texto acabó en otra aplicación.
+
+Ahora las acciones que van al foreground (`tap`, `type`, `key`, `scroll`, `swipe`) se rechazan si el
+origen no coincide con el de la tarea. No aborta: devuelve el motivo como resultado para que el cerebro
+lo lea al turno siguiente. `mcp` y `wait` pasan — no tocan la pantalla. El modo libre de la carita
+sigue sin compuerta, que es lo que se pidió.
+
+Y **registra cada acción con la superficie sobre la que cayó**, leída ANTES de actuar. Antes escribía
+cero líneas: el único actor que mueve el ratón era el único sin rastro, y por eso hubo treinta segundos
+en blanco entre el relevo y el desastre.
+
+## La compuerta mira el PRIMER PLANO, no el escritorio
+
+`UiaSurface.Resolve()` busca en la ventana en foco y, si no encuentra, **barre todas las ventanas de
+nivel superior** — avisando de que el hallazgo «puede estar tapado». `IsStepReady` usaba ese mismo
+camino, y como los ids de SAP bajo UIA son genéricos (`aid=1001`, `aid=200`, `aid=100` salen en cada
+pantalla), el barrido encontraba uno siempre: la compuerta daba luz verde al instante y la espera no
+esperaba nada.
+
+Ese era el «clica tan rápido que el siguiente clic cae donde no existe». No era velocidad: era
+preguntarle a la ventana equivocada. La compuerta ahora solo mira el foreground; el barrido sigue
+disponible para **ejecutar**, que es donde nació como respaldo.
+
 ## Código inerte conocido
 
 La supresión de sub-elementos SAP contenidos en un árbol mapeado mide `0 sub-elementos` en la pantalla

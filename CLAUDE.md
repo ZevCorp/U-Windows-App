@@ -60,45 +60,82 @@ correcto con desplazamiento constante" de "filas equivocadas" de "otra caja pint
 Líneas útiles: `shell subType=`, `filas del árbol ·`, `fila seleccionada`, `CONTRASTE geometría`,
 `✋ no se llegó a`, `⏱ TIEMPOS`.
 
-## Estado actual (2026-07-26)
+## Estado actual (2026-07-26, noche)
 
-Rama de trabajo: **`test/locator-robusto`** — commit `24533bd`, pusheada a `origin`.
+`main` está en **`2d0a0a6`**, con todo mergeado. `test/locator-robusto` apunta al mismo commit.
 
-`main` está en `db8e73a` y le faltan **16 commits**, incluido `b669e62` (accionar filas de árbol por
-clave). **Nada del trabajo del árbol está en main.**
+### La cadena completa funciona, verificada contra el SAP real
 
-Ojo con la historia de la rama: ocho commits con mensaje `@`, y dos son *reverts* de intentos de
-optimizar el locator por eventos de Windows. Squashearlos limpia el historial pero borra el rastro de
-por qué se revirtieron, que ya resultó útil.
+Un workflow grabado arranca desde SAP Easy Access y llega solo hasta el formulario de paciente:
 
-### Funciona y está verificado contra el SAP real
+```
+paso 1-2  okcd «nwp1» + Enter        → NWP1                    (cambió)
+paso 3    doubleClickItem(Column1)   → …/ssubVIEW_SCREEN…      (cambió)
+paso 4    PressToolbarButton(NV44)   → NV2000/…/subPATEINST…   (cambió)
+paso 6    input RNPA1-PASSNR                                    ✓
+↩ resultado: 5/6 ejecutado(s) · 1 omitido(s)
+```
 
-- El árbol se enumera y se marca como mapeado (525 y 20 filas en las dos vistas).
-- **La fila clicada se identifica por clave** vía `selectedItemNode` → el asistente la reproduce con
-  `doubleClickNode(key)`, sin coordenadas ni OCR.
-- **Cajas por fila exactas**, con la geometría que da SAP (`GetItemTop`/`GetItemHeight` con columna).
-- La compuerta del reproductor **detiene** un paso cuya pantalla no coincide, en vez de clicar a ciegas
-  y reportar éxito.
+Lo que hay detrás de cada eslabón está en [`windows-graph/CLAUDE.md`](windows-graph/CLAUDE.md).
 
-Todo esto probado **solo en `SESSION_MANAGER`** (SAP Easy Access). Ver pendientes.
+Herramientas nuevas para diagnosticar, todas en el panel de la carita:
+
+- **🧪 Ensayo en seco** — recorre el plan sin tocar la pantalla. Lo que más pesa: marca **cada cambio de
+  pantalla** y, si el paso anterior es un `input` (que no navega), lo declara bloqueante — falta el paso
+  que navega. Detecta en dos segundos el fallo que costó un día.
+- **👣 Paso a paso** — se detiene ANTES de cada paso, con el veredicto y **la captura de cuando lo
+  enseñaste** al lado. Esas capturas llevaban meses guardándose sin que las usara nadie.
+- **Huella estructural** por paso: hash de los ids de los elementos interactivos + el tamaño de cada
+  shell. Detecta que sigues en la misma transacción pero la pantalla no está en el mismo estado. Hoy
+  **avisa, no detiene** — hasta que tenga kilómetros encima.
 
 ### Pendientes reales
 
-1. **La grabación no captura la entrada a la transacción.** Un workflow grabado dentro de NWP1 empieza
-   asumiendo que ya estás ahí; al reproducir desde Easy Access el paso 1 nunca alcanza su pantalla y se
-   detiene (con 9,8 s perdidos esperando algo imposible). **Sin esto ningún workflow arranca solo** —
-   es el pendiente más importante.
-2. **El techo del reproductor ejecuta igual.** A los 4 s sin confirmar da `ArrivedUnconfirmed` y actúa.
-   Es una decisión de diseño ("resiliente") contraria a lo que pidió el operador: debería **abortar**,
-   con techo más generoso (~15 s) porque las pantallas clínicas son lentas.
-3. **La carrera del `Busy`.** `session.Busy` solo es `true` *durante* el round-trip. Justo después de
+1. **La carrera del `Busy`.** `session.Busy` solo es `true` *durante* el round-trip. Justo después de
    nuestro clic SAP aún no empezó, así que `Busy=false` y los elementos de la pantalla vieja resuelven →
    se puede clicar sobre la pantalla anterior. Fix: exigir la condición en **3 sondeos consecutivos**.
-4. `topNode` no resuelve en algunas pantallas (queda en el log). Sin él no hay cajas por fila.
-5. `FindByPosition` (hit-test nativo) devuelve null en estos árboles: todos los clics caen a
-   `vía bbox (fallback)`. No afecta al accionado por clave, pero es deuda.
-6. **Código inerte:** la supresión de sub-elementos dentro de árboles mide `0 sub-elementos`. Nació de
+2. **El puente consciente improvisa.** Cuando el workflow se detiene, computer-use recibe «retoma y
+   termina la tarea» y elige por su cuenta — una vez pulsó «Buscar pacientes» en vez de «Crear Triage
+   Administrativo». Está atado al origen desde hoy, así que no puede teclear fuera de SAP, pero dentro
+   inventa. Lo que le falta está escrito abajo, en *El agente que se rescata solo*.
+3. **Se queda en bucle** cuando la compuerta lo frena y no consigue traer SAP al frente: 14 turnos
+   rebotando y gastando `wait`.
+4. `topNode` no resuelve en algunas pantallas. Sin él no hay cajas por fila en el inspector.
+5. **Código inerte:** la supresión de sub-elementos dentro de árboles mide `0 sub-elementos`. Nació de
    una hipótesis falsa; borrar o justificar.
+6. La **huella es ciega al contenido** de un shell salvo por su tamaño: dos pantallas con el mismo
+   número de filas dan la misma huella.
+
+### El agente que se rescata solo (diseño acordado, sin implementar)
+
+Cuando no encuentra la ruta, hoy improvisa. Le falta, en orden de impacto:
+
+1. **Un objetivo comprobable por máquina.** El workflow ya sabe a dónde tenía que llegar: es el
+   `observedSurface` del paso que falló. Decírselo convierte la improvisación en una búsqueda acotada
+   con criterio de éxito verificable — y «terminé» deja de ser una opinión del modelo.
+2. **El inventario de lo accionable sin coordenadas**: los botones de toolbar con su clave, las filas
+   con la suya, los campos con su id. Que diga «pulsa `NV44`» en vez de «clic en (683, 242)».
+3. **Validar el aterrizaje con la misma compuerta** que usa el player. Hoy hay dos jueces y uno es un
+   modelo optimista.
+4. **Que lo aprendido se quede**: insertar el paso descubierto en el workflow, como ya hace
+   `PrependAlignmentStepAsync` con la alineación. Eso cierra la premisa del producto — el hueco de
+   `NV44` lo tapó un humano leyendo COM; con esto lo tapa el sistema la primera vez.
+
+## El puente con el portal clínico (repo `Pagina-web-clientes-final`)
+
+Mientras el médico dicta, el portal produce **conceptos canónicos** (`vital.talla`, `vital.peso`,
+`vital.presion.sistolica`…) y el agente los va escribiendo en los campos de SAP al llegar a la pantalla.
+
+Repartición, decidida a propósito: **el portal no sabe de SAP y el agente no sabe de medicina.** Los
+conceptos son estables; las pantallas cambian. El acoplamiento vive en el cliente, que es quien ve la
+pantalla y aprende el mapeo concepto↔selector una vez por pantalla.
+
+- El portal expone `GET /api/agent/values?code=XXXXXXXX` → `{ rev, values, evidence }`, con ETag para
+  que el sondeo cada 1,5 s sea barato, y `409 + stop:true` cuando la consulta se firma.
+- **Emparejamiento por código**, no por credencial: el agente no puede llevar el JWT del médico. El
+  código dura 8 h o hasta que se firme la consulta, lo primero que pase.
+- Lado Windows: **sin implementar todavía**. Falta pegar el código, sondear, y colocar sin sobrescribir
+  lo que ya tenga valor.
 
 ## Aprendizajes de método
 
@@ -137,3 +174,31 @@ Estos costaron caro. Aplicarlos ahorra rondas enteras.
 
 9. **Antes de mergear, contar en cuántas pantallas se probó.** Una sola pantalla verificada es una
    apuesta a que las demás se comportan igual — y el run de NWP1 demostró que no.
+
+10. **Lo peor no es que falle: es que parezca que funcionó.** El salto-adelante se comió 19 pasos y
+    reportó «29 de 30»; otra corrida devolvió `ok=True pasos=2/2` de un plan de 4. Los dos venían del
+    mismo vicio: el denominador se calculaba sobre los pasos *con veredicto*, y los saltados no dejaban
+    veredicto, así que el total encogía con ellos. **Un paso no ejecutado tiene que dejar rastro**
+    (`Omitted`), o el recuento describe con exactitud una corrida que no hizo el trabajo.
+
+11. **Antes de arreglar la clase de error, cuenta cuántos sitios la tienen.** Cableé el diagnóstico de
+    la superficie SAP en dos de los **tres** sitios que la construyen. El que faltaba era justo el que
+    usa el operador, así que el fallo siguió mudo una corrida más — mientras yo citaba el aprendizaje
+    nº7 en el commit.
+
+12. **Un mensaje que no distingue sus causas manda la investigación al lugar equivocado — otra vez.**
+    «sin clic reciente que SAP reconozca» cubría tres situaciones: no hay clic anotado, el clic es
+    viejo, o el hit-test no encuentra nada. Es el aprendizaje nº2, incumplido al escribirlo.
+
+13. **Pregúntale a la API antes de creerle al código.** Una sonda de solo lectura con enlace tardío
+    puro contestó en veinte minutos tres preguntas que llevaban semanas resueltas «por deducción»: que
+    el enganche COM sí calza (con sus DISPIDs), que **no existe getter de foco**, y que los botones de
+    una barra de ALV son items con clave. Es barato y sustituye rondas enteras de teoría.
+
+14. **Un dato que viene de la red puede llegar vacío en vez de ausente.** `??` no cae al respaldo con
+    cadena vacía. Ese detalle convirtió cada clic de árbol en un `SetFocus()` que reportaba éxito.
+
+15. **Antes de escribir en un repo que no conoces, lee sus reglas.** El portal clínico avisa en su
+    `AGENTS.md` de que su Next.js no es el que uno cree, y no usa service-role en ninguna parte: eso es
+    una postura de seguridad, no un olvido. Ir con `security definer`, que es lo que ya usan, en vez de
+    meter una llave nueva.

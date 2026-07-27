@@ -113,11 +113,81 @@ Es la señal **nativa** de carga, mejor que cualquier heurística de conteo. Dos
   instante da "listo" y se actúa sobre la pantalla vieja. Hay que exigir estabilidad (N sondeos
   consecutivos), no un instante. **Pendiente.**
 
-## `FindByPosition` no resuelve filas
+## `FindByPosition` no resuelve NADA en este SAP
 
-El hit-test nativo devuelve `null` en estos árboles: el inspector cae a `vía bbox (fallback)` en todos
-los clics. Por eso la identidad de una fila se obtiene de la **selección**, no del píxel. Y por eso el
-"barrido por bandas" de `feature/sap-tree-mapping` tampoco delimitaría filas.
+El hit-test nativo devuelve `null` en los árboles **y también en los botones** (comprobado el
+2026-07-26 al intentar identificar el «Buscar» del dynpro). Por eso la identidad de una fila se obtiene
+de la **selección**, no del píxel, y por eso el "barrido por bandas" de `feature/sap-tree-mapping`
+tampoco delimitaría filas.
+
+Respaldo que **sí** funciona: hit-test propio con la geometría por componente
+(`ScreenLeft/ScreenTop/Width/Height` de `ReadVisibleElements`, la misma que el inspector usa para
+dibujar y se ve encajar). Se toma el componente **más pequeño** que contiene el punto — los
+contenedores también lo contienen y devolverían el panel entero.
+
+## No existe getter de FOCO. No lo busques.
+
+Comprobado por introspección `ITypeInfo` contra el SAP real, no por prueba y error:
+
+- **`GuiSession`**: `FindById, SendCommand, StartTransaction, EndTransaction, GetVKeyDescription,
+  SendCommandAsync, SendMenu, RunScriptControl, FindByPosition, GetIconResourceName, ClearErrorList,
+  LockSessionUI, UnlockSessionUI, EnableJawsEvents, GetObjectTree`
+- **`GuiFrameWindow`**: `FindById, FindByName(Ex), FindAllByName(Ex), SetFocus, Visualize,
+  IsVKeyAllowed, SendVKey, MoveWindow, Iconify, Restore, Maximize, HardCopy, Close, ShowMessageBox,
+  TabForward/Backward, JumpForward/Backward, DumpState, ResizeWorkingPane(Ex)`
+
+`SetFocus` para **escribir**, ninguno para **leer**. De ahí que un botón que no cambia ningún valor de
+campo sea indistinguible de «no pasó nada»: SAP no dice qué control disparó el round-trip.
+
+Donde **sí** hay foco es dentro de un shell: `GuiGridView.GetToolbarFocusButton`.
+
+> Sonda reutilizable: un binario mínimo con enlace tardío puro resuelve estas preguntas en minutos.
+> PowerShell **no sirve** para esto — intenta cargar la typelib y muere con `TYPE_E_CANTLOADLIBRARY`.
+
+## Los botones de una barra de ALV no son componentes
+
+`«Crear Triage Administrativo»` **no aparece** en un recorrido de `Children`, no tiene `Id` propio y el
+diff de campos no lo ve. Es un **item del control**:
+
+```
+shell subType=GridView  id=…/usr/ssubVIEW_SCREEN:SAPLN1LSTAMB:0007/cntlISH_VIEW_007/shellcont/shell
+   ToolbarButtonCount=15
+    · «Buscar pacientes»             PSRC
+    · «Crear Triage Administrativo»  NV44
+```
+
+Se acciona con `PressToolbarButton(clave)` —sin coordenadas, como las filas— y se graba leyendo
+`GetToolbarFocusButton`, **que devuelve el ÍNDICE, no la clave**. Hay que convertirlo al grabar: el
+índice depende de qué botones muestre la barra y de la autorización del usuario, la clave no.
+
+Selector: `sap:<idDelShell>#tbbtn=NV44`, hermano de `#node=`.
+
+## La identidad de pantalla necesita el subdynpro
+
+Dentro del Puesto de trabajo (NWP1), abrir una fila del árbol cambia el panel derecho pero **no** la
+transacción, ni el programa, ni el dynpro. `Identity()` devolvía lo mismo para toda la transacción.
+
+Consecuencia medida: los 20 pasos del formulario de paciente se sellaron igual que los clics del árbol,
+el salto-adelante del player los confundió entre sí y **se saltó 19 pasos** —el llenado entero— para ir
+a «Buscar», reportando 29 de 30 hechos.
+
+El pathname lleva ahora el subdynpro del área de usuario. **Y son dos prefijos**: `sub` *y* `ssub`
+(`usr/ssubVIEW_SCREEN:SAPLN1LSTAMB:0007`). Con solo `sub` se escapaba justo la pantalla que importaba.
+
+## Vacío no es ausente
+
+`step.NodeKey ?? SapSelector.NodeKeyOf(selector)` parecía correcto. **Graph serializa el campo ausente
+como cadena vacía**, no como null, así que `??` nunca caía al respaldo: la clave quedaba en `""`, el
+paso dejaba de reconocerse como fila de árbol y se iba por `Apply()` → `SetFocus()` → `return true`.
+Enfocaba el árbol, no abría nada, y **reportaba éxito**.
+
+Tres rondas de diagnóstico costó. Cualquier dato que venga de Graph merece esa lectura.
+
+## Aceptado ≠ ejecutado
+
+`TryInvoke` devuelve true cuando la llamada COM no lanzó. En un árbol de columnas `doubleClickNode`
+**existe, no lanza y no hace nada** — y el respaldo por item solo corría si el primero *lanzaba*, así
+que no se probaba nunca. Orden correcto: si el árbol expone columnas, `doubleClickItem` primero.
 
 ## Etiquetas de shells: no identifican nada
 
@@ -127,8 +197,38 @@ resuelva "por etiqueta" dará mismatch en todos ellos; es un criterio que la eje
 
 ## Eventos COM
 
-`SapComEvents` engancha `Change`/`StartRequest`/`EndRequest`/`ErrorMessage` de `GuiSession` sin la type
-library, resolviendo IID y DISPID por introspección (`IProvideClassInfo2`, luego `ITypeInfo`). Sigue
-marcado **no verificado contra un SAP real**; cualquier fallo devuelve `false` con motivo y se cae a
-sondeo. `EndRequest` es la señal de "re-resuelve el árbol, los ids viejos están muertos" y es la vía
-natural para invalidar cachés en vez de un timer.
+`SapComEvents` engancha los eventos de `GuiSession` sin la type library, resolviendo IID y DISPID por
+introspección (`IProvideClassInfo2`, luego `ITypeInfo`).
+
+**VERIFICADO contra el SAP real (2026-07-26)** — ya no es una apuesta:
+
+```
+enganchado Change       (dispid=1280, args=3)
+enganchado StartRequest (dispid=514,  args=1)
+enganchado EndRequest   (dispid=515,  args=1)
+```
+
+`ErrorMessage` **no** aparece en esta versión de SAP GUI: ni enganchado ni fallido, así que la
+enumeración no encuentra un método con ese nombre. **No observamos los errores de SAP.**
+
+`EndRequest` es la señal de "re-resuelve el árbol, los ids viejos están muertos".
+
+### `StartRequest` es el instante más valioso de la API
+
+Es el único momento en que la pantalla de ORIGEN sigue viva y el campo de comandos aún conserva lo
+tecleado (SAP lo vacía al ejecutar). Todo lo que haya que leer "antes del viaje" se lee ahí: el código
+de transacción, el botón de toolbar con foco, y el hit-test del último clic.
+
+Con **una advertencia**: cae en el borde del round-trip. Con `Busy=true` cualquier llamada al scripting
+se bloquea sin retorno y cuelga el hilo de bombeo para siempre. Preguntar `Busy` primero, y si ya
+arrancó, publicar solo desde la sombra que no toca COM.
+
+## El snapshot de campos pertenece a UNA pantalla
+
+Comparar el snapshot estando en otra pantalla no dice «qué cambió»: dice «en qué se diferencian dos
+pantallas distintas», y eso son *todos* los campos de la nueva. Así nacían ~20 pasos `input` con valor
+vacío por grabación, que al reproducir escriben `""` sobre campos que podían venir precargados.
+
+La línea base se rehace al detectar que la pantalla cambió, **sin publicar nada**. No se pierde nada
+real: después de navegar, lo que el operador tecleó en la pantalla vieja ya no se puede leer — eso se
+publica en `StartRequest`, antes del viaje.
