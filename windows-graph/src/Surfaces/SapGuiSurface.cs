@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Threading;
 
@@ -72,6 +73,13 @@ public sealed class SapGuiSurface : IUiSurface
     private DispatcherTimer? _treeTimer;
     private Dictionary<string, string?> _lastSnapshot = new();
 
+    /// <summary>
+    /// La pantalla a la que pertenece <see cref="_lastSnapshot"/>. Un snapshot sin pantalla asociada es
+    /// una trampa: se compara contra él estando en otra pantalla y la diferencia —que es «son dos
+    /// pantallas distintas»— se publica como si el operador hubiera editado veinte campos.
+    /// </summary>
+    private string _snapshotSurface = "";
+
     // ── Instantánea PREVIA a la acción ──────────────────────────────────────────
     //
     // El nodo de un paso es DÓNDE ESTABA EL USUARIO al hacerlo, y leerlo después ya no lo dice: si la
@@ -88,6 +96,32 @@ public sealed class SapGuiSurface : IUiSurface
     /// <summary>Lo último tecleado en el campo de comandos mientras SAP estaba ocioso. Se consume en
     /// StartRequest: para entonces SAP puede estar ya ocupado y no se le puede preguntar nada.</summary>
     private string _pendingOkCode = "";
+
+    // ── Último clic del operador, en coordenadas de PANTALLA ────────────────────────────
+    //
+    // Por qué hace falta un hook de ratón en una superficie que presume de no usar coordenadas: SAP no
+    // dice qué control disparó el round-trip —verificado por introspección ITypeInfo: GuiSession y
+    // GuiFrameWindow no tienen ningún getter de foco—, así que un botón que no cambia ningún valor de
+    // campo es indistinguible de «no pasó nada». Los de barra de ALV se cazan por GetToolbarFocusButton;
+    // los GuiButton sueltos —Guardar, Continuar, Buscar— no tenían forma de detectarse.
+    //
+    // La coordenada NO se graba: se usa UNA VEZ, en StartRequest, para preguntarle a SAP por su propio
+    // hit-test (FindByPosition) quién está ahí. Lo que se guarda en el paso es el ID del control. El
+    // píxel es el soplo; el selector sigue siendo estable.
+    private int _clickX, _clickY;
+    private DateTime _clickAt = DateTime.MinValue;
+    private IntPtr _mouseHook = IntPtr.Zero;
+    private LowLevelMouseProc? _mouseProc;   // campo, no local: si lo recoge el GC, el hook muere
+
+    private delegate IntPtr LowLevelMouseProc(int code, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc proc, IntPtr hMod, uint threadId);
+    [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+    [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hhk, int code, IntPtr wParam, IntPtr lParam);
+    private const int WH_MOUSE_LL = 14, WM_LBUTTONDOWN = 0x0201;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSLLHOOKSTRUCT { public int X; public int Y; public uint MouseData, Flags, Time; public IntPtr Extra; }
 
     // Readiness cacheado por superficie: recorrer la ventana entera en cada tick sería pagar un Walk
     // completo a 2,5 Hz durante toda la grabación. Solo se recuenta al cambiar de pantalla.
@@ -359,7 +393,51 @@ public sealed class SapGuiSurface : IUiSurface
         {
             try { string id = Str(n.Id); if (id.Length > 0) ids.Add(id); } catch { }
         }
+
+        // LOS SHELLS TAMBIÉN CUENTAN. Sin esto la huella era ciega justo donde vive el contenido: dos
+        // pantallas del Puesto de trabajo dieron la MISMA huella (15) porque el allowlist solo mira
+        // botones y campos, y lo que cambiaba estaba dentro de un ALV. Se añade el shell con su TAMAÑO
+        // —filas del árbol, filas del grid, botones de la barra—, que es un número, no un dato: un
+        // árbol con 525 filas sigue teniendo 525 mañana, pero un panel vacío frente a uno cargado no.
+        foreach (dynamic shell in AllShells(session))
+        {
+            string id;
+            try { id = Str(shell.Id); } catch { continue; }
+            if (id.Length == 0) continue;
+
+            var size = new List<string>();
+            try { size.Add($"nodos={(int)shell.GetAllNodeKeys().Count}"); } catch { }
+            try { size.Add($"filas={(int)shell.RowCount}"); } catch { }
+            try { size.Add($"btns={(int)shell.ToolbarButtonCount}"); } catch { }
+            ids.Add(size.Count > 0 ? $"{id}#{string.Join(",", size)}" : id);
+        }
+
         return Fingerprints.Of(ids);
+    }
+
+    /// <summary>Todos los shells de la ventana activa, sean del tipo que sean. Para la huella.</summary>
+    private static IEnumerable<dynamic> AllShells(dynamic session)
+    {
+        var acc = new List<dynamic>();
+        dynamic? root = null;
+        try { root = session.ActiveWindow; } catch { }
+        if (root == null) { try { root = session.FindById("wnd[0]", false); } catch { } }
+        if (root == null) return acc;
+
+        void Walk(dynamic node, int depth)
+        {
+            if (depth > 14 || acc.Count > 24) return;
+            try { if (Str(node.Type).Contains("Shell", StringComparison.OrdinalIgnoreCase)) acc.Add(node); } catch { }
+
+            dynamic children; int n;
+            try { children = node.Children; n = (int)children.Count; } catch { return; }
+            for (int i = 0; i < n && i < 200; i++)
+            {
+                try { Walk(children.ElementAt(i), depth + 1); } catch { }
+            }
+        }
+        try { Walk(root, 0); } catch { }
+        return acc;
     }
 
     /// <summary>
@@ -1624,6 +1702,7 @@ public sealed class SapGuiSurface : IUiSurface
             // del árbol sí tomaba la suya (más abajo); este no. Además _lastSnapshot no se limpia al
             // parar, así que sin esta asignación una segunda grabación heredaba la de la primera.
             _lastSnapshot = SafeReadFields().ToDictionary(f => f.Selector, f => f.CurrentValue);
+            _snapshotSurface = SafeNodeUrl();   // el snapshot nace atado a SU pantalla
 
             _readyCacheUrl = ""; _readyCacheCount = -1;
             RefreshPreflight(session);
@@ -1672,6 +1751,14 @@ public sealed class SapGuiSurface : IUiSurface
                 PublishTreeSelections();
             };
             _treeTimer.Start();
+
+            // El hook de ratón vive en ESTE hilo, que es el único con bomba de mensajes propia
+            // (Dispatcher.Run más abajo). WH_MOUSE_LL exige una, o los eventos no llegan nunca.
+            _mouseProc = MouseHookCallback;
+            _mouseHook = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, IntPtr.Zero, 0);
+            Diagnostic?.Invoke(this, _mouseHook != IntPtr.Zero
+                ? "hook de ratón puesto: los botones del dynpro se identificarán por FindByPosition"
+                : "NO se pudo poner el hook de ratón: los botones que no cambian ningún campo no se grabarán");
 
             _ready.Set();
             Dispatcher.Run(); // bombea hasta que StopObserving llame InvokeShutdown()
@@ -1768,9 +1855,7 @@ public sealed class SapGuiSurface : IUiSurface
 
         if (buttonId.Length == 0 || shellId.Length == 0)
         {
-            Diagnostic?.Invoke(this, "round-trip sin código de transacción y sin botón de toolbar con foco. "
-                + "Si fue un botón normal del dynpro, ese paso NO se graba: SAP no dice qué control disparó "
-                + "el viaje (verificado: GuiSession/GuiFrameWindow no tienen getter de foco).");
+            PublishClickedButton(session);
             return;
         }
 
@@ -1796,6 +1881,98 @@ public sealed class SapGuiSurface : IUiSurface
 
         Diagnostic?.Invoke(this,
             $"observado: botón de toolbar «{label}» ({buttonId}) en {shellId} desde '{node}'");
+    }
+
+    /// <summary>
+    /// Último recurso para saber qué disparó el viaje: preguntarle a SAP quién hay bajo el último clic.
+    ///
+    /// Solo se graba si resulta ser un BOTÓN. Si el clic cayó en un campo de texto, el viaje lo disparó
+    /// un Enter sobre ese campo y no hay clic que reproducir; grabarlo inventaría un paso que el
+    /// operador no dio. El valor se guarda como el texto del botón, que es lo que Apply() espera.
+    /// </summary>
+    private void PublishClickedButton(dynamic session)
+    {
+        string id = ClickedComponentId();
+        if (id.Length == 0)
+        {
+            Diagnostic?.Invoke(this, "round-trip sin código de transacción, sin botón de toolbar con foco y "
+                + "sin clic reciente que SAP reconozca: este paso NO se graba.");
+            return;
+        }
+
+        dynamic? comp = null;
+        try { comp = session.FindById(SapSelector.Normalize(id), false); } catch { }
+        if (comp == null) { Diagnostic?.Invoke(this, $"el clic apuntaba a {id}, pero ya no resuelve"); return; }
+
+        string type = "", label = "", text = "";
+        try { type = Str(comp.Type); label = LabelOf(comp); text = Str(comp.Text); } catch { }
+
+        if (!type.Equals("GuiButton", StringComparison.OrdinalIgnoreCase))
+        {
+            Diagnostic?.Invoke(this, $"el clic cayó en «{label}» ({type}), no en un botón — el viaje lo "
+                + "disparó un Enter sobre ese control. No se graba un clic que nadie dio.");
+            return;
+        }
+
+        string node = SafeNodeUrl();
+        if (node.Length == 0) node = _preNodeUrl;
+
+        StepObserved?.Invoke(this, new ObservedStep(
+            ActionType: "click",
+            Selector: SapSelector.ById(id),
+            Label: label.Length > 0 ? label : (text.Trim().Length > 0 ? text.Trim() : "Botón"),
+            ControlType: "button",
+            Value: text,
+            AllowedOptions: null,
+            SelectedValue: null,
+            SelectedLabel: null,
+            SurfaceSection: null,
+            AlternativeTargets: Array.Empty<string>())
+        {
+            Surface = node,
+            Readiness = node == _preNodeUrl ? _preReadiness : CachedReadinessMeta(node),
+            Fingerprint = _preFingerprint,
+        });
+
+        Diagnostic?.Invoke(this, $"observado: botón «{label}» ({id}) por hit-test del clic, desde '{node}'");
+    }
+
+    /// <summary>
+    /// Anota dónde clicó el operador. No hace NADA más: nada de COM aquí dentro.
+    ///
+    /// Un hook de bajo nivel corre en la cola de mensajes de todo el escritorio; si tarda, Windows lo
+    /// desengancha y el ratón se siente pegajoso en TODA la máquina. Guardar dos enteros es lo único
+    /// que se puede permitir. La consulta cara —FindByPosition— se hace después, en StartRequest.
+    /// </summary>
+    private IntPtr MouseHookCallback(int code, IntPtr wParam, IntPtr lParam)
+    {
+        if (code >= 0 && (int)wParam == WM_LBUTTONDOWN)
+        {
+            try
+            {
+                var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                _clickX = data.X;
+                _clickY = data.Y;
+                _clickAt = DateTime.UtcNow;
+            }
+            catch { }
+        }
+        return CallNextHookEx(_mouseHook, code, wParam, lParam);
+    }
+
+    /// <summary>
+    /// Quién había bajo el último clic, según el hit-test del propio SAP. "" si no hay clic reciente o
+    /// si SAP no reconoce nada ahí.
+    ///
+    /// La ventana de 6 s no es arbitraria: un round-trip que llega mucho después de un clic no lo
+    /// disparó ese clic —lo disparó un Enter, un menú o un temporizador— y atribuírselo inventaría un
+    /// paso. Ante la duda, no se graba: un paso de más en un flujo clínico es peor que uno de menos.
+    /// </summary>
+    private string ClickedComponentId()
+    {
+        if (_clickAt == DateTime.MinValue) return "";
+        if ((DateTime.UtcNow - _clickAt).TotalSeconds > 6) return "";
+        return HitTest(_clickX, _clickY) ?? "";
     }
 
     /// <summary>Los shells de la pantalla activa que tienen barra de botones propia (ALV/GridView).</summary>
@@ -2018,11 +2195,39 @@ public sealed class SapGuiSurface : IUiSurface
     private void PublishChangedFields()
     {
         var current = SafeReadFields();
+
+        // ── LÍNEA BASE NUEVA TRAS NAVEGAR, SIN PUBLICAR NADA ────────────────────────────
+        // El snapshot pertenece a una PANTALLA concreta. Si la pantalla ya no es esa, comparar contra él
+        // no dice «qué cambió»: dice «en qué se diferencian dos pantallas distintas», y eso son TODOS
+        // los campos de la nueva. Así nacían los ~20 `input` con valor vacío de cada grabación (los 14
+        // avisos del ensayo en seco): no son acciones del operador, son la pantalla nueva presentándose.
+        //
+        // Y no se pierde nada real: después de navegar, lo que el operador tecleó en la pantalla vieja
+        // YA NO SE PUEDE LEER. Esos pasos se publican en StartRequest, antes del viaje, que es cuando
+        // los valores siguen ahí. Lo que aquí se suprimía era ruido con forma de paso.
+        string nowSurface = SafeNodeUrl();
+        if (_snapshotSurface.Length > 0 && nowSurface.Length > 0 && nowSurface != _snapshotSurface)
+        {
+            _lastSnapshot = current.ToDictionary(f => f.Selector, f => f.CurrentValue);
+            _snapshotSurface = nowSurface;
+            Diagnostic?.Invoke(this,
+                $"pantalla nueva ({nowSurface}): línea base rehecha, {current.Count} campo(s) NO publicados "
+                + "(son la pantalla presentándose, no lo que hizo el operador)");
+            PublishTreeSelections();
+            return;
+        }
+        if (_snapshotSurface.Length == 0) _snapshotSurface = nowSurface;
+
         string node = "", readiness = "";
         foreach (DetectedField field in current)
         {
-            _lastSnapshot.TryGetValue(field.Selector, out string? prev);
-            if (prev == field.CurrentValue) continue;
+            bool known = _lastSnapshot.TryGetValue(field.Selector, out string? prev);
+            if (known && prev == field.CurrentValue) continue;
+
+            // Campo que aparece por primera vez Y viene VACÍO: eso no es una edición, es un campo que
+            // hasta ahora no habíamos visto. Vaciar un campo A MANO sí se graba, porque entonces el
+            // campo estaba en el snapshot con valor: la condición exige que sea desconocido.
+            if (!known && string.IsNullOrEmpty(field.CurrentValue)) continue;
 
             // El NODO del paso — dónde estaba parado el usuario al hacerlo. Sale de la SOMBRA, no de
             // un Identity() de ahora: Change llega DESPUÉS del round-trip, así que preguntar aquí
@@ -2048,6 +2253,7 @@ public sealed class SapGuiSurface : IUiSurface
             });
         }
         _lastSnapshot = current.ToDictionary(f => f.Selector, f => f.CurrentValue);
+        if (nowSurface.Length > 0) _snapshotSurface = nowSurface;
 
         PublishTreeSelections();
     }
@@ -2227,6 +2433,14 @@ public sealed class SapGuiSurface : IUiSurface
                     // tick del reloj (típico: clic en la fila e inmediatamente "detener enseñanza").
                     // Sin esta lectura, el paso final del workflow se pierde en silencio.
                     try { PublishTreeSelections(); } catch { }
+                    // El hook se suelta EN SU PROPIO HILO: un WH_MOUSE_LL desenganchado desde otro hilo
+                    // puede quedar colgado, y un hook huérfano ralentiza el ratón de toda la máquina.
+                    if (_mouseHook != IntPtr.Zero)
+                    {
+                        try { UnhookWindowsHookEx(_mouseHook); } catch { }
+                        _mouseHook = IntPtr.Zero;
+                        _mouseProc = null;
+                    }
                     _comEvents?.Unhook();
                 });
             }
