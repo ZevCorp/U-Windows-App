@@ -115,7 +115,7 @@ public sealed class WorkflowRecorder : IAsyncDisposable
 
         try
         {
-            return await _graph.FinishSessionAsync(sessionId, ct);
+            return await FinishWithRetryAsync(sessionId, ct);
         }
         finally
         {
@@ -126,6 +126,49 @@ public sealed class WorkflowRecorder : IAsyncDisposable
             _queue = null;
         }
     }
+
+    /// <summary>
+    /// Cierra la sesión reintentando los fallos que pueden salir bien a la segunda.
+    ///
+    /// El post-procesado de Graph escribe título, resumen y guía con un LLM, y en flujos largos se pasa
+    /// del tiempo máximo de la función serverless: Vercel corta y devuelve 504. Un reintento tiene
+    /// sentido porque no es determinista —una función caliente o una generación más corta caben—, pero
+    /// insistir eternamente tampoco: tres intentos y se admite que no.
+    ///
+    /// Si aun así falla, se lanza <see cref="FinishPendingException"/> con el id de sesión. Lo que se ha
+    /// perdido es el RESUMEN, no los pasos: esos se enviaron uno a uno durante la grabación y el
+    /// workflow ya existe. Sin esta distinción el operador cree que perdió la grabación entera —y
+    /// regraba tres minutos que no hacía falta regrabar.
+    /// </summary>
+    public static async Task<FinishResponse> FinishWithRetryAsync(
+        GraphClient graph, string sessionId, string workflowId, Action<string>? log, CancellationToken ct)
+    {
+        var waits = new[] { 3, 8, 0 };  // el último 0 no espera: es el intento final
+        GraphException? last = null;
+
+        for (int attempt = 1; attempt <= waits.Length; attempt++)
+        {
+            try { return await graph.FinishSessionAsync(sessionId, ct); }
+            catch (GraphException e) when (e.Transient)
+            {
+                last = e;
+                log?.Invoke($"cierre de la grabación: intento {attempt}/{waits.Length} falló (HTTP {e.StatusCode})");
+                if (attempt < waits.Length && waits[attempt - 1] > 0)
+                    await Task.Delay(TimeSpan.FromSeconds(waits[attempt - 1]), ct);
+            }
+        }
+
+        throw new FinishPendingException(sessionId, workflowId,
+            $"Graph no alcanzó a cerrar la grabación (HTTP {last?.StatusCode ?? 0}). "
+            + "Los pasos YA están guardados: lo que falta es el resumen, y se puede completar sin volver a grabar.",
+            last?.StatusCode ?? 0);
+    }
+
+    private Task<FinishResponse> FinishWithRetryAsync(string sessionId, CancellationToken ct) =>
+        FinishWithRetryAsync(_graph, sessionId, sessionId, Log, ct);
+
+    /// <summary>Diagnóstico opcional del recorder (lo enchufa el cliente a su LogBus).</summary>
+    public Action<string>? Log { get; set; }
 
     /// <summary>Adjunta contexto en texto a la grabación (lo que el operador explica de viva voz).</summary>
     public async Task AddContextAsync(string transcript, CancellationToken ct)

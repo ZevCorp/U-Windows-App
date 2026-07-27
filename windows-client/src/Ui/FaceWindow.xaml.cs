@@ -137,8 +137,29 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         StartUpdater();
 
+        // Cierres de grabación que quedaron a medias por un 504 de Graph: se reintentan al arrancar, en
+        // segundo plano y sin molestar. Va ANTES de recargar la lista para que, si alguno sale, el
+        // workflow ya aparezca con su resumen puesto.
+        _ = RetryPendingFinishesAsync();
+
         // Precarga la lista para el selector directo del panel Backend (silencioso si Graph no está listo).
         _ = ReloadDirectWorkflowsAsync();
+    }
+
+    /// <summary>Completa en segundo plano los cierres que un 504 dejó pendientes. Nunca interrumpe.</summary>
+    private async Task RetryPendingFinishesAsync()
+    {
+        if (!_graphConfig.IsConfigured) return;
+        try
+        {
+            int done = await PendingFinish.RetryAllAsync(new GraphClient(_graphConfig), CancellationToken.None);
+            if (done > 0)
+            {
+                SetStatus($"Se completó el resumen de {done} grabación(es) que habían quedado a medias.");
+                await ReloadDirectWorkflowsAsync();
+            }
+        }
+        catch (Exception e) { LogBus.Log("teach", $"reintento de cierres pendientes falló: {e.Message}"); }
     }
 
     /// <summary>
@@ -516,6 +537,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 string title = string.IsNullOrWhiteSpace(finish.Summary) ? "el workflow" : finish.Summary;
                 SetStatus($"Aprendido: {title}");
                 _ = ReloadDirectWorkflowsAsync(); // que el recién enseñado aparezca ya en el selector
+            }
+            catch (FinishPendingException pending)
+            {
+                // NO es lo mismo que perder la grabación, y decirlo importa: los pasos ya están en
+                // Graph. Se guarda el id para completar el resumen luego, sin regrabar nada.
+                PendingFinish.Save(pending.SessionId, pending.WorkflowId);
+                LogBus.Log("teach", $"cierre pendiente (HTTP {pending.StatusCode}): {pending.Message}");
+                SetStatus("Los pasos SÍ se guardaron; falta el resumen (Graph tardó de más). "
+                        + "Se completa solo al reabrir la app.");
+                _ = ReloadDirectWorkflowsAsync(); // el workflow existe aunque le falte el resumen
             }
             catch (Exception ex)
             {

@@ -102,9 +102,27 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
         StatusChanged?.Invoke(this, $"Grabando pasos sobre «{surface.Name}»…");
 
         var recorder = new WorkflowRecorder(_graph, _graphConfig, surface);
-        recorder.Progress += (_, status) => StatusChanged?.Invoke(this,
-            $"Grabando pasos… {status.StepsSent} enviados" +
-            (status.LastError != null ? $" (último error: {status.LastError})" : ""));
+        // AVISO DE GRABACIÓN LARGA. El post-procesado de Graph escribe título, resumen y guía con un
+        // LLM sobre TODOS los pasos, y en un flujo largo se pasa del tiempo máximo de la función
+        // serverless: 504 al cerrar. Ya nos pasó con una grabación de seis pantallas y tres minutos.
+        // El cliente no puede subir ese techo, pero sí avisar a tiempo de que conviene partir el flujo
+        // en dos workflows encadenados — que además se reproducen y se depuran mucho mejor.
+        const int AvisoPasos = 30;
+        bool avisado = false;
+        recorder.Progress += (_, status) =>
+        {
+            if (status.StepsSent >= AvisoPasos && !avisado)
+            {
+                avisado = true;
+                LogBus.Log("workflow-teach",
+                    $"grabación larga: {status.StepsSent} pasos. Riesgo de 504 al cerrar (el post-procesado "
+                    + "de Graph se pasa del límite de Vercel). Considera partirla en dos workflows.");
+            }
+            StatusChanged?.Invoke(this,
+                $"Grabando pasos… {status.StepsSent} enviados"
+                + (avisado ? " · ⚠ larga: mejor pártela en dos" : "")
+                + (status.LastError != null ? $" (último error: {status.LastError})" : ""));
+        };
 
         string workflowId = await recorder.StartAsync(description, ct);
         _recorder = recorder;

@@ -5,10 +5,39 @@ using System.Text.Json;
 namespace U.Graph;
 
 /// <summary>Falla del backend Graph, ya con el mensaje que Graph devolvió en <c>error</c>.</summary>
-public sealed class GraphException : Exception
+public class GraphException : Exception
 {
     public int StatusCode { get; }
     public GraphException(string message, int statusCode = 0) : base(message) => StatusCode = statusCode;
+
+    /// <summary>
+    /// ¿El fallo es de los que pueden salir bien al reintentar? 502/503/504 son la pasarela o el
+    /// arranque en frío del serverless; 408 y 0 (timeout del cliente) son la espera. Un 4xx de verdad
+    /// —400, 401, 404— no se reintenta: reintentar un error de contrato solo lo repite.
+    /// </summary>
+    public bool Transient => StatusCode is 0 or 408 or 429 or 502 or 503 or 504;
+}
+
+/// <summary>
+/// El cierre de una grabación falló, pero LOS PASOS YA ESTÁN EN GRAPH: se envían uno a uno mientras se
+/// graba, no al final. Lo que quedó pendiente es el post-procesado —título, resumen y guía— que Graph
+/// hace con un LLM y que en flujos largos se pasa del tiempo máximo de Vercel (504).
+///
+/// Existe como excepción propia porque la diferencia importa y el mensaje genérico la borraba: el
+/// operador creía haber perdido tres minutos de grabación cuando lo perdido era el resumen. Lleva el
+/// <see cref="SessionId"/> para que el cliente pueda guardarlo y reintentar sin volver a grabar.
+/// </summary>
+public sealed class FinishPendingException : GraphException
+{
+    public string SessionId { get; }
+    public string WorkflowId { get; }
+
+    public FinishPendingException(string sessionId, string workflowId, string message, int statusCode)
+        : base(message, statusCode)
+    {
+        SessionId = sessionId;
+        WorkflowId = workflowId;
+    }
 }
 
 /// <summary>
