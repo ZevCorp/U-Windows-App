@@ -1148,6 +1148,268 @@ public sealed class SapGuiSurface : IUiSurface
         catch { /* el componente no tiene hijos */ }
     }
 
+    // ── Filas de ALV (GridView) ──────────────────────────────────────────────
+    //
+    // Un ALV no expone sus filas como componentes: no tienen Id y un recorrido del árbol no las ve.
+    // Se accionan por índice contra el shell, pero el índice NO se persiste: se resuelve en cada
+    // ejecución a partir de los pares columna=valor que lleva el selector.
+
+    /// <summary>
+    /// Último estado visto por grid, para distinguir «el operador eligió» de «así vino la pantalla».
+    ///
+    /// Hacen falta LAS DOS señales. Mirar solo la fila actual no sirve: en una lista de trabajo con
+    /// UN paciente, <c>CurrentCellRow</c> vale 0 antes y después del clic —comprobado el
+    /// 2026-07-28, y por eso la primera versión de esto no publicó nada—. Lo que cambia ahí es la
+    /// selección, que pasa de vacía a «0».
+    /// </summary>
+    private readonly Dictionary<string, int> _gridRow = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _gridSel = new(StringComparer.Ordinal);
+
+    /// <summary>La primera fila de un <c>SelectedRows</c> («0», «0,2», «1-3»), o -1 si no hay ninguna.</summary>
+    private static int FirstRowOf(string selectedRows)
+    {
+        foreach (char c in selectedRows ?? "")
+        {
+            if (char.IsDigit(c)) break;
+            if (c != ' ') return -1;
+        }
+        var digits = new string((selectedRows ?? "").TakeWhile(char.IsDigit).ToArray());
+        return int.TryParse(digits, out int r) ? r : -1;
+    }
+
+    private static List<KeyValuePair<string, string>> ParseRowKey(string rowKey)
+    {
+        var pairs = new List<KeyValuePair<string, string>>();
+        foreach (string part in (rowKey ?? "").Split('|'))
+        {
+            int eq = part.IndexOf('=');
+            if (eq <= 0) continue;
+            string col = part.Substring(0, eq).Trim();
+            if (col.Length > 0) pairs.Add(new KeyValuePair<string, string>(col, part.Substring(eq + 1).Trim()));
+        }
+        return pairs;
+    }
+
+    private static string GridCell(dynamic grid, int row, string column)
+    {
+        try { return Str(grid.GetCellValue(row, column)).Trim(); }
+        catch { return ""; }
+    }
+
+    /// <summary>
+    /// Deja SELECCIONADA la fila que casa con los pares del selector.
+    ///
+    /// Gana la que casa con MÁS pares, y solo si es única: dos filas empatadas significan que la
+    /// clave no distingue, y elegir entre ellas es elegir un paciente al azar. Si no casa ninguna,
+    /// esa entrada ya no está en la lista y el paso FALLA — mejor un workflow detenido que uno que
+    /// abre la historia clínica de otra persona.
+    /// </summary>
+    private bool SelectGridRow(dynamic grid, string rowKey, PlanStep step, out string error)
+    {
+        error = "";
+        var pairs = ParseRowKey(rowKey);
+        if (pairs.Count == 0) { error = $"el paso «{step.Label}» no trae con qué identificar la fila"; return false; }
+
+        int rows;
+        try { rows = (int)grid.RowCount; }
+        catch (Exception e) { error = $"el ALV no dijo cuántas filas tiene: {e.Message}"; return false; }
+        if (rows <= 0) { error = "la lista está vacía: no hay ninguna fila que seleccionar"; return false; }
+
+        int best = -1, bestScore = 0, tied = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            int score = pairs.Count(p =>
+                string.Equals(GridCell(grid, r, p.Key), p.Value, StringComparison.OrdinalIgnoreCase));
+            if (score == 0) continue;
+            if (score > bestScore) { bestScore = score; best = r; tied = 1; }
+            else if (score == bestScore) tied++;
+        }
+
+        if (best < 0)
+        {
+            error = $"ninguna de las {rows} fila(s) casa con «{step.Label}»: esa entrada ya no está en la lista";
+            return false;
+        }
+        if (tied > 1)
+        {
+            error = $"{tied} filas casan igual de bien con «{step.Label}»: la clave no distingue y no se elige al azar";
+            return false;
+        }
+
+        try
+        {
+            grid.GetType().InvokeMember("SelectedRows", BindingFlags.SetProperty, null, grid,
+                new object[] { best.ToString() });
+        }
+        catch (Exception e) { error = $"el ALV no aceptó SelectedRows=«{best}»: {e.Message}"; return false; }
+
+        // La celda actual además de la selección: el clic humano pone las dos, y no sabemos cuál de
+        // las dos mira cada botón de la barra. Si falla, la selección ya está hecha.
+        try
+        {
+            grid.GetType().InvokeMember("SetCurrentCell", BindingFlags.InvokeMethod, null, grid,
+                new object[] { best, pairs[0].Key });
+        }
+        catch { }
+
+        Diagnostic?.Invoke(this,
+            $"fila «{step.Label}» seleccionada: fila {best} de {rows} ({bestScore}/{pairs.Count} campo(s) casados)");
+        return true;
+    }
+
+    /// <summary>
+    /// Identidad de una fila: hasta cuatro pares columna=valor con contenido de verdad.
+    ///
+    /// Se descartan los iconos (<c>@KN\Q…@</c>, que son códigos de pintado y no dicen quién es), los
+    /// marcadores de refresco de este ALV (<c>*** Aktualizar ***</c>), que salen iguales en toda
+    /// fila, y cualquier valor con <c>|</c> o <c>=</c>, que rompería el fragmento.
+    /// </summary>
+    private static string RowKeyAt(dynamic grid, int row, out string label)
+    {
+        var parts = new List<string>();
+        var shown = new List<string>();
+        try
+        {
+            dynamic cols = grid.ColumnOrder;
+            int n = (int)cols.Count;
+            for (int i = 0; i < n && parts.Count < 4; i++)
+            {
+                string col;
+                try { col = Str(cols.ElementAt(i)).Trim(); } catch { continue; }
+                if (col.Length == 0) continue;
+
+                string v = GridCell(grid, row, col);
+                if (v.Length == 0 || v[0] == '@') continue;
+                if (v.StartsWith("***", StringComparison.Ordinal)) continue;
+                if (v.Contains('|') || v.Contains('=')) continue;
+
+                parts.Add(col + "=" + v);
+                shown.Add(v);
+            }
+        }
+        catch { }
+
+        // Para el rótulo, lo que un humano reconoce: el primer valor con letras («GIRALDO») antes que
+        // una fecha o una hora, que no distinguen nada a la vista.
+        label = shown.FirstOrDefault(v => v.Any(char.IsLetter)) ?? (shown.Count > 0 ? shown[0] : "");
+        return string.Join("|", parts);
+    }
+
+    /// <summary>Los ALV (GridView) del área de usuario de la pantalla activa.</summary>
+    private static List<dynamic> GridViews(dynamic session)
+    {
+        var found = new List<dynamic>();
+        try
+        {
+            dynamic area = session.FindById("wnd[0]/usr", false);
+            if (area != null) CollectGrids(area, found, 0);
+        }
+        catch { }
+        return found;
+    }
+
+    private static void CollectGrids(dynamic node, List<dynamic> acc, int depth)
+    {
+        if (depth > 20 || acc.Count > 20) return;
+        try
+        {
+            dynamic children = node.Children;
+            int count = (int)children.Count;
+            for (int i = 0; i < count; i++)
+            {
+                dynamic child;
+                try { child = children.ElementAt(i); } catch { continue; }
+                try
+                {
+                    if (string.Equals(Str(child.Type), "GuiShell", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(Str(child.SubType), "GridView", StringComparison.OrdinalIgnoreCase))
+                        acc.Add(child);
+                }
+                catch { }
+                try { CollectGrids(child, acc, depth + 1); } catch { }
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Publica la SELECCIÓN DE FILA de un ALV mientras se enseña.
+    ///
+    /// Va por temporizador y no por el hook de ratón porque seleccionar una fila es cliente puro: no
+    /// viaja al servidor, así que el StartRequest donde se publican los clics no llega nunca. Es el
+    /// mismo motivo por el que las filas de árbol tienen su propio publicador — y la razón de que
+    /// hasta hoy el clic del operador sobre el paciente se descartara SIEMPRE, con el mensaje «el
+    /// clic cayó en shell, no en un botón».
+    ///
+    /// La PRIMERA lectura de cada grid no se publica: es la pantalla presentándose con su fila por
+    /// defecto, no algo que el operador hiciera. Publicarla metería un paso fantasma en cada
+    /// grabación, que es exactamente el fallo que ya costó una jornada.
+    /// </summary>
+    private void PublishGridSelections(dynamic session)
+    {
+        if (StepObserved == null) return;
+
+        foreach (dynamic grid in GridViews(session))
+        {
+            string gid;
+            try { gid = Str(grid.Id); } catch { continue; }
+            if (gid.Length == 0) continue;
+
+            int cur;
+            try { cur = (int)grid.CurrentCellRow; } catch { continue; }
+
+            string sel = "";
+            try
+            {
+                sel = Str(grid.GetType().InvokeMember(
+                    "SelectedRows", BindingFlags.GetProperty, null, grid, null)).Trim();
+            }
+            catch { }
+
+            bool primera = !_gridRow.ContainsKey(gid);
+            int prevCur = primera ? int.MinValue : _gridRow[gid];
+            string prevSel = _gridSel.TryGetValue(gid, out string? ps) ? ps : "";
+            _gridRow[gid] = cur;
+            _gridSel[gid] = sel;
+            if (primera) continue;
+
+            // Se publica al SELECCIONAR, no al deseleccionar: quitar la marca no es una acción que
+            // haya que reproducir, y grabarla dejaría un paso que al ejecutarse no hace nada.
+            bool eligio = sel.Length > 0 && sel != prevSel;
+            bool movio = cur != prevCur;
+            if (!eligio && !movio) continue;
+
+            int fila = sel.Length > 0 ? FirstRowOf(sel) : cur;
+            if (fila < 0) fila = cur;
+            if (fila < 0) continue;
+
+            string key = RowKeyAt(grid, fila, out string label);
+            if (key.Length == 0) continue;
+
+            string node = SafeNodeUrl();
+            if (node.Length == 0) node = _preNodeUrl;
+
+            StepObserved?.Invoke(this, new ObservedStep(
+                ActionType: "click",
+                Selector: SapSelector.ByRow(gid, key),
+                Label: label.Length > 0 ? label : $"fila {fila}",
+                ControlType: "row",
+                Value: null,
+                AllowedOptions: null,
+                SelectedValue: null,
+                SelectedLabel: null,
+                SurfaceSection: null,
+                AlternativeTargets: Array.Empty<string>())
+            {
+                Surface = node,
+                Readiness = node == _preNodeUrl ? _preReadiness : CachedReadinessMeta(node),
+                Fingerprint = _preFingerprint,
+            });
+
+            Diagnostic?.Invoke(this, $"observado: fila de ALV «{label}» ({key}) en {gid} desde '{node}'");
+        }
+    }
+
     private static DetectedField? Describe(dynamic node, int order, Dictionary<string, string>? labels = null)
     {
         try
@@ -1329,6 +1591,20 @@ public sealed class SapGuiSurface : IUiSurface
                 }
                 error = $"el shell {id} no aceptó PressToolbarButton(«{tbButton}») para «{step.Label}»";
                 return false;
+            }
+
+            // Una fila de ALV tampoco es un componente. Y no basta con «pulsar luego el botón»: el
+            // botón de la barra actúa sobre la fila SELECCIONADA, y sin selección se acepta sin
+            // hacer nada. Este paso es el que pone esa selección.
+            string? rowKey = SapSelector.RowKeyOf(selector);
+            if (rowKey != null)
+            {
+                try { return SelectGridRow(node, rowKey, step, out error); }
+                catch (Exception e)
+                {
+                    error = $"SAP rechazó seleccionar la fila «{step.Label}» ({id}): {e.Message}";
+                    return false;
+                }
             }
 
             // Una fila de árbol no es un componente: el id resuelve al ÁRBOL y la fila viaja aparte.
@@ -1812,6 +2088,7 @@ public sealed class SapGuiSurface : IUiSurface
                 // mantiene la sombra congelada en el origen hasta que la navegación termina.
                 RefreshPreflight(session);
                 PublishTreeSelections();
+                PublishGridSelections(session);
             };
             _treeTimer.Start();
 

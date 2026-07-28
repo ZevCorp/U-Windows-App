@@ -49,6 +49,26 @@ public static class SapSelector
     /// </summary>
     public const string ToolbarMark = "#tbbtn=";
 
+    /// <summary>
+    /// Separador de una FILA DE ALV (GridView). Como la fila de árbol, no es un
+    /// <c>GuiComponent</c>: el id resuelve al grid y la fila viaja en el fragmento.
+    ///
+    ///   <c>sap:wnd[0]/usr/…/cntlISH_VIEW_007/shellcont/shell#row=FALNR=2394336|GEBNAME=GIRALDO</c>
+    ///
+    /// La clave son PARES columna=valor, no un índice. «La fila 0» describe una posición y hoy hay
+    /// un paciente en la lista; el día que haya tres, el índice abre la historia clínica de otra
+    /// persona sin avisar. Los pares describen a QUIÉN se señala, y si esa fila ya no está, el paso
+    /// falla en vez de acertar por casualidad.
+    ///
+    /// POR QUÉ HACE FALTA (verificado contra el SAP real, 2026-07-28): el botón de la barra del ALV
+    /// actúa sobre la fila seleccionada. Con la lista cargada y sin selección,
+    /// <c>PressToolbarButton("ZMEDTRIAGE")</c> se acepta sin excepción y NO PASA NADA; tras
+    /// <c>SelectedRows="0"</c> + <c>SetCurrentCell(0,…)</c> el mismo botón abre el triage al
+    /// instante. Por eso el operador acertaba con el ratón y el workflow no: al hacer clic, SAP le
+    /// pone la selección; la API no.
+    /// </summary>
+    public const string RowMark = "#row=";
+
     /// <summary>Quita el prefijo de conexión/sesión: /app/con[0]/ses[0]/wnd[0]/... → wnd[0]/...</summary>
     private static readonly Regex AbsolutePrefix = new(
         @"^/?app/con\[\d+\]/ses\[\d+\]/", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -90,6 +110,20 @@ public static class SapSelector
         // que apunta al sitio equivocado.
         int cut = v.IndexOf('#');
         return cut >= 0 ? v.Substring(0, cut) : v;
+    }
+
+    /// <summary>Selector de una FILA de ALV: el id del grid más los pares columna=valor.</summary>
+    public static string ByRow(string gridId, string rowKey) =>
+        ById(gridId) + RowMark + (rowKey ?? "").Trim();
+
+    /// <summary>Los pares columna=valor de la fila de ALV, o null si el selector no apunta a una.</summary>
+    public static string? RowKeyOf(string selector)
+    {
+        if (!Owns(selector)) return null;
+        int cut = selector.IndexOf(RowMark, StringComparison.Ordinal);
+        if (cut < 0) return null;
+        string key = selector.Substring(cut + RowMark.Length).Trim();
+        return key.Length > 0 ? key : null;
     }
 
     /// <summary>La clave del nodo que lleva el selector, o null si apunta a un control normal.</summary>
