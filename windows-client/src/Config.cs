@@ -85,7 +85,7 @@ public sealed class Config
         "https://zyvfamlhlmztliexvmej.supabase.co/storage/v1/object/public/windows";
 
     private static string Path =>
-        System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "U", "config.json");
+        System.IO.Path.Combine(U.Graph.UserPaths.Roaming, "U", "config.json");
 
     public static Config Load()
     {

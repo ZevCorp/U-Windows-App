@@ -34,8 +34,7 @@ public sealed class GraphConfig
     public int StepDelayMs { get; set; } = 250;
 
     private static string Path =>
-        System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "U", "graph.json");
+        System.IO.Path.Combine(UserPaths.Roaming, "U", "graph.json");
 
     public static GraphConfig Load()
     {

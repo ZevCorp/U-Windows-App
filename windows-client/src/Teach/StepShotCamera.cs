@@ -32,7 +32,7 @@ public static class StepShotCamera
 
     /// <summary>Carpeta de pantallazos de un workflow.</summary>
     public static string FolderFor(string workflowId) => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "U", "step-shots", Sanitize(workflowId));
+        U.Graph.UserPaths.Local, "U", "step-shots", Sanitize(workflowId));
 
     /// <summary>Captura la pantalla (virtual, multi-monitor) y la guarda como step_N.png del workflow.</summary>
     public static void Capture(string workflowId, int stepNumber)

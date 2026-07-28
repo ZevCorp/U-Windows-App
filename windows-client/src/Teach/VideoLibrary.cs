@@ -22,8 +22,7 @@ public sealed class VideoLibrary
 
     public VideoLibrary(string? folder = null)
     {
-        Folder = folder ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "U", "teach-videos");
+        Folder = folder ?? Path.Combine(U.Graph.UserPaths.Local, "U", "teach-videos");
         Directory.CreateDirectory(Folder);
     }
 

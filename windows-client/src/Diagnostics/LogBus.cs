@@ -22,8 +22,7 @@ public static class LogBus
     private static readonly List<string> _entries = new();
     private static readonly object _lock = new();
 
-    private static readonly string _logDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "U", "logs");
+    private static readonly string _logDir = Path.Combine(U.Graph.UserPaths.Local, "U", "logs");
     private static bool _fileBroken; // si el disco falla una vez, no insistir en cada línea
 
     public static event EventHandler<string>? Logged;
