@@ -514,12 +514,13 @@ public sealed class SapGuiSurface : IUiSurface
             if (area == null) return fields;
 
             var found = new List<dynamic>();
-            Walk(area, found, 0);
+            var labels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Walk(area, found, 0, labels);
 
             int order = 1;
             foreach (dynamic node in found)
             {
-                var field = Describe(node, order);
+                var field = Describe(node, order, labels);
                 if (field != null) { fields.Add(field); order++; }
             }
         }
@@ -1092,7 +1093,22 @@ public sealed class SapGuiSurface : IUiSurface
         return "";
     }
 
-    private static void Walk(dynamic node, List<dynamic> acc, int depth)
+    /// <summary>
+    /// Recorre el área de usuario juntando los controles interactivos y, de paso, ANOTANDO LAS
+    /// ETIQUETAS.
+    ///
+    /// En un dynpro el texto que el humano lee no está en el campo: vive en un GuiLabel aparte, y la
+    /// relación entre los dos es por IDENTIDAD, no por posición — el Name del label es el del campo
+    /// con un «*» delante. Verificado contra el SAP real (2026-07-28, pantalla NWP1/SAPLY000):
+    ///
+    ///   GuiTextField  Name = Y0000000-ZTXTTALLA   Tooltip = (vacío)   Text = «1.70»
+    ///   GuiLabel      Name = *Y0000000-ZTXTTALLA                      Text = «Talla»
+    ///
+    /// Se anotan en ESTE recorrido y no preguntando por el padre de cada campo a posteriori: ya
+    /// pasamos por todos los nodos, y en esta API lo caro son las llamadas COM. Hacerlo después
+    /// habría multiplicado por los hermanos de cada campo.
+    /// </summary>
+    private static void Walk(dynamic node, List<dynamic> acc, int depth, Dictionary<string, string>? labels = null)
     {
         if (depth > 20 || acc.Count > 300) return;
         try
@@ -1106,17 +1122,33 @@ public sealed class SapGuiSurface : IUiSurface
 
                 try
                 {
-                    if (Interactive.Contains(Str(child.Type))) acc.Add(child);
+                    string ctype = Str(child.Type);
+                    if (Interactive.Contains(ctype))
+                    {
+                        acc.Add(child);
+                    }
+                    else if (labels != null && string.Equals(ctype, "GuiLabel", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string ln = Str(child.Name);
+                        // Solo los que APUNTAN a un campo («*NOMBRE»). Los demás son unidades y
+                        // rótulos sueltos —«Kg», «mm Hg», «x min»— que no identifican a nadie y
+                        // llenarían el mapa de ruido.
+                        if (ln.Length > 1 && ln[0] == '*')
+                        {
+                            string txt = Str(child.Text).Trim();
+                            if (txt.Length > 0) labels[ln.Substring(1)] = txt;
+                        }
+                    }
                 }
                 catch { }
 
-                try { Walk(child, acc, depth + 1); } catch { }
+                try { Walk(child, acc, depth + 1, labels); } catch { }
             }
         }
         catch { /* el componente no tiene hijos */ }
     }
 
-    private static DetectedField? Describe(dynamic node, int order)
+    private static DetectedField? Describe(dynamic node, int order, Dictionary<string, string>? labels = null)
     {
         try
         {
@@ -1124,7 +1156,7 @@ public sealed class SapGuiSurface : IUiSurface
             string id = Str(node.Id);
             if (id.Length == 0) return null;
 
-            string label = LabelOf(node);
+            string label = LabelOf(node, labels);
             if (label.Length == 0) return null;
 
             return new DetectedField
@@ -1142,13 +1174,44 @@ public sealed class SapGuiSurface : IUiSurface
     }
 
     /// <summary>
-    /// Cómo se llama el campo para un humano. El Tooltip de SAP suele ser el texto del label de al
-    /// lado (que es un GuiLabel aparte y no está enlazado al control), así que es la mejor pista
-    /// disponible sin adivinar por coordenadas.
+    /// Cómo se llama el campo para un humano.
+    ///
+    /// Orden: Tooltip → GuiLabel hermano → Name → Text.
+    ///
+    /// El Tooltip sigue primero porque cuando existe SUELE ser el texto del label de al lado, y no
+    /// cambiarle la precedencia deja intacto todo lo que hoy funciona en otras pantallas. Lo nuevo
+    /// es el segundo escalón, y es el que importa: en el dynpro clínico el Tooltip viene VACÍO, así
+    /// que hasta ahora se caía a <c>Name</c> y el «nombre humano» acababa siendo
+    /// «Y0000000-ZTXTTALLA». Con eso, emparejar por etiqueta —que es TODO lo que hace
+    /// ConceptBinder— era imposible: ninguno de los ocho signos vitales casaba, nunca.
+    ///
+    /// El mapa lo construye <see cref="Walk"/> por identidad («*NOMBRE» → NOMBRE), no por
+    /// cercanía en pantalla: dos campos contiguos con la etiqueta encima se resolverían al revés
+    /// por coordenadas, y aquí se está decidiendo dónde va una cifra clínica.
+    ///
+    /// Name y Text siguen de último como red: un campo sin label hermano al menos se identifica.
     /// </summary>
-    private static string LabelOf(dynamic node)
+    private static string LabelOf(dynamic node, Dictionary<string, string>? labels = null)
     {
-        foreach (string prop in new[] { "Tooltip", "Name", "Text" })
+        try
+        {
+            string tip = Str(node.GetType().InvokeMember("Tooltip", BindingFlags.GetProperty, null, node, null));
+            if (tip.Trim().Length > 0) return tip.Trim();
+        }
+        catch { }
+
+        if (labels != null && labels.Count > 0)
+        {
+            try
+            {
+                string name = Str(node.GetType().InvokeMember("Name", BindingFlags.GetProperty, null, node, null));
+                if (name.Length > 0 && labels.TryGetValue(name, out string? human) && human.Length > 0)
+                    return human;
+            }
+            catch { }
+        }
+
+        foreach (string prop in new[] { "Name", "Text" })
         {
             try
             {

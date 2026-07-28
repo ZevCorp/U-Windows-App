@@ -57,7 +57,18 @@ if ($estable) {
   Write-Warning "No veo la app estable corriendo desde bin\. Si esperabas que siguiera viva, compruébalo ANTES de seguir."
 }
 
-# --- 3. Compilar a la salida aislada ----------------------------------------
+# --- 3. Cerrar la instancia de DESARROLLO anterior --------------------------
+# Una app viva bloquea su propio U.Graph.dll, asi que la segunda compilacion falla con MSB3027. Se
+# cierra SOLO la que corre desde el directorio de salida, comprobado por RUTA y no por nombre de
+# proceso: "U" son las dos, y matar por nombre se llevaria por delante la app estable.
+foreach ($p in (Get-Process U -ErrorAction SilentlyContinue)) {
+  if ($p.Path -and $p.Path.StartsWith($salidaAbs, [StringComparison]::OrdinalIgnoreCase)) {
+    Write-Host ("Cerrando app de desarrollo anterior (PID {0})..." -f $p.Id) -ForegroundColor DarkGray
+    try { [void]$p.CloseMainWindow(); if (-not $p.WaitForExit(4000)) { $p.Kill() } } catch {}
+  }
+}
+
+# --- 4. Compilar a la salida aislada ----------------------------------------
 Write-Host "Compilando Debug -> $salidaAbs ..." -ForegroundColor Cyan
 dotnet build $proyecto -c Debug -o $salidaAbs --nologo -v minimal
 if ($LASTEXITCODE -ne 0) { throw "La compilacion fallo (codigo $LASTEXITCODE)." }
