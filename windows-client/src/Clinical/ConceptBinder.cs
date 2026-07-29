@@ -32,6 +32,11 @@ public static class ConceptBinder
     /// </summary>
     private static readonly (string Concept, string[] Words)[] Rules =
     {
+        // El motivo es TEXTO, no una cifra, y su campo es una caja larga (GuiShell/TextEdit), no un
+        // GuiTextField. Se empareja igual que los demás: por lo que el humano lee.
+        // «motivo» a secas no vale: la etiqueta real es «Motivo de Consulta», y la regla de palabra
+        // completa lo rechazaría por la letra que le sigue.
+        ("consulta.motivo",                new[] { "motivodeconsulta", "motivoconsulta" }),
         ("paciente.edad",                  new[] { "edad" }),
         ("vital.talla",                    new[] { "talla", "estatura" }),
         ("vital.peso",                     new[] { "peso" }),

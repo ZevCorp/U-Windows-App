@@ -113,6 +113,18 @@ public sealed class GraphClient
     }
 
     /// <summary>
+    /// Un workflow COMPLETO, con sus steps tal como están guardados (incluidos surfaceHints, que es
+    /// donde vive la superficie observada de cada paso). El plan (<see cref="GetPlanAsync"/>) no
+    /// sirve para esto: filtra y transforma steps, y el mapa del grafo necesita lo grabado, no lo
+    /// ejecutable.
+    /// </summary>
+    public async Task<JsonElement> GetWorkflowAsync(string workflowId, CancellationToken ct)
+    {
+        var res = await GetAsync<JsonElement>($"/api/v1/workflows/{Escape(workflowId)}", ct);
+        return res.TryGetProperty("workflow", out var w) ? w : res;
+    }
+
+    /// <summary>
     /// Enseña al workflow a alcanzar su propia superficie: prepend de un step de alineación (abrir/enfocar
     /// la app) en orden 0, para que la próxima vez arranque solo. Graph deriva la app del sourceOrigin ya
     /// guardado del workflow. Best-effort: si el backend aún no lo soporta, no interrumpe nada.

@@ -29,10 +29,20 @@
 
 [CmdletBinding()]
 param(
-  [string]$Salida  = "C:\U-dev\bin",
-  [string]$Datos   = "C:\U-dev",
+  [string]$Salida  = "C:\U-dev2\bin",
+  [string]$Datos   = "C:\U-dev2",
   [string]$Backend,
   [switch]$SoloCompilar
+)
+
+# Instalaciones que NO se cierran ni se compilan encima, pase lo que pase. No es una promesa de
+# quien escribe el comando: es una lista que el script comprueba.
+#   · bin\x64\Release del repo → la app ESTABLE (commit 3080777), viva desde el 2026-07-27.
+#   · C:\U-dev\bin             → la app de desarrollo BUENA, la que ya hace la cadena completa.
+# Las dos tienen copia congelada y verificada en Desktop\U-ROLLBACK-2026-07-28.
+$Protegidas = @(
+  (Join-Path (Split-Path -Parent $PSScriptRoot) "windows-client\bin"),
+  "C:\U-dev\bin"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,8 +54,11 @@ $release  = Join-Path $appRepo "windows-client\bin"
 # Comparación por ruta completa y no por texto suelto: "C:\U-dev\bin" no debe confundirse con
 # ningún subdirectorio del repo, y un -Salida relativo tiene que resolverse antes de juzgarlo.
 $salidaAbs = [System.IO.Path]::GetFullPath($Salida)
-if ($salidaAbs.StartsWith([System.IO.Path]::GetFullPath($release), [StringComparison]::OrdinalIgnoreCase)) {
-  throw "El directorio de salida ($salidaAbs) cae dentro de bin\ del repo. Ahí vive la app ESTABLE: elige otro."
+foreach ($p in $Protegidas) {
+  $pAbs = [System.IO.Path]::GetFullPath($p)
+  if ($salidaAbs.StartsWith($pAbs, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "El directorio de salida ($salidaAbs) cae dentro de una instalacion PROTEGIDA ($pAbs). Elige otro."
+  }
 }
 
 # --- 2. Estado de la app estable (informativo, no bloqueante) ---------------
@@ -62,6 +75,11 @@ if ($estable) {
 # cierra SOLO la que corre desde el directorio de salida, comprobado por RUTA y no por nombre de
 # proceso: "U" son las dos, y matar por nombre se llevaria por delante la app estable.
 foreach ($p in (Get-Process U -ErrorAction SilentlyContinue)) {
+  $protegido = $false
+  foreach ($d in $Protegidas) {
+    if ($p.Path -and $p.Path.StartsWith([System.IO.Path]::GetFullPath($d), [StringComparison]::OrdinalIgnoreCase)) { $protegido = $true }
+  }
+  if ($protegido) { Write-Host ("PROTEGIDA, no se toca: PID {0}" -f $p.Id) -ForegroundColor Green; continue }
   if ($p.Path -and $p.Path.StartsWith($salidaAbs, [StringComparison]::OrdinalIgnoreCase)) {
     Write-Host ("Cerrando app de desarrollo anterior (PID {0})..." -f $p.Id) -ForegroundColor DarkGray
     try { [void]$p.CloseMainWindow(); if (-not $p.WaitForExit(4000)) { $p.Kill() } } catch {}

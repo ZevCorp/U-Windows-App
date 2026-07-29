@@ -1127,16 +1127,26 @@ public sealed class SapGuiSurface : IUiSurface
                     {
                         acc.Add(child);
                     }
+                    else if (string.Equals(ctype, "GuiShell", StringComparison.OrdinalIgnoreCase)
+                             && string.Equals(Str(child.SubType), "TextEdit", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Las cajas de texto largo —«Motivo de Consulta», «Conducta»— NO son
+                        // GuiTextField: son shells, y por eso el autofill clínico ni las veía. Se
+                        // escriben igual que un campo normal (Apply hace node.Text = valor).
+                        acc.Add(child);
+                    }
                     else if (labels != null && string.Equals(ctype, "GuiLabel", StringComparison.OrdinalIgnoreCase))
                     {
-                        string ln = Str(child.Name);
-                        // Solo los que APUNTAN a un campo («*NOMBRE»). Los demás son unidades y
-                        // rótulos sueltos —«Kg», «mm Hg», «x min»— que no identifican a nadie y
-                        // llenarían el mapa de ruido.
-                        if (ln.Length > 1 && ln[0] == '*')
+                        string ln = Str(child.Name).Trim();
+                        string txt = Str(child.Text).Trim();
+                        if (ln.Length > 0 && txt.Length > 0)
                         {
-                            string txt = Str(child.Text).Trim();
-                            if (txt.Length > 0) labels[ln.Substring(1)] = txt;
+                            // DOS claves por etiqueta. La de siempre —«*NOMBRE» → NOMBRE— resuelve
+                            // los campos normales. La otra es el nombre tal cual, que es como la
+                            // encuentran las cajas de texto largo: su etiqueta se llama
+                            // «B__ZTXTMTVCN» y su contenedor «cntlCT__ZTXTMTVCN», mismo sufijo.
+                            labels[ln] = txt;
+                            if (ln.Length > 1 && ln[0] == '*') labels[ln.Substring(1)] = txt;
                         }
                     }
                 }
@@ -1471,6 +1481,27 @@ public sealed class SapGuiSurface : IUiSurface
                     return human;
             }
             catch { }
+
+            // Caja de texto largo: su Name es «shell» y no identifica nada. La identidad vive en el
+            // CONTENEDOR —«cntlCT__ZTXTMTVCN»— y la etiqueta de al lado se llama «B__ZTXTMTVCN».
+            // Mismo sufijo, distinta letra inicial: emparejan por identidad, no por cercanía en
+            // pantalla. Verificado contra el SAP real (NWP1/SAPLY000, 2026-07-28).
+            try
+            {
+                string id = Str(node.GetType().InvokeMember("Id", BindingFlags.GetProperty, null, node, null));
+                int c = id.IndexOf("/cntlCT__", StringComparison.OrdinalIgnoreCase);
+                if (c >= 0)
+                {
+                    int ini = c + "/cntlCT__".Length;
+                    int fin = id.IndexOf('/', ini);
+                    string sufijo = fin > ini ? id.Substring(ini, fin - ini) : id.Substring(ini);
+                    if (sufijo.Length > 0
+                        && labels.TryGetValue("B__" + sufijo, out string? rotulo)
+                        && rotulo.Length > 0)
+                        return rotulo;
+                }
+            }
+            catch { }
         }
 
         foreach (string prop in new[] { "Name", "Text" })
@@ -1499,7 +1530,16 @@ public sealed class SapGuiSurface : IUiSurface
             if (type.Equals("GuiPasswordField", StringComparison.OrdinalIgnoreCase))
                 return null; // jamás se lee ni se graba una contraseña
 
-            return Str(node.Text);
+            string txt = Str(node.Text);
+
+            // El marcador de una caja de texto vacía de SAP («Introduzca texto aquí…») es texto para
+            // la API, pero para un humano ese campo está VACÍO. Sin esto el puente clínico lo daría
+            // por ocupado y se negaría a escribir el motivo de consulta, que es justo lo contrario
+            // de lo que la regla «solo campos vacíos» quiere proteger.
+            if (txt.TrimStart().StartsWith("Introduzca texto", StringComparison.OrdinalIgnoreCase))
+                return "";
+
+            return txt;
         }
         catch { return null; }
     }
