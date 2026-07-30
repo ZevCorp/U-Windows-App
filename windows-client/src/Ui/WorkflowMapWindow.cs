@@ -6,6 +6,7 @@ using System.Windows.Shapes;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using U.Graph;
+using U.WindowsClient.Navigation;
 
 namespace U.WindowsClient.Ui;
 
@@ -50,6 +51,24 @@ public sealed class WorkflowMapWindow : Window
     private readonly Dictionary<string, Node> _nodes = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Edge> _edges = new();
     private readonly StackPanel _rows = new() { Orientation = Orientation.Vertical };
+
+    // ── La capa GRIS: el mapa base del computador ────────────────────────────
+    // El terreno que Ü conoce por haberlo visto (SurfaceMap), debajo de las rutas verdes. Se
+    // expande solo la app donde estás parado: el terreno completo son cientos de pantallas y
+    // este panel es una franja lateral — el mapa se abre por donde caminas.
+    private readonly SurfaceMap? _base;
+    private readonly StackPanel _terrain = new() { Orientation = Orientation.Vertical };
+    private readonly Dictionary<string, Border> _grayBoxes = new(StringComparer.OrdinalIgnoreCase);
+    private string _renderedOrigin = "";
+    private int _renderedVersion = -1;
+
+    private static readonly SolidColorBrush VerdeFondo = new(Color.FromArgb(0x30, 0x2E, 0x7D, 0x32));
+    private static readonly SolidColorBrush VerdeBorde = new(Color.FromArgb(0x55, 0x66, 0xBB, 0x6A));
+    private static readonly SolidColorBrush VerdeAqui = new(Color.FromArgb(0xE0, 0x2E, 0x7D, 0x32));
+    private static readonly SolidColorBrush VerdeAquiBorde = new(Color.FromArgb(0xFF, 0x66, 0xBB, 0x6A));
+    private static readonly SolidColorBrush GrisFondo = new(Color.FromArgb(0x1C, 0xC0, 0xC0, 0xC0));
+    private static readonly SolidColorBrush GrisBorde = new(Color.FromArgb(0x2A, 0xFF, 0xFF, 0xFF));
+    private static readonly SolidColorBrush GrisTexto = new(Color.FromArgb(0x8A, 0xFF, 0xFF, 0xFF));
     private readonly TextBlock _status = new()
     {
         Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
@@ -59,8 +78,9 @@ public sealed class WorkflowMapWindow : Window
     };
     private string _currentSurface = "";
 
-    public WorkflowMapWindow()
+    public WorkflowMapWindow(SurfaceMap? baseMap = null)
     {
+        _base = baseMap;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -83,6 +103,17 @@ public sealed class WorkflowMapWindow : Window
             Margin = new Thickness(2, 0, 2, 6),
         });
         panel.Children.Add(_rows);
+        if (_base != null)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = "— terreno —",
+                Foreground = GrisTexto,
+                FontSize = 9.5,
+                Margin = new Thickness(2, 8, 2, 3),
+            });
+            panel.Children.Add(_terrain);
+        }
         panel.Children.Add(_status);
 
         Content = new Border
@@ -263,8 +294,10 @@ public sealed class WorkflowMapWindow : Window
                 var box = new Border
                 {
                     CornerRadius = new CornerRadius(6),
-                    Background = new SolidColorBrush(Color.FromArgb(0x2A, 0xFF, 0xFF, 0xFF)),
-                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+                    // Verde SIEMPRE, no solo al pisarlo: verde significa "ruta aprendida", que es
+                    // la distinción que el mapa existe para mostrar. El terreno gris va aparte.
+                    Background = VerdeFondo,
+                    BorderBrush = VerdeBorde,
                     BorderThickness = new Thickness(1),
                     Padding = new Thickness(7, 3, 7, 3),
                     Margin = new Thickness(0, 2, 6, 2),
@@ -297,7 +330,7 @@ public sealed class WorkflowMapWindow : Window
     /// </summary>
     public void SetCurrent(string surfaceId)
     {
-        _currentSurface = surfaceId ?? "";
+        _currentSurface = (surfaceId ?? "").Trim().TrimEnd('/');
 
         Node? actual = null;
         if (_currentSurface.Length > 0)
@@ -315,12 +348,102 @@ public sealed class WorkflowMapWindow : Window
         {
             if (n.Box == null) continue;
             bool aqui = ReferenceEquals(n, actual);
-            n.Box.Background = new SolidColorBrush(aqui
-                ? Color.FromArgb(0xE0, 0x2E, 0x7D, 0x32)     // verde: estás aquí
-                : Color.FromArgb(0x2A, 0xFF, 0xFF, 0xFF));
-            n.Box.BorderBrush = new SolidColorBrush(aqui
-                ? Color.FromArgb(0xFF, 0x66, 0xBB, 0x6A)
-                : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+            n.Box.Background = aqui ? VerdeAqui : VerdeFondo;
+            n.Box.BorderBrush = aqui ? VerdeAquiBorde : VerdeBorde;
         }
+
+        RenderTerrainIfStale();
+
+        // En el terreno la coincidencia es EXACTA: los ids grises salen del mismo locator que
+        // este, no de una grabación vieja, así que la tolerancia de prefijo no pinta nada aquí.
+        // Y si una ruta verde ya reclamó la ubicación, el gris no compite: la capa de arriba manda.
+        foreach (var kv in _grayBoxes)
+        {
+            bool aqui = actual == null
+                && string.Equals(kv.Key, _currentSurface, StringComparison.OrdinalIgnoreCase);
+            kv.Value.Background = aqui ? VerdeAqui : GrisFondo;
+            kv.Value.BorderBrush = aqui ? VerdeAquiBorde : GrisBorde;
+        }
+    }
+
+    // ── Terreno (capa gris) ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Redibuja el terreno solo si cambió lo que se vería: otra app delante, o el mapa aprendió
+    /// algo nuevo. Se agrupa por app y solo la app ACTUAL se expande en pantallas; el resto son
+    /// cabeceras con su recuento. El terreno entero no cabe en una franja lateral, y no hace
+    /// falta: el mapa se abre por donde caminas.
+    /// </summary>
+    private void RenderTerrainIfStale()
+    {
+        if (_base == null) return;
+        string origin = _currentSurface.Length > 0 ? SurfacePlace.OriginOf(_currentSurface) : "";
+        if (origin == _renderedOrigin && _base.Version == _renderedVersion) return;
+        _renderedOrigin = origin;
+        _renderedVersion = _base.Version;
+
+        _terrain.Children.Clear();
+        _grayBoxes.Clear();
+
+        var porApp = _base.Nodes
+            .GroupBy(kv => SurfacePlace.OriginOf(kv.Key), StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Max(kv => kv.Value.LastSeen))
+            .ToList();
+
+        foreach (var app in porApp)
+        {
+            bool actualApp = string.Equals(app.Key, origin, StringComparison.OrdinalIgnoreCase);
+            _terrain.Children.Add(new TextBlock
+            {
+                Text = (actualApp ? "▾ " : "▸ ") + app.Key + "  · " + app.Count() + " pantalla(s)",
+                Foreground = GrisTexto,
+                FontSize = 10,
+                FontFamily = new FontFamily("Consolas"),
+                Margin = new Thickness(2, 2, 2, 1),
+            });
+
+            if (!actualApp) continue;
+
+            var row = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(10, 0, 0, 2) };
+            foreach (var kv in app.OrderByDescending(kv => kv.Value.Visits).Take(12))
+            {
+                // Si una ruta verde ya dibuja esta pantalla, el gris no la repite: una pantalla,
+                // una ficha — la capa dice si es terreno o ruta.
+                if (_nodes.Values.Any(n => SurfacePlace.Same(kv.Key, n.Surface))) continue;
+
+                var box = new Border
+                {
+                    CornerRadius = new CornerRadius(6),
+                    Background = GrisFondo,
+                    BorderBrush = GrisBorde,
+                    BorderThickness = new Thickness(1),
+                    Padding = new Thickness(7, 2, 7, 2),
+                    Margin = new Thickness(0, 2, 6, 2),
+                    Child = new TextBlock
+                    {
+                        Text = ShortLabel(kv.Key),
+                        Foreground = GrisTexto,
+                        FontSize = 10,
+                        FontFamily = new FontFamily("Consolas"),
+                        ToolTip = kv.Key + $"  ({kv.Value.Visits} visita(s))",
+                    },
+                };
+                _grayBoxes[kv.Key] = box;
+                row.Children.Add(box);
+            }
+            if (row.Children.Count > 0) _terrain.Children.Add(row);
+        }
+
+        int caminos = _base.Edges().Count();
+        int conAccion = _base.EdgesWithAction;
+        _terrain.Children.Add(new TextBlock
+        {
+            // «N con acción» es la madurez real del mapa: las aristas que ya se pueden RECORRER,
+            // no solo las que se sabe que existen.
+            Text = $"{_base.Nodes.Count} pantalla(s) · {caminos} camino(s) ({conAccion} con acción) · {porApp.Count} app(s)",
+            Foreground = GrisTexto,
+            FontSize = 9.5,
+            Margin = new Thickness(2, 3, 2, 0),
+        });
     }
 }

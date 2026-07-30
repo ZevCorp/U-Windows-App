@@ -52,6 +52,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private SurfaceLocator? _locator;
     private LocatorBadge? _badge;
     private WorkflowMapWindow? _map;
+    // El mapa base del computador (la capa gris): se alimenta SIEMPRE del caudal del locator,
+    // esté o no abierta la visualización — el terreno se acumula mientras el usuario vive su día.
+    private SurfaceMap? _surfaceMap;
+    private ClickWatcher? _clickWatcher;
     private WorkflowMcpRunner? _workflowRunner;
 
     // Selector de workflow directo en el panel Backend: lista cargada de Graph + un GraphClient propio
@@ -120,10 +124,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _badge = new LocatorBadge();
         _badge.Show();
         _locator = new SurfaceLocator();
+        _surfaceMap = SurfaceMap.Load();
+        // El vigilante de clics: sin él las aristas del terreno solo dicen que dos pantallas
+        // conectan; con él dicen CÓMO pasar de una a otra, que es lo que permite navegar sin
+        // haber grabado un workflow. Siempre activo, porque el terreno se aprende viviendo.
+        _clickWatcher = new ClickWatcher();
+        _clickWatcher.Start();
+        _surfaceMap.Clicks = _clickWatcher;
+        Closed += (_, __) =>
+        {
+            _surfaceMap?.Save();
+            _clickWatcher?.Dispose(); // un hook huérfano ralentiza el ratón de TODA la máquina
+        };
         _locator.Changed += loc => Dispatcher.Invoke(() =>
         {
             _badge?.SetText(loc.Id);
-            _map?.SetCurrent(loc.Id);   // el mapa ilumina el nodo donde estás parado
+            _surfaceMap?.Observe(loc.Id); // el terreno se aprende navegando, sin enseñar nada
+            _map?.SetCurrent(loc.Id);     // y el mapa ilumina el nodo donde estás parado
         });
         _locator.Start();
 
@@ -966,7 +983,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             return;
         }
 
-        _map = new WorkflowMapWindow();
+        _map = new WorkflowMapWindow(_surfaceMap);
         _map.Show();
         MapBtn.Content = "🗺 Mapa: cargando…";
         _directGraph ??= new GraphClient(_graphConfig);

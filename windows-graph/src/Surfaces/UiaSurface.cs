@@ -352,6 +352,27 @@ public sealed class UiaSurface : IUiSurface
     }
 
     /// <summary>Los selectores de un elemento, del más estable al más frágil.</summary>
+    /// <summary>
+    /// La respuesta canónica a «¿qué es este elemento?», para quien esté FUERA de la grabación.
+    ///
+    /// Existe porque la pregunta ya tuvo dos respuestas a la vez y salió caro: el mapa base del
+    /// computador (ClickWatcher) resolvía clics con un FromPoint crudo y un selector inventado
+    /// («uia:id=X»), mientras la grabación usaba LabelOf + SelectorsFor. Resultado medido
+    /// (2026-07-29): ~48% de las acciones del terreno eran inservibles, y ninguna era ejecutable
+    /// por el player porque ni siquiera hablaban el formato de los workflows. Mismo patrón que ya
+    /// costó una jornada con dos varas para «¿estoy en esta pantalla?».
+    ///
+    /// Devuelve la MISMA tripleta que se persiste en un paso grabado: etiqueta humana, tipo de
+    /// control y selectores por identidad con alternativas (AutomationId → Name → Path). Quien
+    /// consuma esto produce aristas que el ejecutor puede recorrer tal cual.
+    /// </summary>
+    public static (string Label, string ControlType, List<string> Selectors) DescribeElement(AutomationElement el)
+    {
+        var info = el.Current;
+        string ct = ControlTypeName(info.ControlType);
+        return (LabelOf(el, info), ct, SelectorsFor(info, new List<int>(), ct));
+    }
+
     private static List<string> SelectorsFor(
         AutomationElement.AutomationElementInformation info, List<int> path, string ct)
     {
