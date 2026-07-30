@@ -33,6 +33,25 @@ public sealed class GraphConfig
     /// <summary>Pausa entre pasos al ejecutar un plan. La UI de destino necesita respirar.</summary>
     public int StepDelayMs { get; set; } = 250;
 
+    /// <summary>
+    /// Nombres técnicos ABAP EXTRA que identifican al paciente en las pantallas de este hospital
+    /// (p. ej. <c>["PATNR", "FALNR"]</c>, sin el prefijo de estructura: de <c>RNPA1-PASSNR</c> va
+    /// <c>PASSNR</c>). Se suman a los que <see cref="NoteExport.PatientGuard"/> ya conoce.
+    ///
+    /// Existe porque los dynpros de IS-H cambian entre instalaciones y quien sabe cuáles son es el
+    /// implantador, no este código. Ampliar la lista NUNCA produce un «verificado» falso: solo hace
+    /// que la compuerta encuentre más pistas que enseñarle a quien aprueba.
+    /// </summary>
+    public List<string> PatientFieldNames { get; set; } = new();
+
+    /// <summary>
+    /// Política de verificación del paciente para el ejecutor de exportaciones:
+    /// <c>OperatorConfirms</c> (por defecto — una persona confirma) u <c>Off</c> (solo entornos de
+    /// prueba con datos ficticios). Se lee como texto para que un valor desconocido en el archivo
+    /// caiga en el DEFAULT SEGURO en vez de romper el arranque.
+    /// </summary>
+    public string PatientPolicy { get; set; } = "OperatorConfirms";
+
     private static string Path =>
         System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "U", "graph.json");

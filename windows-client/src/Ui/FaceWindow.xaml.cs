@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using U.Graph;
+using U.Graph.NoteExport;
 using U.Graph.Surfaces;
 using U.WindowsClient.Agent;
 using U.WindowsClient.Backend;
@@ -944,15 +945,26 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         var sap = new SapGuiSurface();
         sap.Diagnostic += (_, msg) => LogBus.Log("sap", msg);
 
+        // La política sale de graph.json. Un valor desconocido cae en el default SEGURO (una persona
+        // confirma), nunca en «escribir sin verificar»: un typo en un archivo de configuración no
+        // puede ser lo que apague la compuerta del paciente.
+        if (!Enum.TryParse(_graphConfig.PatientPolicy, ignoreCase: true, out PatientPolicy policy))
+            policy = PatientPolicy.OperatorConfirms;
+
         _exports = new NoteExportExecutor(
-            new GraphClient(_graphConfig), _graphConfig, Environment.MachineName, uia, sap)
+            new GraphClient(_graphConfig), _graphConfig, Environment.MachineName,
+            new ExportJournal(s => LogBus.Log("exportar", s)), uia, sap)
         {
-            // AppAligner y no SurfaceNavigator: el ejecutor corre desatendido, así que va por la vía
-            // de alineación ya validada (la misma del cerebro/MCP y la biblioteca).
+            PatientPolicy = policy,
+            // AppAligner y no SurfaceNavigator: el ejecutor corre sin vigilancia continua, así que va
+            // por la vía de alineación ya validada (la misma del cerebro/MCP y la biblioteca).
             Aligner = AppAligner.EnsureAsync,
             Log = s => LogBus.Log("exportar", s),
+            // La compuerta humana. Va al hilo de UI porque abre una ventana; el ejecutor la espera.
+            Approval = (request, _) =>
+                Dispatcher.InvokeAsync(() => new ExportApprovalWindow(request).AskAsync()).Task.Unwrap(),
             // No reclamar mientras el operador (o el puente clínico) usa la máquina: reclamar y no
-            // poder ejecutar quema un intento y un lease del trabajo.
+            // poder ejecutar quema un intento y bloquea el lease diez minutos, y solo hay tres.
             HoldReason = () =>
                 _teaching ? "grabando una enseñanza"
                 : _runningDirect ? "hay un workflow corriendo a mano"
@@ -960,9 +972,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 : "",
         };
         _exports.StatusChanged += (_, s) => Dispatcher.Invoke(() => ExportsStatus.Text = s);
-        _exports.JobDone += (_, o) => Dispatcher.Invoke(() => Narrate(o.Outcome == "ok" && o.ConsultationExported
-            ? $"Consulta exportada a la historia clínica{(o.Folio.Length > 0 ? $" (folio {o.Folio})" : "")}."
-            : $"Una exportación terminó en {o.Status}; el detalle está en el registro."));
+        _exports.JobDone += (_, o) => Dispatcher.Invoke(() => Narrate(
+            o.Idempotent ? "Se confirmó una exportación que había quedado pendiente."
+            : o.Outcome == "ok" && o.ConsultationExported
+                ? $"Consulta exportada a la historia clínica{(o.Folio.Length > 0 ? $" (folio {o.Folio})" : "")}."
+                : $"Una exportación terminó en {o.Status}; el detalle está en el registro."));
 
         _exportsCts = new CancellationTokenSource();
         var ct = _exportsCts.Token;
@@ -979,8 +993,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }, CancellationToken.None);
 
         ExportsBtn.Content = "⏹ Dejar de atender";
-        ExportsStatus.Text = "Atendiendo la cola de exportaciones…";
-        LogBus.Log("exportar", $"ejecutor encendido · device={Environment.MachineName}");
+        ExportsStatus.Text = policy == PatientPolicy.Off
+            ? "Atendiendo la cola · SIN verificar el paciente (modo de pruebas)"
+            : "Atendiendo la cola de exportaciones…";
+        LogBus.Log("exportar", $"ejecutor encendido · device={Environment.MachineName} · política={policy}");
     }
 
     private void StopExports(string why)

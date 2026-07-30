@@ -140,21 +140,30 @@ pantalla y aprende el mapeo concepto↔selector una vez por pantalla.
 
 ## El ejecutor de exportaciones (cola de Graph → SAP)
 
-El reemplazo del simulador del repo Graph (`scripts/simulate-operations-executor.js`), hablando su
-mismo carril: `POST /api/v1/operations/exports/claim` → ejecutar el workflow del trabajo contra SAP →
-`POST …/:id/result`. Contrato completo: `docs/note-export-contract.md` del repo Graph.
+El reemplazo del simulador del repo Graph, hablando su mismo carril `/api/v1/operations/exports`.
+Vive en `windows-graph/src/NoteExport/`. Guía completa: [`docs/exportacion-clinica.md`](docs/exportacion-clinica.md);
+pruebas: [`docs/pruebas-exportacion.md`](docs/pruebas-exportacion.md).
 
-- **`NoteExportExecutor`** (`windows-graph/src/NoteExportExecutor.cs`): el loop. Se enciende desde el
-  panel Backend («Exportar a historia clínica»); no reclama mientras se enseña, corre un workflow a
-  mano o hay un ofrecimiento clínico en pantalla — reclamar sin poder ejecutar quema intento y lease.
 - **`outcome:'ok'` solo con señal verificada**: el mensaje **tipo S** de la barra de estado
-  (`SapGuiSurface.AwaitStatusbarMessage`, con la carrera del `Busy` manejada por sondeos consecutivos
-  y una línea base previa que descarta mensajes viejos). Que el workflow termine sin fallos NO es la
-  señal. El folio sale del mensaje; el texto completo se queda en el log local (puede llevar PHI).
-- **El result se reintenta hasta el ack** y se persiste en `%LOCALAPPDATA%\U\export-results\` ANTES
-  del primer envío: si la app muere con SAP ya escrito, al arrancar se reenvía (el endpoint es
-  idempotente). Un rechazo de contrato (lease vencido, otro dueño) no se reintenta: se loguea con
-  todas las letras, porque puede significar doble escritura.
+  (`SapGuiSurface.AwaitStatusbarMessage`, con la carrera del `Busy` manejada por sondeos consecutivos)
+  y **distinto de la línea base** leída antes de ejecutar — un «Documento grabado» de hace una hora
+  no confirma lo de ahora. Que el workflow termine sin fallos NO es la señal. Un mensaje **E** es casi
+  siempre una validación de negocio → `needs_doctor`, no `error`: reintentar daría lo mismo.
+- **La compuerta del paciente** (`PatientGuard`). Hoy es IMPOSIBLE verificarlo por máquina:
+  `patient_ref` es un uuid de Miracle que SAP no conoce, y en el esquema de Notes no hay ningún
+  identificador institucional. Así que se lee lo que la pantalla dice, lo confirma una persona, y si
+  algún día llega un identificador que NO coincida se frena en seco. Lo único a tocar ese día es
+  `HisPatientIdFrom`.
+- **El diario** (`ExportJournal`, `%LOCALAPPDATA%\U\note-exports\`) persiste la fase alcanzada. Es lo
+  único que distingue «no se había empezado» de «pudo haber escrito»: un corte durante la escritura
+  deja el trabajo INCIERTO y, si Graph lo vuelve a servir, se pide intervención en vez de reejecutar.
+- **El result se reintenta hasta el ack**, persistido antes del primer envío. Reenviarlo nunca
+  reejecuta el workflow. Un 4xx no se reintenta.
+- **`device` idéntico en claim y result**: Graph lo compara contra `claimed_by` como string exacto.
+  Cambiarlo da 409, bloquea el lease 10 min y quema uno de los tres intentos.
+- **El ack idempotente NO dice nada de tu envío**: devuelve el estado viejo y `consultation_exported`
+  siempre `false`. Concluir de ahí que la exportación falló es una alarma falsa en el caso más normal
+  —el reenvío tras un corte de red—, y esa alarma estuvo escrita en la primera versión de esto.
 
 ## Aprendizajes de método
 
@@ -221,3 +230,21 @@ Estos costaron caro. Aplicarlos ahorra rondas enteras.
     `AGENTS.md` de que su Next.js no es el que uno cree, y no usa service-role en ninguna parte: eso es
     una postura de seguridad, no un olvido. Ir con `security definer`, que es lo que ya usan, en vez de
     meter una llave nueva.
+
+16. **Un contrato-espejo escrito a mano se desincroniza en silencio.** Tres campos del payload de
+    exportación (`especialidad`, `servicio`, `fecha`) faltaban en el C#: `System.Text.Json` los ignora
+    sin excepción ni warning, y el doc del contrato tampoco los mencionaba. No se detectó leyendo —se
+    detectó **generando el payload real y comparando** (`scripts/verify-export-contract-mirror.js`).
+    Cuando dos repos tienen que coincidir, la comprobación tiene que ser ejecutable, no una relectura.
+
+17. **Una suposición documentada del otro lado no es una garantía de este lado.** Graph deja escrito
+    que no manda identificadores del paciente porque «el ejecutor ya está en el contexto del paciente
+    en el HIS». Es razonable y es falso en cuanto la cola es asíncrona: el trabajo se encoló hace
+    veinte minutos y SAP puede tener otro paciente abierto. Al leer una suposición del vecino, la
+    pregunta no es si es razonable — es quién la comprueba. Aquí no la comprobaba nadie.
+
+18. **Cuando algo no se puede verificar, el diseño correcto es hacerlo evidente, no aproximarlo.**
+    La tentación era casar el paciente por nombre o por lo que hubiera a mano. Una verificación que
+    acierta casi siempre es peor que ninguna: crea confianza sin sostenerla, y falla justo en el caso
+    raro que importa. La compuerta lee, enseña y pregunta — y deja el camino automático escrito y
+    probado para el día que exista el dato que hoy no existe.

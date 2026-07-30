@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace U.Graph;
+namespace U.Graph.NoteExport;
 
 // Espejo del carril Operations de la cola de exportación de notas clínicas:
 // POST /api/v1/operations/exports/claim y POST /api/v1/operations/exports/:id/result.
@@ -46,13 +46,39 @@ public sealed class ExportJobInfo
 /// </summary>
 public sealed class ExportPayload
 {
-    [JsonPropertyName("note")] public JsonElement? Note { get; set; }
+    [JsonPropertyName("note")] public List<ExportNoteSection>? Note { get; set; }
     [JsonPropertyName("resumen")] public string? Resumen { get; set; }
-    [JsonPropertyName("codigos")] public JsonElement? Codigos { get; set; }
+    [JsonPropertyName("codigos")] public List<ExportCode>? Codigos { get; set; }
     [JsonPropertyName("firma")] public ExportSignature? Firma { get; set; }
+
+    /// <summary>uuid del paciente en Miracle. NO es un identificador que el HIS reconozca — ver
+    /// <see cref="U.Graph.PatientGuard"/> para por qué eso importa y qué se hace al respecto.</summary>
     [JsonPropertyName("patient_ref")] public string? PatientRef { get; set; }
+
+    [JsonPropertyName("especialidad")] public string? Especialidad { get; set; }
+    [JsonPropertyName("servicio")] public string? Servicio { get; set; }
+    [JsonPropertyName("fecha")] public string? Fecha { get; set; }
+
     [JsonPropertyName("rendered_text")] public string? RenderedText { get; set; }
     [JsonPropertyName("context")] public string? Context { get; set; }
+}
+
+/// <summary>Una sección de la nota. <c>kind</c> es 'texto' (usa <c>texto</c>) o 'lista' (usa <c>items</c>).</summary>
+public sealed class ExportNoteSection
+{
+    [JsonPropertyName("id")] public string? Id { get; set; }
+    [JsonPropertyName("titulo")] public string? Titulo { get; set; }
+    [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("texto")] public string? Texto { get; set; }
+    [JsonPropertyName("items")] public List<string>? Items { get; set; }
+}
+
+/// <summary>Un código diagnóstico. Graph ya filtró: aquí solo llegan los de estado 'aceptado'.</summary>
+public sealed class ExportCode
+{
+    [JsonPropertyName("sistema")] public string? Sistema { get; set; }
+    [JsonPropertyName("codigo")] public string? Codigo { get; set; }
+    [JsonPropertyName("descripcion")] public string? Descripcion { get; set; }
 }
 
 public sealed class ExportSignature
