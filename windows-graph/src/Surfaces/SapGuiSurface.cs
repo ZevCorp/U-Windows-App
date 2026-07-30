@@ -457,6 +457,72 @@ public sealed class SapGuiSurface : IUiSurface
     }
 
     /// <summary>
+    /// El mensaje de negocio de la barra de estado (<c>wnd[0]/sbar</c>). Es el ÚNICO canal donde SAP
+    /// publica el desenlace de un round-trip: «Documento 4711 grabado» (tipo S), «Rellene todos los
+    /// campos obligatorios» (tipo E)… No hay evento COM para esto —el evento <c>Error</c> de la API es
+    /// otra cosa, ver INVESTIGACION-SAPGUI-UIA.md— así que se lee, no se escucha.
+    /// </summary>
+    /// <remarks>Tipos de SAP: S=éxito · E=error · A=aborto · W=advertencia · I=información.
+    /// <c>Code</c> es <c>MessageId-MessageNumber</c> (p.ej. «V1-311»): identifica el mensaje sin
+    /// llevar su texto, que puede contener datos del paciente.</remarks>
+    public sealed record SapStatusMessage(string Type, string Text, string Code);
+
+    /// <summary>
+    /// Espera a que el viaje al servidor termine y devuelve el mensaje que dejó en la barra de estado,
+    /// o null si en <paramref name="timeoutMs"/> no apareció ninguno. Null significa «no hubo señal»,
+    /// que NO es éxito ni error: el caller decide qué implica (para una exportación implica que no se
+    /// puede reportar 'ok', porque 'ok' exige señal verificada).
+    ///
+    /// Dos disciplinas heredadas de este módulo:
+    ///   1. Con <c>Busy=true</c> cualquier llamada al scripting se bloquea sin retorno — no se toca COM.
+    ///   2. <c>Busy</c> solo es true DURANTE el round-trip: justo tras nuestro clic SAP aún no arrancó,
+    ///      así que un instante suelto de <c>Busy=false</c> miente. Se exige calma en varios sondeos
+    ///      consecutivos antes de leer (la carrera documentada como pendiente nº1 del CLAUDE.md).
+    ///
+    /// BLOQUEA el hilo mientras espera: llamarlo desde un worker (Task.Run), nunca desde la UI.
+    /// </summary>
+    public SapStatusMessage? AwaitStatusbarMessage(int timeoutMs, CancellationToken ct)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int calm = 0; // sondeos consecutivos con Busy=false
+        while (sw.ElapsedMilliseconds < timeoutMs && !ct.IsCancellationRequested)
+        {
+            if (IsBusy()) { calm = 0; Thread.Sleep(150); continue; }
+            if (++calm < 3) { Thread.Sleep(150); continue; }
+
+            try
+            {
+                dynamic? session = Session();
+                dynamic? sbar = session?.FindById("wnd[0]/sbar", false);
+                if (sbar != null)
+                {
+                    string type = Str(sbar.MessageType).Trim().ToUpperInvariant();
+                    string text = Str(sbar.Text).Trim();
+                    string code = "";
+                    try
+                    {
+                        string mid = Str(sbar.MessageId).Trim();
+                        string mno = Str(sbar.MessageNumber).Trim();
+                        code = mid.Length > 0 && mno.Length > 0 ? $"{mid}-{mno}" : mid + mno;
+                    }
+                    catch { /* MessageId/Number no existen en todas las versiones; el tipo basta */ }
+
+                    if (type.Length > 0 || text.Length > 0)
+                        return new SapStatusMessage(type, text, code);
+                }
+            }
+            catch (Exception e)
+            {
+                // La pantalla puede estar cambiando bajo los pies; se nombra el paso que falló y se
+                // vuelve a intentar dentro del plazo, no se concluye nada de un fallo puntual.
+                Diagnostic?.Invoke(this, $"sbar: la lectura falló ({e.Message}); se reintenta");
+            }
+            Thread.Sleep(250);
+        }
+        return null;
+    }
+
+    /// <summary>
     /// ¿El elemento del paso existe YA y se puede tocar? Antes esto devolvía <c>true</c> siempre, lo que
     /// hacía que <see cref="U.Graph.SurfaceReadiness"/> retornara en la primera iteración sin esperar
     /// nada: el motor de carga estaba inerte en SAP y se actuaba sobre la pantalla anterior.

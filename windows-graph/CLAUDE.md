@@ -209,7 +209,12 @@ enganchado EndRequest   (dispid=515,  args=1)
 ```
 
 `ErrorMessage` **no** aparece en esta versión de SAP GUI: ni enganchado ni fallido, así que la
-enumeración no encuentra un método con ese nombre. **No observamos los errores de SAP.**
+enumeración no encuentra un método con ese nombre. **No observamos los errores de SAP por eventos.**
+El canal real de los mensajes de negocio («Documento grabado», «Rellene los campos obligatorios») es
+la **barra de estado** (`wnd[0]/sbar`: `MessageType` S/E/A/W/I + `Text` + `MessageId/Number`), y se
+LEE, no se escucha — `AwaitStatusbarMessage` lo hace con la carrera del `Busy` manejada (sondeos
+consecutivos en calma antes de tocar COM). Es la señal con la que el ejecutor de exportaciones
+distingue «SAP confirmó el guardado» de «no lanzó excepción».
 
 `EndRequest` es la señal de "re-resuelve el árbol, los ids viejos están muertos".
 

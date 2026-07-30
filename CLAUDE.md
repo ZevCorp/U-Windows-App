@@ -134,8 +134,27 @@ pantalla y aprende el mapeo concepto↔selector una vez por pantalla.
   que el sondeo cada 1,5 s sea barato, y `409 + stop:true` cuando la consulta se firma.
 - **Emparejamiento por código**, no por credencial: el agente no puede llevar el JWT del médico. El
   código dura 8 h o hasta que se firme la consulta, lo primero que pase.
-- Lado Windows: **sin implementar todavía**. Falta pegar el código, sondear, y colocar sin sobrescribir
-  lo que ya tenga valor.
+- Lado Windows: implementado en `windows-client/src/Clinical/` (`ClinicalBridge` sondea cada 3 s,
+  `ConceptBinder` mapea concepto↔campo, `FillPreviewWindow` pide aprobación). Nunca escribe sin que el
+  operador apruebe, y no pisa campos que ya tengan valor.
+
+## El ejecutor de exportaciones (cola de Graph → SAP)
+
+El reemplazo del simulador del repo Graph (`scripts/simulate-operations-executor.js`), hablando su
+mismo carril: `POST /api/v1/operations/exports/claim` → ejecutar el workflow del trabajo contra SAP →
+`POST …/:id/result`. Contrato completo: `docs/note-export-contract.md` del repo Graph.
+
+- **`NoteExportExecutor`** (`windows-graph/src/NoteExportExecutor.cs`): el loop. Se enciende desde el
+  panel Backend («Exportar a historia clínica»); no reclama mientras se enseña, corre un workflow a
+  mano o hay un ofrecimiento clínico en pantalla — reclamar sin poder ejecutar quema intento y lease.
+- **`outcome:'ok'` solo con señal verificada**: el mensaje **tipo S** de la barra de estado
+  (`SapGuiSurface.AwaitStatusbarMessage`, con la carrera del `Busy` manejada por sondeos consecutivos
+  y una línea base previa que descarta mensajes viejos). Que el workflow termine sin fallos NO es la
+  señal. El folio sale del mensaje; el texto completo se queda en el log local (puede llevar PHI).
+- **El result se reintenta hasta el ack** y se persiste en `%LOCALAPPDATA%\U\export-results\` ANTES
+  del primer envío: si la app muere con SAP ya escrito, al arrancar se reenvía (el endpoint es
+  idempotente). Un rechazo de contrato (lease vencido, otro dueño) no se reintenta: se loguea con
+  todas las letras, porque puede significar doble escritura.
 
 ## Aprendizajes de método
 

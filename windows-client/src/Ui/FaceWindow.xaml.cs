@@ -254,6 +254,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     protected override void OnClosed(EventArgs e)
     {
+        // El ejecutor de exportaciones no debe sobrevivir a la ventana. Un resultado que quede sin
+        // ack en este instante está persistido a disco y se reenvía al próximo arranque.
+        try { _exportsCts?.Cancel(); } catch { }
         _updater?.ApplyOnExit();
         base.OnClosed(e);
     }
@@ -917,6 +920,77 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             catch (Exception e) { LogBus.Log("clinico", $"«{b.FieldLabel}» lanzó: {e.Message}"); }
         }
         return n;
+    }
+
+    // ── Ejecutor de exportaciones (cola de Graph → SAP) ──────────────────────
+    //
+    // El reemplazo del simulador del repo Graph: reclama trabajos de exportación, ejecuta el
+    // workflow contra SAP y reporta el resultado hasta recibir ack. La lógica vive en
+    // NoteExportExecutor (windows-graph); aquí solo se enciende, se apaga y se pinta su estado.
+
+    private NoteExportExecutor? _exports;
+    private CancellationTokenSource? _exportsCts;
+
+    private void OnToggleExports(object sender, RoutedEventArgs e)
+    {
+        if (_exportsCts != null) { StopExports("apagado por el operador"); return; }
+        if (!_graphConfig.IsConfigured)
+        {
+            ExportsStatus.Text = "Falta la API key de Graph (graph.json / GRAPH_API_KEY).";
+            return;
+        }
+
+        var uia = new UiaSurface { Log = s => LogBus.Log("uia", s) };
+        var sap = new SapGuiSurface();
+        sap.Diagnostic += (_, msg) => LogBus.Log("sap", msg);
+
+        _exports = new NoteExportExecutor(
+            new GraphClient(_graphConfig), _graphConfig, Environment.MachineName, uia, sap)
+        {
+            // AppAligner y no SurfaceNavigator: el ejecutor corre desatendido, así que va por la vía
+            // de alineación ya validada (la misma del cerebro/MCP y la biblioteca).
+            Aligner = AppAligner.EnsureAsync,
+            Log = s => LogBus.Log("exportar", s),
+            // No reclamar mientras el operador (o el puente clínico) usa la máquina: reclamar y no
+            // poder ejecutar quema un intento y un lease del trabajo.
+            HoldReason = () =>
+                _teaching ? "grabando una enseñanza"
+                : _runningDirect ? "hay un workflow corriendo a mano"
+                : _offering ? "hay un ofrecimiento clínico en pantalla"
+                : "",
+        };
+        _exports.StatusChanged += (_, s) => Dispatcher.Invoke(() => ExportsStatus.Text = s);
+        _exports.JobDone += (_, o) => Dispatcher.Invoke(() => Narrate(o.Outcome == "ok" && o.ConsultationExported
+            ? $"Consulta exportada a la historia clínica{(o.Folio.Length > 0 ? $" (folio {o.Folio})" : "")}."
+            : $"Una exportación terminó en {o.Status}; el detalle está en el registro."));
+
+        _exportsCts = new CancellationTokenSource();
+        var ct = _exportsCts.Token;
+        var exports = _exports;
+        _ = Task.Run(async () =>
+        {
+            try { await exports.RunAsync(ct); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                LogBus.Log("exportar", $"el ejecutor murió: {ex}");
+                Dispatcher.Invoke(() => StopExports($"se detuvo solo: {ex.Message}"));
+            }
+        }, CancellationToken.None);
+
+        ExportsBtn.Content = "⏹ Dejar de atender";
+        ExportsStatus.Text = "Atendiendo la cola de exportaciones…";
+        LogBus.Log("exportar", $"ejecutor encendido · device={Environment.MachineName}");
+    }
+
+    private void StopExports(string why)
+    {
+        try { _exportsCts?.Cancel(); } catch { }
+        _exportsCts = null;
+        _exports = null;
+        ExportsBtn.Content = "▶ Atender exportaciones";
+        ExportsStatus.Text = $"Apagado ({why}).";
+        LogBus.Log("exportar", $"ejecutor apagado: {why}");
     }
 
     private void OnToggleStepMode(object sender, RoutedEventArgs e)

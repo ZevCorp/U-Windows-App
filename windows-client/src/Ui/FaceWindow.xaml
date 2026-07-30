@@ -213,6 +213,20 @@
                                    Foreground="#99FFFFFF" TextWrapping="Wrap"
                                    Text="Sin emparejar."/>
 
+                        <!-- El ejecutor de exportaciones: atiende la cola de Graph (claim → workflow
+                             en SAP → result). «Exportada» solo cuando SAP publica su señal de éxito,
+                             y el resultado se reintenta hasta el ack — nunca best-effort. Ver
+                             NoteExportExecutor y docs/note-export-contract.md del repo Graph. -->
+                        <TextBlock Text="Exportar a historia clínica" Margin="0,14,0,4" FontSize="11"
+                                   Foreground="#99FFFFFF"/>
+                        <Button x:Name="ExportsBtn" Content="▶ Atender exportaciones" Height="26"
+                                Click="OnToggleExports" Style="{StaticResource FlatBtn}"
+                                Background="#33FFFFFF" Foreground="#CCFFFFFF" FontSize="11"
+                                ToolTip="Reclama trabajos de exportación de Graph y ejecuta el workflow en SAP. Solo reporta éxito con la confirmación de SAP verificada."/>
+                        <TextBlock x:Name="ExportsStatus" Margin="0,4,0,0" FontSize="10"
+                                   Foreground="#99FFFFFF" TextWrapping="Wrap"
+                                   Text="Apagado. Enciéndelo para atender la cola."/>
+
                         <!-- Paso a paso: no ejecuta distinto, ejecuta PAUSADO. Se queda encendido
                              entre corridas a propósito: si lo enciendes es porque estás depurando. -->
                         <Button x:Name="StepModeBtn" Height="26" Margin="0,14,0,0" Click="OnToggleStepMode"

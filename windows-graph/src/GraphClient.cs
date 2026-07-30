@@ -141,6 +141,33 @@ public sealed class GraphClient
         return res.ExecutionPlan;
     }
 
+    // ── Exportación de notas clínicas (carril Operations) ────────────────────
+
+    /// <summary>
+    /// Reclama el siguiente trabajo de exportación de la cola (FIFO con lease). Devuelve null si la
+    /// cola está vacía (204) — eso no es un error, es «vuelve a preguntar luego».
+    /// </summary>
+    public async Task<ExportJobResponse?> ClaimExportAsync(string device, CancellationToken ct)
+    {
+        string payload = JsonSerializer.Serialize(new ExportClaimRequest { Device = device }, Json);
+        using var res = await SendAsync(() => new HttpRequestMessage(HttpMethod.Post, Url("/api/v1/operations/exports/claim"))
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+        }, ct);
+        if (res.StatusCode == System.Net.HttpStatusCode.NoContent) return null;
+        return await ReadAsync<ExportJobResponse>(res, ct);
+    }
+
+    /// <summary>
+    /// Reporta el desenlace de un trabajo. Esta llamada es UN intento: la política de
+    /// reintentar-hasta-ack —que el contrato exige, porque sin ack Graph no puede saber que el HIS
+    /// ya se escribió— vive en <see cref="NoteExportExecutor"/>, que usa <see cref="GraphException.Transient"/>
+    /// para distinguir «reintenta» de «el servidor rechazó el resultado» (lease vencido, otro dueño).
+    /// </summary>
+    public async Task<ExportResultAck> ReportExportResultAsync(
+        string exportId, ExportResultRequest result, CancellationToken ct) =>
+        await PostAsync<ExportResultAck>($"/api/v1/operations/exports/{Escape(exportId)}/result", result, ct);
+
     // ── Autofill ─────────────────────────────────────────────────────────────
 
     /// <summary>Mapea una nota organizada contra los campos detectados en la superficie.</summary>
