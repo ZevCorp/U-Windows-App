@@ -12,8 +12,16 @@ public static class Gestures
     private const uint KEYUP = 2;
     private const byte VK_LWIN = 0x5B, VK_MENU = 0x12 /*Alt*/, VK_TAB = 0x09, VK_SHIFT = 0x10;
     private const byte VK_D = 0x44, VK_A = 0x41, VK_N = 0x4E;
+    private const byte VK_LEFT = 0x25;
 
     public static bool ShowDesktop() => Combo(VK_LWIN, VK_D);
+
+    /// <summary>
+    /// Atrás en el historial (Alt+Izquierda). GESTO y no botón a propósito: el explorador, los
+    /// navegadores y casi toda app con historial lo entienden, y no depende de acertar la etiqueta
+    /// de una flecha que cambia de nombre y de sitio entre versiones e idiomas.
+    /// </summary>
+    public static bool NavigateBack() => Combo(VK_MENU, VK_LEFT);
     public static bool StartMenu() => Tap(VK_LWIN);
     public static bool NotificationCenter() => Combo(VK_LWIN, VK_N);
 

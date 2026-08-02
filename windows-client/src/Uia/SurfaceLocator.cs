@@ -30,6 +30,8 @@ public sealed class SurfaceLocator : IDisposable
     public sealed record SurfaceLocation(string Id, string Origin, string Path);
 
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+    private const uint GA_ROOT = 2;
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
 
@@ -86,6 +88,13 @@ public sealed class SurfaceLocator : IDisposable
     {
         IntPtr hwnd = GetForegroundWindow();
         if (hwnd == IntPtr.Zero) return;
+
+        // Subir SIEMPRE a la ventana de nivel superior. Si algo dejó activada una ventana hija —un
+        // panel, una lista—, su título es el nombre del panel y no identifica ninguna pantalla:
+        // la superficie se quedaba en «/ventana» hasta que el usuario tocaba otra app (2026-08-01).
+        // Quién sea la pantalla no puede depender de qué trozo de ella tiene el foco.
+        IntPtr raiz = GetAncestor(hwnd, GA_ROOT);
+        if (raiz != IntPtr.Zero) hwnd = raiz;
 
         string proc = ProcessName(hwnd);
         // Nuestras propias ventanas (la carita, el badge, el inspector) no son "una superficie":
@@ -160,7 +169,32 @@ public sealed class SurfaceLocator : IDisposable
             }
         }
 
+        // El título vacío no es una identidad: cae en el slug por defecto «ventana», y como TODAS
+        // las ventanas sin título del sistema caen en el mismo, distintas pantallas se funden en un
+        // solo nodo. Se midió el daño el 2026-07-31: el agente quedó parado en
+        // «uia://explorer.exe/ventana», el mapa no conocía ninguna salida desde ahí —porque ese
+        // nodo es varios sitios a la vez— y la navegación por grafo no pudo usarse.
+        //
+        // Antes de rendirse hay dos fuentes mejores, y ambas describen la pantalla de verdad:
+        // el nombre que UIA da a la ventana (suele existir cuando GetWindowText aún devuelve vacío,
+        // porque el título se rellena tarde al crearse) y, en el explorador, la ruta de la carpeta.
+        title = SinSufijoDeApp(title);
         string slug = Slug(title);
+
+        // Sin identidad utilizable: título vacío O título de PANEL. Lo segundo entra por aquí y no
+        // solo por el camino alternativo — durante una navegación del explorador, el título de la
+        // ventana pasa un instante por «Panel de navegación», y ese instante creó un nodo fantasma
+        // con 10 aristas apuntándole (2026-07-31). Un nombre que vale para cualquier ventana no
+        // identifica ninguna, venga por donde venga.
+        if (slug == "ventana" || EsNombreDePanel(title))
+        {
+            // El alternativo TAMBIÉN se veta: en la corrida del 2026-07-31 el título se rechazó por
+            // ser un panel y el alternativo devolvió «Vista de elementos» —otro panel—, que se
+            // convirtió en el nodo 'vista-elementos' al que apuntaban las aristas de subcarpeta.
+            // Un nombre de panel no identifica una pantalla, venga del título o del alternativo.
+            string mejor = NombreAlternativo(hwnd);
+            slug = mejor.Length > 0 && !EsNombreDePanel(mejor) ? Slug(mejor) : "ventana";
+        }
         return new SurfaceLocation($"uia://{proc}.exe/{slug}", $"uia://{proc}.exe", $"/{slug}");
     }
 
@@ -187,6 +221,90 @@ public sealed class SurfaceLocator : IDisposable
     }
 
     /// <summary>Título de ventana → segmento de ruta estable y legible (minúsculas, guiones).</summary>
+    /// <summary>
+    /// Cómo llamar a una ventana cuyo título llega vacío. Dos intentos, del más fiable al menos:
+    ///
+    ///   1. El NAME de la ventana según UIA. Lo rellena el proveedor de accesibilidad y suele estar
+    ///      cuando <c>GetWindowText</c> todavía devuelve vacío, que es el caso típico —una ventana
+    ///      recién creada, o el foco pasando por ella mientras se pinta—.
+    ///   2. En el explorador, la RUTA de la barra de direcciones: identifica la carpeta, que es
+    ///      justo lo que distingue una ventana del explorador de otra.
+    ///
+    /// Devuelve "" si ninguna sirve; entonces se conserva el «ventana» de siempre, que al menos no
+    /// miente. Nada de esto inventa un nombre: si no hay identidad, no se fabrica.
+    /// </summary>
+    /// <summary>
+    /// Quita el « - Nombre de la app» final del título. Windows lo añade DESPUÉS de pintar la
+    /// pantalla, así que durante una navegación el mismo sitio se lee primero como «app-dev-buena»
+    /// y un instante después como «app-dev-buena - Explorador de archivos»: dos nodos distintos
+    /// para una sola carpeta (2026-07-31). Quitarlo siempre hace que ambas lecturas coincidan.
+    ///
+    /// Es la convención de títulos de Windows —«documento - Word», «página - Google Chrome»—, así
+    /// que vale para cualquier app, no solo el explorador. Solo se corta el ÚLTIMO segmento y solo
+    /// si queda algo delante, para no vaciar títulos que empiezan por guion.
+    /// </summary>
+    private static string SinSufijoDeApp(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return title;
+        int corte = title.LastIndexOf(" - ", StringComparison.Ordinal);
+        if (corte <= 0) return title;
+        string cabeza = title.Substring(0, corte).Trim();
+        return cabeza.Length > 0 ? cabeza : title;
+    }
+
+    private static string NombreAlternativo(IntPtr hwnd)
+    {
+        try
+        {
+            var root = AutomationElement.FromHandle(hwnd);
+            if (root == null) return "";
+
+            string name = (root.Current.Name ?? "").Trim();
+            // El nombre de un PANEL no es el de la ventana. Al pasar el foco por el árbol del
+            // explorador, UIA devuelve «Panel de navegación» y eso creó un nodo que no es una
+            // pantalla —«explorer.exe/panel-de-navegación», con aristas entrando y saliendo
+            // (2026-07-31)—. Es el mismo mal que «ventana» con otro disfraz: un nombre que vale
+            // para cualquier ventana no identifica ninguna.
+            if (name.Length > 0 && !EsNombreDePanel(name)) return name;
+
+            // La barra de direcciones del explorador: su valor es la ruta de la carpeta.
+            var barra = root.FindFirst(TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit));
+            if (barra != null
+                && barra.TryGetCurrentPattern(ValuePattern.Pattern, out var p)
+                && p is ValuePattern vp)
+            {
+                string ruta = (vp.Current.Value ?? "").Trim();
+                // Solo la última parte: la carpeta es lo que distingue, no la ruta entera —que
+                // además haría el id enorme y distinto por cada nivel intermedio.
+                if (ruta.Length > 0)
+                {
+                    string hoja = ruta.TrimEnd('\\', '/').Split('\\', '/').LastOrDefault() ?? "";
+                    if (hoja.Length > 0) return hoja;
+                }
+            }
+        }
+        catch { }
+        return "";
+    }
+
+    /// <summary>Nombres de partes de una ventana, no de la ventana. Sirven para cualquiera: no identifican.</summary>
+    private static bool EsNombreDePanel(string n)
+    {
+        string[] partes =
+        {
+            "panel de navegación", "panel de navegacion", "navigation pane",
+            "panel de detalles", "details pane", "barra de", "toolbar", "árbol", "arbol",
+            "lista", "vista de elementos", "vista elementos", "items view", "contenido", "content",
+            // Aparecido en la corrida del 2026-07-31 como nodo nuevo: es el árbol del panel
+            // izquierdo, no una pantalla. Los nombres de panel son una familia, no casos sueltos.
+            "control de árbol de espacios de nombres", "control de arbol de espacios de nombres",
+            "namespace tree control", "shell folder view", "vista de carpeta",
+        };
+        string l = n.ToLowerInvariant();
+        return partes.Any(p => l.Equals(p, StringComparison.Ordinal) || l.StartsWith(p + " ", StringComparison.Ordinal));
+    }
+
     private static string Slug(string title)
     {
         if (string.IsNullOrWhiteSpace(title)) return "ventana";

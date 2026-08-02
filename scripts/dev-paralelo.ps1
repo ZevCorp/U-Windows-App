@@ -129,6 +129,13 @@ $psi.FileName        = Join-Path $salidaAbs "U.exe"
 $psi.WorkingDirectory = $salidaAbs
 $psi.UseShellExecute = $false
 $psi.EnvironmentVariables["U_DATA_DIR"] = $Datos
+# La instancia de desarrollo arranca con el explorador del grafo YA abierto, para que una prueba
+# automatica pueda lanzar un mapeo nada mas recompilar, sin depender de encontrar y pulsar el boton
+# de la carita por UIA (que no siempre se expone). En la app del usuario esta variable no existe.
+$psi.EnvironmentVariables["U_AUTO_EXPLORER"] = "1"
+# Sonda MCP local (127.0.0.1:8791/mcp): deja llamar a las herramientas del mapa desde fuera para
+# comprobar que el terreno es NAVEGABLE, por el mismo camino que las usa el asistente.
+$psi.EnvironmentVariables["U_MCP_PROBE"] = "1"
 if ($env:GRAPH_API_KEY) { $psi.EnvironmentVariables["GRAPH_API_KEY"] = $env:GRAPH_API_KEY }
 
 # Las DOS bases hacen falta: U_BACKEND_URL manda en el asistente (Config.cs) y GRAPH_BASE_URL en el

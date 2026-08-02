@@ -58,6 +58,20 @@ public sealed class SurfaceMap
         /// <summary>Posición relativa a la ventana. ÚLTIMO respaldo, jamás identidad — el mismo
         /// papel que cumple en la grabación de workflows.</summary>
         public string ClickPos { get; set; } = "";
+
+        /// <summary>
+        /// La acción la ejecutó el PROPIO sistema (explorador del grafo), no se infirió viendo al
+        /// usuario. Importa porque son dos niveles de certeza distintos: la observada llegó al 78%
+        /// medido; la explorada es cierta por construcción — no hubo atribución que adivinar.
+        /// </summary>
+        public bool Explored { get; set; }
+
+        /// <summary>
+        /// Cómo se recorre: «click» o «doubleclick». Guardarlo no es un detalle — una carpeta de la
+        /// lista solo se abre con doble clic, y una arista que dijera «clic» ahí prometería un
+        /// camino que al ejecutarse solo selecciona. La acción es parte de la ruta, no del momento.
+        /// </summary>
+        public string ActionType { get; set; } = "click";
     }
 
     private readonly Dictionary<string, NodeInfo> _nodes = new(StringComparer.OrdinalIgnoreCase);
@@ -90,6 +104,10 @@ public sealed class SurfaceMap
     /// no es legítimo es rellenar ese hueco con la respuesta de otra pregunta.
     /// </summary>
     private ClickWatcher.Click? _lastStashed;
+
+    /// <summary>Clics resueltos al confirmar el nodo anterior. La diferencia contra el contador
+    /// actual dice cuántos clics explica esta arista: uno es correcto, más es ambiguo.</summary>
+    private int _clicksAtLastCommit = -1;
 
     private int _dirty;
 
@@ -162,12 +180,33 @@ public sealed class SurfaceMap
             // sobre cómo recorrerla.
             var clic = _actionLeavingLast;
 
+            // MULTI-SALTO: si entre la confirmación del origen y la de este destino hubo MÁS DE UN
+            // clic, la arista colapsó saltos que no duraron el mínimo y el clic guardado explica
+            // solo el primero. Medido dos veces: «Imágenes» como acción de documentos→música
+            // (pasando de largo por imágenes), y las cabeceras «Nombre» —ordenar no cambia de
+            // pantalla, así que ordenar-y-navegar son dos clics entre confirmaciones—.
+            //
+            // Convive con la comprobación del índice de down y NO la sustituye: aquella detecta
+            // que el clic resuelto no fue el último gesto; esta, que un solo clic no explica el
+            // viaje entero. Fusionarlas fue mi error y devolvió los dos fallos a la vez.
+            //
+            // EXCEPCIÓN: el navegador del sistema. Usar la barra de tareas son DOS clics —el icono
+            // abre el selector, la miniatura elige destino— y esta guarda los descartaba a todos.
+            // Es un solo GESTO en dos tiempos, y el que manda es el segundo, que es justo el que
+            // queda guardado. Restaurar esta guarda mató la barra de tareas el mismo día que se
+            // añadió su soporte: dos arreglos correctos que se anulaban entre sí.
+            if (clic != null && !clic.IsSystemNavigator && _clicksAtLastCommit >= 0
+                && (Clicks?.Count ?? 0) - _clicksAtLastCommit > 1) clic = null;
+
             // EL CLIC DEBE HABER OCURRIDO EN LA APP DE LA QUE SALE la arista. Sin esto, un clic en
             // el chat de Claude acabó como "acción" de una transición de la barra de tareas
-            // (2026-07-30): resolvió, era el último, y aun así no tenía nada que ver. Solo se
-            // exige para orígenes uia:// — en web:// el clic legítimo viene del proceso del
-            // navegador y la comparación por exe no aplica.
-            if (clic != null && clic.Process.Length > 0
+            // (2026-07-30): resolvió, era el último, y aun así no tenía nada que ver.
+            //
+            // SALVO EL NAVEGADOR DEL SISTEMA. La barra de tareas es explorer.exe, así que esta
+            // correa la habría descartado SIEMPRE — y con ella la clase de arista más valiosa de
+            // un grafo cross-app: «desde donde estés, ve a X». La barra no es un lugar, es un
+            // verbo: como nodo se ignora, como acción es legítima venga de donde venga.
+            if (clic != null && !clic.IsSystemNavigator && clic.Process.Length > 0
                 && _lastCommitted.StartsWith("uia://", StringComparison.OrdinalIgnoreCase))
             {
                 string exe = SurfacePlace.OriginOf(_lastCommitted)
@@ -206,6 +245,7 @@ public sealed class SurfaceMap
         if (ahora != null && Clicks != null && Clicks.Downs != ahora.DownIndex) ahora = null;
         _actionLeavingLast = ReferenceEquals(ahora, _lastStashed) ? null : ahora;
         _lastStashed = ahora;
+        _clicksAtLastCommit = Clicks?.Count ?? 0;
         Version++;
 
         if (++_dirty >= 20) Save(); // persistencia periódica; el cierre hace la final
@@ -226,6 +266,255 @@ public sealed class SurfaceMap
 
     /// <summary>Cuántas aristas saben ya CÓMO recorrerse. Es la medida de madurez del mapa.</summary>
     public int EdgesWithAction => _edges.Values.Count(e => e.Selector.Length > 0);
+
+    /// <summary>
+    /// Aprende una arista RECORRIDA por el propio sistema (explorador del grafo). A diferencia de
+    /// las observadas, aquí no hay nada que adivinar: la acción se ejecutó y la transición se vio
+    /// ocurrir. Por eso sobreescribe cualquier acción observada que hubiera — certeza por
+    /// construcción gana a inferencia al 78% — y por eso se guarda a disco al instante: una arista
+    /// explorada costó un clic real del usuario y no puede perderse por un cierre brusco.
+    /// </summary>
+    /// <summary>
+    /// Marca de destino desconocido. Una PUERTA es una salida que se ha VISTO pero no cruzado:
+    /// sabemos que el botón está ahí y cómo pulsarlo, no a dónde lleva.
+    /// </summary>
+    public const string MarcaPuerta = "?";
+
+    /// <summary>El «destino» de una puerta sin cruzar: único por selector, para que en una misma
+    /// pantalla quepan todas las puertas que tenga y no se pisen entre sí.</summary>
+    private static string DestinoPuerta(string selector) => MarcaPuerta + selector;
+
+    /// <summary>¿Este destino es en realidad una puerta cuyo otro lado no conocemos?</summary>
+    public static bool EsPuerta(string to) => to.StartsWith(MarcaPuerta, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Registra todas las salidas VISIBLES de una pantalla, se vayan a cruzar o no.
+    ///
+    /// Antes el grafo solo contenía lo que el sistema había pulsado, y eso lo dejaba con forma de
+    /// estrella: como las salidas del panel de navegación solo se aprendían desde la raíz, cualquier
+    /// otra pantalla aparecía sin salidas propias y todo el mapa colgaba del punto de arranque
+    /// (2026-07-31). Pero esas puertas EXISTEN en todas las pantallas, y saber que existen ya es
+    /// información útil: el asistente puede consultar por MCP qué hay disponible desde donde está
+    /// sin tener que ir hasta allí a comprobarlo.
+    /// </summary>
+    public void ObserveExits(string from,
+        IEnumerable<(string Label, string ControlType, string Selector, string[] Alternatives)> salidas)
+    {
+        string f = Norm(from);
+        if (f.Length == 0) return;
+        if (!_nodes.ContainsKey(f) && _nodes.Count < MaxNodes) _nodes[f] = new NodeInfo();
+
+        foreach (var s in salidas)
+        {
+            if (s.Selector.Length == 0) continue;
+
+            // Si ya conocemos una salida REAL con este selector desde aquí, no se toca: lo recorrido
+            // manda sobre lo observado.
+            if (Edges().Any(e => string.Equals(e.From, f, StringComparison.OrdinalIgnoreCase)
+                              && string.Equals(e.Info.Selector, s.Selector, StringComparison.Ordinal)
+                              && !EsPuerta(e.To)))
+                continue;
+
+            // El destino puede deducirse: si este MISMO selector ya llevó a algún sitio desde otra
+            // pantalla, lleva al mismo desde aquí. Vale para el cromo de navegación —el panel
+            // izquierdo es idéntico en todas las carpetas— y NO para el contenido, porque dos
+            // carpetas distintas pueden tener cada una su «readme.txt» y no son el mismo destino.
+            string deducido = EsContenido(s.ControlType) ? "" : DestinoConocidoDe(s.Selector);
+            string destino = deducido.Length > 0 ? deducido : DestinoPuerta(s.Selector);
+            if (string.Equals(destino, f, StringComparison.OrdinalIgnoreCase)) continue; // no lleva a sí misma
+
+            string k = f + "\n" + destino;
+            if (_edges.ContainsKey(k)) continue;
+            _edges[k] = new EdgeInfo
+            {
+                Selector = s.Selector,
+                Alternatives = s.Alternatives,
+                Label = s.Label,
+                ControlType = s.ControlType,
+                ActionType = EsContenido(s.ControlType) ? "doubleclick" : "click",
+                Explored = deducido.Length > 0,
+            };
+        }
+        Save();
+    }
+
+    /// <summary>
+    /// En cuántas pantallas DISTINTAS se ha visto esta misma puerta.
+    ///
+    /// No hace falta guardar nada aparte: como cada pantalla registra todas sus salidas, contar
+    /// los orígenes distintos de un selector ya dice cuánto se repite. Sobrevive a guardar y
+    /// cargar el mapa porque se deriva de él.
+    /// </summary>
+    public int Ubicuidad(string selector) =>
+        Edges().Where(e => string.Equals(e.Info.Selector, selector, StringComparison.Ordinal))
+               .Select(e => e.From)
+               .Distinct(StringComparer.OrdinalIgnoreCase)
+               .Count();
+
+    /// <summary>
+    /// ¿Es un elemento PERSISTENTE de la app —el panel lateral, una barra, un menú— que sigue ahí
+    /// aunque se cambie de pantalla?
+    ///
+    /// Se detecta por repetición, no por una lista de nombres: si la misma puerta aparece en tres
+    /// pantallas distintas, es parte del marco de la app y no de ninguna de ellas. Así vale para
+    /// cualquier app sin conocerla de antemano. El contenido queda fuera por definición: dos
+    /// carpetas pueden tener cada una su «readme.txt» y no son la misma puerta.
+    /// </summary>
+    public bool EsCromoGlobal(string selector, string controlType = "")
+    {
+        if (selector.Length == 0) return false;
+        // El tipo va DENTRO del selector; si no lo pasan, se lee de ahí. No hacerlo dejaba fuera
+        // la exclusión del contenido justo donde más falta hacía: en el explorador, el
+        // AutomationId de una fila es su ÍNDICE, así que «uia:aid=1;ct=ListItem» existe en todas
+        // las carpetas, la ubicuidad lo daba por marco de la app y sus subcarpetas no se
+        // exploraban nunca (2026-08-01).
+        string ct = controlType.Length > 0 ? controlType : TipoDelSelector(selector);
+        return !EsContenido(ct) && Ubicuidad(selector) >= 3;
+    }
+
+    private static string TipoDelSelector(string selector)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(selector, @"ct=([A-Za-z]+)");
+        return m.Success ? m.Groups[1].Value : "";
+    }
+
+    /// <summary>
+    /// Un ATAJO hasta <paramref name="destino"/> pulsable desde donde sea.
+    ///
+    /// Es la utilidad real de detectar lo persistente: un elemento que está en todas las pantallas
+    /// sirve para llegar a la suya desde cualquiera de ellas, sin recorrer el camino. Convierte
+    /// «no sé volver» en «pulso el panel y ya estoy» — que es como lo haría una persona.
+    /// </summary>
+    public Hop? AtajoHacia(string destino)
+    {
+        string d = Norm(destino);
+        foreach (var (from, to, info) in Edges())
+        {
+            if (!string.Equals(to, d, StringComparison.OrdinalIgnoreCase)) continue;
+            if (info.Selector.Length == 0 || !info.Explored) continue;
+            if (EsCromoGlobal(info.Selector, info.ControlType)) return new Hop(from, to, info);
+        }
+        return null;
+    }
+
+    /// <summary>El contenido de una lista no es cromo: su nombre no identifica un destino global.</summary>
+    private static bool EsContenido(string controlType) =>
+        controlType.Equals("listitem", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A dónde lleva este selector, si ya se recorrió desde cualquier pantalla.</summary>
+    private string DestinoConocidoDe(string selector)
+    {
+        foreach (var (_, to, info) in Edges())
+            if (!EsPuerta(to) && to.Length > 0 && info.Explored
+                && string.Equals(info.Selector, selector, StringComparison.Ordinal))
+                return to;
+        return "";
+    }
+
+    /// <summary>
+    /// Al aprender un destino de verdad, todas las puertas con el MISMO selector —en cualquier
+    /// pantalla— dejan de ser desconocidas. Es lo que convierte la estrella en una malla: descubrir
+    /// una vez a dónde va «Documentos» resuelve ese botón en todas las carpetas donde se ha visto.
+    /// </summary>
+    private void ResolverPuertasIguales(string selector, string destino, string controlType)
+    {
+        if (EsContenido(controlType) || selector.Length == 0) return;
+
+        var promover = _edges
+            .Where(kv => kv.Key.EndsWith("\n" + DestinoPuerta(selector), StringComparison.Ordinal))
+            .ToList();
+
+        foreach (var kv in promover)
+        {
+            string desde = kv.Key[..kv.Key.IndexOf('\n')];
+            if (string.Equals(desde, destino, StringComparison.OrdinalIgnoreCase)) { _edges.Remove(kv.Key); continue; }
+            _edges.Remove(kv.Key);
+            string k = desde + "\n" + destino;
+            if (!_edges.ContainsKey(k)) { kv.Value.Explored = true; _edges[k] = kv.Value; }
+        }
+    }
+
+    public void LearnTraversal(string from, string to, string selector, string[] alternatives,
+        string label, string controlType, string actionType = "click")
+    {
+        string f = Norm(from), t = Norm(to);
+        if (f.Length == 0 || t.Length == 0 || selector.Length == 0) return;
+
+        // La puerta que acabamos de cruzar deja de ser una incógnita aquí y en todas partes.
+        _edges.Remove(f + "\n" + DestinoPuerta(selector));
+        ResolverPuertasIguales(selector, t, controlType);
+
+        if (!_nodes.ContainsKey(t) && _nodes.Count < MaxNodes) _nodes[t] = new NodeInfo();
+        if (_nodes.TryGetValue(t, out var n)) { n.Visits++; n.LastSeen = DateTime.UtcNow; }
+
+        string k = f + "\n" + t;
+        if (!_edges.TryGetValue(k, out var e)) { e = new EdgeInfo(); _edges[k] = e; }
+        e.Count++;
+        e.Selector = selector;
+        e.Alternatives = alternatives;
+        e.Label = label;
+        e.ControlType = controlType;
+        e.ActionType = actionType;
+        e.Explored = true;
+        Version++;
+        Save();
+    }
+
+    // ── Consulta y rutas (lo que el asistente ve por MCP) ────────────────────
+
+    /// <summary>Un tramo de ruta: a dónde lleva y con qué acción. Sin acción = no recorrible.</summary>
+    public sealed record Hop(string From, string To, EdgeInfo Info);
+
+    /// <summary>
+    /// La ruta más corta desde <paramref name="from"/> hasta <paramref name="to"/> usando SOLO
+    /// aristas que saben cómo recorrerse.
+    ///
+    /// Exigir acción en cada tramo no es un detalle: una ruta con un hueco es una ruta que el
+    /// asistente empezaría y no podría terminar, y prefiero devolver «no sé llegar» a dejarlo a
+    /// mitad de camino en la máquina de alguien. Anchura primero porque el coste real de un tramo
+    /// es un round-trip de UI: menos saltos es menos oportunidades de que la pantalla no esté.
+    /// </summary>
+    public List<Hop>? Route(string from, string to)
+    {
+        string origen = Norm(from), destino = Norm(to);
+        if (origen.Length == 0 || destino.Length == 0) return null;
+        if (string.Equals(origen, destino, StringComparison.OrdinalIgnoreCase)) return new List<Hop>();
+
+        var vistos = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { origen };
+        var cola = new Queue<List<Hop>>();
+        cola.Enqueue(new List<Hop>());
+
+        while (cola.Count > 0)
+        {
+            var camino = cola.Dequeue();
+            string actual = camino.Count == 0 ? origen : camino[^1].To;
+
+            foreach (var (f, t, info) in Edges())
+            {
+                if (info.Selector.Length == 0) continue;              // sin acción no se recorre
+                if (EsPuerta(t)) continue;                            // puerta sin cruzar: no sé a dónde da
+                if (!string.Equals(f, actual, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!vistos.Add(t)) continue;
+
+                var siguiente = new List<Hop>(camino) { new(f, t, info) };
+                if (string.Equals(t, destino, StringComparison.OrdinalIgnoreCase)) return siguiente;
+                if (siguiente.Count < 8) cola.Enqueue(siguiente);     // rutas absurdamente largas no son rutas
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Las salidas conocidas de una superficie, con acción o sin ella (se dice cuál es cuál).</summary>
+    public List<Hop> ExitsFrom(string surface)
+    {
+        string s = Norm(surface);
+        return Edges().Where(e => string.Equals(e.From, s, StringComparison.OrdinalIgnoreCase))
+                      .Select(e => new Hop(e.From, e.To, e.Info))
+                      .OrderByDescending(h => h.Info.Count)
+                      .ToList();
+    }
+
+    private static string Norm(string id) => (id ?? "").Trim().TrimEnd('/');
 
     private static string ShortId(string id)
     {

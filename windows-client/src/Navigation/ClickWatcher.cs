@@ -57,6 +57,28 @@ public sealed class ClickWatcher : IDisposable
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(POINT p);
+    [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int RealGetWindowClass(IntPtr hWnd, System.Text.StringBuilder cls, int max);
+    private const uint GA_ROOT = 2;
+
+    /// <summary>¿El clic cayó en la barra de tareas o en otro navegador del shell?</summary>
+    private static bool EnNavegadorDelSistema(int x, int y, string proc)
+    {
+        try
+        {
+            IntPtr raiz = GetAncestor(WindowFromPoint(new POINT { X = x, Y = y }), GA_ROOT);
+            var cls = new System.Text.StringBuilder(256);
+            RealGetWindowClass(raiz, cls, cls.Capacity);
+            if (ShellNavClasses.Contains(cls.ToString())) return true;
+        }
+        catch { }
+        // El menú de inicio y las jump lists viven en procesos propios; explorer NO basta por sí
+        // solo (sus ventanas de carpeta también son explorer y esas sí son lugares).
+        return proc.Length > 0 && ShellNavProcesses.Contains(proc)
+            && !proc.Equals("explorer", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Lo que se pulsó, por identidad y en el MISMO formato que un paso de workflow: selector
@@ -67,7 +89,30 @@ public sealed class ClickWatcher : IDisposable
     /// </summary>
     public sealed record Click(
         string Selector, string[] Alternatives, string Label, string ControlType,
-        string ClickPos, DateTime When, int DownIndex, string Process);
+        string ClickPos, DateTime When, int DownIndex, string Process, bool IsSystemNavigator);
+
+    /// <summary>
+    /// Clases de ventana del NAVEGADOR DEL SISTEMA: barra de tareas, miniaturas, vista de tareas.
+    ///
+    /// Merecen trato aparte porque son un VERBO, no un LUGAR. Como nodo no existen —nadie "vuelve"
+    /// a la barra de tareas, se pasa por ella— pero como acción son lo más valioso de un grafo
+    /// cross-app: «desde donde estés, ve a X». La correa que exige que el clic ocurra en la app de
+    /// origen las mataría a todas, porque la barra es explorer.exe y el origen suele ser otra app.
+    /// </summary>
+    private static readonly HashSet<string> ShellNavClasses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Shell_TrayWnd",            // la barra principal
+        "Shell_SecondaryTrayWnd",   // barras de monitores secundarios
+        "TaskListThumbnailWnd",     // el flyout de miniaturas del hover
+        "MultitaskingViewFrame",    // vista de tareas / alt-tab
+        "XamlExplorerHostIslandWindow",
+    };
+
+    /// <summary>Procesos que SON el navegador del sistema (menú de inicio, jump lists).</summary>
+    private static readonly HashSet<string> ShellNavProcesses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ShellExperienceHost", "StartMenuExperienceHost", "SearchHost", "Explorer.EXE",
+    };
 
     /// <summary>
     /// Cuántos DOWN reales ha habido (el segundo down de un doble clic no cuenta). Comparado con
@@ -219,8 +264,15 @@ public sealed class ClickWatcher : IDisposable
 
             lock (_gate)
             {
+                bool navSistema = EnNavegadorDelSistema(x, y, proc);
                 _last = new Click(utiles[0], utiles.Skip(1).ToArray(), label, type, clickPos,
-                    DateTime.UtcNow, downIndex, proc);
+                    DateTime.UtcNow, downIndex, proc, navSistema);
+
+                // Se registra el reconocimiento, no solo el resultado: sin esta línea no había forma
+                // de distinguir «la barra de tareas no se detectó» de «se detectó y algo posterior
+                // la descartó» — y esa ambigüedad ya me costó un diagnóstico equivocado.
+                if (navSistema)
+                    LogBus.Log("mapa", $"navegador del sistema: «{label}» ({type})");
                 _count++;
             }
         }

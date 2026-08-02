@@ -1,0 +1,254 @@
+# Graphify — el grafo de decisiones
+
+> **Principio (2026-08-01, decidido por el usuario):** el grafo es el PLAN, no el registro.
+> Lo que se aprendió resolviendo problemas de mapeo no puede vivir regado en comentarios y
+> memorias de sesión: se registra AQUÍ, estructurado, para que lo consuman personas hoy y el
+> agente de mapeo mañana.
+
+## Las dos capas
+
+**Capa 1 — decisiones de desarrollo (este archivo).** Reglas duramente ganadas sobre cómo se
+mapea UI. Las escribimos y consumimos los editores del código (humano + asistente). Cada regla
+nace de un fallo real, con fecha y síntoma, porque una regla sin su porqué se borra al primer
+refactor.
+
+**Capa 2 — decisiones por app, por usuario (futura; NO implementar aún).** El agente de mapeo
+(mapear → diagnosticar → corregir → remapear) alimentará un registro de decisiones por app.
+Frontera de diseño fijada desde ya:
+
+- **REGLAS = conocimiento sobre la app** («el contenido del explorador vive en ventanas hijas»).
+  Compartibles entre usuarios; un usuario nuevo hereda el paquete de reglas de cada app.
+- **TERRENO = datos del usuario** (qué carpetas tiene, cómo se llaman). SIEMPRE privado.
+  El mapa del explorador contiene nombres de archivos personales: jamás se comparte.
+
+Se comparte el conocimiento de la app, nunca el contenido del usuario.
+
+Cuándo implementar la capa 2: cuando exista el agente que la alimenta (mismo criterio que
+Neo4j para el mapa — no construir el almacén antes que el productor).
+
+---
+
+## Formato de una decisión
+
+```
+### <regla en una frase imperativa>
+- Síntoma: qué se veía fallar
+- Causa: el porqué real
+- Fecha/evidencia: cuándo se midió
+- Código: dónde vive la implementación
+```
+
+---
+
+## Reglas universales de UIA (cualquier app)
+
+> **Vigilancia permanente: ¿lo hace ya UIA?** Varias veces hemos construido a mano algo que la
+> API ya resolvía mejor (el punto pulsable, el desplazamiento a la vista), y otras hemos dado
+> por identidad algo que UIA ofrece pero NO lo es (el AutomationId posicional). Antes de
+> escribir aritmética sobre coordenadas o heurísticas sobre nombres: mirar si existe el patrón
+> de UIA, y si existe, preguntarse si dice lo que creemos que dice.
+
+### Un AutomationId numérico es una POSICIÓN, no una identidad
+- Síntoma: las subcarpetas de cualquier carpeta se filtraban como si fueran cromo global y
+  nunca se exploraban; el recorrido se quedaba en profundidad 1.
+- Causa: en la lista del explorador cada fila lleva su índice como AutomationId («0», «1»…),
+  así que `uia:aid=1;ct=ListItem` significa «el segundo de lo que haya ahora»: apunta a otra
+  cosa al reordenar y COLISIONA entre pantallas. Como se emitía antes que el nombre, era el
+  selector principal de todo el contenido.
+- Regla: un aid formado solo por dígitos se degrada a respaldo; el nombre pasa delante. Y toda
+  heurística que agrupe por selector debe excluir el contenido leyendo el `ct=` del propio
+  selector, no confiando en que se lo pasen aparte.
+- Fecha: 2026-08-01. Código: `UiaSurface.SelectorsFor`, `SurfaceMap.EsCromoGlobal`.
+
+### El punto pulsable lo da UIA (GetClickablePoint), no nuestra aritmética
+- Síntoma: clics perfectamente válidos se rechazaban («el centro cae fuera de la ventana») y
+  caían a Invoke, que sobre una pestaña no navega.
+- Causa: comparar el centro de la caja contra `GetWindowRect` del contenedor es una
+  aproximación falsa. `GetClickablePoint` devuelve un punto realmente alcanzable —contando
+  recorte, scroll y solapes— o lanza `NoClickablePointException` si no lo hay. La intención de
+  la comprobación era correcta; la implementación, no.
+- Fecha: 2026-08-01. Código: `UiaSurface.RealClick`.
+
+### Un fallo aislado no cierra un nodo
+- Síntoma: al fallar una puerta, el retroceso se pasaba al padre y se perdían las 20+ puertas
+  restantes de ese nodo; toda la corrida quedaba en profundidad 1.
+- Causa: volver es intrínsecamente inestable (el historial se pasa, una pantalla tarda), así
+  que un intento fallido no es evidencia de que el nodo sea inalcanzable. Se cierra tras 3
+  fallos seguidos, y se registra cuántas puertas quedaron pendientes.
+- Fecha: 2026-08-01. Código: `GraphCrawler.Frente.FallosSeguidos`.
+
+### Un log que miente cuesta una ronda entera
+- El registro del «plan» imprimía los candidatos EN BRUTO, sin aplicar el filtro que sí se
+  aplicaba al ejecutar. Parecía que cada pantalla replanificaba el panel entero. Todo log de
+  intención debe reflejar lo que se va a hacer de verdad, no lo que se consideró.
+- Fecha: 2026-08-01. Código: `GraphCrawler.AbrirNodoAsync`.
+
+### Guarda selectores, nunca referencias de elemento
+- Síntoma: el recorrido «solo entraba a la primera carpeta»; las demás fallaban en silencio.
+- Causa: los `AutomationElement` capturados mueren cuando la lista se repinta (al navegar y
+  volver). El selector se resuelve de nuevo contra la pantalla que hay AHORA.
+- Fecha: 2026-08-01. Código: `GraphCrawler.LeerSalidasAsync` (calcula el selector con el
+  elemento vivo y descarta la referencia).
+
+### La ventana de nivel superior se obtiene con GA_ROOT, no con el primer ancestro con handle
+- Síntoma: el badge se congelaba en `uia://explorer.exe/ventana` durante todo el mapeo; ningún
+  destino se confirmaba; el grafo no crecía.
+- Causa: el primer ancestro con handle de un elemento del panel es una ventana HIJA
+  (SysTreeView32). Enfocarla hace que GetForegroundWindow devuelva la hija, cuyo título es el
+  nombre del panel → identidad vetada. Enfocar y recortar son preguntas distintas: enfocar
+  quiere la raíz, recortar quiere el contenedor con scroll.
+- Fecha: 2026-08-01. Código: `UiaSurface.TopLevelWindow` / `ContenedorDe`.
+
+### El `ct=` del selector se aplica al resolver, no es un adorno
+- Síntoma: clics al centro de la lista; «Documentos» resolvía un Pane de 1578×571.
+- Causa: `ConditionFor` filtraba solo por Name; ante un TreeItem y un Pane homónimos gana el
+  primero que aparezca. El selector siempre llevó el tipo; nadie lo usaba.
+- Fecha: 2026-07-31. Código: `UiaSelector.ConditionFor` + `ControlTypePorNombre`.
+
+### Desplaza a la vista antes de pulsar, relee la caja después, y comprueba que el punto caiga dentro del contenedor
+- Síntoma: elementos bajo el scroll «se pulsaban» con ok=True y no pasaba nada; dos elementos
+  distintos con el centro en el mismo punto (y=901), fuera del panel.
+- Causa: un elemento existe en el árbol aunque no esté visible; ScrollIntoView lo deja pegado
+  al borde y el centro puede quedar fuera. Un clic fuera no falla: acierta en otra cosa.
+  «Aceptado no es ejecutado.»
+- Fecha: 2026-08-01. Código: `UiaSurface.TraerALaVista` + `PuntoDentroDe` (contra el
+  contenedor, no la ventana).
+
+### Un selector sin contenido no identifica nada: descártalo
+- Síntoma: «Recientes», «Favoritos», «Compartido» consumían 5 intentos cada uno y fallaban.
+- Causa: sin Name ni AutomationId el único selector posible sale vacío (`uia:path=;ct=Custom`).
+- Fecha: 2026-08-01. Código: `GraphCrawler.EsSelectorUtil`.
+
+### SW_RESTORE solo si IsIconic
+- Síntoma: la app mapeada se encogía al iniciar el mapeo.
+- Causa: SW_RESTORE sobre una ventana maximizada la devuelve a su tamaño anterior. Traer al
+  frente no debe cambiar el tamaño de nadie.
+- Fecha: 2026-08-01. Código: los tres caminos de enfoque (GraphCrawler, AppAligner,
+  NavStrategies).
+
+### La acción viaja con la arista
+- Síntoma: rutas que «prometían» y al ejecutarse solo seleccionaban.
+- Causa: en una lista solo el doble clic abre; una arista aprendida con doubleclick y
+  ejecutada con click no cumple su promesa.
+- Fecha: 2026-07-31. Código: `EdgeInfo.ActionType`, respetado por crawler, map_take, map_go_to.
+
+### El destino se confirma cuando se estabiliza, y las lecturas vacías no rompen el candidato
+- Síntoma: nodos fantasma de estados transitorios; después destinos reales nunca confirmados.
+- Causa: las transiciones pasan por estados intermedios (el título parpadea por el nombre del
+  panel). Aprender el primer cambio captura el tránsito; exigir dos lecturas buenas SEGUIDAS
+  y borrar el candidato ante cualquier lectura mala descarta destinos reales.
+- Fecha: 2026-07-31/08-01. Código: `GraphCrawler.EsperarCambioAsync`.
+
+### Corta el sufijo « - App» del título
+- Síntoma: dos nodos para la misma carpeta (`app-dev-buena` y `app-dev-buena-explorador-...`).
+- Causa: Windows añade el sufijo DESPUÉS de pintar; el mismo sitio se lee de dos formas.
+  Convención universal («doc - Word», «página - Chrome»).
+- Fecha: 2026-08-01. Código: `SurfaceLocator.SinSufijoDeApp`.
+
+### Los nombres de panel no identifican pantallas, vengan por donde vengan
+- Síntoma: nodos fantasma `panel-de-navegación`, `vista-elementos`,
+  `control-de-árbol-de-espacios-de-nombres`, con decenas de aristas apuntándoles.
+- Causa: son una FAMILIA (título transitorio, nombre alternativo, ventana hija enfocada), no
+  casos sueltos. Un nombre que vale para cualquier ventana no identifica ninguna.
+- Fecha: 2026-07-31. Código: `SurfaceLocator.EsNombreDePanel`, aplicado a título Y alternativo.
+
+### La red de seguridad valida el destino, no el reloj
+- Síntoma: acabó mapeando Photos.exe con la guardia de primer plano marcando 0 escapes.
+- Causa: comprobar el foreground justo tras el clic falla porque la otra app tarda en
+  arrancar. Mirar a qué app pertenece el destino AL QUE SE LLEGÓ no depende de tiempos.
+- Fecha: 2026-08-01. Código: `GraphCrawler.EsDelObjetivo` sobre `llegue`.
+
+---
+
+## Reglas del explorador de archivos de Windows 11 (`explorer.exe`)
+
+### El contenido vive en ventanas hijas con HWND propio
+- La ventana principal (CabinetWClass) expone UN nodo UIA. La lista de archivos está bajo
+  `DirectUIHWND`/`SHELLDLL_DefView`; la barra de herramientas (Atrás, Subir, direcciones,
+  pestañas) bajo `Microsoft.UI.Content.DesktopChildSiteBridge` e `InputSiteWindowClass`.
+  Hay que hacer FromHandle sobre cada hija. Medido: 2026-07-31.
+- Código: `UiaReader.ChildContentClasses` / `CollectFromChildren`.
+
+### Carpeta-o-archivo se le pregunta al DISCO
+- `ItemType` de UIA llega VACÍO (30/30 en una carpeta de capturas) y las extensiones están
+  ocultas («Captura de pantalla 1» es un .png que no lo parece). La ruta abierta se obtiene
+  del propio explorador (Shell.Application → HWND → Folder.Self.Path) y `Directory.Exists`
+  responde sin margen de error. Para saber QUÉ hay se lee el disco; la UI enseña CÓMO navegar.
+- Fecha: 2026-08-01. Código: `GraphCrawler.CarpetaEnPrimerPlano`.
+
+### Los archivos son puertas, no cruces
+- Abrir un archivo no explora la app: la abandona (doble clic en una foto → Photos.exe).
+  Se registran en el mapa (existen ahí) y no se cruzan.
+
+### En la lista se entra con doble clic; en el panel, con clic simple
+- La acción depende de DÓNDE vive el elemento, no de qué es.
+
+### El retroceso es el botón `aid=backButton`, por identidad
+- Alt+Izquierda se lo lleva quien tenga el foco y falló 4/4 veces. `backButton` /
+  `forwardButton` / `upButton` tienen AutomationId estable e independiente del idioma.
+  Resultado medido: regresos fallidos de 9 → 0.
+- Fecha: 2026-07-31. Código: `GraphCrawler.VolverAsync`.
+
+### El cromo persistente se detecta por REPETICIÓN y se usa como atajo
+- Regla: si la misma puerta (mismo selector) aparece en 3+ pantallas distintas, es parte del
+  MARCO de la app —panel lateral, barra, menú—, no de ninguna pantalla concreta. Dos
+  consecuencias: (a) no se re-explora en cada nivel; (b) sirve de ATAJO para llegar a su
+  destino desde CUALQUIER pantalla, sin recorrer el camino.
+- Síntoma que lo motivó: cada pantalla replanificaba el panel izquierdo entero y lo primero
+  que pulsaba era «Inicio», devolviendo el recorrido al principio; el contenido de las
+  carpetas solo se alcanzaba mucho más tarde.
+- Por qué por repetición y no por una lista de nombres: así vale para cualquier app sin
+  conocerla de antemano. El contenido queda fuera por definición (dos carpetas pueden tener
+  cada una su «readme.txt»).
+- Dónde rinde: recolocarse tras un regreso fallido («en vez de deshacer el camino, voy al
+  panel y entro otra vez» — como lo haría una persona) y responder `map_go_to` sin haber
+  recorrido nunca ese camino concreto.
+- Fecha: 2026-08-01. Código: `SurfaceMap.Ubicuidad` / `EsCromoGlobal` / `AtajoHacia`;
+  consumido por `GraphCrawler.VolverAsync` y `SurfaceMapTools.GoTo`.
+
+### Una puerta con destino conocido NO se vuelve a pulsar
+- Síntoma: «Saved Searches» se pulsaba en TODAS las pantallas —ida y vuelta, dos navegaciones
+  desperdiciadas por nodo— y rompía el orden del recorrido desde el principio.
+- Causa: el filtro de «navegación ya conocida» comparaba solo contra la RAÍZ, y «Saved
+  Searches» estaba al fondo del panel: al arrancar no era visible, así que nunca entró en el
+  conjunto de conocidas. Además el panel conserva su desplazamiento entre pantallas
+  (ScrollIntoView lo deja donde estaba), así que el primer elemento visible deja de ser el
+  primero de la columna. La regla correcta no es «lo que había en la raíz» sino «todo selector
+  cuyo destino ya sé»: su arista se DEDUCE al registrar la puerta, sin pulsarla.
+- Fecha: 2026-08-01. Código: `GraphCrawler._destinosSabidos`.
+
+### El panel de navegación global se aprende una vez, desde la raíz
+- Está en TODAS las pantallas; sin filtro, cada carpeta gana las mismas ~9 aristas (9 de 19
+  rutas en la corrida medida). Más abajo se salta, y el destino de sus puertas se DEDUCE por
+  selector (misma puerta = mismo destino) → malla, no estrella. La deducción vale para cromo,
+  NUNCA para contenido (dos carpetas pueden tener cada una su «readme.txt»).
+- Código: `GraphCrawler.EsNavegacionGlobalYaConocida`, `SurfaceMap.ObserveExits` /
+  `ResolverPuertasIguales` / `EsContenido`.
+
+### Fuera de alcance
+- «Este equipo», unidades por letra, Red, Papelera, Windows, Archivos de programa: mapear el
+  disco del sistema no enseña nada sobre CÓMO se navega la app. Código: `SafeToClick.FueraDeAlcance`.
+
+---
+
+## Reglas de arquitectura del mapeo
+
+### El grafo es el plan, no el registro
+- El bucle consume una FRONTERA de puertas registradas en el mapa; no listas en memoria.
+  Un regreso fallido cuesta solo las puertas de ese nodo. Parar no pierde el pendiente.
+- Fecha: 2026-08-01. Código: `GraphCrawler.RecorrerAsync` / `Frente`.
+
+### Capa 1 determinista; LLM en capa 2
+- Lo que es regla (carpeta-vs-archivo, nombres de panel) se codifica y es gratis e
+  instantáneo. El LLM entra a lo que es CRITERIO (¿estas dos pantallas son la misma?, ¿qué
+  vale la pena explorar primero?) y siempre sobre datos ya saneados por la capa 1 — un LLM
+  razona mal sobre datos sucios.
+
+### Orden de exploración: como lee una persona
+- Columna izquierda primero, de arriba abajo; luego contenido, de arriba abajo. En
+  profundidad: se agota la sección antes de pasar a la hermana. Reproducible = se nota qué falta.
+
+### Aceptado no es ejecutado (principio transversal del proyecto)
+- Toda API de UI reporta éxito de cosas que no hicieron nada: clics fuera de área, clics a
+  (0,0), Process.Start de un alias inexistente. Cada acción se VERIFICA por su efecto
+  (¿cambió la superficie? ¿llegué a donde esperaba?), nunca por su valor de retorno.

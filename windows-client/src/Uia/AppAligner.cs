@@ -18,6 +18,7 @@ public static class AppAligner
 {
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
     private const int SW_RESTORE = 9;
 
     /// <summary>uia://notepad.exe(/loquesea) → "notepad".</summary>
@@ -72,15 +73,35 @@ public static class AppAligner
         !string.IsNullOrWhiteSpace(current) &&
         string.Equals(current.TrimEnd('/'), target.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Enfoca la app si ya está abierta; si no, la lanza. También lo usa launch_app (LocalMcp).</summary>
+    /// <summary>
+    /// Enfoca la app si ya está abierta; si no, la lanza. También lo usa launch_app (LocalMcp).
+    ///
+    /// EL ESCRITORIO NO ES UNA APP, y tratarlo como tal tuvo consecuencias visibles: un workflow
+    /// sellado en <c>uia://desktop</c> hizo que esto intentara «lanzar un programa llamado desktop»
+    /// y el shell resolvió… Docker Desktop (2026-07-31). Abrir un programa al azar en la máquina de
+    /// alguien es de las cosas más molestas que puede hacer un agente, y encima la alineación
+    /// fallaba igual. El escritorio se alcanza con su gesto —Win+D—, que es lo que ya sabe hacer
+    /// <see cref="Gestures.ShowDesktop"/>.
+    /// </summary>
     public static bool FocusOrLaunch(string proc)
     {
+        if (EsEscritorio(proc)) return Actions.Gestures.ShowDesktop();
+
         var open = Process.GetProcessesByName(proc).FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
         if (open != null)
         {
-            ShowWindow(open.MainWindowHandle, SW_RESTORE);
+            // Restaurar SOLO si está minimizada: SW_RESTORE sobre una ventana maximizada la encoge,
+            // y enfocar una app no debería cambiarle el tamaño a nadie (2026-08-01).
+            if (IsIconic(open.MainWindowHandle)) ShowWindow(open.MainWindowHandle, SW_RESTORE);
             return SetForegroundWindow(open.MainWindowHandle);
         }
         return WindowsSystemApi.LaunchApp(proc);
     }
+
+    /// <summary>El escritorio, en las formas en que lo nombran el locator y los workflows.</summary>
+    private static bool EsEscritorio(string proc) =>
+        proc.Equals("desktop", StringComparison.OrdinalIgnoreCase)
+        || proc.Equals("escritorio", StringComparison.OrdinalIgnoreCase)
+        || proc.Equals("program-manager", StringComparison.OrdinalIgnoreCase)
+        || proc.Equals("progman", StringComparison.OrdinalIgnoreCase);
 }

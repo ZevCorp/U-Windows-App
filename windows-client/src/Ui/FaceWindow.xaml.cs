@@ -131,6 +131,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _clickWatcher = new ClickWatcher();
         _clickWatcher.Start();
         _surfaceMap.Clicks = _clickWatcher;
+
+        // Modo prueba: con U_AUTO_EXPLORER=1 el explorador del grafo se abre solo al arrancar, para
+        // que una instancia recién compilada quede lista para lanzar un mapeo sin tocar la carita.
+        // Lo pone dev-paralelo.ps1; en la app del usuario esa variable no existe y no cambia nada.
+        if (Environment.GetEnvironmentVariable("U_AUTO_EXPLORER") == "1")
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { OnToggleExplorer(this, new RoutedEventArgs()); } catch { }
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         Closed += (_, __) =>
         {
             _surfaceMap?.Save();
@@ -159,6 +168,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         clinicalTimer.Start();
 
         var mcp = new LocalMcp(_uia);
+        // El terreno aprendido, al alcance del cerebro: puede consultar dónde está, qué pantallas
+        // conoce y recorrer rutas que nadie enseñó como workflow.
+        if (_surfaceMap != null)
+            mcp.Map = new SurfaceMapTools(_surfaceMap, () => _locator?.Current);
+        // Sonda de desarrollo: permite invocar las MISMAS herramientas MCP desde fuera para
+        // comprobar si el terreno es navegable, sin depender de que el modelo decida usarlas.
+        // Solo con U_MCP_PROBE=1; en la app del usuario no arranca.
+        McpDevProbe.StartIfEnabled(mcp);
         // El backend es Graph: la credencial (X-API-Key) sale del MISMO GraphConfig que usa la
         // ventana de workflows — una sola fuente de key para toda la app.
         _backend = new BackendClient(_config, _graphConfig);
@@ -1001,6 +1018,24 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             _map = null;
             MapBtn.Content = "🗺 Mapa del grafo";
         }
+    }
+
+    private GraphExplorerWindow? _explorer;
+
+    private void OnToggleExplorer(object sender, RoutedEventArgs e)
+    {
+        if (_explorer != null)
+        {
+            _explorer.Close();
+            _explorer = null;
+            ExplorerBtn.Content = "🕸 Explorar el grafo";
+            return;
+        }
+        if (_surfaceMap == null) { SetStatus("El mapa del terreno no está cargado."); return; }
+        _explorer = new GraphExplorerWindow(_surfaceMap, () => _locator?.Current);
+        _explorer.Closed += (_, __) => { _explorer = null; Dispatcher.Invoke(() => ExplorerBtn.Content = "🕸 Explorar el grafo"); };
+        _explorer.Show();
+        ExplorerBtn.Content = "🕸 Explorador: visible — clic para cerrar";
     }
 
     private void OnToggleStepMode(object sender, RoutedEventArgs e)

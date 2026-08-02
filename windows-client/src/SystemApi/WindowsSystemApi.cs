@@ -14,14 +14,101 @@ public static class WindowsSystemApi
     [DllImport("user32.dll")] private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
     private const byte VK_VOLUME_MUTE = 0xAD, VK_VOLUME_DOWN = 0xAE, VK_VOLUME_UP = 0xAF;
 
+    /// <summary>
+    /// Nombres visibles que el shell NO resuelve como comando, mapeados a su proceso real. Son las
+    /// piezas del propio Windows: el usuario (y el modelo) las llaman por su nombre de pantalla y
+    /// en español, y ningún acceso directo del menú Inicio las encuentra.
+    /// </summary>
+    private static readonly Dictionary<string, string> AliasDeApp = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["explorador de archivos"] = "explorer", ["explorador"] = "explorer",
+        ["file explorer"] = "explorer", ["explorer"] = "explorer", ["archivos"] = "explorer",
+        ["papelera"] = "explorer", ["esta pc"] = "explorer", ["este equipo"] = "explorer",
+        ["bloc de notas"] = "notepad", ["notepad"] = "notepad",
+        ["calculadora"] = "calc", ["símbolo del sistema"] = "cmd", ["simbolo del sistema"] = "cmd",
+    };
+
+    /// <summary>
+    /// Abre una app y CONFIRMA que se abrió. Devolver «ok» sin comprobarlo fue un fallo real,
+    /// medido el 2026-07-31: el cerebro pidió «Explorador de archivos», esto respondió ok, y lo que
+    /// había delante era una ventana de <c>cmd.exe</c> titulada «explorador de archivos» — la dejó
+    /// el fallback <c>cmd /c start</c>, y <see cref="Shell"/> la dio por buena porque
+    /// <c>Process.Start</c> no lanzó excepción. Pero arrancar un proceso no es abrir una app.
+    ///
+    /// Ahora se resuelve el nombre visible a su proceso, se lanza, y se ESPERA a que ese proceso
+    /// tenga ventana. Si no aparece, se devuelve false y el modelo puede reaccionar en vez de
+    /// seguir creyendo que llegó. Es la misma regla que gobierna el resto del sistema: aceptado no
+    /// es ejecutado.
+    /// </summary>
     public static bool LaunchApp(string app)
     {
         if (string.IsNullOrWhiteSpace(app)) return false;
-        // 1) Acceso directo del menú Inicio: resuelve NOMBRES VISIBLES ("Google Chrome" → chrome.exe) que
-        //    el shell no encuentra como comando. Es lo que el cerebro suele pasar a launch_app.
-        if (StartMenuLauncher.TryLaunch(app)) return true;
-        // 2) Fallback: ejecutable directo o que el shell resuelva el nombre (comando del PATH, protocolo).
-        return Shell(app) || Shell("cmd", $"/c start \"\" \"{app}\"");
+        string pedido = app.Trim();
+        string esperado = AliasDeApp.TryGetValue(pedido, out var alias)
+            ? alias
+            : pedido.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim();
+
+        // Ya abierta: traerla al frente es más fiable que relanzar (y no abre una segunda copia).
+        if (TieneVentana(esperado)) { Shell(esperado); return true; }
+
+        // 1) Acceso directo del menú Inicio: resuelve NOMBRES VISIBLES ("Google Chrome" → chrome.exe)
+        //    que el shell no encuentra como comando. Es lo que el cerebro suele pasar a launch_app.
+        bool lanzado = StartMenuLauncher.TryLaunch(pedido) || Shell(esperado) || Shell(pedido);
+
+        // NO se cae a `cmd /c start`: ese fallback es el que dejaba consolas abiertas haciéndose
+        // pasar por la app. Si nada de lo anterior sirvió, es más honesto decir que no se pudo.
+        if (!lanzado) return false;
+
+        return EsperarVentana(esperado, 12000); // arranque en frío de Chrome/Teams pasa de 6 s
+    }
+
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+
+    private static bool TieneVentana(string proc)
+    {
+        try
+        {
+            return Process.GetProcessesByName(proc).Any(p => p.MainWindowHandle != IntPtr.Zero);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>¿La ventana de delante es de esta app? Es la señal más rápida de que ya se abrió.</summary>
+    private static bool EstaDelante(string proc)
+    {
+        try
+        {
+            GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
+            using var p = Process.GetProcessById((int)pid);
+            return p.ProcessName.Equals(proc, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Espera a que la app esté realmente abierta. Arrancar tarda; la paciencia va aquí, no en el
+    /// modelo.
+    ///
+    /// DOS señales, porque una sola falla: <c>MainWindowHandle</c> tarda en poblarse en apps
+    /// multiproceso —Chrome abrió y esto reportó fallo a los 6 s (2026-07-31), así que el modelo
+    /// declaró éxito por su cuenta mientras la herramienta decía lo contrario—. La ventana en
+    /// primer plano lo delata mucho antes, porque una app recién lanzada se pone delante.
+    ///
+    /// Convertir una mentira optimista en una pesimista no era el objetivo: lo que hace útil a esta
+    /// función es acertar, y para eso 6 s no bastan en un arranque en frío.
+    /// </summary>
+    private static bool EsperarVentana(string proc, int msMax)
+    {
+        var hasta = DateTime.UtcNow.AddMilliseconds(msMax);
+        while (DateTime.UtcNow < hasta)
+        {
+            if (EstaDelante(proc) || TieneVentana(proc)) return true;
+            System.Threading.Thread.Sleep(200);
+        }
+        // Hay apps cuyo proceso no se llama como su nombre visible. En esos casos no podemos
+        // AFIRMAR que se abrió — y afirmarlo sin más es justo el error que esto vino a corregir.
+        return false;
     }
 
     public static bool OpenUrl(string url) => Shell(NormalizeUrl(url));
