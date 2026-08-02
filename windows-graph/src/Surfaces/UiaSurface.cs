@@ -747,8 +747,39 @@ public sealed class UiaSurface : IUiSurface
         if (root == null) return null;
         if (byPath) return ByPath(root, raw!);
         if (condition == null) return null;
-        try { return root.FindFirst(TreeScope.Descendants, condition); }
+        try { return MejorCandidato(root.FindAll(TreeScope.Descendants, condition)); }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// De todos los elementos que casan con el selector, el que SE PUEDE USAR: visible y con
+    /// geometría. Coger el primero era el error.
+    ///
+    /// Un nombre no es único. En el panel del explorador hay varios «Escritorio» —el de OneDrive,
+    /// el anclado— y algunos cuelgan de ramas plegadas, así que existen en el árbol de UIA con
+    /// rect vacío. `FindFirst` devolvía uno de esos: sin caja no hay dónde pulsar, se caía al
+    /// respaldo `Invoke`, que sobre un TreeItem devuelve true SIN NAVEGAR, y la ruta se rompía
+    /// reportando éxito en el tramo (2026-08-02). Preferir lo visible convierte un selector
+    /// ambiguo en uno utilizable sin inventarse nada.
+    /// </summary>
+    private static AutomationElement? MejorCandidato(AutomationElementCollection? hits)
+    {
+        if (hits == null || hits.Count == 0) return null;
+        AutomationElement? primero = null;
+        foreach (AutomationElement el in hits)
+        {
+            primero ??= el;
+            try
+            {
+                var info = el.Current;
+                if (info.IsOffscreen) continue;
+                var r = info.BoundingRectangle;
+                if (r.IsEmpty || r.Width < 1 || r.Height < 1) continue;
+                return el;                      // visible y con caja: este sirve
+            }
+            catch { }
+        }
+        return primero;                          // ninguno utilizable: el de siempre, y que falle honestamente
     }
 
     private static AutomationElement? ByPath(AutomationElement root, string raw)
@@ -821,6 +852,16 @@ public sealed class UiaSurface : IUiSurface
     private static bool Click(AutomationElement el, out string error)
     {
         error = "";
+
+        // SELECCIONAR va antes que INVOCAR en lo que es seleccionable. Un TreeItem o un ListItem
+        // expone Invoke por herencia, pero invocarlo devuelve true sin navegar: lo que mueve un
+        // árbol o una lista es la SELECCIÓN. Con Invoke primero, un tramo de ruta se daba por
+        // bueno sin haber cambiado de pantalla (2026-08-02).
+        if (el.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var sip) && sip is SelectionItemPattern selPrim)
+        {
+            selPrim.Select();
+            return true;
+        }
         if (el.TryGetCurrentPattern(InvokePattern.Pattern, out var ip) && ip is InvokePattern inv)
         {
             inv.Invoke();

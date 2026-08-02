@@ -60,6 +60,23 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
   selector, no confiando en que se lo pasen aparte.
 - Fecha: 2026-08-01. Código: `UiaSurface.SelectorsFor`, `SurfaceMap.EsCromoGlobal`.
 
+### Un selector casa con VARIOS elementos: elige el que se puede usar
+- Síntoma: `map_go_to` rompía el primer tramo de toda ruta — «pulsé Escritorio pero seguimos en
+  documentos».
+- Causa: un nombre no es único. En el panel del explorador hay varios «Escritorio» (el de
+  OneDrive, el anclado) y algunos cuelgan de ramas PLEGADAS, así que existen en el árbol de UIA
+  con `rect=Empty`. `FindFirst` devolvía uno de esos. Sin caja no hay dónde pulsar → respaldo a
+  Invoke → true sin navegar.
+- Regla: resolver con `FindAll` y quedarse con el primero visible y con geometría; si ninguno
+  sirve, devolver el primero y dejar que falle honestamente.
+- Fecha: 2026-08-02. Código: `UiaSurface.MejorCandidato`.
+
+### En lo seleccionable, SELECT va antes que INVOKE
+- Síntoma: un tramo de ruta se daba por bueno sin cambiar de pantalla.
+- Causa: un TreeItem o un ListItem exponen `InvokePattern` por herencia, pero invocarlos
+  devuelve true sin navegar: lo que mueve un árbol o una lista es la SELECCIÓN.
+- Fecha: 2026-08-02. Código: `UiaSurface.Click`.
+
 ### El punto pulsable lo da UIA (GetClickablePoint), no nuestra aritmética
 - Síntoma: clics perfectamente válidos se rechazaban («el centro cae fuera de la ventana») y
   caían a Invoke, que sobre una pestaña no navega.
