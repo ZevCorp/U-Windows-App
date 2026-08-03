@@ -193,6 +193,43 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 
 ---
 
+### Si el título no distingue las pantallas, la identidad la da el CONTENIDO
+- Síntoma: al mapear Configuración, los clics funcionaban (ok=True, aterrizaban bien) pero
+  «no llevó a ninguna pantalla identificable». Cero aristas aprendidas.
+- Causa: muchas apps modernas viven en UNA ventana cuyo título nunca cambia —Configuración dice
+  «Configuración» estés en Sistema, en Bluetooth o en Cuentas—, así que derivar la identidad del
+  título funde todas sus pantallas en un solo nodo: la pantalla cambia de verdad y el sistema no
+  ve ninguna transición. Con el explorador no se notaba porque allí el título ES la carpeta.
+- Regla: se añade la SECCIÓN abierta —el elemento de navegación que la app tiene seleccionado, que
+  es como ella misma le dice al usuario dónde está— como sub-ruta: `…/configuración#bluetooth`.
+  Solo cuando aporta: si coincide con el título no dice nada nuevo y no se añade, para no romper
+  las identidades que ya funcionaban.
+- Alcance: general. Configuración, Spotify, Teams… casi toda app moderna es así.
+- Fecha: 2026-08-03, mapeando Configuración como segunda app. Código: `SurfaceLocator.SeccionSeleccionada`.
+
+### Un respaldo que actúa sobre OTRA aplicación no es un respaldo
+- Síntoma: mapeando Configuración, el recorrido pulsó un botón del explorador de archivos que
+  estaba detrás.
+- Causa: Configuración no tiene «Atrás», así que el selector no resolvía en su ventana y el
+  barrido de respaldo lo buscó por todo el escritorio… hasta encontrarlo en otra app. El log lo
+  dijo («NO estaba en foco — hallado por barrido en 'U-PRUEBA-ORGANIZAR'») pero actuó igual.
+- Regla: quien mapea una app SIEMPRE la trae al frente antes de actuar; si un selector no está en
+  la ventana de delante, no está. `SoloEnFoco` también en el crawler, no solo en la capa MCP.
+- Fecha: 2026-08-03.
+
+## Reglas de apps UWP / WinUI (Configuración y similares)
+
+### El proceso es el ANFITRIÓN, no la app
+- Configuración corre bajo `ApplicationFrameHost.exe`, no bajo un proceso propio: la identidad
+  queda como `uia://ApplicationFrameHost.exe/configuración`. Buscar la ventana por el nombre del
+  proceso de la app no la encuentra; hay que buscarla por TÍTULO.
+- Fecha: 2026-08-03.
+
+### No tienen «Atrás» con AutomationId estable
+- La regla del explorador (`aid=backButton`) no aplica. Aquí el retroceso es la propia navegación
+  lateral, que está siempre presente — otra razón por la que el cromo global es la vuelta buena y
+  el historial no.
+
 ## Reglas del explorador de archivos de Windows 11 (`explorer.exe`)
 
 ### El contenido vive en ventanas hijas con HWND propio

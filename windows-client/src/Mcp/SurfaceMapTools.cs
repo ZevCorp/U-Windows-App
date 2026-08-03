@@ -416,7 +416,7 @@ public sealed class SurfaceMapTools
 
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
-        or "map_type" or "map_unblock";
+        or "map_type" or "map_unblock" or "map_run";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -438,6 +438,7 @@ public sealed class SurfaceMapTools
             "map_take" => Take(A("exit"), A("action"), A("at")),
             "map_type" => Type(A("text"), A("target"), A("at")),
             "map_unblock" => Unblock(A("at"), A("choose")),
+            "map_run" => Run(A("steps")),
             _ => $"herramienta de mapa no soportada: {tool}",
         };
 
@@ -464,6 +465,93 @@ public sealed class SurfaceMapTools
              + $"{recorribles} de ellas recorribles."
              + (sel.Count > 0 ? $" Seleccionado ahora mismo: {string.Join(", ", sel.Select(s => $"«{s}»"))}." : "")
              + (DestinoDeAtras().Length > 0 ? $" «Atrás» llevaría a «{DestinoDeAtras()}»." : "");
+    }
+
+    /// <summary>
+    /// EJECUCIÓN DE BAJA FRECUENCIA: un plan entero en UNA llamada.
+    ///
+    /// Es la otra mitad de la arquitectura de dos frecuencias. Quien decide —el modelo— emite el
+    /// plan una vez; el ejecutor lo recorre verificando cada paso, sin volver a preguntar. La
+    /// diferencia con ir paso a paso no es el trabajo, que es el mismo: es cuántas veces se
+    /// consulta a quien decide. Veintiuna consultas para organizar unos archivos era el coste de
+    /// no tener esta pieza, no del sistema (2026-08-03).
+    ///
+    /// Se PARA en el primer paso que no confirme lo esperado, y dice dónde. Seguir tras un fallo
+    /// es exactamente cómo un error se convierte en daño tres pasos después: ya nos pasó, y el
+    /// ancla de ubicación existe por eso. Aquí se aplica a la secuencia entera.
+    ///
+    /// Formato: [{"op":"go_to","surface":"..."},
+    ///           {"op":"take","exit":"...","at":"...","action":"click|addselect|doubleclick"},
+    ///           {"op":"type","text":"...","at":"..."}]
+    /// </summary>
+    private string Run(string pasosJson)
+    {
+        if (pasosJson.Length == 0) return "falta `steps`: la lista de pasos a ejecutar";
+
+        List<Dictionary<string, string>> pasos;
+        try
+        {
+            pasos = new List<Dictionary<string, string>>();
+            using var doc = System.Text.Json.JsonDocument.Parse(pasosJson);
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var p in el.EnumerateObject())
+                    d[p.Name] = p.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                        ? p.Value.GetString() ?? "" : p.Value.ToString();
+                pasos.Add(d);
+            }
+        }
+        catch (Exception e) { return $"no entendí `steps`: {e.Message}"; }
+
+        var informe = new System.Text.StringBuilder();
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        int hechos = 0;
+
+        foreach (var p in pasos)
+        {
+            string op = p.TryGetValue("op", out var o) ? o.Trim().ToLowerInvariant() : "";
+            string V(string k) => p.TryGetValue(k, out var v) ? v.Trim() : "";
+            long t0 = reloj.ElapsedMilliseconds;
+
+            string r = op switch
+            {
+                "go_to" => GoTo(V("surface")),
+                "take" => Take(V("exit"), V("action"), V("at")),
+                "type" => Type(V("text"), V("target"), V("at")),
+                "unblock" => Unblock(V("at"), V("choose")),
+                _ => $"paso desconocido: «{op}»",
+            };
+            long ms = reloj.ElapsedMilliseconds - t0;
+            hechos++;
+
+            bool mal = r.StartsWith("NO actúo", StringComparison.Ordinal)
+                    || r.StartsWith("no ", StringComparison.OrdinalIgnoreCase)
+                    || r.StartsWith("ATASCADO", StringComparison.Ordinal)
+                    || r.Contains("pero no se llegó", StringComparison.OrdinalIgnoreCase)
+                    || r.Contains("paso desconocido", StringComparison.Ordinal);
+
+            informe.AppendLine($"  {hechos,2}. [{ms,5} ms] {op} {V("exit")}{V("surface")}{V("text")} → {Recortar(r, 90)}");
+            if (mal)
+            {
+                reloj.Stop();
+                LogBus.Log("mapa-mcp", $"PLAN detenido en el paso {hechos}/{pasos.Count}");
+                return $"PLAN DETENIDO en el paso {hechos} de {pasos.Count} ({reloj.ElapsedMilliseconds} ms).\n"
+                     + informe.ToString()
+                     + "  No sigo tras un fallo: continuar es cómo un error se vuelve daño más adelante.";
+            }
+        }
+
+        reloj.Stop();
+        LogBus.Log("mapa-mcp", $"PLAN completo: {hechos} paso(s) en {reloj.ElapsedMilliseconds} ms");
+        return $"PLAN COMPLETO: {hechos} paso(s) en {reloj.ElapsedMilliseconds} ms, una sola consulta.\n"
+             + informe.ToString();
+    }
+
+    private static string Recortar(string s, int max)
+    {
+        s = (s ?? "").Replace("\n", " · ");
+        return s.Length > max ? s[..max] + "…" : s;
     }
 
     /// <summary>

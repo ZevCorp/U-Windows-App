@@ -32,7 +32,12 @@ public sealed class GraphCrawler
     private readonly SurfaceMap _map;
     private readonly Func<SurfaceLocator.SurfaceLocation?> _where;
     private readonly UiaReader _reader = new();
-    private readonly UiaSurface _ejecutor = new() { Log = s => LogBus.Log("crawler", s) };
+    // SoloEnFoco: el recorrido mapea UNA app y siempre la trae al frente antes de actuar, así que
+    // un selector que no esté en la ventana de delante no está. Sin esto, el barrido por todo el
+    // escritorio hacía algo peor que fallar: al mapear Configuración —que no tiene «Atrás»— buscó
+    // el botón por ahí y lo encontró EN OTRA APP, pulsando el explorador de archivos que estaba
+    // detrás (2026-08-03). Un respaldo que actúa sobre una aplicación distinta no es un respaldo.
+    private readonly UiaSurface _ejecutor = new() { Log = s => LogBus.Log("crawler", s), SoloEnFoco = true };
 
     /// <summary>Progreso para la UI: nodos vistos, aristas aprendidas y qué está haciendo ahora.</summary>
     public event Action<string, int, int>? Progress;

@@ -226,6 +226,20 @@ public sealed class SurfaceLocator : IDisposable
             string mejor = NombreAlternativo(hwnd);
             slug = mejor.Length > 0 && !EsNombreDePanel(mejor) ? Slug(mejor) : "ventana";
         }
+        // LA SECCIÓN ABIERTA, cuando el título no la distingue. Muchas apps modernas viven en una
+        // sola ventana cuyo título NUNCA cambia —Configuración dice «Configuración» estés en
+        // Sistema, en Bluetooth o en Cuentas— así que derivar la identidad del título funde todas
+        // sus pantallas en un solo nodo: el recorrido pulsa, la pantalla cambia de verdad, y el
+        // sistema no ve ninguna transición. Con el explorador no se notaba porque ahí el título ES
+        // la carpeta (2026-08-03, mapeando Configuración como segunda app).
+        //
+        // La señal es la que usa la propia app para decir dónde estás: el elemento SELECCIONADO de
+        // su navegación. Solo se añade cuando aporta —si coincide con el título, no dice nada
+        // nuevo— para no romper las identidades que ya funcionaban.
+        string seccion = SeccionSeleccionada(hwnd);
+        if (seccion.Length > 0 && !seccion.Equals(slug, StringComparison.OrdinalIgnoreCase))
+            return new SurfaceLocation($"uia://{proc}.exe/{slug}#{seccion}", $"uia://{proc}.exe", $"/{slug}#{seccion}");
+
         return new SurfaceLocation($"uia://{proc}.exe/{slug}", $"uia://{proc}.exe", $"/{slug}");
     }
 
@@ -281,6 +295,31 @@ public sealed class SurfaceLocator : IDisposable
         if (corte <= 0) return title;
         string cabeza = title.Substring(0, corte).Trim();
         return cabeza.Length > 0 ? cabeza : title;
+    }
+
+    /// <summary>
+    /// La sección abierta según la propia app: su elemento de navegación seleccionado.
+    ///
+    /// Es la respuesta a «¿dónde estoy?» que la app ya le da al usuario resaltando una entrada de
+    /// su menú lateral. Cuando el título no distingue las pantallas, esto sí. Se pide a UIA de una
+    /// vez —ListItem AND IsSelected— porque esto se consulta en cada sondeo y recorrer el árbol
+    /// entero aquí costaría segundos.
+    /// </summary>
+    private static string SeccionSeleccionada(IntPtr hwnd)
+    {
+        try
+        {
+            var raiz = AutomationElement.FromHandle(hwnd);
+            if (raiz == null) return "";
+            var sel = raiz.FindFirst(TreeScope.Descendants, new AndCondition(
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem),
+                new PropertyCondition(SelectionItemPattern.IsSelectedProperty, true)));
+            string n = sel?.Current.Name?.Trim() ?? "";
+            // Nombres larguísimos (un dispositivo con toda su descripción) no identifican una
+            // sección: son contenido que resulta estar seleccionado.
+            return n.Length is > 0 and <= 40 ? Slug(n) : "";
+        }
+        catch { return ""; }
     }
 
     private static string NombreAlternativo(IntPtr hwnd)
