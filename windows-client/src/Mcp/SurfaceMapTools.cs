@@ -241,27 +241,31 @@ public sealed class SurfaceMapTools
     /// 200 ms, así que un plazo fijo de 800 ms desperdiciaba medio segundo cada vez y aun así se
     /// quedaba corto en un equipo cargado. Preguntar por lo que se espera sirve para las dos cosas.
     /// </summary>
-    private bool EsperarMenu(int msMax)
+    private bool EsperarMenu(int msMax, int habiaAntes)
     {
         for (int i = 0; i < msMax / 70; i++)
         {
-            try
-            {
-                IntPtr fg = GetForegroundWindow();
-                if (fg != IntPtr.Zero)
-                {
-                    var raiz = System.Windows.Automation.AutomationElement.FromHandle(fg);
-                    var hit = raiz?.FindFirst(System.Windows.Automation.TreeScope.Descendants,
-                        new System.Windows.Automation.PropertyCondition(
-                            System.Windows.Automation.AutomationElement.ControlTypeProperty,
-                            System.Windows.Automation.ControlType.MenuItem));
-                    if (hit != null) return true;
-                }
-            }
-            catch { }
+            if (CuantosMenus() > habiaAntes) return true;
             System.Threading.Thread.Sleep(70);
         }
         return false;
+    }
+
+    /// <summary>Cuántos elementos de menú hay ahora en la ventana de delante.</summary>
+    private static int CuantosMenus()
+    {
+        try
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return 0;
+            var raiz = System.Windows.Automation.AutomationElement.FromHandle(fg);
+            if (raiz == null) return 0;
+            return raiz.FindAll(System.Windows.Automation.TreeScope.Descendants,
+                new System.Windows.Automation.PropertyCondition(
+                    System.Windows.Automation.AutomationElement.ControlTypeProperty,
+                    System.Windows.Automation.ControlType.MenuItem)).Count;
+        }
+        catch { return 0; }
     }
 
     private void ObservarMenus(string nodo)
@@ -755,6 +759,13 @@ public sealed class SurfaceMapTools
         // que contar y no se podría decir sobre qué se actuó.
         _seleccionPrevia = OperaSobreLaSeleccion(elegida.Info.Label) ? SeleccionActual() : new List<string>();
 
+        // Y los elementos de menú TAMBIÉN se cuentan antes: la señal de que un menú se abrió es que
+        // haya MÁS que antes, no que haya alguno. Pueden quedar restos del menú anterior en el
+        // árbol, y darlos por buenos hacía continuar sin que el menú estuviera abierto: el paso
+        // siguiente no encontraba su opción y el grupo entero fallaba (2026-08-03). Comparar contra
+        // el estado previo en vez de contra cero es lo que ya nos resolvió la identidad de pantalla.
+        int menusAntes = PuedeAbrirMenu(elegida.Info.Label) ? CuantosMenus() : 0;
+
         if (!_uia.Execute(paso, out string error))
             return $"no se pudo pulsar «{elegida.Info.Label}»: {error}";
 
@@ -788,7 +799,8 @@ public sealed class SurfaceMapTools
             // Antes eran 800 ms fijos por acción, casi siempre esperando a nada (2026-08-03).
             bool abreMenu = PuedeAbrirMenu(elegida.Info.Label);
             string tras = EsperarCambio(desde, abreMenu ? 240 : 320);
-            if (abreMenu) EsperarMenu(1200);
+            if (abreMenu && !EsperarMenu(1500, menusAntes))
+                LogBus.Log("mapa-mcp", $"«{elegida.Info.Label}» no llegó a abrir menú (seguía habiendo {menusAntes})");
             LogBus.Log("mapa-mcp", $"✓ acción «{elegida.Info.Label}» ejecutada" + (tras.Length > 0 ? $" → {tras}" : ""));
 
             // Se relee SIEMPRE: una acción suele destapar cosas nuevas —un menú, un diálogo— en la

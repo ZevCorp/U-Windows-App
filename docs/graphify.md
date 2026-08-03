@@ -353,6 +353,23 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 - «factura-enero.pdf» aparece en el mapa como «factura-enero». Buscar por el nombre real del
   archivo no encuentra nada. Lo que el mapa guarda es lo que la interfaz muestra.
 
+### La señal de que algo apareció es que haya MÁS que antes, no que haya alguno
+- Síntoma: un grupo de pasos fallaba intermitentemente al elegir una opción de menú.
+- Causa: se daba por abierto el menú al encontrar cualquier `MenuItem` en el árbol, y pueden
+  quedar restos del menú anterior. Se continuaba sin que el menú estuviera abierto de verdad.
+- Regla: contar ANTES de pulsar y esperar a que el número aumente. Es el mismo principio que ya
+  resolvió la identidad de pantalla y la confirmación de llegada: comparar contra el estado
+  previo, no contra cero.
+- Fecha: 2026-08-03. Código: `SurfaceMapTools.CuantosMenus` / `EsperarMenu`.
+
+### El banco de pruebas también tiene estado: no le tires el suelo a la app
+- Varias corridas «fallaron» por culpa del guion de pruebas, no del sistema: borrar las carpetas
+  mientras el explorador estaba dentro lo dejaba apuntando a una ubicación inexistente, con un
+  diálogo de error bloqueando todo lo demás. El reinicio debe SACAR a la app de la zona antes de
+  tocar el disco.
+- Es la versión de laboratorio de la misma regla de siempre: verificar el estado antes de actuar.
+- Fecha: 2026-08-03.
+
 ### Fallar RÁPIDO es parte de ser honesto
 - Síntoma: una sola llamada tardó 181 s en fallar. Un fallo que tarda tres minutos parece un
   cuelgue, no un fallo.
