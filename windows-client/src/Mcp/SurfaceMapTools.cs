@@ -677,6 +677,9 @@ public sealed class SurfaceMapTools
     /// 18 botones, no se confunde (comprobado el 2026-08-03).
     /// </summary>
     private (string Titulo, List<string> Textos, List<string> Opciones) LeerInterrupcion()
+        => Interrupcion.Leer();
+
+    private (string Titulo, List<string> Textos, List<string> Opciones) LeerInterrupcionVieja()
     {
         var textos = new List<string>();
         var opciones = new List<string>();

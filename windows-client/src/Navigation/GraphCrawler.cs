@@ -244,6 +244,10 @@ public sealed class GraphCrawler
         {
             return $"detenido por el usuario · {_nodos} pantalla(s), {_aristas} ruta(s) aprendida(s)";
         }
+        catch (InvalidOperationException e)
+        {
+            return $"parado: {e.Message} · {_nodos} pantalla(s), {_aristas} ruta(s) aprendida(s)";
+        }
         return $"listo · {_nodos} pantalla(s) recorrida(s), {_aristas} ruta(s) aprendida(s)";
     }
 
@@ -354,6 +358,22 @@ public sealed class GraphCrawler
         _nodos++;
         NodeEntered?.Invoke(nodo);
         Progress?.Invoke($"explorando {Corto(nodo)}", _nodos, _aristas);
+
+        // ALGO CRUZADO DELANTE = no se mapea. Recorrer con un diálogo abierto es pulsar a ciegas:
+        // los clics aterrizan donde no deben y todo lo que se aprenda después describe un camino
+        // que nadie hizo. Mapear tampoco es el momento de responder diálogos —eso es una decisión—
+        // así que se para y se dice cuál es, para que alguien lo resuelva y se relance
+        // (2026-08-03: al mapear Configuración se abrió «Cambiar el nombre de tu PC» y el recorrido
+        // siguió pulsando detrás).
+        var cruzado = Interrupcion.Leer();
+        if (cruzado.Opciones.Count > 0)
+        {
+            string aviso = $"hay un diálogo delante («{cruzado.Titulo}»: "
+                         + $"{string.Join(", ", cruzado.Opciones.Select(o => $"«{o}»"))}); "
+                         + "no mapeo con algo cruzado. Resuélvelo y vuelve a lanzarlo.";
+            LogBus.Log("crawler", "PARADA · " + aviso);
+            throw new InvalidOperationException(aviso);
+        }
 
         var candidatos = await LeerSalidasAsync(ct);
         _map.ObserveExits(nodo, candidatos.Select(c => (c.Label, c.Tipo, c.Selector, c.Alternativas)));
