@@ -250,6 +250,44 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 
 ## Reglas de arquitectura del mapeo
 
+### «Atrás» NO es una arista: es un gesto de historial
+- Síntoma: `map_go_to` fallaba el último tramo de las vueltas — «pulsé Atrás pero seguimos en
+  win-x64».
+- Causa: el botón depende de CÓMO se llegó, no de dónde se está. «win-x64 --Atrás--> documentos»
+  fue cierto en un recorrido y falso al llegar a win-x64 por otro camino. Una arista describe una
+  propiedad del sitio; un gesto de historial no lo es.
+- Regla: se usa para volver durante el recorrido, nunca se aprende. La vuelta que SÍ es mapa es
+  la navegación global (panel lateral, barra de inicio), que está en todas las pantallas y
+  siempre lleva al mismo lugar.
+- Fecha: 2026-08-02. Código: `GraphCrawler.VolverAsync`.
+
+### Una puerta se cruza UNA vez, desde donde primero se pueda
+- Síntoma: el mapa nunca supo volver a la raíz desde ningún sitio.
+- Causa: vetar todo el cromo visible en la raíz dejaba agujeros permanentes: «Documentos» no
+  puede aprenderse ESTANDO en documentos —pulsarlo no cambia de pantalla— y quedaba vetado
+  también en las demás. Hay que saltar solo lo que ya tiene destino conocido.
+- Fecha: 2026-08-02. Código: `GraphCrawler.EsNavegacionGlobalYaConocida`.
+
+### Llegar a un sitio nuevo es el momento de mirar alrededor
+- Síntoma: el asistente navegaba a una carpeta llena y leía «0 salidas conocidas».
+- Causa: el mapa solo se llenaba durante un recorrido automático. Preguntar «dónde estoy» ahora
+  registra las salidas de la pantalla actual si aún no hay ninguna RECORRIBLE (una arista
+  observada pasivamente no basta: es conectividad sin acción).
+- Fecha: 2026-08-02. Código: `SurfaceMapTools.ObservarAqui`.
+
+### Cruzar una puerta sin explorar se juzga por el CAMBIO, no por el destino
+- Síntoma: `map_take` sobre una puerta reportaba fallo aunque llegara.
+- Causa: comparaba la llegada contra el marcador `?selector`, que no es un sitio. Para una puerta
+  sin destino conocido el éxito es que la pantalla cambie — y lo descubierto se aprende, que es
+  justo para lo que existen las puertas.
+- Fecha: 2026-08-02. Código: `SurfaceMapTools.Take`.
+
+### Las dependencias y artefactos de compilación están fuera de alcance
+- `node_modules`, `.git`, `.next`, `bin`, `obj`, `dist`… Una corrida se perdió 20 minutos dentro
+  de `node_modules/.next/dev`. Mismo criterio que «Este equipo»: el mapa describe la app, no el
+  disco. Código: `SafeToClick.FueraDeAlcance`.
+
+
 ### El grafo es el plan, no el registro
 - El bucle consume una FRONTERA de puertas registradas en el mapa; no listas en memoria.
   Un regreso fallido cuesta solo las puertas de ese nodo. Parar no pierde el pendiente.

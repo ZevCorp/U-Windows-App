@@ -381,9 +381,30 @@ public sealed class GraphExplorerWindow : Window
         var dibujadas = new HashSet<string>(_ultimaCorrida.Select(e => e.From + "\n" + e.To), StringComparer.OrdinalIgnoreCase);
         foreach (var nodo in pos.Keys.ToList())
         {
+            // PUERTAS SIN CRUZAR: salidas que existen y cuyo destino aún no se conoce. Se dibujan
+            // como un muñón ámbar saliendo del nodo, porque son la FRONTERA del mapa —lo que
+            // queda por descubrir— y no verlas hacía parecer terminado un terreno que no lo está.
+            int pendiente = 0;
             foreach (var h in _map.ExitsFrom(nodo))
             {
-                if (SurfaceMap.EsPuerta(h.To)) continue;              // sin destino: nada que dibujar
+                if (!SurfaceMap.EsPuerta(h.To)) continue;
+                if (!pos.TryGetValue(nodo, out var origen)) continue;
+                if (pendiente >= 6) break;                            // un puñado basta para leerlo
+                double x = origen.X + 14 + pendiente * 13;
+                _lienzo.Children.Add(new System.Windows.Shapes.Line
+                {
+                    X1 = x, Y1 = origen.Y + altoCaja,
+                    X2 = x, Y2 = origen.Y + altoCaja + 13,
+                    Stroke = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xB3, 0x00)),
+                    StrokeThickness = 2,
+                    ToolTip = $"puerta sin cruzar: «{h.Info.Label}» (destino desconocido)",
+                });
+                pendiente++;
+            }
+
+            foreach (var h in _map.ExitsFrom(nodo))
+            {
+                if (SurfaceMap.EsPuerta(h.To)) continue;              // ya dibujada arriba
                 if (!pos.ContainsKey(h.To)) continue;                 // el otro extremo no está en pantalla
                 if (!dibujadas.Add(h.From + "\n" + h.To)) continue;   // ya la dibujó la corrida
                 if (!pos.TryGetValue(h.From, out var p1) || !pos.TryGetValue(h.To, out var p2)) continue;

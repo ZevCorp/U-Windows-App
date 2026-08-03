@@ -392,13 +392,13 @@ public sealed class GraphCrawler
     private bool EsNavegacionGlobalYaConocida(string selector, int prof)
     {
         if (prof == 0) return false;
-        // El cromo que ya estaba en la RAÍZ es trabajo de la raíz: recorrerlo desde dentro no
-        // descubre nada y saca el recorrido de donde estaba. Lo mismo para lo que el mapa haya
-        // detectado como persistente por su cuenta —el marco de la app, visto en 3+ pantallas—
-        // aunque no estuviera en la raíz.
-        return _puertasDeRaiz.Contains(selector)
-            || _destinosSabidos.Contains(selector)
-            || _map.EsCromoGlobal(selector);
+        // Se salta el cromo cuyo DESTINO ya se conoce, y solo ese. Vetar todo lo que estuviera en
+        // la raíz parecía más barato y dejaba agujeros PERMANENTES: «Documentos» no puede
+        // aprenderse EN la raíz —pulsarlo allí no cambia de pantalla— y quedaba vetado también en
+        // las demás, así que el mapa nunca supo volver a documentos desde ningún sitio
+        // (2026-08-02). Una puerta se cruza UNA vez, desde donde primero se pueda; a partir de ahí
+        // se deduce sola en el resto de pantallas.
+        return _destinosSabidos.Contains(selector) || _map.EsCromoGlobal(selector);
     }
 
     /// <summary>
@@ -581,6 +581,13 @@ public sealed class GraphCrawler
             StepOrder = 1, ActionType = "click",
             Selector = "uia:aid=backButton;ct=Button", Label = "Atrás",
         };
+        // «Atrás» se USA para volver pero NO se aprende como arista, y esto costó entenderlo:
+        // depende del HISTORIAL, no de la pantalla. Aprender «win-x64 --Atrás--> documentos» fue
+        // cierto una vez, en aquel recorrido, y falso en cuanto se llegó a win-x64 por otro camino:
+        // al pedir esa ruta por MCP el tramo falló, con el botón ahí delante (2026-08-02). Una
+        // arista describe una propiedad del sitio; un gesto de historial no lo es. La vuelta que
+        // SÍ es mapa es el panel de navegación, que está en todas las pantallas y siempre lleva
+        // al mismo lugar.
         if (await Task.Run(() => _ejecutor.Execute(atras, out _), ct)
             && (await EsperarLlegadaAsync(esperado, 2500, ct)).Length > 0)
             return true;

@@ -27,6 +27,7 @@ public sealed class SurfaceMapTools
     private readonly SurfaceMap _map;
     private readonly Func<SurfaceLocator.SurfaceLocation?> _where;
     private readonly UiaSurface _uia = new() { Log = s => LogBus.Log("mapa-mcp", s) };
+    private readonly UiaReader _lector = new();
 
     public SurfaceMapTools(SurfaceMap map, Func<SurfaceLocator.SurfaceLocation?> where)
     {
@@ -66,10 +67,53 @@ public sealed class SurfaceMapTools
     {
         var loc = _where();
         if (loc == null) return "no se pudo determinar la superficie actual";
+
+        ObservarAqui(loc.Id);
         var salidas = _map.ExitsFrom(loc.Id);
         int recorribles = salidas.Count(h => h.Info.Selector.Length > 0);
         return $"Estás en «{loc.Id}». Desde aquí el mapa conoce {salidas.Count} salida(s), "
              + $"{recorribles} de ellas recorribles.";
+    }
+
+    /// <summary>
+    /// Registra las salidas de la pantalla actual, si aún no se conocen.
+    ///
+    /// El mapa solo se llenaba durante un recorrido automático, así que el asistente podía LLEGAR
+    /// a un sitio nuevo por MCP y quedarse ciego allí: «0 salidas conocidas» estando delante de
+    /// una carpeta llena de cosas (2026-08-02). Preguntar dónde estoy es el momento natural para
+    /// mirar alrededor — el terreno se aprende viviendo, no solo explorando a propósito.
+    /// </summary>
+    private void ObservarAqui(string nodo)
+    {
+        try
+        {
+            // Se mira alrededor salvo que ya haya salidas RECORRIBLES. Bastaba con «alguna salida»
+            // y no servía: una arista observada pasivamente —conectividad sin acción— hacía creer
+            // que la pantalla ya se conocía, y el asistente seguía sin saber qué pulsar.
+            if (_map.ExitsFrom(nodo).Any(h => h.Info.Selector.Length > 0)) return;
+            _lector.Read();
+
+            var puertas = new List<(string, string, string, string[])>();
+            foreach (var el in _lector.Elements)
+            {
+                if (!SafeToClick.Auto(el.Label, el.ControlType, out _)) continue;
+                try
+                {
+                    var (l, t, sels) = UiaSurface.DescribeElement(el.Native);
+                    var utiles = sels.Where(s => !s.Contains("path=", StringComparison.Ordinal)
+                        && !System.Text.RegularExpressions.Regex.IsMatch(s, @"(name|aid)=(;|$)")).ToArray();
+                    if (utiles.Length == 0) continue;
+                    puertas.Add((l.Length > 0 ? l : el.Label, t.Length > 0 ? t : el.ControlType,
+                                 utiles[0], utiles.Skip(1).ToArray()));
+                }
+                catch { }
+            }
+            if (puertas.Count == 0) return;
+
+            _map.ObserveExits(nodo, puertas);
+            LogBus.Log("mapa-mcp", $"al llegar a '{nodo}' se anotaron {puertas.Count} salida(s)");
+        }
+        catch { }
     }
 
     /// <summary>
@@ -227,8 +271,25 @@ public sealed class SurfaceMapTools
             Label = elegida.Info.Label,
         };
 
+        string desde = actual.Id;
         if (!_uia.Execute(paso, out string error))
             return $"no se pudo pulsar «{elegida.Info.Label}»: {error}";
+
+        // PUERTA SIN CRUZAR: no hay destino contra el que comparar, así que el éxito es que la
+        // pantalla CAMBIE, y lo que se descubre se aprende. Comparar contra el marcador «?selector»
+        // hacía que cruzar una puerta se reportara siempre como fallo, incluso llegando —justo lo
+        // contrario de para lo que existen las puertas, que es descubrir a dónde dan (2026-08-02).
+        if (SurfaceMap.EsPuerta(elegida.To))
+        {
+            string llegada = EsperarCambio(desde, 4000);
+            if (llegada.Length == 0)
+                return $"pulsé «{elegida.Info.Label}» pero la pantalla no cambió; sigue sin saberse a dónde da.";
+
+            _map.LearnTraversal(desde, llegada, elegida.Info.Selector, elegida.Info.Alternatives,
+                elegida.Info.Label, elegida.Info.ControlType, elegida.Info.ActionType);
+            LogBus.Log("mapa-mcp", $"✓ puerta «{elegida.Info.Label}» descubierta → {llegada}");
+            return $"tomé «{elegida.Info.Label}»: era una puerta sin explorar y lleva a «{llegada}». Queda aprendida.";
+        }
 
         if (!Llego(elegida.To, 4000))
             return $"pulsé «{elegida.Info.Label}» pero no se llegó a «{elegida.To}». "
@@ -236,6 +297,20 @@ public sealed class SurfaceMapTools
 
         LogBus.Log("mapa-mcp", $"✓ salida «{elegida.Info.Label}» → {elegida.To}");
         return $"tomé «{elegida.Info.Label}» y llegué a «{elegida.To}»";
+    }
+
+    /// <summary>Espera a que la superficie DEJE de ser la de partida y devuelve la nueva, o "".</summary>
+    private string EsperarCambio(string desde, int msMax)
+    {
+        for (int i = 0; i < msMax / 150; i++)
+        {
+            System.Threading.Thread.Sleep(150);
+            string ahora = _where()?.Id ?? "";
+            if (ahora.Length > 0 && !string.Equals(ahora, desde, StringComparison.OrdinalIgnoreCase)
+                && !ahora.EndsWith("/ventana", StringComparison.OrdinalIgnoreCase))
+                return ahora;
+        }
+        return "";
     }
 
     /// <summary>Espera a que la superficie sea la esperada. La UI tarda; la paciencia va aquí.</summary>

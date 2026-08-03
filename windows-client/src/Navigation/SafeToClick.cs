@@ -71,6 +71,12 @@ public static class SafeToClick
         "este equipo", "this pc", "disco local", "local disk", "unidad", "drive",
         "red", "network", "papelera", "recycle", "panel de control", "control panel",
         "windows", "archivos de programa", "program files",
+        // Dependencias y artefactos de compilación: miles de carpetas generadas que no enseñan
+        // NADA sobre cómo se navega la app, solo sobre qué proyectos tiene el usuario. Una corrida
+        // se perdió 20 minutos dentro de node_modules/.next/dev sin terminar (2026-08-02). Mismo
+        // criterio que «Este equipo»: el mapa describe la app, no el disco.
+        "node_modules", ".git", ".next", ".venv", "__pycache__", "obj", "bin",
+        "dist", "build", "packages", "vendor", ".vs", ".idea", "target",
     };
 
     /// <summary>
