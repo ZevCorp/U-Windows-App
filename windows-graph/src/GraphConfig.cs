@@ -1,5 +1,6 @@
 using System.IO;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace U.Graph;
@@ -24,8 +25,84 @@ public sealed class GraphConfig
     /// </summary>
     public string BaseUrl { get; set; } = "https://graph-eight-pied.vercel.app";
 
-    /// <summary>API key permanente. Viaja como X-API-Key en todas las rutas /api/v1.</summary>
+    /// <summary>
+    /// API key de la flota. Viaja como X-API-Key en las rutas /api/v1 y, desde el
+    /// enrolamiento por instalación, es también la key de ENROLAMIENTO: lo que
+    /// permite pedir el token per-install en /api/v1/enroll. El plan de corte
+    /// (autenticacion-interna-plan.md en Graph) la degradará a solo-enrolamiento
+    /// cuando la flota esté enrolada.
+    /// </summary>
     public string? ApiKey { get; set; }
+
+    // ── Identidad por instalación (carril clínico de Operations) ─────────────
+    //
+    // El token per-install es la credencial REAL de este equipo: revocable uno a
+    // uno desde Graph, y la llave del carril clínico (actuar en nombre del médico
+    // vinculado). En disco vive PROTEGIDO con DPAPI (CurrentUser); solo si DPAPI
+    // no está disponible se cae a texto plano, y queda dicho en el log de quien
+    // lo use. Graph solo guarda el sha256: si esto se pierde, se re-enrola.
+
+    /// <summary>Identificador estable de ESTA instalación. Se crea una vez y se persiste.</summary>
+    public string? DeviceId { get; set; }
+
+    /// <summary>Token per-install cifrado con DPAPI (base64). Preferente.</summary>
+    public string? DeviceTokenProtected { get; set; }
+
+    /// <summary>Respaldo SOLO para cuando DPAPI falla en esta máquina. Peor es no poder operar.</summary>
+    public string? DeviceTokenPlain { get; set; }
+
+    /// <summary>Devuelve (creándolo y persistiéndolo si hace falta) el id estable de la instalación.</summary>
+    public string EnsureDeviceId()
+    {
+        if (string.IsNullOrWhiteSpace(DeviceId))
+        {
+            // Un GUID persistido es estable por instalación y no filtra nada de la
+            // máquina (nombre de host, usuario) hacia el backend.
+            DeviceId = $"uwd-{Guid.NewGuid():N}";
+            Save();
+        }
+        return DeviceId;
+    }
+
+    /// <summary>El token per-install, o null si este equipo aún no se enroló. Env gana (pruebas).</summary>
+    public string? GetDeviceToken()
+    {
+        string? fromEnv = Environment.GetEnvironmentVariable("GRAPH_DEVICE_TOKEN");
+        if (!string.IsNullOrWhiteSpace(fromEnv)) return fromEnv.Trim();
+
+        if (!string.IsNullOrWhiteSpace(DeviceTokenProtected))
+        {
+            try
+            {
+                byte[] raw = ProtectedData.Unprotect(
+                    Convert.FromBase64String(DeviceTokenProtected), null, DataProtectionScope.CurrentUser);
+                return System.Text.Encoding.UTF8.GetString(raw);
+            }
+            catch
+            {
+                // Cambió el perfil de usuario o el blob se corrompió: el token es
+                // irrecuperable POR DISEÑO (DPAPI). Se re-enrola; no se adivina.
+            }
+        }
+        return string.IsNullOrWhiteSpace(DeviceTokenPlain) ? null : DeviceTokenPlain.Trim();
+    }
+
+    /// <summary>Guarda el token recién emitido (el enroll lo enseña UNA vez). DPAPI, con respaldo plano.</summary>
+    public void SetDeviceToken(string token)
+    {
+        try
+        {
+            DeviceTokenProtected = Convert.ToBase64String(ProtectedData.Protect(
+                System.Text.Encoding.UTF8.GetBytes(token ?? ""), null, DataProtectionScope.CurrentUser));
+            DeviceTokenPlain = null;
+        }
+        catch
+        {
+            DeviceTokenProtected = null;
+            DeviceTokenPlain = token;
+        }
+        Save();
+    }
 
     /// <summary>Identifica esta instalación en los workflows que graba. Útil con varios clientes.</summary>
     public string AppId { get; set; } = "windows-u";

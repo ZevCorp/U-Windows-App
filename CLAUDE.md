@@ -165,6 +165,18 @@ pruebas: [`docs/pruebas-exportacion.md`](docs/pruebas-exportacion.md).
   siempre `false`. Concluir de ahí que la exportación falló es una alarma falsa en el caso más normal
   —el reenvío tras un corte de red—, y esa alarma estuvo escrita en la primera versión de esto.
 
+## Miracle Notes por API (herramientas `notes_*` del cerebro)
+
+El cerebro también puede TRABAJAR consultas de Notes sin tocar pantallas: Graph declara la
+familia `notes_*` solo si este equipo tiene un **médico vinculado** (token per-install +
+canje de un código en Miracle Notes → Equipos), y `ClinicalMcpRunner` las ejecuta contra
+`/api/clinical/*`. El dictado va por buffer local (jamás por los args del modelo); firmar y
+exportar no existen para el aparato. Identidad: `GraphConfig` (DeviceId + token con DPAPI),
+enrolamiento automático la primera vez. Guía completa y checklist manual:
+[`docs/notas-por-api.md`](docs/notas-por-api.md); banco de pruebas:
+`scripts/fake-graph-clinical.js` (levanta el carril REAL del repo Graph con LLM enlatado) y
+`scripts/verify-clinical-contract-mirror.js` (espejo C# contra respuestas reales).
+
 ## Aprendizajes de método
 
 Estos costaron caro. Aplicarlos ahorra rondas enteras.

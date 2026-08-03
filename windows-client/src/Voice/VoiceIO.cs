@@ -48,6 +48,55 @@ public sealed class VoiceIO : IDisposable
         try { _tts.SpeakAsyncCancelAll(); _tts.SpeakAsync(text); } catch { }
     }
 
+    // ── Dictado continuo (consulta clínica) ──────────────────────────────────
+    //
+    // Distinto de ListenOnceAsync (una frase de comando): esto es una sesión de
+    // dictado que corre mientras el médico habla y entrega cada tramo reconocido
+    // tal cual — quien lo consume (ClinicalMcpRunner) lo apila en su buffer y el
+    // texto JAMÁS pasa por el modelo. Limitación conocida: comparte el micrófono
+    // con el push-to-talk; validar la convivencia en la máquina real está en el
+    // checklist de pruebas manuales.
+
+    private SpeechRecognitionEngine? _dictation;
+
+    /// <summary>¿Hay una sesión de dictado corriendo?</summary>
+    public bool DictationActive => _dictation != null;
+
+    /// <summary>Arranca el dictado continuo. Cada tramo reconocido va a <paramref name="onHeard"/> tal cual.</summary>
+    public void StartDictation(Action<string> onHeard)
+    {
+        StopDictation();
+        try
+        {
+            var rec = new SpeechRecognitionEngine();
+            rec.LoadGrammar(new DictationGrammar());
+            rec.SetInputToDefaultAudioDevice();
+            rec.SpeechRecognized += (_, e) =>
+            {
+                string text = e.Result?.Text ?? "";
+                if (!string.IsNullOrWhiteSpace(text)) onHeard(text);
+            };
+            rec.RecognizeAsync(RecognizeMode.Multiple);
+            _dictation = rec;
+        }
+        catch
+        {
+            // Sin micrófono o sin motor de reconocimiento: el dictado no arranca y
+            // notes_guardar_dictado lo dirá («buffer vacío») en vez de fallar mudo.
+            _dictation = null;
+        }
+    }
+
+    /// <summary>Detiene y libera la sesión de dictado, si la hay.</summary>
+    public void StopDictation()
+    {
+        var rec = _dictation;
+        _dictation = null;
+        if (rec == null) return;
+        try { rec.RecognizeAsyncCancel(); } catch { }
+        try { rec.Dispose(); } catch { }
+    }
+
     /// <summary>Escucha una frase por el micrófono y devuelve el texto (o "" si no reconoció).</summary>
     public async Task<string> ListenOnceAsync(CancellationToken ct)
     {
@@ -65,5 +114,9 @@ public sealed class VoiceIO : IDisposable
         }, ct);
     }
 
-    public void Dispose() => _tts.Dispose();
+    public void Dispose()
+    {
+        StopDictation();
+        _tts.Dispose();
+    }
 }

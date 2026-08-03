@@ -44,6 +44,9 @@
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
     <!-- Requerido por el compilador para resolver `dynamic` sobre objetos COM de SAP GUI. -->
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
+    <!-- DPAPI (CurrentUser) para el token per-install del carril clínico: en .NET 8
+         ProtectedData vive en este paquete, no en el framework. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
 </Project>

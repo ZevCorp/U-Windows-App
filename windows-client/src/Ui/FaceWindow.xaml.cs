@@ -58,6 +58,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private SurfaceMap? _surfaceMap;
     private ClickWatcher? _clickWatcher;
     private WorkflowMcpRunner? _workflowRunner;
+    private ClinicalMcpRunner? _clinicalRunner;
 
     // Selector de workflow directo en el panel Backend: lista cargada de Graph + un GraphClient propio
     // para listar/ejecutar sin abrir la biblioteca. El slider indexa esta lista.
@@ -187,8 +188,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // La superficie actual viaja en cada turno (scoping de workflows) y las llamadas
         // workflow_* del cerebro se ejecutan con el WorkflowPlayer (subconsciente).
         _workflowRunner = new WorkflowMcpRunner(_graphConfig, this);
+        // Miracle Notes por API (notes_*): Graph solo declara estas herramientas si este equipo
+        // tiene un médico vinculado; el runner las ejecuta contra el carril clínico con el token
+        // per-install. Cuando falta el vínculo, el código de emparejamiento se pinta en el estado
+        // además de decirse por voz.
+        _clinicalRunner = new ClinicalMcpRunner(_graphConfig, this);
+        _clinicalRunner.PairingCodeAvailable += (_, code) => Dispatcher.Invoke(() =>
+            SetStatus($"Vincular equipo — código: {code} (Miracle Notes → Equipos, vence en 10 min)"));
+        // El dictado continuo vive mientras la consulta está abierta: arranca al abrirla y se
+        // apaga al generar la nota. Lo oído va DIRECTO al buffer del runner — nunca al cerebro.
+        _clinicalRunner.EncounterOpened += (_, encounterId) => Dispatcher.Invoke(() =>
+        {
+            _voice.StartDictation(t => _clinicalRunner!.AppendDictation(t));
+            SetStatus($"Dictado activo (consulta {encounterId[..Math.Min(8, encounterId.Length)]}…)");
+        });
+        _clinicalRunner.GenerationStarted += (_, __) => Dispatcher.Invoke(() => _voice.StopDictation());
         _loop = new AgentLoop(_backend, _uia, mcp, this, this, InstalledApps.List,
-            () => _locator?.Current, _workflowRunner);
+            () => _locator?.Current, _workflowRunner, _clinicalRunner);
 
         // Arrastrar por el texto de estado mueve el panel (la carita tiene sus propios gestos abajo).
         Header.MouseLeftButtonDown += (_, ev) => { if (ev.ButtonState == MouseButtonState.Pressed) DragMove(); };

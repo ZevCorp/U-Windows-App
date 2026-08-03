@@ -38,12 +38,13 @@ public sealed class AgentLoop
     private readonly Func<string[]> _installedApps;
     private readonly Func<SurfaceLocator.SurfaceLocation?>? _surface;
     private readonly WorkflowMcpRunner? _workflows;
+    private readonly ClinicalMcpRunner? _clinical;
     private readonly SapContextReader _sapContext = new();
     private readonly int _maxTurns;
 
     public AgentLoop(BackendClient backend, UiaReader uia, LocalMcp mcp, IVoice voice, IUserChannel user,
         Func<string[]> installedApps, Func<SurfaceLocator.SurfaceLocation?>? surface = null,
-        WorkflowMcpRunner? workflows = null, int maxTurns = 40)
+        WorkflowMcpRunner? workflows = null, ClinicalMcpRunner? clinical = null, int maxTurns = 40)
     {
         _backend = backend;
         _uia = uia;
@@ -53,6 +54,7 @@ public sealed class AgentLoop
         _installedApps = installedApps;
         _surface = surface;
         _workflows = workflows;
+        _clinical = clinical;
         _maxTurns = maxTurns;
     }
 
@@ -251,6 +253,13 @@ public sealed class AgentLoop
             string context = a.Args != null && a.Args.TryGetValue("context", out var c) ? c : "";
             return await _workflows.RunAsync(id, context, ct);
         }
+
+        // Miracle Notes por API (notes_*): el cerebro solo VE estas herramientas cuando Graph
+        // confirmó el vínculo médico de este equipo (el catálogo viaja condicionado al token
+        // per-install); aquí solo se ejecutan. No tocan la pantalla: no pasan por la compuerta
+        // de foreground, igual que mcp/wait.
+        if (a.Kind == "mcp" && _clinical != null && ClinicalMcpRunner.IsClinicalTool(a.Tool))
+            return await _clinical.RunAsync(a.Tool ?? "", a.Args ?? new Dictionary<string, string>(), ct);
 
         // Telemetría: acción en pantalla (pulso del consciente hacia el nodo Clic) o consulta MCP.
         if (a.Kind == "mcp")
