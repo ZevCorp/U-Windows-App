@@ -29,6 +29,124 @@ public sealed class SurfaceMapTools
     private readonly UiaSurface _uia = new() { Log = s => LogBus.Log("mapa-mcp", s) };
     private readonly UiaReader _lector = new();
 
+    /// <summary>La app con la que se estaba trabajando. Se usa para volver a ella si algo roba el foco.</summary>
+    private string _ultimaApp = "";
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsIconic(IntPtr h);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr h, int cmd);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc cb, IntPtr l);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+    private static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int max);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern void keybd_event(byte key, byte scan, uint flags, IntPtr extra);
+    private delegate bool EnumProc(IntPtr h, IntPtr l);
+
+    /// <summary>Superficies del propio Windows que se ponen delante solas y tapan la app.</summary>
+    private static bool EsPanelDelShell(string proc) =>
+        proc.Equals("ShellExperienceHost", StringComparison.OrdinalIgnoreCase)
+        || proc.Equals("SearchHost", StringComparison.OrdinalIgnoreCase)
+        || proc.Equals("StartMenuExperienceHost", StringComparison.OrdinalIgnoreCase)
+        || proc.Equals("TextInputHost", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>«uia://explorer.exe/loquesea» → «explorer».</summary>
+    private static string AppDe(string id)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(id ?? "", @"^uia://([^/]+?)\.exe/");
+        return m.Success ? m.Groups[1].Value : "";
+    }
+
+    /// <summary>
+    /// Devuelve el foco a la app con la que se está trabajando si algo se lo ha llevado.
+    ///
+    /// El centro de notificaciones, el buscador o cualquier aviso de Windows se ponen delante solos
+    /// y la secuencia se rompe: el asistente pedía «Nuevo» y se le contestaba con las opciones del
+    /// centro de notificaciones (2026-08-02). El recorrido automático ya se recolocaba; esta capa
+    /// no, y es la que usa el asistente para hacer tareas de verdad. No se lanza nada: si la app no
+    /// está viva, se dice y punto — abrir aplicaciones por iniciativa propia no es recuperarse.
+    /// </summary>
+    private bool AsegurarFoco(string app)
+    {
+        if (app.Length == 0) return true;
+        // Se sale pronto solo si LAS DOS fuentes coinciden. Bastaba con el primer plano y era la
+        // trampa: tras cerrarse un panel del shell el foco ya era correcto pero el localizador
+        // —que sondea cada 800 ms— seguía diciendo «SearchHost», así que la ruta se calculaba desde
+        // un sitio donde ya no estábamos y se respondía «no conozco ruta» (2026-08-02).
+        if (Coinciden(app)) return true;
+
+        // Los paneles del shell —centro de notificaciones, buscador, menú inicio— NO se apartan con
+        // SetForegroundWindow: Windows lo bloquea mientras uno de ellos tiene el foco, así que el
+        // intento fallaba en silencio y la tarea moría ahí (2026-08-02). Se DESCARTAN con Escape,
+        // que es lo mismo que haría una persona, y solo después se recupera la app.
+        for (int intento = 0; intento < 2 && EsPanelDelShell(AppEnFrente()); intento++)
+        {
+            LogBus.Log("mapa-mcp", $"«{AppEnFrente()}» tiene el foco: se descarta con Escape");
+            keybd_event(0x1B, 0, 0, IntPtr.Zero);
+            keybd_event(0x1B, 0, 2, IntPtr.Zero);
+            System.Threading.Thread.Sleep(500);
+        }
+        if (EsperarCoincidencia(app)) return true;
+
+        IntPtr elegida = IntPtr.Zero;
+        EnumWindows((h, _) =>
+        {
+            if (!IsWindowVisible(h)) return true;
+            var sb = new System.Text.StringBuilder(300);
+            if (GetWindowText(h, sb, 300) == 0) return true;   // sin título: no es una pantalla
+            GetWindowThreadProcessId(h, out uint pid);
+            try
+            {
+                using var p = System.Diagnostics.Process.GetProcessById((int)pid);
+                if (!p.ProcessName.Equals(app, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            catch { return true; }
+            elegida = h;
+            return false;
+        }, IntPtr.Zero);
+
+        if (elegida == IntPtr.Zero) return false;
+        if (IsIconic(elegida)) ShowWindow(elegida, 9 /* SW_RESTORE */);
+        SetForegroundWindow(elegida);
+
+        // Se espera a que lo confirmen LAS DOS fuentes: el sistema (quién está delante) y el
+        // localizador, que sondea cada 800 ms. Conformarse con la primera dejaba una ventana en la
+        // que el foco ya era correcto pero la superficie seguía siendo la de antes, y la ruta se
+        // calculaba desde el sitio equivocado: «no conozco ruta desde SearchHost» estando ya en el
+        // explorador (2026-08-02). Recuperar el foco no es haberlo notado.
+        if (!EsperarCoincidencia(app)) return false;
+        LogBus.Log("mapa-mcp", $"el foco se había ido; devuelto a «{app}»");
+        return true;
+    }
+
+    /// <summary>El sistema y el localizador dicen los dos que estamos en esta app.</summary>
+    private bool Coinciden(string app) =>
+        AppEnFrente().Equals(app, StringComparison.OrdinalIgnoreCase)
+        && AppDe(_where()?.Id ?? "").Equals(app, StringComparison.OrdinalIgnoreCase);
+
+    private bool EsperarCoincidencia(string app)
+    {
+        for (int i = 0; i < 20; i++)
+        {
+            if (Coinciden(app)) return true;
+            System.Threading.Thread.Sleep(150);
+        }
+        return false;
+    }
+
+    private static string AppEnFrente()
+    {
+        try
+        {
+            GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
+            using var p = System.Diagnostics.Process.GetProcessById((int)pid);
+            return p.ProcessName;
+        }
+        catch { return ""; }
+    }
+
     public SurfaceMapTools(SurfaceMap map, Func<SurfaceLocator.SurfaceLocation?> where)
     {
         _map = map;
@@ -55,7 +173,7 @@ public sealed class SurfaceMapTools
             "map_places" => Places(A("app")),
             "map_routes_from" => Routes(A("surface")),
             "map_go_to" => GoTo(A("surface")),
-            "map_take" => Take(A("exit")),
+            "map_take" => Take(A("exit"), A("action")),
             _ => $"herramienta de mapa no soportada: {tool}",
         };
 
@@ -203,6 +321,16 @@ public sealed class SurfaceMapTools
     {
         if (destino.Length == 0) return "falta `surface`: a dónde hay que ir";
 
+        // El destino dice a qué app pertenece la tarea: si el foco se ha ido, se recupera antes de
+        // calcular nada. Planificar una ruta desde el centro de notificaciones no tiene sentido.
+        string app = AppDe(destino);
+        if (app.Length > 0)
+        {
+            _ultimaApp = app;
+            if (!AsegurarFoco(app))
+                return $"no pude poner «{app}» en primer plano (ahora hay «{AppEnFrente()}»); no me muevo a ciegas";
+        }
+
         var actual = _where();
         if (actual == null) return "no se pudo determinar dónde estamos ahora mismo";
 
@@ -269,9 +397,22 @@ public sealed class SurfaceMapTools
     /// Un salto cada vez, a propósito: así el modelo ve a dónde llegó antes de decidir el
     /// siguiente, en vez de encadenar a ciegas una ruta que quizá dejó de ser válida.
     /// </summary>
-    private string Take(string salida)
+    /// <param name="accionPedida">
+    /// «click» o «doubleclick» para forzar la forma de pulsar. Existe porque SELECCIONAR y ABRIR
+    /// son cosas distintas sobre el mismo elemento: para cortar un archivo hay que seleccionarlo
+    /// con un clic, mientras que la acción aprendida para un archivo es el doble clic, que lo
+    /// abre en otra aplicación. Sin esto, una tarea de organizar archivos era imposible por la
+    /// interfaz: todo intento de tocar un archivo lo abría (2026-08-02). Vacío = la del mapa.
+    /// </param>
+    private string Take(string salida, string accionPedida = "")
     {
         if (salida.Length == 0) return "falta `exit`: el nombre de la salida a tomar (el que aparece en map_routes_from)";
+
+        // Si algo se llevó el foco entre dos pasos de una tarea, se vuelve a la app de antes: el
+        // asistente pidió «Nuevo» y recibió las opciones del centro de notificaciones porque nadie
+        // comprobaba dónde estábamos realmente (2026-08-02).
+        if (_ultimaApp.Length > 0 && !AppEnFrente().Equals(_ultimaApp, StringComparison.OrdinalIgnoreCase))
+            AsegurarFoco(_ultimaApp);
 
         var actual = _where();
         if (actual == null) return "no se pudo determinar dónde estamos ahora mismo";
@@ -283,9 +424,17 @@ public sealed class SurfaceMapTools
         // Coincidencia exacta primero, y luego por contención — «videos» debe encontrar «Videos»,
         // pero si dos salidas contienen lo pedido NO se elige por el modelo: se le devuelven las
         // candidatas. Adivinar entre dos destinos es exactamente lo que no debe hacer esta capa.
+        // El SELECTOR desempata. Dos elementos pueden llamarse igual —en el explorador hay dos
+        // «Detalles»: el modo de vista y el panel lateral— y entonces el nombre no alcanza para
+        // elegir. Decir «coincide con 2, elige por nombre exacto» dejaba al asistente sin salida,
+        // porque el nombre exacto era el mismo (2026-08-02). Se acepta el selector, que sí es único.
+        var porSelector = opciones.Where(h =>
+            h.Info.Selector.Equals(salida, StringComparison.OrdinalIgnoreCase)
+            || h.Info.Selector.Contains($"={salida};", StringComparison.OrdinalIgnoreCase)).ToList();
+
         var exactas = opciones.Where(h => h.Info.Label.Equals(salida, StringComparison.OrdinalIgnoreCase)).ToList();
-        var candidatas = exactas.Count > 0
-            ? exactas
+        var candidatas = porSelector.Count > 0 ? porSelector
+            : exactas.Count > 0 ? exactas
             : opciones.Where(h => h.Info.Label.Contains(salida, StringComparison.OrdinalIgnoreCase)).ToList();
 
         if (candidatas.Count == 0)
@@ -293,14 +442,17 @@ public sealed class SurfaceMapTools
                  + string.Join(", ", opciones.Select(h => $"«{h.Info.Label}»"));
         if (candidatas.Count > 1)
             return $"«{salida}» coincide con {candidatas.Count} salidas: "
-                 + string.Join(", ", candidatas.Select(h => $"«{h.Info.Label}» → {h.To}"))
-                 + ". Elige una por su nombre exacto.";
+                 + string.Join("; ", candidatas.Select(h => $"«{h.Info.Label}» [{h.Info.Selector}]"))
+                 + ". Repite `exit` con el SELECTOR de la que quieras (o con su AutomationId).";
 
         var elegida = candidatas[0];
+        _ultimaApp = AppDe(actual.Id).Length > 0 ? AppDe(actual.Id) : _ultimaApp;
+        bool seleccionar = accionPedida.Equals("click", StringComparison.OrdinalIgnoreCase)
+                           && elegida.Info.ActionType.Equals("doubleclick", StringComparison.OrdinalIgnoreCase);
         var paso = new PlanStep
         {
             StepOrder = 1,
-            ActionType = elegida.Info.ActionType,
+            ActionType = accionPedida.Length > 0 ? accionPedida : elegida.Info.ActionType,
             Selector = elegida.Info.Selector,
             Label = elegida.Info.Label,
         };
@@ -308,6 +460,14 @@ public sealed class SurfaceMapTools
         string desde = actual.Id;
         if (!_uia.Execute(paso, out string error))
             return $"no se pudo pulsar «{elegida.Info.Label}»: {error}";
+
+        // Selección deliberada: no se espera ningún cambio de pantalla, y exigirlo sería reportar
+        // fallo a un clic que hizo exactamente lo pedido.
+        if (seleccionar)
+        {
+            LogBus.Log("mapa-mcp", $"✓ seleccionado «{elegida.Info.Label}» (sin abrir)");
+            return $"seleccioné «{elegida.Info.Label}» sin abrirlo; ya puedes usar una acción sobre él (Cortar, Copiar, Cambiar nombre…)";
+        }
 
         // PUERTA DE ACCIÓN: su éxito no es llegar a otra pantalla — es haber hecho algo AQUÍ.
         // Exigirle navegación reportaría fallo a un «Nuevo» que abrió su menú perfectamente. Si

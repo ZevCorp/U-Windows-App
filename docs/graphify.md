@@ -323,6 +323,36 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
   no obliga a volver a mapear.
 - Fecha: 2026-08-02. Código: `SafeToClick.Clasificar`, `EdgeInfo.Kind`.
 
+### Seleccionar y abrir son cosas distintas sobre el mismo elemento
+- Para cortar un archivo hay que SELECCIONARLO (un clic); la acción aprendida para un archivo es
+  el doble clic, que lo abre en otra aplicación. Sin poder forzar la forma de pulsar, organizar
+  archivos por la interfaz era imposible: cualquier intento de tocar uno lo abría.
+- `map_take` acepta `action: click|doubleclick` para forzarla, y una selección deliberada no
+  espera cambio de pantalla —exigirlo reportaría fallo a un clic que hizo justo lo pedido—.
+- Fecha: 2026-08-02. Código: `SurfaceMapTools.Take`.
+
+### El SELECTOR desempata cuando dos elementos se llaman igual
+- En el explorador hay dos «Detalles» (el modo de vista y el panel lateral) y dos «Nueva carpeta»
+  (el archivo y su campo de renombrado). Responder «coincide con 2, elige por nombre exacto»
+  dejaba al asistente sin salida: el nombre exacto era el mismo. Se acepta el selector.
+- Fecha: 2026-08-02. Código: `SurfaceMapTools.Take`.
+
+### El foco se recupera antes de actuar, y los paneles del shell se descartan con Escape
+- El centro de notificaciones, el buscador o el menú inicio se ponen delante solos y la tarea
+  muere ahí. `SetForegroundWindow` NO los aparta —Windows lo bloquea mientras uno de ellos tiene
+  el foco—: hay que descartarlos con Escape, como haría una persona, y después recuperar la app.
+- La vuelta se confirma con LAS DOS fuentes: el sistema (quién está delante) y el localizador
+  (que sondea cada 800 ms). Conformarse con la primera dejaba una ventana donde el foco ya era
+  correcto pero la superficie seguía siendo la de antes, y la ruta se calculaba desde el sitio
+  equivocado. Recuperar el foco no es haberlo notado.
+- No se LANZA nada: si la app no está viva, se dice. Abrir aplicaciones por iniciativa propia no
+  es recuperarse.
+- Fecha: 2026-08-02. Código: `SurfaceMapTools.AsegurarFoco`.
+
+### Windows oculta las extensiones conocidas: el nombre del mapa es el que se VE
+- «factura-enero.pdf» aparece en el mapa como «factura-enero». Buscar por el nombre real del
+  archivo no encuentra nada. Lo que el mapa guarda es lo que la interfaz muestra.
+
 ### Capa 1 determinista; LLM en capa 2
 - Lo que es regla (carpeta-vs-archivo, nombres de panel) se codifica y es gratis e
   instantáneo. El LLM entra a lo que es CRITERIO (¿estas dos pantallas son la misma?, ¿qué
