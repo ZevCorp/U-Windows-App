@@ -352,6 +352,14 @@ public sealed class SurfaceMapTools
         }
 
         LogBus.Log("mapa-mcp", $"NO SE ACTÚA: se esperaba estar en '{esperada}' y estamos en '{aqui}'");
+
+        // Si lo que bloquea es un diálogo, decir CUÁL. «No estás donde creías» obliga a investigar;
+        // «hay este diálogo delante, con estas opciones» se puede resolver en el acto. Un rechazo
+        // honesto que además explica la causa es la diferencia entre pararse y poder continuar.
+        string interrupcion = DescribirInterrupcion();
+        if (interrupcion.Length > 0)
+            return $"NO actúo: creías estar en «{esperada}» y lo que hay delante es otra cosa.\n{interrupcion}";
+
         return $"NO actúo: creías estar en «{esperada}» pero estamos en «{aqui}». "
              + "Algo salió distinto en un paso anterior; comprueba dónde estás antes de seguir.";
     }
@@ -436,6 +444,12 @@ public sealed class SurfaceMapTools
         var loc = _where();
         if (loc == null) return "no se pudo determinar la superficie actual";
 
+        // UN DIÁLOGO NO ES UN LUGAR: es una interrupción. Se comprueba ANTES de describir salidas
+        // porque, si lo hay, todo lo demás es ruido — no hay «rutas desde aquí», hay una pregunta
+        // que responder para poder seguir.
+        string interrupcion = DescribirInterrupcion();
+        if (interrupcion.Length > 0) return interrupcion;
+
         ObservarAqui(loc.Id);
         var salidas = _map.ExitsFrom(loc.Id);
         int recorribles = salidas.Count(h => h.Info.Selector.Length > 0);
@@ -444,6 +458,70 @@ public sealed class SurfaceMapTools
              + $"{recorribles} de ellas recorribles."
              + (sel.Count > 0 ? $" Seleccionado ahora mismo: {string.Join(", ", sel.Select(s => $"«{s}»"))}." : "")
              + (DestinoDeAtras().Length > 0 ? $" «Atrás» llevaría a «{DestinoDeAtras()}»." : "");
+    }
+
+    /// <summary>
+    /// Si delante hay un DIÁLOGO, lo describe como lo que es: una interrupción con una pregunta y
+    /// unas opciones. Devuelve "" si no lo hay.
+    ///
+    /// El sistema los trataba como nodos del grafo —«estás en uia://explorer.exe/ubicación-no-
+    /// disponible, 15 salidas»— y eso es un error de modelado con consecuencias: quien tenga que
+    /// resolverlo, persona o modelo, recibía ruido en vez del dato que necesita. Un diálogo no es
+    /// un sitio al que se llega: es algo que se cruza en el camino, dice POR QUÉ, y ofrece unas
+    /// opciones entre las que hay que elegir. Es la misma corrección que ya hicimos con los menús
+    /// («no es otro sitio, es una capa»), aplicada a las interrupciones (2026-08-03).
+    ///
+    /// Solo describe. No decide: elegir entre «Aceptar», «Omitir» o «Sí» es criterio —el aviso de
+    /// cambiar la extensión de un archivo tiene un «Sí» que lo corrompe— y esa decisión es de la
+    /// capa consciente, con el veto de SafeToClick encima.
+    /// </summary>
+    private string DescribirInterrupcion()
+    {
+        try
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return "";
+            var v = System.Windows.Automation.AutomationElement.FromHandle(fg);
+            if (v == null) return "";
+
+            // Un diálogo se reconoce por su forma: pocos elementos, botones de respuesta y texto
+            // que explica. No por su título, que cambia con el idioma y con cada versión.
+            var botones = v.FindAll(System.Windows.Automation.TreeScope.Descendants,
+                new System.Windows.Automation.PropertyCondition(
+                    System.Windows.Automation.AutomationElement.ControlTypeProperty,
+                    System.Windows.Automation.ControlType.Button));
+            var opciones = new List<string>();
+            foreach (System.Windows.Automation.AutomationElement b in botones)
+            {
+                try { string n = b.Current.Name?.Trim() ?? ""; if (n.Length > 0 && !opciones.Contains(n)) opciones.Add(n); }
+                catch { }
+            }
+            // Muchos botones = es una app, no un diálogo. Ninguno = tampoco hay nada que responder.
+            if (opciones.Count == 0 || opciones.Count > 8) return "";
+
+            var textos = new List<string>();
+            foreach (System.Windows.Automation.AutomationElement t in v.FindAll(
+                System.Windows.Automation.TreeScope.Descendants,
+                new System.Windows.Automation.PropertyCondition(
+                    System.Windows.Automation.AutomationElement.ControlTypeProperty,
+                    System.Windows.Automation.ControlType.Text)))
+            {
+                try { string n = t.Current.Name?.Trim() ?? ""; if (n.Length > 12 && !textos.Contains(n)) textos.Add(n); }
+                catch { }
+            }
+            if (textos.Count == 0) return "";
+
+            string titulo = "";
+            try { titulo = v.Current.Name?.Trim() ?? ""; } catch { }
+
+            LogBus.Log("mapa-mcp", $"INTERRUPCIÓN: «{titulo}» · opciones: {string.Join(" / ", opciones)}");
+            return $"INTERRUPCIÓN, no una ubicación: hay un diálogo «{titulo}» delante.\n"
+                 + $"  Dice: {string.Join(" ", textos.Take(3))}\n"
+                 + $"  Opciones: {string.Join(", ", opciones.Select(o => $"«{o}»"))}\n"
+                 + "  No hay rutas desde aquí: primero hay que responder. Usa map_take con la opción "
+                 + "que corresponda, y elige con cuidado — algunas son irreversibles.";
+        }
+        catch { return ""; }
     }
 
     /// <summary>

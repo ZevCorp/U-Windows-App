@@ -353,6 +353,22 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 - «factura-enero.pdf» aparece en el mapa como «factura-enero». Buscar por el nombre real del
   archivo no encuentra nada. Lo que el mapa guarda es lo que la interfaz muestra.
 
+### Un DIÁLOGO no es un lugar: es una interrupción
+- Síntoma: ante un aviso de Windows el sistema respondía «estás en
+  uia://explorer.exe/ubicación-no-disponible, 15 salidas», como si fuera un nodo más del grafo.
+- Causa: error de modelado. Un diálogo no es un sitio al que se llega: es algo que se cruza en el
+  camino, dice POR QUÉ, y ofrece opciones entre las que hay que elegir. Es la misma corrección
+  que ya hicimos con los menús («no es otro sitio, es una capa»).
+- Consecuencia: quien tuviera que resolverlo —persona o modelo— recibía ruido en vez del dato
+  útil. Ahora se reporta como interrupción, con su texto y sus opciones, y se dice que no hay
+  rutas desde ahí: primero hay que responder.
+- Se reconoce por su FORMA (pocos botones de respuesta + texto que explica), no por el título,
+  que cambia con el idioma y la versión. El explorador normal, con 18 botones, no se confunde.
+- Solo DESCRIBE, no decide: elegir entre «Aceptar», «Omitir» o «Sí» es criterio —el aviso de
+  cambiar la extensión de un archivo tiene un «Sí» que lo corrompe— y esa decisión pertenece a la
+  capa consciente, con el veto de SafeToClick encima.
+- Fecha: 2026-08-03. Código: `SurfaceMapTools.DescribirInterrupcion`.
+
 ### La señal de que algo apareció es que haya MÁS que antes, no que haya alguno
 - Síntoma: un grupo de pasos fallaba intermitentemente al elegir una opción de menú.
 - Causa: se daba por abierto el menú al encontrar cualquier `MenuItem` en el árbol, y pueden
