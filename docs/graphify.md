@@ -353,6 +353,22 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 - «factura-enero.pdf» aparece en el mapa como «factura-enero». Buscar por el nombre real del
   archivo no encuentra nada. Lo que el mapa guarda es lo que la interfaz muestra.
 
+### Un sistema que desbloquea, no un parche por cada bloqueo
+- Estábamos arreglando los colapsos de uno en uno —un diálogo, otro diálogo, otro más— en vez de
+  tener un mecanismo que los resuelva. Los bloqueos comparten forma: algo se cruza, hay que
+  responderle, y después hay que volver a donde íbamos.
+- `map_unblock` hace las tres cosas: sale del atasco, REANUDA por el mapa (salir no sirve de nada
+  si la tarea no puede continuar) y deja constancia del incidente.
+- La política es deliberadamente conservadora, y esa es la parte importante: una sola opción → es
+  informativo, se acepta; hay una opción que no compromete nada (Cancelar/No/Cerrar) → esa;
+  cualquier otra cosa → NO se adivina, se describe y decide la capa consciente. Elegir mal aquí
+  es destructivo: el aviso de cambiar la extensión de un archivo tiene un «Sí» que lo corrompe.
+- Se verifica que el diálogo se FUE. Un desbloqueo que no desbloquea es peor que no intentarlo.
+- Verificado el 2026-08-03 provocando el aviso de extensión: detectó, eligió «No», el archivo
+  conservó su extensión y la ejecución quedó lista para continuar.
+- El incidente se registra pero NO dispara mejoras automáticas: si un diálogo se repite, eso es
+  material para una regla, y esa decisión es de quien desarrolla.
+
 ### Un DIÁLOGO no es un lugar: es una interrupción
 - Síntoma: ante un aviso de Windows el sistema respondía «estás en
   uia://explorer.exe/ubicación-no-disponible, 15 salidas», como si fuera un nodo más del grafo.

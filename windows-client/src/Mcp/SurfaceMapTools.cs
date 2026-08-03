@@ -411,7 +411,8 @@ public sealed class SurfaceMapTools
     }
 
     public static bool IsMapTool(string tool) => tool is
-        "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take" or "map_type";
+        "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
+        or "map_type" or "map_unblock";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -432,6 +433,7 @@ public sealed class SurfaceMapTools
             "map_go_to" => GoTo(A("surface")),
             "map_take" => Take(A("exit"), A("action"), A("at")),
             "map_type" => Type(A("text"), A("target"), A("at")),
+            "map_unblock" => Unblock(A("at"), A("choose")),
             _ => $"herramienta de mapa no soportada: {tool}",
         };
 
@@ -461,6 +463,92 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
+    /// EL DESBLOQUEADOR. Detecta que la ejecución está atascada, sale del atasco y reanuda por el
+    /// mapa, dejando constancia de lo ocurrido.
+    ///
+    /// Nace de una crítica acertada: estábamos arreglando los colapsos uno a uno —un diálogo, otro
+    /// diálogo, otro más— en vez de tener un sistema que los resuelva. Los bloqueos comparten forma
+    /// (algo se cruza, hay que responderle, y después hay que volver a donde íbamos), así que
+    /// merecen un mecanismo, no un parche por cada caso.
+    ///
+    /// La política es DELIBERADAMENTE conservadora, y es lo importante de este diseño:
+    ///   • una sola opción → es informativo, se acepta y ya está;
+    ///   • hay una opción que NO compromete nada (Cancelar, No, Cerrar) → esa;
+    ///   • cualquier otra cosa → NO se adivina. Se describe y decide la capa consciente.
+    /// Elegir mal aquí es destructivo —el aviso de cambiar la extensión de un archivo tiene un «Sí»
+    /// que lo corrompe—, así que ante la duda se prefiere no avanzar antes que avanzar mal.
+    /// </summary>
+    /// <param name="reanudarEn">A dónde volver una vez resuelto, para continuar la tarea.</param>
+    /// <param name="eleccion">Opción impuesta por la capa consciente cuando la política no decide.</param>
+    private string Unblock(string reanudarEn, string eleccion)
+    {
+        var (titulo, textos, opciones) = LeerInterrupcion();
+        if (opciones.Count == 0)
+            return "no hay nada que desbloquear: no veo ningún diálogo delante.";
+
+        string elegida = eleccion.Length > 0
+            ? opciones.FirstOrDefault(o => o.Equals(eleccion, StringComparison.OrdinalIgnoreCase)) ?? ""
+            : OpcionSegura(opciones);
+
+        if (elegida.Length == 0)
+            return $"ATASCADO y NO decido solo. Diálogo «{titulo}»: {string.Join(" ", textos.Take(2))}\n"
+                 + $"  Opciones: {string.Join(", ", opciones.Select(o => $"«{o}»"))}\n"
+                 + "  Ninguna es claramente inocua. Vuelve a llamarme con `choose` indicando cuál, "
+                 + "sabiendo que puede ser irreversible.";
+
+        // El veto de siempre: aunque el consciente la pida, una opción destructiva no se pulsa.
+        if (!SafeToClick.Auto(elegida, "Button", out string motivo) && eleccion.Length > 0)
+            return $"NO pulso «{elegida}»: {motivo}. Esa decisión es del usuario, no mía.";
+
+        var paso = new PlanStep
+        {
+            StepOrder = 1, ActionType = "click",
+            Selector = $"uia:name={elegida};ct=Button", Label = elegida,
+        };
+        if (!_uia.Execute(paso, out string error))
+            return $"no pude pulsar «{elegida}» para salir del atasco: {error}";
+
+        // ¿Se fue de verdad? Un desbloqueo que no desbloquea es peor que no intentarlo.
+        bool libre = false;
+        for (int i = 0; i < 20; i++)
+        {
+            System.Threading.Thread.Sleep(120);
+            if (LeerInterrupcion().Opciones.Count == 0) { libre = true; break; }
+        }
+        LogBus.Log("mapa-mcp", $"DESBLOQUEO: «{titulo}» → pulsado «{elegida}» · {(libre ? "resuelto" : "sigue ahí")}");
+        if (!libre)
+            return $"pulsé «{elegida}» y el diálogo «{titulo}» sigue delante. No insisto sola: dime qué hacer.";
+
+        // Reanudar por el mapa, que es de lo que se trata: salir del atasco no sirve de nada si la
+        // tarea no puede continuar desde donde estaba.
+        string vuelta = reanudarEn.Length > 0 ? GoTo(reanudarEn) : "";
+        return $"DESBLOQUEADO. Era «{titulo}» ({string.Join(" ", textos.Take(1))}); pulsé «{elegida}»."
+             + (vuelta.Length > 0 ? $"\n  Reanudación: {vuelta}" : "")
+             + "\n  INCIDENTE registrado — si este diálogo se repite, es una regla que falta.";
+    }
+
+    /// <summary>
+    /// La opción que no compromete nada, o "" si hay que preguntar. Una sola opción es informativa;
+    /// «Cancelar»/«No»/«Cerrar» dejan las cosas como estaban; el resto son decisiones con efecto.
+    /// </summary>
+    private static string OpcionSegura(List<string> opciones)
+    {
+        if (opciones.Count == 1) return opciones[0];
+
+        string[] inocuas = { "cancelar", "cancel", "no", "cerrar", "close", "omitir", "skip", "descartar" };
+        foreach (string o in opciones)
+            if (inocuas.Any(i => o.Trim().Equals(i, StringComparison.OrdinalIgnoreCase)))
+                return o;
+
+        // «Aceptar» a secas, sin alternativa que comprometa, es el botón de un aviso informativo.
+        if (opciones.Count == 2 && opciones.Any(o => o.Trim().Equals("Aceptar", StringComparison.OrdinalIgnoreCase)
+                                                 || o.Trim().Equals("OK", StringComparison.OrdinalIgnoreCase)))
+            return opciones.First(o => o.Trim().Equals("Aceptar", StringComparison.OrdinalIgnoreCase)
+                                    || o.Trim().Equals("OK", StringComparison.OrdinalIgnoreCase));
+        return "";
+    }
+
+    /// <summary>
     /// Si delante hay un DIÁLOGO, lo describe como lo que es: una interrupción con una pregunta y
     /// unas opciones. Devuelve "" si no lo hay.
     ///
@@ -477,29 +565,49 @@ public sealed class SurfaceMapTools
     /// </summary>
     private string DescribirInterrupcion()
     {
+        var (titulo, textos, opciones) = LeerInterrupcion();
+        if (opciones.Count == 0) return "";
+
+        LogBus.Log("mapa-mcp", $"INTERRUPCIÓN: «{titulo}» · opciones: {string.Join(" / ", opciones)}");
+        return $"INTERRUPCIÓN, no una ubicación: hay un diálogo «{titulo}» delante.\n"
+             + $"  Dice: {string.Join(" ", textos.Take(3))}\n"
+             + $"  Opciones: {string.Join(", ", opciones.Select(o => $"«{o}»"))}\n"
+             + "  No hay rutas desde aquí: primero hay que responder. Llama a map_unblock con `at` "
+             + "para que resuelva y te devuelva a donde estabas.";
+    }
+
+    /// <summary>
+    /// Lee el diálogo que haya delante: título, lo que dice y entre qué se puede elegir.
+    /// Opciones vacías = no hay diálogo.
+    ///
+    /// Se reconoce por su FORMA —pocos botones de respuesta más texto que explica— y no por el
+    /// título, que cambia con el idioma y con cada versión de Windows. El explorador normal, con
+    /// 18 botones, no se confunde (comprobado el 2026-08-03).
+    /// </summary>
+    private (string Titulo, List<string> Textos, List<string> Opciones) LeerInterrupcion()
+    {
+        var textos = new List<string>();
+        var opciones = new List<string>();
+        string titulo = "";
         try
         {
             IntPtr fg = GetForegroundWindow();
-            if (fg == IntPtr.Zero) return "";
+            if (fg == IntPtr.Zero) return (titulo, textos, opciones);
             var v = System.Windows.Automation.AutomationElement.FromHandle(fg);
-            if (v == null) return "";
+            if (v == null) return (titulo, textos, opciones);
 
-            // Un diálogo se reconoce por su forma: pocos elementos, botones de respuesta y texto
-            // que explica. No por su título, que cambia con el idioma y con cada versión.
-            var botones = v.FindAll(System.Windows.Automation.TreeScope.Descendants,
+            foreach (System.Windows.Automation.AutomationElement b in v.FindAll(
+                System.Windows.Automation.TreeScope.Descendants,
                 new System.Windows.Automation.PropertyCondition(
                     System.Windows.Automation.AutomationElement.ControlTypeProperty,
-                    System.Windows.Automation.ControlType.Button));
-            var opciones = new List<string>();
-            foreach (System.Windows.Automation.AutomationElement b in botones)
+                    System.Windows.Automation.ControlType.Button)))
             {
                 try { string n = b.Current.Name?.Trim() ?? ""; if (n.Length > 0 && !opciones.Contains(n)) opciones.Add(n); }
                 catch { }
             }
-            // Muchos botones = es una app, no un diálogo. Ninguno = tampoco hay nada que responder.
-            if (opciones.Count == 0 || opciones.Count > 8) return "";
+            // Muchos botones = es una app, no un diálogo. Ninguno = no hay nada que responder.
+            if (opciones.Count == 0 || opciones.Count > 8) { opciones.Clear(); return (titulo, textos, opciones); }
 
-            var textos = new List<string>();
             foreach (System.Windows.Automation.AutomationElement t in v.FindAll(
                 System.Windows.Automation.TreeScope.Descendants,
                 new System.Windows.Automation.PropertyCondition(
@@ -509,19 +617,12 @@ public sealed class SurfaceMapTools
                 try { string n = t.Current.Name?.Trim() ?? ""; if (n.Length > 12 && !textos.Contains(n)) textos.Add(n); }
                 catch { }
             }
-            if (textos.Count == 0) return "";
+            if (textos.Count == 0) { opciones.Clear(); return (titulo, textos, opciones); }
 
-            string titulo = "";
             try { titulo = v.Current.Name?.Trim() ?? ""; } catch { }
-
-            LogBus.Log("mapa-mcp", $"INTERRUPCIÓN: «{titulo}» · opciones: {string.Join(" / ", opciones)}");
-            return $"INTERRUPCIÓN, no una ubicación: hay un diálogo «{titulo}» delante.\n"
-                 + $"  Dice: {string.Join(" ", textos.Take(3))}\n"
-                 + $"  Opciones: {string.Join(", ", opciones.Select(o => $"«{o}»"))}\n"
-                 + "  No hay rutas desde aquí: primero hay que responder. Usa map_take con la opción "
-                 + "que corresponda, y elige con cuidado — algunas son irreversibles.";
         }
-        catch { return ""; }
+        catch { opciones.Clear(); }
+        return (titulo, textos, opciones);
     }
 
     /// <summary>
