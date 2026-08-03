@@ -83,20 +83,44 @@ public sealed class SurfaceMapTools
     /// una carpeta llena de cosas (2026-08-02). Preguntar dónde estoy es el momento natural para
     /// mirar alrededor — el terreno se aprende viviendo, no solo explorando a propósito.
     /// </summary>
-    private void ObservarAqui(string nodo)
+    private void ObservarAqui(string nodo, bool forzar = false)
     {
         try
         {
-            // Se mira alrededor salvo que ya haya salidas RECORRIBLES. Bastaba con «alguna salida»
-            // y no servía: una arista observada pasivamente —conectividad sin acción— hacía creer
-            // que la pantalla ya se conocía, y el asistente seguía sin saber qué pulsar.
-            if (_map.ExitsFrom(nodo).Any(h => h.Info.Selector.Length > 0)) return;
+            if (forzar) { ObservarSinGuardia(nodo); return; }
+            // Se mira alrededor salvo que la pantalla ya se conozca COMPLETA: con salidas
+            // recorribles Y con sus acciones. «Alguna salida» no bastaba (conectividad pasiva sin
+            // acción), y «alguna recorrible» tampoco: los nodos mapeados antes de clasificar
+            // puertas conocían la navegación pero ninguna acción, y sin este repaso se quedaban
+            // así para siempre.
+            var conocidas = _map.ExitsFrom(nodo);
+            if (conocidas.Any(h => h.Info.Selector.Length > 0)
+                && conocidas.Any(h => h.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase))) return;
+            ObservarSinGuardia(nodo);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Relee la pantalla y anota lo que haya, sin preguntarse si ya se conocía.
+    ///
+    /// Hace falta después de EJECUTAR una acción: un menú abierto no es una pantalla nueva —la
+    /// superficie sigue siendo la misma— así que el guardia de «esto ya se conoce» impedía ver los
+    /// elementos que acababan de aparecer. Se pulsaba «Nuevo», el menú se abría con «Carpeta»
+    /// dentro, y el asistente seguía viendo la lista de antes (2026-08-02).
+    /// </summary>
+    private void ObservarSinGuardia(string nodo)
+    {
+        try
+        {
             _lector.Read();
 
             var puertas = new List<(string, string, string, string[])>();
             foreach (var el in _lector.Elements)
             {
-                if (!SafeToClick.Auto(el.Label, el.ControlType, out _)) continue;
+                // Igual que el crawler: TODO lo accionable, también los botones de ejecución.
+                if (el.ControlType.Equals("text", StringComparison.OrdinalIgnoreCase)
+                    || el.ControlType.Equals("image", StringComparison.OrdinalIgnoreCase)) continue;
                 try
                 {
                     var (l, t, sels) = UiaSurface.DescribeElement(el.Native);
@@ -151,11 +175,21 @@ public sealed class SurfaceMapTools
         var salidas = _map.ExitsFrom(desde);
         if (salidas.Count == 0) return $"el mapa no conoce ninguna salida desde «{desde}»";
 
+        // Navegación y ejecución separadas: son preguntas distintas («¿a dónde puedo ir?» vs
+        // «¿qué puedo hacer aquí?») y mezclarlas obliga al modelo a adivinar cuál es cuál.
         var sb = new System.Text.StringBuilder($"Desde «{desde}»:\n");
-        foreach (var h in salidas)
+        foreach (var h in salidas.Where(x => !x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)))
             sb.AppendLine(h.Info.Selector.Length > 0
                 ? $"  → {h.To}   pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces)"
                 : $"  → {h.To}   (observado {h.Info.Count} vez/veces, pero NO se sabe con qué acción)");
+
+        var acciones = salidas.Where(x => x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
+                                       && x.Info.Selector.Length > 0).ToList();
+        if (acciones.Count > 0)
+        {
+            sb.AppendLine("Acciones disponibles aquí (se toman con map_take, no navegan):");
+            sb.AppendLine("  " + string.Join(", ", acciones.Select(a => $"«{a.Info.Label}»")));
+        }
         return sb.ToString();
     }
 
@@ -274,6 +308,28 @@ public sealed class SurfaceMapTools
         string desde = actual.Id;
         if (!_uia.Execute(paso, out string error))
             return $"no se pudo pulsar «{elegida.Info.Label}»: {error}";
+
+        // PUERTA DE ACCIÓN: su éxito no es llegar a otra pantalla — es haber hecho algo AQUÍ.
+        // Exigirle navegación reportaría fallo a un «Nuevo» que abrió su menú perfectamente. Si
+        // resulta que sí navegó (un «Guardar como…» que abre diálogo), eso también se cuenta.
+        if (elegida.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase))
+        {
+            string tras = EsperarCambio(desde, 2000);
+            LogBus.Log("mapa-mcp", $"✓ acción «{elegida.Info.Label}» ejecutada" + (tras.Length > 0 ? $" → {tras}" : ""));
+
+            // Se relee SIEMPRE: una acción suele destapar cosas nuevas —un menú, un diálogo— en la
+            // misma superficie, y sin releer el asistente actuaría sobre la pantalla de antes.
+            string aqui = tras.Length > 0 ? tras : desde;
+            ObservarAqui(aqui, forzar: true);
+            var nuevas = _map.ExitsFrom(aqui)
+                .Where(h => h.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase) && h.Info.Selector.Length > 0)
+                .Select(h => h.Info.Label).Distinct().Take(18).ToList();
+
+            return (tras.Length > 0
+                    ? $"ejecuté «{elegida.Info.Label}» y la pantalla pasó a «{tras}». "
+                    : $"ejecuté «{elegida.Info.Label}» (la superficie sigue siendo «{desde}»). ")
+                 + (nuevas.Count > 0 ? "Ahora hay: " + string.Join(", ", nuevas.Select(n => $"«{n}»")) : "");
+        }
 
         // PUERTA SIN CRUZAR: no hay destino contra el que comparar, así que el éxito es que la
         // pantalla CAMBIE, y lo que se descubre se aprende. Comparar contra el marcador «?selector»

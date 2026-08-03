@@ -60,6 +60,22 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
   selector, no confiando en que se lo pasen aparte.
 - Fecha: 2026-08-01. Código: `UiaSurface.SelectorsFor`, `SurfaceMap.EsCromoGlobal`.
 
+### Los MENÚS no se alcanzan caminando el árbol: hay que buscarlos con FindAll
+- Síntoma: el asistente pulsaba «Nuevo», el menú se abría con «Carpeta» dentro, y seguía sin ver
+  ninguna opción. Podía abrir menús pero nunca elegir en ellos.
+- Causa: un menú abierto cuelga de una frontera que el `ControlViewWalker` no cruza —vive además
+  en su propia ventana emergente (`Microsoft.UI.Content.PopupWindowSiteBridge`)— pero
+  `FindAll(TreeScope.Descendants, MenuItem)` sobre la ventana principal SÍ los encuentra.
+- Alcance: general, no del explorador. Los menús de CUALQUIER app estaban invisibles.
+- Fecha: 2026-08-02. Código: `UiaReader.CollectMenus`.
+
+### Una acción no navega: su éxito es haber HECHO algo, y después hay que releer
+- Un botón de ejecución («Nuevo», «Cortar») a menudo deja la superficie igual: exigirle un cambio
+  de pantalla reportaría fallo a un menú que se abrió perfectamente. Y como suele destapar cosas
+  nuevas en la MISMA superficie, después de ejecutarla hay que releer sin el guardia de «esto ya
+  se conoce» — si no, el asistente actúa sobre la pantalla de antes.
+- Fecha: 2026-08-02. Código: `SurfaceMapTools.Take`, `ObservarSinGuardia`.
+
 ### Un selector casa con VARIOS elementos: elige el que se puede usar
 - Síntoma: `map_go_to` rompía el primer tramo de toda ruta — «pulsé Escritorio pero seguimos en
   documentos».
@@ -292,6 +308,20 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 - El bucle consume una FRONTERA de puertas registradas en el mapa; no listas en memoria.
   Un regreso fallido cuesta solo las puertas de ese nodo. Parar no pierde el pendiente.
 - Fecha: 2026-08-01. Código: `GraphCrawler.RecorrerAsync` / `Frente`.
+
+### El grafo es de navegación Y de ejecución: se registra todo, se cruza solo navegación
+- Cada puerta se clasifica en `navegacion` (lleva a otra pantalla) o `accion` (hace algo aquí:
+  Nuevo, Cortar, Pegar, Eliminar). **Las dos se registran** — sin las de acción el asistente
+  llega a cualquier sitio y no puede hacer nada al llegar, que es media razón de tener el grafo.
+- Durante el MAPEO solo se cruzan las de navegación segura: pulsar «Eliminar» para ver a dónde
+  lleva no es explorar, es romper. Durante la EJECUCIÓN deliberada se toman las de acción.
+- `map_routes_from` las presenta por separado: «¿a dónde puedo ir?» y «¿qué puedo hacer aquí?»
+  son preguntas distintas, y mezclarlas obliga al modelo a adivinar cuál es cuál.
+- v1 determinista por tipo de control. El refinamiento fino —«Guardar como…» abre un diálogo,
+  ¿navega o ejecuta?— es CRITERIO, no sintaxis: ahí entra el LLM de capa 2, leyendo las puertas
+  ya registradas. La clasificación es un dato del mapa, no del clasificador: cambiar de criterio
+  no obliga a volver a mapear.
+- Fecha: 2026-08-02. Código: `SafeToClick.Clasificar`, `EdgeInfo.Kind`.
 
 ### Capa 1 determinista; LLM en capa 2
 - Lo que es regla (carpeta-vs-archivo, nombres de panel) se codifica y es gratis e

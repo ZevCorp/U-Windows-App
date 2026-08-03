@@ -61,6 +61,23 @@ public static class SafeToClick
     };
 
     /// <summary>
+    /// ¿Esta puerta NAVEGA (te lleva a otra pantalla) o EJECUTA (hace algo aquí)?
+    ///
+    /// El grafo registra las dos —los botones de acción son la mitad del valor: sin «Nuevo»,
+    /// «Cortar» o «Pegar» el asistente puede llegar a cualquier sitio y no hacer nada al llegar—
+    /// pero se comportan distinto: durante el MAPEO solo se cruzan las de navegación (pulsar
+    /// «Eliminar» para ver a dónde lleva no es explorar, es romper), y durante la EJECUCIÓN las
+    /// de acción se pulsan a propósito vía map_take.
+    ///
+    /// v1 determinista por tipo de control: árbol/lista/pestaña/enlace navegan, el resto ejecuta.
+    /// La etiqueta viaja en la firma porque el refinamiento fino —«Guardar como…» abre un diálogo,
+    /// ¿eso navega o ejecuta?— es CRITERIO, no sintaxis, y ahí entrará el LLM de capa 2 leyendo
+    /// las puertas ya registradas. La clasificación es dato del mapa, no del clasificador.
+    /// </summary>
+    public static string Clasificar(string label, string controlType) =>
+        TiposNavegables.Contains(controlType ?? "") ? "navegacion" : "accion";
+
+    /// <summary>
     /// Sitios donde NO se entra al mapear. No es seguridad, es alcance: mapear el disco del sistema
     /// son decenas de miles de carpetas que no enseñan nada sobre CÓMO se navega la app —solo sobre
     /// qué archivos hay, que es otra pregunta y se responde leyendo el sistema de archivos en

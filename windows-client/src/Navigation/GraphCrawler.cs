@@ -441,8 +441,14 @@ public sealed class GraphCrawler
                 _reader.Read();
                 if (!EsObjetivoElFrente()) return salidas; // cambió bajo los pies: mejor nada que ajeno
 
+                // TODO lo accionable entra al mapa — también los botones de EJECUCIÓN (Nuevo,
+                // Cortar, Pegar…), que son la mitad del valor del grafo: sin ellos el asistente
+                // llega a cualquier sitio y no puede hacer nada al llegar. La distinción no es
+                // qué se registra sino qué se CRUZA: durante el mapeo, solo navegación segura.
+                // Texto e imagen se quedan fuera: no son puertas, son decoración con nombre.
                 var seguros = _reader.Elements
-                    .Where(e => SafeToClick.Auto(e.Label, e.ControlType, out _))
+                    .Where(e => !e.ControlType.Equals("text", StringComparison.OrdinalIgnoreCase)
+                             && !e.ControlType.Equals("image", StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
                 // LA COLUMNA IZQUIERDA PRIMERO, de arriba abajo, y después el contenido, también de
@@ -463,9 +469,12 @@ public sealed class GraphCrawler
                     // Si sabemos la carpeta abierta, el disco resuelve la duda sin margen de error;
                     // si no, se cae a la heurística (ItemType / extensión), que es peor pero es algo.
                     bool esLista = el.ControlType.Equals("listitem", StringComparison.OrdinalIgnoreCase);
-                    bool entrable = !esLista || (carpeta.Length > 0
-                        ? System.IO.Directory.Exists(System.IO.Path.Combine(carpeta, el.Label))
-                        : SafeToClick.EsContenedor(el.Label, el.ItemType));
+                    // CRUZABLE = navegación segura Y (si es lista) carpeta de verdad. Lo que no es
+                    // cruzable igual se registra: queda como puerta, con su clase, para ejecución.
+                    bool entrable = SafeToClick.Auto(el.Label, el.ControlType, out _)
+                        && (!esLista || (carpeta.Length > 0
+                            ? System.IO.Directory.Exists(System.IO.Path.Combine(carpeta, el.Label))
+                            : SafeToClick.EsContenedor(el.Label, el.ItemType)));
 
                     // El SELECTOR se calcula ahora, mientras el elemento está vivo, y es lo único
                     // que se guarda: sobrevive a que la lista se repinte, la referencia no.

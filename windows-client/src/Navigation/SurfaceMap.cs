@@ -72,6 +72,11 @@ public sealed class SurfaceMap
         /// camino que al ejecutarse solo selecciona. La acción es parte de la ruta, no del momento.
         /// </summary>
         public string ActionType { get; set; } = "click";
+
+        /// <summary>«navegacion» (lleva a otra pantalla) o «accion» (hace algo aquí: Nuevo,
+        /// Cortar, Pegar…). Vacío en datos viejos = navegación. El mapeo solo cruza navegación;
+        /// la ejecución usa las de acción a propósito.</summary>
+        public string Kind { get; set; } = "";
     }
 
     private readonly Dictionary<string, NodeInfo> _nodes = new(StringComparer.OrdinalIgnoreCase);
@@ -332,6 +337,7 @@ public sealed class SurfaceMap
                 Label = s.Label,
                 ControlType = s.ControlType,
                 ActionType = EsContenido(s.ControlType) ? "doubleclick" : "click",
+                Kind = SafeToClick.Clasificar(s.Label, s.ControlType),
                 Explored = deducido.Length > 0,
             };
         }
@@ -455,6 +461,7 @@ public sealed class SurfaceMap
         e.Label = label;
         e.ControlType = controlType;
         e.ActionType = actionType;
+        e.Kind = SafeToClick.Clasificar(label, controlType);
         e.Explored = true;
         Version++;
         Save();

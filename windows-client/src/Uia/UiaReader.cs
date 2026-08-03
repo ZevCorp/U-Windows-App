@@ -90,6 +90,7 @@ public sealed class UiaReader
         // aparecen al hacer FromHandle sobre ese hijo. Sin esto el recorrido nunca veía la lista y
         // se quedaba paseando el panel izquierdo. Los duplicados por etiqueta se filtran abajo.
         try { CollectFromChildren(hwnd, elements); } catch { }
+        try { CollectMenus(root, elements); } catch { }
 
         Elements = elements;
 
@@ -151,6 +152,39 @@ public sealed class UiaReader
         {
             var el = SafeFromHandle(h);
             if (el != null) { try { Collect(el, acc, 0); } catch { } }
+        }
+    }
+
+    /// <summary>
+    /// Los elementos de MENÚ, buscados con FindAll en vez de caminando el árbol.
+    ///
+    /// El recorrido con TreeWalker no llega a ellos: un menú abierto cuelga de una frontera que el
+    /// ControlViewWalker no cruza —vive además en su propia ventana emergente
+    /// (Microsoft.UI.Content.PopupWindowSiteBridge)— aunque FindAll(Descendants) sobre la ventana
+    /// principal SÍ los encuentra. Sin esto, el asistente pulsaba «Nuevo», el menú se abría con
+    /// «Carpeta» dentro, y seguía sin ver ninguna opción: podía abrir menús pero nunca elegir en
+    /// ellos (2026-08-02). Es general, no del explorador: los menús de cualquier app estaban
+    /// invisibles.
+    /// </summary>
+    private static void CollectMenus(AutomationElement? root, List<UiElement> acc)
+    {
+        if (root == null) return;
+        var menus = root.FindAll(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.MenuItem));
+        foreach (AutomationElement el in menus)
+        {
+            try
+            {
+                var info = el.Current;
+                if (info.IsOffscreen) continue;
+                string label = LabelOf(el, info);
+                var r = info.BoundingRectangle;
+                if (string.IsNullOrWhiteSpace(label) || r.IsEmpty || r.Width < 1 || r.Height < 1) continue;
+                if (acc.Any(e => e.Label.Equals(label, StringComparison.OrdinalIgnoreCase)
+                              && e.ControlType.Equals("MenuItem", StringComparison.OrdinalIgnoreCase))) continue;
+                acc.Add(new UiElement(label, "MenuItem", r, el, ItemTypeDe(el)));
+            }
+            catch { }
         }
     }
 
