@@ -1035,7 +1035,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             return;
         }
         if (_surfaceMap == null) { SetStatus("El mapa del terreno no está cargado."); return; }
-        _explorer = new GraphExplorerWindow(_surfaceMap, () => _locator?.Current);
+        // Lectura inmediata también para el MAPEO: el recorrido confirma cada transición esperando
+        // dos lecturas estables de la superficie, y contra un valor que se refresca cada 800 ms eso
+        // son ~1,6 s de reloj por arista, más que el clic y la carga de la pantalla juntos.
+        _explorer = new GraphExplorerWindow(_surfaceMap, () => _locator?.Ahora() ?? _locator?.Current);
         _explorer.Closed += (_, __) => { _explorer = null; Dispatcher.Invoke(() => ExplorerBtn.Content = "🕸 Explorar el grafo"); };
         _explorer.Show();
         ExplorerBtn.Content = "🕸 Explorador: visible — clic para cerrar";

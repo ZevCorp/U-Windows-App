@@ -353,6 +353,12 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 - «factura-enero.pdf» aparece en el mapa como «factura-enero». Buscar por el nombre real del
   archivo no encuentra nada. Lo que el mapa guarda es lo que la interfaz muestra.
 
+### No leas el árbol entero para responder algo que el sistema contesta al momento
+- `LeerSalidasAsync` hacía un `Read()` completo del árbol UIA solo para saber quién estaba
+  delante, y luego otro para usarlo. Recorrer una pantalla llena cuesta cientos de milisegundos:
+  era medio segundo por nodo tirado en una pregunta que `GetForegroundWindow` contesta al momento.
+- Fecha: 2026-08-02.
+
 ### Para verificar rápido hay que PREGUNTAR, no esperar al siguiente latido
 - Síntoma: navegar por el grafo era correcto pero lento — una ruta de varios saltos se iba en
   segundos.

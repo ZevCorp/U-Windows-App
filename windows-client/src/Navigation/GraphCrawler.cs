@@ -424,10 +424,10 @@ public sealed class GraphCrawler
     /// <summary>Los elementos pulsables por un autónomo, en la pantalla actual.</summary>
     private async Task<List<(string Label, string Tipo, string Selector, string[] Alternativas, bool Entrable)>> LeerSalidasAsync(CancellationToken ct)
     {
-        // Una lectura previa para saber quién está delante; si no es el objetivo, se recupera el
-        // foco antes de leer de verdad. Leer la ventana equivocada no da menos datos: da datos de
-        // otra app, que es peor.
-        await Task.Run(() => { try { _reader.Read(); } catch { } }, ct);
+        // Quién está delante se le PREGUNTA al sistema, que es instantáneo; antes se leía el árbol
+        // UIA entero solo para averiguarlo y luego se volvía a leer para usarlo. Recorrer una
+        // pantalla llena cuesta cientos de milisegundos, así que era medio segundo por nodo tirado
+        // en responder algo que GetForegroundWindow contesta al momento (2026-08-02).
         if (!EsObjetivoElFrente() && !await EnfocarObjetivoAsync(ct))
             return new List<(string, string, string, string[], bool)>();
 
@@ -662,10 +662,14 @@ public sealed class GraphCrawler
     /// </summary>
     private async Task<string> EsperarCambioAsync(string desde, int msMax, CancellationToken ct)
     {
+        // Muestreo fino: la superficie se calcula en el acto, así que sondear cada 60 ms confirma
+        // la transición en cuanto ocurre en vez de en el siguiente latido. Con el valor cacheado
+        // esto no habría servido de nada —se leería el mismo dato viejo— pero con lectura directa
+        // es la diferencia entre ~1,6 s y ~120 ms de reloj por arista (2026-08-02).
         string candidato = "";
-        for (int i = 0; i < msMax / 150; i++)
+        for (int i = 0; i < msMax / 60; i++)
         {
-            await Task.Delay(150, ct);
+            await Task.Delay(60, ct);
             string ahora = _where()?.Id ?? "";
 
             // Lecturas que no dicen nada: vacío, seguimos donde estábamos, o cromo sin identidad.
@@ -693,9 +697,9 @@ public sealed class GraphCrawler
 
     private async Task<string> EsperarLlegadaAsync(string esperado, int msMax, CancellationToken ct)
     {
-        for (int i = 0; i < msMax / 150; i++)
+        for (int i = 0; i < msMax / 60; i++)
         {
-            await Task.Delay(150, ct);
+            await Task.Delay(60, ct);
             string ahora = _where()?.Id ?? "";
             if (string.Equals(ahora, esperado, StringComparison.OrdinalIgnoreCase)) return ahora;
         }
