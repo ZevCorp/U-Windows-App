@@ -122,6 +122,30 @@ public static class SafeToClick
             label ?? "", @"\.[A-Za-z0-9]{1,6}$");
     }
 
+    /// <summary>
+    /// ¿La etiqueta nombra algo DESTRUCTIVO? Solo mira el verbo, no el tipo de control.
+    ///
+    /// Hace falta aparte de <see cref="Auto"/> porque aquel responde otra pregunta —«¿puede el
+    /// explorador autónomo pulsar esto mientras mapea?»— y por eso rechaza todos los botones: al
+    /// mapear, un botón nunca es navegación. Usarlo como veto al responder un diálogo bloqueaba
+    /// incluso pulsar «No», que es justo lo que salvaba el archivo (2026-08-03). Responder a un
+    /// diálogo es legítimo; lo que no lo es, es responder «Eliminar».
+    /// </summary>
+    public static bool EsDestructivo(string label, out string motivo)
+    {
+        motivo = "";
+        string norm = Normalizar(label ?? "");
+        foreach (string v in Prohibido)
+        {
+            if (ContienePalabra(norm, Normalizar(v)))
+            {
+                motivo = $"«{label}» contiene «{v}»";
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>¿Un explorador autónomo puede pulsar esto? Ante la duda, NO.</summary>
     public static bool Auto(string label, string controlType, out string motivo)
     {

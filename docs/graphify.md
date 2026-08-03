@@ -359,15 +359,29 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
   responderle, y después hay que volver a donde íbamos.
 - `map_unblock` hace las tres cosas: sale del atasco, REANUDA por el mapa (salir no sirve de nada
   si la tarea no puede continuar) y deja constancia del incidente.
-- La política es deliberadamente conservadora, y esa es la parte importante: una sola opción → es
-  informativo, se acepta; hay una opción que no compromete nada (Cancelar/No/Cerrar) → esa;
-  cualquier otra cosa → NO se adivina, se describe y decide la capa consciente. Elegir mal aquí
-  es destructivo: el aviso de cambiar la extensión de un archivo tiene un «Sí» que lo corrompe.
+- Lo automático resuelve SOLO lo que no tiene decisión: el aviso informativo, el de una única
+  salida, donde no se elige nada sino que se acusa recibo. En cuanto hay dos opciones hay una
+  DECISIÓN y sube al consciente.
+- **«No comprometer» no es lo mismo que acertar** (corregido por el usuario, 2026-08-03). La
+  primera versión prefería siempre Cancelar/No/Cerrar; parecía prudente y era falso: si la tarea
+  quería continuar de verdad, cancelar por regla la rompe igual, solo que en silencio y con aire
+  de cautela. Continuar o no depende de lo que se estuviera intentando, y eso solo lo sabe quien
+  tiene la intención. Se prefiere preguntar a acertar por casualidad.
+- Al escalar se incluye QUÉ se estaba intentando: sin eso, quien decide no sabe para qué apareció
+  el diálogo, que es justamente el dato que necesita.
 - Se verifica que el diálogo se FUE. Un desbloqueo que no desbloquea es peor que no intentarlo.
 - Verificado el 2026-08-03 provocando el aviso de extensión: detectó, eligió «No», el archivo
   conservó su extensión y la ejecución quedó lista para continuar.
 - El incidente se registra pero NO dispara mejoras automáticas: si un diálogo se repite, eso es
   material para una regla, y esa decisión es de quien desarrolla.
+
+### Un veto responde a UNA pregunta: no lo reutilices para otra
+- `SafeToClick.Auto` responde «¿puede el explorador autónomo pulsar esto MIENTRAS MAPEA?», y por
+  eso rechaza todos los botones: al mapear, un botón nunca es navegación. Usarlo como veto al
+  responder un diálogo bloqueaba incluso pulsar «No», que era justo lo que salvaba el archivo.
+- Responder a un diálogo es legítimo —para eso está—; lo que no lo es es responder «Eliminar».
+  El veto correcto mira el VERBO (`EsDestructivo`), no el tipo de control.
+- Fecha: 2026-08-03.
 
 ### Un DIÁLOGO no es un lugar: es una interrupción
 - Síntoma: ante un aviso de Windows el sistema respondía «estás en

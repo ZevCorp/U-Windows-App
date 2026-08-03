@@ -36,6 +36,10 @@ public sealed class SurfaceMapTools
     private string _ultimaApp = "";
     private List<string> _seleccionPrevia = new();
 
+    /// <summary>Lo último que se intentó. Sin esto, quien deba decidir ante un diálogo no sabe
+    /// para qué apareció, y «continuar o no» depende justamente de eso.</summary>
+    private string _ultimaAccion = "";
+
     /// <summary>
     /// A dónde llevaría «Atrás» AHORA MISMO. Estado efímero de la sesión, nunca una arista.
     ///
@@ -491,14 +495,19 @@ public sealed class SurfaceMapTools
             : OpcionSegura(opciones);
 
         if (elegida.Length == 0)
-            return $"ATASCADO y NO decido solo. Diálogo «{titulo}»: {string.Join(" ", textos.Take(2))}\n"
+            return $"ATASCADO · decide tú, esto no lo automatizo.\n"
+                 + $"  Diálogo: «{titulo}»\n"
+                 + $"  Dice: {string.Join(" ", textos.Take(3))}\n"
                  + $"  Opciones: {string.Join(", ", opciones.Select(o => $"«{o}»"))}\n"
-                 + "  Ninguna es claramente inocua. Vuelve a llamarme con `choose` indicando cuál, "
-                 + "sabiendo que puede ser irreversible.";
+                 + (_ultimaAccion.Length > 0 ? $"  Veníamos de: {_ultimaAccion}\n" : "")
+                 + "  Hay una DECISIÓN aquí, y depende de lo que estuvieras intentando: continuar o "
+                 + "no es tuyo, no mío. Vuelve a llamarme con `choose` indicando la opción.";
 
-        // El veto de siempre: aunque el consciente la pida, una opción destructiva no se pulsa.
-        if (!SafeToClick.Auto(elegida, "Button", out string motivo) && eleccion.Length > 0)
-            return $"NO pulso «{elegida}»: {motivo}. Esa decisión es del usuario, no mía.";
+        // El veto, ahora sobre el VERBO y no sobre el tipo de control: responder a un diálogo es
+        // legítimo —para eso está—, lo que no lo es es responder «Eliminar». Aunque lo pida la
+        // capa consciente: esa decisión es del usuario.
+        if (SafeToClick.EsDestructivo(elegida, out string motivo))
+            return $"NO pulso «{elegida}»: {motivo}. Una opción destructiva la confirma el usuario, no yo.";
 
         var paso = new PlanStep
         {
@@ -528,25 +537,20 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
-    /// La opción que no compromete nada, o "" si hay que preguntar. Una sola opción es informativa;
-    /// «Cancelar»/«No»/«Cerrar» dejan las cosas como estaban; el resto son decisiones con efecto.
+    /// La opción que se puede tomar SIN decidir nada, o "" si hay que preguntar al consciente.
+    ///
+    /// Solo hay un caso: el aviso informativo, el que tiene una única salida. Ahí no se elige nada
+    /// —se acusa recibo— y automatizarlo no arriesga.
+    ///
+    /// En cuanto hay dos opciones hay una DECISIÓN, y no es de esta capa. La versión anterior
+    /// prefería siempre la que «no compromete» (Cancelar/No/Cerrar), y eso parecía prudente y era
+    /// falso: si la tarea quería continuar de verdad, cancelar por regla la rompe igual, solo que
+    /// en silencio y con aire de cautela. Si continuar o no depende de lo que se estuviera
+    /// intentando, y eso solo lo sabe quien tiene la intención (2026-08-03, corregido por el
+    /// usuario). Se prefiere preguntar a acertar por casualidad.
     /// </summary>
-    private static string OpcionSegura(List<string> opciones)
-    {
-        if (opciones.Count == 1) return opciones[0];
-
-        string[] inocuas = { "cancelar", "cancel", "no", "cerrar", "close", "omitir", "skip", "descartar" };
-        foreach (string o in opciones)
-            if (inocuas.Any(i => o.Trim().Equals(i, StringComparison.OrdinalIgnoreCase)))
-                return o;
-
-        // «Aceptar» a secas, sin alternativa que comprometa, es el botón de un aviso informativo.
-        if (opciones.Count == 2 && opciones.Any(o => o.Trim().Equals("Aceptar", StringComparison.OrdinalIgnoreCase)
-                                                 || o.Trim().Equals("OK", StringComparison.OrdinalIgnoreCase)))
-            return opciones.First(o => o.Trim().Equals("Aceptar", StringComparison.OrdinalIgnoreCase)
-                                    || o.Trim().Equals("OK", StringComparison.OrdinalIgnoreCase));
-        return "";
-    }
+    private static string OpcionSegura(List<string> opciones) =>
+        opciones.Count == 1 ? opciones[0] : "";
 
     /// <summary>
     /// Si delante hay un DIÁLOGO, lo describe como lo que es: una interrupción con una pregunta y
@@ -933,6 +937,7 @@ public sealed class SurfaceMapTools
         };
 
         string desde = actual.Id;
+        _ultimaAccion = $"intentar «{elegida.Info.Label}» en «{desde}»";
 
         // La selección se lee ANTES de pulsar: «Cortar» la vacía, así que después ya no hay nada
         // que contar y no se podría decir sobre qué se actuó.
