@@ -558,6 +558,17 @@ public sealed class GraphCrawler
         // que en el mapa: dos carpetas pueden tener cada una su «readme.txt».
         if (!ct_.Equals("listitem", StringComparison.OrdinalIgnoreCase))
             _destinosSabidos.Add(selector);
+        else if (!string.Equals(desde, llegue, StringComparison.OrdinalIgnoreCase))
+        {
+            // La SUBIDA al padre, que es estructural: desde una carpeta «Subir» lleva siempre a la
+            // que la contiene, se haya llegado como se haya llegado. Aprenderla aquí es lo que
+            // hace el grafo recorrible en los dos sentidos sin depender del historial.
+            _map.LearnTraversal(llegue, desde, "uia:aid=upButton;ct=Button",
+                Array.Empty<string>(), "Subir un nivel", "Button", "click");
+            _aristas++;
+            _learned.Add((llegue, desde, "Subir un nivel"));
+            EdgeLearned?.Invoke(llegue, desde, "Subir un nivel");
+        }
         _aristas++;
         _learned.Add((desde, llegue, etiqueta));
         // En caliente, para que el grafo se dibuje mientras se construye y no al terminar: ver

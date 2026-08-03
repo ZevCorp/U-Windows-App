@@ -583,6 +583,11 @@ public sealed class UiaSurface : IUiSurface
                 "input" => SetValue(el, step.Value ?? "", out error),
                 "select" => Select(el, step.SelectedValue ?? step.Value ?? "", out error),
                 "click" => RealClick(el, out error),
+                // AÑADIR a la selección sin perder lo ya seleccionado. Se hace con el patrón de
+                // UIA y no manteniendo Ctrl pulsado: un modificador es estado global del teclado
+                // —si algo falla entre medias se queda hundido y todo lo posterior sale mal—,
+                // mientras que AddToSelection se lo pide al control y punto.
+                "addselect" => AddToSelection(el, out error),
                 // Doble clic: en una LISTA, un clic selecciona y solo el doble abre. Sin esto el
                 // recorrido se quedaba en el panel de navegación —donde un clic sí navega— y jamás
                 // entraba en una subcarpeta: la superficie no cambiaba, así que se concluía «acción
@@ -847,6 +852,37 @@ public sealed class UiaSurface : IUiSurface
 
         error = $"no se pudo seleccionar «{value}»: la opción no existe o el control no lo permite";
         return false;
+    }
+
+    /// <summary>Suma este elemento a la selección actual, sin sustituirla.</summary>
+    private static bool AddToSelection(AutomationElement el, out string error)
+    {
+        error = "";
+        try
+        {
+            TraerALaVistaEstatico(el);
+            if (el.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var p) && p is SelectionItemPattern sel)
+            {
+                sel.AddToSelection();
+                return true;
+            }
+            error = "el elemento no admite selección múltiple";
+            return false;
+        }
+        catch (Exception e) { error = e.Message; return false; }
+    }
+
+    private static void TraerALaVistaEstatico(AutomationElement el)
+    {
+        try
+        {
+            if (el.TryGetCurrentPattern(ScrollItemPattern.Pattern, out var p) && p is ScrollItemPattern si)
+            {
+                si.ScrollIntoView();
+                Thread.Sleep(120);
+            }
+        }
+        catch { }
     }
 
     private static bool Click(AutomationElement el, out string error)

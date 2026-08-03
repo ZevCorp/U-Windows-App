@@ -353,6 +353,29 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 - «factura-enero.pdf» aparece en el mapa como «factura-enero». Buscar por el nombre real del
   archivo no encuentra nada. Lo que el mapa guarda es lo que la interfaz muestra.
 
+### «Subir» es estructural; «Atrás» es histórico
+- `upButton` desde una carpeta lleva SIEMPRE a la que la contiene, se haya llegado como se haya
+  llegado: es una propiedad del sitio y por tanto una arista legítima. `backButton` depende del
+  historial y no lo es. Al bajar por un elemento de lista se aprende la subida al padre; sin eso
+  el grafo bajaba y no subía, y una tarea que creaba carpetas hermanas las creaba ANIDADAS
+  —Windows lo paró con «la carpeta de destino es una subcarpeta de la de origen»—.
+- Fecha: 2026-08-02. Código: `SurfaceMapTools.AprenderSubida`, `GraphCrawler.PulsarYAprenderAsync`.
+
+### Antes de una acción destructiva, di sobre QUÉ actúa
+- «Cortar», «Copiar», «Eliminar» y «Cambiar nombre» operan sobre LO SELECCIONADO, y el asistente
+  no tenía forma de saber qué era. Un paso previo falló, la selección se quedó en una carpeta
+  recién creada, y el siguiente «Cortar» la cortó a ella. Nadie mintió —cada paso reportó su
+  fallo— pero quien actuaba no sabía sobre qué actuaba.
+- La selección se lee ANTES de pulsar (Cortar la vacía) y con lectura propia (el snapshot del
+  lector puede ser de otra pantalla). Solo cuenta la lista de contenido: una pestaña activa o un
+  botón de radio marcado también están «seleccionados» y no son sobre lo que actúa Cortar.
+- Fecha: 2026-08-02. Código: `SurfaceMapTools.SeleccionActual`.
+
+### Un paso encadenado sin comprobar envenena todo lo que viene detrás
+- Los fallos de esta sesión no fueron del sistema —reportó cada uno— sino del guion que seguía
+  adelante igual. Toda secuencia de acciones debe PARAR en el primer resultado que no confirme lo
+  esperado; si no, un fallo silencioso se convierte en daño real varios pasos después.
+
 ### Capa 1 determinista; LLM en capa 2
 - Lo que es regla (carpeta-vs-archivo, nombres de panel) se codifica y es gratis e
   instantáneo. El LLM entra a lo que es CRITERIO (¿estas dos pantallas son la misma?, ¿qué

@@ -31,6 +31,7 @@ public sealed class SurfaceMapTools
 
     /// <summary>La app con la que se estaba trabajando. Se usa para volver a ella si algo roba el foco.</summary>
     private string _ultimaApp = "";
+    private List<string> _seleccionPrevia = new();
 
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
@@ -121,6 +122,76 @@ public sealed class SurfaceMapTools
         return true;
     }
 
+    /// <summary>
+    /// Qué hay seleccionado ahora mismo en la pantalla.
+    ///
+    /// Existe porque una acción como «Cortar» opera sobre LO SELECCIONADO, y el asistente no tenía
+    /// forma de saber qué era. En una tarea de organizar archivos, un paso previo falló, la
+    /// selección se quedó en una carpeta recién creada, y el siguiente «Cortar» la cortó a ella:
+    /// se intentó pegar la carpeta dentro de sí misma (2026-08-02). Nadie mintió —cada paso
+    /// reportó su fallo— pero el que actuaba no sabía sobre qué actuaba. Decirlo convierte un
+    /// encadenamiento a ciegas en algo comprobable antes de tocar nada.
+    /// </summary>
+    /// <summary>
+    /// Al bajar a una carpeta, aprende también la SUBIDA a su padre.
+    ///
+    /// «Subir» (aid=upButton) es estructural: desde una carpeta siempre lleva a la que la contiene,
+    /// se haya llegado como se haya llegado. Eso lo hace una arista legítima, al contrario que
+    /// «Atrás», que depende del historial y por eso NO se aprende. Sin esto el grafo bajaba y no
+    /// subía: al pedir volver de «facturas» a su padre la respuesta era «no conozco una ruta
+    /// COMPLETA», y una tarea que creaba carpetas hermanas acababa creándolas anidadas — Windows
+    /// mismo lo paró con «la carpeta de destino es una subcarpeta de la de origen» (2026-08-02).
+    ///
+    /// Solo cuando la bajada fue por un elemento de LISTA —una carpeta de contenido—: pulsar algo
+    /// del panel lateral no es descender, y su padre no es de donde veníamos.
+    /// </summary>
+    private void AprenderSubida(string padre, string hijo, string tipoDePuerta)
+    {
+        if (!tipoDePuerta.Equals("listitem", StringComparison.OrdinalIgnoreCase)) return;
+        if (padre.Length == 0 || hijo.Length == 0
+            || string.Equals(padre, hijo, StringComparison.OrdinalIgnoreCase)) return;
+
+        _map.LearnTraversal(hijo, padre, "uia:aid=upButton;ct=Button",
+            Array.Empty<string>(), "Subir un nivel", "Button", "click");
+        LogBus.Log("mapa-mcp", $"aprendida la subida: '{hijo}' → '{padre}'");
+    }
+
+    private List<string> SeleccionActual()
+    {
+        var sel = new List<string>();
+        try
+        {
+            // Lectura PROPIA: la selección cambia con cada clic, y el snapshot del lector puede ser
+            // de hace varias acciones —o de otra pantalla— porque solo se refresca cuando hace
+            // falta anotar puertas. Un dato de seguridad no puede venir de una foto vieja.
+            _lector.Read();
+            foreach (var el in _lector.Elements)
+            {
+                try
+                {
+                    // Solo la LISTA de contenido. Una pestaña activa, un botón de radio marcado o
+                    // el nodo resaltado del árbol también están «seleccionados», pero no son sobre
+                    // lo que actúa Cortar: incluirlos convertía la respuesta en ruido donde había
+                    // que leer un dato de seguridad.
+                    if (!el.ControlType.Equals("listitem", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!el.Native.TryGetCurrentPattern(System.Windows.Automation.SelectionItemPattern.Pattern, out var p)
+                        || p is not System.Windows.Automation.SelectionItemPattern s) continue;
+                    if (s.Current.IsSelected && el.Label.Length > 0 && !sel.Contains(el.Label)) sel.Add(el.Label);
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return sel;
+    }
+
+    /// <summary>Acciones que operan sobre lo seleccionado: antes de ejecutarlas hay que saber qué es.</summary>
+    private static bool OperaSobreLaSeleccion(string etiqueta) =>
+        etiqueta.Contains("Cortar", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Contains("Copiar", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Contains("Eliminar", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Contains("Cambiar nombre", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>El sistema y el localizador dicen los dos que estamos en esta app.</summary>
     private bool Coinciden(string app) =>
         AppEnFrente().Equals(app, StringComparison.OrdinalIgnoreCase)
@@ -154,7 +225,7 @@ public sealed class SurfaceMapTools
     }
 
     public static bool IsMapTool(string tool) => tool is
-        "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take";
+        "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take" or "map_type";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -174,6 +245,7 @@ public sealed class SurfaceMapTools
             "map_routes_from" => Routes(A("surface")),
             "map_go_to" => GoTo(A("surface")),
             "map_take" => Take(A("exit"), A("action")),
+            "map_type" => Type(A("text"), A("target")),
             _ => $"herramienta de mapa no soportada: {tool}",
         };
 
@@ -189,8 +261,10 @@ public sealed class SurfaceMapTools
         ObservarAqui(loc.Id);
         var salidas = _map.ExitsFrom(loc.Id);
         int recorribles = salidas.Count(h => h.Info.Selector.Length > 0);
+        var sel = SeleccionActual();
         return $"Estás en «{loc.Id}». Desde aquí el mapa conoce {salidas.Count} salida(s), "
-             + $"{recorribles} de ellas recorribles.";
+             + $"{recorribles} de ellas recorribles."
+             + (sel.Count > 0 ? $" Seleccionado ahora mismo: {string.Join(", ", sel.Select(s => $"«{s}»"))}." : "");
     }
 
     /// <summary>
@@ -211,9 +285,14 @@ public sealed class SurfaceMapTools
             // acción), y «alguna recorrible» tampoco: los nodos mapeados antes de clasificar
             // puertas conocían la navegación pero ninguna acción, y sin este repaso se quedaban
             // así para siempre.
+            // Se mira alrededor salvo que la pantalla se conozca DE VERDAD. «Que haya alguna de
+            // cada clase» no bastaba: la arista de subida que se aprende al entrar es ella sola una
+            // acción, así que una carpeta recién creada parecía conocida y al llegar solo se veía
+            // «Subir un nivel» — se pidió «Pegar» y no existía, con la barra a la vista
+            // (2026-08-02). Una pantalla real tiene muchas puertas; dos no es conocerla.
             var conocidas = _map.ExitsFrom(nodo);
-            if (conocidas.Any(h => h.Info.Selector.Length > 0)
-                && conocidas.Any(h => h.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase))) return;
+            if (conocidas.Count(h => h.Info.Selector.Length > 0) >= 6
+                && conocidas.Count(h => h.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)) >= 3) return;
             ObservarSinGuardia(nodo);
         }
         catch { }
@@ -381,6 +460,7 @@ public sealed class SurfaceMapTools
 
             LogBus.Log("mapa-mcp", $"✓ tramo {i + 1}/{ruta.Count}: «{h.Info.Label}» → {h.To}");
         }
+        ObservarAqui(destino);   // llegar es mirar alrededor
         return $"llegué a «{destino}» en {ruta.Count} paso(s)";
     }
 
@@ -447,8 +527,13 @@ public sealed class SurfaceMapTools
 
         var elegida = candidatas[0];
         _ultimaApp = AppDe(actual.Id).Length > 0 ? AppDe(actual.Id) : _ultimaApp;
-        bool seleccionar = accionPedida.Equals("click", StringComparison.OrdinalIgnoreCase)
-                           && elegida.Info.ActionType.Equals("doubleclick", StringComparison.OrdinalIgnoreCase);
+        // Seleccionar es TODA acción pedida que no pretende navegar: un clic sobre algo que
+        // normalmente se abre con doble, y añadir a la selección. Dejar fuera «addselect» hacía
+        // que sumar el segundo archivo se juzgara como puerta y se reportara «la pantalla no
+        // cambió» —cierto y engañoso: no tenía que cambiar (2026-08-02).
+        bool seleccionar = accionPedida.Equals("addselect", StringComparison.OrdinalIgnoreCase)
+                           || (accionPedida.Equals("click", StringComparison.OrdinalIgnoreCase)
+                               && elegida.Info.ActionType.Equals("doubleclick", StringComparison.OrdinalIgnoreCase));
         var paso = new PlanStep
         {
             StepOrder = 1,
@@ -458,6 +543,11 @@ public sealed class SurfaceMapTools
         };
 
         string desde = actual.Id;
+
+        // La selección se lee ANTES de pulsar: «Cortar» la vacía, así que después ya no hay nada
+        // que contar y no se podría decir sobre qué se actuó.
+        _seleccionPrevia = OperaSobreLaSeleccion(elegida.Info.Label) ? SeleccionActual() : new List<string>();
+
         if (!_uia.Execute(paso, out string error))
             return $"no se pudo pulsar «{elegida.Info.Label}»: {error}";
 
@@ -474,6 +564,17 @@ public sealed class SurfaceMapTools
         // resulta que sí navegó (un «Guardar como…» que abre diálogo), eso también se cuenta.
         if (elegida.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase))
         {
+            // Sobre QUÉ actuó: para Cortar/Copiar/Eliminar es la única forma de comprobar que se
+            // hizo sobre lo que se creía, y no sobre lo que quedó seleccionado de un paso anterior.
+            string sobre = "";
+            if (OperaSobreLaSeleccion(elegida.Info.Label))
+            {
+                var s = _seleccionPrevia;
+                sobre = s.Count > 0
+                    ? $" sobre {s.Count} elemento(s): {string.Join(", ", s.Select(x => $"«{x}»"))}"
+                    : " sobre NADA seleccionado (probablemente no hizo nada)";
+            }
+
             string tras = EsperarCambio(desde, 2000);
             LogBus.Log("mapa-mcp", $"✓ acción «{elegida.Info.Label}» ejecutada" + (tras.Length > 0 ? $" → {tras}" : ""));
 
@@ -486,8 +587,8 @@ public sealed class SurfaceMapTools
                 .Select(h => h.Info.Label).Distinct().Take(18).ToList();
 
             return (tras.Length > 0
-                    ? $"ejecuté «{elegida.Info.Label}» y la pantalla pasó a «{tras}». "
-                    : $"ejecuté «{elegida.Info.Label}» (la superficie sigue siendo «{desde}»). ")
+                    ? $"ejecuté «{elegida.Info.Label}»{sobre} y la pantalla pasó a «{tras}». "
+                    : $"ejecuté «{elegida.Info.Label}»{sobre} (la superficie sigue siendo «{desde}»). ")
                  + (nuevas.Count > 0 ? "Ahora hay: " + string.Join(", ", nuevas.Select(n => $"«{n}»")) : "");
         }
 
@@ -503,6 +604,8 @@ public sealed class SurfaceMapTools
 
             _map.LearnTraversal(desde, llegada, elegida.Info.Selector, elegida.Info.Alternatives,
                 elegida.Info.Label, elegida.Info.ControlType, elegida.Info.ActionType);
+            AprenderSubida(desde, llegada, elegida.Info.ControlType);
+            ObservarAqui(llegada);
             LogBus.Log("mapa-mcp", $"✓ puerta «{elegida.Info.Label}» descubierta → {llegada}");
             return $"tomé «{elegida.Info.Label}»: era una puerta sin explorar y lleva a «{llegada}». Queda aprendida.";
         }
@@ -511,8 +614,61 @@ public sealed class SurfaceMapTools
             return $"pulsé «{elegida.Info.Label}» pero no se llegó a «{elegida.To}». "
                  + $"Estamos en «{_where()?.Id}».";
 
+        // Llegar es mirar alrededor: si no, el asistente se planta en una pantalla nueva y no sabe
+        // qué puede hacer allí. Se pegó un archivo en una carpeta recién abierta y la respuesta
+        // fue «aquí no hay ninguna salida que se llame Pegar», con la barra a la vista (2026-08-02).
+        AprenderSubida(desde, elegida.To, elegida.Info.ControlType);
+        ObservarAqui(elegida.To);
         LogBus.Log("mapa-mcp", $"✓ salida «{elegida.Info.Label}» → {elegida.To}");
         return $"tomé «{elegida.Info.Label}» y llegué a «{elegida.To}»";
+    }
+
+    /// <summary>
+    /// Escribe texto en un campo. Sin `target`, en el que tenga el foco del teclado.
+    ///
+    /// Es la primitiva que faltaba para que una tarea completa se pueda hacer por la interfaz:
+    /// renombrar exige escribir, y sin ella el asistente podía crear una carpeta pero no ponerle
+    /// nombre. Se escribe por VALOR cuando el control lo admite —determinista, sin depender de la
+    /// distribución del teclado ni de que ninguna tecla se quede hundida— y solo si no lo admite
+    /// se recurre a teclear, con Enter al final para confirmar la edición en línea.
+    /// </summary>
+    private string Type(string texto, string target)
+    {
+        if (texto.Length == 0) return "falta `text`: qué hay que escribir";
+
+        if (_ultimaApp.Length > 0 && !AppEnFrente().Equals(_ultimaApp, StringComparison.OrdinalIgnoreCase))
+            AsegurarFoco(_ultimaApp);
+
+        string selector = target;
+        if (selector.Length == 0)
+        {
+            // El campo con el foco: es donde una persona escribiría sin pensarlo.
+            try
+            {
+                var foco = System.Windows.Automation.AutomationElement.FocusedElement;
+                string aid = foco?.Current.AutomationId ?? "";
+                string nombre = foco?.Current.Name ?? "";
+                string tipo = (foco?.Current.ControlType.ProgrammaticName ?? "").Replace("ControlType.", "");
+                selector = aid.Length > 0 && !aid.All(char.IsDigit) ? $"uia:aid={aid};ct={tipo}"
+                         : nombre.Length > 0 ? $"uia:name={nombre};ct={tipo}"
+                         : "";
+            }
+            catch { }
+            if (selector.Length == 0) return "no hay ningún campo con el foco; pasa `target` con su selector";
+        }
+
+        var paso = new PlanStep { StepOrder = 1, ActionType = "input", Selector = selector, Value = texto };
+        if (!_uia.Execute(paso, out string error))
+            return $"no pude escribir en «{selector}»: {error}";
+
+        // Enter confirma: en una edición en línea (renombrar) el texto no se aplica hasta que se
+        // acepta, y dejarlo a medias deja la interfaz en un estado del que nadie se acuerda luego.
+        keybd_event(0x0D, 0, 0, IntPtr.Zero);
+        keybd_event(0x0D, 0, 2, IntPtr.Zero);
+        System.Threading.Thread.Sleep(400);
+
+        LogBus.Log("mapa-mcp", $"✓ escrito «{texto}» en {selector}");
+        return $"escribí «{texto}» y confirmé con Enter";
     }
 
     /// <summary>Espera a que la superficie DEJE de ser la de partida y devuelve la nueva, o "".</summary>
