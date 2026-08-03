@@ -657,15 +657,9 @@ public sealed class SurfaceMapTools
     /// </summary>
     private string DescribirInterrupcion()
     {
-        var (titulo, textos, opciones) = LeerInterrupcion();
-        if (opciones.Count == 0) return "";
-
-        LogBus.Log("mapa-mcp", $"INTERRUPCIÓN: «{titulo}» · opciones: {string.Join(" / ", opciones)}");
-        return $"INTERRUPCIÓN, no una ubicación: hay un diálogo «{titulo}» delante.\n"
-             + $"  Dice: {string.Join(" ", textos.Take(3))}\n"
-             + $"  Opciones: {string.Join(", ", opciones.Select(o => $"«{o}»"))}\n"
-             + "  No hay rutas desde aquí: primero hay que responder. Llama a map_unblock con `at` "
-             + "para que resuelva y te devuelva a donde estabas.";
+        string d = Interrupcion.Describir();
+        if (d.Length > 0) LogBus.Log("mapa-mcp", "INTERRUPCIÓN detectada");
+        return d;
     }
 
     /// <summary>
@@ -1019,10 +1013,15 @@ public sealed class SurfaceMapTools
         bool seleccionar = accionPedida.Equals("addselect", StringComparison.OrdinalIgnoreCase)
                            || (accionPedida.Equals("click", StringComparison.OrdinalIgnoreCase)
                                && elegida.Info.ActionType.Equals("doubleclick", StringComparison.OrdinalIgnoreCase));
+        // Se EMPIEZA por el clic simple aunque la arista diga doble: es la acción menos agresiva y
+        // la que funciona en los menús de navegación. Si no mueve nada, más abajo se sube al doble.
+        string accionInicial = accionPedida.Length > 0 ? accionPedida
+            : elegida.Info.ActionType.Equals("doubleclick", StringComparison.OrdinalIgnoreCase)
+                ? "click" : elegida.Info.ActionType;
         var paso = new PlanStep
         {
             StepOrder = 1,
-            ActionType = accionPedida.Length > 0 ? accionPedida : elegida.Info.ActionType,
+            ActionType = accionInicial,
             Selector = elegida.Info.Selector,
             Label = elegida.Info.Label,
         };
@@ -1043,6 +1042,24 @@ public sealed class SurfaceMapTools
 
         if (!_uia.Execute(paso, out string error))
             return $"no se pudo pulsar «{elegida.Info.Label}»: {error}";
+
+        // UN CLIC PRIMERO, EL DOBLE SOLO SI HACE FALTA. La acción de un elemento de lista depende
+        // de la APP, no del tipo: en una lista de archivos el doble clic abre, pero en un menú de
+        // navegación —el panel de Configuración— un solo clic navega y el segundo lo ANULA, así que
+        // el recorrido pulsaba las doce secciones sin moverse de «Inicio» (2026-08-03). En vez de
+        // adivinar por app, se prueba lo suave y se sube a lo fuerte solo si no pasó nada: se
+        // acierta en las dos sin saber en cuál estamos.
+        if (elegida.Info.ActionType.Equals("doubleclick", StringComparison.OrdinalIgnoreCase)
+            && accionPedida.Length == 0 && !seleccionar && EsperarCambio(desde, 450).Length == 0)
+        {
+            var doble = new PlanStep
+            {
+                StepOrder = 1, ActionType = "doubleclick",
+                Selector = elegida.Info.Selector, Label = elegida.Info.Label,
+            };
+            LogBus.Log("mapa-mcp", $"«{elegida.Info.Label}»: un clic no movió nada, se prueba el doble");
+            _uia.Execute(doble, out _);
+        }
 
         // Selección deliberada: no se espera ningún cambio de pantalla, y exigirlo sería reportar
         // fallo a un clic que hizo exactamente lo pedido.

@@ -365,12 +365,10 @@ public sealed class GraphCrawler
         // así que se para y se dice cuál es, para que alguien lo resuelva y se relance
         // (2026-08-03: al mapear Configuración se abrió «Cambiar el nombre de tu PC» y el recorrido
         // siguió pulsando detrás).
-        var cruzado = Interrupcion.Leer();
-        if (cruzado.Opciones.Count > 0)
+        if (Interrupcion.Hay())
         {
-            string aviso = $"hay un diálogo delante («{cruzado.Titulo}»: "
-                         + $"{string.Join(", ", cruzado.Opciones.Select(o => $"«{o}»"))}); "
-                         + "no mapeo con algo cruzado. Resuélvelo y vuelve a lanzarlo.";
+            string aviso = Interrupcion.Describir().Replace("\n", " ")
+                         + " — no mapeo con algo cruzado; resuélvelo y vuelve a lanzarlo.";
             LogBus.Log("crawler", "PARADA · " + aviso);
             throw new InvalidOperationException(aviso);
         }
@@ -550,6 +548,17 @@ public sealed class GraphCrawler
 
         bool ok = await Task.Run(() => _ejecutor.Execute(paso, out _), ct);
         if (!ok) return "";
+
+        // ¿El clic abrió algo cruzado? Se comprueba tras CADA acción, no solo al entrar en una
+        // pantalla: en Configuración, «Cambiar nombre» abre un diálogo del sistema y el recorrido
+        // seguía pulsando detrás durante toda la corrida, aprendiendo caminos que nadie hizo
+        // (2026-08-03). El primer clic que levanta una barrera tiene que parar la corrida entera.
+        if (Interrupcion.Hay())
+        {
+            string aviso = $"«{etiqueta}» abrió algo que bloquea: {Interrupcion.Describir().Replace("\n", " ")}";
+            LogBus.Log("crawler", "PARADA · " + aviso);
+            throw new InvalidOperationException(aviso);
+        }
 
         string llegue = await EsperarCambioAsync(desde, 4000, ct);
 

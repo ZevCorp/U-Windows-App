@@ -311,9 +311,33 @@ public sealed class SurfaceLocator : IDisposable
         {
             var raiz = AutomationElement.FromHandle(hwnd);
             if (raiz == null) return "";
-            var sel = raiz.FindFirst(TreeScope.Descendants, new AndCondition(
+            // Puede haber VARIOS elementos seleccionados a la vez —en Configuración conviven la
+            // sección del menú y opciones de la página, como el tema «Oscuro»— y coger el primero
+            // que aparezca daba una identidad que no cambiaba al navegar: el recorrido pulsaba
+            // todas las secciones y no aprendía ninguna (2026-08-03).
+            //
+            // La navegación es la columna de la IZQUIERDA. Entre los seleccionados se elige el de
+            // menor X, que es donde vive el menú en toda app con panel lateral. Es geometría, sí,
+            // pero geometría de la ESTRUCTURA, no de un punto concreto: no se pulsa nada con ella.
+            var seleccionados = raiz.FindAll(TreeScope.Descendants, new AndCondition(
                 new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem),
                 new PropertyCondition(SelectionItemPattern.IsSelectedProperty, true)));
+
+            AutomationElement? sel = null;
+            double masIzquierda = double.MaxValue;
+            foreach (AutomationElement el in seleccionados)
+            {
+                try
+                {
+                    var info = el.Current;
+                    if (info.IsOffscreen) continue;
+                    var r = info.BoundingRectangle;
+                    if (r.IsEmpty || r.Left >= masIzquierda) continue;
+                    masIzquierda = r.Left;
+                    sel = el;
+                }
+                catch { }
+            }
             string n = sel?.Current.Name?.Trim() ?? "";
             // Nombres larguísimos (un dispositivo con toda su descripción) no identifican una
             // sección: son contenido que resulta estar seleccionado.

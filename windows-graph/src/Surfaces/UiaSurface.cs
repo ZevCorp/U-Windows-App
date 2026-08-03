@@ -984,12 +984,56 @@ public sealed class UiaSurface : IUiSurface
         catch { return true; }
     }
 
+    /// <summary>
+    /// ¿Es contenido de una lista —un archivo, una fila— y no un elemento de navegación?
+    ///
+    /// La diferencia importa porque en el contenido SELECCIONAR no es ABRIR: en el explorador hace
+    /// falta el doble clic de verdad. Se distingue por el contenedor: una lista de contenido cuelga
+    /// de un control de lista/rejilla; el menú lateral de una app también, así que además se mira
+    /// si el elemento está en la franja izquierda, que es donde vive la navegación.
+    /// </summary>
+    private static bool EsContenidoDeLista(AutomationElement el)
+    {
+        try
+        {
+            if (el.Current.ControlType != ControlType.ListItem) return false;
+            IntPtr win = TopLevelWindow(el);
+            if (win == IntPtr.Zero || !GetWindowRect(win, out RECT w)) return true;
+            var r = el.Current.BoundingRectangle;
+            // En el tercio izquierdo de la ventana = navegación; más allá = contenido.
+            double tercio = w.Left + (w.Right - w.Left) / 3.0;
+            return r.Left > tercio;
+        }
+        catch { return true; }
+    }
+
     private bool RealClick(AutomationElement el, out string error)
     {
         error = "";
         try
         {
             TraerALaVista(el);
+
+            // SELECCIONAR ANTES QUE PULSAR en lo que es seleccionable y NO es contenido de lista.
+            // El menú de Configuración ignora el ratón sintético —clic simple y doble, ambos con
+            // ok=True, la página no se movía— pero responde a SelectionItemPattern.Select() al
+            // instante: se pulsó «Personalización» doce veces sin salir de «Inicio», y un Select()
+            // la abrió a la primera (2026-08-03). Muchas apps WinUI son así.
+            //
+            // El contenido de una lista queda fuera a propósito: ahí seleccionar NO es abrir, y
+            // confundirlos rompería el explorador, donde hace falta el doble clic de verdad.
+            if (!EsContenidoDeLista(el)
+                && el.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var sp0)
+                && sp0 is SelectionItemPattern selNav)
+            {
+                try
+                {
+                    selNav.Select();
+                    L("    → seleccionado por patrón (la app no responde al ratón sintético)");
+                    return true;
+                }
+                catch (Exception e) { L($"    Select por patrón falló ({e.Message}); se sigue con el clic"); }
+            }
 
             var r = el.Current.BoundingRectangle;
             if (!r.IsEmpty && !double.IsInfinity(r.Width) && r.Width >= 1 && r.Height >= 1)
