@@ -26,7 +26,10 @@ public sealed class SurfaceMapTools
 {
     private readonly SurfaceMap _map;
     private readonly Func<SurfaceLocator.SurfaceLocation?> _where;
-    private readonly UiaSurface _uia = new() { Log = s => LogBus.Log("mapa-mcp", s) };
+    // SoloEnFoco: esta capa verifica la ubicación antes de actuar, así que si un selector no está
+    // en la ventana de delante es que no está. Sin esto, un nombre inexistente disparaba un barrido
+    // por todas las ventanas del escritorio que llegó a tardar 181 s en fallar (2026-08-03).
+    private readonly UiaSurface _uia = new() { Log = s => LogBus.Log("mapa-mcp", s), SoloEnFoco = true };
     private readonly UiaReader _lector = new();
 
     /// <summary>La app con la que se estaba trabajando. Se usa para volver a ella si algo roba el foco.</summary>
@@ -187,22 +190,30 @@ public sealed class SurfaceMapTools
         var sel = new List<string>();
         try
         {
-            // Lectura PROPIA: la selección cambia con cada clic, y el snapshot del lector puede ser
-            // de hace varias acciones —o de otra pantalla— porque solo se refresca cuando hace
-            // falta anotar puertas. Un dato de seguridad no puede venir de una foto vieja.
-            _lector.Read();
-            foreach (var el in _lector.Elements)
+            // Consulta DIRIGIDA, no una lectura del árbol entero. Saber qué hay marcado solo
+            // necesita los elementos de lista seleccionados, y UIA sabe pedirlos: una condición
+            // compuesta (ListItem AND IsSelected) los resuelve de una vez. Recorrer todo el lector
+            // —ventanas hijas, menús, cientos de elementos, un viaje entre procesos por cada uno—
+            // costaba ~3 s por llamada, y esto se consulta en cada acción (2026-08-02).
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return sel;
+            var raiz = System.Windows.Automation.AutomationElement.FromHandle(fg);
+            if (raiz == null) return sel;
+
+            var cond = new System.Windows.Automation.AndCondition(
+                new System.Windows.Automation.PropertyCondition(
+                    System.Windows.Automation.AutomationElement.ControlTypeProperty,
+                    System.Windows.Automation.ControlType.ListItem),
+                new System.Windows.Automation.PropertyCondition(
+                    System.Windows.Automation.SelectionItemPattern.IsSelectedProperty, true));
+
+            foreach (System.Windows.Automation.AutomationElement el
+                     in raiz.FindAll(System.Windows.Automation.TreeScope.Descendants, cond))
             {
                 try
                 {
-                    // Solo la LISTA de contenido. Una pestaña activa, un botón de radio marcado o
-                    // el nodo resaltado del árbol también están «seleccionados», pero no son sobre
-                    // lo que actúa Cortar: incluirlos convertía la respuesta en ruido donde había
-                    // que leer un dato de seguridad.
-                    if (!el.ControlType.Equals("listitem", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!el.Native.TryGetCurrentPattern(System.Windows.Automation.SelectionItemPattern.Pattern, out var p)
-                        || p is not System.Windows.Automation.SelectionItemPattern s) continue;
-                    if (s.Current.IsSelected && el.Label.Length > 0 && !sel.Contains(el.Label)) sel.Add(el.Label);
+                    string n = el.Current.Name?.Trim() ?? "";
+                    if (n.Length > 0 && !sel.Contains(n)) sel.Add(n);
                 }
                 catch { }
             }
@@ -210,6 +221,59 @@ public sealed class SurfaceMapTools
         catch { }
         return sel;
     }
+
+    /// <summary>
+    /// ¿Esta acción puede DESTAPAR elementos nuevos (un menú, un desplegable, un diálogo)?
+    /// Solo entonces vale la pena releer la pantalla: lo demás no cambia las puertas y releer
+    /// cuesta un recorrido completo del árbol de UI.
+    /// </summary>
+    /// <summary>
+    /// Registra SOLO los elementos de menú visibles. Consulta dirigida, no una relectura completa.
+    ///
+    /// Tras pulsar «Nuevo» lo único que interesa es lo que acaba de aparecer —«Carpeta», «Acceso
+    /// directo»…—, no las 300 puertas que la pantalla ya tenía. Releerlo todo costaba ~7 s por
+    /// acción de menú; pedirle a UIA los MenuItem de una vez lo resuelve en una fracción.
+    /// </summary>
+    private void ObservarMenus(string nodo)
+    {
+        try
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return;
+            var raiz = System.Windows.Automation.AutomationElement.FromHandle(fg);
+            if (raiz == null) return;
+
+            var puertas = new List<(string, string, string, string[])>();
+            foreach (System.Windows.Automation.AutomationElement el in raiz.FindAll(
+                System.Windows.Automation.TreeScope.Descendants,
+                new System.Windows.Automation.PropertyCondition(
+                    System.Windows.Automation.AutomationElement.ControlTypeProperty,
+                    System.Windows.Automation.ControlType.MenuItem)))
+            {
+                try
+                {
+                    var info = el.Current;
+                    if (info.IsOffscreen) continue;
+                    string n = info.Name?.Trim() ?? "";
+                    if (n.Length == 0) continue;
+                    puertas.Add((n, "MenuItem", $"uia:name={n};ct=MenuItem", Array.Empty<string>()));
+                }
+                catch { }
+            }
+            if (puertas.Count == 0) return;
+            _map.ObserveExits(nodo, puertas);
+            LogBus.Log("mapa-mcp", $"menú abierto: {puertas.Count} opción(es) anotadas");
+        }
+        catch { }
+    }
+
+    private static bool PuedeAbrirMenu(string etiqueta) =>
+        etiqueta.Contains("Nuevo", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Contains("Ordenar", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Contains("Ver", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Contains("opciones", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Contains("Más", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Contains("Compartir", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Acciones que operan sobre lo seleccionado: antes de ejecutarlas hay que saber qué es.</summary>
     private static bool OperaSobreLaSeleccion(string etiqueta) =>
@@ -235,8 +299,18 @@ public sealed class SurfaceMapTools
         string app = AppDe(esperada);
         if (app.Length > 0) { _ultimaApp = app; AsegurarFoco(app); }
 
-        string aqui = _where()?.Id ?? "";
-        if (string.Equals(aqui, esperada, StringComparison.OrdinalIgnoreCase)) return "";
+        // Se ESPERA a que la superficie se asiente antes de negarse. Justo después de una acción la
+        // pantalla pasa por estados intermedios —al crear una carpeta el foco va un instante a la
+        // ventana emergente del menú— y rechazar en el primer desacuerdo bloqueaba el paso
+        // siguiente en 11 ms, con la carpeta quedándose como «Nueva carpeta» (2026-08-03). La
+        // garantía no cambia: si al cabo de un segundo seguimos en otro sitio, no se actúa.
+        string aqui = "";
+        for (int i = 0; i < 12; i++)
+        {
+            aqui = _where()?.Id ?? "";
+            if (string.Equals(aqui, esperada, StringComparison.OrdinalIgnoreCase)) return "";
+            System.Threading.Thread.Sleep(90);
+        }
 
         LogBus.Log("mapa-mcp", $"NO SE ACTÚA: se esperaba estar en '{esperada}' y estamos en '{aqui}'");
         return $"NO actúo: creías estar en «{esperada}» pero estamos en «{aqui}». "
@@ -659,13 +733,20 @@ public sealed class SurfaceMapTools
                     : " sobre NADA seleccionado (probablemente no hizo nada)";
             }
 
-            string tras = EsperarCambio(desde, 2000);
+            // 800 ms, no 2000: una acción que NAVEGA lo hace enseguida y ahora se muestrea cada
+            // 150 ms contra una lectura fresca, así que esperar más solo penaliza a las que —como
+            // «Cortar» o «Pegar»— nunca cambian de pantalla, que son la mayoría.
+            string tras = EsperarCambio(desde, 800);
             LogBus.Log("mapa-mcp", $"✓ acción «{elegida.Info.Label}» ejecutada" + (tras.Length > 0 ? $" → {tras}" : ""));
 
             // Se relee SIEMPRE: una acción suele destapar cosas nuevas —un menú, un diálogo— en la
             // misma superficie, y sin releer el asistente actuaría sobre la pantalla de antes.
+            // Tras una acción se relee SOLO si pudo destapar algo nuevo: un menú, un diálogo. Un
+            // «Cortar» o un «Pegar» no cambian las puertas de la pantalla, y releerla entera —con
+            // su viaje UIA por cada elemento— costaba segundos por acción sin aportar nada
+            // (medido el 2026-08-02: «Carpeta» llegó a agotar 150 s de espera).
             string aqui = tras.Length > 0 ? tras : desde;
-            ObservarAqui(aqui, forzar: true);
+            if (PuedeAbrirMenu(elegida.Info.Label)) ObservarMenus(aqui);
             var nuevas = _map.ExitsFrom(aqui)
                 .Where(h => h.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase) && h.Info.Selector.Length > 0)
                 .Select(h => h.Info.Label).Distinct().Take(18).ToList();
@@ -730,6 +811,21 @@ public sealed class SurfaceMapTools
         string selector = target;
         if (selector.Length == 0)
         {
+            // Se ESPERA a que aparezca un campo editable. Una edición en línea —el nombre de una
+            // carpeta recién creada— tarda un instante en aparecer, y desde que las acciones son
+            // rápidas se llegaba aquí antes que ella: se respondía «no hay ningún campo con el
+            // foco» y la carpeta se quedaba como «Nueva carpeta» (2026-08-03).
+            for (int i = 0; i < 12; i++)
+            {
+                try
+                {
+                    var f = System.Windows.Automation.AutomationElement.FocusedElement;
+                    if (f != null && f.Current.ControlType == System.Windows.Automation.ControlType.Edit) break;
+                }
+                catch { }
+                System.Threading.Thread.Sleep(120);
+            }
+
             // El campo con el foco: es donde una persona escribiría sin pensarlo.
             try
             {
@@ -762,9 +858,9 @@ public sealed class SurfaceMapTools
     /// <summary>Espera a que la superficie DEJE de ser la de partida y devuelve la nueva, o "".</summary>
     private string EsperarCambio(string desde, int msMax)
     {
-        for (int i = 0; i < msMax / 150; i++)
+        for (int i = 0; i < msMax / 80; i++)
         {
-            System.Threading.Thread.Sleep(150);
+            System.Threading.Thread.Sleep(80);
             string ahora = _where()?.Id ?? "";
             if (ahora.Length > 0 && !string.Equals(ahora, desde, StringComparison.OrdinalIgnoreCase)
                 && !ahora.EndsWith("/ventana", StringComparison.OrdinalIgnoreCase))

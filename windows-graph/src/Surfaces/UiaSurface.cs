@@ -719,6 +719,18 @@ public sealed class UiaSurface : IUiSurface
     /// (<see cref="IsStepReady"/>): «listo» tiene que significar listo DONDE se va a clicar. El barrido
     /// sigue disponible para EJECUTAR, que es donde nació como respaldo.
     /// </param>
+    /// <summary>
+    /// Buscar SOLO en la ventana en foco, sin el barrido por todo el escritorio.
+    ///
+    /// El barrido nació como respaldo razonable, pero cuando quien llama YA sabe en qué app está
+    /// —porque verificó la ubicación antes de actuar— es puro daño: ante un selector que no existe
+    /// recorre el árbol completo de cada ventana abierta, y con un navegador con muchas pestañas
+    /// eso son MINUTOS. Medido el 2026-08-03: una sola llamada tardó 181 s en fallar, cuando la
+    /// respuesta correcta —«ese elemento no está aquí»— era instantánea. Fallar rápido es parte de
+    /// ser honesto: un fallo que tarda tres minutos parece un cuelgue.
+    /// </summary>
+    public bool SoloEnFoco { get; set; }
+
     private AutomationElement? Resolve(string selector, bool foregroundOnly = false)
     {
         var parts = UiaSelector.Parse(selector);
@@ -734,7 +746,7 @@ public sealed class UiaSurface : IUiSurface
             if (hit != null) { L($"    ✓ '{selector}' en la ventana en foco ('{WindowLabel(hit)}')"); return hit; }
         }
 
-        if (foregroundOnly) return null;
+        if (foregroundOnly || SoloEnFoco) return null;
 
         // 2) Barrido de ventanas de nivel superior (shell/otras apps), saltando a Ü. Solo por condición.
         if (!byPath && condition != null)

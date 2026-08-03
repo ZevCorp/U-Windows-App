@@ -353,6 +353,30 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 - «factura-enero.pdf» aparece en el mapa como «factura-enero». Buscar por el nombre real del
   archivo no encuentra nada. Lo que el mapa guarda es lo que la interfaz muestra.
 
+### Fallar RÁPIDO es parte de ser honesto
+- Síntoma: una sola llamada tardó 181 s en fallar. Un fallo que tarda tres minutos parece un
+  cuelgue, no un fallo.
+- Causa: si un selector no resolvía en la ventana en foco, el ejecutor barría el árbol completo de
+  TODAS las ventanas abiertas buscándolo. Con un navegador con muchas pestañas eso son minutos.
+- Regla: cuando quien llama ya verificó la ubicación (`at`), el barrido es puro daño — si el
+  elemento no está en la ventana de delante, no está. `UiaSurface.SoloEnFoco`.
+- Fecha: 2026-08-03.
+
+### Pregúntale a UIA lo que necesitas, no le pidas la pantalla entera
+- `SeleccionActual` recorría todo el lector —ventanas hijas, menús, cientos de elementos, un viaje
+  entre procesos por cada uno— para saber qué había marcado: ~3 s por llamada, en cada acción. Una
+  condición compuesta (`ListItem AND IsSelected`) lo resuelve de una vez.
+- Igual tras abrir un menú: interesan los `MenuItem` que acaban de aparecer, no las 300 puertas que
+  la pantalla ya tenía. De ~7 s a una fracción.
+- Medido: `map_where_am_i` 3.045 → 683 ms; abrir un submenú 150.030 → 2.634 ms; la tarea completa
+  de organizar 222 → 36 s. Fecha: 2026-08-03.
+
+### Una verificación que no tolera el asentamiento bloquea el paso siguiente
+- El ancla de ubicación rechazaba en 11 ms porque, justo tras crear una carpeta, la superficie pasa
+  un instante por la ventana emergente del menú. Esperar ~1 s a que se asiente mantiene intacta la
+  garantía —si sigue sin coincidir, no se actúa— y deja de romper cadenas correctas.
+- Fecha: 2026-08-03. Código: `SurfaceMapTools.ComprobarUbicacion`.
+
 ### No leas el árbol entero para responder algo que el sistema contesta al momento
 - `LeerSalidasAsync` hacía un `Read()` completo del árbol UIA solo para saber quién estaba
   delante, y luego otro para usarlo. Recorrer una pantalla llena cuesta cientos de milisegundos:
