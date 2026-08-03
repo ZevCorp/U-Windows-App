@@ -84,6 +84,37 @@ public sealed class SurfaceLocator : IDisposable
     }
 
     /// <summary>Chequeo barato en el hilo de UI: solo hwnd + título. Lo caro va a un hilo de fondo.</summary>
+    /// <summary>
+    /// La superficie AHORA, calculada en el acto en vez de esperar al siguiente tick.
+    ///
+    /// <see cref="Current"/> es un valor cacheado que se refresca cada 800 ms, y ese retraso es el
+    /// suelo de latencia de todo lo que verifica llegadas: una ruta de cinco saltos se pasaba
+    /// varios segundos esperando a que el reloj confirmara algo que ya había ocurrido. Para
+    /// navegar rápido hay que preguntar, no esperar — la misma lección que con el proceso en
+    /// primer plano (2026-08-02).
+    ///
+    /// No toca <see cref="Current"/> ni dispara <see cref="Changed"/>: es una consulta, no un
+    /// latido. Devuelve null si delante hay una ventana nuestra o no se puede resolver.
+    /// </summary>
+    public SurfaceLocation? Ahora()
+    {
+        try
+        {
+            IntPtr hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return null;
+            IntPtr raiz = GetAncestor(hwnd, GA_ROOT);
+            if (raiz != IntPtr.Zero) hwnd = raiz;
+
+            string proc = ProcessName(hwnd);
+            if (proc.Equals("U", StringComparison.OrdinalIgnoreCase)) return Current;
+
+            var sb = new StringBuilder(512);
+            GetWindowText(hwnd, sb, sb.Capacity);
+            return Compute(hwnd, proc, sb.ToString());
+        }
+        catch { return Current; }
+    }
+
     private void Probe()
     {
         IntPtr hwnd = GetForegroundWindow();

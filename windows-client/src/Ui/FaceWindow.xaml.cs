@@ -171,7 +171,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // El terreno aprendido, al alcance del cerebro: puede consultar dónde está, qué pantallas
         // conoce y recorrer rutas que nadie enseñó como workflow.
         if (_surfaceMap != null)
-            mcp.Map = new SurfaceMapTools(_surfaceMap, () => _locator?.Current);
+            // Lectura INMEDIATA de la superficie, no el valor cacheado: navegar verificando cada
+            // salto contra un dato que se refresca cada 800 ms convertía una ruta de cinco tramos
+            // en varios segundos de espera por algo que ya había pasado.
+            mcp.Map = new SurfaceMapTools(_surfaceMap, () => _locator?.Ahora() ?? _locator?.Current);
         // Sonda de desarrollo: permite invocar las MISMAS herramientas MCP desde fuera para
         // comprobar si el terreno es navegable, sin depender de que el modelo decida usarlas.
         // Solo con U_MCP_PROBE=1; en la app del usuario no arranca.

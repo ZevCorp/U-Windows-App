@@ -353,6 +353,16 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 - «factura-enero.pdf» aparece en el mapa como «factura-enero». Buscar por el nombre real del
   archivo no encuentra nada. Lo que el mapa guarda es lo que la interfaz muestra.
 
+### Para verificar rápido hay que PREGUNTAR, no esperar al siguiente latido
+- Síntoma: navegar por el grafo era correcto pero lento — una ruta de varios saltos se iba en
+  segundos.
+- Causa: la verificación de llegada consultaba `SurfaceLocator.Current`, un valor cacheado que se
+  refresca cada 800 ms. Ese retraso era el suelo de latencia de CADA salto: se esperaba a que el
+  reloj confirmara algo que ya había ocurrido. Es la misma lección que con el proceso en primer
+  plano, en otro sitio.
+- Con lectura inmediata: ~700 ms por salto, incluida la pulsación real y su verificación.
+- Fecha: 2026-08-02. Código: `SurfaceLocator.Ahora()`.
+
 ### LA UBICACIÓN ES EL ANCLA: quien actúa declara dónde cree estar, y si no coincide no se actúa
 - Síntoma: se pegaban archivos en su propia carpeta de origen, se creaban carpetas anidadas, y la
   tarea seguía «funcionando» varios pasos después del error real.
