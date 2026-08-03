@@ -217,6 +217,41 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
   la ventana de delante, no está. `SoloEnFoco` también en el crawler, no solo en la capa MCP.
 - Fecha: 2026-08-03.
 
+### Una regla ganada en una app NO se exporta a otra sin verificarla
+- Síntoma: Configuración quedó con 98 rutas correctas y aun así 6 de 7 navegaciones fallaban.
+- Causa: la regla «al bajar a una carpeta, aprende la subida al padre» venía del explorador y se
+  aplicaba en todas partes. Pero `aid=upButton` SOLO existe en el explorador, así que el grafo de
+  Configuración se llenó de caminos imposibles y las rutas se planificaban por un botón que esa
+  app no tiene. El mapa estaba bien; lo que sobraba eran aristas que nunca se podían recorrer.
+- Regla: antes de aprender una arista basada en un elemento concreto, COMPROBAR que ese elemento
+  existe en la app actual. Es exactamente para lo que sirve mapear una segunda app.
+- Fecha: 2026-08-03. Código: `SurfaceMapTools.ExisteBotonSubir`, `GraphCrawler.HayBotonSubir`.
+
+### Hay apps que IGNORAN el ratón sintético
+- Síntoma: se pulsó una sección del menú de Configuración con clic simple y con doble, ambos con
+  ok=True y el punto dentro del elemento; la página no se movió ni una vez.
+- Causa: muchas apps WinUI no reaccionan a la entrada de ratón sintetizada. Sí reaccionan a
+  `SelectionItemPattern.Select()`, que abrió la sección a la primera.
+- Regla: en lo seleccionable que NO es contenido de lista, seleccionar por patrón antes de
+  recurrir al ratón. El contenido queda fuera a propósito: ahí seleccionar no es abrir, y
+  confundirlos rompería el explorador, donde el doble clic hace falta de verdad. Se distinguen
+  por dónde viven: la navegación ocupa el tercio izquierdo de la ventana.
+- Fecha: 2026-08-03. Código: `UiaSurface.RealClick`, `EsContenidoDeLista`.
+
+### Hay diálogos OPACOS a UIA: no se pueden leer ni pulsar
+- El de cambiar el nombre del equipo (clase `Shell_Dialog`) no expone ni un botón ni un texto: una
+  búsqueda global de «Siguiente» devuelve cero. Es un límite honesto de esta tecnología.
+- Se detectan por ausencia TOTAL de elementos accionables y se reportan como «bloqueado por algo
+  que no puedo leer», que es mejor que fingir que es un lugar vacío.
+- Fecha: 2026-08-03. Código: `Interrupcion.EsOpaca`.
+
+### Un diálogo PREGUNTA; una app OFRECE IR a sitios
+- Contar botones no discrimina: la ventana de Configuración pasó de 9 botones visibles a 6 según
+  la sección y de golpe se detectaba como diálogo, parando el mapeo de la app entera.
+- Si hay menú, lista o pestañas, no es una pregunta. Y nuestras propias ventanas nunca son un
+  bloqueo: el panel del grafo tiene la forma de un diálogo y se detectaba a sí mismo.
+- Fecha: 2026-08-03. Código: `Interrupcion.Leer`.
+
 ## Reglas de apps UWP / WinUI (Configuración y similares)
 
 ### El proceso es el ANFITRIÓN, no la app

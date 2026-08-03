@@ -125,6 +125,25 @@ public sealed class GraphCrawler
         return !System.Text.RegularExpressions.Regex.IsMatch(s, @"(name|aid)=(;|$)");
     }
 
+    /// <summary>
+    /// ¿La app tiene botón «Subir un nivel»? Solo el explorador de archivos.
+    ///
+    /// Aprender la subida al padre sin comprobar que el botón EXISTE llenaba el grafo de otras
+    /// apps con caminos imposibles: Configuración acabó con rutas que pasaban por un botón que no
+    /// tiene, y 6 de 7 navegaciones fallaban sobre un mapa por lo demás correcto (2026-08-03). Una
+    /// regla ganada en una app no se exporta a las demás sin verificarla.
+    /// </summary>
+    private static bool HayBotonSubir()
+    {
+        try
+        {
+            var raiz = AutomationElement.FromHandle(GetForegroundWindow());
+            return raiz?.FindFirst(TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.AutomationIdProperty, "upButton")) != null;
+        }
+        catch { return false; }
+    }
+
     /// <summary>¿Este identificador de superficie pertenece a la app que estamos mapeando?</summary>
     private bool EsDelObjetivo(string id) =>
         id.StartsWith($"uia://{_appObjetivo}.exe/", StringComparison.OrdinalIgnoreCase);
@@ -592,7 +611,7 @@ public sealed class GraphCrawler
         // que en el mapa: dos carpetas pueden tener cada una su «readme.txt».
         if (!ct_.Equals("listitem", StringComparison.OrdinalIgnoreCase))
             _destinosSabidos.Add(selector);
-        else if (!string.Equals(desde, llegue, StringComparison.OrdinalIgnoreCase))
+        else if (!string.Equals(desde, llegue, StringComparison.OrdinalIgnoreCase) && HayBotonSubir())
         {
             // La SUBIDA al padre, que es estructural: desde una carpeta «Subir» lleva siempre a la
             // que la contiene, se haya llegado como se haya llegado. Aprenderla aquí es lo que

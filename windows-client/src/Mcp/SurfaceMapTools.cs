@@ -184,9 +184,32 @@ public sealed class SurfaceMapTools
         if (padre.Length == 0 || hijo.Length == 0
             || string.Equals(padre, hijo, StringComparison.OrdinalIgnoreCase)) return;
 
+        // ¿EXISTE el botón de subir en ESTA app? «Subir un nivel» es del explorador de archivos;
+        // Configuración no lo tiene. Aprender la arista sin comprobarlo llenó su grafo de caminos
+        // imposibles: las rutas se planificaban por un botón inexistente y 6 de 7 navegaciones
+        // fallaban sobre un mapa que por lo demás estaba bien (2026-08-03). Una regla ganada en una
+        // app no se exporta a las demás sin verificarla — es justo lo que la segunda app existe
+        // para enseñarnos.
+        if (!ExisteBotonSubir()) return;
+
         _map.LearnTraversal(hijo, padre, "uia:aid=upButton;ct=Button",
             Array.Empty<string>(), "Subir un nivel", "Button", "click");
         LogBus.Log("mapa-mcp", $"aprendida la subida: '{hijo}' → '{padre}'");
+    }
+
+    /// <summary>¿La app de delante tiene el botón «Subir un nivel»? Solo el explorador lo tiene.</summary>
+    private static bool ExisteBotonSubir()
+    {
+        try
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return false;
+            var raiz = System.Windows.Automation.AutomationElement.FromHandle(fg);
+            return raiz?.FindFirst(System.Windows.Automation.TreeScope.Descendants,
+                new System.Windows.Automation.PropertyCondition(
+                    System.Windows.Automation.AutomationElement.AutomationIdProperty, "upButton")) != null;
+        }
+        catch { return false; }
     }
 
     private List<string> SeleccionActual()
