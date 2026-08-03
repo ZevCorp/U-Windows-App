@@ -234,6 +234,36 @@ public sealed class SurfaceMapTools
     /// directo»…—, no las 300 puertas que la pantalla ya tenía. Releerlo todo costaba ~7 s por
     /// acción de menú; pedirle a UIA los MenuItem de una vez lo resuelve en una fracción.
     /// </summary>
+    /// <summary>
+    /// Espera a que HAYA menú abierto, y vuelve en cuanto lo hay. Devuelve false si no apareció.
+    ///
+    /// Es la diferencia entre esperar el efecto y esperar el reloj: un menú se abre en unos
+    /// 200 ms, así que un plazo fijo de 800 ms desperdiciaba medio segundo cada vez y aun así se
+    /// quedaba corto en un equipo cargado. Preguntar por lo que se espera sirve para las dos cosas.
+    /// </summary>
+    private bool EsperarMenu(int msMax)
+    {
+        for (int i = 0; i < msMax / 70; i++)
+        {
+            try
+            {
+                IntPtr fg = GetForegroundWindow();
+                if (fg != IntPtr.Zero)
+                {
+                    var raiz = System.Windows.Automation.AutomationElement.FromHandle(fg);
+                    var hit = raiz?.FindFirst(System.Windows.Automation.TreeScope.Descendants,
+                        new System.Windows.Automation.PropertyCondition(
+                            System.Windows.Automation.AutomationElement.ControlTypeProperty,
+                            System.Windows.Automation.ControlType.MenuItem));
+                    if (hit != null) return true;
+                }
+            }
+            catch { }
+            System.Threading.Thread.Sleep(70);
+        }
+        return false;
+    }
+
     private void ObservarMenus(string nodo)
     {
         try
@@ -305,16 +335,35 @@ public sealed class SurfaceMapTools
         // siguiente en 11 ms, con la carpeta quedándose como «Nueva carpeta» (2026-08-03). La
         // garantía no cambia: si al cabo de un segundo seguimos en otro sitio, no se actúa.
         string aqui = "";
-        for (int i = 0; i < 12; i++)
+        for (int i = 0; i < 25; i++)
         {
             aqui = _where()?.Id ?? "";
             if (string.Equals(aqui, esperada, StringComparison.OrdinalIgnoreCase)) return "";
-            System.Threading.Thread.Sleep(90);
+            // UN MENÚ ABIERTO NO ES OTRO SITIO: es una capa sobre el mismo. Mientras está
+            // desplegado, la superficie en foco es su ventana emergente, y tomarla por una
+            // ubicación distinta hacía que el ancla rechazara elegir la opción del menú que
+            // acabábamos de abrir (2026-08-03). Se acepta si pertenece a la misma app.
+            if (EsCapaSobreLaPantalla(aqui, esperada)) return "";
+            System.Threading.Thread.Sleep(45);   // el caso normal acierta a la primera; el resto, pronto
         }
 
         LogBus.Log("mapa-mcp", $"NO SE ACTÚA: se esperaba estar en '{esperada}' y estamos en '{aqui}'");
         return $"NO actúo: creías estar en «{esperada}» pero estamos en «{aqui}». "
              + "Algo salió distinto en un paso anterior; comprueba dónde estás antes de seguir.";
+    }
+
+    /// <summary>
+    /// ¿Lo que hay delante es una CAPA sobre la pantalla esperada —un menú, un desplegable— y no
+    /// otro sitio? Se exige que sea de la MISMA app: una ventana emergente de otro programa sí es
+    /// irse a otra parte, y ahí el ancla debe seguir negándose.
+    /// </summary>
+    private static bool EsCapaSobreLaPantalla(string aqui, string esperada)
+    {
+        if (aqui.Length == 0) return false;
+        if (!AppDe(aqui).Equals(AppDe(esperada), StringComparison.OrdinalIgnoreCase)) return false;
+        return aqui.Contains("ventanas-emergentes", StringComparison.OrdinalIgnoreCase)
+            || aqui.Contains("popup", StringComparison.OrdinalIgnoreCase)
+            || aqui.EndsWith("/ventana", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>El sistema y el localizador dicen los dos que estamos en esta app.</summary>
@@ -733,10 +782,13 @@ public sealed class SurfaceMapTools
                     : " sobre NADA seleccionado (probablemente no hizo nada)";
             }
 
-            // 800 ms, no 2000: una acción que NAVEGA lo hace enseguida y ahora se muestrea cada
-            // 150 ms contra una lectura fresca, así que esperar más solo penaliza a las que —como
-            // «Cortar» o «Pegar»— nunca cambian de pantalla, que son la mayoría.
-            string tras = EsperarCambio(desde, 800);
+            // Se espera EL EFECTO, no un tiempo. Un botón que abre menú se da por hecho cuando
+            // aparecen sus opciones —suele ser <300 ms— y no cuando se agota un reloj; el resto
+            // se comprueba en una ventana corta, porque una acción que navega lo hace enseguida.
+            // Antes eran 800 ms fijos por acción, casi siempre esperando a nada (2026-08-03).
+            bool abreMenu = PuedeAbrirMenu(elegida.Info.Label);
+            string tras = EsperarCambio(desde, abreMenu ? 240 : 320);
+            if (abreMenu) EsperarMenu(1200);
             LogBus.Log("mapa-mcp", $"✓ acción «{elegida.Info.Label}» ejecutada" + (tras.Length > 0 ? $" → {tras}" : ""));
 
             // Se relee SIEMPRE: una acción suele destapar cosas nuevas —un menú, un diálogo— en la
@@ -746,7 +798,7 @@ public sealed class SurfaceMapTools
             // su viaje UIA por cada elemento— costaba segundos por acción sin aportar nada
             // (medido el 2026-08-02: «Carpeta» llegó a agotar 150 s de espera).
             string aqui = tras.Length > 0 ? tras : desde;
-            if (PuedeAbrirMenu(elegida.Info.Label)) ObservarMenus(aqui);
+            if (abreMenu) ObservarMenus(aqui);
             var nuevas = _map.ExitsFrom(aqui)
                 .Where(h => h.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase) && h.Info.Selector.Length > 0)
                 .Select(h => h.Info.Label).Distinct().Take(18).ToList();
@@ -815,7 +867,7 @@ public sealed class SurfaceMapTools
             // carpeta recién creada— tarda un instante en aparecer, y desde que las acciones son
             // rápidas se llegaba aquí antes que ella: se respondía «no hay ningún campo con el
             // foco» y la carpeta se quedaba como «Nueva carpeta» (2026-08-03).
-            for (int i = 0; i < 12; i++)
+            for (int i = 0; i < 30; i++)
             {
                 try
                 {
@@ -823,7 +875,7 @@ public sealed class SurfaceMapTools
                     if (f != null && f.Current.ControlType == System.Windows.Automation.ControlType.Edit) break;
                 }
                 catch { }
-                System.Threading.Thread.Sleep(120);
+                System.Threading.Thread.Sleep(50);   // se sondea fino: se sale en cuanto aparece
             }
 
             // El campo con el foco: es donde una persona escribiría sin pensarlo.
