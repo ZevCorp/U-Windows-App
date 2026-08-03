@@ -15,6 +15,14 @@ namespace U.WindowsClient.Mcp;
 public sealed class LocalMcp
 {
     private readonly UiaReader _uia;
+
+    /// <summary>
+    /// El mapa del computador, si está disponible. Opcional a propósito: el catálogo base tiene que
+    /// seguir funcionando aunque el terreno no se haya cargado —una instalación recién puesta no ha
+    /// observado nada todavía y no por eso deja de poder abrir apps—.
+    /// </summary>
+    public SurfaceMapTools? Map { get; set; }
+
     public LocalMcp(UiaReader uia) => _uia = uia;
 
     /// <summary>Ejecuta una llamada MCP y devuelve un resultado legible para el modelo ("ok" / detalle).</summary>
@@ -22,6 +30,12 @@ public sealed class LocalMcp
     {
         string A(string k) => args.TryGetValue(k, out var v) ? v.Trim() : "";
         int I(string k, int def) => int.TryParse(A(k), out var n) ? n : def;
+
+        // El mapa del computador: devuelve TEXTO (lo que sabe, o por qué no pudo), no un booleano.
+        // Va antes que nada porque sus respuestas son informativas incluso cuando fallan, y
+        // aplastarlas a «no se pudo ejecutar» perdería justo lo que el modelo necesita para decidir.
+        if (SurfaceMapTools.IsMapTool(tool))
+            return Map?.Call(tool, args) ?? "el mapa del computador no está disponible en este cliente";
 
         // Herramienta aprendida: llega con `taps` y no es una del catálogo base. Devuelve su propio
         // detalle (qué pasos fallaron), igual que las learned tools de Android.

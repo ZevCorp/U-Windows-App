@@ -53,8 +53,7 @@ public sealed class GraphConfig
     public string PatientPolicy { get; set; } = "OperatorConfirms";
 
     private static string Path =>
-        System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "U", "graph.json");
+        System.IO.Path.Combine(UserPaths.Roaming, "U", "graph.json");
 
     public static GraphConfig Load()
     {

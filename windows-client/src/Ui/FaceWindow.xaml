@@ -150,6 +150,19 @@
                                 Click="OnOpenWorkflows" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
                                 ToolTip="Biblioteca de workflows: ejecutar contra Graph (SAP GUI / UIA) + autofill"/>
 
+                        <!-- El grafo pre-aprendido, visible: pantallas como nodos, saltos como aristas,
+                             y el nodo actual iluminado mientras navegas. Ver WorkflowMapWindow. -->
+                        <!-- El grafo TOCABLE: la ventana actual expone sus elementos como aristas;
+                             hover = iluminar el botón real, clic = pulsarlo de verdad y aprender la
+                             arista con certeza absoluta. Ver GraphExplorerWindow. -->
+                        <Button x:Name="ExplorerBtn" Content="🕸 Explorar el grafo" Height="26" Margin="0,6,0,0"
+                                Click="OnToggleExplorer" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
+                                ToolTip="Las aristas de la pantalla actual, en vivo. Hover: ilumina el elemento real. Clic: lo pulsa de verdad y aprende la ruta."/>
+
+                        <Button x:Name="MapBtn" Content="🗺 Mapa del grafo" Height="26" Margin="0,6,0,0"
+                                Click="OnToggleMap" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
+                                ToolTip="Dibuja los workflows como un grafo de pantallas. Dos workflows que pasan por la misma pantalla comparten nodo: ahí se concatenan."/>
+
                         <!-- Ejecutar un workflow directo, sin abrir la biblioteca. Dos formas de elegir el
                              workflow, alternables con el botón de la derecha: CARRUSEL (un título a la vez,
                              flechas ◀ ▶) o LISTA. El botón corre igual que "Ejecutar ahora" de la biblioteca

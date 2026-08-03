@@ -21,9 +21,7 @@ public static class PendingFinish
 {
     private sealed record Entry(string SessionId, string WorkflowId, string SavedAt);
 
-    private static string FilePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "U", "pending-finish.json");
+    private static string FilePath => Path.Combine(UserPaths.Local, "U", "pending-finish.json");
 
     public static void Save(string sessionId, string workflowId)
     {

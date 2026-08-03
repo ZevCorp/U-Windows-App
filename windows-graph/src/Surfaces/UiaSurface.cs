@@ -19,6 +19,8 @@ public sealed class UiaSurface : IUiSurface
     [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+    private const uint GA_ROOT = 2;
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
     [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
@@ -63,6 +65,20 @@ public sealed class UiaSurface : IUiSurface
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004, MOUSEEVENTF_WHEEL = 0x0800;
+
+    /// <summary>
+    /// Doble clic REAL sobre el elemento. Reutiliza <see cref="RealClick"/> dos veces para heredar
+    /// todo lo que aquel resuelve —foco de la ventana, comprobación de oclusión, movimiento suave
+    /// del cursor— en vez de duplicar esa lógica, que es donde vive el conocimiento caro.
+    /// Los 120 ms son el margen del doble clic de Windows con holgura: más rápido y el sistema
+    /// pierde el segundo, más lento y lo interpreta como dos clics sueltos.
+    /// </summary>
+    private bool RealDoubleClick(System.Windows.Automation.AutomationElement el, out string error)
+    {
+        if (!RealClick(el, out error)) return false;
+        System.Threading.Thread.Sleep(120);
+        return RealClick(el, out error);
+    }
 
     /// <summary>El cursor automatizado, frame a frame: la carita colapsada lo escucha para SEGUIRLO
     /// (se ve "quién" está haciendo los clics). Estático a propósito: hay una sola automatización viva.</summary>
@@ -352,14 +368,45 @@ public sealed class UiaSurface : IUiSurface
     }
 
     /// <summary>Los selectores de un elemento, del más estable al más frágil.</summary>
+    /// <summary>
+    /// La respuesta canónica a «¿qué es este elemento?», para quien esté FUERA de la grabación.
+    ///
+    /// Existe porque la pregunta ya tuvo dos respuestas a la vez y salió caro: el mapa base del
+    /// computador (ClickWatcher) resolvía clics con un FromPoint crudo y un selector inventado
+    /// («uia:id=X»), mientras la grabación usaba LabelOf + SelectorsFor. Resultado medido
+    /// (2026-07-29): ~48% de las acciones del terreno eran inservibles, y ninguna era ejecutable
+    /// por el player porque ni siquiera hablaban el formato de los workflows. Mismo patrón que ya
+    /// costó una jornada con dos varas para «¿estoy en esta pantalla?».
+    ///
+    /// Devuelve la MISMA tripleta que se persiste en un paso grabado: etiqueta humana, tipo de
+    /// control y selectores por identidad con alternativas (AutomationId → Name → Path). Quien
+    /// consuma esto produce aristas que el ejecutor puede recorrer tal cual.
+    /// </summary>
+    public static (string Label, string ControlType, List<string> Selectors) DescribeElement(AutomationElement el)
+    {
+        var info = el.Current;
+        string ct = ControlTypeName(info.ControlType);
+        return (LabelOf(el, info), ct, SelectorsFor(info, new List<int>(), ct));
+    }
+
     private static List<string> SelectorsFor(
         AutomationElement.AutomationElementInformation info, List<int> path, string ct)
     {
         var list = new List<string>();
-        if (!string.IsNullOrWhiteSpace(info.AutomationId))
-            list.Add(UiaSelector.ByAutomationId(info.AutomationId.Trim(), ct));
-        if (!string.IsNullOrWhiteSpace(info.Name))
-            list.Add(UiaSelector.ByName(info.Name.Trim(), ct));
+        string aid = (info.AutomationId ?? "").Trim();
+        string name = (info.Name ?? "").Trim();
+
+        // Un AutomationId NUMÉRICO no es una identidad: es una POSICIÓN. En la lista del
+        // explorador de Windows cada fila lleva su índice («0», «1», «2»…), así que
+        // «uia:aid=1;ct=ListItem» no señala un archivo concreto sino «el segundo de lo que haya
+        // ahora» — apunta a otra cosa en cuanto se ordena distinto o se entra en otra carpeta, y
+        // colisiona entre pantallas. El nombre, con todos sus defectos, sí describe la cosa.
+        // Un aid así se conserva como respaldo, nunca como selector principal (2026-08-01).
+        bool aidEsPosicional = aid.Length > 0 && aid.All(char.IsDigit);
+
+        if (aid.Length > 0 && !aidEsPosicional) list.Add(UiaSelector.ByAutomationId(aid, ct));
+        if (name.Length > 0) list.Add(UiaSelector.ByName(name, ct));
+        if (aidEsPosicional) list.Add(UiaSelector.ByAutomationId(aid, ct));
         list.Add(UiaSelector.ByPath(path, ct));
         return list;
     }
@@ -536,6 +583,11 @@ public sealed class UiaSurface : IUiSurface
                 "input" => SetValue(el, step.Value ?? "", out error),
                 "select" => Select(el, step.SelectedValue ?? step.Value ?? "", out error),
                 "click" => RealClick(el, out error),
+                // Doble clic: en una LISTA, un clic selecciona y solo el doble abre. Sin esto el
+                // recorrido se quedaba en el panel de navegación —donde un clic sí navega— y jamás
+                // entraba en una subcarpeta: la superficie no cambiaba, así que se concluía «acción
+                // local, nada que aprender». No era falta de criterio, era falta de esta acción.
+                "doubleclick" => RealDoubleClick(el, out error),
                 _ => Fail($"actionType no soportado en UIA: {step.ActionType}", out error),
             };
             L($"  resultado acción: ok={ok}{(ok ? "" : $" · motivo='{error}'")}");
@@ -695,8 +747,39 @@ public sealed class UiaSurface : IUiSurface
         if (root == null) return null;
         if (byPath) return ByPath(root, raw!);
         if (condition == null) return null;
-        try { return root.FindFirst(TreeScope.Descendants, condition); }
+        try { return MejorCandidato(root.FindAll(TreeScope.Descendants, condition)); }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// De todos los elementos que casan con el selector, el que SE PUEDE USAR: visible y con
+    /// geometría. Coger el primero era el error.
+    ///
+    /// Un nombre no es único. En el panel del explorador hay varios «Escritorio» —el de OneDrive,
+    /// el anclado— y algunos cuelgan de ramas plegadas, así que existen en el árbol de UIA con
+    /// rect vacío. `FindFirst` devolvía uno de esos: sin caja no hay dónde pulsar, se caía al
+    /// respaldo `Invoke`, que sobre un TreeItem devuelve true SIN NAVEGAR, y la ruta se rompía
+    /// reportando éxito en el tramo (2026-08-02). Preferir lo visible convierte un selector
+    /// ambiguo en uno utilizable sin inventarse nada.
+    /// </summary>
+    private static AutomationElement? MejorCandidato(AutomationElementCollection? hits)
+    {
+        if (hits == null || hits.Count == 0) return null;
+        AutomationElement? primero = null;
+        foreach (AutomationElement el in hits)
+        {
+            primero ??= el;
+            try
+            {
+                var info = el.Current;
+                if (info.IsOffscreen) continue;
+                var r = info.BoundingRectangle;
+                if (r.IsEmpty || r.Width < 1 || r.Height < 1) continue;
+                return el;                      // visible y con caja: este sirve
+            }
+            catch { }
+        }
+        return primero;                          // ninguno utilizable: el de siempre, y que falle honestamente
     }
 
     private static AutomationElement? ByPath(AutomationElement root, string raw)
@@ -769,6 +852,16 @@ public sealed class UiaSurface : IUiSurface
     private static bool Click(AutomationElement el, out string error)
     {
         error = "";
+
+        // SELECCIONAR va antes que INVOCAR en lo que es seleccionable. Un TreeItem o un ListItem
+        // expone Invoke por herencia, pero invocarlo devuelve true sin navegar: lo que mueve un
+        // árbol o una lista es la SELECCIÓN. Con Invoke primero, un tramo de ruta se daba por
+        // bueno sin haber cambiado de pantalla (2026-08-02).
+        if (el.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var sip) && sip is SelectionItemPattern selPrim)
+        {
+            selPrim.Select();
+            return true;
+        }
         if (el.TryGetCurrentPattern(InvokePattern.Pattern, out var ip) && ip is InvokePattern inv)
         {
             inv.Invoke();
@@ -794,11 +887,51 @@ public sealed class UiaSurface : IUiSurface
     /// taskbar, Chrome—. Si el elemento no expone una caja usable, cae al Invoke de UIA (invisible pero
     /// mejor que nada). Espejo de cómo se graba: por posición en pantalla.
     /// </summary>
+    /// <summary>
+    /// Desplaza la lista hasta que el elemento esté visible, antes de intentar pulsarlo.
+    ///
+    /// Un elemento que existe en el árbol de UIA no está necesariamente en pantalla: en una lista
+    /// con scroll —el panel lateral del explorador, sin ir más lejos— los de abajo tienen
+    /// coordenadas fuera del área visible. Pulsar ahí no acierta en el elemento: acierta en lo que
+    /// haya en ese punto, o en nada, y el recorrido se detiene sin saber por qué (2026-08-01).
+    ///
+    /// <c>ScrollItemPattern</c> es la forma que UIA da para esto y es la correcta: se le pide al
+    /// control que traiga SU elemento a la vista, en lugar de calcular cuánto habría que rodar la
+    /// rueda. Coherente con la regla del proyecto: se actúa por identidad, no por geometría.
+    /// </summary>
+    private void TraerALaVista(AutomationElement el)
+    {
+        try
+        {
+            if (el.TryGetCurrentPattern(ScrollItemPattern.Pattern, out var p) && p is ScrollItemPattern si)
+            {
+                si.ScrollIntoView();
+                Thread.Sleep(120);   // el desplazamiento se anima; sin esto se lee la caja de antes
+                L("    traído a la vista con ScrollIntoView");
+            }
+        }
+        catch (Exception e) { L($"    ScrollIntoView no pudo: {e.Message}"); }
+    }
+
+    /// <summary>¿El punto cae dentro del área visible de la ventana? Sin ventana, se da por bueno.</summary>
+    private static bool PuntoDentroDe(IntPtr win, double x, double y)
+    {
+        if (win == IntPtr.Zero) return true;
+        try
+        {
+            if (!GetWindowRect(win, out RECT w)) return true;
+            return x >= w.Left && x <= w.Right && y >= w.Top && y <= w.Bottom;
+        }
+        catch { return true; }
+    }
+
     private bool RealClick(AutomationElement el, out string error)
     {
         error = "";
         try
         {
+            TraerALaVista(el);
+
             var r = el.Current.BoundingRectangle;
             if (!r.IsEmpty && !double.IsInfinity(r.Width) && r.Width >= 1 && r.Height >= 1)
             {
@@ -806,8 +939,41 @@ public sealed class UiaSurface : IUiSurface
                 if (win != IntPtr.Zero) { try { SetForegroundWindow(win); } catch { } }
                 Thread.Sleep(40); // dar tiempo a que la ventana suba antes de comprobar visibilidad
 
-                double cx = r.Left + r.Width / 2, cy = r.Top + r.Height / 2;
-                L($"    RealClick: rect={r} centro=({(int)cx},{(int)cy}) ventana='{WindowLabel(el)}'{(IsDesktopWindow(win) ? " (ESCRITORIO)" : "")}");
+                // La caja se relee DESPUÉS de desplazar: si el elemento se movió al traerlo a la
+                // vista, la de antes apunta a donde ya no está.
+                r = el.Current.BoundingRectangle;
+                if (r.IsEmpty || r.Width < 1 || r.Height < 1)
+                {
+                    L("    RealClick: tras desplazar sigue sin caja usable → Invoke por UIA");
+                    return Click(el, out error);
+                }
+
+                // DÓNDE se puede pulsar lo dice UIA, no nuestra aritmética. GetClickablePoint
+                // devuelve un punto realmente alcanzable —contando recorte, scroll y solapes— o
+                // lanza si el elemento no está a la vista. Calcularlo a mano, comparando el centro
+                // de la caja contra GetWindowRect del contenedor, rechazaba clics BUENOS: un
+                // TabItem en (549,233), perfectamente visible, se descartaba y caía a Invoke, que
+                // sobre una pestaña no navega. Eso dejó el recorrido clavado en profundidad 1
+                // (2026-08-01). La comprobación era correcta en intención y falsa en implementación.
+                double cx, cy;
+                try
+                {
+                    var punto = el.GetClickablePoint();
+                    cx = punto.X; cy = punto.Y;
+                }
+                catch (NoClickablePointException)
+                {
+                    L("    RealClick: UIA dice que no hay punto pulsable (tapado o fuera de vista) → Select/Invoke");
+                    if (Click(el, out error)) return true;
+                    L($"    identidad tampoco pudo ({error}); no se pulsa a ciegas");
+                    return false;
+                }
+                catch
+                {
+                    // Sin soporte para el punto pulsable: el centro de la caja, como siempre.
+                    cx = r.Left + r.Width / 2; cy = r.Top + r.Height / 2;
+                }
+                L($"    RealClick: rect={r} punto=({(int)cx},{(int)cy}) ventana='{WindowLabel(el)}'{(IsDesktopWindow(win) ? " (ESCRITORIO)" : "")}");
                 L($"    → clic físico en ({(int)cx},{(int)cy})");
                 SmoothMove((int)cx, (int)cy);
                 Thread.Sleep(20);
@@ -845,7 +1011,31 @@ public sealed class UiaSurface : IUiSurface
     }
 
     /// <summary>La ventana (hwnd) que contiene al elemento, subiendo hasta el primer ancestro con handle.</summary>
+    /// <summary>
+    /// La ventana de NIVEL SUPERIOR del elemento — la que tiene barra de título y representa la
+    /// pantalla.
+    ///
+    /// El primer ancestro con handle NO sirve para esto: dentro del panel lateral del explorador es
+    /// una ventana hija (SysTreeView32, DirectUIHWND). Dar el foco a esa hija hacía que
+    /// <c>GetForegroundWindow</c> devolviera la hija, cuyo título es el nombre del panel; el
+    /// localizador lo vetaba por no identificar nada y la superficie se quedaba clavada en
+    /// «uia://explorer.exe/ventana» durante todo el mapeo. Como los destinos sin identidad se
+    /// descartan, NINGUNA transición se confirmaba y el grafo no crecía (2026-08-01). Un fallo de
+    /// una línea que parecía tres problemas distintos.
+    /// </summary>
     private static IntPtr TopLevelWindow(AutomationElement el)
+    {
+        IntPtr h = ContenedorDe(el);
+        if (h == IntPtr.Zero) return IntPtr.Zero;
+        try { IntPtr raiz = GetAncestor(h, GA_ROOT); return raiz != IntPtr.Zero ? raiz : h; }
+        catch { return h; }
+    }
+
+    /// <summary>
+    /// La ventana que CONTIENE al elemento, sea hija o no. Para recortar: lo que decide si un punto
+    /// está a la vista es el panel donde vive, no la ventana entera.
+    /// </summary>
+    private static IntPtr ContenedorDe(AutomationElement el)
     {
         try
         {

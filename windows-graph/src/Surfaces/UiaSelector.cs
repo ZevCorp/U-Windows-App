@@ -71,9 +71,40 @@ public static class UiaSelector
         if (parts.TryGetValue("name", out string? name) && !string.IsNullOrWhiteSpace(name))
             conditions.Add(new PropertyCondition(AutomationElement.NameProperty, name));
 
+        // El TIPO también filtra, y no era un adorno. Sin esto, «Documentos» resolvía al primer
+        // elemento con ese nombre —el Pane de contenido de 1578×571— en vez del TreeItem del panel,
+        // y el clic caía en el centro de la lista de archivos (medido el 2026-07-31). El selector
+        // SIEMPRE llevaba el ct; lo que faltaba era usarlo aquí.
+        if (parts.TryGetValue("ct", out string? ct) && !string.IsNullOrWhiteSpace(ct))
+        {
+            var tipo = ControlTypePorNombre(ct);
+            if (tipo != null)
+                conditions.Add(new PropertyCondition(AutomationElement.ControlTypeProperty, tipo));
+        }
+
         if (conditions.Count == 0) return null;
         return conditions.Count == 1 ? conditions[0] : new AndCondition(conditions.ToArray());
     }
+
+    /// <summary>El nombre de tipo que emite ControlTypeName (sin el «ControlType.») → el ControlType.</summary>
+    private static ControlType? ControlTypePorNombre(string n) => n.Trim().ToLowerInvariant() switch
+    {
+        "button" => ControlType.Button,
+        "menuitem" => ControlType.MenuItem,
+        "listitem" => ControlType.ListItem,
+        "treeitem" => ControlType.TreeItem,
+        "tabitem" => ControlType.TabItem,
+        "hyperlink" => ControlType.Hyperlink,
+        "edit" => ControlType.Edit,
+        "checkbox" => ControlType.CheckBox,
+        "radiobutton" => ControlType.RadioButton,
+        "combobox" => ControlType.ComboBox,
+        "splitbutton" => ControlType.SplitButton,
+        "text" => ControlType.Text,
+        "pane" => ControlType.Pane,
+        "image" => ControlType.Image,
+        _ => null, // desconocido: no se filtra por tipo, solo por nombre (comportamiento anterior)
+    };
 
     // Los separadores del formato tienen que sobrevivir dentro de un Name arbitrario.
     private static string Escape(string v) =>

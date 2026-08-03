@@ -52,6 +52,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private UiInspector? _inspector;
     private SurfaceLocator? _locator;
     private LocatorBadge? _badge;
+    private WorkflowMapWindow? _map;
+    // El mapa base del computador (la capa gris): se alimenta SIEMPRE del caudal del locator,
+    // esté o no abierta la visualización — el terreno se acumula mientras el usuario vive su día.
+    private SurfaceMap? _surfaceMap;
+    private ClickWatcher? _clickWatcher;
     private WorkflowMcpRunner? _workflowRunner;
 
     // Selector de workflow directo en el panel Backend: lista cargada de Graph + un GraphClient propio
@@ -94,6 +99,20 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         UpdateBackendStatus();
         UpdateVideoLlmToggle();
         SetMuted(_config.Muted); // si lo silenciaron en una sesión anterior, sigue mudo
+
+        // Puente clínico: si ya se emparejó en otra sesión, se retoma solo. Sin esto había que
+        // teclear el código en CADA arranque de Ü, que es la fricción que sobra en una consulta.
+        if (_config.ClinicalCode.Length == 8)
+        {
+            _clinical.Pair(_config.ClinicalCode);
+            if (_clinical.Active)
+            {
+                ClinicalCodeBox.Text = _clinical.Code;
+                ClinicalPairBtn.Content = "Soltar";
+                _clinicalStep = -1;
+                SetClinicalStep(1, "Esperando a que guardes la nota en el portal.");
+            }
+        }
         Closed += (_, __) =>
         {
             _inspector?.Dispose(); // suelta el hook global de mouse al cerrar
@@ -106,7 +125,33 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _badge = new LocatorBadge();
         _badge.Show();
         _locator = new SurfaceLocator();
-        _locator.Changed += loc => Dispatcher.Invoke(() => _badge?.SetText(loc.Id));
+        _surfaceMap = SurfaceMap.Load();
+        // El vigilante de clics: sin él las aristas del terreno solo dicen que dos pantallas
+        // conectan; con él dicen CÓMO pasar de una a otra, que es lo que permite navegar sin
+        // haber grabado un workflow. Siempre activo, porque el terreno se aprende viviendo.
+        _clickWatcher = new ClickWatcher();
+        _clickWatcher.Start();
+        _surfaceMap.Clicks = _clickWatcher;
+
+        // Modo prueba: con U_AUTO_EXPLORER=1 el explorador del grafo se abre solo al arrancar, para
+        // que una instancia recién compilada quede lista para lanzar un mapeo sin tocar la carita.
+        // Lo pone dev-paralelo.ps1; en la app del usuario esa variable no existe y no cambia nada.
+        if (Environment.GetEnvironmentVariable("U_AUTO_EXPLORER") == "1")
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { OnToggleExplorer(this, new RoutedEventArgs()); } catch { }
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        Closed += (_, __) =>
+        {
+            _surfaceMap?.Save();
+            _clickWatcher?.Dispose(); // un hook huérfano ralentiza el ratón de TODA la máquina
+        };
+        _locator.Changed += loc => Dispatcher.Invoke(() =>
+        {
+            _badge?.SetText(loc.Id);
+            _surfaceMap?.Observe(loc.Id); // el terreno se aprende navegando, sin enseñar nada
+            _map?.SetCurrent(loc.Id);     // y el mapa ilumina el nodo donde estás parado
+        });
         _locator.Start();
 
         // Puente clínico: se sondea cada 3 s, no en cada cambio de pantalla. El médico
@@ -124,6 +169,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         clinicalTimer.Start();
 
         var mcp = new LocalMcp(_uia);
+        // El terreno aprendido, al alcance del cerebro: puede consultar dónde está, qué pantallas
+        // conoce y recorrer rutas que nadie enseñó como workflow.
+        if (_surfaceMap != null)
+            mcp.Map = new SurfaceMapTools(_surfaceMap, () => _locator?.Current);
+        // Sonda de desarrollo: permite invocar las MISMAS herramientas MCP desde fuera para
+        // comprobar si el terreno es navegable, sin depender de que el modelo decida usarlas.
+        // Solo con U_MCP_PROBE=1; en la app del usuario no arranca.
+        McpDevProbe.StartIfEnabled(mcp);
         // El backend es Graph: la credencial (X-API-Key) sale del MISMO GraphConfig que usa la
         // ventana de workflows — una sola fuente de key para toda la app.
         _backend = new BackendClient(_config, _graphConfig);
@@ -800,6 +853,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             ClinicalCodeBox.Text = "";
             ClinicalPairBtn.Content = "Emparejar";
             ClinicalStatus.Text = "Sin emparejar.";
+            _config.ClinicalCode = "";   // soltar es soltar: no debe resucitar al reiniciar
+            _config.Save();
             return;
         }
 
@@ -809,6 +864,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             ClinicalStatus.Text = "El código son 8 caracteres.";
             return;
         }
+
+        _config.ClinicalCode = _clinical.Code;   // se teclea una vez por instalación, no por arranque
+        _config.Save();
 
         _offeredRev = "";
         _focusedRev = "";
@@ -857,6 +915,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         if (_clinical.LastRev == _offeredRev) return;   // ya se ofreció esta versión
 
+        string donde = loc?.Id ?? "SAP";
+
         // ── PASO 3: ¿esta pantalla tiene los campos? ────────────────────────────
         IReadOnlyList<DetectedField> fields;
         try { fields = await Task.Run(() => _clinicalSap.ReadFields()); }
@@ -880,9 +940,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         try
         {
             SetClinicalStep(4, $"Esperando tu aprobación para {escribibles} dato(s).");
-            LogBus.Log("clinico", $"ofreciendo {escribibles} dato(s) en '{loc!.Id}'");
+            LogBus.Log("clinico", $"ofreciendo {escribibles} dato(s) en '{donde}'");
 
-            var preview = new FillPreviewWindow(bindings, loc.Id);
+            var preview = new FillPreviewWindow(bindings, donde);
             bool ok = await preview.AskAsync();
             if (!ok)
             {
@@ -1009,6 +1069,65 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         LogBus.Log("exportar", $"ejecutor apagado: {why}");
     }
 
+    /// <summary>
+    /// Muestra u oculta el mapa del grafo. Se reconstruye al abrir —no en cada tick— porque los
+    /// workflows cambian al grabar, no al navegar; y la iluminación del nodo actual sí es en vivo,
+    /// por el mismo evento del locator que alimenta el badge.
+    /// </summary>
+    private async void OnToggleMap(object sender, RoutedEventArgs e)
+    {
+        if (_map != null)
+        {
+            _map.Close();
+            _map = null;
+            MapBtn.Content = "🗺 Mapa del grafo";
+            return;
+        }
+
+        if (!_graphConfig.IsConfigured)
+        {
+            SetStatus("Configura Graph (URL + API key) para ver el mapa.");
+            return;
+        }
+
+        _map = new WorkflowMapWindow(_surfaceMap);
+        _map.Show();
+        MapBtn.Content = "🗺 Mapa: cargando…";
+        _directGraph ??= new GraphClient(_graphConfig);
+        try
+        {
+            await _map.LoadAsync(_directGraph, CancellationToken.None);
+            MapBtn.Content = "🗺 Mapa: visible — clic para ocultar";
+            _map.SetCurrent(_locator?.Current?.Id ?? "");
+        }
+        catch (Exception ex)
+        {
+            LogBus.Log("mapa", $"no se pudo construir el grafo: {ex.Message}");
+            SetStatus($"El mapa no cargó: {ex.Message}");
+            _map.Close();
+            _map = null;
+            MapBtn.Content = "🗺 Mapa del grafo";
+        }
+    }
+
+    private GraphExplorerWindow? _explorer;
+
+    private void OnToggleExplorer(object sender, RoutedEventArgs e)
+    {
+        if (_explorer != null)
+        {
+            _explorer.Close();
+            _explorer = null;
+            ExplorerBtn.Content = "🕸 Explorar el grafo";
+            return;
+        }
+        if (_surfaceMap == null) { SetStatus("El mapa del terreno no está cargado."); return; }
+        _explorer = new GraphExplorerWindow(_surfaceMap, () => _locator?.Current);
+        _explorer.Closed += (_, __) => { _explorer = null; Dispatcher.Invoke(() => ExplorerBtn.Content = "🕸 Explorar el grafo"); };
+        _explorer.Show();
+        ExplorerBtn.Content = "🕸 Explorador: visible — clic para cerrar";
+    }
+
     private void OnToggleStepMode(object sender, RoutedEventArgs e)
     {
         _stepMode = !_stepMode;
@@ -1124,6 +1243,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             SetStatus(result.Ok
                 ? $"«{wf.Title}» terminó: {result.Tally}."
                 : $"«{wf.Title}» se detuvo: {result.Error}");
+
+            // Una ejecución nueva es una oportunidad nueva. El puente clínico se calla cuando ya
+            // ofreció ESTA versión de la nota, y está bien para no repetir el ofrecimiento en la
+            // misma pantalla — pero un workflow que acaba de navegar deja delante una pantalla
+            // NUEVA y vacía, donde esos mismos datos sí hacen falta. Sin esto, correr el workflow
+            // por segunda vez con la misma nota no ofrece nada y parece que el puente se rompió
+            // (visto el 2026-07-28: 7/7 ejecutado y ni un ofrecimiento después).
+            if (result.Ok && _clinical.Active)
+            {
+                _offeredRev = "";
+                _clinicalStep = -1;
+            }
 
             if (result.Ok && result.AlignedConsciously)
                 _ = _directGraph.PrependAlignmentStepAsync(wf.Id, CancellationToken.None); // aprende a alcanzar su superficie
@@ -1277,3 +1408,4 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         CollapsedFace.Thinking = on;
     });
 }
+

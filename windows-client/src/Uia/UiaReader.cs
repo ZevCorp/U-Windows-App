@@ -22,10 +22,19 @@ public sealed class UiaReader
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     [DllImport("user32.dll")] private static extern int GetSystemMetrics(int nIndex);
+    [DllImport("user32.dll")] private static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc cb, IntPtr lparam);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder s, int max);
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lparam);
     private const int SM_CXSCREEN = 0, SM_CYSCREEN = 1;
 
     /// <summary>Un elemento accionable detectado en la pantalla visible.</summary>
-    public sealed record UiElement(string Label, string ControlType, System.Windows.Rect Bounds, AutomationElement Native);
+    /// <summary>
+    /// Un accionable de la pantalla. <paramref name="ItemType"/> es lo que la app dice que ES el
+    /// elemento —«Carpeta de archivos», «Imagen PNG»—, y es la diferencia entre entrar en una
+    /// carpeta y abrir una foto en otra aplicación.
+    /// </summary>
+    public sealed record UiElement(string Label, string ControlType, System.Windows.Rect Bounds,
+        AutomationElement Native, string ItemType = "");
 
     /// <summary>Snapshot de accionables del último <see cref="Read"/>. Sirve para taps por etiqueta.</summary>
     public IReadOnlyList<UiElement> Elements { get; private set; } = Array.Empty<UiElement>();
@@ -73,6 +82,15 @@ public sealed class UiaReader
         {
             try { Collect(root, elements, 0); } catch { /* UIA puede lanzar en árboles inestables */ }
         }
+
+        // Contenido en VENTANAS HIJAS. El explorador de Windows 11 (y otras apps shell) mete su
+        // lista de archivos en un HWND hijo —DirectUIHWND / SHELLDLL_DefView— cuyo árbol UIA NO
+        // cuelga del de la ventana principal: FromHandle(principal) + descenso da 1 solo nodo.
+        // Verificado leyendo el árbol en vivo (2026-07-31): los ListItem de los archivos solo
+        // aparecen al hacer FromHandle sobre ese hijo. Sin esto el recorrido nunca veía la lista y
+        // se quedaba paseando el panel izquierdo. Los duplicados por etiqueta se filtran abajo.
+        try { CollectFromChildren(hwnd, elements); } catch { }
+
         Elements = elements;
 
         state.UiContext = BuildContext(proc, title, elements);
@@ -102,6 +120,47 @@ public sealed class UiaReader
     private static bool Match(string a, string b) =>
         string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Clases de ventana hija que contienen elementos accionables que el árbol de la
+    /// ventana principal no expone: la vista de contenido del shell y su host DirectUI.</summary>
+    private static readonly HashSet<string> ChildContentClasses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "DirectUIHWND", "SHELLDLL_DefView", "SysListView32", "SysTreeView32",
+        // WinUI 3: la barra de herramientas del explorador de Windows 11 (Atrás, Adelante, Subir,
+        // barra de direcciones, pestañas) vive en estas dos y en ninguna otra. Sin ellas el sistema
+        // no veía NADA de la barra —ni el botón de volver, que es justo lo que necesita para
+        // retroceder por identidad en vez de con un gesto a ciegas (verificado el 2026-07-31).
+        "Microsoft.UI.Content.DesktopChildSiteBridge", "InputSiteWindowClass",
+    };
+
+    /// <summary>
+    /// Recorre las ventanas HIJAS que albergan contenido accionable fuera del árbol principal.
+    /// Solo las clases conocidas —no todo HWND hijo— para no leer cromo ni pagar UIA sobre nada.
+    /// </summary>
+    private void CollectFromChildren(IntPtr parent, List<UiElement> acc)
+    {
+        var hijos = new List<IntPtr>();
+        EnumChildWindows(parent, (h, _) =>
+        {
+            var sb = new System.Text.StringBuilder(128);
+            GetClassName(h, sb, sb.Capacity);
+            if (ChildContentClasses.Contains(sb.ToString())) hijos.Add(h);
+            return true;
+        }, IntPtr.Zero);
+
+        foreach (var h in hijos)
+        {
+            var el = SafeFromHandle(h);
+            if (el != null) { try { Collect(el, acc, 0); } catch { } }
+        }
+    }
+
+    /// <summary>Lo que la app declara que es el elemento. Vacío si no lo dice.</summary>
+    private static string ItemTypeDe(AutomationElement el)
+    {
+        try { return (el.GetCurrentPropertyValue(AutomationElement.ItemTypeProperty) as string ?? "").Trim(); }
+        catch { return ""; }
+    }
+
     private static void Collect(AutomationElement node, List<UiElement> acc, int depth)
     {
         if (depth > 40 || acc.Count > 400) return;
@@ -116,8 +175,12 @@ public sealed class UiaReader
                 if (!offscreen && Actionable.Contains(ct))
                 {
                     string label = LabelOf(child, info);
-                    if (!string.IsNullOrWhiteSpace(label))
-                        acc.Add(new UiElement(label, ControlTypeName(ct), info.BoundingRectangle, child));
+                    // Sin geometría no hay dónde pulsar: un rect vacío acababa en un clic a (0,0)
+                    // que el sistema daba por bueno (visto el 2026-07-31 en un TreeItem 'Escritorio'
+                    // con rect=Empty). Aceptado no es ejecutado, y aquí ni siquiera es accionable.
+                    var r = info.BoundingRectangle;
+                    if (!string.IsNullOrWhiteSpace(label) && !r.IsEmpty && r.Width >= 1 && r.Height >= 1)
+                        acc.Add(new UiElement(label, ControlTypeName(ct), r, child, ItemTypeDe(child)));
                 }
             }
             catch { /* nodo muerto */ }

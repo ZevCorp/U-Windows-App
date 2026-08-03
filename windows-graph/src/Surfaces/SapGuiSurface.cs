@@ -580,12 +580,13 @@ public sealed class SapGuiSurface : IUiSurface
             if (area == null) return fields;
 
             var found = new List<dynamic>();
-            Walk(area, found, 0);
+            var labels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Walk(area, found, 0, labels);
 
             int order = 1;
             foreach (dynamic node in found)
             {
-                var field = Describe(node, order);
+                var field = Describe(node, order, labels);
                 if (field != null) { fields.Add(field); order++; }
             }
         }
@@ -1158,7 +1159,22 @@ public sealed class SapGuiSurface : IUiSurface
         return "";
     }
 
-    private static void Walk(dynamic node, List<dynamic> acc, int depth)
+    /// <summary>
+    /// Recorre el área de usuario juntando los controles interactivos y, de paso, ANOTANDO LAS
+    /// ETIQUETAS.
+    ///
+    /// En un dynpro el texto que el humano lee no está en el campo: vive en un GuiLabel aparte, y la
+    /// relación entre los dos es por IDENTIDAD, no por posición — el Name del label es el del campo
+    /// con un «*» delante. Verificado contra el SAP real (2026-07-28, pantalla NWP1/SAPLY000):
+    ///
+    ///   GuiTextField  Name = Y0000000-ZTXTTALLA   Tooltip = (vacío)   Text = «1.70»
+    ///   GuiLabel      Name = *Y0000000-ZTXTTALLA                      Text = «Talla»
+    ///
+    /// Se anotan en ESTE recorrido y no preguntando por el padre de cada campo a posteriori: ya
+    /// pasamos por todos los nodos, y en esta API lo caro son las llamadas COM. Hacerlo después
+    /// habría multiplicado por los hermanos de cada campo.
+    /// </summary>
+    private static void Walk(dynamic node, List<dynamic> acc, int depth, Dictionary<string, string>? labels = null)
     {
         if (depth > 20 || acc.Count > 300) return;
         try
@@ -1172,17 +1188,305 @@ public sealed class SapGuiSurface : IUiSurface
 
                 try
                 {
-                    if (Interactive.Contains(Str(child.Type))) acc.Add(child);
+                    string ctype = Str(child.Type);
+                    if (Interactive.Contains(ctype))
+                    {
+                        acc.Add(child);
+                    }
+                    else if (string.Equals(ctype, "GuiShell", StringComparison.OrdinalIgnoreCase)
+                             && string.Equals(Str(child.SubType), "TextEdit", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Las cajas de texto largo —«Motivo de Consulta», «Conducta»— NO son
+                        // GuiTextField: son shells, y por eso el autofill clínico ni las veía. Se
+                        // escriben igual que un campo normal (Apply hace node.Text = valor).
+                        acc.Add(child);
+                    }
+                    else if (labels != null && string.Equals(ctype, "GuiLabel", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string ln = Str(child.Name).Trim();
+                        string txt = Str(child.Text).Trim();
+                        if (ln.Length > 0 && txt.Length > 0)
+                        {
+                            // DOS claves por etiqueta. La de siempre —«*NOMBRE» → NOMBRE— resuelve
+                            // los campos normales. La otra es el nombre tal cual, que es como la
+                            // encuentran las cajas de texto largo: su etiqueta se llama
+                            // «B__ZTXTMTVCN» y su contenedor «cntlCT__ZTXTMTVCN», mismo sufijo.
+                            labels[ln] = txt;
+                            if (ln.Length > 1 && ln[0] == '*') labels[ln.Substring(1)] = txt;
+                        }
+                    }
                 }
                 catch { }
 
-                try { Walk(child, acc, depth + 1); } catch { }
+                try { Walk(child, acc, depth + 1, labels); } catch { }
             }
         }
         catch { /* el componente no tiene hijos */ }
     }
 
-    private static DetectedField? Describe(dynamic node, int order)
+    // ── Filas de ALV (GridView) ──────────────────────────────────────────────
+    //
+    // Un ALV no expone sus filas como componentes: no tienen Id y un recorrido del árbol no las ve.
+    // Se accionan por índice contra el shell, pero el índice NO se persiste: se resuelve en cada
+    // ejecución a partir de los pares columna=valor que lleva el selector.
+
+    /// <summary>
+    /// Último estado visto por grid, para distinguir «el operador eligió» de «así vino la pantalla».
+    ///
+    /// Hacen falta LAS DOS señales. Mirar solo la fila actual no sirve: en una lista de trabajo con
+    /// UN paciente, <c>CurrentCellRow</c> vale 0 antes y después del clic —comprobado el
+    /// 2026-07-28, y por eso la primera versión de esto no publicó nada—. Lo que cambia ahí es la
+    /// selección, que pasa de vacía a «0».
+    /// </summary>
+    private readonly Dictionary<string, int> _gridRow = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _gridSel = new(StringComparer.Ordinal);
+
+    /// <summary>La primera fila de un <c>SelectedRows</c> («0», «0,2», «1-3»), o -1 si no hay ninguna.</summary>
+    private static int FirstRowOf(string selectedRows)
+    {
+        foreach (char c in selectedRows ?? "")
+        {
+            if (char.IsDigit(c)) break;
+            if (c != ' ') return -1;
+        }
+        var digits = new string((selectedRows ?? "").TakeWhile(char.IsDigit).ToArray());
+        return int.TryParse(digits, out int r) ? r : -1;
+    }
+
+    private static List<KeyValuePair<string, string>> ParseRowKey(string rowKey)
+    {
+        var pairs = new List<KeyValuePair<string, string>>();
+        foreach (string part in (rowKey ?? "").Split('|'))
+        {
+            int eq = part.IndexOf('=');
+            if (eq <= 0) continue;
+            string col = part.Substring(0, eq).Trim();
+            if (col.Length > 0) pairs.Add(new KeyValuePair<string, string>(col, part.Substring(eq + 1).Trim()));
+        }
+        return pairs;
+    }
+
+    private static string GridCell(dynamic grid, int row, string column)
+    {
+        try { return Str(grid.GetCellValue(row, column)).Trim(); }
+        catch { return ""; }
+    }
+
+    /// <summary>
+    /// Deja SELECCIONADA la fila que casa con los pares del selector.
+    ///
+    /// Gana la que casa con MÁS pares, y solo si es única: dos filas empatadas significan que la
+    /// clave no distingue, y elegir entre ellas es elegir un paciente al azar. Si no casa ninguna,
+    /// esa entrada ya no está en la lista y el paso FALLA — mejor un workflow detenido que uno que
+    /// abre la historia clínica de otra persona.
+    /// </summary>
+    private bool SelectGridRow(dynamic grid, string rowKey, PlanStep step, out string error)
+    {
+        error = "";
+        var pairs = ParseRowKey(rowKey);
+        if (pairs.Count == 0) { error = $"el paso «{step.Label}» no trae con qué identificar la fila"; return false; }
+
+        int rows;
+        try { rows = (int)grid.RowCount; }
+        catch (Exception e) { error = $"el ALV no dijo cuántas filas tiene: {e.Message}"; return false; }
+        if (rows <= 0) { error = "la lista está vacía: no hay ninguna fila que seleccionar"; return false; }
+
+        int best = -1, bestScore = 0, tied = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            int score = pairs.Count(p =>
+                string.Equals(GridCell(grid, r, p.Key), p.Value, StringComparison.OrdinalIgnoreCase));
+            if (score == 0) continue;
+            if (score > bestScore) { bestScore = score; best = r; tied = 1; }
+            else if (score == bestScore) tied++;
+        }
+
+        if (best < 0)
+        {
+            error = $"ninguna de las {rows} fila(s) casa con «{step.Label}»: esa entrada ya no está en la lista";
+            return false;
+        }
+        if (tied > 1)
+        {
+            error = $"{tied} filas casan igual de bien con «{step.Label}»: la clave no distingue y no se elige al azar";
+            return false;
+        }
+
+        try
+        {
+            grid.GetType().InvokeMember("SelectedRows", BindingFlags.SetProperty, null, grid,
+                new object[] { best.ToString() });
+        }
+        catch (Exception e) { error = $"el ALV no aceptó SelectedRows=«{best}»: {e.Message}"; return false; }
+
+        // La celda actual además de la selección: el clic humano pone las dos, y no sabemos cuál de
+        // las dos mira cada botón de la barra. Si falla, la selección ya está hecha.
+        try
+        {
+            grid.GetType().InvokeMember("SetCurrentCell", BindingFlags.InvokeMethod, null, grid,
+                new object[] { best, pairs[0].Key });
+        }
+        catch { }
+
+        Diagnostic?.Invoke(this,
+            $"fila «{step.Label}» seleccionada: fila {best} de {rows} ({bestScore}/{pairs.Count} campo(s) casados)");
+        return true;
+    }
+
+    /// <summary>
+    /// Identidad de una fila: hasta cuatro pares columna=valor con contenido de verdad.
+    ///
+    /// Se descartan los iconos (<c>@KN\Q…@</c>, que son códigos de pintado y no dicen quién es), los
+    /// marcadores de refresco de este ALV (<c>*** Aktualizar ***</c>), que salen iguales en toda
+    /// fila, y cualquier valor con <c>|</c> o <c>=</c>, que rompería el fragmento.
+    /// </summary>
+    private static string RowKeyAt(dynamic grid, int row, out string label)
+    {
+        var parts = new List<string>();
+        var shown = new List<string>();
+        try
+        {
+            dynamic cols = grid.ColumnOrder;
+            int n = (int)cols.Count;
+            for (int i = 0; i < n && parts.Count < 4; i++)
+            {
+                string col;
+                try { col = Str(cols.ElementAt(i)).Trim(); } catch { continue; }
+                if (col.Length == 0) continue;
+
+                string v = GridCell(grid, row, col);
+                if (v.Length == 0 || v[0] == '@') continue;
+                if (v.StartsWith("***", StringComparison.Ordinal)) continue;
+                if (v.Contains('|') || v.Contains('=')) continue;
+
+                parts.Add(col + "=" + v);
+                shown.Add(v);
+            }
+        }
+        catch { }
+
+        // Para el rótulo, lo que un humano reconoce: el primer valor con letras («GIRALDO») antes que
+        // una fecha o una hora, que no distinguen nada a la vista.
+        label = shown.FirstOrDefault(v => v.Any(char.IsLetter)) ?? (shown.Count > 0 ? shown[0] : "");
+        return string.Join("|", parts);
+    }
+
+    /// <summary>Los ALV (GridView) del área de usuario de la pantalla activa.</summary>
+    private static List<dynamic> GridViews(dynamic session)
+    {
+        var found = new List<dynamic>();
+        try
+        {
+            dynamic area = session.FindById("wnd[0]/usr", false);
+            if (area != null) CollectGrids(area, found, 0);
+        }
+        catch { }
+        return found;
+    }
+
+    private static void CollectGrids(dynamic node, List<dynamic> acc, int depth)
+    {
+        if (depth > 20 || acc.Count > 20) return;
+        try
+        {
+            dynamic children = node.Children;
+            int count = (int)children.Count;
+            for (int i = 0; i < count; i++)
+            {
+                dynamic child;
+                try { child = children.ElementAt(i); } catch { continue; }
+                try
+                {
+                    if (string.Equals(Str(child.Type), "GuiShell", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(Str(child.SubType), "GridView", StringComparison.OrdinalIgnoreCase))
+                        acc.Add(child);
+                }
+                catch { }
+                try { CollectGrids(child, acc, depth + 1); } catch { }
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Publica la SELECCIÓN DE FILA de un ALV mientras se enseña.
+    ///
+    /// Va por temporizador y no por el hook de ratón porque seleccionar una fila es cliente puro: no
+    /// viaja al servidor, así que el StartRequest donde se publican los clics no llega nunca. Es el
+    /// mismo motivo por el que las filas de árbol tienen su propio publicador — y la razón de que
+    /// hasta hoy el clic del operador sobre el paciente se descartara SIEMPRE, con el mensaje «el
+    /// clic cayó en shell, no en un botón».
+    ///
+    /// La PRIMERA lectura de cada grid no se publica: es la pantalla presentándose con su fila por
+    /// defecto, no algo que el operador hiciera. Publicarla metería un paso fantasma en cada
+    /// grabación, que es exactamente el fallo que ya costó una jornada.
+    /// </summary>
+    private void PublishGridSelections(dynamic session)
+    {
+        if (StepObserved == null) return;
+
+        foreach (dynamic grid in GridViews(session))
+        {
+            string gid;
+            try { gid = Str(grid.Id); } catch { continue; }
+            if (gid.Length == 0) continue;
+
+            int cur;
+            try { cur = (int)grid.CurrentCellRow; } catch { continue; }
+
+            string sel = "";
+            try
+            {
+                sel = Str(grid.GetType().InvokeMember(
+                    "SelectedRows", BindingFlags.GetProperty, null, grid, null)).Trim();
+            }
+            catch { }
+
+            bool primera = !_gridRow.ContainsKey(gid);
+            int prevCur = primera ? int.MinValue : _gridRow[gid];
+            string prevSel = _gridSel.TryGetValue(gid, out string? ps) ? ps : "";
+            _gridRow[gid] = cur;
+            _gridSel[gid] = sel;
+            if (primera) continue;
+
+            // Se publica al SELECCIONAR, no al deseleccionar: quitar la marca no es una acción que
+            // haya que reproducir, y grabarla dejaría un paso que al ejecutarse no hace nada.
+            bool eligio = sel.Length > 0 && sel != prevSel;
+            bool movio = cur != prevCur;
+            if (!eligio && !movio) continue;
+
+            int fila = sel.Length > 0 ? FirstRowOf(sel) : cur;
+            if (fila < 0) fila = cur;
+            if (fila < 0) continue;
+
+            string key = RowKeyAt(grid, fila, out string label);
+            if (key.Length == 0) continue;
+
+            string node = SafeNodeUrl();
+            if (node.Length == 0) node = _preNodeUrl;
+
+            StepObserved?.Invoke(this, new ObservedStep(
+                ActionType: "click",
+                Selector: SapSelector.ByRow(gid, key),
+                Label: label.Length > 0 ? label : $"fila {fila}",
+                ControlType: "row",
+                Value: null,
+                AllowedOptions: null,
+                SelectedValue: null,
+                SelectedLabel: null,
+                SurfaceSection: null,
+                AlternativeTargets: Array.Empty<string>())
+            {
+                Surface = node,
+                Readiness = node == _preNodeUrl ? _preReadiness : CachedReadinessMeta(node),
+                Fingerprint = _preFingerprint,
+            });
+
+            Diagnostic?.Invoke(this, $"observado: fila de ALV «{label}» ({key}) en {gid} desde '{node}'");
+        }
+    }
+
+    private static DetectedField? Describe(dynamic node, int order, Dictionary<string, string>? labels = null)
     {
         try
         {
@@ -1190,7 +1494,7 @@ public sealed class SapGuiSurface : IUiSurface
             string id = Str(node.Id);
             if (id.Length == 0) return null;
 
-            string label = LabelOf(node);
+            string label = LabelOf(node, labels);
             if (label.Length == 0) return null;
 
             return new DetectedField
@@ -1208,13 +1512,65 @@ public sealed class SapGuiSurface : IUiSurface
     }
 
     /// <summary>
-    /// Cómo se llama el campo para un humano. El Tooltip de SAP suele ser el texto del label de al
-    /// lado (que es un GuiLabel aparte y no está enlazado al control), así que es la mejor pista
-    /// disponible sin adivinar por coordenadas.
+    /// Cómo se llama el campo para un humano.
+    ///
+    /// Orden: Tooltip → GuiLabel hermano → Name → Text.
+    ///
+    /// El Tooltip sigue primero porque cuando existe SUELE ser el texto del label de al lado, y no
+    /// cambiarle la precedencia deja intacto todo lo que hoy funciona en otras pantallas. Lo nuevo
+    /// es el segundo escalón, y es el que importa: en el dynpro clínico el Tooltip viene VACÍO, así
+    /// que hasta ahora se caía a <c>Name</c> y el «nombre humano» acababa siendo
+    /// «Y0000000-ZTXTTALLA». Con eso, emparejar por etiqueta —que es TODO lo que hace
+    /// ConceptBinder— era imposible: ninguno de los ocho signos vitales casaba, nunca.
+    ///
+    /// El mapa lo construye <see cref="Walk"/> por identidad («*NOMBRE» → NOMBRE), no por
+    /// cercanía en pantalla: dos campos contiguos con la etiqueta encima se resolverían al revés
+    /// por coordenadas, y aquí se está decidiendo dónde va una cifra clínica.
+    ///
+    /// Name y Text siguen de último como red: un campo sin label hermano al menos se identifica.
     /// </summary>
-    private static string LabelOf(dynamic node)
+    private static string LabelOf(dynamic node, Dictionary<string, string>? labels = null)
     {
-        foreach (string prop in new[] { "Tooltip", "Name", "Text" })
+        try
+        {
+            string tip = Str(node.GetType().InvokeMember("Tooltip", BindingFlags.GetProperty, null, node, null));
+            if (tip.Trim().Length > 0) return tip.Trim();
+        }
+        catch { }
+
+        if (labels != null && labels.Count > 0)
+        {
+            try
+            {
+                string name = Str(node.GetType().InvokeMember("Name", BindingFlags.GetProperty, null, node, null));
+                if (name.Length > 0 && labels.TryGetValue(name, out string? human) && human.Length > 0)
+                    return human;
+            }
+            catch { }
+
+            // Caja de texto largo: su Name es «shell» y no identifica nada. La identidad vive en el
+            // CONTENEDOR —«cntlCT__ZTXTMTVCN»— y la etiqueta de al lado se llama «B__ZTXTMTVCN».
+            // Mismo sufijo, distinta letra inicial: emparejan por identidad, no por cercanía en
+            // pantalla. Verificado contra el SAP real (NWP1/SAPLY000, 2026-07-28).
+            try
+            {
+                string id = Str(node.GetType().InvokeMember("Id", BindingFlags.GetProperty, null, node, null));
+                int c = id.IndexOf("/cntlCT__", StringComparison.OrdinalIgnoreCase);
+                if (c >= 0)
+                {
+                    int ini = c + "/cntlCT__".Length;
+                    int fin = id.IndexOf('/', ini);
+                    string sufijo = fin > ini ? id.Substring(ini, fin - ini) : id.Substring(ini);
+                    if (sufijo.Length > 0
+                        && labels.TryGetValue("B__" + sufijo, out string? rotulo)
+                        && rotulo.Length > 0)
+                        return rotulo;
+                }
+            }
+            catch { }
+        }
+
+        foreach (string prop in new[] { "Name", "Text" })
         {
             try
             {
@@ -1240,7 +1596,16 @@ public sealed class SapGuiSurface : IUiSurface
             if (type.Equals("GuiPasswordField", StringComparison.OrdinalIgnoreCase))
                 return null; // jamás se lee ni se graba una contraseña
 
-            return Str(node.Text);
+            string txt = Str(node.Text);
+
+            // El marcador de una caja de texto vacía de SAP («Introduzca texto aquí…») es texto para
+            // la API, pero para un humano ese campo está VACÍO. Sin esto el puente clínico lo daría
+            // por ocupado y se negaría a escribir el motivo de consulta, que es justo lo contrario
+            // de lo que la regla «solo campos vacíos» quiere proteger.
+            if (txt.TrimStart().StartsWith("Introduzca texto", StringComparison.OrdinalIgnoreCase))
+                return "";
+
+            return txt;
         }
         catch { return null; }
     }
@@ -1332,6 +1697,20 @@ public sealed class SapGuiSurface : IUiSurface
                 }
                 error = $"el shell {id} no aceptó PressToolbarButton(«{tbButton}») para «{step.Label}»";
                 return false;
+            }
+
+            // Una fila de ALV tampoco es un componente. Y no basta con «pulsar luego el botón»: el
+            // botón de la barra actúa sobre la fila SELECCIONADA, y sin selección se acepta sin
+            // hacer nada. Este paso es el que pone esa selección.
+            string? rowKey = SapSelector.RowKeyOf(selector);
+            if (rowKey != null)
+            {
+                try { return SelectGridRow(node, rowKey, step, out error); }
+                catch (Exception e)
+                {
+                    error = $"SAP rechazó seleccionar la fila «{step.Label}» ({id}): {e.Message}";
+                    return false;
+                }
             }
 
             // Una fila de árbol no es un componente: el id resuelve al ÁRBOL y la fila viaja aparte.
@@ -1815,6 +2194,7 @@ public sealed class SapGuiSurface : IUiSurface
                 // mantiene la sombra congelada en el origen hasta que la navegación termina.
                 RefreshPreflight(session);
                 PublishTreeSelections();
+                PublishGridSelections(session);
             };
             _treeTimer.Start();
 

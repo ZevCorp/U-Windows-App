@@ -50,6 +50,7 @@ public sealed class FocusRunningStrategy : INavStrategy
 {
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
     private const int SW_RESTORE = 9;
 
     public string Name => "enfocar-app-viva";
@@ -60,7 +61,9 @@ public sealed class FocusRunningStrategy : INavStrategy
     {
         Process? open = Process.GetProcessesByName(t.Process).FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
         if (open == null) return Task.FromResult(false); // no está viva → que la lance otra ruta
-        ShowWindow(open.MainWindowHandle, SW_RESTORE); // por si estaba minimizada
+        // «Por si estaba minimizada» era la intención, pero se hacía SIEMPRE: sobre una ventana
+        // maximizada, SW_RESTORE la encoge. Ahora se comprueba antes (2026-08-01).
+        if (IsIconic(open.MainWindowHandle)) ShowWindow(open.MainWindowHandle, SW_RESTORE);
         return Task.FromResult(SetForegroundWindow(open.MainWindowHandle));
     }
 }
