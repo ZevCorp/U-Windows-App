@@ -353,6 +353,43 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 - «factura-enero.pdf» aparece en el mapa como «factura-enero». Buscar por el nombre real del
   archivo no encuentra nada. Lo que el mapa guarda es lo que la interfaz muestra.
 
+### LA UBICACIÓN ES EL ANCLA: quien actúa declara dónde cree estar, y si no coincide no se actúa
+- Síntoma: se pegaban archivos en su propia carpeta de origen, se creaban carpetas anidadas, y la
+  tarea seguía «funcionando» varios pasos después del error real.
+- Causa: un paso que falla deja el recorrido en otra pantalla, y las acciones siguientes se
+  ejecutan igual de bien… sobre el sitio equivocado. La garantía estaba en quien LLAMA (que puede
+  olvidarla) en vez de en el sistema.
+- Regla: `map_take` y `map_type` aceptan `at` con la superficie esperada. Si la real no coincide,
+  se rechaza la acción y se dice dónde estamos. El fallo aparece donde se produce.
+- Fecha: 2026-08-02. Código: `SurfaceMapTools.ComprobarUbicacion`.
+
+### Un selector cuyo destino depende de la pantalla NUNCA se generaliza
+- Síntoma: el recorrido subía en escalera —de la carpeta de pruebas a Documentos, a felip, a
+  Usuarios, a «Disco local (C:)»— creyendo obedecer al mapa.
+- Causa: `aid=upButton` es el MISMO selector en todas las pantallas pero lleva a un sitio distinto
+  en cada una (al padre de donde estés). La deducción «mismo botón → mismo destino» es cierta para
+  el cromo global y falsa para estos. Aplicarla convirtió el mapa en una escalera.
+- Regla: `upButton`/`backButton`/`forwardButton` se aprenden por pareja concreta y se excluyen de
+  la deducción por selector y de la detección de cromo ubicuo.
+- Fecha: 2026-08-02. Código: `SurfaceMap.EsRelativo`.
+
+### «Atrás» es estado EFÍMERO de la sesión, no dato del mapa (idea del usuario)
+- No se puede guardar como arista (depende de cómo se llegó) pero SÍ se sabe a dónde lleva ahora:
+  al sitio del que se vino. Un historial vivo permite usarlo cuando el destino coincide y
+  descartarlo cuando no, en vez de elegir entre aprenderlo mal o no tenerlo.
+- Al volver al sitio anterior se DESAPILA en vez de apilar; si no, las idas y vueltas harían que
+  «Atrás» prometiera un bucle.
+- Fecha: 2026-08-02. Código: `SurfaceMapTools._historial`, `DestinoDeAtras`.
+
+### Un doble clic es DOS pulsaciones seguidas, no dos clics completos
+- Síntoma: «pulsé la carpeta pero no se llegó», con ok=True; de ahí salieron los pegados en la
+  carpeta equivocada.
+- Causa: repetir toda la rutina de clic —enfocar, desplazar a la vista, releer la caja, mover el
+  cursor— mete ~300 ms entre pulsaciones y Windows deja de verlo como doble clic: lo interpreta
+  como dos clics sueltos, que solo SELECCIONAN. El primero hace el trabajo caro; el segundo va
+  inmediatamente después, en el mismo punto y sin recolocar nada.
+- Fecha: 2026-08-02. Código: `UiaSurface.RealDoubleClick`.
+
 ### «Subir» es estructural; «Atrás» es histórico
 - `upButton` desde una carpeta lleva SIEMPRE a la que la contiene, se haya llegado como se haya
   llegado: es una propiedad del sitio y por tanto una arista legítima. `backButton` depende del

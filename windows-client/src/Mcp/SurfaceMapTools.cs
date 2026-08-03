@@ -33,6 +33,32 @@ public sealed class SurfaceMapTools
     private string _ultimaApp = "";
     private List<string> _seleccionPrevia = new();
 
+    /// <summary>
+    /// A dónde llevaría «Atrás» AHORA MISMO. Estado efímero de la sesión, nunca una arista.
+    ///
+    /// El botón Atrás no describe una propiedad de la pantalla —depende de cómo se llegó— así que
+    /// guardarlo en el mapa lo hace mentir en cuanto se llega por otro camino. Pero SÍ se sabe a
+    /// dónde lleva en esta sesión: al sitio del que se vino. Recordarlo permite usarlo cuando
+    /// conviene y descartarlo cuando el destino es otro, en vez de tener que elegir entre
+    /// aprenderlo mal o no tenerlo (idea del usuario, 2026-08-02).
+    /// </summary>
+    private readonly Stack<string> _historial = new();
+
+    /// <summary>Anota que se pasó de <paramref name="de"/> a <paramref name="a"/>.</summary>
+    private void Anotar(string de, string a)
+    {
+        if (de.Length == 0 || a.Length == 0 || string.Equals(de, a, StringComparison.OrdinalIgnoreCase)) return;
+        // Si volvimos justo al sitio anterior, se DESAPILA en vez de apilar: si no, el historial
+        // crecería con idas y vueltas y «Atrás» acabaría prometiendo un bucle.
+        if (_historial.Count > 0 && string.Equals(_historial.Peek(), a, StringComparison.OrdinalIgnoreCase))
+            _historial.Pop();
+        else
+            _historial.Push(de);
+    }
+
+    /// <summary>A dónde lleva «Atrás» en esta sesión, o "" si no se sabe.</summary>
+    private string DestinoDeAtras() => _historial.Count > 0 ? _historial.Peek() : "";
+
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsIconic(IntPtr h);
@@ -192,6 +218,31 @@ public sealed class SurfaceMapTools
         || etiqueta.Contains("Eliminar", StringComparison.OrdinalIgnoreCase)
         || etiqueta.Contains("Cambiar nombre", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// ¿Estoy donde quien me pide la acción cree que estoy? Devuelve "" si sí (o si no lo dijo),
+    /// y el motivo del desacuerdo si no.
+    ///
+    /// Es el ancla de la ejecución. Sin ella, un paso que falla deja el recorrido en otra pantalla
+    /// y los siguientes se ejecutan perfectamente… en el sitio equivocado: así se pegaron archivos
+    /// dentro de su propia carpeta de origen y se crearon carpetas anidadas (2026-08-02). Se
+    /// recupera el foco primero, porque «no estoy donde creía» y «algo me tapó» son cosas distintas
+    /// y solo la segunda tiene arreglo automático.
+    /// </summary>
+    private string ComprobarUbicacion(string esperada)
+    {
+        if (esperada.Length == 0) return "";   // no lo declaró: se actúa como antes
+
+        string app = AppDe(esperada);
+        if (app.Length > 0) { _ultimaApp = app; AsegurarFoco(app); }
+
+        string aqui = _where()?.Id ?? "";
+        if (string.Equals(aqui, esperada, StringComparison.OrdinalIgnoreCase)) return "";
+
+        LogBus.Log("mapa-mcp", $"NO SE ACTÚA: se esperaba estar en '{esperada}' y estamos en '{aqui}'");
+        return $"NO actúo: creías estar en «{esperada}» pero estamos en «{aqui}». "
+             + "Algo salió distinto en un paso anterior; comprueba dónde estás antes de seguir.";
+    }
+
     /// <summary>El sistema y el localizador dicen los dos que estamos en esta app.</summary>
     private bool Coinciden(string app) =>
         AppEnFrente().Equals(app, StringComparison.OrdinalIgnoreCase)
@@ -244,8 +295,8 @@ public sealed class SurfaceMapTools
             "map_places" => Places(A("app")),
             "map_routes_from" => Routes(A("surface")),
             "map_go_to" => GoTo(A("surface")),
-            "map_take" => Take(A("exit"), A("action")),
-            "map_type" => Type(A("text"), A("target")),
+            "map_take" => Take(A("exit"), A("action"), A("at")),
+            "map_type" => Type(A("text"), A("target"), A("at")),
             _ => $"herramienta de mapa no soportada: {tool}",
         };
 
@@ -264,7 +315,8 @@ public sealed class SurfaceMapTools
         var sel = SeleccionActual();
         return $"Estás en «{loc.Id}». Desde aquí el mapa conoce {salidas.Count} salida(s), "
              + $"{recorribles} de ellas recorribles."
-             + (sel.Count > 0 ? $" Seleccionado ahora mismo: {string.Join(", ", sel.Select(s => $"«{s}»"))}." : "");
+             + (sel.Count > 0 ? $" Seleccionado ahora mismo: {string.Join(", ", sel.Select(s => $"«{s}»"))}." : "")
+             + (DestinoDeAtras().Length > 0 ? $" «Atrás» llevaría a «{DestinoDeAtras()}»." : "");
     }
 
     /// <summary>
@@ -413,6 +465,26 @@ public sealed class SurfaceMapTools
         var actual = _where();
         if (actual == null) return "no se pudo determinar dónde estamos ahora mismo";
 
+        // ¿El destino es justo de donde venimos? Entonces «Atrás» es el camino más corto y seguro,
+        // y lo sabemos con certeza porque lo recordamos de ESTA sesión. Si el destino es otro, no
+        // se toca: pulsar Atrás «a ver si suena» es como se acabó subiendo hasta Disco local (C:).
+        if (string.Equals(DestinoDeAtras(), destino, StringComparison.OrdinalIgnoreCase))
+        {
+            var atras = new PlanStep
+            {
+                StepOrder = 1, ActionType = "click",
+                Selector = "uia:aid=backButton;ct=Button", Label = "Atrás",
+            };
+            if (_uia.Execute(atras, out _) && Llego(destino, 4000))
+            {
+                Anotar(actual.Id, destino);
+                ObservarAqui(destino);
+                LogBus.Log("mapa-mcp", $"vuelta por «Atrás» (historial de sesión) → {destino}");
+                return $"volví a «{destino}» con «Atrás» (era de donde venía)";
+            }
+            LogBus.Log("mapa-mcp", "«Atrás» no llevó a donde el historial decía; se sigue por el mapa");
+        }
+
         var ruta = _map.Route(actual.Id, destino);
 
         // Sin ruta conocida, queda el ATAJO: un elemento presente en TODAS las pantallas —el panel
@@ -460,6 +532,7 @@ public sealed class SurfaceMapTools
 
             LogBus.Log("mapa-mcp", $"✓ tramo {i + 1}/{ruta.Count}: «{h.Info.Label}» → {h.To}");
         }
+        Anotar(actual.Id, destino);
         ObservarAqui(destino);   // llegar es mirar alrededor
         return $"llegué a «{destino}» en {ruta.Count} paso(s)";
     }
@@ -484,8 +557,19 @@ public sealed class SurfaceMapTools
     /// abre en otra aplicación. Sin esto, una tarea de organizar archivos era imposible por la
     /// interfaz: todo intento de tocar un archivo lo abría (2026-08-02). Vacío = la del mapa.
     /// </param>
-    private string Take(string salida, string accionPedida = "")
+    /// <param name="dondeCreoEstar">
+    /// La superficie donde quien pide la acción CREE estar. Si no coincide con la real, no se
+    /// actúa. Es el ancla de toda la ejecución: un paso que falla en silencio deja el recorrido en
+    /// otra pantalla, y las acciones siguientes se ejecutan igual de bien… sobre el sitio
+    /// equivocado. Así se pegaron archivos en la carpeta de origen y se crearon carpetas anidadas
+    /// (2026-08-02). Comprobar la ubicación ANTES convierte un encadenamiento optimista en uno
+    /// verificado, y el fallo aparece donde se produce en vez de tres pasos después.
+    /// </param>
+    private string Take(string salida, string accionPedida = "", string dondeCreoEstar = "")
     {
+        string desalineado = ComprobarUbicacion(dondeCreoEstar);
+        if (desalineado.Length > 0) return desalineado;
+
         if (salida.Length == 0) return "falta `exit`: el nombre de la salida a tomar (el que aparece en map_routes_from)";
 
         // Si algo se llevó el foco entre dos pasos de una tarea, se vuelve a la app de antes: el
@@ -604,6 +688,7 @@ public sealed class SurfaceMapTools
 
             _map.LearnTraversal(desde, llegada, elegida.Info.Selector, elegida.Info.Alternatives,
                 elegida.Info.Label, elegida.Info.ControlType, elegida.Info.ActionType);
+            Anotar(desde, llegada);
             AprenderSubida(desde, llegada, elegida.Info.ControlType);
             ObservarAqui(llegada);
             LogBus.Log("mapa-mcp", $"✓ puerta «{elegida.Info.Label}» descubierta → {llegada}");
@@ -617,6 +702,7 @@ public sealed class SurfaceMapTools
         // Llegar es mirar alrededor: si no, el asistente se planta en una pantalla nueva y no sabe
         // qué puede hacer allí. Se pegó un archivo en una carpeta recién abierta y la respuesta
         // fue «aquí no hay ninguna salida que se llame Pegar», con la barra a la vista (2026-08-02).
+        Anotar(desde, elegida.To);
         AprenderSubida(desde, elegida.To, elegida.Info.ControlType);
         ObservarAqui(elegida.To);
         LogBus.Log("mapa-mcp", $"✓ salida «{elegida.Info.Label}» → {elegida.To}");
@@ -632,9 +718,11 @@ public sealed class SurfaceMapTools
     /// distribución del teclado ni de que ninguna tecla se quede hundida— y solo si no lo admite
     /// se recurre a teclear, con Enter al final para confirmar la edición en línea.
     /// </summary>
-    private string Type(string texto, string target)
+    private string Type(string texto, string target, string dondeCreoEstar = "")
     {
         if (texto.Length == 0) return "falta `text`: qué hay que escribir";
+        string desalineado = ComprobarUbicacion(dondeCreoEstar);
+        if (desalineado.Length > 0) return desalineado;
 
         if (_ultimaApp.Length > 0 && !AppEnFrente().Equals(_ultimaApp, StringComparison.OrdinalIgnoreCase))
             AsegurarFoco(_ultimaApp);

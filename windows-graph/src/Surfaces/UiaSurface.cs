@@ -75,9 +75,20 @@ public sealed class UiaSurface : IUiSurface
     /// </summary>
     private bool RealDoubleClick(System.Windows.Automation.AutomationElement el, out string error)
     {
+        // El PRIMER clic hace todo el trabajo caro —enfocar, desplazar a la vista, releer la caja,
+        // mover el cursor—; el segundo va inmediatamente después, en el mismo punto y sin nada de
+        // eso. Repetir RealClick entero metía ~300 ms entre pulsación y pulsación (ScrollIntoView
+        // duerme 120, el enfoque 40, el movimiento suave más) y Windows dejaba de verlo como un
+        // doble clic: lo interpretaba como dos clics sueltos, que solo SELECCIONAN. El síntoma era
+        // desconcertante —«pulsé Facturas pero no se llegó», con ok=True— y de ahí salieron los
+        // pegados en la carpeta equivocada (2026-08-02).
         if (!RealClick(el, out error)) return false;
-        System.Threading.Thread.Sleep(120);
-        return RealClick(el, out error);
+
+        System.Threading.Thread.Sleep(60);
+        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
+        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
+        L("    → segundo clic del doble (mismo punto, sin recolocar)");
+        return true;
     }
 
     /// <summary>El cursor automatizado, frame a frame: la carita colapsada lo escucha para SEGUIRLO

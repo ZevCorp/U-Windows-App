@@ -374,6 +374,7 @@ public sealed class SurfaceMap
         // AutomationId de una fila es su ÍNDICE, así que «uia:aid=1;ct=ListItem» existe en todas
         // las carpetas, la ubicuidad lo daba por marco de la app y sus subcarpetas no se
         // exploraban nunca (2026-08-01).
+        if (EsRelativo(selector)) return false;   // está en todas partes pero NO lleva al mismo sitio
         string ct = controlType.Length > 0 ? controlType : TipoDelSelector(selector);
         return !EsContenido(ct) && Ubicuidad(selector) >= 3;
     }
@@ -407,9 +408,25 @@ public sealed class SurfaceMap
     private static bool EsContenido(string controlType) =>
         controlType.Equals("listitem", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Selectores cuyo destino es RELATIVO a la pantalla desde la que se pulsan.
+    ///
+    /// «Subir un nivel» tiene el mismo selector en todas partes (aid=upButton) pero lleva a un
+    /// sitio distinto en cada una: al padre de donde estés. La deducción por selector —«el mismo
+    /// botón lleva al mismo destino»— es cierta para el cromo global y FALSA para estos, y
+    /// aplicarla los convirtió en una escalera: el recorrido subía de la carpeta de pruebas a
+    /// Documentos, luego a felip, a Usuarios y a Disco local (C:), creyendo obedecer al mapa
+    /// (2026-08-02). Se aprenden por pareja concreta (de aquí a su padre) y NUNCA se generalizan.
+    /// </summary>
+    private static bool EsRelativo(string selector) =>
+        selector.Contains("upButton", StringComparison.OrdinalIgnoreCase)
+        || selector.Contains("backButton", StringComparison.OrdinalIgnoreCase)
+        || selector.Contains("forwardButton", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>A dónde lleva este selector, si ya se recorrió desde cualquier pantalla.</summary>
     private string DestinoConocidoDe(string selector)
     {
+        if (EsRelativo(selector)) return "";   // su destino depende de dónde estés: no se deduce
         foreach (var (_, to, info) in Edges())
             if (!EsPuerta(to) && to.Length > 0 && info.Explored
                 && string.Equals(info.Selector, selector, StringComparison.Ordinal))
@@ -424,7 +441,7 @@ public sealed class SurfaceMap
     /// </summary>
     private void ResolverPuertasIguales(string selector, string destino, string controlType)
     {
-        if (EsContenido(controlType) || selector.Length == 0) return;
+        if (EsContenido(controlType) || selector.Length == 0 || EsRelativo(selector)) return;
 
         var promover = _edges
             .Where(kv => kv.Key.EndsWith("\n" + DestinoPuerta(selector), StringComparison.Ordinal))
