@@ -55,6 +55,9 @@ public sealed class GraphExplorerWindow : Window
 
     /// <summary>La tira de niveles del borde derecho: una app por nivel. Ver <see cref="DibujarNiveles"/>.</summary>
     private StackPanel _niveles = null!;
+
+    /// <summary>Se enciende en ámbar mientras la capa acepta el ratón (Ctrl+Shift).</summary>
+    private Border _marco = null!;
     private readonly System.Windows.Threading.DispatcherTimer _refresh;
     private string _signature = "";   // para no redibujar (y matar el hover) si nada cambió
     private bool _busy;               // recorriendo una arista: el refresco espera
@@ -121,21 +124,6 @@ public sealed class GraphExplorerWindow : Window
         };
         _graphBtn.Click += (_, __) => SetGraphView(!_graphView);
 
-        var titulo = new TextBlock
-        {
-            Text = "🕸 Explorador del grafo",
-            Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)),
-            FontSize = 11.5, FontWeight = FontWeights.Bold,
-            TextWrapping = TextWrapping.Wrap, Cursor = Cursors.SizeAll,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
-        DockPanel.SetDock(_collapseBtn, Dock.Right);
-        header.Children.Add(_collapseBtn);
-        DockPanel.SetDock(_graphBtn, Dock.Right);
-        header.Children.Add(_graphBtn);
-        header.Children.Add(titulo);
-
         // Mapeo AUTÓNOMO de la app que esté delante. Vive aquí, junto al recorrido manual, porque
         // son el mismo gesto a dos velocidades: uno lo conduce el usuario, el otro el sistema.
         _crawlBtn = new Button
@@ -196,25 +184,42 @@ public sealed class GraphExplorerWindow : Window
 
         // LA BARRA es lo único sólido y lo único que recibe el ratón: el resto es una capa que se
         // mira, no se toca (ver EsZonaViva y el enganche de WM_NCHITTEST más abajo).
-        var contenidoBarra = new DockPanel();
-        DockPanel.SetDock(header, Dock.Top);
-        contenidoBarra.Children.Add(header);
-        DockPanel.SetDock(_crawlBtn, Dock.Top);
-        contenidoBarra.Children.Add(_crawlBtn);
-        contenidoBarra.Children.Add(_nodeTitle);
+        // DOS ICONOS Y NADA MÁS. La barra llevaba título, un botón ancho con su texto, la superficie
+        // actual y el recuento de aristas: cinco cosas escritas permanentemente encima de la app que
+        // se está mirando, para dos gestos que se hacen de vez en cuando (2026-08-04). Lo que se
+        // hace poco se guarda pequeño; lo que se lee mucho —dónde estás, cuántas salidas hay— pasa a
+        // los tooltips, que aparecen cuando se preguntan y no antes.
+        _crawlBtn.Content = "🤖";
+        _crawlBtn.Width = 26; _crawlBtn.Height = 26;
+        _crawlBtn.Margin = new Thickness(4, 0, 0, 0);
+        _crawlBtn.FontSize = 12;
+        // MinWidth 0: el estilo por defecto de Button reserva 75 px, así que dos iconos de 26
+        // ocupaban 166 y la «barra pequeña» seguía siendo una barra.
+        _crawlBtn.MinWidth = 0; _crawlBtn.MinHeight = 0;
+        _crawlBtn.Padding = new Thickness(0);
 
-        DockPanel.SetDock(_status, Dock.Bottom);
-        contenidoBarra.Children.Add(_status);
+        _collapseBtn.Width = 26; _collapseBtn.Height = 26;
+        _collapseBtn.FontSize = 12;
+        _collapseBtn.MinWidth = 0; _collapseBtn.MinHeight = 0;
+        _collapseBtn.Padding = new Thickness(0);
+        _collapseBtn.VerticalAlignment = VerticalAlignment.Center;
+
+        var iconos = new StackPanel { Orientation = Orientation.Horizontal };
+        iconos.Children.Add(_collapseBtn);
+        iconos.Children.Add(_crawlBtn);
 
         _barra = new Border
         {
-            CornerRadius = new CornerRadius(12),
-            Background = new SolidColorBrush(Color.FromArgb(0xEE, 0x10, 0x10, 0x14)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
+            CornerRadius = new CornerRadius(10),
+            Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x10, 0x10, 0x14)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(12, 8, 12, 8),
-            Child = contenidoBarra,
+            Padding = new Thickness(5),
+            Cursor = Cursors.SizeAll,
+            Child = iconos,
         };
+        // Se arrastra por el propio recuadro: sin título, no hay otro sitio del que agarrarla.
+        _barra.MouseLeftButtonDown += (_, __) => { try { _ventanaBarra.DragMove(); } catch { } };
 
         // LA BARRA VIVE EN SU PROPIA VENTANA, y la capa del grafo no recibe ratón EN ABSOLUTO.
         //
@@ -233,15 +238,20 @@ public sealed class GraphExplorerWindow : Window
             Topmost = true,
             ShowInTaskbar = false,
             ResizeMode = ResizeMode.NoResize,
-            SizeToContent = SizeToContent.Height,
             WindowStartupLocation = WindowStartupLocation.Manual,   // si no, WPF la centra y se ignora Left/Top
-            Width = 420,
+            SizeToContent = SizeToContent.WidthAndHeight,
             Title = "Ü Explorador del grafo",
             Content = _barra,
         };
-        titulo.MouseLeftButtonDown += (_, __) => { try { _ventanaBarra.DragMove(); } catch { } };
 
-        Content = dos;
+        // El marco solo se enciende mientras la capa se deja tocar (ver VigilarModificadores).
+        _marco = new Border
+        {
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xC1, 0x07)),
+            BorderThickness = new Thickness(0),
+            Child = dos,
+        };
+        Content = _marco;
 
         // Se ocupa toda el área de trabajo: lo que se está siguiendo es un asistente moviéndose por
         // una app, y eso no cabe en un panel de 380 px sin obligar a hacer scroll justo cuando pasa
@@ -255,9 +265,17 @@ public sealed class GraphExplorerWindow : Window
         _refresh = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _refresh.Tick += (_, __) => RefreshEdges();
         _refresh.Start();
-        // La barra sale arriba a la izquierda, sobre la columna de la lista.
-        _ventanaBarra.Left = wa.Left + 16;
-        _ventanaBarra.Top = wa.Top + 12;
+        // Esquina superior derecha: es donde no estorba y donde se busca lo accesorio. Se recoloca
+        // en cada cambio de tamaño porque con SizeToContent el ancho real no se sabe hasta que WPF
+        // ha medido, y colocarla antes la dejaba a media pantalla.
+        bool colocada = false;
+        _ventanaBarra.SizeChanged += (_, __) =>
+        {
+            if (colocada && _ventanaBarra.Left > 0) return;   // si el usuario la movió, se respeta
+            _ventanaBarra.Left = wa.Right - _ventanaBarra.ActualWidth - 12;
+            _ventanaBarra.Top = wa.Top + 10;
+            colocada = true;
+        };
 
         Closed += (_, __) => { _refresh.Stop(); _overlay.Close(); _ventanaBarra.Close(); };
         IsVisibleChanged += (_, __) =>
@@ -282,9 +300,52 @@ public sealed class GraphExplorerWindow : Window
     /// Se responde por REGIÓN y no marcando la ventana entera con WS_EX_TRANSPARENT porque esa
     /// marca es de todo o nada: dejaría la barra tan muerta como el resto.
     /// </summary>
+    /// <summary>
+    /// Con Ctrl+Shift la capa se deja tocar; sin ellos, el ratón la atraviesa.
+    ///
+    /// Las dos cosas se querían a la vez y son contrarias: una capa a pantalla completa que se traga
+    /// el ratón es una persiana, pero una que nunca lo recibe no deja pulsar un nivel ni leer el
+    /// nombre completo de nada. La salida es que lo decida el usuario con las manos, sin apuntar a
+    /// ningún sitio: mientras mantiene Ctrl+Shift, la capa existe para el ratón (2026-08-04).
+    ///
+    /// Se sondea con GetAsyncKeyState y no con eventos de teclado porque esta ventana nunca tiene el
+    /// foco —lo tiene la app que se está mirando— y sin foco no llegan pulsaciones.
+    /// </summary>
+    private void VigilarModificadores()
+    {
+        var reloj = new System.Windows.Threading.DispatcherTimer
+        { Interval = TimeSpan.FromMilliseconds(90) };
+        reloj.Tick += (_, __) =>
+        {
+            bool quiere = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
+                       && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            if (quiere == _interactivo) return;
+            _interactivo = quiere;
+
+            var mano = new WindowInteropHelper(this).Handle;
+            int estilo = GetWindowLong(mano, GWL_EXSTYLE);
+            SetWindowLong(mano, GWL_EXSTYLE, quiere
+                ? estilo & ~WS_EX_TRANSPARENT      // se deja tocar
+                : estilo | WS_EX_TRANSPARENT);     // vuelve a ser solo mirable
+
+            // Se AVISA de que ahora se puede tocar. Un cambio de comportamiento invisible es un
+            // cambio que el usuario descubre a base de clics que no hacen lo que espera.
+            _marco.BorderThickness = new Thickness(quiere ? 2 : 0);
+        };
+        reloj.Start();
+        Closed += (_, __) => reloj.Stop();
+    }
+
+    private bool _interactivo;
+    private const int VK_CONTROL = 0x11, VK_SHIFT = 0x10;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
+        VigilarModificadores();
         var h = new WindowInteropHelper(this).Handle;
         // TRANSPARENT: el ratón la atraviesa. NOACTIVATE: nunca se pone delante ni roba el foco —sin
         // esto, pulsar encima la activaba y la app de debajo perdía el foco, que se veía como que la
@@ -423,6 +484,20 @@ public sealed class GraphExplorerWindow : Window
         }
 
         _status.Text = $"{els.Count} arista(s) a la vista · {conocidas.Count} ya recorrida(s) desde aquí";
+        RefrescarAyudas();
+    }
+
+    /// <summary>
+    /// Lo que antes estaba escrito en la barra —dónde estás y cuántas salidas hay— pasa a los
+    /// tooltips de los dos iconos. No se ha perdido: se ha callado hasta que alguien pregunte.
+    /// </summary>
+    private void RefrescarAyudas()
+    {
+        _collapseBtn.ToolTip = (_collapsed ? "Mostrar la capa del grafo" : "Ocultar la capa del grafo")
+            + "\n" + _nodeTitle.Text + "\n" + _status.Text
+            + "\nCtrl+Shift: la capa se deja tocar";
+        _crawlBtn.ToolTip = (_crawlCts != null ? "Detener el mapeo" : "Mapear esta app automáticamente")
+            + "\nRecorre la app abriendo lo que encuentra. Solo navegación: nunca pulsa botones ni menús.";
     }
 
     private static string Corto(string id)
@@ -533,9 +608,10 @@ public sealed class GraphExplorerWindow : Window
             int pantallas = _map.Nodes.Keys.Count(n =>
                 SurfaceMap.AppDe(n).Equals(app, StringComparison.OrdinalIgnoreCase));
 
-            _niveles.Children.Add(new Border
+            var nivel = new Border
             {
                 Width = 26, Height = 26,
+                Cursor = Cursors.Hand,
                 CornerRadius = new CornerRadius(13),
                 Margin = new Thickness(0, 3, 0, 3),
                 Background = new SolidColorBrush(aqui
@@ -543,7 +619,8 @@ public sealed class GraphExplorerWindow : Window
                 BorderBrush = new SolidColorBrush(aqui
                     ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
                 BorderThickness = new Thickness(aqui ? 2 : 1),
-                ToolTip = $"nivel {i + 1}: {app} · {pantallas} pantalla(s) conocidas",
+                ToolTip = $"nivel {i + 1}: {app} · {pantallas} pantalla(s) conocidas"
+                        + (aqui ? " · estás aquí" : " · Ctrl+Shift y clic para ir"),
                 Child = new TextBlock
                 {
                     // Dos letras: es una tira de 26 px, y el nombre entero vive en el tooltip.
@@ -554,7 +631,18 @@ public sealed class GraphExplorerWindow : Window
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
                 },
-            });
+            };
+
+            // Pulsar un nivel es IR a esa aplicación. Es la acción natural de la tira —enumera los
+            // terrenos disponibles, así que señalarlos y no poder entrar sería enseñar puertas
+            // pintadas— y no inventa nada: usa el mismo enfocar-o-abrir que ya usa todo lo demás.
+            string destinoApp = app;
+            nivel.MouseLeftButtonUp += (_, __) =>
+            {
+                LogBus.Log("explorador", $"nivel pulsado: se va a «{destinoApp}»");
+                try { AppAligner.FocusOrLaunch(destinoApp); } catch { }
+            };
+            _niveles.Children.Add(nivel);
 
             // El salto entre niveles se dibuja: dos puntos y una línea, para que se vea que hay que
             // CRUZAR algo —abrir la app— y no simplemente seguir por el mismo terreno.
