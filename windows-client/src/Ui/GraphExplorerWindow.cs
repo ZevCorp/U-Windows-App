@@ -462,12 +462,26 @@ public sealed class GraphExplorerWindow : Window
                 if (delante == IntPtr.Zero || (raiz != delante && hwnd != delante)) return;
             }
 
-            // Los movimientos de posición son los más ruidosos —el cursor de texto emite uno por
-            // parpadeo— así que se les pide un respiro mayor antes de mover nada.
-            int msMinimo = evento == EVENT_OBJECT_LOCATIONCHANGE ? 300 : 90;
-            if ((DateTime.UtcNow - _ultimaLectura).TotalMilliseconds < msMinimo) return;
+            // UN EVENTO QUE LLEGA PRONTO SE APLAZA, NO SE TIRA. Antes, si venía antes del mínimo,
+            // se descartaba: con una app que emite sin parar, el aviso de «cambió la ventana
+            // activa» se perdía entre el ruido y la capa se quedaba con los puntos de la app
+            // anterior hasta que el reloj de red la despertaba tres segundos después. Se veía como
+            // que no se enteraba hasta que clicabas algo (2026-08-04, reportado por el usuario).
+            // Filtrar ráfagas es retrasar, nunca olvidar.
+            //
+            // Y el cambio de ventana no espera: es EL cambio, el que decide todo lo demás. Igual si
+            // hace rato que no se lee, para que una ráfaga continua no deje el redibujo en el limbo
+            // reprogramándolo eternamente.
+            bool urgente = evento == EVENT_SYSTEM_FOREGROUND
+                        || (DateTime.UtcNow - _ultimaLectura).TotalMilliseconds > 400;
+            int espera = evento == EVENT_OBJECT_LOCATIONCHANGE ? 200 : 60;
 
-            Dispatcher.BeginInvoke(() => { _rebote!.Stop(); _rebote.Start(); });
+            Dispatcher.BeginInvoke(() =>
+            {
+                _rebote!.Stop();
+                if (urgente) RefreshEdges();
+                else { _rebote.Interval = TimeSpan.FromMilliseconds(espera); _rebote.Start(); }
+            });
         };
 
         foreach (var (a, b) in new[]
@@ -856,6 +870,47 @@ public sealed class GraphExplorerWindow : Window
     /// vuelta atrás, y en un árbol la distancia a la raíz ES la información —cuánto hay que bajar
     /// para llegar—. Un grafo de resortes lo taparía moviendo los nodos a donde quepan.
     /// </summary>
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    /// <summary>
+    /// Traer al frente el nivel pedido.
+    ///
+    /// No vale con enfocar «el proceso»: el del explorador es la SHELL, y su ventana principal es
+    /// el escritorio. Así que pulsar el nivel del explorador llevaba al escritorio, y los dos
+    /// niveles acababan en el mismo sitio — no alternaban (2026-08-04, reportado por el usuario).
+    /// Un nivel se alcanza buscando una ventana SUYA, no un proceso con su nombre.
+    /// </summary>
+    private void IrAlNivel(string nivel)
+    {
+        bool ok = false;
+        try
+        {
+            if (nivel.Equals("escritorio", StringComparison.OrdinalIgnoreCase))
+                ok = Actions.Gestures.ShowDesktop();
+            else if (nivel.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                // Una ventana de archivos de verdad: CabinetWClass. Si no hay ninguna abierta, se
+                // abre —que es lo que quiere quien pulsa «ir al explorador» sin tenerlo abierto.
+                var ventana = AutomationElement.RootElement.FindFirst(TreeScope.Children,
+                    new PropertyCondition(AutomationElement.ClassNameProperty, "CabinetWClass"));
+                if (ventana != null)
+                    ok = SetForegroundWindow(new IntPtr(ventana.Current.NativeWindowHandle));
+                else
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe")
+                    { UseShellExecute = true });
+                    ok = true;
+                }
+            }
+            else
+                ok = AppAligner.FocusOrLaunch(
+                    nivel.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim());
+        }
+        catch (Exception e) { LogBus.Log("explorador", $"al ir a «{nivel}»: {e.Message}"); }
+        LogBus.Log("explorador", $"nivel pulsado: «{nivel}» → {(ok ? "al frente" : "NO se pudo")}");
+    }
+
     /// <summary>
     /// A qué NIVEL pertenece una pantalla. Casi siempre es su app, pero no siempre.
     ///
@@ -969,13 +1024,8 @@ public sealed class GraphExplorerWindow : Window
             // LANZAR la app —que ya estaba abierta— así que pulsar el nivel no hacía nada visible
             // (2026-08-04, reportado por el usuario). El identificador de superficie lleva la
             // extensión; el buscador de procesos, no.
-            string destinoApp = app.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim();
-            nivel.MouseLeftButtonUp += (_, __) =>
-            {
-                bool ok = false;
-                try { ok = AppAligner.FocusOrLaunch(destinoApp); } catch { }
-                LogBus.Log("explorador", $"nivel pulsado: «{destinoApp}» → {(ok ? "al frente" : "NO se pudo")}");
-            };
+            string destinoNivel = app;
+            nivel.MouseLeftButtonUp += (_, __) => IrAlNivel(destinoNivel);
             _niveles.Children.Add(nivel);
 
             // El salto entre niveles se dibuja: dos puntos y una línea, para que se vea que hay que
