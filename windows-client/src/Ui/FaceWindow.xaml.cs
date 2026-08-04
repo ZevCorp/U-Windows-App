@@ -232,8 +232,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // La superficie actual viaja en cada turno (scoping de workflows) y las llamadas
         // workflow_* del cerebro se ejecutan con el WorkflowPlayer (subconsciente).
         _workflowRunner = new WorkflowMcpRunner(_graphConfig, this);
+        // La superficie se PREGUNTA, igual que en el camino del mapa. Aquí se quedó el valor
+        // cacheado —que se refresca cada 800 ms— porque este código es anterior a que existiera
+        // Ahora(), y nadie volvió a mirarlo: el consciente decidía su siguiente paso sobre dónde
+        // estaba hasta casi un segundo antes, justo cuando retoma una tarea que acaba de moverse
+        // (2026-08-04). Dos caminos que responden «¿dónde estoy?» de forma distinta no es una
+        // optimización pendiente: es que uno de los dos está equivocado.
         _loop = new AgentLoop(_backend, _uia, mcp, this, this, InstalledApps.List,
-            () => _locator?.Current, _workflowRunner);
+            () => _locator?.Ahora() ?? _locator?.Current, _workflowRunner);
 
         // Arrastrar por cualquier zona libre de la barra mueve la ventana (la carita tiene sus
         // propios gestos abajo; los botones se tragan el clic, así que no interfieren). DragMove()
@@ -1617,7 +1623,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
 
         // ── PASO 2: ¿SAP está delante? ──────────────────────────────────────────
-        var loc = _locator?.Current;
+        // Inmediato: de esto depende traer SAP al frente o no, y con el valor cacheado se decidía
+        // sobre una pantalla de hasta 800 ms antes.
+        var loc = _locator?.Ahora() ?? _locator?.Current;
         bool enSap = loc != null && loc.Origin.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase);
         if (!enSap)
         {
@@ -1629,7 +1637,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             {
                 _focusedRev = _clinical.LastRev;
                 LogBus.Log("clinico", "datos listos y SAP no está delante: se trae al frente");
-                try { await AppAligner.EnsureAsync("sapgui://", () => _locator?.Current?.Origin ?? "", CancellationToken.None); }
+                try { await AppAligner.EnsureAsync("sapgui://", () => (_locator?.Ahora() ?? _locator?.Current)?.Origin ?? "", CancellationToken.None); }
                 catch (Exception e) { LogBus.Log("clinico", $"no se pudo traer SAP al frente: {e.Message}"); }
             }
             return;
@@ -1734,7 +1742,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             await _map.LoadAsync(_directGraph, CancellationToken.None);
             MapBtn.Content = "🗺 Mapa: visible — clic para ocultar";
-            _map.SetCurrent(_locator?.Current?.Id ?? "");
+            _map.SetCurrent((_locator?.Ahora() ?? _locator?.Current)?.Id ?? "");
         }
         catch (Exception ex)
         {
@@ -1943,7 +1951,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // la tarea. Se lo pasamos al consciente como compuerta: puede navegar todo lo que quiera
             // DENTRO de esa app, pero no teclear en otra. Sin esto, «retoma desde la pantalla actual»
             // se ejecutó sobre la ventana que tuviera el foco — el incidente del 2026-07-26.
-            string origin = _locator?.Current?.Origin ?? "";
+            // Lectura inmediata: esta compuerta ata al consciente a UNA app, y atarlo a la de hace
+            // 800 ms es justo el fallo que la compuerta existe para evitar.
+            string origin = (_locator?.Ahora() ?? _locator?.Current)?.Origin ?? "";
             LogBus.Log("workflow-ui", "puente consciente: el workflow se detuvo → computer-use retoma"
                 + (origin.Length > 0 ? $" (atado a «{origin}»)" : " · SIN origen conocido: va sin compuerta"));
             SetStatus("El workflow se detuvo — el modo consciente retoma…");
