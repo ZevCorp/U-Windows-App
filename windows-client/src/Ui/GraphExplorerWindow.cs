@@ -50,7 +50,8 @@ public sealed class GraphExplorerWindow : Window
         Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
         FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0),
     };
-    private readonly StackPanel _edges = new();
+    /// <summary>Los puntos de las salidas, en rejilla: apilados en columna volverían a ser una lista.</summary>
+    private readonly WrapPanel _edges = new() { Orientation = Orientation.Horizontal };
     private readonly System.Windows.Threading.DispatcherTimer _refresh;
     private string _signature = "";   // para no redibujar (y matar el hover) si nada cambió
     private bool _busy;               // recorriendo una arista: el refresco espera
@@ -67,6 +68,8 @@ public sealed class GraphExplorerWindow : Window
     private readonly Canvas _lienzo = new() { Background = Brushes.Transparent };
     private bool _collapsed;
     private bool _graphView;
+    /// <summary>El grafo se dibuja como mapa de puntos porque el detalle ya no cabría legible.</summary>
+    private bool _compacto;
     private string _nodoActual = "";
     /// <summary>Lo aprendido en la última corrida automática: lo único que la vista de grafo dibuja.</summary>
     private List<(string From, string To, string Label)> _ultimaCorrida = new();
@@ -168,8 +171,10 @@ public sealed class GraphExplorerWindow : Window
         // —otra resolución, la barra de tareas, un monitor distinto— porque la pregunta es la misma.
         _grafo.SizeChanged += (_, __) => AjustarALaVista();
 
+        // Los puntos ya no necesitan media pantalla: una tira estrecha a la izquierda basta para
+        // decir cuántas salidas hay y cuántas se conocen, y todo lo demás es para el grafo.
         var dos = new Grid();
-        dos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        dos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
         dos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         Grid.SetColumn(_lista, 0);
         Grid.SetColumn(_grafo, 1);
@@ -368,30 +373,34 @@ public sealed class GraphExplorerWindow : Window
         _nodeTitle.Text = aqui.Length > 0 ? "◉ " + aqui : "◉ (sin superficie)";
         _edges.Children.Clear();
 
+        // PUNTOS, NO RENGLONES. Cada salida era una fila de ancho completo con su nombre y su
+        // destino escritos; con una pantalla normal eso son cuarenta renglones que se comen media
+        // pantalla y tapan justo la app que se está mirando (2026-08-04, visto en pantalla). Lo que
+        // esta columna tiene que responder de un vistazo es CUÁNTAS salidas hay y cuántas se
+        // conocen, y para eso el nombre sobra: un punto por salida lo dice igual y ocupa cien veces
+        // menos. El texto no se pierde —vive en el tooltip y en AutomationProperties, así que sigue
+        // estando para quien pase el ratón y para cualquier registro—, solo deja de gritar.
         foreach (var el in els)
         {
             bool sabida = conocidas.TryGetValue(el.Label, out string? destino);
+            string descripcion = el.Label
+                + (sabida ? $"  ⇒  {Corto(destino!)}" : $"  ({el.ControlType}, sin explorar)");
+
             var chip = new Border
             {
+                Width = 12, Height = 12,
                 CornerRadius = new CornerRadius(6),
                 // Verde = arista ya recorrida (se sabe a dónde lleva); gris = potencial, sin explorar.
                 Background = new SolidColorBrush(sabida
-                    ? Color.FromArgb(0x30, 0x2E, 0x7D, 0x32) : Color.FromArgb(0x1C, 0xC0, 0xC0, 0xC0)),
+                    ? Color.FromArgb(0x88, 0x2E, 0x7D, 0x32) : Color.FromArgb(0x33, 0xC0, 0xC0, 0xC0)),
                 BorderBrush = new SolidColorBrush(sabida
-                    ? Color.FromArgb(0x55, 0x66, 0xBB, 0x6A) : Color.FromArgb(0x2A, 0xFF, 0xFF, 0xFF)),
+                    ? Color.FromArgb(0xAA, 0x66, 0xBB, 0x6A) : Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
                 BorderThickness = new Thickness(1),
-                Padding = new Thickness(8, 4, 8, 4),
-                Margin = new Thickness(0, 2, 0, 2),
+                Margin = new Thickness(2),
                 Cursor = Cursors.Hand,
-                Child = new TextBlock
-                {
-                    Text = (sabida ? "→ " : "· ") + el.Label
-                         + (sabida ? $"   ⇒ {Corto(destino!)}" : $"   ({el.ControlType})"),
-                    Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
-                    FontSize = 11, FontFamily = new FontFamily("Consolas"),
-                    TextWrapping = TextWrapping.Wrap,
-                },
+                ToolTip = descripcion,
             };
+            System.Windows.Automation.AutomationProperties.SetName(chip, descripcion);
 
             var elemento = el; // captura por arista, no la variable del bucle
             chip.MouseEnter += (_, __) => _overlay.ShowRect(elemento.Bounds);
@@ -510,7 +519,22 @@ public sealed class GraphExplorerWindow : Window
             if (!prof.ContainsKey(t)) prof[t] = 1;
         }
 
-        const double anchoCaja = 168, altoCaja = 34, sepX = 16, sepY = 62;
+        // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra
+        // deja de leerse; a partir de ahí se sigue pagando el sitio que ocupa un texto que ya nadie
+        // puede leer, y el recorrido —que es lo que se quiere ver— queda enterrado bajo etiquetas
+        // borrosas (2026-08-04). Cuando el detalle no cabe con holgura, se cambia a un mapa de
+        // puntos: la FORMA del recorrido se lee igual de bien, y el único nombre que se conserva es
+        // el del nodo donde está ahora, que es el que hace falta.
+        int filas = prof.Values.Max() + 1;
+        int columnas = prof.GroupBy(kv => kv.Value).Max(g => g.Count());
+        double necesarioX = 12 + columnas * (168.0 + 16), necesarioY = 24 + filas * 62.0;
+        double dispX = _grafo.ActualWidth - 16, dispY = _grafo.ActualHeight - 16;
+        double cabeDetalle = (dispX > 0 && dispY > 0)
+            ? Math.Min(dispX / necesarioX, dispY / necesarioY) : 1;
+        _compacto = cabeDetalle < 0.55;
+
+        double anchoCaja = _compacto ? 18 : 168, altoCaja = _compacto ? 18 : 34;
+        double sepX = _compacto ? 10 : 16, sepY = _compacto ? 34 : 62;
         var pos = new Dictionary<string, Point>(StringComparer.OrdinalIgnoreCase);
         double maxX = 0;
         foreach (var fila in prof.GroupBy(kv => kv.Value).OrderBy(g => g.Key))
@@ -541,12 +565,15 @@ public sealed class GraphExplorerWindow : Window
             {
                 if (!SurfaceMap.EsPuerta(h.To)) continue;
                 if (!pos.TryGetValue(nodo, out var origen)) continue;
-                if (pendiente >= 6) break;                            // un puñado basta para leerlo
-                double x = origen.X + 14 + pendiente * 13;
+                // En puntos caben menos muñones y más juntos: son una señal de «aquí queda algo por
+                // abrir», no un recuento, así que tres bastan para decirlo sin emborronar el nodo.
+                if (pendiente >= (_compacto ? 3 : 6)) break;
+                double paso = _compacto ? 5 : 13;
+                double x = origen.X + (_compacto ? 3 : 14) + pendiente * paso;
                 _lienzo.Children.Add(new System.Windows.Shapes.Line
                 {
                     X1 = x, Y1 = origen.Y + altoCaja,
-                    X2 = x, Y2 = origen.Y + altoCaja + 13,
+                    X2 = x, Y2 = origen.Y + altoCaja + (_compacto ? 6 : 13),
                     Stroke = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xB3, 0x00)),
                     StrokeThickness = 2,
                     ToolTip = $"puerta sin cruzar: «{h.Info.Label}» (destino desconocido)",
@@ -586,6 +613,7 @@ public sealed class GraphExplorerWindow : Window
             };
             _lienzo.Children.Add(linea);
 
+            if (_compacto) continue;   // en puntos, la etiqueta de cada arista sobra: no se leería
             var et = new TextBlock
             {
                 Text = label,
@@ -607,7 +635,9 @@ public sealed class GraphExplorerWindow : Window
             var caja = new Border
             {
                 Width = anchoCaja, Height = altoCaja,
-                CornerRadius = new CornerRadius(6),
+                // En puntos son círculos: una caja diminuta con esquinas parece una caja rota, y un
+                // punto se lee como «un sitio» sin fingir que dentro cabía algo.
+                CornerRadius = new CornerRadius(_compacto ? anchoCaja / 2 : 6),
                 Background = new SolidColorBrush(esActual
                     ? Color.FromArgb(0x55, 0xFF, 0xB3, 0x00)
                     : Color.FromArgb(0x30, 0x2E, 0x7D, 0x32)),
@@ -616,7 +646,7 @@ public sealed class GraphExplorerWindow : Window
                     : Color.FromArgb(0x55, 0x66, 0xBB, 0x6A)),
                 BorderThickness = new Thickness(esActual ? 2 : 1),
                 ToolTip = kv.Key,
-                Child = new TextBlock
+                Child = _compacto ? null : new TextBlock
                 {
                     Text = Corto(kv.Key),
                     Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)),
@@ -626,6 +656,23 @@ public sealed class GraphExplorerWindow : Window
                     VerticalAlignment = VerticalAlignment.Center,
                 },
             };
+
+            // El ÚNICO nombre que sobrevive al alejarse es el de donde estás. Un mapa de puntos sin
+            // ninguna referencia es bonito y no sirve: hace falta saber cuál de todos eres tú.
+            if (_compacto && esActual)
+            {
+                var etiqueta = new TextBlock
+                {
+                    Text = Corto(kv.Key),
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)),
+                    FontSize = 10, FontFamily = new FontFamily("Consolas"),
+                    Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x10, 0x10, 0x14)),
+                    Padding = new Thickness(4, 1, 4, 1),
+                };
+                Canvas.SetLeft(etiqueta, kv.Value.X + anchoCaja + 6);
+                Canvas.SetTop(etiqueta, kv.Value.Y - 2);
+                _lienzo.Children.Add(etiqueta);
+            }
             Canvas.SetLeft(caja, kv.Value.X);
             Canvas.SetTop(caja, kv.Value.Y);
             _lienzo.Children.Add(caja);
@@ -636,8 +683,14 @@ public sealed class GraphExplorerWindow : Window
         AjustarALaVista();
         // Durante el mapeo el estado lo escribe el propio recorrido («explorando X · N pantallas»),
         // que dice más que un recuento: no se pisa.
+        // Se dice EN QUÉ MODO está. Al alejarse desaparecen los nombres, y sin avisar eso se lee
+        // como que el grafo se ha vaciado en vez de como que se ha resumido. Además la barra es lo
+        // único de esta vista que sigue siendo legible para el sistema: la capa, al volverse
+        // atravesable, dejó de exponer su contenido, así que este texto es el único sitio donde
+        // comprobar desde fuera qué se está dibujando (2026-08-04).
         if (_crawlCts == null)
-            _status.Text = $"grafo de la última corrida · {pos.Count} pantalla(s), {_ultimaCorrida.Count} ruta(s)";
+            _status.Text = $"grafo · {pos.Count} pantalla(s), {_ultimaCorrida.Count} ruta(s)"
+                         + (_compacto ? " · vista de puntos (alejado)" : " · vista con nombres");
     }
 
     // ── Mapeo autónomo ───────────────────────────────────────────────────────
