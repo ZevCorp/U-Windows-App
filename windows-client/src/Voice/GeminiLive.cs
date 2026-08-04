@@ -362,11 +362,25 @@ public sealed class GeminiLive : IDisposable
         return Math.Sqrt(suma / n) / short.MaxValue;
     }
 
-    /// <summary>Por debajo de esto es sala, no voz. Medido a ojo sobre silencio con ventilador.</summary>
-    private const double UmbralVoz = 0.045;
+    /// <summary>
+    /// Cuánto hay que subir la voz sobre el ruido de la sala para que cuente como hablar.
+    ///
+    /// Era un número fijo (0,045) medido en UN equipo, y eso lo hacía una lotería: con un micrófono
+    /// de menos ganancia la puerta no se abría NUNCA, así que no se enviaba ni un byte y la sesión
+    /// se quedaba abierta sin oír nada —«dice te escucho y no me escucha» (2026-08-04)—. El nivel de
+    /// un micrófono depende del aparato, del sistema y de la sala; fijarlo a mano es adivinar.
+    ///
+    /// Ahora se aprende el silencio de esta sala y se exige destacar sobre ÉL. El suelo absoluto es
+    /// solo una red para micrófonos con ruido eléctrico.
+    /// </summary>
+    private const double SueloAbsoluto = 0.008;
+    private const double VecesSobreElRuido = 3.0;
 
+    private double _ruidoSala = 0.02;
     private bool _usuarioHablando;
     private DateTime _ultimaVoz;
+    private DateTime _ultimoAforo = DateTime.MinValue;
+    private double _picoDelTramo;
 
     private async void MandarTrozo(byte[] pcm)
     {
@@ -380,7 +394,25 @@ public sealed class GeminiLive : IDisposable
         // El umbral sube mientras Ü habla, no se cierra del todo: cortarle a media frase es media
         // gracia de hablar en vivo, pero su propia voz por los altavoces no puede valer como corte.
         double vol = Volumen(pcm);
-        double umbral = _audio.Hablando ? UmbralVoz * 2.5 : UmbralVoz;
+
+        // El silencio se APRENDE: baja deprisa hacia lo más bajo que se oye y sube muy despacio, de
+        // modo que una frase larga no lo arrastre consigo. Así el umbral se calibra solo en cualquier
+        // equipo, que es justo lo que un número fijo no podía hacer.
+        _ruidoSala = vol < _ruidoSala ? (_ruidoSala * 0.90) + (vol * 0.10)
+                                      : (_ruidoSala * 0.999) + (vol * 0.001);
+        double umbral = Math.Max(SueloAbsoluto, _ruidoSala * VecesSobreElRuido);
+        if (_audio.Hablando) umbral *= 2.0;   // mientras Ü habla, solo una voz clara la corta
+
+        // Se publica lo que se está oyendo. Sin esto, «no me escucha» y «no le llega audio» se ven
+        // exactamente igual desde fuera, que es lo que costó encontrar este fallo.
+        _picoDelTramo = Math.Max(_picoDelTramo, vol);
+        if ((DateTime.UtcNow - _ultimoAforo).TotalSeconds >= 2)
+        {
+            _ultimoAforo = DateTime.UtcNow;
+            LogBus.Log("voz-viva", $"micrófono: pico {_picoDelTramo:F3} · ruido {_ruidoSala:F3} · "
+                + $"umbral {umbral:F3} · {(_usuarioHablando ? "HABLANDO" : "en silencio")}");
+            _picoDelTramo = 0;
+        }
 
         if (vol >= umbral)
         {
