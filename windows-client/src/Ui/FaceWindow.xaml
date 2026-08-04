@@ -3,12 +3,30 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:U.WindowsClient.Ui"
         Title="Ü"
-        Width="320"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False"
-        ResizeMode="NoResize" SizeToContent="Height">
+        ResizeMode="NoResize" SizeToContent="WidthAndHeight">
 
     <Window.Resources>
+        <!-- Tooltip oscuro y rápido: en una barra de solo iconos, el tooltip ES la etiqueta. -->
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HasDropShadow" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="#F01A1A20" BorderBrush="#33FFFFFF" BorderThickness="1"
+                                CornerRadius="6" Padding="8,5">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Foreground" Value="#EEFFFFFF"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+
         <!-- Botón plano que HONRA su Background en todos los estados. WPF, con el template por defecto,
              pinta un fondo claro del sistema cuando el botón está deshabilitado y deja el Foreground
              blanco → texto blanco sobre fondo blanco. Este template lo arregla: deshabilitado = fondo
@@ -17,6 +35,8 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ToolTipService.InitialShowDelay" Value="300"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -37,139 +57,194 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Botón de la BARRA: cuadrado, redondeado, solo icono. El hover es una capa que se funde en
+             ~120 ms (no un salto), y el foco de teclado se ve como un aro — la barra se puede operar
+             sin ratón. -->
+        <Style x:Key="BarBtn" TargetType="Button">
+            <Setter Property="Width" Value="38"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#1AFFFFFF"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ToolTipService.InitialShowDelay" Value="300"/>
+            <Setter Property="ToolTipService.Placement" Value="Left"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="10"/>
+                            <Border x:Name="hover" Background="#22FFFFFF" CornerRadius="10" Opacity="0"/>
+                            <Border x:Name="focus" BorderBrush="#66FFFFFF" BorderThickness="1.5"
+                                    CornerRadius="10" Opacity="0"/>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="hover"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="hover"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bg" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="focus" Property="Opacity" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bg" Property="Background" Value="#10FFFFFF"/>
+                                <Setter Property="Foreground" Value="#55FFFFFF"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Fila del MENÚ EXTENDIDO: icono + nombre alineados a la izquierda. Mismo lenguaje de hover
+             que la barra. Los deshabilitados explican su motivo por tooltip (ShowOnDisabled). -->
+        <Style x:Key="MenuBtn" TargetType="Button">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#26FFFFFF"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="ToolTipService.InitialShowDelay" Value="300"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="7"/>
+                            <Border x:Name="hover" Background="#1CFFFFFF" CornerRadius="7" Opacity="0"/>
+                            <Border x:Name="focus" BorderBrush="#66FFFFFF" BorderThickness="1.5"
+                                    CornerRadius="7" Opacity="0"/>
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="hover"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="hover"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bg" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="focus" Property="Opacity" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bg" Property="Background" Value="#12FFFFFF"/>
+                                <Setter Property="Foreground" Value="#55FFFFFF"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Etiqueta de sección del menú extendido. -->
+        <Style x:Key="SectionLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#88FFFFFF"/>
+            <Setter Property="FontSize" Value="10"/>
+        </Style>
+
+        <!-- Separador fino entre grupos. -->
+        <Style x:Key="Sep" TargetType="Border">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Background" Value="#1EFFFFFF"/>
+            <Setter Property="Margin" Value="2,10"/>
+        </Style>
     </Window.Resources>
 
     <!-- Carita flotante: overlay permanente, arrastrable, siempre encima. Es TODO el frontend visible.
          No decide nada; solo muestra el estado y recoge lo que el usuario pide.
-         Dos estados en la misma ventana: el panel completo, o SOLO la carita (se alternan con un clic
-         en la carita). Ver FaceWindow.xaml.cs (ToggleCollapsed). -->
+
+         Tres piezas en la misma ventana, ancladas a la esquina inferior derecha:
+           · BarPanel   — barra vertical compacta, SIEMPRE visible: carita + 4 acciones (micrófono,
+                          conversación, enseñar, silencio) + contextuales (⏹, ⬇) + el activador ⌃.
+           · TalkPanel  — el globo de conversación (estado, narración, entrada de texto). Aparece solo
+                          cuando hay algo que decir o el usuario lo abre con 💬.
+           · MenuPanel  — el menú extendido: se abre HACIA ARRIBA al pasar el ratón por el activador
+                          (o con clic, que lo fija). Contiene lo secundario y, al final, Backend.
+         El estado COLAPSADO (solo la carita suelta) se alterna con un clic en la carita, como siempre.
+         Ver FaceWindow.xaml.cs (ToggleCollapsed y la región «menú extendido»). -->
     <Grid>
-        <!-- Estado COLAPSADO: solo la carita, como una burbuja flotante. Clic → panel · doble clic →
+        <!-- Estado COLAPSADO: solo la carita, como una burbuja flotante. Clic → barra · doble clic →
              micrófono · mantener oprimido → cambia de tema · arrastrar y soltar → se lanza al borde.
              El Margin de 28 deja aire alrededor para que la sombra (blur 24) no se recorte. -->
         <ui:FaceControl x:Name="CollapsedFace" Width="72" Height="72"
                         Visibility="Collapsed" Cursor="Hand"
                         HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="28"
-                        ToolTip="Clic: abrir panel · doble clic: micrófono · mantener: cambiar tema · arrastrar y soltar: mover">
+                        ToolTip="Clic: abrir la barra · doble clic: micrófono · mantener: cambiar tema · arrastrar y soltar: mover">
             <ui:FaceControl.Effect>
                 <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="Black"/>
             </ui:FaceControl.Effect>
         </ui:FaceControl>
 
-        <!-- Estado EXPANDIDO: el panel completo de siempre. -->
-        <Border x:Name="Panel" CornerRadius="18" Background="#F2101014" Padding="14"
-                BorderBrush="#33FFFFFF" BorderThickness="1">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.5" Color="Black"/>
-            </Border.Effect>
-            <StackPanel>
-                <!-- Cabecera arrastrable: la carita + estado -->
-                <DockPanel x:Name="Header" LastChildFill="True" Cursor="SizeAll">
-                    <!-- La carita (misma que Android). Clic → colapsa a solo la carita · doble clic →
-                         micrófono · mantener oprimido → cambia de tema · arrastrar → mover. -->
-                    <ui:FaceControl x:Name="Face" Width="40" Height="40" DockPanel.Dock="Left" Cursor="Hand"
-                                    ToolTip="Clic: solo la carita · doble clic: micrófono · mantener: cambiar tema · arrastrar: mover"/>
-                    <TextBlock x:Name="Status" Text="Ü listo" Foreground="#EEFFFFFF" FontSize="13"
-                               VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap"/>
-                </DockPanel>
+        <!-- Estado NORMAL: menú extendido (arriba) + globo de conversación (izquierda) + barra (derecha).
+             La ventana mide lo que mida el contenido (SizeToContent) y OnSizeChanged la mantiene
+             anclada a la esquina inferior derecha: abrir el menú crece hacia arriba y a la izquierda. -->
+        <StackPanel x:Name="RootPanel">
 
-                <!-- Globo de narración: crece con el texto (la ventana se expande hacia arriba) y,
-                     si el texto excede el máximo, hace scroll en vez de cortarse. -->
-                <ScrollViewer MaxHeight="380" Margin="0,10,0,0" VerticalScrollBarVisibility="Auto"
+            <!-- MENÚ EXTENDIDO: se abre hacia arriba desde el activador. No es una ventana aparte:
+                 es la continuación de la barra. Si el contenido no cabe, MenuScroll hace scroll
+                 interno (el tope se calcula al abrir, según el área de trabajo). -->
+            <Border x:Name="MenuPanel" Width="292" HorizontalAlignment="Right" Visibility="Collapsed"
+                    CornerRadius="14" Background="#F2101014" BorderBrush="#33FFFFFF" BorderThickness="1"
+                    Padding="10" Margin="0,0,0,8">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="MenuShift"/>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.5" Color="Black"/>
+                </Border.Effect>
+                <ScrollViewer x:Name="MenuScroll" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
-                    <TextBlock x:Name="Bubble" Text="" Foreground="#CCFFFFFF" FontSize="12"
-                               TextWrapping="Wrap"/>
-                </ScrollViewer>
-
-                <!-- Pastilla de actualización: oculta salvo que ya haya una versión descargada y lista.
-                     Si el usuario la ignora, se aplica sola al cerrar (ver Updater.ApplyOnExit). -->
-                <Button x:Name="UpdateBtn" Content="⬇ Nueva versión lista — reiniciar" Height="28"
-                        Margin="0,10,0,0" Click="OnApplyUpdate" Background="#553B82F6" Foreground="White"
-                        BorderThickness="0" FontSize="11" Visibility="Collapsed"
-                        ToolTip="Se instalará sola al cerrar Ü si prefieres seguir trabajando"/>
-
-                <!-- Entrada de texto + micrófono -->
-                <DockPanel Margin="0,12,0,0" LastChildFill="True">
-                    <Button x:Name="MicBtn" Content="🎤" DockPanel.Dock="Right" Width="34" Height="30"
-                            Margin="6,0,0,0" Click="OnMic" Background="#22FFFFFF" Foreground="White" BorderThickness="0"/>
-                    <!-- Siempre visible: callarlo tiene que estar a un clic, sin importar qué esté pasando. -->
-                    <Button x:Name="MuteBtn" Content="🔊" DockPanel.Dock="Right" Width="34" Height="30"
-                            Margin="6,0,0,0" Click="OnToggleMute" Background="#22FFFFFF" Foreground="White"
-                            BorderThickness="0" ToolTip="Callar a Ü ahora mismo"/>
-                    <Button x:Name="StopBtn" Content="⏹" DockPanel.Dock="Right" Width="34" Height="30"
-                            Margin="6,0,0,0" Click="OnStop" Background="#55FF3B30" Foreground="White" BorderThickness="0"
-                            Visibility="Collapsed"/>
-                    <TextBox x:Name="Input" Height="30" VerticalContentAlignment="Center"
-                             Background="#22FFFFFF" Foreground="White" BorderThickness="0" Padding="8,0"
-                             KeyDown="OnInputKey"/>
-                </DockPanel>
-
-                <!-- Enseñanza activa: graba pantalla+voz para que Ü aprenda a usar una app. -->
-                <DockPanel Margin="0,8,0,0" LastChildFill="True">
-                    <Button x:Name="VideosBtn" Content="🎞 Videos" DockPanel.Dock="Right" Width="76" Height="30"
-                            Margin="6,0,0,0" Click="OnOpenVideos" Background="#22FFFFFF" Foreground="White"
-                            BorderThickness="0" FontSize="11"/>
-                    <!-- Solo visible mientras se graba: descarta lo grabado y vuelve a empezar, sin que el
-                         error llegue nunca a Gemini ni al cerebro. Ver TeachSession.RestartAsync. -->
-                    <Button x:Name="RestartTeachBtn" Content="🔄" DockPanel.Dock="Right" Width="34" Height="30"
-                            Margin="6,0,0,0" Click="OnRestartTeach" Background="#22FFFFFF" Foreground="White"
-                            BorderThickness="0" FontSize="11" Visibility="Collapsed"
-                            ToolTip="Me equivoqué: descartar esta grabación y empezar de nuevo"/>
-                    <Button x:Name="TeachBtn" Content="🎓 Enseñar" Height="30" Click="OnToggleTeach"
-                            Background="#22FFFFFF" Foreground="White" BorderThickness="0" FontSize="11"/>
-                </DockPanel>
-
-                <!-- Ajustes mínimos: dónde vive el cerebro -->
-                <Expander x:Name="BackendExpander" Header="Backend" Foreground="#88FFFFFF" FontSize="11"
-                          Margin="0,10,0,0" Expanded="OnBackendExpanded">
-                    <StackPanel Margin="0,6,0,0">
-                        <!-- El backend ya no se configura a mano: la URL tiene default sano y la API key
-                             llega sola (key embebida en el build de distribución, o env GRAPH_API_KEY en
-                             dev). Esto es solo un estado de diagnóstico, no un campo editable. Ver
-                             GraphConfig.Load y el doc "Distribución conectada" del Provider Studio. -->
-                        <TextBlock x:Name="BackendStatus" Foreground="#88FFFFFF" FontSize="10"
-                                   TextWrapping="Wrap" Margin="0,0,0,2"/>
-
-                        <!-- Inspector visual de elementos (estilo TalkBack): dibuja recuadros sobre la
-                             pantalla; al hacer clic, amarillo si coincide con lo que el asistente tocaría,
-                             rojo doble si no. Ver UiInspector. -->
-                        <Button x:Name="InspectorBtn" Content="🔍 Inspector de elementos" Height="26" Margin="0,10,0,0"
-                                Click="OnToggleInspector" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
-                                ToolTip="Muestra recuadros sobre los elementos de la pantalla. Al hacer clic: amarillo si coincide con lo que el asistente tocaría, rojo (ambos) si no."/>
-
-                        <!-- El "location bar de Windows": ID de superficie actual, arriba a la derecha.
-                             Mismo formato que source_url de los workflows (uia:// y web://). -->
-                        <Button x:Name="LocatorBtn" Content="📍 ID visible — clic para ocultar" Height="26" Margin="0,6,0,0"
-                                Click="OnToggleLocator" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
-                                ToolTip="Muestra dónde estás parado como URL: uia://app.exe/ventana o web://dominio/ruta. Es el ID con el que se cargan los workflows."/>
-
-                        <!-- Utilidades ocultas aquí para no saturar la fila principal: biblioteca de
-                             workflows (ejecutar/autofill) y registro de diagnóstico. La grabación ya
-                             la hace el botón 🎓 Enseñar (pasos UIA + video en un solo gesto). -->
-                        <Button x:Name="WorkflowsBtn" Content="🧭 Workflows" Height="26" Margin="0,10,0,0"
-                                Click="OnOpenWorkflows" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
-                                ToolTip="Biblioteca de workflows: ejecutar contra Graph (SAP GUI / UIA) + autofill"/>
-
-                        <!-- El grafo pre-aprendido, visible: pantallas como nodos, saltos como aristas,
-                             y el nodo actual iluminado mientras navegas. Ver WorkflowMapWindow. -->
-                        <!-- El grafo TOCABLE: la ventana actual expone sus elementos como aristas;
-                             hover = iluminar el botón real, clic = pulsarlo de verdad y aprender la
-                             arista con certeza absoluta. Ver GraphExplorerWindow. -->
-                        <Button x:Name="ExplorerBtn" Content="🕸 Explorar el grafo" Height="26" Margin="0,6,0,0"
-                                Click="OnToggleExplorer" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
-                                ToolTip="Las aristas de la pantalla actual, en vivo. Hover: ilumina el elemento real. Clic: lo pulsa de verdad y aprende la ruta."/>
-
-                        <Button x:Name="MapBtn" Content="🗺 Mapa del grafo" Height="26" Margin="0,6,0,0"
-                                Click="OnToggleMap" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
-                                ToolTip="Dibuja los workflows como un grafo de pantallas. Dos workflows que pasan por la misma pantalla comparten nodo: ahí se concatenan."/>
-
-                        <!-- Ejecutar un workflow directo, sin abrir la biblioteca. Dos formas de elegir el
-                             workflow, alternables con el botón de la derecha: CARRUSEL (un título a la vez,
-                             flechas ◀ ▶) o LISTA. El botón corre igual que "Ejecutar ahora" de la biblioteca
-                             (WorkflowPlayer contra Graph, con alineación consciente si la pantalla no coincide). -->
-                        <DockPanel Margin="0,10,0,3" LastChildFill="False">
-                            <TextBlock DockPanel.Dock="Left" Text="Ejecutar workflow" Foreground="#88FFFFFF"
-                                       FontSize="10" VerticalAlignment="Center"/>
+                    <StackPanel>
+                        <!-- ── Ejecutar workflow: lo que el operador usa a diario ─────────────── -->
+                        <DockPanel LastChildFill="False" Margin="0,0,0,3">
+                            <TextBlock DockPanel.Dock="Left" Text="Ejecutar workflow"
+                                       Style="{StaticResource SectionLabel}" VerticalAlignment="Center"/>
                             <Button x:Name="WorkflowViewToggle" DockPanel.Dock="Right" Content="☰" Width="26" Height="20"
                                     Click="OnToggleWorkflowView" Style="{StaticResource FlatBtn}" Background="#22FFFFFF"
                                     Foreground="#CCFFFFFF" FontSize="11" ToolTip="Cambiar entre carrusel y lista"/>
@@ -200,22 +275,44 @@
                                  SelectionChanged="OnWorkflowListSelected"/>
 
                         <Button x:Name="RunWorkflowBtn" Content="▶ Ejecutar ahora" Height="34" Margin="0,8,0,0"
-                                Click="OnRunWorkflowDirect" Style="{StaticResource FlatBtn}" Background="#2FB457"
-                                Foreground="White" FontWeight="SemiBold" FontSize="12" IsEnabled="False"/>
+                                Click="OnRunWorkflowDirect" Style="{StaticResource MenuBtn}" Background="#2FB457"
+                                HorizontalContentAlignment="Center" FontWeight="SemiBold" FontSize="12" IsEnabled="False"
+                                ToolTip="Corre el workflow seleccionado contra Graph (se alinea solo si la pantalla no coincide)"/>
 
                         <!-- Ensayo en seco: recorre el plan y dice qué pasaría, SIN tocar la pantalla.
                              Va debajo del verde y en gris a propósito: no es una acción, es una
                              comprobación — se pulsa ANTES de ejecutar, y sobre todo antes de un demo. -->
-                        <!-- Puente con la consulta del portal: se pega el código que el médico
+                        <Button x:Name="DryRunBtn" Content="🧪 Ensayo en seco" Height="26" Margin="0,6,0,0"
+                                Click="OnDryRunWorkflow" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
+                                Foreground="#CCFFFFFF" IsEnabled="False"
+                                ToolTip="Comprueba el workflow sin ejecutarlo: qué pasos no resolverían y dónde cambia de pantalla sin un paso que lo provoque. El detalle va a 📜 Logs."/>
+
+                        <!-- Paso a paso: no ejecuta distinto, ejecuta PAUSADO. Se queda encendido
+                             entre corridas a propósito: si lo enciendes es porque estás depurando. -->
+                        <Button x:Name="StepModeBtn" Height="26" Margin="0,6,0,0" Click="OnToggleStepMode"
+                                Style="{StaticResource MenuBtn}" Background="#33FFFFFF" Foreground="#CCFFFFFF"
+                                ToolTip="Ejecuta el workflow paso a paso: se detiene ANTES de cada paso y muestra el veredicto y cómo se veía la pantalla al enseñarlo."/>
+
+                        <!-- Biblioteca y videos: utilidades del mismo mundo que el runner. -->
+                        <Button x:Name="WorkflowsBtn" Content="🧭 Workflows" Height="26" Margin="0,10,0,0"
+                                Click="OnOpenWorkflows" Style="{StaticResource MenuBtn}"
+                                ToolTip="Biblioteca de workflows: ejecutar contra Graph (SAP GUI / UIA) + autofill"/>
+                        <Button x:Name="VideosBtn" Content="🎞 Videos" Height="26" Margin="0,6,0,0"
+                                Click="OnOpenVideos" Style="{StaticResource MenuBtn}"
+                                ToolTip="Las grabaciones de tus enseñanzas"/>
+
+                        <Border Style="{StaticResource Sep}"/>
+
+                        <!-- ── Puente con la consulta del portal: se pega el código que el médico
                              generó allá, y cuando SAP muestre una pantalla con signos vitales, Ü
-                             ofrece llenarlos. Nunca escribe sin que el operador lo apruebe. -->
-                        <TextBlock Text="Consulta del portal" Margin="0,14,0,4" FontSize="11"
-                                   Foreground="#99FFFFFF"/>
+                             ofrece llenarlos. Nunca escribe sin que el operador lo apruebe. ────── -->
+                        <TextBlock Text="Consulta del portal" Margin="0,0,0,4"
+                                   Style="{StaticResource SectionLabel}"/>
                         <DockPanel LastChildFill="True">
                             <Button x:Name="ClinicalPairBtn" Content="Emparejar" DockPanel.Dock="Right"
                                     Width="86" Height="26" Margin="6,0,0,0" Click="OnClinicalPair"
-                                    Style="{StaticResource FlatBtn}" Background="#33FFFFFF"
-                                    Foreground="#CCFFFFFF" FontSize="11"/>
+                                    Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
+                                    Foreground="#CCFFFFFF" HorizontalContentAlignment="Center"/>
                             <TextBox x:Name="ClinicalCodeBox" Height="26" MaxLength="8"
                                      CharacterCasing="Upper" FontFamily="Consolas" FontSize="12"
                                      VerticalContentAlignment="Center" Padding="6,0,0,0"
@@ -226,35 +323,200 @@
                                    Foreground="#99FFFFFF" TextWrapping="Wrap"
                                    Text="Sin emparejar."/>
 
-                        <!-- Paso a paso: no ejecuta distinto, ejecuta PAUSADO. Se queda encendido
-                             entre corridas a propósito: si lo enciendes es porque estás depurando. -->
-                        <Button x:Name="StepModeBtn" Height="26" Margin="0,14,0,0" Click="OnToggleStepMode"
-                                Style="{StaticResource FlatBtn}" Background="#33FFFFFF" Foreground="#CCFFFFFF"
-                                FontSize="11"
-                                ToolTip="Ejecuta el workflow paso a paso: se detiene ANTES de cada paso y muestra el veredicto y cómo se veía la pantalla al enseñarlo."/>
+                        <Border Style="{StaticResource Sep}"/>
 
-                        <Button x:Name="DryRunBtn" Content="🧪 Ensayo en seco" Height="26" Margin="0,6,0,0"
-                                Click="OnDryRunWorkflow" Style="{StaticResource FlatBtn}" Background="#33FFFFFF"
-                                Foreground="#CCFFFFFF" FontSize="11" IsEnabled="False"
-                                ToolTip="Comprueba el workflow sin ejecutarlo: qué pasos no resolverían y dónde cambia de pantalla sin un paso que lo provoque. El detalle va a 📜 Logs."/>
+                        <!-- ── Backend: herramientas de desarrollo. Sección secundaria, PLEGADA por
+                             defecto — hover la abre, clic la fija, y no compite visualmente con lo
+                             que usa el operador. El contenido conserva su apariencia técnica. ──── -->
+                        <StackPanel x:Name="BackendZone">
+                            <Border x:Name="BackendHeader" CornerRadius="8" Background="#1CFFFFFF" Height="30"
+                                    Cursor="Hand" Focusable="True"
+                                    AutomationProperties.Name="Backend — herramientas de desarrollo">
+                                <DockPanel LastChildFill="True" Margin="10,0">
+                                    <Path x:Name="BackendChevron" DockPanel.Dock="Left" Data="M 0 0 L 4.5 4.5 L 0 9"
+                                          Stroke="#CCFFFFFF" StrokeThickness="1.6" StrokeLineJoin="Round"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                        <Path.RenderTransform>
+                                            <RotateTransform x:Name="BackendRot" Angle="0"/>
+                                        </Path.RenderTransform>
+                                    </Path>
+                                    <!-- Señal de conexión con Graph, visible sin abrir la sección:
+                                         verde = configurado, ámbar = falta la API key. -->
+                                    <Ellipse x:Name="BackendDot" DockPanel.Dock="Right" Width="7" Height="7"
+                                             Fill="#FFA51F" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Backend" Foreground="#CCFFFFFF" FontSize="11"
+                                               Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </DockPanel>
+                            </Border>
 
-                        <!-- Toggle: al enseñar, ¿procesar el video con IA (LLM)? Off = se graba el video y
-                             se ve en 🎞 Videos, pero NO se manda al LLM (evita el timeout 504). -->
-                        <Button x:Name="VideoLlmToggle" Height="26" Margin="0,8,0,0" Click="OnToggleVideoLlm"
-                                Style="{StaticResource FlatBtn}" Background="#33FFFFFF" Foreground="#CCFFFFFF"
-                                FontSize="11"
-                                ToolTip="Al enseñar: si está OFF, el video NO se manda al LLM (evita el timeout); igual se graba y lo ves en 🎞 Videos."/>
+                            <StackPanel x:Name="BackendBody" Visibility="Collapsed" Margin="0,6,0,0">
+                                <!-- El backend ya no se configura a mano: la URL tiene default sano y la
+                                     API key llega sola (key embebida en el build de distribución, o env
+                                     GRAPH_API_KEY en dev). Esto es solo un estado de diagnóstico. Ver
+                                     GraphConfig.Load y el doc "Distribución conectada". -->
+                                <TextBlock x:Name="BackendStatus" Foreground="#88FFFFFF" FontSize="10"
+                                           TextWrapping="Wrap" Margin="0,0,0,2"/>
 
-                        <Button x:Name="LogsBtn" Content="📜 Logs" Height="26" Margin="0,6,0,0"
-                                Click="OnOpenLogs" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
-                                ToolTip="Registro (para diagnosticar errores)"/>
+                                <!-- Inspector visual de elementos (estilo TalkBack): dibuja recuadros sobre
+                                     la pantalla; al hacer clic, amarillo si coincide con lo que el asistente
+                                     tocaría, rojo doble si no. Ver UiInspector. -->
+                                <Button x:Name="InspectorBtn" Content="🔍 Inspector de elementos" Height="26" Margin="0,8,0,0"
+                                        Click="OnToggleInspector" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
+                                        ToolTip="Muestra recuadros sobre los elementos de la pantalla. Al hacer clic: amarillo si coincide con lo que el asistente tocaría, rojo (ambos) si no."/>
 
-                        <!-- Para soporte: saber qué versión tiene el cliente delante sin pedirle nada. -->
-                        <TextBlock x:Name="VersionText" Text="" Foreground="#66FFFFFF" FontSize="10"
-                                   Margin="0,10,0,0"/>
+                                <!-- El "location bar de Windows": ID de superficie actual, arriba a la derecha.
+                                     Mismo formato que source_url de los workflows (uia:// y web://). -->
+                                <Button x:Name="LocatorBtn" Content="📍 ID visible — clic para ocultar" Height="26" Margin="0,6,0,0"
+                                        Click="OnToggleLocator" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
+                                        ToolTip="Muestra dónde estás parado como URL: uia://app.exe/ventana o web://dominio/ruta. Es el ID con el que se cargan los workflows."/>
+
+                                <!-- El grafo TOCABLE: la ventana actual expone sus elementos como aristas;
+                                     hover = iluminar el botón real, clic = pulsarlo de verdad y aprender la
+                                     arista con certeza absoluta. Ver GraphExplorerWindow. -->
+                                <Button x:Name="ExplorerBtn" Content="🕸 Explorar el grafo" Height="26" Margin="0,6,0,0"
+                                        Click="OnToggleExplorer" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
+                                        ToolTip="Las aristas de la pantalla actual, en vivo. Hover: ilumina el elemento real. Clic: lo pulsa de verdad y aprende la ruta."/>
+
+                                <!-- El grafo pre-aprendido, visible: pantallas como nodos, saltos como aristas,
+                                     y el nodo actual iluminado mientras navegas. Ver WorkflowMapWindow. -->
+                                <Button x:Name="MapBtn" Content="🗺 Mapa del grafo" Height="26" Margin="0,6,0,0"
+                                        Click="OnToggleMap" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
+                                        ToolTip="Dibuja los workflows como un grafo de pantallas. Dos workflows que pasan por la misma pantalla comparten nodo: ahí se concatenan."/>
+
+                                <!-- Toggle: al enseñar, ¿procesar el video con IA (LLM)? Off = se graba el
+                                     video y se ve en 🎞 Videos, pero NO se manda al LLM (evita el 504). -->
+                                <Button x:Name="VideoLlmToggle" Height="26" Margin="0,6,0,0" Click="OnToggleVideoLlm"
+                                        Style="{StaticResource MenuBtn}" Background="#33FFFFFF" Foreground="#CCFFFFFF"
+                                        ToolTip="Al enseñar: si está OFF, el video NO se manda al LLM (evita el timeout); igual se graba y lo ves en 🎞 Videos."/>
+
+                                <Button x:Name="LogsBtn" Content="📜 Logs" Height="26" Margin="0,6,0,0"
+                                        Click="OnOpenLogs" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
+                                        ToolTip="Registro (para diagnosticar errores)"/>
+
+                                <!-- Para soporte: saber qué versión tiene el cliente delante sin pedir nada. -->
+                                <TextBlock x:Name="VersionText" Text="" Foreground="#66FFFFFF" FontSize="10"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
                     </StackPanel>
-                </Expander>
-            </StackPanel>
-        </Border>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Fila inferior: el globo de conversación a la izquierda, la barra a la derecha. -->
+            <DockPanel HorizontalAlignment="Right" LastChildFill="False">
+
+                <!-- GLOBO DE CONVERSACIÓN: estado + narración + entrada de texto. Aparece solo cuando
+                     hay algo que decir (narración, una pregunta, una ejecución en curso) o cuando el
+                     usuario lo abre con 💬. Se cierra con ✕ o Esc; lo que muestre sigue actualizándose
+                     aunque esté cerrado (Status/Bubble viven aquí). -->
+                <Border x:Name="TalkPanel" DockPanel.Dock="Left" Width="252" Visibility="Collapsed"
+                        VerticalAlignment="Bottom" CornerRadius="14" Background="#F2101014"
+                        BorderBrush="#33FFFFFF" BorderThickness="1" Padding="12" Margin="0,0,8,0">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="TalkShift"/>
+                    </Border.RenderTransform>
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.5" Color="Black"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <DockPanel LastChildFill="True">
+                            <Button x:Name="TalkCloseBtn" DockPanel.Dock="Right" Content="✕" Width="22" Height="22"
+                                    Style="{StaticResource FlatBtn}" Background="#22FFFFFF" FontSize="10"
+                                    Margin="6,0,0,0" VerticalAlignment="Top" ToolTip="Cerrar (Esc)"
+                                    AutomationProperties.Name="Cerrar la conversación"/>
+                            <TextBlock x:Name="Status" Text="Ü listo" Foreground="#EEFFFFFF" FontSize="12.5"
+                                       TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        </DockPanel>
+
+                        <!-- Globo de narración: crece con el texto (la ventana se expande hacia arriba) y,
+                             si el texto excede el máximo, hace scroll en vez de cortarse. -->
+                        <ScrollViewer MaxHeight="320" Margin="0,8,0,0" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <TextBlock x:Name="Bubble" Text="" Foreground="#CCFFFFFF" FontSize="12"
+                                       TextWrapping="Wrap"/>
+                        </ScrollViewer>
+
+                        <!-- Entrada de texto: también resuelve las preguntas del asistente (AskAsync
+                             abre este globo y enfoca la caja). El micrófono vive en la barra. -->
+                        <TextBox x:Name="Input" Height="30" Margin="0,10,0,0" VerticalContentAlignment="Center"
+                                 Background="#22FFFFFF" Foreground="White" BorderThickness="0" Padding="8,0"
+                                 KeyDown="OnInputKey" ToolTip="Escríbele a Ü y pulsa Enter"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- LA BARRA: vertical, estrecha, siempre disponible. Arrastrable por cualquier zona
+                     libre (y por la carita). De arriba a abajo: carita, contextuales (⬇ actualización,
+                     ⏹ detener), y las 4 acciones de siempre; abajo, el activador del menú. -->
+                <Border x:Name="BarPanel" DockPanel.Dock="Right" CornerRadius="18" Background="#F2101014"
+                        Padding="8,10" BorderBrush="#33FFFFFF" BorderThickness="1" VerticalAlignment="Bottom">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.5" Color="Black"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <!-- La carita (misma que Android). Clic → colapsa a solo la carita · doble clic →
+                             micrófono · mantener oprimido → cambia de tema · arrastrar → mover. -->
+                        <ui:FaceControl x:Name="Face" Width="42" Height="42" Cursor="Hand"
+                                        HorizontalAlignment="Center"
+                                        ToolTip="Clic: solo la carita · doble clic: micrófono · mantener: cambiar tema · arrastrar: mover"/>
+
+                        <!-- Pastilla de actualización: oculta salvo que ya haya una versión descargada y
+                             lista. Si el usuario la ignora, se aplica sola al cerrar (Updater.ApplyOnExit). -->
+                        <Button x:Name="UpdateBtn" Content="⬇" Style="{StaticResource BarBtn}"
+                                Background="#553B82F6" Visibility="Collapsed" Click="OnApplyUpdate"
+                                ToolTip="Nueva versión lista — clic para reiniciar (si no, se instala sola al cerrar Ü)"
+                                AutomationProperties.Name="Aplicar la actualización"/>
+
+                        <!-- Solo visible mientras ejecuta algo: detener es detener, también la voz. -->
+                        <Button x:Name="StopBtn" Content="⏹" Style="{StaticResource BarBtn}"
+                                Background="#55FF3B30" Visibility="Collapsed" Click="OnStop"
+                                ToolTip="Detener lo que está haciendo"
+                                AutomationProperties.Name="Detener"/>
+
+                        <Button x:Name="MicBtn" Content="🎤" Style="{StaticResource BarBtn}" Click="OnMic"
+                                ToolTip="Hablarle a Ü" AutomationProperties.Name="Micrófono"/>
+
+                        <Button x:Name="TalkBtn" Content="💬" Style="{StaticResource BarBtn}"
+                                ToolTip="Conversación: estado, respuestas y entrada de texto"
+                                AutomationProperties.Name="Conversación"/>
+
+                        <!-- Enseñanza activa: graba pantalla+voz para que Ü aprenda a usar una app.
+                             En rojo mientras graba (SetTeachingUi). -->
+                        <Button x:Name="TeachBtn" Content="🎓" Style="{StaticResource BarBtn}" Click="OnToggleTeach"
+                                ToolTip="Enseñar: Ü graba la pantalla y tu voz para aprender un workflow"
+                                AutomationProperties.Name="Enseñar"/>
+
+                        <!-- Solo visible mientras se graba: descarta lo grabado y vuelve a empezar, sin
+                             que el error llegue nunca a Gemini ni al cerebro. Ver TeachSession.RestartAsync. -->
+                        <Button x:Name="RestartTeachBtn" Content="🔄" Style="{StaticResource BarBtn}"
+                                Visibility="Collapsed" Click="OnRestartTeach"
+                                ToolTip="Me equivoqué: descartar esta grabación y empezar de nuevo"
+                                AutomationProperties.Name="Rehacer la enseñanza"/>
+
+                        <!-- Siempre visible: callarlo tiene que estar a un clic, sin importar qué esté pasando. -->
+                        <Button x:Name="MuteBtn" Content="🔊" Style="{StaticResource BarBtn}" Click="OnToggleMute"
+                                ToolTip="Callar a Ü ahora mismo" AutomationProperties.Name="Silencio"/>
+
+                        <Border Background="#1EFFFFFF" Height="1" Margin="6,10,6,2"/>
+
+                        <!-- ACTIVADOR del menú extendido: hover lo abre (hacia arriba), clic lo fija,
+                             Esc lo cierra. El chevron gira 180° cuando el menú está abierto. -->
+                        <Button x:Name="MenuActivator" Height="26" Style="{StaticResource BarBtn}"
+                                Width="38" FontSize="11" Background="#00FFFFFF"
+                                ToolTip="Más herramientas (hover abre · clic fija · Esc cierra)"
+                                AutomationProperties.Name="Más herramientas">
+                            <Path x:Name="ActivatorChevron" Data="M 0 5 L 6 0 L 12 5"
+                                  Stroke="#CCFFFFFF" StrokeThickness="1.8" StrokeLineJoin="Round"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  RenderTransformOrigin="0.5,0.5">
+                                <Path.RenderTransform>
+                                    <RotateTransform x:Name="ActivatorRot" Angle="0"/>
+                                </Path.RenderTransform>
+                            </Path>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </DockPanel>
+        </StackPanel>
     </Grid>
 </Window>

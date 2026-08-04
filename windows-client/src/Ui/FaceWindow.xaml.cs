@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
 using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Agent;
@@ -86,11 +87,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // la telemetría de "Windows Live" arranque con el usuario correcto.
         EnsureOnboarded();
 
-        // Esquina inferior derecha por defecto. El panel crece hacia arriba (ver OnSizeChanged) cuando
-        // se abre un Expander (p.ej. "Backend"): sin esto, ResizeMode="NoResize" con altura fija
-        // recortaba el contenido expandido y quedaba invisible.
+        // Esquina inferior derecha por defecto. La ventana mide lo que mida el contenido
+        // (SizeToContent=WidthAndHeight): abrir el menú extendido o el globo de conversación crece
+        // hacia arriba/izquierda (ver OnSizeChanged), sin recortar nada. ActualWidth y no Width:
+        // con SizeToContent, Width es NaN.
         var wa = SystemParameters.WorkArea;
-        Left = wa.Right - Width - 24;
+        Left = wa.Right - ActualWidth - 24;
         Top = wa.Bottom - ActualHeight - 24;
         MaxHeight = wa.Height - 48; // al llegar al tope vertical, el globo hace scroll (ver Bubble)
         SizeChanged += OnSizeChanged;
@@ -192,8 +194,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _loop = new AgentLoop(_backend, _uia, mcp, this, this, InstalledApps.List,
             () => _locator?.Current, _workflowRunner);
 
-        // Arrastrar por el texto de estado mueve el panel (la carita tiene sus propios gestos abajo).
-        Header.MouseLeftButtonDown += (_, ev) => { if (ev.ButtonState == MouseButtonState.Pressed) DragMove(); };
+        // Arrastrar por cualquier zona libre de la barra mueve la ventana (la carita tiene sus
+        // propios gestos abajo; los botones se tragan el clic, así que no interfieren).
+        BarPanel.MouseLeftButtonDown += (_, ev) => { if (ev.ButtonState == MouseButtonState.Pressed) DragMove(); };
+        TalkPanel.MouseLeftButtonDown += (_, ev) => { if (ev.ButtonState == MouseButtonState.Pressed) DragMove(); };
+
+        // El menú extendido: hover/clic/teclado sobre el activador, cierre con retraso, Backend
+        // plegado. Toda la coreografía vive en la región «menú extendido» de abajo.
+        WireMenu();
 
         // La carita colapsada SIGUE al cursor automatizado durante la ejecución de workflows: se ve
         // "quién" está haciendo los clics. Evento estático de UiaSurface; se suelta al cerrar.
@@ -290,9 +298,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _updater = new Updater(_config.UpdateFeedUrl);
         VersionText.Text = $"Versión {_updater.CurrentVersion}";
         // UpdateReady llega desde un hilo del pool, no del Dispatcher: tocar la UI directo reventaría.
+        // En la barra el botón es solo el icono ⬇; la versión concreta va en el tooltip.
         _updater.UpdateReady += version => Dispatcher.Invoke(() =>
         {
-            UpdateBtn.Content = $"⬇ Versión {version} lista — reiniciar";
+            UpdateBtn.ToolTip = $"Versión {version} lista — clic para reiniciar (si no, se instala sola al cerrar Ü)";
             UpdateBtn.Visibility = Visibility.Visible;
         });
         _updater.Start();
@@ -351,21 +360,20 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
             double px = x / dpi.DpiScaleX + 18, py = y / dpi.DpiScaleY + 18;
             var wa = SystemParameters.WorkArea;
-            Left = Math.Clamp(px, wa.Left, Math.Max(wa.Left, wa.Right - Width));
+            Left = Math.Clamp(px, wa.Left, Math.Max(wa.Left, wa.Right - ActualWidth));
             Top = Math.Clamp(py, wa.Top, Math.Max(wa.Top, wa.Bottom - ActualHeight));
         }));
     }
 
-    // --- Colapsar / expandir: la carita alterna entre el panel completo y solo ella misma ---
+    // --- Colapsar / expandir: la carita alterna entre la barra y solo ella misma ---
 
-    private const double ExpandedWidth = 320;
-    private const double CollapsedWidth = 128; // 72 de la carita + 28 de aire a cada lado (sombra)
     private bool _collapsed;
 
     /// <summary>
-    /// Alterna entre el panel completo y SOLO la carita. Al colapsar, se oculta el panel y aparece la
-    /// carita suelta (misma que el header); al expandir, vuelve el panel intacto. El cambio de tamaño
-    /// lo reancla <see cref="OnSizeChanged"/> a la esquina inferior derecha.
+    /// Alterna entre la barra (con sus flyouts) y SOLO la carita. Al colapsar se cierra el menú
+    /// extendido (si estaba abierto) y aparece la carita suelta; al expandir, la barra vuelve intacta
+    /// — incluido el globo de conversación si estaba abierto. El tamaño lo pone SizeToContent y el
+    /// cambio lo reancla <see cref="OnSizeChanged"/> a la esquina inferior derecha.
     /// </summary>
     private void ToggleCollapsed()
     {
@@ -373,15 +381,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_collapsed)
         {
             CollapsedFace.Thinking = Face.Thinking; // que la carita suelta refleje el mismo estado
-            Panel.Visibility = Visibility.Collapsed;
+            CloseMenu();
+            RootPanel.Visibility = Visibility.Collapsed;
             CollapsedFace.Visibility = Visibility.Visible;
-            Width = CollapsedWidth;
         }
         else
         {
             CollapsedFace.Visibility = Visibility.Collapsed;
-            Panel.Visibility = Visibility.Visible;
-            Width = ExpandedWidth;
+            RootPanel.Visibility = Visibility.Visible;
         }
     }
 
@@ -485,6 +492,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private async void OnMic(object sender, RoutedEventArgs e)
     {
         SetStatus("Escuchando…");
+        ShowTalk(); // que «Escuchando…» y lo que se entienda queden a la vista
         string heard = await _voice.ListenOnceAsync(CancellationToken.None);
         if (string.IsNullOrWhiteSpace(heard)) { SetStatus("No te escuché"); return; }
         if (_pendingAnswer != null && !_pendingAnswer.Task.IsCompleted) { _pendingAnswer.TrySetResult(heard); return; }
@@ -554,6 +562,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _teachSession.StatusChanged += (_, msg) => Dispatcher.Invoke(() => SetStatus(msg));
 
         SetTeachingUi(true);
+        ShowTalk(); // el conteo regresivo y el estado de la grabación se ven ahí
         try
         {
             // Título vacío: se autogenera al final desde lo aprendido (WorkflowLearner en Graph).
@@ -570,14 +579,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
     }
 
-    /// <summary>Botón 🎓 en rojo y 🔄 a la vista mientras se graba; todo de vuelta a lo normal si no.</summary>
+    /// <summary>Botón 🎓 en rojo (⏸) mientras se graba; todo de vuelta a lo normal si no.
+    /// En la barra el botón es solo icono: el verbo va en el tooltip, y el estado en el color.</summary>
     private void SetTeachingUi(bool teaching)
     {
         _teaching = teaching;
-        TeachBtn.Content = teaching ? "⏸ Enseñar" : "🎓 Enseñar";
+        TeachBtn.Content = teaching ? "⏸" : "🎓";
+        TeachBtn.ToolTip = teaching
+            ? "Enseñando: clic para terminar y guardar lo aprendido"
+            : "Enseñar: Ü graba la pantalla y tu voz para aprender un workflow";
         TeachBtn.Background = new System.Windows.Media.SolidColorBrush(teaching
-            ? System.Windows.Media.Color.FromRgb(255, 59, 48)  // rojo, como StopBtn
-            : System.Windows.Media.Color.FromRgb(34, 34, 34)); // gris normal
+            ? System.Windows.Media.Color.FromArgb(0x88, 255, 59, 48)   // rojo, como StopBtn
+            : System.Windows.Media.Color.FromArgb(0x1A, 255, 255, 255)); // el fondo normal de BarBtn
         RestartTeachBtn.Visibility = Visibility.Collapsed; // reinicio en caliente: follow-up de la enseñanza unificada
     }
 
@@ -597,6 +610,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         SetTeachingUi(false);
         SetStatus("Cerrando la enseñanza y estructurando el workflow…");
+        ShowTalk(); // el cierre tarda y termina en un veredicto: que no pase en silencio
 
         if (_teachSession != null)
         {
@@ -673,13 +687,225 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             : "Al enseñar, el video NO se procesa con IA (se graba igual; míralo en Videos)");
     }
 
-    // --- Selector de workflow directo (panel Backend) ---
+    // ── Menú extendido: activador con hover, cierre con retraso, fijado por clic ──────────────
+    //
+    // Reglas (calcadas del brief del rediseño):
+    //  · Hover sobre el activador abre el menú HACIA ARRIBA (la ventana crece anclada abajo-derecha).
+    //  · Mientras el cursor esté sobre el menú O sobre la barra, no se cierra: la barra entera es la
+    //    zona segura entre activador y panel, así el trayecto nunca lo cierra por accidente.
+    //  · Al salir del todo, espera ~320 ms; si el cursor vuelve antes, se cancela el cierre.
+    //  · Clic (o Enter/Espacio) en el activador lo FIJA: ya no se cierra por hover-out, solo con
+    //    Esc, otro clic, o al colapsar la carita.
+    //  · Backend, dentro del menú, repite el mismo patrón en miniatura: plegado por defecto, hover
+    //    lo abre (con una pausa de intención), clic lo fija, y al cerrarse el menú vuelve a plegarse
+    //    salvo que esté fijado.
 
-    /// <summary>Al abrir el panel Backend refresca la lista, así un workflow recién enseñado ya aparece.</summary>
-    private void OnBackendExpanded(object sender, RoutedEventArgs e)
+    private bool _menuOpen, _menuPinned;
+    private bool _backendOpen, _backendPinned;
+    private bool _talkOpen;
+    private System.Windows.Threading.DispatcherTimer _menuOpenTimer = null!,
+        _menuCloseTimer = null!, _backendHoverTimer = null!, _backendCloseTimer = null!;
+
+    /// <summary>Conecta toda la coreografía del menú. Se llama una vez, desde OnLoaded.</summary>
+    private void WireMenu()
     {
-        if (!_runningDirect) _ = ReloadDirectWorkflowsAsync();
+        // Pausa de intención al abrir por hover: pasar de largo por el activador no abre nada.
+        _menuOpenTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(110) };
+        _menuOpenTimer.Tick += (_, __) => { _menuOpenTimer.Stop(); if (MenuActivator.IsMouseOver) OpenMenu(pin: false); };
+
+        _menuCloseTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(320) };
+        _menuCloseTimer.Tick += (_, __) =>
+        {
+            _menuCloseTimer.Stop();
+            if (_menuOpen && !_menuPinned && !MenuPanel.IsMouseOver && !BarPanel.IsMouseOver) CloseMenu();
+        };
+
+        _backendHoverTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+        _backendHoverTimer.Tick += (_, __) => { _backendHoverTimer.Stop(); if (BackendHeader.IsMouseOver) OpenBackend(); };
+
+        _backendCloseTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _backendCloseTimer.Tick += (_, __) =>
+        {
+            _backendCloseTimer.Stop();
+            if (_backendOpen && !_backendPinned && !BackendZone.IsMouseOver) CloseBackend();
+        };
+
+        // Activador: hover abre, clic fija/cierra, el foco de teclado también abre (accesible sin ratón).
+        MenuActivator.MouseEnter += (_, __) => { _menuOpenTimer.Stop(); _menuOpenTimer.Start(); };
+        MenuActivator.MouseLeave += (_, __) => _menuOpenTimer.Stop();
+        MenuActivator.Click += (_, __) => { if (_menuOpen && _menuPinned) CloseMenu(); else OpenMenu(pin: true); };
+        MenuActivator.GotKeyboardFocus += (_, __) => OpenMenu(pin: false);
+
+        // Zona segura: menú y barra cancelan el cierre al entrar y lo agendan al salir.
+        MenuPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
+        MenuPanel.MouseLeave += (_, __) => ScheduleMenuClose();
+        BarPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
+        BarPanel.MouseLeave += (_, __) => ScheduleMenuClose();
+
+        // Backend: el mismo patrón, en miniatura.
+        BackendHeader.MouseEnter += (_, __) => { _backendCloseTimer.Stop(); _backendHoverTimer.Stop(); _backendHoverTimer.Start(); };
+        BackendHeader.MouseLeave += (_, __) => _backendHoverTimer.Stop();
+        BackendZone.MouseEnter += (_, __) => _backendCloseTimer.Stop();
+        BackendZone.MouseLeave += (_, __) => { if (_backendOpen && !_backendPinned) { _backendCloseTimer.Stop(); _backendCloseTimer.Start(); } };
+        BackendHeader.MouseLeftButtonUp += (_, __) => ToggleBackendPin();
+        BackendHeader.KeyDown += (_, e) => { if (e.Key is Key.Enter or Key.Space) { ToggleBackendPin(); e.Handled = true; } };
+
+        // Globo de conversación: 💬 lo alterna, ✕ lo cierra.
+        TalkBtn.Click += (_, __) => { if (_talkOpen) HideTalk(); else ShowTalk(focusInput: true); };
+        TalkCloseBtn.Click += (_, __) => HideTalk();
+
+        // Esc cierra lo más volátil primero: menú, luego conversación.
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            if (_menuOpen) { CloseMenu(); e.Handled = true; }
+            else if (_talkOpen) { HideTalk(); e.Handled = true; }
+        };
+
+        // Clic fuera (en otra app estando esta ventana activa): el menú sin fijar se cierra.
+        // El fijado sobrevive a propósito — fijar es pedir que se quede mientras trabajas al lado.
+        Deactivated += (_, __) => { if (_menuOpen && !_menuPinned) CloseMenu(); };
+
+        // Timers muertos al cerrar: un DispatcherTimer vivo mantiene la ventana en memoria.
+        Closed += (_, __) =>
+        {
+            _menuOpenTimer.Stop(); _menuCloseTimer.Stop();
+            _backendHoverTimer.Stop(); _backendCloseTimer.Stop();
+        };
     }
+
+    private void ScheduleMenuClose()
+    {
+        if (!_menuOpen || _menuPinned) return;
+        _menuCloseTimer.Stop();
+        _menuCloseTimer.Start();
+    }
+
+    /// <summary>Abre el menú extendido (idempotente). <paramref name="pin"/> lo deja fijado.</summary>
+    private void OpenMenu(bool pin)
+    {
+        if (pin) _menuPinned = true;
+        if (_menuOpen) return;
+        _menuOpen = true;
+        _menuCloseTimer.Stop();
+
+        // El tope de scroll se calcula al abrir: el menú nunca debe empujar la ventana más allá del
+        // área de trabajo (poco espacio vertical, DPI alto, ventanas pequeñas → scroll interno).
+        var wa = SystemParameters.WorkArea;
+        double vecino = Math.Max(BarPanel.ActualHeight, _talkOpen ? TalkPanel.ActualHeight : 0);
+        MenuScroll.MaxHeight = Math.Max(180, wa.Height - 48 - vecino - 40);
+
+        FadeSlideIn(MenuPanel, MenuShift, fromY: 10);
+        Rotate(ActivatorRot, 180);
+
+        // Refresca la lista al abrir (antes lo hacía el Expander de Backend): un workflow recién
+        // enseñado aparece sin reiniciar nada. Con freno: abrir por hover puede pasar muchas veces
+        // por minuto y cada recarga es un GET a Graph.
+        if (!_runningDirect && Environment.TickCount64 - _lastWorkflowReloadMs > 3000)
+        {
+            _lastWorkflowReloadMs = Environment.TickCount64;
+            _ = ReloadDirectWorkflowsAsync();
+        }
+    }
+
+    private long _lastWorkflowReloadMs;
+
+    /// <summary>Cierra el menú (y despliega el cierre de Backend si no está fijado).</summary>
+    private void CloseMenu()
+    {
+        _menuPinned = false;
+        if (!_menuOpen) return;
+        _menuOpen = false;
+        _menuCloseTimer.Stop();
+        FadeSlideOut(MenuPanel, MenuShift, toY: 8, () => { if (!_menuOpen) MenuPanel.Visibility = Visibility.Collapsed; });
+        Rotate(ActivatorRot, 0);
+        if (_backendOpen && !_backendPinned) CloseBackend();
+    }
+
+    /// <summary>Fijar/soltar Backend con clic (o Enter/Espacio) en su cabecera.</summary>
+    private void ToggleBackendPin()
+    {
+        if (!_backendOpen) { _backendPinned = true; OpenBackend(); }
+        else if (_backendPinned) { _backendPinned = false; CloseBackend(); }
+        else _backendPinned = true; // estaba abierto por hover: el clic lo consolida
+    }
+
+    private void OpenBackend()
+    {
+        if (_backendOpen) return;
+        _backendOpen = true;
+        BackendBody.Visibility = Visibility.Visible;
+        BackendBody.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+        Rotate(BackendRot, 90);
+    }
+
+    private void CloseBackend()
+    {
+        if (!_backendOpen) return;
+        _backendOpen = false;
+        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(120));
+        fade.Completed += (_, __) => { if (!_backendOpen) BackendBody.Visibility = Visibility.Collapsed; };
+        BackendBody.BeginAnimation(OpacityProperty, fade);
+        Rotate(BackendRot, 0);
+    }
+
+    // ── Globo de conversación (estado + narración + entrada de texto) ─────────────────────────
+
+    /// <summary>
+    /// Muestra el globo de conversación. Se llama solo cuando hay algo que ver: una narración, una
+    /// pregunta del asistente, una ejecución en curso. Con la carita colapsada no hace nada (mismo
+    /// contrato de siempre: colapsado = solo la carita).
+    /// </summary>
+    private void ShowTalk(bool focusInput = false)
+    {
+        if (_collapsed) return;
+        if (!_talkOpen)
+        {
+            _talkOpen = true;
+            FadeSlideIn(TalkPanel, TalkShift, fromY: 6);
+        }
+        // El foco se pide DESPUÉS del pase de layout: si el globo acaba de hacerse visible,
+        // enfocar en el mismo instante puede caer en el vacío.
+        if (focusInput)
+            Dispatcher.BeginInvoke(new Action(() => Input.Focus()),
+                System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void HideTalk()
+    {
+        if (!_talkOpen) return;
+        _talkOpen = false;
+        FadeSlideOut(TalkPanel, TalkShift, toY: 6, () => { if (!_talkOpen) TalkPanel.Visibility = Visibility.Collapsed; });
+    }
+
+    // ── Microanimaciones compartidas: fundido + deslizamiento corto, sin rebotes ──────────────
+
+    private static void FadeSlideIn(UIElement el, System.Windows.Media.TranslateTransform shift, double fromY)
+    {
+        el.Visibility = Visibility.Visible;
+        var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+        el.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
+        shift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
+            new DoubleAnimation(fromY, 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
+    }
+
+    private static void FadeSlideOut(UIElement el, System.Windows.Media.TranslateTransform shift, double toY, Action done)
+    {
+        var ease = new QuadraticEase { EasingMode = EasingMode.EaseIn };
+        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140)) { EasingFunction = ease };
+        fade.Completed += (_, __) => done();
+        el.BeginAnimation(OpacityProperty, fade);
+        shift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
+            new DoubleAnimation(toY, TimeSpan.FromMilliseconds(140)) { EasingFunction = ease });
+    }
+
+    private static void Rotate(System.Windows.Media.RotateTransform t, double angle) =>
+        t.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty,
+            new DoubleAnimation(angle, TimeSpan.FromMilliseconds(160)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+
+    // --- Selector de workflow directo (en el menú extendido) ---
 
     /// <summary>
     /// Carga los workflows de Graph para el selector directo del panel Backend: el carrusel/lista elige
@@ -751,6 +977,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_runningDirect) return;
         if (_directIndex < 0 || _directIndex >= _directWorkflows.Count) return;
         var wf = _directWorkflows[_directIndex];
+
+        // El diálogo de confirmación desactiva esta ventana, y un menú abierto por hover se
+        // cerraría debajo. Fijarlo primero: la pregunta y su consecuencia se ven en el mismo sitio.
+        OpenMenu(pin: true);
 
         var confirm = MessageBox.Show(
             $"¿Borrar «{wf.Title}»?\n\nNo se puede deshacer.",
@@ -1124,6 +1354,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         StopBtn.Visibility = Visibility.Visible;
         SetThinking(true);
         SetStatus($"Ejecutando «{wf.Title}»…");
+        ShowTalk(); // el progreso se narra ahí, y el ⏹ de la barra ya quedó visible
         string? bridgeGoal = null; // puente subconsciente→consciente si el workflow se detiene
         try
         {
@@ -1239,6 +1470,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         BackendStatus.Text = _graphConfig.IsConfigured
             ? $"✓ Conectado a {host}"
             : "⚠ Sin API key. Una sola vez en dev: setx GRAPH_API_KEY \"tu_key\" y reinicia Ü.";
+        // El punto de la cabecera dice lo mismo de un vistazo, sin abrir la sección.
+        BackendDot.Fill = new System.Windows.Media.SolidColorBrush(_graphConfig.IsConfigured
+            ? System.Windows.Media.Color.FromRgb(0x2F, 0xB4, 0x57)   // verde: configurado
+            : System.Windows.Media.Color.FromRgb(0xFF, 0xA5, 0x1F)); // ámbar: falta la key
+        BackendHeader.ToolTip = BackendStatus.Text;
     }
 
     /// <summary>
@@ -1284,6 +1520,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         StopBtn.Visibility = Visibility.Visible;
         SetThinking(true);
         SetStatus("Pensando…");
+        ShowTalk(); // que se vea el estado (y quede a mano el ⏹) desde el primer segundo
         try
         {
             string summary = await _loop.RunAsync(goal, _cts.Token, requireOrigin);
@@ -1295,10 +1532,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
     // --- IVoice ---
-    public void Narrate(string text) => Dispatcher.Invoke(() => Bubble.Text = text);
+    // Narrar y hablar abren el globo de conversación: en la barra compacta no hay texto permanente,
+    // así que lo que Ü dice tiene que traer su propia ventana.
+    public void Narrate(string text) => Dispatcher.Invoke(() =>
+    {
+        Bubble.Text = text;
+        if (!string.IsNullOrWhiteSpace(text)) ShowTalk();
+    });
     public void Speak(string text)
     {
-        Dispatcher.Invoke(() => { Bubble.Text = text; SetStatus(text); });
+        Dispatcher.Invoke(() => { Bubble.Text = text; SetStatus(text); ShowTalk(); });
         _voice.Speak(text);
     }
 
@@ -1308,7 +1551,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Dispatcher.Invoke(() =>
         {
             SetStatus(question);
-            Input.Focus();
+            ShowTalk(focusInput: true); // la pregunta necesita la caja de texto delante
         });
         _pendingAnswer = new TaskCompletionSource<string>();
         ct.Register(() => _pendingAnswer?.TrySetResult(""));
