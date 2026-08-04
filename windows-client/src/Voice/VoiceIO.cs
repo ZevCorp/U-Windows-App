@@ -17,6 +17,32 @@ public sealed class VoiceIO : IDisposable
     public VoiceIO()
     {
         try { _tts.SelectVoiceByHints(VoiceGender.Female, VoiceAge.Adult); } catch { }
+        // El sintetizador SÍ avisa de cuándo empieza y termina; nadie lo estaba escuchando, así que
+        // «Ü está hablando» no existía como dato en ninguna parte y la interfaz no podía reflejarlo.
+        _tts.SpeakStarted += (_, __) => Raise(escuchando: false, hablando: true);
+        _tts.SpeakCompleted += (_, __) => Raise(escuchando: false, hablando: false);
+    }
+
+    /// <summary>
+    /// Cambió lo que la voz está haciendo. Existe para que la carita pueda reflejarlo: antes la UI lo
+    /// simulaba escribiendo «Escuchando…» antes del await y confiando en que el await tardase lo mismo
+    /// que el micrófono, que no es un estado sino una suposición.
+    /// </summary>
+    public event EventHandler<VoiceActivity>? ActivityChanged;
+
+    /// <summary>Lo que la voz está haciendo AHORA. Las dos pueden ser false (en reposo).</summary>
+    public readonly record struct VoiceActivity(bool Escuchando, bool Hablando);
+
+    /// <summary>Instantánea del estado, para quien se enganche tarde.</summary>
+    public VoiceActivity Activity { get; private set; }
+
+    private void Raise(bool escuchando, bool hablando)
+    {
+        var next = new VoiceActivity(escuchando, hablando);
+        if (next == Activity) return;
+        Activity = next;
+        // Llega en el hilo del motor de voz, no en el de la UI: quien pinte tiene que marshalear.
+        ActivityChanged?.Invoke(this, next);
     }
 
     /// <summary>
@@ -40,6 +66,9 @@ public sealed class VoiceIO : IDisposable
     public void Silence()
     {
         try { _tts.SpeakAsyncCancelAll(); } catch { }
+        // SpeakCompleted llega igual al cancelar, pero no siempre y no siempre a tiempo: dejar el
+        // estado en «hablando» cuando ya se calló sería una carita mintiendo.
+        Raise(Activity.Escuchando, hablando: false);
     }
 
     public void Speak(string text)
@@ -48,21 +77,32 @@ public sealed class VoiceIO : IDisposable
         try { _tts.SpeakAsyncCancelAll(); _tts.SpeakAsync(text); } catch { }
     }
 
-    /// <summary>Escucha una frase por el micrófono y devuelve el texto (o "" si no reconoció).</summary>
+    /// <summary>
+    /// Escucha una frase por el micrófono y devuelve el texto (o "" si no reconoció).
+    ///
+    /// El estado «escuchando» se levanta y se baja AQUÍ, alrededor de la llamada bloqueante, que es
+    /// el único sitio que sabe de verdad cuándo el micrófono está abierto. El motor se crea y se
+    /// destruye por llamada, así que no hay nada más a lo que engancharse.
+    /// </summary>
     public async Task<string> ListenOnceAsync(CancellationToken ct)
     {
-        return await Task.Run(() =>
+        Raise(escuchando: true, Activity.Hablando);
+        try
         {
-            try
+            return await Task.Run(() =>
             {
-                using var rec = new SpeechRecognitionEngine();
-                rec.LoadGrammar(new DictationGrammar());
-                rec.SetInputToDefaultAudioDevice();
-                var result = rec.Recognize(TimeSpan.FromSeconds(8));
-                return result?.Text ?? "";
-            }
-            catch { return ""; }
-        }, ct);
+                try
+                {
+                    using var rec = new SpeechRecognitionEngine();
+                    rec.LoadGrammar(new DictationGrammar());
+                    rec.SetInputToDefaultAudioDevice();
+                    var result = rec.Recognize(TimeSpan.FromSeconds(8));
+                    return result?.Text ?? "";
+                }
+                catch { return ""; }
+            }, ct);
+        }
+        finally { Raise(escuchando: false, Activity.Hablando); }
     }
 
     public void Dispose() => _tts.Dispose();

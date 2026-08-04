@@ -63,12 +63,27 @@ public partial class WorkflowLibraryWindow : Window
 
         Loaded += (_, _) =>
         {
-            string host = _graphConfig.BaseUrl.Replace("https://", "").Replace("http://", "").TrimEnd('/');
-            ConnStatus.Text = _graphConfig.IsConfigured
-                ? $"✓ Conectado a {host}"
-                : "⚠ Sin API key. Una sola vez en dev: setx GRAPH_API_KEY \"tu_key\" y reinicia Ü.";
+            // Este es el SEGUNDO indicador de conexión de la aplicación, y mentía igual que el de la
+            // carita: decía «conectado» por tener una API key, sin haber hablado con nadie. Los dos
+            // pasan ahora por el mismo formateador para que no puedan contradecirse.
+            ShowConnStatus();
+            GraphHealth.Changed += OnGraphHealthChanged;
             _ = ReloadWorkflowsAsync();
         };
+        // Evento estático: sin esto, cada apertura de la biblioteca deja una ventana viva.
+        Closed += (_, _) => GraphHealth.Changed -= OnGraphHealthChanged;
+    }
+
+    private void OnGraphHealthChanged(object? sender, GraphObservation obs) =>
+        Dispatcher.BeginInvoke(new Action(ShowConnStatus));
+
+    private void ShowConnStatus()
+    {
+        var (_, text) = GraphHealthText.Describe(
+            _graphConfig.IsConfigured
+                ? GraphHealth.CurrentFor(_graphConfig.BaseUrl)
+                : GraphHealth.CurrentFor(_graphConfig.BaseUrl) with { Link = GraphLink.SinKey });
+        ConnStatus.Text = text;
     }
 
     // ── Conexión ─────────────────────────────────────────────────────────────

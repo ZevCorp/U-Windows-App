@@ -27,6 +27,15 @@ public sealed class FaceGestures
     /// <summary>Mantener oprimido en un lugar estático (sin arrastrar).</summary>
     public Action? LongPress { get; set; }
 
+    /// <summary>
+    /// La ventana quedó en un sitio nuevo porque el usuario la movió. Llega con el destino FINAL.
+    ///
+    /// Con el destino y no leyendo <c>Left</c>/<c>Top</c> a propósito: en un lanzamiento esas
+    /// propiedades están a mitad de la animación, así que leerlas daría un punto intermedio. Pasar el
+    /// destino calculado evita tener que esperar al <c>Completed</c> para saber dónde va a caer.
+    /// </summary>
+    public Action<double, double>? Moved { get; set; }
+
     private const double MoveThresholdSq = 100; // (10 px)² para pasar de "toque" a "arrastre"
     private const int LongPressMs = 450;
     private const int TapWindowMs = 250; // ventana para distinguir 1 vs 2 toques
@@ -193,6 +202,7 @@ public sealed class FaceGestures
         var wa = SystemParameters.WorkArea;
         _win.Left = Math.Clamp(_win.Left, wa.Left, Math.Max(wa.Left, wa.Right - _win.ActualWidth));
         _win.Top = Math.Clamp(_win.Top, wa.Top, Math.Max(wa.Top, wa.Bottom - _win.ActualHeight));
+        Moved?.Invoke(_win.Left, _win.Top);
     }
 
     /// <summary>
@@ -219,6 +229,10 @@ public sealed class FaceGestures
 
         Animate(Window.LeftProperty, destLeft, dur, ease);
         Animate(Window.TopProperty, destTop, dur, ease);
+
+        // Se avisa con el DESTINO, no con la posición actual: la animación acaba de empezar y
+        // _win.Left todavía vale lo de antes.
+        Moved?.Invoke(destLeft, destTop);
     }
 
     private void Animate(DependencyProperty prop, double to, Duration dur, IEasingFunction ease)

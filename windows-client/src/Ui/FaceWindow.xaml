@@ -350,10 +350,13 @@
                                             <RotateTransform x:Name="BackendRot" Angle="0"/>
                                         </Path.RenderTransform>
                                     </Path>
-                                    <!-- Señal de conexión con Graph, visible sin abrir la sección:
-                                         verde = configurado, ámbar = falta la API key. -->
+                                    <!-- Señal de conexión con Graph, visible sin abrir la sección. NO
+                                         dice «hay API key» —eso decía antes, y por eso estaba verde
+                                         mientras el DNS fallaba—: dice qué pasó la última vez que se
+                                         habló con Graph, y el tooltip añade cuándo. Los siete estados
+                                         y sus colores viven en GraphHealthText. -->
                                     <Ellipse x:Name="BackendDot" DockPanel.Dock="Right" Width="7" Height="7"
-                                             Fill="#FFA51F" VerticalAlignment="Center"/>
+                                             Fill="#8A8A8E" VerticalAlignment="Center"/>
                                     <TextBlock Text="Backend" Foreground="#CCFFFFFF" FontSize="11"
                                                Margin="8,0,0,0" VerticalAlignment="Center"/>
                                 </DockPanel>
@@ -366,6 +369,13 @@
                                      GraphConfig.Load y el doc "Distribución conectada". -->
                                 <TextBlock x:Name="BackendStatus" Foreground="#88FFFFFF" FontSize="10"
                                            TextWrapping="Wrap" Margin="0,0,0,2"/>
+
+                                <!-- Qué atajo global quedó ACTIVO. Se enseña porque puede no ser el
+                                     preferido: si otra aplicación ya tenía la combinación, se registra
+                                     la de respaldo, y anunciar la que no es sería peor que no decir
+                                     nada. Lo rellena OnSourceInitialized. -->
+                                <TextBlock x:Name="HotkeyStatus" Foreground="#88FFFFFF" FontSize="10"
+                                           TextWrapping="Wrap" Margin="0,2,0,0"/>
 
                                 <!-- Inspector visual de elementos (estilo TalkBack): dibuja recuadros sobre
                                      la pantalla; al hacer clic, amarillo si coincide con lo que el asistente
@@ -413,7 +423,7 @@
             </Border>
 
             <!-- Fila inferior: el globo de conversación a la izquierda, la barra a la derecha. -->
-            <DockPanel Grid.Row="1" HorizontalAlignment="Right" LastChildFill="False">
+            <DockPanel x:Name="BarRow" Grid.Row="1" HorizontalAlignment="Right" LastChildFill="False">
 
                 <!-- GLOBO DE CONVERSACIÓN: estado + narración + entrada de texto. Aparece solo cuando
                      hay algo que decir (narración, una pregunta, una ejecución en curso) o cuando el
@@ -455,23 +465,59 @@
                 </Border>
 
                 <!-- LA BARRA: vertical, estrecha, siempre disponible. Arrastrable por cualquier zona
-                     libre (y por la carita). De arriba a abajo: el activador del menú, las acciones
-                     (con las contextuales ⬇/⏹ intercaladas) y, abajo del todo, la carita.
+                     libre (y por la carita). De arriba a abajo: la zona contextual (⬇ ⏹ 🔄, que
+                     aparecen y desaparecen), el activador del menú, las acciones fijas y, abajo del
+                     todo, la carita.
 
-                     Ese orden no es estético. El activador va ARRIBA porque el menú nace justo encima:
-                     el cursor pasa del uno al otro en línea recta en vez de recorrer la barra entera.
-                     Y la carita va ABAJO porque ahí es donde vive la burbuja cuando se colapsa — así
-                     no salta de sitio al alternar entre los dos estados. -->
+                     Ese orden no es estético, es aritmética. El borde INFERIOR de la barra está
+                     clavado (la ventana se ancla por la esquina), así que cuando la barra crece, crece
+                     hacia arriba: un botón que aparece empuja 44 px hacia arriba a todo lo que tenga
+                     ENCIMA y no mueve nada de lo que tenga debajo. Con los contextuales en medio, el
+                     activador saltaba justo cuando el usuario iba hacia él. Poniéndolos arriba del
+                     todo no queda nadie por encima y el desplazamiento es cero para todos.
+
+                     Lo demás: el activador va sobre las acciones porque el menú nace justo encima, y
+                     la carita va abajo porque ahí vive la burbuja cuando se colapsa — así no salta de
+                     sitio al alternar entre los dos estados. -->
                 <Border x:Name="BarPanel" DockPanel.Dock="Right" CornerRadius="18" Background="#F2101014"
                         Padding="8,10" BorderBrush="#33FFFFFF" BorderThickness="1" VerticalAlignment="Bottom">
                     <Border.Effect>
                         <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.5" Color="Black"/>
                     </Border.Effect>
                     <StackPanel>
+                        <!-- ZONA CONTEXTUAL: lo que solo existe a ratos. Va envuelta para que el
+                             separador se colapse con ella (si no, queda una raya flotando sobre nada)
+                             y para que su visibilidad se decida en UN sitio: UpdateContextZone(). -->
+                        <StackPanel x:Name="ContextZone" Visibility="Collapsed">
+                            <!-- Pastilla de actualización: oculta salvo que ya haya una versión descargada
+                                 y lista. Si el usuario la ignora, se aplica sola al cerrar (ApplyOnExit). -->
+                            <Button x:Name="UpdateBtn" Content="⬇" Style="{StaticResource BarBtn}"
+                                    Margin="0" Background="#553B82F6" Visibility="Collapsed" Click="OnApplyUpdate"
+                                    ToolTip="Nueva versión lista — clic para reiniciar (si no, se instala sola al cerrar Ü)"
+                                    AutomationProperties.Name="Aplicar la actualización"/>
+
+                            <!-- Solo visible mientras ejecuta algo: detener es detener, también la voz. -->
+                            <Button x:Name="StopBtn" Content="⏹" Style="{StaticResource BarBtn}"
+                                    Background="#55FF3B30" Visibility="Collapsed" Click="OnStop"
+                                    ToolTip="Detener lo que está haciendo"
+                                    AutomationProperties.Name="Detener"/>
+
+                            <!-- Descartar lo grabado y volver a empezar. Sigue inerte: el reinicio en
+                                 caliente aún no existe en la enseñanza unificada (ver OnRestartTeach y
+                                 el follow-up WorkflowTeachSession.RestartAsync). Se conserva a
+                                 propósito, no por olvido. -->
+                            <Button x:Name="RestartTeachBtn" Content="🔄" Style="{StaticResource BarBtn}"
+                                    Visibility="Collapsed" Click="OnRestartTeach"
+                                    ToolTip="Me equivoqué: descartar esta grabación y empezar de nuevo"
+                                    AutomationProperties.Name="Rehacer la enseñanza"/>
+
+                            <Border Background="#1EFFFFFF" Height="1" Margin="6,8,6,0"/>
+                        </StackPanel>
+
                         <!-- ACTIVADOR del menú extendido: hover lo abre (hacia arriba, justo encima),
-                             clic lo fija, Esc lo cierra. El chevron gira 180° cuando el menú está
-                             abierto: apunta a donde está el menú, y girado significa «ciérralo». -->
-                        <Button x:Name="MenuActivator" Height="26" Margin="0" Style="{StaticResource BarBtn}"
+                             clic lo fija, Esc lo cierra. El chevron apunta a donde va a nacer el menú;
+                             girado significa «ciérralo». Ver UpdateChevron(). -->
+                        <Button x:Name="MenuActivator" Height="26" Margin="0,4,0,0" Style="{StaticResource BarBtn}"
                                 Width="38" FontSize="11" Background="#00FFFFFF"
                                 ToolTip="Más herramientas (hover abre · clic fija · Esc cierra)"
                                 AutomationProperties.Name="Más herramientas">
@@ -485,20 +531,7 @@
                             </Path>
                         </Button>
 
-                        <Border Background="#1EFFFFFF" Height="1" Margin="6,4,6,2"/>
-
-                        <!-- Pastilla de actualización: oculta salvo que ya haya una versión descargada y
-                             lista. Si el usuario la ignora, se aplica sola al cerrar (Updater.ApplyOnExit). -->
-                        <Button x:Name="UpdateBtn" Content="⬇" Style="{StaticResource BarBtn}"
-                                Background="#553B82F6" Visibility="Collapsed" Click="OnApplyUpdate"
-                                ToolTip="Nueva versión lista — clic para reiniciar (si no, se instala sola al cerrar Ü)"
-                                AutomationProperties.Name="Aplicar la actualización"/>
-
-                        <!-- Solo visible mientras ejecuta algo: detener es detener, también la voz. -->
-                        <Button x:Name="StopBtn" Content="⏹" Style="{StaticResource BarBtn}"
-                                Background="#55FF3B30" Visibility="Collapsed" Click="OnStop"
-                                ToolTip="Detener lo que está haciendo"
-                                AutomationProperties.Name="Detener"/>
+                        <Border Background="#1EFFFFFF" Height="1" Margin="6,6,6,0"/>
 
                         <Button x:Name="MicBtn" Content="🎤" Style="{StaticResource BarBtn}" Click="OnMic"
                                 ToolTip="Hablarle a Ü" AutomationProperties.Name="Micrófono"/>
@@ -513,24 +546,40 @@
                                 ToolTip="Enseñar: Ü graba la pantalla y tu voz para aprender un workflow"
                                 AutomationProperties.Name="Enseñar"/>
 
-                        <!-- Solo visible mientras se graba: descarta lo grabado y vuelve a empezar, sin
-                             que el error llegue nunca a Gemini ni al cerebro. Ver TeachSession.RestartAsync. -->
-                        <Button x:Name="RestartTeachBtn" Content="🔄" Style="{StaticResource BarBtn}"
-                                Visibility="Collapsed" Click="OnRestartTeach"
-                                ToolTip="Me equivoqué: descartar esta grabación y empezar de nuevo"
-                                AutomationProperties.Name="Rehacer la enseñanza"/>
-
                         <!-- Siempre visible: callarlo tiene que estar a un clic, sin importar qué esté pasando. -->
                         <Button x:Name="MuteBtn" Content="🔊" Style="{StaticResource BarBtn}" Click="OnToggleMute"
                                 ToolTip="Callar a Ü ahora mismo" AutomationProperties.Name="Silencio"/>
 
                         <!-- La carita (misma que Android), abajo del todo. Clic → colapsa a solo la
                              carita · doble clic → micrófono · mantener oprimido → cambia de tema ·
-                             arrastrar → mover. -->
+                             arrastrar → mover. Y además es el SEMÁFORO del sistema: su gesto y su
+                             color dicen qué está pasando (ver FaceMood). -->
                         <ui:FaceControl x:Name="Face" Width="42" Height="42" Cursor="Hand"
                                         HorizontalAlignment="Center" Margin="0,10,0,0"
                                         ToolTip="Clic: solo la carita · doble clic: micrófono · mantener: cambiar tema · arrastrar: mover"/>
                     </StackPanel>
+                </Border>
+
+                <!-- LA FRASE CORTA: acompaña a la carita para que el estado no dependa de aprenderse
+                     los gestos. Va FUERA de la barra, a su izquierda, y por eso no rompe los 60 DIP de
+                     ancho: la ventana está anclada por su borde derecho, así que crecer hacia la
+                     izquierda no mueve absolutamente nada (la misma aritmética que hace que los
+                     contextuales no empujen al activador).
+
+                     Declarada DESPUÉS de BarPanel a propósito: en un DockPanel los hijos con
+                     Dock=Right se apilan de derecha a izquierda en orden de declaración.
+
+                     No es un eco del globo: cuando el globo está abierto, esta píldora se esconde
+                     (allí ya está el texto largo). Ver UpdateChip. -->
+                <Border x:Name="StatusChip" DockPanel.Dock="Right" Visibility="Collapsed"
+                        VerticalAlignment="Bottom" Margin="0,0,8,14"
+                        CornerRadius="9" Background="#F01A1A20" BorderBrush="#33FFFFFF" BorderThickness="1"
+                        Padding="9,4" MaxWidth="170">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="ChipShift"/>
+                    </Border.RenderTransform>
+                    <TextBlock x:Name="StatusChipText" Foreground="#EEFFFFFF" FontSize="11"
+                               TextTrimming="CharacterEllipsis"/>
                 </Border>
             </DockPanel>
         </Grid>
