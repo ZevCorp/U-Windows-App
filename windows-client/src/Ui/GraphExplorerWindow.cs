@@ -1150,6 +1150,47 @@ public sealed class GraphExplorerWindow : Window
         // insinuaría una profundidad que nadie ha comprobado.
         foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = 0;
 
+        // EL CROMO DE LA APP CUELGA DE LA APP, no de cada pantalla.
+        //
+        // El panel izquierdo del explorador —Imágenes, Notas, Música, Vídeos, Descargas…— está en
+        // TODAS sus pantallas: son hermanos, y se llega a cualquiera desde cualquiera. Dibujarlos
+        // como salidas de cada carpeta llenaba el grafo de las mismas aristas repetidas N veces y
+        // hacía parecer que hay que aprender a llegar a cada hermano desde cada sitio (2026-08-04,
+        // observado por el usuario). No hay que aprenderlo: el mapa ya lo deduce en cuanto se cruza
+        // UNA vez desde donde sea. Lo que faltaba era decirlo en el dibujo.
+        //
+        // Se reconoce por lo que es: una salida que lleva al mismo sitio con el mismo botón desde
+        // DOS pantallas distintas ya no describe una pantalla, describe la aplicación.
+        var vecesPorSalida = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var n in prof.Keys.ToList())
+            foreach (var h in _map.ExitsFrom(n))
+            {
+                if (SurfaceMap.EsPuerta(h.To) || h.Info.Label.Length == 0) continue;
+                if (!NivelDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase)) continue;
+                string clave = h.Info.Label + "\n" + h.To;
+                if (!vecesPorSalida.TryGetValue(clave, out var origenes))
+                    vecesPorSalida[clave] = origenes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                origenes.Add(h.From);
+            }
+
+        var cromo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);   // destino → etiqueta
+        foreach (var kv in vecesPorSalida.Where(k => k.Value.Count >= 2))
+        {
+            int corte = kv.Key.IndexOf('\n');
+            cromo[kv.Key[(corte + 1)..]] = kv.Key[..corte];
+        }
+
+        // El centro del nivel: la aplicación. Los hermanos cuelgan de él, a un solo salto.
+        string centro = cromo.Count > 0 ? $"nivel://{appActual}" : "";
+        if (centro.Length > 0)
+        {
+            prof[centro] = 0;
+            foreach (var d in cromo.Keys) prof[d] = 1;
+            // Lo que ya se recorrió cuelga por debajo, para no mezclarse con los hermanos.
+            foreach (var n in prof.Keys.ToList())
+                if (n != centro && !cromo.ContainsKey(n)) prof[n] = Math.Max(prof[n], 2);
+        }
+
         // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra
         // deja de leerse; a partir de ahí se sigue pagando el sitio que ocupa un texto que ya nadie
         // puede leer, y el recorrido —que es lo que se quiere ver— queda enterrado bajo etiquetas
@@ -1217,6 +1258,9 @@ public sealed class GraphExplorerWindow : Window
                 if (SurfaceMap.EsPuerta(h.To)) continue;              // ya dibujada arriba
                 if (!pos.ContainsKey(h.To)) continue;                 // el otro extremo no está en pantalla
                 if (!dibujadas.Add(h.From + "\n" + h.To)) continue;   // ya la dibujó la corrida
+                // Al cromo se llega desde todas partes: se dibuja UNA vez desde el centro del nivel,
+                // no una por pantalla. Repetirlo era el enredo que ocultaba la forma real.
+                if (cromo.ContainsKey(h.To)) continue;
                 if (!pos.TryGetValue(h.From, out var p1) || !pos.TryGetValue(h.To, out var p2)) continue;
 
                 _lienzo.Children.Add(new System.Windows.Shapes.Line
@@ -1229,6 +1273,23 @@ public sealed class GraphExplorerWindow : Window
                 });
             }
         }
+
+        // Del centro del nivel a cada hermano: una sola arista por hermano, alcanzable desde
+        // cualquier pantalla de la app. Es la forma que el usuario tiene en la cabeza y la que el
+        // mapa ya sabía; solo faltaba dibujarla así.
+        if (centro.Length > 0 && pos.TryGetValue(centro, out var pc))
+            foreach (var (destino, etiqueta) in cromo.Select(k => (k.Key, k.Value)))
+            {
+                if (!pos.TryGetValue(destino, out var pd)) continue;
+                _lienzo.Children.Add(new System.Windows.Shapes.Line
+                {
+                    X1 = pc.X + anchoCaja / 2, Y1 = pc.Y + altoCaja,
+                    X2 = pd.X + anchoCaja / 2, Y2 = pd.Y,
+                    Stroke = new SolidColorBrush(Color.FromArgb(0x77, 0x64, 0xB5, 0xF6)),
+                    StrokeThickness = 1.2,
+                    ToolTip = $"«{etiqueta}» · disponible desde cualquier pantalla de {appActual}",
+                });
+            }
 
         // Aristas primero, para que las cajas queden encima de las líneas.
         foreach (var (f, t, label) in traza)
@@ -1267,23 +1328,27 @@ public sealed class GraphExplorerWindow : Window
             // El nodo donde está el recorrido ahora mismo va en ámbar y con borde grueso: durante
             // un mapeo en vivo, saber DÓNDE está es tan informativo como ver aparecer las aristas.
             bool esActual = string.Equals(kv.Key, _nodoActual, StringComparison.OrdinalIgnoreCase);
+            bool esCentro = kv.Key == centro;
             var caja = new Border
             {
                 Width = anchoCaja, Height = altoCaja,
                 // En puntos son círculos: una caja diminuta con esquinas parece una caja rota, y un
                 // punto se lee como «un sitio» sin fingir que dentro cabía algo.
                 CornerRadius = new CornerRadius(_compacto ? anchoCaja / 2 : 6),
-                Background = new SolidColorBrush(esActual
-                    ? Color.FromArgb(0x55, 0xFF, 0xB3, 0x00)
+                // El centro del nivel va en azul: no es un sitio al que se llega, es la app misma.
+                Background = new SolidColorBrush(esCentro ? Color.FromArgb(0x44, 0x21, 0x96, 0xF3)
+                    : esActual ? Color.FromArgb(0x55, 0xFF, 0xB3, 0x00)
                     : Color.FromArgb(0x30, 0x2E, 0x7D, 0x32)),
-                BorderBrush = new SolidColorBrush(esActual
-                    ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)
+                BorderBrush = new SolidColorBrush(esCentro ? Color.FromArgb(0xAA, 0x64, 0xB5, 0xF6)
+                    : esActual ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)
                     : Color.FromArgb(0x55, 0x66, 0xBB, 0x6A)),
-                BorderThickness = new Thickness(esActual ? 2 : 1),
-                ToolTip = kv.Key,
+                BorderThickness = new Thickness(esActual || esCentro ? 2 : 1),
+                ToolTip = esCentro
+                    ? $"{appActual} · lo que cuelga de aquí se alcanza desde cualquier pantalla de la app"
+                    : kv.Key,
                 Child = _compacto ? null : new TextBlock
                 {
-                    Text = Distintivo(kv.Key, prefijo),
+                    Text = esCentro ? appActual : Distintivo(kv.Key, prefijo),
                     Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)),
                     FontSize = 9.5, FontFamily = new FontFamily("Consolas"),
                     TextTrimming = TextTrimming.CharacterEllipsis,
