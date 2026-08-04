@@ -59,6 +59,11 @@ public sealed class GraphExplorerWindow : Window
     private readonly Button _graphBtn;
     private ScrollViewer _lista = null!;
     private ScrollViewer _grafo = null!;
+    /// <summary>Lo único sólido: título, botones y estado. Vive en <see cref="_ventanaBarra"/>.</summary>
+    private Border _barra = null!;
+
+    /// <summary>La ventana de la barra: lo único de esta vista que se puede tocar.</summary>
+    private Window _ventanaBarra = null!;
     private readonly Canvas _lienzo = new() { Background = Brushes.Transparent };
     private bool _collapsed;
     private bool _graphView;
@@ -118,8 +123,6 @@ public sealed class GraphExplorerWindow : Window
             TextWrapping = TextWrapping.Wrap, Cursor = Cursors.SizeAll,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        titulo.MouseLeftButtonDown += (_, __) => { try { DragMove(); } catch { } };
-
         var header = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
         DockPanel.SetDock(_collapseBtn, Dock.Right);
         header.Children.Add(_collapseBtn);
@@ -143,54 +146,146 @@ public sealed class GraphExplorerWindow : Window
         };
         _crawlBtn.Click += (_, __) => _ = CrawlAsync();
 
-        var panel = new DockPanel();
-        DockPanel.SetDock(header, Dock.Top);
-        panel.Children.Add(header);
-        DockPanel.SetDock(_crawlBtn, Dock.Top);
-        panel.Children.Add(_crawlBtn);
-        DockPanel.SetDock(_nodeTitle, Dock.Top);
-        panel.Children.Add(_nodeTitle);
-        DockPanel.SetDock(_status, Dock.Bottom);
-        panel.Children.Add(_status);
+        // LAS DOS VISTAS A LA VEZ, no una o la otra. Eran modos alternativos y eso obligaba a elegir
+        // entre ver QUÉ hay disponible (la lista de aristas) y ver POR DÓNDE va (el grafo), que es
+        // justo lo que no se puede separar cuando lo que quieres es seguir en directo a un asistente
+        // que se está moviendo solo: la lista dice qué puertas tiene delante y el grafo dice de
+        // dónde viene (2026-08-04). Lista a la izquierda, grafo a la derecha.
         _lista = new ScrollViewer
         {
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = _edges,
+            Margin = new Thickness(0, 0, 6, 0),
         };
         _grafo = new ScrollViewer
         {
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = _lienzo,
-            Visibility = Visibility.Collapsed,
+            Margin = new Thickness(6, 0, 0, 0),
         };
-        var pila = new Grid();
-        pila.Children.Add(_lista);
-        pila.Children.Add(_grafo);
-        panel.Children.Add(pila);
+        // Si cambia el sitio disponible, se recalcula el encaje: da igual de dónde venga el cambio
+        // —otra resolución, la barra de tareas, un monitor distinto— porque la pregunta es la misma.
+        _grafo.SizeChanged += (_, __) => AjustarALaVista();
 
-        Content = new Border
+        var dos = new Grid();
+        dos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        dos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(_lista, 0);
+        Grid.SetColumn(_grafo, 1);
+        dos.Children.Add(_lista);
+        dos.Children.Add(_grafo);
+
+        // LA BARRA es lo único sólido y lo único que recibe el ratón: el resto es una capa que se
+        // mira, no se toca (ver EsZonaViva y el enganche de WM_NCHITTEST más abajo).
+        var contenidoBarra = new DockPanel();
+        DockPanel.SetDock(header, Dock.Top);
+        contenidoBarra.Children.Add(header);
+        DockPanel.SetDock(_crawlBtn, Dock.Top);
+        contenidoBarra.Children.Add(_crawlBtn);
+        contenidoBarra.Children.Add(_nodeTitle);
+
+        DockPanel.SetDock(_status, Dock.Bottom);
+        contenidoBarra.Children.Add(_status);
+
+        _barra = new Border
         {
             CornerRadius = new CornerRadius(12),
             Background = new SolidColorBrush(Color.FromArgb(0xEE, 0x10, 0x10, 0x14)),
             BorderBrush = new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(12),
-            Child = panel,
+            Padding = new Thickness(12, 8, 12, 8),
+            Child = contenidoBarra,
         };
 
+        // LA BARRA VIVE EN SU PROPIA VENTANA, y la capa del grafo no recibe ratón EN ABSOLUTO.
+        //
+        // El intento anterior era una sola ventana que respondía al hit test según la zona: barra
+        // sólida, resto transparente. No funcionó — el clic no atravesaba y, peor, al pulsar encima
+        // la ventana se activaba y desaparecía unos segundos (2026-08-04, reportado por el usuario).
+        // Repartir una ventana en «esto sí y esto no» depende de demasiadas piezas; separar las dos
+        // cosas en dos ventanas no depende de ninguna: la capa lleva WS_EX_TRANSPARENT —el ratón la
+        // atraviesa siempre, sin excepciones— y WS_EX_NOACTIVATE, así que tampoco puede robar el
+        // foco. Lo que hay que poder tocar está en otra ventana, normal y corriente.
+        _ventanaBarra = new Window
+        {
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = Brushes.Transparent,
+            Topmost = true,
+            ShowInTaskbar = false,
+            ResizeMode = ResizeMode.NoResize,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.Manual,   // si no, WPF la centra y se ignora Left/Top
+            Width = 420,
+            Title = "Ü Explorador del grafo",
+            Content = _barra,
+        };
+        titulo.MouseLeftButtonDown += (_, __) => { try { _ventanaBarra.DragMove(); } catch { } };
+
+        Content = dos;
+
+        // Se ocupa toda el área de trabajo: lo que se está siguiendo es un asistente moviéndose por
+        // una app, y eso no cabe en un panel de 380 px sin obligar a hacer scroll justo cuando pasa
+        // lo interesante. Como el fondo es transparente y los clics la atraviesan, ocupar la
+        // pantalla entera no le quita sitio a nada.
         var wa = SystemParameters.WorkArea;
-        Left = wa.Left + 16;
-        Top = wa.Top + 60;
+        Left = wa.Left; Top = wa.Top; Width = wa.Width; Height = wa.Height;
 
         // 1 s y con candado de no-solape: leer el árbol UIA de la ventana activa no es gratis, y
         // dos lecturas montadas es como el inspector ya aprendió a no hacerlo.
         _refresh = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _refresh.Tick += (_, __) => RefreshEdges();
         _refresh.Start();
-        Closed += (_, __) => { _refresh.Stop(); _overlay.Close(); };
+        // La barra sale arriba a la izquierda, sobre la columna de la lista.
+        _ventanaBarra.Left = wa.Left + 16;
+        _ventanaBarra.Top = wa.Top + 12;
+
+        Closed += (_, __) => { _refresh.Stop(); _overlay.Close(); _ventanaBarra.Close(); };
+        IsVisibleChanged += (_, __) =>
+        {
+            if (IsVisible) _ventanaBarra.Show(); else _ventanaBarra.Hide();
+        };
         _overlay.Show();
     }
+
+    // ── Una capa que se mira, no se toca ─────────────────────────────────────
+
+    /// <summary>
+    /// Los clics ATRAVIESAN la ventana salvo en la barra.
+    ///
+    /// Ocupar la pantalla entera solo vale si no le quita la pantalla a nadie: una capa a pantalla
+    /// completa que además se traga el ratón no es una vista, es una persiana. Y hacerla del todo
+    /// intransitable tampoco sirve, porque entonces no habría por dónde moverla ni cómo lanzar el
+    /// mapeo. Windows tiene exactamente esta pregunta —WM_NCHITTEST, «¿esto es tuyo?»— y respondiendo
+    /// HTTRANSPARENT fuera de la barra el clic sigue su camino hasta la app de abajo, que es donde
+    /// el usuario estaba mirando (2026-08-04).
+    ///
+    /// Se responde por REGIÓN y no marcando la ventana entera con WS_EX_TRANSPARENT porque esa
+    /// marca es de todo o nada: dejaría la barra tan muerta como el resto.
+    /// </summary>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var h = new WindowInteropHelper(this).Handle;
+        // TRANSPARENT: el ratón la atraviesa. NOACTIVATE: nunca se pone delante ni roba el foco —sin
+        // esto, pulsar encima la activaba y la app de debajo perdía el foco, que se veía como que la
+        // capa «desaparecía un momento». TOOLWINDOW: fuera de Alt+Tab, no es un sitio al que ir.
+        SetWindowLong(h, GWL_EXSTYLE, GetWindowLong(h, GWL_EXSTYLE)
+            | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+    }
+
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_TRANSPARENT = 0x20;
+    private const int WS_EX_LAYERED = 0x80000;
+    private const int WS_EX_NOACTIVATE = 0x8000000;
+    private const int WS_EX_TOOLWINDOW = 0x80;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
     // ── Aristas en tiempo real ───────────────────────────────────────────────
 
@@ -232,6 +327,29 @@ public sealed class GraphExplorerWindow : Window
 
         var loc = _where();
         string aqui = loc?.Id ?? "";
+
+        // EL GRAFO SIGUE AL ASISTENTE, no solo al recorrido automático. Antes solo se dibujaba
+        // durante un mapeo, así que mientras la voz movía la app de verdad el panel de la derecha se
+        // quedaba con el dibujo de la última corrida — justo cuando lo que se quiere es ver por
+        // dónde va AHORA (2026-08-04). Cada cambio de pantalla se añade como un tramo más: el
+        // resultado es la traza en vivo de por dónde ha pasado.
+        if (!_busy && aqui.Length > 0
+            && !aqui.Equals(_nodoActual, StringComparison.OrdinalIgnoreCase))
+        {
+            if (_nodoActual.Length > 0)
+            {
+                string etiqueta = _map.ExitsFrom(_nodoActual)
+                    .FirstOrDefault(h => h.To.Equals(aqui, StringComparison.OrdinalIgnoreCase))
+                    ?.Info.Label ?? "";
+                _ultimaCorrida.Add((_nodoActual, aqui, etiqueta));
+                // Una traza infinita no se lee: se conservan los últimos tramos, que es el tramo de
+                // historia que cabe en pantalla y el único que se está mirando.
+                if (_ultimaCorrida.Count > 40) _ultimaCorrida.RemoveRange(0, _ultimaCorrida.Count - 40);
+            }
+            _nodoActual = aqui;
+            DibujarGrafo();
+        }
+
         var conocidas = aqui.Length > 0
             // Agrupando por etiqueta, no ToDictionary: desde que se registran TODAS las puertas
             // visibles, una pantalla puede tener dos salidas con el mismo nombre —el mismo archivo
@@ -296,29 +414,63 @@ public sealed class GraphExplorerWindow : Window
     /// aunque esté plegado porque es donde se lee el progreso del recorrido — plegar es para
     /// estorbar menos, no para quedarse a ciegas.
     /// </summary>
+    /// <summary>
+    /// Plegar esconde las DOS vistas y deja solo la barra. Ya no encoge la ventana: ocupa la
+    /// pantalla entera y no le estorba a nadie, así que redimensionarla solo servía para que al
+    /// desplegar volviera a un tamaño que ya no es el suyo.
+    /// </summary>
     private void SetCollapsed(bool colapsar)
     {
         _collapsed = colapsar;
         var v = colapsar ? Visibility.Collapsed : Visibility.Visible;
         _nodeTitle.Visibility = v;
         _lista.Visibility = v;
+        _grafo.Visibility = v;
+        _status.Visibility = v;
         _collapseBtn.Content = colapsar ? "▸" : "▾";
-        // Al plegar SÍ se encoge, porque el usuario lo pidió; al mapear NO. El encogido molesto que
-        // se veía al iniciar el recorrido era este SetCollapsed disparado por el propio mapeo.
-        Height = colapsar ? 116 : 560;
-        Width = colapsar ? 300 : 380;
     }
 
+    /// <summary>
+    /// El botón ya no ELIGE entre lista y grafo —las dos están puestas, una al lado de la otra—:
+    /// ahora solo redibuja el grafo a mano, por si se quiere refrescar sin esperar al recorrido.
+    /// </summary>
     private void SetGraphView(bool grafo)
     {
         _graphView = grafo;
         _graphBtn.Background = new SolidColorBrush(grafo
             ? Color.FromArgb(0x55, 0x66, 0xBB, 0x6A) : Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
         if (_collapsed) SetCollapsed(false);
-        _lista.Visibility = grafo ? Visibility.Collapsed : Visibility.Visible;
-        _grafo.Visibility = grafo ? Visibility.Visible : Visibility.Collapsed;
-        _nodeTitle.Visibility = grafo ? Visibility.Collapsed : Visibility.Visible;
-        if (grafo) DibujarGrafo();
+        DibujarGrafo();
+    }
+
+    /// <summary>
+    /// Encoge el grafo hasta que quepa entero en su columna.
+    ///
+    /// Crece a lo ancho con cada pantalla nueva de la misma profundidad, así que a la tercera o
+    /// cuarta se salía por la derecha y lo que estaba pasando quedaba fuera de la pantalla, sin
+    /// forma cómoda de seguirlo (2026-08-04). Se escala, no se hace scroll: el sentido de esta vista
+    /// es ver la FORMA del recorrido de un vistazo, y un grafo que hay que arrastrar para leer ya no
+    /// la enseña. Nunca se agranda por encima del 100 %: un grafo de dos nodos ocupando media
+    /// pantalla se lee peor, no mejor.
+    /// </summary>
+    private void AjustarALaVista()
+    {
+        double dispW = _grafo.ActualWidth - 16, dispH = _grafo.ActualHeight - 16;
+        double w = _lienzo.Width, h = _lienzo.Height;
+
+        // NaN ANTES QUE CERO. Un Canvas sin tamaño fijado mide NaN, no 0, y `NaN <= 0` es FALSO: la
+        // guarda lo dejaba pasar, la escala salía NaN y WPF tumbaba la aplicación con «no debería
+        // devolver valores NaN como su DesiredSize» — en cascada, una ventana de error por intento
+        // de dibujo (2026-08-04). Con dobles, comprobar «no es válido» nunca es comparar con cero.
+        if (double.IsNaN(w) || double.IsNaN(h) || double.IsNaN(dispW) || double.IsNaN(dispH)) return;
+        if (dispW <= 0 || dispH <= 0 || w <= 0 || h <= 0) return;
+
+        double escala = Math.Min(1.0, Math.Min(dispW / w, dispH / h));
+        if (double.IsNaN(escala) || double.IsInfinity(escala)) return;
+        if (escala < 0.25) escala = 0.25;   // por debajo de esto ya no se lee: mejor scroll
+        _lienzo.LayoutTransform = escala >= 0.999
+            ? System.Windows.Media.Transform.Identity
+            : new ScaleTransform(escala, escala);
     }
 
     /// <summary>
@@ -481,6 +633,7 @@ public sealed class GraphExplorerWindow : Window
 
         _lienzo.Width = Math.Max(maxX + 12, 320);
         _lienzo.Height = 24 + (prof.Values.Max() + 1) * sepY;
+        AjustarALaVista();
         // Durante el mapeo el estado lo escribe el propio recorrido («explorando X · N pantallas»),
         // que dice más que un recuento: no se pisa.
         if (_crawlCts == null)
