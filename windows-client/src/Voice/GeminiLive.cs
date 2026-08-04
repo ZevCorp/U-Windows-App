@@ -85,9 +85,17 @@ public sealed class GeminiLive : IDisposable
         if (vivos.Count == 0)
             throw new InvalidOperationException("esta clave no tiene acceso a ningún modelo de voz en vivo");
 
-        // Se prefiere «flash»: es el que Google publica para voz en tiempo real, y en una
-        // conversación el retardo importa más que el tamaño del modelo.
-        _modelo = vivos.FirstOrDefault(v => v.Contains("flash", StringComparison.OrdinalIgnoreCase)) ?? vivos[0];
+        // No todo lo que habla en vivo sirve para esto: la lista real trae también un modelo de
+        // robótica y uno de traducción simultánea, que hablarían pero no son un asistente. Se
+        // descartan por nombre y entre los que quedan se prefiere «flash-live», que es la familia
+        // que Google publica para conversación en tiempo real; en una conversación el retardo
+        // importa más que el tamaño del modelo.
+        var utiles = vivos.Where(v => !v.Contains("robotics", StringComparison.OrdinalIgnoreCase)
+                                   && !v.Contains("translate", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (utiles.Count == 0) utiles = vivos;
+        _modelo = utiles.FirstOrDefault(v => v.Contains("flash-live", StringComparison.OrdinalIgnoreCase))
+               ?? utiles.FirstOrDefault(v => v.Contains("flash", StringComparison.OrdinalIgnoreCase))
+               ?? utiles[0];
         LogBus.Log("voz-viva", $"modelos con voz en vivo: {string.Join(", ", vivos)} → se usa «{_modelo}»");
         return _modelo;
     }
@@ -185,6 +193,16 @@ public sealed class GeminiLive : IDisposable
                 tools = new object[] { new { functionDeclarations = Herramientas() } },
                 inputAudioTranscription = new { },
                 outputAudioTranscription = new { },
+
+                // QUIÉN DECIDE QUE ESTÁS HABLANDO: nosotros, no el servidor.
+                //
+                // Con la detección automática, el micrófono abierto de continuo bastaba para que
+                // cualquier ruido de sala se leyera como que alguien interrumpe: el modelo abortaba
+                // el turno y llegaba «toolCallCancellation» sin que la llamada nos llegara siquiera.
+                // Bajar la sensibilidad no lo arregló. Apagarla y marcar nosotros el principio y el
+                // final de cada intervención sí, porque el criterio pasa a estar donde se puede
+                // medir: en el volumen del trozo que acabamos de capturar (2026-08-04).
+                realtimeInputConfig = new { automaticActivityDetection = new { disabled = true } },
             },
         };
         return JsonSerializer.Serialize(setup);
@@ -261,9 +279,60 @@ public sealed class GeminiLive : IDisposable
 
     // ── El caño ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Cuánto sonido trae el trozo (0..1). Sirve para distinguir «alguien habla» de «hay sala».
+    /// </summary>
+    private static double Volumen(byte[] pcm)
+    {
+        if (pcm.Length < 2) return 0;
+        double suma = 0;
+        int n = pcm.Length / 2;
+        for (int i = 0; i + 1 < pcm.Length; i += 2)
+        {
+            short m = (short)(pcm[i] | (pcm[i + 1] << 8));
+            suma += (double)m * m;
+        }
+        return Math.Sqrt(suma / n) / short.MaxValue;
+    }
+
+    /// <summary>Por debajo de esto es sala, no voz. Medido a ojo sobre silencio con ventilador.</summary>
+    private const double UmbralVoz = 0.045;
+
+    private bool _usuarioHablando;
+    private DateTime _ultimaVoz;
+
     private async void MandarTrozo(byte[] pcm)
     {
         if (!Viva || _ws?.State != WebSocketState.Open) return;
+
+        // EL TURNO SE ABRE Y SE CIERRA A MANO. Mientras el volumen no llega a voz, no se manda nada:
+        // el silencio no tiene por qué viajar, y sobre todo no puede leerse como una interrupción.
+        // Cuando arranca, se avisa con activityStart; cuando lleva un rato callado, activityEnd — y
+        // ese cierre es lo que le dice al modelo «ya, te toca». Sin él esperaría eternamente.
+        //
+        // El umbral sube mientras Ü habla, no se cierra del todo: cortarle a media frase es media
+        // gracia de hablar en vivo, pero su propia voz por los altavoces no puede valer como corte.
+        double vol = Volumen(pcm);
+        double umbral = _audio.Hablando ? UmbralVoz * 2.5 : UmbralVoz;
+
+        if (vol >= umbral)
+        {
+            _ultimaVoz = DateTime.UtcNow;
+            if (!_usuarioHablando)
+            {
+                _usuarioHablando = true;
+                await EnviarAsync("""{"realtimeInput":{"activityStart":{}}}""", _cts?.Token ?? default);
+            }
+        }
+        else if (_usuarioHablando && (DateTime.UtcNow - _ultimaVoz).TotalMilliseconds > 700)
+        {
+            _usuarioHablando = false;
+            await EnviarAsync("""{"realtimeInput":{"activityEnd":{}}}""", _cts?.Token ?? default);
+            return;
+        }
+
+        if (!_usuarioHablando) return;
+
         try
         {
             var msg = new
@@ -280,6 +349,30 @@ public sealed class GeminiLive : IDisposable
             await EnviarAsync(JsonSerializer.Serialize(msg), _cts?.Token ?? CancellationToken.None);
         }
         catch { /* el caño se cierra solo al terminar; un trozo perdido no merece tirar la sesión */ }
+    }
+
+    /// <summary>
+    /// Decirle algo por ESCRITO sin colgar la conversación.
+    ///
+    /// La misma sesión, el mismo turno, las mismas manos: solo cambia por dónde entra la frase. Hace
+    /// falta para lo obvio —una oficina, una reunión, un nombre de carpeta que no quieres deletrear
+    /// en voz alta— y de paso hace que la conversación se pueda probar sin depender de que haya un
+    /// micrófono delante, que es la diferencia entre una función verificable y una que hay que
+    /// creerse.
+    /// </summary>
+    public async Task EnviarTextoAsync(string texto)
+    {
+        if (!Viva || _ws?.State != WebSocketState.Open || string.IsNullOrWhiteSpace(texto)) return;
+        Dice?.Invoke($"Tú: {texto}");
+        var msg = new
+        {
+            clientContent = new
+            {
+                turns = new[] { new { role = "user", parts = new[] { new { text = texto } } } },
+                turnComplete = true,
+            },
+        };
+        await EnviarAsync(JsonSerializer.Serialize(msg), _cts?.Token ?? CancellationToken.None);
     }
 
     /// <summary>Un único escritor por socket: WebSocket no admite envíos solapados.</summary>
@@ -323,6 +416,17 @@ public sealed class GeminiLive : IDisposable
         using var doc = JsonDocument.Parse(json);
         var raiz = doc.RootElement;
 
+        // TODO lo que llega se anota. Atender solo lo que se sabe interpretar y tirar el resto en
+        // silencio deja el peor de los diagnósticos posibles: la sesión abierta, el micrófono en
+        // rojo, y ninguna pista de por qué no contesta. Un error del servidor tiene que verse.
+        if (!raiz.TryGetProperty("serverContent", out _) && !raiz.TryGetProperty("toolCall", out _)
+            && !raiz.TryGetProperty("sessionResumptionUpdate", out _))   // llega cada segundo; no dice nada
+        {
+            // Aplanado: el log es de una línea por entrada, y un JSON con saltos se veía como «{».
+            string plano = System.Text.RegularExpressions.Regex.Replace(json, @"\s+", " ");
+            LogBus.Log("voz-viva", "← " + (plano.Length > 400 ? plano[..400] + "…" : plano));
+        }
+
         if (raiz.TryGetProperty("serverContent", out var contenido))
         {
             // INTERRUMPIDO: el usuario habló encima. Lo que ya nos habían mandado sigue en nuestra
@@ -335,7 +439,10 @@ public sealed class GeminiLive : IDisposable
 
             if (contenido.TryGetProperty("outputTranscription", out var suyo)
                 && suyo.TryGetProperty("text", out var tSuyo))
+            {
                 Dice?.Invoke($"Ü: {tSuyo.GetString()}");
+                LogBus.Log("voz-viva", $"Ü dice: {tSuyo.GetString()}");
+            }
 
             if (contenido.TryGetProperty("modelTurn", out var turno)
                 && turno.TryGetProperty("parts", out var partes))
@@ -347,7 +454,20 @@ public sealed class GeminiLive : IDisposable
 
         if (raiz.TryGetProperty("toolCall", out var llamada)
             && llamada.TryGetProperty("functionCalls", out var funciones))
-            _ = Task.Run(() => EjecutarAsync(funciones.Clone(), ct), ct);
+        {
+            // Se anota que LLEGÓ, antes de intentar nada. Una llamada con un nombre que no
+            // reconocemos no dejaba rastro en ninguna parte, y desde fuera eso es idéntico a que el
+            // modelo no hubiera pedido nada: dos diagnósticos opuestos con la misma cara.
+            LogBus.Log("voz-viva", "llamada recibida: " + System.Text.RegularExpressions.Regex
+                .Replace(funciones.GetRawText(), @"\s+", " "));
+
+            // El clon se saca AQUÍ, no dentro de la tarea. Dentro se evaluaba cuando el `using` de
+            // esta función ya había liberado el documento, así que reventaba con ObjectDisposed…
+            // y como nadie espera la tarea, la excepción se perdía: la llamada llegaba, no se
+            // ejecutaba nada, y a los 20 s el modelo la cancelaba (2026-08-04).
+            var copia = funciones.Clone();
+            _ = Task.Run(() => EjecutarAsync(copia, ct), ct);
+        }
     }
 
     /// <summary>
@@ -360,6 +480,15 @@ public sealed class GeminiLive : IDisposable
     /// </summary>
     private async Task EjecutarAsync(JsonElement funciones, CancellationToken ct)
     {
+        try { await EjecutarNucleoAsync(funciones, ct); }
+        // Una tarea suelta que revienta se lleva su excepción a la tumba: nadie la espera. Y el
+        // síntoma desde fuera es el peor posible — la llamada llega, no pasa nada, y a los 20 s el
+        // modelo la cancela sin que en el log haya una sola pista.
+        catch (Exception e) { LogBus.Log("voz-viva", $"la ejecución se cayó: {e.GetType().Name}: {e.Message}"); }
+    }
+
+    private async Task EjecutarNucleoAsync(JsonElement funciones, CancellationToken ct)
+    {
         var respuestas = new List<object>();
         foreach (var f in funciones.EnumerateArray())
         {
@@ -371,6 +500,7 @@ public sealed class GeminiLive : IDisposable
                     args[p.Name] = p.Value.ValueKind == JsonValueKind.String
                         ? p.Value.GetString() ?? "" : p.Value.ToString();
 
+            LogBus.Log("voz-viva", $"ejecutando «{nombre}»…");
             string resultado;
             if (!SurfaceMapTools.IsMapTool(nombre))
                 resultado = $"«{nombre}» no es una herramienta del mapa";

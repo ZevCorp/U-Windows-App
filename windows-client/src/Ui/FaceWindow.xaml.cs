@@ -200,7 +200,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // ubicación, la verificación de llegadas y los vetos — y duplicar una protección es la
             // forma más segura de que una de las dos copias se quede atrás.
             _vivo = new GeminiLive(mcp.Map);
-            _vivo.Dice += t => Dispatcher.Invoke(() => { AppendChat(t); SetStatus(t); });
+            // BeginInvoke, no Invoke: quien avisa a la carita es el mismo hilo que está ejecutando
+            // la acción sobre la pantalla, y `Invoke` lo deja esperando a que la interfaz le
+            // conteste. Con eso, `map_where_am_i` no llegaba ni a empezar —el modelo la pedía, se
+            // quedaba colgada y a los 20 s llegaba «toolCallCancellation»— y desde fuera parecía que
+            // el modelo no hacía nada (2026-08-04). Contar lo que haces no puede costarte hacerlo.
+            _vivo.Dice += t => Dispatcher.BeginInvoke(() => { AppendChat(t); SetStatus(t); });
             _vivo.Cambio += viva => Dispatcher.Invoke(() =>
             {
                 MicBtn.Content = viva ? "🔴" : "🎤";
@@ -782,6 +787,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             _pendingAnswer.TrySetResult(text);
             return;
         }
+
+        // Con la conversación viva abierta, escribir es SEGUIR HABLANDO, no empezar otra cosa.
+        // Arrancar aquí un objetivo aparte pondría dos cerebros a mover la misma pantalla a la vez.
+        if (_vivo?.Viva == true) { _ = _vivo.EnviarTextoAsync(text); return; }
+
         _ = StartGoal(text);
     }
 
