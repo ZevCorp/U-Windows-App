@@ -30,6 +30,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private Config _config = Config.Load();
     private readonly UiaReader _uia = new();
     private readonly VoiceIO _voice = new();
+
+    /// <summary>La conversación en vivo, si el mapa está disponible. Ver <see cref="GeminiLive"/>.</summary>
+    private GeminiLive? _vivo;
     private readonly VideoLibrary _videoLibrary = new();
     private readonly GraphConfig _graphConfig = GraphConfig.Load();
     private Updater? _updater;
@@ -189,7 +192,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // Lectura INMEDIATA de la superficie, no el valor cacheado: navegar verificando cada
             // salto contra un dato que se refresca cada 800 ms convertía una ruta de cinco tramos
             // en varios segundos de espera por algo que ya había pasado.
+        {
             mcp.Map = new SurfaceMapTools(_surfaceMap, () => _locator?.Ahora() ?? _locator?.Current);
+
+            // La voz en vivo usa EXACTAMENTE estas manos, no unas propias. Darle a la conversación
+            // hablada su propio camino para actuar habría significado duplicar el ancla de
+            // ubicación, la verificación de llegadas y los vetos — y duplicar una protección es la
+            // forma más segura de que una de las dos copias se quede atrás.
+            _vivo = new GeminiLive(mcp.Map);
+            _vivo.Dice += t => Dispatcher.Invoke(() => { AppendChat(t); SetStatus(t); });
+            _vivo.Cambio += viva => Dispatcher.Invoke(() =>
+            {
+                MicBtn.Content = viva ? "🔴" : "🎤";
+                MicBtn.ToolTip = viva ? "Conversación en vivo — clic para colgar" : "Hablarle a Ü";
+                if (viva) ShowTalk();
+            });
+            Closed += (_, __) => _vivo?.Dispose();
+        }
         // Sonda de desarrollo: permite invocar las MISMAS herramientas MCP desde fuera para
         // comprobar si el terreno es navegable, sin depender de que el modelo decida usarlas.
         // Solo con U_MCP_PROBE=1; en la app del usuario no arranca.
@@ -766,8 +785,22 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _ = StartGoal(text);
     }
 
+    /// <summary>
+    /// El micrófono. Con voz en vivo disponible, ABRE Y CIERRA una conversación; sin ella, cae al
+    /// dictado de una frase de siempre.
+    ///
+    /// Los dos comportamientos no son intercambiables y por eso el icono cambia: el dictado escucha
+    /// ocho segundos y se cierra solo, así que pulsar y hablar basta; una conversación viva sigue
+    /// abierta hasta que la cuelgas, y un micrófono que se queda abierto sin decirlo es lo último
+    /// que quiere nadie. Rojo = te está oyendo ahora mismo.
+    ///
+    /// El doble clic en la carita entra por aquí, así que hereda las dos cosas: abre la conversación
+    /// y, con otro doble clic, la cuelga.
+    /// </summary>
     private async void OnMic(object sender, RoutedEventArgs e)
     {
+        if (_vivo != null) { await _vivo.AlternarAsync(); return; }
+
         SetStatus("Escuchando…");
         ShowTalk(); // que «Escuchando…» y lo que se entienda queden a la vista
         string heard = await _voice.ListenOnceAsync(CancellationToken.None);
@@ -2049,7 +2082,29 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     public void Speak(string text)
     {
         Dispatcher.Invoke(() => { Bubble.Text = text; SetStatus(text); ShowTalk(); });
+        // Durante una conversación en vivo la voz de Ü la pone Gemini. Añadir encima el sintetizador
+        // de Windows serían dos Ü hablando a la vez, cada una su frase: el texto se sigue viendo,
+        // que es lo que hace falta, pero se oye una sola.
+        if (_vivo?.Viva == true) return;
         _voice.Speak(text);
+    }
+
+    /// <summary>
+    /// Añade una línea al globo sin borrar lo anterior.
+    ///
+    /// <see cref="Narrate"/> REEMPLAZA, que es lo correcto para un estado («voy por el paso 3»), y
+    /// justo lo contrario de lo que necesita una conversación: ahí lo dicho y lo hecho tienen que
+    /// quedarse a la vista. Cuando la voz mueve archivos de verdad, poder leer después qué se pidió
+    /// y qué herramienta se ejecutó no es un lujo.
+    /// </summary>
+    private void AppendChat(string linea)
+    {
+        if (string.IsNullOrWhiteSpace(linea)) return;
+        var lineas = (Bubble.Text ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
+        lineas.Add(linea);
+        if (lineas.Count > 40) lineas.RemoveRange(0, lineas.Count - 40);
+        Bubble.Text = string.Join("\n", lineas);
+        ShowTalk();
     }
 
     // --- IUserChannel ---

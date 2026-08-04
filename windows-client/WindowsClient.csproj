@@ -61,6 +61,7 @@
 
   <ItemGroup>
     <!-- TTS/STT integrados de Windows (paquete NuGet en .NET moderno). -->
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.Speech" Version="8.0.0" />
     <!-- Captura de pantalla (GDI) para computer-use. -->
     <PackageReference Include="System.Drawing.Common" Version="8.0.7" />
