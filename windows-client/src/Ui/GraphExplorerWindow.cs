@@ -611,7 +611,14 @@ public sealed class GraphExplorerWindow : Window
                   .ToDictionary(g => g.Key, g => g.First().To, StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        string firma = aqui + "|" + string.Join("|", els.Select(e => e.Label + ":" + e.ControlType));
+        // LA POSICIÓN FORMA PARTE DE LO QUE HAY QUE REDIBUJAR. La firma llevaba solo nombres y
+        // tipos, que era lo correcto cuando los puntos vivían en una tira: daba igual dónde
+        // estuviera cada botón. Desde que cada punto se coloca ENCIMA de su elemento, mover la
+        // ventana cambia todo lo que importa y no cambiaba la firma — se arrastraba una ventana y
+        // los puntos se quedaban clavados donde estaban (2026-08-04, reportado por el usuario).
+        // Se redondea a píxeles enteros para no redibujar por medio punto de diferencia.
+        string firma = aqui + "|" + string.Join("|", els.Select(e =>
+            $"{e.Label}:{e.ControlType}:{(int)e.Bounds.X},{(int)e.Bounds.Y}"));
         if (firma == _signature) return; // nada cambió: no matar el hover redibujando
         _signature = firma;
 
