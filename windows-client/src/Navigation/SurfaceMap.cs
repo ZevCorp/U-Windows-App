@@ -324,7 +324,7 @@ public sealed class SurfaceMap
             // pantalla, lleva al mismo desde aquí. Vale para el cromo de navegación —el panel
             // izquierdo es idéntico en todas las carpetas— y NO para el contenido, porque dos
             // carpetas distintas pueden tener cada una su «readme.txt» y no son el mismo destino.
-            string deducido = EsContenido(s.ControlType) ? "" : DestinoConocidoDe(s.Selector);
+            string deducido = EsContenido(s.ControlType) ? "" : DestinoConocidoDe(s.Selector, f);
             string destino = deducido.Length > 0 ? deducido : DestinoPuerta(s.Selector);
             if (string.Equals(destino, f, StringComparison.OrdinalIgnoreCase)) continue; // no lleva a sí misma
 
@@ -423,12 +423,33 @@ public sealed class SurfaceMap
         || selector.Contains("backButton", StringComparison.OrdinalIgnoreCase)
         || selector.Contains("forwardButton", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>A dónde lleva este selector, si ya se recorrió desde cualquier pantalla.</summary>
-    private string DestinoConocidoDe(string selector)
+    /// <summary>Qué app es esta superficie: el proceso dentro de «uia://proceso/loquesea».</summary>
+    public static string AppDe(string id)
+    {
+        if (id.Length == 0) return "";
+        int i = id.IndexOf("//", StringComparison.Ordinal);
+        if (i < 0) return "";
+        int j = id.IndexOf('/', i + 2);
+        return j < 0 ? id[(i + 2)..] : id[(i + 2)..j];
+    }
+
+    /// <summary>¿Estas dos superficies pertenecen a la misma aplicación?</summary>
+    public static bool MismaApp(string a, string b) =>
+        string.Equals(AppDe(a), AppDe(b), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A dónde lleva este selector, si ya se recorrió desde otra pantalla DE LA MISMA APP.
+    ///
+    /// La deducción entre apps distintas no es un atajo, es una invención: que «Nuevo» lleve a algún
+    /// sitio en el explorador no dice nada de un «Nuevo» del Bloc de notas, y mezclarlos convertía
+    /// un destino equivocado en un destino equivocado EN TODAS PARTES (2026-08-03).
+    /// </summary>
+    private string DestinoConocidoDe(string selector, string desde = "")
     {
         if (EsRelativo(selector)) return "";   // su destino depende de dónde estés: no se deduce
         foreach (var (_, to, info) in Edges())
             if (!EsPuerta(to) && to.Length > 0 && info.Explored
+                && (desde.Length == 0 || MismaApp(desde, to))
                 && string.Equals(info.Selector, selector, StringComparison.Ordinal))
                 return to;
         return "";
@@ -462,6 +483,20 @@ public sealed class SurfaceMap
     {
         string f = Norm(from), t = Norm(to);
         if (f.Length == 0 || t.Length == 0 || selector.Length == 0) return;
+
+        // UN CLIC DENTRO DE UNA APP NO LLEVA A OTRA APP. Cuando otra ventana roba el foco justo
+        // después de una acción, lo que aparece delante no es el destino: es una interrupción. El
+        // mapa lo anotaba como transición, y «uia://claude.exe/claude» llegó a ser el nodo MÁS
+        // visitado del grafo —49 visitas— sin que nadie hubiera navegado nunca hasta allí. Tenía
+        // dos consecuencias, y la segunda es la grave: rutas imposibles, y sobre todo que
+        // DestinoConocidoDe propagaba ese destino a TODA pantalla que compartiera el selector, así
+        // que un solo robo de foco envenenaba el grafo entero (2026-08-03).
+        if (!MismaApp(f, t))
+        {
+            LogBus.Log("mapa", $"NO se aprende «{label}»: «{ShortId(f)}» y «{ShortId(t)}» son apps distintas; "
+                             + "eso es un robo de foco, no una transición");
+            return;
+        }
 
         // La puerta que acabamos de cruzar deja de ser una incógnita aquí y en todas partes.
         _edges.Remove(f + "\n" + DestinoPuerta(selector));
@@ -602,6 +637,27 @@ public sealed class SurfaceMap
                         LogBus.Log("mapa", $"esquema v{s.Version}→v{SchemaVersion}: {purgadas} acción(es) "
                             + "descartadas por haberse capturado tarde (identidad no fiable). "
                             + "Nodos y conectividad intactos.");
+                        map.Save();
+                    }
+
+                    // El terreno ya escrito también se cura. Las aristas entre apps distintas no
+                    // son transiciones sino robos de foco anotados como si lo fueran, y mientras
+                    // sigan en el fichero el mapa arranca sucio aunque la regla nueva ya no las
+                    // deje entrar. Se van con sus nodos huérfanos (2026-08-03).
+                    var cruzadas = map._edges.Keys
+                        .Where(k => { int c = k.IndexOf('\n'); return c > 0 && !EsPuerta(k[(c + 1)..])
+                                                                  && !MismaApp(k[..c], k[(c + 1)..]); })
+                        .ToList();
+                    if (cruzadas.Count > 0)
+                    {
+                        foreach (var k in cruzadas) map._edges.Remove(k);
+                        var vivos = new HashSet<string>(StringComparer.Ordinal);
+                        foreach (var k in map._edges.Keys)
+                        { int c = k.IndexOf('\n'); vivos.Add(k[..c]); if (c > 0) vivos.Add(k[(c + 1)..]); }
+                        int sueltos = map._nodes.Keys.Where(n => !vivos.Contains(n)).ToList()
+                            .Count(n => map._nodes.Remove(n));
+                        LogBus.Log("mapa", $"curado: {cruzadas.Count} arista(s) entre apps distintas "
+                            + $"y {sueltos} nodo(s) sin conexión eliminados; eran foco robado, no terreno");
                         map.Save();
                     }
                 }

@@ -82,7 +82,12 @@ public sealed class UiaSurface : IUiSurface
         // doble clic: lo interpretaba como dos clics sueltos, que solo SELECCIONAN. El síntoma era
         // desconcertante —«pulsé Facturas pero no se llegó», con ok=True— y de ahí salieron los
         // pegados en la carpeta equivocada (2026-08-02).
-        if (!RealClick(el, out error)) return false;
+        // Y el primero tiene que ser un CLIC DE VERDAD. La sustitución por Select() —que existe
+        // porque muchas apps WinUI ignoran el ratón sintético— convertía el doble clic en dos
+        // selecciones, y seleccionar no abre nada: se creaban las tres carpetas y no se entraba en
+        // ninguna, con ok=True en cada paso (2026-08-03). Seleccionar y abrir son intenciones
+        // distintas; quien pide un doble clic pide abrir, y Select() no sabe decir eso.
+        if (!RealClick(el, out error, permitirSelect: false)) return false;
 
         System.Threading.Thread.Sleep(60);
         mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
@@ -999,15 +1004,39 @@ public sealed class UiaSurface : IUiSurface
             if (el.Current.ControlType != ControlType.ListItem) return false;
             IntPtr win = TopLevelWindow(el);
             if (win == IntPtr.Zero || !GetWindowRect(win, out RECT w)) return true;
+            double ancho = w.Right - w.Left;
+            if (ancho <= 0) return true;
+
+            // Se mide el CONTENEDOR, no el elemento. Mirar dónde cae el elemento —«en el tercio
+            // izquierdo = navegación»— clasificaba la PRIMERA COLUMNA de la rejilla de archivos como
+            // menú lateral, porque el contenido empieza justo después del panel y su primera columna
+            // aún cae dentro de ese tercio. Con la ventana en x=743 una carpeta en x=1039 se tomaba
+            // por navegación, se «pulsaba» con Select() y no se entraba nunca en ella (2026-08-03).
+            // El contenedor no tiene esa ambigüedad: un panel de navegación es estrecho y una vista
+            // de contenido ocupa el grueso de la ventana.
+            var padre = System.Windows.Automation.TreeWalker.ControlViewWalker.GetParent(el);
+            for (int i = 0; i < 6 && padre != null; i++)
+            {
+                var ct = padre.Current.ControlType;
+                if (ct == ControlType.Tree) return false;               // árbol = navegación, siempre
+                if (ct == ControlType.List || ct == ControlType.DataGrid)
+                {
+                    var c = padre.Current.BoundingRectangle;
+                    if (c.IsEmpty || c.Width < 1) break;
+                    return c.Width > ancho * 0.5;                        // ancho = contenido; estrecho = menú
+                }
+                padre = System.Windows.Automation.TreeWalker.ControlViewWalker.GetParent(padre);
+            }
+
+            // Sin contenedor identificable se vuelve al criterio antiguo, que al menos acierta
+            // en los menús laterales claramente separados del contenido.
             var r = el.Current.BoundingRectangle;
-            // En el tercio izquierdo de la ventana = navegación; más allá = contenido.
-            double tercio = w.Left + (w.Right - w.Left) / 3.0;
-            return r.Left > tercio;
+            return r.Left > w.Left + ancho / 3.0;
         }
         catch { return true; }
     }
 
-    private bool RealClick(AutomationElement el, out string error)
+    private bool RealClick(AutomationElement el, out string error, bool permitirSelect = true)
     {
         error = "";
         try
@@ -1022,7 +1051,8 @@ public sealed class UiaSurface : IUiSurface
             //
             // El contenido de una lista queda fuera a propósito: ahí seleccionar NO es abrir, y
             // confundirlos rompería el explorador, donde hace falta el doble clic de verdad.
-            if (!EsContenidoDeLista(el)
+            if (permitirSelect
+                && !EsContenidoDeLista(el)
                 && el.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var sp0)
                 && sp0 is SelectionItemPattern selNav)
             {

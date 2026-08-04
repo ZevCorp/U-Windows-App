@@ -1061,6 +1061,73 @@ public sealed class SurfaceMapTools
             : exactas.Count > 0 ? exactas
             : opciones.Where(h => h.Info.Label.Contains(salida, StringComparison.OrdinalIgnoreCase)).ToList();
 
+        // NO CONOCERLO NO ES RAZÓN PARA NEGARSE, si lo que se pide es un SELECTOR. El mapa es una
+        // memoria de lo visto, no una lista de permisos: una carpeta recién creada existe en la
+        // pantalla aunque el mapa aún no la haya registrado, y negarse a entrar en ella rompía la
+        // tarea justo después de crearla (2026-08-03). Se intenta, se verifica el resultado, y si
+        // funciona se aprende — que es como se aprende todo lo demás.
+        if (candidatas.Count == 0 && salida.StartsWith("uia:", StringComparison.OrdinalIgnoreCase))
+        {
+            var directo = new PlanStep
+            {
+                StepOrder = 1, ActionType = "click",
+                Selector = salida, Label = salida,
+            };
+            string origen = actual.Id;
+
+            // UN CLIC SOBRE LO YA SELECCIONADO NO SELECCIONA: ABRE EL RENOMBRADO. Es la regla del
+            // explorador de toda la vida (clic lento sobre lo seleccionado = renombrar), y aquí
+            // mordía justo en el peor sitio: una carpeta recién creada queda seleccionada, así que
+            // el clic previo abría su campo de edición y el doble clic siguiente caía dentro del
+            // campo en vez de entrar en la carpeta. Se creaban las tres carpetas y no se entraba en
+            // ninguna (2026-08-03). Si ya está seleccionado, el paso de seleccionar sobra.
+            string nombrePedido = System.Text.RegularExpressions.Regex
+                .Match(salida, @"name=([^;]+)").Groups[1].Value;
+            bool yaSeleccionado = nombrePedido.Length > 0
+                && SeleccionActual().Any(s => s.Equals(nombrePedido, StringComparison.OrdinalIgnoreCase));
+
+            bool errDirectoOk = yaSeleccionado
+                || _uia.Execute(directo, out _);
+            string errDirecto = "";
+            if (errDirectoOk)
+            {
+                string llegada = "";
+                if (!yaSeleccionado)
+                {
+                    EsperarPantallaLista(700);
+                    llegada = EsperarCambio(origen, 1200);
+                }
+                else LogBus.Log("mapa-mcp", $"«{nombrePedido}» ya estaba seleccionado: se va directo al doble clic");
+                if (llegada.Length == 0)
+                {
+                    _uia.Execute(new PlanStep { StepOrder = 1, ActionType = "doubleclick", Selector = salida, Label = salida }, out errDirecto);
+                    EsperarPantallaLista(700);
+                    llegada = EsperarCambio(origen, 1500);
+                }
+                // Salir de la app no es cruzar una puerta de la app. Se pidió entrar en «Datos» y lo
+                // que había con ese nombre era una foto: el doble clic abrió Photos.exe y esto lo
+                // dio por «puerta cruzada y aprendida» (2026-08-03). Decirlo es lo útil: quien pidió
+                // entrar en una carpeta necesita saber que abrió un archivo.
+                if (llegada.Length > 0 && !SurfaceMap.MismaApp(origen, llegada))
+                {
+                    LogBus.Log("mapa-mcp", $"«{salida}» no es una puerta: abrió «{llegada}», otra aplicación");
+                    return $"«{salida}» no lleva a ninguna parte dentro de esta app: al pulsarla se abrió "
+                         + $"«{llegada}», que es otra aplicación. Lo que hay con ese nombre no es un sitio "
+                         + "al que entrar, es un archivo que se abre.";
+                }
+                if (llegada.Length > 0)
+                {
+                    _map.LearnTraversal(origen, llegada, salida, Array.Empty<string>(), salida, "ListItem", "doubleclick");
+                    Anotar(origen, llegada);
+                    ObservarAqui(llegada);
+                    LogBus.Log("mapa-mcp", $"✓ «{salida}» no estaba en el mapa; se cruzó y quedó aprendida → {llegada}");
+                    return $"«{salida}» no estaba en el mapa; la crucé y lleva a «{llegada}». Queda aprendida.";
+                }
+            }
+            return $"«{salida}» no está en el mapa y al pulsarla no llevó a ninguna parte"
+                 + (errDirecto.Length > 0 ? $" ({errDirecto})" : "") + ".";
+        }
+
         if (candidatas.Count == 0)
             return $"desde «{actual.Id}» no hay ninguna salida que se llame «{salida}». Disponibles: "
                  + string.Join(", ", opciones.Select(h => $"«{h.Info.Label}»"));
@@ -1106,7 +1173,25 @@ public sealed class SurfaceMapTools
         int menusAntes = PuedeAbrirMenu(elegida.Info.Label) ? CuantosMenus() : 0;
 
         if (!_uia.Execute(paso, out string error))
-            return $"no se pudo pulsar «{elegida.Info.Label}»: {error}";
+        {
+            // NO ESTAR TODAVÍA NO ES NO ESTAR. Lo que se abre tarda en aparecer: se pulsaba «Nuevo»
+            // y se preguntaba por «Carpeta» antes de que el menú existiera, así que se respondía «no
+            // se encontró» y el grupo entero se caía —sin carpeta, y con el paso siguiente
+            // escribiendo sobre lo que hubiera seleccionado (2026-08-03). Se espera a que la
+            // pantalla se estabilice y se vuelve a mirar UNA vez: si sigue sin estar, no está.
+            if (error.Contains("no se encontró", StringComparison.OrdinalIgnoreCase))
+            {
+                EsperarPantallaLista(1500);
+                if (_uia.Execute(paso, out string error2))
+                {
+                    LogBus.Log("mapa-mcp", $"«{elegida.Info.Label}» no estaba aún; apareció al esperar a que la pantalla se estabilizara");
+                    error = "";
+                }
+                else error = error2;
+            }
+            if (error.Length > 0)
+                return $"no se pudo pulsar «{elegida.Info.Label}»: {error}";
+        }
 
         // UN CLIC PRIMERO, EL DOBLE SOLO SI HACE FALTA. La acción de un elemento de lista depende
         // de la APP, no del tipo: en una lista de archivos el doble clic abre, pero en un menú de
@@ -1203,8 +1288,28 @@ public sealed class SurfaceMapTools
         }
 
         if (!Llego(elegida.To, 4000))
+        {
+            // EL TERRENO MANDA SOBRE EL MAPA. Si la puerta llevó a otro sitio de la MISMA app, la
+            // que estaba equivocada era la arista, no la acción: se corrige y se sigue. Sin esto
+            // una arista mala se quedaba mala para siempre y arrastraba cada tarea que pasara por
+            // ella — se entró en «docs6» perfectamente y se reportó fallo porque el mapa esperaba
+            // «claude.exe», destino que nunca existió (2026-08-03).
+            string real = _where()?.Id ?? "";
+            if (real.Length > 0 && !string.Equals(real, desde, StringComparison.OrdinalIgnoreCase)
+                && SurfaceMap.MismaApp(desde, real))
+            {
+                _map.LearnTraversal(desde, real, elegida.Info.Selector, elegida.Info.Alternatives,
+                    elegida.Info.Label, elegida.Info.ControlType, elegida.Info.ActionType);
+                Anotar(desde, real);
+                AprenderSubida(desde, real, elegida.Info.ControlType);
+                ObservarAqui(real);
+                LogBus.Log("mapa-mcp", $"✓ «{elegida.Info.Label}» lleva a «{real}», no a «{elegida.To}»: mapa corregido");
+                return $"tomé «{elegida.Info.Label}» y llegué a «{real}» "
+                     + $"(el mapa decía «{elegida.To}»; queda corregido).";
+            }
             return $"pulsé «{elegida.Info.Label}» pero no se llegó a «{elegida.To}». "
-                 + $"Estamos en «{_where()?.Id}».";
+                 + $"Estamos en «{real}».";
+        }
 
         // Llegar es mirar alrededor: si no, el asistente se planta en una pantalla nueva y no sabe
         // qué puede hacer allí. Se pegó un archivo en una carpeta recién abierta y la respuesta
@@ -1252,19 +1357,33 @@ public sealed class SurfaceMapTools
                 System.Threading.Thread.Sleep(50);   // se sondea fino: se sale en cuanto aparece
             }
 
-            // El campo con el foco: es donde una persona escribiría sin pensarlo.
+            // El campo con el foco: es donde una persona escribiría sin pensarlo. Pero SOLO si de
+            // verdad es un campo. Sin esta comprobación, cuando la edición en línea no llegaba a
+            // abrirse se escribía sobre lo que estuviera seleccionado —un archivo del usuario— y
+            // el explorador lo interpretaba como renombrar: «logo-empresa.png» se convirtió en
+            // «Datos.png» y la respuesta fue «✓ escrito» (2026-08-03). Escribir a ciegas sobre la
+            // selección no es escribir: es renombrar lo que haya delante y llamarlo éxito.
+            string tipoFoco = "";
             try
             {
                 var foco = System.Windows.Automation.AutomationElement.FocusedElement;
                 string aid = foco?.Current.AutomationId ?? "";
                 string nombre = foco?.Current.Name ?? "";
-                string tipo = (foco?.Current.ControlType.ProgrammaticName ?? "").Replace("ControlType.", "");
-                selector = aid.Length > 0 && !aid.All(char.IsDigit) ? $"uia:aid={aid};ct={tipo}"
-                         : nombre.Length > 0 ? $"uia:name={nombre};ct={tipo}"
+                tipoFoco = (foco?.Current.ControlType.ProgrammaticName ?? "").Replace("ControlType.", "");
+                selector = aid.Length > 0 && !aid.All(char.IsDigit) ? $"uia:aid={aid};ct={tipoFoco}"
+                         : nombre.Length > 0 ? $"uia:name={nombre};ct={tipoFoco}"
                          : "";
             }
             catch { }
             if (selector.Length == 0) return "no hay ningún campo con el foco; pasa `target` con su selector";
+            if (!tipoFoco.Equals("Edit", StringComparison.OrdinalIgnoreCase)
+                && !tipoFoco.Equals("Document", StringComparison.OrdinalIgnoreCase))
+            {
+                LogBus.Log("mapa-mcp", $"NO SE ESCRIBE: el foco lo tiene «{selector}», que es {tipoFoco}, no un campo de texto");
+                return $"NO escribo: no hay ningún campo de texto abierto. El foco lo tiene «{selector}» "
+                     + $"({tipoFoco}), y escribir ahí no es escribir — es renombrar lo que esté seleccionado. "
+                     + "Si querías renombrar, abre antes la edición (Cambiar nombre / F2) o pasa `target`.";
+            }
         }
 
         var paso = new PlanStep { StepOrder = 1, ActionType = "input", Selector = selector, Value = texto };
@@ -1273,9 +1392,28 @@ public sealed class SurfaceMapTools
 
         // Enter confirma: en una edición en línea (renombrar) el texto no se aplica hasta que se
         // acepta, y dejarlo a medias deja la interfaz en un estado del que nadie se acuerda luego.
+        string antes = _where()?.Id ?? "";
         keybd_event(0x0D, 0, 0, IntPtr.Zero);
         keybd_event(0x0D, 0, 2, IntPtr.Zero);
-        System.Threading.Thread.Sleep(400);
+        EsperarPantallaLista(900);
+
+        // EL ENTER PUEDE HABERNOS METIDO DENTRO. Al renombrar una carpeta recién creada queda
+        // seleccionada, y el Enter que confirma el nombre también la ABRE: la tarea seguía creyendo
+        // estar en la carpeta padre y el ancla rechazaba los pasos siguientes uno tras otro
+        // (2026-08-03). Escribir un nombre no debería cambiar de sitio; si cambió, se deshace.
+        string ahora = _where()?.Id ?? "";
+        if (antes.Length > 0 && ahora.Length > 0
+            && !string.Equals(antes, ahora, StringComparison.OrdinalIgnoreCase))
+        {
+            LogBus.Log("mapa-mcp", $"el Enter abrió «{ahora}»; se vuelve a «{antes}»");
+            var atras = new PlanStep
+            {
+                StepOrder = 1, ActionType = "click",
+                Selector = "uia:aid=backButton;ct=Button", Label = "Atrás",
+            };
+            _uia.Execute(atras, out _);
+            Llego(antes, 2000);
+        }
 
         LogBus.Log("mapa-mcp", $"✓ escrito «{texto}» en {selector}");
         return $"escribí «{texto}» y confirmé con Enter";

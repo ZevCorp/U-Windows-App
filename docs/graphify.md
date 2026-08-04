@@ -286,7 +286,42 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
   lateral, que está siempre presente — otra razón por la que el cromo global es la vuelta buena y
   el historial no.
 
+### `Select()` sustituye a un CLIC, nunca a un DOBLE clic
+- Síntoma: se creaban las tres carpetas y no se entraba en ninguna de ellas, con `ok=True` en cada
+  paso. En el log: «→ seleccionado por patrón (la app no responde al ratón sintético)» sobre una
+  carpeta del explorador, dentro de un doble clic.
+- Causa: la regla nació para Configuración —que ignora el ratón sintético pero obedece
+  `SelectionItemPattern.Select()`— y se coló en el explorador. `Select()` convertía el doble clic
+  en dos selecciones, y seleccionar no abre nada.
+- Regla: seleccionar y abrir son intenciones distintas. Quien pide un doble clic pide ABRIR, y
+  `Select()` no sabe decir eso: la sustitución solo vale para el clic simple.
+- Fecha: 2026-08-03. Código: `UiaSurface.RealDoubleClick` (`permitirSelect: false`).
+- **Es el tercer caso de una regla de una app rompiendo otra. El patrón ya es conocido: toda regla
+  nacida en una app se prueba en la otra antes de darla por universal.**
+
+### Navegación o contenido lo dice el CONTENEDOR, no dónde cae el elemento
+- Síntoma: con la ventana en x=743, una carpeta en x=1039 se clasificaba como menú lateral.
+- Causa: la guarda era «en el tercio izquierdo de la ventana = navegación». El contenido empieza
+  justo después del panel, así que su PRIMERA COLUMNA aún cae dentro de ese tercio.
+- Regla: se sube al contenedor. `Tree` = navegación siempre. `List`/`DataGrid` ancho (>50 % de la
+  ventana) = contenido; estrecho = menú lateral. Nunca la posición del elemento suelto.
+- Fecha: 2026-08-03. Código: `UiaSurface.EsContenidoDeLista`.
+
 ## Reglas del explorador de archivos de Windows 11 (`explorer.exe`)
+
+### Un clic sobre lo YA seleccionado no selecciona: abre el renombrado
+- Síntoma: una carpeta recién creada y nombrada queda seleccionada; el clic previo al doble clic
+  abría su campo de edición y el doble clic caía dentro del campo en vez de entrar en la carpeta.
+- Regla: si el elemento ya está en la selección, el paso de seleccionar sobra — se va directo a
+  abrir. Es la regla de toda la vida del explorador (clic lento sobre lo seleccionado = renombrar).
+- Fecha: 2026-08-03. Código: `SurfaceMapTools.Take`.
+
+### El explorador NO refresca su árbol UIA ante cambios hechos fuera de él
+- Se creó una carpeta desde disco con la ventana abierta en ese directorio y, un segundo después,
+  UIA seguía sin verla: 0 coincidencias por nombre. Lo creado POR la interfaz sí aparece.
+- Consecuencia para las pruebas: preparar terreno a espaldas de la app no reproduce el escenario
+  real, y hace parecer roto lo que funciona.
+- Fecha: 2026-08-03.
 
 ### El contenido vive en ventanas hijas con HWND propio
 - La ventana principal (CabinetWClass) expone UN nodo UIA. La lista de archivos está bajo
@@ -358,6 +393,40 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
 ---
 
 ## Reglas de arquitectura del mapeo
+
+### Un clic dentro de una app NO lleva a otra app
+- Síntoma: `uia://claude.exe/claude` era el nodo MÁS visitado del grafo (49 visitas) sin que nadie
+  hubiera navegado nunca hasta allí. Había 130 aristas entre apps distintas.
+- Causa: cuando otra ventana roba el foco justo después de una acción, lo que aparece delante se
+  anotaba como destino. Y `DestinoConocidoDe` propagaba ese destino a TODA pantalla que compartiera
+  el selector: un solo robo de foco envenenaba el grafo entero.
+- Regla: una transición solo se aprende si origen y destino son de la misma app. La deducción de
+  destino por selector también se limita a la misma app. El terreno ya escrito se cura al cargar.
+- Fecha: 2026-08-03. Código: `SurfaceMap.LearnTraversal`, `SurfaceMap.DestinoConocidoDe`, `SurfaceMap.Load`.
+
+### El terreno manda sobre el mapa: una arista equivocada se corrige, no se acata
+- Síntoma: se entró en `docs6` perfectamente y se reportó fallo, porque el mapa esperaba llegar a
+  `claude.exe`. La arista mala se quedaba mala para siempre y arrastraba toda tarea que pasara por ella.
+- Causa: la llegada se juzgaba solo contra el destino APRENDIDO.
+- Regla: si la puerta lleva a otro sitio de la MISMA app, la equivocada era la arista: se reaprende
+  y la tarea continúa. Si lleva a otra app, no es una puerta — es un archivo que se abre, y se dice.
+- Fecha: 2026-08-03. Código: `SurfaceMapTools.Take`.
+
+### Escribir sin campo de texto no es escribir: es renombrar lo que haya seleccionado
+- Síntoma: `logo-empresa.png` se convirtió en `Datos.png` y la respuesta fue «✓ escrito «Datos»».
+- Causa: sin `target`, se escribía en el elemento con el foco fuera cual fuera. Si la edición en
+  línea no llegaba a abrirse, el foco lo tenía el archivo seleccionado y el explorador lo
+  interpretó como renombrar.
+- Regla: sin `target`, solo se escribe si el foco lo tiene un `Edit` o `Document`. Si no, se niega
+  y se explica. Un daño silencioso reportado como éxito es lo peor que puede hacer esta capa.
+- Fecha: 2026-08-03. Código: `SurfaceMapTools.Type`.
+
+### No estar TODAVÍA no es no estar
+- Síntoma: se pulsaba «Nuevo» y «Carpeta» respondía «no se encontró»; el grupo entero se caía.
+- Causa: lo que se abre tarda en aparecer, y se preguntaba antes de que el menú existiera.
+- Regla: ante un «no se encontró», se espera a que la pantalla se estabilice y se mira UNA vez más.
+  Espera por ESTADO, no por reloj. Si sigue sin estar, entonces no está.
+- Fecha: 2026-08-03. Código: `SurfaceMapTools.Take`, `EsperarPantallaLista`.
 
 ### «Atrás» NO es una arista: es un gesto de historial
 - Síntoma: `map_go_to` fallaba el último tramo de las vueltas — «pulsé Atrás pero seguimos en

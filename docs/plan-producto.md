@@ -14,7 +14,9 @@
 | No hacer daño | **funciona** | rechazó 28 acciones tras un error, 0 archivos tocados |
 | Salir de un bloqueo | **funciona** | detecta diálogo, escala la decisión, reanuda |
 | Elegir la app a aprender | **funciona** | `map_learn_app` la trae al frente ella sola |
-| **Repetibilidad** | **NO medida** | corridas sueltas perfectas; nunca 4/4 seguidas |
+| Grafo sin terreno falso | **funciona** | 130 aristas entre apps eliminadas; ninguna nueva entra |
+| No dañar por escribir | **funciona** | sin campo de texto se niega; 8/8 archivos intactos |
+| **Repetibilidad** | **0/3** | 1 corrida perfecta aislada; 3 seguidas se caen por terreno borrado |
 | **Planificador** | **NO existe** | los 21 pasos los escribió una persona |
 | **Tarea aprendida** | **NO existe** | cada paso es una consulta; no hay «esto ya lo sé hacer» |
 
@@ -109,6 +111,14 @@ tercera y la cuarta enseñarán más.
 ---
 
 ## Problemas abiertos (se actualizan con cada prueba)
+
+- **Tras desbloquear, el sistema no vuelve a la tarea.** Medido 2026-08-03: apareció «Ubicación no
+  disponible», se detectó, se pulsó «Aceptar» correctamente… y el explorador quedó en `Notas`. A
+  partir de ahí el ancla rechazó 27 acciones seguidas —bien, cero daño— pero la tarea murió ahí.
+  Resolver el bloqueo y reanudar son dos cosas, y solo está la primera.
+- **El mapa conserva lugares que ya no existen y sigue enrutando por ellos.** Al borrar las carpetas
+  entre corridas, `map_go_to` intentaba pasar por nodos muertos. Un lugar que ya no está tiene que
+  poder marcarse como tal cuando se comprueba que no está — no antes, o el mapa se vaciaría solo.
 
 - **Mapeo lento en apps grandes.** Configuración: 516 s para 4 pantallas en la última corrida,
   frente a 98 rutas en una anterior. Sin diagnosticar: ¿plazos demasiado cortos o algo más?
