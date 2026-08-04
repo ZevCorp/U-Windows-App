@@ -969,6 +969,22 @@ public sealed class SurfaceMapTools
         {
             _lector.Read();
 
+            // LO LEÍDO Y EL DÓNDE TIENEN QUE SER LA MISMA APP. El lector mira la ventana en primer
+            // plano y el nodo viene del localizador; entre las dos cosas la ventana puede cambiar, y
+            // entonces se le escriben a una pantalla las salidas de otra. Comprobado el 2026-08-04:
+            // el nodo del Bloc de notas acabó con «Crear PR» y «Editado GraphExplorerWindow.cs»
+            // dentro, que son de la ventana de Claude. Es el mismo veneno que las aristas entre apps
+            // —una pantalla afirmando salidas que no tiene— y llevaba aquí desde el principio, solo
+            // que nadie lo había mirado.
+            string appLeida = _lector.ForegroundProcess;
+            string appNodo = SurfaceMap.AppDe(nodo);
+            if (appLeida.Length > 0 && appNodo.Length > 0
+                && !appNodo.StartsWith(appLeida + ".", StringComparison.OrdinalIgnoreCase))
+            {
+                LogBus.Log("mapa-mcp", $"NO se anotan salidas: se leyó «{appLeida}» y el nodo es «{nodo}»");
+                return;
+            }
+
             var puertas = new List<(string, string, string, string[])>();
             foreach (var el in _lector.Elements)
             {

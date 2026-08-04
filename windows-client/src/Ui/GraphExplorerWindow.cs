@@ -458,6 +458,9 @@ public sealed class GraphExplorerWindow : Window
             }
 
             _nodoActual = aqui;
+            // Solo se anota si lo LEÍDO y el DÓNDE hablan de la misma app: ver AnotarPuertas.
+            if (SurfaceMap.AppDe(aqui).StartsWith(proc + ".", StringComparison.OrdinalIgnoreCase))
+                AnotarPuertas(aqui, els);
             DibujarGrafo();
         }
 
@@ -541,6 +544,50 @@ public sealed class GraphExplorerWindow : Window
     /// no decir nada, y lo único que las distinguía era justo lo que se recortaba (2026-08-04).
     /// Se quita el prefijo que todos comparten y se enseña el resto.
     /// </summary>
+    /// <summary>
+    /// Lo que se ve desde aquí queda anotado como SALIDA de aquí.
+    ///
+    /// El panel enseñaba los elementos de la pantalla y los olvidaba: eran una lista en vivo, no
+    /// terreno. Por eso, al dejar de convertir cada icono del escritorio en un nodo falso, los
+    /// accesos directos desaparecieron del grafo por completo — y desaparecer no era lo correcto,
+    /// porque SÍ existen: son puertas del escritorio, alcanzables directamente desde él. Anotarlas
+    /// como salidas dice justo eso y nada más: que están ahí y que se llega sin pasos intermedios;
+    /// a dónde dan se sabrá el día que se crucen (2026-08-04, reportado por el usuario).
+    ///
+    /// Solo al CAMBIAR de pantalla, no en cada sondeo: describir cada elemento cuesta un viaje a
+    /// UIA, y repetirlo cada segundo sobre lo mismo no aporta nada.
+    ///
+    /// Y SOLO SI LO LEÍDO Y EL DÓNDE COINCIDEN. Los elementos los da el lector sobre la ventana en
+    /// primer plano y la identidad la da el localizador, y entre las dos lecturas la ventana puede
+    /// haber cambiado: al probar esto, el nodo del Bloc de notas acabó con las acciones de la
+    /// ventana de Claude —«Crear PR», «Editado GraphExplorerWindow.cs»— escritas dentro
+    /// (2026-08-04). Mientras esto solo se pintaba, una lista desfasada un segundo no hacía daño;
+    /// desde que se ESCRIBE en el mapa, es exactamente el veneno que costó una mañana limpiar.
+    /// </summary>
+    private void AnotarPuertas(string nodo, List<UiaReader.UiElement> els)
+    {
+        if (nodo.Length == 0 || els.Count == 0) return;
+        try
+        {
+            var puertas = new List<(string, string, string, string[])>();
+            foreach (var el in els.Take(80))   // un techo: una pantalla con cientos no se mapea mirándola
+            {
+                try
+                {
+                    var (l, t, sels) = U.Graph.Surfaces.UiaSurface.DescribeElement(el.Native);
+                    var utiles = sels.Where(s => !s.Contains("path=", StringComparison.Ordinal)
+                        && !System.Text.RegularExpressions.Regex.IsMatch(s, @"(name|aid)=(;|$)")).ToArray();
+                    if (utiles.Length == 0) continue;
+                    puertas.Add((l.Length > 0 ? l : el.Label, t.Length > 0 ? t : el.ControlType,
+                                 utiles[0], utiles.Skip(1).ToArray()));
+                }
+                catch { }
+            }
+            if (puertas.Count > 0) _map.ObserveExits(nodo, puertas);
+        }
+        catch { }
+    }
+
     private static string Distintivo(string id, string prefijoComun)
     {
         string corto = Corto(id);
