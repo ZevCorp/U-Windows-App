@@ -203,17 +203,54 @@ public sealed class GraphClient
         return await ReadAsync<T>(res, ct);
     }
 
+    /// <summary>
+    /// El embudo por el que pasa TODA petición a Graph. Por eso el semáforo de conexión
+    /// (<see cref="GraphHealth"/>) se anota aquí y no en los nueve sitios que construyen un
+    /// GraphClient: cablearlo en cada uno garantiza que el que se olvide quede mudo.
+    ///
+    /// Lo que NO se anota aquí, a propósito: los fallos de <see cref="ReadAsync{T}"/> —respuesta
+    /// vacía, JSON inesperado—. Ocurren DESPUÉS de un 2xx, así que Graph está vivo y lo que falló es
+    /// el payload; pintarlos de rojo haría mentir a la caja en la otra dirección. El instinto es
+    /// meterlos; no lo hagas.
+    /// </summary>
     private async Task<HttpResponseMessage> SendAsync(Func<HttpRequestMessage> build, CancellationToken ct)
     {
+        string host = GraphHealth.HostOf(_config.BaseUrl);
         if (!_config.IsConfigured)
+        {
+            GraphHealth.Report(GraphLink.SinKey, host);
             throw new GraphException("Graph no está configurado: falta la URL o la API key.");
+        }
         try
         {
-            return await _http.SendAsync(build(), ct);
+            var res = await _http.SendAsync(build(), ct);
+            int code = (int)res.StatusCode;
+            // Cualquier status significa que Graph CONTESTÓ: la red y el host están vivos. Lo que
+            // cambia es qué dijo.
+            GraphHealth.Report(
+                res.IsSuccessStatusCode ? GraphLink.Ok
+                : code is 401 or 403 ? GraphLink.KeyRechazada
+                : GraphLink.ErrorDelServidor, host, code);
+            return res;
         }
-        catch (OperationCanceledException) { throw; }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // El timeout del propio HttpClient llega como TaskCanceledException, NO como
+            // GraphException — por eso se escapaba de todos los catch de aguas arriba. Sin este caso,
+            // «Ü esperó minuto y medio y no llegó nada» era indistinguible de «el usuario pulsó ⏹».
+            GraphHealth.Report(GraphLink.SinRespuesta, host, 0,
+                $"sin respuesta en {_http.Timeout.TotalSeconds:0} s");
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelación pedida por quien llama. No dice absolutamente nada sobre Graph: reportarla
+            // sería una conclusión falsa.
+            throw;
+        }
         catch (Exception e)
         {
+            GraphHealth.Report(GraphLink.SinContacto, host, 0, e.Message);
             throw new GraphException($"No se pudo contactar con Graph: {e.Message}");
         }
     }
