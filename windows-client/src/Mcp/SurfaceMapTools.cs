@@ -148,8 +148,10 @@ public sealed class SurfaceMapTools
         }, IntPtr.Zero);
 
         if (elegida == IntPtr.Zero) return false;
-        if (IsIconic(elegida)) ShowWindow(elegida, 9 /* SW_RESTORE */);
-        SetForegroundWindow(elegida);
+        // Una sola forma de traer una ventana al frente en toda la app: ver AppAligner.TraerAlFrente.
+        // Aquí había una copia sin el enganche a la cola de entrada, que falla en silencio cuando
+        // quien llama no está delante — y quien llama a esto casi nunca lo está.
+        AppAligner.TraerAlFrente(elegida);
 
         // Se espera a que lo confirmen LAS DOS fuentes: el sistema (quién está delante) y el
         // localizador, que sondea cada 800 ms. Conformarse con la primera dejaba una ventana en la

@@ -890,44 +890,8 @@ public sealed class GraphExplorerWindow : Window
 
     private const int SW_RESTORE = 9;
 
-    /// <summary>
-    /// Traer una ventana al frente DE VERDAD, y comprobarlo.
-    /// </summary>
-    /// <remarks>
-    /// Windows no deja que un proceso que no está delante le robe el primer plano a otro: la llamada
-    /// devuelve éxito y lo único que hace es parpadear su botón en la barra de tareas. Y nuestra
-    /// capa nunca está delante —lleva NOACTIVATE a propósito— así que caía siempre en ese caso.
-    ///
-    /// La salida documentada es engancharse a la cola de entrada del hilo que SÍ está delante: para
-    /// Windows pasan a ser el mismo «usuario», y el cambio se permite. Se desengancha enseguida,
-    /// porque compartir cola de entrada con otra app más tiempo del necesario es pedir un bloqueo.
-    ///
-    /// Y se comprueba el resultado mirando quién está delante DESPUÉS, no lo que devolvió la
-    /// llamada. El log decía «al frente» las diez veces mientras la ventana no se movía
-    /// (2026-08-04): aceptado no es ejecutado, que es regla vieja de esta casa y se me escapó.
-    /// </remarks>
-    private static bool TraerAlFrente(IntPtr h)
-    {
-        if (h == IntPtr.Zero) return false;
-        try
-        {
-            if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
-
-            uint mio = GetCurrentThreadId();
-            uint suyo = GetWindowThreadProcessId(GetForegroundWindow(), out _);
-            bool enganchado = mio != suyo && AttachThreadInput(mio, suyo, true);
-            try { SetForegroundWindow(h); BringWindowToTop(h); }
-            finally { if (enganchado) AttachThreadInput(mio, suyo, false); }
-
-            for (int i = 0; i < 12; i++)
-            {
-                if (GetForegroundWindow() == h) return true;
-                System.Threading.Thread.Sleep(40);
-            }
-            return false;
-        }
-        catch { return false; }
-    }
+    /// <summary>Traer al frente lo hace <see cref="AppAligner.TraerAlFrente"/>, para toda la app.</summary>
+    private static bool TraerAlFrente(IntPtr h) => AppAligner.TraerAlFrente(h);
 
     /// <summary>
     /// Traer al frente el nivel pedido.

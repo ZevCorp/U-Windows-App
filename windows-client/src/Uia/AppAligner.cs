@@ -90,12 +90,57 @@ public static class AppAligner
         var open = Process.GetProcessesByName(proc).FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
         if (open != null)
         {
-            // Restaurar SOLO si está minimizada: SW_RESTORE sobre una ventana maximizada la encoge,
-            // y enfocar una app no debería cambiarle el tamaño a nadie (2026-08-01).
-            if (IsIconic(open.MainWindowHandle)) ShowWindow(open.MainWindowHandle, SW_RESTORE);
-            return SetForegroundWindow(open.MainWindowHandle);
+            return TraerAlFrente(open.MainWindowHandle);
         }
         return WindowsSystemApi.LaunchApp(proc);
+    }
+
+    [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint a, uint b, bool attach);
+    [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr h);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+
+    /// <summary>
+    /// Traer una ventana al frente DE VERDAD, y comprobarlo. La única forma de hacerlo en la app.
+    /// </summary>
+    /// <remarks>
+    /// Windows no deja que un proceso que no está delante le robe el primer plano a otro: la llamada
+    /// devuelve éxito y lo único que hace es parpadear su botón en la barra de tareas. La salida
+    /// documentada es engancharse a la cola de entrada del hilo que SÍ está delante, y desengancharse
+    /// enseguida —compartir cola con otra app más de lo necesario es pedir un bloqueo—.
+    ///
+    /// Vive AQUÍ y no en quien la necesita porque «traer al frente» se contestaba en cuatro sitios y
+    /// solo uno tenía este arreglo: el más nuevo. Los otros tres seguían con la versión que falla en
+    /// silencio, y nadie lo habría notado hasta toparse con el caso (2026-08-04). Una pregunta con
+    /// varias respuestas no se mantiene: se desincroniza.
+    ///
+    /// Y se verifica mirando quién está delante DESPUÉS, no lo que devolvió la llamada: aceptado no
+    /// es ejecutado.
+    /// </remarks>
+    public static bool TraerAlFrente(IntPtr h)
+    {
+        if (h == IntPtr.Zero) return false;
+        try
+        {
+            // Restaurar SOLO si está minimizada: SW_RESTORE sobre una ventana maximizada la encoge,
+            // y enfocar una app no debería cambiarle el tamaño a nadie (2026-08-01).
+            if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+
+            uint mio = GetCurrentThreadId();
+            uint suyo = GetWindowThreadProcessId(GetForegroundWindow(), out _);
+            bool enganchado = mio != suyo && AttachThreadInput(mio, suyo, true);
+            try { SetForegroundWindow(h); BringWindowToTop(h); }
+            finally { if (enganchado) AttachThreadInput(mio, suyo, false); }
+
+            for (int i = 0; i < 12; i++)
+            {
+                if (GetForegroundWindow() == h) return true;
+                System.Threading.Thread.Sleep(40);
+            }
+            return false;
+        }
+        catch { return false; }
     }
 
     /// <summary>El escritorio, en las formas en que lo nombran el locator y los workflows.</summary>
