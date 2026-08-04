@@ -283,9 +283,11 @@ public sealed class GraphExplorerWindow : Window
         var wa = SystemParameters.WorkArea;
         Left = wa.Left; Top = wa.Top; Width = wa.Width; Height = wa.Height;
 
-        // 1 s y con candado de no-solape: leer el árbol UIA de la ventana activa no es gratis, y
-        // dos lecturas montadas es como el inspector ya aprendió a no hacerlo.
-        _refresh = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        // Lo que manda ahora son los EVENTOS (ver EscucharLaPantalla). Este reloj se queda de red,
+        // y por eso pasa de 1 s a 3: si algún cambio no emite evento, se acaba viendo igual, pero
+        // sin pagar una lectura por segundo que casi siempre no encuentra nada nuevo.
+        EscucharLaPantalla();
+        _refresh = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _refresh.Tick += (_, __) => RefreshEdges();
         _refresh.Start();
         // Esquina superior derecha: es donde no estorba y donde se busca lo accesorio. Se recoloca
@@ -389,6 +391,127 @@ public sealed class GraphExplorerWindow : Window
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
+    // ── Refresco por EVENTOS, no por reloj ───────────────────────────────────
+
+    private delegate void WinEventProc(IntPtr hook, uint evento, IntPtr hwnd,
+        int idObjeto, int idHijo, uint hilo, uint ms);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr dll,
+        WinEventProc callback, uint proceso, uint hilo, uint flags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool UnhookWinEvent(IntPtr hook);
+
+    private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    private const uint EVENT_SYSTEM_MOVESIZEEND = 0x000B;
+    private const uint EVENT_OBJECT_SHOW = 0x8002;
+    private const uint EVENT_OBJECT_HIDE = 0x8003;
+    private const uint EVENT_OBJECT_FOCUS = 0x8005;
+    private const uint EVENT_OBJECT_SELECTION = 0x8006;
+    private const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;
+    private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+
+    private readonly List<IntPtr> _enganches = new();
+    private WinEventProc? _alOcurrir;              // referencia viva: si la recoge el GC, Windows llama a un hueco
+    private System.Windows.Threading.DispatcherTimer? _rebote;
+    private DateTime _ultimaLectura = DateTime.MinValue;
+
+    /// <summary>
+    /// Windows AVISA cuando la pantalla cambia; no hace falta preguntárselo cada segundo.
+    ///
+    /// El refresco iba con un reloj de 1 s, y eso se veía: los puntos —que desde que viven encima de
+    /// cada elemento tienen que seguirle el paso— llegaban tarde a cada cambio de la interfaz
+    /// (2026-08-04, reportado por el usuario). Sondear más rápido no es la respuesta: leer el árbol
+    /// UIA de una ventana no es gratis y hacerlo diez veces por segundo para nada es peor que el
+    /// retraso.
+    ///
+    /// SetWinEventHook fuera de contexto es la vía barata: el sistema nos llama cuando algo pasa de
+    /// verdad —cambia la ventana activa, aparece o desaparece algo, se mueve, cambia la selección—
+    /// y en reposo no cuesta absolutamente nada. Se eligen esos eventos y no «todos» porque la lista
+    /// completa incluye cosas como el parpadeo del cursor.
+    ///
+    /// Con dos frenos, porque estos eventos vienen en ráfagas: se espera a que la ráfaga termine
+    /// (rebote) y no se lee dos veces seguidas antes de un mínimo. El reloj se queda como red, mucho
+    /// más lento: si algún cambio no emite evento, se acaba viendo igual.
+    /// </summary>
+    private void EscucharLaPantalla()
+    {
+        _rebote = new System.Windows.Threading.DispatcherTimer
+        { Interval = TimeSpan.FromMilliseconds(70) };
+        _rebote.Tick += (_, __) => { _rebote!.Stop(); RefreshEdges(); };
+
+        _alOcurrir = (_, evento, hwnd, idObjeto, _, _, _) =>
+        {
+            // Lo nuestro no cuenta: la propia capa dibujándose generaría eventos y con ellos otra
+            // lectura, y esa lectura otro dibujo. Un observador que reacciona a sí mismo no para.
+            if (hwnd != IntPtr.Zero && EsNuestraVentana(hwnd)) return;
+
+            // SOLO LA VENTANA DE DELANTE. Estos eventos llegan de TODA la sesión, y las ventanas de
+            // fondo que animan —un chat, un navegador reproduciendo algo— emiten sin parar. Se
+            // midió: escuchando a todas, la capa quemaba un 22 % de un núcleo sin que nadie tocara
+            // nada (2026-08-04). Y no aporta: lo que se dibuja son los elementos de la ventana en
+            // primer plano, así que lo que pase detrás no cambia ni un punto.
+            //
+            // Se compara contra la ventana RAÍZ del evento: un botón emite desde su ventana hija, y
+            // exigir que el hwnd sea exactamente el de primer plano descartaría casi todo.
+            if (evento != EVENT_SYSTEM_FOREGROUND)
+            {
+                IntPtr delante = GetForegroundWindow();
+                IntPtr raiz = hwnd == IntPtr.Zero ? IntPtr.Zero : GetAncestor(hwnd, GA_ROOT);
+                if (delante == IntPtr.Zero || (raiz != delante && hwnd != delante)) return;
+            }
+
+            // Los movimientos de posición son los más ruidosos —el cursor de texto emite uno por
+            // parpadeo— así que se les pide un respiro mayor antes de mover nada.
+            int msMinimo = evento == EVENT_OBJECT_LOCATIONCHANGE ? 300 : 90;
+            if ((DateTime.UtcNow - _ultimaLectura).TotalMilliseconds < msMinimo) return;
+
+            Dispatcher.BeginInvoke(() => { _rebote!.Stop(); _rebote.Start(); });
+        };
+
+        foreach (var (a, b) in new[]
+        {
+            (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MOVESIZEEND),
+            (EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE),
+            (EVENT_OBJECT_FOCUS, EVENT_OBJECT_SELECTION),
+            (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
+        })
+        {
+            IntPtr h = SetWinEventHook(a, b, IntPtr.Zero, _alOcurrir, 0, 0, WINEVENT_OUTOFCONTEXT);
+            if (h != IntPtr.Zero) _enganches.Add(h);
+        }
+        LogBus.Log("explorador", $"escuchando la pantalla por eventos ({_enganches.Count} enganches)");
+
+        Closed += (_, __) =>
+        {
+            _rebote?.Stop();
+            foreach (var h in _enganches) { try { UnhookWinEvent(h); } catch { } }
+            _enganches.Clear();
+        };
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+
+    private const uint GA_ROOT = 2;
+
+    private static bool EsNuestraVentana(IntPtr h)
+    {
+        try
+        {
+            GetWindowThreadProcessId(h, out uint pid);
+            return pid == (uint)Environment.ProcessId;
+        }
+        catch { return false; }
+    }
+
     // ── Aristas en tiempo real ───────────────────────────────────────────────
 
     /// <summary>Tipos que son una ACCIÓN al alcance de un clic. El resto es contenido o cromo.</summary>
@@ -404,6 +527,7 @@ public sealed class GraphExplorerWindow : Window
     {
         if (_busy || _reading) return;
         _reading = true;
+        _ultimaLectura = DateTime.UtcNow;
         Task.Run(() =>
         {
             try
