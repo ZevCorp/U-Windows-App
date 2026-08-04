@@ -67,6 +67,20 @@ public sealed class SurfaceMap
         public bool Explored { get; set; }
 
         /// <summary>
+        /// A qué GRUPO pertenece esta salida dentro de su app: "" si a ninguno todavía.
+        ///
+        /// Hoy el sistema deduce un solo grupo y lo hace al vuelo —el cromo, lo que está en todas
+        /// las pantallas— y por eso este campo puede quedarse vacío sin que nada se rompa. Existe
+        /// para lo que viene: que un agente mire una app y diga «esto es la barra de herramientas»,
+        /// «esto el menú de archivo», «esto la navegación lateral», y lo escriba aquí.
+        ///
+        /// Es un campo y no una jerarquía a propósito: agrupar es ETIQUETAR, no mover nada de sitio.
+        /// Una salida sigue estando donde está y llevando a donde lleva; el grupo solo dice con
+        /// quién se lee mejor. Así, quien agrupe mañana no puede romper la navegación de hoy.
+        /// </summary>
+        public string Nivel { get; set; } = "";
+
+        /// <summary>
         /// Cómo se recorre: «click» o «doubleclick». Guardarlo no es un detalle — una carpeta de la
         /// lista solo se abre con doble clic, y una arista que dijera «clic» ahí prometería un
         /// camino que al ejecutarse solo selecciona. La acción es parte de la ruta, no del momento.
@@ -584,14 +598,73 @@ public sealed class SurfaceMap
     }
 
     /// <summary>Las salidas conocidas de una superficie, con acción o sin ella (se dice cuál es cuál).</summary>
+    /// <summary>
+    /// Las salidas de una pantalla: las suyas MÁS las del nivel al que pertenece.
+    ///
+    /// El panel lateral de una app está en todas sus pantallas, pero se anotaba pantalla por
+    /// pantalla en el momento de observarla — y la deducción de a dónde lleva cada botón se hacía
+    /// UNA vez, ahí. Consecuencia: una carpeta observada antes de que se cruzara «Música» se quedaba
+    /// con ese hermano en gris para siempre, mientras otra observada después lo tenía en verde. Se
+    /// veía como que el sistema «conoce» cosas distintas según dónde estés, cuando en realidad la
+    /// app expone lo mismo en todas partes (2026-08-04, observado por el usuario).
+    ///
+    /// Lo que pertenece al nivel se calcula al preguntar, no al observar, así que llega a las
+    /// pantallas viejas igual que a las nuevas: lo aprendido en una beneficia a todas.
+    /// </summary>
     public List<Hop> ExitsFrom(string surface)
     {
         string s = Norm(surface);
-        return Edges().Where(e => string.Equals(e.From, s, StringComparison.OrdinalIgnoreCase))
-                      .Select(e => new Hop(e.From, e.To, e.Info))
-                      .OrderByDescending(h => h.Info.Count)
-                      .ToList();
+        var propias = Edges().Where(e => string.Equals(e.From, s, StringComparison.OrdinalIgnoreCase))
+                             .Select(e => new Hop(e.From, e.To, e.Info))
+                             .ToList();
+
+        var vistas = new HashSet<string>(propias.Select(h => h.Info.Label), StringComparer.OrdinalIgnoreCase);
+        foreach (var h in CromoDe(AppDe(s)))
+            if (h.Info.Label.Length > 0 && !vistas.Contains(h.Info.Label)
+                && !string.Equals(h.To, s, StringComparison.OrdinalIgnoreCase))   // no lleva a sí misma
+                propias.Add(new Hop(s, h.To, h.Info));
+
+        return propias.OrderByDescending(h => h.Info.Count).ToList();
     }
+
+    /// <summary>
+    /// El CROMO de una app: lo que está en todas sus pantallas y lleva siempre al mismo sitio.
+    ///
+    /// Se reconoce por lo que es, sin listas escritas a mano: una salida que lleva al mismo destino
+    /// con el mismo botón desde DOS pantallas distintas ya no describe una pantalla —describe la
+    /// aplicación—. Dos y no una, porque desde una sola no hay forma de distinguir el panel lateral
+    /// de una carpeta que casualmente contiene algo con ese nombre.
+    ///
+    /// Es el primer NIVEL que el sistema deduce solo. La estructura admite más: el día que un agente
+    /// quiera agrupar salidas por otro criterio —«esto es la barra de herramientas», «esto es el menú
+    /// de archivo»— le basta con marcar <see cref="EdgeInfo.Nivel"/> y esto seguirá funcionando
+    /// igual, porque agrupar es etiquetar, no mover nada de sitio.
+    /// </summary>
+    public List<Hop> CromoDe(string app)
+    {
+        if (app.Length == 0) return new List<Hop>();
+        if (_cromo.TryGetValue(app, out var guardado) && _cromoVersion == Version) return guardado;
+
+        var porSalida = new Dictionary<string, (HashSet<string> Origenes, Hop Uno)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (from, to, info) in Edges())
+        {
+            if (EsPuerta(to) || info.Label.Length == 0 || info.Selector.Length == 0) continue;
+            if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)
+                || !AppDe(to).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
+            string clave = info.Label + "\n" + to;
+            if (!porSalida.TryGetValue(clave, out var e))
+                porSalida[clave] = e = (new HashSet<string>(StringComparer.OrdinalIgnoreCase), new Hop(from, to, info));
+            e.Origenes.Add(from);
+        }
+
+        var cromo = porSalida.Values.Where(v => v.Origenes.Count >= 2).Select(v => v.Uno).ToList();
+        if (_cromoVersion != Version) { _cromo.Clear(); _cromoVersion = Version; }
+        _cromo[app] = cromo;
+        return cromo;
+    }
+
+    private readonly Dictionary<string, List<Hop>> _cromo = new(StringComparer.OrdinalIgnoreCase);
+    private int _cromoVersion = -1;
 
     private static string Norm(string id) => (id ?? "").Trim().TrimEnd('/');
 
