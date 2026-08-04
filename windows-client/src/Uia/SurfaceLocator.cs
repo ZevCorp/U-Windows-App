@@ -89,8 +89,14 @@ public sealed class SurfaceLocator : IDisposable
     /// razonar sobre una pantalla que ya no está delante. El botón «ID visible» llamaba aquí para
     /// esconder un badge y apagaba de paso media aplicación (2026-08-04). Si lo que quieres es
     /// dejar de VER el ID, oculta el badge: saber dónde estamos no se negocia.
+    ///
+    /// Es PRIVADO a propósito, y esa es la garantía: no se arregla con cuidado, se arregla haciendo
+    /// que no se pueda. Mientras fue público, un botón de visibilidad lo llamó para esconder un
+    /// badge y apagó de paso el ancla de ubicación, la comprobación de llegadas, el MCP y el
+    /// aprendizaje del terreno. Ahora ningún código de fuera puede apagar el localizador aunque
+    /// quiera: solo <see cref="Dispose"/>, que es el cierre de la aplicación (2026-08-04).
     /// </summary>
-    public void Stop()
+    private void Stop()
     {
         Active = false;
         _timer.Stop();
@@ -113,6 +119,11 @@ public sealed class SurfaceLocator : IDisposable
     {
         try
         {
+            // Y si por lo que sea no estuviera corriendo, se arranca aquí mismo. Segunda red tras
+            // hacer Stop() privado: entre las dos, un localizador apagado deja de ser un estado
+            // alcanzable. Cuesta comprobar un bool; costaba media aplicación no comprobarlo.
+            if (!Active) Start();
+
             IntPtr hwnd = GetForegroundWindow();
             if (hwnd == IntPtr.Zero) return null;
             IntPtr raiz = GetAncestor(hwnd, GA_ROOT);
