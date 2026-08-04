@@ -946,11 +946,17 @@ public sealed class GraphExplorerWindow : Window
             // Pulsar un nivel es IR a esa aplicación. Es la acción natural de la tira —enumera los
             // terrenos disponibles, así que señalarlos y no poder entrar sería enseñar puertas
             // pintadas— y no inventa nada: usa el mismo enfocar-o-abrir que ya usa todo lo demás.
-            string destinoApp = app;
+            // SIN el «.exe»: FocusOrLaunch busca por Process.GetProcessesByName, que quiere el
+            // nombre pelado. Pasándole «claude.exe» no encontraba ningún proceso y se iba a intentar
+            // LANZAR la app —que ya estaba abierta— así que pulsar el nivel no hacía nada visible
+            // (2026-08-04, reportado por el usuario). El identificador de superficie lleva la
+            // extensión; el buscador de procesos, no.
+            string destinoApp = app.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim();
             nivel.MouseLeftButtonUp += (_, __) =>
             {
-                LogBus.Log("explorador", $"nivel pulsado: se va a «{destinoApp}»");
-                try { AppAligner.FocusOrLaunch(destinoApp); } catch { }
+                bool ok = false;
+                try { ok = AppAligner.FocusOrLaunch(destinoApp); } catch { }
+                LogBus.Log("explorador", $"nivel pulsado: «{destinoApp}» → {(ok ? "al frente" : "NO se pudo")}");
             };
             _niveles.Children.Add(nivel);
 
