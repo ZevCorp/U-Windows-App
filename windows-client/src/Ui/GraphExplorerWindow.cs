@@ -857,6 +857,24 @@ public sealed class GraphExplorerWindow : Window
     /// para llegar—. Un grafo de resortes lo taparía moviendo los nodos a donde quepan.
     /// </summary>
     /// <summary>
+    /// A qué NIVEL pertenece una pantalla. Casi siempre es su app, pero no siempre.
+    ///
+    /// El escritorio y el explorador de archivos son el mismo proceso —los dos son explorer.exe—
+    /// así que agrupar por proceso los metía en el mismo nivel, y el sistema los confundía
+    /// (2026-08-04, reportado por el usuario). Como terreno no se parecen en nada: el escritorio es
+    /// una rejilla de accesos directos que abren OTRAS apps; el explorador es un árbol de carpetas.
+    /// Un nivel es un terreno con sus propias reglas de moverse, no un identificador de proceso.
+    /// </summary>
+    private static string NivelDe(string id)
+    {
+        string app = SurfaceMap.AppDe(id);
+        if (app.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase)
+            && id.Contains("/program-manager", StringComparison.OrdinalIgnoreCase))
+            return "escritorio";
+        return app;
+    }
+
+    /// <summary>
     /// La tira de niveles del borde derecho: una aplicación por nivel, la actual encendida.
     ///
     /// Existe porque el filtrado por app resuelve la legibilidad pero crea una pregunta nueva: si
@@ -873,7 +891,7 @@ public sealed class GraphExplorerWindow : Window
         // ordenar por nombre o por tamaño lo borraría.
         var apps = new List<string>();
         foreach (var (f, t, _) in _ultimaCorrida)
-            foreach (var a in new[] { SurfaceMap.AppDe(f), SurfaceMap.AppDe(t) })
+            foreach (var a in new[] { NivelDe(f), NivelDe(t) })
                 if (a.Length > 0 && !apps.Contains(a, StringComparer.OrdinalIgnoreCase)) apps.Add(a);
         if (appActual.Length > 0 && !apps.Contains(appActual, StringComparer.OrdinalIgnoreCase))
             apps.Add(appActual);
@@ -884,7 +902,7 @@ public sealed class GraphExplorerWindow : Window
             string app = apps[i];
             bool aqui = app.Equals(appActual, StringComparison.OrdinalIgnoreCase);
             int pantallas = _map.Nodes.Keys.Count(n =>
-                SurfaceMap.AppDe(n).Equals(app, StringComparison.OrdinalIgnoreCase));
+                NivelDe(n).Equals(app, StringComparison.OrdinalIgnoreCase));
 
             // AL PASAR POR ENCIMA SE ABRE Y ENSEÑA EL NOMBRE. El tooltip no valía: esta ventana
             // nunca se activa —es su gracia—, y sin activarse WPF no llega a mostrarlo, así que el
@@ -981,21 +999,21 @@ public sealed class GraphExplorerWindow : Window
         // terreno: «Nuevo» del explorador al lado de «Bluetooth», sin que nada dijera que para pasar
         // de uno a otro hay que abrir otra app. Filtrando por app, la forma de moverse DENTRO de
         // donde estás se lee sola, y los saltos entre apps se cuentan aparte, en la tira de niveles.
-        string appActual = SurfaceMap.AppDe(_nodoActual.Length > 0
+        string appActual = NivelDe(_nodoActual.Length > 0
             ? _nodoActual
             : (_ultimaCorrida.Count > 0 ? _ultimaCorrida[^1].To : ""));
         DibujarNiveles(appActual);
 
         var traza = appActual.Length == 0
             ? _ultimaCorrida
-            : _ultimaCorrida.Where(h => SurfaceMap.AppDe(h.From).Equals(appActual, StringComparison.OrdinalIgnoreCase)
-                                     && SurfaceMap.AppDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
+            : _ultimaCorrida.Where(h => NivelDe(h.From).Equals(appActual, StringComparison.OrdinalIgnoreCase)
+                                     && NivelDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
                             .ToList();
 
         // Los sitios de ESTE nivel por los que ya se ha pasado, haya saltos o no.
         var pisados = _vistos
             .Where(n => appActual.Length == 0
-                     || SurfaceMap.AppDe(n).Equals(appActual, StringComparison.OrdinalIgnoreCase))
+                     || NivelDe(n).Equals(appActual, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (traza.Count == 0 && pisados.Count == 0)
