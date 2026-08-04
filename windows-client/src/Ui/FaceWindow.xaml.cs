@@ -196,7 +196,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // salto contra un dato que se refresca cada 800 ms convertía una ruta de cinco tramos
             // en varios segundos de espera por algo que ya había pasado.
         {
-            mcp.Map = new SurfaceMapTools(_surfaceMap, () => _locator?.Ahora() ?? _locator?.Current);
+            mcp.Map = new SurfaceMapTools(_surfaceMap, () => _locator?.DondeEstoy());
 
             // La voz en vivo usa EXACTAMENTE estas manos, no unas propias. Darle a la conversación
             // hablada su propio camino para actuar habría significado duplicar el ancla de
@@ -239,7 +239,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // (2026-08-04). Dos caminos que responden «¿dónde estoy?» de forma distinta no es una
         // optimización pendiente: es que uno de los dos está equivocado.
         _loop = new AgentLoop(_backend, _uia, mcp, this, this, InstalledApps.List,
-            () => _locator?.Ahora() ?? _locator?.Current, _workflowRunner);
+            () => _locator?.DondeEstoy(), _workflowRunner);
 
         // Arrastrar por cualquier zona libre de la barra mueve la ventana (la carita tiene sus
         // propios gestos abajo; los botones se tragan el clic, así que no interfieren). DragMove()
@@ -1625,7 +1625,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // ── PASO 2: ¿SAP está delante? ──────────────────────────────────────────
         // Inmediato: de esto depende traer SAP al frente o no, y con el valor cacheado se decidía
         // sobre una pantalla de hasta 800 ms antes.
-        var loc = _locator?.Ahora() ?? _locator?.Current;
+        var loc = _locator?.DondeEstoy();
         bool enSap = loc != null && loc.Origin.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase);
         if (!enSap)
         {
@@ -1637,7 +1637,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             {
                 _focusedRev = _clinical.LastRev;
                 LogBus.Log("clinico", "datos listos y SAP no está delante: se trae al frente");
-                try { await AppAligner.EnsureAsync("sapgui://", () => (_locator?.Ahora() ?? _locator?.Current)?.Origin ?? "", CancellationToken.None); }
+                try { await AppAligner.EnsureAsync("sapgui://", () => _locator?.DondeEstoy()?.Origin ?? "", CancellationToken.None); }
                 catch (Exception e) { LogBus.Log("clinico", $"no se pudo traer SAP al frente: {e.Message}"); }
             }
             return;
@@ -1742,7 +1742,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             await _map.LoadAsync(_directGraph, CancellationToken.None);
             MapBtn.Content = "🗺 Mapa: visible — clic para ocultar";
-            _map.SetCurrent((_locator?.Ahora() ?? _locator?.Current)?.Id ?? "");
+            _map.SetCurrent(_locator?.DondeEstoy()?.Id ?? "");
         }
         catch (Exception ex)
         {
@@ -1769,7 +1769,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // Lectura inmediata también para el MAPEO: el recorrido confirma cada transición esperando
         // dos lecturas estables de la superficie, y contra un valor que se refresca cada 800 ms eso
         // son ~1,6 s de reloj por arista, más que el clic y la carga de la pantalla juntos.
-        _explorer = new GraphExplorerWindow(_surfaceMap, () => _locator?.Ahora() ?? _locator?.Current);
+        _explorer = new GraphExplorerWindow(_surfaceMap, () => _locator?.DondeEstoy());
         _explorer.Closed += (_, __) => { _explorer = null; Dispatcher.Invoke(() => ExplorerBtn.Content = "🕸 Explorar el grafo"); };
         _explorer.Show();
         ExplorerBtn.Content = "🕸 Explorador: visible — clic para cerrar";
@@ -1953,7 +1953,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // se ejecutó sobre la ventana que tuviera el foco — el incidente del 2026-07-26.
             // Lectura inmediata: esta compuerta ata al consciente a UNA app, y atarlo a la de hace
             // 800 ms es justo el fallo que la compuerta existe para evitar.
-            string origin = (_locator?.Ahora() ?? _locator?.Current)?.Origin ?? "";
+            string origin = _locator?.DondeEstoy()?.Origin ?? "";
             LogBus.Log("workflow-ui", "puente consciente: el workflow se detuvo → computer-use retoma"
                 + (origin.Length > 0 ? $" (atado a «{origin}»)" : " · SIN origen conocido: va sin compuerta"));
             SetStatus("El workflow se detuvo — el modo consciente retoma…");

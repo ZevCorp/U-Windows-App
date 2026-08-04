@@ -115,7 +115,30 @@ public sealed class SurfaceLocator : IDisposable
     /// No toca <see cref="Current"/> ni dispara <see cref="Changed"/>: es una consulta, no un
     /// latido. Devuelve null si delante hay una ventana nuestra o no se puede resolver.
     /// </summary>
-    public SurfaceLocation? Ahora()
+    /// <summary>
+    /// DÓNDE ESTOY. La única respuesta a esa pregunta en toda la aplicación.
+    ///
+    /// Existe porque la respuesta tenía dos mitades —calcular en el acto, o el último valor
+    /// confirmado— y cada sitio elegía la suya: siete llamadas escribiendo la misma fórmula a mano,
+    /// y una de ellas se había quedado con solo la mitad cacheada durante meses sin que nadie lo
+    /// notara (2026-08-04). Cuando una pregunta se contesta en siete sitios, tarde o temprano dos
+    /// contestan distinto; y ese día el fallo no parece un fallo, parece que el sistema «a veces se
+    /// confunde».
+    ///
+    /// Se pregunta primero, porque preguntar es inmediato y esperar al siguiente latido cuesta
+    /// hasta 800 ms. Se cae a lo último confirmado solo cuando no se puede resolver — que es el
+    /// caso de tener nuestra propia ventana delante, donde lo correcto es conservar la app real en
+    /// la que estaba el usuario.
+    /// </summary>
+    public SurfaceLocation? DondeEstoy() => Ahora() ?? Current;
+
+    /// <summary>
+    /// El cálculo inmediato. PRIVADO: quien pregunta usa <see cref="DondeEstoy"/>.
+    ///
+    /// No se arregla con cuidado, se arregla haciendo que no se pueda: mientras esto y
+    /// <see cref="Current"/> fueran las dos públicas, elegir mal seguía estando a un descuido.
+    /// </summary>
+    private SurfaceLocation? Ahora()
     {
         try
         {
