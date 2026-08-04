@@ -133,6 +133,33 @@ public sealed class GraphCrawler
     /// tiene, y 6 de 7 navegaciones fallaban sobre un mapa por lo demás correcto (2026-08-03). Una
     /// regla ganada en una app no se exporta a las demás sin verificarla.
     /// </summary>
+    /// <summary>
+    /// Ejecuta algo que habla con OTRO proceso —COM, UIA— con un plazo. Si se pasa, devuelve el
+    /// valor de reserva y sigue.
+    ///
+    /// Hace falta porque estas llamadas pueden no volver NUNCA: mapeando Configuración el
+    /// recorrido se quedó tres minutos sin registrar una sola línea, congelado dentro de una de
+    /// ellas, y ni el botón de detener respondía (2026-08-03). Un cuelgue silencioso es peor que un
+    /// fallo: el fallo se ve y se corrige. Es la misma regla que ya aplicamos al barrido de
+    /// ventanas —fallar rápido es parte de ser honesto— en el último sitio donde faltaba.
+    ///
+    /// El hilo colgado se abandona: no se puede matar sin arriesgar el estado del proceso, y sigue
+    /// bloqueado en su llamada hasta que el sistema la resuelva.
+    /// </summary>
+    private static async Task<T> ConPlazoAsync<T>(Func<T> trabajo, int ms, T reserva, CancellationToken ct)
+    {
+        try
+        {
+            var tarea = Task.Run(trabajo, ct);
+            var cual = await Task.WhenAny(tarea, Task.Delay(ms, ct));
+            if (cual == tarea) return await tarea;
+            LogBus.Log("crawler", $"una llamada al sistema no respondió en {ms} ms; se sigue sin ella");
+            return reserva;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { return reserva; }
+    }
+
     private static bool HayBotonSubir()
     {
         try
@@ -473,9 +500,11 @@ public sealed class GraphCrawler
         if (!EsObjetivoElFrente() && !await EnfocarObjetivoAsync(ct))
             return new List<(string, string, string, string[], bool)>();
 
-        string carpeta = CarpetaEnPrimerPlano();
+        string carpeta = await ConPlazoAsync(() => CarpetaEnPrimerPlano(), 2000, "", ct);
 
-        return await Task.Run(() =>
+        // Leer el árbol de una app grande también puede no volver. Con plazo: una pantalla que no
+        // se deja leer se salta, y el recorrido sigue con las demás en vez de congelarse entero.
+        return await ConPlazoAsync(() =>
         {
             var salidas = new List<(string, string, string, string[], bool)>();
             try
@@ -538,7 +567,7 @@ public sealed class GraphCrawler
             }
             catch { }
             return salidas.Take(30).ToList();
-        }, ct);
+        }, 12000, new List<(string, string, string, string[], bool)>(), ct);
     }
 
     /// <summary>

@@ -197,6 +197,47 @@ public sealed class SurfaceMapTools
         LogBus.Log("mapa-mcp", $"aprendida la subida: '{hijo}' → '{padre}'");
     }
 
+    /// <summary>
+    /// Aprende una app ENTERA: la trae al frente ella sola (o la abre) y la recorre.
+    ///
+    /// Antes, mapear dependía de quién tuviera el foco al pulsar el botón, y eso es frágil hasta el
+    /// absurdo: cualquier ventana que se pusiera delante en ese instante —incluida la de quien
+    /// lanzaba la prueba— hacía que se mapeara la app equivocada (2026-08-03). Decir QUÉ app se
+    /// quiere aprender y que el sistema se encargue del resto es la forma correcta: la intención
+    /// la pone quien pide, no el azar del escritorio.
+    /// </summary>
+    private string LearnApp(string app)
+    {
+        if (app.Length == 0)
+            return "falta `app`: el proceso a aprender (por ejemplo «explorer» o «ApplicationFrameHost»)";
+
+        _ultimaApp = app;
+        if (!AsegurarFoco(app))
+        {
+            // No estaba viva: se abre. Lanzar una app es razonable cuando ALGUIEN LA PIDIÓ por su
+            // nombre; lo que no vale es abrir cosas por iniciativa propia al recuperarse de un fallo.
+            LogBus.Log("mapa-mcp", $"«{app}» no estaba delante; se intenta abrir");
+            AppAligner.FocusOrLaunch(app);
+            if (!AsegurarFoco(app))
+                return $"no pude poner «{app}» delante (ahora hay «{AppEnFrente()}»); no mapeo a ciegas";
+        }
+
+        var loc = _where();
+        if (loc == null || !AppDe(loc.Id).Equals(app, StringComparison.OrdinalIgnoreCase))
+            return $"«{app}» está delante pero la superficie no lo confirma ({loc?.Id}); no mapeo.";
+
+        LogBus.Log("mapa-mcp", $"→ aprender «{app}» desde '{loc.Id}'");
+        var crawler = new GraphCrawler(_map, _where);
+        try
+        {
+            string r = crawler.CrawlAsync(120, 4, System.Threading.CancellationToken.None)
+                              .GetAwaiter().GetResult();
+            LogBus.Log("mapa-mcp", $"← aprender «{app}»: {r}");
+            return $"aprendida «{app}»: {r}";
+        }
+        catch (Exception e) { return $"el recorrido de «{app}» falló: {e.Message}"; }
+    }
+
     /// <summary>¿La app de delante tiene el botón «Subir un nivel»? Solo el explorador lo tiene.</summary>
     private static bool ExisteBotonSubir()
     {
@@ -439,7 +480,7 @@ public sealed class SurfaceMapTools
 
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
-        or "map_type" or "map_unblock" or "map_run";
+        or "map_type" or "map_unblock" or "map_run" or "map_learn_app";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -461,6 +502,7 @@ public sealed class SurfaceMapTools
             "map_take" => Take(A("exit"), A("action"), A("at")),
             "map_type" => Type(A("text"), A("target"), A("at")),
             "map_unblock" => Unblock(A("at"), A("choose")),
+            "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
             _ => $"herramienta de mapa no soportada: {tool}",
         };

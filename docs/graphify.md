@@ -217,6 +217,27 @@ Neo4j para el mapa — no construir el almacén antes que el productor).
   la ventana de delante, no está. `SoloEnFoco` también en el crawler, no solo en la capa MCP.
 - Fecha: 2026-08-03.
 
+### Se aprende una app POR SU NOMBRE, no «la que esté delante»
+- Síntoma: el mapeo arrancaba sobre la app equivocada una y otra vez.
+- Causa: «mapear esta app» dependía de quién tuviera el foco al pulsar el botón, y eso es frágil
+  hasta el absurdo — cualquier ventana que se pusiera delante en ese instante, incluida la de
+  quien lanzaba la prueba, decidía qué se mapeaba.
+- Regla: `map_learn_app` recibe la app, la trae al frente ella sola (o la abre si no está viva) y
+  la recorre. La intención la pone quien pide, no el azar del escritorio. Abrir una app es
+  razonable cuando ALGUIEN LA PIDIÓ por su nombre; lo que no vale es abrir cosas por iniciativa
+  propia al recuperarse de un fallo.
+- Fecha: 2026-08-03. Código: `SurfaceMapTools.LearnApp`.
+
+### Una llamada a otro proceso sin plazo puede congelarlo todo
+- Síntoma: el mapeo se quedó tres minutos sin registrar una sola línea y ni el botón de detener
+  respondía.
+- Causa: las llamadas a COM y a UIA pueden no volver NUNCA. Sin plazo, el recorrido entero queda
+  colgado dentro de una de ellas. Un cuelgue silencioso es peor que un fallo: el fallo se ve.
+- Regla: plazo en todo lo que hable con otro proceso. Si se pasa, se sigue sin ese dato —2 s para
+  preguntar la carpeta abierta— o se salta esa pantalla —12 s para leer su árbol—. El hilo colgado
+  se ABANDONA: matarlo arriesgaría el estado del proceso.
+- Fecha: 2026-08-03. Código: `GraphCrawler.ConPlazoAsync`.
+
 ### Una regla ganada en una app NO se exporta a otra sin verificarla
 - Síntoma: Configuración quedó con 98 rutas correctas y aun así 6 de 7 navegaciones fallaban.
 - Causa: la regla «al bajar a una carpeta, aprende la subida al padre» venía del explorador y se
