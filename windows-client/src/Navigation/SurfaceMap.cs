@@ -668,6 +668,29 @@ public sealed class SurfaceMap
                         .Where(k => { int c = k.IndexOf('\n'); return c > 0 && !EsPuerta(k[(c + 1)..])
                                                                   && !MismaApp(k[..c], k[(c + 1)..]); })
                         .ToList();
+                    // EL ESCRITORIO NUNCA TUVO SECCIONES. Cada icono seleccionado creó su propio
+                    // nodo —«program-manager#docker-desktop», «program-manager#sap-logon-64»…— y con
+                    // ellos aristas que afirmaban que para llegar a un icono hay que pasar por el
+                    // anterior. Nunca fue cierto: todos se alcanzan directamente desde el escritorio.
+                    // La regla nueva ya no los crea; estos son los que quedaron escritos (2026-08-04).
+                    var falsos = map._nodes.Keys
+                        .Where(n => n.Contains("/program-manager#", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    if (falsos.Count > 0)
+                    {
+                        var fuera = new HashSet<string>(falsos, StringComparer.OrdinalIgnoreCase);
+                        foreach (var n in falsos) map._nodes.Remove(n);
+                        foreach (var k in map._edges.Keys.ToList())
+                        {
+                            int c = k.IndexOf('\n');
+                            if (c <= 0) continue;
+                            if (fuera.Contains(k[..c]) || fuera.Contains(k[(c + 1)..])) map._edges.Remove(k);
+                        }
+                        LogBus.Log("mapa", $"curado: {falsos.Count} nodo(s) del escritorio que eran una "
+                            + "selección, no un sitio, eliminados con sus aristas");
+                        map.Save();
+                    }
+
                     if (cruzadas.Count > 0)
                     {
                         foreach (var k in cruzadas) map._edges.Remove(k);

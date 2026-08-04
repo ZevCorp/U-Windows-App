@@ -270,7 +270,17 @@ public sealed class SurfaceLocator : IDisposable
         // seleccionada y la identidad pasaba a «u-prueba-organizar#nueva-carpeta-4», con lo que el
         // ancla rechazaba los 15 pasos siguientes (2026-08-03). Un título con sufijo de app ya trae
         // la pantalla delante; uno que es solo el nombre de la app, no.
-        string seccion = elTituloIdentifica ? "" : SeccionSeleccionada(hwnd);
+        // EL ESCRITORIO NO TIENE SECCIONES: seleccionar un icono no es ir a otro sitio. Sin esta
+        // excepción, cada icono del escritorio creaba su propio nodo —«program-manager#docker-desk»,
+        // «program-manager#sap-logon-64»…— y, como la traza encadena de dónde venías a dónde estás,
+        // el grafo acababa afirmando que para llegar a un icono hay que pasar por el anterior. Es
+        // falso y además caro: todos son alcanzables directamente desde el escritorio, así que
+        // inventaba pasos de navegación que nadie necesita dar (2026-08-04, visto en pantalla).
+        //
+        // La regla de fondo: una sección es un SITIO DISTINTO dentro de la misma ventana; una
+        // selección es qué hay señalado en el sitio donde ya estás. El escritorio solo tiene lo
+        // segundo.
+        string seccion = elTituloIdentifica || EsElEscritorio(hwnd) ? "" : SeccionSeleccionada(hwnd);
         if (seccion.Length > 0 && !seccion.Equals(slug, StringComparison.OrdinalIgnoreCase))
             return new SurfaceLocation($"uia://{proc}.exe/{slug}#{seccion}", $"uia://{proc}.exe", $"/{slug}#{seccion}");
 
@@ -339,6 +349,26 @@ public sealed class SurfaceLocator : IDisposable
     /// vez —ListItem AND IsSelected— porque esto se consulta en cada sondeo y recorrer el árbol
     /// entero aquí costaría segundos.
     /// </summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+    /// <summary>
+    /// ¿Esta ventana es el escritorio? Progman es la ventana del shell; WorkerW es la que Windows
+    /// intercala cuando hay fondo dinámico. Las dos son «el escritorio», que es UN sitio.
+    /// </summary>
+    private static bool EsElEscritorio(IntPtr hwnd)
+    {
+        try
+        {
+            var sb = new StringBuilder(64);
+            GetClassName(hwnd, sb, sb.Capacity);
+            string c = sb.ToString();
+            return c.Equals("Progman", StringComparison.OrdinalIgnoreCase)
+                || c.Equals("WorkerW", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
     private static string SeccionSeleccionada(IntPtr hwnd)
     {
         try

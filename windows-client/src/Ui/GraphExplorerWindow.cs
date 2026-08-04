@@ -420,7 +420,15 @@ public sealed class GraphExplorerWindow : Window
         if (!_busy && aqui.Length > 0
             && !aqui.Equals(_nodoActual, StringComparison.OrdinalIgnoreCase))
         {
-            if (_nodoActual.Length > 0)
+            // CAMBIAR DE SELECCIÓN NO ES MOVERSE. Si las dos identidades son la misma pantalla y
+            // solo cambia el «#sección», no ha habido navegación: sigues donde estabas, señalando
+            // otra cosa. Anotarlo como tramo hacía que el grafo afirmara que para llegar a B hay que
+            // pasar por A, cuando los dos son alcanzables directamente desde donde estás — pasos de
+            // navegación inventados que luego alguien tendría que dar (2026-08-04).
+            bool mismaPantalla = _nodoActual.Length > 0
+                && _nodoActual.Split('#')[0].Equals(aqui.Split('#')[0], StringComparison.OrdinalIgnoreCase);
+
+            if (_nodoActual.Length > 0 && !mismaPantalla)
             {
                 string etiqueta = _map.ExitsFrom(_nodoActual)
                     .FirstOrDefault(h => h.To.Equals(aqui, StringComparison.OrdinalIgnoreCase))
