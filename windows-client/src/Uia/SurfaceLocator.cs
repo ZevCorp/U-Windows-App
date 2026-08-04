@@ -153,7 +153,7 @@ public sealed class SurfaceLocator : IDisposable
             if (raiz != IntPtr.Zero) hwnd = raiz;
 
             string proc = ProcessName(hwnd);
-            if (proc.Equals("U", StringComparison.OrdinalIgnoreCase)) return Current;
+            if (Propio.EsProceso(proc)) return Current;
 
             var sb = new StringBuilder(512);
             GetWindowText(hwnd, sb, sb.Capacity);
@@ -177,7 +177,7 @@ public sealed class SurfaceLocator : IDisposable
         string proc = ProcessName(hwnd);
         // Nuestras propias ventanas (la carita, el badge, el inspector) no son "una superficie":
         // conservan el ID de la app real que el usuario estaba usando.
-        if (proc.Equals("U", StringComparison.OrdinalIgnoreCase)) return;
+        if (Propio.EsProceso(proc)) return;
 
         var sb = new StringBuilder(512);
         GetWindowText(hwnd, sb, sb.Capacity);
@@ -303,7 +303,7 @@ public sealed class SurfaceLocator : IDisposable
         // La regla de fondo: una sección es un SITIO DISTINTO dentro de la misma ventana; una
         // selección es qué hay señalado en el sitio donde ya estás. El escritorio solo tiene lo
         // segundo.
-        string seccion = elTituloIdentifica || EsElEscritorio(hwnd) ? "" : SeccionSeleccionada(hwnd);
+        string seccion = elTituloIdentifica || Escritorio.EsVentana(hwnd) ? "" : SeccionSeleccionada(hwnd);
         if (seccion.Length > 0 && !seccion.Equals(slug, StringComparison.OrdinalIgnoreCase))
             return new SurfaceLocation($"uia://{proc}.exe/{slug}#{seccion}", $"uia://{proc}.exe", $"/{slug}#{seccion}");
 
@@ -372,26 +372,6 @@ public sealed class SurfaceLocator : IDisposable
     /// vez —ListItem AND IsSelected— porque esto se consulta en cada sondeo y recorrer el árbol
     /// entero aquí costaría segundos.
     /// </summary>
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-
-    /// <summary>
-    /// ¿Esta ventana es el escritorio? Progman es la ventana del shell; WorkerW es la que Windows
-    /// intercala cuando hay fondo dinámico. Las dos son «el escritorio», que es UN sitio.
-    /// </summary>
-    private static bool EsElEscritorio(IntPtr hwnd)
-    {
-        try
-        {
-            var sb = new StringBuilder(64);
-            GetClassName(hwnd, sb, sb.Capacity);
-            string c = sb.ToString();
-            return c.Equals("Progman", StringComparison.OrdinalIgnoreCase)
-                || c.Equals("WorkerW", StringComparison.OrdinalIgnoreCase);
-        }
-        catch { return false; }
-    }
-
     private static string SeccionSeleccionada(IntPtr hwnd)
     {
         try

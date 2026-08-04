@@ -269,19 +269,17 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
-    /// ¿Esta superficie es el escritorio y no una ventana de verdad?
+    /// ¿Lo que hay delante NO es una ventana de la app —el escritorio, o algo sin identidad—?
     ///
-    /// Se compara por CONTENIDO y no por final de cadena porque al escritorio le llega su sufijo de
-    /// sección como a cualquier pantalla: con un icono seleccionado, la identidad es
-    /// «program-manager#imágenes-acceso-directo», y comparar por el final no lo reconocía. Se daba
-    /// el escritorio por una ventana del explorador y el modelo se ponía a pasear entre los accesos
-    /// directos buscando Documentos (2026-08-04).
+    /// Qué es el escritorio lo sabe <see cref="Escritorio"/>, para toda la app. Aquí se añade el
+    /// caso propio de abrir una app: una superficie vacía o «/ventana» —una ventana sin título que
+    /// no identifica nada— cuenta igual, porque la decisión que se toma con esto es la misma: abrir
+    /// una ventana de verdad.
     /// </summary>
     private static bool EsEscritorio(string id) =>
         id.Length == 0
-        || id.Contains("/program-manager", StringComparison.OrdinalIgnoreCase)
-        || id.Contains("/ventana", StringComparison.OrdinalIgnoreCase)
-        || id.StartsWith("uia://desktop", StringComparison.OrdinalIgnoreCase);
+        || Escritorio.EsId(id)
+        || id.Contains("/ventana", StringComparison.OrdinalIgnoreCase);
 
     private string LearnApp(string app)
     {

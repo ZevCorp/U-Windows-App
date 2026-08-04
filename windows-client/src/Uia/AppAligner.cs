@@ -85,7 +85,7 @@ public static class AppAligner
     /// </summary>
     public static bool FocusOrLaunch(string proc)
     {
-        if (EsEscritorio(proc)) return Actions.Gestures.ShowDesktop();
+        if (Escritorio.EsProceso(proc)) return Escritorio.Mostrar();
 
         var open = Process.GetProcessesByName(proc).FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
         if (open != null)
@@ -143,10 +143,5 @@ public static class AppAligner
         catch { return false; }
     }
 
-    /// <summary>El escritorio, en las formas en que lo nombran el locator y los workflows.</summary>
-    private static bool EsEscritorio(string proc) =>
-        proc.Equals("desktop", StringComparison.OrdinalIgnoreCase)
-        || proc.Equals("escritorio", StringComparison.OrdinalIgnoreCase)
-        || proc.Equals("program-manager", StringComparison.OrdinalIgnoreCase)
-        || proc.Equals("progman", StringComparison.OrdinalIgnoreCase);
+    // Qué es el escritorio y cómo se llega lo sabe Escritorio, para toda la app.
 }

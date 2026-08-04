@@ -149,7 +149,7 @@ public sealed class SurfaceMap
         // (slug «ventana», 4 visitas fundidas en un nodo cajón de sastre) y la jump list vive en
         // ShellExperienceHost. Ninguno es un lugar al que se pueda "volver": son el pasillo.
         string origen = SurfacePlace.OriginOf(id);
-        bool esPropia = origen.EndsWith("//u.exe", StringComparison.OrdinalIgnoreCase)
+        bool esPropia = Uia.Propio.EsSuperficie(origen)
             || origen.Contains("shellexperiencehost", StringComparison.OrdinalIgnoreCase)
             || id.EndsWith("/ventana", StringComparison.OrdinalIgnoreCase);
 
@@ -674,7 +674,7 @@ public sealed class SurfaceMap
                     // anterior. Nunca fue cierto: todos se alcanzan directamente desde el escritorio.
                     // La regla nueva ya no los crea; estos son los que quedaron escritos (2026-08-04).
                     var falsos = map._nodes.Keys
-                        .Where(n => n.Contains("/program-manager#", StringComparison.OrdinalIgnoreCase))
+                        .Where(n => Uia.Escritorio.EsId(n) && n.Contains('#'))
                         .ToList();
                     if (falsos.Count > 0)
                     {

@@ -516,15 +516,7 @@ public sealed class GraphExplorerWindow : Window
 
     private const uint GA_ROOT = 2;
 
-    private static bool EsNuestraVentana(IntPtr h)
-    {
-        try
-        {
-            GetWindowThreadProcessId(h, out uint pid);
-            return pid == (uint)Environment.ProcessId;
-        }
-        catch { return false; }
-    }
+    private static bool EsNuestraVentana(IntPtr h) => Propio.EsVentana(h);
 
     // ── Aristas en tiempo real ───────────────────────────────────────────────
 
@@ -563,7 +555,7 @@ public sealed class GraphExplorerWindow : Window
     {
         // La UI de Ü delante (este panel incluido): congelar lo último útil en vez de listarse a
         // sí misma — el observador no es terreno, regla vieja ya.
-        if (proc.Equals("U", StringComparison.OrdinalIgnoreCase)) return;
+        if (Propio.EsProceso(proc)) return;
 
         var loc = _where();
         string aqui = loc?.Id ?? "";
@@ -906,18 +898,7 @@ public sealed class GraphExplorerWindow : Window
         bool ok = false;
         try
         {
-            if (nivel.Equals("escritorio", StringComparison.OrdinalIgnoreCase))
-            {
-                // NADA DE ATAJOS DE TECLADO AQUÍ. Mostrar el escritorio se hacía con un Win+D
-                // sintético, y esto se pulsa MANTENIENDO Ctrl+Shift —es la única forma de que la
-                // capa acepte el ratón—, así que lo que llegaba al sistema era Ctrl+Shift+Win+D:
-                // un atajo que no existe, y de ahí el pitido de error (2026-08-04). El shell lo sabe
-                // hacer por COM, sin teclas y sin importar qué haya oprimido el usuario.
-                var shell = Activator.CreateInstance(Type.GetTypeFromProgID("Shell.Application")!);
-                shell?.GetType().InvokeMember("MinimizeAll",
-                    System.Reflection.BindingFlags.InvokeMethod, null, shell, null);
-                ok = shell != null;
-            }
+            if (Escritorio.EsProceso(nivel)) ok = Escritorio.Mostrar();
             else if (nivel.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase))
             {
                 // Una ventana de archivos de verdad: CabinetWClass. Si no hay ninguna abierta, se
@@ -995,11 +976,8 @@ public sealed class GraphExplorerWindow : Window
     /// </summary>
     private static string NivelDe(string id)
     {
-        string app = SurfaceMap.AppDe(id);
-        if (app.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase)
-            && id.Contains("/program-manager", StringComparison.OrdinalIgnoreCase))
-            return "escritorio";
-        return app;
+        if (Escritorio.EsId(id)) return "escritorio";
+        return SurfaceMap.AppDe(id);
     }
 
     /// <summary>

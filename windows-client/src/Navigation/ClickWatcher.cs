@@ -215,7 +215,7 @@ public sealed class ClickWatcher : IDisposable
             // al explorador, que no describe nada. Misma regla que ya rige para los nodos.
             try
             {
-                if (el.Current.ProcessId == Environment.ProcessId) return;
+                if (el.Current.ProcessId == Environment.ProcessId) return;   // lo nuestro no es terreno (ver Uia.Propio)
             }
             catch { }
 
