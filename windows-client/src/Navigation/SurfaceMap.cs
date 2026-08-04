@@ -519,6 +519,26 @@ public sealed class SurfaceMap
         Save();
     }
 
+    /// <summary>
+    /// Esta puerta ya no está: se le quita la acción para que deje de usarse al trazar rutas.
+    ///
+    /// El terreno cambia —una carpeta se borra, un botón desaparece— y el mapa seguía enrutando por
+    /// ahí: `map_go_to` intentaba pasar por sitios muertos y acababa en «Ubicación no disponible»
+    /// (2026-08-03). Se olvida la ACCIÓN, no el nodo ni la conectividad: que un sitio no se pueda
+    /// alcanzar hoy por esta puerta no prueba que el sitio no exista, y borrarlo entero haría que el
+    /// mapa se vaciara solo con cualquier fallo pasajero. Solo se olvida tras COMPROBAR la ausencia.
+    /// </summary>
+    public void OlvidarAccion(string from, string to)
+    {
+        string k = Norm(from) + "\n" + Norm(to);
+        if (!_edges.TryGetValue(k, out var e) || e.Selector.Length == 0) return;
+        LogBus.Log("mapa", $"«{e.Label}» ya no está en '{ShortId(Norm(from))}': se deja de enrutar por ahí");
+        e.Selector = ""; e.Alternatives = Array.Empty<string>(); e.ClickPos = "";
+        e.Explored = false;
+        Version++;
+        Save();
+    }
+
     // ── Consulta y rutas (lo que el asistente ve por MCP) ────────────────────
 
     /// <summary>Un tramo de ruta: a dónde lleva y con qué acción. Sin acción = no recorrible.</summary>

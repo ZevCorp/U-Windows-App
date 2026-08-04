@@ -40,6 +40,12 @@ public sealed class SurfaceMapTools
     /// para qué apareció, y «continuar o no» depende justamente de eso.</summary>
     private string _ultimaAccion = "";
 
+    /// <summary>Ya estamos volviendo a la ubicación esperada: la vuelta no puede pedir otra vuelta.</summary>
+    private bool _reanudando;
+
+    /// <summary>Ya estamos buscando un camino alternativo: un solo reintento, no una cadena.</summary>
+    private bool _reenrutando;
+
     /// <summary>
     /// A dónde llevaría «Atrás» AHORA MISMO. Estado efímero de la sesión, nunca una arista.
     ///
@@ -424,11 +430,63 @@ public sealed class SurfaceMapTools
         // Si lo que bloquea es un diálogo, decir CUÁL. «No estás donde creías» obliga a investigar;
         // «hay este diálogo delante, con estas opciones» se puede resolver en el acto. Un rechazo
         // honesto que además explica la causa es la diferencia entre pararse y poder continuar.
+        // UN AVISO CON UNA SOLA SALIDA NO ES UNA DECISIÓN: es un trámite. Cuando el diálogo no
+        // ofrece elección, escalarlo al consciente no aporta nada y sí mata la tarea — se detectó
+        // «Ubicación no disponible», se describió correctamente, y como nadie lo cerró las 27
+        // acciones siguientes se rechazaron una tras otra (2026-08-03). En cuanto hay DOS opciones
+        // sigue siendo del consciente, que es la regla que ya teníamos: aquí no se elige nada.
+        var (_, _, opcionesAhora) = LeerInterrupcion();
+        if (!_reanudando && opcionesAhora.Count > 0 && OpcionSegura(opcionesAhora).Length > 0)
+        {
+            _reanudando = true;
+            try
+            {
+                LogBus.Log("mapa-mcp", "aviso de una sola salida delante: se cierra y se reanuda");
+                Unblock(esperada, "");
+                string tras = _where()?.Id ?? "";
+                if (string.Equals(tras, esperada, StringComparison.OrdinalIgnoreCase))
+                {
+                    LogBus.Log("mapa-mcp", $"✓ reanudado tras el aviso: de vuelta en «{esperada}»");
+                    return "";
+                }
+            }
+            catch (Exception e) { LogBus.Log("mapa-mcp", $"al cerrar el aviso: {e.Message}"); }
+            finally { _reanudando = false; }
+        }
+
         string interrupcion = DescribirInterrupcion();
         if (interrupcion.Length > 0)
             return $"NO actúo: creías estar en «{esperada}» y lo que hay delante es otra cosa.\n{interrupcion}";
 
-        return $"NO actúo: creías estar en «{esperada}» pero estamos en «{aqui}». "
+        // RESOLVER UN BLOQUEO Y REANUDAR LA TAREA SON DOS COSAS DISTINTAS, y solo estaba la primera.
+        // Medido el 2026-08-03: apareció «Ubicación no disponible», se detectó, se pulsó «Aceptar»
+        // correctamente… y el explorador quedó en «Notas». A partir de ahí el ancla rechazó 27
+        // acciones seguidas —bien, cero daño— pero la tarea murió ahí mismo. Estar desplazado dentro
+        // de la MISMA app y sin nada delante no es motivo para abandonar: es motivo para volver.
+        //
+        // Volver es navegación por el mapa, no la acción pedida: se usan rutas ya conocidas, se
+        // COMPRUEBA la llegada, y si no se llega se rechaza igual que antes. El rechazo sigue siendo
+        // la red; deja de ser lo único.
+        if (!_reanudando && aqui.Length > 0 && SurfaceMap.MismaApp(aqui, esperada))
+        {
+            _reanudando = true;
+            try
+            {
+                LogBus.Log("mapa-mcp", $"desplazados a «{aqui}»; se intenta volver a «{esperada}» por el mapa");
+                GoTo(esperada);
+                string tras = _where()?.Id ?? "";
+                if (string.Equals(tras, esperada, StringComparison.OrdinalIgnoreCase))
+                {
+                    LogBus.Log("mapa-mcp", $"✓ reanudado: de vuelta en «{esperada}», la tarea sigue");
+                    return "";
+                }
+                LogBus.Log("mapa-mcp", $"no se pudo volver a «{esperada}»; seguimos en «{tras}»");
+            }
+            catch (Exception e) { LogBus.Log("mapa-mcp", $"al intentar volver: {e.Message}"); }
+            finally { _reanudando = false; }
+        }
+
+        return $"NO actúo: creías estar en «{esperada}» pero estamos en «{aqui}», y no he sabido volver. "
              + "Algo salió distinto en un paso anterior; comprueba dónde estás antes de seguir.";
     }
 
@@ -702,8 +760,25 @@ public sealed class SurfaceMapTools
     /// intentando, y eso solo lo sabe quien tiene la intención (2026-08-03, corregido por el
     /// usuario). Se prefiere preguntar a acertar por casualidad.
     /// </summary>
-    private static string OpcionSegura(List<string> opciones) =>
-        opciones.Count == 1 ? opciones[0] : "";
+    /// <remarks>
+    /// La X del título NO es una opción: es la salida. Contarla como tal hacía que un aviso con un
+    /// solo botón —«Ubicación no disponible», con «Aceptar» y la X— pareciera una decisión de dos
+    /// caminos, así que se escalaba al consciente, nadie lo cerraba y el diálogo se quedaba delante
+    /// envenenando todas las corridas siguientes (2026-08-03, visto en pantalla). Las opciones son
+    /// lo que el aviso PROPONE, no las formas de deshacerse de él.
+    /// </remarks>
+    private static string OpcionSegura(List<string> opciones)
+    {
+        var reales = opciones.Where(o => !EsSalidaDeVentana(o)).ToList();
+        return reales.Count == 1 ? reales[0] : "";
+    }
+
+    /// <summary>¿Esta «opción» es en realidad el cierre de la ventana y no una respuesta?</summary>
+    private static bool EsSalidaDeVentana(string etiqueta) =>
+        etiqueta.Equals("Cerrar", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Equals("Close", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Equals("Minimizar", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.Equals("Maximizar", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Si delante hay un DIÁLOGO, lo describe como lo que es: una interrupción con una pregunta y
@@ -981,8 +1056,31 @@ public sealed class SurfaceMapTools
             };
 
             if (!_uia.Execute(paso, out string error))
+            {
+                // Lo que no está tras esperar a que la pantalla se asiente, no está: se deja de
+                // enrutar por esa puerta y se intenta OTRO camino. Antes se insistía por el mismo
+                // sitio muerto hasta acabar en «Ubicación no disponible» (2026-08-03).
+                bool ausente = error.Contains("no se encontró", StringComparison.OrdinalIgnoreCase);
+                if (ausente) { EsperarPantallaLista(1200); ausente = !_uia.Execute(paso, out error); }
+                if (ausente)
+                {
+                    _map.OlvidarAccion(h.From, h.To);
+                    if (!_reenrutando)
+                    {
+                        _reenrutando = true;
+                        try
+                        {
+                            LogBus.Log("mapa-mcp", $"«{h.Info.Label}» ya no está; se busca otro camino hacia «{destino}»");
+                            return GoTo(destino);
+                        }
+                        finally { _reenrutando = false; }
+                    }
+                    return $"tramo {i + 1}/{ruta.Count}: «{h.Info.Label}» ya no existe y no hay otro camino "
+                         + $"hacia «{destino}». El recorrido se detuvo en «{_where()?.Id}».";
+                }
                 return $"tramo {i + 1}/{ruta.Count}: no se pudo pulsar «{h.Info.Label}» ({error}). "
                      + $"El recorrido se detuvo en «{_where()?.Id}».";
+            }
 
             // La llegada se COMPRUEBA, no se supone. Sin esto, una acción equivocada —y el mapa
             // tiene ~1 de cada 5— dejaría al modelo creyendo que está donde no está.
@@ -1246,8 +1344,26 @@ public sealed class SurfaceMapTools
             bool abreMenu = PuedeAbrirMenu(elegida.Info.Label);
             EsperarPantallaLista(abreMenu ? 900 : 1200);
             string tras = EsperarCambio(desde, 200);
+            // ABRIR UN MENÚ Y QUE SE ABRA SON LO MISMO: si no se abrió, la acción NO se hizo. Antes
+            // esto solo se anotaba en el log y se devolvía «✓ ejecuté Nuevo», así que el paso
+            // siguiente pedía «Carpeta», no la encontraba, y el grupo entero moría arrastrando a los
+            // demás. Es «aceptado ≠ ejecutado» en su forma más pura: el clic se aceptó y no pasó
+            // nada. Se reintenta UNA vez —el primer intento tras cambiar de carpeta es el que más
+            // falla, con la barra aún asentándose— y si sigue sin abrirse se dice (2026-08-03).
             if (abreMenu && !EsperarMenu(1500, menusAntes))
-                LogBus.Log("mapa-mcp", $"«{elegida.Info.Label}» no llegó a abrir menú (seguía habiendo {menusAntes})");
+            {
+                LogBus.Log("mapa-mcp", $"«{elegida.Info.Label}» no llegó a abrir menú (seguía habiendo {menusAntes}); se reintenta");
+                EsperarPantallaLista(1200);
+                if (_uia.Execute(paso, out _) && EsperarMenu(1800, menusAntes))
+                    LogBus.Log("mapa-mcp", $"✓ «{elegida.Info.Label}» abrió el menú al segundo intento");
+                else
+                {
+                    LogBus.Log("mapa-mcp", $"NO SE ABRIÓ: «{elegida.Info.Label}» no despliega su menú");
+                    return $"pulsé «{elegida.Info.Label}» dos veces y su menú no llegó a abrirse. "
+                         + "No sigo como si lo hubiera hecho: el paso siguiente buscaría una opción "
+                         + "que no está delante. Estamos en «" + (_where()?.Id ?? desde) + "».";
+                }
+            }
             LogBus.Log("mapa-mcp", $"✓ acción «{elegida.Info.Label}» ejecutada" + (tras.Length > 0 ? $" → {tras}" : ""));
 
             // Se relee SIEMPRE: una acción suele destapar cosas nuevas —un menú, un diálogo— en la
