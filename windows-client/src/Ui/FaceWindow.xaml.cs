@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
 using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Agent;
@@ -86,16 +87,30 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // la telemetría de "Windows Live" arranque con el usuario correcto.
         EnsureOnboarded();
 
-        // Esquina inferior derecha por defecto. El panel crece hacia arriba (ver OnSizeChanged) cuando
-        // se abre un Expander (p.ej. "Backend"): sin esto, ResizeMode="NoResize" con altura fija
-        // recortaba el contenido expandido y quedaba invisible.
-        var wa = SystemParameters.WorkArea;
-        Left = wa.Right - Width - 24;
-        Top = wa.Bottom - ActualHeight - 24;
-        MaxHeight = wa.Height - 48; // al llegar al tope vertical, el globo hace scroll (ver Bubble)
-        SizeChanged += OnSizeChanged;
+        MaxHeight = SystemParameters.WorkArea.Height - 48; // al llegar al tope, el globo hace scroll
+        ColocarVentana();
+
+        // El reanclaje se engancha DESPUÉS del primer layout completo, no aquí.
+        //
+        // Con SizeToContent la ventana sigue asentando su tamaño después de Loaded, y OnSizeChanged
+        // no puede distinguir «el contenido terminó de medirse» de «el usuario abrió el menú»: trata
+        // el asentamiento como un crecimiento y desplaza la ventana para mantener el borde derecho.
+        // Medido: 20 px de deriva por arranque, acumulándose hasta pegarse al borde. Se recoloca una
+        // última vez con el tamaño ya definitivo y ahí sí se escucha.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            ColocarVentana();
+            RefreshBarSide();          // si quedó a la izquierda, el layout se espeja antes de verse
+            SizeChanged += OnSizeChanged;
+            RefreshRestingChevron();   // ya se puede medir el hueco: el chevron dice hacia dónde abrirá
+        }), System.Windows.Threading.DispatcherPriority.Loaded);
 
         UpdateBackendStatus();
+        // El semáforo se repinta solo cada vez que alguien habla con Graph, venga de donde venga.
+        // Llega desde la continuación HTTP, no del Dispatcher: hay que marshalear, como ya hace
+        // _updater.UpdateReady. Y hay que soltarlo al cerrar: es un evento ESTÁTICO.
+        GraphHealth.Changed += OnGraphHealthChanged;
+        Closed += (_, __) => GraphHealth.Changed -= OnGraphHealthChanged;
         UpdateVideoLlmToggle();
         SetMuted(_config.Muted); // si lo silenciaron en una sesión anterior, sigue mudo
 
@@ -192,13 +207,34 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _loop = new AgentLoop(_backend, _uia, mcp, this, this, InstalledApps.List,
             () => _locator?.Current, _workflowRunner);
 
-        // Arrastrar por el texto de estado mueve el panel (la carita tiene sus propios gestos abajo).
-        Header.MouseLeftButtonDown += (_, ev) => { if (ev.ButtonState == MouseButtonState.Pressed) DragMove(); };
+        // Arrastrar por cualquier zona libre de la barra mueve la ventana (la carita tiene sus
+        // propios gestos abajo; los botones se tragan el clic, así que no interfieren). DragMove()
+        // es bloqueante y retorna al soltar, así que ahí mismo se anota dónde quedó.
+        void OnDragSurface(object _, MouseButtonEventArgs ev)
+        {
+            if (ev.ButtonState != MouseButtonState.Pressed) return;
+            DragMove();   // bloqueante: retorna al soltar
+            // Y de ahí se va a un lado, igual que si lo hubieras arrastrado por la carita. Sin
+            // velocidad que medir (DragMove no la da), así que manda el borde más cercano.
+            EdgeSnap.Aplicar(this, 0, 0, OnWindowMoved);
+        }
+        BarPanel.MouseLeftButtonDown += OnDragSurface;
+        TalkPanel.MouseLeftButtonDown += OnDragSurface;
+
+        // El menú extendido: hover/clic/teclado sobre el activador, cierre con retraso, Backend
+        // plegado. Toda la coreografía vive en la región «menú extendido» de abajo.
+        WireMenu();
 
         // La carita colapsada SIGUE al cursor automatizado durante la ejecución de workflows: se ve
         // "quién" está haciendo los clics. Evento estático de UiaSurface; se suelta al cerrar.
         UiaSurface.CursorMoved += OnAutomationCursorMoved;
         Closed += (_, __) => UiaSurface.CursorMoved -= OnAutomationCursorMoved;
+
+        // La voz ya dice cuándo está escuchando y cuándo hablando (antes no lo decía nadie y la UI lo
+        // simulaba escribiendo «Escuchando…» y cruzando los dedos). Llega desde el hilo del motor de
+        // voz, así que RefreshMood marshalea por dentro.
+        _voice.ActivityChanged += (_, __) => RefreshMood();
+        Closed += (_, __) => _voice.Dispose();
 
         LoadSounds();
         WireFaceGestures();
@@ -290,10 +326,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _updater = new Updater(_config.UpdateFeedUrl);
         VersionText.Text = $"Versión {_updater.CurrentVersion}";
         // UpdateReady llega desde un hilo del pool, no del Dispatcher: tocar la UI directo reventaría.
+        // En la barra el botón es solo el icono ⬇; la versión concreta va en el tooltip.
         _updater.UpdateReady += version => Dispatcher.Invoke(() =>
         {
-            UpdateBtn.Content = $"⬇ Versión {version} lista — reiniciar";
-            UpdateBtn.Visibility = Visibility.Visible;
+            UpdateBtn.ToolTip = $"Versión {version} lista — clic para reiniciar (si no, se instala sola al cerrar Ü)";
+            ShowUpdate(true);
         });
         _updater.Start();
     }
@@ -314,6 +351,71 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         base.OnClosed(e);
     }
 
+    // ── Atajos globales: llamar a Ü sin soltar SAP ────────────────────────────────────────────
+
+    private readonly GlobalHotkeys _hotkeys = new();
+    private IntPtr _prevForeground;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    /// <summary>El HWND existe a partir de aquí: es el momento de registrar las combinaciones.</summary>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        _hotkeys.Attach(this, InvocarPorAtajo, MicPorAtajo);
+        Closed += (_, __) => _hotkeys.Dispose();
+        // Los tooltips dicen el atajo que quedó ACTIVO, no el que se pretendía: si el preferido
+        // estaba ocupado y anunciáramos ese, el usuario pulsaría algo que no hace nada.
+        foreach (string s in _hotkeys.Activos)
+        {
+            if (s.Contains("invocar")) MenuActivator.ToolTip = $"Más herramientas (hover abre · clic fija · Esc cierra) · {s.Split(' ')[0]} llama a Ü";
+            if (s.Contains("micrófono")) MicBtn.ToolTip = $"Hablarle a Ü · {s.Split(' ')[0]}";
+        }
+        if (_hotkeys.Resumen.Length > 0) HotkeyStatus.Text = _hotkeys.Resumen;
+    }
+
+    /// <summary>
+    /// Trae a Ü al frente con el cursor ya dentro de la caja de texto. No mueve la ventana a
+    /// propósito: el usuario la dejó donde la dejó, y reubicarla pisaría la posición que se persiste.
+    /// </summary>
+    private void InvocarPorAtajo()
+    {
+        _prevForeground = GetForegroundWindow();   // para poder devolver el teclado con Esc
+        if (_collapsed) ToggleCollapsed();
+        Show();
+        Activate();
+        ShowTalk(focusInput: true);   // el mismo camino que ya usa AskAsync; no se duplica el foco
+        if (!IsActive)
+            // Si esto sale en el registro de la máquina del hospital, hará falta el rodeo de
+            // SetForegroundWindow + AttachThreadInput. No se implementa por adelantado: que la
+            // necesidad la demuestre el log y no una teoría.
+            LogBus.Log("atajo", "Activate() no trajo la ventana al frente");
+    }
+
+    private void MicPorAtajo()
+    {
+        _prevForeground = GetForegroundWindow();
+        if (_collapsed) ToggleCollapsed();
+        Show();
+        Activate();
+        OnMic(this, new RoutedEventArgs());
+    }
+
+    /// <summary>
+    /// Devuelve el teclado a donde estaba. Sin esto, el operador que invoca a Ü y se arrepiente tiene
+    /// que buscar SAP con el ratón — justo lo que el atajo venía a evitar.
+    /// </summary>
+    private void DevolverElFoco()
+    {
+        if (_prevForeground == IntPtr.Zero) return;
+        try { SetForegroundWindow(_prevForeground); } catch { }
+        _prevForeground = IntPtr.Zero;
+    }
+
     /// <summary>
     /// Mantiene fija la esquina inferior derecha: si la ventana cambia de tamaño (Expander abierto,
     /// o colapsar a solo la carita) crece/encoge hacia arriba y hacia la izquierda, sin mover esa
@@ -322,14 +424,184 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (e.PreviousSize.Width > 0) Left += e.PreviousSize.Width - e.NewSize.Width;
-        if (e.PreviousSize.Height > 0) Top += e.PreviousSize.Height - e.NewSize.Height;
+        // El borde clavado es el del lado donde vive la barra: a la derecha, el menú y el globo crecen
+        // hacia la izquierda y hay que compensar; a la izquierda crecen hacia la derecha y no hay nada
+        // que compensar, porque el borde izquierdo ya está donde tiene que estar.
+        if (!_barLeft && e.PreviousSize.Width > 0) Left += e.PreviousSize.Width - e.NewSize.Width;
+
+        // El vertical depende de hacia dónde crece el menú. Con el menú hacia arriba se ancla el
+        // borde inferior (la barra no se mueve y el panel sube). Con el menú hacia abajo hay que
+        // anclar el SUPERIOR: mantener el inferior empujaría la barra hacia arriba, que es peor que
+        // el problema que la apertura hacia abajo venía a resolver.
+        if (!_menuDown && e.PreviousSize.Height > 0) Top += e.PreviousSize.Height - e.NewSize.Height;
 
         // Nunca dejar la ventana fuera del área de trabajo (p.ej. al crecer cerca de un borde).
         var wa = SystemParameters.WorkArea;
-        Left = Math.Clamp(Left, wa.Left, Math.Max(wa.Left, wa.Right - e.NewSize.Width));
-        Top = Math.Clamp(Top, wa.Top, Math.Max(wa.Top, wa.Bottom - e.NewSize.Height));
+        MoveTo(Math.Clamp(Left, wa.Left, Math.Max(wa.Left, wa.Right - e.NewSize.Width)),
+               Math.Clamp(Top, wa.Top, Math.Max(wa.Top, wa.Bottom - e.NewSize.Height)));
+
+        // Si la barra cambió de zona de la pantalla, el chevron en reposo puede estar prometiendo una
+        // dirección que ya no es la que va a tomar el menú.
+        if (!_menuOpen) RefreshRestingChevron();
     }
+
+    /// <summary>
+    /// Recalcula hacia dónde apuntaría el chevron con el menú cerrado. Barato, y evita que la flecha
+    /// mienta sobre dónde va a nacer el menú.
+    /// </summary>
+    private void RefreshRestingChevron()
+    {
+        if (_menuOpen) return;
+        bool down = ShouldOpenDown();
+        if (down == _menuDown) return;
+        ApplyMenuDirection(down);
+        UpdateChevron();
+    }
+
+    /// <summary>
+    /// Coloca la ventana donde el usuario la dejó, o en la esquina inferior derecha si no hay nada
+    /// guardado. Es idempotente a propósito: se llama al cargar y otra vez cuando el tamaño ya es el
+    /// definitivo (ver <see cref="OnLoaded"/>).
+    ///
+    /// <c>ActualWidth</c> y no <c>Width</c>: con <c>SizeToContent</c>, <c>Width</c> es <c>NaN</c>.
+    /// </summary>
+    private void ColocarVentana()
+    {
+        // El tamaño tiene que ser el definitivo ANTES de medir con él: con SizeToContent, un
+        // ActualWidth a medio asentar coloca la ventana a un puñado de píxeles de donde debía.
+        UpdateLayout();
+
+        var wa = SystemParameters.WorkArea;
+        bool mismaPantalla =
+            _config.SavedWorkAreaWidth is double sw && Math.Abs(sw - wa.Width) < 1 &&
+            _config.SavedWorkAreaHeight is double sh && Math.Abs(sh - wa.Height) < 1;
+
+        double top;
+        double left;
+
+        if (_config.WindowLeft is double savedL && _config.WindowTop is double savedT && mismaPantalla)
+        {
+            left = savedL;
+            top = savedT;
+        }
+        else
+        {
+            // Si la pantalla cambió, se DESCARTA y se dice. Remapear proporcionalmente sería adivinar
+            // dónde la habría querido el usuario en una pantalla que nunca ha visto.
+            if (_config.WindowLeft != null && !mismaPantalla && !_avisóDelDescarte)
+            {
+                _avisóDelDescarte = true;
+                LogBus.Log("ui", $"posición guardada descartada: el área de trabajo es ahora "
+                                + $"{wa.Width:0}x{wa.Height:0} y se guardó en "
+                                + $"{_config.SavedWorkAreaWidth:0}x{_config.SavedWorkAreaHeight:0}");
+            }
+            left = wa.Right;                        // el borde: lo pega el ajuste de abajo
+            top = wa.Bottom - ActualHeight - 24;
+        }
+
+        // Al arrancar también se pega a un lado, pase lo que pase. Dos motivos: un config viejo puede
+        // traer una posición de en medio (el margen de 24 px del sitio por defecto era justo eso), y
+        // una posición guardada en una sesión anterior puede haber quedado descolgada del borde al
+        // cambiar el tamaño de la barra. Si la regla es «Ü vive en un lado», el arranque la cumple.
+        double centro = left + ActualWidth / 2;
+        left = centro >= (wa.Left + wa.Right) / 2
+            ? Math.Max(wa.Left, wa.Right - ActualWidth)
+            : wa.Left;
+
+        top = Math.Clamp(top, wa.Top, Math.Max(wa.Top, wa.Bottom - ActualHeight));
+        MoveTo(left, top);
+
+        // Aserción viva: colocar la ventana depende de tres cosas que cambian solas (el tamaño ya
+        // asentado, el área de trabajo y lo guardado). Cuando alguna falla, el síntoma es «aparece
+        // en un sitio raro», que no se distingue de nada. Esto lo hace legible en el registro.
+        LogBus.Log("ui", $"colocada en ({left:0},{top:0}) · tamaño {ActualWidth:0}x{ActualHeight:0} · "
+                       + $"guardado=({_config.WindowLeft:0},{_config.WindowTop:0}) "
+                       + $"mismaPantalla={mismaPantalla} · área {wa.Width:0}x{wa.Height:0}");
+    }
+
+    private bool _avisóDelDescarte;
+
+    /// <summary>
+    /// Mueve la ventana DE VERDAD. Hay que pasar por aquí siempre.
+    ///
+    /// Lanzar la carita a un borde deja una animación sobre <c>Left</c>/<c>Top</c> con
+    /// <c>FillBehavior.HoldEnd</c> (ver <see cref="FaceGestures.FlingToEdge"/>), y mientras esa
+    /// animación está retenida WPF IGNORA cualquier asignación directa a esas propiedades. El
+    /// síntoma es desconcertante porque no falla nada: simplemente la ventana deja de obedecer.
+    ///
+    /// Eso ya rompía dos cosas antes de que existiera este helper —la carita colapsada dejaba de
+    /// seguir al cursor automatizado después de un lanzamiento, y el reanclaje de tamaño no
+    /// reanclaba— y ninguna de las dos daba error. Tres sitios con la misma clase de fallo.
+    /// </summary>
+    private void MoveTo(double left, double top)
+    {
+        BeginAnimation(LeftProperty, null);
+        BeginAnimation(TopProperty, null);
+        Left = left;
+        Top = top;
+    }
+
+    // --- Recordar dónde dejó el usuario la barra ---
+    //
+    // Solo se guardan los movimientos que el usuario QUISO: soltar un arrastre y asentar un gesto de
+    // la carita. Los otros dos orígenes se ignoran a propósito:
+    //   · OnSizeChanged mueve la ventana cada vez que se abre el menú o el globo — eso es layout, no
+    //     intención, y guardarlo desplazaría la barra un poco en cada arranque.
+    //   · OnAutomationCursorMoved la mueve DECENAS DE VECES POR SEGUNDO mientras corre un workflow;
+    //     persistir eso dejaría la barra en un punto aleatorio de SAP el próximo arranque.
+
+    private System.Windows.Threading.DispatcherTimer? _saveTimer;
+
+    /// <param name="left">Destino final. En un lanzamiento NO se puede leer <c>Left</c>: vale lo de
+    /// antes hasta que termine la animación.</param>
+    private void SavePositionSoon(double left, double top)
+    {
+        var wa = SystemParameters.WorkArea;
+        _config.WindowLeft = left;
+        _config.WindowTop = top;
+        _config.SavedWorkAreaWidth = wa.Width;
+        _config.SavedWorkAreaHeight = wa.Height;
+        LogBus.Log("ui", $"posición anotada: ({left:0},{top:0})");
+
+        // Escribir a disco en cada gesto es barato pero innecesario; el debounce fusiona el par
+        // «asentar + lanzar» en una sola escritura.
+        if (_saveTimer == null)
+        {
+            _saveTimer = new System.Windows.Threading.DispatcherTimer(
+                System.Windows.Threading.DispatcherPriority.Background)
+            { Interval = TimeSpan.FromMilliseconds(700) };
+            _saveTimer.Tick += (_, __) => { _saveTimer!.Stop(); _config.Save(); };
+        }
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    // --- La zona contextual de la barra (⬇ ⏹ 🔄) ---
+    //
+    // Estos botones NO se muestran/ocultan a mano desde los sitios que los provocan. Pasan por aquí
+    // por dos razones: la zona entera (con su separador) tiene que colapsarse cuando no queda ninguno
+    // visible, y porque cinco `X.Visibility = …` sueltos por el archivo son cinco oportunidades de
+    // que aparezca un sexto y se olvide.
+
+    private void ShowStop(bool on)
+    {
+        StopBtn.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        UpdateContextZone();
+    }
+
+    private void ShowUpdate(bool on)
+    {
+        UpdateBtn.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        UpdateContextZone();
+    }
+
+    /// <summary>La zona vive solo mientras haya algo dentro; si no, se lleva su separador con ella.</summary>
+    private void UpdateContextZone() =>
+        ContextZone.Visibility =
+            UpdateBtn.Visibility == Visibility.Visible ||
+            StopBtn.Visibility == Visibility.Visible ||
+            RestartTeachBtn.Visibility == Visibility.Visible
+                ? Visibility.Visible : Visibility.Collapsed;
 
     // --- La carita sigue al cursor automatizado (solo colapsada) ---
 
@@ -351,38 +623,40 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
             double px = x / dpi.DpiScaleX + 18, py = y / dpi.DpiScaleY + 18;
             var wa = SystemParameters.WorkArea;
-            Left = Math.Clamp(px, wa.Left, Math.Max(wa.Left, wa.Right - Width));
-            Top = Math.Clamp(py, wa.Top, Math.Max(wa.Top, wa.Bottom - ActualHeight));
+            // Por MoveTo y no por asignación directa: si el usuario lanzó la carita a un borde, la
+            // animación retenida se traga los Left/Top y la carita se queda plantada sin seguir a nadie.
+            MoveTo(Math.Clamp(px, wa.Left, Math.Max(wa.Left, wa.Right - ActualWidth)),
+                   Math.Clamp(py, wa.Top, Math.Max(wa.Top, wa.Bottom - ActualHeight)));
         }));
     }
 
-    // --- Colapsar / expandir: la carita alterna entre el panel completo y solo ella misma ---
+    // --- Colapsar / expandir: la carita alterna entre la barra y solo ella misma ---
 
-    private const double ExpandedWidth = 320;
-    private const double CollapsedWidth = 128; // 72 de la carita + 28 de aire a cada lado (sombra)
     private bool _collapsed;
 
     /// <summary>
-    /// Alterna entre el panel completo y SOLO la carita. Al colapsar, se oculta el panel y aparece la
-    /// carita suelta (misma que el header); al expandir, vuelve el panel intacto. El cambio de tamaño
-    /// lo reancla <see cref="OnSizeChanged"/> a la esquina inferior derecha.
+    /// Alterna entre la barra (con sus flyouts) y SOLO la carita. Al colapsar se cierra el menú
+    /// extendido (si estaba abierto) y aparece la carita suelta; al expandir, la barra vuelve intacta
+    /// — incluido el globo de conversación si estaba abierto. El tamaño lo pone SizeToContent y el
+    /// cambio lo reancla <see cref="OnSizeChanged"/> a la esquina inferior derecha.
     /// </summary>
     private void ToggleCollapsed()
     {
         _collapsed = !_collapsed;
         if (_collapsed)
         {
-            CollapsedFace.Thinking = Face.Thinking; // que la carita suelta refleje el mismo estado
-            Panel.Visibility = Visibility.Collapsed;
+            CollapsedFace.Mood = Face.Mood; // que la carita suelta refleje el mismo estado
+            CloseMenu();
+            RootPanel.Visibility = Visibility.Collapsed;
             CollapsedFace.Visibility = Visibility.Visible;
-            Width = CollapsedWidth;
         }
         else
         {
             CollapsedFace.Visibility = Visibility.Collapsed;
-            Panel.Visibility = Visibility.Visible;
-            Width = ExpandedWidth;
+            RootPanel.Visibility = Visibility.Visible;
         }
+        // Colapsada, el contrato es «solo la carita»: la píldora no aparece y el semáforo ES la cara.
+        UpdateChip(_mood);
     }
 
     // --- Temas de la carita: se alternan manteniéndola oprimida (claro → oscuro → transparente) ---
@@ -411,20 +685,30 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>Conecta los gestos (toque/doble toque/mantener/arrastre) a ambas caritas.</summary>
     private void WireFaceGestures()
     {
-        // Carita del header (panel abierto): no se lanza al borde (arrastra el panel entero).
-        new FaceGestures(this, Face, fling: false)
+        // Carita de la barra: arrastra la barra entera, y al soltar se va a un lado como la suelta.
+        new FaceGestures(this, Face)
         {
             SingleTap = () => { PlayTick(); ToggleCollapsed(); },
             DoubleTap = StartMicByFace,
             LongPress = CycleTheme,
+            // Un solo callback alimenta las tres cosas que dependen de dónde quedó la barra: recordar
+            // el sitio, espejar el layout al lado que toque, y hacia dónde abrirá el menú. Llega con
+            // el DESTINO, así que el espejo se aplica al empezar el vuelo y no al terminarlo — la
+            // barra viaja ya con su forma final en vez de darse la vuelta al aterrizar.
+            Moved = OnWindowMoved,
         };
 
-        // Carita suelta (colapsada): además se puede lanzar de un lado a otro de la pantalla.
-        new FaceGestures(this, CollapsedFace, fling: true)
+        // Carita suelta (colapsada): mismos gestos, mismo pegado al borde.
+        new FaceGestures(this, CollapsedFace)
         {
             SingleTap = () => { PlayTick(); ToggleCollapsed(); },
             DoubleTap = StartMicByFace,
             LongPress = CycleTheme,
+            // Un solo callback alimenta las tres cosas que dependen de dónde quedó la barra: recordar
+            // el sitio, espejar el layout al lado que toque, y hacia dónde abrirá el menú. Llega con
+            // el DESTINO, así que el espejo se aplica al empezar el vuelo y no al terminarlo — la
+            // barra viaja ya con su forma final en vez de darse la vuelta al aterrizar.
+            Moved = OnWindowMoved,
         };
     }
 
@@ -485,6 +769,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private async void OnMic(object sender, RoutedEventArgs e)
     {
         SetStatus("Escuchando…");
+        ShowTalk(); // que «Escuchando…» y lo que se entienda queden a la vista
         string heard = await _voice.ListenOnceAsync(CancellationToken.None);
         if (string.IsNullOrWhiteSpace(heard)) { SetStatus("No te escuché"); return; }
         if (_pendingAnswer != null && !_pendingAnswer.Task.IsCompleted) { _pendingAnswer.TrySetResult(heard); return; }
@@ -499,7 +784,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // hasta terminar la frase. Detener es detener, también la voz.
         _voice.Silence();
         SetStatus("Detenido");
-        StopBtn.Visibility = Visibility.Collapsed;
+        ShowStop(false);
     }
 
     /// <summary>
@@ -554,6 +839,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _teachSession.StatusChanged += (_, msg) => Dispatcher.Invoke(() => SetStatus(msg));
 
         SetTeachingUi(true);
+        ShowTalk(); // el conteo regresivo y el estado de la grabación se ven ahí
         try
         {
             // Título vacío: se autogenera al final desde lo aprendido (WorkflowLearner en Graph).
@@ -570,15 +856,24 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
     }
 
-    /// <summary>Botón 🎓 en rojo y 🔄 a la vista mientras se graba; todo de vuelta a lo normal si no.</summary>
+    /// <summary>Botón 🎓 en rojo (⏸) mientras se graba; todo de vuelta a lo normal si no.
+    /// En la barra el botón es solo icono: el verbo va en el tooltip, y el estado en el color.</summary>
     private void SetTeachingUi(bool teaching)
     {
         _teaching = teaching;
-        TeachBtn.Content = teaching ? "⏸ Enseñar" : "🎓 Enseñar";
+        RefreshMood();   // grabar es un estado de la cara, no solo un color de botón
+        TeachBtn.Content = teaching ? "⏸" : "🎓";
+        TeachBtn.ToolTip = teaching
+            ? "Enseñando: clic para terminar y guardar lo aprendido"
+            : "Enseñar: Ü graba la pantalla y tu voz para aprender un workflow";
         TeachBtn.Background = new System.Windows.Media.SolidColorBrush(teaching
-            ? System.Windows.Media.Color.FromRgb(255, 59, 48)  // rojo, como StopBtn
-            : System.Windows.Media.Color.FromRgb(34, 34, 34)); // gris normal
-        RestartTeachBtn.Visibility = Visibility.Collapsed; // reinicio en caliente: follow-up de la enseñanza unificada
+            ? System.Windows.Media.Color.FromArgb(0x88, 255, 59, 48)   // rojo, como StopBtn
+            : System.Windows.Media.Color.FromArgb(0x1A, 255, 255, 255)); // el fondo normal de BarBtn
+        // Reinicio en caliente: sigue siendo follow-up de la enseñanza unificada, así que el botón
+        // no llega a mostrarse nunca. Pasa por la zona igual, para que el día que se implemente no
+        // haya que acordarse de este sitio.
+        RestartTeachBtn.Visibility = Visibility.Collapsed;
+        UpdateContextZone();
     }
 
     /// <summary>
@@ -597,6 +892,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         SetTeachingUi(false);
         SetStatus("Cerrando la enseñanza y estructurando el workflow…");
+        ShowTalk(); // el cierre tarda y termina en un veredicto: que no pase en silencio
 
         if (_teachSession != null)
         {
@@ -673,13 +969,389 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             : "Al enseñar, el video NO se procesa con IA (se graba igual; míralo en Videos)");
     }
 
-    // --- Selector de workflow directo (panel Backend) ---
+    // ── Menú extendido: activador con hover, cierre con retraso, fijado por clic ──────────────
+    //
+    // Reglas (calcadas del brief del rediseño):
+    //  · Hover sobre el activador abre el menú HACIA ARRIBA (la ventana crece anclada abajo-derecha).
+    //  · Mientras el cursor esté sobre el menú O sobre la barra, no se cierra: la barra entera es la
+    //    zona segura entre activador y panel, así el trayecto nunca lo cierra por accidente.
+    //  · Al salir del todo, espera ~320 ms; si el cursor vuelve antes, se cancela el cierre.
+    //  · Clic (o Enter/Espacio) en el activador lo FIJA: ya no se cierra por hover-out, solo con
+    //    Esc, otro clic, o al colapsar la carita.
+    //  · Backend, dentro del menú, repite el mismo patrón en miniatura: plegado por defecto, hover
+    //    lo abre (con una pausa de intención), clic lo fija, y al cerrarse el menú vuelve a plegarse
+    //    salvo que esté fijado.
 
-    /// <summary>Al abrir el panel Backend refresca la lista, así un workflow recién enseñado ya aparece.</summary>
-    private void OnBackendExpanded(object sender, RoutedEventArgs e)
+    private bool _menuOpen, _menuPinned;
+    private bool _backendOpen, _backendPinned;
+    private bool _talkOpen;
+    private System.Windows.Threading.DispatcherTimer _menuOpenTimer = null!,
+        _menuCloseTimer = null!, _backendHoverTimer = null!, _backendCloseTimer = null!;
+
+    /// <summary>Conecta toda la coreografía del menú. Se llama una vez, desde OnLoaded.</summary>
+    private void WireMenu()
     {
-        if (!_runningDirect) _ = ReloadDirectWorkflowsAsync();
+        // Pausa de intención al abrir por hover: pasar de largo por el activador no abre nada.
+        _menuOpenTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(110) };
+        _menuOpenTimer.Tick += (_, __) => { _menuOpenTimer.Stop(); if (MenuActivator.IsMouseOver) OpenMenu(pin: false); };
+
+        _menuCloseTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(320) };
+        _menuCloseTimer.Tick += (_, __) =>
+        {
+            _menuCloseTimer.Stop();
+            if (_menuOpen && !_menuPinned && !MenuPanel.IsMouseOver && !BarPanel.IsMouseOver) CloseMenu();
+        };
+
+        _backendHoverTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+        _backendHoverTimer.Tick += (_, __) => { _backendHoverTimer.Stop(); if (BackendHeader.IsMouseOver) OpenBackend(); };
+
+        _backendCloseTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _backendCloseTimer.Tick += (_, __) =>
+        {
+            _backendCloseTimer.Stop();
+            if (_backendOpen && !_backendPinned && !BackendZone.IsMouseOver) CloseBackend();
+        };
+
+        // Activador: hover abre, clic fija/cierra, el foco de teclado también abre (accesible sin ratón).
+        MenuActivator.MouseEnter += (_, __) => { _menuOpenTimer.Stop(); _menuOpenTimer.Start(); };
+        MenuActivator.MouseLeave += (_, __) => _menuOpenTimer.Stop();
+        MenuActivator.Click += (_, __) => { if (_menuOpen && _menuPinned) CloseMenu(); else OpenMenu(pin: true); };
+        // Abrir al recibir el foco, PERO no con el foco inicial que WPF reparte al cargar: sin esta
+        // compuerta el menú aparecía abierto solo con arrancar la app (visto en la primera corrida).
+        MenuActivator.GotKeyboardFocus += (_, __) => { if (_uiReady) OpenMenu(pin: false); };
+
+        // Zona segura: menú y barra cancelan el cierre al entrar y lo agendan al salir.
+        MenuPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
+        MenuPanel.MouseLeave += (_, __) => ScheduleMenuClose();
+        BarPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
+        BarPanel.MouseLeave += (_, __) => ScheduleMenuClose();
+
+        // Backend: el mismo patrón, en miniatura.
+        BackendHeader.MouseEnter += (_, __) => { _backendCloseTimer.Stop(); _backendHoverTimer.Stop(); _backendHoverTimer.Start(); };
+        BackendHeader.MouseLeave += (_, __) => _backendHoverTimer.Stop();
+        BackendZone.MouseEnter += (_, __) => _backendCloseTimer.Stop();
+        BackendZone.MouseLeave += (_, __) => { if (_backendOpen && !_backendPinned) { _backendCloseTimer.Stop(); _backendCloseTimer.Start(); } };
+        BackendHeader.MouseLeftButtonUp += (_, __) => ToggleBackendPin();
+        BackendHeader.KeyDown += (_, e) => { if (e.Key is Key.Enter or Key.Space) { ToggleBackendPin(); e.Handled = true; } };
+
+        // Globo de conversación: 💬 lo alterna, ✕ lo cierra.
+        TalkBtn.Click += (_, __) => { if (_talkOpen) HideTalk(); else ShowTalk(focusInput: true); };
+        TalkCloseBtn.Click += (_, __) => HideTalk();
+
+        // Esc cierra lo más volátil primero: menú, luego conversación. Y al cerrar la conversación
+        // devuelve el teclado a la aplicación desde la que se invocó a Ü con el atajo.
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            if (_menuOpen) { CloseMenu(); e.Handled = true; }
+            else if (_talkOpen) { HideTalk(); DevolverElFoco(); e.Handled = true; }
+        };
+
+        // Clic fuera (en otra app estando esta ventana activa): el menú sin fijar se cierra.
+        // El fijado sobrevive a propósito — fijar es pedir que se quede mientras trabajas al lado.
+        Deactivated += (_, __) => { if (_menuOpen && !_menuPinned) CloseMenu(); };
+
+        // Timers muertos al cerrar: un DispatcherTimer vivo mantiene la ventana en memoria. Y la
+        // posición se escribe ya, sin esperar al debounce: si el usuario mueve la barra y cierra Ü
+        // en menos de 700 ms, ese último movimiento se perdería.
+        Closed += (_, __) =>
+        {
+            _menuOpenTimer.Stop(); _menuCloseTimer.Stop();
+            _backendHoverTimer.Stop(); _backendCloseTimer.Stop();
+            if (_saveTimer != null) { _saveTimer.Stop(); _config.Save(); }
+        };
+
+        // A partir del primer ciclo ocioso, el foco ya es intención del usuario y no reparto inicial.
+        Dispatcher.BeginInvoke(new Action(() => _uiReady = true),
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
+
+    private bool _uiReady;
+
+    private void ScheduleMenuClose()
+    {
+        if (!_menuOpen || _menuPinned) return;
+        _menuCloseTimer.Stop();
+        _menuCloseTimer.Start();
+    }
+
+    // ── De qué lado de la pantalla vive Ü ─────────────────────────────────────────────────────
+    //
+    // Todo el layout nació asumiendo «la barra está a la derecha»: el menú crece hacia la izquierda,
+    // el globo se pone a la izquierda, la píldora también, y la ventana se ancla por su borde
+    // derecho. Con la barra pegada al borde IZQUIERDO, todo eso apunta fuera de la pantalla.
+    //
+    // Así que el lado no es solo una posición: es un espejo del layout.
+
+    private bool _barLeft;
+
+    private void ApplyBarSide(bool left)
+    {
+        if (_barLeft == left && _sideApplied) return;
+        _barLeft = left;
+        _sideApplied = true;
+
+        // En un DockPanel el orden de los hijos decide qué franja ocupa cada uno; invirtiendo los
+        // Dock, el orden visual se invierte solo: [globo][píldora][barra] ↔ [barra][píldora][globo].
+        DockPanel.SetDock(TalkPanel, left ? Dock.Right : Dock.Left);
+        DockPanel.SetDock(BarPanel, left ? Dock.Left : Dock.Right);
+        DockPanel.SetDock(StatusChip, left ? Dock.Left : Dock.Right);
+
+        MenuPanel.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        BarRow.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        CollapsedFace.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+
+        // Los tooltips salían siempre por la izquierda: pegados al borde izquierdo se saldrían de la
+        // pantalla. Es un ajuste por botón porque ToolTipService.Placement no se hereda.
+        foreach (var b in BarButtons())
+            ToolTipService.SetPlacement(b, left ? System.Windows.Controls.Primitives.PlacementMode.Right
+                                               : System.Windows.Controls.Primitives.PlacementMode.Left);
+
+        // Y la píldora respira hacia el lado contrario a la barra.
+        StatusChip.Margin = left ? new Thickness(8, 0, 0, 14) : new Thickness(0, 0, 8, 14);
+        TalkPanel.Margin = left ? new Thickness(8, 0, 0, 0) : new Thickness(0, 0, 8, 0);
+    }
+
+    private bool _sideApplied;
+
+    private IEnumerable<Button> BarButtons()
+    {
+        foreach (object child in ((StackPanel)BarPanel.Child).Children)
+        {
+            if (child is Button b) yield return b;
+            else if (child is StackPanel zona)
+                foreach (object nieto in zona.Children)
+                    if (nieto is Button nb) yield return nb;
+        }
+    }
+
+    /// <summary>Recoloca el espejo según dónde está la ventana. Barato: sale pronto si no cambia.</summary>
+    private void RefreshBarSide() => ApplyBarSide(EdgeSnap.EstáALaIzquierda(this));
+
+    /// <summary>
+    /// La ventana acabó en un sitio nuevo por voluntad del usuario. Llega con el DESTINO, así que
+    /// todo lo que dependa del lado se aplica mientras la barra todavía está viajando.
+    /// </summary>
+    private void OnWindowMoved(double left, double top)
+    {
+        SavePositionSoon(left, top);
+        var wa = SystemParameters.WorkArea;
+        ApplyBarSide(left + ActualWidth / 2 < (wa.Left + wa.Right) / 2);
+        RefreshRestingChevron();
+    }
+
+    // ── Hacia dónde se abre el menú ───────────────────────────────────────────────────────────
+    //
+    // Por defecto hacia arriba, que es donde hay sitio con la barra en su esquina. Pero si el usuario
+    // la arrastra al borde superior, abrir hacia arriba obliga a la ventana a acotarse contra el área
+    // de trabajo y quien acaba bajando es la BARRA: el menú aparecería justo donde estaba la mano.
+
+    private bool _menuDown;
+    private double _menuHeightGuess = 420;   // se corrige sola tras la primera apertura
+
+    /// <summary>
+    /// Cambia la dirección moviendo las dos filas del <c>RootPanel</c>. La fila «*» sigue siendo
+    /// SIEMPRE la del menú: esa es la garantía de que, cuando no cabe, quien cede y hace scroll es el
+    /// menú y nunca la barra.
+    /// </summary>
+    private void ApplyMenuDirection(bool down)
+    {
+        if (_menuDown == down) return;
+        _menuDown = down;
+        RootPanel.RowDefinitions[0].Height = down ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+        RootPanel.RowDefinitions[1].Height = down ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+        Grid.SetRow(BarRow, down ? 0 : 1);
+        Grid.SetRow(MenuPanel, down ? 1 : 0);
+        MenuPanel.VerticalAlignment = down ? VerticalAlignment.Top : VerticalAlignment.Bottom;
+        MenuPanel.Margin = down ? new Thickness(0, 8, 0, 0) : new Thickness(0, 0, 0, 8);
+    }
+
+    /// <summary>
+    /// ¿Hay que abrir hacia abajo? Solo si arriba no cabe Y abajo hay MÁS sitio. La segunda condición
+    /// importa: sin ella el menú se voltearía en cuanto faltara un píxel arriba, aunque abajo hubiera
+    /// todavía menos — y entonces el scroll interno resuelve mejor quedándose donde está.
+    /// </summary>
+    private bool ShouldOpenDown()
+    {
+        try
+        {
+            var wa = SystemParameters.WorkArea;
+            double scale = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleY;
+            double barTop = BarPanel.PointToScreen(new Point(0, 0)).Y / scale;
+            double barBottom = barTop + BarPanel.ActualHeight;
+            double necesario = Math.Min(_menuHeightGuess, wa.Height - 48) + 8;
+            double arriba = barTop - wa.Top, abajo = wa.Bottom - barBottom;
+            return arriba < necesario && abajo > arriba;
+        }
+        catch (Exception ex)
+        {
+            // PointToScreen exige la ventana renderizada. Si falla, se cae al modo conocido (arriba)
+            // y se DICE: un fallback silencioso aquí se vería como «a veces se abre raro».
+            LogBus.Log("ui", $"no se pudo medir el hueco para el menú, se abre hacia arriba: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// El chevron apunta a DONDE VA A NACER el menú, y girado significa «ciérralo». Hay que
+    /// recalcularlo también en reposo: con la barra arriba, un chevron que apunta hacia arriba
+    /// promete un menú que va a salir por abajo.
+    /// </summary>
+    private void UpdateChevron() =>
+        Rotate(ActivatorRot, _menuOpen ? (_menuDown ? 0 : 180) : (_menuDown ? 180 : 0));
+
+    /// <summary>Abre el menú extendido (idempotente). <paramref name="pin"/> lo deja fijado.</summary>
+    private void OpenMenu(bool pin)
+    {
+        if (pin) _menuPinned = true;
+        if (_menuOpen) return;
+        _menuOpen = true;
+        _menuCloseTimer.Stop();
+        ApplyMenuDirection(ShouldOpenDown());
+
+        // Sin cuentas de altura aquí: el menú vive en la fila «*» del RootPanel y la barra en la
+        // fila «Auto», así que el layout ya garantiza que quien cede y hace scroll es el menú.
+        // La primera versión lo calculaba a mano con BarPanel.ActualHeight — que al arrancar valía
+        // 0 — y el resultado fue una barra recortada fuera de la pantalla.
+        // Hacia abajo entra deslizando desde arriba: el movimiento sale del activador, no hacia él.
+        FadeSlideIn(MenuPanel, MenuShift, fromY: _menuDown ? -10 : 10);
+        UpdateChevron();
+
+        // La altura real solo se conoce una vez montado. Se guarda para que la SIGUIENTE decisión de
+        // dirección no dependa de una estimación.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (MenuPanel.ActualHeight > 0) _menuHeightGuess = MenuPanel.ActualHeight;
+        }), System.Windows.Threading.DispatcherPriority.Loaded);
+
+        // Refresca la lista al abrir (antes lo hacía el Expander de Backend): un workflow recién
+        // enseñado aparece sin reiniciar nada. Con freno: abrir por hover puede pasar muchas veces
+        // por minuto y cada recarga es un GET a Graph.
+        if (!_runningDirect && Environment.TickCount64 - _lastWorkflowReloadMs > 3000)
+        {
+            _lastWorkflowReloadMs = Environment.TickCount64;
+            _ = ReloadDirectWorkflowsAsync();
+        }
+
+        // Y se comprueba que Graph siga vivo, con el mismo criterio: solo si hace rato que no se
+        // sabe nada de él. Si acaba de responder (p.ej. la recarga de arriba), no hace falta preguntar.
+        if (Environment.TickCount64 - _lastProbeMs > 15000 &&
+            (GraphHealth.Current.Edad is not TimeSpan edad || edad > TimeSpan.FromSeconds(15)))
+        {
+            _lastProbeMs = Environment.TickCount64;
+            _ = ProbeGraphAsync();
+        }
+        UpdateBackendStatus();   // repinta la EDAD aunque no toque sondear
+    }
+
+    private long _lastWorkflowReloadMs;
+
+    /// <summary>Cierra el menú (y despliega el cierre de Backend si no está fijado).</summary>
+    private void CloseMenu()
+    {
+        _menuPinned = false;
+        if (!_menuOpen) return;
+        _menuOpen = false;
+        _menuCloseTimer.Stop();
+        FadeSlideOut(MenuPanel, MenuShift, toY: _menuDown ? -8 : 8, () =>
+        {
+            if (_menuOpen) return;
+            MenuPanel.Visibility = Visibility.Collapsed;
+            // La dirección se suelta AQUÍ y no antes: el último SizeChanged es el del colapso, y si
+            // _menuDown ya fuera false se anclaría por el lado equivocado y la barra daría un salto.
+            ApplyMenuDirection(false);
+            UpdateChevron();
+        });
+        UpdateChevron();
+        if (_backendOpen && !_backendPinned) CloseBackend();
+    }
+
+    /// <summary>Fijar/soltar Backend con clic (o Enter/Espacio) en su cabecera.</summary>
+    private void ToggleBackendPin()
+    {
+        if (!_backendOpen) { _backendPinned = true; OpenBackend(); }
+        else if (_backendPinned) { _backendPinned = false; CloseBackend(); }
+        else _backendPinned = true; // estaba abierto por hover: el clic lo consolida
+    }
+
+    private void OpenBackend()
+    {
+        if (_backendOpen) return;
+        _backendOpen = true;
+        BackendBody.Visibility = Visibility.Visible;
+        BackendBody.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+        Rotate(BackendRot, 90);
+    }
+
+    private void CloseBackend()
+    {
+        if (!_backendOpen) return;
+        _backendOpen = false;
+        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(120));
+        fade.Completed += (_, __) => { if (!_backendOpen) BackendBody.Visibility = Visibility.Collapsed; };
+        BackendBody.BeginAnimation(OpacityProperty, fade);
+        Rotate(BackendRot, 0);
+    }
+
+    // ── Globo de conversación (estado + narración + entrada de texto) ─────────────────────────
+
+    /// <summary>
+    /// Muestra el globo de conversación. Se llama solo cuando hay algo que ver: una narración, una
+    /// pregunta del asistente, una ejecución en curso. Con la carita colapsada no hace nada (mismo
+    /// contrato de siempre: colapsado = solo la carita).
+    /// </summary>
+    private void ShowTalk(bool focusInput = false)
+    {
+        if (_collapsed) return;
+        if (!_talkOpen)
+        {
+            _talkOpen = true;
+            FadeSlideIn(TalkPanel, TalkShift, fromY: 6);
+        }
+        UpdateChip(_mood);   // el globo lleva el texto largo: la píldora sobra mientras esté abierto
+        // El foco se pide DESPUÉS del pase de layout: si el globo acaba de hacerse visible,
+        // enfocar en el mismo instante puede caer en el vacío.
+        if (focusInput)
+            Dispatcher.BeginInvoke(new Action(() => Input.Focus()),
+                System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void HideTalk()
+    {
+        if (!_talkOpen) return;
+        _talkOpen = false;
+        FadeSlideOut(TalkPanel, TalkShift, toY: 6, () => { if (!_talkOpen) TalkPanel.Visibility = Visibility.Collapsed; });
+        UpdateChip(_mood);   // sin globo, la píldora vuelve a ser la que informa
+    }
+
+    // ── Microanimaciones compartidas: fundido + deslizamiento corto, sin rebotes ──────────────
+
+    private static void FadeSlideIn(UIElement el, System.Windows.Media.TranslateTransform shift, double fromY)
+    {
+        el.Visibility = Visibility.Visible;
+        var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+        el.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
+        shift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
+            new DoubleAnimation(fromY, 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
+    }
+
+    private static void FadeSlideOut(UIElement el, System.Windows.Media.TranslateTransform shift, double toY, Action done)
+    {
+        var ease = new QuadraticEase { EasingMode = EasingMode.EaseIn };
+        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140)) { EasingFunction = ease };
+        fade.Completed += (_, __) => done();
+        el.BeginAnimation(OpacityProperty, fade);
+        shift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
+            new DoubleAnimation(toY, TimeSpan.FromMilliseconds(140)) { EasingFunction = ease });
+    }
+
+    private static void Rotate(System.Windows.Media.RotateTransform t, double angle) =>
+        t.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty,
+            new DoubleAnimation(angle, TimeSpan.FromMilliseconds(160)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+
+    // --- Selector de workflow directo (en el menú extendido) ---
 
     /// <summary>
     /// Carga los workflows de Graph para el selector directo del panel Backend: el carrusel/lista elige
@@ -751,6 +1423,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_runningDirect) return;
         if (_directIndex < 0 || _directIndex >= _directWorkflows.Count) return;
         var wf = _directWorkflows[_directIndex];
+
+        // El diálogo de confirmación desactiva esta ventana, y un menú abierto por hover se
+        // cerraría debajo. Fijarlo primero: la pregunta y su consecuencia se ven en el mismo sitio.
+        OpenMenu(pin: true);
 
         var confirm = MessageBox.Show(
             $"¿Borrar «{wf.Title}»?\n\nNo se puede deshacer.",
@@ -1121,10 +1797,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _runningDirect = true;
         RunWorkflowBtn.IsEnabled = false;
         _cts = new CancellationTokenSource();
-        StopBtn.Visibility = Visibility.Visible;
-        SetThinking(true);
+        ShowStop(true);
+        SetWorking(true);
         SetStatus($"Ejecutando «{wf.Title}»…");
+        ShowTalk(); // el progreso se narra ahí, y el ⏹ de la barra ya quedó visible
         string? bridgeGoal = null; // puente subconsciente→consciente si el workflow se detiene
+        bool paróElUsuario = false, falló = false;
         try
         {
             _directGraph ??= new GraphClient(_graphConfig);
@@ -1159,6 +1837,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             SetStatus(result.Ok
                 ? $"«{wf.Title}» terminó: {result.Tally}."
                 : $"«{wf.Title}» se detuvo: {result.Error}");
+            // Un workflow que se detiene NO lanza excepción: devuelve un resultado que dice que no
+            // llegó. Sin esta línea la cara se quedaría tan contenta tras una corrida fallida.
+            falló = !result.Ok && !_cts.IsCancellationRequested;
 
             // Una ejecución nueva es una oportunidad nueva. El puente clínico se calla cuando ya
             // ofreció ESTA versión de la nota, y está bien para no repetir el ofrecimiento en la
@@ -1187,18 +1868,22 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     "obstáculo, puedes invocar de nuevo la herramienta del workflow: se reanuda solo " +
                     "desde la ubicación actual sin repetir lo ya hecho.";
         }
-        catch (OperationCanceledException) { SetStatus("Detenido"); }
+        catch (OperationCanceledException) { SetStatus("Detenido"); paróElUsuario = true; }
         catch (Exception ex)
         {
             LogBus.Log("workflow-ui", $"selector directo: RunAsync falló: {ex}");
             SetStatus($"Error ejecutando: {ex.Message}");
+            falló = true;
         }
         finally
         {
             _runningDirect = false;
             RunWorkflowBtn.IsEnabled = true;
-            StopBtn.Visibility = Visibility.Collapsed;
-            SetThinking(false);
+            ShowStop(false);
+            _working = false;
+            // «Yo lo paré» y «se rompió» se cuentan por separado: son causas distintas y la cara
+            // tiene que poder decir cuál fue.
+            SetOutcome(paróElUsuario, falló);
             _cts = null;
             // Se oculta, no se cierra: cerrar dispara el Closing, que significa «el operador paró».
             _debugger?.Finish();
@@ -1235,10 +1920,50 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void UpdateBackendStatus()
     {
-        string host = _graphConfig.BaseUrl.Replace("https://", "").Replace("http://", "").TrimEnd('/');
-        BackendStatus.Text = _graphConfig.IsConfigured
-            ? $"✓ Conectado a {host}"
-            : "⚠ Sin API key. Una sola vez en dev: setx GRAPH_API_KEY \"tu_key\" y reinicia Ü.";
+        // Toda la tabla de estados vive en GraphHealthText, que es también quien alimenta el
+        // indicador de la biblioteca de workflows. Aquí solo se pinta.
+        var (dot, text) = GraphHealthText.Describe(
+            _graphConfig.IsConfigured
+                ? GraphHealth.CurrentFor(_graphConfig.BaseUrl)   // solo lo que sepamos de ESTE host
+                : GraphHealth.CurrentFor(_graphConfig.BaseUrl) with { Link = GraphLink.SinKey });
+        BackendStatus.Text = text;
+        BackendDot.Fill = dot;
+        BackendHeader.ToolTip = text;
+    }
+
+    private void OnGraphHealthChanged(object? sender, GraphObservation obs) =>
+        Dispatcher.BeginInvoke(new Action(UpdateBackendStatus));
+
+    private long _lastProbeMs;
+
+    /// <summary>
+    /// Le pregunta a Graph si sigue ahí, con el manifiesto (<c>GET /api/v1</c>) — que existía desde
+    /// siempre descrito como «prueba de vida y de key» y no lo llamaba nadie.
+    ///
+    /// Se sondea cuando el usuario MIRA (al abrir el menú), no por temporizador: un latido permanente
+    /// gasta red toda la jornada para responder una pregunta que solo se hace de vez en cuando.
+    ///
+    /// Cinco segundos y no los noventa del cliente: si Graph está caído, el punto tiene que ponerse
+    /// rojo mientras el menú sigue abierto, no minuto y medio después.
+    /// </summary>
+    private async Task ProbeGraphAsync()
+    {
+        if (!_graphConfig.IsConfigured) { UpdateBackendStatus(); return; }
+        _directGraph ??= new GraphClient(_graphConfig);   // el mismo cliente del selector, no uno nuevo
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try
+        {
+            await _directGraph.ManifestAsync(cts.Token);  // el éxito lo anota SendAsync
+        }
+        catch (OperationCanceledException)
+        {
+            // El corte es NUESTRO, de 5 s. SendAsync no puede distinguirlo de un ⏹ del usuario, así
+            // que lo reporta quien sí lo sabe: este método.
+            GraphHealth.Report(GraphLink.SinRespuesta, GraphHealth.HostOf(_graphConfig.BaseUrl),
+                0, "no respondió en 5 s");
+        }
+        catch (GraphException) { /* ya lo anotó SendAsync, con su causa distinguida */ }
+        catch (Exception ex) { LogBus.Log("backend", $"sonda de vida falló de forma inesperada: {ex.Message}"); }
     }
 
     /// <summary>
@@ -1281,24 +2006,32 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private async Task StartGoal(string goal, string requireOrigin = "")
     {
         _cts = new CancellationTokenSource();
-        StopBtn.Visibility = Visibility.Visible;
-        SetThinking(true);
+        ShowStop(true);
+        SetWorking(true);
         SetStatus("Pensando…");
+        ShowTalk(); // que se vea el estado (y quede a mano el ⏹) desde el primer segundo
+        bool paró = false, falló = false;
         try
         {
             string summary = await _loop.RunAsync(goal, _cts.Token, requireOrigin);
             SetStatus(summary);
         }
-        catch (OperationCanceledException) { SetStatus("Detenido"); }
-        catch (Exception ex) { SetStatus($"Error: {ex.Message}"); }
-        finally { StopBtn.Visibility = Visibility.Collapsed; SetThinking(false); }
+        catch (OperationCanceledException) { SetStatus("Detenido"); paró = true; }
+        catch (Exception ex) { SetStatus($"Error: {ex.Message}"); falló = true; }
+        finally { ShowStop(false); _working = false; SetOutcome(paró, falló); }
     }
 
     // --- IVoice ---
-    public void Narrate(string text) => Dispatcher.Invoke(() => Bubble.Text = text);
+    // Narrar y hablar abren el globo de conversación: en la barra compacta no hay texto permanente,
+    // así que lo que Ü dice tiene que traer su propia ventana.
+    public void Narrate(string text) => Dispatcher.Invoke(() =>
+    {
+        Bubble.Text = text;
+        if (!string.IsNullOrWhiteSpace(text)) ShowTalk();
+    });
     public void Speak(string text)
     {
-        Dispatcher.Invoke(() => { Bubble.Text = text; SetStatus(text); });
+        Dispatcher.Invoke(() => { Bubble.Text = text; SetStatus(text); ShowTalk(); });
         _voice.Speak(text);
     }
 
@@ -1308,20 +2041,142 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Dispatcher.Invoke(() =>
         {
             SetStatus(question);
-            Input.Focus();
+            ShowTalk(focusInput: true); // la pregunta necesita la caja de texto delante
         });
         _pendingAnswer = new TaskCompletionSource<string>();
         ct.Register(() => _pendingAnswer?.TrySetResult(""));
+        RefreshMood();   // la cara pasa a «te toca a ti» mientras la pregunta siga sin responder
+        // Y vuelve a lo que toque en cuanto se resuelva, sea por texto, por voz o por ⏹.
+        _pendingAnswer.Task.ContinueWith(_ => RefreshMood(), TaskScheduler.Default);
         return _pendingAnswer.Task;
     }
 
     private void SetStatus(string s) => Dispatcher.Invoke(() => Status.Text = s.Length > 120 ? s[..120] + "…" : s);
 
-    /// <summary>Pone la carita (ambas: la del header y la suelta) en modo "pensando" mientras ejecuta.</summary>
-    private void SetThinking(bool on) => Dispatcher.Invoke(() =>
+    // ── La carita como semáforo ───────────────────────────────────────────────────────────────
+    //
+    // El estado NO se asigna a mano desde cada sitio: se DERIVA de los flags que ya existen, en una
+    // sola función. Así no puede haber dos partes del código afirmando cosas distintas sobre lo mismo
+    // — que es exactamente lo que habría pasado manteniendo el viejo `Thinking` junto al `Mood`.
+
+    private bool _working;   // el consciente pensando, o un workflow corriendo
+    private bool _stopped;   // el usuario pulsó ⏹ (se limpia al siguiente arranque)
+    private bool _failed;    // la última corrida terminó mal
+    private FaceMood _mood = FaceMood.Reposo;
+
+    /// <summary>
+    /// El orden de las ramas ES la prioridad: primero lo que está pasando ahora mismo, después lo que
+    /// acaba de pasar. Escuchar gana a todo porque el micrófono está abierto y el usuario necesita
+    /// saberlo ya.
+    /// </summary>
+    private FaceMood ResolveMood()
     {
-        Face.Thinking = on;
-        CollapsedFace.Thinking = on;
+        var voz = _voice.Activity;
+        if (voz.Escuchando) return FaceMood.Escuchando;
+        if (_teaching) return FaceMood.Grabando;
+        // Una pregunta sin responder: el agente está parado esperando al usuario, no trabajando.
+        if (_pendingAnswer is { Task.IsCompleted: false }) return FaceMood.Esperando;
+        if (voz.Hablando) return FaceMood.Hablando;
+        if (_working || _runningDirect) return FaceMood.Trabajando;
+        if (_failed) return FaceMood.Fallo;
+        if (_stopped) return FaceMood.Detenido;
+        return FaceMood.Reposo;
+    }
+
+    /// <summary>Recalcula el estado y lo aplica a las DOS caritas y a la píldora, en un solo sitio.</summary>
+    private void RefreshMood() => Dispatcher.Invoke(() =>
+    {
+        var mood = ResolveMood();
+        if (mood == _mood) return;
+        _mood = mood;
+        Face.Mood = mood;
+        CollapsedFace.Mood = mood;
+        UpdateChip(mood);
     });
+
+    /// <summary>
+    /// Sustituye al viejo <c>SetThinking</c>: los sitios que ejecutan siguen diciendo «estoy
+    /// trabajando» y la cara la decide <see cref="ResolveMood"/>. Arrancar limpia los estados de
+    /// resultado: si vuelves a lanzar algo, el «se detuvo» de antes ya no describe nada.
+    /// </summary>
+    private void SetWorking(bool on)
+    {
+        _working = on;
+        if (on) { _stopped = false; _failed = false; }
+        RefreshMood();
+    }
+
+    /// <summary>Cómo terminó lo último. Se separan a propósito: «yo lo paré» no es «se rompió».</summary>
+    private void SetOutcome(bool stopped, bool failed)
+    {
+        _stopped = stopped;
+        _failed = failed;
+        RefreshMood();
+        // Un resultado es un aviso, no un estado: a los 5 s la cara vuelve a la calma.
+        if (stopped || failed) ClearOutcomeSoon();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _outcomeTimer;
+
+    private void ClearOutcomeSoon()
+    {
+        if (_outcomeTimer == null)
+        {
+            _outcomeTimer = new System.Windows.Threading.DispatcherTimer(
+                System.Windows.Threading.DispatcherPriority.Background)
+            { Interval = TimeSpan.FromSeconds(5) };
+            _outcomeTimer.Tick += (_, __) =>
+            {
+                _outcomeTimer!.Stop();
+                _stopped = _failed = false;
+                RefreshMood();
+            };
+        }
+        _outcomeTimer.Stop();
+        _outcomeTimer.Start();
+    }
+
+    /// <summary>
+    /// La píldora es la SUPLENTE del globo, nunca su eco.
+    ///
+    /// Con el globo abierto no aparece: allí ya está el texto largo y completo, y dos superficies
+    /// diciendo lo mismo con distinto detalle es cómo se acaba con dos verdades. Colapsada tampoco:
+    /// el contrato de ese estado es «solo la carita», y ahí el semáforo ES la cara.
+    /// </summary>
+    private void UpdateChip(FaceMood mood)
+    {
+        string s = ShortPhrase(mood);
+        bool show = s.Length > 0 && !_talkOpen && !_collapsed;
+
+        if (show)
+        {
+            StatusChipText.Text = s;
+            if (StatusChip.Visibility != Visibility.Visible)
+                FadeSlideIn(StatusChip, ChipShift, fromY: 4);
+        }
+        else if (StatusChip.Visibility == Visibility.Visible)
+        {
+            FadeSlideOut(StatusChip, ChipShift, toY: 4,
+                () => { if (StatusChip.Visibility == Visibility.Visible && !ShouldShowChip()) StatusChip.Visibility = Visibility.Collapsed; });
+        }
+    }
+
+    private bool ShouldShowChip() => ShortPhrase(_mood).Length > 0 && !_talkOpen && !_collapsed;
+
+    /// <summary>
+    /// El texto sale del ESTADO, no del <c>Status</c> libre: así la cara y la frase no pueden
+    /// discrepar. Sin contadores del tipo «3 de 7» — el denominador de un plan ya mintió una vez, y
+    /// el detalle es cosa del globo.
+    /// </summary>
+    private static string ShortPhrase(FaceMood mood) => mood switch
+    {
+        FaceMood.Escuchando => "Escuchando…",
+        FaceMood.Trabajando => "Trabajando…",
+        FaceMood.Grabando => "Grabando",
+        FaceMood.Esperando => "Te toca a ti",
+        FaceMood.Detenido => "Detenido",
+        FaceMood.Fallo => "Se detuvo",
+        _ => "",   // Reposo y Hablando: la cara basta
+    };
 }
 

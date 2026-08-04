@@ -10,20 +10,57 @@ namespace U.WindowsClient.Ui;
 public enum FaceTheme { Light, Dark }
 
 /// <summary>
+/// Qué está haciendo Ü, dicho con la cara. Sustituye al viejo booleano <c>Thinking</c>: tener los dos
+/// garantizaría que algún día alguien ponga uno sin tocar el otro y la carita diga dos cosas a la vez.
+///
+/// Ocho y no seis por dos separaciones que importan:
+///   · <see cref="Detenido"/> ≠ <see cref="Fallo"/> — «yo lo paré» y «se rompió solo» son causas
+///     distintas con acciones distintas; juntarlas es el vicio de los mensajes que no distinguen.
+///   · <see cref="Hablando"/> existe porque hubo que crear la señal en VoiceIO, y una capacidad sin
+///     quien la use se convierte en código muerto (le pasó a ManifestAsync durante meses).
+/// </summary>
+public enum FaceMood
+{
+    Reposo,
+    Escuchando,
+    Trabajando,
+    Grabando,
+    Esperando,
+    Hablando,
+    Detenido,
+    Fallo,
+}
+
+/// <summary>
 /// La carita del asistente (misma que la app Android: <c>FaceView.kt</c>), portada a WPF:
 /// cejas curvas + ojos de línea vertical + sonrisa bezier sobre un squircle. Coordenadas en el sistema
 /// original del SVG (viewBox -75..75), escaladas al tamaño del control. Solo dibuja y anima; no decide
-/// nada. Soporta los mismos tres temas que Android: claro (fondo blanco), oscuro (línea blanca) y
-/// transparente (solo líneas negras, sin relleno).
+/// nada: quién está en cada momento lo decide FaceWindow y lo dice por <see cref="Mood"/>.
+///
+/// DOS REGLAS DE RENDIMIENTO que no son negociables, porque este control se dibuja a mano y hay dos
+/// instancias vivas siempre:
+///
+///  1. **Los squircles se cachean.** Cada uno son 73 puntos con dos `Math.Pow`, y se dibujan dos por
+///     render. Solo dependen del tamaño, así que recalcularlos en cada cuadro es tirar trabajo.
+///  2. **Toda animación CONTINUA va en RenderTransform, nunca en una DependencyProperty con
+///     AffectsRender.** Las transform las compone el sistema sin repintar; una DP animada en bucle
+///     serían 60 repintados por segundo × 2 geometrías × 2 instancias, durante toda una corrida.
+///     Las DP animadas quedan para lo puntual: <see cref="Blink"/> y la mirada.
 /// </summary>
 public sealed class FaceControl : FrameworkElement
 {
     private readonly ScaleTransform _scale = new(1, 1);
+    private readonly RotateTransform _tilt = new(0);
 
     public FaceControl()
     {
         RenderTransformOrigin = new Point(0.5, 0.5);
-        RenderTransform = _scale;
+        // Grupo y no una sola transform: el pulso escala y el balanceo de «trabajando» rota, y las
+        // dos tienen que poder convivir sin pisarse.
+        var group = new TransformGroup();
+        group.Children.Add(_scale);
+        group.Children.Add(_tilt);
+        RenderTransform = group;
     }
 
     /// <summary>Modo de color de la carita (claro/oscuro/transparente). Repinta al cambiar.</summary>
@@ -48,16 +85,17 @@ public sealed class FaceControl : FrameworkElement
         nameof(EyeShift), typeof(double), typeof(FaceControl),
         new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
 
-    /// <summary>true = ojos/cejas "pensativos" mientras ejecuta; false = sonrisa en reposo.</summary>
-    public bool Thinking
+    /// <summary>Qué está haciendo Ü. Cambia la pose, el acento de color y la animación continua.</summary>
+    public FaceMood Mood
     {
-        get => (bool)GetValue(ThinkingProperty);
-        set => SetValue(ThinkingProperty, value);
+        get => (FaceMood)GetValue(MoodProperty);
+        set => SetValue(MoodProperty, value);
     }
 
-    public static readonly DependencyProperty ThinkingProperty = DependencyProperty.Register(
-        nameof(Thinking), typeof(bool), typeof(FaceControl),
-        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty MoodProperty = DependencyProperty.Register(
+        nameof(Mood), typeof(FaceMood), typeof(FaceControl),
+        new FrameworkPropertyMetadata(FaceMood.Reposo, FrameworkPropertyMetadataOptions.AffectsRender,
+            (d, e) => ((FaceControl)d).OnMoodChanged((FaceMood)e.NewValue)));
 
     /// <summary>0 = ojos abiertos, 1 = cerrados. Lo anima <see cref="Blink"/>.</summary>
     public double BlinkClosed
@@ -69,6 +107,113 @@ public sealed class FaceControl : FrameworkElement
     public static readonly DependencyProperty BlinkClosedProperty = DependencyProperty.Register(
         nameof(BlinkClosed), typeof(double), typeof(FaceControl),
         new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    // ── Las poses ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Los diez escalares que definen una expresión, más el acento. Antes eran diez ternarios sobre
+    /// un booleano dentro de OnRender; con ocho estados, una tabla.
+    /// </summary>
+    private readonly record struct FacePose(
+        double BrowL, double BrowR, double CurveL, double CurveR,
+        double EyeOpen, double Squint, double MouthCurve, double MouthWidth,
+        double CornerL, double CornerR, Color? Accent);
+
+    /// <summary>
+    /// Reposo y Trabajando conservan EXACTAMENTE los valores que tenían como <c>thinking</c> false y
+    /// true: el rediseño no debe cambiar cómo se ve lo que ya existía.
+    ///
+    /// <c>MouthCurve</c> negativo en <see cref="FaceMood.Fallo"/> no es un truco: con la bezier actual,
+    /// un valor negativo pone el punto medio por debajo de las comisuras y sale un ceño, sin tocar el
+    /// dibujo.
+    /// </summary>
+    private static readonly Dictionary<FaceMood, FacePose> Poses = new()
+    {
+        //                              browL browR curvL curvR  eyeOpen squint mouthCurve  width   cornL cornR  acento
+        [FaceMood.Reposo] = new(2, 2.5, 0.3, 0.4, 0.85, 0.15, 0.7, 34 * 1.1, 0.3, 0.5, null),
+        [FaceMood.Trabajando] = new(-1, 4, 0.1, 0.5, 0.75, 0.20, 0.7, 34 * 0.95, 0.2, 0.1, UiPalette.Trabajando),
+        // Cejas altas y ojos bien abiertos: la cara de estar prestando atención.
+        [FaceMood.Escuchando] = new(6, 6, 0.35, 0.35, 1.00, 0.05, 0.6, 34 * 1.05, 0.35, 0.35, UiPalette.Vivo),
+        // Quieta y mirando de frente: «te estoy viendo». La quietud es la señal.
+        [FaceMood.Grabando] = new(2, 2, 0.3, 0.3, 0.95, 0.10, 0.4, 34 * 0.8, 0.2, 0.2, UiPalette.Fallo),
+        // Asimetría interrogativa: una ceja sube, la otra baja.
+        [FaceMood.Esperando] = new(6, -1, 0.45, 0.15, 0.9, 0.10, 0.2, 34 * 0.95, 0.4, 0.1, UiPalette.Atencion),
+        [FaceMood.Hablando] = new(2, 2.5, 0.3, 0.4, 0.85, 0.15, 0.9, 34 * 1.25, 0.4, 0.4, null),
+        // Boca recta y ojos entornados: ni contenta ni enfadada, parada.
+        [FaceMood.Detenido] = new(0, 0, 0.2, 0.2, 0.6, 0.25, 0.0, 34 * 0.9, 0.0, 0.0, UiPalette.Inactivo),
+        [FaceMood.Fallo] = new(-3, -3, 0.15, 0.15, 0.8, 0.15, -0.5, 34 * 0.9, 0.1, 0.1, UiPalette.Fallo),
+    };
+
+    private FacePose CurrentPose => Poses.TryGetValue(Mood, out var p) ? p : Poses[FaceMood.Reposo];
+
+    /// <summary>
+    /// Coreografía del estado: limpia lo del anterior y arranca lo del nuevo.
+    ///
+    /// Lo primero que hace es soltar las animaciones retenidas de <c>BlinkClosed</c> y
+    /// <c>EyeShift</c>: <see cref="Blink"/> y la mirada usan <c>BeginAnimation</c> con el
+    /// <c>FillBehavior</c> por defecto (HoldEnd), y mientras un valor está retenido WPF IGNORA
+    /// cualquier asignación. Sin esta limpieza, una carita que parpadeó justo antes de cambiar de
+    /// estado se quedaría con los ojos a medio cerrar para siempre.
+    /// </summary>
+    private void OnMoodChanged(FaceMood mood)
+    {
+        BeginAnimation(BlinkClosedProperty, null);
+        BeginAnimation(EyeShiftProperty, null);
+        BlinkClosed = 0;
+        EyeShift = 0;
+
+        StopContinuous();
+
+        switch (mood)
+        {
+            case FaceMood.Escuchando:
+                // Respiración: el único estado con movimiento propio permanente, porque «te escucho»
+                // tiene que notarse mientras dura el micrófono (8 s como mucho).
+                Breathe(from: 1.0, to: 1.05, ms: 1200);
+                break;
+
+            case FaceMood.Trabajando:
+                // Balanceo mínimo. Es una rotación, no un repintado: cuesta cero por cuadro.
+                Sway(degrees: 3, ms: 2400);
+                break;
+
+            case FaceMood.Fallo:
+                Pulse();   // un solo golpe al entrar, no en bucle
+                break;
+        }
+    }
+
+    private void StopContinuous()
+    {
+        _scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        _scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        _tilt.BeginAnimation(RotateTransform.AngleProperty, null);
+        _scale.ScaleX = _scale.ScaleY = 1;
+        _tilt.Angle = 0;
+    }
+
+    private void Breathe(double from, double to, int ms)
+    {
+        var a = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(ms))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        };
+        _scale.BeginAnimation(ScaleTransform.ScaleXProperty, a);
+        _scale.BeginAnimation(ScaleTransform.ScaleYProperty, a);
+    }
+
+    private void Sway(double degrees, int ms)
+    {
+        var a = new DoubleAnimation(-degrees, degrees, TimeSpan.FromMilliseconds(ms))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        };
+        _tilt.BeginAnimation(RotateTransform.AngleProperty, a);
+    }
 
     /// <summary>Parpadea <paramref name="times"/> veces (onda triangular: abre→cierra→abre).</summary>
     public void Blink(int times)
@@ -166,10 +311,26 @@ public sealed class FaceControl : FrameworkElement
         Color fillBottom = dark ? Colors.Black : Colors.White;
         Color faceBorder = dark ? Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x1F, 0, 0, 0);
 
+        // --- El acento del estado ---
+        //
+        // A 42 px de lado la pluma de los rasgos mide 1,12 px: un anillo o un punto de color
+        // sencillamente NO SE VEN. Lo único legible a ese tamaño son los rasgos (que son casi toda la
+        // tinta) y el bloque de relleno. Así que el acento tiñe los dos: la carita entera cambia de
+        // carácter y se distingue de reojo, que es de lo que se trata.
+        FacePose pose = CurrentPose;
+        if (pose.Accent is Color accent)
+        {
+            faceLine = accent;
+            // Sobre el relleno casi negro del tema oscuro hace falta más peso para que se aprecie.
+            double peso = dark ? 0.20 : 0.14;
+            fillTop = UiPalette.Blend(fillTop, accent, peso);
+            fillBottom = UiPalette.Blend(fillBottom, accent, peso);
+        }
+
         // Relleno del rostro (degradado diagonal, esquina sup-izq → inf-der).
         var fill = new LinearGradientBrush(fillTop, fillBottom, new Point(0, 0), new Point(1, 1));
         fill.Freeze();
-        dc.DrawGeometry(fill, null, Squircle(cx, cy, r));
+        dc.DrawGeometry(fill, null, OuterSquircle(cx, cy, r));
 
         if (dark)
         {
@@ -177,13 +338,13 @@ public sealed class FaceControl : FrameworkElement
             double hairline = 0.35 * s;
             var pen = new Pen(new SolidColorBrush(faceLine), hairline);
             pen.Freeze();
-            dc.DrawGeometry(null, pen, Squircle(cx, cy, r - hairline * 1.5));
+            dc.DrawGeometry(null, pen, InnerSquircle(cx, cy, r - hairline * 1.5));
         }
         else
         {
             var pen = new Pen(new SolidColorBrush(faceBorder), 1.5 * s);
             pen.Freeze();
-            dc.DrawGeometry(null, pen, Squircle(cx, cy, r));
+            dc.DrawGeometry(null, pen, OuterSquircle(cx, cy, r));
         }
 
         // Rasgos: trazo grueso del color de la línea, con el lienzo rotado -2° como en Android.
@@ -197,17 +358,11 @@ public sealed class FaceControl : FrameworkElement
 
         dc.PushTransform(new RotateTransform(-2, cx, cy));
 
-        bool thinking = Thinking;
-        double browL = thinking ? -1 : 2;
-        double browR = thinking ? 4 : 2.5;
-        double curveL = thinking ? 0.1 : 0.3;
-        double curveR = thinking ? 0.5 : 0.4;
-        double eyeOpen = thinking ? 0.75 : 0.85;
-        double squint = thinking ? 0.2 : 0.15;
-        double mouthCurve = 0.7;
-        double mouthWidth = 34 * (thinking ? 0.95 : 1.1);
-        double cornerL = thinking ? 0.2 : 0.3;
-        double cornerR = thinking ? 0.1 : 0.5;
+        double browL = pose.BrowL, browR = pose.BrowR;
+        double curveL = pose.CurveL, curveR = pose.CurveR;
+        double eyeOpen = pose.EyeOpen, squint = pose.Squint;
+        double mouthCurve = pose.MouthCurve, mouthWidth = pose.MouthWidth;
+        double cornerL = pose.CornerL, cornerR = pose.CornerR;
 
         // Cejas: bezier cuadrática sobre cada ojo.
         foreach (var (bx, bh, c) in new[] { (-30.0, browL, curveL), (30.0, browR, curveR) })
@@ -244,6 +399,33 @@ public sealed class FaceControl : FrameworkElement
         dc.DrawGeometry(null, stroke, mouth);
 
         dc.Pop();
+    }
+
+    // Caché de los dos squircles. Solo dependen de (cx, cy, r), que solo cambian si el control cambia
+    // de tamaño — es decir, casi nunca. Sin caché se reconstruían 2 × 73 puntos con dos Math.Pow cada
+    // uno EN CADA REPINTADO, y hay repintados de sobra: cada parpadeo anima BlinkClosed, que lleva
+    // AffectsRender, así que ya hoy se repinta a la velocidad del cuadro varias veces por minuto.
+    private Geometry? _outerCache, _innerCache;
+    private double _cacheCx, _cacheCy, _cacheR, _cacheInnerR;
+
+    private Geometry OuterSquircle(double cx, double cy, double r)
+    {
+        if (_outerCache == null || cx != _cacheCx || cy != _cacheCy || r != _cacheR)
+        {
+            _outerCache = Squircle(cx, cy, r);
+            _cacheCx = cx; _cacheCy = cy; _cacheR = r;
+        }
+        return _outerCache;
+    }
+
+    private Geometry InnerSquircle(double cx, double cy, double r)
+    {
+        if (_innerCache == null || r != _cacheInnerR || cx != _cacheCx || cy != _cacheCy)
+        {
+            _innerCache = Squircle(cx, cy, r);
+            _cacheInnerR = r;
+        }
+        return _innerCache;
     }
 
     /// <summary>Squircle (superelipse |x|^n+|y|^n=1, n≈4): el "cuadrado con curva de Euler" de Apple.</summary>

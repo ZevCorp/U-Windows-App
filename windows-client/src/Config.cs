@@ -85,6 +85,24 @@ public sealed class Config
     public string FaceTheme { get; set; } = "Light";
 
     /// <summary>
+    /// Dónde dejó el usuario la barra. Se persiste porque el operador la aparta de la barra de
+    /// herramientas de SAP una vez, y sin esto tendría que volver a apartarla en cada arranque.
+    ///
+    /// <c>double?</c> y no <c>double</c>: <c>null</c> significa «nunca la movió» y hay que poder
+    /// distinguirlo de <c>0,0</c>, que es la esquina superior izquierda y una posición legítima.
+    /// </summary>
+    public double? WindowLeft { get; set; }
+    public double? WindowTop { get; set; }
+
+    /// <summary>
+    /// El área de trabajo en la que se guardó esa posición. Sin esto, un portátil que pasa de su
+    /// pantalla a un proyector de menos resolución restaura la carita fuera de la pantalla, donde no
+    /// se puede ni agarrar. Si no coincide, se descarta la posición y se vuelve al sitio por defecto.
+    /// </summary>
+    public double? SavedWorkAreaWidth { get; set; }
+    public double? SavedWorkAreaHeight { get; set; }
+
+    /// <summary>
     /// De dónde baja la carita sus propias actualizaciones (ver <see cref="Update.Updater"/> y
     /// RELEASING-WINDOWS.md). Es el bucket PÚBLICO `windows` de Supabase — público a propósito: el
     /// updater tiene que poder leerlo sin credenciales, igual que el bucket `apks` de Android. Aquí solo
