@@ -80,6 +80,16 @@ public sealed class SurfaceLocator : IDisposable
         Probe();
     }
 
+    /// <summary>
+    /// Para el localizador. SOLO al cerrar la aplicación (ver <see cref="Dispose"/>).
+    ///
+    /// Pararlo deja CIEGO a todo el sistema, no solo a lo que se ve: <see cref="Current"/> se
+    /// congela en el último valor y el evento <see cref="Changed"/> deja de disparar, con lo que el
+    /// ancla de ubicación, la comprobación de llegadas, el MCP y el aprendizaje del terreno pasan a
+    /// razonar sobre una pantalla que ya no está delante. El botón «ID visible» llamaba aquí para
+    /// esconder un badge y apagaba de paso media aplicación (2026-08-04). Si lo que quieres es
+    /// dejar de VER el ID, oculta el badge: saber dónde estamos no se negocia.
+    /// </summary>
     public void Stop()
     {
         Active = false;

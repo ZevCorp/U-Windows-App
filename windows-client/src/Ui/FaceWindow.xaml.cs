@@ -1978,25 +1978,42 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         SetStatus(on ? "Inspector de elementos activo" : "Inspector apagado");
     }
 
-    /// <summary>Muestra/oculta el ID de superficie (badge arriba a la derecha). Ver <see cref="SurfaceLocator"/>.</summary>
+    /// <summary>
+    /// Muestra/oculta el ID de superficie. SOLO el badge: el localizador no se apaga nunca.
+    ///
+    /// Antes este botón llamaba a <c>_locator.Stop()</c>, y con eso paraba el motor entero: el ID
+    /// dejaba de recalcularse, <c>Current</c> se congelaba en el último valor y todo lo que vive de
+    /// saber dónde estamos se quedaba ciego —el ancla de ubicación, la comprobación de llegadas, el
+    /// MCP, y sobre todo el aprendizaje del terreno, porque sin el evento <c>Changed</c> el mapa
+    /// deja de observar las pantallas por las que pasa el usuario. Ocultar un dato no es dejar de
+    /// medirlo (2026-08-04, reportado por el usuario: «que solo se active o desactive visualmente»).
+    ///
+    /// Es la misma regla que ya sigue el vigilante de clics: siempre activo, porque el terreno se
+    /// aprende viviendo. Lo que el usuario decide aquí es si quiere VERLO, no si el sistema sabe.
+    /// </summary>
     private void OnToggleLocator(object sender, RoutedEventArgs e)
     {
         if (_locator == null || _badge == null) return;
-        if (_locator.Active)
+
+        if (!_locator.Active) _locator.Start();   // red: si algo lo paró, vuelve a andar
+
+        _idALaVista = !_idALaVista;
+        if (_idALaVista)
         {
-            _locator.Stop();
-            _badge.Hide();
-            LocatorBtn.Content = "📍 ID de superficie";
-            SetStatus("Localizador apagado");
+            _badge.Show();
+            LocatorBtn.Content = "📍 ID visible — clic para ocultar";
+            SetStatus("ID de superficie a la vista");
         }
         else
         {
-            _locator.Start();
-            _badge.Show();
-            LocatorBtn.Content = "📍 ID visible — clic para ocultar";
-            SetStatus("Localizador activo");
+            _badge.Hide();
+            LocatorBtn.Content = "📍 ID oculto — clic para mostrar";
+            SetStatus("ID oculto (se sigue midiendo)");
         }
     }
+
+    /// <summary>Si el badge del ID se está mostrando. El localizador corre igual, se vea o no.</summary>
+    private bool _idALaVista = true;
 
     /// <summary>
     /// Arranca el modo consciente. <paramref name="requireOrigin"/> ata el objetivo a una aplicación:
