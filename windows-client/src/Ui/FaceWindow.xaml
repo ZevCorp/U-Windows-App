@@ -224,12 +224,21 @@
         <!-- Estado NORMAL: menú extendido (arriba) + globo de conversación (izquierda) + barra (derecha).
              La ventana mide lo que mida el contenido (SizeToContent) y OnSizeChanged la mantiene
              anclada a la esquina inferior derecha: abrir el menú crece hacia arriba y a la izquierda. -->
-        <StackPanel x:Name="RootPanel">
+        <!-- Dos filas y no un StackPanel: la barra es la fila Auto y el menú la fila «*». Así, cuando
+             el contenido excede el MaxHeight de la ventana, quien cede es el MENÚ (que hace scroll),
+             nunca la barra. Con un StackPanel el recorte se comía el último hijo — es decir, la
+             interfaz permanente — y encima dependía de que yo calculara bien una altura a mano. -->
+        <Grid x:Name="RootPanel">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
             <!-- MENÚ EXTENDIDO: se abre hacia arriba desde el activador. No es una ventana aparte:
-                 es la continuación de la barra. Si el contenido no cabe, MenuScroll hace scroll
-                 interno (el tope se calcula al abrir, según el área de trabajo). -->
-            <Border x:Name="MenuPanel" Width="292" HorizontalAlignment="Right" Visibility="Collapsed"
+                 es la continuación de la barra. Si no cabe, MenuScroll hace scroll interno — el
+                 tope lo pone la fila, no una cuenta nuestra. -->
+            <Border x:Name="MenuPanel" Grid.Row="0" VerticalAlignment="Bottom"
+                    Width="292" HorizontalAlignment="Right" Visibility="Collapsed"
                     CornerRadius="14" Background="#F2101014" BorderBrush="#33FFFFFF" BorderThickness="1"
                     Padding="10" Margin="0,0,0,8">
                 <Border.RenderTransform>
@@ -404,7 +413,7 @@
             </Border>
 
             <!-- Fila inferior: el globo de conversación a la izquierda, la barra a la derecha. -->
-            <DockPanel HorizontalAlignment="Right" LastChildFill="False">
+            <DockPanel Grid.Row="1" HorizontalAlignment="Right" LastChildFill="False">
 
                 <!-- GLOBO DE CONVERSACIÓN: estado + narración + entrada de texto. Aparece solo cuando
                      hay algo que decir (narración, una pregunta, una ejecución en curso) o cuando el
@@ -517,6 +526,6 @@
                     </StackPanel>
                 </Border>
             </DockPanel>
-        </StackPanel>
+        </Grid>
     </Grid>
 </Window>

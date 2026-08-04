@@ -734,7 +734,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         MenuActivator.MouseEnter += (_, __) => { _menuOpenTimer.Stop(); _menuOpenTimer.Start(); };
         MenuActivator.MouseLeave += (_, __) => _menuOpenTimer.Stop();
         MenuActivator.Click += (_, __) => { if (_menuOpen && _menuPinned) CloseMenu(); else OpenMenu(pin: true); };
-        MenuActivator.GotKeyboardFocus += (_, __) => OpenMenu(pin: false);
+        // Abrir al recibir el foco, PERO no con el foco inicial que WPF reparte al cargar: sin esta
+        // compuerta el menú aparecía abierto solo con arrancar la app (visto en la primera corrida).
+        MenuActivator.GotKeyboardFocus += (_, __) => { if (_uiReady) OpenMenu(pin: false); };
 
         // Zona segura: menú y barra cancelan el cierre al entrar y lo agendan al salir.
         MenuPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
@@ -772,7 +774,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             _menuOpenTimer.Stop(); _menuCloseTimer.Stop();
             _backendHoverTimer.Stop(); _backendCloseTimer.Stop();
         };
+
+        // A partir del primer ciclo ocioso, el foco ya es intención del usuario y no reparto inicial.
+        Dispatcher.BeginInvoke(new Action(() => _uiReady = true),
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
+
+    private bool _uiReady;
 
     private void ScheduleMenuClose()
     {
@@ -789,12 +797,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _menuOpen = true;
         _menuCloseTimer.Stop();
 
-        // El tope de scroll se calcula al abrir: el menú nunca debe empujar la ventana más allá del
-        // área de trabajo (poco espacio vertical, DPI alto, ventanas pequeñas → scroll interno).
-        var wa = SystemParameters.WorkArea;
-        double vecino = Math.Max(BarPanel.ActualHeight, _talkOpen ? TalkPanel.ActualHeight : 0);
-        MenuScroll.MaxHeight = Math.Max(180, wa.Height - 48 - vecino - 40);
-
+        // Sin cuentas de altura aquí: el menú vive en la fila «*» del RootPanel y la barra en la
+        // fila «Auto», así que el layout ya garantiza que quien cede y hace scroll es el menú.
+        // La primera versión lo calculaba a mano con BarPanel.ActualHeight — que al arrancar valía
+        // 0 — y el resultado fue una barra recortada fuera de la pantalla.
         FadeSlideIn(MenuPanel, MenuShift, fromY: 10);
         Rotate(ActivatorRot, 180);
 
