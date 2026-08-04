@@ -50,8 +50,16 @@ public sealed class GraphExplorerWindow : Window
         Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
         FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0),
     };
-    /// <summary>Los puntos de las salidas, en rejilla: apilados en columna volverían a ser una lista.</summary>
-    private readonly WrapPanel _edges = new() { Orientation = Orientation.Horizontal };
+    /// <summary>
+    /// Los puntos de las salidas, cada uno SOBRE su elemento real.
+    ///
+    /// Estaban agrupados en una tira arriba a la izquierda, y eso obligaba a traducir mentalmente
+    /// entre «el punto número siete» y «ese botón de allí»: la relación existía —hover iluminaba el
+    /// elemento— pero había que buscarla. Encima de la pantalla no hace falta buscar nada: el punto
+    /// ESTÁ en el sitio del que habla, así que lo que el mapa sabe y lo que se ve son la misma
+    /// imagen (2026-08-04). Es lo que ya permitía la capa a pantalla completa y no se aprovechaba.
+    /// </summary>
+    private readonly Canvas _edges = new();
 
     /// <summary>La tira de niveles del borde derecho: una app por nivel. Ver <see cref="DibujarNiveles"/>.</summary>
     private StackPanel _niveles = null!;
@@ -153,9 +161,9 @@ public sealed class GraphExplorerWindow : Window
         // dónde viene (2026-08-04). Lista a la izquierda, grafo a la derecha.
         _lista = new ScrollViewer
         {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Content = _edges,
-            Margin = new Thickness(0, 0, 6, 0),
         };
         _grafo = new ScrollViewer
         {
@@ -182,16 +190,20 @@ public sealed class GraphExplorerWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
         };
 
-        var dos = new Grid();
-        dos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
-        dos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        dos.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(_lista, 0);
+        // Los puntos van DEBAJO y ocupando todo: están colocados sobre la pantalla real, así que no
+        // pueden vivir en una columna. El grafo y los niveles se quedan a la derecha, encima.
+        var derecha = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
+        derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(560) });
+        derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(_grafo, 1);
         Grid.SetColumn(_niveles, 2);
-        dos.Children.Add(_lista);
-        dos.Children.Add(_grafo);
-        dos.Children.Add(_niveles);
+        derecha.Children.Add(_grafo);
+        derecha.Children.Add(_niveles);
+
+        var dos = new Grid();
+        dos.Children.Add(_lista);      // capa de puntos, al fondo
+        dos.Children.Add(derecha);     // grafo y niveles, encima
 
         // LA BARRA es lo único sólido y lo único que recibe el ratón: el resto es una capa que se
         // mira, no se toca (ver EsZonaViva y el enganche de WM_NCHITTEST más abajo).
@@ -489,6 +501,12 @@ public sealed class GraphExplorerWindow : Window
         // conocen, y para eso el nombre sobra: un punto por salida lo dice igual y ocupa cien veces
         // menos. El texto no se pierde —vive en el tooltip y en AutomationProperties, así que sigue
         // estando para quien pase el ratón y para cualquier registro—, solo deja de gritar.
+        // Las cajas de UIA vienen en píxeles FÍSICOS y WPF dibuja en unidades independientes del
+        // monitor: sin convertir, con escalado al 125 % cada punto caería un cuarto más allá de su
+        // elemento — cerca, que es peor que lejos, porque parece que funciona.
+        var fuente = PresentationSource.FromVisual(this);
+        Matrix aPantalla = fuente?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+
         foreach (var el in els)
         {
             bool sabida = conocidas.TryGetValue(el.Label, out string? destino);
@@ -505,7 +523,6 @@ public sealed class GraphExplorerWindow : Window
                 BorderBrush = new SolidColorBrush(sabida
                     ? Color.FromArgb(0xAA, 0x66, 0xBB, 0x6A) : Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
                 BorderThickness = new Thickness(1),
-                Margin = new Thickness(2),
                 Cursor = Cursors.Hand,
                 ToolTip = descripcion,
             };
@@ -515,6 +532,15 @@ public sealed class GraphExplorerWindow : Window
             chip.MouseEnter += (_, __) => _overlay.ShowRect(elemento.Bounds);
             chip.MouseLeave += (_, __) => _overlay.HideRect();
             chip.MouseLeftButtonUp += (_, __) => _ = TraverseAsync(elemento, aqui);
+
+            // En la esquina superior izquierda del elemento, no en su centro: el centro es donde
+            // está el texto o el icono del botón —lo que el usuario necesita seguir viendo— y un
+            // punto encima lo taparía. La esquina es de nadie.
+            var caja = el.Bounds;
+            if (caja.Width <= 0 || caja.Height <= 0) continue;
+            var esquina = aPantalla.Transform(new Point(caja.X, caja.Y));
+            Canvas.SetLeft(chip, esquina.X + 2);
+            Canvas.SetTop(chip, esquina.Y + 2);
             _edges.Children.Add(chip);
         }
 
