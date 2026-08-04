@@ -52,6 +52,9 @@ public sealed class GraphExplorerWindow : Window
     };
     /// <summary>Los puntos de las salidas, en rejilla: apilados en columna volverían a ser una lista.</summary>
     private readonly WrapPanel _edges = new() { Orientation = Orientation.Horizontal };
+
+    /// <summary>La tira de niveles del borde derecho: una app por nivel. Ver <see cref="DibujarNiveles"/>.</summary>
+    private StackPanel _niveles = null!;
     private readonly System.Windows.Threading.DispatcherTimer _refresh;
     private string _signature = "";   // para no redibujar (y matar el hover) si nada cambió
     private bool _busy;               // recorriendo una arista: el refresco espera
@@ -173,13 +176,23 @@ public sealed class GraphExplorerWindow : Window
 
         // Los puntos ya no necesitan media pantalla: una tira estrecha a la izquierda basta para
         // decir cuántas salidas hay y cuántas se conocen, y todo lo demás es para el grafo.
+        // LOS NIVELES, pegados al borde derecho. Un nivel es una APP: el grafo de dentro de una
+        // aplicación es un terreno cerrado —sus pantallas, sus botones— y lo que lleva de una a otra
+        // no es una arista más, es un salto de nivel (abrirla, o su icono en la barra de tareas).
+        // Dibujarlo todo junto mezclaba los botones del explorador con los de Configuración y hacía
+        // ilegible lo que sí importa: cómo moverse DENTRO de donde estás (2026-08-04).
+        _niveles = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(6, 0, 0, 0) };
+
         var dos = new Grid();
         dos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
         dos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        dos.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(_lista, 0);
         Grid.SetColumn(_grafo, 1);
+        Grid.SetColumn(_niveles, 2);
         dos.Children.Add(_lista);
         dos.Children.Add(_grafo);
+        dos.Children.Add(_niveles);
 
         // LA BARRA es lo único sólido y lo único que recibe el ratón: el resto es una capa que se
         // mira, no se toca (ver EsZonaViva y el enganche de WM_NCHITTEST más abajo).
@@ -490,14 +503,98 @@ public sealed class GraphExplorerWindow : Window
     /// vuelta atrás, y en un árbol la distancia a la raíz ES la información —cuánto hay que bajar
     /// para llegar—. Un grafo de resortes lo taparía moviendo los nodos a donde quepan.
     /// </summary>
+    /// <summary>
+    /// La tira de niveles del borde derecho: una aplicación por nivel, la actual encendida.
+    ///
+    /// Existe porque el filtrado por app resuelve la legibilidad pero crea una pregunta nueva: si
+    /// solo veo el terreno de donde estoy, ¿qué otros terrenos hay y cómo se salta? La tira los
+    /// enumera en el orden en que se pisaron, así que se lee como lo que es —el camino entre apps—
+    /// y deja claro que pasar de un nivel a otro no es pulsar una arista más: es abrir otra
+    /// aplicación, o su icono en la barra de tareas (2026-08-04).
+    /// </summary>
+    private void DibujarNiveles(string appActual)
+    {
+        _niveles.Children.Clear();
+
+        // Orden de primera aparición: es el camino real que se ha recorrido entre aplicaciones, y
+        // ordenar por nombre o por tamaño lo borraría.
+        var apps = new List<string>();
+        foreach (var (f, t, _) in _ultimaCorrida)
+            foreach (var a in new[] { SurfaceMap.AppDe(f), SurfaceMap.AppDe(t) })
+                if (a.Length > 0 && !apps.Contains(a, StringComparer.OrdinalIgnoreCase)) apps.Add(a);
+        if (appActual.Length > 0 && !apps.Contains(appActual, StringComparer.OrdinalIgnoreCase))
+            apps.Add(appActual);
+        if (apps.Count == 0) return;
+
+        for (int i = 0; i < apps.Count; i++)
+        {
+            string app = apps[i];
+            bool aqui = app.Equals(appActual, StringComparison.OrdinalIgnoreCase);
+            int pantallas = _map.Nodes.Keys.Count(n =>
+                SurfaceMap.AppDe(n).Equals(app, StringComparison.OrdinalIgnoreCase));
+
+            _niveles.Children.Add(new Border
+            {
+                Width = 26, Height = 26,
+                CornerRadius = new CornerRadius(13),
+                Margin = new Thickness(0, 3, 0, 3),
+                Background = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0x66, 0xFF, 0xB3, 0x00) : Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(aqui ? 2 : 1),
+                ToolTip = $"nivel {i + 1}: {app} · {pantallas} pantalla(s) conocidas",
+                Child = new TextBlock
+                {
+                    // Dos letras: es una tira de 26 px, y el nombre entero vive en el tooltip.
+                    Text = app.Length >= 2 ? app[..2].ToUpperInvariant() : app.ToUpperInvariant(),
+                    Foreground = new SolidColorBrush(aqui
+                        ? Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                    FontSize = 9, FontWeight = FontWeights.Bold, FontFamily = new FontFamily("Consolas"),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            });
+
+            // El salto entre niveles se dibuja: dos puntos y una línea, para que se vea que hay que
+            // CRUZAR algo —abrir la app— y no simplemente seguir por el mismo terreno.
+            if (i < apps.Count - 1)
+                _niveles.Children.Add(new System.Windows.Shapes.Rectangle
+                {
+                    Width = 2, Height = 10,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Fill = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+                });
+        }
+    }
+
     private void DibujarGrafo()
     {
         _lienzo.Children.Clear();
-        if (_ultimaCorrida.Count == 0)
+
+        // SOLO EL NIVEL EN EL QUE ESTÁS. La traza cruza aplicaciones —del explorador a Configuración
+        // y vuelta—, y pintarlas juntas mezclaba en un mismo dibujo botones que no comparten
+        // terreno: «Nuevo» del explorador al lado de «Bluetooth», sin que nada dijera que para pasar
+        // de uno a otro hay que abrir otra app. Filtrando por app, la forma de moverse DENTRO de
+        // donde estás se lee sola, y los saltos entre apps se cuentan aparte, en la tira de niveles.
+        string appActual = SurfaceMap.AppDe(_nodoActual.Length > 0
+            ? _nodoActual
+            : (_ultimaCorrida.Count > 0 ? _ultimaCorrida[^1].To : ""));
+        DibujarNiveles(appActual);
+
+        var traza = appActual.Length == 0
+            ? _ultimaCorrida
+            : _ultimaCorrida.Where(h => SurfaceMap.AppDe(h.From).Equals(appActual, StringComparison.OrdinalIgnoreCase)
+                                     && SurfaceMap.AppDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+
+        if (traza.Count == 0)
         {
             _lienzo.Children.Add(new TextBlock
             {
-                Text = "Todavía no hay ninguna corrida automática.\nPulsa «Mapear esta app automáticamente».",
+                Text = appActual.Length > 0
+                    ? $"Todavía no hay recorrido dentro de «{appActual}».\nMuévete por la app o púlsale «Mapear esta app automáticamente»."
+                    : "Todavía no hay ninguna corrida automática.\nPulsa «Mapear esta app automáticamente».",
                 Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
                 FontSize = 11, Margin = new Thickness(8),
             });
@@ -506,14 +603,14 @@ public sealed class GraphExplorerWindow : Window
         }
 
         // Raíz: el origen de la primera arista aprendida (donde arrancó el recorrido).
-        string raiz = _ultimaCorrida[0].From;
+        string raiz = traza[0].From;
         var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
         // Varias pasadas: una arista puede aprenderse antes de que su origen tenga profundidad.
         for (int pasada = 0; pasada < 6; pasada++)
-            foreach (var (f, t, _) in _ultimaCorrida)
+            foreach (var (f, t, _) in traza)
                 if (prof.TryGetValue(f, out int d) && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
                     prof[t] = d + 1;
-        foreach (var (f, t, _) in _ultimaCorrida)
+        foreach (var (f, t, _) in traza)
         {
             if (!prof.ContainsKey(f)) prof[f] = 0;
             if (!prof.ContainsKey(t)) prof[t] = 1;
@@ -554,7 +651,7 @@ public sealed class GraphExplorerWindow : Window
         // mismo botón ya se cruzó desde otra pantalla, así que sabemos a dónde lleva desde aquí.
         // Son las que convierten la estrella en malla, y verlas es la diferencia entre creer que
         // el grafo tiene forma y comprobarlo.
-        var dibujadas = new HashSet<string>(_ultimaCorrida.Select(e => e.From + "\n" + e.To), StringComparer.OrdinalIgnoreCase);
+        var dibujadas = new HashSet<string>(traza.Select(e => e.From + "\n" + e.To), StringComparer.OrdinalIgnoreCase);
         foreach (var nodo in pos.Keys.ToList())
         {
             // PUERTAS SIN CRUZAR: salidas que existen y cuyo destino aún no se conoce. Se dibujan
@@ -600,7 +697,7 @@ public sealed class GraphExplorerWindow : Window
         }
 
         // Aristas primero, para que las cajas queden encima de las líneas.
-        foreach (var (f, t, label) in _ultimaCorrida)
+        foreach (var (f, t, label) in traza)
         {
             if (!pos.TryGetValue(f, out var a) || !pos.TryGetValue(t, out var b)) continue;
             var linea = new System.Windows.Shapes.Line
@@ -689,7 +786,7 @@ public sealed class GraphExplorerWindow : Window
         // atravesable, dejó de exponer su contenido, así que este texto es el único sitio donde
         // comprobar desde fuera qué se está dibujando (2026-08-04).
         if (_crawlCts == null)
-            _status.Text = $"grafo · {pos.Count} pantalla(s), {_ultimaCorrida.Count} ruta(s)"
+            _status.Text = $"grafo · {pos.Count} pantalla(s), {traza.Count} ruta(s)"
                          + (_compacto ? " · vista de puntos (alejado)" : " · vista con nombres");
     }
 
