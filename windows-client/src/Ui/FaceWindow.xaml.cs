@@ -33,6 +33,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     /// <summary>La conversación en vivo, si el mapa está disponible. Ver <see cref="GeminiLive"/>.</summary>
     private GeminiLive? _vivo;
+
+    /// <summary>Hay una frase escribiéndose: los trozos que lleguen la actualizan, no la repiten.</summary>
+    private bool _turnoAbierto;
     private readonly VideoLibrary _videoLibrary = new();
     private readonly GraphConfig _graphConfig = GraphConfig.Load();
     private Updater? _updater;
@@ -206,6 +209,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // quedaba colgada y a los 20 s llegaba «toolCallCancellation»— y desde fuera parecía que
             // el modelo no hacía nada (2026-08-04). Contar lo que haces no puede costarte hacerlo.
             _vivo.Dice += t => Dispatcher.BeginInvoke(() => { AppendChat(t); SetStatus(t); });
+            _vivo.Cerro += () => Dispatcher.BeginInvoke(() => _turnoAbierto = false);
             _vivo.Cambio += viva => Dispatcher.Invoke(() =>
             {
                 MicBtn.Content = viva ? "🔴" : "🎤";
@@ -2111,7 +2115,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         if (string.IsNullOrWhiteSpace(linea)) return;
         var lineas = (Bubble.Text ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
-        lineas.Add(linea);
+
+        // Una frase que se está diciendo REEMPLAZA a su versión anterior en vez de añadirse: llega a
+        // trozos y añadirlos dejaba una columna de palabras sueltas. Se compara por quién habla, y
+        // solo mientras el turno sigue abierto: al cerrarse, `_turnoAbierto` cae y la siguiente
+        // frase del mismo interlocutor empieza línea nueva, que es lo que hace legible el historial.
+        string quien = linea.Length > 3 ? linea[..3] : "";
+        if (_turnoAbierto && (quien == "Ü: " || quien == "Tú:") && lineas.Count > 0
+            && lineas[^1].StartsWith(quien, StringComparison.Ordinal))
+            lineas[^1] = linea;
+        else
+            lineas.Add(linea);
+        _turnoAbierto = true;
         if (lineas.Count > 40) lineas.RemoveRange(0, lineas.Count - 40);
         Bubble.Text = string.Join("\n", lineas);
         ShowTalk();

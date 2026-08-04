@@ -45,6 +45,12 @@ public sealed class GeminiLive : IDisposable
     /// <summary>Arrancó o terminó. La interfaz cambia el icono del micrófono con esto.</summary>
     public event Action<bool>? Cambio;
 
+    /// <summary>El turno se cerró: lo siguiente que se diga empieza en una línea nueva.</summary>
+    public event Action? Cerro;
+
+    private readonly StringBuilder _fraseU = new();
+    private readonly StringBuilder _fraseUsuario = new();
+
     private static string _modelo = "";
 
     /// <summary>
@@ -218,6 +224,8 @@ public sealed class GeminiLive : IDisposable
         final: lo que se está viendo en pantalla y lo que oye tienen que ir juntos.
 
         Cómo trabajar:
+        - Para ABRIR una aplicación, map_open_app. No busques su icono en el mapa: el mapa guarda
+          pantallas, no accesos directos, y un icono aprendido en otra app no estará donde estás.
         - Empieza por map_where_am_i si no sabes dónde estás.
         - map_go_to lleva a una pantalla conocida; map_places dice cuáles hay; map_routes_from dice
           qué se puede hacer desde donde estás.
@@ -230,6 +238,11 @@ public sealed class GeminiLive : IDisposable
 
         Si una herramienta responde que no actuó, dilo en voz alta y explica por qué. No lo maquilles
         ni sigas como si hubiera funcionado.
+
+        Y no repitas la misma llamada con los mismos argumentos más de dos veces: si falló dos veces
+        va a fallar la tercera. Prueba otra vía o cuéntale al usuario qué está pasando y qué
+        necesitas de él. Insistir en silencio es lo peor que puedes hacer con las manos puestas en
+        el ordenador de alguien.
         """;
 
     /// <summary>
@@ -261,7 +274,12 @@ public sealed class GeminiLive : IDisposable
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
             ("at", "La superficie a la que hay que volver después."),
             ("choose", "La opción a pulsar. Vacío = solo si hay una única salida posible.")),
-        Fn("map_learn_app", "Trae una aplicación al frente y la mapea entera ella sola.",
+        Fn("map_open_app", "ABRE una aplicación (o la trae al frente si ya estaba) y dice en qué pantalla "
+            + "quedas. Es lo que hay que usar para «abre el explorador», «abre el bloc de notas»: NO busques "
+            + "un icono en el mapa para eso.",
+            ("app", "El proceso, por ejemplo «explorer», «notepad», «chrome».")),
+        Fn("map_learn_app", "Recorre una aplicación entera y aprende sus pantallas. Tarda; úsala solo si hace "
+            + "falta conocer una app que el mapa no tiene, no para abrirla.",
             ("app", "El proceso, por ejemplo «explorer» o «notepad».")),
     };
 
@@ -433,15 +451,34 @@ public sealed class GeminiLive : IDisposable
             // cola de audio, y seguir diciéndolo es la sensación exacta de no ser escuchado.
             if (contenido.TryGetProperty("interrupted", out _)) _audio.Callar();
 
+            // LA TRANSCRIPCIÓN LLEGA A TROZOS, no por frases: «Voy a», « intentar», « crear»… Pintar
+            // cada trozo como una línea propia convertía la conversación en una columna de palabras
+            // sueltas, cada una con su «Ü:» delante (2026-08-04, visto en pantalla). Se acumula y se
+            // manda la frase entera cada vez; la carita reemplaza la última línea en vez de añadir,
+            // que es lo que hace que se vea escribiéndose en directo en lugar de a saltos.
             if (contenido.TryGetProperty("inputTranscription", out var mio)
                 && mio.TryGetProperty("text", out var tMio))
-                Dice?.Invoke($"Tú: {tMio.GetString()}");
+            {
+                _fraseUsuario.Append(tMio.GetString());
+                Dice?.Invoke($"Tú: {_fraseUsuario}");
+            }
 
             if (contenido.TryGetProperty("outputTranscription", out var suyo)
                 && suyo.TryGetProperty("text", out var tSuyo))
             {
-                Dice?.Invoke($"Ü: {tSuyo.GetString()}");
-                LogBus.Log("voz-viva", $"Ü dice: {tSuyo.GetString()}");
+                _fraseU.Append(tSuyo.GetString());
+                Dice?.Invoke($"Ü: {_fraseU}");
+            }
+
+            // Turno cerrado: lo dicho queda fijo y la siguiente frase empieza línea nueva.
+            if (contenido.TryGetProperty("turnComplete", out _)
+                || contenido.TryGetProperty("generationComplete", out _))
+            {
+                if (_fraseU.Length > 0) LogBus.Log("voz-viva", $"Ü dijo: {_fraseU}");
+                if (_fraseUsuario.Length > 0) LogBus.Log("voz-viva", $"usuario dijo: {_fraseUsuario}");
+                _fraseU.Clear();
+                _fraseUsuario.Clear();
+                Cerro?.Invoke();
             }
 
             if (contenido.TryGetProperty("modelTurn", out var turno)

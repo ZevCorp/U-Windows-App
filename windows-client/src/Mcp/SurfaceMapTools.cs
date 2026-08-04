@@ -212,6 +212,75 @@ public sealed class SurfaceMapTools
     /// quiere aprender y que el sistema se encargue del resto es la forma correcta: la intención
     /// la pone quien pide, no el azar del escritorio.
     /// </summary>
+    /// <summary>
+    /// Abre una aplicación (o la trae al frente si ya estaba) y dice dónde quedamos.
+    ///
+    /// Faltaba, y se notó en cuanto la voz tuvo manos: al pedirle «abre el explorador de archivos»,
+    /// el modelo no tenía con qué, así que buscó en el mapa algo que sonara a explorador y acabó
+    /// pulsando un icono de la barra de tareas aprendido desde OTRA app — que ni existía allí
+    /// (2026-08-04). Aprender una app entera con map_learn_app tampoco servía: eso mapea, tarda, y
+    /// no es lo que se pidió. Abrir es un gesto propio y merecía su primitiva.
+    /// </summary>
+    private string OpenApp(string app)
+    {
+        if (app.Length == 0) return "falta `app`: qué abrir (por ejemplo «explorer» o «notepad»)";
+        app = app.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim();
+        _ultimaApp = app;
+
+        if (!AsegurarFoco(app))
+        {
+            LogBus.Log("mapa-mcp", $"«{app}» no estaba delante; se abre");
+            AppAligner.FocusOrLaunch(app);
+            if (!AsegurarFoco(app))
+                return $"no pude abrir «{app}» ni traerla al frente; ahora hay «{AppEnFrente()}»";
+        }
+
+        EsperarPantallaLista(2000);
+        var loc = _where();
+        string donde = loc?.Id ?? "";
+
+        // EL PROCESO NO ES LA APLICACIÓN, y en Windows el caso que lo demuestra es el explorador:
+        // explorer.exe SIEMPRE está vivo porque ES el escritorio y la barra de tareas. Enfocar el
+        // proceso te deja en «program-manager» —el escritorio— y desde ahí el modelo se puso a
+        // buscar accesos directos entre los iconos, que no es lo que se le pidió (2026-08-04).
+        // «Abrir el explorador» significa una VENTANA de archivos, así que si no hay ninguna, se
+        // abre; y si ya la había, AsegurarFoco ya nos habrá dejado dentro.
+        if (EsEscritorio(donde))
+        {
+            LogBus.Log("mapa-mcp", $"«{donde}» es el escritorio, no una ventana de {app}: se abre una");
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(app) { UseShellExecute = true }); }
+            catch (Exception e) { return $"no pude abrir una ventana de «{app}»: {e.Message}"; }
+
+            for (int i = 0; i < 30 && EsEscritorio(donde); i++)
+            {
+                System.Threading.Thread.Sleep(120);
+                donde = _where()?.Id ?? "";
+            }
+            if (EsEscritorio(donde))
+                return $"abrí «{app}» pero sigo viendo el escritorio; puede que la ventana tarde en salir";
+            EsperarPantallaLista(1500);
+        }
+        if (donde.Length > 0) { Anotar("", donde); ObservarAqui(donde); }
+        return donde.Length > 0
+            ? $"«{app}» está delante. Estás en «{donde}»."
+            : $"«{app}» está delante, pero aún no sé identificar la pantalla.";
+    }
+
+    /// <summary>
+    /// ¿Esta superficie es el escritorio y no una ventana de verdad?
+    ///
+    /// Se compara por CONTENIDO y no por final de cadena porque al escritorio le llega su sufijo de
+    /// sección como a cualquier pantalla: con un icono seleccionado, la identidad es
+    /// «program-manager#imágenes-acceso-directo», y comparar por el final no lo reconocía. Se daba
+    /// el escritorio por una ventana del explorador y el modelo se ponía a pasear entre los accesos
+    /// directos buscando Documentos (2026-08-04).
+    /// </summary>
+    private static bool EsEscritorio(string id) =>
+        id.Length == 0
+        || id.Contains("/program-manager", StringComparison.OrdinalIgnoreCase)
+        || id.Contains("/ventana", StringComparison.OrdinalIgnoreCase)
+        || id.StartsWith("uia://desktop", StringComparison.OrdinalIgnoreCase);
+
     private string LearnApp(string app)
     {
         if (app.Length == 0)
@@ -538,7 +607,7 @@ public sealed class SurfaceMapTools
 
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
-        or "map_type" or "map_unblock" or "map_run" or "map_learn_app";
+        or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -560,6 +629,7 @@ public sealed class SurfaceMapTools
             "map_take" => Take(A("exit"), A("action"), A("at")),
             "map_type" => Type(A("text"), A("target"), A("at")),
             "map_unblock" => Unblock(A("at"), A("choose")),
+            "map_open_app" => OpenApp(A("app")),
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
             _ => $"herramienta de mapa no soportada: {tool}",
