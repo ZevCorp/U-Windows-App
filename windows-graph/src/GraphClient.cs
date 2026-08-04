@@ -65,6 +65,19 @@ public sealed class GraphClient
         _http.DefaultRequestHeaders.Remove("X-API-Key");
         if (!string.IsNullOrWhiteSpace(config.ApiKey))
             _http.DefaultRequestHeaders.Add("X-API-Key", config.ApiKey);
+
+        // Atribución del consumo de IA. La API key dice QUÉ aplicación llama;
+        // estas cabeceras dicen QUIÉN, para que el gasto no acabe en el cajón
+        // de «sin atribuir». Graph las verifica contra `profiles`: son una
+        // pista para buscar la identidad, no una afirmación en la que confíe.
+        _http.DefaultRequestHeaders.Remove("X-Miracle-App");
+        _http.DefaultRequestHeaders.Add("X-Miracle-App", "windows_app");
+        _http.DefaultRequestHeaders.Remove("X-Miracle-Device-Id");
+        if (!string.IsNullOrWhiteSpace(config.AppId))
+            _http.DefaultRequestHeaders.Add("X-Miracle-Device-Id", config.AppId);
+        _http.DefaultRequestHeaders.Remove("X-Miracle-User-Email");
+        if (!string.IsNullOrWhiteSpace(config.OperatorEmail))
+            _http.DefaultRequestHeaders.Add("X-Miracle-User-Email", config.OperatorEmail);
     }
 
     private string Url(string path) => $"{_config.BaseUrl.TrimEnd('/')}{path}";
