@@ -873,6 +873,62 @@ public sealed class GraphExplorerWindow : Window
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    private const int SW_RESTORE = 9;
+
+    /// <summary>
+    /// Traer una ventana al frente DE VERDAD, y comprobarlo.
+    /// </summary>
+    /// <remarks>
+    /// Windows no deja que un proceso que no está delante le robe el primer plano a otro: la llamada
+    /// devuelve éxito y lo único que hace es parpadear su botón en la barra de tareas. Y nuestra
+    /// capa nunca está delante —lleva NOACTIVATE a propósito— así que caía siempre en ese caso.
+    ///
+    /// La salida documentada es engancharse a la cola de entrada del hilo que SÍ está delante: para
+    /// Windows pasan a ser el mismo «usuario», y el cambio se permite. Se desengancha enseguida,
+    /// porque compartir cola de entrada con otra app más tiempo del necesario es pedir un bloqueo.
+    ///
+    /// Y se comprueba el resultado mirando quién está delante DESPUÉS, no lo que devolvió la
+    /// llamada. El log decía «al frente» las diez veces mientras la ventana no se movía
+    /// (2026-08-04): aceptado no es ejecutado, que es regla vieja de esta casa y se me escapó.
+    /// </remarks>
+    private static bool TraerAlFrente(IntPtr h)
+    {
+        if (h == IntPtr.Zero) return false;
+        try
+        {
+            if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+
+            uint mio = GetCurrentThreadId();
+            uint suyo = GetWindowThreadProcessId(GetForegroundWindow(), out _);
+            bool enganchado = mio != suyo && AttachThreadInput(mio, suyo, true);
+            try { SetForegroundWindow(h); BringWindowToTop(h); }
+            finally { if (enganchado) AttachThreadInput(mio, suyo, false); }
+
+            for (int i = 0; i < 12; i++)
+            {
+                if (GetForegroundWindow() == h) return true;
+                System.Threading.Thread.Sleep(40);
+            }
+            return false;
+        }
+        catch { return false; }
+    }
+
     /// <summary>
     /// Traer al frente el nivel pedido.
     ///
@@ -887,7 +943,17 @@ public sealed class GraphExplorerWindow : Window
         try
         {
             if (nivel.Equals("escritorio", StringComparison.OrdinalIgnoreCase))
-                ok = Actions.Gestures.ShowDesktop();
+            {
+                // NADA DE ATAJOS DE TECLADO AQUÍ. Mostrar el escritorio se hacía con un Win+D
+                // sintético, y esto se pulsa MANTENIENDO Ctrl+Shift —es la única forma de que la
+                // capa acepte el ratón—, así que lo que llegaba al sistema era Ctrl+Shift+Win+D:
+                // un atajo que no existe, y de ahí el pitido de error (2026-08-04). El shell lo sabe
+                // hacer por COM, sin teclas y sin importar qué haya oprimido el usuario.
+                var shell = Activator.CreateInstance(Type.GetTypeFromProgID("Shell.Application")!);
+                shell?.GetType().InvokeMember("MinimizeAll",
+                    System.Reflection.BindingFlags.InvokeMethod, null, shell, null);
+                ok = shell != null;
+            }
             else if (nivel.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase))
             {
                 // Una ventana de archivos de verdad: CabinetWClass. Si no hay ninguna abierta, se
@@ -895,7 +961,7 @@ public sealed class GraphExplorerWindow : Window
                 var ventana = AutomationElement.RootElement.FindFirst(TreeScope.Children,
                     new PropertyCondition(AutomationElement.ClassNameProperty, "CabinetWClass"));
                 if (ventana != null)
-                    ok = SetForegroundWindow(new IntPtr(ventana.Current.NativeWindowHandle));
+                    ok = TraerAlFrente(new IntPtr(ventana.Current.NativeWindowHandle));
                 else
                 {
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe")
@@ -904,8 +970,16 @@ public sealed class GraphExplorerWindow : Window
                 }
             }
             else
-                ok = AppAligner.FocusOrLaunch(
-                    nivel.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim());
+            {
+                // Se busca su ventana y se trae con el enganche; FocusOrLaunch solo como respaldo
+                // para abrirla si no hay ninguna.
+                string proc = nivel.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim();
+                var abierto = System.Diagnostics.Process.GetProcessesByName(proc)
+                    .FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
+                ok = abierto != null
+                    ? TraerAlFrente(abierto.MainWindowHandle)
+                    : AppAligner.FocusOrLaunch(proc);
+            }
         }
         catch (Exception e) { LogBus.Log("explorador", $"al ir a «{nivel}»: {e.Message}"); }
         LogBus.Log("explorador", $"nivel pulsado: «{nivel}» → {(ok ? "al frente" : "NO se pudo")}");
