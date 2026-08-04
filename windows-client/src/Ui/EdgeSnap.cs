@@ -13,11 +13,29 @@ namespace U.WindowsClient.Ui;
 /// </summary>
 public static class EdgeSnap
 {
-    /// <summary>Por debajo de esto el gesto no tiene dirección: manda la cercanía, no el impulso.</summary>
-    private const double DireccionMinimaDip = 260;
+    /// <summary>
+    /// Velocidad a partir de la cual un gesto cuenta como LANZAMIENTO y puede mandar a Ü al lado
+    /// contrario. Estaba en 260 y era demasiado poco: cualquier arrastre normal pasa de ahí sin
+    /// querer, así que reposicionar la barra la cruzaba de pantalla sola. Un lanzamiento de verdad
+    /// —el gesto de tirarla— pasa de 900 sin esfuerzo.
+    /// </summary>
+    private const double LanzamientoDip = 900;
 
-    /// <summary>Rigidez del muelle. Ver <see cref="ThrowEase"/>: es también el tope de velocidad sin rebote.</summary>
-    private const double Rigidez = 6.5;
+    /// <summary>
+    /// Rigidez del muelle. Bajada de 6.5 a 4.5 porque el muelle duro concentraba el viaje al
+    /// principio: con 6.5 el 73 % del recorrido se hacía en el primer 20 % del tiempo, y eso no se lee
+    /// como velocidad sino como un SALTO con una cola lenta detrás. A 4.5 el movimiento se reparte y
+    /// se ve frenar.
+    /// </summary>
+    private const double Rigidez = 4.5;
+
+    /// <summary>
+    /// Tope de la pendiente inicial. Es lo que de verdad decidía la sensación de «se mueve
+    /// demasiado»: dejar que la velocidad del cursor entre entera hace que la ventana salga disparada.
+    /// Con este tope se conserva la continuidad con el gesto —sales moviéndote, no arrancas de cero—
+    /// pero sin que el arranque se coma el recorrido.
+    /// </summary>
+    private const double PendienteMaxima = 2.2;
 
     /// <summary>¿En qué mitad de la pantalla está la ventana ahora mismo?</summary>
     public static bool EstáALaIzquierda(Window win)
@@ -31,16 +49,17 @@ public static class EdgeSnap
     /// encima del trabajo del usuario, que es justo donde no tiene que estar. La velocidad no decide
     /// SI se va al borde; decide a CUÁL y con cuánto ímpetu llega.
     ///
-    /// **A qué lado.** Si se lanzó con intención (más de <see cref="DireccionMinimaDip"/>), manda la
-    /// DIRECCIÓN del lanzamiento aunque el borde contrario esté más cerca — tirar hacia la derecha y
-    /// que se vaya a la izquierda porque estaba a tres píxeles se siente como que no te hizo caso.
-    /// Si se movió despacio, manda el borde más próximo.
+    /// **A qué lado.** Solo un LANZAMIENTO cruza de lado: hace falta pasar de
+    /// <see cref="LanzamientoDip"/> y que el gesto sea claramente horizontal. Cualquier otra cosa
+    /// —arrastrarla para recolocarla, moverla en vertical— la deja en el borde que tenga más cerca.
+    /// Con el umbral bajo que había antes, reposicionar la barra la mandaba al otro lado sola.
     ///
-    /// **La altura es del usuario.** Queda donde la dejó, más lo que proyecte el impulso vertical.
+    /// **La altura es del usuario.** Queda donde la dejó, con una pizca de proyección del impulso.
     /// Solo el lado es innegociable.
     ///
-    /// **Cuánto tarda.** Proporcional a la distancia, pero acortado si venía rápido: mantener una
-    /// duración larga con mucha velocidad obligaría al muelle a pasarse del borde y volver.
+    /// **Cuánto tarda.** Proporcional a la distancia y nada más. Antes se acortaba con la velocidad
+    /// —un lanzamiento fuerte daba 200 ms— y por eso parecía que se teletransportaba; ahora el ímpetu
+    /// se nota en la FORMA de la curva, no en recortar el viaje.
     /// </summary>
     /// <param name="vx">Velocidad horizontal al soltar, en DIP/s. 0 si no se midió.</param>
     /// <param name="alLlegar">Se llama con el DESTINO (no con la posición actual, que está a medio camino).</param>
@@ -52,23 +71,26 @@ public static class EdgeSnap
         double bordeIzq = wa.Left;
         double bordeDer = Math.Max(wa.Left, wa.Right - w);
 
-        bool aLaDerecha = Math.Abs(vx) >= DireccionMinimaDip
-            ? vx > 0                                            // lo lanzaste: manda hacia dónde iba
-            : win.Left + w / 2 >= (wa.Left + wa.Right) / 2;     // lo posaste: manda dónde está
+        // Cruzar de lado exige las dos cosas: fuerza Y que el gesto vaya de verdad en horizontal.
+        // Sin la segunda, arrastrarla hacia abajo con un poco de deriva lateral la cruzaba entera.
+        bool lanzada = Math.Abs(vx) >= LanzamientoDip && Math.Abs(vx) > Math.Abs(vy);
+
+        bool aLaDerecha = lanzada
+            ? vx > 0                                            // la lanzaste: manda hacia dónde iba
+            : win.Left + w / 2 >= (wa.Left + wa.Right) / 2;     // la posaste: manda dónde está
 
         double destLeft = aLaDerecha ? bordeDer : bordeIzq;
-        double destTop = Math.Clamp(win.Top + vy * 0.12, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
+        // Proyección vertical corta (antes 0.12): con la larga, un gesto rápido la mandaba al otro
+        // extremo de la pantalla y el usuario la perdía de vista.
+        double destTop = Math.Clamp(win.Top + vy * 0.05, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
 
         double dx = destLeft - win.Left, dy = destTop - win.Top;
         double dist = Math.Sqrt(dx * dx + dy * dy);
 
         if (dist < 0.5) { alLlegar?.Invoke(destLeft, destTop); return; }   // ya estaba ahí
 
-        double rapidez = Math.Sqrt(vx * vx + vy * vy);
-        double ms = Math.Clamp(300 + dist * 0.55, 320, 820);
-        // Tope por velocidad: la v₀ normalizada (rapidez·T/dist) tiene que quedar bajo la rigidez.
-        if (rapidez > 1) ms = Math.Min(ms, Rigidez * dist / rapidez * 1000);
-        ms = Math.Max(ms, 170);   // por debajo de esto ya no es un movimiento, es un salto
+        // Solo distancia. Un recorrido corto se resuelve rápido, uno largo se ve viajar.
+        double ms = Math.Clamp(300 + dist * 0.62, 280, 900);
         var dur = new Duration(TimeSpan.FromMilliseconds(ms));
         double segundos = ms / 1000.0;
 
@@ -90,7 +112,10 @@ public static class EdgeSnap
         double pendiente = Math.Abs(d) < 1 ? 0 : v * segundos / d;
         // Negativa = el impulso iba al revés del destino (te pasaste y vuelve). En física pura habría
         // que arrancar hacia atrás; en pantalla se lee como un tirón, así que se ignora.
-        return new ThrowEase { InitialSlope = Math.Max(0, pendiente), Stiffness = Rigidez };
+        // Y con techo: la continuidad con el gesto se nota mucho antes de dejar entrar la velocidad
+        // entera, y dejarla entera es lo que hacía que saliera disparada.
+        pendiente = Math.Clamp(pendiente, 0, PendienteMaxima);
+        return new ThrowEase { InitialSlope = pendiente, Stiffness = Rigidez };
     }
 
     private static void Animar(Window win, DependencyProperty prop, double to, Duration dur, IEasingFunction ease) =>

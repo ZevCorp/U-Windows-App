@@ -122,11 +122,16 @@ public sealed class FaceGestures
             double dt = now - _lastTick;
             if (dt > 0)
             {
-                // Velocidad instantánea suavizada un poco con la anterior.
+                // Velocidad instantánea, MUY suavizada con la anterior.
+                //
+                // El peso importa más de lo que parece: con la instantánea mandando (0.6), un
+                // temblor de 5 px en el último fotograma antes de soltar da ~500 DIP/s, y esa cifra
+                // —que no describe el gesto, describe el pulso de la mano— era la que decidía si Ü
+                // cruzaba la pantalla. Ahora manda la trayectoria (0.65) y no el último instante.
                 double vx = (c.X - _lastCursor.X) / dt * 1000.0;
                 double vy = (c.Y - _lastCursor.Y) / dt * 1000.0;
-                _vx = _vx * 0.4 + vx * 0.6;
-                _vy = _vy * 0.4 + vy * 0.6;
+                _vx = _vx * 0.65 + vx * 0.35;
+                _vy = _vy * 0.65 + vy * 0.35;
                 _lastCursor = c;
                 _lastTick = now;
             }
