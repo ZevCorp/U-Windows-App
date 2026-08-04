@@ -1159,26 +1159,16 @@ public sealed class GraphExplorerWindow : Window
         // observado por el usuario). No hay que aprenderlo: el mapa ya lo deduce en cuanto se cruza
         // UNA vez desde donde sea. Lo que faltaba era decirlo en el dibujo.
         //
-        // Se reconoce por lo que es: una salida que lleva al mismo sitio con el mismo botón desde
-        // DOS pantallas distintas ya no describe una pantalla, describe la aplicación.
-        var vecesPorSalida = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var n in prof.Keys.ToList())
-            foreach (var h in _map.ExitsFrom(n))
-            {
-                if (SurfaceMap.EsPuerta(h.To) || h.Info.Label.Length == 0) continue;
-                if (!NivelDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase)) continue;
-                string clave = h.Info.Label + "\n" + h.To;
-                if (!vecesPorSalida.TryGetValue(clave, out var origenes))
-                    vecesPorSalida[clave] = origenes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                origenes.Add(h.From);
-            }
-
+        // QUIÉN ES CROMO LO DICE EL MAPA, no este dibujo. Aquí se recontaba por cuenta propia y solo
+        // sobre los nodos que había delante, así que una salida que el mapa sabe que está en toda la
+        // app podía no llegar al umbral localmente y caer una fila más abajo: en Configuración,
+        // «Windows Update» aparecía debajo estando cruzada desde las once pantallas (2026-08-04,
+        // visto por el usuario). Otra vez dos respuestas para la misma pregunta — y la de aquí era
+        // la peor informada, porque solo veía un trozo.
         var cromo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);   // destino → etiqueta
-        foreach (var kv in vecesPorSalida.Where(k => k.Value.Count >= 2))
-        {
-            int corte = kv.Key.IndexOf('\n');
-            cromo[kv.Key[(corte + 1)..]] = kv.Key[..corte];
-        }
+        foreach (var h in _map.CromoDe(SurfaceMap.AppDe(_nodoActual)))
+            if (NivelDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
+                cromo[h.To] = h.Info.Label;
 
         // El centro del nivel: la aplicación. Los hermanos cuelgan de él, a un solo salto.
         string centro = cromo.Count > 0 ? $"nivel://{appActual}" : "";

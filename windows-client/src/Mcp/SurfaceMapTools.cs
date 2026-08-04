@@ -1049,9 +1049,14 @@ public sealed class SurfaceMapTools
         // «¿qué puedo hacer aquí?») y mezclarlas obliga al modelo a adivinar cuál es cuál.
         var sb = new System.Text.StringBuilder($"Desde «{desde}»:\n");
         foreach (var h in salidas.Where(x => !x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)))
+        {
+            // Se distingue lo cruzado DESDE AQUÍ de lo que está disponible porque la app lo tiene en
+            // todas sus pantallas. Las dos sirven para navegar; solo una se comprobó en este sitio.
+            string origen = h.Info.Nivel == SurfaceMap.NivelCromo ? "  ·  del nivel (en toda la app)" : "";
             sb.AppendLine(h.Info.Selector.Length > 0
-                ? $"  → {h.To}   pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces)"
+                ? $"  → {h.To}   pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces){origen}"
                 : $"  → {h.To}   (observado {h.Info.Count} vez/veces, pero NO se sabe con qué acción)");
+        }
 
         var acciones = salidas.Where(x => x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
                                        && x.Info.Selector.Length > 0).ToList();

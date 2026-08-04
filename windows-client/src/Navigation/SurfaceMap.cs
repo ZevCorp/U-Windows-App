@@ -622,7 +622,14 @@ public sealed class SurfaceMap
         foreach (var h in CromoDe(AppDe(s)))
             if (h.Info.Label.Length > 0 && !vistas.Contains(h.Info.Label)
                 && !string.Equals(h.To, s, StringComparison.OrdinalIgnoreCase))   // no lleva a sí misma
-                propias.Add(new Hop(s, h.To, h.Info));
+                // Lo heredado se MARCA. Sin marca, «cruzado desde aquí» y «disponible porque la app
+                // lo tiene en todas partes» se leen igual desde fuera, y eso no es un detalle de
+                // presentación: perdí la forma de medir cuántas pantallas habían cruzado algo de
+                // verdad, justo después de escribir la herencia (2026-08-04). Lo que se hereda hay
+                // que poder distinguirlo de lo que se comprobó, o el sistema deja de saber lo que
+                // sabe. Y al modelo le sirve igual: una salida heredada es fiable pero no probada
+                // desde esta pantalla concreta.
+                propias.Add(new Hop(s, h.To, Heredada(h.Info)));
 
         return propias.OrderByDescending(h => h.Info.Count).ToList();
     }
@@ -662,6 +669,18 @@ public sealed class SurfaceMap
         _cromo[app] = cromo;
         return cromo;
     }
+
+    /// <summary>Nombre del nivel que el sistema deduce solo: lo que está en todas las pantallas.</summary>
+    public const string NivelCromo = "cromo";
+
+    /// <summary>Copia de una arista marcada como heredada del nivel. Copia y no la misma: escribir
+    /// en el original convertiría en «heredada» la arista real de la pantalla donde sí se cruzó.</summary>
+    private static EdgeInfo Heredada(EdgeInfo o) => new()
+    {
+        Count = o.Count, Selector = o.Selector, Label = o.Label, ControlType = o.ControlType,
+        Alternatives = o.Alternatives, ClickPos = o.ClickPos, Explored = o.Explored,
+        ActionType = o.ActionType, Kind = o.Kind, Nivel = NivelCromo,
+    };
 
     private readonly Dictionary<string, List<Hop>> _cromo = new(StringComparer.OrdinalIgnoreCase);
     private int _cromoVersion = -1;
