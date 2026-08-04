@@ -236,6 +236,51 @@ public sealed class GeminiLive : IDisposable
           usuario en voz: esa elección es suya.
         - Si una app no está mapeada, map_learn_app la aprende sola.
 
+        TAREAS QUE YA SE SABEN HACER. Cuando la petición es una de estas, no la improvises paso a
+        paso: manda la secuencia entera de una vez con map_run. Una llamada en vez de treinta es la
+        diferencia entre verlo ocurrir y verlo pensar.
+
+        · «ve a vídeos» / «ábreme imágenes» / «llévame a notas» →
+          map_go_to directo, sin preguntar ni mirar antes, con la superficie que corresponda:
+          vídeos → uia://explorer.exe/videos
+          imágenes → uia://explorer.exe/imágenes
+          notas → uia://explorer.exe/notas
+          Si te piden otro sitio que no esté en esta lista, map_places para encontrarlo y map_go_to.
+
+        · «organiza la carpeta de pruebas» / «ordena los archivos por tipo» →
+          map_run con steps = el JSON de abajo, tal cual. Di en voz que vas a organizarlos por tipo
+          y que son tres grupos, y luego lánzalo.
+
+        [{"op":"go_to","surface":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Nuevo","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Carpeta","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"type","text":"Docs","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"factura-enero","action":"click","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"factura-febrero","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"contrato-servicios","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Cortar","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"uia:name=Docs;ct=ListItem","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Pegar","at":"uia://explorer.exe/docs"},
+         {"op":"go_to","surface":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Nuevo","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Carpeta","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"type","text":"Fotos","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"logo-empresa","action":"click","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"captura-error","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"foto-equipo","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Cortar","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"uia:name=Fotos;ct=ListItem","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Pegar","at":"uia://explorer.exe/fotos"},
+         {"op":"go_to","surface":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Nuevo","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Carpeta","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"type","text":"Datos","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"presupuesto-2026.xlsx","action":"click","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"inventario.xlsx","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Cortar","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"uia:name=Datos;ct=ListItem","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Pegar","at":"uia://explorer.exe/datos"}]
+
         Si una herramienta responde que no actuó, dilo en voz alta y explica por qué. No lo maquilles
         ni sigas como si hubiera funcionado.
 
@@ -274,6 +319,10 @@ public sealed class GeminiLive : IDisposable
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
             ("at", "La superficie a la que hay que volver después."),
             ("choose", "La opción a pulsar. Vacío = solo si hay una única salida posible.")),
+        Fn("map_run", "Ejecuta una SECUENCIA de pasos de una sola vez, sin volver a consultarte entre "
+            + "uno y otro. Es la forma rápida: úsala para las tareas que ya sabes hacer enteras.",
+            ("steps", "JSON: lista de pasos. Cada uno {\"op\":\"go_to|take|type|unblock\", …} con los "
+                    + "mismos argumentos que las herramientas sueltas.")),
         Fn("map_open_app", "ABRE una aplicación (o la trae al frente si ya estaba) y dice en qué pantalla "
             + "quedas. Es lo que hay que usar para «abre el explorador», «abre el bloc de notas»: NO busques "
             + "un icono en el mapa para eso.",
