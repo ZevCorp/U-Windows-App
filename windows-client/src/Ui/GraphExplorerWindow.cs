@@ -169,7 +169,12 @@ public sealed class GraphExplorerWindow : Window
         // no es una arista más, es un salto de nivel (abrirla, o su icono en la barra de tareas).
         // Dibujarlo todo junto mezclaba los botones del explorador con los de Configuración y hacía
         // ilegible lo que sí importa: cómo moverse DENTRO de donde estás (2026-08-04).
-        _niveles = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(6, 0, 0, 0) };
+        _niveles = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Margin = new Thickness(6, 0, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
 
         var dos = new Grid();
         dos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
@@ -500,6 +505,48 @@ public sealed class GraphExplorerWindow : Window
             + "\nRecorre la app abriendo lo que encuentra. Solo navegación: nunca pulsa botones ni menús.";
     }
 
+    /// <summary>
+    /// Lo que DIFERENCIA a un nodo de los demás que hay en pantalla.
+    ///
+    /// Todos los nodos de un nivel comparten el principio —son la misma app, muchas veces la misma
+    /// pantalla con distinta sección— así que enseñar la ruta entera y recortar por el final dejaba
+    /// diez cajas idénticas que ponían «explorer.exe/program-manager…»: el texto ocupaba sitio para
+    /// no decir nada, y lo único que las distinguía era justo lo que se recortaba (2026-08-04).
+    /// Se quita el prefijo que todos comparten y se enseña el resto.
+    /// </summary>
+    private static string Distintivo(string id, string prefijoComun)
+    {
+        string corto = Corto(id);
+        if (prefijoComun.Length > 0 && corto.StartsWith(prefijoComun, StringComparison.Ordinal))
+        {
+            string resto = corto[prefijoComun.Length..].TrimStart('/', '#', '-');
+            if (resto.Length > 0) return resto;
+        }
+        // Sin resto —es el propio nodo del prefijo— se enseña su último tramo, que es su nombre.
+        int corte = corto.LastIndexOfAny(new[] { '/', '#' });
+        return corte >= 0 && corte < corto.Length - 1 ? corto[(corte + 1)..] : corto;
+    }
+
+    /// <summary>El principio que TODOS comparten, cortado en el último separador para no partir palabras.</summary>
+    private static string PrefijoComun(IEnumerable<string> ids)
+    {
+        var lista = ids.Select(Corto).ToList();
+        if (lista.Count < 2) return "";
+
+        string primero = lista[0];
+        int n = primero.Length;
+        foreach (var s in lista.Skip(1))
+        {
+            int i = 0;
+            while (i < n && i < s.Length && primero[i] == s[i]) i++;
+            n = i;
+            if (n == 0) return "";
+        }
+        string comun = primero[..n];
+        int corte = comun.LastIndexOfAny(new[] { '/', '#' });
+        return corte >= 0 ? comun[..corte] : "";
+    }
+
     private static string Corto(string id)
     {
         int i = id.IndexOf("://", StringComparison.Ordinal);
@@ -608,10 +655,26 @@ public sealed class GraphExplorerWindow : Window
             int pantallas = _map.Nodes.Keys.Count(n =>
                 SurfaceMap.AppDe(n).Equals(app, StringComparison.OrdinalIgnoreCase));
 
+            // AL PASAR POR ENCIMA SE ABRE Y ENSEÑA EL NOMBRE. El tooltip no valía: esta ventana
+            // nunca se activa —es su gracia—, y sin activarse WPF no llega a mostrarlo, así que el
+            // nombre completo quedaba escrito en un sitio al que no se podía llegar (2026-08-04).
+            // Expandirse es además más honesto con lo que la tira es: no un menú que se despliega,
+            // sino una fila de niveles que se ensancha cuando la miras.
+            var nombre = new TextBlock
+            {
+                Text = app,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xFF, 0xFF)),
+                FontSize = 10, FontFamily = new FontFamily("Consolas"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(6, 0, 4, 0),
+                Visibility = Visibility.Collapsed,
+            };
+
             var nivel = new Border
             {
                 Width = 26, Height = 26,
                 Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Right,   // al ensancharse, crece hacia la izquierda
                 CornerRadius = new CornerRadius(13),
                 Margin = new Thickness(0, 3, 0, 3),
                 Background = new SolidColorBrush(aqui
@@ -621,16 +684,32 @@ public sealed class GraphExplorerWindow : Window
                 BorderThickness = new Thickness(aqui ? 2 : 1),
                 ToolTip = $"nivel {i + 1}: {app} · {pantallas} pantalla(s) conocidas"
                         + (aqui ? " · estás aquí" : " · Ctrl+Shift y clic para ir"),
-                Child = new TextBlock
-                {
-                    // Dos letras: es una tira de 26 px, y el nombre entero vive en el tooltip.
-                    Text = app.Length >= 2 ? app[..2].ToUpperInvariant() : app.ToUpperInvariant(),
-                    Foreground = new SolidColorBrush(aqui
-                        ? Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
-                    FontSize = 9, FontWeight = FontWeights.Bold, FontFamily = new FontFamily("Consolas"),
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
+            };
+
+            var dentro = new StackPanel { Orientation = Orientation.Horizontal };
+            dentro.Children.Add(nombre);
+            dentro.Children.Add(new TextBlock
+            {
+                // Dos letras cuando está cerrada; el nombre entero aparece al lado al abrirse.
+                Text = app.Length >= 2 ? app[..2].ToUpperInvariant() : app.ToUpperInvariant(),
+                Foreground = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                FontSize = 9, FontWeight = FontWeights.Bold, FontFamily = new FontFamily("Consolas"),
+                Width = 24, TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            nivel.Child = dentro;
+
+            nivel.MouseEnter += (_, __) =>
+            {
+                nombre.Visibility = Visibility.Visible;
+                nivel.Width = double.NaN;          // NaN = «lo que ocupe», que es lo que hace falta
+                nivel.CornerRadius = new CornerRadius(13);
+            };
+            nivel.MouseLeave += (_, __) =>
+            {
+                nombre.Visibility = Visibility.Collapsed;
+                nivel.Width = 26;
             };
 
             // Pulsar un nivel es IR a esa aplicación. Es la acción natural de la tira —enumera los
@@ -812,6 +891,10 @@ public sealed class GraphExplorerWindow : Window
             _lienzo.Children.Add(et);
         }
 
+        // Lo que todos comparten se calcula UNA vez y se quita de todas las etiquetas: enseñarlo
+        // diez veces no informa, y el sitio que ocupa es justo el que le falta a lo que distingue.
+        string prefijo = PrefijoComun(pos.Keys);
+
         foreach (var kv in pos)
         {
             // El nodo donde está el recorrido ahora mismo va en ámbar y con borde grueso: durante
@@ -833,7 +916,7 @@ public sealed class GraphExplorerWindow : Window
                 ToolTip = kv.Key,
                 Child = _compacto ? null : new TextBlock
                 {
-                    Text = Corto(kv.Key),
+                    Text = Distintivo(kv.Key, prefijo),
                     Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)),
                     FontSize = 9.5, FontFamily = new FontFamily("Consolas"),
                     TextTrimming = TextTrimming.CharacterEllipsis,
@@ -848,7 +931,7 @@ public sealed class GraphExplorerWindow : Window
             {
                 var etiqueta = new TextBlock
                 {
-                    Text = Corto(kv.Key),
+                    Text = Distintivo(kv.Key, prefijo),
                     Foreground = new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)),
                     FontSize = 10, FontFamily = new FontFamily("Consolas"),
                     Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x10, 0x10, 0x14)),
