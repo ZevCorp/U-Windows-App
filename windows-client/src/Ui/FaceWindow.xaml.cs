@@ -100,6 +100,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Dispatcher.BeginInvoke(new Action(() =>
         {
             ColocarVentana();
+            RefreshBarSide();          // si quedó a la izquierda, el layout se espeja antes de verse
             SizeChanged += OnSizeChanged;
             RefreshRestingChevron();   // ya se puede medir el hueco: el chevron dice hacia dónde abrirá
         }), System.Windows.Threading.DispatcherPriority.Loaded);
@@ -212,9 +213,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         void OnDragSurface(object _, MouseButtonEventArgs ev)
         {
             if (ev.ButtonState != MouseButtonState.Pressed) return;
-            DragMove();
-            SavePositionSoon(Left, Top);   // DragMove ya terminó: aquí Left/Top son los definitivos
-            RefreshRestingChevron();       // pudo cambiar de zona: el chevron tiene que decir la verdad
+            DragMove();   // bloqueante: retorna al soltar
+            // Y de ahí se va a un lado, igual que si lo hubieras arrastrado por la carita. Sin
+            // velocidad que medir (DragMove no la da), así que manda el borde más cercano.
+            EdgeSnap.Aplicar(this, 0, 0, OnWindowMoved);
         }
         BarPanel.MouseLeftButtonDown += OnDragSurface;
         TalkPanel.MouseLeftButtonDown += OnDragSurface;
@@ -422,8 +424,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        // El borde DERECHO siempre está clavado: el menú y el globo crecen hacia la izquierda.
-        if (e.PreviousSize.Width > 0) Left += e.PreviousSize.Width - e.NewSize.Width;
+        // El borde clavado es el del lado donde vive la barra: a la derecha, el menú y el globo crecen
+        // hacia la izquierda y hay que compensar; a la izquierda crecen hacia la derecha y no hay nada
+        // que compensar, porque el borde izquierdo ya está donde tiene que estar.
+        if (!_barLeft && e.PreviousSize.Width > 0) Left += e.PreviousSize.Width - e.NewSize.Width;
 
         // El vertical depende de hacia dónde crece el menú. Con el menú hacia arriba se ancla el
         // borde inferior (la barra no se mueve y el panel sube). Con el menú hacia abajo hay que
@@ -463,28 +467,56 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void ColocarVentana()
     {
+        // El tamaño tiene que ser el definitivo ANTES de medir con él: con SizeToContent, un
+        // ActualWidth a medio asentar coloca la ventana a un puñado de píxeles de donde debía.
+        UpdateLayout();
+
         var wa = SystemParameters.WorkArea;
         bool mismaPantalla =
             _config.SavedWorkAreaWidth is double sw && Math.Abs(sw - wa.Width) < 1 &&
             _config.SavedWorkAreaHeight is double sh && Math.Abs(sh - wa.Height) < 1;
 
+        double top;
+        double left;
+
         if (_config.WindowLeft is double savedL && _config.WindowTop is double savedT && mismaPantalla)
         {
-            MoveTo(Math.Clamp(savedL, wa.Left, Math.Max(wa.Left, wa.Right - ActualWidth)),
-                   Math.Clamp(savedT, wa.Top, Math.Max(wa.Top, wa.Bottom - ActualHeight)));
-            return;
+            left = savedL;
+            top = savedT;
+        }
+        else
+        {
+            // Si la pantalla cambió, se DESCARTA y se dice. Remapear proporcionalmente sería adivinar
+            // dónde la habría querido el usuario en una pantalla que nunca ha visto.
+            if (_config.WindowLeft != null && !mismaPantalla && !_avisóDelDescarte)
+            {
+                _avisóDelDescarte = true;
+                LogBus.Log("ui", $"posición guardada descartada: el área de trabajo es ahora "
+                                + $"{wa.Width:0}x{wa.Height:0} y se guardó en "
+                                + $"{_config.SavedWorkAreaWidth:0}x{_config.SavedWorkAreaHeight:0}");
+            }
+            left = wa.Right;                        // el borde: lo pega el ajuste de abajo
+            top = wa.Bottom - ActualHeight - 24;
         }
 
-        // Si la pantalla cambió, se DESCARTA y se dice. Remapear proporcionalmente sería adivinar
-        // dónde la habría querido el usuario en una pantalla que nunca ha visto.
-        if (_config.WindowLeft != null && !mismaPantalla && !_avisóDelDescarte)
-        {
-            _avisóDelDescarte = true;
-            LogBus.Log("ui", $"posición guardada descartada: el área de trabajo es ahora "
-                            + $"{wa.Width:0}x{wa.Height:0} y se guardó en "
-                            + $"{_config.SavedWorkAreaWidth:0}x{_config.SavedWorkAreaHeight:0}");
-        }
-        MoveTo(wa.Right - ActualWidth - 24, wa.Bottom - ActualHeight - 24);
+        // Al arrancar también se pega a un lado, pase lo que pase. Dos motivos: un config viejo puede
+        // traer una posición de en medio (el margen de 24 px del sitio por defecto era justo eso), y
+        // una posición guardada en una sesión anterior puede haber quedado descolgada del borde al
+        // cambiar el tamaño de la barra. Si la regla es «Ü vive en un lado», el arranque la cumple.
+        double centro = left + ActualWidth / 2;
+        left = centro >= (wa.Left + wa.Right) / 2
+            ? Math.Max(wa.Left, wa.Right - ActualWidth)
+            : wa.Left;
+
+        top = Math.Clamp(top, wa.Top, Math.Max(wa.Top, wa.Bottom - ActualHeight));
+        MoveTo(left, top);
+
+        // Aserción viva: colocar la ventana depende de tres cosas que cambian solas (el tamaño ya
+        // asentado, el área de trabajo y lo guardado). Cuando alguna falla, el síntoma es «aparece
+        // en un sitio raro», que no se distingue de nada. Esto lo hace legible en el registro.
+        LogBus.Log("ui", $"colocada en ({left:0},{top:0}) · tamaño {ActualWidth:0}x{ActualHeight:0} · "
+                       + $"guardado=({_config.WindowLeft:0},{_config.WindowTop:0}) "
+                       + $"mismaPantalla={mismaPantalla} · área {wa.Width:0}x{wa.Height:0}");
     }
 
     private bool _avisóDelDescarte;
@@ -529,6 +561,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _config.WindowTop = top;
         _config.SavedWorkAreaWidth = wa.Width;
         _config.SavedWorkAreaHeight = wa.Height;
+        LogBus.Log("ui", $"posición anotada: ({left:0},{top:0})");
 
         // Escribir a disco en cada gesto es barato pero innecesario; el debounce fusiona el par
         // «asentar + lanzar» en una sola escritura.
@@ -652,26 +685,30 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>Conecta los gestos (toque/doble toque/mantener/arrastre) a ambas caritas.</summary>
     private void WireFaceGestures()
     {
-        // Carita de la barra: no se lanza al borde (arrastra la barra entera).
-        new FaceGestures(this, Face, fling: false)
+        // Carita de la barra: arrastra la barra entera, y al soltar se va a un lado como la suelta.
+        new FaceGestures(this, Face)
         {
             SingleTap = () => { PlayTick(); ToggleCollapsed(); },
             DoubleTap = StartMicByFace,
             LongPress = CycleTheme,
-            // Un solo callback alimenta las dos cosas que dependen de dónde está la barra: recordar
-            // el sitio y saber hacia dónde tendrá que abrirse el menú.
-            Moved = (l, t) => { SavePositionSoon(l, t); RefreshRestingChevron(); },
+            // Un solo callback alimenta las tres cosas que dependen de dónde quedó la barra: recordar
+            // el sitio, espejar el layout al lado que toque, y hacia dónde abrirá el menú. Llega con
+            // el DESTINO, así que el espejo se aplica al empezar el vuelo y no al terminarlo — la
+            // barra viaja ya con su forma final en vez de darse la vuelta al aterrizar.
+            Moved = OnWindowMoved,
         };
 
-        // Carita suelta (colapsada): además se puede lanzar de un lado a otro de la pantalla.
-        new FaceGestures(this, CollapsedFace, fling: true)
+        // Carita suelta (colapsada): mismos gestos, mismo pegado al borde.
+        new FaceGestures(this, CollapsedFace)
         {
             SingleTap = () => { PlayTick(); ToggleCollapsed(); },
             DoubleTap = StartMicByFace,
             LongPress = CycleTheme,
-            // Un solo callback alimenta las dos cosas que dependen de dónde está la barra: recordar
-            // el sitio y saber hacia dónde tendrá que abrirse el menú.
-            Moved = (l, t) => { SavePositionSoon(l, t); RefreshRestingChevron(); },
+            // Un solo callback alimenta las tres cosas que dependen de dónde quedó la barra: recordar
+            // el sitio, espejar el layout al lado que toque, y hacia dónde abrirá el menú. Llega con
+            // el DESTINO, así que el espejo se aplica al empezar el vuelo y no al terminarlo — la
+            // barra viaja ya con su forma final en vez de darse la vuelta al aterrizar.
+            Moved = OnWindowMoved,
         };
     }
 
@@ -1036,6 +1073,71 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (!_menuOpen || _menuPinned) return;
         _menuCloseTimer.Stop();
         _menuCloseTimer.Start();
+    }
+
+    // ── De qué lado de la pantalla vive Ü ─────────────────────────────────────────────────────
+    //
+    // Todo el layout nació asumiendo «la barra está a la derecha»: el menú crece hacia la izquierda,
+    // el globo se pone a la izquierda, la píldora también, y la ventana se ancla por su borde
+    // derecho. Con la barra pegada al borde IZQUIERDO, todo eso apunta fuera de la pantalla.
+    //
+    // Así que el lado no es solo una posición: es un espejo del layout.
+
+    private bool _barLeft;
+
+    private void ApplyBarSide(bool left)
+    {
+        if (_barLeft == left && _sideApplied) return;
+        _barLeft = left;
+        _sideApplied = true;
+
+        // En un DockPanel el orden de los hijos decide qué franja ocupa cada uno; invirtiendo los
+        // Dock, el orden visual se invierte solo: [globo][píldora][barra] ↔ [barra][píldora][globo].
+        DockPanel.SetDock(TalkPanel, left ? Dock.Right : Dock.Left);
+        DockPanel.SetDock(BarPanel, left ? Dock.Left : Dock.Right);
+        DockPanel.SetDock(StatusChip, left ? Dock.Left : Dock.Right);
+
+        MenuPanel.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        BarRow.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        CollapsedFace.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+
+        // Los tooltips salían siempre por la izquierda: pegados al borde izquierdo se saldrían de la
+        // pantalla. Es un ajuste por botón porque ToolTipService.Placement no se hereda.
+        foreach (var b in BarButtons())
+            ToolTipService.SetPlacement(b, left ? System.Windows.Controls.Primitives.PlacementMode.Right
+                                               : System.Windows.Controls.Primitives.PlacementMode.Left);
+
+        // Y la píldora respira hacia el lado contrario a la barra.
+        StatusChip.Margin = left ? new Thickness(8, 0, 0, 14) : new Thickness(0, 0, 8, 14);
+        TalkPanel.Margin = left ? new Thickness(8, 0, 0, 0) : new Thickness(0, 0, 8, 0);
+    }
+
+    private bool _sideApplied;
+
+    private IEnumerable<Button> BarButtons()
+    {
+        foreach (object child in ((StackPanel)BarPanel.Child).Children)
+        {
+            if (child is Button b) yield return b;
+            else if (child is StackPanel zona)
+                foreach (object nieto in zona.Children)
+                    if (nieto is Button nb) yield return nb;
+        }
+    }
+
+    /// <summary>Recoloca el espejo según dónde está la ventana. Barato: sale pronto si no cambia.</summary>
+    private void RefreshBarSide() => ApplyBarSide(EdgeSnap.EstáALaIzquierda(this));
+
+    /// <summary>
+    /// La ventana acabó en un sitio nuevo por voluntad del usuario. Llega con el DESTINO, así que
+    /// todo lo que dependa del lado se aplica mientras la barra todavía está viajando.
+    /// </summary>
+    private void OnWindowMoved(double left, double top)
+    {
+        SavePositionSoon(left, top);
+        var wa = SystemParameters.WorkArea;
+        ApplyBarSide(left + ActualWidth / 2 < (wa.Left + wa.Right) / 2);
+        RefreshRestingChevron();
     }
 
     // ── Hacia dónde se abre el menú ───────────────────────────────────────────────────────────
