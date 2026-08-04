@@ -983,6 +983,41 @@ public sealed class GraphExplorerWindow : Window
         }
         catch (Exception e) { LogBus.Log("explorador", $"al ir a «{nivel}»: {e.Message}"); }
         LogBus.Log("explorador", $"nivel pulsado: «{nivel}» → {(ok ? "al frente" : "NO se pudo")}");
+        ComprobarUnRato();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _insistir;
+    private int _quedanComprobaciones;
+
+    /// <summary>
+    /// Tras actuar sobre el mundo, se vuelve a mirar unas cuantas veces durante un segundo y medio.
+    ///
+    /// La capa se refresca con los avisos del sistema, y eso basta para todo… menos para lo que
+    /// hacemos NOSOTROS. Mostrar el escritorio minimiza las ventanas una a una: cuando llega el
+    /// aviso, el escritorio todavía no está delante, así que se lee demasiado pronto — y como el
+    /// escritorio quieto no genera más avisos, nadie vuelve a mirar y los puntos se quedan con la
+    /// app anterior hasta que el usuario clica algo. Se notaba solo al ir al escritorio desde la
+    /// tira de niveles, y en ningún otro sitio (2026-08-04, reportado por el usuario).
+    ///
+    /// El principio es el de siempre en esta casa: quien provoca un cambio comprueba su
+    /// consecuencia, en vez de fiarse de que el mundo avise a tiempo. Es una ráfaga corta y
+    /// acotada; en reposo no cuesta nada porque no está corriendo.
+    /// </summary>
+    private void ComprobarUnRato()
+    {
+        _quedanComprobaciones = 10;   // ~1,5 s, de sobra para una animación de minimizar
+        if (_insistir == null)
+        {
+            _insistir = new System.Windows.Threading.DispatcherTimer
+            { Interval = TimeSpan.FromMilliseconds(150) };
+            _insistir.Tick += (_, __) =>
+            {
+                if (--_quedanComprobaciones <= 0) _insistir!.Stop();
+                RefreshEdges();
+            };
+            Closed += (_, __) => _insistir?.Stop();
+        }
+        _insistir.Start();
     }
 
     /// <summary>
