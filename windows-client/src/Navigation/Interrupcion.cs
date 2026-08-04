@@ -139,6 +139,15 @@ public static class Interrupcion
         {
             IntPtr fg = GetForegroundWindow();
             if (fg == IntPtr.Zero) return false;
+
+            // NUESTRAS PROPIAS VENTANAS TAMPOCO SON UN BLOQUEO OPACO. La misma regla que ya rige en
+            // Leer(), que aquí faltaba: la barra flotante tiene una ventana a pantalla completa sin
+            // nada que UIA pueda leer, así que en cuanto Ü pasaba al frente el sistema se declaraba
+            // «BLOQUEADO por algo que NO puedo leer» —bloqueado por sí mismo— y dejaba de saber
+            // dónde estaba el usuario (2026-08-04). Un sistema que se confunde con lo que está
+            // mirando no puede opinar sobre lo demás; el guardia tiene que estar en los DOS sitios.
+            if (EsNuestra(fg)) return false;
+
             var v = AutomationElement.FromHandle(fg);
             if (v == null) return false;
             foreach (var ct in new[] { ControlType.Button, ControlType.Text, ControlType.ListItem,
