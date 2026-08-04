@@ -31,6 +31,9 @@ public sealed class SurfaceLocator : IDisposable
 
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
     private const uint GA_ROOT = 2;
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
@@ -209,7 +212,12 @@ public sealed class SurfaceLocator : IDisposable
         // Antes de rendirse hay dos fuentes mejores, y ambas describen la pantalla de verdad:
         // el nombre que UIA da a la ventana (suele existir cuando GetWindowText aún devuelve vacío,
         // porque el título se rellena tarde al crearse) y, en el explorador, la ruta de la carpeta.
+        // ¿El título lleva sufijo de app («Carpeta - Explorador de archivos»)? Si lo lleva, la parte
+        // de delante YA identifica la pantalla y no hace falta mirar el contenido. Si no lo lleva
+        // —«Configuración» a secas— el título es el nombre de la app y no dice dónde estás.
+        string tituloOriginal = title;
         title = SinSufijoDeApp(title);
+        bool elTituloIdentifica = !ReferenceEquals(title, tituloOriginal) && title != tituloOriginal;
         string slug = Slug(title);
 
         // Sin identidad utilizable: título vacío O título de PANEL. Lo segundo entra por aquí y no
@@ -236,7 +244,12 @@ public sealed class SurfaceLocator : IDisposable
         // La señal es la que usa la propia app para decir dónde estás: el elemento SELECCIONADO de
         // su navegación. Solo se añade cuando aporta —si coincide con el título, no dice nada
         // nuevo— para no romper las identidades que ya funcionaban.
-        string seccion = SeccionSeleccionada(hwnd);
+        // Solo se mira el contenido cuando el TÍTULO NO IDENTIFICA. Añadirlo siempre que
+        // «difiriera del título» era una mala prueba: en el explorador, crear una carpeta la deja
+        // seleccionada y la identidad pasaba a «u-prueba-organizar#nueva-carpeta-4», con lo que el
+        // ancla rechazaba los 15 pasos siguientes (2026-08-03). Un título con sufijo de app ya trae
+        // la pantalla delante; uno que es solo el nombre de la app, no.
+        string seccion = elTituloIdentifica ? "" : SeccionSeleccionada(hwnd);
         if (seccion.Length > 0 && !seccion.Equals(slug, StringComparison.OrdinalIgnoreCase))
             return new SurfaceLocation($"uia://{proc}.exe/{slug}#{seccion}", $"uia://{proc}.exe", $"/{slug}#{seccion}");
 
@@ -323,6 +336,16 @@ public sealed class SurfaceLocator : IDisposable
                 new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem),
                 new PropertyCondition(SelectionItemPattern.IsSelectedProperty, true)));
 
+            // SOLO cuenta lo seleccionado en la NAVEGACIÓN, no en el contenido. La diferencia no es
+            // un detalle: al crear una carpeta en el explorador, esa carpeta queda seleccionada en
+            // la lista, y tomarla por «dónde estás» cambiaba la identidad del nodo con cada
+            // selección —«u-prueba-organizar» pasaba a «u-prueba-organizar#nueva-carpeta»— y el
+            // ancla de ubicación rechazaba los 23 pasos siguientes (2026-08-03). Es el mismo error
+            // que el botón «Subir»: una regla ganada en Configuración aplicada donde no vale.
+            //
+            // El menú lateral vive en el tercio izquierdo de la ventana; la lista de contenido, a
+            // la derecha. Es geometría de la ESTRUCTURA, no de un punto: no se pulsa nada con ella.
+            double limite = LimiteDeNavegacion(hwnd);
             AutomationElement? sel = null;
             double masIzquierda = double.MaxValue;
             foreach (AutomationElement el in seleccionados)
@@ -332,7 +355,7 @@ public sealed class SurfaceLocator : IDisposable
                     var info = el.Current;
                     if (info.IsOffscreen) continue;
                     var r = info.BoundingRectangle;
-                    if (r.IsEmpty || r.Left >= masIzquierda) continue;
+                    if (r.IsEmpty || r.Left > limite || r.Left >= masIzquierda) continue;
                     masIzquierda = r.Left;
                     sel = el;
                 }
@@ -344,6 +367,17 @@ public sealed class SurfaceLocator : IDisposable
             return n.Length is > 0 and <= 40 ? Slug(n) : "";
         }
         catch { return ""; }
+    }
+
+    /// <summary>Hasta dónde llega la franja de navegación: el primer tercio de la ventana.</summary>
+    private static double LimiteDeNavegacion(IntPtr hwnd)
+    {
+        try
+        {
+            if (!GetWindowRect(hwnd, out RECT r)) return double.MaxValue;
+            return r.Left + (r.Right - r.Left) / 3.0;
+        }
+        catch { return double.MaxValue; }
     }
 
     private static string NombreAlternativo(IntPtr hwnd)

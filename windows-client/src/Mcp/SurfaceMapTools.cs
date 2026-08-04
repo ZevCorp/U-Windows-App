@@ -1115,7 +1115,8 @@ public sealed class SurfaceMapTools
         // adivinar por app, se prueba lo suave y se sube a lo fuerte solo si no pasó nada: se
         // acierta en las dos sin saber en cuál estamos.
         if (elegida.Info.ActionType.Equals("doubleclick", StringComparison.OrdinalIgnoreCase)
-            && accionPedida.Length == 0 && !seleccionar && EsperarCambio(desde, 450).Length == 0)
+            && accionPedida.Length == 0 && !seleccionar
+            && (EsperarPantallaLista(700) || true) && EsperarCambio(desde, 150).Length == 0)
         {
             var doble = new PlanStep
             {
@@ -1154,8 +1155,12 @@ public sealed class SurfaceMapTools
             // aparecen sus opciones —suele ser <300 ms— y no cuando se agota un reloj; el resto
             // se comprueba en una ventana corta, porque una acción que navega lo hace enseguida.
             // Antes eran 800 ms fijos por acción, casi siempre esperando a nada (2026-08-03).
+            // La pantalla decide cuándo se sigue, no el reloj: se espera a que se asiente y solo
+            // entonces se mira si cambió de sitio. Antes eran 240-320 ms fijos, que sobraban en el
+            // caso normal y se quedaban cortos cuando la app iba lenta (Fase 1 del plan, 2026-08-03).
             bool abreMenu = PuedeAbrirMenu(elegida.Info.Label);
-            string tras = EsperarCambio(desde, abreMenu ? 240 : 320);
+            EsperarPantallaLista(abreMenu ? 900 : 1200);
+            string tras = EsperarCambio(desde, 200);
             if (abreMenu && !EsperarMenu(1500, menusAntes))
                 LogBus.Log("mapa-mcp", $"«{elegida.Info.Label}» no llegó a abrir menú (seguía habiendo {menusAntes})");
             LogBus.Log("mapa-mcp", $"✓ acción «{elegida.Info.Label}» ejecutada" + (tras.Length > 0 ? $" → {tras}" : ""));
@@ -1274,6 +1279,54 @@ public sealed class SurfaceMapTools
 
         LogBus.Log("mapa-mcp", $"✓ escrito «{texto}» en {selector}");
         return $"escribí «{texto}» y confirmé con Enter";
+    }
+
+    /// <summary>
+    /// Espera a que la pantalla esté LISTA: que deje de cambiar. Devuelve en cuanto lo está.
+    ///
+    /// Es la idea de <c>SurfaceReadiness</c> —que ya usa el reproductor de workflows— traída a esta
+    /// capa en su forma mínima. La diferencia con dormir un tiempo fijo es doble: se sigue en
+    /// cuanto se puede, en vez de esperar el peor caso, y no se actúa antes de tiempo cuando la app
+    /// tarda más de lo previsto. Un plazo fijo se equivoca en las dos direcciones a la vez.
+    ///
+    /// La señal es el número de elementos accionables: mientras la pantalla se pinta, sube; cuando
+    /// se repite dos lecturas seguidas, está lista. El techo es una red contra pantallas que nunca
+    /// se asientan (una lista que se refresca sola), no el mecanismo de espera.
+    /// </summary>
+    private bool EsperarPantallaLista(int msMax = 2500)
+    {
+        int anterior = -1;
+        for (int i = 0; i < msMax / 90; i++)
+        {
+            int ahora = CuantosAccionables();
+            if (ahora > 0 && ahora == anterior) return true;
+            anterior = ahora;
+            System.Threading.Thread.Sleep(90);
+        }
+        return false;
+    }
+
+    /// <summary>Cuántos elementos accionables hay ahora. Consulta dirigida: nada de leer el árbol.</summary>
+    private static int CuantosAccionables()
+    {
+        try
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return 0;
+            var raiz = System.Windows.Automation.AutomationElement.FromHandle(fg);
+            if (raiz == null) return 0;
+            int n = 0;
+            foreach (var ct in new[] { System.Windows.Automation.ControlType.Button,
+                                       System.Windows.Automation.ControlType.ListItem,
+                                       System.Windows.Automation.ControlType.MenuItem })
+            {
+                n += raiz.FindAll(System.Windows.Automation.TreeScope.Descendants,
+                    new System.Windows.Automation.PropertyCondition(
+                        System.Windows.Automation.AutomationElement.ControlTypeProperty, ct)).Count;
+            }
+            return n;
+        }
+        catch { return 0; }
     }
 
     /// <summary>Espera a que la superficie DEJE de ser la de partida y devuelve la nueva, o "".</summary>
