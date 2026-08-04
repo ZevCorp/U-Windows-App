@@ -455,19 +455,37 @@
                 </Border>
 
                 <!-- LA BARRA: vertical, estrecha, siempre disponible. Arrastrable por cualquier zona
-                     libre (y por la carita). De arriba a abajo: carita, contextuales (⬇ actualización,
-                     ⏹ detener), y las 4 acciones de siempre; abajo, el activador del menú. -->
+                     libre (y por la carita). De arriba a abajo: el activador del menú, las acciones
+                     (con las contextuales ⬇/⏹ intercaladas) y, abajo del todo, la carita.
+
+                     Ese orden no es estético. El activador va ARRIBA porque el menú nace justo encima:
+                     el cursor pasa del uno al otro en línea recta en vez de recorrer la barra entera.
+                     Y la carita va ABAJO porque ahí es donde vive la burbuja cuando se colapsa — así
+                     no salta de sitio al alternar entre los dos estados. -->
                 <Border x:Name="BarPanel" DockPanel.Dock="Right" CornerRadius="18" Background="#F2101014"
                         Padding="8,10" BorderBrush="#33FFFFFF" BorderThickness="1" VerticalAlignment="Bottom">
                     <Border.Effect>
                         <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.5" Color="Black"/>
                     </Border.Effect>
                     <StackPanel>
-                        <!-- La carita (misma que Android). Clic → colapsa a solo la carita · doble clic →
-                             micrófono · mantener oprimido → cambia de tema · arrastrar → mover. -->
-                        <ui:FaceControl x:Name="Face" Width="42" Height="42" Cursor="Hand"
-                                        HorizontalAlignment="Center"
-                                        ToolTip="Clic: solo la carita · doble clic: micrófono · mantener: cambiar tema · arrastrar: mover"/>
+                        <!-- ACTIVADOR del menú extendido: hover lo abre (hacia arriba, justo encima),
+                             clic lo fija, Esc lo cierra. El chevron gira 180° cuando el menú está
+                             abierto: apunta a donde está el menú, y girado significa «ciérralo». -->
+                        <Button x:Name="MenuActivator" Height="26" Margin="0" Style="{StaticResource BarBtn}"
+                                Width="38" FontSize="11" Background="#00FFFFFF"
+                                ToolTip="Más herramientas (hover abre · clic fija · Esc cierra)"
+                                AutomationProperties.Name="Más herramientas">
+                            <Path x:Name="ActivatorChevron" Data="M 0 5 L 6 0 L 12 5"
+                                  Stroke="#CCFFFFFF" StrokeThickness="1.8" StrokeLineJoin="Round"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  RenderTransformOrigin="0.5,0.5">
+                                <Path.RenderTransform>
+                                    <RotateTransform x:Name="ActivatorRot" Angle="0"/>
+                                </Path.RenderTransform>
+                            </Path>
+                        </Button>
+
+                        <Border Background="#1EFFFFFF" Height="1" Margin="6,4,6,2"/>
 
                         <!-- Pastilla de actualización: oculta salvo que ya haya una versión descargada y
                              lista. Si el usuario la ignora, se aplica sola al cerrar (Updater.ApplyOnExit). -->
@@ -506,23 +524,12 @@
                         <Button x:Name="MuteBtn" Content="🔊" Style="{StaticResource BarBtn}" Click="OnToggleMute"
                                 ToolTip="Callar a Ü ahora mismo" AutomationProperties.Name="Silencio"/>
 
-                        <Border Background="#1EFFFFFF" Height="1" Margin="6,10,6,2"/>
-
-                        <!-- ACTIVADOR del menú extendido: hover lo abre (hacia arriba), clic lo fija,
-                             Esc lo cierra. El chevron gira 180° cuando el menú está abierto. -->
-                        <Button x:Name="MenuActivator" Height="26" Style="{StaticResource BarBtn}"
-                                Width="38" FontSize="11" Background="#00FFFFFF"
-                                ToolTip="Más herramientas (hover abre · clic fija · Esc cierra)"
-                                AutomationProperties.Name="Más herramientas">
-                            <Path x:Name="ActivatorChevron" Data="M 0 5 L 6 0 L 12 5"
-                                  Stroke="#CCFFFFFF" StrokeThickness="1.8" StrokeLineJoin="Round"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  RenderTransformOrigin="0.5,0.5">
-                                <Path.RenderTransform>
-                                    <RotateTransform x:Name="ActivatorRot" Angle="0"/>
-                                </Path.RenderTransform>
-                            </Path>
-                        </Button>
+                        <!-- La carita (misma que Android), abajo del todo. Clic → colapsa a solo la
+                             carita · doble clic → micrófono · mantener oprimido → cambia de tema ·
+                             arrastrar → mover. -->
+                        <ui:FaceControl x:Name="Face" Width="42" Height="42" Cursor="Hand"
+                                        HorizontalAlignment="Center" Margin="0,10,0,0"
+                                        ToolTip="Clic: solo la carita · doble clic: micrófono · mantener: cambiar tema · arrastrar: mover"/>
                     </StackPanel>
                 </Border>
             </DockPanel>
