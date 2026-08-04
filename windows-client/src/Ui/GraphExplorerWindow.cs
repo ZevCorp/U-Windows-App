@@ -77,8 +77,14 @@ public sealed class GraphExplorerWindow : Window
     /// <summary>El grafo se dibuja como mapa de puntos porque el detalle ya no cabría legible.</summary>
     private bool _compacto;
     private string _nodoActual = "";
-    /// <summary>Lo aprendido en la última corrida automática: lo único que la vista de grafo dibuja.</summary>
+    /// <summary>Lo aprendido en la última corrida automática: los SALTOS que la vista dibuja.</summary>
     private List<(string From, string To, string Label)> _ultimaCorrida = new();
+
+    /// <summary>Los sitios por los que se ha pasado, con o sin salto. Un sitio pisado ya es un nodo.</summary>
+    private readonly List<string> _vistos = new();
+
+    /// <summary>Para no repetir la misma línea de log en cada redibujo.</summary>
+    private string _huellaDibujo = "";
     private CancellationTokenSource? _crawlCts;
 
     public GraphExplorerWindow(SurfaceMap map, Func<SurfaceLocator.SurfaceLocation?> where)
@@ -438,6 +444,19 @@ public sealed class GraphExplorerWindow : Window
                 // historia que cabe en pantalla y el único que se está mirando.
                 if (_ultimaCorrida.Count > 40) _ultimaCorrida.RemoveRange(0, _ultimaCorrida.Count - 40);
             }
+            // ESTAR EN UN SITIO YA ES SABER QUE EXISTE. El grafo se guardaba solo como lista de
+            // SALTOS, así que un nodo no aparecía hasta haber una transición: te plantabas delante
+            // de una app y el panel seguía diciendo «todavía no hay recorrido», y con el filtro por
+            // nivel bastaba con que los saltos registrados fueran de otra app para que el tuyo
+            // saliera vacío estando dentro. De ahí la sensación de que cuesta que empiecen a
+            // aparecer los nodos (2026-08-04, reportado por el usuario). Un sitio pisado se dibuja,
+            // tenga o no aristas todavía.
+            if (!_vistos.Contains(aqui, StringComparer.OrdinalIgnoreCase))
+            {
+                _vistos.Add(aqui);
+                if (_vistos.Count > 60) _vistos.RemoveRange(0, _vistos.Count - 60);
+            }
+
             _nodoActual = aqui;
             DibujarGrafo();
         }
@@ -763,7 +782,13 @@ public sealed class GraphExplorerWindow : Window
                                      && SurfaceMap.AppDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
                             .ToList();
 
-        if (traza.Count == 0)
+        // Los sitios de ESTE nivel por los que ya se ha pasado, haya saltos o no.
+        var pisados = _vistos
+            .Where(n => appActual.Length == 0
+                     || SurfaceMap.AppDe(n).Equals(appActual, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (traza.Count == 0 && pisados.Count == 0)
         {
             _lienzo.Children.Add(new TextBlock
             {
@@ -777,8 +802,8 @@ public sealed class GraphExplorerWindow : Window
             return;
         }
 
-        // Raíz: el origen de la primera arista aprendida (donde arrancó el recorrido).
-        string raiz = traza[0].From;
+        // Raíz: el origen del primer salto, o —si aún no hay ninguno— el primer sitio pisado.
+        string raiz = traza.Count > 0 ? traza[0].From : pisados[0];
         var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
         // Varias pasadas: una arista puede aprenderse antes de que su origen tenga profundidad.
         for (int pasada = 0; pasada < 6; pasada++)
@@ -790,6 +815,11 @@ public sealed class GraphExplorerWindow : Window
             if (!prof.ContainsKey(f)) prof[f] = 0;
             if (!prof.ContainsKey(t)) prof[t] = 1;
         }
+
+        // Los pisados sin salto conocido entran a la altura de la raíz: se sabe que existen y que
+        // están en este nivel, y no se sabe todavía cómo se encadenan. Colocarlos abajo del todo
+        // insinuaría una profundidad que nadie ha comprobado.
+        foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = 0;
 
         // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra
         // deja de leerse; a partir de ahí se sigue pagando el sitio que ocupa un texto que ya nadie
@@ -967,6 +997,17 @@ public sealed class GraphExplorerWindow : Window
         if (_crawlCts == null)
             _status.Text = $"grafo · {pos.Count} pantalla(s), {traza.Count} ruta(s)"
                          + (_compacto ? " · vista de puntos (alejado)" : " · vista con nombres");
+
+        // Se registra lo dibujado. Desde que la capa es atravesable no expone su contenido a UIA,
+        // así que esta línea es la única forma de comprobar desde fuera qué hay pintado — y sin ella
+        // «no se ve nada» y «no se está dibujando nada» son indistinguibles (2026-08-04).
+        string huella = $"{appActual}|{pos.Count}|{traza.Count}|{_compacto}";
+        if (huella != _huellaDibujo)
+        {
+            _huellaDibujo = huella;
+            LogBus.Log("explorador", $"grafo: nivel «{appActual}» · {pos.Count} nodo(s), "
+                + $"{traza.Count} salto(s) · {(_compacto ? "puntos" : "nombres")}");
+        }
     }
 
     // ── Mapeo autónomo ───────────────────────────────────────────────────────
