@@ -15,8 +15,12 @@ namespace U.WindowsClient.Ui;
 /// </summary>
 public static class Senalador
 {
-    /// <summary>Se está señalando algo: su caja en pantalla y cómo se llama.</summary>
+    /// <summary>Se está señalando algo: su caja en pantalla y cómo se llama. La primera caja manda
+    /// —es donde se pone la carita— y las demás acompañan.</summary>
     public static event Action<Rect, string>? Senala;
+
+    /// <summary>Todas las cajas señaladas, cuando son varias.</summary>
+    public static event Action<IReadOnlyList<Rect>>? SenalaVarias;
 
     /// <summary>Se dejó de señalar.</summary>
     public static event Action? Suelta;
@@ -24,14 +28,37 @@ public static class Senalador
     /// <summary>Lo último señalado, para quien se enganche tarde.</summary>
     public static (Rect Caja, string Que)? Actual { get; private set; }
 
-    public static void Senalar(Rect caja, string que)
+    /// <summary>
+    /// Señalar CADUCA. Un señalamiento sin final deja el recuadro encendido y los ojos torcidos para
+    /// siempre —que fue justo lo que pasó (2026-08-05)— y entonces deja de significar nada: si
+    /// siempre está señalando, no está señalando.
+    ///
+    /// Cinco segundos: lo que dura mirar algo que te acaban de indicar. Y se suelta antes si el
+    /// asistente hace cualquier otra cosa, porque ya no está mirando eso.
+    /// </summary>
+    private static readonly TimeSpan Duracion = TimeSpan.FromSeconds(5);
+    private static System.Threading.Timer? _caducidad;
+
+    public static void Senalar(Rect caja, string que) => SenalarVarias(new[] { caja }, que);
+
+    /// <summary>Señala varias cajas. La primera manda: es donde se pone la carita.</summary>
+    public static void SenalarVarias(IReadOnlyList<Rect> cajas, string que)
     {
-        Actual = (caja, que);
-        Senala?.Invoke(caja, que);
+        if (cajas.Count == 0) { Soltar(); return; }
+        Actual = (cajas[0], que);
+        SenalaVarias?.Invoke(cajas);
+        Senala?.Invoke(cajas[0], que);
+
+        _caducidad?.Dispose();
+        _caducidad = new System.Threading.Timer(_ => Soltar(), null,
+            (int)Duracion.TotalMilliseconds, System.Threading.Timeout.Infinite);
     }
 
     public static void Soltar()
     {
+        _caducidad?.Dispose();
+        _caducidad = null;
+        if (Actual == null) return;   // ya estaba suelto: no se avisa dos veces
         Actual = null;
         Suelta?.Invoke();
     }

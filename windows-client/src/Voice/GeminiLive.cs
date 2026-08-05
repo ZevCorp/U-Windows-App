@@ -342,7 +342,9 @@ public sealed class GeminiLive : IDisposable
             + "enciende un recuadro sobre él y lleva la carita a su lado. Úsala siempre que el usuario "
             + "pregunte «¿ves X?» o «¿dónde está X?» — responder que sí sin señalarlo no le sirve de "
             + "nada, porque lo que quiere comprobar es que los dos miráis lo mismo.",
-            ("exit", "El elemento, por su nombre tal como se ve en pantalla.")),
+            ("exit", "Uno: su nombre tal como se ve. Varios: separados por comas. O una ZONA de la "
+                   + "ventana: «la columna derecha», «el panel izquierdo», «la barra de arriba», "
+                   + "«todos los elementos de abajo» — se señalan todos los de esa zona.")),
         Fn("map_set_level", "Corrige a mano a qué NIVEL pertenece una salida, para toda la app y de "
             + "forma permanente. Nivel 1 = navegación principal (los hermanos que están siempre a la "
             + "vista). Úsala cuando el usuario diga cosas como «esto es del menú principal», «esto no "

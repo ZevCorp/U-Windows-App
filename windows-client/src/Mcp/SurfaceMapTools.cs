@@ -295,6 +295,14 @@ public sealed class SurfaceMapTools
         //
         // Ver es pasivo por definición: se lee lo que hay delante, y si no se puede leer se dice.
         // Un observador que reordena la pantalla para verla mejor ha dejado de observar.
+        // NO NOS MIRAMOS A NOSOTROS. Si lo que hay delante es una ventana de Ü —la barra, la capa
+        // del grafo— leerla y contestar «veo ▾ y 🤖» es describirse a sí mismo creyendo que describe
+        // la pantalla del usuario (2026-08-05, salió en la primera prueba de las zonas). Es la misma
+        // regla que ya rige en el mapa y en el detector de diálogos, que aquí faltaba.
+        if (Ui_EsNuestraVentanaDelante())
+            return "ahora mismo lo que está delante es mi propia interfaz, no la tuya. "
+                 + "Pon delante la aplicación que quieres que mire y vuelve a preguntar.";
+
         _lector.Read();
         var candidatos = _lector.Elements.Where(e => e.Label.Length > 0).ToList();
         string donde = _where()?.Id ?? "(pantalla desconocida)";
@@ -309,10 +317,48 @@ public sealed class SurfaceMapTools
                  + "No es que «{que}» no esté — es que no llegué a mirar.";
         }
 
-        var el = candidatos.FirstOrDefault(e => e.Label.Equals(que, StringComparison.OrdinalIgnoreCase))
-              ?? candidatos.FirstOrDefault(e => e.Label.Contains(que, StringComparison.OrdinalIgnoreCase));
+        // ¿Se pregunta por UNA cosa, por VARIAS, o por una ZONA? «¿Ves los elementos de la columna
+        // derecha?» no se responde buscando un nombre: se responde mirando dónde está cada cosa. Y
+        // es la forma natural de preguntar cuando se señala en voz alta, porque quien mira una
+        // pantalla piensa en zonas antes que en nombres (2026-08-05, pedido por el usuario).
+        var zona = ZonaPedida(que);
+        List<UiaReader.UiElement> elegidos;
+        string comoSeLlama;
 
-        if (el == null)
+        if (zona != null)
+        {
+            // Solo lo PULSABLE, y sin repetir nombre. Sin filtrar salían 256 «elementos» de una
+            // columna que tiene doce: contenedores anidados, textos de estado, cada fila contada
+            // varias veces. Señalar 256 cosas no es señalar (2026-08-05). Lo que el usuario llama
+            // «los elementos de esa columna» son sus puertas, no cada nodo del árbol UIA.
+            elegidos = candidatos
+                .Where(e => zona(e.Bounds) && EsPuertaVisible(e))
+                .GroupBy(e => e.Label, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .OrderBy(e => e.Bounds.Top).ThenBy(e => e.Bounds.Left)
+                .Take(30)
+                .ToList();
+            comoSeLlama = que;
+        }
+        else if (que.Contains(',') || que.Contains(';'))
+        {
+            var nombres = que.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                             .Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
+            elegidos = nombres
+                .Select(n => candidatos.FirstOrDefault(e => e.Label.Equals(n, StringComparison.OrdinalIgnoreCase))
+                          ?? candidatos.FirstOrDefault(e => e.Label.Contains(n, StringComparison.OrdinalIgnoreCase)))
+                .Where(e => e != null).Select(e => e!).ToList();
+            comoSeLlama = string.Join(", ", nombres);
+        }
+        else
+        {
+            var uno = candidatos.FirstOrDefault(e => e.Label.Equals(que, StringComparison.OrdinalIgnoreCase))
+                   ?? candidatos.FirstOrDefault(e => e.Label.Contains(que, StringComparison.OrdinalIgnoreCase));
+            elegidos = uno == null ? new List<UiaReader.UiElement>() : new List<UiaReader.UiElement> { uno };
+            comoSeLlama = que;
+        }
+
+        if (elegidos.Count == 0)
         {
             Ui.Senalador.Soltar();
             var parecidos = candidatos.Take(12).Select(c => $"«{c.Label}»");
@@ -320,6 +366,16 @@ public sealed class SurfaceMapTools
                  + $"Lo que sí veo: {string.Join(", ", parecidos)}…";
         }
 
+        if (elegidos.Count > 1)
+        {
+            Ui.Senalador.SenalarVarias(elegidos.Select(e => e.Bounds).ToList(), comoSeLlama);
+            var nombres = elegidos.Take(20).Select(e => $"«{e.Label}»");
+            return $"SÍ, veo {elegidos.Count} y los estoy señalando todos en «{donde}»: "
+                 + string.Join(", ", nombres) + (elegidos.Count > 20 ? "…" : "")
+                 + ". Para moverlos de nivel, map_set_level uno por uno.";
+        }
+
+        var el = elegidos[0];
         Ui.Senalador.Senalar(el.Bounds, el.Label);
         string aqui = _where()?.Id ?? "";
         var h = aqui.Length > 0
@@ -332,6 +388,53 @@ public sealed class SurfaceMapTools
         return $"SÍ veo «{el.Label}» ({el.ControlType}) y lo estoy señalando: recuadro encendido y "
              + $"la carita puesta a su lado. En el mapa: {enMapa}. Para pulsarlo, map_take con "
              + $"exit=«{el.Label}».";
+    }
+
+    private static bool Ui_EsNuestraVentanaDelante() => Uia.Propio.EsVentana(GetForegroundWindow());
+
+    /// <summary>Lo que una persona llamaría «un elemento» de la pantalla: algo que se puede pulsar
+    /// y que ocupa un sitio razonable. No un contenedor ni una etiqueta suelta.</summary>
+    private static bool EsPuertaVisible(UiaReader.UiElement e) =>
+        e.Bounds.Width >= 12 && e.Bounds.Height >= 12
+        && e.Bounds.Width < 900                       // un contenedor ancho no es un elemento
+        && e.ControlType.ToLowerInvariant() is "button" or "listitem" or "treeitem" or "tabitem"
+            or "menuitem" or "hyperlink" or "checkbox" or "radiobutton" or "splitbutton" or "combobox";
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
+    /// <summary>
+    /// Traduce «la columna derecha», «el panel de la izquierda», «la barra de arriba» a una región
+    /// de la ventana. Devuelve null si lo pedido no suena a zona.
+    ///
+    /// Los tercios y quintos no son arbitrarios: un panel lateral ocupa alrededor de un tercio y una
+    /// barra de herramientas bastante menos de un quinto del alto. No hace falta afinar más, porque
+    /// esto sirve para SEÑALAR —el usuario ve al instante si se pasó o se quedó corto— y no para
+    /// decidir nada por su cuenta.
+    /// </summary>
+    private Func<System.Windows.Rect, bool>? ZonaPedida(string texto)
+    {
+        string t = texto.ToLowerInvariant();
+        bool zonaSuena = t.Contains("columna") || t.Contains("panel") || t.Contains("barra")
+                      || t.Contains("lateral") || t.Contains("todos") || t.Contains("elementos de");
+        if (!zonaSuena) return null;
+
+        IntPtr h = GetForegroundWindow();
+        if (h == IntPtr.Zero || !GetWindowRect(h, out RECT w)) return null;
+        double x0 = w.Left, y0 = w.Top, ancho = w.Right - w.Left, alto = w.Bottom - w.Top;
+        if (ancho <= 0 || alto <= 0) return null;
+
+        if (t.Contains("derech")) return r => r.X >= x0 + ancho * 2 / 3;
+        if (t.Contains("izquierd")) return r => r.X <= x0 + ancho / 3;
+        if (t.Contains("arriba") || t.Contains("superior") || t.Contains("herramientas"))
+            return r => r.Y <= y0 + alto / 5;
+        if (t.Contains("abajo") || t.Contains("inferior")) return r => r.Y >= y0 + alto * 4 / 5;
+        if (t.Contains("centro") || t.Contains("contenido"))
+            return r => r.X > x0 + ancho / 3 && r.X < x0 + ancho * 2 / 3;
+        return null;
     }
 
     /// <summary>
@@ -766,6 +869,10 @@ public sealed class SurfaceMapTools
         // lanzador de apps.
         string args_ = string.Join(" ", args.Select(kv => $"{kv.Key}={kv.Value}"));
         LogBus.Log("mapa-mcp", $"→ {tool} {args_}".TrimEnd());
+
+        // Si se pasa a hacer otra cosa, ya no se está mirando lo de antes: se suelta. Señalar es un
+        // gesto que acompaña a una frase, no un estado en el que quedarse.
+        if (!tool.Equals("map_show", StringComparison.OrdinalIgnoreCase)) Ui.Senalador.Soltar();
 
         string r = tool switch
         {
