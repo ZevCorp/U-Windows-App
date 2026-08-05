@@ -288,6 +288,17 @@ public sealed class GeminiLive : IDisposable
         columna izquierda salió la barra de título. La zona la interpretas tú con el vídeo; a la
         herramienta le pasas SIEMPRE nombres concretos.
 
+        UNA SELECCIÓN SE CORRIGE, NO SE REHACE. Lo que marcas SE QUEDA marcado, y las frases que
+        vienen después la retocan:
+        · «excepto este», «ese no», «quita el de X» → map_exclude. Quita ese y DEJA EL RESTO.
+        · «y este también», «añade ese» → map_show con la lista COMPLETA: los que ya había MÁS el
+          nuevo. map_show enciende exactamente lo que le pasas, así que si mandas solo el nuevo
+          apagas los demás.
+        El error que NO debes cometer: responder a «excepto este» llamando a map_show con el que
+        sobra. Eso deja encendido justo el que se quería quitar y apaga todos los buenos — pasó, y
+        es exactamente lo contrario de lo que te piden. Cuando dudes de qué hay marcado, la
+        respuesta de la última llamada te lo dice: léela antes de decidir.
+
         LA JERARQUÍA SE PUEDE CORREGIR, y el usuario manda. El sistema deduce solo a qué nivel
         pertenece cada cosa —nivel 1 es la navegación principal de la app, la que está siempre a la
         vista— y acierta casi siempre. Cuando el usuario te diga que algo pertenece o no al nivel
@@ -426,6 +437,12 @@ public sealed class GeminiLive : IDisposable
             + "señalando —«todos estos», «esto que te muestro», «los que te acabo de pasar»— en vez de "
             + "adivinar una zona de la pantalla por su nombre.",
             ("seconds", "Cuántos segundos hacia atrás mirar. Vacío = 10, que es lo que dura enseñar algo con la mano.")),
+        Fn("map_exclude", "QUITA uno de los que ya están marcados y deja el resto encendido. Es lo que "
+            + "hay que usar para «excepto este», «ese no», «quita el de X»: NO vuelvas a llamar a "
+            + "map_show con el que sobra, porque eso apagaría todos los demás y dejaría encendido "
+            + "justo el que se quería excluir.",
+            ("exit", "Nombre del que sobra (o varios separados por comas). Vacío = el que esté bajo el cursor, "
+                   + "que es como se dice «excepto ESTE».")),
         Fn("map_open_app", "ABRE una aplicación (o la trae al frente si ya estaba) y dice en qué pantalla "
             + "quedas. Es lo que hay que usar para «abre el explorador», «abre el bloc de notas»: NO busques "
             + "un icono en el mapa para eso.",

@@ -29,6 +29,17 @@ public static class Senalador
     public static (Rect Caja, string Que)? Actual { get; private set; }
 
     /// <summary>
+    /// LO QUE ESTÁ MARCADO AHORA, uno por uno y con su nombre.
+    ///
+    /// Sin esto, señalar era un gesto sin memoria: cada llamada empezaba de cero, así que «excepto
+    /// este» no podía significar «quita ese de los que ya tienes» —no había «los que ya tienes»— y
+    /// acababa iluminando justo el que se quería excluir (2026-08-05). Una selección que no se
+    /// puede retocar no es una selección, es un parpadeo.
+    /// </summary>
+    public static IReadOnlyList<(Rect Caja, string Que)> Marcadas { get; private set; }
+        = Array.Empty<(Rect, string)>();
+
+    /// <summary>
     /// Lo señalado SE QUEDA hasta que el asistente pase a otra cosa.
     ///
     /// Hubo un reloj de cinco segundos y estorbaba: si señala «estos cuatro son del menú principal»
@@ -41,15 +52,26 @@ public static class Senalador
 
     /// <summary>Señala varias cajas. La primera manda: es donde se pone la carita.</summary>
     public static void SenalarVarias(IReadOnlyList<Rect> cajas, string que)
+        => SenalarVarias(cajas.Select(c => (c, que)).ToList());
+
+    /// <summary>
+    /// Señala varias, cada una con SU nombre. La primera manda: es donde se pone la carita.
+    ///
+    /// Guardar el nombre de cada una es lo que permite decir después «quita la de Música» o
+    /// «excepto esta»: para quitar una hay que saber cuál es cuál.
+    /// </summary>
+    public static void SenalarVarias(IReadOnlyList<(Rect Caja, string Que)> elementos)
     {
-        if (cajas.Count == 0) { Soltar(); return; }
-        Actual = (cajas[0], que);
-        SenalaVarias?.Invoke(cajas);
-        Senala?.Invoke(cajas[0], que);
+        if (elementos.Count == 0) { Soltar(); return; }
+        Marcadas = elementos.ToList();
+        Actual = (elementos[0].Caja, elementos[0].Que);
+        SenalaVarias?.Invoke(elementos.Select(e => e.Caja).ToList());
+        Senala?.Invoke(elementos[0].Caja, elementos[0].Que);
     }
 
     public static void Soltar()
     {
+        Marcadas = Array.Empty<(Rect, string)>();
         if (Actual == null) return;   // ya estaba suelto: no se avisa dos veces
         Actual = null;
         Suelta?.Invoke();

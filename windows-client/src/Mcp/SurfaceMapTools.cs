@@ -369,7 +369,7 @@ public sealed class SurfaceMapTools
 
         if (elegidos.Count > 1)
         {
-            Ui.Senalador.SenalarVarias(elegidos.Select(e => e.Bounds).ToList(), comoSeLlama);
+            Ui.Senalador.SenalarVarias(elegidos.Select(e => (e.Bounds, e.Label)).ToList());
             var nombres = elegidos.Take(20).Select(e => $"«{e.Label}»");
             return $"SÍ, veo {elegidos.Count} y los estoy señalando todos en «{donde}»: "
                  + string.Join(", ", nombres) + (elegidos.Count > 20 ? "…" : "")
@@ -571,13 +571,78 @@ public sealed class SurfaceMapTools
             return "por donde pasaste no había nada que pueda señalar.";
         }
 
-        Ui.Senalador.SenalarVarias(buenas.Select(m => m.Caja).ToList(),
-            $"lo que me acabas de mostrar ({buenas.Count})");
+        Ui.Senalador.SenalarVarias(buenas.Select(m => (m.Caja, m.Nombre)).ToList());
 
         string lista = string.Join(", ", buenas.Select(m => $"«{m.Nombre}» ({m.Tipo})"));
         return $"SÍ: por ahí pasaste {buenas.Count} cosa(s) y las estoy iluminando todas: {lista}. "
              + "Si sobra alguna o falta otra, vuelve a pasar el ratón y dímelo.";
     }
+
+    /// <summary>
+    /// «Excepto este»: quita uno de lo que ya está marcado y DEJA EL RESTO encendido.
+    ///
+    /// Sin esto, la única forma de responder a «excepto este» era señalar algo — y lo que se
+    /// señalaba era justo el que se quería excluir, así que quedaba encendido él solo: exactamente
+    /// lo contrario de lo pedido (2026-08-05). Corregir una selección es parte de hacerla; si cada
+    /// frase empieza de cero, no se puede afinar nada.
+    /// </summary>
+    private string Excluir(string cual)
+    {
+        var marcadas = Ui.Senalador.Marcadas;
+        if (marcadas.Count == 0)
+            return "ahora mismo no tengo nada marcado, así que no hay de dónde quitar. "
+                 + "Dime primero qué ilumino.";
+
+        // Cuál quitar: el que se nombre, o —si no se nombra— el que esté bajo el cursor, porque
+        // «excepto ESTE» se dice señalando.
+        var fuera = new List<(System.Windows.Rect Caja, string Que)>();
+
+        if (cual.Length > 0)
+        {
+            foreach (var n in cual.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                                  .Select(x => x.Trim()).Where(x => x.Length > 0))
+            {
+                string norm = Uia.Reconocedor.Normalizar(n);
+                fuera.AddRange(marcadas.Where(m =>
+                    Uia.Reconocedor.Normalizar(m.Que) == norm
+                    || Uia.Reconocedor.Normalizar(m.Que).Contains(norm, StringComparison.Ordinal)));
+            }
+        }
+
+        if (fuera.Count == 0 && GetCursorPos(out var p))
+        {
+            var punto = new System.Windows.Point(p.X, p.Y);
+            // La MÁS PEQUEÑA que contenga el cursor: si hay cajas anidadas, la de dentro es la que
+            // se está señalando.
+            var bajoElCursor = marcadas.Where(m => m.Caja.Contains(punto))
+                                       .OrderBy(m => m.Caja.Width * m.Caja.Height)
+                                       .Cast<(System.Windows.Rect Caja, string Que)?>()
+                                       .FirstOrDefault();
+            if (bajoElCursor != null) fuera.Add(bajoElCursor.Value);
+        }
+
+        if (fuera.Count == 0)
+            return cual.Length > 0
+                ? $"«{cual}» no está entre los que tengo marcados: {Marcados(marcadas)}. "
+                  + "Dime cuál de esos quito."
+                : "el cursor no está encima de ninguno de los que tengo marcados. Ponlo sobre el que "
+                  + $"quieras quitar, o dime su nombre. Marcados: {Marcados(marcadas)}.";
+
+        var quedan = marcadas.Where(m => !fuera.Any(f =>
+            f.Caja == m.Caja && f.Que.Equals(m.Que, StringComparison.OrdinalIgnoreCase))).ToList();
+
+        if (quedan.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            return $"quitando {Marcados(fuera)} no queda ninguno marcado, así que lo he apagado todo.";
+        }
+
+        Ui.Senalador.SenalarVarias(quedan);
+        return $"quitado {Marcados(fuera)}. Siguen marcados los otros {quedan.Count}: {Marcados(quedan)}.";
+    }
+
+    private static string Marcados(IReadOnlyList<(System.Windows.Rect Caja, string Que)> xs) =>
+        string.Join(", ", xs.Take(25).Select(x => $"«{x.Que}»")) + (xs.Count > 25 ? "…" : "");
 
     private string OpenApp(string app)
     {
@@ -965,7 +1030,7 @@ public sealed class SurfaceMapTools
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
-        or "map_pointed_trail";
+        or "map_pointed_trail" or "map_exclude";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -982,7 +1047,9 @@ public sealed class SurfaceMapTools
         // gesto que acompaña a una frase, no un estado en el que quedarse.
         if (!tool.Equals("map_show", StringComparison.OrdinalIgnoreCase)
             && !tool.Equals("map_pointing_at", StringComparison.OrdinalIgnoreCase)
-            && !tool.Equals("map_pointed_trail", StringComparison.OrdinalIgnoreCase))
+            && !tool.Equals("map_pointed_trail", StringComparison.OrdinalIgnoreCase)
+            // Excluir RETOCA lo marcado; si se soltara antes, se quedaría sin nada que retocar.
+            && !tool.Equals("map_exclude", StringComparison.OrdinalIgnoreCase))
             Ui.Senalador.Soltar();
 
         string r = tool switch
@@ -998,6 +1065,7 @@ public sealed class SurfaceMapTools
             "map_what_i_see" => LoQueVeo(),
             "map_pointing_at" => LoQueSenala(),
             "map_pointed_trail" => LoQueMeAcabasDeMostrar(A("seconds")),
+            "map_exclude" => Excluir(A("exit")),
             "map_show" => Mostrar(A("exit")),
             "map_set_level" => _map.FijarNivel(
                 A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
