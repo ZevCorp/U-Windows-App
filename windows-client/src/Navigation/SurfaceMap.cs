@@ -52,6 +52,14 @@ public sealed class SurfaceMap
         /// -1 = todavía sin situar.
         /// </summary>
         public int Nivel { get; set; } = -1;
+
+        /// <summary>
+        /// La última vez que se MIRÓ esta pantalla y se apuntó qué puertas tenía.
+        ///
+        /// Es la referencia contra la que se sabe si una puerta sigue estando: las que se vieron en
+        /// esta misma pasada están ahora; las que traen una fecha anterior estuvieron, pero hoy no.
+        /// </summary>
+        public DateTime UltimaObservacion { get; set; }
     }
 
     /// <summary>
@@ -131,6 +139,22 @@ public sealed class SurfaceMap
         /// Cortar, Pegar…). Vacío en datos viejos = navegación. El mapeo solo cruza navegación;
         /// la ejecución usa las de acción a propósito.</summary>
         public string Kind { get; set; } = "";
+
+        /// <summary>
+        /// La última vez que esta puerta se vio EN PANTALLA.
+        /// </summary>
+        /// <remarks>
+        /// Dejar de verse no es dejar de existir: una puerta que hoy no está —porque la app cambió
+        /// de modo, porque el panel está plegado, porque la carpeta está vacía— sigue siendo parte
+        /// de lo que se aprendió de esa pantalla, y borrarla haría que el mapa olvidara y
+        /// reaprendiera lo mismo una y otra vez. Pero tampoco puede ofrecerse como si estuviera:
+        /// prometer una salida que no está en pantalla es mandar al asistente a pulsar el vacío.
+        ///
+        /// Así que se queda, con la fecha de cuándo se vio por última vez. Comparándola con la
+        /// última observación de su pantalla se sabe si está AHORA o solo estuvo
+        /// (2026-08-05, pedido por el usuario).
+        /// </remarks>
+        public DateTime VistaPorUltimaVez { get; set; }
     }
 
     private readonly Dictionary<string, NodeInfo> _nodes = new(StringComparer.OrdinalIgnoreCase);
@@ -228,7 +252,14 @@ public sealed class SurfaceMap
 
         if (_lastCommitted.Length > 0 && !string.Equals(_lastCommitted, id, StringComparison.OrdinalIgnoreCase))
         {
-            string k = _lastCommitted + "\n" + id;
+            // Se REUTILIZA la arista que ya una estos dos sitios, sea cual sea su puerta. Desde que
+            // la puerta forma parte de la clave, crear una nueva aquí duplicaría la misma
+            // transición: una anotada al verla pasar y otra aprendida al cruzarla a propósito. Dos
+            // caminos distintos sí son dos aristas; el mismo camino visto dos veces, no.
+            string k = _edges.Keys.FirstOrDefault(x =>
+                           x.StartsWith(_lastCommitted + "\n" + id + "\n", StringComparison.OrdinalIgnoreCase)
+                           || string.Equals(x, _lastCommitted + "\n" + id, StringComparison.OrdinalIgnoreCase))
+                       ?? Clave(_lastCommitted, id, "");
             if (!_edges.TryGetValue(k, out var e)) { e = new EdgeInfo(); _edges[k] = e; }
             e.Count++;
 
@@ -314,17 +345,57 @@ public sealed class SurfaceMap
 
     public IReadOnlyDictionary<string, NodeInfo> Nodes => _nodes;
 
+    /// <summary>
+    /// La clave de una arista: DE DÓNDE, A DÓNDE y POR QUÉ PUERTA.
+    /// </summary>
+    /// <remarks>
+    /// La puerta forma parte de la identidad, y esto no es un capricho de modelado: sin ella, dos
+    /// puertas distintas que llevan al mismo sitio son la MISMA arista, y la segunda pisa a la
+    /// primera. En el explorador pasa constantemente —al panel de «Imágenes» se llega desde el árbol
+    /// de la izquierda y desde los accesos anclados—, y el mapa se quedaba solo con la última
+    /// aprendida: el otro camino desaparecía del grafo aunque siguiera existiendo en la pantalla.
+    ///
+    /// Dos caminos al mismo sitio son dos caminos, y el usuario lo pidió así explícitamente
+    /// (2026-08-05). Fundirlos es perder información que la pantalla sí tiene.
+    ///
+    /// Las claves viejas —sin puerta— se siguen leyendo: se les entiende la puerta vacía.
+    /// </remarks>
+    private static string Clave(string from, string to, string selector) => from + "\n" + to + "\n" + selector;
+
     public IEnumerable<(string From, string To, EdgeInfo Info)> Edges()
     {
         foreach (var kv in _edges)
         {
-            int cut = kv.Key.IndexOf('\n');
-            yield return (kv.Key[..cut], kv.Key[(cut + 1)..], kv.Value);
+            int a = kv.Key.IndexOf('\n');
+            if (a < 0) continue;
+            int b = kv.Key.IndexOf('\n', a + 1);
+            string to = b < 0 ? kv.Key[(a + 1)..] : kv.Key[(a + 1)..b];
+            yield return (kv.Key[..a], to, kv.Value);
         }
     }
 
     /// <summary>Cuántas aristas saben ya CÓMO recorrerse. Es la medida de madurez del mapa.</summary>
     public int EdgesWithAction => _edges.Values.Count(e => e.Selector.Length > 0);
+
+    /// <summary>
+    /// ¿Esta salida estaba a la vista la última vez que se miró su pantalla?
+    ///
+    /// «No estar ahora» no borra nada —la puerta se queda en el mapa, con su nivel y su destino—,
+    /// pero sí cambia lo que se puede prometer: ofrecer como salida algo que no está en pantalla es
+    /// mandar a pulsar el vacío. Quien pregunta merece saber cuál de las dos cosas es.
+    ///
+    /// Sin fecha —datos de antes de que esto existiera— se responde que sí: lo que se aprendió
+    /// entonces se vio alguna vez, y tratarlo como ausente escondería medio mapa de golpe.
+    /// </summary>
+    public bool SigueALaVista(string desde, EdgeInfo e)
+    {
+        if (e.VistaPorUltimaVez == default) return true;
+        string d = Norm(desde);
+        if (!_nodes.TryGetValue(d, out var n) || n.UltimaObservacion == default) return true;
+        // Misma pasada de observación = sigue estando. Se deja un margen por si la anotación de la
+        // arista y el sello del nodo caen en milisegundos distintos.
+        return e.VistaPorUltimaVez >= n.UltimaObservacion.AddMilliseconds(-500);
+    }
 
     /// <summary>
     /// Aprende una arista RECORRIDA por el propio sistema (explorador del grafo). A diferencia de
@@ -384,16 +455,29 @@ public sealed class SurfaceMap
                 && !nivelPorSelector.ContainsKey(info.Selector))
                 nivelPorSelector[info.Selector] = info.NivelNav;
 
+        // Se sella la pasada. Lo que se vea en ella queda con esta misma marca de tiempo, y lo que
+        // no, se queda con la anterior: ahí está la diferencia entre «está» y «estuvo».
+        var ahora = DateTime.UtcNow;
+        if (_nodes.TryGetValue(f, out var nObs)) nObs.UltimaObservacion = ahora;
+
         foreach (var s in salidas)
         {
             if (s.Selector.Length == 0) continue;
 
             // Si ya conocemos una salida REAL con este selector desde aquí, no se toca: lo recorrido
-            // manda sobre lo observado.
-            if (Edges().Any(e => string.Equals(e.From, f, StringComparison.OrdinalIgnoreCase)
-                              && string.Equals(e.Info.Selector, s.Selector, StringComparison.Ordinal)
-                              && !EsPuerta(e.To)))
-                continue;
+            // manda sobre lo observado. Pero SÍ se le refresca la fecha: sigue estando delante, y
+            // sin esto lo ya aprendido se leería como desaparecido en cuanto se aprende.
+            var yaReal = _edges.FirstOrDefault(kv =>
+                kv.Key.StartsWith(f + "\n", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(kv.Value.Selector, s.Selector, StringComparison.Ordinal));
+            if (yaReal.Value != null)
+            {
+                yaReal.Value.VistaPorUltimaVez = ahora;
+                int corte = yaReal.Key.IndexOf('\n');
+                int corte2 = yaReal.Key.IndexOf('\n', corte + 1);
+                string haciaDonde = corte2 < 0 ? yaReal.Key[(corte + 1)..] : yaReal.Key[(corte + 1)..corte2];
+                if (!EsPuerta(haciaDonde)) continue;
+            }
 
             // El destino puede deducirse: si este MISMO selector ya llevó a algún sitio desde otra
             // pantalla, lleva al mismo desde aquí. Vale para el cromo de navegación —el panel
@@ -403,8 +487,8 @@ public sealed class SurfaceMap
             string destino = deducido.Length > 0 ? deducido : DestinoPuerta(s.Selector);
             if (string.Equals(destino, f, StringComparison.OrdinalIgnoreCase)) continue; // no lleva a sí misma
 
-            string k = f + "\n" + destino;
-            if (_edges.ContainsKey(k)) continue;
+            string k = Clave(f, destino, s.Selector);
+            if (_edges.TryGetValue(k, out var yaEsta)) { yaEsta.VistaPorUltimaVez = ahora; continue; }
 
             // EL NIVEL SE FIJA UNA VEZ. Si esta puerta ya se vio antes en esta app, conserva el
             // nivel que se le puso entonces —da igual desde dónde se esté mirando ahora—; si es
@@ -425,6 +509,7 @@ public sealed class SurfaceMap
                 Explored = deducido.Length > 0,
                 Nivel = s.Grupo,
                 NivelNav = nivelPuerta,
+                VistaPorUltimaVez = ahora,
             };
         }
         Save();
@@ -589,8 +674,12 @@ public sealed class SurfaceMap
     {
         if (EsContenido(controlType) || selector.Length == 0 || EsRelativo(selector)) return;
 
+        // La puerta va ahora en la clave, así que se buscan las dos formas: la nueva
+        // «desde\n?sel\nsel» y la vieja «desde\n?sel», que puede venir de un mapa ya guardado.
+        string colgante = "\n" + DestinoPuerta(selector);
         var promover = _edges
-            .Where(kv => kv.Key.EndsWith("\n" + DestinoPuerta(selector), StringComparison.Ordinal))
+            .Where(kv => kv.Key.EndsWith(colgante + "\n" + selector, StringComparison.Ordinal)
+                      || kv.Key.EndsWith(colgante, StringComparison.Ordinal))
             .ToList();
 
         foreach (var kv in promover)
@@ -598,7 +687,7 @@ public sealed class SurfaceMap
             string desde = kv.Key[..kv.Key.IndexOf('\n')];
             if (string.Equals(desde, destino, StringComparison.OrdinalIgnoreCase)) { _edges.Remove(kv.Key); continue; }
             _edges.Remove(kv.Key);
-            string k = desde + "\n" + destino;
+            string k = Clave(desde, destino, selector);
             if (!_edges.ContainsKey(k)) { kv.Value.Explored = true; _edges[k] = kv.Value; }
         }
     }
@@ -624,7 +713,8 @@ public sealed class SurfaceMap
         }
 
         // La puerta que acabamos de cruzar deja de ser una incógnita aquí y en todas partes.
-        _edges.Remove(f + "\n" + DestinoPuerta(selector));
+        _edges.Remove(Clave(f, DestinoPuerta(selector), selector));
+        _edges.Remove(f + "\n" + DestinoPuerta(selector));   // por si viene de un mapa guardado antes
         ResolverPuertasIguales(selector, t, controlType);
 
         if (!_nodes.ContainsKey(t) && _nodes.Count < MaxNodes) _nodes[t] = new NodeInfo();
@@ -657,9 +747,10 @@ public sealed class SurfaceMap
             if (!fijado && nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
         }
 
-        string k = f + "\n" + t;
+        string k = Clave(f, t, selector);
         if (!_edges.TryGetValue(k, out var e)) { e = new EdgeInfo(); _edges[k] = e; }
         e.Count++;
+        e.VistaPorUltimaVez = DateTime.UtcNow;   // acabamos de cruzarla: por fuerza estaba a la vista
         e.Selector = selector;
         e.Alternatives = alternatives;
         e.Label = label;

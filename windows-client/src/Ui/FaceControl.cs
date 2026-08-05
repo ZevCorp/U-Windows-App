@@ -108,6 +108,45 @@ public sealed class FaceControl : FrameworkElement
         nameof(BlinkClosed), typeof(double), typeof(FaceControl),
         new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    /// <summary>
+    /// Cuánto está ABIERTA la boca, 0 (cerrada, la sonrisa de siempre) a 1 (bien abierta).
+    /// </summary>
+    /// <remarks>
+    /// Va en una DependencyProperty con AffectsRender pese a la regla de esta clase —lo continuo va
+    /// en RenderTransform— porque aquí no hay transform que valga: la boca no se mueve ni se escala,
+    /// CAMBIA DE FORMA, y una geometría distinta hay que dibujarla. Lo que sí se respeta es el
+    /// motivo de la regla: esto solo se anima mientras Ü habla (no en reposo, que es casi todo el
+    /// tiempo), a ~16 cuadros por segundo y no a 60, y quien la mueve redondea el valor para no
+    /// disparar un repintado por cada variación imperceptible.
+    /// </remarks>
+    public double MouthOpen
+    {
+        get => (double)GetValue(MouthOpenProperty);
+        set => SetValue(MouthOpenProperty, value);
+    }
+
+    public static readonly DependencyProperty MouthOpenProperty = DependencyProperty.Register(
+        nameof(MouthOpen), typeof(double), typeof(FaceControl),
+        new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>
+    /// La FORMA de la abertura: 0 = ancha y plana (como al decir «i» o «e»), 1 = redonda y estrecha
+    /// (como al decir «o» o «u»). Con la altura, es lo que distingue las bocas del dibujo.
+    ///
+    /// Por el volumen no se puede saber qué vocal se está diciendo —eso exigiría analizar el sonido,
+    /// que es otro problema entero— así que esto no pretende acertar la vocal: pretende que la boca
+    /// no repita siempre el mismo gesto, que es lo que delata a un muñeco.
+    /// </summary>
+    public double MouthRound
+    {
+        get => (double)GetValue(MouthRoundProperty);
+        set => SetValue(MouthRoundProperty, value);
+    }
+
+    public static readonly DependencyProperty MouthRoundProperty = DependencyProperty.Register(
+        nameof(MouthRound), typeof(double), typeof(FaceControl),
+        new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
     // ── Las poses ─────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -131,9 +170,15 @@ public sealed class FaceControl : FrameworkElement
     {
         //                              browL browR curvL curvR  eyeOpen squint mouthCurve  width   cornL cornR  acento
         [FaceMood.Reposo] = new(2, 2.5, 0.3, 0.4, 0.85, 0.15, 0.7, 34 * 1.1, 0.3, 0.5, null),
-        [FaceMood.Trabajando] = new(-1, 4, 0.1, 0.5, 0.75, 0.20, 0.7, 34 * 0.95, 0.2, 0.1, UiPalette.Trabajando),
+        // SIN TINTE, los dos. Escuchar y trabajar son los estados en los que más rato pasa la carita
+        // —con la conversación en vivo, «escuchando» es casi toda la sesión— y teñir la cara entera
+        // de verde o de azul durante minutos cansa a quien la tiene siempre delante (2026-08-05,
+        // decidido por el usuario). Su gesto ya los distingue: cejas altas y ojos abiertos para
+        // escuchar, ceja torcida para trabajar. El color se guarda para lo que interrumpe —grabando,
+        // esperando, fallo—, que es cuando merece la pena robar la mirada.
+        [FaceMood.Trabajando] = new(-1, 4, 0.1, 0.5, 0.75, 0.20, 0.7, 34 * 0.95, 0.2, 0.1, null),
         // Cejas altas y ojos bien abiertos: la cara de estar prestando atención.
-        [FaceMood.Escuchando] = new(6, 6, 0.35, 0.35, 1.00, 0.05, 0.6, 34 * 1.05, 0.35, 0.35, UiPalette.Vivo),
+        [FaceMood.Escuchando] = new(6, 6, 0.35, 0.35, 1.00, 0.05, 0.6, 34 * 1.05, 0.35, 0.35, null),
         // Quieta y mirando de frente: «te estoy viendo». La quietud es la señal.
         [FaceMood.Grabando] = new(2, 2, 0.3, 0.3, 0.95, 0.10, 0.4, 34 * 0.8, 0.2, 0.2, UiPalette.Fallo),
         // Asimetría interrogativa: una ceja sube, la otra baja.
@@ -277,8 +322,43 @@ public sealed class FaceControl : FrameworkElement
     }
 
     /// <summary>Corre los ojos a un lado (sutil), los mantiene un momento y los devuelve al centro.</summary>
+    /// <summary>
+    /// Mirar hacia un lado y QUEDARSE mirando, hasta que se suelte.
+    ///
+    /// Es lo que hace creíble que la carita esté señalando algo: ponerse al lado del elemento y
+    /// seguir mirando al frente es raro, casi desatento. Como <see cref="IrJuntoA"/> la centra en
+    /// vertical con el elemento, la dirección es puramente lateral y basta con EyeShift
+    /// (2026-08-05, pedido por el usuario).
+    ///
+    /// Mientras está fija, los gestos de reposo no le corren los ojos: no se puede estar mirando
+    /// algo y distraerse cada ocho segundos.
+    /// </summary>
+    public void MirarHacia(bool izquierda)
+    {
+        _mirandoFijo = true;
+        double objetivo = (izquierda ? -1 : 1) * 3.5;
+        var ease = new KeySpline(0.3, 0, 0.2, 1);
+        var a = new DoubleAnimationUsingKeyFrames();
+        a.KeyFrames.Add(new SplineDoubleKeyFrame(objetivo, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(320)), ease));
+        BeginAnimation(EyeShiftProperty, a);
+    }
+
+    /// <summary>Vuelve a mirar al frente y deja que los gestos de reposo sigan su curso.</summary>
+    public void DejarDeMirar()
+    {
+        if (!_mirandoFijo) return;
+        _mirandoFijo = false;
+        var ease = new KeySpline(0.3, 0, 0.2, 1);
+        var a = new DoubleAnimationUsingKeyFrames();
+        a.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)), ease));
+        BeginAnimation(EyeShiftProperty, a);
+    }
+
+    private bool _mirandoFijo;
+
     private void LookAround()
     {
+        if (_mirandoFijo) return;   // está mirando algo: no se distrae
         double target = (_rng.Next(2) == 0 ? -1 : 1) * (2.0 + _rng.NextDouble() * 1.5); // ±2..3.5 unidades
         var ease = new KeySpline(0.3, 0, 0.2, 1);
         var a = new DoubleAnimationUsingKeyFrames();
@@ -389,14 +469,81 @@ public sealed class FaceControl : FrameworkElement
         double midY = 34 - mouthCurve * 12;
         double shift = (cornerR - cornerL) * 10;
         double half = mouthWidth / 2;
-        var mouth = new StreamGeometry();
-        using (var g = mouth.Open())
+
+        // ABIERTA O CERRADA. Cerrada es la sonrisa de siempre —una línea— y así se queda en reposo:
+        // esto no puede cambiar la cara que ya existía. Abierta, la MISMA curva pasa a ser el labio
+        // de arriba y se le añade otro por debajo, cerrando una figura que se rellena. Un solo
+        // dibujo con dos estados, en vez de dos bocas distintas que habría que mantener a la par.
+        double abierta = Math.Max(0, Math.Min(1, MouthOpen));
+        if (abierta <= 0.02)
         {
-            g.BeginFigure(new Point(X(-half), Y(leftY)), false, false);
-            g.BezierTo(new Point(X(-half * 0.3 + shift), Y(midY)), new Point(X(half * 0.3 + shift), Y(midY)), new Point(X(half), Y(rightY)), true, false);
+            var linea = new StreamGeometry();
+            using (var g = linea.Open())
+            {
+                g.BeginFigure(new Point(X(-half), Y(leftY)), false, false);
+                g.BezierTo(new Point(X(-half * 0.3 + shift), Y(midY)), new Point(X(half * 0.3 + shift), Y(midY)), new Point(X(half), Y(rightY)), true, false);
+            }
+            linea.Freeze();
+            dc.DrawGeometry(null, stroke, linea);
         }
-        mouth.Freeze();
-        dc.DrawGeometry(null, stroke, mouth);
+        else
+        {
+            // Redonda estrecha la boca; ancha la deja como está. Es lo que separa una «o» de una «e».
+            double redonda = Math.Max(0, Math.Min(1, MouthRound));
+            double halfA = half * (1 - redonda * 0.58);
+            double alto = 3 + abierta * 20 * (0.75 + redonda * 0.45);
+
+            // La comisura sube un poco al abrir, como una boca de verdad: si las esquinas se quedan
+            // clavadas mientras el centro baja, parece una bisagra y no una boca.
+            double lY = leftY - abierta * 2, rY = rightY - abierta * 2;
+            double mY = midY - abierta * 1.5;
+            double centro = (lY + rY) / 2;
+
+            // DE MEDIA LUNA A ÓVALO. Con la sonrisa de siempre arriba, estrechar la boca la cierra en
+            // PUNTA y sale un colmillo, no una «o» (2026-08-05, visto al dibujarlas todas seguidas).
+            // Así que al redondear no basta con estrechar: el labio de arriba tiene que dejar de
+            // sonreír —se levanta hasta curvarse al revés— y los dos tiran hacia fuera, que es lo que
+            // convierte la media luna en un óvalo.
+            double Mezcla(double plano, double redondo) => plano + (redondo - plano) * redonda;
+            double ctrlArribaY = Mezcla(mY, centro - alto * 0.45);
+            double ctrlAbajoY = Mezcla(mY + alto, centro + alto * 0.55);
+            double anchoArriba = halfA * Mezcla(0.30, 0.62);
+            double anchoAbajo = halfA * Mezcla(0.45, 0.78);
+
+            var boca = new StreamGeometry();
+            using (var g = boca.Open())
+            {
+                g.BeginFigure(new Point(X(-halfA), Y(lY)), true, true);
+                g.BezierTo(new Point(X(-anchoArriba + shift), Y(ctrlArribaY)), new Point(X(anchoArriba + shift), Y(ctrlArribaY)), new Point(X(halfA), Y(rY)), false, false);
+                g.BezierTo(new Point(X(anchoAbajo), Y(ctrlAbajoY)), new Point(X(-anchoAbajo), Y(ctrlAbajoY)), new Point(X(-halfA), Y(lY)), false, false);
+            }
+            boca.Freeze();
+            dc.DrawGeometry(stroke.Brush, null, boca);
+
+            // La lengua. Solo cuando la boca está lo bastante abierta para que se vea algo dentro:
+            // dibujarla siempre la convierte en una mancha pegada al labio.
+            if (abierta > 0.35)
+            {
+                // DÓNDE ACABA LA BOCA NO ES DONDE ESTÁ SU PUNTO DE CONTROL. Una bezier cúbica no
+                // llega hasta sus controles: con los dos a la misma altura se queda en tres cuartos
+                // del camino. Colocar la lengua contando desde el control la dejaba POR DEBAJO del
+                // labio, asomando fuera de la boca (2026-08-05). El punto más bajo de la curva sale
+                // de evaluarla en la mitad: (P0 + 3·C1 + 3·C2 + P3) / 8.
+                double fondo = (lY + rY) / 8 + ctrlAbajoY * 0.75;
+
+                double rx = halfA * 0.42, ry = alto * 0.20;
+                var lengua = new EllipseGeometry(new Point(X(shift * 0.4), Y(fondo - ry * 0.25)), rx * s, ry * s);
+                lengua.Freeze();
+
+                // Y ADEMÁS se recorta contra la boca, que es lo que garantiza que no pueda salirse
+                // aunque la cuenta de arriba falle en algún tamaño raro: la geometría manda sobre la
+                // aritmética. De paso es como se ve en el dibujo de referencia — la lengua no es un
+                // óvalo entero flotando, es un óvalo cortado por el borde del labio.
+                dc.PushClip(boca);
+                dc.DrawGeometry(UiPalette.PincelLengua, null, lengua);
+                dc.Pop();
+            }
+        }
 
         dc.Pop();
     }

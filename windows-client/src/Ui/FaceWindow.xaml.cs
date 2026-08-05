@@ -142,6 +142,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         // El "location bar de Windows": arranca encendido mostrando el ID de superficie arriba a la
         // derecha. Es la base del scoping de workflows (mismo formato que source_url en Graph).
+        // LA CARITA VA A DONDE MIRA. Cuando el asistente dice que ve un elemento, ponerse a su lado
+        // es lo que convierte «lo veo» en algo comprobable: si se planta junto a otra cosa, se ve al
+        // instante. Es la misma idea que el recuadro, dicha con el cuerpo (2026-08-05).
+        Senalador.Senala += (caja, _) => Dispatcher.BeginInvoke(() => IrJuntoA(caja));
+        Senalador.Suelta += () => Dispatcher.BeginInvoke(() => { try { CollapsedFace?.DejarDeMirar(); } catch { } });
         _badge = new LocatorBadge();
         _badge.Show();
         _locator = new SurfaceLocator();
@@ -173,6 +178,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             _map?.SetCurrent(loc.Id);     // y el mapa ilumina el nodo donde estás parado
         });
         _locator.Start();
+
+        // El rastro del cursor va desde el arranque: cuando alguien dice «ilumina todo esto que te
+        // estoy mostrando», ya ha PASADO el ratón por encima. Si se empezara a mirar al oír la
+        // frase, lo que se quiere enseñar ya habría ocurrido.
+        RastroDelCursor.Arrancar();
 
         // Puente clínico: se sondea cada 3 s, no en cada cambio de pantalla. El médico
         // puede guardar la nota DESPUÉS de que SAP ya esté en la pantalla, así que
@@ -215,6 +225,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 MicBtn.Content = viva ? "🔴" : "🎤";
                 MicBtn.ToolTip = viva ? "Conversación en vivo — clic para colgar" : "Hablarle a Ü";
                 if (viva) ShowTalk();
+                // La boca la mueve el audio EN VIVO, que no pasa por VoiceIO: sin esto el gesto
+                // quedaba dibujado y sin nadie que lo moviera (2026-08-05).
+                ActualizarBoca();
             });
             Closed += (_, __) => _vivo?.Dispose();
         }
@@ -2048,6 +2061,53 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// Es la misma regla que ya sigue el vigilante de clics: siempre activo, porque el terreno se
     /// aprende viviendo. Lo que el usuario decide aquí es si quiere VERLO, no si el sistema sabe.
     /// </summary>
+    /// <summary>
+    /// Lleva la carita junto a una caja de pantalla, sin taparla.
+    ///
+    /// Se coloca a la DERECHA del elemento y, si ahí no cabe, a la izquierda: taparlo justo cuando
+    /// se está diciendo «mira esto» sería la peor forma de señalarlo. La caja llega en píxeles
+    /// físicos —como los da UIA— y se convierte aquí, porque el escalado lo sabe la ventana.
+    /// </summary>
+    private void IrJuntoA(Rect fisico)
+    {
+        try
+        {
+            var src = PresentationSource.FromVisual(this);
+            System.Windows.Media.Matrix m = src?.CompositionTarget?.TransformFromDevice
+                ?? System.Windows.Media.Matrix.Identity;
+            var tl = m.Transform(new Point(fisico.X, fisico.Y));
+            var br = m.Transform(new Point(fisico.Right, fisico.Bottom));
+
+            // DÓNDE PUEDE PONERSE. El área de trabajo es la del monitor PRINCIPAL, así que recortar
+            // contra ella arrastraba la carita de vuelta a la pantalla principal cada vez que el
+            // elemento estaba en otra: quedaba lejísimos de lo que decía estar mirando. Si el
+            // elemento cae dentro del área de trabajo se usa esa —así no tapa la barra de tareas—;
+            // si no, manda el escritorio ENTERO, que es donde de verdad está (2026-08-05).
+            var trabajo = SystemParameters.WorkArea;
+            var todo = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+                                SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+            var elemento = new Rect(tl, br);
+            var area = trabajo.Contains(elemento) ? trabajo : todo;
+
+            double ancho = ActualWidth > 0 ? ActualWidth : 160;
+            double alto = ActualHeight > 0 ? ActualHeight : 160;
+
+            double x = br.X + 12;
+            if (x + ancho > area.Right) x = tl.X - ancho - 12;      // no cabe a la derecha: al otro lado
+            x = Math.Max(area.Left, Math.Min(x, area.Right - ancho));
+
+            double y = tl.Y + ((br.Y - tl.Y) / 2) - (alto / 2);      // centrada con el elemento
+            y = Math.Max(area.Top, Math.Min(y, area.Bottom - alto));
+
+            Left = x; Top = y;
+
+            // Y los ojos hacia él: si la carita quedó a su derecha, mira a la izquierda.
+            bool aLaIzquierda = (tl.X + br.X) / 2 < x + (ancho / 2);
+            try { CollapsedFace?.MirarHacia(aLaIzquierda); } catch { }
+        }
+        catch { }
+    }
+
     private void OnToggleLocator(object sender, RoutedEventArgs e)
     {
         if (_locator == null || _badge == null) return;
@@ -2178,6 +2238,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private FaceMood ResolveMood()
     {
+        // LA CONVERSACIÓN EN VIVO ES OTRA VOZ, y esta función solo miraba a la de Windows. Mientras
+        // había una sesión abierta la carita se quedaba en reposo: ni hablando cuando hablaba, ni
+        // escuchando con el micrófono abierto (2026-08-05).
+        if (_vivo?.Viva == true) return _vivo.NivelVoz > 0.004 ? FaceMood.Hablando : FaceMood.Escuchando;
+
         var voz = _voice.Activity;
         if (voz.Escuchando) return FaceMood.Escuchando;
         if (_teaching) return FaceMood.Grabando;
@@ -2199,7 +2264,100 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Face.Mood = mood;
         CollapsedFace.Mood = mood;
         UpdateChip(mood);
+        ActualizarBoca();
     });
+
+    /// <summary>
+    /// ¿Hay que estar moviendo la boca? Dos voces distintas pueden estar hablando y la carita no
+    /// tiene por qué saber cuál.
+    ///
+    /// La de Windows avisa por <see cref="FaceMood.Hablando"/>; la de la conversación en vivo NO
+    /// pasa por ahí —su audio sale por otro sitio— y ese fue el fallo: la boca estaba dibujada y
+    /// nadie la movía, porque el único disparador miraba a la voz vieja (2026-08-05).
+    /// </summary>
+    private void ActualizarBoca() =>
+        MoverLaBoca(_mood == FaceMood.Hablando || _vivo?.Viva == true);
+
+    // ── La boca, mientras habla ───────────────────────────────────────────────────────────────
+
+    private System.Windows.Threading.DispatcherTimer? _boca;
+    private double _bocaAbierta;
+    private int _bocaPaso;
+
+    /// <summary>
+    /// Abre y cierra la boca al ritmo de lo que se está diciendo.
+    ///
+    /// El movimiento sale del VOLUMEN REAL de la voz, no de un bucle de animación: una boca que se
+    /// mueve sola mientras suena una frase acaba desincronizada de ella y se nota enseguida —es la
+    /// diferencia entre un muñeco que habla y uno al que le suena un altavoz detrás—. Ese volumen ya
+    /// lo mide la capa de voz para otra cosa (no confundir su propio eco con el usuario), así que
+    /// aquí se aprovecha en vez de medirlo por segunda vez.
+    ///
+    /// Cuando no hay sesión viva —la voz vieja de Windows no da nivel— se cae a un vaivén, que es
+    /// mejor que una boca quieta mientras se oye hablar.
+    ///
+    /// 16 cuadros por segundo y no 60: la boca cambia de FORMA, así que cada cuadro es un repintado
+    /// de la carita entera, y esto solo puede correr mientras habla. A 16 el habla ya se lee como
+    /// habla —el cine mudo iba a esa velocidad— y cuesta la cuarta parte.
+    /// </summary>
+    private void MoverLaBoca(bool hablando)
+    {
+        if (!hablando)
+        {
+            _boca?.Stop();
+            _boca = null;
+            _bocaAbierta = 0;
+            Face.MouthOpen = 0;
+            CollapsedFace.MouthOpen = 0;
+            return;
+        }
+        if (_boca != null) return;
+
+        _boca = new System.Windows.Threading.DispatcherTimer(
+            System.Windows.Threading.DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(60) };
+        _boca.Tick += (_, __) =>
+        {
+            _bocaPaso++;
+            bool enVivo = _vivo?.Viva == true;
+
+            // CON NIVEL REAL, EL SILENCIO CIERRA LA BOCA. Caer al vaivén cuando el nivel es bajo
+            // haría que la carita moviera los labios durante las pausas de la conversación —y en una
+            // conversación se calla más de lo que se habla—, que es peor que no moverlos: parece que
+            // dice cosas que no dice. El vaivén es solo para la voz de Windows, que no da nivel.
+            double objetivo;
+            if (enVivo)
+            {
+                // Se estira porque la voz normal vive en la parte baja de la escala: una boca que
+                // solo se abre en los gritos no parece que hable.
+                double nivel = _vivo!.NivelVoz;
+                objetivo = nivel <= 0.004 ? 0 : Math.Min(1, Math.Pow(nivel, 0.55) * 1.45);
+            }
+            else
+            {
+                objetivo = 0.35 + 0.30 * Math.Sin(_bocaPaso * 0.9) + 0.15 * Math.Sin(_bocaPaso * 2.3);
+            }
+
+            // Se persigue el objetivo en vez de saltar a él: los labios tienen inercia, y sin esto
+            // la boca parpadea entre abierta y cerrada como un interruptor.
+            _bocaAbierta += (Math.Max(0, Math.Min(1, objetivo)) - _bocaAbierta) * 0.55;
+
+            // Redondeado a centésimas: por debajo de eso no se ve nada y solo serían repintados.
+            double abierta = Math.Round(_bocaAbierta, 2);
+            // La forma acompaña pero no va a la par: abrir mucho tiende a «a», poco a «o», y una
+            // onda lenta desempata para que no salga siempre la misma cara.
+            double redonda = Math.Round(Math.Max(0, Math.Min(1,
+                (1 - abierta) * 0.7 + 0.3 * (0.5 + 0.5 * Math.Sin(_bocaPaso * 0.37)))), 2);
+
+            if (Math.Abs(Face.MouthOpen - abierta) >= 0.01) { Face.MouthOpen = abierta; CollapsedFace.MouthOpen = abierta; }
+            if (Math.Abs(Face.MouthRound - redonda) >= 0.02) { Face.MouthRound = redonda; CollapsedFace.MouthRound = redonda; }
+
+            // Y que el resto de la cara acompañe: en vivo se alterna entre hablar y escuchar sin que
+            // nadie más lo avise. RefreshMood no hace nada si el estado no cambió, así que llamarla
+            // en cada cuadro sale gratis.
+            if (_vivo?.Viva == true) RefreshMood();
+        };
+        _boca.Start();
+    }
 
     /// <summary>
     /// Sustituye al viejo <c>SetThinking</c>: los sitios que ejecutan siguen diciendo «estoy

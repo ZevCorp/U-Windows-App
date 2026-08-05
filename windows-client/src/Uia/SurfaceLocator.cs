@@ -174,6 +174,12 @@ public sealed class SurfaceLocator : IDisposable
         IntPtr raiz = GetAncestor(hwnd, GA_ROOT);
         if (raiz != IntPtr.Zero) hwnd = raiz;
 
+        // De paso, se apunta cuál es la ventana DEL USUARIO. Este sondeo es lo único que mira el
+        // primer plano de forma continua, así que es el sitio natural para recordarlo: cuando
+        // alguien pulsa la carita para hablarnos, delante pasamos a estar nosotros y ya no hay
+        // forma de deducir qué estaba mirando. Con esto sí (2026-08-05).
+        AppAligner.VentanaDelUsuario();
+
         string proc = ProcessName(hwnd);
         // Nuestras propias ventanas (la carita, el badge, el inspector) no son "una superficie":
         // conservan el ID de la app real que el usuario estaba usando.

@@ -34,6 +34,45 @@ public sealed class LiveAudio : IDisposable
         get { lock (_candado) return _cola != null && _cola.BufferedBytes > 0; }
     }
 
+    /// <summary>
+    /// CUÁNTO DE FUERTE estamos sonando ahora mismo, en la misma escala que el micrófono (0–1).
+    ///
+    /// Hace falta para no confundir nuestra propia voz con la del usuario. Lo que entra por el
+    /// micro cuando hablamos es un eco de esto, y lo alto que llegue depende del volumen de los
+    /// altavoces: con el volumen bajo no molesta y con el volumen alto tapa la voz de cualquiera.
+    /// Saber a qué volumen estamos sonando es lo único que permite distinguir «me están
+    /// interrumpiendo» de «me estoy oyendo a mí mismo» (2026-08-05).
+    ///
+    /// Baja sola: se queda con el pico reciente y lo va soltando, para que el silencio entre dos
+    /// palabras de una misma frase no la ponga a cero y abra la puerta al eco de la siguiente.
+    /// </summary>
+    public double NivelSalida
+    {
+        get
+        {
+            lock (_candado)
+            {
+                double caida = (DateTime.UtcNow - _cuandoSalida).TotalMilliseconds / 400.0;
+                return caida >= 1 ? 0 : _nivelSalida * (1 - caida);
+            }
+        }
+    }
+
+    private double _nivelSalida;
+    private DateTime _cuandoSalida = DateTime.MinValue;
+
+    /// <summary>El pico de un bloque PCM de 16 bits, normalizado a 0–1. Igual que mide la entrada.</summary>
+    private static double Pico(byte[] pcm)
+    {
+        int max = 0;
+        for (int i = 0; i + 1 < pcm.Length; i += 2)
+        {
+            int m = Math.Abs((short)(pcm[i] | (pcm[i + 1] << 8)));
+            if (m > max) max = m;
+        }
+        return max / 32768.0;
+    }
+
     public void AbrirMicrofono()
     {
         lock (_candado)
@@ -89,6 +128,12 @@ public sealed class LiveAudio : IDisposable
                 _altavoz.Play();
             }
             _cola!.AddSamples(pcm, 0, pcm.Length);
+
+            // Se anota lo fuerte que va a sonar esto. Se queda el pico más alto mientras no haya
+            // decaído: dentro de una frase hay silencios cortos, y dejar caer el nivel en cada uno
+            // abriría la puerta al eco de la sílaba siguiente.
+            double p = Pico(pcm);
+            if (p >= NivelSalida) { _nivelSalida = p; _cuandoSalida = DateTime.UtcNow; }
         }
     }
 

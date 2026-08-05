@@ -273,6 +273,175 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
+    /// ¿Veo esto? Si sí, lo SEÑALA: enciende el recuadro y lleva la carita a su lado.
+    ///
+    /// «¿Ves el botón Nuevo?» tenía una respuesta insuficiente: decir que sí. Quien pregunta no está
+    /// pidiendo un sí — está pidiendo comprobar que los dos miran lo mismo, y para eso hay que
+    /// apuntar (2026-08-05, pedido por el usuario). Señalar convierte una afirmación en algo
+    /// verificable de un vistazo: si el recuadro cae sobre otra cosa, se ve al instante.
+    ///
+    /// Se busca en lo que hay AHORA en pantalla, no en el mapa: la pregunta es «¿lo ves?», no
+    /// «¿te acuerdas de él?».
+    /// </summary>
+    private string Mostrar(string que)
+    {
+        if (que.Length == 0) return "falta `exit`: qué elemento hay que señalar";
+
+        // MIRAR NO MUEVE NADA. Aquí había un AsegurarFoco para que una ventana intrusa no falseara
+        // la respuesta, y fue un remedio peor que la enfermedad: `_ultimaApp` guarda la última app
+        // sobre la que se ACTUÓ, así que preguntar «¿ves esto?» estando en Chrome arrancaba el foco
+        // al explorador —el usuario lo vio pasar cada vez (2026-08-05)—. Y el problema que
+        // pretendía resolver era de mi banco de pruebas, no de nadie usando esto.
+        //
+        // Ver es pasivo por definición: se lee lo que hay delante, y si no se puede leer se dice.
+        // Un observador que reordena la pantalla para verla mejor ha dejado de observar.
+        // NO NOS MIRAMOS A NOSOTROS. Si lo que hay delante es una ventana de Ü —la barra, la capa
+        // del grafo— leerla y contestar «veo ▾ y 🤖» es describirse a sí mismo creyendo que describe
+        // la pantalla del usuario (2026-08-05, salió en la primera prueba de las zonas). Es la misma
+        // regla que ya rige en el mapa y en el detector de diálogos, que aquí faltaba.
+        // Ya NO se rechaza por tener nuestra propia ventana delante: pulsar la carita para hablar
+        // nos pone delante, así que rechazarlo era negarse justo cuando se pregunta. El lector mira
+        // la ventana del usuario —la de debajo de la nuestra—, que es a la que se refiere quien
+        // pregunta. Además el asistente contaba aquel «mi propia interfaz» como «Claude se puso por
+        // medio», culpando a una app que ni siquiera estaba (2026-08-05).
+        _lector.Read();
+        var candidatos = _lector.Elements.Where(e => e.Label.Length > 0).ToList();
+        string donde = _where()?.Id ?? "(pantalla desconocida)";
+
+        // NO HABER MIRADO NO ES NO HABERLO VISTO. Si la lectura vino vacía, decir «no lo veo» sería
+        // afirmar algo que no se ha comprobado — el mismo error que perseguimos en las acciones,
+        // trasladado a la vista (2026-08-05).
+        if (candidatos.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            return $"no he podido leer la pantalla ({donde}): no me devuelve ningún elemento. "
+                 + "No es que «{que}» no esté — es que no llegué a mirar.";
+        }
+
+        // ¿Se pregunta por UNA cosa, por VARIAS, o por una ZONA? «¿Ves los elementos de la columna
+        // derecha?» no se responde buscando un nombre: se responde mirando dónde está cada cosa. Y
+        // es la forma natural de preguntar cuando se señala en voz alta, porque quien mira una
+        // pantalla piensa en zonas antes que en nombres (2026-08-05, pedido por el usuario).
+        var zona = ZonaPedida(que);
+        List<UiaReader.UiElement> elegidos;
+        string comoSeLlama;
+
+        if (zona != null)
+        {
+            // Solo lo PULSABLE, y sin repetir nombre. Sin filtrar salían 256 «elementos» de una
+            // columna que tiene doce: contenedores anidados, textos de estado, cada fila contada
+            // varias veces. Señalar 256 cosas no es señalar (2026-08-05). Lo que el usuario llama
+            // «los elementos de esa columna» son sus puertas, no cada nodo del árbol UIA.
+            elegidos = candidatos
+                .Where(e => zona(e.Bounds) && EsPuertaVisible(e))
+                .GroupBy(e => e.Label, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .OrderBy(e => e.Bounds.Top).ThenBy(e => e.Bounds.Left)
+                .Take(30)
+                .ToList();
+            comoSeLlama = que;
+        }
+        else if (que.Contains(',') || que.Contains(';'))
+        {
+            var nombres = que.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                             .Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
+            elegidos = nombres
+                .Select(n => Uia.Reconocedor.Buscar(candidatos, n).FirstOrDefault())
+                .Where(e => e != null).Select(e => e!).ToList();
+            comoSeLlama = string.Join(", ", nombres);
+        }
+        else
+        {
+            // El MISMO reconocedor que usa map_take para pulsar. Cuando señalar y pulsar buscaban
+            // cada uno a su manera, pasaba lo del 2026-08-05: veía la barra de búsqueda y decía que
+            // no podía pulsarla. Si lo señalo, lo puedo pulsar — y al revés.
+            elegidos = Uia.Reconocedor.Buscar(candidatos, que).Take(1).ToList();
+            comoSeLlama = que;
+        }
+
+        if (elegidos.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            var parecidos = candidatos.Take(12).Select(c => $"«{c.Label}»");
+            return $"NO veo «{que}» en «{donde}» ({candidatos.Count} elementos a la vista). "
+                 + $"Lo que sí veo: {string.Join(", ", parecidos)}…";
+        }
+
+        if (elegidos.Count > 1)
+        {
+            Ui.Senalador.SenalarVarias(elegidos.Select(e => (e.Bounds, e.Label)).ToList());
+            var nombres = elegidos.Take(20).Select(e => $"«{e.Label}»");
+            return $"SÍ, veo {elegidos.Count} y los estoy señalando todos en «{donde}»: "
+                 + string.Join(", ", nombres) + (elegidos.Count > 20 ? "…" : "")
+                 + ". Para moverlos de nivel, map_set_level uno por uno.";
+        }
+
+        var el = elegidos[0];
+        Ui.Senalador.Senalar(el.Bounds, el.Label);
+        string aqui = _where()?.Id ?? "";
+        var h = aqui.Length > 0
+            ? _map.ExitsFrom(aqui).FirstOrDefault(x => x.Info.Label.Equals(el.Label, StringComparison.OrdinalIgnoreCase))
+            : null;
+        // «El mapa aún no lo tiene» se leía como una negativa, y el asistente la repetía tal cual:
+        // «lo veo pero como no lo conozco no puedo marcarlo». No conocerlo nunca ha impedido nada
+        // —el mapa es memoria de lo recorrido, no permiso para actuar—, así que se dice lo que de
+        // verdad significa: aún sin recorrer (2026-08-05).
+        string enMapa = h == null ? "aún sin recorrer, se aprende al cruzarla"
+            : (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
+              + (h.Info.NivelFijado ? " · fijado" : "");
+
+        return $"SÍ veo «{el.Label}» ({el.ControlType}) y lo estoy señalando: recuadro encendido y "
+             + $"la carita puesta a su lado. En el mapa: {enMapa}. Lo puedo pulsar ahora mismo con "
+             + $"map_take exit=«{el.Label}» — que lo vea basta.";
+    }
+
+
+    /// <summary>Lo que una persona llamaría «un elemento» de la pantalla: algo que se puede pulsar
+    /// y que ocupa un sitio razonable. No un contenedor ni una etiqueta suelta.</summary>
+    private static bool EsPuertaVisible(UiaReader.UiElement e) =>
+        e.Bounds.Width >= 12 && e.Bounds.Height >= 12
+        && e.Bounds.Width < 900                       // un contenedor ancho no es un elemento
+        && e.ControlType.ToLowerInvariant() is "button" or "listitem" or "treeitem" or "tabitem"
+            or "menuitem" or "hyperlink" or "checkbox" or "radiobutton" or "splitbutton" or "combobox";
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
+    /// <summary>
+    /// Traduce «la columna derecha», «el panel de la izquierda», «la barra de arriba» a una región
+    /// de la ventana. Devuelve null si lo pedido no suena a zona.
+    ///
+    /// Los tercios y quintos no son arbitrarios: un panel lateral ocupa alrededor de un tercio y una
+    /// barra de herramientas bastante menos de un quinto del alto. No hace falta afinar más, porque
+    /// esto sirve para SEÑALAR —el usuario ve al instante si se pasó o se quedó corto— y no para
+    /// decidir nada por su cuenta.
+    /// </summary>
+    private Func<System.Windows.Rect, bool>? ZonaPedida(string texto)
+    {
+        string t = texto.ToLowerInvariant();
+        bool zonaSuena = t.Contains("columna") || t.Contains("panel") || t.Contains("barra")
+                      || t.Contains("lateral") || t.Contains("todos") || t.Contains("elementos de");
+        if (!zonaSuena) return null;
+
+        IntPtr h = GetForegroundWindow();
+        if (h == IntPtr.Zero || !GetWindowRect(h, out RECT w)) return null;
+        double x0 = w.Left, y0 = w.Top, ancho = w.Right - w.Left, alto = w.Bottom - w.Top;
+        if (ancho <= 0 || alto <= 0) return null;
+
+        if (t.Contains("derech")) return r => r.X >= x0 + ancho * 2 / 3;
+        if (t.Contains("izquierd")) return r => r.X <= x0 + ancho / 3;
+        if (t.Contains("arriba") || t.Contains("superior") || t.Contains("herramientas"))
+            return r => r.Y <= y0 + alto / 5;
+        if (t.Contains("abajo") || t.Contains("inferior")) return r => r.Y >= y0 + alto * 4 / 5;
+        if (t.Contains("centro") || t.Contains("contenido"))
+            return r => r.X > x0 + ancho / 3 && r.X < x0 + ancho * 2 / 3;
+        return null;
+    }
+
+    /// <summary>
     /// El elemento que hay BAJO EL CURSOR, ahora mismo.
     ///
     /// Es la forma barata y exacta de resolver «esto que estoy señalando»: la alternativa era
@@ -291,7 +460,62 @@ public sealed class SurfaceMapTools
 
             var (etiqueta, tipo, sels) = UiaSurface.DescribeElement(el);
             string nombre = etiqueta.Length > 0 ? etiqueta : (el.Current.Name ?? "").Trim();
-            if (nombre.Length == 0) return $"bajo el cursor hay un {tipo} sin nombre; no puedo referirme a él";
+
+            // EL PUNTO MANDA, PERO LA PUERTA ES LO ÚTIL. Bajo el cursor puede haber un trozo interno
+            // —el texto de un botón, la celda de una fila— y ese trozo no es lo que el usuario está
+            // señalando: señala la PUERTA que lo contiene. Se busca entre lo que hay en pantalla la
+            // puerta que cubre ese punto, y se prefiere la más pequeña, que es la más específica
+            // (2026-08-05, pedido por el usuario: primero el cursor, luego buscarlo entre las
+            // puertas).
+            var punto = new System.Windows.Point(p.X, p.Y);
+            _lector.Read();
+            var puerta = _lector.Elements
+                .Where(e => e.Label.Length > 0 && EsPuertaVisible(e) && e.Bounds.Contains(punto))
+                .OrderBy(e => e.Bounds.Width * e.Bounds.Height)
+                .FirstOrDefault();
+
+            // La caja que se va a iluminar. Se prefiere la de la puerta —es la que el usuario
+            // reconoce como «el elemento»— pero si no la hay, vale la del propio elemento bajo el
+            // cursor: LO TENEMOS DELANTE, con su rectángulo. Exigir la puerta dejaba sin iluminar
+            // —y sin mover la carita— todo lo que estuviera fuera de la ventana leída: la barra de
+            // tareas, otra ventana, un menú (2026-08-05, «no se movió la carita al lado»).
+            System.Windows.Rect caja = System.Windows.Rect.Empty;
+            try { caja = el.Current.BoundingRectangle; } catch { }
+
+            if (puerta != null) { nombre = puerta.Label; tipo = puerta.ControlType; caja = puerta.Bounds; }
+
+            // Si el punto cayó en un trozo sin nombre —un Group, un panel interno— se sube por el
+            // árbol hasta encontrar algo que sí lo tenga. Un contenedor anónimo no es una respuesta:
+            // el usuario está señalando ALGO, y ese algo tiene nombre un poco más arriba.
+            if (nombre.Length == 0)
+            {
+                var subiendo = System.Windows.Automation.TreeWalker.ControlViewWalker.GetParent(el);
+                for (int i = 0; i < 5 && subiendo != null && nombre.Length == 0; i++)
+                {
+                    try
+                    {
+                        string n = (subiendo.Current.Name ?? "").Trim();
+                        if (n.Length > 0)
+                        {
+                            nombre = n;
+                            tipo = subiendo.Current.ControlType.ProgrammaticName.Replace("ControlType.", "");
+                            try { caja = subiendo.Current.BoundingRectangle; } catch { }
+                            break;
+                        }
+                    }
+                    catch { }
+                    subiendo = System.Windows.Automation.TreeWalker.ControlViewWalker.GetParent(subiendo);
+                }
+            }
+
+            if (nombre.Length == 0)
+                return "bajo el cursor no hay nada con nombre, ni en él ni en lo que lo contiene. "
+                     + "Muévelo un poco y vuelve a preguntar.";
+
+            // Y se ilumina: si el usuario señala y el asistente dice un nombre, hay que poder
+            // comprobar de un vistazo que hablan del mismo sitio.
+            bool iluminado = !caja.IsEmpty && caja.Width >= 1 && caja.Height >= 1;
+            if (iluminado) Ui.Senalador.Senalar(caja, nombre);
 
             string aqui = _where()?.Id ?? "";
             var h = aqui.Length > 0
@@ -301,11 +525,124 @@ public sealed class SurfaceMapTools
                 : (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
                   + (h.Info.NivelFijado ? " · fijado a mano" : " · deducido");
 
-            return $"señalas «{nombre}» ({tipo}) · {estado}. "
-                 + $"Para moverlo de nivel: map_set_level con exit=«{nombre}».";
+            return $"señalas «{nombre}» ({tipo}) · {estado}"
+                 + (iluminado ? " · lo estoy iluminando y me pongo a su lado" : " · no he podido iluminarlo (sin caja)")
+                 + $". Para moverlo de nivel: map_set_level con exit=«{nombre}».";
         }
         catch (Exception e) { return $"no pude leer lo que hay bajo el cursor: {e.Message}"; }
     }
+
+    /// <summary>
+    /// «Ilumina todo ESTO que te estoy mostrando»: lo que el cursor ha tocado hace nada.
+    ///
+    /// Es la misma técnica que ya acertaba con un elemento —mirar qué hay bajo el cursor— repetida
+    /// en el tiempo, que es exactamente como una persona enseña varias cosas: pasando la mano por
+    /// encima. Antes esto se intentaba adivinando ZONAS de la pantalla por coordenadas, y pedir «la
+    /// columna izquierda» devolvía la barra de título: una banda de píxeles no sabe qué agrupa
+    /// (2026-08-05, propuesto por el usuario al ver que señalar de uno en uno sí funcionaba).
+    /// </summary>
+    private string LoQueMeAcabasDeMostrar(string segundosPedidos)
+    {
+        double segundos = double.TryParse(segundosPedidos, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out double s) && s > 0 ? s : 10;
+
+        var marcas = Ui.RastroDelCursor.Ultimas(segundos);
+        if (marcas.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            return $"no has pasado el ratón por encima de nada en los últimos {segundos:0} segundos. "
+                 + "Pásalo por lo que quieras enseñarme y dímelo otra vez.";
+        }
+
+        // Lo que se ATRAVIESA no es lo que se enseña. Al ir de un icono a otro el cursor cruza por
+        // encima de cosas de paso, y meterlas convertiría «estos cuatro» en «estos once». Se filtra
+        // igual que en el resto: solo lo que una persona llamaría un elemento.
+        var buenas = marcas
+            .Where(m => m.Caja.Width >= 12 && m.Caja.Height >= 12)
+            .GroupBy(m => m.Nombre, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Last())
+            .OrderBy(m => m.Caja.Top).ThenBy(m => m.Caja.Left)
+            .Take(25)
+            .ToList();
+
+        if (buenas.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            return "por donde pasaste no había nada que pueda señalar.";
+        }
+
+        Ui.Senalador.SenalarVarias(buenas.Select(m => (m.Caja, m.Nombre)).ToList());
+
+        string lista = string.Join(", ", buenas.Select(m => $"«{m.Nombre}» ({m.Tipo})"));
+        return $"SÍ: por ahí pasaste {buenas.Count} cosa(s) y las estoy iluminando todas: {lista}. "
+             + "Si sobra alguna o falta otra, vuelve a pasar el ratón y dímelo.";
+    }
+
+    /// <summary>
+    /// «Excepto este»: quita uno de lo que ya está marcado y DEJA EL RESTO encendido.
+    ///
+    /// Sin esto, la única forma de responder a «excepto este» era señalar algo — y lo que se
+    /// señalaba era justo el que se quería excluir, así que quedaba encendido él solo: exactamente
+    /// lo contrario de lo pedido (2026-08-05). Corregir una selección es parte de hacerla; si cada
+    /// frase empieza de cero, no se puede afinar nada.
+    /// </summary>
+    private string Excluir(string cual)
+    {
+        var marcadas = Ui.Senalador.Marcadas;
+        if (marcadas.Count == 0)
+            return "ahora mismo no tengo nada marcado, así que no hay de dónde quitar. "
+                 + "Dime primero qué ilumino.";
+
+        // Cuál quitar: el que se nombre, o —si no se nombra— el que esté bajo el cursor, porque
+        // «excepto ESTE» se dice señalando.
+        var fuera = new List<(System.Windows.Rect Caja, string Que)>();
+
+        if (cual.Length > 0)
+        {
+            foreach (var n in cual.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                                  .Select(x => x.Trim()).Where(x => x.Length > 0))
+            {
+                string norm = Uia.Reconocedor.Normalizar(n);
+                fuera.AddRange(marcadas.Where(m =>
+                    Uia.Reconocedor.Normalizar(m.Que) == norm
+                    || Uia.Reconocedor.Normalizar(m.Que).Contains(norm, StringComparison.Ordinal)));
+            }
+        }
+
+        if (fuera.Count == 0 && GetCursorPos(out var p))
+        {
+            var punto = new System.Windows.Point(p.X, p.Y);
+            // La MÁS PEQUEÑA que contenga el cursor: si hay cajas anidadas, la de dentro es la que
+            // se está señalando.
+            var bajoElCursor = marcadas.Where(m => m.Caja.Contains(punto))
+                                       .OrderBy(m => m.Caja.Width * m.Caja.Height)
+                                       .Cast<(System.Windows.Rect Caja, string Que)?>()
+                                       .FirstOrDefault();
+            if (bajoElCursor != null) fuera.Add(bajoElCursor.Value);
+        }
+
+        if (fuera.Count == 0)
+            return cual.Length > 0
+                ? $"«{cual}» no está entre los que tengo marcados: {Marcados(marcadas)}. "
+                  + "Dime cuál de esos quito."
+                : "el cursor no está encima de ninguno de los que tengo marcados. Ponlo sobre el que "
+                  + $"quieras quitar, o dime su nombre. Marcados: {Marcados(marcadas)}.";
+
+        var quedan = marcadas.Where(m => !fuera.Any(f =>
+            f.Caja == m.Caja && f.Que.Equals(m.Que, StringComparison.OrdinalIgnoreCase))).ToList();
+
+        if (quedan.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            return $"quitando {Marcados(fuera)} no queda ninguno marcado, así que lo he apagado todo.";
+        }
+
+        Ui.Senalador.SenalarVarias(quedan);
+        return $"quitado {Marcados(fuera)}. Siguen marcados los otros {quedan.Count}: {Marcados(quedan)}.";
+    }
+
+    private static string Marcados(IReadOnlyList<(System.Windows.Rect Caja, string Que)> xs) =>
+        string.Join(", ", xs.Take(25).Select(x => $"«{x.Que}»")) + (xs.Count > 25 ? "…" : "");
 
     private string OpenApp(string app)
     {
@@ -692,7 +1029,8 @@ public sealed class SurfaceMapTools
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
-        or "map_set_level" or "map_what_i_see" or "map_pointing_at";
+        or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
+        or "map_pointed_trail" or "map_exclude";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -704,6 +1042,15 @@ public sealed class SurfaceMapTools
         // lanzador de apps.
         string args_ = string.Join(" ", args.Select(kv => $"{kv.Key}={kv.Value}"));
         LogBus.Log("mapa-mcp", $"→ {tool} {args_}".TrimEnd());
+
+        // Si se pasa a hacer otra cosa, ya no se está mirando lo de antes: se suelta. Señalar es un
+        // gesto que acompaña a una frase, no un estado en el que quedarse.
+        if (!tool.Equals("map_show", StringComparison.OrdinalIgnoreCase)
+            && !tool.Equals("map_pointing_at", StringComparison.OrdinalIgnoreCase)
+            && !tool.Equals("map_pointed_trail", StringComparison.OrdinalIgnoreCase)
+            // Excluir RETOCA lo marcado; si se soltara antes, se quedaría sin nada que retocar.
+            && !tool.Equals("map_exclude", StringComparison.OrdinalIgnoreCase))
+            Ui.Senalador.Soltar();
 
         string r = tool switch
         {
@@ -717,6 +1064,9 @@ public sealed class SurfaceMapTools
             "map_open_app" => OpenApp(A("app")),
             "map_what_i_see" => LoQueVeo(),
             "map_pointing_at" => LoQueSenala(),
+            "map_pointed_trail" => LoQueMeAcabasDeMostrar(A("seconds")),
+            "map_exclude" => Excluir(A("exit")),
+            "map_show" => Mostrar(A("exit")),
             "map_set_level" => _map.FijarNivel(
                 A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
                 A("exit"),
@@ -1023,26 +1373,26 @@ public sealed class SurfaceMapTools
     /// una carpeta llena de cosas (2026-08-02). Preguntar dónde estoy es el momento natural para
     /// mirar alrededor — el terreno se aprende viviendo, no solo explorando a propósito.
     /// </summary>
+    /// <summary>
+    /// Mira la pantalla y anota sus puertas. SIEMPRE.
+    /// </summary>
+    /// <remarks>
+    /// Aquí había un guardia que se saltaba la relectura cuando la pantalla «ya se conocía»: seis
+    /// salidas recorribles y tres acciones bastaban para darla por sabida. Ahorraba una lectura del
+    /// árbol de UI y costaba dos cosas, las dos malas:
+    ///
+    /// · Lo que aparecía DESPUÉS no entraba nunca. Una carpeta recién creada, un botón que sale al
+    ///   seleccionar algo, se quedaban fuera del mapa aunque estuvieran delante — es el «a veces
+    ///   verde y a veces gris» que se venía notando en los puntos del explorador.
+    /// · Y desde que el grafo se arma con lo VISIBLE, sin volver a mirar no hay forma de saber qué
+    ///   dejó de estar: una puerta que ya no está seguiría ofreciéndose como si estuviera.
+    ///
+    /// Una pantalla no se conoce de una vez: cambia mientras se usa. Si el grafo es lo que se ve,
+    /// hay que mirar (2026-08-05).
+    /// </remarks>
     private void ObservarAqui(string nodo, bool forzar = false)
     {
-        try
-        {
-            if (forzar) { ObservarSinGuardia(nodo); return; }
-            // Se mira alrededor salvo que la pantalla ya se conozca COMPLETA: con salidas
-            // recorribles Y con sus acciones. «Alguna salida» no bastaba (conectividad pasiva sin
-            // acción), y «alguna recorrible» tampoco: los nodos mapeados antes de clasificar
-            // puertas conocían la navegación pero ninguna acción, y sin este repaso se quedaban
-            // así para siempre.
-            // Se mira alrededor salvo que la pantalla se conozca DE VERDAD. «Que haya alguna de
-            // cada clase» no bastaba: la arista de subida que se aprende al entrar es ella sola una
-            // acción, así que una carpeta recién creada parecía conocida y al llegar solo se veía
-            // «Subir un nivel» — se pidió «Pegar» y no existía, con la barra a la vista
-            // (2026-08-02). Una pantalla real tiene muchas puertas; dos no es conocerla.
-            var conocidas = _map.ExitsFrom(nodo);
-            if (conocidas.Count(h => h.Info.Selector.Length > 0) >= 6
-                && conocidas.Count(h => h.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)) >= 3) return;
-            ObservarSinGuardia(nodo);
-        }
+        try { ObservarSinGuardia(nodo); }
         catch { }
     }
 
@@ -1155,8 +1505,16 @@ public sealed class SurfaceMapTools
             // Se distingue lo cruzado DESDE AQUÍ de lo que está disponible porque la app lo tiene en
             // todas sus pantallas. Las dos sirven para navegar; solo una se comprobó en este sitio.
             string origen = h.Info.Nivel == SurfaceMap.NivelCromo ? "  ·  del nivel (en toda la app)" : "";
+
+            // Sin cruzar y ausente son cosas distintas, y las dos hay que decirlas. Una puerta sin
+            // cruzar se puede tomar YA —se aprende al hacerlo—; una que hoy no está en pantalla, no,
+            // por mucho que el mapa la recuerde (2026-08-05).
+            string estado = SurfaceMap.EsPuerta(h.To) ? "  ·  sin cruzar todavía: al tomarla se aprende" : "";
+            if (!_map.SigueALaVista(desde, h.Info)) estado += "  ·  NO está en pantalla ahora";
+
             sb.AppendLine(h.Info.Selector.Length > 0
-                ? $"  → {h.To}   pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces){origen}"
+                ? $"  → {(SurfaceMap.EsPuerta(h.To) ? "(destino por descubrir)" : h.To)}   "
+                  + $"pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces){origen}{estado}"
                 : $"  → {h.To}   (observado {h.Info.Count} vez/veces, pero NO se sabe con qué acción)");
         }
 
@@ -1164,8 +1522,18 @@ public sealed class SurfaceMapTools
                                        && x.Info.Selector.Length > 0).ToList();
         if (acciones.Count > 0)
         {
+            // «Disponibles» tiene que querer decir disponibles AHORA. Una acción que el mapa
+            // recuerda pero que ya no está en pantalla —las cabeceras de columna al cambiar de
+            // vista, los botones que solo salen con algo seleccionado— se sigue guardando, pero
+            // ofrecerla sin avisar es mandar a pulsar el vacío (2026-08-05).
+            var aqui = acciones.Where(a => _map.SigueALaVista(desde, a.Info)).ToList();
+            var ausentes = acciones.Where(a => !_map.SigueALaVista(desde, a.Info)).ToList();
+
             sb.AppendLine("Acciones disponibles aquí (se toman con map_take, no navegan):");
-            sb.AppendLine("  " + string.Join(", ", acciones.Select(a => $"«{a.Info.Label}»")));
+            sb.AppendLine("  " + string.Join(", ", aqui.Select(a => $"«{a.Info.Label}»")));
+            if (ausentes.Count > 0)
+                sb.AppendLine($"  Conocidas pero NO en pantalla ahora ({ausentes.Count}): "
+                    + string.Join(", ", ausentes.Take(15).Select(a => $"«{a.Info.Label}»")));
         }
         return sb.ToString();
     }
@@ -1332,9 +1700,11 @@ public sealed class SurfaceMapTools
         var actual = _where();
         if (actual == null) return "no se pudo determinar dónde estamos ahora mismo";
 
+        // NO RECORDARLA NO ES NO TENERLA DELANTE. Aquí se devolvía «el mapa no conoce ninguna
+        // salida» y se acababa la conversación, aunque la puerta estuviera a la vista: en una
+        // pantalla nueva el mapa está vacío por definición, así que la primera visita a cualquier
+        // sitio era siempre un no. Se sigue: si el mapa no la tiene, se mira la pantalla.
         var opciones = _map.ExitsFrom(actual.Id).Where(h => h.Info.Selector.Length > 0).ToList();
-        if (opciones.Count == 0)
-            return $"desde «{actual.Id}» el mapa no conoce ninguna salida recorrible";
 
         // Coincidencia exacta primero, y luego por contención — «videos» debe encontrar «Videos»,
         // pero si dos salidas contienen lo pedido NO se elige por el modelo: se le devuelven las
@@ -1357,12 +1727,46 @@ public sealed class SurfaceMapTools
         // pantalla aunque el mapa aún no la haya registrado, y negarse a entrar en ella rompía la
         // tarea justo después de crearla (2026-08-03). Se intenta, se verifica el resultado, y si
         // funciona se aprende — que es como se aprende todo lo demás.
-        if (candidatas.Count == 0 && salida.StartsWith("uia:", StringComparison.OrdinalIgnoreCase))
+        // LO QUE SE VE, SE PUEDE PULSAR. El mapa es memoria, no lista de permisos. Si lo pedido no
+        // está registrado desde aquí, se mira la pantalla tal como está AHORA. Este era el hueco
+        // entre ver y pulsar: el asistente señalaba la barra de búsqueda —que la veía— y acto
+        // seguido decía que no podía pulsarla, porque señalar leía la pantalla y pulsar leía el
+        // mapa. Dos sentidos distintos para la misma cosa (2026-08-05, pedido por el usuario: «que
+        // pueda ver y clickear cualquier puerta que se vea en pantalla»).
+        if (candidatas.Count == 0)
         {
+            _lector.Read();
+            var vistos = Uia.Reconocedor.Buscar(_lector.Elements, salida);
+
+            if (vistos.Count > 1)
+                return $"«{salida}» coincide con {vistos.Count} cosas que tengo a la vista: "
+                     + string.Join("; ", vistos.Take(8).Select(v => $"«{v.Label}» [{Uia.Reconocedor.SelectorDe(v)}]"))
+                     + ". Repite `exit` con el selector de la que quieras.";
+
+            if (vistos.Count == 0)
+            {
+                // Se dice QUÉ HAY, no solo que no está lo pedido. Quien pregunta por voz dice «la
+                // barra de búsqueda» y el elemento se llama «Buscar en Notas»: con la lista delante
+                // el reintento es inmediato, y sin ella hay que adivinar a ciegas (2026-08-05).
+                var aLaVista = _lector.Elements.Where(EsPuertaVisible)
+                    .GroupBy(e => e.Label, StringComparer.OrdinalIgnoreCase).Select(g => g.Key)
+                    .Take(25).ToList();
+                return $"no veo nada que se llame «{salida}» en «{actual.Id}». Lo que SÍ tengo delante "
+                     + $"y puedo pulsar: {string.Join(", ", aLaVista.Select(n => $"«{n}»"))}"
+                     + (aLaVista.Count >= 25 ? "…" : "")
+                     + ". Vuelve a pedírmelo con uno de esos nombres.";
+            }
+
+            var visto = vistos[0];
+            string selectorDirecto = Uia.Reconocedor.SelectorDe(visto);
+            string etiquetaDirecta = visto.Label;
+            LogBus.Log("mapa-mcp", $"«{salida}» no está en el mapa, pero la veo en pantalla como "
+                                 + $"«{etiquetaDirecta}» ({visto.ControlType}): se pulsa y se verifica");
+
             var directo = new PlanStep
             {
                 StepOrder = 1, ActionType = "click",
-                Selector = salida, Label = salida,
+                Selector = selectorDirecto, Label = etiquetaDirecta,
             };
             string origen = actual.Id;
 
@@ -1373,27 +1777,42 @@ public sealed class SurfaceMapTools
             // campo en vez de entrar en la carpeta. Se creaban las tres carpetas y no se entraba en
             // ninguna (2026-08-03). Si ya está seleccionado, el paso de seleccionar sobra.
             string nombrePedido = System.Text.RegularExpressions.Regex
-                .Match(salida, @"name=([^;]+)").Groups[1].Value;
+                .Match(selectorDirecto, @"name=([^;]+)").Groups[1].Value;
             bool yaSeleccionado = nombrePedido.Length > 0
                 && SeleccionActual().Any(s => s.Equals(nombrePedido, StringComparison.OrdinalIgnoreCase));
 
-            bool errDirectoOk = yaSeleccionado
-                || _uia.Execute(directo, out _);
+            // NO TODO LO QUE SE PULSA ABRE ALGO. Una barra de búsqueda, una casilla o un botón de
+            // barra hacen su trabajo sin cambiar de pantalla; exigirles un cambio los daba por
+            // fallados —«al pulsarla no llevó a ninguna parte», cierto y engañoso, porque no tenía
+            // que llevar. Solo se sube al doble clic lo que efectivamente se abre: lo de las listas
+            // y los árboles. Y si quien llama pidió una acción concreta, manda la suya.
+            bool abrePorDoble = accionPedida.Length > 0
+                ? accionPedida.Equals("doubleclick", StringComparison.OrdinalIgnoreCase)
+                : visto.ControlType.Equals("ListItem", StringComparison.OrdinalIgnoreCase)
+                  || visto.ControlType.Equals("TreeItem", StringComparison.OrdinalIgnoreCase);
+
+            // Se actúa sobre el elemento QUE SE ACABA DE VER, no sobre su nombre: buscarlo otra vez
+            // es un rodeo que puede fallar aunque siga delante, y fallaba (ver EjecutarSobre).
             string errDirecto = "";
+            bool errDirectoOk = yaSeleccionado || _uia.EjecutarSobre(visto.Native, directo, out errDirecto);
+            string accionHecha = "click";
             if (errDirectoOk)
             {
                 string llegada = "";
                 if (!yaSeleccionado)
                 {
                     EsperarPantallaLista(700);
-                    llegada = EsperarCambio(origen, 1200);
+                    llegada = EsperarCambio(origen, abrePorDoble ? 1200 : 800);
                 }
                 else LogBus.Log("mapa-mcp", $"«{nombrePedido}» ya estaba seleccionado: se va directo al doble clic");
-                if (llegada.Length == 0)
+                if (llegada.Length == 0 && abrePorDoble)
                 {
-                    _uia.Execute(new PlanStep { StepOrder = 1, ActionType = "doubleclick", Selector = salida, Label = salida }, out errDirecto);
+                    _uia.EjecutarSobre(visto.Native,
+                        new PlanStep { StepOrder = 1, ActionType = "doubleclick", Selector = selectorDirecto, Label = etiquetaDirecta },
+                        out errDirecto);
                     EsperarPantallaLista(700);
                     llegada = EsperarCambio(origen, 1500);
+                    accionHecha = "doubleclick";
                 }
                 // Salir de la app no es cruzar una puerta de la app. Se pidió entrar en «Datos» y lo
                 // que había con ese nombre era una foto: el doble clic abrió Photos.exe y esto lo
@@ -1401,27 +1820,37 @@ public sealed class SurfaceMapTools
                 // entrar en una carpeta necesita saber que abrió un archivo.
                 if (llegada.Length > 0 && !SurfaceMap.MismaApp(origen, llegada))
                 {
-                    LogBus.Log("mapa-mcp", $"«{salida}» no es una puerta: abrió «{llegada}», otra aplicación");
-                    return $"«{salida}» no lleva a ninguna parte dentro de esta app: al pulsarla se abrió "
+                    LogBus.Log("mapa-mcp", $"«{etiquetaDirecta}» no es una puerta: abrió «{llegada}», otra aplicación");
+                    return $"«{etiquetaDirecta}» no lleva a ninguna parte dentro de esta app: al pulsarla se abrió "
                          + $"«{llegada}», que es otra aplicación. Lo que hay con ese nombre no es un sitio "
                          + "al que entrar, es un archivo que se abre.";
                 }
                 if (llegada.Length > 0)
                 {
-                    _map.LearnTraversal(origen, llegada, salida, Array.Empty<string>(), salida, "ListItem", "doubleclick");
+                    _ultimaApp = AppDe(llegada).Length > 0 ? AppDe(llegada) : _ultimaApp;
+                    _map.LearnTraversal(origen, llegada, selectorDirecto, Array.Empty<string>(),
+                                        etiquetaDirecta, visto.ControlType, accionHecha);
                     Anotar(origen, llegada);
                     ObservarAqui(llegada);
-                    LogBus.Log("mapa-mcp", $"✓ «{salida}» no estaba en el mapa; se cruzó y quedó aprendida → {llegada}");
-                    return $"«{salida}» no estaba en el mapa; la crucé y lleva a «{llegada}». Queda aprendida.";
+                    LogBus.Log("mapa-mcp", $"✓ «{etiquetaDirecta}» no estaba en el mapa; se cruzó y quedó aprendida → {llegada}");
+                    return $"«{etiquetaDirecta}» no estaba en el mapa; la vi en pantalla, la crucé y lleva a "
+                         + $"«{llegada}». Queda aprendida.";
+                }
+
+                // Pulsado y la pantalla sigue igual. Para lo que no abre nada, ESO es haberlo hecho
+                // bien: la barra de búsqueda queda enfocada, la casilla marcada, el botón aplicado.
+                if (!abrePorDoble)
+                {
+                    LogBus.Log("mapa-mcp", $"✓ pulsado «{etiquetaDirecta}» ({visto.ControlType}) visto en pantalla, sin cambio de pantalla");
+                    return $"pulsé «{etiquetaDirecta}» ({visto.ControlType}). La veía en pantalla aunque el mapa "
+                         + $"no la tuviera. Seguimos en «{origen}», que es lo normal en algo así: no es una "
+                         + "puerta, es un control. Si querías ir a otro sitio, dime a cuál.";
                 }
             }
-            return $"«{salida}» no está en el mapa y al pulsarla no llevó a ninguna parte"
+            return $"vi «{etiquetaDirecta}» e intenté pulsarla, pero no pasó nada"
                  + (errDirecto.Length > 0 ? $" ({errDirecto})" : "") + ".";
         }
 
-        if (candidatas.Count == 0)
-            return $"desde «{actual.Id}» no hay ninguna salida que se llame «{salida}». Disponibles: "
-                 + string.Join(", ", opciones.Select(h => $"«{h.Info.Label}»"));
         if (candidatas.Count > 1)
             return $"«{salida}» coincide con {candidatas.Count} salidas: "
                  + string.Join("; ", candidatas.Select(h => $"«{h.Info.Label}» [{h.Info.Selector}]"))
@@ -1673,9 +2102,10 @@ public sealed class SurfaceMapTools
             // «Datos.png» y la respuesta fue «✓ escrito» (2026-08-03). Escribir a ciegas sobre la
             // selección no es escribir: es renombrar lo que haya delante y llamarlo éxito.
             string tipoFoco = "";
+            System.Windows.Automation.AutomationElement? foco = null;
             try
             {
-                var foco = System.Windows.Automation.AutomationElement.FocusedElement;
+                foco = System.Windows.Automation.AutomationElement.FocusedElement;
                 string aid = foco?.Current.AutomationId ?? "";
                 string nombre = foco?.Current.Name ?? "";
                 tipoFoco = (foco?.Current.ControlType.ProgrammaticName ?? "").Replace("ControlType.", "");
@@ -1685,8 +2115,12 @@ public sealed class SurfaceMapTools
             }
             catch { }
             if (selector.Length == 0) return "no hay ningún campo con el foco; pasa `target` con su selector";
-            if (!tipoFoco.Equals("Edit", StringComparison.OrdinalIgnoreCase)
-                && !tipoFoco.Equals("Document", StringComparison.OrdinalIgnoreCase))
+
+            // Si ACEPTA texto o no lo dice el control, no su nombre de tipo: el buscador de YouTube
+            // es un ComboBox y se rechazaba por no llamarse «Edit», aunque es justo donde se escribe
+            // (2026-08-05). La regla vive en UiaSurface.AceptaTexto, que también protege el caso
+            // contrario: una fila de lista jamás acepta texto, porque ahí escribir es renombrar.
+            if (foco == null || !U.Graph.Surfaces.UiaSurface.AceptaTexto(foco))
             {
                 LogBus.Log("mapa-mcp", $"NO SE ESCRIBE: el foco lo tiene «{selector}», que es {tipoFoco}, no un campo de texto");
                 return $"NO escribo: no hay ningún campo de texto abierto. El foco lo tiene «{selector}» "

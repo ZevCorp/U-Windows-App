@@ -308,6 +308,10 @@ public sealed class GraphExplorerWindow : Window
             colocada = true;
         };
 
+        // Cuando el asistente dice que ve algo, el recuadro lo señala. Ver Senalador.
+        Senalador.SenalaVarias += cajas => Dispatcher.BeginInvoke(() => { try { _overlay.ShowRects(cajas); } catch { } });
+        Senalador.Suelta += () => Dispatcher.BeginInvoke(() => { try { _overlay.HideRect(); } catch { } });
+
         Closed += (_, __) => { _refresh.Stop(); _overlay.Close(); _ventanaBarra.Close(); };
         IsVisibleChanged += (_, __) =>
         {
@@ -1613,18 +1617,55 @@ public sealed class HighlightOverlay : Window
         SetWindowLong(h, GWL_EXSTYLE, GetWindowLong(h, GWL_EXSTYLE) | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW);
     }
 
-    public void ShowRect(Rect fisico)
+    public void ShowRect(Rect fisico) => ShowRects(new[] { fisico });
+
+    /// <summary>
+    /// Enciende VARIOS recuadros a la vez.
+    ///
+    /// Uno solo bastaba para el hover del explorador, pero señalar de viva voz casi nunca es de uno
+    /// en uno: «esos cuatro son del menú principal» necesita ver los cuatro juntos, o no hay forma
+    /// de confirmar que son esos y no otros (2026-08-05, pedido por el usuario). El primero se pinta
+    /// más fuerte, porque es del que se está hablando.
+    /// </summary>
+    public void ShowRects(IReadOnlyList<Rect> fisicos)
     {
         var src = PresentationSource.FromVisual(this);
         Matrix m = src?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
-        var tl = m.Transform(new Point(fisico.X, fisico.Y));
-        var br = m.Transform(new Point(fisico.Right, fisico.Bottom));
-        Canvas.SetLeft(_rect, tl.X);
-        Canvas.SetTop(_rect, tl.Y);
-        _rect.Width = Math.Max(0, br.X - tl.X);
-        _rect.Height = Math.Max(0, br.Y - tl.Y);
-        _rect.Visibility = Visibility.Visible;
+
+        // Se reutiliza el primero y se crean los demás al vuelo: lo normal es uno, y no tiene
+        // sentido pagar por adelantado unos recuadros que casi nunca se usan.
+        foreach (var extra in _extras) _canvas.Children.Remove(extra);
+        _extras.Clear();
+
+        for (int i = 0; i < fisicos.Count; i++)
+        {
+            var tl = m.Transform(new Point(fisicos[i].X, fisicos[i].Y));
+            var br = m.Transform(new Point(fisicos[i].Right, fisicos[i].Bottom));
+
+            var r = i == 0 ? _rect : NuevoRecuadro();
+            Canvas.SetLeft(r, tl.X);
+            Canvas.SetTop(r, tl.Y);
+            r.Width = Math.Max(0, br.X - tl.X);
+            r.Height = Math.Max(0, br.Y - tl.Y);
+            r.Visibility = Visibility.Visible;
+            if (i > 0) { _canvas.Children.Add(r); _extras.Add(r); }
+        }
+        if (fisicos.Count == 0) HideRect();
     }
 
-    public void HideRect() => _rect.Visibility = Visibility.Collapsed;
+    private readonly List<System.Windows.Shapes.Rectangle> _extras = new();
+
+    private static System.Windows.Shapes.Rectangle NuevoRecuadro() => new()
+    {
+        Stroke = new SolidColorBrush(Color.FromArgb(0xCC, 0xA9, 0x6B, 0xF6)),
+        StrokeThickness = 2,
+        Fill = new SolidColorBrush(Color.FromArgb(0x1C, 0xA9, 0x6B, 0xF6)),
+    };
+
+    public void HideRect()
+    {
+        _rect.Visibility = Visibility.Collapsed;
+        foreach (var extra in _extras) _canvas.Children.Remove(extra);
+        _extras.Clear();
+    }
 }

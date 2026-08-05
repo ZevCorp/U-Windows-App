@@ -61,7 +61,10 @@ public sealed class UiaReader
             Height = GetSystemMetrics(SM_CYSCREEN),
         };
 
-        IntPtr hwnd = GetForegroundWindow();
+        // La ventana DEL USUARIO, no la de delante sin más: si delante estamos nosotros —y lo
+        // estamos siempre que alguien acaba de pulsar la carita para hablarnos— leer el primer
+        // plano es leerse a uno mismo. Quien pregunta se refiere a lo que hay debajo.
+        IntPtr hwnd = AppAligner.VentanaDelUsuario();
         if (hwnd == IntPtr.Zero)
         {
             state.Screen = "escritorio";

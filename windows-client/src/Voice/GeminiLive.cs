@@ -40,6 +40,15 @@ public sealed class GeminiLive : IDisposable
     /// <summary>Está en curso una sesión de voz viva.</summary>
     public bool Viva { get; private set; }
 
+    /// <summary>
+    /// Lo fuerte que está sonando Ü ahora mismo (0–1). La carita mueve la boca con esto.
+    ///
+    /// Es la MISMA medida que usa el detector de voz para no confundir su propio eco con el usuario:
+    /// una sola fuente para «cuánto estoy sonando», y así la boca no puede acabar diciendo una cosa
+    /// distinta de lo que se oye.
+    /// </summary>
+    public double NivelVoz => Viva ? _audio.NivelSalida : 0;
+
     /// <summary>Texto para la carita: lo que se oye, lo que responde, y qué está haciendo.</summary>
     public event Action<string>? Dice;
 
@@ -48,6 +57,10 @@ public sealed class GeminiLive : IDisposable
 
     /// <summary>El turno se cerró: lo siguiente que se diga empieza en una línea nueva.</summary>
     public event Action? Cerro;
+
+    /// <summary>Llamadas que el modelo retiró: ni se ejecutan ni se responden.</summary>
+    private readonly HashSet<string> _canceladas = new();
+    private readonly object _candadoCancel = new();
 
     private readonly StringBuilder _fraseU = new();
     private readonly StringBuilder _fraseUsuario = new();
@@ -142,6 +155,7 @@ public sealed class GeminiLive : IDisposable
             await _ws.ConnectAsync(new Uri($"{Host}?key={Uri.EscapeDataString(clave)}"), _cts.Token);
             await EnviarAsync(Configuracion(modelo), _cts.Token);
 
+            lock (_candadoCancel) _canceladas.Clear();   // sesión nueva, cuentas nuevas
             Viva = true;
             Cambio?.Invoke(true);
             LogBus.Log("voz-viva", $"sesión abierta con «{modelo}»");
@@ -230,6 +244,74 @@ public sealed class GeminiLive : IDisposable
         cuanto la petición sea clara, sin pedir permiso para cada paso — el usuario ya te lo pidió.
         Ve contando lo que haces mientras lo haces («voy al explorador», «creando la carpeta»), no al
         final: lo que se está viendo en pantalla y lo que oye tienen que ir juntos.
+
+        EL CURSOR MANDA SOBRE TU INTERPRETACIÓN. Cuando el usuario diga «esto», «este», «el que estoy
+        señalando», «mira aquí» —o cuando en el vídeo veas su puntero sobre algo— usa map_pointing_at
+        ANTES que nada. No adivines de qué elemento habla por el nombre que creas haber entendido:
+        él está apuntando, y apuntar es más exacto que describir. map_pointing_at te da la puerta que
+        hay bajo el cursor, con su nombre real, y la ilumina. Con ese nombre ya puedes usar
+        map_set_level o map_take.
+
+        SEÑALAR ANTES QUE AFIRMAR. Si te preguntan «¿ves X?» o «¿dónde está X?», usa map_show: dice
+        si está y además lo marca en pantalla y lleva la carita a su lado. Contestar «sí, lo veo» sin
+        señalarlo no vale — quien pregunta está comprobando que los dos miráis lo mismo, y solo lo
+        sabe si ve dónde apuntas. Para pulsarlo después, map_take con ese mismo nombre.
+
+        LO QUE VES, LO PUEDES PULSAR. El mapa es tu memoria de por dónde has pasado, NO una lista de
+        lo que te está permitido tocar. Nunca digas «lo veo pero como no lo conozco no puedo
+        pulsarlo»: eso es falso. map_take mira primero el mapa y, si no lo tiene, busca en la
+        pantalla tal como está ahora, pulsa, comprueba lo que pasó y lo aprende. Así que si algo está
+        a la vista —en el vídeo o en map_show— llama a map_take y ya está. Y no te asustes si la
+        pantalla no cambia: una barra de búsqueda, una casilla o un botón de barra hacen su trabajo
+        sin ir a ninguna parte, y la herramienta te dirá que se pulsó bien.
+
+        VARIAS COSAS: DOS CAMINOS, Y ELIGES TÚ CUÁL.
+
+        (a) LO QUE TE ENSEÑAN CON LA MANO. Si acaban de pasar el ratón por encima de varias cosas
+        —«ilumina todos estos», «esto que te estoy mostrando»— usa map_pointed_trail: te dice por
+        encima de qué pasó el cursor y lo ilumina. Es exacto porque no adivina nada: repite el gesto.
+
+        (b) LO QUE TE DESCRIBEN CON PALABRAS. «Todos los de esa barra lateral», «las carpetas de la
+        izquierda», «los botones de arriba», «solo los de este tipo». Aquí NO hay gesto que repetir,
+        así que lo resuelves TÚ, razonando, en tres pasos y en este orden:
+
+          1. MIRA EL VÍDEO y decide a qué se refieren. El vídeo es lo único que te dice qué es «esa
+             barra», dónde está «arriba» y cuál es «este tipo» — es tu comprensión de la pantalla.
+          2. PIDE map_what_i_see. Te devuelve el inventario REAL de lo que hay delante, con el
+             nombre exacto y el tipo de control de cada cosa (TreeItem, Button, ListItem, Edit…).
+             El vídeo te da el sentido; esta lista te da los nombres con los que se puede actuar.
+          3. CRUZA LAS DOS y elige a mano el subconjunto: los del inventario que, según lo que ves
+             en el vídeo, están en esa zona Y son de ese tipo. Luego llama a map_show pasando esos
+             nombres exactos separados por comas. map_show acepta una lista y los ilumina todos.
+
+        Lo que hace que esto funcione es la división: el VÍDEO para entender de qué te hablan, el
+        INVENTARIO para nombrarlo sin equivocarte. Ninguno de los dos solo basta.
+
+        Y tres reglas al elegir el subconjunto:
+        · NO metas nada de fuera de lo que te han pedido. Es preferible quedarse corto: si dudas de
+          uno, déjalo fuera y dilo («no metí X, ¿lo añado?»). Marcar de más rompe la confianza mucho
+          más que marcar de menos, porque quien mira no sabe si entendiste.
+        · FÍLTRALO por tipo cuando te lo pidan. «Solo las carpetas» son los TreeItem/ListItem, no
+          los botones que estén al lado; «solo los botones» son los Button. El tipo viene en el
+          inventario: úsalo, no lo supongas por el nombre.
+        · DI EN VOZ ALTA la lista que vas a marcar, corta, para que puedan corregirte. «Marco estas
+          seis: Escritorio, Descargas, Notas, Imágenes, Música y Vídeos. ¿Falta alguna?»
+
+        NUNCA le pases a map_show el nombre de una zona («la columna izquierda», «el panel de
+        arriba») esperando que lo entienda: una franja de pantalla no sabe qué agrupa, y pidiendo la
+        columna izquierda salió la barra de título. La zona la interpretas tú con el vídeo; a la
+        herramienta le pasas SIEMPRE nombres concretos.
+
+        UNA SELECCIÓN SE CORRIGE, NO SE REHACE. Lo que marcas SE QUEDA marcado, y las frases que
+        vienen después la retocan:
+        · «excepto este», «ese no», «quita el de X» → map_exclude. Quita ese y DEJA EL RESTO.
+        · «y este también», «añade ese» → map_show con la lista COMPLETA: los que ya había MÁS el
+          nuevo. map_show enciende exactamente lo que le pasas, así que si mandas solo el nuevo
+          apagas los demás.
+        El error que NO debes cometer: responder a «excepto este» llamando a map_show con el que
+        sobra. Eso deja encendido justo el que se quería quitar y apaga todos los buenos — pasó, y
+        es exactamente lo contrario de lo que te piden. Cuando dudes de qué hay marcado, la
+        respuesta de la última llamada te lo dice: léela antes de decidir.
 
         LA JERARQUÍA SE PUEDE CORREGIR, y el usuario manda. El sistema deduce solo a qué nivel
         pertenece cada cosa —nivel 1 es la navegación principal de la app, la que está siempre a la
@@ -321,9 +403,10 @@ public sealed class GeminiLive : IDisposable
             ("surface", "La pantalla, por ejemplo «uia://explorer.exe/documentos». Vacío = donde estés.")),
         Fn("map_go_to", "Va a una pantalla conocida recorriendo el mapa, comprobando cada tramo.",
             ("surface", "La pantalla de destino, tal como la devuelve map_places.")),
-        Fn("map_take", "Pulsa una salida o ejecuta una acción de la pantalla actual: entrar en una carpeta, "
-            + "«Nuevo», «Cortar», «Pegar», seleccionar un archivo…",
-            ("exit", "Nombre de la salida o acción («Nuevo», «Pegar») o un selector «uia:name=X;ct=ListItem»."),
+        Fn("map_take", "Pulsa CUALQUIER cosa que esté en la pantalla: entrar en una carpeta, «Nuevo», "
+            + "«Cortar», «Pegar», una barra de búsqueda, una casilla… No hace falta que el mapa la "
+            + "conozca: si no la tiene, la busca en la pantalla de ahora, la pulsa y la aprende.",
+            ("exit", "Nombre de lo que hay que pulsar («Nuevo», «Buscar», «Pegar») o un selector «uia:name=X;ct=ListItem»."),
             ("action", "Vacío para lo normal. «addselect» para añadir a la selección sin perder lo anterior."),
             ("at", "La superficie donde CREES estar. Si no coincide con la realidad, no se actúa.")),
         Fn("map_type", "Escribe texto en el campo abierto; sirve para nombrar una carpeta recién creada.",
@@ -333,6 +416,24 @@ public sealed class GeminiLive : IDisposable
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
             ("at", "La superficie a la que hay que volver después."),
             ("choose", "La opción a pulsar. Vacío = solo si hay una única salida posible.")),
+        Fn("map_pointing_at", "PRIORITARIA cuando el usuario señala algo. Devuelve la PUERTA que hay "
+            + "bajo el cursor —con su nombre real— y la ilumina. Úsala en cuanto oigas «esto», «este», "
+            + "«el que estoy señalando», «mira aquí», o cuando en el vídeo veas su puntero sobre algo. "
+            + "Apuntar es más exacto que describir: no adivines el nombre, pregúntalo aquí."),
+        Fn("map_what_i_see", "El INVENTARIO de lo que hay en pantalla ahora: el nombre exacto y el TIPO "
+            + "de control de cada elemento (TreeItem, Button, ListItem, Edit…), más lo que el mapa sabe "
+            + "de él. Pídelo SIEMPRE antes de iluminar un grupo que te han descrito con palabras («los "
+            + "de esa barra», «solo las carpetas»): el vídeo te dice a qué se refieren, y esta lista te "
+            + "da los nombres exactos y el tipo con los que elegir el subconjunto sin equivocarte."),
+        Fn("map_show", "¿VES este elemento? Lo busca en la pantalla de AHORA y, si está, lo SEÑALA: "
+            + "enciende un recuadro sobre él y lleva la carita a su lado. Úsala siempre que el usuario "
+            + "pregunte «¿ves X?» o «¿dónde está X?» — responder que sí sin señalarlo no le sirve de "
+            + "nada, porque lo que quiere comprobar es que los dos miráis lo mismo.",
+            ("exit", "Uno: su nombre tal como se ve. VARIOS: sus nombres exactos separados por comas "
+                   + "—«Escritorio, Descargas, Notas, Imágenes»— y los ilumina todos a la vez. Pásale "
+                   + "SIEMPRE nombres concretos, nunca el nombre de una zona («la columna izquierda»): "
+                   + "qué elementos forman esa zona lo decides TÚ mirando el vídeo y cruzándolo con "
+                   + "map_what_i_see, y aquí traes ya la lista elegida.")),
         Fn("map_set_level", "Corrige a mano a qué NIVEL pertenece una salida, para toda la app y de "
             + "forma permanente. Nivel 1 = navegación principal (los hermanos que están siempre a la "
             + "vista). Úsala cuando el usuario diga cosas como «esto es del menú principal», «esto no "
@@ -345,6 +446,17 @@ public sealed class GeminiLive : IDisposable
             + "uno y otro. Es la forma rápida: úsala para las tareas que ya sabes hacer enteras.",
             ("steps", "JSON: lista de pasos. Cada uno {\"op\":\"go_to|take|type|unblock\", …} con los "
                     + "mismos argumentos que las herramientas sueltas.")),
+        Fn("map_pointed_trail", "«Ilumina TODO ESTO que te estoy mostrando». Devuelve y señala todo aquello "
+            + "por encima de lo que el usuario acaba de pasar el ratón. Úsala SIEMPRE que hable en plural "
+            + "señalando —«todos estos», «esto que te muestro», «los que te acabo de pasar»— en vez de "
+            + "adivinar una zona de la pantalla por su nombre.",
+            ("seconds", "Cuántos segundos hacia atrás mirar. Vacío = 10, que es lo que dura enseñar algo con la mano.")),
+        Fn("map_exclude", "QUITA uno de los que ya están marcados y deja el resto encendido. Es lo que "
+            + "hay que usar para «excepto este», «ese no», «quita el de X»: NO vuelvas a llamar a "
+            + "map_show con el que sobra, porque eso apagaría todos los demás y dejaría encendido "
+            + "justo el que se quería excluir.",
+            ("exit", "Nombre del que sobra (o varios separados por comas). Vacío = el que esté bajo el cursor, "
+                   + "que es como se dice «excepto ESTE».")),
         Fn("map_open_app", "ABRE una aplicación (o la trae al frente si ya estaba) y dice en qué pantalla "
             + "quedas. Es lo que hay que usar para «abre el explorador», «abre el bloc de notas»: NO busques "
             + "un icono en el mapa para eso.",
@@ -398,6 +510,19 @@ public sealed class GeminiLive : IDisposable
     private const double SueloAbsoluto = 0.008;
     private const double VecesSobreElRuido = 3.0;
 
+    /// <summary>Cuánto hay que destacar sobre el eco propio para que cuente como interrupción. No es
+    /// mucho a propósito: cortarle a media frase es media gracia de hablar en vivo, así que se pide
+    /// sonar algo más fuerte que el eco, no gritar.</summary>
+    private const double MargenSobreElEco = 1.6;
+
+    /// <summary>Qué parte de lo que sale por el altavoz vuelve por el micrófono. Se aprende sola;
+    /// este valor solo es por dónde empieza mientras no haya medido nada.</summary>
+    private double _gananciaEco = 0.5;
+
+    /// <summary>Tramos seguidos por encima del umbral. Mientras hablamos se piden dos —200 ms— porque
+    /// el eco da picos sueltos y una voz de verdad no dura un solo tramo.</summary>
+    private int _tramosAltos;
+
     private double _ruidoSala = 0.02;
     private bool _usuarioHablando;
     private DateTime _ultimaVoz;
@@ -423,7 +548,31 @@ public sealed class GeminiLive : IDisposable
         _ruidoSala = vol < _ruidoSala ? (_ruidoSala * 0.90) + (vol * 0.10)
                                       : (_ruidoSala * 0.999) + (vol * 0.001);
         double umbral = Math.Max(SueloAbsoluto, _ruidoSala * VecesSobreElRuido);
-        if (_audio.Hablando) umbral *= 2.0;   // mientras Ü habla, solo una voz clara la corta
+
+        // OÍRSE A UNO MISMO NO ES QUE TE INTERRUMPAN. Lo que sale por el altavoz vuelve a entrar por
+        // el micrófono, y con el volumen alto entra MÁS FUERTE que la voz de quien está delante: el
+        // asistente se cortaba a sí mismo a media frase (2026-08-05). Antes esto se defendía con un
+        // «×2» fijo, que es el mismo error que ya cometimos con el umbral: un número medido en un
+        // equipo y a un volumen no vale para otro.
+        //
+        // Cuánto eco vuelve depende del volumen, de los altavoces y de la sala, así que SE APRENDE:
+        // mientras hablamos y nadie nos interrumpe, todo lo que entra por el micro ES nuestro eco, y
+        // la proporción entre lo que suena y lo que se cuela es justo lo que hay que medir. Sube
+        // deprisa y baja despacio, porque quedarse corto deja pasar el eco y pasarse solo exige
+        // hablar un poco más alto para interrumpir.
+        double salida = _audio.NivelSalida;
+        if (salida > 0.01)
+        {
+            if (!_usuarioHablando)
+            {
+                double proporcion = vol / salida;
+                _gananciaEco = proporcion > _gananciaEco
+                    ? (_gananciaEco * 0.7) + (proporcion * 0.3)
+                    : (_gananciaEco * 0.995) + (proporcion * 0.005);
+                _gananciaEco = Math.Min(_gananciaEco, 2.0);   // por encima de esto ya no es eco
+            }
+            umbral = Math.Max(umbral, salida * _gananciaEco * MargenSobreElEco);
+        }
 
         // Se publica lo que se está oyendo. Sin esto, «no me escucha» y «no le llega audio» se ven
         // exactamente igual desde fuera, que es lo que costó encontrar este fallo.
@@ -432,22 +581,39 @@ public sealed class GeminiLive : IDisposable
         {
             _ultimoAforo = DateTime.UtcNow;
             LogBus.Log("voz-viva", $"micrófono: pico {_picoDelTramo:F3} · ruido {_ruidoSala:F3} · "
-                + $"umbral {umbral:F3} · {(_usuarioHablando ? "HABLANDO" : "en silencio")}");
+                + $"umbral {umbral:F3}"
+                + (salida > 0.01 ? $" · Ü sonando {salida:F3} (eco ×{_gananciaEco:F2})" : "")
+                + $" · {(_usuarioHablando ? "HABLANDO" : "en silencio")}");
             _picoDelTramo = 0;
         }
 
         if (vol >= umbral)
         {
-            _ultimaVoz = DateTime.UtcNow;
-            if (!_usuarioHablando)
+            _tramosAltos++;
+
+            // UN PICO SUELTO NO ES UNA FRASE. Mientras sonamos, el eco cruza el umbral a ratos —una
+            // consonante fuerte, un golpe de voz— y bastaba uno para dar el turno por interrumpido.
+            // Quien interrumpe de verdad sigue hablando el tramo siguiente. Cuando estamos callados
+            // no se pide nada: ahí no hay eco que confundir y el retardo sí se notaría.
+            int hacenFalta = salida > 0.01 ? 2 : 1;
+            if (_tramosAltos >= hacenFalta)
             {
-                _usuarioHablando = true;
-                await EnviarAsync("""{"realtimeInput":{"activityStart":{}}}""", _cts?.Token ?? default);
+                _ultimaVoz = DateTime.UtcNow;
+                if (!_usuarioHablando)
+                {
+                    _usuarioHablando = true;
+                    LogBus.Log("voz-viva", $"interrumpe: pico {vol:F3} sobre umbral {umbral:F3} "
+                        + $"(salida {salida:F3} · eco aprendido ×{_gananciaEco:F2})");
+                    await EnviarAsync("""{"realtimeInput":{"activityStart":{}}}""", _cts?.Token ?? default);
+                }
             }
+            else return;   // aún no cuenta: no se manda nada
         }
+        else if (_tramosAltos > 0 && !_usuarioHablando) _tramosAltos = 0;
         else if (_usuarioHablando && (DateTime.UtcNow - _ultimaVoz).TotalMilliseconds > 700)
         {
             _usuarioHablando = false;
+            _tramosAltos = 0;
             await EnviarAsync("""{"realtimeInput":{"activityEnd":{}}}""", _cts?.Token ?? default);
             return;
         }
@@ -572,6 +738,33 @@ public sealed class GeminiLive : IDisposable
             LogBus.Log("voz-viva", "← " + (plano.Length > 400 ? plano[..400] + "…" : plano));
         }
 
+        // CANCELADA ES CANCELADA. Cuando el usuario habla encima, el modelo retira las llamadas que
+        // había pedido — y aquí no se atendía ese aviso: se seguían ejecutando igual, en serie y
+        // tardando segundos, y encima se le contestaba a algo que él ya había dado por muerto.
+        //
+        // El resultado era un bucle que se comía la conversación: el usuario hablaba, se cancelaban
+        // las llamadas, el modelo volvía a pedir LAS MISMAS, y mientras tanto la cola de trabajo
+        // seguía creciendo con las viejas. Nunca terminaba una tanda, así que nunca llegaba a
+        // responder: «le hablaba y no me respondía» (2026-08-05). Se llegaron a ejecutar llamadas
+        // después de colgar la sesión.
+        if (raiz.TryGetProperty("toolCallCancellation", out var cancelacion)
+            && cancelacion.TryGetProperty("ids", out var ids))
+        {
+            lock (_candadoCancel)
+            {
+                // No crece sin fin: los identificadores son de un solo uso y solo importan mientras
+                // su tanda esté en la cola.
+                if (_canceladas.Count > 200) _canceladas.Clear();
+                foreach (var x in ids.EnumerateArray())
+                {
+                    string s = x.GetString() ?? "";
+                    if (s.Length > 0) _canceladas.Add(s);
+                }
+            }
+            LogBus.Log("voz-viva", "canceladas por el modelo: " + string.Join(", ",
+                ids.EnumerateArray().Select(x => x.GetString())));
+        }
+
         if (raiz.TryGetProperty("serverContent", out var contenido))
         {
             // INTERRUMPIDO: el usuario habló encima. Lo que ya nos habían mandado sigue en nuestra
@@ -663,6 +856,16 @@ public sealed class GeminiLive : IDisposable
                 foreach (var p in a.EnumerateObject())
                     args[p.Name] = p.Value.ValueKind == JsonValueKind.String
                         ? p.Value.GetString() ?? "" : p.Value.ToString();
+
+            // Se mira JUSTO ANTES de cada una, no al empezar la tanda: una tanda de tres puede tardar
+            // diez segundos, y si el usuario habla en la primera, las otras dos ya sobran.
+            bool anulada;
+            lock (_candadoCancel) anulada = id.Length > 0 && _canceladas.Contains(id);
+            if (anulada)
+            {
+                LogBus.Log("voz-viva", $"«{nombre}» se cancela: el modelo la retiró (habló el usuario)");
+                continue;   // y NO se responde: contestar a algo retirado es lo que lo hacía repetirla
+            }
 
             LogBus.Log("voz-viva", $"ejecutando «{nombre}»…");
             string resultado;
