@@ -618,6 +618,24 @@ public sealed class SurfaceMap
                              .Select(e => new Hop(e.From, e.To, e.Info))
                              .ToList();
 
+        // UNA PUERTA NO TAPA AL NIVEL. Una puerta dice «esto existe y no sé a dónde va»; el nivel
+        // dice «existe y va aquí». Descartar lo heredado por haber ya una salida con ese nombre
+        // dejaba siempre la peor de las dos respuestas: cada sección de Configuración veía sus once
+        // hermanas como puertas sin destino, aun sabiendo el mapa perfectamente a dónde llevan
+        // (2026-08-04). Si lo que hay aquí es una incógnita y el nivel trae la respuesta, gana el
+        // nivel; si aquí ya se cruzó de verdad, lo de aquí manda, porque es lo comprobado.
+        foreach (var h in CromoDe(AppDe(s)))
+        {
+            if (h.Info.Label.Length == 0
+                || string.Equals(h.To, s, StringComparison.OrdinalIgnoreCase)) continue;   // no lleva a sí misma
+            int ya = propias.FindIndex(p => p.Info.Label.Equals(h.Info.Label, StringComparison.OrdinalIgnoreCase));
+            if (ya >= 0)
+            {
+                if (!EsPuerta(propias[ya].To)) continue;          // aquí ya se comprobó: manda lo de aquí
+                propias.RemoveAt(ya);                             // era una incógnita: el nivel la resuelve
+            }
+        }
+
         var vistas = new HashSet<string>(propias.Select(h => h.Info.Label), StringComparer.OrdinalIgnoreCase);
         foreach (var h in CromoDe(AppDe(s)))
             if (h.Info.Label.Length > 0 && !vistas.Contains(h.Info.Label)
@@ -652,19 +670,39 @@ public sealed class SurfaceMap
         if (app.Length == 0) return new List<Hop>();
         if (_cromo.TryGetValue(app, out var guardado) && _cromoVersion == Version) return guardado;
 
-        var porSalida = new Dictionary<string, (HashSet<string> Origenes, Hop Uno)>(StringComparer.OrdinalIgnoreCase);
+        // ESTAR EN TODAS PARTES SE SABE MIRANDO, NO CRUZANDO. Antes solo contaban las aristas ya
+        // recorridas, y eso exigía cruzar cada hermano DOS veces desde sitios distintos para que el
+        // sistema aceptara que pertenece a la app: recorriendo el panel de Configuración en orden,
+        // cada sección se alcanzaba desde la anterior —un solo origen— así que ninguna calificaba y
+        // el nodo central no aparecía hasta la segunda vuelta (2026-08-04, observado por el usuario).
+        //
+        // Pero las doce secciones se ven a la vez desde la primera pantalla. Que estén en todas
+        // partes es una propiedad OBSERVABLE, y el mapa ya anota lo que ve aunque no lo haya cruzado.
+        // Se cuenta por SELECTOR y contando también las puertas sin cruzar: eso responde «¿está en
+        // todas las pantallas?», que es la pregunta. A dónde lleva es otra pregunta distinta, y para
+        // esa sí hace falta haberla cruzado al menos una vez.
+        var vistoDesde = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var destinoDe = new Dictionary<string, Hop>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var (from, to, info) in Edges())
         {
-            if (EsPuerta(to) || info.Label.Length == 0 || info.Selector.Length == 0) continue;
-            if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)
-                || !AppDe(to).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
-            string clave = info.Label + "\n" + to;
-            if (!porSalida.TryGetValue(clave, out var e))
-                porSalida[clave] = e = (new HashSet<string>(StringComparer.OrdinalIgnoreCase), new Hop(from, to, info));
-            e.Origenes.Add(from);
+            if (info.Label.Length == 0 || info.Selector.Length == 0) continue;
+            if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
+
+            if (!vistoDesde.TryGetValue(info.Selector, out var origenes))
+                vistoDesde[info.Selector] = origenes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            origenes.Add(from);
+
+            // El destino solo lo aporta una arista CRUZADA: una puerta dice que existe, no a dónde va.
+            if (!EsPuerta(to) && AppDe(to).Equals(app, StringComparison.OrdinalIgnoreCase)
+                && !destinoDe.ContainsKey(info.Selector))
+                destinoDe[info.Selector] = new Hop(from, to, info);
         }
 
-        var cromo = porSalida.Values.Where(v => v.Origenes.Count >= 2).Select(v => v.Uno).ToList();
+        var cromo = destinoDe
+            .Where(kv => vistoDesde.TryGetValue(kv.Key, out var o) && o.Count >= 2)
+            .Select(kv => kv.Value)
+            .ToList();
         if (_cromoVersion != Version) { _cromo.Clear(); _cromoVersion = Version; }
         _cromo[app] = cromo;
         return cromo;
