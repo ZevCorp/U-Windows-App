@@ -474,7 +474,15 @@ public sealed class SurfaceMapTools
                 .OrderBy(e => e.Bounds.Width * e.Bounds.Height)
                 .FirstOrDefault();
 
-            if (puerta != null) { nombre = puerta.Label; tipo = puerta.ControlType; }
+            // La caja que se va a iluminar. Se prefiere la de la puerta —es la que el usuario
+            // reconoce como «el elemento»— pero si no la hay, vale la del propio elemento bajo el
+            // cursor: LO TENEMOS DELANTE, con su rectángulo. Exigir la puerta dejaba sin iluminar
+            // —y sin mover la carita— todo lo que estuviera fuera de la ventana leída: la barra de
+            // tareas, otra ventana, un menú (2026-08-05, «no se movió la carita al lado»).
+            System.Windows.Rect caja = System.Windows.Rect.Empty;
+            try { caja = el.Current.BoundingRectangle; } catch { }
+
+            if (puerta != null) { nombre = puerta.Label; tipo = puerta.ControlType; caja = puerta.Bounds; }
 
             // Si el punto cayó en un trozo sin nombre —un Group, un panel interno— se sube por el
             // árbol hasta encontrar algo que sí lo tenga. Un contenedor anónimo no es una respuesta:
@@ -491,6 +499,7 @@ public sealed class SurfaceMapTools
                         {
                             nombre = n;
                             tipo = subiendo.Current.ControlType.ProgrammaticName.Replace("ControlType.", "");
+                            try { caja = subiendo.Current.BoundingRectangle; } catch { }
                             break;
                         }
                     }
@@ -505,7 +514,8 @@ public sealed class SurfaceMapTools
 
             // Y se ilumina: si el usuario señala y el asistente dice un nombre, hay que poder
             // comprobar de un vistazo que hablan del mismo sitio.
-            if (puerta != null) Ui.Senalador.Senalar(puerta.Bounds, puerta.Label);
+            bool iluminado = !caja.IsEmpty && caja.Width >= 1 && caja.Height >= 1;
+            if (iluminado) Ui.Senalador.Senalar(caja, nombre);
 
             string aqui = _where()?.Id ?? "";
             var h = aqui.Length > 0
@@ -516,10 +526,57 @@ public sealed class SurfaceMapTools
                   + (h.Info.NivelFijado ? " · fijado a mano" : " · deducido");
 
             return $"señalas «{nombre}» ({tipo}) · {estado}"
-                 + (puerta != null ? " · lo estoy iluminando" : "")
+                 + (iluminado ? " · lo estoy iluminando y me pongo a su lado" : " · no he podido iluminarlo (sin caja)")
                  + $". Para moverlo de nivel: map_set_level con exit=«{nombre}».";
         }
         catch (Exception e) { return $"no pude leer lo que hay bajo el cursor: {e.Message}"; }
+    }
+
+    /// <summary>
+    /// «Ilumina todo ESTO que te estoy mostrando»: lo que el cursor ha tocado hace nada.
+    ///
+    /// Es la misma técnica que ya acertaba con un elemento —mirar qué hay bajo el cursor— repetida
+    /// en el tiempo, que es exactamente como una persona enseña varias cosas: pasando la mano por
+    /// encima. Antes esto se intentaba adivinando ZONAS de la pantalla por coordenadas, y pedir «la
+    /// columna izquierda» devolvía la barra de título: una banda de píxeles no sabe qué agrupa
+    /// (2026-08-05, propuesto por el usuario al ver que señalar de uno en uno sí funcionaba).
+    /// </summary>
+    private string LoQueMeAcabasDeMostrar(string segundosPedidos)
+    {
+        double segundos = double.TryParse(segundosPedidos, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out double s) && s > 0 ? s : 10;
+
+        var marcas = Ui.RastroDelCursor.Ultimas(segundos);
+        if (marcas.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            return $"no has pasado el ratón por encima de nada en los últimos {segundos:0} segundos. "
+                 + "Pásalo por lo que quieras enseñarme y dímelo otra vez.";
+        }
+
+        // Lo que se ATRAVIESA no es lo que se enseña. Al ir de un icono a otro el cursor cruza por
+        // encima de cosas de paso, y meterlas convertiría «estos cuatro» en «estos once». Se filtra
+        // igual que en el resto: solo lo que una persona llamaría un elemento.
+        var buenas = marcas
+            .Where(m => m.Caja.Width >= 12 && m.Caja.Height >= 12)
+            .GroupBy(m => m.Nombre, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Last())
+            .OrderBy(m => m.Caja.Top).ThenBy(m => m.Caja.Left)
+            .Take(25)
+            .ToList();
+
+        if (buenas.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            return "por donde pasaste no había nada que pueda señalar.";
+        }
+
+        Ui.Senalador.SenalarVarias(buenas.Select(m => m.Caja).ToList(),
+            $"lo que me acabas de mostrar ({buenas.Count})");
+
+        string lista = string.Join(", ", buenas.Select(m => $"«{m.Nombre}» ({m.Tipo})"));
+        return $"SÍ: por ahí pasaste {buenas.Count} cosa(s) y las estoy iluminando todas: {lista}. "
+             + "Si sobra alguna o falta otra, vuelve a pasar el ratón y dímelo.";
     }
 
     private string OpenApp(string app)
@@ -907,7 +964,8 @@ public sealed class SurfaceMapTools
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
-        or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show";
+        or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
+        or "map_pointed_trail";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -923,7 +981,8 @@ public sealed class SurfaceMapTools
         // Si se pasa a hacer otra cosa, ya no se está mirando lo de antes: se suelta. Señalar es un
         // gesto que acompaña a una frase, no un estado en el que quedarse.
         if (!tool.Equals("map_show", StringComparison.OrdinalIgnoreCase)
-            && !tool.Equals("map_pointing_at", StringComparison.OrdinalIgnoreCase))
+            && !tool.Equals("map_pointing_at", StringComparison.OrdinalIgnoreCase)
+            && !tool.Equals("map_pointed_trail", StringComparison.OrdinalIgnoreCase))
             Ui.Senalador.Soltar();
 
         string r = tool switch
@@ -938,6 +997,7 @@ public sealed class SurfaceMapTools
             "map_open_app" => OpenApp(A("app")),
             "map_what_i_see" => LoQueVeo(),
             "map_pointing_at" => LoQueSenala(),
+            "map_pointed_trail" => LoQueMeAcabasDeMostrar(A("seconds")),
             "map_show" => Mostrar(A("exit")),
             "map_set_level" => _map.FijarNivel(
                 A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
@@ -1956,9 +2016,10 @@ public sealed class SurfaceMapTools
             // «Datos.png» y la respuesta fue «✓ escrito» (2026-08-03). Escribir a ciegas sobre la
             // selección no es escribir: es renombrar lo que haya delante y llamarlo éxito.
             string tipoFoco = "";
+            System.Windows.Automation.AutomationElement? foco = null;
             try
             {
-                var foco = System.Windows.Automation.AutomationElement.FocusedElement;
+                foco = System.Windows.Automation.AutomationElement.FocusedElement;
                 string aid = foco?.Current.AutomationId ?? "";
                 string nombre = foco?.Current.Name ?? "";
                 tipoFoco = (foco?.Current.ControlType.ProgrammaticName ?? "").Replace("ControlType.", "");
@@ -1968,8 +2029,12 @@ public sealed class SurfaceMapTools
             }
             catch { }
             if (selector.Length == 0) return "no hay ningún campo con el foco; pasa `target` con su selector";
-            if (!tipoFoco.Equals("Edit", StringComparison.OrdinalIgnoreCase)
-                && !tipoFoco.Equals("Document", StringComparison.OrdinalIgnoreCase))
+
+            // Si ACEPTA texto o no lo dice el control, no su nombre de tipo: el buscador de YouTube
+            // es un ComboBox y se rechazaba por no llamarse «Edit», aunque es justo donde se escribe
+            // (2026-08-05). La regla vive en UiaSurface.AceptaTexto, que también protege el caso
+            // contrario: una fila de lista jamás acepta texto, porque ahí escribir es renombrar.
+            if (foco == null || !U.Graph.Surfaces.UiaSurface.AceptaTexto(foco))
             {
                 LogBus.Log("mapa-mcp", $"NO SE ESCRIBE: el foco lo tiene «{selector}», que es {tipoFoco}, no un campo de texto");
                 return $"NO escribo: no hay ningún campo de texto abierto. El foco lo tiene «{selector}» "

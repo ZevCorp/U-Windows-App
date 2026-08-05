@@ -1092,13 +1092,36 @@ public sealed class UiaSurface : IUiSurface
         catch { }
     }
 
-    /// <summary>Algo donde se escribe: enfocarlo es la forma correcta de «pulsarlo».</summary>
-    private static bool EsCampoDeTexto(AutomationElement el)
+    /// <summary>
+    /// ¿Aquí se puede ESCRIBIR? La única respuesta, para quien pulsa y para quien teclea.
+    /// </summary>
+    /// <remarks>
+    /// Por el nombre del tipo no se sabe, y creerlo costó las dos caras del mismo error:
+    ///
+    /// · Aceptar de más: se escribía sobre una fila seleccionada del explorador y Windows lo
+    ///   entendía como RENOMBRAR — «logo-empresa.png» acabó llamándose «Datos.png», y la respuesta
+    ///   fue «✓ escrito» (2026-08-03). Por eso las filas de listas y árboles se rechazan siempre.
+    ///
+    /// · Aceptar de menos: el buscador de YouTube es un ComboBox, y también la barra de Chrome. Se
+    ///   rechazaban por no llamarse «Edit» aunque son exactamente donde se escribe en la web
+    ///   (2026-08-05). Un ComboBox de solo selección y uno de búsqueda no se distinguen por el
+    ///   tipo — los distingue tener ValuePattern y no ser de solo lectura.
+    /// </remarks>
+    public static bool AceptaTexto(AutomationElement el)
     {
         try
         {
             var ct = el.Current.ControlType;
-            return ct == ControlType.Edit || ct == ControlType.Document || ct == ControlType.ComboBox;
+
+            // Una fila de una lista o de un árbol NUNCA acepta texto, tenga el patrón que tenga:
+            // escribir ahí no es escribir, es renombrar lo que haya debajo.
+            if (ct == ControlType.ListItem || ct == ControlType.TreeItem || ct == ControlType.DataItem)
+                return false;
+
+            if (ct == ControlType.Edit || ct == ControlType.Document) return true;
+
+            return el.TryGetCurrentPattern(ValuePattern.Pattern, out var vp)
+                   && vp is ValuePattern v && !v.Current.IsReadOnly;
         }
         catch { return false; }
     }
@@ -1138,7 +1161,7 @@ public sealed class UiaSurface : IUiSurface
         // búsqueda del explorador: UIA no le daba punto pulsable (está recogida hasta que se usa) y
         // los patrones de pulsación no le aplican. SetFocus sí, y es exactamente lo que consigue un
         // clic sobre ella (2026-08-05).
-        if (EsCampoDeTexto(el))
+        if (AceptaTexto(el))
         {
             try { el.SetFocus(); } catch (Exception e) { error = $"no se pudo enfocar el campo: {e.Message}"; return false; }
 

@@ -179,6 +179,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         });
         _locator.Start();
 
+        // El rastro del cursor va desde el arranque: cuando alguien dice «ilumina todo esto que te
+        // estoy mostrando», ya ha PASADO el ratón por encima. Si se empezara a mirar al oír la
+        // frase, lo que se quiere enseñar ya habría ocurrido.
+        RastroDelCursor.Arrancar();
+
         // Puente clínico: se sondea cada 3 s, no en cada cambio de pantalla. El médico
         // puede guardar la nota DESPUÉS de que SAP ya esté en la pantalla, así que
         // reaccionar solo al cambio de superficie perdería justo ese caso. Cuando no hay
@@ -2070,7 +2075,17 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             var tl = m.Transform(new Point(fisico.X, fisico.Y));
             var br = m.Transform(new Point(fisico.Right, fisico.Bottom));
 
-            var area = SystemParameters.WorkArea;
+            // DÓNDE PUEDE PONERSE. El área de trabajo es la del monitor PRINCIPAL, así que recortar
+            // contra ella arrastraba la carita de vuelta a la pantalla principal cada vez que el
+            // elemento estaba en otra: quedaba lejísimos de lo que decía estar mirando. Si el
+            // elemento cae dentro del área de trabajo se usa esa —así no tapa la barra de tareas—;
+            // si no, manda el escritorio ENTERO, que es donde de verdad está (2026-08-05).
+            var trabajo = SystemParameters.WorkArea;
+            var todo = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+                                SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+            var elemento = new Rect(tl, br);
+            var area = trabajo.Contains(elemento) ? trabajo : todo;
+
             double ancho = ActualWidth > 0 ? ActualWidth : 160;
             double alto = ActualHeight > 0 ? ActualHeight : 160;
 

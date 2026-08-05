@@ -251,6 +251,13 @@ public sealed class GeminiLive : IDisposable
         pantalla no cambia: una barra de búsqueda, una casilla o un botón de barra hacen su trabajo
         sin ir a ninguna parte, y la herramienta te dirá que se pulsó bien.
 
+        VARIAS COSAS SE ENSEÑAN CON LA MANO, NO CON PALABRAS. Cuando te digan «ilumina todos estos»,
+        «esto que te estoy mostrando», «los de aquí» —cualquier plural mientras señalan— usa
+        map_pointed_trail: te dice por encima de qué acaba de pasar el ratón y lo ilumina todo. NO
+        intentes adivinar una zona por su nombre («la columna izquierda», «el panel de arriba»): una
+        franja de pantalla no sabe qué agrupa, y pidiendo la columna izquierda salió la barra de
+        título. Si el rastro sale vacío, pide que vuelvan a pasar el ratón por encima.
+
         LA JERARQUÍA SE PUEDE CORREGIR, y el usuario manda. El sistema deduce solo a qué nivel
         pertenece cada cosa —nivel 1 es la navegación principal de la app, la que está siempre a la
         vista— y acierta casi siempre. Cuando el usuario te diga que algo pertenece o no al nivel
@@ -380,6 +387,11 @@ public sealed class GeminiLive : IDisposable
             + "uno y otro. Es la forma rápida: úsala para las tareas que ya sabes hacer enteras.",
             ("steps", "JSON: lista de pasos. Cada uno {\"op\":\"go_to|take|type|unblock\", …} con los "
                     + "mismos argumentos que las herramientas sueltas.")),
+        Fn("map_pointed_trail", "«Ilumina TODO ESTO que te estoy mostrando». Devuelve y señala todo aquello "
+            + "por encima de lo que el usuario acaba de pasar el ratón. Úsala SIEMPRE que hable en plural "
+            + "señalando —«todos estos», «esto que te muestro», «los que te acabo de pasar»— en vez de "
+            + "adivinar una zona de la pantalla por su nombre.",
+            ("seconds", "Cuántos segundos hacia atrás mirar. Vacío = 10, que es lo que dura enseñar algo con la mano.")),
         Fn("map_open_app", "ABRE una aplicación (o la trae al frente si ya estaba) y dice en qué pantalla "
             + "quedas. Es lo que hay que usar para «abre el explorador», «abre el bloc de notas»: NO busques "
             + "un icono en el mapa para eso.",
