@@ -87,13 +87,54 @@ public static class AppAligner
     {
         if (Escritorio.EsProceso(proc)) return Escritorio.Mostrar();
 
-        var open = Process.GetProcessesByName(proc).FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
-        if (open != null)
-        {
-            return TraerAlFrente(open.MainWindowHandle);
-        }
+        IntPtr ventana = VentanaDe(proc);
+        if (ventana != IntPtr.Zero) return TraerAlFrente(ventana);
         return WindowsSystemApi.LaunchApp(proc);
     }
+
+    /// <summary>
+    /// Una ventana de verdad de ese programa: visible, con título y que no sea el escritorio.
+    /// </summary>
+    /// <remarks>
+    /// <c>Process.MainWindowHandle</c> parecía servir y no sirve para el caso que más usamos. En
+    /// explorer.exe la ventana «principal» del proceso es el SHELL —el escritorio y la barra de
+    /// tareas—, no la carpeta que el usuario está mirando: traerla al frente no hacía nada, así que
+    /// «abre el explorador» respondía «no pude traerla al frente» con la carpeta abierta y visible
+    /// delante (2026-08-05). Y con varias ventanas abiertas, «la principal» tampoco es una
+    /// pregunta con respuesta: hay que elegir.
+    ///
+    /// Se recorren las ventanas de arriba abajo en el orden Z, así que la primera que valga es la
+    /// que el usuario usó más recientemente — que es la que quiere decir cuando dice «el
+    /// explorador».
+    /// </remarks>
+    public static IntPtr VentanaDe(string proc)
+    {
+        var pids = Process.GetProcessesByName(proc).Select(p => (uint)p.Id).ToHashSet();
+        if (pids.Count == 0) return IntPtr.Zero;
+
+        IntPtr elegida = IntPtr.Zero;
+        EnumWindows((h, _) =>
+        {
+            if (!IsWindowVisible(h)) return true;
+            GetWindowThreadProcessId(h, out uint pid);
+            if (!pids.Contains(pid)) return true;
+            if (Escritorio.EsVentana(h)) return true;          // el escritorio no es una ventana de app
+
+            var sb = new System.Text.StringBuilder(300);
+            GetWindowText(h, sb, sb.Capacity);
+            if (sb.Length == 0) return true;                    // sin título: barra de tareas y demás
+
+            elegida = h;
+            return false;                                       // la primera en orden Z: la más reciente
+        }, IntPtr.Zero);
+        return elegida;
+    }
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder s, int max);
 
     [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint a, uint b, bool attach);
     [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr h);
@@ -118,30 +159,7 @@ public static class AppAligner
     /// Y se verifica mirando quién está delante DESPUÉS, no lo que devolvió la llamada: aceptado no
     /// es ejecutado.
     /// </remarks>
-    public static bool TraerAlFrente(IntPtr h)
-    {
-        if (h == IntPtr.Zero) return false;
-        try
-        {
-            // Restaurar SOLO si está minimizada: SW_RESTORE sobre una ventana maximizada la encoge,
-            // y enfocar una app no debería cambiarle el tamaño a nadie (2026-08-01).
-            if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
-
-            uint mio = GetCurrentThreadId();
-            uint suyo = GetWindowThreadProcessId(GetForegroundWindow(), out _);
-            bool enganchado = mio != suyo && AttachThreadInput(mio, suyo, true);
-            try { SetForegroundWindow(h); BringWindowToTop(h); }
-            finally { if (enganchado) AttachThreadInput(mio, suyo, false); }
-
-            for (int i = 0; i < 12; i++)
-            {
-                if (GetForegroundWindow() == h) return true;
-                System.Threading.Thread.Sleep(40);
-            }
-            return false;
-        }
-        catch { return false; }
-    }
+    public static bool TraerAlFrente(IntPtr h) => U.Graph.Surfaces.UiaSurface.TraerAlFrente(h);
 
     // Qué es el escritorio y cómo se llega lo sabe Escritorio, para toda la app.
 }

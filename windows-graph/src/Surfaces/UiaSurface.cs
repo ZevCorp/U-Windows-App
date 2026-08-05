@@ -63,6 +63,12 @@ public sealed class UiaSurface : IUiSurface
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, IntPtr dwExtraInfo);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_RESTORE = 9;
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004, MOUSEEVENTF_WHEEL = 0x0800;
 
@@ -686,6 +692,85 @@ public sealed class UiaSurface : IUiSurface
 
         L($"  ✓ resuelto en {attempts} intento(s) con '{hitSelector}' → name='{Safe(() => el.Current.Name)}' ct={Safe(() => el.Current.ControlType.ProgrammaticName)} rect={Safe(() => el.Current.BoundingRectangle.ToString())} ventana='{WindowLabel(el)}'");
 
+        return Actuar(el, step, flexible, out error);
+    }
+
+    /// <summary>
+    /// Actúa sobre un elemento QUE YA SE TIENE EN LA MANO, sin volver a buscarlo por selector.
+    ///
+    /// Quien lee la pantalla se queda con el <see cref="AutomationElement"/> exacto; volver a
+    /// resolverlo por nombre es un rodeo que puede fallar aunque el elemento siga ahí — y fallaba:
+    /// el lector encontraba «Buscar en Notas» (Edit) y el ejecutor no lo resolvía ni en cinco
+    /// intentos, así que el asistente veía la barra de búsqueda y no podía pulsarla (2026-08-05).
+    ///
+    /// Esto NO es pulsar por coordenadas: es pulsar EXACTAMENTE el elemento que se vio, que es la
+    /// forma más fuerte de acción por identidad que hay — no hay nombre que pueda quedarse a medias
+    /// ni homónimo que confunda, porque no se busca nada.
+    /// </summary>
+    public bool EjecutarSobre(AutomationElement el, PlanStep step, out string error)
+    {
+        L($"Ejecutar directo «{step.Label}» · {step.ActionType} · sobre el elemento ya leído "
+          + $"(name='{Safe(() => el.Current.Name)}' ct={Safe(() => el.Current.ControlType.ProgrammaticName)})");
+
+        // SOBRE UNA VENTANA TAPADA NO SE ACTÚA. Con la ventana detrás, UIA no da punto pulsable
+        // —dice, con razón, que está tapado— y SetFocus no agarra: el foco se queda donde estaba.
+        // Eso produjo lo peor que puede pasar aquí: se pulsó la barra de búsqueda del explorador,
+        // se dio por hecha, y el texto siguiente acabó en la barra de direcciones de Chrome, que
+        // sí tenía el foco, y navegó (2026-08-05). Se sube la ventana ANTES y se comprueba.
+        IntPtr win = TopLevelWindow(el);
+        if (win != IntPtr.Zero && !TraerAlFrente(win))
+            L("    NO se pudo traer la ventana al frente; se actúa igual, pero puede no agarrar");
+
+        return Actuar(el, step, flexible: false, out error);
+    }
+
+    /// <summary>
+    /// Sube una ventana al primer plano DE VERDAD, y dice si lo consiguió. La única forma de
+    /// hacerlo: quien la necesite, que llame aquí.
+    /// </summary>
+    /// <remarks>
+    /// <c>SetForegroundWindow</c> a secas devuelve éxito y no hace nada cuando el proceso que llama
+    /// no es el que está delante: Windows lo impide a propósito para que ninguna app te robe la
+    /// ventana de las manos. La salida documentada es engancharse a la cola de entrada del hilo que
+    /// SÍ manda (<c>AttachThreadInput</c>) y desengancharse enseguida — compartir cola de entrada
+    /// más de lo necesario es pedir un bloqueo.
+    ///
+    /// Vive en esta capa, y no arriba, porque la necesitan las dos: la alineación de apps y la
+    /// ejecución sobre un elemento. Estaba escrita dos veces y solo una tenía el enganche; la otra
+    /// fallaba en silencio. Una pregunta con dos respuestas se desincroniza siempre.
+    ///
+    /// Se comprueba mirando quién está delante DESPUÉS, no el valor devuelto: aceptado no es
+    /// ejecutado.
+    /// </remarks>
+    public static bool TraerAlFrente(IntPtr win)
+    {
+        if (win == IntPtr.Zero) return false;
+        if (GetForegroundWindow() == win) return true;
+        try
+        {
+            // Restaurar SOLO si está minimizada: SW_RESTORE sobre una maximizada la encoge, y
+            // enfocar una app no debería cambiarle el tamaño a nadie.
+            if (IsIconic(win)) ShowWindow(win, SW_RESTORE);
+
+            uint mio = GetCurrentThreadId();
+            uint suyo = GetWindowThreadProcessId(GetForegroundWindow(), out _);
+            bool enganchado = suyo != 0 && mio != suyo && AttachThreadInput(mio, suyo, true);
+            try { SetForegroundWindow(win); BringWindowToTop(win); }
+            finally { if (enganchado) AttachThreadInput(mio, suyo, false); }
+
+            for (int i = 0; i < 12; i++)
+            {
+                if (GetForegroundWindow() == win) return true;
+                Thread.Sleep(40);
+            }
+            return false;
+        }
+        catch { return false; }
+    }
+
+    private bool Actuar(AutomationElement el, PlanStep step, bool flexible, out string error)
+    {
+        error = "";
         try
         {
             bool ok = step.ActionType switch
@@ -1007,6 +1092,17 @@ public sealed class UiaSurface : IUiSurface
         catch { }
     }
 
+    /// <summary>Algo donde se escribe: enfocarlo es la forma correcta de «pulsarlo».</summary>
+    private static bool EsCampoDeTexto(AutomationElement el)
+    {
+        try
+        {
+            var ct = el.Current.ControlType;
+            return ct == ControlType.Edit || ct == ControlType.Document || ct == ControlType.ComboBox;
+        }
+        catch { return false; }
+    }
+
     private static bool Click(AutomationElement el, out string error)
     {
         error = "";
@@ -1035,6 +1131,31 @@ public sealed class UiaSurface : IUiSurface
             sel.Select();
             return true;
         }
+
+        // EN UN CAMPO DE TEXTO, PULSAR ES ENFOCAR. Un Edit no expone Invoke ni Toggle ni Select —no
+        // hay nada que «invocar» en una caja donde se escribe—, así que aquí se daba por imposible
+        // y se devolvía «no soporta Invoke/Toggle/Select». Es lo que impedía pulsar la barra de
+        // búsqueda del explorador: UIA no le daba punto pulsable (está recogida hasta que se usa) y
+        // los patrones de pulsación no le aplican. SetFocus sí, y es exactamente lo que consigue un
+        // clic sobre ella (2026-08-05).
+        if (EsCampoDeTexto(el))
+        {
+            try { el.SetFocus(); } catch (Exception e) { error = $"no se pudo enfocar el campo: {e.Message}"; return false; }
+
+            // ACEPTADO NO ES EJECUTADO, y aquí menos que en ninguna parte. SetFocus no protesta
+            // cuando el foco acaba en otro sitio, y lo que viene detrás de pulsar un campo es
+            // ESCRIBIR: dar por bueno un foco que no llegó no deja un paso fallido, deja el texto
+            // metido en la ventana equivocada. Pasó: acabó en la barra de Chrome (2026-08-05).
+            for (int i = 0; i < 8; i++)
+            {
+                try { if (Automation.Compare(AutomationElement.FocusedElement, el)) return true; }
+                catch { }
+                Thread.Sleep(40);
+            }
+            error = "pedí el foco al campo y se quedó en otra parte (¿ventana tapada o sin activar?)";
+            return false;
+        }
+
         error = "el elemento no soporta Invoke/Toggle/Select";
         return false;
     }

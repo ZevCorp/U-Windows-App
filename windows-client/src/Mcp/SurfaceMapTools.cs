@@ -345,16 +345,16 @@ public sealed class SurfaceMapTools
             var nombres = que.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
                              .Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             elegidos = nombres
-                .Select(n => candidatos.FirstOrDefault(e => e.Label.Equals(n, StringComparison.OrdinalIgnoreCase))
-                          ?? candidatos.FirstOrDefault(e => e.Label.Contains(n, StringComparison.OrdinalIgnoreCase)))
+                .Select(n => Uia.Reconocedor.Buscar(candidatos, n).FirstOrDefault())
                 .Where(e => e != null).Select(e => e!).ToList();
             comoSeLlama = string.Join(", ", nombres);
         }
         else
         {
-            var uno = candidatos.FirstOrDefault(e => e.Label.Equals(que, StringComparison.OrdinalIgnoreCase))
-                   ?? candidatos.FirstOrDefault(e => e.Label.Contains(que, StringComparison.OrdinalIgnoreCase));
-            elegidos = uno == null ? new List<UiaReader.UiElement>() : new List<UiaReader.UiElement> { uno };
+            // El MISMO reconocedor que usa map_take para pulsar. Cuando señalar y pulsar buscaban
+            // cada uno a su manera, pasaba lo del 2026-08-05: veía la barra de búsqueda y decía que
+            // no podía pulsarla. Si lo señalo, lo puedo pulsar — y al revés.
+            elegidos = Uia.Reconocedor.Buscar(candidatos, que).Take(1).ToList();
             comoSeLlama = que;
         }
 
@@ -381,13 +381,17 @@ public sealed class SurfaceMapTools
         var h = aqui.Length > 0
             ? _map.ExitsFrom(aqui).FirstOrDefault(x => x.Info.Label.Equals(el.Label, StringComparison.OrdinalIgnoreCase))
             : null;
-        string enMapa = h == null ? "el mapa aún no lo tiene"
+        // «El mapa aún no lo tiene» se leía como una negativa, y el asistente la repetía tal cual:
+        // «lo veo pero como no lo conozco no puedo marcarlo». No conocerlo nunca ha impedido nada
+        // —el mapa es memoria de lo recorrido, no permiso para actuar—, así que se dice lo que de
+        // verdad significa: aún sin recorrer (2026-08-05).
+        string enMapa = h == null ? "aún sin recorrer, se aprende al cruzarla"
             : (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
               + (h.Info.NivelFijado ? " · fijado" : "");
 
         return $"SÍ veo «{el.Label}» ({el.ControlType}) y lo estoy señalando: recuadro encendido y "
-             + $"la carita puesta a su lado. En el mapa: {enMapa}. Para pulsarlo, map_take con "
-             + $"exit=«{el.Label}».";
+             + $"la carita puesta a su lado. En el mapa: {enMapa}. Lo puedo pulsar ahora mismo con "
+             + $"map_take exit=«{el.Label}» — que lo vea basta.";
     }
 
     private static bool Ui_EsNuestraVentanaDelante() => Uia.Propio.EsVentana(GetForegroundWindow());
@@ -1550,9 +1554,11 @@ public sealed class SurfaceMapTools
         var actual = _where();
         if (actual == null) return "no se pudo determinar dónde estamos ahora mismo";
 
+        // NO RECORDARLA NO ES NO TENERLA DELANTE. Aquí se devolvía «el mapa no conoce ninguna
+        // salida» y se acababa la conversación, aunque la puerta estuviera a la vista: en una
+        // pantalla nueva el mapa está vacío por definición, así que la primera visita a cualquier
+        // sitio era siempre un no. Se sigue: si el mapa no la tiene, se mira la pantalla.
         var opciones = _map.ExitsFrom(actual.Id).Where(h => h.Info.Selector.Length > 0).ToList();
-        if (opciones.Count == 0)
-            return $"desde «{actual.Id}» el mapa no conoce ninguna salida recorrible";
 
         // Coincidencia exacta primero, y luego por contención — «videos» debe encontrar «Videos»,
         // pero si dos salidas contienen lo pedido NO se elige por el modelo: se le devuelven las
@@ -1575,12 +1581,46 @@ public sealed class SurfaceMapTools
         // pantalla aunque el mapa aún no la haya registrado, y negarse a entrar en ella rompía la
         // tarea justo después de crearla (2026-08-03). Se intenta, se verifica el resultado, y si
         // funciona se aprende — que es como se aprende todo lo demás.
-        if (candidatas.Count == 0 && salida.StartsWith("uia:", StringComparison.OrdinalIgnoreCase))
+        // LO QUE SE VE, SE PUEDE PULSAR. El mapa es memoria, no lista de permisos. Si lo pedido no
+        // está registrado desde aquí, se mira la pantalla tal como está AHORA. Este era el hueco
+        // entre ver y pulsar: el asistente señalaba la barra de búsqueda —que la veía— y acto
+        // seguido decía que no podía pulsarla, porque señalar leía la pantalla y pulsar leía el
+        // mapa. Dos sentidos distintos para la misma cosa (2026-08-05, pedido por el usuario: «que
+        // pueda ver y clickear cualquier puerta que se vea en pantalla»).
+        if (candidatas.Count == 0)
         {
+            _lector.Read();
+            var vistos = Uia.Reconocedor.Buscar(_lector.Elements, salida);
+
+            if (vistos.Count > 1)
+                return $"«{salida}» coincide con {vistos.Count} cosas que tengo a la vista: "
+                     + string.Join("; ", vistos.Take(8).Select(v => $"«{v.Label}» [{Uia.Reconocedor.SelectorDe(v)}]"))
+                     + ". Repite `exit` con el selector de la que quieras.";
+
+            if (vistos.Count == 0)
+            {
+                // Se dice QUÉ HAY, no solo que no está lo pedido. Quien pregunta por voz dice «la
+                // barra de búsqueda» y el elemento se llama «Buscar en Notas»: con la lista delante
+                // el reintento es inmediato, y sin ella hay que adivinar a ciegas (2026-08-05).
+                var aLaVista = _lector.Elements.Where(EsPuertaVisible)
+                    .GroupBy(e => e.Label, StringComparer.OrdinalIgnoreCase).Select(g => g.Key)
+                    .Take(25).ToList();
+                return $"no veo nada que se llame «{salida}» en «{actual.Id}». Lo que SÍ tengo delante "
+                     + $"y puedo pulsar: {string.Join(", ", aLaVista.Select(n => $"«{n}»"))}"
+                     + (aLaVista.Count >= 25 ? "…" : "")
+                     + ". Vuelve a pedírmelo con uno de esos nombres.";
+            }
+
+            var visto = vistos[0];
+            string selectorDirecto = Uia.Reconocedor.SelectorDe(visto);
+            string etiquetaDirecta = visto.Label;
+            LogBus.Log("mapa-mcp", $"«{salida}» no está en el mapa, pero la veo en pantalla como "
+                                 + $"«{etiquetaDirecta}» ({visto.ControlType}): se pulsa y se verifica");
+
             var directo = new PlanStep
             {
                 StepOrder = 1, ActionType = "click",
-                Selector = salida, Label = salida,
+                Selector = selectorDirecto, Label = etiquetaDirecta,
             };
             string origen = actual.Id;
 
@@ -1591,27 +1631,42 @@ public sealed class SurfaceMapTools
             // campo en vez de entrar en la carpeta. Se creaban las tres carpetas y no se entraba en
             // ninguna (2026-08-03). Si ya está seleccionado, el paso de seleccionar sobra.
             string nombrePedido = System.Text.RegularExpressions.Regex
-                .Match(salida, @"name=([^;]+)").Groups[1].Value;
+                .Match(selectorDirecto, @"name=([^;]+)").Groups[1].Value;
             bool yaSeleccionado = nombrePedido.Length > 0
                 && SeleccionActual().Any(s => s.Equals(nombrePedido, StringComparison.OrdinalIgnoreCase));
 
-            bool errDirectoOk = yaSeleccionado
-                || _uia.Execute(directo, out _);
+            // NO TODO LO QUE SE PULSA ABRE ALGO. Una barra de búsqueda, una casilla o un botón de
+            // barra hacen su trabajo sin cambiar de pantalla; exigirles un cambio los daba por
+            // fallados —«al pulsarla no llevó a ninguna parte», cierto y engañoso, porque no tenía
+            // que llevar. Solo se sube al doble clic lo que efectivamente se abre: lo de las listas
+            // y los árboles. Y si quien llama pidió una acción concreta, manda la suya.
+            bool abrePorDoble = accionPedida.Length > 0
+                ? accionPedida.Equals("doubleclick", StringComparison.OrdinalIgnoreCase)
+                : visto.ControlType.Equals("ListItem", StringComparison.OrdinalIgnoreCase)
+                  || visto.ControlType.Equals("TreeItem", StringComparison.OrdinalIgnoreCase);
+
+            // Se actúa sobre el elemento QUE SE ACABA DE VER, no sobre su nombre: buscarlo otra vez
+            // es un rodeo que puede fallar aunque siga delante, y fallaba (ver EjecutarSobre).
             string errDirecto = "";
+            bool errDirectoOk = yaSeleccionado || _uia.EjecutarSobre(visto.Native, directo, out errDirecto);
+            string accionHecha = "click";
             if (errDirectoOk)
             {
                 string llegada = "";
                 if (!yaSeleccionado)
                 {
                     EsperarPantallaLista(700);
-                    llegada = EsperarCambio(origen, 1200);
+                    llegada = EsperarCambio(origen, abrePorDoble ? 1200 : 800);
                 }
                 else LogBus.Log("mapa-mcp", $"«{nombrePedido}» ya estaba seleccionado: se va directo al doble clic");
-                if (llegada.Length == 0)
+                if (llegada.Length == 0 && abrePorDoble)
                 {
-                    _uia.Execute(new PlanStep { StepOrder = 1, ActionType = "doubleclick", Selector = salida, Label = salida }, out errDirecto);
+                    _uia.EjecutarSobre(visto.Native,
+                        new PlanStep { StepOrder = 1, ActionType = "doubleclick", Selector = selectorDirecto, Label = etiquetaDirecta },
+                        out errDirecto);
                     EsperarPantallaLista(700);
                     llegada = EsperarCambio(origen, 1500);
+                    accionHecha = "doubleclick";
                 }
                 // Salir de la app no es cruzar una puerta de la app. Se pidió entrar en «Datos» y lo
                 // que había con ese nombre era una foto: el doble clic abrió Photos.exe y esto lo
@@ -1619,27 +1674,37 @@ public sealed class SurfaceMapTools
                 // entrar en una carpeta necesita saber que abrió un archivo.
                 if (llegada.Length > 0 && !SurfaceMap.MismaApp(origen, llegada))
                 {
-                    LogBus.Log("mapa-mcp", $"«{salida}» no es una puerta: abrió «{llegada}», otra aplicación");
-                    return $"«{salida}» no lleva a ninguna parte dentro de esta app: al pulsarla se abrió "
+                    LogBus.Log("mapa-mcp", $"«{etiquetaDirecta}» no es una puerta: abrió «{llegada}», otra aplicación");
+                    return $"«{etiquetaDirecta}» no lleva a ninguna parte dentro de esta app: al pulsarla se abrió "
                          + $"«{llegada}», que es otra aplicación. Lo que hay con ese nombre no es un sitio "
                          + "al que entrar, es un archivo que se abre.";
                 }
                 if (llegada.Length > 0)
                 {
-                    _map.LearnTraversal(origen, llegada, salida, Array.Empty<string>(), salida, "ListItem", "doubleclick");
+                    _ultimaApp = AppDe(llegada).Length > 0 ? AppDe(llegada) : _ultimaApp;
+                    _map.LearnTraversal(origen, llegada, selectorDirecto, Array.Empty<string>(),
+                                        etiquetaDirecta, visto.ControlType, accionHecha);
                     Anotar(origen, llegada);
                     ObservarAqui(llegada);
-                    LogBus.Log("mapa-mcp", $"✓ «{salida}» no estaba en el mapa; se cruzó y quedó aprendida → {llegada}");
-                    return $"«{salida}» no estaba en el mapa; la crucé y lleva a «{llegada}». Queda aprendida.";
+                    LogBus.Log("mapa-mcp", $"✓ «{etiquetaDirecta}» no estaba en el mapa; se cruzó y quedó aprendida → {llegada}");
+                    return $"«{etiquetaDirecta}» no estaba en el mapa; la vi en pantalla, la crucé y lleva a "
+                         + $"«{llegada}». Queda aprendida.";
+                }
+
+                // Pulsado y la pantalla sigue igual. Para lo que no abre nada, ESO es haberlo hecho
+                // bien: la barra de búsqueda queda enfocada, la casilla marcada, el botón aplicado.
+                if (!abrePorDoble)
+                {
+                    LogBus.Log("mapa-mcp", $"✓ pulsado «{etiquetaDirecta}» ({visto.ControlType}) visto en pantalla, sin cambio de pantalla");
+                    return $"pulsé «{etiquetaDirecta}» ({visto.ControlType}). La veía en pantalla aunque el mapa "
+                         + $"no la tuviera. Seguimos en «{origen}», que es lo normal en algo así: no es una "
+                         + "puerta, es un control. Si querías ir a otro sitio, dime a cuál.";
                 }
             }
-            return $"«{salida}» no está en el mapa y al pulsarla no llevó a ninguna parte"
+            return $"vi «{etiquetaDirecta}» e intenté pulsarla, pero no pasó nada"
                  + (errDirecto.Length > 0 ? $" ({errDirecto})" : "") + ".";
         }
 
-        if (candidatas.Count == 0)
-            return $"desde «{actual.Id}» no hay ninguna salida que se llame «{salida}». Disponibles: "
-                 + string.Join(", ", opciones.Select(h => $"«{h.Info.Label}»"));
         if (candidatas.Count > 1)
             return $"«{salida}» coincide con {candidatas.Count} salidas: "
                  + string.Join("; ", candidatas.Select(h => $"«{h.Info.Label}» [{h.Info.Selector}]"))

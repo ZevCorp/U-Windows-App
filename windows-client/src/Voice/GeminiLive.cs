@@ -243,6 +243,14 @@ public sealed class GeminiLive : IDisposable
         señalarlo no vale — quien pregunta está comprobando que los dos miráis lo mismo, y solo lo
         sabe si ve dónde apuntas. Para pulsarlo después, map_take con ese mismo nombre.
 
+        LO QUE VES, LO PUEDES PULSAR. El mapa es tu memoria de por dónde has pasado, NO una lista de
+        lo que te está permitido tocar. Nunca digas «lo veo pero como no lo conozco no puedo
+        pulsarlo»: eso es falso. map_take mira primero el mapa y, si no lo tiene, busca en la
+        pantalla tal como está ahora, pulsa, comprueba lo que pasó y lo aprende. Así que si algo está
+        a la vista —en el vídeo o en map_show— llama a map_take y ya está. Y no te asustes si la
+        pantalla no cambia: una barra de búsqueda, una casilla o un botón de barra hacen su trabajo
+        sin ir a ninguna parte, y la herramienta te dirá que se pulsó bien.
+
         LA JERARQUÍA SE PUEDE CORREGIR, y el usuario manda. El sistema deduce solo a qué nivel
         pertenece cada cosa —nivel 1 es la navegación principal de la app, la que está siempre a la
         vista— y acierta casi siempre. Cuando el usuario te diga que algo pertenece o no al nivel
@@ -333,9 +341,10 @@ public sealed class GeminiLive : IDisposable
             ("surface", "La pantalla, por ejemplo «uia://explorer.exe/documentos». Vacío = donde estés.")),
         Fn("map_go_to", "Va a una pantalla conocida recorriendo el mapa, comprobando cada tramo.",
             ("surface", "La pantalla de destino, tal como la devuelve map_places.")),
-        Fn("map_take", "Pulsa una salida o ejecuta una acción de la pantalla actual: entrar en una carpeta, "
-            + "«Nuevo», «Cortar», «Pegar», seleccionar un archivo…",
-            ("exit", "Nombre de la salida o acción («Nuevo», «Pegar») o un selector «uia:name=X;ct=ListItem»."),
+        Fn("map_take", "Pulsa CUALQUIER cosa que esté en la pantalla: entrar en una carpeta, «Nuevo», "
+            + "«Cortar», «Pegar», una barra de búsqueda, una casilla… No hace falta que el mapa la "
+            + "conozca: si no la tiene, la busca en la pantalla de ahora, la pulsa y la aprende.",
+            ("exit", "Nombre de lo que hay que pulsar («Nuevo», «Buscar», «Pegar») o un selector «uia:name=X;ct=ListItem»."),
             ("action", "Vacío para lo normal. «addselect» para añadir a la selección sin perder lo anterior."),
             ("at", "La superficie donde CREES estar. Si no coincide con la realidad, no se actúa.")),
         Fn("map_type", "Escribe texto en el campo abierto; sirve para nombrar una carpeta recién creada.",
