@@ -518,11 +518,24 @@ public sealed class FaceControl : FrameworkElement
             // dibujarla siempre la convierte en una mancha pegada al labio.
             if (abierta > 0.35)
             {
+                // DÓNDE ACABA LA BOCA NO ES DONDE ESTÁ SU PUNTO DE CONTROL. Una bezier cúbica no
+                // llega hasta sus controles: con los dos a la misma altura se queda en tres cuartos
+                // del camino. Colocar la lengua contando desde el control la dejaba POR DEBAJO del
+                // labio, asomando fuera de la boca (2026-08-05). El punto más bajo de la curva sale
+                // de evaluarla en la mitad: (P0 + 3·C1 + 3·C2 + P3) / 8.
+                double fondo = (lY + rY) / 8 + ctrlAbajoY * 0.75;
+
                 double rx = halfA * 0.42, ry = alto * 0.20;
-                double cyL = Mezcla(mY + alto, centro + alto * 0.55) - ry * 1.15;
-                var lengua = new EllipseGeometry(new Point(X(shift * 0.4), Y(cyL)), rx * s, ry * s);
+                var lengua = new EllipseGeometry(new Point(X(shift * 0.4), Y(fondo - ry * 0.25)), rx * s, ry * s);
                 lengua.Freeze();
+
+                // Y ADEMÁS se recorta contra la boca, que es lo que garantiza que no pueda salirse
+                // aunque la cuenta de arriba falle en algún tamaño raro: la geometría manda sobre la
+                // aritmética. De paso es como se ve en el dibujo de referencia — la lengua no es un
+                // óvalo entero flotando, es un óvalo cortado por el borde del labio.
+                dc.PushClip(boca);
                 dc.DrawGeometry(UiPalette.PincelLengua, null, lengua);
+                dc.Pop();
             }
         }
 
