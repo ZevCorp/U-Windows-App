@@ -579,6 +579,128 @@ public sealed class SurfaceMapTools
              + "Si sobra alguna o falta otra, vuelve a pasar el ratón y dímelo.";
     }
 
+    /// <summary>
+    /// «Todos los de este tipo», «todos los de esa barra»: los HERMANOS de lo que se está señalando.
+    ///
+    /// Enseñar seis cosas pasando el ratón por las seis funciona, pero no es lo que hace una
+    /// persona: señala una y dice «y todas las de al lado». Lo que las hace «las de al lado» no es
+    /// estar cerca en la pantalla —eso ya se intentó con zonas y devolvía la barra de título— sino
+    /// COLGAR DEL MISMO SITIO en el árbol de la interfaz. Los hermanos de un elemento son
+    /// exactamente el grupo al que pertenece, dicho por la propia aplicación.
+    ///
+    /// No se sube por el árbol buscando más: si el grupo sale corto, se dice y ya. Ampliar por
+    /// nuestra cuenta es justo lo que produce «me marcó cosas que yo no pedí» (2026-08-05).
+    /// </summary>
+    private string LosHermanosDeLoSenalado(string segundosPedidos)
+    {
+        double segundos = double.TryParse(segundosPedidos, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out double s) && s > 0 ? s : 10;
+
+        // UNA referencia, la de AHORA. «Todos los de este tipo» se dice con el dedo puesto encima de
+        // uno, así que manda el cursor; y si se ha movido a otra parte al hablar, vale lo último que
+        // tocó. Tomar TODO el rastro como referencia fue un error de diseño mío: bastaba una marca
+        // de paso de otro grupo para que se negara a responder (2026-08-05, visto en la primera
+        // prueba). Completar un grupo no necesita más que un ejemplo.
+        System.Windows.Automation.AutomationElement? referencia = null;
+        if (GetCursorPos(out var pc))
+        {
+            try { referencia = System.Windows.Automation.AutomationElement.FromPoint(
+                new System.Windows.Point(pc.X, pc.Y)); }
+            catch { }
+        }
+
+        // NOSOTROS NO CONTAMOS. Al iluminar algo la carita se pone A SU LADO, así que puede acabar
+        // justo debajo del cursor — y entonces la siguiente pregunta toma nuestra propia ventana
+        // como referencia y responde con las ventanas del escritorio (2026-08-05, visto en la
+        // segunda prueba). Si el cursor cae sobre lo nuestro, manda lo último que se señaló.
+        if (referencia != null)
+        {
+            try { if (referencia.Current.ProcessId == Environment.ProcessId) referencia = null; }
+            catch { }
+        }
+
+        if (referencia == null || (referencia.Current.Name ?? "").Trim().Length == 0)
+        {
+            var ultima = Ui.RastroDelCursor.Ultimas(segundos).LastOrDefault();
+            if (ultima != null)
+            {
+                try { referencia = System.Windows.Automation.AutomationElement.FromPoint(
+                    new System.Windows.Point(ultima.Caja.Left + ultima.Caja.Width / 2,
+                                             ultima.Caja.Top + ultima.Caja.Height / 2)); }
+                catch { }
+            }
+        }
+        if (referencia == null)
+            return "no sé de qué elemento me hablas: pon el ratón encima de uno y dímelo.";
+
+        var caminante = System.Windows.Automation.TreeWalker.ControlViewWalker;
+        var padre = caminante.GetParent(referencia);
+        if (padre == null) return "lo que señalas no cuelga de ningún grupo que yo pueda leer.";
+
+        // Los hermanos de una VENTANA son las demás ventanas abiertas, y eso no es «un grupo de la
+        // pantalla»: es el escritorio. Nadie que diga «todos los de esta barra» quiere eso.
+        try
+        {
+            if (System.Windows.Automation.Automation.Compare(
+                    padre, System.Windows.Automation.AutomationElement.RootElement))
+                return "lo que señalas es una ventana entera, no un elemento dentro de un grupo. "
+                     + "Pon el ratón sobre uno de los elementos de la barra y dímelo.";
+        }
+        catch { }
+
+        System.Windows.Automation.ControlType? tipoRef = null;
+        string nombreRef = "";
+        try { tipoRef = referencia.Current.ControlType; nombreRef = (referencia.Current.Name ?? "").Trim(); }
+        catch { }
+        if (tipoRef == null) return "no he podido leer de qué tipo es lo que señalas.";
+        var tipos = new List<System.Windows.Automation.ControlType?> { tipoRef };
+
+        var hermanos = new List<UiaReader.UiElement>();
+        var hijo = caminante.GetFirstChild(padre);
+        for (int i = 0; hijo != null && i < 300; i++)
+        {
+            try
+            {
+                var info = hijo.Current;
+                if (!info.IsOffscreen && tipos.Contains(info.ControlType))
+                {
+                    string nombre = (info.Name ?? "").Trim();
+                    var caja = info.BoundingRectangle;
+                    if (nombre.Length > 0 && !caja.IsEmpty && caja.Width >= 12 && caja.Height >= 12)
+                        hermanos.Add(new UiaReader.UiElement(
+                            nombre,
+                            info.ControlType.ProgrammaticName.Replace("ControlType.", ""),
+                            caja, hijo));
+                }
+            }
+            catch { }
+            try { hijo = caminante.GetNextSibling(hijo); } catch { break; }
+        }
+
+        if (hermanos.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            return "no encuentro hermanos suyos a la vista.";
+        }
+
+        var elegidos = hermanos
+            .GroupBy(h => h.Label, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
+            .OrderBy(h => h.Bounds.Top).ThenBy(h => h.Bounds.Left)
+            .Take(40).ToList();
+
+        Ui.Senalador.SenalarVarias(elegidos.Select(h => h.Bounds).ToList(),
+            $"los {elegidos.Count} de ese grupo");
+
+        string nombreGrupo = "";
+        try { nombreGrupo = (padre.Current.Name ?? "").Trim(); } catch { }
+
+        return $"SÍ: partiendo de «{nombreRef}», son {elegidos.Count} y están todos en su mismo grupo"
+             + (nombreGrupo.Length > 0 ? $" («{nombreGrupo}»)" : "")
+             + ", los estoy iluminando: "
+             + string.Join(", ", elegidos.Select(h => $"«{h.Label}»"))
+             + ". No he metido nada de fuera de ese grupo.";
+    }
+
     private string OpenApp(string app)
     {
         if (app.Length == 0) return "falta `app`: qué abrir (por ejemplo «explorer» o «notepad»)";
@@ -965,7 +1087,7 @@ public sealed class SurfaceMapTools
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
-        or "map_pointed_trail";
+        or "map_pointed_trail" or "map_same_group";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -982,7 +1104,8 @@ public sealed class SurfaceMapTools
         // gesto que acompaña a una frase, no un estado en el que quedarse.
         if (!tool.Equals("map_show", StringComparison.OrdinalIgnoreCase)
             && !tool.Equals("map_pointing_at", StringComparison.OrdinalIgnoreCase)
-            && !tool.Equals("map_pointed_trail", StringComparison.OrdinalIgnoreCase))
+            && !tool.Equals("map_pointed_trail", StringComparison.OrdinalIgnoreCase)
+            && !tool.Equals("map_same_group", StringComparison.OrdinalIgnoreCase))
             Ui.Senalador.Soltar();
 
         string r = tool switch
@@ -998,6 +1121,7 @@ public sealed class SurfaceMapTools
             "map_what_i_see" => LoQueVeo(),
             "map_pointing_at" => LoQueSenala(),
             "map_pointed_trail" => LoQueMeAcabasDeMostrar(A("seconds")),
+            "map_same_group" => LosHermanosDeLoSenalado(A("seconds")),
             "map_show" => Mostrar(A("exit")),
             "map_set_level" => _map.FijarNivel(
                 A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
