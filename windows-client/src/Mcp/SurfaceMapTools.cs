@@ -299,10 +299,11 @@ public sealed class SurfaceMapTools
         // del grafo— leerla y contestar «veo ▾ y 🤖» es describirse a sí mismo creyendo que describe
         // la pantalla del usuario (2026-08-05, salió en la primera prueba de las zonas). Es la misma
         // regla que ya rige en el mapa y en el detector de diálogos, que aquí faltaba.
-        if (Ui_EsNuestraVentanaDelante())
-            return "ahora mismo lo que está delante es mi propia interfaz, no la tuya. "
-                 + "Pon delante la aplicación que quieres que mire y vuelve a preguntar.";
-
+        // Ya NO se rechaza por tener nuestra propia ventana delante: pulsar la carita para hablar
+        // nos pone delante, así que rechazarlo era negarse justo cuando se pregunta. El lector mira
+        // la ventana del usuario —la de debajo de la nuestra—, que es a la que se refiere quien
+        // pregunta. Además el asistente contaba aquel «mi propia interfaz» como «Claude se puso por
+        // medio», culpando a una app que ni siquiera estaba (2026-08-05).
         _lector.Read();
         var candidatos = _lector.Elements.Where(e => e.Label.Length > 0).ToList();
         string donde = _where()?.Id ?? "(pantalla desconocida)";
@@ -394,7 +395,6 @@ public sealed class SurfaceMapTools
              + $"map_take exit=«{el.Label}» — que lo vea basta.";
     }
 
-    private static bool Ui_EsNuestraVentanaDelante() => Uia.Propio.EsVentana(GetForegroundWindow());
 
     /// <summary>Lo que una persona llamaría «un elemento» de la pantalla: algo que se puede pulsar
     /// y que ocupa un sitio razonable. No un contenedor ni una etiqueta suelta.</summary>

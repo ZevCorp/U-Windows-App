@@ -130,6 +130,55 @@ public static class AppAligner
         return elegida;
     }
 
+    /// <summary>
+    /// La ventana que el usuario está mirando: la de delante, salvo que la de delante sea NUESTRA.
+    /// </summary>
+    /// <remarks>
+    /// Para hablarnos hay que pulsar la carita, y pulsar la carita nos pone en primer plano. Así que
+    /// justo cuando alguien pregunta «¿ves la barra de búsqueda?», lo que está delante somos
+    /// nosotros. Antes eso se resolvía negándose —«lo que está delante es mi propia interfaz»— y el
+    /// asistente lo contaba como que «Claude se puso por medio», que además no era verdad: era
+    /// nuestra propia ventana (2026-08-05, visto en una prueba con YouTube, dos veces seguidas).
+    ///
+    /// Negarse era la respuesta equivocada a un guardia correcto: el observador no debe observarse,
+    /// pero la ventana del usuario no ha desaparecido — está JUSTO DEBAJO. Se baja por el orden Z
+    /// hasta la primera que no sea nuestra, y esa es la que quiere decir quien pregunta.
+    /// </remarks>
+    private static IntPtr _ultimaDelUsuario;
+
+    public static IntPtr VentanaDelUsuario()
+    {
+        IntPtr delante = GetForegroundWindow();
+        if (delante != IntPtr.Zero && !Propio.EsVentana(delante))
+        {
+            _ultimaDelUsuario = delante;
+            return delante;
+        }
+
+        // LA QUE ESTABA USANDO, no la que resulta que quedó debajo. El orden Z de un instante no
+        // sirve para esto: en la prueba con YouTube, debajo de nuestra ventana había otra app
+        // cualquiera —Claude— y responder por ella habría sido igual de falso que negarse. Lo que
+        // quiere decir «lo que estoy mirando» es la última ventana que la persona activó, y eso
+        // hay que recordarlo mientras pasa. Se refresca en cada sondeo del localizador.
+        if (_ultimaDelUsuario != IntPtr.Zero && IsWindowVisible(_ultimaDelUsuario))
+            return _ultimaDelUsuario;
+
+        IntPtr elegida = IntPtr.Zero;
+        EnumWindows((h, _) =>
+        {
+            if (!IsWindowVisible(h) || Propio.EsVentana(h)) return true;
+            if (Escritorio.EsVentana(h)) return true;
+
+            var sb = new System.Text.StringBuilder(300);
+            GetWindowText(h, sb, sb.Capacity);
+            if (sb.Length == 0) return true;
+
+            elegida = h;
+            return false;                                       // la primera por debajo de la nuestra
+        }, IntPtr.Zero);
+        return elegida;
+    }
+
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);

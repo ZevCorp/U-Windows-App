@@ -138,6 +138,19 @@ $psi.EnvironmentVariables["U_AUTO_EXPLORER"] = "1"
 $psi.EnvironmentVariables["U_MCP_PROBE"] = "1"
 if ($env:GRAPH_API_KEY) { $psi.EnvironmentVariables["GRAPH_API_KEY"] = $env:GRAPH_API_KEY }
 
+# La clave de la voz (Gemini Live) se lee del ENTORNO, y por eso hay que ir a buscarla al nivel de
+# USUARIO en vez de heredarla: una consola abierta ANTES del `setx` no la tiene, así que la app
+# arrancaba diciendo que no hay API key aunque estuviera puesta desde hacía rato (2026-08-05). El
+# valor de la sesión manda si existe, para poder probar otra clave sin tocar la del usuario.
+$gemini = $env:GEMINI_API_KEY
+if (-not $gemini) { $gemini = [Environment]::GetEnvironmentVariable("GEMINI_API_KEY", "User") }
+if ($gemini) {
+  $psi.EnvironmentVariables["GEMINI_API_KEY"] = $gemini
+  Write-Host ("Clave de voz (GEMINI_API_KEY): presente, {0} caracteres" -f $gemini.Length) -ForegroundColor DarkGray
+} else {
+  Write-Warning "Sin GEMINI_API_KEY: la voz en vivo no arrancara. Ponla con: setx GEMINI_API_KEY <clave>"
+}
+
 # Las DOS bases hacen falta: U_BACKEND_URL manda en el asistente (Config.cs) y GRAPH_BASE_URL en el
 # modulo de workflows (GraphConfig.cs). Apuntar solo una deja la mitad del trafico en el Graph
 # remoto, que es justo lo que hace imposible depurar.
