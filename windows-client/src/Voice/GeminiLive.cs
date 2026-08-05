@@ -258,13 +258,6 @@ public sealed class GeminiLive : IDisposable
         franja de pantalla no sabe qué agrupa, y pidiendo la columna izquierda salió la barra de
         título. Si el rastro sale vacío, pide que vuelvan a pasar el ratón por encima.
 
-        Y SI DICEN «TODOS LOS DE ESTE TIPO», map_same_group. Con que hayan señalado UNO basta: sus
-        hermanos son los que cuelgan del mismo grupo, y ese grupo lo declara la propia aplicación,
-        así que no se cuela nada de fuera. Es la diferencia entre las dos herramientas:
-        map_pointed_trail ilumina lo que te han enseñado UNO A UNO; map_same_group completa el grupo
-        a partir de uno solo. Si te señalan dos de grupos distintos te lo dirá — pídeles entonces
-        que señalen uno solo, no elijas tú.
-
         LA JERARQUÍA SE PUEDE CORREGIR, y el usuario manda. El sistema deduce solo a qué nivel
         pertenece cada cosa —nivel 1 es la navegación principal de la app, la que está siempre a la
         vista— y acierta casi siempre. Cuando el usuario te diga que algo pertenece o no al nivel
@@ -399,10 +392,6 @@ public sealed class GeminiLive : IDisposable
             + "señalando —«todos estos», «esto que te muestro», «los que te acabo de pasar»— en vez de "
             + "adivinar una zona de la pantalla por su nombre.",
             ("seconds", "Cuántos segundos hacia atrás mirar. Vacío = 10, que es lo que dura enseñar algo con la mano.")),
-        Fn("map_same_group", "«Todos los de ESTE tipo», «todos los de esa barra», «y los demás de ahí». "
-            + "Señala el usuario UNO con el ratón y esto ilumina TODOS sus hermanos: los que cuelgan del "
-            + "mismo grupo en la interfaz, ni uno de fuera. No hace falta que los recorra todos con el ratón.",
-            ("seconds", "Cuántos segundos atrás buscar la referencia señalada. Vacío = 10.")),
         Fn("map_open_app", "ABRE una aplicación (o la trae al frente si ya estaba) y dice en qué pantalla "
             + "quedas. Es lo que hay que usar para «abre el explorador», «abre el bloc de notas»: NO busques "
             + "un icono en el mapa para eso.",
