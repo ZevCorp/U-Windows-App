@@ -192,12 +192,18 @@ public sealed class GraphExplorerWindow : Window
 
         // Los puntos van DEBAJO y ocupando todo: están colocados sobre la pantalla real, así que no
         // pueden vivir en una columna. El grafo y los niveles se quedan a la derecha, encima.
+        // EL GRAFO OCUPA TODO Y VA CENTRADO. Vivía en una columna fija de 560 px pegada a la
+        // derecha, que era una herencia de cuando a su izquierda había una lista de aristas: se
+        // quedó ahí cuando esa lista se convirtió en puntos sobre la pantalla, así que el grafo
+        // seguía apretado en media pantalla sin que nada ocupara la otra mitad (2026-08-04).
+        // Solo la tira de niveles conserva su sitio, porque su sitio ES el borde.
         var derecha = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
         derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(560) });
         derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(_grafo, 1);
-        Grid.SetColumn(_niveles, 2);
+        Grid.SetColumn(_grafo, 0);
+        Grid.SetColumn(_niveles, 1);
+        _lienzo.HorizontalAlignment = HorizontalAlignment.Center;
+        _lienzo.VerticalAlignment = VerticalAlignment.Center;
         derecha.Children.Add(_grafo);
         derecha.Children.Add(_niveles);
 
@@ -846,7 +852,11 @@ public sealed class GraphExplorerWindow : Window
         if (double.IsNaN(w) || double.IsNaN(h) || double.IsNaN(dispW) || double.IsNaN(dispH)) return;
         if (dispW <= 0 || dispH <= 0 || w <= 0 || h <= 0) return;
 
-        double escala = Math.Min(1.0, Math.Min(dispW / w, dispH / h));
+        // Se AGRANDA cuando sobra sitio, no solo se encoge cuando falta. Antes el tope era 1,0 —
+        // pensado para que un grafo de dos nodos no ocupara media pantalla— pero con el lienzo
+        // suelto a todo el ancho eso dejaba el dibujo pequeño en el centro de un espacio vacío.
+        // El techo de 1,8 es el punto donde las cajas siguen pareciendo cajas y no carteles.
+        double escala = Math.Min(1.8, Math.Min(dispW / w, dispH / h));
         if (double.IsNaN(escala) || double.IsInfinity(escala)) return;
         if (escala < 0.25) escala = 0.25;   // por debajo de esto ya no se lee: mejor scroll
         _lienzo.LayoutTransform = escala >= 0.999
