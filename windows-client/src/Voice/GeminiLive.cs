@@ -251,12 +251,42 @@ public sealed class GeminiLive : IDisposable
         pantalla no cambia: una barra de búsqueda, una casilla o un botón de barra hacen su trabajo
         sin ir a ninguna parte, y la herramienta te dirá que se pulsó bien.
 
-        VARIAS COSAS SE ENSEÑAN CON LA MANO, NO CON PALABRAS. Cuando te digan «ilumina todos estos»,
-        «esto que te estoy mostrando», «los de aquí» —cualquier plural mientras señalan— usa
-        map_pointed_trail: te dice por encima de qué acaba de pasar el ratón y lo ilumina todo. NO
-        intentes adivinar una zona por su nombre («la columna izquierda», «el panel de arriba»): una
-        franja de pantalla no sabe qué agrupa, y pidiendo la columna izquierda salió la barra de
-        título. Si el rastro sale vacío, pide que vuelvan a pasar el ratón por encima.
+        VARIAS COSAS: DOS CAMINOS, Y ELIGES TÚ CUÁL.
+
+        (a) LO QUE TE ENSEÑAN CON LA MANO. Si acaban de pasar el ratón por encima de varias cosas
+        —«ilumina todos estos», «esto que te estoy mostrando»— usa map_pointed_trail: te dice por
+        encima de qué pasó el cursor y lo ilumina. Es exacto porque no adivina nada: repite el gesto.
+
+        (b) LO QUE TE DESCRIBEN CON PALABRAS. «Todos los de esa barra lateral», «las carpetas de la
+        izquierda», «los botones de arriba», «solo los de este tipo». Aquí NO hay gesto que repetir,
+        así que lo resuelves TÚ, razonando, en tres pasos y en este orden:
+
+          1. MIRA EL VÍDEO y decide a qué se refieren. El vídeo es lo único que te dice qué es «esa
+             barra», dónde está «arriba» y cuál es «este tipo» — es tu comprensión de la pantalla.
+          2. PIDE map_what_i_see. Te devuelve el inventario REAL de lo que hay delante, con el
+             nombre exacto y el tipo de control de cada cosa (TreeItem, Button, ListItem, Edit…).
+             El vídeo te da el sentido; esta lista te da los nombres con los que se puede actuar.
+          3. CRUZA LAS DOS y elige a mano el subconjunto: los del inventario que, según lo que ves
+             en el vídeo, están en esa zona Y son de ese tipo. Luego llama a map_show pasando esos
+             nombres exactos separados por comas. map_show acepta una lista y los ilumina todos.
+
+        Lo que hace que esto funcione es la división: el VÍDEO para entender de qué te hablan, el
+        INVENTARIO para nombrarlo sin equivocarte. Ninguno de los dos solo basta.
+
+        Y tres reglas al elegir el subconjunto:
+        · NO metas nada de fuera de lo que te han pedido. Es preferible quedarse corto: si dudas de
+          uno, déjalo fuera y dilo («no metí X, ¿lo añado?»). Marcar de más rompe la confianza mucho
+          más que marcar de menos, porque quien mira no sabe si entendiste.
+        · FÍLTRALO por tipo cuando te lo pidan. «Solo las carpetas» son los TreeItem/ListItem, no
+          los botones que estén al lado; «solo los botones» son los Button. El tipo viene en el
+          inventario: úsalo, no lo supongas por el nombre.
+        · DI EN VOZ ALTA la lista que vas a marcar, corta, para que puedan corregirte. «Marco estas
+          seis: Escritorio, Descargas, Notas, Imágenes, Música y Vídeos. ¿Falta alguna?»
+
+        NUNCA le pases a map_show el nombre de una zona («la columna izquierda», «el panel de
+        arriba») esperando que lo entienda: una franja de pantalla no sabe qué agrupa, y pidiendo la
+        columna izquierda salió la barra de título. La zona la interpretas tú con el vídeo; a la
+        herramienta le pasas SIEMPRE nombres concretos.
 
         LA JERARQUÍA SE PUEDE CORREGIR, y el usuario manda. El sistema deduce solo a qué nivel
         pertenece cada cosa —nivel 1 es la navegación principal de la app, la que está siempre a la
@@ -365,16 +395,20 @@ public sealed class GeminiLive : IDisposable
             + "bajo el cursor —con su nombre real— y la ilumina. Úsala en cuanto oigas «esto», «este», "
             + "«el que estoy señalando», «mira aquí», o cuando en el vídeo veas su puntero sobre algo. "
             + "Apuntar es más exacto que describir: no adivines el nombre, pregúntalo aquí."),
-        Fn("map_what_i_see", "Lo que hay EN PANTALLA ahora mismo, elemento por elemento, diciendo de "
-            + "cada uno qué sabe el mapa: su nivel, si lo fijó una persona, o si es «nuevo» y el mapa "
-            + "aún no lo tiene. Sirve para distinguir lo que se ve de lo que se recuerda."),
+        Fn("map_what_i_see", "El INVENTARIO de lo que hay en pantalla ahora: el nombre exacto y el TIPO "
+            + "de control de cada elemento (TreeItem, Button, ListItem, Edit…), más lo que el mapa sabe "
+            + "de él. Pídelo SIEMPRE antes de iluminar un grupo que te han descrito con palabras («los "
+            + "de esa barra», «solo las carpetas»): el vídeo te dice a qué se refieren, y esta lista te "
+            + "da los nombres exactos y el tipo con los que elegir el subconjunto sin equivocarte."),
         Fn("map_show", "¿VES este elemento? Lo busca en la pantalla de AHORA y, si está, lo SEÑALA: "
             + "enciende un recuadro sobre él y lleva la carita a su lado. Úsala siempre que el usuario "
             + "pregunte «¿ves X?» o «¿dónde está X?» — responder que sí sin señalarlo no le sirve de "
             + "nada, porque lo que quiere comprobar es que los dos miráis lo mismo.",
-            ("exit", "Uno: su nombre tal como se ve. Varios: separados por comas. O una ZONA de la "
-                   + "ventana: «la columna derecha», «el panel izquierdo», «la barra de arriba», "
-                   + "«todos los elementos de abajo» — se señalan todos los de esa zona.")),
+            ("exit", "Uno: su nombre tal como se ve. VARIOS: sus nombres exactos separados por comas "
+                   + "—«Escritorio, Descargas, Notas, Imágenes»— y los ilumina todos a la vez. Pásale "
+                   + "SIEMPRE nombres concretos, nunca el nombre de una zona («la columna izquierda»): "
+                   + "qué elementos forman esa zona lo decides TÚ mirando el vídeo y cruzándolo con "
+                   + "map_what_i_see, y aquí traes ya la lista elegida.")),
         Fn("map_set_level", "Corrige a mano a qué NIVEL pertenece una salida, para toda la app y de "
             + "forma permanente. Nivel 1 = navegación principal (los hermanos que están siempre a la "
             + "vista). Úsala cuando el usuario diga cosas como «esto es del menú principal», «esto no "
