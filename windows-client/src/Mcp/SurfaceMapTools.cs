@@ -1373,26 +1373,26 @@ public sealed class SurfaceMapTools
     /// una carpeta llena de cosas (2026-08-02). Preguntar dónde estoy es el momento natural para
     /// mirar alrededor — el terreno se aprende viviendo, no solo explorando a propósito.
     /// </summary>
+    /// <summary>
+    /// Mira la pantalla y anota sus puertas. SIEMPRE.
+    /// </summary>
+    /// <remarks>
+    /// Aquí había un guardia que se saltaba la relectura cuando la pantalla «ya se conocía»: seis
+    /// salidas recorribles y tres acciones bastaban para darla por sabida. Ahorraba una lectura del
+    /// árbol de UI y costaba dos cosas, las dos malas:
+    ///
+    /// · Lo que aparecía DESPUÉS no entraba nunca. Una carpeta recién creada, un botón que sale al
+    ///   seleccionar algo, se quedaban fuera del mapa aunque estuvieran delante — es el «a veces
+    ///   verde y a veces gris» que se venía notando en los puntos del explorador.
+    /// · Y desde que el grafo se arma con lo VISIBLE, sin volver a mirar no hay forma de saber qué
+    ///   dejó de estar: una puerta que ya no está seguiría ofreciéndose como si estuviera.
+    ///
+    /// Una pantalla no se conoce de una vez: cambia mientras se usa. Si el grafo es lo que se ve,
+    /// hay que mirar (2026-08-05).
+    /// </remarks>
     private void ObservarAqui(string nodo, bool forzar = false)
     {
-        try
-        {
-            if (forzar) { ObservarSinGuardia(nodo); return; }
-            // Se mira alrededor salvo que la pantalla ya se conozca COMPLETA: con salidas
-            // recorribles Y con sus acciones. «Alguna salida» no bastaba (conectividad pasiva sin
-            // acción), y «alguna recorrible» tampoco: los nodos mapeados antes de clasificar
-            // puertas conocían la navegación pero ninguna acción, y sin este repaso se quedaban
-            // así para siempre.
-            // Se mira alrededor salvo que la pantalla se conozca DE VERDAD. «Que haya alguna de
-            // cada clase» no bastaba: la arista de subida que se aprende al entrar es ella sola una
-            // acción, así que una carpeta recién creada parecía conocida y al llegar solo se veía
-            // «Subir un nivel» — se pidió «Pegar» y no existía, con la barra a la vista
-            // (2026-08-02). Una pantalla real tiene muchas puertas; dos no es conocerla.
-            var conocidas = _map.ExitsFrom(nodo);
-            if (conocidas.Count(h => h.Info.Selector.Length > 0) >= 6
-                && conocidas.Count(h => h.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)) >= 3) return;
-            ObservarSinGuardia(nodo);
-        }
+        try { ObservarSinGuardia(nodo); }
         catch { }
     }
 
@@ -1522,8 +1522,18 @@ public sealed class SurfaceMapTools
                                        && x.Info.Selector.Length > 0).ToList();
         if (acciones.Count > 0)
         {
+            // «Disponibles» tiene que querer decir disponibles AHORA. Una acción que el mapa
+            // recuerda pero que ya no está en pantalla —las cabeceras de columna al cambiar de
+            // vista, los botones que solo salen con algo seleccionado— se sigue guardando, pero
+            // ofrecerla sin avisar es mandar a pulsar el vacío (2026-08-05).
+            var aqui = acciones.Where(a => _map.SigueALaVista(desde, a.Info)).ToList();
+            var ausentes = acciones.Where(a => !_map.SigueALaVista(desde, a.Info)).ToList();
+
             sb.AppendLine("Acciones disponibles aquí (se toman con map_take, no navegan):");
-            sb.AppendLine("  " + string.Join(", ", acciones.Select(a => $"«{a.Info.Label}»")));
+            sb.AppendLine("  " + string.Join(", ", aqui.Select(a => $"«{a.Info.Label}»")));
+            if (ausentes.Count > 0)
+                sb.AppendLine($"  Conocidas pero NO en pantalla ahora ({ausentes.Count}): "
+                    + string.Join(", ", ausentes.Take(15).Select(a => $"«{a.Info.Label}»")));
         }
         return sb.ToString();
     }
