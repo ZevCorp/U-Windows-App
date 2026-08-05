@@ -479,6 +479,19 @@ public sealed class GeminiLive : IDisposable
     private const double SueloAbsoluto = 0.008;
     private const double VecesSobreElRuido = 3.0;
 
+    /// <summary>Cuánto hay que destacar sobre el eco propio para que cuente como interrupción. No es
+    /// mucho a propósito: cortarle a media frase es media gracia de hablar en vivo, así que se pide
+    /// sonar algo más fuerte que el eco, no gritar.</summary>
+    private const double MargenSobreElEco = 1.6;
+
+    /// <summary>Qué parte de lo que sale por el altavoz vuelve por el micrófono. Se aprende sola;
+    /// este valor solo es por dónde empieza mientras no haya medido nada.</summary>
+    private double _gananciaEco = 0.5;
+
+    /// <summary>Tramos seguidos por encima del umbral. Mientras hablamos se piden dos —200 ms— porque
+    /// el eco da picos sueltos y una voz de verdad no dura un solo tramo.</summary>
+    private int _tramosAltos;
+
     private double _ruidoSala = 0.02;
     private bool _usuarioHablando;
     private DateTime _ultimaVoz;
@@ -504,7 +517,31 @@ public sealed class GeminiLive : IDisposable
         _ruidoSala = vol < _ruidoSala ? (_ruidoSala * 0.90) + (vol * 0.10)
                                       : (_ruidoSala * 0.999) + (vol * 0.001);
         double umbral = Math.Max(SueloAbsoluto, _ruidoSala * VecesSobreElRuido);
-        if (_audio.Hablando) umbral *= 2.0;   // mientras Ü habla, solo una voz clara la corta
+
+        // OÍRSE A UNO MISMO NO ES QUE TE INTERRUMPAN. Lo que sale por el altavoz vuelve a entrar por
+        // el micrófono, y con el volumen alto entra MÁS FUERTE que la voz de quien está delante: el
+        // asistente se cortaba a sí mismo a media frase (2026-08-05). Antes esto se defendía con un
+        // «×2» fijo, que es el mismo error que ya cometimos con el umbral: un número medido en un
+        // equipo y a un volumen no vale para otro.
+        //
+        // Cuánto eco vuelve depende del volumen, de los altavoces y de la sala, así que SE APRENDE:
+        // mientras hablamos y nadie nos interrumpe, todo lo que entra por el micro ES nuestro eco, y
+        // la proporción entre lo que suena y lo que se cuela es justo lo que hay que medir. Sube
+        // deprisa y baja despacio, porque quedarse corto deja pasar el eco y pasarse solo exige
+        // hablar un poco más alto para interrumpir.
+        double salida = _audio.NivelSalida;
+        if (salida > 0.01)
+        {
+            if (!_usuarioHablando)
+            {
+                double proporcion = vol / salida;
+                _gananciaEco = proporcion > _gananciaEco
+                    ? (_gananciaEco * 0.7) + (proporcion * 0.3)
+                    : (_gananciaEco * 0.995) + (proporcion * 0.005);
+                _gananciaEco = Math.Min(_gananciaEco, 2.0);   // por encima de esto ya no es eco
+            }
+            umbral = Math.Max(umbral, salida * _gananciaEco * MargenSobreElEco);
+        }
 
         // Se publica lo que se está oyendo. Sin esto, «no me escucha» y «no le llega audio» se ven
         // exactamente igual desde fuera, que es lo que costó encontrar este fallo.
@@ -513,22 +550,39 @@ public sealed class GeminiLive : IDisposable
         {
             _ultimoAforo = DateTime.UtcNow;
             LogBus.Log("voz-viva", $"micrófono: pico {_picoDelTramo:F3} · ruido {_ruidoSala:F3} · "
-                + $"umbral {umbral:F3} · {(_usuarioHablando ? "HABLANDO" : "en silencio")}");
+                + $"umbral {umbral:F3}"
+                + (salida > 0.01 ? $" · Ü sonando {salida:F3} (eco ×{_gananciaEco:F2})" : "")
+                + $" · {(_usuarioHablando ? "HABLANDO" : "en silencio")}");
             _picoDelTramo = 0;
         }
 
         if (vol >= umbral)
         {
-            _ultimaVoz = DateTime.UtcNow;
-            if (!_usuarioHablando)
+            _tramosAltos++;
+
+            // UN PICO SUELTO NO ES UNA FRASE. Mientras sonamos, el eco cruza el umbral a ratos —una
+            // consonante fuerte, un golpe de voz— y bastaba uno para dar el turno por interrumpido.
+            // Quien interrumpe de verdad sigue hablando el tramo siguiente. Cuando estamos callados
+            // no se pide nada: ahí no hay eco que confundir y el retardo sí se notaría.
+            int hacenFalta = salida > 0.01 ? 2 : 1;
+            if (_tramosAltos >= hacenFalta)
             {
-                _usuarioHablando = true;
-                await EnviarAsync("""{"realtimeInput":{"activityStart":{}}}""", _cts?.Token ?? default);
+                _ultimaVoz = DateTime.UtcNow;
+                if (!_usuarioHablando)
+                {
+                    _usuarioHablando = true;
+                    LogBus.Log("voz-viva", $"interrumpe: pico {vol:F3} sobre umbral {umbral:F3} "
+                        + $"(salida {salida:F3} · eco aprendido ×{_gananciaEco:F2})");
+                    await EnviarAsync("""{"realtimeInput":{"activityStart":{}}}""", _cts?.Token ?? default);
+                }
             }
+            else return;   // aún no cuenta: no se manda nada
         }
+        else if (_tramosAltos > 0 && !_usuarioHablando) _tramosAltos = 0;
         else if (_usuarioHablando && (DateTime.UtcNow - _ultimaVoz).TotalMilliseconds > 700)
         {
             _usuarioHablando = false;
+            _tramosAltos = 0;
             await EnviarAsync("""{"realtimeInput":{"activityEnd":{}}}""", _cts?.Token ?? default);
             return;
         }
