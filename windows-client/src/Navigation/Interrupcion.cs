@@ -24,15 +24,7 @@ public static class Interrupcion
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
 
     /// <summary>¿La ventana es del propio asistente? Nuestras ventanas nunca son un bloqueo.</summary>
-    private static bool EsNuestra(IntPtr h)
-    {
-        try
-        {
-            GetWindowThreadProcessId(h, out uint pid);
-            return pid == System.Diagnostics.Process.GetCurrentProcess().Id;
-        }
-        catch { return false; }
-    }
+    private static bool EsNuestra(IntPtr h) => Uia.Propio.EsVentana(h);
 
     /// <summary>Lee el diálogo que haya delante. Opciones vacías = no hay ninguno.</summary>
     public static (string Titulo, List<string> Textos, List<string> Opciones) Leer()

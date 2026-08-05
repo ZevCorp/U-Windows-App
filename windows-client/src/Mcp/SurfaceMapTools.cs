@@ -148,8 +148,10 @@ public sealed class SurfaceMapTools
         }, IntPtr.Zero);
 
         if (elegida == IntPtr.Zero) return false;
-        if (IsIconic(elegida)) ShowWindow(elegida, 9 /* SW_RESTORE */);
-        SetForegroundWindow(elegida);
+        // Una sola forma de traer una ventana al frente en toda la app: ver AppAligner.TraerAlFrente.
+        // Aquí había una copia sin el enganche a la cola de entrada, que falla en silencio cuando
+        // quien llama no está delante — y quien llama a esto casi nunca lo está.
+        AppAligner.TraerAlFrente(elegida);
 
         // Se espera a que lo confirmen LAS DOS fuentes: el sistema (quién está delante) y el
         // localizador, que sondea cada 800 ms. Conformarse con la primera dejaba una ventana en la
@@ -221,6 +223,90 @@ public sealed class SurfaceMapTools
     /// (2026-08-04). Aprender una app entera con map_learn_app tampoco servía: eso mapea, tarda, y
     /// no es lo que se pidió. Abrir es un gesto propio y merecía su primitiva.
     /// </summary>
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out System.Drawing.Point p);
+
+    /// <summary>
+    /// LO QUE HAY EN PANTALLA AHORA, leído en vivo, y qué sabe el mapa de cada cosa.
+    ///
+    /// Hasta ahora el asistente solo podía consultar su MEMORIA: todas las herramientas respondían
+    /// desde el grafo guardado. Eso deja un hueco que ya nos mordió —una carpeta recién creada es
+    /// invisible para quien solo recuerda, y el modelo pedía entrar en algo que «no existe» con la
+    /// carpeta delante (2026-08-03)— y además impide lo que el usuario quiere hacer ahora: señalar
+    /// cosas de la interfaz viva para colocarlas en un nivel.
+    ///
+    /// Se marca CADA elemento con lo que el mapa sabe de él, porque mezclar «lo que veo» con «lo que
+    /// recuerdo» sin distinguirlos sería peor que no tener esto: el modelo no podría saber si algo
+    /// es terreno conocido o una novedad.
+    /// </summary>
+    private string LoQueVeo()
+    {
+        var loc = _where();
+        string aqui = loc?.Id ?? "";
+        if (aqui.Length == 0) return "no sé en qué pantalla estoy";
+
+        _lector.Read();
+        var vivos = _lector.Elements
+            .Where(e => e.Label.Length > 0
+                     && !e.ControlType.Equals("text", StringComparison.OrdinalIgnoreCase)
+                     && !e.ControlType.Equals("image", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (vivos.Count == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo";
+
+        var enMapa = _map.ExitsFrom(aqui)
+            .GroupBy(h => h.Info.Label, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var sb = new System.Text.StringBuilder(
+            $"EN PANTALLA AHORA, en «{aqui}» ({vivos.Count} elemento(s)). "
+            + "«nivel N» = lo que el mapa sabe; «fijado» = lo puso una persona; «nuevo» = el mapa aún no lo tiene.\n");
+        foreach (var el in vivos.Take(60))
+        {
+            string estado = "nuevo";
+            if (enMapa.TryGetValue(el.Label, out var h))
+                estado = (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
+                       + (h.Info.NivelFijado ? " · fijado" : "");
+            sb.AppendLine($"  «{el.Label}» ({el.ControlType})  →  {estado}");
+        }
+        if (vivos.Count > 60) sb.AppendLine($"  …y {vivos.Count - 60} más");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// El elemento que hay BAJO EL CURSOR, ahora mismo.
+    ///
+    /// Es la forma barata y exacta de resolver «esto que estoy señalando»: la alternativa era
+    /// mandarle vídeo de la pantalla al modelo y confiar en que acertara mirando píxeles, cuando el
+    /// sistema ya puede preguntarle a Windows qué hay en ese punto y obtener el nombre exacto
+    /// (2026-08-04, a propuesta del usuario de señalar con el ratón).
+    /// </summary>
+    private string LoQueSenala()
+    {
+        try
+        {
+            if (!GetCursorPos(out var p)) return "no pude leer dónde está el cursor";
+            var el = System.Windows.Automation.AutomationElement.FromPoint(
+                new System.Windows.Point(p.X, p.Y));
+            if (el == null) return "bajo el cursor no hay ningún elemento que UIA reconozca";
+
+            var (etiqueta, tipo, sels) = UiaSurface.DescribeElement(el);
+            string nombre = etiqueta.Length > 0 ? etiqueta : (el.Current.Name ?? "").Trim();
+            if (nombre.Length == 0) return $"bajo el cursor hay un {tipo} sin nombre; no puedo referirme a él";
+
+            string aqui = _where()?.Id ?? "";
+            var h = aqui.Length > 0
+                ? _map.ExitsFrom(aqui).FirstOrDefault(x => x.Info.Label.Equals(nombre, StringComparison.OrdinalIgnoreCase))
+                : null;
+            string estado = h == null ? "el mapa aún no lo tiene"
+                : (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
+                  + (h.Info.NivelFijado ? " · fijado a mano" : " · deducido");
+
+            return $"señalas «{nombre}» ({tipo}) · {estado}. "
+                 + $"Para moverlo de nivel: map_set_level con exit=«{nombre}».";
+        }
+        catch (Exception e) { return $"no pude leer lo que hay bajo el cursor: {e.Message}"; }
+    }
+
     private string OpenApp(string app)
     {
         if (app.Length == 0) return "falta `app`: qué abrir (por ejemplo «explorer» o «notepad»)";
@@ -267,19 +353,17 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
-    /// ¿Esta superficie es el escritorio y no una ventana de verdad?
+    /// ¿Lo que hay delante NO es una ventana de la app —el escritorio, o algo sin identidad—?
     ///
-    /// Se compara por CONTENIDO y no por final de cadena porque al escritorio le llega su sufijo de
-    /// sección como a cualquier pantalla: con un icono seleccionado, la identidad es
-    /// «program-manager#imágenes-acceso-directo», y comparar por el final no lo reconocía. Se daba
-    /// el escritorio por una ventana del explorador y el modelo se ponía a pasear entre los accesos
-    /// directos buscando Documentos (2026-08-04).
+    /// Qué es el escritorio lo sabe <see cref="Escritorio"/>, para toda la app. Aquí se añade el
+    /// caso propio de abrir una app: una superficie vacía o «/ventana» —una ventana sin título que
+    /// no identifica nada— cuenta igual, porque la decisión que se toma con esto es la misma: abrir
+    /// una ventana de verdad.
     /// </summary>
     private static bool EsEscritorio(string id) =>
         id.Length == 0
-        || id.Contains("/program-manager", StringComparison.OrdinalIgnoreCase)
-        || id.Contains("/ventana", StringComparison.OrdinalIgnoreCase)
-        || id.StartsWith("uia://desktop", StringComparison.OrdinalIgnoreCase);
+        || Escritorio.EsId(id)
+        || id.Contains("/ventana", StringComparison.OrdinalIgnoreCase);
 
     private string LearnApp(string app)
     {
@@ -420,7 +504,7 @@ public sealed class SurfaceMapTools
             var raiz = System.Windows.Automation.AutomationElement.FromHandle(fg);
             if (raiz == null) return;
 
-            var puertas = new List<(string, string, string, string[])>();
+            var puertas = new List<(string, string, string, string[], string)>();
             foreach (System.Windows.Automation.AutomationElement el in raiz.FindAll(
                 System.Windows.Automation.TreeScope.Descendants,
                 new System.Windows.Automation.PropertyCondition(
@@ -433,7 +517,7 @@ public sealed class SurfaceMapTools
                     if (info.IsOffscreen) continue;
                     string n = info.Name?.Trim() ?? "";
                     if (n.Length == 0) continue;
-                    puertas.Add((n, "MenuItem", $"uia:name={n};ct=MenuItem", Array.Empty<string>()));
+                    puertas.Add((n, "MenuItem", $"uia:name={n};ct=MenuItem", Array.Empty<string>(), "menú"));
                 }
                 catch { }
             }
@@ -607,7 +691,8 @@ public sealed class SurfaceMapTools
 
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
-        or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app";
+        or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
+        or "map_set_level" or "map_what_i_see" or "map_pointing_at";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -630,6 +715,12 @@ public sealed class SurfaceMapTools
             "map_type" => Type(A("text"), A("target"), A("at")),
             "map_unblock" => Unblock(A("at"), A("choose")),
             "map_open_app" => OpenApp(A("app")),
+            "map_what_i_see" => LoQueVeo(),
+            "map_pointing_at" => LoQueSenala(),
+            "map_set_level" => _map.FijarNivel(
+                A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
+                A("exit"),
+                int.TryParse(A("level"), out int niv) ? niv : -1),
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
             _ => $"herramienta de mapa no soportada: {tool}",
@@ -969,7 +1060,23 @@ public sealed class SurfaceMapTools
         {
             _lector.Read();
 
-            var puertas = new List<(string, string, string, string[])>();
+            // LO LEÍDO Y EL DÓNDE TIENEN QUE SER LA MISMA APP. El lector mira la ventana en primer
+            // plano y el nodo viene del localizador; entre las dos cosas la ventana puede cambiar, y
+            // entonces se le escriben a una pantalla las salidas de otra. Comprobado el 2026-08-04:
+            // el nodo del Bloc de notas acabó con «Crear PR» y «Editado GraphExplorerWindow.cs»
+            // dentro, que son de la ventana de Claude. Es el mismo veneno que las aristas entre apps
+            // —una pantalla afirmando salidas que no tiene— y llevaba aquí desde el principio, solo
+            // que nadie lo había mirado.
+            string appLeida = _lector.ForegroundProcess;
+            string appNodo = SurfaceMap.AppDe(nodo);
+            if (appLeida.Length > 0 && appNodo.Length > 0
+                && !appNodo.StartsWith(appLeida + ".", StringComparison.OrdinalIgnoreCase))
+            {
+                LogBus.Log("mapa-mcp", $"NO se anotan salidas: se leyó «{appLeida}» y el nodo es «{nodo}»");
+                return;
+            }
+
+            var puertas = new List<(string, string, string, string[], string)>();
             foreach (var el in _lector.Elements)
             {
                 // Igual que el crawler: TODO lo accionable, también los botones de ejecución.
@@ -982,11 +1089,22 @@ public sealed class SurfaceMapTools
                         && !System.Text.RegularExpressions.Regex.IsMatch(s, @"(name|aid)=(;|$)")).ToArray();
                     if (utiles.Length == 0) continue;
                     puertas.Add((l.Length > 0 ? l : el.Label, t.Length > 0 ? t : el.ControlType,
-                                 utiles[0], utiles.Skip(1).ToArray()));
+                                 utiles[0], utiles.Skip(1).ToArray(), U.Graph.Surfaces.UiaSurface.GrupoDe(el.Native)));
                 }
                 catch { }
             }
             if (puertas.Count == 0) return;
+
+            // Cuántas salidas quedaron sin grupo, y por dónde iba el árbol en una de ellas. Sin
+            // esto, «este elemento no pertenece a ningún grupo» y «no supimos ver el suyo» se leen
+            // igual, que es exactamente lo que costó ver aquí (2026-08-04).
+            int sinGrupo = puertas.Count(p => p.Item5.Length == 0);
+            if (sinGrupo > 0)
+            {
+                var muestra = _lector.Elements.FirstOrDefault(e => e.Label.Length > 0);
+                LogBus.Log("mapa-mcp", $"grupos: {puertas.Count - sinGrupo}/{puertas.Count} con grupo"
+                    + (muestra != null ? $" · ejemplo «{muestra.Label}»: {UiaSurface.Ancestros(muestra.Native)}" : ""));
+            }
 
             _map.ObserveExits(nodo, puertas);
             LogBus.Log("mapa-mcp", $"al llegar a '{nodo}' se anotaron {puertas.Count} salida(s)");
@@ -1033,9 +1151,14 @@ public sealed class SurfaceMapTools
         // «¿qué puedo hacer aquí?») y mezclarlas obliga al modelo a adivinar cuál es cuál.
         var sb = new System.Text.StringBuilder($"Desde «{desde}»:\n");
         foreach (var h in salidas.Where(x => !x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)))
+        {
+            // Se distingue lo cruzado DESDE AQUÍ de lo que está disponible porque la app lo tiene en
+            // todas sus pantallas. Las dos sirven para navegar; solo una se comprobó en este sitio.
+            string origen = h.Info.Nivel == SurfaceMap.NivelCromo ? "  ·  del nivel (en toda la app)" : "";
             sb.AppendLine(h.Info.Selector.Length > 0
-                ? $"  → {h.To}   pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces)"
+                ? $"  → {h.To}   pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces){origen}"
                 : $"  → {h.To}   (observado {h.Info.Count} vez/veces, pero NO se sabe con qué acción)");
+        }
 
         var acciones = salidas.Where(x => x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
                                        && x.Info.Selector.Length > 0).ToList();

@@ -30,6 +30,7 @@ public sealed class GeminiLive : IDisposable
 
     private readonly SurfaceMapTools _mapa;
     private readonly LiveAudio _audio = new();
+    private readonly LiveVideo _video = new();
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
     private readonly SemaphoreSlim _envio = new(1, 1);
@@ -148,6 +149,11 @@ public sealed class GeminiLive : IDisposable
 
             _audio.Capturado += MandarTrozo;
             _audio.AbrirMicrofono();
+
+            // OJOS. Un fotograma por segundo, con el cursor pintado: es lo que permite decir «esto
+            // que estoy señalando» y que signifique algo. Va por el mismo canal que el audio.
+            _video.Capturado += MandarFotograma;
+            _video.Abrir(1000);
             _ = Task.Run(() => RecibirAsync(_cts.Token));
         }
         catch (Exception e)
@@ -165,6 +171,8 @@ public sealed class GeminiLive : IDisposable
         _audio.Capturado -= MandarTrozo;
         _audio.CerrarMicrofono();
         _audio.Callar();
+        _video.Capturado -= MandarFotograma;
+        _video.Cerrar();
         try { _cts?.Cancel(); } catch { }
         try
         {
@@ -223,6 +231,12 @@ public sealed class GeminiLive : IDisposable
         Ve contando lo que haces mientras lo haces («voy al explorador», «creando la carpeta»), no al
         final: lo que se está viendo en pantalla y lo que oye tienen que ir juntos.
 
+        LA JERARQUÍA SE PUEDE CORREGIR, y el usuario manda. El sistema deduce solo a qué nivel
+        pertenece cada cosa —nivel 1 es la navegación principal de la app, la que está siempre a la
+        vista— y acierta casi siempre. Cuando el usuario te diga que algo pertenece o no al nivel
+        principal, o te señale elementos, usa map_set_level: queda fijo para esa app y la deducción
+        ya no lo mueve. Si te señala varios seguidos, uno por uno, y confirma en voz cuáles quedaron.
+
         Cómo trabajar:
         - Para ABRIR una aplicación, map_open_app. No busques su icono en el mapa: el mapa guarda
           pantallas, no accesos directos, y un icono aprendido en otra app no estará donde estás.
@@ -235,6 +249,51 @@ public sealed class GeminiLive : IDisposable
         - Si algo se bloquea, map_unblock. Si te ofrece una decisión de verdad, pregúntasela al
           usuario en voz: esa elección es suya.
         - Si una app no está mapeada, map_learn_app la aprende sola.
+
+        TAREAS QUE YA SE SABEN HACER. Cuando la petición es una de estas, no la improvises paso a
+        paso: manda la secuencia entera de una vez con map_run. Una llamada en vez de treinta es la
+        diferencia entre verlo ocurrir y verlo pensar.
+
+        · «ve a vídeos» / «ábreme imágenes» / «llévame a notas» →
+          map_go_to directo, sin preguntar ni mirar antes, con la superficie que corresponda:
+          vídeos → uia://explorer.exe/videos
+          imágenes → uia://explorer.exe/imágenes
+          notas → uia://explorer.exe/notas
+          Si te piden otro sitio que no esté en esta lista, map_places para encontrarlo y map_go_to.
+
+        · «organiza la carpeta de pruebas» / «ordena los archivos por tipo» →
+          map_run con steps = el JSON de abajo, tal cual. Di en voz que vas a organizarlos por tipo
+          y que son tres grupos, y luego lánzalo.
+
+        [{"op":"go_to","surface":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Nuevo","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Carpeta","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"type","text":"Docs","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"factura-enero","action":"click","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"factura-febrero","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"contrato-servicios","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Cortar","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"uia:name=Docs;ct=ListItem","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Pegar","at":"uia://explorer.exe/docs"},
+         {"op":"go_to","surface":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Nuevo","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Carpeta","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"type","text":"Fotos","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"logo-empresa","action":"click","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"captura-error","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"foto-equipo","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Cortar","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"uia:name=Fotos;ct=ListItem","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Pegar","at":"uia://explorer.exe/fotos"},
+         {"op":"go_to","surface":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Nuevo","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Carpeta","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"type","text":"Datos","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"presupuesto-2026.xlsx","action":"click","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"inventario.xlsx","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Cortar","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"uia:name=Datos;ct=ListItem","at":"uia://explorer.exe/u-prueba-organizar"},
+         {"op":"take","exit":"Pegar","at":"uia://explorer.exe/datos"}]
 
         Si una herramienta responde que no actuó, dilo en voz alta y explica por qué. No lo maquilles
         ni sigas como si hubiera funcionado.
@@ -274,6 +333,18 @@ public sealed class GeminiLive : IDisposable
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
             ("at", "La superficie a la que hay que volver después."),
             ("choose", "La opción a pulsar. Vacío = solo si hay una única salida posible.")),
+        Fn("map_set_level", "Corrige a mano a qué NIVEL pertenece una salida, para toda la app y de "
+            + "forma permanente. Nivel 1 = navegación principal (los hermanos que están siempre a la "
+            + "vista). Úsala cuando el usuario diga cosas como «esto es del menú principal», «esto no "
+            + "pertenece al primer nivel» o «pon esto en el nivel 2». Con level = -1 se suelta y vuelve "
+            + "a decidirlo el sistema.",
+            ("exit", "La salida, por su nombre tal como se ve («Notas») o su selector."),
+            ("level", "El nivel: 1 para la navegación principal, 2 o más para lo de dentro, -1 para soltar."),
+            ("app", "La app; vacío = donde estés ahora.")),
+        Fn("map_run", "Ejecuta una SECUENCIA de pasos de una sola vez, sin volver a consultarte entre "
+            + "uno y otro. Es la forma rápida: úsala para las tareas que ya sabes hacer enteras.",
+            ("steps", "JSON: lista de pasos. Cada uno {\"op\":\"go_to|take|type|unblock\", …} con los "
+                    + "mismos argumentos que las herramientas sueltas.")),
         Fn("map_open_app", "ABRE una aplicación (o la trae al frente si ya estaba) y dice en qué pantalla "
             + "quedas. Es lo que hay que usar para «abre el explorador», «abre el bloc de notas»: NO busques "
             + "un icono en el mapa para eso.",
@@ -313,11 +384,25 @@ public sealed class GeminiLive : IDisposable
         return Math.Sqrt(suma / n) / short.MaxValue;
     }
 
-    /// <summary>Por debajo de esto es sala, no voz. Medido a ojo sobre silencio con ventilador.</summary>
-    private const double UmbralVoz = 0.045;
+    /// <summary>
+    /// Cuánto hay que subir la voz sobre el ruido de la sala para que cuente como hablar.
+    ///
+    /// Era un número fijo (0,045) medido en UN equipo, y eso lo hacía una lotería: con un micrófono
+    /// de menos ganancia la puerta no se abría NUNCA, así que no se enviaba ni un byte y la sesión
+    /// se quedaba abierta sin oír nada —«dice te escucho y no me escucha» (2026-08-04)—. El nivel de
+    /// un micrófono depende del aparato, del sistema y de la sala; fijarlo a mano es adivinar.
+    ///
+    /// Ahora se aprende el silencio de esta sala y se exige destacar sobre ÉL. El suelo absoluto es
+    /// solo una red para micrófonos con ruido eléctrico.
+    /// </summary>
+    private const double SueloAbsoluto = 0.008;
+    private const double VecesSobreElRuido = 3.0;
 
+    private double _ruidoSala = 0.02;
     private bool _usuarioHablando;
     private DateTime _ultimaVoz;
+    private DateTime _ultimoAforo = DateTime.MinValue;
+    private double _picoDelTramo;
 
     private async void MandarTrozo(byte[] pcm)
     {
@@ -331,7 +416,25 @@ public sealed class GeminiLive : IDisposable
         // El umbral sube mientras Ü habla, no se cierra del todo: cortarle a media frase es media
         // gracia de hablar en vivo, pero su propia voz por los altavoces no puede valer como corte.
         double vol = Volumen(pcm);
-        double umbral = _audio.Hablando ? UmbralVoz * 2.5 : UmbralVoz;
+
+        // El silencio se APRENDE: baja deprisa hacia lo más bajo que se oye y sube muy despacio, de
+        // modo que una frase larga no lo arrastre consigo. Así el umbral se calibra solo en cualquier
+        // equipo, que es justo lo que un número fijo no podía hacer.
+        _ruidoSala = vol < _ruidoSala ? (_ruidoSala * 0.90) + (vol * 0.10)
+                                      : (_ruidoSala * 0.999) + (vol * 0.001);
+        double umbral = Math.Max(SueloAbsoluto, _ruidoSala * VecesSobreElRuido);
+        if (_audio.Hablando) umbral *= 2.0;   // mientras Ü habla, solo una voz clara la corta
+
+        // Se publica lo que se está oyendo. Sin esto, «no me escucha» y «no le llega audio» se ven
+        // exactamente igual desde fuera, que es lo que costó encontrar este fallo.
+        _picoDelTramo = Math.Max(_picoDelTramo, vol);
+        if ((DateTime.UtcNow - _ultimoAforo).TotalSeconds >= 2)
+        {
+            _ultimoAforo = DateTime.UtcNow;
+            LogBus.Log("voz-viva", $"micrófono: pico {_picoDelTramo:F3} · ruido {_ruidoSala:F3} · "
+                + $"umbral {umbral:F3} · {(_usuarioHablando ? "HABLANDO" : "en silencio")}");
+            _picoDelTramo = 0;
+        }
 
         if (vol >= umbral)
         {
@@ -391,6 +494,30 @@ public sealed class GeminiLive : IDisposable
             },
         };
         await EnviarAsync(JsonSerializer.Serialize(msg), _cts?.Token ?? CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Un fotograma de la pantalla, por el mismo caño que el audio.
+    ///
+    /// Va sin cola: si el envío anterior no ha terminado, este se pierde y no pasa nada. Un
+    /// fotograma viejo no informa de nada —lo que importa es lo que hay AHORA— y acumularlos solo
+    /// serviría para retrasar lo siguiente.
+    /// </summary>
+    private async void MandarFotograma(byte[] jpeg)
+    {
+        if (!Viva || _ws?.State != WebSocketState.Open || jpeg.Length == 0) return;
+        try
+        {
+            var msg = new
+            {
+                realtimeInput = new
+                {
+                    video = new { data = Convert.ToBase64String(jpeg), mimeType = "image/jpeg" },
+                },
+            };
+            await EnviarAsync(JsonSerializer.Serialize(msg), _cts?.Token ?? CancellationToken.None);
+        }
+        catch { }
     }
 
     /// <summary>Un único escritor por socket: WebSocket no admite envíos solapados.</summary>

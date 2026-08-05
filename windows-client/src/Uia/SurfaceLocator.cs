@@ -115,7 +115,30 @@ public sealed class SurfaceLocator : IDisposable
     /// No toca <see cref="Current"/> ni dispara <see cref="Changed"/>: es una consulta, no un
     /// latido. Devuelve null si delante hay una ventana nuestra o no se puede resolver.
     /// </summary>
-    public SurfaceLocation? Ahora()
+    /// <summary>
+    /// DÓNDE ESTOY. La única respuesta a esa pregunta en toda la aplicación.
+    ///
+    /// Existe porque la respuesta tenía dos mitades —calcular en el acto, o el último valor
+    /// confirmado— y cada sitio elegía la suya: siete llamadas escribiendo la misma fórmula a mano,
+    /// y una de ellas se había quedado con solo la mitad cacheada durante meses sin que nadie lo
+    /// notara (2026-08-04). Cuando una pregunta se contesta en siete sitios, tarde o temprano dos
+    /// contestan distinto; y ese día el fallo no parece un fallo, parece que el sistema «a veces se
+    /// confunde».
+    ///
+    /// Se pregunta primero, porque preguntar es inmediato y esperar al siguiente latido cuesta
+    /// hasta 800 ms. Se cae a lo último confirmado solo cuando no se puede resolver — que es el
+    /// caso de tener nuestra propia ventana delante, donde lo correcto es conservar la app real en
+    /// la que estaba el usuario.
+    /// </summary>
+    public SurfaceLocation? DondeEstoy() => Ahora() ?? Current;
+
+    /// <summary>
+    /// El cálculo inmediato. PRIVADO: quien pregunta usa <see cref="DondeEstoy"/>.
+    ///
+    /// No se arregla con cuidado, se arregla haciendo que no se pueda: mientras esto y
+    /// <see cref="Current"/> fueran las dos públicas, elegir mal seguía estando a un descuido.
+    /// </summary>
+    private SurfaceLocation? Ahora()
     {
         try
         {
@@ -130,7 +153,7 @@ public sealed class SurfaceLocator : IDisposable
             if (raiz != IntPtr.Zero) hwnd = raiz;
 
             string proc = ProcessName(hwnd);
-            if (proc.Equals("U", StringComparison.OrdinalIgnoreCase)) return Current;
+            if (Propio.EsProceso(proc)) return Current;
 
             var sb = new StringBuilder(512);
             GetWindowText(hwnd, sb, sb.Capacity);
@@ -154,7 +177,7 @@ public sealed class SurfaceLocator : IDisposable
         string proc = ProcessName(hwnd);
         // Nuestras propias ventanas (la carita, el badge, el inspector) no son "una superficie":
         // conservan el ID de la app real que el usuario estaba usando.
-        if (proc.Equals("U", StringComparison.OrdinalIgnoreCase)) return;
+        if (Propio.EsProceso(proc)) return;
 
         var sb = new StringBuilder(512);
         GetWindowText(hwnd, sb, sb.Capacity);
@@ -270,7 +293,17 @@ public sealed class SurfaceLocator : IDisposable
         // seleccionada y la identidad pasaba a «u-prueba-organizar#nueva-carpeta-4», con lo que el
         // ancla rechazaba los 15 pasos siguientes (2026-08-03). Un título con sufijo de app ya trae
         // la pantalla delante; uno que es solo el nombre de la app, no.
-        string seccion = elTituloIdentifica ? "" : SeccionSeleccionada(hwnd);
+        // EL ESCRITORIO NO TIENE SECCIONES: seleccionar un icono no es ir a otro sitio. Sin esta
+        // excepción, cada icono del escritorio creaba su propio nodo —«program-manager#docker-desk»,
+        // «program-manager#sap-logon-64»…— y, como la traza encadena de dónde venías a dónde estás,
+        // el grafo acababa afirmando que para llegar a un icono hay que pasar por el anterior. Es
+        // falso y además caro: todos son alcanzables directamente desde el escritorio, así que
+        // inventaba pasos de navegación que nadie necesita dar (2026-08-04, visto en pantalla).
+        //
+        // La regla de fondo: una sección es un SITIO DISTINTO dentro de la misma ventana; una
+        // selección es qué hay señalado en el sitio donde ya estás. El escritorio solo tiene lo
+        // segundo.
+        string seccion = elTituloIdentifica || Escritorio.EsVentana(hwnd) ? "" : SeccionSeleccionada(hwnd);
         if (seccion.Length > 0 && !seccion.Equals(slug, StringComparison.OrdinalIgnoreCase))
             return new SurfaceLocation($"uia://{proc}.exe/{slug}#{seccion}", $"uia://{proc}.exe", $"/{slug}#{seccion}");
 

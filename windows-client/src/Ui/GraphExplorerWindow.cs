@@ -50,7 +50,22 @@ public sealed class GraphExplorerWindow : Window
         Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
         FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0),
     };
-    private readonly StackPanel _edges = new();
+    /// <summary>
+    /// Los puntos de las salidas, cada uno SOBRE su elemento real.
+    ///
+    /// Estaban agrupados en una tira arriba a la izquierda, y eso obligaba a traducir mentalmente
+    /// entre «el punto número siete» y «ese botón de allí»: la relación existía —hover iluminaba el
+    /// elemento— pero había que buscarla. Encima de la pantalla no hace falta buscar nada: el punto
+    /// ESTÁ en el sitio del que habla, así que lo que el mapa sabe y lo que se ve son la misma
+    /// imagen (2026-08-04). Es lo que ya permitía la capa a pantalla completa y no se aprovechaba.
+    /// </summary>
+    private readonly Canvas _edges = new();
+
+    /// <summary>La tira de niveles del borde derecho: una app por nivel. Ver <see cref="DibujarNiveles"/>.</summary>
+    private StackPanel _niveles = null!;
+
+    /// <summary>Se enciende en ámbar mientras la capa acepta el ratón (Ctrl+Shift).</summary>
+    private Border _marco = null!;
     private readonly System.Windows.Threading.DispatcherTimer _refresh;
     private string _signature = "";   // para no redibujar (y matar el hover) si nada cambió
     private bool _busy;               // recorriendo una arista: el refresco espera
@@ -59,12 +74,25 @@ public sealed class GraphExplorerWindow : Window
     private readonly Button _graphBtn;
     private ScrollViewer _lista = null!;
     private ScrollViewer _grafo = null!;
+    /// <summary>Lo único sólido: título, botones y estado. Vive en <see cref="_ventanaBarra"/>.</summary>
+    private Border _barra = null!;
+
+    /// <summary>La ventana de la barra: lo único de esta vista que se puede tocar.</summary>
+    private Window _ventanaBarra = null!;
     private readonly Canvas _lienzo = new() { Background = Brushes.Transparent };
     private bool _collapsed;
     private bool _graphView;
+    /// <summary>El grafo se dibuja como mapa de puntos porque el detalle ya no cabría legible.</summary>
+    private bool _compacto;
     private string _nodoActual = "";
-    /// <summary>Lo aprendido en la última corrida automática: lo único que la vista de grafo dibuja.</summary>
+    /// <summary>Lo aprendido en la última corrida automática: los SALTOS que la vista dibuja.</summary>
     private List<(string From, string To, string Label)> _ultimaCorrida = new();
+
+    /// <summary>Los sitios por los que se ha pasado, con o sin salto. Un sitio pisado ya es un nodo.</summary>
+    private readonly List<string> _vistos = new();
+
+    /// <summary>Para no repetir la misma línea de log en cada redibujo.</summary>
+    private string _huellaDibujo = "";
     private CancellationTokenSource? _crawlCts;
 
     public GraphExplorerWindow(SurfaceMap map, Func<SurfaceLocator.SurfaceLocation?> where)
@@ -110,23 +138,6 @@ public sealed class GraphExplorerWindow : Window
         };
         _graphBtn.Click += (_, __) => SetGraphView(!_graphView);
 
-        var titulo = new TextBlock
-        {
-            Text = "🕸 Explorador del grafo",
-            Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)),
-            FontSize = 11.5, FontWeight = FontWeights.Bold,
-            TextWrapping = TextWrapping.Wrap, Cursor = Cursors.SizeAll,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        titulo.MouseLeftButtonDown += (_, __) => { try { DragMove(); } catch { } };
-
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
-        DockPanel.SetDock(_collapseBtn, Dock.Right);
-        header.Children.Add(_collapseBtn);
-        DockPanel.SetDock(_graphBtn, Dock.Right);
-        header.Children.Add(_graphBtn);
-        header.Children.Add(titulo);
-
         // Mapeo AUTÓNOMO de la app que esté delante. Vive aquí, junto al recorrido manual, porque
         // son el mismo gesto a dos velocidades: uno lo conduce el usuario, el otro el sistema.
         _crawlBtn = new Button
@@ -143,18 +154,15 @@ public sealed class GraphExplorerWindow : Window
         };
         _crawlBtn.Click += (_, __) => _ = CrawlAsync();
 
-        var panel = new DockPanel();
-        DockPanel.SetDock(header, Dock.Top);
-        panel.Children.Add(header);
-        DockPanel.SetDock(_crawlBtn, Dock.Top);
-        panel.Children.Add(_crawlBtn);
-        DockPanel.SetDock(_nodeTitle, Dock.Top);
-        panel.Children.Add(_nodeTitle);
-        DockPanel.SetDock(_status, Dock.Bottom);
-        panel.Children.Add(_status);
+        // LAS DOS VISTAS A LA VEZ, no una o la otra. Eran modos alternativos y eso obligaba a elegir
+        // entre ver QUÉ hay disponible (la lista de aristas) y ver POR DÓNDE va (el grafo), que es
+        // justo lo que no se puede separar cuando lo que quieres es seguir en directo a un asistente
+        // que se está moviendo solo: la lista dice qué puertas tiene delante y el grafo dice de
+        // dónde viene (2026-08-04). Lista a la izquierda, grafo a la derecha.
         _lista = new ScrollViewer
         {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Content = _edges,
         };
         _grafo = new ScrollViewer
@@ -162,35 +170,359 @@ public sealed class GraphExplorerWindow : Window
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = _lienzo,
-            Visibility = Visibility.Collapsed,
+            Margin = new Thickness(6, 0, 0, 0),
         };
-        var pila = new Grid();
-        pila.Children.Add(_lista);
-        pila.Children.Add(_grafo);
-        panel.Children.Add(pila);
+        // Si cambia el sitio disponible, se recalcula el encaje: da igual de dónde venga el cambio
+        // —otra resolución, la barra de tareas, un monitor distinto— porque la pregunta es la misma.
+        _grafo.SizeChanged += (_, __) => AjustarALaVista();
 
-        Content = new Border
+        // Los puntos ya no necesitan media pantalla: una tira estrecha a la izquierda basta para
+        // decir cuántas salidas hay y cuántas se conocen, y todo lo demás es para el grafo.
+        // LOS NIVELES, pegados al borde derecho. Un nivel es una APP: el grafo de dentro de una
+        // aplicación es un terreno cerrado —sus pantallas, sus botones— y lo que lleva de una a otra
+        // no es una arista más, es un salto de nivel (abrirla, o su icono en la barra de tareas).
+        // Dibujarlo todo junto mezclaba los botones del explorador con los de Configuración y hacía
+        // ilegible lo que sí importa: cómo moverse DENTRO de donde estás (2026-08-04).
+        _niveles = new StackPanel
         {
-            CornerRadius = new CornerRadius(12),
-            Background = new SolidColorBrush(Color.FromArgb(0xEE, 0x10, 0x10, 0x14)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(12),
-            Child = panel,
+            Orientation = Orientation.Vertical,
+            Margin = new Thickness(6, 0, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
         };
 
-        var wa = SystemParameters.WorkArea;
-        Left = wa.Left + 16;
-        Top = wa.Top + 60;
+        // Los puntos van DEBAJO y ocupando todo: están colocados sobre la pantalla real, así que no
+        // pueden vivir en una columna. El grafo y los niveles se quedan a la derecha, encima.
+        // EL GRAFO OCUPA TODO Y VA CENTRADO. Vivía en una columna fija de 560 px pegada a la
+        // derecha, que era una herencia de cuando a su izquierda había una lista de aristas: se
+        // quedó ahí cuando esa lista se convirtió en puntos sobre la pantalla, así que el grafo
+        // seguía apretado en media pantalla sin que nada ocupara la otra mitad (2026-08-04).
+        // Solo la tira de niveles conserva su sitio, porque su sitio ES el borde.
+        var derecha = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
+        derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(_grafo, 0);
+        Grid.SetColumn(_niveles, 1);
+        _lienzo.HorizontalAlignment = HorizontalAlignment.Center;
+        _lienzo.VerticalAlignment = VerticalAlignment.Center;
+        derecha.Children.Add(_grafo);
+        derecha.Children.Add(_niveles);
 
-        // 1 s y con candado de no-solape: leer el árbol UIA de la ventana activa no es gratis, y
-        // dos lecturas montadas es como el inspector ya aprendió a no hacerlo.
-        _refresh = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        var dos = new Grid();
+        dos.Children.Add(_lista);      // capa de puntos, al fondo
+        dos.Children.Add(derecha);     // grafo y niveles, encima
+
+        // LA BARRA es lo único sólido y lo único que recibe el ratón: el resto es una capa que se
+        // mira, no se toca (ver EsZonaViva y el enganche de WM_NCHITTEST más abajo).
+        // DOS ICONOS Y NADA MÁS. La barra llevaba título, un botón ancho con su texto, la superficie
+        // actual y el recuento de aristas: cinco cosas escritas permanentemente encima de la app que
+        // se está mirando, para dos gestos que se hacen de vez en cuando (2026-08-04). Lo que se
+        // hace poco se guarda pequeño; lo que se lee mucho —dónde estás, cuántas salidas hay— pasa a
+        // los tooltips, que aparecen cuando se preguntan y no antes.
+        _crawlBtn.Content = "🤖";
+        _crawlBtn.Width = 26; _crawlBtn.Height = 26;
+        _crawlBtn.Margin = new Thickness(4, 0, 0, 0);
+        _crawlBtn.FontSize = 12;
+        // MinWidth 0: el estilo por defecto de Button reserva 75 px, así que dos iconos de 26
+        // ocupaban 166 y la «barra pequeña» seguía siendo una barra.
+        _crawlBtn.MinWidth = 0; _crawlBtn.MinHeight = 0;
+        _crawlBtn.Padding = new Thickness(0);
+
+        _collapseBtn.Width = 26; _collapseBtn.Height = 26;
+        _collapseBtn.FontSize = 12;
+        _collapseBtn.MinWidth = 0; _collapseBtn.MinHeight = 0;
+        _collapseBtn.Padding = new Thickness(0);
+        _collapseBtn.VerticalAlignment = VerticalAlignment.Center;
+
+        var iconos = new StackPanel { Orientation = Orientation.Horizontal };
+        iconos.Children.Add(_collapseBtn);
+        iconos.Children.Add(_crawlBtn);
+
+        _barra = new Border
+        {
+            CornerRadius = new CornerRadius(10),
+            Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x10, 0x10, 0x14)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(5),
+            Cursor = Cursors.SizeAll,
+            Child = iconos,
+        };
+        // Se arrastra por el propio recuadro: sin título, no hay otro sitio del que agarrarla.
+        _barra.MouseLeftButtonDown += (_, __) => { try { _ventanaBarra.DragMove(); } catch { } };
+
+        // LA BARRA VIVE EN SU PROPIA VENTANA, y la capa del grafo no recibe ratón EN ABSOLUTO.
+        //
+        // El intento anterior era una sola ventana que respondía al hit test según la zona: barra
+        // sólida, resto transparente. No funcionó — el clic no atravesaba y, peor, al pulsar encima
+        // la ventana se activaba y desaparecía unos segundos (2026-08-04, reportado por el usuario).
+        // Repartir una ventana en «esto sí y esto no» depende de demasiadas piezas; separar las dos
+        // cosas en dos ventanas no depende de ninguna: la capa lleva WS_EX_TRANSPARENT —el ratón la
+        // atraviesa siempre, sin excepciones— y WS_EX_NOACTIVATE, así que tampoco puede robar el
+        // foco. Lo que hay que poder tocar está en otra ventana, normal y corriente.
+        _ventanaBarra = new Window
+        {
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = Brushes.Transparent,
+            Topmost = true,
+            ShowInTaskbar = false,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.Manual,   // si no, WPF la centra y se ignora Left/Top
+            SizeToContent = SizeToContent.WidthAndHeight,
+            Title = "Ü Explorador del grafo",
+            Content = _barra,
+        };
+
+        // El marco solo se enciende mientras la capa se deja tocar (ver VigilarModificadores).
+        _marco = new Border
+        {
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xC1, 0x07)),
+            BorderThickness = new Thickness(0),
+            Child = dos,
+        };
+        Content = _marco;
+
+        // Se ocupa toda el área de trabajo: lo que se está siguiendo es un asistente moviéndose por
+        // una app, y eso no cabe en un panel de 380 px sin obligar a hacer scroll justo cuando pasa
+        // lo interesante. Como el fondo es transparente y los clics la atraviesan, ocupar la
+        // pantalla entera no le quita sitio a nada.
+        var wa = SystemParameters.WorkArea;
+        Left = wa.Left; Top = wa.Top; Width = wa.Width; Height = wa.Height;
+
+        // Lo que manda ahora son los EVENTOS (ver EscucharLaPantalla). Este reloj se queda de red,
+        // y por eso pasa de 1 s a 3: si algún cambio no emite evento, se acaba viendo igual, pero
+        // sin pagar una lectura por segundo que casi siempre no encuentra nada nuevo.
+        EscucharLaPantalla();
+        _refresh = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _refresh.Tick += (_, __) => RefreshEdges();
         _refresh.Start();
-        Closed += (_, __) => { _refresh.Stop(); _overlay.Close(); };
+        // Esquina superior derecha: es donde no estorba y donde se busca lo accesorio. Se recoloca
+        // en cada cambio de tamaño porque con SizeToContent el ancho real no se sabe hasta que WPF
+        // ha medido, y colocarla antes la dejaba a media pantalla.
+        bool colocada = false;
+        _ventanaBarra.SizeChanged += (_, __) =>
+        {
+            if (colocada && _ventanaBarra.Left > 0) return;   // si el usuario la movió, se respeta
+            _ventanaBarra.Left = wa.Right - _ventanaBarra.ActualWidth - 12;
+            _ventanaBarra.Top = wa.Top + 10;
+            colocada = true;
+        };
+
+        Closed += (_, __) => { _refresh.Stop(); _overlay.Close(); _ventanaBarra.Close(); };
+        IsVisibleChanged += (_, __) =>
+        {
+            if (IsVisible) _ventanaBarra.Show(); else _ventanaBarra.Hide();
+        };
         _overlay.Show();
     }
+
+    // ── Una capa que se mira, no se toca ─────────────────────────────────────
+
+    /// <summary>
+    /// Los clics ATRAVIESAN la ventana salvo en la barra.
+    ///
+    /// Ocupar la pantalla entera solo vale si no le quita la pantalla a nadie: una capa a pantalla
+    /// completa que además se traga el ratón no es una vista, es una persiana. Y hacerla del todo
+    /// intransitable tampoco sirve, porque entonces no habría por dónde moverla ni cómo lanzar el
+    /// mapeo. Windows tiene exactamente esta pregunta —WM_NCHITTEST, «¿esto es tuyo?»— y respondiendo
+    /// HTTRANSPARENT fuera de la barra el clic sigue su camino hasta la app de abajo, que es donde
+    /// el usuario estaba mirando (2026-08-04).
+    ///
+    /// Se responde por REGIÓN y no marcando la ventana entera con WS_EX_TRANSPARENT porque esa
+    /// marca es de todo o nada: dejaría la barra tan muerta como el resto.
+    /// </summary>
+    /// <summary>
+    /// Con Ctrl+Shift la capa se deja tocar; sin ellos, el ratón la atraviesa.
+    ///
+    /// Las dos cosas se querían a la vez y son contrarias: una capa a pantalla completa que se traga
+    /// el ratón es una persiana, pero una que nunca lo recibe no deja pulsar un nivel ni leer el
+    /// nombre completo de nada. La salida es que lo decida el usuario con las manos, sin apuntar a
+    /// ningún sitio: mientras mantiene Ctrl+Shift, la capa existe para el ratón (2026-08-04).
+    ///
+    /// Se sondea con GetAsyncKeyState y no con eventos de teclado porque esta ventana nunca tiene el
+    /// foco —lo tiene la app que se está mirando— y sin foco no llegan pulsaciones.
+    /// </summary>
+    private void VigilarModificadores()
+    {
+        var reloj = new System.Windows.Threading.DispatcherTimer
+        { Interval = TimeSpan.FromMilliseconds(90) };
+        reloj.Tick += (_, __) =>
+        {
+            bool quiere = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
+                       && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            if (quiere == _interactivo) return;
+            _interactivo = quiere;
+
+            var mano = new WindowInteropHelper(this).Handle;
+            int estilo = GetWindowLong(mano, GWL_EXSTYLE);
+            SetWindowLong(mano, GWL_EXSTYLE, quiere
+                ? estilo & ~WS_EX_TRANSPARENT      // se deja tocar
+                : estilo | WS_EX_TRANSPARENT);     // vuelve a ser solo mirable
+
+            // Se AVISA de que ahora se puede tocar. Un cambio de comportamiento invisible es un
+            // cambio que el usuario descubre a base de clics que no hacen lo que espera.
+            _marco.BorderThickness = new Thickness(quiere ? 2 : 0);
+        };
+        reloj.Start();
+        Closed += (_, __) => reloj.Stop();
+    }
+
+    private bool _interactivo;
+    private const int VK_CONTROL = 0x11, VK_SHIFT = 0x10;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        VigilarModificadores();
+        var h = new WindowInteropHelper(this).Handle;
+        // TRANSPARENT: el ratón la atraviesa. NOACTIVATE: nunca se pone delante ni roba el foco —sin
+        // esto, pulsar encima la activaba y la app de debajo perdía el foco, que se veía como que la
+        // capa «desaparecía un momento». TOOLWINDOW: fuera de Alt+Tab, no es un sitio al que ir.
+        SetWindowLong(h, GWL_EXSTYLE, GetWindowLong(h, GWL_EXSTYLE)
+            | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+    }
+
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_TRANSPARENT = 0x20;
+    private const int WS_EX_LAYERED = 0x80000;
+    private const int WS_EX_NOACTIVATE = 0x8000000;
+    private const int WS_EX_TOOLWINDOW = 0x80;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    // ── Refresco por EVENTOS, no por reloj ───────────────────────────────────
+
+    private delegate void WinEventProc(IntPtr hook, uint evento, IntPtr hwnd,
+        int idObjeto, int idHijo, uint hilo, uint ms);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr dll,
+        WinEventProc callback, uint proceso, uint hilo, uint flags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool UnhookWinEvent(IntPtr hook);
+
+    private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    private const uint EVENT_SYSTEM_MOVESIZEEND = 0x000B;
+    private const uint EVENT_OBJECT_SHOW = 0x8002;
+    private const uint EVENT_OBJECT_HIDE = 0x8003;
+    private const uint EVENT_OBJECT_FOCUS = 0x8005;
+    private const uint EVENT_OBJECT_SELECTION = 0x8006;
+    private const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;
+    private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+
+    private readonly List<IntPtr> _enganches = new();
+    private WinEventProc? _alOcurrir;              // referencia viva: si la recoge el GC, Windows llama a un hueco
+    private System.Windows.Threading.DispatcherTimer? _rebote;
+    private DateTime _ultimaLectura = DateTime.MinValue;
+
+    /// <summary>
+    /// Windows AVISA cuando la pantalla cambia; no hace falta preguntárselo cada segundo.
+    ///
+    /// El refresco iba con un reloj de 1 s, y eso se veía: los puntos —que desde que viven encima de
+    /// cada elemento tienen que seguirle el paso— llegaban tarde a cada cambio de la interfaz
+    /// (2026-08-04, reportado por el usuario). Sondear más rápido no es la respuesta: leer el árbol
+    /// UIA de una ventana no es gratis y hacerlo diez veces por segundo para nada es peor que el
+    /// retraso.
+    ///
+    /// SetWinEventHook fuera de contexto es la vía barata: el sistema nos llama cuando algo pasa de
+    /// verdad —cambia la ventana activa, aparece o desaparece algo, se mueve, cambia la selección—
+    /// y en reposo no cuesta absolutamente nada. Se eligen esos eventos y no «todos» porque la lista
+    /// completa incluye cosas como el parpadeo del cursor.
+    ///
+    /// Con dos frenos, porque estos eventos vienen en ráfagas: se espera a que la ráfaga termine
+    /// (rebote) y no se lee dos veces seguidas antes de un mínimo. El reloj se queda como red, mucho
+    /// más lento: si algún cambio no emite evento, se acaba viendo igual.
+    /// </summary>
+    private void EscucharLaPantalla()
+    {
+        _rebote = new System.Windows.Threading.DispatcherTimer
+        { Interval = TimeSpan.FromMilliseconds(70) };
+        _rebote.Tick += (_, __) => { _rebote!.Stop(); RefreshEdges(); };
+
+        _alOcurrir = (_, evento, hwnd, idObjeto, _, _, _) =>
+        {
+            // Lo nuestro no cuenta: la propia capa dibujándose generaría eventos y con ellos otra
+            // lectura, y esa lectura otro dibujo. Un observador que reacciona a sí mismo no para.
+            if (hwnd != IntPtr.Zero && EsNuestraVentana(hwnd)) return;
+
+            // SOLO LA VENTANA DE DELANTE. Estos eventos llegan de TODA la sesión, y las ventanas de
+            // fondo que animan —un chat, un navegador reproduciendo algo— emiten sin parar. Se
+            // midió: escuchando a todas, la capa quemaba un 22 % de un núcleo sin que nadie tocara
+            // nada (2026-08-04). Y no aporta: lo que se dibuja son los elementos de la ventana en
+            // primer plano, así que lo que pase detrás no cambia ni un punto.
+            //
+            // Se compara contra la ventana RAÍZ del evento: un botón emite desde su ventana hija, y
+            // exigir que el hwnd sea exactamente el de primer plano descartaría casi todo.
+            if (evento != EVENT_SYSTEM_FOREGROUND)
+            {
+                IntPtr delante = GetForegroundWindow();
+                IntPtr raiz = hwnd == IntPtr.Zero ? IntPtr.Zero : GetAncestor(hwnd, GA_ROOT);
+                if (delante == IntPtr.Zero || (raiz != delante && hwnd != delante)) return;
+            }
+
+            // UN EVENTO QUE LLEGA PRONTO SE APLAZA, NO SE TIRA. Antes, si venía antes del mínimo,
+            // se descartaba: con una app que emite sin parar, el aviso de «cambió la ventana
+            // activa» se perdía entre el ruido y la capa se quedaba con los puntos de la app
+            // anterior hasta que el reloj de red la despertaba tres segundos después. Se veía como
+            // que no se enteraba hasta que clicabas algo (2026-08-04, reportado por el usuario).
+            // Filtrar ráfagas es retrasar, nunca olvidar.
+            //
+            // Y el cambio de ventana no espera: es EL cambio, el que decide todo lo demás. Igual si
+            // hace rato que no se lee, para que una ráfaga continua no deje el redibujo en el limbo
+            // reprogramándolo eternamente.
+            bool urgente = evento == EVENT_SYSTEM_FOREGROUND
+                        || (DateTime.UtcNow - _ultimaLectura).TotalMilliseconds > 400;
+            int espera = evento == EVENT_OBJECT_LOCATIONCHANGE ? 200 : 60;
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                _rebote!.Stop();
+                if (urgente) RefreshEdges();
+                else { _rebote.Interval = TimeSpan.FromMilliseconds(espera); _rebote.Start(); }
+            });
+        };
+
+        foreach (var (a, b) in new[]
+        {
+            (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MOVESIZEEND),
+            (EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE),
+            (EVENT_OBJECT_FOCUS, EVENT_OBJECT_SELECTION),
+            (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
+        })
+        {
+            IntPtr h = SetWinEventHook(a, b, IntPtr.Zero, _alOcurrir, 0, 0, WINEVENT_OUTOFCONTEXT);
+            if (h != IntPtr.Zero) _enganches.Add(h);
+        }
+        LogBus.Log("explorador", $"escuchando la pantalla por eventos ({_enganches.Count} enganches)");
+
+        Closed += (_, __) =>
+        {
+            _rebote?.Stop();
+            foreach (var h in _enganches) { try { UnhookWinEvent(h); } catch { } }
+            _enganches.Clear();
+        };
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+
+    private const uint GA_ROOT = 2;
+
+    private static bool EsNuestraVentana(IntPtr h) => Propio.EsVentana(h);
 
     // ── Aristas en tiempo real ───────────────────────────────────────────────
 
@@ -207,6 +539,7 @@ public sealed class GraphExplorerWindow : Window
     {
         if (_busy || _reading) return;
         _reading = true;
+        _ultimaLectura = DateTime.UtcNow;
         Task.Run(() =>
         {
             try
@@ -228,10 +561,57 @@ public sealed class GraphExplorerWindow : Window
     {
         // La UI de Ü delante (este panel incluido): congelar lo último útil en vez de listarse a
         // sí misma — el observador no es terreno, regla vieja ya.
-        if (proc.Equals("U", StringComparison.OrdinalIgnoreCase)) return;
+        if (Propio.EsProceso(proc)) return;
 
         var loc = _where();
         string aqui = loc?.Id ?? "";
+
+        // EL GRAFO SIGUE AL ASISTENTE, no solo al recorrido automático. Antes solo se dibujaba
+        // durante un mapeo, así que mientras la voz movía la app de verdad el panel de la derecha se
+        // quedaba con el dibujo de la última corrida — justo cuando lo que se quiere es ver por
+        // dónde va AHORA (2026-08-04). Cada cambio de pantalla se añade como un tramo más: el
+        // resultado es la traza en vivo de por dónde ha pasado.
+        if (!_busy && aqui.Length > 0
+            && !aqui.Equals(_nodoActual, StringComparison.OrdinalIgnoreCase))
+        {
+            // CAMBIAR DE SELECCIÓN NO ES MOVERSE. Si las dos identidades son la misma pantalla y
+            // solo cambia el «#sección», no ha habido navegación: sigues donde estabas, señalando
+            // otra cosa. Anotarlo como tramo hacía que el grafo afirmara que para llegar a B hay que
+            // pasar por A, cuando los dos son alcanzables directamente desde donde estás — pasos de
+            // navegación inventados que luego alguien tendría que dar (2026-08-04).
+            bool mismaPantalla = _nodoActual.Length > 0
+                && _nodoActual.Split('#')[0].Equals(aqui.Split('#')[0], StringComparison.OrdinalIgnoreCase);
+
+            if (_nodoActual.Length > 0 && !mismaPantalla)
+            {
+                string etiqueta = _map.ExitsFrom(_nodoActual)
+                    .FirstOrDefault(h => h.To.Equals(aqui, StringComparison.OrdinalIgnoreCase))
+                    ?.Info.Label ?? "";
+                _ultimaCorrida.Add((_nodoActual, aqui, etiqueta));
+                // Una traza infinita no se lee: se conservan los últimos tramos, que es el tramo de
+                // historia que cabe en pantalla y el único que se está mirando.
+                if (_ultimaCorrida.Count > 40) _ultimaCorrida.RemoveRange(0, _ultimaCorrida.Count - 40);
+            }
+            // ESTAR EN UN SITIO YA ES SABER QUE EXISTE. El grafo se guardaba solo como lista de
+            // SALTOS, así que un nodo no aparecía hasta haber una transición: te plantabas delante
+            // de una app y el panel seguía diciendo «todavía no hay recorrido», y con el filtro por
+            // nivel bastaba con que los saltos registrados fueran de otra app para que el tuyo
+            // saliera vacío estando dentro. De ahí la sensación de que cuesta que empiecen a
+            // aparecer los nodos (2026-08-04, reportado por el usuario). Un sitio pisado se dibuja,
+            // tenga o no aristas todavía.
+            if (!_vistos.Contains(aqui, StringComparer.OrdinalIgnoreCase))
+            {
+                _vistos.Add(aqui);
+                if (_vistos.Count > 60) _vistos.RemoveRange(0, _vistos.Count - 60);
+            }
+
+            _nodoActual = aqui;
+            // Solo se anota si lo LEÍDO y el DÓNDE hablan de la misma app: ver AnotarPuertas.
+            if (SurfaceMap.AppDe(aqui).StartsWith(proc + ".", StringComparison.OrdinalIgnoreCase))
+                AnotarPuertas(aqui, els);
+            DibujarGrafo();
+        }
+
         var conocidas = aqui.Length > 0
             // Agrupando por etiqueta, no ToDictionary: desde que se registran TODAS las puertas
             // visibles, una pantalla puede tener dos salidas con el mismo nombre —el mismo archivo
@@ -243,46 +623,179 @@ public sealed class GraphExplorerWindow : Window
                   .ToDictionary(g => g.Key, g => g.First().To, StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        string firma = aqui + "|" + string.Join("|", els.Select(e => e.Label + ":" + e.ControlType));
+        // LA POSICIÓN FORMA PARTE DE LO QUE HAY QUE REDIBUJAR. La firma llevaba solo nombres y
+        // tipos, que era lo correcto cuando los puntos vivían en una tira: daba igual dónde
+        // estuviera cada botón. Desde que cada punto se coloca ENCIMA de su elemento, mover la
+        // ventana cambia todo lo que importa y no cambiaba la firma — se arrastraba una ventana y
+        // los puntos se quedaban clavados donde estaban (2026-08-04, reportado por el usuario).
+        // Se redondea a píxeles enteros para no redibujar por medio punto de diferencia.
+        string firma = aqui + "|" + string.Join("|", els.Select(e =>
+            $"{e.Label}:{e.ControlType}:{(int)e.Bounds.X},{(int)e.Bounds.Y}"));
         if (firma == _signature) return; // nada cambió: no matar el hover redibujando
         _signature = firma;
 
         _nodeTitle.Text = aqui.Length > 0 ? "◉ " + aqui : "◉ (sin superficie)";
         _edges.Children.Clear();
 
+        // PUNTOS, NO RENGLONES. Cada salida era una fila de ancho completo con su nombre y su
+        // destino escritos; con una pantalla normal eso son cuarenta renglones que se comen media
+        // pantalla y tapan justo la app que se está mirando (2026-08-04, visto en pantalla). Lo que
+        // esta columna tiene que responder de un vistazo es CUÁNTAS salidas hay y cuántas se
+        // conocen, y para eso el nombre sobra: un punto por salida lo dice igual y ocupa cien veces
+        // menos. El texto no se pierde —vive en el tooltip y en AutomationProperties, así que sigue
+        // estando para quien pase el ratón y para cualquier registro—, solo deja de gritar.
+        // Las cajas de UIA vienen en píxeles FÍSICOS y WPF dibuja en unidades independientes del
+        // monitor: sin convertir, con escalado al 125 % cada punto caería un cuarto más allá de su
+        // elemento — cerca, que es peor que lejos, porque parece que funciona.
+        var fuente = PresentationSource.FromVisual(this);
+        Matrix aPantalla = fuente?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+
         foreach (var el in els)
         {
             bool sabida = conocidas.TryGetValue(el.Label, out string? destino);
+            string descripcion = el.Label
+                + (sabida ? $"  ⇒  {Corto(destino!)}" : $"  ({el.ControlType}, sin explorar)");
+
             var chip = new Border
             {
+                Width = 12, Height = 12,
                 CornerRadius = new CornerRadius(6),
                 // Verde = arista ya recorrida (se sabe a dónde lleva); gris = potencial, sin explorar.
                 Background = new SolidColorBrush(sabida
-                    ? Color.FromArgb(0x30, 0x2E, 0x7D, 0x32) : Color.FromArgb(0x1C, 0xC0, 0xC0, 0xC0)),
+                    ? Color.FromArgb(0x88, 0x2E, 0x7D, 0x32) : Color.FromArgb(0x33, 0xC0, 0xC0, 0xC0)),
                 BorderBrush = new SolidColorBrush(sabida
-                    ? Color.FromArgb(0x55, 0x66, 0xBB, 0x6A) : Color.FromArgb(0x2A, 0xFF, 0xFF, 0xFF)),
+                    ? Color.FromArgb(0xAA, 0x66, 0xBB, 0x6A) : Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
                 BorderThickness = new Thickness(1),
-                Padding = new Thickness(8, 4, 8, 4),
-                Margin = new Thickness(0, 2, 0, 2),
                 Cursor = Cursors.Hand,
-                Child = new TextBlock
-                {
-                    Text = (sabida ? "→ " : "· ") + el.Label
-                         + (sabida ? $"   ⇒ {Corto(destino!)}" : $"   ({el.ControlType})"),
-                    Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
-                    FontSize = 11, FontFamily = new FontFamily("Consolas"),
-                    TextWrapping = TextWrapping.Wrap,
-                },
+                ToolTip = descripcion,
             };
+            System.Windows.Automation.AutomationProperties.SetName(chip, descripcion);
 
             var elemento = el; // captura por arista, no la variable del bucle
             chip.MouseEnter += (_, __) => _overlay.ShowRect(elemento.Bounds);
             chip.MouseLeave += (_, __) => _overlay.HideRect();
             chip.MouseLeftButtonUp += (_, __) => _ = TraverseAsync(elemento, aqui);
+
+            // En la esquina superior izquierda del elemento, no en su centro: el centro es donde
+            // está el texto o el icono del botón —lo que el usuario necesita seguir viendo— y un
+            // punto encima lo taparía. La esquina es de nadie.
+            var caja = el.Bounds;
+            if (caja.Width <= 0 || caja.Height <= 0) continue;
+            var esquina = aPantalla.Transform(new Point(caja.X, caja.Y));
+            Canvas.SetLeft(chip, esquina.X + 2);
+            Canvas.SetTop(chip, esquina.Y + 2);
             _edges.Children.Add(chip);
         }
 
         _status.Text = $"{els.Count} arista(s) a la vista · {conocidas.Count} ya recorrida(s) desde aquí";
+        RefrescarAyudas();
+    }
+
+    /// <summary>
+    /// Lo que antes estaba escrito en la barra —dónde estás y cuántas salidas hay— pasa a los
+    /// tooltips de los dos iconos. No se ha perdido: se ha callado hasta que alguien pregunte.
+    /// </summary>
+    private void RefrescarAyudas()
+    {
+        _collapseBtn.ToolTip = (_collapsed ? "Mostrar la capa del grafo" : "Ocultar la capa del grafo")
+            + "\n" + _nodeTitle.Text + "\n" + _status.Text
+            + "\nCtrl+Shift: la capa se deja tocar";
+        _crawlBtn.ToolTip = (_crawlCts != null ? "Detener el mapeo" : "Mapear esta app automáticamente")
+            + "\nRecorre la app abriendo lo que encuentra. Solo navegación: nunca pulsa botones ni menús.";
+    }
+
+    /// <summary>
+    /// Lo que DIFERENCIA a un nodo de los demás que hay en pantalla.
+    ///
+    /// Todos los nodos de un nivel comparten el principio —son la misma app, muchas veces la misma
+    /// pantalla con distinta sección— así que enseñar la ruta entera y recortar por el final dejaba
+    /// diez cajas idénticas que ponían «explorer.exe/program-manager…»: el texto ocupaba sitio para
+    /// no decir nada, y lo único que las distinguía era justo lo que se recortaba (2026-08-04).
+    /// Se quita el prefijo que todos comparten y se enseña el resto.
+    /// </summary>
+    /// <summary>
+    /// Lo que se ve desde aquí queda anotado como SALIDA de aquí.
+    ///
+    /// El panel enseñaba los elementos de la pantalla y los olvidaba: eran una lista en vivo, no
+    /// terreno. Por eso, al dejar de convertir cada icono del escritorio en un nodo falso, los
+    /// accesos directos desaparecieron del grafo por completo — y desaparecer no era lo correcto,
+    /// porque SÍ existen: son puertas del escritorio, alcanzables directamente desde él. Anotarlas
+    /// como salidas dice justo eso y nada más: que están ahí y que se llega sin pasos intermedios;
+    /// a dónde dan se sabrá el día que se crucen (2026-08-04, reportado por el usuario).
+    ///
+    /// Solo al CAMBIAR de pantalla, no en cada sondeo: describir cada elemento cuesta un viaje a
+    /// UIA, y repetirlo cada segundo sobre lo mismo no aporta nada.
+    ///
+    /// Y SOLO SI LO LEÍDO Y EL DÓNDE COINCIDEN. Los elementos los da el lector sobre la ventana en
+    /// primer plano y la identidad la da el localizador, y entre las dos lecturas la ventana puede
+    /// haber cambiado: al probar esto, el nodo del Bloc de notas acabó con las acciones de la
+    /// ventana de Claude —«Crear PR», «Editado GraphExplorerWindow.cs»— escritas dentro
+    /// (2026-08-04). Mientras esto solo se pintaba, una lista desfasada un segundo no hacía daño;
+    /// desde que se ESCRIBE en el mapa, es exactamente el veneno que costó una mañana limpiar.
+    /// </summary>
+    private void AnotarPuertas(string nodo, List<UiaReader.UiElement> els)
+    {
+        if (nodo.Length == 0 || els.Count == 0) return;
+        try
+        {
+            var puertas = new List<(string, string, string, string[], string)>();
+            foreach (var el in els.Take(80))   // un techo: una pantalla con cientos no se mapea mirándola
+            {
+                try
+                {
+                    var (l, t, sels) = U.Graph.Surfaces.UiaSurface.DescribeElement(el.Native);
+                    var utiles = sels.Where(s => !s.Contains("path=", StringComparison.Ordinal)
+                        && !System.Text.RegularExpressions.Regex.IsMatch(s, @"(name|aid)=(;|$)")).ToArray();
+                    if (utiles.Length == 0) continue;
+                    puertas.Add((l.Length > 0 ? l : el.Label, t.Length > 0 ? t : el.ControlType,
+                                 utiles[0], utiles.Skip(1).ToArray(), U.Graph.Surfaces.UiaSurface.GrupoDe(el.Native)));
+                }
+                catch { }
+            }
+            if (puertas.Count > 0)
+            {
+                int con = puertas.Count(p => p.Item5.Length > 0);
+                if (con == 0 && els.Count > 0)
+                    LogBus.Log("explorador", $"SIN GRUPO {puertas.Count}/{puertas.Count} · «{els[0].Label}» → "
+                        + U.Graph.Surfaces.UiaSurface.Ancestros(els[0].Native));
+                else LogBus.Log("explorador", $"grupos: {con}/{puertas.Count} salidas con grupo");
+                _map.ObserveExits(nodo, puertas);
+            }
+        }
+        catch { }
+    }
+
+    private static string Distintivo(string id, string prefijoComun)
+    {
+        string corto = Corto(id);
+        if (prefijoComun.Length > 0 && corto.StartsWith(prefijoComun, StringComparison.Ordinal))
+        {
+            string resto = corto[prefijoComun.Length..].TrimStart('/', '#', '-');
+            if (resto.Length > 0) return resto;
+        }
+        // Sin resto —es el propio nodo del prefijo— se enseña su último tramo, que es su nombre.
+        int corte = corto.LastIndexOfAny(new[] { '/', '#' });
+        return corte >= 0 && corte < corto.Length - 1 ? corto[(corte + 1)..] : corto;
+    }
+
+    /// <summary>El principio que TODOS comparten, cortado en el último separador para no partir palabras.</summary>
+    private static string PrefijoComun(IEnumerable<string> ids)
+    {
+        var lista = ids.Select(Corto).ToList();
+        if (lista.Count < 2) return "";
+
+        string primero = lista[0];
+        int n = primero.Length;
+        foreach (var s in lista.Skip(1))
+        {
+            int i = 0;
+            while (i < n && i < s.Length && primero[i] == s[i]) i++;
+            n = i;
+            if (n == 0) return "";
+        }
+        string comun = primero[..n];
+        int corte = comun.LastIndexOfAny(new[] { '/', '#' });
+        return corte >= 0 ? comun[..corte] : "";
     }
 
     private static string Corto(string id)
@@ -296,29 +809,67 @@ public sealed class GraphExplorerWindow : Window
     /// aunque esté plegado porque es donde se lee el progreso del recorrido — plegar es para
     /// estorbar menos, no para quedarse a ciegas.
     /// </summary>
+    /// <summary>
+    /// Plegar esconde las DOS vistas y deja solo la barra. Ya no encoge la ventana: ocupa la
+    /// pantalla entera y no le estorba a nadie, así que redimensionarla solo servía para que al
+    /// desplegar volviera a un tamaño que ya no es el suyo.
+    /// </summary>
     private void SetCollapsed(bool colapsar)
     {
         _collapsed = colapsar;
         var v = colapsar ? Visibility.Collapsed : Visibility.Visible;
         _nodeTitle.Visibility = v;
         _lista.Visibility = v;
+        _grafo.Visibility = v;
+        _status.Visibility = v;
         _collapseBtn.Content = colapsar ? "▸" : "▾";
-        // Al plegar SÍ se encoge, porque el usuario lo pidió; al mapear NO. El encogido molesto que
-        // se veía al iniciar el recorrido era este SetCollapsed disparado por el propio mapeo.
-        Height = colapsar ? 116 : 560;
-        Width = colapsar ? 300 : 380;
     }
 
+    /// <summary>
+    /// El botón ya no ELIGE entre lista y grafo —las dos están puestas, una al lado de la otra—:
+    /// ahora solo redibuja el grafo a mano, por si se quiere refrescar sin esperar al recorrido.
+    /// </summary>
     private void SetGraphView(bool grafo)
     {
         _graphView = grafo;
         _graphBtn.Background = new SolidColorBrush(grafo
             ? Color.FromArgb(0x55, 0x66, 0xBB, 0x6A) : Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
         if (_collapsed) SetCollapsed(false);
-        _lista.Visibility = grafo ? Visibility.Collapsed : Visibility.Visible;
-        _grafo.Visibility = grafo ? Visibility.Visible : Visibility.Collapsed;
-        _nodeTitle.Visibility = grafo ? Visibility.Collapsed : Visibility.Visible;
-        if (grafo) DibujarGrafo();
+        DibujarGrafo();
+    }
+
+    /// <summary>
+    /// Encoge el grafo hasta que quepa entero en su columna.
+    ///
+    /// Crece a lo ancho con cada pantalla nueva de la misma profundidad, así que a la tercera o
+    /// cuarta se salía por la derecha y lo que estaba pasando quedaba fuera de la pantalla, sin
+    /// forma cómoda de seguirlo (2026-08-04). Se escala, no se hace scroll: el sentido de esta vista
+    /// es ver la FORMA del recorrido de un vistazo, y un grafo que hay que arrastrar para leer ya no
+    /// la enseña. Nunca se agranda por encima del 100 %: un grafo de dos nodos ocupando media
+    /// pantalla se lee peor, no mejor.
+    /// </summary>
+    private void AjustarALaVista()
+    {
+        double dispW = _grafo.ActualWidth - 16, dispH = _grafo.ActualHeight - 16;
+        double w = _lienzo.Width, h = _lienzo.Height;
+
+        // NaN ANTES QUE CERO. Un Canvas sin tamaño fijado mide NaN, no 0, y `NaN <= 0` es FALSO: la
+        // guarda lo dejaba pasar, la escala salía NaN y WPF tumbaba la aplicación con «no debería
+        // devolver valores NaN como su DesiredSize» — en cascada, una ventana de error por intento
+        // de dibujo (2026-08-04). Con dobles, comprobar «no es válido» nunca es comparar con cero.
+        if (double.IsNaN(w) || double.IsNaN(h) || double.IsNaN(dispW) || double.IsNaN(dispH)) return;
+        if (dispW <= 0 || dispH <= 0 || w <= 0 || h <= 0) return;
+
+        // Se AGRANDA cuando sobra sitio, no solo se encoge cuando falta. Antes el tope era 1,0 —
+        // pensado para que un grafo de dos nodos no ocupara media pantalla— pero con el lienzo
+        // suelto a todo el ancho eso dejaba el dibujo pequeño en el centro de un espacio vacío.
+        // El techo de 1,8 es el punto donde las cajas siguen pareciendo cajas y no carteles.
+        double escala = Math.Min(1.8, Math.Min(dispW / w, dispH / h));
+        if (double.IsNaN(escala) || double.IsInfinity(escala)) return;
+        if (escala < 0.25) escala = 0.25;   // por debajo de esto ya no se lee: mejor scroll
+        _lienzo.LayoutTransform = escala >= 0.999
+            ? System.Windows.Media.Transform.Identity
+            : new ScaleTransform(escala, escala);
     }
 
     /// <summary>
@@ -329,14 +880,268 @@ public sealed class GraphExplorerWindow : Window
     /// vuelta atrás, y en un árbol la distancia a la raíz ES la información —cuánto hay que bajar
     /// para llegar—. Un grafo de resortes lo taparía moviendo los nodos a donde quepan.
     /// </summary>
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    private const int SW_RESTORE = 9;
+
+    /// <summary>Traer al frente lo hace <see cref="AppAligner.TraerAlFrente"/>, para toda la app.</summary>
+    private static bool TraerAlFrente(IntPtr h) => AppAligner.TraerAlFrente(h);
+
+    /// <summary>
+    /// Traer al frente el nivel pedido.
+    ///
+    /// No vale con enfocar «el proceso»: el del explorador es la SHELL, y su ventana principal es
+    /// el escritorio. Así que pulsar el nivel del explorador llevaba al escritorio, y los dos
+    /// niveles acababan en el mismo sitio — no alternaban (2026-08-04, reportado por el usuario).
+    /// Un nivel se alcanza buscando una ventana SUYA, no un proceso con su nombre.
+    /// </summary>
+    private void IrAlNivel(string nivel)
+    {
+        bool ok = false;
+        try
+        {
+            if (Escritorio.EsProceso(nivel)) ok = Escritorio.Mostrar();
+            else if (nivel.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                // Una ventana de archivos de verdad: CabinetWClass. Si no hay ninguna abierta, se
+                // abre —que es lo que quiere quien pulsa «ir al explorador» sin tenerlo abierto.
+                var ventana = AutomationElement.RootElement.FindFirst(TreeScope.Children,
+                    new PropertyCondition(AutomationElement.ClassNameProperty, "CabinetWClass"));
+                if (ventana != null)
+                    ok = TraerAlFrente(new IntPtr(ventana.Current.NativeWindowHandle));
+                else
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe")
+                    { UseShellExecute = true });
+                    ok = true;
+                }
+            }
+            else
+            {
+                // Se busca su ventana y se trae con el enganche; FocusOrLaunch solo como respaldo
+                // para abrirla si no hay ninguna.
+                string proc = nivel.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim();
+                var abierto = System.Diagnostics.Process.GetProcessesByName(proc)
+                    .FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
+                ok = abierto != null
+                    ? TraerAlFrente(abierto.MainWindowHandle)
+                    : AppAligner.FocusOrLaunch(proc);
+            }
+        }
+        catch (Exception e) { LogBus.Log("explorador", $"al ir a «{nivel}»: {e.Message}"); }
+        LogBus.Log("explorador", $"nivel pulsado: «{nivel}» → {(ok ? "al frente" : "NO se pudo")}");
+        ComprobarUnRato();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _insistir;
+    private int _quedanComprobaciones;
+
+    /// <summary>
+    /// Tras actuar sobre el mundo, se vuelve a mirar unas cuantas veces durante un segundo y medio.
+    ///
+    /// La capa se refresca con los avisos del sistema, y eso basta para todo… menos para lo que
+    /// hacemos NOSOTROS. Mostrar el escritorio minimiza las ventanas una a una: cuando llega el
+    /// aviso, el escritorio todavía no está delante, así que se lee demasiado pronto — y como el
+    /// escritorio quieto no genera más avisos, nadie vuelve a mirar y los puntos se quedan con la
+    /// app anterior hasta que el usuario clica algo. Se notaba solo al ir al escritorio desde la
+    /// tira de niveles, y en ningún otro sitio (2026-08-04, reportado por el usuario).
+    ///
+    /// El principio es el de siempre en esta casa: quien provoca un cambio comprueba su
+    /// consecuencia, en vez de fiarse de que el mundo avise a tiempo. Es una ráfaga corta y
+    /// acotada; en reposo no cuesta nada porque no está corriendo.
+    /// </summary>
+    private void ComprobarUnRato()
+    {
+        _quedanComprobaciones = 10;   // ~1,5 s, de sobra para una animación de minimizar
+        if (_insistir == null)
+        {
+            _insistir = new System.Windows.Threading.DispatcherTimer
+            { Interval = TimeSpan.FromMilliseconds(150) };
+            _insistir.Tick += (_, __) =>
+            {
+                if (--_quedanComprobaciones <= 0) _insistir!.Stop();
+                RefreshEdges();
+            };
+            Closed += (_, __) => _insistir?.Stop();
+        }
+        _insistir.Start();
+    }
+
+    /// <summary>
+    /// A qué NIVEL pertenece una pantalla. Casi siempre es su app, pero no siempre.
+    ///
+    /// El escritorio y el explorador de archivos son el mismo proceso —los dos son explorer.exe—
+    /// así que agrupar por proceso los metía en el mismo nivel, y el sistema los confundía
+    /// (2026-08-04, reportado por el usuario). Como terreno no se parecen en nada: el escritorio es
+    /// una rejilla de accesos directos que abren OTRAS apps; el explorador es un árbol de carpetas.
+    /// Un nivel es un terreno con sus propias reglas de moverse, no un identificador de proceso.
+    /// </summary>
+    private static string NivelDe(string id)
+    {
+        if (Escritorio.EsId(id)) return "escritorio";
+        return SurfaceMap.AppDe(id);
+    }
+
+    /// <summary>
+    /// La tira de niveles del borde derecho: una aplicación por nivel, la actual encendida.
+    ///
+    /// Existe porque el filtrado por app resuelve la legibilidad pero crea una pregunta nueva: si
+    /// solo veo el terreno de donde estoy, ¿qué otros terrenos hay y cómo se salta? La tira los
+    /// enumera en el orden en que se pisaron, así que se lee como lo que es —el camino entre apps—
+    /// y deja claro que pasar de un nivel a otro no es pulsar una arista más: es abrir otra
+    /// aplicación, o su icono en la barra de tareas (2026-08-04).
+    /// </summary>
+    private void DibujarNiveles(string appActual)
+    {
+        _niveles.Children.Clear();
+
+        // Orden de primera aparición: es el camino real que se ha recorrido entre aplicaciones, y
+        // ordenar por nombre o por tamaño lo borraría.
+        var apps = new List<string>();
+        foreach (var (f, t, _) in _ultimaCorrida)
+            foreach (var a in new[] { NivelDe(f), NivelDe(t) })
+                if (a.Length > 0 && !apps.Contains(a, StringComparer.OrdinalIgnoreCase)) apps.Add(a);
+        if (appActual.Length > 0 && !apps.Contains(appActual, StringComparer.OrdinalIgnoreCase))
+            apps.Add(appActual);
+        if (apps.Count == 0) return;
+
+        for (int i = 0; i < apps.Count; i++)
+        {
+            string app = apps[i];
+            bool aqui = app.Equals(appActual, StringComparison.OrdinalIgnoreCase);
+            int pantallas = _map.Nodes.Keys.Count(n =>
+                NivelDe(n).Equals(app, StringComparison.OrdinalIgnoreCase));
+
+            // AL PASAR POR ENCIMA SE ABRE Y ENSEÑA EL NOMBRE. El tooltip no valía: esta ventana
+            // nunca se activa —es su gracia—, y sin activarse WPF no llega a mostrarlo, así que el
+            // nombre completo quedaba escrito en un sitio al que no se podía llegar (2026-08-04).
+            // Expandirse es además más honesto con lo que la tira es: no un menú que se despliega,
+            // sino una fila de niveles que se ensancha cuando la miras.
+            var nombre = new TextBlock
+            {
+                Text = app,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xFF, 0xFF)),
+                FontSize = 10, FontFamily = new FontFamily("Consolas"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(6, 0, 4, 0),
+                Visibility = Visibility.Collapsed,
+            };
+
+            var nivel = new Border
+            {
+                Width = 26, Height = 26,
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Right,   // al ensancharse, crece hacia la izquierda
+                CornerRadius = new CornerRadius(13),
+                Margin = new Thickness(0, 3, 0, 3),
+                Background = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0x66, 0xFF, 0xB3, 0x00) : Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(aqui ? 2 : 1),
+                ToolTip = $"nivel {i + 1}: {app} · {pantallas} pantalla(s) conocidas"
+                        + (aqui ? " · estás aquí" : " · Ctrl+Shift y clic para ir"),
+            };
+
+            var dentro = new StackPanel { Orientation = Orientation.Horizontal };
+            dentro.Children.Add(nombre);
+            dentro.Children.Add(new TextBlock
+            {
+                // Dos letras cuando está cerrada; el nombre entero aparece al lado al abrirse.
+                Text = app.Length >= 2 ? app[..2].ToUpperInvariant() : app.ToUpperInvariant(),
+                Foreground = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                FontSize = 9, FontWeight = FontWeights.Bold, FontFamily = new FontFamily("Consolas"),
+                Width = 24, TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            nivel.Child = dentro;
+
+            nivel.MouseEnter += (_, __) =>
+            {
+                nombre.Visibility = Visibility.Visible;
+                nivel.Width = double.NaN;          // NaN = «lo que ocupe», que es lo que hace falta
+                nivel.CornerRadius = new CornerRadius(13);
+            };
+            nivel.MouseLeave += (_, __) =>
+            {
+                nombre.Visibility = Visibility.Collapsed;
+                nivel.Width = 26;
+            };
+
+            // Pulsar un nivel es IR a esa aplicación. Es la acción natural de la tira —enumera los
+            // terrenos disponibles, así que señalarlos y no poder entrar sería enseñar puertas
+            // pintadas— y no inventa nada: usa el mismo enfocar-o-abrir que ya usa todo lo demás.
+            // SIN el «.exe»: FocusOrLaunch busca por Process.GetProcessesByName, que quiere el
+            // nombre pelado. Pasándole «claude.exe» no encontraba ningún proceso y se iba a intentar
+            // LANZAR la app —que ya estaba abierta— así que pulsar el nivel no hacía nada visible
+            // (2026-08-04, reportado por el usuario). El identificador de superficie lleva la
+            // extensión; el buscador de procesos, no.
+            string destinoNivel = app;
+            nivel.MouseLeftButtonUp += (_, __) => IrAlNivel(destinoNivel);
+            _niveles.Children.Add(nivel);
+
+            // El salto entre niveles se dibuja: dos puntos y una línea, para que se vea que hay que
+            // CRUZAR algo —abrir la app— y no simplemente seguir por el mismo terreno.
+            if (i < apps.Count - 1)
+                _niveles.Children.Add(new System.Windows.Shapes.Rectangle
+                {
+                    Width = 2, Height = 10,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Fill = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+                });
+        }
+    }
+
     private void DibujarGrafo()
     {
         _lienzo.Children.Clear();
-        if (_ultimaCorrida.Count == 0)
+
+        // SOLO EL NIVEL EN EL QUE ESTÁS. La traza cruza aplicaciones —del explorador a Configuración
+        // y vuelta—, y pintarlas juntas mezclaba en un mismo dibujo botones que no comparten
+        // terreno: «Nuevo» del explorador al lado de «Bluetooth», sin que nada dijera que para pasar
+        // de uno a otro hay que abrir otra app. Filtrando por app, la forma de moverse DENTRO de
+        // donde estás se lee sola, y los saltos entre apps se cuentan aparte, en la tira de niveles.
+        string appActual = NivelDe(_nodoActual.Length > 0
+            ? _nodoActual
+            : (_ultimaCorrida.Count > 0 ? _ultimaCorrida[^1].To : ""));
+        DibujarNiveles(appActual);
+
+        var traza = appActual.Length == 0
+            ? _ultimaCorrida
+            : _ultimaCorrida.Where(h => NivelDe(h.From).Equals(appActual, StringComparison.OrdinalIgnoreCase)
+                                     && NivelDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+
+        // Los sitios de ESTE nivel por los que ya se ha pasado, haya saltos o no.
+        var pisados = _vistos
+            .Where(n => appActual.Length == 0
+                     || NivelDe(n).Equals(appActual, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (traza.Count == 0 && pisados.Count == 0)
         {
             _lienzo.Children.Add(new TextBlock
             {
-                Text = "Todavía no hay ninguna corrida automática.\nPulsa «Mapear esta app automáticamente».",
+                Text = appActual.Length > 0
+                    ? $"Todavía no hay recorrido dentro de «{appActual}».\nMuévete por la app o púlsale «Mapear esta app automáticamente»."
+                    : "Todavía no hay ninguna corrida automática.\nPulsa «Mapear esta app automáticamente».",
                 Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
                 FontSize = 11, Margin = new Thickness(8),
             });
@@ -344,21 +1149,84 @@ public sealed class GraphExplorerWindow : Window
             return;
         }
 
-        // Raíz: el origen de la primera arista aprendida (donde arrancó el recorrido).
-        string raiz = _ultimaCorrida[0].From;
+        // Raíz: el origen del primer salto, o —si aún no hay ninguno— el primer sitio pisado.
+        string raiz = traza.Count > 0 ? traza[0].From : pisados[0];
         var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
         // Varias pasadas: una arista puede aprenderse antes de que su origen tenga profundidad.
         for (int pasada = 0; pasada < 6; pasada++)
-            foreach (var (f, t, _) in _ultimaCorrida)
+            foreach (var (f, t, _) in traza)
                 if (prof.TryGetValue(f, out int d) && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
                     prof[t] = d + 1;
-        foreach (var (f, t, _) in _ultimaCorrida)
+        foreach (var (f, t, _) in traza)
         {
             if (!prof.ContainsKey(f)) prof[f] = 0;
             if (!prof.ContainsKey(t)) prof[t] = 1;
         }
 
-        const double anchoCaja = 168, altoCaja = 34, sepX = 16, sepY = 62;
+        // Los pisados sin salto conocido entran a la altura de la raíz: se sabe que existen y que
+        // están en este nivel, y no se sabe todavía cómo se encadenan. Colocarlos abajo del todo
+        // insinuaría una profundidad que nadie ha comprobado.
+        foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = 0;
+
+        // EL CROMO DE LA APP CUELGA DE LA APP, no de cada pantalla.
+        //
+        // El panel izquierdo del explorador —Imágenes, Notas, Música, Vídeos, Descargas…— está en
+        // TODAS sus pantallas: son hermanos, y se llega a cualquiera desde cualquiera. Dibujarlos
+        // como salidas de cada carpeta llenaba el grafo de las mismas aristas repetidas N veces y
+        // hacía parecer que hay que aprender a llegar a cada hermano desde cada sitio (2026-08-04,
+        // observado por el usuario). No hay que aprenderlo: el mapa ya lo deduce en cuanto se cruza
+        // UNA vez desde donde sea. Lo que faltaba era decirlo en el dibujo.
+        //
+        // EL NIVEL LO DICE LA ESTRUCTURA, NO EL PASEO. Si el mapa ya sabe a qué nivel pertenece cada
+        // pantalla —cuántas puertas hay que abrir para verla— ese es el eje del dibujo, y el orden
+        // en que alguien navegó deja de importar. Llegar a Escritorio pasando por Imágenes no pone
+        // Escritorio debajo de Imágenes: los dos se ven al abrir la app, así que los dos están en el
+        // nivel 1 (2026-08-04, replanteado por el usuario).
+        //
+        // El recorrido no se tira: sigue siendo el material de las ACCIONES, donde el orden SÍ es la
+        // información. Simplemente deja de mandar en la navegación.
+        foreach (var n in prof.Keys.ToList())
+            if (_map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
+                prof[n] = ni.Nivel;
+
+        // QUIÉN ES CROMO LO DICE EL MAPA, no este dibujo. Aquí se recontaba por cuenta propia y solo
+        // sobre los nodos que había delante, así que una salida que el mapa sabe que está en toda la
+        // app podía no llegar al umbral localmente y caer una fila más abajo: en Configuración,
+        // «Windows Update» aparecía debajo estando cruzada desde las once pantallas (2026-08-04,
+        // visto por el usuario). Otra vez dos respuestas para la misma pregunta — y la de aquí era
+        // la peor informada, porque solo veía un trozo.
+        var cromo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);   // destino → etiqueta
+        foreach (var h in _map.CromoDe(SurfaceMap.AppDe(_nodoActual)))
+            if (NivelDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
+                cromo[h.To] = h.Info.Label;
+
+        // El centro del nivel: la aplicación. Los hermanos cuelgan de él, a un solo salto.
+        string centro = cromo.Count > 0 ? $"nivel://{appActual}" : "";
+        if (centro.Length > 0)
+        {
+            prof[centro] = 0;
+            foreach (var d in cromo.Keys) prof[d] = 1;
+            // Lo que ya se recorrió cuelga por debajo, para no mezclarse con los hermanos.
+            foreach (var n in prof.Keys.ToList())
+                if (n != centro && !cromo.ContainsKey(n)) prof[n] = Math.Max(prof[n], 2);
+        }
+
+        // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra
+        // deja de leerse; a partir de ahí se sigue pagando el sitio que ocupa un texto que ya nadie
+        // puede leer, y el recorrido —que es lo que se quiere ver— queda enterrado bajo etiquetas
+        // borrosas (2026-08-04). Cuando el detalle no cabe con holgura, se cambia a un mapa de
+        // puntos: la FORMA del recorrido se lee igual de bien, y el único nombre que se conserva es
+        // el del nodo donde está ahora, que es el que hace falta.
+        int filas = prof.Values.Max() + 1;
+        int columnas = prof.GroupBy(kv => kv.Value).Max(g => g.Count());
+        double necesarioX = 12 + columnas * (168.0 + 16), necesarioY = 24 + filas * 62.0;
+        double dispX = _grafo.ActualWidth - 16, dispY = _grafo.ActualHeight - 16;
+        double cabeDetalle = (dispX > 0 && dispY > 0)
+            ? Math.Min(dispX / necesarioX, dispY / necesarioY) : 1;
+        _compacto = cabeDetalle < 0.55;
+
+        double anchoCaja = _compacto ? 18 : 168, altoCaja = _compacto ? 18 : 34;
+        double sepX = _compacto ? 10 : 16, sepY = _compacto ? 34 : 62;
         var pos = new Dictionary<string, Point>(StringComparer.OrdinalIgnoreCase);
         double maxX = 0;
         foreach (var fila in prof.GroupBy(kv => kv.Value).OrderBy(g => g.Key))
@@ -378,7 +1246,7 @@ public sealed class GraphExplorerWindow : Window
         // mismo botón ya se cruzó desde otra pantalla, así que sabemos a dónde lleva desde aquí.
         // Son las que convierten la estrella en malla, y verlas es la diferencia entre creer que
         // el grafo tiene forma y comprobarlo.
-        var dibujadas = new HashSet<string>(_ultimaCorrida.Select(e => e.From + "\n" + e.To), StringComparer.OrdinalIgnoreCase);
+        var dibujadas = new HashSet<string>(traza.Select(e => e.From + "\n" + e.To), StringComparer.OrdinalIgnoreCase);
         foreach (var nodo in pos.Keys.ToList())
         {
             // PUERTAS SIN CRUZAR: salidas que existen y cuyo destino aún no se conoce. Se dibujan
@@ -389,12 +1257,15 @@ public sealed class GraphExplorerWindow : Window
             {
                 if (!SurfaceMap.EsPuerta(h.To)) continue;
                 if (!pos.TryGetValue(nodo, out var origen)) continue;
-                if (pendiente >= 6) break;                            // un puñado basta para leerlo
-                double x = origen.X + 14 + pendiente * 13;
+                // En puntos caben menos muñones y más juntos: son una señal de «aquí queda algo por
+                // abrir», no un recuento, así que tres bastan para decirlo sin emborronar el nodo.
+                if (pendiente >= (_compacto ? 3 : 6)) break;
+                double paso = _compacto ? 5 : 13;
+                double x = origen.X + (_compacto ? 3 : 14) + pendiente * paso;
                 _lienzo.Children.Add(new System.Windows.Shapes.Line
                 {
                     X1 = x, Y1 = origen.Y + altoCaja,
-                    X2 = x, Y2 = origen.Y + altoCaja + 13,
+                    X2 = x, Y2 = origen.Y + altoCaja + (_compacto ? 6 : 13),
                     Stroke = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xB3, 0x00)),
                     StrokeThickness = 2,
                     ToolTip = $"puerta sin cruzar: «{h.Info.Label}» (destino desconocido)",
@@ -407,6 +1278,9 @@ public sealed class GraphExplorerWindow : Window
                 if (SurfaceMap.EsPuerta(h.To)) continue;              // ya dibujada arriba
                 if (!pos.ContainsKey(h.To)) continue;                 // el otro extremo no está en pantalla
                 if (!dibujadas.Add(h.From + "\n" + h.To)) continue;   // ya la dibujó la corrida
+                // Al cromo se llega desde todas partes: se dibuja UNA vez desde el centro del nivel,
+                // no una por pantalla. Repetirlo era el enredo que ocultaba la forma real.
+                if (cromo.ContainsKey(h.To)) continue;
                 if (!pos.TryGetValue(h.From, out var p1) || !pos.TryGetValue(h.To, out var p2)) continue;
 
                 _lienzo.Children.Add(new System.Windows.Shapes.Line
@@ -420,8 +1294,25 @@ public sealed class GraphExplorerWindow : Window
             }
         }
 
+        // Del centro del nivel a cada hermano: una sola arista por hermano, alcanzable desde
+        // cualquier pantalla de la app. Es la forma que el usuario tiene en la cabeza y la que el
+        // mapa ya sabía; solo faltaba dibujarla así.
+        if (centro.Length > 0 && pos.TryGetValue(centro, out var pc))
+            foreach (var (destino, etiqueta) in cromo.Select(k => (k.Key, k.Value)))
+            {
+                if (!pos.TryGetValue(destino, out var pd)) continue;
+                _lienzo.Children.Add(new System.Windows.Shapes.Line
+                {
+                    X1 = pc.X + anchoCaja / 2, Y1 = pc.Y + altoCaja,
+                    X2 = pd.X + anchoCaja / 2, Y2 = pd.Y,
+                    Stroke = new SolidColorBrush(Color.FromArgb(0x77, 0x64, 0xB5, 0xF6)),
+                    StrokeThickness = 1.2,
+                    ToolTip = $"«{etiqueta}» · disponible desde cualquier pantalla de {appActual}",
+                });
+            }
+
         // Aristas primero, para que las cajas queden encima de las líneas.
-        foreach (var (f, t, label) in _ultimaCorrida)
+        foreach (var (f, t, label) in traza)
         {
             if (!pos.TryGetValue(f, out var a) || !pos.TryGetValue(t, out var b)) continue;
             var linea = new System.Windows.Shapes.Line
@@ -434,6 +1325,7 @@ public sealed class GraphExplorerWindow : Window
             };
             _lienzo.Children.Add(linea);
 
+            if (_compacto) continue;   // en puntos, la etiqueta de cada arista sobra: no se leería
             var et = new TextBlock
             {
                 Text = label,
@@ -447,26 +1339,43 @@ public sealed class GraphExplorerWindow : Window
             _lienzo.Children.Add(et);
         }
 
+        // Lo que todos comparten se calcula UNA vez y se quita de todas las etiquetas: enseñarlo
+        // diez veces no informa, y el sitio que ocupa es justo el que le falta a lo que distingue.
+        string prefijo = PrefijoComun(pos.Keys);
+
         foreach (var kv in pos)
         {
             // El nodo donde está el recorrido ahora mismo va en ámbar y con borde grueso: durante
             // un mapeo en vivo, saber DÓNDE está es tan informativo como ver aparecer las aristas.
             bool esActual = string.Equals(kv.Key, _nodoActual, StringComparison.OrdinalIgnoreCase);
+            bool esCentro = kv.Key == centro;
+            // Azul = su nivel lo puso una persona. Se distingue de lo deducido porque son dos cosas
+            // distintas: una es lo que el sistema cree y la otra lo que alguien sabe.
+            bool fijado = _map.ExitsFrom(kv.Key).Any(h => h.Info.NivelFijado)
+                || _map.Edges().Any(e => e.To.Equals(kv.Key, StringComparison.OrdinalIgnoreCase)
+                                      && e.Info.NivelFijado);
             var caja = new Border
             {
                 Width = anchoCaja, Height = altoCaja,
-                CornerRadius = new CornerRadius(6),
-                Background = new SolidColorBrush(esActual
-                    ? Color.FromArgb(0x55, 0xFF, 0xB3, 0x00)
+                // En puntos son círculos: una caja diminuta con esquinas parece una caja rota, y un
+                // punto se lee como «un sitio» sin fingir que dentro cabía algo.
+                CornerRadius = new CornerRadius(_compacto ? anchoCaja / 2 : 6),
+                // El centro del nivel va en azul: no es un sitio al que se llega, es la app misma.
+                Background = new SolidColorBrush(esCentro ? Color.FromArgb(0x44, 0x21, 0x96, 0xF3)
+                    : esActual ? Color.FromArgb(0x55, 0xFF, 0xB3, 0x00)
+                    : fijado ? Color.FromArgb(0x4A, 0x21, 0x96, 0xF3)
                     : Color.FromArgb(0x30, 0x2E, 0x7D, 0x32)),
-                BorderBrush = new SolidColorBrush(esActual
-                    ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)
+                BorderBrush = new SolidColorBrush(esCentro ? Color.FromArgb(0xAA, 0x64, 0xB5, 0xF6)
+                    : esActual ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)
+                    : fijado ? Color.FromArgb(0xCC, 0x64, 0xB5, 0xF6)
                     : Color.FromArgb(0x55, 0x66, 0xBB, 0x6A)),
-                BorderThickness = new Thickness(esActual ? 2 : 1),
-                ToolTip = kv.Key,
-                Child = new TextBlock
+                BorderThickness = new Thickness(esActual || esCentro ? 2 : 1),
+                ToolTip = esCentro
+                    ? $"{appActual} · lo que cuelga de aquí se alcanza desde cualquier pantalla de la app"
+                    : kv.Key,
+                Child = _compacto ? null : new TextBlock
                 {
-                    Text = Corto(kv.Key),
+                    Text = esCentro ? appActual : Distintivo(kv.Key, prefijo),
                     Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)),
                     FontSize = 9.5, FontFamily = new FontFamily("Consolas"),
                     TextTrimming = TextTrimming.CharacterEllipsis,
@@ -474,6 +1383,23 @@ public sealed class GraphExplorerWindow : Window
                     VerticalAlignment = VerticalAlignment.Center,
                 },
             };
+
+            // El ÚNICO nombre que sobrevive al alejarse es el de donde estás. Un mapa de puntos sin
+            // ninguna referencia es bonito y no sirve: hace falta saber cuál de todos eres tú.
+            if (_compacto && esActual)
+            {
+                var etiqueta = new TextBlock
+                {
+                    Text = Distintivo(kv.Key, prefijo),
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)),
+                    FontSize = 10, FontFamily = new FontFamily("Consolas"),
+                    Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x10, 0x10, 0x14)),
+                    Padding = new Thickness(4, 1, 4, 1),
+                };
+                Canvas.SetLeft(etiqueta, kv.Value.X + anchoCaja + 6);
+                Canvas.SetTop(etiqueta, kv.Value.Y - 2);
+                _lienzo.Children.Add(etiqueta);
+            }
             Canvas.SetLeft(caja, kv.Value.X);
             Canvas.SetTop(caja, kv.Value.Y);
             _lienzo.Children.Add(caja);
@@ -481,10 +1407,28 @@ public sealed class GraphExplorerWindow : Window
 
         _lienzo.Width = Math.Max(maxX + 12, 320);
         _lienzo.Height = 24 + (prof.Values.Max() + 1) * sepY;
+        AjustarALaVista();
         // Durante el mapeo el estado lo escribe el propio recorrido («explorando X · N pantallas»),
         // que dice más que un recuento: no se pisa.
+        // Se dice EN QUÉ MODO está. Al alejarse desaparecen los nombres, y sin avisar eso se lee
+        // como que el grafo se ha vaciado en vez de como que se ha resumido. Además la barra es lo
+        // único de esta vista que sigue siendo legible para el sistema: la capa, al volverse
+        // atravesable, dejó de exponer su contenido, así que este texto es el único sitio donde
+        // comprobar desde fuera qué se está dibujando (2026-08-04).
         if (_crawlCts == null)
-            _status.Text = $"grafo de la última corrida · {pos.Count} pantalla(s), {_ultimaCorrida.Count} ruta(s)";
+            _status.Text = $"grafo · {pos.Count} pantalla(s), {traza.Count} ruta(s)"
+                         + (_compacto ? " · vista de puntos (alejado)" : " · vista con nombres");
+
+        // Se registra lo dibujado. Desde que la capa es atravesable no expone su contenido a UIA,
+        // así que esta línea es la única forma de comprobar desde fuera qué hay pintado — y sin ella
+        // «no se ve nada» y «no se está dibujando nada» son indistinguibles (2026-08-04).
+        string huella = $"{appActual}|{pos.Count}|{traza.Count}|{_compacto}";
+        if (huella != _huellaDibujo)
+        {
+            _huellaDibujo = huella;
+            LogBus.Log("explorador", $"grafo: nivel «{appActual}» · {pos.Count} nodo(s), "
+                + $"{traza.Count} salto(s) · {(_compacto ? "puntos" : "nombres")}");
+        }
     }
 
     // ── Mapeo autónomo ───────────────────────────────────────────────────────

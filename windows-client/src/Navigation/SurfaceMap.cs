@@ -35,6 +35,23 @@ public sealed class SurfaceMap
     {
         public int Visits { get; set; }
         public DateTime LastSeen { get; set; }
+
+        /// <summary>
+        /// A qué NIVEL de la app pertenece esta pantalla: cuántas puertas hay que abrir para verla.
+        ///
+        /// Es el eje del grafo de NAVEGACIÓN, y no tiene nada que ver con por dónde se pasó. Antes
+        /// el nivel salía del recorrido —si llegaste a Escritorio pasando por Imágenes, el grafo
+        /// decía que Escritorio cuelga de Imágenes— y eso describe un CAMINO, no una estructura: al
+        /// día siguiente, entrando en otro orden, el mismo sitio cambiaba de sitio.
+        ///
+        /// Lo que no cambia es qué puerta revela qué. Lo visible nada más abrir la app es el nivel 1;
+        /// lo que solo aparece tras abrir una puerta está un nivel por debajo de ESA puerta. Se
+        /// asigna la primera vez que se ve y no se toca más: un sitio no cambia de nivel porque hoy
+        /// hayas llegado por otro lado (2026-08-04, replanteado por el usuario).
+        ///
+        /// -1 = todavía sin situar.
+        /// </summary>
+        public int Nivel { get; set; } = -1;
     }
 
     /// <summary>
@@ -65,6 +82,43 @@ public sealed class SurfaceMap
         /// medido; la explorada es cierta por construcción — no hubo atribución que adivinar.
         /// </summary>
         public bool Explored { get; set; }
+
+        /// <summary>
+        /// A qué GRUPO pertenece esta salida dentro de su app: "" si a ninguno todavía.
+        ///
+        /// Hoy el sistema deduce un solo grupo y lo hace al vuelo —el cromo, lo que está en todas
+        /// las pantallas— y por eso este campo puede quedarse vacío sin que nada se rompa. Existe
+        /// para lo que viene: que un agente mire una app y diga «esto es la barra de herramientas»,
+        /// «esto el menú de archivo», «esto la navegación lateral», y lo escriba aquí.
+        ///
+        /// Es un campo y no una jerarquía a propósito: agrupar es ETIQUETAR, no mover nada de sitio.
+        /// Una salida sigue estando donde está y llevando a donde lleva; el grupo solo dice con
+        /// quién se lee mejor. Así, quien agrupe mañana no puede romper la navegación de hoy.
+        /// </summary>
+        public string Nivel { get; set; } = "";
+
+        /// <summary>
+        /// El nivel de NAVEGACIÓN de esta puerta: cuántas puertas hay que abrir antes de verla.
+        ///
+        /// Se fija la primera vez que la puerta se observa y ya no se mueve. Una puerta visible al
+        /// abrir la app es nivel 1; una que solo aparece después de abrir otra está un nivel por
+        /// debajo de aquélla. Eso da la jerarquía REAL de la aplicación —qué contiene qué— en vez
+        /// del orden accidental en que alguien paseó por ella.
+        ///
+        /// -1 = sin situar. Ver <see cref="NodeInfo.Nivel"/>.
+        /// </summary>
+        public int NivelNav { get; set; } = -1;
+
+        /// <summary>
+        /// El nivel lo puso una PERSONA, no la deducción. Entonces no se toca.
+        ///
+        /// La regla automática acierta casi siempre y se equivoca en lo raro —un botón que aparece
+        /// tarde y en realidad es de la navegación principal, o al revés—. Que el usuario pueda
+        /// corregirlo no sirve de nada si el siguiente recorrido lo vuelve a mover: una corrección
+        /// que no sobrevive no es una corrección, es un comentario (2026-08-04, pedido por el
+        /// usuario). Lo dicho a mano gana siempre y se queda.
+        /// </summary>
+        public bool NivelFijado { get; set; }
 
         /// <summary>
         /// Cómo se recorre: «click» o «doubleclick». Guardarlo no es un detalle — una carpeta de la
@@ -149,7 +203,7 @@ public sealed class SurfaceMap
         // (slug «ventana», 4 visitas fundidas en un nodo cajón de sastre) y la jump list vive en
         // ShellExperienceHost. Ninguno es un lugar al que se pueda "volver": son el pasillo.
         string origen = SurfacePlace.OriginOf(id);
-        bool esPropia = origen.EndsWith("//u.exe", StringComparison.OrdinalIgnoreCase)
+        bool esPropia = Uia.Propio.EsSuperficie(origen)
             || origen.Contains("shellexperiencehost", StringComparison.OrdinalIgnoreCase)
             || id.EndsWith("/ventana", StringComparison.OrdinalIgnoreCase);
 
@@ -303,11 +357,32 @@ public sealed class SurfaceMap
     /// sin tener que ir hasta allí a comprobarlo.
     /// </summary>
     public void ObserveExits(string from,
-        IEnumerable<(string Label, string ControlType, string Selector, string[] Alternatives)> salidas)
+        IEnumerable<(string Label, string ControlType, string Selector, string[] Alternatives, string Grupo)> salidas)
     {
         string f = Norm(from);
         if (f.Length == 0) return;
         if (!_nodes.ContainsKey(f) && _nodes.Count < MaxNodes) _nodes[f] = new NodeInfo();
+
+        // La pantalla donde primero se entra en una app es su raíz de navegación: nivel 0. Sin este
+        // ancla, ningún nivel tiene desde dónde contarse.
+        if (_nodes.TryGetValue(f, out var nf) && nf.Nivel < 0)
+        {
+            string appF = AppDe(f);
+            bool hayOtraSituada = _nodes.Any(kv => kv.Value.Nivel >= 0
+                && AppDe(kv.Key).Equals(appF, StringComparison.OrdinalIgnoreCase));
+            if (!hayOtraSituada) nf.Nivel = 0;
+        }
+        int nivelAqui = _nodes.TryGetValue(f, out var na) ? na.Nivel : -1;
+
+        // Lo que YA se conoce en esta app, con el nivel que se le puso la primera vez. Una puerta no
+        // cambia de nivel por volver a verla desde más adentro: si el panel lateral está en el nivel
+        // 1, sigue estando en el 1 aunque lo vuelvas a ver tres carpetas más abajo.
+        var nivelPorSelector = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var (fr, _, info) in Edges())
+            if (info.NivelNav >= 0 && info.Selector.Length > 0
+                && AppDe(fr).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase)
+                && !nivelPorSelector.ContainsKey(info.Selector))
+                nivelPorSelector[info.Selector] = info.NivelNav;
 
         foreach (var s in salidas)
         {
@@ -330,6 +405,15 @@ public sealed class SurfaceMap
 
             string k = f + "\n" + destino;
             if (_edges.ContainsKey(k)) continue;
+
+            // EL NIVEL SE FIJA UNA VEZ. Si esta puerta ya se vio antes en esta app, conserva el
+            // nivel que se le puso entonces —da igual desde dónde se esté mirando ahora—; si es
+            // nueva, pertenece a un nivel por debajo de la pantalla que la revela. Eso es lo que
+            // convierte «qué abre qué» en una jerarquía estable, en vez de un reflejo del paseo.
+            int nivelPuerta = nivelPorSelector.TryGetValue(s.Selector, out int ya)
+                ? ya
+                : (nivelAqui >= 0 ? nivelAqui + 1 : -1);
+
             _edges[k] = new EdgeInfo
             {
                 Selector = s.Selector,
@@ -339,9 +423,50 @@ public sealed class SurfaceMap
                 ActionType = EsContenido(s.ControlType) ? "doubleclick" : "click",
                 Kind = SafeToClick.Clasificar(s.Label, s.ControlType),
                 Explored = deducido.Length > 0,
+                Nivel = s.Grupo,
+                NivelNav = nivelPuerta,
             };
         }
         Save();
+    }
+
+    /// <summary>
+    /// Poner a mano el nivel de una salida en toda una app, y dejarlo fijo.
+    ///
+    /// Es la corrección humana de la jerarquía: la deducción acierta casi siempre, pero quien mira
+    /// la pantalla sabe cosas que el árbol UIA no dice —que ese botón raro es navegación principal,
+    /// que ese otro no lo es—. Se aplica a TODAS las apariciones de esa salida en la app, porque el
+    /// nivel es una propiedad de la salida, no del sitio desde donde se mire.
+    ///
+    /// Con nivel negativo se suelta: vuelve a mandar la deducción.
+    /// </summary>
+    public string FijarNivel(string app, string etiquetaOSelector, int nivel)
+    {
+        string a = app.Trim();
+        string q = etiquetaOSelector.Trim();
+        if (a.Length == 0 || q.Length == 0) return "falta la app o qué salida mover";
+
+        var tocadas = Edges().Where(e =>
+                AppDe(e.From).Equals(a, StringComparison.OrdinalIgnoreCase)
+                && (e.Info.Label.Equals(q, StringComparison.OrdinalIgnoreCase)
+                    || e.Info.Selector.Equals(q, StringComparison.Ordinal)))
+            .ToList();
+        if (tocadas.Count == 0) return $"no encuentro ninguna salida «{q}» en «{a}»";
+
+        foreach (var (_, to, info) in tocadas)
+        {
+            info.NivelNav = nivel;
+            info.NivelFijado = nivel >= 0;
+            // La pantalla que hay detrás vive en el nivel de su puerta: si se mueve la puerta, se
+            // mueve el sitio. Si no, el dibujo diría una cosa y el mapa otra.
+            if (nivel >= 0 && !EsPuerta(to) && _nodes.TryGetValue(to, out var n)) n.Nivel = nivel;
+        }
+        Version++;
+        Save();
+        string quien = tocadas[0].Info.Label;
+        return nivel >= 0
+            ? $"«{quien}» queda en el nivel {nivel} de «{a}» ({tocadas.Count} aparición/es). Fijado: la deducción ya no lo mueve."
+            : $"«{quien}» vuelve a nivel automático en «{a}».";
     }
 
     /// <summary>
@@ -503,7 +628,34 @@ public sealed class SurfaceMap
         ResolverPuertasIguales(selector, t, controlType);
 
         if (!_nodes.ContainsKey(t) && _nodes.Count < MaxNodes) _nodes[t] = new NodeInfo();
-        if (_nodes.TryGetValue(t, out var n)) { n.Visits++; n.LastSeen = DateTime.UtcNow; }
+        if (_nodes.TryGetValue(t, out var n))
+        {
+            n.Visits++; n.LastSeen = DateTime.UtcNow;
+
+            // La pantalla que hay tras una puerta vive en el nivel de esa puerta. Se toma el MENOR
+            // encontrado: si a un mismo sitio se llega por dos puertas de niveles distintos, su
+            // nivel es el del camino más corto — que es lo que significa «cuántas puertas hay que
+            // abrir para verlo», no «cuántas abrí yo esta vez».
+            // La puerta se busca por su SELECTOR, no por «de aquí a allí»: antes de cruzarla no
+            // tenía destino conocido —era «?selector»— así que buscarla por el par origen→destino
+            // no la encontraba nunca y el nivel se quedaba sin asignar (2026-08-04). El selector es
+            // lo único que la identifica desde que se ve hasta después de cruzarla.
+            int nivelPuerta = -1;
+            foreach (var (fr, _, info) in Edges())
+                if (info.NivelNav >= 0
+                    && string.Equals(info.Selector, selector, StringComparison.Ordinal)
+                    && AppDe(fr).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase))
+                { nivelPuerta = info.NivelNav; break; }
+
+            if (nivelPuerta < 0 && _nodes.TryGetValue(f, out var origen) && origen.Nivel >= 0)
+                nivelPuerta = origen.Nivel + 1;
+
+            // Lo fijado a mano no se toca: ver EdgeInfo.NivelFijado.
+            bool fijado = Edges().Any(e => e.Info.NivelFijado
+                && string.Equals(e.Info.Selector, selector, StringComparison.Ordinal)
+                && AppDe(e.From).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase));
+            if (!fijado && nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
+        }
 
         string k = f + "\n" + t;
         if (!_edges.TryGetValue(k, out var e)) { e = new EdgeInfo(); _edges[k] = e; }
@@ -584,14 +736,130 @@ public sealed class SurfaceMap
     }
 
     /// <summary>Las salidas conocidas de una superficie, con acción o sin ella (se dice cuál es cuál).</summary>
+    /// <summary>
+    /// Las salidas de una pantalla: las suyas MÁS las del nivel al que pertenece.
+    ///
+    /// El panel lateral de una app está en todas sus pantallas, pero se anotaba pantalla por
+    /// pantalla en el momento de observarla — y la deducción de a dónde lleva cada botón se hacía
+    /// UNA vez, ahí. Consecuencia: una carpeta observada antes de que se cruzara «Música» se quedaba
+    /// con ese hermano en gris para siempre, mientras otra observada después lo tenía en verde. Se
+    /// veía como que el sistema «conoce» cosas distintas según dónde estés, cuando en realidad la
+    /// app expone lo mismo en todas partes (2026-08-04, observado por el usuario).
+    ///
+    /// Lo que pertenece al nivel se calcula al preguntar, no al observar, así que llega a las
+    /// pantallas viejas igual que a las nuevas: lo aprendido en una beneficia a todas.
+    /// </summary>
     public List<Hop> ExitsFrom(string surface)
     {
         string s = Norm(surface);
-        return Edges().Where(e => string.Equals(e.From, s, StringComparison.OrdinalIgnoreCase))
-                      .Select(e => new Hop(e.From, e.To, e.Info))
-                      .OrderByDescending(h => h.Info.Count)
-                      .ToList();
+        var propias = Edges().Where(e => string.Equals(e.From, s, StringComparison.OrdinalIgnoreCase))
+                             .Select(e => new Hop(e.From, e.To, e.Info))
+                             .ToList();
+
+        // UNA PUERTA NO TAPA AL NIVEL. Una puerta dice «esto existe y no sé a dónde va»; el nivel
+        // dice «existe y va aquí». Descartar lo heredado por haber ya una salida con ese nombre
+        // dejaba siempre la peor de las dos respuestas: cada sección de Configuración veía sus once
+        // hermanas como puertas sin destino, aun sabiendo el mapa perfectamente a dónde llevan
+        // (2026-08-04). Si lo que hay aquí es una incógnita y el nivel trae la respuesta, gana el
+        // nivel; si aquí ya se cruzó de verdad, lo de aquí manda, porque es lo comprobado.
+        foreach (var h in CromoDe(AppDe(s)))
+        {
+            if (h.Info.Label.Length == 0
+                || string.Equals(h.To, s, StringComparison.OrdinalIgnoreCase)) continue;   // no lleva a sí misma
+            int ya = propias.FindIndex(p => p.Info.Label.Equals(h.Info.Label, StringComparison.OrdinalIgnoreCase));
+            if (ya >= 0)
+            {
+                if (!EsPuerta(propias[ya].To)) continue;          // aquí ya se comprobó: manda lo de aquí
+                propias.RemoveAt(ya);                             // era una incógnita: el nivel la resuelve
+            }
+        }
+
+        var vistas = new HashSet<string>(propias.Select(h => h.Info.Label), StringComparer.OrdinalIgnoreCase);
+        foreach (var h in CromoDe(AppDe(s)))
+            if (h.Info.Label.Length > 0 && !vistas.Contains(h.Info.Label)
+                && !string.Equals(h.To, s, StringComparison.OrdinalIgnoreCase))   // no lleva a sí misma
+                // Lo heredado se MARCA. Sin marca, «cruzado desde aquí» y «disponible porque la app
+                // lo tiene en todas partes» se leen igual desde fuera, y eso no es un detalle de
+                // presentación: perdí la forma de medir cuántas pantallas habían cruzado algo de
+                // verdad, justo después de escribir la herencia (2026-08-04). Lo que se hereda hay
+                // que poder distinguirlo de lo que se comprobó, o el sistema deja de saber lo que
+                // sabe. Y al modelo le sirve igual: una salida heredada es fiable pero no probada
+                // desde esta pantalla concreta.
+                propias.Add(new Hop(s, h.To, Heredada(h.Info)));
+
+        return propias.OrderByDescending(h => h.Info.Count).ToList();
     }
+
+    /// <summary>
+    /// El CROMO de una app: lo que está en todas sus pantallas y lleva siempre al mismo sitio.
+    ///
+    /// Se reconoce por lo que es, sin listas escritas a mano: una salida que lleva al mismo destino
+    /// con el mismo botón desde DOS pantallas distintas ya no describe una pantalla —describe la
+    /// aplicación—. Dos y no una, porque desde una sola no hay forma de distinguir el panel lateral
+    /// de una carpeta que casualmente contiene algo con ese nombre.
+    ///
+    /// Es el primer NIVEL que el sistema deduce solo. La estructura admite más: el día que un agente
+    /// quiera agrupar salidas por otro criterio —«esto es la barra de herramientas», «esto es el menú
+    /// de archivo»— le basta con marcar <see cref="EdgeInfo.Nivel"/> y esto seguirá funcionando
+    /// igual, porque agrupar es etiquetar, no mover nada de sitio.
+    /// </summary>
+    public List<Hop> CromoDe(string app)
+    {
+        if (app.Length == 0) return new List<Hop>();
+        if (_cromo.TryGetValue(app, out var guardado) && _cromoVersion == Version) return guardado;
+
+        // ESTAR EN TODAS PARTES SE SABE MIRANDO, NO CRUZANDO. Antes solo contaban las aristas ya
+        // recorridas, y eso exigía cruzar cada hermano DOS veces desde sitios distintos para que el
+        // sistema aceptara que pertenece a la app: recorriendo el panel de Configuración en orden,
+        // cada sección se alcanzaba desde la anterior —un solo origen— así que ninguna calificaba y
+        // el nodo central no aparecía hasta la segunda vuelta (2026-08-04, observado por el usuario).
+        //
+        // Pero las doce secciones se ven a la vez desde la primera pantalla. Que estén en todas
+        // partes es una propiedad OBSERVABLE, y el mapa ya anota lo que ve aunque no lo haya cruzado.
+        // Se cuenta por SELECTOR y contando también las puertas sin cruzar: eso responde «¿está en
+        // todas las pantallas?», que es la pregunta. A dónde lleva es otra pregunta distinta, y para
+        // esa sí hace falta haberla cruzado al menos una vez.
+        var vistoDesde = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var destinoDe = new Dictionary<string, Hop>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (from, to, info) in Edges())
+        {
+            if (info.Label.Length == 0 || info.Selector.Length == 0) continue;
+            if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
+
+            if (!vistoDesde.TryGetValue(info.Selector, out var origenes))
+                vistoDesde[info.Selector] = origenes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            origenes.Add(from);
+
+            // El destino solo lo aporta una arista CRUZADA: una puerta dice que existe, no a dónde va.
+            if (!EsPuerta(to) && AppDe(to).Equals(app, StringComparison.OrdinalIgnoreCase)
+                && !destinoDe.ContainsKey(info.Selector))
+                destinoDe[info.Selector] = new Hop(from, to, info);
+        }
+
+        var cromo = destinoDe
+            .Where(kv => vistoDesde.TryGetValue(kv.Key, out var o) && o.Count >= 2)
+            .Select(kv => kv.Value)
+            .ToList();
+        if (_cromoVersion != Version) { _cromo.Clear(); _cromoVersion = Version; }
+        _cromo[app] = cromo;
+        return cromo;
+    }
+
+    /// <summary>Nombre del nivel que el sistema deduce solo: lo que está en todas las pantallas.</summary>
+    public const string NivelCromo = "cromo";
+
+    /// <summary>Copia de una arista marcada como heredada del nivel. Copia y no la misma: escribir
+    /// en el original convertiría en «heredada» la arista real de la pantalla donde sí se cruzó.</summary>
+    private static EdgeInfo Heredada(EdgeInfo o) => new()
+    {
+        Count = o.Count, Selector = o.Selector, Label = o.Label, ControlType = o.ControlType,
+        Alternatives = o.Alternatives, ClickPos = o.ClickPos, Explored = o.Explored,
+        ActionType = o.ActionType, Kind = o.Kind, Nivel = NivelCromo,
+    };
+
+    private readonly Dictionary<string, List<Hop>> _cromo = new(StringComparer.OrdinalIgnoreCase);
+    private int _cromoVersion = -1;
 
     private static string Norm(string id) => (id ?? "").Trim().TrimEnd('/');
 
@@ -668,6 +936,29 @@ public sealed class SurfaceMap
                         .Where(k => { int c = k.IndexOf('\n'); return c > 0 && !EsPuerta(k[(c + 1)..])
                                                                   && !MismaApp(k[..c], k[(c + 1)..]); })
                         .ToList();
+                    // EL ESCRITORIO NUNCA TUVO SECCIONES. Cada icono seleccionado creó su propio
+                    // nodo —«program-manager#docker-desktop», «program-manager#sap-logon-64»…— y con
+                    // ellos aristas que afirmaban que para llegar a un icono hay que pasar por el
+                    // anterior. Nunca fue cierto: todos se alcanzan directamente desde el escritorio.
+                    // La regla nueva ya no los crea; estos son los que quedaron escritos (2026-08-04).
+                    var falsos = map._nodes.Keys
+                        .Where(n => Uia.Escritorio.EsId(n) && n.Contains('#'))
+                        .ToList();
+                    if (falsos.Count > 0)
+                    {
+                        var fuera = new HashSet<string>(falsos, StringComparer.OrdinalIgnoreCase);
+                        foreach (var n in falsos) map._nodes.Remove(n);
+                        foreach (var k in map._edges.Keys.ToList())
+                        {
+                            int c = k.IndexOf('\n');
+                            if (c <= 0) continue;
+                            if (fuera.Contains(k[..c]) || fuera.Contains(k[(c + 1)..])) map._edges.Remove(k);
+                        }
+                        LogBus.Log("mapa", $"curado: {falsos.Count} nodo(s) del escritorio que eran una "
+                            + "selección, no un sitio, eliminados con sus aristas");
+                        map.Save();
+                    }
+
                     if (cruzadas.Count > 0)
                     {
                         foreach (var k in cruzadas) map._edges.Remove(k);
