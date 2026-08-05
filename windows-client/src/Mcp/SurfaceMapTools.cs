@@ -456,7 +456,52 @@ public sealed class SurfaceMapTools
 
             var (etiqueta, tipo, sels) = UiaSurface.DescribeElement(el);
             string nombre = etiqueta.Length > 0 ? etiqueta : (el.Current.Name ?? "").Trim();
-            if (nombre.Length == 0) return $"bajo el cursor hay un {tipo} sin nombre; no puedo referirme a él";
+
+            // EL PUNTO MANDA, PERO LA PUERTA ES LO ÚTIL. Bajo el cursor puede haber un trozo interno
+            // —el texto de un botón, la celda de una fila— y ese trozo no es lo que el usuario está
+            // señalando: señala la PUERTA que lo contiene. Se busca entre lo que hay en pantalla la
+            // puerta que cubre ese punto, y se prefiere la más pequeña, que es la más específica
+            // (2026-08-05, pedido por el usuario: primero el cursor, luego buscarlo entre las
+            // puertas).
+            var punto = new System.Windows.Point(p.X, p.Y);
+            _lector.Read();
+            var puerta = _lector.Elements
+                .Where(e => e.Label.Length > 0 && EsPuertaVisible(e) && e.Bounds.Contains(punto))
+                .OrderBy(e => e.Bounds.Width * e.Bounds.Height)
+                .FirstOrDefault();
+
+            if (puerta != null) { nombre = puerta.Label; tipo = puerta.ControlType; }
+
+            // Si el punto cayó en un trozo sin nombre —un Group, un panel interno— se sube por el
+            // árbol hasta encontrar algo que sí lo tenga. Un contenedor anónimo no es una respuesta:
+            // el usuario está señalando ALGO, y ese algo tiene nombre un poco más arriba.
+            if (nombre.Length == 0)
+            {
+                var subiendo = System.Windows.Automation.TreeWalker.ControlViewWalker.GetParent(el);
+                for (int i = 0; i < 5 && subiendo != null && nombre.Length == 0; i++)
+                {
+                    try
+                    {
+                        string n = (subiendo.Current.Name ?? "").Trim();
+                        if (n.Length > 0)
+                        {
+                            nombre = n;
+                            tipo = subiendo.Current.ControlType.ProgrammaticName.Replace("ControlType.", "");
+                            break;
+                        }
+                    }
+                    catch { }
+                    subiendo = System.Windows.Automation.TreeWalker.ControlViewWalker.GetParent(subiendo);
+                }
+            }
+
+            if (nombre.Length == 0)
+                return "bajo el cursor no hay nada con nombre, ni en él ni en lo que lo contiene. "
+                     + "Muévelo un poco y vuelve a preguntar.";
+
+            // Y se ilumina: si el usuario señala y el asistente dice un nombre, hay que poder
+            // comprobar de un vistazo que hablan del mismo sitio.
+            if (puerta != null) Ui.Senalador.Senalar(puerta.Bounds, puerta.Label);
 
             string aqui = _where()?.Id ?? "";
             var h = aqui.Length > 0
@@ -466,8 +511,9 @@ public sealed class SurfaceMapTools
                 : (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
                   + (h.Info.NivelFijado ? " · fijado a mano" : " · deducido");
 
-            return $"señalas «{nombre}» ({tipo}) · {estado}. "
-                 + $"Para moverlo de nivel: map_set_level con exit=«{nombre}».";
+            return $"señalas «{nombre}» ({tipo}) · {estado}"
+                 + (puerta != null ? " · lo estoy iluminando" : "")
+                 + $". Para moverlo de nivel: map_set_level con exit=«{nombre}».";
         }
         catch (Exception e) { return $"no pude leer lo que hay bajo el cursor: {e.Message}"; }
     }
@@ -872,7 +918,9 @@ public sealed class SurfaceMapTools
 
         // Si se pasa a hacer otra cosa, ya no se está mirando lo de antes: se suelta. Señalar es un
         // gesto que acompaña a una frase, no un estado en el que quedarse.
-        if (!tool.Equals("map_show", StringComparison.OrdinalIgnoreCase)) Ui.Senalador.Soltar();
+        if (!tool.Equals("map_show", StringComparison.OrdinalIgnoreCase)
+            && !tool.Equals("map_pointing_at", StringComparison.OrdinalIgnoreCase))
+            Ui.Senalador.Soltar();
 
         string r = tool switch
         {

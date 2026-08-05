@@ -231,6 +231,13 @@ public sealed class GeminiLive : IDisposable
         Ve contando lo que haces mientras lo haces («voy al explorador», «creando la carpeta»), no al
         final: lo que se está viendo en pantalla y lo que oye tienen que ir juntos.
 
+        EL CURSOR MANDA SOBRE TU INTERPRETACIÓN. Cuando el usuario diga «esto», «este», «el que estoy
+        señalando», «mira aquí» —o cuando en el vídeo veas su puntero sobre algo— usa map_pointing_at
+        ANTES que nada. No adivines de qué elemento habla por el nombre que creas haber entendido:
+        él está apuntando, y apuntar es más exacto que describir. map_pointing_at te da la puerta que
+        hay bajo el cursor, con su nombre real, y la ilumina. Con ese nombre ya puedes usar
+        map_set_level o map_take.
+
         SEÑALAR ANTES QUE AFIRMAR. Si te preguntan «¿ves X?» o «¿dónde está X?», usa map_show: dice
         si está y además lo marca en pantalla y lleva la carita a su lado. Contestar «sí, lo veo» sin
         señalarlo no vale — quien pregunta está comprobando que los dos miráis lo mismo, y solo lo
@@ -338,6 +345,13 @@ public sealed class GeminiLive : IDisposable
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
             ("at", "La superficie a la que hay que volver después."),
             ("choose", "La opción a pulsar. Vacío = solo si hay una única salida posible.")),
+        Fn("map_pointing_at", "PRIORITARIA cuando el usuario señala algo. Devuelve la PUERTA que hay "
+            + "bajo el cursor —con su nombre real— y la ilumina. Úsala en cuanto oigas «esto», «este», "
+            + "«el que estoy señalando», «mira aquí», o cuando en el vídeo veas su puntero sobre algo. "
+            + "Apuntar es más exacto que describir: no adivines el nombre, pregúntalo aquí."),
+        Fn("map_what_i_see", "Lo que hay EN PANTALLA ahora mismo, elemento por elemento, diciendo de "
+            + "cada uno qué sabe el mapa: su nivel, si lo fijó una persona, o si es «nuevo» y el mapa "
+            + "aún no lo tiene. Sirve para distinguir lo que se ve de lo que se recuerda."),
         Fn("map_show", "¿VES este elemento? Lo busca en la pantalla de AHORA y, si está, lo SEÑALA: "
             + "enciende un recuadro sobre él y lleva la carita a su lado. Úsala siempre que el usuario "
             + "pregunte «¿ves X?» o «¿dónde está X?» — responder que sí sin señalarlo no le sirve de "
