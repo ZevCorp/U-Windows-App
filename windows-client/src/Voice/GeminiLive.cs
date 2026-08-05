@@ -223,6 +223,12 @@ public sealed class GeminiLive : IDisposable
         Ve contando lo que haces mientras lo haces («voy al explorador», «creando la carpeta»), no al
         final: lo que se está viendo en pantalla y lo que oye tienen que ir juntos.
 
+        LA JERARQUÍA SE PUEDE CORREGIR, y el usuario manda. El sistema deduce solo a qué nivel
+        pertenece cada cosa —nivel 1 es la navegación principal de la app, la que está siempre a la
+        vista— y acierta casi siempre. Cuando el usuario te diga que algo pertenece o no al nivel
+        principal, o te señale elementos, usa map_set_level: queda fijo para esa app y la deducción
+        ya no lo mueve. Si te señala varios seguidos, uno por uno, y confirma en voz cuáles quedaron.
+
         Cómo trabajar:
         - Para ABRIR una aplicación, map_open_app. No busques su icono en el mapa: el mapa guarda
           pantallas, no accesos directos, y un icono aprendido en otra app no estará donde estás.
@@ -319,6 +325,14 @@ public sealed class GeminiLive : IDisposable
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
             ("at", "La superficie a la que hay que volver después."),
             ("choose", "La opción a pulsar. Vacío = solo si hay una única salida posible.")),
+        Fn("map_set_level", "Corrige a mano a qué NIVEL pertenece una salida, para toda la app y de "
+            + "forma permanente. Nivel 1 = navegación principal (los hermanos que están siempre a la "
+            + "vista). Úsala cuando el usuario diga cosas como «esto es del menú principal», «esto no "
+            + "pertenece al primer nivel» o «pon esto en el nivel 2». Con level = -1 se suelta y vuelve "
+            + "a decidirlo el sistema.",
+            ("exit", "La salida, por su nombre tal como se ve («Notas») o su selector."),
+            ("level", "El nivel: 1 para la navegación principal, 2 o más para lo de dentro, -1 para soltar."),
+            ("app", "La app; vacío = donde estés ahora.")),
         Fn("map_run", "Ejecuta una SECUENCIA de pasos de una sola vez, sin volver a consultarte entre "
             + "uno y otro. Es la forma rápida: úsala para las tareas que ya sabes hacer enteras.",
             ("steps", "JSON: lista de pasos. Cada uno {\"op\":\"go_to|take|type|unblock\", …} con los "

@@ -110,6 +110,17 @@ public sealed class SurfaceMap
         public int NivelNav { get; set; } = -1;
 
         /// <summary>
+        /// El nivel lo puso una PERSONA, no la deducción. Entonces no se toca.
+        ///
+        /// La regla automática acierta casi siempre y se equivoca en lo raro —un botón que aparece
+        /// tarde y en realidad es de la navegación principal, o al revés—. Que el usuario pueda
+        /// corregirlo no sirve de nada si el siguiente recorrido lo vuelve a mover: una corrección
+        /// que no sobrevive no es una corrección, es un comentario (2026-08-04, pedido por el
+        /// usuario). Lo dicho a mano gana siempre y se queda.
+        /// </summary>
+        public bool NivelFijado { get; set; }
+
+        /// <summary>
         /// Cómo se recorre: «click» o «doubleclick». Guardarlo no es un detalle — una carpeta de la
         /// lista solo se abre con doble clic, y una arista que dijera «clic» ahí prometería un
         /// camino que al ejecutarse solo selecciona. La acción es parte de la ruta, no del momento.
@@ -420,6 +431,45 @@ public sealed class SurfaceMap
     }
 
     /// <summary>
+    /// Poner a mano el nivel de una salida en toda una app, y dejarlo fijo.
+    ///
+    /// Es la corrección humana de la jerarquía: la deducción acierta casi siempre, pero quien mira
+    /// la pantalla sabe cosas que el árbol UIA no dice —que ese botón raro es navegación principal,
+    /// que ese otro no lo es—. Se aplica a TODAS las apariciones de esa salida en la app, porque el
+    /// nivel es una propiedad de la salida, no del sitio desde donde se mire.
+    ///
+    /// Con nivel negativo se suelta: vuelve a mandar la deducción.
+    /// </summary>
+    public string FijarNivel(string app, string etiquetaOSelector, int nivel)
+    {
+        string a = app.Trim();
+        string q = etiquetaOSelector.Trim();
+        if (a.Length == 0 || q.Length == 0) return "falta la app o qué salida mover";
+
+        var tocadas = Edges().Where(e =>
+                AppDe(e.From).Equals(a, StringComparison.OrdinalIgnoreCase)
+                && (e.Info.Label.Equals(q, StringComparison.OrdinalIgnoreCase)
+                    || e.Info.Selector.Equals(q, StringComparison.Ordinal)))
+            .ToList();
+        if (tocadas.Count == 0) return $"no encuentro ninguna salida «{q}» en «{a}»";
+
+        foreach (var (_, to, info) in tocadas)
+        {
+            info.NivelNav = nivel;
+            info.NivelFijado = nivel >= 0;
+            // La pantalla que hay detrás vive en el nivel de su puerta: si se mueve la puerta, se
+            // mueve el sitio. Si no, el dibujo diría una cosa y el mapa otra.
+            if (nivel >= 0 && !EsPuerta(to) && _nodes.TryGetValue(to, out var n)) n.Nivel = nivel;
+        }
+        Version++;
+        Save();
+        string quien = tocadas[0].Info.Label;
+        return nivel >= 0
+            ? $"«{quien}» queda en el nivel {nivel} de «{a}» ({tocadas.Count} aparición/es). Fijado: la deducción ya no lo mueve."
+            : $"«{quien}» vuelve a nivel automático en «{a}».";
+    }
+
+    /// <summary>
     /// En cuántas pantallas DISTINTAS se ha visto esta misma puerta.
     ///
     /// No hace falta guardar nada aparte: como cada pantalla registra todas sus salidas, contar
@@ -600,7 +650,11 @@ public sealed class SurfaceMap
             if (nivelPuerta < 0 && _nodes.TryGetValue(f, out var origen) && origen.Nivel >= 0)
                 nivelPuerta = origen.Nivel + 1;
 
-            if (nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
+            // Lo fijado a mano no se toca: ver EdgeInfo.NivelFijado.
+            bool fijado = Edges().Any(e => e.Info.NivelFijado
+                && string.Equals(e.Info.Selector, selector, StringComparison.Ordinal)
+                && AppDe(e.From).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase));
+            if (!fijado && nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
         }
 
         string k = f + "\n" + t;

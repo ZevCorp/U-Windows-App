@@ -1349,6 +1349,11 @@ public sealed class GraphExplorerWindow : Window
             // un mapeo en vivo, saber DÓNDE está es tan informativo como ver aparecer las aristas.
             bool esActual = string.Equals(kv.Key, _nodoActual, StringComparison.OrdinalIgnoreCase);
             bool esCentro = kv.Key == centro;
+            // Azul = su nivel lo puso una persona. Se distingue de lo deducido porque son dos cosas
+            // distintas: una es lo que el sistema cree y la otra lo que alguien sabe.
+            bool fijado = _map.ExitsFrom(kv.Key).Any(h => h.Info.NivelFijado)
+                || _map.Edges().Any(e => e.To.Equals(kv.Key, StringComparison.OrdinalIgnoreCase)
+                                      && e.Info.NivelFijado);
             var caja = new Border
             {
                 Width = anchoCaja, Height = altoCaja,
@@ -1358,9 +1363,11 @@ public sealed class GraphExplorerWindow : Window
                 // El centro del nivel va en azul: no es un sitio al que se llega, es la app misma.
                 Background = new SolidColorBrush(esCentro ? Color.FromArgb(0x44, 0x21, 0x96, 0xF3)
                     : esActual ? Color.FromArgb(0x55, 0xFF, 0xB3, 0x00)
+                    : fijado ? Color.FromArgb(0x4A, 0x21, 0x96, 0xF3)
                     : Color.FromArgb(0x30, 0x2E, 0x7D, 0x32)),
                 BorderBrush = new SolidColorBrush(esCentro ? Color.FromArgb(0xAA, 0x64, 0xB5, 0xF6)
                     : esActual ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)
+                    : fijado ? Color.FromArgb(0xCC, 0x64, 0xB5, 0xF6)
                     : Color.FromArgb(0x55, 0x66, 0xBB, 0x6A)),
                 BorderThickness = new Thickness(esActual || esCentro ? 2 : 1),
                 ToolTip = esCentro

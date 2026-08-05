@@ -607,7 +607,8 @@ public sealed class SurfaceMapTools
 
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
-        or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app";
+        or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
+        or "map_set_level";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -630,6 +631,10 @@ public sealed class SurfaceMapTools
             "map_type" => Type(A("text"), A("target"), A("at")),
             "map_unblock" => Unblock(A("at"), A("choose")),
             "map_open_app" => OpenApp(A("app")),
+            "map_set_level" => _map.FijarNivel(
+                A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
+                A("exit"),
+                int.TryParse(A("level"), out int niv) ? niv : -1),
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
             _ => $"herramienta de mapa no soportada: {tool}",
