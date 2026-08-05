@@ -732,7 +732,7 @@ public sealed class GraphExplorerWindow : Window
         if (nodo.Length == 0 || els.Count == 0) return;
         try
         {
-            var puertas = new List<(string, string, string, string[])>();
+            var puertas = new List<(string, string, string, string[], string)>();
             foreach (var el in els.Take(80))   // un techo: una pantalla con cientos no se mapea mirándola
             {
                 try
@@ -742,7 +742,7 @@ public sealed class GraphExplorerWindow : Window
                         && !System.Text.RegularExpressions.Regex.IsMatch(s, @"(name|aid)=(;|$)")).ToArray();
                     if (utiles.Length == 0) continue;
                     puertas.Add((l.Length > 0 ? l : el.Label, t.Length > 0 ? t : el.ControlType,
-                                 utiles[0], utiles.Skip(1).ToArray()));
+                                 utiles[0], utiles.Skip(1).ToArray(), U.Graph.Surfaces.UiaSurface.GrupoDe(el.Native)));
                 }
                 catch { }
             }

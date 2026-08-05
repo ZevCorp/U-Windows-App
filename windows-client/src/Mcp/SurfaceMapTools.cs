@@ -420,7 +420,7 @@ public sealed class SurfaceMapTools
             var raiz = System.Windows.Automation.AutomationElement.FromHandle(fg);
             if (raiz == null) return;
 
-            var puertas = new List<(string, string, string, string[])>();
+            var puertas = new List<(string, string, string, string[], string)>();
             foreach (System.Windows.Automation.AutomationElement el in raiz.FindAll(
                 System.Windows.Automation.TreeScope.Descendants,
                 new System.Windows.Automation.PropertyCondition(
@@ -433,7 +433,7 @@ public sealed class SurfaceMapTools
                     if (info.IsOffscreen) continue;
                     string n = info.Name?.Trim() ?? "";
                     if (n.Length == 0) continue;
-                    puertas.Add((n, "MenuItem", $"uia:name={n};ct=MenuItem", Array.Empty<string>()));
+                    puertas.Add((n, "MenuItem", $"uia:name={n};ct=MenuItem", Array.Empty<string>(), "menú"));
                 }
                 catch { }
             }
@@ -985,7 +985,7 @@ public sealed class SurfaceMapTools
                 return;
             }
 
-            var puertas = new List<(string, string, string, string[])>();
+            var puertas = new List<(string, string, string, string[], string)>();
             foreach (var el in _lector.Elements)
             {
                 // Igual que el crawler: TODO lo accionable, también los botones de ejecución.
@@ -998,11 +998,22 @@ public sealed class SurfaceMapTools
                         && !System.Text.RegularExpressions.Regex.IsMatch(s, @"(name|aid)=(;|$)")).ToArray();
                     if (utiles.Length == 0) continue;
                     puertas.Add((l.Length > 0 ? l : el.Label, t.Length > 0 ? t : el.ControlType,
-                                 utiles[0], utiles.Skip(1).ToArray()));
+                                 utiles[0], utiles.Skip(1).ToArray(), U.Graph.Surfaces.UiaSurface.GrupoDe(el.Native)));
                 }
                 catch { }
             }
             if (puertas.Count == 0) return;
+
+            // Cuántas salidas quedaron sin grupo, y por dónde iba el árbol en una de ellas. Sin
+            // esto, «este elemento no pertenece a ningún grupo» y «no supimos ver el suyo» se leen
+            // igual, que es exactamente lo que costó ver aquí (2026-08-04).
+            int sinGrupo = puertas.Count(p => p.Item5.Length == 0);
+            if (sinGrupo > 0)
+            {
+                var muestra = _lector.Elements.FirstOrDefault(e => e.Label.Length > 0);
+                LogBus.Log("mapa-mcp", $"grupos: {puertas.Count - sinGrupo}/{puertas.Count} con grupo"
+                    + (muestra != null ? $" · ejemplo «{muestra.Label}»: {UiaSurface.Ancestros(muestra.Native)}" : ""));
+            }
 
             _map.ObserveExits(nodo, puertas);
             LogBus.Log("mapa-mcp", $"al llegar a '{nodo}' se anotaron {puertas.Count} salida(s)");

@@ -304,7 +304,7 @@ public sealed class GraphCrawler
         public int Prof;
         /// <summary>Veces seguidas que no se ha podido volver aquí. Un fallo suelto no cierra un nodo.</summary>
         public int FallosSeguidos;
-        public Queue<(string Label, string Tipo, string Selector, string[] Alts, bool Entrable)> Puertas = new();
+        public Queue<(string Label, string Tipo, string Selector, string[] Alts, bool Entrable, string Grupo)> Puertas = new();
     }
 
     /// <summary>
@@ -367,7 +367,7 @@ public sealed class GraphCrawler
             }
             frente.FallosSeguidos = 0;
 
-            var (label, tipo, selector, alts, entrable) = frente.Puertas.Dequeue();
+            var (label, tipo, selector, alts, entrable, _) = frente.Puertas.Dequeue();
             if (EsNavegacionGlobalYaConocida(selector, frente.Prof)) continue;
             // Un archivo ya está anotado como puerta; abrirlo solo serviría para irse de la app.
             if (!entrable) continue;
@@ -420,7 +420,7 @@ public sealed class GraphCrawler
         }
 
         var candidatos = await LeerSalidasAsync(ct);
-        _map.ObserveExits(nodo, candidatos.Select(c => (c.Label, c.Tipo, c.Selector, c.Alternativas)));
+        _map.ObserveExits(nodo, candidatos.Select(c => (c.Label, c.Tipo, c.Selector, c.Alternativas, c.Grupo)));
         LogBus.Log("crawler", $"en '{Corto(nodo)}': {candidatos.Count} salida(s), " +
                               $"{candidatos.Count(c => c.Entrable)} para entrar (carpetas)");
 
@@ -491,14 +491,14 @@ public sealed class GraphCrawler
     private readonly HashSet<string> _destinosSabidos = new(StringComparer.Ordinal);
 
     /// <summary>Los elementos pulsables por un autónomo, en la pantalla actual.</summary>
-    private async Task<List<(string Label, string Tipo, string Selector, string[] Alternativas, bool Entrable)>> LeerSalidasAsync(CancellationToken ct)
+    private async Task<List<(string Label, string Tipo, string Selector, string[] Alternativas, bool Entrable, string Grupo)>> LeerSalidasAsync(CancellationToken ct)
     {
         // Quién está delante se le PREGUNTA al sistema, que es instantáneo; antes se leía el árbol
         // UIA entero solo para averiguarlo y luego se volvía a leer para usarlo. Recorrer una
         // pantalla llena cuesta cientos de milisegundos, así que era medio segundo por nodo tirado
         // en responder algo que GetForegroundWindow contesta al momento (2026-08-02).
         if (!EsObjetivoElFrente() && !await EnfocarObjetivoAsync(ct))
-            return new List<(string, string, string, string[], bool)>();
+            return new List<(string, string, string, string[], bool, string)>();
 
         string carpeta = await ConPlazoAsync(() => CarpetaEnPrimerPlano(), 2000, "", ct);
 
@@ -506,7 +506,7 @@ public sealed class GraphCrawler
         // se deja leer se salta, y el recorrido sigue con las demás en vez de congelarse entero.
         return await ConPlazoAsync(() =>
         {
-            var salidas = new List<(string, string, string, string[], bool)>();
+            var salidas = new List<(string, string, string, string[], bool, string)>();
             try
             {
                 _reader.Read();
@@ -562,12 +562,12 @@ public sealed class GraphCrawler
                     catch { }
                     if (sel.Length == 0) continue;   // sin identidad no hay nada que recorrer
 
-                    salidas.Add((etiqueta, tipo, sel, alts, entrable));
+                    salidas.Add((etiqueta, tipo, sel, alts, entrable, U.Graph.Surfaces.UiaSurface.GrupoDe(el.Native)));
                 }
             }
             catch { }
             return salidas.Take(30).ToList();
-        }, 12000, new List<(string, string, string, string[], bool)>(), ct);
+        }, 12000, new List<(string, string, string, string[], bool, string)>(), ct);
     }
 
     /// <summary>

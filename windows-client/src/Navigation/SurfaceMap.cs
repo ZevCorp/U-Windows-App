@@ -317,7 +317,7 @@ public sealed class SurfaceMap
     /// sin tener que ir hasta allí a comprobarlo.
     /// </summary>
     public void ObserveExits(string from,
-        IEnumerable<(string Label, string ControlType, string Selector, string[] Alternatives)> salidas)
+        IEnumerable<(string Label, string ControlType, string Selector, string[] Alternatives, string Grupo)> salidas)
     {
         string f = Norm(from);
         if (f.Length == 0) return;

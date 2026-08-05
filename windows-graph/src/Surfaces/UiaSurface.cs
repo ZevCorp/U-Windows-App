@@ -405,6 +405,100 @@ public sealed class UiaSurface : IUiSurface
         return (LabelOf(el, info), ct, SelectorsFor(info, new List<int>(), ct));
     }
 
+    /// <summary>
+    /// A qué GRUPO de la interfaz pertenece un elemento, según UIA.
+    ///
+    /// La jerarquía no hay que inventarla: la aplicación ya la declara. Los doce enlaces del panel
+    /// lateral del explorador viven dentro de un Tree; los botones de arriba, dentro de un ToolBar;
+    /// los archivos, dentro de una List. Eso se sabe MIRANDO UNA pantalla, mientras que deducirlo
+    /// por estadística —«lo he visto desde dos sitios, será del panel»— tarda dos visitas y se
+    /// equivoca con lo que casualmente se repite (2026-08-04, a propuesta del usuario).
+    ///
+    /// Devuelve "" cuando el elemento cuelga directo de la ventana: no todo pertenece a un grupo, y
+    /// fingir que sí sería el mismo error al revés.
+    /// </summary>
+    public static string GrupoDe(AutomationElement el)
+    {
+        try
+        {
+            var padre = TreeWalker.ControlViewWalker.GetParent(el);
+            for (int i = 0; i < 10 && padre != null; i++)
+            {
+                var info = padre.Current;
+                var ct = info.ControlType;
+                string clase = (info.ClassName ?? "").Trim();
+
+                // El TIPO cuando lo hay: es lo estándar y lo que usan las apps clásicas.
+                if (ct == ControlType.Tree) return Nombrar("navegación", padre);
+                if (ct == ControlType.ToolBar) return Nombrar("herramientas", padre);
+                if (ct == ControlType.MenuBar || ct == ControlType.Menu) return Nombrar("menú", padre);
+                if (ct == ControlType.Tab) return Nombrar("pestañas", padre);
+                if (ct == ControlType.List || ct == ControlType.DataGrid) return Nombrar("lista", padre);
+
+                // Y LA CLASE cuando el tipo no dice nada, que es lo normal en WinUI. El explorador
+                // de Windows 11 mete sus botones en un contenedor llamado «ApplicationBar» cuyo
+                // ControlType viene VACÍO: mirando solo el tipo, la barra de herramientas entera
+                // parecía no pertenecer a ningún grupo (2026-08-04, comprobado volcando el árbol).
+                // La app declara la estructura; solo que a veces por un canal y a veces por el otro.
+                string porClase = PorClase(clase);
+                if (porClase.Length > 0) return Nombrar(porClase, padre);
+
+                if (ct == ControlType.Window) break;   // se llegó a la ventana: no hay grupo
+                padre = TreeWalker.ControlViewWalker.GetParent(padre);
+            }
+        }
+        catch { }
+        return "";
+    }
+
+    /// <summary>
+    /// La cadena de ancestros, para diagnosticar. Cuando <see cref="GrupoDe"/> devuelve vacío hay
+    /// dos explicaciones opuestas —el elemento no está en ningún grupo, o no supimos verlo— y sin
+    /// esto se ven igual.
+    /// </summary>
+    public static string Ancestros(AutomationElement el)
+    {
+        var partes = new List<string>();
+        try
+        {
+            var p = TreeWalker.ControlViewWalker.GetParent(el);
+            for (int i = 0; i < 6 && p != null; i++)
+            {
+                var inf = p.Current;
+                partes.Add($"{ControlTypeName(inf.ControlType)}/{inf.ClassName}");
+                p = TreeWalker.ControlViewWalker.GetParent(p);
+            }
+        }
+        catch (Exception e) { partes.Add("ERROR:" + e.GetType().Name); }
+        return partes.Count > 0 ? string.Join(" > ", partes) : "(sin padre)";
+    }
+
+    /// <summary>Contenedores que se reconocen por su clase porque no declaran ControlType.</summary>
+    private static string PorClase(string clase)
+    {
+        if (clase.Length == 0) return "";
+        if (clase.Contains("NavigationView", StringComparison.OrdinalIgnoreCase)
+            || clase.Contains("TreeView", StringComparison.OrdinalIgnoreCase)
+            || clase.Contains("SysTreeView", StringComparison.OrdinalIgnoreCase)) return "navegación";
+        if (clase.Contains("ApplicationBar", StringComparison.OrdinalIgnoreCase)
+            || clase.Contains("CommandBar", StringComparison.OrdinalIgnoreCase)
+            || clase.Contains("ToolbarWindow", StringComparison.OrdinalIgnoreCase)) return "herramientas";
+        if (clase.Contains("SHELLDLL_DefView", StringComparison.OrdinalIgnoreCase)
+            || clase.Contains("DirectUIHWND", StringComparison.OrdinalIgnoreCase)) return "contenido";
+        if (clase.Contains("Breadcrumb", StringComparison.OrdinalIgnoreCase)) return "ruta";
+        if (clase.Contains("TabView", StringComparison.OrdinalIgnoreCase)) return "pestañas";
+        return "";
+    }
+
+    /// <summary>El grupo lleva su nombre cuando lo tiene: «navegación:Panel de navegación» dice más
+    /// que «navegación», y una app con dos listas necesita distinguirlas.</summary>
+    private static string Nombrar(string clase, AutomationElement contenedor)
+    {
+        string n = "";
+        try { n = (contenedor.Current.Name ?? "").Trim(); } catch { }
+        return n.Length > 0 ? $"{clase}:{n}" : clase;
+    }
+
     private static List<string> SelectorsFor(
         AutomationElement.AutomationElementInformation info, List<int> path, string ct)
     {
