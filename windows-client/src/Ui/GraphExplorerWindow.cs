@@ -1177,6 +1177,18 @@ public sealed class GraphExplorerWindow : Window
         // observado por el usuario). No hay que aprenderlo: el mapa ya lo deduce en cuanto se cruza
         // UNA vez desde donde sea. Lo que faltaba era decirlo en el dibujo.
         //
+        // EL NIVEL LO DICE LA ESTRUCTURA, NO EL PASEO. Si el mapa ya sabe a qué nivel pertenece cada
+        // pantalla —cuántas puertas hay que abrir para verla— ese es el eje del dibujo, y el orden
+        // en que alguien navegó deja de importar. Llegar a Escritorio pasando por Imágenes no pone
+        // Escritorio debajo de Imágenes: los dos se ven al abrir la app, así que los dos están en el
+        // nivel 1 (2026-08-04, replanteado por el usuario).
+        //
+        // El recorrido no se tira: sigue siendo el material de las ACCIONES, donde el orden SÍ es la
+        // información. Simplemente deja de mandar en la navegación.
+        foreach (var n in prof.Keys.ToList())
+            if (_map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
+                prof[n] = ni.Nivel;
+
         // QUIÉN ES CROMO LO DICE EL MAPA, no este dibujo. Aquí se recontaba por cuenta propia y solo
         // sobre los nodos que había delante, así que una salida que el mapa sabe que está en toda la
         // app podía no llegar al umbral localmente y caer una fila más abajo: en Configuración,

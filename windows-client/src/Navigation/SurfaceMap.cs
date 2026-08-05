@@ -35,6 +35,23 @@ public sealed class SurfaceMap
     {
         public int Visits { get; set; }
         public DateTime LastSeen { get; set; }
+
+        /// <summary>
+        /// A qué NIVEL de la app pertenece esta pantalla: cuántas puertas hay que abrir para verla.
+        ///
+        /// Es el eje del grafo de NAVEGACIÓN, y no tiene nada que ver con por dónde se pasó. Antes
+        /// el nivel salía del recorrido —si llegaste a Escritorio pasando por Imágenes, el grafo
+        /// decía que Escritorio cuelga de Imágenes— y eso describe un CAMINO, no una estructura: al
+        /// día siguiente, entrando en otro orden, el mismo sitio cambiaba de sitio.
+        ///
+        /// Lo que no cambia es qué puerta revela qué. Lo visible nada más abrir la app es el nivel 1;
+        /// lo que solo aparece tras abrir una puerta está un nivel por debajo de ESA puerta. Se
+        /// asigna la primera vez que se ve y no se toca más: un sitio no cambia de nivel porque hoy
+        /// hayas llegado por otro lado (2026-08-04, replanteado por el usuario).
+        ///
+        /// -1 = todavía sin situar.
+        /// </summary>
+        public int Nivel { get; set; } = -1;
     }
 
     /// <summary>
@@ -79,6 +96,18 @@ public sealed class SurfaceMap
         /// quién se lee mejor. Así, quien agrupe mañana no puede romper la navegación de hoy.
         /// </summary>
         public string Nivel { get; set; } = "";
+
+        /// <summary>
+        /// El nivel de NAVEGACIÓN de esta puerta: cuántas puertas hay que abrir antes de verla.
+        ///
+        /// Se fija la primera vez que la puerta se observa y ya no se mueve. Una puerta visible al
+        /// abrir la app es nivel 1; una que solo aparece después de abrir otra está un nivel por
+        /// debajo de aquélla. Eso da la jerarquía REAL de la aplicación —qué contiene qué— en vez
+        /// del orden accidental en que alguien paseó por ella.
+        ///
+        /// -1 = sin situar. Ver <see cref="NodeInfo.Nivel"/>.
+        /// </summary>
+        public int NivelNav { get; set; } = -1;
 
         /// <summary>
         /// Cómo se recorre: «click» o «doubleclick». Guardarlo no es un detalle — una carpeta de la
@@ -323,6 +352,27 @@ public sealed class SurfaceMap
         if (f.Length == 0) return;
         if (!_nodes.ContainsKey(f) && _nodes.Count < MaxNodes) _nodes[f] = new NodeInfo();
 
+        // La pantalla donde primero se entra en una app es su raíz de navegación: nivel 0. Sin este
+        // ancla, ningún nivel tiene desde dónde contarse.
+        if (_nodes.TryGetValue(f, out var nf) && nf.Nivel < 0)
+        {
+            string appF = AppDe(f);
+            bool hayOtraSituada = _nodes.Any(kv => kv.Value.Nivel >= 0
+                && AppDe(kv.Key).Equals(appF, StringComparison.OrdinalIgnoreCase));
+            if (!hayOtraSituada) nf.Nivel = 0;
+        }
+        int nivelAqui = _nodes.TryGetValue(f, out var na) ? na.Nivel : -1;
+
+        // Lo que YA se conoce en esta app, con el nivel que se le puso la primera vez. Una puerta no
+        // cambia de nivel por volver a verla desde más adentro: si el panel lateral está en el nivel
+        // 1, sigue estando en el 1 aunque lo vuelvas a ver tres carpetas más abajo.
+        var nivelPorSelector = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var (fr, _, info) in Edges())
+            if (info.NivelNav >= 0 && info.Selector.Length > 0
+                && AppDe(fr).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase)
+                && !nivelPorSelector.ContainsKey(info.Selector))
+                nivelPorSelector[info.Selector] = info.NivelNav;
+
         foreach (var s in salidas)
         {
             if (s.Selector.Length == 0) continue;
@@ -344,6 +394,15 @@ public sealed class SurfaceMap
 
             string k = f + "\n" + destino;
             if (_edges.ContainsKey(k)) continue;
+
+            // EL NIVEL SE FIJA UNA VEZ. Si esta puerta ya se vio antes en esta app, conserva el
+            // nivel que se le puso entonces —da igual desde dónde se esté mirando ahora—; si es
+            // nueva, pertenece a un nivel por debajo de la pantalla que la revela. Eso es lo que
+            // convierte «qué abre qué» en una jerarquía estable, en vez de un reflejo del paseo.
+            int nivelPuerta = nivelPorSelector.TryGetValue(s.Selector, out int ya)
+                ? ya
+                : (nivelAqui >= 0 ? nivelAqui + 1 : -1);
+
             _edges[k] = new EdgeInfo
             {
                 Selector = s.Selector,
@@ -353,6 +412,8 @@ public sealed class SurfaceMap
                 ActionType = EsContenido(s.ControlType) ? "doubleclick" : "click",
                 Kind = SafeToClick.Clasificar(s.Label, s.ControlType),
                 Explored = deducido.Length > 0,
+                Nivel = s.Grupo,
+                NivelNav = nivelPuerta,
             };
         }
         Save();
@@ -517,7 +578,30 @@ public sealed class SurfaceMap
         ResolverPuertasIguales(selector, t, controlType);
 
         if (!_nodes.ContainsKey(t) && _nodes.Count < MaxNodes) _nodes[t] = new NodeInfo();
-        if (_nodes.TryGetValue(t, out var n)) { n.Visits++; n.LastSeen = DateTime.UtcNow; }
+        if (_nodes.TryGetValue(t, out var n))
+        {
+            n.Visits++; n.LastSeen = DateTime.UtcNow;
+
+            // La pantalla que hay tras una puerta vive en el nivel de esa puerta. Se toma el MENOR
+            // encontrado: si a un mismo sitio se llega por dos puertas de niveles distintos, su
+            // nivel es el del camino más corto — que es lo que significa «cuántas puertas hay que
+            // abrir para verlo», no «cuántas abrí yo esta vez».
+            // La puerta se busca por su SELECTOR, no por «de aquí a allí»: antes de cruzarla no
+            // tenía destino conocido —era «?selector»— así que buscarla por el par origen→destino
+            // no la encontraba nunca y el nivel se quedaba sin asignar (2026-08-04). El selector es
+            // lo único que la identifica desde que se ve hasta después de cruzarla.
+            int nivelPuerta = -1;
+            foreach (var (fr, _, info) in Edges())
+                if (info.NivelNav >= 0
+                    && string.Equals(info.Selector, selector, StringComparison.Ordinal)
+                    && AppDe(fr).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase))
+                { nivelPuerta = info.NivelNav; break; }
+
+            if (nivelPuerta < 0 && _nodes.TryGetValue(f, out var origen) && origen.Nivel >= 0)
+                nivelPuerta = origen.Nivel + 1;
+
+            if (nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
+        }
 
         string k = f + "\n" + t;
         if (!_edges.TryGetValue(k, out var e)) { e = new EdgeInfo(); _edges[k] = e; }
