@@ -752,7 +752,15 @@ public sealed class GraphExplorerWindow : Window
                 }
                 catch { }
             }
-            if (puertas.Count > 0) _map.ObserveExits(nodo, puertas);
+            if (puertas.Count > 0)
+            {
+                int con = puertas.Count(p => p.Item5.Length > 0);
+                if (con == 0 && els.Count > 0)
+                    LogBus.Log("explorador", $"SIN GRUPO {puertas.Count}/{puertas.Count} · «{els[0].Label}» → "
+                        + U.Graph.Surfaces.UiaSurface.Ancestros(els[0].Native));
+                else LogBus.Log("explorador", $"grupos: {con}/{puertas.Count} salidas con grupo");
+                _map.ObserveExits(nodo, puertas);
+            }
         }
         catch { }
     }
