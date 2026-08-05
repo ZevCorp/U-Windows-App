@@ -223,6 +223,90 @@ public sealed class SurfaceMapTools
     /// (2026-08-04). Aprender una app entera con map_learn_app tampoco servía: eso mapea, tarda, y
     /// no es lo que se pidió. Abrir es un gesto propio y merecía su primitiva.
     /// </summary>
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out System.Drawing.Point p);
+
+    /// <summary>
+    /// LO QUE HAY EN PANTALLA AHORA, leído en vivo, y qué sabe el mapa de cada cosa.
+    ///
+    /// Hasta ahora el asistente solo podía consultar su MEMORIA: todas las herramientas respondían
+    /// desde el grafo guardado. Eso deja un hueco que ya nos mordió —una carpeta recién creada es
+    /// invisible para quien solo recuerda, y el modelo pedía entrar en algo que «no existe» con la
+    /// carpeta delante (2026-08-03)— y además impide lo que el usuario quiere hacer ahora: señalar
+    /// cosas de la interfaz viva para colocarlas en un nivel.
+    ///
+    /// Se marca CADA elemento con lo que el mapa sabe de él, porque mezclar «lo que veo» con «lo que
+    /// recuerdo» sin distinguirlos sería peor que no tener esto: el modelo no podría saber si algo
+    /// es terreno conocido o una novedad.
+    /// </summary>
+    private string LoQueVeo()
+    {
+        var loc = _where();
+        string aqui = loc?.Id ?? "";
+        if (aqui.Length == 0) return "no sé en qué pantalla estoy";
+
+        _lector.Read();
+        var vivos = _lector.Elements
+            .Where(e => e.Label.Length > 0
+                     && !e.ControlType.Equals("text", StringComparison.OrdinalIgnoreCase)
+                     && !e.ControlType.Equals("image", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (vivos.Count == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo";
+
+        var enMapa = _map.ExitsFrom(aqui)
+            .GroupBy(h => h.Info.Label, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var sb = new System.Text.StringBuilder(
+            $"EN PANTALLA AHORA, en «{aqui}» ({vivos.Count} elemento(s)). "
+            + "«nivel N» = lo que el mapa sabe; «fijado» = lo puso una persona; «nuevo» = el mapa aún no lo tiene.\n");
+        foreach (var el in vivos.Take(60))
+        {
+            string estado = "nuevo";
+            if (enMapa.TryGetValue(el.Label, out var h))
+                estado = (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
+                       + (h.Info.NivelFijado ? " · fijado" : "");
+            sb.AppendLine($"  «{el.Label}» ({el.ControlType})  →  {estado}");
+        }
+        if (vivos.Count > 60) sb.AppendLine($"  …y {vivos.Count - 60} más");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// El elemento que hay BAJO EL CURSOR, ahora mismo.
+    ///
+    /// Es la forma barata y exacta de resolver «esto que estoy señalando»: la alternativa era
+    /// mandarle vídeo de la pantalla al modelo y confiar en que acertara mirando píxeles, cuando el
+    /// sistema ya puede preguntarle a Windows qué hay en ese punto y obtener el nombre exacto
+    /// (2026-08-04, a propuesta del usuario de señalar con el ratón).
+    /// </summary>
+    private string LoQueSenala()
+    {
+        try
+        {
+            if (!GetCursorPos(out var p)) return "no pude leer dónde está el cursor";
+            var el = System.Windows.Automation.AutomationElement.FromPoint(
+                new System.Windows.Point(p.X, p.Y));
+            if (el == null) return "bajo el cursor no hay ningún elemento que UIA reconozca";
+
+            var (etiqueta, tipo, sels) = UiaSurface.DescribeElement(el);
+            string nombre = etiqueta.Length > 0 ? etiqueta : (el.Current.Name ?? "").Trim();
+            if (nombre.Length == 0) return $"bajo el cursor hay un {tipo} sin nombre; no puedo referirme a él";
+
+            string aqui = _where()?.Id ?? "";
+            var h = aqui.Length > 0
+                ? _map.ExitsFrom(aqui).FirstOrDefault(x => x.Info.Label.Equals(nombre, StringComparison.OrdinalIgnoreCase))
+                : null;
+            string estado = h == null ? "el mapa aún no lo tiene"
+                : (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
+                  + (h.Info.NivelFijado ? " · fijado a mano" : " · deducido");
+
+            return $"señalas «{nombre}» ({tipo}) · {estado}. "
+                 + $"Para moverlo de nivel: map_set_level con exit=«{nombre}».";
+        }
+        catch (Exception e) { return $"no pude leer lo que hay bajo el cursor: {e.Message}"; }
+    }
+
     private string OpenApp(string app)
     {
         if (app.Length == 0) return "falta `app`: qué abrir (por ejemplo «explorer» o «notepad»)";
@@ -608,7 +692,7 @@ public sealed class SurfaceMapTools
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
-        or "map_set_level";
+        or "map_set_level" or "map_what_i_see" or "map_pointing_at";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -631,6 +715,8 @@ public sealed class SurfaceMapTools
             "map_type" => Type(A("text"), A("target"), A("at")),
             "map_unblock" => Unblock(A("at"), A("choose")),
             "map_open_app" => OpenApp(A("app")),
+            "map_what_i_see" => LoQueVeo(),
+            "map_pointing_at" => LoQueSenala(),
             "map_set_level" => _map.FijarNivel(
                 A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
                 A("exit"),

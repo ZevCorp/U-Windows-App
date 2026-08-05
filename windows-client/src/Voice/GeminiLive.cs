@@ -30,6 +30,7 @@ public sealed class GeminiLive : IDisposable
 
     private readonly SurfaceMapTools _mapa;
     private readonly LiveAudio _audio = new();
+    private readonly LiveVideo _video = new();
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
     private readonly SemaphoreSlim _envio = new(1, 1);
@@ -148,6 +149,11 @@ public sealed class GeminiLive : IDisposable
 
             _audio.Capturado += MandarTrozo;
             _audio.AbrirMicrofono();
+
+            // OJOS. Un fotograma por segundo, con el cursor pintado: es lo que permite decir «esto
+            // que estoy señalando» y que signifique algo. Va por el mismo canal que el audio.
+            _video.Capturado += MandarFotograma;
+            _video.Abrir(1000);
             _ = Task.Run(() => RecibirAsync(_cts.Token));
         }
         catch (Exception e)
@@ -165,6 +171,8 @@ public sealed class GeminiLive : IDisposable
         _audio.Capturado -= MandarTrozo;
         _audio.CerrarMicrofono();
         _audio.Callar();
+        _video.Capturado -= MandarFotograma;
+        _video.Cerrar();
         try { _cts?.Cancel(); } catch { }
         try
         {
@@ -486,6 +494,30 @@ public sealed class GeminiLive : IDisposable
             },
         };
         await EnviarAsync(JsonSerializer.Serialize(msg), _cts?.Token ?? CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Un fotograma de la pantalla, por el mismo caño que el audio.
+    ///
+    /// Va sin cola: si el envío anterior no ha terminado, este se pierde y no pasa nada. Un
+    /// fotograma viejo no informa de nada —lo que importa es lo que hay AHORA— y acumularlos solo
+    /// serviría para retrasar lo siguiente.
+    /// </summary>
+    private async void MandarFotograma(byte[] jpeg)
+    {
+        if (!Viva || _ws?.State != WebSocketState.Open || jpeg.Length == 0) return;
+        try
+        {
+            var msg = new
+            {
+                realtimeInput = new
+                {
+                    video = new { data = Convert.ToBase64String(jpeg), mimeType = "image/jpeg" },
+                },
+            };
+            await EnviarAsync(JsonSerializer.Serialize(msg), _cts?.Token ?? CancellationToken.None);
+        }
+        catch { }
     }
 
     /// <summary>Un único escritor por socket: WebSocket no admite envíos solapados.</summary>
