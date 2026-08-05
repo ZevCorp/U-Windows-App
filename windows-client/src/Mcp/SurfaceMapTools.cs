@@ -287,11 +287,14 @@ public sealed class SurfaceMapTools
     {
         if (que.Length == 0) return "falta `exit`: qué elemento hay que señalar";
 
-        // Se mira la app de la tarea, no lo que haya delante por casualidad. Sin esto, cualquier
-        // ventana que robara el foco entre dos preguntas hacía que «no lo veo» significara en
-        // realidad «estoy mirando otra cosa».
-        if (_ultimaApp.Length > 0) AsegurarFoco(_ultimaApp);
-
+        // MIRAR NO MUEVE NADA. Aquí había un AsegurarFoco para que una ventana intrusa no falseara
+        // la respuesta, y fue un remedio peor que la enfermedad: `_ultimaApp` guarda la última app
+        // sobre la que se ACTUÓ, así que preguntar «¿ves esto?» estando en Chrome arrancaba el foco
+        // al explorador —el usuario lo vio pasar cada vez (2026-08-05)—. Y el problema que
+        // pretendía resolver era de mi banco de pruebas, no de nadie usando esto.
+        //
+        // Ver es pasivo por definición: se lee lo que hay delante, y si no se puede leer se dice.
+        // Un observador que reordena la pantalla para verla mejor ha dejado de observar.
         _lector.Read();
         var candidatos = _lector.Elements.Where(e => e.Label.Length > 0).ToList();
         string donde = _where()?.Id ?? "(pantalla desconocida)";

@@ -146,6 +146,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // es lo que convierte «lo veo» en algo comprobable: si se planta junto a otra cosa, se ve al
         // instante. Es la misma idea que el recuadro, dicha con el cuerpo (2026-08-05).
         Senalador.Senala += (caja, _) => Dispatcher.BeginInvoke(() => IrJuntoA(caja));
+        Senalador.Suelta += () => Dispatcher.BeginInvoke(() => { try { CollapsedFace?.DejarDeMirar(); } catch { } });
         _badge = new LocatorBadge();
         _badge.Show();
         _locator = new SurfaceLocator();
@@ -2081,6 +2082,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             y = Math.Max(area.Top, Math.Min(y, area.Bottom - alto));
 
             Left = x; Top = y;
+
+            // Y los ojos hacia él: si la carita quedó a su derecha, mira a la izquierda.
+            bool aLaIzquierda = (tl.X + br.X) / 2 < x + (ancho / 2);
+            try { CollapsedFace?.MirarHacia(aLaIzquierda); } catch { }
         }
         catch { }
     }

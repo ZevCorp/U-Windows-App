@@ -277,8 +277,43 @@ public sealed class FaceControl : FrameworkElement
     }
 
     /// <summary>Corre los ojos a un lado (sutil), los mantiene un momento y los devuelve al centro.</summary>
+    /// <summary>
+    /// Mirar hacia un lado y QUEDARSE mirando, hasta que se suelte.
+    ///
+    /// Es lo que hace creíble que la carita esté señalando algo: ponerse al lado del elemento y
+    /// seguir mirando al frente es raro, casi desatento. Como <see cref="IrJuntoA"/> la centra en
+    /// vertical con el elemento, la dirección es puramente lateral y basta con EyeShift
+    /// (2026-08-05, pedido por el usuario).
+    ///
+    /// Mientras está fija, los gestos de reposo no le corren los ojos: no se puede estar mirando
+    /// algo y distraerse cada ocho segundos.
+    /// </summary>
+    public void MirarHacia(bool izquierda)
+    {
+        _mirandoFijo = true;
+        double objetivo = (izquierda ? -1 : 1) * 3.5;
+        var ease = new KeySpline(0.3, 0, 0.2, 1);
+        var a = new DoubleAnimationUsingKeyFrames();
+        a.KeyFrames.Add(new SplineDoubleKeyFrame(objetivo, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(320)), ease));
+        BeginAnimation(EyeShiftProperty, a);
+    }
+
+    /// <summary>Vuelve a mirar al frente y deja que los gestos de reposo sigan su curso.</summary>
+    public void DejarDeMirar()
+    {
+        if (!_mirandoFijo) return;
+        _mirandoFijo = false;
+        var ease = new KeySpline(0.3, 0, 0.2, 1);
+        var a = new DoubleAnimationUsingKeyFrames();
+        a.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)), ease));
+        BeginAnimation(EyeShiftProperty, a);
+    }
+
+    private bool _mirandoFijo;
+
     private void LookAround()
     {
+        if (_mirandoFijo) return;   // está mirando algo: no se distrae
         double target = (_rng.Next(2) == 0 ? -1 : 1) * (2.0 + _rng.NextDouble() * 1.5); // ±2..3.5 unidades
         var ease = new KeySpline(0.3, 0, 0.2, 1);
         var a = new DoubleAnimationUsingKeyFrames();
