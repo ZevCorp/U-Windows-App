@@ -225,6 +225,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 MicBtn.Content = viva ? "🔴" : "🎤";
                 MicBtn.ToolTip = viva ? "Conversación en vivo — clic para colgar" : "Hablarle a Ü";
                 if (viva) ShowTalk();
+                // La boca la mueve el audio EN VIVO, que no pasa por VoiceIO: sin esto el gesto
+                // quedaba dibujado y sin nadie que lo moviera (2026-08-05).
+                ActualizarBoca();
             });
             Closed += (_, __) => _vivo?.Dispose();
         }
@@ -2235,6 +2238,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private FaceMood ResolveMood()
     {
+        // LA CONVERSACIÓN EN VIVO ES OTRA VOZ, y esta función solo miraba a la de Windows. Mientras
+        // había una sesión abierta la carita se quedaba en reposo: ni hablando cuando hablaba, ni
+        // escuchando con el micrófono abierto (2026-08-05).
+        if (_vivo?.Viva == true) return _vivo.NivelVoz > 0.004 ? FaceMood.Hablando : FaceMood.Escuchando;
+
         var voz = _voice.Activity;
         if (voz.Escuchando) return FaceMood.Escuchando;
         if (_teaching) return FaceMood.Grabando;
@@ -2256,8 +2264,19 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Face.Mood = mood;
         CollapsedFace.Mood = mood;
         UpdateChip(mood);
-        MoverLaBoca(mood == FaceMood.Hablando);
+        ActualizarBoca();
     });
+
+    /// <summary>
+    /// ¿Hay que estar moviendo la boca? Dos voces distintas pueden estar hablando y la carita no
+    /// tiene por qué saber cuál.
+    ///
+    /// La de Windows avisa por <see cref="FaceMood.Hablando"/>; la de la conversación en vivo NO
+    /// pasa por ahí —su audio sale por otro sitio— y ese fue el fallo: la boca estaba dibujada y
+    /// nadie la movía, porque el único disparador miraba a la voz vieja (2026-08-05).
+    /// </summary>
+    private void ActualizarBoca() =>
+        MoverLaBoca(_mood == FaceMood.Hablando || _vivo?.Viva == true);
 
     // ── La boca, mientras habla ───────────────────────────────────────────────────────────────
 
@@ -2299,14 +2318,24 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _boca.Tick += (_, __) =>
         {
             _bocaPaso++;
-            double nivel = _vivo?.NivelVoz ?? 0;
+            bool enVivo = _vivo?.Viva == true;
 
-            // Sin nivel real, un vaivén: dos ondas que no encajan entre sí, para que no se note el
-            // bucle. Con nivel real manda el nivel — se estira un poco porque la voz normal vive en
-            // la parte baja de la escala y una boca que solo se abre en los gritos no parece hablar.
-            double objetivo = nivel > 0.005
-                ? Math.Min(1, Math.Pow(nivel, 0.55) * 1.45)
-                : 0.35 + 0.30 * Math.Sin(_bocaPaso * 0.9) + 0.15 * Math.Sin(_bocaPaso * 2.3);
+            // CON NIVEL REAL, EL SILENCIO CIERRA LA BOCA. Caer al vaivén cuando el nivel es bajo
+            // haría que la carita moviera los labios durante las pausas de la conversación —y en una
+            // conversación se calla más de lo que se habla—, que es peor que no moverlos: parece que
+            // dice cosas que no dice. El vaivén es solo para la voz de Windows, que no da nivel.
+            double objetivo;
+            if (enVivo)
+            {
+                // Se estira porque la voz normal vive en la parte baja de la escala: una boca que
+                // solo se abre en los gritos no parece que hable.
+                double nivel = _vivo!.NivelVoz;
+                objetivo = nivel <= 0.004 ? 0 : Math.Min(1, Math.Pow(nivel, 0.55) * 1.45);
+            }
+            else
+            {
+                objetivo = 0.35 + 0.30 * Math.Sin(_bocaPaso * 0.9) + 0.15 * Math.Sin(_bocaPaso * 2.3);
+            }
 
             // Se persigue el objetivo en vez de saltar a él: los labios tienen inercia, y sin esto
             // la boca parpadea entre abierta y cerrada como un interruptor.
@@ -2321,6 +2350,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             if (Math.Abs(Face.MouthOpen - abierta) >= 0.01) { Face.MouthOpen = abierta; CollapsedFace.MouthOpen = abierta; }
             if (Math.Abs(Face.MouthRound - redonda) >= 0.02) { Face.MouthRound = redonda; CollapsedFace.MouthRound = redonda; }
+
+            // Y que el resto de la cara acompañe: en vivo se alterna entre hablar y escuchar sin que
+            // nadie más lo avise. RefreshMood no hace nada si el estado no cambió, así que llamarla
+            // en cada cuadro sale gratis.
+            if (_vivo?.Viva == true) RefreshMood();
         };
         _boca.Start();
     }

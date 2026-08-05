@@ -1505,8 +1505,16 @@ public sealed class SurfaceMapTools
             // Se distingue lo cruzado DESDE AQUÍ de lo que está disponible porque la app lo tiene en
             // todas sus pantallas. Las dos sirven para navegar; solo una se comprobó en este sitio.
             string origen = h.Info.Nivel == SurfaceMap.NivelCromo ? "  ·  del nivel (en toda la app)" : "";
+
+            // Sin cruzar y ausente son cosas distintas, y las dos hay que decirlas. Una puerta sin
+            // cruzar se puede tomar YA —se aprende al hacerlo—; una que hoy no está en pantalla, no,
+            // por mucho que el mapa la recuerde (2026-08-05).
+            string estado = SurfaceMap.EsPuerta(h.To) ? "  ·  sin cruzar todavía: al tomarla se aprende" : "";
+            if (!_map.SigueALaVista(desde, h.Info)) estado += "  ·  NO está en pantalla ahora";
+
             sb.AppendLine(h.Info.Selector.Length > 0
-                ? $"  → {h.To}   pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces){origen}"
+                ? $"  → {(SurfaceMap.EsPuerta(h.To) ? "(destino por descubrir)" : h.To)}   "
+                  + $"pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces){origen}{estado}"
                 : $"  → {h.To}   (observado {h.Info.Count} vez/veces, pero NO se sabe con qué acción)");
         }
 

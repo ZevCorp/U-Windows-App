@@ -58,6 +58,10 @@ public sealed class GeminiLive : IDisposable
     /// <summary>El turno se cerró: lo siguiente que se diga empieza en una línea nueva.</summary>
     public event Action? Cerro;
 
+    /// <summary>Llamadas que el modelo retiró: ni se ejecutan ni se responden.</summary>
+    private readonly HashSet<string> _canceladas = new();
+    private readonly object _candadoCancel = new();
+
     private readonly StringBuilder _fraseU = new();
     private readonly StringBuilder _fraseUsuario = new();
 
@@ -151,6 +155,7 @@ public sealed class GeminiLive : IDisposable
             await _ws.ConnectAsync(new Uri($"{Host}?key={Uri.EscapeDataString(clave)}"), _cts.Token);
             await EnviarAsync(Configuracion(modelo), _cts.Token);
 
+            lock (_candadoCancel) _canceladas.Clear();   // sesión nueva, cuentas nuevas
             Viva = true;
             Cambio?.Invoke(true);
             LogBus.Log("voz-viva", $"sesión abierta con «{modelo}»");
@@ -733,6 +738,33 @@ public sealed class GeminiLive : IDisposable
             LogBus.Log("voz-viva", "← " + (plano.Length > 400 ? plano[..400] + "…" : plano));
         }
 
+        // CANCELADA ES CANCELADA. Cuando el usuario habla encima, el modelo retira las llamadas que
+        // había pedido — y aquí no se atendía ese aviso: se seguían ejecutando igual, en serie y
+        // tardando segundos, y encima se le contestaba a algo que él ya había dado por muerto.
+        //
+        // El resultado era un bucle que se comía la conversación: el usuario hablaba, se cancelaban
+        // las llamadas, el modelo volvía a pedir LAS MISMAS, y mientras tanto la cola de trabajo
+        // seguía creciendo con las viejas. Nunca terminaba una tanda, así que nunca llegaba a
+        // responder: «le hablaba y no me respondía» (2026-08-05). Se llegaron a ejecutar llamadas
+        // después de colgar la sesión.
+        if (raiz.TryGetProperty("toolCallCancellation", out var cancelacion)
+            && cancelacion.TryGetProperty("ids", out var ids))
+        {
+            lock (_candadoCancel)
+            {
+                // No crece sin fin: los identificadores son de un solo uso y solo importan mientras
+                // su tanda esté en la cola.
+                if (_canceladas.Count > 200) _canceladas.Clear();
+                foreach (var x in ids.EnumerateArray())
+                {
+                    string s = x.GetString() ?? "";
+                    if (s.Length > 0) _canceladas.Add(s);
+                }
+            }
+            LogBus.Log("voz-viva", "canceladas por el modelo: " + string.Join(", ",
+                ids.EnumerateArray().Select(x => x.GetString())));
+        }
+
         if (raiz.TryGetProperty("serverContent", out var contenido))
         {
             // INTERRUMPIDO: el usuario habló encima. Lo que ya nos habían mandado sigue en nuestra
@@ -824,6 +856,16 @@ public sealed class GeminiLive : IDisposable
                 foreach (var p in a.EnumerateObject())
                     args[p.Name] = p.Value.ValueKind == JsonValueKind.String
                         ? p.Value.GetString() ?? "" : p.Value.ToString();
+
+            // Se mira JUSTO ANTES de cada una, no al empezar la tanda: una tanda de tres puede tardar
+            // diez segundos, y si el usuario habla en la primera, las otras dos ya sobran.
+            bool anulada;
+            lock (_candadoCancel) anulada = id.Length > 0 && _canceladas.Contains(id);
+            if (anulada)
+            {
+                LogBus.Log("voz-viva", $"«{nombre}» se cancela: el modelo la retiró (habló el usuario)");
+                continue;   // y NO se responde: contestar a algo retirado es lo que lo hacía repetirla
+            }
 
             LogBus.Log("voz-viva", $"ejecutando «{nombre}»…");
             string resultado;

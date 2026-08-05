@@ -170,9 +170,15 @@ public sealed class FaceControl : FrameworkElement
     {
         //                              browL browR curvL curvR  eyeOpen squint mouthCurve  width   cornL cornR  acento
         [FaceMood.Reposo] = new(2, 2.5, 0.3, 0.4, 0.85, 0.15, 0.7, 34 * 1.1, 0.3, 0.5, null),
-        [FaceMood.Trabajando] = new(-1, 4, 0.1, 0.5, 0.75, 0.20, 0.7, 34 * 0.95, 0.2, 0.1, UiPalette.Trabajando),
+        // SIN TINTE, los dos. Escuchar y trabajar son los estados en los que más rato pasa la carita
+        // —con la conversación en vivo, «escuchando» es casi toda la sesión— y teñir la cara entera
+        // de verde o de azul durante minutos cansa a quien la tiene siempre delante (2026-08-05,
+        // decidido por el usuario). Su gesto ya los distingue: cejas altas y ojos abiertos para
+        // escuchar, ceja torcida para trabajar. El color se guarda para lo que interrumpe —grabando,
+        // esperando, fallo—, que es cuando merece la pena robar la mirada.
+        [FaceMood.Trabajando] = new(-1, 4, 0.1, 0.5, 0.75, 0.20, 0.7, 34 * 0.95, 0.2, 0.1, null),
         // Cejas altas y ojos bien abiertos: la cara de estar prestando atención.
-        [FaceMood.Escuchando] = new(6, 6, 0.35, 0.35, 1.00, 0.05, 0.6, 34 * 1.05, 0.35, 0.35, UiPalette.Vivo),
+        [FaceMood.Escuchando] = new(6, 6, 0.35, 0.35, 1.00, 0.05, 0.6, 34 * 1.05, 0.35, 0.35, null),
         // Quieta y mirando de frente: «te estoy viendo». La quietud es la señal.
         [FaceMood.Grabando] = new(2, 2, 0.3, 0.3, 0.95, 0.10, 0.4, 34 * 0.8, 0.2, 0.2, UiPalette.Fallo),
         // Asimetría interrogativa: una ceja sube, la otra baja.
