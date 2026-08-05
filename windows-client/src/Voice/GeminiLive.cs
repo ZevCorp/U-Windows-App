@@ -231,6 +231,11 @@ public sealed class GeminiLive : IDisposable
         Ve contando lo que haces mientras lo haces («voy al explorador», «creando la carpeta»), no al
         final: lo que se está viendo en pantalla y lo que oye tienen que ir juntos.
 
+        SEÑALAR ANTES QUE AFIRMAR. Si te preguntan «¿ves X?» o «¿dónde está X?», usa map_show: dice
+        si está y además lo marca en pantalla y lleva la carita a su lado. Contestar «sí, lo veo» sin
+        señalarlo no vale — quien pregunta está comprobando que los dos miráis lo mismo, y solo lo
+        sabe si ve dónde apuntas. Para pulsarlo después, map_take con ese mismo nombre.
+
         LA JERARQUÍA SE PUEDE CORREGIR, y el usuario manda. El sistema deduce solo a qué nivel
         pertenece cada cosa —nivel 1 es la navegación principal de la app, la que está siempre a la
         vista— y acierta casi siempre. Cuando el usuario te diga que algo pertenece o no al nivel
@@ -333,6 +338,11 @@ public sealed class GeminiLive : IDisposable
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
             ("at", "La superficie a la que hay que volver después."),
             ("choose", "La opción a pulsar. Vacío = solo si hay una única salida posible.")),
+        Fn("map_show", "¿VES este elemento? Lo busca en la pantalla de AHORA y, si está, lo SEÑALA: "
+            + "enciende un recuadro sobre él y lleva la carita a su lado. Úsala siempre que el usuario "
+            + "pregunte «¿ves X?» o «¿dónde está X?» — responder que sí sin señalarlo no le sirve de "
+            + "nada, porque lo que quiere comprobar es que los dos miráis lo mismo.",
+            ("exit", "El elemento, por su nombre tal como se ve en pantalla.")),
         Fn("map_set_level", "Corrige a mano a qué NIVEL pertenece una salida, para toda la app y de "
             + "forma permanente. Nivel 1 = navegación principal (los hermanos que están siempre a la "
             + "vista). Úsala cuando el usuario diga cosas como «esto es del menú principal», «esto no "

@@ -273,6 +273,65 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
+    /// ¿Veo esto? Si sí, lo SEÑALA: enciende el recuadro y lleva la carita a su lado.
+    ///
+    /// «¿Ves el botón Nuevo?» tenía una respuesta insuficiente: decir que sí. Quien pregunta no está
+    /// pidiendo un sí — está pidiendo comprobar que los dos miran lo mismo, y para eso hay que
+    /// apuntar (2026-08-05, pedido por el usuario). Señalar convierte una afirmación en algo
+    /// verificable de un vistazo: si el recuadro cae sobre otra cosa, se ve al instante.
+    ///
+    /// Se busca en lo que hay AHORA en pantalla, no en el mapa: la pregunta es «¿lo ves?», no
+    /// «¿te acuerdas de él?».
+    /// </summary>
+    private string Mostrar(string que)
+    {
+        if (que.Length == 0) return "falta `exit`: qué elemento hay que señalar";
+
+        // Se mira la app de la tarea, no lo que haya delante por casualidad. Sin esto, cualquier
+        // ventana que robara el foco entre dos preguntas hacía que «no lo veo» significara en
+        // realidad «estoy mirando otra cosa».
+        if (_ultimaApp.Length > 0) AsegurarFoco(_ultimaApp);
+
+        _lector.Read();
+        var candidatos = _lector.Elements.Where(e => e.Label.Length > 0).ToList();
+        string donde = _where()?.Id ?? "(pantalla desconocida)";
+
+        // NO HABER MIRADO NO ES NO HABERLO VISTO. Si la lectura vino vacía, decir «no lo veo» sería
+        // afirmar algo que no se ha comprobado — el mismo error que perseguimos en las acciones,
+        // trasladado a la vista (2026-08-05).
+        if (candidatos.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            return $"no he podido leer la pantalla ({donde}): no me devuelve ningún elemento. "
+                 + "No es que «{que}» no esté — es que no llegué a mirar.";
+        }
+
+        var el = candidatos.FirstOrDefault(e => e.Label.Equals(que, StringComparison.OrdinalIgnoreCase))
+              ?? candidatos.FirstOrDefault(e => e.Label.Contains(que, StringComparison.OrdinalIgnoreCase));
+
+        if (el == null)
+        {
+            Ui.Senalador.Soltar();
+            var parecidos = candidatos.Take(12).Select(c => $"«{c.Label}»");
+            return $"NO veo «{que}» en «{donde}» ({candidatos.Count} elementos a la vista). "
+                 + $"Lo que sí veo: {string.Join(", ", parecidos)}…";
+        }
+
+        Ui.Senalador.Senalar(el.Bounds, el.Label);
+        string aqui = _where()?.Id ?? "";
+        var h = aqui.Length > 0
+            ? _map.ExitsFrom(aqui).FirstOrDefault(x => x.Info.Label.Equals(el.Label, StringComparison.OrdinalIgnoreCase))
+            : null;
+        string enMapa = h == null ? "el mapa aún no lo tiene"
+            : (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
+              + (h.Info.NivelFijado ? " · fijado" : "");
+
+        return $"SÍ veo «{el.Label}» ({el.ControlType}) y lo estoy señalando: recuadro encendido y "
+             + $"la carita puesta a su lado. En el mapa: {enMapa}. Para pulsarlo, map_take con "
+             + $"exit=«{el.Label}».";
+    }
+
+    /// <summary>
     /// El elemento que hay BAJO EL CURSOR, ahora mismo.
     ///
     /// Es la forma barata y exacta de resolver «esto que estoy señalando»: la alternativa era
@@ -692,7 +751,7 @@ public sealed class SurfaceMapTools
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
-        or "map_set_level" or "map_what_i_see" or "map_pointing_at";
+        or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -717,6 +776,7 @@ public sealed class SurfaceMapTools
             "map_open_app" => OpenApp(A("app")),
             "map_what_i_see" => LoQueVeo(),
             "map_pointing_at" => LoQueSenala(),
+            "map_show" => Mostrar(A("exit")),
             "map_set_level" => _map.FijarNivel(
                 A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
                 A("exit"),

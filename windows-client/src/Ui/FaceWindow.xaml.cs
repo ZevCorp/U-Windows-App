@@ -142,6 +142,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         // El "location bar de Windows": arranca encendido mostrando el ID de superficie arriba a la
         // derecha. Es la base del scoping de workflows (mismo formato que source_url en Graph).
+        // LA CARITA VA A DONDE MIRA. Cuando el asistente dice que ve un elemento, ponerse a su lado
+        // es lo que convierte «lo veo» en algo comprobable: si se planta junto a otra cosa, se ve al
+        // instante. Es la misma idea que el recuadro, dicha con el cuerpo (2026-08-05).
+        Senalador.Senala += (caja, _) => Dispatcher.BeginInvoke(() => IrJuntoA(caja));
         _badge = new LocatorBadge();
         _badge.Show();
         _locator = new SurfaceLocator();
@@ -2048,6 +2052,39 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// Es la misma regla que ya sigue el vigilante de clics: siempre activo, porque el terreno se
     /// aprende viviendo. Lo que el usuario decide aquí es si quiere VERLO, no si el sistema sabe.
     /// </summary>
+    /// <summary>
+    /// Lleva la carita junto a una caja de pantalla, sin taparla.
+    ///
+    /// Se coloca a la DERECHA del elemento y, si ahí no cabe, a la izquierda: taparlo justo cuando
+    /// se está diciendo «mira esto» sería la peor forma de señalarlo. La caja llega en píxeles
+    /// físicos —como los da UIA— y se convierte aquí, porque el escalado lo sabe la ventana.
+    /// </summary>
+    private void IrJuntoA(Rect fisico)
+    {
+        try
+        {
+            var src = PresentationSource.FromVisual(this);
+            System.Windows.Media.Matrix m = src?.CompositionTarget?.TransformFromDevice
+                ?? System.Windows.Media.Matrix.Identity;
+            var tl = m.Transform(new Point(fisico.X, fisico.Y));
+            var br = m.Transform(new Point(fisico.Right, fisico.Bottom));
+
+            var area = SystemParameters.WorkArea;
+            double ancho = ActualWidth > 0 ? ActualWidth : 160;
+            double alto = ActualHeight > 0 ? ActualHeight : 160;
+
+            double x = br.X + 12;
+            if (x + ancho > area.Right) x = tl.X - ancho - 12;      // no cabe a la derecha: al otro lado
+            x = Math.Max(area.Left, Math.Min(x, area.Right - ancho));
+
+            double y = tl.Y + ((br.Y - tl.Y) / 2) - (alto / 2);      // centrada con el elemento
+            y = Math.Max(area.Top, Math.Min(y, area.Bottom - alto));
+
+            Left = x; Top = y;
+        }
+        catch { }
+    }
+
     private void OnToggleLocator(object sender, RoutedEventArgs e)
     {
         if (_locator == null || _badge == null) return;

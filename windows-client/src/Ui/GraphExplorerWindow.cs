@@ -308,6 +308,10 @@ public sealed class GraphExplorerWindow : Window
             colocada = true;
         };
 
+        // Cuando el asistente dice que ve algo, el recuadro lo señala. Ver Senalador.
+        Senalador.Senala += (caja, _) => Dispatcher.BeginInvoke(() => { try { _overlay.ShowRect(caja); } catch { } });
+        Senalador.Suelta += () => Dispatcher.BeginInvoke(() => { try { _overlay.HideRect(); } catch { } });
+
         Closed += (_, __) => { _refresh.Stop(); _overlay.Close(); _ventanaBarra.Close(); };
         IsVisibleChanged += (_, __) =>
         {
