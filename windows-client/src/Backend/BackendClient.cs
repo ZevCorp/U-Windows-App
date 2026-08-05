@@ -60,6 +60,14 @@ public sealed class BackendClient
             // Contrato Graph: la misma X-API-Key (miracle_…) que ya usa windows-graph.
             _http.DefaultRequestHeaders.Add("X-API-Key", graphConfig.ApiKey);
         }
+
+        // Atribución del consumo de IA del puente consciente (computer-use).
+        // Sin esto, todo el gasto del cerebro quedaría como «sin atribuir» y no
+        // se podría separar del resto de la app de Windows.
+        _http.DefaultRequestHeaders.Add("X-Miracle-App", "windows_app");
+        _http.DefaultRequestHeaders.Add("X-Miracle-Feature", "conscious_bridge");
+        if (!string.IsNullOrWhiteSpace(config.Email))
+            _http.DefaultRequestHeaders.Add("X-Miracle-User-Email", config.Email);
     }
 
     public async Task<TurnResponse> TurnAsync(TurnRequest req, CancellationToken ct)

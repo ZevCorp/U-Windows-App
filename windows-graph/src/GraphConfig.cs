@@ -30,6 +30,17 @@ public sealed class GraphConfig
     /// <summary>Identifica esta instalación en los workflows que graba. Útil con varios clientes.</summary>
     public string AppId { get; set; } = "windows-u";
 
+    /// <summary>
+    /// Correo del operador. Viaja como X-Miracle-User-Email para que Graph pueda
+    /// ATRIBUIR el consumo de IA a una persona y a su organización.
+    ///
+    /// No es una credencial y no autoriza nada: quien autoriza es la X-API-Key.
+    /// Graph resuelve este correo contra `profiles` con service-role antes de
+    /// imputar nada; si no existe, el gasto queda sin atribuir en vez de
+    /// asignarse a quien lo diga el cliente.
+    /// </summary>
+    public string OperatorEmail { get; set; } = "";
+
     /// <summary>Pausa entre pasos al ejecutar un plan. La UI de destino necesita respirar.</summary>
     public int StepDelayMs { get; set; } = 250;
 
