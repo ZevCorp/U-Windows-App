@@ -40,7 +40,16 @@ public static class UiPalette
     /// <summary>Inactivo, sin configurar, sin nada que decir.</summary>
     public static readonly Color Inactivo = Color.FromRgb(0x8A, 0x8A, 0x8E);
 
+    /// <summary>
+    /// La lengua, cuando la carita abre la boca al hablar. No es un color de estado: es el único
+    /// detalle de la cara que no es tinta, y por eso vive aquí y no suelto en el dibujo — el día que
+    /// haya un tema nuevo, los colores de la carita se cambian en un sitio.
+    /// </summary>
+    public static readonly Color Lengua = Color.FromRgb(0xFF, 0x9A, 0xA5);
+
     /// <summary>Pinceles congelados, para no crear uno por repintado.</summary>
+    public static readonly Brush PincelLengua = Frozen(Lengua);
+
     public static readonly Brush VivoBrush = Frozen(Vivo);
     public static readonly Brush TrabajandoBrush = Frozen(Trabajando);
     public static readonly Brush AtencionBrush = Frozen(Atencion);

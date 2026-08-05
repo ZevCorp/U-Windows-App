@@ -40,6 +40,15 @@ public sealed class GeminiLive : IDisposable
     /// <summary>Está en curso una sesión de voz viva.</summary>
     public bool Viva { get; private set; }
 
+    /// <summary>
+    /// Lo fuerte que está sonando Ü ahora mismo (0–1). La carita mueve la boca con esto.
+    ///
+    /// Es la MISMA medida que usa el detector de voz para no confundir su propio eco con el usuario:
+    /// una sola fuente para «cuánto estoy sonando», y así la boca no puede acabar diciendo una cosa
+    /// distinta de lo que se oye.
+    /// </summary>
+    public double NivelVoz => Viva ? _audio.NivelSalida : 0;
+
     /// <summary>Texto para la carita: lo que se oye, lo que responde, y qué está haciendo.</summary>
     public event Action<string>? Dice;
 

@@ -2256,7 +2256,74 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Face.Mood = mood;
         CollapsedFace.Mood = mood;
         UpdateChip(mood);
+        MoverLaBoca(mood == FaceMood.Hablando);
     });
+
+    // ── La boca, mientras habla ───────────────────────────────────────────────────────────────
+
+    private System.Windows.Threading.DispatcherTimer? _boca;
+    private double _bocaAbierta;
+    private int _bocaPaso;
+
+    /// <summary>
+    /// Abre y cierra la boca al ritmo de lo que se está diciendo.
+    ///
+    /// El movimiento sale del VOLUMEN REAL de la voz, no de un bucle de animación: una boca que se
+    /// mueve sola mientras suena una frase acaba desincronizada de ella y se nota enseguida —es la
+    /// diferencia entre un muñeco que habla y uno al que le suena un altavoz detrás—. Ese volumen ya
+    /// lo mide la capa de voz para otra cosa (no confundir su propio eco con el usuario), así que
+    /// aquí se aprovecha en vez de medirlo por segunda vez.
+    ///
+    /// Cuando no hay sesión viva —la voz vieja de Windows no da nivel— se cae a un vaivén, que es
+    /// mejor que una boca quieta mientras se oye hablar.
+    ///
+    /// 16 cuadros por segundo y no 60: la boca cambia de FORMA, así que cada cuadro es un repintado
+    /// de la carita entera, y esto solo puede correr mientras habla. A 16 el habla ya se lee como
+    /// habla —el cine mudo iba a esa velocidad— y cuesta la cuarta parte.
+    /// </summary>
+    private void MoverLaBoca(bool hablando)
+    {
+        if (!hablando)
+        {
+            _boca?.Stop();
+            _boca = null;
+            _bocaAbierta = 0;
+            Face.MouthOpen = 0;
+            CollapsedFace.MouthOpen = 0;
+            return;
+        }
+        if (_boca != null) return;
+
+        _boca = new System.Windows.Threading.DispatcherTimer(
+            System.Windows.Threading.DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(60) };
+        _boca.Tick += (_, __) =>
+        {
+            _bocaPaso++;
+            double nivel = _vivo?.NivelVoz ?? 0;
+
+            // Sin nivel real, un vaivén: dos ondas que no encajan entre sí, para que no se note el
+            // bucle. Con nivel real manda el nivel — se estira un poco porque la voz normal vive en
+            // la parte baja de la escala y una boca que solo se abre en los gritos no parece hablar.
+            double objetivo = nivel > 0.005
+                ? Math.Min(1, Math.Pow(nivel, 0.55) * 1.45)
+                : 0.35 + 0.30 * Math.Sin(_bocaPaso * 0.9) + 0.15 * Math.Sin(_bocaPaso * 2.3);
+
+            // Se persigue el objetivo en vez de saltar a él: los labios tienen inercia, y sin esto
+            // la boca parpadea entre abierta y cerrada como un interruptor.
+            _bocaAbierta += (Math.Max(0, Math.Min(1, objetivo)) - _bocaAbierta) * 0.55;
+
+            // Redondeado a centésimas: por debajo de eso no se ve nada y solo serían repintados.
+            double abierta = Math.Round(_bocaAbierta, 2);
+            // La forma acompaña pero no va a la par: abrir mucho tiende a «a», poco a «o», y una
+            // onda lenta desempata para que no salga siempre la misma cara.
+            double redonda = Math.Round(Math.Max(0, Math.Min(1,
+                (1 - abierta) * 0.7 + 0.3 * (0.5 + 0.5 * Math.Sin(_bocaPaso * 0.37)))), 2);
+
+            if (Math.Abs(Face.MouthOpen - abierta) >= 0.01) { Face.MouthOpen = abierta; CollapsedFace.MouthOpen = abierta; }
+            if (Math.Abs(Face.MouthRound - redonda) >= 0.02) { Face.MouthRound = redonda; CollapsedFace.MouthRound = redonda; }
+        };
+        _boca.Start();
+    }
 
     /// <summary>
     /// Sustituye al viejo <c>SetThinking</c>: los sitios que ejecutan siguen diciendo «estoy
