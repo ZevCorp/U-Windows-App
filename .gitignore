@@ -19,3 +19,6 @@ release/
 
 # graphify: respaldos automaticos del grafo (no se comparten)
 graphify-out/20*/
+
+# Temporales que deja el compilador de WPF al construir
+*_wpftmp.csproj
