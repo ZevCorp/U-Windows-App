@@ -89,8 +89,18 @@ public static class EdgeSnap
         // día obligó a cerrarla: sin tope, un gesto rápido la mandaba de una esquina a la otra y el
         // usuario la perdía de vista. Con el tope el gesto se nota y la carita nunca se va tan lejos
         // como para tener que buscarla.
-        double saltoY = Math.Clamp(vy * 0.14, -wa.Height * 0.45, wa.Height * 0.45);
+        // Y LA FUERZA DECIDE CUÁNTO. Un empujón flojo la mueve un palmo; uno fuerte la manda al otro
+        // extremo del borde. Eso es lo que hace que el gesto se sienta como tuyo y no como una orden
+        // con una única respuesta posible: la misma dirección con distinta fuerza tiene que dar
+        // distinto resultado (2026-08-06, pedido por el usuario).
+        double saltoY = Math.Clamp(vy * 0.22, -wa.Height * 0.55, wa.Height * 0.55);
         double destTop = Math.Clamp(win.Top + saltoY, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
+
+        // Aserción viva: «la fuerza no se nota» es una queja sin número, y con la pantalla de por
+        // medio no se puede comprobar desde fuera —un lanzamiento fuerte choca contra el borde y da
+        // el mismo resultado que uno flojo que también llegó—. Esto dice lo que el gesto PIDIÓ.
+        Diagnostics.LogBus.Log("ui", $"gesto: v=({vx:0},{vy:0}) dip/s · pide bajar {saltoY:0} px · "
+            + $"queda en y={destTop:0} (tope {wa.Bottom - h:0})");
 
         double dx = destLeft - win.Left, dy = destTop - win.Top;
         double dist = Math.Sqrt(dx * dx + dy * dy);
@@ -99,10 +109,17 @@ public static class EdgeSnap
 
         // Solo distancia. Un recorrido corto se resuelve rápido, uno largo se ve viajar.
         //
-        // Subido de (300 + 0,62·d, tope 900) porque cruzar la pantalla en 0,9 s no se lee como un
-        // viaje, se lee como un corte: el ojo ve la salida y la llegada y se pierde el medio, que es
-        // justo donde está la sensación de peso. Con esto un lado a otro son ~1,3 s (2026-08-06).
-        double ms = Math.Clamp(420 + dist * 0.95, 380, 1400);
+        // Subido de (300 + 0,62·d, tope 900) porque cruzar la pantalla en 0,9 s no se leía como un
+        // viaje sino como un corte: el ojo ve la salida y la llegada y se pierde el medio, que es
+        // donde está la sensación de peso. Luego bajado de 0,95 a 0,78 —un lado a otro pasa de ~1,3 s
+        // a ~1,05— porque con el arco ya puesto el recorrido se lee solo y 1,3 s se hacía largo.
+        //
+        // Y LA FUERZA ACORTA: un lanzamiento seco llega antes que uno flojo aunque recorran lo
+        // mismo, que es lo que distingue empujar de posar. Poco, porque el ímpetu tiene que notarse
+        // sobre todo en el arranque de la curva; recortar mucho el viaje fue lo que en su día hizo
+        // que pareciera un teletransporte.
+        double fuerza = Math.Min(1, Math.Sqrt(vx * vx + vy * vy) / 5000);
+        double ms = Math.Clamp((360 + dist * 0.78) * (1 - fuerza * 0.22), 320, 1200);
         double segundos = ms / 1000.0;
 
         // El viaje se lanza ANTES de avisar a nadie: `alLlegar` reordena la barra hacia el lado

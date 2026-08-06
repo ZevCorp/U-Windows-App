@@ -103,7 +103,7 @@ public sealed class FaceGestures
         _downLeft = _win.Left;
         _downTop = _win.Top;
         _lastCursor = _downCursor;
-        _lastTick = Environment.TickCount64;
+        _lastTick = System.Diagnostics.Stopwatch.GetTimestamp();
         _vx = _vy = 0;
         _pressed = true;
         _moved = false;
@@ -131,9 +131,15 @@ public sealed class FaceGestures
             _win.Left = _downLeft + dx / _scaleX;
             _win.Top = _downTop + dy / _scaleY;
 
-            long now = Environment.TickCount64;
-            double dt = now - _lastTick;
-            if (dt > 0)
+            // EL RELOJ TIENE QUE VER EL GESTO. Esto medía con Environment.TickCount64, que avanza a
+            // saltos de ~15 ms: un lanzamiento seco dura 60 ms enteros, así que la mayoría de las
+            // muestras caían con dt=0 y se descartaban, y las pocas que pasaban repartían el
+            // recorrido sobre un tiempo redondeado hacia arriba. El resultado es que un gesto rápido
+            // y uno lento devolvían casi la misma velocidad —medido: 295 px contra 338— y por eso la
+            // fuerza no cambiaba nada por más que se ajustara la proyección (2026-08-06).
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            double dt = (now - _lastTick) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            if (dt > 0.5)   // medio milisegundo: por debajo el ratón no ha llegado a moverse
             {
                 // Velocidad instantánea, MUY suavizada con la anterior.
                 //
