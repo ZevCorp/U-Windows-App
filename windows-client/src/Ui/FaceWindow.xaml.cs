@@ -58,6 +58,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private UiInspector? _inspector;
     private SurfaceLocator? _locator;
     private LocatorBadge? _badge;
+
+    /// <summary>La lista de lo que va pasando. Ver <see cref="PanelDeAcciones"/>.</summary>
+    private PanelDeAcciones? _acciones;
+
     private WorkflowMapWindow? _map;
     // El mapa base del computador (la capa gris): se alimenta SIEMPRE del caudal del locator,
     // esté o no abierta la visualización — el terreno se acumula mientras el usuario vive su día.
@@ -229,6 +233,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // el modelo no hacía nada (2026-08-04). Contar lo que haces no puede costarte hacerlo.
             _vivo.Dice += t => Dispatcher.BeginInvoke(() => { AppendChat(t); SetStatus(t); });
             _vivo.Cerro += () => Dispatcher.BeginInvoke(() => _turnoAbierto = false);
+            // La maquinaria va a su propio panel y NO a la burbuja: la burbuja reemplaza, así que un
+            // «abriendo Descargas…» borraba la última frase de la conversación, y además solo dejaba
+            // ver el último paso. En el panel se acumulan y se ve la secuencia entera.
+            _vivo.Accion += (texto, listo) => Dispatcher.BeginInvoke(() =>
+            {
+                _acciones ??= new PanelDeAcciones();
+                if (listo) _acciones.Termina(texto, !texto.StartsWith("✋"));
+                else { _acciones.Empieza(texto); SetStatus(texto); }
+            });
             _vivo.Cambio += viva => Dispatcher.Invoke(() =>
             {
                 MicBtn.Content = viva ? "🔴" : "🎤";

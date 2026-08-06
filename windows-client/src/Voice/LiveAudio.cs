@@ -45,6 +45,15 @@ public sealed class LiveAudio : IDisposable
     ///
     /// Baja sola: se queda con el pico reciente y lo va soltando, para que el silencio entre dos
     /// palabras de una misma frase no la ponga a cero y abra la puerta al eco de la siguiente.
+    ///
+    /// SONAR NO ES RECIBIR (2026-08-06). El modelo manda el audio mucho más rápido de lo que se
+    /// oye: una frase de cinco segundos entra en menos de uno y se queda en la cola. Medir el
+    /// tiempo desde que LLEGA el último trozo dejaba esto en cero a los 400 ms, con el altavoz
+    /// todavía hablando —o sea, en cero justo cuando hace falta—. Y de ahí colgaban las tres
+    /// defensas contra el eco de GeminiLive: aprender la ganancia, subir el umbral y exigir dos
+    /// tramos seguidos. Las tres se apagaban a la vez y Ü se cortaba a media frase oyéndose a sí
+    /// misma. Mientras quede cola estamos sonando y no hay nada que soltar; la caída empieza
+    /// cuando la cola se vacía.
     /// </summary>
     public double NivelSalida
     {
@@ -52,8 +61,14 @@ public sealed class LiveAudio : IDisposable
         {
             lock (_candado)
             {
+                if (_cola != null && _cola.BufferedBytes > 0)
+                {
+                    _cuandoSalida = DateTime.UtcNow;
+                    return _nivelSalida;
+                }
                 double caida = (DateTime.UtcNow - _cuandoSalida).TotalMilliseconds / 400.0;
-                return caida >= 1 ? 0 : _nivelSalida * (1 - caida);
+                if (caida >= 1) { _nivelSalida = 0; return 0; }
+                return _nivelSalida * (1 - caida);
             }
         }
     }
@@ -132,8 +147,14 @@ public sealed class LiveAudio : IDisposable
             // Se anota lo fuerte que va a sonar esto. Se queda el pico más alto mientras no haya
             // decaído: dentro de una frase hay silencios cortos, y dejar caer el nivel en cada uno
             // abriría la puerta al eco de la sílaba siguiente.
+            //
+            // Se compara contra el pico CRUDO, no contra el getter: el getter devuelve el valor ya
+            // soltado, así que un trozo flojo lo superaba y bajaba el pico sostenido en vez de
+            // mantenerlo. El getter lo pone a cero solo cuando la cola se vacía y termina la caída,
+            // que es cuando empieza de verdad una frase nueva.
             double p = Pico(pcm);
-            if (p >= NivelSalida) { _nivelSalida = p; _cuandoSalida = DateTime.UtcNow; }
+            if (p >= _nivelSalida) _nivelSalida = p;
+            _cuandoSalida = DateTime.UtcNow;
         }
     }
 
