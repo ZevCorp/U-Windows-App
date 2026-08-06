@@ -88,6 +88,15 @@ public sealed class GraphExplorerWindow : Window
 
         var (nodos, aristas) = _map.OlvidarTodo();
         _ultimaCorrida.Clear();
+
+        // Y LOS SITIOS PISADOS. El dibujo se alimenta de TRES sitios, no de dos: el mapa, la traza
+        // del recorrido y esta lista de «por aquí ya pasé». Se limpiaban los dos primeros, así que
+        // tras borrar desaparecían las conexiones y los niveles de la derecha —vienen de la traza—
+        // pero los nodos seguían ahí, y todos a la misma altura, porque sin aristas nadie les
+        // asigna profundidad. Se veía como que el borrado no llegaba a los nodos, y en realidad
+        // llegaba: los que se veían eran los de esta lista (2026-08-06, observado por el usuario).
+        _vistos.Clear();
+
         _nodoActual = "";
         _numeradas.Clear();
         _signature = "";              // que el repintado no se salte por «nada ha cambiado»
