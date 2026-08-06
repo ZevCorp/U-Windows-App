@@ -75,7 +75,7 @@ public sealed class CarruselDeApps : Window
         });
         columna.Children.Add(new TextBlock
         {
-            Text = "Doble clic en una para empezar. Esc para cerrar.",
+            Text = "Pulsa una para empezar. Esc para cerrar.",
             Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
             FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 12),
@@ -176,17 +176,19 @@ public sealed class CarruselDeApps : Window
             Padding = new Thickness(6),
             Background = Brushes.Transparent,
             Child = caja,
-            ToolTip = $"Doble clic para que aprenda «{app.Nombre}»",
+            ToolTip = $"Que aprenda «{app.Nombre}»",
         };
         marco.MouseEnter += (_, __) => marco.Background =
             new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
         marco.MouseLeave += (_, __) => marco.Background = Brushes.Transparent;
 
-        // DOBLE clic, no simple: es el gesto con el que se abre una aplicación en todo Windows, y
-        // aquí además evita que un roce del ratón lance un mapeo entero por accidente.
-        marco.MouseLeftButtonUp += (_, e) =>
+        // UN CLIC. Estaba pedido el doble, y no llegaba nunca: en WPF, MouseLeftButtonUp informa
+        // siempre de ClickCount = 1 —ese contador solo vale en el evento de BAJADA—, así que la
+        // condición «si no son dos, no hagas nada» descartaba todos los clics. El doble no aporta
+        // aquí ninguna protección real: esta ventana no está para otra cosa que elegir, y quien
+        // abre el catálogo ya ha dicho lo que quiere (2026-08-05).
+        marco.MouseLeftButtonUp += (_, __) =>
         {
-            if (e.ClickCount < 2) return;
             LogBus.Log("carrusel", $"elegida «{app.Nombre}» para mapear");
             Elegida?.Invoke(app);
             Close();

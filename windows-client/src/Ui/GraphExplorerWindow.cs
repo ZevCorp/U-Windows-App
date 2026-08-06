@@ -72,6 +72,22 @@ public sealed class GraphExplorerWindow : Window
     private readonly Button _crawlBtn;
     private Button _carruselBtn = null!;
     private CarruselDeApps? _carrusel;
+
+    /// <summary>
+    /// Pintar un NÚMERO en cada puerta. Se enciende mientras se le enseña una app a un modelo de
+    /// visión: es lo que le permite señalar «el 7» en vez de «ese de la izquierda».
+    ///
+    /// Apagado el resto del tiempo, a propósito: un número encima de cada elemento es ruido cuando
+    /// nadie lo está leyendo, y esto vive permanentemente encima de la app del usuario.
+    /// </summary>
+    public bool Numerar { get; set; }
+
+    private readonly Dictionary<int, UiaReader.UiElement> _numeradas = new();
+
+    /// <summary>Lo que hay numerado ahora mismo, para quien tenga que traducir «el 7» a un elemento
+    /// de verdad. Copia: la lista se rehace en cada refresco.</summary>
+    public IReadOnlyDictionary<int, UiaReader.UiElement> PuertasNumeradas() =>
+        new Dictionary<int, UiaReader.UiElement>(_numeradas);
     private readonly Button _collapseBtn;
     private readonly Button _graphBtn;
     private ScrollViewer _lista = null!;
@@ -674,6 +690,8 @@ public sealed class GraphExplorerWindow : Window
         var fuente = PresentationSource.FromVisual(this);
         Matrix aPantalla = fuente?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
 
+        _numeradas.Clear();   // los números valen para ESTA pantalla; en otra son otros elementos
+
         foreach (var el in els)
         {
             bool sabida = conocidas.TryGetValue(el.Label, out var salida);
@@ -691,10 +709,25 @@ public sealed class GraphExplorerWindow : Window
                 + (primerNivel ? "  ·  nivel 1" : "")
                 + (aMano ? " (fijado a mano)" : "");
 
+            // EL NÚMERO ES EL PUENTE ENTRE VER Y ACCIONAR. Cuando un modelo de visión mira la
+            // pantalla y dice «el menú lateral», nadie sabe a qué elementos se refiere: describir
+            // no identifica. Con un número encima de cada puerta, puede decir «el 7 y el 12» y eso
+            // se traduce al elemento exacto del árbol UIA, que es lo único que se puede pulsar.
+            // La imagen le da el sentido; el número, la identidad (2026-08-05).
+            int numero = _numeradas.Count + 1;
+            if (Numerar) _numeradas[numero] = el;
+
             var chip = new Border
             {
-                Width = 12, Height = 12,
-                CornerRadius = new CornerRadius(6),
+                Width = Numerar ? 18 : 12, Height = Numerar ? 18 : 12,
+                CornerRadius = new CornerRadius(Numerar ? 9 : 6),
+                Child = Numerar ? new TextBlock
+                {
+                    Text = numero.ToString(),
+                    Foreground = Brushes.White, FontSize = 10, FontWeight = FontWeights.Bold,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                } : null,
                 // Azul = nivel principal; verde = arista ya recorrida; gris = potencial, sin explorar.
                 Background = new SolidColorBrush(primerNivel
                     ? Color.FromArgb(aMano ? (byte)0xAA : (byte)0x88, 0x21, 0x96, 0xF3)
