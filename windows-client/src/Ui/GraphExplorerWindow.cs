@@ -1795,10 +1795,16 @@ public sealed class GraphExplorerWindow : Window
             // posiciones dan la misma firma—, así que el azul no llegaba hasta que un clic del
             // usuario forzaba una relectura: se acababa de enseñar y en pantalla no se veía nada
             // (2026-08-06, observado por el usuario). Se invalida la firma y se repinta.
+            // LOS NÚMEROS SE APAGAN ANTES DE PREGUNTAR POR EL COLOR. Mientras se numera, los puntos
+            // se pintan oscuros para que el número se lea — así que preguntar «¿están azules?» con
+            // los números todavía puestos es preguntar por algo que no puede estar en pantalla. Se
+            // apagan, se repinta, y entonces se pregunta (2026-08-06, observado por el usuario: «no
+            // se pusieron azules aunque dijo que el maestro lo hizo»).
+            Numerar = false;
             _signature = "";
             _numeradas.Clear();
             RefreshEdges();
-            await Task.Delay(500);   // que el repintado llegue ANTES de preguntar qué se ve
+            await Task.Delay(900);   // que el repintado llegue ANTES de preguntar qué se ve
 
             await PasoAPaso.EsperarAsync(
                 leccion == null ? "El maestro no pudo responder" : "Lección aplicada",

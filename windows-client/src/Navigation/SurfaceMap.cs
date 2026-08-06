@@ -1032,11 +1032,21 @@ public sealed class SurfaceMap
 
     /// <summary>Copia de una arista marcada como heredada del nivel. Copia y no la misma: escribir
     /// en el original convertiría en «heredada» la arista real de la pantalla donde sí se cruzó.</summary>
+    /// <remarks>
+    /// EL NIVEL VIAJA CON LA COPIA. Se copiaba todo menos <see cref="EdgeInfo.NivelNav"/> y
+    /// <see cref="EdgeInfo.NivelFijado"/>, así que lo heredado llegaba a cada pantalla con nivel
+    /// −1: el sitio donde se enseñó lo sabía y ninguno de los demás. Y desde que lo DECLARADO entra
+    /// precisamente por aquí, el maestro fijaba quince elementos al primer nivel y no se ponía
+    /// azul ni uno —lo aplicado era cierto y lo que se dibujaba, otra cosa (2026-08-06, observado
+    /// por el usuario). Un nivel que no viaja con la salida no es un nivel de la app.
+    /// </remarks>
     private static EdgeInfo Heredada(EdgeInfo o) => new()
     {
         Count = o.Count, Selector = o.Selector, Label = o.Label, ControlType = o.ControlType,
         Alternatives = o.Alternatives, ClickPos = o.ClickPos, Explored = o.Explored,
         ActionType = o.ActionType, Kind = o.Kind, Nivel = NivelCromo,
+        NivelNav = o.NivelNav, NivelFijado = o.NivelFijado,
+        VistaPorUltimaVez = o.VistaPorUltimaVez,
     };
 
     private readonly Dictionary<string, List<Hop>> _cromo = new(StringComparer.OrdinalIgnoreCase);
