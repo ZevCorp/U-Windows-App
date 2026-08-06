@@ -72,6 +72,7 @@ public sealed class GraphExplorerWindow : Window
     private readonly Button _crawlBtn;
     private Button _carruselBtn = null!;
     private Button _limpiarBtn = null!;
+    private Button _pasoBtn = null!;
     private CarruselDeApps? _carrusel;
 
     /// <summary>
@@ -306,11 +307,37 @@ public sealed class GraphExplorerWindow : Window
         };
         _limpiarBtn.Click += (_, __) => LimpiarGrafo();
 
+        // PARAR EN CADA PASO. El log cuenta lo que el sistema CREE que hizo; parar deja ver lo que
+        // pasó de verdad en la pantalla, que es justo donde estaba el fallo de los puntos sin
+        // refrescar (2026-08-06, pedido por el usuario).
+        _pasoBtn = new Button
+        {
+            Content = "⏯",
+            Width = 26, Height = 26, FontSize = 12,
+            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Paso a paso: parar en cada paso del mapeo y poder comentarlo",
+        };
+        _pasoBtn.Click += (_, __) =>
+        {
+            PasoAPaso.Activo = !PasoAPaso.Activo;
+            _pasoBtn.Background = new SolidColorBrush(PasoAPaso.Activo
+                ? Color.FromArgb(0x66, 0xFF, 0xB3, 0x00) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+            _status.Text = PasoAPaso.Activo
+                ? "paso a paso ENCENDIDO: el mapeo se detendrá en cada paso"
+                : "paso a paso apagado";
+        };
+
         var iconos = new StackPanel { Orientation = Orientation.Horizontal };
         iconos.Children.Add(_collapseBtn);
         iconos.Children.Add(_crawlBtn);
         iconos.Children.Add(_carruselBtn);
         iconos.Children.Add(_limpiarBtn);
+        iconos.Children.Add(_pasoBtn);
 
         _barra = new Border
         {
@@ -1623,6 +1650,12 @@ public sealed class GraphExplorerWindow : Window
         // Que esté delante no es que esté lista: se le da tiempo a terminar de pintarse.
         await Task.Delay(1200);
 
+        await PasoAPaso.EsperarAsync(
+            $"«{app.Nombre}» abierta",
+            $"la pantalla pasó de «{(antes.Length > 0 ? antes : "(nada)")}» a «{ahora}»\n\n"
+            + "MIRA: ¿los puntos flotantes son ya los de esta app, o siguen siendo los de la "
+            + "anterior? Si siguen siendo los de antes, dímelo aquí.");
+
         await CrawlAsync();
     }
 
@@ -1669,6 +1702,15 @@ public sealed class GraphExplorerWindow : Window
             await Task.Delay(150);
             if (!_reading && _numeradas.Count == 0 && i % 10 == 9) RefreshEdges();
         }
+
+        await PasoAPaso.EsperarAsync(
+            $"Puntos numerados sobre «{app}»",
+            $"pantalla: {loc.Id}\n"
+            + $"puntos: {_numeradas.Count}\n"
+            + $"leídos de: {_ultimoProcPintado}\n\n"
+            + "MIRA: ¿los números están sobre la app correcta, o sobre otra que quedó detrás?\n"
+            + string.Join("\n", PuertasNumeradas().OrderBy(kv => kv.Key).Take(20)
+                .Select(kv => $"  {kv.Key}. «{kv.Value.Label}» ({kv.Value.ControlType})")));
         if (_numeradas.Count == 0)
         {
             LogBus.Log("maestro", "los puntos no llegaron a numerarse: no se enseña");
@@ -1680,11 +1722,31 @@ public sealed class GraphExplorerWindow : Window
 
         try
         {
+            // La app se vuelve a mirar AQUÍ, no la de hace quince segundos: entre pedir los puntos y
+            // tenerlos puede haber cambiado el foco, y entonces «app» diría una cosa y los puntos
+            // otra. Se enseña lo que hay delante ahora, o no se enseña.
+            var ahora = _where();
+            string appAhora = ahora == null ? "" : SurfaceMap.AppDe(ahora.Id);
+            if (appAhora.Length == 0 || !appAhora.Equals(app, StringComparison.OrdinalIgnoreCase))
+            {
+                LogBus.Log("maestro", $"se iba a enseñar «{app}» y ahora hay «{appAhora}»: no se enseña una mezcla");
+                _status.Text = "cambió la app mientras miraba; no enseño una mezcla";
+                return;
+            }
+
             var maestro = new Navigation.MaestroDeApps(_map);
-            var leccion = await maestro.EnsenarAsync(app, loc.Id, PuertasNumeradas(), CancellationToken.None);
+            var leccion = await maestro.EnsenarAsync(app, ahora!.Id, PuertasNumeradas(),
+                CancellationToken.None, Uia.AppAligner.VentanaDelUsuario());
             _status.Text = leccion == null
                 ? "no pude consultar al maestro; sigo con el recorrido"
                 : $"jerarquía aprendida: {leccion.Resumen}";
+
+            await PasoAPaso.EsperarAsync(
+                leccion == null ? "El maestro no pudo responder" : "Lección aplicada",
+                leccion == null
+                    ? "No hubo lección. Mira el log de «maestro» para ver por qué."
+                    : $"{leccion.Nivel1} al primer nivel, {leccion.Nivel2} al segundo.\n\n{leccion.Resumen}\n\n"
+                      + "MIRA: ¿los puntos azules están sobre la navegación permanente de la app?");
         }
         catch (Exception e)
         {

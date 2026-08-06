@@ -44,8 +44,16 @@ public sealed class MaestroDeApps
     /// <param name="app">A qué aplicación pertenece lo que se ve («explorer.exe»).</param>
     /// <param name="superficie">Dónde estamos, para que pueda situar el segundo nivel.</param>
     /// <param name="numeradas">Número pintado en pantalla → elemento real.</param>
+    /// <param name="ventana">
+    /// La ventana EXACTA de la que salieron los puntos numerados. Se pasa en vez de volver a
+    /// buscarla porque entre leer los puntos y sacar la foto pasan segundos, y en esos segundos el
+    /// foco puede irse a otra app: se llegó a leer los puntos del explorador y aplicar la lección a
+    /// claude.exe, mezclando tres momentos distintos en una sola enseñanza (2026-08-06). La app, los
+    /// puntos y la foto tienen que venir de la misma ventana y del mismo instante.
+    /// </param>
     public async Task<Leccion?> EnsenarAsync(string app, string superficie,
-        IReadOnlyDictionary<int, UiaReader.UiElement> numeradas, CancellationToken ct)
+        IReadOnlyDictionary<int, UiaReader.UiElement> numeradas, CancellationToken ct,
+        IntPtr ventana)
     {
         string clave = Clave();
         if (clave.Length == 0) { LogBus.Log("maestro", "sin GEMINI_API_KEY: no se puede enseñar"); return null; }
@@ -62,10 +70,19 @@ public sealed class MaestroDeApps
         // normales: en el navegador la app es el DOMINIO —«canva.com», que no es ningún proceso— y
         // el Panel de control vive dentro de explorer.exe. Las dos veces se dijo «no encuentro la
         // ventana» con la ventana delante (2026-08-05). Lo que hay delante es lo que se enseña.
-        string? foto = Screenshotter.CaptureVentanaBase64Png(AppAligner.VentanaDelUsuario());
+        // LA MISMA VENTANA DE LA QUE SALIERON LOS PUNTOS. Si entre medias el foco se fue a otra
+        // app, enseñar sería mezclar: puntos de una, foto de otra, y la lección aplicada a una
+        // tercera. Antes que enseñar mal, no enseñar.
+        if (ventana == IntPtr.Zero || AppAligner.VentanaDelUsuario() != ventana)
+        {
+            LogBus.Log("maestro", $"la ventana cambió mientras se preparaba la lección de «{app}»: no se enseña");
+            return null;
+        }
+
+        string? foto = Screenshotter.CaptureVentanaBase64Png(ventana);
         if (foto == null)
         {
-            LogBus.Log("maestro", $"no hay ventana a la vista de «{app}»: no se enseña a ciegas");
+            LogBus.Log("maestro", $"no pude fotografiar la ventana de «{app}»: no se enseña a ciegas");
             return null;
         }
 
