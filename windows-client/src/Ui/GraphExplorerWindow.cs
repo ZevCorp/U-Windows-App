@@ -636,11 +636,22 @@ public sealed class GraphExplorerWindow : Window
         });
     }
 
+    private string _ultimoProcPintado = "";
+
     private void Render(string proc, List<UiaReader.UiElement> els)
     {
         // La UI de Ü delante (este panel incluido): congelar lo último útil en vez de listarse a
         // sí misma — el observador no es terreno, regla vieja ya.
         if (Propio.EsProceso(proc)) return;
+
+        // De QUÉ app se están pintando los puntos. Se dice solo cuando cambia, para que no llene el
+        // log: es lo que distingue «no hay puntos» de «hay puntos, pero de otra ventana» —que se
+        // ven igual desde fuera y son problemas opuestos (2026-08-06).
+        if (!proc.Equals(_ultimoProcPintado, StringComparison.OrdinalIgnoreCase))
+        {
+            _ultimoProcPintado = proc;
+            LogBus.Log("explorador", $"puntos: se pintan los de «{proc}» ({els.Count} elemento(s))");
+        }
 
         var loc = _where();
         string aqui = loc?.Id ?? "";
