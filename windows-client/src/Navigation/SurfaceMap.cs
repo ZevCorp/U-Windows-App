@@ -936,6 +936,15 @@ public sealed class SurfaceMap
     /// de archivo»— le basta con marcar <see cref="EdgeInfo.Nivel"/> y esto seguirá funcionando
     /// igual, porque agrupar es etiquetar, no mover nada de sitio.
     /// </summary>
+    /// <summary>
+    /// Solo cuenta como primer nivel lo que alguien DECLARÓ; la deducción por repetición se calla.
+    ///
+    /// Es un interruptor de experimento, no una decisión definitiva: mientras se construye la
+    /// enseñanza hay que poder ver qué produce ELLA, y con las dos fuentes activas cada punto azul
+    /// podía venir de cualquiera de las dos.
+    /// </summary>
+    public static bool SoloLoDeclarado { get; set; } = true;
+
     public List<Hop> CromoDe(string app)
     {
         if (app.Length == 0) return new List<Hop>();
@@ -970,10 +979,21 @@ public sealed class SurfaceMap
                 destinoDe[info.Selector] = new Hop(from, to, info);
         }
 
-        var cromo = destinoDe
-            .Where(kv => vistoDesde.TryGetValue(kv.Key, out var o) && o.Count >= 2)
-            .Select(kv => kv.Value)
-            .ToList();
+        // DOS CAUSAS MEZCLADAS NO SE PUEDEN LEER. El primer nivel salía de dos sitios a la vez: lo
+        // DECLARADO —el usuario señalando, o el maestro mirando la pantalla— y lo DEDUCIDO contando
+        // apariciones. Viéndolo en pantalla no hay forma de saber cuál de los dos puso cada punto
+        // azul, así que tampoco de saber si la enseñanza funciona (2026-08-06, propuesto por el
+        // usuario: «no sabemos cuál es la causa del resultado que vemos»).
+        //
+        // Mientras se construye la enseñanza, manda SOLO lo declarado. La deducción no se borra
+        // —sigue aquí y se vuelve a encender cambiando esto— porque es la que cubre las apps que
+        // nadie ha enseñado todavía; pero no puede estar opinando mientras se mide la otra.
+        var cromo = SoloLoDeclarado
+            ? new List<Hop>()
+            : destinoDe
+                .Where(kv => vistoDesde.TryGetValue(kv.Key, out var o) && o.Count >= 2)
+                .Select(kv => kv.Value)
+                .ToList();
 
         // LO DICHO A MANO NO ESPERA AL CONTADOR. El umbral de «visto desde dos pantallas» existe
         // para DEDUCIR qué es mobiliario fijo cuando nadie lo ha dicho. Cuando alguien —el usuario
