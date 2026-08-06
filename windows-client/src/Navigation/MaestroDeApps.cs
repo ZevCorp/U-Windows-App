@@ -109,11 +109,23 @@ public sealed class MaestroDeApps
 
         Tu tarea es explicar la JERARQUÍA DE NAVEGACIÓN de esta aplicación:
 
-        · PRIMER NIVEL: el mobiliario fijo de navegación, lo que está SIEMPRE a la vista dentro de
-          esta app estés en la pantalla que estés — el panel lateral del explorador, las pestañas de
-          un navegador, la barra de secciones de una app de ajustes. No son acciones («Copiar»,
-          «Eliminar», «Nuevo») ni contenido (archivos, correos, filas de una lista): son los sitios
-          a los que siempre se puede ir.
+        · PRIMER NIVEL: lo PERMANENTE Y TRANSVERSAL. La prueba es una sola pregunta, y hazla
+          elemento por elemento:
+
+              «Si me voy a cualquier otra subpágina de esta aplicación, ¿ESTO seguiría ahí?»
+
+          Si la respuesta es sí, es del primer nivel. Si desaparecería al cambiar de sección, NO lo
+          es —por muy visible que esté ahora—.
+
+          Tres ejemplos de lo que sí:
+            · la barra de tareas de Windows: vayas a donde vayas en el sistema, sigue ahí;
+            · las pestañas del navegador: estés en la web que estés, siguen ahí;
+            · el menú principal de una página: navegues a la subpágina que navegues, sigue ahí.
+
+          Y lo que NO es, aunque se vea grande y en el centro: el CONTENIDO de la pantalla actual
+          —los archivos de esta carpeta, los accesos rápidos de esta vista, las filas de una lista,
+          los correos de la bandeja— y las ACCIONES («Copiar», «Eliminar», «Nuevo», «Pegar»). Todo
+          eso cambia al moverte; el mobiliario, no.
 
         · SEGUNDO NIVEL: si en esta pantalla ves elementos que pertenecen a UNO de los de primer
           nivel —porque estamos dentro de él—, dilo colgándolos de su número. Ejemplo: si estamos
