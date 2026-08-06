@@ -126,11 +126,18 @@ public sealed class MaestroDeApps
          "nivel2": {"5": [12, 13]},
          "explicacion": "una frase corta, en español, de qué es cada zona"}
 
+        CASI TODA APLICACIÓN TIENE NAVEGACIÓN PERMANENTE, y suele estar en el mismo sitio: una
+        columna a la izquierda, una fila de pestañas arriba, o una barra de secciones. Si crees que
+        no la hay, vuelve a mirar el lado izquierdo y la parte de arriba antes de decirlo — devolver
+        la lista vacía es casi siempre no haber mirado bien, no una app sin navegación.
+
         Reglas:
         - Solo números que estén en la lista. Nada inventado.
-        - ANTE LA DUDA, DÉJALO FUERA. Es mejor quedarse corto: un elemento de más en el primer nivel
-          se propaga a toda la aplicación y cuesta desandarlo.
-        - Si no reconoces ninguna navegación permanente, devuelve "nivel1": [].
+        - Si dudas de UNO concreto, déjalo fuera y sigue con los demás. Lo que NO vale es dejarlos
+          todos fuera por no estar seguro de alguno: quedarse corto en uno se arregla señalándolo,
+          quedarse en cero deja la app sin aprender.
+        - Los números están pintados sobre cada elemento, en su esquina superior izquierda. Si
+          alguno no se lee bien, guíate por la posición: el que está encima de la carpeta que ves.
         """;
 
     private static async Task<string> PreguntarAsync(string clave, string instruccion, string fotoBase64, CancellationToken ct)

@@ -805,19 +805,28 @@ public sealed class GraphExplorerWindow : Window
             int numero = _numeradas.Count + 1;
             if (Numerar) _numeradas[numero] = el;
 
+            // GRANDES Y CON CONTRASTE MIENTRAS SE ENSEÑA. A 18 px sobre una ventana maximizada de
+            // casi dos mil de ancho, los números son el 1% de la imagen: legibles para quien se
+            // acerca, no para quien mira la foto entera. Y un modelo que no lee bien los números
+            // responde lo cómodo —«no reconozco navegación permanente»— en vez de equivocarse
+            // (2026-08-06, con la captura del usuario delante). Fuera de la enseñanza siguen
+            // pequeños: ahí el punto solo marca dónde hay una puerta.
             var chip = new Border
             {
-                Width = Numerar ? 18 : 12, Height = Numerar ? 18 : 12,
-                CornerRadius = new CornerRadius(Numerar ? 9 : 6),
+                Width = Numerar ? 26 : 12, Height = Numerar ? 26 : 12,
+                CornerRadius = new CornerRadius(Numerar ? 13 : 6),
                 Child = Numerar ? new TextBlock
                 {
                     Text = numero.ToString(),
-                    Foreground = Brushes.White, FontSize = 10, FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.White, FontSize = 14, FontWeight = FontWeights.Bold,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
                 } : null,
                 // Azul = nivel principal; verde = arista ya recorrida; gris = potencial, sin explorar.
-                Background = new SolidColorBrush(primerNivel
+                Background = new SolidColorBrush(Numerar
+                    // Enseñando: fondo opaco y oscuro, que el número se lea sobre cualquier app.
+                    ? Color.FromArgb(0xEE, 0x11, 0x11, 0x18)
+                    : primerNivel
                     ? Color.FromArgb(aMano ? (byte)0xAA : (byte)0x88, 0x21, 0x96, 0xF3)
                     : sabida ? Color.FromArgb(0x88, 0x2E, 0x7D, 0x32) : Color.FromArgb(0x33, 0xC0, 0xC0, 0xC0)),
                 BorderBrush = new SolidColorBrush(primerNivel
@@ -1733,6 +1742,18 @@ public sealed class GraphExplorerWindow : Window
                 _status.Text = "cambió la app mientras miraba; no enseño una mezcla";
                 return;
             }
+
+            // EL MAPA TIENE QUE CONOCER LA PANTALLA ANTES DE PODER FIJARLE NIVELES. Fijar un nivel
+            // busca la SALIDA con ese nombre; si la pantalla no se ha anotado todavía —y con el
+            // grafo recién limpiado no lo está— no existe ninguna, así que el maestro acertaba y
+            // sus quince elecciones rebotaban una a una: «no está como salida en el mapa». El
+            // resumen decía entonces «no reconoció navegación permanente», que era falso y mandó a
+            // buscar el fallo en el prompt y en el tamaño de los números (2026-08-06).
+            //
+            // Se anotan justo los que se le van a enseñar: los mismos que llevan número, así que lo
+            // que el maestro señale existe por construcción.
+            _map.ObserveExits(ahora.Id, PuertasNumeradas().Values.Select(e =>
+                (e.Label, e.ControlType, Uia.Reconocedor.SelectorDe(e), Array.Empty<string>(), "")));
 
             var maestro = new Navigation.MaestroDeApps(_map);
             var leccion = await maestro.EnsenarAsync(app, ahora!.Id, PuertasNumeradas(),
