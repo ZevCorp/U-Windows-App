@@ -62,6 +62,11 @@ public sealed class GeminiLive : IDisposable
     private readonly HashSet<string> _canceladas = new();
     private readonly object _candadoCancel = new();
 
+    /// <summary>El pase de reanudación más reciente, y si el último cierre no lo pedimos nosotros.</summary>
+    private string _pase = "";
+    private bool _cayoSolo;
+    private int _reintentos;
+
     private readonly StringBuilder _fraseU = new();
     private readonly StringBuilder _fraseUsuario = new();
 
@@ -155,7 +160,10 @@ public sealed class GeminiLive : IDisposable
             await _ws.ConnectAsync(new Uri($"{Host}?key={Uri.EscapeDataString(clave)}"), _cts.Token);
             await EnviarAsync(Configuracion(modelo), _cts.Token);
 
-            lock (_candadoCancel) _canceladas.Clear();   // sesión nueva, cuentas nuevas
+            // Sesión nueva, cuentas nuevas: ni llamadas retiradas de antes, ni el pase de la
+            // conversación anterior —volver con él nos devolvería a una charla que ya terminó.
+            lock (_candadoCancel) _canceladas.Clear();
+            _pase = ""; _cayoSolo = false; _reintentos = 0;
             Viva = true;
             Cambio?.Invoke(true);
             LogBus.Log("voz-viva", $"sesión abierta con «{modelo}»");
@@ -231,6 +239,33 @@ public sealed class GeminiLive : IDisposable
                 // final de cada intervención sí, porque el criterio pasa a estar donde se puede
                 // medir: en el volumen del trozo que acabamos de capturar (2026-08-04).
                 realtimeInputConfig = new { automaticActivityDetection = new { disabled = true } },
+
+                // QUE LA CONVERSACIÓN SOBREVIVA A LA CONEXIÓN. El servidor corta el socket cuando le
+                // parece —se midieron cortes a los 36 s, a los 2 min y a los 3 min en la misma
+                // tarde— y sin esto cada corte era el final: la conversación se apagaba a media
+                // frase (2026-08-05). Pidiéndolo, el servidor va mandando un pase con el que se
+                // puede volver a entrar donde lo dejamos, en vez de empezar de cero sin memoria.
+                sessionResumption = new { },
+            },
+        };
+        return JsonSerializer.Serialize(setup);
+    }
+
+    /// <summary>El pase para volver a la MISMA conversación si se cae la conexión.</summary>
+    private static string Reanudacion(string modelo, string pase)
+    {
+        var setup = new
+        {
+            setup = new
+            {
+                model = $"models/{modelo}",
+                generationConfig = new { responseModalities = new[] { "AUDIO" } },
+                systemInstruction = new { parts = new[] { new { text = Instrucciones } } },
+                tools = new object[] { new { functionDeclarations = Herramientas() } },
+                inputAudioTranscription = new { },
+                outputAudioTranscription = new { },
+                realtimeInputConfig = new { automaticActivityDetection = new { disabled = true } },
+                sessionResumption = new { handle = pase },
             },
         };
         return JsonSerializer.Serialize(setup);
@@ -707,7 +742,17 @@ public sealed class GeminiLive : IDisposable
             while (!ct.IsCancellationRequested && _ws?.State == WebSocketState.Open)
             {
                 var r = await _ws.ReceiveAsync(buf, ct);
-                if (r.MessageType == WebSocketMessageType.Close) break;
+                if (r.MessageType == WebSocketMessageType.Close)
+                {
+                    // SE SALÍA DE AQUÍ EN SILENCIO, y desde fuera «lo colgué yo» y «se cayó solo»
+                    // eran exactamente lo mismo: micrófono cerrado, vídeo cerrado, sesión cerrada, y
+                    // ni una pista de por qué (2026-08-05). Quien cierra tiene un motivo y lo manda;
+                    // no anotarlo era tirarlo.
+                    LogBus.Log("voz-viva", $"el servidor cerró la conexión: {r.CloseStatus} "
+                        + $"«{r.CloseStatusDescription}»");
+                    _cayoSolo = true;
+                    break;
+                }
                 acumulado.Write(buf, 0, r.Count);
                 if (!r.EndOfMessage) continue;
 
@@ -718,8 +763,68 @@ public sealed class GeminiLive : IDisposable
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception e) { LogBus.Log("voz-viva", $"se cortó la escucha: {e.Message}"); }
-        finally { if (Viva) await TerminarAsync(); }
+        catch (Exception e)
+        {
+            LogBus.Log("voz-viva", $"se cortó la escucha: {e.Message}");
+            _cayoSolo = true;
+        }
+        finally
+        {
+            // CAERSE NO ES COLGAR. Si el socket se fue solo —y se va, a los 36 s o a los 3 min, sin
+            // avisar— la conversación no ha terminado: la persona sigue hablando. Se vuelve a entrar
+            // con el pase de reanudación, que devuelve la MISMA conversación con su memoria.
+            if (_cayoSolo && Viva && !ct.IsCancellationRequested) await ReconectarAsync();
+            else if (Viva) await TerminarAsync();
+        }
+    }
+
+    /// <summary>
+    /// Vuelve a entrar en la MISMA conversación después de un corte que no pedimos.
+    ///
+    /// Sin ruido para quien habla: no se cierra el micrófono ni la cámara, no se dice «se cayó la
+    /// conexión». Alguien que está a media frase no necesita un parte de red, necesita seguir. Solo
+    /// se avisa si de verdad no se puede volver, que entonces sí cambia lo que tiene que hacer.
+    ///
+    /// Se reintenta unas pocas veces y con espera creciente: si lo que falla es la red o la clave,
+    /// insistir a toda velocidad no lo arregla y sí quema la cuota.
+    /// </summary>
+    private async Task ReconectarAsync()
+    {
+        _cayoSolo = false;
+        string clave = Clave();
+        if (clave.Length == 0 || _cts == null) { await TerminarAsync(); return; }
+
+        if (++_reintentos > 4)
+        {
+            LogBus.Log("voz-viva", $"la conexión se cayó {_reintentos} veces seguidas: se deja");
+            Dice?.Invoke("Se me cortó la conexión y no consigo volver. Vuelve a darle al micrófono.");
+            await TerminarAsync();
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(300 * _reintentos, _cts.Token);
+            string modelo = await ModeloAsync(clave, _cts.Token);
+
+            try { _ws?.Dispose(); } catch { }
+            _ws = new ClientWebSocket();
+            await _ws.ConnectAsync(new Uri($"{Host}?key={Uri.EscapeDataString(clave)}"), _cts.Token);
+            await EnviarAsync(_pase.Length > 0 ? Reanudacion(modelo, _pase) : Configuracion(modelo), _cts.Token);
+
+            LogBus.Log("voz-viva", _pase.Length > 0
+                ? $"reconectada y reanudada donde iba (intento {_reintentos})"
+                : $"reconectada, pero SIN pase: la conversación empieza de cero (intento {_reintentos})");
+
+            _ = Task.Run(() => RecibirAsync(_cts.Token), _cts.Token);
+        }
+        catch (OperationCanceledException) { await TerminarAsync(); }
+        catch (Exception e)
+        {
+            LogBus.Log("voz-viva", $"no pude reconectar: {e.Message}");
+            _cayoSolo = true;
+            await ReconectarAsync();
+        }
     }
 
     private void Procesar(string json, CancellationToken ct)
@@ -730,6 +835,16 @@ public sealed class GeminiLive : IDisposable
         // TODO lo que llega se anota. Atender solo lo que se sabe interpretar y tirar el resto en
         // silencio deja el peor de los diagnósticos posibles: la sesión abierta, el micrófono en
         // rojo, y ninguna pista de por qué no contesta. Un error del servidor tiene que verse.
+        // EL PASE PARA VOLVER. Llega cada pocos segundos y antes se tiraba por «no dice nada»: sí lo
+        // dice, dice cómo recuperar esta misma conversación si se cae el socket. Solo vale el que
+        // viene marcado como reanudable.
+        if (raiz.TryGetProperty("sessionResumptionUpdate", out var pase))
+        {
+            bool sirve = !pase.TryGetProperty("resumable", out var res) || res.ValueKind != JsonValueKind.False;
+            if (sirve && pase.TryGetProperty("newHandle", out var h) && h.GetString() is { Length: > 0 } valor)
+                _pase = valor;
+        }
+
         if (!raiz.TryGetProperty("serverContent", out _) && !raiz.TryGetProperty("toolCall", out _)
             && !raiz.TryGetProperty("sessionResumptionUpdate", out _))   // llega cada segundo; no dice nada
         {
@@ -767,6 +882,11 @@ public sealed class GeminiLive : IDisposable
 
         if (raiz.TryGetProperty("serverContent", out var contenido))
         {
+            // Hay conversación de verdad otra vez: el contador de caídas seguidas vuelve a cero. Si
+            // no, una sesión larga con un corte cada media hora acabaría rindiéndose por sumar
+            // cuatro caídas que no tenían nada que ver entre sí.
+            _reintentos = 0;
+
             // INTERRUMPIDO: el usuario habló encima. Lo que ya nos habían mandado sigue en nuestra
             // cola de audio, y seguir diciéndolo es la sensación exacta de no ser escuchado.
             if (contenido.TryGetProperty("interrupted", out _)) _audio.Callar();

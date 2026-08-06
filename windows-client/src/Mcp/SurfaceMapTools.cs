@@ -1083,7 +1083,7 @@ public sealed class SurfaceMapTools
             "map_pointed_trail" => LoQueMeAcabasDeMostrar(A("seconds")),
             "map_exclude" => Excluir(A("exit")),
             "map_show" => Mostrar(A("exit")),
-            "map_set_level" => _map.FijarNivel(
+            "map_set_level" => FijarNivelDeVarios(
                 A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
                 A("exit"),
                 int.TryParse(A("level"), out int niv) ? niv : -1),
