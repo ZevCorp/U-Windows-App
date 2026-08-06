@@ -640,6 +640,13 @@ public sealed class GraphExplorerWindow : Window
 
     private void Render(string proc, List<UiaReader.UiElement> els)
     {
+        // La traza va ANTES del primer return, no después: puesta después no distinguía «no se
+        // pintó» de «se pintó y no lo conté», que es exactamente lo que hizo falta saber cuando la
+        // lección abortaba por falta de números y no aparecía ni una línea (2026-08-06).
+        if (Numerar)
+            LogBus.Log("maestro", $"Render con números: proc=«{proc}» ({els.Count} elemento(s))"
+                + (Propio.EsProceso(proc) ? " → ES NUESTRO PROCESO: no se pinta" : ""));
+
         // La UI de Ü delante (este panel incluido): congelar lo último útil en vez de listarse a
         // sí misma — el observador no es terreno, regla vieja ya.
         if (Propio.EsProceso(proc)) return;
@@ -1649,10 +1656,18 @@ public sealed class GraphExplorerWindow : Window
         // cuenta —lee el árbol de UI en otro hilo y pinta cuando puede—, así que una espera fija se
         // queda corta justo cuando la pantalla tiene mucho que leer: la foto salía sin números y el
         // maestro recibía una lista vacía (2026-08-05). Se mira hasta que los haya.
-        for (int i = 0; i < 30 && _numeradas.Count == 0; i++)
+        // SE PIDE UNA VEZ Y SE ESPERA. Pedirlo en bucle no acelera nada: RefreshEdges se sale sola
+        // si ya hay una lectura en curso, así que treinta llamadas en cuatro segundos eran
+        // veintinueve rebotes contra la misma lectura. Y leer el árbol de una ventana recién abierta
+        // tarda MÁS que eso —el explorador expone cientos de nodos—, así que la lección se rendía
+        // justo antes de que llegara: «los puntos no llegaron a numerarse», tres pruebas seguidas
+        // (2026-08-06). Se pide una vez, se espera hasta quince segundos, y se reintenta solo si la
+        // lectura anterior ya terminó sin dar números.
+        RefreshEdges();
+        for (int i = 0; i < 100 && _numeradas.Count == 0; i++)
         {
-            RefreshEdges();
             await Task.Delay(150);
+            if (!_reading && _numeradas.Count == 0 && i % 10 == 9) RefreshEdges();
         }
         if (_numeradas.Count == 0)
         {
