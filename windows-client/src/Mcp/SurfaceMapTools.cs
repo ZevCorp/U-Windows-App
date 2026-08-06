@@ -644,6 +644,50 @@ public sealed class SurfaceMapTools
     private static string Marcados(IReadOnlyList<(System.Windows.Rect Caja, string Que)> xs) =>
         string.Join(", ", xs.Take(25).Select(x => $"«{x.Que}»")) + (xs.Count > 25 ? "…" : "");
 
+    /// <summary>
+    /// Mueve de nivel UNO o VARIOS, separados por comas.
+    /// </summary>
+    /// <remarks>
+    /// Corregir la jerarquía es una tarea de lista —«todos estos son del nivel principal»— y hacerlo
+    /// de uno en uno son veinte llamadas y veinte confirmaciones habladas. El modelo lo intentó por
+    /// su cuenta: mandó los diecinueve de la barra lateral separados por comas y la herramienta
+    /// buscó una salida llamada «Inicio,Galería,OneDrive - Personal,…», que por supuesto no existe.
+    /// Contestó que no podía, y luego los fue haciendo de uno en uno; las dos cosas eran verdad y
+    /// por eso la respuesta pareció contradecirse (2026-08-05).
+    ///
+    /// Se informa de cada uno por separado: fijar quince y fallar en uno no es ni éxito ni fracaso,
+    /// y quien pregunta necesita saber exactamente cuál se quedó fuera.
+    /// </remarks>
+    private string FijarNivelDeVarios(string app, string cuales, int nivel)
+    {
+        var nombres = cuales.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                            .Select(n => n.Trim()).Where(n => n.Length > 0)
+                            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (nombres.Count == 0) return "falta `exit`: qué salida (o cuáles, separadas por comas) mover de nivel";
+        if (nombres.Count == 1) return _map.FijarNivel(app, nombres[0], nivel);
+
+        var hechos = new List<string>();
+        var fallados = new List<string>();
+        foreach (var n in nombres)
+        {
+            string r = _map.FijarNivel(app, n, nivel);
+            if (r.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) fallados.Add(n);
+            else hechos.Add(n);
+        }
+
+        var sb = new System.Text.StringBuilder();
+        if (hechos.Count > 0)
+            sb.Append($"Al nivel {nivel} de «{app}» han pasado {hechos.Count}: ")
+              .Append(string.Join(", ", hechos.Select(h => $"«{h}»")))
+              .Append(". Fijados: la deducción ya no los mueve.");
+        if (fallados.Count > 0)
+            sb.Append(hechos.Count > 0 ? " " : "")
+              .Append($"NO encontré {fallados.Count}: ")
+              .Append(string.Join(", ", fallados.Select(f => $"«{f}»")))
+              .Append(" — no hay ninguna salida con ese nombre en esta app.");
+        return sb.ToString();
+    }
+
     private string OpenApp(string app)
     {
         if (app.Length == 0) return "falta `app`: qué abrir (por ejemplo «explorer» o «notepad»)";

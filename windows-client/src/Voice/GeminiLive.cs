@@ -474,7 +474,10 @@ public sealed class GeminiLive : IDisposable
             + "vista). Úsala cuando el usuario diga cosas como «esto es del menú principal», «esto no "
             + "pertenece al primer nivel» o «pon esto en el nivel 2». Con level = -1 se suelta y vuelve "
             + "a decidirlo el sistema.",
-            ("exit", "La salida, por su nombre tal como se ve («Notas») o su selector."),
+            ("exit", "La salida por su nombre tal como se ve («Notas») o su selector. VARIAS a la vez: "
+                   + "sus nombres separados por comas —«Escritorio, Descargas, Notas, Música»—, que es "
+                   + "como se corrige una barra entera sin repetir la llamada veinte veces. Te dirá "
+                   + "cuáles quedaron fijados y cuáles no encontró."),
             ("level", "El nivel: 1 para la navegación principal, 2 o más para lo de dentro, -1 para soltar."),
             ("app", "La app; vacío = donde estés ahora.")),
         Fn("map_run", "Ejecuta una SECUENCIA de pasos de una sola vez, sin volver a consultarte entre "

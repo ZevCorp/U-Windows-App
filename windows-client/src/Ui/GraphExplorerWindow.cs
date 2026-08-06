@@ -624,8 +624,8 @@ public sealed class GraphExplorerWindow : Window
             // Que dos puertas se llamen igual es normal; que la app se caiga por ello, no.
             ? _map.ExitsFrom(aqui).Where(h => h.Info.Selector.Length > 0)
                   .GroupBy(h => h.Info.Label, StringComparer.OrdinalIgnoreCase)
-                  .ToDictionary(g => g.Key, g => g.First().To, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                  .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, SurfaceMap.Hop>(StringComparer.OrdinalIgnoreCase);
 
         // LA POSICIÓN FORMA PARTE DE LO QUE HAY QUE REDIBUJAR. La firma llevaba solo nombres y
         // tipos, que era lo correcto cuando los puntos vivían en una tira: daba igual dónde
@@ -656,19 +656,32 @@ public sealed class GraphExplorerWindow : Window
 
         foreach (var el in els)
         {
-            bool sabida = conocidas.TryGetValue(el.Label, out string? destino);
+            bool sabida = conocidas.TryGetValue(el.Label, out var salida);
+
+            // AZUL = NIVEL PRINCIPAL, y es el MISMO azul del grafo. Los dos dibujos hablan de lo
+            // mismo —qué pertenece a la navegación principal de la app— y tenerlo solo en uno
+            // obligaba a mirar el grafo para saber algo que se decide señalando los puntos. Si el
+            // usuario acaba de fijar «Descargas» al nivel 1, tiene que verlo donde está Descargas
+            // (2026-08-05, pedido por el usuario).
+            bool primerNivel = sabida && salida!.Info.NivelNav == 1;
+            bool aMano = sabida && salida!.Info.NivelFijado;
+
             string descripcion = el.Label
-                + (sabida ? $"  ⇒  {Corto(destino!)}" : $"  ({el.ControlType}, sin explorar)");
+                + (sabida ? $"  ⇒  {Corto(salida!.To)}" : $"  ({el.ControlType}, sin explorar)")
+                + (primerNivel ? "  ·  nivel 1" : "")
+                + (aMano ? " (fijado a mano)" : "");
 
             var chip = new Border
             {
                 Width = 12, Height = 12,
                 CornerRadius = new CornerRadius(6),
-                // Verde = arista ya recorrida (se sabe a dónde lleva); gris = potencial, sin explorar.
-                Background = new SolidColorBrush(sabida
-                    ? Color.FromArgb(0x88, 0x2E, 0x7D, 0x32) : Color.FromArgb(0x33, 0xC0, 0xC0, 0xC0)),
-                BorderBrush = new SolidColorBrush(sabida
-                    ? Color.FromArgb(0xAA, 0x66, 0xBB, 0x6A) : Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
+                // Azul = nivel principal; verde = arista ya recorrida; gris = potencial, sin explorar.
+                Background = new SolidColorBrush(primerNivel
+                    ? Color.FromArgb(aMano ? (byte)0xAA : (byte)0x88, 0x21, 0x96, 0xF3)
+                    : sabida ? Color.FromArgb(0x88, 0x2E, 0x7D, 0x32) : Color.FromArgb(0x33, 0xC0, 0xC0, 0xC0)),
+                BorderBrush = new SolidColorBrush(primerNivel
+                    ? Color.FromArgb(0xCC, 0x64, 0xB5, 0xF6)
+                    : sabida ? Color.FromArgb(0xAA, 0x66, 0xBB, 0x6A) : Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
                 BorderThickness = new Thickness(1),
                 Cursor = Cursors.Hand,
                 ToolTip = descripcion,
