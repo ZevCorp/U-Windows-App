@@ -1082,9 +1082,21 @@ public sealed class SurfaceMap
 
             // Se prefiere la aparición que SÍ sabe a dónde lleva: una puerta sin cruzar sigue
             // valiendo como mobiliario —«existe y está en todas partes»— pero no como ruta.
+            //
+            // SE EMPAREJA POR SELECTOR Y POR ETIQUETA, la misma regla que NivelesConocidos. La
+            // puerta que declaró el maestro y la que cruzó el recorrido son LA MISMA con dos
+            // selectores distintos —«uia:name=Escritorio» frente a «uia:aid=…»— porque cada camino
+            // los escribe a su manera, así que buscar solo por selector no las emparejaba nunca.
+            //
+            // La consecuencia era silenciosa y llegaba hasta el dibujo: lo declarado se quedaba sin
+            // destino, su «to» seguía siendo «?uia:name=Escritorio», y el grafo lo descartaba al no
+            // poder decir de qué app era. Por eso lo que el maestro ponía en el primer nivel no
+            // aparecía en la primera fila (2026-08-06, captura del usuario).
             var conDestino = Edges().FirstOrDefault(e =>
-                string.Equals(e.Info.Selector, info.Selector, StringComparison.Ordinal)
-                && !EsPuerta(e.To) && AppDe(e.To).Equals(app, StringComparison.OrdinalIgnoreCase));
+                !EsPuerta(e.To) && AppDe(e.To).Equals(app, StringComparison.OrdinalIgnoreCase)
+                && (string.Equals(e.Info.Selector, info.Selector, StringComparison.Ordinal)
+                    || (!EsContenido(info.ControlType)
+                        && e.Info.Label.Equals(info.Label, StringComparison.OrdinalIgnoreCase))));
             cromo.Add(conDestino.Info != null
                 ? new Hop(conDestino.From, conDestino.To, conDestino.Info)
                 : new Hop(from, to, info));
