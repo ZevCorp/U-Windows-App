@@ -467,7 +467,18 @@ public sealed class GraphCrawler
         // las demás, así que el mapa nunca supo volver a documentos desde ningún sitio
         // (2026-08-02). Una puerta se cruza UNA vez, desde donde primero se pueda; a partir de ahí
         // se deduce sola en el resto de pantallas.
-        return _destinosSabidos.Contains(selector) || _map.EsCromoGlobal(selector);
+        // Y SE LE PREGUNTA AL MAPA, no solo a lo que haya cruzado ESTA corrida. Desde que el grafo
+        // anota TODAS las puertas visibles al llegar a una pantalla, una visita ya revela dónde
+        // lleva cada selector que se conozca de antes: volver a cruzarlo desde cada sitio es
+        // comprobar N veces lo mismo, y eso es lo que convertía el recorrido en N² — se veía en el
+        // log, cada pantalla replanificando el panel lateral entero (2026-08-06, medido por el
+        // usuario). Una puerta se cruza UNA vez en toda la app; su destino se deduce en el resto.
+        if (_destinosSabidos.Contains(selector) || _map.EsCromoGlobal(selector)) return true;
+
+        return _map.Edges().Any(e =>
+            string.Equals(e.Info.Selector, selector, StringComparison.Ordinal)
+            && !SurfaceMap.EsPuerta(e.To)
+            && SurfaceMap.MismaApp(e.From, e.To));
     }
 
     /// <summary>

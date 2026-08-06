@@ -733,6 +733,7 @@ public sealed class GraphExplorerWindow : Window
         Matrix aPantalla = fuente?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
 
         _numeradas.Clear();   // los números valen para ESTA pantalla; en otra son otros elementos
+        if (Numerar) LogBus.Log("maestro", $"repintando con números: {els.Count} elemento(s), vistaGrafo={_graphView}");
 
         foreach (var el in els)
         {
@@ -1622,6 +1623,15 @@ public sealed class GraphExplorerWindow : Window
         LogBus.Log("maestro", $"enseñando «{app}» desde «{loc.Id}»…");
 
         _status.Text = "mirando la app para entender su navegación…";
+
+        // LOS PUNTOS SOLO EXISTEN EN LA VISTA DE PUNTOS. En la vista de grafo se dibuja el mapa, no
+        // los elementos de la pantalla, así que no había nada que numerar y la lección se abortaba
+        // con «los puntos no llegaron a numerarse» — justo al pedir el mapeo desde el catálogo, que
+        // es cuando el explorador suele estar mostrando el grafo (2026-08-06, visto por el usuario).
+        // Se cambia de vista para preguntar y se devuelve como estaba.
+        bool veniaDelGrafo = _graphView;
+        if (veniaDelGrafo) SetGraphView(false);
+
         Numerar = true;
 
         // SE ESPERA A QUE LOS NÚMEROS ESTÉN, no un rato «por si acaso». El repintado va por su
@@ -1637,6 +1647,7 @@ public sealed class GraphExplorerWindow : Window
         {
             LogBus.Log("maestro", "los puntos no llegaron a numerarse: no se enseña");
             Numerar = false;
+            if (veniaDelGrafo) SetGraphView(true);
             return;
         }
         await Task.Delay(250);   // que el último repintado esté en pantalla ANTES de la foto
@@ -1658,6 +1669,7 @@ public sealed class GraphExplorerWindow : Window
         {
             Numerar = false;
             RefreshEdges();
+            if (veniaDelGrafo) SetGraphView(true);   // se devuelve la vista como estaba
         }
     }
 
