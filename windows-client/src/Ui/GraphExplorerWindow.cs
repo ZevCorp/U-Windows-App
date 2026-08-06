@@ -1629,14 +1629,17 @@ public sealed class GraphExplorerWindow : Window
         var loc = _where();
         if (loc == null) { _status.Text = "trae al frente la app que quieres mapear"; return; }
 
+        // EL GUARDIA SE ARMA ANTES DE LA LECCIÓN. Estaba después, y como preguntar tarda varios
+        // segundos, cada pulsación que llegara mientras tanto pasaba el «¿ya hay uno en marcha?» y
+        // arrancaba otra lección: tres seguidas en dos segundos, y tres facturas (2026-08-06).
+        _crawlCts = new CancellationTokenSource();
+
         // PRIMERO LA LECCIÓN, DESPUÉS EL RECORRIDO. El maestro dice de un vistazo qué es navegación
         // permanente —algo que al recorredor le cuesta varias vueltas deducir contando— y con esa
         // jerarquía ya puesta, el recorrido sabe qué está explorando en vez de descubrirlo al final.
         // Va aquí y no en quien llama para que valga para TODAS las formas de pedir un mapeo: el
         // botón de «esta app» y el catálogo tienen que aprender lo mismo.
         await EnsenarLaAppAsync();
-
-        _crawlCts = new CancellationTokenSource();
         _crawlBtn.Content = "⏹ Detener el mapeo";
         _busy = true;   // el refresco de aristas no compite con el recorrido
         try

@@ -205,14 +205,18 @@ public sealed class MaestroDeApps
         }
 
         int puestos1 = 0, puestos2 = 0;
+        var elegidos = new List<string>();   // para poder JUZGAR la lección, no solo contarla
         foreach (int n in nivel1.Distinct())
         {
             // UN NÚMERO QUE NO EXISTE NO SE APLICA. Si el modelo se inventa uno, aquí se cae solo:
             // el puente son los números que nosotros pintamos, no los que él imagine.
             if (!numeradas.TryGetValue(n, out var el)) { LogBus.Log("maestro", $"número {n} no existe: se ignora"); continue; }
             string r = _mapa.FijarNivel(app, el.Label, 1);
-            if (!r.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) puestos1++;
+            if (!r.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) { puestos1++; elegidos.Add(el.Label); }
+            else LogBus.Log("maestro", $"«{el.Label}» (nº {n}) no está como salida en el mapa: no se fija");
         }
+        if (elegidos.Count > 0)
+            LogBus.Log("maestro", "primer nivel: " + string.Join(", ", elegidos.Select(x => $"«{x}»")));
 
         foreach (var (padre, hijos) in nivel2)
             foreach (int n in hijos.Distinct())
