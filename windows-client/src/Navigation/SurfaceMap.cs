@@ -448,12 +448,7 @@ public sealed class SurfaceMap
         // Lo que YA se conoce en esta app, con el nivel que se le puso la primera vez. Una puerta no
         // cambia de nivel por volver a verla desde más adentro: si el panel lateral está en el nivel
         // 1, sigue estando en el 1 aunque lo vuelvas a ver tres carpetas más abajo.
-        var nivelPorSelector = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var (fr, _, info) in Edges())
-            if (info.NivelNav >= 0 && info.Selector.Length > 0
-                && AppDe(fr).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase)
-                && !nivelPorSelector.ContainsKey(info.Selector))
-                nivelPorSelector[info.Selector] = info.NivelNav;
+        var conocidos = new NivelesConocidos(this, AppDe(f));
 
         // Se sella la pasada. Lo que se vea en ella queda con esta misma marca de tiempo, y lo que
         // no, se queda con la anterior: ahí está la diferencia entre «está» y «estuvo».
@@ -494,9 +489,8 @@ public sealed class SurfaceMap
             // nivel que se le puso entonces —da igual desde dónde se esté mirando ahora—; si es
             // nueva, pertenece a un nivel por debajo de la pantalla que la revela. Eso es lo que
             // convierte «qué abre qué» en una jerarquía estable, en vez de un reflejo del paseo.
-            int nivelPuerta = nivelPorSelector.TryGetValue(s.Selector, out int ya)
-                ? ya
-                : (nivelAqui >= 0 ? nivelAqui + 1 : -1);
+            var ya = conocidos.De(s.Selector, s.Label, s.ControlType);
+            int nivelPuerta = ya.Nivel >= 0 ? ya.Nivel : (nivelAqui >= 0 ? nivelAqui + 1 : -1);
 
             _edges[k] = new EdgeInfo
             {
@@ -509,6 +503,9 @@ public sealed class SurfaceMap
                 Explored = deducido.Length > 0,
                 Nivel = s.Grupo,
                 NivelNav = nivelPuerta,
+                // Si el nivel viene de algo que se fijó a mano, esta aparición nace fijada también:
+                // el nivel es propiedad de la puerta, no del sitio desde donde se la mire.
+                NivelFijado = ya.Fijado,
                 VistaPorUltimaVez = ahora,
             };
         }
@@ -552,6 +549,60 @@ public sealed class SurfaceMap
         return nivel >= 0
             ? $"«{quien}» queda en el nivel {nivel} de «{a}» ({tocadas.Count} aparición/es). Fijado: la deducción ya no lo mueve."
             : $"«{quien}» vuelve a nivel automático en «{a}».";
+    }
+
+    /// <summary>
+    /// A qué nivel pertenece cada puerta CONOCIDA de una app, indexado por selector y por etiqueta.
+    ///
+    /// UNA SOLA RESPUESTA a «¿qué nivel tiene esta puerta?». Se contestaba en dos sitios con su
+    /// propio bucle —al observar una pantalla y al cruzar una puerta— y los dos buscaban SOLO por
+    /// selector. Pero el selector de una misma puerta puede cambiar entre pantallas: en el
+    /// explorador el AutomationId de una fila es su ÍNDICE (ver <see cref="EsCromoGlobal"/>), así
+    /// que «Documentos» visto desde otra carpeta no es el mismo texto que el que se enseñó. Cuando
+    /// no se encontraba, el nivel caía al respaldo «uno más que donde estoy» y los hermanos del
+    /// panel lateral —Imágenes, Documentos, Inicio— se iban colocando cada uno un peldaño por
+    /// debajo del anterior, en escalera, en vez de quedar todos en el primero (2026-08-06).
+    ///
+    /// La ETIQUETA es el segundo criterio porque es lo que de verdad se señala: <see cref="FijarNivel"/>
+    /// acepta etiqueta O selector para ESCRIBIR, así que leer solo por selector no encontraba la
+    /// mitad de lo que la otra mitad del par había guardado. Queda fuera el contenido: dos carpetas
+    /// pueden tener cada una su «readme.txt» y no son la misma puerta.
+    ///
+    /// Se construye de una pasada y se consulta muchas: el recorrido ya pagó caro comprobar N² veces
+    /// lo mismo.
+    /// </summary>
+    private sealed class NivelesConocidos
+    {
+        private readonly Dictionary<string, (int Nivel, bool Fijado)> _porSelector = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, (int Nivel, bool Fijado)> _porEtiqueta = new(StringComparer.OrdinalIgnoreCase);
+
+        public NivelesConocidos(SurfaceMap mapa, string app)
+        {
+            foreach (var (from, _, info) in mapa.Edges())
+            {
+                if (info.NivelNav < 0) continue;
+                if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
+                var dato = (info.NivelNav, info.NivelFijado);
+                if (info.Selector.Length > 0) Anotar(_porSelector, info.Selector, dato);
+                if (info.Label.Length > 0 && !EsContenido(info.ControlType))
+                    Anotar(_porEtiqueta, info.Label, dato);
+            }
+        }
+
+        /// <summary>Lo fijado a mano gana; entre deducciones manda la primera que se vio.</summary>
+        private static void Anotar(Dictionary<string, (int Nivel, bool Fijado)> donde, string clave,
+            (int Nivel, bool Fijado) dato)
+        {
+            if (!donde.TryGetValue(clave, out var ya) || (dato.Fijado && !ya.Fijado)) donde[clave] = dato;
+        }
+
+        /// <summary>Nivel -1 = no se sabe todavía.</summary>
+        public (int Nivel, bool Fijado) De(string selector, string label, string controlType)
+        {
+            if (selector.Length > 0 && _porSelector.TryGetValue(selector, out var s)) return s;
+            if (label.Length > 0 && !EsContenido(controlType) && _porEtiqueta.TryGetValue(label, out var e)) return e;
+            return (-1, false);
+        }
     }
 
     /// <summary>
@@ -713,9 +764,30 @@ public sealed class SurfaceMap
         }
 
         // La puerta que acabamos de cruzar deja de ser una incógnita aquí y en todas partes.
-        _edges.Remove(Clave(f, DestinoPuerta(selector), selector));
-        _edges.Remove(f + "\n" + DestinoPuerta(selector));   // por si viene de un mapa guardado antes
+        //
+        // PERO LO QUE YA SABÍA DE SÍ MISMA SE RESCATA ANTES DE BORRARLA. Aquí se quitaba la arista
+        // «de aquí a la incógnita» y más abajo se estrenaba una EdgeInfo en blanco, así que CRUZAR
+        // una puerta borraba el nivel que el maestro —o el usuario— le acababa de fijar. Es justo
+        // lo que NivelFijado promete que no pasa: los quince hermanos del panel lateral se quedaban
+        // sin nivel enseñado en cuanto el recorrido pasaba por ellos, y el siguiente los deducía
+        // «uno por debajo de donde estoy», en escalera (2026-08-06, visto por el usuario).
+        string clavePuerta = Clave(f, DestinoPuerta(selector), selector);
+        string clavePuertaVieja = f + "\n" + DestinoPuerta(selector);   // mapas guardados antes
+        if (!_edges.TryGetValue(clavePuerta, out var puertaPrevia))
+            _edges.TryGetValue(clavePuertaVieja, out puertaPrevia);
+        _edges.Remove(clavePuerta);
+        _edges.Remove(clavePuertaVieja);
         ResolverPuertasIguales(selector, t, controlType);
+
+        // A qué nivel pertenece esta puerta: primero lo que ella misma sabía antes de cruzarse,
+        // después lo que se sepa de ella en el resto de la app (por selector Y por etiqueta, ver
+        // NivelesConocidos), y solo si nada de eso responde, la deducción por dónde estamos.
+        var sabido = new NivelesConocidos(this, AppDe(f)).De(selector, label, controlType);
+        int nivelPuerta = puertaPrevia?.NivelNav ?? -1;
+        if (nivelPuerta < 0) nivelPuerta = sabido.Nivel;
+        bool fijado = (puertaPrevia?.NivelFijado ?? false) || sabido.Fijado;
+        if (nivelPuerta < 0 && _nodes.TryGetValue(f, out var origen) && origen.Nivel >= 0)
+            nivelPuerta = origen.Nivel + 1;
 
         if (!_nodes.ContainsKey(t) && _nodes.Count < MaxNodes) _nodes[t] = new NodeInfo();
         if (_nodes.TryGetValue(t, out var n))
@@ -726,29 +798,24 @@ public sealed class SurfaceMap
             // encontrado: si a un mismo sitio se llega por dos puertas de niveles distintos, su
             // nivel es el del camino más corto — que es lo que significa «cuántas puertas hay que
             // abrir para verlo», no «cuántas abrí yo esta vez».
-            // La puerta se busca por su SELECTOR, no por «de aquí a allí»: antes de cruzarla no
-            // tenía destino conocido —era «?selector»— así que buscarla por el par origen→destino
-            // no la encontraba nunca y el nivel se quedaba sin asignar (2026-08-04). El selector es
-            // lo único que la identifica desde que se ve hasta después de cruzarla.
-            int nivelPuerta = -1;
-            foreach (var (fr, _, info) in Edges())
-                if (info.NivelNav >= 0
-                    && string.Equals(info.Selector, selector, StringComparison.Ordinal)
-                    && AppDe(fr).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase))
-                { nivelPuerta = info.NivelNav; break; }
-
-            if (nivelPuerta < 0 && _nodes.TryGetValue(f, out var origen) && origen.Nivel >= 0)
-                nivelPuerta = origen.Nivel + 1;
-
-            // Lo fijado a mano no se toca: ver EdgeInfo.NivelFijado.
-            bool fijado = Edges().Any(e => e.Info.NivelFijado
-                && string.Equals(e.Info.Selector, selector, StringComparison.Ordinal)
-                && AppDe(e.From).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase));
-            if (!fijado && nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
+            //
+            // Con la puerta FIJADA no se compara: se obedece. Antes se saltaba la asignación entera
+            // —«lo fijado a mano no se toca»— y el efecto era el contrario del que quería quien la
+            // fijó: la pantalla de detrás se quedaba SIN nivel. Es la misma regla que ya aplica
+            // FijarNivel cuando la puerta está cruzada.
+            if (nivelPuerta >= 0 && (fijado || n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
         }
 
         string k = Clave(f, t, selector);
         if (!_edges.TryGetValue(k, out var e)) { e = new EdgeInfo(); _edges[k] = e; }
+
+        // EL NIVEL VIAJA CON LA PUERTA AL CRUZARLA. Sin esto una arista ya recorrida se quedaba con
+        // NivelNav = -1 para siempre —ObserveExits no vuelve a tocar las que ya existen— así que
+        // nadie podía volver a leer de ella a qué nivel pertenece, y el mapa olvidaba lo enseñado
+        // en cuanto lo recorría.
+        if (e.NivelNav < 0 && nivelPuerta >= 0) e.NivelNav = nivelPuerta;
+        if (fijado) e.NivelFijado = true;
+        if (e.Nivel.Length == 0 && puertaPrevia != null) e.Nivel = puertaPrevia.Nivel;
         e.Count++;
         e.VistaPorUltimaVez = DateTime.UtcNow;   // acabamos de cruzarla: por fuerza estaba a la vista
         e.Selector = selector;
