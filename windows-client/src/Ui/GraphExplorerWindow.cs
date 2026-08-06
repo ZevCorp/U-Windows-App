@@ -71,7 +71,28 @@ public sealed class GraphExplorerWindow : Window
     private bool _busy;               // recorriendo una arista: el refresco espera
     private readonly Button _crawlBtn;
     private Button _carruselBtn = null!;
+    private Button _limpiarBtn = null!;
     private CarruselDeApps? _carrusel;
+
+    /// <summary>
+    /// Borra el grafo entero, preguntando antes. Borrar lo aprendido no se deshace.
+    /// </summary>
+    private void LimpiarGrafo()
+    {
+        var r = MessageBox.Show(
+            "Se va a borrar TODO lo aprendido: pantallas, puertas y niveles, de todas las "
+            + "aplicaciones.\n\nEsto no se puede deshacer. ¿Empezamos de cero?",
+            "Borrar el grafo", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+        if (r != MessageBoxResult.Yes) return;
+
+        var (nodos, aristas) = _map.OlvidarTodo();
+        _ultimaCorrida.Clear();
+        _nodoActual = "";
+        _signature = "";              // que el repintado no se salte por «nada ha cambiado»
+        _status.Text = $"grafo a cero: borradas {nodos} pantalla(s) y {aristas} puerta(s)";
+        RefreshEdges();
+        if (_graphView) DibujarGrafo();
+    }
 
     /// <summary>
     /// Pintar un NÚMERO en cada puerta. Se enciende mientras se le enseña una app a un modelo de
@@ -268,10 +289,28 @@ public sealed class GraphExplorerWindow : Window
         };
         _carruselBtn.Click += (_, __) => AbrirCarrusel();
 
+        // EMPEZAR DE CERO, a mano. Toda prueba del mapa tiene que arrancar sin historia: un grafo
+        // con recorrido esconde justo lo que se quiere medir. Hasta ahora había que borrar un
+        // archivo, que no es algo que se pueda pedir a nadie (2026-08-06, pedido por el usuario).
+        _limpiarBtn = new Button
+        {
+            Content = "🧹",
+            Width = 26, Height = 26, FontSize = 12,
+            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Borrar TODO el grafo y empezar de cero",
+        };
+        _limpiarBtn.Click += (_, __) => LimpiarGrafo();
+
         var iconos = new StackPanel { Orientation = Orientation.Horizontal };
         iconos.Children.Add(_collapseBtn);
         iconos.Children.Add(_crawlBtn);
         iconos.Children.Add(_carruselBtn);
+        iconos.Children.Add(_limpiarBtn);
 
         _barra = new Border
         {

@@ -771,6 +771,33 @@ public sealed class SurfaceMap
     /// alcanzar hoy por esta puerta no prueba que el sitio no exista, y borrarlo entero haría que el
     /// mapa se vaciara solo con cualquier fallo pasajero. Solo se olvida tras COMPROBAR la ausencia.
     /// </summary>
+    /// <summary>
+    /// Olvidarlo TODO y volver a empezar. Devuelve qué había, para poder decirlo.
+    /// </summary>
+    /// <remarks>
+    /// Existe porque toda prueba del mapa tiene que empezar desde cero: un grafo con historia
+    /// esconde justo lo que se quiere medir —si las puertas ya están cruzadas, no se ve si el
+    /// sistema sabe llegar a un sitio nuevo ni si una app desconocida se mapea sola—. Hasta ahora
+    /// eso se hacía borrando un archivo a mano, que no es algo que se pueda pedir a nadie.
+    ///
+    /// No hay confirmación aquí: quien llama es quien sabe si preguntó. Y se guarda en el acto, para
+    /// que un cierre inesperado no resucite lo borrado.
+    /// </remarks>
+    public (int Nodos, int Aristas) OlvidarTodo()
+    {
+        int nodos = _nodes.Count, aristas = _edges.Count;
+        _nodes.Clear();
+        _edges.Clear();
+        _cromo.Clear();
+        _cromoVersion = -1;
+        _lastCommitted = "";
+        _pendingId = "";
+        Version++;
+        Save();
+        LogBus.Log("mapa", $"grafo olvidado a petición: {nodos} nodo(s) y {aristas} arista(s) borradas");
+        return (nodos, aristas);
+    }
+
     public void OlvidarAccion(string from, string to)
     {
         string k = Norm(from) + "\n" + Norm(to);
@@ -811,11 +838,26 @@ public sealed class SurfaceMap
             var camino = cola.Dequeue();
             string actual = camino.Count == 0 ? origen : camino[^1].To;
 
-            foreach (var (f, t, info) in Edges())
+            // LO QUE ESTÁ EN TODAS PARTES SE PUEDE TOMAR DESDE AQUÍ. El planificador recorría solo
+            // las aristas crudas, así que la herencia del nivel llegaba a «¿qué hay desde aquí?» y
+            // a «púlsalo», pero NO a «¿cómo llego?»: se decía «no sé llegar» a un sitio que estaba
+            // a un clic en el panel lateral (2026-08-05). El mobiliario fijo de una app es
+            // alcanzable desde cualquiera de sus pantallas — eso es lo que lo hace mobiliario.
+            //
+            // Se añaden como tramos VIRTUALES, no como aristas guardadas: materializarlas sería
+            // escribir el mismo hecho una vez por pantalla —dieciséis salidas por cada sitio— y dos
+            // copias de una misma verdad acaban siempre desincronizadas.
+            var salidas = Edges().Where(e =>
+                    string.Equals(e.From, actual, StringComparison.OrdinalIgnoreCase))
+                .Select(e => (e.From, e.To, e.Info))
+                .Concat(CromoDe(AppDe(actual))
+                    .Where(h => !string.Equals(h.To, actual, StringComparison.OrdinalIgnoreCase))
+                    .Select(h => (From: actual, h.To, h.Info)));
+
+            foreach (var (f, t, info) in salidas)
             {
                 if (info.Selector.Length == 0) continue;              // sin acción no se recorre
                 if (EsPuerta(t)) continue;                            // puerta sin cruzar: no sé a dónde da
-                if (!string.Equals(f, actual, StringComparison.OrdinalIgnoreCase)) continue;
                 if (!vistos.Add(t)) continue;
 
                 var siguiente = new List<Hop>(camino) { new(f, t, info) };
@@ -932,6 +974,34 @@ public sealed class SurfaceMap
             .Where(kv => vistoDesde.TryGetValue(kv.Key, out var o) && o.Count >= 2)
             .Select(kv => kv.Value)
             .ToList();
+
+        // LO DICHO A MANO NO ESPERA AL CONTADOR. El umbral de «visto desde dos pantallas» existe
+        // para DEDUCIR qué es mobiliario fijo cuando nadie lo ha dicho. Cuando alguien —el usuario
+        // señalando, o el maestro mirando la pantalla— declara que algo es del primer nivel, ya
+        // está dicho: hacerle esperar a que el contador llegue a dos es pedir pruebas de algo que
+        // acaban de afirmar.
+        //
+        // Esto es lo que faltaba para que «ponlo en el primer nivel» signifique algo. Antes solo
+        // pintaba el punto de azul y congelaba un número: si además acababa siendo accesible desde
+        // todas partes era porque el contador había llegado a dos por su cuenta, no por haberlo
+        // dicho (2026-08-05, visto por el usuario: «los azules aún quedan en segundo nivel»).
+        var yaEsta = new HashSet<string>(cromo.Select(h => h.Info.Selector), StringComparer.Ordinal);
+        foreach (var (from, to, info) in Edges())
+        {
+            if (!info.NivelFijado || info.NivelNav != 1) continue;
+            if (info.Selector.Length == 0 || info.Label.Length == 0) continue;
+            if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!yaEsta.Add(info.Selector)) continue;
+
+            // Se prefiere la aparición que SÍ sabe a dónde lleva: una puerta sin cruzar sigue
+            // valiendo como mobiliario —«existe y está en todas partes»— pero no como ruta.
+            var conDestino = Edges().FirstOrDefault(e =>
+                string.Equals(e.Info.Selector, info.Selector, StringComparison.Ordinal)
+                && !EsPuerta(e.To) && AppDe(e.To).Equals(app, StringComparison.OrdinalIgnoreCase));
+            cromo.Add(conDestino.Info != null
+                ? new Hop(conDestino.From, conDestino.To, conDestino.Info)
+                : new Hop(from, to, info));
+        }
         if (_cromoVersion != Version) { _cromo.Clear(); _cromoVersion = Version; }
         _cromo[app] = cromo;
         return cromo;

@@ -704,15 +704,49 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             CollapsedFace.Mood = Face.Mood; // que la carita suelta refleje el mismo estado
             CloseMenu();
             RootPanel.Visibility = Visibility.Collapsed;
-            CollapsedFace.Visibility = Visibility.Visible;
+            CollapsedGroup.Visibility = Visibility.Visible;
         }
         else
         {
-            CollapsedFace.Visibility = Visibility.Collapsed;
+            CollapsedGroup.Visibility = Visibility.Collapsed;
+            EsconderBotonVoz();   // que no se quede encendido al volver a la barra
             RootPanel.Visibility = Visibility.Visible;
         }
         // Colapsada, el contrato es «solo la carita»: la píldora no aparece y el semáforo ES la cara.
         UpdateChip(_mood);
+    }
+
+    // --- El botón de voz que asoma al pasar por encima de la carita suelta ---
+
+    /// <summary>
+    /// Aparece al acercar el ratón y se va al retirarlo.
+    ///
+    /// Hablarle es lo que más se hace y estaba escondido detrás de dos gestos que hay que saberse:
+    /// abrir la barra, o un doble clic sobre la carita. Un botón permanente al lado sobraría —la
+    /// carita vive encima del trabajo de alguien y cuanto menos ocupe, mejor—, así que se enseña
+    /// solo cuando la mano ya está ahí, que es justo cuando puede servir.
+    ///
+    /// Se desvanece, no se quita: quitarlo del árbol movería la carita de sitio, y una cosa que se
+    /// mueve cuando te acercas es una cosa que no se deja pulsar.
+    /// </summary>
+    private void OnCollapsedHoverIn(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        VoiceDot.IsHitTestVisible = true;
+        VoiceDot.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(140))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        });
+    }
+
+    private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e) => EsconderBotonVoz();
+
+    private void EsconderBotonVoz()
+    {
+        VoiceDot.IsHitTestVisible = false;
+        VoiceDot.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(180))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
+        });
     }
 
     // --- Temas de la carita: se alternan manteniéndola oprimida (claro → oscuro → transparente) ---
@@ -1174,7 +1208,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         MenuPanel.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
         BarRow.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-        CollapsedFace.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        CollapsedGroup.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        // El botón de voz se pone del lado de FUERA: pegada al borde izquierdo, a la derecha de la
+        // carita; pegada al derecho, a su izquierda. Si no, quedaría contra el borde de la pantalla.
+        CollapsedGroup.Children.Clear();
+        if (left) { CollapsedGroup.Children.Add(CollapsedFace); CollapsedGroup.Children.Add(VoiceDot); }
+        else { CollapsedGroup.Children.Add(VoiceDot); CollapsedGroup.Children.Add(CollapsedFace); }
+        VoiceDot.Margin = left ? new Thickness(10, 0, 0, 0) : new Thickness(0, 0, 10, 0);
 
         // Los tooltips salían siempre por la izquierda: pegados al borde izquierdo se saldrían de la
         // pantalla. Es un ajuste por botón porque ToolTipService.Placement no se hereda.
