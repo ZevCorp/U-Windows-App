@@ -128,10 +128,14 @@ public static class EdgeSnap
         //
         // Una curva por eje: cada uno sale a SU velocidad. Con una sola compartida, el eje lento
         // arrancaría de golpe o el rápido arrancaría frenado, y se nota.
-        // La panza del camino: proporcional al viaje y con techo, porque en un salto corto un arco
-        // grande se ve como un tropiezo. Hacia ARRIBA siempre (la perpendicular con el signo que
-        // toque), como quien lanza algo por encima de la mesa en vez de arrastrarlo por ella.
-        double arco = Math.Min(dist * 0.10, 55) * (dx >= 0 ? -1 : 1);
+        // La panza del camino, hacia ARRIBA: como quien lanza algo por encima de la mesa en vez de
+        // arrastrarlo por ella.
+        //
+        // Bajada de (0,10·d, tope 55 px) a (0,04·d, tope 22): con 55 px la curva se veía COMO curva
+        // —la carita hacía una parábola y llamaba la atención sobre sí misma—, y lo que se buscaba
+        // era otra cosa: que no se notara la línea recta. El arco tiene que sentirse sin verse
+        // (2026-08-06, «la curva es muy exagerada»).
+        double arco = Math.Min(dist * 0.04, 22) * (dx >= 0 ? -1 : 1);
 
         Vuelo.Mover(win, destLeft, destTop, TimeSpan.FromMilliseconds(ms),
                     Curva(vx, dx, segundos), Curva(vy, dy, segundos), arco);

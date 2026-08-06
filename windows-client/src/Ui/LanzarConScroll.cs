@@ -50,6 +50,94 @@ internal sealed class LanzarConScroll
     private readonly List<(DateTime Cuando, double Dx, double Dy)> _recientes = new();
 
     private HwndSource? _fuente;
+    private double _pendX, _pendY;
+    private bool _pintando;
+
+    // ── Oír la rueda aunque el cursor ya no esté encima ──────────────────────────────────────
+    //
+    // WM_MOUSEWHEEL lo entrega Windows a la ventana QUE ESTÁ BAJO EL CURSOR. Y lo primero que hace
+    // este gesto es apartar la carita de debajo del cursor, así que a los pocos píxeles dejábamos de
+    // recibir el resto del empujón: el movimiento salía con velocidad y se cortaba en seco a mitad,
+    // como si el trackpad hubiera dejado de existir (2026-08-06, lo describió el usuario: «sale de
+    // su contorno de acción»).
+    //
+    // Mientras dura el gesto se escucha la rueda de TODO el sistema con un gancho de bajo nivel, y
+    // se suelta en cuanto los dedos paran. Un gancho global permanente sería caro y de mala
+    // educación; uno que vive lo que dura un empujón, no.
+
+    private const int WH_MOUSE_LL = 14;
+    private delegate IntPtr Gancho(int code, IntPtr wParam, IntPtr lParam);
+    private Gancho? _fnGancho;           // referencia viva: si se la lleva el recolector, Windows cae
+    private IntPtr _hGancho;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSLLHOOKSTRUCT
+    {
+        public int X, Y;
+        public uint MouseData, Flags, Time;
+        public IntPtr Extra;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetWindowsHookEx(int idHook, Gancho fn, IntPtr mod, uint hilo);
+    [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr h);
+    [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr h, int code, IntPtr w, IntPtr l);
+
+    private void EngancharRuedaGlobal()
+    {
+        if (_hGancho != IntPtr.Zero) return;
+        _fnGancho = RuedaGlobal;
+        _hGancho = SetWindowsHookEx(WH_MOUSE_LL, _fnGancho, IntPtr.Zero, 0);
+    }
+
+    private void SoltarRuedaGlobal()
+    {
+        if (_hGancho == IntPtr.Zero) return;
+        UnhookWindowsHookEx(_hGancho);
+        _hGancho = IntPtr.Zero;
+        _fnGancho = null;
+    }
+
+    private IntPtr RuedaGlobal(int code, IntPtr wParam, IntPtr lParam)
+    {
+        if (code >= 0)
+        {
+            int msg = (int)(IntPtr.Size == 8 ? wParam.ToInt64() : wParam.ToInt32());
+            if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL)
+            {
+                var datos = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                int delta = (short)((datos.MouseData >> 16) & 0xFFFF);
+                if (delta != 0) Empujar(msg, delta);
+                return new IntPtr(1);   // el empujón es nuestro: que no lo desplace nadie más
+            }
+        }
+        return CallNextHookEx(_hGancho, code, wParam, lParam);
+    }
+
+    /// <summary>Aplica lo acumulado desde el último fotograma. Uno por cuadro, no uno por mensaje.</summary>
+    private void Cuadro(object? sender, EventArgs e)
+    {
+        double dx = _pendX, dy = _pendY;
+        _pendX = _pendY = 0;
+        if (dx == 0 && dy == 0) return;
+
+        var wa = SystemParameters.WorkArea;
+        double w = _win.ActualWidth, h = _win.ActualHeight;
+        try
+        {
+            _win.Left = Math.Clamp(_win.Left + dx, wa.Left - w * 0.35, wa.Right - w * 0.65);
+            _win.Top = Math.Clamp(_win.Top + dy, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
+        }
+        catch { }
+    }
+
+    private void DejarDePintar()
+    {
+        if (!_pintando) return;
+        _pintando = false;
+        System.Windows.Media.CompositionTarget.Rendering -= Cuadro;
+        _pendX = _pendY = 0;
+    }
 
     /// <param name="activo">Si ahora mismo el gesto cuenta. Colapsada sí; con la barra abierta no,
     /// que ahí el scroll es para el menú.</param>
@@ -67,7 +155,13 @@ internal sealed class LanzarConScroll
         {
             if (PresentationSource.FromVisual(win) is HwndSource s) Enganchar(s);
         };
-        win.Closed += (_, __) => { _fin.Stop(); _fuente?.RemoveHook(Mensaje); };
+        win.Closed += (_, __) =>
+        {
+            _fin.Stop();
+            SoltarRuedaGlobal();
+            DejarDePintar();
+            _fuente?.RemoveHook(Mensaje);
+        };
     }
 
     private void Enganchar(HwndSource s)
@@ -84,6 +178,16 @@ internal sealed class LanzarConScroll
         int delta = (short)((ToInt64(wParam) >> 16) & 0xFFFF);
         if (delta == 0) return IntPtr.Zero;
 
+        // Desde aquí manda el gancho global: el cursor va a dejar de estar encima enseguida.
+        EngancharRuedaGlobal();
+        Empujar(msg, delta);
+        handled = true;
+        return IntPtr.Zero;
+    }
+
+    /// <summary>Un trocito de empujón, venga del mensaje de la ventana o del gancho global.</summary>
+    private void Empujar(int msg, int delta)
+    {
         double dx = 0, dy = 0;
         if (msg == WM_MOUSEHWHEEL) dx = -delta * PixelesPorUnidad;
         else dy = delta * PixelesPorUnidad;
@@ -91,14 +195,21 @@ internal sealed class LanzarConScroll
         // Tocarla corta el viaje que llevara: mandan los dedos, como al agarrarla con el ratón.
         Vuelo.Termina();
 
-        var wa = SystemParameters.WorkArea;
-        double w = _win.ActualWidth, h = _win.ActualHeight;
-        try
+        // NO SE MUEVE LA VENTANA AQUÍ. Un trackpad de precisión manda más de cien mensajes por
+        // segundo, y mover la ventana en cada uno son cien SetWindowPos —cada uno de verdad, sobre
+        // una ventana transparente— hechos en el hilo que atiende los mensajes. La cola se llena, el
+        // gesto se retrasa y la carita llega tarde a donde ya están los dedos (2026-08-06).
+        //
+        // Se apunta el desplazamiento y se aplica UNA VEZ por fotograma, que es lo máximo que puede
+        // verse de todos modos. La respuesta se siente inmediata porque el fotograma llega enseguida,
+        // y el trabajo pasa a ser el mismo mueva el trackpad lo que mueva.
+        _pendX += dx;
+        _pendY += dy;
+        if (!_pintando)
         {
-            _win.Left = Math.Clamp(_win.Left + dx, wa.Left - w * 0.35, wa.Right - w * 0.65);
-            _win.Top = Math.Clamp(_win.Top + dy, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
+            _pintando = true;
+            System.Windows.Media.CompositionTarget.Rendering += Cuadro;
         }
-        catch { }
 
         var ahora = DateTime.UtcNow;
         _recientes.Add((ahora, dx, dy));
@@ -108,13 +219,14 @@ internal sealed class LanzarConScroll
 
         _fin.Stop();
         _fin.Start();
-        handled = true;
-        return IntPtr.Zero;
     }
 
     private void Soltar()
     {
         _fin.Stop();
+        SoltarRuedaGlobal();             // el gesto acabó: la rueda vuelve a ser de quien la use
+        Cuadro(null, EventArgs.Empty);   // lo que quedara sin aplicar, antes de soltar
+        DejarDePintar();
         var ahora = DateTime.UtcNow;
         _recientes.RemoveAll(r => ahora - r.Cuando > Ventana + Pausa);
         if (_recientes.Count == 0) return;
