@@ -146,6 +146,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // es lo que convierte «lo veo» en algo comprobable: si se planta junto a otra cosa, se ve al
         // instante. Es la misma idea que el recuadro, dicha con el cuerpo (2026-08-05).
         Senalador.Senala += (caja, _) => Dispatcher.BeginInvoke(() => IrJuntoA(caja));
+
+        // Cuando se abre el catálogo de apps, la carita se pone JUSTO ENCIMA y centrada: es ella la
+        // que está preguntando «¿cuál quieres que aprenda?», y una pregunta se hace de frente, no
+        // desde una esquina. Al cerrarse vuelve a donde estaba.
+        CarruselDeApps.Colocado += caja => Dispatcher.BeginInvoke(() =>
+        {
+            if (caja.IsEmpty) { VolverASuSitio(); return; }
+            EncimaDe(caja);
+        });
         Senalador.Suelta += () => Dispatcher.BeginInvoke(() => { try { CollapsedFace?.DejarDeMirar(); } catch { } });
         _badge = new LocatorBadge();
         _badge.Show();
@@ -2106,6 +2115,35 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             try { CollapsedFace?.MirarHacia(aLaIzquierda); } catch { }
         }
         catch { }
+    }
+
+    /// <summary>Dónde estaba antes de irse a presidir algo. Vacío = no se ha movido.</summary>
+    private (double Left, double Top)? _sitioDeAntes;
+
+    /// <summary>Se pone centrada justo ENCIMA de una caja de pantalla (píxeles ya en unidades WPF).</summary>
+    private void EncimaDe(Rect caja)
+    {
+        try
+        {
+            _sitioDeAntes ??= (Left, Top);
+            double ancho = ActualWidth > 0 ? ActualWidth : 160;
+            double alto = ActualHeight > 0 ? ActualHeight : 160;
+            var area = SystemParameters.WorkArea;
+
+            double x = caja.Left + (caja.Width - ancho) / 2;
+            double y = caja.Top - alto + 12;                 // pegada al borde de arriba, solapando un poco
+            Left = Math.Max(area.Left, Math.Min(x, area.Right - ancho));
+            Top = Math.Max(area.Top, Math.Min(y, area.Bottom - alto));
+            try { CollapsedFace?.DejarDeMirar(); } catch { }
+        }
+        catch { }
+    }
+
+    private void VolverASuSitio()
+    {
+        if (_sitioDeAntes is not { } sitio) return;
+        Left = sitio.Left; Top = sitio.Top;
+        _sitioDeAntes = null;
     }
 
     private void OnToggleLocator(object sender, RoutedEventArgs e)

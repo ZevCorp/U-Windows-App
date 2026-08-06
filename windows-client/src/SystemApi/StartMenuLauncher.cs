@@ -61,7 +61,9 @@ public static class StartMenuLauncher
         return null;
     }
 
-    private static IEnumerable<string> StartMenuRoots()
+    /// <summary>Dónde vive el menú Inicio. Público porque el carrusel de apps lo recorre entero, y
+    /// «dónde están los accesos directos» no puede tener dos respuestas.</summary>
+    public static IEnumerable<string> StartMenuRoots()
     {
         yield return Environment.GetFolderPath(Environment.SpecialFolder.StartMenu);       // menú del usuario
         yield return Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu);  // menú de la máquina

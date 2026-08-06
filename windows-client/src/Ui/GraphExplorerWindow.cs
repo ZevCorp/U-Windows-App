@@ -70,6 +70,8 @@ public sealed class GraphExplorerWindow : Window
     private string _signature = "";   // para no redibujar (y matar el hover) si nada cambió
     private bool _busy;               // recorriendo una arista: el refresco espera
     private readonly Button _crawlBtn;
+    private Button _carruselBtn = null!;
+    private CarruselDeApps? _carrusel;
     private readonly Button _collapseBtn;
     private readonly Button _graphBtn;
     private ScrollViewer _lista = null!;
@@ -233,9 +235,27 @@ public sealed class GraphExplorerWindow : Window
         _collapseBtn.Padding = new Thickness(0);
         _collapseBtn.VerticalAlignment = VerticalAlignment.Center;
 
+        // ELEGIR QUÉ APRENDER, sin tener que estar dentro. El botón de al lado mapea la app que
+        // tengas delante, lo que obliga a saber de antemano cuál quieres y a llegar hasta ella.
+        // Este abre el catálogo de lo instalado y se elige con doble clic (2026-08-05).
+        _carruselBtn = new Button
+        {
+            Content = "🗂",
+            Width = 26, Height = 26, FontSize = 12,
+            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Elegir qué aplicación aprender",
+        };
+        _carruselBtn.Click += (_, __) => AbrirCarrusel();
+
         var iconos = new StackPanel { Orientation = Orientation.Horizontal };
         iconos.Children.Add(_collapseBtn);
         iconos.Children.Add(_crawlBtn);
+        iconos.Children.Add(_carruselBtn);
 
         _barra = new Border
         {
@@ -1454,6 +1474,44 @@ public sealed class GraphExplorerWindow : Window
     /// Lanza el recorrido automático. El botón se convierte en «Detener» mientras corre: parar
     /// tiene que estar a un clic, sin buscarlo, porque esto mueve el ratón y el foco de la máquina.
     /// </summary>
+    /// <summary>
+    /// Abre el catálogo de apps instaladas. Al elegir una, se abre y se aprende.
+    /// </summary>
+    /// <remarks>
+    /// El mapeo empieza SIEMPRE por traer la app al frente y esperar a que esté: aprender una
+    /// aplicación que aún se está pintando anota media pantalla y la da por completa. Y si no se
+    /// consigue traerla, no se mapea nada — es preferible decirlo a llenar el grafo con las puertas
+    /// de la ventana equivocada, que es el veneno que ya conocemos.
+    /// </remarks>
+    private void AbrirCarrusel()
+    {
+        if (_carrusel != null) { _carrusel.Activate(); return; }
+
+        var carrusel = new CarruselDeApps();
+        _carrusel = carrusel;
+        carrusel.Closed += (_, __) => _carrusel = null;
+        carrusel.Elegida += app => Dispatcher.BeginInvoke(new Action(async () => await AprenderAppAsync(app)));
+        _ = carrusel.MostrarAsync();
+    }
+
+    private async Task AprenderAppAsync(SystemApi.AppInstalada app)
+    {
+        _status.Text = $"abriendo «{app.Nombre}»…";
+        LogBus.Log("carrusel", $"abriendo «{app.Nombre}» para aprenderla");
+
+        bool abierta = await Task.Run(() => SystemApi.WindowsSystemApi.LaunchApp(app.Nombre));
+        if (!abierta)
+        {
+            _status.Text = $"no pude abrir «{app.Nombre}»: no la mapeo a ciegas";
+            LogBus.Log("carrusel", $"NO se pudo abrir «{app.Nombre}»; no se mapea");
+            return;
+        }
+
+        // Que esté abierta no es que esté lista: se le da tiempo a pintarse antes de mirarla.
+        await Task.Delay(1500);
+        await CrawlAsync();
+    }
+
     private async Task CrawlAsync()
     {
         if (_crawlCts != null) { _crawlCts.Cancel(); return; }
