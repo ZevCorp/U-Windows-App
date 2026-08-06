@@ -42,26 +42,10 @@ public sealed class MuelleEase : IEasingFunction
     /// </summary>
     public double Damping { get; init; } = 0.62;
 
-    /// <summary>
-    /// El rebote va HACIA DENTRO en vez de pasarse de largo. Para cuando el destino es una pared.
-    /// </summary>
-    /// <remarks>
-    /// Un muelle se pasa del destino y vuelve. Eso está bien en mitad de la pantalla, pero cuando el
-    /// destino ES el borde, pasarse significa salirse — y ahí Windows no deja: clava la ventana en el
-    /// borde y se come el rebote entero. Medido: la curva pedía −67 px y la ventana se quedaba en 0
-    /// durante medio segundo, así que el lanzamiento se veía llegar y pararse en seco mientras la
-    /// animación seguía corriendo sola por dentro (2026-08-06).
-    ///
-    /// Reflejar lo que se pasa de 1 convierte «se sale y vuelve» en «choca y rebota hacia dentro»,
-    /// que es lo que hace una pelota contra una pared: el mismo gesto, del lado donde hay sitio.
-    /// </remarks>
-    public bool RebotaHaciaDentro { get; init; }
-
     public double Ease(double t)
     {
         double p1 = P(1);
-        double v = Math.Abs(p1) < 1e-6 ? t : P(t) / p1;
-        return RebotaHaciaDentro && v > 1 ? 2 - v : v;
+        return Math.Abs(p1) < 1e-6 ? t : P(t) / p1;
     }
 
     private double P(double t)
