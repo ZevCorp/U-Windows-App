@@ -1535,16 +1535,35 @@ public sealed class GraphExplorerWindow : Window
         _status.Text = $"abriendo «{app.Nombre}»…";
         LogBus.Log("carrusel", $"abriendo «{app.Nombre}» para aprenderla");
 
-        bool abierta = await Task.Run(() => SystemApi.WindowsSystemApi.LaunchApp(app.Nombre));
-        if (!abierta)
+        // SE LANZA EL ACCESO DIRECTO Y SE COMPRUEBA MIRANDO, no preguntando por un proceso con ese
+        // nombre. «Control Panel» abre de verdad, pero su ventana es de explorer.exe —es una
+        // ventana del shell—, así que esperar un proceso llamado «Control Panel» daba «no se pudo
+        // abrir» con el Panel de control delante (2026-08-05). Lo que dice que se abrió es que la
+        // pantalla cambió, que es la misma regla que rige en todo lo demás.
+        string antes = _where()?.Id ?? "";
+        await Task.Run(() =>
         {
-            _status.Text = $"no pude abrir «{app.Nombre}»: no la mapeo a ciegas";
-            LogBus.Log("carrusel", $"NO se pudo abrir «{app.Nombre}»; no se mapea");
-            return;
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(app.Lnk) { UseShellExecute = true }); }
+            catch (Exception e) { LogBus.Log("carrusel", $"no se pudo lanzar «{app.Nombre}»: {e.Message}"); }
+        });
+
+        string ahora = antes;
+        for (int i = 0; i < 40 && (ahora.Length == 0 || ahora == antes); i++)
+        {
+            await Task.Delay(250);
+            ahora = _where()?.Id ?? "";
         }
 
-        // Que esté abierta no es que esté lista: se le da tiempo a pintarse antes de mirarla.
-        await Task.Delay(1500);
+        if (ahora.Length == 0 || ahora == antes)
+        {
+            _status.Text = $"abrí «{app.Nombre}» pero la pantalla no cambió; no mapeo a ciegas";
+            LogBus.Log("carrusel", $"«{app.Nombre}»: la pantalla siguió siendo «{antes}»; no se mapea");
+            return;
+        }
+        LogBus.Log("carrusel", $"«{app.Nombre}» abierta: la pantalla pasó a «{ahora}»");
+
+        // Que esté delante no es que esté lista: se le da tiempo a terminar de pintarse.
+        await Task.Delay(1200);
 
         await CrawlAsync();
     }

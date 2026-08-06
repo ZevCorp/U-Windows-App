@@ -56,11 +56,16 @@ public sealed class MaestroDeApps
 
         // La foto es DE LA APP, no del escritorio: ver también el editor, el navegador y nuestra
         // propia interfaz convierte «¿qué es aquí navegación permanente?» en una pregunta sin «aquí».
-        string proc = app.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
-        string? foto = Screenshotter.CaptureVentanaBase64Png(AppAligner.VentanaDe(proc));
+        //
+        // Y la ventana se toma de LO QUE ESTÁ DELANTE, no buscándola por el nombre de la app. Ese
+        // nombre no siempre es el dueño de la ventana, y buscarlo así fallaba en dos casos muy
+        // normales: en el navegador la app es el DOMINIO —«canva.com», que no es ningún proceso— y
+        // el Panel de control vive dentro de explorer.exe. Las dos veces se dijo «no encuentro la
+        // ventana» con la ventana delante (2026-08-05). Lo que hay delante es lo que se enseña.
+        string? foto = Screenshotter.CaptureVentanaBase64Png(AppAligner.VentanaDelUsuario());
         if (foto == null)
         {
-            LogBus.Log("maestro", $"no encontré la ventana de «{app}»: no se enseña a ciegas");
+            LogBus.Log("maestro", $"no hay ventana a la vista de «{app}»: no se enseña a ciegas");
             return null;
         }
 
@@ -133,12 +138,31 @@ public sealed class MaestroDeApps
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
         string url = $"https://generativelanguage.googleapis.com/v1beta/models/{Modelo}:generateContent?key={Uri.EscapeDataString(clave)}";
-        using var contenido = new StringContent(JsonSerializer.Serialize(cuerpo), Encoding.UTF8, "application/json");
+        string json = JsonSerializer.Serialize(cuerpo);
 
-        var r = await http.PostAsync(url, contenido, ct);
-        string texto = await r.Content.ReadAsStringAsync(ct);
-        if (!r.IsSuccessStatusCode)
-            throw new InvalidOperationException($"{(int)r.StatusCode}: {Recorta(texto)}");
+        // «AHORA MISMO NO» NO ES «NO». Un 503 o un 429 dicen que el servicio está ocupado, no que la
+        // pregunta esté mal, y sin reintentar se perdía la lección entera por un momento malo — que
+        // es justo lo que pasó al probar con Chrome (2026-08-05). Se espera un poco más cada vez;
+        // los errores de verdad —una clave mala, una petición inválida— no se reintentan, porque
+        // repetirlos no los arregla.
+        string texto = "";
+        int codigo = 0;
+        for (int intento = 1; intento <= 4; intento++)
+        {
+            using var contenido = new StringContent(json, Encoding.UTF8, "application/json");
+            var r = await http.PostAsync(url, contenido, ct);
+            texto = await r.Content.ReadAsStringAsync(ct);
+            codigo = (int)r.StatusCode;
+            if (r.IsSuccessStatusCode) break;
+
+            bool vuelveAIntentarse = codigo is 429 or 500 or 502 or 503 or 504;
+            if (!vuelveAIntentarse || intento == 4)
+                throw new InvalidOperationException($"{codigo}: {Recorta(texto)}");
+
+            int esperaMs = 1000 * (1 << (intento - 1));   // 1s, 2s, 4s
+            LogBus.Log("maestro", $"el servicio dijo {codigo}; reintento {intento + 1} de 4 en {esperaMs / 1000}s");
+            await Task.Delay(esperaMs, ct);
+        }
 
         using var doc = JsonDocument.Parse(texto);
         return doc.RootElement.GetProperty("candidates")[0]
