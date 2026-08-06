@@ -669,7 +669,10 @@ public sealed class GraphExplorerWindow : Window
         // ventana cambia todo lo que importa y no cambiaba la firma — se arrastraba una ventana y
         // los puntos se quedaban clavados donde estaban (2026-08-04, reportado por el usuario).
         // Se redondea a píxeles enteros para no redibujar por medio punto de diferencia.
-        string firma = aqui + "|" + string.Join("|", els.Select(e =>
+        // Encender o apagar los números CAMBIA lo que hay que dibujar aunque los elementos sean los
+        // mismos: sin esto en la firma, se pedían los números y el repintado se saltaba por «nada
+        // ha cambiado», así que la foto salía sin ellos.
+        string firma = (Numerar ? "n|" : "") + aqui + "|" + string.Join("|", els.Select(e =>
             $"{e.Label}:{e.ControlType}:{(int)e.Bounds.X},{(int)e.Bounds.Y}"));
         if (firma == _signature) return; // nada cambió: no matar el hover redibujando
         _signature = firma;
@@ -1542,7 +1545,62 @@ public sealed class GraphExplorerWindow : Window
 
         // Que esté abierta no es que esté lista: se le da tiempo a pintarse antes de mirarla.
         await Task.Delay(1500);
+
         await CrawlAsync();
+    }
+
+    /// <summary>
+    /// Le pide a un modelo que MIRE la pantalla y explique la jerarquía de la app.
+    ///
+    /// Los números se encienden solo durante la pregunta y se apagan después: son para que el
+    /// maestro pueda señalar sin ambigüedad, no para que vivan encima de la pantalla del usuario.
+    /// </summary>
+    private async Task EnsenarLaAppAsync()
+    {
+        var loc = _where();
+        if (loc == null) { LogBus.Log("maestro", "no se sabe dónde estamos: no se enseña"); return; }
+        string app = SurfaceMap.AppDe(loc.Id);
+        if (app.Length == 0) { LogBus.Log("maestro", $"«{loc.Id}» no dice de qué app es: no se enseña"); return; }
+        LogBus.Log("maestro", $"enseñando «{app}» desde «{loc.Id}»…");
+
+        _status.Text = "mirando la app para entender su navegación…";
+        Numerar = true;
+
+        // SE ESPERA A QUE LOS NÚMEROS ESTÉN, no un rato «por si acaso». El repintado va por su
+        // cuenta —lee el árbol de UI en otro hilo y pinta cuando puede—, así que una espera fija se
+        // queda corta justo cuando la pantalla tiene mucho que leer: la foto salía sin números y el
+        // maestro recibía una lista vacía (2026-08-05). Se mira hasta que los haya.
+        for (int i = 0; i < 30 && _numeradas.Count == 0; i++)
+        {
+            RefreshEdges();
+            await Task.Delay(150);
+        }
+        if (_numeradas.Count == 0)
+        {
+            LogBus.Log("maestro", "los puntos no llegaron a numerarse: no se enseña");
+            Numerar = false;
+            return;
+        }
+        await Task.Delay(250);   // que el último repintado esté en pantalla ANTES de la foto
+
+        try
+        {
+            var maestro = new Navigation.MaestroDeApps(_map);
+            var leccion = await maestro.EnsenarAsync(app, loc.Id, PuertasNumeradas(), CancellationToken.None);
+            _status.Text = leccion == null
+                ? "no pude consultar al maestro; sigo con el recorrido"
+                : $"jerarquía aprendida: {leccion.Resumen}";
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("maestro", $"falló la enseñanza: {e.Message}");
+            _status.Text = "la enseñanza falló; sigo con el recorrido";
+        }
+        finally
+        {
+            Numerar = false;
+            RefreshEdges();
+        }
     }
 
     private async Task CrawlAsync()
@@ -1551,6 +1609,13 @@ public sealed class GraphExplorerWindow : Window
 
         var loc = _where();
         if (loc == null) { _status.Text = "trae al frente la app que quieres mapear"; return; }
+
+        // PRIMERO LA LECCIÓN, DESPUÉS EL RECORRIDO. El maestro dice de un vistazo qué es navegación
+        // permanente —algo que al recorredor le cuesta varias vueltas deducir contando— y con esa
+        // jerarquía ya puesta, el recorrido sabe qué está explorando en vez de descubrirlo al final.
+        // Va aquí y no en quien llama para que valga para TODAS las formas de pedir un mapeo: el
+        // botón de «esta app» y el catálogo tienen que aprender lo mismo.
+        await EnsenarLaAppAsync();
 
         _crawlCts = new CancellationTokenSource();
         _crawlBtn.Content = "⏹ Detener el mapeo";
