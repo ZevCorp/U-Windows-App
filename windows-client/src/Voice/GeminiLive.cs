@@ -58,6 +58,16 @@ public sealed class GeminiLive : IDisposable
     /// <summary>El turno se cerró: lo siguiente que se diga empieza en una línea nueva.</summary>
     public event Action? Cerro;
 
+    /// <summary>
+    /// Una acción, dicha en castellano, cuando EMPIEZA y cuando TERMINA (<c>listo</c>).
+    ///
+    /// Va aparte de <see cref="Dice"/> a propósito: <c>Dice</c> es conversación —lo que se oye y lo
+    /// que se responde— y esto es maquinaria. Mezclarlos hacía que un «⚙ file_open path=descargas»
+    /// pisara la última frase de la conversación en la burbuja. Quien escuche esto puede pintarlo
+    /// donde quiera y con su propio ritmo.
+    /// </summary>
+    public event Action<string, bool>? Accion;
+
     /// <summary>Llamadas que el modelo retiró: ni se ejecutan ni se responden.</summary>
     private readonly HashSet<string> _canceladas = new();
     private readonly object _candadoCancel = new();
@@ -371,12 +381,24 @@ public sealed class GeminiLive : IDisposable
         paso: manda la secuencia entera de una vez con map_run. Una llamada en vez de treinta es la
         diferencia entre verlo ocurrir y verlo pensar.
 
-        · «ve a vídeos» / «ábreme imágenes» / «llévame a notas» →
-          map_go_to directo, sin preguntar ni mirar antes, con la superficie que corresponda:
-          vídeos → uia://explorer.exe/videos
-          imágenes → uia://explorer.exe/imágenes
-          notas → uia://explorer.exe/notas
-          Si te piden otro sitio que no esté en esta lista, map_places para encontrarlo y map_go_to.
+        EL EXPLORADOR DE ARCHIVOS ES DISTINTO A TODO LO DEMÁS: lo que hay NO es lo que se ve.
+        En cualquier otra app te fías de la pantalla. Aquí no puedes: en la ventana caben veinte
+        archivos y en la carpeta puede haber trescientos, Windows esconde las extensiones, y por el
+        nombre no se distingue una carpeta de un archivo. Para MIRAR y para IR usa siempre los
+        verbos file_*, que preguntan al disco y contestan enteros, exactos y al instante:
+
+          «¿dónde estoy?» / «¿en qué carpeta estamos?»      → file_where
+          «¿qué hay aquí?» / «¿cuántos PDF?» / «¿está X?»   → file_list   (NO map_what_i_see)
+          «ve a vídeos» / «entra en facturas» / «vuelve»    → file_open   (NO map_go_to, NO map_take)
+          «encuéntrame X» / «¿dónde está X?»                → file_find
+
+        Para TOCAR —crear, seleccionar, cortar, pegar, renombrar— se sigue usando map_take, porque
+        el explorador no se entera de lo que se hace por fuera de su ventana. Leer va por disco;
+        tocar va por la pantalla.
+
+        Y no encadenes clics para llegar a una carpeta: file_open llega en un salto y no puede
+        equivocarse de elemento. Ir pulsando carpeta por carpeta son varios saltos y cada uno puede
+        fallar.
 
         · «organiza la carpeta de pruebas» / «ordena los archivos por tipo» →
           map_run con steps = el JSON de abajo, tal cual. Di en voz que vas a organizarlos por tipo
@@ -411,6 +433,18 @@ public sealed class GeminiLive : IDisposable
          {"op":"take","exit":"Cortar","at":"uia://explorer.exe/u-prueba-organizar"},
          {"op":"take","exit":"uia:name=Datos;ct=ListItem","at":"uia://explorer.exe/u-prueba-organizar"},
          {"op":"take","exit":"Pegar","at":"uia://explorer.exe/datos"}]
+
+        DI LO QUE VAS A HACER, Y LUEGO HAZLO. Antes de cada llamada, una frase corta en voz —«voy a
+        Descargas», «busco el informe»— y a continuación la herramienta. No al revés y no en
+        silencio: quien te habla está mirando la pantalla, y unos segundos sin que digas nada no se
+        distinguen de que te hayas colgado. Es la diferencia entre verlo ocurrir y no saber si pasa
+        algo.
+
+        Y UNA COSA CADA VEZ mientras se conversa. Si te dicen «ve a descargas», ve y cuenta qué hay;
+        si luego te dicen «no, mejor documentos», ve allí y vuelve a contar. No te guardes los pasos
+        para hacerlos todos juntos al final: quien habla quiere corregirte a mitad de camino, y no
+        puede corregir lo que todavía no ha visto. map_run es para las tareas largas que ya te han
+        pedido enteras de una vez, no para una conversación.
 
         Si una herramienta responde que no actuó, dilo en voz alta y explica por qué. No lo maquilles
         ni sigas como si hubiera funcionado.
@@ -502,7 +536,92 @@ public sealed class GeminiLive : IDisposable
         Fn("map_learn_app", "Recorre una aplicación entera y aprende sus pantallas. Tarda; úsala solo si hace "
             + "falta conocer una app que el mapa no tiene, no para abrirla.",
             ("app", "El proceso, por ejemplo «explorer» o «notepad».")),
+
+        // EL EXPLORADOR DE ARCHIVOS SE PREGUNTA AL DISCO. En cualquier otra app, lo que hay es lo
+        // que se ve; aquí no. UIA solo ve lo que cabe en pantalla —una carpeta de 300 archivos son
+        // los ~20 visibles—, no dice si algo es carpeta o archivo (ItemType vacío 30/30) y Windows
+        // oculta las extensiones. El disco contesta entero, exacto y en microsegundos. Estas cuatro
+        // son para MIRAR y para IR; para TOCAR (crear, cortar, pegar, renombrar) se sigue usando
+        // map_take, porque el explorador no se entera de lo que se hace por fuera de su ventana.
+        Fn("file_where", "DÓNDE está el explorador ahora: la ruta real en disco —«C:\\Users\\ana\\Downloads», "
+            + "no «Descargas»— y cuánto hay dentro. Úsala antes de nada cuando la tarea sea de archivos: "
+            + "el título de la ventana no distingue tres carpetas llamadas «Facturas» y la ruta sí."),
+        Fn("file_list", "QUÉ HAY dentro de una carpeta, leído del disco: TODO, no solo lo que se ve en "
+            + "pantalla, con la extensión real de cada archivo. Úsala en vez de map_what_i_see siempre "
+            + "que la pregunta sea sobre archivos («¿qué hay aquí?», «¿cuántos PDF hay?», «¿está el "
+            + "informe?»): map_what_i_see te da los que caben en la ventana, esta te los da todos.",
+            ("path", "La carpeta. Vacío = la que está abierta. Acepta «descargas», «escritorio», «~\\notas» o una ruta entera."),
+            ("filter", "Solo los que contengan este texto en el nombre. Vacío = todo.")),
+        Fn("file_open", "VE a una carpeta de un solo salto. Para «entra en facturas», «vuelve a descargas», "
+            + "«ábreme la carpeta del proyecto». NO vayas pulsando carpeta por carpeta con map_take para "
+            + "llegar a una ruta: eso son varios saltos, cada uno puede fallar y tarda. Esto es uno y no "
+            + "falla. Después de abrir te dice ya lo que hay dentro.",
+            ("path", "A dónde. Ruta entera, un nombre común («descargas», «documentos»), o el nombre de una "
+                   + "subcarpeta de donde estás («facturas»), que se resuelve desde ahí.")),
+        Fn("file_find", "BUSCA un archivo o carpeta por su nombre, en la carpeta actual y las de dentro. "
+            + "Úsala cuando el usuario diga «encuéntrame X» o «¿dónde está X?» y no sepas dónde está. "
+            + "Es del disco: no toca la caja de búsqueda del explorador ni deja la ventana en un estado raro.",
+            ("query", "Parte del nombre que buscas."),
+            ("path", "Dónde buscar. Vacío = la carpeta abierta ahora.")),
     };
+
+    /// <summary>
+    /// Qué se está haciendo, en las palabras que usaría alguien al contarlo.
+    ///
+    /// El nombre de la función no vale: «file_open» no le dice nada a quien mira la pantalla, y en
+    /// el momento en que aparece es justo cuando esa persona necesita saber si vamos a donde ella
+    /// quería. Lo desconocido cae al nombre crudo en vez de inventarse una frase: preferimos que se
+    /// vea raro a que mienta.
+    /// </summary>
+    private static string EnCurso(string tool, IReadOnlyDictionary<string, string> a)
+    {
+        string V(string k) => a.TryGetValue(k, out var v) ? v.Trim() : "";
+        return tool switch
+        {
+            "file_where" => "mirando dónde estamos…",
+            "file_list" => V("path").Length > 0 ? $"mirando qué hay en {V("path")}…" : "mirando qué hay aquí…",
+            "file_open" => $"abriendo {V("path")}…",
+            "file_find" => $"buscando «{V("query")}»…",
+            "map_open_app" => $"abriendo {V("app")}…",
+            "map_go_to" => $"yendo a {Corto(V("surface"))}…",
+            "map_take" => $"pulsando «{V("exit")}»…",
+            "map_type" => $"escribiendo «{V("text")}»…",
+            "map_where_am_i" => "mirando dónde estamos…",
+            "map_what_i_see" => "mirando la pantalla…",
+            "map_show" or "map_pointing_at" => "señalando…",
+            "map_run" => "haciendo la secuencia…",
+            "map_learn_app" => $"aprendiendo {V("app")}… (esto tarda)",
+            _ => tool,
+        };
+    }
+
+    /// <summary>
+    /// Cómo quedó. Lo importante es que se distinga de lo anterior sin leerlo entero: ✓ o ✋, y el
+    /// dato que la persona estaba esperando —cuántos archivos, a dónde se fue— no el volcado del
+    /// resultado, que se lo queda el modelo.
+    /// </summary>
+    private static string Terminado(string tool, IReadOnlyDictionary<string, string> a,
+        string resultado, long ms)
+    {
+        // Las herramientas contestan en prosa, así que «no se pudo» se reconoce por cómo empieza.
+        bool mal = resultado.StartsWith("No ", StringComparison.OrdinalIgnoreCase)
+                || resultado.StartsWith("Falta", StringComparison.OrdinalIgnoreCase)
+                || resultado.StartsWith("Nada ", StringComparison.OrdinalIgnoreCase)
+                || resultado.Contains("no existe", StringComparison.OrdinalIgnoreCase)
+                || resultado.Contains("falló", StringComparison.OrdinalIgnoreCase)
+                || resultado.Contains("no se pudo", StringComparison.OrdinalIgnoreCase);
+
+        string primera = resultado.Split('\n')[0].Trim();
+        if (primera.Length > 70) primera = primera[..70] + "…";
+        return $"{(mal ? "✋" : "✓")} {primera}  ({ms} ms)";
+    }
+
+    /// <summary>La cola de una superficie, que es la parte que una persona reconoce.</summary>
+    private static string Corto(string superficie)
+    {
+        int barra = superficie.LastIndexOf('/');
+        return barra >= 0 && barra < superficie.Length - 1 ? superficie[(barra + 1)..] : superficie;
+    }
 
     private static object Fn(string nombre, string descripcion, params (string Nombre, string Que)[] args)
     {
@@ -545,8 +664,25 @@ public sealed class GeminiLive : IDisposable
     /// Ahora se aprende el silencio de esta sala y se exige destacar sobre ÉL. El suelo absoluto es
     /// solo una red para micrófonos con ruido eléctrico.
     /// </summary>
+    /// Y hay que dejar sitio para el ruido QUE NO ES SUELO: un teclazo, una silla, un ventilador.
+    /// El suelo aprendido de esta sala midió 0,004–0,007 y los golpes sueltos 0,02–0,03, mientras que
+    /// la voz de verdad midió 0,15–0,20 — treinta veces el suelo, no tres. Con ×3 la puerta quedaba
+    /// dentro del ruido y se abría sola: 81 «interrumpe» en una sesión, y el turno no se cerraba
+    /// nunca (2026-08-06). ×8 deja los golpes fuera y la voz dentro con holgura.
     private const double SueloAbsoluto = 0.008;
-    private const double VecesSobreElRuido = 3.0;
+    private const double VecesSobreElRuido = 8.0;
+
+    /// <summary>
+    /// Cuánto puede durar UN turno hablado antes de darlo por cerrado a la fuerza.
+    ///
+    /// Es la red de seguridad de todo esto. Como la detección automática está desactivada, el turno
+    /// lo cerramos nosotros con activityEnd, y ese cierre es lo único que le dice al modelo «te
+    /// toca». Si el umbral se queda por debajo del ruido, el cierre no llega NUNCA: el 2026-08-06 la
+    /// sala se leyó como voz continua y el modelo estuvo 62 segundos esperando un final que no
+    /// existía, con la carita cargando y sin decir nada. Nadie le habla doce segundos seguidos y sin
+    /// pausa a un asistente; si el micro dice que sí, es que el micro se está equivocando.
+    /// </summary>
+    private static readonly TimeSpan TurnoMaximo = TimeSpan.FromSeconds(12);
 
     /// <summary>Cuánto hay que destacar sobre el eco propio para que cuente como interrupción. No es
     /// mucho a propósito: cortarle a media frase es media gracia de hablar en vivo, así que se pide
@@ -564,6 +700,9 @@ public sealed class GeminiLive : IDisposable
     private double _ruidoSala = 0.02;
     private bool _usuarioHablando;
     private DateTime _ultimaVoz;
+
+    /// <summary>Desde cuándo llevamos el turno abierto. Lo vigila <see cref="TurnoMaximo"/>.</summary>
+    private DateTime _desdeQueHabla;
     private DateTime _ultimoAforo = DateTime.MinValue;
     private double _picoDelTramo;
 
@@ -640,9 +779,26 @@ public sealed class GeminiLive : IDisposable
                 if (!_usuarioHablando)
                 {
                     _usuarioHablando = true;
+                    _desdeQueHabla = DateTime.UtcNow;
                     LogBus.Log("voz-viva", $"interrumpe: pico {vol:F3} sobre umbral {umbral:F3} "
                         + $"(salida {salida:F3} · eco aprendido ×{_gananciaEco:F2})");
                     await EnviarAsync("""{"realtimeInput":{"activityStart":{}}}""", _cts?.Token ?? default);
+                }
+                // EL TURNO NO PUEDE QUEDARSE ABIERTO PARA SIEMPRE. Aquí arriba se refresca _ultimaVoz
+                // en cada tramo, así que mientras el ruido siga cruzando el umbral la rama del cierre
+                // por silencio —700 ms más abajo— no se alcanza jamás. Ese es exactamente el camino
+                // por el que el modelo se quedó un minuto esperando. Se cierra por reloj y se DICE
+                // que fue por reloj, con lo que se estaba midiendo: si esto aparece en el log, el
+                // umbral está mal puesto, no es que alguien hablara doce segundos.
+                else if (DateTime.UtcNow - _desdeQueHabla > TurnoMaximo)
+                {
+                    _usuarioHablando = false;
+                    _tramosAltos = 0;
+                    LogBus.Log("voz-viva", $"turno cerrado por reloj tras {TurnoMaximo.TotalSeconds:F0} s "
+                        + $"seguidos sobre el umbral (pico {vol:F3} · umbral {umbral:F3} · ruido {_ruidoSala:F3}). "
+                        + "El umbral está por debajo del ruido de la sala.");
+                    await EnviarAsync("""{"realtimeInput":{"activityEnd":{}}}""", _cts?.Token ?? default);
+                    return;
                 }
             }
             else return;   // aún no cuenta: no se manda nada
@@ -996,9 +1152,16 @@ public sealed class GeminiLive : IDisposable
                 resultado = $"«{nombre}» no es una herramienta del mapa";
             else
             {
-                Dice?.Invoke($"⚙ {nombre} {string.Join(" ", args.Select(kv => $"{kv.Key}={kv.Value}"))}".TrimEnd());
+                // SE AVISA ANTES, Y EN CASTELLANO. Esto ya se disparaba antes de la llamada —el
+                // instante bueno— pero decía «⚙ file_open path=descargas», que es el nombre de una
+                // función, no lo que está pasando. Quien mira la pantalla necesita saber qué se está
+                // haciendo mientras se hace; la mitad de la sensación de tiempo real es esta línea.
+                Accion?.Invoke(EnCurso(nombre, args), false);
+                var reloj = System.Diagnostics.Stopwatch.StartNew();
                 try { resultado = _mapa.Call(nombre, args); }
                 catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; }
+                reloj.Stop();
+                Accion?.Invoke(Terminado(nombre, args, resultado, reloj.ElapsedMilliseconds), true);
             }
 
             respuestas.Add(new { id, name = nombre, response = new { result = resultado } });

@@ -1090,7 +1090,8 @@ public sealed class SurfaceMapTools
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
-        or "map_pointed_trail" or "map_exclude";
+        or "map_pointed_trail" or "map_exclude"
+        or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -1133,11 +1134,81 @@ public sealed class SurfaceMapTools
                 int.TryParse(A("level"), out int niv) ? niv : -1),
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
+
+            // Los verbos del explorador. Van por disco, no por pantalla: ver Explorador.cs.
+            "file_where" => DondeEnDisco(),
+            "file_list" => SystemApi.Explorador.Describir(SystemApi.Explorador.Expandir(A("path")), A("filter")),
+            "file_open" => AbrirCarpeta(A("path")),
+            "file_find" => BuscarEnDisco(A("query"), A("path")),
+
             _ => $"herramienta de mapa no soportada: {tool}",
         };
 
         LogBus.Log("mapa-mcp", "← " + (r.Length > 200 ? r[..200] + "…" : r).Replace("\n", " | "));
         return r;
+    }
+
+    /// <summary>
+    /// Dónde está el explorador, con la ruta REAL y no el título de la ventana.
+    ///
+    /// El título dice «Descargas»; la ruta dice «C:\Users\quien\Downloads». Cuando el usuario
+    /// habla, la diferencia importa: hay una carpeta «Facturas» en tres sitios distintos y el
+    /// título no las distingue.
+    /// </summary>
+    private static string DondeEnDisco()
+    {
+        string ruta = SystemApi.Explorador.RutaEnPrimerPlano();
+        if (ruta.Length == 0)
+            return "No hay ninguna carpeta del explorador en primer plano. "
+                 + "Usa map_open_app con «explorer», o file_open con una ruta.";
+
+        var todo = SystemApi.Explorador.Listar(ruta);
+        int carpetas = todo.Count(e => e.EsCarpeta);
+        return $"{ruta} · {carpetas} carpeta(s) y {todo.Count - carpetas} archivo(s) dentro. "
+             + $"Carpeta padre: {System.IO.Path.GetDirectoryName(ruta) ?? "(ninguna, es una raíz)"}";
+    }
+
+    /// <summary>
+    /// Navega a una carpeta en un salto. Es lo que sustituye a encadenar clics carpeta por carpeta.
+    /// </summary>
+    private static string AbrirCarpeta(string path)
+    {
+        if (path.Trim().Length == 0) return "Falta la ruta o el nombre de la carpeta.";
+
+        string destino = SystemApi.Explorador.Expandir(path);
+        string ido = SystemApi.Explorador.Navegar(destino);
+        if (ido.Length == 0)
+            return $"No existe la carpeta «{destino}»"
+                 + (destino.Equals(path, StringComparison.OrdinalIgnoreCase) ? "." : $" (interpretado desde «{path}»).")
+                 + " Mira con file_list qué hay donde estás antes de inventar el nombre.";
+
+        // El explorador tarda un instante en repintar; sin esto, un file_list inmediatamente después
+        // podría leerse antes de que la ventana muestre el destino. El disco ya es correcto — esto
+        // es solo para que lo que se dice y lo que se ve coincidan.
+        System.Threading.Thread.Sleep(150);
+        return $"Abierta «{ido}».\n" + SystemApi.Explorador.Describir(ido);
+    }
+
+    /// <summary>
+    /// Busca por nombre en el disco, sin tocar la caja de búsqueda del explorador.
+    /// </summary>
+    private static string BuscarEnDisco(string query, string path)
+    {
+        if (query.Trim().Length == 0) return "Falta qué buscar.";
+
+        string raiz = path.Trim().Length > 0
+            ? SystemApi.Explorador.Expandir(path)
+            : SystemApi.Explorador.RutaEnPrimerPlano();
+        if (raiz.Length == 0) return "No sé dónde buscar: no hay carpeta abierta y no me diste ruta.";
+
+        var hallazgos = SystemApi.Explorador.Buscar(raiz, query.Trim());
+        if (hallazgos.Count == 0) return $"Nada que contenga «{query}» dentro de {raiz}.";
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"{hallazgos.Count} resultado(s) para «{query}» en {raiz}:");
+        foreach (string p in hallazgos)
+            sb.AppendLine($"  {(System.IO.Directory.Exists(p) ? "[carpeta] " : "")}{p}");
+        return sb.ToString().TrimEnd();
     }
 
     private string WhereAmI()
