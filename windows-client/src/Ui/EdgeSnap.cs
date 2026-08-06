@@ -80,9 +80,17 @@ public static class EdgeSnap
             : win.Left + w / 2 >= (wa.Left + wa.Right) / 2;     // la posaste: manda dónde está
 
         double destLeft = aLaDerecha ? bordeDer : bordeIzq;
-        // Proyección vertical corta (antes 0.12): con la larga, un gesto rápido la mandaba al otro
-        // extremo de la pantalla y el usuario la perdía de vista.
-        double destTop = Math.Clamp(win.Top + vy * 0.05, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
+
+        // EN DIAGONAL TAMBIÉN. La proyección vertical estaba en 0,05 —casi nada— así que cualquier
+        // lanzamiento acababa plano: se iba al lado, sí, pero a la misma altura, y un gesto hecho en
+        // diagonal se veía enderezar por el camino (2026-08-06, pedido por el usuario).
+        //
+        // Se abre a 0,14 pero con un TOPE de recorrido en vez de dejarlo suelto, que es lo que en su
+        // día obligó a cerrarla: sin tope, un gesto rápido la mandaba de una esquina a la otra y el
+        // usuario la perdía de vista. Con el tope el gesto se nota y la carita nunca se va tan lejos
+        // como para tener que buscarla.
+        double saltoY = Math.Clamp(vy * 0.14, -wa.Height * 0.45, wa.Height * 0.45);
+        double destTop = Math.Clamp(win.Top + saltoY, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
 
         double dx = destLeft - win.Left, dy = destTop - win.Top;
         double dist = Math.Sqrt(dx * dx + dy * dy);
@@ -90,7 +98,11 @@ public static class EdgeSnap
         if (dist < 0.5) { alLlegar?.Invoke(destLeft, destTop); return; }   // ya estaba ahí
 
         // Solo distancia. Un recorrido corto se resuelve rápido, uno largo se ve viajar.
-        double ms = Math.Clamp(300 + dist * 0.62, 280, 900);
+        //
+        // Subido de (300 + 0,62·d, tope 900) porque cruzar la pantalla en 0,9 s no se lee como un
+        // viaje, se lee como un corte: el ojo ve la salida y la llegada y se pierde el medio, que es
+        // justo donde está la sensación de peso. Con esto un lado a otro son ~1,3 s (2026-08-06).
+        double ms = Math.Clamp(420 + dist * 0.95, 380, 1400);
         double segundos = ms / 1000.0;
 
         // El viaje se lanza ANTES de avisar a nadie: `alLlegar` reordena la barra hacia el lado
@@ -99,8 +111,13 @@ public static class EdgeSnap
         //
         // Una curva por eje: cada uno sale a SU velocidad. Con una sola compartida, el eje lento
         // arrancaría de golpe o el rápido arrancaría frenado, y se nota.
+        // La panza del camino: proporcional al viaje y con techo, porque en un salto corto un arco
+        // grande se ve como un tropiezo. Hacia ARRIBA siempre (la perpendicular con el signo que
+        // toque), como quien lanza algo por encima de la mesa en vez de arrastrarlo por ella.
+        double arco = Math.Min(dist * 0.10, 55) * (dx >= 0 ? -1 : 1);
+
         Vuelo.Mover(win, destLeft, destTop, TimeSpan.FromMilliseconds(ms),
-                    Curva(vx, dx, segundos), Curva(vy, dy, segundos));
+                    Curva(vx, dx, segundos), Curva(vy, dy, segundos), arco);
 
         alLlegar?.Invoke(destLeft, destTop);
     }
@@ -121,14 +138,14 @@ public static class EdgeSnap
         // CON REBOTE, como la burbuja de Android. Llegar y parar en seco es correcto y se lee como
         // software; pasarse un poco y volver es lo que hace que parezca que pesa (2026-08-05, pedido
         // por el usuario comparándolo con el de Android, donde esto ya funcionaba bien).
-        // Hacia dentro: aquí el destino es un borde de la pantalla, y pasarse de un borde es salirse.
-        return new MuelleEase
-        {
-            InitialSlope = pendiente,
-            Stiffness = RigidezConRebote,
-            Damping = Amortiguamiento,
-            RebotaHaciaDentro = true,
-        };
+        // SIN REBOTE aquí. El destino es un borde de la pantalla, y un muelle que rebota tiene que
+        // pasarse del destino para volver: pasarse de un borde es salirse, y Windows no deja —clava
+        // la ventana y se come el rebote—. Se probó a reflejarlo hacia dentro y el efecto es otro:
+        // ya no parece que llega, parece que se arrepiente (2026-08-06, descartado por el usuario).
+        //
+        // Lo que da la sensación de física aquí no es el rebote, es el recorrido: la curva de
+        // velocidad y la panza del camino.
+        return new MuelleEase { InitialSlope = pendiente, Stiffness = Rigidez, Damping = 1.0 };
     }
 
     /// <summary>Un rebote corto. Ver <see cref="MuelleEase.Damping"/>.</summary>

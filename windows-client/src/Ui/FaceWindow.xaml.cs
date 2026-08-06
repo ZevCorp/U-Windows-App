@@ -845,6 +845,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // barra viaja ya con su forma final en vez de darse la vuelta al aterrizar.
             Moved = OnWindowMoved,
         };
+
+        // Y con dos dedos en el trackpad, sin tener que agarrarla. Solo con la carita suelta: con la
+        // barra abierta el scroll es del menú, y robárselo sería quitarle una función que sí tiene.
+        _ = new LanzarConScroll(this, () => _collapsed,
+            (vx, vy) => EdgeSnap.Aplicar(this, vx, vy, OnWindowMoved));
     }
 
     /// <summary>Doble clic en la carita = micrófono (como el doble toque de Android). El carrillón del
