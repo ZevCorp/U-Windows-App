@@ -94,6 +94,11 @@ public static class EdgeSnap
         var dur = new Duration(TimeSpan.FromMilliseconds(ms));
         double segundos = ms / 1000.0;
 
+        // El viaje se anuncia ANTES de avisar a nadie: `alLlegar` reordena la barra hacia el lado
+        // nuevo, y esa reordenación cambia el tamaño de la ventana, lo que disparaba una corrección
+        // de posición que cancelaba esta misma animación en el primer cuadro (2026-08-06).
+        Vuelo.Empieza(dur);
+
         // Una curva por eje: cada uno sale a SU velocidad. Con una sola compartida, el eje lento
         // arrancaría de golpe o el rápido arrancaría frenado, y se nota.
         Animar(win, Window.LeftProperty, destLeft, dur, Curva(vx, dx, segundos));

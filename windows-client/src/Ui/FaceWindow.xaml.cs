@@ -486,6 +486,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        // SI ESTÁ VIAJANDO, LA POSICIÓN ES SUYA. Todo lo de aquí abajo asigna Left/Top, y en WPF eso
+        // cancela la animación en curso: la carita llegaba al destino de un salto en vez de volando.
+        // Y los cambios de tamaño caen justo mientras viaja —al soltarla se reordena la barra, al
+        // señalar algo aparece texto en el globo—, así que la animación se moría en el primer
+        // cuadro. El destino del viaje ya viene acotado a la pantalla por quien lo lanzó, así que no
+        // hay nada que corregir aquí (2026-08-06).
+        if (Vuelo.EnCurso) return;
+
         // El borde clavado es el del lado donde vive la barra: a la derecha, el menú y el globo crecen
         // hacia la izquierda y hay que compensar; a la izquierda crecen hacia la derecha y no hay nada
         // que compensar, porque el borde izquierdo ya está donde tiene que estar.
@@ -597,6 +605,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void MoveTo(double left, double top)
     {
+        Vuelo.Termina();   // ponerla a mano cancela el viaje: ya no hay nada que respetar
         BeginAnimation(LeftProperty, null);
         BeginAnimation(TopProperty, null);
         Left = left;
@@ -624,6 +633,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (dist < 24) { MoveTo(left, top); return; }
 
         var dur = new Duration(TimeSpan.FromMilliseconds(Math.Clamp(260 + dist * 0.45, 260, 720)));
+        Vuelo.Empieza(dur);   // que el reajuste por tamaño no le pise la animación
         Animar(LeftProperty, left, dur);
         Animar(TopProperty, top, dur);
 
@@ -1247,12 +1257,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         MenuPanel.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
         BarRow.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
         CollapsedGroup.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+
         // El botón de voz se pone del lado de FUERA: pegada al borde izquierdo, a la derecha de la
         // carita; pegada al derecho, a su izquierda. Si no, quedaría contra el borde de la pantalla.
-        CollapsedGroup.Children.Clear();
-        if (left) { CollapsedGroup.Children.Add(CollapsedFace); CollapsedGroup.Children.Add(VoiceDot); }
-        else { CollapsedGroup.Children.Add(VoiceDot); CollapsedGroup.Children.Add(CollapsedFace); }
-        VoiceDot.Margin = left ? new Thickness(10, 0, 0, 0) : new Thickness(0, 0, 10, 0);
+        //
+        // SOLO SI DE VERDAD CAMBIA. Esto se llama en cada movimiento de la ventana —también al
+        // empezar un lanzamiento—, y sacar y volver a meter los hijos fuerza una pasada de layout
+        // entera sobre una ventana que se está midiendo sola (SizeToContent). Reconstruir el árbol
+        // para dejarlo exactamente igual es trabajo tirado, y trabajo tirado en mitad de una
+        // animación se nota.
+        bool caraPrimero = CollapsedGroup.Children.Count > 0 && CollapsedGroup.Children[0] == CollapsedFace;
+        if (caraPrimero != left)
+        {
+            CollapsedGroup.Children.Clear();
+            if (left) { CollapsedGroup.Children.Add(CollapsedFace); CollapsedGroup.Children.Add(VoiceDot); }
+            else { CollapsedGroup.Children.Add(VoiceDot); CollapsedGroup.Children.Add(CollapsedFace); }
+            VoiceDot.Margin = left ? new Thickness(10, 0, 0, 0) : new Thickness(0, 0, 10, 0);
+        }
 
         // Los tooltips salían siempre por la izquierda: pegados al borde izquierdo se saldrían de la
         // pantalla. Es un ajuste por botón porque ToolTipService.Placement no se hereda.
