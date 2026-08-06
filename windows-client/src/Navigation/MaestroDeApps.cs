@@ -98,6 +98,18 @@ public sealed class MaestroDeApps
     /// NÚMEROS —un nombre puede repetirse en la pantalla, un número no— y que ante la duda deje algo
     /// fuera. Un elemento de más en el nivel principal se propaga a toda la app y hay que
     /// desandarlo; uno de menos se añade señalándolo, que es un gesto.
+    ///
+    /// «DENTRO DE» NO ES «DEBAJO DE». La definición del segundo nivel decía «elementos que
+    /// pertenecen a UNO de los de primer nivel —porque estamos dentro de él—», y estando parados en
+    /// «Inicio» eso describe también a sus vecinas del panel lateral: el maestro mandó Escritorio,
+    /// Descargas, Notas, Imágenes, Música, Videos y siete más al segundo nivel, y lo explicó él
+    /// mismo — «las carpetas ancladas a Inicio corresponden al segundo nivel» (2026-08-06, log de la
+    /// prueba del usuario: «7 en el primer nivel y 14 en el segundo»).
+    ///
+    /// No era un fallo de lectura de la imagen ni del mapa: era la respuesta correcta a lo que se le
+    /// preguntó. Ahora el criterio es una prueba que no depende de dónde estemos parados —¿seguiría
+    /// estando si me voy a otra sección?— y se dice explícitamente que un panel fijo va ENTERO al
+    /// primer nivel, porque sus entradas son hermanas y no hijas de la que esté seleccionada.
     /// </summary>
     private static string Instruccion(string app, string superficie, string inventario) => $$"""
         Estás mirando la aplicación «{{app}}». Ahora mismo la pantalla es «{{superficie}}».
@@ -109,16 +121,42 @@ public sealed class MaestroDeApps
 
         Tu tarea es explicar la JERARQUÍA DE NAVEGACIÓN de esta aplicación:
 
-        · PRIMER NIVEL: el mobiliario fijo de navegación, lo que está SIEMPRE a la vista dentro de
-          esta app estés en la pantalla que estés — el panel lateral del explorador, las pestañas de
-          un navegador, la barra de secciones de una app de ajustes. No son acciones («Copiar»,
-          «Eliminar», «Nuevo») ni contenido (archivos, correos, filas de una lista): son los sitios
-          a los que siempre se puede ir.
+        · PRIMER NIVEL: lo que SIEMPRE, O CASI SIEMPRE, está en pantalla dentro de esta app — estés
+          en la sección que estés. Eso es todo lo que significa. Por ejemplo:
+            · en un explorador de archivos: las carpetas del panel lateral;
+            · en una página web: la barra de navegación;
+            · en un navegador: las pestañas abiertas.
+          No son acciones («Copiar», «Eliminar», «Nuevo») ni contenido (archivos, correos, filas de
+          una lista): son los sitios a los que siempre se puede ir.
 
-        · SEGUNDO NIVEL: si en esta pantalla ves elementos que pertenecen a UNO de los de primer
-          nivel —porque estamos dentro de él—, dilo colgándolos de su número. Ejemplo: si estamos
-          dentro de «Notas» y ves sus subcarpetas, esas van en el segundo nivel bajo el número de
-          «Notas».
+          LA PRUEBA, y es la única que decide: «si me voy a otra sección de la app, ¿esto seguiría
+          estando ahí?». Si la respuesta es sí, es de PRIMER NIVEL. Da igual que ahora mismo parezca
+          colgar de la pantalla en la que estamos, y da igual si es la que está seleccionada.
+
+          «Casi siempre» basta: no hace falta que esté en el cien por cien de las pantallas.
+
+          UN PANEL FIJO VA ENTERO AL PRIMER NIVEL. Todas las entradas de esa misma columna o de esa
+          misma fila de pestañas son HERMANAS entre sí. Estar parados dentro de una de ellas no
+          convierte a las demás en sus hijas: siguen a la vista, siguen siendo hermanas, y todas van
+          al primer nivel. Si dejas fuera a la mitad de una lista lateral porque «cuelgan» de la que
+          está seleccionada, te has equivocado.
+
+          OJO CON LA TRAMPA MÁS COMÚN: muchas apps repiten en el centro de la pantalla los mismos
+          sitios que ya están en el panel lateral (accesos rápidos, anclados, favoritos, recientes).
+          Eso NO los degrada. Si el nombre está en el panel fijo, es de primer nivel — aunque además
+          aparezca en el contenido.
+
+        · SEGUNDO NIVEL: solo lo que DESAPARECERÍA al irte a otra sección, porque solo existe dentro
+          de esta. Típicamente el contenido del área central: las subcarpetas de la carpeta abierta,
+          los correos de la bandeja abierta, las filas de la lista abierta. Cuélgalo del número del
+          elemento de primer nivel al que pertenece.
+
+          Ejemplo de las dos cosas a la vez: dentro de «Notas» ves su panel lateral y sus
+          subcarpetas. El panel lateral entero es primer nivel —Notas incluida y sus vecinas
+          también—; las subcarpetas que solo existen dentro de Notas son segundo nivel, bajo el
+          número de «Notas».
+
+          Ante la duda entre primer y segundo nivel, elige PRIMER nivel.
 
         Responde SOLO con este JSON, usando los números de la lista:
 

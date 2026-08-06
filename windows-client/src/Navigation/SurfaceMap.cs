@@ -129,6 +129,20 @@ public sealed class SurfaceMap
         public bool NivelFijado { get; set; }
 
         /// <summary>
+        /// El nivel lo puso la MEDICIÓN: esta puerta se ha visto en tantas pantallas distintas de su
+        /// app que es mobiliario fijo, se haya enseñado o no.
+        ///
+        /// Existe para que las dos fuentes se puedan seguir leyendo por separado. Ese era el motivo
+        /// del viejo interruptor <c>SoloLoDeclarado</c>: con las dos activas, viendo un punto azul no
+        /// se sabía si lo puso el maestro o el contador, y entonces tampoco si la enseñanza funciona.
+        /// Marcando quién lo puso, las dos pueden estar encendidas sin perder esa lectura.
+        ///
+        /// No compite con <see cref="NivelFijado"/>: lo declarado gana siempre y la medición no lo
+        /// toca. Solo PROMUEVE lo que nadie declaró.
+        /// </summary>
+        public bool NivelMedido { get; set; }
+
+        /// <summary>
         /// Cómo se recorre: «click» o «doubleclick». Guardarlo no es un detalle — una carpeta de la
         /// lista solo se abre con doble clic, y una arista que dijera «clic» ahí prometería un
         /// camino que al ejecutarse solo selecciona. La acción es parte de la ruta, no del momento.
@@ -509,6 +523,11 @@ public sealed class SurfaceMap
                 VistaPorUltimaVez = ahora,
             };
         }
+
+        // Acabamos de apuntar lo que se ve en ESTA pantalla, así que es justo ahora cuando una puerta
+        // puede cruzar el umbral de «está en casi todas». Medir aquí es lo que hace que el mapa se
+        // corrija solo mientras se recorre, sin esperar a que nadie lo enseñe otra vez.
+        if (PromoverPorUbicuidad(AppDe(f))) Version++;
         Save();
     }
 
@@ -550,6 +569,94 @@ public sealed class SurfaceMap
             ? $"«{quien}» queda en el nivel {nivel} de «{a}» ({tocadas.Count} aparición/es). Fijado: la deducción ya no lo mueve."
             : $"«{quien}» vuelve a nivel automático en «{a}».";
     }
+
+    /// <summary>
+    /// En cuántas pantallas DISTINTAS se ha visto cada puerta de una app, contada por selector.
+    ///
+    /// Se cuenta MIRANDO, no cruzando: entran también las puertas cuyo destino aún se desconoce,
+    /// porque la pregunta es «¿está en todas las pantallas?» y para eso basta con haberla visto. A
+    /// dónde lleva es otra pregunta, y esa sí exige haberla cruzado.
+    ///
+    /// De una pasada. Preguntarlo puerta por puerta con <see cref="Ubicuidad"/> sería recorrer el
+    /// mapa dentro de un recorrido del mapa, que es la comprobación N² que ya costó una cacería.
+    /// </summary>
+    private Dictionary<string, HashSet<string>> PantallasPorPuerta(string app)
+    {
+        var vistoDesde = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (from, _, info) in Edges())
+        {
+            if (info.Label.Length == 0 || info.Selector.Length == 0) continue;
+            if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!vistoDesde.TryGetValue(info.Selector, out var origenes))
+                vistoDesde[info.Selector] = origenes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            origenes.Add(from);
+        }
+        return vistoDesde;
+    }
+
+    /// <summary>
+    /// Lo que aparece en casi todas las pantallas de una app ES su primer nivel. Se mide y se aplica.
+    ///
+    /// Aquí conviven las dos formas de saberlo, que es lo que se quería: el maestro MIRA una captura
+    /// y lo dice al instante —sirve desde el primer segundo, antes de haber paseado— y el contador lo
+    /// COMPRUEBA recorriendo. La primera es rápida y opina; la segunda es lenta y sabe.
+    ///
+    /// Por eso la medición solo PROMUEVE. Nunca degrada nada, y nunca toca lo declarado
+    /// (<see cref="EdgeInfo.NivelFijado"/>): una corrección humana que el siguiente recorrido
+    /// deshace no es una corrección. Si el maestro se quedó corto —mandó al segundo nivel media
+    /// columna del panel lateral, que es lo que pasó el 2026-08-06— el recorrido lo repara solo en
+    /// cuanto ve esas puertas en tres pantallas. Si el maestro acertó, la medición coincide y no
+    /// cambia nada.
+    ///
+    /// Devuelve true si movió algo, para que quien llama suba <see cref="Version"/> y el cromo se
+    /// recalcule.
+    /// </summary>
+    private bool PromoverPorUbicuidad(string app)
+    {
+        if (!MedirUbicuidad || app.Length == 0) return false;
+
+        var vistoDesde = PantallasPorPuerta(app);
+        var promovidas = new List<string>();
+
+        foreach (var (from, to, info) in Edges())
+        {
+            if (info.NivelFijado) continue;              // lo declarado manda: la medición no lo mueve
+            if (info.NivelNav == 1) continue;            // ya está donde lo pondríamos
+            if (info.Label.Length == 0 || info.Selector.Length == 0) continue;
+            if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
+            // El contenido y las puertas relativas se quedan fuera por lo mismo que en EsCromoGlobal:
+            // están en todas partes y NO llevan al mismo sitio. «Atrás» es la puerta más ubicua que
+            // existe y no es el primer nivel de nada.
+            if (EsContenido(info.ControlType) || EsRelativo(info.Selector)) continue;
+            if (!vistoDesde.TryGetValue(info.Selector, out var pantallas)
+                || pantallas.Count < MinPantallasParaCromo) continue;
+
+            info.NivelNav = 1;
+            info.NivelMedido = true;
+            // La pantalla que hay tras la puerta vive en el nivel de su puerta, igual que en
+            // FijarNivel. Solo hacia arriba: nunca se le sube el número a un sitio ya situado.
+            if (!EsPuerta(to) && _nodes.TryGetValue(to, out var n) && (n.Nivel < 0 || n.Nivel > 1))
+                n.Nivel = 1;
+            if (!promovidas.Contains(info.Label)) promovidas.Add(info.Label);
+        }
+
+        if (promovidas.Count == 0) return false;
+        LogBus.Log("mapa", $"medido en «{app}»: {promovidas.Count} puerta(s) pasan al primer nivel por "
+            + $"estar en {MinPantallasParaCromo}+ pantallas · "
+            + string.Join(", ", promovidas.Take(12).Select(x => $"«{x}»"))
+            + (promovidas.Count > 12 ? "…" : ""));
+        return true;
+    }
+
+    /// <summary>
+    /// ¿Se deja que el contador promueva al primer nivel, o solo vale lo que alguien declaró?
+    ///
+    /// Sustituye a <c>SoloLoDeclarado</c>, que existía para poder medir la enseñanza sin que la
+    /// deducción opinara encima. Ese motivo ya está cubierto por <see cref="EdgeInfo.NivelMedido"/>:
+    /// ahora cada puerta dice quién le puso el nivel, así que las dos fuentes pueden estar activas
+    /// y aun así leerse por separado. Se queda el interruptor por si hace falta aislar otra vez.
+    /// </summary>
+    public static bool MedirUbicuidad { get; set; } = true;
 
     /// <summary>
     /// A qué nivel pertenece cada puerta CONOCIDA de una app, indexado por selector y por etiqueta.
@@ -637,8 +744,19 @@ public sealed class SurfaceMap
         // exploraban nunca (2026-08-01).
         if (EsRelativo(selector)) return false;   // está en todas partes pero NO lleva al mismo sitio
         string ct = controlType.Length > 0 ? controlType : TipoDelSelector(selector);
-        return !EsContenido(ct) && Ubicuidad(selector) >= 3;
+        return !EsContenido(ct) && Ubicuidad(selector) >= MinPantallasParaCromo;
     }
+
+    /// <summary>
+    /// En cuántas pantallas distintas hay que haber visto una puerta para darla por mobiliario fijo.
+    ///
+    /// «Siempre o casi siempre en pantalla» es la definición del primer nivel, y esta es la cifra que
+    /// la hace comprobable. Tres y no dos: desde dos pantallas todavía puede ser casualidad —una
+    /// carpeta que contiene algo con el mismo nombre—; a la tercera ya describe la app y no una
+    /// pantalla suya. Está aquí, en un solo sitio, porque antes había DOS umbrales para la misma
+    /// pregunta (este 3 y un 2 dentro de CromoDe) y no podían dar la misma respuesta.
+    /// </summary>
+    private const int MinPantallasParaCromo = 3;
 
     private static string TipoDelSelector(string selector)
     {
@@ -1003,64 +1121,34 @@ public sealed class SurfaceMap
     /// de archivo»— le basta con marcar <see cref="EdgeInfo.Nivel"/> y esto seguirá funcionando
     /// igual, porque agrupar es etiquetar, no mover nada de sitio.
     /// </summary>
-    /// <summary>
-    /// Solo cuenta como primer nivel lo que alguien DECLARÓ; la deducción por repetición se calla.
-    ///
-    /// Es un interruptor de experimento, no una decisión definitiva: mientras se construye la
-    /// enseñanza hay que poder ver qué produce ELLA, y con las dos fuentes activas cada punto azul
-    /// podía venir de cualquiera de las dos.
-    /// </summary>
-    public static bool SoloLoDeclarado { get; set; } = true;
-
     public List<Hop> CromoDe(string app)
     {
         if (app.Length == 0) return new List<Hop>();
         if (_cromo.TryGetValue(app, out var guardado) && _cromoVersion == Version) return guardado;
 
-        // ESTAR EN TODAS PARTES SE SABE MIRANDO, NO CRUZANDO. Antes solo contaban las aristas ya
-        // recorridas, y eso exigía cruzar cada hermano DOS veces desde sitios distintos para que el
-        // sistema aceptara que pertenece a la app: recorriendo el panel de Configuración en orden,
-        // cada sección se alcanzaba desde la anterior —un solo origen— así que ninguna calificaba y
-        // el nodo central no aparecía hasta la segunda vuelta (2026-08-04, observado por el usuario).
-        //
-        // Pero las doce secciones se ven a la vez desde la primera pantalla. Que estén en todas
-        // partes es una propiedad OBSERVABLE, y el mapa ya anota lo que ve aunque no lo haya cruzado.
-        // Se cuenta por SELECTOR y contando también las puertas sin cruzar: eso responde «¿está en
-        // todas las pantallas?», que es la pregunta. A dónde lleva es otra pregunta distinta, y para
-        // esa sí hace falta haberla cruzado al menos una vez.
-        var vistoDesde = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        // A DÓNDE LLEVA CADA PUERTA. Es la otra mitad de la pregunta: «¿está en todas las pantallas?»
+        // se responde MIRANDO —y eso lo cuenta PantallasPorPuerta, que admite puertas sin cruzar—,
+        // pero «¿a dónde va?» solo lo contesta una arista CRUZADA. Aquí se busca esa.
         var destinoDe = new Dictionary<string, Hop>(StringComparer.OrdinalIgnoreCase);
-
         foreach (var (from, to, info) in Edges())
         {
             if (info.Label.Length == 0 || info.Selector.Length == 0) continue;
             if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
-
-            if (!vistoDesde.TryGetValue(info.Selector, out var origenes))
-                vistoDesde[info.Selector] = origenes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            origenes.Add(from);
-
             // El destino solo lo aporta una arista CRUZADA: una puerta dice que existe, no a dónde va.
             if (!EsPuerta(to) && AppDe(to).Equals(app, StringComparison.OrdinalIgnoreCase)
                 && !destinoDe.ContainsKey(info.Selector))
                 destinoDe[info.Selector] = new Hop(from, to, info);
         }
 
-        // DOS CAUSAS MEZCLADAS NO SE PUEDEN LEER. El primer nivel salía de dos sitios a la vez: lo
-        // DECLARADO —el usuario señalando, o el maestro mirando la pantalla— y lo DEDUCIDO contando
-        // apariciones. Viéndolo en pantalla no hay forma de saber cuál de los dos puso cada punto
-        // azul, así que tampoco de saber si la enseñanza funciona (2026-08-06, propuesto por el
-        // usuario: «no sabemos cuál es la causa del resultado que vemos»).
+        // UNA SOLA PREGUNTA, UNA SOLA RESPUESTA. Aquí se volvía a contar apariciones con su propio
+        // umbral (2) mientras EsCromoGlobal usaba otro (3), y encima el resultado no se escribía en
+        // el mapa: era una opinión que vivía solo dentro de este método.
         //
-        // Mientras se construye la enseñanza, manda SOLO lo declarado. La deducción no se borra
-        // —sigue aquí y se vuelve a encender cambiando esto— porque es la que cubre las apps que
-        // nadie ha enseñado todavía; pero no puede estar opinando mientras se mide la otra.
-        var cromo = SoloLoDeclarado
-            ? new List<Hop>()
-            : destinoDe
-                .Where(kv => vistoDesde.TryGetValue(kv.Key, out var o) && o.Count >= 2)
-                .Select(kv => kv.Value)
-                .ToList();
+        // Ahora el recuento lo hace PromoverPorUbicuidad al observar cada pantalla, y lo ESCRIBE
+        // —NivelNav=1 con NivelMedido—. Aquí solo se lee lo que ya está decidido. Las dos fuentes
+        // siguen distinguiéndose, que era el motivo del viejo interruptor: NivelFijado lo dijo una
+        // persona, NivelMedido lo comprobó el contador.
+        var cromo = new List<Hop>();
 
         // LO DICHO A MANO NO ESPERA AL CONTADOR. El umbral de «visto desde dos pantallas» existe
         // para DEDUCIR qué es mobiliario fijo cuando nadie lo ha dicho. Cuando alguien —el usuario
@@ -1075,7 +1163,7 @@ public sealed class SurfaceMap
         var yaEsta = new HashSet<string>(cromo.Select(h => h.Info.Selector), StringComparer.Ordinal);
         foreach (var (from, to, info) in Edges())
         {
-            if (!info.NivelFijado || info.NivelNav != 1) continue;
+            if (info.NivelNav != 1 || !(info.NivelFijado || info.NivelMedido)) continue;
             if (info.Selector.Length == 0 || info.Label.Length == 0) continue;
             if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
             if (!yaEsta.Add(info.Selector)) continue;

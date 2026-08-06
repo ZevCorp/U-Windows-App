@@ -517,8 +517,14 @@ public sealed class GraphExplorerWindow : Window
 
     private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     private const uint EVENT_SYSTEM_MOVESIZEEND = 0x000B;
+    /// <summary>Una ventana dejó de existir. Va JUSTO por debajo de SHOW (0x8002), así que el rango
+    /// que empezaba ahí lo dejaba fuera por uno — y cerrar una ventana no avisaba a nadie.</summary>
+    private const uint EVENT_OBJECT_DESTROY = 0x8001;
     private const uint EVENT_OBJECT_SHOW = 0x8002;
     private const uint EVENT_OBJECT_HIDE = 0x8003;
+    /// <summary>El evento habla de la VENTANA misma, no de un control suyo ni de un hijo.</summary>
+    private const int OBJID_WINDOW = 0;
+    private const int CHILDID_SELF = 0;
     private const uint EVENT_OBJECT_FOCUS = 0x8005;
     private const uint EVENT_OBJECT_SELECTION = 0x8006;
     private const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;
@@ -553,7 +559,7 @@ public sealed class GraphExplorerWindow : Window
         { Interval = TimeSpan.FromMilliseconds(70) };
         _rebote.Tick += (_, __) => { _rebote!.Stop(); RefreshEdges(); };
 
-        _alOcurrir = (_, evento, hwnd, idObjeto, _, _, _) =>
+        _alOcurrir = (_, evento, hwnd, idObjeto, idHijo, _, _) =>
         {
             // Lo nuestro no cuenta: la propia capa dibujándose generaría eventos y con ellos otra
             // lectura, y esa lectura otro dibujo. Un observador que reacciona a sí mismo no para.
@@ -567,7 +573,24 @@ public sealed class GraphExplorerWindow : Window
             //
             // Se compara contra la ventana RAÍZ del evento: un botón emite desde su ventana hija, y
             // exigir que el hwnd sea exactamente el de primer plano descartaría casi todo.
-            if (evento != EVENT_SYSTEM_FOREGROUND)
+            //
+            // CON UNA EXCEPCIÓN: UNA VENTANA QUE SE VA. Es el cambio más grande que puede haber en
+            // la pantalla y era justo el que no se oía, por dos motivos a la vez. Uno, al cerrar
+            // algo Windows avisa DESDE LA VENTANA QUE DESAPARECE, que por definición ya no es la de
+            // delante — así que este mismo filtro la descartaba entera. Y dos, DESTROY (0x8001) ni
+            // siquiera estaba enganchado: el rango empezaba en SHOW (0x8002), uno por encima. El
+            // resultado era que cerrabas una ventana y los puntos se quedaban con lo de antes hasta
+            // que un clic despertaba la lectura (2026-08-06, reportado por el usuario).
+            //
+            // Se acepta SOLO si la que se va es una ventana de verdad: que el evento hable de la
+            // ventana y no de un control suyo, y que sea de nivel superior. Un menú que se cierra o
+            // un botón que se oculta emiten esto mismo sin parar, y son el ruido que este filtro
+            // existe para callar — el 22 % de un núcleo que se midió arriba.
+            bool ventanaSeFue = (evento == EVENT_OBJECT_DESTROY || evento == EVENT_OBJECT_HIDE)
+                && idObjeto == OBJID_WINDOW && idHijo == CHILDID_SELF
+                && hwnd != IntPtr.Zero && GetAncestor(hwnd, GA_ROOT) == hwnd;
+
+            if (evento != EVENT_SYSTEM_FOREGROUND && !ventanaSeFue)
             {
                 IntPtr delante = GetForegroundWindow();
                 IntPtr raiz = hwnd == IntPtr.Zero ? IntPtr.Zero : GetAncestor(hwnd, GA_ROOT);
@@ -584,9 +607,17 @@ public sealed class GraphExplorerWindow : Window
             // Y el cambio de ventana no espera: es EL cambio, el que decide todo lo demás. Igual si
             // hace rato que no se lee, para que una ráfaga continua no deje el redibujo en el limbo
             // reprogramándolo eternamente.
-            bool urgente = evento == EVENT_SYSTEM_FOREGROUND
-                        || (DateTime.UtcNow - _ultimaLectura).TotalMilliseconds > 400;
-            int espera = evento == EVENT_OBJECT_LOCATIONCHANGE ? 200 : 60;
+            //
+            // La ventana que se va es la ÚNICA que no se lee en el acto, y no por ahorrar: en ese
+            // instante todavía está muriendo y el primer plano aún no ha pasado a la de detrás, así
+            // que leer ahora describiría la pantalla que acaba de dejar de existir. Se espera a que
+            // se asiente — que es distinto de tirar el evento, que es lo que se hacía antes.
+            bool urgente = !ventanaSeFue
+                        && (evento == EVENT_SYSTEM_FOREGROUND
+                            || (DateTime.UtcNow - _ultimaLectura).TotalMilliseconds > 400);
+            int espera = ventanaSeFue ? 150
+                       : evento == EVENT_OBJECT_LOCATIONCHANGE ? 200
+                       : 60;
 
             Dispatcher.BeginInvoke(() =>
             {
@@ -599,7 +630,9 @@ public sealed class GraphExplorerWindow : Window
         foreach (var (a, b) in new[]
         {
             (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MOVESIZEEND),
-            (EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE),
+            // Desde DESTROY, no desde SHOW: una ventana que se cierra avisa por ahí, y el rango
+            // viejo empezaba un número más arriba.
+            (EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE),
             (EVENT_OBJECT_FOCUS, EVENT_OBJECT_SELECTION),
             (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
         })
@@ -1373,9 +1406,27 @@ public sealed class GraphExplorerWindow : Window
         {
             prof[centro] = 0;
             foreach (var d in cromo.Keys) prof[d] = 1;
-            // Lo que ya se recorrió cuelga por debajo, para no mezclarse con los hermanos.
+
+            // LO QUE EL MAPA SABE MANDA SOBRE ESTA REGLA. Aquí se empujaba a la fila 2 TODO lo que
+            // no fuera cromo, y eso pisaba el nivel estructural que se acababa de leer veinte líneas
+            // más arriba — el mismo que este archivo declara como eje del dibujo.
+            //
+            // Cromo es «lo he visto en tres pantallas distintas» (Ubicuidad >= 3), que es una
+            // deducción por repetición: necesita haber paseado. Recién enseñada una app, cada puerta
+            // se ha visto en UNA pantalla, así que casi nada llega al umbral y casi todo caía a la
+            // fila 2 — aunque el maestro acabara de decir que son del primer nivel. Se veía
+            // exactamente así: cinco arriba y el resto en escalón (2026-08-06, captura del usuario).
+            //
+            // Ser cromo y pertenecer al primer nivel son dos preguntas distintas, y solo la segunda
+            // decide en qué fila va. Lo que no tiene nivel propio sí sigue colgando por debajo: de
+            // eso no se sabe nada, y ponerlo con los hermanos afirmaría algo que nadie comprobó.
             foreach (var n in prof.Keys.ToList())
-                if (n != centro && !cromo.ContainsKey(n)) prof[n] = Math.Max(prof[n], 2);
+            {
+                if (n == centro || cromo.ContainsKey(n)) continue;
+                prof[n] = _map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0
+                    ? Math.Max(ni.Nivel, 1)   // nunca en la fila del centro: esa es la app, no un sitio
+                    : Math.Max(prof[n], 2);
+            }
         }
 
         // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra
@@ -1510,17 +1561,31 @@ public sealed class GraphExplorerWindow : Window
         // diez veces no informa, y el sitio que ocupa es justo el que le falta a lo que distingue.
         string prefijo = PrefijoComun(pos.Keys);
 
+        // QUIÉN PUSO EL NIVEL DE CADA SITIO, resuelto de UNA pasada. Antes se preguntaba dentro del
+        // bucle de cajas, y cada caja recorría el mapa entero.
+        //
+        // Se guardan por separado porque son dos certezas distintas y conviene no confundirlas: lo
+        // DECLARADO lo dijo una persona (o el maestro mirando la captura) y lo MEDIDO lo comprobó el
+        // contador viendo la puerta en casi todas las pantallas. Mezclarlas deja el mismo azul para
+        // las dos y ya no se puede saber si la enseñanza está funcionando.
+        var declarados = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var medidos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in _map.Edges())
+        {
+            if (e.Info.NivelFijado) { declarados.Add(e.From); declarados.Add(e.To); }
+            else if (e.Info.NivelMedido) { medidos.Add(e.From); medidos.Add(e.To); }
+        }
+
         foreach (var kv in pos)
         {
             // El nodo donde está el recorrido ahora mismo va en ámbar y con borde grueso: durante
             // un mapeo en vivo, saber DÓNDE está es tan informativo como ver aparecer las aristas.
             bool esActual = string.Equals(kv.Key, _nodoActual, StringComparison.OrdinalIgnoreCase);
             bool esCentro = kv.Key == centro;
-            // Azul = su nivel lo puso una persona. Se distingue de lo deducido porque son dos cosas
-            // distintas: una es lo que el sistema cree y la otra lo que alguien sabe.
-            bool fijado = _map.ExitsFrom(kv.Key).Any(h => h.Info.NivelFijado)
-                || _map.Edges().Any(e => e.To.Equals(kv.Key, StringComparison.OrdinalIgnoreCase)
-                                      && e.Info.NivelFijado);
+            // Azul = es del primer nivel. El TONO dice quién lo puso: fuerte lo declarado, suave lo
+            // medido. Lo declarado gana el color cuando concurren, igual que gana en el mapa.
+            bool declarado = declarados.Contains(kv.Key);
+            bool medido = !declarado && medidos.Contains(kv.Key);
             var caja = new Border
             {
                 Width = anchoCaja, Height = altoCaja,
@@ -1530,16 +1595,23 @@ public sealed class GraphExplorerWindow : Window
                 // El centro del nivel va en azul: no es un sitio al que se llega, es la app misma.
                 Background = new SolidColorBrush(esCentro ? Color.FromArgb(0x44, 0x21, 0x96, 0xF3)
                     : esActual ? Color.FromArgb(0x55, 0xFF, 0xB3, 0x00)
-                    : fijado ? Color.FromArgb(0x4A, 0x21, 0x96, 0xF3)
+                    : declarado ? Color.FromArgb(0x4A, 0x21, 0x96, 0xF3)
+                    : medido ? Color.FromArgb(0x28, 0x21, 0x96, 0xF3)
                     : Color.FromArgb(0x30, 0x2E, 0x7D, 0x32)),
                 BorderBrush = new SolidColorBrush(esCentro ? Color.FromArgb(0xAA, 0x64, 0xB5, 0xF6)
                     : esActual ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)
-                    : fijado ? Color.FromArgb(0xCC, 0x64, 0xB5, 0xF6)
+                    : declarado ? Color.FromArgb(0xCC, 0x64, 0xB5, 0xF6)
+                    : medido ? Color.FromArgb(0x77, 0x64, 0xB5, 0xF6)
                     : Color.FromArgb(0x55, 0x66, 0xBB, 0x6A)),
                 BorderThickness = new Thickness(esActual || esCentro ? 2 : 1),
+                // El tooltip DICE la causa además de pintarla: dos azules parecidos se distinguen
+                // mal de un vistazo, y saber quién puso el nivel es justo lo que hace falta para
+                // juzgar si la enseñanza acertó.
                 ToolTip = esCentro
                     ? $"{appActual} · lo que cuelga de aquí se alcanza desde cualquier pantalla de la app"
-                    : kv.Key,
+                    : kv.Key + (declarado ? "  ·  primer nivel (declarado)"
+                              : medido ? "  ·  primer nivel (medido: está en casi todas las pantallas)"
+                              : ""),
                 Child = _compacto ? null : new TextBlock
                 {
                     Text = esCentro ? appActual : Distintivo(kv.Key, prefijo),
