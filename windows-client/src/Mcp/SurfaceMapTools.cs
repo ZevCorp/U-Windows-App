@@ -1611,9 +1611,41 @@ public sealed class SurfaceMapTools
                 ruta = new List<SurfaceMap.Hop> { atajo };
             }
         }
+        // NO TENER RUTA NO ES NO PODER IR, si el sitio está a un clic. Planificar exige puertas ya
+        // cruzadas —a través de una incógnita no se traza un camino— así que con el mapa recién
+        // nacido casi todo es «no sé llegar», aunque el destino esté ahí delante, en la barra
+        // lateral. Se vio el 2026-08-05: dijo que no conocía el camino a «Música», y acto seguido
+        // llegó pulsándola. Salió bien porque el modelo lo razonó, y eso es suerte, no diseño.
+        //
+        // Así que antes de negarse, se MIRA: si hay algo delante que se llama como el destino, se
+        // toma. Tomar ya comprueba a dónde se llegó y lo aprende, así que la ruta que faltaba queda
+        // hecha para la próxima vez — y entonces sí habrá plan.
         if (ruta == null)
-            return $"no conozco una ruta COMPLETA de «{actual.Id}» a «{destino}». "
-                 + "Puede que el camino exista pero falte saber con qué acción se recorre alguno de sus tramos.";
+        {
+            string comoSeLlama = destino.TrimEnd('/');
+            int barra = comoSeLlama.LastIndexOf('/');
+            if (barra >= 0) comoSeLlama = comoSeLlama[(barra + 1)..];
+
+            if (comoSeLlama.Length > 0)
+            {
+                _lector.Read();
+                var aLaVista = Uia.Reconocedor.Buscar(_lector.Elements, comoSeLlama.Replace('-', ' '));
+                if (aLaVista.Count == 1)
+                {
+                    LogBus.Log("mapa-mcp", $"sin ruta a «{destino}», pero «{aLaVista[0].Label}» está a la vista: se toma");
+                    string r = Take(aLaVista[0].Label, "", actual.Id);
+                    var llegamos = _where()?.Id ?? "";
+                    return string.Equals(llegamos, destino, StringComparison.OrdinalIgnoreCase)
+                        ? $"no tenía ruta comprobada, pero «{aLaVista[0].Label}» estaba a la vista: la tomé y "
+                          + $"estamos en «{destino}». Queda aprendida para la próxima."
+                        : $"no tenía ruta a «{destino}» y probé con «{aLaVista[0].Label}», que estaba a la vista. "
+                          + $"Resultado: {r}";
+                }
+            }
+
+            return $"no conozco una ruta COMPLETA de «{actual.Id}» a «{destino}», ni veo nada delante que "
+                 + "se llame así. Dime por dónde empiezo, o llévame tú a un sitio desde el que se vea.";
+        }
         if (ruta.Count == 0) return $"ya estás en «{destino}»";
 
         LogBus.Log("mapa-mcp", $"ruta de {ruta.Count} tramo(s) hacia «{destino}»");
