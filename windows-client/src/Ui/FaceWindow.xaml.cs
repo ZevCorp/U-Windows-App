@@ -2402,16 +2402,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
     /// <summary>
-    /// La píldora es la SUPLENTE del globo, nunca su eco.
+    /// La frase corta que acompaña a la carita.
     ///
-    /// Con el globo abierto no aparece: allí ya está el texto largo y completo, y dos superficies
-    /// diciendo lo mismo con distinto detalle es cómo se acaba con dos verdades. Colapsada tampoco:
-    /// el contrato de ese estado es «solo la carita», y ahí el semáforo ES la cara.
+    /// Nació con la regla «es la suplente del globo, se esconde cuando el globo está abierto». Esa
+    /// regla la hacía INVISIBLE SIEMPRE: todos los caminos que producen un estado —micrófono,
+    /// enseñar, ejecutar— abren el globo por su cuenta, así que la condición nunca se cumplía y la
+    /// píldora no llegó a verse ni una vez desde que se escribió.
+    ///
+    /// No compiten: son dos granularidades. La píldora dice UNA palabra pegada a la cara, para saber
+    /// qué pasa de un vistazo; el globo lleva el texto largo, para leerlo. Solo se calla con la
+    /// carita colapsada, donde el contrato es «solo la carita» y el semáforo es la cara misma.
     /// </summary>
     private void UpdateChip(FaceMood mood)
     {
         string s = ShortPhrase(mood);
-        bool show = s.Length > 0 && !_talkOpen && !_collapsed;
+        bool show = s.Length > 0 && !_collapsed;
 
         if (show)
         {
@@ -2426,7 +2431,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
     }
 
-    private bool ShouldShowChip() => ShortPhrase(_mood).Length > 0 && !_talkOpen && !_collapsed;
+    private bool ShouldShowChip() => ShortPhrase(_mood).Length > 0 && !_collapsed;
 
     /// <summary>
     /// El texto sale del ESTADO, no del <c>Status</c> libre: así la cara y la frase no pueden

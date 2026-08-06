@@ -37,8 +37,21 @@ public sealed class FaceGestures
     /// </summary>
     public Action<double, double>? Moved { get; set; }
 
-    private const double MoveThresholdSq = 100; // (10 px)² para pasar de "toque" a "arrastre"
-    private const int LongPressMs = 450;
+    /// <summary>(13 px)² para pasar de «toque» a «arrastre». Eran 10 px, y un pulso normal los cruza
+    /// sin querer: ibas a hacer clic y la carita salía disparada hacia un borde.</summary>
+    private const double MoveThresholdSq = 169;
+
+    /// <summary>
+    /// Cuánto hay que mantener oprimido para cambiar de tema.
+    ///
+    /// Eran 450 ms, y ese era el motivo de que «los gestos no funcionaran»: un clic deliberado sobre
+    /// un objetivo de 42 px dura tranquilamente medio segundo, así que al ir a colapsar la carita le
+    /// cambiabas el tema. Y encima el clic se perdía, porque una vez disparado el mantener-oprimido
+    /// el soltar ya no cuenta (ver OnUp). 750 ms sigue siendo cómodo de hacer a propósito y deja de
+    /// dispararse solo.
+    /// </summary>
+    private const int LongPressMs = 750;
+
     private const int TapWindowMs = 250; // ventana para distinguir 1 vs 2 toques
 
     private readonly DispatcherTimer _longTimer;
