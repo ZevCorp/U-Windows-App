@@ -1741,6 +1741,16 @@ public sealed class GraphExplorerWindow : Window
                 ? "no pude consultar al maestro; sigo con el recorrido"
                 : $"jerarquía aprendida: {leccion.Resumen}";
 
+            // EL COLOR SE REFRESCA YA. La lección cambia el nivel de las salidas, pero los puntos
+            // solo se repintan cuando cambia su firma —los mismos elementos en las mismas
+            // posiciones dan la misma firma—, así que el azul no llegaba hasta que un clic del
+            // usuario forzaba una relectura: se acababa de enseñar y en pantalla no se veía nada
+            // (2026-08-06, observado por el usuario). Se invalida la firma y se repinta.
+            _signature = "";
+            _numeradas.Clear();
+            RefreshEdges();
+            await Task.Delay(500);   // que el repintado llegue ANTES de preguntar qué se ve
+
             await PasoAPaso.EsperarAsync(
                 leccion == null ? "El maestro no pudo responder" : "Lección aplicada",
                 leccion == null
