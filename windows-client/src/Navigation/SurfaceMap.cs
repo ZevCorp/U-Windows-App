@@ -129,6 +129,17 @@ public sealed class SurfaceMap
         public bool NivelFijado { get; set; }
 
         /// <summary>
+        /// Lo fijó UNA PERSONA, no el maestro que mira la pantalla.
+        /// </summary>
+        /// <remarks>
+        /// Los dos «fijan», pero solo uno enseña. Si las correcciones que se le devuelven al
+        /// maestro incluyeran las suyas propias, se estaría confirmando a sí mismo: repetiría su
+        /// criterio de ayer creyendo que es una corrección humana, y un error se volvería
+        /// permanente por el simple hecho de haberlo cometido una vez (2026-08-06).
+        /// </remarks>
+        public bool PorPersona { get; set; }
+
+        /// <summary>
         /// Cómo se recorre: «click» o «doubleclick». Guardarlo no es un detalle — una carpeta de la
         /// lista solo se abre con doble clic, y una arista que dijera «clic» ahí prometería un
         /// camino que al ejecutarse solo selecciona. La acción es parte de la ruta, no del momento.
@@ -525,7 +536,11 @@ public sealed class SurfaceMap
     ///
     /// Con nivel negativo se suelta: vuelve a mandar la deducción.
     /// </summary>
-    public string FijarNivel(string app, string etiquetaOSelector, int nivel)
+    /// <param name="porPersona">
+    /// Lo dice una persona (true) o el maestro que mira la pantalla (false). Solo lo humano se le
+    /// devuelve después como corrección: si le devolviéramos lo suyo, se confirmaría a sí mismo.
+    /// </param>
+    public string FijarNivel(string app, string etiquetaOSelector, int nivel, bool porPersona = true)
     {
         string a = app.Trim();
         string q = etiquetaOSelector.Trim();
@@ -542,6 +557,7 @@ public sealed class SurfaceMap
         {
             info.NivelNav = nivel;
             info.NivelFijado = nivel >= 0;
+            info.PorPersona = nivel >= 0 && (porPersona || info.PorPersona);   // lo humano no se degrada
             // La pantalla que hay detrás vive en el nivel de su puerta: si se mueve la puerta, se
             // mueve el sitio. Si no, el dibujo diría una cosa y el mapa otra.
             if (nivel >= 0 && !EsPuerta(to) && _nodes.TryGetValue(to, out var n)) n.Nivel = nivel;
@@ -944,6 +960,34 @@ public sealed class SurfaceMap
     /// podía venir de cualquiera de las dos.
     /// </summary>
     public static bool SoloLoDeclarado { get; set; } = true;
+
+    /// <summary>
+    /// Lo que UNA PERSONA ha corregido a mano en esta app: qué salida va a qué nivel.
+    /// </summary>
+    /// <remarks>
+    /// Es la memoria de las correcciones, y se le devuelve al maestro antes de que vuelva a mirar
+    /// esa aplicación. Corregir una vez y que al día siguiente lo vuelva a fallar no es corregir,
+    /// es repetirse — la misma razón por la que el nivel puesto a mano no lo mueve la deducción.
+    ///
+    /// Solo lo humano. Lo que el propio maestro fijó no cuenta: devolvérselo sería confirmarse a sí
+    /// mismo y convertir un error de ayer en doctrina (2026-08-06).
+    ///
+    /// Se agrupa por etiqueta porque una misma salida aparece muchas veces —el panel lateral está
+    /// en cada pantalla— y la corrección es de la salida, no de dónde se estaba al hacerla.
+    /// </remarks>
+    public IReadOnlyList<(string Etiqueta, int Nivel)> CorreccionesDe(string app)
+    {
+        string a = app.Trim();
+        if (a.Length == 0) return Array.Empty<(string, int)>();
+
+        return Edges()
+            .Where(e => e.Info.PorPersona && e.Info.NivelNav >= 0 && e.Info.Label.Length > 0
+                     && AppDe(e.From).Equals(a, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
+            .Select(g => (g.Key, g.First().Info.NivelNav))
+            .OrderBy(x => x.Item2).ThenBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
 
     public List<Hop> CromoDe(string app)
     {

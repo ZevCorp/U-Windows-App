@@ -86,8 +86,23 @@ public sealed class MaestroDeApps
             return null;
         }
 
+        // LO QUE YA SE CORRIGIÓ A MANO EN ESTA APP. Corregir una vez y que al día siguiente lo
+        // vuelva a fallar no es corregir, es repetirse.
+        var correcciones = _mapa.CorreccionesDe(app);
+        string aprendido = correcciones.Count == 0 ? "" : $"""
+
+            YA TE CORRIGIERON ANTES EN ESTA APLICACIÓN. Una persona revisó tu trabajo y dejó dicho
+            esto; respétalo salvo que lo que veas ahora lo contradiga de forma evidente:
+            {string.Join("\n", correcciones.Select(c => $"  · «{c.Etiqueta}» → nivel {c.Nivel}"))}
+
+            Si alguno de esos elementos está en la lista de números de arriba, inclúyelo en el nivel
+            que se te indica. No hace falta que vuelvas a juzgarlo: ya está juzgado.
+            """;
+        if (correcciones.Count > 0)
+            LogBus.Log("maestro", $"{correcciones.Count} corrección(es) previas de «{app}» van en la consulta");
+
         string respuesta;
-        try { respuesta = await PreguntarAsync(clave, Instruccion(app, superficie, inventario), foto, ct); }
+        try { respuesta = await PreguntarAsync(clave, Instruccion(app, superficie, inventario) + aprendido, foto, ct); }
         catch (Exception e) { LogBus.Log("maestro", $"no se pudo preguntar: {e.Message}"); return null; }
 
         return Aplicar(app, respuesta, numeradas);
@@ -126,6 +141,13 @@ public sealed class MaestroDeApps
           —los archivos de esta carpeta, los accesos rápidos de esta vista, las filas de una lista,
           los correos de la bandeja— y las ACCIONES («Copiar», «Eliminar», «Nuevo», «Pegar»). Todo
           eso cambia al moverte; el mobiliario, no.
+
+          EL PANEL ENTERO, TAMBIÉN LO QUE CUELGA DENTRO. Si dentro del panel permanente hay un grupo
+          desplegado —«OneDrive» con sus carpetas debajo, «Este equipo» con sus unidades, una
+          sección con sus apartados—, esos hijos también son del primer nivel: están en el panel, y
+          el panel no se va al navegar. No los dejes fuera por estar indentados o por colgar de otro
+          elemento; lo que decide es dónde VIVEN, no cuánto se sangran. Aquí es donde se falla:
+          marcando el panel y saltándose lo que hay dentro (2026-08-06).
 
         · SEGUNDO NIVEL: si en esta pantalla ves elementos que pertenecen a UNO de los de primer
           nivel —porque estamos dentro de él—, dilo colgándolos de su número. Ejemplo: si estamos
@@ -261,7 +283,7 @@ public sealed class MaestroDeApps
             // UN NÚMERO QUE NO EXISTE NO SE APLICA. Si el modelo se inventa uno, aquí se cae solo:
             // el puente son los números que nosotros pintamos, no los que él imagine.
             if (!numeradas.TryGetValue(n, out var el)) { LogBus.Log("maestro", $"número {n} no existe: se ignora"); continue; }
-            string r = _mapa.FijarNivel(app, el.Label, 1);
+            string r = _mapa.FijarNivel(app, el.Label, 1, porPersona: false);
             if (!r.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) { puestos1++; elegidos.Add(el.Label); }
             else LogBus.Log("maestro", $"«{el.Label}» (nº {n}) no está como salida en el mapa: no se fija");
         }
@@ -272,7 +294,7 @@ public sealed class MaestroDeApps
             foreach (int n in hijos.Distinct())
             {
                 if (!numeradas.TryGetValue(n, out var el)) continue;
-                string r = _mapa.FijarNivel(app, el.Label, 2);
+                string r = _mapa.FijarNivel(app, el.Label, 2, porPersona: false);
                 if (!r.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) puestos2++;
             }
 
