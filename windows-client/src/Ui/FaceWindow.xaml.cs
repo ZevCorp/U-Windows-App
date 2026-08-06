@@ -298,6 +298,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Face.StartIdle();          // gestos casuales: parpadeo, mirada, pulso
         CollapsedFace.StartIdle();
 
+        // SE ARRANCA EN LA CARITA, no en la barra. Abrir la aplicación desplegaba las siete
+        // herramientas de golpe sobre el trabajo de alguien que no ha pedido ninguna todavía: lo
+        // primero que se ve tiene que ser lo que representa a Ü, y lo demás llegar cuando se pida
+        // (2026-08-05). Un clic en la carita abre la barra de siempre, intacta.
+        ToggleCollapsed();
+
         StartUpdater();
 
         // Cierres de grabación que quedaron a medias por un 504 de Graph: se reintentan al arrancar, en
@@ -595,6 +601,38 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         BeginAnimation(TopProperty, null);
         Left = left;
         Top = top;
+    }
+
+    /// <summary>
+    /// Mueve la ventana CON EL MISMO MUELLE con el que se mueve cuando la lanzas.
+    ///
+    /// Cuando la carita va sola —a ponerse junto a lo que está señalando, o encima del catálogo de
+    /// apps— aparecía de golpe en el destino, porque <see cref="MoveTo"/> asigna y punto. Un objeto
+    /// que se teletransporta no parece el mismo objeto: parece que se apagó aquí y se encendió allá,
+    /// y se pierde de vista a dónde fue. Moverse es lo que deja seguirla con la mirada, y eso
+    /// importa justo aquí, que es cuando está enseñando algo (2026-08-05).
+    ///
+    /// Arranca parada (pendiente 0) porque nadie la ha empujado: el impulso solo existe cuando hay
+    /// una mano detrás.
+    /// </summary>
+    private void MoverConMuelle(double left, double top)
+    {
+        double dx = left - Left, dy = top - Top;
+        double dist = Math.Sqrt(dx * dx + dy * dy);
+
+        // Un salto corto se resuelve moviendo y ya: animar 12 px es un parpadeo, no un movimiento.
+        if (dist < 24) { MoveTo(left, top); return; }
+
+        var dur = new Duration(TimeSpan.FromMilliseconds(Math.Clamp(260 + dist * 0.45, 260, 720)));
+        Animar(LeftProperty, left, dur);
+        Animar(TopProperty, top, dur);
+
+        void Animar(DependencyProperty prop, double to, Duration d) =>
+            BeginAnimation(prop, new DoubleAnimation(to, d)
+            {
+                EasingFunction = new MuelleEase { InitialSlope = 0 },
+                FillBehavior = FillBehavior.HoldEnd,
+            });
     }
 
     // --- Recordar dónde dejó el usuario la barra ---
@@ -2148,7 +2186,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             double y = tl.Y + ((br.Y - tl.Y) / 2) - (alto / 2);      // centrada con el elemento
             y = Math.Max(area.Top, Math.Min(y, area.Bottom - alto));
 
-            Left = x; Top = y;
+            MoverConMuelle(x, y);
 
             // Y los ojos hacia él: si la carita quedó a su derecha, mira a la izquierda.
             bool aLaIzquierda = (tl.X + br.X) / 2 < x + (ancho / 2);
@@ -2172,8 +2210,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             double x = caja.Left + (caja.Width - ancho) / 2;
             double y = caja.Top - alto + 12;                 // pegada al borde de arriba, solapando un poco
-            Left = Math.Max(area.Left, Math.Min(x, area.Right - ancho));
-            Top = Math.Max(area.Top, Math.Min(y, area.Bottom - alto));
+            MoverConMuelle(Math.Max(area.Left, Math.Min(x, area.Right - ancho)),
+                           Math.Max(area.Top, Math.Min(y, area.Bottom - alto)));
             try { CollapsedFace?.DejarDeMirar(); } catch { }
         }
         catch { }
@@ -2182,7 +2220,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void VolverASuSitio()
     {
         if (_sitioDeAntes is not { } sitio) return;
-        Left = sitio.Left; Top = sitio.Top;
+        MoverConMuelle(sitio.Left, sitio.Top);
         _sitioDeAntes = null;
     }
 

@@ -115,8 +115,24 @@ public static class EdgeSnap
         // Y con techo: la continuidad con el gesto se nota mucho antes de dejar entrar la velocidad
         // entera, y dejarla entera es lo que hacía que saliera disparada.
         pendiente = Math.Clamp(pendiente, 0, PendienteMaxima);
-        return new ThrowEase { InitialSlope = pendiente, Stiffness = Rigidez };
+        // CON REBOTE, como la burbuja de Android. Llegar y parar en seco es correcto y se lee como
+        // software; pasarse un poco y volver es lo que hace que parezca que pesa (2026-08-05, pedido
+        // por el usuario comparándolo con el de Android, donde esto ya funcionaba bien).
+        return new MuelleEase { InitialSlope = pendiente, Stiffness = RigidezConRebote, Damping = Amortiguamiento };
     }
+
+    /// <summary>Un rebote corto. Ver <see cref="MuelleEase.Damping"/>.</summary>
+    private const double Amortiguamiento = 0.62;
+
+    /// <summary>
+    /// La rigidez del muelle QUE REBOTA, que no puede ser la misma que la del que no rebota.
+    ///
+    /// <see cref="Rigidez"/> se bajó a 4,5 para repartir el recorrido de una curva que llega y para.
+    /// A un muelle que rebota, 4,5 le deja el rebote a medias cuando la animación se acaba —tarda
+    /// ≈4/ζω en asentarse, o sea 1,4 veces la duración— y la normalización final se lo come. Con 6,5
+    /// el muelle está quieto justo al terminar y el rebote se ve entero.
+    /// </summary>
+    private const double RigidezConRebote = 6.5;
 
     private static void Animar(Window win, DependencyProperty prop, double to, Duration dur, IEasingFunction ease) =>
         win.BeginAnimation(prop, new DoubleAnimation(to, dur)
