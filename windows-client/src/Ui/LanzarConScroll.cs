@@ -121,12 +121,16 @@ internal sealed class LanzarConScroll
         _pendX = _pendY = 0;
         if (dx == 0 && dy == 0) return;
 
+        // POR LOS CUATRO BORDES. El lateral dejaba asomar la carita fuera de la pantalla y el
+        // vertical no, así que arriba y abajo topaba contra una pared invisible mientras a los lados
+        // se salía tan ricamente. No hay razón para que un borde se comporte distinto de otro
+        // (2026-08-06). Lo que la trae de vuelta es EdgeSnap al soltar, no un tope aquí.
         var wa = SystemParameters.WorkArea;
         double w = _win.ActualWidth, h = _win.ActualHeight;
         try
         {
             _win.Left = Math.Clamp(_win.Left + dx, wa.Left - w * 0.35, wa.Right - w * 0.65);
-            _win.Top = Math.Clamp(_win.Top + dy, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
+            _win.Top = Math.Clamp(_win.Top + dy, wa.Top - h * 0.35, wa.Bottom - h * 0.65);
         }
         catch { }
     }
