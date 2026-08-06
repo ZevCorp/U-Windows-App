@@ -250,6 +250,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // La boca la mueve el audio EN VIVO, que no pasa por VoiceIO: sin esto el gesto
                 // quedaba dibujado y sin nadie que lo moviera (2026-08-05).
                 ActualizarBoca();
+                PintarBotonVoz();
             });
             Closed += (_, __) => _vivo?.Dispose();
         }
@@ -789,6 +790,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void OnCollapsedHoverIn(object sender, System.Windows.Input.MouseEventArgs e)
     {
+        PintarBotonVoz();   // que aparezca ya con el aspecto que toca, no con el de la vez anterior
         VoiceDot.IsHitTestVisible = true;
         VoiceDot.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(140))
         {
@@ -798,8 +800,63 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e) => EsconderBotonVoz();
 
+    /// <summary>
+    /// El punto dice si la conversación está viva, y respira con lo que se está diciendo.
+    /// </summary>
+    /// <remarks>
+    /// Con el micrófono abierto, el botón se veía EXACTAMENTE igual que apagado: la única señal de
+    /// que había una conversación en marcha estaba en la barra, que es justo lo que no se ve cuando
+    /// la carita está sola (2026-08-06).
+    ///
+    /// La señal es de dos partes, y las dos son suaves a propósito. El punto se INVIERTE —claro con
+    /// el micrófono oscuro— que es un cambio que se reconoce de reojo sin gritar. Y un halo detrás
+    /// crece con el volumen de la voz: no es un adorno que late solo, es el mismo nivel que mueve la
+    /// boca, así que lo que se ve pulsar es lo que se está oyendo.
+    ///
+    /// El halo vive fuera del botón para poder crecer más que él sin empujar nada: dentro, cada
+    /// latido movería la carita de sitio.
+    /// </remarks>
+    private void PintarBotonVoz()
+    {
+        bool viva = _vivo?.Viva == true;
+
+        VoiceDot.Background = viva ? PincelVozViva : PincelVozQuieta;
+        VoiceDot.Foreground = viva ? System.Windows.Media.Brushes.Black : System.Windows.Media.Brushes.White;
+
+        if (!viva)
+        {
+            VoiceHalo.Opacity = 0;
+            VoiceHaloEscala.ScaleX = VoiceHaloEscala.ScaleY = 1;
+            return;
+        }
+
+        // Al hablar late con la voz; callada, un latido lento que solo dice «sigo aquí».
+        double nivel = _vivo!.NivelVoz;
+        double fuerza = nivel > 0.004
+            ? Math.Min(1, Math.Pow(nivel, 0.55) * 1.45)
+            : 0.18 + 0.10 * Math.Sin(_bocaPaso * 0.16);
+
+        VoiceHalo.Opacity = 0.10 + fuerza * 0.22;
+        double escala = 1.15 + fuerza * 0.55;
+        VoiceHaloEscala.ScaleX = VoiceHaloEscala.ScaleY = escala;
+    }
+
+    private static readonly System.Windows.Media.Brush PincelVozQuieta = Congelar(0xE6, 0x20, 0x20, 0x22);
+    private static readonly System.Windows.Media.Brush PincelVozViva = Congelar(0xFF, 0xF2, 0xF2, 0xF4);
+
+    private static System.Windows.Media.Brush Congelar(byte a, byte r, byte g, byte b)
+    {
+        var p = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(a, r, g, b));
+        p.Freeze();
+        return p;
+    }
+
     private void EsconderBotonVoz()
     {
+        // El halo se va con el punto: es suyo, y quedarse latiendo solo sobre la carita sería otra
+        // cosa distinta de la que se quiso decir.
+        VoiceHalo.BeginAnimation(OpacityProperty, null);
+        VoiceHalo.Opacity = 0;
         VoiceDot.IsHitTestVisible = false;
         VoiceDot.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(180))
         {
@@ -1285,9 +1342,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (caraPrimero != left)
         {
             CollapsedGroup.Children.Clear();
-            if (left) { CollapsedGroup.Children.Add(CollapsedFace); CollapsedGroup.Children.Add(VoiceDot); }
-            else { CollapsedGroup.Children.Add(VoiceDot); CollapsedGroup.Children.Add(CollapsedFace); }
-            VoiceDot.Margin = left ? new Thickness(10, 0, 0, 0) : new Thickness(0, 0, 10, 0);
+            if (left) { CollapsedGroup.Children.Add(CollapsedFace); CollapsedGroup.Children.Add(VoiceDotGrupo); }
+            else { CollapsedGroup.Children.Add(VoiceDotGrupo); CollapsedGroup.Children.Add(CollapsedFace); }
+            VoiceDotGrupo.Margin = left ? new Thickness(10, 0, 0, 0) : new Thickness(0, 0, 10, 0);
         }
 
         // Los tooltips salían siempre por la izquierda: pegados al borde izquierdo se saldrían de la
@@ -2521,7 +2578,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // Y que el resto de la cara acompañe: en vivo se alterna entre hablar y escuchar sin que
             // nadie más lo avise. RefreshMood no hace nada si el estado no cambió, así que llamarla
             // en cada cuadro sale gratis.
-            if (_vivo?.Viva == true) RefreshMood();
+            if (_vivo?.Viva == true) { RefreshMood(); PintarBotonVoz(); }
         };
         _boca.Start();
     }
