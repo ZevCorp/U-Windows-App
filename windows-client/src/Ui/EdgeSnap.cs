@@ -91,18 +91,16 @@ public static class EdgeSnap
 
         // Solo distancia. Un recorrido corto se resuelve rápido, uno largo se ve viajar.
         double ms = Math.Clamp(300 + dist * 0.62, 280, 900);
-        var dur = new Duration(TimeSpan.FromMilliseconds(ms));
         double segundos = ms / 1000.0;
 
-        // El viaje se anuncia ANTES de avisar a nadie: `alLlegar` reordena la barra hacia el lado
+        // El viaje se lanza ANTES de avisar a nadie: `alLlegar` reordena la barra hacia el lado
         // nuevo, y esa reordenación cambia el tamaño de la ventana, lo que disparaba una corrección
-        // de posición que cancelaba esta misma animación en el primer cuadro (2026-08-06).
-        Vuelo.Empieza(dur);
-
+        // de posición que se comía el movimiento (2026-08-06).
+        //
         // Una curva por eje: cada uno sale a SU velocidad. Con una sola compartida, el eje lento
         // arrancaría de golpe o el rápido arrancaría frenado, y se nota.
-        Animar(win, Window.LeftProperty, destLeft, dur, Curva(vx, dx, segundos));
-        Animar(win, Window.TopProperty, destTop, dur, Curva(vy, dy, segundos));
+        Vuelo.Mover(win, destLeft, destTop, TimeSpan.FromMilliseconds(ms),
+                    Curva(vx, dx, segundos), Curva(vy, dy, segundos));
 
         alLlegar?.Invoke(destLeft, destTop);
     }
@@ -123,7 +121,14 @@ public static class EdgeSnap
         // CON REBOTE, como la burbuja de Android. Llegar y parar en seco es correcto y se lee como
         // software; pasarse un poco y volver es lo que hace que parezca que pesa (2026-08-05, pedido
         // por el usuario comparándolo con el de Android, donde esto ya funcionaba bien).
-        return new MuelleEase { InitialSlope = pendiente, Stiffness = RigidezConRebote, Damping = Amortiguamiento };
+        // Hacia dentro: aquí el destino es un borde de la pantalla, y pasarse de un borde es salirse.
+        return new MuelleEase
+        {
+            InitialSlope = pendiente,
+            Stiffness = RigidezConRebote,
+            Damping = Amortiguamiento,
+            RebotaHaciaDentro = true,
+        };
     }
 
     /// <summary>Un rebote corto. Ver <see cref="MuelleEase.Damping"/>.</summary>
@@ -139,10 +144,4 @@ public static class EdgeSnap
     /// </summary>
     private const double RigidezConRebote = 6.5;
 
-    private static void Animar(Window win, DependencyProperty prop, double to, Duration dur, IEasingFunction ease) =>
-        win.BeginAnimation(prop, new DoubleAnimation(to, dur)
-        {
-            EasingFunction = ease,
-            FillBehavior = FillBehavior.HoldEnd,
-        });
 }

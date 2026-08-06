@@ -616,8 +616,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// seguir al cursor automatizado después de un lanzamiento, y el reanclaje de tamaño no
     /// reanclaba— y ninguna de las dos daba error. Tres sitios con la misma clase de fallo.
     /// </summary>
-    private void MoveTo(double left, double top)
+    private void MoveTo(double left, double top,
+        [System.Runtime.CompilerServices.CallerMemberName] string quien = "")
     {
+        if (Vuelo.EnCurso)
+            LogBus.Log("ui-anim", $"«{quien}» CLAVA la ventana en ({left:0},{top:0}) durante un vuelo");
         Vuelo.Termina();   // ponerla a mano cancela el viaje: ya no hay nada que respetar
         BeginAnimation(LeftProperty, null);
         BeginAnimation(TopProperty, null);
@@ -645,17 +648,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // Un salto corto se resuelve moviendo y ya: animar 12 px es un parpadeo, no un movimiento.
         if (dist < 24) { MoveTo(left, top); return; }
 
-        var dur = new Duration(TimeSpan.FromMilliseconds(Math.Clamp(260 + dist * 0.45, 260, 720)));
-        Vuelo.Empieza(dur);   // que el reajuste por tamaño no le pise la animación
-        Animar(LeftProperty, left, dur);
-        Animar(TopProperty, top, dur);
-
-        void Animar(DependencyProperty prop, double to, Duration d) =>
-            BeginAnimation(prop, new DoubleAnimation(to, d)
-            {
-                EasingFunction = new MuelleEase { InitialSlope = 0 },
-                FillBehavior = FillBehavior.HoldEnd,
-            });
+        // El MISMO motor que el lanzamiento: mover la ventana con física se contesta en un solo
+        // sitio. Arranca parada (pendiente 0) porque nadie la ha empujado.
+        var dur = TimeSpan.FromMilliseconds(Math.Clamp(260 + dist * 0.45, 260, 720));
+        Vuelo.Mover(this, left, top, dur,
+                    new MuelleEase { InitialSlope = 0 }, new MuelleEase { InitialSlope = 0 });
     }
 
     // --- Recordar dónde dejó el usuario la barra ---
