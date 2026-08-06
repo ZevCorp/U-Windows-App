@@ -23,6 +23,17 @@ public enum FaceMood
 {
     Reposo,
     Escuchando,
+    /// <summary>
+    /// Hay una conversación abierta y ahora mismo no está diciendo nada.
+    ///
+    /// No es <see cref="Escuchando"/> aunque lo parezca, y la diferencia es CUÁNTO DURA. Escuchando
+    /// se hizo para el dictado: ocho segundos como mucho, con los ojos bien abiertos y respirando,
+    /// porque en ocho segundos eso se lee como atención. Una conversación en vivo dura minutos, y
+    /// ahí lo mismo pasa a ser una carita con los ojos como platos que jadea sin parar delante de
+    /// alguien que está trabajando (2026-08-05, lo notó el usuario en cuanto se conectaron las dos
+    /// cosas). Atender mucho rato se parece más a estar quieto que a moverse.
+    /// </summary>
+    Conversando,
     Trabajando,
     Grabando,
     Esperando,
@@ -179,6 +190,10 @@ public sealed class FaceControl : FrameworkElement
         [FaceMood.Trabajando] = new(-1, 4, 0.1, 0.5, 0.75, 0.20, 0.7, 34 * 0.95, 0.2, 0.1, null),
         // Cejas altas y ojos bien abiertos: la cara de estar prestando atención.
         [FaceMood.Escuchando] = new(6, 6, 0.35, 0.35, 1.00, 0.05, 0.6, 34 * 1.05, 0.35, 0.35, null),
+        // Casi el reposo, con la ceja un pelo más alta. A propósito: es lo que se ve durante toda una
+        // conversación —el rato en que no dice nada es la mayor parte— y tiene que poder mirarse sin
+        // cansar. Quien quiera saber si el micrófono sigue abierto lo tiene en el botón, en rojo.
+        [FaceMood.Conversando] = new(3, 3.5, 0.3, 0.4, 0.90, 0.12, 0.7, 34 * 1.1, 0.3, 0.45, null),
         // Quieta y mirando de frente: «te estoy viendo». La quietud es la señal.
         [FaceMood.Grabando] = new(2, 2, 0.3, 0.3, 0.95, 0.10, 0.4, 34 * 0.8, 0.2, 0.2, UiPalette.Fallo),
         // Asimetría interrogativa: una ceja sube, la otra baja.

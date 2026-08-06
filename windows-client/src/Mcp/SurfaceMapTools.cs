@@ -865,13 +865,29 @@ public sealed class SurfaceMapTools
         catch { }
     }
 
-    private static bool PuedeAbrirMenu(string etiqueta) =>
-        etiqueta.Contains("Nuevo", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Contains("Ordenar", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Contains("Ver", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Contains("opciones", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Contains("Más", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Contains("Compartir", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// ¿Es de los que al pulsarlos despliegan un menú? Se espera el menú y, si no sale, no se sigue.
+    /// </summary>
+    /// <remarks>
+    /// Se miraba por TROZO de texto, y un trozo no distingue una cosa de otra: «Ver» casa con
+    /// «Volver», y «Más» casa igual con «Más opciones» —que sí abre menú— que con el «Más» de
+    /// sumar. Pidiéndole una suma a la Calculadora, el sistema pulsó «Más» dos veces esperando un
+    /// menú que nunca iba a salir y detuvo la operación a medias (2026-08-05).
+    ///
+    /// Ahora se compara por PALABRA COMPLETA, y las palabras que solas no significan menú —«más»,
+    /// «ver»— solo cuentan cuando acompañan a algo: «Más opciones», «Ver más». Una etiqueta de una
+    /// sola palabra ambigua es un botón normal, que es lo que casi siempre es.
+    /// </remarks>
+    private static bool PuedeAbrirMenu(string etiqueta)
+    {
+        var palabras = Uia.Reconocedor.Normalizar(etiqueta).Split(' ',
+            StringSplitOptions.RemoveEmptyEntries);
+        if (palabras.Length == 0) return false;
+
+        bool inequivoca = palabras.Any(p => p is "nuevo" or "ordenar" or "opciones" or "compartir");
+        bool ambigua = palabras.Any(p => p is "mas" or "ver");
+        return inequivoca || (ambigua && palabras.Length > 1);
+    }
 
     /// <summary>Acciones que operan sobre lo seleccionado: antes de ejecutarlas hay que saber qué es.</summary>
     private static bool OperaSobreLaSeleccion(string etiqueta) =>

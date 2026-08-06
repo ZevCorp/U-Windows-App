@@ -260,16 +260,10 @@ public sealed class UiaReader
         return sb.ToString().TrimEnd();
     }
 
-    private static string ProcessName(IntPtr hwnd)
-    {
-        try
-        {
-            GetWindowThreadProcessId(hwnd, out uint pid);
-            using var p = Process.GetProcessById((int)pid);
-            return p.ProcessName;
-        }
-        catch { return "app"; }
-    }
+    // La MISMA respuesta que usa el localizador: si el lector y el localizador no coinciden en de
+    // quién es la ventana, la comprobación de «lo leído y el dónde son la misma app» se dispara
+    // sola y deja de anotarse el terreno.
+    private static string ProcessName(IntPtr hwnd) => AppAligner.ProcesoDe(hwnd);
 
     private static AutomationElement? SafeFromHandle(IntPtr hwnd)
     {

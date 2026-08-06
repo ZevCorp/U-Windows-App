@@ -2240,8 +2240,19 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         // LA CONVERSACIÓN EN VIVO ES OTRA VOZ, y esta función solo miraba a la de Windows. Mientras
         // había una sesión abierta la carita se quedaba en reposo: ni hablando cuando hablaba, ni
-        // escuchando con el micrófono abierto (2026-08-05).
-        if (_vivo?.Viva == true) return _vivo.NivelVoz > 0.004 ? FaceMood.Hablando : FaceMood.Escuchando;
+        // atenta con el micrófono abierto (2026-08-05).
+        //
+        // Y no vale preguntar «¿suena algo AHORA?»: entre dos palabras de una misma frase hay
+        // silencio, así que el estado iría y volvería varias veces por segundo. Cada ida y vuelta
+        // reinicia las animaciones de la cara —y de paso el parpadeo y la mirada—, o sea que la
+        // carita se quedaría sin parpadear justo mientras habla. Se sostiene medio segundo.
+        if (_vivo?.Viva == true)
+        {
+            if (_vivo.NivelVoz > 0.004) _ultimoSonido = DateTime.UtcNow;
+            return (DateTime.UtcNow - _ultimoSonido).TotalMilliseconds < 600
+                ? FaceMood.Hablando
+                : FaceMood.Conversando;
+        }
 
         var voz = _voice.Activity;
         if (voz.Escuchando) return FaceMood.Escuchando;
@@ -2283,6 +2294,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private System.Windows.Threading.DispatcherTimer? _boca;
     private double _bocaAbierta;
     private int _bocaPaso;
+
+    /// <summary>La última vez que se oyó algo por el altavoz. Sostiene el estado «hablando» durante
+    /// los silencios cortos de dentro de una frase.</summary>
+    private DateTime _ultimoSonido = DateTime.MinValue;
 
     /// <summary>
     /// Abre y cierra la boca al ritmo de lo que se está diciendo.
@@ -2446,7 +2461,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         FaceMood.Esperando => "Te toca a ti",
         FaceMood.Detenido => "Detenido",
         FaceMood.Fallo => "Se detuvo",
-        _ => "",   // Reposo y Hablando: la cara basta
+        // Reposo, Hablando y Conversando: la cara basta. Conversando además dura minutos, y una
+        // etiqueta fija ahí no informa de nada — solo ocupa sitio en la pantalla de alguien que
+        // está trabajando. Que el micrófono sigue abierto ya lo dice su botón, en rojo.
+        _ => "",
     };
 }
 

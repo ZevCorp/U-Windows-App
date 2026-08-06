@@ -508,16 +508,9 @@ public sealed class SurfaceLocator : IDisposable
         return slug.Length == 0 ? "ventana" : slug;
     }
 
-    private static string ProcessName(IntPtr hwnd)
-    {
-        try
-        {
-            GetWindowThreadProcessId(hwnd, out uint pid);
-            using var p = System.Diagnostics.Process.GetProcessById((int)pid);
-            return p.ProcessName;
-        }
-        catch { return "app"; }
-    }
+    // De quién es la ventana lo sabe AppAligner, para toda la app: las UWP viven bajo un anfitrión
+    // común y preguntárselo a Windows a secas las llama a todas igual.
+    private static string ProcessName(IntPtr hwnd) => AppAligner.ProcesoDe(hwnd);
 
     public void Dispose() => Stop();
 }

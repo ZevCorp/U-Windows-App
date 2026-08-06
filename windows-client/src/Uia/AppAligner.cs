@@ -109,15 +109,14 @@ public static class AppAligner
     /// </remarks>
     public static IntPtr VentanaDe(string proc)
     {
-        var pids = Process.GetProcessesByName(proc).Select(p => (uint)p.Id).ToHashSet();
-        if (pids.Count == 0) return IntPtr.Zero;
-
         IntPtr elegida = IntPtr.Zero;
         EnumWindows((h, _) =>
         {
             if (!IsWindowVisible(h)) return true;
-            GetWindowThreadProcessId(h, out uint pid);
-            if (!pids.Contains(pid)) return true;
+            // Se compara por la app REAL de la ventana, no por el proceso que la posee: si no, las
+            // UWP no se encuentran nunca —su ventana es de ApplicationFrameHost— y «abre la
+            // calculadora» acababa lanzando otra copia en vez de traer la que ya estaba.
+            if (!ProcesoDe(h).Equals(proc, StringComparison.OrdinalIgnoreCase)) return true;
             if (Escritorio.EsVentana(h)) return true;          // el escritorio no es una ventana de app
 
             var sb = new System.Text.StringBuilder(300);
@@ -179,7 +178,60 @@ public static class AppAligner
         return elegida;
     }
 
+    /// <summary>
+    /// De qué aplicación es esta ventana. La única respuesta, para todo el sistema.
+    /// </summary>
+    /// <remarks>
+    /// Preguntarle a Windows de quién es la ventana da la respuesta equivocada para media tienda de
+    /// aplicaciones: la Calculadora, Configuración, Fotos, el Correo… son UWP, y sus ventanas
+    /// pertenecen a <c>ApplicationFrameHost.exe</c>, un anfitrión común. El proceso que de verdad
+    /// dibuja está DENTRO, en una ventana hija de clase <c>Windows.UI.Core.CoreWindow</c>.
+    ///
+    /// Sin esto, todas las UWP se llaman igual —«ApplicationFrameHost»— y el sistema entero pierde
+    /// el hilo: la pantalla se identifica como de otra app, el guardia de ubicación se niega a
+    /// actuar, «tráela al frente» dice que no pudo con la ventana delante, y la regla de misma-app
+    /// trata dos pantallas de la misma aplicación como si fueran de dos. Se vio entero al pedirle
+    /// una suma a la Calculadora: no llegó ni a pulsar el primer botón (2026-08-05).
+    /// </remarks>
+    public static string ProcesoDe(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return "app";
+        try
+        {
+            GetWindowThreadProcessId(hwnd, out uint pid);
+            using var p = Process.GetProcessById((int)pid);
+            string nombre = p.ProcessName;
+
+            if (!nombre.Equals("ApplicationFrameHost", StringComparison.OrdinalIgnoreCase))
+                return nombre;
+
+            // Es el anfitrión: el inquilino es la ventana hija que pinta de verdad.
+            uint pidReal = 0;
+            EnumChildWindows(hwnd, (h, _) =>
+            {
+                var clase = new System.Text.StringBuilder(200);
+                GetClassName(h, clase, clase.Capacity);
+                if (!clase.ToString().Equals("Windows.UI.Core.CoreWindow", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                GetWindowThreadProcessId(h, out uint hijo);
+                if (hijo != 0 && hijo != pid) { pidReal = hijo; return false; }
+                return true;
+            }, IntPtr.Zero);
+
+            if (pidReal != 0)
+            {
+                using var real = Process.GetProcessById((int)pidReal);
+                return real.ProcessName;
+            }
+            return nombre;
+        }
+        catch { return "app"; }
+    }
+
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc cb, IntPtr lParam);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder s, int max);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
