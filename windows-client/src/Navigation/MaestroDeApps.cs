@@ -174,7 +174,21 @@ public sealed class MaestroDeApps
         for (int intento = 1; intento <= 4; intento++)
         {
             using var contenido = new StringContent(json, Encoding.UTF8, "application/json");
-            var r = await http.PostAsync(url, contenido, ct);
+            HttpResponseMessage r;
+            try { r = await http.PostAsync(url, contenido, ct); }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+            {
+                // LA RED TAMBIÉN DICE «AHORA NO». Se reintentaba por código HTTP, pero un fallo de
+                // red no llega como código: llega como excepción y se llevaba la lección entera a la
+                // primera. Pasó de verdad —el DNS de la máquina devolvía solo IPv6 y las conexiones
+                // se quedaban colgadas— y desde fuera se veía igual que si el maestro no supiera
+                // responder (2026-08-06).
+                if (intento == 4) throw new InvalidOperationException($"no se pudo llegar al servicio: {e.Message}");
+                int esperaRed = 1000 * (1 << (intento - 1));
+                LogBus.Log("maestro", $"la red falló ({e.GetType().Name}); reintento {intento + 1} de 4 en {esperaRed / 1000}s");
+                await Task.Delay(esperaRed, ct);
+                continue;
+            }
             texto = await r.Content.ReadAsStringAsync(ct);
             codigo = (int)r.StatusCode;
             if (r.IsSuccessStatusCode) break;
