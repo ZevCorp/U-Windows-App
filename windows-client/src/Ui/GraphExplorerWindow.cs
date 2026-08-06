@@ -89,10 +89,22 @@ public sealed class GraphExplorerWindow : Window
         var (nodos, aristas) = _map.OlvidarTodo();
         _ultimaCorrida.Clear();
         _nodoActual = "";
+        _numeradas.Clear();
         _signature = "";              // que el repintado no se salte por «nada ha cambiado»
-        _status.Text = $"grafo a cero: borradas {nodos} pantalla(s) y {aristas} puerta(s)";
+
+        // SE REPINTA A LA FUERZA, las dos vistas. Borrar dejaba los puntos azules y los grafos de
+        // antes en pantalla: RefreshEdges se sale sola si hay una lectura en curso —y suele
+        // haberla— y el grafo solo se redibujaba si se estaba mirando esa vista. Quien acaba de
+        // borrarlo todo tiene que VER que está borrado; si no, el botón parece no funcionar
+        // (2026-08-06, observado por el usuario).
+        _busy = false;
+        _reading = false;
+        DibujarGrafo();
         RefreshEdges();
-        if (_graphView) DibujarGrafo();
+
+        _status.Text = $"grafo a cero: borradas {nodos} pantalla(s) y {aristas} puerta(s)";
+        LogBus.Log("mapa", $"tras borrar quedan {_map.Nodes.Count} nodo(s) y "
+                         + $"{_map.Edges().Count()} arista(s) — si no es cero, el borrado no llegó");
     }
 
     /// <summary>
@@ -789,8 +801,15 @@ public sealed class GraphExplorerWindow : Window
             // obligaba a mirar el grafo para saber algo que se decide señalando los puntos. Si el
             // usuario acaba de fijar «Descargas» al nivel 1, tiene que verlo donde está Descargas
             // (2026-08-05, pedido por el usuario).
-            bool primerNivel = sabida && salida!.Info.NivelNav == 1;
+            // AZUL = LO DECLARADO, no lo deducido. El nivel también se asigna solo al observar: la
+            // primera pantalla que se mira tras borrar pasa a ser la raíz de la app, y TODAS sus
+            // puertas reciben nivel 1 de oficio. Así que nada más limpiar el grafo aparecían todas
+            // azules sin que nadie las hubiera enseñado, y era imposible saber qué había puesto el
+            // maestro y qué la deducción (2026-08-06, observado por el usuario). Mientras se mide la
+            // enseñanza, solo se pinta de azul lo que alguien dijo a mano.
             bool aMano = sabida && salida!.Info.NivelFijado;
+            bool primerNivel = sabida && salida!.Info.NivelNav == 1
+                               && (aMano || !SurfaceMap.SoloLoDeclarado);
 
             string descripcion = el.Label
                 + (sabida ? $"  ⇒  {Corto(salida!.To)}" : $"  ({el.ControlType}, sin explorar)")
