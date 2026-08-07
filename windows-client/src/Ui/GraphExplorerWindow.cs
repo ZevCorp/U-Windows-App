@@ -1634,14 +1634,14 @@ public sealed class GraphExplorerWindow : Window
         {
             if (!pos.TryGetValue(f, out var a) || !pos.TryGetValue(t, out var b)) continue;
 
-            // ENTRE HERMANOS DEL PRIMER NIVEL, LA ESTRUCTURA LA DICE EL CENTRO. Pasear de «Notas» a
-            // «Música» no crea jerarquía entre ellas —las dos cuelgan de la app— y dibujar el paseo
-            // en verde encima de las azules del centro contaba dos historias contradictorias sobre
-            // el mismo par de nodos (2026-08-07, observado por el usuario: «las aristas que los
-            // conectan son verdes en vez de azules»). El paseo entre hermanos sigue en el mapa como
-            // acción; en el dibujo de niveles, la fila 1 se une solo por el centro.
+            // HACIA EL PRIMER NIVEL NO SE DIBUJA NINGÚN PASEO. Al cromo se llega desde CUALQUIER
+            // parte —eso es lo que lo hace cromo— así que la arista azul del centro ya lo dice
+            // entero. Dibujar además el paseo verde «nivel3 → Notas» insinuaba que para llegar a
+            // Notas hay que pasar por el nivel 3, que es exactamente lo contrario de lo que
+            // significa ser del primer nivel (2026-08-07, observado por el usuario). Primero se
+            // suprimió solo entre hermanos de la fila 1; el caso general es este: LLEGAR al primer
+            // nivel nunca es estructura, venga de donde venga. Salir de él hacia dentro, sí.
             if (centro.Length > 0
-                && prof.TryGetValue(f, out int pf) && pf == 1
                 && prof.TryGetValue(t, out int pt) && pt == 1) continue;
             var linea = new System.Windows.Shapes.Line
             {
