@@ -710,9 +710,22 @@ public sealed class GraphExplorerWindow : Window
     }
 
     private string _ultimoProcPintado = "";
+    private int _versionDibujada = -1;
 
     private void Render(string proc, List<UiaReader.UiElement> els)
     {
+        // EL GRAFO SE REESTRUCTURA CUANDO CAMBIA EL MAPA. Marcar algo como primer nivel cambia la
+        // ESTRUCTURA, no la pantalla: los mismos elementos siguen en el mismo sitio, así que la
+        // firma del repintado no cambiaba y el grafo seguía enseñando la jerarquía vieja —con los
+        // recién ascendidos colgando de donde se descubrieron— hasta que algo más lo forzara
+        // (2026-08-06, pedido por el usuario). La versión del mapa sí cambia: se sigue esa.
+        if (_map.Version != _versionDibujada)
+        {
+            _versionDibujada = _map.Version;
+            _signature = "";
+            if (_graphView) DibujarGrafo();
+        }
+
         // La traza va ANTES del primer return, no después: puesta después no distinguía «no se
         // pintó» de «se pintó y no lo conté», que es exactamente lo que hizo falta saber cuando la
         // lección abortaba por falta de números y no aparecía ni una línea (2026-08-06).
@@ -1391,17 +1404,17 @@ public sealed class GraphExplorerWindow : Window
         // estructura: mañana, entrando en otro orden, el mismo sitio cambia de sitio. Lo que una
         // persona declaró como primer nivel cuelga del centro y de nadie más (2026-08-06, pedido
         // por el usuario: «aunque ambos estén marcados como primer nivel, esto no debería suceder»).
+        // Vale para TODO lo declarado —lo tuyo y lo del maestro—, no solo lo humano: los dos dicen
+        // la estructura de la app, y el dibujo tiene que enseñar la estructura.
+        var declarados = _map.Edges()
+            .Where(e => e.Info.NivelFijado && e.Info.NivelNav >= 0 && !SurfaceMap.EsPuerta(e.To))
+            .GroupBy(e => e.To, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Min(e => e.Info.NivelNav), StringComparer.OrdinalIgnoreCase);
+
         foreach (var n in prof.Keys.ToList())
-        {
-            bool declarado = _map.Edges().Any(e =>
-                e.To.Equals(n, StringComparison.OrdinalIgnoreCase)
-                && e.Info.PorPersona && e.Info.NivelNav >= 0);
-            if (!declarado) continue;
-            int nivel = _map.Edges().First(e =>
-                e.To.Equals(n, StringComparison.OrdinalIgnoreCase)
-                && e.Info.PorPersona && e.Info.NivelNav >= 0).Info.NivelNav;
-            if (nivel >= 0 && !n.Equals(raiz, StringComparison.OrdinalIgnoreCase)) prof[n] = nivel;
-        }
+            if (declarados.TryGetValue(n, out int nivel)
+                && !n.Equals(raiz, StringComparison.OrdinalIgnoreCase))
+                prof[n] = nivel;
 
         foreach (var (f, t, _) in traza)
         {
