@@ -711,6 +711,7 @@ public sealed class GraphExplorerWindow : Window
 
     private string _ultimoProcPintado = "";
     private int _versionDibujada = -1;
+    private Dictionary<string, int> _profDeclarada = new(StringComparer.OrdinalIgnoreCase);
 
     private void Render(string proc, List<UiaReader.UiElement> els)
     {
@@ -1416,6 +1417,11 @@ public sealed class GraphExplorerWindow : Window
                 && !n.Equals(raiz, StringComparison.OrdinalIgnoreCase))
                 prof[n] = nivel;
 
+        // Y SE VUELVE A APLICAR AL FINAL. Más abajo hay pasadas que asignan profundidad a lo que no
+        // la tenía, y una de ellas puede volver a hundir lo que acabamos de subir: el orden importa
+        // porque la última en escribir gana. Se deja esto anotado para reponerlo después de todas.
+        _profDeclarada = declarados;
+
         foreach (var (f, t, _) in traza)
         {
             if (!prof.ContainsKey(f)) prof[f] = 0;
@@ -1426,6 +1432,14 @@ public sealed class GraphExplorerWindow : Window
         // están en este nivel, y no se sabe todavía cómo se encadenan. Colocarlos abajo del todo
         // insinuaría una profundidad que nadie ha comprobado.
         foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = 0;
+
+        // Y LO DECLARADO SE REPONE AL FINAL, después de todas las pasadas. Las de arriba rellenan
+        // huecos y podían volver a hundir lo que se había subido: la última en escribir gana, y
+        // quien tiene la última palabra sobre el nivel es quien lo declaró, no el orden del paseo.
+        foreach (var n in prof.Keys.ToList())
+            if (_profDeclarada.TryGetValue(n, out int nd)
+                && !n.Equals(raiz, StringComparison.OrdinalIgnoreCase))
+                prof[n] = nd;
 
         // EL CROMO DE LA APP CUELGA DE LA APP, no de cada pantalla.
         //

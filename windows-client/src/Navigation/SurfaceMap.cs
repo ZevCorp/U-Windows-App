@@ -802,6 +802,20 @@ public sealed class SurfaceMap
         e.ActionType = actionType;
         e.Kind = SafeToClick.Clasificar(label, controlType);
         e.Explored = true;
+
+        // LO ENSEÑADO SE REAPLICA TAMBIÉN AL CRUZAR. Se hacía solo al observar, y una arista nace
+        // por dos vías: verla y cruzarla. Al cruzarla nacía sin nivel, así que tras borrar el grafo
+        // y volver a navegar, lo enseñado quedaba colocado por el orden del paseo en vez de en su
+        // nivel — que es justo lo que no debe pasar: el nivel es de la salida, no del camino por el
+        // que se llegó (2026-08-06, observado por el usuario).
+        if (_ensenanzas.TryGetValue(AppDe(f), out var sabidas)
+            && sabidas.TryGetValue(label, out var ens))
+        {
+            e.NivelNav = ens.Nivel;
+            e.NivelFijado = true;
+            e.PorPersona = ens.Humano;
+        }
+
         Version++;
         Save();
     }
