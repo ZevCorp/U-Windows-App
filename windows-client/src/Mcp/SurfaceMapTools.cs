@@ -667,6 +667,15 @@ public sealed class SurfaceMapTools
     /// pero no registrado— y de ahí que fijarle el nivel respondiera «no lo veo en la pantalla»
     /// teniéndolo delante. Ver y recordar no son lo mismo, pero para el usuario tienen que serlo.
     /// </remarks>
+    /// <summary>Procesos que dibujan páginas web. Una superficie web:// es legítima si delante hay
+    /// uno de estos: su app es el dominio, no el proceso.</summary>
+    private static bool EsNavegador(string proc) =>
+        proc.Equals("chrome", StringComparison.OrdinalIgnoreCase)
+        || proc.Equals("msedge", StringComparison.OrdinalIgnoreCase)
+        || proc.Equals("firefox", StringComparison.OrdinalIgnoreCase)
+        || proc.Equals("brave", StringComparison.OrdinalIgnoreCase)
+        || proc.Equals("opera", StringComparison.OrdinalIgnoreCase);
+
     private string FijarNivelMirandoAntes(string app, string cuales, int nivel, bool? cromo)
     {
         var donde = _where();
@@ -676,6 +685,16 @@ public sealed class SurfaceMapTools
 
     private string FijarNivelDeVarios(string app, string cuales, int nivel, bool? cromo = null)
     {
+        // PRIMERO ENTERO. La coma separa una lista… y también vive dentro de etiquetas reales:
+        // «English 7,189,000+ articles» se partía en tres trozos y ninguno existía (2026-08-07,
+        // en la primera web mapeada). Si lo pedido existe tal cual, es UNA etiqueta y no hay lista.
+        string entero = cuales.Trim();
+        if (entero.Length > 0)
+        {
+            string r0 = _map.FijarNivel(app, entero, nivel, porPersona: true, cromo);
+            if (!r0.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) return r0;
+        }
+
         var nombres = cuales.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
                             .Select(n => n.Trim()).Where(n => n.Length > 0)
                             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -1572,8 +1591,19 @@ public sealed class SurfaceMapTools
             // que nadie lo había mirado.
             string appLeida = _lector.ForegroundProcess;
             string appNodo = SurfaceMap.AppDe(nodo);
-            if (appLeida.Length > 0 && appNodo.Length > 0
-                && !appNodo.StartsWith(appLeida + ".", StringComparison.OrdinalIgnoreCase))
+
+            // UNA WEB PERTENECE A SU DOMINIO, PERO QUIEN LA DIBUJA ES EL NAVEGADOR. Comparar
+            // nombres declaraba distinta a toda página web —«se leyó chrome y el nodo es
+            // web://…»— así que en una web no se podía anotar nada, y por eso señalar un elemento
+            // funcionaba (lee la pantalla) pero fijarle el nivel no (busca en el mapa, que seguía
+            // vacío) (2026-08-07, observado por el usuario). Para lo web, la coincidencia se
+            // comprueba por IDENTIDAD: que el localizador siga diciendo que estamos en ese nodo.
+            bool coincide = appNodo.Length == 0 || appLeida.Length == 0
+                || appNodo.StartsWith(appLeida + ".", StringComparison.OrdinalIgnoreCase)
+                || (nodo.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
+                    && EsNavegador(appLeida)
+                    && string.Equals(_where()?.Id ?? "", nodo, StringComparison.OrdinalIgnoreCase));
+            if (!coincide)
             {
                 LogBus.Log("mapa-mcp", $"NO se anotan salidas: se leyó «{appLeida}» y el nodo es «{nodo}»");
                 return;

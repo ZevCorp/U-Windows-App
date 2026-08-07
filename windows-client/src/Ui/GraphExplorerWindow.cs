@@ -1188,6 +1188,17 @@ public sealed class GraphExplorerWindow : Window
                     ok = true;
                 }
             }
+            else if (nivel.Contains('.') && !nivel.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                // UN NIVEL WEB ES UN DOMINIO, NO UN PROCESO. Buscar un proceso llamado «canva.com»
+                // no encuentra nada y el clic no hacía nada visible: la página vive DENTRO del
+                // navegador —es un subnivel suyo— y la forma de «ir» a un dominio es abrirlo como
+                // URL, que además llega a la página y no solo al navegador (2026-08-07, observado
+                // por el usuario probando el clic como lo haría el asistente).
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://" + nivel)
+                { UseShellExecute = true });
+                ok = true;
+            }
             else
             {
                 // Se busca su ventana y se trae con el enganche; FocusOrLaunch solo como respaldo
@@ -1270,11 +1281,22 @@ public sealed class GraphExplorerWindow : Window
         // Orden de primera aparición: es el camino real que se ha recorrido entre aplicaciones, y
         // ordenar por nombre o por tamaño lo borraría.
         var apps = new List<string>();
+        // Un nivel WEB es un SUBNIVEL del navegador: la página vive dentro de él. Se apunta cuáles
+        // son para dibujarlos como lo que son, sin reordenar nada (2026-08-07).
+        var esWeb = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (f, t, _) in _ultimaCorrida)
-            foreach (var a in new[] { NivelDe(f), NivelDe(t) })
-                if (a.Length > 0 && !apps.Contains(a, StringComparer.OrdinalIgnoreCase)) apps.Add(a);
+            foreach (var id in new[] { f, t })
+            {
+                string a = NivelDe(id);
+                if (a.Length == 0) continue;
+                if (id.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) esWeb.Add(a);
+                if (!apps.Contains(a, StringComparer.OrdinalIgnoreCase)) apps.Add(a);
+            }
         if (appActual.Length > 0 && !apps.Contains(appActual, StringComparer.OrdinalIgnoreCase))
+        {
             apps.Add(appActual);
+            if ((_nodoActual ?? "").StartsWith("web://", StringComparison.OrdinalIgnoreCase)) esWeb.Add(appActual);
+        }
         if (apps.Count == 0) return;
 
         for (int i = 0; i < apps.Count; i++)
@@ -1299,19 +1321,23 @@ public sealed class GraphExplorerWindow : Window
                 Visibility = Visibility.Collapsed,
             };
 
+            bool web = esWeb.Contains(app);
             var nivel = new Border
             {
-                Width = 26, Height = 26,
+                // Los subniveles web van algo más pequeños y metidos hacia dentro: son páginas
+                // DENTRO del navegador, no aplicaciones hermanas.
+                Width = web ? 22 : 26, Height = web ? 22 : 26,
                 Cursor = Cursors.Hand,
                 HorizontalAlignment = HorizontalAlignment.Right,   // al ensancharse, crece hacia la izquierda
                 CornerRadius = new CornerRadius(13),
-                Margin = new Thickness(0, 3, 0, 3),
+                Margin = new Thickness(0, 3, web ? 10 : 0, 3),
                 Background = new SolidColorBrush(aqui
                     ? Color.FromArgb(0x66, 0xFF, 0xB3, 0x00) : Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF)),
                 BorderBrush = new SolidColorBrush(aqui
                     ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
                 BorderThickness = new Thickness(aqui ? 2 : 1),
-                ToolTip = $"nivel {i + 1}: {app} · {pantallas} pantalla(s) conocidas"
+                ToolTip = (web ? $"página: {app} · subnivel de tu navegador" : $"nivel {i + 1}: {app}")
+                        + $" · {pantallas} pantalla(s) conocidas"
                         + (aqui ? " · estás aquí" : " · Ctrl+Shift y clic para ir"),
             };
 
