@@ -1392,55 +1392,53 @@ public sealed class GraphExplorerWindow : Window
             return;
         }
 
-        // Raíz: el origen del primer salto, o —si aún no hay ninguno— el primer sitio pisado.
-        string raiz = traza.Count > 0 ? traza[0].From : pisados[0];
-        var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
-        // Varias pasadas: una arista puede aprenderse antes de que su origen tenga profundidad.
-        for (int pasada = 0; pasada < 6; pasada++)
-            foreach (var (f, t, _) in traza)
-                if (prof.TryGetValue(f, out int d) && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
-                    prof[t] = d + 1;
-        // EL NIVEL DECLARADO MANDA SOBRE EL CAMINO POR EL QUE SE DESCUBRIÓ. La profundidad salía de
-        // la traza: si se entra en «Descargas» viniendo de «Notas», Descargas queda un escalón por
-        // debajo de Notas —aunque las dos sean del primer nivel—. Eso dibuja el PASEO, no la
-        // estructura: mañana, entrando en otro orden, el mismo sitio cambia de sitio. Lo que una
-        // persona declaró como primer nivel cuelga del centro y de nadie más (2026-08-06, pedido
-        // por el usuario: «aunque ambos estén marcados como primer nivel, esto no debería suceder»).
-        // Vale para TODO lo declarado —lo tuyo y lo del maestro—, no solo lo humano: los dos dicen
-        // la estructura de la app, y el dibujo tiene que enseñar la estructura.
+        // EL CENTRO ES LA APP, NO LA PANTALLA POR LA QUE SE ENTRÓ. La raíz era el primer sitio
+        // pisado, así que toda la estructura se medía desde donde alguien entrara ese día: entrando
+        // por «Música», Música quedaba en el centro y sus HERMANAS colgaban a un escalón, aunque
+        // las diecisiete estuvieran declaradas del primer nivel. El diagnóstico lo dejó escrito:
+        // raíz «explorer.exe/música» (2026-08-06). Un nivel medido desde uno de sus miembros no
+        // puede tener a todos sus miembros a la misma altura.
+        //
+        // El centro es ahora un nodo que NO es ninguna pantalla —la aplicación— y la profundidad se
+        // asigna en UN orden, cada fuente solo donde la anterior no llegó:
+        //   1. lo DECLARADO (persona o maestro): nivel N → fila N. Es estructura, y manda.
+        //   2. el nivel que el mapa conoce de cada pantalla (cuántas puertas hay que abrir).
+        //   3. el paseo, SOLO para rellenar lo que nadie conoce.
+        // Antes eran siete escrituras encadenadas sobre el mismo diccionario, cada una pisando a la
+        // anterior: el ORDEN decidía el resultado, y por eso cada arreglo movía el fallo de sitio.
         var declarados = _map.Edges()
-            .Where(e => e.Info.NivelFijado && e.Info.NivelNav >= 0 && !SurfaceMap.EsPuerta(e.To))
+            .Where(e => e.Info.NivelFijado && e.Info.NivelNav >= 0 && !SurfaceMap.EsPuerta(e.To)
+                     && (appActual.Length == 0
+                         || NivelDe(e.To).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
             .GroupBy(e => e.To, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Min(e => e.Info.NivelNav), StringComparer.OrdinalIgnoreCase);
-
-        foreach (var n in prof.Keys.ToList())
-            if (declarados.TryGetValue(n, out int nivel)
-                && !n.Equals(raiz, StringComparison.OrdinalIgnoreCase))
-                prof[n] = nivel;
-
-        // Y SE VUELVE A APLICAR AL FINAL. Más abajo hay pasadas que asignan profundidad a lo que no
-        // la tenía, y una de ellas puede volver a hundir lo que acabamos de subir: el orden importa
-        // porque la última en escribir gana. Se deja esto anotado para reponerlo después de todas.
         _profDeclarada = declarados;
 
+        string centro = appActual.Length > 0 ? $"nivel://{appActual}" : "";
+        string raiz = centro.Length > 0 ? centro : (traza.Count > 0 ? traza[0].From : pisados[0]);
+        var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
+        int suelo = centro.Length > 0 ? 1 : 0;   // la fila 0 es de la app: nadie más la ocupa
+
+        // 1. Lo declarado: nivel N → fila N, colgando del centro.
+        foreach (var d in declarados)
+            prof[d.Key] = Math.Max(suelo, d.Value);
+
+        // 2. Lo que el mapa sabe de cada pantalla.
+        foreach (var n in pisados.Concat(traza.SelectMany(x => new[] { x.From, x.To })))
+            if (!prof.ContainsKey(n) && _map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
+                prof[n] = Math.Max(suelo, ni.Nivel);
+
+        // 3. El paseo rellena los huecos, sin mover NADA de lo ya colocado.
+        for (int pasada = 0; pasada < 6; pasada++)
+            foreach (var (f, t, _) in traza)
+                if (prof.TryGetValue(f, out int d) && !prof.ContainsKey(t))
+                    prof[t] = d + 1;
         foreach (var (f, t, _) in traza)
         {
-            if (!prof.ContainsKey(f)) prof[f] = 0;
-            if (!prof.ContainsKey(t)) prof[t] = 1;
+            if (!prof.ContainsKey(f)) prof[f] = suelo;
+            if (!prof.ContainsKey(t)) prof[t] = prof[f] + 1;
         }
-
-        // Los pisados sin salto conocido entran a la altura de la raíz: se sabe que existen y que
-        // están en este nivel, y no se sabe todavía cómo se encadenan. Colocarlos abajo del todo
-        // insinuaría una profundidad que nadie ha comprobado.
-        foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = 0;
-
-        // Y LO DECLARADO SE REPONE AL FINAL, después de todas las pasadas. Las de arriba rellenan
-        // huecos y podían volver a hundir lo que se había subido: la última en escribir gana, y
-        // quien tiene la última palabra sobre el nivel es quien lo declaró, no el orden del paseo.
-        foreach (var n in prof.Keys.ToList())
-            if (_profDeclarada.TryGetValue(n, out int nd)
-                && !n.Equals(raiz, StringComparison.OrdinalIgnoreCase))
-                prof[n] = nd;
+        foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = suelo;
 
         // CÓMO QUEDÓ LA ESTRUCTURA, y por qué. Llevamos dos arreglos por el sitio equivocado
         // suponiendo dónde estaba el fallo; esto lo dice en vez de deducirlo. Se escribe solo
@@ -1478,10 +1476,9 @@ public sealed class GraphExplorerWindow : Window
         // nivel 1 (2026-08-04, replanteado por el usuario).
         //
         // El recorrido no se tira: sigue siendo el material de las ACCIONES, donde el orden SÍ es la
-        // información. Simplemente deja de mandar en la navegación.
-        foreach (var n in prof.Keys.ToList())
-            if (_map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
-                prof[n] = ni.Nivel;
+        // información. Simplemente deja de mandar en la navegación. (El nivel de cada pantalla ya
+        // se aplicó arriba, como fuente 2 y sin pisar lo declarado — aquí volvía a escribirse
+        // encima y deshacía la fila de lo enseñado en cada repintado.)
 
         // QUIÉN ES CROMO LO DICE EL MAPA, no este dibujo. Aquí se recontaba por cuenta propia y solo
         // sobre los nodos que había delante, así que una salida que el mapa sabe que está en toda la
@@ -1494,16 +1491,10 @@ public sealed class GraphExplorerWindow : Window
             if (NivelDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
                 cromo[h.To] = h.Info.Label;
 
-        // El centro del nivel: la aplicación. Los hermanos cuelgan de él, a un solo salto.
-        string centro = cromo.Count > 0 ? $"nivel://{appActual}" : "";
-        if (centro.Length > 0)
-        {
-            prof[centro] = 0;
-            foreach (var d in cromo.Keys) prof[d] = 1;
-            // Lo que ya se recorrió cuelga por debajo, para no mezclarse con los hermanos.
-            foreach (var n in prof.Keys.ToList())
-                if (n != centro && !cromo.ContainsKey(n)) prof[n] = Math.Max(prof[n], 2);
-        }
+        // El centro ya existe desde arriba. El cromo solo APORTA sus destinos a la fila 1 si nadie
+        // los colocó; el empujón que hundía todo lo no-cromo a la fila 2 se va — era la última
+        // escritura del repintado y deshacía lo declarado cada vez (2026-08-06).
+        foreach (var d in cromo.Keys) if (!prof.ContainsKey(d)) prof[d] = 1;
 
         // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra
         // deja de leerse; a partir de ahí se sigue pagando el sitio que ocupa un texto que ya nadie
@@ -1591,10 +1582,13 @@ public sealed class GraphExplorerWindow : Window
         // Del centro del nivel a cada hermano: una sola arista por hermano, alcanzable desde
         // cualquier pantalla de la app. Es la forma que el usuario tiene en la cabeza y la que el
         // mapa ya sabía; solo faltaba dibujarla así.
+        // Del centro cuelga TODA la fila 1 —el cromo deducido y lo declarado— con la misma arista
+        // azul: son la misma afirmación, «esto se alcanza desde cualquier pantalla de la app».
         if (centro.Length > 0 && pos.TryGetValue(centro, out var pc))
-            foreach (var (destino, etiqueta) in cromo.Select(k => (k.Key, k.Value)))
+            foreach (var kv in prof.Where(p => p.Value == 1 && !p.Key.Equals(centro, StringComparison.OrdinalIgnoreCase)))
             {
-                if (!pos.TryGetValue(destino, out var pd)) continue;
+                if (!pos.TryGetValue(kv.Key, out var pd)) continue;
+                string etiqueta = cromo.TryGetValue(kv.Key, out var et) ? et : Corto(kv.Key);
                 _lienzo.Children.Add(new System.Windows.Shapes.Line
                 {
                     X1 = pc.X + anchoCaja / 2, Y1 = pc.Y + altoCaja,

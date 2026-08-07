@@ -329,6 +329,10 @@ public sealed class SurfaceMap
                     e.Label = clic.Label;
                     e.ControlType = clic.ControlType;
                     LogBus.Log("mapa", $"aprendido: «{clic.Label}» lleva de '{ShortId(_lastCommitted)}' a '{ShortId(id)}'");
+
+                    // Esta es la vía por la que nacen las aristas cuando navega UNA PERSONA — y era
+                    // la única de las tres que no reponía lo enseñado (2026-08-06).
+                    AplicarEnsenanza(_lastCommitted, e);
                 }
             }
         }
@@ -537,18 +541,9 @@ public sealed class SurfaceMap
                 VistaPorUltimaVez = ahora,
             };
 
-            // LO ENSEÑADO SE REAPLICA AL VERLO. Así una puerta recién observada nace ya con el
-            // nivel que una persona le dio en su día, aunque el grafo se haya borrado entero desde
-            // entonces: enseñar una app es un aprendizaje, y los aprendizajes no se tiran al
-            // limpiar el terreno.
-            if (_ensenanzas.TryGetValue(AppDe(f), out var sabidas)
-                && sabidas.TryGetValue(s.Label, out var ens))
-            {
-                var e = _edges[k];
-                e.NivelNav = ens.Nivel;
-                e.NivelFijado = true;
-                e.PorPersona = ens.Humano;
-            }
+            // LO ENSEÑADO SE REAPLICA AL VERLO: una puerta recién observada nace ya con el nivel
+            // que se le dio en su día, aunque el grafo se haya borrado entero desde entonces.
+            AplicarEnsenanza(f, _edges[k]);
         }
         Save();
     }
@@ -808,17 +803,7 @@ public sealed class SurfaceMap
         // y volver a navegar, lo enseñado quedaba colocado por el orden del paseo en vez de en su
         // nivel — que es justo lo que no debe pasar: el nivel es de la salida, no del camino por el
         // que se llegó (2026-08-06, observado por el usuario).
-        if (_ensenanzas.TryGetValue(AppDe(f), out var sabidas)
-            && sabidas.TryGetValue(label, out var ens))
-        {
-            e.NivelNav = ens.Nivel;
-            e.NivelFijado = true;
-            e.PorPersona = ens.Humano;
-            LogBus.Log("grafo", $"al cruzar «{label}» se le repone el nivel {ens.Nivel} → {ShortId(t)}");
-        }
-        else if (_ensenanzas.ContainsKey(AppDe(f)))
-            LogBus.Log("grafo", $"al cruzar «{label}» NO había enseñanza para esa etiqueta "
-                + $"(la app tiene {_ensenanzas[AppDe(f)].Count})");
+        AplicarEnsenanza(f, e);
 
         Version++;
         Save();
@@ -1100,6 +1085,28 @@ public sealed class SurfaceMap
     private static string RutaEnsenanzas =>
         System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, "jerarquias-ensenadas.json");
 
+    /// <summary>
+    /// Le repone a una arista el nivel que se enseñó para su etiqueta. LA ÚNICA respuesta.
+    /// </summary>
+    /// <remarks>
+    /// Una arista nace por TRES vías —observarla, cruzarla a propósito, y la transición que se ve
+    /// pasar al navegar a mano— y la reposición estaba copiada en dos de ellas y ausente en la
+    /// tercera, que es justo la que usa una persona paseando. El diagnóstico lo dijo sin ambigüedad:
+    /// «NINGÚN nodo llega declarado» con diecisiete enseñadas en disco (2026-08-06). Una pregunta,
+    /// una respuesta, un sitio; y quien cree una arista nueva, que llame aquí.
+    /// </remarks>
+    private void AplicarEnsenanza(string desde, EdgeInfo e)
+    {
+        if (e.Label.Length == 0) return;
+        if (_ensenanzas.TryGetValue(AppDe(desde), out var sabidas)
+            && sabidas.TryGetValue(e.Label, out var ens))
+        {
+            e.NivelNav = ens.Nivel;
+            e.NivelFijado = true;
+            e.PorPersona = e.PorPersona || ens.Humano;
+        }
+    }
+
     private void Aprender(string app, string etiqueta, int nivel, bool humano)
     {
         if (app.Length == 0 || etiqueta.Length == 0) return;
@@ -1288,6 +1295,11 @@ public sealed class SurfaceMap
                 {
                     foreach (var kv in s.Nodes) map._nodes[kv.Key] = kv.Value;
                     foreach (var kv in s.Edges) map._edges[kv.Key] = kv.Value;
+
+                    // Y AL CARGAR SE SANA TODO: da igual por qué vía nació cada arista o con qué
+                    // versión del código — al arrancar, toda arista cuya etiqueta esté enseñada
+                    // recibe su nivel. Es la red de seguridad de las tres vías de nacimiento.
+                    foreach (var (from, _, info) in map.Edges()) map.AplicarEnsenanza(from, info);
 
                     if (s.Version < SchemaVersion)
                     {
