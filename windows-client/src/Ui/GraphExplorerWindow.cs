@@ -1482,6 +1482,23 @@ public sealed class GraphExplorerWindow : Window
                     + string.Join(", ", _map.AppsConJerarquia().Select(x => $"«{x.App}»")));
             }
             if (ensenadas.Count > 0)
+            {
+                // EL PUENTE POR NOMBRE ES UNA RED, NO UNA SEGUNDA FUENTE. Dos reglas que salieron
+                // de enseñar GitHub (2026-08-07, observado por el usuario):
+                // · si la etiqueta ya está anclada por una ARISTA FIJADA, el puente se abstiene —
+                //   la pestaña «Code» lleva a la pantalla «graph» (así se llama su URL), y el
+                //   puente anclaba ADEMÁS un nodo fantasma «code»: la misma pantalla, dos veces
+                //   en la fila 1;
+                // · si el nombre casa con MÁS DE UN nodo, la ambigüedad no es evidencia — «pulls»
+                //   existe como pantalla global y como pestaña del repo, y anclar las dos duplicaba
+                //   la fila 1. En la duda, mandan las aristas, que sí distinguen.
+                var ancladas = new HashSet<string>(
+                    _map.Edges().Where(e => e.Info.NivelFijado && !SurfaceMap.EsPuerta(e.To)
+                                         && e.Info.Label.Length > 0)
+                        .Select(e => Uia.Reconocedor.Normalizar(e.Info.Label)),
+                    StringComparer.Ordinal);
+
+                var candidatosPorEtiqueta = new Dictionary<string, (int Nivel, List<string> Nodos)>(StringComparer.Ordinal);
                 foreach (var n in candidatosPuente)
                 {
                     if (declarados.ContainsKey(n)) continue;
@@ -1489,9 +1506,25 @@ public sealed class GraphExplorerWindow : Window
                     int barra = cola.LastIndexOf('/');
                     string slug = Uia.Reconocedor.Normalizar(barra >= 0 ? cola[(barra + 1)..] : cola);
                     foreach (var (etiqueta, nivel) in ensenadas)
-                        if (slug.Equals(Uia.Reconocedor.Normalizar(etiqueta), StringComparison.Ordinal))
-                        { declarados[n] = nivel; _porQueDeclarado[n] = $"nombre≈«{etiqueta}»"; break; }
+                    {
+                        string norm = Uia.Reconocedor.Normalizar(etiqueta);
+                        if (!slug.Equals(norm, StringComparison.Ordinal)) continue;
+                        if (!candidatosPorEtiqueta.TryGetValue(norm, out var acc))
+                            candidatosPorEtiqueta[norm] = acc = (nivel, new List<string>());
+                        acc.Nodos.Add(n);
+                        break;
+                    }
                 }
+                foreach (var (norm, (nivel, nodos)) in candidatosPorEtiqueta)
+                {
+                    if (ancladas.Contains(norm))
+                    { LogBus.Log("grafo", $"puente: «{norm}» ya anclada por arista fijada; el nombre no opina"); continue; }
+                    if (nodos.Count != 1)
+                    { LogBus.Log("grafo", $"puente: «{norm}» casa con {nodos.Count} nodos; ambigüedad no es evidencia"); continue; }
+                    declarados[nodos[0]] = nivel;
+                    _porQueDeclarado[nodos[0]] = $"nombre≈«{norm}»";
+                }
+            }
         }
         _profDeclarada = declarados;
 

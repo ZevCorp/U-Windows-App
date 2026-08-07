@@ -176,6 +176,7 @@ public sealed class SurfaceMap
     private readonly Dictionary<string, EdgeInfo> _edges = new(StringComparer.Ordinal); // "from\nto"
 
     private string _pendingId = "";
+    private DateTime _lastCommitTime = DateTime.MinValue;
     private DateTime _pendingSince = DateTime.MinValue;
     private string _lastCommitted = "";
 
@@ -256,6 +257,19 @@ public sealed class SurfaceMap
 
     private void Commit(string id, DateTime when)
     {
+        // MEDICIÓN, no arreglo: una SPA cambia de identidad a mitad de transición («code» y al
+        // rato «graph» para la misma pantalla de GitHub) y si el estado intermedio aguanta el
+        // MinDwell, se consolida un nodo FANTASMA con su arista. Antes de tocar el umbral o la
+        // estabilización hay que ver cuántas veces pasa y con qué separación: dos commits web del
+        // mismo dominio muy seguidos son el sospechoso (2026-08-07, observado por el usuario).
+        if (id.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
+            && _lastCommitted.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
+            && AppDe(id).Equals(AppDe(_lastCommitted), StringComparison.OrdinalIgnoreCase)
+            && (when - _lastCommitTime).TotalMilliseconds < 4000)
+            LogBus.Log("mapa", $"SPA: «{ShortId(_lastCommitted)}» → «{ShortId(id)}» en "
+                + $"{(when - _lastCommitTime).TotalMilliseconds:F0} ms — posible identidad transitoria");
+        _lastCommitTime = when;
+
         if (!_nodes.TryGetValue(id, out var n))
         {
             if (_nodes.Count >= MaxNodes) return;
