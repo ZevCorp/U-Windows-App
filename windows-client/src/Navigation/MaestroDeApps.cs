@@ -154,10 +154,15 @@ public sealed class MaestroDeApps
           dentro de «Notas» y ves sus subcarpetas, esas van en el segundo nivel bajo el número de
           «Notas».
 
+        · ATRÁS: además, di qué número es el control de VOLVER de esta aplicación —la flecha de
+          retroceso, el «Back»—, si lo ves. Importa porque el atrás no es navegación constante: a
+          dónde lleva depende de por dónde viniste, y el mapa no debe tratarlo como una puerta.
+
         Responde SOLO con este JSON, usando los números de la lista:
 
         {"nivel1": [1, 5, 9],
          "nivel2": {"5": [12, 13]},
+         "atras": [3],
          "explicacion": "una frase corta, en español, de qué es cada zona"}
 
         CASI TODA APLICACIÓN TIENE NAVEGACIÓN PERMANENTE, y suele estar en el mismo sitio: una
@@ -269,6 +274,12 @@ public sealed class MaestroDeApps
                     nivel2[p.Name] = p.Value.EnumerateArray()
                         .Where(x => x.TryGetInt32(out _)).Select(x => x.GetInt32()).ToList();
             explicacion = raiz.TryGetProperty("explicacion", out var ex) ? ex.GetString() ?? "" : "";
+
+            // El gesto de VOLVER, si lo señaló: no acuña aristas y su rastro es efímero.
+            if (raiz.TryGetProperty("atras", out var at) && at.ValueKind == JsonValueKind.Array)
+                foreach (var x in at.EnumerateArray())
+                    if (x.TryGetInt32(out int na) && numeradas.TryGetValue(na, out var elAtras))
+                        _mapa.AprenderAtras(app, elAtras.Label, humano: false);
         }
         catch (Exception e)
         {

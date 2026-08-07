@@ -261,7 +261,15 @@ public sealed class SurfaceMap
         n.Visits++;
         n.LastSeen = when;
 
-        if (_lastCommitted.Length > 0 && !string.Equals(_lastCommitted, id, StringComparison.OrdinalIgnoreCase))
+        if (_lastCommitted.Length > 0 && !string.Equals(_lastCommitted, id, StringComparison.OrdinalIgnoreCase)
+            // EL ATRÁS NO ACUÑA ARISTAS: es un gesto de historial, no de estructura. Puedes venir
+            // de cualquier parte, así que «a dónde lleva» no es una propiedad del botón sino del
+            // camino andado — su rastro es efímero por naturaleza. La arista «vercel → graph» que
+            // se acuñaba al volver fue la que hizo saltar a vercel a la altura de su padre en el
+            // dibujo (2026-08-07, observado por el usuario). La posición SÍ se sigue actualizando
+            // (_lastCommitted): saber dónde estás no es lo mismo que afirmar por dónde se llega.
+            && !(_actionLeavingLast is { } gesto
+                 && EsGestoDeAtras(AppDe(_lastCommitted), gesto.Label, gesto.Selector)))
         {
             // Se REUTILIZA la arista que ya una estos dos sitios, sea cual sea su puerta. Desde que
             // la puerta forma parte de la clave, crear una nueva aquí duplicaría la misma
@@ -786,6 +794,14 @@ public sealed class SurfaceMap
             if (!fijado && nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
         }
 
+        // También aquí: el ATRÁS no acuña. Esta es la vía del cruce deliberado (map_take «Atrás»),
+        // y sin este guardia la regla valía para el paseo a mano pero no para el asistente.
+        if (EsGestoDeAtras(AppDe(f), label, selector))
+        {
+            LogBus.Log("mapa", $"«{label}» es el gesto de volver: se navegó, no se acuña arista");
+            return;
+        }
+
         string k = Clave(f, t, selector);
         if (!_edges.TryGetValue(k, out var e)) { e = new EdgeInfo(); _edges[k] = e; }
         e.Count++;
@@ -1024,7 +1040,7 @@ public sealed class SurfaceMap
         string a = app.Trim();
         if (a.Length == 0) return Array.Empty<(string, int)>();
         return _ensenanzas.TryGetValue(a, out var d)
-            ? d.Where(kv => kv.Value.Humano).Select(kv => (kv.Key, kv.Value.Nivel))
+            ? d.Where(kv => kv.Value.Humano && !kv.Value.Atras && kv.Value.Nivel >= 0).Select(kv => (kv.Key, kv.Value.Nivel))
                .OrderBy(x => x.Item2).ThenBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
                .ToList()
             : Array.Empty<(string, int)>();
@@ -1051,7 +1067,40 @@ public sealed class SurfaceMap
     /// porque solo lo humano se le devuelve después: devolverle lo suyo sería confirmarse a sí
     /// mismo (2026-08-06).
     /// </remarks>
-    public sealed record Ensenanza(int Nivel, bool Humano);
+    public sealed record Ensenanza(int Nivel, bool Humano, bool Atras = false);
+
+    /// <summary>
+    /// ¿Este control es el gesto de VOLVER de su app?
+    /// </summary>
+    /// <remarks>
+    /// El atrás no es constante: puedes venir de cualquier parte, así que a dónde lleva depende del
+    /// historial, no de la estructura. Una arista acuñada al pulsarlo —«vercel → graph»— afirma una
+    /// jerarquía que no existe, y fue lo que hizo saltar a «vercel» a la altura de su padre en el
+    /// dibujo (2026-08-07, observado por el usuario). Se reconocen los modismos universales y,
+    /// para el resto de aplicaciones, lo que el maestro haya señalado como atrás al enseñarlas.
+    /// </remarks>
+    public bool EsGestoDeAtras(string app, string label, string selector)
+    {
+        if (EsRelativo(selector)) return true;   // backButton, upButton, forwardButton
+        string l = label.Trim();
+        if (l.Equals("Atrás", StringComparison.OrdinalIgnoreCase)
+            || l.Equals("Back", StringComparison.OrdinalIgnoreCase)
+            || l.Equals("Volver", StringComparison.OrdinalIgnoreCase)
+            || l.Equals("Adelante", StringComparison.OrdinalIgnoreCase)
+            || l.Equals("Forward", StringComparison.OrdinalIgnoreCase)) return true;
+        return _ensenanzas.TryGetValue(app, out var d) && d.TryGetValue(l, out var e) && e.Atras;
+    }
+
+    /// <summary>El maestro (o una persona) dice cuál es el botón de volver de esta app.</summary>
+    public void AprenderAtras(string app, string etiqueta, bool humano)
+    {
+        if (app.Length == 0 || etiqueta.Length == 0) return;
+        if (!_ensenanzas.TryGetValue(app, out var d))
+            _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
+        d[etiqueta] = new Ensenanza(-1, humano || (d.TryGetValue(etiqueta, out var ya) && ya.Humano), Atras: true);
+        GuardarEnsenanzas();
+        LogBus.Log("mapa", $"«{etiqueta}» es el gesto de volver de «{app}»: no acuñará aristas");
+    }
 
     private readonly Dictionary<string, Dictionary<string, Ensenanza>> _ensenanzas =
         new(StringComparer.OrdinalIgnoreCase);
@@ -1062,7 +1111,7 @@ public sealed class SurfaceMap
     /// lo dijo — los dos describen la estructura.</remarks>
     public IReadOnlyList<(string Etiqueta, int Nivel)> EnsenanzasDe(string app) =>
         _ensenanzas.TryGetValue(app.Trim(), out var d)
-            ? d.Select(kv => (kv.Key, kv.Value.Nivel)).ToList()
+            ? d.Where(kv => !kv.Value.Atras && kv.Value.Nivel >= 0).Select(kv => (kv.Key, kv.Value.Nivel)).ToList()
             : Array.Empty<(string, int)>();
 
     /// <summary>Las apps con jerarquía enseñada, para poder verlas y borrarlas por separado.</summary>
@@ -1108,7 +1157,8 @@ public sealed class SurfaceMap
     {
         if (e.Label.Length == 0) return;
         if (_ensenanzas.TryGetValue(AppDe(desde), out var sabidas)
-            && sabidas.TryGetValue(e.Label, out var ens))
+            && sabidas.TryGetValue(e.Label, out var ens)
+            && !ens.Atras && ens.Nivel >= 0)
         {
             e.NivelNav = ens.Nivel;
             e.NivelFijado = true;
@@ -1309,6 +1359,19 @@ public sealed class SurfaceMap
                     // versión del código — al arrancar, toda arista cuya etiqueta esté enseñada
                     // recibe su nivel. Es la red de seguridad de las tres vías de nacimiento.
                     foreach (var (from, _, info) in map.Edges()) map.AplicarEnsenanza(from, info);
+
+                    // Las aristas del gesto de VOLVER se purgan: las acuñadas antes de que la regla
+                    // existiera siguen en el mapa afirmando jerarquías que no son («vercel→graph»).
+                    var deAtras = map._edges
+                        .Where(kv => kv.Value.Label.Length > 0 && kv.Key.IndexOf('\n') > 0
+                                  && map.EsGestoDeAtras(AppDe(kv.Key[..kv.Key.IndexOf('\n')]),
+                                                        kv.Value.Label, kv.Value.Selector))
+                        .Select(kv => kv.Key).ToList();
+                    foreach (var k in deAtras) map._edges.Remove(k);
+                    if (deAtras.Count > 0)
+                        LogBus.Log("mapa", $"purgadas {deAtras.Count} arista(s) del gesto de volver: "
+                                         + string.Join(" · ", deAtras.Take(10).Select(k =>
+                                             k.Replace("\n", "→").Replace("uia://explorer.exe/", ""))));
 
                     if (s.Version < SchemaVersion)
                     {

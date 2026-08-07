@@ -658,6 +658,22 @@ public sealed class SurfaceMapTools
     /// Se informa de cada uno por separado: fijar quince y fallar en uno no es ni éxito ni fracaso,
     /// y quien pregunta necesita saber exactamente cuál se quedó fuera.
     /// </remarks>
+    /// <summary>
+    /// Anota lo que hay en pantalla y DESPUÉS fija el nivel.
+    /// </summary>
+    /// <remarks>
+    /// Los puntos y el mapa son dos lectores distintos: el punto se dibuja leyendo la pantalla en
+    /// vivo, y el mapa solo anota cuando alguna herramienta se lo pide. De ahí el punto GRIS —visible
+    /// pero no registrado— y de ahí que fijarle el nivel respondiera «no lo veo en la pantalla»
+    /// teniéndolo delante. Ver y recordar no son lo mismo, pero para el usuario tienen que serlo.
+    /// </remarks>
+    private string FijarNivelMirandoAntes(string app, string cuales, int nivel)
+    {
+        var donde = _where();
+        if (donde != null) ObservarAqui(donde.Id);
+        return FijarNivelDeVarios(app, cuales, nivel);
+    }
+
     private string FijarNivelDeVarios(string app, string cuales, int nivel)
     {
         var nombres = cuales.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
@@ -1128,7 +1144,12 @@ public sealed class SurfaceMapTools
             "map_pointed_trail" => LoQueMeAcabasDeMostrar(A("seconds")),
             "map_exclude" => Excluir(A("exit")),
             "map_show" => Mostrar(A("exit")),
-            "map_set_level" => FijarNivelDeVarios(
+            // SE MIRA ANTES DE FIJAR. Fijar un nivel busca la SALIDA con ese nombre en el mapa, y
+            // el mapa solo anota cuando se le pide: un elemento perfectamente visible —con su punto
+            // gris encima— podía no estar registrado todavía, y la respuesta era «no lo veo en la
+            // pantalla», que además es falsa. El usuario lo tenía delante (2026-08-07). Es el mismo
+            // arreglo que ya necesitó el maestro: primero se anota lo que hay, luego se juzga.
+            "map_set_level" => FijarNivelMirandoAntes(
                 A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
                 A("exit"),
                 int.TryParse(A("level"), out int niv) ? niv : -1),

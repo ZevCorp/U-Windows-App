@@ -869,9 +869,17 @@ public sealed class GraphExplorerWindow : Window
             bool primerNivel = sabida && salida!.Info.NivelNav == 1
                                && (aMano || !SurfaceMap.SoloLoDeclarado);
 
+            // «Sin explorar» era engañoso: el gris no dice que falte cruzarla, dice que el MAPA aún
+            // no la tiene anotada —los puntos leen la pantalla y el mapa anota aparte—. Y como el
+            // estado se lee para decidir qué se puede hacer con el elemento, tiene que decir la
+            // verdad: se puede pulsar igual, y fijarle el nivel la anota sola (2026-08-07).
             string descripcion = el.Label
-                + (sabida ? $"  ⇒  {Corto(salida!.To)}" : $"  ({el.ControlType}, sin explorar)")
-                + (primerNivel ? "  ·  nivel 1" : "")
+                + (sabida
+                    ? (SurfaceMap.EsPuerta(salida!.To)
+                        ? "  ·  puerta conocida, sin cruzar todavía"
+                        : $"  ⇒  {Corto(salida!.To)}")
+                    : $"  ({el.ControlType})  ·  aún no está en el mapa; se anota al usarla")
+                + (primerNivel ? "  ·  NIVEL 1" : "")
                 + (aMano ? " (fijado a mano)" : "");
 
             // EL NÚMERO ES EL PUENTE ENTRE VER Y ACCIONAR. Cuando un modelo de visión mira la
@@ -1422,6 +1430,17 @@ public sealed class GraphExplorerWindow : Window
         // «explorer.exe/notas» NACE de la puerta «Notas», su nombre ES la etiqueta enseñada.
         if (appActual.Length > 0)
         {
+            // El puente recorre TAMBIÉN los extremos de las aristas del mapa, no solo lo paseado en
+            // esta sesión: desde que la estructura sale del mapa, un nodo enseñado puede entrar al
+            // dibujo sin que nadie lo haya pisado hoy — «videos» apareció en fila 2 sin asterisco,
+            // estando enseñada, porque llegó por una arista y el puente no la miró (2026-08-07).
+            var candidatosPuente = pisados
+                .Concat(traza.SelectMany(x => new[] { x.From, x.To }))
+                .Concat(_map.Edges()
+                    .Where(e => !SurfaceMap.EsPuerta(e.To) && SurfaceMap.MismaApp(e.From, e.To))
+                    .SelectMany(e => new[] { e.From, e.To }))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
             var ensenadas = _map.EnsenanzasDe(appActual);
             if (ensenadas.Count == 0 && _huellaPuente != appActual)
             {
@@ -1431,7 +1450,7 @@ public sealed class GraphExplorerWindow : Window
                     + string.Join(", ", _map.AppsConJerarquia().Select(x => $"«{x.App}»")));
             }
             if (ensenadas.Count > 0)
-                foreach (var n in pisados.Concat(traza.SelectMany(x => new[] { x.From, x.To })).Distinct(StringComparer.OrdinalIgnoreCase))
+                foreach (var n in candidatosPuente)
                 {
                     if (declarados.ContainsKey(n)) continue;
                     string cola = n.TrimEnd('/');
@@ -1485,19 +1504,25 @@ public sealed class GraphExplorerWindow : Window
             if (!prof.ContainsKey(n) && _map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
                 prof[n] = Math.Max(sueloDesconocido, ni.Nivel);
 
-        // 3. Las aristas DEL MAPA rellenan los huecos, sin mover nada de lo ya colocado. En
-        //    anchura: cada pantalla queda a un paso de su ancestro colocado más cercano, y ese
-        //    número no depende de por dónde se paseó hoy.
-        for (int pasada = 0; pasada < 6; pasada++)
+        // 3. Las aristas DEL MAPA rellenan los huecos por DISTANCIA MÍNIMA a lo ya colocado. Con
+        //    «la primera asignación gana», el resultado dependía del orden de enumeración de las
+        //    aristas — y ese orden CAMBIA cuando el diccionario recicla el hueco de una puerta
+        //    borrada. Con un ciclo de por medio (vercel→graph del atrás), cada redibujo podía
+        //    resolverse distinto: «vercel» saltó a la altura de su padre y al rato volvió a su
+        //    sitio (2026-08-07, observado por el usuario). La distancia mínima no depende de
+        //    ningún orden. Lo colocado por las fuentes 1 y 2 queda FIJO: relajar no lo toca.
+        var fijos = new HashSet<string>(prof.Keys, StringComparer.OrdinalIgnoreCase);
+        for (int pasada = 0; pasada < 8; pasada++)
             foreach (var (f, t) in aristasMapa)
-                if (prof.TryGetValue(f, out int d) && !prof.ContainsKey(t))
+                if (prof.TryGetValue(f, out int d) && !fijos.Contains(t)
+                    && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
                     prof[t] = d + 1;
 
         // 4. Solo lo que el mapa aún no encadena cae al paseo de la sesión, y lo huérfano al suelo
         //    de lo desconocido.
         for (int pasada = 0; pasada < 6; pasada++)
             foreach (var (f, t, _) in traza)
-                if (prof.TryGetValue(f, out int d) && !prof.ContainsKey(t))
+                if (prof.TryGetValue(f, out int d) && !fijos.Contains(t) && !prof.ContainsKey(t))
                     prof[t] = d + 1;
         foreach (var (f, t, _) in traza)
         {
