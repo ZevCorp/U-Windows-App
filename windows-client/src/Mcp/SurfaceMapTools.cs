@@ -667,26 +667,26 @@ public sealed class SurfaceMapTools
     /// pero no registrado— y de ahí que fijarle el nivel respondiera «no lo veo en la pantalla»
     /// teniéndolo delante. Ver y recordar no son lo mismo, pero para el usuario tienen que serlo.
     /// </remarks>
-    private string FijarNivelMirandoAntes(string app, string cuales, int nivel)
+    private string FijarNivelMirandoAntes(string app, string cuales, int nivel, bool? cromo)
     {
         var donde = _where();
         if (donde != null) ObservarAqui(donde.Id);
-        return FijarNivelDeVarios(app, cuales, nivel);
+        return FijarNivelDeVarios(app, cuales, nivel, cromo);
     }
 
-    private string FijarNivelDeVarios(string app, string cuales, int nivel)
+    private string FijarNivelDeVarios(string app, string cuales, int nivel, bool? cromo = null)
     {
         var nombres = cuales.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
                             .Select(n => n.Trim()).Where(n => n.Length > 0)
                             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (nombres.Count == 0) return "falta `exit`: qué salida (o cuáles, separadas por comas) mover de nivel";
-        if (nombres.Count == 1) return _map.FijarNivel(app, nombres[0], nivel);
+        if (nombres.Count == 1) return _map.FijarNivel(app, nombres[0], nivel, porPersona: true, cromo);
 
         var hechos = new List<string>();
         var fallados = new List<string>();
         foreach (var n in nombres)
         {
-            string r = _map.FijarNivel(app, n, nivel);
+            string r = _map.FijarNivel(app, n, nivel, porPersona: true, cromo);
             if (r.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) fallados.Add(n);
             else hechos.Add(n);
         }
@@ -1152,7 +1152,8 @@ public sealed class SurfaceMapTools
             "map_set_level" => FijarNivelMirandoAntes(
                 A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
                 A("exit"),
-                int.TryParse(A("level"), out int niv) ? niv : -1),
+                int.TryParse(A("level"), out int niv) ? niv : -1,
+                bool.TryParse(A("cromo"), out bool crm) ? crm : null),
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
 

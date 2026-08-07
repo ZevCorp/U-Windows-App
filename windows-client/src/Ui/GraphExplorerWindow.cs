@@ -714,6 +714,7 @@ public sealed class GraphExplorerWindow : Window
     private Dictionary<string, int> _profDeclarada = new(StringComparer.OrdinalIgnoreCase);
     private string _huellaEstructura = "";
     private string _huellaPuente = "";
+    private readonly Dictionary<string, string> _porQueDeclarado = new(StringComparer.OrdinalIgnoreCase);
 
     private void Render(string proc, List<UiaReader.UiElement> els)
     {
@@ -866,7 +867,10 @@ public sealed class GraphExplorerWindow : Window
             // maestro y qué la deducción (2026-08-06, observado por el usuario). Mientras se mide la
             // enseñanza, solo se pinta de azul lo que alguien dijo a mano.
             bool aMano = sabida && salida!.Info.NivelFijado;
-            bool primerNivel = sabida && salida!.Info.NivelNav == 1
+            // AZUL = CROMO, en el nivel que sea. Antes azul y nivel 1 eran lo mismo, y una web con
+            // barra de cromo dentro de cada sección (cromo de nivel 2) lo desmintió: el nivel dice
+            // dónde vive, el cromo dice qué es (2026-08-07, observado por el usuario).
+            bool primerNivel = sabida && salida!.Info.EsCromo
                                && (aMano || !SurfaceMap.SoloLoDeclarado);
 
             // «Sin explorar» era engañoso: el gris no dice que falte cruzarla, dice que el MAPA aún
@@ -879,7 +883,7 @@ public sealed class GraphExplorerWindow : Window
                         ? "  ·  puerta conocida, sin cruzar todavía"
                         : $"  ⇒  {Corto(salida!.To)}")
                     : $"  ({el.ControlType})  ·  aún no está en el mapa; se anota al usarla")
-                + (primerNivel ? "  ·  NIVEL 1" : "")
+                + (primerNivel ? $"  ·  CROMO (nivel {salida!.Info.NivelNav})" : "")
                 + (aMano ? " (fijado a mano)" : "");
 
             // EL NÚMERO ES EL PUENTE ENTRE VER Y ACCIONAR. Cuando un modelo de visión mira la
@@ -1415,12 +1419,14 @@ public sealed class GraphExplorerWindow : Window
         //   3. el paseo, SOLO para rellenar lo que nadie conoce.
         // Antes eran siete escrituras encadenadas sobre el mismo diccionario, cada una pisando a la
         // anterior: el ORDEN decidía el resultado, y por eso cada arreglo movía el fallo de sitio.
+        _porQueDeclarado.Clear();   // por qué vía llegó cada declarado: para no volver a adivinarlo
         var declarados = _map.Edges()
             .Where(e => e.Info.NivelFijado && e.Info.NivelNav >= 0 && !SurfaceMap.EsPuerta(e.To)
                      && (appActual.Length == 0
                          || NivelDe(e.To).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
             .GroupBy(e => e.To, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Min(e => e.Info.NivelNav), StringComparer.OrdinalIgnoreCase);
+        foreach (var k in declarados.Keys) _porQueDeclarado[k] = "arista fijada";
 
         // Y LA ENSEÑANZA SE CONECTA A LOS NODOS POR SU NOMBRE, no solo a través de las aristas. El
         // camino por aristas depende de que la arista exista Y conserve su etiqueta, y las que
@@ -1458,7 +1464,7 @@ public sealed class GraphExplorerWindow : Window
                     string slug = Uia.Reconocedor.Normalizar(barra >= 0 ? cola[(barra + 1)..] : cola);
                     foreach (var (etiqueta, nivel) in ensenadas)
                         if (slug.Equals(Uia.Reconocedor.Normalizar(etiqueta), StringComparison.Ordinal))
-                        { declarados[n] = nivel; break; }
+                        { declarados[n] = nivel; _porQueDeclarado[n] = $"nombre≈«{etiqueta}»"; break; }
                 }
         }
         _profDeclarada = declarados;
@@ -1546,7 +1552,7 @@ public sealed class GraphExplorerWindow : Window
                 + $"{traza.Count} tramo(s) · profundidades: "
                 + string.Join(", ", prof.OrderBy(p => p.Value).ThenBy(p => p.Key)
                     .Take(20).Select(p => $"{Corto(p.Key)}={p.Value}"
-                        + (_profDeclarada.ContainsKey(p.Key) ? "*" : ""))));
+                        + (_porQueDeclarado.TryGetValue(p.Key, out var pq) ? $"*({pq})" : ""))));
             if (_profDeclarada.Count == 0 && traza.Count > 0)
                 LogBus.Log("grafo", "NINGÚN nodo llega declarado: las aristas cruzadas no traen el nivel");
         }

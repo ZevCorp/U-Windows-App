@@ -139,6 +139,10 @@ public sealed class SurfaceMap
         /// </remarks>
         public bool PorPersona { get; set; }
 
+        /// <summary>Esta salida es CROMO: navegación persistente dentro de su ámbito. Es lo que se
+        /// pinta de azul, en el nivel que sea — ver <see cref="Ensenanza"/>.</summary>
+        public bool EsCromo { get; set; }
+
         /// <summary>
         /// Cómo se recorre: «click» o «doubleclick». Guardarlo no es un detalle — una carpeta de la
         /// lista solo se abre con doble clic, y una arista que dijera «clic» ahí prometería un
@@ -570,11 +574,18 @@ public sealed class SurfaceMap
     /// Lo dice una persona (true) o el maestro que mira la pantalla (false). Solo lo humano se le
     /// devuelve después como corrección: si le devolviéramos lo suyo, se confirmaría a sí mismo.
     /// </param>
-    public string FijarNivel(string app, string etiquetaOSelector, int nivel, bool porPersona = true)
+    /// <param name="cromo">
+    /// ¿Es navegación persistente (azul)? Sin decirlo, el nivel 1 lo es y los demás no — que es el
+    /// comportamiento de siempre. Decirlo permite lo nuevo: cromo de nivel 2, o un nivel 1 que no
+    /// sea cromo.
+    /// </param>
+    public string FijarNivel(string app, string etiquetaOSelector, int nivel, bool porPersona = true,
+        bool? cromo = null)
     {
         string a = app.Trim();
         string q = etiquetaOSelector.Trim();
         if (a.Length == 0 || q.Length == 0) return "falta la app o qué salida mover";
+        bool esCromo = cromo ?? nivel == 1;
 
         var tocadas = Edges().Where(e =>
                 AppDe(e.From).Equals(a, StringComparison.OrdinalIgnoreCase)
@@ -588,10 +599,14 @@ public sealed class SurfaceMap
             info.NivelNav = nivel;
             info.NivelFijado = nivel >= 0;
             info.PorPersona = nivel >= 0 && (porPersona || info.PorPersona);   // lo humano no se degrada
-            Aprender(a, info.Label, nivel, porPersona);   // sobrevive a borrar el grafo
+            info.EsCromo = nivel >= 0 && esCromo;
+            Aprender(a, info.Label, nivel, porPersona, esCromo);   // sobrevive a borrar el grafo
             // La pantalla que hay detrás vive en el nivel de su puerta: si se mueve la puerta, se
-            // mueve el sitio. Si no, el dibujo diría una cosa y el mapa otra.
-            if (nivel >= 0 && !EsPuerta(to) && _nodes.TryGetValue(to, out var n)) n.Nivel = nivel;
+            // mueve el sitio. Y si la puerta se SUELTA, el sitio también se suelta — dejarle el
+            // nivel viejo lo clavaba en esa fila para siempre: «Graph» se soltó y siguió a la
+            // altura de «Code» porque su nodo conservaba el 2 declarado (2026-08-07).
+            if (!EsPuerta(to) && _nodes.TryGetValue(to, out var n))
+                n.Nivel = nivel >= 0 ? nivel : -1;
         }
         Version++;
         Save();
@@ -977,6 +992,7 @@ public sealed class SurfaceMap
                     propias[ya].Info.NivelNav = h.Info.NivelNav;
                     propias[ya].Info.NivelFijado = true;
                     propias[ya].Info.PorPersona = h.Info.PorPersona;
+                    propias[ya].Info.EsCromo = h.Info.EsCromo;
                 }
                 if (!EsPuerta(propias[ya].To)) continue;          // aquí ya se comprobó: manda lo de aquí
                 propias.RemoveAt(ya);                             // era una incógnita: el nivel la resuelve
@@ -1067,7 +1083,17 @@ public sealed class SurfaceMap
     /// porque solo lo humano se le devuelve después: devolverle lo suyo sería confirmarse a sí
     /// mismo (2026-08-06).
     /// </remarks>
-    public sealed record Ensenanza(int Nivel, bool Humano, bool Atras = false);
+    /// <summary>
+    /// CROMO es una propiedad, no un sinónimo de «nivel 1».
+    ///
+    /// Hasta ahora azul y primer nivel eran lo mismo, y una página web lo desmintió: tenía una
+    /// barra de cromo en el primer nivel Y, dentro de cada sección, otra barra de cromo de segundo
+    /// nivel que cambia el contenido del tercero. Ser cromo —navegación persistente dentro de su
+    /// ámbito— puede darse en cualquier nivel; el nivel dice DÓNDE vive, el cromo dice QUÉ ES
+    /// (2026-08-07, observado por el usuario). Por compatibilidad, declarar nivel 1 sigue
+    /// marcando cromo salvo que se diga lo contrario.
+    /// </summary>
+    public sealed record Ensenanza(int Nivel, bool Humano, bool Atras = false, bool Cromo = false);
 
     /// <summary>
     /// ¿Este control es el gesto de VOLVER de su app?
@@ -1163,16 +1189,18 @@ public sealed class SurfaceMap
             e.NivelNav = ens.Nivel;
             e.NivelFijado = true;
             e.PorPersona = e.PorPersona || ens.Humano;
+            e.EsCromo = ens.Cromo;
         }
     }
 
-    private void Aprender(string app, string etiqueta, int nivel, bool humano)
+    private void Aprender(string app, string etiqueta, int nivel, bool humano, bool cromo = false)
     {
         if (app.Length == 0 || etiqueta.Length == 0) return;
         if (!_ensenanzas.TryGetValue(app, out var d))
             _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
         if (nivel < 0) d.Remove(etiqueta);
-        else d[etiqueta] = new Ensenanza(nivel, humano || (d.TryGetValue(etiqueta, out var ya) && ya.Humano));
+        else d[etiqueta] = new Ensenanza(nivel,
+            humano || (d.TryGetValue(etiqueta, out var ya) && ya.Humano), Atras: false, Cromo: cromo);
         GuardarEnsenanzas();
     }
 
@@ -1190,7 +1218,14 @@ public sealed class SurfaceMap
             var d = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, Ensenanza>>>(
                 File.ReadAllText(RutaEnsenanzas));
             if (d == null) return;
-            foreach (var kv in d) _ensenanzas[kv.Key] = new Dictionary<string, Ensenanza>(kv.Value, StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in d)
+                _ensenanzas[kv.Key] = new Dictionary<string, Ensenanza>(
+                    // Lo guardado antes de que el cromo fuera una propiedad no trae el campo, pero
+                    // entonces nivel 1 SIGNIFICABA cromo: se repone al leer, no se pierde el azul.
+                    kv.Value.ToDictionary(x => x.Key,
+                        x => x.Value is { Nivel: 1, Atras: false, Cromo: false } v
+                            ? v with { Cromo = true } : x.Value),
+                    StringComparer.OrdinalIgnoreCase);
             LogBus.Log("mapa", $"jerarquías enseñadas: {_ensenanzas.Sum(x => x.Value.Count)} en {_ensenanzas.Count} app(s)");
         }
         catch (Exception e) { LogBus.Log("mapa", $"no se pudieron leer las jerarquías: {e.Message}"); }
@@ -1296,7 +1331,7 @@ public sealed class SurfaceMap
         Count = o.Count, Selector = o.Selector, Label = o.Label, ControlType = o.ControlType,
         Alternatives = o.Alternatives, ClickPos = o.ClickPos, Explored = o.Explored,
         ActionType = o.ActionType, Kind = o.Kind, Nivel = NivelCromo,
-        NivelNav = o.NivelNav, NivelFijado = o.NivelFijado,
+        NivelNav = o.NivelNav, NivelFijado = o.NivelFijado, EsCromo = o.EsCromo, PorPersona = o.PorPersona,
         VistaPorUltimaVez = o.VistaPorUltimaVez,
     };
 
