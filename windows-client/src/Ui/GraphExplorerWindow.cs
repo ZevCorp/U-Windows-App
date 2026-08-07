@@ -1449,14 +1449,22 @@ public sealed class GraphExplorerWindow : Window
         var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
         int suelo = centro.Length > 0 ? 1 : 0;   // la fila 0 es de la app: nadie más la ocupa
 
+        // Y MIENTRAS MANDA LO DECLARADO, LA FILA 1 ES SUYA. Lo pisado sin información y los
+        // orígenes huérfanos del paseo caían al suelo —la fila 1— y se mezclaban con el primer
+        // nivel: en el grafo aparecían «code», «diagtrack» o «leykiara» a la altura del panel,
+        // sin que nadie los hubiera declarado (2026-08-07, observado por el usuario; el
+        // diagnóstico los mostró en fila 1 SIN asterisco y con Nivel=-1 en el mapa — no los subió
+        // nadie: aterrizaron ahí). Ser desconocido no puede colocar mejor que ser conocido.
+        int sueloDesconocido = centro.Length > 0 && SurfaceMap.SoloLoDeclarado ? 2 : suelo;
+
         // 1. Lo declarado: nivel N → fila N, colgando del centro.
         foreach (var d in declarados)
             prof[d.Key] = Math.Max(suelo, d.Value);
 
-        // 2. Lo que el mapa sabe de cada pantalla.
+        // 2. Lo que el mapa sabe de cada pantalla. Deducido, no declarado: tampoco reclama la fila 1.
         foreach (var n in pisados.Concat(traza.SelectMany(x => new[] { x.From, x.To })))
             if (!prof.ContainsKey(n) && _map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
-                prof[n] = Math.Max(suelo, ni.Nivel);
+                prof[n] = Math.Max(sueloDesconocido, ni.Nivel);
 
         // 3. El paseo rellena los huecos, sin mover NADA de lo ya colocado.
         for (int pasada = 0; pasada < 6; pasada++)
@@ -1465,10 +1473,10 @@ public sealed class GraphExplorerWindow : Window
                     prof[t] = d + 1;
         foreach (var (f, t, _) in traza)
         {
-            if (!prof.ContainsKey(f)) prof[f] = suelo;
+            if (!prof.ContainsKey(f)) prof[f] = sueloDesconocido;
             if (!prof.ContainsKey(t)) prof[t] = prof[f] + 1;
         }
-        foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = suelo;
+        foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = sueloDesconocido;
 
         // CÓMO QUEDÓ LA ESTRUCTURA, y por qué. Llevamos dos arreglos por el sitio equivocado
         // suponiendo dónde estaba el fallo; esto lo dice en vez de deducirlo. Se escribe solo
