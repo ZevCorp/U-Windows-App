@@ -536,6 +536,19 @@ public sealed class SurfaceMap
                 PorPersona = humanoPorSelector.TryGetValue(s.Selector, out bool hm) && hm,
                 VistaPorUltimaVez = ahora,
             };
+
+            // LO ENSEÑADO SE REAPLICA AL VERLO. Así una puerta recién observada nace ya con el
+            // nivel que una persona le dio en su día, aunque el grafo se haya borrado entero desde
+            // entonces: enseñar una app es un aprendizaje, y los aprendizajes no se tiran al
+            // limpiar el terreno.
+            if (_ensenanzas.TryGetValue(AppDe(f), out var sabidas)
+                && sabidas.TryGetValue(s.Label, out int nivelEnsenado))
+            {
+                var e = _edges[k];
+                e.NivelNav = nivelEnsenado;
+                e.NivelFijado = true;
+                e.PorPersona = true;
+            }
         }
         Save();
     }
@@ -572,6 +585,7 @@ public sealed class SurfaceMap
             info.NivelNav = nivel;
             info.NivelFijado = nivel >= 0;
             info.PorPersona = nivel >= 0 && (porPersona || info.PorPersona);   // lo humano no se degrada
+            if (porPersona) Aprender(a, info.Label, nivel);   // sobrevive a borrar el grafo
             // La pantalla que hay detrás vive en el nivel de su puerta: si se mueve la puerta, se
             // mueve el sitio. Si no, el dibujo diría una cosa y el mapa otra.
             if (nivel >= 0 && !EsPuerta(to) && _nodes.TryGetValue(to, out var n)) n.Nivel = nivel;
@@ -993,14 +1007,60 @@ public sealed class SurfaceMap
     {
         string a = app.Trim();
         if (a.Length == 0) return Array.Empty<(string, int)>();
+        return _ensenanzas.TryGetValue(a, out var d)
+            ? d.Select(kv => (kv.Key, kv.Value))
+               .OrderBy(x => x.Value).ThenBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
+               .ToList()
+            : Array.Empty<(string, int)>();
+    }
 
-        return Edges()
-            .Where(e => e.Info.PorPersona && e.Info.NivelNav >= 0 && e.Info.Label.Length > 0
-                     && AppDe(e.From).Equals(a, StringComparison.OrdinalIgnoreCase))
-            .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
-            .Select(g => (g.Key, g.First().Info.NivelNav))
-            .OrderBy(x => x.Item2).ThenBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
+    /// <summary>
+    /// LO ENSEÑADO NO ES TERRENO. Qué salidas de cada app son de qué nivel, dicho por una persona.
+    /// </summary>
+    /// <remarks>
+    /// Vive fuera del grafo y sobrevive a borrarlo, porque no es lo mismo: el grafo es por dónde se
+    /// ha pasado en ESTA máquina —terreno, y se tira sin pena— y esto es qué es la navegación
+    /// permanente de una aplicación, que vale igual mañana, en otro equipo y para cualquiera que
+    /// use esa app. Borrar el mapa y perder la jerarquía obligaba a volver a enseñar lo mismo cada
+    /// vez que se quería una prueba limpia (2026-08-06, pedido por el usuario).
+    ///
+    /// Es la misma frontera que ya rige en graphify: se comparten las reglas, nunca el terreno.
+    /// Guardarlo aparte es lo que permitirá algún día subirlo — enseñar una app una vez y que
+    /// sirva para todos.
+    /// </remarks>
+    private readonly Dictionary<string, Dictionary<string, int>> _ensenanzas =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static string RutaEnsenanzas =>
+        System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, "jerarquias-ensenadas.json");
+
+    private void Aprender(string app, string etiqueta, int nivel)
+    {
+        if (app.Length == 0 || etiqueta.Length == 0) return;
+        if (!_ensenanzas.TryGetValue(app, out var d))
+            _ensenanzas[app] = d = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (nivel < 0) d.Remove(etiqueta); else d[etiqueta] = nivel;
+        GuardarEnsenanzas();
+    }
+
+    private void GuardarEnsenanzas()
+    {
+        try { File.WriteAllText(RutaEnsenanzas, JsonSerializer.Serialize(_ensenanzas)); }
+        catch (Exception e) { LogBus.Log("mapa", $"no se pudieron guardar las jerarquías: {e.Message}"); }
+    }
+
+    private void CargarEnsenanzas()
+    {
+        try
+        {
+            if (!File.Exists(RutaEnsenanzas)) return;
+            var d = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, int>>>(
+                File.ReadAllText(RutaEnsenanzas));
+            if (d == null) return;
+            foreach (var kv in d) _ensenanzas[kv.Key] = new Dictionary<string, int>(kv.Value, StringComparer.OrdinalIgnoreCase);
+            LogBus.Log("mapa", $"jerarquías enseñadas: {_ensenanzas.Sum(x => x.Value.Count)} en {_ensenanzas.Count} app(s)");
+        }
+        catch (Exception e) { LogBus.Log("mapa", $"no se pudieron leer las jerarquías: {e.Message}"); }
     }
 
     public List<Hop> CromoDe(string app)
@@ -1151,6 +1211,7 @@ public sealed class SurfaceMap
     public static SurfaceMap Load()
     {
         var map = new SurfaceMap();
+        map.CargarEnsenanzas();   // el aprendizaje se lee aunque no haya terreno que leer
         try
         {
             if (File.Exists(Path))

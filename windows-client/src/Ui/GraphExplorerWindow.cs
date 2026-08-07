@@ -1360,6 +1360,24 @@ public sealed class GraphExplorerWindow : Window
             foreach (var (f, t, _) in traza)
                 if (prof.TryGetValue(f, out int d) && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
                     prof[t] = d + 1;
+        // EL NIVEL DECLARADO MANDA SOBRE EL CAMINO POR EL QUE SE DESCUBRIÓ. La profundidad salía de
+        // la traza: si se entra en «Descargas» viniendo de «Notas», Descargas queda un escalón por
+        // debajo de Notas —aunque las dos sean del primer nivel—. Eso dibuja el PASEO, no la
+        // estructura: mañana, entrando en otro orden, el mismo sitio cambia de sitio. Lo que una
+        // persona declaró como primer nivel cuelga del centro y de nadie más (2026-08-06, pedido
+        // por el usuario: «aunque ambos estén marcados como primer nivel, esto no debería suceder»).
+        foreach (var n in prof.Keys.ToList())
+        {
+            bool declarado = _map.Edges().Any(e =>
+                e.To.Equals(n, StringComparison.OrdinalIgnoreCase)
+                && e.Info.PorPersona && e.Info.NivelNav >= 0);
+            if (!declarado) continue;
+            int nivel = _map.Edges().First(e =>
+                e.To.Equals(n, StringComparison.OrdinalIgnoreCase)
+                && e.Info.PorPersona && e.Info.NivelNav >= 0).Info.NivelNav;
+            if (nivel >= 0 && !n.Equals(raiz, StringComparison.OrdinalIgnoreCase)) prof[n] = nivel;
+        }
+
         foreach (var (f, t, _) in traza)
         {
             if (!prof.ContainsKey(f)) prof[f] = 0;
