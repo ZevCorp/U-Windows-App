@@ -712,6 +712,7 @@ public sealed class GraphExplorerWindow : Window
     private string _ultimoProcPintado = "";
     private int _versionDibujada = -1;
     private Dictionary<string, int> _profDeclarada = new(StringComparer.OrdinalIgnoreCase);
+    private string _huellaEstructura = "";
 
     private void Render(string proc, List<UiaReader.UiElement> els)
     {
@@ -1440,6 +1441,26 @@ public sealed class GraphExplorerWindow : Window
             if (_profDeclarada.TryGetValue(n, out int nd)
                 && !n.Equals(raiz, StringComparison.OrdinalIgnoreCase))
                 prof[n] = nd;
+
+        // CÓMO QUEDÓ LA ESTRUCTURA, y por qué. Llevamos dos arreglos por el sitio equivocado
+        // suponiendo dónde estaba el fallo; esto lo dice en vez de deducirlo. Se escribe solo
+        // cuando cambia, para no llenar el log en cada repintado (2026-08-06).
+        //
+        // Lo que hay que leer aquí: quién es la RAÍZ —si es una pantalla y no la app, todo se mide
+        // desde donde entraste y la forma cambia según por dónde empieces—, cuántos venían
+        // declarados, y a qué profundidad acabó cada uno.
+        string huellaNiv = raiz + "|" + string.Join(",", prof.OrderBy(p => p.Key).Select(p => $"{Corto(p.Key)}={p.Value}"));
+        if (huellaNiv != _huellaEstructura)
+        {
+            _huellaEstructura = huellaNiv;
+            LogBus.Log("grafo", $"raíz «{Corto(raiz)}» · {_profDeclarada.Count} declarado(s) · "
+                + $"{traza.Count} tramo(s) · profundidades: "
+                + string.Join(", ", prof.OrderBy(p => p.Value).ThenBy(p => p.Key)
+                    .Take(20).Select(p => $"{Corto(p.Key)}={p.Value}"
+                        + (_profDeclarada.ContainsKey(p.Key) ? "*" : ""))));
+            if (_profDeclarada.Count == 0 && traza.Count > 0)
+                LogBus.Log("grafo", "NINGÚN nodo llega declarado: las aristas cruzadas no traen el nivel");
+        }
 
         // EL CROMO DE LA APP CUELGA DE LA APP, no de cada pantalla.
         //

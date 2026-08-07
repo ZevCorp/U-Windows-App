@@ -814,7 +814,11 @@ public sealed class SurfaceMap
             e.NivelNav = ens.Nivel;
             e.NivelFijado = true;
             e.PorPersona = ens.Humano;
+            LogBus.Log("grafo", $"al cruzar «{label}» se le repone el nivel {ens.Nivel} → {ShortId(t)}");
         }
+        else if (_ensenanzas.ContainsKey(AppDe(f)))
+            LogBus.Log("grafo", $"al cruzar «{label}» NO había enseñanza para esa etiqueta "
+                + $"(la app tiene {_ensenanzas[AppDe(f)].Count})");
 
         Version++;
         Save();
