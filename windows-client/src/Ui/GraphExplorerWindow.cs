@@ -1461,12 +1461,40 @@ public sealed class GraphExplorerWindow : Window
         foreach (var d in declarados)
             prof[d.Key] = Math.Max(suelo, d.Value);
 
+        // LA ESTRUCTURA SALE DEL MAPA, NO DEL PASEO DE ESTA SESIÓN. La profundidad de los niveles
+        // inferiores se rellenaba con la traza viva (_ultimaCorrida), que cambia con cada
+        // movimiento y olvida tramos al pasar de cuarenta: moverse entre dos elementos del primer
+        // nivel REDIBUJABA todo el drill-down ya aprendido, porque su colocación dependía del
+        // orden del paseo de hoy (2026-08-07, observado por el usuario). La superficie de
+        // navegación, una vez aprendida, es ESTÁTICA — y quien la sabe es el mapa, cuyas aristas
+        // cruzadas no cambian por volver a pasear. La traza queda solo como rastro visual (las
+        // líneas verdes), sin voz en la estructura.
+        var aristasMapa = _map.Edges()
+            .Where(e => !SurfaceMap.EsPuerta(e.To) && e.Info.Selector.Length > 0
+                     && SurfaceMap.MismaApp(e.From, e.To)
+                     && (appActual.Length == 0
+                         || NivelDe(e.From).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
+            .Select(e => (e.From, e.To))
+            .Distinct()
+            .ToList();
+
         // 2. Lo que el mapa sabe de cada pantalla. Deducido, no declarado: tampoco reclama la fila 1.
-        foreach (var n in pisados.Concat(traza.SelectMany(x => new[] { x.From, x.To })))
+        foreach (var n in pisados
+                     .Concat(aristasMapa.SelectMany(x => new[] { x.From, x.To }))
+                     .Concat(traza.SelectMany(x => new[] { x.From, x.To })))
             if (!prof.ContainsKey(n) && _map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
                 prof[n] = Math.Max(sueloDesconocido, ni.Nivel);
 
-        // 3. El paseo rellena los huecos, sin mover NADA de lo ya colocado.
+        // 3. Las aristas DEL MAPA rellenan los huecos, sin mover nada de lo ya colocado. En
+        //    anchura: cada pantalla queda a un paso de su ancestro colocado más cercano, y ese
+        //    número no depende de por dónde se paseó hoy.
+        for (int pasada = 0; pasada < 6; pasada++)
+            foreach (var (f, t) in aristasMapa)
+                if (prof.TryGetValue(f, out int d) && !prof.ContainsKey(t))
+                    prof[t] = d + 1;
+
+        // 4. Solo lo que el mapa aún no encadena cae al paseo de la sesión, y lo huérfano al suelo
+        //    de lo desconocido.
         for (int pasada = 0; pasada < 6; pasada++)
             foreach (var (f, t, _) in traza)
                 if (prof.TryGetValue(f, out int d) && !prof.ContainsKey(t))
