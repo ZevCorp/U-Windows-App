@@ -1056,6 +1056,15 @@ public sealed class SurfaceMap
     private readonly Dictionary<string, Dictionary<string, Ensenanza>> _ensenanzas =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>TODO lo enseñado de una app —persona y maestro—, etiqueta a etiqueta.</summary>
+    /// <remarks>A diferencia de <see cref="CorreccionesDe"/> (solo lo humano, para devolvérselo al
+    /// maestro sin que se confirme a sí mismo), esto es para DIBUJAR y NAVEGAR: ahí da igual quién
+    /// lo dijo — los dos describen la estructura.</remarks>
+    public IReadOnlyList<(string Etiqueta, int Nivel)> EnsenanzasDe(string app) =>
+        _ensenanzas.TryGetValue(app.Trim(), out var d)
+            ? d.Select(kv => (kv.Key, kv.Value.Nivel)).ToList()
+            : Array.Empty<(string, int)>();
+
     /// <summary>Las apps con jerarquía enseñada, para poder verlas y borrarlas por separado.</summary>
     public IReadOnlyList<(string App, int Cuantas, int DeHumano)> AppsConJerarquia() =>
         _ensenanzas.Where(kv => kv.Value.Count > 0)

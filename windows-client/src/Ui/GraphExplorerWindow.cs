@@ -713,6 +713,7 @@ public sealed class GraphExplorerWindow : Window
     private int _versionDibujada = -1;
     private Dictionary<string, int> _profDeclarada = new(StringComparer.OrdinalIgnoreCase);
     private string _huellaEstructura = "";
+    private string _huellaPuente = "";
 
     private void Render(string proc, List<UiaReader.UiElement> els)
     {
@@ -1412,6 +1413,35 @@ public sealed class GraphExplorerWindow : Window
                          || NivelDe(e.To).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
             .GroupBy(e => e.To, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Min(e => e.Info.NivelNav), StringComparer.OrdinalIgnoreCase);
+
+        // Y LA ENSEÑANZA SE CONECTA A LOS NODOS POR SU NOMBRE, no solo a través de las aristas. El
+        // camino por aristas depende de que la arista exista Y conserve su etiqueta, y las que
+        // nacen viendo pasar una navegación a mano pierden la etiqueta cuando la atribución del
+        // clic falla — el diagnóstico dio «0 declarados» con la enseñanza intacta en disco
+        // (2026-08-07). El puente que no se rompe es la identidad: la pantalla
+        // «explorer.exe/notas» NACE de la puerta «Notas», su nombre ES la etiqueta enseñada.
+        if (appActual.Length > 0)
+        {
+            var ensenadas = _map.EnsenanzasDe(appActual);
+            if (ensenadas.Count == 0 && _huellaPuente != appActual)
+            {
+                _huellaPuente = appActual;
+                LogBus.Log("grafo", $"puente: EnsenanzasDe(«{appActual}») = 0 — ¿la clave del "
+                    + $"diccionario no coincide? apps con enseñanza: "
+                    + string.Join(", ", _map.AppsConJerarquia().Select(x => $"«{x.App}»")));
+            }
+            if (ensenadas.Count > 0)
+                foreach (var n in pisados.Concat(traza.SelectMany(x => new[] { x.From, x.To })).Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    if (declarados.ContainsKey(n)) continue;
+                    string cola = n.TrimEnd('/');
+                    int barra = cola.LastIndexOf('/');
+                    string slug = Uia.Reconocedor.Normalizar(barra >= 0 ? cola[(barra + 1)..] : cola);
+                    foreach (var (etiqueta, nivel) in ensenadas)
+                        if (slug.Equals(Uia.Reconocedor.Normalizar(etiqueta), StringComparison.Ordinal))
+                        { declarados[n] = nivel; break; }
+                }
+        }
         _profDeclarada = declarados;
 
         string centro = appActual.Length > 0 ? $"nivel://{appActual}" : "";
@@ -1603,6 +1633,16 @@ public sealed class GraphExplorerWindow : Window
         foreach (var (f, t, label) in traza)
         {
             if (!pos.TryGetValue(f, out var a) || !pos.TryGetValue(t, out var b)) continue;
+
+            // ENTRE HERMANOS DEL PRIMER NIVEL, LA ESTRUCTURA LA DICE EL CENTRO. Pasear de «Notas» a
+            // «Música» no crea jerarquía entre ellas —las dos cuelgan de la app— y dibujar el paseo
+            // en verde encima de las azules del centro contaba dos historias contradictorias sobre
+            // el mismo par de nodos (2026-08-07, observado por el usuario: «las aristas que los
+            // conectan son verdes en vez de azules»). El paseo entre hermanos sigue en el mapa como
+            // acción; en el dibujo de niveles, la fila 1 se une solo por el centro.
+            if (centro.Length > 0
+                && prof.TryGetValue(f, out int pf) && pf == 1
+                && prof.TryGetValue(t, out int pt) && pt == 1) continue;
             var linea = new System.Windows.Shapes.Line
             {
                 X1 = a.X + anchoCaja / 2, Y1 = a.Y + altoCaja,
