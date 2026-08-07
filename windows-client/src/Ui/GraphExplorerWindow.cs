@@ -73,6 +73,7 @@ public sealed class GraphExplorerWindow : Window
     private Button _carruselBtn = null!;
     private Button _limpiarBtn = null!;
     private Button _pasoBtn = null!;
+    private Button _olvidarBtn = null!;
     private CarruselDeApps? _carrusel;
 
     /// <summary>
@@ -357,7 +358,31 @@ public sealed class GraphExplorerWindow : Window
         iconos.Children.Add(_collapseBtn);
         iconos.Children.Add(_crawlBtn);
         iconos.Children.Add(_carruselBtn);
+        // OLVIDAR LO ENSEÑADO es distinto de borrar el grafo, y por eso es otro botón: el grafo es
+        // terreno y se tira entero sin pena; la jerarquía es aprendizaje, sobrevive al borrado, y
+        // se elige por aplicación —enseñar bien el explorador no es motivo para perder lo que se
+        // aprendió del navegador (2026-08-06, pedido por el usuario).
+        _olvidarBtn = new Button
+        {
+            Content = "🎓",
+            Width = 26, Height = 26, FontSize = 12,
+            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Olvidar la jerarquía aprendida, por aplicación",
+        };
+        _olvidarBtn.Click += (_, __) =>
+        {
+            var v = new OlvidarJerarquias(_map);
+            v.Olvidado += () => { _signature = ""; RefreshEdges(); DibujarGrafo(); };
+            v.Show();
+        };
+
         iconos.Children.Add(_limpiarBtn);
+        iconos.Children.Add(_olvidarBtn);
         iconos.Children.Add(_pasoBtn);
 
         _barra = new Border

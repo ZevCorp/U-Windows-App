@@ -542,12 +542,12 @@ public sealed class SurfaceMap
             // entonces: enseñar una app es un aprendizaje, y los aprendizajes no se tiran al
             // limpiar el terreno.
             if (_ensenanzas.TryGetValue(AppDe(f), out var sabidas)
-                && sabidas.TryGetValue(s.Label, out int nivelEnsenado))
+                && sabidas.TryGetValue(s.Label, out var ens))
             {
                 var e = _edges[k];
-                e.NivelNav = nivelEnsenado;
+                e.NivelNav = ens.Nivel;
                 e.NivelFijado = true;
-                e.PorPersona = true;
+                e.PorPersona = ens.Humano;
             }
         }
         Save();
@@ -585,7 +585,7 @@ public sealed class SurfaceMap
             info.NivelNav = nivel;
             info.NivelFijado = nivel >= 0;
             info.PorPersona = nivel >= 0 && (porPersona || info.PorPersona);   // lo humano no se degrada
-            if (porPersona) Aprender(a, info.Label, nivel);   // sobrevive a borrar el grafo
+            Aprender(a, info.Label, nivel, porPersona);   // sobrevive a borrar el grafo
             // La pantalla que hay detrás vive en el nivel de su puerta: si se mueve la puerta, se
             // mueve el sitio. Si no, el dibujo diría una cosa y el mapa otra.
             if (nivel >= 0 && !EsPuerta(to) && _nodes.TryGetValue(to, out var n)) n.Nivel = nivel;
@@ -946,6 +946,19 @@ public sealed class SurfaceMap
             int ya = propias.FindIndex(p => p.Info.Label.Equals(h.Info.Label, StringComparison.OrdinalIgnoreCase));
             if (ya >= 0)
             {
+                // EL NIVEL DECLARADO SE PEGA A LA SALIDA DE AQUÍ. La de esta pantalla manda sobre
+                // el destino —es lo comprobado— pero no sobre el NIVEL: si alguien declaró que esa
+                // salida es del primer nivel, lo es desde donde se mire. Sin esto, el azul dependía
+                // de dónde estuvieras: en «Música» salían tres marcadas y en «Notas» solo dos,
+                // porque allí había una arista propia sin marcar que tapaba a la declarada
+                // (2026-08-06, observado por el usuario). Un nivel que cambia según dónde estés no
+                // es un nivel de la app.
+                if (h.Info.NivelFijado && !propias[ya].Info.NivelFijado)
+                {
+                    propias[ya].Info.NivelNav = h.Info.NivelNav;
+                    propias[ya].Info.NivelFijado = true;
+                    propias[ya].Info.PorPersona = h.Info.PorPersona;
+                }
                 if (!EsPuerta(propias[ya].To)) continue;          // aquí ya se comprobó: manda lo de aquí
                 propias.RemoveAt(ya);                             // era una incógnita: el nivel la resuelve
             }
@@ -1008,8 +1021,8 @@ public sealed class SurfaceMap
         string a = app.Trim();
         if (a.Length == 0) return Array.Empty<(string, int)>();
         return _ensenanzas.TryGetValue(a, out var d)
-            ? d.Select(kv => (kv.Key, kv.Value))
-               .OrderBy(x => x.Value).ThenBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
+            ? d.Where(kv => kv.Value.Humano).Select(kv => (kv.Key, kv.Value.Nivel))
+               .OrderBy(x => x.Item2).ThenBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
                .ToList()
             : Array.Empty<(string, int)>();
     }
@@ -1028,18 +1041,54 @@ public sealed class SurfaceMap
     /// Guardarlo aparte es lo que permitirá algún día subirlo — enseñar una app una vez y que
     /// sirva para todos.
     /// </remarks>
-    private readonly Dictionary<string, Dictionary<string, int>> _ensenanzas =
+    /// <summary>Una jerarquía aprendida: a qué nivel va, y si lo dijo una persona o el maestro.</summary>
+    /// <remarks>
+    /// Se guardan LAS DOS —lo que enseña el maestro también es aprendizaje, y volver a
+    /// preguntárselo cuesta tiempo y dinero por algo que ya acertó— pero se recuerda de quién vino,
+    /// porque solo lo humano se le devuelve después: devolverle lo suyo sería confirmarse a sí
+    /// mismo (2026-08-06).
+    /// </remarks>
+    public sealed record Ensenanza(int Nivel, bool Humano);
+
+    private readonly Dictionary<string, Dictionary<string, Ensenanza>> _ensenanzas =
         new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Las apps con jerarquía enseñada, para poder verlas y borrarlas por separado.</summary>
+    public IReadOnlyList<(string App, int Cuantas, int DeHumano)> AppsConJerarquia() =>
+        _ensenanzas.Where(kv => kv.Value.Count > 0)
+            .Select(kv => (kv.Key, kv.Value.Count, kv.Value.Count(x => x.Value.Humano)))
+            .OrderBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+    /// <summary>Olvida lo enseñado de UNA app. Lo demás no se toca.</summary>
+    public int OlvidarJerarquiaDe(string app)
+    {
+        if (!_ensenanzas.TryGetValue(app, out var d)) return 0;
+        int n = d.Count;
+        _ensenanzas.Remove(app);
+        GuardarEnsenanzas();
+
+        // Y se sueltan las aristas vivas de esa app: si no, el grafo en memoria seguiría
+        // afirmando un nivel que ya nadie sostiene.
+        foreach (var e in Edges())
+            if (AppDe(e.From).Equals(app, StringComparison.OrdinalIgnoreCase) && e.Info.NivelFijado)
+            { e.Info.NivelFijado = false; e.Info.PorPersona = false; }
+        Version++;
+        Save();
+        LogBus.Log("mapa", $"olvidada la jerarquía enseñada de «{app}»: {n} salida(s)");
+        return n;
+    }
 
     private static string RutaEnsenanzas =>
         System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, "jerarquias-ensenadas.json");
 
-    private void Aprender(string app, string etiqueta, int nivel)
+    private void Aprender(string app, string etiqueta, int nivel, bool humano)
     {
         if (app.Length == 0 || etiqueta.Length == 0) return;
         if (!_ensenanzas.TryGetValue(app, out var d))
-            _ensenanzas[app] = d = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        if (nivel < 0) d.Remove(etiqueta); else d[etiqueta] = nivel;
+            _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
+        if (nivel < 0) d.Remove(etiqueta);
+        else d[etiqueta] = new Ensenanza(nivel, humano || (d.TryGetValue(etiqueta, out var ya) && ya.Humano));
         GuardarEnsenanzas();
     }
 
@@ -1054,10 +1103,10 @@ public sealed class SurfaceMap
         try
         {
             if (!File.Exists(RutaEnsenanzas)) return;
-            var d = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, int>>>(
+            var d = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, Ensenanza>>>(
                 File.ReadAllText(RutaEnsenanzas));
             if (d == null) return;
-            foreach (var kv in d) _ensenanzas[kv.Key] = new Dictionary<string, int>(kv.Value, StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in d) _ensenanzas[kv.Key] = new Dictionary<string, Ensenanza>(kv.Value, StringComparer.OrdinalIgnoreCase);
             LogBus.Log("mapa", $"jerarquías enseñadas: {_ensenanzas.Sum(x => x.Value.Count)} en {_ensenanzas.Count} app(s)");
         }
         catch (Exception e) { LogBus.Log("mapa", $"no se pudieron leer las jerarquías: {e.Message}"); }
