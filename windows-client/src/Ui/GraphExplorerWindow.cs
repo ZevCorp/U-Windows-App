@@ -765,7 +765,15 @@ public sealed class GraphExplorerWindow : Window
             // Que dos puertas se llamen igual es normal; que la app se caiga por ello, no.
             ? _map.ExitsFrom(aqui).Where(h => h.Info.Selector.Length > 0)
                   .GroupBy(h => h.Info.Label, StringComparer.OrdinalIgnoreCase)
-                  .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase)
+                  // GANA LA CORRECCIÓN HUMANA, no la aparición que llegue primero. Una misma salida
+                  // sale varias veces —la de esta pantalla y la heredada del nivel—, y quedarse con
+                  // la primera hacía que una copia recién observada tapara la que el usuario había
+                  // marcado: el punto volvía a verde (2026-08-06).
+                  .ToDictionary(g => g.Key,
+                                g => g.OrderByDescending(h => h.Info.PorPersona)
+                                      .ThenByDescending(h => h.Info.NivelFijado)
+                                      .First(),
+                                StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, SurfaceMap.Hop>(StringComparer.OrdinalIgnoreCase);
 
         // LA POSICIÓN FORMA PARTE DE LO QUE HAY QUE REDIBUJAR. La firma llevaba solo nombres y

@@ -459,12 +459,24 @@ public sealed class SurfaceMap
         // Lo que YA se conoce en esta app, con el nivel que se le puso la primera vez. Una puerta no
         // cambia de nivel por volver a verla desde más adentro: si el panel lateral está en el nivel
         // 1, sigue estando en el 1 aunque lo vuelvas a ver tres carpetas más abajo.
+        // Y CON EL NIVEL VIAJA QUIÉN LO PUSO. Al entrar en una carpeta se anota una aparición NUEVA
+        // de las mismas salidas del panel, y esa copia nacía sin el sello de «fijado a mano»: el
+        // nivel sí se heredaba, pero el azul exige además que alguien lo haya dicho, así que lo que
+        // el usuario acababa de marcar volvía a verde en cuanto entraba en ello (2026-08-06,
+        // observado por el usuario). Una corrección humana es de la SALIDA en toda la app, no de la
+        // pantalla desde la que se hizo.
+        var fijadoPorSelector = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var humanoPorSelector = new Dictionary<string, bool>(StringComparer.Ordinal);
         var nivelPorSelector = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var (fr, _, info) in Edges())
             if (info.NivelNav >= 0 && info.Selector.Length > 0
                 && AppDe(fr).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase)
                 && !nivelPorSelector.ContainsKey(info.Selector))
+            {
                 nivelPorSelector[info.Selector] = info.NivelNav;
+                fijadoPorSelector[info.Selector] = info.NivelFijado;
+                humanoPorSelector[info.Selector] = info.PorPersona;
+            }
 
         // Se sella la pasada. Lo que se vea en ella queda con esta misma marca de tiempo, y lo que
         // no, se queda con la anterior: ahí está la diferencia entre «está» y «estuvo».
@@ -520,6 +532,8 @@ public sealed class SurfaceMap
                 Explored = deducido.Length > 0,
                 Nivel = s.Grupo,
                 NivelNav = nivelPuerta,
+                NivelFijado = fijadoPorSelector.TryGetValue(s.Selector, out bool fj) && fj,
+                PorPersona = humanoPorSelector.TryGetValue(s.Selector, out bool hm) && hm,
                 VistaPorUltimaVez = ahora,
             };
         }
