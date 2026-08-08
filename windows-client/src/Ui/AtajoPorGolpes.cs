@@ -75,9 +75,21 @@ public sealed class AtajoPorGolpes : IDisposable
             : "doble Ctrl / Ctrl+Shift: NO se pudo enganchar el teclado");
     }
 
-    private static bool Pulsada(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
-    private static bool Ctrl => Pulsada(0x11);
-    private static bool Shift => Pulsada(0x10);
+    /// <summary>
+    /// EL ESTADO SE LLEVA AQUÍ, no se le pregunta a Windows.
+    ///
+    /// La primera versión usaba <c>GetAsyncKeyState</c> dentro del propio gancho, y ahí no vale: el
+    /// gancho de bajo nivel corre ANTES de que el sistema apunte la tecla como pulsada, así que al
+    /// pulsar Ctrl la pregunta «¿está Ctrl pulsado?» contestaba que no. El acorde no se abría nunca
+    /// y ningún atajo llegó a dispararse — con el gancho instalado y todo (2026-08-07).
+    ///
+    /// Quien ve las teclas es este gancho; llevar la cuenta con lo que él mismo recibe es la única
+    /// fuente que va en hora.
+    /// </summary>
+    private bool _ctrlAbajo, _shiftAbajo;
+
+    private static bool EsCtrl(uint vk) => vk is 0x11 or 0xA2 or 0xA3;
+    private static bool EsShift(uint vk) => vk is 0x10 or 0xA0 or 0xA1;
 
     private IntPtr Teclado(int code, IntPtr wParam, IntPtr lParam)
     {
@@ -85,28 +97,41 @@ public sealed class AtajoPorGolpes : IDisposable
         {
             int msg = (int)(IntPtr.Size == 8 ? wParam.ToInt64() : wParam.ToInt32());
             var k = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-            bool esModificador = k.Vk is 0x10 or 0x11 or 0xA0 or 0xA1 or 0xA2 or 0xA3;
+            bool esModificador = EsCtrl(k.Vk) || EsShift(k.Vk);
 
             if (msg is WM_KEYDOWN or WM_SYSKEYDOWN)
             {
+                if (EsCtrl(k.Vk)) _ctrlAbajo = true;
+                if (EsShift(k.Vk)) _shiftAbajo = true;
+
                 // Cualquier tecla que no sea modificador ensucia el acorde: ya es otro atajo.
                 if (!esModificador) { _acordeLimpio = false; _huboShift = false; }
-                else if (Ctrl)
+                else if (_ctrlAbajo)
                 {
                     _acordeLimpio = true;
-                    if (Shift) _huboShift = true;   // el acorde ya no es «Ctrl solo»
+                    if (_shiftAbajo) _huboShift = true;   // el acorde ya no es «Ctrl solo»
                 }
             }
             else if (msg is WM_KEYUP or WM_SYSKEYUP && esModificador)
             {
+                if (EsCtrl(k.Vk)) _ctrlAbajo = false;
+                if (EsShift(k.Vk)) _shiftAbajo = false;
+
                 // Se cuenta al soltar, cuando ya no queda Ctrl pulsado: ese es el final del gesto.
-                if (_acordeLimpio && !Ctrl)
+                if (_acordeLimpio && !_ctrlAbajo)
                 {
                     bool conShift = _huboShift;
                     _acordeLimpio = false;
                     _huboShift = false;
 
                     var ahora = DateTime.UtcNow;
+
+                    // Aserción viva: «el atajo no funciona» es una queja sin número. Esta línea dice
+                    // si el golpe se contó y si llegó a tiempo, que son las dos cosas que pueden
+                    // fallar y se sienten igual desde fuera.
+                    LogBus.Log("atajo", $"golpe {(conShift ? "Ctrl+Shift" : "Ctrl")} · "
+                        + $"desde el anterior: {(ahora - (conShift ? _ultimoConShift : _ultimoSolo)).TotalMilliseconds:0} ms");
+
                     // Cada gesto lleva su propia cuenta: si compartieran una, un Ctrl+Shift seguido
                     // de un Ctrl a secas contaría como pareja y dispararía lo que no toca.
                     ref var ultimo = ref (conShift ? ref _ultimoConShift : ref _ultimoSolo);

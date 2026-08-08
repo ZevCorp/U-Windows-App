@@ -38,8 +38,8 @@ public sealed class SurfaceLocator : IDisposable
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
 
-    private static readonly HashSet<string> Browsers = new(StringComparer.OrdinalIgnoreCase)
-        { "chrome", "msedge", "firefox", "brave", "opera", "vivaldi", "arc" };
+    /// <summary>Qué cuenta como navegador lo dice <see cref="PestanasAbiertas.EsNavegador"/>, para toda la app.</summary>
+    private static bool EsNavegador(string proc) => PestanasAbiertas.EsNavegador(proc);
 
     private readonly DispatcherTimer _timer;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
@@ -243,11 +243,16 @@ public sealed class SurfaceLocator : IDisposable
             catch { }
         }
 
-        if (Browsers.Contains(proc))
+        if (EsNavegador(proc))
         {
             var url = TryReadBrowserUrl(hwnd);
             if (url != null)
             {
+                // Aquí, y en ningún otro sitio, coinciden a la vez el dominio, el navegador que lo
+                // aloja y el título de la página. Sin apuntarlo ahora, luego no hay forma de volver
+                // a una pestaña de fondo: el navegador solo publica su TÍTULO, y «github.com» no
+                // aparece en «joseph1356k/Graph» (ver PestanasAbiertas).
+                PestanasAbiertas.Apunta(url.Host, proc, title);
                 string path = url.AbsolutePath.TrimEnd('/');
                 return new SurfaceLocation($"web://{url.Host}{path}", $"web://{url.Host}", path.Length == 0 ? "/" : path);
             }
@@ -319,7 +324,14 @@ public sealed class SurfaceLocator : IDisposable
     /// <summary>
     /// La URL real del navegador: el primer Edit del árbol (la omnibox en Chrome/Edge/Brave) leído
     /// por ValuePattern. Si lo que hay escrito no parsea como URL (una búsqueda a medias), se ignora.
+    ///
+    /// Es LA forma de preguntarle su URL a una ventana de navegador en toda la app: la usa este
+    /// localizador para saber dónde estás y <see cref="PestanasAbiertas"/> para saber si un dominio
+    /// ya está abierto en otra ventana. Dos lectores distintos de la misma barra acabarían midiendo
+    /// cosas distintas de la misma pantalla.
     /// </summary>
+    internal static Uri? LeerUrlDelNavegador(IntPtr hwnd) => TryReadBrowserUrl(hwnd);
+
     private static Uri? TryReadBrowserUrl(IntPtr hwnd)
     {
         try

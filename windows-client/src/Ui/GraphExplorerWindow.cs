@@ -1195,9 +1195,18 @@ public sealed class GraphExplorerWindow : Window
                 // navegador —es un subnivel suyo— y la forma de «ir» a un dominio es abrirlo como
                 // URL, que además llega a la página y no solo al navegador (2026-08-07, observado
                 // por el usuario probando el clic como lo haría el asistente).
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://" + nivel)
-                { UseShellExecute = true });
-                ok = true;
+                //
+                // PRIMERO LO QUE YA ESTÁ ABIERTO. Abrir siempre una pestaña nueva no es ir al sitio:
+                // es fabricar una segunda copia y dejar atrás lo que el usuario tuviera a medias en
+                // la primera (2026-08-07, observado por él con GitHub ya abierto). Abrir es el plan
+                // B, para cuando de verdad no está en ninguna parte. Ver PestanasAbiertas.
+                ok = Uia.PestanasAbiertas.IrA(nivel);
+                if (!ok)
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://" + nivel)
+                    { UseShellExecute = true });
+                    ok = true;
+                }
             }
             else
             {
@@ -1299,13 +1308,38 @@ public sealed class GraphExplorerWindow : Window
         }
         if (apps.Count == 0) return;
 
-        for (int i = 0; i < apps.Count; i++)
-        {
-            string app = apps[i];
-            bool aqui = app.Equals(appActual, StringComparison.OrdinalIgnoreCase);
-            int pantallas = _map.Nodes.Keys.Count(n =>
-                NivelDe(n).Equals(app, StringComparison.OrdinalIgnoreCase));
+        // ── CADA PÁGINA, DENTRO DE SU NAVEGADOR ─────────────────────────────
+        // Un rato de navegar deja diez o quince dominios, y puestos como hermanos de las apps
+        // convertían la tira en una lista larguísima que se salía de la pantalla y en la que no se
+        // distinguía lo importante: cuántos TERRENOS distintos hay (2026-08-07, pedido por el
+        // usuario). Un dominio no es un terreno hermano de Chrome: vive dentro. Así que se dibuja
+        // dentro, y solo se enseña cuando se mira el navegador.
+        //
+        // De qué navegador cuelga cada uno no se adivina: lo apuntó el localizador la primera vez
+        // que identificó ese dominio, con el proceso delante (ver PestanasAbiertas.NavegadorDe).
+        var hijos = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var raices = new List<string>();
+        void Anotar(List<string> l, string x)
+        { if (!l.Contains(x, StringComparer.OrdinalIgnoreCase)) l.Add(x); }
 
+        foreach (var app in apps)
+        {
+            if (!esWeb.Contains(app)) { Anotar(raices, app); continue; }
+            string nav = Uia.PestanasAbiertas.NavegadorDe(app);
+            if (nav.Length == 0)
+                nav = apps.FirstOrDefault(a => !esWeb.Contains(a) && Uia.PestanasAbiertas.EsNavegador(a)) ?? "";
+            // Sin navegador conocido se queda suelta: esconderla bajo un navegador inventado sería
+            // meterla en un sitio del que no consta que venga.
+            if (nav.Length == 0) { Anotar(raices, app); continue; }
+            Anotar(raices, nav);                       // el navegador entra donde salió su primera página
+            if (!hijos.TryGetValue(nav, out var l)) hijos[nav] = l = new List<string>();
+            Anotar(l, app);
+        }
+
+        // Una pastilla, con su nombre al pasar por encima y su clic. La usan igual los niveles y sus
+        // páginas: cambian el tamaño y la sangría, no lo que son.
+        Border Pastilla(string app, bool web, bool aqui, string tooltip)
+        {
             // AL PASAR POR ENCIMA SE ABRE Y ENSEÑA EL NOMBRE. El tooltip no valía: esta ventana
             // nunca se activa —es su gracia—, y sin activarse WPF no llega a mostrarlo, así que el
             // nombre completo quedaba escrito en un sitio al que no se podía llegar (2026-08-04).
@@ -1321,11 +1355,10 @@ public sealed class GraphExplorerWindow : Window
                 Visibility = Visibility.Collapsed,
             };
 
-            bool web = esWeb.Contains(app);
-            var nivel = new Border
+            var pastilla = new Border
             {
-                // Los subniveles web van algo más pequeños y metidos hacia dentro: son páginas
-                // DENTRO del navegador, no aplicaciones hermanas.
+                // Las páginas van algo más pequeñas y metidas hacia dentro: son subniveles DENTRO
+                // del navegador, no aplicaciones hermanas.
                 Width = web ? 22 : 26, Height = web ? 22 : 26,
                 Cursor = Cursors.Hand,
                 HorizontalAlignment = HorizontalAlignment.Right,   // al ensancharse, crece hacia la izquierda
@@ -1336,9 +1369,7 @@ public sealed class GraphExplorerWindow : Window
                 BorderBrush = new SolidColorBrush(aqui
                     ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
                 BorderThickness = new Thickness(aqui ? 2 : 1),
-                ToolTip = (web ? $"página: {app} · subnivel de tu navegador" : $"nivel {i + 1}: {app}")
-                        + $" · {pantallas} pantalla(s) conocidas"
-                        + (aqui ? " · estás aquí" : " · Ctrl+Shift y clic para ir"),
+                ToolTip = tooltip,
             };
 
             var dentro = new StackPanel { Orientation = Orientation.Horizontal };
@@ -1353,18 +1384,18 @@ public sealed class GraphExplorerWindow : Window
                 Width = 24, TextAlignment = TextAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             });
-            nivel.Child = dentro;
+            pastilla.Child = dentro;
 
-            nivel.MouseEnter += (_, __) =>
+            pastilla.MouseEnter += (_, __) =>
             {
                 nombre.Visibility = Visibility.Visible;
-                nivel.Width = double.NaN;          // NaN = «lo que ocupe», que es lo que hace falta
-                nivel.CornerRadius = new CornerRadius(13);
+                pastilla.Width = double.NaN;       // NaN = «lo que ocupe», que es lo que hace falta
+                pastilla.CornerRadius = new CornerRadius(13);
             };
-            nivel.MouseLeave += (_, __) =>
+            pastilla.MouseLeave += (_, __) =>
             {
                 nombre.Visibility = Visibility.Collapsed;
-                nivel.Width = 26;
+                pastilla.Width = web ? 22 : 26;
             };
 
             // Pulsar un nivel es IR a esa aplicación. Es la acción natural de la tira —enumera los
@@ -1376,12 +1407,87 @@ public sealed class GraphExplorerWindow : Window
             // (2026-08-04, reportado por el usuario). El identificador de superficie lleva la
             // extensión; el buscador de procesos, no.
             string destinoNivel = app;
-            nivel.MouseLeftButtonUp += (_, __) => IrAlNivel(destinoNivel);
-            _niveles.Children.Add(nivel);
+            pastilla.MouseLeftButtonUp += (_, __) => IrAlNivel(destinoNivel);
+            return pastilla;
+        }
+
+        int Pantallas(string app) => _map.Nodes.Keys.Count(n =>
+            NivelDe(n).Equals(app, StringComparison.OrdinalIgnoreCase));
+
+        for (int i = 0; i < raices.Count; i++)
+        {
+            string app = raices[i];
+            bool web = esWeb.Contains(app);
+            hijos.TryGetValue(app, out var paginas);
+            // Estar en una de sus páginas es estar en el navegador: si no, con las páginas
+            // escondidas no habría NADA encendido y la tira mentiría sobre dónde estás.
+            bool aqui = app.Equals(appActual, StringComparison.OrdinalIgnoreCase)
+                || (paginas?.Any(p => p.Equals(appActual, StringComparison.OrdinalIgnoreCase)) ?? false);
+
+            string tip = (web ? $"página: {app} · subnivel de tu navegador" : $"nivel {i + 1}: {app}")
+                       + $" · {Pantallas(app)} pantalla(s) conocidas"
+                       + (paginas is { Count: > 0 } ? $" · {paginas.Count} página(s) dentro, pasa el ratón" : "")
+                       + (aqui ? " · estás aquí" : " · clic para ir");
+            var pastilla = Pastilla(app, web, aqui, tip);
+
+            if (paginas == null || paginas.Count == 0) _niveles.Children.Add(pastilla);
+            else
+            {
+                // El grupo entero recibe el ratón, no solo el navegador: si el hover viviera en la
+                // pastilla de arriba, bajar hacia una página la haría desaparecer justo antes de
+                // poder pulsarla.
+                //
+                // FONDO TRANSPARENTE, Y NO ES DECORACIÓN. Un Panel sin Background no participa en el
+                // hit-test de WPF: sus huecos —los 6 px entre pastillas y el escalón de la sangría—
+                // no son suyos, así que cruzarlos dispara MouseLeave y las páginas se cerraban justo
+                // al ir hacia ellas (2026-08-07, reportado por el usuario). «Transparent» es
+                // invisible pero sí recibe ratón; null es un agujero.
+                var grupo = new StackPanel
+                {
+                    Orientation = Orientation.Vertical,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Background = Brushes.Transparent,
+                };
+                grupo.Children.Add(pastilla);
+                var dentroDelNavegador = new List<UIElement>();
+                foreach (var p in paginas)
+                {
+                    var sub = Pastilla(p, true, p.Equals(appActual, StringComparison.OrdinalIgnoreCase),
+                        $"página: {p} · dentro de {app} · {Pantallas(p)} pantalla(s) conocidas · clic para ir");
+                    sub.Visibility = Visibility.Collapsed;
+                    grupo.Children.Add(sub);
+                    dentroDelNavegador.Add(sub);
+                }
+
+                // Y UN MARGEN DE GRACIA AL SALIR. Aun con el hueco tapado, el trayecto hasta una
+                // página pasa por encima de la pastilla de al lado o roza el borde de la tira; que
+                // se cierre en ese instante obliga a un pulso que nadie tiene. Se cierra un cuarto
+                // de segundo después, y volver a entrar lo cancela.
+                System.Windows.Threading.DispatcherTimer? cierre = null;
+                grupo.MouseEnter += (_, __) =>
+                {
+                    cierre?.Stop();
+                    foreach (var s in dentroDelNavegador) s.Visibility = Visibility.Visible;
+                };
+                grupo.MouseLeave += (_, __) =>
+                {
+                    cierre?.Stop();
+                    cierre = new System.Windows.Threading.DispatcherTimer
+                    { Interval = TimeSpan.FromMilliseconds(260) };
+                    cierre.Tick += (s2, __2) =>
+                    {
+                        ((System.Windows.Threading.DispatcherTimer)s2!).Stop();
+                        if (grupo.IsMouseOver) return;
+                        foreach (var s in dentroDelNavegador) s.Visibility = Visibility.Collapsed;
+                    };
+                    cierre.Start();
+                };
+                _niveles.Children.Add(grupo);
+            }
 
             // El salto entre niveles se dibuja: dos puntos y una línea, para que se vea que hay que
             // CRUZAR algo —abrir la app— y no simplemente seguir por el mismo terreno.
-            if (i < apps.Count - 1)
+            if (i < raices.Count - 1)
                 _niveles.Children.Add(new System.Windows.Shapes.Rectangle
                 {
                     Width = 2, Height = 10,

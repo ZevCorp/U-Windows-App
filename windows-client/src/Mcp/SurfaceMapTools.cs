@@ -668,13 +668,10 @@ public sealed class SurfaceMapTools
     /// teniéndolo delante. Ver y recordar no son lo mismo, pero para el usuario tienen que serlo.
     /// </remarks>
     /// <summary>Procesos que dibujan páginas web. Una superficie web:// es legítima si delante hay
-    /// uno de estos: su app es el dominio, no el proceso.</summary>
-    private static bool EsNavegador(string proc) =>
-        proc.Equals("chrome", StringComparison.OrdinalIgnoreCase)
-        || proc.Equals("msedge", StringComparison.OrdinalIgnoreCase)
-        || proc.Equals("firefox", StringComparison.OrdinalIgnoreCase)
-        || proc.Equals("brave", StringComparison.OrdinalIgnoreCase)
-        || proc.Equals("opera", StringComparison.OrdinalIgnoreCase);
+    /// uno de estos: su app es el dominio, no el proceso. La lista vive en un solo sitio
+    /// (<see cref="Uia.PestanasAbiertas.EsNavegador"/>): había tres copias y a «vivaldi» solo lo
+    /// conocía una, así que la misma ventana era web para el localizador y no para el mapa.</summary>
+    private static bool EsNavegador(string proc) => Uia.PestanasAbiertas.EsNavegador(proc);
 
     private string FijarNivelMirandoAntes(string app, string cuales, int nivel, bool? cromo)
     {
