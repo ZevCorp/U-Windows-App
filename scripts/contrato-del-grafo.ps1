@@ -20,13 +20,24 @@ $scratch  = Join-Path $env:TEMP "u-contrato"
 $binApp   = Join-Path $scratch "bin-app"
 $binTest  = Join-Path $scratch "bin-contrato"
 
+# RELEASE, NO DEBUG, y no es una preferencia: con Debug el contrato NO PUEDE CORRER en una maquina
+# con Smart App Control activo. El binario de Debug es distinto del que la app ejecuta a diario, asi
+# que no tiene reputacion, y Windows bloquea su carga:
+#
+#   FileLoadException: Could not load file or assembly 'U.Graph.dll'.
+#   Una directiva de Control de aplicaciones bloqueo este archivo. (0x800711C7)
+#
+# Las diez promesas fallaban a la vez y el veredicto decia «CONTRATO ROTO» — un fallo del arnes
+# disfrazado de nucleo roto, que es lo peor que puede decir un juez. Con Release el binario coincide
+# con el que ya se ejecuta y pasa (2026-08-08). Ademas es lo correcto por si solo: se juzga el mismo
+# binario que se distribuye, no una variante.
 Write-Host "1/3 compilando el nucleo..." -ForegroundColor Cyan
-dotnet build (Join-Path $repo "windows-client\WindowsClient.csproj") -c Debug -o $binApp --nologo -v quiet -nodeReuse:false
+dotnet build (Join-Path $repo "windows-client\WindowsClient.csproj") -c Release -o $binApp --nologo -v quiet -nodeReuse:false
 if ($LASTEXITCODE -ne 0) { throw "el nucleo no compila (codigo $LASTEXITCODE)" }
 
 Write-Host "2/3 compilando el contrato contra esos binarios..." -ForegroundColor Cyan
 dotnet build (Join-Path $repo "tests\ContratoDelGrafo\ContratoDelGrafo.csproj") `
-  -c Debug -o $binTest -p:UBin=$binApp --nologo -v quiet -nodeReuse:false
+  -c Release -o $binTest -p:UBin=$binApp --nologo -v quiet -nodeReuse:false
 if ($LASTEXITCODE -ne 0) { throw "el contrato no compila (codigo $LASTEXITCODE)" }
 
 Write-Host "3/3 juzgando..." -ForegroundColor Cyan
