@@ -1126,3 +1126,28 @@ más abajo, y «Almacenamiento» para por qué el transporte sigue siendo un arc
   confirmación para algo que se va a negar hace perder un clic y la confianza.
 - Fecha: 2026-08-08. Código: `GraphExplorerWindow.{BorrarTerrenoDe, ElegirEscenariosAsync}`,
   `SurfaceMap.OlvidarApp` (v1+), `Contrato.OlvidarPorApp`.
+
+---
+
+## El arquitecto: un cerebro externo que navega y contrasta (2026-08-08)
+
+### El crawler pone las manos; el arquitecto pone el criterio
+- Evaluación hecha a fondo antes de decidir: el crawler SÍ tiene oro — frontera explícita (un
+  fallo pierde solo su nodo), recolocación automática, parada ante diálogos cruzados, clic por
+  identidad con el mismo ejecutor de los workflows. Lo que no tiene es criterio: recorre todo por
+  igual y no puede juzgar si lo construido se parece a la app real.
+- Por eso el arquitecto NO lo reemplaza ni duplica: es un agente Claude (Agent SDK, Node, en
+  `agente-arquitecto/`) cuyo único brazo es la sonda MCP local — las MISMAS herramientas map_* por
+  las que actúa el asistente. Navega pidiendo (`map_take`), mira (`map_what_i_see`), contrasta
+  (`map_hierarchy`, nueva) y deja hallazgos (`map_feedback`, nueva →
+  `C:\U-versiones\feedback-arquitecto\<app>.md`).
+- Sus límites no son promesas, son ausencia de herramientas: no tiene Edit, ni Bash, ni archivos.
+  Solo organizar el grafo (fijar_nivel) y reportar. Y la autoridad sigue el orden del grafo: lo
+  que declaró UNA PERSONA no se toca — si discrepa, lo dice en el feedback.
+- `map_hierarchy` enseña la PROCEDENCIA de cada nivel (persona / maestro / deducción) a propósito:
+  sin ella el agente «corregiría» lo que el dueño acaba de fijar a mano.
+- Se corre: `node agente-arquitecto\arquitecto.mjs explorer.exe 40`. Requiere `claude /login`
+  hecho una vez en esa máquina (la sesión del escritorio no se hereda: la autenticación del CLI
+  headless es suya propia — medido, no supuesto).
+- Fecha: 2026-08-08, pedido por el usuario. El maestro (Gemini, visión) y el arquitecto (Claude,
+  navegación) conviven: uno mira de un vistazo, el otro camina y contrasta.

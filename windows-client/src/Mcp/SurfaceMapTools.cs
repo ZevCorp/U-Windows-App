@@ -1123,6 +1123,7 @@ public sealed class SurfaceMapTools
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
+        or "map_hierarchy" or "map_feedback"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1172,6 +1173,8 @@ public sealed class SurfaceMapTools
                 bool.TryParse(A("cromo"), out bool crm) ? crm : null),
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
+            "map_hierarchy" => Jerarquia(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
+            "map_feedback" => Feedback(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("finding")),
 
             // Los verbos del explorador. Van por disco, no por pantalla: ver Explorador.cs.
             "file_where" => DondeEnDisco(),
@@ -1646,6 +1649,74 @@ public sealed class SurfaceMapTools
     /// Las superficies conocidas, agrupadas por app y ordenadas por frecuencia — lo más visitado
     /// primero, que es lo que un humano llamaría "los sitios donde trabajo".
     /// </summary>
+    /// <summary>
+    /// LA JERARQUÍA COMO EL GRAFO LA TIENE, para poder contrastarla con la real.
+    ///
+    /// Existe para el agente ARQUITECTO: su misión es navegar la app, entender su jerarquía
+    /// mirándola, y compararla con la que el grafo está construyendo. Esa comparación necesita ver
+    /// lo mismo que el mapa cree — con su procedencia: qué nivel tiene cada cosa, quién lo dijo
+    /// (persona, maestro, deducción) y qué es cromo. Sin la procedencia, el agente «corregiría»
+    /// niveles que una persona acaba de fijar a mano, que es exactamente lo que no debe pasar.
+    /// </summary>
+    private string Jerarquia(string app)
+    {
+        if (app.Length == 0) return "falta `app`: de qué aplicación quieres la jerarquía";
+        bool DeLaApp(string id) => SurfaceMap.AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase);
+
+        var sb = new System.Text.StringBuilder($"JERARQUÍA de «{app}» según el grafo:\n\n");
+
+        var nodos = _map.Nodes.Where(kv => DeLaApp(kv.Key)).OrderBy(kv => kv.Value.Nivel).ToList();
+        sb.AppendLine($"PANTALLAS ({nodos.Count}):");
+        foreach (var (id, n) in nodos)
+            sb.AppendLine($"  nivel {(n.Nivel >= 0 ? n.Nivel.ToString() : "?")} · {id} · {n.Visits} visita(s)");
+
+        var declaradas = _map.Edges()
+            .Where(e => DeLaApp(e.From) && e.Info.NivelFijado && e.Info.NivelNav >= 0)
+            .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g.First().Info.NivelNav).ThenBy(g => g.Key)
+            .ToList();
+        sb.AppendLine($"\nSALIDAS CON NIVEL DECLARADO ({declaradas.Count}):");
+        foreach (var g in declaradas)
+        {
+            var i = g.First().Info;
+            sb.AppendLine($"  nivel {i.NivelNav} · «{g.Key}»"
+                + (i.EsCromo ? " · CROMO (te sigue a todas partes)" : "")
+                + (i.PorPersona ? " · lo dijo UNA PERSONA (no lo muevas sin decirlo en el feedback)" : " · lo dijo el maestro")
+                + $" · vista en {g.Count()} pantalla(s)");
+        }
+
+        var sinNivel = _map.Edges()
+            .Where(e => DeLaApp(e.From) && !e.Info.NivelFijado && e.Info.Label.Length > 0)
+            .Select(e => e.Info.Label).Distinct(StringComparer.OrdinalIgnoreCase).Take(40).ToList();
+        sb.AppendLine($"\nSALIDAS SIN NIVEL DECLARADO (muestra de {sinNivel.Count}):");
+        sb.AppendLine("  " + string.Join(" · ", sinNivel));
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// El HALLAZGO del arquitecto queda escrito donde el desarrollo lo lee. Es su entregable: los
+    /// desajustes entre la jerarquía real de la app y la que el grafo construyó no se arreglan
+    /// solos —a veces el fallo es del grafo, a veces del maestro, a veces de la app— y la decisión
+    /// es nuestra. El agente NO edita código: deja constancia aquí y organiza el grafo con las
+    /// herramientas de niveles, nada más.
+    /// </summary>
+    private string Feedback(string app, string finding)
+    {
+        if (finding.Length == 0) return "falta `finding`: el hallazgo que quieres dejar escrito";
+        try
+        {
+            string dir = System.IO.Path.Combine(Navigation.NucleoVersiones.Raiz, "feedback-arquitecto");
+            System.IO.Directory.CreateDirectory(dir);
+            string ruta = System.IO.Path.Combine(dir, $"{app.Replace(".exe", "")}.md");
+            System.IO.File.AppendAllText(ruta,
+                $"\n## {DateTime.Now:yyyy-MM-dd HH:mm} · núcleo {(Navigation.NucleoVersiones.Actual() is { } n ? $"v{n}" : "dev")}\n\n{finding.Trim()}\n");
+            LogBus.Log("arquitecto", $"hallazgo sobre «{app}» apuntado en {ruta}");
+            return $"hallazgo apuntado en {ruta}. Sigue con la exploración o cierra con un resumen.";
+        }
+        catch (Exception e) { return $"no pude apuntar el hallazgo: {e.Message}"; }
+    }
+
     private string Places(string app)
     {
         var nodos = _map.Nodes.AsEnumerable();
