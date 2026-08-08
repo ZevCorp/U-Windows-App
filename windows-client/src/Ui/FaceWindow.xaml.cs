@@ -837,6 +837,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         var radio = new DoubleAnimation(crece ? 13 : RadioPastilla, dur) { EasingFunction = suave };
         cuerpo.BeginAnimation(System.Windows.Shapes.Rectangle.RadiusXProperty, radio);
         cuerpo.BeginAnimation(System.Windows.Shapes.Rectangle.RadiusYProperty, radio);
+
+        // Y SE SEPARAN AL ABRIRSE. En reposo van casi pegadas —dos marcas de una misma cosa—; al
+        // convertirse en botones necesitan aire, porque ya no son una marca sino dos sitios donde
+        // pulsar, y dos botones pegados se pulsan mal. La separación viaja con la forma, así que no
+        // hay un instante en que se note el reajuste.
+        ZonaChat.BeginAnimation(MarginProperty, new ThicknessAnimation(
+            new Thickness(0, crece ? 7 : 1, 0, 0), dur) { EasingFunction = suave });
         icono.BeginAnimation(OpacityProperty, new DoubleAnimation(crece ? 1 : 0,
             TimeSpan.FromMilliseconds(crece ? 130 : 110)) { EasingFunction = suave });
 
@@ -2419,7 +2426,44 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// se está diciendo «mira esto» sería la peor forma de señalarlo. La caja llega en píxeles
     /// físicos —como los da UIA— y se convierte aquí, porque el escalado lo sabe la ventana.
     /// </summary>
+    /// <summary>Cuando se señalan varias, el aviso de «una» llega detrás y no debe pisar el recorrido.</summary>
+    private bool _recorridoReciénLanzado;
+
     private void IrJuntoA(Rect fisico)
+    {
+        if (JuntoA(fisico) is not { } sitio) return;
+
+        // SEÑALAR VARIAS EMITE LAS DOS SEÑALES. Senalador avisa de «estas seis» y acto seguido de
+        // «la principal es esta», y las dos llegan a la carita: el recorrido arrancaba y el aviso
+        // siguiente lo sustituía por un viaje corriente a la primera. Desde fuera parecía que el
+        // recorrido no se había implementado (2026-08-07). Los ojos sí miran; lo que se ignora es
+        // el movimiento, que ya lo lleva la ruta.
+        if (_recorridoReciénLanzado) _recorridoReciénLanzado = false;
+        else MoverConMuelle(sitio.X, sitio.Y);
+
+        // Y los ojos hacia él: si la carita quedó a su derecha, mira a la izquierda.
+        try
+        {
+            var m = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice
+                    ?? System.Windows.Media.Matrix.Identity;
+            var tl = m.Transform(new Point(fisico.X, fisico.Y));
+            var br = m.Transform(new Point(fisico.Right, fisico.Bottom));
+            double ancho = ActualWidth > 0 ? ActualWidth : 160;
+            CollapsedFace?.MirarHacia((tl.X + br.X) / 2 < sitio.X + ancho / 2);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// DÓNDE SE PONE la carita para señalar algo. Solo lo calcula; no la mueve.
+    /// </summary>
+    /// <remarks>
+    /// Separado de <see cref="IrJuntoA"/> porque hay dos formas de usarlo y solo una mueve: señalar
+    /// una cosa va y se planta, y señalar varias necesita SABER los sitios de todas antes de salir,
+    /// para trazar un camino que pase por ellos. Si el cálculo viviera dentro del movimiento, el
+    /// recorrido tendría que ir parándose para preguntar (2026-08-07).
+    /// </remarks>
+    private Point? JuntoA(Rect fisico)
     {
         try
         {
@@ -2450,13 +2494,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             double y = tl.Y + ((br.Y - tl.Y) / 2) - (alto / 2);      // centrada con el elemento
             y = Math.Max(area.Top, Math.Min(y, area.Bottom - alto));
 
-            MoverConMuelle(x, y);
-
-            // Y los ojos hacia él: si la carita quedó a su derecha, mira a la izquierda.
-            bool aLaIzquierda = (tl.X + br.X) / 2 < x + (ancho / 2);
-            try { CollapsedFace?.MirarHacia(aLaIzquierda); } catch { }
+            return new Point(x, y);
         }
-        catch { }
+        catch { return null; }
     }
 
     private int _recorrido;   // cada recorrido nuevo invalida el anterior
@@ -2479,20 +2519,35 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// asistente señala otra cosa a mitad de camino, el recorrido viejo tiene que morir en silencio,
     /// no pelearse por mover la ventana.
     /// </remarks>
-    private async void Recorrer(IReadOnlyList<Rect> cajas)
+    private void Recorrer(IReadOnlyList<Rect> cajas)
     {
         if (cajas.Count <= 1) return;   // una sola ya la lleva IrJuntoA
 
-        int mio = ++_recorrido;
-        // Un recorrido largo se hace pesado: con más de seis paradas se enseñan las seis primeras y
-        // se vuelve. Verlas todas deja de ser información y pasa a ser espera.
-        foreach (var caja in cajas.Take(6))
+        _recorrido++;
+
+        // TODAS, sin recortar. Antes se enseñaban seis por miedo a que fuera largo, y eso mentía:
+        // se marcaban treinta recuadros y el cuerpo visitaba seis. Lo que hacía largo el recorrido
+        // no era el número de paradas, era pararse en cada una — resuelto yendo de un tirón
+        // (2026-08-07). Lo que sí se acota es el TIEMPO, no el contenido.
+        var paradas = new List<Point>();
+        foreach (var caja in cajas)
         {
-            if (mio != _recorrido) return;
-            IrJuntoA(caja);
-            await Task.Delay(620);
+            if (JuntoA(caja) is { } sitio) paradas.Add(sitio);
         }
-        if (mio == _recorrido) IrJuntoA(cajas[0]);
+        if (paradas.Count == 0) return;
+
+        // Y se acaba en la primera: es la que manda —la que Senalador considera principal— y
+        // terminar en la última sería quedarse señalando algo que no es el asunto.
+        paradas.Add(paradas[0]);
+
+        double largo = 0;
+        for (int i = 1; i < paradas.Count; i++)
+            largo += (paradas[i] - paradas[i - 1]).Length;
+
+        // El tiempo sale del recorrido, con techo: treinta paradas no pueden costar medio minuto.
+        var dur = TimeSpan.FromMilliseconds(Math.Clamp(700 + largo * 0.45, 700, 5200));
+        _recorridoReciénLanzado = true;
+        Vuelo.Recorrido(this, paradas, dur);
     }
 
     /// <summary>Dónde estaba antes de irse a presidir algo. Vacío = no se ha movido.</summary>
