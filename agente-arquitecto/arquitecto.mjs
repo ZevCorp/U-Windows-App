@@ -25,7 +25,7 @@ if (!APP) {
   console.error("uso: node arquitecto.mjs <app> [turnos]   (p. ej. explorer.exe 40)");
   process.exit(2);
 }
-const TURNOS = parseInt(process.argv[3] ?? "40", 10);
+const TURNOS = parseInt(process.argv[3] ?? "80", 10);   // bajar en profundidad cuesta turnos: agotar una rama son varios cruces + un ir_a por cada vuelta
 
 // ── La sonda: el único brazo del agente ─────────────────────────────────────
 async function sonda(toolName, args = {}) {
@@ -66,6 +66,10 @@ const herramientas = createSdkMcpServer({
     t("jerarquia_del_grafo", "La jerarquía que el grafo TIENE de la app: pantallas con nivel, salidas declaradas (con quién las declaró: persona, maestro) y salidas aún sin nivel. Es tu material de contraste.",
       {}, () => sonda("map_hierarchy", { app: APP })),
 
+    t("rutas_desde", "Qué salidas se conocen desde una pantalla y CUÁLES NO SE HAN CRUZADO todavía (las que llevan a destino desconocido). Es tu lista de pendientes para bajar en profundidad: sin esto solo verías la pantalla en la que estás.",
+      { pantalla: z.string().optional().describe("identidad de la pantalla; vacío = donde estés ahora") },
+      (a) => sonda("map_routes_from", a.pantalla ? { surface: a.pantalla } : {})),
+
     t("fijar_nivel", "Declarar el nivel de una salida (1 = navegación transversal de la app entera). cromo=true si además te sigue a todas partes. NO muevas lo que declaró una persona: si discrepas, dilo con feedback.",
       {
         salida: z.string().describe("nombre de la salida tal como se ve"),
@@ -86,21 +90,37 @@ y un grafo que el sistema construye solo mientras navega. Tu misión NO es mapea
 JUZGAR si la jerarquía que el grafo está construyendo se corresponde con la arquitectura real de
 la app, corregir el grafo donde te den autoridad tus herramientas, y dejar constancia del resto.
 
+LO QUE MÁS IMPORTA: BAJAR EN PROFUNDIDAD. El recorredor mecánico al que sustituyes se quedaba en
+el primer nivel —trece pantallas, todas hermanas, ninguna dentro de otra— y por eso existes tú. Un
+mapa de un solo nivel no es una jerarquía: es una lista. Tu trabajo se mide por los NIVELES 2, 3 y
+4 que descubras, no por cuántas puertas de la primera pantalla toques. Si al terminar todo lo que
+mapeaste cuelga del inicio, has fallado aunque no te hayas equivocado en nada.
+
 Método de trabajo:
 1. Empieza SIEMPRE por jerarquia_del_grafo y que_veo: qué cree el grafo, qué hay de verdad.
-2. Navega con criterio: cruza las puertas que revelen ESTRUCTURA (secciones, paneles, pestañas),
-   no cada archivo. Una puerta a la vez; tras cruzar, donde_estoy confirma dónde aterrizaste —
-   aceptado no es ejecutado. Para volver usa ir_a, no re-cruces a ciegas.
-3. El primer nivel es PERMANENCIA, no visibilidad: algo es de nivel 1 si al irte a cualquier otra
+2. BAJA. Elige una sección con contenido, entra, y desde DENTRO vuelve a mirar (que_veo y
+   rutas_desde): ahí aparecen las puertas del nivel 2. Entra en una de ellas y repite. Agota una
+   rama hasta que ya no haya dónde bajar ANTES de volver a la hermana — así se aprende una
+   estructura, no un abanico. rutas_desde te dice qué queda sin cruzar: úsalo para no repetirte y
+   para saber dónde queda profundidad pendiente.
+3. Una puerta a la vez; tras cruzar, donde_estoy confirma dónde aterrizaste — aceptado no es
+   ejecutado. Si no te moviste, no insistas: prueba otra. Para volver arriba usa ir_a con la
+   identidad de la pantalla, no re-cruces a ciegas.
+4. Cruza lo que revele ESTRUCTURA (secciones, paneles, carpetas, pestañas) y no el contenido
+   suelto: un archivo o un elemento de lista no enseña arquitectura, y encima puede sacarte de la
+   app. Si una rama resulta ser solo contenido, sal y busca otra.
+5. El primer nivel es PERMANENCIA, no visibilidad: algo es de nivel 1 si al irte a cualquier otra
    subpágina SEGUIRÍA ahí (panel lateral entero, pestañas, menú principal). Lo que solo existe en
-   una pantalla no lo es, por grande que se vea.
-4. Contrasta: ¿lo que el grafo declara nivel 1 es de verdad transversal? ¿Hay navegación
+   una pantalla no lo es, por grande que se vea. Y lo que está DENTRO de una sección es nivel 2 o
+   más: no lo declares de nivel 1 solo porque lo veas.
+6. Contrasta: ¿lo que el grafo declara nivel 1 es de verdad transversal? ¿Hay navegación
    transversal que el grafo aún no declara? Corrígelo con fijar_nivel — SALVO lo que dijo una
    persona: eso no se toca; si discrepas, feedback.
-5. Cada desajuste real va a feedback en el momento, concreto: qué esperabas, qué hay, por qué
+7. Cada desajuste real va a feedback en el momento, concreto: qué esperabas, qué hay, por qué
    importa. Nada de «todo bien» genérico.
-6. Cierra SIEMPRE con un feedback final: resumen de la arquitectura real de la app, qué tan fiel
-   es el grafo (di un porcentaje honesto), y los 3 desajustes más importantes.
+8. Cierra SIEMPRE con un feedback final: la arquitectura real de la app en forma de árbol con sus
+   niveles, hasta qué profundidad llegaste, qué tan fiel es el grafo (un porcentaje honesto) y los
+   3 desajustes más importantes.
 
 Límites duros: no puedes editar código ni archivos —no tienes herramientas para ello—, solo
 organizar el grafo y reportar. Si la app se cierra o algo se cruza, dilo en feedback y termina.
@@ -116,7 +136,7 @@ const corrida = query({
     mcpServers: { grafo: herramientas },
     allowedTools: [
       "mcp__grafo__donde_estoy", "mcp__grafo__que_veo", "mcp__grafo__cruzar",
-      "mcp__grafo__ir_a", "mcp__grafo__jerarquia_del_grafo",
+      "mcp__grafo__ir_a", "mcp__grafo__jerarquia_del_grafo", "mcp__grafo__rutas_desde",
       "mcp__grafo__fijar_nivel", "mcp__grafo__feedback",
     ],
     disallowedTools: ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"],

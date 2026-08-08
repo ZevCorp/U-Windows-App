@@ -19,14 +19,31 @@ namespace U.WindowsClient.Navigation;
 /// </summary>
 public static class Arquitecto
 {
-    /// <summary>¿Puede correr? Devuelve el porqué cuando no, para poder decirlo en vez de fallar callado.</summary>
+    /// <summary>
+    /// ¿Puede correr? Devuelve el porqué cuando no.
+    ///
+    /// Y lo ESCRIBE EN EL LOG, no solo lo devuelve: la primera vez esto dijo que no —el registro
+    /// de versiones se había quedado sin apuntar dónde vive el repo— el aviso murió en la barra de
+    /// estado, el mapeo lo hizo el recorredor mecánico, y desde fuera se vio como «el arquitecto
+    /// mapea igual de plano que el crawler». Un motivo que nadie lee es un motivo perdido
+    /// (2026-08-08, diagnosticado en los logs de la prueba del usuario).
+    /// </summary>
     public static (bool Puede, string Porque) Disponible()
+    {
+        var (puede, porque) = Comprobar();
+        if (!puede) LogBus.Log("arquitecto", "NO puede correr: " + porque);
+        return (puede, porque);
+    }
+
+    private static (bool, string) Comprobar()
     {
         if (Environment.GetEnvironmentVariable("U_MCP_PROBE") != "1")
             return (false, "la sonda MCP local no está encendida (U_MCP_PROBE=1): sin ella el arquitecto no tiene con qué actuar");
         string s = Script();
         if (s.Length == 0)
-            return (false, "no encuentro agente-arquitecto\\arquitecto.mjs: ¿está el repo donde dice el registro de versiones?");
+            return (false, NucleoVersiones.Repo().Length == 0
+                ? "el registro de versiones no dice dónde vive el repo: corre una vez scripts\\version-nucleo.ps1 -Construir"
+                : "no encuentro agente-arquitecto\\arquitecto.mjs bajo el repo apuntado en el registro");
         if (!Directory.Exists(Path.Combine(Path.GetDirectoryName(s)!, "node_modules")))
             return (false, "faltan las dependencias del arquitecto: corre «npm install» en agente-arquitecto\\");
         return (true, "");
