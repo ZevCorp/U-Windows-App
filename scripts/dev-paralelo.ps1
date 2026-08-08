@@ -70,20 +70,28 @@ if ($estable) {
   Write-Warning "No veo la app estable corriendo desde bin\. Si esperabas que siguiera viva, compruébalo ANTES de seguir."
 }
 
-# --- 3. Cerrar la instancia de DESARROLLO anterior --------------------------
-# Una app viva bloquea su propio U.Graph.dll, asi que la segunda compilacion falla con MSB3027. Se
-# cierra SOLO la que corre desde el directorio de salida, comprobado por RUTA y no por nombre de
-# proceso: "U" son las dos, y matar por nombre se llevaria por delante la app estable.
+# --- 3. Cerrar TODA instancia de desarrollo, no solo la de este directorio ---
+# Una app viva bloquea su propio U.Graph.dll, asi que la segunda compilacion falla con MSB3027. Pero
+# hay una razon mas fuerte que la compilacion, y costo una hora de diagnostico equivocado el
+# 2026-08-07: cada instancia PINTA SU PROPIA CAPA ENCIMA DE LA PANTALLA. Dos vivas = dos tiras de
+# niveles superpuestas, con ordenes distintos, que se leen como elementos duplicados de UNA sola
+# tira. El sintoma no dice "hay dos apps": dice "el grafo esta mal". Un build viejo de otra rama
+# (C:\U-dev3) llevaba un dia entero vivo porque este bucle solo miraba $salidaAbs.
+#
+# Se cierra por RUTA y no por nombre de proceso: "U" se llaman todas, y matar por nombre se llevaria
+# por delante la app estable. Lo PROTEGIDO no se toca jamas; lo demas se cierra y se dice de donde
+# era, para que cerrar una instancia ajena nunca sea silencioso.
 foreach ($p in (Get-Process U -ErrorAction SilentlyContinue)) {
   $protegido = $false
   foreach ($d in $Protegidas) {
     if ($p.Path -and $p.Path.StartsWith([System.IO.Path]::GetFullPath($d), [StringComparison]::OrdinalIgnoreCase)) { $protegido = $true }
   }
   if ($protegido) { Write-Host ("PROTEGIDA, no se toca: PID {0}" -f $p.Id) -ForegroundColor Green; continue }
-  if ($p.Path -and $p.Path.StartsWith($salidaAbs, [StringComparison]::OrdinalIgnoreCase)) {
-    Write-Host ("Cerrando app de desarrollo anterior (PID {0})..." -f $p.Id) -ForegroundColor DarkGray
-    try { [void]$p.CloseMainWindow(); if (-not $p.WaitForExit(4000)) { $p.Kill() } } catch {}
-  }
+  if (-not $p.Path) { continue }
+  $propia = $p.Path.StartsWith($salidaAbs, [StringComparison]::OrdinalIgnoreCase)
+  if ($propia) { Write-Host ("Cerrando app de desarrollo anterior (PID {0})..." -f $p.Id) -ForegroundColor DarkGray }
+  else { Write-Host ("Cerrando OTRA instancia de desarrollo (PID {0}) desde {1}: pintaria una segunda capa encima." -f $p.Id, $p.Path) -ForegroundColor Yellow }
+  try { [void]$p.CloseMainWindow(); if (-not $p.WaitForExit(4000)) { $p.Kill() } } catch {}
 }
 
 # --- 4. Compilar a la salida aislada ----------------------------------------
