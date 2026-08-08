@@ -58,9 +58,17 @@ foreach ($pat in $vetados) {
   }
 }
 
+# NO SE ANCLA AL NOMBRE DE LA CARPETA DEL REPO. Estos patrones decian '*\windows-app\...' y la
+# carpeta real se llama 'U-Windows-App': el comodin acaba en '\', asi que '\U-Windows-App\' no
+# casaba con '\windows-app\' y el candado no protegia NADA. Se descubrio editando SurfaceMap.cs sin
+# que saliera el dialogo, cinco horas despues de declarar el nucleo congelado (2026-08-08).
+#
+# Justo el fallo que este candado existe para no tener: un guardia que se cree puesto. Y es peor que
+# no tenerlo, porque invita a confiar. El repo se puede clonar con cualquier nombre —lo hara el
+# siguiente desarrollador— asi que el ancla es la ruta DENTRO del repo, que si es estable.
 $protegidos = @(
-  '*\windows-app\windows-client\src\Navigation\SurfaceMap.cs',
-  '*\windows-app\tests\ContratoDelGrafo\*',
+  '*\windows-client\src\Navigation\SurfaceMap.cs',
+  '*\tests\ContratoDelGrafo\*',
   '*\.claude\hooks\guardia-nucleo.ps1',
   '*\.claude\hooks\nucleo-clave.hash',
   # El INTERRUPTOR tambien se protege: sin esto, apagar el candado seria tan facil como borrar tres
