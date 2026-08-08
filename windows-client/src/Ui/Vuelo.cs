@@ -124,6 +124,8 @@ internal static class Vuelo
         }
         if (_largos[^1] < 1) { _ruta = null; return; }   // todas en el mismo sitio
 
+        PrepararRitmo();
+
         _dur = dur <= TimeSpan.Zero ? TimeSpan.FromMilliseconds(1) : dur;
         _inicio = DateTime.UtcNow;
         _andando = true;
@@ -132,6 +134,65 @@ internal static class Vuelo
 
     private static List<Point>? _ruta;
     private static double[]? _largos;
+    private static double[]? _ritmo;   // para cada instante, cuánto camino se lleva recorrido
+
+    /// <summary>
+    /// El RITMO del recorrido: se afloja al pasar junto a cada parada y se recupera entre ellas.
+    /// </summary>
+    /// <remarks>
+    /// A velocidad pareja el recorrido se lee como un barrido —pasa por encima de todo sin mirar
+    /// nada—. Lo que hace que parezca que OBSERVA es justamente lo contrario de lo que pedía el
+    /// arreglo anterior: no pararse, pero sí aminorar. Es lo que hace la vista al repasar una lista.
+    ///
+    /// Se resuelve invirtiendo el problema: en vez de repartir el tiempo y ver por dónde se pasa, se
+    /// recorre el camino a pasitos y se apunta cuánto tiempo cuesta cada uno —más donde hay algo que
+    /// mirar—. La tabla resultante se lee al revés en cada cuadro: dado el instante, dónde toca
+    /// estar. Integrar una vez al empezar sale gratis; hacer la cuenta por cuadro, no.
+    /// </remarks>
+    private static void PrepararRitmo()
+    {
+        var largos = _largos!;
+        double total = largos[^1];
+        const int Pasos = 400;
+        const double Cerca = 55;      // a menos de esto de una parada, ya se está mirando
+        const double Lento = 0.35;    // a qué fracción de velocidad se pasa por delante
+
+        var tiempo = new double[Pasos + 1];
+        double acumulado = 0;
+        for (int i = 1; i <= Pasos; i++)
+        {
+            double s = total * i / Pasos;
+
+            // Lo cerca que se está de la parada más próxima decide la velocidad.
+            double cerca = double.MaxValue;
+            foreach (double p in largos) cerca = Math.Min(cerca, Math.Abs(s - p));
+            double velocidad = Lento + (1 - Lento) * Math.Min(1, cerca / Cerca);
+
+            acumulado += (total / Pasos) / velocidad;
+            tiempo[i] = acumulado;
+        }
+
+        // Normalizado a 0..1: la tabla dice, para cada instante, qué fracción del camino va hecha.
+        _ritmo = new double[Pasos + 1];
+        for (int i = 0; i <= Pasos; i++) _ritmo[i] = tiempo[i] / acumulado;
+    }
+
+    /// <summary>Del instante al camino recorrido, deshaciendo la tabla del ritmo.</summary>
+    private static double CaminoEn(double t)
+    {
+        var ritmo = _ritmo;
+        if (ritmo == null) return t;
+
+        int i = Array.BinarySearch(ritmo, t);
+        if (i >= 0) return (double)i / (ritmo.Length - 1);
+        i = ~i;
+        if (i <= 0) return 0;
+        if (i >= ritmo.Length) return 1;
+
+        double tramo = ritmo[i] - ritmo[i - 1];
+        double u = tramo < 1e-9 ? 0 : (t - ritmo[i - 1]) / tramo;
+        return (i - 1 + u) / (ritmo.Length - 1);
+    }
 
     /// <summary>El punto de la ruta a una fracción del camino, con la curva que pasa por todos.</summary>
     private static Point EnLaRuta(double t)
@@ -166,7 +227,7 @@ internal static class Vuelo
         if (!_andando) return;
         _andando = false;
         CompositionTarget.Rendering -= Cuadro;
-        _win = null; _ex = null; _ey = null; _ruta = null; _largos = null;
+        _win = null; _ex = null; _ey = null; _ruta = null; _largos = null; _ritmo = null;
     }
 
     private static void Cuadro(object? sender, EventArgs e)
@@ -184,8 +245,10 @@ internal static class Vuelo
             {
                 // Arranca y termina suave, pero por el medio no frena: parar en cada parada es
                 // justo lo que convertía el recorrido en una lista de saltos.
+                // Arranca y termina suave, y por el medio manda el ritmo: aminora al pasar junto a
+                // cada parada sin llegar a detenerse.
                 double suave = t < 0.5 ? 2 * t * t : 1 - Math.Pow(-2 * t + 2, 2) / 2;
-                var p = EnLaRuta(suave);
+                var p = EnLaRuta(CaminoEn(suave));
                 win.Left = p.X;
                 win.Top = p.Y;
             }

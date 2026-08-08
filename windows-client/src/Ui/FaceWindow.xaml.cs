@@ -2536,16 +2536,37 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
         if (paradas.Count == 0) return;
 
-        // Y se acaba en la primera: es la que manda —la que Senalador considera principal— y
-        // terminar en la última sería quedarse señalando algo que no es el asunto.
-        paradas.Add(paradas[0]);
+        // EL ORDEN EN QUE LLEGAN NO ES UN ORDEN. Las cosas se señalan pasando el ratón por encima,
+        // y eso se hace en desorden —arriba, abajo, otra vez arriba—, así que recorrerlas en ese
+        // orden producía un zigzag que no se lee como mirar nada. Ese desorden es el comportamiento
+        // normal de quien señala y no va a cambiar: quien tiene que ordenar es esto (2026-08-07).
+        //
+        // Se ordenan por el eje en el que están REPARTIDAS: una columna se recorre de arriba abajo y
+        // una fila de izquierda a derecha, que es como se mira una lista.
+        double anchoTotal = paradas.Max(p => p.X) - paradas.Min(p => p.X);
+        double altoTotal = paradas.Max(p => p.Y) - paradas.Min(p => p.Y);
+        paradas = (altoTotal >= anchoTotal
+            ? paradas.OrderBy(p => p.Y).ThenBy(p => p.X)
+            : paradas.OrderBy(p => p.X).ThenBy(p => p.Y)).ToList();
+
+        // Y SE EMPIEZA POR EL EXTREMO QUE PILLA MÁS CERCA. Ir hasta la otra punta para empezar desde
+        // allí es un viaje que no dice nada; salir de donde ya se está y terminar en el extremo
+        // contrario recorre lo mismo sin el paseo previo.
+        var desdeAqui = new Point(Left, Top);
+        if ((paradas[^1] - desdeAqui).Length < (paradas[0] - desdeAqui).Length) paradas.Reverse();
+
+        // No se vuelve a la primera: se termina donde termina la lista. Volver al principio
+        // convertía el recorrido en un circuito, y lo que se está diciendo es «de aquí hasta aquí».
 
         double largo = 0;
         for (int i = 1; i < paradas.Count; i++)
             largo += (paradas[i] - paradas[i - 1]).Length;
 
-        // El tiempo sale del recorrido, con techo: treinta paradas no pueden costar medio minuto.
-        var dur = TimeSpan.FromMilliseconds(Math.Clamp(700 + largo * 0.45, 700, 5200));
+        // TRANQUILO. El tiempo sale de la distancia Y del número de paradas, porque cada cosa mirada
+        // pide su momento aunque esté pegada a la anterior: solo con la distancia, seis elementos de
+        // una barra lateral se despachaban en menos de un segundo y no daba tiempo a leer nada.
+        var dur = TimeSpan.FromMilliseconds(
+            Math.Clamp(500 + largo * 0.55 + paradas.Count * 260, 900, 8000));
         _recorridoReciénLanzado = true;
         Vuelo.Recorrido(this, paradas, dur);
     }
