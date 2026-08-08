@@ -1354,7 +1354,13 @@ public sealed class SurfaceMap
         var yaEsta = new HashSet<string>(cromo.Select(h => h.Info.Selector), StringComparer.Ordinal);
         foreach (var (from, to, info) in Edges())
         {
-            if (!info.NivelFijado || info.NivelNav != 1) continue;
+            // POR LA PROPIEDAD, NO POR EL NIVEL. Aquí decía «NivelNav != 1»: el último sitio donde
+            // cromo y primer nivel seguían siendo sinónimos, después de que una web con barra fija
+            // dentro de cada sección demostrara que son cosas distintas (2026-08-07, pedido por el
+            // usuario). El nivel dice DÓNDE vive la puerta; el cromo dice que TE SIGUE. Lo declarado
+            // de nivel 1 sigue entrando —FijarNivel marca EsCromo por defecto en ese caso y la
+            // carga repone el campo en lo guardado antiguo— pero ahora un cromo de nivel 2 también.
+            if (!info.NivelFijado || !info.EsCromo) continue;
             if (info.Selector.Length == 0 || info.Label.Length == 0) continue;
             if (!AppDe(from).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
             if (!yaEsta.Add(info.Selector)) continue;

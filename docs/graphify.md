@@ -984,3 +984,47 @@ más abajo, y «Almacenamiento» para por qué el transporte sigue siendo un arc
   estorbaba en las pruebas era el COLOR, no los nodos.
 - Fecha: 2026-08-05/06. CÃ³digo: `SurfaceMap.OlvidarTodo`, `OlvidarJerarquiaDe`, `Ui/OlvidarJerarquias`.
 
+
+---
+
+## El núcleo está CONGELADO (2026-08-08)
+
+### El contrato ejecutable manda sobre la memoria
+- El día que el grafo alcanzó su punto estable, sus promesas se escribieron como pruebas que
+  llaman al código real: `tests\ContratoDelGrafo\Contrato.cs`. Nueve invariantes, cada uno pagado
+  con una prueba manual del usuario y un diagnóstico: el dwell y el paso de largo, la enseñanza
+  que sobrevive al borrado, el nivel fijado que no se mueve, el atrás efímero, dos puertas dos
+  aristas, el robo de foco, el cromo como propiedad, la persistencia y las rutas sin huecos.
+- Se corre con `scripts\contrato-del-grafo.ps1` ANTES de dar por bueno cualquier cambio al núcleo.
+  El primer día ya pagó su existencia: encontró el último sitio donde cromo y nivel 1 seguían
+  siendo sinónimos (`CromoDe` filtraba por `NivelNav != 1` en vez de por `EsCromo`).
+- Si una prueba estorba para un cambio, la conversación es sobre el CONTRATO, no sobre la prueba:
+  cambiarla es cambiar lo que el grafo le promete a todo lo que se construye encima.
+
+### Editar el núcleo exige la contraseña del dueño
+- `SurfaceMap.cs`, el contrato y el propio guardián están tras un hook de Claude Code
+  (`~\.claude\hooks\guardia-nucleo.ps1`): editar cualquiera abre un popup que pide una contraseña
+  que solo el usuario conoce (queda el hash SHA-256, nunca el texto). Sin ella, la edición se
+  bloquea y el agente recibe el porqué.
+- No es criptografía contra atacantes: es fricción deliberada para que tocar la base sea siempre
+  una decisión humana consciente, nunca un paso intermedio de otra tarea. Habrá cambios futuros
+  —el candado tiene llave— pero serán pocos y elegidos.
+- Fecha: 2026-08-08, pedido por el usuario.
+
+### Las superficies se conectan por ADAPTADORES; el núcleo no conoce ninguna
+- El núcleo habla exactamente tres verbos: «estoy aquí» (`Observe`), «veo estas puertas»
+  (`ObserveExits`) y «crucé por esta» (`LearnTraversal`). Todo lo demás —niveles, cromo, rutas,
+  enseñanza, persistencia— se deriva de esos tres. En `SurfaceMap` no hay un solo `if` por tipo
+  de superficie más allá del esquema del identificador, y así debe seguir.
+- Lo específico de cada superficie vive en su ADAPTADOR, fuera del núcleo: quién soy
+  (`SurfaceLocator` produce `uia://`, `web://`, `sapgui://`), qué se ve (el lector de UIA, la
+  omnibox del navegador, el scripting de SAP), cómo se acciona, y qué gesto es «volver». Ejemplos
+  ya vivos: `SapGuiSurface`, `PestanasAbiertas`, la resolución UWP de `AppAligner`.
+- Soportar una superficie nueva = escribir su adaptador + enseñarle jerarquías. CERO ediciones al
+  núcleo. Si un adaptador «necesita» tocar el núcleo, lo que de verdad pasa es que el núcleo tiene
+  una promesa mal contada — y eso se discute con el contrato delante.
+- Que dos páginas web usen el grafo distinto no es código: son DATOS. Las diferencias por sitio
+  viven en `jerarquias-ensenadas.json` (qué es cromo aquí, qué es atrás allá), nunca en ramas
+  `if (dominio == …)`. El mismo principio de las dos capas de graphify: se comparten reglas,
+  nunca terreno.
+- Fecha: 2026-08-08, diseñado al congelar el núcleo.
