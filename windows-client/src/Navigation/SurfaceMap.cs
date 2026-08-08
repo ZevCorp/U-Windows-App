@@ -711,6 +711,39 @@ public sealed class SurfaceMap
         return !EsContenido(ct) && Ubicuidad(selector) >= 3;
     }
 
+    /// <summary>
+    /// TODOS los selectores que son cromo, de una pasada. Mismo criterio que
+    /// <see cref="EsCromoGlobal"/> — es la misma pregunta hecha para todos a la vez.
+    ///
+    /// Existe por el COSTE, no por comodidad: <see cref="Ubicuidad"/> recorre las aristas enteras,
+    /// así que preguntarlo punto por punto al repintar es O(puntos × aristas) — con 883 aristas y
+    /// cincuenta puntos son cuarenta mil vueltas por cuadro, y este repintado corre encima de la app
+    /// del usuario. Aquí se agrupa una vez y sale O(aristas). Es el aprendizaje nº8 aplicado antes
+    /// de tropezar: el coste por iteración primero.
+    /// </summary>
+    public HashSet<string> SelectoresCromo()
+    {
+        var origenes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var tipo = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (from, _, info) in Edges())
+        {
+            if (info.Selector.Length == 0 || EsRelativo(info.Selector)) continue;
+            if (!origenes.TryGetValue(info.Selector, out var o))
+                origenes[info.Selector] = o = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            o.Add(from);
+            if (info.ControlType.Length > 0) tipo[info.Selector] = info.ControlType;
+        }
+
+        var cromo = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (sel, o) in origenes)
+        {
+            if (o.Count < 3) continue;
+            string ct = tipo.TryGetValue(sel, out var t) && t.Length > 0 ? t : TipoDelSelector(sel);
+            if (!EsContenido(ct)) cromo.Add(sel);
+        }
+        return cromo;
+    }
+
     private static string TipoDelSelector(string selector)
     {
         var m = System.Text.RegularExpressions.Regex.Match(selector, @"ct=([A-Za-z]+)");
