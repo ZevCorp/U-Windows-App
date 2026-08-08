@@ -583,6 +583,13 @@
                                         Click="OnToggleMap" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
                                         ToolTip="Dibuja los workflows como un grafo de pantallas. Dos workflows que pasan por la misma pantalla comparten nodo: ahí se concatenan."/>
 
+                                <!-- TODO ENCENDIDO DE UN GOLPE. Ver la pantalla entera anotada exige cuatro
+                                     interruptores, y hasta ahora había que acordarse de los cuatro y del
+                                     orden. Un solo botón para el modo «quiero verlo todo». -->
+                                <Button x:Name="FullTooltipsBtn" Content="👁 Full Tooltips" Height="26" Margin="0,6,0,0"
+                                        Click="OnToggleFullTooltips" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
+                                        ToolTip="Enciende de una vez el inspector, el ID de superficie, el explorador del grafo y el mapa. Volver a pulsarlo lo apaga todo."/>
+
                                 <!-- Toggle: al enseñar, ¿procesar el video con IA (LLM)? Off = se graba el
                                      video y se ve en 🎞 Videos, pero NO se manda al LLM (evita el 504). -->
                                 <Button x:Name="VideoLlmToggle" Height="26" Margin="0,6,0,0" Click="OnToggleVideoLlm"

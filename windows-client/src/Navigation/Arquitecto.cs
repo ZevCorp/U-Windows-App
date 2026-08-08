@@ -84,8 +84,28 @@ public static class Arquitecto
             using var p = System.Diagnostics.Process.Start(psi);
             if (p == null) return "no pude lanzar node: ¿está instalado y en el PATH?";
 
-            p.OutputDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) Contar(e.Data, cuenta); };
-            p.ErrorDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) LogBus.Log("arquitecto", "! " + e.Data); };
+            // UNA CONSOLA DE VERDAD, EN VIVO. El agente corría con CreateNoWindow y su salida solo
+            // llegaba al log: para saber si estaba pensando, atascado o muerto había que abrir el
+            // visor y refrescar. Un agente que razona durante minutos y no se ve por ningún sitio se
+            // parece demasiado a uno colgado (2026-08-08, pedido por el usuario).
+            //
+            // No se quita el redirigido para poner la ventana del hijo: la app CONSUME esa salida
+            // —Contar() alimenta el contador de turnos y el estado— y perderla para ganar una
+            // consola sería cambiar información por decorado. Se abre una consola propia y se
+            // escribe en las dos.
+            ConsolaViva.Abrir($"arquitecto · {app}");
+            p.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data is not { Length: > 0 }) return;
+                ConsolaViva.Escribir(e.Data);
+                Contar(e.Data, cuenta);
+            };
+            p.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data is not { Length: > 0 }) return;
+                ConsolaViva.Escribir("! " + e.Data);
+                LogBus.Log("arquitecto", "! " + e.Data);
+            };
             p.BeginOutputReadLine();
             p.BeginErrorReadLine();
 

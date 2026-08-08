@@ -839,7 +839,7 @@ public sealed class GraphExplorerWindow : Window
 
             _nodoActual = aqui;
             // Solo se anota si lo LEÍDO y el DÓNDE hablan de la misma app: ver AnotarPuertas.
-            if (SurfaceMap.AppDe(aqui).StartsWith(proc + ".", StringComparison.OrdinalIgnoreCase))
+            if (LoLeidoYElDondeHablanDeLoMismo(aqui, proc))
                 AnotarPuertas(aqui, els);
             DibujarGrafo();
         }
@@ -1034,6 +1034,34 @@ public sealed class GraphExplorerWindow : Window
     /// (2026-08-04). Mientras esto solo se pintaba, una lista desfasada un segundo no hacía daño;
     /// desde que se ESCRIBE en el mapa, es exactamente el veneno que costó una mañana limpiar.
     /// </summary>
+    /// <summary>
+    /// ¿Lo que se acaba de LEER de la pantalla pertenece al sitio donde dice el localizador que
+    /// estamos? Si no, anotar esas puertas se las colgaría a la app equivocada.
+    ///
+    /// Para una app nativa la comprobación es directa: el id es <c>uia://proceso.exe/…</c> y el
+    /// proceso tiene que ser este. Para el navegador NO, y ahí estuvo el fallo: la superficie es el
+    /// DOMINIO (<c>web://mail.google.com/…</c> → app «mail.google.com») y el proceso es «chrome».
+    /// La comparación era <c>"mail.google.com".StartsWith("chrome.")</c> — falsa SIEMPRE, en
+    /// cualquier navegador y cualquier página.
+    ///
+    /// Consecuencia medida el 2026-08-08: ninguna puerta web habia entrado JAMAS al mapa. Los puntos
+    /// se leían, se pintaban y se tiraban. «mail.google.com» tenía cero aristas con el uso que tiene,
+    /// y la ubicuidad máxima de un selector web era 1 — cuando el cromo exige 3. El grafo solo sabía
+    /// de apps nativas y parecía que la web «no se mapeaba bien».
+    ///
+    /// Que el dominio y el proceso no coincidan es lo NORMAL en un navegador, no un error: son dos
+    /// preguntas distintas —qué sitio y qué programa lo dibuja— y solo la primera identifica la
+    /// pantalla. Quién cuenta como navegador lo dice <see cref="PestanasAbiertas.EsNavegador"/>,
+    /// igual que en el resto de la app.
+    /// </summary>
+    private static bool LoLeidoYElDondeHablanDeLoMismo(string aqui, string proc)
+    {
+        if (SurfaceMap.AppDe(aqui).StartsWith(proc + ".", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return aqui.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
+               && PestanasAbiertas.EsNavegador(proc);
+    }
+
     private void AnotarPuertas(string nodo, List<UiaReader.UiElement> els)
     {
         if (nodo.Length == 0 || els.Count == 0) return;
