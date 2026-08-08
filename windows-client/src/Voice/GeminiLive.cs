@@ -174,6 +174,16 @@ public sealed class GeminiLive : IDisposable
             // conversación anterior —volver con él nos devolvería a una charla que ya terminó.
             lock (_candadoCancel) _canceladas.Clear();
             _pase = ""; _cayoSolo = false; _reintentos = 0;
+
+            // Cuentas del consumo, también a cero. El id de sesión viaja hasta el
+            // ledger y hace de clave de idempotencia: si el envío se reintenta
+            // tras un corte de red, la misma conversación no se cobra dos veces.
+            _entrada = _salida = _total = 0;
+            _turnos = 0;
+            _modeloVivo = modelo;
+            _sesionId = Guid.NewGuid().ToString("n");
+            _inicioSesion = DateTime.UtcNow;
+
             Viva = true;
             Cambio?.Invoke(true);
             LogBus.Log("voz-viva", $"sesión abierta con «{modelo}»");
@@ -196,9 +206,88 @@ public sealed class GeminiLive : IDisposable
         }
     }
 
+    // ── Cuánto ha costado esta conversación ──────────────────────────────────
+
+    /// <summary>
+    /// Lo que Ü le manda a Graph al acabar la conversación, para que el panel de
+    /// costos la vea. Solo cifras: ni una palabra de lo que se dijo.
+    /// </summary>
+    public sealed record ConsumoVivo(
+        string Modelo, long Entrada, long Salida, long Total, int Turnos, long DuracionMs, string Sesion);
+
+    /// <summary>
+    /// A dónde se reporta. Lo cablea la carita con el cliente de Graph; si nadie
+    /// lo cablea, la voz sigue funcionando igual y simplemente no se mide.
+    /// </summary>
+    public Func<ConsumoVivo, Task>? ReportaConsumo { get; set; }
+
+    private long _entrada, _salida, _total;
+    private int _turnos;
+    private string _modeloVivo = "";
+    private string _sesionId = "";
+    private DateTime _inicioSesion = DateTime.UtcNow;
+
+    /// <summary>
+    /// La Live API va mandando <c>usageMetadata</c> con el TOTAL ACUMULADO de la
+    /// sesión, no con el incremento de cada mensaje. Por eso se REEMPLAZA y no se
+    /// suma: sumarlo multiplicaría el consumo por el número de mensajes recibidos,
+    /// que en una conversación de dos minutos son cientos.
+    /// </summary>
+    private void AnotarConsumo(JsonElement raiz)
+    {
+        if (!raiz.TryGetProperty("usageMetadata", out var uso)) return;
+
+        // El ValueKind se comprueba ANTES de pedir el número: TryGetInt64 no
+        // devuelve false sobre un texto o un null, lanza InvalidOperationException
+        // — y una excepción aquí dentro tumbaría el bucle que recibe la voz.
+        static long Leer(JsonElement padre, params string[] nombres)
+        {
+            foreach (var nombre in nombres)
+                if (padre.TryGetProperty(nombre, out var v)
+                    && v.ValueKind == JsonValueKind.Number
+                    && v.TryGetInt64(out long n) && n > 0)
+                    return n;
+            return 0;
+        }
+
+        long total = Leer(uso, "totalTokenCount");
+        if (total <= 0) return;
+
+        _entrada = Leer(uso, "promptTokenCount");
+        _salida = Leer(uso, "responseTokenCount", "candidatesTokenCount");
+        _total = total;
+        _turnos++;
+    }
+
+    /// <summary>
+    /// Manda el consumo acumulado y lo pone a cero. Nunca lanza y nunca espera:
+    /// que el panel de costos se entere no puede retrasar el cierre de la voz ni,
+    /// mucho menos, romperlo.
+    /// </summary>
+    private void ReportarConsumo()
+    {
+        // Copia local: entre la comprobación y el envío diferido, otro hilo podría
+        // dejar la propiedad en null y el `await` reventaría dentro del Task.
+        var reporta = ReportaConsumo;
+        if (_total <= 0 || reporta is null) { _entrada = _salida = _total = 0; _turnos = 0; return; }
+
+        var parte = new ConsumoVivo(
+            _modeloVivo, _entrada, _salida, _total, _turnos,
+            (long)(DateTime.UtcNow - _inicioSesion).TotalMilliseconds, _sesionId);
+        _entrada = _salida = _total = 0;
+        _turnos = 0;
+
+        _ = Task.Run(async () =>
+        {
+            try { await reporta(parte); }
+            catch (Exception ex) { LogBus.Log("voz-viva", $"no se pudo reportar el consumo: {ex.Message}"); }
+        });
+    }
+
     public async Task TerminarAsync()
     {
         if (!Viva && _ws == null) return;
+        ReportarConsumo();
         Viva = false;
         _audio.Capturado -= MandarTrozo;
         _audio.CerrarMicrofono();
@@ -995,6 +1084,8 @@ public sealed class GeminiLive : IDisposable
     {
         using var doc = JsonDocument.Parse(json);
         var raiz = doc.RootElement;
+
+        AnotarConsumo(raiz);
 
         // TODO lo que llega se anota. Atender solo lo que se sabe interpretar y tirar el resto en
         // silencio deja el peor de los diagnósticos posibles: la sesión abierta, el micrófono en

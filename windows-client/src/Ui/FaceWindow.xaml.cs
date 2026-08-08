@@ -232,6 +232,33 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // ubicación, la verificación de llegadas y los vetos — y duplicar una protección es la
             // forma más segura de que una de las dos copias se quede atrás.
             _vivo = new GeminiLive(mcp.Map);
+
+            // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.
+            // Hace falta porque este WebSocket va DIRECTO a Google: Graph no ve la
+            // conversación, así que si el cliente no lo cuenta, ese gasto no
+            // aparece en el panel de costos aunque Google lo facture igual.
+            //
+            // Solo van cifras. Quién es el operador NO se manda: Graph lo resuelve
+            // contra la key y el correo con los que ya viene autenticada la
+            // petición, así que este equipo no puede atribuirle su gasto a otro.
+            _vivo.ReportaConsumo = async parte =>
+            {
+                if (_backend == null) return;
+                await _backend.PostAsync<object>("/agent/usage", new
+                {
+                    provider = "google",
+                    feature = "live_voice",
+                    model = parte.Modelo,
+                    inputTokens = parte.Entrada,
+                    outputTokens = parte.Salida,
+                    totalTokens = parte.Total,
+                    turns = parte.Turnos,
+                    durationMs = parte.DuracionMs,
+                    sessionId = parte.Sesion,
+                    clientVersion = System.Reflection.Assembly.GetExecutingAssembly()
+                        .GetName().Version?.ToString() ?? ""
+                }, CancellationToken.None);
+            };
             // BeginInvoke, no Invoke: quien avisa a la carita es el mismo hilo que está ejecutando
             // la acción sobre la pantalla, y `Invoke` lo deja esperando a que la interfaz le
             // conteste. Con eso, `map_where_am_i` no llegaba ni a empezar —el modelo la pedía, se
