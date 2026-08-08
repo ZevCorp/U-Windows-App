@@ -68,8 +68,12 @@ function Compilar($n) {
   $viva = Get-Process U -ErrorAction SilentlyContinue |
           Where-Object { $_.Path -and $_.Path.StartsWith([IO.Path]::GetFullPath($bin), [StringComparison]::OrdinalIgnoreCase) }
   if ($viva) {
+    # La version de ejemplo NO puede ser la que se reconstruye: este mensaje llego a decir «salta
+    # a v0» reconstruyendo la v0 (2026-08-08). Se sugiere otra que exista de verdad.
+    $otra = (Leer-Registro).Versiones | Where-Object { $_.N -ne $n } | Select-Object -First 1
+    $aDonde = if ($otra) { "v$($otra.N)" } else { "otra version (crea una con -Crear si no hay)" }
     throw ("v{0} se esta EJECUTANDO ahora mismo (PID {1}): su U.exe esta bloqueado y no se puede recompilar." -f $n, $viva.Id) +
-          " Salta a otra version en la tira izquierda del explorador (v0, por ejemplo) y repite este comando;" +
+          " Salta a $aDonde en la tira izquierda del explorador y repite este comando;" +
           " despues vuelve a v$n. Si solo querias probar un cambio sin tocar esta version, usa el boton + para crear una nueva."
   }
 

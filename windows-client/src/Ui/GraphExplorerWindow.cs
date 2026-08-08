@@ -86,11 +86,24 @@ public sealed class GraphExplorerWindow : Window
     private void LimpiarGrafo()
     {
         var r = MessageBox.Show(
-            "Se va a borrar TODO lo aprendido: pantallas, puertas y niveles, de todas las "
-            + "aplicaciones.\n\nEsto no se puede deshacer. ¿Empezamos de cero?",
+            "Se va a borrar el TERRENO: pantallas, puertas y recorrido, de todas las aplicaciones."
+            + "\n\nLo ENSEÑADO (las jerarquías de primer nivel) NO se toca: vive aparte y sobrevive."
+            + "\n\nEsto no se puede deshacer. ¿Empezamos de cero?",
             "Borrar el grafo", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
         if (r != MessageBoxResult.Yes) return;
+        BorrarTerreno();
+    }
 
+    /// <summary>
+    /// Borrar el terreno sin preguntar. Lo enseñado NO se toca — vive en otro archivo y
+    /// <see cref="SurfaceMap.OlvidarTodo"/> no lo mira.
+    ///
+    /// Existe separado del botón porque las pruebas del núcleo empiezan con el grafo a cero y no
+    /// pueden pararse a preguntar en cada una: un diálogo por escenario convierte una prueba
+    /// automática en un cuestionario (2026-08-08).
+    /// </summary>
+    private void BorrarTerreno()
+    {
         var (nodos, aristas) = _map.OlvidarTodo();
         _ultimaCorrida.Clear();
 
@@ -1313,8 +1326,19 @@ public sealed class GraphExplorerWindow : Window
     /// </summary>
     private void DibujarVersiones()
     {
-        // Se redibuja solo si el registro cambió: esto corre en cada latido del refresco.
+        // Se redibuja solo si algo cambió: esto corre en cada latido del refresco. La huella
+        // incluye la carpeta de escenarios porque el ▶ existe solo si hay pruebas — grabar la
+        // primera tiene que hacerlo aparecer sin esperar a que cambie el registro de versiones.
         var huella = NucleoVersiones.UltimoCambio();
+        try
+        {
+            if (System.IO.Directory.Exists(EscenarioCi.Carpeta))
+            {
+                var h2 = System.IO.Directory.GetLastWriteTimeUtc(EscenarioCi.Carpeta);
+                if (h2 > huella) huella = h2;
+            }
+        }
+        catch { }
         if (huella == _versionesVistas && _versionesNucleo.Children.Count > 0) return;
         _versionesVistas = huella;
         _versionesNucleo.Children.Clear();
@@ -1395,6 +1419,14 @@ public sealed class GraphExplorerWindow : Window
             pastilla.MouseRightButtonUp += (_, e) =>
             {
                 e.Handled = true;
+                // La v0 ni siquiera abre el diálogo: ofrecer una confirmación para algo que se va
+                // a negar es hacer perder un clic y la confianza. El motor además lo rechaza
+                // (NucleoVersiones.Borrar), pero la negativa se da aquí, a la primera.
+                if (destino.N == 0)
+                {
+                    _status.Text = "la v0 es la original congelada: es el suelo al que se vuelve, no se borra";
+                    return;
+                }
                 var r = MessageBox.Show(
                     $"¿Borrar la versión v{destino.N} del núcleo?"
                     + (destino.Nota.Length > 0 ? $"\n\n«{destino.Nota}»" : "")
@@ -1465,6 +1497,29 @@ public sealed class GraphExplorerWindow : Window
             };
             play.MouseLeftButtonUp += (_, __) =>
                 Dispatcher.BeginInvoke(new Action(async () => await CorrerPruebasAsync()));
+
+            // CLIC DERECHO: borrar pruebas guardadas. Desmarcadas por defecto —al contrario que al
+            // correr— porque borrar pide señalar qué, no quitar de una lista de condenadas.
+            play.MouseRightButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    var borrar = await ElegirEscenariosAsync(EscenarioCi.Todos(),
+                        "¿Qué pruebas guardadas se borran?", "Borrar las marcadas", marcadasPorDefecto: false);
+                    if (borrar == null || borrar.Count == 0) return;
+                    var r = MessageBox.Show(
+                        "Se van a borrar estas pruebas:\n\n  · " + string.Join("\n  · ", borrar.Select(x => x.App))
+                        + "\n\nVolver a tenerlas cuesta mapear cada app otra vez. ¿Seguimos?",
+                        "Borrar pruebas de CI", MessageBoxButton.YesNo, MessageBoxImage.Warning,
+                        MessageBoxResult.No);
+                    if (r != MessageBoxResult.Yes) return;
+                    int fuera = borrar.Count(x => EscenarioCi.Olvidar(x.App));
+                    _status.Text = $"borradas {fuera} prueba(s) de CI";
+                    _versionesVistas = DateTime.MinValue;
+                    DibujarVersiones();   // si no queda ninguna, el ▶ desaparece con ellas
+                }));
+            };
             _versionesNucleo.Children.Add(play);
         }
 
@@ -1499,8 +1554,15 @@ public sealed class GraphExplorerWindow : Window
     private async Task CorrerPruebasAsync()
     {
         if (_busy || _crawlCts != null) { _status.Text = "hay un mapeo en marcha; espera a que termine"; return; }
-        var pruebas = EscenarioCi.Todos();
-        if (pruebas.Count == 0) { _status.Text = "no hay pruebas guardadas"; return; }
+        var todas = EscenarioCi.Todos();
+        if (todas.Count == 0) { _status.Text = "no hay pruebas guardadas"; return; }
+
+        // SE ELIGE SOBRE QUÉ APPS SE CORRE. Cada escenario abre una app y la recorre entera, así
+        // que correrlas todas cuando solo interesa una es regalar minutos de escritorio ocupado.
+        // Marcadas por defecto: lo normal es querer la foto completa (2026-08-08, pedido por él).
+        var pruebas = await ElegirEscenariosAsync(todas,
+            "¿Sobre qué apps se prueba este núcleo?", "Correr las marcadas", marcadasPorDefecto: true);
+        if (pruebas == null || pruebas.Count == 0) return;
 
         string nucleo = NucleoVersiones.Actual() is { } n ? $"v{n}" : "dev";
         bool pasoAntes = PasoAPaso.Activo, ciAntes = PasoAPaso.GuardarComoCi;
@@ -1514,7 +1576,11 @@ public sealed class GraphExplorerWindow : Window
             foreach (var p in pruebas)
             {
                 _status.Text = $"[{nucleo}] probando «{p.App}»… no toques el ratón";
-                LimpiarGrafo();
+                // El terreno DE ESTA APP a cero, y nada más: lo andado en las otras apps no tiene
+                // nada que ver con lo que se mide aquí. Lo enseñado sobrevive y se repone solo
+                // sobre las puertas que vuelvan a nacer — se mide si la estructura se arma bien,
+                // no si el maestro vuelve a acertar.
+                BorrarTerrenoDe(p.App);
 
                 string proc = p.App.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
                 if (!Uia.AppAligner.FocusOrLaunch(proc))
@@ -1531,7 +1597,7 @@ public sealed class GraphExplorerWindow : Window
                     continue;
                 }
 
-                await CrawlAsync();
+                await CrawlAsync(conMaestro: false);
                 var (ok, detalle) = EscenarioCi.Juzgar(p, _map);
                 informe.Add((p.App, ok, detalle));
                 LogBus.Log("ci", $"[{nucleo}] «{p.App}»: {(ok ? "OK" : "FALLO")} · {detalle}");
@@ -1559,6 +1625,100 @@ public sealed class GraphExplorerWindow : Window
                 : "Este núcleo NO está a la altura de lo que ya funcionaba."),
             $"Pruebas del núcleo {nucleo}",
             MessageBoxButton.OK, rotas == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
+    }
+
+    /// <summary>
+    /// Elegir escenarios con casillas. La misma ventana sirve para correr (marcadas por defecto:
+    /// lo normal es querer la foto completa) y para borrar (desmarcadas: borrar pide señalar).
+    /// Devuelve null si se cierra con Escape — que no es «ninguna», es «déjalo».
+    /// </summary>
+    private Task<List<EscenarioCi.Escenario>?> ElegirEscenariosAsync(
+        IReadOnlyList<EscenarioCi.Escenario> todas, string titulo, string accion, bool marcadasPorDefecto)
+    {
+        var tcs = new TaskCompletionSource<List<EscenarioCi.Escenario>?>();
+        var v = new Window
+        {
+            WindowStyle = WindowStyle.None, AllowsTransparency = true,
+            Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+        };
+        var col = new StackPanel { MinWidth = 360 };
+        col.Children.Add(new TextBlock
+        {
+            Text = titulo, Foreground = Brushes.White,
+            FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 10),
+        });
+
+        var casillas = new List<(CheckBox Caja, EscenarioCi.Escenario E)>();
+        foreach (var e in todas)
+        {
+            var caja = new CheckBox
+            {
+                IsChecked = marcadasPorDefecto,
+                Foreground = Brushes.White, FontSize = 12, Margin = new Thickness(0, 3, 0, 3),
+                Content = $"{e.App}   (≥{e.Pantallas} pantallas, ≥{e.Declarados} declarados, ≥{e.ConAccion} con acción)",
+            };
+            casillas.Add((caja, e));
+            col.Children.Add(caja);
+        }
+
+        var boton = Boton(accion, Color.FromArgb(0x55, 0x66, 0xBB, 0x6A));
+        boton.HorizontalAlignment = HorizontalAlignment.Right;
+        boton.Margin = new Thickness(0, 12, 0, 0);
+        boton.Click += (_, __) =>
+        {
+            tcs.TrySetResult(casillas.Where(c => c.Caja.IsChecked == true).Select(c => c.E).ToList());
+            v.Close();
+        };
+        col.Children.Add(boton);
+
+        v.Content = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x18, 0x18, 0x1C)),
+            CornerRadius = new CornerRadius(14), Padding = new Thickness(18),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1), Child = col,
+        };
+        v.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; v.Close(); } };
+        v.Closed += (_, __) => tcs.TrySetResult(tcs.Task.IsCompleted ? tcs.Task.Result : null);
+        v.Show();
+        v.Activate();
+        return tcs.Task;
+    }
+
+    private static Button Boton(string texto, Color fondo) => new()
+    {
+        Content = texto, Height = 30, MinWidth = 130, FontSize = 12,
+        Cursor = Cursors.Hand, Background = new SolidColorBrush(fondo),
+        Foreground = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(10, 0, 10, 0),
+    };
+
+    /// <summary>
+    /// Borrar el terreno de UNA app, preguntándole al núcleo POR NOMBRE si sabe hacerlo.
+    ///
+    /// La reflexión no es pereza, es la frontera de versiones trabajando: OlvidarApp nació en la
+    /// v1 y la instantánea de la v0 es intocable, así que llamarlo directo dejaría a la v0 sin
+    /// poder compilar con esta UI. Un núcleo que no lo tenga se degrada a lo que ese núcleo sabía
+    /// hacer —borrar todo— y se dice en el log, no en silencio.
+    /// </summary>
+    private void BorrarTerrenoDe(string app)
+    {
+        var m = _map.GetType().GetMethod("OlvidarApp");
+        if (m != null)
+        {
+            m.Invoke(_map, new object[] { app });
+        }
+        else
+        {
+            LogBus.Log("ci", $"este núcleo no sabe olvidar por app ({app}): se borra el terreno entero, como hacía");
+            _map.OlvidarTodo();
+        }
+        _ultimaCorrida.Clear();
+        _vistos.Clear();
+        _nodoActual = "";
+        _numeradas.Clear();
+        _signature = "";
     }
 
     /// <summary>
@@ -2536,7 +2696,18 @@ public sealed class GraphExplorerWindow : Window
         }
     }
 
-    private async Task CrawlAsync()
+    /// <param name="conMaestro">
+    /// ¿Se le pregunta al modelo por la jerarquía antes de recorrer?
+    ///
+    /// Sí cuando alguien manda mapear una app: la lección le dice de un vistazo qué es navegación
+    /// permanente. NO cuando lo que se está probando es el NÚCLEO: ahí la pregunta es si la
+    /// estructura se arma bien recorriendo, y meter al maestro por medio mezcla dos cosas — un
+    /// modelo que hoy acierta catorce y mañana doce haría fallar una prueba sin que el grafo
+    /// hubiera cambiado nada. Además lo enseñado ya está guardado y se repone solo, así que la
+    /// prueba no pierde el azul: lo hereda sin pagarlo otra vez (2026-08-08, señalado por el
+    /// usuario).
+    /// </param>
+    private async Task CrawlAsync(bool conMaestro = true)
     {
         if (_crawlCts != null) { _crawlCts.Cancel(); return; }
 
@@ -2553,7 +2724,7 @@ public sealed class GraphExplorerWindow : Window
         // jerarquía ya puesta, el recorrido sabe qué está explorando en vez de descubrirlo al final.
         // Va aquí y no en quien llama para que valga para TODAS las formas de pedir un mapeo: el
         // botón de «esta app» y el catálogo tienen que aprender lo mismo.
-        await EnsenarLaAppAsync();
+        if (conMaestro) await EnsenarLaAppAsync();
         _crawlBtn.Content = "⏹ Detener el mapeo";
         _busy = true;   // el refresco de aristas no compite con el recorrido
         try

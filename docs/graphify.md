@@ -1108,3 +1108,21 @@ más abajo, y «Almacenamiento» para por qué el transporte sigue siendo un arc
   trabajo la contiene ahora mismo).
 - Fecha: 2026-08-08, pedido por el usuario. Código: `Navigation/EscenarioCi.Juzgar`,
   `GraphExplorerWindow.CorrerPruebasAsync`, `NucleoVersiones.Borrar`.
+
+### Las capacidades nuevas se piden POR NOMBRE: así conviven núcleos de épocas distintas
+- `OlvidarApp` nació en la v1, y dos cosas se rompieron a la vez contra la v0: la UI no habría
+  compilado llamándolo directo, y el CONTRATO dejó de compilar de verdad (medido reconstruyendo
+  v0). La regla que quedó: la UI y el contrato piden las capacidades nuevas por nombre
+  (reflexión); un núcleo que no la tiene se degrada a lo que sabía hacer —y se dice en el log—,
+  y la promesa correspondiente es «no aplicable», no «rota». Un núcleo viejo no promete
+  capacidades que no conoce.
+- Las pruebas del ▶ limpian SOLO el terreno de la app que van a probar: lo andado en las demás no
+  tiene nada que ver con lo medido. Sin maestro: se mide si la estructura se arma recorriendo, no
+  si el modelo vuelve a acertar — lo enseñado ya está guardado y se repone solo sobre las puertas
+  que renacen.
+- Antes de correr, un selector con casillas (todas marcadas) elige sobre qué apps va la corrida;
+  el clic derecho sobre ▶ abre el mismo selector (desmarcado) para BORRAR pruebas guardadas, con
+  confirmación. Y la v0 ni siquiera abre el diálogo de borrado de versiones: ofrecer una
+  confirmación para algo que se va a negar hace perder un clic y la confianza.
+- Fecha: 2026-08-08. Código: `GraphExplorerWindow.{BorrarTerrenoDe, ElegirEscenariosAsync}`,
+  `SurfaceMap.OlvidarApp` (v1+), `Contrato.OlvidarPorApp`.

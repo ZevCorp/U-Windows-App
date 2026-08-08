@@ -45,6 +45,7 @@ internal static class Contrato
         Prueba("7. el cromo es propiedad de cualquier nivel y se alcanza desde cualquier pantalla", CromoDesdeCualquierParte);
         Prueba("8. guardar y cargar no pierde nada: nodos, aristas, niveles, enseñanzas", Persistencia);
         Prueba("9. una ruta jamás incluye un tramo que no sabe recorrerse", RutaSinHuecos);
+        Prueba("10. olvidar una app no toca a las demás", OlvidarPorApp);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -214,6 +215,35 @@ internal static class Contrato
             "la puerta sin cruzar se conoce y se puede enumerar");
         Debe(m.Route("uia://fake.exe/inicio", "uia://fake.exe/misterio") == null,
             "…pero no sostiene una ruta: «no sé llegar» antes que un camino a medias");
+    }
+
+    private static void OlvidarPorApp(SurfaceMap m)
+    {
+        // POR NOMBRE, no directo: OlvidarApp nació en la v1 y este MISMO contrato juzga también a
+        // la v0, que no lo tiene. Llamarlo directo rompía la COMPILACIÓN del contrato contra los
+        // núcleos viejos (medido 2026-08-08 reconstruyendo v0) — y un núcleo viejo no promete
+        // capacidades que no conoce: sin el método, la promesa es «no aplicable», no «rota».
+        var olvidar = typeof(SurfaceMap).GetMethod("OlvidarApp");
+        if (olvidar == null)
+        {
+            Console.WriteLine("   (este núcleo no tiene OlvidarApp: promesa no aplicable, no rota)");
+            return;
+        }
+
+        // Dos apps con terreno y una enseñanza cada una.
+        m.LearnTraversal("uia://fake.exe/inicio", "uia://fake.exe/escritorio",
+            "uia:name=Escritorio;ct=TreeItem", Array.Empty<string>(), "Escritorio", "TreeItem");
+        m.FijarNivel("fake.exe", "Escritorio", 1);
+        m.LearnTraversal("uia://otra.exe/inicio", "uia://otra.exe/ajustes",
+            "uia:name=Ajustes;ct=Button", Array.Empty<string>(), "Ajustes", "Button");
+
+        olvidar.Invoke(m, new object[] { "fake.exe" });
+        Debe(!m.Nodes.Keys.Any(k => k.Contains("fake.exe")),
+            "el terreno de la app olvidada desaparece entero");
+        Debe(m.Nodes.ContainsKey("uia://otra.exe/ajustes") && m.Edges().Any(e => e.Info.Label == "Ajustes"),
+            "…y el de las DEMÁS apps queda intacto: el borrado es un bisturí, no una escoba");
+        Debe(m.EnsenanzasDe("fake.exe").Any(),
+            "la enseñanza de la app olvidada sobrevive: es aprendizaje, no terreno");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
