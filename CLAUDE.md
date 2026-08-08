@@ -32,6 +32,84 @@ es presentación y diagnóstico.
 dynpro, ni la barra. Para SAP es Scripting API o nada. Detalles y trampas:
 [`windows-graph/CLAUDE.md`](windows-graph/CLAUDE.md).
 
+## Ramas: `<persona>/<que-hace>`
+
+Somos tres. Cada rama lleva delante el nombre de quien la abre — `jero`, `jose` o `pipe`, en
+minúscula — y después **el resultado**, en kebab-case:
+
+```
+jose/puente-portal-clinico
+jero/carrera-del-busy
+pipe/inventario-accionable
+```
+
+El prefijo es dueño de *la rama*, no del código: si necesitas tocar algo que otro tiene abierto, se
+habla — no se abre una rama paralela con el mismo trabajo.
+
+Lo que el prefijo compra: `git branch -r --list 'origin/jero/*'` lista lo de Jero y nada más, y el
+buscador de ramas de GitHub filtra igual escribiendo `jero/`.
+
+### Nace, vive corto, muere
+
+Una rama dura **de medio día a tres días**. Ese es el punto de todo el esquema: si dura dos semanas,
+el merge deja de ser un merge y pasa a ser una negociación.
+
+| | |
+|---|---|
+| **Nacer** | `git checkout main && git pull origin main && git checkout -b jose/lo-que-sea` — siempre desde `main` fresco, nunca desde tu rama anterior. |
+| **Vivir** | Una vez al día: `git pull --rebase origin main`. Con `--rebase` tus commits se reescriben *encima* de lo nuevo; la historia queda lineal y los conflictos llegan de a uno, del tamaño de un día. Es seguro porque nadie más trabaja sobre tu rama. |
+| **Integrar** | `git push -u origin jose/lo-que-sea` y PR. |
+| **Morir** | Al mergear, aceptar el borrado que ofrece GitHub. Local: `git branch -d jose/lo-que-sea`. |
+
+El `-d` en minúscula solo borra si está mergeada. Si te grita, algo no se integró — es una red, no un
+estorbo. No lo cambies por `-D`.
+
+### Una rama es una feature — ni media, ni dos
+
+`jose/` no es un sitio donde Jose trabaja: es el prefijo de *esta* feature de Jose. **Al cambiar de
+feature se cambia de rama, aunque la anterior no esté terminada.** Si metes dos features en la misma
+rama quedan casadas: no puedes mergear una sin arrastrar la otra a medio hacer, y el PR deja de poder
+revisarse.
+
+Dejar algo aparcado y arrancar otra cosa: commitea lo que llevas (aunque sea `wip:`), súbelo para no
+depender de tu disco, y abre la siguiente **desde `main`**, nunca desde la que aparcaste.
+
+```
+git commit -am "wip: hasta donde llegué"
+git push -u origin jero/carrera-del-busy
+git checkout main && git pull origin main && git checkout -b jero/otra-cosa
+```
+
+Volver es `git checkout jero/carrera-del-busy` y un `git pull --rebase origin main` para ponerte al día.
+
+### `main` no se toca
+
+`main` cambia **solo por merge de un PR**. Nadie commitea encima. Esto no es ceremonia: el repo llegó
+hasta aquí con cero PRs y todo entrando por merge directo, que con una persona da igual y con tres
+significa que `main` roto bloquea a los tres.
+
+Si `git status` dice `On branch main` y tienes cambios, te equivocaste de sitio:
+`git stash && git checkout -b jose/lo-que-sea && git stash pop`.
+
+El PR va aunque lo mergees tú mismo cinco minutos después — es donde queda escrito qué entró y por
+qué, y donde el CI puede correr. **Squash merge** por defecto: tus doce commits de `wip` entran a
+`main` como uno con mensaje limpio. Mergear tú mismo está bien si nadie más tocó esos archivos; si el
+PR cruza territorio ajeno, se pide ojo antes.
+
+### El reparto que de verdad evita choques
+
+Una rama por persona evita pisarse la rama, no el archivo. Lo que evita el conflicto es repartir por
+superficie:
+
+| Zona | Riesgo de choque |
+|---|---|
+| `windows-graph/` | bajo — es específico de SAP |
+| `windows-client/` UI (carita, paneles, inspector) | **alto** — es lo que todos tocan |
+| `windows-client/` servicios (voz, logging, release) | bajo |
+
+Regla: **que dos personas no tengan features abiertas en la UI a la vez.** Si es inevitable, que sean
+pantallas distintas y que ninguna rama pase de un día.
+
 ## Compilar y correr
 
 ```powershell
@@ -60,9 +138,14 @@ correcto con desplazamiento constante" de "filas equivocadas" de "otra caja pint
 Líneas útiles: `shell subType=`, `filas del árbol ·`, `fila seleccionada`, `CONTRASTE geometría`,
 `✋ no se llegó a`, `⏱ TIEMPOS`.
 
-## Estado actual (2026-07-26, noche)
+## Estado actual (2026-08-08)
 
-`main` está en **`2d0a0a6`**, con todo mergeado. `test/locator-robusto` apunta al mismo commit.
+`main` está en **`61921d4`**. Las ramas viejas de trabajo ya mergeadas se borraron; a partir de aquí
+rige la convención `<persona>/<que-hace>` de arriba. Lo que sigue abierto con trabajo propio:
+`claude/hola-8284hn` (cola de exportaciones), `fix/priority-graph` (jerarquía de niveles) y
+`feature/sap-tree-mapping` (sonda de hit-test).
+
+Lo de abajo se verificó el 2026-07-26 y no ha cambiado desde entonces.
 
 ### La cadena completa funciona, verificada contra el SAP real
 
