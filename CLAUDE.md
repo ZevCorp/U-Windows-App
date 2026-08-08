@@ -64,6 +64,24 @@ el merge deja de ser un merge y pasa a ser una negociación.
 El `-d` en minúscula solo borra si está mergeada. Si te grita, algo no se integró — es una red, no un
 estorbo. No lo cambies por `-D`.
 
+### Una rama es una feature — ni media, ni dos
+
+`jose/` no es un sitio donde Jose trabaja: es el prefijo de *esta* feature de Jose. **Al cambiar de
+feature se cambia de rama, aunque la anterior no esté terminada.** Si metes dos features en la misma
+rama quedan casadas: no puedes mergear una sin arrastrar la otra a medio hacer, y el PR deja de poder
+revisarse.
+
+Dejar algo aparcado y arrancar otra cosa: commitea lo que llevas (aunque sea `wip:`), súbelo para no
+depender de tu disco, y abre la siguiente **desde `main`**, nunca desde la que aparcaste.
+
+```
+git commit -am "wip: hasta donde llegué"
+git push -u origin jero/carrera-del-busy
+git checkout main && git pull origin main && git checkout -b jero/otra-cosa
+```
+
+Volver es `git checkout jero/carrera-del-busy` y un `git pull --rebase origin main` para ponerte al día.
+
 ### `main` no se toca
 
 `main` cambia **solo por merge de un PR**. Nadie commitea encima. Esto no es ceremonia: el repo llegó
