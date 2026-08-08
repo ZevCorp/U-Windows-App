@@ -425,6 +425,15 @@ public sealed class UiaSurface : IUiSurface
     /// </summary>
     public static string GrupoDe(AutomationElement el)
     {
+        // EL LANDMARK GANA AUNQUE ESTÉ MÁS ARRIBA. Lo genérico que se encuentre por el camino se
+        // guarda y solo se usa si no aparece ningún landmark por encima.
+        //
+        // Sin esto el landmark casi nunca ganaba, y se midió: «Code · Issues · Pull requests» de
+        // GitHub viven dentro de <nav aria-label="Repository"> pero maquetados con un <ul>, así
+        // que el ancestro MÁS CERCANO era una List y el grupo salía «lista» — el nav quedaba dos
+        // pisos más arriba, sin que nadie llegara a mirarlo (2026-08-08). Una lista dentro de una
+        // navegación sigue siendo navegación: la lista es cómo se maqueta, el nav es lo que ES.
+        string generico = "";
         try
         {
             var padre = TreeWalker.ControlViewWalker.GetParent(el);
@@ -453,12 +462,17 @@ public sealed class UiaSurface : IUiSurface
                 string landmark = LandmarkWeb(info.LocalizedControlType);
                 if (landmark.Length > 0) return Nombrar(landmark, padre);
 
-                // El TIPO cuando lo hay: es lo estándar y lo que usan las apps clásicas.
-                if (ct == ControlType.Tree) return Nombrar("navegación", padre);
-                if (ct == ControlType.ToolBar) return Nombrar("herramientas", padre);
-                if (ct == ControlType.MenuBar || ct == ControlType.Menu) return Nombrar("menú", padre);
-                if (ct == ControlType.Tab) return Nombrar("pestañas", padre);
-                if (ct == ControlType.List || ct == ControlType.DataGrid) return Nombrar("lista", padre);
+                // El TIPO cuando lo hay: es lo estándar y lo que usan las apps clásicas. Se
+                // APUNTA el primero que aparezca, pero no se devuelve todavía: puede haber un
+                // landmark por encima que lo explique mejor (ver arriba).
+                if (generico.Length == 0)
+                {
+                    if (ct == ControlType.Tree) generico = Nombrar("navegación", padre);
+                    else if (ct == ControlType.ToolBar) generico = Nombrar("herramientas", padre);
+                    else if (ct == ControlType.MenuBar || ct == ControlType.Menu) generico = Nombrar("menú", padre);
+                    else if (ct == ControlType.Tab) generico = Nombrar("pestañas", padre);
+                    else if (ct == ControlType.List || ct == ControlType.DataGrid) generico = Nombrar("lista", padre);
+                }
 
                 // Y LA CLASE cuando el tipo no dice nada, que es lo normal en WinUI. El explorador
                 // de Windows 11 mete sus botones en un contenedor llamado «ApplicationBar» cuyo
@@ -466,14 +480,14 @@ public sealed class UiaSurface : IUiSurface
                 // parecía no pertenecer a ningún grupo (2026-08-04, comprobado volcando el árbol).
                 // La app declara la estructura; solo que a veces por un canal y a veces por el otro.
                 string porClase = PorClase(clase);
-                if (porClase.Length > 0) return Nombrar(porClase, padre);
+                if (porClase.Length > 0 && generico.Length == 0) generico = Nombrar(porClase, padre);
 
                 if (ct == ControlType.Window) break;   // se llegó a la ventana: no hay grupo
                 padre = TreeWalker.ControlViewWalker.GetParent(padre);
             }
         }
         catch { }
-        return "";
+        return generico;   // ningún landmark por encima: manda el contenedor que se encontró
     }
 
     /// <summary>
