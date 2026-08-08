@@ -229,9 +229,21 @@ public sealed class GraphExplorerWindow : Window
             BorderThickness = new Thickness(0),
             FontSize = 11,
             Cursor = Cursors.Hand,
-            ToolTip = "Recorre la app abriendo lo que encuentra. Solo navegación: nunca pulsa botones ni menús.",
+            ToolTip = "Recorre la app abriendo lo que encuentra. Solo navegación: nunca pulsa botones ni menús."
+                    + "\nMAYÚS+clic: recorrido mecánico, sin modelo — determinista y gratis.",
         };
-        _crawlBtn.Click += (_, __) => _ = CrawlAsync();
+        // MAYÚS ELIGE EL MECÁNICO. Son dos trabajos distintos y hasta hoy solo se alcanzaba uno:
+        // cruzar una puerta y leer dónde caes es una MEDICIÓN —barata, reproducible, sin opinión—
+        // mientras que decidir qué nivel es cada cosa es un JUICIO, y para eso está el arquitecto.
+        // El mecánico existía pero solo lo alcanzaban las pruebas del núcleo (EsPrueba), así que
+        // para poblar el mapa había que pagar un agente que hace noventa clics distintos cada vez.
+        // Sin maestro además: la lección cuesta dinero y no aporta nada a un recorrido que solo
+        // quiere abrir puertas (2026-08-08, señalado por el usuario al ver el explorador de archivos
+        // con 90 puertas declaradas y sin cruzar).
+        _crawlBtn.Click += (_, __) =>
+            _ = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
+                ? CrawlAsync(conMaestro: false, mecanico: true)
+                : CrawlAsync();
 
         // LAS DOS VISTAS A LA VEZ, no una o la otra. Eran modos alternativos y eso obligaba a elegir
         // entre ver QUÉ hay disponible (la lista de aristas) y ver POR DÓNDE va (el grafo), que es
@@ -2771,7 +2783,15 @@ public sealed class GraphExplorerWindow : Window
     /// </summary>
     private bool EsPrueba;
 
-    private async Task CrawlAsync(bool conMaestro = true)
+    /// <param name="mecanico">
+    /// Forzar el recorrido determinista aunque no sea una prueba. Lo enciende MAYÚS+clic.
+    ///
+    /// La frontera: cruzar una puerta y leer dónde caes es una MEDICIÓN, y una medición no debe
+    /// depender de un modelo —cuesta dinero y no da el mismo resultado dos veces—. Decidir qué
+    /// nivel es cada pantalla sí es un juicio, y ahí el arquitecto gana. Lo normal es usar los dos
+    /// en ese orden: mecánico para poblar, arquitecto para estructurar lo poblado.
+    /// </param>
+    private async Task CrawlAsync(bool conMaestro = true, bool mecanico = false)
     {
         if (_crawlCts != null) { _crawlCts.Cancel(); return; }
 
@@ -2797,7 +2817,7 @@ public sealed class GraphExplorerWindow : Window
         // El recorrido mecánico NO desaparece: sigue siendo el motor de las pruebas del núcleo
         // (CrawlAsync con conMaestro:false), donde hace falta algo determinista y gratis. Lo que ya
         // no hace es mapear para el usuario.
-        if (!EsPrueba)
+        if (!EsPrueba && !mecanico)
         {
             await AuditarConArquitectoAsync(SurfaceMap.AppDe(loc.Id));
             return;
