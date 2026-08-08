@@ -163,6 +163,12 @@ if ($Construir) {
   $r = Leer-Registro
   $n = if ($Version -ge 0) { $Version } else { $r.EnEdicion }
   if ($n -lt 0) { throw "no hay version en edicion ni -Version dada" }
+  # SE REESCRIBE EL REGISTRO AUNQUE NO CAMBIE NADA, y no es redundante: Guardar-Registro es quien
+  # estampa donde vive el repo, y -Construir no lo llamaba. Resultado medido el 2026-08-08: el
+  # registro se quedo sin Repo, la app no supo donde estaba arquitecto.mjs, el boton del arquitecto
+  # se nego en silencio y el mapeo lo hizo el recorredor mecanico — que es justo lo que el usuario
+  # vio como «solo mapeo a primer nivel». Construir es el momento natural para reafirmarlo.
+  Guardar-Registro $r
   if ($n -eq $r.EnEdicion) {
     # La instantanea es LO CONSTRUIDO: se refresca desde el trabajo justo antes de compilar.
     Copy-Item $trabajo (Snap $n) -Force

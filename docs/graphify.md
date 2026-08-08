@@ -1174,3 +1174,30 @@ más abajo, y «Almacenamiento» para por qué el transporte sigue siendo un arc
   contrato corría en segundos y pasaba 10/10.
 - Un build que a veces no termina es peor que un build medio segundo más lento.
 - Fecha: 2026-08-08, medido.
+
+### Mapear es el ARQUITECTO, sin interruptor
+- Hubo un botón para elegir entre el recorredor mecánico y el arquitecto, y duró una prueba: no se
+  veía si estaba puesto, y —lo grave— cuando el arquitecto no podía arrancar el botón se negaba en
+  silencio y mapeaba el mecánico. Desde fuera eso se ve como «el agente mapea igual de plano que
+  el crawler», que es exactamente lo que el usuario reportó. Dos caminos que hacen lo mismo con
+  calidades distintas y sin señal visible es peor que uno solo.
+- El recorrido mecánico NO desaparece: es el motor de las pruebas del núcleo, donde hace falta
+  algo determinista y gratis. Lo que ya no hace es mapear para el usuario.
+- La causa raíz de aquella prueba, encontrada en los logs (cero líneas de «arquitecto», 1278 del
+  crawler): el registro de versiones se había quedado SIN el campo `Repo` porque `-Construir` no
+  llamaba a `Guardar-Registro`, que es quien lo estampa. Sin repo no se encuentra `arquitecto.mjs`.
+  Ahora `-Construir` lo reafirma siempre, y todo «no puedo correr» va al LOG y no solo a la barra
+  de estado: un motivo que nadie lee es un motivo perdido.
+- Fecha: 2026-08-08.
+
+### La profundidad hay que pedirla explícitamente
+- Un agente con herramientas de navegar no baja solo: toca todas las puertas de la primera
+  pantalla, que es lo que tiene delante. La misión ahora dice que el trabajo se mide por los
+  niveles 2, 3 y 4 descubiertos, manda agotar una rama antes de pasar a la hermana, y advierte que
+  si todo cuelga del inicio ha fallado aunque no se haya equivocado.
+- Y se le dieron OJOS para eso: `rutas_desde` (map_routes_from) enseña qué puertas se conocen y
+  cuáles siguen sin cruzar. Sin esa lista, un agente solo ve la pantalla en la que está y no puede
+  saber dónde queda profundidad pendiente.
+- El presupuesto sube a 80 turnos por defecto: agotar una rama son varios cruces más un `ir_a` por
+  cada vuelta atrás.
+- Fecha: 2026-08-08, observado por el usuario: «solo mapeó a primer nivel».

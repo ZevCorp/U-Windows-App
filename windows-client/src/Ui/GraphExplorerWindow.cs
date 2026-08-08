@@ -78,11 +78,7 @@ public sealed class GraphExplorerWindow : Window
     private Button _limpiarBtn = null!;
     private Button _pasoBtn = null!;
     private Button _olvidarBtn = null!;
-    private Button _arquitectoBtn = null!;
     private CarruselDeApps? _carrusel;
-
-    /// <summary>¿Mapea el arquitecto en vez del recorredor mecánico? Lo enciende el botón 🧠.</summary>
-    private bool _conArquitecto;
 
     /// <summary>
     /// Borra el grafo entero, preguntando antes. Borrar lo aprendido no se deshace.
@@ -391,43 +387,10 @@ public sealed class GraphExplorerWindow : Window
                 : "paso a paso apagado";
         };
 
-        // QUIÉN MAPEA: el recorredor mecánico o el ARQUITECTO. Son dos formas de la misma tarea y
-        // por eso comparten el punto de entrada —el botón de mapear y el catálogo de apps— en vez
-        // de tener uno cada uno: quien elige una app quiere que se aprenda, y esto decide CÓMO.
-        //
-        // El mecánico agota lo que ve, es gratis y no juzga. El arquitecto navega con criterio,
-        // contrasta la jerarquía real con la del grafo y deja hallazgos escritos — pero cuesta
-        // tokens y tarda. Por eso se elige, y no se sustituye uno por otro (2026-08-08, pedido por
-        // el usuario: «el arquitecto debería correr en el punto donde corre el crawler»).
-        _arquitectoBtn = new Button
-        {
-            Content = "🧠",
-            Width = 26, Height = 26, FontSize = 12,
-            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
-            Margin = new Thickness(4, 0, 0, 0),
-            Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
-            Foreground = Brushes.White,
-            BorderThickness = new Thickness(0),
-            Cursor = Cursors.Hand,
-            ToolTip = "Mapear con el ARQUITECTO (agente que navega y contrasta) en vez del recorredor mecánico",
-        };
-        _arquitectoBtn.Click += (_, __) =>
-        {
-            var (puede, porque) = Navigation.Arquitecto.Disponible();
-            if (!_conArquitecto && !puede) { _status.Text = porque; return; }
-            _conArquitecto = !_conArquitecto;
-            _arquitectoBtn.Background = new SolidColorBrush(_conArquitecto
-                ? Color.FromArgb(0x66, 0x64, 0xB5, 0xF6) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
-            _status.Text = _conArquitecto
-                ? "mapeo con ARQUITECTO: navegará con criterio y dejará su informe"
-                : "mapeo mecánico: el recorredor agota lo que ve";
-        };
-
         var iconos = new StackPanel { Orientation = Orientation.Horizontal };
         iconos.Children.Add(_collapseBtn);
         iconos.Children.Add(_crawlBtn);
         iconos.Children.Add(_carruselBtn);
-        iconos.Children.Add(_arquitectoBtn);
         // OLVIDAR LO ENSEÑADO es distinto de borrar el grafo, y por eso es otro botón: el grafo es
         // terreno y se tira entero sin pena; la jerarquía es aprendizaje, sobrevive al borrado, y
         // se elige por aplicación —enseñar bien el explorador no es motivo para perder lo que se
@@ -1690,7 +1653,9 @@ public sealed class GraphExplorerWindow : Window
                     continue;
                 }
 
-                await CrawlAsync(conMaestro: false);
+                EsPrueba = true;
+                try { await CrawlAsync(conMaestro: false); }
+                finally { EsPrueba = false; }
                 var (ok, detalle) = EscenarioCi.Juzgar(p, _map);
                 informe.Add((p.App, ok, detalle));
                 LogBus.Log("ci", $"[{nucleo}] «{p.App}»: {(ok ? "OK" : "FALLO")} · {detalle}");
@@ -2800,6 +2765,12 @@ public sealed class GraphExplorerWindow : Window
     /// prueba no pierde el azul: lo hereda sin pagarlo otra vez (2026-08-08, señalado por el
     /// usuario).
     /// </param>
+    /// <summary>
+    /// ¿Esta corrida es una PRUEBA del núcleo? Entonces recorre el mecánico, no el arquitecto: una
+    /// prueba tiene que ser determinista y gratis, y un agente que razona no es ninguna de las dos.
+    /// </summary>
+    private bool EsPrueba;
+
     private async Task CrawlAsync(bool conMaestro = true)
     {
         if (_crawlCts != null) { _crawlCts.Cancel(); return; }
@@ -2817,11 +2788,16 @@ public sealed class GraphExplorerWindow : Window
         // jerarquía ya puesta, el recorrido sabe qué está explorando en vez de descubrirlo al final.
         // Va aquí y no en quien llama para que valga para TODAS las formas de pedir un mapeo: el
         // botón de «esta app» y el catálogo tienen que aprender lo mismo.
-        // EL ARQUITECTO SE PONE AQUÍ, en el mismo sitio donde corre el recorredor: quien pulsa
-        // «mapear» o elige una app del catálogo quiere que se aprenda, y el 🧠 decide con qué
-        // cabeza. Va DENTRO de CrawlAsync y no en cada sitio que la llama para que las dos puertas
-        // de entrada —el botón y el catálogo— no puedan divergir (2026-08-08).
-        if (_conArquitecto)
+        // MAPEAR ES EL ARQUITECTO, sin interruptor. Hubo uno y duró una prueba: no se veía si
+        // estaba puesto, y cuando el arquitecto no podía arrancar el botón se negaba en silencio y
+        // mapeaba el recorredor — lo que desde fuera parecía «el agente mapea igual de plano»
+        // (2026-08-08, pedido por el usuario tras verlo). Dos caminos que hacen lo mismo con
+        // calidades distintas y sin señal visible es peor que uno solo.
+        //
+        // El recorrido mecánico NO desaparece: sigue siendo el motor de las pruebas del núcleo
+        // (CrawlAsync con conMaestro:false), donde hace falta algo determinista y gratis. Lo que ya
+        // no hace es mapear para el usuario.
+        if (!EsPrueba)
         {
             await AuditarConArquitectoAsync(SurfaceMap.AppDe(loc.Id));
             return;
