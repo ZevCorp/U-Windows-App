@@ -3,6 +3,7 @@ using System.Text;
 using System.Windows.Automation;
 using System.Windows.Threading;
 using U.Graph.Surfaces;
+using U.WindowsClient.Diagnostics;
 
 namespace U.WindowsClient.Uia;
 
@@ -245,7 +246,7 @@ public sealed class SurfaceLocator : IDisposable
 
         if (EsNavegador(proc))
         {
-            var url = TryReadBrowserUrl(hwnd);
+            var url = TryReadBrowserUrl(hwnd, out bool hayBarra);
             if (url != null)
             {
                 // Aquí, y en ningún otro sitio, coinciden a la vez el dominio, el navegador que lo
@@ -255,6 +256,32 @@ public sealed class SurfaceLocator : IDisposable
                 PestanasAbiertas.Apunta(url.Host, proc, title);
                 string path = url.AbsolutePath.TrimEnd('/');
                 return new SurfaceLocation($"web://{url.Host}{path}", $"web://{url.Host}", path.Length == 0 ? "/" : path);
+            }
+
+            // SIN BARRA DE DIRECCIONES NO HAY PANTALLA QUE ACUÑAR.
+            //
+            // Un navegador abre muchas ventanas que no son páginas: la barra «meet.google.com está
+            // compartiendo tu pantalla», el selector de qué compartir, burbujas de permisos, el
+            // diálogo de impresión. Ninguna tiene barra de direcciones, así que la URL no se puede
+            // leer y hasta hoy caían al esquema uia:// de abajo, que las bautizaba con su TÍTULO.
+            // Así nació «uia://chrome.exe/meet-google-com-está-compartiendo-tu-pantalla»: un nodo
+            // permanente, a profundidad 2 bajo chrome.exe, que se seguía dibujando dos días después
+            // de cerrar la reunión (2026-08-08, observado por el usuario).
+            //
+            // Es el mismo veto que ya existe abajo para «ventana» y para los nombres de panel, por
+            // la misma razón: un nombre que no identifica una pantalla no debe acuñar una.
+            //
+            // Se distingue NO HAY BARRA de HAY BARRA PERO NO SE PUEDE LEER, y solo se abstiene en el
+            // primer caso. La nueva pestaña tiene barra y está vacía: es una pantalla de verdad
+            // —sus azulejos son puertas— y sigue cayendo al slug del título como siempre.
+            //
+            // Abstenerse es devolver null, que para el sondeo significa «no ha cambiado nada»: la
+            // ubicación se queda en la página que el usuario tenía delante, que es la verdad.
+            if (!hayBarra)
+            {
+                LogBus.Log("superficie", $"«{proc}» sin barra de direcciones: «{title}» es mobiliario "
+                                       + "del navegador, no una pantalla — no se acuña nodo");
+                return null;
             }
         }
 
@@ -330,16 +357,30 @@ public sealed class SurfaceLocator : IDisposable
     /// ya está abierto en otra ventana. Dos lectores distintos de la misma barra acabarían midiendo
     /// cosas distintas de la misma pantalla.
     /// </summary>
-    internal static Uri? LeerUrlDelNavegador(IntPtr hwnd) => TryReadBrowserUrl(hwnd);
+    internal static Uri? LeerUrlDelNavegador(IntPtr hwnd) => TryReadBrowserUrl(hwnd, out _);
 
-    private static Uri? TryReadBrowserUrl(IntPtr hwnd)
+    /// <summary>
+    /// La URL que muestra la barra de direcciones, o null si no se puede leer.
+    ///
+    /// <paramref name="hayBarra"/> separa las dos razones por las que esto devuelve null, que hasta
+    /// el 2026-08-08 eran indistinguibles y pedían tratos opuestos: <c>false</c> significa que la
+    /// ventana NO TIENE barra —no es una ventana de navegación, es mobiliario del navegador— y
+    /// <c>true</c> que la tiene pero su contenido no sirve como URL: vacía (nueva pestaña), con
+    /// espacios (texto de búsqueda a medio escribir) o un esquema interno como <c>chrome://newtab</c>.
+    ///
+    /// Solo se mira si el Edit existe. Que le falte el ValuePattern cuenta como barra presente: es
+    /// el corte más estrecho posible, y el único que la evidencia sostiene.
+    /// </summary>
+    private static Uri? TryReadBrowserUrl(IntPtr hwnd, out bool hayBarra)
     {
+        hayBarra = false;
         try
         {
             var root = AutomationElement.FromHandle(hwnd);
             var edit = root?.FindFirst(TreeScope.Descendants,
                 new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit));
             if (edit == null) return null;
+            hayBarra = true;
             if (!edit.TryGetCurrentPattern(ValuePattern.Pattern, out var p) || p is not ValuePattern vp) return null;
 
             string raw = (vp.Current.Value ?? "").Trim();

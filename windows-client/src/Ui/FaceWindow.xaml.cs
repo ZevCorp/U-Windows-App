@@ -2411,6 +2411,36 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// Enciende/apaga el inspector visual de elementos (overlay click-through con recuadros +
     /// diagnóstico de clic amarillo/rojo). Ver <see cref="UiInspector"/>.
     /// </summary>
+    /// <summary>Si el modo «verlo todo» está puesto. Ver <see cref="OnToggleFullTooltips"/>.</summary>
+    private bool _fullTooltips;
+
+    /// <summary>
+    /// TODO ENCENDIDO DE UN GOLPE: inspector, ID de superficie, explorador del grafo y mapa.
+    ///
+    /// Ver la pantalla entera anotada exigía cuatro interruptores, y había que acordarse de los
+    /// cuatro. Cuando lo que quieres es mirar, quieres mirarlo todo (2026-08-08, pedido por el
+    /// usuario).
+    ///
+    /// Reutiliza los manejadores de siempre en vez de duplicar lo que hacen, y por eso pregunta
+    /// primero por el estado de cada uno: son TOGGLES, así que llamarlos a ciegas apagaría lo que ya
+    /// estuviera encendido — pulsar «encender todo» con el inspector puesto lo habría apagado. Cada
+    /// uno se toca solo si no está ya como queremos.
+    /// </summary>
+    private void OnToggleFullTooltips(object sender, RoutedEventArgs e)
+    {
+        _fullTooltips = !_fullTooltips;
+
+        if ((_inspector?.Active ?? false) != _fullTooltips) OnToggleInspector(sender, e);
+        if (_idALaVista != _fullTooltips) OnToggleLocator(sender, e);
+        if ((_explorer != null) != _fullTooltips) OnToggleExplorer(sender, e);
+        if ((_map != null) != _fullTooltips) OnToggleMap(sender, e);
+
+        FullTooltipsBtn.Content = _fullTooltips ? "👁 Full Tooltips: TODO a la vista" : "👁 Full Tooltips";
+        SetStatus(_fullTooltips
+            ? "Todo a la vista: inspector, ID, explorador y mapa"
+            : "Todo apagado");
+    }
+
     private void OnToggleInspector(object sender, RoutedEventArgs e)
     {
         _inspector ??= new UiInspector();

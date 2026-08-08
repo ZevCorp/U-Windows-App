@@ -229,9 +229,21 @@ public sealed class GraphExplorerWindow : Window
             BorderThickness = new Thickness(0),
             FontSize = 11,
             Cursor = Cursors.Hand,
-            ToolTip = "Recorre la app abriendo lo que encuentra. Solo navegación: nunca pulsa botones ni menús.",
+            ToolTip = "Recorre la app abriendo lo que encuentra. Solo navegación: nunca pulsa botones ni menús."
+                    + "\nMAYÚS+clic: recorrido mecánico, sin modelo — determinista y gratis.",
         };
-        _crawlBtn.Click += (_, __) => _ = CrawlAsync();
+        // MAYÚS ELIGE EL MECÁNICO. Son dos trabajos distintos y hasta hoy solo se alcanzaba uno:
+        // cruzar una puerta y leer dónde caes es una MEDICIÓN —barata, reproducible, sin opinión—
+        // mientras que decidir qué nivel es cada cosa es un JUICIO, y para eso está el arquitecto.
+        // El mecánico existía pero solo lo alcanzaban las pruebas del núcleo (EsPrueba), así que
+        // para poblar el mapa había que pagar un agente que hace noventa clics distintos cada vez.
+        // Sin maestro además: la lección cuesta dinero y no aporta nada a un recorrido que solo
+        // quiere abrir puertas (2026-08-08, señalado por el usuario al ver el explorador de archivos
+        // con 90 puertas declaradas y sin cruzar).
+        _crawlBtn.Click += (_, __) =>
+            _ = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
+                ? CrawlAsync(conMaestro: false, mecanico: true)
+                : CrawlAsync();
 
         // LAS DOS VISTAS A LA VEZ, no una o la otra. Eran modos alternativos y eso obligaba a elegir
         // entre ver QUÉ hay disponible (la lista de aristas) y ver POR DÓNDE va (el grafo), que es
@@ -827,7 +839,7 @@ public sealed class GraphExplorerWindow : Window
 
             _nodoActual = aqui;
             // Solo se anota si lo LEÍDO y el DÓNDE hablan de la misma app: ver AnotarPuertas.
-            if (SurfaceMap.AppDe(aqui).StartsWith(proc + ".", StringComparison.OrdinalIgnoreCase))
+            if (LoLeidoYElDondeHablanDeLoMismo(aqui, proc))
                 AnotarPuertas(aqui, els);
             DibujarGrafo();
         }
@@ -1022,6 +1034,34 @@ public sealed class GraphExplorerWindow : Window
     /// (2026-08-04). Mientras esto solo se pintaba, una lista desfasada un segundo no hacía daño;
     /// desde que se ESCRIBE en el mapa, es exactamente el veneno que costó una mañana limpiar.
     /// </summary>
+    /// <summary>
+    /// ¿Lo que se acaba de LEER de la pantalla pertenece al sitio donde dice el localizador que
+    /// estamos? Si no, anotar esas puertas se las colgaría a la app equivocada.
+    ///
+    /// Para una app nativa la comprobación es directa: el id es <c>uia://proceso.exe/…</c> y el
+    /// proceso tiene que ser este. Para el navegador NO, y ahí estuvo el fallo: la superficie es el
+    /// DOMINIO (<c>web://mail.google.com/…</c> → app «mail.google.com») y el proceso es «chrome».
+    /// La comparación era <c>"mail.google.com".StartsWith("chrome.")</c> — falsa SIEMPRE, en
+    /// cualquier navegador y cualquier página.
+    ///
+    /// Consecuencia medida el 2026-08-08: ninguna puerta web habia entrado JAMAS al mapa. Los puntos
+    /// se leían, se pintaban y se tiraban. «mail.google.com» tenía cero aristas con el uso que tiene,
+    /// y la ubicuidad máxima de un selector web era 1 — cuando el cromo exige 3. El grafo solo sabía
+    /// de apps nativas y parecía que la web «no se mapeaba bien».
+    ///
+    /// Que el dominio y el proceso no coincidan es lo NORMAL en un navegador, no un error: son dos
+    /// preguntas distintas —qué sitio y qué programa lo dibuja— y solo la primera identifica la
+    /// pantalla. Quién cuenta como navegador lo dice <see cref="PestanasAbiertas.EsNavegador"/>,
+    /// igual que en el resto de la app.
+    /// </summary>
+    private static bool LoLeidoYElDondeHablanDeLoMismo(string aqui, string proc)
+    {
+        if (SurfaceMap.AppDe(aqui).StartsWith(proc + ".", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return aqui.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
+               && PestanasAbiertas.EsNavegador(proc);
+    }
+
     private void AnotarPuertas(string nodo, List<UiaReader.UiElement> els)
     {
         if (nodo.Length == 0 || els.Count == 0) return;
@@ -2771,7 +2811,15 @@ public sealed class GraphExplorerWindow : Window
     /// </summary>
     private bool EsPrueba;
 
-    private async Task CrawlAsync(bool conMaestro = true)
+    /// <param name="mecanico">
+    /// Forzar el recorrido determinista aunque no sea una prueba. Lo enciende MAYÚS+clic.
+    ///
+    /// La frontera: cruzar una puerta y leer dónde caes es una MEDICIÓN, y una medición no debe
+    /// depender de un modelo —cuesta dinero y no da el mismo resultado dos veces—. Decidir qué
+    /// nivel es cada pantalla sí es un juicio, y ahí el arquitecto gana. Lo normal es usar los dos
+    /// en ese orden: mecánico para poblar, arquitecto para estructurar lo poblado.
+    /// </param>
+    private async Task CrawlAsync(bool conMaestro = true, bool mecanico = false)
     {
         if (_crawlCts != null) { _crawlCts.Cancel(); return; }
 
@@ -2797,7 +2845,7 @@ public sealed class GraphExplorerWindow : Window
         // El recorrido mecánico NO desaparece: sigue siendo el motor de las pruebas del núcleo
         // (CrawlAsync con conMaestro:false), donde hace falta algo determinista y gratis. Lo que ya
         // no hace es mapear para el usuario.
-        if (!EsPrueba)
+        if (!EsPrueba && !mecanico)
         {
             await AuditarConArquitectoAsync(SurfaceMap.AppDe(loc.Id));
             return;
