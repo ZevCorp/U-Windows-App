@@ -68,42 +68,84 @@ public static class Arquitecto
         if (!puede) return porque;
 
         string script = Script();
-        var psi = new System.Diagnostics.ProcessStartInfo("node")
+
+        // EN UNA CONSOLA VISIBLE, y no escondido. Ver al agente decidir mientras decide es lo que
+        // permite pararlo cuando va por mal camino; con la salida solo en el log, para cuando se
+        // lee ya terminó (2026-08-08, pedido por el usuario). Se hace con Tee-Object: la consola
+        // enseña y el archivo deja que la app siga narrando en su barra y en su log — una salida,
+        // dos lectores, sin duplicar nada.
+        string salida = Path.Combine(NucleoVersiones.Raiz, $"arquitecto-{app.Replace(".exe", "")}.log");
+        try { if (File.Exists(salida)) File.Delete(salida); } catch { }
+
+        string comando =
+            $"& node \"{script}\" \"{app}\" {turnos} 2>&1 | Tee-Object -FilePath \"{salida}\"; "
+            + "Write-Host ''; Read-Host 'Terminó. Pulsa Enter para cerrar esta ventana'";
+        var psi = new System.Diagnostics.ProcessStartInfo("powershell")
         {
-            Arguments = $"\"{script}\" \"{app}\" {turnos}",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{comando.Replace("\"", "\\\"")}\"",
             WorkingDirectory = Path.GetDirectoryName(script)!,
-            UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardOutput = true, RedirectStandardError = true,
-            StandardOutputEncoding = System.Text.Encoding.UTF8,
-            StandardErrorEncoding = System.Text.Encoding.UTF8,
+            UseShellExecute = true,
+            WindowStyle = System.Diagnostics.ProcessWindowStyle.Normal,
         };
 
-        LogBus.Log("arquitecto", $"lanzando sobre «{app}» con {turnos} turno(s)");
+        LogBus.Log("arquitecto", $"lanzando sobre «{app}» con {turnos} turno(s); su consola queda abierta");
         try
         {
             using var p = System.Diagnostics.Process.Start(psi);
-            if (p == null) return "no pude lanzar node: ¿está instalado y en el PATH?";
-
-            p.OutputDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) Contar(e.Data, cuenta); };
-            p.ErrorDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) LogBus.Log("arquitecto", "! " + e.Data); };
-            p.BeginOutputReadLine();
-            p.BeginErrorReadLine();
-
-            // El token para de verdad: sin esto, «detener» dejaría al agente navegando la máquina
-            // de alguien mientras la app cree que ya paró.
+            if (p == null) return "no pude lanzar la consola del arquitecto";
             using var reg = ct.Register(() => { try { if (!p.HasExited) p.Kill(entireProcessTree: true); } catch { } });
-            await p.WaitForExitAsync(CancellationToken.None);
+
+            // Se sigue el archivo, no el proceso: la consola se queda abierta a propósito para
+            // poder leerla, así que esperar a que muera sería esperar a que el usuario la cierre.
+            // Lo que dice que terminó es la marca [[FIN]] que el propio agente imprime al final.
+            bool termino = await SeguirSalidaAsync(salida, p, cuenta, ct);
 
             if (ct.IsCancellationRequested) return "arquitecto detenido";
-            return p.ExitCode == 0
-                ? $"arquitecto: auditoría de «{app}» terminada; su informe está en {Informe(app)}"
-                : $"el arquitecto terminó con código {p.ExitCode}; mira el log de «arquitecto»";
+            if (!termino) return "el arquitecto se cortó sin terminar; mira su consola y el log de «arquitecto»";
+            return $"arquitecto: auditoría de «{app}» terminada; su informe está en {Informe(app)}";
         }
         catch (Exception e)
         {
             LogBus.Log("arquitecto", $"falló: {e.Message}");
             return $"el arquitecto no pudo correr: {e.Message}";
         }
+    }
+
+    /// <summary>
+    /// Va leyendo lo que el agente escribe y lo cuenta según llega. Devuelve true si vio la marca
+    /// de final; false si el proceso murió antes o se canceló.
+    /// </summary>
+    private static async Task<bool> SeguirSalidaAsync(string salida, System.Diagnostics.Process p,
+        Action<string> cuenta, CancellationToken ct)
+    {
+        long leido = 0;
+        while (!ct.IsCancellationRequested)
+        {
+            await Task.Delay(600, CancellationToken.None);
+            try
+            {
+                if (!File.Exists(salida))
+                {
+                    // Ni archivo ni proceso: algo murió antes de empezar a escribir.
+                    if (p.HasExited) return false;
+                    continue;
+                }
+                // Compartido para lectura Y escritura: el otro proceso lo tiene abierto.
+                using var fs = new FileStream(salida, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                if (fs.Length <= leido) { if (p.HasExited) return false; continue; }
+                fs.Seek(leido, SeekOrigin.Begin);
+                using var sr = new StreamReader(fs, System.Text.Encoding.UTF8);
+                string? linea;
+                while ((linea = sr.ReadLine()) != null)
+                {
+                    if (linea.Contains("[[FIN]]", StringComparison.Ordinal)) return true;
+                    if (linea.Trim().Length > 0) Contar(linea, cuenta);
+                }
+                leido = fs.Position;
+            }
+            catch (IOException) { /* justo lo estaba escribiendo: se reintenta al siguiente latido */ }
+        }
+        return false;
     }
 
     /// <summary>Dónde deja escrito lo que encuentre (lo escribe la sonda, ver map_feedback).</summary>

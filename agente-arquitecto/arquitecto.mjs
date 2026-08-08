@@ -155,5 +155,9 @@ for await (const m of corrida) {
     console.log(`\n${"=".repeat(60)}`);
     console.log(m.subtype === "success" ? "CORRIDA COMPLETA" : `TERMINÓ POR: ${m.subtype}`);
     console.log(`turnos: ${m.num_turns} · duración: ${Math.round(m.duration_ms / 1000)} s`);
+    // La señal de que terminó, para quien lo esté siguiendo desde fuera. La consola se queda
+    // abierta a propósito —es para leerla— así que esperar a que el proceso muera no vale como
+    // final: hace falta una marca en la propia salida (ver Arquitecto.AuditarAsync).
+    console.log("[[FIN]]");
   }
 }
