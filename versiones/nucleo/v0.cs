@@ -936,43 +936,6 @@ public sealed class SurfaceMap
         return (nodos, aristas);
     }
 
-    /// <summary>
-    /// Olvidar el terreno de UNA app: sus pantallas y sus puertas, y las de nadie más.
-    ///
-    /// Existe porque probar el núcleo sobre una app costaba el mapa de todas: la prueba limpia
-    /// antes de recorrer —un grafo con historia esconde lo que se mide— pero solo OlvidarTodo
-    /// existía, así que verificar el explorador arrasaba lo andado en Chrome, que no tenía nada
-    /// que ver (2026-08-08, señalado por el usuario).
-    ///
-    /// Las ENSEÑANZAS no se tocan, como en OlvidarTodo: son aprendizaje, no terreno, y se reponen
-    /// solas sobre las puertas que vuelvan a nacer.
-    /// </summary>
-    public (int Nodos, int Aristas) OlvidarApp(string app)
-    {
-        if (string.IsNullOrWhiteSpace(app)) return (0, 0);
-        bool DeLaApp(string id) => AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase);
-
-        var nodos = _nodes.Keys.Where(DeLaApp).ToList();
-        // Una arista es de la app si sale de ella o entra en ella: dejar la mitad que "entra"
-        // desde otra app apuntaría a pantallas que ya no existen.
-        var aristas = _edges.Keys.Where(k =>
-        {
-            var p = k.Split('\n');
-            return DeLaApp(p[0]) || (p.Length > 1 && !EsPuerta(p[1]) && DeLaApp(p[1]));
-        }).ToList();
-
-        foreach (var n in nodos) _nodes.Remove(n);
-        foreach (var k in aristas) _edges.Remove(k);
-        _cromo.Clear();
-        _cromoVersion = -1;
-        if (DeLaApp(_lastCommitted)) _lastCommitted = "";
-        if (DeLaApp(_pendingId)) _pendingId = "";
-        Version++;
-        Save();
-        LogBus.Log("mapa", $"terreno de «{app}» olvidado: {nodos.Count} nodo(s) y {aristas.Count} arista(s); el resto queda");
-        return (nodos.Count, aristas.Count);
-    }
-
     public void OlvidarAccion(string from, string to)
     {
         string k = Norm(from) + "\n" + Norm(to);

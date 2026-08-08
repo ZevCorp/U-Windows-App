@@ -658,19 +658,51 @@ public sealed class SurfaceMapTools
     /// Se informa de cada uno por separado: fijar quince y fallar en uno no es ni éxito ni fracaso,
     /// y quien pregunta necesita saber exactamente cuál se quedó fuera.
     /// </remarks>
-    private string FijarNivelDeVarios(string app, string cuales, int nivel)
+    /// <summary>
+    /// Anota lo que hay en pantalla y DESPUÉS fija el nivel.
+    /// </summary>
+    /// <remarks>
+    /// Los puntos y el mapa son dos lectores distintos: el punto se dibuja leyendo la pantalla en
+    /// vivo, y el mapa solo anota cuando alguna herramienta se lo pide. De ahí el punto GRIS —visible
+    /// pero no registrado— y de ahí que fijarle el nivel respondiera «no lo veo en la pantalla»
+    /// teniéndolo delante. Ver y recordar no son lo mismo, pero para el usuario tienen que serlo.
+    /// </remarks>
+    /// <summary>Procesos que dibujan páginas web. Una superficie web:// es legítima si delante hay
+    /// uno de estos: su app es el dominio, no el proceso. La lista vive en un solo sitio
+    /// (<see cref="Uia.PestanasAbiertas.EsNavegador"/>): había tres copias y a «vivaldi» solo lo
+    /// conocía una, así que la misma ventana era web para el localizador y no para el mapa.</summary>
+    private static bool EsNavegador(string proc) => Uia.PestanasAbiertas.EsNavegador(proc);
+
+    private string FijarNivelMirandoAntes(string app, string cuales, int nivel, bool? cromo)
     {
+        var donde = _where();
+        if (donde != null) ObservarAqui(donde.Id);
+        return FijarNivelDeVarios(app, cuales, nivel, cromo);
+    }
+
+    private string FijarNivelDeVarios(string app, string cuales, int nivel, bool? cromo = null)
+    {
+        // PRIMERO ENTERO. La coma separa una lista… y también vive dentro de etiquetas reales:
+        // «English 7,189,000+ articles» se partía en tres trozos y ninguno existía (2026-08-07,
+        // en la primera web mapeada). Si lo pedido existe tal cual, es UNA etiqueta y no hay lista.
+        string entero = cuales.Trim();
+        if (entero.Length > 0)
+        {
+            string r0 = _map.FijarNivel(app, entero, nivel, porPersona: true, cromo);
+            if (!r0.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) return r0;
+        }
+
         var nombres = cuales.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
                             .Select(n => n.Trim()).Where(n => n.Length > 0)
                             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (nombres.Count == 0) return "falta `exit`: qué salida (o cuáles, separadas por comas) mover de nivel";
-        if (nombres.Count == 1) return _map.FijarNivel(app, nombres[0], nivel);
+        if (nombres.Count == 1) return _map.FijarNivel(app, nombres[0], nivel, porPersona: true, cromo);
 
         var hechos = new List<string>();
         var fallados = new List<string>();
         foreach (var n in nombres)
         {
-            string r = _map.FijarNivel(app, n, nivel);
+            string r = _map.FijarNivel(app, n, nivel, porPersona: true, cromo);
             if (r.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) fallados.Add(n);
             else hechos.Add(n);
         }
@@ -1091,6 +1123,7 @@ public sealed class SurfaceMapTools
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
+        or "map_hierarchy" or "map_feedback"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1128,12 +1161,20 @@ public sealed class SurfaceMapTools
             "map_pointed_trail" => LoQueMeAcabasDeMostrar(A("seconds")),
             "map_exclude" => Excluir(A("exit")),
             "map_show" => Mostrar(A("exit")),
-            "map_set_level" => FijarNivelDeVarios(
+            // SE MIRA ANTES DE FIJAR. Fijar un nivel busca la SALIDA con ese nombre en el mapa, y
+            // el mapa solo anota cuando se le pide: un elemento perfectamente visible —con su punto
+            // gris encima— podía no estar registrado todavía, y la respuesta era «no lo veo en la
+            // pantalla», que además es falsa. El usuario lo tenía delante (2026-08-07). Es el mismo
+            // arreglo que ya necesitó el maestro: primero se anota lo que hay, luego se juzga.
+            "map_set_level" => FijarNivelMirandoAntes(
                 A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""),
                 A("exit"),
-                int.TryParse(A("level"), out int niv) ? niv : -1),
+                int.TryParse(A("level"), out int niv) ? niv : -1,
+                bool.TryParse(A("cromo"), out bool crm) ? crm : null),
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
+            "map_hierarchy" => Jerarquia(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
+            "map_feedback" => Feedback(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("finding")),
 
             // Los verbos del explorador. Van por disco, no por pantalla: ver Explorador.cs.
             "file_where" => DondeEnDisco(),
@@ -1550,8 +1591,19 @@ public sealed class SurfaceMapTools
             // que nadie lo había mirado.
             string appLeida = _lector.ForegroundProcess;
             string appNodo = SurfaceMap.AppDe(nodo);
-            if (appLeida.Length > 0 && appNodo.Length > 0
-                && !appNodo.StartsWith(appLeida + ".", StringComparison.OrdinalIgnoreCase))
+
+            // UNA WEB PERTENECE A SU DOMINIO, PERO QUIEN LA DIBUJA ES EL NAVEGADOR. Comparar
+            // nombres declaraba distinta a toda página web —«se leyó chrome y el nodo es
+            // web://…»— así que en una web no se podía anotar nada, y por eso señalar un elemento
+            // funcionaba (lee la pantalla) pero fijarle el nivel no (busca en el mapa, que seguía
+            // vacío) (2026-08-07, observado por el usuario). Para lo web, la coincidencia se
+            // comprueba por IDENTIDAD: que el localizador siga diciendo que estamos en ese nodo.
+            bool coincide = appNodo.Length == 0 || appLeida.Length == 0
+                || appNodo.StartsWith(appLeida + ".", StringComparison.OrdinalIgnoreCase)
+                || (nodo.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
+                    && EsNavegador(appLeida)
+                    && string.Equals(_where()?.Id ?? "", nodo, StringComparison.OrdinalIgnoreCase));
+            if (!coincide)
             {
                 LogBus.Log("mapa-mcp", $"NO se anotan salidas: se leyó «{appLeida}» y el nodo es «{nodo}»");
                 return;
@@ -1597,6 +1649,74 @@ public sealed class SurfaceMapTools
     /// Las superficies conocidas, agrupadas por app y ordenadas por frecuencia — lo más visitado
     /// primero, que es lo que un humano llamaría "los sitios donde trabajo".
     /// </summary>
+    /// <summary>
+    /// LA JERARQUÍA COMO EL GRAFO LA TIENE, para poder contrastarla con la real.
+    ///
+    /// Existe para el agente ARQUITECTO: su misión es navegar la app, entender su jerarquía
+    /// mirándola, y compararla con la que el grafo está construyendo. Esa comparación necesita ver
+    /// lo mismo que el mapa cree — con su procedencia: qué nivel tiene cada cosa, quién lo dijo
+    /// (persona, maestro, deducción) y qué es cromo. Sin la procedencia, el agente «corregiría»
+    /// niveles que una persona acaba de fijar a mano, que es exactamente lo que no debe pasar.
+    /// </summary>
+    private string Jerarquia(string app)
+    {
+        if (app.Length == 0) return "falta `app`: de qué aplicación quieres la jerarquía";
+        bool DeLaApp(string id) => SurfaceMap.AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase);
+
+        var sb = new System.Text.StringBuilder($"JERARQUÍA de «{app}» según el grafo:\n\n");
+
+        var nodos = _map.Nodes.Where(kv => DeLaApp(kv.Key)).OrderBy(kv => kv.Value.Nivel).ToList();
+        sb.AppendLine($"PANTALLAS ({nodos.Count}):");
+        foreach (var (id, n) in nodos)
+            sb.AppendLine($"  nivel {(n.Nivel >= 0 ? n.Nivel.ToString() : "?")} · {id} · {n.Visits} visita(s)");
+
+        var declaradas = _map.Edges()
+            .Where(e => DeLaApp(e.From) && e.Info.NivelFijado && e.Info.NivelNav >= 0)
+            .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g.First().Info.NivelNav).ThenBy(g => g.Key)
+            .ToList();
+        sb.AppendLine($"\nSALIDAS CON NIVEL DECLARADO ({declaradas.Count}):");
+        foreach (var g in declaradas)
+        {
+            var i = g.First().Info;
+            sb.AppendLine($"  nivel {i.NivelNav} · «{g.Key}»"
+                + (i.EsCromo ? " · CROMO (te sigue a todas partes)" : "")
+                + (i.PorPersona ? " · lo dijo UNA PERSONA (no lo muevas sin decirlo en el feedback)" : " · lo dijo el maestro")
+                + $" · vista en {g.Count()} pantalla(s)");
+        }
+
+        var sinNivel = _map.Edges()
+            .Where(e => DeLaApp(e.From) && !e.Info.NivelFijado && e.Info.Label.Length > 0)
+            .Select(e => e.Info.Label).Distinct(StringComparer.OrdinalIgnoreCase).Take(40).ToList();
+        sb.AppendLine($"\nSALIDAS SIN NIVEL DECLARADO (muestra de {sinNivel.Count}):");
+        sb.AppendLine("  " + string.Join(" · ", sinNivel));
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// El HALLAZGO del arquitecto queda escrito donde el desarrollo lo lee. Es su entregable: los
+    /// desajustes entre la jerarquía real de la app y la que el grafo construyó no se arreglan
+    /// solos —a veces el fallo es del grafo, a veces del maestro, a veces de la app— y la decisión
+    /// es nuestra. El agente NO edita código: deja constancia aquí y organiza el grafo con las
+    /// herramientas de niveles, nada más.
+    /// </summary>
+    private string Feedback(string app, string finding)
+    {
+        if (finding.Length == 0) return "falta `finding`: el hallazgo que quieres dejar escrito";
+        try
+        {
+            string dir = System.IO.Path.Combine(Navigation.NucleoVersiones.Raiz, "feedback-arquitecto");
+            System.IO.Directory.CreateDirectory(dir);
+            string ruta = System.IO.Path.Combine(dir, $"{app.Replace(".exe", "")}.md");
+            System.IO.File.AppendAllText(ruta,
+                $"\n## {DateTime.Now:yyyy-MM-dd HH:mm} · núcleo {(Navigation.NucleoVersiones.Actual() is { } n ? $"v{n}" : "dev")}\n\n{finding.Trim()}\n");
+            LogBus.Log("arquitecto", $"hallazgo sobre «{app}» apuntado en {ruta}");
+            return $"hallazgo apuntado en {ruta}. Sigue con la exploración o cierra con un resumen.";
+        }
+        catch (Exception e) { return $"no pude apuntar el hallazgo: {e.Message}"; }
+    }
+
     private string Places(string app)
     {
         var nodos = _map.Nodes.AsEnumerable();

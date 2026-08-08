@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- EL CONTRATO DEL GRAFO. No es «un proyecto de tests»: es la definición ejecutable de lo que
+       el núcleo de navegación promete, escrita el día que alcanzó estabilidad (2026-08-08).
+
+       Referencia los BINARIOS compilados y no el proyecto, a propósito: el contrato juzga lo que
+       de verdad se va a ejecutar, y compilar aparte evita pelearse con la app estable que tiene
+       sus DLL bloqueadas. La ruta la inyecta scripts/contrato-del-grafo.ps1, que es la única
+       forma prevista de correr esto. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <AssemblyName>contrato-del-grafo</AssemblyName>
+    <UBin Condition="'$(UBin)' == ''">C:\U-dev2\bin</UBin>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="U"><HintPath>$(UBin)\U.dll</HintPath></Reference>
+    <Reference Include="U.Graph"><HintPath>$(UBin)\U.Graph.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

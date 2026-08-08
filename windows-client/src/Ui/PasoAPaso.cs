@@ -25,6 +25,14 @@ public static class PasoAPaso
     /// <summary>¿Se para en cada paso? Lo enciende el botón de la barra.</summary>
     public static bool Activo { get; set; }
 
+    /// <summary>
+    /// ¿Esta prueba se congela como escenario de CI al terminar? Lo marca el usuario en la
+    /// ventanita (desmarcado por defecto): una prueba que salió bien vale más si además queda
+    /// como vara de medir para las versiones futuras del núcleo (2026-08-08, pedido por él).
+    /// Quien mapea lo consulta al FINAL del recorrido; ver EscenarioCi.
+    /// </summary>
+    public static bool GuardarComoCi { get; set; }
+
     /// <summary>Lo que se ha ido observando, paso a paso. Para poder leerlo entero al final.</summary>
     public static IReadOnlyList<(string Paso, string Visto)> Observado => _observado;
     private static readonly List<(string Paso, string Visto)> _observado = new();
@@ -120,6 +128,19 @@ public static class PasoAPaso
                 FontSize = 11, Margin = new Thickness(0, 10, 0, 0),
             });
             col.Children.Add(_visto);
+
+            // La casilla de CI vive aquí y no en la barra: se decide DURANTE la prueba, cuando ya
+            // se está viendo si va bien, no antes de saber qué va a pasar.
+            var ci = new CheckBox
+            {
+                Content = "al terminar, guardar esta prueba para CI",
+                Foreground = new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF)),
+                FontSize = 11, Margin = new Thickness(0, 10, 0, 0),
+                IsChecked = false,
+            };
+            ci.Checked += (_, __) => GuardarComoCi = true;
+            ci.Unchecked += (_, __) => GuardarComoCi = false;
+            col.Children.Add(ci);
 
             var seguir = Boton("Continuar  ⏎", Color.FromArgb(0x55, 0x66, 0xBB, 0x6A));
             var parar = Boton("Detener", Color.FromArgb(0x44, 0xE5, 0x73, 0x73));

@@ -83,13 +83,151 @@ internal static class Vuelo
         CompositionTarget.Rendering += Cuadro;
     }
 
+    /// <summary>
+    /// UN SOLO viaje que pasa por todas las paradas, en vez de N viajes encadenados.
+    /// </summary>
+    /// <remarks>
+    /// Ir a una parada, frenar, arrancar hacia la siguiente y repetir se lee como una lista de
+    /// saltos: el ojo pierde el hilo entre uno y otro y lo que queda no es «estos seis», es «este,
+    /// este, este…». Un recorrido continuo mantiene el hilo — y ese hilo ES la información: lo que
+    /// se está diciendo es que los seis van juntos.
+    ///
+    /// La curva es una Catmull-Rom, que es la que pasa POR los puntos en vez de acercarse a ellos.
+    /// Una Bézier corriente los usaría como imanes y la carita no llegaría a ninguno; aquí toca cada
+    /// uno y sale hacia el siguiente sin detenerse, que es lo que hace una mano al enumerar.
+    ///
+    /// El avance va por LONGITUD y no por índice: con paradas desiguales, repartir el tiempo a
+    /// partes iguales haría que los tramos cortos se vieran lentísimos y los largos, disparados.
+    /// </remarks>
+    public static void Recorrido(Window win, IReadOnlyList<Point> paradas, TimeSpan dur)
+    {
+        if (paradas.Count == 0) return;
+        if (paradas.Count == 1)
+        {
+            Mover(win, paradas[0].X, paradas[0].Y, dur,
+                  new MuelleEase { InitialSlope = 0 }, new MuelleEase { InitialSlope = 0 });
+            return;
+        }
+
+        Termina();
+        _win = win;
+        _ruta = new List<Point> { new(win.Left, win.Top) };
+        _ruta.AddRange(paradas);
+
+        // Longitud acumulada: es lo que permite avanzar a velocidad pareja por todo el recorrido.
+        _largos = new double[_ruta.Count];
+        _largos[0] = 0;
+        for (int i = 1; i < _ruta.Count; i++)
+        {
+            double dx = _ruta[i].X - _ruta[i - 1].X, dy = _ruta[i].Y - _ruta[i - 1].Y;
+            _largos[i] = _largos[i - 1] + Math.Sqrt(dx * dx + dy * dy);
+        }
+        if (_largos[^1] < 1) { _ruta = null; return; }   // todas en el mismo sitio
+
+        PrepararRitmo();
+
+        _dur = dur <= TimeSpan.Zero ? TimeSpan.FromMilliseconds(1) : dur;
+        _inicio = DateTime.UtcNow;
+        _andando = true;
+        CompositionTarget.Rendering += Cuadro;
+    }
+
+    private static List<Point>? _ruta;
+    private static double[]? _largos;
+    private static double[]? _ritmo;   // para cada instante, cuánto camino se lleva recorrido
+
+    /// <summary>
+    /// El RITMO del recorrido: se afloja al pasar junto a cada parada y se recupera entre ellas.
+    /// </summary>
+    /// <remarks>
+    /// A velocidad pareja el recorrido se lee como un barrido —pasa por encima de todo sin mirar
+    /// nada—. Lo que hace que parezca que OBSERVA es justamente lo contrario de lo que pedía el
+    /// arreglo anterior: no pararse, pero sí aminorar. Es lo que hace la vista al repasar una lista.
+    ///
+    /// Se resuelve invirtiendo el problema: en vez de repartir el tiempo y ver por dónde se pasa, se
+    /// recorre el camino a pasitos y se apunta cuánto tiempo cuesta cada uno —más donde hay algo que
+    /// mirar—. La tabla resultante se lee al revés en cada cuadro: dado el instante, dónde toca
+    /// estar. Integrar una vez al empezar sale gratis; hacer la cuenta por cuadro, no.
+    /// </remarks>
+    private static void PrepararRitmo()
+    {
+        var largos = _largos!;
+        double total = largos[^1];
+        const int Pasos = 400;
+        const double Cerca = 55;      // a menos de esto de una parada, ya se está mirando
+        const double Lento = 0.35;    // a qué fracción de velocidad se pasa por delante
+
+        var tiempo = new double[Pasos + 1];
+        double acumulado = 0;
+        for (int i = 1; i <= Pasos; i++)
+        {
+            double s = total * i / Pasos;
+
+            // Lo cerca que se está de la parada más próxima decide la velocidad.
+            double cerca = double.MaxValue;
+            foreach (double p in largos) cerca = Math.Min(cerca, Math.Abs(s - p));
+            double velocidad = Lento + (1 - Lento) * Math.Min(1, cerca / Cerca);
+
+            acumulado += (total / Pasos) / velocidad;
+            tiempo[i] = acumulado;
+        }
+
+        // Normalizado a 0..1: la tabla dice, para cada instante, qué fracción del camino va hecha.
+        _ritmo = new double[Pasos + 1];
+        for (int i = 0; i <= Pasos; i++) _ritmo[i] = tiempo[i] / acumulado;
+    }
+
+    /// <summary>Del instante al camino recorrido, deshaciendo la tabla del ritmo.</summary>
+    private static double CaminoEn(double t)
+    {
+        var ritmo = _ritmo;
+        if (ritmo == null) return t;
+
+        int i = Array.BinarySearch(ritmo, t);
+        if (i >= 0) return (double)i / (ritmo.Length - 1);
+        i = ~i;
+        if (i <= 0) return 0;
+        if (i >= ritmo.Length) return 1;
+
+        double tramo = ritmo[i] - ritmo[i - 1];
+        double u = tramo < 1e-9 ? 0 : (t - ritmo[i - 1]) / tramo;
+        return (i - 1 + u) / (ritmo.Length - 1);
+    }
+
+    /// <summary>El punto de la ruta a una fracción del camino, con la curva que pasa por todos.</summary>
+    private static Point EnLaRuta(double t)
+    {
+        var ruta = _ruta!;
+        var largos = _largos!;
+        double meta = t * largos[^1];
+
+        int i = 1;
+        while (i < largos.Length - 1 && largos[i] < meta) i++;
+
+        double tramo = largos[i] - largos[i - 1];
+        double u = tramo < 0.001 ? 0 : (meta - largos[i - 1]) / tramo;
+
+        // Catmull-Rom necesita un punto antes y otro después; en los extremos se repite el borde.
+        Point p0 = ruta[Math.Max(i - 2, 0)], p1 = ruta[i - 1], p2 = ruta[i], p3 = ruta[Math.Min(i + 1, ruta.Count - 1)];
+        return new Point(CatmullRom(p0.X, p1.X, p2.X, p3.X, u),
+                         CatmullRom(p0.Y, p1.Y, p2.Y, p3.Y, u));
+    }
+
+    private static double CatmullRom(double a, double b, double c, double d, double u)
+    {
+        double u2 = u * u, u3 = u2 * u;
+        return 0.5 * ((2 * b) + (-a + c) * u
+                    + (2 * a - 5 * b + 4 * c - d) * u2
+                    + (-a + 3 * b - 3 * c + d) * u3);
+    }
+
     /// <summary>Se acabó: alguien ha puesto la ventana en un sitio a mano.</summary>
     public static void Termina()
     {
         if (!_andando) return;
         _andando = false;
         CompositionTarget.Rendering -= Cuadro;
-        _win = null; _ex = null; _ey = null;
+        _win = null; _ex = null; _ey = null; _ruta = null; _largos = null; _ritmo = null;
     }
 
     private static void Cuadro(object? sender, EventArgs e)
@@ -103,12 +241,26 @@ internal static class Vuelo
 
         try
         {
-            // El arco se abre y se cierra con un seno: cero en los dos extremos, máximo en medio.
-            // Va en tiempo REAL y no en el progreso de la curva, para que la panza quede en mitad
-            // del viaje y no amontonada al principio donde la curva corre más.
-            double panza = _arcoX == 0 && _arcoY == 0 ? 0 : Math.Sin(Math.PI * t);
-            win.Left = _x0 + (_x1 - _x0) * (_ex?.Ease(t) ?? t) + _arcoX * panza;
-            win.Top = _y0 + (_y1 - _y0) * (_ey?.Ease(t) ?? t) + _arcoY * panza;
+            if (_ruta != null)
+            {
+                // Arranca y termina suave, pero por el medio no frena: parar en cada parada es
+                // justo lo que convertía el recorrido en una lista de saltos.
+                // Arranca y termina suave, y por el medio manda el ritmo: aminora al pasar junto a
+                // cada parada sin llegar a detenerse.
+                double suave = t < 0.5 ? 2 * t * t : 1 - Math.Pow(-2 * t + 2, 2) / 2;
+                var p = EnLaRuta(CaminoEn(suave));
+                win.Left = p.X;
+                win.Top = p.Y;
+            }
+            else
+            {
+                // El arco se abre y se cierra con un seno: cero en los dos extremos, máximo en medio.
+                // Va en tiempo REAL y no en el progreso de la curva, para que la panza quede en mitad
+                // del viaje y no amontonada al principio donde la curva corre más.
+                double panza = _arcoX == 0 && _arcoY == 0 ? 0 : Math.Sin(Math.PI * t);
+                win.Left = _x0 + (_x1 - _x0) * (_ex?.Ease(t) ?? t) + _arcoX * panza;
+                win.Top = _y0 + (_y1 - _y0) * (_ey?.Ease(t) ?? t) + _arcoY * panza;
+            }
         }
         catch { ultimo = true; }   // ventana cerrándose: no hay a dónde mover nada
 
@@ -116,7 +268,12 @@ internal static class Vuelo
         {
             // Se aterriza EXACTO. Una curva con rebote no acaba clavada en el destino por sí sola —
             // acaba a una milésima—, y una ventana que se queda a un píxel del borde se ve.
-            try { win.Left = _x1; win.Top = _y1; } catch { }
+            try
+            {
+                if (_ruta != null) { win.Left = _ruta[^1].X; win.Top = _ruta[^1].Y; }
+                else { win.Left = _x1; win.Top = _y1; }
+            }
+            catch { }
             Termina();
         }
     }

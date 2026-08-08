@@ -151,6 +151,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // instante. Es la misma idea que el recuadro, dicha con el cuerpo (2026-08-05).
         Senalador.Senala += (caja, _) => Dispatcher.BeginInvoke(() => IrJuntoA(caja));
 
+        // VARIAS COSAS SE SEÑALAN RECORRIÉNDOLAS. Plantarse junto a una de las seis y quedarse ahí
+        // era el gesto de señalar UNA, heredado sin más al señalar varias: los recuadros decían seis
+        // y el cuerpo decía una (2026-08-07, pedido por el usuario). Ir a cada una es lo que hace
+        // una persona cuando enumera algo con la mano.
+        Senalador.SenalaVarias += cajas => Dispatcher.BeginInvoke(() => Recorrer(cajas));
+
         // Cuando se abre el catálogo de apps, la carita se pone JUSTO ENCIMA y centrada: es ella la
         // que está preguntando «¿cuál quieres que aprenda?», y una pregunta se hace de frente, no
         // desde una esquina. Al cerrarse vuelve a donde estaba.
@@ -791,11 +797,98 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void OnCollapsedHoverIn(object sender, System.Windows.Input.MouseEventArgs e)
     {
         PintarBotonVoz();   // que aparezca ya con el aspecto que toca, no con el de la vez anterior
-        VoiceDot.IsHitTestVisible = true;
-        VoiceDot.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(140))
+        VoiceDotGrupo.IsHitTestVisible = true;
+        VoiceDotGrupo.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(140))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
         });
+    }
+
+    // ── Las dos pastillas: de insinuación a botón ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Una pastilla crece hasta ser un botón cuando la mano va hacia ella, y vuelve al soltarla.
+    /// </summary>
+    /// <remarks>
+    /// Dos fases y no una: acercarse a la carita SUGIERE que hay algo —dos barritas mínimas—, y solo
+    /// acercarse a una de ellas la convierte en botón. Es lo que hace el Dock de macOS al ampliar el
+    /// icono bajo el cursor, y la forma es la del indicador de inicio de iOS: una barra redondeada
+    /// que no pide nada mientras no la mires.
+    ///
+    /// El truco de que no haya dos dibujos: el radio de esquina se queda fijo y grande, así que la
+    /// forma la decide el TAMAÑO. A 4x16 se lee pastilla, a 26x26 círculo, y entre medias es una
+    /// transición y no un cambio de estado. Un umbral se nota; esto no.
+    ///
+    /// Y el blanco del gesto mide 26x26 aunque la pastilla mida 4: acertarle a cuatro píxeles sería
+    /// puntería, no una interfaz.
+    /// </remarks>
+    private void CrecerPastilla(System.Windows.Shapes.Rectangle cuerpo,
+                                System.Windows.Media.SolidColorBrush fondo,
+                                UIElement icono, bool crece)
+    {
+        var suave = new CubicEase { EasingMode = crece ? EasingMode.EaseOut : EasingMode.EaseIn };
+        var dur = TimeSpan.FromMilliseconds(crece ? 160 : 200);
+
+        cuerpo.BeginAnimation(WidthProperty, new DoubleAnimation(crece ? 26 : AnchoPastilla, dur) { EasingFunction = suave });
+        cuerpo.BeginAnimation(HeightProperty, new DoubleAnimation(crece ? 26 : AltoPastilla, dur) { EasingFunction = suave });
+
+        // El radio viaja con el tamaño: barrita casi recta arriba, círculo abajo. Si se quedara
+        // fijo, o la barrita saldría ovalada o el botón saldría con esquinas de caja.
+        var radio = new DoubleAnimation(crece ? 13 : RadioPastilla, dur) { EasingFunction = suave };
+        cuerpo.BeginAnimation(System.Windows.Shapes.Rectangle.RadiusXProperty, radio);
+        cuerpo.BeginAnimation(System.Windows.Shapes.Rectangle.RadiusYProperty, radio);
+
+        // Y SE SEPARAN AL ABRIRSE. En reposo van casi pegadas —dos marcas de una misma cosa—; al
+        // convertirse en botones necesitan aire, porque ya no son una marca sino dos sitios donde
+        // pulsar, y dos botones pegados se pulsan mal. La separación viaja con la forma, así que no
+        // hay un instante en que se note el reajuste.
+        ZonaChat.BeginAnimation(MarginProperty, new ThicknessAnimation(
+            new Thickness(0, crece ? 7 : 1, 0, 0), dur) { EasingFunction = suave });
+        icono.BeginAnimation(OpacityProperty, new DoubleAnimation(crece ? 1 : 0,
+            TimeSpan.FromMilliseconds(crece ? 130 : 110)) { EasingFunction = suave });
+
+        // Y el color va con la forma: barrita clara sobre lo que haya detrás, botón oscuro con el
+        // icono en blanco. Animar el color y no cambiarlo de golpe es lo que evita el parpadeo.
+        fondo.BeginAnimation(System.Windows.Media.SolidColorBrush.ColorProperty, new ColorAnimation(
+            crece ? System.Windows.Media.Color.FromArgb(0xE6, 0x20, 0x20, 0x22) : ColorPastilla, dur));
+    }
+
+    // El reposo de la pastilla, en UN SITIO: lo pone el XAML al nacer y lo restaura la animación al
+    // encogerse, y si cada uno lleva su copia acaban discrepando — la pastilla nacería de un tamaño
+    // y volvería a otro después del primer hover, que es de esos fallos que solo se ven a la
+    // segunda vez (2026-08-07).
+    private const double AnchoPastilla = 4.5, AltoPastilla = 10, RadioPastilla = 2;
+
+    /// <summary>Gris apagado al 50 %: se ve que hay algo y no compite con la carita.</summary>
+    private static readonly System.Windows.Media.Color ColorPastilla =
+        System.Windows.Media.Color.FromArgb(0x80, 0xA8, 0xA8, 0xAE);
+
+    private void OnZonaVozEntra(object sender, System.Windows.Input.MouseEventArgs e)
+        => CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: true);
+
+    private void OnZonaVozSale(object sender, System.Windows.Input.MouseEventArgs e)
+        => CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: false);
+
+    private void OnZonaChatEntra(object sender, System.Windows.Input.MouseEventArgs e)
+        => CrecerPastilla(ChatCuerpo, ChatFondo, ChatIcono, crece: true);
+
+    private void OnZonaChatSale(object sender, System.Windows.Input.MouseEventArgs e)
+        => CrecerPastilla(ChatCuerpo, ChatFondo, ChatIcono, crece: false);
+
+    /// <summary>Pulsar la pastilla de voz es lo mismo que el doble clic en la cara: ni abre la barra
+    /// ni mueve nada, solo empieza (o cuelga) la conversación.</summary>
+    private void OnMicDesdePastilla(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;   // que el clic no llegue a la carita y le cuente como gesto
+        StartMicByFace();
+    }
+
+    /// <summary>Y la de abajo abre el globo para escribirle, que es la otra forma de hablarle.</summary>
+    private void OnChatDesdePastilla(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        PlayTick();
+        if (_talkOpen) HideTalk(); else ShowTalk(focusInput: true);
     }
 
     private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e) => EsconderBotonVoz();
@@ -820,8 +913,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         bool viva = _vivo?.Viva == true;
 
-        VoiceDot.Background = viva ? PincelVozViva : PincelVozQuieta;
-        VoiceDot.Foreground = viva ? System.Windows.Media.Brushes.Black : System.Windows.Media.Brushes.White;
+        // Con la conversación abierta, la pastilla de voz no espera a que te acerques: se queda
+        // encendida. Lo que está pasando ahora mismo no puede depender de dónde tengas el ratón.
+        if (viva && !ZonaVoz.IsMouseOver)
+            CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: true);
 
         if (!viva)
         {
@@ -841,24 +936,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         VoiceHaloEscala.ScaleX = VoiceHaloEscala.ScaleY = escala;
     }
 
-    private static readonly System.Windows.Media.Brush PincelVozQuieta = Congelar(0xE6, 0x20, 0x20, 0x22);
-    private static readonly System.Windows.Media.Brush PincelVozViva = Congelar(0xFF, 0xF2, 0xF2, 0xF4);
-
-    private static System.Windows.Media.Brush Congelar(byte a, byte r, byte g, byte b)
-    {
-        var p = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(a, r, g, b));
-        p.Freeze();
-        return p;
-    }
-
     private void EsconderBotonVoz()
     {
-        // El halo se va con el punto: es suyo, y quedarse latiendo solo sobre la carita sería otra
-        // cosa distinta de la que se quiso decir.
+        // Con la conversación abierta NO se esconde: mientras Ü escucha, esa pastilla es lo único
+        // que lo dice, y retirarla al apartar el ratón sería quitar la señal justo cuando importa.
+        if (_vivo?.Viva == true) return;
+
         VoiceHalo.BeginAnimation(OpacityProperty, null);
         VoiceHalo.Opacity = 0;
-        VoiceDot.IsHitTestVisible = false;
-        VoiceDot.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(180))
+        VoiceDotGrupo.IsHitTestVisible = false;
+        VoiceDotGrupo.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(180))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
         });
@@ -1212,6 +1299,85 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     //    salvo que esté fijado.
 
     private bool _menuOpen, _menuPinned;
+    private AtajoPorGolpes? _golpes;
+
+    // ── El panel de desarrollo, en el centro y por su cuenta ──────────────────────────────────
+
+    private Window? _panelSuelto;
+    private (HorizontalAlignment H, VerticalAlignment V, Thickness M)? _panelComoEstaba;
+
+    /// <summary>
+    /// Saca el panel a una ventana propia, centrada en la pantalla, y lo devuelve al cerrarlo.
+    /// </summary>
+    /// <remarks>
+    /// El panel nació pegado a la barra —era «la continuación de la barra»— y por eso abrirlo
+    /// obligaba a desplegar la barra entera. Pero desde que se pide con un atajo ya no es la
+    /// continuación de nada: es una herramienta que se convoca, y una herramienta que se convoca
+    /// aparece donde estás mirando, que es el centro (2026-08-07, pedido por el usuario).
+    ///
+    /// Se REAPROVECHA el mismo control, no se hace una copia: se saca de su sitio y se mete en la
+    /// ventana nueva. Duplicar el panel significaría mantener dos, y el día que alguien añada un
+    /// botón lo añadirá en uno solo. Todos los manejadores y los nombres siguen apuntando al mismo
+    /// objeto, así que lo de dentro sigue funcionando sin tocar una línea.
+    /// </remarks>
+    private void AlternarPanelDesarrollo()
+    {
+        if (_panelSuelto != null) { CerrarPanelDesarrollo(); return; }
+
+        _panelComoEstaba = (MenuPanel.HorizontalAlignment, MenuPanel.VerticalAlignment, MenuPanel.Margin);
+        RootPanel.Children.Remove(MenuPanel);
+        MenuPanel.HorizontalAlignment = HorizontalAlignment.Center;
+        MenuPanel.VerticalAlignment = VerticalAlignment.Center;
+        MenuPanel.Margin = new Thickness(0);
+        MenuPanel.Visibility = Visibility.Visible;
+
+        _panelSuelto = new Window
+        {
+            Title = "Ü",
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = System.Windows.Media.Brushes.Transparent,
+            ShowInTaskbar = false,
+            Topmost = true,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            ResizeMode = ResizeMode.NoResize,
+            Content = MenuPanel,
+        };
+        // Que quepa: si el panel crece más que la pantalla, quien cede es su scroll interno.
+        MenuPanel.MaxHeight = SystemParameters.WorkArea.Height * 0.86;
+        _panelSuelto.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Escape) CerrarPanelDesarrollo(); };
+        _panelSuelto.Show();
+
+        // Centrar DESPUÉS de mostrarlo: hasta que no se mide, no se sabe cuánto ocupa.
+        var wa = SystemParameters.WorkArea;
+        _panelSuelto.Left = wa.Left + (wa.Width - _panelSuelto.ActualWidth) / 2;
+        _panelSuelto.Top = wa.Top + (wa.Height - _panelSuelto.ActualHeight) / 2;
+        _panelSuelto.Activate();
+    }
+
+    private void CerrarPanelDesarrollo()
+    {
+        if (_panelSuelto == null) return;
+
+        var ventana = _panelSuelto;
+        _panelSuelto = null;
+        ventana.Content = null;
+        try { ventana.Close(); } catch { }
+
+        // De vuelta a su sitio y con su forma de antes: la ventana de la carita lo espera en su
+        // fila, y dejarlo con la alineación del centro lo descolocaría la próxima vez.
+        MenuPanel.MaxHeight = double.PositiveInfinity;
+        MenuPanel.Visibility = Visibility.Collapsed;
+        if (_panelComoEstaba is { } antes)
+        {
+            MenuPanel.HorizontalAlignment = antes.H;
+            MenuPanel.VerticalAlignment = antes.V;
+            MenuPanel.Margin = antes.M;
+            _panelComoEstaba = null;
+        }
+        if (!RootPanel.Children.Contains(MenuPanel)) RootPanel.Children.Add(MenuPanel);
+    }
     private bool _backendOpen, _backendPinned;
     private bool _talkOpen;
     private System.Windows.Threading.DispatcherTimer _menuOpenTimer = null!,
@@ -1241,13 +1407,25 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             if (_backendOpen && !_backendPinned && !BackendZone.IsMouseOver) CloseBackend();
         };
 
-        // Activador: hover abre, clic fija/cierra, el foco de teclado también abre (accesible sin ratón).
-        MenuActivator.MouseEnter += (_, __) => { _menuOpenTimer.Stop(); _menuOpenTimer.Start(); };
-        MenuActivator.MouseLeave += (_, __) => _menuOpenTimer.Stop();
-        MenuActivator.Click += (_, __) => { if (_menuOpen && _menuPinned) CloseMenu(); else OpenMenu(pin: true); };
-        // Abrir al recibir el foco, PERO no con el foco inicial que WPF reparte al cargar: sin esta
-        // compuerta el menú aparecía abierto solo con arrancar la app (visto en la primera corrida).
-        MenuActivator.GotKeyboardFocus += (_, __) => { if (_uiReady) OpenMenu(pin: false); };
+        // EL PANEL YA NO CUELGA DE LA FLECHA. Lo que hay dentro —ejecutar workflows, ensayo en seco,
+        // paso a paso, la consulta del portal, el backend— son herramientas de DESARROLLO, y estaban
+        // a un hover de distancia de quien solo quiere hablar con Ü: bastaba rozar la barra para que
+        // se desplegara media pantalla de controles que esa persona no va a usar nunca
+        // (2026-08-06). Ahora se pide a propósito, con Ctrl+Shift dos veces seguidas.
+        //
+        // La flecha se queda para lo que ya hacía por sí sola: decir hacia dónde crecería el panel.
+        MenuActivator.Visibility = Visibility.Collapsed;
+
+        // Ctrl+Shift dos veces seguidas abre y cierra el panel. Global: se puede pedir sin soltar la
+        // aplicación en la que se esté trabajando, que es cuando de verdad hace falta.
+        // Ninguno de los dos convierte la carita en barra: la carita se queda como está y lo que se
+        // pidió aparece por su cuenta. Abrir el micrófono es EXACTAMENTE lo del doble clic sobre la
+        // cara —el mismo gesto, dicho con el teclado— y el panel es una ventana aparte, centrada
+        // (2026-08-07, pedido por el usuario).
+        _golpes = new AtajoPorGolpes(
+            soloCtrl: () => Dispatcher.BeginInvoke(() => StartMicByFace()),
+            ctrlShift: () => Dispatcher.BeginInvoke(() => AlternarPanelDesarrollo()));
+        Closed += (_, __) => { _golpes?.Dispose(); CerrarPanelDesarrollo(); };
 
         // Zona segura: menú y barra cancelan el cierre al entrar y lo agendan al salir.
         MenuPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
@@ -2248,7 +2426,44 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// se está diciendo «mira esto» sería la peor forma de señalarlo. La caja llega en píxeles
     /// físicos —como los da UIA— y se convierte aquí, porque el escalado lo sabe la ventana.
     /// </summary>
+    /// <summary>Cuando se señalan varias, el aviso de «una» llega detrás y no debe pisar el recorrido.</summary>
+    private bool _recorridoReciénLanzado;
+
     private void IrJuntoA(Rect fisico)
+    {
+        if (JuntoA(fisico) is not { } sitio) return;
+
+        // SEÑALAR VARIAS EMITE LAS DOS SEÑALES. Senalador avisa de «estas seis» y acto seguido de
+        // «la principal es esta», y las dos llegan a la carita: el recorrido arrancaba y el aviso
+        // siguiente lo sustituía por un viaje corriente a la primera. Desde fuera parecía que el
+        // recorrido no se había implementado (2026-08-07). Los ojos sí miran; lo que se ignora es
+        // el movimiento, que ya lo lleva la ruta.
+        if (_recorridoReciénLanzado) _recorridoReciénLanzado = false;
+        else MoverConMuelle(sitio.X, sitio.Y);
+
+        // Y los ojos hacia él: si la carita quedó a su derecha, mira a la izquierda.
+        try
+        {
+            var m = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice
+                    ?? System.Windows.Media.Matrix.Identity;
+            var tl = m.Transform(new Point(fisico.X, fisico.Y));
+            var br = m.Transform(new Point(fisico.Right, fisico.Bottom));
+            double ancho = ActualWidth > 0 ? ActualWidth : 160;
+            CollapsedFace?.MirarHacia((tl.X + br.X) / 2 < sitio.X + ancho / 2);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// DÓNDE SE PONE la carita para señalar algo. Solo lo calcula; no la mueve.
+    /// </summary>
+    /// <remarks>
+    /// Separado de <see cref="IrJuntoA"/> porque hay dos formas de usarlo y solo una mueve: señalar
+    /// una cosa va y se planta, y señalar varias necesita SABER los sitios de todas antes de salir,
+    /// para trazar un camino que pase por ellos. Si el cálculo viviera dentro del movimiento, el
+    /// recorrido tendría que ir parándose para preguntar (2026-08-07).
+    /// </remarks>
+    private Point? JuntoA(Rect fisico)
     {
         try
         {
@@ -2279,13 +2494,81 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             double y = tl.Y + ((br.Y - tl.Y) / 2) - (alto / 2);      // centrada con el elemento
             y = Math.Max(area.Top, Math.Min(y, area.Bottom - alto));
 
-            MoverConMuelle(x, y);
-
-            // Y los ojos hacia él: si la carita quedó a su derecha, mira a la izquierda.
-            bool aLaIzquierda = (tl.X + br.X) / 2 < x + (ancho / 2);
-            try { CollapsedFace?.MirarHacia(aLaIzquierda); } catch { }
+            return new Point(x, y);
         }
-        catch { }
+        catch { return null; }
+    }
+
+    private int _recorrido;   // cada recorrido nuevo invalida el anterior
+
+    /// <summary>
+    /// Va PASANDO por todas las cosas señaladas, una tras otra, en vez de plantarse junto a la
+    /// primera.
+    /// </summary>
+    /// <remarks>
+    /// Señalar seis cosas y quedarse junto a una es decir dos cosas distintas a la vez: los
+    /// recuadros dicen seis y el cuerpo dice una. Recorrerlas es lo que hace una persona cuando
+    /// enumera algo con la mano — y de paso convierte una lista en algo que se puede seguir con la
+    /// mirada, que es justo lo que no se puede hacer con seis recuadros encendidos de golpe.
+    ///
+    /// Se para en cada una lo justo para que se lea, y se acaba en la primera: es la que manda —la
+    /// que <see cref="Senalador"/> considera la principal— y dejar la carita en la última sería
+    /// terminar señalando algo que no es el asunto.
+    ///
+    /// Cada recorrido nuevo cancela el anterior por número de serie y no por una bandera: si el
+    /// asistente señala otra cosa a mitad de camino, el recorrido viejo tiene que morir en silencio,
+    /// no pelearse por mover la ventana.
+    /// </remarks>
+    private void Recorrer(IReadOnlyList<Rect> cajas)
+    {
+        if (cajas.Count <= 1) return;   // una sola ya la lleva IrJuntoA
+
+        _recorrido++;
+
+        // TODAS, sin recortar. Antes se enseñaban seis por miedo a que fuera largo, y eso mentía:
+        // se marcaban treinta recuadros y el cuerpo visitaba seis. Lo que hacía largo el recorrido
+        // no era el número de paradas, era pararse en cada una — resuelto yendo de un tirón
+        // (2026-08-07). Lo que sí se acota es el TIEMPO, no el contenido.
+        var paradas = new List<Point>();
+        foreach (var caja in cajas)
+        {
+            if (JuntoA(caja) is { } sitio) paradas.Add(sitio);
+        }
+        if (paradas.Count == 0) return;
+
+        // EL ORDEN EN QUE LLEGAN NO ES UN ORDEN. Las cosas se señalan pasando el ratón por encima,
+        // y eso se hace en desorden —arriba, abajo, otra vez arriba—, así que recorrerlas en ese
+        // orden producía un zigzag que no se lee como mirar nada. Ese desorden es el comportamiento
+        // normal de quien señala y no va a cambiar: quien tiene que ordenar es esto (2026-08-07).
+        //
+        // Se ordenan por el eje en el que están REPARTIDAS: una columna se recorre de arriba abajo y
+        // una fila de izquierda a derecha, que es como se mira una lista.
+        double anchoTotal = paradas.Max(p => p.X) - paradas.Min(p => p.X);
+        double altoTotal = paradas.Max(p => p.Y) - paradas.Min(p => p.Y);
+        paradas = (altoTotal >= anchoTotal
+            ? paradas.OrderBy(p => p.Y).ThenBy(p => p.X)
+            : paradas.OrderBy(p => p.X).ThenBy(p => p.Y)).ToList();
+
+        // Y SE EMPIEZA POR EL EXTREMO QUE PILLA MÁS CERCA. Ir hasta la otra punta para empezar desde
+        // allí es un viaje que no dice nada; salir de donde ya se está y terminar en el extremo
+        // contrario recorre lo mismo sin el paseo previo.
+        var desdeAqui = new Point(Left, Top);
+        if ((paradas[^1] - desdeAqui).Length < (paradas[0] - desdeAqui).Length) paradas.Reverse();
+
+        // No se vuelve a la primera: se termina donde termina la lista. Volver al principio
+        // convertía el recorrido en un circuito, y lo que se está diciendo es «de aquí hasta aquí».
+
+        double largo = 0;
+        for (int i = 1; i < paradas.Count; i++)
+            largo += (paradas[i] - paradas[i - 1]).Length;
+
+        // TRANQUILO. El tiempo sale de la distancia Y del número de paradas, porque cada cosa mirada
+        // pide su momento aunque esté pegada a la anterior: solo con la distancia, seis elementos de
+        // una barra lateral se despachaban en menos de un segundo y no daba tiempo a leer nada.
+        var dur = TimeSpan.FromMilliseconds(
+            Math.Clamp(500 + largo * 0.55 + paradas.Count * 260, 900, 8000));
+        _recorridoReciénLanzado = true;
+        Vuelo.Recorrido(this, paradas, dur);
     }
 
     /// <summary>Dónde estaba antes de irse a presidir algo. Vacío = no se ha movido.</summary>

@@ -64,6 +64,10 @@ public sealed class GraphExplorerWindow : Window
     /// <summary>La tira de niveles del borde derecho: una app por nivel. Ver <see cref="DibujarNiveles"/>.</summary>
     private StackPanel _niveles = null!;
 
+    /// <summary>La tira de versiones del núcleo, borde izquierdo. Ver <see cref="DibujarVersiones"/>.</summary>
+    private StackPanel _versionesNucleo = null!;
+    private DateTime _versionesVistas = DateTime.MinValue;
+
     /// <summary>Se enciende en ámbar mientras la capa acepta el ratón (Ctrl+Shift).</summary>
     private Border _marco = null!;
     private readonly System.Windows.Threading.DispatcherTimer _refresh;
@@ -73,7 +77,12 @@ public sealed class GraphExplorerWindow : Window
     private Button _carruselBtn = null!;
     private Button _limpiarBtn = null!;
     private Button _pasoBtn = null!;
+    private Button _olvidarBtn = null!;
+    private Button _arquitectoBtn = null!;
     private CarruselDeApps? _carrusel;
+
+    /// <summary>¿Mapea el arquitecto en vez del recorredor mecánico? Lo enciende el botón 🧠.</summary>
+    private bool _conArquitecto;
 
     /// <summary>
     /// Borra el grafo entero, preguntando antes. Borrar lo aprendido no se deshace.
@@ -81,13 +90,35 @@ public sealed class GraphExplorerWindow : Window
     private void LimpiarGrafo()
     {
         var r = MessageBox.Show(
-            "Se va a borrar TODO lo aprendido: pantallas, puertas y niveles, de todas las "
-            + "aplicaciones.\n\nEsto no se puede deshacer. ¿Empezamos de cero?",
+            "Se va a borrar el TERRENO: pantallas, puertas y recorrido, de todas las aplicaciones."
+            + "\n\nLo ENSEÑADO (las jerarquías de primer nivel) NO se toca: vive aparte y sobrevive."
+            + "\n\nEsto no se puede deshacer. ¿Empezamos de cero?",
             "Borrar el grafo", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
         if (r != MessageBoxResult.Yes) return;
+        BorrarTerreno();
+    }
 
+    /// <summary>
+    /// Borrar el terreno sin preguntar. Lo enseñado NO se toca — vive en otro archivo y
+    /// <see cref="SurfaceMap.OlvidarTodo"/> no lo mira.
+    ///
+    /// Existe separado del botón porque las pruebas del núcleo empiezan con el grafo a cero y no
+    /// pueden pararse a preguntar en cada una: un diálogo por escenario convierte una prueba
+    /// automática en un cuestionario (2026-08-08).
+    /// </summary>
+    private void BorrarTerreno()
+    {
         var (nodos, aristas) = _map.OlvidarTodo();
         _ultimaCorrida.Clear();
+
+        // Y LOS SITIOS PISADOS. El dibujo se alimenta de TRES sitios, no de dos: el mapa, la traza
+        // del recorrido y esta lista de «por aquí ya pasé». Se limpiaban los dos primeros, así que
+        // tras borrar desaparecían las conexiones y los niveles de la derecha —vienen de la traza—
+        // pero los nodos seguían ahí, y todos a la misma altura, porque sin aristas nadie les
+        // asigna profundidad. Se veía como que el borrado no llegaba a los nodos, y en realidad
+        // llegaba: los que se veían eran los de esta lista (2026-08-06, observado por el usuario).
+        _vistos.Clear();
+
         _nodoActual = "";
         _numeradas.Clear();
         _signature = "";              // que el repintado no se salte por «nada ha cambiado»
@@ -249,13 +280,29 @@ public sealed class GraphExplorerWindow : Window
         // quedó ahí cuando esa lista se convirtió en puntos sobre la pantalla, así que el grafo
         // seguía apretado en media pantalla sin que nada ocupara la otra mitad (2026-08-04).
         // Solo la tira de niveles conserva su sitio, porque su sitio ES el borde.
+        // LAS VERSIONES DEL NÚCLEO, pegadas al borde IZQUIERDO: el espejo de los niveles. La tira
+        // derecha responde «¿en qué terreno estoy?»; esta responde «¿con qué NÚCLEO lo estoy
+        // pisando?». Un clic salta a otra versión precompilada — así probar un cambio del grafo o
+        // volver a la v0 que funcionaba cuesta lo mismo que cambiar de app (2026-08-08, pedido por
+        // el usuario). Ver NucleoVersiones.
+        _versionesNucleo = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Margin = new Thickness(0, 0, 6, 0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
         var derecha = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
+        derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(_grafo, 0);
-        Grid.SetColumn(_niveles, 1);
+        Grid.SetColumn(_versionesNucleo, 0);
+        Grid.SetColumn(_grafo, 1);
+        Grid.SetColumn(_niveles, 2);
         _lienzo.HorizontalAlignment = HorizontalAlignment.Center;
         _lienzo.VerticalAlignment = VerticalAlignment.Center;
+        derecha.Children.Add(_versionesNucleo);
         derecha.Children.Add(_grafo);
         derecha.Children.Add(_niveles);
 
@@ -344,11 +391,68 @@ public sealed class GraphExplorerWindow : Window
                 : "paso a paso apagado";
         };
 
+        // QUIÉN MAPEA: el recorredor mecánico o el ARQUITECTO. Son dos formas de la misma tarea y
+        // por eso comparten el punto de entrada —el botón de mapear y el catálogo de apps— en vez
+        // de tener uno cada uno: quien elige una app quiere que se aprenda, y esto decide CÓMO.
+        //
+        // El mecánico agota lo que ve, es gratis y no juzga. El arquitecto navega con criterio,
+        // contrasta la jerarquía real con la del grafo y deja hallazgos escritos — pero cuesta
+        // tokens y tarda. Por eso se elige, y no se sustituye uno por otro (2026-08-08, pedido por
+        // el usuario: «el arquitecto debería correr en el punto donde corre el crawler»).
+        _arquitectoBtn = new Button
+        {
+            Content = "🧠",
+            Width = 26, Height = 26, FontSize = 12,
+            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Mapear con el ARQUITECTO (agente que navega y contrasta) en vez del recorredor mecánico",
+        };
+        _arquitectoBtn.Click += (_, __) =>
+        {
+            var (puede, porque) = Navigation.Arquitecto.Disponible();
+            if (!_conArquitecto && !puede) { _status.Text = porque; return; }
+            _conArquitecto = !_conArquitecto;
+            _arquitectoBtn.Background = new SolidColorBrush(_conArquitecto
+                ? Color.FromArgb(0x66, 0x64, 0xB5, 0xF6) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+            _status.Text = _conArquitecto
+                ? "mapeo con ARQUITECTO: navegará con criterio y dejará su informe"
+                : "mapeo mecánico: el recorredor agota lo que ve";
+        };
+
         var iconos = new StackPanel { Orientation = Orientation.Horizontal };
         iconos.Children.Add(_collapseBtn);
         iconos.Children.Add(_crawlBtn);
         iconos.Children.Add(_carruselBtn);
+        iconos.Children.Add(_arquitectoBtn);
+        // OLVIDAR LO ENSEÑADO es distinto de borrar el grafo, y por eso es otro botón: el grafo es
+        // terreno y se tira entero sin pena; la jerarquía es aprendizaje, sobrevive al borrado, y
+        // se elige por aplicación —enseñar bien el explorador no es motivo para perder lo que se
+        // aprendió del navegador (2026-08-06, pedido por el usuario).
+        _olvidarBtn = new Button
+        {
+            Content = "🎓",
+            Width = 26, Height = 26, FontSize = 12,
+            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Olvidar la jerarquía aprendida, por aplicación",
+        };
+        _olvidarBtn.Click += (_, __) =>
+        {
+            var v = new OlvidarJerarquias(_map);
+            v.Olvidado += () => { _signature = ""; RefreshEdges(); DibujarGrafo(); };
+            v.Show();
+        };
+
         iconos.Children.Add(_limpiarBtn);
+        iconos.Children.Add(_olvidarBtn);
         iconos.Children.Add(_pasoBtn);
 
         _barra = new Border
@@ -676,9 +780,26 @@ public sealed class GraphExplorerWindow : Window
     }
 
     private string _ultimoProcPintado = "";
+    private int _versionDibujada = -1;
+    private Dictionary<string, int> _profDeclarada = new(StringComparer.OrdinalIgnoreCase);
+    private string _huellaEstructura = "";
+    private string _huellaPuente = "";
+    private readonly Dictionary<string, string> _porQueDeclarado = new(StringComparer.OrdinalIgnoreCase);
 
     private void Render(string proc, List<UiaReader.UiElement> els)
     {
+        // EL GRAFO SE REESTRUCTURA CUANDO CAMBIA EL MAPA. Marcar algo como primer nivel cambia la
+        // ESTRUCTURA, no la pantalla: los mismos elementos siguen en el mismo sitio, así que la
+        // firma del repintado no cambiaba y el grafo seguía enseñando la jerarquía vieja —con los
+        // recién ascendidos colgando de donde se descubrieron— hasta que algo más lo forzara
+        // (2026-08-06, pedido por el usuario). La versión del mapa sí cambia: se sigue esa.
+        if (_map.Version != _versionDibujada)
+        {
+            _versionDibujada = _map.Version;
+            _signature = "";
+            if (_graphView) DibujarGrafo();
+        }
+
         // La traza va ANTES del primer return, no después: puesta después no distinguía «no se
         // pintó» de «se pintó y no lo conté», que es exactamente lo que hizo falta saber cuando la
         // lección abortaba por falta de números y no aparecía ni una línea (2026-08-06).
@@ -756,7 +877,15 @@ public sealed class GraphExplorerWindow : Window
             // Que dos puertas se llamen igual es normal; que la app se caiga por ello, no.
             ? _map.ExitsFrom(aqui).Where(h => h.Info.Selector.Length > 0)
                   .GroupBy(h => h.Info.Label, StringComparer.OrdinalIgnoreCase)
-                  .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase)
+                  // GANA LA CORRECCIÓN HUMANA, no la aparición que llegue primero. Una misma salida
+                  // sale varias veces —la de esta pantalla y la heredada del nivel—, y quedarse con
+                  // la primera hacía que una copia recién observada tapara la que el usuario había
+                  // marcado: el punto volvía a verde (2026-08-06).
+                  .ToDictionary(g => g.Key,
+                                g => g.OrderByDescending(h => h.Info.PorPersona)
+                                      .ThenByDescending(h => h.Info.NivelFijado)
+                                      .First(),
+                                StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, SurfaceMap.Hop>(StringComparer.OrdinalIgnoreCase);
 
         // LA POSICIÓN FORMA PARTE DE LO QUE HAY QUE REDIBUJAR. La firma llevaba solo nombres y
@@ -808,12 +937,23 @@ public sealed class GraphExplorerWindow : Window
             // maestro y qué la deducción (2026-08-06, observado por el usuario). Mientras se mide la
             // enseñanza, solo se pinta de azul lo que alguien dijo a mano.
             bool aMano = sabida && salida!.Info.NivelFijado;
-            bool primerNivel = sabida && salida!.Info.NivelNav == 1
+            // AZUL = CROMO, en el nivel que sea. Antes azul y nivel 1 eran lo mismo, y una web con
+            // barra de cromo dentro de cada sección (cromo de nivel 2) lo desmintió: el nivel dice
+            // dónde vive, el cromo dice qué es (2026-08-07, observado por el usuario).
+            bool primerNivel = sabida && salida!.Info.EsCromo
                                && (aMano || !SurfaceMap.SoloLoDeclarado);
 
+            // «Sin explorar» era engañoso: el gris no dice que falte cruzarla, dice que el MAPA aún
+            // no la tiene anotada —los puntos leen la pantalla y el mapa anota aparte—. Y como el
+            // estado se lee para decidir qué se puede hacer con el elemento, tiene que decir la
+            // verdad: se puede pulsar igual, y fijarle el nivel la anota sola (2026-08-07).
             string descripcion = el.Label
-                + (sabida ? $"  ⇒  {Corto(salida!.To)}" : $"  ({el.ControlType}, sin explorar)")
-                + (primerNivel ? "  ·  nivel 1" : "")
+                + (sabida
+                    ? (SurfaceMap.EsPuerta(salida!.To)
+                        ? "  ·  puerta conocida, sin cruzar todavía"
+                        : $"  ⇒  {Corto(salida!.To)}")
+                    : $"  ({el.ControlType})  ·  aún no está en el mapa; se anota al usarla")
+                + (primerNivel ? $"  ·  CROMO (nivel {salida!.Info.NivelNav})" : "")
                 + (aMano ? " (fijado a mano)" : "");
 
             // EL NÚMERO ES EL PUENTE ENTRE VER Y ACCIONAR. Cuando un modelo de visión mira la
@@ -1118,6 +1258,26 @@ public sealed class GraphExplorerWindow : Window
                     ok = true;
                 }
             }
+            else if (nivel.Contains('.') && !nivel.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                // UN NIVEL WEB ES UN DOMINIO, NO UN PROCESO. Buscar un proceso llamado «canva.com»
+                // no encuentra nada y el clic no hacía nada visible: la página vive DENTRO del
+                // navegador —es un subnivel suyo— y la forma de «ir» a un dominio es abrirlo como
+                // URL, que además llega a la página y no solo al navegador (2026-08-07, observado
+                // por el usuario probando el clic como lo haría el asistente).
+                //
+                // PRIMERO LO QUE YA ESTÁ ABIERTO. Abrir siempre una pestaña nueva no es ir al sitio:
+                // es fabricar una segunda copia y dejar atrás lo que el usuario tuviera a medias en
+                // la primera (2026-08-07, observado por él con GitHub ya abierto). Abrir es el plan
+                // B, para cuando de verdad no está en ninguna parte. Ver PestanasAbiertas.
+                ok = Uia.PestanasAbiertas.IrA(nivel);
+                if (!ok)
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://" + nivel)
+                    { UseShellExecute = true });
+                    ok = true;
+                }
+            }
             else
             {
                 // Se busca su ventana y se trae con el enganche; FocusOrLaunch solo como respaldo
@@ -1193,6 +1353,533 @@ public sealed class GraphExplorerWindow : Window
     /// y deja claro que pasar de un nivel a otro no es pulsar una arista más: es abrir otra
     /// aplicación, o su icono en la barra de tareas (2026-08-04).
     /// </summary>
+    /// <summary>
+    /// La tira de versiones del núcleo: v0, v1, v2… y «dev» si este binario no es ninguna.
+    ///
+    /// La que CORRE va encendida en ámbar (como «estás aquí» en los niveles); la que está EN
+    /// EDICIÓN lleva el lápiz — esa es la única cuyo código puede tocar el agente, con contraseña.
+    /// Pulsar otra versión salta a su binario precompilado al instante; no se compila nada al
+    /// pulsar. Una versión sin binario se dibuja apagada y el clic lo dice en vez de fingir.
+    /// </summary>
+    private void DibujarVersiones()
+    {
+        // Se redibuja solo si algo cambió: esto corre en cada latido del refresco. La huella
+        // incluye la carpeta de escenarios porque el ▶ existe solo si hay pruebas — grabar la
+        // primera tiene que hacerlo aparecer sin esperar a que cambie el registro de versiones.
+        var huella = NucleoVersiones.UltimoCambio();
+        try
+        {
+            if (System.IO.Directory.Exists(EscenarioCi.Carpeta))
+            {
+                var h2 = System.IO.Directory.GetLastWriteTimeUtc(EscenarioCi.Carpeta);
+                if (h2 > huella) huella = h2;
+            }
+        }
+        catch { }
+        if (huella == _versionesVistas && _versionesNucleo.Children.Count > 0) return;
+        _versionesVistas = huella;
+        _versionesNucleo.Children.Clear();
+
+        var todas = NucleoVersiones.Todas();
+        if (todas.Count == 0) return;   // sin registro no hay tira: nada que elegir
+
+        int? actual = NucleoVersiones.Actual();
+        int enEdicion = NucleoVersiones.EnEdicion();
+
+        _versionesNucleo.Children.Add(new TextBlock
+        {
+            Text = "NÚCLEO",
+            Foreground = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+            FontSize = 8, FontWeight = FontWeights.Bold, FontFamily = new FontFamily("Consolas"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 4),
+        });
+
+        foreach (var v in todas)
+        {
+            bool aqui = actual == v.N;
+            bool editando = enEdicion == v.N;
+
+            var pastilla = new Border
+            {
+                Width = 26, Height = 26,
+                Cursor = v.Construida ? Cursors.Hand : Cursors.No,
+                CornerRadius = new CornerRadius(13),
+                Margin = new Thickness(0, 3, 0, 3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Background = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0x66, 0xFF, 0xB3, 0x00)
+                    : Color.FromArgb(v.Construida ? (byte)0x28 : (byte)0x12, 0xFF, 0xFF, 0xFF)),
+                // El lápiz de «en edición» se dice con el borde: punteado no hay en Border, así que
+                // azul clarito — distinto del ámbar de «corriendo», y pueden coincidir.
+                BorderBrush = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)
+                    : editando ? Color.FromArgb(0xCC, 0x64, 0xB5, 0xF6)
+                               : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(aqui || editando ? 2 : 1),
+                ToolTip = $"núcleo v{v.N}"
+                        + (v.Nota.Length > 0 ? $" · {v.Nota}" : "")
+                        + (aqui ? " · CORRIENDO AHORA" : "")
+                        + (editando ? " · en edición (la única que el agente puede tocar)" : "")
+                        + (v.Construida ? (aqui ? "" : " · clic para saltar a esta versión")
+                                        : " · SIN COMPILAR: scripts\\version-nucleo.ps1 -Construir"),
+            };
+            pastilla.Child = new TextBlock
+            {
+                Text = editando ? $"{v.N}✏" : v.N.ToString(),
+                Foreground = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF)
+                    : Color.FromArgb(v.Construida ? (byte)0x99 : (byte)0x44, 0xFF, 0xFF, 0xFF)),
+                FontSize = editando ? 9 : 11, FontWeight = FontWeights.Bold,
+                FontFamily = new FontFamily("Consolas"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            var destino = v;
+            pastilla.MouseLeftButtonUp += (_, __) =>
+            {
+                if (actual == destino.N) return;   // ya estamos en esta
+                if (!destino.Construida)
+                {
+                    _status.Text = $"v{destino.N} no está compilada: córrele scripts\\version-nucleo.ps1 -Construir {destino.N}";
+                    return;
+                }
+                _status.Text = $"saltando al núcleo v{destino.N}…";
+                NucleoVersiones.SaltarA(destino);
+            };
+
+            // BORRAR CON CLIC DERECHO Y CONFIRMACIÓN. Las versiones se crean para experimentar, así
+            // que también hay que poder tirarlas: un cementerio de v2..v9 hace ilegible la tira, que
+            // es justo lo que venía a resolver. Se confirma nombrando la versión y su nota, porque
+            // borrar es lo único de esta tira que no se deshace.
+            pastilla.MouseRightButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                // La v0 ni siquiera abre el diálogo: ofrecer una confirmación para algo que se va
+                // a negar es hacer perder un clic y la confianza. El motor además lo rechaza
+                // (NucleoVersiones.Borrar), pero la negativa se da aquí, a la primera.
+                if (destino.N == 0)
+                {
+                    _status.Text = "la v0 es la original congelada: es el suelo al que se vuelve, no se borra";
+                    return;
+                }
+                var r = MessageBox.Show(
+                    $"¿Borrar la versión v{destino.N} del núcleo?"
+                    + (destino.Nota.Length > 0 ? $"\n\n«{destino.Nota}»" : "")
+                    + "\n\nSe van su registro, sus binarios y su instantánea de código.\nEsto no se deshace.",
+                    $"Borrar núcleo v{destino.N}", MessageBoxButton.YesNo, MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+                if (r != MessageBoxResult.Yes) return;
+
+                var (ok, porque) = NucleoVersiones.Borrar(destino.N);
+                _status.Text = porque;
+                _versionesVistas = DateTime.MinValue;   // fuerza el redibujo
+                DibujarVersiones();
+            };
+            _versionesNucleo.Children.Add(pastilla);
+        }
+
+        // EL «+»: una versión nueva desde la que está en edición. Experimentar tiene que costar un
+        // clic, porque si cuesta más se acaba experimentando encima de lo que funciona — que es
+        // justo lo que las versiones vienen a evitar (2026-08-08, pedido por el usuario).
+        var mas = new Border
+        {
+            Width = 26, Height = 26, Cursor = Cursors.Hand,
+            CornerRadius = new CornerRadius(13),
+            Margin = new Thickness(0, 6, 0, 3),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Background = new SolidColorBrush(Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
+            ToolTip = "nueva versión del núcleo desde la que está en edición · compila y pasa el contrato (tarda un minuto)",
+            Child = new TextBlock
+            {
+                Text = "+",
+                Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
+                FontSize = 14, FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+        mas.MouseLeftButtonUp += (_, __) => CrearVersionNucleo();
+        _versionesNucleo.Children.Add(mas);
+
+        // ▶ CORRER LAS PRUEBAS GUARDADAS, aquí y no en una terminal: la pregunta que responden es
+        // «¿este núcleo, el que está corriendo ahora, sostiene lo que ya funcionaba?», y esa
+        // pregunta se hace mirando la tira, que es donde se ve qué núcleo está puesto.
+        var escenarios = EscenarioCi.Todos();
+        if (escenarios.Count > 0)
+        {
+            var play = new Border
+            {
+                Width = 26, Height = 26, Cursor = Cursors.Hand,
+                CornerRadius = new CornerRadius(13),
+                Margin = new Thickness(0, 3, 0, 3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Background = new SolidColorBrush(Color.FromArgb(0x33, 0x66, 0xBB, 0x6A)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x88, 0x66, 0xBB, 0x6A)),
+                BorderThickness = new Thickness(1),
+                ToolTip = $"probar este núcleo contra {escenarios.Count} prueba(s) guardada(s): "
+                        + string.Join(", ", escenarios.Select(x => x.App))
+                        + " · usa la pantalla de verdad, no toques el ratón mientras corre",
+                Child = new TextBlock
+                {
+                    Text = "▶",
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)),
+                    FontSize = 11,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            };
+            play.MouseLeftButtonUp += (_, __) =>
+                Dispatcher.BeginInvoke(new Action(async () => await CorrerPruebasAsync()));
+
+            // CLIC DERECHO: borrar pruebas guardadas. Desmarcadas por defecto —al contrario que al
+            // correr— porque borrar pide señalar qué, no quitar de una lista de condenadas.
+            play.MouseRightButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    var borrar = await ElegirEscenariosAsync(EscenarioCi.Todos(),
+                        "¿Qué pruebas guardadas se borran?", "Borrar las marcadas", marcadasPorDefecto: false);
+                    if (borrar == null || borrar.Count == 0) return;
+                    var r = MessageBox.Show(
+                        "Se van a borrar estas pruebas:\n\n  · " + string.Join("\n  · ", borrar.Select(x => x.App))
+                        + "\n\nVolver a tenerlas cuesta mapear cada app otra vez. ¿Seguimos?",
+                        "Borrar pruebas de CI", MessageBoxButton.YesNo, MessageBoxImage.Warning,
+                        MessageBoxResult.No);
+                    if (r != MessageBoxResult.Yes) return;
+                    int fuera = borrar.Count(x => EscenarioCi.Olvidar(x.App));
+                    _status.Text = $"borradas {fuera} prueba(s) de CI";
+                    _versionesVistas = DateTime.MinValue;
+                    DibujarVersiones();   // si no queda ninguna, el ▶ desaparece con ellas
+                }));
+            };
+            _versionesNucleo.Children.Add(play);
+        }
+
+        // Este binario no es ninguna versión: se dice, para que «dev» no se confunda con la v-nada.
+        if (actual == null)
+            _versionesNucleo.Children.Add(new TextBlock
+            {
+                Text = "dev",
+                Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xB3, 0x00)),
+                FontSize = 9, FontFamily = new FontFamily("Consolas"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 2, 0, 0),
+                ToolTip = "este binario es de DESARROLLO (no es ninguna versión numerada)",
+            });
+    }
+
+    /// <summary>
+    /// Soltar al arquitecto sobre la app que hay delante y seguir lo que hace en vivo.
+    ///
+    /// El grafo se dibuja mientras tanto sin trucos: el agente navega por la misma sonda que el
+    /// asistente, así que cada puerta que cruza la aprende el mapa por su cuenta y basta con
+    /// repintar de vez en cuando para verlo crecer. El botón de mapear pasa a «detener» porque una
+    /// auditoría que no se puede parar es una auditoría que se apodera de la máquina.
+    /// </summary>
+    private async Task AuditarConArquitectoAsync(string app)
+    {
+        _crawlBtn.Content = "⏹ Detener el arquitecto";
+        _status.Text = $"arquitecto: auditando «{app}»… no toques el ratón";
+        if (!_graphView) SetGraphView(true);
+
+        // Un latido que repinta: el agente escribe en el mapa desde fuera, así que el dibujo no se
+        // entera por eventos como con el recorredor. Mirar el reloj del mapa es barato.
+        var latido = new System.Windows.Threading.DispatcherTimer
+        { Interval = TimeSpan.FromSeconds(2) };
+        int versionVista = -1;
+        latido.Tick += (_, __) =>
+        {
+            if (_map.Version == versionVista) return;
+            versionVista = _map.Version;
+            DibujarGrafo();
+        };
+        latido.Start();
+
+        try
+        {
+            string r = await Navigation.Arquitecto.AuditarAsync(app, 40,
+                linea => Dispatcher.BeginInvoke(new Action(() => _status.Text = "🧠 " + linea)),
+                _crawlCts!.Token);
+            _status.Text = r;
+
+            // Su informe se abre solo: un hallazgo que hay que ir a buscar a un archivo es un
+            // hallazgo que nadie lee.
+            string informe = Navigation.Arquitecto.Informe(app);
+            if (System.IO.File.Exists(informe))
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(informe)
+                    { UseShellExecute = true });
+                }
+                catch (Exception e) { LogBus.Log("arquitecto", $"no pude abrir el informe: {e.Message}"); }
+        }
+        finally
+        {
+            latido.Stop();
+            DibujarGrafo();
+            _crawlBtn.Content = "🤖 Mapear esta app automáticamente";
+            _crawlCts?.Dispose();
+            _crawlCts = null;
+            _signature = "";
+        }
+    }
+
+    /// <summary>
+    /// Correr todas las pruebas guardadas contra EL NÚCLEO QUE ESTÁ CORRIENDO.
+    ///
+    /// Esto es lo único que estas pruebas juzgan: si la estructura y el comportamiento del núcleo
+    /// puesto ahora mismo siguen siendo los que eran. No miden si el maestro acertó más o si la app
+    /// cambió de sitio un botón — por eso los mínimos son el 80% de lo grabado y no una igualdad.
+    ///
+    /// Corre AQUÍ dentro y no lanzando procesos: quien mapea es este proceso, así que lo que quede
+    /// en su mapa es exactamente lo que este núcleo sabe hacer. Mandar la prueba a otro binario
+    /// mediría otro núcleo, que es justo lo contrario de lo que se pregunta.
+    ///
+    /// Cada prueba empieza con el grafo a cero: un grafo con historia esconde justo lo que se
+    /// quiere medir. Y el paso a paso se apaga mientras corre —una prueba automática no puede
+    /// depender de que alguien pulse Continuar quince veces— y se devuelve como estaba.
+    /// </summary>
+    private async Task CorrerPruebasAsync()
+    {
+        if (_busy || _crawlCts != null) { _status.Text = "hay un mapeo en marcha; espera a que termine"; return; }
+        var todas = EscenarioCi.Todos();
+        if (todas.Count == 0) { _status.Text = "no hay pruebas guardadas"; return; }
+
+        // SE ELIGE SOBRE QUÉ APPS SE CORRE. Cada escenario abre una app y la recorre entera, así
+        // que correrlas todas cuando solo interesa una es regalar minutos de escritorio ocupado.
+        // Marcadas por defecto: lo normal es querer la foto completa (2026-08-08, pedido por él).
+        var pruebas = await ElegirEscenariosAsync(todas,
+            "¿Sobre qué apps se prueba este núcleo?", "Correr las marcadas", marcadasPorDefecto: true);
+        if (pruebas == null || pruebas.Count == 0) return;
+
+        string nucleo = NucleoVersiones.Actual() is { } n ? $"v{n}" : "dev";
+        bool pasoAntes = PasoAPaso.Activo, ciAntes = PasoAPaso.GuardarComoCi;
+        PasoAPaso.Activo = false;
+        PasoAPaso.GuardarComoCi = false;   // una prueba no reescribe la vara con la que se mide
+
+        var informe = new List<(string App, bool Ok, string Detalle)>();
+        LogBus.Log("ci", $"probando el núcleo {nucleo} contra {pruebas.Count} escenario(s)");
+        try
+        {
+            foreach (var p in pruebas)
+            {
+                _status.Text = $"[{nucleo}] probando «{p.App}»… no toques el ratón";
+                // El terreno DE ESTA APP a cero, y nada más: lo andado en las otras apps no tiene
+                // nada que ver con lo que se mide aquí. Lo enseñado sobrevive y se repone solo
+                // sobre las puertas que vuelvan a nacer — se mide si la estructura se arma bien,
+                // no si el maestro vuelve a acertar.
+                BorrarTerrenoDe(p.App);
+
+                string proc = p.App.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+                if (!Uia.AppAligner.FocusOrLaunch(proc))
+                {
+                    informe.Add((p.App, false, "no pude poner la app delante"));
+                    continue;
+                }
+                await Task.Delay(1500);   // que termine de pintarse antes de mirarla
+
+                var loc = _where();
+                if (loc == null || !SurfaceMap.AppDe(loc.Id).Equals(p.App, StringComparison.OrdinalIgnoreCase))
+                {
+                    informe.Add((p.App, false, $"delante hay «{(loc == null ? "nada" : SurfaceMap.AppDe(loc.Id))}»; no mapeo a ciegas"));
+                    continue;
+                }
+
+                await CrawlAsync(conMaestro: false);
+                var (ok, detalle) = EscenarioCi.Juzgar(p, _map);
+                informe.Add((p.App, ok, detalle));
+                LogBus.Log("ci", $"[{nucleo}] «{p.App}»: {(ok ? "OK" : "FALLO")} · {detalle}");
+            }
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("ci", $"las pruebas se cortaron: {e.Message}");
+            informe.Add(("(la corrida)", false, e.Message));
+        }
+        finally
+        {
+            PasoAPaso.Activo = pasoAntes;
+            PasoAPaso.GuardarComoCi = ciAntes;
+        }
+
+        int rotas = informe.Count(x => !x.Ok);
+        _status.Text = rotas == 0
+            ? $"núcleo {nucleo}: sostiene las {informe.Count} prueba(s)"
+            : $"núcleo {nucleo}: {rotas} de {informe.Count} prueba(s) NO se sostienen";
+        MessageBox.Show(
+            string.Join("\n", informe.Select(x => $"{(x.Ok ? "OK    " : "FALLO ")} {x.App}\n           {x.Detalle}"))
+            + "\n\n" + (rotas == 0
+                ? "Este núcleo sostiene todo lo que ya funcionaba."
+                : "Este núcleo NO está a la altura de lo que ya funcionaba."),
+            $"Pruebas del núcleo {nucleo}",
+            MessageBoxButton.OK, rotas == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
+    }
+
+    /// <summary>
+    /// Elegir escenarios con casillas. La misma ventana sirve para correr (marcadas por defecto:
+    /// lo normal es querer la foto completa) y para borrar (desmarcadas: borrar pide señalar).
+    /// Devuelve null si se cierra con Escape — que no es «ninguna», es «déjalo».
+    /// </summary>
+    private Task<List<EscenarioCi.Escenario>?> ElegirEscenariosAsync(
+        IReadOnlyList<EscenarioCi.Escenario> todas, string titulo, string accion, bool marcadasPorDefecto)
+    {
+        var tcs = new TaskCompletionSource<List<EscenarioCi.Escenario>?>();
+        var v = new Window
+        {
+            WindowStyle = WindowStyle.None, AllowsTransparency = true,
+            Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+        };
+        var col = new StackPanel { MinWidth = 360 };
+        col.Children.Add(new TextBlock
+        {
+            Text = titulo, Foreground = Brushes.White,
+            FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 10),
+        });
+
+        var casillas = new List<(CheckBox Caja, EscenarioCi.Escenario E)>();
+        foreach (var e in todas)
+        {
+            var caja = new CheckBox
+            {
+                IsChecked = marcadasPorDefecto,
+                Foreground = Brushes.White, FontSize = 12, Margin = new Thickness(0, 3, 0, 3),
+                Content = $"{e.App}   (≥{e.Pantallas} pantallas, ≥{e.Declarados} declarados, ≥{e.ConAccion} con acción)",
+            };
+            casillas.Add((caja, e));
+            col.Children.Add(caja);
+        }
+
+        var boton = Boton(accion, Color.FromArgb(0x55, 0x66, 0xBB, 0x6A));
+        boton.HorizontalAlignment = HorizontalAlignment.Right;
+        boton.Margin = new Thickness(0, 12, 0, 0);
+        boton.Click += (_, __) =>
+        {
+            tcs.TrySetResult(casillas.Where(c => c.Caja.IsChecked == true).Select(c => c.E).ToList());
+            v.Close();
+        };
+        col.Children.Add(boton);
+
+        v.Content = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x18, 0x18, 0x1C)),
+            CornerRadius = new CornerRadius(14), Padding = new Thickness(18),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1), Child = col,
+        };
+        v.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; v.Close(); } };
+        v.Closed += (_, __) => tcs.TrySetResult(tcs.Task.IsCompleted ? tcs.Task.Result : null);
+        v.Show();
+        v.Activate();
+        return tcs.Task;
+    }
+
+    private static Button Boton(string texto, Color fondo) => new()
+    {
+        Content = texto, Height = 30, MinWidth = 130, FontSize = 12,
+        Cursor = Cursors.Hand, Background = new SolidColorBrush(fondo),
+        Foreground = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(10, 0, 10, 0),
+    };
+
+    /// <summary>
+    /// Borrar el terreno de UNA app, preguntándole al núcleo POR NOMBRE si sabe hacerlo.
+    ///
+    /// La reflexión no es pereza, es la frontera de versiones trabajando: OlvidarApp nació en la
+    /// v1 y la instantánea de la v0 es intocable, así que llamarlo directo dejaría a la v0 sin
+    /// poder compilar con esta UI. Un núcleo que no lo tenga se degrada a lo que ese núcleo sabía
+    /// hacer —borrar todo— y se dice en el log, no en silencio.
+    /// </summary>
+    private void BorrarTerrenoDe(string app)
+    {
+        var m = _map.GetType().GetMethod("OlvidarApp");
+        if (m != null)
+        {
+            m.Invoke(_map, new object[] { app });
+        }
+        else
+        {
+            LogBus.Log("ci", $"este núcleo no sabe olvidar por app ({app}): se borra el terreno entero, como hacía");
+            _map.OlvidarTodo();
+        }
+        _ultimaCorrida.Clear();
+        _vistos.Clear();
+        _nodoActual = "";
+        _numeradas.Clear();
+        _signature = "";
+    }
+
+    /// <summary>
+    /// Pedir la nota y crear una versión nueva del núcleo.
+    ///
+    /// La NOTA no es un adorno: en un mes habrá seis versiones y «v4» no dice nada. El riesgo de
+    /// este botón no es crear demasiadas —son baratas y se tiran— sino no saber para qué era cada
+    /// una, así que se pregunta antes y la nota va al tooltip de su pastilla.
+    /// </summary>
+    private void CrearVersionNucleo()
+    {
+        var caja = new TextBox
+        {
+            FontSize = 13, Padding = new Thickness(8), MinWidth = 380,
+            Background = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+            Foreground = Brushes.White, BorderThickness = new Thickness(0),
+        };
+        var v = new Window
+        {
+            WindowStyle = WindowStyle.None, AllowsTransparency = true,
+            Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+        };
+        var col = new StackPanel();
+        col.Children.Add(new TextBlock
+        {
+            Text = "¿Qué vas a probar en esta versión del núcleo?",
+            Foreground = Brushes.White, FontSize = 14, FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 10),
+        });
+        col.Children.Add(caja);
+        col.Children.Add(new TextBlock
+        {
+            Text = "Se copia lo que está en edición, se compila y se pasa el contrato. Tarda ~1 minuto.",
+            Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+            FontSize = 11, Margin = new Thickness(0, 8, 0, 0),
+        });
+        v.Content = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x18, 0x18, 0x1C)),
+            CornerRadius = new CornerRadius(14), Padding = new Thickness(18),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1), Child = col,
+        };
+        v.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape) { e.Handled = true; v.Close(); }
+            else if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                string nota = caja.Text.Trim();
+                v.Close();
+                if (nota.Length == 0) { _status.Text = "sin nota no creo la versión: en un mes «v4» no diría nada"; return; }
+                _status.Text = "creando versión del núcleo… (compila y pasa el contrato)";
+                NucleoVersiones.Crear(nota, (ok, msg) => Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _status.Text = msg;
+                    _versionesVistas = DateTime.MinValue;   // fuerza el redibujo de la tira
+                    DibujarVersiones();
+                })));
+            }
+        };
+        v.Show();
+        v.Activate();
+        caja.Focus();
+    }
+
     private void DibujarNiveles(string appActual)
     {
         _niveles.Children.Clear();
@@ -1200,20 +1887,56 @@ public sealed class GraphExplorerWindow : Window
         // Orden de primera aparición: es el camino real que se ha recorrido entre aplicaciones, y
         // ordenar por nombre o por tamaño lo borraría.
         var apps = new List<string>();
+        // Un nivel WEB es un SUBNIVEL del navegador: la página vive dentro de él. Se apunta cuáles
+        // son para dibujarlos como lo que son, sin reordenar nada (2026-08-07).
+        var esWeb = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (f, t, _) in _ultimaCorrida)
-            foreach (var a in new[] { NivelDe(f), NivelDe(t) })
-                if (a.Length > 0 && !apps.Contains(a, StringComparer.OrdinalIgnoreCase)) apps.Add(a);
+            foreach (var id in new[] { f, t })
+            {
+                string a = NivelDe(id);
+                if (a.Length == 0) continue;
+                if (id.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) esWeb.Add(a);
+                if (!apps.Contains(a, StringComparer.OrdinalIgnoreCase)) apps.Add(a);
+            }
         if (appActual.Length > 0 && !apps.Contains(appActual, StringComparer.OrdinalIgnoreCase))
+        {
             apps.Add(appActual);
+            if ((_nodoActual ?? "").StartsWith("web://", StringComparison.OrdinalIgnoreCase)) esWeb.Add(appActual);
+        }
         if (apps.Count == 0) return;
 
-        for (int i = 0; i < apps.Count; i++)
-        {
-            string app = apps[i];
-            bool aqui = app.Equals(appActual, StringComparison.OrdinalIgnoreCase);
-            int pantallas = _map.Nodes.Keys.Count(n =>
-                NivelDe(n).Equals(app, StringComparison.OrdinalIgnoreCase));
+        // ── CADA PÁGINA, DENTRO DE SU NAVEGADOR ─────────────────────────────
+        // Un rato de navegar deja diez o quince dominios, y puestos como hermanos de las apps
+        // convertían la tira en una lista larguísima que se salía de la pantalla y en la que no se
+        // distinguía lo importante: cuántos TERRENOS distintos hay (2026-08-07, pedido por el
+        // usuario). Un dominio no es un terreno hermano de Chrome: vive dentro. Así que se dibuja
+        // dentro, y solo se enseña cuando se mira el navegador.
+        //
+        // De qué navegador cuelga cada uno no se adivina: lo apuntó el localizador la primera vez
+        // que identificó ese dominio, con el proceso delante (ver PestanasAbiertas.NavegadorDe).
+        var hijos = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var raices = new List<string>();
+        void Anotar(List<string> l, string x)
+        { if (!l.Contains(x, StringComparer.OrdinalIgnoreCase)) l.Add(x); }
 
+        foreach (var app in apps)
+        {
+            if (!esWeb.Contains(app)) { Anotar(raices, app); continue; }
+            string nav = Uia.PestanasAbiertas.NavegadorDe(app);
+            if (nav.Length == 0)
+                nav = apps.FirstOrDefault(a => !esWeb.Contains(a) && Uia.PestanasAbiertas.EsNavegador(a)) ?? "";
+            // Sin navegador conocido se queda suelta: esconderla bajo un navegador inventado sería
+            // meterla en un sitio del que no consta que venga.
+            if (nav.Length == 0) { Anotar(raices, app); continue; }
+            Anotar(raices, nav);                       // el navegador entra donde salió su primera página
+            if (!hijos.TryGetValue(nav, out var l)) hijos[nav] = l = new List<string>();
+            Anotar(l, app);
+        }
+
+        // Una pastilla, con su nombre al pasar por encima y su clic. La usan igual los niveles y sus
+        // páginas: cambian el tamaño y la sangría, no lo que son.
+        Border Pastilla(string app, bool web, bool aqui, string tooltip)
+        {
             // AL PASAR POR ENCIMA SE ABRE Y ENSEÑA EL NOMBRE. El tooltip no valía: esta ventana
             // nunca se activa —es su gracia—, y sin activarse WPF no llega a mostrarlo, así que el
             // nombre completo quedaba escrito en un sitio al que no se podía llegar (2026-08-04).
@@ -1229,20 +1952,21 @@ public sealed class GraphExplorerWindow : Window
                 Visibility = Visibility.Collapsed,
             };
 
-            var nivel = new Border
+            var pastilla = new Border
             {
-                Width = 26, Height = 26,
+                // Las páginas van algo más pequeñas y metidas hacia dentro: son subniveles DENTRO
+                // del navegador, no aplicaciones hermanas.
+                Width = web ? 22 : 26, Height = web ? 22 : 26,
                 Cursor = Cursors.Hand,
                 HorizontalAlignment = HorizontalAlignment.Right,   // al ensancharse, crece hacia la izquierda
                 CornerRadius = new CornerRadius(13),
-                Margin = new Thickness(0, 3, 0, 3),
+                Margin = new Thickness(0, 3, web ? 10 : 0, 3),
                 Background = new SolidColorBrush(aqui
                     ? Color.FromArgb(0x66, 0xFF, 0xB3, 0x00) : Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF)),
                 BorderBrush = new SolidColorBrush(aqui
                     ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
                 BorderThickness = new Thickness(aqui ? 2 : 1),
-                ToolTip = $"nivel {i + 1}: {app} · {pantallas} pantalla(s) conocidas"
-                        + (aqui ? " · estás aquí" : " · Ctrl+Shift y clic para ir"),
+                ToolTip = tooltip,
             };
 
             var dentro = new StackPanel { Orientation = Orientation.Horizontal };
@@ -1257,18 +1981,18 @@ public sealed class GraphExplorerWindow : Window
                 Width = 24, TextAlignment = TextAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             });
-            nivel.Child = dentro;
+            pastilla.Child = dentro;
 
-            nivel.MouseEnter += (_, __) =>
+            pastilla.MouseEnter += (_, __) =>
             {
                 nombre.Visibility = Visibility.Visible;
-                nivel.Width = double.NaN;          // NaN = «lo que ocupe», que es lo que hace falta
-                nivel.CornerRadius = new CornerRadius(13);
+                pastilla.Width = double.NaN;       // NaN = «lo que ocupe», que es lo que hace falta
+                pastilla.CornerRadius = new CornerRadius(13);
             };
-            nivel.MouseLeave += (_, __) =>
+            pastilla.MouseLeave += (_, __) =>
             {
                 nombre.Visibility = Visibility.Collapsed;
-                nivel.Width = 26;
+                pastilla.Width = web ? 22 : 26;
             };
 
             // Pulsar un nivel es IR a esa aplicación. Es la acción natural de la tira —enumera los
@@ -1280,12 +2004,87 @@ public sealed class GraphExplorerWindow : Window
             // (2026-08-04, reportado por el usuario). El identificador de superficie lleva la
             // extensión; el buscador de procesos, no.
             string destinoNivel = app;
-            nivel.MouseLeftButtonUp += (_, __) => IrAlNivel(destinoNivel);
-            _niveles.Children.Add(nivel);
+            pastilla.MouseLeftButtonUp += (_, __) => IrAlNivel(destinoNivel);
+            return pastilla;
+        }
+
+        int Pantallas(string app) => _map.Nodes.Keys.Count(n =>
+            NivelDe(n).Equals(app, StringComparison.OrdinalIgnoreCase));
+
+        for (int i = 0; i < raices.Count; i++)
+        {
+            string app = raices[i];
+            bool web = esWeb.Contains(app);
+            hijos.TryGetValue(app, out var paginas);
+            // Estar en una de sus páginas es estar en el navegador: si no, con las páginas
+            // escondidas no habría NADA encendido y la tira mentiría sobre dónde estás.
+            bool aqui = app.Equals(appActual, StringComparison.OrdinalIgnoreCase)
+                || (paginas?.Any(p => p.Equals(appActual, StringComparison.OrdinalIgnoreCase)) ?? false);
+
+            string tip = (web ? $"página: {app} · subnivel de tu navegador" : $"nivel {i + 1}: {app}")
+                       + $" · {Pantallas(app)} pantalla(s) conocidas"
+                       + (paginas is { Count: > 0 } ? $" · {paginas.Count} página(s) dentro, pasa el ratón" : "")
+                       + (aqui ? " · estás aquí" : " · clic para ir");
+            var pastilla = Pastilla(app, web, aqui, tip);
+
+            if (paginas == null || paginas.Count == 0) _niveles.Children.Add(pastilla);
+            else
+            {
+                // El grupo entero recibe el ratón, no solo el navegador: si el hover viviera en la
+                // pastilla de arriba, bajar hacia una página la haría desaparecer justo antes de
+                // poder pulsarla.
+                //
+                // FONDO TRANSPARENTE, Y NO ES DECORACIÓN. Un Panel sin Background no participa en el
+                // hit-test de WPF: sus huecos —los 6 px entre pastillas y el escalón de la sangría—
+                // no son suyos, así que cruzarlos dispara MouseLeave y las páginas se cerraban justo
+                // al ir hacia ellas (2026-08-07, reportado por el usuario). «Transparent» es
+                // invisible pero sí recibe ratón; null es un agujero.
+                var grupo = new StackPanel
+                {
+                    Orientation = Orientation.Vertical,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Background = Brushes.Transparent,
+                };
+                grupo.Children.Add(pastilla);
+                var dentroDelNavegador = new List<UIElement>();
+                foreach (var p in paginas)
+                {
+                    var sub = Pastilla(p, true, p.Equals(appActual, StringComparison.OrdinalIgnoreCase),
+                        $"página: {p} · dentro de {app} · {Pantallas(p)} pantalla(s) conocidas · clic para ir");
+                    sub.Visibility = Visibility.Collapsed;
+                    grupo.Children.Add(sub);
+                    dentroDelNavegador.Add(sub);
+                }
+
+                // Y UN MARGEN DE GRACIA AL SALIR. Aun con el hueco tapado, el trayecto hasta una
+                // página pasa por encima de la pastilla de al lado o roza el borde de la tira; que
+                // se cierre en ese instante obliga a un pulso que nadie tiene. Se cierra un cuarto
+                // de segundo después, y volver a entrar lo cancela.
+                System.Windows.Threading.DispatcherTimer? cierre = null;
+                grupo.MouseEnter += (_, __) =>
+                {
+                    cierre?.Stop();
+                    foreach (var s in dentroDelNavegador) s.Visibility = Visibility.Visible;
+                };
+                grupo.MouseLeave += (_, __) =>
+                {
+                    cierre?.Stop();
+                    cierre = new System.Windows.Threading.DispatcherTimer
+                    { Interval = TimeSpan.FromMilliseconds(260) };
+                    cierre.Tick += (s2, __2) =>
+                    {
+                        ((System.Windows.Threading.DispatcherTimer)s2!).Stop();
+                        if (grupo.IsMouseOver) return;
+                        foreach (var s in dentroDelNavegador) s.Visibility = Visibility.Collapsed;
+                    };
+                    cierre.Start();
+                };
+                _niveles.Children.Add(grupo);
+            }
 
             // El salto entre niveles se dibuja: dos puntos y una línea, para que se vea que hay que
             // CRUZAR algo —abrir la app— y no simplemente seguir por el mismo terreno.
-            if (i < apps.Count - 1)
+            if (i < raices.Count - 1)
                 _niveles.Children.Add(new System.Windows.Shapes.Rectangle
                 {
                     Width = 2, Height = 10,
@@ -1308,6 +2107,7 @@ public sealed class GraphExplorerWindow : Window
             ? _nodoActual
             : (_ultimaCorrida.Count > 0 ? _ultimaCorrida[^1].To : ""));
         DibujarNiveles(appActual);
+        DibujarVersiones();
 
         var traza = appActual.Length == 0
             ? _ultimaCorrida
@@ -1335,24 +2135,190 @@ public sealed class GraphExplorerWindow : Window
             return;
         }
 
-        // Raíz: el origen del primer salto, o —si aún no hay ninguno— el primer sitio pisado.
-        string raiz = traza.Count > 0 ? traza[0].From : pisados[0];
+        // EL CENTRO ES LA APP, NO LA PANTALLA POR LA QUE SE ENTRÓ. La raíz era el primer sitio
+        // pisado, así que toda la estructura se medía desde donde alguien entrara ese día: entrando
+        // por «Música», Música quedaba en el centro y sus HERMANAS colgaban a un escalón, aunque
+        // las diecisiete estuvieran declaradas del primer nivel. El diagnóstico lo dejó escrito:
+        // raíz «explorer.exe/música» (2026-08-06). Un nivel medido desde uno de sus miembros no
+        // puede tener a todos sus miembros a la misma altura.
+        //
+        // El centro es ahora un nodo que NO es ninguna pantalla —la aplicación— y la profundidad se
+        // asigna en UN orden, cada fuente solo donde la anterior no llegó:
+        //   1. lo DECLARADO (persona o maestro): nivel N → fila N. Es estructura, y manda.
+        //   2. el nivel que el mapa conoce de cada pantalla (cuántas puertas hay que abrir).
+        //   3. el paseo, SOLO para rellenar lo que nadie conoce.
+        // Antes eran siete escrituras encadenadas sobre el mismo diccionario, cada una pisando a la
+        // anterior: el ORDEN decidía el resultado, y por eso cada arreglo movía el fallo de sitio.
+        _porQueDeclarado.Clear();   // por qué vía llegó cada declarado: para no volver a adivinarlo
+        var declarados = _map.Edges()
+            .Where(e => e.Info.NivelFijado && e.Info.NivelNav >= 0 && !SurfaceMap.EsPuerta(e.To)
+                     && (appActual.Length == 0
+                         || NivelDe(e.To).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
+            .GroupBy(e => e.To, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Min(e => e.Info.NivelNav), StringComparer.OrdinalIgnoreCase);
+        foreach (var k in declarados.Keys) _porQueDeclarado[k] = "arista fijada";
+
+        // Y LA ENSEÑANZA SE CONECTA A LOS NODOS POR SU NOMBRE, no solo a través de las aristas. El
+        // camino por aristas depende de que la arista exista Y conserve su etiqueta, y las que
+        // nacen viendo pasar una navegación a mano pierden la etiqueta cuando la atribución del
+        // clic falla — el diagnóstico dio «0 declarados» con la enseñanza intacta en disco
+        // (2026-08-07). El puente que no se rompe es la identidad: la pantalla
+        // «explorer.exe/notas» NACE de la puerta «Notas», su nombre ES la etiqueta enseñada.
+        if (appActual.Length > 0)
+        {
+            // El puente recorre TAMBIÉN los extremos de las aristas del mapa, no solo lo paseado en
+            // esta sesión: desde que la estructura sale del mapa, un nodo enseñado puede entrar al
+            // dibujo sin que nadie lo haya pisado hoy — «videos» apareció en fila 2 sin asterisco,
+            // estando enseñada, porque llegó por una arista y el puente no la miró (2026-08-07).
+            var candidatosPuente = pisados
+                .Concat(traza.SelectMany(x => new[] { x.From, x.To }))
+                .Concat(_map.Edges()
+                    .Where(e => !SurfaceMap.EsPuerta(e.To) && SurfaceMap.MismaApp(e.From, e.To))
+                    .SelectMany(e => new[] { e.From, e.To }))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            var ensenadas = _map.EnsenanzasDe(appActual);
+            if (ensenadas.Count == 0 && _huellaPuente != appActual)
+            {
+                _huellaPuente = appActual;
+                LogBus.Log("grafo", $"puente: EnsenanzasDe(«{appActual}») = 0 — ¿la clave del "
+                    + $"diccionario no coincide? apps con enseñanza: "
+                    + string.Join(", ", _map.AppsConJerarquia().Select(x => $"«{x.App}»")));
+            }
+            if (ensenadas.Count > 0)
+            {
+                // EL PUENTE POR NOMBRE ES UNA RED, NO UNA SEGUNDA FUENTE. Dos reglas que salieron
+                // de enseñar GitHub (2026-08-07, observado por el usuario):
+                // · si la etiqueta ya está anclada por una ARISTA FIJADA, el puente se abstiene —
+                //   la pestaña «Code» lleva a la pantalla «graph» (así se llama su URL), y el
+                //   puente anclaba ADEMÁS un nodo fantasma «code»: la misma pantalla, dos veces
+                //   en la fila 1;
+                // · si el nombre casa con MÁS DE UN nodo, la ambigüedad no es evidencia — «pulls»
+                //   existe como pantalla global y como pestaña del repo, y anclar las dos duplicaba
+                //   la fila 1. En la duda, mandan las aristas, que sí distinguen.
+                var ancladas = new HashSet<string>(
+                    _map.Edges().Where(e => e.Info.NivelFijado && !SurfaceMap.EsPuerta(e.To)
+                                         && e.Info.Label.Length > 0)
+                        .Select(e => Uia.Reconocedor.Normalizar(e.Info.Label)),
+                    StringComparer.Ordinal);
+
+                var candidatosPorEtiqueta = new Dictionary<string, (int Nivel, List<string> Nodos)>(StringComparer.Ordinal);
+                foreach (var n in candidatosPuente)
+                {
+                    if (declarados.ContainsKey(n)) continue;
+                    string cola = n.TrimEnd('/');
+                    int barra = cola.LastIndexOf('/');
+                    string slug = Uia.Reconocedor.Normalizar(barra >= 0 ? cola[(barra + 1)..] : cola);
+                    foreach (var (etiqueta, nivel) in ensenadas)
+                    {
+                        string norm = Uia.Reconocedor.Normalizar(etiqueta);
+                        if (!slug.Equals(norm, StringComparison.Ordinal)) continue;
+                        if (!candidatosPorEtiqueta.TryGetValue(norm, out var acc))
+                            candidatosPorEtiqueta[norm] = acc = (nivel, new List<string>());
+                        acc.Nodos.Add(n);
+                        break;
+                    }
+                }
+                foreach (var (norm, (nivel, nodos)) in candidatosPorEtiqueta)
+                {
+                    if (ancladas.Contains(norm))
+                    { LogBus.Log("grafo", $"puente: «{norm}» ya anclada por arista fijada; el nombre no opina"); continue; }
+                    if (nodos.Count != 1)
+                    { LogBus.Log("grafo", $"puente: «{norm}» casa con {nodos.Count} nodos; ambigüedad no es evidencia"); continue; }
+                    declarados[nodos[0]] = nivel;
+                    _porQueDeclarado[nodos[0]] = $"nombre≈«{norm}»";
+                }
+            }
+        }
+        _profDeclarada = declarados;
+
+        string centro = appActual.Length > 0 ? $"nivel://{appActual}" : "";
+        string raiz = centro.Length > 0 ? centro : (traza.Count > 0 ? traza[0].From : pisados[0]);
         var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
-        // Varias pasadas: una arista puede aprenderse antes de que su origen tenga profundidad.
+        int suelo = centro.Length > 0 ? 1 : 0;   // la fila 0 es de la app: nadie más la ocupa
+
+        // Y MIENTRAS MANDA LO DECLARADO, LA FILA 1 ES SUYA. Lo pisado sin información y los
+        // orígenes huérfanos del paseo caían al suelo —la fila 1— y se mezclaban con el primer
+        // nivel: en el grafo aparecían «code», «diagtrack» o «leykiara» a la altura del panel,
+        // sin que nadie los hubiera declarado (2026-08-07, observado por el usuario; el
+        // diagnóstico los mostró en fila 1 SIN asterisco y con Nivel=-1 en el mapa — no los subió
+        // nadie: aterrizaron ahí). Ser desconocido no puede colocar mejor que ser conocido.
+        int sueloDesconocido = centro.Length > 0 && SurfaceMap.SoloLoDeclarado ? 2 : suelo;
+
+        // 1. Lo declarado: nivel N → fila N, colgando del centro.
+        foreach (var d in declarados)
+            prof[d.Key] = Math.Max(suelo, d.Value);
+
+        // LA ESTRUCTURA SALE DEL MAPA, NO DEL PASEO DE ESTA SESIÓN. La profundidad de los niveles
+        // inferiores se rellenaba con la traza viva (_ultimaCorrida), que cambia con cada
+        // movimiento y olvida tramos al pasar de cuarenta: moverse entre dos elementos del primer
+        // nivel REDIBUJABA todo el drill-down ya aprendido, porque su colocación dependía del
+        // orden del paseo de hoy (2026-08-07, observado por el usuario). La superficie de
+        // navegación, una vez aprendida, es ESTÁTICA — y quien la sabe es el mapa, cuyas aristas
+        // cruzadas no cambian por volver a pasear. La traza queda solo como rastro visual (las
+        // líneas verdes), sin voz en la estructura.
+        var aristasMapa = _map.Edges()
+            .Where(e => !SurfaceMap.EsPuerta(e.To) && e.Info.Selector.Length > 0
+                     && SurfaceMap.MismaApp(e.From, e.To)
+                     && (appActual.Length == 0
+                         || NivelDe(e.From).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
+            .Select(e => (e.From, e.To))
+            .Distinct()
+            .ToList();
+
+        // 2. Lo que el mapa sabe de cada pantalla. Deducido, no declarado: tampoco reclama la fila 1.
+        foreach (var n in pisados
+                     .Concat(aristasMapa.SelectMany(x => new[] { x.From, x.To }))
+                     .Concat(traza.SelectMany(x => new[] { x.From, x.To })))
+            if (!prof.ContainsKey(n) && _map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
+                prof[n] = Math.Max(sueloDesconocido, ni.Nivel);
+
+        // 3. Las aristas DEL MAPA rellenan los huecos por DISTANCIA MÍNIMA a lo ya colocado. Con
+        //    «la primera asignación gana», el resultado dependía del orden de enumeración de las
+        //    aristas — y ese orden CAMBIA cuando el diccionario recicla el hueco de una puerta
+        //    borrada. Con un ciclo de por medio (vercel→graph del atrás), cada redibujo podía
+        //    resolverse distinto: «vercel» saltó a la altura de su padre y al rato volvió a su
+        //    sitio (2026-08-07, observado por el usuario). La distancia mínima no depende de
+        //    ningún orden. Lo colocado por las fuentes 1 y 2 queda FIJO: relajar no lo toca.
+        var fijos = new HashSet<string>(prof.Keys, StringComparer.OrdinalIgnoreCase);
+        for (int pasada = 0; pasada < 8; pasada++)
+            foreach (var (f, t) in aristasMapa)
+                if (prof.TryGetValue(f, out int d) && !fijos.Contains(t)
+                    && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
+                    prof[t] = d + 1;
+
+        // 4. Solo lo que el mapa aún no encadena cae al paseo de la sesión, y lo huérfano al suelo
+        //    de lo desconocido.
         for (int pasada = 0; pasada < 6; pasada++)
             foreach (var (f, t, _) in traza)
-                if (prof.TryGetValue(f, out int d) && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
+                if (prof.TryGetValue(f, out int d) && !fijos.Contains(t) && !prof.ContainsKey(t))
                     prof[t] = d + 1;
         foreach (var (f, t, _) in traza)
         {
-            if (!prof.ContainsKey(f)) prof[f] = 0;
-            if (!prof.ContainsKey(t)) prof[t] = 1;
+            if (!prof.ContainsKey(f)) prof[f] = sueloDesconocido;
+            if (!prof.ContainsKey(t)) prof[t] = prof[f] + 1;
         }
+        foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = sueloDesconocido;
 
-        // Los pisados sin salto conocido entran a la altura de la raíz: se sabe que existen y que
-        // están en este nivel, y no se sabe todavía cómo se encadenan. Colocarlos abajo del todo
-        // insinuaría una profundidad que nadie ha comprobado.
-        foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = 0;
+        // CÓMO QUEDÓ LA ESTRUCTURA, y por qué. Llevamos dos arreglos por el sitio equivocado
+        // suponiendo dónde estaba el fallo; esto lo dice en vez de deducirlo. Se escribe solo
+        // cuando cambia, para no llenar el log en cada repintado (2026-08-06).
+        //
+        // Lo que hay que leer aquí: quién es la RAÍZ —si es una pantalla y no la app, todo se mide
+        // desde donde entraste y la forma cambia según por dónde empieces—, cuántos venían
+        // declarados, y a qué profundidad acabó cada uno.
+        string huellaNiv = raiz + "|" + string.Join(",", prof.OrderBy(p => p.Key).Select(p => $"{Corto(p.Key)}={p.Value}"));
+        if (huellaNiv != _huellaEstructura)
+        {
+            _huellaEstructura = huellaNiv;
+            LogBus.Log("grafo", $"raíz «{Corto(raiz)}» · {_profDeclarada.Count} declarado(s) · "
+                + $"{traza.Count} tramo(s) · profundidades: "
+                + string.Join(", ", prof.OrderBy(p => p.Value).ThenBy(p => p.Key)
+                    .Take(20).Select(p => $"{Corto(p.Key)}={p.Value}"
+                        + (_porQueDeclarado.TryGetValue(p.Key, out var pq) ? $"*({pq})" : ""))));
+            if (_profDeclarada.Count == 0 && traza.Count > 0)
+                LogBus.Log("grafo", "NINGÚN nodo llega declarado: las aristas cruzadas no traen el nivel");
+        }
 
         // EL CROMO DE LA APP CUELGA DE LA APP, no de cada pantalla.
         //
@@ -1370,10 +2336,9 @@ public sealed class GraphExplorerWindow : Window
         // nivel 1 (2026-08-04, replanteado por el usuario).
         //
         // El recorrido no se tira: sigue siendo el material de las ACCIONES, donde el orden SÍ es la
-        // información. Simplemente deja de mandar en la navegación.
-        foreach (var n in prof.Keys.ToList())
-            if (_map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
-                prof[n] = ni.Nivel;
+        // información. Simplemente deja de mandar en la navegación. (El nivel de cada pantalla ya
+        // se aplicó arriba, como fuente 2 y sin pisar lo declarado — aquí volvía a escribirse
+        // encima y deshacía la fila de lo enseñado en cada repintado.)
 
         // QUIÉN ES CROMO LO DICE EL MAPA, no este dibujo. Aquí se recontaba por cuenta propia y solo
         // sobre los nodos que había delante, así que una salida que el mapa sabe que está en toda la
@@ -1386,16 +2351,10 @@ public sealed class GraphExplorerWindow : Window
             if (NivelDe(h.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
                 cromo[h.To] = h.Info.Label;
 
-        // El centro del nivel: la aplicación. Los hermanos cuelgan de él, a un solo salto.
-        string centro = cromo.Count > 0 ? $"nivel://{appActual}" : "";
-        if (centro.Length > 0)
-        {
-            prof[centro] = 0;
-            foreach (var d in cromo.Keys) prof[d] = 1;
-            // Lo que ya se recorrió cuelga por debajo, para no mezclarse con los hermanos.
-            foreach (var n in prof.Keys.ToList())
-                if (n != centro && !cromo.ContainsKey(n)) prof[n] = Math.Max(prof[n], 2);
-        }
+        // El centro ya existe desde arriba. El cromo solo APORTA sus destinos a la fila 1 si nadie
+        // los colocó; el empujón que hundía todo lo no-cromo a la fila 2 se va — era la última
+        // escritura del repintado y deshacía lo declarado cada vez (2026-08-06).
+        foreach (var d in cromo.Keys) if (!prof.ContainsKey(d)) prof[d] = 1;
 
         // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra
         // deja de leerse; a partir de ahí se sigue pagando el sitio que ocupa un texto que ya nadie
@@ -1483,10 +2442,13 @@ public sealed class GraphExplorerWindow : Window
         // Del centro del nivel a cada hermano: una sola arista por hermano, alcanzable desde
         // cualquier pantalla de la app. Es la forma que el usuario tiene en la cabeza y la que el
         // mapa ya sabía; solo faltaba dibujarla así.
+        // Del centro cuelga TODA la fila 1 —el cromo deducido y lo declarado— con la misma arista
+        // azul: son la misma afirmación, «esto se alcanza desde cualquier pantalla de la app».
         if (centro.Length > 0 && pos.TryGetValue(centro, out var pc))
-            foreach (var (destino, etiqueta) in cromo.Select(k => (k.Key, k.Value)))
+            foreach (var kv in prof.Where(p => p.Value == 1 && !p.Key.Equals(centro, StringComparison.OrdinalIgnoreCase)))
             {
-                if (!pos.TryGetValue(destino, out var pd)) continue;
+                if (!pos.TryGetValue(kv.Key, out var pd)) continue;
+                string etiqueta = cromo.TryGetValue(kv.Key, out var et) ? et : Corto(kv.Key);
                 _lienzo.Children.Add(new System.Windows.Shapes.Line
                 {
                     X1 = pc.X + anchoCaja / 2, Y1 = pc.Y + altoCaja,
@@ -1501,6 +2463,16 @@ public sealed class GraphExplorerWindow : Window
         foreach (var (f, t, label) in traza)
         {
             if (!pos.TryGetValue(f, out var a) || !pos.TryGetValue(t, out var b)) continue;
+
+            // HACIA EL PRIMER NIVEL NO SE DIBUJA NINGÚN PASEO. Al cromo se llega desde CUALQUIER
+            // parte —eso es lo que lo hace cromo— así que la arista azul del centro ya lo dice
+            // entero. Dibujar además el paseo verde «nivel3 → Notas» insinuaba que para llegar a
+            // Notas hay que pasar por el nivel 3, que es exactamente lo contrario de lo que
+            // significa ser del primer nivel (2026-08-07, observado por el usuario). Primero se
+            // suprimió solo entre hermanos de la fila 1; el caso general es este: LLEGAR al primer
+            // nivel nunca es estructura, venga de donde venga. Salir de él hacia dentro, sí.
+            if (centro.Length > 0
+                && prof.TryGetValue(t, out int pt) && pt == 1) continue;
             var linea = new System.Windows.Shapes.Line
             {
                 X1 = a.X + anchoCaja / 2, Y1 = a.Y + altoCaja,
@@ -1786,10 +2758,16 @@ public sealed class GraphExplorerWindow : Window
             // posiciones dan la misma firma—, así que el azul no llegaba hasta que un clic del
             // usuario forzaba una relectura: se acababa de enseñar y en pantalla no se veía nada
             // (2026-08-06, observado por el usuario). Se invalida la firma y se repinta.
+            // LOS NÚMEROS SE APAGAN ANTES DE PREGUNTAR POR EL COLOR. Mientras se numera, los puntos
+            // se pintan oscuros para que el número se lea — así que preguntar «¿están azules?» con
+            // los números todavía puestos es preguntar por algo que no puede estar en pantalla. Se
+            // apagan, se repinta, y entonces se pregunta (2026-08-06, observado por el usuario: «no
+            // se pusieron azules aunque dijo que el maestro lo hizo»).
+            Numerar = false;
             _signature = "";
             _numeradas.Clear();
             RefreshEdges();
-            await Task.Delay(500);   // que el repintado llegue ANTES de preguntar qué se ve
+            await Task.Delay(900);   // que el repintado llegue ANTES de preguntar qué se ve
 
             await PasoAPaso.EsperarAsync(
                 leccion == null ? "El maestro no pudo responder" : "Lección aplicada",
@@ -1811,7 +2789,18 @@ public sealed class GraphExplorerWindow : Window
         }
     }
 
-    private async Task CrawlAsync()
+    /// <param name="conMaestro">
+    /// ¿Se le pregunta al modelo por la jerarquía antes de recorrer?
+    ///
+    /// Sí cuando alguien manda mapear una app: la lección le dice de un vistazo qué es navegación
+    /// permanente. NO cuando lo que se está probando es el NÚCLEO: ahí la pregunta es si la
+    /// estructura se arma bien recorriendo, y meter al maestro por medio mezcla dos cosas — un
+    /// modelo que hoy acierta catorce y mañana doce haría fallar una prueba sin que el grafo
+    /// hubiera cambiado nada. Además lo enseñado ya está guardado y se repone solo, así que la
+    /// prueba no pierde el azul: lo hereda sin pagarlo otra vez (2026-08-08, señalado por el
+    /// usuario).
+    /// </param>
+    private async Task CrawlAsync(bool conMaestro = true)
     {
         if (_crawlCts != null) { _crawlCts.Cancel(); return; }
 
@@ -1828,7 +2817,17 @@ public sealed class GraphExplorerWindow : Window
         // jerarquía ya puesta, el recorrido sabe qué está explorando en vez de descubrirlo al final.
         // Va aquí y no en quien llama para que valga para TODAS las formas de pedir un mapeo: el
         // botón de «esta app» y el catálogo tienen que aprender lo mismo.
-        await EnsenarLaAppAsync();
+        // EL ARQUITECTO SE PONE AQUÍ, en el mismo sitio donde corre el recorredor: quien pulsa
+        // «mapear» o elige una app del catálogo quiere que se aprenda, y el 🧠 decide con qué
+        // cabeza. Va DENTRO de CrawlAsync y no en cada sitio que la llama para que las dos puertas
+        // de entrada —el botón y el catálogo— no puedan divergir (2026-08-08).
+        if (_conArquitecto)
+        {
+            await AuditarConArquitectoAsync(SurfaceMap.AppDe(loc.Id));
+            return;
+        }
+
+        if (conMaestro) await EnsenarLaAppAsync();
         _crawlBtn.Content = "⏹ Detener el mapeo";
         _busy = true;   // el refresco de aristas no compite con el recorrido
         try
@@ -1864,6 +2863,12 @@ public sealed class GraphExplorerWindow : Window
             DibujarGrafo();
             _status.Text = r;
             LogBus.Log("explorador", "mapeo automático: " + r);
+
+            // La prueba que salió bien puede quedar de vara de medir: si el usuario marcó la
+            // casilla en el paso a paso, lo logrado se congela como escenario de CI y las
+            // versiones futuras del núcleo tendrán que estar a su altura (ver EscenarioCi).
+            if (PasoAPaso.Activo && PasoAPaso.GuardarComoCi)
+                EscenarioCi.Guardar(SurfaceMap.AppDe(loc.Id), _map);
         }
         catch (Exception ex) { _status.Text = "el mapeo falló: " + ex.Message; }
         finally

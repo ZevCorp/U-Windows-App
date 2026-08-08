@@ -86,8 +86,23 @@ public sealed class MaestroDeApps
             return null;
         }
 
+        // LO QUE YA SE CORRIGIÓ A MANO EN ESTA APP. Corregir una vez y que al día siguiente lo
+        // vuelva a fallar no es corregir, es repetirse.
+        var correcciones = _mapa.CorreccionesDe(app);
+        string aprendido = correcciones.Count == 0 ? "" : $"""
+
+            YA TE CORRIGIERON ANTES EN ESTA APLICACIÓN. Una persona revisó tu trabajo y dejó dicho
+            esto; respétalo salvo que lo que veas ahora lo contradiga de forma evidente:
+            {string.Join("\n", correcciones.Select(c => $"  · «{c.Etiqueta}» → nivel {c.Nivel}"))}
+
+            Si alguno de esos elementos está en la lista de números de arriba, inclúyelo en el nivel
+            que se te indica. No hace falta que vuelvas a juzgarlo: ya está juzgado.
+            """;
+        if (correcciones.Count > 0)
+            LogBus.Log("maestro", $"{correcciones.Count} corrección(es) previas de «{app}» van en la consulta");
+
         string respuesta;
-        try { respuesta = await PreguntarAsync(clave, Instruccion(app, superficie, inventario), foto, ct); }
+        try { respuesta = await PreguntarAsync(clave, Instruccion(app, superficie, inventario) + aprendido, foto, ct); }
         catch (Exception e) { LogBus.Log("maestro", $"no se pudo preguntar: {e.Message}"); return null; }
 
         return Aplicar(app, respuesta, numeradas);
@@ -109,21 +124,45 @@ public sealed class MaestroDeApps
 
         Tu tarea es explicar la JERARQUÍA DE NAVEGACIÓN de esta aplicación:
 
-        · PRIMER NIVEL: el mobiliario fijo de navegación, lo que está SIEMPRE a la vista dentro de
-          esta app estés en la pantalla que estés — el panel lateral del explorador, las pestañas de
-          un navegador, la barra de secciones de una app de ajustes. No son acciones («Copiar»,
-          «Eliminar», «Nuevo») ni contenido (archivos, correos, filas de una lista): son los sitios
-          a los que siempre se puede ir.
+        · PRIMER NIVEL: lo PERMANENTE Y TRANSVERSAL. La prueba es una sola pregunta, y hazla
+          elemento por elemento:
+
+              «Si me voy a cualquier otra subpágina de esta aplicación, ¿ESTO seguiría ahí?»
+
+          Si la respuesta es sí, es del primer nivel. Si desaparecería al cambiar de sección, NO lo
+          es —por muy visible que esté ahora—.
+
+          Tres ejemplos de lo que sí:
+            · la barra de tareas de Windows: vayas a donde vayas en el sistema, sigue ahí;
+            · las pestañas del navegador: estés en la web que estés, siguen ahí;
+            · el menú principal de una página: navegues a la subpágina que navegues, sigue ahí.
+
+          Y lo que NO es, aunque se vea grande y en el centro: el CONTENIDO de la pantalla actual
+          —los archivos de esta carpeta, los accesos rápidos de esta vista, las filas de una lista,
+          los correos de la bandeja— y las ACCIONES («Copiar», «Eliminar», «Nuevo», «Pegar»). Todo
+          eso cambia al moverte; el mobiliario, no.
+
+          EL PANEL ENTERO, TAMBIÉN LO QUE CUELGA DENTRO. Si dentro del panel permanente hay un grupo
+          desplegado —«OneDrive» con sus carpetas debajo, «Este equipo» con sus unidades, una
+          sección con sus apartados—, esos hijos también son del primer nivel: están en el panel, y
+          el panel no se va al navegar. No los dejes fuera por estar indentados o por colgar de otro
+          elemento; lo que decide es dónde VIVEN, no cuánto se sangran. Aquí es donde se falla:
+          marcando el panel y saltándose lo que hay dentro (2026-08-06).
 
         · SEGUNDO NIVEL: si en esta pantalla ves elementos que pertenecen a UNO de los de primer
           nivel —porque estamos dentro de él—, dilo colgándolos de su número. Ejemplo: si estamos
           dentro de «Notas» y ves sus subcarpetas, esas van en el segundo nivel bajo el número de
           «Notas».
 
+        · ATRÁS: además, di qué número es el control de VOLVER de esta aplicación —la flecha de
+          retroceso, el «Back»—, si lo ves. Importa porque el atrás no es navegación constante: a
+          dónde lleva depende de por dónde viniste, y el mapa no debe tratarlo como una puerta.
+
         Responde SOLO con este JSON, usando los números de la lista:
 
         {"nivel1": [1, 5, 9],
          "nivel2": {"5": [12, 13]},
+         "atras": [3],
          "explicacion": "una frase corta, en español, de qué es cada zona"}
 
         CASI TODA APLICACIÓN TIENE NAVEGACIÓN PERMANENTE, y suele estar en el mismo sitio: una
@@ -235,6 +274,12 @@ public sealed class MaestroDeApps
                     nivel2[p.Name] = p.Value.EnumerateArray()
                         .Where(x => x.TryGetInt32(out _)).Select(x => x.GetInt32()).ToList();
             explicacion = raiz.TryGetProperty("explicacion", out var ex) ? ex.GetString() ?? "" : "";
+
+            // El gesto de VOLVER, si lo señaló: no acuña aristas y su rastro es efímero.
+            if (raiz.TryGetProperty("atras", out var at) && at.ValueKind == JsonValueKind.Array)
+                foreach (var x in at.EnumerateArray())
+                    if (x.TryGetInt32(out int na) && numeradas.TryGetValue(na, out var elAtras))
+                        _mapa.AprenderAtras(app, elAtras.Label, humano: false);
         }
         catch (Exception e)
         {
@@ -249,7 +294,7 @@ public sealed class MaestroDeApps
             // UN NÚMERO QUE NO EXISTE NO SE APLICA. Si el modelo se inventa uno, aquí se cae solo:
             // el puente son los números que nosotros pintamos, no los que él imagine.
             if (!numeradas.TryGetValue(n, out var el)) { LogBus.Log("maestro", $"número {n} no existe: se ignora"); continue; }
-            string r = _mapa.FijarNivel(app, el.Label, 1);
+            string r = _mapa.FijarNivel(app, el.Label, 1, porPersona: false);
             if (!r.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) { puestos1++; elegidos.Add(el.Label); }
             else LogBus.Log("maestro", $"«{el.Label}» (nº {n}) no está como salida en el mapa: no se fija");
         }
@@ -260,7 +305,7 @@ public sealed class MaestroDeApps
             foreach (int n in hijos.Distinct())
             {
                 if (!numeradas.TryGetValue(n, out var el)) continue;
-                string r = _mapa.FijarNivel(app, el.Label, 2);
+                string r = _mapa.FijarNivel(app, el.Label, 2, porPersona: false);
                 if (!r.Contains("no encuentro", StringComparison.OrdinalIgnoreCase)) puestos2++;
             }
 

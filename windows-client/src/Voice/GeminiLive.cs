@@ -504,15 +504,20 @@ public sealed class GeminiLive : IDisposable
                    + "qué elementos forman esa zona lo decides TÚ mirando el vídeo y cruzándolo con "
                    + "map_what_i_see, y aquí traes ya la lista elegida.")),
         Fn("map_set_level", "Corrige a mano a qué NIVEL pertenece una salida, para toda la app y de "
-            + "forma permanente. Nivel 1 = navegación principal (los hermanos que están siempre a la "
-            + "vista). Úsala cuando el usuario diga cosas como «esto es del menú principal», «esto no "
-            + "pertenece al primer nivel» o «pon esto en el nivel 2». Con level = -1 se suelta y vuelve "
-            + "a decidirlo el sistema.",
+            + "forma permanente. Nivel 1 = navegación principal. IMPORTANTE: «quítalo del primer "
+            + "nivel», «esto no va ahí» o «no es del menú principal» se hace con level = -1 (SOLTAR), "
+            + "nunca inventando otro nivel: un nivel declarado CLAVA el elemento en esa fila y la "
+            + "jerarquía real ya no puede colocarlo — quitar no es mover, es soltar. Declara un nivel "
+            + "concreto solo cuando el usuario lo diga con número o señale dónde va.",
             ("exit", "La salida por su nombre tal como se ve («Notas») o su selector. VARIAS a la vez: "
                    + "sus nombres separados por comas —«Escritorio, Descargas, Notas, Música»—, que es "
                    + "como se corrige una barra entera sin repetir la llamada veinte veces. Te dirá "
                    + "cuáles quedaron fijados y cuáles no encontró."),
             ("level", "El nivel: 1 para la navegación principal, 2 o más para lo de dentro, -1 para soltar."),
+            ("cromo", "«true» si es navegación PERSISTENTE de su nivel (se marca en azul): una barra "
+                    + "que sigue ahí mientras te mueves dentro de esa sección. El cromo puede vivir en "
+                    + "cualquier nivel — una web puede tener barra de cromo en el nivel 1 Y otra dentro "
+                    + "de cada sección (nivel 2). Vacío = nivel 1 es cromo y los demás no."),
             ("app", "La app; vacío = donde estés ahora.")),
         Fn("map_run", "Ejecuta una SECUENCIA de pasos de una sola vez, sin volver a consultarte entre "
             + "uno y otro. Es la forma rápida: úsala para las tareas que ya sabes hacer enteras.",
