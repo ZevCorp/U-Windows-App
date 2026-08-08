@@ -64,6 +64,10 @@ public sealed class GraphExplorerWindow : Window
     /// <summary>La tira de niveles del borde derecho: una app por nivel. Ver <see cref="DibujarNiveles"/>.</summary>
     private StackPanel _niveles = null!;
 
+    /// <summary>La tira de versiones del núcleo, borde izquierdo. Ver <see cref="DibujarVersiones"/>.</summary>
+    private StackPanel _versionesNucleo = null!;
+    private DateTime _versionesVistas = DateTime.MinValue;
+
     /// <summary>Se enciende en ámbar mientras la capa acepta el ratón (Ctrl+Shift).</summary>
     private Border _marco = null!;
     private readonly System.Windows.Threading.DispatcherTimer _refresh;
@@ -259,13 +263,29 @@ public sealed class GraphExplorerWindow : Window
         // quedó ahí cuando esa lista se convirtió en puntos sobre la pantalla, así que el grafo
         // seguía apretado en media pantalla sin que nada ocupara la otra mitad (2026-08-04).
         // Solo la tira de niveles conserva su sitio, porque su sitio ES el borde.
+        // LAS VERSIONES DEL NÚCLEO, pegadas al borde IZQUIERDO: el espejo de los niveles. La tira
+        // derecha responde «¿en qué terreno estoy?»; esta responde «¿con qué NÚCLEO lo estoy
+        // pisando?». Un clic salta a otra versión precompilada — así probar un cambio del grafo o
+        // volver a la v0 que funcionaba cuesta lo mismo que cambiar de app (2026-08-08, pedido por
+        // el usuario). Ver NucleoVersiones.
+        _versionesNucleo = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Margin = new Thickness(0, 0, 6, 0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
         var derecha = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
+        derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(_grafo, 0);
-        Grid.SetColumn(_niveles, 1);
+        Grid.SetColumn(_versionesNucleo, 0);
+        Grid.SetColumn(_grafo, 1);
+        Grid.SetColumn(_niveles, 2);
         _lienzo.HorizontalAlignment = HorizontalAlignment.Center;
         _lienzo.VerticalAlignment = VerticalAlignment.Center;
+        derecha.Children.Add(_versionesNucleo);
         derecha.Children.Add(_grafo);
         derecha.Children.Add(_niveles);
 
@@ -1283,6 +1303,106 @@ public sealed class GraphExplorerWindow : Window
     /// y deja claro que pasar de un nivel a otro no es pulsar una arista más: es abrir otra
     /// aplicación, o su icono en la barra de tareas (2026-08-04).
     /// </summary>
+    /// <summary>
+    /// La tira de versiones del núcleo: v0, v1, v2… y «dev» si este binario no es ninguna.
+    ///
+    /// La que CORRE va encendida en ámbar (como «estás aquí» en los niveles); la que está EN
+    /// EDICIÓN lleva el lápiz — esa es la única cuyo código puede tocar el agente, con contraseña.
+    /// Pulsar otra versión salta a su binario precompilado al instante; no se compila nada al
+    /// pulsar. Una versión sin binario se dibuja apagada y el clic lo dice en vez de fingir.
+    /// </summary>
+    private void DibujarVersiones()
+    {
+        // Se redibuja solo si el registro cambió: esto corre en cada latido del refresco.
+        var huella = NucleoVersiones.UltimoCambio();
+        if (huella == _versionesVistas && _versionesNucleo.Children.Count > 0) return;
+        _versionesVistas = huella;
+        _versionesNucleo.Children.Clear();
+
+        var todas = NucleoVersiones.Todas();
+        if (todas.Count == 0) return;   // sin registro no hay tira: nada que elegir
+
+        int? actual = NucleoVersiones.Actual();
+        int enEdicion = NucleoVersiones.EnEdicion();
+
+        _versionesNucleo.Children.Add(new TextBlock
+        {
+            Text = "NÚCLEO",
+            Foreground = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+            FontSize = 8, FontWeight = FontWeights.Bold, FontFamily = new FontFamily("Consolas"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 4),
+        });
+
+        foreach (var v in todas)
+        {
+            bool aqui = actual == v.N;
+            bool editando = enEdicion == v.N;
+
+            var pastilla = new Border
+            {
+                Width = 26, Height = 26,
+                Cursor = v.Construida ? Cursors.Hand : Cursors.No,
+                CornerRadius = new CornerRadius(13),
+                Margin = new Thickness(0, 3, 0, 3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Background = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0x66, 0xFF, 0xB3, 0x00)
+                    : Color.FromArgb(v.Construida ? (byte)0x28 : (byte)0x12, 0xFF, 0xFF, 0xFF)),
+                // El lápiz de «en edición» se dice con el borde: punteado no hay en Border, así que
+                // azul clarito — distinto del ámbar de «corriendo», y pueden coincidir.
+                BorderBrush = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07)
+                    : editando ? Color.FromArgb(0xCC, 0x64, 0xB5, 0xF6)
+                               : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(aqui || editando ? 2 : 1),
+                ToolTip = $"núcleo v{v.N}"
+                        + (v.Nota.Length > 0 ? $" · {v.Nota}" : "")
+                        + (aqui ? " · CORRIENDO AHORA" : "")
+                        + (editando ? " · en edición (la única que el agente puede tocar)" : "")
+                        + (v.Construida ? (aqui ? "" : " · clic para saltar a esta versión")
+                                        : " · SIN COMPILAR: scripts\\version-nucleo.ps1 -Construir"),
+            };
+            pastilla.Child = new TextBlock
+            {
+                Text = editando ? $"{v.N}✏" : v.N.ToString(),
+                Foreground = new SolidColorBrush(aqui
+                    ? Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF)
+                    : Color.FromArgb(v.Construida ? (byte)0x99 : (byte)0x44, 0xFF, 0xFF, 0xFF)),
+                FontSize = editando ? 9 : 11, FontWeight = FontWeights.Bold,
+                FontFamily = new FontFamily("Consolas"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            var destino = v;
+            pastilla.MouseLeftButtonUp += (_, __) =>
+            {
+                if (actual == destino.N) return;   // ya estamos en esta
+                if (!destino.Construida)
+                {
+                    _status.Text = $"v{destino.N} no está compilada: córrele scripts\\version-nucleo.ps1 -Construir {destino.N}";
+                    return;
+                }
+                _status.Text = $"saltando al núcleo v{destino.N}…";
+                NucleoVersiones.SaltarA(destino);
+            };
+            _versionesNucleo.Children.Add(pastilla);
+        }
+
+        // Este binario no es ninguna versión: se dice, para que «dev» no se confunda con la v-nada.
+        if (actual == null)
+            _versionesNucleo.Children.Add(new TextBlock
+            {
+                Text = "dev",
+                Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xB3, 0x00)),
+                FontSize = 9, FontFamily = new FontFamily("Consolas"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 2, 0, 0),
+                ToolTip = "este binario es de DESARROLLO (no es ninguna versión numerada)",
+            });
+    }
+
     private void DibujarNiveles(string appActual)
     {
         _niveles.Children.Clear();
@@ -1510,6 +1630,7 @@ public sealed class GraphExplorerWindow : Window
             ? _nodoActual
             : (_ultimaCorrida.Count > 0 ? _ultimaCorrida[^1].To : ""));
         DibujarNiveles(appActual);
+        DibujarVersiones();
 
         var traza = appActual.Length == 0
             ? _ultimaCorrida
@@ -2244,6 +2365,12 @@ public sealed class GraphExplorerWindow : Window
             DibujarGrafo();
             _status.Text = r;
             LogBus.Log("explorador", "mapeo automático: " + r);
+
+            // La prueba que salió bien puede quedar de vara de medir: si el usuario marcó la
+            // casilla en el paso a paso, lo logrado se congela como escenario de CI y las
+            // versiones futuras del núcleo tendrán que estar a su altura (ver EscenarioCi).
+            if (PasoAPaso.Activo && PasoAPaso.GuardarComoCi)
+                EscenarioCi.Guardar(SurfaceMap.AppDe(loc.Id), _map);
         }
         catch (Exception ex) { _status.Text = "el mapeo falló: " + ex.Message; }
         finally

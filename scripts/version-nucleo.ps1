@@ -1,0 +1,143 @@
+# VERSIONES DEL NUCLEO DEL GRAFO. La v0 es la original congelada; se edita sobre la version que el
+# DUENO elija, y volver a la que funcionaba es un clic en la tira izquierda del explorador del grafo.
+#
+#   .\scripts\version-nucleo.ps1 -Bootstrap                # crea v0 (congelada) y v1 (en edicion), y las compila
+#   .\scripts\version-nucleo.ps1 -Crear -Nota "prueba X"   # nueva version desde la que esta en edicion
+#   .\scripts\version-nucleo.ps1 -Editar 2                 # elegir cual se edita (SOLO el dueno; v0 jamas)
+#   .\scripts\version-nucleo.ps1 -Construir                # compilar la version en edicion a su directorio
+#
+# Como encajan las piezas:
+#   - La INSTANTANEA de cada version es versiones\nucleo\vN.cs (en el repo: es codigo).
+#   - El archivo de TRABAJO es src\Navigation\SurfaceMap.cs: SIEMPRE contiene la version en
+#     edicion. El agente de codigo solo puede editar ese archivo (con contrasena) — las
+#     instantaneas las bloquea el guardian sin popup siquiera.
+#   - El REGISTRO (que versiones hay, cual se edita) es C:\U-versiones\versiones.json: UNA copia,
+#     la leen el runtime, el guardian y este script. Dos copias se desincronizan en silencio.
+#   - Cada version COMPILADA vive en C:\U-versiones\vN\bin con su version.txt. Saltar de version
+#     en la app no compila nada: arranca ese binario. Por eso -Construir existe: la tira solo
+#     ofrece lo que ya este compilado.
+#
+# -Construir tambien refresca la instantanea vN.cs desde el archivo de trabajo: la instantanea es
+# LO CONSTRUIDO, no un borrador. Y corre el contrato antes de dar la build por buena.
+
+[CmdletBinding()]
+param(
+  [switch]$Bootstrap,
+  [switch]$Crear,
+  [int]$Editar = -1,
+  [switch]$Construir,
+  [int]$Version = -1,          # con -Construir: cual (por defecto, la que esta en edicion)
+  [string]$Nota = "",
+  [switch]$SinContrato         # solo para depurar el propio script; el contrato es la red
+)
+
+$ErrorActionPreference = 'Stop'
+$repo      = Split-Path -Parent $PSScriptRoot
+$trabajo   = Join-Path $repo "windows-client\src\Navigation\SurfaceMap.cs"
+$snaps     = Join-Path $repo "versiones\nucleo"
+$raiz      = if ($env:U_VERSIONES_DIR) { $env:U_VERSIONES_DIR } else { "C:\U-versiones" }
+$registro  = Join-Path $raiz "versiones.json"
+
+function Leer-Registro {
+  if (Test-Path $registro) { Get-Content $registro -Raw | ConvertFrom-Json }
+  else { [pscustomobject]@{ EnEdicion = -1; Versiones = @() } }
+}
+function Guardar-Registro($r) {
+  New-Item -ItemType Directory -Force -Path $raiz | Out-Null
+  $r | ConvertTo-Json -Depth 5 | Set-Content $registro -Encoding utf8
+}
+function Snap($n) { Join-Path $snaps ("v{0}.cs" -f $n) }
+
+function Compilar($n) {
+  $bin = Join-Path $raiz ("v{0}\bin" -f $n)
+  Write-Host ("compilando v{0} -> {1} ..." -f $n, $bin) -ForegroundColor Cyan
+
+  # La instantanea manda: se construye EXACTAMENTE lo que dice vN.cs. Si no es la version en
+  # edicion, el archivo de trabajo se aparta y se restaura pase lo que pase.
+  $eraTrabajo = (Get-FileHash $trabajo).Hash -eq (Get-FileHash (Snap $n)).Hash
+  $respaldo = "$trabajo.antes-de-compilar"
+  if (-not $eraTrabajo) { Copy-Item $trabajo $respaldo -Force; Copy-Item (Snap $n) $trabajo -Force }
+  try {
+    dotnet build (Join-Path $repo "windows-client\WindowsClient.csproj") -c Debug -o $bin --nologo -v quiet
+    if ($LASTEXITCODE -ne 0) { throw "v$n no compila (codigo $LASTEXITCODE)" }
+    Set-Content (Join-Path $bin "version.txt") $n -Encoding ascii
+  } finally {
+    if (-not $eraTrabajo) { Move-Item $respaldo $trabajo -Force }
+  }
+
+  if (-not $SinContrato) {
+    Write-Host ("contrato sobre v{0}..." -f $n) -ForegroundColor Cyan
+    $binTest = Join-Path $env:TEMP ("u-contrato\bin-v{0}" -f $n)
+    dotnet build (Join-Path $repo "tests\ContratoDelGrafo\ContratoDelGrafo.csproj") -c Debug -o $binTest -p:UBin=$bin --nologo -v quiet
+    if ($LASTEXITCODE -ne 0) { throw "el contrato no compila contra v$n" }
+    & (Join-Path $binTest "contrato-del-grafo.exe")
+    if ($LASTEXITCODE -ne 0) { throw "v$n ROMPE el contrato: la build queda, pero no la uses sin arreglarlo" }
+  }
+  Write-Host ("v{0} lista." -f $n) -ForegroundColor Green
+}
+
+# --- bootstrap: v0 congelada + v1 editable ------------------------------------
+if ($Bootstrap) {
+  if (Test-Path $registro) { throw "ya hay registro en ${registro}: el bootstrap es solo la primera vez" }
+  New-Item -ItemType Directory -Force -Path $snaps | Out-Null
+  Copy-Item $trabajo (Snap 0) -Force
+  Copy-Item $trabajo (Snap 1) -Force
+  $hoy = Get-Date -Format "yyyy-MM-dd"
+  Guardar-Registro ([pscustomobject]@{
+    EnEdicion = 1
+    Versiones = @(
+      [pscustomobject]@{ N = 0; Creada = $hoy; Nota = "la original congelada" },
+      [pscustomobject]@{ N = 1; Creada = $hoy; Nota = "en edicion" }
+    )
+  })
+  Compilar 0
+  Compilar 1
+  Write-Host "v0 congelada y v1 en edicion. La tira izquierda del explorador ya las ofrece." -ForegroundColor Green
+  return
+}
+
+# --- crear: nueva version desde la que esta en edicion ------------------------
+if ($Crear) {
+  $r = Leer-Registro
+  $n = ($r.Versiones | Measure-Object -Property N -Maximum).Maximum + 1
+  Copy-Item $trabajo (Snap $n) -Force
+  $r.Versiones += [pscustomobject]@{ N = $n; Creada = (Get-Date -Format "yyyy-MM-dd"); Nota = $Nota }
+  $r.EnEdicion = $n
+  Guardar-Registro $r
+  Compilar $n
+  Write-Host ("v{0} creada desde lo que habia en edicion, y queda EN EDICION." -f $n) -ForegroundColor Green
+  return
+}
+
+# --- editar: elegir sobre cual se trabaja -------------------------------------
+if ($Editar -ge 0) {
+  if ($Editar -eq 0) { throw "la v0 es la original congelada: no se edita. Crea una version nueva con -Crear." }
+  $r = Leer-Registro
+  if (-not ($r.Versiones | Where-Object { $_.N -eq $Editar })) { throw "no existe la v$Editar" }
+  # Lo editado sin construir se perderia al traer la otra instantanea: se avisa y se corta.
+  $enEd = $r.EnEdicion
+  if ($enEd -ge 0 -and (Test-Path (Snap $enEd)) -and
+      ((Get-FileHash $trabajo).Hash -ne (Get-FileHash (Snap $enEd)).Hash)) {
+    throw "el archivo de trabajo tiene cambios de v$enEd sin construir. Corre -Construir primero (o descartalos a mano)."
+  }
+  Copy-Item (Snap $Editar) $trabajo -Force
+  $r.EnEdicion = $Editar
+  Guardar-Registro $r
+  Write-Host ("ahora se edita la v{0}: el archivo de trabajo ES esa version." -f $Editar) -ForegroundColor Green
+  return
+}
+
+# --- construir ----------------------------------------------------------------
+if ($Construir) {
+  $r = Leer-Registro
+  $n = if ($Version -ge 0) { $Version } else { $r.EnEdicion }
+  if ($n -lt 0) { throw "no hay version en edicion ni -Version dada" }
+  if ($n -eq $r.EnEdicion) {
+    # La instantanea es LO CONSTRUIDO: se refresca desde el trabajo justo antes de compilar.
+    Copy-Item $trabajo (Snap $n) -Force
+  }
+  Compilar $n
+  return
+}
+
+Write-Host "nada que hacer: usa -Bootstrap, -Crear, -Editar N o -Construir (ver cabecera)" -ForegroundColor Yellow

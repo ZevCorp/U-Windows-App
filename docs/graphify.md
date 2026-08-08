@@ -1028,3 +1028,46 @@ más abajo, y «Almacenamiento» para por qué el transporte sigue siendo un arc
   `if (dominio == …)`. El mismo principio de las dos capas de graphify: se comparten reglas,
   nunca terreno.
 - Fecha: 2026-08-08, diseñado al congelar el núcleo.
+
+---
+
+## Versiones del núcleo y el CI (2026-08-08)
+
+### El núcleo se versiona: romper no cuesta nada
+- El candado hace que editar el núcleo sea una decisión consciente, pero una decisión consciente
+  también rompe cosas. La salida no es prohibir más: es que volver atrás cueste UN clic. La v0 es
+  el núcleo congelado original; se trabaja sobre la versión que el dueño elija, y la tira
+  IZQUIERDA del explorador salta entre versiones precompiladas al instante (ámbar = corriendo,
+  lápiz azul = en edición).
+- El salto NO recompila: arranca el binario de esa versión (`C:\U-versiones\vN\bin`) heredando el
+  entorno entero —mismo terreno, mismas enseñanzas— y apaga el actual. Se descartó el intercambio
+  en caliente a propósito: estado estático y eventos WPF lo hacen frágil, y un sistema de
+  seguridad no se construye sobre algo frágil.
+- El agente de código SOLO puede editar la versión en edición, porque el archivo de trabajo
+  (`src\Navigation\SurfaceMap.cs`) ES esa versión por construcción; las instantáneas
+  (`versiones\nucleo\vN.cs`) y el registro los veta el guardián sin popup siquiera. El popup de
+  contraseña dice qué versión se está editando, para que la autorización sea informada.
+- Comandos: `version-nucleo.ps1 -Crear` / `-Editar N` / `-Construir`. Construir refresca la
+  instantánea («la instantánea es lo construido») y corre el contrato antes de dar la build por
+  buena. La v0 no se edita jamás: de ella solo se sale con `-Crear`.
+- Fecha: 2026-08-08, pedido por el usuario. Código: `Navigation/NucleoVersiones`,
+  `scripts/version-nucleo.ps1`, tira en `GraphExplorerWindow.DibujarVersiones`.
+
+### El CI tiene dos mitades porque las pruebas tienen dos naturalezas
+- CI = integración continua: cada cambio se construye y se prueba SOLO, sin que nadie se acuerde.
+  Aquí en dos niveles, porque nuestras pruebas son de dos especies distintas:
+  · Las PROMESAS del núcleo (el contrato) no tocan pantalla → corren en la nube en cada push
+    (`.github/workflows/contrato.yml`, un Windows alquilado de GitHub). Rojo en GitHub = una
+    promesa rota antes de que nadie construya encima.
+  · El RESULTADO sobre el terreno real (abrir una app, recorrerla, el maestro) necesita ESTE PC,
+    su escritorio y sus apps → corre local con `scripts/ci-local.ps1`, contra la versión que se
+    pida (`-Version 0` responde «¿lo nuevo rompió lo viejo?»).
+- Los escenarios los graba el paso a paso: la casilla «al terminar, guardar esta prueba para CI»
+  congela lo logrado en un mapeo como MÍNIMO exigible (el 80%, contra el ruido del maestro y del
+  terreno — exigir igualdad exacta fallaría sin que nada se hubiera roto). Viven en
+  `C:\U-versiones\escenarios\`, no en el repo: son la vara de medir de ESTA máquina.
+- El CI local corre en entorno limpio y aparte (`C:\U-ci\vN`): ni contamina el terreno del
+  usuario ni hereda historia que esconda una regresión. Y juzga por el ARCHIVO guardado, no por
+  lo que la app diga de sí misma.
+- Fecha: 2026-08-08. Código: `Ui/PasoAPaso.GuardarComoCi`, `Navigation/EscenarioCi`,
+  `scripts/ci-local.ps1`.
