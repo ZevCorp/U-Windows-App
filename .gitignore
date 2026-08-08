@@ -3,6 +3,10 @@
 .env.*
 *.local
 
+# El candado del nucleo: cada maquina/desarrollador crea SU PROPIA contraseña. El script viaja
+# con el repo; el hash, nunca — es personal de quien la tecleo (ver .claude/hooks/guardia-nucleo.ps1).
+.claude/hooks/nucleo-clave.hash
+
 # .NET
 bin/
 obj/

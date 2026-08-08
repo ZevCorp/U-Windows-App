@@ -18,6 +18,17 @@
             "command": "\"C:/Users/Jose David Jaramillo/.local/bin/graphify.EXE\" hook-guard read"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guardia-nucleo.ps1\"",
+            "timeout": 300,
+            "statusMessage": "Guardia del nucleo del grafo"
+          }
+        ]
       }
     ]
   },
