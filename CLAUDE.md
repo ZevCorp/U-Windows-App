@@ -295,3 +295,28 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+### El grafo no se commitea — se regenera
+
+`graphify-out/` entero está en `.gitignore`. **Si tu `git status` lo muestra, algo va mal.**
+
+Tres medidas lo decidieron, ninguna es una opinión:
+
+1. Un commit de tres archivos de código arrastraba **133.216 líneas de diff en `graph.json`**. Con
+   una persona es ruido; con tres es un conflicto en cada merge, irresoluble a mano.
+2. `manifest.json` guarda **mtimes** — son de cada máquina. No existe forma de que dos personas
+   produzcan el mismo archivo.
+3. Los artefactos del pase semántico están indexados por **número de comunidad**, y esos números se
+   reasignan en cada build: el índice `"6"` pasó de `FaceWindow.xaml.cs` a `RoutedEventArgs` entre
+   dos corridas. Compartirlos no ahorra el pase — hace que una máquina lea el grafo de otra con las
+   etiquetas cambiadas. Un grafo que miente sobre qué es cada cosa es peor que no tener grafo.
+
+Al clonar no hay grafo. Se construye una vez, y esto **sí** cuesta llamadas (la última medición,
+en `.graphify_semantic_marker`, fueron 62.837 tokens de salida):
+
+```powershell
+graphify .
+```
+
+A partir de ahí, `graphify update .` tras cada cambio — AST puro, sin coste. El hook de Claude Code
+ya lo dispara solo al cambiar de rama, así que en la práctica no hay que acordarse.

@@ -24,5 +24,19 @@ release/
 # graphify: respaldos automaticos del grafo (no se comparten)
 graphify-out/20*/
 
+# graphify: el grafo NO se commitea, se regenera en cada maquina con `graphify .`
+#
+# Tres medidas que lo decidieron:
+#   1. Un commit de tres archivos de codigo arrastraba 133.216 lineas de diff en graph.json. Con
+#      tres personas eso es un conflicto en cada merge, en archivos irresolubles a mano.
+#   2. manifest.json guarda mtimes: son de cada maquina, no existe forma de que dos personas
+#      produzcan el mismo archivo.
+#   3. Los artefactos del pase semantico (.graphify_labels.json, .graphify_analysis.json) estan
+#      indexados por NUMERO de comunidad, y esos numeros se reasignan en cada build: el indice "6"
+#      paso de «FaceWindow.xaml.cs» a «RoutedEventArgs» entre dos corridas. Compartirlos no ahorra
+#      el pase semantico — hace que una maquina lea el grafo de otra con las etiquetas cambiadas.
+#      Por eso se van tambien, aunque cuesten llamadas: no son portables.
+graphify-out/
+
 # Temporales que deja el compilador de WPF al construir
 *_wpftmp.csproj
