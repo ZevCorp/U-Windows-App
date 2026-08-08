@@ -1151,3 +1151,26 @@ más abajo, y «Almacenamiento» para por qué el transporte sigue siendo un arc
   headless es suya propia — medido, no supuesto).
 - Fecha: 2026-08-08, pedido por el usuario. El maestro (Gemini, visión) y el arquitecto (Claude,
   navegación) conviven: uno mira de un vistazo, el otro camina y contrasta.
+
+### El arquitecto corre donde corría el crawler, y se elige con un botón
+- Mismo punto de entrada —el botón de mapear y el catálogo de apps— porque quien elige una app
+  quiere que se aprenda; el 🧠 decide CON QUÉ CABEZA. Va dentro de `CrawlAsync` y no en cada sitio
+  que la llama, para que las dos puertas de entrada no puedan divergir.
+- No se sustituye uno por otro: el mecánico agota lo que ve, es gratis y no juzga; el arquitecto
+  navega con criterio y deja hallazgos, pero cuesta tokens y tarda. Son dos formas de la misma
+  tarea, y cuál conviene depende de si lo que se quiere es cobertura o criterio.
+- Mientras corre, el grafo se repinta con un latido que mira `SurfaceMap.Version`: el agente
+  escribe en el mapa desde fuera (por la sonda), así que el dibujo no se entera por eventos como
+  con el recorredor. Y su informe se abre solo al terminar — un hallazgo que hay que ir a buscar
+  a un archivo es un hallazgo que nadie lee.
+- Exige `U_MCP_PROBE=1`: sin sonda el arquitecto no tiene brazos, y se dice en vez de fingir que
+  se está mapeando.
+- Fecha: 2026-08-08. Código: `Navigation/Arquitecto`, `GraphExplorerWindow.AuditarConArquitectoAsync`.
+
+### `-nodeReuse:false` en todo build de los scripts
+- MSBuild deja nodos vivos entre compilaciones para ir más rápido, y esos nodos se quedan
+  agarrados a `obj\` y a los binarios de salida. Compilando varias versiones seguidas, uno colgó
+  el build DIEZ MINUTOS sin decir nada — y el síntoma parecía «el contrato se cuelga», cuando el
+  contrato corría en segundos y pasaba 10/10.
+- Un build que a veces no termina es peor que un build medio segundo más lento.
+- Fecha: 2026-08-08, medido.

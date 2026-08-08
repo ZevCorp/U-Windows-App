@@ -85,7 +85,11 @@ function Compilar($n) {
   $respaldo = "$trabajo.antes-de-compilar"
   if (-not $eraTrabajo) { Copy-Item $trabajo $respaldo -Force; Copy-Item (Snap $n) $trabajo -Force }
   try {
-    dotnet build (Join-Path $repo "windows-client\WindowsClient.csproj") -c Debug -o $bin --nologo -v quiet
+    # -nodeReuse:false: MSBuild deja nodos vivos entre compilaciones para ir mas rapido, y esos
+    # nodos se quedan agarrados a obj\ y a los binarios de salida. Compilando varias versiones
+    # seguidas, uno de esos nodos colgo el build diez minutos sin decir nada (2026-08-08, medido).
+    # Un build que a veces no termina es peor que un build medio segundo mas lento.
+    dotnet build (Join-Path $repo "windows-client\WindowsClient.csproj") -c Debug -o $bin --nologo -v quiet -nodeReuse:false
     if ($LASTEXITCODE -ne 0) { throw "v$n no compila (codigo $LASTEXITCODE)" }
     Set-Content (Join-Path $bin "version.txt") $n -Encoding ascii
   } finally {
@@ -95,7 +99,7 @@ function Compilar($n) {
   if (-not $SinContrato) {
     Write-Host ("contrato sobre v{0}..." -f $n) -ForegroundColor Cyan
     $binTest = Join-Path $env:TEMP ("u-contrato\bin-v{0}" -f $n)
-    dotnet build (Join-Path $repo "tests\ContratoDelGrafo\ContratoDelGrafo.csproj") -c Debug -o $binTest -p:UBin=$bin --nologo -v quiet
+    dotnet build (Join-Path $repo "tests\ContratoDelGrafo\ContratoDelGrafo.csproj") -c Debug -o $binTest -p:UBin=$bin --nologo -v quiet -nodeReuse:false
     if ($LASTEXITCODE -ne 0) { throw "el contrato no compila contra v$n" }
     & (Join-Path $binTest "contrato-del-grafo.exe")
     if ($LASTEXITCODE -ne 0) { throw "v$n ROMPE el contrato: la build queda, pero no la uses sin arreglarlo" }

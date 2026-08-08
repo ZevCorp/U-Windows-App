@@ -21,12 +21,12 @@ $binApp   = Join-Path $scratch "bin-app"
 $binTest  = Join-Path $scratch "bin-contrato"
 
 Write-Host "1/3 compilando el nucleo..." -ForegroundColor Cyan
-dotnet build (Join-Path $repo "windows-client\WindowsClient.csproj") -c Debug -o $binApp --nologo -v quiet
+dotnet build (Join-Path $repo "windows-client\WindowsClient.csproj") -c Debug -o $binApp --nologo -v quiet -nodeReuse:false
 if ($LASTEXITCODE -ne 0) { throw "el nucleo no compila (codigo $LASTEXITCODE)" }
 
 Write-Host "2/3 compilando el contrato contra esos binarios..." -ForegroundColor Cyan
 dotnet build (Join-Path $repo "tests\ContratoDelGrafo\ContratoDelGrafo.csproj") `
-  -c Debug -o $binTest -p:UBin=$binApp --nologo -v quiet
+  -c Debug -o $binTest -p:UBin=$binApp --nologo -v quiet -nodeReuse:false
 if ($LASTEXITCODE -ne 0) { throw "el contrato no compila (codigo $LASTEXITCODE)" }
 
 Write-Host "3/3 juzgando..." -ForegroundColor Cyan
