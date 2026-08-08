@@ -1092,3 +1092,19 @@ más abajo, y «Almacenamiento» para por qué el transporte sigue siendo un arc
   clic — y el clic ya existe: saltar a otra versión en la tira relanza con el mismo entorno.
 - El botón «+» no tiene este problema: crea un directorio nuevo, así que nunca choca con lo vivo.
 - Fecha: 2026-08-08, tropezado en vivo mientras el usuario corría v1.
+
+### Las pruebas del núcleo se corren DENTRO del núcleo que se juzga
+- Qué juzgan, y solo eso: si la estructura y el comportamiento del núcleo PUESTO AHORA MISMO
+  siguen siendo los que eran. No miden si el maestro acertó más ni si la app movió un botón — por
+  eso los mínimos son el 80% de lo grabado y no una igualdad.
+- El botón ▶ de la tira izquierda las corre en este mismo proceso, y eso no es comodidad: quien
+  mapea es este binario, así que lo que quede en su mapa es exactamente lo que ESE núcleo sabe
+  hacer. Lanzar otro proceso mediría otro núcleo, que es lo contrario de la pregunta.
+- Cada prueba empieza con el grafo a cero, el paso a paso se apaga mientras corre (una prueba
+  automática no puede depender de que alguien pulse Continuar quince veces) y se devuelve como
+  estaba. Y `GuardarComoCi` se fuerza a falso: una prueba no reescribe la vara con la que se mide.
+- Las versiones se borran con clic derecho y confirmación. Se niegan tres: la v0 (es el suelo al
+  que se vuelve), la que corre (su exe está abierto) y la que está en edición (el archivo de
+  trabajo la contiene ahora mismo).
+- Fecha: 2026-08-08, pedido por el usuario. Código: `Navigation/EscenarioCi.Juzgar`,
+  `GraphExplorerWindow.CorrerPruebasAsync`, `NucleoVersiones.Borrar`.

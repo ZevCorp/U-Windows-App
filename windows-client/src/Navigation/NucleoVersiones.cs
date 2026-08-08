@@ -161,6 +161,47 @@ public static class NucleoVersiones
     }
 
     /// <summary>
+    /// Borrar una versión: fuera del registro y fuera del disco.
+    ///
+    /// Tres se niegan, y ninguna por capricho: la v0 es el suelo al que se vuelve cuando todo lo
+    /// demás falla; la que CORRE tiene su exe abierto —borrarla dejaría medio directorio y un
+    /// proceso huérfano—; y la que está EN EDICIÓN es la que el archivo de trabajo contiene ahora
+    /// mismo, así que borrarla dejaría al agente editando una versión que ya no existe.
+    /// </summary>
+    public static (bool Ok, string Porque) Borrar(int n)
+    {
+        if (n == 0) return (false, "la v0 es la original congelada: es el sitio al que se vuelve, no se borra");
+        if (Actual() == n) return (false, $"v{n} es la que está corriendo ahora: salta a otra y bórrala desde allí");
+        if (EnEdicion() == n) return (false, $"v{n} es la que está en edición: elige otra para editar antes de borrarla");
+
+        try
+        {
+            var r = JsonSerializer.Deserialize<RegistroCrudo>(File.ReadAllText(Registro));
+            if (r == null || r.Versiones.RemoveAll(v => v.N == n) == 0) return (false, $"no consta ninguna v{n}");
+            File.WriteAllText(Registro, JsonSerializer.Serialize(r, new JsonSerializerOptions { WriteIndented = true }));
+
+            string dir = Path.Combine(Raiz, $"v{n}");
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+
+            // La instantánea del código también: si se queda, la versión «no existe» pero su código
+            // sí, y el próximo que mire el repo verá una vN.cs sin dueño.
+            string repo = r.Repo ?? "";
+            if (repo.Length > 0)
+            {
+                string snap = Path.Combine(repo, "versiones", "nucleo", $"v{n}.cs");
+                if (File.Exists(snap)) File.Delete(snap);
+            }
+            LogBus.Log("versiones", $"v{n} borrada: registro, binarios e instantánea");
+            return (true, $"v{n} borrada");
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("versiones", $"no se pudo borrar v{n}: {e.Message}");
+            return (false, e.Message);
+        }
+    }
+
+    /// <summary>
     /// Saltar a otra versión: arrancar su binario y apagar este proceso. El hijo hereda el entorno
     /// entero (U_DATA_DIR, claves, la sonda MCP), así que ve el MISMO terreno y las mismas
     /// enseñanzas: lo que cambia es el núcleo, no el mundo.

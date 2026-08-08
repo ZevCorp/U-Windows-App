@@ -1387,6 +1387,27 @@ public sealed class GraphExplorerWindow : Window
                 _status.Text = $"saltando al núcleo v{destino.N}…";
                 NucleoVersiones.SaltarA(destino);
             };
+
+            // BORRAR CON CLIC DERECHO Y CONFIRMACIÓN. Las versiones se crean para experimentar, así
+            // que también hay que poder tirarlas: un cementerio de v2..v9 hace ilegible la tira, que
+            // es justo lo que venía a resolver. Se confirma nombrando la versión y su nota, porque
+            // borrar es lo único de esta tira que no se deshace.
+            pastilla.MouseRightButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                var r = MessageBox.Show(
+                    $"¿Borrar la versión v{destino.N} del núcleo?"
+                    + (destino.Nota.Length > 0 ? $"\n\n«{destino.Nota}»" : "")
+                    + "\n\nSe van su registro, sus binarios y su instantánea de código.\nEsto no se deshace.",
+                    $"Borrar núcleo v{destino.N}", MessageBoxButton.YesNo, MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+                if (r != MessageBoxResult.Yes) return;
+
+                var (ok, porque) = NucleoVersiones.Borrar(destino.N);
+                _status.Text = porque;
+                _versionesVistas = DateTime.MinValue;   // fuerza el redibujo
+                DibujarVersiones();
+            };
             _versionesNucleo.Children.Add(pastilla);
         }
 
@@ -1415,6 +1436,38 @@ public sealed class GraphExplorerWindow : Window
         mas.MouseLeftButtonUp += (_, __) => CrearVersionNucleo();
         _versionesNucleo.Children.Add(mas);
 
+        // ▶ CORRER LAS PRUEBAS GUARDADAS, aquí y no en una terminal: la pregunta que responden es
+        // «¿este núcleo, el que está corriendo ahora, sostiene lo que ya funcionaba?», y esa
+        // pregunta se hace mirando la tira, que es donde se ve qué núcleo está puesto.
+        var escenarios = EscenarioCi.Todos();
+        if (escenarios.Count > 0)
+        {
+            var play = new Border
+            {
+                Width = 26, Height = 26, Cursor = Cursors.Hand,
+                CornerRadius = new CornerRadius(13),
+                Margin = new Thickness(0, 3, 0, 3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Background = new SolidColorBrush(Color.FromArgb(0x33, 0x66, 0xBB, 0x6A)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x88, 0x66, 0xBB, 0x6A)),
+                BorderThickness = new Thickness(1),
+                ToolTip = $"probar este núcleo contra {escenarios.Count} prueba(s) guardada(s): "
+                        + string.Join(", ", escenarios.Select(x => x.App))
+                        + " · usa la pantalla de verdad, no toques el ratón mientras corre",
+                Child = new TextBlock
+                {
+                    Text = "▶",
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)),
+                    FontSize = 11,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            };
+            play.MouseLeftButtonUp += (_, __) =>
+                Dispatcher.BeginInvoke(new Action(async () => await CorrerPruebasAsync()));
+            _versionesNucleo.Children.Add(play);
+        }
+
         // Este binario no es ninguna versión: se dice, para que «dev» no se confunda con la v-nada.
         if (actual == null)
             _versionesNucleo.Children.Add(new TextBlock
@@ -1426,6 +1479,86 @@ public sealed class GraphExplorerWindow : Window
                 Margin = new Thickness(0, 2, 0, 0),
                 ToolTip = "este binario es de DESARROLLO (no es ninguna versión numerada)",
             });
+    }
+
+    /// <summary>
+    /// Correr todas las pruebas guardadas contra EL NÚCLEO QUE ESTÁ CORRIENDO.
+    ///
+    /// Esto es lo único que estas pruebas juzgan: si la estructura y el comportamiento del núcleo
+    /// puesto ahora mismo siguen siendo los que eran. No miden si el maestro acertó más o si la app
+    /// cambió de sitio un botón — por eso los mínimos son el 80% de lo grabado y no una igualdad.
+    ///
+    /// Corre AQUÍ dentro y no lanzando procesos: quien mapea es este proceso, así que lo que quede
+    /// en su mapa es exactamente lo que este núcleo sabe hacer. Mandar la prueba a otro binario
+    /// mediría otro núcleo, que es justo lo contrario de lo que se pregunta.
+    ///
+    /// Cada prueba empieza con el grafo a cero: un grafo con historia esconde justo lo que se
+    /// quiere medir. Y el paso a paso se apaga mientras corre —una prueba automática no puede
+    /// depender de que alguien pulse Continuar quince veces— y se devuelve como estaba.
+    /// </summary>
+    private async Task CorrerPruebasAsync()
+    {
+        if (_busy || _crawlCts != null) { _status.Text = "hay un mapeo en marcha; espera a que termine"; return; }
+        var pruebas = EscenarioCi.Todos();
+        if (pruebas.Count == 0) { _status.Text = "no hay pruebas guardadas"; return; }
+
+        string nucleo = NucleoVersiones.Actual() is { } n ? $"v{n}" : "dev";
+        bool pasoAntes = PasoAPaso.Activo, ciAntes = PasoAPaso.GuardarComoCi;
+        PasoAPaso.Activo = false;
+        PasoAPaso.GuardarComoCi = false;   // una prueba no reescribe la vara con la que se mide
+
+        var informe = new List<(string App, bool Ok, string Detalle)>();
+        LogBus.Log("ci", $"probando el núcleo {nucleo} contra {pruebas.Count} escenario(s)");
+        try
+        {
+            foreach (var p in pruebas)
+            {
+                _status.Text = $"[{nucleo}] probando «{p.App}»… no toques el ratón";
+                LimpiarGrafo();
+
+                string proc = p.App.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+                if (!Uia.AppAligner.FocusOrLaunch(proc))
+                {
+                    informe.Add((p.App, false, "no pude poner la app delante"));
+                    continue;
+                }
+                await Task.Delay(1500);   // que termine de pintarse antes de mirarla
+
+                var loc = _where();
+                if (loc == null || !SurfaceMap.AppDe(loc.Id).Equals(p.App, StringComparison.OrdinalIgnoreCase))
+                {
+                    informe.Add((p.App, false, $"delante hay «{(loc == null ? "nada" : SurfaceMap.AppDe(loc.Id))}»; no mapeo a ciegas"));
+                    continue;
+                }
+
+                await CrawlAsync();
+                var (ok, detalle) = EscenarioCi.Juzgar(p, _map);
+                informe.Add((p.App, ok, detalle));
+                LogBus.Log("ci", $"[{nucleo}] «{p.App}»: {(ok ? "OK" : "FALLO")} · {detalle}");
+            }
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("ci", $"las pruebas se cortaron: {e.Message}");
+            informe.Add(("(la corrida)", false, e.Message));
+        }
+        finally
+        {
+            PasoAPaso.Activo = pasoAntes;
+            PasoAPaso.GuardarComoCi = ciAntes;
+        }
+
+        int rotas = informe.Count(x => !x.Ok);
+        _status.Text = rotas == 0
+            ? $"núcleo {nucleo}: sostiene las {informe.Count} prueba(s)"
+            : $"núcleo {nucleo}: {rotas} de {informe.Count} prueba(s) NO se sostienen";
+        MessageBox.Show(
+            string.Join("\n", informe.Select(x => $"{(x.Ok ? "OK    " : "FALLO ")} {x.App}\n           {x.Detalle}"))
+            + "\n\n" + (rotas == 0
+                ? "Este núcleo sostiene todo lo que ya funcionaba."
+                : "Este núcleo NO está a la altura de lo que ya funcionaba."),
+            $"Pruebas del núcleo {nucleo}",
+            MessageBoxButton.OK, rotas == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
     }
 
     /// <summary>
