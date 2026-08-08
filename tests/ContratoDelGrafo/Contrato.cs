@@ -257,7 +257,19 @@ internal static class Contrato
 
         int antes = _fallos;
         try { cuerpo(SurfaceMap.Load()); }
-        catch (Exception e) { _fallos++; Console.WriteLine($"   ✘ reventó: {e.Message}"); }
+        catch (Exception e)
+        {
+            _fallos++;
+            // LA CADENA ENTERA, no solo el mensaje de arriba. Un TypeInitializationException dice
+            // «el inicializador de tipo de X lanzó una excepción» y se guarda para sí POR QUÉ, que
+            // es lo único que sirve: las diez promesas fallaron con ese texto y no se podía saber
+            // si el núcleo estaba roto o si era el arnés (2026-08-08). Es el aprendizaje nº3 —un
+            // catch mudo convierte un fallo concreto en «algo no va»— cometido dentro del arnés
+            // que existe justo para que eso no pase.
+            for (var x = e; x != null; x = x.InnerException)
+                Console.WriteLine($"   ✘ {x.GetType().Name}: {x.Message}");
+            Console.WriteLine($"     en {e.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}");
+        }
         Console.WriteLine($"{(_fallos == antes ? "✔" : "✘")} {nombre}");
     }
 
