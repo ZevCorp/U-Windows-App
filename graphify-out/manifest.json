@@ -770,8 +770,8 @@
     "semantic_hash": ""
   },
   "agente-arquitecto/arquitecto.mjs": {
-    "mtime": 1786207423.50168,
-    "ast_hash": "264d51b1a3372c22ef0687197d29c19c",
+    "mtime": 1786211712.296683,
+    "ast_hash": "5f9cbc9d103eb2dfcf43c3dd98f1ff07",
     "semantic_hash": ""
   },
   "agente-arquitecto/package.json": {
@@ -810,13 +810,13 @@
     "semantic_hash": ""
   },
   "versiones/nucleo/v1.cs": {
-    "mtime": 1786207404.459031,
+    "mtime": 1786207404.4753952,
     "ast_hash": "533d36db489c6de2a6dde44f0f32f984",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Arquitecto.cs": {
-    "mtime": 1786207423.51161,
-    "ast_hash": "ea0d6cb33da934c121cdd8980b2588f7",
+    "mtime": 1786211744.0749888,
+    "ast_hash": "f44998fbfdc0cf77de3d4233abf2ccb4",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/EscenarioCi.cs": {
