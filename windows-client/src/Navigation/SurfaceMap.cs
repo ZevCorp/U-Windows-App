@@ -248,12 +248,29 @@ public sealed class SurfaceMap
             || id.EndsWith("/ventana", StringComparison.OrdinalIgnoreCase);
 
         var now = DateTime.UtcNow;
-        if (_pendingId.Length > 0 && (now - _pendingSince).TotalMilliseconds >= MinDwellMs)
-            Commit(_pendingId, now);
+        if (_pendingId.Length > 0)
+        {
+            if ((now - _pendingSince).TotalMilliseconds >= MinDwellMs) Commit(_pendingId, now);
+            // PASAR DE LARGO SE APUNTA. Una pantalla que no llega al mínimo no se confirma, y hasta
+            // aquí bien: no es un sitio donde se haya estado. Pero el viaje SÍ pasó por ella, y la
+            // arista que se cierre después ya no va del sitio anterior a este, sino de dos saltos
+            // más atrás. Sin este contador no hay forma de distinguirlo (2026-08-07, ver Commit).
+            else if (!string.Equals(_pendingId, _lastCommitted, StringComparison.OrdinalIgnoreCase))
+            {
+                _pasadasDeLargo++;
+                LogBus.Log("mapa", $"pasó de largo por «{ShortId(_pendingId)}» "
+                    + $"({(now - _pendingSince).TotalMilliseconds:F0} ms): el clic guardado ya no explica el viaje");
+            }
+        }
 
         _pendingId = esPropia ? "" : id;
         _pendingSince = now;
     }
+
+    /// <summary>
+    /// Cuántas pantallas se han cruzado sin quedarse desde la última confirmación. Ver <see cref="Commit"/>.
+    /// </summary>
+    private int _pasadasDeLargo;
 
     private void Commit(string id, DateTime when)
     {
@@ -325,6 +342,32 @@ public sealed class SurfaceMap
             if (clic != null && !clic.IsSystemNavigator && _clicksAtLastCommit >= 0
                 && (Clicks?.Count ?? 0) - _clicksAtLastCommit > 1) clic = null;
 
+            // UNA PANTALLA SALTADA INVALIDA EL CLIC GUARDADO, y contar clics no lo detecta.
+            //
+            // El caso, medido entero (2026-08-07, prueba del usuario en el explorador): estaba en
+            // Descargas, pulsó «Escritorio» —enseñado de primer nivel— y entró enseguida en una
+            // carpeta de dentro. Escritorio no llegó a los 1200 ms, así que nunca se confirmó, y el
+            // clic que salía de Descargas se le acabó atribuyendo al viaje Descargas→Nueva carpeta.
+            // La arista quedó etiquetada «Escritorio» y, como esa etiqueta está enseñada de primer
+            // nivel, AplicarEnsenanza subió a la fila 1 una carpeta de SEGUNDO nivel. De paso,
+            // «escritorio» cayó a la fila 2: el puente por nombre se abstuvo al ver su etiqueta ya
+            // anclada por esa arista fijada —falsa—. Un solo clic mal atribuido movió dos cosas.
+            //
+            // Y el botón atrás no tuvo nada que ver, aunque todo saltara al pulsarlo: un nodo se
+            // confirma al ABANDONARLO, así que volver fue solo el instante en que la arista mal
+            // formada salió a la luz.
+            //
+            // La guarda de multi-salto de arriba no puede verlo: cuenta los clics posteriores a la
+            // confirmación del origen, y el clic culpable es ANTERIOR a ella. En los dos casos —el
+            // sano y el saltado— la cuenta da exactamente 1. Lo que sí los distingue es si el viaje
+            // atravesó una pantalla que no se quedó.
+            if (clic != null && _pasadasDeLargo > 0)
+            {
+                LogBus.Log("mapa", $"'{ShortId(_lastCommitted)}' → '{ShortId(id)}' sin acción: "
+                    + $"por medio quedó {_pasadasDeLargo} pantalla(s) sin confirmar, y «{clic.Label}» no llevaba aquí");
+                clic = null;
+            }
+
             // EL CLIC DEBE HABER OCURRIDO EN LA APP DE LA QUE SALE la arista. Sin esto, un clic en
             // el chat de Claude acabó como "acción" de una transición de la barra de tareas
             // (2026-07-30): resolvió, era el último, y aun así no tenía nada que ver.
@@ -377,6 +420,9 @@ public sealed class SurfaceMap
         _actionLeavingLast = ReferenceEquals(ahora, _lastStashed) ? null : ahora;
         _lastStashed = ahora;
         _clicksAtLastCommit = Clicks?.Count ?? 0;
+        // Lo saltado ya se ha cobrado en la arista de arriba; a partir de aquí el viaje vuelve a
+        // empezar desde un sitio confirmado.
+        _pasadasDeLargo = 0;
         Version++;
 
         if (++_dirty >= 20) Save(); // persistencia periódica; el cierre hace la final

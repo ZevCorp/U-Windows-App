@@ -822,23 +822,39 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// Y el blanco del gesto mide 26x26 aunque la pastilla mida 4: acertarle a cuatro píxeles sería
     /// puntería, no una interfaz.
     /// </remarks>
-    private void CrecerPastilla(Border cuerpo, System.Windows.Media.SolidColorBrush fondo,
+    private void CrecerPastilla(System.Windows.Shapes.Rectangle cuerpo,
+                                System.Windows.Media.SolidColorBrush fondo,
                                 UIElement icono, bool crece)
     {
         var suave = new CubicEase { EasingMode = crece ? EasingMode.EaseOut : EasingMode.EaseIn };
         var dur = TimeSpan.FromMilliseconds(crece ? 160 : 200);
 
-        cuerpo.BeginAnimation(WidthProperty, new DoubleAnimation(crece ? 26 : 4, dur) { EasingFunction = suave });
-        cuerpo.BeginAnimation(HeightProperty, new DoubleAnimation(crece ? 26 : 16, dur) { EasingFunction = suave });
+        cuerpo.BeginAnimation(WidthProperty, new DoubleAnimation(crece ? 26 : AnchoPastilla, dur) { EasingFunction = suave });
+        cuerpo.BeginAnimation(HeightProperty, new DoubleAnimation(crece ? 26 : AltoPastilla, dur) { EasingFunction = suave });
+
+        // El radio viaja con el tamaño: barrita casi recta arriba, círculo abajo. Si se quedara
+        // fijo, o la barrita saldría ovalada o el botón saldría con esquinas de caja.
+        var radio = new DoubleAnimation(crece ? 13 : RadioPastilla, dur) { EasingFunction = suave };
+        cuerpo.BeginAnimation(System.Windows.Shapes.Rectangle.RadiusXProperty, radio);
+        cuerpo.BeginAnimation(System.Windows.Shapes.Rectangle.RadiusYProperty, radio);
         icono.BeginAnimation(OpacityProperty, new DoubleAnimation(crece ? 1 : 0,
             TimeSpan.FromMilliseconds(crece ? 130 : 110)) { EasingFunction = suave });
 
         // Y el color va con la forma: barrita clara sobre lo que haya detrás, botón oscuro con el
         // icono en blanco. Animar el color y no cambiarlo de golpe es lo que evita el parpadeo.
         fondo.BeginAnimation(System.Windows.Media.SolidColorBrush.ColorProperty, new ColorAnimation(
-            crece ? System.Windows.Media.Color.FromArgb(0xE6, 0x20, 0x20, 0x22)
-                  : System.Windows.Media.Color.FromArgb(0xB3, 0xFF, 0xFF, 0xFF), dur));
+            crece ? System.Windows.Media.Color.FromArgb(0xE6, 0x20, 0x20, 0x22) : ColorPastilla, dur));
     }
+
+    // El reposo de la pastilla, en UN SITIO: lo pone el XAML al nacer y lo restaura la animación al
+    // encogerse, y si cada uno lleva su copia acaban discrepando — la pastilla nacería de un tamaño
+    // y volvería a otro después del primer hover, que es de esos fallos que solo se ven a la
+    // segunda vez (2026-08-07).
+    private const double AnchoPastilla = 4.5, AltoPastilla = 10, RadioPastilla = 2;
+
+    /// <summary>Gris apagado al 50 %: se ve que hay algo y no compite con la carita.</summary>
+    private static readonly System.Windows.Media.Color ColorPastilla =
+        System.Windows.Media.Color.FromArgb(0x80, 0xA8, 0xA8, 0xAE);
 
     private void OnZonaVozEntra(object sender, System.Windows.Input.MouseEventArgs e)
         => CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: true);

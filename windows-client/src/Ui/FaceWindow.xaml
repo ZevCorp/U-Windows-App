@@ -326,14 +326,17 @@
                             <ScaleTransform x:Name="VoiceHaloEscala" ScaleX="1" ScaleY="1"/>
                         </Ellipse.RenderTransform>
                     </Ellipse>
-                    <!-- CornerRadius fijo y grande: la forma la decide el tamaño. A 4x16 se ve
-                         pastilla y a 26x26 círculo, sin cambiar de dibujo ni cruzar un umbral. -->
-                    <Border x:Name="VozCuerpo" Width="4" Height="16" CornerRadius="13"
-                            IsHitTestVisible="False">
-                        <Border.Background>
-                            <SolidColorBrush x:Name="VozFondo" Color="#B3FFFFFF"/>
-                        </Border.Background>
-                    </Border>
+                    <!-- Rectangle y no Border: su radio de esquina es un número y por tanto se puede
+                         ANIMAR. Con Border el radio es una estructura y no se anima, así que había
+                         que dejarlo fijo y grande — y un radio grande sobre algo estrecho no es un
+                         rectángulo redondeado, es un óvalo (2026-08-07). Aquí el radio viaja con el
+                         tamaño: de 1,5 (barrita) a 13 (círculo). -->
+                    <Rectangle x:Name="VozCuerpo" Width="4.5" Height="10" RadiusX="2" RadiusY="2"
+                               IsHitTestVisible="False">
+                        <Rectangle.Fill>
+                            <SolidColorBrush x:Name="VozFondo" Color="#80A8A8AE"/>
+                        </Rectangle.Fill>
+                    </Rectangle>
                     <Canvas x:Name="VozIcono" Width="26" Height="26" Opacity="0" IsHitTestVisible="False">
                         <Border Canvas.Left="10.5" Canvas.Top="6" Width="5" Height="9"
                                 CornerRadius="2.5" Background="White"/>
@@ -349,12 +352,12 @@
                       Margin="0,6,0,0" ToolTip="Escribirle a Ü"
                       MouseEnter="OnZonaChatEntra" MouseLeave="OnZonaChatSale"
                       MouseLeftButtonUp="OnChatDesdePastilla">
-                    <Border x:Name="ChatCuerpo" Width="4" Height="16" CornerRadius="13"
-                            IsHitTestVisible="False">
-                        <Border.Background>
-                            <SolidColorBrush x:Name="ChatFondo" Color="#B3FFFFFF"/>
-                        </Border.Background>
-                    </Border>
+                    <Rectangle x:Name="ChatCuerpo" Width="4.5" Height="10" RadiusX="2" RadiusY="2"
+                               IsHitTestVisible="False">
+                        <Rectangle.Fill>
+                            <SolidColorBrush x:Name="ChatFondo" Color="#80A8A8AE"/>
+                        </Rectangle.Fill>
+                    </Rectangle>
                     <Canvas x:Name="ChatIcono" Width="26" Height="26" Opacity="0" IsHitTestVisible="False">
                         <!-- Bocadillo: cuerpo redondeado y la puntita abajo a la izquierda. -->
                         <Border Canvas.Left="6" Canvas.Top="7" Width="14" Height="10"
