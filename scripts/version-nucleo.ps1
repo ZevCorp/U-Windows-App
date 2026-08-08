@@ -44,12 +44,35 @@ function Leer-Registro {
 }
 function Guardar-Registro($r) {
   New-Item -ItemType Directory -Force -Path $raiz | Out-Null
+  # DONDE VIVE EL REPO, apuntado en cada guardado. La app corre desde C:\U-dev2 o desde
+  # C:\U-versiones\vN y no tiene forma de saber donde esta el codigo; sin esto, el boton «+» de la
+  # tira no podria invocar este mismo script. Se reescribe siempre para que mover el repo se
+  # arregle solo la proxima vez que se toque una version.
+  $r | Add-Member -NotePropertyName Repo -NotePropertyValue $repo -Force
   $r | ConvertTo-Json -Depth 5 | Set-Content $registro -Encoding utf8
 }
 function Snap($n) { Join-Path $snaps ("v{0}.cs" -f $n) }
 
 function Compilar($n) {
   $bin = Join-Path $raiz ("v{0}\bin" -f $n)
+
+  # NO SE RECOMPILA LA VERSION QUE SE ESTA EJECUTANDO. Su U.exe esta bloqueado y el build muere con
+  # un MSB3027 que no explica nada (2026-08-08, tropezado en vivo: el usuario habia saltado a v1
+  # desde la tira y reconstruir v1 fallaba).
+  #
+  # Se RECHAZA en vez de cerrarla por las buenas, y la razon es de fondo: esa instancia la lanzo la
+  # app con SU entorno —U_DATA_DIR, claves, sonda—, y relanzarla desde aqui le daria otro terreno
+  # sin avisar. Un sistema que cambia en silencio los datos que miras es peor que uno que te pide
+  # un clic. El clic ademas ya existe: saltar a otra version en la tira relanza con el mismo
+  # entorno, que es justo lo que hace falta.
+  $viva = Get-Process U -ErrorAction SilentlyContinue |
+          Where-Object { $_.Path -and $_.Path.StartsWith([IO.Path]::GetFullPath($bin), [StringComparison]::OrdinalIgnoreCase) }
+  if ($viva) {
+    throw ("v{0} se esta EJECUTANDO ahora mismo (PID {1}): su U.exe esta bloqueado y no se puede recompilar." -f $n, $viva.Id) +
+          " Salta a otra version en la tira izquierda del explorador (v0, por ejemplo) y repite este comando;" +
+          " despues vuelve a v$n. Si solo querias probar un cambio sin tocar esta version, usa el boton + para crear una nueva."
+  }
+
   Write-Host ("compilando v{0} -> {1} ..." -f $n, $bin) -ForegroundColor Cyan
 
   # La instantanea manda: se construye EXACTAMENTE lo que dice vN.cs. Si no es la version en

@@ -1071,3 +1071,24 @@ más abajo, y «Almacenamiento» para por qué el transporte sigue siendo un arc
   lo que la app diga de sí misma.
 - Fecha: 2026-08-08. Código: `Ui/PasoAPaso.GuardarComoCi`, `Navigation/EscenarioCi`,
   `scripts/ci-local.ps1`.
+
+### Autorizar un archivo no es autorizar un cambio: se declara la intención
+- El popup del candado decía «se va a editar SurfaceMap.cs», que nombra el archivo pero no el
+  CAMBIO. Ahora el agente tiene que escribir antes en `C:\U-versiones\intencion.txt` qué se
+  propone hacer y por qué; el guardián lo exige (sin declaración fresca, bloquea y explica cómo
+  declararla) y lo muestra en el diálogo. La contraseña se teclea sabiendo a qué se dice que sí.
+- Caduca a los 20 minutos: una declaración vieja describe otro cambio. La ventana deja que un
+  mismo cambio abarque varias ediciones sin redeclarar en cada una.
+- Dos fallos que solo se ven en pantalla, y por eso hay que mirarla: PowerShell 5.1 lee con la
+  ANSI del sistema y el archivo es UTF-8 («añadir» salía «aÃ±adir»), y el TextBox de WinForms solo
+  corta líneas con CRLF, así que un archivo con LF salía en un párrafo ilegible.
+- Fecha: 2026-08-08, pedido por el usuario. Código: `~\.claude\hooks\guardia-nucleo.ps1`.
+
+### La versión que se está ejecutando no se puede recompilar
+- Su `U.exe` está bloqueado y el build muere con un MSB3027 que no explica nada. Se RECHAZA con
+  un mensaje que dice qué hacer, en vez de cerrarla por las buenas: esa instancia la lanzó la app
+  con SU entorno —`U_DATA_DIR`, claves, sonda— y relanzarla desde el script le daría otro terreno
+  sin avisar. Un sistema que cambia en silencio los datos que miras es peor que uno que pide un
+  clic — y el clic ya existe: saltar a otra versión en la tira relanza con el mismo entorno.
+- El botón «+» no tiene este problema: crea un directorio nuevo, así que nunca choca con lo vivo.
+- Fecha: 2026-08-08, tropezado en vivo mientras el usuario corría v1.

@@ -405,6 +405,28 @@
                 <ScrollViewer x:Name="MenuScroll" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
+                        <!-- ── Lo que se sacó de la barra ──────────────────────────────────────
+                             La barra vive encima del trabajo de alguien y solo debería tener lo que
+                             esa persona usa. Hablar y escribir ya están en la carita —las dos
+                             pastillas—, y enseñar y silenciar son de quien desarrolla, no de quien
+                             trabaja. Se conservan enteros, con su nombre y su manejador: mover algo
+                             de sitio no es reescribirlo (2026-08-07). -->
+                        <TextBlock Text="Acciones" Style="{StaticResource SectionLabel}"/>
+                        <UniformGrid Columns="4" Margin="0,4,0,10">
+                            <Button x:Name="MicBtn" Content="🎤" Style="{StaticResource BarBtn}" Click="OnMic"
+                                    Margin="0" ToolTip="Hablarle a Ü" AutomationProperties.Name="Micrófono"/>
+                            <Button x:Name="TalkBtn" Content="💬" Style="{StaticResource BarBtn}"
+                                    Margin="0" ToolTip="Conversación: estado, respuestas y entrada de texto"
+                                    AutomationProperties.Name="Conversación"/>
+                            <!-- Enseñanza activa: graba pantalla+voz para que Ü aprenda a usar una
+                                 app. En rojo mientras graba (SetTeachingUi). -->
+                            <Button x:Name="TeachBtn" Content="🎓" Style="{StaticResource BarBtn}" Click="OnToggleTeach"
+                                    Margin="0" ToolTip="Enseñar: Ü graba la pantalla y tu voz para aprender un workflow"
+                                    AutomationProperties.Name="Enseñar"/>
+                            <Button x:Name="MuteBtn" Content="🔊" Style="{StaticResource BarBtn}" Click="OnToggleMute"
+                                    Margin="0" ToolTip="Callar a Ü ahora mismo" AutomationProperties.Name="Silencio"/>
+                        </UniformGrid>
+
                         <!-- ── Ejecutar workflow: lo que el operador usa a diario ─────────────── -->
                         <DockPanel LastChildFill="False" Margin="0,0,0,3">
                             <TextBlock DockPanel.Dock="Left" Text="Ejecutar workflow"
@@ -688,22 +710,60 @@
 
                         <Border Background="#1EFFFFFF" Height="1" Margin="6,6,6,0"/>
 
-                        <Button x:Name="MicBtn" Content="🎤" Style="{StaticResource BarBtn}" Click="OnMic"
-                                ToolTip="Hablarle a Ü" AutomationProperties.Name="Micrófono"/>
+                        <!-- LOS TRES MODOS DE Ü, de arriba abajo: autónomo, proactividad, aprendizaje.
+                             Aún no hacen nada: primero se decide cómo se ven y dónde viven, y después
+                             qué hacen — al revés, la forma acaba dictada por lo primero que se cableó.
 
-                        <Button x:Name="TalkBtn" Content="💬" Style="{StaticResource BarBtn}"
-                                ToolTip="Conversación: estado, respuestas y entrada de texto"
-                                AutomationProperties.Name="Conversación"/>
+                             Los iconos van DIBUJADOS y no como emoji. Un emoji lo pinta la fuente del
+                             sistema: trae su propio color, su propio peso y su propio estilo, así que
+                             cuatro emojis juntos son cuatro dibujos de cuatro autores distintos —que
+                             es exactamente lo que se veía—. Estos son trazo de 1,5 con extremos
+                             redondeados, el mismo lápiz que la carita (2026-08-07). -->
 
-                        <!-- Enseñanza activa: graba pantalla+voz para que Ü aprenda a usar una app.
-                             En rojo mientras graba (SetTeachingUi). -->
-                        <Button x:Name="TeachBtn" Content="🎓" Style="{StaticResource BarBtn}" Click="OnToggleTeach"
-                                ToolTip="Enseñar: Ü graba la pantalla y tu voz para aprender un workflow"
-                                AutomationProperties.Name="Enseñar"/>
+                        <Button x:Name="AutonomoBtn" Style="{StaticResource BarBtn}"
+                                ToolTip="Autónomo: Ü actúa por su cuenta"
+                                AutomationProperties.Name="Autónomo">
+                            <!-- Un ciclo que se cierra solo, con su punta de flecha: anda sin que nadie
+                                 lo empuje. -->
+                            <Canvas Width="20" Height="20">
+                                <Path Stroke="#E8FFFFFF" StrokeThickness="1.5" StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      Data="M 16.2,7.4 A 7,7 0 1 0 17,10.6"/>
+                                <Path Stroke="#E8FFFFFF" StrokeThickness="1.5" StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                      Data="M 13.4,7.6 L 16.6,7.1 L 16.1,3.9"/>
+                                <Ellipse Canvas.Left="8.2" Canvas.Top="8.2" Width="3.6" Height="3.6"
+                                         Fill="#E8FFFFFF"/>
+                            </Canvas>
+                        </Button>
 
-                        <!-- Siempre visible: callarlo tiene que estar a un clic, sin importar qué esté pasando. -->
-                        <Button x:Name="MuteBtn" Content="🔊" Style="{StaticResource BarBtn}" Click="OnToggleMute"
-                                ToolTip="Callar a Ü ahora mismo" AutomationProperties.Name="Silencio"/>
+                        <Button x:Name="ProactividadBtn" Style="{StaticResource BarBtn}"
+                                ToolTip="Proactividad: Ü se adelanta y propone"
+                                AutomationProperties.Name="Proactividad">
+                            <!-- Destellos: lo que aparece sin haberlo pedido. -->
+                            <Canvas Width="20" Height="20">
+                                <Path Fill="#E8FFFFFF"
+                                      Data="M 8,2.6 L 9.35,6.85 L 13.6,8.2 L 9.35,9.55 L 8,13.8
+                                            L 6.65,9.55 L 2.4,8.2 L 6.65,6.85 Z"/>
+                                <Path Fill="#E8FFFFFF"
+                                      Data="M 14.8,11.6 L 15.55,13.65 L 17.6,14.4 L 15.55,15.15
+                                            L 14.8,17.2 L 14.05,15.15 L 12,14.4 L 14.05,13.65 Z"/>
+                            </Canvas>
+                        </Button>
+
+                        <Button x:Name="AprendizajeBtn" Style="{StaticResource BarBtn}"
+                                ToolTip="Aprendizaje: lo que Ü está aprendiendo"
+                                AutomationProperties.Name="Aprendizaje">
+                            <!-- Un libro abierto: lo que se lee para aprender. -->
+                            <Canvas Width="20" Height="20">
+                                <Path Stroke="#E8FFFFFF" StrokeThickness="1.5" StrokeLineJoin="Round"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      Data="M 10,6 C 8.6,4.5 6,4.1 3.6,4.7 L 3.6,15 C 6,14.4 8.6,14.8 10,16.3
+                                            C 11.4,14.8 14,14.4 16.4,15 L 16.4,4.7 C 14,4.1 11.4,4.5 10,6 Z"/>
+                                <Path Stroke="#E8FFFFFF" StrokeThickness="1.5" StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round" Data="M 10,6 L 10,16.3"/>
+                            </Canvas>
+                        </Button>
 
                         <!-- La carita (misma que Android), abajo del todo. Clic → colapsa a solo la
                              carita · doble clic → micrófono · mantener oprimido → cambia de tema ·

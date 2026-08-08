@@ -1390,6 +1390,31 @@ public sealed class GraphExplorerWindow : Window
             _versionesNucleo.Children.Add(pastilla);
         }
 
+        // EL «+»: una versión nueva desde la que está en edición. Experimentar tiene que costar un
+        // clic, porque si cuesta más se acaba experimentando encima de lo que funciona — que es
+        // justo lo que las versiones vienen a evitar (2026-08-08, pedido por el usuario).
+        var mas = new Border
+        {
+            Width = 26, Height = 26, Cursor = Cursors.Hand,
+            CornerRadius = new CornerRadius(13),
+            Margin = new Thickness(0, 6, 0, 3),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Background = new SolidColorBrush(Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
+            ToolTip = "nueva versión del núcleo desde la que está en edición · compila y pasa el contrato (tarda un minuto)",
+            Child = new TextBlock
+            {
+                Text = "+",
+                Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
+                FontSize = 14, FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+        mas.MouseLeftButtonUp += (_, __) => CrearVersionNucleo();
+        _versionesNucleo.Children.Add(mas);
+
         // Este binario no es ninguna versión: se dice, para que «dev» no se confunda con la v-nada.
         if (actual == null)
             _versionesNucleo.Children.Add(new TextBlock
@@ -1401,6 +1426,72 @@ public sealed class GraphExplorerWindow : Window
                 Margin = new Thickness(0, 2, 0, 0),
                 ToolTip = "este binario es de DESARROLLO (no es ninguna versión numerada)",
             });
+    }
+
+    /// <summary>
+    /// Pedir la nota y crear una versión nueva del núcleo.
+    ///
+    /// La NOTA no es un adorno: en un mes habrá seis versiones y «v4» no dice nada. El riesgo de
+    /// este botón no es crear demasiadas —son baratas y se tiran— sino no saber para qué era cada
+    /// una, así que se pregunta antes y la nota va al tooltip de su pastilla.
+    /// </summary>
+    private void CrearVersionNucleo()
+    {
+        var caja = new TextBox
+        {
+            FontSize = 13, Padding = new Thickness(8), MinWidth = 380,
+            Background = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+            Foreground = Brushes.White, BorderThickness = new Thickness(0),
+        };
+        var v = new Window
+        {
+            WindowStyle = WindowStyle.None, AllowsTransparency = true,
+            Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+        };
+        var col = new StackPanel();
+        col.Children.Add(new TextBlock
+        {
+            Text = "¿Qué vas a probar en esta versión del núcleo?",
+            Foreground = Brushes.White, FontSize = 14, FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 10),
+        });
+        col.Children.Add(caja);
+        col.Children.Add(new TextBlock
+        {
+            Text = "Se copia lo que está en edición, se compila y se pasa el contrato. Tarda ~1 minuto.",
+            Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+            FontSize = 11, Margin = new Thickness(0, 8, 0, 0),
+        });
+        v.Content = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x18, 0x18, 0x1C)),
+            CornerRadius = new CornerRadius(14), Padding = new Thickness(18),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1), Child = col,
+        };
+        v.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape) { e.Handled = true; v.Close(); }
+            else if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                string nota = caja.Text.Trim();
+                v.Close();
+                if (nota.Length == 0) { _status.Text = "sin nota no creo la versión: en un mes «v4» no diría nada"; return; }
+                _status.Text = "creando versión del núcleo… (compila y pasa el contrato)";
+                NucleoVersiones.Crear(nota, (ok, msg) => Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _status.Text = msg;
+                    _versionesVistas = DateTime.MinValue;   // fuerza el redibujo de la tira
+                    DibujarVersiones();
+                })));
+            }
+        };
+        v.Show();
+        v.Activate();
+        caja.Focus();
     }
 
     private void DibujarNiveles(string appActual)

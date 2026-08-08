@@ -45,6 +45,67 @@ public static class NucleoVersiones
     {
         public int EnEdicion { get; set; } = -1;
         public List<Version> Versiones { get; set; } = new();
+
+        /// <summary>Dónde vive el repo. Lo apunta el script en cada guardado, porque la app corre
+        /// desde otro directorio y sin esto no sabría a qué script llamar para crear una versión.</summary>
+        public string Repo { get; set; } = "";
+    }
+
+    /// <summary>El repositorio del que salen las versiones, según lo apuntó el script.</summary>
+    public static string Repo()
+    {
+        try
+        {
+            if (!File.Exists(Registro)) return "";
+            return JsonSerializer.Deserialize<RegistroCrudo>(File.ReadAllText(Registro))?.Repo ?? "";
+        }
+        catch { return ""; }
+    }
+
+    /// <summary>
+    /// Crear una versión nueva desde lo que hay en edición, y dejarla en edición.
+    ///
+    /// Lo hace el MISMO script que se usa a mano (<c>version-nucleo.ps1 -Crear</c>) y no una copia
+    /// del procedimiento aquí dentro: crear una versión es instantánea + compilación + contrato, y
+    /// dos implementaciones de eso acabarían divergiendo justo el día que importe. Corre aparte y
+    /// tarda su minuto —compila de verdad—, así que se avisa por <paramref name="cuandoTermine"/>.
+    /// </summary>
+    public static void Crear(string nota, Action<bool, string> cuandoTermine)
+    {
+        string repo = Repo();
+        if (repo.Length == 0 || !Directory.Exists(repo))
+        {
+            cuandoTermine(false, "no consta dónde está el repo: corre una vez scripts\\version-nucleo.ps1 a mano");
+            return;
+        }
+        string script = Path.Combine(repo, "scripts", "version-nucleo.ps1");
+        if (!File.Exists(script)) { cuandoTermine(false, $"no encuentro {script}"); return; }
+
+        Task.Run(() =>
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo("powershell")
+                {
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -Crear -Nota \"{nota.Replace("\"", "'")}\"",
+                    UseShellExecute = false, CreateNoWindow = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                    WorkingDirectory = repo,
+                };
+                using var p = System.Diagnostics.Process.Start(psi)!;
+                string salida = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
+                p.WaitForExit();
+                LogBus.Log("versiones", $"crear versión (código {p.ExitCode}): {salida.Trim()}");
+                cuandoTermine(p.ExitCode == 0, p.ExitCode == 0
+                    ? "versión nueva creada y compilada"
+                    : "no se pudo crear la versión; mira el log de «versiones»");
+            }
+            catch (Exception e)
+            {
+                LogBus.Log("versiones", $"crear versión falló: {e.Message}");
+                cuandoTermine(false, e.Message);
+            }
+        });
     }
 
     /// <summary>Las versiones que constan, con o sin binario (se dice cuál es cuál).</summary>
