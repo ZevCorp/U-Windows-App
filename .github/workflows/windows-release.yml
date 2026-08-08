@@ -69,16 +69,21 @@ jobs:
           }
           vpk pack @packArgs
 
+      # SIN --region. `vpk upload s3` rechaza que se le den `--region` y
+      # `--endpoint` a la vez ("please choose one") y sale con código 1. Es lo
+      # que ha hecho fallar los SEIS intentos de publicación reales desde el
+      # 2026-07-22: el build, el publish y el empaquetado terminaban bien y la
+      # subida moría en la última línea, así que nunca llegó nada al bucket.
+      # Supabase no es AWS: se identifica por endpoint, no por región.
       - name: Subir a Supabase (compatible con S3)
         if: ${{ inputs.dry_run != true }}
         env:
           VPK_S3_ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
-          VPK_S3_REGION: ${{ secrets.SUPABASE_S3_REGION }}
           VPK_S3_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
           VPK_S3_SECRET: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
         run: >
           vpk upload s3 -o out\releases -c win --bucket windows
-          --endpoint $env:VPK_S3_ENDPOINT --region $env:VPK_S3_REGION
+          --endpoint $env:VPK_S3_ENDPOINT
           --keyId $env:VPK_S3_KEY_ID --secret $env:VPK_S3_SECRET
 
       - name: Smoke test (dry run)
