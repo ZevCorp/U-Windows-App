@@ -1212,6 +1212,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     //    salvo que esté fijado.
 
     private bool _menuOpen, _menuPinned;
+    private AtajoPorGolpes? _golpes;
     private bool _backendOpen, _backendPinned;
     private bool _talkOpen;
     private System.Windows.Threading.DispatcherTimer _menuOpenTimer = null!,
@@ -1241,13 +1242,25 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             if (_backendOpen && !_backendPinned && !BackendZone.IsMouseOver) CloseBackend();
         };
 
-        // Activador: hover abre, clic fija/cierra, el foco de teclado también abre (accesible sin ratón).
-        MenuActivator.MouseEnter += (_, __) => { _menuOpenTimer.Stop(); _menuOpenTimer.Start(); };
-        MenuActivator.MouseLeave += (_, __) => _menuOpenTimer.Stop();
-        MenuActivator.Click += (_, __) => { if (_menuOpen && _menuPinned) CloseMenu(); else OpenMenu(pin: true); };
-        // Abrir al recibir el foco, PERO no con el foco inicial que WPF reparte al cargar: sin esta
-        // compuerta el menú aparecía abierto solo con arrancar la app (visto en la primera corrida).
-        MenuActivator.GotKeyboardFocus += (_, __) => { if (_uiReady) OpenMenu(pin: false); };
+        // EL PANEL YA NO CUELGA DE LA FLECHA. Lo que hay dentro —ejecutar workflows, ensayo en seco,
+        // paso a paso, la consulta del portal, el backend— son herramientas de DESARROLLO, y estaban
+        // a un hover de distancia de quien solo quiere hablar con Ü: bastaba rozar la barra para que
+        // se desplegara media pantalla de controles que esa persona no va a usar nunca
+        // (2026-08-06). Ahora se pide a propósito, con Ctrl+Shift dos veces seguidas.
+        //
+        // La flecha se queda para lo que ya hacía por sí sola: decir hacia dónde crecería el panel.
+        MenuActivator.Visibility = Visibility.Collapsed;
+
+        // Ctrl+Shift dos veces seguidas abre y cierra el panel. Global: se puede pedir sin soltar la
+        // aplicación en la que se esté trabajando, que es cuando de verdad hace falta.
+        _golpes = new AtajoPorGolpes(
+            soloCtrl: () => Dispatcher.BeginInvoke(() => MicPorAtajo()),
+            ctrlShift: () => Dispatcher.BeginInvoke(() =>
+            {
+                if (_menuOpen) CloseMenu();
+                else { if (_collapsed) ToggleCollapsed(); OpenMenu(pin: true); }
+            }));
+        Closed += (_, __) => _golpes?.Dispose();
 
         // Zona segura: menú y barra cancelan el cierre al entrar y lo agendan al salir.
         MenuPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
