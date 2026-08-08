@@ -512,11 +512,14 @@
                         <Border Style="{StaticResource Sep}"/>
 
                         <!-- ── Backend: herramientas de desarrollo. Sección secundaria, PLEGADA por
-                             defecto — hover la abre, clic la fija, y no compite visualmente con lo
-                             que usa el operador. El contenido conserva su apariencia técnica. ──── -->
+                             defecto — se abre y se cierra CON CLIC, y no compite visualmente con lo
+                             que usa el operador. El contenido conserva su apariencia técnica.
+                             El hover que la abría se quitó: rozarla la desplegaba sola y el clic
+                             entonces no cambiaba nada, así que el control parecía roto. ────────── -->
                         <StackPanel x:Name="BackendZone">
                             <Border x:Name="BackendHeader" CornerRadius="8" Background="#1CFFFFFF" Height="30"
                                     Cursor="Hand" Focusable="True"
+                                    ToolTip="Clic para abrir o cerrar las herramientas de desarrollo"
                                     AutomationProperties.Name="Backend — herramientas de desarrollo">
                                 <DockPanel LastChildFill="True" Margin="10,0">
                                     <Path x:Name="BackendChevron" DockPanel.Dock="Left" Data="M 0 0 L 4.5 4.5 L 0 9"
