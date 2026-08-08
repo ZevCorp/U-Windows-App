@@ -1321,9 +1321,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     //  · Al salir del todo, espera ~320 ms; si el cursor vuelve antes, se cancela el cierre.
     //  · Clic (o Enter/Espacio) en el activador lo FIJA: ya no se cierra por hover-out, solo con
     //    Esc, otro clic, o al colapsar la carita.
-    //  · Backend, dentro del menú, repite el mismo patrón en miniatura: plegado por defecto, hover
-    //    lo abre (con una pausa de intención), clic lo fija, y al cerrarse el menú vuelve a plegarse
-    //    salvo que esté fijado.
+    //  · Backend, dentro del menú, se abre y se cierra SOLO CON CLIC (o Enter/Espacio). Antes repetía
+    //    el patrón de hover en miniatura y era indistinguible de un fallo: rozarlo lo abría, y el clic
+    //    caía sobre una sección que el hover ya había abierto, así que no cambiaba nada visible —
+    //    parecía que el control no detectaba el clic (2026-08-08). Es la misma corrección que ya se
+    //    le hizo al menú principal, por la misma razón: abrir por roce no se pide, se sufre.
 
     private bool _menuOpen, _menuPinned;
     private AtajoPorGolpes? _golpes;
@@ -1405,10 +1407,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
         if (!RootPanel.Children.Contains(MenuPanel)) RootPanel.Children.Add(MenuPanel);
     }
-    private bool _backendOpen, _backendPinned;
+    private bool _backendOpen;
     private bool _talkOpen;
-    private System.Windows.Threading.DispatcherTimer _menuOpenTimer = null!,
-        _menuCloseTimer = null!, _backendHoverTimer = null!, _backendCloseTimer = null!;
+    private System.Windows.Threading.DispatcherTimer _menuOpenTimer = null!, _menuCloseTimer = null!;
 
     /// <summary>Conecta toda la coreografía del menú. Se llama una vez, desde OnLoaded.</summary>
     private void WireMenu()
@@ -1422,16 +1423,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             _menuCloseTimer.Stop();
             if (_menuOpen && !_menuPinned && !MenuPanel.IsMouseOver && !BarPanel.IsMouseOver) CloseMenu();
-        };
-
-        _backendHoverTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
-        _backendHoverTimer.Tick += (_, __) => { _backendHoverTimer.Stop(); if (BackendHeader.IsMouseOver) OpenBackend(); };
-
-        _backendCloseTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-        _backendCloseTimer.Tick += (_, __) =>
-        {
-            _backendCloseTimer.Stop();
-            if (_backendOpen && !_backendPinned && !BackendZone.IsMouseOver) CloseBackend();
         };
 
         // EL PANEL YA NO CUELGA DE LA FLECHA. Lo que hay dentro —ejecutar workflows, ensayo en seco,
@@ -1460,13 +1451,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         BarPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
         BarPanel.MouseLeave += (_, __) => ScheduleMenuClose();
 
-        // Backend: el mismo patrón, en miniatura.
-        BackendHeader.MouseEnter += (_, __) => { _backendCloseTimer.Stop(); _backendHoverTimer.Stop(); _backendHoverTimer.Start(); };
-        BackendHeader.MouseLeave += (_, __) => _backendHoverTimer.Stop();
-        BackendZone.MouseEnter += (_, __) => _backendCloseTimer.Stop();
-        BackendZone.MouseLeave += (_, __) => { if (_backendOpen && !_backendPinned) { _backendCloseTimer.Stop(); _backendCloseTimer.Start(); } };
-        BackendHeader.MouseLeftButtonUp += (_, __) => ToggleBackendPin();
-        BackendHeader.KeyDown += (_, e) => { if (e.Key is Key.Enter or Key.Space) { ToggleBackendPin(); e.Handled = true; } };
+        // Backend: solo clic. Sin MouseEnter/MouseLeave a propósito — ver la nota de arriba.
+        BackendHeader.MouseLeftButtonUp += (_, __) => ToggleBackend();
+        BackendHeader.KeyDown += (_, e) => { if (e.Key is Key.Enter or Key.Space) { ToggleBackend(); e.Handled = true; } };
 
         // Globo de conversación: 💬 lo alterna, ✕ lo cierra.
         TalkBtn.Click += (_, __) => { if (_talkOpen) HideTalk(); else ShowTalk(focusInput: true); };
@@ -1491,7 +1478,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Closed += (_, __) =>
         {
             _menuOpenTimer.Stop(); _menuCloseTimer.Stop();
-            _backendHoverTimer.Stop(); _backendCloseTimer.Stop();
             if (_saveTimer != null) { _saveTimer.Stop(); _config.Save(); }
         };
 
@@ -1714,15 +1700,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             UpdateChevron();
         });
         UpdateChevron();
-        if (_backendOpen && !_backendPinned) CloseBackend();
+        // Backend se queda como lo dejaste. Antes se replegaba al cerrar el menú porque podía haberse
+        // abierto de refilón, por hover; ahora abrirlo cuesta un clic deliberado y deshacerlo a sus
+        // espaldas sería contradecir lo que el usuario pidió.
     }
 
-    /// <summary>Fijar/soltar Backend con clic (o Enter/Espacio) en su cabecera.</summary>
-    private void ToggleBackendPin()
+    /// <summary>Abrir/cerrar Backend con clic (o Enter/Espacio) en su cabecera.</summary>
+    private void ToggleBackend()
     {
-        if (!_backendOpen) { _backendPinned = true; OpenBackend(); }
-        else if (_backendPinned) { _backendPinned = false; CloseBackend(); }
-        else _backendPinned = true; // estaba abierto por hover: el clic lo consolida
+        if (_backendOpen) CloseBackend(); else OpenBackend();
     }
 
     private void OpenBackend()
