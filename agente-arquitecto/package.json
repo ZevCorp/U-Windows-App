@@ -4,7 +4,7 @@
   "type": "module",
   "description": "El cerebro que navega la UI y contrasta la jerarquía real con la del grafo. Ver arquitecto.mjs.",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
-    "zod": "^3.23.0"
+    "@anthropic-ai/claude-agent-sdk": "^0.3.226",
+    "zod": "^4.4.3"
   }
 }

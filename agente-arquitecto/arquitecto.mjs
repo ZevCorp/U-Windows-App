@@ -145,15 +145,27 @@ const corrida = query({
   },
 });
 
-for await (const m of corrida) {
-  if (m.type === "assistant") {
-    for (const b of m.message.content ?? []) {
-      if (b.type === "text" && b.text.trim()) console.log(`\n[arquitecto] ${b.text.trim()}`);
-      if (b.type === "tool_use") console.log(`  → ${b.name.replace("mcp__grafo__", "")}(${JSON.stringify(b.input)})`);
+// AGOTAR LOS TURNOS NO ES UN FALLO, es el presupuesto haciendo su trabajo — pero el SDK lo lanza
+// como excepción, y sin capturarla Node imprime su propio código minificado entero encima del
+// informe que acabas de leer (2026-08-08, visto en la consola). Se recoge y se dice en una línea.
+try {
+  for await (const m of corrida) {
+    if (m.type === "assistant") {
+      for (const b of m.message.content ?? []) {
+        if (b.type === "text" && b.text.trim()) console.log(`\n[arquitecto] ${b.text.trim()}`);
+        if (b.type === "tool_use") console.log(`  → ${b.name.replace("mcp__grafo__", "")}(${JSON.stringify(b.input)})`);
+      }
+    } else if (m.type === "result") {
+      console.log(`\n${"=".repeat(60)}`);
+      console.log(m.subtype === "success" ? "CORRIDA COMPLETA" : `TERMINÓ POR: ${m.subtype}`);
+      console.log(`turnos: ${m.num_turns} · duración: ${Math.round(m.duration_ms / 1000)} s`);
     }
-  } else if (m.type === "result") {
-    console.log(`\n${"=".repeat(60)}`);
-    console.log(m.subtype === "success" ? "CORRIDA COMPLETA" : `TERMINÓ POR: ${m.subtype}`);
-    console.log(`turnos: ${m.num_turns} · duración: ${Math.round(m.duration_ms / 1000)} s`);
   }
+} catch (e) {
+  const msg = String(e?.message ?? e);
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(/maximum number of turns/i.test(msg)
+    ? `SE ACABARON LOS TURNOS (${TURNOS}). Lo aprendido hasta aquí queda en el grafo; su informe, en feedback-arquitecto.`
+    : `LA CORRIDA SE CORTÓ: ${msg.split("\n")[0]}`);
+  process.exitCode = 0;   // no es un fallo del sistema: es un presupuesto agotado
 }

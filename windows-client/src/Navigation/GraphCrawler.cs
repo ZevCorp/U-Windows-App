@@ -73,18 +73,35 @@ public sealed class GraphCrawler
     /// foco se ha ido —al pulsar el botón del panel, o si el usuario toca otra ventana—, porque
     /// leer y clicar exigen que la app esté delante.
     /// </summary>
+    /// <summary>
+    /// ¿El objetivo es una PÁGINA WEB? Entonces «estar delante» no se pregunta por proceso.
+    ///
+    /// El recorrido mecánico nació para apps de escritorio y lo daba por hecho: comparaba el
+    /// proceso en primer plano con el nombre de la app. Para una web ese nombre es el DOMINIO, así
+    /// que la comparación era «chrome» contra «github.com» — falsa siempre, en cualquier navegador
+    /// y cualquier página. Resultado medido: «no pude traer github.com al frente» y cero pantallas,
+    /// dos veces seguidas (2026-08-08, prueba del usuario). Nunca pudo recorrer una web.
+    /// </summary>
+    private bool _objetivoEsWeb;
+
     private async Task<bool> EnfocarObjetivoAsync(CancellationToken ct)
     {
         if (_appObjetivo.Length == 0) return false;
         if (EsObjetivoElFrente()) return true;
 
-        if (!EnfocarVentanaDe(_appObjetivo)) AppAligner.FocusOrLaunch(_appObjetivo);
+        // Una web se alcanza por su PESTAÑA, no lanzando un proceso que no existe. Lo resuelve
+        // quien ya sabe hacerlo —y prefiere la pestaña abierta a abrir otra copia— en vez de
+        // duplicar aquí esa lógica: ver PestanasAbiertas.
+        if (_objetivoEsWeb) Uia.PestanasAbiertas.IrA(_appObjetivo);
+        else if (!EnfocarVentanaDe(_appObjetivo)) AppAligner.FocusOrLaunch(_appObjetivo);
+
         for (int i = 0; i < 20; i++)
         {
             await Task.Delay(150, ct);
             if (EsObjetivoElFrente()) return true;
         }
-        LogBus.Log("crawler", $"no logré poner «{_appObjetivo}» delante (ahora hay '{ProcesoDelFrente()}')");
+        LogBus.Log("crawler", $"no logré poner «{_appObjetivo}» delante (ahora hay "
+            + $"'{(_objetivoEsWeb ? SurfaceMap.AppDe(_where()?.Id ?? "") : ProcesoDelFrente())}')");
         return false;
     }
 
@@ -105,8 +122,15 @@ public sealed class GraphCrawler
         catch { return ""; }
     }
 
+    /// <summary>
+    /// ¿Estamos donde queríamos? Para una app, lo dice el proceso en primer plano; para una web, la
+    /// SUPERFICIE — que es lo único que sabe qué página hay delante dentro del navegador. El
+    /// proceso no distingue una pestaña de otra, y esa distinción es justo lo que aquí importa.
+    /// </summary>
     private bool EsObjetivoElFrente() =>
-        ProcesoDelFrente().Equals(_appObjetivo, StringComparison.OrdinalIgnoreCase);
+        _objetivoEsWeb
+            ? SurfaceMap.AppDe(_where()?.Id ?? "").Equals(_appObjetivo, StringComparison.OrdinalIgnoreCase)
+            : ProcesoDelFrente().Equals(_appObjetivo, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// ¿Este selector identifica algo de verdad?
@@ -172,8 +196,14 @@ public sealed class GraphCrawler
     }
 
     /// <summary>¿Este identificador de superficie pertenece a la app que estamos mapeando?</summary>
+    /// <summary>
+    /// ¿Esta pantalla pertenece a lo que estamos recorriendo? Se pregunta por la APP de la
+    /// identidad y no por su prefijo: escrito como texto —«uia://app.exe/»— dejaba fuera a
+    /// cualquier página, porque una web es «web://dominio/…». Quien sabe extraer la app de una
+    /// identidad, sea del esquema que sea, es SurfaceMap.AppDe.
+    /// </summary>
     private bool EsDelObjetivo(string id) =>
-        id.StartsWith($"uia://{_appObjetivo}.exe/", StringComparison.OrdinalIgnoreCase);
+        SurfaceMap.AppDe(id).Equals(_appObjetivo, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// La ruta de la carpeta que el explorador tiene abierta en primer plano, preguntándole a él.
@@ -278,7 +308,10 @@ public sealed class GraphCrawler
         // ese instante la ventana de delante es la NUESTRA: sin esto el lector devuelve los botones
         // del propio panel, SafeToClick los rechaza por no ser navegación, y el recorrido termina
         // con «1 pantalla, 0 rutas» sin haber mirado la app. Pasó en la primera corrida (2026-07-31).
-        _appObjetivo = AppAligner.ProcessFromOrigin(raiz);
+        // Para una web la app es el DOMINIO (github.com), no un proceso: se guarda tal cual y se
+        // marca como web, que es lo que cambia cómo se llega y cómo se comprueba que se llegó.
+        _objetivoEsWeb = raiz.StartsWith("web://", StringComparison.OrdinalIgnoreCase);
+        _appObjetivo = _objetivoEsWeb ? SurfaceMap.AppDe(raiz) : AppAligner.ProcessFromOrigin(raiz);
         if (!await EnfocarObjetivoAsync(ct))
             return $"no pude traer «{_appObjetivo}» al frente para explorarla";
 
