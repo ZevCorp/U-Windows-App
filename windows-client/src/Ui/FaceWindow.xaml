@@ -305,22 +305,65 @@
                     Background="Transparent"
                     MouseEnter="OnCollapsedHoverIn" MouseLeave="OnCollapsedHoverOut">
 
-            <!-- El punto y, detrás, un halo que respira cuando la voz está viva. El halo va en un
-                 Grid y no dentro del botón porque tiene que poder crecer MÁS que él sin empujar
-                 nada: si formara parte del botón, cada latido movería la carita de sitio. -->
-            <Grid x:Name="VoiceDotGrupo" VerticalAlignment="Center" Margin="0,0,10,0"
-                  Width="26" Height="26">
-                <Ellipse x:Name="VoiceHalo" Width="26" Height="26" Opacity="0"
-                         Fill="#FFFFFF" IsHitTestVisible="False"
-                         RenderTransformOrigin="0.5,0.5">
-                    <Ellipse.RenderTransform>
-                        <ScaleTransform x:Name="VoiceHaloEscala" ScaleX="1" ScaleY="1"/>
-                    </Ellipse.RenderTransform>
-                </Ellipse>
-                <Button x:Name="VoiceDot" Style="{StaticResource VoiceDot}"
-                        Opacity="0" IsHitTestVisible="False" Click="OnMic"
-                        ToolTip="Hablar con Ü"/>
-            </Grid>
+            <!-- DOS PASTILLAS DIMINUTAS que se convierten en botones al acercarse.
+                 Es el gesto del Dock de macOS —los iconos crecen cuando te acercas— con la forma
+                 del indicador de inicio de iOS: una barrita redondeada que no pide nada. En reposo
+                 solo insinúan que hay algo; el icono aparece cuando la mano ya va hacia él.
+
+                 La zona sensible mide 26x26 aunque la pastilla mida 4x16: el blanco de un gesto no
+                 puede ser tan pequeño como su dibujo, o acertarle se convierte en puntería. -->
+            <StackPanel x:Name="VoiceDotGrupo" Orientation="Vertical" VerticalAlignment="Center"
+                        Margin="0,0,10,0" Opacity="0">
+
+                <!-- Voz -->
+                <Grid x:Name="ZonaVoz" Width="26" Height="26" Background="Transparent" Cursor="Hand"
+                      ToolTip="Hablar con Ü"
+                      MouseEnter="OnZonaVozEntra" MouseLeave="OnZonaVozSale"
+                      MouseLeftButtonUp="OnMicDesdePastilla">
+                    <Ellipse x:Name="VoiceHalo" Width="26" Height="26" Opacity="0"
+                             Fill="#FFFFFF" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform>
+                            <ScaleTransform x:Name="VoiceHaloEscala" ScaleX="1" ScaleY="1"/>
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+                    <!-- CornerRadius fijo y grande: la forma la decide el tamaño. A 4x16 se ve
+                         pastilla y a 26x26 círculo, sin cambiar de dibujo ni cruzar un umbral. -->
+                    <Border x:Name="VozCuerpo" Width="4" Height="16" CornerRadius="13"
+                            IsHitTestVisible="False">
+                        <Border.Background>
+                            <SolidColorBrush x:Name="VozFondo" Color="#B3FFFFFF"/>
+                        </Border.Background>
+                    </Border>
+                    <Canvas x:Name="VozIcono" Width="26" Height="26" Opacity="0" IsHitTestVisible="False">
+                        <Border Canvas.Left="10.5" Canvas.Top="6" Width="5" Height="9"
+                                CornerRadius="2.5" Background="White"/>
+                        <Path Stroke="White" StrokeThickness="1.3" StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round" Data="M 8.2,12.4 A 4.8,4.8 0 0 0 17.8,12.4"/>
+                        <Line X1="13" Y1="17.2" X2="13" Y2="19.6" Stroke="White"
+                              StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    </Canvas>
+                </Grid>
+
+                <!-- Conversación -->
+                <Grid x:Name="ZonaChat" Width="26" Height="26" Background="Transparent" Cursor="Hand"
+                      Margin="0,6,0,0" ToolTip="Escribirle a Ü"
+                      MouseEnter="OnZonaChatEntra" MouseLeave="OnZonaChatSale"
+                      MouseLeftButtonUp="OnChatDesdePastilla">
+                    <Border x:Name="ChatCuerpo" Width="4" Height="16" CornerRadius="13"
+                            IsHitTestVisible="False">
+                        <Border.Background>
+                            <SolidColorBrush x:Name="ChatFondo" Color="#B3FFFFFF"/>
+                        </Border.Background>
+                    </Border>
+                    <Canvas x:Name="ChatIcono" Width="26" Height="26" Opacity="0" IsHitTestVisible="False">
+                        <!-- Bocadillo: cuerpo redondeado y la puntita abajo a la izquierda. -->
+                        <Border Canvas.Left="6" Canvas.Top="7" Width="14" Height="10"
+                                CornerRadius="5" BorderBrush="White" BorderThickness="1.4"/>
+                        <Path Stroke="White" StrokeThickness="1.4" StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round" Data="M 9.5,16.6 L 8.6,19.6 L 12.2,17.2"/>
+                    </Canvas>
+                </Grid>
+            </StackPanel>
 
             <ui:FaceControl x:Name="CollapsedFace" Width="72" Height="72" Cursor="Hand"
                             ToolTip="Clic: abrir la barra · doble clic: micrófono · mantener: cambiar tema · arrastrar y soltar: mover">
