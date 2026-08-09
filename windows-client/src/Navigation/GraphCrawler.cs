@@ -202,8 +202,24 @@ public sealed class GraphCrawler
     /// cualquier página, porque una web es «web://dominio/…». Quien sabe extraer la app de una
     /// identidad, sea del esquema que sea, es SurfaceMap.AppDe.
     /// </summary>
+    /// <remarks>
+    /// LAS DOS PARTES SE NORMALIZAN IGUAL, y ahí estaba el fallo. <c>_appObjetivo</c> se llena con
+    /// <see cref="AppAligner.ProcessFromOrigin"/>, que QUITA el «.exe» —«explorer»—, mientras que
+    /// aquí se comparaba contra <c>SurfaceMap.AppDe</c>, que lo conserva —«explorer.exe»—. Nunca
+    /// coincidían: el crawler entraba por una puerta, veía «explorer.exe/vídeos», lo declaraba OTRA
+    /// APLICACIÓN y se volvía sin aprender. En TODAS las puertas.
+    ///
+    /// Medido el 2026-08-08: un recorrido completo del explorador terminó con «1 pantalla recorrida,
+    /// 0 rutas aprendidas» — y así llevaba desde siempre, que es por qué el mapa tenía 244 puertas
+    /// sin cruzar y la cobertura no subía nunca.
+    ///
+    /// Es la tercera vez en el día que una compuerta compara identidades de formas distintas y da
+    /// falso siempre (las otras: el dominio contra el proceso en el navegador, y la clave de dos
+    /// partes contra el diccionario de tres). Cuando dos lados de una comparación salen de funciones
+    /// distintas, hay que normalizar en el mismo sitio.
+    /// </remarks>
     private bool EsDelObjetivo(string id) =>
-        SurfaceMap.AppDe(id).Equals(_appObjetivo, StringComparison.OrdinalIgnoreCase);
+        AppAligner.ProcessFromOrigin(id).Equals(_appObjetivo, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// La ruta de la carpeta que el explorador tiene abierta en primer plano, preguntándole a él.

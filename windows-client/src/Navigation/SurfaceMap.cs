@@ -1006,13 +1006,44 @@ public sealed class SurfaceMap
         return (nodos.Count, aristas.Count);
     }
 
-    public void OlvidarAccion(string from, string to)
+    /// <param name="selector">
+    /// Cuál de las puertas entre esos dos sitios. Vacío = todas. Entre un par puede haber varias
+    /// —el panel lateral y la miga de pan llevan al mismo sitio— y quien llama suele saber cuál
+    /// falló: quitarle la acción a la buena por culpa de la mala sería peor que no hacer nada.
+    /// </param>
+    public void OlvidarAccion(string from, string to, string selector = "")
     {
-        string k = Norm(from) + "\n" + Norm(to);
-        if (!_edges.TryGetValue(k, out var e) || e.Selector.Length == 0) return;
-        LogBus.Log("mapa", $"«{e.Label}» ya no está en '{ShortId(Norm(from))}': se deja de enrutar por ahí");
-        e.Selector = ""; e.Alternatives = Array.Empty<string>(); e.ClickPos = "";
-        e.Explored = false;
+        // LA CLAVE TENÍA DOS PARTES Y EL DICCIONARIO TRES.
+        //
+        // Esto construía «from\nto» y buscaba con TryGetValue, pero _edges se indexa con
+        // Clave(from, to, selector) —tres partes—, así que la búsqueda no acertaba NUNCA y el método
+        // salía por el primer return sin tocar nada. Su propia línea de log aparece cero veces en
+        // todos los logs que existen: no es que fallara a veces, es que no ha ocurrido jamás.
+        //
+        // Lo que se caía con ello es el mecanismo entero de «esta puerta ya no lleva ahí, olvídala y
+        // busca otro camino». Una arista falsa se volvía a elegir en cada intento, para siempre: el
+        // mapa creía que «Nombre» —la cabecera de columna del explorador— llevaba a inetpub, y la
+        // ruta moría ahí una y otra vez aunque el que llamaba pidiera olvidarla (2026-08-08).
+        //
+        // Se recorre en vez de indexar. Es O(aristas) y se llama al fallar un tramo, no en bucle.
+        string f = Norm(from), t = Norm(to);
+        var tocadas = _edges.Where(kv =>
+        {
+            var p = kv.Key.Split('\n');
+            return p.Length >= 2
+                && p[0].Equals(f, StringComparison.OrdinalIgnoreCase)
+                && p[1].Equals(t, StringComparison.OrdinalIgnoreCase)
+                && kv.Value.Selector.Length > 0
+                && (selector.Length == 0 || kv.Value.Selector.Equals(selector, StringComparison.Ordinal));
+        }).Select(kv => kv.Value).ToList();
+
+        if (tocadas.Count == 0) return;
+        foreach (var e in tocadas)
+        {
+            LogBus.Log("mapa", $"«{e.Label}» ya no está en '{ShortId(f)}': se deja de enrutar por ahí");
+            e.Selector = ""; e.Alternatives = Array.Empty<string>(); e.ClickPos = "";
+            e.Explored = false;
+        }
         Version++;
         Save();
     }
