@@ -78,7 +78,12 @@ public sealed class GraphExplorerWindow : Window
     private Button _limpiarBtn = null!;
     private Button _pasoBtn = null!;
     private Button _olvidarBtn = null!;
+    private Button _clasicoBtn = null!;
     private CarruselDeApps? _carrusel;
+
+    /// <summary>¿Se dibuja con las cinco fuentes de siempre? Es la referencia contra la que se
+    /// mide el dibujo fiel al mapa, no un modo de trabajo. Ver <see cref="ProfundidadClasica"/>.</summary>
+    private bool _dibujoClasico;
 
     /// <summary>
     /// Borra el grafo entero, preguntando antes. Borrar lo aprendido no se deshace.
@@ -399,10 +404,39 @@ public sealed class GraphExplorerWindow : Window
                 : "paso a paso apagado";
         };
 
+        // ⚖ LOS DOS DIBUJOS, PARA CONTRASTAR. El clásico tenía un comportamiento que el usuario vio
+        // funcionar en el explorador —cromo quieto, raíz firme, bajar y volver sin saltos— y el
+        // nuevo es fiel al mapa pero todavía no lo reproduce entero. Hasta que lo haga, poder
+        // alternar sobre EL MISMO grafo es la única forma de medir qué falta (2026-08-08).
+        _clasicoBtn = new Button
+        {
+            Content = "⚖",
+            Width = 26, Height = 26, FontSize = 12,
+            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Dibujo CLÁSICO (5 fuentes) vs. dibujo fiel al mapa · el mismo grafo, dos lecturas",
+        };
+        _clasicoBtn.Click += (_, __) =>
+        {
+            _dibujoClasico = !_dibujoClasico;
+            _clasicoBtn.Background = new SolidColorBrush(_dibujoClasico
+                ? Color.FromArgb(0x66, 0xBA, 0x68, 0xC8) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+            _status.Text = _dibujoClasico
+                ? "dibujo CLÁSICO: las cinco fuentes de siempre (referencia para contrastar)"
+                : "dibujo FIEL AL MAPA: lo que el grafo sabe, y lo que no, en «sin situar»";
+            _huellaEstructura = "";   // que el log vuelva a contarlo con el modo nuevo
+            DibujarGrafo();
+        };
+
         var iconos = new StackPanel { Orientation = Orientation.Horizontal };
         iconos.Children.Add(_collapseBtn);
         iconos.Children.Add(_crawlBtn);
         iconos.Children.Add(_carruselBtn);
+        iconos.Children.Add(_clasicoBtn);
         // OLVIDAR LO ENSEÑADO es distinto de borrar el grafo, y por eso es otro botón: el grafo es
         // terreno y se tira entero sin pena; la jerarquía es aprendizaje, sobrevive al borrado, y
         // se elige por aplicación —enseñar bien el explorador no es motivo para perder lo que se
@@ -2230,6 +2264,21 @@ public sealed class GraphExplorerWindow : Window
             .Select(e => (e.From, e.To))
             .ToList();
 
+        // EL MODO CLÁSICO, PARA PODER CONTRASTAR. Lo que el usuario llama «plata» no es una capa de
+        // datos: es un COMPORTAMIENTO que vio funcionar —el cromo quieto en su fila, la raíz firme,
+        // bajar y volver sin que nada saltara—. Ese comportamiento lo sostenían las cinco fuentes
+        // que vivían aquí. Quitarlas de golpe dejó sin referencia contra la que medir lo nuevo, así
+        // que se conservan ENTERAS y aparte (ProfundidadClasica) y se eligen con un botón: mismo
+        // grafo, dos dibujos, uno al lado del otro (2026-08-08, pedido por él).
+        if (_dibujoClasico)
+        {
+            prof = ProfundidadClasica.Calcular(_map, appActual, raiz, centro, pisados, traza,
+                NivelDe, declarados, _porQueDeclarado, ref _huellaPuente);
+            _profDeclarada = declarados;
+            DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, 0);
+            return;
+        }
+
         var todos = pisados
             .Concat(aristasMapa.SelectMany(x => new[] { x.From, x.To }))
             .Concat(traza.SelectMany(x => new[] { x.From, x.To }))
@@ -2262,6 +2311,18 @@ public sealed class GraphExplorerWindow : Window
         foreach (var n in todos)
             if (!prof.ContainsKey(n)) { prof[n] = filaSinSituar; sinSituar++; }
 
+        DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, sinSituar);
+    }
+
+    /// <summary>
+    /// Pintar el grafo con una profundidad YA CALCULADA. Los dos modos —el del mapa y el clásico—
+    /// difieren solo en cómo se decide la fila; lo que se dibuja después es idéntico, y así el
+    /// contraste compara lo que de verdad cambia y no dos dibujos distintos (2026-08-08).
+    /// </summary>
+    private void DibujarConProfundidad(Dictionary<string, int> prof, string raiz, string centro,
+        string appActual, List<(string From, string To, string Etiqueta)> traza,
+        List<string> pisados, int sinSituar)
+    {
         // CÓMO QUEDÓ LA ESTRUCTURA, y por qué. Llevamos dos arreglos por el sitio equivocado
         // suponiendo dónde estaba el fallo; esto lo dice en vez de deducirlo. Se escribe solo
         // cuando cambia, para no llenar el log en cada repintado (2026-08-06).
@@ -2273,8 +2334,9 @@ public sealed class GraphExplorerWindow : Window
         if (huellaNiv != _huellaEstructura)
         {
             _huellaEstructura = huellaNiv;
-            LogBus.Log("grafo", $"raíz «{Corto(raiz)}» · {_profDeclarada.Count} situada(s) por el mapa · "
-                + $"{sinSituar} SIN SITUAR · {traza.Count} tramo(s) · profundidades: "
+            LogBus.Log("grafo", $"[{(_dibujoClasico ? "CLÁSICO" : "mapa")}] raíz «{Corto(raiz)}» · "
+                + $"{_profDeclarada.Count} situada(s) · {sinSituar} SIN SITUAR · "
+                + $"{traza.Count} tramo(s) · profundidades: "
                 + string.Join(", ", prof.OrderBy(p => p.Value).ThenBy(p => p.Key)
                     .Take(20).Select(p => $"{Corto(p.Key)}={p.Value}"
                         + (_porQueDeclarado.TryGetValue(p.Key, out var pq) ? $"*({pq})" : ""))));

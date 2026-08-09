@@ -112,7 +112,7 @@
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow",
       "community": 108,
-      "community_name": ".Render",
+      "community_name": "HighlightOverlay",
       "norm_label": "graphexplorerwindow.cs"
     },
     {
@@ -127,7 +127,7 @@
       },
       "_origin": "ast",
       "id": "csharp_namespace:08f005169dcc3e1e",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.ui"
     },
@@ -139,7 +139,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -224,7 +224,7 @@
       "_origin": "ast",
       "id": "canvas",
       "community": 108,
-      "community_name": ".Render",
+      "community_name": "HighlightOverlay",
       "norm_label": "canvas"
     },
     {
@@ -323,7 +323,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -341,7 +341,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -370,7 +370,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -398,8 +398,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "uielement",
-      "community": 108,
-      "community_name": ".Render",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": "uielement"
     },
     {
@@ -420,8 +420,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "list",
-      "community": 108,
-      "community_name": ".Render",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": "list"
     },
     {
@@ -443,14 +443,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_vigilarmodificadores",
-      "community": 56,
-      "community_name": "DllImport",
+      "community": 108,
+      "community_name": "HighlightOverlay",
       "norm_label": ".vigilarmodificadores()"
     },
     {
@@ -461,7 +461,7 @@
       "_origin": "ast",
       "id": "int",
       "community": 108,
-      "community_name": ".Render",
+      "community_name": "HighlightOverlay",
       "norm_label": "int"
     },
     {
@@ -472,14 +472,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_getasynckeystate",
-      "community": 56,
-      "community_name": "DllImport",
+      "community": 108,
+      "community_name": "HighlightOverlay",
       "norm_label": ".getasynckeystate()"
     },
     {
@@ -501,14 +501,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_onsourceinitialized",
-      "community": 56,
-      "community_name": "DllImport",
+      "community": 108,
+      "community_name": "HighlightOverlay",
       "norm_label": ".onsourceinitialized()"
     },
     {
@@ -518,8 +518,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "eventargs",
-      "community": 56,
-      "community_name": "DllImport",
+      "community": 108,
+      "community_name": "HighlightOverlay",
       "norm_label": "eventargs"
     },
     {
@@ -530,7 +530,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -559,7 +559,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -577,7 +577,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -606,7 +606,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -635,7 +635,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -653,7 +653,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -671,7 +671,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -689,7 +689,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -707,7 +707,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -736,7 +736,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -754,14 +754,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_render",
-      "community": 108,
-      "community_name": ".Render",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".render()"
     },
     {
@@ -772,14 +772,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_refrescarayudas",
-      "community": 108,
-      "community_name": ".Render",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".refrescarayudas()"
     },
     {
@@ -790,7 +790,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -808,14 +808,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_anotarpuertas",
-      "community": 108,
-      "community_name": ".Render",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".anotarpuertas()"
     },
     {
@@ -826,14 +826,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_distintivo",
-      "community": 142,
-      "community_name": "GraphExplorerWindow",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".distintivo()"
     },
     {
@@ -844,14 +844,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_prefijocomun",
-      "community": 142,
-      "community_name": "GraphExplorerWindow",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".prefijocomun()"
     },
     {
@@ -861,8 +861,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "ienumerable",
-      "community": 142,
-      "community_name": "GraphExplorerWindow",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": "ienumerable"
     },
     {
@@ -873,14 +873,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_corto",
-      "community": 142,
-      "community_name": "GraphExplorerWindow",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".corto()"
     },
     {
@@ -891,7 +891,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -909,7 +909,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -927,14 +927,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_ajustaralavista",
-      "community": 142,
-      "community_name": "GraphExplorerWindow",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".ajustaralavista()"
     },
     {
@@ -945,7 +945,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -963,7 +963,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -981,7 +981,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -999,7 +999,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1017,7 +1017,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1035,7 +1035,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1053,7 +1053,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1071,7 +1071,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1089,7 +1089,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1107,14 +1107,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_nivelde",
-      "community": 142,
-      "community_name": "GraphExplorerWindow",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".nivelde()"
     },
     {
@@ -1125,7 +1125,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1143,7 +1143,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1172,14 +1172,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_correrpruebasasync",
-      "community": 86,
-      "community_name": ".DibujarVersiones",
+      "community": 110,
+      "community_name": ".CrawlAsync",
       "norm_label": ".correrpruebasasync()"
     },
     {
@@ -1190,14 +1190,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_elegirescenariosasync",
-      "community": 86,
-      "community_name": ".DibujarVersiones",
+      "community": 110,
+      "community_name": ".CrawlAsync",
       "norm_label": ".elegirescenariosasync()"
     },
     {
@@ -1207,8 +1207,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "ireadonlylist",
-      "community": 86,
-      "community_name": ".DibujarVersiones",
+      "community": 108,
+      "community_name": "HighlightOverlay",
       "norm_label": "ireadonlylist"
     },
     {
@@ -1218,8 +1218,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "escenario",
-      "community": 86,
-      "community_name": ".DibujarVersiones",
+      "community": 110,
+      "community_name": ".CrawlAsync",
       "norm_label": "escenario"
     },
     {
@@ -1230,7 +1230,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1259,7 +1259,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1277,7 +1277,7 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1295,14 +1295,14 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujarniveles",
-      "community": 142,
-      "community_name": "GraphExplorerWindow",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".dibujarniveles()"
     },
     {
@@ -1313,25 +1313,25 @@
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
-      "community": 142,
-      "community_name": "GraphExplorerWindow",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".dibujargrafo()"
     },
     {
       "label": ".AbrirCarrusel()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2663",
+      "source_location": "L2569",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1345,11 +1345,11 @@
       "label": ".AprenderAppAsync()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2674",
+      "source_location": "L2580",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1374,11 +1374,11 @@
       "label": ".EnsenarLaAppAsync()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2724",
+      "source_location": "L2630",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1392,11 +1392,11 @@
       "label": ".CrawlAsync()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2873",
+      "source_location": "L2779",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1410,29 +1410,29 @@
       "label": ".TraverseAsync()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2967",
+      "source_location": "L2873",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_traverseasync",
-      "community": 108,
-      "community_name": ".Render",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".traverseasync()"
     },
     {
       "label": "HighlightOverlay",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3039",
+      "source_location": "L2945",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
@@ -1440,43 +1440,43 @@
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay",
       "community": 108,
-      "community_name": ".Render",
+      "community_name": "HighlightOverlay",
       "norm_label": "highlightoverlay"
     },
     {
       "label": ".GetWindowLong()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3043",
+      "source_location": "L2949",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_getwindowlong",
-      "community": 56,
-      "community_name": "DllImport",
+      "community": 108,
+      "community_name": "HighlightOverlay",
       "norm_label": ".getwindowlong()"
     },
     {
       "label": ".SetWindowLong()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3044",
+      "source_location": "L2950",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_setwindowlong",
-      "community": 56,
-      "community_name": "DllImport",
+      "community": 108,
+      "community_name": "HighlightOverlay",
       "norm_label": ".setwindowlong()"
     },
     {
@@ -1487,43 +1487,43 @@
       "_origin": "ast",
       "id": "rectangle",
       "community": 108,
-      "community_name": ".Render",
+      "community_name": "HighlightOverlay",
       "norm_label": "rectangle"
     },
     {
       "label": ".OnSourceInitialized()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3073",
+      "source_location": "L2979",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_onsourceinitialized",
-      "community": 56,
-      "community_name": "DllImport",
+      "community": 108,
+      "community_name": "HighlightOverlay",
       "norm_label": ".onsourceinitialized()"
     },
     {
       "label": ".ShowRect()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3080",
+      "source_location": "L2986",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_showrect",
       "community": 108,
-      "community_name": ".Render",
+      "community_name": "HighlightOverlay",
       "norm_label": ".showrect()"
     },
     {
@@ -1534,61 +1534,61 @@
       "_origin": "ast",
       "id": "rect",
       "community": 108,
-      "community_name": ".Render",
+      "community_name": "HighlightOverlay",
       "norm_label": "rect"
     },
     {
       "label": ".ShowRects()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3090",
+      "source_location": "L2996",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_showrects",
       "community": 108,
-      "community_name": ".Render",
+      "community_name": "HighlightOverlay",
       "norm_label": ".showrects()"
     },
     {
       "label": ".NuevoRecuadro()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3118",
+      "source_location": "L3024",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_nuevorecuadro",
       "community": 108,
-      "community_name": ".Render",
+      "community_name": "HighlightOverlay",
       "norm_label": ".nuevorecuadro()"
     },
     {
       "label": ".HideRect()",
       "file_type": "code",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3125",
+      "source_location": "L3031",
       "metadata": {
         "namespace": "U.WindowsClient.Ui",
         "scope_chain": [
-          "s350"
+          "s338"
         ]
       },
       "_callable": true,
       "_origin": "ast",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_hiderect",
-      "community": 108,
-      "community_name": ".Render",
+      "community": 8,
+      "community_name": ".DibujarGrafo",
       "norm_label": ".hiderect()"
     },
     {
@@ -4002,7 +4002,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "graphcrawler.cs",
       "id": "windows_client_src_navigation_graphcrawler"
     },
@@ -5066,7 +5066,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "uiasurface.cs",
       "id": "windows_graph_src_surfaces_uiasurface"
     },
@@ -5082,7 +5082,7 @@
       },
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.graph.surfaces",
       "id": "csharp_namespace:49eb2a32df1003c2"
     },
@@ -10399,8 +10399,8 @@
       "source_file": "versiones/nucleo/v0.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 152,
-      "community_name": "U.WindowsClient.Navigation",
+      "community": 32,
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "v0.cs",
       "id": "versiones_nucleo_v0"
     },
@@ -11773,7 +11773,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "gestures.cs",
       "id": "windows_client_src_actions_gestures"
     },
@@ -11789,7 +11789,7 @@
       },
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.actions",
       "id": "csharp_namespace:7657b4ec99ce487c"
     },
@@ -12043,7 +12043,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "inputexecutor.cs",
       "id": "windows_client_src_actions_inputexecutor"
     },
@@ -12475,7 +12475,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "agentloop.cs",
       "id": "windows_client_src_agent_agentloop"
     },
@@ -12491,7 +12491,7 @@
       },
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.agent",
       "id": "csharp_namespace:fa2861be48927cc7"
     },
@@ -12812,7 +12812,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "backendclient.cs",
       "id": "windows_client_src_backend_backendclient"
     },
@@ -12827,7 +12827,7 @@
         "namespace": "U.WindowsClient.Backend"
       },
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.backend",
       "id": "csharp_namespace:02173a0cb4051fa2"
@@ -13063,7 +13063,7 @@
       },
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.capture",
       "id": "csharp_namespace:1ab641519afcb24e"
     },
@@ -13660,7 +13660,7 @@
         "namespace": "U.WindowsClient.Diagnostics"
       },
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.diagnostics",
       "id": "csharp_namespace:68a18d2f0231921b"
@@ -14056,7 +14056,7 @@
       },
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.domain",
       "id": "csharp_namespace:4d754e13ec748ecf"
     },
@@ -14165,7 +14165,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "localmcp.cs",
       "id": "windows_client_src_mcp_localmcp"
     },
@@ -14181,7 +14181,7 @@
       },
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.mcp",
       "id": "csharp_namespace:ebb34b811774c5c6"
     },
@@ -14287,7 +14287,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "mcpdevprobe.cs",
       "id": "windows_client_src_mcp_mcpdevprobe"
     },
@@ -14440,7 +14440,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "surfacemaptools.cs",
       "id": "windows_client_src_mcp_surfacemaptools"
     },
@@ -15970,7 +15970,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "workflowmcprunner.cs",
       "id": "windows_client_src_mcp_workflowmcprunner"
     },
@@ -16739,8 +16739,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 86,
-      "community_name": ".DibujarVersiones",
+      "community": 110,
+      "community_name": ".CrawlAsync",
       "norm_label": ".todos()",
       "id": "windows_client_src_navigation_escenarioci_u_windowsclient_navigation_escenarioci_todos"
     },
@@ -16750,8 +16750,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 86,
-      "community_name": ".DibujarVersiones",
+      "community": 110,
+      "community_name": ".CrawlAsync",
       "norm_label": "ireadonlylist",
       "id": "windows_client_src_navigation_escenarioci_cs_ireadonlylist"
     },
@@ -17177,7 +17177,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "maestrodeapps.cs",
       "id": "windows_client_src_navigation_maestrodeapps"
     },
@@ -17400,7 +17400,7 @@
       "source_file": "windows-client/src/Navigation/NavStrategies.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "navstrategies.cs",
       "id": "windows_client_src_navigation_navstrategies"
@@ -18467,7 +18467,7 @@
         "namespace": "U.WindowsClient.SystemApi"
       },
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.systemapi",
       "id": "csharp_namespace:d523a1c81743d694"
@@ -19730,7 +19730,7 @@
       "source_file": "windows-client/src/Teach/PendingFinish.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "pendingfinish.cs",
       "id": "windows_client_src_teach_pendingfinish"
@@ -19746,7 +19746,7 @@
         "namespace": "U.WindowsClient.Teach"
       },
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.teach",
       "id": "csharp_namespace:699dfa3951a6cf32"
@@ -19883,7 +19883,7 @@
       "source_file": "windows-client/src/Teach/ScreenRecorder.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "screenrecorder.cs",
       "id": "windows_client_src_teach_screenrecorder"
@@ -20091,7 +20091,7 @@
       "source_file": "windows-client/src/Teach/StepShotCamera.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "stepshotcamera.cs",
       "id": "windows_client_src_teach_stepshotcamera"
@@ -20929,7 +20929,7 @@
       "source_file": "windows-client/src/Teach/WorkflowTeachSession.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "workflowteachsession.cs",
       "id": "windows_client_src_teach_workflowteachsession"
@@ -21189,8 +21189,8 @@
         "namespace": "U.WindowsClient.Telemetry"
       },
       "_origin": "ast",
-      "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community": 78,
+      "community_name": "Telemetry.cs",
       "norm_label": "u.windowsclient.telemetry",
       "id": "csharp_namespace:405d149b7e132161"
     },
@@ -21561,7 +21561,7 @@
       "source_file": "windows-client/src/Ui/AtajoPorGolpes.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "atajoporgolpes.cs",
       "id": "windows_client_src_ui_atajoporgolpes"
@@ -21580,7 +21580,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": "atajoporgolpes",
       "id": "windows_client_src_ui_atajoporgolpes_u_windowsclient_ui_atajoporgolpes"
@@ -21591,7 +21591,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": "int",
       "id": "windows_client_src_ui_atajoporgolpes_cs_int"
@@ -21602,7 +21602,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": "timespan",
       "id": "windows_client_src_ui_atajoporgolpes_cs_timespan"
@@ -21620,7 +21620,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": ".setwindowshookex()",
       "id": "windows_client_src_ui_atajoporgolpes_u_windowsclient_ui_atajoporgolpes_setwindowshookex"
@@ -21631,7 +21631,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": "gancho",
       "id": "windows_client_src_ui_atajoporgolpes_cs_gancho"
@@ -21642,7 +21642,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": "intptr",
       "id": "windows_client_src_ui_atajoporgolpes_cs_intptr"
@@ -21653,7 +21653,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": "dllimport",
       "id": "windows_client_src_ui_atajoporgolpes_cs_dllimport"
@@ -21671,7 +21671,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": ".unhookwindowshookex()",
       "id": "windows_client_src_ui_atajoporgolpes_u_windowsclient_ui_atajoporgolpes_unhookwindowshookex"
@@ -21689,7 +21689,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": ".callnexthookex()",
       "id": "windows_client_src_ui_atajoporgolpes_u_windowsclient_ui_atajoporgolpes_callnexthookex"
@@ -21707,7 +21707,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": ".getasynckeystate()",
       "id": "windows_client_src_ui_atajoporgolpes_u_windowsclient_ui_atajoporgolpes_getasynckeystate"
@@ -21727,7 +21727,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": "kbdllhookstruct",
       "id": "windows_client_src_ui_atajoporgolpes_u_windowsclient_ui_kbdllhookstruct"
@@ -21738,7 +21738,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": "uint",
       "id": "windows_client_src_ui_atajoporgolpes_cs_uint"
@@ -21749,7 +21749,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": "bool",
       "id": "windows_client_src_ui_atajoporgolpes_cs_bool"
@@ -21760,7 +21760,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": "datetime",
       "id": "windows_client_src_ui_atajoporgolpes_cs_datetime"
@@ -21778,7 +21778,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": ".esctrl()",
       "id": "windows_client_src_ui_atajoporgolpes_u_windowsclient_ui_atajoporgolpes_esctrl"
@@ -21796,7 +21796,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": ".esshift()",
       "id": "windows_client_src_ui_atajoporgolpes_u_windowsclient_ui_atajoporgolpes_esshift"
@@ -21814,7 +21814,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": ".teclado()",
       "id": "windows_client_src_ui_atajoporgolpes_u_windowsclient_ui_atajoporgolpes_teclado"
@@ -21832,7 +21832,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 16,
+      "community": 22,
       "community_name": "AtajoPorGolpes",
       "norm_label": ".dispose()",
       "id": "windows_client_src_ui_atajoporgolpes_u_windowsclient_ui_atajoporgolpes_dispose"
@@ -21843,7 +21843,7 @@
       "source_file": "windows-client/src/Ui/CarruselDeApps.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "carruseldeapps.cs",
       "id": "windows_client_src_ui_carruseldeapps"
@@ -24694,7 +24694,7 @@
       "source_file": "windows-client/src/Ui/FaceWindow.xaml.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "facewindow.xaml.cs",
       "id": "windows_client_src_ui_facewindow_xaml"
@@ -26885,7 +26885,7 @@
       "source_file": "windows-client/src/Ui/GlobalHotkeys.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "globalhotkeys.cs",
       "id": "windows_client_src_ui_globalhotkeys"
@@ -27277,7 +27277,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "graphhealthtext.cs",
       "id": "windows_client_src_ui_graphhealthtext"
     },
@@ -28550,7 +28550,7 @@
       "source_file": "windows-client/src/Ui/LogWindow.xaml.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "logwindow.xaml.cs",
       "id": "windows_client_src_ui_logwindow_xaml"
@@ -29408,7 +29408,7 @@
       "source_file": "windows-client/src/Ui/PasoAPaso.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "pasoapaso.cs",
       "id": "windows_client_src_ui_pasoapaso"
@@ -30640,7 +30640,7 @@
       "source_file": "windows-client/src/Ui/VideoLibraryWindow.xaml.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "videolibrarywindow.xaml.cs",
       "id": "windows_client_src_ui_videolibrarywindow_xaml"
@@ -31446,7 +31446,7 @@
       "source_file": "windows-client/src/Ui/WorkflowLibraryWindow.xaml.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "workflowlibrarywindow.xaml.cs",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml"
@@ -31763,7 +31763,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "autofillrow",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_autofillrow"
     },
@@ -32333,7 +32333,7 @@
       "source_file": "windows-client/src/Uia/AppAligner.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "appaligner.cs",
       "id": "windows_client_src_uia_appaligner"
@@ -32350,7 +32350,7 @@
       },
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.uia",
       "id": "csharp_namespace:3ffd835799f4877f"
     },
@@ -33010,7 +33010,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "inspectordiagnostics.cs",
       "id": "windows_client_src_uia_inspectordiagnostics"
     },
@@ -33254,7 +33254,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "pestanasabiertas.cs",
       "id": "windows_client_src_uia_pestanasabiertas"
     },
@@ -34004,7 +34004,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "sapcontextreader.cs",
       "id": "windows_client_src_uia_sapcontextreader"
     },
@@ -34052,7 +34052,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "sapinspectorreader.cs",
       "id": "windows_client_src_uia_sapinspectorreader"
     },
@@ -34512,7 +34512,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "surfacelocator.cs",
       "id": "windows_client_src_uia_surfacelocator"
     },
@@ -35116,7 +35116,7 @@
       "source_file": "windows-client/src/Uia/UiInspector.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "uiinspector.cs",
       "id": "windows_client_src_uia_uiinspector"
@@ -35672,7 +35672,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "uiareader.cs",
       "id": "windows_client_src_uia_uiareader"
     },
@@ -36188,7 +36188,7 @@
       "source_file": "windows-client/src/Update/Updater.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "updater.cs",
       "id": "windows_client_src_update_updater"
@@ -36204,7 +36204,7 @@
         "namespace": "U.WindowsClient.Update"
       },
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.update",
       "id": "csharp_namespace:f282fd03dd628923"
@@ -36368,7 +36368,7 @@
       "source_file": "windows-client/src/Voice/GeminiLive.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "geminilive.cs",
       "id": "windows_client_src_voice_geminilive"
@@ -36384,7 +36384,7 @@
         "namespace": "U.WindowsClient.Voice"
       },
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.voice",
       "id": "csharp_namespace:cd4950b1c8d340e9"
@@ -37082,7 +37082,7 @@
       "source_file": "windows-client/src/Voice/LiveAudio.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "liveaudio.cs",
       "id": "windows_client_src_voice_liveaudio"
@@ -37297,7 +37297,7 @@
       "source_file": "windows-client/src/Voice/LiveVideo.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "livevideo.cs",
       "id": "windows_client_src_voice_livevideo"
@@ -37720,7 +37720,7 @@
       "source_file": "windows-client/src/Voice/VoiceIO.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 8,
+      "community": 32,
       "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "voiceio.cs",
       "id": "windows_client_src_voice_voiceio"
@@ -37949,7 +37949,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "contracts.cs",
       "id": "windows_graph_src_contracts"
     },
@@ -37965,7 +37965,7 @@
       },
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.graph",
       "id": "csharp_namespace:e3b4ef999be8f1af"
     },
@@ -37984,7 +37984,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "startsessionrequest",
       "id": "windows_graph_src_contracts_u_graph_startsessionrequest"
     },
@@ -37995,7 +37995,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "dictionary",
       "id": "windows_graph_src_contracts_cs_dictionary"
     },
@@ -38014,7 +38014,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "startsessionresponse",
       "id": "windows_graph_src_contracts_u_graph_startsessionresponse"
     },
@@ -38033,7 +38033,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "sessioninfo",
       "id": "windows_graph_src_contracts_u_graph_sessioninfo"
     },
@@ -38052,7 +38052,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "steprequest",
       "id": "windows_graph_src_contracts_u_graph_steprequest"
     },
@@ -38063,7 +38063,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "list",
       "id": "windows_graph_src_contracts_cs_list"
     },
@@ -38082,7 +38082,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "fieldoption",
       "id": "windows_graph_src_contracts_u_graph_fieldoption"
     },
@@ -38101,7 +38101,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "stepresponse",
       "id": "windows_graph_src_contracts_u_graph_stepresponse"
     },
@@ -38120,7 +38120,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "stepinfo",
       "id": "windows_graph_src_contracts_u_graph_stepinfo"
     },
@@ -38139,7 +38139,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "contextnoterequest",
       "id": "windows_graph_src_contracts_u_graph_contextnoterequest"
     },
@@ -38158,7 +38158,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "contextnote",
       "id": "windows_graph_src_contracts_u_graph_contextnote"
     },
@@ -38187,8 +38187,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 28,
-      "community_name": "WorkflowRecorder",
+      "community": 33,
+      "community_name": "PlanStep",
       "norm_label": "jsonelement",
       "id": "windows_graph_src_contracts_cs_jsonelement"
     },
@@ -38207,7 +38207,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "workflowlistresponse",
       "id": "windows_graph_src_contracts_u_graph_workflowlistresponse"
     },
@@ -38226,7 +38226,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "planrequest",
       "id": "windows_graph_src_contracts_u_graph_planrequest"
     },
@@ -38245,7 +38245,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "planresponse",
       "id": "windows_graph_src_contracts_u_graph_planresponse"
     },
@@ -38264,7 +38264,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "executionplan",
       "id": "windows_graph_src_contracts_u_graph_executionplan"
     },
@@ -38282,7 +38282,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 163,
+      "community": 33,
       "community_name": "PlanStep",
       "norm_label": "planstep",
       "id": "windows_graph_src_contracts_u_graph_planstep"
@@ -38293,7 +38293,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 163,
+      "community": 33,
       "community_name": "PlanStep",
       "norm_label": "string",
       "id": "windows_graph_src_contracts_cs_string"
@@ -38311,7 +38311,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
+      "community": 33,
       "community_name": "PlanStep",
       "norm_label": ".hintstring()",
       "id": "windows_graph_src_contracts_u_graph_planstep_hintstring"
@@ -38329,8 +38329,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "PlanStep",
+      "community": 17,
+      "community_name": ".RunAsync",
       "norm_label": ".surface()",
       "id": "windows_graph_src_contracts_u_graph_planstep_surface"
     },
@@ -38348,7 +38348,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".readinesscount()",
       "id": "windows_graph_src_contracts_u_graph_planstep_readinesscount"
     },
@@ -38365,8 +38365,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 17,
-      "community_name": ".RunAsync",
+      "community": 33,
+      "community_name": "PlanStep",
       "norm_label": ".fingerprint()",
       "id": "windows_graph_src_contracts_u_graph_planstep_fingerprint"
     },
@@ -38383,7 +38383,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
+      "community": 33,
       "community_name": "PlanStep",
       "norm_label": ".clickpos()",
       "id": "windows_graph_src_contracts_u_graph_planstep_clickpos"
@@ -38394,7 +38394,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 163,
+      "community": 33,
       "community_name": "PlanStep",
       "norm_label": "relx",
       "id": "relx"
@@ -38405,7 +38405,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 163,
+      "community": 33,
       "community_name": "PlanStep",
       "norm_label": "rely",
       "id": "rely"
@@ -38453,7 +38453,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": ".forautofill()",
       "id": "windows_graph_src_contracts_u_graph_planstep_forautofill"
     },
@@ -38472,7 +38472,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "detectedfield",
       "id": "windows_graph_src_contracts_u_graph_detectedfield"
     },
@@ -38491,7 +38491,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "autofillrequest",
       "id": "windows_graph_src_contracts_u_graph_autofillrequest"
     },
@@ -38510,7 +38510,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "fulfilledfield",
       "id": "windows_graph_src_contracts_u_graph_fulfilledfield"
     },
@@ -38529,7 +38529,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "autofillresponse",
       "id": "windows_graph_src_contracts_u_graph_autofillresponse"
     },
@@ -38548,7 +38548,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "autofillresult",
       "id": "windows_graph_src_contracts_u_graph_autofillresult"
     },
@@ -38567,7 +38567,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": "Contracts.cs",
+      "community_name": "PlanStep",
       "norm_label": "fieldmatch",
       "id": "windows_graph_src_contracts_u_graph_fieldmatch"
     },
@@ -39445,7 +39445,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "surfaceplace.cs",
       "id": "windows_graph_src_surfaceplace"
     },
@@ -39600,8 +39600,8 @@
       "source_file": "windows-graph/src/SurfaceReadiness.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community": 163,
+      "community_name": "IUiSurface",
       "norm_label": "surfacereadiness.cs",
       "id": "windows_graph_src_surfacereadiness"
     },
@@ -39619,8 +39619,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community": 163,
+      "community_name": "IUiSurface",
       "norm_label": "stepgate",
       "id": "windows_graph_src_surfacereadiness_u_graph_stepgate"
     },
@@ -39638,8 +39638,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community": 163,
+      "community_name": "IUiSurface",
       "norm_label": "stepgateresult",
       "id": "windows_graph_src_surfacereadiness_u_graph_stepgateresult"
     },
@@ -39658,7 +39658,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": "surfacereadiness",
       "id": "windows_graph_src_surfacereadiness_u_graph_surfacereadiness"
     },
@@ -39669,7 +39669,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": "double",
       "id": "windows_graph_src_surfacereadiness_cs_double"
     },
@@ -39680,7 +39680,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": "int",
       "id": "windows_graph_src_surfacereadiness_cs_int"
     },
@@ -39698,7 +39698,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".waitasync()",
       "id": "windows_graph_src_surfacereadiness_u_graph_surfacereadiness_waitasync"
     },
@@ -39709,7 +39709,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": "cancellationtoken",
       "id": "windows_graph_src_surfacereadiness_cs_cancellationtoken"
     },
@@ -39720,7 +39720,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": "task",
       "id": "windows_graph_src_surfacereadiness_cs_task"
     },
@@ -39738,7 +39738,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".targetsanelement()",
       "id": "windows_graph_src_surfacereadiness_u_graph_surfacereadiness_targetsanelement"
     },
@@ -39756,7 +39756,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".safeready()",
       "id": "windows_graph_src_surfacereadiness_u_graph_surfacereadiness_safeready"
     },
@@ -39774,7 +39774,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".safecount()",
       "id": "windows_graph_src_surfacereadiness_u_graph_surfacereadiness_safecount"
     },
@@ -39792,7 +39792,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".safeurl()",
       "id": "windows_graph_src_surfacereadiness_u_graph_surfacereadiness_safeurl"
     },
@@ -39810,7 +39810,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".bar()",
       "id": "windows_graph_src_surfacereadiness_u_graph_surfacereadiness_bar"
     },
@@ -39879,8 +39879,8 @@
       "source_file": "windows-graph/src/Surfaces/IUiSurface.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 28,
-      "community_name": "WorkflowRecorder",
+      "community": 163,
+      "community_name": "IUiSurface",
       "norm_label": "iuisurface.cs",
       "id": "windows_graph_src_surfaces_iuisurface"
     },
@@ -39936,8 +39936,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 28,
-      "community_name": "WorkflowRecorder",
+      "community": 163,
+      "community_name": "IUiSurface",
       "norm_label": "surfaceavailability",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_surfaceavailability"
     },
@@ -39954,8 +39954,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 28,
-      "community_name": "WorkflowRecorder",
+      "community": 163,
+      "community_name": "IUiSurface",
       "norm_label": ".no()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_surfaceavailability_no"
     },
@@ -39974,7 +39974,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": "iuisurface",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface"
     },
@@ -39991,8 +39991,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 28,
-      "community_name": "WorkflowRecorder",
+      "community": 163,
+      "community_name": "IUiSurface",
       "norm_label": ".check()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_check"
     },
@@ -40009,8 +40009,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 28,
-      "community_name": "WorkflowRecorder",
+      "community": 17,
+      "community_name": ".RunAsync",
       "norm_label": ".identity()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_identity"
     },
@@ -40028,7 +40028,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".readinesscount()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_readinesscount"
     },
@@ -40046,7 +40046,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".structurefingerprint()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_structurefingerprint"
     },
@@ -40064,7 +40064,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".isstepready()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_isstepready"
     },
@@ -40075,7 +40075,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": "planstep",
       "id": "windows_graph_src_surfaces_iuisurface_cs_planstep"
     },
@@ -40133,7 +40133,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 163,
-      "community_name": "PlanStep",
+      "community_name": "IUiSurface",
       "norm_label": ".execute()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_execute"
     },
@@ -40150,8 +40150,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 28,
-      "community_name": "WorkflowRecorder",
+      "community": 163,
+      "community_name": "IUiSurface",
       "norm_label": ".startobserving()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_startobserving"
     },
@@ -40168,8 +40168,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "PlanStep",
+      "community": 28,
+      "community_name": "WorkflowRecorder",
       "norm_label": ".stopobserving()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_stopobserving"
     },
@@ -40180,7 +40180,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "sapcomevents.cs",
       "id": "windows_graph_src_surfaces_sapcomevents"
     },
@@ -40199,7 +40199,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "sapcomevents",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_sapcomevents"
     },
@@ -40210,7 +40210,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "int",
       "id": "windows_graph_src_surfaces_sapcomevents_cs_int"
     },
@@ -40221,7 +40221,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "string",
       "id": "windows_graph_src_surfaces_sapcomevents_cs_string"
     },
@@ -40232,7 +40232,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "object",
       "id": "windows_graph_src_surfaces_sapcomevents_cs_object"
     },
@@ -40243,7 +40243,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "list",
       "id": "windows_graph_src_surfaces_sapcomevents_cs_list"
     },
@@ -40261,7 +40261,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".tryhook()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_sapcomevents_tryhook"
     },
@@ -40279,7 +40279,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".unhook()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_sapcomevents_unhook"
     },
@@ -40297,7 +40297,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".dispose()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_sapcomevents_dispose"
     },
@@ -40315,7 +40315,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".sinkfor()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_sapcomevents_sinkfor"
     },
@@ -40326,7 +40326,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "delegate",
       "id": "delegate"
     },
@@ -40344,7 +40344,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".tryresolvesourceinterface()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_sapcomevents_tryresolvesourceinterface"
     },
@@ -40355,7 +40355,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "guid",
       "id": "guid"
     },
@@ -40366,7 +40366,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "itypeinfo",
       "id": "itypeinfo"
     },
@@ -40384,7 +40384,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".trygettypeinfoofguid()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_sapcomevents_trygettypeinfoofguid"
     },
@@ -40402,7 +40402,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".tryfindsourceinterface()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_sapcomevents_tryfindsourceinterface"
     },
@@ -40420,7 +40420,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".gettypeattrsafe()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_sapcomevents_gettypeattrsafe"
     },
@@ -40431,7 +40431,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "typeattr",
       "id": "typeattr"
     },
@@ -40449,7 +40449,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".enumeratemethods()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_sapcomevents_enumeratemethods"
     },
@@ -40460,7 +40460,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "ienumerable",
       "id": "windows_graph_src_surfaces_sapcomevents_cs_ienumerable"
     },
@@ -40471,7 +40471,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "name",
       "id": "name"
     },
@@ -40482,7 +40482,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "dispid",
       "id": "dispid"
     },
@@ -40493,7 +40493,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "arity",
       "id": "arity"
     },
@@ -40513,7 +40513,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "iprovideclassinfo",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_iprovideclassinfo"
     },
@@ -40531,7 +40531,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".getclassinfo()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_iprovideclassinfo_getclassinfo"
     },
@@ -40551,7 +40551,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": "iprovideclassinfo2",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_iprovideclassinfo2"
     },
@@ -40569,7 +40569,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".getclassinfo()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_iprovideclassinfo2_getclassinfo"
     },
@@ -40587,7 +40587,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 22,
-      "community_name": "SapComEvents",
+      "community_name": "AtajoPorGolpes",
       "norm_label": ".getguid()",
       "id": "windows_graph_src_surfaces_sapcomevents_u_graph_surfaces_iprovideclassinfo2_getguid"
     },
@@ -40598,7 +40598,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 32,
-      "community_name": "U.Graph.Surfaces",
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "sapguisurface.cs",
       "id": "windows_graph_src_surfaces_sapguisurface"
     },
@@ -43900,8 +43900,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "PlanStep",
+      "community": 17,
+      "community_name": ".RunAsync",
       "norm_label": ".pausems()",
       "id": "windows_graph_src_workflowplayer_u_graph_workflowplayer_pausems"
     },
@@ -44026,8 +44026,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "PlanStep",
+      "community": 17,
+      "community_name": ".RunAsync",
       "norm_label": ".culprit()",
       "id": "windows_graph_src_workflowplayer_u_graph_workflowplayer_culprit"
     },
@@ -50157,7 +50157,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3039",
+      "source_location": "L2945",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow",
@@ -50497,7 +50497,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2863",
+      "source_location": "L2769",
       "weight": 1.0,
       "context": "field",
       "metadata": {
@@ -50831,7 +50831,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2663",
+      "source_location": "L2569",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow",
@@ -50864,7 +50864,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2674",
+      "source_location": "L2580",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow",
@@ -50974,7 +50974,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2873",
+      "source_location": "L2779",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow",
@@ -51051,7 +51051,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2724",
+      "source_location": "L2630",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow",
@@ -51348,7 +51348,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2967",
+      "source_location": "L2873",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow",
@@ -51454,7 +51454,7 @@
       "relation": "inherits",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3039",
+      "source_location": "L2945",
       "weight": 1.0,
       "metadata": {
         "ref_token": "Window"
@@ -51622,7 +51622,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3046",
+      "source_location": "L2952",
       "weight": 1.0,
       "context": "field",
       "metadata": {
@@ -51725,7 +51725,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2768",
+      "source_location": "L2674",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_ensenarlaappasync",
@@ -51802,7 +51802,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2967",
+      "source_location": "L2873",
       "weight": 1.0,
       "context": "parameter_type",
       "metadata": {
@@ -51864,7 +51864,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3116",
+      "source_location": "L3022",
       "weight": 1.0,
       "context": "field",
       "metadata": {
@@ -51927,7 +51927,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3042",
+      "source_location": "L2948",
       "weight": 1.0,
       "context": "field",
       "metadata": {
@@ -52180,7 +52180,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3043",
+      "source_location": "L2949",
       "weight": 1.0,
       "context": "attribute",
       "metadata": {
@@ -52195,7 +52195,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3044",
+      "source_location": "L2950",
       "weight": 1.0,
       "context": "attribute",
       "metadata": {
@@ -52249,7 +52249,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3073",
+      "source_location": "L2979",
       "weight": 1.0,
       "context": "parameter_type",
       "metadata": {
@@ -52459,7 +52459,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3043",
+      "source_location": "L2949",
       "weight": 1.0,
       "context": "parameter_type",
       "metadata": {
@@ -52474,7 +52474,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3044",
+      "source_location": "L2950",
       "weight": 1.0,
       "context": "parameter_type",
       "metadata": {
@@ -52613,7 +52613,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2755",
+      "source_location": "L2661",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_ensenarlaappasync",
@@ -52853,7 +52853,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2592",
+      "source_location": "L2498",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
@@ -52877,7 +52877,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2558",
+      "source_location": "L2464",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
@@ -52904,7 +52904,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2366",
+      "source_location": "L2272",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
@@ -52916,7 +52916,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3022",
+      "source_location": "L2928",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_traverseasync",
@@ -52952,7 +52952,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2914",
+      "source_location": "L2820",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_crawlasync",
@@ -52964,7 +52964,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2740",
+      "source_location": "L2646",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_ensenarlaappasync",
@@ -52988,7 +52988,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2624",
+      "source_location": "L2530",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
@@ -53327,7 +53327,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2901",
+      "source_location": "L2807",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_crawlasync",
@@ -53338,7 +53338,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2674",
+      "source_location": "L2580",
       "weight": 1.0,
       "context": "return_type",
       "metadata": {
@@ -53368,7 +53368,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2873",
+      "source_location": "L2779",
       "weight": 1.0,
       "context": "return_type",
       "metadata": {
@@ -53398,7 +53398,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2724",
+      "source_location": "L2630",
       "weight": 1.0,
       "context": "return_type",
       "metadata": {
@@ -53413,7 +53413,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2967",
+      "source_location": "L2873",
       "weight": 1.0,
       "context": "return_type",
       "metadata": {
@@ -53568,7 +53568,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3090",
+      "source_location": "L2996",
       "weight": 1.0,
       "context": "parameter_type",
       "metadata": {
@@ -53689,7 +53689,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2914",
+      "source_location": "L2820",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_crawlasync",
@@ -53702,7 +53702,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2406",
+      "source_location": "L2312",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
@@ -53714,19 +53714,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2230",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
-      "target": "versiones_nucleo_v0_u_windowsclient_navigation_surfacemap_appsconjerarquia"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2406",
+      "source_location": "L2312",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
@@ -53738,7 +53726,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2197",
+      "source_location": "L2226",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
@@ -53747,22 +53735,10 @@
     {
       "relation": "calls",
       "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2224",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
-      "target": "versiones_nucleo_v0_u_windowsclient_navigation_surfacemap_ensenanzasde"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2198",
+      "source_location": "L2242",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
@@ -53774,7 +53750,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2457",
+      "source_location": "L2363",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
@@ -53786,19 +53762,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2220",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
-      "target": "versiones_nucleo_v0_u_windowsclient_navigation_surfacemap_mismaapp"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2228",
+      "source_location": "L2276",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_dibujargrafo",
@@ -53810,7 +53774,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2671",
+      "source_location": "L2577",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_abrircarrusel",
@@ -53821,7 +53785,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2670",
+      "source_location": "L2576",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_abrircarrusel",
@@ -53832,7 +53796,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2674",
+      "source_location": "L2580",
       "weight": 1.0,
       "context": "parameter_type",
       "metadata": {
@@ -53851,7 +53815,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2677",
+      "source_location": "L2583",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_aprenderappasync",
@@ -53862,7 +53826,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2715",
+      "source_location": "L2621",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_aprenderappasync",
@@ -53875,7 +53839,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2709",
+      "source_location": "L2615",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_aprenderappasync",
@@ -53886,7 +53850,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2905",
+      "source_location": "L2811",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_crawlasync",
@@ -53899,7 +53863,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2728",
+      "source_location": "L2634",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_ensenarlaappasync",
@@ -53911,7 +53875,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2802",
+      "source_location": "L2708",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_ensenarlaappasync",
@@ -53923,7 +53887,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2727",
+      "source_location": "L2633",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_ensenarlaappasync",
@@ -53935,7 +53899,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2806",
+      "source_location": "L2712",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_ensenarlaappasync",
@@ -53947,7 +53911,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2762",
+      "source_location": "L2668",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_ensenarlaappasync",
@@ -53959,7 +53923,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2901",
+      "source_location": "L2807",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_crawlasync",
@@ -53971,7 +53935,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2940",
+      "source_location": "L2846",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_crawlasync",
@@ -53983,7 +53947,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2946",
+      "source_location": "L2852",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_crawlasync",
@@ -53995,7 +53959,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2936",
+      "source_location": "L2842",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_crawlasync",
@@ -54007,7 +53971,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3018",
+      "source_location": "L2924",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_traverseasync",
@@ -54019,7 +53983,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3023",
+      "source_location": "L2929",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_traverseasync",
@@ -54031,7 +53995,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2971",
+      "source_location": "L2877",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_traverseasync",
@@ -54043,7 +54007,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L2990",
+      "source_location": "L2896",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_traverseasync",
@@ -54053,7 +54017,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3047",
+      "source_location": "L2953",
       "weight": 1.0,
       "context": "field",
       "metadata": {
@@ -54070,7 +54034,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3043",
+      "source_location": "L2949",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay",
@@ -54081,7 +54045,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3125",
+      "source_location": "L3031",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay",
@@ -54092,7 +54056,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3118",
+      "source_location": "L3024",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay",
@@ -54103,7 +54067,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3073",
+      "source_location": "L2979",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay",
@@ -54114,7 +54078,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3044",
+      "source_location": "L2950",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay",
@@ -54125,7 +54089,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3080",
+      "source_location": "L2986",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay",
@@ -54136,7 +54100,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3090",
+      "source_location": "L2996",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay",
@@ -54148,7 +54112,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3077",
+      "source_location": "L2983",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_onsourceinitialized",
@@ -54160,7 +54124,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3077",
+      "source_location": "L2983",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_onsourceinitialized",
@@ -54171,7 +54135,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3118",
+      "source_location": "L3024",
       "weight": 1.0,
       "context": "return_type",
       "metadata": {
@@ -54188,7 +54152,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3080",
+      "source_location": "L2986",
       "weight": 1.0,
       "context": "parameter_type",
       "metadata": {
@@ -54204,7 +54168,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3080",
+      "source_location": "L2986",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_showrect",
@@ -54215,7 +54179,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3090",
+      "source_location": "L2996",
       "weight": 1.0,
       "context": "generic_arg",
       "metadata": {
@@ -54231,7 +54195,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3113",
+      "source_location": "L3019",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_showrects",
@@ -54243,7 +54207,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
-      "source_location": "L3105",
+      "source_location": "L3011",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_showrects",
@@ -141795,5 +141759,5 @@
       "source_file": "windows-graph/INVESTIGACION-SAPGUI-UIA.md"
     }
   ],
-  "built_at_commit": "3e7d4683ffb1736884894d3a0b5dfdc3de8c27c0"
+  "built_at_commit": "9f6043870618b2a0e555dd69532fd3d23d996c11"
 }
