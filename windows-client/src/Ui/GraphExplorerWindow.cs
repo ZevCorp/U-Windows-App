@@ -1089,6 +1089,9 @@ public sealed class GraphExplorerWindow : Window
                         + U.Graph.Surfaces.UiaSurface.Ancestros(els[0].Native));
                 else LogBus.Log("explorador", $"grupos: {con}/{puertas.Count} salidas con grupo");
                 _map.ObserveExits(nodo, puertas);
+                // MIRAR YA ES SITUAR, en una web. El sitio declara su estructura y acabamos de
+                // leerla: los niveles se ponen aquí mismo, sin esperar a que alguien mande mapear.
+                Navigation.JerarquiaWeb.Aplicar(_map, SurfaceMap.AppDe(nodo));
             }
         }
         catch { }

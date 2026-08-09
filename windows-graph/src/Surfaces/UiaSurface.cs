@@ -532,7 +532,11 @@ public sealed class UiaSurface : IUiSurface
         // El breadcrumb primero: es una navegación, pero decir «ruta» conserva que además ordena.
         if (l.Contains("breadcrumb") || l.Contains("ruta de navegación")) return "ruta";
         if (l.StartsWith("navegaci") || l == "navigation") return "navegación";
-        if (l == "banner" || l == "encabezado" || l == "header") return "navegación";
+        // LA CABECERA APARTE DE LA NAVEGACIÓN, aunque las dos sean navegar. El <header> es el
+        // marco del SITIO —está en todas las páginas, es cromo de nivel 1— y un <nav> suelto suele
+        // ser la navegación de UNA sección, que es nivel 2. Colapsarlas en «navegación» borraba
+        // justo la diferencia que hace falta para asignar el nivel (2026-08-08).
+        if (l == "banner" || l == "encabezado" || l == "header") return "cabecera";
         if (l == "principal" || l == "main") return "contenido";
         if (l == "complementario" || l == "complementary" || l == "aside") return "lateral";
         if (l == "pie" || l == "pie de página" || l == "footer" || l == "contentinfo") return "pie";
