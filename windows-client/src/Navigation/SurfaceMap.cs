@@ -701,46 +701,33 @@ public sealed class SurfaceMap
     public bool EsCromoGlobal(string selector, string controlType = "")
     {
         if (selector.Length == 0) return false;
-        // El tipo va DENTRO del selector; si no lo pasan, se lee de ahí. No hacerlo dejaba fuera
-        // la exclusión del contenido justo donde más falta hacía: en el explorador, el
-        // AutomationId de una fila es su ÍNDICE, así que «uia:aid=1;ct=ListItem» existe en todas
-        // las carpetas, la ubicuidad lo daba por marco de la app y sus subcarpetas no se
-        // exploraban nunca (2026-08-01).
         if (EsRelativo(selector)) return false;   // está en todas partes pero NO lleva al mismo sitio
-        string ct = controlType.Length > 0 ? controlType : TipoDelSelector(selector);
-        return !EsContenido(ct) && Ubicuidad(selector) >= 3;
+        return SelectoresCromo().Contains(selector);
     }
 
     /// <summary>
     /// TODOS los selectores que son cromo, de una pasada. Mismo criterio que
     /// <see cref="EsCromoGlobal"/> — es la misma pregunta hecha para todos a la vez.
     ///
-    /// Existe por el COSTE, no por comodidad: <see cref="Ubicuidad"/> recorre las aristas enteras,
-    /// así que preguntarlo punto por punto al repintar es O(puntos × aristas) — con 883 aristas y
-    /// cincuenta puntos son cuarenta mil vueltas por cuadro, y este repintado corre encima de la app
-    /// del usuario. Aquí se agrupa una vez y sale O(aristas). Es el aprendizaje nº8 aplicado antes
-    /// de tropezar: el coste por iteración primero.
+    /// SOLO LO DECLARADO. Antes esto CONTABA: una puerta vista en tres pantallas distintas se daba
+    /// por mobiliario de la app. Era el último recurso cuando nadie había dicho nada, y hoy sobra
+    /// —lo pidió el usuario el 2026-08-08— porque hay tres fuentes que DECLARAN en vez de adivinar:
+    /// la persona, el maestro, y la propia página con sus landmarks de HTML.
+    ///
+    /// Contar tenía tres defectos que ninguna declaración tiene: necesitaba tres visitas para
+    /// opinar, confundía lo que casualmente se repite con lo que pertenece al marco, y llegaba a
+    /// contradecir a fuentes más fiables. Un mapa que adivina cuando podría preguntar acaba
+    /// discutiendo consigo mismo.
+    ///
+    /// Sigue existiendo por el COSTE: el pintor pregunta por cada punto en cada cuadro, y esto se
+    /// resuelve una vez para todos — O(aristas) en vez de O(puntos × aristas).
     /// </summary>
     public HashSet<string> SelectoresCromo()
     {
-        var origenes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        var tipo = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (from, _, info) in Edges())
-        {
-            if (info.Selector.Length == 0 || EsRelativo(info.Selector)) continue;
-            if (!origenes.TryGetValue(info.Selector, out var o))
-                origenes[info.Selector] = o = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            o.Add(from);
-            if (info.ControlType.Length > 0) tipo[info.Selector] = info.ControlType;
-        }
-
         var cromo = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (sel, o) in origenes)
-        {
-            if (o.Count < 3) continue;
-            string ct = tipo.TryGetValue(sel, out var t) && t.Length > 0 ? t : TipoDelSelector(sel);
-            if (!EsContenido(ct)) cromo.Add(sel);
-        }
+        foreach (var (_, _, info) in Edges())
+            if (info.EsCromo && info.NivelFijado && info.Selector.Length > 0 && !EsRelativo(info.Selector))
+                cromo.Add(info.Selector);
         return cromo;
     }
 
@@ -1159,13 +1146,14 @@ public sealed class SurfaceMap
     /// igual, porque agrupar es etiquetar, no mover nada de sitio.
     /// </summary>
     /// <summary>
-    /// Solo cuenta como primer nivel lo que alguien DECLARÓ; la deducción por repetición se calla.
+    /// Ya no hay nada que silenciar: el cromo SOLO sale de lo declarado.
     ///
-    /// Es un interruptor de experimento, no una decisión definitiva: mientras se construye la
-    /// enseñanza hay que poder ver qué produce ELLA, y con las dos fuentes activas cada punto azul
-    /// podía venir de cualquiera de las dos.
+    /// Fue un interruptor de experimento —mientras se construía la enseñanza había que poder ver
+    /// qué producía ELLA y no la deducción— y el 2026-08-08 el usuario pidió eliminar la deducción
+    /// del todo. Se conserva la propiedad para no romper a quien la lea, siempre en true: la
+    /// pregunta que hacía ya solo tiene una respuesta posible.
     /// </summary>
-    public static bool SoloLoDeclarado { get; set; } = true;
+    public static bool SoloLoDeclarado => true;
 
     /// <summary>
     /// Lo que UNA PERSONA ha corregido a mano en esta app: qué salida va a qué nivel.
@@ -1395,21 +1383,15 @@ public sealed class SurfaceMap
                 destinoDe[info.Selector] = new Hop(from, to, info);
         }
 
-        // DOS CAUSAS MEZCLADAS NO SE PUEDEN LEER. El primer nivel salía de dos sitios a la vez: lo
-        // DECLARADO —el usuario señalando, o el maestro mirando la pantalla— y lo DEDUCIDO contando
-        // apariciones. Viéndolo en pantalla no hay forma de saber cuál de los dos puso cada punto
-        // azul, así que tampoco de saber si la enseñanza funciona (2026-08-06, propuesto por el
-        // usuario: «no sabemos cuál es la causa del resultado que vemos»).
+        // AQUÍ YA NO SE DEDUCE NADA. El cromo salía de dos sitios a la vez —lo DECLARADO y lo
+        // CONTADO— y viéndolo en pantalla no había forma de saber cuál de los dos puso cada punto
+        // azul, ni por tanto de saber si la enseñanza funcionaba (2026-08-06). Se silenció con un
+        // interruptor mientras se medía; el 2026-08-08 el usuario pidió eliminarla del todo, y ya
+        // no hace falta: entre la persona, el maestro y los landmarks de la propia página, todo lo
+        // que es mobiliario acaba DECLARADO por alguien que lo sabe.
         //
-        // Mientras se construye la enseñanza, manda SOLO lo declarado. La deducción no se borra
-        // —sigue aquí y se vuelve a encender cambiando esto— porque es la que cubre las apps que
-        // nadie ha enseñado todavía; pero no puede estar opinando mientras se mide la otra.
-        var cromo = SoloLoDeclarado
-            ? new List<Hop>()
-            : destinoDe
-                .Where(kv => vistoDesde.TryGetValue(kv.Key, out var o) && o.Count >= 2)
-                .Select(kv => kv.Value)
-                .ToList();
+        // Lo que sigue debajo llena la lista SOLO con lo declarado.
+        var cromo = new List<Hop>();
 
         // LO DICHO A MANO NO ESPERA AL CONTADOR. El umbral de «visto desde dos pantallas» existe
         // para DEDUCIR qué es mobiliario fijo cuando nadie lo ha dicho. Cuando alguien —el usuario
