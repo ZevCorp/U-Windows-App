@@ -557,10 +557,29 @@ public sealed class GraphCrawler
         // UIA entero solo para averiguarlo y luego se volvía a leer para usarlo. Recorrer una
         // pantalla llena cuesta cientos de milisegundos, así que era medio segundo por nodo tirado
         // en responder algo que GetForegroundWindow contesta al momento (2026-08-02).
+        // «NO PUDE MIRAR» NO ES «NO HAY NADA». Los dos caminos devolvían la misma lista vacía, y
+        // arriba eso se imprime como «0 salida(s), 0 para entrar (carpetas)» — que se lee como un
+        // hecho sobre la pantalla cuando en realidad es un hecho sobre NOSOTROS. El 2026-08-08 un
+        // recorrido dio «1 pantalla, 0 rutas» y costó media hora entender que el primer plano era
+        // Chrome con una llamada de Meet reteniendo el foco: el crawler nunca llegó a mirar el
+        // explorador. Es el aprendizaje nº2 del repo, incumplido en el sitio donde más caro sale.
         if (!EsObjetivoElFrente() && !await EnfocarObjetivoAsync(ct))
+        {
+            LogBus.Log("crawler", $"NO se pudo mirar: «{_appObjetivo}» no está delante (ahora hay "
+                + $"«{ProcesoDelFrente()}») y no conseguí traerla. Esto NO significa que la pantalla "
+                + "no tenga salidas: significa que no se miró.");
             return new List<(string, string, string, string[], bool, string)>();
+        }
 
         string carpeta = await ConPlazoAsync(() => CarpetaEnPrimerPlano(), 2000, "", ct);
+
+        // La ruta es la que decide si un elemento de la lista es CARPETA. Sin ella se cae a una
+        // heurística que en Windows 11 casi no acierta —ItemType llega vacío—, así que el contenido
+        // deja de ser cruzable y el recorrido se queda en el panel lateral. Se dice cuando pasa: es
+        // la diferencia entre «esta carpeta no tenía subcarpetas» y «no supe cuáles lo eran».
+        if (carpeta.Length == 0)
+            LogBus.Log("crawler", "sin ruta de la carpeta abierta: el contenido se juzgará por heurística "
+                + "(ItemType/extensión), que en Windows 11 falla — puede que no se cruce ninguna subcarpeta");
 
         // Leer el árbol de una app grande también puede no volver. Con plazo: una pantalla que no
         // se deja leer se salta, y el recorrido sigue con las demás en vez de congelarse entero.
@@ -570,7 +589,14 @@ public sealed class GraphCrawler
             try
             {
                 _reader.Read();
-                if (!EsObjetivoElFrente()) return salidas; // cambió bajo los pies: mejor nada que ajeno
+                if (!EsObjetivoElFrente())
+                {
+                    // Mismo caso que arriba, un instante después: el foco se fue MIENTRAS leíamos.
+                    // Callarlo dejaba una lista vacía que parecía una pantalla sin puertas.
+                    LogBus.Log("crawler", $"el foco se fue mientras leía (ahora hay «{ProcesoDelFrente()}»); "
+                        + "se descarta la lectura — NO es que la pantalla estuviera vacía");
+                    return salidas;
+                }
 
                 // TODO lo accionable entra al mapa — también los botones de EJECUCIÓN (Nuevo,
                 // Cortar, Pegar…), que son la mitad del valor del grafo: sin ellos el asistente
