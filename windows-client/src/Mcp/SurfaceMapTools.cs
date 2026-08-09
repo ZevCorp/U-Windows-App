@@ -2134,6 +2134,83 @@ public sealed class SurfaceMapTools
                  + (errDirecto.Length > 0 ? $" ({errDirecto})" : "") + ".";
         }
 
+        // LA PUERTA QUE ESTÁ DELANTE GANA A LA QUE SOLO SE RECUERDA.
+        //
+        // Una misma etiqueta nombra varias puertas distintas en casi cualquier app: en el explorador
+        // hay CUATRO «Descargas» —el árbol del panel lateral (visto 17 veces), la miga de pan
+        // (4), una pestaña (3) y otra miga—. El nombre no las distingue, y el selector tampoco basta
+        // para elegir: hay que saber cuál EXISTE ahora mismo. Una pestaña solo existe si está
+        // abierta; el panel lateral está siempre.
+        //
+        // El 2026-08-08 el asistente pidió «Descargas» estando en Escritorio y le tocó la PESTAÑA.
+        // No estaba, así que reintentó cinco veces, dos veces por llamada, contra un elemento que
+        // estructuralmente no podía aparecer — esperar no trae lo que no existe. Y como
+        // Alternatives venía vacío, no había a qué caer. Se probó con el respaldo por coordenadas
+        // encendido y falló igual: no era el grafo contra computer-use, era el selector.
+        //
+        // Se desempata por lo que ya se sabe y no se estaba mirando: primero las que están EN
+        // PANTALLA, y entre esas la más ubicua — el mobiliario de la app le gana a lo circunstancial.
+        // Es la clase entera, no el caso: panel lateral + migas + pestañas repiten nombre en
+        // cualquier app con esa forma.
+        // Vale también —y sobre todo— cuando solo hay UNA candidata: es el caso que falló. El modelo
+        // pidió el selector exacto de la pestaña, así que la búsqueda por selector devolvió una sola
+        // puerta y no había nada que desempatar; simplemente no estaba en pantalla. Por eso, si la
+        // única candidata no está delante, se ABRE el abanico a sus homónimas antes de rendirse.
+        if (candidatas.Count > 0)
+        {
+            _lector.Read();
+            var enPantalla = new HashSet<string>(
+                _lector.Elements.Select(e => Uia.Reconocedor.SelectorDe(e)).Where(s => s.Length > 0),
+                StringComparer.OrdinalIgnoreCase);
+
+            var visibles = candidatas.Where(h => enPantalla.Contains(h.Info.Selector)).ToList();
+
+            if (visibles.Count == 0)
+            {
+                // Ninguna de las pedidas está delante. ¿Hay una hermana —mismo nombre, otra
+                // encarnación— que sí? Es lo que hace un humano: si la pestaña no está, usa el panel.
+                var etiquetas = new HashSet<string>(candidatas.Select(h => h.Info.Label),
+                                                    StringComparer.OrdinalIgnoreCase);
+                var hermanas = opciones.Where(h => etiquetas.Contains(h.Info.Label)
+                                                && enPantalla.Contains(h.Info.Selector)).ToList();
+                if (hermanas.Count > 0)
+                {
+                    LogBus.Log("mapa-mcp", $"«{salida}»: lo pedido ({candidatas[0].Info.Selector}) no está en "
+                        + $"pantalla; sí está la homónima {hermanas[0].Info.Selector} — se toma esa");
+                    visibles = hermanas;
+                }
+            }
+
+            if (visibles.Count > 0)
+            {
+                var descartadas = candidatas.Where(h => !visibles.Contains(h)).ToList();
+                candidatas = visibles.OrderByDescending(h => _map.Ubicuidad(h.Info.Selector))
+                                     .ThenByDescending(h => h.Info.Count).ToList();
+
+                // AMBIGUO ES «A DÓNDE», NO «CON CUÁL». Devolver las candidatas para que elija el
+                // modelo es lo correcto cuando llevan a sitios distintos —esta capa no adivina
+                // destinos—, pero «Descargas» del panel y «Descargas» del escritorio son la misma
+                // puerta con dos encarnaciones: preguntar cuál de las dos es pedirle al modelo que
+                // decida algo que da igual, y en la corrida del 2026-08-08 eso costó otro turno.
+                // Si todas las visibles van al MISMO destino conocido, se toma la más ubicua: el
+                // mobiliario de la app le gana a lo circunstancial.
+                var destinos = candidatas.Select(h => h.To)
+                    .Where(t => !SurfaceMap.EsPuerta(t))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (candidatas.Count > 1 && destinos.Count == 1)
+                {
+                    LogBus.Log("mapa-mcp", $"«{salida}»: {candidatas.Count} encarnaciones visibles y todas llevan a "
+                        + $"«{destinos[0]}»; no hay nada que elegir — se toma {candidatas[0].Info.Selector} "
+                        + $"(ubicuidad {_map.Ubicuidad(candidatas[0].Info.Selector)})");
+                    candidatas = new List<SurfaceMap.Hop> { candidatas[0] };
+                }
+                if (descartadas.Count > 0)
+                    LogBus.Log("mapa-mcp", $"«{salida}»: {descartadas.Count} homónima(s) descartada(s) por no estar "
+                        + $"en pantalla ({string.Join(", ", descartadas.Select(h => h.Info.Selector))}); "
+                        + $"se toma {candidatas[0].Info.Selector} (ubicuidad {_map.Ubicuidad(candidatas[0].Info.Selector)})");
+            }
+        }
+
         if (candidatas.Count > 1)
             return $"«{salida}» coincide con {candidatas.Count} salidas: "
                  + string.Join("; ", candidatas.Select(h => $"«{h.Info.Label}» [{h.Info.Selector}]"))
