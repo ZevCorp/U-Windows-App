@@ -260,8 +260,8 @@
     "semantic_hash": "aec373cf4f3b1d2bf2256dd3eb60d0b9"
   },
   "windows-client/src/Navigation/SurfaceMap.cs": {
-    "mtime": 1786226900.8948922,
-    "ast_hash": "9846f86a7378bda6d3f45e66ca63232b",
+    "mtime": 1786283561.015587,
+    "ast_hash": "17b493546d073c91c80c2d93f6843127",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/SurfaceNavigator.cs": {
@@ -810,8 +810,8 @@
     "semantic_hash": ""
   },
   "versiones/nucleo/v1.cs": {
-    "mtime": 1786226900.8948922,
-    "ast_hash": "9846f86a7378bda6d3f45e66ca63232b",
+    "mtime": 1786283561.015587,
+    "ast_hash": "17b493546d073c91c80c2d93f6843127",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Arquitecto.cs": {

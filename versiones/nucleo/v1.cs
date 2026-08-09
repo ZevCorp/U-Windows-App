@@ -882,11 +882,22 @@ public sealed class SurfaceMap
             if (nivelPuerta < 0 && _nodes.TryGetValue(f, out var origen) && origen.Nivel >= 0)
                 nivelPuerta = origen.Nivel + 1;
 
-            // Lo fijado a mano no se toca: ver EdgeInfo.NivelFijado.
-            bool fijado = Edges().Any(e => e.Info.NivelFijado
-                && string.Equals(e.Info.Selector, selector, StringComparison.Ordinal)
-                && AppDe(e.From).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase));
-            if (!fijado && nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
+            // QUE LA PUERTA ESTÉ DECLARADA ES LA RAZÓN MÁS FUERTE PARA SITUAR SU DESTINO, no una
+            // razón para negarse. Aquí había un `!fijado` que miraba si la PUERTA estaba fijada
+            // para decidir si se situaba el NODO — un error de categoría, y con consecuencias:
+            //
+            // el nodo caía entre dos sillas. FijarNivel sí sitúa el destino, pero solo cuando ya se
+            // conoce (si la puerta todavía es «?selector» no hay destino que situar); y cuando por
+            // fin se cruzaba, este guardián lo bloqueaba. Nunca se situaba. Se midió en cuanto los
+            // landmarks empezaron a declarar TODAS las puertas de una web: las trece pantallas de
+            // GitHub en «nivel ?», y el dibujo poniéndolas todas a la misma altura porque sin nivel
+            // caen al mismo suelo (2026-08-08, observado por el usuario: «todos los botones
+            // quedaron en el mismo nivel»).
+            //
+            // Lo fijado a mano sigue protegido, y por la regla que de verdad lo protege: el MENOR
+            // gana. Un nodo situado en 1 no lo empuja nadie al 2; solo puede acercarse a la raíz,
+            // que es lo que significa haber encontrado un camino más corto.
+            if (nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
         }
 
         // También aquí: el ATRÁS no acuña. Esta es la vía del cruce deliberado (map_take «Atrás»),
