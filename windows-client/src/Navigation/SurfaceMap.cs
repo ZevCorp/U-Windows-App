@@ -402,6 +402,22 @@ public sealed class SurfaceMap
                     // Esta es la vía por la que nacen las aristas cuando navega UNA PERSONA — y era
                     // la única de las tres que no reponía lo enseñado (2026-08-06).
                     AplicarEnsenanza(_lastCommitted, e);
+
+                    // Y TAMBIÉN SITÚA LA PANTALLA A LA QUE LLEGA. «La pantalla que hay tras una
+                    // puerta vive en el nivel de esa puerta» ya estaba escrito en el núcleo, pero
+                    // solo se aplicaba en LearnTraversal — el camino del cruce DELIBERADO (el
+                    // recorredor, map_take). Navegar a mano pasa por aquí, así que en una web,
+                    // donde el usuario navega con el ratón, ningún nodo se situaba jamás.
+                    //
+                    // Lo que se veía: «Insights» y «Pull requests» un nivel por debajo de sus
+                    // hermanos, y colocándose solos a la quinta visita (2026-08-08, trazado por el
+                    // usuario). No se movía el nodo: se movía el DIBUJO, que cuando una pantalla no
+                    // tiene nivel la coloca por distancia, y esa distancia cambia según aparecen
+                    // aristas. Un sitio que baila mientras exploras no es un mapa.
+                    //
+                    // Misma regla del MENOR que en LearnTraversal: solo se acerca a la raíz, nunca
+                    // se aleja. Así lo situado a mano no lo empuja nadie.
+                    if (e.NivelNav >= 0 && (n.Nivel < 0 || e.NivelNav < n.Nivel)) n.Nivel = e.NivelNav;
                 }
             }
         }
