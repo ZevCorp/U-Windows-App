@@ -240,8 +240,8 @@
     "semantic_hash": "30987cdc033e4e866955e72c77924840"
   },
   "windows-client/src/Navigation/GraphCrawler.cs": {
-    "mtime": 1786230536.3008246,
-    "ast_hash": "19e8df6d142a76475e8e296955546078",
+    "mtime": 1786234201.887528,
+    "ast_hash": "52fa1d986a0a719cc4a1374f2ade3365",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Interrupcion.cs": {
@@ -355,8 +355,8 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786226900.9036732,
-    "ast_hash": "5ec188ca3f6787e12df8a71d25c0cfe3",
+    "mtime": 1786234226.9370182,
+    "ast_hash": "7205ade215b32ae900f224daac53e299",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/GraphHealthText.cs": {
@@ -590,8 +590,8 @@
     "semantic_hash": "9e0b3615e348d339b1ef8b452b79171c"
   },
   "windows-graph/src/Surfaces/UiaSurface.cs": {
-    "mtime": 1786232225.3618467,
-    "ast_hash": "fa941daa8b40dbefca26fcf80e36e19f",
+    "mtime": 1786234152.3184788,
+    "ast_hash": "3ccb6b7ce48644e906d291ad7da37c26",
     "semantic_hash": ""
   },
   "windows-graph/src/UserPaths.cs": {
@@ -857,6 +857,11 @@
   "windows-client/src/Diagnostics/ConsolaViva.cs": {
     "mtime": 1786226900.8887107,
     "ast_hash": "a22ed64431acc493dedd1dbd15a27752",
+    "semantic_hash": ""
+  },
+  "windows-client/src/Navigation/JerarquiaWeb.cs": {
+    "mtime": 1786234546.4423919,
+    "ast_hash": "5c878bd20b3a17596b3fe75447374226",
     "semantic_hash": ""
   }
 }

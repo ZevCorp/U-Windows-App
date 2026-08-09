@@ -1065,6 +1065,26 @@ public sealed class GraphExplorerWindow : Window
     private void AnotarPuertas(string nodo, List<UiaReader.UiElement> els)
     {
         if (nodo.Length == 0 || els.Count == 0) return;
+
+        // ¿SEGUIMOS DONDE CREÍAMOS? Se vuelve a preguntar AHORA, no se confía en el nodo que se
+        // recibió: entre leer la pantalla y anotarla cabe un cambio de pestaña, y anotar entonces
+        // mete las puertas de un sitio en el nodo de otro.
+        //
+        // Pasó y se midió: «Google apps», «Switch to Calendar», «Next week» y ocho etiquetas más de
+        // Google Calendar acabaron dentro de github.com, declaradas nivel 1 (2026-08-08). La guarda
+        // de más abajo solo exigía «superficie web + proceso navegador», que para dos pestañas del
+        // mismo Chrome se cumple siempre — distinguía el navegador, no el SITIO.
+        //
+        // Comparar por app y no por identidad completa es deliberado: dentro de un mismo dominio la
+        // ruta puede cambiar sola (una SPA) sin que las puertas dejen de ser suyas.
+        string ahora = _where()?.Id ?? "";
+        if (ahora.Length > 0 && !SurfaceMap.AppDe(ahora).Equals(SurfaceMap.AppDe(nodo), StringComparison.OrdinalIgnoreCase))
+        {
+            LogBus.Log("explorador", $"NO anoto: leí «{SurfaceMap.AppDe(nodo)}» y ahora hay "
+                + $"«{SurfaceMap.AppDe(ahora)}» — no meto las puertas de un sitio en el nodo de otro");
+            return;
+        }
+
         try
         {
             var puertas = new List<(string, string, string, string[], string)>();
