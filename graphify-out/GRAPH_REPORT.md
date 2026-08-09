@@ -1,7 +1,7 @@
 # Graph Report - windows-app  (2026-08-09)
 
 ## Corpus Check
-- 169 files · ~304,600 words
+- 169 files · ~304,911 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `901b6c2a`
+- Built from commit: `3e7d4683`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -895,7 +895,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **What is the exact relationship between `Fiabilidad de eventos (controles Win32 no siempre notifican)` and `Issues dotnet/winforms#7763 y dotnet/wpf#9382`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **Why does `FaceWindow` connect `FaceWindow` to `SurfaceLocator`, `VideoLibraryWindow`, `ClickWatcher`, `.SetDirectIndex`, `U.WindowsClient.Diagnostics`, `Window`, `UiaReader`, `GraphExplorerWindow`, `.OnLoaded`, `AtajoPorGolpes`, `GraphClient`, `SapGuiSurface`, `WorkflowTeachSession`, `UiaSurface`, `WorkflowMapWindow`, `RoutedEventArgs`, `WorkflowRecorder`, `AgentLoop`, `GlobalHotkeys`, `VideoLibrary`, `UI Inspector Hooks`, `GraphObservation`, `.CrecerPastilla`, `BackendClient`, `WorkflowLibraryWindow`, `StepDebuggerWindow`, `LogBus`, `Locator Badge Overlay`, `Window`, `.RefreshMood`, `.Log`, `VoiceIO`, `Updater`, `PanelDeAcciones`, `GeminiLive`?**
-  _High betweenness centrality (0.238) - this node is a cross-community bridge._
+  _High betweenness centrality (0.236) - this node is a cross-community bridge._
 - **Why does `UiaSurface` connect `UiaSurface` to `GraphCrawler`, `U.Graph.Surfaces`, `.GetForegroundWindow`, `.ParseKeySpec`, `SurfaceMapTools`, `WorkflowLibraryWindow`, `AutomationElement`, `FaceWindow`, `.FindIn`, `.Describe`, `UiaSelector`, `IntPtr`, `AgentLoop`?**
   _High betweenness centrality (0.096) - this node is a cross-community bridge._
 - **Why does `SapGuiSurface` connect `SapGuiSurface` to `U.Graph.Surfaces`, `.PumpMain`, `SurfaceLocator`, `PlanStep`, `.Str`, `dynamic`, `.Execute`, `.ReadTreeSelections`, `.Session`, `WorkflowLibraryWindow`, `FaceWindow`, `SapInspectorReader`, `SapComEvents`, `AgentLoop`?**

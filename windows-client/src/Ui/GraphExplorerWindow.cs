@@ -2194,86 +2194,8 @@ public sealed class GraphExplorerWindow : Window
         // Antes eran siete escrituras encadenadas sobre el mismo diccionario, cada una pisando a la
         // anterior: el ORDEN decidía el resultado, y por eso cada arreglo movía el fallo de sitio.
         _porQueDeclarado.Clear();   // por qué vía llegó cada declarado: para no volver a adivinarlo
-        var declarados = _map.Edges()
-            .Where(e => e.Info.NivelFijado && e.Info.NivelNav >= 0 && !SurfaceMap.EsPuerta(e.To)
-                     && (appActual.Length == 0
-                         || NivelDe(e.To).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
-            .GroupBy(e => e.To, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.Min(e => e.Info.NivelNav), StringComparer.OrdinalIgnoreCase);
-        foreach (var k in declarados.Keys) _porQueDeclarado[k] = "arista fijada";
+        var declarados = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        // Y LA ENSEÑANZA SE CONECTA A LOS NODOS POR SU NOMBRE, no solo a través de las aristas. El
-        // camino por aristas depende de que la arista exista Y conserve su etiqueta, y las que
-        // nacen viendo pasar una navegación a mano pierden la etiqueta cuando la atribución del
-        // clic falla — el diagnóstico dio «0 declarados» con la enseñanza intacta en disco
-        // (2026-08-07). El puente que no se rompe es la identidad: la pantalla
-        // «explorer.exe/notas» NACE de la puerta «Notas», su nombre ES la etiqueta enseñada.
-        if (appActual.Length > 0)
-        {
-            // El puente recorre TAMBIÉN los extremos de las aristas del mapa, no solo lo paseado en
-            // esta sesión: desde que la estructura sale del mapa, un nodo enseñado puede entrar al
-            // dibujo sin que nadie lo haya pisado hoy — «videos» apareció en fila 2 sin asterisco,
-            // estando enseñada, porque llegó por una arista y el puente no la miró (2026-08-07).
-            var candidatosPuente = pisados
-                .Concat(traza.SelectMany(x => new[] { x.From, x.To }))
-                .Concat(_map.Edges()
-                    .Where(e => !SurfaceMap.EsPuerta(e.To) && SurfaceMap.MismaApp(e.From, e.To))
-                    .SelectMany(e => new[] { e.From, e.To }))
-                .Distinct(StringComparer.OrdinalIgnoreCase);
-
-            var ensenadas = _map.EnsenanzasDe(appActual);
-            if (ensenadas.Count == 0 && _huellaPuente != appActual)
-            {
-                _huellaPuente = appActual;
-                LogBus.Log("grafo", $"puente: EnsenanzasDe(«{appActual}») = 0 — ¿la clave del "
-                    + $"diccionario no coincide? apps con enseñanza: "
-                    + string.Join(", ", _map.AppsConJerarquia().Select(x => $"«{x.App}»")));
-            }
-            if (ensenadas.Count > 0)
-            {
-                // EL PUENTE POR NOMBRE ES UNA RED, NO UNA SEGUNDA FUENTE. Dos reglas que salieron
-                // de enseñar GitHub (2026-08-07, observado por el usuario):
-                // · si la etiqueta ya está anclada por una ARISTA FIJADA, el puente se abstiene —
-                //   la pestaña «Code» lleva a la pantalla «graph» (así se llama su URL), y el
-                //   puente anclaba ADEMÁS un nodo fantasma «code»: la misma pantalla, dos veces
-                //   en la fila 1;
-                // · si el nombre casa con MÁS DE UN nodo, la ambigüedad no es evidencia — «pulls»
-                //   existe como pantalla global y como pestaña del repo, y anclar las dos duplicaba
-                //   la fila 1. En la duda, mandan las aristas, que sí distinguen.
-                var ancladas = new HashSet<string>(
-                    _map.Edges().Where(e => e.Info.NivelFijado && !SurfaceMap.EsPuerta(e.To)
-                                         && e.Info.Label.Length > 0)
-                        .Select(e => Uia.Reconocedor.Normalizar(e.Info.Label)),
-                    StringComparer.Ordinal);
-
-                var candidatosPorEtiqueta = new Dictionary<string, (int Nivel, List<string> Nodos)>(StringComparer.Ordinal);
-                foreach (var n in candidatosPuente)
-                {
-                    if (declarados.ContainsKey(n)) continue;
-                    string cola = n.TrimEnd('/');
-                    int barra = cola.LastIndexOf('/');
-                    string slug = Uia.Reconocedor.Normalizar(barra >= 0 ? cola[(barra + 1)..] : cola);
-                    foreach (var (etiqueta, nivel) in ensenadas)
-                    {
-                        string norm = Uia.Reconocedor.Normalizar(etiqueta);
-                        if (!slug.Equals(norm, StringComparison.Ordinal)) continue;
-                        if (!candidatosPorEtiqueta.TryGetValue(norm, out var acc))
-                            candidatosPorEtiqueta[norm] = acc = (nivel, new List<string>());
-                        acc.Nodos.Add(n);
-                        break;
-                    }
-                }
-                foreach (var (norm, (nivel, nodos)) in candidatosPorEtiqueta)
-                {
-                    if (ancladas.Contains(norm))
-                    { LogBus.Log("grafo", $"puente: «{norm}» ya anclada por arista fijada; el nombre no opina"); continue; }
-                    if (nodos.Count != 1)
-                    { LogBus.Log("grafo", $"puente: «{norm}» casa con {nodos.Count} nodos; ambigüedad no es evidencia"); continue; }
-                    declarados[nodos[0]] = nivel;
-                    _porQueDeclarado[nodos[0]] = $"nombre≈«{norm}»";
-                }
-            }
-        }
         _profDeclarada = declarados;
 
         string centro = appActual.Length > 0 ? $"nivel://{appActual}" : "";
@@ -2281,80 +2203,64 @@ public sealed class GraphExplorerWindow : Window
         var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
         int suelo = centro.Length > 0 ? 1 : 0;   // la fila 0 es de la app: nadie más la ocupa
 
-        // Y MIENTRAS MANDA LO DECLARADO, LA FILA 1 ES SUYA. Lo pisado sin información y los
-        // orígenes huérfanos del paseo caían al suelo —la fila 1— y se mezclaban con el primer
-        // nivel: en el grafo aparecían «code», «diagtrack» o «leykiara» a la altura del panel,
-        // sin que nadie los hubiera declarado (2026-08-07, observado por el usuario; el
-        // diagnóstico los mostró en fila 1 SIN asterisco y con Nivel=-1 en el mapa — no los subió
-        // nadie: aterrizaron ahí). Ser desconocido no puede colocar mejor que ser conocido.
-        int sueloDesconocido = centro.Length > 0 && SurfaceMap.SoloLoDeclarado ? 2 : suelo;
-
-        // 1. Lo declarado: nivel N → fila N, colgando del centro.
-        foreach (var d in declarados)
-            prof[d.Key] = Math.Max(suelo, d.Value);
-
-        // LA ESTRUCTURA SALE DEL MAPA, NO DEL PASEO DE ESTA SESIÓN. La profundidad de los niveles
-        // inferiores se rellenaba con la traza viva (_ultimaCorrida), que cambia con cada
-        // movimiento y olvida tramos al pasar de cuarenta: moverse entre dos elementos del primer
-        // nivel REDIBUJABA todo el drill-down ya aprendido, porque su colocación dependía del
-        // orden del paseo de hoy (2026-08-07, observado por el usuario). La superficie de
-        // navegación, una vez aprendida, es ESTÁTICA — y quien la sabe es el mapa, cuyas aristas
-        // cruzadas no cambian por volver a pasear. La traza queda solo como rastro visual (las
-        // líneas verdes), sin voz en la estructura.
+        // ─────────────────────────────────────────────────────────────────────────────────────
+        // EL DIBUJO NO OPINA. UNA SOLA FUENTE: EL MAPA.
+        //
+        // Aquí había CINCO fuentes de profundidad —aristas fijadas, un puente por nombre, el nivel
+        // del mapa, la distancia mínima entre aristas, y el paseo de la sesión— cada una
+        // rellenando donde la anterior no llegaba. Cinco opiniones sobre la misma pregunta.
+        //
+        // El coste de eso no era la complejidad: era la CONFIANZA. Cada vez que se mejoraba cómo
+        // el mapa calcula niveles, el dibujo seguía con su cálculo paralelo, y lo que se veía en
+        // pantalla dejaba de ser lo que el grafo sabía. Se diagnosticaban fallos que no existían y
+        // se daban por buenos otros que sí — el entorno de pruebas mentía. Lo dijo el usuario con
+        // todas las letras el 2026-08-08: «el dibujo debe ser 100% fiel».
+        //
+        // Ahora la profundidad de una PANTALLA es la que el mapa le da, y punto. La de una PUERTA
+        // sin cruzar es la de su arista, porque una puerta no es una pantalla y el mapa no le
+        // guarda nivel propio. Y lo que el mapa NO sitúa se dibuja aparte, en una fila de «sin
+        // situar»: eso es lo que de verdad hay, y verlo es la única forma de arreglarlo. Un hueco
+        // tapado con una suposición es un hueco que nadie va a arreglar nunca.
+        // Las aristas del MAPA de esta app: de ahí sale qué nodos hay que colocar. Se leen aquí y
+        // no se guardan aparte para que no haya dos listas de lo mismo.
         var aristasMapa = _map.Edges()
-            .Where(e => !SurfaceMap.EsPuerta(e.To) && e.Info.Selector.Length > 0
-                     && SurfaceMap.MismaApp(e.From, e.To)
-                     && (appActual.Length == 0
-                         || NivelDe(e.From).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
+            .Where(e => appActual.Length == 0
+                     || NivelDe(e.From).Equals(appActual, StringComparison.OrdinalIgnoreCase)
+                     || NivelDe(e.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
             .Select(e => (e.From, e.To))
-            .Distinct()
             .ToList();
 
-        // 2. Lo que el mapa sabe de cada pantalla, TAL CUAL. Aquí había un
-        //    `Math.Max(sueloDesconocido, ni.Nivel)` que impedía a estas pantallas reclamar la fila 1
-        //    — un guardián contra la DEDUCCIÓN ESTADÍSTICA, que existía cuando el nivel de un nodo
-        //    podía salir de contar apariciones y no de que alguien lo declarara.
-        //
-        //    Esa fuente ya no existe (se eliminó el 2026-08-08) y el guardián se volvió el problema:
-        //    pulsar una puerta CROMO —nivel 1— llevaba a una pantalla que el mapa situaba en 1 y el
-        //    dibujo empujaba a la 2. Se veía como «hice clic en un botón que es cromo y se colocó
-        //    debajo» (observado por el usuario). El mapa y el dibujo decían cosas distintas del
-        //    mismo sitio, y eso es exactamente lo que un mapa no puede hacer.
-        //
-        //    Hoy el nivel de una pantalla solo llega por una puerta DECLARADA (ver Commit y
-        //    LearnTraversal), así que no hay nada de lo que protegerse: si el mapa lo sitúa, va ahí.
-        foreach (var n in pisados
-                     .Concat(aristasMapa.SelectMany(x => new[] { x.From, x.To }))
-                     .Concat(traza.SelectMany(x => new[] { x.From, x.To })))
-            if (!prof.ContainsKey(n) && _map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
-                prof[n] = ni.Nivel;
+        var todos = pisados
+            .Concat(aristasMapa.SelectMany(x => new[] { x.From, x.To }))
+            .Concat(traza.SelectMany(x => new[] { x.From, x.To }))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(n => !string.Equals(n, raiz, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
-        // 3. Las aristas DEL MAPA rellenan los huecos por DISTANCIA MÍNIMA a lo ya colocado. Con
-        //    «la primera asignación gana», el resultado dependía del orden de enumeración de las
-        //    aristas — y ese orden CAMBIA cuando el diccionario recicla el hueco de una puerta
-        //    borrada. Con un ciclo de por medio (vercel→graph del atrás), cada redibujo podía
-        //    resolverse distinto: «vercel» saltó a la altura de su padre y al rato volvió a su
-        //    sitio (2026-08-07, observado por el usuario). La distancia mínima no depende de
-        //    ningún orden. Lo colocado por las fuentes 1 y 2 queda FIJO: relajar no lo toca.
-        var fijos = new HashSet<string>(prof.Keys, StringComparer.OrdinalIgnoreCase);
-        for (int pasada = 0; pasada < 8; pasada++)
-            foreach (var (f, t) in aristasMapa)
-                if (prof.TryGetValue(f, out int d) && !fijos.Contains(t)
-                    && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
-                    prof[t] = d + 1;
-
-        // 4. Solo lo que el mapa aún no encadena cae al paseo de la sesión, y lo huérfano al suelo
-        //    de lo desconocido.
-        for (int pasada = 0; pasada < 6; pasada++)
-            foreach (var (f, t, _) in traza)
-                if (prof.TryGetValue(f, out int d) && !fijos.Contains(t) && !prof.ContainsKey(t))
-                    prof[t] = d + 1;
-        foreach (var (f, t, _) in traza)
+        foreach (var n in todos)
         {
-            if (!prof.ContainsKey(f)) prof[f] = sueloDesconocido;
-            if (!prof.ContainsKey(t)) prof[t] = prof[f] + 1;
+            if (SurfaceMap.EsPuerta(n)) continue;   // las puertas van después, por su arista
+            if (_map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
+            {
+                prof[n] = Math.Max(suelo, ni.Nivel);
+                declarados[n] = ni.Nivel;
+                _porQueDeclarado[n] = "el mapa la sitúa";
+            }
         }
-        foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = sueloDesconocido;
+
+        // Las puertas sin cruzar heredan el nivel de SU arista: existen, se ven, y su sitio es el
+        // de la puerta que son. No tienen NodeInfo porque no son un lugar todavía.
+        foreach (var (f, t, info) in _map.Edges())
+            if (SurfaceMap.EsPuerta(t) && info.NivelNav >= 0 && !prof.ContainsKey(t)
+                && (appActual.Length == 0 || NivelDe(f).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
+                prof[t] = Math.Max(suelo, info.NivelNav);
+
+        // Lo que nadie sitúa, junto y abajo. Se dice cuántos son: es la medida honesta de cuánto
+        // del terreno entiende el sistema, y si sube, algo se rompió antes de llegar al dibujo.
+        int filaSinSituar = prof.Values.DefaultIfEmpty(suelo).Max() + 1;
+        int sinSituar = 0;
+        foreach (var n in todos)
+            if (!prof.ContainsKey(n)) { prof[n] = filaSinSituar; sinSituar++; }
 
         // CÓMO QUEDÓ LA ESTRUCTURA, y por qué. Llevamos dos arreglos por el sitio equivocado
         // suponiendo dónde estaba el fallo; esto lo dice en vez de deducirlo. Se escribe solo
@@ -2367,8 +2273,8 @@ public sealed class GraphExplorerWindow : Window
         if (huellaNiv != _huellaEstructura)
         {
             _huellaEstructura = huellaNiv;
-            LogBus.Log("grafo", $"raíz «{Corto(raiz)}» · {_profDeclarada.Count} declarado(s) · "
-                + $"{traza.Count} tramo(s) · profundidades: "
+            LogBus.Log("grafo", $"raíz «{Corto(raiz)}» · {_profDeclarada.Count} situada(s) por el mapa · "
+                + $"{sinSituar} SIN SITUAR · {traza.Count} tramo(s) · profundidades: "
                 + string.Join(", ", prof.OrderBy(p => p.Value).ThenBy(p => p.Key)
                     .Take(20).Select(p => $"{Corto(p.Key)}={p.Value}"
                         + (_porQueDeclarado.TryGetValue(p.Key, out var pq) ? $"*({pq})" : ""))));

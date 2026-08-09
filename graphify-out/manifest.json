@@ -355,8 +355,8 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786280765.006999,
-    "ast_hash": "85863435e06edd63d8177bd176587499",
+    "mtime": 1786292500.242629,
+    "ast_hash": "9bb5de1dad22b0dd80d669e4aa942b33",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/GraphHealthText.cs": {
