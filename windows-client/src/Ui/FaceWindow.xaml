@@ -590,6 +590,12 @@
                                         Click="OnToggleFullTooltips" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
                                         ToolTip="Enciende de una vez el inspector, el ID de superficie, el explorador del grafo y el mapa. Volver a pulsarlo lo apaga todo."/>
 
+                                <!-- INTERRUPTOR DE MEDICIÓN, duro y sin respaldo. Ver AgentLoop.SoloGrafo:
+                                     con computer-use de red no se puede saber cuál de los dos llegó. -->
+                                <Button x:Name="SoloGrafoBtn" Content="🕸 Navegación: GRAFO + coordenadas" Height="26" Margin="0,6,0,0"
+                                        Click="OnToggleSoloGrafo" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
+                                        ToolTip="Botón de DESARROLLO, para medir. Al ponerlo en SOLO GRAFO el asistente pierde tap/type/scroll/swipe/key: solo puede moverse con rutas del grafo (ir_a). Si el grafo no conoce el camino, se detiene — no lo rodea con clics a coordenadas. Cada negativa queda en el log con la marca «SOLO GRAFO»."/>
+
                                 <!-- Toggle: al enseñar, ¿procesar el video con IA (LLM)? Off = se graba el
                                      video y se ve en 🎞 Videos, pero NO se manda al LLM (evita el 504). -->
                                 <Button x:Name="VideoLlmToggle" Height="26" Margin="0,6,0,0" Click="OnToggleVideoLlm"

@@ -67,6 +67,24 @@ public sealed class AgentLoop
     };
 
     /// <summary>
+    /// SOLO GRAFO: prohíbe actuar a coordenadas. Interruptor de DESARROLLO, apagado por defecto.
+    ///
+    /// Existe para poder MEDIR, no para usarlo a diario. El grafo y computer-use conviven hoy en una
+    /// escalera —grafo donde se conoce el terreno, coordenadas cuando se acaba el mapa— y esa
+    /// escalera es justo lo que impide saber cuál de los dos hizo el trabajo: si el grafo falla y
+    /// las coordenadas rescatan, el resultado dice «llegué» y no dice por dónde. Un experimento con
+    /// red no mide nada (2026-08-08, pedido por el usuario).
+    ///
+    /// Es DURO a propósito: sin respaldo. Cuando está puesto, un fallo del grafo tiene que doler y
+    /// quedar escrito, porque el fallo es el dato. El terreno para medirlo es el explorador de
+    /// archivos, que es donde la estructura del grafo ya es estable.
+    ///
+    /// No toca <c>mcp</c> ni <c>wait</c>: por ahí va precisamente la navegación por grafo (ir_a),
+    /// que es lo que se quiere dejar solo en la pista.
+    /// </summary>
+    public static bool SoloGrafo { get; set; }
+
+    /// <summary>
     /// Ejecuta un objetivo hasta que el cerebro devuelve el control con texto. Devuelve ese resumen.
     ///
     /// <paramref name="requireOrigin"/> es la COMPUERTA DE SUPERFICIE: el origen (<c>sapgui://QAS</c>,
@@ -227,6 +245,21 @@ public sealed class AgentLoop
         // esta tarea vive, no se toca la pantalla. Se devuelve el motivo como resultado de la acción
         // (no se lanza) para que el cerebro lo lea en el turno siguiente y decida — traer la app al
         // frente, preguntar, o rendirse. Rechazar siempre es seguro; teclear a ciegas no.
+        // SOLO GRAFO, antes incluso que la compuerta de superficie: si está puesto, actuar a
+        // coordenadas no es una opción en ninguna app ni con ningún origen. Mismo trato que la
+        // compuerta —se devuelve el motivo, no se lanza— para que el cerebro lo lea y use `ir_a`,
+        // que es lo que se está midiendo. Y se dice en el log con una marca propia, porque estas
+        // líneas SON el resultado del experimento: cada una es un sitio al que el grafo no supo ir.
+        if (SoloGrafo && ForegroundActions.Contains(a.Kind))
+        {
+            string why = $"acción «{a.Kind}» NO ejecutada: está puesto SOLO GRAFO, así que no se "
+                + "actúa a coordenadas. Navega con `ir_a` hacia la superficie destino; si el grafo no "
+                + "conoce el camino, dilo y para — no lo rodees.";
+            LogBus.Log("agent", $"🕸 SOLO GRAFO ✋ {why}"
+                + (a.Kind == "type" ? $" · texto descartado='{Short(a.Text, 40)}'" : ""));
+            return why;
+        }
+
         if (requireOrigin.Length > 0 && ForegroundActions.Contains(a.Kind))
         {
             string here = HereOrigin();
