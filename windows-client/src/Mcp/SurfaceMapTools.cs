@@ -1,4 +1,4 @@
-using U.Graph;
+﻿using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Navigation;
@@ -45,6 +45,12 @@ public sealed class SurfaceMapTools
 
     /// <summary>Ya estamos buscando un camino alternativo: un solo reintento, no una cadena.</summary>
     private bool _reenrutando;
+
+    /// <summary>
+    /// Cuántas veces ha fallado cada arista EN ESTA SESIÓN. Ver el olvido de dos strikes en
+    /// <c>GoTo</c>: olvidar es permanente, y una casualidad no es una prueba.
+    /// </summary>
+    private readonly Dictionary<string, int> _fallosPorArista = new(StringComparer.Ordinal);
 
     /// <summary>
     /// A dónde llevaría «Atrás» AHORA MISMO. Estado efímero de la sesión, nunca una arista.
@@ -1857,9 +1863,7 @@ public sealed class SurfaceMapTools
         // hecha para la próxima vez — y entonces sí habrá plan.
         if (ruta == null)
         {
-            string comoSeLlama = destino.TrimEnd('/');
-            int barra = comoSeLlama.LastIndexOf('/');
-            if (barra >= 0) comoSeLlama = comoSeLlama[(barra + 1)..];
+            string comoSeLlama = NombreDe(destino);
 
             if (comoSeLlama.Length > 0)
             {
@@ -1908,7 +1912,7 @@ public sealed class SurfaceMapTools
                 if (ausente) { EsperarPantallaLista(1200); ausente = !_uia.Execute(paso, out error); }
                 if (ausente)
                 {
-                    _map.OlvidarAccion(h.From, h.To);
+                    _map.OlvidarAccion(h.From, h.To, h.Info.Selector);
                     if (!_reenrutando)
                     {
                         _reenrutando = true;
@@ -1929,8 +1933,95 @@ public sealed class SurfaceMapTools
             // La llegada se COMPRUEBA, no se supone. Sin esto, una acción equivocada —y el mapa
             // tiene ~1 de cada 5— dejaría al modelo creyendo que está donde no está.
             if (!Llego(h.To, 4000))
+            {
+                // UNA ARISTA QUE NO LLEVA A NINGUNA PARTE SE CORRIGE, NO SE PADECE.
+                //
+                // Aquí solo se informaba y se volvía. El olvido de más arriba cubre el caso «el
+                // elemento ya no está», pero no este otro —el elemento SÍ está, se pulsa, y no lleva
+                // donde el mapa promete— que es el más común y el más dañino: la arista sobrevive y
+                // vuelve a elegirse en cada intento, para siempre. En la ruta a «inetpub» el mapa
+                // creía que «Nombre» —la CABECERA DE COLUMNA— llevaba a inetpub: pulsarla ordena la
+                // lista, y el tramo 3/3 moría igual una y otra vez (2026-08-08).
+                //
+                // Se distinguen las dos causas, porque piden remedios opuestos:
+                string aqui = _where()?.Id ?? "";
+                bool nosQuedamos = string.Equals(aqui, h.From, StringComparison.OrdinalIgnoreCase);
+
+                if (nosQuedamos)
+                {
+                    // NO NOS MOVIMOS: esto no es una puerta. Ordena, selecciona, despliega — hace
+                    // algo, pero no navega.
+                    //
+                    // PERO NO A LA PRIMERA. Olvidar es permanente y un tramo bueno falla de vez en
+                    // cuando por tiempo: la pantalla tarda más de los 4 s, o el clic llega mientras
+                    // la anterior se está desmontando. Con olvido inmediato se borró
+                    // «Disco local (C:)» desde Escritorio —una puerta real, que había funcionado
+                    // veinte minutos antes— y el explorador se quedó sin camino a C: (2026-08-08,
+                    // regresión introducida al arreglar las aristas falsas).
+                    //
+                    // Dos strikes. Una casualidad no es una prueba; dos fallos en la misma sesión
+                    // sobre la misma puerta sí. El contador es de sesión a propósito: no hace falta
+                    // persistirlo —una arista de verdad falsa vuelve a fallar enseguida— y así no se
+                    // arrastra un veredicto viejo a una app que pudo cambiar.
+                    string huella = h.From + "\n" + h.To + "\n" + h.Info.Selector;
+                    _fallosPorArista.TryGetValue(huella, out int antes);
+                    _fallosPorArista[huella] = antes + 1;
+
+                    if (antes + 1 >= 2)
+                    {
+                        LogBus.Log("mapa-mcp", $"«{h.Info.Label}» no movió la pantalla por 2ª vez: no es una "
+                            + $"puerta hacia «{h.To}» — se deja de enrutar por ella");
+                        _map.OlvidarAccion(h.From, h.To, h.Info.Selector);
+                    }
+                    else
+                    {
+                        LogBus.Log("mapa-mcp", $"«{h.Info.Label}» no movió la pantalla (1ª vez): puede ser "
+                            + "tiempo; se conserva la arista y se intenta otro camino");
+                    }
+                }
+                else if (aqui.Length > 0 && !SurfaceMap.EsPuerta(aqui))
+                {
+                    // NOS MOVIMOS, PERO A OTRO SITIO: la puerta es real y el mapa tiene mal el
+                    // destino. Se REAPUNTA con lo que acaba de pasar, que es la verdad más fresca que
+                    // existe, y se olvida la creencia vieja. Esto no degrada el mapa: lo corrige.
+                    LogBus.Log("mapa-mcp", $"«{h.Info.Label}» sí es puerta, pero lleva a «{aqui}», no a "
+                        + $"«{h.To}» — se reapunta la arista");
+                    _map.OlvidarAccion(h.From, h.To, h.Info.Selector);
+                    _map.LearnTraversal(h.From, aqui, h.Info.Selector, h.Info.Alternatives,
+                                        h.Info.Label, h.Info.ControlType);
+                }
+
+                // ANTES DE REPLANIFICAR, MIRAR. Este tramo quería llegar a un sitio concreto, y muy
+                // a menudo la puerta de verdad está DELANTE — solo que el mapa apuntaba a otra cosa.
+                // Al fallar el tramo «→ disco-local-c» por una cabecera de columna, «Disco local (C:)»
+                // estaba ahí, seleccionado, a un clic (2026-08-08). El sistema ya sabía hacer esto,
+                // pero solo cuando no había NINGUNA ruta; si había ruta y se rompía, se rendía sin
+                // levantar la vista. Es la misma jugada que hace una persona: si el camino que
+                // recordaba no existe, mira a ver si lo que busca está a la vista.
+                //
+                // Y al tomarlo se aprende, así que el hueco que dejó la arista falsa queda tapado.
+                if (VerYTomar(h.To, h.From) && Llego(h.To, 4000))
+                {
+                    LogBus.Log("mapa-mcp", $"✓ tramo {i + 1}/{ruta.Count} rescatado a la vista: → {h.To}");
+                    continue;
+                }
+
+                // Y se vuelve a planificar UNA vez con el mapa ya corregido: el destino puede seguir
+                // siendo alcanzable por otro lado, y ahora sabemos algo que antes no.
+                if (!_reenrutando)
+                {
+                    _reenrutando = true;
+                    try
+                    {
+                        LogBus.Log("mapa-mcp", $"mapa corregido; se replanifica hacia «{destino}»");
+                        return GoTo(destino);
+                    }
+                    finally { _reenrutando = false; }
+                }
+
                 return $"tramo {i + 1}/{ruta.Count}: pulsé «{h.Info.Label}» pero no se llegó a «{h.To}». "
-                     + $"Estamos en «{_where()?.Id}». La ruta del mapa no coincide con la realidad aquí.";
+                     + $"Estamos en «{aqui}». Corregí el mapa, pero no hay otro camino conocido.";
+            }
 
             LogBus.Log("mapa-mcp", $"✓ tramo {i + 1}/{ruta.Count}: «{h.Info.Label}» → {h.To}");
         }
@@ -1967,6 +2058,39 @@ public sealed class SurfaceMapTools
     /// (2026-08-02). Comprobar la ubicación ANTES convierte un encadenamiento optimista en uno
     /// verificado, y el fallo aparece donde se produce en vez de tres pasos después.
     /// </param>
+    /// <summary>El último segmento de una superficie: «uia://explorer.exe/disco-local-c» → «disco-local-c».</summary>
+    private static string NombreDe(string superficie)
+    {
+        string s = (superficie ?? "").TrimEnd('/');
+        int barra = s.LastIndexOf('/');
+        return barra >= 0 ? s[(barra + 1)..] : s;
+    }
+
+    /// <summary>
+    /// ¿Está a la vista una puerta que se llame como <paramref name="aDonde"/>? Entonces se toma.
+    ///
+    /// Es lo que hace una persona cuando el camino que recordaba no existe: levantar la vista. Se
+    /// exige coincidencia ÚNICA — con dos candidatas no se adivina, que es la regla de esta capa —,
+    /// y se devuelve solo si se pulsó algo; comprobar que se llegó es cosa de quien llama, porque
+    /// solo él sabe qué esperaba.
+    /// </summary>
+    private bool VerYTomar(string aDonde, string desde)
+    {
+        string nombre = NombreDe(aDonde);
+        if (nombre.Length == 0) return false;
+        try
+        {
+            _lector.Read();
+            var vistas = Uia.Reconocedor.Buscar(_lector.Elements, nombre.Replace('-', ' '));
+            if (vistas.Count != 1) return false;
+            LogBus.Log("mapa-mcp", $"el mapa no sabía llegar a «{aDonde}», pero «{vistas[0].Label}» está "
+                                 + "delante: se toma y se aprende");
+            Take(vistas[0].Label, "", desde);
+            return true;
+        }
+        catch (Exception e) { LogBus.Log("mapa-mcp", $"VerYTomar falló: {e.Message}"); return false; }
+    }
+
     private string Take(string salida, string accionPedida = "", string dondeCreoEstar = "")
     {
         string desalineado = ComprobarUbicacion(dondeCreoEstar);
