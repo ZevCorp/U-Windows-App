@@ -1150,10 +1150,26 @@ public sealed class GraphExplorerWindow : Window
         return corte >= 0 ? comun[..corte] : "";
     }
 
+    /// <summary>
+    /// El nombre corto de una pantalla, para leerla de un vistazo en el grafo.
+    ///
+    /// LA PORTADA DE UN SITIO SE LLAMA «inicio», no como el sitio. En una web la portada es
+    /// <c>web://github.com</c> —sin ruta— y el centro del nivel es <c>nivel://github.com</c>: dos
+    /// cosas distintas que se dibujaban con el MISMO texto, así que parecían un nodo duplicado.
+    /// Pasó y se vio: pulsar un botón de cromo llevaba a «github.com» habiendo ya un «github.com»
+    /// (2026-08-08, observado por el usuario).
+    ///
+    /// No se fusionan porque no son lo mismo: el centro es la APP —el terreno entero— y la portada
+    /// es UNA pantalla suya, a la que se llega y de la que se sale. Lo que había que arreglar no
+    /// era el grafo, era el nombre.
+    /// </summary>
     private static string Corto(string id)
     {
         int i = id.IndexOf("://", StringComparison.Ordinal);
-        return i >= 0 ? id[(i + 3)..] : id;
+        string s = i >= 0 ? id[(i + 3)..] : id;
+        if (id.StartsWith("web://", StringComparison.OrdinalIgnoreCase) && !s.Contains('/'))
+            return s + "/inicio";
+        return s;
     }
 
     /// <summary>
@@ -2294,12 +2310,24 @@ public sealed class GraphExplorerWindow : Window
             .Distinct()
             .ToList();
 
-        // 2. Lo que el mapa sabe de cada pantalla. Deducido, no declarado: tampoco reclama la fila 1.
+        // 2. Lo que el mapa sabe de cada pantalla, TAL CUAL. Aquí había un
+        //    `Math.Max(sueloDesconocido, ni.Nivel)` que impedía a estas pantallas reclamar la fila 1
+        //    — un guardián contra la DEDUCCIÓN ESTADÍSTICA, que existía cuando el nivel de un nodo
+        //    podía salir de contar apariciones y no de que alguien lo declarara.
+        //
+        //    Esa fuente ya no existe (se eliminó el 2026-08-08) y el guardián se volvió el problema:
+        //    pulsar una puerta CROMO —nivel 1— llevaba a una pantalla que el mapa situaba en 1 y el
+        //    dibujo empujaba a la 2. Se veía como «hice clic en un botón que es cromo y se colocó
+        //    debajo» (observado por el usuario). El mapa y el dibujo decían cosas distintas del
+        //    mismo sitio, y eso es exactamente lo que un mapa no puede hacer.
+        //
+        //    Hoy el nivel de una pantalla solo llega por una puerta DECLARADA (ver Commit y
+        //    LearnTraversal), así que no hay nada de lo que protegerse: si el mapa lo sitúa, va ahí.
         foreach (var n in pisados
                      .Concat(aristasMapa.SelectMany(x => new[] { x.From, x.To }))
                      .Concat(traza.SelectMany(x => new[] { x.From, x.To })))
             if (!prof.ContainsKey(n) && _map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
-                prof[n] = Math.Max(sueloDesconocido, ni.Nivel);
+                prof[n] = ni.Nivel;
 
         // 3. Las aristas DEL MAPA rellenan los huecos por DISTANCIA MÍNIMA a lo ya colocado. Con
         //    «la primera asignación gana», el resultado dependía del orden de enumeración de las
