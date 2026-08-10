@@ -571,8 +571,6 @@ public sealed class SurfaceMap
                 && AppDe(kv.Key).Equals(appF, StringComparison.OrdinalIgnoreCase));
             if (!hayOtraSituada) nf.Nivel = 0;
         }
-        int nivelAqui = _nodes.TryGetValue(f, out var na) ? na.Nivel : -1;
-
         // Lo que YA se conoce en esta app, con el nivel que se le puso la primera vez. Una puerta no
         // cambia de nivel por volver a verla desde más adentro: si el panel lateral está en el nivel
         // 1, sigue estando en el 1 aunque lo vuelvas a ver tres carpetas más abajo.
@@ -630,13 +628,21 @@ public sealed class SurfaceMap
             string k = Clave(f, destino, s.Selector);
             if (_edges.TryGetValue(k, out var yaEsta)) { yaEsta.VistaPorUltimaVez = ahora; continue; }
 
-            // EL NIVEL SE FIJA UNA VEZ. Si esta puerta ya se vio antes en esta app, conserva el
-            // nivel que se le puso entonces —da igual desde dónde se esté mirando ahora—; si es
-            // nueva, pertenece a un nivel por debajo de la pantalla que la revela. Eso es lo que
-            // convierte «qué abre qué» en una jerarquía estable, en vez de un reflejo del paseo.
-            int nivelPuerta = nivelPorSelector.TryGetValue(s.Selector, out int ya)
-                ? ya
-                : (nivelAqui >= 0 ? nivelAqui + 1 : -1);
+            // EL NIVEL NO SALE DEL PASEO. Si esta puerta ya se vio antes en esta app, conserva el
+            // nivel que se le puso entonces —da igual desde dónde se esté mirando ahora—; y si es
+            // nueva, nace SIN NIVEL, esperando a que alguien lo diga.
+            //
+            // Antes nacía en «nivelAqui + 1», un nivel por debajo de la pantalla que la revelaba.
+            // Congelar ese número la volvía ESTABLE, no CORRECTA: congelaba el accidente de dónde
+            // se la vio primero. Medido el 2026-08-10 sobre explorer.exe: el mismo botón de
+            // scrollbar salía sin nivel en «inicio» y en nivel 4 en «u-versiones», porque allí
+            // nació. Y un ARCHIVO nació en «nivel 5» —anunciando estructura más profunda—, se
+            // cruzó confiando en esa etiqueta y abrió el Bloc de notas.
+            //
+            // Un número que depende de por dónde pasaste no describe la app: describe tu paseo.
+            // Decir «no sé» es más barato que decir un número inventado, y es lo que vuelve
+            // «cuánto queda sin situar» una pregunta con respuesta.
+            int nivelPuerta = nivelPorSelector.TryGetValue(s.Selector, out int ya) ? ya : -1;
 
             _edges[k] = new EdgeInfo
             {

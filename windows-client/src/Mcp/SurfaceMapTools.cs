@@ -1903,9 +1903,17 @@ public sealed class SurfaceMapTools
         // Se cuentan aparte en vez de callarlas del todo: que ahí hay mil imágenes es un dato útil
         // —dice que esa pantalla es un CONTENEDOR— y esconderlo sería fingir que la pantalla está
         // vacía. Lo que no se hace es ofrecerlas como si fueran navegación.
+        //
+        // PERO UNA PUERTA CON DESTINO CONOCIDO NO ES CONTENIDO, diga lo que diga su grupo. En un
+        // explorador de archivos la CARPETA es la navegación —la única fuente de niveles 3, 4, 5…—
+        // y es ListItem exactamente igual que el archivo. Al filtrar por grupo se ocultaron las 15
+        // carpetas de C:\ como «contenido que no se ofrece como camino», y con ellas el techo de
+        // profundidad del mapa entero (2026-08-10, medido por el arquitecto: cruzó «U-versiones»
+        // desde ese bloque y SÍ abría pantalla propia). Cruzada una vez, deja de ser dudosa.
         var esContenido = salidas.Where(x =>
-            x.Info.Nivel.StartsWith("contenido", StringComparison.OrdinalIgnoreCase)
-            || x.Info.Nivel.StartsWith("lista", StringComparison.OrdinalIgnoreCase)).ToList();
+            (x.Info.Nivel.StartsWith("contenido", StringComparison.OrdinalIgnoreCase)
+             || x.Info.Nivel.StartsWith("lista", StringComparison.OrdinalIgnoreCase))
+            && SurfaceMap.EsPuerta(x.To)).ToList();
 
         var sb = new System.Text.StringBuilder($"Desde «{desde}»:\n");
         foreach (var h in salidas.Where(x => !x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
@@ -1931,9 +1939,14 @@ public sealed class SurfaceMapTools
         // estructura. Es la forma corta de la regla que ya está escrita en la doctrina — el
         // contenido se describe y se consulta, no se enumera.
         if (esContenido.Count > 0)
-            sb.AppendLine($"\n  [CONTENIDO: {esContenido.Count} elemento(s) en el panel de esta pantalla "
-                + $"(p. ej. «{esContenido[0].Info.Label}»). No son navegación y no se ofrecen como camino: "
-                + "esta pantalla es un CONTENEDOR. Para llegar a uno concreto, usa su buscador o filtro.]");
+            sb.AppendLine($"\n  [CONTENIDO SIN CRUZAR: {esContenido.Count} elemento(s) en el panel de esta "
+                + $"pantalla (p. ej. «{esContenido[0].Info.Label}»). No se listan uno a uno: esta pantalla "
+                + "es un CONTENEDOR y enumerarlos ahogaría su estructura. Para llegar a uno concreto, usa "
+                + "su buscador o filtro.\n"
+                + "   AVISO: entre ellos puede haber CONTENEDORES —una carpeta abre pantalla propia y es la "
+                + "única fuente de profundidad de esta app—. No hay forma de saberlo sin cruzarlos: al "
+                + "hacerlo con map_take el mapa lo aprende y a partir de ahí sale como camino. Cruzar uno "
+                + "que NO lo sea abrirá otra aplicación.]");
 
         var acciones = salidas.Where(x => x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
                                        && x.Info.Selector.Length > 0).ToList();
