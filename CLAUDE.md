@@ -286,6 +286,41 @@ Estos costaron caro. Aplicarlos ahorra rondas enteras.
     una postura de seguridad, no un olvido. Ir con `security definer`, que es lo que ya usan, en vez de
     meter una llave nueva.
 
+16. **Una comparación entre identidades de distinta forma da falso SIEMPRE, y en silencio.** El
+    2026-08-08 aparecieron **cuatro** en un solo día, todas con meses de antigüedad y ninguna rompiendo
+    nada visible:
+
+    | Dónde | Comparaba | Consecuencia |
+    |---|---|---|
+    | `AnotarPuertas` | `"mail.google.com"` vs `"chrome."` | ninguna puerta web entró jamás al mapa |
+    | `OlvidarAccion` | clave de 2 partes vs diccionario de 3 | el grafo no podía autocorregirse |
+    | `GraphCrawler` | `"explorer"` vs `"explorer.exe"` | el recorrido mecánico nunca cruzó una puerta |
+    | `guardia-nucleo` | `windows-app` vs `U-Windows-App` | el candado no protegía nada |
+
+    Ninguna daba error. Las cuatro hacían que el sistema **aprendiera menos de lo que creía** — y eso
+    se parece demasiado a «se usa poco». La señal de alarma es cuando los dos lados de una comparación
+    salen de funciones distintas: `AppDe` conserva el `.exe`, `ProcessFromOrigin` lo quita, y quien las
+    junta hereda el desacuerdo. **Normalizar en un solo sitio, o comparar por el mismo camino.**
+
+17. **Un juez que no puede correr no dice «no sé», dice «culpable».** El contrato del grafo reportaba
+    *«CONTRATO ROTO: 10 promesas incumplidas»* sin haber probado nada: no conseguía cargar sus propios
+    ensamblados. Lo mismo el crawler, que imprimía `0 salida(s)` cuando ni había llegado a mirar la
+    pantalla. Un arnés tiene que distinguir **«falló la promesa»** de **«no pude ejecutarla»**, o su
+    veredicto manda la investigación al sitio equivocado — y el fallo estaba en el arnés que existe
+    justo para eso.
+
+18. **Un guardia que se cree puesto es peor que ninguno.** El candado del núcleo llevaba cinco horas
+    protegiendo nada porque su lista de rutas se anclaba al nombre de la carpeta del repo. Se descubrió
+    al editar `SurfaceMap.cs` y **no ver el diálogo**. Cualquier comprobación anclada a algo accidental
+    —el nombre de una carpeta, una ruta de máquina— degrada en silencio a «siempre no», y mientras
+    tanto todo el mundo trabaja creyendo que hay una red debajo.
+
+19. **Seleccionar no es abrir, y devolver `true` no es haber hecho el trabajo.** `RealClick` prefería
+    `SelectionItemPattern.Select()` para todo lo seleccionable —correcto para los menús WinUI, que
+    ignoran el ratón sintético— y en el explorador eso marcaba la entrada del panel lateral **sin
+    navegar**, reportando éxito. Una ruta de tres tramos moría en el primero. El orden correcto es
+    actuar primero y **verificar después**: el clic real, y solo si no agarró, el patrón.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

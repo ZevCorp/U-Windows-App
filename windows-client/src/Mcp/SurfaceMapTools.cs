@@ -1409,6 +1409,16 @@ public sealed class SurfaceMapTools
         if (SafeToClick.EsDestructivo(elegida, out string motivo))
             return $"NO pulso «{elegida}»: {motivo}. Una opción destructiva la confirma el usuario, no yo.";
 
+        // NI SIQUIERA SI ME LO PIDEN. `choose` es una instrucción explícita y por eso se respeta casi
+        // siempre —responder diálogos es para lo que existe esta herramienta—, pero abrir una sesión
+        // de cuenta o autorizar un pago no es responder un diálogo: es comprometer al usuario con un
+        // tercero. Eso lo pulsa él, delante de la pantalla. Mismo criterio que el veto de lo
+        // destructivo, que también ignora a la capa consciente a propósito.
+        if (EsCuentaOPago(elegida))
+            return $"NO pulso «{elegida}»: abre una sesión de cuenta o un pago, y eso compromete al "
+                 + "usuario con un tercero. Tiene que pulsarlo él. Puedo cerrar el diálogo si quieres "
+                 + "seguir sin eso.";
+
         var paso = new PlanStep
         {
             StepOrder = 1, ActionType = "click",
@@ -1456,18 +1466,101 @@ public sealed class SurfaceMapTools
     /// envenenando todas las corridas siguientes (2026-08-03, visto en pantalla). Las opciones son
     /// lo que el aviso PROPONE, no las formas de deshacerse de él.
     /// </remarks>
+    /// <summary>
+    /// La opción que se puede pulsar SIN preguntarle a nadie.
+    ///
+    /// QUITAR LA FORMA DE DECLINAR CONVIERTE UNA DECISIÓN EN UN SÍ FORZADO. Esto filtraba «Cerrar»
+    /// por considerarlo cromo de ventana y, si quedaba UNA sola opción, la pulsaba automáticamente
+    /// dando por hecho que «una opción no es una elección». El 2026-08-10 Windows ofreció
+    /// «Iniciar sesión» y «Cerrar» para una copia de seguridad con cuenta Microsoft: se filtró
+    /// «Cerrar», quedó una, y el sistema **inició sesión solo** — y lo reportó como DESBLOQUEADO.
+    /// Se pidió declinar y aceptó.
+    ///
+    /// El error de fondo: en un diálogo así la elección no es «cuál de las respuestas», es
+    /// **aceptar o irse**, y «Cerrar» ES la respuesta de irse. Cualquier consentimiento, login o
+    /// upsell con la forma [Acción] + [Cerrar] se auto-aceptaba.
+    ///
+    /// Ahora manda otra regla, y es la de siempre para un agente sin supervisión: **si hay manera de
+    /// declinar, esa es la segura.** Y si la única respuesta que queda compromete algo —iniciar
+    /// sesión, aceptar, permitir, activar, comprar— no se pulsa: se devuelve la decisión, que es de
+    /// quien va a vivir con ella.
+    /// </summary>
     private static string OpcionSegura(List<string> opciones)
     {
+        // 1. DECLINAR SIEMPRE GANA. Irse nunca compromete nada; quedarse puede.
+        string? declinar = opciones.FirstOrDefault(EsDeclinar);
+        if (declinar != null) return declinar;
+
+        // 2. Sin salida ofrecida: solo se automatiza si lo que queda no compromete nada.
         var reales = opciones.Where(o => !EsSalidaDeVentana(o)).ToList();
-        return reales.Count == 1 ? reales[0] : "";
+        if (reales.Count == 1 && !EsCompromiso(reales[0])) return reales[0];
+
+        return "";   // hay una decisión: la toma el usuario, con `choose`
+    }
+
+    /// <summary>
+    /// ¿Esta opción es «irse sin hacer nada»? Se compara por PREFIJO porque Windows etiqueta los
+    /// botones de marco con el nombre de la ventana detrás: «Cerrar Copias de seguridad de Windows».
+    /// Con <c>Equals</c> ese no casaba con nada y el diálogo entero quedaba sin salida reconocible.
+    /// </summary>
+    private static bool EsDeclinar(string etiqueta)
+    {
+        string e = (etiqueta ?? "").Trim();
+        string[] formas =
+        {
+            "cerrar", "close", "cancelar", "cancel", "no, gracias", "no thanks", "ahora no",
+            "not now", "más tarde", "mas tarde", "later", "omitir", "skip", "rechazar", "decline",
+            "descartar", "dismiss",
+        };
+        return formas.Any(f => e.StartsWith(f, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// ¿Esta opción COMPROMETE algo — una cuenta, un permiso, un pago, un cambio de configuración?
+    ///
+    /// No es la lista de lo destructivo (eso ya lo veta <c>SafeToClick.EsDestructivo</c>): es la de
+    /// lo que ata al usuario a algo. Nada de esto se pulsa solo, ni siquiera cuando es la única
+    /// opción que queda — sobre todo entonces, porque «solo queda una» es justo como se disfraza un
+    /// diálogo que no acepta un no.
+    /// </summary>
+    private static bool EsCompromiso(string etiqueta)
+    {
+        string e = (etiqueta ?? "").Trim();
+        string[] verbos =
+        {
+            "iniciar sesión", "iniciar sesion", "sign in", "log in", "acceder", "entrar",
+            "crear cuenta", "registrar", "sign up", "suscrib", "subscribe", "comprar", "buy",
+            "pagar", "pay", "aceptar", "accept", "acepto", "estoy de acuerdo", "agree",
+            "permitir", "allow", "conceder", "grant", "activar", "enable", "habilitar",
+            "continuar", "continue", "siguiente", "next", "sí", "si", "yes", "ok", "aceptar y",
+        };
+        return verbos.Any(v => e.StartsWith(v, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// El subconjunto de <see cref="EsCompromiso"/> que NO se pulsa ni con <c>choose</c> explícito:
+    /// abrir sesión en una cuenta, crearla, o autorizar un pago. No es responder un diálogo, es atar
+    /// al usuario con un tercero — y eso lo hace él, delante de la pantalla.
+    /// </summary>
+    private static bool EsCuentaOPago(string etiqueta)
+    {
+        string e = (etiqueta ?? "").Trim();
+        string[] verbos =
+        {
+            "iniciar sesión", "iniciar sesion", "sign in", "log in", "acceder con", "entrar con",
+            "crear cuenta", "crear una cuenta", "registrar", "sign up", "create account",
+            "suscrib", "subscribe", "comprar", "buy", "pagar", "pay", "añadir tarjeta", "add card",
+        };
+        return verbos.Any(v => e.StartsWith(v, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>¿Esta «opción» es en realidad el cierre de la ventana y no una respuesta?</summary>
     private static bool EsSalidaDeVentana(string etiqueta) =>
-        etiqueta.Equals("Cerrar", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Equals("Close", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Equals("Minimizar", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Equals("Maximizar", StringComparison.OrdinalIgnoreCase);
+        EsDeclinar(etiqueta)
+        || etiqueta.StartsWith("Minimizar", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.StartsWith("Maximizar", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.StartsWith("Minimize", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.StartsWith("Maximize", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Si delante hay un DIÁLOGO, lo describe como lo que es: una interrupción con una pregunta y
