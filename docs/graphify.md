@@ -1201,3 +1201,48 @@ más abajo, y «Almacenamiento» para por qué el transporte sigue siendo un arc
 - El presupuesto sube a 80 turnos por defecto: agotar una rama son varios cruces más un `ir_a` por
   cada vuelta atrás.
 - Fecha: 2026-08-08, observado por el usuario: «solo mapeó a primer nivel».
+
+---
+
+## El CONTENIDO en el grafo: se describe y se consulta, no se enumera (2026-08-10)
+
+### La pregunta
+El contenido —archivos, filas, resultados, mensajes— es probablemente lo más valioso para el
+usuario, y a la vez es ilimitado: una carpeta tiene miles de archivos, una bandeja miles de
+correos. Enumerarlo en el grafo lo revienta (la lista de pendientes del arquitecto pasó de 2 a 44
+por abrir dos carpetas); ignorarlo deja al asistente sin lo que la gente de verdad busca.
+
+### La respuesta: dos naturalezas, dos tratos
+La ESTRUCTURA es pequeña, estable y finita → se ENUMERA como nodos y aristas. Eso es plata.
+El CONTENIDO es enorme, volátil e ilimitado → NO se enumera. Se describe su CONTENEDOR y se
+consulta cuando hace falta.
+
+Un grafo ahorra contexto porque solo se carga lo que se necesita; enumerar contenido es
+exactamente lo contrario — cargar por adelantado lo que casi nunca se usará.
+
+### Las tres piezas
+1. **El contenedor se describe, una vez por pantalla.** Un nodo que contiene una lista lleva:
+   qué tipo de elementos hay, cuántos aproximadamente, y —lo importante— QUÉ AFORDANCIAS existen
+   para reducirlos: campo de búsqueda, filtro, orden, barra de direcciones. Eso es una entrada por
+   pantalla, no una por archivo: acotado por construcción.
+
+2. **Se consulta en vivo, no de memoria.** Buscar «factura de marzo» no se responde recorriendo
+   nodos: se responde usando la afordancia de esa pantalla. Y cuando existe un oráculo más rápido
+   que la UI, se le pregunta a él — en el explorador ya lo hacemos con `file_find`/`file_list`,
+   que responden en milisegundos lo que clicando cuesta horas. La regla general: no enumerar por
+   la interfaz lo que se puede preguntar mejor por otro lado.
+
+3. **Un contenido se PROMUEVE a nodo cuando demuestra que importa.** El informe que se abre cada
+   semana, el repo al que se vuelve siempre. El grafo recuerda lo que resultó útil, no todo lo que
+   existió. Acotado por el uso real, que es finito.
+
+### Por qué esto es lo mismo que hace un sitemap índice
+Un sitemap no mete todas las páginas en un archivo: apunta a dónde encontrar más. Aquí igual — el
+grafo no guarda el contenido, guarda CÓMO LLEGAR A ÉL y cómo estrecharlo. La diferencia es que
+nuestro «índice» es ejecutable: no es una lista de URLs, es un campo de búsqueda que el asistente
+sabe usar.
+
+### Lo que implica para el arquitecto
+Su trabajo sigue siendo la estructura, pero gana una responsabilidad: marcar QUÉ PANTALLAS SON
+CONTENEDORES y con qué se estrechan. Es lo que convierte «aquí hay mil archivos» en «aquí hay mil
+archivos y este es el campo donde se buscan».
