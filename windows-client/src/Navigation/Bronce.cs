@@ -23,10 +23,10 @@ public static class Bronce
 {
     /// <summary>Una pantalla observada. `EsRaiz` es la primera de la app por la que se entró.</summary>
     /// <remarks>
-    /// La raíz es dato de bronce —quién estaba delante la primera vez— pero hoy se guarda en
-    /// `NodeInfo.Nivel == 0`, el mismo campo que la plata reescribe. Es la única lectura de este
-    /// archivo que toca un campo compartido, y desaparece cuando bronce tenga su propio `EsRaiz`
-    /// en disco (fase 3 del plan).
+    /// La deuda que este archivo declaró al nacer está saldada: la raíz tiene su propio campo en
+    /// `NodeInfo`, y este lector ya no depende de `Nivel == 0` —que es plata y se recalcula—. El
+    /// respaldo por nivel se queda para los mapas guardados antes del cambio, donde la marca no
+    /// existe todavía; en cuanto esa pantalla se vuelve a observar, se sella y el respaldo sobra.
     /// </remarks>
     public sealed record Pantalla(string Id, int Visitas, bool EsRaiz);
 
@@ -52,7 +52,7 @@ public static class Bronce
         var pantallas = mapa.Nodes
             .Where(kv => DeLaApp(kv.Key))
             .OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(kv => new Pantalla(kv.Key, kv.Value.Visits, kv.Value.Nivel == 0))
+            .Select(kv => new Pantalla(kv.Key, kv.Value.Visits, kv.Value.EsRaiz || kv.Value.Nivel == 0))
             .ToList();
 
         var puertas = mapa.Edges()

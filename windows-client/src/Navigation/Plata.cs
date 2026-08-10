@@ -340,7 +340,9 @@ public static class Plata
         // falta de ancla, la más visitada— y se quita: sin ancla, la más visitada es una ADIVINANZA
         // con forma de dato, y toda la jerarquía colgaría de ella. Sin raíz no se sitúa nada y se
         // dice; es la misma decisión que ya tomó RecalcularProfundidades («adivinarla sería peor»).
-        string raiz = pantallas.Where(kv => kv.Value.Nivel == 0)
+        // La marca de raíz es de bronce y tiene campo propio desde la fase 3; el `Nivel == 0` queda
+        // como respaldo para los mapas guardados antes, que aún no la traen.
+        string raiz = pantallas.Where(kv => kv.Value.EsRaiz || kv.Value.Nivel == 0)
                                .OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
                                .Select(kv => kv.Key).FirstOrDefault() ?? "";
 

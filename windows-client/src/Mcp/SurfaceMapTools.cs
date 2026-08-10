@@ -1836,9 +1836,17 @@ public sealed class SurfaceMapTools
             .ToList();
         if (tocadas.Count == 0) return $"no encuentro ninguna salida «{salida}» en «{app}»";
 
-        foreach (var (_, _, info) in tocadas) info.KindDeclarado = k;
+        foreach (var (_, _, info) in tocadas)
+        {
+            info.KindDeclarado = k;
+            // Y SOBREVIVE AL TERRENO. Esto vivía solo en la arista, así que borrar el grafo
+            // deshacía el trabajo: el arquitecto clasificaba cuarenta salidas y la corrida
+            // siguiente se las encontraba pendientes otra vez. Ahora va a la capa de enseñanzas,
+            // que es donde vive todo lo que alguien AFIRMA (2026-08-10, fase 3 del plan).
+            _map.AprenderClase(app, info.Label, info.Selector, k);
+        }
         LogBus.Log("mapa-mcp", $"«{salida}» clasificada como «{k}» ({tocadas.Count} aparición/es): "
-            + "sigue en el mapa para ejecutarla, deja de contar como estructura");
+            + "sigue en el mapa para ejecutarla, deja de contar como estructura, y sobrevive al borrado");
         return $"«{tocadas[0].Info.Label}» queda clasificada como «{k}» en «{app}» "
              + $"({tocadas.Count} aparición/es). Sigue en el mapa: el asistente podrá ejecutarla.";
     }

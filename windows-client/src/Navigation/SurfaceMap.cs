@@ -54,6 +54,16 @@ public sealed class SurfaceMap
         public int Nivel { get; set; } = -1;
 
         /// <summary>
+        /// Esta es la pantalla por la que se ENTRÓ en la app. Es dato de bronce: se observó.
+        ///
+        /// Vivía disfrazado de <see cref="Nivel"/> == 0, y eso mezclaba dos cosas que no lo son —
+        /// «aquí se entró» es una observación y no se mueve nunca; el nivel es una derivación que
+        /// se recalcula entera cada vez que la estructura cambia—. Mientras compartieron campo, el
+        /// lector de bronce tenía que mirar un dato que la plata reescribe (2026-08-10).
+        /// </summary>
+        public bool EsRaiz { get; set; }
+
+        /// <summary>
         /// La última vez que se MIRÓ esta pantalla y se apuntó qué puertas tenía.
         ///
         /// Es la referencia contra la que se sabe si una puerta sigue estando: las que se vieron en
@@ -569,7 +579,7 @@ public sealed class SurfaceMap
             string appF = AppDe(f);
             bool hayOtraSituada = _nodes.Any(kv => kv.Value.Nivel >= 0
                 && AppDe(kv.Key).Equals(appF, StringComparison.OrdinalIgnoreCase));
-            if (!hayOtraSituada) nf.Nivel = 0;
+            if (!hayOtraSituada) { nf.Nivel = 0; nf.EsRaiz = true; }
         }
         int nivelAqui = _nodes.TryGetValue(f, out var na) ? na.Nivel : -1;
 
@@ -1392,8 +1402,15 @@ public sealed class SurfaceMap
     /// clave: la promesa nº2 empezó a fallar porque devolvía selectores donde promete etiquetas
     /// (2026-08-10). Cambiar cómo se guarda algo no puede cambiar lo que se promete de ello.
     /// </remarks>
+    /// <param name="Kind">
+    /// Lo que alguien AFIRMA que es esta salida («accion»). Vive aquí desde el 2026-08-10 y no en
+    /// el terreno, por dos razones que son la misma: es una declaración, no una observación; y
+    /// mientras vivió solo en `EdgeInfo.KindDeclarado` se perdía al borrar el grafo — el arquitecto
+    /// clasificaba cuarenta salidas y la siguiente corrida las encontraba sin clasificar. Un
+    /// aprendizaje que no sobrevive al terreno no es un aprendizaje.
+    /// </param>
     public sealed record Ensenanza(int Nivel, bool Humano, bool Atras = false, bool Cromo = false,
-        string Selector = "", string Etiqueta = "");
+        string Selector = "", string Etiqueta = "", string Kind = "");
 
     /// <summary>
     /// ¿Este control es el gesto de VOLVER de su app?
@@ -1510,13 +1527,21 @@ public sealed class SurfaceMap
         if (e.Selector.Length > 0 && sabidas.TryGetValue(e.Selector, out var porSel)) ens = porSel;
         else if (sabidas.TryGetValue(e.Label, out var porEtq) && porEtq.Selector.Length == 0) ens = porEtq;
 
-        if (ens != null && !ens.Atras && ens.Nivel >= 0)
+        if (ens == null || ens.Atras) return;
+
+        if (ens.Nivel >= 0)
         {
             e.NivelNav = ens.Nivel;
             e.NivelFijado = true;
             e.PorPersona = e.PorPersona || ens.Humano;
             e.EsCromo = ens.Cromo;
         }
+
+        // LA CLASE SE REPONE AUNQUE NO HAYA NIVEL, y son dos afirmaciones distintas: «esto es una
+        // acción» no dice nada de en qué nivel vive, y de hecho lo normal es que quien clasifica
+        // una acción no le ponga nivel ninguno. Colgarla del `Nivel >= 0` la habría hecho
+        // desaparecer justo en el caso para el que existe.
+        if (ens.Kind.Length > 0) e.KindDeclarado = ens.Kind;
     }
 
     /// <summary>
@@ -1534,10 +1559,41 @@ public sealed class SurfaceMap
             _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
 
         string clave = selector.Length > 0 ? selector : etiqueta;
-        if (nivel < 0) d.Remove(clave);
+        // SOLTAR EL NIVEL NO BORRA LA CLASE. Antes aquí se quitaba la entrada entera, y desde que
+        // la clasificación vive en ella eso significaría que soltar un nivel desclasifica una
+        // acción — dos decisiones distintas de dos personas distintas, borradas por una.
+        if (nivel < 0)
+        {
+            if (d.TryGetValue(clave, out var previa) && previa.Kind.Length > 0)
+                d[clave] = previa with { Nivel = -1, Humano = false, Cromo = false };
+            else d.Remove(clave);
+        }
         else d[clave] = new Ensenanza(nivel,
             humano || (d.TryGetValue(clave, out var ya) && ya.Humano),
-            Atras: false, Cromo: cromo, Selector: selector, Etiqueta: etiqueta);
+            Atras: false, Cromo: cromo, Selector: selector, Etiqueta: etiqueta,
+            Kind: d.TryGetValue(clave, out var conClase) ? conClase.Kind : "");
+        GuardarEnsenanzas();
+    }
+
+    /// <summary>
+    /// Guardar que alguien CLASIFICÓ una salida («accion»), para que sobreviva al terreno.
+    ///
+    /// Es el hermano de <see cref="Aprender"/> para la otra cosa que se declara. Existe desde que
+    /// la clasificación salió de `EdgeInfo`: sin él, marcar cuarenta salidas como acciones y borrar
+    /// el grafo dejaba el trabajo en nada, y el agente volvía a encontrárselas como pendientes.
+    /// </summary>
+    public void AprenderClase(string app, string etiqueta, string selector, string kind)
+    {
+        if (app.Length == 0 || (etiqueta.Length == 0 && selector.Length == 0)) return;
+        if (!_ensenanzas.TryGetValue(app, out var d))
+            _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
+
+        string clave = selector.Length > 0 ? selector : etiqueta;
+        if (d.TryGetValue(clave, out var previa))
+            d[clave] = previa with { Kind = kind };
+        else
+            d[clave] = new Ensenanza(-1, Humano: false, Atras: false, Cromo: false,
+                Selector: selector, Etiqueta: etiqueta, Kind: kind);
         GuardarEnsenanzas();
     }
 
@@ -1736,6 +1792,29 @@ public sealed class SurfaceMap
         Dictionary<string, EdgeInfo> Edges,
         int Version = 1);
 
+    /// <summary>
+    /// UNA ARISTA, SOLO CON LO QUE SE OBSERVÓ. Es lo que se ESCRIBE en el terreno desde el
+    /// 2026-08-10; lo que se LEE sigue siendo <see cref="EdgeInfo"/> entero, y esa asimetría es
+    /// deliberada — ver <see cref="Save"/> y la cosecha de <see cref="Load"/>.
+    ///
+    /// Faltan a propósito `NivelNav`, `NivelFijado`, `PorPersona`, `EsCromo` y `KindDeclarado`:
+    /// no son terreno, son lo que alguien afirmó DESPUÉS. Vivían aquí y el resultado era que el
+    /// archivo del bronce contenía plata, que ninguna de las dos etapas se podía recomputar por
+    /// separado, y que borrar el grafo se llevaba por delante clasificaciones que nadie había
+    /// vuelto a guardar. Ahora viven en `jerarquias-ensenadas.json`, que ya existía para esto y ya
+    /// sobrevive al borrado, y se reponen al cargar.
+    ///
+    /// NO se sube <see cref="SchemaVersion"/> por este cambio, y conviene decir por qué: la
+    /// migración de versión de este archivo PURGA las acciones de todas las aristas —es su
+    /// naturaleza desde la v2— y aquí no hay nada que purgar. Los datos viejos se siguen leyendo,
+    /// se cosechan a la capa de overrides y el archivo queda limpio solo, en el primer guardado.
+    /// Subir la versión habría destruido el trabajo de todos para arreglar una mezcla de campos.
+    /// </summary>
+    private sealed record EdgeBronce(
+        int Count, string Selector, string Label, string ControlType,
+        string[] Alternatives, string ClickPos, bool Explored, string Nivel,
+        string ActionType, string Kind, DateTime VistaPorUltimaVez);
+
     public static SurfaceMap Load()
     {
         var map = new SurfaceMap();
@@ -1749,6 +1828,41 @@ public sealed class SurfaceMap
                 {
                     foreach (var kv in s.Nodes) map._nodes[kv.Key] = kv.Value;
                     foreach (var kv in s.Edges) map._edges[kv.Key] = kv.Value;
+
+                    // LO DECLARADO QUE VENGA EN EL TERRENO SE COSECHA ANTES DE PERDERSE.
+                    //
+                    // Desde el 2026-08-10 el terreno se escribe SIN los campos declarados (ver
+                    // EdgeBronce), pero se sigue leyendo el objeto entero: los archivos guardados
+                    // antes los traen dentro, y unos pocos pueden no tener enseñanza que los
+                    // reponga —declaraciones anteriores a que `Aprender` guardara el selector, o
+                    // hechas por vías que ya no existen—. Se pasan a la capa de overrides aquí, una
+                    // vez, y el primer guardado deja el archivo limpio.
+                    //
+                    // Es una migración que no destruye nada, que es justo lo que la migración por
+                    // SchemaVersion no podía ofrecer: la suya purga acciones.
+                    int cosechadas = 0;
+                    foreach (var (from, _, info) in map.Edges())
+                    {
+                        string app = AppDe(from);
+                        if (app.Length == 0 || info.Label.Length == 0) continue;
+                        string clave = info.Selector.Length > 0 ? info.Selector : info.Label;
+                        bool yaSabida = map._ensenanzas.TryGetValue(app, out var d) && d.ContainsKey(clave);
+                        if (yaSabida) continue;
+
+                        if (info.NivelFijado && info.NivelNav >= 0)
+                        {
+                            map.Aprender(app, info.Label, info.NivelNav, info.PorPersona, info.EsCromo, info.Selector);
+                            cosechadas++;
+                        }
+                        if (info.KindDeclarado.Length > 0)
+                        {
+                            map.AprenderClase(app, info.Label, info.Selector, info.KindDeclarado);
+                            cosechadas++;
+                        }
+                    }
+                    if (cosechadas > 0)
+                        LogBus.Log("mapa", $"{cosechadas} declaración(es) que vivían en el terreno pasan "
+                            + "a la capa de enseñanzas: el bronce se queda solo con lo observado");
 
                     // Y AL CARGAR SE SANA TODO: da igual por qué vía nació cada arista o con qué
                     // versión del código — al arrancar, toda arista cuya etiqueta esté enseñada
@@ -1843,7 +1957,22 @@ public sealed class SurfaceMap
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-            File.WriteAllText(Path, JsonSerializer.Serialize(new Stored(_nodes, _edges, SchemaVersion)));
+            // Se escribe BRONCE, no el objeto en memoria: ver EdgeBronce. Lo declarado ya está en
+            // la capa de enseñanzas —FijarNivel y AprenderClase la escriben siempre— y vuelve solo
+            // al cargar, así que esto no pierde nada: deja de duplicarlo donde no le toca.
+            var bronce = new Dictionary<string, EdgeBronce>(_edges.Count, StringComparer.Ordinal);
+            foreach (var kv in _edges)
+                bronce[kv.Key] = new EdgeBronce(
+                    kv.Value.Count, kv.Value.Selector, kv.Value.Label, kv.Value.ControlType,
+                    kv.Value.Alternatives, kv.Value.ClickPos, kv.Value.Explored, kv.Value.Nivel,
+                    kv.Value.ActionType, kv.Value.Kind, kv.Value.VistaPorUltimaVez);
+
+            File.WriteAllText(Path, JsonSerializer.Serialize(new
+            {
+                Nodes = _nodes,
+                Edges = bronce,
+                Version = SchemaVersion,
+            }));
             _dirty = 0;
         }
         catch (Exception e) { LogBus.Log("mapa", $"no se pudo guardar el mapa: {e.Message}"); }

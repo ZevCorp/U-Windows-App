@@ -142,21 +142,35 @@ que pase.
 **Terminado cuando:** contrato intacto **y** una app real mapeada de punta a punta sin declarar
 nada a mano. Ninguna de las dos se ha hecho todavía.
 
-### Fase 3 · Separar la persistencia `<tu-prefijo>/bronce-sin-plata-dentro` · 2–3 días
+### Fase 3 · Separar la persistencia — **ESCRITA, sin verificar**
 
-**Cubre:** promesa 13.
-**Entra:** los campos declarados salen de `EdgeInfo` a la capa de overrides —que **ya existe**:
-`jerarquias-ensenadas.json` con `Ensenanza(Nivel, Humano, Atras, Cromo, Selector)`, y sobrevive al
-borrado del grafo—; `SchemaVersion` sube a 7 con su migración, exactamente como se hizo en la 6.
-**Trocear si se alarga:** 3a redirige los cuatro escritores
-([`map_set_level`](../windows-client/src/Mcp/SurfaceMapTools.cs#L691),
-[`MaestroDeApps:297`](../windows-client/src/Navigation/MaestroDeApps.cs#L297),
-[`JerarquiaWeb:60`](../windows-client/src/Navigation/JerarquiaWeb.cs#L60), y la deducción de
-[`ObserveExits:645`](../windows-client/src/Navigation/SurfaceMap.cs#L645)); 3b migra el esquema.
-Son dos PRs, no dos commits: si 3b se tuerce, 3a ya está dentro.
-**Riesgo:** alto — toca la persistencia de todos. La promesa 8 que ya existe («guardar y cargar no
-pierde nada») es la red, y la migración se prueba cargando el `surface-map.json` de una máquina real
-de antes del cambio.
+**Cubre:** promesa 18.
+**Entró:**
+
+- El terreno se **escribe** como `EdgeBronce` —sin `NivelNav`, `NivelFijado`, `PorPersona`,
+  `EsCromo` ni `KindDeclarado`— y se **sigue leyendo** como `EdgeInfo` entero. Esa asimetría es lo
+  que permite migrar sin perder nada.
+- `Ensenanza` gana `Kind`, y `map_set_kind` lo guarda ahí: la clasificación vivía solo en la arista,
+  así que borrar el grafo deshacía el trabajo — el arquitecto marcaba cuarenta acciones y la corrida
+  siguiente se las encontraba pendientes. Ahora sobrevive, como los niveles.
+- `NodeInfo.EsRaiz`: la marca de «aquí se entró» tiene campo propio y deja de viajar disfrazada de
+  `Nivel == 0`, que es plata y se recalcula. Salda la deuda que `Bronce.cs` declaró al nacer.
+- Una **cosecha** en `Load`: lo declarado que venga dentro de un terreno antiguo pasa a la capa de
+  overrides antes de perderse, y el primer guardado deja el archivo limpio.
+
+**Lo que el plan decía y no se hizo, con su razón:** no se sube `SchemaVersion` a 7. Al leer el
+código quedó claro que la migración por versión de este archivo **purga las acciones de todas las
+aristas** —es su naturaleza desde la v2— y aquí no hay nada que purgar. Habría destruido el trabajo
+de todos para arreglar una mezcla de campos. La cosecha hace la migración sin romper nada.
+
+**Lo que queda de esta fase:** `NodeInfo.Nivel` se sigue guardando. Es plata, pero es la caché que
+permite que el grafo arranque situado en vez de plano hasta la primera navegación. Queda dicho aquí
+en vez de disimulado: es la última mezcla que queda en el archivo.
+
+**Riesgo:** alto, toca la persistencia de todos. La promesa 8 («guardar y cargar no pierde nada») es
+la red. **Antes de mergear esto hay que cargar un `surface-map.json` real de antes del cambio y
+comprobar que los niveles siguen ahí** — es la única prueba que importa y no se puede hacer desde
+macOS.
 
 ### Fase 4 · El criterio de terminado — **ESCRITA, sin verificar**
 
