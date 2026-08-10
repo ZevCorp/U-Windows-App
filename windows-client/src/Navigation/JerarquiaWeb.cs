@@ -62,7 +62,12 @@ public static class JerarquiaWeb
         }
 
         if (puestas > 0)
+        {
             LogBus.Log("jerarquía", $"«{app}»: {puestas} salida(s) situadas por lo que declara la página");
+            // Declarar cromo cambia qué aristas son ATAJOS, y los atajos no cuentan para la
+            // profundidad: hay que rehacer el cálculo o la jerarquía se queda con la de antes.
+            mapa.RecalcularProfundidades(app);
+        }
         return puestas;
     }
 

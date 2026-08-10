@@ -415,9 +415,12 @@ public sealed class SurfaceMap
                     // tiene nivel la coloca por distancia, y esa distancia cambia según aparecen
                     // aristas. Un sitio que baila mientras exploras no es un mapa.
                     //
-                    // Misma regla del MENOR que en LearnTraversal: solo se acerca a la raíz, nunca
-                    // se aleja. Así lo situado a mano no lo empuja nadie.
-                    if (e.NivelNav >= 0 && (n.Nivel < 0 || e.NivelNav < n.Nivel)) n.Nivel = e.NivelNav;
+                    // LA PROFUNDIDAD SE CALCULA ENTERA, no se hereda de la puerta. Aquí ponía
+                    // `n.Nivel = e.NivelNav`, y eso confunde «a un clic» con «a esta profundidad»:
+                    // una puerta cromo lleva a sitios que están a un clic pero viven hondo. Ver
+                    // RecalcularProfundidades, que lo resuelve por camino más corto ignorando los
+                    // atajos (2026-08-09, medido por el arquitecto).
+                    RecalcularProfundidades(AppDe(id));
                 }
             }
         }
@@ -910,10 +913,9 @@ public sealed class SurfaceMap
             // caen al mismo suelo (2026-08-08, observado por el usuario: «todos los botones
             // quedaron en el mismo nivel»).
             //
-            // Lo fijado a mano sigue protegido, y por la regla que de verdad lo protege: el MENOR
-            // gana. Un nodo situado en 1 no lo empuja nadie al 2; solo puede acercarse a la raíz,
-            // que es lo que significa haber encontrado un camino más corto.
-            if (nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
+            // La profundidad NO se hereda de la puerta: se calcula entera al final de este método
+            // (ver RecalcularProfundidades). Un atajo cromo dice a cuántos clics está el destino,
+            // no a qué profundidad vive — y confundirlo dejaba «C:» por debajo de su propio padre.
         }
 
         // También aquí: el ATRÁS no acuña. Esta es la vía del cruce deliberado (map_take «Atrás»),
@@ -943,6 +945,11 @@ public sealed class SurfaceMap
         // que se llegó (2026-08-06, observado por el usuario).
         AplicarEnsenanza(f, e);
 
+        // La estructura cambió: hay una arista más, así que las profundidades pueden haber
+        // cambiado. Se recalculan enteras — es lo que las hace independientes del orden en que se
+        // navegue (ver RecalcularProfundidades).
+        RecalcularProfundidades(AppDe(f));
+
         Version++;
         Save();
     }
@@ -968,6 +975,91 @@ public sealed class SurfaceMap
     /// No hay confirmación aquí: quien llama es quien sabe si preguntó. Y se guarda en el acto, para
     /// que un cierre inesperado no resucite lo borrado.
     /// </remarks>
+    /// <summary>
+    /// LA PROFUNDIDAD DE CADA PANTALLA, calculada entera y no a trocitos.
+    ///
+    /// «A cuántos clics está» y «a qué profundidad vive» son dos preguntas distintas, y estaban
+    /// fundidas: la pantalla heredaba el nivel de la PUERTA que la abría. Pero una puerta cromo
+    /// dice «estoy a un clic desde cualquier sitio», no «lo que hay detrás es de primer nivel».
+    ///
+    /// Lo midió el arquitecto recorriendo Este equipo → C: → Usuarios → felip → .claude → skills
+    /// (2026-08-09): «disco-local-c» quedaba en 0 —POR DEBAJO de su propio padre, porque se alcanza
+    /// por el atajo del panel lateral—, tres saltos consecutivos empataban en 2, y «skills» saltaba
+    /// a 4 sin que existiera un 3. Con esos números el navegador cree que C: es una raíz y que
+    /// .claude y Usuarios son hermanos.
+    ///
+    /// Se CALCULA por camino más corto desde la raíz IGNORANDO las aristas cromo, que son atajos y
+    /// no estructura. Lo que solo se alcanza por cromo se queda en 1: es una sección de primer
+    /// nivel, alcanzable desde cualquier parte — que es exactamente lo que significa.
+    ///
+    /// Y se recalcula ENTERO en vez de parchear al cruzar, porque asignar al vuelo depende del
+    /// orden en que uno navegue: el mismo sitio salía en niveles distintos según el día. Un cálculo
+    /// completo da el mismo resultado siempre, se llegue por donde se llegue.
+    ///
+    /// Lo fijado a mano no se toca: quien declaró un nivel sabe algo que este cálculo no.
+    /// </summary>
+    public void RecalcularProfundidades(string app)
+    {
+        if (app.Length == 0) return;
+        bool DeLaApp(string id) => AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase);
+
+        // Las pantallas cuyo nivel puso una PERSONA se quedan como están: quien lo declaró sabe
+        // algo que este cálculo no.
+        var fijadasAMano = new HashSet<string>(
+            Edges().Where(e => e.Info.NivelFijado && e.Info.PorPersona && e.Info.NivelNav >= 0
+                            && !EsPuerta(e.To) && DeLaApp(e.To))
+                   .Select(e => e.To),
+            StringComparer.OrdinalIgnoreCase);
+
+        // La raíz: la pantalla por la que se entra en la app (nivel 0 al observarla la primera vez).
+        string raiz = _nodes.FirstOrDefault(kv => DeLaApp(kv.Key) && kv.Value.Nivel == 0).Key ?? "";
+        if (raiz.Length == 0) return;   // sin ancla no hay nada que medir, y adivinarla sería peor
+
+        // Solo las aristas ESTRUCTURALES: un atajo no dice a qué profundidad vive su destino.
+        var hijos = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var porCromo = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (f, t, info) in Edges())
+        {
+            if (!DeLaApp(f) || !DeLaApp(t) || EsPuerta(t)) continue;
+            if (info.EsCromo) { porCromo.Add(t); continue; }
+            if (!hijos.TryGetValue(f, out var l)) hijos[f] = l = new List<string>();
+            if (!l.Contains(t, StringComparer.OrdinalIgnoreCase)) l.Add(t);
+        }
+
+        // Anchura primero: la primera vez que se llega a un sitio es por el camino más corto.
+        var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
+        var cola = new Queue<string>();
+        cola.Enqueue(raiz);
+        while (cola.Count > 0)
+        {
+            string aqui = cola.Dequeue();
+            if (!hijos.TryGetValue(aqui, out var l)) continue;
+            foreach (var h in l)
+                if (!prof.ContainsKey(h)) { prof[h] = prof[aqui] + 1; cola.Enqueue(h); }
+        }
+
+        // Lo alcanzable SOLO por cromo es una sección de primer nivel: está a un clic de todas
+        // partes, y eso es precisamente lo que significa vivir en el primer nivel.
+        foreach (var t in porCromo)
+            if (!prof.ContainsKey(t)) prof[t] = 1;
+
+        int movidas = 0;
+        foreach (var (id, n) in _nodes)
+        {
+            if (!DeLaApp(id) || fijadasAMano.Contains(id)) continue;
+            int nuevo = prof.TryGetValue(id, out int p) ? p : -1;
+            if (n.Nivel == nuevo) continue;
+            n.Nivel = nuevo;
+            movidas++;
+        }
+        if (movidas > 0)
+        {
+            Version++;
+            LogBus.Log("mapa", $"profundidades de «{app}» recalculadas: {movidas} pantalla(s) movida(s) "
+                + $"· raíz «{ShortId(raiz)}» · {prof.Count} situada(s)");
+        }
+    }
+
     public (int Nodos, int Aristas) OlvidarTodo()
     {
         int nodos = _nodes.Count, aristas = _edges.Count;

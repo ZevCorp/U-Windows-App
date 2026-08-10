@@ -225,8 +225,8 @@
     "semantic_hash": "275bc8ba78be31a8ac456833edcaa275"
   },
   "windows-client/src/Mcp/SurfaceMapTools.cs": {
-    "mtime": 1786323792.575281,
-    "ast_hash": "9ca4924ed0a40f68ddfc258c16258ac5",
+    "mtime": 1786329141.0037243,
+    "ast_hash": "2934bd32c1f9ad41963208d3cb0e680b",
     "semantic_hash": ""
   },
   "windows-client/src/Mcp/WorkflowMcpRunner.cs": {
@@ -355,8 +355,8 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786323880.1957097,
-    "ast_hash": "eebea89f5bbb6c912c8ea255ee1734d1",
+    "mtime": 1786329371.3283339,
+    "ast_hash": "42559af4c7d43794f52967e02884ef8b",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/GraphHealthText.cs": {
@@ -770,8 +770,8 @@
     "semantic_hash": ""
   },
   "agente-arquitecto/arquitecto.mjs": {
-    "mtime": 1786323743.626903,
-    "ast_hash": "6a5326f050c733c33fa15b11d18b21c5",
+    "mtime": 1786329122.0484598,
+    "ast_hash": "e079f10ce647610e799401d589c9824e",
     "semantic_hash": ""
   },
   "agente-arquitecto/package.json": {
@@ -855,8 +855,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Diagnostics/ConsolaViva.cs": {
-    "mtime": 1786323911.8321488,
-    "ast_hash": "bf14fb12c61684bbbd554d74c6708c91",
+    "mtime": 1786329309.8247428,
+    "ast_hash": "46848db559a1cb52d5241343fee0dd62",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/JerarquiaWeb.cs": {
