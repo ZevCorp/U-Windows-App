@@ -898,6 +898,13 @@ public sealed class GraphExplorerWindow : Window
                 .Where(e => e.To.Equals(nodo, StringComparison.OrdinalIgnoreCase) && e.Info.Selector.Length > 0)
                 .Select(e => e.Info.Selector)
                 .ToHashSet(StringComparer.Ordinal);
+
+            // MEDIR ANTES QUE SUPONER. «No se ilumina» tiene tres causas que se ven iguales desde
+            // fuera —el ratón no llega a la capa, el mapa no sabe la puerta, o la puerta no está en
+            // esta pantalla— y adivinar cuál es cuesta una prueba entera. Esta línea las separa.
+            LogBus.Log("grafo", $"iluminar «{Corto(nodo)}»: {sels.Count} selector(es) candidatos, "
+                + $"{_loLeidoEnPantalla.Count} elemento(s) leídos en pantalla");
+
             if (sels.Count == 0) { _status.Text = $"«{Corto(nodo)}»: el mapa no sabe por qué puerta se llega"; return; }
 
             foreach (var el in _loLeidoEnPantalla)
@@ -2978,6 +2985,23 @@ public sealed class GraphExplorerWindow : Window
         _ = carrusel.MostrarAsync();
     }
 
+    /// <summary>
+    /// ¿La superficie que hay delante es la app que se pidió en el catálogo?
+    ///
+    /// El catálogo da nombres de HUMANO («File Explorer», «Panel de control») y la superficie da
+    /// procesos («explorer.exe»). Comparar los dos textos de frente no casa casi nunca, así que se
+    /// comparan sus formas normalizadas y se acepta que uno contenga al otro — que es como se
+    /// parecen de verdad: «File Explorer» → «fileexplorer», «explorer.exe» → «explorer».
+    /// </summary>
+    private static bool EsLaAppPedida(SystemApi.AppInstalada app, string superficie)
+    {
+        string proc = SurfaceMap.AppDe(superficie).Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+        string a = Uia.Reconocedor.Normalizar(app.Nombre).Replace(" ", "");
+        string b = Uia.Reconocedor.Normalizar(proc).Replace(" ", "");
+        if (a.Length == 0 || b.Length == 0) return false;
+        return a.Contains(b, StringComparison.Ordinal) || b.Contains(a, StringComparison.Ordinal);
+    }
+
     private async Task AprenderAppAsync(SystemApi.AppInstalada app)
     {
         _status.Text = $"abriendo «{app.Nombre}»…";
@@ -2995,17 +3019,27 @@ public sealed class GraphExplorerWindow : Window
             catch (Exception e) { LogBus.Log("carrusel", $"no se pudo lanzar «{app.Nombre}»: {e.Message}"); }
         });
 
-        string ahora = antes;
-        for (int i = 0; i < 40 && (ahora.Length == 0 || ahora == antes); i++)
+        // LA PRUEBA DE QUE ESTÁ LISTA NO ES QUE LA PANTALLA CAMBIE, es que delante esté LA APP QUE
+        // SE PIDIÓ. Aquí se esperaba un cambio de pantalla, y eso falla exactamente en el caso más
+        // común: la app ya estaba abierta y delante, así que abrirla no cambia nada y el mapeo se
+        // negaba con «la pantalla siguió siendo…». Peor todavía, aceptaba lo contrario: si mientras
+        // tanto el foco se iba a OTRA app, la pantalla SÍ cambiaba y se daba por buena — el
+        // arquitecto acabó auditando claude.exe creyendo que auditaba el explorador (2026-08-10,
+        // medido en los logs de tres intentos del usuario).
+        //
+        // La pregunta correcta se responde mirando quién está delante, no si algo se movió.
+        string ahora = "";
+        for (int i = 0; i < 40; i++)
         {
-            await Task.Delay(250);
             ahora = _where()?.Id ?? "";
+            if (ahora.Length > 0 && EsLaAppPedida(app, ahora)) break;
+            await Task.Delay(250);
         }
 
-        if (ahora.Length == 0 || ahora == antes)
+        if (ahora.Length == 0 || !EsLaAppPedida(app, ahora))
         {
-            _status.Text = $"abrí «{app.Nombre}» pero la pantalla no cambió; no mapeo a ciegas";
-            LogBus.Log("carrusel", $"«{app.Nombre}»: la pantalla siguió siendo «{antes}»; no se mapea");
+            _status.Text = $"pedí «{app.Nombre}» y delante hay «{SurfaceMap.AppDe(ahora)}»; no mapeo a ciegas";
+            LogBus.Log("carrusel", $"«{app.Nombre}»: delante quedó «{ahora}»; no se mapea");
             return;
         }
         LogBus.Log("carrusel", $"«{app.Nombre}» abierta: la pantalla pasó a «{ahora}»");
