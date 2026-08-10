@@ -82,7 +82,7 @@ public sealed class GraphExplorerWindow : Window
     private CarruselDeApps? _carrusel;
 
     /// <summary>
-    /// Las cuatro formas de mirar el MISMO grafo. No son estilos: son etapas del sistema, y verlas
+    /// Las cinco formas de mirar el MISMO grafo. No son estilos: son etapas del sistema, y verlas
     /// una al lado de otra es la única manera de saber cuánto falta (2026-08-08, pedido por el
     /// usuario con el modelo bronce/plata/oro).
     /// </summary>
@@ -90,6 +90,10 @@ public sealed class GraphExplorerWindow : Window
     {
         /// <summary>Lo que el MAPA sabe: niveles declarados, y lo que no, en «sin situar».</summary>
         Plata,
+        /// <summary>Lo mismo, pero DERIVADO del bronce en vez de declarado encima: cada fila sale
+        /// de una evidencia contable. Es a donde se quiere llegar; convive con la declarada hasta
+        /// que le gane (2026-08-10). Ver <see cref="Navigation.Plata"/>.</summary>
+        PlataReal,
         /// <summary>Las cinco fuentes de siempre. La referencia contra la que se mide plata.</summary>
         Clasico,
         /// <summary>Lo observado en CRUDO: nodos y aristas por pura topología, sin jerarquía.</summary>
@@ -485,14 +489,15 @@ public sealed class GraphExplorerWindow : Window
         _clasicoBtn.Click += (_, __) =>
         {
             if (seLoLlevo) return;
-            _vista = (VistaGrafo)(((int)_vista + 1) % 4);
+            _vista = (VistaGrafo)(((int)_vista + 1) % 5);
             _clasicoBtn.Content = _vista switch
             {
-                VistaGrafo.Plata => "⚖", VistaGrafo.Clasico => "◈",
+                VistaGrafo.Plata => "⚖", VistaGrafo.PlataReal => "⚗", VistaGrafo.Clasico => "◈",
                 VistaGrafo.Bronce => "⛁", _ => "◌",
             };
             _clasicoBtn.Background = new SolidColorBrush(_vista switch
             {
+                VistaGrafo.PlataReal => Color.FromArgb(0x66, 0x4D, 0xB6, 0xAC),
                 VistaGrafo.Clasico => Color.FromArgb(0x66, 0xBA, 0x68, 0xC8),
                 VistaGrafo.Bronce => Color.FromArgb(0x66, 0xA1, 0x88, 0x7F),
                 VistaGrafo.Oculto => Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF),
@@ -501,6 +506,7 @@ public sealed class GraphExplorerWindow : Window
             _status.Text = _vista switch
             {
                 VistaGrafo.Plata => "PLATA: lo que el mapa sabe; lo que no, en «sin situar»",
+                VistaGrafo.PlataReal => "PLATA REAL: derivada del bronce, cada fila con su evidencia",
                 VistaGrafo.Clasico => "CLÁSICO: las cinco fuentes de siempre (referencia)",
                 VistaGrafo.Bronce => "BRONCE: lo observado en crudo, sin jerarquía ninguna",
                 _ => "grafo OCULTO: el arquitecto trabaja sin ruido visual",
@@ -872,6 +878,14 @@ public sealed class GraphExplorerWindow : Window
     private string _huellaEstructura = "";
     private string _huellaPuente = "";
     private readonly Dictionary<string, string> _porQueDeclarado = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>La última derivación de PLATA REAL, con la versión del mapa y la app de la que
+    /// salió: derivar es O(aristas) varias veces y el pintor repinta muchas veces por segundo, así
+    /// que se recalcula cuando el mapa aprende algo y no cuando se redibuja.</summary>
+    private Navigation.Plata.PlataApp? _plata;
+    private int _plataVersion = -1;
+    private string _plataApp = "";
+    private string _huellaPlata = "";
 
     /// <summary>
     /// Lo último que se leyó de la pantalla, para poder señalar en la app real un nodo del grafo.
@@ -2580,6 +2594,48 @@ public sealed class GraphExplorerWindow : Window
         foreach (var n in todos)
             if (!prof.ContainsKey(n)) { prof[n] = filaSinSituar; sinSituar++; }
 
+        // PLATA REAL: la estructura DERIVADA del bronce, no la declarada encima de él.
+        //
+        // Se dibuja aparte y no sustituye a nada todavía, por la misma razón por la que existe el
+        // modo clásico: sin las dos a la vista sobre el mismo grafo no hay forma de saber si el
+        // cálculo gana o pierde contra lo que un humano escribió a mano. Cuando gane, esta pasa a
+        // ser LA plata y la declarada se queda como override (2026-08-10, pedido por el usuario:
+        // «que tome todo lo crudo en bronce y haga una transformación real»).
+        //
+        // Se deriva una vez por versión del mapa y no por cuadro: el pintor repinta seguido y esto
+        // recorre las aristas varias veces. Es la lección nº8 —el costo por iteración antes que la
+        // cadencia— aplicada de entrada en vez de después de la cacería.
+        if (_vista == VistaGrafo.PlataReal)
+        {
+            var plata = _plata;
+            if (plata == null || _plataVersion != _map.Version
+                || !string.Equals(_plataApp, appActual, StringComparison.OrdinalIgnoreCase))
+            {
+                plata = Navigation.Plata.Derivar(_map, appActual);
+                _plata = plata;
+                _plataVersion = _map.Version;
+                _plataApp = appActual;
+                string huella = Navigation.Plata.Resumen(plata);
+                if (huella != _huellaPlata) { _huellaPlata = huella; Navigation.Plata.Registrar(plata); }
+            }
+
+            prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
+            _profDeclarada.Clear();
+            _porQueDeclarado.Clear();
+            foreach (var (id, pp) in plata.Pantallas)
+            {
+                if (pp.Profundidad < 0) continue;
+                prof[id] = Math.Max(suelo, pp.Profundidad);
+                _profDeclarada[id] = pp.Profundidad;
+                // El PORQUÉ viaja hasta el log de estructura: aquí es donde se ve la diferencia
+                // entre «alguien lo escribió» y «visto en 9 de 11 pantallas».
+                _porQueDeclarado[id] = $"{pp.Porque.Regla}: {pp.Porque.Evidencia}";
+            }
+            sinSituar = 0;
+            foreach (var n in todos)
+                if (!prof.ContainsKey(n)) { prof[n] = filaSinSituar; sinSituar++; }
+        }
+
         // BRONCE: lo observado, sin jerarquía. La fila es la DISTANCIA en saltos desde la raíz y
         // nada más — ni niveles, ni cromo, ni declaraciones. Es lo que el sistema tiene antes de
         // que nadie ordene nada, y verlo aparte es lo que permite decir qué añadió plata.
@@ -2604,6 +2660,13 @@ public sealed class GraphExplorerWindow : Window
         {
             VistaGrafo.Plata => $"PLATA · {appActual} · {_profDeclarada.Count} situada(s)"
                               + (sinSituar > 0 ? $" · {sinSituar} SIN SITUAR" : " · completo"),
+            // La medida de PLATA REAL no es cuántas hay declaradas —esa sube escribiendo— sino
+            // cuánto explica la derivación y en qué discrepa de lo que alguien afirmó.
+            VistaGrafo.PlataReal when _plata is { } pl =>
+                $"PLATA REAL · {appActual} · cobertura {pl.M.Cobertura:P0} · "
+                + $"{pl.M.SinCruzar} sin cruzar · {pl.M.Desacuerdos} desacuerdo(s)"
+                + (pl.M.DeclaradasSinEvidencia > 0
+                    ? $" · {pl.M.DeclaradasSinEvidencia} declarada(s) SIN EVIDENCIA" : ""),
             VistaGrafo.Clasico => $"CLÁSICO (referencia) · {appActual}",
             VistaGrafo.Bronce => $"BRONCE · {appActual} · lo observado en crudo, sin jerarquía",
             _ => "",
@@ -2612,6 +2675,7 @@ public sealed class GraphExplorerWindow : Window
         {
             VistaGrafo.Plata => sinSituar > 0
                 ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07) : Color.FromArgb(0xEE, 0x81, 0xC7, 0x84),
+            VistaGrafo.PlataReal => Color.FromArgb(0xEE, 0x4D, 0xB6, 0xAC),
             VistaGrafo.Clasico => Color.FromArgb(0xEE, 0xBA, 0x68, 0xC8),
             _ => Color.FromArgb(0xEE, 0xC8, 0xA6, 0x7F),
         });
