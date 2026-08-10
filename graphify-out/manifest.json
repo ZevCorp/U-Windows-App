@@ -225,8 +225,8 @@
     "semantic_hash": "275bc8ba78be31a8ac456833edcaa275"
   },
   "windows-client/src/Mcp/SurfaceMapTools.cs": {
-    "mtime": 1786342587.0975173,
-    "ast_hash": "01affe596a2dc364b89cbd1ee653a6a8",
+    "mtime": 1786366402.1512961,
+    "ast_hash": "01b19d9d3938d0cc4178f7582f8a40d0",
     "semantic_hash": ""
   },
   "windows-client/src/Mcp/WorkflowMcpRunner.cs": {
@@ -770,8 +770,8 @@
     "semantic_hash": ""
   },
   "agente-arquitecto/arquitecto.mjs": {
-    "mtime": 1786364505.018456,
-    "ast_hash": "81515ac5da344cc20b9f15dedb76ed66",
+    "mtime": 1786366422.7425132,
+    "ast_hash": "2641c48c256fc0414bfda68059f02e58",
     "semantic_hash": ""
   },
   "agente-arquitecto/package.json": {
