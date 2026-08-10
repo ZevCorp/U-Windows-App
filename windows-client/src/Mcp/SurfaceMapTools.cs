@@ -1123,7 +1123,7 @@ public sealed class SurfaceMapTools
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
-        or "map_hierarchy" or "map_feedback"
+        or "map_hierarchy" or "map_feedback" or "map_unsituated" or "map_learn_back" or "map_shot"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1173,6 +1173,9 @@ public sealed class SurfaceMapTools
                 bool.TryParse(A("cromo"), out bool crm) ? crm : null),
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
+            "map_unsituated" => SinSituar(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
+            "map_learn_back" => AprenderGestoAtras(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("exit")),
+            "map_shot" => Foto(),
             "map_hierarchy" => Jerarquia(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
             "map_feedback" => Feedback(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("finding")),
 
@@ -1649,6 +1652,85 @@ public sealed class SurfaceMapTools
     /// Las superficies conocidas, agrupadas por app y ordenadas por frecuencia — lo más visitado
     /// primero, que es lo que un humano llamaría "los sitios donde trabajo".
     /// </summary>
+    /// <summary>
+    /// LO QUE EL MAPA NO SABE SITUAR: la lista de trabajo del arquitecto.
+    ///
+    /// Es la otra cara de <see cref="Jerarquia"/>. El dibujo fiel al mapa manda a una fila aparte
+    /// todo lo que nadie ha situado, y ese número es la medida honesta de cuánto falta para que la
+    /// estructura esté completa. Aquí se enumera, para poder atacarlo uno a uno en vez de mirar un
+    /// contador (2026-08-08).
+    ///
+    /// Un sitio no situado no es basura por definición: puede ser una pantalla real a la que aún
+    /// nadie le ha puesto nivel, o una puerta que no debió anotarse nunca. Distinguirlo es
+    /// justamente el trabajo, y por eso se dan las dos cosas que permiten decidir: el grupo que
+    /// declaró la página y desde dónde se ve.
+    /// </summary>
+    private string SinSituar(string app)
+    {
+        if (app.Length == 0) return "falta `app`";
+        bool DeLaApp(string id) => SurfaceMap.AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase);
+
+        var pantallas = _map.Nodes.Where(kv => DeLaApp(kv.Key) && kv.Value.Nivel < 0)
+            .OrderByDescending(kv => kv.Value.Visits).ToList();
+        var puertas = _map.Edges()
+            .Where(e => DeLaApp(e.From) && e.Info.NivelNav < 0 && e.Info.Label.Length > 0)
+            .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count()).Take(40).ToList();
+
+        if (pantallas.Count == 0 && puertas.Count == 0)
+            return $"«{app}» está ENTERA situada: no queda nada sin nivel. Eso es la meta.";
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"SIN SITUAR en «{app}» — esto es lo que falta para completar la estructura:\n");
+        sb.AppendLine($"PANTALLAS sin nivel ({pantallas.Count}):");
+        foreach (var (id, n) in pantallas.Take(25))
+            sb.AppendLine($"  {id} · {n.Visits} visita(s)");
+        sb.AppendLine($"\nSALIDAS sin nivel ({puertas.Count}) — con el grupo que declaró la página:");
+        foreach (var g in puertas)
+        {
+            var i = g.First().Info;
+            sb.AppendLine($"  «{g.Key}» ({i.ControlType})"
+                + (i.Nivel.Length > 0 ? $" · grupo: {i.Nivel}" : " · sin grupo")
+                + $" · vista en {g.Count()} pantalla(s)");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Enseñar cuál es el gesto de VOLVER de esta app. No es una puerta: es historial.
+    ///
+    /// Una arista dice «desde aquí se llega allí», y el atrás no cumple eso — te devuelve a donde
+    /// vinieras, que depende del camino y no de la estructura. Sin marcarlo, cada vuelta acuña una
+    /// arista falsa y el grafo acaba lleno de caminos que no existen.
+    /// </summary>
+    private string AprenderGestoAtras(string app, string salida)
+    {
+        if (app.Length == 0 || salida.Length == 0) return "faltan `app` y `exit`";
+        _map.AprenderAtras(app, salida, humano: false);
+        return $"«{salida}» queda marcado como el gesto de volver de «{app}»: dejará de acuñar aristas.";
+    }
+
+    /// <summary>
+    /// UNA FOTO DE LA VENTANA DE DELANTE, en base64. Para que quien decide la estructura pueda
+    /// MIRAR y no solo leer nombres: un panel lateral y una lista de contenido se distinguen de un
+    /// vistazo y son indistinguibles en una lista de etiquetas.
+    ///
+    /// Se fotografía la ventana del USUARIO, no la nuestra: quien pregunta corre en otro proceso y
+    /// nuestra propia capa se pondría en medio (ver AppAligner.VentanaDelUsuario).
+    /// </summary>
+    private string Foto()
+    {
+        try
+        {
+            var ventana = AppAligner.VentanaDelUsuario();
+            string? b64 = Capture.Screenshotter.CaptureVentanaBase64Png(ventana);
+            if (string.IsNullOrEmpty(b64)) return "no pude capturar la ventana";
+            LogBus.Log("mapa-mcp", $"foto de la ventana del usuario: {b64.Length} car. base64");
+            return "data:image/png;base64," + b64;
+        }
+        catch (Exception e) { return $"no pude capturar: {e.Message}"; }
+    }
+
     /// <summary>
     /// LA JERARQUÍA COMO EL GRAFO LA TIENE, para poder contrastarla con la real.
     ///

@@ -355,8 +355,8 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786293804.463774,
-    "ast_hash": "a1b5d93eabad27c91cf524f7b1d73c27",
+    "mtime": 1786318507.509359,
+    "ast_hash": "82b168cb6155d8124a4bfdb0c38eab75",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/GraphHealthText.cs": {
@@ -862,6 +862,11 @@
   "windows-client/src/Navigation/JerarquiaWeb.cs": {
     "mtime": 1786234546.4423919,
     "ast_hash": "5c878bd20b3a17596b3fe75447374226",
+    "semantic_hash": ""
+  },
+  "windows-client/src/Ui/ProfundidadClasica.cs": {
+    "mtime": 1786318507.366786,
+    "ast_hash": "9f8ba8f0a631f52a36ee5289441918e8",
     "semantic_hash": ""
   }
 }

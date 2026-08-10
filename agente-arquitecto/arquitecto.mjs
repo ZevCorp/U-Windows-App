@@ -45,6 +45,23 @@ const t = (name, description, schema, fn) =>
     content: [{ type: "text", text: await fn(args) }],
   }));
 
+// MIRAR NO ES LEER. Una herramienta que devuelve una FOTO, no su descripción: un panel lateral y
+// una lista de contenido se distinguen de un vistazo y son indistinguibles en una lista de
+// etiquetas. La sonda entrega un data-URI; aquí se convierte en un bloque de imagen de verdad para
+// que el modelo lo VEA (2026-08-08, pedido por el usuario: «que pueda tomar screenshots y verlos»).
+const tFoto = (name, description) =>
+  tool(name, description, {}, async () => {
+    const r = await sonda("map_shot");
+    const m = /^data:image\/png;base64,(.+)$/s.exec(r.trim());
+    if (!m) return { content: [{ type: "text", text: r }] };
+    return {
+      content: [
+        { type: "image", source: { type: "base64", media_type: "image/png", data: m[1] } },
+        { type: "text", text: "Foto de la ventana que hay delante ahora mismo." },
+      ],
+    };
+  });
+
 const herramientas = createSdkMcpServer({
   name: "grafo",
   version: "1.0.0",
@@ -78,6 +95,19 @@ const herramientas = createSdkMcpServer({
       },
       (a) => sonda("map_set_level", { app: APP, exit: a.salida, level: String(a.nivel), ...(a.cromo === undefined ? {} : { cromo: String(a.cromo) }) })),
 
+    t("sin_situar", "TU LISTA DE TRABAJO: las pantallas y salidas que el mapa NO sabe situar todavía, con el grupo que declaró la página. Mientras esta lista no esté vacía, la estructura está incompleta.",
+      {}, () => sonda("map_unsituated", { app: APP })),
+
+    tFoto("mirar", "Una FOTO de la ventana que hay delante. Úsala cuando los nombres no basten para decidir qué es navegación y qué es contenido: un panel lateral se reconoce de un vistazo."),
+
+    t("marcar_atras", "Declarar cuál es el gesto de VOLVER de esta app (el botón «Atrás»). No es una puerta: es historial, y sin marcarlo cada vuelta acuña una arista falsa que ensucia la estructura.",
+      { salida: z.string().describe("nombre del botón de volver, tal como se ve") },
+      (a) => sonda("map_learn_back", { app: APP, exit: a.salida })),
+
+    t("excluir", "Quitar del mapa una salida que NO es una puerta de navegación (adornos, texto, elementos de contenido que ensucian). Limpia el terreno para que la estructura se lea.",
+      { salida: z.string().describe("nombre de la salida a excluir") },
+      (a) => sonda("map_exclude", { exit: a.salida })),
+
     t("feedback", "Dejar escrito un HALLAZGO para el equipo: un desajuste entre la jerarquía real de la app y la del grafo, un nivel que no cuadra, una puerta que el grafo no vio. Es tu entregable.",
       { hallazgo: z.string().describe("el hallazgo, concreto: qué esperabas, qué hay, y por qué importa") },
       (a) => sonda("map_feedback", { app: APP, finding: a.hallazgo })),
@@ -90,14 +120,35 @@ y un grafo que el sistema construye solo mientras navega. Tu misión NO es mapea
 JUZGAR si la jerarquía que el grafo está construyendo se corresponde con la arquitectura real de
 la app, corregir el grafo donde te den autoridad tus herramientas, y dejar constancia del resto.
 
-LO QUE MÁS IMPORTA: BAJAR EN PROFUNDIDAD. El recorredor mecánico al que sustituyes se quedaba en
-el primer nivel —trece pantallas, todas hermanas, ninguna dentro de otra— y por eso existes tú. Un
-mapa de un solo nivel no es una jerarquía: es una lista. Tu trabajo se mide por los NIVELES 2, 3 y
-4 que descubras, no por cuántas puertas de la primera pantalla toques. Si al terminar todo lo que
-mapeaste cuelga del inicio, has fallado aunque no te hayas equivocado en nada.
+TU TRABAJO ES LLEVAR ESTA APP DE BRONCE A PLATA, y esas dos palabras tienen un significado exacto
+aquí:
+  · BRONCE es lo que hay ahora: todo lo visible anotado en crudo, sin jerarquía. El mapa lo tiene
+    todo y no sabe qué es qué.
+  · PLATA es lo mismo ORDENADO: cada salida en su nivel, el mobiliario marcado como cromo, el
+    gesto de volver identificado, y lo que no es navegación fuera de en medio.
+
+CÓMO SE MIDE QUE HAS TERMINADO, y no es una opinión: la herramienta `sin_situar` enumera lo que el
+mapa todavía no sabe colocar. Empiezas mirándola y terminas cuando esté vacía o cuando lo que
+quede esté explicado en el feedback. Ese es tu criterio de terminado.
+
+QUÉ ES CADA NIVEL:
+  · NIVEL 1 + CROMO = el mobiliario que TE SIGUE. Si te vas a cualquier otra pantalla de la app y
+    ESO seguiría ahí, es nivel 1 cromo. El panel lateral entero, la barra superior, el menú
+    principal. Marca el cromo, porque significa algo concreto: se llega desde cualquier sitio de un
+    solo clic, así que el navegador no necesita aristas para moverse entre ellos.
+  · NIVEL 2 = la navegación de UNA sección: existe dentro de ella y desaparece al salir.
+  · NIVEL 3+ = lo que solo aparece tras abrir algo de nivel 2.
+  · CONTENIDO = archivos, filas, resultados. NO es estructura: no le pongas nivel; si ensucia,
+    exclúyelo.
+
+BAJAR EN PROFUNDIDAD SIGUE IMPORTANDO. Un mapa de un solo nivel no es una jerarquía: es una lista.
+Si al terminar todo cuelga del inicio, has fallado aunque no te hayas equivocado en nada.
 
 Método de trabajo:
-1. Empieza SIEMPRE por jerarquia_del_grafo y que_veo: qué cree el grafo, qué hay de verdad.
+0. Empieza por `sin_situar` (tu lista) y `mirar` (una foto). Los nombres solos engañan: un panel
+   lateral y una lista de archivos son indistinguibles en texto y obvios en una imagen. Y marca
+   pronto el gesto de volver con `marcar_atras` — cada vuelta sin marcar ensucia el grafo.
+1. Sigue por jerarquia_del_grafo y que_veo: qué cree el grafo, qué hay de verdad.
 2. BAJA. Elige una sección con contenido, entra, y desde DENTRO vuelve a mirar (que_veo y
    rutas_desde): ahí aparecen las puertas del nivel 2. Entra en una de ellas y repite. Agota una
    rama hasta que ya no haya dónde bajar ANTES de volver a la hermana — así se aprende una
@@ -138,6 +189,8 @@ const corrida = query({
       "mcp__grafo__donde_estoy", "mcp__grafo__que_veo", "mcp__grafo__cruzar",
       "mcp__grafo__ir_a", "mcp__grafo__jerarquia_del_grafo", "mcp__grafo__rutas_desde",
       "mcp__grafo__fijar_nivel", "mcp__grafo__feedback",
+      "mcp__grafo__sin_situar", "mcp__grafo__mirar",
+      "mcp__grafo__marcar_atras", "mcp__grafo__excluir",
     ],
     disallowedTools: ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"],
     permissionMode: "bypassPermissions",
