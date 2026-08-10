@@ -670,8 +670,8 @@
     "semantic_hash": "8afe35f891b6eaaf448dcb6a0955699b"
   },
   "docs/graphify.md": {
-    "mtime": 1786207423.506456,
-    "ast_hash": "ac46916459e7ec63be34e455afa11049",
+    "mtime": 1786343209.7206483,
+    "ast_hash": "8413543c4e917cf9a1e5158c8f6ef712",
     "semantic_hash": ""
   },
   "docs/plan-producto.md": {
@@ -872,6 +872,11 @@
   "windows-client/src/Ui/Pantallas.cs": {
     "mtime": 1786335967.38876,
     "ast_hash": "1218d0db46fb870cdf7579f77bbf7bc6",
+    "semantic_hash": ""
+  },
+  "scripts/noche-arquitecto.ps1": {
+    "mtime": 1786343334.4321232,
+    "ast_hash": "ffe2d3b906ee257f3c75a941c750e519",
     "semantic_hash": ""
   }
 }

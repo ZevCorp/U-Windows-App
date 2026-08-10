@@ -29,13 +29,46 @@ if (!APP) {
 // poder escribir su informe, que es lo único que nos llevamos. Auditar de verdad —bajar una rama,
 // volver, clasificar cuarenta salidas y contrastar— sale caro en turnos, y quedarse corto no
 // significa medio informe: significa ninguno (2026-08-10, medido).
-const TURNOS = parseInt(process.argv[3] ?? "160", 10);
+// El tercer argumento puede ser un número o una bandera («--chat»), así que se toma solo si es
+// un número: con «--chat» salía «presupuesto NaN turnos» y el límite quedaba sin definir.
+const TURNOS = /^\d+$/.test(process.argv[3] ?? "") ? parseInt(process.argv[3], 10) : 160;
 
 // CONTINUAR LA CONVERSACIÓN ANTERIOR en vez de empezar de cero. Cuando se acaban los turnos, todo
 // lo que el agente ya entendió de la app —qué es cromo, qué ya clasificó, por dónde iba— sigue en
 // esa conversación; volver a empezar sería pagarlo otra vez y además llegar a conclusiones
 // distintas. Con «continuar» retoma donde estaba y cierra con su informe.
 const CONTINUAR = process.argv.includes("--continuar");
+
+// HABLAR CON ÉL CUANDO TERMINA. Un informe contesta lo que el agente decidió contar; una
+// conversación contesta lo que TÚ necesitas saber — «¿por qué pusiste Galería en nivel 1?»,
+// «¿qué te faltó para cerrar?». Y él sigue teniendo delante la app y sus herramientas, así que
+// puede ir a MIRAR en vez de recordar (2026-08-10, pedido por el usuario).
+//
+//   node arquitecto.mjs explorer.exe --chat            → audita y al terminar abre el turno de preguntas
+//   node arquitecto.mjs explorer.exe --chat --solo-chat → solo preguntas, sobre la última corrida
+const CHAT = process.argv.includes("--chat");
+const SOLO_CHAT = process.argv.includes("--solo-chat");
+
+// SU sesión, no «la última». `continueConversation` retoma la conversación más reciente del
+// DIRECTORIO, y este directorio es el repo — donde el usuario también corre Claude Code. Al
+// probar el turno de preguntas, el arquitecto retomó la sesión del usuario y contestó que no
+// tenía ninguna herramienta del grafo, solo conectores de Gmail y Canva (2026-08-10, medido).
+// Retomar la conversación de otro no es continuar: es suplantar. Se guarda el id de la suya y se
+// resume por id, que es la única forma de saber que se habla con quien se cree.
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+// Barras NORMALES, no invertidas: en un literal de JS «\U» y «\s» son escapes y se comen la
+// barra, así que la ruta acababa siendo «C:U-versionessesiones…» y el archivo se escribía en un
+// sitio inexistente sin quejarse (2026-08-10, medido). Node acepta «/» en Windows.
+const MEMORIA = `C:/U-versiones/sesiones/arquitecto-${APP.replace(/[^a-z0-9.]/gi, "_")}.txt`;
+function sesionGuardada() {
+  try { return readFileSync(MEMORIA, "utf8").trim() || null; } catch { return null; }
+}
+function guardaSesion(id) {
+  if (!id) return;
+  try { mkdirSync(dirname(MEMORIA), { recursive: true }); writeFileSync(MEMORIA, id, "utf8"); } catch {}
+}
+const SESION = (CONTINUAR || SOLO_CHAT || CHAT) ? sesionGuardada() : null;
 
 // ── La sonda: el único brazo del agente ─────────────────────────────────────
 async function sonda(toolName, args = {}) {
@@ -193,6 +226,17 @@ Límites duros: no puedes editar código ni archivos —no tienes herramientas p
 organizar el grafo y reportar. Si la app se cierra o algo se cruza, dilo en feedback y termina.
 Trabaja en español.`;
 
+// LAS MISMAS HERRAMIENTAS EN LOS DOS MODOS. Si el turno de preguntas le diera menos, contestaría
+// de memoria donde podría ir a mirar — y una respuesta recordada vale menos que una comprobada.
+const PERMITIDAS = [
+  "mcp__grafo__donde_estoy", "mcp__grafo__que_veo", "mcp__grafo__cruzar",
+  "mcp__grafo__ir_a", "mcp__grafo__jerarquia_del_grafo", "mcp__grafo__rutas_desde",
+  "mcp__grafo__fijar_nivel", "mcp__grafo__feedback",
+  "mcp__grafo__sin_situar", "mcp__grafo__mirar",
+  "mcp__grafo__marcar_atras", "mcp__grafo__marcar_accion",
+];
+const PROHIBIDAS = ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"];
+
 // ── A correr ─────────────────────────────────────────────────────────────────
 console.log(`ARQUITECTO sobre «${APP}» · presupuesto ${TURNOS} turnos`
   + `${CONTINUAR ? " · CONTINÚA la corrida anterior" : ""}\n`);
@@ -210,25 +254,22 @@ const corrida = query({
   options: {
     systemPrompt: MISION,
     mcpServers: { grafo: herramientas },
-    allowedTools: [
-      "mcp__grafo__donde_estoy", "mcp__grafo__que_veo", "mcp__grafo__cruzar",
-      "mcp__grafo__ir_a", "mcp__grafo__jerarquia_del_grafo", "mcp__grafo__rutas_desde",
-      "mcp__grafo__fijar_nivel", "mcp__grafo__feedback",
-      "mcp__grafo__sin_situar", "mcp__grafo__mirar",
-      "mcp__grafo__marcar_atras", "mcp__grafo__marcar_accion",
-    ],
-    disallowedTools: ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"],
+    allowedTools: PERMITIDAS,
+    disallowedTools: PROHIBIDAS,
     permissionMode: "bypassPermissions",
     maxTurns: TURNOS,
-    ...(CONTINUAR ? { continueConversation: true } : {}),
+    ...(CONTINUAR && SESION ? { resume: SESION } : {}),
   },
 });
 
 // AGOTAR LOS TURNOS NO ES UN FALLO, es el presupuesto haciendo su trabajo — pero el SDK lo lanza
 // como excepción, y sin capturarla Node imprime su propio código minificado entero encima del
 // informe que acabas de leer (2026-08-08, visto en la consola). Se recoge y se dice en una línea.
-try {
+if (!SOLO_CHAT) try {
   for await (const m of corrida) {
+    // EL ID SE GUARDA EN CUANTO APARECE, no al final: si la corrida se queda sin turnos o revienta,
+    // el final puede no llegar — y entonces se pierde justo lo que permite retomarla.
+    if (m.session_id) guardaSesion(m.session_id);
     if (m.type === "assistant") {
       for (const b of m.message.content ?? []) {
         if (b.type === "text" && b.text.trim()) console.log(`\n[arquitecto] ${b.text.trim()}`);
@@ -238,6 +279,7 @@ try {
       console.log(`\n${"=".repeat(60)}`);
       console.log(m.subtype === "success" ? "CORRIDA COMPLETA" : `TERMINÓ POR: ${m.subtype}`);
       console.log(`turnos: ${m.num_turns} · duración: ${Math.round(m.duration_ms / 1000)} s`);
+      guardaSesion(m.session_id);   // para poder retomar ESTA conversación, y no la de otro
     }
   }
 } catch (e) {
@@ -248,3 +290,56 @@ try {
     : `LA CORRIDA SE CORTÓ: ${msg.split("\n")[0]}`);
   process.exitCode = 0;   // no es un fallo del sistema: es un presupuesto agotado
 }
+
+// ── EL TURNO DE PREGUNTAS ────────────────────────────────────────────────────
+// Un informe contesta lo que el agente decidió contar. Una conversación contesta lo que TÚ
+// necesitas saber, que casi nunca coincide: «¿por qué Galería en nivel 1?», «¿qué te faltó?»,
+// «¿estás seguro de que Compartido no tiene pantalla propia?».
+//
+// Y no responde de memoria: mantiene TODAS sus herramientas, así que puede ir a mirar la app otra
+// vez para contestarte. Es la diferencia entre preguntarle a un informe y preguntarle a alguien
+// que sigue delante del sitio.
+async function turnoDePreguntas() {
+  const readline = await import("node:readline/promises");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+  console.log(`\n${"=".repeat(60)}`);
+  console.log("PREGÚNTALE AL ARQUITECTO. Sigue con la app delante y sus herramientas puestas,");
+  console.log("así que puede ir a comprobar en vez de recordar. Enter vacío o «salir» para cerrar.\n");
+
+  for (;;) {
+    let q = "";
+    try { q = (await rl.question("tú > ")).trim(); } catch { break; }
+    if (q.length === 0 || /^(salir|exit|quit|q)$/i.test(q)) break;
+
+    try {
+      // 30 turnos por pregunta: suficiente para que vaya a mirar y vuelva, corto para que no se
+      // enrede en otra auditoría entera cuando solo se le pidió una aclaración.
+      const respuesta = query({
+        prompt: q,
+        options: {
+          systemPrompt: MISION,
+          mcpServers: { grafo: herramientas },
+          allowedTools: PERMITIDAS,
+          disallowedTools: PROHIBIDAS,
+          permissionMode: "bypassPermissions",
+          maxTurns: 30,
+          ...(sesionGuardada() ? { resume: sesionGuardada() } : {}),
+        },
+      });
+      for await (const m of respuesta) {
+        if (m.type !== "assistant") continue;
+        for (const b of m.message.content ?? []) {
+          if (b.type === "text" && b.text.trim()) console.log(`\n[arquitecto] ${b.text.trim()}\n`);
+          if (b.type === "tool_use") console.log(`  → ${b.name.replace("mcp__grafo__", "")}(${JSON.stringify(b.input)})`);
+        }
+      }
+    } catch (e) {
+      console.log(`\n[no pude contestar: ${String(e?.message ?? e).split("\n")[0]}]\n`);
+    }
+  }
+  rl.close();
+  console.log("\nHasta luego.");
+}
+
+if (CHAT) await turnoDePreguntas();
