@@ -1,16 +1,16 @@
 # Graph Report - windows-app  (2026-08-10)
 
 ## Corpus Check
-- 172 files · ~316,300 words
+- 172 files · ~317,042 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3492 nodes · 7354 edges · 246 communities (170 shown, 76 thin omitted)
+- 3498 nodes · 7361 edges · 240 communities (165 shown, 75 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 286 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9b357326`
+- Built from commit: `dcef710e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -23,25 +23,27 @@
 - .Call
 - WorkflowLibraryWindow
 - SurfaceMap
-- DllImport
+- .ObserveExits
+- .AsegurarFoco
 - FaceControl
 - AppAligner
 - Window
 - UiaReader
 - INVESTIGACION-SAPGUI-UIA.md
 - .Describe
+- .UpdateChip
 - .RunAsync
 - InspectorOverlay
 - GraphClient
 - SapGuiSurface
 - NavTarget
-- AtajoPorGolpes
+- WorkflowTeachSession
 - UiaSurface
 - WorkflowMapWindow
 - FaceWindow
 - IntPtr
 - openai.ts
-- WorkflowTeachSession
+- WorkflowRecorder
 - AgentLoop
 - handleTeach.ts
 - InputExecutor
@@ -54,7 +56,7 @@
 - backend/package.json
 - mcp.ts
 - TypeScript Compiler Config
-- .Read
+- .Marcados
 - AutomationElement
 - GraphObservation
 - SurfaceMapTools
@@ -63,7 +65,7 @@
 - LanzarConScroll
 - UI Inspector Hooks
 - windows-client — el inspector visual
-- .Edges
+- DllImport
 - .CrecerPastilla
 - gemini.ts
 - OnboardingWindow
@@ -82,33 +84,33 @@
 - Ü · Cliente Windows (el frontend tonto)
 - BackendClient
 - Canvas
-- .ParseKeySpec
-- In-Memory Learning Store
+- .Execute
+- workflows.ts
 - GuiSession
-- .ToggleCollapsed
+- .ClinicalTickAsync
 - Explorador
 - SAP/UIA Hit Diagnostics
-- Config
+- App
 - StepDebuggerWindow
 - Gestures
-- Health & Video Config
+- U.WindowsClient.Navigation
 - GuiTree — árboles de SAP
 - WindowsClient.csproj
 - Caja
 - LogWindow
 - Locator Badge Overlay
-- .Execute
+- .Analyze
 - .DibujarVersiones
 - .AppsConJerarquia
 - UIA Threading Architecture
 - SurfaceDetector
 - .EnsenarAsync
 - Window
-- .ArrancarAsync
+- Telemetry.cs
 - Senalador
 - Reglas de arquitectura del mapeo
 - SurfaceMapTools
-- .LearnTraversal
+- .Edges
 - SapVisualElement
 - TeachSession.cs
 - .Str
@@ -117,7 +119,7 @@
 - Vercel Function Config
 - Plan hasta el producto: controlar cualquier app por el grafo
 - .Session
-- IDisposable
+- .RunLearnedTaps
 - .AppsConJerarquia
 - Local Dev Server
 - GraphExplorerWindow
@@ -127,7 +129,7 @@
 - LogBus
 - .Aplicar
 - Clinical Values API Bridge
-- U.WindowsClient.SystemApi
+- CarruselDeApps
 - .RetryAllAsync
 - Reglas universales de UIA (cualquier app)
 - PanelDeAcciones
@@ -148,7 +150,7 @@
 - Ü Windows — guía para trabajar en este repo
 - Reglas del explorador de archivos de Windows 11 (`explorer.exe`)
 - SAP GUI Scripting (superficie de automatización)
-- AppsInstaladas
+- .Of
 - 1.7 GRABACIÓN — el modelo de eventos (lo crítico)
 - Screenshotter
 - Propio
@@ -157,9 +159,9 @@
 - Captura de texto tecleado
 - Reconocedor
 - Ü — Windows App
-- InstalledApps
-- .Same
-- GlobalHotkeys
+- U.WindowsClient.SystemApi
+- .ClickPos
+- AtajoPorGolpes
 - .Contar
 - EdgeInfo
 - 3. Mapeo conceptual DOM ↔ SAP GUI Scripting ↔ UIA
@@ -171,15 +173,13 @@
 - version-nucleo.ps1
 - ContratoDelGrafo.csproj
 - IUiSurface
-- .TryResolveSourceInterface
 - byte
 - ConsolaViva
 - Condition
 - ControlType
 - WorkflowSummary
 - DetectedField
-- .Unblock
-- .EjecutarNucleoAsync
+- .GoTo
 - Ventana
 - Nivel
 - OlvidarJerarquias
@@ -191,7 +191,7 @@
 - Dictionary
 - SurfaceMap
 - Key
-- .Analyze
+- RunTimings
 - src/Update/Updater.cs
 - object
 - PlanStep
@@ -203,7 +203,7 @@
 - HashSet
 - HighlightOverlay
 - IEnumerable
-- U.Graph.Surfaces
+- U.Graph
 - CancellationToken
 - EnumProc
 - From
@@ -218,7 +218,7 @@
 - int
 - DispatcherTimer
 - EventArgs
-- .SetDirectIndex
+- .ReloadDirectWorkflowsAsync
 - IReadOnlyDictionary
 - Rectangle
 - StackPanel
@@ -228,16 +228,13 @@
 - Árboles (`GuiTree`)
 - string
 - SurfaceMap
-- UserPaths.cs
 - Task
 - .OnInputKey
 - .DibujarConProfundidad
-- .OlvidarTodo
 - uint
 - EnumProc
 - SurfaceMap
 - SurfaceMap
-- InputUnion
 - bool
 - Opciones
 - Point
@@ -287,7 +284,7 @@
 - **Matriz comparativa SAP GUI Scripting vs UIA** — windows_graph_investigacion_sapgui_uia_sap_gui_scripting, windows_graph_investigacion_sapgui_uia_uia, windows_graph_investigacion_sapgui_uia_identificacion_de_elementos, windows_graph_investigacion_sapgui_uia_granularidad_de_grabacion, windows_graph_investigacion_sapgui_uia_captura_de_texto, windows_graph_investigacion_sapgui_uia_entries_combo, windows_graph_investigacion_sapgui_uia_user_scripting_disable_recording, windows_graph_investigacion_sapgui_uia_fiabilidad_de_eventos [EXTRACTED 0.95]
 - **Wrappers .NET para UIA y SAP GUI Scripting** — windows_graph_investigacion_sapgui_uia_flaui, windows_graph_investigacion_sapgui_uia_uiacomwrapper, windows_graph_investigacion_sapgui_uia_sapgui_wrapper, windows_graph_investigacion_sapgui_uia_sap_gui_scripting_net [INFERRED 0.75]
 
-## Communities (246 total, 76 thin omitted)
+## Communities (240 total, 75 thin omitted)
 
 ### Community 0 - "GraphCrawler"
 Cohesion: 0.05
@@ -321,8 +318,12 @@ Nodes (31): ConfidenceLabel, Label, Value, TextChangedEventArgs, AutofillStatus,
 Cohesion: 0.08
 Nodes (28): NodeInfo, Alternatives, Aristas, Click, ClickWatcher, ControlType, DateTime, Dictionary (+20 more)
 
-### Community 9 - "DllImport"
-Cohesion: 0.27
+### Community 8 - ".ObserveExits"
+Cohesion: 0.13
+Nodes (8): Alternatives, Aristas, ControlType, Grupo, IEnumerable, Label, Nodos, Selector
+
+### Community 9 - ".AsegurarFoco"
+Cohesion: 0.19
 Nodes (4): DllImport, IntPtr, RECT, StringBuilder
 
 ### Community 10 - "FaceControl"
@@ -335,11 +336,11 @@ Nodes (14): CancellationToken, DllImport, EnumWindowsProc, Func, int, IntPtr, St
 
 ### Community 12 - "Window"
 Cohesion: 0.04
-Nodes (78): ActivatorChevron, ActivatorRot, AprendizajeBtn, AutonomoBtn, BackendChevron, BackendDot, BackendHeader, BackendRot (+70 more)
+Nodes (79): ActivatorChevron, ActivatorRot, AprendizajeBtn, AutonomoBtn, BackendChevron, BackendDot, BackendHeader, BackendRot (+71 more)
 
 ### Community 13 - "UiaReader"
-Cohesion: 0.12
-Nodes (16): UiElement, AutomationElement, AutomationElementInformation, ControlType, DllImport, EnumWindowsProc, HashSet, int (+8 more)
+Cohesion: 0.16
+Nodes (14): UiElement, AutomationElement, AutomationElementInformation, ControlType, DllImport, EnumWindowsProc, HashSet, int (+6 more)
 
 ### Community 14 - "INVESTIGACION-SAPGUI-UIA.md"
 Cohesion: 0.12
@@ -349,9 +350,13 @@ Nodes (18): 4. Correcciones a las premisas del encargo, 5. Arquitectura que se d
 Cohesion: 0.13
 Nodes (9): AutomationElementInformation, AutomationPropertyChangedEventArgs, ControlType, DetectedField, FieldOption, Selectors, IReadOnlyList, Label (+1 more)
 
+### Community 16 - ".UpdateChip"
+Cohesion: 0.14
+Nodes (5): TranslateTransform, FaceMood, FaceTheme, MouseButtonEventArgs, UIElement
+
 ### Community 17 - ".RunAsync"
-Cohesion: 0.13
-Nodes (15): RelX, RelY, SurfaceAligner, string, PlanStep, SurfaceIdentity, CancellationToken, Dictionary (+7 more)
+Cohesion: 0.15
+Nodes (13): SurfaceAligner, string, PlanStep, SurfaceIdentity, CancellationToken, Dictionary, Func, IReadOnlyList (+5 more)
 
 ### Community 18 - "InspectorOverlay"
 Cohesion: 0.12
@@ -362,60 +367,60 @@ Cohesion: 0.17
 Nodes (12): HttpRequestMessage, CancellationToken, Dictionary, Func, HttpClient, HttpResponseMessage, HttpStatusCode, JsonElement (+4 more)
 
 ### Community 20 - "SapGuiSurface"
-Cohesion: 0.11
+Cohesion: 0.10
 Nodes (18): LowLevelMouseProc, ManualResetEventSlim, Thread, SapContextReader, bool, DateTime, Dispatcher, DispatcherTimer (+10 more)
 
 ### Community 21 - "NavTarget"
 Cohesion: 0.10
 Nodes (20): byte, CancellationToken, DllImport, int, IntPtr, Task, TimeSpan, uint (+12 more)
 
-### Community 22 - "AtajoPorGolpes"
+### Community 22 - "WorkflowTeachSession"
 Cohesion: 0.18
-Nodes (10): bool, DateTime, DllImport, Gancho, int, IntPtr, TimeSpan, uint (+2 more)
+Nodes (9): EventHandler, CancellationToken, DllImport, int, IntPtr, string, Task, WorkflowTeachSession (+1 more)
 
 ### Community 23 - "UiaSurface"
-Cohesion: 0.10
+Cohesion: 0.09
 Nodes (18): Action, AutomationPropertyChangedEventHandler, byte, HookProc, IUiSurface, Point, Timer, bool (+10 more)
 
 ### Community 24 - "WorkflowMapWindow"
-Cohesion: 0.10
-Nodes (18): Node, Border, CancellationToken, Dictionary, DllImport, EventArgs, HashSet, int (+10 more)
+Cohesion: 0.09
+Nodes (19): Node, Border, CancellationToken, Dictionary, DllImport, EventArgs, HashSet, int (+11 more)
 
 ### Community 25 - "FaceWindow"
-Cohesion: 0.07
-Nodes (18): Config, HorizontalAlignment, SoundPlayer, bool, CancellationToken, CancellationTokenSource, Color, DateTime (+10 more)
+Cohesion: 0.08
+Nodes (17): Config, HorizontalAlignment, SoundPlayer, bool, CancellationToken, CancellationTokenSource, Color, DateTime (+9 more)
 
 ### Community 26 - "IntPtr"
 Cohesion: 0.15
 Nodes (4): DllImport, IntPtr, RECT, StringBuilder
 
 ### Community 27 - "openai.ts"
-Cohesion: 0.22
-Nodes (16): asArr(), asObj(), asStr(), customFn(), dataUri(), extractMessage(), functionOutput(), mapKey() (+8 more)
+Cohesion: 0.24
+Nodes (15): asArr(), asObj(), asStr(), customFn(), dataUri(), extractMessage(), functionOutput(), mapKey() (+7 more)
 
-### Community 28 - "WorkflowTeachSession"
-Cohesion: 0.09
-Nodes (22): Channel, EventHandler, CancellationToken, DllImport, int, IntPtr, string, Task (+14 more)
+### Community 28 - "WorkflowRecorder"
+Cohesion: 0.14
+Nodes (12): Channel, FinishResponse, ObservedStep, SurfaceAvailability, CancellationToken, CancellationTokenSource, Dictionary, int (+4 more)
 
 ### Community 29 - "AgentLoop"
 Cohesion: 0.16
 Nodes (13): CancellationToken, Func, HashSet, int, Task, AgentLoop, IUserChannel, IVoice (+5 more)
 
 ### Community 30 - "handleTeach.ts"
-Cohesion: 0.14
-Nodes (21): handler(), handler(), handler(), deps(), checkAuth(), FileStateBody, guard(), handleFileState() (+13 more)
+Cohesion: 0.12
+Nodes (24): handler(), handler(), handler(), videoArchiveEnabled(), checkAuth(), FileStateBody, guard(), handleFileState() (+16 more)
 
 ### Community 31 - "InputExecutor"
-Cohesion: 0.16
-Nodes (11): INPUT, InputUnion, ushort, DllImport, int, IntPtr, uint, INPUT (+3 more)
+Cohesion: 0.14
+Nodes (14): INPUT, InputUnion, KEYBDINPUT, MOUSEINPUT, ushort, DllImport, int, IntPtr (+6 more)
 
 ### Community 32 - "U.WindowsClient.Diagnostics"
-Cohesion: 0.10
-Nodes (11): U.WindowsClient.Capture, U.WindowsClient.Uia, U.WindowsClient.Telemetry, U.WindowsClient.Navigation, U.WindowsClient.Diagnostics, U.WindowsClient.Actions, U.WindowsClient.Voice, U.WindowsClient.Mcp (+3 more)
+Cohesion: 0.12
+Nodes (8): U.WindowsClient.Capture, U.WindowsClient.Uia, U.Graph.Surfaces, U.WindowsClient.Diagnostics, U.WindowsClient.Voice, U.WindowsClient.Mcp, U.WindowsClient.Update, U.WindowsClient.Agent
 
 ### Community 33 - "Contracts.cs"
-Cohesion: 0.15
-Nodes (23): AutofillRow, Dictionary, JsonElement, List, AutofillRequest, AutofillResponse, AutofillResult, ContextNote (+15 more)
+Cohesion: 0.14
+Nodes (23): IReadOnlyList, Dictionary, JsonElement, List, AutofillRequest, AutofillResponse, AutofillResult, ContextNote (+15 more)
 
 ### Community 34 - "SurfaceMap"
 Cohesion: 0.13
@@ -434,20 +439,20 @@ Cohesion: 0.09
 Nodes (21): dependencies, description, devDependencies, tsx, typescript, @vercel/node, engines, node (+13 more)
 
 ### Community 39 - "mcp.ts"
-Cohesion: 0.15
-Nodes (17): assembleTools(), goalPrompt(), learnedRule(), memoryBlock(), workflowRule(), baseCatalog(), gestureTools, LEARNED_VIA (+9 more)
+Cohesion: 0.20
+Nodes (12): t(), goalPrompt(), learnedRule(), memoryBlock(), workflowRule(), catalogNames(), docMarkdown(), gestureTools (+4 more)
 
 ### Community 40 - "TypeScript Compiler Config"
 Cohesion: 0.09
 Nodes (21): compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, lib, module, moduleResolution, noEmit, noImplicitAny (+13 more)
 
-### Community 41 - ".Read"
-Cohesion: 0.13
-Nodes (6): Caja, Rect, Func, Que, UiElement, IReadOnlyList
+### Community 41 - ".Marcados"
+Cohesion: 0.29
+Nodes (5): Caja, Rect, Func, Que, IReadOnlyList
 
 ### Community 42 - "AutomationElement"
-Cohesion: 0.11
-Nodes (8): AutomationElement, AutomationElementCollection, Condition, L, PlanStep, T, IReadOnlyList, Func
+Cohesion: 0.16
+Nodes (4): AutomationElement, AutomationElementCollection, Condition, Func
 
 ### Community 43 - "GraphObservation"
 Cohesion: 0.15
@@ -459,7 +464,7 @@ Nodes (17): Aceptado no es ejecutado, Cromo global detectado por repetición, Ed
 
 ### Community 45 - ".WireMenu"
 Cohesion: 0.12
-Nodes (4): SizeChangedEventArgs, BackendBody, BarPanel, RotateTransform
+Nodes (4): BackendBody, DllImport, IntPtr, RotateTransform
 
 ### Community 46 - "SapInspectorReader"
 Cohesion: 0.14
@@ -477,13 +482,13 @@ Nodes (10): Dispatcher, DispatcherTimer, DllImport, HookProc, int, IntPtr, uint,
 Cohesion: 0.10
 Nodes (23): Aprendizajes de método, 🧪 Ensayo en seco, Graph — el cerebro remoto, Guía del repo Ü Windows, Huella estructural por paso, LogBus — el log es la fuente de verdad, windows-client (cliente C#/WPF), Cajas por fila (+15 more)
 
-### Community 50 - ".Edges"
-Cohesion: 0.18
-Nodes (11): Alternatives, ControlType, From, Grupo, Hop, IEnumerable, Info, Label (+3 more)
+### Community 50 - "DllImport"
+Cohesion: 0.20
+Nodes (3): DllImport, IntPtr, WinEventProc
 
 ### Community 51 - ".CrecerPastilla"
-Cohesion: 0.13
-Nodes (11): TranslateTransform, FaceMood, RootPanel, MouseButtonEventArgs, MouseEventArgs, Rectangle, SolidColorBrush, UIElement (+3 more)
+Cohesion: 0.14
+Nodes (13): BackendZone, CollapsedGroup, ContextZone, RootPanel, VoiceDotGrupo, VoiceHalo, MouseEventArgs, Rectangle (+5 more)
 
 ### Community 52 - "gemini.ts"
 Cohesion: 0.29
@@ -494,28 +499,28 @@ Cohesion: 0.12
 Nodes (10): ControlTemplate, Border, Brush, Button, Regex, RoutedEventArgs, TextBlock, TextBox (+2 more)
 
 ### Community 54 - ".BindPressure"
-Cohesion: 0.14
-Nodes (13): Field, CancellationToken, IReadOnlyList, Task, ClinicalValue, HashSet, IReadOnlyList, Key (+5 more)
+Cohesion: 0.18
+Nodes (10): U.WindowsClient.Clinical, Field, ClinicalValue, HashSet, IReadOnlyList, Key, List, string (+2 more)
 
 ### Community 55 - "Publicar actualizaciones (Ü Windows)"
 Cohesion: 0.14
 Nodes (17): Workflow CI «Windows release», GRAPH_DEFAULT_API_KEY (secreto embebido en el build), Firma de código / SmartScreen, scripts/publish-release.ps1, Runbook de producción, README — Ü Windows App, 1. Cómo funciona (resumen), 2. Infraestructura (ya creada, no hay que volver a hacerla) (+9 more)
 
 ### Community 56 - "SapComEvents"
-Cohesion: 0.14
-Nodes (11): Arity, Delegate, DispId, Name, IEnumerable, int, List, object (+3 more)
+Cohesion: 0.12
+Nodes (15): Arity, Delegate, DispId, Guid, ITypeInfo, Name, TYPEATTR, IEnumerable (+7 more)
 
 ### Community 57 - "UiaSelector"
-Cohesion: 0.19
+Cohesion: 0.21
 Nodes (6): Condition, ControlType, Dictionary, IEnumerable, string, UiaSelector
 
 ### Community 59 - "handleTurn.ts"
-Cohesion: 0.27
-Nodes (11): handler(), assertConfigured(), decodeSession(), encodeSession(), freshSession(), GeminiPending, GeminiState, secret() (+3 more)
+Cohesion: 0.17
+Nodes (19): handler(), handler(), resolveTurn(), activeKey(), activeModel(), assertConfigured(), config, Provider (+11 more)
 
 ### Community 60 - "TelemetryClient"
-Cohesion: 0.13
-Nodes (13): ConcurrentQueue, int, List, string, Task, Timer, AckResponse, EventsPayload (+5 more)
+Cohesion: 0.19
+Nodes (8): ConcurrentQueue, int, string, Task, Timer, TelemetryBus, TelemetryClient, TelemetryIdentity
 
 ### Community 61 - "Step Screenshot Capture"
 Cohesion: 0.34
@@ -526,12 +531,12 @@ Cohesion: 0.08
 Nodes (27): Alternatives, Aristas, Click, ClickWatcher, ControlType, DateTime, Dictionary, From (+19 more)
 
 ### Community 63 - "InspectorDiagnostics"
-Cohesion: 0.19
+Cohesion: 0.21
 Nodes (9): int, IReadOnlyList, Key, Rect, string, Text, UiElement, Via (+1 more)
 
 ### Community 64 - ".ReadTreeSelections"
-Cohesion: 0.39
-Nodes (5): Path, TreeId, Key, Text, Via
+Cohesion: 0.21
+Nodes (7): Path, TreeId, DetectedField, IReadOnlyList, Key, Text, Via
 
 ### Community 66 - "AgentLoop (compuerta de origen)"
 Cohesion: 0.11
@@ -545,17 +550,21 @@ Nodes (10): macos-client (U.app), backend/src/domain/actions.ts (el contrato), C
 Cohesion: 0.24
 Nodes (10): HttpContent, bool, CancellationToken, HttpClient, HttpResponseMessage, HttpStatusCode, JsonSerializerOptions, string (+2 more)
 
-### Community 71 - "In-Memory Learning Store"
-Cohesion: 0.18
-Nodes (4): InMemoryLearningStore, Workflow, InMemoryMemoryStore, MemoryStore
+### Community 70 - ".Execute"
+Cohesion: 0.16
+Nodes (7): Key, L, PlanStep, SurfaceIdentity, T, Times, IReadOnlyList
+
+### Community 71 - "workflows.ts"
+Cohesion: 0.12
+Nodes (12): assembleTools(), baseCatalog(), InMemoryLearningStore, learnedToMcp(), LearnedTool, LearningStore, sanitize(), Workflow (+4 more)
 
 ### Community 72 - "GuiSession"
 Cohesion: 0.16
 Nodes (15): La carrera del Busy (pendiente), EndRequest (re-resolver el árbol), Enlace tardío siempre (SapROTWr.SapROTWrapper), session.FindById (rutas relativas), SapComEvents (enganche por introspección), SapSelector.Normalize, `session.Busy`, StartRequest (el instante más valioso) (+7 more)
 
-### Community 73 - ".ToggleCollapsed"
-Cohesion: 0.15
-Nodes (8): BackendZone, CollapsedGroup, ContextZone, VoiceDotGrupo, VoiceHalo, DllImport, IntPtr, StackPanel
+### Community 73 - ".ClinicalTickAsync"
+Cohesion: 0.22
+Nodes (5): CancellationToken, HttpClient, IReadOnlyList, Task, ClinicalBridge
 
 ### Community 74 - "Explorador"
 Cohesion: 0.20
@@ -565,9 +574,9 @@ Nodes (6): DllImport, int, IntPtr, IReadOnlyList, Entrada, Explorador
 Cohesion: 0.18
 Nodes (3): IReadOnlyList, Rect, UiElement
 
-### Community 76 - "Config"
-Cohesion: 0.29
-Nodes (3): U.WindowsClient, string, Config
+### Community 76 - "App"
+Cohesion: 0.14
+Nodes (7): U.WindowsClient, StartupEventArgs, Application, STAThread, App, string, Config
 
 ### Community 77 - "StepDebuggerWindow"
 Cohesion: 0.18
@@ -576,10 +585,6 @@ Nodes (8): Image, Button, Task, TaskCompletionSource, TextBlock, StepDebuggerWin
 ### Community 78 - "Gestures"
 Cohesion: 0.27
 Nodes (5): byte, DllImport, uint, UIntPtr, Gestures
-
-### Community 79 - "Health & Video Config"
-Cohesion: 0.30
-Nodes (9): handler(), activeKey(), activeModel(), config, Provider, videoArchiveEnabled(), sanitize(), SignedVideoUpload (+1 more)
 
 ### Community 80 - "GuiTree — árboles de SAP"
 Cohesion: 0.25
@@ -597,9 +602,9 @@ Nodes (7): CopyBtn, List, Window, RoutedEventArgs, LogWindow, Button, ListBox
 Cohesion: 0.24
 Nodes (6): DllImport, EventArgs, int, IntPtr, TextBlock, LocatorBadge
 
-### Community 85 - ".Execute"
-Cohesion: 0.15
-Nodes (5): KeyValuePair, PlanStep, Regex, string, SapSelector
+### Community 85 - ".Analyze"
+Cohesion: 0.13
+Nodes (9): Regex, string, SapSelector, IEnumerable, IReadOnlyList, DryRunFinding, DryRunLevel, DryRunReport (+1 more)
 
 ### Community 86 - ".DibujarVersiones"
 Cohesion: 0.18
@@ -625,8 +630,12 @@ Nodes (9): Leccion, CancellationToken, IntPtr, IReadOnlyDictionary, string, Task
 Cohesion: 0.20
 Nodes (7): Window, Brush, Button, Task, TaskCompletionSource, UIElement, FillPreviewWindow
 
+### Community 92 - "Telemetry.cs"
+Cohesion: 0.29
+Nodes (6): U.WindowsClient.Telemetry, List, AckResponse, EventsPayload, RegisterPayload, TelemetryEvent
+
 ### Community 93 - "Senalador"
-Cohesion: 0.50
+Cohesion: 0.42
 Nodes (5): Caja, IReadOnlyList, Que, Rect, Senalador
 
 ### Community 94 - "Reglas de arquitectura del mapeo"
@@ -634,12 +643,12 @@ Cohesion: 0.06
 Nodes (36): Aceptado no es ejecutado (principio transversal del proyecto), Antes de una acción destructiva, di sobre QUÉ actúa, «Atrás» es estado EFÍMERO de la sesión, no dato del mapa (idea del usuario), «Atrás» NO es una arista: es un gesto de historial, Capa 1 determinista; LLM en capa 2, Cruzar una puerta sin explorar se juzga por el CAMBIO, no por el destino, El banco de pruebas también tiene estado: no le tires el suelo a la app, El foco se recupera antes de actuar, y los paneles del shell se descartan con Escape (+28 more)
 
 ### Community 95 - "SurfaceMapTools"
-Cohesion: 0.11
-Nodes (9): bool, Stack, UiaReader, UiaSurface, int, IReadOnlyDictionary, string, RECT (+1 more)
+Cohesion: 0.08
+Nodes (10): bool, Stack, UiaReader, UiaSurface, UiElement, int, IReadOnlyDictionary, string (+2 more)
 
-### Community 96 - ".LearnTraversal"
-Cohesion: 0.26
-Nodes (4): Contrato, int, STAThread, string
+### Community 96 - ".Edges"
+Cohesion: 0.17
+Nodes (9): Contrato, int, STAThread, string, From, Hop, Info, List (+1 more)
 
 ### Community 97 - "SapVisualElement"
 Cohesion: 0.46
@@ -648,6 +657,10 @@ Nodes (3): SapBox, IReadOnlyList, SapVisualElement
 ### Community 98 - "TeachSession.cs"
 Cohesion: 0.25
 Nodes (8): List, FileStateRequest, FileStateResponse, ProcessRequest, ProcessResult, TeachNote, UploadTokenRequest, UploadTokenResponse
+
+### Community 99 - ".Str"
+Cohesion: 0.16
+Nodes (3): Dictionary, FieldOption, IEnumerable
 
 ### Community 100 - "Graphify — el grafo de decisiones"
 Cohesion: 0.22
@@ -665,14 +678,6 @@ Nodes (6): maxDuration, maxDuration, functions, api/teach/process-video.ts, api/
 Cohesion: 0.18
 Nodes (13): La ubicación es el ancla (parámetro `at`), map_learn_app, map_take, Una regla ganada en una app no se exporta sin verificar, Plan hasta el producto, Dónde estamos (medido, 2026-08-03), Fase 1 · Que la espera sea por ESTADO, no por reloj, Fase 2 · Repetibilidad (+5 more)
 
-### Community 104 - ".Session"
-Cohesion: 0.19
-Nodes (3): DetectedField, IEnumerable, IReadOnlyList
-
-### Community 105 - "IDisposable"
-Cohesion: 0.18
-Nodes (8): IDisposable, SpeechSynthesizer, VoiceActivity, bool, CancellationToken, Task, VoiceActivity, VoiceIO
-
 ### Community 106 - ".AppsConJerarquia"
 Cohesion: 0.28
 Nodes (6): App, Cuantas, DeHumano, Etiqueta, IReadOnlyList, Nivel
@@ -683,15 +688,15 @@ Nodes (3): dir, port, server
 
 ### Community 108 - "GraphExplorerWindow"
 Cohesion: 0.08
-Nodes (23): Border, CancellationTokenSource, CarruselDeApps, DispatcherTimer, DockPanel, Screen, ScrollViewer, StackPanel (+15 more)
+Nodes (22): Border, Button, CancellationTokenSource, CarruselDeApps, Color, DispatcherTimer, DockPanel, Screen (+14 more)
 
 ### Community 109 - "U.WindowsClient.Ui"
-Cohesion: 0.15
-Nodes (5): U.WindowsClient.Ui, U.WindowsClient.Clinical, IEasingFunction, MuelleEase, ThrowEase
+Cohesion: 0.18
+Nodes (5): U.WindowsClient.Ui, IEasingFunction, MuelleEase, ProfundidadClasica, ThrowEase
 
 ### Community 110 - ".CrawlAsync"
-Cohesion: 0.18
-Nodes (5): AppInstalada, Button, Color, Task, Task
+Cohesion: 0.16
+Nodes (6): AppInstalada, Escenario, Task, IReadOnlyList, IReadOnlyDictionary, Task
 
 ### Community 111 - "PasoAPaso"
 Cohesion: 0.17
@@ -702,19 +707,19 @@ Cohesion: 0.20
 Nodes (7): bool, int, IReadOnlyList, List, object, string, LogBus
 
 ### Community 113 - ".Aplicar"
-Cohesion: 0.10
-Nodes (7): double, IEasingFunction, Window, EdgeSnap, FaceTheme, Button, IEnumerable
+Cohesion: 0.15
+Nodes (6): double, IEasingFunction, Window, EdgeSnap, Button, IEnumerable
 
 ### Community 114 - "Clinical Values API Bridge"
 Cohesion: 1.00
 Nodes (3): GET /api/agent/values (emparejamiento por código), Conceptos canónicos (vital.talla, vital.peso…), Puente con el portal clínico
 
-### Community 115 - "U.WindowsClient.SystemApi"
-Cohesion: 0.09
-Nodes (13): U.WindowsClient.SystemApi, IReadOnlyList, AppInstalada, IEnumerable, StartMenuLauncher, ImageSource, IReadOnlyList, List (+5 more)
+### Community 115 - "CarruselDeApps"
+Cohesion: 0.08
+Nodes (21): SHFILEINFO, DllImport, ImageSource, int, IntPtr, IReadOnlyList, string, uint (+13 more)
 
 ### Community 116 - ".RetryAllAsync"
-Cohesion: 0.28
+Cohesion: 0.24
 Nodes (6): Entry, CancellationToken, List, Task, Entry, PendingFinish
 
 ### Community 117 - "Reglas universales de UIA (cualquier app)"
@@ -726,8 +731,8 @@ Cohesion: 0.12
 Nodes (13): Estado, Border, Color, DateTime, DispatcherTimer, DllImport, EventArgs, int (+5 more)
 
 ### Community 123 - "GeminiLive"
-Cohesion: 0.10
-Nodes (17): ClientWebSocket, ConsumoVivo, SemaphoreSlim, bool, CancellationTokenSource, DateTime, double, Func (+9 more)
+Cohesion: 0.09
+Nodes (21): ClientWebSocket, ConsumoVivo, SemaphoreSlim, bool, CancellationToken, CancellationTokenSource, DateTime, double (+13 more)
 
 ### Community 124 - "Runbook de producción — de cero a un usuario usándolo"
 Cohesion: 0.08
@@ -742,19 +747,19 @@ Cohesion: 0.11
 Nodes (21): SAP GUI Scripting (COM), UIA — superficie genérica de Windows, windows-graph (workflows sobre SAP GUI), UiaReader (CollectMenus, CollectFromChildren), Fase 4 · La tarea aprendida (workflows), UiaReader.Read(), Aceptado ≠ ejecutado, El snapshot de campos pertenece a UNA pantalla (+13 more)
 
 ### Community 127 - "engine.ts"
-Cohesion: 0.33
-Nodes (11): resolveTurn(), TurnRequest, TurnResult, runProviderTurn(), TurnInput, TurnOutput, BrainTurn, ScreenState (+3 more)
+Cohesion: 0.40
+Nodes (9): TurnRequest, TurnResult, runProviderTurn(), TurnInput, TurnOutput, BrainTurn, ScreenState, McpTool (+1 more)
 
 ### Community 128 - "Graphify en el equipo"
 Cohesion: 0.11
 Nodes (18): 1. Instalar uv, 2. Instalar graphify, 3. Registrar la skill y los hooks, 4. Traer el grafo, Actualizar el grafo a mano, Camino entre dos partes del sistema, Comandos útiles, Encontrar los archivos más conectados (los críticos) (+10 more)
 
 ### Community 129 - ".Calcular"
-Cohesion: 0.12
-Nodes (14): App, Cuantas, DeHumano, Etiqueta, IReadOnlyList, Nivel, Dictionary, Etiqueta (+6 more)
+Cohesion: 0.14
+Nodes (13): App, Cuantas, DeHumano, Etiqueta, IReadOnlyList, Nivel, Dictionary, Etiqueta (+5 more)
 
 ### Community 130 - "LiveAudio"
-Cohesion: 0.14
+Cohesion: 0.15
 Nodes (8): BufferedWaveProvider, WaveInEvent, WaveOutEvent, DateTime, double, int, object, LiveAudio
 
 ### Community 131 - "2. Windows UI Automation (UIA)"
@@ -770,8 +775,8 @@ Cohesion: 0.15
 Nodes (15): Arquitectura — la separación cliente / cerebro, Dónde se corta el bucle, El problema que resuelve (heredado de Android), ExecutionEngine.run (core Android), Mapa al core Kotlin, Por qué el cliente conduce el bucle (y no el servidor), Puntos de extensión (fases siguientes), Arquitectura (+7 more)
 
 ### Community 134 - ".Log"
-Cohesion: 0.13
-Nodes (9): StartupEventArgs, UpdateManager, VelopackAsset, Application, STAThread, App, Task, TimeSpan (+1 more)
+Cohesion: 0.27
+Nodes (5): UpdateManager, VelopackAsset, Task, TimeSpan, Updater
 
 ### Community 135 - "1. SAP GUI Scripting"
 Cohesion: 0.13
@@ -789,10 +794,6 @@ Nodes (12): Carpeta-o-archivo se le pregunta al DISCO, El contenido vive en vent
 Cohesion: 0.18
 Nodes (12): Issues dotnet/winforms#7763 y dotnet/wpf#9382, Entries — opciones de combo en SAP, Fiabilidad de eventos (controles Win32 no siempre notifican), Granularidad de grabación (round-trip vs evento), Identificación de elementos (Id canónico / AutomationId), SAP GUI Scripting (superficie de automatización), SAP.GUI.Scripting.net, SAP GUI Scripting Security Guide (7.60) (+4 more)
 
-### Community 139 - "AppsInstaladas"
-Cohesion: 0.27
-Nodes (9): SHFILEINFO, DllImport, ImageSource, int, IntPtr, string, uint, AppsInstaladas (+1 more)
-
 ### Community 140 - "1.7 GRABACIÓN — el modelo de eventos (lo crítico)"
 Cohesion: 0.18
 Nodes (11): 1.7.1 Diseño del modelo, según SAP **[SAP-DOC]**, 1.7.2 El interruptor: `GuiSession.Record` **[SAP-DOC]**, 1.7.3 Eventos de `GuiSession` **[SAP-DOC]** — firmas literales, 1.7.4 Eventos de `GuiApplication` **[SAP-DOC]**, 1.7.5 Qué se captura en vivo desde un proceso externo, y qué NO, 1.7.6 STA, apartments y el pump — **la trampa de ingeniería nº1**, 1.7 GRABACIÓN — el modelo de eventos (lo crítico), `Change` — el corazón del grabador (+3 more)
@@ -802,7 +803,7 @@ Cohesion: 0.31
 Nodes (6): DllImport, int, IntPtr, RECT, Screenshotter, RECT
 
 ### Community 142 - "Propio"
-Cohesion: 0.24
+Cohesion: 0.32
 Nodes (3): DllImport, IntPtr, Propio
 
 ### Community 143 - ".NivelDe"
@@ -810,8 +811,8 @@ Cohesion: 0.25
 Nodes (3): Visual, Rect, Pantallas
 
 ### Community 144 - ".OnLoaded"
-Cohesion: 0.11
-Nodes (7): HttpClient, ClinicalBridge, CollapsedFace, Face, Point, Rect, FaceControl
+Cohesion: 0.13
+Nodes (6): SizeChangedEventArgs, CollapsedFace, Face, Point, Rect, FaceControl
 
 ### Community 145 - "Captura de texto tecleado"
 Cohesion: 0.29
@@ -825,17 +826,17 @@ Nodes (3): IReadOnlyList, UiElement, Reconocedor
 Cohesion: 0.33
 Nodes (5): Backend, Build, Estructura, Historial, Ü — Windows App
 
-### Community 148 - "InstalledApps"
-Cohesion: 0.40
-Nodes (3): IEnumerable, string, InstalledApps
-
-### Community 150 - "GlobalHotkeys"
+### Community 148 - "U.WindowsClient.SystemApi"
 Cohesion: 0.15
-Nodes (10): EventArgs, Dictionary, DllImport, HwndSource, int, IntPtr, List, uint (+2 more)
+Nodes (5): U.WindowsClient.Actions, U.WindowsClient.SystemApi, IEnumerable, string, InstalledApps
+
+### Community 150 - "AtajoPorGolpes"
+Cohesion: 0.06
+Nodes (28): IDisposable, SpeechSynthesizer, VoiceActivity, bool, DateTime, DllImport, Gancho, int (+20 more)
 
 ### Community 151 - ".Contar"
-Cohesion: 0.16
-Nodes (9): ConAccion, Declarados, Detalle, Escenario, Pantallas, IReadOnlyList, Ok, Escenario (+1 more)
+Cohesion: 0.20
+Nodes (7): ConAccion, Declarados, Detalle, Pantallas, Ok, Escenario, EscenarioCi
 
 ### Community 153 - "3. Mapeo conceptual DOM ↔ SAP GUI Scripting ↔ UIA"
 Cohesion: 0.50
@@ -850,8 +851,8 @@ Cohesion: 0.20
 Nodes (9): dependencies, @anthropic-ai/claude-agent-sdk, zod, description, name, private, type, @anthropic-ai/claude-agent-sdk (+1 more)
 
 ### Community 156 - "arquitecto.mjs"
-Cohesion: 0.25
-Nodes (8): CONTINUAR, corrida, herramientas, sonda(), t(), tFoto(), TURNOS, docMarkdown()
+Cohesion: 0.18
+Nodes (11): CHAT, CONTINUAR, corrida, herramientas, PERMITIDAS, PROHIBIDAS, sesionGuardada(), SOLO_CHAT (+3 more)
 
 ### Community 160 - "version-nucleo.ps1"
 Cohesion: 0.60
@@ -861,16 +862,12 @@ Nodes (3): Compilar(), Leer-Registro(), Snap()
 Cohesion: 0.11
 Nodes (11): CancellationToken, double, int, Task, StepGate, StepGateResult, SurfaceReadiness, DetectedField (+3 more)
 
-### Community 165 - ".TryResolveSourceInterface"
-Cohesion: 0.35
-Nodes (4): Guid, ITypeInfo, TYPEATTR, IProvideClassInfo2
-
 ### Community 167 - "ConsolaViva"
 Cohesion: 0.12
 Nodes (12): object, Puede, bool, DllImport, int, IntPtr, uint, ConsolaViva (+4 more)
 
-### Community 172 - ".Unblock"
-Cohesion: 0.33
+### Community 172 - ".GoTo"
+Cohesion: 0.18
 Nodes (4): Opciones, Textos, Titulo, List
 
 ### Community 174 - "Ventana"
@@ -889,10 +886,6 @@ Nodes (4): List, ScreenState, TurnRequest, TurnResponse
 Cohesion: 0.32
 Nodes (3): Delante(), Estado(), Sonda()
 
-### Community 185 - ".Analyze"
-Cohesion: 0.15
-Nodes (8): List, RunTimings, IEnumerable, IReadOnlyList, DryRunFinding, DryRunLevel, DryRunReport, WorkflowDryRun
-
 ### Community 186 - "src/Update/Updater.cs"
 Cohesion: 0.25
 Nodes (9): Paso «Subir a Supabase (compatible con S3)», Backend en Vercel (Fase 1), CLIENT_TOKEN — candado del endpoint, windows-client/src/Config.cs, Bucket público `windows` (Supabase miracle-app), Ui/FaceWindow.xaml (UpdateBtn), releases.win.json (el índice del feed), src/Update/Updater.cs (+1 more)
@@ -902,16 +895,16 @@ Cohesion: 0.38
 Nodes (3): DllImport, IntPtr, UIntPtr
 
 ### Community 195 - "HighlightOverlay"
-Cohesion: 0.23
+Cohesion: 0.19
 Nodes (7): Canvas, EventArgs, Rectangle, int, IReadOnlyList, Rect, HighlightOverlay
 
-### Community 197 - "U.Graph.Surfaces"
-Cohesion: 0.11
-Nodes (8): U.WindowsClient.Backend, U.Graph.Surfaces, U.WindowsClient.Domain, U.WindowsClient.Teach, U.Graph, IEnumerable, Fingerprints, RecordingStatus
+### Community 197 - "U.Graph"
+Cohesion: 0.12
+Nodes (8): U.WindowsClient.Backend, U.WindowsClient.Domain, U.WindowsClient.Teach, U.Graph, SpecialFolder, AutofillRow, UserPaths, RecordingStatus
 
-### Community 212 - ".SetDirectIndex"
-Cohesion: 0.40
-Nodes (3): SelectionChangedEventArgs, WorkflowListBox, ListBox
+### Community 212 - ".ReloadDirectWorkflowsAsync"
+Cohesion: 0.17
+Nodes (5): SelectionChangedEventArgs, ValueTask, WorkflowListBox, Task, ListBox
 
 ### Community 219 - "Árboles (`GuiTree`)"
 Cohesion: 0.33
@@ -922,12 +915,8 @@ Cohesion: 0.40
 Nodes (4): KeyEventArgs, ClinicalCodeBox, Input, TextBox
 
 ### Community 226 - ".DibujarConProfundidad"
-Cohesion: 0.15
-Nodes (8): Dictionary, Etiqueta, From, IEnumerable, IReadOnlyDictionary, List, To, UiElement
-
-### Community 232 - "InputUnion"
-Cohesion: 0.67
-Nodes (3): KEYBDINPUT, MOUSEINPUT, InputUnion
+Cohesion: 0.18
+Nodes (7): Dictionary, Etiqueta, From, IEnumerable, List, To, UiElement
 
 ## Ambiguous Edges - Review These
 - `UiaSurface` → `IsStepReady (compuerta al primer plano)`  [AMBIGUOUS]
@@ -938,9 +927,9 @@ Nodes (3): KEYBDINPUT, MOUSEINPUT, InputUnion
   windows-graph/INVESTIGACION-SAPGUI-UIA.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **374 isolated node(s):** `TURNOS`, `CONTINUAR`, `herramientas`, `corrida`, `Hop` (+369 more)
+- **377 isolated node(s):** `CONTINUAR`, `CHAT`, `SOLO_CHAT`, `herramientas`, `PERMITIDAS` (+372 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **76 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **75 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -951,11 +940,11 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `Fiabilidad de eventos (controles Win32 no siempre notifican)` and `Issues dotnet/winforms#7763 y dotnet/wpf#9382`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `FaceWindow` connect `FaceWindow` to `SurfaceLocator`, `TeachSession`, `ClickWatcher`, `WorkflowLibraryWindow`, `.Log`, `Window`, `UiaReader`, `.OnLoaded`, `GraphClient`, `SapGuiSurface`, `AtajoPorGolpes`, `GlobalHotkeys`, `WorkflowMapWindow`, `UiaSurface`, `WorkflowTeachSession`, `AgentLoop`, `U.WindowsClient.Diagnostics`, `SurfaceMap`, `GraphObservation`, `.WireMenu`, `UI Inspector Hooks`, `.CrecerPastilla`, `.BindPressure`, `BackendClient`, `.ToggleCollapsed`, `StepDebuggerWindow`, `LogWindow`, `.SetDirectIndex`, `Locator Badge Overlay`, `Window`, `.OnInputKey`, `IDisposable`, `GraphExplorerWindow`, `.Aplicar`, `PanelDeAcciones`, `GeminiLive`?**
-  _High betweenness centrality (0.255) - this node is a cross-community bridge._
-- **Why does `SapGuiSurface` connect `SapGuiSurface` to `.ReadTreeSelections`, `.PumpMain`, `SurfaceLocator`, `IUiSurface`, `.Str`, `U.Graph.Surfaces`, `WorkflowLibraryWindow`, `dynamic`, `.Session`, `SapInspectorReader`, `.Execute`, `SapComEvents`, `FaceWindow`, `AgentLoop`?**
-  _High betweenness centrality (0.073) - this node is a cross-community bridge._
-- **Why does `UiaSurface` connect `UiaSurface` to `GraphCrawler`, `.GetForegroundWindow`, `U.Graph.Surfaces`, `WorkflowLibraryWindow`, `ConsolaViva`, `.ParseKeySpec`, `AutomationElement`, `.Describe`, `FaceWindow`, `IntPtr`, `AgentLoop`, `UiaSelector`?**
-  _High betweenness centrality (0.071) - this node is a cross-community bridge._
-- **What connects `TURNOS`, `CONTINUAR`, `herramientas` to the rest of the system?**
-  _374 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Why does `FaceWindow` connect `FaceWindow` to `SurfaceLocator`, `TeachSession`, `ClickWatcher`, `WorkflowLibraryWindow`, `.Log`, `Window`, `UiaReader`, `.UpdateChip`, `.OnLoaded`, `GraphClient`, `SapGuiSurface`, `WorkflowTeachSession`, `AtajoPorGolpes`, `WorkflowMapWindow`, `UiaSurface`, `AgentLoop`, `U.WindowsClient.Diagnostics`, `Contracts.cs`, `SurfaceMap`, `GraphObservation`, `.WireMenu`, `UI Inspector Hooks`, `.CrecerPastilla`, `BackendClient`, `.ClinicalTickAsync`, `StepDebuggerWindow`, `LogWindow`, `.ReloadDirectWorkflowsAsync`, `Locator Badge Overlay`, `Window`, `.OnInputKey`, `GraphExplorerWindow`, `.Aplicar`, `PanelDeAcciones`, `GeminiLive`?**
+  _High betweenness centrality (0.262) - this node is a cross-community bridge._
+- **Why does `GraphExplorerWindow` connect `GraphExplorerWindow` to `.DibujarConProfundidad`, `HighlightOverlay`, `SurfaceLocator`, `AppAligner`, `.CrawlAsync`, `.NivelDe`, `DllImport`, `CarruselDeApps`, `.DibujarVersiones`, `FaceWindow`, `Window`, `SurfaceMap`?**
+  _High betweenness centrality (0.078) - this node is a cross-community bridge._
+- **Why does `SapGuiSurface` connect `SapGuiSurface` to `U.WindowsClient.Diagnostics`, `.PumpMain`, `SurfaceLocator`, `IUiSurface`, `.Str`, `dynamic`, `WorkflowLibraryWindow`, `.ReadTreeSelections`, `.Session`, `SapInspectorReader`, `SapComEvents`, `FaceWindow`, `AgentLoop`?**
+  _High betweenness centrality (0.069) - this node is a cross-community bridge._
+- **What connects `CONTINUAR`, `CHAT`, `SOLO_CHAT` to the rest of the system?**
+  _377 weakly-connected nodes found - possible documentation gaps or missing edges._

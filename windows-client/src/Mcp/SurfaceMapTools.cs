@@ -1894,8 +1894,22 @@ public sealed class SurfaceMapTools
 
         // Navegación y ejecución separadas: son preguntas distintas («¿a dónde puedo ir?» vs
         // «¿qué puedo hacer aquí?») y mezclarlas obliga al modelo a adivinar cuál es cuál.
+        // EL CONTENIDO NO SE OFRECE COMO CAMINO. En «Galería» esta lista llegó a ofrecer las 1.831
+        // imágenes de la carpeta como puertas cruzables, y en «Inicio» catorce archivos sueltos. Dos
+        // daños, y el segundo es el grave: la estructura real —trece anclas y tres pestañas— se
+        // pierde entre el relleno, y cruzar cualquiera de ellas SACA DE LA APP, porque un .d abre el
+        // editor y una miniatura el visor de fotos (2026-08-10, medido por el arquitecto).
+        //
+        // Se cuentan aparte en vez de callarlas del todo: que ahí hay mil imágenes es un dato útil
+        // —dice que esa pantalla es un CONTENEDOR— y esconderlo sería fingir que la pantalla está
+        // vacía. Lo que no se hace es ofrecerlas como si fueran navegación.
+        var esContenido = salidas.Where(x =>
+            x.Info.Nivel.StartsWith("contenido", StringComparison.OrdinalIgnoreCase)
+            || x.Info.Nivel.StartsWith("lista", StringComparison.OrdinalIgnoreCase)).ToList();
+
         var sb = new System.Text.StringBuilder($"Desde «{desde}»:\n");
-        foreach (var h in salidas.Where(x => !x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)))
+        foreach (var h in salidas.Where(x => !x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
+                                          && !esContenido.Contains(x)))
         {
             // Se distingue lo cruzado DESDE AQUÍ de lo que está disponible porque la app lo tiene en
             // todas sus pantallas. Las dos sirven para navegar; solo una se comprobó en este sitio.
@@ -1912,6 +1926,14 @@ public sealed class SurfaceMapTools
                   + $"pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces){origen}{estado}"
                 : $"  → {h.To}   (observado {h.Info.Count} vez/veces, pero NO se sabe con qué acción)");
         }
+
+        // El contenido, CONTADO y no listado: dice que esta pantalla es un contenedor sin ahogar la
+        // estructura. Es la forma corta de la regla que ya está escrita en la doctrina — el
+        // contenido se describe y se consulta, no se enumera.
+        if (esContenido.Count > 0)
+            sb.AppendLine($"\n  [CONTENIDO: {esContenido.Count} elemento(s) en el panel de esta pantalla "
+                + $"(p. ej. «{esContenido[0].Info.Label}»). No son navegación y no se ofrecen como camino: "
+                + "esta pantalla es un CONTENEDOR. Para llegar a uno concreto, usa su buscador o filtro.]");
 
         var acciones = salidas.Where(x => x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
                                        && x.Info.Selector.Length > 0).ToList();

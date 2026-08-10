@@ -770,8 +770,8 @@
     "semantic_hash": ""
   },
   "agente-arquitecto/arquitecto.mjs": {
-    "mtime": 1786341504.8954864,
-    "ast_hash": "e1e8a9c6607f1882170e496160e799ca",
+    "mtime": 1786364505.018456,
+    "ast_hash": "81515ac5da344cc20b9f15dedb76ed66",
     "semantic_hash": ""
   },
   "agente-arquitecto/package.json": {
@@ -877,6 +877,16 @@
   "scripts/noche-arquitecto.ps1": {
     "mtime": 1786343334.4321232,
     "ast_hash": "ffe2d3b906ee257f3c75a941c750e519",
+    "semantic_hash": ""
+  },
+  "agente-arquitecto/U-versionessesionesarquitecto-explorer.exe.txt": {
+    "mtime": 1786364392.2710817,
+    "ast_hash": "d6f01ccfc7a5147b62cc44332a554e46",
+    "semantic_hash": ""
+  },
+  "agente-arquitecto/U-versionessesionesprueba.txt": {
+    "mtime": 1786364446.2764933,
+    "ast_hash": "4d186321c1a7f0f354b297e8914ab240",
     "semantic_hash": ""
   }
 }

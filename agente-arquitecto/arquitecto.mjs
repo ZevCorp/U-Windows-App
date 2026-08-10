@@ -270,6 +270,18 @@ if (!SOLO_CHAT) try {
     // EL ID SE GUARDA EN CUANTO APARECE, no al final: si la corrida se queda sin turnos o revienta,
     // el final puede no llegar — y entonces se pierde justo lo que permite retomarla.
     if (m.session_id) guardaSesion(m.session_id);
+
+    // CON QUÉ MODELO ESTÁ PENSANDO, dicho por él y no por nosotros. Sus conclusiones dependen del
+    // modelo tanto como del código, así que comparar dos auditorías sin saber cuál las escribió es
+    // comparar dos cosas distintas creyendo que son la misma (2026-08-10, pedido por el usuario).
+    // Se lee del mensaje de arranque del propio SDK: escribirlo a mano seria repetir un dato que
+    // el sistema ya sabe, y repetirlo es firmar que algun dia dira una cosa por otra.
+    if (m.type === "system" && m.subtype === "init") {
+      const extra = [m.model, m.permissionMode && `permisos: ${m.permissionMode}`]
+        .filter(Boolean).join(" · ");
+      if (extra) console.log(`modelo: ${extra}
+`);
+    }
     if (m.type === "assistant") {
       for (const b of m.message.content ?? []) {
         if (b.type === "text" && b.text.trim()) console.log(`\n[arquitecto] ${b.text.trim()}`);
