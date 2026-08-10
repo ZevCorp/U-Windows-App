@@ -873,8 +873,50 @@ public sealed class GraphExplorerWindow : Window
     private string _huellaPuente = "";
     private readonly Dictionary<string, string> _porQueDeclarado = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Lo último que se leyó de la pantalla, para poder señalar en la app real un nodo del grafo.
+    ///
+    /// El grafo guarda SELECTORES —identidad, no posición— y eso es lo correcto: una caja se mueve
+    /// al hacer scroll y un selector no. Pero para pintar el resaltado hace falta una caja, y la
+    /// única honesta es la que se acaba de leer de la pantalla. Por eso se guarda aquí y no en el
+    /// mapa: es un dato de AHORA, y guardarlo en el mapa sería convertir en memoria algo que caduca.
+    /// </summary>
+    private List<UiaReader.UiElement> _loLeidoEnPantalla = new();
+
+    /// <summary>
+    /// Iluminar en la app real la puerta por la que se llega a este nodo.
+    ///
+    /// Se busca por selector entre lo que hay AHORA en pantalla. Si no está —porque la puerta vive
+    /// en otra pantalla— no se ilumina nada y se dice: enseñar un recuadro sobre algo que no existe
+    /// sería peor que no enseñar ninguno.
+    /// </summary>
+    private void IluminarPuertaHacia(string nodo)
+    {
+        try
+        {
+            var sels = _map.Edges()
+                .Where(e => e.To.Equals(nodo, StringComparison.OrdinalIgnoreCase) && e.Info.Selector.Length > 0)
+                .Select(e => e.Info.Selector)
+                .ToHashSet(StringComparer.Ordinal);
+            if (sels.Count == 0) { _status.Text = $"«{Corto(nodo)}»: el mapa no sabe por qué puerta se llega"; return; }
+
+            foreach (var el in _loLeidoEnPantalla)
+            {
+                if (!sels.Contains(Uia.Reconocedor.SelectorDe(el))) continue;
+                if (el.Bounds.Width <= 0 || el.Bounds.Height <= 0) continue;
+                _overlay.ShowRect(el.Bounds);
+                _status.Text = $"«{el.Label}» → {Corto(nodo)}";
+                return;
+            }
+            _overlay.HideRect();
+            _status.Text = $"«{Corto(nodo)}»: su puerta no está en esta pantalla";
+        }
+        catch { }
+    }
+
     private void Render(string proc, List<UiaReader.UiElement> els)
     {
+        _loLeidoEnPantalla = els;   // para poder señalar en la app lo que se pase por encima en el grafo
         // EL GRAFO SE REESTRUCTURA CUANDO CAMBIA EL MAPA. Marcar algo como primer nivel cambia la
         // ESTRUCTURA, no la pantalla: los mismos elementos siguen en el mismo sitio, así que la
         // firma del repintado no cambiaba y el grafo seguía enseñando la jerarquía vieja —con los
@@ -2621,9 +2663,15 @@ public sealed class GraphExplorerWindow : Window
             .Take(24)
             .ToList();
         // Fuera del reparto por filas: si siguieran en `prof`, seguirían siendo estructura.
-        foreach (var a in accionesAhora.ToList())
-            foreach (var k in prof.Keys.Where(k => Corto(k).EndsWith("/" + a, StringComparison.OrdinalIgnoreCase)).ToList())
-                prof.Remove(k);
+        //
+        // Se sacan SOLO las PUERTAS sin cruzar («?selector»), nunca una pantalla real. La primera
+        // versión las buscaba por nombre —quitaba cualquier nodo cuyo slug terminara como la
+        // acción— y eso podía borrar del dibujo una carpeta que se llamara igual que un botón.
+        // Limpiar la vista no puede costar perder terreno de verdad: si una acción resultó llevar
+        // a algún sitio, ese sitio es una pantalla y se queda donde está.
+        foreach (var (_, to, info) in _map.Edges())
+            if (info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase) && SurfaceMap.EsPuerta(to))
+                prof.Remove(to);
 
         // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra
         // deja de leerse; a partir de ahí se sigue pagando el sitio que ocupa un texto que ya nadie
@@ -2861,6 +2909,18 @@ public sealed class GraphExplorerWindow : Window
                 Canvas.SetTop(etiqueta, kv.Value.Y - 2);
                 _lienzo.Children.Add(etiqueta);
             }
+            // PASAR POR UN NODO ILUMINA LA PUERTA QUE LLEVA A ÉL. El grafo dice a dónde se puede
+            // ir; esto dice POR DÓNDE, señalándolo en la app de verdad. Sin ello, un nodo es un
+            // nombre y hay que fiarse de que el selector guardado apunte a lo que uno cree — y
+            // «fiarse» es justo lo que este sistema evita en todo lo demás (2026-08-10, pedido por
+            // el usuario).
+            //
+            // Solo con Ctrl+Shift, porque es cuando la capa acepta el ratón: sin esos modificadores
+            // el cursor la atraviesa y estos eventos no llegarían nunca.
+            string nodoDeLaCaja = kv.Key;
+            caja.MouseEnter += (_, __) => IluminarPuertaHacia(nodoDeLaCaja);
+            caja.MouseLeave += (_, __) => _overlay.HideRect();
+
             Canvas.SetLeft(caja, kv.Value.X);
             Canvas.SetTop(caja, kv.Value.Y);
             _lienzo.Children.Add(caja);
