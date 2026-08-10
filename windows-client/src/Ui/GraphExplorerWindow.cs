@@ -2639,13 +2639,17 @@ public sealed class GraphExplorerWindow : Window
         // BRONCE: lo observado, sin jerarquía. La fila es la DISTANCIA en saltos desde la raíz y
         // nada más — ni niveles, ni cromo, ni declaraciones. Es lo que el sistema tiene antes de
         // que nadie ordene nada, y verlo aparte es lo que permite decir qué añadió plata.
+        //
+        // AHORA SE LEE, NO SE CALCULA AQUÍ. Este bloque se construía su propio bronce con un
+        // recorrido por anchura, así que la etapa de partida del pipeline significaba una cosa para
+        // el dibujo y otra para el derivador — y con dos definiciones de dónde se empieza no se
+        // puede decir qué añadió la etapa siguiente. La distancia sale de `Bronce.De`, que es el
+        // único sitio donde vive (2026-08-10, fase 1 del plan).
         if (_vista == VistaGrafo.Bronce)
         {
+            var bronce = Navigation.Bronce.De(_map, appActual);
             prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
-            for (int pasada = 0; pasada < 10; pasada++)
-                foreach (var (f, t) in aristasMapa)
-                    if (prof.TryGetValue(f, out int d) && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
-                        prof[t] = d + 1;
+            foreach (var (id, d) in bronce.Distancias) prof[id] = d;
             sinSituar = 0;
             foreach (var n in todos)
                 if (!prof.ContainsKey(n)) { prof[n] = 1; sinSituar++; }

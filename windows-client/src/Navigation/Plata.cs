@@ -296,35 +296,45 @@ public static class Plata
 
         var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var porqueProf = new Dictionary<string, Porque>(StringComparer.OrdinalIgnoreCase);
-        if (raiz.Length > 0)
+        var cola = new Queue<string>();
+
+        void Sembrar(string id, int p, Porque pq)
         {
-            prof[raiz] = 0;
-            porqueProf[raiz] = new Porque("raíz", "la pantalla por la que se entra en la app", 1.0);
-            var cola = new Queue<string>();
-            cola.Enqueue(raiz);
+            if (prof.ContainsKey(id)) return;
+            prof[id] = p;
+            porqueProf[id] = pq;
+            cola.Enqueue(id);
+        }
+
+        void Recorrer()
+        {
             while (cola.Count > 0)
             {
                 string aqui = cola.Dequeue();
                 if (!hijos.TryGetValue(aqui, out var l)) continue;
                 // El orden de los hermanos no puede cambiar el resultado: se recorren ordenados.
                 foreach (var h in l.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
-                    if (!prof.ContainsKey(h))
-                    {
-                        prof[h] = prof[aqui] + 1;
-                        porqueProf[h] = new Porque("camino más corto",
-                            $"a {prof[h]} puerta(s) estructural(es) de la raíz", 1.0);
-                        cola.Enqueue(h);
-                    }
+                    Sembrar(h, prof[aqui] + 1, new Porque("camino más corto",
+                        $"a {prof[aqui] + 1} puerta(s) estructural(es) de la raíz", 1.0));
             }
         }
+
+        if (raiz.Length > 0)
+        {
+            Sembrar(raiz, 0, new Porque("raíz", "la pantalla por la que se entra en la app", 1.0));
+            Recorrer();
+        }
+
         // Lo que solo se alcanza por mobiliario es una sección de primer nivel: está a un clic de
         // todas partes, y eso es exactamente lo que significa vivir en el primer nivel.
+        //
+        // Y SE SIGUE BAJANDO DESDE AHÍ, que es lo que faltaba. Colocarlas y parar dejaba sin situar
+        // todo lo que cuelga de ellas: en un explorador de archivos, donde a cada carpeta grande se
+        // entra por el panel lateral, eso es la app entera. Lo encontró la promesa 19 del contrato
+        // ANTES de que este código existiera — para eso se escribe la spec primero.
         foreach (var t in soloPorCromo.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
-            if (!prof.ContainsKey(t))
-            {
-                prof[t] = 1;
-                porqueProf[t] = new Porque("solo por cromo", "se alcanza únicamente desde el mobiliario", 0.8);
-            }
+            Sembrar(t, 1, new Porque("solo por cromo", "se alcanza únicamente desde el mobiliario", 0.8));
+        Recorrer();
 
         var pantallasPlata = new Dictionary<string, PantallaPlata>(StringComparer.OrdinalIgnoreCase);
         foreach (var id in pantallas.Keys)
@@ -360,6 +370,28 @@ public static class Plata
 
         return new PlataApp(app, raiz, pantallasPlata, salidas, desacuerdos, m);
     }
+
+    /// <summary>
+    /// LA DERIVACIÓN ENTERA EN UNA CADENA CANÓNICA: raíz, cada pantalla con su profundidad, cada
+    /// salida con su clase; todo ordenado, para que dos derivaciones iguales den cadenas iguales
+    /// carácter a carácter.
+    ///
+    /// Existe porque sin ella la promesa «la misma entrada da la misma plata» no se puede escribir:
+    /// comparar dos grafos campo a campo desde el contrato es exactamente el tipo de código que
+    /// falla por su cuenta y manda la investigación al sitio equivocado. Y de paso es lo que
+    /// permite afirmar lo segundo, que es lo que de verdad importa: que el ORDEN DEL PASEO no
+    /// cambia la estructura.
+    ///
+    /// No lleva la evidencia a propósito — los textos de <see cref="Porque"/> están para leerse,
+    /// no para compararse, y meterlos aquí haría que cambiar una palabra rompiera una promesa.
+    /// </summary>
+    public static string Huella(PlataApp p) =>
+        $"raiz={p.Raiz}|"
+        + string.Join(",", p.Pantallas.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+                            .Select(kv => $"{kv.Key}={kv.Value.Profundidad}"))
+        + "|"
+        + string.Join(",", p.SalidasPorSelector.OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                            .Select(kv => $"{kv.Key}={kv.Value.Clase}"));
 
     /// <summary>
     /// Lo que hay que leer de una derivación, en una línea. Se escribe solo cuando cambia (quien
