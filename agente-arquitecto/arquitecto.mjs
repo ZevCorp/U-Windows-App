@@ -25,7 +25,17 @@ if (!APP) {
   console.error("uso: node arquitecto.mjs <app> [turnos]   (p. ej. explorer.exe 40)");
   process.exit(2);
 }
-const TURNOS = parseInt(process.argv[3] ?? "80", 10);   // bajar en profundidad cuesta turnos: agotar una rama son varios cruces + un ir_a por cada vuelta
+// 160 y no 80: la primera corrida con las herramientas ya sanas se quedó sin turnos ANTES de
+// poder escribir su informe, que es lo único que nos llevamos. Auditar de verdad —bajar una rama,
+// volver, clasificar cuarenta salidas y contrastar— sale caro en turnos, y quedarse corto no
+// significa medio informe: significa ninguno (2026-08-10, medido).
+const TURNOS = parseInt(process.argv[3] ?? "160", 10);
+
+// CONTINUAR LA CONVERSACIÓN ANTERIOR en vez de empezar de cero. Cuando se acaban los turnos, todo
+// lo que el agente ya entendió de la app —qué es cromo, qué ya clasificó, por dónde iba— sigue en
+// esa conversación; volver a empezar sería pagarlo otra vez y además llegar a conclusiones
+// distintas. Con «continuar» retoma donde estaba y cierra con su informe.
+const CONTINUAR = process.argv.includes("--continuar");
 
 // ── La sonda: el único brazo del agente ─────────────────────────────────────
 async function sonda(toolName, args = {}) {
@@ -184,10 +194,19 @@ organizar el grafo y reportar. Si la app se cierra o algo se cruza, dilo en feed
 Trabaja en español.`;
 
 // ── A correr ─────────────────────────────────────────────────────────────────
-console.log(`ARQUITECTO sobre «${APP}» · presupuesto ${TURNOS} turnos\n`);
+console.log(`ARQUITECTO sobre «${APP}» · presupuesto ${TURNOS} turnos`
+  + `${CONTINUAR ? " · CONTINÚA la corrida anterior" : ""}\n`);
 
 const corrida = query({
-  prompt: `Audita la jerarquía de «${APP}». La app ya está abierta y la sonda viva.`,
+  // Al continuar, la instrucción no es «audita» —eso ya lo estaba haciendo— sino «cierra». Lo
+  // único que nos llevamos de una auditoría es el informe, así que retomar sin pedirlo
+  // explícitamente arriesga gastar los turnos nuevos en seguir explorando y quedarse otra vez sin
+  // escribirlo.
+  prompt: CONTINUAR
+    ? `Se te acabaron los turnos y te doy más. Retoma donde estabas con «${APP}»: mira «sin_situar», `
+      + `termina de declarar lo que falte y CIERRA con tu informe final en feedback. El informe es `
+      + `lo único que nos llevamos: escríbelo aunque no hayas terminado de nivelarlo todo.`
+    : `Audita la jerarquía de «${APP}». La app ya está abierta y la sonda viva.`,
   options: {
     systemPrompt: MISION,
     mcpServers: { grafo: herramientas },
@@ -201,6 +220,7 @@ const corrida = query({
     disallowedTools: ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"],
     permissionMode: "bypassPermissions",
     maxTurns: TURNOS,
+    ...(CONTINUAR ? { continueConversation: true } : {}),
   },
 });
 

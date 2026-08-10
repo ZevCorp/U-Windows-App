@@ -225,8 +225,8 @@
     "semantic_hash": "275bc8ba78be31a8ac456833edcaa275"
   },
   "windows-client/src/Mcp/SurfaceMapTools.cs": {
-    "mtime": 1786336938.563837,
-    "ast_hash": "954343f477c55f65077c0060dee28038",
+    "mtime": 1786340055.6040423,
+    "ast_hash": "41cc87696aa5b39eb4c971a4620cec24",
     "semantic_hash": ""
   },
   "windows-client/src/Mcp/WorkflowMcpRunner.cs": {
@@ -260,8 +260,8 @@
     "semantic_hash": "aec373cf4f3b1d2bf2256dd3eb60d0b9"
   },
   "windows-client/src/Navigation/SurfaceMap.cs": {
-    "mtime": 1786331082.7100031,
-    "ast_hash": "e569b0f227c3a66911eb44c79784c6b5",
+    "mtime": 1786340108.6840968,
+    "ast_hash": "7c33fb3e97d025f361fe4825ab01957f",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/SurfaceNavigator.cs": {
@@ -355,8 +355,8 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786339216.9855776,
-    "ast_hash": "dd0a3a904a1902f9e09a224854f4456d",
+    "mtime": 1786340454.9650378,
+    "ast_hash": "aea3b0b391b71c508e04cae56a07f3ff",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/GraphHealthText.cs": {
@@ -810,8 +810,8 @@
     "semantic_hash": ""
   },
   "versiones/nucleo/v1.cs": {
-    "mtime": 1786331082.7100031,
-    "ast_hash": "e569b0f227c3a66911eb44c79784c6b5",
+    "mtime": 1786340108.6840968,
+    "ast_hash": "7c33fb3e97d025f361fe4825ab01957f",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Arquitecto.cs": {
@@ -855,8 +855,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Diagnostics/ConsolaViva.cs": {
-    "mtime": 1786329309.8247428,
-    "ast_hash": "46848db559a1cb52d5241343fee0dd62",
+    "mtime": 1786340400.1747086,
+    "ast_hash": "6cd5bfbb1fa1b5b392733a708315db8b",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/JerarquiaWeb.cs": {

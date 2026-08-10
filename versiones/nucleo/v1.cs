@@ -309,7 +309,16 @@ public sealed class SurfaceMap
         n.Visits++;
         n.LastSeen = when;
 
+        // CAMBIAR DE APP NO ES NAVEGAR, tampoco a mano. LearnTraversal ya lo impedía para el cruce
+        // deliberado, pero esta vía —la navegación de una persona— sí las acuñaba, y el curado del
+        // arranque las borraba después. Entre medias, el grafo afirmaba caminos que no existen:
+        // apareció una pantalla «claude.exe» dentro del grafo del explorador solo porque el usuario
+        // se cambió de app para escribirme (2026-08-10, aclarado por él).
+        //
+        // Borrarlo al arrancar no basta: el arquitecto lo vio y gastó un hallazgo en investigarlo.
+        // Lo que no es una transición no debe entrar, ni un minuto.
         if (_lastCommitted.Length > 0 && !string.Equals(_lastCommitted, id, StringComparison.OrdinalIgnoreCase)
+            && MismaApp(_lastCommitted, id)
             // EL ATRÁS NO ACUÑA ARISTAS: es un gesto de historial, no de estructura. Puedes venir
             // de cualquier parte, así que «a dónde lleva» no es una propiedad del botón sino del
             // camino andado — su rastro es efímero por naturaleza. La arista «vercel → graph» que
@@ -692,7 +701,9 @@ public sealed class SurfaceMap
             info.NivelFijado = nivel >= 0;
             info.PorPersona = nivel >= 0 && (porPersona || info.PorPersona);   // lo humano no se degrada
             info.EsCromo = nivel >= 0 && esCromo;
-            Aprender(a, info.Label, nivel, porPersona, esCromo);   // sobrevive a borrar el grafo
+            // Se apunta también SU SELECTOR: es lo que permite que dos salidas con el mismo nombre
+            // tengan niveles distintos y dejen de pisarse al recargar (ver Ensenanza).
+            Aprender(a, info.Label, nivel, porPersona, esCromo, info.Selector);   // sobrevive a borrar el grafo
             // La pantalla que hay detrás vive en el nivel de su puerta: si se mueve la puerta, se
             // mueve el sitio. Y si la puerta se SUELTA, el sitio también se suelta — dejarle el
             // nivel viejo lo clavaba en esa fila para siempre: «Graph» se soltó y siguió a la
@@ -1306,8 +1317,9 @@ public sealed class SurfaceMap
         string a = app.Trim();
         if (a.Length == 0) return Array.Empty<(string, int)>();
         return _ensenanzas.TryGetValue(a, out var d)
-            ? d.Where(kv => kv.Value.Humano && !kv.Value.Atras && kv.Value.Nivel >= 0).Select(kv => (kv.Key, kv.Value.Nivel))
-               .OrderBy(x => x.Item2).ThenBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
+            ? d.Where(kv => kv.Value.Humano && !kv.Value.Atras && kv.Value.Nivel >= 0)
+              .Select(kv => (kv.Value.Etiqueta.Length > 0 ? kv.Value.Etiqueta : kv.Key, kv.Value.Nivel))
+               .OrderBy(x => x.Item2).ThenBy(x => x.Item1, StringComparer.CurrentCultureIgnoreCase)
                .ToList()
             : Array.Empty<(string, int)>();
     }
@@ -1343,7 +1355,29 @@ public sealed class SurfaceMap
     /// (2026-08-07, observado por el usuario). Por compatibilidad, declarar nivel 1 sigue
     /// marcando cromo salvo que se diga lo contrario.
     /// </summary>
-    public sealed record Ensenanza(int Nivel, bool Humano, bool Atras = false, bool Cromo = false);
+    /// <summary>
+    /// Lo enseñado de una salida. <paramref name="Selector"/> es lo que la hace ÚNICA cuando su
+    /// nombre no lo es.
+    ///
+    /// Sin él, dos salidas que se llaman igual comparten enseñanza a la fuerza. Lo midió el
+    /// arquitecto en el explorador (2026-08-10): en UNA sola pantalla, el panel lateral salía con
+    /// «Documentos» e «Imágenes» en nivel 1 y «Descargas», «Música» y «Videos» en nivel 2 — siendo
+    /// hermanos del mismo árbol. El panel duplica nombres (Acceso rápido y OneDrive tienen cada
+    /// uno su «Escritorio», su «Documentos») y, resolviendo por etiqueta, cada declaración pisaba
+    /// todas las apariciones: ganaba la última escritura.
+    ///
+    /// Su consecuencia operativa, que es la que importa: «el navegador buscará ruta hacia Música
+    /// creyéndola de nivel 2 cuando está a un clic desde cualquier sitio».
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="Etiqueta"/> viaja aparte de la clave porque desde que la clave es el
+    /// SELECTOR, la clave dejó de ser legible. Y quien pregunta «qué se enseñó de esta app» quiere
+    /// el nombre que se ve en pantalla, no un selector — lo cazó el contrato en cuanto cambió la
+    /// clave: la promesa nº2 empezó a fallar porque devolvía selectores donde promete etiquetas
+    /// (2026-08-10). Cambiar cómo se guarda algo no puede cambiar lo que se promete de ello.
+    /// </remarks>
+    public sealed record Ensenanza(int Nivel, bool Humano, bool Atras = false, bool Cromo = false,
+        string Selector = "", string Etiqueta = "");
 
     /// <summary>
     /// ¿Este control es el gesto de VOLVER de su app?
@@ -1387,7 +1421,8 @@ public sealed class SurfaceMap
     /// lo dijo — los dos describen la estructura.</remarks>
     public IReadOnlyList<(string Etiqueta, int Nivel)> EnsenanzasDe(string app) =>
         _ensenanzas.TryGetValue(app.Trim(), out var d)
-            ? d.Where(kv => !kv.Value.Atras && kv.Value.Nivel >= 0).Select(kv => (kv.Key, kv.Value.Nivel)).ToList()
+            ? d.Where(kv => !kv.Value.Atras && kv.Value.Nivel >= 0)
+              .Select(kv => (kv.Value.Etiqueta.Length > 0 ? kv.Value.Etiqueta : kv.Key, kv.Value.Nivel)).ToList()
             : Array.Empty<(string, int)>();
 
     /// <summary>Las apps con jerarquía enseñada, para poder verlas y borrarlas por separado.</summary>
@@ -1450,9 +1485,16 @@ public sealed class SurfaceMap
     private void AplicarEnsenanza(string desde, EdgeInfo e)
     {
         if (e.Label.Length == 0) return;
-        if (_ensenanzas.TryGetValue(AppDe(desde), out var sabidas)
-            && sabidas.TryGetValue(e.Label, out var ens)
-            && !ens.Atras && ens.Nivel >= 0)
+        if (!_ensenanzas.TryGetValue(AppDe(desde), out var sabidas)) return;
+
+        // PRIMERO POR SELECTOR, que es lo que identifica. Solo se cae a la etiqueta cuando la
+        // enseñanza no traía selector — lo aprendido antes de este cambio sigue funcionando, y lo
+        // nuevo deja de confundir dos salidas que se llaman igual.
+        Ensenanza? ens = null;
+        if (e.Selector.Length > 0 && sabidas.TryGetValue(e.Selector, out var porSel)) ens = porSel;
+        else if (sabidas.TryGetValue(e.Label, out var porEtq) && porEtq.Selector.Length == 0) ens = porEtq;
+
+        if (ens != null && !ens.Atras && ens.Nivel >= 0)
         {
             e.NivelNav = ens.Nivel;
             e.NivelFijado = true;
@@ -1461,14 +1503,25 @@ public sealed class SurfaceMap
         }
     }
 
-    private void Aprender(string app, string etiqueta, int nivel, bool humano, bool cromo = false)
+    /// <summary>
+    /// Guardar lo enseñado. LA CLAVE ES EL SELECTOR cuando se conoce, y la etiqueta solo cuando no.
+    ///
+    /// Así dos salidas que se llaman igual dejan de compartir enseñanza: cada una tiene su entrada
+    /// y su nivel. Con la etiqueta por clave, declarar una pisaba a la otra y el árbol salía con
+    /// hermanos en niveles distintos (ver <see cref="Ensenanza"/>).
+    /// </summary>
+    private void Aprender(string app, string etiqueta, int nivel, bool humano, bool cromo = false,
+        string selector = "")
     {
         if (app.Length == 0 || etiqueta.Length == 0) return;
         if (!_ensenanzas.TryGetValue(app, out var d))
             _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
-        if (nivel < 0) d.Remove(etiqueta);
-        else d[etiqueta] = new Ensenanza(nivel,
-            humano || (d.TryGetValue(etiqueta, out var ya) && ya.Humano), Atras: false, Cromo: cromo);
+
+        string clave = selector.Length > 0 ? selector : etiqueta;
+        if (nivel < 0) d.Remove(clave);
+        else d[clave] = new Ensenanza(nivel,
+            humano || (d.TryGetValue(clave, out var ya) && ya.Humano),
+            Atras: false, Cromo: cromo, Selector: selector, Etiqueta: etiqueta);
         GuardarEnsenanzas();
     }
 

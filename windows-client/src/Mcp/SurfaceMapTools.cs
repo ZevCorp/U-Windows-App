@@ -1691,9 +1691,18 @@ public sealed class SurfaceMapTools
         // «corrompe el juicio, no el dato». Un agente que se fía cierra la app en BRONCE creyendo
         // que llegó a PLATA. Las dos herramientas tienen que medir lo MISMO: lo declarado
         // (2026-08-09, hallazgo nº1 de su auditoría).
+        // Y EL CONTENIDO TAMPOCO ES ESTRUCTURA PENDIENTE. Sin esto la lista CRECÍA al trabajar
+        // bien: cada carpeta que el arquitecto abría volcaba sus archivos a los pendientes, y en un
+        // explorador el contenido es infinito. Lo midió él: pasó de 2 pendientes a 4 pantallas + 40
+        // salidas «por hacer bien el trabajo de bajar en profundidad» (2026-08-10).
+        //
+        // Una lista de tareas que se alarga cuanto más trabajas no es una lista de tareas. Y el
+        // criterio de «qué es contenido» ya existía en SafeToClick — solo faltaba usarlo aquí.
         var puertas = _map.Edges()
             .Where(e => DeLaApp(e.From) && !e.Info.NivelFijado && e.Info.Label.Length > 0
                         && !e.Info.KindDeclarado.Equals("accion", StringComparison.OrdinalIgnoreCase)
+                        && !e.Info.Nivel.StartsWith("contenido", StringComparison.OrdinalIgnoreCase)
+                        && !e.Info.Nivel.StartsWith("lista", StringComparison.OrdinalIgnoreCase)
                         && !_map.EsGestoDeAtras(app, e.Info.Label, e.Info.Selector))
             .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(g => g.Count()).Take(40).ToList();
