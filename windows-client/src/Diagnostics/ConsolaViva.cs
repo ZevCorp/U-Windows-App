@@ -86,6 +86,22 @@ public static class ConsolaViva
     private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
     private const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
 
+    /// <summary>
+    /// En qué pantalla está la consola del agente, o null si no hay consola. El grafo la SIGUE:
+    /// mirar su razonamiento y mirar el grafo son la misma tarea, así que quien decide dónde vive
+    /// esa pareja es la consola, y el grafo va detrás sin que haya que moverlo aparte.
+    /// </summary>
+    public static string? PantallaDeLaConsola()
+    {
+        try
+        {
+            var h = GetConsoleWindow();
+            if (h == IntPtr.Zero) return null;
+            return System.Windows.Forms.Screen.FromHandle(h).DeviceName;
+        }
+        catch { return null; }
+    }
+
     /// <summary>Una línea, con su hora. No hace nada si nunca se abrió la consola.</summary>
     public static void Escribir(string linea)
     {

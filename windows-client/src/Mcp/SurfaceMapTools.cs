@@ -1674,8 +1674,18 @@ public sealed class SurfaceMapTools
 
         var pantallas = _map.Nodes.Where(kv => DeLaApp(kv.Key) && kv.Value.Nivel < 0)
             .OrderByDescending(kv => kv.Value.Visits).ToList();
+        // LO CLASIFICADO YA NO ESTÁ PENDIENTE. Aquí solo se miraba el nivel, así que una salida
+        // marcada como ACCIÓN o como gesto de VOLVER seguía saliendo en la lista para siempre: el
+        // agente clasificó cuarenta y la lista no bajó ni una. Rompía su criterio de terminado y,
+        // peor, lo empujaba a la única salida que quedaba —ponerle nivel a cosas que no son
+        // navegación—, que es justo lo contrario de lo que se le pide (2026-08-09, lo reportó él).
+        //
+        // Pendiente es lo que no tiene NI nivel NI clasificación. Clasificar es decidir, y una
+        // decisión tomada no puede seguir contando como trabajo por hacer.
         var puertas = _map.Edges()
-            .Where(e => DeLaApp(e.From) && e.Info.NivelNav < 0 && e.Info.Label.Length > 0)
+            .Where(e => DeLaApp(e.From) && e.Info.NivelNav < 0 && e.Info.Label.Length > 0
+                        && e.Info.Kind.Length == 0
+                        && !_map.EsGestoDeAtras(app, e.Info.Label, e.Info.Selector))
             .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(g => g.Count()).Take(40).ToList();
 

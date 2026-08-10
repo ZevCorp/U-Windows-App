@@ -54,9 +54,15 @@ const tFoto = (name, description) =>
     const r = await sonda("map_shot");
     const m = /^data:image\/png;base64,(.+)$/s.exec(r.trim());
     if (!m) return { content: [{ type: "text", text: r }] };
+    // FORMATO MCP, no formato de la API de Anthropic. Aquí iba `source: {type, media_type, data}`
+    // —la forma que usa la API de mensajes— y MCP quiere `data` + `mimeType` planos. El servidor
+    // rechazaba la respuesta entera con -32602 «Invalid tools/call result», así que el agente se
+    // quedó CIEGO justo en la herramienta que existía para que viera: tuvo que clasificar chrome
+    // contra contenido solo con nombres, que es el modo de fallo que la foto venía a evitar
+    // (2026-08-09, lo reportó él mismo en su auditoría).
     return {
       content: [
-        { type: "image", source: { type: "base64", media_type: "image/png", data: m[1] } },
+        { type: "image", data: m[1], mimeType: "image/png" },
         { type: "text", text: "Foto de la ventana que hay delante ahora mismo." },
       ],
     };

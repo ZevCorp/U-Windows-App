@@ -101,6 +101,16 @@ public sealed class GraphExplorerWindow : Window
     private VistaGrafo _vista = VistaGrafo.Plata;
     private bool _dibujoClasico => _vista == VistaGrafo.Clasico;
 
+    /// <summary>Dónde se aloja el grafo. Existe para poder sacarlo a otra pantalla y devolverlo.</summary>
+    private Border _grafoHueco = null!;
+
+    /// <summary>El rótulo de qué grafo se está viendo. Sin él, las tres vistas se confunden entre
+    /// sí y una prueba pasa a ser un adivinanza sobre cuál estabas mirando (2026-08-09).</summary>
+    private TextBlock _rotuloVista = null!;
+
+    /// <summary>El grafo con su rótulo: lo que viaja junto cuando se manda a otra pantalla.</summary>
+    private DockPanel _conRotulo = null!;
+
     /// <summary>
     /// Borra el grafo entero, preguntando antes. Borrar lo aprendido no se deshace.
     /// </summary>
@@ -327,12 +337,29 @@ public sealed class GraphExplorerWindow : Window
         derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(_versionesNucleo, 0);
-        Grid.SetColumn(_grafo, 1);
+        // El grafo vive dentro de un HUECO, no directamente en la rejilla: así puede salir a su
+        // propia ventana (otro monitor) y volver sin tocar el resto de la capa. Ver MoverAOtraPantalla.
+        // EL RÓTULO, encima del grafo y siempre visible: qué vista es y cuánto falta. Con tres
+        // dibujos del mismo grafo, no saber cuál estás mirando convierte cada prueba en una
+        // adivinanza — y ya perdimos horas diagnosticando el dibujo equivocado (2026-08-09).
+        _rotuloVista = new TextBlock
+        {
+            Foreground = new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xFF, 0xFF)),
+            FontSize = 12, FontWeight = FontWeights.Bold, FontFamily = new FontFamily("Consolas"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 6, 0, 2),
+        };
+        _conRotulo = new DockPanel();
+        DockPanel.SetDock(_rotuloVista, Dock.Top);
+        _conRotulo.Children.Add(_rotuloVista);
+        _conRotulo.Children.Add(_grafo);
+        _grafoHueco = new Border { Child = _conRotulo };
+        Grid.SetColumn(_grafoHueco, 1);
         Grid.SetColumn(_niveles, 2);
         _lienzo.HorizontalAlignment = HorizontalAlignment.Center;
         _lienzo.VerticalAlignment = VerticalAlignment.Center;
         derecha.Children.Add(_versionesNucleo);
-        derecha.Children.Add(_grafo);
+        derecha.Children.Add(_grafoHueco);
         derecha.Children.Add(_niveles);
 
         var dos = new Grid();
@@ -1369,24 +1396,56 @@ public sealed class GraphExplorerWindow : Window
         var pantallas = System.Windows.Forms.Screen.AllScreens;
         if (pantallas.Length < 2) return "solo hay una pantalla: no hay a dónde llevárselo";
 
-        var mano = new WindowInteropHelper(this).Handle;
-        var actual = System.Windows.Forms.Screen.FromHandle(mano);
-        int i = Array.FindIndex(pantallas, p => p.DeviceName == actual.DeviceName);
-        var destino = pantallas[(i + 1) % pantallas.Length];
-        var a = destino.WorkingArea;
+        // SOLO EL GRAFO SE MUEVE, no la capa entera. Mover la ventana se llevaba TODO lo de
+        // pruebas —los puntos sobre los elementos, la barra, los niveles— y esos tienen que quedarse
+        // encima de la app, que es a lo que apuntan: unos puntos flotando en otro monitor no señalan
+        // nada (2026-08-09, visto por el usuario). El grafo, en cambio, es un dibujo que se mira
+        // aparte, y ahí sí estorba.
+        //
+        // Y NO ELIGE PANTALLA POR SU CUENTA: va a donde esté la consola del arquitecto. Mirar su
+        // razonamiento y mirar el grafo son la misma tarea, así que el grafo SIGUE a la consola —
+        // pedido por el usuario, y además evita tener que acordarse de mover dos cosas.
+        var destino = Diagnostics.ConsolaViva.PantallaDeLaConsola() is { } dev
+            ? Array.Find(pantallas, p => p.DeviceName == dev) ?? OtraPantalla(pantallas)
+            : OtraPantalla(pantallas);
 
-        // Coordenadas de PANTALLA (píxeles físicos), que es lo que entiende SetWindowPos. WPF
-        // trabaja en unidades independientes del dispositivo y con dos monitores de escala distinta
-        // las dos cuentas no coinciden.
+        _grafoFuera = !_grafoFuera;
+        if (!_grafoFuera)
+        {
+            _ventanaGrafo?.Close();
+            _ventanaGrafo = null;
+            _grafoHueco.Child = _conRotulo;   // vuelve a su sitio dentro de la capa
+            return "el grafo vuelve a la capa";
+        }
+
+        // Se saca a una ventana propia: es la única forma de que viva en otra pantalla mientras la
+        // capa sigue pegada a la app del usuario.
+        _grafoHueco.Child = null;
+        var a = destino.WorkingArea;
+        _ventanaGrafo = new Window
+        {
+            Title = "Grafo",
+            WindowStyle = WindowStyle.None, AllowsTransparency = true, ShowInTaskbar = false,
+            Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x12, 0x12, 0x16)),
+            Content = _conRotulo, Topmost = true,
+        };
+        _ventanaGrafo.Show();
+        var mano = new WindowInteropHelper(_ventanaGrafo).Handle;
         SetWindowPos(mano, IntPtr.Zero, a.Left, a.Top, a.Width, a.Height, SWP_NOZORDER | SWP_NOACTIVATE);
 
-        // Y la consola del arquitecto detrás: mirar su razonamiento y mirar el grafo son la misma
-        // tarea, y separarlos entre dos pantallas obligaría a girar la cabeza en cada paso.
-        Diagnostics.ConsolaViva.MoverA(a.Left + 40, a.Top + 40, Math.Min(900, a.Width - 80), Math.Min(600, a.Height - 80));
-
-        LogBus.Log("explorador", $"capa y consola movidas a «{destino.DeviceName}» ({a.Width}×{a.Height})");
-        return $"grafo y consola en la otra pantalla ({a.Width}×{a.Height}); mantén pulsado otra vez para volver";
+        LogBus.Log("explorador", $"grafo movido a «{destino.DeviceName}» ({a.Width}×{a.Height}); "
+            + "la capa de pruebas se queda sobre la app");
+        return $"grafo en «{destino.DeviceName}»; la capa se queda aquí. Mantén pulsado para traerlo";
     }
+
+    private static System.Windows.Forms.Screen OtraPantalla(System.Windows.Forms.Screen[] todas)
+    {
+        var primaria = Array.Find(todas, p => p.Primary) ?? todas[0];
+        return Array.Find(todas, p => p.DeviceName != primaria.DeviceName) ?? primaria;
+    }
+
+    private Window? _ventanaGrafo;
+    private bool _grafoFuera;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
@@ -2417,6 +2476,25 @@ public sealed class GraphExplorerWindow : Window
             _profDeclarada.Clear();
             _porQueDeclarado.Clear();
         }
+
+        // EL RÓTULO DICE QUÉ SE ESTÁ MIRANDO, siempre. Y en plata, además, cuánto falta: el número
+        // de «sin situar» es la medida de avance, y tenerlo en pantalla evita ir al log para saber
+        // si una prueba mejoró o empeoró.
+        _rotuloVista.Text = _vista switch
+        {
+            VistaGrafo.Plata => $"PLATA · {appActual} · {_profDeclarada.Count} situada(s)"
+                              + (sinSituar > 0 ? $" · {sinSituar} SIN SITUAR" : " · completo"),
+            VistaGrafo.Clasico => $"CLÁSICO (referencia) · {appActual}",
+            VistaGrafo.Bronce => $"BRONCE · {appActual} · lo observado en crudo, sin jerarquía",
+            _ => "",
+        };
+        _rotuloVista.Foreground = new SolidColorBrush(_vista switch
+        {
+            VistaGrafo.Plata => sinSituar > 0
+                ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07) : Color.FromArgb(0xEE, 0x81, 0xC7, 0x84),
+            VistaGrafo.Clasico => Color.FromArgb(0xEE, 0xBA, 0x68, 0xC8),
+            _ => Color.FromArgb(0xEE, 0xC8, 0xA6, 0x7F),
+        });
 
         DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, sinSituar);
     }
