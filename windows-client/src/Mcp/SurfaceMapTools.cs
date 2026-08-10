@@ -1124,6 +1124,7 @@ public sealed class SurfaceMapTools
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
         or "map_hierarchy" or "map_feedback" or "map_unsituated" or "map_learn_back" or "map_shot"
+        or "map_set_kind"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1176,6 +1177,7 @@ public sealed class SurfaceMapTools
             "map_unsituated" => SinSituar(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
             "map_learn_back" => AprenderGestoAtras(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("exit")),
             "map_shot" => Foto(),
+            "map_set_kind" => Clasificar(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("exit"), A("kind")),
             "map_hierarchy" => Jerarquia(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
             "map_feedback" => Feedback(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("finding")),
 
@@ -1694,6 +1696,38 @@ public sealed class SurfaceMapTools
                 + $" · vista en {g.Count()} pantalla(s)");
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// CLASIFICAR una salida, no borrarla. Marcarla como «accion» dice que hace algo pero no lleva
+    /// a otra pantalla: guardar, ordenar, copiar, crear.
+    ///
+    /// Antes esto era «excluir», y el usuario lo paró a tiempo: quitar del mapa lo que no es
+    /// navegación deja sin brazos al asistente que vendrá después — esos botones son justo los que
+    /// necesitará para EJECUTAR (2026-08-08). Una salida puede no ser estructura y seguir siendo
+    /// imprescindible. Así que se queda con todo lo suyo —selector, alternativas, dónde vive— y
+    /// solo se le pone la etiqueta que dice de qué sirve.
+    ///
+    /// El campo <see cref="SurfaceMap.EdgeInfo.Kind"/> ya existía para esto y estaba sin usar: no
+    /// hace falta estructura nueva, hacía falta que alguien lo dijera.
+    /// </summary>
+    private string Clasificar(string app, string salida, string clase)
+    {
+        if (salida.Length == 0) return "falta `exit`: qué salida quieres clasificar";
+        string k = clase.Length > 0 ? clase.Trim().ToLowerInvariant() : "accion";
+
+        var tocadas = _map.Edges().Where(e =>
+                SurfaceMap.AppDe(e.From).Equals(app, StringComparison.OrdinalIgnoreCase)
+                && (e.Info.Label.Equals(salida, StringComparison.OrdinalIgnoreCase)
+                    || e.Info.Selector.Equals(salida, StringComparison.Ordinal)))
+            .ToList();
+        if (tocadas.Count == 0) return $"no encuentro ninguna salida «{salida}» en «{app}»";
+
+        foreach (var (_, _, info) in tocadas) info.Kind = k;
+        LogBus.Log("mapa-mcp", $"«{salida}» clasificada como «{k}» ({tocadas.Count} aparición/es): "
+            + "sigue en el mapa para ejecutarla, deja de contar como estructura");
+        return $"«{tocadas[0].Info.Label}» queda clasificada como «{k}» en «{app}» "
+             + $"({tocadas.Count} aparición/es). Sigue en el mapa: el asistente podrá ejecutarla.";
     }
 
     /// <summary>

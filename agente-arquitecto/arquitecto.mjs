@@ -104,9 +104,9 @@ const herramientas = createSdkMcpServer({
       { salida: z.string().describe("nombre del botón de volver, tal como se ve") },
       (a) => sonda("map_learn_back", { app: APP, exit: a.salida })),
 
-    t("excluir", "Quitar del mapa una salida que NO es una puerta de navegación (adornos, texto, elementos de contenido que ensucian). Limpia el terreno para que la estructura se lea.",
-      { salida: z.string().describe("nombre de la salida a excluir") },
-      (a) => sonda("map_exclude", { exit: a.salida })),
+    t("marcar_accion", "Clasificar una salida como ACCIÓN y no como navegación: hace algo (guardar, copiar, ordenar, crear) pero no lleva a otra pantalla. NO se borra del mapa — el asistente la necesitará para EJECUTAR; solo deja de contar como estructura.",
+      { salida: z.string().describe("nombre de la salida, tal como se ve") },
+      (a) => sonda("map_set_kind", { app: APP, exit: a.salida, kind: "accion" })),
 
     t("feedback", "Dejar escrito un HALLAZGO para el equipo: un desajuste entre la jerarquía real de la app y la del grafo, un nivel que no cuadra, una puerta que el grafo no vio. Es tu entregable.",
       { hallazgo: z.string().describe("el hallazgo, concreto: qué esperabas, qué hay, y por qué importa") },
@@ -127,7 +127,7 @@ aquí:
   · PLATA es lo mismo ORDENADO: cada salida en su nivel, el mobiliario marcado como cromo, el
     gesto de volver identificado, y lo que no es navegación fuera de en medio.
 
-CÓMO SE MIDE QUE HAS TERMINADO, y no es una opinión: la herramienta `sin_situar` enumera lo que el
+CÓMO SE MIDE QUE HAS TERMINADO, y no es una opinión: la herramienta «sin_situar» enumera lo que el
 mapa todavía no sabe colocar. Empiezas mirándola y terminas cuando esté vacía o cuando lo que
 quede esté explicado en el feedback. Ese es tu criterio de terminado.
 
@@ -145,9 +145,9 @@ BAJAR EN PROFUNDIDAD SIGUE IMPORTANDO. Un mapa de un solo nivel no es una jerarq
 Si al terminar todo cuelga del inicio, has fallado aunque no te hayas equivocado en nada.
 
 Método de trabajo:
-0. Empieza por `sin_situar` (tu lista) y `mirar` (una foto). Los nombres solos engañan: un panel
+0. Empieza por «sin_situar» (tu lista) y «mirar» (una foto). Los nombres solos engañan: un panel
    lateral y una lista de archivos son indistinguibles en texto y obvios en una imagen. Y marca
-   pronto el gesto de volver con `marcar_atras` — cada vuelta sin marcar ensucia el grafo.
+   pronto el gesto de volver con «marcar_atras» — cada vuelta sin marcar ensucia el grafo.
 1. Sigue por jerarquia_del_grafo y que_veo: qué cree el grafo, qué hay de verdad.
 2. BAJA. Elige una sección con contenido, entra, y desde DENTRO vuelve a mirar (que_veo y
    rutas_desde): ahí aparecen las puertas del nivel 2. Entra en una de ellas y repite. Agota una
@@ -190,7 +190,7 @@ const corrida = query({
       "mcp__grafo__ir_a", "mcp__grafo__jerarquia_del_grafo", "mcp__grafo__rutas_desde",
       "mcp__grafo__fijar_nivel", "mcp__grafo__feedback",
       "mcp__grafo__sin_situar", "mcp__grafo__mirar",
-      "mcp__grafo__marcar_atras", "mcp__grafo__excluir",
+      "mcp__grafo__marcar_atras", "mcp__grafo__marcar_accion",
     ],
     disallowedTools: ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"],
     permissionMode: "bypassPermissions",

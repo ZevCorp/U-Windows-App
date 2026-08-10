@@ -81,9 +81,25 @@ public sealed class GraphExplorerWindow : Window
     private Button _clasicoBtn = null!;
     private CarruselDeApps? _carrusel;
 
-    /// <summary>¿Se dibuja con las cinco fuentes de siempre? Es la referencia contra la que se
-    /// mide el dibujo fiel al mapa, no un modo de trabajo. Ver <see cref="ProfundidadClasica"/>.</summary>
-    private bool _dibujoClasico;
+    /// <summary>
+    /// Las cuatro formas de mirar el MISMO grafo. No son estilos: son etapas del sistema, y verlas
+    /// una al lado de otra es la única manera de saber cuánto falta (2026-08-08, pedido por el
+    /// usuario con el modelo bronce/plata/oro).
+    /// </summary>
+    private enum VistaGrafo
+    {
+        /// <summary>Lo que el MAPA sabe: niveles declarados, y lo que no, en «sin situar».</summary>
+        Plata,
+        /// <summary>Las cinco fuentes de siempre. La referencia contra la que se mide plata.</summary>
+        Clasico,
+        /// <summary>Lo observado en CRUDO: nodos y aristas por pura topología, sin jerarquía.</summary>
+        Bronce,
+        /// <summary>Nada. El arquitecto trabaja sin que el grafo le tape la app.</summary>
+        Oculto,
+    }
+
+    private VistaGrafo _vista = VistaGrafo.Plata;
+    private bool _dibujoClasico => _vista == VistaGrafo.Clasico;
 
     /// <summary>
     /// Borra el grafo entero, preguntando antes. Borrar lo aprendido no se deshace.
@@ -420,15 +436,50 @@ public sealed class GraphExplorerWindow : Window
             Cursor = Cursors.Hand,
             ToolTip = "Dibujo CLÁSICO (5 fuentes) vs. dibujo fiel al mapa · el mismo grafo, dos lecturas",
         };
+        // PULSAR CICLA LAS VISTAS; MANTENER PULSADO SE LO LLEVA AL OTRO MONITOR. Dos gestos en un
+        // botón porque son la misma pregunta —«qué quiero ver y dónde»— y porque el sitio donde
+        // haría falta un segundo botón es justo el que no sobra: la barra vive encima de la app que
+        // se está mirando (2026-08-08, pedido por el usuario).
+        var pulsado = new System.Windows.Threading.DispatcherTimer
+        { Interval = TimeSpan.FromMilliseconds(550) };
+        bool seLoLlevo = false;
+        pulsado.Tick += (_, __) =>
+        {
+            pulsado.Stop();
+            seLoLlevo = true;                  // el clic de soltar ya no cicla: fue un «llévatelo»
+            _status.Text = MoverAOtraPantalla();
+        };
+        _clasicoBtn.PreviewMouseLeftButtonDown += (_, __) => { seLoLlevo = false; pulsado.Start(); };
+        _clasicoBtn.PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            pulsado.Stop();
+            if (seLoLlevo) { e.Handled = true; return; }
+        };
         _clasicoBtn.Click += (_, __) =>
         {
-            _dibujoClasico = !_dibujoClasico;
-            _clasicoBtn.Background = new SolidColorBrush(_dibujoClasico
-                ? Color.FromArgb(0x66, 0xBA, 0x68, 0xC8) : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
-            _status.Text = _dibujoClasico
-                ? "dibujo CLÁSICO: las cinco fuentes de siempre (referencia para contrastar)"
-                : "dibujo FIEL AL MAPA: lo que el grafo sabe, y lo que no, en «sin situar»";
-            _huellaEstructura = "";   // que el log vuelva a contarlo con el modo nuevo
+            if (seLoLlevo) return;
+            _vista = (VistaGrafo)(((int)_vista + 1) % 4);
+            _clasicoBtn.Content = _vista switch
+            {
+                VistaGrafo.Plata => "⚖", VistaGrafo.Clasico => "◈",
+                VistaGrafo.Bronce => "⛁", _ => "◌",
+            };
+            _clasicoBtn.Background = new SolidColorBrush(_vista switch
+            {
+                VistaGrafo.Clasico => Color.FromArgb(0x66, 0xBA, 0x68, 0xC8),
+                VistaGrafo.Bronce => Color.FromArgb(0x66, 0xA1, 0x88, 0x7F),
+                VistaGrafo.Oculto => Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF),
+                _ => Color.FromArgb(0x66, 0x64, 0xB5, 0xF6),
+            });
+            _status.Text = _vista switch
+            {
+                VistaGrafo.Plata => "PLATA: lo que el mapa sabe; lo que no, en «sin situar»",
+                VistaGrafo.Clasico => "CLÁSICO: las cinco fuentes de siempre (referencia)",
+                VistaGrafo.Bronce => "BRONCE: lo observado en crudo, sin jerarquía ninguna",
+                _ => "grafo OCULTO: el arquitecto trabaja sin ruido visual",
+            };
+            _grafo.Visibility = _vista == VistaGrafo.Oculto ? Visibility.Collapsed : Visibility.Visible;
+            _huellaEstructura = "";   // que el log vuelva a contarlo con la vista nueva
             DibujarGrafo();
         };
 
@@ -1301,6 +1352,45 @@ public sealed class GraphExplorerWindow : Window
     private static extern uint GetCurrentThreadId();
 
     private const int SW_RESTORE = 9;
+
+    /// <summary>
+    /// Llevarse la capa —y la consola del arquitecto— a la SIGUIENTE pantalla.
+    ///
+    /// Con dos monitores, el conflicto es real: el grafo tiene que verse mientras el arquitecto
+    /// trabaja, pero si vive encima de la app que él está navegando le mete ruido visual justo a
+    /// quien tiene que mirarla. Con dos pantallas no hay que elegir (2026-08-08, pedido por el
+    /// usuario). Con una sola, se dice y no se finge.
+    ///
+    /// Se mueve por handle y no por WindowState porque esta ventana es una capa: ocupa el área de
+    /// trabajo de SU pantalla, y cambiar de pantalla es cambiar de área, no maximizar.
+    /// </summary>
+    private string MoverAOtraPantalla()
+    {
+        var pantallas = System.Windows.Forms.Screen.AllScreens;
+        if (pantallas.Length < 2) return "solo hay una pantalla: no hay a dónde llevárselo";
+
+        var mano = new WindowInteropHelper(this).Handle;
+        var actual = System.Windows.Forms.Screen.FromHandle(mano);
+        int i = Array.FindIndex(pantallas, p => p.DeviceName == actual.DeviceName);
+        var destino = pantallas[(i + 1) % pantallas.Length];
+        var a = destino.WorkingArea;
+
+        // Coordenadas de PANTALLA (píxeles físicos), que es lo que entiende SetWindowPos. WPF
+        // trabaja en unidades independientes del dispositivo y con dos monitores de escala distinta
+        // las dos cuentas no coinciden.
+        SetWindowPos(mano, IntPtr.Zero, a.Left, a.Top, a.Width, a.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+
+        // Y la consola del arquitecto detrás: mirar su razonamiento y mirar el grafo son la misma
+        // tarea, y separarlos entre dos pantallas obligaría a girar la cabeza en cada paso.
+        Diagnostics.ConsolaViva.MoverA(a.Left + 40, a.Top + 40, Math.Min(900, a.Width - 80), Math.Min(600, a.Height - 80));
+
+        LogBus.Log("explorador", $"capa y consola movidas a «{destino.DeviceName}» ({a.Width}×{a.Height})");
+        return $"grafo y consola en la otra pantalla ({a.Width}×{a.Height}); mantén pulsado otra vez para volver";
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    private const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
 
     /// <summary>Traer al frente lo hace <see cref="AppAligner.TraerAlFrente"/>, para toda la app.</summary>
     private static bool TraerAlFrente(IntPtr h) => AppAligner.TraerAlFrente(h);
@@ -2310,6 +2400,23 @@ public sealed class GraphExplorerWindow : Window
         int sinSituar = 0;
         foreach (var n in todos)
             if (!prof.ContainsKey(n)) { prof[n] = filaSinSituar; sinSituar++; }
+
+        // BRONCE: lo observado, sin jerarquía. La fila es la DISTANCIA en saltos desde la raíz y
+        // nada más — ni niveles, ni cromo, ni declaraciones. Es lo que el sistema tiene antes de
+        // que nadie ordene nada, y verlo aparte es lo que permite decir qué añadió plata.
+        if (_vista == VistaGrafo.Bronce)
+        {
+            prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
+            for (int pasada = 0; pasada < 10; pasada++)
+                foreach (var (f, t) in aristasMapa)
+                    if (prof.TryGetValue(f, out int d) && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
+                        prof[t] = d + 1;
+            sinSituar = 0;
+            foreach (var n in todos)
+                if (!prof.ContainsKey(n)) { prof[n] = 1; sinSituar++; }
+            _profDeclarada.Clear();
+            _porQueDeclarado.Clear();
+        }
 
         DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, sinSituar);
     }

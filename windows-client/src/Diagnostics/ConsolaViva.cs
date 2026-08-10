@@ -64,6 +64,28 @@ public static class ConsolaViva
         }
     }
 
+    /// <summary>
+    /// Mover la consola a una posición de pantalla. La usa el explorador cuando se lleva el grafo
+    /// al otro monitor: mirar el razonamiento del agente y mirar el grafo son la MISMA tarea, y
+    /// dejarlos en pantallas distintas obligaría a girar la cabeza en cada paso (2026-08-08).
+    ///
+    /// Silenciosa si no hay consola: mover algo que no existe no es un error, es un no-op.
+    /// </summary>
+    public static void MoverA(int x, int y, int ancho, int alto)
+    {
+        try
+        {
+            var h = GetConsoleWindow();
+            if (h == IntPtr.Zero) return;
+            SetWindowPos(h, IntPtr.Zero, x, y, ancho, alto, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        catch { }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    private const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+
     /// <summary>Una línea, con su hora. No hace nada si nunca se abrió la consola.</summary>
     public static void Escribir(string linea)
     {
