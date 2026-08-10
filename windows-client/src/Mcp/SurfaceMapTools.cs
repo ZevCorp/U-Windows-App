@@ -1682,8 +1682,17 @@ public sealed class SurfaceMapTools
         //
         // Pendiente es lo que no tiene NI nivel NI clasificación. Clasificar es decidir, y una
         // decisión tomada no puede seguir contando como trabajo por hacer.
+        // PENDIENTE ES LO NO DECLARADO, no lo que carece de número. Aquí se miraba NivelNav < 0, y
+        // casi ninguna salida cumple eso: al observarlas se les pone un nivel por deducción. Así
+        // que esta herramienta contestó «explorer.exe está ENTERA situada» mientras jerarquia
+        // reportaba, en el mismo instante, CERO salidas con nivel declarado.
+        //
+        // Es el peor tipo de fallo que puede tener esto y lo dijo el arquitecto con precisión:
+        // «corrompe el juicio, no el dato». Un agente que se fía cierra la app en BRONCE creyendo
+        // que llegó a PLATA. Las dos herramientas tienen que medir lo MISMO: lo declarado
+        // (2026-08-09, hallazgo nº1 de su auditoría).
         var puertas = _map.Edges()
-            .Where(e => DeLaApp(e.From) && e.Info.NivelNav < 0 && e.Info.Label.Length > 0
+            .Where(e => DeLaApp(e.From) && !e.Info.NivelFijado && e.Info.Label.Length > 0
                         && e.Info.Kind.Length == 0
                         && !_map.EsGestoDeAtras(app, e.Info.Label, e.Info.Selector))
             .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)

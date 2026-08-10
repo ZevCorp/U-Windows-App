@@ -2601,6 +2601,30 @@ public sealed class GraphExplorerWindow : Window
         // escritura del repintado y deshacía lo declarado cada vez (2026-08-06).
         foreach (var d in cromo.Keys) if (!prof.ContainsKey(d)) prof[d] = 1;
 
+        // LAS ACCIONES, A UN LADO Y FUERA DE LA ESTRUCTURA. Copiar, Pegar, Ordenar o Eliminar no
+        // llevan a ninguna parte: mezclarlas con las pantallas hace que el árbol parezca tener
+        // ramas que no existen y obliga a leer cada nodo para saber si es un sitio o un verbo
+        // (2026-08-09, pedido por el usuario). No se borran —el asistente las necesita para
+        // ejecutar, y esa fue su otra corrección— pero viven en su propio carril.
+        //
+        // Y SOLO SE DIBUJAN LAS QUE ESTÁN AHORA EN PANTALLA: una acción no es un lugar al que se
+        // pueda volver, así que enseñar las de otra pantalla sería ofrecer algo que no se puede
+        // pulsar. Lo que ya no está a la vista, se calla hasta que vuelva.
+        var accionesAhora = _map.Edges()
+            .Where(e => e.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
+                        && e.Info.Label.Length > 0
+                        && (appActual.Length == 0 || NivelDe(e.From).Equals(appActual, StringComparison.OrdinalIgnoreCase))
+                        && _map.SigueALaVista(e.From, e.Info))
+            .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Key)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .Take(24)
+            .ToList();
+        // Fuera del reparto por filas: si siguieran en `prof`, seguirían siendo estructura.
+        foreach (var a in accionesAhora.ToList())
+            foreach (var k in prof.Keys.Where(k => Corto(k).EndsWith("/" + a, StringComparison.OrdinalIgnoreCase)).ToList())
+                prof.Remove(k);
+
         // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra
         // deja de leerse; a partir de ahí se sigue pagando el sitio que ocupa un texto que ya nadie
         // puede leer, y el recorrido —que es lo que se quiere ver— queda enterrado bajo etiquetas
@@ -2630,6 +2654,40 @@ public sealed class GraphExplorerWindow : Window
                 maxX = Math.Max(maxX, x + anchoCaja);
                 i++;
             }
+        }
+
+        // EL CARRIL DE ACCIONES, a la derecha de todo y sin líneas: no se conecta con nada porque
+        // no lleva a ninguna parte. Es una lista de verbos disponibles AQUÍ, no un trozo del árbol.
+        if (accionesAhora.Count > 0)
+        {
+            double xAcc = maxX + 48;
+            _lienzo.Children.Add(new TextBlock
+            {
+                Text = $"ACCIONES AQUÍ ({accionesAhora.Count})",
+                Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+                FontSize = 9, FontFamily = new FontFamily("Consolas"), FontWeight = FontWeights.Bold,
+                Margin = new Thickness(xAcc, 12, 0, 0),
+            });
+            for (int i = 0; i < accionesAhora.Count; i++)
+            {
+                var chip = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
+                    BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Margin = new Thickness(xAcc, 30 + i * 22, 0, 0),
+                    ToolTip = "acción disponible en esta pantalla · no es un lugar, no tiene nivel",
+                    Child = new TextBlock
+                    {
+                        Text = accionesAhora[i],
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+                        FontSize = 10, FontFamily = new FontFamily("Consolas"),
+                    },
+                };
+                _lienzo.Children.Add(chip);
+            }
+            maxX = xAcc + 160;
         }
 
         // Las aristas DEDUCIDAS, en gris y a trazos: no se recorrieron en esta corrida, pero el

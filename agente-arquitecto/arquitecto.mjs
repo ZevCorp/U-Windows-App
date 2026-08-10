@@ -95,7 +95,7 @@ const herramientas = createSdkMcpServer({
 
     t("fijar_nivel", "Declarar el nivel de una salida (1 = navegación transversal de la app entera). cromo=true si además te sigue a todas partes. NO muevas lo que declaró una persona: si discrepas, dilo con feedback.",
       {
-        salida: z.string().describe("nombre de la salida tal como se ve"),
+        salida: z.string().describe("nombre de la salida O SU SELECTOR (uia:name=X;ct=TreeItem). Usa el SELECTOR siempre que el nombre se repita en la app: por nombre se aplica a TODAS las apariciones a la vez"),
         nivel: z.number().int().min(1).max(6),
         cromo: z.boolean().optional(),
       },
@@ -110,7 +110,7 @@ const herramientas = createSdkMcpServer({
       { salida: z.string().describe("nombre del botón de volver, tal como se ve") },
       (a) => sonda("map_learn_back", { app: APP, exit: a.salida })),
 
-    t("marcar_accion", "Clasificar una salida como ACCIÓN y no como navegación: hace algo (guardar, copiar, ordenar, crear) pero no lleva a otra pantalla. NO se borra del mapa — el asistente la necesitará para EJECUTAR; solo deja de contar como estructura.",
+    t("marcar_accion", "Clasificar una salida como ACCIÓN y no como navegación: hace algo (guardar, copiar, ordenar, crear) pero no lleva a otra pantalla. NO se borra del mapa — el asistente la necesitará para EJECUTAR; solo deja de contar como estructura. Acepta nombre o SELECTOR; usa el selector si el nombre se repite.",
       { salida: z.string().describe("nombre de la salida, tal como se ve") },
       (a) => sonda("map_set_kind", { app: APP, exit: a.salida, kind: "accion" })),
 
