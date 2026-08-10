@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -28,6 +29,11 @@ internal static class Contrato
     private const int Dwell = 1450;
 
     private static int _fallos;
+
+    /// <summary>De las incumplidas, cuántas lo están porque su código aún no se ha escrito. Se
+    /// cuentan aparte para que el rojo del desarrollo no se confunda con una regresión.</summary>
+    private static int _pendientes;
+
     private static string _raiz = "";
 
     [STAThread]
@@ -47,7 +53,31 @@ internal static class Contrato
         Prueba("9. una ruta jamás incluye un tramo que no sabe recorrerse", RutaSinHuecos);
         Prueba("10. olvidar una app no toca a las demás", OlvidarPorApp);
 
+        // ── LA PLATA DERIVADA ────────────────────────────────────────────────
+        //
+        // Estas siete se escribieron ANTES que el código que las cumple (2026-08-10), y no por
+        // metodología: lo que arreglan es un subsistema que se daba por bueno a sí mismo —la plata
+        // declarada sube su métrica escribiendo, y el criterio de terminado del arquitecto se
+        // satisface declarando—. Una prueba escrita después de ese código se habría escrito para
+        // que pasara, que es el mismo vicio con otro nombre.
+        //
+        // Las que aún no se pueden cumplir se declaran PENDIENTES y cuentan como incumplidas: el
+        // rojo es el entregable de la primera fase. Lo que no vale es que una promesa que todavía
+        // no tiene código diga «no aplicable» y se sume al verde.
+        Prueba("11. la misma entrada da la misma plata", PlataDetermista);
+        Prueba("12. el orden del paseo no cambia la estructura derivada", PlataNoDependeDelPaseo);
+        Prueba("13. el bronce no se entera de lo declarado", BronceIgnoraLaPlata);
+        Prueba("14. lo que dijo una persona manda, y queda anotado como desacuerdo", LaPersonaManda);
+        Prueba("15. lo que dijo un modelo no mueve la derivación", ElModeloNoManda);
+        Prueba("16. sin cromo derivado no hay atajo: quitar la plata rompe una ruta", SinPlataNoHayAtajo);
+        Prueba("17. una app sin raíz observada no sitúa nada, y lo dice", SinRaizNoSeSitua);
+        Prueba("18. el archivo del bronce no contiene plata", ElDiscoNoMezcla);
+        Prueba("19. una sección alcanzada solo por el mobiliario sigue teniendo hijos", ElCromoNoCortaLaRama);
+
         Console.WriteLine();
+        if (_pendientes > 0)
+            Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
+                + "Es el rojo esperado mientras se implementa, no una regresión.)");
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
             : $"CONTRATO ROTO: {_fallos} promesa(s) incumplida(s). El cambio no puede entrar así.");
@@ -244,6 +274,279 @@ internal static class Contrato
             "…y el de las DEMÁS apps queda intacto: el borrado es un bisturí, no una escoba");
         Debe(m.EnsenanzasDe("fake.exe").Any(),
             "la enseñanza de la app olvidada sobrevive: es aprendizaje, no terreno");
+    }
+
+    // ── La plata derivada ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// EL BRONCE DE PRUEBA: una app pequeña con todo lo que la derivación tiene que distinguir.
+    ///
+    /// Es sintético y se dice: no es una captura de `explorer.exe` disfrazada. Un fixture que
+    /// pretendiera ser real y no lo fuera sería exactamente el vicio que este trabajo persigue —un
+    /// dato que parece observado y está fabricado—. Lo que sí es real es la FORMA: panel lateral
+    /// que sigue al usuario, una carpeta dentro de otra, un «Subir» que lleva a un sitio distinto
+    /// según desde dónde se pulse, y una lista de archivos que no es estructura.
+    ///
+    /// El bronce capturado de una máquina de verdad entra después, en `bronce/`, y se juzga con
+    /// estas mismas promesas: lo sintético prueba las reglas, lo capturado prueba los umbrales.
+    /// </summary>
+    /// <param name="alReves">
+    /// El MISMO terreno recorrido en otro orden. La primera pantalla no cambia —es la raíz, y
+    /// cambiarla cambiaría la app, no el paseo— pero todo lo demás se visita al contrario.
+    /// </param>
+    private static void MontarBronce(SurfaceMap m, bool alReves = false)
+    {
+        const string ini = "uia://fake.exe/inicio";
+        const string docs = "uia://fake.exe/docs";
+        const string anio = "uia://fake.exe/docs/2026";
+        const string fotos = "uia://fake.exe/fotos";
+
+        // El mobiliario: las dos puertas del panel lateral, presentes en TODAS las pantallas.
+        (string, string, string, string[], string)[] Panel() => new[]
+        {
+            ("Documentos", "TreeItem", "uia:name=Documentos;ct=TreeItem", Array.Empty<string>(), ""),
+            ("Fotos", "TreeItem", "uia:name=Fotos;ct=TreeItem", Array.Empty<string>(), ""),
+        };
+
+        // La raíz se observa siempre primero: es lo que la convierte en raíz.
+        m.ObserveExits(ini, Panel().Concat(new[]
+        {
+            ("Ajustes", "Button", "uia:name=Ajustes;ct=Button", Array.Empty<string>(), ""),
+        }).ToArray());
+
+        void Documentos()
+        {
+            m.LearnTraversal(ini, docs, "uia:name=Documentos;ct=TreeItem", Array.Empty<string>(),
+                "Documentos", "TreeItem");
+            m.ObserveExits(docs, Panel().Concat(new[]
+            {
+                ("2026", "TreeItem", "uia:name=2026;ct=TreeItem", Array.Empty<string>(), ""),
+                ("Subir", "Button", "uia:aid=upButton;ct=Button", Array.Empty<string>(), ""),
+            }).ToArray());
+
+            m.LearnTraversal(docs, anio, "uia:name=2026;ct=TreeItem", Array.Empty<string>(),
+                "2026", "TreeItem");
+
+            // La carpeta con contenido: diez hermanos iguales y un campo con el que estrecharlos.
+            var dentro = Panel().Concat(new[]
+            {
+                ("Subir", "Button", "uia:aid=upButton;ct=Button", Array.Empty<string>(), ""),
+                ("Buscar", "Edit", "uia:aid=searchBox;ct=Edit", Array.Empty<string>(), ""),
+            }).ToList();
+            for (int i = 1; i <= 10; i++)
+                dentro.Add(($"factura-{i:00}.pdf", "ListItem",
+                    $"uia:name=factura-{i:00}.pdf;ct=ListItem", Array.Empty<string>(), ""));
+            m.ObserveExits(anio, dentro);
+
+            // «Subir» desde aquí lleva a docs…
+            m.LearnTraversal(anio, docs, "uia:aid=upButton;ct=Button", Array.Empty<string>(),
+                "Subir", "Button");
+            // …y desde docs lleva a inicio. Mismo selector, dos destinos: eso es ser relativo, y es
+            // lo que hay que poder derivar sin una lista de nombres de botón.
+            m.LearnTraversal(docs, ini, "uia:aid=upButton;ct=Button", Array.Empty<string>(),
+                "Subir", "Button");
+        }
+
+        void Fotos()
+        {
+            m.LearnTraversal(ini, fotos, "uia:name=Fotos;ct=TreeItem", Array.Empty<string>(),
+                "Fotos", "TreeItem");
+            m.ObserveExits(fotos, Panel());
+        }
+
+        if (alReves) { Fotos(); Documentos(); }
+        else { Documentos(); Fotos(); }
+    }
+
+    private static void PlataDetermista(SurfaceMap m)
+    {
+        MontarBronce(m);
+        string? una = HuellaDePlata(m, "fake.exe");
+        string? otra = HuellaDePlata(m, "fake.exe");
+        if (una == null) { Pendiente("Plata.Derivar", "0"); return; }
+
+        Debe(una == otra, "derivar dos veces sobre el mismo bronce da exactamente lo mismo");
+        Debe(una.Contains("uia://fake.exe/inicio=0"), "la raíz observada es el suelo de la app");
+        Debe(una.Contains("uia:name=Documentos;ct=TreeItem=Cromo"),
+            "una puerta presente en todas las pantallas se deriva como mobiliario, sin que nadie lo diga");
+        Debe(una.Contains("uia:aid=upButton;ct=Button=Relativa"),
+            "un selector con dos destinos distintos es relativo — derivado, no reconocido por su nombre");
+        Debe(una.Contains("uia:name=factura-01.pdf;ct=ListItem=Contenido"),
+            "uno de diez hermanos iguales es contenido, no estructura");
+        Debe(una.Contains("uia:name=Ajustes;ct=Button=SinCruzar"),
+            "lo que nunca se cruzó se queda SIN CRUZAR: el hueco se ve, no se rellena");
+    }
+
+    private static void PlataNoDependeDelPaseo(SurfaceMap m)
+    {
+        MontarBronce(m, alReves: false);
+        string? comoUno = HuellaDePlata(m, "fake.exe");
+        if (comoUno == null) { Pendiente("Plata.Derivar", "0"); return; }
+
+        // El mismo terreno, andado al revés, en un mapa recién nacido y en su propio directorio.
+        string otroDir = Path.Combine(_raiz, "12-al-reves");
+        Directory.CreateDirectory(otroDir);
+        Environment.SetEnvironmentVariable("U_DATA_DIR", otroDir);
+        var otro = SurfaceMap.Load();
+        MontarBronce(otro, alReves: true);
+        string? comoOtro = HuellaDePlata(otro, "fake.exe");
+
+        Debe(comoUno == comoOtro,
+            "la estructura sale del terreno, no del orden en que se paseó por él");
+    }
+
+    private static void BronceIgnoraLaPlata(SurfaceMap m)
+    {
+        MontarBronce(m);
+        string? antes = HuellaDeBronce(m, "fake.exe");
+        if (antes == null) { Pendiente("Bronce.De", "1"); return; }
+
+        m.FijarNivel("fake.exe", "Ajustes", 1, porPersona: true, cromo: true);
+        m.FijarNivel("fake.exe", "2026", 3, porPersona: false);
+
+        Debe(antes == HuellaDeBronce(m, "fake.exe"),
+            "declarar niveles no cambia el bronce: lo observado es lo observado");
+    }
+
+    private static void LaPersonaManda(SurfaceMap m)
+    {
+        MontarBronce(m);
+        // La derivación dice que «Ajustes» no se ha cruzado. Una persona sabe que es mobiliario.
+        m.FijarNivel("fake.exe", "Ajustes", 1, porPersona: true, cromo: true);
+
+        string? h = HuellaDePlata(m, "fake.exe");
+        if (h == null) { Pendiente("Plata.Derivar", "0"); return; }
+
+        Debe(h.Contains("uia:name=Ajustes;ct=Button=Cromo"),
+            "lo que declaró una PERSONA manda sobre el cálculo: sabe algo que el bronce no dice");
+        Debe(Metrica(m, "fake.exe", "Desacuerdos") >= 1,
+            "…y queda anotado como desacuerdo: o el cálculo aprende, o la declaración estaba mal");
+    }
+
+    private static void ElModeloNoManda(SurfaceMap m)
+    {
+        MontarBronce(m);
+        string? antes = HuellaDePlata(m, "fake.exe");
+        if (antes == null) { Pendiente("Plata.Derivar", "0"); return; }
+
+        // El maestro de visión y los landmarks de una web entran por aquí: porPersona = false.
+        m.FijarNivel("fake.exe", "Ajustes", 1, porPersona: false, cromo: true);
+        m.FijarNivel("fake.exe", "2026", 4, porPersona: false);
+
+        Debe(antes == HuellaDePlata(m, "fake.exe"),
+            "lo que dice un modelo se contrasta, no se obedece: la derivación no se mueve");
+        Debe(Metrica(m, "fake.exe", "Desacuerdos") >= 1,
+            "…pero se anota, que para eso se le pregunta");
+    }
+
+    private static void SinPlataNoHayAtajo(SurfaceMap m)
+    {
+        MontarBronce(m);
+        // NADIE ha declarado nada: todo el mobiliario de este bronce es derivado.
+        Debe(!m.Edges().Any(e => e.Info.NivelFijado),
+            "el fixture no trae ninguna declaración: lo que venga, viene del cálculo");
+
+        var ruta = m.Route("uia://fake.exe/fotos", "uia://fake.exe/docs");
+        Debe(ruta != null && ruta.Count == 1,
+            "desde una pantalla cualquiera se llega al mobiliario derivado en UN salto");
+
+        if (ruta == null)
+            Console.WriteLine("   (pendiente de la fase 2: SelectoresCromo() todavía solo lee lo declarado)");
+    }
+
+    private static void SinRaizNoSeSitua(SurfaceMap m)
+    {
+        // Terreno sin una sola observación: hay aristas, pero nadie entró por la puerta principal,
+        // así que ninguna pantalla lleva el sello de raíz.
+        m.LearnTraversal("uia://huerfana.exe/a", "uia://huerfana.exe/b",
+            "uia:name=B;ct=Button", Array.Empty<string>(), "B", "Button");
+
+        string? h = HuellaDePlata(m, "huerfana.exe");
+        if (h == null) { Pendiente("Plata.Derivar", "0"); return; }
+
+        Debe(h.StartsWith("raiz=|"), "sin raíz observada no se elige una: adivinarla sería peor");
+        Debe(!h.Contains("=0,") && !h.EndsWith("=0"),
+            "y entonces NADA queda situado: la jerarquía entera colgaría de una suposición");
+    }
+
+    private static void ElDiscoNoMezcla(SurfaceMap m)
+    {
+        MontarBronce(m);
+        m.FijarNivel("fake.exe", "Ajustes", 1, porPersona: true, cromo: true);
+        m.Save();
+
+        string archivo = Path.Combine(U.Graph.UserPaths.Local, "U", "surface-map.json");
+        Debe(File.Exists(archivo), "el bronce se guarda donde dice que lo guarda");
+        string crudo = File.Exists(archivo) ? File.ReadAllText(archivo) : "";
+
+        foreach (string campo in new[] { "NivelFijado", "PorPersona", "EsCromo", "KindDeclarado" })
+            Debe(!crudo.Contains(campo, StringComparison.Ordinal),
+                $"el archivo del bronce no guarda «{campo}»: lo declarado vive en su propia capa");
+    }
+
+    /// <summary>
+    /// Lo encontró la propia spec antes de que existiera el código, que es para lo que sirve
+    /// escribirla primero: una sección a la que solo se llega por el panel lateral se coloca en el
+    /// primer nivel y ahí se acaba el recorrido, así que TODO lo que cuelga de ella se queda sin
+    /// situar. En un explorador de archivos eso es la app entera.
+    /// </summary>
+    private static void ElCromoNoCortaLaRama(SurfaceMap m)
+    {
+        MontarBronce(m);
+        string? h = HuellaDePlata(m, "fake.exe");
+        if (h == null) { Pendiente("Plata.Derivar", "0"); return; }
+
+        Debe(h.Contains("uia://fake.exe/docs=1"),
+            "la sección a la que solo se llega por el mobiliario vive en el primer nivel");
+        Debe(h.Contains("uia://fake.exe/docs/2026=2"),
+            "y lo que hay DENTRO de ella está un nivel más abajo, no sin situar");
+    }
+
+    // ── Pedir por nombre lo que quizá no existe ──────────────────────────────
+    //
+    // Mismo motivo que en la promesa 10: este contrato juzga también a núcleos de antes de que
+    // existiera nada de esto, y llamar a `Plata` directamente rompería su COMPILACIÓN. Con una
+    // diferencia deliberada: allí la ausencia es «no aplicable», aquí es PENDIENTE y cuenta como
+    // incumplida. Un núcleo viejo no promete lo que no conoce; el que estamos escribiendo sí.
+
+    private static readonly System.Reflection.Assembly Nucleo = typeof(SurfaceMap).Assembly;
+
+    private static object? Derivacion(SurfaceMap m, string app)
+    {
+        var t = Nucleo.GetType("U.WindowsClient.Navigation.Plata");
+        return t?.GetMethod("Derivar")?.Invoke(null, new object[] { m, app });
+    }
+
+    private static string? HuellaDePlata(SurfaceMap m, string app)
+    {
+        var t = Nucleo.GetType("U.WindowsClient.Navigation.Plata");
+        var p = Derivacion(m, app);
+        if (t == null || p == null) return null;
+        return t.GetMethod("Huella")?.Invoke(null, new[] { p }) as string;
+    }
+
+    private static string? HuellaDeBronce(SurfaceMap m, string app)
+    {
+        var t = Nucleo.GetType("U.WindowsClient.Navigation.Bronce");
+        var b = t?.GetMethod("De")?.Invoke(null, new object[] { m, app });
+        if (t == null || b == null) return null;
+        return t.GetMethod("Huella")?.Invoke(null, new[] { b }) as string;
+    }
+
+    private static int Metrica(SurfaceMap m, string app, string nombre)
+    {
+        var p = Derivacion(m, app);
+        var metricas = p?.GetType().GetProperty("M")?.GetValue(p);
+        var valor = metricas?.GetType().GetProperty(nombre)?.GetValue(metricas);
+        return valor is int i ? i : -1;
+    }
+
+    private static void Pendiente(string capacidad, string fase)
+    {
+        _fallos++;
+        _pendientes++;
+        Console.WriteLine($"   ⧗ PENDIENTE: «{capacidad}» todavía no existe (fase {fase} del plan). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar.");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
