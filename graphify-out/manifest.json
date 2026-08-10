@@ -225,8 +225,8 @@
     "semantic_hash": "275bc8ba78be31a8ac456833edcaa275"
   },
   "windows-client/src/Mcp/SurfaceMapTools.cs": {
-    "mtime": 1786366402.1512961,
-    "ast_hash": "01b19d9d3938d0cc4178f7582f8a40d0",
+    "mtime": 1786380358.8613355,
+    "ast_hash": "f279a1b59254601c8ffacf90e016f21b",
     "semantic_hash": ""
   },
   "windows-client/src/Mcp/WorkflowMcpRunner.cs": {
@@ -260,8 +260,8 @@
     "semantic_hash": "aec373cf4f3b1d2bf2256dd3eb60d0b9"
   },
   "windows-client/src/Navigation/SurfaceMap.cs": {
-    "mtime": 1786342743.457721,
-    "ast_hash": "2e64f7e5ef6afd0c59d6020ad5c5700a",
+    "mtime": 1786380333.9301817,
+    "ast_hash": "c1ddbd2d01d722490ebf99bd69282d73",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/SurfaceNavigator.cs": {
@@ -810,8 +810,8 @@
     "semantic_hash": ""
   },
   "versiones/nucleo/v1.cs": {
-    "mtime": 1786342743.457721,
-    "ast_hash": "2e64f7e5ef6afd0c59d6020ad5c5700a",
+    "mtime": 1786380333.9301817,
+    "ast_hash": "c1ddbd2d01d722490ebf99bd69282d73",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Arquitecto.cs": {
