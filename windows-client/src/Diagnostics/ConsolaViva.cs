@@ -57,7 +57,7 @@ public static class ConsolaViva
                     Console.WriteLine(new string('─', 70));
                 }
                 SetConsoleTitle(titulo);
-                if (h != IntPtr.Zero) { ShowWindow(h, SW_RESTORE); ShowWindow(h, SW_SHOW); }
+                if (h != IntPtr.Zero) { NoRobarElFoco(h); ShowWindow(h, SW_RESTORE); ShowWindow(h, SW_SHOW); }
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {titulo}");
             }
             catch { _rota = true; }
@@ -81,6 +81,33 @@ public static class ConsolaViva
         }
         catch { }
     }
+
+    /// <summary>
+    /// QUE MIRARLA NO CUESTE EL FOCO. La consola es una ventana normal, así que pulsarla —para
+    /// subir, para leer— se lo quitaba a la app que el arquitecto está navegando, y eso no es un
+    /// detalle: el agente actúa sobre LA VENTANA DE DELANTE, así que un clic tuyo en la consola
+    /// podía cambiarle el terreno bajo los pies en mitad de una auditoría.
+    ///
+    /// Es el mismo WS_EX_NOACTIVATE que ya usa la carita flotante, y por la misma razón: hay
+    /// ventanas que están para MIRARSE, no para trabajar en ellas (2026-08-10, pedido por el
+    /// usuario). Se puede seguir leyendo y haciendo scroll con el ratón encima; lo que ya no pasa
+    /// es que pulsarla se lleve el foco.
+    /// </summary>
+    private static void NoRobarElFoco(IntPtr h)
+    {
+        try
+        {
+            if (h == IntPtr.Zero) return;
+            int estilo = GetWindowLong(h, GWL_EXSTYLE);
+            SetWindowLong(h, GWL_EXSTYLE, estilo | WS_EX_NOACTIVATE);
+        }
+        catch { }
+    }
+
+    [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr h, int i);
+    [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr h, int i, int v);
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
 
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);

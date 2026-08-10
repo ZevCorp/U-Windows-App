@@ -1693,7 +1693,7 @@ public sealed class SurfaceMapTools
         // (2026-08-09, hallazgo nº1 de su auditoría).
         var puertas = _map.Edges()
             .Where(e => DeLaApp(e.From) && !e.Info.NivelFijado && e.Info.Label.Length > 0
-                        && e.Info.Kind.Length == 0
+                        && !e.Info.KindDeclarado.Equals("accion", StringComparison.OrdinalIgnoreCase)
                         && !_map.EsGestoDeAtras(app, e.Info.Label, e.Info.Selector))
             .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(g => g.Count()).Take(40).ToList();
@@ -1742,7 +1742,7 @@ public sealed class SurfaceMapTools
             .ToList();
         if (tocadas.Count == 0) return $"no encuentro ninguna salida «{salida}» en «{app}»";
 
-        foreach (var (_, _, info) in tocadas) info.Kind = k;
+        foreach (var (_, _, info) in tocadas) info.KindDeclarado = k;
         LogBus.Log("mapa-mcp", $"«{salida}» clasificada como «{k}» ({tocadas.Count} aparición/es): "
             + "sigue en el mapa para ejecutarla, deja de contar como estructura");
         return $"«{tocadas[0].Info.Label}» queda clasificada como «{k}» en «{app}» "

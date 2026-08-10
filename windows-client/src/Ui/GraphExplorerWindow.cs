@@ -1895,6 +1895,36 @@ public sealed class GraphExplorerWindow : Window
     {
         _crawlBtn.Content = "⏹ Detener el arquitecto";
         _status.Text = $"arquitecto: auditando «{app}»… no toques el ratón";
+
+        // MODO PRUEBA: la capa se pone donde ESTÁ LA APP y el grafo se esconde.
+        //
+        // Las dos cosas van juntas porque responden a la misma pregunta —qué necesita verse
+        // durante una auditoría— y tienen respuestas opuestas. Los PUNTOS son anotaciones sobre
+        // elementos concretos: si la capa se queda en otra pantalla señalan al vacío, así que
+        // tienen que estar sobre la app que se audita. El GRAFO no señala nada: es un dibujo que
+        // se mira, y encima de la app que el agente navega es ruido puro (2026-08-10, pedido por
+        // el usuario).
+        //
+        // Se guarda la vista para devolverla al final: el modo prueba es un préstamo, no una
+        // decisión sobre cómo quiere trabajar quien mira.
+        var vistaAntes = _vista;
+        try
+        {
+            var ventana = Uia.AppAligner.VentanaDelUsuario();
+            if (ventana != IntPtr.Zero)
+            {
+                var suya = System.Windows.Forms.Screen.FromHandle(ventana);
+                var a = suya.WorkingArea;
+                SetWindowPos(new WindowInteropHelper(this).Handle, IntPtr.Zero,
+                    a.Left, a.Top, a.Width, a.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+                LogBus.Log("explorador", $"modo prueba: capa sobre «{suya.DeviceName}», donde está «{app}»");
+            }
+        }
+        catch (Exception e) { LogBus.Log("explorador", $"no pude colocar la capa: {e.Message}"); }
+
+        _vista = VistaGrafo.Oculto;
+        _grafo.Visibility = Visibility.Collapsed;
+        _rotuloVista.Text = "";
         if (!_graphView) SetGraphView(true);
 
         // Un latido que repinta: el agente escribe en el mapa desde fuera, así que el dibujo no se
@@ -1931,6 +1961,11 @@ public sealed class GraphExplorerWindow : Window
         finally
         {
             latido.Stop();
+            // El modo prueba era un préstamo: se devuelve la vista que había, y con ella el grafo.
+            // Terminada la auditoría, lo primero que hace falta es MIRAR lo que hizo.
+            _vista = vistaAntes == VistaGrafo.Oculto ? VistaGrafo.Plata : vistaAntes;
+            _grafo.Visibility = Visibility.Visible;
+            _huellaEstructura = "";
             DibujarGrafo();
             _crawlBtn.Content = "🤖 Mapear esta app automáticamente";
             _crawlCts?.Dispose();
@@ -2660,7 +2695,7 @@ public sealed class GraphExplorerWindow : Window
         // pueda volver, así que enseñar las de otra pantalla sería ofrecer algo que no se puede
         // pulsar. Lo que ya no está a la vista, se calla hasta que vuelva.
         var accionesAhora = _map.Edges()
-            .Where(e => e.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
+            .Where(e => e.Info.KindDeclarado.Equals("accion", StringComparison.OrdinalIgnoreCase)
                         && e.Info.Label.Length > 0
                         && (appActual.Length == 0 || NivelDe(e.From).Equals(appActual, StringComparison.OrdinalIgnoreCase))
                         && _map.SigueALaVista(e.From, e.Info))
@@ -2677,7 +2712,7 @@ public sealed class GraphExplorerWindow : Window
         // Limpiar la vista no puede costar perder terreno de verdad: si una acción resultó llevar
         // a algún sitio, ese sitio es una pantalla y se queda donde está.
         foreach (var (_, to, info) in _map.Edges())
-            if (info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase) && SurfaceMap.EsPuerta(to))
+            if (info.KindDeclarado.Equals("accion", StringComparison.OrdinalIgnoreCase) && SurfaceMap.EsPuerta(to))
                 prof.Remove(to);
 
         // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra

@@ -156,6 +156,19 @@ public sealed class SurfaceMap
         public string Kind { get; set; } = "";
 
         /// <summary>
+        /// Lo que ALGUIEN AFIRMA que es esta salida («accion»), frente a <see cref="Kind"/>, que es
+        /// lo que el sistema deduce solo del tipo de control.
+        ///
+        /// Son dos campos porque son dos cosas, y meterlas en uno costó una prueba entera: el
+        /// arquitecto marcaba acciones a mano sobre el mismo campo que el sistema rellena al nacer
+        /// CADA arista, así que «lo ya clasificado» era el 100% y la lista de pendientes contestaba
+        /// «no queda nada» con cero salidas declaradas (2026-08-10). Es la misma regla de
+        /// procedencia que ya rige en los niveles: lo dicho y lo deducido nunca comparten sitio,
+        /// porque el día que discrepan hay que saber cuál es cuál.
+        /// </summary>
+        public string KindDeclarado { get; set; } = "";
+
+        /// <summary>
         /// La última vez que esta puerta se vio EN PANTALLA.
         /// </summary>
         /// <remarks>
@@ -1394,9 +1407,27 @@ public sealed class SurfaceMap
 
         // Y se sueltan las aristas vivas de esa app: si no, el grafo en memoria seguiría
         // afirmando un nivel que ya nadie sostiene.
+        //
+        // SE SUELTA TODO LO DECLARADO, no solo el sello. Antes se quitaban NivelFijado y PorPersona
+        // pero se dejaban el NÚMERO y el CROMO, así que tras «olvidar» el grafo seguía dibujando
+        // exactamente los mismos niveles — solo que ya sin nadie que los sostuviera. Olvidar a
+        // medias es peor que no olvidar: deja afirmaciones huérfanas que parecen deducidas
+        // (2026-08-10, lo señaló el usuario preguntando si esto no debería estar conectado).
+        //
+        // También se va la clasificación DECLARADA (acción). Es parte de lo que se aprendió de esta
+        // app; la deducida por el sistema se queda, porque esa no la dijo nadie.
         foreach (var e in Edges())
-            if (AppDe(e.From).Equals(app, StringComparison.OrdinalIgnoreCase) && e.Info.NivelFijado)
-            { e.Info.NivelFijado = false; e.Info.PorPersona = false; }
+        {
+            if (!AppDe(e.From).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
+            e.Info.NivelFijado = false;
+            e.Info.PorPersona = false;
+            e.Info.NivelNav = -1;
+            e.Info.EsCromo = false;
+            e.Info.KindDeclarado = "";
+        }
+        // Y las profundidades, que salían de esos niveles, dejan de tener en qué apoyarse.
+        foreach (var (id, nodo) in _nodes)
+            if (AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase) && nodo.Nivel > 0) nodo.Nivel = -1;
         Version++;
         Save();
         LogBus.Log("mapa", $"olvidada la jerarquía enseñada de «{app}»: {n} salida(s)");
