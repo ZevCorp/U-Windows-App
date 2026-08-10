@@ -879,12 +879,10 @@ public sealed class GraphExplorerWindow : Window
     private string _huellaPuente = "";
     private readonly Dictionary<string, string> _porQueDeclarado = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>La última derivación de PLATA REAL, con la versión del mapa y la app de la que
-    /// salió: derivar es O(aristas) varias veces y el pintor repinta muchas veces por segundo, así
-    /// que se recalcula cuando el mapa aprende algo y no cuando se redibuja.</summary>
+    /// <summary>La última derivación de PLATA REAL, para que el rótulo pueda leer sus métricas sin
+    /// volver a pedirla. Quien la sirve —y quien decide cuándo se recalcula— es
+    /// <see cref="Navigation.Plata.DerivadaDe"/>.</summary>
     private Navigation.Plata.PlataApp? _plata;
-    private int _plataVersion = -1;
-    private string _plataApp = "";
     private string _huellaPlata = "";
 
     /// <summary>
@@ -2607,17 +2605,14 @@ public sealed class GraphExplorerWindow : Window
         // cadencia— aplicada de entrada en vez de después de la cacería.
         if (_vista == VistaGrafo.PlataReal)
         {
-            var plata = _plata;
-            if (plata == null || _plataVersion != _map.Version
-                || !string.Equals(_plataApp, appActual, StringComparison.OrdinalIgnoreCase))
-            {
-                plata = Navigation.Plata.Derivar(_map, appActual);
-                _plata = plata;
-                _plataVersion = _map.Version;
-                _plataApp = appActual;
-                string huella = Navigation.Plata.Resumen(plata);
-                if (huella != _huellaPlata) { _huellaPlata = huella; Navigation.Plata.Registrar(plata); }
-            }
+            // La derivación se pide, no se guarda: `DerivadaDe` ya la sirve una vez por versión del
+            // mapa. Aquí había una segunda caché con la misma llave, y dos cachés del mismo hecho
+            // acaban contestando cosas distintas — es el mismo error que este trabajo persigue, en
+            // pequeño. El registro en el log sí es de aquí: solo cuando el resumen cambia.
+            var plata = Navigation.Plata.DerivadaDe(_map, appActual);
+            _plata = plata;
+            string huella = Navigation.Plata.Resumen(plata);
+            if (huella != _huellaPlata) { _huellaPlata = huella; Navigation.Plata.Registrar(plata); }
 
             prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
             _profDeclarada.Clear();

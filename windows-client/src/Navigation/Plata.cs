@@ -141,6 +141,50 @@ public static class Plata
 
     // ── La derivación ────────────────────────────────────────────────────────────────────────
 
+    // ── La derivación, servida ───────────────────────────────────────────────────────────────
+
+    private static readonly object _candado = new();
+
+    /// <summary>
+    /// La caché va colgada del MAPA que la produjo, no de esta clase.
+    ///
+    /// Un diccionario estático parecía suficiente —clave: la app; caducidad: la versión— y es
+    /// falso en cuanto hay dos mapas vivos a la vez: el contrato crea uno por promesa, todos
+    /// arrancan con la versión en cero y todos hablan de «fake.exe», así que el segundo se habría
+    /// comido la plata del primero. Un caché que confunde dos mundos es peor que no tener caché.
+    ///
+    /// `ConditionalWeakTable` ata la entrada a la vida del mapa: cuando el mapa se va, se va con él.
+    /// </summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+        SurfaceMap, Dictionary<string, (int Version, PlataApp Plata)>> _cache = new();
+
+    /// <summary>
+    /// La plata de una app, derivada una vez por cada cambio del mapa.
+    ///
+    /// Existe por dónde se usa: desde que el cromo derivado alimenta las rutas, esto acaba llamado
+    /// por cada punto y en cada cuadro del pintor —el mismo camino caliente que ya obligó a
+    /// <see cref="SurfaceMap.SelectoresCromo"/> a resolverse de una pasada—. Derivar ahí sería
+    /// meter un cálculo O(aristas) donde antes había una consulta a un conjunto.
+    ///
+    /// La llave es <see cref="SurfaceMap.Version"/>, que es lo que el mapa mueve cuando aprende
+    /// algo. Es la misma llave que ya usa la caché de <c>CromoDe</c>, a propósito: dos cachés del
+    /// mismo hecho con criterios de caducidad distintos acaban contestando cosas distintas.
+    /// </summary>
+    public static PlataApp DerivadaDe(SurfaceMap mapa, string app)
+    {
+        if (app.Length == 0) return Derivar(mapa, app);
+        lock (_candado)
+        {
+            var suyas = _cache.GetValue(mapa,
+                _ => new Dictionary<string, (int, PlataApp)>(StringComparer.OrdinalIgnoreCase));
+            if (suyas.TryGetValue(app, out var guardada) && guardada.Version == mapa.Version)
+                return guardada.Plata;
+            var fresca = Derivar(mapa, app);
+            suyas[app] = (mapa.Version, fresca);
+            return fresca;
+        }
+    }
+
     /// <summary>
     /// Del bronce de una app a su plata. Puro: no muta el mapa, no escribe en disco, no depende de
     /// la hora ni del orden de enumeración.
@@ -259,11 +303,29 @@ public static class Plata
             else if (info.NivelFijado && info.EsCromo) declarada = Clase.Cromo;
             else if (info.NivelFijado) declarada = Clase.Navegacion;
 
+            // Y EL DESACUERDO SE ANOTA CONTRA LO QUE DIJO EL CÁLCULO, no contra el resultado final:
+            // si se comparara después de aplicar el override, una corrección humana nunca aparecería
+            // como desacuerdo —quedarían iguales por construcción— y perderíamos justo la señal que
+            // dice dónde el cálculo se queda corto.
+            Clase derivada = clase;
+            if (declarada != Clase.SinCruzar && declarada != derivada)
+                desacuerdos.Add(new Desacuerdo(selector, info.Label, derivada.ToString(), declarada.ToString(),
+                    info.PorPersona));
+
+            // LO QUE DIJO UNA PERSONA MANDA. Sabe algo que este cálculo no puede saber: que ese botón
+            // raro es navegación principal, que ese otro no lo es. Lo que dijo un MODELO —el maestro
+            // de visión, los landmarks de una web— no manda: se contrasta y se anota. Esa asimetría
+            // es la que impide que la plata vuelva a ser lo que alguien escribió encima.
+            bool loDijoUnaPersona = grupo.Any(e => e.Info.PorPersona && e.Info.NivelFijado);
+            if (loDijoUnaPersona && declarada != Clase.SinCruzar)
+            {
+                clase = declarada;
+                porque = new Porque("lo dijo una persona",
+                    $"declarado {declarada}; el cálculo decía {derivada}", 1.0);
+            }
+
             salidas[selector] = new SalidaPlata(selector, info.Label, info.ControlType, clase, porque,
                 k, destinos.Count, cruzada, declarada, info.PorPersona);
-
-            if (declarada != Clase.SinCruzar && declarada != clase)
-                desacuerdos.Add(new Desacuerdo(selector, info.Label, clase.ToString(), declarada.ToString(), info.PorPersona));
         }
 
         // ── La profundidad, por camino más corto sobre lo ESTRUCTURAL ────────────────────────
@@ -320,10 +382,22 @@ public static class Plata
         }
 
         if (raiz.Length > 0)
-        {
             Sembrar(raiz, 0, new Porque("raíz", "la pantalla por la que se entra en la app", 1.0));
-            Recorrer();
-        }
+
+        // LAS PANTALLAS QUE SITUÓ UNA PERSONA SE SIEMBRAN CON SU NIVEL, y desde ellas se sigue
+        // bajando. No es una excepción al cálculo: es la misma regla de autoridad de arriba, vista
+        // desde las pantallas en vez de desde las salidas. Sin esto, hacer de esta derivación la
+        // fuente de `RecalcularProfundidades` habría movido lo que alguien fijó a mano — que es
+        // exactamente lo que la promesa 3 del contrato lleva desde el principio impidiendo.
+        var situadasAMano = mapa.Edges()
+            .Where(e => e.Info.NivelFijado && e.Info.PorPersona && e.Info.NivelNav >= 0
+                     && !SurfaceMap.EsPuerta(e.To) && DeLaApp(e.To))
+            .GroupBy(e => e.To, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Min(e => e.Info.NivelNav), StringComparer.OrdinalIgnoreCase);
+        foreach (var (id, nivel) in situadasAMano.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))
+            Sembrar(id, nivel, new Porque("lo situó una persona", $"declarada en el nivel {nivel}", 1.0));
+
+        Recorrer();
 
         // Lo que solo se alcanza por mobiliario es una sección de primer nivel: está a un clic de
         // todas partes, y eso es exactamente lo que significa vivir en el primer nivel.

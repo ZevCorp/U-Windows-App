@@ -600,6 +600,9 @@ public sealed class SurfaceMap
         var ahora = DateTime.UtcNow;
         if (_nodes.TryGetValue(f, out var nObs)) nObs.UltimaObservacion = ahora;
 
+        // Cuántas puertas NUEVAS deja esta pasada. Ver el porqué al final del método.
+        int nacidas = 0;
+
         foreach (var s in salidas)
         {
             if (s.Selector.Length == 0) continue;
@@ -657,7 +660,19 @@ public sealed class SurfaceMap
             // LO ENSEÑADO SE REAPLICA AL VERLO: una puerta recién observada nace ya con el nivel
             // que se le dio en su día, aunque el grafo se haya borrado entero desde entonces.
             AplicarEnsenanza(f, _edges[k]);
+            nacidas++;
         }
+
+        // VER PUERTAS NUEVAS ES APRENDER, y <see cref="Version"/> dice justo eso: «cambia cuando el
+        // mapa aprende algo». Aquí no se movía, y mientras nadie derivara del mapa no se notaba —el
+        // pintor tiene además su propio latido—. Desde que hay cachés colgadas de esa versión (el
+        // cromo, la plata), no moverla significa servir una estructura vieja hasta que otra cosa la
+        // empuje.
+        //
+        // Solo si NACIÓ alguna: esto se llama en cada refresco del locator, y subir la versión al
+        // ver lo mismo de siempre convertiría cada tick en un repintado y en una derivación. Es la
+        // lección nº8 —el costo por iteración antes que la cadencia— aplicada al escribirlo.
+        if (nacidas > 0) Version++;
         Save();
     }
 
@@ -767,12 +782,35 @@ public sealed class SurfaceMap
     /// </summary>
     public HashSet<string> SelectoresCromo()
     {
+        if (_selectoresCromo != null && _selectoresCromoVersion == Version) return _selectoresCromo;
+
         var cromo = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (_, _, info) in Edges())
             if (info.EsCromo && info.NivelFijado && info.Selector.Length > 0 && !EsRelativo(info.Selector))
                 cromo.Add(info.Selector);
+
+        // LO DERIVADO ENTRA DESPUÉS Y NO PISA NADA: ver la nota larga en CromoDe. El filtro de
+        // selectores relativos se mantiene aunque `Plata` ya los descarte por evidencia — la
+        // evidencia necesita DOS destinos observados, y hasta que se hayan visto los dos, el
+        // reconocimiento por nombre sigue siendo la única red. Lo uno no sustituye a lo otro:
+        // «Subir» está en todas las pantallas, así que sin esto sería mobiliario ejemplar.
+        foreach (string app in Edges().Select(e => AppDe(e.From))
+                     .Where(a => a.Length > 0)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var s in Plata.DerivadaDe(this, app).SalidasPorSelector.Values)
+                if (s.Clase == Plata.Clase.Cromo && s.Selector.Length > 0 && !EsRelativo(s.Selector))
+                    cromo.Add(s.Selector);
+
+        _selectoresCromoVersion = Version;
+        _selectoresCromo = cromo;
         return cromo;
     }
+
+    /// <summary>Lo mismo que la caché de <see cref="CromoDe"/> y por lo mismo: esto se pregunta por
+    /// cada punto y en cada cuadro, y desde que además deriva, resolverlo entero cada vez sería
+    /// meter el cálculo en el camino caliente.</summary>
+    private HashSet<string>? _selectoresCromo;
+    private int _selectoresCromoVersion = -1;
 
     private static string TipoDelSelector(string selector)
     {
@@ -1027,51 +1065,28 @@ public sealed class SurfaceMap
         if (app.Length == 0) return;
         bool DeLaApp(string id) => AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase);
 
-        // Las pantallas cuyo nivel puso una PERSONA se quedan como están: quien lo declaró sabe
-        // algo que este cálculo no.
-        var fijadasAMano = new HashSet<string>(
-            Edges().Where(e => e.Info.NivelFijado && e.Info.PorPersona && e.Info.NivelNav >= 0
-                            && !EsPuerta(e.To) && DeLaApp(e.To))
-                   .Select(e => e.To),
-            StringComparer.OrdinalIgnoreCase);
+        // ESTE MÉTODO YA NO CALCULA: PROYECTA. Tenía su propio recorrido —correcto, y lo dice el
+        // historial de arriba— pero desde que existe `Plata` había DOS respondiendo a la misma
+        // pregunta con entradas distintas: aquí lo estructural se decidía mirando `EsCromo`, que
+        // solo existe si alguien lo declaró; allí sale de la permanencia medida.
+        //
+        // Dos cálculos de la misma cosa es el fallo que este repo ya pagó con rondas enteras —está
+        // escrito en el pintor con todas las letras: «el dibujo no opina, una sola fuente»—. La
+        // convivencia fue deliberada mientras la derivación no tenía kilómetros; esto la termina.
+        // Lo que se conserva intacto es el CONTRATO de este método: quién manda (la persona),
+        // cuándo no se toca nada (sin raíz), y que se avise en el log de cuántas se movieron.
+        var plata = Plata.DerivadaDe(this, app);
 
-        // La raíz: la pantalla por la que se entra en la app (nivel 0 al observarla la primera vez).
-        string raiz = _nodes.FirstOrDefault(kv => DeLaApp(kv.Key) && kv.Value.Nivel == 0).Key ?? "";
-        if (raiz.Length == 0) return;   // sin ancla no hay nada que medir, y adivinarla sería peor
-
-        // Solo las aristas ESTRUCTURALES: un atajo no dice a qué profundidad vive su destino.
-        var hijos = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        var porCromo = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (f, t, info) in Edges())
-        {
-            if (!DeLaApp(f) || !DeLaApp(t) || EsPuerta(t)) continue;
-            if (info.EsCromo) { porCromo.Add(t); continue; }
-            if (!hijos.TryGetValue(f, out var l)) hijos[f] = l = new List<string>();
-            if (!l.Contains(t, StringComparer.OrdinalIgnoreCase)) l.Add(t);
-        }
-
-        // Anchura primero: la primera vez que se llega a un sitio es por el camino más corto.
-        var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
-        var cola = new Queue<string>();
-        cola.Enqueue(raiz);
-        while (cola.Count > 0)
-        {
-            string aqui = cola.Dequeue();
-            if (!hijos.TryGetValue(aqui, out var l)) continue;
-            foreach (var h in l)
-                if (!prof.ContainsKey(h)) { prof[h] = prof[aqui] + 1; cola.Enqueue(h); }
-        }
-
-        // Lo alcanzable SOLO por cromo es una sección de primer nivel: está a un clic de todas
-        // partes, y eso es precisamente lo que significa vivir en el primer nivel.
-        foreach (var t in porCromo)
-            if (!prof.ContainsKey(t)) prof[t] = 1;
+        // Sin ancla no hay nada que medir, y adivinarla sería peor. Escribir aquí lo que la
+        // derivación devuelve —todo a −1— borraría el nivel 0 de la raíz y la app no volvería a
+        // situarse nunca: el único estado del que no se sale solo.
+        if (plata.Raiz.Length == 0) return;
 
         int movidas = 0;
         foreach (var (id, n) in _nodes)
         {
-            if (!DeLaApp(id) || fijadasAMano.Contains(id)) continue;
-            int nuevo = prof.TryGetValue(id, out int p) ? p : -1;
+            if (!DeLaApp(id)) continue;
+            int nuevo = plata.Pantallas.TryGetValue(id, out var pp) ? pp.Profundidad : -1;
             if (n.Nivel == nuevo) continue;
             n.Nivel = nuevo;
             movidas++;
@@ -1080,7 +1095,8 @@ public sealed class SurfaceMap
         {
             Version++;
             LogBus.Log("mapa", $"profundidades de «{app}» recalculadas: {movidas} pantalla(s) movida(s) "
-                + $"· raíz «{ShortId(raiz)}» · {prof.Count} situada(s)");
+                + $"· raíz «{ShortId(plata.Raiz)}» · {plata.M.PantallasSituadas} situada(s) "
+                + $"· cobertura {plata.M.Cobertura:P0}");
         }
     }
 
@@ -1629,6 +1645,29 @@ public sealed class SurfaceMap
                 ? new Hop(conDestino.From, conDestino.To, conDestino.Info)
                 : new Hop(from, to, info));
         }
+        // Y LO QUE NADIE DECLARÓ PERO EL BRONCE DEMUESTRA. Aquí vivía una deducción por conteo que
+        // se eliminó el 2026-08-08 con razón: contaba «visto desde tres pantallas» sin guardar de
+        // dónde salía el número, así que en pantalla no había forma de saber si un punto azul lo
+        // había puesto una persona o la estadística, y llegaba a contradecir a fuentes mejores.
+        //
+        // Lo que vuelve NO es aquello. Es la misma pregunta contestada por `Plata`, que además
+        // guarda la evidencia («visto en 9 de 11 pantallas observadas»), descarta por construcción
+        // lo que tiene destino variable —un «Subir» está en todas partes y no lleva al mismo sitio—
+        // y nunca pisa lo declarado: esto corre DESPUÉS y solo rellena lo que nadie dijo.
+        //
+        // Y es lo que hace que la plata deje de ser cosmética. Mientras el mobiliario solo llegara
+        // declarado, borrar la plata entera no rompía nada: era una capa de dibujo. Desde aquí, un
+        // grafo sin plata pierde los atajos y `Route` vuelve a decir «no sé llegar» a un sitio que
+        // está a un clic (promesa 16 del contrato).
+        foreach (var s in Plata.DerivadaDe(this, app).SalidasPorSelector.Values
+                     .Where(s => s.Clase == Plata.Clase.Cromo)
+                     .OrderBy(s => s.Selector, StringComparer.Ordinal))
+        {
+            if (s.Selector.Length == 0 || !yaEsta.Add(s.Selector)) continue;
+            if (!destinoDe.TryGetValue(s.Selector, out var hop)) continue;   // sin destino no es ruta
+            cromo.Add(hop);
+        }
+
         if (_cromoVersion != Version) { _cromo.Clear(); _cromoVersion = Version; }
         _cromo[app] = cromo;
         return cromo;

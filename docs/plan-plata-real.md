@@ -112,20 +112,35 @@ Es la única lectura de un campo compartido con la plata, y desaparece en la fas
 tenga su propio `EsRaiz` en disco. Está escrito en el propio archivo para que nadie lo tome por
 descuido.
 
-### Fase 2 · Plata, única fuente de cromo y profundidad `<tu-prefijo>/plata-manda-en-la-estructura` · 1–2 días
+### Fase 2 · Plata, única fuente de cromo y profundidad — **ESCRITA, sin verificar**
 
-**Cubre:** promesas 12, 16.
-**Entra:** `SelectoresCromo()` pasa a consultar el cromo derivado; `RecalcularProfundidades` deja de
-tener cálculo propio y se convierte en la proyección de `Plata.Derivar` sobre `NodeInfo.Nivel`.
-**Por qué es la fase peligrosa:** ahora mismo hay **dos cálculos** respondiendo la misma pregunta con
-entradas distintas, y este repo ya pagó rondas por eso — está escrito en el propio pintor («*el
-dibujo no opina: una sola fuente*»). La convivencia es deliberada y temporal; esta fase la termina.
-**Cuidado explícito:** la promesa 7 que ya existe («el cromo es propiedad de cualquier nivel y se
-alcanza desde cualquier pantalla») es la red. Si se pone roja, el cromo derivado no está
-reproduciendo lo que el declarado hacía, y eso hay que entenderlo antes de seguir, no ajustar el
-umbral hasta que pase.
+**Cubre:** promesas 14 y 16.
+**Entró:**
+
+- `CromoDe` y `SelectoresCromo()` añaden el cromo **derivado** después de lo declarado, sin pisarlo.
+  Esto es lo que hace que borrar la plata rompa algo: sin ella se pierden los atajos y `Route`
+  vuelve a decir «no sé llegar» a un sitio que está a un clic.
+- `Plata.Derivar` aplica el override de una **persona** sobre la clase, y sigue anotando el
+  desacuerdo contra lo que dijo el cálculo (si se comparara después del override, una corrección
+  humana nunca aparecería como desacuerdo). Lo de un modelo se contrasta y no manda.
+- Las pantallas que situó una persona se siembran con su nivel en el recorrido, y desde ellas se
+  sigue bajando — sin eso, proyectar la derivación habría movido lo fijado a mano y roto la
+  promesa 3, que lleva desde el principio impidiéndolo.
+- `RecalcularProfundidades` **ya no calcula: proyecta**. Se acabaron los dos recorridos.
+- `Plata.DerivadaDe` sirve la derivación una vez por versión del mapa, con la caché **colgada del
+  mapa** (`ConditionalWeakTable`) y no de la clase: estática confundía dos mapas vivos con la misma
+  versión y el mismo nombre de app, que es justo lo que hace el contrato al crear uno por promesa.
+- `ObserveExits` mueve `Version` cuando nacen puertas nuevas — solo entonces. Ver puertas es
+  aprender, y hay cachés colgadas de esa versión; pero subirla en cada refresco convertiría cada
+  tick en una derivación.
+
+**Cuidado explícito al correrlo:** la promesa 7 («el cromo es propiedad de cualquier nivel y se
+alcanza desde cualquier pantalla») es la red de esta fase. Si se pone roja, el cromo derivado no
+está reproduciendo lo que el declarado hacía — eso hay que entenderlo, no ajustar el umbral hasta
+que pase.
+
 **Terminado cuando:** contrato intacto **y** una app real mapeada de punta a punta sin declarar
-nada a mano.
+nada a mano. Ninguna de las dos se ha hecho todavía.
 
 ### Fase 3 · Separar la persistencia `<tu-prefijo>/bronce-sin-plata-dentro` · 2–3 días
 
