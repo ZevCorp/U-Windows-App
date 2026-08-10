@@ -260,8 +260,8 @@
     "semantic_hash": "aec373cf4f3b1d2bf2256dd3eb60d0b9"
   },
   "windows-client/src/Navigation/SurfaceMap.cs": {
-    "mtime": 1786286168.7054336,
-    "ast_hash": "e295510a6bee90c87afcf7540b09a77c",
+    "mtime": 1786331082.7100031,
+    "ast_hash": "e569b0f227c3a66911eb44c79784c6b5",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/SurfaceNavigator.cs": {
@@ -810,8 +810,8 @@
     "semantic_hash": ""
   },
   "versiones/nucleo/v1.cs": {
-    "mtime": 1786286168.7054336,
-    "ast_hash": "e295510a6bee90c87afcf7540b09a77c",
+    "mtime": 1786331082.7100031,
+    "ast_hash": "e569b0f227c3a66911eb44c79784c6b5",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Arquitecto.cs": {
@@ -860,8 +860,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/JerarquiaWeb.cs": {
-    "mtime": 1786234546.4423919,
-    "ast_hash": "5c878bd20b3a17596b3fe75447374226",
+    "mtime": 1786331095.635372,
+    "ast_hash": "d6cea641f21382f63a0e3095134e10b3",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/ProfundidadClasica.cs": {

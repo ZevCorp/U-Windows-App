@@ -1396,56 +1396,90 @@ public sealed class GraphExplorerWindow : Window
         var pantallas = System.Windows.Forms.Screen.AllScreens;
         if (pantallas.Length < 2) return "solo hay una pantalla: no hay a dónde llevárselo";
 
-        // SOLO EL GRAFO SE MUEVE, no la capa entera. Mover la ventana se llevaba TODO lo de
-        // pruebas —los puntos sobre los elementos, la barra, los niveles— y esos tienen que quedarse
-        // encima de la app, que es a lo que apuntan: unos puntos flotando en otro monitor no señalan
-        // nada (2026-08-09, visto por el usuario). El grafo, en cambio, es un dibujo que se mira
-        // aparte, y ahí sí estorba.
-        //
-        // Y NO ELIGE PANTALLA POR SU CUENTA: va a donde esté la consola del arquitecto. Mirar su
-        // razonamiento y mirar el grafo son la misma tarea, así que el grafo SIGUE a la consola —
-        // pedido por el usuario, y además evita tener que acordarse de mover dos cosas.
-        var destino = Diagnostics.ConsolaViva.PantallaDeLaConsola() is { } dev
-            ? Array.Find(pantallas, p => p.DeviceName == dev) ?? OtraPantalla(pantallas)
-            : OtraPantalla(pantallas);
-
-        _grafoFuera = !_grafoFuera;
-        if (!_grafoFuera)
-        {
-            _ventanaGrafo?.Close();
-            _ventanaGrafo = null;
-            _grafoHueco.Child = _conRotulo;   // vuelve a su sitio dentro de la capa
-            return "el grafo vuelve a la capa";
-        }
-
-        // Se saca a una ventana propia: es la única forma de que viva en otra pantalla mientras la
-        // capa sigue pegada a la app del usuario.
-        _grafoHueco.Child = null;
+        // LA CAPA ENTERA SE MUDA, y el grafo va donde esté la consola del arquitecto. Son dos
+        // reglas distintas porque responden a dos necesidades distintas: la capa de desarrollo
+        // estorba encima de la app que el agente navega, y el grafo se mira junto al razonamiento
+        // que lo explica (2026-08-09, pedido por el usuario).
+        var mano = new WindowInteropHelper(this).Handle;
+        var actual = System.Windows.Forms.Screen.FromHandle(mano);
+        var destino = OtraPantalla(pantallas, actual);
         var a = destino.WorkingArea;
-        _ventanaGrafo = new Window
-        {
-            Title = "Grafo",
-            WindowStyle = WindowStyle.None, AllowsTransparency = true, ShowInTaskbar = false,
-            Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x12, 0x12, 0x16)),
-            Content = _conRotulo, Topmost = true,
-        };
-        _ventanaGrafo.Show();
-        var mano = new WindowInteropHelper(_ventanaGrafo).Handle;
         SetWindowPos(mano, IntPtr.Zero, a.Left, a.Top, a.Width, a.Height, SWP_NOZORDER | SWP_NOACTIVATE);
 
-        LogBus.Log("explorador", $"grafo movido a «{destino.DeviceName}» ({a.Width}×{a.Height}); "
-            + "la capa de pruebas se queda sobre la app");
-        return $"grafo en «{destino.DeviceName}»; la capa se queda aquí. Mantén pulsado para traerlo";
+        string donde = AjustarGrafoALaConsola(destino);
+        LogBus.Log("explorador", $"capa movida a «{destino.DeviceName}» ({a.Width}×{a.Height}); {donde}");
+        return $"capa en «{destino.DeviceName}» · {donde}. Mantén pulsado para volver";
     }
 
-    private static System.Windows.Forms.Screen OtraPantalla(System.Windows.Forms.Screen[] todas)
+    /// <summary>
+    /// El grafo vive en la pantalla de la consola del arquitecto — y SOLO se separa de la capa si
+    /// esa pantalla es otra.
+    ///
+    /// Ese «solo si es otra» es un seguro, no una optimización: la primera versión sacaba el grafo
+    /// a una ventana propia a pantalla completa y siempre encima, y cuando caía en la MISMA
+    /// pantalla que la capa tapaba la barra entera — sin barra no hay forma de cambiar la vista ni
+    /// de traerlo de vuelta, así que el usuario se quedaba encerrado (2026-08-09, lo sufrió él).
+    /// Nada que ocupe toda una pantalla puede ser la única forma de salir de sí mismo; por eso
+    /// además Escape lo devuelve.
+    /// </summary>
+    private string AjustarGrafoALaConsola(System.Windows.Forms.Screen pantallaDeLaCapa)
     {
-        var primaria = Array.Find(todas, p => p.Primary) ?? todas[0];
-        return Array.Find(todas, p => p.DeviceName != primaria.DeviceName) ?? primaria;
+        var pantallas = System.Windows.Forms.Screen.AllScreens;
+        var consola = Diagnostics.ConsolaViva.PantallaDeLaConsola() is { } dev
+            ? Array.Find(pantallas, p => p.DeviceName == dev) : null;
+
+        bool separar = consola != null && consola.DeviceName != pantallaDeLaCapa.DeviceName;
+        if (!separar)
+        {
+            DevolverGrafoALaCapa();
+            return consola == null
+                ? "el grafo se queda en la capa (no hay consola del arquitecto abierta)"
+                : "el grafo se queda en la capa (la consola está en esta misma pantalla)";
+        }
+
+        var a = consola!.WorkingArea;
+        if (_ventanaGrafo == null)
+        {
+            _grafoHueco.Child = null;
+            _ventanaGrafo = new Window
+            {
+                Title = "Grafo",
+                WindowStyle = WindowStyle.None, AllowsTransparency = true, ShowInTaskbar = false,
+                Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x12, 0x12, 0x16)),
+                Content = _conRotulo, Topmost = true,
+            };
+            // La salida de emergencia: Escape lo devuelve a la capa, pase lo que pase.
+            _ventanaGrafo.PreviewKeyDown += (_, e) =>
+            { if (e.Key == Key.Escape) { e.Handled = true; DevolverGrafoALaCapa(); } };
+            _ventanaGrafo.Show();
+        }
+        // Ocupa la mayor parte de SU pantalla, no toda: deja ver la consola de debajo, que es con lo
+        // que se lee en pareja.
+        var h = new WindowInteropHelper(_ventanaGrafo).Handle;
+        SetWindowPos(h, IntPtr.Zero, a.Left + 20, a.Top + 20, a.Width - 40, (int)(a.Height * 0.62),
+            SWP_NOZORDER | SWP_NOACTIVATE);
+        return $"el grafo en «{consola.DeviceName}», con la consola (Escape lo devuelve)";
+    }
+
+    private void DevolverGrafoALaCapa()
+    {
+        if (_ventanaGrafo == null) return;
+        _ventanaGrafo.Content = null;
+        _ventanaGrafo.Close();
+        _ventanaGrafo = null;
+        _grafoHueco.Child = _conRotulo;
+        LogBus.Log("explorador", "el grafo vuelve a la capa");
+    }
+
+    /// <summary>La siguiente pantalla en el ciclo: mantener pulsado dos veces devuelve al sitio.</summary>
+    private static System.Windows.Forms.Screen OtraPantalla(
+        System.Windows.Forms.Screen[] todas, System.Windows.Forms.Screen actual)
+    {
+        int i = Array.FindIndex(todas, p => p.DeviceName == actual.DeviceName);
+        return todas[(Math.Max(i, 0) + 1) % todas.Length];
     }
 
     private Window? _ventanaGrafo;
-    private bool _grafoFuera;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
