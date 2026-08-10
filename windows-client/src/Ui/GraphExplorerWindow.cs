@@ -1094,7 +1094,9 @@ public sealed class GraphExplorerWindow : Window
             // punto encima lo taparía. La esquina es de nadie.
             var caja = el.Bounds;
             if (caja.Width <= 0 || caja.Height <= 0) continue;
-            var esquina = aPantalla.Transform(new Point(caja.X, caja.Y));
+            // Al sistema del LIENZO, no solo corregido de DPI: la capa puede estar en el segundo
+            // monitor y entonces «restar dónde está la ventana» deja de ser cero (ver Pantallas).
+            var esquina = Pantallas.AlVisual(_edges, caja.X, caja.Y);
             Canvas.SetLeft(chip, esquina.X + 2);
             Canvas.SetTop(chip, esquina.Y + 2);
             _edges.Children.Add(chip);
@@ -3276,9 +3278,6 @@ public sealed class HighlightOverlay : Window
     /// </summary>
     public void ShowRects(IReadOnlyList<Rect> fisicos)
     {
-        var src = PresentationSource.FromVisual(this);
-        Matrix m = src?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
-
         // Se reutiliza el primero y se crean los demás al vuelo: lo normal es uno, y no tiene
         // sentido pagar por adelantado unos recuadros que casi nunca se usan.
         foreach (var extra in _extras) _canvas.Children.Remove(extra);
@@ -3286,14 +3285,15 @@ public sealed class HighlightOverlay : Window
 
         for (int i = 0; i < fisicos.Count; i++)
         {
-            var tl = m.Transform(new Point(fisicos[i].X, fisicos[i].Y));
-            var br = m.Transform(new Point(fisicos[i].Right, fisicos[i].Bottom));
+            // Misma conversión que los puntos, y por el mismo sitio: dos formas de responder
+            // «dónde cae esto en mi lienzo» acaban discrepando el día que la ventana se mueve.
+            var caja = Pantallas.AlVisual(_canvas, fisicos[i]);
 
             var r = i == 0 ? _rect : NuevoRecuadro();
-            Canvas.SetLeft(r, tl.X);
-            Canvas.SetTop(r, tl.Y);
-            r.Width = Math.Max(0, br.X - tl.X);
-            r.Height = Math.Max(0, br.Y - tl.Y);
+            Canvas.SetLeft(r, caja.X);
+            Canvas.SetTop(r, caja.Y);
+            r.Width = caja.Width;
+            r.Height = caja.Height;
             r.Visibility = Visibility.Visible;
             if (i > 0) { _canvas.Children.Add(r); _extras.Add(r); }
         }
