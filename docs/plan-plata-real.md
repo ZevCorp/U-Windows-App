@@ -158,17 +158,26 @@ Son dos PRs, no dos commits: si 3b se tuerce, 3a ya está dentro.
 pierde nada») es la red, y la migración se prueba cargando el `surface-map.json` de una máquina real
 de antes del cambio.
 
-### Fase 4 · El criterio de terminado `<tu-prefijo>/terminado-se-mide-derivando` · 1 día
+### Fase 4 · El criterio de terminado — **ESCRITA, sin verificar**
 
-**Cubre:** promesa 15.
-**Entra:** una herramienta MCP que devuelva el resumen derivado (cobertura, sin cruzar, desacuerdos,
-declaradas sin evidencia); la misión de [`arquitecto.mjs:172-181`](../agente-arquitecto/arquitecto.mjs#L172)
-reescrita —hoy define plata como «cada salida en su nivel» y su terminado como «`sin_situar` vacío»,
-que es la definición que produce plata falsa—; y `EscenarioCi.Escenario` gana `Cobertura` junto a
-`Declarados`.
-**Urgencia por calendario, no por arquitectura:** mientras la misión diga lo que dice, la próxima
-corrida nocturna vuelve a producir plata declarada aunque el derivador ya funcione. La parte de la
-misión se puede adelantar a la fase 1 si hay una corrida programada antes.
+**Entró:**
+
+- `map_silver` (`cuanto_entiende` para el agente): cobertura derivada, puertas **sin cruzar** como
+  lista de trabajo, desacuerdos con quién los declaró, y los contenedores con su afordancia.
+- `map_unsituated` deja de poder leerse como meta: cada respuesta suya lleva pegada la cobertura
+  derivada y dice que declarar no la sube. Dos herramientas que se leen juntas no pueden dar
+  impresiones contrarias — es el hallazgo nº1 de la auditoría del arquitecto, aplicado otra vez.
+- La misión reescrita: plata deja de ser «cada salida en su nivel» y pasa a ser lo que el sistema
+  deriva; el trabajo del agente pasa de **declarar** a **cruzar puertas y disputar el cálculo**; y
+  se le dice explícitamente que declarar sin evidencia se cuenta como deuda, no como avance.
+- `fijar_nivel` se describe ahora como herramienta de último recurso, no como el trabajo.
+- `EscenarioCi` mide `Cobertura` junto a `Declarados`. Los escenarios ya grabados no la traen y
+  siguen valiendo: sin el campo el mínimo es 0, igual que un núcleo viejo no promete lo que no
+  conoce.
+
+**Lo que NO entró:** una promesa en el contrato que ate `map_silver` y `map_unsituated` a decir lo
+mismo. El contrato no instancia herramientas MCP hoy, y montar ese arnés es más trabajo que la fase
+entera. Queda anotado como lo que es: un hueco de cobertura, no algo verificado.
 
 ### Fase 5 · Calibrar y limpiar `<tu-prefijo>/plata-calibrada` · 1 día
 

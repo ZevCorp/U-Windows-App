@@ -136,7 +136,7 @@ const herramientas = createSdkMcpServer({
       { pantalla: z.string().optional().describe("identidad de la pantalla; vacío = donde estés ahora") },
       (a) => sonda("map_routes_from", a.pantalla ? { surface: a.pantalla } : {})),
 
-    t("fijar_nivel", "Declarar el nivel de una salida (1 = navegación transversal de la app entera). cromo=true si además te sigue a todas partes. NO muevas lo que declaró una persona: si discrepas, dilo con feedback.",
+    t("fijar_nivel", "Declarar el nivel de una salida. ÚSALO POCO: el sistema deriva la estructura solo, y tu declaración no sube la cobertura — si el bronce no la sostiene, sale marcada como «declarada sin evidencia», que es lo contrario de haber avanzado. Resérvalo para lo que has COMPROBADO cruzando y el cálculo aún no puede ver. NO muevas lo que declaró una persona: si discrepas, dilo con feedback.",
       {
         salida: z.string().describe("nombre de la salida O SU SELECTOR (uia:name=X;ct=TreeItem). Usa el SELECTOR siempre que el nombre se repita en la app: por nombre se aplica a TODAS las apariciones a la vez"),
         nivel: z.number().int().min(1).max(6),
@@ -144,7 +144,10 @@ const herramientas = createSdkMcpServer({
       },
       (a) => sonda("map_set_level", { app: APP, exit: a.salida, level: String(a.nivel), ...(a.cromo === undefined ? {} : { cromo: String(a.cromo) }) })),
 
-    t("sin_situar", "TU LISTA DE TRABAJO: las pantallas y salidas que el mapa NO sabe situar todavía, con el grupo que declaró la página. Mientras esta lista no esté vacía, la estructura está incompleta.",
+    t("cuanto_entiende", "TU CRITERIO DE TERMINADO: cuánto entiende el sistema por sí solo (cobertura derivada), qué puertas siguen SIN CRUZAR —esa es tu lista de trabajo real— y en qué discrepan el cálculo y lo declarado. Empieza y termina aquí.",
+      {}, () => sonda("map_silver", { app: APP })),
+
+    t("sin_situar", "Lo que nadie ha DECLARADO todavía. Es información, no tu meta: se vacía escribiendo niveles, y escribir no es entender. Para saber si avanzas, mira «cuanto_entiende».",
       {}, () => sonda("map_unsituated", { app: APP })),
 
     tFoto("mirar", "Una FOTO de la ventana que hay delante. Úsala cuando los nombres no basten para decidir qué es navegación y qué es contenido: un panel lateral se reconoce de un vistazo."),
@@ -169,16 +172,33 @@ y un grafo que el sistema construye solo mientras navega. Tu misión NO es mapea
 JUZGAR si la jerarquía que el grafo está construyendo se corresponde con la arquitectura real de
 la app, corregir el grafo donde te den autoridad tus herramientas, y dejar constancia del resto.
 
-TU TRABAJO ES LLEVAR ESTA APP DE BRONCE A PLATA, y esas dos palabras tienen un significado exacto
-aquí:
-  · BRONCE es lo que hay ahora: todo lo visible anotado en crudo, sin jerarquía. El mapa lo tiene
-    todo y no sabe qué es qué.
-  · PLATA es lo mismo ORDENADO: cada salida en su nivel, el mobiliario marcado como cromo, el
-    gesto de volver identificado, y lo que no es navegación fuera de en medio.
+TU TRABAJO ES LLEVAR ESTA APP DE BRONCE A PLATA, y esas dos palabras cambiaron de significado el
+2026-08-10. Léelas otra vez aunque creas que las sabes:
+  · BRONCE es lo observado en crudo: pantallas, puertas, tipos, y si cada puerta se llegó a cruzar.
+  · PLATA es lo que el sistema DERIVA de ese bronce y puede sostener con evidencia — qué es
+    mobiliario porque está en 9 de 11 pantallas, qué es relativo porque lleva a dos sitios
+    distintos, qué es contenido porque tiene cuarenta hermanos iguales, y a qué profundidad vive
+    cada pantalla.
 
-CÓMO SE MIDE QUE HAS TERMINADO, y no es una opinión: la herramienta «sin_situar» enumera lo que el
-mapa todavía no sabe colocar. Empiezas mirándola y terminas cuando esté vacía o cuando lo que
-quede esté explicado en el feedback. Ese es tu criterio de terminado.
+PLATA NO ES LO QUE TÚ DECLARES. Esto es lo importante y es lo que ha cambiado: antes tu trabajo era
+ponerle nivel a todo, y con eso el sistema PARECÍA entender la app mientras seguía sin entenderla.
+Declarar mueve un número; no enseña nada a nadie. Ahora la estructura la calcula el sistema, y tu
+trabajo es DARLE EL MATERIAL QUE LE FALTA Y DECIRLE DÓNDE SE EQUIVOCA.
+
+CÓMO SE MIDE QUE HAS TERMINADO, y no es una opinión: la herramienta «cuanto_entiende» da la
+COBERTURA DERIVADA —qué parte de la app se sostiene con evidencia— y la lista de puertas SIN CRUZAR.
+Empiezas ahí y terminas ahí. Esa cobertura sube de dos maneras, las dos honestas:
+  1. CRUZANDO puertas que nadie ha cruzado. Es tu trabajo principal: cada puerta que abres convierte
+     una incógnita en un hecho, y ninguna otra cosa que hagas vale tanto.
+  2. REPORTANDO con feedback dónde el cálculo se equivoca, con el caso concreto delante.
+
+Y no sube declarando. Si declaras algo que el bronce no sostiene, aparece marcado como «declarada
+sin evidencia» — o sea, contado como deuda, no como avance. Usa «fijar_nivel» solo para lo que hayas
+COMPROBADO cruzando y el cálculo todavía no pueda ver.
+
+Los DESACUERDOS entre el cálculo y lo declarado son tu material más valioso: cada uno es o una regla
+que hay que mejorar o una declaración que estaba mal. Míralos uno a uno y explica en el feedback de
+qué lado está la razón.
 
 QUÉ ES CADA NIVEL:
   · NIVEL 1 + CROMO = el mobiliario que TE SIGUE. Si te vas a cualquier otra pantalla de la app y
@@ -194,9 +214,10 @@ BAJAR EN PROFUNDIDAD SIGUE IMPORTANDO. Un mapa de un solo nivel no es una jerarq
 Si al terminar todo cuelga del inicio, has fallado aunque no te hayas equivocado en nada.
 
 Método de trabajo:
-0. Empieza por «sin_situar» (tu lista) y «mirar» (una foto). Los nombres solos engañan: un panel
-   lateral y una lista de archivos son indistinguibles en texto y obvios en una imagen. Y marca
-   pronto el gesto de volver con «marcar_atras» — cada vuelta sin marcar ensucia el grafo.
+0. Empieza por «cuanto_entiende» (tu criterio y tu lista de puertas sin cruzar) y «mirar» (una foto).
+   Los nombres solos engañan: un panel lateral y una lista de archivos son indistinguibles en texto
+   y obvios en una imagen. Y marca pronto el gesto de volver con «marcar_atras» — cada vuelta sin
+   marcar ensucia el grafo.
 1. Sigue por jerarquia_del_grafo y que_veo: qué cree el grafo, qué hay de verdad.
 2. BAJA. Elige una sección con contenido, entra, y desde DENTRO vuelve a mirar (que_veo y
    rutas_desde): ahí aparecen las puertas del nivel 2. Entra en una de ellas y repite. Agota una
@@ -213,14 +234,19 @@ Método de trabajo:
    subpágina SEGUIRÍA ahí (panel lateral entero, pestañas, menú principal). Lo que solo existe en
    una pantalla no lo es, por grande que se vea. Y lo que está DENTRO de una sección es nivel 2 o
    más: no lo declares de nivel 1 solo porque lo veas.
-6. Contrasta: ¿lo que el grafo declara nivel 1 es de verdad transversal? ¿Hay navegación
-   transversal que el grafo aún no declara? Corrígelo con fijar_nivel — SALVO lo que dijo una
-   persona: eso no se toca; si discrepas, feedback.
+6. Contrasta contra el CÁLCULO, no contra el vacío: vuelve a «cuanto_entiende» cada pocas puertas.
+   ¿Lo que deriva como mobiliario es de verdad transversal? ¿Hay algo transversal que el cálculo no
+   ve, y por qué —cuántas pantallas te faltan por visitar para que lo vea—? Cada desacuerdo que
+   aparezca, míralo: o la regla se equivoca (feedback) o la declaración estaba mal. Lo que dijo una
+   persona no se toca; si discrepas, feedback.
 7. Cada desajuste real va a feedback en el momento, concreto: qué esperabas, qué hay, por qué
-   importa. Nada de «todo bien» genérico.
-8. Cierra SIEMPRE con un feedback final: la arquitectura real de la app en forma de árbol con sus
-   niveles, hasta qué profundidad llegaste, qué tan fiel es el grafo (un porcentaje honesto) y los
-   3 desajustes más importantes.
+   importa. Nada de «todo bien» genérico. Y si una REGLA de derivación falla, es el hallazgo más
+   valioso que puedes traer: dilo con el caso delante (qué salida, qué dice el cálculo, qué es en
+   realidad y cómo lo comprobaste). Arreglar una regla vale por cien declaraciones.
+8. Cierra SIEMPRE con un feedback final: la cobertura con la que empezaste y con la que terminas,
+   cuántas puertas cruzaste, la arquitectura real de la app en forma de árbol, hasta qué
+   profundidad llegaste, y los 3 desajustes más importantes. Si la cobertura no subió, dilo: una
+   corrida honesta que no avanzó enseña más que un informe que dice que todo está bien.
 
 Límites duros: no puedes editar código ni archivos —no tienes herramientas para ello—, solo
 organizar el grafo y reportar. Si la app se cierra o algo se cruza, dilo en feedback y termina.
@@ -232,7 +258,7 @@ const PERMITIDAS = [
   "mcp__grafo__donde_estoy", "mcp__grafo__que_veo", "mcp__grafo__cruzar",
   "mcp__grafo__ir_a", "mcp__grafo__jerarquia_del_grafo", "mcp__grafo__rutas_desde",
   "mcp__grafo__fijar_nivel", "mcp__grafo__feedback",
-  "mcp__grafo__sin_situar", "mcp__grafo__mirar",
+  "mcp__grafo__cuanto_entiende", "mcp__grafo__sin_situar", "mcp__grafo__mirar",
   "mcp__grafo__marcar_atras", "mcp__grafo__marcar_accion",
 ];
 const PROHIBIDAS = ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"];
@@ -247,9 +273,10 @@ const corrida = query({
   // explícitamente arriesga gastar los turnos nuevos en seguir explorando y quedarse otra vez sin
   // escribirlo.
   prompt: CONTINUAR
-    ? `Se te acabaron los turnos y te doy más. Retoma donde estabas con «${APP}»: mira «sin_situar», `
-      + `termina de declarar lo que falte y CIERRA con tu informe final en feedback. El informe es `
-      + `lo único que nos llevamos: escríbelo aunque no hayas terminado de nivelarlo todo.`
+    ? `Se te acabaron los turnos y te doy más. Retoma donde estabas con «${APP}»: mira `
+      + `«cuanto_entiende», cruza las puertas que más suban la cobertura y CIERRA con tu informe `
+      + `final en feedback. El informe es lo único que nos llevamos: escríbelo aunque la cobertura `
+      + `se haya quedado corta, y di con cuál terminaste.`
     : `Audita la jerarquía de «${APP}». La app ya está abierta y la sonda viva.`,
   options: {
     systemPrompt: MISION,
