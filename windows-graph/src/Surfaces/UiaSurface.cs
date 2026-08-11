@@ -1353,18 +1353,41 @@ public sealed class UiaSurface : IUiSurface
             //
             // El contenido de una lista queda fuera a propósito: ahí seleccionar NO es abrir, y
             // confundirlos rompería el explorador, donde hace falta el doble clic de verdad.
-            if (permitirSelect
+            // …PERO SELECCIONAR NO ES ABRIR EN UN ÁRBOL DE NAVEGACIÓN, y esta rama se lo tragaba.
+            //
+            // El panel lateral del explorador son TreeItem con SelectionItemPattern, así que entraban
+            // aquí: Select() marcaba la entrada, NO navegaba, y se devolvía éxito. El 2026-08-08 se
+            // vio dos veces seguidas —«Descargas» y «Escritorio»—: el elemento se resolvía al primer
+            // intento, se «pulsaba», y acto seguido «pulsé X pero no se llegó». Un `map_go_to` de
+            // tres tramos moría en el primero. Aceptado no es ejecutado, otra vez.
+            //
+            // El orden se INVIERTE y se verifica, que es lo que permite conservar los dos casos:
+            // primero el clic real —que en el explorador navega—, y solo si NO consiguió seleccionar
+            // se recurre a Select(). El menú de Configuración sigue funcionando porque allí el ratón
+            // sintético no selecciona nada, así que el respaldo entra igual; el explorador funciona
+            // porque el clic real hace las dos cosas a la vez.
+            bool seleccionable = permitirSelect
                 && !EsContenidoDeLista(el)
                 && el.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var sp0)
-                && sp0 is SelectionItemPattern selNav)
+                && sp0 is SelectionItemPattern;
+
+            bool RespaldoSelect()
             {
+                if (!seleccionable) return false;
                 try
                 {
-                    selNav.Select();
-                    L("    → seleccionado por patrón (la app no responde al ratón sintético)");
+                    if (!el.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var sp1)
+                        || sp1 is not SelectionItemPattern sel) return false;
+                    if (sel.Current.IsSelected)
+                    {
+                        L("    → el clic real ya lo dejó seleccionado; no hace falta el patrón");
+                        return true;
+                    }
+                    sel.Select();
+                    L("    → Select() por patrón: el clic real no agarró (app que ignora el ratón sintético)");
                     return true;
                 }
-                catch (Exception e) { L($"    Select por patrón falló ({e.Message}); se sigue con el clic"); }
+                catch (Exception e) { L($"    Select por patrón falló ({e.Message})"); return false; }
             }
 
             var r = el.Current.BoundingRectangle;
@@ -1414,6 +1437,11 @@ public sealed class UiaSurface : IUiSurface
                 Thread.Sleep(20);
                 mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
                 mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
+
+                // ¿AGARRÓ? Solo se puede preguntar en lo seleccionable, y ahí basta: si tras el clic
+                // real el elemento no quedó seleccionado, esta app ignora el ratón sintético y hay
+                // que pedírselo por patrón. Se da un respiro para que el control procese el clic.
+                if (seleccionable) { Thread.Sleep(120); RespaldoSelect(); }
                 return true;
             }
             L($"    RealClick: sin caja usable (rect={r}) → respaldo a Invoke por UIA (INVISIBLE)");

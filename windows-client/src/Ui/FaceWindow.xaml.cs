@@ -2411,6 +2411,31 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// Enciende/apaga el inspector visual de elementos (overlay click-through con recuadros +
     /// diagnóstico de clic amarillo/rojo). Ver <see cref="UiInspector"/>.
     /// </summary>
+    /// <summary>
+    /// SOLO GRAFO: le quita al asistente las acciones a coordenadas, para medir hasta dónde llega
+    /// el grafo por sí solo. Ver <see cref="Agent.AgentLoop.SoloGrafo"/>.
+    ///
+    /// El texto del botón dice el ESTADO, no la acción — «GRAFO + coordenadas» / «SOLO GRAFO» — y no
+    /// «activar solo grafo». Un botón que nombra lo que hará obliga a deducir dónde estás, y este se
+    /// mira justo cuando se está midiendo, que es cuando peor se deduce.
+    /// </summary>
+    private void OnToggleSoloGrafo(object sender, RoutedEventArgs e)
+    {
+        bool on = !Agent.AgentLoop.SoloGrafo;
+        Agent.AgentLoop.SoloGrafo = on;
+
+        SoloGrafoBtn.Content = on ? "🕸 Navegación: SOLO GRAFO" : "🕸 Navegación: GRAFO + coordenadas";
+        SoloGrafoBtn.Background = new System.Windows.Media.SolidColorBrush(on
+            ? System.Windows.Media.Color.FromArgb(0x66, 0x21, 0x96, 0xF3)   // el mismo azul que el cromo del grafo
+            : System.Windows.Media.Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+        SetStatus(on
+            ? "SOLO GRAFO: sin tap/type/scroll. Si el grafo no sabe llegar, se detiene."
+            : "Grafo + coordenadas: si el grafo no sabe llegar, computer-use lo rodea.");
+        LogBus.Log("agent", on
+            ? "🕸 SOLO GRAFO puesto: las acciones a coordenadas quedan prohibidas (medición)"
+            : "🕸 SOLO GRAFO quitado: vuelve el respaldo por coordenadas");
+    }
+
     /// <summary>Si el modo «verlo todo» está puesto. Ver <see cref="OnToggleFullTooltips"/>.</summary>
     private bool _fullTooltips;
 

@@ -1,4 +1,4 @@
-using U.Graph;
+﻿using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Navigation;
@@ -45,6 +45,12 @@ public sealed class SurfaceMapTools
 
     /// <summary>Ya estamos buscando un camino alternativo: un solo reintento, no una cadena.</summary>
     private bool _reenrutando;
+
+    /// <summary>
+    /// Cuántas veces ha fallado cada arista EN ESTA SESIÓN. Ver el olvido de dos strikes en
+    /// <c>GoTo</c>: olvidar es permanente, y una casualidad no es una prueba.
+    /// </summary>
+    private readonly Dictionary<string, int> _fallosPorArista = new(StringComparer.Ordinal);
 
     /// <summary>
     /// A dónde llevaría «Atrás» AHORA MISMO. Estado efímero de la sesión, nunca una arista.
@@ -1408,6 +1414,16 @@ public sealed class SurfaceMapTools
         if (SafeToClick.EsDestructivo(elegida, out string motivo))
             return $"NO pulso «{elegida}»: {motivo}. Una opción destructiva la confirma el usuario, no yo.";
 
+        // NI SIQUIERA SI ME LO PIDEN. `choose` es una instrucción explícita y por eso se respeta casi
+        // siempre —responder diálogos es para lo que existe esta herramienta—, pero abrir una sesión
+        // de cuenta o autorizar un pago no es responder un diálogo: es comprometer al usuario con un
+        // tercero. Eso lo pulsa él, delante de la pantalla. Mismo criterio que el veto de lo
+        // destructivo, que también ignora a la capa consciente a propósito.
+        if (EsCuentaOPago(elegida))
+            return $"NO pulso «{elegida}»: abre una sesión de cuenta o un pago, y eso compromete al "
+                 + "usuario con un tercero. Tiene que pulsarlo él. Puedo cerrar el diálogo si quieres "
+                 + "seguir sin eso.";
+
         var paso = new PlanStep
         {
             StepOrder = 1, ActionType = "click",
@@ -1455,18 +1471,101 @@ public sealed class SurfaceMapTools
     /// envenenando todas las corridas siguientes (2026-08-03, visto en pantalla). Las opciones son
     /// lo que el aviso PROPONE, no las formas de deshacerse de él.
     /// </remarks>
+    /// <summary>
+    /// La opción que se puede pulsar SIN preguntarle a nadie.
+    ///
+    /// QUITAR LA FORMA DE DECLINAR CONVIERTE UNA DECISIÓN EN UN SÍ FORZADO. Esto filtraba «Cerrar»
+    /// por considerarlo cromo de ventana y, si quedaba UNA sola opción, la pulsaba automáticamente
+    /// dando por hecho que «una opción no es una elección». El 2026-08-10 Windows ofreció
+    /// «Iniciar sesión» y «Cerrar» para una copia de seguridad con cuenta Microsoft: se filtró
+    /// «Cerrar», quedó una, y el sistema **inició sesión solo** — y lo reportó como DESBLOQUEADO.
+    /// Se pidió declinar y aceptó.
+    ///
+    /// El error de fondo: en un diálogo así la elección no es «cuál de las respuestas», es
+    /// **aceptar o irse**, y «Cerrar» ES la respuesta de irse. Cualquier consentimiento, login o
+    /// upsell con la forma [Acción] + [Cerrar] se auto-aceptaba.
+    ///
+    /// Ahora manda otra regla, y es la de siempre para un agente sin supervisión: **si hay manera de
+    /// declinar, esa es la segura.** Y si la única respuesta que queda compromete algo —iniciar
+    /// sesión, aceptar, permitir, activar, comprar— no se pulsa: se devuelve la decisión, que es de
+    /// quien va a vivir con ella.
+    /// </summary>
     private static string OpcionSegura(List<string> opciones)
     {
+        // 1. DECLINAR SIEMPRE GANA. Irse nunca compromete nada; quedarse puede.
+        string? declinar = opciones.FirstOrDefault(EsDeclinar);
+        if (declinar != null) return declinar;
+
+        // 2. Sin salida ofrecida: solo se automatiza si lo que queda no compromete nada.
         var reales = opciones.Where(o => !EsSalidaDeVentana(o)).ToList();
-        return reales.Count == 1 ? reales[0] : "";
+        if (reales.Count == 1 && !EsCompromiso(reales[0])) return reales[0];
+
+        return "";   // hay una decisión: la toma el usuario, con `choose`
+    }
+
+    /// <summary>
+    /// ¿Esta opción es «irse sin hacer nada»? Se compara por PREFIJO porque Windows etiqueta los
+    /// botones de marco con el nombre de la ventana detrás: «Cerrar Copias de seguridad de Windows».
+    /// Con <c>Equals</c> ese no casaba con nada y el diálogo entero quedaba sin salida reconocible.
+    /// </summary>
+    private static bool EsDeclinar(string etiqueta)
+    {
+        string e = (etiqueta ?? "").Trim();
+        string[] formas =
+        {
+            "cerrar", "close", "cancelar", "cancel", "no, gracias", "no thanks", "ahora no",
+            "not now", "más tarde", "mas tarde", "later", "omitir", "skip", "rechazar", "decline",
+            "descartar", "dismiss",
+        };
+        return formas.Any(f => e.StartsWith(f, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// ¿Esta opción COMPROMETE algo — una cuenta, un permiso, un pago, un cambio de configuración?
+    ///
+    /// No es la lista de lo destructivo (eso ya lo veta <c>SafeToClick.EsDestructivo</c>): es la de
+    /// lo que ata al usuario a algo. Nada de esto se pulsa solo, ni siquiera cuando es la única
+    /// opción que queda — sobre todo entonces, porque «solo queda una» es justo como se disfraza un
+    /// diálogo que no acepta un no.
+    /// </summary>
+    private static bool EsCompromiso(string etiqueta)
+    {
+        string e = (etiqueta ?? "").Trim();
+        string[] verbos =
+        {
+            "iniciar sesión", "iniciar sesion", "sign in", "log in", "acceder", "entrar",
+            "crear cuenta", "registrar", "sign up", "suscrib", "subscribe", "comprar", "buy",
+            "pagar", "pay", "aceptar", "accept", "acepto", "estoy de acuerdo", "agree",
+            "permitir", "allow", "conceder", "grant", "activar", "enable", "habilitar",
+            "continuar", "continue", "siguiente", "next", "sí", "si", "yes", "ok", "aceptar y",
+        };
+        return verbos.Any(v => e.StartsWith(v, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// El subconjunto de <see cref="EsCompromiso"/> que NO se pulsa ni con <c>choose</c> explícito:
+    /// abrir sesión en una cuenta, crearla, o autorizar un pago. No es responder un diálogo, es atar
+    /// al usuario con un tercero — y eso lo hace él, delante de la pantalla.
+    /// </summary>
+    private static bool EsCuentaOPago(string etiqueta)
+    {
+        string e = (etiqueta ?? "").Trim();
+        string[] verbos =
+        {
+            "iniciar sesión", "iniciar sesion", "sign in", "log in", "acceder con", "entrar con",
+            "crear cuenta", "crear una cuenta", "registrar", "sign up", "create account",
+            "suscrib", "subscribe", "comprar", "buy", "pagar", "pay", "añadir tarjeta", "add card",
+        };
+        return verbos.Any(v => e.StartsWith(v, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>¿Esta «opción» es en realidad el cierre de la ventana y no una respuesta?</summary>
     private static bool EsSalidaDeVentana(string etiqueta) =>
-        etiqueta.Equals("Cerrar", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Equals("Close", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Equals("Minimizar", StringComparison.OrdinalIgnoreCase)
-        || etiqueta.Equals("Maximizar", StringComparison.OrdinalIgnoreCase);
+        EsDeclinar(etiqueta)
+        || etiqueta.StartsWith("Minimizar", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.StartsWith("Maximizar", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.StartsWith("Minimize", StringComparison.OrdinalIgnoreCase)
+        || etiqueta.StartsWith("Maximize", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Si delante hay un DIÁLOGO, lo describe como lo que es: una interrupción con una pregunta y
@@ -2048,9 +2147,7 @@ public sealed class SurfaceMapTools
         // hecha para la próxima vez — y entonces sí habrá plan.
         if (ruta == null)
         {
-            string comoSeLlama = destino.TrimEnd('/');
-            int barra = comoSeLlama.LastIndexOf('/');
-            if (barra >= 0) comoSeLlama = comoSeLlama[(barra + 1)..];
+            string comoSeLlama = NombreDe(destino);
 
             if (comoSeLlama.Length > 0)
             {
@@ -2099,7 +2196,7 @@ public sealed class SurfaceMapTools
                 if (ausente) { EsperarPantallaLista(1200); ausente = !_uia.Execute(paso, out error); }
                 if (ausente)
                 {
-                    _map.OlvidarAccion(h.From, h.To);
+                    _map.OlvidarAccion(h.From, h.To, h.Info.Selector);
                     if (!_reenrutando)
                     {
                         _reenrutando = true;
@@ -2120,8 +2217,95 @@ public sealed class SurfaceMapTools
             // La llegada se COMPRUEBA, no se supone. Sin esto, una acción equivocada —y el mapa
             // tiene ~1 de cada 5— dejaría al modelo creyendo que está donde no está.
             if (!Llego(h.To, 4000))
+            {
+                // UNA ARISTA QUE NO LLEVA A NINGUNA PARTE SE CORRIGE, NO SE PADECE.
+                //
+                // Aquí solo se informaba y se volvía. El olvido de más arriba cubre el caso «el
+                // elemento ya no está», pero no este otro —el elemento SÍ está, se pulsa, y no lleva
+                // donde el mapa promete— que es el más común y el más dañino: la arista sobrevive y
+                // vuelve a elegirse en cada intento, para siempre. En la ruta a «inetpub» el mapa
+                // creía que «Nombre» —la CABECERA DE COLUMNA— llevaba a inetpub: pulsarla ordena la
+                // lista, y el tramo 3/3 moría igual una y otra vez (2026-08-08).
+                //
+                // Se distinguen las dos causas, porque piden remedios opuestos:
+                string aqui = _where()?.Id ?? "";
+                bool nosQuedamos = string.Equals(aqui, h.From, StringComparison.OrdinalIgnoreCase);
+
+                if (nosQuedamos)
+                {
+                    // NO NOS MOVIMOS: esto no es una puerta. Ordena, selecciona, despliega — hace
+                    // algo, pero no navega.
+                    //
+                    // PERO NO A LA PRIMERA. Olvidar es permanente y un tramo bueno falla de vez en
+                    // cuando por tiempo: la pantalla tarda más de los 4 s, o el clic llega mientras
+                    // la anterior se está desmontando. Con olvido inmediato se borró
+                    // «Disco local (C:)» desde Escritorio —una puerta real, que había funcionado
+                    // veinte minutos antes— y el explorador se quedó sin camino a C: (2026-08-08,
+                    // regresión introducida al arreglar las aristas falsas).
+                    //
+                    // Dos strikes. Una casualidad no es una prueba; dos fallos en la misma sesión
+                    // sobre la misma puerta sí. El contador es de sesión a propósito: no hace falta
+                    // persistirlo —una arista de verdad falsa vuelve a fallar enseguida— y así no se
+                    // arrastra un veredicto viejo a una app que pudo cambiar.
+                    string huella = h.From + "\n" + h.To + "\n" + h.Info.Selector;
+                    _fallosPorArista.TryGetValue(huella, out int antes);
+                    _fallosPorArista[huella] = antes + 1;
+
+                    if (antes + 1 >= 2)
+                    {
+                        LogBus.Log("mapa-mcp", $"«{h.Info.Label}» no movió la pantalla por 2ª vez: no es una "
+                            + $"puerta hacia «{h.To}» — se deja de enrutar por ella");
+                        _map.OlvidarAccion(h.From, h.To, h.Info.Selector);
+                    }
+                    else
+                    {
+                        LogBus.Log("mapa-mcp", $"«{h.Info.Label}» no movió la pantalla (1ª vez): puede ser "
+                            + "tiempo; se conserva la arista y se intenta otro camino");
+                    }
+                }
+                else if (aqui.Length > 0 && !SurfaceMap.EsPuerta(aqui))
+                {
+                    // NOS MOVIMOS, PERO A OTRO SITIO: la puerta es real y el mapa tiene mal el
+                    // destino. Se REAPUNTA con lo que acaba de pasar, que es la verdad más fresca que
+                    // existe, y se olvida la creencia vieja. Esto no degrada el mapa: lo corrige.
+                    LogBus.Log("mapa-mcp", $"«{h.Info.Label}» sí es puerta, pero lleva a «{aqui}», no a "
+                        + $"«{h.To}» — se reapunta la arista");
+                    _map.OlvidarAccion(h.From, h.To, h.Info.Selector);
+                    _map.LearnTraversal(h.From, aqui, h.Info.Selector, h.Info.Alternatives,
+                                        h.Info.Label, h.Info.ControlType);
+                }
+
+                // ANTES DE REPLANIFICAR, MIRAR. Este tramo quería llegar a un sitio concreto, y muy
+                // a menudo la puerta de verdad está DELANTE — solo que el mapa apuntaba a otra cosa.
+                // Al fallar el tramo «→ disco-local-c» por una cabecera de columna, «Disco local (C:)»
+                // estaba ahí, seleccionado, a un clic (2026-08-08). El sistema ya sabía hacer esto,
+                // pero solo cuando no había NINGUNA ruta; si había ruta y se rompía, se rendía sin
+                // levantar la vista. Es la misma jugada que hace una persona: si el camino que
+                // recordaba no existe, mira a ver si lo que busca está a la vista.
+                //
+                // Y al tomarlo se aprende, así que el hueco que dejó la arista falsa queda tapado.
+                if (VerYTomar(h.To, h.From) && Llego(h.To, 4000))
+                {
+                    LogBus.Log("mapa-mcp", $"✓ tramo {i + 1}/{ruta.Count} rescatado a la vista: → {h.To}");
+                    continue;
+                }
+
+                // Y se vuelve a planificar UNA vez con el mapa ya corregido: el destino puede seguir
+                // siendo alcanzable por otro lado, y ahora sabemos algo que antes no.
+                if (!_reenrutando)
+                {
+                    _reenrutando = true;
+                    try
+                    {
+                        LogBus.Log("mapa-mcp", $"mapa corregido; se replanifica hacia «{destino}»");
+                        return GoTo(destino);
+                    }
+                    finally { _reenrutando = false; }
+                }
+
                 return $"tramo {i + 1}/{ruta.Count}: pulsé «{h.Info.Label}» pero no se llegó a «{h.To}». "
-                     + $"Estamos en «{_where()?.Id}». La ruta del mapa no coincide con la realidad aquí.";
+                     + $"Estamos en «{aqui}». Corregí el mapa, pero no hay otro camino conocido.";
+            }
 
             LogBus.Log("mapa-mcp", $"✓ tramo {i + 1}/{ruta.Count}: «{h.Info.Label}» → {h.To}");
         }
@@ -2158,6 +2342,39 @@ public sealed class SurfaceMapTools
     /// (2026-08-02). Comprobar la ubicación ANTES convierte un encadenamiento optimista en uno
     /// verificado, y el fallo aparece donde se produce en vez de tres pasos después.
     /// </param>
+    /// <summary>El último segmento de una superficie: «uia://explorer.exe/disco-local-c» → «disco-local-c».</summary>
+    private static string NombreDe(string superficie)
+    {
+        string s = (superficie ?? "").TrimEnd('/');
+        int barra = s.LastIndexOf('/');
+        return barra >= 0 ? s[(barra + 1)..] : s;
+    }
+
+    /// <summary>
+    /// ¿Está a la vista una puerta que se llame como <paramref name="aDonde"/>? Entonces se toma.
+    ///
+    /// Es lo que hace una persona cuando el camino que recordaba no existe: levantar la vista. Se
+    /// exige coincidencia ÚNICA — con dos candidatas no se adivina, que es la regla de esta capa —,
+    /// y se devuelve solo si se pulsó algo; comprobar que se llegó es cosa de quien llama, porque
+    /// solo él sabe qué esperaba.
+    /// </summary>
+    private bool VerYTomar(string aDonde, string desde)
+    {
+        string nombre = NombreDe(aDonde);
+        if (nombre.Length == 0) return false;
+        try
+        {
+            _lector.Read();
+            var vistas = Uia.Reconocedor.Buscar(_lector.Elements, nombre.Replace('-', ' '));
+            if (vistas.Count != 1) return false;
+            LogBus.Log("mapa-mcp", $"el mapa no sabía llegar a «{aDonde}», pero «{vistas[0].Label}» está "
+                                 + "delante: se toma y se aprende");
+            Take(vistas[0].Label, "", desde);
+            return true;
+        }
+        catch (Exception e) { LogBus.Log("mapa-mcp", $"VerYTomar falló: {e.Message}"); return false; }
+    }
+
     private string Take(string salida, string accionPedida = "", string dondeCreoEstar = "")
     {
         string desalineado = ComprobarUbicacion(dondeCreoEstar);
@@ -2323,6 +2540,83 @@ public sealed class SurfaceMapTools
             }
             return $"vi «{etiquetaDirecta}» e intenté pulsarla, pero no pasó nada"
                  + (errDirecto.Length > 0 ? $" ({errDirecto})" : "") + ".";
+        }
+
+        // LA PUERTA QUE ESTÁ DELANTE GANA A LA QUE SOLO SE RECUERDA.
+        //
+        // Una misma etiqueta nombra varias puertas distintas en casi cualquier app: en el explorador
+        // hay CUATRO «Descargas» —el árbol del panel lateral (visto 17 veces), la miga de pan
+        // (4), una pestaña (3) y otra miga—. El nombre no las distingue, y el selector tampoco basta
+        // para elegir: hay que saber cuál EXISTE ahora mismo. Una pestaña solo existe si está
+        // abierta; el panel lateral está siempre.
+        //
+        // El 2026-08-08 el asistente pidió «Descargas» estando en Escritorio y le tocó la PESTAÑA.
+        // No estaba, así que reintentó cinco veces, dos veces por llamada, contra un elemento que
+        // estructuralmente no podía aparecer — esperar no trae lo que no existe. Y como
+        // Alternatives venía vacío, no había a qué caer. Se probó con el respaldo por coordenadas
+        // encendido y falló igual: no era el grafo contra computer-use, era el selector.
+        //
+        // Se desempata por lo que ya se sabe y no se estaba mirando: primero las que están EN
+        // PANTALLA, y entre esas la más ubicua — el mobiliario de la app le gana a lo circunstancial.
+        // Es la clase entera, no el caso: panel lateral + migas + pestañas repiten nombre en
+        // cualquier app con esa forma.
+        // Vale también —y sobre todo— cuando solo hay UNA candidata: es el caso que falló. El modelo
+        // pidió el selector exacto de la pestaña, así que la búsqueda por selector devolvió una sola
+        // puerta y no había nada que desempatar; simplemente no estaba en pantalla. Por eso, si la
+        // única candidata no está delante, se ABRE el abanico a sus homónimas antes de rendirse.
+        if (candidatas.Count > 0)
+        {
+            _lector.Read();
+            var enPantalla = new HashSet<string>(
+                _lector.Elements.Select(e => Uia.Reconocedor.SelectorDe(e)).Where(s => s.Length > 0),
+                StringComparer.OrdinalIgnoreCase);
+
+            var visibles = candidatas.Where(h => enPantalla.Contains(h.Info.Selector)).ToList();
+
+            if (visibles.Count == 0)
+            {
+                // Ninguna de las pedidas está delante. ¿Hay una hermana —mismo nombre, otra
+                // encarnación— que sí? Es lo que hace un humano: si la pestaña no está, usa el panel.
+                var etiquetas = new HashSet<string>(candidatas.Select(h => h.Info.Label),
+                                                    StringComparer.OrdinalIgnoreCase);
+                var hermanas = opciones.Where(h => etiquetas.Contains(h.Info.Label)
+                                                && enPantalla.Contains(h.Info.Selector)).ToList();
+                if (hermanas.Count > 0)
+                {
+                    LogBus.Log("mapa-mcp", $"«{salida}»: lo pedido ({candidatas[0].Info.Selector}) no está en "
+                        + $"pantalla; sí está la homónima {hermanas[0].Info.Selector} — se toma esa");
+                    visibles = hermanas;
+                }
+            }
+
+            if (visibles.Count > 0)
+            {
+                var descartadas = candidatas.Where(h => !visibles.Contains(h)).ToList();
+                candidatas = visibles.OrderByDescending(h => _map.Ubicuidad(h.Info.Selector))
+                                     .ThenByDescending(h => h.Info.Count).ToList();
+
+                // AMBIGUO ES «A DÓNDE», NO «CON CUÁL». Devolver las candidatas para que elija el
+                // modelo es lo correcto cuando llevan a sitios distintos —esta capa no adivina
+                // destinos—, pero «Descargas» del panel y «Descargas» del escritorio son la misma
+                // puerta con dos encarnaciones: preguntar cuál de las dos es pedirle al modelo que
+                // decida algo que da igual, y en la corrida del 2026-08-08 eso costó otro turno.
+                // Si todas las visibles van al MISMO destino conocido, se toma la más ubicua: el
+                // mobiliario de la app le gana a lo circunstancial.
+                var destinos = candidatas.Select(h => h.To)
+                    .Where(t => !SurfaceMap.EsPuerta(t))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (candidatas.Count > 1 && destinos.Count == 1)
+                {
+                    LogBus.Log("mapa-mcp", $"«{salida}»: {candidatas.Count} encarnaciones visibles y todas llevan a "
+                        + $"«{destinos[0]}»; no hay nada que elegir — se toma {candidatas[0].Info.Selector} "
+                        + $"(ubicuidad {_map.Ubicuidad(candidatas[0].Info.Selector)})");
+                    candidatas = new List<SurfaceMap.Hop> { candidatas[0] };
+                }
+                if (descartadas.Count > 0)
+                    LogBus.Log("mapa-mcp", $"«{salida}»: {descartadas.Count} homónima(s) descartada(s) por no estar "
+                        + $"en pantalla ({string.Join(", ", descartadas.Select(h => h.Info.Selector))}); "
+                        + $"se toma {candidatas[0].Info.Selector} (ubicuidad {_map.Ubicuidad(candidatas[0].Info.Selector)})");
+            }
         }
 
         if (candidatas.Count > 1)
