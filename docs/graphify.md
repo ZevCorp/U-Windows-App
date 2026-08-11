@@ -5,6 +5,11 @@
 > memorias de sesión: se registra AQUÍ, estructurado, para que lo consuman personas hoy y el
 > agente de mapeo mañana.
 
+> **Qué significa que un grafo está terminado** no se define aquí: vive en
+> [`plata.md`](plata.md), con las cinco condiciones, las cuatro formas de plata falsa que ya
+> nos engañaron una vez, y cómo se comprueba cada una. Este archivo dice cómo se mapea; ese
+> dice cuándo está bien mapeado.
+
 ## Las dos capas
 
 **Capa 1 — decisiones de desarrollo (este archivo).** Reglas duramente ganadas sobre cómo se

@@ -225,8 +225,8 @@
     "semantic_hash": "275bc8ba78be31a8ac456833edcaa275"
   },
   "windows-client/src/Mcp/SurfaceMapTools.cs": {
-    "mtime": 1786380358.8613355,
-    "ast_hash": "f279a1b59254601c8ffacf90e016f21b",
+    "mtime": 1786451619.9863007,
+    "ast_hash": "3e21a133db0a000960b94206d881d7de",
     "semantic_hash": ""
   },
   "windows-client/src/Mcp/WorkflowMcpRunner.cs": {
@@ -260,8 +260,8 @@
     "semantic_hash": "aec373cf4f3b1d2bf2256dd3eb60d0b9"
   },
   "windows-client/src/Navigation/SurfaceMap.cs": {
-    "mtime": 1786380333.9301817,
-    "ast_hash": "c1ddbd2d01d722490ebf99bd69282d73",
+    "mtime": 1786451576.6102793,
+    "ast_hash": "26ff1c93dafc54c9b62887ab0455d2b8",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/SurfaceNavigator.cs": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   "tests/ContratoDelGrafo/Contrato.cs": {
-    "mtime": 1786211968.879904,
-    "ast_hash": "27426dd48664b2eb773e4047fa2e3de3",
+    "mtime": 1786451729.6709237,
+    "ast_hash": "d9b23861056df00dce334fc8246041ea",
     "semantic_hash": ""
   },
   "tests/ContratoDelGrafo/ContratoDelGrafo.csproj": {
@@ -810,8 +810,8 @@
     "semantic_hash": ""
   },
   "versiones/nucleo/v1.cs": {
-    "mtime": 1786380333.9301817,
-    "ast_hash": "c1ddbd2d01d722490ebf99bd69282d73",
+    "mtime": 1786451576.6102793,
+    "ast_hash": "26ff1c93dafc54c9b62887ab0455d2b8",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Arquitecto.cs": {
