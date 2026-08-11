@@ -670,8 +670,8 @@
     "semantic_hash": "8afe35f891b6eaaf448dcb6a0955699b"
   },
   "docs/graphify.md": {
-    "mtime": 1786343209.7206483,
-    "ast_hash": "8413543c4e917cf9a1e5158c8f6ef712",
+    "mtime": 1786451983.3967144,
+    "ast_hash": "9ba81d49d781e1a8bac5a201724f39d8",
     "semantic_hash": ""
   },
   "docs/plan-producto.md": {
@@ -887,6 +887,11 @@
   "agente-arquitecto/U-versionessesionesprueba.txt": {
     "mtime": 1786364446.2764933,
     "ast_hash": "4d186321c1a7f0f354b297e8914ab240",
+    "semantic_hash": ""
+  },
+  "docs/plata.md": {
+    "mtime": 1786451969.0328488,
+    "ast_hash": "cabe5321a8879463990b9694e9d9d1bf",
     "semantic_hash": ""
   }
 }

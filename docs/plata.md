@@ -163,6 +163,49 @@ apariciones. Cinco «Actualizar "X"» dejan de contar como cinco pendientes.
 
 Ordenado por lo que bloquea, no por lo que cuesta.
 
+### 5.0 El cambio de modelo: los elementos viven DENTRO del nodo
+
+**Idea del usuario, 2026-08-10.** Es el cambio estructural que subsume a los dos siguientes, y
+por eso va primero aunque no sea lo primero que se haga.
+
+Hoy todo se guarda como arista. Medido: **de 407 aristas, 15 tienen destino.** Una arista
+relaciona dos nodos, y `Nuevo` en `/inicio` no relaciona `/inicio` con nada — se le inventa un
+destino falso (`?selector`) para que quepa en la tabla. El grafo está guardando **el contenido de
+los nodos en la tabla de aristas**.
+
+De ahí salen cuatro síntomas que veníamos tratando por separado:
+
+- la lista de pendientes la domina el mobiliario
+- el dibujo tiene que **filtrar** las acciones a su propio carril, y ese filtro es una opinión
+  paralela — justo lo que §2.4 prohíbe
+- el mismo control se acuña una vez por pantalla
+- el enrutador se salta el 96 % de lo que lee
+
+El modelo correcto: **todo lo observado en una pantalla es un elemento de esa pantalla.** Un
+elemento que se cruza y lleva a algún sitio **produce** una arista. La arista es la consecuencia,
+no el almacén. La promesa 9 del contrato ya lo dice a su manera —una ruta jamás se apoya en una
+puerta sin cruzar—: el sistema ya trataba lo no cruzado como «no es arista»; el almacén no.
+
+**El contenido también, y más claramente que las acciones.** Es por definición la carga del nodo:
+los archivos de esta carpeta, los correos de esta etiqueta. Por nodo, ilimitado, privado, cambia
+solo. Y disuelve la contradicción de §5.2 que el arquitecto no pudo cerrar: la fila de la carpeta
+es **contenido del nodo**, y cruzarla **produjo una arista**. No son categorías excluyentes;
+«produce arista» no se asigna, se descubre.
+
+**No se puede hacer solo.** Si los elementos viven en los nodos sin el dominio de §5.1, el panel
+lateral se duplica dentro de cada nodo en vez de en la tabla de aristas: mismo problema, otro
+sitio. El dueño de un elemento es **el nodo más profundo desde el que siempre está disponible** —
+la app entera para el panel lateral, `/galería` para «Colección». §5.0 y §5.1 son un solo cambio.
+
+**Lo que NO arregla**: la identidad que ignora el estado (§5.3) y la separación rol/profundidad
+(§5.2) siguen haciendo falta igual.
+
+**Cuándo hacerlo.** No antes de tener una línea base honesta con el modelo actual: rehacer el
+núcleo mientras se valida plata destruye la capacidad de atribuir la mejora, que es lo único que
+ha permitido distinguir plata de plata falsa las tres veces que ha pasado. Es el cambio más caro
+discutido —`_edges` es *la* estructura del núcleo— y no arreglaría plata: la haría barata en la
+app número cincuenta.
+
 ### 5.1 Subcromo: el cromo necesita un dominio
 
 Hoy `EsCromo` es un sí/no y significa «se llega desde cualquier sitio de un clic». Le falta la
