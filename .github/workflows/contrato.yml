@@ -1,0 +1,76 @@
+name: Contrato del grafo
+
+# La mitad que SI puede correr en la nube. El contrato juzga las PROMESAS del nucleo
+# (tests/ContratoDelGrafo/Contrato.cs) y no toca la pantalla, asi que un runner sin escritorio ni
+# apps instaladas lo puede correr entero. Lo que no puede correr aqui son los escenarios
+# (scripts/ci-local.ps1): esos abren apps de verdad y miden el resultado sobre el terreno, y por
+# eso viven en la maquina del desarrollador.
+#
+# Corre en cada PR a main porque main roto bloquea a los tres. Una rama con promesas PENDIENTES da
+# rojo aqui, y esta bien que asi sea: las fases intermedias son commits de la rama, no merges.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: contrato-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contrato:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # El script compila el nucleo en RELEASE y despues el contrato contra esos binarios recien
+      # hechos, para que lo aprobado sea exactamente lo que se va a ejecutar. Su codigo de salida
+      # es el numero de promesas incumplidas: 0 = CONTRATO INTACTO.
+      - name: Juzgar el contrato
+        id: contrato
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'contrato.txt'
+          try {
+            & ./scripts/contrato-del-grafo.ps1 *>&1 | Tee-Object -FilePath $log
+            $codigo = $LASTEXITCODE
+          } catch {
+            # Nunca un catch mudo: si el arnes se cae, el motivo entero va al log y al resumen.
+            "ARNES CAIDO: $_" | Tee-Object -FilePath $log -Append
+            $codigo = 99
+          }
+
+          $total = @(Select-String -Path tests/ContratoDelGrafo/Contrato.cs -Pattern '^\s*Prueba\("').Count
+          $pend  = @(Select-String -Path $log -SimpleMatch 'PENDIENTE').Count
+          # Con el arnes caido el codigo no es un recuento de promesas: el verde se cuenta desde 0
+          # en vez de dar un negativo que parezca un dato.
+          $verdes = [Math]::Max(0, $total - $codigo)
+
+          # El resumen del run dice el veredicto sin que nadie abra los logs, y distingue sus causas
+          # (una promesa sin codigo todavia no es lo mismo que una regresion).
+          $resumen = @(
+            '## Contrato del grafo'
+            ''
+            "| Promesas | Verdes | Incumplidas | Pendientes (sin codigo aun) |"
+            "|---|---|---|---|"
+            "| $total | $verdes | $([Math]::Max(0, $codigo - $pend)) | $pend |"
+            ''
+            '```'
+            (Get-Content $log -Raw)
+            '```'
+          )
+          $resumen -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+          if ($codigo -ne 0) {
+            Write-Host "::error::CONTRATO ROTO: $codigo promesa(s) incumplida(s) ($pend de ellas sin codigo todavia). Esto no puede entrar a main."
+            exit 1
+          }
+          Write-Host "CONTRATO INTACTO: $total/$total promesas."
