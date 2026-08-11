@@ -54,6 +54,16 @@ public sealed class SurfaceMap
         public int Nivel { get; set; } = -1;
 
         /// <summary>
+        /// Esta es la pantalla por la que se ENTRÓ en la app. Es dato de bronce: se observó.
+        ///
+        /// Vivía disfrazado de <see cref="Nivel"/> == 0, y eso mezclaba dos cosas que no lo son —
+        /// «aquí se entró» es una observación y no se mueve nunca; el nivel es una derivación que
+        /// se recalcula entera cada vez que la estructura cambia—. Mientras compartieron campo, el
+        /// lector de bronce tenía que mirar un dato que la plata reescribe (2026-08-10).
+        /// </summary>
+        public bool EsRaiz { get; set; }
+
+        /// <summary>
         /// La última vez que se MIRÓ esta pantalla y se apuntó qué puertas tenía.
         ///
         /// Es la referencia contra la que se sabe si una puerta sigue estando: las que se vieron en
@@ -569,7 +579,7 @@ public sealed class SurfaceMap
             string appF = AppDe(f);
             bool hayOtraSituada = _nodes.Any(kv => kv.Value.Nivel >= 0
                 && AppDe(kv.Key).Equals(appF, StringComparison.OrdinalIgnoreCase));
-            if (!hayOtraSituada) nf.Nivel = 0;
+            if (!hayOtraSituada) { nf.Nivel = 0; nf.EsRaiz = true; }
         }
         // Lo que YA se conoce en esta app, con el nivel que se le puso la primera vez. Una puerta no
         // cambia de nivel por volver a verla desde más adentro: si el panel lateral está en el nivel
@@ -597,6 +607,9 @@ public sealed class SurfaceMap
         // no, se queda con la anterior: ahí está la diferencia entre «está» y «estuvo».
         var ahora = DateTime.UtcNow;
         if (_nodes.TryGetValue(f, out var nObs)) nObs.UltimaObservacion = ahora;
+
+        // Cuántas puertas NUEVAS deja esta pasada. Ver el porqué al final del método.
+        int nacidas = 0;
 
         foreach (var s in salidas)
         {
@@ -663,7 +676,19 @@ public sealed class SurfaceMap
             // LO ENSEÑADO SE REAPLICA AL VERLO: una puerta recién observada nace ya con el nivel
             // que se le dio en su día, aunque el grafo se haya borrado entero desde entonces.
             AplicarEnsenanza(f, _edges[k]);
+            nacidas++;
         }
+
+        // VER PUERTAS NUEVAS ES APRENDER, y <see cref="Version"/> dice justo eso: «cambia cuando el
+        // mapa aprende algo». Aquí no se movía, y mientras nadie derivara del mapa no se notaba —el
+        // pintor tiene además su propio latido—. Desde que hay cachés colgadas de esa versión (el
+        // cromo, la plata), no moverla significa servir una estructura vieja hasta que otra cosa la
+        // empuje.
+        //
+        // Solo si NACIÓ alguna: esto se llama en cada refresco del locator, y subir la versión al
+        // ver lo mismo de siempre convertiría cada tick en un repintado y en una derivación. Es la
+        // lección nº8 —el costo por iteración antes que la cadencia— aplicada al escribirlo.
+        if (nacidas > 0) Version++;
         Save();
     }
 
@@ -773,12 +798,35 @@ public sealed class SurfaceMap
     /// </summary>
     public HashSet<string> SelectoresCromo()
     {
+        if (_selectoresCromo != null && _selectoresCromoVersion == Version) return _selectoresCromo;
+
         var cromo = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (_, _, info) in Edges())
             if (info.EsCromo && info.NivelFijado && info.Selector.Length > 0 && !EsRelativo(info.Selector))
                 cromo.Add(info.Selector);
+
+        // LO DERIVADO ENTRA DESPUÉS Y NO PISA NADA: ver la nota larga en CromoDe. El filtro de
+        // selectores relativos se mantiene aunque `Plata` ya los descarte por evidencia — la
+        // evidencia necesita DOS destinos observados, y hasta que se hayan visto los dos, el
+        // reconocimiento por nombre sigue siendo la única red. Lo uno no sustituye a lo otro:
+        // «Subir» está en todas las pantallas, así que sin esto sería mobiliario ejemplar.
+        foreach (string app in Edges().Select(e => AppDe(e.From))
+                     .Where(a => a.Length > 0)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var s in Plata.DerivadaDe(this, app).SalidasPorSelector.Values)
+                if (s.Clase == Plata.Clase.Cromo && s.Selector.Length > 0 && !EsRelativo(s.Selector))
+                    cromo.Add(s.Selector);
+
+        _selectoresCromoVersion = Version;
+        _selectoresCromo = cromo;
         return cromo;
     }
+
+    /// <summary>Lo mismo que la caché de <see cref="CromoDe"/> y por lo mismo: esto se pregunta por
+    /// cada punto y en cada cuadro, y desde que además deriva, resolverlo entero cada vez sería
+    /// meter el cálculo en el camino caliente.</summary>
+    private HashSet<string>? _selectoresCromo;
+    private int _selectoresCromoVersion = -1;
 
     private static string TipoDelSelector(string selector)
     {
@@ -1033,51 +1081,28 @@ public sealed class SurfaceMap
         if (app.Length == 0) return;
         bool DeLaApp(string id) => AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase);
 
-        // Las pantallas cuyo nivel puso una PERSONA se quedan como están: quien lo declaró sabe
-        // algo que este cálculo no.
-        var fijadasAMano = new HashSet<string>(
-            Edges().Where(e => e.Info.NivelFijado && e.Info.PorPersona && e.Info.NivelNav >= 0
-                            && !EsPuerta(e.To) && DeLaApp(e.To))
-                   .Select(e => e.To),
-            StringComparer.OrdinalIgnoreCase);
+        // ESTE MÉTODO YA NO CALCULA: PROYECTA. Tenía su propio recorrido —correcto, y lo dice el
+        // historial de arriba— pero desde que existe `Plata` había DOS respondiendo a la misma
+        // pregunta con entradas distintas: aquí lo estructural se decidía mirando `EsCromo`, que
+        // solo existe si alguien lo declaró; allí sale de la permanencia medida.
+        //
+        // Dos cálculos de la misma cosa es el fallo que este repo ya pagó con rondas enteras —está
+        // escrito en el pintor con todas las letras: «el dibujo no opina, una sola fuente»—. La
+        // convivencia fue deliberada mientras la derivación no tenía kilómetros; esto la termina.
+        // Lo que se conserva intacto es el CONTRATO de este método: quién manda (la persona),
+        // cuándo no se toca nada (sin raíz), y que se avise en el log de cuántas se movieron.
+        var plata = Plata.DerivadaDe(this, app);
 
-        // La raíz: la pantalla por la que se entra en la app (nivel 0 al observarla la primera vez).
-        string raiz = _nodes.FirstOrDefault(kv => DeLaApp(kv.Key) && kv.Value.Nivel == 0).Key ?? "";
-        if (raiz.Length == 0) return;   // sin ancla no hay nada que medir, y adivinarla sería peor
-
-        // Solo las aristas ESTRUCTURALES: un atajo no dice a qué profundidad vive su destino.
-        var hijos = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        var porCromo = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (f, t, info) in Edges())
-        {
-            if (!DeLaApp(f) || !DeLaApp(t) || EsPuerta(t)) continue;
-            if (info.EsCromo) { porCromo.Add(t); continue; }
-            if (!hijos.TryGetValue(f, out var l)) hijos[f] = l = new List<string>();
-            if (!l.Contains(t, StringComparer.OrdinalIgnoreCase)) l.Add(t);
-        }
-
-        // Anchura primero: la primera vez que se llega a un sitio es por el camino más corto.
-        var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
-        var cola = new Queue<string>();
-        cola.Enqueue(raiz);
-        while (cola.Count > 0)
-        {
-            string aqui = cola.Dequeue();
-            if (!hijos.TryGetValue(aqui, out var l)) continue;
-            foreach (var h in l)
-                if (!prof.ContainsKey(h)) { prof[h] = prof[aqui] + 1; cola.Enqueue(h); }
-        }
-
-        // Lo alcanzable SOLO por cromo es una sección de primer nivel: está a un clic de todas
-        // partes, y eso es precisamente lo que significa vivir en el primer nivel.
-        foreach (var t in porCromo)
-            if (!prof.ContainsKey(t)) prof[t] = 1;
+        // Sin ancla no hay nada que medir, y adivinarla sería peor. Escribir aquí lo que la
+        // derivación devuelve —todo a −1— borraría el nivel 0 de la raíz y la app no volvería a
+        // situarse nunca: el único estado del que no se sale solo.
+        if (plata.Raiz.Length == 0) return;
 
         int movidas = 0;
         foreach (var (id, n) in _nodes)
         {
-            if (!DeLaApp(id) || fijadasAMano.Contains(id)) continue;
-            int nuevo = prof.TryGetValue(id, out int p) ? p : -1;
+            if (!DeLaApp(id)) continue;
+            int nuevo = plata.Pantallas.TryGetValue(id, out var pp) ? pp.Profundidad : -1;
             if (n.Nivel == nuevo) continue;
             n.Nivel = nuevo;
             movidas++;
@@ -1086,7 +1111,8 @@ public sealed class SurfaceMap
         {
             Version++;
             LogBus.Log("mapa", $"profundidades de «{app}» recalculadas: {movidas} pantalla(s) movida(s) "
-                + $"· raíz «{ShortId(raiz)}» · {prof.Count} situada(s)");
+                + $"· raíz «{ShortId(plata.Raiz)}» · {plata.M.PantallasSituadas} situada(s) "
+                + $"· cobertura {plata.M.Cobertura:P0}");
         }
     }
 
@@ -1142,13 +1168,44 @@ public sealed class SurfaceMap
         return (nodos.Count, aristas.Count);
     }
 
-    public void OlvidarAccion(string from, string to)
+    /// <param name="selector">
+    /// Cuál de las puertas entre esos dos sitios. Vacío = todas. Entre un par puede haber varias
+    /// —el panel lateral y la miga de pan llevan al mismo sitio— y quien llama suele saber cuál
+    /// falló: quitarle la acción a la buena por culpa de la mala sería peor que no hacer nada.
+    /// </param>
+    public void OlvidarAccion(string from, string to, string selector = "")
     {
-        string k = Norm(from) + "\n" + Norm(to);
-        if (!_edges.TryGetValue(k, out var e) || e.Selector.Length == 0) return;
-        LogBus.Log("mapa", $"«{e.Label}» ya no está en '{ShortId(Norm(from))}': se deja de enrutar por ahí");
-        e.Selector = ""; e.Alternatives = Array.Empty<string>(); e.ClickPos = "";
-        e.Explored = false;
+        // LA CLAVE TENÍA DOS PARTES Y EL DICCIONARIO TRES.
+        //
+        // Esto construía «from\nto» y buscaba con TryGetValue, pero _edges se indexa con
+        // Clave(from, to, selector) —tres partes—, así que la búsqueda no acertaba NUNCA y el método
+        // salía por el primer return sin tocar nada. Su propia línea de log aparece cero veces en
+        // todos los logs que existen: no es que fallara a veces, es que no ha ocurrido jamás.
+        //
+        // Lo que se caía con ello es el mecanismo entero de «esta puerta ya no lleva ahí, olvídala y
+        // busca otro camino». Una arista falsa se volvía a elegir en cada intento, para siempre: el
+        // mapa creía que «Nombre» —la cabecera de columna del explorador— llevaba a inetpub, y la
+        // ruta moría ahí una y otra vez aunque el que llamaba pidiera olvidarla (2026-08-08).
+        //
+        // Se recorre en vez de indexar. Es O(aristas) y se llama al fallar un tramo, no en bucle.
+        string f = Norm(from), t = Norm(to);
+        var tocadas = _edges.Where(kv =>
+        {
+            var p = kv.Key.Split('\n');
+            return p.Length >= 2
+                && p[0].Equals(f, StringComparison.OrdinalIgnoreCase)
+                && p[1].Equals(t, StringComparison.OrdinalIgnoreCase)
+                && kv.Value.Selector.Length > 0
+                && (selector.Length == 0 || kv.Value.Selector.Equals(selector, StringComparison.Ordinal));
+        }).Select(kv => kv.Value).ToList();
+
+        if (tocadas.Count == 0) return;
+        foreach (var e in tocadas)
+        {
+            LogBus.Log("mapa", $"«{e.Label}» ya no está en '{ShortId(f)}': se deja de enrutar por ahí");
+            e.Selector = ""; e.Alternatives = Array.Empty<string>(); e.ClickPos = "";
+            e.Explored = false;
+        }
         Version++;
         Save();
     }
@@ -1391,6 +1448,10 @@ public sealed class SurfaceMap
     /// por etiqueta, una sola aparición sin marcar devolvía las seis (2026-08-10). Vaciar la lista
     /// costaba O(controles × pantallas), y en un explorador el número de pantallas es el número de
     /// carpetas del disco: el criterio de terminado era inalcanzable por construcción.
+    ///
+    /// Y por vivir aquí y no en el terreno, SOBREVIVE A BORRAR EL GRAFO: mientras estuvo solo en
+    /// <c>EdgeInfo.KindDeclarado</c>, clasificar cuarenta salidas y limpiar el terreno dejaba el
+    /// trabajo en nada. Un aprendizaje que no sobrevive al terreno no es un aprendizaje.
     /// </remarks>
     public sealed record Ensenanza(int Nivel, bool Humano, bool Atras = false, bool Cromo = false,
         string Selector = "", string Etiqueta = "", string Kind = "");
@@ -1510,7 +1571,9 @@ public sealed class SurfaceMap
         if (e.Selector.Length > 0 && sabidas.TryGetValue(e.Selector, out var porSel)) ens = porSel;
         else if (sabidas.TryGetValue(e.Label, out var porEtq) && porEtq.Selector.Length == 0) ens = porEtq;
 
-        if (ens != null && !ens.Atras && ens.Nivel >= 0)
+        if (ens == null || ens.Atras) return;
+
+        if (ens.Nivel >= 0)
         {
             e.NivelNav = ens.Nivel;
             e.NivelFijado = true;
@@ -1602,9 +1665,9 @@ public sealed class SurfaceMap
              + "pantallas nacerán ya clasificadas, no hay que repetirlo.";
     }
 
-    private void AprenderClase(string app, string etiqueta, string kind, string selector)
+    public void AprenderClase(string app, string etiqueta, string kind, string selector)
     {
-        if (app.Length == 0 || etiqueta.Length == 0) return;
+        if (app.Length == 0 || (etiqueta.Length == 0 && selector.Length == 0)) return;
         if (!_ensenanzas.TryGetValue(app, out var d))
             _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
 
@@ -1612,7 +1675,7 @@ public sealed class SurfaceMap
         if (d.TryGetValue(clave, out var ya))
             d[clave] = ya with { Kind = kind, Etiqueta = etiqueta };
         else
-            d[clave] = new Ensenanza(-1, Humano: true, Atras: false, Cromo: false,
+            d[clave] = new Ensenanza(-1, Humano: false, Atras: false, Cromo: false,
                 Selector: selector, Etiqueta: etiqueta, Kind: kind);
         GuardarEnsenanzas();
     }
@@ -1721,6 +1784,29 @@ public sealed class SurfaceMap
                 ? new Hop(conDestino.From, conDestino.To, conDestino.Info)
                 : new Hop(from, to, info));
         }
+        // Y LO QUE NADIE DECLARÓ PERO EL BRONCE DEMUESTRA. Aquí vivía una deducción por conteo que
+        // se eliminó el 2026-08-08 con razón: contaba «visto desde tres pantallas» sin guardar de
+        // dónde salía el número, así que en pantalla no había forma de saber si un punto azul lo
+        // había puesto una persona o la estadística, y llegaba a contradecir a fuentes mejores.
+        //
+        // Lo que vuelve NO es aquello. Es la misma pregunta contestada por `Plata`, que además
+        // guarda la evidencia («visto en 9 de 11 pantallas observadas»), descarta por construcción
+        // lo que tiene destino variable —un «Subir» está en todas partes y no lleva al mismo sitio—
+        // y nunca pisa lo declarado: esto corre DESPUÉS y solo rellena lo que nadie dijo.
+        //
+        // Y es lo que hace que la plata deje de ser cosmética. Mientras el mobiliario solo llegara
+        // declarado, borrar la plata entera no rompía nada: era una capa de dibujo. Desde aquí, un
+        // grafo sin plata pierde los atajos y `Route` vuelve a decir «no sé llegar» a un sitio que
+        // está a un clic (promesa 16 del contrato).
+        foreach (var s in Plata.DerivadaDe(this, app).SalidasPorSelector.Values
+                     .Where(s => s.Clase == Plata.Clase.Cromo)
+                     .OrderBy(s => s.Selector, StringComparer.Ordinal))
+        {
+            if (s.Selector.Length == 0 || !yaEsta.Add(s.Selector)) continue;
+            if (!destinoDe.TryGetValue(s.Selector, out var hop)) continue;   // sin destino no es ruta
+            cromo.Add(hop);
+        }
+
         if (_cromoVersion != Version) { _cromo.Clear(); _cromoVersion = Version; }
         _cromo[app] = cromo;
         return cromo;
@@ -1789,6 +1875,29 @@ public sealed class SurfaceMap
         Dictionary<string, EdgeInfo> Edges,
         int Version = 1);
 
+    /// <summary>
+    /// UNA ARISTA, SOLO CON LO QUE SE OBSERVÓ. Es lo que se ESCRIBE en el terreno desde el
+    /// 2026-08-10; lo que se LEE sigue siendo <see cref="EdgeInfo"/> entero, y esa asimetría es
+    /// deliberada — ver <see cref="Save"/> y la cosecha de <see cref="Load"/>.
+    ///
+    /// Faltan a propósito `NivelNav`, `NivelFijado`, `PorPersona`, `EsCromo` y `KindDeclarado`:
+    /// no son terreno, son lo que alguien afirmó DESPUÉS. Vivían aquí y el resultado era que el
+    /// archivo del bronce contenía plata, que ninguna de las dos etapas se podía recomputar por
+    /// separado, y que borrar el grafo se llevaba por delante clasificaciones que nadie había
+    /// vuelto a guardar. Ahora viven en `jerarquias-ensenadas.json`, que ya existía para esto y ya
+    /// sobrevive al borrado, y se reponen al cargar.
+    ///
+    /// NO se sube <see cref="SchemaVersion"/> por este cambio, y conviene decir por qué: la
+    /// migración de versión de este archivo PURGA las acciones de todas las aristas —es su
+    /// naturaleza desde la v2— y aquí no hay nada que purgar. Los datos viejos se siguen leyendo,
+    /// se cosechan a la capa de overrides y el archivo queda limpio solo, en el primer guardado.
+    /// Subir la versión habría destruido el trabajo de todos para arreglar una mezcla de campos.
+    /// </summary>
+    private sealed record EdgeBronce(
+        int Count, string Selector, string Label, string ControlType,
+        string[] Alternatives, string ClickPos, bool Explored, string Nivel,
+        string ActionType, string Kind, DateTime VistaPorUltimaVez);
+
     public static SurfaceMap Load()
     {
         var map = new SurfaceMap();
@@ -1802,6 +1911,41 @@ public sealed class SurfaceMap
                 {
                     foreach (var kv in s.Nodes) map._nodes[kv.Key] = kv.Value;
                     foreach (var kv in s.Edges) map._edges[kv.Key] = kv.Value;
+
+                    // LO DECLARADO QUE VENGA EN EL TERRENO SE COSECHA ANTES DE PERDERSE.
+                    //
+                    // Desde el 2026-08-10 el terreno se escribe SIN los campos declarados (ver
+                    // EdgeBronce), pero se sigue leyendo el objeto entero: los archivos guardados
+                    // antes los traen dentro, y unos pocos pueden no tener enseñanza que los
+                    // reponga —declaraciones anteriores a que `Aprender` guardara el selector, o
+                    // hechas por vías que ya no existen—. Se pasan a la capa de overrides aquí, una
+                    // vez, y el primer guardado deja el archivo limpio.
+                    //
+                    // Es una migración que no destruye nada, que es justo lo que la migración por
+                    // SchemaVersion no podía ofrecer: la suya purga acciones.
+                    int cosechadas = 0;
+                    foreach (var (from, _, info) in map.Edges())
+                    {
+                        string app = AppDe(from);
+                        if (app.Length == 0 || info.Label.Length == 0) continue;
+                        string clave = info.Selector.Length > 0 ? info.Selector : info.Label;
+                        bool yaSabida = map._ensenanzas.TryGetValue(app, out var d) && d.ContainsKey(clave);
+                        if (yaSabida) continue;
+
+                        if (info.NivelFijado && info.NivelNav >= 0)
+                        {
+                            map.Aprender(app, info.Label, info.NivelNav, info.PorPersona, info.EsCromo, info.Selector);
+                            cosechadas++;
+                        }
+                        if (info.KindDeclarado.Length > 0)
+                        {
+                            map.AprenderClase(app, info.Label, info.KindDeclarado, info.Selector);
+                            cosechadas++;
+                        }
+                    }
+                    if (cosechadas > 0)
+                        LogBus.Log("mapa", $"{cosechadas} declaración(es) que vivían en el terreno pasan "
+                            + "a la capa de enseñanzas: el bronce se queda solo con lo observado");
 
                     // Y AL CARGAR SE SANA TODO: da igual por qué vía nació cada arista o con qué
                     // versión del código — al arrancar, toda arista cuya etiqueta esté enseñada
@@ -1896,7 +2040,22 @@ public sealed class SurfaceMap
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-            File.WriteAllText(Path, JsonSerializer.Serialize(new Stored(_nodes, _edges, SchemaVersion)));
+            // Se escribe BRONCE, no el objeto en memoria: ver EdgeBronce. Lo declarado ya está en
+            // la capa de enseñanzas —FijarNivel y AprenderClase la escriben siempre— y vuelve solo
+            // al cargar, así que esto no pierde nada: deja de duplicarlo donde no le toca.
+            var bronce = new Dictionary<string, EdgeBronce>(_edges.Count, StringComparer.Ordinal);
+            foreach (var kv in _edges)
+                bronce[kv.Key] = new EdgeBronce(
+                    kv.Value.Count, kv.Value.Selector, kv.Value.Label, kv.Value.ControlType,
+                    kv.Value.Alternatives, kv.Value.ClickPos, kv.Value.Explored, kv.Value.Nivel,
+                    kv.Value.ActionType, kv.Value.Kind, kv.Value.VistaPorUltimaVez);
+
+            File.WriteAllText(Path, JsonSerializer.Serialize(new
+            {
+                Nodes = _nodes,
+                Edges = bronce,
+                Version = SchemaVersion,
+            }));
             _dirty = 0;
         }
         catch (Exception e) { LogBus.Log("mapa", $"no se pudo guardar el mapa: {e.Message}"); }
