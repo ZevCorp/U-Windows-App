@@ -23,7 +23,20 @@ public static class EscenarioCi
     public static string Carpeta => Path.Combine(NucleoVersiones.Raiz, "escenarios");
 
     /// <summary>Lo exigible de un escenario: qué app y qué mínimos tiene que sostener el núcleo.</summary>
-    public sealed record Escenario(string App, int Pantallas, int Declarados, int ConAccion, string Creada);
+    /// <param name="Cobertura">
+    /// Qué porcentaje de la app se sostiene con EVIDENCIA derivada, no con declaraciones.
+    ///
+    /// Se añadió el 2026-08-10 porque esta vara tenía el mismo sesgo que todo lo demás: exigía un
+    /// mínimo de `Declarados`, y declarar es escribir. Un núcleo que dejara de entender la app pero
+    /// siguiera declarando igual pasaba la prueba; uno que entendiera más sin declarar nada, la
+    /// fallaba. La cuenta vieja se queda —no vamos a invalidar los escenarios ya grabados— pero
+    /// deja de ser la única.
+    ///
+    /// Los escenarios anteriores no la traen y valen igual: sin el campo, el mínimo es 0 y la
+    /// promesa correspondiente es «no aplicable». Un escenario viejo no exige lo que no midió.
+    /// </param>
+    public sealed record Escenario(string App, int Pantallas, int Declarados, int ConAccion,
+        string Creada, int Cobertura = 0);
 
     /// <summary>Los escenarios grabados, por orden alfabético para que el informe sea estable.</summary>
     public static IReadOnlyList<Escenario> Todos()
@@ -42,7 +55,8 @@ public static class EscenarioCi
                     min.GetProperty("pantallas").GetInt32(),
                     min.GetProperty("declarados").GetInt32(),
                     min.GetProperty("conAccion").GetInt32(),
-                    raiz.TryGetProperty("creada", out var c) ? c.GetString() ?? "" : ""));
+                    raiz.TryGetProperty("creada", out var c) ? c.GetString() ?? "" : "",
+                    min.TryGetProperty("cobertura", out var cb) ? cb.GetInt32() : 0));
             }
         }
         catch (Exception e) { LogBus.Log("ci", $"no se pudieron leer los escenarios: {e.Message}"); }
@@ -59,21 +73,24 @@ public static class EscenarioCi
     /// </summary>
     public static (bool Ok, string Detalle) Juzgar(Escenario e, SurfaceMap mapa)
     {
-        var (pantallas, declarados, conAccion) = Contar(e.App, mapa);
-        bool ok = pantallas >= e.Pantallas && declarados >= e.Declarados && conAccion >= e.ConAccion;
+        var (pantallas, declarados, conAccion, cobertura) = Contar(e.App, mapa);
+        bool ok = pantallas >= e.Pantallas && declarados >= e.Declarados && conAccion >= e.ConAccion
+               && cobertura >= e.Cobertura;
         return (ok, $"pantallas {pantallas}/{e.Pantallas} · declarados {declarados}/{e.Declarados} "
-                  + $"· con acción {conAccion}/{e.ConAccion}");
+                  + $"· con acción {conAccion}/{e.ConAccion}"
+                  + (e.Cobertura > 0 ? $" · cobertura {cobertura}%/{e.Cobertura}%" : $" · cobertura {cobertura}% (no exigida)"));
     }
 
-    /// <summary>Las tres cuentas que definen «salió bien». Una sola función: grabar y juzgar tienen
+    /// <summary>Las cuatro cuentas que definen «salió bien». Una sola función: grabar y juzgar tienen
     /// que medir lo mismo, y dos copias de una cuenta acaban midiendo cosas distintas.</summary>
-    private static (int Pantallas, int Declarados, int ConAccion) Contar(string app, SurfaceMap mapa)
+    private static (int Pantallas, int Declarados, int ConAccion, int Cobertura) Contar(string app, SurfaceMap mapa)
     {
         bool DeLaApp(string id) => SurfaceMap.AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase);
         return (
             mapa.Nodes.Keys.Count(DeLaApp),
             mapa.Edges().Count(x => DeLaApp(x.From) && x.Info.NivelFijado && x.Info.NivelNav >= 0),
-            mapa.Edges().Count(x => DeLaApp(x.From) && x.Info.Selector.Length > 0 && !SurfaceMap.EsPuerta(x.To)));
+            mapa.Edges().Count(x => DeLaApp(x.From) && x.Info.Selector.Length > 0 && !SurfaceMap.EsPuerta(x.To)),
+            (int)Math.Round(Plata.DerivadaDe(mapa, app).M.Cobertura * 100));
     }
 
     /// <summary>Olvidar un escenario. Devuelve false si no había ninguno con ese nombre.</summary>
@@ -95,7 +112,7 @@ public static class EscenarioCi
     {
         try
         {
-            var (pantallas, declarados, conAccion) = Contar(app, mapa);
+            var (pantallas, declarados, conAccion, cobertura) = Contar(app, mapa);
             if (pantallas == 0)
             {
                 LogBus.Log("ci", $"no se guarda escenario de «{app}»: el mapa no tiene ninguna pantalla suya");
@@ -108,12 +125,13 @@ public static class EscenarioCi
                 creada = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
                 nucleo = NucleoVersiones.Actual() is { } n ? $"v{n}" : "dev",
                 // Lo LOGRADO hoy, de referencia; lo EXIGIBLE es el 80%, contra el ruido del maestro.
-                logrado = new { pantallas, declarados, conAccion },
+                logrado = new { pantallas, declarados, conAccion, cobertura },
                 minimos = new
                 {
                     pantallas = Math.Max(1, (int)(pantallas * 0.8)),
                     declarados = (int)(declarados * 0.8),
                     conAccion = (int)(conAccion * 0.8),
+                    cobertura = (int)(cobertura * 0.8),
                 },
             };
 
@@ -122,7 +140,8 @@ public static class EscenarioCi
             File.WriteAllText(ruta, JsonSerializer.Serialize(escenario,
                 new JsonSerializerOptions { WriteIndented = true }));
             LogBus.Log("ci", $"escenario guardado: «{app}» exige ≥{escenario.minimos.pantallas} pantallas, "
-                + $"≥{escenario.minimos.declarados} declarados, ≥{escenario.minimos.conAccion} con acción → {ruta}");
+                + $"≥{escenario.minimos.declarados} declarados, ≥{escenario.minimos.conAccion} con acción, "
+                + $"≥{escenario.minimos.cobertura}% de cobertura derivada → {ruta}");
         }
         catch (Exception e) { LogBus.Log("ci", $"no se pudo guardar el escenario de «{app}»: {e.Message}"); }
     }

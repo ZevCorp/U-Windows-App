@@ -1130,7 +1130,7 @@ public sealed class SurfaceMapTools
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
         or "map_hierarchy" or "map_feedback" or "map_unsituated" or "map_learn_back" or "map_shot"
-        or "map_set_kind"
+        or "map_set_kind" or "map_silver"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1181,6 +1181,7 @@ public sealed class SurfaceMapTools
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
             "map_unsituated" => SinSituar(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
+            "map_silver" => CuantoEntiende(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
             "map_learn_back" => AprenderGestoAtras(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("exit")),
             "map_shot" => Foto(),
             "map_set_kind" => Clasificar(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("exit"), A("kind")),
@@ -1756,6 +1757,78 @@ public sealed class SurfaceMapTools
     /// <summary>
     /// LO QUE EL MAPA NO SABE SITUAR: la lista de trabajo del arquitecto.
     ///
+    /// <summary>
+    /// CUÁNTO ENTIENDE EL SISTEMA POR SÍ SOLO, y qué le falta para entender más.
+    ///
+    /// Es la herramienta que sustituye a <see cref="SinSituar"/> como criterio de terminado, y la
+    /// diferencia entre las dos es la razón de ser de todo este trabajo: aquella cuenta lo
+    /// DECLARADO, así que se vacía escribiendo niveles y un agente puede cerrarla sin haber
+    /// entendido una pantalla más. Ésta mide lo DERIVADO —lo que el bronce sostiene con evidencia—
+    /// y solo sube de dos maneras honestas: cruzando puertas que nadie ha cruzado, o corrigiendo
+    /// una regla que se equivoca.
+    ///
+    /// Por eso lo que enumera no son «cosas a las que ponerles nivel» sino **puertas sin cruzar**:
+    /// el trabajo pendiente de verdad. Un agente que las abra sube la cobertura sin declarar nada.
+    /// </summary>
+    private string CuantoEntiende(string app)
+    {
+        if (app.Length == 0) return "falta `app`";
+        // Cualificado: este archivo importa el namespace entero y un método llamado «Plata» habría
+        // competido con el tipo. El nombre del método dice qué contesta, no de dónde sale.
+        var p = Navigation.Plata.DerivadaDe(_map, app);
+        var m = p.M;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"PLATA de «{app}» — lo que el sistema entiende SOLO, sin que nadie se lo diga:\n");
+        sb.AppendLine($"  cobertura {m.Cobertura:P0} ({m.SalidasConEvidencia} de {m.SalidasTotal} salidas con evidencia)");
+        sb.AppendLine($"  {m.PantallasSituadas} pantalla(s) situada(s) de {m.PantallasObservadas} observada(s)");
+        sb.AppendLine($"  {m.SinCruzar} salida(s) SIN CRUZAR");
+        sb.AppendLine($"  {m.Desacuerdos} desacuerdo(s) entre el cálculo y lo que alguien declaró");
+        if (m.DeclaradasSinEvidencia > 0)
+            sb.AppendLine($"  {m.DeclaradasSinEvidencia} declarada(s) SIN EVIDENCIA: alguien lo afirmó y el bronce no lo sostiene");
+        if (p.Raiz.Length == 0)
+            sb.AppendLine("  ⚠ sin raíz observada: nada tiene desde dónde contarse, y por eso no hay nada situado");
+
+        var sinCruzar = p.SalidasPorSelector.Values
+            .Where(s => s.Clase == Navigation.Plata.Clase.SinCruzar)
+            .OrderByDescending(s => s.EnCuantasPantallas)
+            .ThenBy(s => s.Etiqueta, StringComparer.OrdinalIgnoreCase)
+            .Take(20).ToList();
+        if (sinCruzar.Count > 0)
+        {
+            sb.AppendLine("\nSIN CRUZAR — esto es lo que sube la cobertura si lo abres:");
+            foreach (var s in sinCruzar)
+                sb.AppendLine($"  «{s.Etiqueta}» ({s.ControlType}) · vista en {s.EnCuantasPantallas} pantalla(s)");
+        }
+
+        if (p.Desacuerdos.Count > 0)
+        {
+            sb.AppendLine("\nDESACUERDOS — el cálculo y alguien dicen cosas distintas:");
+            foreach (var d in p.Desacuerdos.Take(15))
+                sb.AppendLine($"  «{d.Etiqueta}»: el cálculo dice {d.Derivado}, declarado {d.Declarado}"
+                    + (d.DeUnaPersona ? " POR UNA PERSONA (manda la persona: no lo toques)"
+                                      : " por un modelo (no manda: si el cálculo acierta, deja constancia)"));
+        }
+
+        var contenedores = p.Pantallas.Values.Where(x => x.EsContenedor).Take(8).ToList();
+        if (contenedores.Count > 0)
+        {
+            sb.AppendLine("\nCONTENEDORES detectados — pantallas con contenido, no con estructura:");
+            foreach (var c in contenedores)
+                sb.AppendLine($"  {c.Id} · ~{c.CuantosAprox} «{c.TipoDeContenido}»"
+                    + (c.Afordancias.Count > 0
+                        ? $" · se estrecha con: {string.Join(", ", c.Afordancias)}"
+                        : " · SIN afordancia conocida para estrecharlo"));
+        }
+
+        sb.AppendLine("\nTU CRITERIO DE TERMINADO: que la cobertura sea alta y los desacuerdos estén");
+        sb.AppendLine("explicados. Declarar niveles NO la sube — sube cruzar puertas y reportar dónde");
+        sb.AppendLine("el cálculo se equivoca. Si declaras algo que el bronce no sostiene, aparecerá");
+        sb.AppendLine("aquí como «declarada sin evidencia», que es lo contrario de haber avanzado.");
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Es la otra cara de <see cref="Jerarquia"/>. El dibujo fiel al mapa manda a una fila aparte
     /// todo lo que nadie ha situado, y ese número es la medida honesta de cuánto falta para que la
     /// estructura esté completa. Aquí se enumera, para poder atacarlo uno a uno en vez de mirar un
@@ -1812,8 +1885,19 @@ public sealed class SurfaceMapTools
                      StringComparer.Ordinal)
             .OrderByDescending(g => g.Count()).Take(40).ToList();
 
+        // ESTA LISTA YA NO ES LA META, Y TIENE QUE DECIRLO. Vaciarla es escribir niveles, y eso se
+        // puede hacer sin entender una pantalla más — el fallo que el propio arquitecto describió
+        // como «corrompe el juicio, no el dato». La medida de verdad es la cobertura derivada, así
+        // que viaja pegada a cada respuesta: dos herramientas que se leen juntas no pueden dar
+        // impresiones contrarias (2026-08-10, fase 4 del plan).
+        var derivada = Navigation.Plata.DerivadaDe(_map, app).M;
+        string laMedidaDeVerdad =
+            $"\nY LO QUE DE VERDAD MIDE EL AVANCE: cobertura derivada {derivada.Cobertura:P0} "
+            + $"({derivada.SalidasConEvidencia}/{derivada.SalidasTotal}), {derivada.SinCruzar} sin cruzar. "
+            + "Declarar niveles NO la sube; cruzar puertas, sí. Ver `map_silver`.";
+
         if (pantallas.Count == 0 && puertas.Count == 0)
-            return $"«{app}» está ENTERA situada: no queda nada sin nivel. Eso es la meta.";
+            return $"«{app}» no tiene nada sin declarar — pero eso no es la meta." + laMedidaDeVerdad;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"SIN SITUAR en «{app}» — esto es lo que falta para completar la estructura:\n");
@@ -1835,6 +1919,7 @@ public sealed class SurfaceMapTools
                 + (i.Nivel.Length > 0 ? $" · grupo: {i.Nivel}" : " · sin grupo")
                 + $" · vista en {g.Count()} pantalla(s)");
         }
+        sb.Append(laMedidaDeVerdad);
         return sb.ToString();
     }
 
