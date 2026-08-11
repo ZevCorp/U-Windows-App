@@ -323,7 +323,14 @@ public sealed class GeminiLive : IDisposable
             setup = new
             {
                 model = $"models/{modelo}",
-                generationConfig = new { responseModalities = new[] { "AUDIO" } },
+                // LA VOZ ES FIJA: Iapetus, elegida a mano en el catálogo de AI Studio. Sin esto el
+                // servidor sortea una de las 30 en cada sesión nueva, así que Ü sonaba distinto cada
+                // vez que se abría una conversación (2026-08-10).
+                generationConfig = new
+                {
+                    responseModalities = new[] { "AUDIO" },
+                    speechConfig = new { voiceConfig = new { prebuiltVoiceConfig = new { voiceName = Voz } } },
+                },
                 systemInstruction = new { parts = new[] { new { text = Instrucciones } } },
                 tools = new object[] { new { functionDeclarations = Herramientas() } },
                 inputAudioTranscription = new { },
@@ -358,7 +365,11 @@ public sealed class GeminiLive : IDisposable
             setup = new
             {
                 model = $"models/{modelo}",
-                generationConfig = new { responseModalities = new[] { "AUDIO" } },
+                generationConfig = new
+                {
+                    responseModalities = new[] { "AUDIO" },
+                    speechConfig = new { voiceConfig = new { prebuiltVoiceConfig = new { voiceName = Voz } } },
+                },
                 systemInstruction = new { parts = new[] { new { text = Instrucciones } } },
                 tools = new object[] { new { functionDeclarations = Herramientas() } },
                 inputAudioTranscription = new { },
@@ -369,6 +380,9 @@ public sealed class GeminiLive : IDisposable
         };
         return JsonSerializer.Serialize(setup);
     }
+
+    /// <summary>Elegida a mano en el catálogo de voces de AI Studio (2026-08-10). Es la voz de Ü.</summary>
+    private const string Voz = "Iapetus";
 
     private const string Instrucciones = """
         Eres Ü, un asistente que maneja el ordenador de quien te habla. Respondes en español, en voz,

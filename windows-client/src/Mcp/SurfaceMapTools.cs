@@ -1129,7 +1129,8 @@ public sealed class SurfaceMapTools
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
-        or "map_hierarchy" or "map_feedback"
+        or "map_hierarchy" or "map_feedback" or "map_unsituated" or "map_learn_back" or "map_shot"
+        or "map_set_kind"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1179,6 +1180,10 @@ public sealed class SurfaceMapTools
                 bool.TryParse(A("cromo"), out bool crm) ? crm : null),
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
+            "map_unsituated" => SinSituar(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
+            "map_learn_back" => AprenderGestoAtras(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("exit")),
+            "map_shot" => Foto(),
+            "map_set_kind" => Clasificar(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("exit"), A("kind")),
             "map_hierarchy" => Jerarquia(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
             "map_feedback" => Feedback(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("finding")),
 
@@ -1749,6 +1754,157 @@ public sealed class SurfaceMapTools
     /// primero, que es lo que un humano llamaría "los sitios donde trabajo".
     /// </summary>
     /// <summary>
+    /// LO QUE EL MAPA NO SABE SITUAR: la lista de trabajo del arquitecto.
+    ///
+    /// Es la otra cara de <see cref="Jerarquia"/>. El dibujo fiel al mapa manda a una fila aparte
+    /// todo lo que nadie ha situado, y ese número es la medida honesta de cuánto falta para que la
+    /// estructura esté completa. Aquí se enumera, para poder atacarlo uno a uno en vez de mirar un
+    /// contador (2026-08-08).
+    ///
+    /// Un sitio no situado no es basura por definición: puede ser una pantalla real a la que aún
+    /// nadie le ha puesto nivel, o una puerta que no debió anotarse nunca. Distinguirlo es
+    /// justamente el trabajo, y por eso se dan las dos cosas que permiten decidir: el grupo que
+    /// declaró la página y desde dónde se ve.
+    /// </summary>
+    private string SinSituar(string app)
+    {
+        if (app.Length == 0) return "falta `app`";
+        bool DeLaApp(string id) => SurfaceMap.AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase);
+
+        var pantallas = _map.Nodes.Where(kv => DeLaApp(kv.Key) && kv.Value.Nivel < 0)
+            .OrderByDescending(kv => kv.Value.Visits).ToList();
+        // LO CLASIFICADO YA NO ESTÁ PENDIENTE. Aquí solo se miraba el nivel, así que una salida
+        // marcada como ACCIÓN o como gesto de VOLVER seguía saliendo en la lista para siempre: el
+        // agente clasificó cuarenta y la lista no bajó ni una. Rompía su criterio de terminado y,
+        // peor, lo empujaba a la única salida que quedaba —ponerle nivel a cosas que no son
+        // navegación—, que es justo lo contrario de lo que se le pide (2026-08-09, lo reportó él).
+        //
+        // Pendiente es lo que no tiene NI nivel NI clasificación. Clasificar es decidir, y una
+        // decisión tomada no puede seguir contando como trabajo por hacer.
+        // PENDIENTE ES LO NO DECLARADO, no lo que carece de número. Aquí se miraba NivelNav < 0, y
+        // casi ninguna salida cumple eso: al observarlas se les pone un nivel por deducción. Así
+        // que esta herramienta contestó «explorer.exe está ENTERA situada» mientras jerarquia
+        // reportaba, en el mismo instante, CERO salidas con nivel declarado.
+        //
+        // Es el peor tipo de fallo que puede tener esto y lo dijo el arquitecto con precisión:
+        // «corrompe el juicio, no el dato». Un agente que se fía cierra la app en BRONCE creyendo
+        // que llegó a PLATA. Las dos herramientas tienen que medir lo MISMO: lo declarado
+        // (2026-08-09, hallazgo nº1 de su auditoría).
+        // Y EL CONTENIDO TAMPOCO ES ESTRUCTURA PENDIENTE. Sin esto la lista CRECÍA al trabajar
+        // bien: cada carpeta que el arquitecto abría volcaba sus archivos a los pendientes, y en un
+        // explorador el contenido es infinito. Lo midió él: pasó de 2 pendientes a 4 pantallas + 40
+        // salidas «por hacer bien el trabajo de bajar en profundidad» (2026-08-10).
+        //
+        // Una lista de tareas que se alarga cuanto más trabajas no es una lista de tareas. Y el
+        // criterio de «qué es contenido» ya existía en SafeToClick — solo faltaba usarlo aquí.
+        var puertas = _map.Edges()
+            .Where(e => DeLaApp(e.From) && !e.Info.NivelFijado && e.Info.Label.Length > 0
+                        && !e.Info.KindDeclarado.Equals("accion", StringComparison.OrdinalIgnoreCase)
+                        && !e.Info.Nivel.StartsWith("contenido", StringComparison.OrdinalIgnoreCase)
+                        && !e.Info.Nivel.StartsWith("lista", StringComparison.OrdinalIgnoreCase)
+                        && !_map.EsGestoDeAtras(app, e.Info.Label, e.Info.Selector))
+            // POR SELECTOR, NO POR ETIQUETA. «Actualizar "Inicio" (F5)», «Actualizar "Galería"
+            // (F5)», «Actualizar "Common Files" (F5)»… son UN botón cuyo nombre lleva interpolada
+            // la carpeta actual, y contaban como cinco pendientes distintos; con cincuenta carpetas
+            // visitadas serían cincuenta. Ya compartían uia:aid=refreshButton;ct=Button — la
+            // identidad estaba ahí, solo se estaba mirando el nombre (2026-08-10, lo reportó él).
+            .GroupBy(e => e.Info.Selector.Length > 0 ? e.Info.Selector : e.Info.Label,
+                     StringComparer.Ordinal)
+            .OrderByDescending(g => g.Count()).Take(40).ToList();
+
+        if (pantallas.Count == 0 && puertas.Count == 0)
+            return $"«{app}» está ENTERA situada: no queda nada sin nivel. Eso es la meta.";
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"SIN SITUAR en «{app}» — esto es lo que falta para completar la estructura:\n");
+        sb.AppendLine($"PANTALLAS sin nivel ({pantallas.Count}):");
+        foreach (var (id, n) in pantallas.Take(25))
+            sb.AppendLine($"  {id} · {n.Visits} visita(s)");
+        sb.AppendLine($"\nSALIDAS sin nivel ({puertas.Count}) — con el grupo que declaró la página:");
+        foreach (var g in puertas)
+        {
+            var i = g.First().Info;
+            // Se agrupa por selector pero se DICE el nombre: agrupar por identidad no puede
+            // convertir la respuesta en una lista de selectores ilegibles. Y cuando el nombre varía
+            // entre apariciones —los «Actualizar "X"»— se avisa, porque si no, pedir la salida por
+            // ese nombre solo acertaría en una de ellas.
+            var nombres = g.Select(x => x.Info.Label).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            sb.AppendLine($"  «{i.Label}» ({i.ControlType})"
+                + (nombres.Count > 1 ? $" · OJO: el nombre cambia según la pantalla ({nombres.Count} variantes); "
+                                       + $"clasifícala por su selector {i.Selector}" : "")
+                + (i.Nivel.Length > 0 ? $" · grupo: {i.Nivel}" : " · sin grupo")
+                + $" · vista en {g.Count()} pantalla(s)");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// CLASIFICAR una salida, no borrarla. Marcarla como «accion» dice que hace algo pero no lleva
+    /// a otra pantalla: guardar, ordenar, copiar, crear.
+    ///
+    /// Antes esto era «excluir», y el usuario lo paró a tiempo: quitar del mapa lo que no es
+    /// navegación deja sin brazos al asistente que vendrá después — esos botones son justo los que
+    /// necesitará para EJECUTAR (2026-08-08). Una salida puede no ser estructura y seguir siendo
+    /// imprescindible. Así que se queda con todo lo suyo —selector, alternativas, dónde vive— y
+    /// solo se le pone la etiqueta que dice de qué sirve.
+    ///
+    /// El campo <see cref="SurfaceMap.EdgeInfo.Kind"/> ya existía para esto y estaba sin usar: no
+    /// hace falta estructura nueva, hacía falta que alguien lo dijera.
+    /// </summary>
+    /// <remarks>
+    /// Clasificar es DECIDIR, y una decisión se toma una vez. Esto escribía solo en las apariciones
+    /// que existían en ese instante, así que cada pantalla nueva devolvía el mismo mobiliario a la
+    /// lista de pendientes: el arquitecto marcó «Nuevo» ocho veces y al entrar en OneDrive le
+    /// reaparecieron 27 controles ya clasificados (2026-08-10). Ahora vive donde vive el nivel —en
+    /// la enseñanza, indexada por selector— y se repone sola en cada aparición nueva.
+    /// </remarks>
+    private string Clasificar(string app, string salida, string clase)
+    {
+        if (salida.Length == 0) return "falta `exit`: qué salida quieres clasificar";
+        string k = clase.Length > 0 ? clase.Trim().ToLowerInvariant() : "accion";
+
+        string r = _map.ClasificarSalida(app, salida, k);
+        LogBus.Log("mapa-mcp", $"«{salida}» clasificada como «{k}»: sigue en el mapa para "
+            + "ejecutarla, deja de contar como estructura, y queda aprendida para toda la app");
+        return r;
+    }
+
+    /// <summary>
+    /// Enseñar cuál es el gesto de VOLVER de esta app. No es una puerta: es historial.
+    ///
+    /// Una arista dice «desde aquí se llega allí», y el atrás no cumple eso — te devuelve a donde
+    /// vinieras, que depende del camino y no de la estructura. Sin marcarlo, cada vuelta acuña una
+    /// arista falsa y el grafo acaba lleno de caminos que no existen.
+    /// </summary>
+    private string AprenderGestoAtras(string app, string salida)
+    {
+        if (app.Length == 0 || salida.Length == 0) return "faltan `app` y `exit`";
+        _map.AprenderAtras(app, salida, humano: false);
+        return $"«{salida}» queda marcado como el gesto de volver de «{app}»: dejará de acuñar aristas.";
+    }
+
+    /// <summary>
+    /// UNA FOTO DE LA VENTANA DE DELANTE, en base64. Para que quien decide la estructura pueda
+    /// MIRAR y no solo leer nombres: un panel lateral y una lista de contenido se distinguen de un
+    /// vistazo y son indistinguibles en una lista de etiquetas.
+    ///
+    /// Se fotografía la ventana del USUARIO, no la nuestra: quien pregunta corre en otro proceso y
+    /// nuestra propia capa se pondría en medio (ver AppAligner.VentanaDelUsuario).
+    /// </summary>
+    private string Foto()
+    {
+        try
+        {
+            var ventana = AppAligner.VentanaDelUsuario();
+            string? b64 = Capture.Screenshotter.CaptureVentanaBase64Png(ventana);
+            if (string.IsNullOrEmpty(b64)) return "no pude capturar la ventana";
+            LogBus.Log("mapa-mcp", $"foto de la ventana del usuario: {b64.Length} car. base64");
+            return "data:image/png;base64," + b64;
+        }
+        catch (Exception e) { return $"no pude capturar: {e.Message}"; }
+    }
+
+    /// <summary>
     /// LA JERARQUÍA COMO EL GRAFO LA TIENE, para poder contrastarla con la real.
     ///
     /// Existe para el agente ARQUITECTO: su misión es navegar la app, entender su jerarquía
@@ -1849,8 +2005,30 @@ public sealed class SurfaceMapTools
 
         // Navegación y ejecución separadas: son preguntas distintas («¿a dónde puedo ir?» vs
         // «¿qué puedo hacer aquí?») y mezclarlas obliga al modelo a adivinar cuál es cuál.
+        // EL CONTENIDO NO SE OFRECE COMO CAMINO. En «Galería» esta lista llegó a ofrecer las 1.831
+        // imágenes de la carpeta como puertas cruzables, y en «Inicio» catorce archivos sueltos. Dos
+        // daños, y el segundo es el grave: la estructura real —trece anclas y tres pestañas— se
+        // pierde entre el relleno, y cruzar cualquiera de ellas SACA DE LA APP, porque un .d abre el
+        // editor y una miniatura el visor de fotos (2026-08-10, medido por el arquitecto).
+        //
+        // Se cuentan aparte en vez de callarlas del todo: que ahí hay mil imágenes es un dato útil
+        // —dice que esa pantalla es un CONTENEDOR— y esconderlo sería fingir que la pantalla está
+        // vacía. Lo que no se hace es ofrecerlas como si fueran navegación.
+        //
+        // PERO UNA PUERTA CON DESTINO CONOCIDO NO ES CONTENIDO, diga lo que diga su grupo. En un
+        // explorador de archivos la CARPETA es la navegación —la única fuente de niveles 3, 4, 5…—
+        // y es ListItem exactamente igual que el archivo. Al filtrar por grupo se ocultaron las 15
+        // carpetas de C:\ como «contenido que no se ofrece como camino», y con ellas el techo de
+        // profundidad del mapa entero (2026-08-10, medido por el arquitecto: cruzó «U-versiones»
+        // desde ese bloque y SÍ abría pantalla propia). Cruzada una vez, deja de ser dudosa.
+        var esContenido = salidas.Where(x =>
+            (x.Info.Nivel.StartsWith("contenido", StringComparison.OrdinalIgnoreCase)
+             || x.Info.Nivel.StartsWith("lista", StringComparison.OrdinalIgnoreCase))
+            && SurfaceMap.EsPuerta(x.To)).ToList();
+
         var sb = new System.Text.StringBuilder($"Desde «{desde}»:\n");
-        foreach (var h in salidas.Where(x => !x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)))
+        foreach (var h in salidas.Where(x => !x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
+                                          && !esContenido.Contains(x)))
         {
             // Se distingue lo cruzado DESDE AQUÍ de lo que está disponible porque la app lo tiene en
             // todas sus pantallas. Las dos sirven para navegar; solo una se comprobó en este sitio.
@@ -1867,6 +2045,19 @@ public sealed class SurfaceMapTools
                   + $"pulsando «{h.Info.Label}»  ({h.Info.Count} vez/veces){origen}{estado}"
                 : $"  → {h.To}   (observado {h.Info.Count} vez/veces, pero NO se sabe con qué acción)");
         }
+
+        // El contenido, CONTADO y no listado: dice que esta pantalla es un contenedor sin ahogar la
+        // estructura. Es la forma corta de la regla que ya está escrita en la doctrina — el
+        // contenido se describe y se consulta, no se enumera.
+        if (esContenido.Count > 0)
+            sb.AppendLine($"\n  [CONTENIDO SIN CRUZAR: {esContenido.Count} elemento(s) en el panel de esta "
+                + $"pantalla (p. ej. «{esContenido[0].Info.Label}»). No se listan uno a uno: esta pantalla "
+                + "es un CONTENEDOR y enumerarlos ahogaría su estructura. Para llegar a uno concreto, usa "
+                + "su buscador o filtro.\n"
+                + "   AVISO: entre ellos puede haber CONTENEDORES —una carpeta abre pantalla propia y es la "
+                + "única fuente de profundidad de esta app—. No hay forma de saberlo sin cruzarlos: al "
+                + "hacerlo con map_take el mapa lo aprende y a partir de ahí sale como camino. Cruzar uno "
+                + "que NO lo sea abrirá otra aplicación.]");
 
         var acciones = salidas.Where(x => x.Info.Kind.Equals("accion", StringComparison.OrdinalIgnoreCase)
                                        && x.Info.Selector.Length > 0).ToList();

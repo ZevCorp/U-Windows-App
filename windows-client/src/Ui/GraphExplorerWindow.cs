@@ -78,7 +78,38 @@ public sealed class GraphExplorerWindow : Window
     private Button _limpiarBtn = null!;
     private Button _pasoBtn = null!;
     private Button _olvidarBtn = null!;
+    private Button _clasicoBtn = null!;
     private CarruselDeApps? _carrusel;
+
+    /// <summary>
+    /// Las cuatro formas de mirar el MISMO grafo. No son estilos: son etapas del sistema, y verlas
+    /// una al lado de otra es la única manera de saber cuánto falta (2026-08-08, pedido por el
+    /// usuario con el modelo bronce/plata/oro).
+    /// </summary>
+    private enum VistaGrafo
+    {
+        /// <summary>Lo que el MAPA sabe: niveles declarados, y lo que no, en «sin situar».</summary>
+        Plata,
+        /// <summary>Las cinco fuentes de siempre. La referencia contra la que se mide plata.</summary>
+        Clasico,
+        /// <summary>Lo observado en CRUDO: nodos y aristas por pura topología, sin jerarquía.</summary>
+        Bronce,
+        /// <summary>Nada. El arquitecto trabaja sin que el grafo le tape la app.</summary>
+        Oculto,
+    }
+
+    private VistaGrafo _vista = VistaGrafo.Plata;
+    private bool _dibujoClasico => _vista == VistaGrafo.Clasico;
+
+    /// <summary>Dónde se aloja el grafo. Existe para poder sacarlo a otra pantalla y devolverlo.</summary>
+    private Border _grafoHueco = null!;
+
+    /// <summary>El rótulo de qué grafo se está viendo. Sin él, las tres vistas se confunden entre
+    /// sí y una prueba pasa a ser un adivinanza sobre cuál estabas mirando (2026-08-09).</summary>
+    private TextBlock _rotuloVista = null!;
+
+    /// <summary>El grafo con su rótulo: lo que viaja junto cuando se manda a otra pantalla.</summary>
+    private DockPanel _conRotulo = null!;
 
     /// <summary>
     /// Borra el grafo entero, preguntando antes. Borrar lo aprendido no se deshace.
@@ -306,12 +337,29 @@ public sealed class GraphExplorerWindow : Window
         derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         derecha.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(_versionesNucleo, 0);
-        Grid.SetColumn(_grafo, 1);
+        // El grafo vive dentro de un HUECO, no directamente en la rejilla: así puede salir a su
+        // propia ventana (otro monitor) y volver sin tocar el resto de la capa. Ver MoverAOtraPantalla.
+        // EL RÓTULO, encima del grafo y siempre visible: qué vista es y cuánto falta. Con tres
+        // dibujos del mismo grafo, no saber cuál estás mirando convierte cada prueba en una
+        // adivinanza — y ya perdimos horas diagnosticando el dibujo equivocado (2026-08-09).
+        _rotuloVista = new TextBlock
+        {
+            Foreground = new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xFF, 0xFF)),
+            FontSize = 12, FontWeight = FontWeights.Bold, FontFamily = new FontFamily("Consolas"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 6, 0, 2),
+        };
+        _conRotulo = new DockPanel();
+        DockPanel.SetDock(_rotuloVista, Dock.Top);
+        _conRotulo.Children.Add(_rotuloVista);
+        _conRotulo.Children.Add(_grafo);
+        _grafoHueco = new Border { Child = _conRotulo };
+        Grid.SetColumn(_grafoHueco, 1);
         Grid.SetColumn(_niveles, 2);
         _lienzo.HorizontalAlignment = HorizontalAlignment.Center;
         _lienzo.VerticalAlignment = VerticalAlignment.Center;
         derecha.Children.Add(_versionesNucleo);
-        derecha.Children.Add(_grafo);
+        derecha.Children.Add(_grafoHueco);
         derecha.Children.Add(_niveles);
 
         var dos = new Grid();
@@ -399,10 +447,74 @@ public sealed class GraphExplorerWindow : Window
                 : "paso a paso apagado";
         };
 
+        // ⚖ LOS DOS DIBUJOS, PARA CONTRASTAR. El clásico tenía un comportamiento que el usuario vio
+        // funcionar en el explorador —cromo quieto, raíz firme, bajar y volver sin saltos— y el
+        // nuevo es fiel al mapa pero todavía no lo reproduce entero. Hasta que lo haga, poder
+        // alternar sobre EL MISMO grafo es la única forma de medir qué falta (2026-08-08).
+        _clasicoBtn = new Button
+        {
+            Content = "⚖",
+            Width = 26, Height = 26, FontSize = 12,
+            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Dibujo CLÁSICO (5 fuentes) vs. dibujo fiel al mapa · el mismo grafo, dos lecturas",
+        };
+        // PULSAR CICLA LAS VISTAS; MANTENER PULSADO SE LO LLEVA AL OTRO MONITOR. Dos gestos en un
+        // botón porque son la misma pregunta —«qué quiero ver y dónde»— y porque el sitio donde
+        // haría falta un segundo botón es justo el que no sobra: la barra vive encima de la app que
+        // se está mirando (2026-08-08, pedido por el usuario).
+        var pulsado = new System.Windows.Threading.DispatcherTimer
+        { Interval = TimeSpan.FromMilliseconds(550) };
+        bool seLoLlevo = false;
+        pulsado.Tick += (_, __) =>
+        {
+            pulsado.Stop();
+            seLoLlevo = true;                  // el clic de soltar ya no cicla: fue un «llévatelo»
+            _status.Text = MoverAOtraPantalla();
+        };
+        _clasicoBtn.PreviewMouseLeftButtonDown += (_, __) => { seLoLlevo = false; pulsado.Start(); };
+        _clasicoBtn.PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            pulsado.Stop();
+            if (seLoLlevo) { e.Handled = true; return; }
+        };
+        _clasicoBtn.Click += (_, __) =>
+        {
+            if (seLoLlevo) return;
+            _vista = (VistaGrafo)(((int)_vista + 1) % 4);
+            _clasicoBtn.Content = _vista switch
+            {
+                VistaGrafo.Plata => "⚖", VistaGrafo.Clasico => "◈",
+                VistaGrafo.Bronce => "⛁", _ => "◌",
+            };
+            _clasicoBtn.Background = new SolidColorBrush(_vista switch
+            {
+                VistaGrafo.Clasico => Color.FromArgb(0x66, 0xBA, 0x68, 0xC8),
+                VistaGrafo.Bronce => Color.FromArgb(0x66, 0xA1, 0x88, 0x7F),
+                VistaGrafo.Oculto => Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF),
+                _ => Color.FromArgb(0x66, 0x64, 0xB5, 0xF6),
+            });
+            _status.Text = _vista switch
+            {
+                VistaGrafo.Plata => "PLATA: lo que el mapa sabe; lo que no, en «sin situar»",
+                VistaGrafo.Clasico => "CLÁSICO: las cinco fuentes de siempre (referencia)",
+                VistaGrafo.Bronce => "BRONCE: lo observado en crudo, sin jerarquía ninguna",
+                _ => "grafo OCULTO: el arquitecto trabaja sin ruido visual",
+            };
+            _grafo.Visibility = _vista == VistaGrafo.Oculto ? Visibility.Collapsed : Visibility.Visible;
+            _huellaEstructura = "";   // que el log vuelva a contarlo con la vista nueva
+            DibujarGrafo();
+        };
+
         var iconos = new StackPanel { Orientation = Orientation.Horizontal };
         iconos.Children.Add(_collapseBtn);
         iconos.Children.Add(_crawlBtn);
         iconos.Children.Add(_carruselBtn);
+        iconos.Children.Add(_clasicoBtn);
         // OLVIDAR LO ENSEÑADO es distinto de borrar el grafo, y por eso es otro botón: el grafo es
         // terreno y se tira entero sin pena; la jerarquía es aprendizaje, sobrevive al borrado, y
         // se elige por aplicación —enseñar bien el explorador no es motivo para perder lo que se
@@ -761,8 +873,57 @@ public sealed class GraphExplorerWindow : Window
     private string _huellaPuente = "";
     private readonly Dictionary<string, string> _porQueDeclarado = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Lo último que se leyó de la pantalla, para poder señalar en la app real un nodo del grafo.
+    ///
+    /// El grafo guarda SELECTORES —identidad, no posición— y eso es lo correcto: una caja se mueve
+    /// al hacer scroll y un selector no. Pero para pintar el resaltado hace falta una caja, y la
+    /// única honesta es la que se acaba de leer de la pantalla. Por eso se guarda aquí y no en el
+    /// mapa: es un dato de AHORA, y guardarlo en el mapa sería convertir en memoria algo que caduca.
+    /// </summary>
+    private List<UiaReader.UiElement> _loLeidoEnPantalla = new();
+
+    /// <summary>
+    /// Iluminar en la app real la puerta por la que se llega a este nodo.
+    ///
+    /// Se busca por selector entre lo que hay AHORA en pantalla. Si no está —porque la puerta vive
+    /// en otra pantalla— no se ilumina nada y se dice: enseñar un recuadro sobre algo que no existe
+    /// sería peor que no enseñar ninguno.
+    /// </summary>
+    private void IluminarPuertaHacia(string nodo)
+    {
+        try
+        {
+            var sels = _map.Edges()
+                .Where(e => e.To.Equals(nodo, StringComparison.OrdinalIgnoreCase) && e.Info.Selector.Length > 0)
+                .Select(e => e.Info.Selector)
+                .ToHashSet(StringComparer.Ordinal);
+
+            // MEDIR ANTES QUE SUPONER. «No se ilumina» tiene tres causas que se ven iguales desde
+            // fuera —el ratón no llega a la capa, el mapa no sabe la puerta, o la puerta no está en
+            // esta pantalla— y adivinar cuál es cuesta una prueba entera. Esta línea las separa.
+            LogBus.Log("grafo", $"iluminar «{Corto(nodo)}»: {sels.Count} selector(es) candidatos, "
+                + $"{_loLeidoEnPantalla.Count} elemento(s) leídos en pantalla");
+
+            if (sels.Count == 0) { _status.Text = $"«{Corto(nodo)}»: el mapa no sabe por qué puerta se llega"; return; }
+
+            foreach (var el in _loLeidoEnPantalla)
+            {
+                if (!sels.Contains(Uia.Reconocedor.SelectorDe(el))) continue;
+                if (el.Bounds.Width <= 0 || el.Bounds.Height <= 0) continue;
+                _overlay.ShowRect(el.Bounds);
+                _status.Text = $"«{el.Label}» → {Corto(nodo)}";
+                return;
+            }
+            _overlay.HideRect();
+            _status.Text = $"«{Corto(nodo)}»: su puerta no está en esta pantalla";
+        }
+        catch { }
+    }
+
     private void Render(string proc, List<UiaReader.UiElement> els)
     {
+        _loLeidoEnPantalla = els;   // para poder señalar en la app lo que se pase por encima en el grafo
         // EL GRAFO SE REESTRUCTURA CUANDO CAMBIA EL MAPA. Marcar algo como primer nivel cambia la
         // ESTRUCTURA, no la pantalla: los mismos elementos siguen en el mismo sitio, así que la
         // firma del repintado no cambiaba y el grafo seguía enseñando la jerarquía vieja —con los
@@ -982,7 +1143,9 @@ public sealed class GraphExplorerWindow : Window
             // punto encima lo taparía. La esquina es de nadie.
             var caja = el.Bounds;
             if (caja.Width <= 0 || caja.Height <= 0) continue;
-            var esquina = aPantalla.Transform(new Point(caja.X, caja.Y));
+            // Al sistema del LIENZO, no solo corregido de DPI: la capa puede estar en el segundo
+            // monitor y entonces «restar dónde está la ventana» deja de ser cero (ver Pantallas).
+            var esquina = Pantallas.AlVisual(_edges, caja.X, caja.Y);
             Canvas.SetLeft(chip, esquina.X + 2);
             Canvas.SetTop(chip, esquina.Y + 2);
             _edges.Children.Add(chip);
@@ -1065,6 +1228,26 @@ public sealed class GraphExplorerWindow : Window
     private void AnotarPuertas(string nodo, List<UiaReader.UiElement> els)
     {
         if (nodo.Length == 0 || els.Count == 0) return;
+
+        // ¿SEGUIMOS DONDE CREÍAMOS? Se vuelve a preguntar AHORA, no se confía en el nodo que se
+        // recibió: entre leer la pantalla y anotarla cabe un cambio de pestaña, y anotar entonces
+        // mete las puertas de un sitio en el nodo de otro.
+        //
+        // Pasó y se midió: «Google apps», «Switch to Calendar», «Next week» y ocho etiquetas más de
+        // Google Calendar acabaron dentro de github.com, declaradas nivel 1 (2026-08-08). La guarda
+        // de más abajo solo exigía «superficie web + proceso navegador», que para dos pestañas del
+        // mismo Chrome se cumple siempre — distinguía el navegador, no el SITIO.
+        //
+        // Comparar por app y no por identidad completa es deliberado: dentro de un mismo dominio la
+        // ruta puede cambiar sola (una SPA) sin que las puertas dejen de ser suyas.
+        string ahora = _where()?.Id ?? "";
+        if (ahora.Length > 0 && !SurfaceMap.AppDe(ahora).Equals(SurfaceMap.AppDe(nodo), StringComparison.OrdinalIgnoreCase))
+        {
+            LogBus.Log("explorador", $"NO anoto: leí «{SurfaceMap.AppDe(nodo)}» y ahora hay "
+                + $"«{SurfaceMap.AppDe(ahora)}» — no meto las puertas de un sitio en el nodo de otro");
+            return;
+        }
+
         try
         {
             var puertas = new List<(string, string, string, string[], string)>();
@@ -1089,6 +1272,9 @@ public sealed class GraphExplorerWindow : Window
                         + U.Graph.Surfaces.UiaSurface.Ancestros(els[0].Native));
                 else LogBus.Log("explorador", $"grupos: {con}/{puertas.Count} salidas con grupo");
                 _map.ObserveExits(nodo, puertas);
+                // MIRAR YA ES SITUAR, en una web. El sitio declara su estructura y acabamos de
+                // leerla: los niveles se ponen aquí mismo, sin esperar a que alguien mande mapear.
+                Navigation.JerarquiaWeb.Aplicar(_map, SurfaceMap.AppDe(nodo));
             }
         }
         catch { }
@@ -1127,10 +1313,26 @@ public sealed class GraphExplorerWindow : Window
         return corte >= 0 ? comun[..corte] : "";
     }
 
+    /// <summary>
+    /// El nombre corto de una pantalla, para leerla de un vistazo en el grafo.
+    ///
+    /// LA PORTADA DE UN SITIO SE LLAMA «inicio», no como el sitio. En una web la portada es
+    /// <c>web://github.com</c> —sin ruta— y el centro del nivel es <c>nivel://github.com</c>: dos
+    /// cosas distintas que se dibujaban con el MISMO texto, así que parecían un nodo duplicado.
+    /// Pasó y se vio: pulsar un botón de cromo llevaba a «github.com» habiendo ya un «github.com»
+    /// (2026-08-08, observado por el usuario).
+    ///
+    /// No se fusionan porque no son lo mismo: el centro es la APP —el terreno entero— y la portada
+    /// es UNA pantalla suya, a la que se llega y de la que se sale. Lo que había que arreglar no
+    /// era el grafo, era el nombre.
+    /// </summary>
     private static string Corto(string id)
     {
         int i = id.IndexOf("://", StringComparison.Ordinal);
-        return i >= 0 ? id[(i + 3)..] : id;
+        string s = i >= 0 ? id[(i + 3)..] : id;
+        if (id.StartsWith("web://", StringComparison.OrdinalIgnoreCase) && !s.Contains('/'))
+            return s + "/inicio";
+        return s;
     }
 
     /// <summary>
@@ -1228,6 +1430,111 @@ public sealed class GraphExplorerWindow : Window
     private static extern uint GetCurrentThreadId();
 
     private const int SW_RESTORE = 9;
+
+    /// <summary>
+    /// Llevarse la capa —y la consola del arquitecto— a la SIGUIENTE pantalla.
+    ///
+    /// Con dos monitores, el conflicto es real: el grafo tiene que verse mientras el arquitecto
+    /// trabaja, pero si vive encima de la app que él está navegando le mete ruido visual justo a
+    /// quien tiene que mirarla. Con dos pantallas no hay que elegir (2026-08-08, pedido por el
+    /// usuario). Con una sola, se dice y no se finge.
+    ///
+    /// Se mueve por handle y no por WindowState porque esta ventana es una capa: ocupa el área de
+    /// trabajo de SU pantalla, y cambiar de pantalla es cambiar de área, no maximizar.
+    /// </summary>
+    private string MoverAOtraPantalla()
+    {
+        var pantallas = System.Windows.Forms.Screen.AllScreens;
+        if (pantallas.Length < 2) return "solo hay una pantalla: no hay a dónde llevárselo";
+
+        // LA CAPA ENTERA SE MUDA, y el grafo va donde esté la consola del arquitecto. Son dos
+        // reglas distintas porque responden a dos necesidades distintas: la capa de desarrollo
+        // estorba encima de la app que el agente navega, y el grafo se mira junto al razonamiento
+        // que lo explica (2026-08-09, pedido por el usuario).
+        var mano = new WindowInteropHelper(this).Handle;
+        var actual = System.Windows.Forms.Screen.FromHandle(mano);
+        var destino = OtraPantalla(pantallas, actual);
+        var a = destino.WorkingArea;
+        SetWindowPos(mano, IntPtr.Zero, a.Left, a.Top, a.Width, a.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+
+        string donde = AjustarGrafoALaConsola(destino);
+        LogBus.Log("explorador", $"capa movida a «{destino.DeviceName}» ({a.Width}×{a.Height}); {donde}");
+        return $"capa en «{destino.DeviceName}» · {donde}. Mantén pulsado para volver";
+    }
+
+    /// <summary>
+    /// El grafo vive en la pantalla de la consola del arquitecto — y SOLO se separa de la capa si
+    /// esa pantalla es otra.
+    ///
+    /// Ese «solo si es otra» es un seguro, no una optimización: la primera versión sacaba el grafo
+    /// a una ventana propia a pantalla completa y siempre encima, y cuando caía en la MISMA
+    /// pantalla que la capa tapaba la barra entera — sin barra no hay forma de cambiar la vista ni
+    /// de traerlo de vuelta, así que el usuario se quedaba encerrado (2026-08-09, lo sufrió él).
+    /// Nada que ocupe toda una pantalla puede ser la única forma de salir de sí mismo; por eso
+    /// además Escape lo devuelve.
+    /// </summary>
+    private string AjustarGrafoALaConsola(System.Windows.Forms.Screen pantallaDeLaCapa)
+    {
+        var pantallas = System.Windows.Forms.Screen.AllScreens;
+        var consola = Diagnostics.ConsolaViva.PantallaDeLaConsola() is { } dev
+            ? Array.Find(pantallas, p => p.DeviceName == dev) : null;
+
+        bool separar = consola != null && consola.DeviceName != pantallaDeLaCapa.DeviceName;
+        if (!separar)
+        {
+            DevolverGrafoALaCapa();
+            return consola == null
+                ? "el grafo se queda en la capa (no hay consola del arquitecto abierta)"
+                : "el grafo se queda en la capa (la consola está en esta misma pantalla)";
+        }
+
+        var a = consola!.WorkingArea;
+        if (_ventanaGrafo == null)
+        {
+            _grafoHueco.Child = null;
+            _ventanaGrafo = new Window
+            {
+                Title = "Grafo",
+                WindowStyle = WindowStyle.None, AllowsTransparency = true, ShowInTaskbar = false,
+                Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x12, 0x12, 0x16)),
+                Content = _conRotulo, Topmost = true,
+            };
+            // La salida de emergencia: Escape lo devuelve a la capa, pase lo que pase.
+            _ventanaGrafo.PreviewKeyDown += (_, e) =>
+            { if (e.Key == Key.Escape) { e.Handled = true; DevolverGrafoALaCapa(); } };
+            _ventanaGrafo.Show();
+        }
+        // Ocupa la mayor parte de SU pantalla, no toda: deja ver la consola de debajo, que es con lo
+        // que se lee en pareja.
+        var h = new WindowInteropHelper(_ventanaGrafo).Handle;
+        SetWindowPos(h, IntPtr.Zero, a.Left + 20, a.Top + 20, a.Width - 40, (int)(a.Height * 0.62),
+            SWP_NOZORDER | SWP_NOACTIVATE);
+        return $"el grafo en «{consola.DeviceName}», con la consola (Escape lo devuelve)";
+    }
+
+    private void DevolverGrafoALaCapa()
+    {
+        if (_ventanaGrafo == null) return;
+        _ventanaGrafo.Content = null;
+        _ventanaGrafo.Close();
+        _ventanaGrafo = null;
+        _grafoHueco.Child = _conRotulo;
+        LogBus.Log("explorador", "el grafo vuelve a la capa");
+    }
+
+    /// <summary>La siguiente pantalla en el ciclo: mantener pulsado dos veces devuelve al sitio.</summary>
+    private static System.Windows.Forms.Screen OtraPantalla(
+        System.Windows.Forms.Screen[] todas, System.Windows.Forms.Screen actual)
+    {
+        int i = Array.FindIndex(todas, p => p.DeviceName == actual.DeviceName);
+        return todas[(Math.Max(i, 0) + 1) % todas.Length];
+    }
+
+    private Window? _ventanaGrafo;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    private const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
 
     /// <summary>Traer al frente lo hace <see cref="AppAligner.TraerAlFrente"/>, para toda la app.</summary>
     private static bool TraerAlFrente(IntPtr h) => AppAligner.TraerAlFrente(h);
@@ -1588,6 +1895,36 @@ public sealed class GraphExplorerWindow : Window
     {
         _crawlBtn.Content = "⏹ Detener el arquitecto";
         _status.Text = $"arquitecto: auditando «{app}»… no toques el ratón";
+
+        // MODO PRUEBA: la capa se pone donde ESTÁ LA APP y el grafo se esconde.
+        //
+        // Las dos cosas van juntas porque responden a la misma pregunta —qué necesita verse
+        // durante una auditoría— y tienen respuestas opuestas. Los PUNTOS son anotaciones sobre
+        // elementos concretos: si la capa se queda en otra pantalla señalan al vacío, así que
+        // tienen que estar sobre la app que se audita. El GRAFO no señala nada: es un dibujo que
+        // se mira, y encima de la app que el agente navega es ruido puro (2026-08-10, pedido por
+        // el usuario).
+        //
+        // Se guarda la vista para devolverla al final: el modo prueba es un préstamo, no una
+        // decisión sobre cómo quiere trabajar quien mira.
+        var vistaAntes = _vista;
+        try
+        {
+            var ventana = Uia.AppAligner.VentanaDelUsuario();
+            if (ventana != IntPtr.Zero)
+            {
+                var suya = System.Windows.Forms.Screen.FromHandle(ventana);
+                var a = suya.WorkingArea;
+                SetWindowPos(new WindowInteropHelper(this).Handle, IntPtr.Zero,
+                    a.Left, a.Top, a.Width, a.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+                LogBus.Log("explorador", $"modo prueba: capa sobre «{suya.DeviceName}», donde está «{app}»");
+            }
+        }
+        catch (Exception e) { LogBus.Log("explorador", $"no pude colocar la capa: {e.Message}"); }
+
+        _vista = VistaGrafo.Oculto;
+        _grafo.Visibility = Visibility.Collapsed;
+        _rotuloVista.Text = "";
         if (!_graphView) SetGraphView(true);
 
         // Un latido que repinta: el agente escribe en el mapa desde fuera, así que el dibujo no se
@@ -1624,6 +1961,11 @@ public sealed class GraphExplorerWindow : Window
         finally
         {
             latido.Stop();
+            // El modo prueba era un préstamo: se devuelve la vista que había, y con ella el grafo.
+            // Terminada la auditoría, lo primero que hace falta es MIRAR lo que hizo.
+            _vista = vistaAntes == VistaGrafo.Oculto ? VistaGrafo.Plata : vistaAntes;
+            _grafo.Visibility = Visibility.Visible;
+            _huellaEstructura = "";
             DibujarGrafo();
             _crawlBtn.Content = "🤖 Mapear esta app automáticamente";
             _crawlCts?.Dispose();
@@ -2155,86 +2497,8 @@ public sealed class GraphExplorerWindow : Window
         // Antes eran siete escrituras encadenadas sobre el mismo diccionario, cada una pisando a la
         // anterior: el ORDEN decidía el resultado, y por eso cada arreglo movía el fallo de sitio.
         _porQueDeclarado.Clear();   // por qué vía llegó cada declarado: para no volver a adivinarlo
-        var declarados = _map.Edges()
-            .Where(e => e.Info.NivelFijado && e.Info.NivelNav >= 0 && !SurfaceMap.EsPuerta(e.To)
-                     && (appActual.Length == 0
-                         || NivelDe(e.To).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
-            .GroupBy(e => e.To, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.Min(e => e.Info.NivelNav), StringComparer.OrdinalIgnoreCase);
-        foreach (var k in declarados.Keys) _porQueDeclarado[k] = "arista fijada";
+        var declarados = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        // Y LA ENSEÑANZA SE CONECTA A LOS NODOS POR SU NOMBRE, no solo a través de las aristas. El
-        // camino por aristas depende de que la arista exista Y conserve su etiqueta, y las que
-        // nacen viendo pasar una navegación a mano pierden la etiqueta cuando la atribución del
-        // clic falla — el diagnóstico dio «0 declarados» con la enseñanza intacta en disco
-        // (2026-08-07). El puente que no se rompe es la identidad: la pantalla
-        // «explorer.exe/notas» NACE de la puerta «Notas», su nombre ES la etiqueta enseñada.
-        if (appActual.Length > 0)
-        {
-            // El puente recorre TAMBIÉN los extremos de las aristas del mapa, no solo lo paseado en
-            // esta sesión: desde que la estructura sale del mapa, un nodo enseñado puede entrar al
-            // dibujo sin que nadie lo haya pisado hoy — «videos» apareció en fila 2 sin asterisco,
-            // estando enseñada, porque llegó por una arista y el puente no la miró (2026-08-07).
-            var candidatosPuente = pisados
-                .Concat(traza.SelectMany(x => new[] { x.From, x.To }))
-                .Concat(_map.Edges()
-                    .Where(e => !SurfaceMap.EsPuerta(e.To) && SurfaceMap.MismaApp(e.From, e.To))
-                    .SelectMany(e => new[] { e.From, e.To }))
-                .Distinct(StringComparer.OrdinalIgnoreCase);
-
-            var ensenadas = _map.EnsenanzasDe(appActual);
-            if (ensenadas.Count == 0 && _huellaPuente != appActual)
-            {
-                _huellaPuente = appActual;
-                LogBus.Log("grafo", $"puente: EnsenanzasDe(«{appActual}») = 0 — ¿la clave del "
-                    + $"diccionario no coincide? apps con enseñanza: "
-                    + string.Join(", ", _map.AppsConJerarquia().Select(x => $"«{x.App}»")));
-            }
-            if (ensenadas.Count > 0)
-            {
-                // EL PUENTE POR NOMBRE ES UNA RED, NO UNA SEGUNDA FUENTE. Dos reglas que salieron
-                // de enseñar GitHub (2026-08-07, observado por el usuario):
-                // · si la etiqueta ya está anclada por una ARISTA FIJADA, el puente se abstiene —
-                //   la pestaña «Code» lleva a la pantalla «graph» (así se llama su URL), y el
-                //   puente anclaba ADEMÁS un nodo fantasma «code»: la misma pantalla, dos veces
-                //   en la fila 1;
-                // · si el nombre casa con MÁS DE UN nodo, la ambigüedad no es evidencia — «pulls»
-                //   existe como pantalla global y como pestaña del repo, y anclar las dos duplicaba
-                //   la fila 1. En la duda, mandan las aristas, que sí distinguen.
-                var ancladas = new HashSet<string>(
-                    _map.Edges().Where(e => e.Info.NivelFijado && !SurfaceMap.EsPuerta(e.To)
-                                         && e.Info.Label.Length > 0)
-                        .Select(e => Uia.Reconocedor.Normalizar(e.Info.Label)),
-                    StringComparer.Ordinal);
-
-                var candidatosPorEtiqueta = new Dictionary<string, (int Nivel, List<string> Nodos)>(StringComparer.Ordinal);
-                foreach (var n in candidatosPuente)
-                {
-                    if (declarados.ContainsKey(n)) continue;
-                    string cola = n.TrimEnd('/');
-                    int barra = cola.LastIndexOf('/');
-                    string slug = Uia.Reconocedor.Normalizar(barra >= 0 ? cola[(barra + 1)..] : cola);
-                    foreach (var (etiqueta, nivel) in ensenadas)
-                    {
-                        string norm = Uia.Reconocedor.Normalizar(etiqueta);
-                        if (!slug.Equals(norm, StringComparison.Ordinal)) continue;
-                        if (!candidatosPorEtiqueta.TryGetValue(norm, out var acc))
-                            candidatosPorEtiqueta[norm] = acc = (nivel, new List<string>());
-                        acc.Nodos.Add(n);
-                        break;
-                    }
-                }
-                foreach (var (norm, (nivel, nodos)) in candidatosPorEtiqueta)
-                {
-                    if (ancladas.Contains(norm))
-                    { LogBus.Log("grafo", $"puente: «{norm}» ya anclada por arista fijada; el nombre no opina"); continue; }
-                    if (nodos.Count != 1)
-                    { LogBus.Log("grafo", $"puente: «{norm}» casa con {nodos.Count} nodos; ambigüedad no es evidencia"); continue; }
-                    declarados[nodos[0]] = nivel;
-                    _porQueDeclarado[nodos[0]] = $"nombre≈«{norm}»";
-                }
-            }
-        }
         _profDeclarada = declarados;
 
         string centro = appActual.Length > 0 ? $"nivel://{appActual}" : "";
@@ -2242,69 +2506,128 @@ public sealed class GraphExplorerWindow : Window
         var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
         int suelo = centro.Length > 0 ? 1 : 0;   // la fila 0 es de la app: nadie más la ocupa
 
-        // Y MIENTRAS MANDA LO DECLARADO, LA FILA 1 ES SUYA. Lo pisado sin información y los
-        // orígenes huérfanos del paseo caían al suelo —la fila 1— y se mezclaban con el primer
-        // nivel: en el grafo aparecían «code», «diagtrack» o «leykiara» a la altura del panel,
-        // sin que nadie los hubiera declarado (2026-08-07, observado por el usuario; el
-        // diagnóstico los mostró en fila 1 SIN asterisco y con Nivel=-1 en el mapa — no los subió
-        // nadie: aterrizaron ahí). Ser desconocido no puede colocar mejor que ser conocido.
-        int sueloDesconocido = centro.Length > 0 && SurfaceMap.SoloLoDeclarado ? 2 : suelo;
-
-        // 1. Lo declarado: nivel N → fila N, colgando del centro.
-        foreach (var d in declarados)
-            prof[d.Key] = Math.Max(suelo, d.Value);
-
-        // LA ESTRUCTURA SALE DEL MAPA, NO DEL PASEO DE ESTA SESIÓN. La profundidad de los niveles
-        // inferiores se rellenaba con la traza viva (_ultimaCorrida), que cambia con cada
-        // movimiento y olvida tramos al pasar de cuarenta: moverse entre dos elementos del primer
-        // nivel REDIBUJABA todo el drill-down ya aprendido, porque su colocación dependía del
-        // orden del paseo de hoy (2026-08-07, observado por el usuario). La superficie de
-        // navegación, una vez aprendida, es ESTÁTICA — y quien la sabe es el mapa, cuyas aristas
-        // cruzadas no cambian por volver a pasear. La traza queda solo como rastro visual (las
-        // líneas verdes), sin voz en la estructura.
+        // ─────────────────────────────────────────────────────────────────────────────────────
+        // EL DIBUJO NO OPINA. UNA SOLA FUENTE: EL MAPA.
+        //
+        // Aquí había CINCO fuentes de profundidad —aristas fijadas, un puente por nombre, el nivel
+        // del mapa, la distancia mínima entre aristas, y el paseo de la sesión— cada una
+        // rellenando donde la anterior no llegaba. Cinco opiniones sobre la misma pregunta.
+        //
+        // El coste de eso no era la complejidad: era la CONFIANZA. Cada vez que se mejoraba cómo
+        // el mapa calcula niveles, el dibujo seguía con su cálculo paralelo, y lo que se veía en
+        // pantalla dejaba de ser lo que el grafo sabía. Se diagnosticaban fallos que no existían y
+        // se daban por buenos otros que sí — el entorno de pruebas mentía. Lo dijo el usuario con
+        // todas las letras el 2026-08-08: «el dibujo debe ser 100% fiel».
+        //
+        // Ahora la profundidad de una PANTALLA es la que el mapa le da, y punto. La de una PUERTA
+        // sin cruzar es la de su arista, porque una puerta no es una pantalla y el mapa no le
+        // guarda nivel propio. Y lo que el mapa NO sitúa se dibuja aparte, en una fila de «sin
+        // situar»: eso es lo que de verdad hay, y verlo es la única forma de arreglarlo. Un hueco
+        // tapado con una suposición es un hueco que nadie va a arreglar nunca.
+        // Las aristas del MAPA de esta app: de ahí sale qué nodos hay que colocar. Se leen aquí y
+        // no se guardan aparte para que no haya dos listas de lo mismo.
         var aristasMapa = _map.Edges()
-            .Where(e => !SurfaceMap.EsPuerta(e.To) && e.Info.Selector.Length > 0
-                     && SurfaceMap.MismaApp(e.From, e.To)
-                     && (appActual.Length == 0
-                         || NivelDe(e.From).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
+            .Where(e => appActual.Length == 0
+                     || NivelDe(e.From).Equals(appActual, StringComparison.OrdinalIgnoreCase)
+                     || NivelDe(e.To).Equals(appActual, StringComparison.OrdinalIgnoreCase))
             .Select(e => (e.From, e.To))
-            .Distinct()
             .ToList();
 
-        // 2. Lo que el mapa sabe de cada pantalla. Deducido, no declarado: tampoco reclama la fila 1.
-        foreach (var n in pisados
-                     .Concat(aristasMapa.SelectMany(x => new[] { x.From, x.To }))
-                     .Concat(traza.SelectMany(x => new[] { x.From, x.To })))
-            if (!prof.ContainsKey(n) && _map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
-                prof[n] = Math.Max(sueloDesconocido, ni.Nivel);
-
-        // 3. Las aristas DEL MAPA rellenan los huecos por DISTANCIA MÍNIMA a lo ya colocado. Con
-        //    «la primera asignación gana», el resultado dependía del orden de enumeración de las
-        //    aristas — y ese orden CAMBIA cuando el diccionario recicla el hueco de una puerta
-        //    borrada. Con un ciclo de por medio (vercel→graph del atrás), cada redibujo podía
-        //    resolverse distinto: «vercel» saltó a la altura de su padre y al rato volvió a su
-        //    sitio (2026-08-07, observado por el usuario). La distancia mínima no depende de
-        //    ningún orden. Lo colocado por las fuentes 1 y 2 queda FIJO: relajar no lo toca.
-        var fijos = new HashSet<string>(prof.Keys, StringComparer.OrdinalIgnoreCase);
-        for (int pasada = 0; pasada < 8; pasada++)
-            foreach (var (f, t) in aristasMapa)
-                if (prof.TryGetValue(f, out int d) && !fijos.Contains(t)
-                    && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
-                    prof[t] = d + 1;
-
-        // 4. Solo lo que el mapa aún no encadena cae al paseo de la sesión, y lo huérfano al suelo
-        //    de lo desconocido.
-        for (int pasada = 0; pasada < 6; pasada++)
-            foreach (var (f, t, _) in traza)
-                if (prof.TryGetValue(f, out int d) && !fijos.Contains(t) && !prof.ContainsKey(t))
-                    prof[t] = d + 1;
-        foreach (var (f, t, _) in traza)
+        // EL MODO CLÁSICO, PARA PODER CONTRASTAR. Lo que el usuario llama «plata» no es una capa de
+        // datos: es un COMPORTAMIENTO que vio funcionar —el cromo quieto en su fila, la raíz firme,
+        // bajar y volver sin que nada saltara—. Ese comportamiento lo sostenían las cinco fuentes
+        // que vivían aquí. Quitarlas de golpe dejó sin referencia contra la que medir lo nuevo, así
+        // que se conservan ENTERAS y aparte (ProfundidadClasica) y se eligen con un botón: mismo
+        // grafo, dos dibujos, uno al lado del otro (2026-08-08, pedido por él).
+        if (_dibujoClasico)
         {
-            if (!prof.ContainsKey(f)) prof[f] = sueloDesconocido;
-            if (!prof.ContainsKey(t)) prof[t] = prof[f] + 1;
+            prof = ProfundidadClasica.Calcular(_map, appActual, raiz, centro, pisados, traza,
+                NivelDe, declarados, _porQueDeclarado, ref _huellaPuente);
+            _profDeclarada = declarados;
+            DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, 0);
+            return;
         }
-        foreach (var n in pisados) if (!prof.ContainsKey(n)) prof[n] = sueloDesconocido;
 
+        var todos = pisados
+            .Concat(aristasMapa.SelectMany(x => new[] { x.From, x.To }))
+            .Concat(traza.SelectMany(x => new[] { x.From, x.To }))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(n => !string.Equals(n, raiz, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var n in todos)
+        {
+            if (SurfaceMap.EsPuerta(n)) continue;   // las puertas van después, por su arista
+            if (_map.Nodes.TryGetValue(n, out var ni) && ni.Nivel >= 0)
+            {
+                prof[n] = Math.Max(suelo, ni.Nivel);
+                declarados[n] = ni.Nivel;
+                _porQueDeclarado[n] = "el mapa la sitúa";
+            }
+        }
+
+        // Las puertas sin cruzar heredan el nivel de SU arista: existen, se ven, y su sitio es el
+        // de la puerta que son. No tienen NodeInfo porque no son un lugar todavía.
+        foreach (var (f, t, info) in _map.Edges())
+            if (SurfaceMap.EsPuerta(t) && info.NivelNav >= 0 && !prof.ContainsKey(t)
+                && (appActual.Length == 0 || NivelDe(f).Equals(appActual, StringComparison.OrdinalIgnoreCase)))
+                prof[t] = Math.Max(suelo, info.NivelNav);
+
+        // Lo que nadie sitúa, junto y abajo. Se dice cuántos son: es la medida honesta de cuánto
+        // del terreno entiende el sistema, y si sube, algo se rompió antes de llegar al dibujo.
+        int filaSinSituar = prof.Values.DefaultIfEmpty(suelo).Max() + 1;
+        int sinSituar = 0;
+        foreach (var n in todos)
+            if (!prof.ContainsKey(n)) { prof[n] = filaSinSituar; sinSituar++; }
+
+        // BRONCE: lo observado, sin jerarquía. La fila es la DISTANCIA en saltos desde la raíz y
+        // nada más — ni niveles, ni cromo, ni declaraciones. Es lo que el sistema tiene antes de
+        // que nadie ordene nada, y verlo aparte es lo que permite decir qué añadió plata.
+        if (_vista == VistaGrafo.Bronce)
+        {
+            prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
+            for (int pasada = 0; pasada < 10; pasada++)
+                foreach (var (f, t) in aristasMapa)
+                    if (prof.TryGetValue(f, out int d) && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
+                        prof[t] = d + 1;
+            sinSituar = 0;
+            foreach (var n in todos)
+                if (!prof.ContainsKey(n)) { prof[n] = 1; sinSituar++; }
+            _profDeclarada.Clear();
+            _porQueDeclarado.Clear();
+        }
+
+        // EL RÓTULO DICE QUÉ SE ESTÁ MIRANDO, siempre. Y en plata, además, cuánto falta: el número
+        // de «sin situar» es la medida de avance, y tenerlo en pantalla evita ir al log para saber
+        // si una prueba mejoró o empeoró.
+        _rotuloVista.Text = _vista switch
+        {
+            VistaGrafo.Plata => $"PLATA · {appActual} · {_profDeclarada.Count} situada(s)"
+                              + (sinSituar > 0 ? $" · {sinSituar} SIN SITUAR" : " · completo"),
+            VistaGrafo.Clasico => $"CLÁSICO (referencia) · {appActual}",
+            VistaGrafo.Bronce => $"BRONCE · {appActual} · lo observado en crudo, sin jerarquía",
+            _ => "",
+        };
+        _rotuloVista.Foreground = new SolidColorBrush(_vista switch
+        {
+            VistaGrafo.Plata => sinSituar > 0
+                ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07) : Color.FromArgb(0xEE, 0x81, 0xC7, 0x84),
+            VistaGrafo.Clasico => Color.FromArgb(0xEE, 0xBA, 0x68, 0xC8),
+            _ => Color.FromArgb(0xEE, 0xC8, 0xA6, 0x7F),
+        });
+
+        DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, sinSituar);
+    }
+
+    /// <summary>
+    /// Pintar el grafo con una profundidad YA CALCULADA. Los dos modos —el del mapa y el clásico—
+    /// difieren solo en cómo se decide la fila; lo que se dibuja después es idéntico, y así el
+    /// contraste compara lo que de verdad cambia y no dos dibujos distintos (2026-08-08).
+    /// </summary>
+    private void DibujarConProfundidad(Dictionary<string, int> prof, string raiz, string centro,
+        string appActual, List<(string From, string To, string Etiqueta)> traza,
+        List<string> pisados, int sinSituar)
+    {
         // CÓMO QUEDÓ LA ESTRUCTURA, y por qué. Llevamos dos arreglos por el sitio equivocado
         // suponiendo dónde estaba el fallo; esto lo dice en vez de deducirlo. Se escribe solo
         // cuando cambia, para no llenar el log en cada repintado (2026-08-06).
@@ -2316,7 +2639,8 @@ public sealed class GraphExplorerWindow : Window
         if (huellaNiv != _huellaEstructura)
         {
             _huellaEstructura = huellaNiv;
-            LogBus.Log("grafo", $"raíz «{Corto(raiz)}» · {_profDeclarada.Count} declarado(s) · "
+            LogBus.Log("grafo", $"[{(_dibujoClasico ? "CLÁSICO" : "mapa")}] raíz «{Corto(raiz)}» · "
+                + $"{_profDeclarada.Count} situada(s) · {sinSituar} SIN SITUAR · "
                 + $"{traza.Count} tramo(s) · profundidades: "
                 + string.Join(", ", prof.OrderBy(p => p.Value).ThenBy(p => p.Key)
                     .Take(20).Select(p => $"{Corto(p.Key)}={p.Value}"
@@ -2361,6 +2685,36 @@ public sealed class GraphExplorerWindow : Window
         // escritura del repintado y deshacía lo declarado cada vez (2026-08-06).
         foreach (var d in cromo.Keys) if (!prof.ContainsKey(d)) prof[d] = 1;
 
+        // LAS ACCIONES, A UN LADO Y FUERA DE LA ESTRUCTURA. Copiar, Pegar, Ordenar o Eliminar no
+        // llevan a ninguna parte: mezclarlas con las pantallas hace que el árbol parezca tener
+        // ramas que no existen y obliga a leer cada nodo para saber si es un sitio o un verbo
+        // (2026-08-09, pedido por el usuario). No se borran —el asistente las necesita para
+        // ejecutar, y esa fue su otra corrección— pero viven en su propio carril.
+        //
+        // Y SOLO SE DIBUJAN LAS QUE ESTÁN AHORA EN PANTALLA: una acción no es un lugar al que se
+        // pueda volver, así que enseñar las de otra pantalla sería ofrecer algo que no se puede
+        // pulsar. Lo que ya no está a la vista, se calla hasta que vuelva.
+        var accionesAhora = _map.Edges()
+            .Where(e => e.Info.KindDeclarado.Equals("accion", StringComparison.OrdinalIgnoreCase)
+                        && e.Info.Label.Length > 0
+                        && (appActual.Length == 0 || NivelDe(e.From).Equals(appActual, StringComparison.OrdinalIgnoreCase))
+                        && _map.SigueALaVista(e.From, e.Info))
+            .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Key)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .Take(24)
+            .ToList();
+        // Fuera del reparto por filas: si siguieran en `prof`, seguirían siendo estructura.
+        //
+        // Se sacan SOLO las PUERTAS sin cruzar («?selector»), nunca una pantalla real. La primera
+        // versión las buscaba por nombre —quitaba cualquier nodo cuyo slug terminara como la
+        // acción— y eso podía borrar del dibujo una carpeta que se llamara igual que un botón.
+        // Limpiar la vista no puede costar perder terreno de verdad: si una acción resultó llevar
+        // a algún sitio, ese sitio es una pantalla y se queda donde está.
+        foreach (var (_, to, info) in _map.Edges())
+            if (info.KindDeclarado.Equals("accion", StringComparison.OrdinalIgnoreCase) && SurfaceMap.EsPuerta(to))
+                prof.Remove(to);
+
         // DOS REPRESENTACIONES, no una encogida. Escalar el mismo dibujo funciona hasta que la letra
         // deja de leerse; a partir de ahí se sigue pagando el sitio que ocupa un texto que ya nadie
         // puede leer, y el recorrido —que es lo que se quiere ver— queda enterrado bajo etiquetas
@@ -2390,6 +2744,40 @@ public sealed class GraphExplorerWindow : Window
                 maxX = Math.Max(maxX, x + anchoCaja);
                 i++;
             }
+        }
+
+        // EL CARRIL DE ACCIONES, a la derecha de todo y sin líneas: no se conecta con nada porque
+        // no lleva a ninguna parte. Es una lista de verbos disponibles AQUÍ, no un trozo del árbol.
+        if (accionesAhora.Count > 0)
+        {
+            double xAcc = maxX + 48;
+            _lienzo.Children.Add(new TextBlock
+            {
+                Text = $"ACCIONES AQUÍ ({accionesAhora.Count})",
+                Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+                FontSize = 9, FontFamily = new FontFamily("Consolas"), FontWeight = FontWeights.Bold,
+                Margin = new Thickness(xAcc, 12, 0, 0),
+            });
+            for (int i = 0; i < accionesAhora.Count; i++)
+            {
+                var chip = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
+                    BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Margin = new Thickness(xAcc, 30 + i * 22, 0, 0),
+                    ToolTip = "acción disponible en esta pantalla · no es un lugar, no tiene nivel",
+                    Child = new TextBlock
+                    {
+                        Text = accionesAhora[i],
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+                        FontSize = 10, FontFamily = new FontFamily("Consolas"),
+                    },
+                };
+                _lienzo.Children.Add(chip);
+            }
+            maxX = xAcc + 160;
         }
 
         // Las aristas DEDUCIDAS, en gris y a trazos: no se recorrieron en esta corrida, pero el
@@ -2563,6 +2951,18 @@ public sealed class GraphExplorerWindow : Window
                 Canvas.SetTop(etiqueta, kv.Value.Y - 2);
                 _lienzo.Children.Add(etiqueta);
             }
+            // PASAR POR UN NODO ILUMINA LA PUERTA QUE LLEVA A ÉL. El grafo dice a dónde se puede
+            // ir; esto dice POR DÓNDE, señalándolo en la app de verdad. Sin ello, un nodo es un
+            // nombre y hay que fiarse de que el selector guardado apunte a lo que uno cree — y
+            // «fiarse» es justo lo que este sistema evita en todo lo demás (2026-08-10, pedido por
+            // el usuario).
+            //
+            // Solo con Ctrl+Shift, porque es cuando la capa acepta el ratón: sin esos modificadores
+            // el cursor la atraviesa y estos eventos no llegarían nunca.
+            string nodoDeLaCaja = kv.Key;
+            caja.MouseEnter += (_, __) => IluminarPuertaHacia(nodoDeLaCaja);
+            caja.MouseLeave += (_, __) => _overlay.HideRect();
+
             Canvas.SetLeft(caja, kv.Value.X);
             Canvas.SetTop(caja, kv.Value.Y);
             _lienzo.Children.Add(caja);
@@ -2620,6 +3020,23 @@ public sealed class GraphExplorerWindow : Window
         _ = carrusel.MostrarAsync();
     }
 
+    /// <summary>
+    /// ¿La superficie que hay delante es la app que se pidió en el catálogo?
+    ///
+    /// El catálogo da nombres de HUMANO («File Explorer», «Panel de control») y la superficie da
+    /// procesos («explorer.exe»). Comparar los dos textos de frente no casa casi nunca, así que se
+    /// comparan sus formas normalizadas y se acepta que uno contenga al otro — que es como se
+    /// parecen de verdad: «File Explorer» → «fileexplorer», «explorer.exe» → «explorer».
+    /// </summary>
+    private static bool EsLaAppPedida(SystemApi.AppInstalada app, string superficie)
+    {
+        string proc = SurfaceMap.AppDe(superficie).Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+        string a = Uia.Reconocedor.Normalizar(app.Nombre).Replace(" ", "");
+        string b = Uia.Reconocedor.Normalizar(proc).Replace(" ", "");
+        if (a.Length == 0 || b.Length == 0) return false;
+        return a.Contains(b, StringComparison.Ordinal) || b.Contains(a, StringComparison.Ordinal);
+    }
+
     private async Task AprenderAppAsync(SystemApi.AppInstalada app)
     {
         _status.Text = $"abriendo «{app.Nombre}»…";
@@ -2637,17 +3054,27 @@ public sealed class GraphExplorerWindow : Window
             catch (Exception e) { LogBus.Log("carrusel", $"no se pudo lanzar «{app.Nombre}»: {e.Message}"); }
         });
 
-        string ahora = antes;
-        for (int i = 0; i < 40 && (ahora.Length == 0 || ahora == antes); i++)
+        // LA PRUEBA DE QUE ESTÁ LISTA NO ES QUE LA PANTALLA CAMBIE, es que delante esté LA APP QUE
+        // SE PIDIÓ. Aquí se esperaba un cambio de pantalla, y eso falla exactamente en el caso más
+        // común: la app ya estaba abierta y delante, así que abrirla no cambia nada y el mapeo se
+        // negaba con «la pantalla siguió siendo…». Peor todavía, aceptaba lo contrario: si mientras
+        // tanto el foco se iba a OTRA app, la pantalla SÍ cambiaba y se daba por buena — el
+        // arquitecto acabó auditando claude.exe creyendo que auditaba el explorador (2026-08-10,
+        // medido en los logs de tres intentos del usuario).
+        //
+        // La pregunta correcta se responde mirando quién está delante, no si algo se movió.
+        string ahora = "";
+        for (int i = 0; i < 40; i++)
         {
-            await Task.Delay(250);
             ahora = _where()?.Id ?? "";
+            if (ahora.Length > 0 && EsLaAppPedida(app, ahora)) break;
+            await Task.Delay(250);
         }
 
-        if (ahora.Length == 0 || ahora == antes)
+        if (ahora.Length == 0 || !EsLaAppPedida(app, ahora))
         {
-            _status.Text = $"abrí «{app.Nombre}» pero la pantalla no cambió; no mapeo a ciegas";
-            LogBus.Log("carrusel", $"«{app.Nombre}»: la pantalla siguió siendo «{antes}»; no se mapea");
+            _status.Text = $"pedí «{app.Nombre}» y delante hay «{SurfaceMap.AppDe(ahora)}»; no mapeo a ciegas";
+            LogBus.Log("carrusel", $"«{app.Nombre}»: delante quedó «{ahora}»; no se mapea");
             return;
         }
         LogBus.Log("carrusel", $"«{app.Nombre}» abierta: la pantalla pasó a «{ahora}»");
@@ -3038,9 +3465,6 @@ public sealed class HighlightOverlay : Window
     /// </summary>
     public void ShowRects(IReadOnlyList<Rect> fisicos)
     {
-        var src = PresentationSource.FromVisual(this);
-        Matrix m = src?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
-
         // Se reutiliza el primero y se crean los demás al vuelo: lo normal es uno, y no tiene
         // sentido pagar por adelantado unos recuadros que casi nunca se usan.
         foreach (var extra in _extras) _canvas.Children.Remove(extra);
@@ -3048,14 +3472,15 @@ public sealed class HighlightOverlay : Window
 
         for (int i = 0; i < fisicos.Count; i++)
         {
-            var tl = m.Transform(new Point(fisicos[i].X, fisicos[i].Y));
-            var br = m.Transform(new Point(fisicos[i].Right, fisicos[i].Bottom));
+            // Misma conversión que los puntos, y por el mismo sitio: dos formas de responder
+            // «dónde cae esto en mi lienzo» acaban discrepando el día que la ventana se mueve.
+            var caja = Pantallas.AlVisual(_canvas, fisicos[i]);
 
             var r = i == 0 ? _rect : NuevoRecuadro();
-            Canvas.SetLeft(r, tl.X);
-            Canvas.SetTop(r, tl.Y);
-            r.Width = Math.Max(0, br.X - tl.X);
-            r.Height = Math.Max(0, br.Y - tl.Y);
+            Canvas.SetLeft(r, caja.X);
+            Canvas.SetTop(r, caja.Y);
+            r.Width = caja.Width;
+            r.Height = caja.Height;
             r.Visibility = Visibility.Visible;
             if (i > 0) { _canvas.Children.Add(r); _extras.Add(r); }
         }

@@ -470,6 +470,9 @@ public sealed class GraphCrawler
 
         var candidatos = await LeerSalidasAsync(ct);
         _map.ObserveExits(nodo, candidatos.Select(c => (c.Label, c.Tipo, c.Selector, c.Alternativas, c.Grupo)));
+        // Y lo que la página declara, traducido a niveles en el acto: los grupos acaban de nacer y
+        // esperar a otra pasada sería recorrer con una estructura que ya sabíamos (ver JerarquiaWeb).
+        JerarquiaWeb.Aplicar(_map, SurfaceMap.AppDe(nodo));
         LogBus.Log("crawler", $"en '{Corto(nodo)}': {candidatos.Count} salida(s), " +
                               $"{candidatos.Count(c => c.Entrable)} para entrar (carpetas)");
 
@@ -626,6 +629,28 @@ public sealed class GraphCrawler
                     // Si sabemos la carpeta abierta, el disco resuelve la duda sin margen de error;
                     // si no, se cae a la heurística (ItemType / extensión), que es peor pero es algo.
                     bool esLista = el.ControlType.Equals("listitem", StringComparison.OrdinalIgnoreCase);
+
+                    // UNA PESTAÑA DEL NAVEGADOR NO ES UNA PUERTA DE ESTA PÁGINA, y ni siquiera se
+                    // anota: ya está representada donde le toca. Cada dominio visitado es un
+                    // SUBNIVEL del navegador en la tira de la derecha, y pulsarlo cambia a su
+                    // pestaña abierta (PestanasAbiertas.IrA). Meterla además como salida sería
+                    // decir dos veces la misma verdad por dos caminos distintos — y dos copias de
+                    // una verdad acaban discrepando (2026-08-08, señalado por el usuario).
+                    //
+                    // Lo que pasaba sin esto: el recorrido de GitHub se fue a LinkedIn, a Arch
+                    // Linux y a Graphify cruzando pestañas, y desde fuera se veía como «se va
+                    // intermitentemente a otra página». Cambiar de pestaña no es navegar el sitio:
+                    // es cambiar de sitio, igual que cambiar de aplicación.
+                    //
+                    // Y hay una segunda razón, más grave: Chrome le da a TODAS sus pestañas el
+                    // mismo AutomationId («view_20»), así que el selector no identifica ninguna. El
+                    // log lo enseña entero: el crawler creía cruzar «Arch Linux» y resolvía a
+                    // «Nueva pestaña», una y otra vez. Un selector que casa con cuarenta elementos
+                    // no es identidad, es una coincidencia con nombre — y ya teníamos la regla de
+                    // descartar los selectores que no identifican nada.
+                    if (_objetivoEsWeb && el.ControlType.Equals("tabitem", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
                     // CRUZABLE = navegación segura Y (si es lista) carpeta de verdad. Lo que no es
                     // cruzable igual se registra: queda como puerta, con su clase, para ejecución.
                     bool entrable = SafeToClick.Auto(el.Label, el.ControlType, out _)

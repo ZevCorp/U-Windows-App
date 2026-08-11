@@ -425,6 +425,15 @@ public sealed class UiaSurface : IUiSurface
     /// </summary>
     public static string GrupoDe(AutomationElement el)
     {
+        // EL LANDMARK GANA AUNQUE ESTÉ MÁS ARRIBA. Lo genérico que se encuentre por el camino se
+        // guarda y solo se usa si no aparece ningún landmark por encima.
+        //
+        // Sin esto el landmark casi nunca ganaba, y se midió: «Code · Issues · Pull requests» de
+        // GitHub viven dentro de <nav aria-label="Repository"> pero maquetados con un <ul>, así
+        // que el ancestro MÁS CERCANO era una List y el grupo salía «lista» — el nav quedaba dos
+        // pisos más arriba, sin que nadie llegara a mirarlo (2026-08-08). Una lista dentro de una
+        // navegación sigue siendo navegación: la lista es cómo se maqueta, el nav es lo que ES.
+        string generico = "";
         try
         {
             var padre = TreeWalker.ControlViewWalker.GetParent(el);
@@ -434,12 +443,36 @@ public sealed class UiaSurface : IUiSurface
                 var ct = info.ControlType;
                 string clase = (info.ClassName ?? "").Trim();
 
-                // El TIPO cuando lo hay: es lo estándar y lo que usan las apps clásicas.
-                if (ct == ControlType.Tree) return Nombrar("navegación", padre);
-                if (ct == ControlType.ToolBar) return Nombrar("herramientas", padre);
-                if (ct == ControlType.MenuBar || ct == ControlType.Menu) return Nombrar("menú", padre);
-                if (ct == ControlType.Tab) return Nombrar("pestañas", padre);
-                if (ct == ControlType.List || ct == ControlType.DataGrid) return Nombrar("lista", padre);
+                // LOS LANDMARKS DE LA PÁGINA, PRIMERO. En una web la estructura no hay que
+                // deducirla ni preguntársela a un modelo: HTML tiene un estándar para declararla
+                // —<nav>, <main>, <header>, role="navigation"— y Chrome lo traduce a UIA. Medido
+                // sobre GitHub el 2026-08-08: «banner» con la navegación global, «navegación
+                // Repository» con Code/Issues/Pull requests, «navegación Breadcrumbs» con la cadena
+                // de padres, y «principal» con las 97 puertas de contenido. Justo nuestro modelo,
+                // escrito por el propio sitio.
+                //
+                // Va ANTES que el resto porque un landmark es más específico que el contenedor
+                // genérico donde caiga: dentro de un <nav> puede haber una lista, y quedarse con
+                // «lista» perdería lo único que decía que aquello es navegación.
+                //
+                // Se lee de LocalizedControlType y no de AriaRole a propósito: la API que usamos
+                // (System.Windows.Automation) no expone AriaRole —comprobado, cero de 463
+                // elementos— y el nombre localizado sí llega. Por eso la tabla incluye las dos
+                // formas: el sistema traduce, y un mapa que solo funciona en inglés no es un mapa.
+                string landmark = LandmarkWeb(info.LocalizedControlType);
+                if (landmark.Length > 0) return Nombrar(landmark, padre);
+
+                // El TIPO cuando lo hay: es lo estándar y lo que usan las apps clásicas. Se
+                // APUNTA el primero que aparezca, pero no se devuelve todavía: puede haber un
+                // landmark por encima que lo explique mejor (ver arriba).
+                if (generico.Length == 0)
+                {
+                    if (ct == ControlType.Tree) generico = Nombrar("navegación", padre);
+                    else if (ct == ControlType.ToolBar) generico = Nombrar("herramientas", padre);
+                    else if (ct == ControlType.MenuBar || ct == ControlType.Menu) generico = Nombrar("menú", padre);
+                    else if (ct == ControlType.Tab) generico = Nombrar("pestañas", padre);
+                    else if (ct == ControlType.List || ct == ControlType.DataGrid) generico = Nombrar("lista", padre);
+                }
 
                 // Y LA CLASE cuando el tipo no dice nada, que es lo normal en WinUI. El explorador
                 // de Windows 11 mete sus botones en un contenedor llamado «ApplicationBar» cuyo
@@ -447,14 +480,14 @@ public sealed class UiaSurface : IUiSurface
                 // parecía no pertenecer a ningún grupo (2026-08-04, comprobado volcando el árbol).
                 // La app declara la estructura; solo que a veces por un canal y a veces por el otro.
                 string porClase = PorClase(clase);
-                if (porClase.Length > 0) return Nombrar(porClase, padre);
+                if (porClase.Length > 0 && generico.Length == 0) generico = Nombrar(porClase, padre);
 
                 if (ct == ControlType.Window) break;   // se llegó a la ventana: no hay grupo
                 padre = TreeWalker.ControlViewWalker.GetParent(padre);
             }
         }
         catch { }
-        return "";
+        return generico;   // ningún landmark por encima: manda el contenedor que se encontró
     }
 
     /// <summary>
@@ -477,6 +510,37 @@ public sealed class UiaSurface : IUiSurface
         }
         catch (Exception e) { partes.Add("ERROR:" + e.GetType().Name); }
         return partes.Count > 0 ? string.Join(" > ", partes) : "(sin padre)";
+    }
+
+    /// <summary>
+    /// Los LANDMARKS de una página web, tal como el navegador los nombra.
+    ///
+    /// Cada uno responde a una pregunta que hasta ahora costaba dinero o varias visitas:
+    ///   · banner / navegación → esto es NAVEGACIÓN, no contenido. La base del primer nivel.
+    ///   · ruta (breadcrumb)   → la cadena de padres, dicha por el sitio: dónde estás en su árbol.
+    ///   · principal          → CONTENIDO. Lo que hay dentro no es estructura, por mucho que se vea.
+    ///   · complementario     → lateral: acompaña, no navega el sitio entero.
+    ///
+    /// Se comparan nombres en español e inglés porque UIA los localiza según el sistema, y una
+    /// tabla que solo entiende inglés dejaría el mapa ciego en la mitad de las máquinas. El
+    /// «contentinfo» de HTML llega como «pie» o «footer» según idioma.
+    /// </summary>
+    private static string LandmarkWeb(string localizado)
+    {
+        string l = (localizado ?? "").Trim().ToLowerInvariant();
+        if (l.Length == 0) return "";
+        // El breadcrumb primero: es una navegación, pero decir «ruta» conserva que además ordena.
+        if (l.Contains("breadcrumb") || l.Contains("ruta de navegación")) return "ruta";
+        if (l.StartsWith("navegaci") || l == "navigation") return "navegación";
+        // LA CABECERA APARTE DE LA NAVEGACIÓN, aunque las dos sean navegar. El <header> es el
+        // marco del SITIO —está en todas las páginas, es cromo de nivel 1— y un <nav> suelto suele
+        // ser la navegación de UNA sección, que es nivel 2. Colapsarlas en «navegación» borraba
+        // justo la diferencia que hace falta para asignar el nivel (2026-08-08).
+        if (l == "banner" || l == "encabezado" || l == "header") return "cabecera";
+        if (l == "principal" || l == "main") return "contenido";
+        if (l == "complementario" || l == "complementary" || l == "aside") return "lateral";
+        if (l == "pie" || l == "pie de página" || l == "footer" || l == "contentinfo") return "pie";
+        return "";
     }
 
     /// <summary>Contenedores que se reconocen por su clase porque no declaran ControlType.</summary>

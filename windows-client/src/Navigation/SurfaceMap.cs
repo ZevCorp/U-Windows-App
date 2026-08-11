@@ -156,6 +156,19 @@ public sealed class SurfaceMap
         public string Kind { get; set; } = "";
 
         /// <summary>
+        /// Lo que ALGUIEN AFIRMA que es esta salida («accion»), frente a <see cref="Kind"/>, que es
+        /// lo que el sistema deduce solo del tipo de control.
+        ///
+        /// Son dos campos porque son dos cosas, y meterlas en uno costó una prueba entera: el
+        /// arquitecto marcaba acciones a mano sobre el mismo campo que el sistema rellena al nacer
+        /// CADA arista, así que «lo ya clasificado» era el 100% y la lista de pendientes contestaba
+        /// «no queda nada» con cero salidas declaradas (2026-08-10). Es la misma regla de
+        /// procedencia que ya rige en los niveles: lo dicho y lo deducido nunca comparten sitio,
+        /// porque el día que discrepan hay que saber cuál es cuál.
+        /// </summary>
+        public string KindDeclarado { get; set; } = "";
+
+        /// <summary>
         /// La última vez que esta puerta se vio EN PANTALLA.
         /// </summary>
         /// <remarks>
@@ -296,7 +309,16 @@ public sealed class SurfaceMap
         n.Visits++;
         n.LastSeen = when;
 
+        // CAMBIAR DE APP NO ES NAVEGAR, tampoco a mano. LearnTraversal ya lo impedía para el cruce
+        // deliberado, pero esta vía —la navegación de una persona— sí las acuñaba, y el curado del
+        // arranque las borraba después. Entre medias, el grafo afirmaba caminos que no existen:
+        // apareció una pantalla «claude.exe» dentro del grafo del explorador solo porque el usuario
+        // se cambió de app para escribirme (2026-08-10, aclarado por él).
+        //
+        // Borrarlo al arrancar no basta: el arquitecto lo vio y gastó un hallazgo en investigarlo.
+        // Lo que no es una transición no debe entrar, ni un minuto.
         if (_lastCommitted.Length > 0 && !string.Equals(_lastCommitted, id, StringComparison.OrdinalIgnoreCase)
+            && MismaApp(_lastCommitted, id)
             // EL ATRÁS NO ACUÑA ARISTAS: es un gesto de historial, no de estructura. Puedes venir
             // de cualquier parte, así que «a dónde lleva» no es una propiedad del botón sino del
             // camino andado — su rastro es efímero por naturaleza. La arista «vercel → graph» que
@@ -402,6 +424,25 @@ public sealed class SurfaceMap
                     // Esta es la vía por la que nacen las aristas cuando navega UNA PERSONA — y era
                     // la única de las tres que no reponía lo enseñado (2026-08-06).
                     AplicarEnsenanza(_lastCommitted, e);
+
+                    // Y TAMBIÉN SITÚA LA PANTALLA A LA QUE LLEGA. «La pantalla que hay tras una
+                    // puerta vive en el nivel de esa puerta» ya estaba escrito en el núcleo, pero
+                    // solo se aplicaba en LearnTraversal — el camino del cruce DELIBERADO (el
+                    // recorredor, map_take). Navegar a mano pasa por aquí, así que en una web,
+                    // donde el usuario navega con el ratón, ningún nodo se situaba jamás.
+                    //
+                    // Lo que se veía: «Insights» y «Pull requests» un nivel por debajo de sus
+                    // hermanos, y colocándose solos a la quinta visita (2026-08-08, trazado por el
+                    // usuario). No se movía el nodo: se movía el DIBUJO, que cuando una pantalla no
+                    // tiene nivel la coloca por distancia, y esa distancia cambia según aparecen
+                    // aristas. Un sitio que baila mientras exploras no es un mapa.
+                    //
+                    // LA PROFUNDIDAD SE CALCULA ENTERA, no se hereda de la puerta. Aquí ponía
+                    // `n.Nivel = e.NivelNav`, y eso confunde «a un clic» con «a esta profundidad»:
+                    // una puerta cromo lleva a sitios que están a un clic pero viven hondo. Ver
+                    // RecalcularProfundidades, que lo resuelve por camino más corto ignorando los
+                    // atajos (2026-08-09, medido por el arquitecto).
+                    RecalcularProfundidades(AppDe(id));
                 }
             }
         }
@@ -530,8 +571,6 @@ public sealed class SurfaceMap
                 && AppDe(kv.Key).Equals(appF, StringComparison.OrdinalIgnoreCase));
             if (!hayOtraSituada) nf.Nivel = 0;
         }
-        int nivelAqui = _nodes.TryGetValue(f, out var na) ? na.Nivel : -1;
-
         // Lo que YA se conoce en esta app, con el nivel que se le puso la primera vez. Una puerta no
         // cambia de nivel por volver a verla desde más adentro: si el panel lateral está en el nivel
         // 1, sigue estando en el 1 aunque lo vuelvas a ver tres carpetas más abajo.
@@ -589,13 +628,21 @@ public sealed class SurfaceMap
             string k = Clave(f, destino, s.Selector);
             if (_edges.TryGetValue(k, out var yaEsta)) { yaEsta.VistaPorUltimaVez = ahora; continue; }
 
-            // EL NIVEL SE FIJA UNA VEZ. Si esta puerta ya se vio antes en esta app, conserva el
-            // nivel que se le puso entonces —da igual desde dónde se esté mirando ahora—; si es
-            // nueva, pertenece a un nivel por debajo de la pantalla que la revela. Eso es lo que
-            // convierte «qué abre qué» en una jerarquía estable, en vez de un reflejo del paseo.
-            int nivelPuerta = nivelPorSelector.TryGetValue(s.Selector, out int ya)
-                ? ya
-                : (nivelAqui >= 0 ? nivelAqui + 1 : -1);
+            // EL NIVEL NO SALE DEL PASEO. Si esta puerta ya se vio antes en esta app, conserva el
+            // nivel que se le puso entonces —da igual desde dónde se esté mirando ahora—; y si es
+            // nueva, nace SIN NIVEL, esperando a que alguien lo diga.
+            //
+            // Antes nacía en «nivelAqui + 1», un nivel por debajo de la pantalla que la revelaba.
+            // Congelar ese número la volvía ESTABLE, no CORRECTA: congelaba el accidente de dónde
+            // se la vio primero. Medido el 2026-08-10 sobre explorer.exe: el mismo botón de
+            // scrollbar salía sin nivel en «inicio» y en nivel 4 en «u-versiones», porque allí
+            // nació. Y un ARCHIVO nació en «nivel 5» —anunciando estructura más profunda—, se
+            // cruzó confiando en esa etiqueta y abrió el Bloc de notas.
+            //
+            // Un número que depende de por dónde pasaste no describe la app: describe tu paseo.
+            // Decir «no sé» es más barato que decir un número inventado, y es lo que vuelve
+            // «cuánto queda sin situar» una pregunta con respuesta.
+            int nivelPuerta = nivelPorSelector.TryGetValue(s.Selector, out int ya) ? ya : -1;
 
             _edges[k] = new EdgeInfo
             {
@@ -660,7 +707,9 @@ public sealed class SurfaceMap
             info.NivelFijado = nivel >= 0;
             info.PorPersona = nivel >= 0 && (porPersona || info.PorPersona);   // lo humano no se degrada
             info.EsCromo = nivel >= 0 && esCromo;
-            Aprender(a, info.Label, nivel, porPersona, esCromo);   // sobrevive a borrar el grafo
+            // Se apunta también SU SELECTOR: es lo que permite que dos salidas con el mismo nombre
+            // tengan niveles distintos y dejen de pisarse al recargar (ver Ensenanza).
+            Aprender(a, info.Label, nivel, porPersona, esCromo, info.Selector);   // sobrevive a borrar el grafo
             // La pantalla que hay detrás vive en el nivel de su puerta: si se mueve la puerta, se
             // mueve el sitio. Y si la puerta se SUELTA, el sitio también se suelta — dejarle el
             // nivel viejo lo clavaba en esa fila para siempre: «Graph» se soltó y siguió a la
@@ -701,46 +750,33 @@ public sealed class SurfaceMap
     public bool EsCromoGlobal(string selector, string controlType = "")
     {
         if (selector.Length == 0) return false;
-        // El tipo va DENTRO del selector; si no lo pasan, se lee de ahí. No hacerlo dejaba fuera
-        // la exclusión del contenido justo donde más falta hacía: en el explorador, el
-        // AutomationId de una fila es su ÍNDICE, así que «uia:aid=1;ct=ListItem» existe en todas
-        // las carpetas, la ubicuidad lo daba por marco de la app y sus subcarpetas no se
-        // exploraban nunca (2026-08-01).
         if (EsRelativo(selector)) return false;   // está en todas partes pero NO lleva al mismo sitio
-        string ct = controlType.Length > 0 ? controlType : TipoDelSelector(selector);
-        return !EsContenido(ct) && Ubicuidad(selector) >= 3;
+        return SelectoresCromo().Contains(selector);
     }
 
     /// <summary>
     /// TODOS los selectores que son cromo, de una pasada. Mismo criterio que
     /// <see cref="EsCromoGlobal"/> — es la misma pregunta hecha para todos a la vez.
     ///
-    /// Existe por el COSTE, no por comodidad: <see cref="Ubicuidad"/> recorre las aristas enteras,
-    /// así que preguntarlo punto por punto al repintar es O(puntos × aristas) — con 883 aristas y
-    /// cincuenta puntos son cuarenta mil vueltas por cuadro, y este repintado corre encima de la app
-    /// del usuario. Aquí se agrupa una vez y sale O(aristas). Es el aprendizaje nº8 aplicado antes
-    /// de tropezar: el coste por iteración primero.
+    /// SOLO LO DECLARADO. Antes esto CONTABA: una puerta vista en tres pantallas distintas se daba
+    /// por mobiliario de la app. Era el último recurso cuando nadie había dicho nada, y hoy sobra
+    /// —lo pidió el usuario el 2026-08-08— porque hay tres fuentes que DECLARAN en vez de adivinar:
+    /// la persona, el maestro, y la propia página con sus landmarks de HTML.
+    ///
+    /// Contar tenía tres defectos que ninguna declaración tiene: necesitaba tres visitas para
+    /// opinar, confundía lo que casualmente se repite con lo que pertenece al marco, y llegaba a
+    /// contradecir a fuentes más fiables. Un mapa que adivina cuando podría preguntar acaba
+    /// discutiendo consigo mismo.
+    ///
+    /// Sigue existiendo por el COSTE: el pintor pregunta por cada punto en cada cuadro, y esto se
+    /// resuelve una vez para todos — O(aristas) en vez de O(puntos × aristas).
     /// </summary>
     public HashSet<string> SelectoresCromo()
     {
-        var origenes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        var tipo = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (from, _, info) in Edges())
-        {
-            if (info.Selector.Length == 0 || EsRelativo(info.Selector)) continue;
-            if (!origenes.TryGetValue(info.Selector, out var o))
-                origenes[info.Selector] = o = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            o.Add(from);
-            if (info.ControlType.Length > 0) tipo[info.Selector] = info.ControlType;
-        }
-
         var cromo = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (sel, o) in origenes)
-        {
-            if (o.Count < 3) continue;
-            string ct = tipo.TryGetValue(sel, out var t) && t.Length > 0 ? t : TipoDelSelector(sel);
-            if (!EsContenido(ct)) cromo.Add(sel);
-        }
+        foreach (var (_, _, info) in Edges())
+            if (info.EsCromo && info.NivelFijado && info.Selector.Length > 0 && !EsRelativo(info.Selector))
+                cromo.Add(info.Selector);
         return cromo;
     }
 
@@ -895,11 +931,21 @@ public sealed class SurfaceMap
             if (nivelPuerta < 0 && _nodes.TryGetValue(f, out var origen) && origen.Nivel >= 0)
                 nivelPuerta = origen.Nivel + 1;
 
-            // Lo fijado a mano no se toca: ver EdgeInfo.NivelFijado.
-            bool fijado = Edges().Any(e => e.Info.NivelFijado
-                && string.Equals(e.Info.Selector, selector, StringComparison.Ordinal)
-                && AppDe(e.From).Equals(AppDe(f), StringComparison.OrdinalIgnoreCase));
-            if (!fijado && nivelPuerta >= 0 && (n.Nivel < 0 || nivelPuerta < n.Nivel)) n.Nivel = nivelPuerta;
+            // QUE LA PUERTA ESTÉ DECLARADA ES LA RAZÓN MÁS FUERTE PARA SITUAR SU DESTINO, no una
+            // razón para negarse. Aquí había un `!fijado` que miraba si la PUERTA estaba fijada
+            // para decidir si se situaba el NODO — un error de categoría, y con consecuencias:
+            //
+            // el nodo caía entre dos sillas. FijarNivel sí sitúa el destino, pero solo cuando ya se
+            // conoce (si la puerta todavía es «?selector» no hay destino que situar); y cuando por
+            // fin se cruzaba, este guardián lo bloqueaba. Nunca se situaba. Se midió en cuanto los
+            // landmarks empezaron a declarar TODAS las puertas de una web: las trece pantallas de
+            // GitHub en «nivel ?», y el dibujo poniéndolas todas a la misma altura porque sin nivel
+            // caen al mismo suelo (2026-08-08, observado por el usuario: «todos los botones
+            // quedaron en el mismo nivel»).
+            //
+            // La profundidad NO se hereda de la puerta: se calcula entera al final de este método
+            // (ver RecalcularProfundidades). Un atajo cromo dice a cuántos clics está el destino,
+            // no a qué profundidad vive — y confundirlo dejaba «C:» por debajo de su propio padre.
         }
 
         // También aquí: el ATRÁS no acuña. Esta es la vía del cruce deliberado (map_take «Atrás»),
@@ -929,6 +975,11 @@ public sealed class SurfaceMap
         // que se llegó (2026-08-06, observado por el usuario).
         AplicarEnsenanza(f, e);
 
+        // La estructura cambió: hay una arista más, así que las profundidades pueden haber
+        // cambiado. Se recalculan enteras — es lo que las hace independientes del orden en que se
+        // navegue (ver RecalcularProfundidades).
+        RecalcularProfundidades(AppDe(f));
+
         Version++;
         Save();
     }
@@ -954,6 +1005,91 @@ public sealed class SurfaceMap
     /// No hay confirmación aquí: quien llama es quien sabe si preguntó. Y se guarda en el acto, para
     /// que un cierre inesperado no resucite lo borrado.
     /// </remarks>
+    /// <summary>
+    /// LA PROFUNDIDAD DE CADA PANTALLA, calculada entera y no a trocitos.
+    ///
+    /// «A cuántos clics está» y «a qué profundidad vive» son dos preguntas distintas, y estaban
+    /// fundidas: la pantalla heredaba el nivel de la PUERTA que la abría. Pero una puerta cromo
+    /// dice «estoy a un clic desde cualquier sitio», no «lo que hay detrás es de primer nivel».
+    ///
+    /// Lo midió el arquitecto recorriendo Este equipo → C: → Usuarios → felip → .claude → skills
+    /// (2026-08-09): «disco-local-c» quedaba en 0 —POR DEBAJO de su propio padre, porque se alcanza
+    /// por el atajo del panel lateral—, tres saltos consecutivos empataban en 2, y «skills» saltaba
+    /// a 4 sin que existiera un 3. Con esos números el navegador cree que C: es una raíz y que
+    /// .claude y Usuarios son hermanos.
+    ///
+    /// Se CALCULA por camino más corto desde la raíz IGNORANDO las aristas cromo, que son atajos y
+    /// no estructura. Lo que solo se alcanza por cromo se queda en 1: es una sección de primer
+    /// nivel, alcanzable desde cualquier parte — que es exactamente lo que significa.
+    ///
+    /// Y se recalcula ENTERO en vez de parchear al cruzar, porque asignar al vuelo depende del
+    /// orden en que uno navegue: el mismo sitio salía en niveles distintos según el día. Un cálculo
+    /// completo da el mismo resultado siempre, se llegue por donde se llegue.
+    ///
+    /// Lo fijado a mano no se toca: quien declaró un nivel sabe algo que este cálculo no.
+    /// </summary>
+    public void RecalcularProfundidades(string app)
+    {
+        if (app.Length == 0) return;
+        bool DeLaApp(string id) => AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase);
+
+        // Las pantallas cuyo nivel puso una PERSONA se quedan como están: quien lo declaró sabe
+        // algo que este cálculo no.
+        var fijadasAMano = new HashSet<string>(
+            Edges().Where(e => e.Info.NivelFijado && e.Info.PorPersona && e.Info.NivelNav >= 0
+                            && !EsPuerta(e.To) && DeLaApp(e.To))
+                   .Select(e => e.To),
+            StringComparer.OrdinalIgnoreCase);
+
+        // La raíz: la pantalla por la que se entra en la app (nivel 0 al observarla la primera vez).
+        string raiz = _nodes.FirstOrDefault(kv => DeLaApp(kv.Key) && kv.Value.Nivel == 0).Key ?? "";
+        if (raiz.Length == 0) return;   // sin ancla no hay nada que medir, y adivinarla sería peor
+
+        // Solo las aristas ESTRUCTURALES: un atajo no dice a qué profundidad vive su destino.
+        var hijos = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var porCromo = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (f, t, info) in Edges())
+        {
+            if (!DeLaApp(f) || !DeLaApp(t) || EsPuerta(t)) continue;
+            if (info.EsCromo) { porCromo.Add(t); continue; }
+            if (!hijos.TryGetValue(f, out var l)) hijos[f] = l = new List<string>();
+            if (!l.Contains(t, StringComparer.OrdinalIgnoreCase)) l.Add(t);
+        }
+
+        // Anchura primero: la primera vez que se llega a un sitio es por el camino más corto.
+        var prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
+        var cola = new Queue<string>();
+        cola.Enqueue(raiz);
+        while (cola.Count > 0)
+        {
+            string aqui = cola.Dequeue();
+            if (!hijos.TryGetValue(aqui, out var l)) continue;
+            foreach (var h in l)
+                if (!prof.ContainsKey(h)) { prof[h] = prof[aqui] + 1; cola.Enqueue(h); }
+        }
+
+        // Lo alcanzable SOLO por cromo es una sección de primer nivel: está a un clic de todas
+        // partes, y eso es precisamente lo que significa vivir en el primer nivel.
+        foreach (var t in porCromo)
+            if (!prof.ContainsKey(t)) prof[t] = 1;
+
+        int movidas = 0;
+        foreach (var (id, n) in _nodes)
+        {
+            if (!DeLaApp(id) || fijadasAMano.Contains(id)) continue;
+            int nuevo = prof.TryGetValue(id, out int p) ? p : -1;
+            if (n.Nivel == nuevo) continue;
+            n.Nivel = nuevo;
+            movidas++;
+        }
+        if (movidas > 0)
+        {
+            Version++;
+            LogBus.Log("mapa", $"profundidades de «{app}» recalculadas: {movidas} pantalla(s) movida(s) "
+                + $"· raíz «{ShortId(raiz)}» · {prof.Count} situada(s)");
+        }
+    }
+
     public (int Nodos, int Aristas) OlvidarTodo()
     {
         int nodos = _nodes.Count, aristas = _edges.Count;
@@ -1190,13 +1326,14 @@ public sealed class SurfaceMap
     /// igual, porque agrupar es etiquetar, no mover nada de sitio.
     /// </summary>
     /// <summary>
-    /// Solo cuenta como primer nivel lo que alguien DECLARÓ; la deducción por repetición se calla.
+    /// Ya no hay nada que silenciar: el cromo SOLO sale de lo declarado.
     ///
-    /// Es un interruptor de experimento, no una decisión definitiva: mientras se construye la
-    /// enseñanza hay que poder ver qué produce ELLA, y con las dos fuentes activas cada punto azul
-    /// podía venir de cualquiera de las dos.
+    /// Fue un interruptor de experimento —mientras se construía la enseñanza había que poder ver
+    /// qué producía ELLA y no la deducción— y el 2026-08-08 el usuario pidió eliminar la deducción
+    /// del todo. Se conserva la propiedad para no romper a quien la lea, siempre en true: la
+    /// pregunta que hacía ya solo tiene una respuesta posible.
     /// </summary>
-    public static bool SoloLoDeclarado { get; set; } = true;
+    public static bool SoloLoDeclarado => true;
 
     /// <summary>
     /// Lo que UNA PERSONA ha corregido a mano en esta app: qué salida va a qué nivel.
@@ -1217,8 +1354,9 @@ public sealed class SurfaceMap
         string a = app.Trim();
         if (a.Length == 0) return Array.Empty<(string, int)>();
         return _ensenanzas.TryGetValue(a, out var d)
-            ? d.Where(kv => kv.Value.Humano && !kv.Value.Atras && kv.Value.Nivel >= 0).Select(kv => (kv.Key, kv.Value.Nivel))
-               .OrderBy(x => x.Item2).ThenBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
+            ? d.Where(kv => kv.Value.Humano && !kv.Value.Atras && kv.Value.Nivel >= 0)
+              .Select(kv => (kv.Value.Etiqueta.Length > 0 ? kv.Value.Etiqueta : kv.Key, kv.Value.Nivel))
+               .OrderBy(x => x.Item2).ThenBy(x => x.Item1, StringComparer.CurrentCultureIgnoreCase)
                .ToList()
             : Array.Empty<(string, int)>();
     }
@@ -1254,7 +1392,39 @@ public sealed class SurfaceMap
     /// (2026-08-07, observado por el usuario). Por compatibilidad, declarar nivel 1 sigue
     /// marcando cromo salvo que se diga lo contrario.
     /// </summary>
-    public sealed record Ensenanza(int Nivel, bool Humano, bool Atras = false, bool Cromo = false);
+    /// <summary>
+    /// Lo enseñado de una salida. <paramref name="Selector"/> es lo que la hace ÚNICA cuando su
+    /// nombre no lo es.
+    ///
+    /// Sin él, dos salidas que se llaman igual comparten enseñanza a la fuerza. Lo midió el
+    /// arquitecto en el explorador (2026-08-10): en UNA sola pantalla, el panel lateral salía con
+    /// «Documentos» e «Imágenes» en nivel 1 y «Descargas», «Música» y «Videos» en nivel 2 — siendo
+    /// hermanos del mismo árbol. El panel duplica nombres (Acceso rápido y OneDrive tienen cada
+    /// uno su «Escritorio», su «Documentos») y, resolviendo por etiqueta, cada declaración pisaba
+    /// todas las apariciones: ganaba la última escritura.
+    ///
+    /// Su consecuencia operativa, que es la que importa: «el navegador buscará ruta hacia Música
+    /// creyéndola de nivel 2 cuando está a un clic desde cualquier sitio».
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="Etiqueta"/> viaja aparte de la clave porque desde que la clave es el
+    /// SELECTOR, la clave dejó de ser legible. Y quien pregunta «qué se enseñó de esta app» quiere
+    /// el nombre que se ve en pantalla, no un selector — lo cazó el contrato en cuanto cambió la
+    /// clave: la promesa nº2 empezó a fallar porque devolvía selectores donde promete etiquetas
+    /// (2026-08-10). Cambiar cómo se guarda algo no puede cambiar lo que se promete de ello.
+    /// </remarks>
+    /// <remarks>
+    /// <paramref name="Kind"/> viaja aquí por la misma razón que el nivel: es una DECISIÓN de quien
+    /// audita, y una decisión tomada no puede volver a preguntarse. Antes, marcar algo como acción
+    /// escribía en las aristas que existían en ese instante y se olvidaba; entrar en una pantalla
+    /// nueva devolvía el mismo mobiliario a la lista de pendientes. Medido: «Retroceder poco» salía
+    /// clasificada en /inicio y sin clasificar en las otras cinco pantallas, y como la lista agrupa
+    /// por etiqueta, una sola aparición sin marcar devolvía las seis (2026-08-10). Vaciar la lista
+    /// costaba O(controles × pantallas), y en un explorador el número de pantallas es el número de
+    /// carpetas del disco: el criterio de terminado era inalcanzable por construcción.
+    /// </remarks>
+    public sealed record Ensenanza(int Nivel, bool Humano, bool Atras = false, bool Cromo = false,
+        string Selector = "", string Etiqueta = "", string Kind = "");
 
     /// <summary>
     /// ¿Este control es el gesto de VOLVER de su app?
@@ -1298,7 +1468,8 @@ public sealed class SurfaceMap
     /// lo dijo — los dos describen la estructura.</remarks>
     public IReadOnlyList<(string Etiqueta, int Nivel)> EnsenanzasDe(string app) =>
         _ensenanzas.TryGetValue(app.Trim(), out var d)
-            ? d.Where(kv => !kv.Value.Atras && kv.Value.Nivel >= 0).Select(kv => (kv.Key, kv.Value.Nivel)).ToList()
+            ? d.Where(kv => !kv.Value.Atras && kv.Value.Nivel >= 0)
+              .Select(kv => (kv.Value.Etiqueta.Length > 0 ? kv.Value.Etiqueta : kv.Key, kv.Value.Nivel)).ToList()
             : Array.Empty<(string, int)>();
 
     /// <summary>Las apps con jerarquía enseñada, para poder verlas y borrarlas por separado.</summary>
@@ -1318,9 +1489,27 @@ public sealed class SurfaceMap
 
         // Y se sueltan las aristas vivas de esa app: si no, el grafo en memoria seguiría
         // afirmando un nivel que ya nadie sostiene.
+        //
+        // SE SUELTA TODO LO DECLARADO, no solo el sello. Antes se quitaban NivelFijado y PorPersona
+        // pero se dejaban el NÚMERO y el CROMO, así que tras «olvidar» el grafo seguía dibujando
+        // exactamente los mismos niveles — solo que ya sin nadie que los sostuviera. Olvidar a
+        // medias es peor que no olvidar: deja afirmaciones huérfanas que parecen deducidas
+        // (2026-08-10, lo señaló el usuario preguntando si esto no debería estar conectado).
+        //
+        // También se va la clasificación DECLARADA (acción). Es parte de lo que se aprendió de esta
+        // app; la deducida por el sistema se queda, porque esa no la dijo nadie.
         foreach (var e in Edges())
-            if (AppDe(e.From).Equals(app, StringComparison.OrdinalIgnoreCase) && e.Info.NivelFijado)
-            { e.Info.NivelFijado = false; e.Info.PorPersona = false; }
+        {
+            if (!AppDe(e.From).Equals(app, StringComparison.OrdinalIgnoreCase)) continue;
+            e.Info.NivelFijado = false;
+            e.Info.PorPersona = false;
+            e.Info.NivelNav = -1;
+            e.Info.EsCromo = false;
+            e.Info.KindDeclarado = "";
+        }
+        // Y las profundidades, que salían de esos niveles, dejan de tener en qué apoyarse.
+        foreach (var (id, nodo) in _nodes)
+            if (AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase) && nodo.Nivel > 0) nodo.Nivel = -1;
         Version++;
         Save();
         LogBus.Log("mapa", $"olvidada la jerarquía enseñada de «{app}»: {n} salida(s)");
@@ -1343,25 +1532,119 @@ public sealed class SurfaceMap
     private void AplicarEnsenanza(string desde, EdgeInfo e)
     {
         if (e.Label.Length == 0) return;
-        if (_ensenanzas.TryGetValue(AppDe(desde), out var sabidas)
-            && sabidas.TryGetValue(e.Label, out var ens)
-            && !ens.Atras && ens.Nivel >= 0)
+        if (!_ensenanzas.TryGetValue(AppDe(desde), out var sabidas)) return;
+
+        // PRIMERO POR SELECTOR, que es lo que identifica. Solo se cae a la etiqueta cuando la
+        // enseñanza no traía selector — lo aprendido antes de este cambio sigue funcionando, y lo
+        // nuevo deja de confundir dos salidas que se llaman igual.
+        Ensenanza? ens = null;
+        if (e.Selector.Length > 0 && sabidas.TryGetValue(e.Selector, out var porSel)) ens = porSel;
+        else if (sabidas.TryGetValue(e.Label, out var porEtq) && porEtq.Selector.Length == 0) ens = porEtq;
+
+        if (ens != null && !ens.Atras && ens.Nivel >= 0)
         {
             e.NivelNav = ens.Nivel;
             e.NivelFijado = true;
             e.PorPersona = e.PorPersona || ens.Humano;
             e.EsCromo = ens.Cromo;
         }
+
+        // Y LA CLASIFICACIÓN, que es la otra mitad de lo mismo. Va aparte del nivel porque se
+        // declaran por separado: una acción no tiene nivel y no por eso deja de estar decidida.
+        if (ens != null && !ens.Atras && ens.Kind.Length > 0) e.KindDeclarado = ens.Kind;
     }
 
-    private void Aprender(string app, string etiqueta, int nivel, bool humano, bool cromo = false)
+    /// <summary>
+    /// Guardar lo enseñado. LA CLAVE ES EL SELECTOR cuando se conoce, y la etiqueta solo cuando no.
+    ///
+    /// Así dos salidas que se llaman igual dejan de compartir enseñanza: cada una tiene su entrada
+    /// y su nivel. Con la etiqueta por clave, declarar una pisaba a la otra y el árbol salía con
+    /// hermanos en niveles distintos (ver <see cref="Ensenanza"/>).
+    /// </summary>
+    private void Aprender(string app, string etiqueta, int nivel, bool humano, bool cromo = false,
+        string selector = "")
     {
         if (app.Length == 0 || etiqueta.Length == 0) return;
         if (!_ensenanzas.TryGetValue(app, out var d))
             _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
-        if (nivel < 0) d.Remove(etiqueta);
-        else d[etiqueta] = new Ensenanza(nivel,
-            humano || (d.TryGetValue(etiqueta, out var ya) && ya.Humano), Atras: false, Cromo: cromo);
+
+        string clave = selector.Length > 0 ? selector : etiqueta;
+        d.TryGetValue(clave, out var ya);
+
+        // LAS DOS DECLARACIONES COMPARTEN ENTRADA Y NO SE PISAN. Nivel y clasificación son cosas
+        // distintas dichas sobre la misma salida, y se dicen en momentos distintos: soltar el nivel
+        // no puede borrar que alguien ya decidió que eso era una acción, ni al revés.
+        if (nivel < 0)
+        {
+            // Soltar el nivel deja la entrada SOLO si aún dice algo — si no, sobra.
+            if (ya != null && ya.Kind.Length > 0)
+                d[clave] = ya with { Nivel = -1, Cromo = false };
+            else d.Remove(clave);
+        }
+        else d[clave] = new Ensenanza(nivel,
+            humano || (ya?.Humano ?? false),
+            Atras: false, Cromo: cromo, Selector: selector, Etiqueta: etiqueta,
+            Kind: ya?.Kind ?? "");
+        GuardarEnsenanzas();
+    }
+
+    /// <summary>
+    /// Alguien decide QUÉ ES esta salida —navegación, acción— para toda la app, no para la pantalla
+    /// desde la que lo dijo. Espejo exacto de <see cref="FijarNivel"/>: toca lo que hay delante y
+    /// deja la enseñanza para lo que venga.
+    /// </summary>
+    public string ClasificarSalida(string app, string etiquetaOSelector, string kind)
+    {
+        string a = app.Trim();
+        string q = etiquetaOSelector.Trim();
+        string k = kind.Trim().ToLowerInvariant();
+        if (a.Length == 0 || q.Length == 0) return "falta la app o qué salida clasificar";
+
+        var tocadas = Edges().Where(e =>
+                AppDe(e.From).Equals(a, StringComparison.OrdinalIgnoreCase)
+                && (e.Info.Label.Equals(q, StringComparison.OrdinalIgnoreCase)
+                    || e.Info.Selector.Equals(q, StringComparison.Ordinal)))
+            .ToList();
+        if (tocadas.Count == 0) return $"no encuentro ninguna salida «{q}» en «{a}»";
+
+        // POR SELECTOR, que es lo que identifica. Y de paso resuelve las etiquetas plantilla: las
+        // cinco «Actualizar "X" (F5)» —una por carpeta visitada— son un solo control, y ya
+        // compartían uia:aid=refreshButton;ct=Button. Clasificar una las clasifica todas.
+        foreach (var sel in tocadas.Select(t => t.Info.Selector).Distinct(StringComparer.Ordinal))
+        {
+            if (sel.Length == 0) continue;
+            foreach (var (_, _, info) in tocadas.Where(t =>
+                string.Equals(t.Info.Selector, sel, StringComparison.Ordinal)))
+                info.KindDeclarado = k;
+            AprenderClase(a, tocadas.First(t => t.Info.Selector == sel).Info.Label, k, sel);
+        }
+        // Una salida sin selector solo puede declararse por su nombre: es todo lo que tiene.
+        foreach (var (_, _, info) in tocadas.Where(t => t.Info.Selector.Length == 0))
+        {
+            info.KindDeclarado = k;
+            AprenderClase(a, info.Label, k, "");
+        }
+
+        Version++;
+        Save();
+        int cuantas = tocadas.Count;
+        return $"«{tocadas[0].Info.Label}» queda clasificada como «{k}» en «{a}» "
+             + $"({cuantas} aparición/es). Queda APRENDIDA: las apariciones que salgan en otras "
+             + "pantallas nacerán ya clasificadas, no hay que repetirlo.";
+    }
+
+    private void AprenderClase(string app, string etiqueta, string kind, string selector)
+    {
+        if (app.Length == 0 || etiqueta.Length == 0) return;
+        if (!_ensenanzas.TryGetValue(app, out var d))
+            _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
+
+        string clave = selector.Length > 0 ? selector : etiqueta;
+        if (d.TryGetValue(clave, out var ya))
+            d[clave] = ya with { Kind = kind, Etiqueta = etiqueta };
+        else
+            d[clave] = new Ensenanza(-1, Humano: true, Atras: false, Cromo: false,
+                Selector: selector, Etiqueta: etiqueta, Kind: kind);
         GuardarEnsenanzas();
     }
 
@@ -1426,21 +1709,15 @@ public sealed class SurfaceMap
                 destinoDe[info.Selector] = new Hop(from, to, info);
         }
 
-        // DOS CAUSAS MEZCLADAS NO SE PUEDEN LEER. El primer nivel salía de dos sitios a la vez: lo
-        // DECLARADO —el usuario señalando, o el maestro mirando la pantalla— y lo DEDUCIDO contando
-        // apariciones. Viéndolo en pantalla no hay forma de saber cuál de los dos puso cada punto
-        // azul, así que tampoco de saber si la enseñanza funciona (2026-08-06, propuesto por el
-        // usuario: «no sabemos cuál es la causa del resultado que vemos»).
+        // AQUÍ YA NO SE DEDUCE NADA. El cromo salía de dos sitios a la vez —lo DECLARADO y lo
+        // CONTADO— y viéndolo en pantalla no había forma de saber cuál de los dos puso cada punto
+        // azul, ni por tanto de saber si la enseñanza funcionaba (2026-08-06). Se silenció con un
+        // interruptor mientras se medía; el 2026-08-08 el usuario pidió eliminarla del todo, y ya
+        // no hace falta: entre la persona, el maestro y los landmarks de la propia página, todo lo
+        // que es mobiliario acaba DECLARADO por alguien que lo sabe.
         //
-        // Mientras se construye la enseñanza, manda SOLO lo declarado. La deducción no se borra
-        // —sigue aquí y se vuelve a encender cambiando esto— porque es la que cubre las apps que
-        // nadie ha enseñado todavía; pero no puede estar opinando mientras se mide la otra.
-        var cromo = SoloLoDeclarado
-            ? new List<Hop>()
-            : destinoDe
-                .Where(kv => vistoDesde.TryGetValue(kv.Key, out var o) && o.Count >= 2)
-                .Select(kv => kv.Value)
-                .ToList();
+        // Lo que sigue debajo llena la lista SOLO con lo declarado.
+        var cromo = new List<Hop>();
 
         // LO DICHO A MANO NO ESPERA AL CONTADOR. El umbral de «visto desde dos pantallas» existe
         // para DEDUCIR qué es mobiliario fijo cuando nadie lo ha dicho. Cuando alguien —el usuario
