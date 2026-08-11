@@ -32,6 +32,47 @@ es presentación y diagnóstico.
 dynpro, ni la barra. Para SAP es Scripting API o nada. Detalles y trampas:
 [`windows-graph/CLAUDE.md`](windows-graph/CLAUDE.md).
 
+## Cómo se trabaja aquí: el flujo dirigido por especificación
+
+El repo ya lo hacía sin llamarlo así. [`tests/ContratoDelGrafo/Contrato.cs`](tests/ContratoDelGrafo/Contrato.cs)
+no es «un proyecto de tests»: es **la definición ejecutable de lo que el núcleo promete**, y
+[`docs/plan-plata-real.md`](docs/plan-plata-real.md) fue la primera spec escrita antes que su código
+— encontró un bug de meses (la promesa 19) que ninguna lectura del código había visto.
+
+**La regla, y no tiene excepciones: ninguna línea de producción entra antes que la promesa que la
+juzga.** Cada fase empieza con el contrato ROTO y termina con el contrato INTACTO.
+
+| Etapa | Skill | Deja |
+|---|---|---|
+| 1. Especificar | `/especifica` | `docs/specs/NNN-<slug>.md` con promesas numeradas |
+| 2. Partir en fases | `/fases` | la tabla de fases dentro de esa spec |
+| 3. Poner en rojo | `/promesas` | las promesas en `Contrato.cs`, ROJAS, antes del código |
+| 4. Implementar | `/implementa` | una fase → su promesa verde |
+| 5. Verificar | `/verifica` | `out\evidencia.md` con los cuatro niveles |
+| 6. Integrar | `/a-main` | PR con evidencia, y `main` sigue verde |
+
+Y atravesándolo todo: **cada `git push` que publique commits deja un aviso en `#miracle-updates`**
+con `/avisa` — qué entró, a qué rama y qué zona toca. Somos tres, y enterarse de un push cuando
+llega el conflicto es enterarse tarde.
+
+Las reglas completas viven en `.claude/rules/` y se cargan con el proyecto:
+
+@.claude/rules/flujo-sdd.md
+@.claude/rules/patrones-de-desarrollo.md
+@.claude/rules/ramas-y-commits.md
+@.claude/rules/compuerta-a-main.md
+@.claude/rules/nucleo-congelado.md
+@.claude/rules/aviso-en-slack.md
+
+Lo que separa una rama de `main` —los cuatro niveles, en orden de coste:
+
+```powershell
+.\scripts\verificar.ps1        # 1 compila · 2 el contrato · 3 escenarios (-Escenarios) · 4 a mano
+```
+
+Y en la nube, en cada PR: [`.github/workflows/contrato.yml`](.github/workflows/contrato.yml). Los
+escenarios NO corren allí y no es un olvido: abren apps de verdad sobre un escritorio real.
+
 ## Ramas: `<persona>/<que-hace>`
 
 Somos tres. Cada rama lleva delante el nombre de quien la abre — `jero`, `jose` o `pipe`, en
