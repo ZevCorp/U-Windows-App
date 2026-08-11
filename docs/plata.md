@@ -200,6 +200,28 @@ la app entera para el panel lateral, `/galería` para «Colección». §5.0 y §
 **Lo que NO arregla**: la identidad que ignora el estado (§5.3) y la separación rol/profundidad
 (§5.2) siguen haciendo falta igual.
 
+#### No hay un «grafo de acciones» dentro del nodo
+
+Se consideró y se **descartó** (2026-08-10). La pregunta era si las acciones de un nodo forman a
+su vez un grafo, ya que el asistente también las ejecutará navegando. Al buscar qué podría
+significar una arista entre dos acciones solo aparecen tres casos, y ninguno es un grafo nuevo:
+
+| Caso | Qué es en realidad |
+|---|---|
+| «Más opciones» → «Propiedades»; «Nuevo» → «Carpeta» | **Una ubicación que no reconocemos.** Un menú abierto es un sitio: entras, te mueves, escapas. Lo que lo hace parecer interior es que es efímero y depende de su padre — o sea, que un nodo necesita **dueño y vida**, que es el mismo campo de §5.1. Hoy esto se pierde o se inventa nodos basura (`uia://explorer.exe/ventana`, `uia://OpenWith.exe/ventana` aparecieron así). |
+| «Copiar» antes de «Pegar»; «Cortar» necesita selección | **Una dependencia, no un camino.** Recorrerla no lleva a ningún sitio. Modelarla como arista repetiría un nivel más abajo el error de §5.0. Es un **atributo** de la acción: «requiere selección», «requiere portapapeles». |
+| «Detalles» vs «Iconos grandes» | **El problema de identidad de §5.3**, no de acciones. Se arregla allí y desaparece aquí. |
+
+No se encontró contraejemplo: ni los asistentes de varios pasos ni las transacciones de SAP
+producen otra cosa. **O es una ubicación que no reconocemos, o es la identidad que ignora el
+estado.**
+
+Corolario sobre la visualización: **no reutilizar los niveles de la tira para las acciones.** El
+significado de la tira es «se alcanza desde cualquier parte»; el de una acción es «está aquí y no
+te mueve». Lo reutilizable no es la metáfora de niveles sino el cálculo que hay debajo —dueño +
+herencia—: «qué puedo hacer aquí» es la misma operación que «a dónde puedo saltar», con otra
+pregunta.
+
 **Cuándo hacerlo.** No antes de tener una línea base honesta con el modelo actual: rehacer el
 núcleo mientras se valida plata destruye la capacidad de atribuir la mejora, que es lo único que
 ha permitido distinguir plata de plata falsa las tres veces que ha pasado. Es el cambio más caro
