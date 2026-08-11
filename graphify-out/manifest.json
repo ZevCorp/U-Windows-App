@@ -485,8 +485,8 @@
     "semantic_hash": "1ba6aa004c899ebdbd55e31854e50b82"
   },
   "windows-client/src/Voice/GeminiLive.cs": {
-    "mtime": 1786207404.5180666,
-    "ast_hash": "ad6732dda1787a8562827ab5b3fe0e85",
+    "mtime": 1786406324.8485136,
+    "ast_hash": "b025148099628b69a991ed40b0968852",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/LiveAudio.cs": {

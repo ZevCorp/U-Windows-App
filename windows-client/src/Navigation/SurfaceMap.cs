@@ -1382,8 +1382,18 @@ public sealed class SurfaceMap
     /// clave: la promesa nº2 empezó a fallar porque devolvía selectores donde promete etiquetas
     /// (2026-08-10). Cambiar cómo se guarda algo no puede cambiar lo que se promete de ello.
     /// </remarks>
+    /// <remarks>
+    /// <paramref name="Kind"/> viaja aquí por la misma razón que el nivel: es una DECISIÓN de quien
+    /// audita, y una decisión tomada no puede volver a preguntarse. Antes, marcar algo como acción
+    /// escribía en las aristas que existían en ese instante y se olvidaba; entrar en una pantalla
+    /// nueva devolvía el mismo mobiliario a la lista de pendientes. Medido: «Retroceder poco» salía
+    /// clasificada en /inicio y sin clasificar en las otras cinco pantallas, y como la lista agrupa
+    /// por etiqueta, una sola aparición sin marcar devolvía las seis (2026-08-10). Vaciar la lista
+    /// costaba O(controles × pantallas), y en un explorador el número de pantallas es el número de
+    /// carpetas del disco: el criterio de terminado era inalcanzable por construcción.
+    /// </remarks>
     public sealed record Ensenanza(int Nivel, bool Humano, bool Atras = false, bool Cromo = false,
-        string Selector = "", string Etiqueta = "");
+        string Selector = "", string Etiqueta = "", string Kind = "");
 
     /// <summary>
     /// ¿Este control es el gesto de VOLVER de su app?
@@ -1507,6 +1517,10 @@ public sealed class SurfaceMap
             e.PorPersona = e.PorPersona || ens.Humano;
             e.EsCromo = ens.Cromo;
         }
+
+        // Y LA CLASIFICACIÓN, que es la otra mitad de lo mismo. Va aparte del nivel porque se
+        // declaran por separado: una acción no tiene nivel y no por eso deja de estar decidida.
+        if (ens != null && !ens.Atras && ens.Kind.Length > 0) e.KindDeclarado = ens.Kind;
     }
 
     /// <summary>
@@ -1524,10 +1538,82 @@ public sealed class SurfaceMap
             _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
 
         string clave = selector.Length > 0 ? selector : etiqueta;
-        if (nivel < 0) d.Remove(clave);
+        d.TryGetValue(clave, out var ya);
+
+        // LAS DOS DECLARACIONES COMPARTEN ENTRADA Y NO SE PISAN. Nivel y clasificación son cosas
+        // distintas dichas sobre la misma salida, y se dicen en momentos distintos: soltar el nivel
+        // no puede borrar que alguien ya decidió que eso era una acción, ni al revés.
+        if (nivel < 0)
+        {
+            // Soltar el nivel deja la entrada SOLO si aún dice algo — si no, sobra.
+            if (ya != null && ya.Kind.Length > 0)
+                d[clave] = ya with { Nivel = -1, Cromo = false };
+            else d.Remove(clave);
+        }
         else d[clave] = new Ensenanza(nivel,
-            humano || (d.TryGetValue(clave, out var ya) && ya.Humano),
-            Atras: false, Cromo: cromo, Selector: selector, Etiqueta: etiqueta);
+            humano || (ya?.Humano ?? false),
+            Atras: false, Cromo: cromo, Selector: selector, Etiqueta: etiqueta,
+            Kind: ya?.Kind ?? "");
+        GuardarEnsenanzas();
+    }
+
+    /// <summary>
+    /// Alguien decide QUÉ ES esta salida —navegación, acción— para toda la app, no para la pantalla
+    /// desde la que lo dijo. Espejo exacto de <see cref="FijarNivel"/>: toca lo que hay delante y
+    /// deja la enseñanza para lo que venga.
+    /// </summary>
+    public string ClasificarSalida(string app, string etiquetaOSelector, string kind)
+    {
+        string a = app.Trim();
+        string q = etiquetaOSelector.Trim();
+        string k = kind.Trim().ToLowerInvariant();
+        if (a.Length == 0 || q.Length == 0) return "falta la app o qué salida clasificar";
+
+        var tocadas = Edges().Where(e =>
+                AppDe(e.From).Equals(a, StringComparison.OrdinalIgnoreCase)
+                && (e.Info.Label.Equals(q, StringComparison.OrdinalIgnoreCase)
+                    || e.Info.Selector.Equals(q, StringComparison.Ordinal)))
+            .ToList();
+        if (tocadas.Count == 0) return $"no encuentro ninguna salida «{q}» en «{a}»";
+
+        // POR SELECTOR, que es lo que identifica. Y de paso resuelve las etiquetas plantilla: las
+        // cinco «Actualizar "X" (F5)» —una por carpeta visitada— son un solo control, y ya
+        // compartían uia:aid=refreshButton;ct=Button. Clasificar una las clasifica todas.
+        foreach (var sel in tocadas.Select(t => t.Info.Selector).Distinct(StringComparer.Ordinal))
+        {
+            if (sel.Length == 0) continue;
+            foreach (var (_, _, info) in tocadas.Where(t =>
+                string.Equals(t.Info.Selector, sel, StringComparison.Ordinal)))
+                info.KindDeclarado = k;
+            AprenderClase(a, tocadas.First(t => t.Info.Selector == sel).Info.Label, k, sel);
+        }
+        // Una salida sin selector solo puede declararse por su nombre: es todo lo que tiene.
+        foreach (var (_, _, info) in tocadas.Where(t => t.Info.Selector.Length == 0))
+        {
+            info.KindDeclarado = k;
+            AprenderClase(a, info.Label, k, "");
+        }
+
+        Version++;
+        Save();
+        int cuantas = tocadas.Count;
+        return $"«{tocadas[0].Info.Label}» queda clasificada como «{k}» en «{a}» "
+             + $"({cuantas} aparición/es). Queda APRENDIDA: las apariciones que salgan en otras "
+             + "pantallas nacerán ya clasificadas, no hay que repetirlo.";
+    }
+
+    private void AprenderClase(string app, string etiqueta, string kind, string selector)
+    {
+        if (app.Length == 0 || etiqueta.Length == 0) return;
+        if (!_ensenanzas.TryGetValue(app, out var d))
+            _ensenanzas[app] = d = new Dictionary<string, Ensenanza>(StringComparer.OrdinalIgnoreCase);
+
+        string clave = selector.Length > 0 ? selector : etiqueta;
+        if (d.TryGetValue(clave, out var ya))
+            d[clave] = ya with { Kind = kind, Etiqueta = etiqueta };
+        else
+            d[clave] = new Ensenanza(-1, Humano: true, Atras: false, Cromo: false,
+                Selector: selector, Etiqueta: etiqueta, Kind: kind);
         GuardarEnsenanzas();
     }
 

@@ -46,6 +46,7 @@ internal static class Contrato
         Prueba("8. guardar y cargar no pierde nada: nodos, aristas, niveles, enseñanzas", Persistencia);
         Prueba("9. una ruta jamás incluye un tramo que no sabe recorrerse", RutaSinHuecos);
         Prueba("10. olvidar una app no toca a las demás", OlvidarPorApp);
+        Prueba("11. clasificar es decidir una vez: la aparición nueva nace ya clasificada", ClaseSePropaga);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -244,6 +245,50 @@ internal static class Contrato
             "…y el de las DEMÁS apps queda intacto: el borrado es un bisturí, no una escoba");
         Debe(m.EnsenanzasDe("fake.exe").Any(),
             "la enseñanza de la app olvidada sobrevive: es aprendizaje, no terreno");
+    }
+
+    private static void ClaseSePropaga(SurfaceMap m)
+    {
+        // El caso medido el 2026-08-10: el arquitecto marcó «Nuevo» como acción ocho veces —una por
+        // pantalla— y al entrar en OneDrive le reaparecieron 27 controles ya clasificados. La
+        // clasificación se escribía en las apariciones de ese instante, así que vaciar la lista de
+        // pendientes costaba O(controles × pantallas); en un explorador, el número de pantallas es
+        // el número de carpetas del disco, y el criterio de terminado era inalcanzable.
+        // POR NOMBRE, como la promesa 10 y por la misma razón: este contrato juzga también a la v0,
+        // que no conoce ClasificarSalida. Un núcleo viejo no promete lo que no sabe hacer.
+        var clasificar = typeof(SurfaceMap).GetMethod("ClasificarSalida");
+        if (clasificar == null)
+        {
+            Console.WriteLine("   (este núcleo no tiene ClasificarSalida: promesa no aplicable, no rota)");
+            return;
+        }
+
+        m.ObserveExits("uia://fake.exe/inicio",
+            new[] { ("Nuevo", "Button", "uia:name=Nuevo;ct=Button", Array.Empty<string>(), "herramientas") });
+        var r = (string)clasificar.Invoke(m, new object[] { "fake.exe", "Nuevo", "accion" })!;
+        Debe(!r.StartsWith("no encuentro"), "clasificar encuentra la salida que está delante");
+        Debe(m.Edges().Single(e => e.Info.Label == "Nuevo").Info.KindDeclarado == "accion",
+            "la aparición de esta pantalla queda clasificada");
+
+        // Tres carpetas más adentro aparece el MISMO botón. Es el mismo control, y ya se decidió.
+        m.ObserveExits("uia://fake.exe/muy/adentro",
+            new[] { ("Nuevo", "Button", "uia:name=Nuevo;ct=Button", Array.Empty<string>(), "herramientas") });
+        Debe(m.Edges().Where(e => e.Info.Label == "Nuevo").All(e => e.Info.KindDeclarado == "accion"),
+            "…y la que nace en otra pantalla nace YA clasificada: no se vuelve a preguntar");
+
+        // Y sobrevive al disco, como el nivel: una decisión no se pierde al cerrar la app.
+        m.Save();
+        var otraVez = SurfaceMap.Load();
+        otraVez.ObserveExits("uia://fake.exe/otra/mas",
+            new[] { ("Nuevo", "Button", "uia:name=Nuevo;ct=Button", Array.Empty<string>(), "herramientas") });
+        Debe(otraVez.Edges().Where(e => e.Info.Label == "Nuevo").All(e => e.Info.KindDeclarado == "accion"),
+            "la clasificación es aprendizaje: sobrevive a cargar el mapa de nuevo");
+
+        // Nivel y clase se dicen por separado y no se pisan: son dos cosas sobre la misma salida.
+        otraVez.FijarNivel("fake.exe", "Nuevo", 1);
+        var puerta = otraVez.Edges().First(e => e.Info.Label == "Nuevo");
+        Debe(puerta.Info.NivelNav == 1 && puerta.Info.KindDeclarado == "accion",
+            "poner nivel no borra la clasificación, ni al revés");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

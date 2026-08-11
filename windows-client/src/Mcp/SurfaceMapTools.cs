@@ -1704,7 +1704,13 @@ public sealed class SurfaceMapTools
                         && !e.Info.Nivel.StartsWith("contenido", StringComparison.OrdinalIgnoreCase)
                         && !e.Info.Nivel.StartsWith("lista", StringComparison.OrdinalIgnoreCase)
                         && !_map.EsGestoDeAtras(app, e.Info.Label, e.Info.Selector))
-            .GroupBy(e => e.Info.Label, StringComparer.OrdinalIgnoreCase)
+            // POR SELECTOR, NO POR ETIQUETA. «Actualizar "Inicio" (F5)», «Actualizar "Galería"
+            // (F5)», «Actualizar "Common Files" (F5)»… son UN botón cuyo nombre lleva interpolada
+            // la carpeta actual, y contaban como cinco pendientes distintos; con cincuenta carpetas
+            // visitadas serían cincuenta. Ya compartían uia:aid=refreshButton;ct=Button — la
+            // identidad estaba ahí, solo se estaba mirando el nombre (2026-08-10, lo reportó él).
+            .GroupBy(e => e.Info.Selector.Length > 0 ? e.Info.Selector : e.Info.Label,
+                     StringComparer.Ordinal)
             .OrderByDescending(g => g.Count()).Take(40).ToList();
 
         if (pantallas.Count == 0 && puertas.Count == 0)
@@ -1719,7 +1725,14 @@ public sealed class SurfaceMapTools
         foreach (var g in puertas)
         {
             var i = g.First().Info;
-            sb.AppendLine($"  «{g.Key}» ({i.ControlType})"
+            // Se agrupa por selector pero se DICE el nombre: agrupar por identidad no puede
+            // convertir la respuesta en una lista de selectores ilegibles. Y cuando el nombre varía
+            // entre apariciones —los «Actualizar "X"»— se avisa, porque si no, pedir la salida por
+            // ese nombre solo acertaría en una de ellas.
+            var nombres = g.Select(x => x.Info.Label).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            sb.AppendLine($"  «{i.Label}» ({i.ControlType})"
+                + (nombres.Count > 1 ? $" · OJO: el nombre cambia según la pantalla ({nombres.Count} variantes); "
+                                       + $"clasifícala por su selector {i.Selector}" : "")
                 + (i.Nivel.Length > 0 ? $" · grupo: {i.Nivel}" : " · sin grupo")
                 + $" · vista en {g.Count()} pantalla(s)");
         }
@@ -1739,23 +1752,22 @@ public sealed class SurfaceMapTools
     /// El campo <see cref="SurfaceMap.EdgeInfo.Kind"/> ya existía para esto y estaba sin usar: no
     /// hace falta estructura nueva, hacía falta que alguien lo dijera.
     /// </summary>
+    /// <remarks>
+    /// Clasificar es DECIDIR, y una decisión se toma una vez. Esto escribía solo en las apariciones
+    /// que existían en ese instante, así que cada pantalla nueva devolvía el mismo mobiliario a la
+    /// lista de pendientes: el arquitecto marcó «Nuevo» ocho veces y al entrar en OneDrive le
+    /// reaparecieron 27 controles ya clasificados (2026-08-10). Ahora vive donde vive el nivel —en
+    /// la enseñanza, indexada por selector— y se repone sola en cada aparición nueva.
+    /// </remarks>
     private string Clasificar(string app, string salida, string clase)
     {
         if (salida.Length == 0) return "falta `exit`: qué salida quieres clasificar";
         string k = clase.Length > 0 ? clase.Trim().ToLowerInvariant() : "accion";
 
-        var tocadas = _map.Edges().Where(e =>
-                SurfaceMap.AppDe(e.From).Equals(app, StringComparison.OrdinalIgnoreCase)
-                && (e.Info.Label.Equals(salida, StringComparison.OrdinalIgnoreCase)
-                    || e.Info.Selector.Equals(salida, StringComparison.Ordinal)))
-            .ToList();
-        if (tocadas.Count == 0) return $"no encuentro ninguna salida «{salida}» en «{app}»";
-
-        foreach (var (_, _, info) in tocadas) info.KindDeclarado = k;
-        LogBus.Log("mapa-mcp", $"«{salida}» clasificada como «{k}» ({tocadas.Count} aparición/es): "
-            + "sigue en el mapa para ejecutarla, deja de contar como estructura");
-        return $"«{tocadas[0].Info.Label}» queda clasificada como «{k}» en «{app}» "
-             + $"({tocadas.Count} aparición/es). Sigue en el mapa: el asistente podrá ejecutarla.";
+        string r = _map.ClasificarSalida(app, salida, k);
+        LogBus.Log("mapa-mcp", $"«{salida}» clasificada como «{k}»: sigue en el mapa para "
+            + "ejecutarla, deja de contar como estructura, y queda aprendida para toda la app");
+        return r;
     }
 
     /// <summary>
