@@ -134,10 +134,25 @@ public sealed class MapaVivo : IDisposable
                 // SE BUSCA EN LA PANTALLA ANTERIOR, no en esta: el clic ocurrió ALLÍ. Buscarlo en
                 // lo que se ve ahora acertaría solo cuando el elemento existe en las dos —el
                 // mobiliario— y fallaría justo en lo que de verdad navega.
-                var elDelNucleo = clic == null ? null
+                // POR ETIQUETA **Y TIPO**, Y SOLO SI ES INEQUÍVOCO. Buscar solo por etiqueta acuñó
+                // un camino falso que costó una prueba entera: en el explorador de Windows 11 la
+                // celda del nombre de CADA FILA se llama «Nombre» —el nombre de la columna, no el
+                // del archivo—, así que al hacer doble clic en una carpeta el clic se resuelve a
+                // «Nombre», y en esa pantalla hay dos: la cabecera de columna (SplitButton) y la
+                // celda (Edit). Se eligió la primera, y el grafo aprendió que «para llegar a
+                // U-ROLLBACK, pulsa la cabecera Nombre». Al navegar hacía exactamente eso: pulsar
+                // el filtro, una y otra vez (2026-08-12, lo midió el usuario).
+                //
+                // Si tras filtrar por tipo sigue habiendo varios, NO SE ATRIBUYE. Una etiqueta que
+                // nombra a varias cosas en la misma pantalla no es una identidad, y adivinar entre
+                // ellas es justo cómo nació la arista falsa. Sin camino se puede seguir explorando;
+                // con un camino equivocado, el navegador va a pulsar lo que no es para siempre.
+                var candidatos = clic == null ? new List<Nucleo.Alcanzable>()
                     : _grafo.DesdeAqui(_anterior)
-                        .FirstOrDefault(a => a.Que.Etiqueta.Equals(clic.Label, StringComparison.OrdinalIgnoreCase));
-                string selectorObservado = elDelNucleo?.Que.Selector ?? "";
+                        .Where(a => a.Que.Etiqueta.Equals(clic.Label, StringComparison.OrdinalIgnoreCase)
+                                 && a.Que.Tipo.Equals(clic.ControlType, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                string selectorObservado = candidatos.Count == 1 ? candidatos[0].Que.Selector : "";
 
                 if (clic != null && reciente && salioDeAlli && mismaApp && selectorObservado.Length > 0
                     && _grafo.Cruzar(_anterior, selectorObservado, aqui))
@@ -157,7 +172,10 @@ public sealed class MapaVivo : IDisposable
                                     + "— o tardamos, o ese clic no se registró y estamos viendo uno anterior)"
                         : !salioDeAlli ? $"(el clic «{clic.Label}» fue en «{clic.Process}», no en donde estábamos)"
                         : !mismaApp ? "(es otra app: fue un cambio de ventana, no navegación)"
-                        : $"(el núcleo no conoce «{clic.Label}» ({clic.ControlType}) en esa pantalla)";
+                        : candidatos.Count > 1
+                            ? $"(«{clic.Label}» ({clic.ControlType}) nombra a {candidatos.Count} cosas en esa "
+                            + "pantalla: no es una identidad, y adivinar acuñaría un camino falso)"
+                            : $"(el núcleo no conoce «{clic.Label}» ({clic.ControlType}) en esa pantalla)";
                     LogBus.Log("mapa-vivo", $"salto de {Corto(_anterior)} a {Corto(aqui)} SIN atribuir {porQue}");
                 }
             }
