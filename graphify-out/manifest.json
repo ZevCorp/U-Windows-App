@@ -355,8 +355,8 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786458394.6635532,
-    "ast_hash": "c78e4c9b4b23c93379c066baa826a939",
+    "mtime": 1786494737.6838176,
+    "ast_hash": "81603dae8bec32f854609e265c34d5e0",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/GraphHealthText.cs": {
@@ -770,8 +770,8 @@
     "semantic_hash": ""
   },
   "agente-arquitecto/arquitecto.mjs": {
-    "mtime": 1786458394.6539776,
-    "ast_hash": "e77c1407245426dcde13660b1ff7c6e8",
+    "mtime": 1786493859.9694054,
+    "ast_hash": "1aae2f2967d1a3523072deddc86164e9",
     "semantic_hash": ""
   },
   "agente-arquitecto/package.json": {
@@ -815,8 +815,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Arquitecto.cs": {
-    "mtime": 1786226995.7129743,
-    "ast_hash": "e9e6c7a525327bf99287663f31b6a04e",
+    "mtime": 1786494747.4101145,
+    "ast_hash": "4101e27759a21f7960f947cf8b89ff51",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/EscenarioCi.cs": {
@@ -855,8 +855,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Diagnostics/ConsolaViva.cs": {
-    "mtime": 1786457716.4992266,
-    "ast_hash": "6cd5bfbb1fa1b5b392733a708315db8b",
+    "mtime": 1786494671.4856813,
+    "ast_hash": "f23da395e4d1a6c288fd409f07455854",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/JerarquiaWeb.cs": {

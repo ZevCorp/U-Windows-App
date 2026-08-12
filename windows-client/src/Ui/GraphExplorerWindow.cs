@@ -465,7 +465,11 @@ public sealed class GraphExplorerWindow : Window
             Foreground = Brushes.White,
             BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand,
-            ToolTip = "Dibujo CLÁSICO (5 fuentes) vs. dibujo fiel al mapa · el mismo grafo, dos lecturas",
+            // El nombre viejo —«dibujo clásico»— describía dos vistas, y ahora son cinco: decía qué
+            // hacía el botón el día que nació, no lo que hace (2026-08-11, lo notó el usuario).
+            ToolTip = "Cambiar de VISTA sobre el mismo grafo · ⚖ plata declarada → ⚗ plata real "
+                    + "(derivada) → ◈ clásico (referencia) → ⛁ bronce (crudo) → ◌ oculto"
+                    + "\nMantener pulsado: llevarlo al otro monitor",
         };
         // PULSAR CICLA LAS VISTAS; MANTENER PULSADO SE LO LLEVA AL OTRO MONITOR. Dos gestos en un
         // botón porque son la misma pregunta —«qué quiero ver y dónde»— y porque el sitio donde
@@ -2629,6 +2633,13 @@ public sealed class GraphExplorerWindow : Window
             prof = ProfundidadClasica.Calcular(_map, appActual, raiz, centro, pisados, traza,
                 NivelDe, declarados, _porQueDeclarado, ref _huellaPuente);
             _profDeclarada = declarados;
+            // EL RÓTULO TAMBIÉN AQUÍ, porque esta rama se va sin pasar por el final. Sin esto el
+            // título se quedaba con el de la vista ANTERIOR —«PLATA REAL», que es la que precede a
+            // CLÁSICO en el ciclo—, así que el botón mostraba el dibujo clásico bajo un letrero que
+            // prometía otra cosa, y el ciclo parecía tener dos «plata real» seguidas (2026-08-11,
+            // observado por el usuario). Un dibujo que dice ser otro es exactamente lo que este
+            // trabajo persigue.
+            RotularVista(appActual, 0);
             DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, 0);
             return;
         }
@@ -2725,9 +2736,24 @@ public sealed class GraphExplorerWindow : Window
             _porQueDeclarado.Clear();
         }
 
-        // EL RÓTULO DICE QUÉ SE ESTÁ MIRANDO, siempre. Y en plata, además, cuánto falta: el número
-        // de «sin situar» es la medida de avance, y tenerlo en pantalla evita ir al log para saber
-        // si una prueba mejoró o empeoró.
+        RotularVista(appActual, sinSituar);
+
+        DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, sinSituar);
+    }
+
+    /// <summary>
+    /// EL RÓTULO DICE QUÉ SE ESTÁ MIRANDO, siempre. Y en plata, además, cuánto falta: el número de
+    /// «sin situar» es la medida de avance, y tenerlo en pantalla evita ir al log para saber si una
+    /// prueba mejoró o empeoró.
+    /// </summary>
+    /// <remarks>
+    /// EN UN SITIO, no en cada rama que dibuja. Vivía al final de <c>DibujarGrafo</c>, y la rama
+    /// del modo clásico se va antes con un <c>return</c>: el título se quedaba con el de la vista
+    /// anterior. Copiarlo en las dos habría arreglado el síntoma y dejado dos definiciones de lo
+    /// mismo, que es como vuelven estos fallos.
+    /// </remarks>
+    private void RotularVista(string appActual, int sinSituar)
+    {
         _rotuloVista.Text = _vista switch
         {
             VistaGrafo.Plata => $"PLATA · {appActual} · {_profDeclarada.Count} situada(s)"
@@ -2739,6 +2765,10 @@ public sealed class GraphExplorerWindow : Window
                 + $"{pl.M.SinCruzar} sin cruzar · {pl.M.Desacuerdos} desacuerdo(s)"
                 + (pl.M.DeclaradasSinEvidencia > 0
                     ? $" · {pl.M.DeclaradasSinEvidencia} declarada(s) SIN EVIDENCIA" : ""),
+            // SIN el `when`, esta rama también cubre el caso de que la derivación aún no se haya
+            // pedido: antes caía al `_ => ""` y la vista se quedaba MUDA, que desde fuera es
+            // indistinguible de un título pegado.
+            VistaGrafo.PlataReal => $"PLATA REAL · {appActual} · (derivando…)",
             VistaGrafo.Clasico => $"CLÁSICO (referencia) · {appActual}",
             VistaGrafo.Bronce => $"BRONCE · {appActual} · lo observado en crudo, sin jerarquía",
             _ => "",
@@ -2751,8 +2781,6 @@ public sealed class GraphExplorerWindow : Window
             VistaGrafo.Clasico => Color.FromArgb(0xEE, 0xBA, 0x68, 0xC8),
             _ => Color.FromArgb(0xEE, 0xC8, 0xA6, 0x7F),
         });
-
-        DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, sinSituar);
     }
 
     /// <summary>
