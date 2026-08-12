@@ -28,19 +28,45 @@ internal static class Contrato
     /// <summary>El MinDwell del mapa es 1200 ms; se espera con margen para no medir la casualidad.</summary>
     private const int Dwell = 1450;
 
+    /// <summary>
+    /// PROMESAS incumplidas, no aserciones. `Debe()` sumaba aquí por cada condición falsa y `Main`
+    /// devolvía ese número diciendo «N promesa(s) incumplida(s)»: una promesa con cuatro `Debe`
+    /// rotos contaba cuatro. Medido en el contrato del núcleo el 2026-08-12 —donde vive la misma
+    /// clase de error—: un solo sabotaje tumbó 2 promesas y el arnés reportó 3.
+    ///
+    /// Quien lee este número es la compuerta: `verificar.ps1` calcula `$fallos - $pendientes` y
+    /// `contrato.yml` publica `total - codigo` como «verdes». Con el recuento por aserción, el
+    /// primero **puede salir negativo** y el segundo publica un dato falso. Es el aprendizaje nº10
+    /// —«el denominador es el plan»— cometido en el numerador.
+    /// </summary>
     private static int _fallos;
 
     /// <summary>De las incumplidas, cuántas lo están porque su código aún no se ha escrito. Se
     /// cuentan aparte para que el rojo del desarrollo no se confunda con una regresión.</summary>
     private static int _pendientes;
 
+    /// <summary>Cuántas se juzgaron. El total lo dice quien sabe contarlo, no un grep del log.</summary>
+    private static int _promesas;
+
+    /// <summary>¿La promesa EN CURSO ya falló? Se sigue evaluando —queremos ver las cuatro
+    /// aserciones rotas, no sólo la primera— pero cuentan como UNA promesa incumplida.</summary>
+    private static bool _rota;
+
+    /// <summary>¿…y lo está porque su capacidad no existe todavía? Ver <see cref="Pendiente"/>.</summary>
+    private static bool _pendienteDeEstaPromesa;
+
     private static string _raiz = "";
 
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
         _raiz = Path.Combine(Path.GetTempPath(), "u-contrato", DateTime.Now.ToString("HHmmss"));
         Console.OutputEncoding = System.Text.Encoding.UTF8;
+
+        // El juez juzgándose a sí mismo, antes de juzgar a nadie. Un arnés que sólo se ha visto en
+        // verde es indistinguible de uno que devuelve verde siempre — y este arnés ya dijo una vez
+        // «CONTRATO ROTO: 10 promesas» sin haber probado nada (2026-08-08).
+        if (args.Contains("--autoprueba")) return Autoprueba();
 
         Prueba("1. un sitio se confirma tras quedarse; pasar de largo no crea nodo", DwellYPasoDeLargo);
         Prueba("2. la enseñanza sobrevive a borrar el grafo y se reaplica sola", EnsenanzaSobrevive);
@@ -75,7 +101,26 @@ internal static class Contrato
         Prueba("19. el archivo del bronce no contiene plata", ElDiscoNoMezcla);
         Prueba("20. una sección alcanzada solo por el mobiliario sigue teniendo hijos", ElCromoNoCortaLaRama);
 
+        return Resumir();
+    }
+
+    /// <summary>
+    /// La línea que los scripts LEEN, en vez de grepear el log.
+    ///
+    /// `verificar.ps1` y `contrato.yml` contaban los pendientes con
+    /// `Select-String -SimpleMatch "PENDIENTE"`, que es **case-insensitive por defecto**: se comía
+    /// la propia línea de resumen («…de ellas PENDIENTES…») y cualquier «pendiente» en minúscula de
+    /// otro texto. El recuento salía inflado, y con él la rama de `verificar.ps1` que trata
+    /// `$fallos -eq $pendientes` como «fase intermedia» — es decir, **una regresión podía pasar por
+    /// pendiente y no bloquear**. Era el único de los huecos del arnés que daba verde falso.
+    ///
+    /// Un número lo dice quien sabe contarlo.
+    /// </summary>
+    private static int Resumir()
+    {
         Console.WriteLine();
+        Console.WriteLine($"CONTRATO: {_promesas} promesas, {_promesas - _fallos} verdes, "
+                        + $"{_fallos} incumplidas, {_pendientes} pendientes");
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
                 + "Es el rojo esperado mientras se implementa, no una regresión.)");
@@ -83,6 +128,38 @@ internal static class Contrato
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
             : $"CONTRATO ROTO: {_fallos} promesa(s) incumplida(s). El cambio no puede entrar así.");
         return _fallos;
+    }
+
+    /// <summary>
+    /// Cuatro promesas de mentira con un resultado conocido: una verde, una con CUATRO aserciones
+    /// falsas, una que revienta y una PENDIENTE. El arnés tiene que salir con **3** —tres promesas
+    /// incumplidas, una de ellas pendiente— y no con 6, que es lo que sumaría contando aserciones.
+    ///
+    /// Sin esto, arreglar el contador sería el vicio que el contador tiene: dar por bueno un número
+    /// porque lo escribió quien lo iba a leer. Corre en un segundo y no toca el núcleo.
+    /// </summary>
+    private static int Autoprueba()
+    {
+        Console.WriteLine("AUTOPRUEBA DEL ARNÉS (cuatro promesas de mentira, resultado conocido)\n");
+
+        Prueba("A. verde", _ => Debe(true, "esto se cumple"));
+        Prueba("B. una promesa con CUATRO aserciones rotas", _ =>
+        {
+            Debe(false, "la primera");
+            Debe(false, "la segunda");
+            Debe(false, "la tercera");
+            Debe(false, "la cuarta");
+        });
+        Prueba("C. una promesa que revienta", _ => throw new InvalidOperationException("a propósito"));
+        Prueba("D. una promesa pendiente", _ => Pendiente("UnaCapacidadQueNoExiste", "99"));
+
+        Console.WriteLine();
+        bool bien = _promesas == 4 && _fallos == 3 && _pendientes == 1;
+        Console.WriteLine(bien
+            ? "✔ EL ARNÉS SABE CONTAR: 4 promesas, 3 incumplidas, 1 pendiente — no 6 aserciones."
+            : $"✘ EL ARNÉS NO SABE CONTAR: dijo {_promesas} promesas, {_fallos} incumplidas y "
+              + $"{_pendientes} pendientes; esperaba 4, 3 y 1. Todo veredicto suyo es sospechoso.");
+        return bien ? 0 : 1;
     }
 
     // ── Las promesas ─────────────────────────────────────────────────────────
@@ -603,8 +680,8 @@ internal static class Contrato
 
     private static void Pendiente(string capacidad, string fase)
     {
-        _fallos++;
-        _pendientes++;
+        _rota = true;
+        _pendienteDeEstaPromesa = true;
         Console.WriteLine($"   ⧗ PENDIENTE: «{capacidad}» todavía no existe (fase {fase} del plan). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar.");
     }
@@ -618,11 +695,13 @@ internal static class Contrato
         Directory.CreateDirectory(dir);
         Environment.SetEnvironmentVariable("U_DATA_DIR", dir);
 
-        int antes = _fallos;
+        _promesas++;
+        _rota = false;
+        _pendienteDeEstaPromesa = false;
         try { cuerpo(SurfaceMap.Load()); }
         catch (Exception e)
         {
-            _fallos++;
+            _rota = true;
             // LA CADENA ENTERA, no solo el mensaje de arriba. Un TypeInitializationException dice
             // «el inicializador de tipo de X lanzó una excepción» y se guarda para sí POR QUÉ, que
             // es lo único que sirve: las diez promesas fallaron con ese texto y no se podía saber
@@ -633,13 +712,24 @@ internal static class Contrato
                 Console.WriteLine($"   ✘ {x.GetType().Name}: {x.Message}");
             Console.WriteLine($"     en {e.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}");
         }
-        Console.WriteLine($"{(_fallos == antes ? "✔" : "✘")} {nombre}");
+
+        // UNA promesa incumplida, aunque hayan caído cuatro de sus aserciones. Y si lo está porque
+        // su capacidad no existe, además cuenta como pendiente — sigue siendo incumplida: una
+        // promesa sin código que dijera «no aplicable» se sumaría al verde, y el contrato pasaría a
+        // certificar el vacío.
+        if (_rota) _fallos++;
+        if (_pendienteDeEstaPromesa) _pendientes++;
+        Console.WriteLine($"{(_rota ? "✘" : "✔")} {nombre}");
     }
 
+    /// <summary>
+    /// Marca la promesa en curso como rota y SIGUE. No suma al total: eso lo hace <see cref="Prueba"/>
+    /// una sola vez, porque cuatro aserciones rotas siguen siendo una promesa incumplida.
+    /// </summary>
     private static void Debe(bool condicion, string promesa)
     {
         if (condicion) return;
-        _fallos++;
+        _rota = true;
         Console.WriteLine($"   ✘ {promesa}");
     }
 }
