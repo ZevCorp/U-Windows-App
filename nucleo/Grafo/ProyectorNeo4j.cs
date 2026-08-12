@@ -25,6 +25,24 @@ public sealed class ProyectorNeo4j : IDisposable
     private string _ultimaHuella = "";
     private bool _yaAvise;
 
+    /// <summary>
+    /// Lo último que se escribió de CADA ubicación. Es lo que permite escribir solo lo que cambió
+    /// en vez de rehacer el grafo entero.
+    /// </summary>
+    private readonly Dictionary<string, string> _huellaPorUbicacion = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// UNA PROYECCIÓN A LA VEZ. Sin esto, el latido de 900 ms disparaba una escritura nueva antes de
+    /// que terminara la anterior: con 3.868 elementos cada una tardaba segundos, se solapaban, y
+    /// Neo4j las rechazaba por INTERBLOQUEO —310 fallos medidos en un rato—. Las escrituras
+    /// perdidas dejaban datos viejos, y el visor mostraba una pantalla donde no estabas.
+    ///
+    /// Se DESCARTA la que llega mientras hay otra en curso, no se encola: si el estado volvió a
+    /// cambiar, el siguiente latido lo recogerá igual, y una cola solo serviría para pintar con
+    /// retraso una foto que ya caducó.
+    /// </summary>
+    private int _escribiendo;
+
     /// <summary>Lo que se dice cuando algo va mal. Se inyecta para no atar el núcleo a ningún log.</summary>
     public Action<string>? Cuenta { get; set; }
 
@@ -58,77 +76,67 @@ public sealed class ProyectorNeo4j : IDisposable
     {
         if (grafo.Version == _ultimaVersion) return false;
 
-        // MOVERSE ES BARATO Y PASA TODO EL RATO. Reescribir el grafo entero cada vez que alguien
-        // cambia de ventana no escala: con seis mil nodos acumulados, cada pasada mandaba un JSON
-        // de varios megas, el cliente cortaba a los cinco segundos y Neo4j se quedaba registrando
-        // «Early EOF» hasta atascarse (2026-08-12, medido: el servidor dejó de responder).
-        //
-        // Si lo ÚNICO que cambió es dónde estamos, se manda una consulta de dos líneas. El volcado
-        // completo se reserva para cuando cambió el contenido del grafo, que es mucho menos
-        // frecuente. Las dos escriben lo mismo; lo que cambia es cuánto se envía.
-        bool soloNosMovimos = _ultimaVersion >= 0
-                           && _ultimaHuella.Length > 0
-                           && _ultimaHuella == HuellaDeContenido(grafo);
-        _ultimaVersion = grafo.Version;
-
-        if (soloNosMovimos)
+        // UNA A LA VEZ. Si hay otra escribiendo, esta se descarta: el siguiente latido recogerá el
+        // estado igual, y encolarlas solo serviría para pintar con retraso una foto ya caducada.
+        if (Interlocked.Exchange(ref _escribiendo, 1) == 1) return false;
+        try
         {
-            var mover = new
+            _ultimaVersion = grafo.Version;
+
+            // SOLO SE ESCRIBE LO QUE CAMBIÓ. Antes esto borraba el grafo entero y lo reescribía en
+            // cada cambio. Con 3.868 elementos cada pasada tardaba segundos, el latido de 900 ms
+            // disparaba la siguiente antes de que acabara la anterior, y Neo4j las rechazaba por
+            // interbloqueo: 310 fallos medidos, y el visor enseñando una pantalla donde no estabas
+            // (2026-08-12, lo vio el usuario).
+            //
+            // Ahora se compara ubicación por ubicación y se manda solo la que se movió — que en el
+            // caso normal es UNA, la de delante. No hace falta borrar nada en el camino caliente:
+            // el núcleo nunca quita elementos de una ubicación (observar no borra), así que un
+            // MERGE basta. Vaciar el grafo entero tiene su propio botón, que sí borra.
+            var cambiadas = new List<string>();
+            foreach (string u in grafo.Ubicaciones())
             {
-                statements = new object[]
-                {
-                    new
-                    {
-                        statement = """
-                        MATCH (p:Ubicacion {actual:true}) SET p.actual = false
-                        WITH count(*) AS _
-                        MATCH (n:Ubicacion {id:$aqui}) SET n.actual = true
-                        """,
-                        parameters = new { aqui = grafo.Aqui },
-                    },
-                },
-            };
-            return Mandar(JsonSerializer.Serialize(mover));
-        }
+                string h = HuellaDeUbicacion(grafo, u);
+                if (_huellaPorUbicacion.TryGetValue(u, out var ya) && ya == h) continue;
+                _huellaPorUbicacion[u] = h;
+                cambiadas.Add(u);
+            }
 
-        _ultimaHuella = HuellaDeContenido(grafo);
-
-        var ubicaciones = grafo.Ubicaciones()
-            .Select(u => new { id = u, app = Grafo.AppDe(u), actual = u == grafo.Aqui })
-            .ToList();
-
-        var filas = new List<object>();
-        foreach (string u in grafo.Ubicaciones())
-            foreach (var a in grafo.DesdeAqui(u))
-                filas.Add(new
-                {
-                    donde = u,
-                    app = Grafo.AppDe(u),
-                    sel = a.Que.Selector,
-                    etq = a.Que.Etiqueta,
-                    tipo = a.Que.Tipo,
-                    vivo = a.Vivo,
-                    destino = a.Destino,
-                });
-
-        var cypher = new
-        {
-            statements = new object[]
+            var declaraciones = new List<object>
             {
-                // BORRAR Y REESCRIBIR. Es más caro que actualizar en su sitio y es lo correcto: con
-                // actualizaciones parciales, un elemento que desaparece del grafo se queda para
-                // siempre en la pantalla de Neo4j, y entonces el visor miente igual que mentía el
-                // dibujo anterior.
-                new { statement = "MATCH (n) WHERE n:Ubicacion OR n:Elemento DETACH DELETE n" },
+                // DÓNDE ESTAMOS, siempre y aparte: es lo que más cambia y lo más barato de escribir.
                 new
                 {
                     statement = """
-                    UNWIND $ubis AS u
-                      MERGE (p:Ubicacion {id:u.id}) SET p.app = u.app, p.actual = u.actual
+                    MATCH (p:Ubicacion {actual:true}) WHERE p.id <> $aqui SET p.actual = false
+                    WITH count(*) AS _
+                    MERGE (n:Ubicacion {id:$aqui}) SET n.actual = true, n.app = $app
                     """,
-                    parameters = new { ubis = ubicaciones },
+                    parameters = new { aqui = grafo.Aqui, app = Grafo.AppDe(grafo.Aqui) },
                 },
-                new
+            };
+
+            if (cambiadas.Count > 0)
+            {
+                var filas = new List<object>();
+                foreach (string u in cambiadas)
+                    foreach (var a in grafo.DesdeAqui(u))
+                        filas.Add(new
+                        {
+                            donde = u, app = Grafo.AppDe(u),
+                            sel = a.Que.Selector, etq = a.Que.Etiqueta, tipo = a.Que.Tipo,
+                            vivo = a.Vivo, destino = a.Destino,
+                        });
+
+                declaraciones.Add(new
+                {
+                    statement = """
+                    UNWIND $ubis AS u
+                      MERGE (p:Ubicacion {id:u.id}) SET p.app = u.app
+                    """,
+                    parameters = new { ubis = cambiadas.Select(u => new { id = u, app = Grafo.AppDe(u) }) },
+                });
+                declaraciones.Add(new
                 {
                     statement = """
                     UNWIND $filas AS f
@@ -142,75 +150,21 @@ public sealed class ProyectorNeo4j : IDisposable
                       MERGE (e)-[:LLEVA_A]->(d)
                     """,
                     parameters = new { filas },
-                },
-            },
-        };
+                });
+            }
 
-        return Mandar(JsonSerializer.Serialize(cypher));
+            _ultimaHuella = HuellaDeContenido(grafo);
+            return Mandar(JsonSerializer.Serialize(new { statements = declaraciones }));
+        }
+        finally { Interlocked.Exchange(ref _escribiendo, 0); }
     }
 
-    /// <summary>
-    /// ¿Lo que hay en Neo4j es EXACTAMENTE lo que dice el núcleo? Lee el grafo de vuelta y lo
-    /// compara, hecho por hecho. Devuelve vacío si coinciden; si no, qué sobra y qué falta.
-    /// </summary>
-    /// <remarks>
-    /// Esto existe porque «confía en que el proyector escribe bien» es exactamente la clase de
-    /// promesa que ya nos falló. Los dos fallos del 2026-08-12 —la app de cada ubicación pisada con
-    /// la actual, y la ubicación colapsada a nivel de app— vivían AQUÍ, en el paso de escribir, y
-    /// cualquier visor del mundo los habría pintado con la misma seguridad: un dibujo fiel a una
-    /// base de datos equivocada sigue siendo un dibujo equivocado.
-    ///
-    /// Cambiar de herramienta de visualización no cubre esto. Comparar, sí. Y comparar LEYENDO DE
-    /// VUELTA es lo único que lo cubre de verdad: revisar el código del proyector demuestra lo que
-    /// pretende hacer, no lo que hizo.
-    /// </remarks>
-    public string Verificar(Grafo grafo)
+    /// <summary>La huella de UNA ubicación: qué elementos tiene, cuáles vivos y a dónde llevan.</summary>
+    private static string HuellaDeUbicacion(Grafo grafo, string u)
     {
-        var esperado = Retrato(grafo);
-
-        var consulta = new
-        {
-            statements = new object[]
-            {
-                new
-                {
-                    statement = """
-                    MATCH (u:Ubicacion)
-                    OPTIONAL MATCH (u)-[a:ALCANZA]->(e:Elemento)
-                    OPTIONAL MATCH (e)-[:LLEVA_A]->(d:Ubicacion)
-                    RETURN u.id AS donde, e.selector AS sel, a.vivo AS vivo, d.id AS destino
-                    """,
-                },
-            },
-        };
-
-        string cuerpo = Pedir(JsonSerializer.Serialize(consulta));
-        if (cuerpo.Length == 0) return "no pude leer de vuelta desde Neo4j: la comprobación NO se hizo";
-
-        var enBase = new SortedSet<string>(StringComparer.Ordinal);
-        using (var doc = JsonDocument.Parse(cuerpo))
-        {
-            if (!doc.RootElement.TryGetProperty("results", out var res) || res.GetArrayLength() == 0)
-                return "Neo4j no devolvió resultados: la comprobación NO se hizo";
-            foreach (var fila in res[0].GetProperty("data").EnumerateArray())
-            {
-                var row = fila.GetProperty("row");
-                string donde = row[0].GetString() ?? "";
-                if (row[1].ValueKind == JsonValueKind.Null) continue;   // ubicación sin elementos
-                string sel = row[1].GetString() ?? "";
-                bool vivo = row[2].ValueKind == JsonValueKind.True;
-                string destino = row[3].ValueKind == JsonValueKind.Null ? "" : row[3].GetString() ?? "";
-                enBase.Add(Linea(donde, sel, vivo, destino));
-            }
-        }
-
-        var sobra = enBase.Except(esperado, StringComparer.Ordinal).Take(6).ToList();
-        var falta = esperado.Except(enBase, StringComparer.Ordinal).Take(6).ToList();
-        if (sobra.Count == 0 && falta.Count == 0) return "";
-
-        var sb = new StringBuilder($"NO COINCIDEN: el núcleo tiene {esperado.Count} hechos y Neo4j {enBase.Count}.");
-        if (falta.Count > 0) sb.Append("\n  FALTA en Neo4j: ").Append(string.Join(" | ", falta));
-        if (sobra.Count > 0) sb.Append("\n  SOBRA en Neo4j: ").Append(string.Join(" | ", sobra));
+        var sb = new StringBuilder();
+        foreach (var a in grafo.DesdeAqui(u))
+            sb.Append(a.Que.Selector).Append(a.Vivo ? '+' : '-').Append(a.Destino).Append(';');
         return sb.ToString();
     }
 
@@ -293,6 +247,7 @@ public sealed class ProyectorNeo4j : IDisposable
         // que Neo4j ya tiene: acabamos de leerlo de ahí.
         _ultimaHuella = HuellaDeContenido(grafo);
         _ultimaVersion = grafo.Version;
+        foreach (string u in grafo.Ubicaciones()) _huellaPorUbicacion[u] = HuellaDeUbicacion(grafo, u);
         return porUbicacion.Count;
     }
 
@@ -304,6 +259,7 @@ public sealed class ProyectorNeo4j : IDisposable
     {
         _ultimaVersion = -1;
         _ultimaHuella = "";
+        _huellaPorUbicacion.Clear();
         Mandar(JsonSerializer.Serialize(new
         {
             statements = new object[]
@@ -322,8 +278,15 @@ public sealed class ProyectorNeo4j : IDisposable
     /// No la llama nadie más, y por eso lleva este nombre: si algún día aparece en código de
     /// producción, el nombre lo delata a la primera lectura.
     /// </summary>
-    public void Sabotear(string cypher) =>
+    public void Sabotear(string cypher)
+    {
+        // Se olvida lo que creíamos escrito: acabamos de corromper la base por detrás, así que
+        // nuestra caché por ubicación ya no describe lo que hay y la siguiente pasada tiene que
+        // volver a escribirlo todo.
+        _huellaPorUbicacion.Clear();
+        _ultimaHuella = "";
         Mandar(JsonSerializer.Serialize(new { statements = new object[] { new { statement = cypher } } }));
+    }
 
     /// <summary>
     /// Una huella de TODO menos de dónde estamos. Sirve para distinguir «me moví» de «el grafo
@@ -342,6 +305,107 @@ public sealed class ProyectorNeo4j : IDisposable
             sb.Append('}');
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// ¿Lo que hay en Neo4j es EXACTAMENTE lo que dice el núcleo? Lee el grafo de vuelta y lo
+    /// compara, hecho por hecho. Devuelve vacío si coinciden; si no, qué sobra y qué falta.
+    /// </summary>
+    /// <remarks>
+    /// Existe porque «confía en que el proyector escribe bien» es exactamente la clase de promesa
+    /// que ya nos falló. Y comparar LEYENDO DE VUELTA es lo único que lo cubre: revisar el código
+    /// del proyector demuestra lo que pretende hacer, no lo que hizo. Con la escritura incremental
+    /// vale todavía más — ahora hay una caché de por medio, y una caché que se desincronice
+    /// dejaría Neo4j viejo sin que nadie se enterara.
+    /// </remarks>
+    public string Verificar(Grafo grafo)
+    {
+        var esperado = Retrato(grafo);
+
+        var consulta = new
+        {
+            statements = new object[]
+            {
+                new
+                {
+                    statement = """
+                    MATCH (u:Ubicacion)-[a:ALCANZA]->(e:Elemento)
+                    OPTIONAL MATCH (e)-[:LLEVA_A]->(d:Ubicacion)
+                    RETURN u.id AS donde, e.selector AS sel, a.vivo AS vivo, d.id AS destino
+                    """,
+                },
+            },
+        };
+
+        string cuerpo = Pedir(JsonSerializer.Serialize(consulta));
+        if (cuerpo.Length == 0) return "no pude leer de vuelta desde Neo4j: la comprobación NO se hizo";
+
+        // SE COMPARA SOLO LO QUE ESTE GRAFO DICE CONOCER. Neo4j puede tener a la vez lo de otro
+        // núcleo —la app corriendo mientras el contrato se juzga— y eso no es una infidelidad de
+        // ESTE grafo: es otro inquilino. Comparar la base entera hacía fallar la comprobación por
+        // la sola presencia del vecino (2026-08-12, medido con la app en marcha).
+        //
+        // Sigue detectando lo que importa: si a una ubicación conocida le falta o le sobra un
+        // elemento, se ve. El sabotaje del contrato —borrar un elemento por detrás— cae aquí.
+        var mias = new HashSet<string>(grafo.Ubicaciones(), StringComparer.OrdinalIgnoreCase);
+
+        var enBase = new SortedSet<string>(StringComparer.Ordinal);
+        using (var doc = JsonDocument.Parse(cuerpo))
+        {
+            if (!doc.RootElement.TryGetProperty("results", out var res) || res.GetArrayLength() == 0)
+                return "Neo4j no devolvió resultados: la comprobación NO se hizo";
+            foreach (var fila in res[0].GetProperty("data").EnumerateArray())
+            {
+                var row = fila.GetProperty("row");
+                string donde = row[0].GetString() ?? "";
+                if (!mias.Contains(donde)) continue;
+                if (row[1].ValueKind == JsonValueKind.Null) continue;
+                string sel = row[1].GetString() ?? "";
+                bool vivo = row[2].ValueKind == JsonValueKind.True;
+                string destino = row[3].ValueKind == JsonValueKind.Null ? "" : row[3].GetString() ?? "";
+                enBase.Add(Linea(donde, sel, vivo, destino));
+            }
+        }
+
+        var sobra = enBase.Except(esperado, StringComparer.Ordinal).Take(6).ToList();
+        var falta = esperado.Except(enBase, StringComparer.Ordinal).Take(6).ToList();
+        if (sobra.Count == 0 && falta.Count == 0) return "";
+
+        var sb = new StringBuilder($"NO COINCIDEN: el núcleo tiene {esperado.Count} hechos y Neo4j {enBase.Count}.");
+        if (falta.Count > 0) sb.Append("\n  FALTA en Neo4j: ").Append(string.Join(" | ", falta));
+        if (sobra.Count > 0) sb.Append("\n  SOBRA en Neo4j: ").Append(string.Join(" | ", sobra));
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// ¿Hay en Neo4j ubicaciones que no son de este grafo? Es decir: ¿lo está usando alguien más?
+    /// </summary>
+    /// <remarks>
+    /// Las comprobaciones de FIDELIDAD y de IDA Y VUELTA necesitan la base para ellas solas: la
+    /// segunda restaura TODO lo que haya, así que con la app corriendo se traía su grafo y la
+    /// comparación fallaba por la sola presencia del vecino. Un rojo que no significa «el núcleo
+    /// está roto» es peor que no comprobar: enseña a desconfiar del juez (2026-08-12).
+    /// </remarks>
+    public bool HayOtroInquilino(IEnumerable<string> mias)
+    {
+        string cuerpo = Pedir(JsonSerializer.Serialize(new
+        {
+            statements = new object[] { new { statement = "MATCH (u:Ubicacion) RETURN u.id" } },
+        }));
+        if (cuerpo.Length == 0) return false;
+        var propias = new HashSet<string>(mias, StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var doc = JsonDocument.Parse(cuerpo);
+            if (!doc.RootElement.TryGetProperty("results", out var res) || res.GetArrayLength() == 0) return false;
+            foreach (var fila in res[0].GetProperty("data").EnumerateArray())
+            {
+                string id = fila.GetProperty("row")[0].GetString() ?? "";
+                if (id.Length > 0 && !propias.Contains(id)) return true;
+            }
+        }
+        catch { }
+        return false;
     }
 
     /// <summary>El grafo como un conjunto de hechos comparables. Ordenado, para que dos retratos

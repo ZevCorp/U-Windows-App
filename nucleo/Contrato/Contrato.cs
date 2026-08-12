@@ -167,6 +167,17 @@ internal static class Contrato
             return;
         }
 
+        // ESTAS COMPROBACIONES NECESITAN NEO4J PARA ELLAS SOLAS. La de ida y vuelta restaura TODO
+        // lo que haya, así que con la app corriendo se traía su grafo y fallaba por la sola
+        // presencia del vecino. Un rojo que no significa «el núcleo está roto» es peor que no
+        // comprobar: enseña a desconfiar del juez (2026-08-12).
+        if (p.HayOtroInquilino(g.Ubicaciones()))
+        {
+            Console.WriteLine("⚪ fidelidad e ida y vuelta: NO COMPROBADAS — la app está usando Neo4j. "
+                            + "Ciérrala y vuelve a correr esto para juzgarlas.");
+            return;
+        }
+
         string veredicto = p.Verificar(g);
         if (veredicto.Length == 0)
         {

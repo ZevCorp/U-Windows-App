@@ -1020,8 +1020,8 @@
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
-    "mtime": 1786570483.6675563,
-    "ast_hash": "1896f86b7d2980a8577d664e68c91309",
+    "mtime": 1786571052.1723225,
+    "ast_hash": "c15010f3abe1af765ca3ef6d47194041",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.csproj": {
@@ -1045,13 +1045,18 @@
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
-    "mtime": 1786554523.6370301,
-    "ast_hash": "8050992e967d45861b9d4fba430fd2a3",
+    "mtime": 1786571125.3382452,
+    "ast_hash": "90255b0df35a456f9b35679fc932e6eb",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/ServidorDelNucleo.cs": {
-    "mtime": 1786559755.5549352,
-    "ast_hash": "590696449653f37043aae93216c5face",
+    "mtime": 1786571081.5644605,
+    "ast_hash": "8a2ca679af60626302f737e6c79444bd",
+    "semantic_hash": ""
+  },
+  "nucleo/visor/reglas.json": {
+    "mtime": 1786571066.1372755,
+    "ast_hash": "bd240f4cda12859987424f5bab630bfc",
     "semantic_hash": ""
   }
 }
