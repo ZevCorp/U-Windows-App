@@ -94,16 +94,31 @@ public sealed class Grafo
     /// sitios distintos según desde dónde se pulse —un «Atrás», una miga de pan—, y meterlos en la
     /// misma casilla haría que el grafo prometiera un destino que depende de por dónde viniste.
     /// </summary>
-    public void Cruzar(string ubicacion, string selector, string destino)
+    /// <returns>
+    /// Falso si NO se guardó, y el motivo importa: un destino cuyo selector no se vio nunca en esa
+    /// ubicación es un hecho sobre un elemento que el grafo no conoce, y guardarlo lo dejaría
+    /// invisible para siempre — nadie que pregunte «qué alcanzo desde aquí» lo vería, porque esa
+    /// respuesta se arma con los elementos observados.
+    ///
+    /// Pasó de verdad y por eso se rechaza en vez de tragarlo: el vigilante de clics escribía
+    /// «uia:aid=navCatalogo;ct=Button» y el observador «uia:name=Catálogo;ct=Button» — dos
+    /// vocabularios de identidad para la misma cosa. De diez caminos aprendidos llegaron tres, y
+    /// los siete perdidos no dejaron rastro (2026-08-12, medido). Un rechazo ruidoso habría
+    /// enseñado el problema el primer día.
+    /// </returns>
+    public bool Cruzar(string ubicacion, string selector, string destino)
     {
-        if (string.IsNullOrWhiteSpace(ubicacion) || string.IsNullOrWhiteSpace(selector)) return;
-        if (string.IsNullOrWhiteSpace(destino) || destino.Equals(ubicacion, StringComparison.OrdinalIgnoreCase)) return;
+        if (string.IsNullOrWhiteSpace(ubicacion) || string.IsNullOrWhiteSpace(selector)) return false;
+        if (string.IsNullOrWhiteSpace(destino) || destino.Equals(ubicacion, StringComparison.OrdinalIgnoreCase)) return false;
         lock (_llave)
         {
+            if (!_vistos.TryGetValue(ubicacion, out var aqui) || !aqui.ContainsKey(selector)) return false;
+
             string clave = ubicacion + "\n" + selector;
-            if (_destinos.TryGetValue(clave, out var ya) && ya == destino) return;
+            if (_destinos.TryGetValue(clave, out var ya) && ya == destino) return true;
             _destinos[clave] = destino;
             Version++;
+            return true;
         }
     }
 

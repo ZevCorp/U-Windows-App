@@ -29,6 +29,13 @@ public sealed class MapaVivo : IDisposable
     private readonly Func<string> _donde;
     private readonly Func<IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>> _loQueVeo;
     private System.Threading.Timer? _reloj;
+    private string _anterior = "";
+
+    /// <summary>
+    /// Quién sabe qué se acaba de pulsar. Sin esto el núcleo solo aprende «esto se ve aquí» y nunca
+    /// «esto llevó allí», así que el grafo no se arma nunca: quedan islas sin caminos entre ellas.
+    /// </summary>
+    public ClickWatcher? Clics { get; set; }
 
     /// <summary>El núcleo, para que quien quiera preguntarle no tenga que pasar por aquí.</summary>
     public Nucleo.Grafo Nucleo => _grafo;
@@ -67,6 +74,53 @@ public sealed class MapaVivo : IDisposable
                 .Select(v => new Nucleo.Elemento(v.Selector, v.Etiqueta, v.Tipo))
                 .ToList();
 
+            // ¿CAMBIAMOS DE SITIO? Entonces algo nos trajo, y ese «algo» es el otro hecho que el
+            // núcleo guarda. Se atribuye al ÚLTIMO CLIC si es reciente y salió de donde estábamos;
+            // si no se puede saber, no se inventa: una arista con el elemento equivocado es peor
+            // que ninguna, porque el asistente la usaría para volver y pulsaría otra cosa.
+            if (_anterior.Length > 0 && !_anterior.Equals(aqui, StringComparison.OrdinalIgnoreCase))
+            {
+                var clic = Clics?.Last;
+                bool reciente = clic != null && (DateTime.UtcNow - clic.When).TotalSeconds < 6;
+                bool salioDeAlli = clic != null
+                    && global::Nucleo.Grafo.AppDe(_anterior)
+                        .StartsWith(clic.Process, StringComparison.OrdinalIgnoreCase);
+
+                // UN CLIC NO TE LLEVA A OTRA APP. Si el destino es de otra aplicación, lo que pasó
+                // fue un cambio de ventana —alt-tab, la barra de tareas, un clic fuera— y no una
+                // navegación. Sin esta valla el grafo acuñó «pulsar Ajustes en la Maqueta lleva a
+                // la terminal», que es falso y además peligroso: el asistente lo usaría para
+                // volver y pulsaría otra cosa (2026-08-12, visto en el primer camino aprendido).
+                bool mismaApp = global::Nucleo.Grafo.AppDe(_anterior)
+                    .Equals(global::Nucleo.Grafo.AppDe(aqui), StringComparison.OrdinalIgnoreCase);
+
+                // UN SOLO VOCABULARIO DE IDENTIDAD. El vigilante de clics describe con
+                // «uia:aid=…» y el observador con «uia:name=…», así que pasarle al núcleo el
+                // selector del clic guardaba el destino bajo una clave que ningún elemento
+                // observado tenía: el camino quedaba huérfano e invisible. Se traduce al idioma del
+                // observador, que es el que usa quien luego pregunta «qué alcanzo desde aquí».
+                string selectorObservado = clic == null ? ""
+                    : $"uia:name={clic.Label};ct={clic.ControlType}";
+
+                if (clic != null && reciente && salioDeAlli && mismaApp && selectorObservado.Length > 0
+                    && _grafo.Cruzar(_anterior, selectorObservado, aqui))
+                {
+                    LogBus.Log("mapa-vivo", $"aprendido: «{clic.Label}» lleva de {Corto(_anterior)} a {Corto(aqui)}");
+                }
+                else
+                {
+                    // Se dice, y no se calla: un salto que no supimos atribuir dice dónde el
+                    // mapeador no llega, que es justo lo que hay que ver.
+                    LogBus.Log("mapa-vivo", $"salto de {Corto(_anterior)} a {Corto(aqui)} SIN atribuir "
+                        + (clic == null ? "(no hay clic)"
+                           : !reciente ? "(el clic es viejo)"
+                           : !salioDeAlli ? "(el clic no salió de allí)"
+                           : !mismaApp ? "(es otra app: fue un cambio de ventana, no navegación)"
+                           : "(el núcleo no reconoce ese elemento aquí)"));
+                }
+            }
+            _anterior = aqui;
+
             _grafo.Observar(aqui, visibles);
             _proyector.Proyectar(_grafo);
         }
@@ -84,6 +138,13 @@ public sealed class MapaVivo : IDisposable
     {
         _grafo.Cruzar(desde, selector, hasta);
         _proyector.Proyectar(_grafo);
+    }
+
+    /// <summary>Solo para el log: la identidad entera no cabe y lo que distingue está al final.</summary>
+    private static string Corto(string id)
+    {
+        int i = id.LastIndexOf('/');
+        return i > 0 ? id[(i + 1)..] : id;
     }
 
     public void Dispose()

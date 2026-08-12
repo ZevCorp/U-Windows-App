@@ -26,6 +26,7 @@ internal static class Contrato
         Prueba("6. lo vivo y lo recordado nunca se confunden", VivoNoEsRecordado);
         Prueba("7. no se inventa nada: sin cruzar, no hay destino", SinCruzarNoHayDestino);
         Prueba("8. cambiar de sitio ES un cambio, aunque se vea lo mismo", MoverseEsCambio);
+        Prueba("9. un destino de algo que nunca se vio aquí se RECHAZA, no se traga", NadaDeFantasmas);
 
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
@@ -225,6 +226,24 @@ internal static class Contrato
         Debe(g.Aqui == "app://a", "el grafo sabe que volvimos a A");
         Debe(g.Version != antes,
             "…y volver CUENTA como cambio: si no, quien pinta se salta la pasada y deja marcado el sitio anterior");
+    }
+
+    private static void NadaDeFantasmas(Grafo g)
+    {
+        // EL CASO REAL, medido el 2026-08-12: el vigilante de clics escribía
+        // «uia:aid=navCatalogo;ct=Button» y el observador «uia:name=Catálogo;ct=Button». Dos
+        // vocabularios de identidad para la misma cosa. `Cruzar` guardaba el destino bajo una clave
+        // que ningún elemento observado tenía, así que el camino quedaba HUÉRFANO: invisible para
+        // quien preguntara «qué alcanzo desde aquí», porque esa respuesta se arma con lo observado.
+        // De diez caminos aprendidos llegaron tres, y los siete perdidos no dejaron rastro.
+        g.Observar("app://a", new[] { new Elemento("uia:name=Ir;ct=Button", "Ir", "Button") });
+
+        Debe(!g.Cruzar("app://a", "uia:aid=botonIr;ct=Button", "app://b"),
+            "un selector que nunca se vio aquí se RECHAZA: decir que no es lo honesto");
+        Debe(g.DesdeAqui("app://a").All(x => x.Destino.Length == 0),
+            "…y no deja rastro fantasma en el grafo");
+        Debe(g.Cruzar("app://a", "uia:name=Ir;ct=Button", "app://b"),
+            "y el mismo elemento, nombrado como se observó, SÍ se acepta");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

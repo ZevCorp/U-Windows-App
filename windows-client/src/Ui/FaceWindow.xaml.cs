@@ -255,6 +255,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                         .Where(t => t.Item1.Length > 0 && t.Label.Length > 0)
                         .ToList();
                 });
+            // El mismo vigilante de clics que ya usa el mapa viejo: sin él, el núcleo aprende dónde
+            // está y qué ve, pero nunca QUÉ LE TRAJO — y sin eso el grafo no se arma, se queda en
+            // islas sueltas sin caminos entre ellas.
+            _mapaVivo.Clics = _clickWatcher;
             _mapaVivo.Arrancar();
 
             // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.

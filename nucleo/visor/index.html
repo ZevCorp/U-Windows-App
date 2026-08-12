@@ -5,32 +5,39 @@
   EL VISOR DEL NÚCLEO. Un archivo, sin dependencias, sin servidor.
 
   Existe porque ni Neo4j Browser ni NeoDash contestaban lo que hacía falta: el primero no se
-  refresca solo —hay que volver a lanzar la consulta a mano— y el segundo se quedaba pegado en la
-  pantalla anterior. Y la pregunta que este visor tiene que contestar es de las que solo sirven si
-  se contestan CONTINUAMENTE: «¿dónde estoy y qué alcanzo desde aquí, ahora mismo?».
+  refresca solo —hay que relanzar la consulta a mano— y el segundo se quedaba pegado en la pantalla
+  anterior. Y la pregunta que este visor contesta solo sirve si se contesta CONTINUAMENTE.
 
-  Habla con Neo4j directamente desde el navegador porque Neo4j manda «Access-Control-Allow-Origin:
-  *» en su API HTTP (comprobado, 2026-08-12). Eso ahorra el servidor intermedio que habría hecho
-  falta si no, y con él la posibilidad de que el intermediario enseñe algo distinto de lo que hay.
+  DOS VISTAS DE LA MISMA VERDAD, porque son dos preguntas distintas:
+    · AQUÍ  — dónde estoy y qué alcanzo desde aquí, ahora mismo. Es la pregunta que el asistente
+              se hace en cada paso.
+    · MAPA  — cómo se va armando el grafo entero según navegas: las ubicaciones y los caminos que
+              se han probado entre ellas. Es la pregunta de quien construye el núcleo.
 
-  NO INTERPRETA NADA. Dibuja lo que el núcleo dice y nada más: no ordena por niveles, no agrupa por
-  cromo, no deduce jerarquías. Si el dibujo y el núcleo discrepan, el fallo es de este archivo —y
-  esa es exactamente la propiedad que se busca, porque el problema que nos trajo aquí fue mirar un
-  dibujo que opinaba por su cuenta.
+  Habla con Neo4j directo desde el navegador porque su API HTTP manda «Access-Control-Allow-Origin:
+  *» (comprobado). Eso ahorra el servidor intermedio, y con él la posibilidad de que el
+  intermediario enseñe algo distinto de lo que hay.
+
+  NO INTERPRETA NADA. Dibuja lo que el núcleo dice: no ordena por niveles, no agrupa por cromo, no
+  deduce jerarquías. Si el dibujo y el núcleo discrepan, el fallo es de este archivo — y ésa es
+  exactamente la propiedad que se busca, porque el problema que nos trajo aquí fue mirar un dibujo
+  que opinaba por su cuenta.
 -->
 
 <style>
   :root { color-scheme: dark; }
   body { margin:0; background:#0d0f14; color:#e6e8ec; font:13px/1.5 system-ui, sans-serif; overflow:hidden; }
-  #cabecera { position:fixed; top:0; left:0; right:0; padding:12px 18px; z-index:2;
-              background:linear-gradient(#0d0f14ee, #0d0f1400); pointer-events:none; }
+  #cabecera { position:fixed; top:0; left:0; right:0; padding:12px 18px; z-index:3;
+              background:linear-gradient(#0d0f14ee, #0d0f1400); }
   #donde { font-size:17px; font-weight:600; }
   #app { color:#8a919e; font-size:12px; }
   #cuenta { color:#8a919e; font-size:12px; margin-top:2px; }
-  #estado { position:fixed; bottom:10px; left:18px; color:#5a6170; font-size:11px; z-index:2; }
-  .vivo   { fill:#4c8dff; }
-  .memoria{ fill:#3a4050; }
-  .puerta { stroke:#5cc28d; }
+  #pestanas { position:fixed; top:12px; right:18px; z-index:4; display:flex; gap:6px; }
+  .tab { padding:6px 14px; border-radius:7px; background:#1b1e25; border:1px solid #2a2e38;
+         cursor:pointer; font-size:12px; color:#8a919e; user-select:none; }
+  .tab.on { background:#1e2e4d; border-color:#4c8dff; color:#e6e8ec; }
+  #estado { position:fixed; bottom:10px; left:18px; color:#5a6170; font-size:11px; z-index:3; }
+  #leyenda { position:fixed; bottom:10px; right:18px; color:#5a6170; font-size:11px; z-index:3; }
   text { font:11px system-ui, sans-serif; fill:#c9ced8; }
   text.gris { fill:#5a6170; }
 </style>
@@ -40,95 +47,158 @@
   <div id="app"></div>
   <div id="cuenta"></div>
 </div>
+<div id="pestanas">
+  <div class="tab on" data-v="aqui">Aquí</div>
+  <div class="tab" data-v="mapa">Mapa completo</div>
+</div>
 <svg id="lienzo"></svg>
 <div id="estado"></div>
+<div id="leyenda"></div>
 
 <script>
 const URL  = "http://127.0.0.1:7474/db/neo4j/tx/commit";
 const AUTH = "Basic " + btoa("neo4j:grafo-local-2026");
 
-// La consulta ES el modelo: dónde estoy, qué alcanzo, y de eso qué está vivo y a dónde lleva.
-// No hay una segunda pregunta, porque el núcleo no guarda una segunda cosa.
-const CONSULTA = `
+// «Aquí»: dónde estoy y qué alcanzo. Una sola consulta, porque el núcleo guarda una sola cosa.
+const Q_AQUI = `
 MATCH (u:Ubicacion {actual:true})
 OPTIONAL MATCH (u)-[a:ALCANZA]->(e:Elemento)
 OPTIONAL MATCH (e)-[:LLEVA_A]->(d:Ubicacion)
 RETURN u.id AS donde, u.app AS app,
-       collect({etq:e.etiqueta, tipo:e.tipo, vivo:a.vivo, destino:d.id}) AS hijos`;
+       collect({etq:e.etiqueta, vivo:a.vivo, destino:d.id}) AS hijos`;
 
-let ultimo = "";
+// «Mapa completo»: las ubicaciones y los caminos PROBADOS entre ellas. No se pintan los elementos
+// —serían miles— sino lo que conectan, que es lo que hace que el grafo sea un grafo.
+const Q_MAPA = `
+MATCH (u:Ubicacion)
+OPTIONAL MATCH (u)-[:ALCANZA]->(e:Elemento)-[:LLEVA_A]->(d:Ubicacion)
+RETURN u.id AS id, u.app AS app, u.actual AS actual,
+       collect(DISTINCT {hacia:d.id, por:e.etiqueta}) AS caminos`;
+
+let vista = "aqui", ultimo = "";
+
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  vista = t.dataset.v; ultimo = ""; tick();
+});
+
+async function pedir(q) {
+  const r = await fetch(URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", "authorization": AUTH },
+    body: JSON.stringify({ statements: [{ statement: q }] }),
+  });
+  return (await r.json()).results?.[0]?.data ?? [];
+}
 
 async function tick() {
-  try {
-    const r = await fetch(URL, {
-      method: "POST",
-      headers: { "content-type": "application/json", "authorization": AUTH },
-      body: JSON.stringify({ statements: [{ statement: CONSULTA }] }),
-    });
-    const j = await r.json();
-    const fila = j.results?.[0]?.data?.[0]?.row;
-    if (!fila) { estado("el núcleo aún no ha publicado ninguna ubicación"); return; }
-
-    const [donde, app, hijos] = fila;
-    const limpios = (hijos || []).filter(h => h && h.etq);
-    // Se redibuja solo si algo cambió: repintar sesenta veces por minuto lo mismo hace parpadear
-    // el dibujo y esconde justo el instante en que algo se movió, que es lo único que se mira.
-    const huella = donde + "|" + limpios.map(h => h.etq + h.vivo + (h.destino || "")).join(",");
-    if (huella === ultimo) { estado("sin cambios · " + new Date().toLocaleTimeString()); return; }
-    ultimo = huella;
-
-    document.getElementById("donde").textContent = corto(donde);
-    document.getElementById("app").textContent = app || "";
-    const vivos = limpios.filter(h => h.vivo).length;
-    const puertas = limpios.filter(h => h.destino).length;
-    document.getElementById("cuenta").textContent =
-      `${limpios.length} alcanzables · ${vivos} vivos ahora · ${limpios.length - vivos} solo en memoria · ${puertas} cruzados`;
-
-    dibujar(limpios);
-    estado("actualizado " + new Date().toLocaleTimeString());
-  } catch (e) {
-    estado("no llego a Neo4j: " + e.message);
-  }
+  try { vista === "aqui" ? await tickAqui() : await tickMapa(); }
+  catch (e) { estado("no llego a Neo4j: " + e.message); }
 }
 
-function corto(id) {
-  const i = (id || "").lastIndexOf("/");
-  return i > 0 ? id.slice(i + 1) : (id || "");
-}
+async function tickAqui() {
+  const filas = await pedir(Q_AQUI);
+  if (!filas.length) { estado("el núcleo aún no ha publicado ninguna ubicación"); return; }
+  const [donde, app, hijos] = filas[0].row;
+  const limpios = (hijos || []).filter(h => h && h.etq);
 
-function dibujar(hijos) {
-  const svg = document.getElementById("lienzo");
-  const an = window.innerWidth, al = window.innerHeight;
-  svg.setAttribute("width", an); svg.setAttribute("height", al);
-  const cx = an / 2, cy = al / 2 + 20;
+  const huella = "aqui|" + donde + "|" + limpios.map(h => h.etq + h.vivo + (h.destino || "")).join(",");
+  if (huella === ultimo) { estado("sin cambios · " + hora()); return; }
+  ultimo = huella;
 
-  // El radio crece con la población para que ochenta elementos no se apilen unos sobre otros;
-  // con pocos, el anillo se queda cerca y se lee de un vistazo.
-  const radio = Math.min(Math.max(150, hijos.length * 5.5), Math.min(an, al) / 2 - 90);
+  const vivos = limpios.filter(h => h.vivo).length;
+  const cruzados = limpios.filter(h => h.destino).length;
+  cabecera(corto(donde), app, `${limpios.length} alcanzables · ${vivos} vivos · ${limpios.length - vivos} en memoria · ${cruzados} cruzados`);
+  leyenda("azul = vivo ahora · gris = solo memoria · borde verde = ya se cruzó");
+
+  const an = innerWidth, al = innerHeight, cx = an / 2, cy = al / 2 + 20;
+  const radio = Math.min(Math.max(150, limpios.length * 5.5), Math.min(an, al) / 2 - 90);
   let s = "";
-
-  hijos.forEach((h, i) => {
-    const ang = (i / hijos.length) * Math.PI * 2 - Math.PI / 2;
+  limpios.forEach((h, i) => {
+    const ang = (i / limpios.length) * Math.PI * 2 - Math.PI / 2;
     const x = cx + Math.cos(ang) * radio, y = cy + Math.sin(ang) * radio;
-    const color = h.vivo ? "#2b3a55" : "#1a1d24";
-    const borde = h.destino ? "#5cc28d" : (h.vivo ? "#4c8dff" : "#2a2f3a");
-    s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${h.vivo ? '#28324a' : '#1a1d24'}" stroke-width="1"/>`;
-    s += `<circle cx="${x}" cy="${y}" r="6" fill="${color}" stroke="${borde}" stroke-width="${h.destino ? 2 : 1}"/>`;
+    s += linea(cx, cy, x, y, h.vivo ? "#28324a" : "#1a1d24");
+    s += `<circle cx="${x}" cy="${y}" r="6" fill="${h.vivo ? '#2b3a55' : '#1a1d24'}"`
+       + ` stroke="${h.destino ? '#5cc28d' : (h.vivo ? '#4c8dff' : '#2a2f3a')}" stroke-width="${h.destino ? 2 : 1}"/>`;
     const der = Math.cos(ang) > -0.1;
-    s += `<text x="${x + (der ? 11 : -11)}" y="${y + 4}" text-anchor="${der ? 'start' : 'end'}"`
-       + ` class="${h.vivo ? '' : 'gris'}">${escapar(h.etq).slice(0, 34)}</text>`;
+    s += rotulo(x + (der ? 11 : -11), y + 4, der ? "start" : "end", h.etq, !h.vivo);
   });
-
-  // El centro se dibuja al final para que quede por encima de las líneas.
   s += `<circle cx="${cx}" cy="${cy}" r="34" fill="#1b2740" stroke="#4c8dff" stroke-width="2"/>`;
   s += `<text x="${cx}" y="${cy + 5}" text-anchor="middle" style="font-size:12px;fill:#e6e8ec">aquí</text>`;
+  pintar(s);
+  estado("actualizado " + hora());
+}
+
+async function tickMapa() {
+  const filas = await pedir(Q_MAPA);
+  if (!filas.length) { estado("todavía no hay ninguna ubicación"); return; }
+  const nodos = filas.map(f => ({ id: f.row[0], app: f.row[1], actual: f.row[2],
+                                  caminos: (f.row[3] || []).filter(c => c && c.hacia) }));
+
+  const huella = "mapa|" + nodos.map(n => n.id + n.actual + n.caminos.map(c => c.hacia).join("")).join("|");
+  if (huella === ultimo) { estado("sin cambios · " + hora()); return; }
+  ultimo = huella;
+
+  const aqui = nodos.find(n => n.actual);
+  const enlaces = nodos.reduce((t, n) => t + n.caminos.length, 0);
+  cabecera(aqui ? corto(aqui.id) : "—", `${new Set(nodos.map(n => n.app)).size} app(s)`,
+           `${nodos.length} ubicaciones · ${enlaces} camino(s) aprendido(s)`);
+  leyenda("cada punto es una PANTALLA · las flechas son caminos ya probados");
+
+  // Se agrupa por app en anillos concéntricos: sin agrupar, dos apps distintas se mezclan y el
+  // dibujo sugiere una vecindad que no existe. Dentro de cada anillo el orden es alfabético para
+  // que un nodo no salte de sitio entre dos refrescos — un dibujo que se mueve solo no se puede leer.
+  const porApp = {};
+  nodos.forEach(n => (porApp[n.app] ||= []).push(n));
+  const apps = Object.keys(porApp).sort();
+  const an = innerWidth, al = innerHeight, cx = an / 2, cy = al / 2 + 20;
+  const pos = {};
+  apps.forEach((app, ia) => {
+    const lista = porApp[app].sort((a, b) => a.id.localeCompare(b.id));
+    const radio = 120 + ia * Math.min(160, (Math.min(an, al) / 2 - 140) / Math.max(1, apps.length - 1 || 1));
+    lista.forEach((n, i) => {
+      const ang = (i / lista.length) * Math.PI * 2 - Math.PI / 2 + ia * 0.4;
+      pos[n.id] = { x: cx + Math.cos(ang) * radio, y: cy + Math.sin(ang) * radio, n };
+    });
+  });
+
+  let s = `<defs><marker id="f" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+             <path d="M0,0 L0,6 L8,3 z" fill="#5cc28d"/></marker></defs>`;
+  nodos.forEach(n => n.caminos.forEach(c => {
+    const a = pos[n.id], b = pos[c.hacia];
+    if (!a || !b) return;
+    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#2f6b4f" stroke-width="1.5" marker-end="url(#f)"/>`;
+  }));
+  Object.values(pos).forEach(({ x, y, n }) => {
+    s += `<circle cx="${x}" cy="${y}" r="${n.actual ? 11 : 7}"`
+       + ` fill="${n.actual ? '#1b2740' : '#22262f'}" stroke="${n.actual ? '#4c8dff' : '#3a4050'}" stroke-width="${n.actual ? 3 : 1}"/>`;
+    s += rotulo(x + 13, y + 4, "start", corto(n.id), !n.actual);
+  });
+  pintar(s);
+  estado("actualizado " + hora());
+}
+
+// ── piezas ────────────────────────────────────────────────────────────────
+const linea = (x1, y1, x2, y2, c) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="1"/>`;
+const rotulo = (x, y, anchor, t, gris) =>
+  `<text x="${x}" y="${y}" text-anchor="${anchor}" class="${gris ? 'gris' : ''}">${escapar(t).slice(0, 32)}</text>`;
+const escapar = t => (t || "").replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+const hora = () => new Date().toLocaleTimeString();
+const estado = t => document.getElementById("estado").textContent = t;
+const leyenda = t => document.getElementById("leyenda").textContent = t;
+function cabecera(d, a, c) {
+  document.getElementById("donde").textContent = d;
+  document.getElementById("app").textContent = a || "";
+  document.getElementById("cuenta").textContent = c;
+}
+function corto(id) { const i = (id || "").lastIndexOf("/"); return i > 0 ? id.slice(i + 1) : (id || ""); }
+function pintar(s) {
+  const svg = document.getElementById("lienzo");
+  svg.setAttribute("width", innerWidth); svg.setAttribute("height", innerHeight);
   svg.innerHTML = s;
 }
 
-const escapar = t => (t || "").replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
-const estado = t => document.getElementById("estado").textContent = t;
-
 tick();
 setInterval(tick, 1000);
-window.addEventListener("resize", () => { ultimo = ""; tick(); });
+addEventListener("resize", () => { ultimo = ""; tick(); });
 </script>

@@ -1020,8 +1020,8 @@
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
-    "mtime": 1786541011.1264634,
-    "ast_hash": "dd904c81f49dd57eeb969437ffff7fac",
+    "mtime": 1786553666.1006806,
+    "ast_hash": "3f43621cd2d3ce36cb5265022a7dc610",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.csproj": {
@@ -1030,8 +1030,8 @@
     "semantic_hash": ""
   },
   "nucleo/Grafo/Grafo.cs": {
-    "mtime": 1786539032.2592459,
-    "ast_hash": "3b948bb72ca495580991e59b4d2b17a0",
+    "mtime": 1786553505.1340845,
+    "ast_hash": "b0d5a9dc9c965b8c0b53a9fcab70a4e1",
     "semantic_hash": ""
   },
   "nucleo/Grafo/Grafo.csproj": {
@@ -1040,8 +1040,8 @@
     "semantic_hash": ""
   },
   "nucleo/Grafo/ProyectorNeo4j.cs": {
-    "mtime": 1786541025.7081478,
-    "ast_hash": "3f06a6e79c2560fe50892c731f2717bb",
+    "mtime": 1786553650.5305405,
+    "ast_hash": "e80158293914e9be5f436206e403e825",
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
