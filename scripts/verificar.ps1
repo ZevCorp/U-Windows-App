@@ -49,7 +49,11 @@ Write-Host "`n0. de que rama estamos hablando" -ForegroundColor Cyan
 if ($rama -eq "main") {
   Anotar "Rama" "FALLO" "estas en main. main cambia SOLO por merge de un PR (git stash; git checkout -b <persona>/<que-hace>; git stash pop)"
   $bloquea = $true
-} elseif ($rama -notmatch '^(jero|jose|pipe)/[a-z0-9.-]+$') {
+} elseif ($rama -notmatch '^(jero|jose|pipe|will)/[a-z0-9.-]+$') {
+  # `will` faltaba, y el autor del flujo quedaba fuera de la convencion que escribio: su rama salia
+  # NO CORRIDO en cada corrida. No bloquea, y ese es justo el problema — un aviso falso repetido
+  # ensena a leer los NO CORRIDO como ruido, incluido el del nivel 4, que es el unico que de verdad
+  # depende de que alguien mire (2026-08-12).
   Anotar "Rama" "NO CORRIDO" "'$rama' no sigue <persona>/<que-hace>. No bloquea (hay ramas historicas), pero las nuevas si"
 } else {
   Anotar "Rama" "OK" $rama
@@ -119,19 +123,44 @@ if (-not $bloquea) {
     Tee-Object -FilePath $log
   $fallos = $LASTEXITCODE
 
-  # El total sale del CODIGO FUENTE del contrato y no de su salida: contar sobre el texto impreso
-  # depende de la codificacion con que se lea, y un recuento que puede encoger es exactamente el
-  # vicio del aprendizaje n.10 (el denominador es el plan, nunca lo ejecutado).
-  $total = @(Select-String -Path (Join-Path $repo "tests\ContratoDelGrafo\Contrato.cs") -Pattern '^\s*Prueba\("').Count
-  $pendientes = @(Select-String -Path $log -SimpleMatch "PENDIENTE").Count
-
-  if ($fallos -eq 0) {
-    Anotar "Contrato" "OK" "$total/$total promesas, 0 pendientes"
-  } elseif ($PermitirPendientes -and $fallos -eq $pendientes) {
-    Anotar "Contrato" "NO CORRIDO" "$($total - $fallos)/$total verdes, $pendientes PENDIENTES declaradas (fase intermedia: NO puede ir a main)"
+  # EL RECUENTO LO DA EL CONTRATO. Aqui habia dos cuentas y las dos mentian (2026-08-12):
+  #
+  #   · el total se contaba con `Prueba("` sobre el .cs — y desde que existe --autoprueba, ese
+  #     patron cuenta tambien las cuatro promesas de MENTIRA del arnes: 24 donde hay 20.
+  #   · los pendientes con `Select-String -SimpleMatch "PENDIENTE"` sobre el log, que es
+  #     CASE-INSENSITIVE por defecto: se comia la propia linea de resumen «(N de ellas
+  #     PENDIENTES...)» y cualquier «pendiente» en minuscula de otro texto.
+  #
+  # Con $pendientes inflado hasta igualar a $fallos, la rama de abajo declara «fase intermedia» y
+  # NO bloquea: una regresion real pasaba por pendiente. Era el unico hueco del arnes que daba
+  # verde falso. Un numero lo dice quien sabe contarlo.
+  $m = (Select-String -Path $log -Pattern '^CONTRATO:\s*(\d+)\s+promesas,\s*(\d+)\s+verdes,\s*(\d+)\s+incumplidas,\s*(\d+)\s+pendientes' |
+        Select-Object -Last 1)
+  if ($m) {
+    $total       = [int]$m.Matches[0].Groups[1].Value
+    $incumplidas = [int]$m.Matches[0].Groups[3].Value
+    $pendientes  = [int]$m.Matches[0].Groups[4].Value
   } else {
-    $regresiones = $fallos - $pendientes
-    Anotar "Contrato" "FALLO" "$($total - $fallos)/$total verdes; $regresiones incumplida(s) con codigo y $pendientes pendiente(s)"
+    # Un contrato anterior al 2026-08-12 no imprime la linea. Se DICE que no se pudo contar, en vez
+    # de inventar un recuento: un juez que no puede contar no dice «cero», dice «no se».
+    $total = -1; $incumplidas = $fallos; $pendientes = 0
+  }
+
+  if ($total -lt 0) {
+    Anotar "Contrato" $(if ($fallos -eq 0) { "OK" } else { "FALLO" }) "codigo $fallos; el contrato no imprime el recuento (binario anterior al 2026-08-12): no se pudo desglosar"
+    if ($fallos -ne 0) { $bloquea = $true }
+  } elseif ($fallos -ne $incumplidas) {
+    # El codigo de salida y la linea tienen que decir lo mismo. Si no, el arnes esta descuadrado y
+    # su veredicto no vale — y eso se dice, no se elige uno de los dos numeros.
+    Anotar "Contrato" "FALLO" "ARNES DESCUADRADO: codigo de salida $fallos pero la linea dice $incumplidas incumplidas. No se puede confiar en el veredicto"
+    $bloquea = $true
+  } elseif ($fallos -eq 0) {
+    Anotar "Contrato" "OK" "$total/$total promesas, 0 pendientes"
+  } elseif ($PermitirPendientes -and $incumplidas -eq $pendientes) {
+    Anotar "Contrato" "NO CORRIDO" "$($total - $incumplidas)/$total verdes, $pendientes PENDIENTES declaradas (fase intermedia: NO puede ir a main)"
+  } else {
+    $regresiones = $incumplidas - $pendientes
+    Anotar "Contrato" "FALLO" "$($total - $incumplidas)/$total verdes; $regresiones incumplida(s) con codigo y $pendientes pendiente(s)"
     $bloquea = $true
   }
 }

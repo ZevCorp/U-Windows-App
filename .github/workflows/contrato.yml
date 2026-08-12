@@ -48,11 +48,24 @@ jobs:
             $codigo = 99
           }
 
-          $total = @(Select-String -Path tests/ContratoDelGrafo/Contrato.cs -Pattern '^\s*Prueba\("').Count
-          $pend  = @(Select-String -Path $log -SimpleMatch 'PENDIENTE').Count
-          # Con el arnes caido el codigo no es un recuento de promesas: el verde se cuenta desde 0
-          # en vez de dar un negativo que parezca un dato.
-          $verdes = [Math]::Max(0, $total - $codigo)
+          # EL RECUENTO LO DA EL CONTRATO, en su linea canonica. Antes se contaba `Prueba("` sobre
+          # el .cs —que desde --autoprueba cuenta tambien las promesas de MENTIRA del arnes— y los
+          # pendientes con `Select-String -SimpleMatch 'PENDIENTE'`, case-insensitive por defecto,
+          # que se comia la linea de resumen y cualquier «pendiente» en minuscula (2026-08-12).
+          $m = (Select-String -Path $log -Pattern '^CONTRATO:\s*(\d+)\s+promesas,\s*(\d+)\s+verdes,\s*(\d+)\s+incumplidas,\s*(\d+)\s+pendientes' |
+                Select-Object -Last 1)
+          if ($m) {
+            $total  = [int]$m.Matches[0].Groups[1].Value
+            $verdes = [int]$m.Matches[0].Groups[2].Value
+            $rojas  = [int]$m.Matches[0].Groups[3].Value
+            $pend   = [int]$m.Matches[0].Groups[4].Value
+          } else {
+            # Sin la linea no se sabe el desglose, y se dice: un arnes caido o un binario viejo no
+            # pueden producir un recuento que parezca un dato. Antes esto daba «$total - $codigo»,
+            # que con el arnes caido (codigo 99) publicaba un negativo recortado a 0.
+            $total = -1; $verdes = -1; $rojas = -1; $pend = -1
+          }
+          $nd = { param($n) if ($n -lt 0) { '?' } else { "$n" } }
 
           # El resumen del run dice el veredicto sin que nadie abra los logs, y distingue sus causas
           # (una promesa sin codigo todavia no es lo mismo que una regresion).
@@ -61,7 +74,7 @@ jobs:
             ''
             "| Promesas | Verdes | Incumplidas | Pendientes (sin codigo aun) |"
             "|---|---|---|---|"
-            "| $total | $verdes | $([Math]::Max(0, $codigo - $pend)) | $pend |"
+            "| $(& $nd $total) | $(& $nd $verdes) | $(& $nd $rojas) | $(& $nd $pend) |"
             ''
             '```'
             (Get-Content $log -Raw)
@@ -69,8 +82,14 @@ jobs:
           )
           $resumen -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
+          # El codigo de salida y la linea tienen que decir lo mismo. Si no, el arnes esta
+          # descuadrado y su veredicto no vale — y eso se dice en vez de elegir uno de los dos.
+          if ($rojas -ge 0 -and $codigo -ne $rojas) {
+            Write-Host "::error::ARNES DESCUADRADO: codigo de salida $codigo pero la linea dice $rojas incumplidas. El veredicto no es fiable."
+            exit 1
+          }
           if ($codigo -ne 0) {
-            Write-Host "::error::CONTRATO ROTO: $codigo promesa(s) incumplida(s) ($pend de ellas sin codigo todavia). Esto no puede entrar a main."
+            Write-Host "::error::CONTRATO ROTO: $(& $nd $rojas) promesa(s) incumplida(s) ($(& $nd $pend) de ellas sin codigo todavia). Esto no puede entrar a main."
             exit 1
           }
           Write-Host "CONTRATO INTACTO: $total/$total promesas."

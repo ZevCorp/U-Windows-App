@@ -40,6 +40,13 @@ dotnet build (Join-Path $repo "tests\ContratoDelGrafo\ContratoDelGrafo.csproj") 
   -c Release -o $binTest -p:UBin=$binApp --nologo -v quiet -nodeReuse:false
 if ($LASTEXITCODE -ne 0) { throw "el contrato no compila (codigo $LASTEXITCODE)" }
 
-Write-Host "3/3 juzgando..." -ForegroundColor Cyan
+# EL JUEZ, ANTES DE JUZGAR A NADIE. Cuatro promesas de mentira con resultado conocido: si el arnes
+# no sabe contar, su veredicto sobre el nucleo no vale nada — y ya dijo una vez «CONTRATO ROTO: 10
+# promesas» sin haber probado ninguna (2026-08-08). Cuesta un segundo.
+Write-Host "3/4 el arnes, juzgandose a si mismo..." -ForegroundColor Cyan
+& (Join-Path $binTest "contrato-del-grafo.exe") --autoprueba
+if ($LASTEXITCODE -ne 0) { throw "EL ARNES NO SABE CONTAR (codigo $LASTEXITCODE): cualquier veredicto suyo sobre el nucleo es sospechoso. Arreglar esto antes de mirar el contrato." }
+
+Write-Host "4/4 juzgando..." -ForegroundColor Cyan
 & (Join-Path $binTest "contrato-del-grafo.exe")
 exit $LASTEXITCODE
