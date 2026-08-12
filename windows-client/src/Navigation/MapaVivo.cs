@@ -101,13 +101,28 @@ public sealed class MapaVivo : IDisposable
                 bool mismaApp = global::Nucleo.Grafo.AppDe(_anterior)
                     .Equals(global::Nucleo.Grafo.AppDe(aqui), StringComparison.OrdinalIgnoreCase);
 
-                // UN SOLO VOCABULARIO DE IDENTIDAD. El vigilante de clics describe con
-                // «uia:aid=…» y el observador con «uia:name=…», así que pasarle al núcleo el
-                // selector del clic guardaba el destino bajo una clave que ningún elemento
-                // observado tenía: el camino quedaba huérfano e invisible. Se traduce al idioma del
-                // observador, que es el que usa quien luego pregunta «qué alcanzo desde aquí».
-                string selectorObservado = clic == null ? ""
-                    : $"uia:name={clic.Label};ct={clic.ControlType}";
+                // EL CLIC SE TRADUCE AL ELEMENTO QUE EL NÚCLEO CONOCE, buscándolo POR ETIQUETA
+                // entre lo observado. Dos motivos, los dos medidos:
+                //
+                //  1. Hay dos vocabularios de identidad: el vigilante de clics describe con
+                //     «uia:aid=…» y el observador con «uia:name=…». Pasarle el selector del clic
+                //     guardaba el destino bajo una clave que ningún elemento observado tenía, y el
+                //     camino quedaba huérfano e invisible (de diez aprendidos llegaron tres).
+                //  2. El clic suele caer en el TEXTO de dentro del control, no en el control. Y ese
+                //     texto es justo el que se descarta por duplicado. Así se perdió el camino a
+                //     «Lote A1-2»: el núcleo no conocía «Lote A1-2» (Text) porque el que guarda es
+                //     el Button (2026-08-12 — lo rompió el arreglo de los duplicados, dos commits
+                //     antes; a las 12:23 funcionaba y a las 12:52 ya no).
+                //
+                // Buscar por etiqueta entre lo que el núcleo YA tiene resuelve los dos a la vez, y
+                // no inventa: si no hay nada con ese nombre aquí, no se atribuye.
+                // SE BUSCA EN LA PANTALLA ANTERIOR, no en esta: el clic ocurrió ALLÍ. Buscarlo en
+                // lo que se ve ahora acertaría solo cuando el elemento existe en las dos —el
+                // mobiliario— y fallaría justo en lo que de verdad navega.
+                var elDelNucleo = clic == null ? null
+                    : _grafo.DesdeAqui(_anterior)
+                        .FirstOrDefault(a => a.Que.Etiqueta.Equals(clic.Label, StringComparison.OrdinalIgnoreCase));
+                string selectorObservado = elDelNucleo?.Que.Selector ?? "";
 
                 if (clic != null && reciente && salioDeAlli && mismaApp && selectorObservado.Length > 0
                     && _grafo.Cruzar(_anterior, selectorObservado, aqui))
