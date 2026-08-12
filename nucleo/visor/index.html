@@ -26,7 +26,7 @@
 
 <style>
   :root { color-scheme: dark; }
-  body { margin:0; background:#0d0f14; color:#e6e8ec; font:13px/1.5 system-ui, sans-serif; overflow:hidden; }
+  body { margin:0; background:#0d0f14; color:#e6e8ec; font:13px/1.5 system-ui, sans-serif; }
   #cabecera { position:fixed; top:0; left:0; right:0; padding:12px 18px; z-index:3;
               background:linear-gradient(#0d0f14ee, #0d0f1400); }
   #donde { font-size:17px; font-weight:600; }
@@ -50,6 +50,7 @@
 <div id="pestanas">
   <div class="tab on" data-v="aqui">Aquí</div>
   <div class="tab" data-v="mapa">Mapa completo</div>
+  <div class="tab" data-v="reglas">Reglas</div>
 </div>
 <svg id="lienzo"></svg>
 <div id="estado"></div>
@@ -92,8 +93,44 @@ async function pedir(q) {
 }
 
 async function tick() {
-  try { vista === "aqui" ? await tickAqui() : await tickMapa(); }
-  catch (e) { estado("no llego a Neo4j: " + e.message); }
+  try {
+    if (vista === "aqui") await tickAqui();
+    else if (vista === "mapa") await tickMapa();
+    else await tickReglas();
+  } catch (e) { estado("no llego: " + e.message); }
+}
+
+// LAS REGLAS SON LAS PROMESAS, y lo que se enseña es el RESULTADO de correrlas, no una lista que
+// alguien escribió. La diferencia importa: una descripción tecleada envejece en silencio en cuanto
+// alguien toca el núcleo; esto dice qué se verificó y cuándo, y si algo está en rojo se ve.
+async function tickReglas() {
+  const r = await fetch("http://127.0.0.1:8792/reglas");
+  const j = await r.json();
+  if (j.error) { cabecera("Reglas", "", j.error); pintar(""); estado(hora()); return; }
+
+  const huella = "reglas|" + j.cuando;
+  if (huella === ultimo) { estado("sin cambios · " + hora()); return; }
+  ultimo = huella;
+
+  const rotas = j.reglas.filter(x => !x.cumple).length;
+  cabecera(j.integro ? "El núcleo cumple lo que promete" : `${rotas} promesa(s) INCUMPLIDA(S)`,
+           `verificado el ${j.cuando}`,
+           `${j.reglas.length} reglas · son las del contrato, no una descripción: esto es el resultado de correrlas`);
+  leyenda("para actualizar: dotnet run en nucleo/Contrato");
+
+  // Se pinta como lista y no como grafo: son enunciados, no cosas conectadas entre sí. Dibujar
+  // aristas donde no las hay sería inventar una estructura para que quede bonito.
+  const an = innerWidth;
+  let y = 130, s = "";
+  j.reglas.forEach(x => {
+    s += `<text x="46" y="${y}" style="font-size:15px;fill:${x.cumple ? '#5cc28d' : '#ff6b6b'}">${x.cumple ? '✔' : '✘'}</text>`;
+    s += `<text x="72" y="${y}" style="font-size:13px;fill:${x.cumple ? '#c9ced8' : '#ff9b9b'}">${escapar(x.regla)}</text>`;
+    y += 30;
+  });
+  const svg = document.getElementById("lienzo");
+  svg.setAttribute("width", an); svg.setAttribute("height", Math.max(innerHeight, y + 40));
+  svg.innerHTML = s;
+  estado("actualizado " + hora());
 }
 
 async function tickAqui() {

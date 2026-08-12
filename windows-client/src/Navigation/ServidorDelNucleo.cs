@@ -146,7 +146,22 @@ public sealed class ServidorDelNucleo : IDisposable
             });
         }
 
-        return Json(new { error = "no conozco esa ruta", rutas = new[] { "/nucleo", "/ir" } });
+        // LAS REGLAS: el veredicto de la última vez que el contrato juzgó al núcleo. Se sirve el
+        // archivo tal cual, sin interpretarlo — describirlas aquí crearía una segunda versión de
+        // las reglas que envejecería en silencio, que es exactamente lo que este proyecto persigue.
+        if (ruta.EndsWith("/reglas"))
+        {
+            try
+            {
+                string repo = Navigation.NucleoVersiones.Repo();
+                string f = Path.Combine(repo, "nucleo", "visor", "reglas.json");
+                if (File.Exists(f)) return File.ReadAllText(f, Encoding.UTF8);
+                return Json(new { error = "el contrato todavía no ha dejado su veredicto", donde = f });
+            }
+            catch (Exception e) { return Json(new { error = e.Message }); }
+        }
+
+        return Json(new { error = "no conozco esa ruta", rutas = new[] { "/nucleo", "/ir", "/reglas" } });
     }
 
     private static string LeerDestino(HttpListenerRequest req)

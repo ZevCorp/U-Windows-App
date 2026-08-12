@@ -44,6 +44,12 @@ internal static class Contrato
         Console.WriteLine(_fallos == 0
             ? "NÚCLEO ÍNTEGRO: el grafo promete lo que dice prometer."
             : $"NÚCLEO ROTO: {_fallos} promesa(s) incumplida(s).");
+
+        // EL VEREDICTO, POR ESCRITO, para que se pueda MIRAR sin correr nada. Es lo que el visor
+        // enseña en su pestaña de reglas: no una descripción que alguien tecleó —esa envejecería
+        // sin avisar— sino el resultado real de la última vez que las promesas se juzgaron, con su
+        // hora. Ver «✔ 11 de 11, hace dos minutos» dice algo; ver una lista bonita, no.
+        Apuntar();
         return _fallos;
     }
 
@@ -163,7 +169,10 @@ internal static class Contrato
 
         string veredicto = p.Verificar(g);
         if (veredicto.Length == 0)
+        {
             Console.WriteLine("✔ fidelidad de la proyección: lo que hay en Neo4j ES lo que dice el núcleo");
+            Extra("la proyección en Neo4j es fiel al núcleo", true);
+        }
         else
         {
             _fallos++;
@@ -188,7 +197,10 @@ internal static class Contrato
         p.Proyectar(g);
         string trasMoverse = p.Verificar(g);
         if (trasMoverse.Length == 0)
+        {
             Console.WriteLine("✔ …y el atajo de «solo me moví» deja Neo4j igual de fiel");
+            Extra("moverse por el atajo deja Neo4j igual de fiel", true);
+        }
         else
         {
             _fallos++;
@@ -213,7 +225,10 @@ internal static class Contrato
                 .Select(a => $"{a.Que.Selector}->{a.Destino}"))));
 
         if (volvieron > 0 && Esqueleto(resucitado) == Esqueleto(g))
+        {
             Console.WriteLine($"✔ …y SOBREVIVE AL REINICIO: {volvieron} ubicación(es), misma estructura");
+            Extra("la memoria sobrevive al reinicio de la app", true);
+        }
         else
         {
             _fallos++;
@@ -227,7 +242,10 @@ internal static class Contrato
         p.Sabotear("MATCH (e:Elemento {selector:'s:x'}) DETACH DELETE e");
         string trasElSabotaje = p.Verificar(g);
         if (trasElSabotaje.Length > 0)
+        {
             Console.WriteLine("✔ …y SABE FALLAR: al borrar un elemento por detrás, lo detectó");
+            Extra("la comprobación de fidelidad sabe fallar", true);
+        }
         else
         {
             _fallos++;
@@ -335,6 +353,8 @@ internal static class Contrato
                 .OrderBy(a => a.Que.Selector, StringComparer.Ordinal)
                 .Select(a => $"{a.Que.Selector}[{(a.Vivo ? "vivo" : "memoria")}]->{a.Destino}"))));
 
+    private static readonly List<(string Nombre, bool Cumple)> _veredicto = new();
+
     private static void Prueba(string nombre, Action<Grafo> cuerpo)
     {
         int antes = _fallos;
@@ -345,8 +365,45 @@ internal static class Contrato
             for (var x = e; x != null; x = x.InnerException)
                 Console.WriteLine($"   ✘ {x.GetType().Name}: {x.Message}");
         }
-        Console.WriteLine($"{(_fallos == antes ? "✔" : "✘")} {nombre}");
+        bool cumple = _fallos == antes;
+        _veredicto.Add((nombre, cumple));
+        Console.WriteLine($"{(cumple ? "✔" : "✘")} {nombre}");
     }
+
+    private static void Extra(string nombre, bool cumple)
+    {
+        _veredicto.Add((nombre, cumple));
+        if (!cumple) _fallos++;
+    }
+
+    /// <summary>
+    /// Deja el veredicto en disco, junto al visor, para poder mirarlo sin correr nada.
+    /// </summary>
+    private static void Apuntar()
+    {
+        try
+        {
+            // Se busca la carpeta del visor subiendo desde el binario: el contrato corre desde
+            // bin/Release/... y el repo está unos niveles por encima. Si no se encuentra, se calla:
+            // no poder dejar la nota no puede tumbar al juez.
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "visor"))) dir = dir.Parent;
+            if (dir == null) return;
+
+            string ruta = Path.Combine(dir.FullName, "visor", "reglas.json");
+            var filas = _veredicto.Select(v =>
+                $"{{\"regla\":{Cita(v.Nombre)},\"cumple\":{(v.Cumple ? "true" : "false")}}}");
+            File.WriteAllText(ruta,
+                "{\"cuando\":" + Cita(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"))
+                + ",\"integro\":" + (_fallos == 0 ? "true" : "false")
+                + ",\"reglas\":[" + string.Join(",", filas) + "]}",
+                System.Text.Encoding.UTF8);
+        }
+        catch { }
+    }
+
+    private static string Cita(string s) =>
+        "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 
     private static void Debe(bool condicion, string promesa)
     {
