@@ -22,6 +22,7 @@ public sealed class ProyectorNeo4j : IDisposable
     private readonly string _url;
     private readonly string _auth;
     private int _ultimaVersion = -1;
+    private string _ultimaHuella = "";
     private bool _yaAvise;
 
     /// <summary>Lo que se dice cuando algo va mal. Se inyecta para no atar el núcleo a ningún log.</summary>
@@ -56,7 +57,41 @@ public sealed class ProyectorNeo4j : IDisposable
     public bool Proyectar(Grafo grafo)
     {
         if (grafo.Version == _ultimaVersion) return false;
+
+        // MOVERSE ES BARATO Y PASA TODO EL RATO. Reescribir el grafo entero cada vez que alguien
+        // cambia de ventana no escala: con seis mil nodos acumulados, cada pasada mandaba un JSON
+        // de varios megas, el cliente cortaba a los cinco segundos y Neo4j se quedaba registrando
+        // «Early EOF» hasta atascarse (2026-08-12, medido: el servidor dejó de responder).
+        //
+        // Si lo ÚNICO que cambió es dónde estamos, se manda una consulta de dos líneas. El volcado
+        // completo se reserva para cuando cambió el contenido del grafo, que es mucho menos
+        // frecuente. Las dos escriben lo mismo; lo que cambia es cuánto se envía.
+        bool soloNosMovimos = _ultimaVersion >= 0
+                           && _ultimaHuella.Length > 0
+                           && _ultimaHuella == HuellaDeContenido(grafo);
         _ultimaVersion = grafo.Version;
+
+        if (soloNosMovimos)
+        {
+            var mover = new
+            {
+                statements = new object[]
+                {
+                    new
+                    {
+                        statement = """
+                        MATCH (p:Ubicacion {actual:true}) SET p.actual = false
+                        WITH count(*) AS _
+                        MATCH (n:Ubicacion {id:$aqui}) SET n.actual = true
+                        """,
+                        parameters = new { aqui = grafo.Aqui },
+                    },
+                },
+            };
+            return Mandar(JsonSerializer.Serialize(mover));
+        }
+
+        _ultimaHuella = HuellaDeContenido(grafo);
 
         var ubicaciones = grafo.Ubicaciones()
             .Select(u => new { id = u, app = Grafo.AppDe(u), actual = u == grafo.Aqui })
@@ -190,6 +225,25 @@ public sealed class ProyectorNeo4j : IDisposable
     /// </summary>
     public void Sabotear(string cypher) =>
         Mandar(JsonSerializer.Serialize(new { statements = new object[] { new { statement = cypher } } }));
+
+    /// <summary>
+    /// Una huella de TODO menos de dónde estamos. Sirve para distinguir «me moví» de «el grafo
+    /// cambió», que son lo mismo para la versión del núcleo y cuestan cosas muy distintas de
+    /// escribir. No entra <see cref="Grafo.Aqui"/> a propósito: si entrara, moverse siempre
+    /// parecería un cambio de contenido y volveríamos al volcado completo por cada ventana.
+    /// </summary>
+    private static string HuellaDeContenido(Grafo grafo)
+    {
+        var sb = new StringBuilder();
+        foreach (string u in grafo.Ubicaciones())
+        {
+            sb.Append(u).Append('{');
+            foreach (var a in grafo.DesdeAqui(u))
+                sb.Append(a.Que.Selector).Append(a.Vivo ? '+' : '-').Append(a.Destino).Append(';');
+            sb.Append('}');
+        }
+        return sb.ToString();
+    }
 
     /// <summary>El grafo como un conjunto de hechos comparables. Ordenado, para que dos retratos
     /// del mismo grafo sean iguales carácter a carácter.</summary>

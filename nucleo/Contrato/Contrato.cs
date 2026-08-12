@@ -25,6 +25,7 @@ internal static class Contrato
         Prueba("5. el orden de las observaciones no cambia el grafo", ElOrdenNoImporta);
         Prueba("6. lo vivo y lo recordado nunca se confunden", VivoNoEsRecordado);
         Prueba("7. no se inventa nada: sin cruzar, no hay destino", SinCruzarNoHayDestino);
+        Prueba("8. cambiar de sitio ES un cambio, aunque se vea lo mismo", MoverseEsCambio);
 
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
@@ -175,6 +176,23 @@ internal static class Contrato
         //
         // Se estropea Neo4j A PROPÓSITO, por fuera del proyector, y se exige que lo note. Después
         // se deja como estaba.
+        // MOVERSE Y NADA MÁS: el proyector manda entonces una consulta corta en vez del volcado
+        // entero. Tiene que dejar Neo4j igual de fiel — si el atajo escribiera algo distinto del
+        // camino largo, el visor mentiría solo al cambiar de ventana, que es justo cuando más se
+        // mira. Se comprueba porque el atajo se añadió DESPUÉS de que el volcado completo tumbara
+        // el servidor (2026-08-12).
+        g.Observar("uia://otra.exe/sola", new[] { new Elemento("s:x", "Equis", "Button") });
+        p.Proyectar(g);
+        string trasMoverse = p.Verificar(g);
+        if (trasMoverse.Length == 0)
+            Console.WriteLine("✔ …y el atajo de «solo me moví» deja Neo4j igual de fiel");
+        else
+        {
+            _fallos++;
+            Console.WriteLine("✘ el atajo de «solo me moví» rompió la fidelidad:");
+            Console.WriteLine("   " + trasMoverse.Replace("\n", "\n   "));
+        }
+
         p.Sabotear("MATCH (e:Elemento {selector:'s:x'}) DETACH DELETE e");
         string trasElSabotaje = p.Verificar(g);
         if (trasElSabotaje.Length > 0)
@@ -186,6 +204,27 @@ internal static class Contrato
                             + "está dando verde sin mirar");
         }
         p.Proyectar(g);   // se deja el mundo como estaba
+    }
+
+    private static void MoverseEsCambio(Grafo g)
+    {
+        // EL CASO REAL, medido por el usuario el 2026-08-12: «lo que estoy enfocando ya lo detectó
+        // la url, pero la visualización marca un app diferente».
+        //
+        // Se va de A a B y se vuelve a A sin que nada de A haya cambiado. Si «dónde estoy» no
+        // cuenta como cambio, quien proyecta se salta la pasada —porque la versión no se movió— y
+        // el dibujo se queda marcando B como actual para siempre. DÓNDE ESTOY ES UN HECHO DEL
+        // GRAFO, tanto como qué se ve; que sea el más volátil de todos no lo hace menos hecho.
+        var mismo = new[] { new Elemento("s:a", "Algo", "Button") };
+        g.Observar("app://a", mismo);
+        g.Observar("app://b", new[] { new Elemento("s:b", "Otro", "Button") });
+
+        int antes = g.Version;
+        g.Observar("app://a", mismo);   // se vuelve a A, y A no ha cambiado en nada
+
+        Debe(g.Aqui == "app://a", "el grafo sabe que volvimos a A");
+        Debe(g.Version != antes,
+            "…y volver CUENTA como cambio: si no, quien pinta se salta la pasada y deja marcado el sitio anterior");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

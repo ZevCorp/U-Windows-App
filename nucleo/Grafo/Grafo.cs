@@ -59,12 +59,18 @@ public sealed class Grafo
         if (string.IsNullOrWhiteSpace(ubicacion)) return;
         lock (_llave)
         {
+            // MOVERSE ES UN CAMBIO, aunque lo que se vea sea idéntico. «Dónde estoy» es un hecho
+            // del grafo tanto como «qué se ve aquí»; que sea el más volátil de todos no lo hace
+            // menos hecho. Sin esto, ir de A a B y volver a A no movía la versión —porque A no
+            // había cambiado— así que quien pinta se saltaba la pasada y el dibujo se quedaba
+            // marcando B como el sitio actual. El usuario lo vio así: «lo que estoy enfocando ya lo
+            // detectó la url, pero la visualización marca un app diferente» (2026-08-12).
+            bool cambio = !string.Equals(Aqui, ubicacion, StringComparison.OrdinalIgnoreCase);
             Aqui = ubicacion;
             if (!_vistos.TryGetValue(ubicacion, out var aqui))
                 _vistos[ubicacion] = aqui = new Dictionary<string, Elemento>(StringComparer.Ordinal);
 
             var vivos = new HashSet<string>(StringComparer.Ordinal);
-            bool cambio = false;
             foreach (var e in visibles)
             {
                 if (string.IsNullOrWhiteSpace(e.Selector)) continue;
