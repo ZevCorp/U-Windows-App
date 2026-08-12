@@ -180,7 +180,7 @@ async function tickMapa() {
   const enlaces = nodos.reduce((t, n) => t + n.caminos.length, 0);
   cabecera(aqui ? corto(aqui.id) : "—", `${new Set(nodos.map(n => n.app)).size} app(s)`,
            `${nodos.length} ubicaciones · ${enlaces} camino(s) aprendido(s)`);
-  leyenda("cada punto es una PANTALLA · las flechas son caminos probados · Ctrl+Shift+clic en un nodo para ir");
+  leyenda("cada punto es una PANTALLA · las flechas son caminos probados · clic en un nodo para ir");
 
   // Se agrupa por app en anillos concéntricos: sin agrupar, dos apps distintas se mezclan y el
   // dibujo sugiere una vecindad que no existe. Dentro de cada anillo el orden es alfabético para
@@ -207,20 +207,23 @@ async function tickMapa() {
     s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#2f6b4f" stroke-width="1.5" marker-end="url(#f)"/>`;
   }));
   Object.values(pos).forEach(({ x, y, n }) => {
-    // El círculo lleva su id encima: es lo que permite que Ctrl+Shift+clic sepa a dónde ir sin
-    // que la página tenga que calcular nada. El destino sale del dibujo, y el dibujo del núcleo.
+    // El círculo lleva su id encima: es lo que permite que un clic sepa a dónde ir sin que la
+    // página tenga que calcular nada. El destino sale del dibujo, y el dibujo del núcleo.
     s += `<circle class="nodo" data-id="${escapar(n.id)}" cx="${x}" cy="${y}" r="${n.actual ? 11 : 7}"`
        + ` fill="${n.actual ? '#1b2740' : '#22262f'}" stroke="${n.actual ? '#4c8dff' : '#3a4050'}"`
        + ` stroke-width="${n.actual ? 3 : 1}" style="cursor:pointer"/>`;
     s += rotulo(x + 13, y + 4, "start", corto(n.id), !n.actual);
   });
   pintar(s);
+  // CLIC LLANO. Ctrl+Shift no hacía falta en la práctica —el navegador nunca acaba de garantizar
+  // que ambas teclas lleguen limpias a un evento de clic sobre SVG— y esta vista solo tiene una
+  // acción posible sobre un nodo: ir. No hay ambigüedad que combinar teclas tuviera que resolver.
   document.querySelectorAll("circle.nodo").forEach(c =>
-    c.addEventListener("click", ev => { if (ev.ctrlKey && ev.shiftKey) irA(c.dataset.id); }));
+    c.addEventListener("click", () => irA(c.dataset.id)));
   estado("actualizado " + hora());
 }
 
-// ── NAVEGAR: Ctrl+Shift+clic sobre un nodo ────────────────────────────────
+// ── NAVEGAR: clic sobre un nodo ─────────────────────────────────────────
 //
 // UN PASO CADA VEZ, porque es lo único que el núcleo contesta. Se le vuelve a preguntar después de
 // cada clic en lugar de pedirle la ruta entera: el mapa es vivo, y una ruta calculada de golpe es

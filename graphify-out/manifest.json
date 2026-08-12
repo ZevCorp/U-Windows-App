@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml.cs": {
-    "mtime": 1786559769.4173167,
-    "ast_hash": "1b2185715ac3cfa32efe309e56969ce8",
+    "mtime": 1786575738.2677832,
+    "ast_hash": "237346012cd1b35898dcaadaceac5f30",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FillPreviewWindow.cs": {
@@ -1045,13 +1045,13 @@
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
-    "mtime": 1786571125.3382452,
-    "ast_hash": "90255b0df35a456f9b35679fc932e6eb",
+    "mtime": 1786575787.2251024,
+    "ast_hash": "8dc71d1188ff4a9278bdd27c64734d41",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/ServidorDelNucleo.cs": {
-    "mtime": 1786571081.5644605,
-    "ast_hash": "8a2ca679af60626302f737e6c79444bd",
+    "mtime": 1786575726.0198116,
+    "ast_hash": "3dbecb49fc53b1d3efdb4fa35ef238c6",
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
