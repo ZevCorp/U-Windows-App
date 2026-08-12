@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    LAS PROMESAS DEL NÚCLEO NUEVO, escritas como pruebas que llaman al código real.
+
+    Aparte de tests/ContratoDelGrafo, que juzga el núcleo ANTERIOR: son dos cosas distintas y
+    mezclarlas haría imposible saber cuál se rompió. Aquel vigila lo que hay en producción; este
+    vigila lo que estamos construyendo para reemplazarlo.
+
+    Corre sin abrir una sola ventana, porque el núcleo es puro: eso es lo que permite que una prueba
+    dure un segundo en vez de minuto y medio de UIA.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>contrato-nucleo</AssemblyName>
+    <RootNamespace>Nucleo.Pruebas</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Grafo\Grafo.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -78,6 +78,12 @@
     <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- EL NÚCLEO. La dependencia va en UNA dirección y no se invierte nunca: el cliente conoce al
+         grafo, el grafo no conoce al cliente. Ver nucleo/Grafo/Grafo.csproj. -->
+    <ProjectReference Include="..\nucleo\Grafo\Grafo.csproj" />
+  </ItemGroup>
+
 </Project>
 
 

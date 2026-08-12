@@ -241,7 +241,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // pantalla— y no el dibujo: un visor que leyera al pintor heredaría sus mentiras, que
             // es justo lo que este visor existe para detectar (2026-08-12, pedido por el usuario).
             _mapaVivo = new Navigation.MapaVivo(
-                _surfaceMap,
                 () => _locator?.DondeEstoy()?.Origin ?? "",
                 () =>
                 {

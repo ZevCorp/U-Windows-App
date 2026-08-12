@@ -193,6 +193,18 @@ const herramientas = createSdkMcpServer({
       { salida: z.string().describe("nombre de la salida, tal como se ve") },
       (a) => sonda("map_set_kind", { app: APP, exit: a.salida, kind: "accion" })),
 
+    // CLASIFICAR ES HOY TU ÚNICO ENTREGABLE ESTRUCTURAL, y no se usa todavía para nada: no mueve
+    // rutas, no cambia el dibujo, no sube ninguna métrica. Se recoge porque saber QUÉ ES cada cosa
+    // es el dato que hará falta después, y porque recogerlo ahora —mientras alguien mira una app
+    // de verdad— es infinitamente más barato que reconstruirlo luego a partir de nombres
+    // (2026-08-12, decidido por el usuario: «que clasifique y ya, luego veremos qué hacer con eso»).
+    t("clasificar", "Decir QUÉ ES una salida. Es tu entregable principal: recorre cada pantalla y clasifica lo que ves. Cuatro clases: «navegacion» (lleva a otra pantalla), «accion» (hace algo y te deja donde estás), «contenido» (un dato de una lista: un archivo, una fila, una foto — no es estructura de la app) y «cromo» (mobiliario que se ve desde muchas pantallas, como una barra lateral o una barra superior). Acepta nombre o SELECTOR; usa el selector si el nombre se repite en la app.",
+      {
+        salida: z.string().describe("nombre de la salida O su selector (uia:name=X;ct=Button)"),
+        clase: z.enum(["navegacion", "accion", "contenido", "cromo"]),
+      },
+      (a) => sonda("map_set_kind", { app: APP, exit: a.salida, kind: a.clase })),
+
     t("feedback", "Dejar escrito un HALLAZGO para el equipo: un desajuste entre la jerarquía real de la app y la del grafo, un nivel que no cuadra, una puerta que el grafo no vio. Es tu entregable.",
       { hallazgo: z.string().describe("el hallazgo, concreto: qué esperabas, qué hay, y por qué importa") },
       (a) => sonda("map_feedback", { app: APP, finding: a.hallazgo })),
@@ -201,7 +213,42 @@ const herramientas = createSdkMcpServer({
 
 // ── La misión ────────────────────────────────────────────────────────────────
 const MISION = `Eres el ARQUITECTO del grafo de navegación. Delante tienes la app «${APP}», ya abierta,
-y un grafo que el sistema construye solo mientras navega. Tu misión NO es mapear por mapear: es
+y un grafo que el sistema construye solo mientras navega.
+
+═══ LO PRIMERO, PORQUE CAMBIÓ EL 2026-08-12 Y CONTRADICE LO DE ABAJO ═══
+
+El modelo del grafo se simplificó y esto es ahora tu trabajo principal:
+
+  El grafo NO responde «¿cuál es la ruta hasta X?». Responde «¿qué es alcanzable desde donde
+  estoy?». Navegar es caminar mirando: en cada pantalla se comprueba EN VIVO qué hay delante, y de
+  eso se elige. No hay jerarquía que calcular.
+
+Consecuencia directa: LOS NIVELES YA NO IMPORTAN. No pierdas turnos en «fijar_nivel» — esa
+herramienta sigue existiendo pero ya no es tu entregable, y ponerle números a las cosas no mide
+nada. Si la usas, que sea porque comprobaste algo cruzando, no para subir una cuenta.
+
+TU ENTREGABLE AHORA SON DOS COSAS, en este orden:
+
+  1. CRUZAR lo que nadie ha cruzado. Cada puerta que abres convierte una incógnita en un hecho, y
+     eso es lo único que hace crecer el mapa de verdad. Agota una rama hasta el fondo antes de
+     saltar a otra.
+
+  2. CLASIFICAR con «clasificar» lo que ves en cada pantalla, en cuatro clases:
+       · navegacion — lleva a otra pantalla
+       · accion     — hace algo y te deja donde estabas
+       · contenido  — un dato de una lista (un archivo, una fila, una foto): no es estructura
+       · cromo      — mobiliario que se ve desde muchas pantallas (barra lateral, barra superior)
+     Esta clasificación HOY NO SE USA PARA NADA: no mueve rutas, no cambia el dibujo, no sube
+     ninguna métrica. Se recoge igual, y es deliberado — saber qué es cada cosa es el dato que hará
+     falta después, y recogerlo ahora, mientras alguien mira la app de verdad, es infinitamente más
+     barato que reconstruirlo luego adivinando por los nombres.
+
+Y sigue valiendo, más que nunca, «feedback»: si algo del grafo no se corresponde con la app,
+escríbelo. Es lo que más nos ha servido de ti.
+
+═══ EL RESTO SIGUE VIGENTE, CON LOS NIVELES YA DESCONTADOS ═══
+
+Tu misión NO es mapear por mapear: es
 JUZGAR si la jerarquía que el grafo está construyendo se corresponde con la arquitectura real de
 la app, corregir el grafo donde te den autoridad tus herramientas, y dejar constancia del resto.
 
@@ -292,7 +339,7 @@ const PERMITIDAS = [
   "mcp__grafo__ir_a", "mcp__grafo__jerarquia_del_grafo", "mcp__grafo__rutas_desde",
   "mcp__grafo__fijar_nivel", "mcp__grafo__feedback",
   "mcp__grafo__cuanto_entiende", "mcp__grafo__sin_situar", "mcp__grafo__mirar",
-  "mcp__grafo__marcar_atras", "mcp__grafo__marcar_accion",
+  "mcp__grafo__marcar_atras", "mcp__grafo__marcar_accion", "mcp__grafo__clasificar",
 ];
 const PROHIBIDAS = ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"];
 

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    EL NÚCLEO. El grafo, y nada más.
+
+    AISLADO A PROPÓSITO Y POR CONSTRUCCIÓN: este proyecto no referencia a windows-client, ni a
+    windows-graph, ni a nada del mapeador. No es una convención que alguien pueda saltarse sin
+    querer — es que las clases de allí NO EXISTEN aquí, así que un vicio del núcleo anterior no
+    puede colarse por descuido. Si algún día alguien añade esa referencia, tendrá que escribirla a
+    mano y verá este comentario primero.
+
+    LA FRONTERA, dicha una vez:
+      · El MAPEADOR lee la pantalla: UIA, pestañas del navegador, el crawler, el localizador. Es
+        imperfecto y está en desarrollo, y eso está bien — no es el núcleo.
+      · El NÚCLEO recibe lo que el mapeador vio y responde UNA pregunta: qué es alcanzable desde
+        donde estoy, y a dónde llevó cada cosa cuando se cruzó.
+
+    LO QUE NO HAY AQUÍ, y su ausencia es el diseño:
+      · No hay NIVELES. Navegar es caminar mirando, no calcular un camino sobre una jerarquía.
+      · No hay CROMO como concepto estructural. Si se comprueba lo visible en cada paso, el panel
+        lateral simplemente está visible desde aquí.
+      · No hay Kind, ni NivelNav, ni EsCromo, ni Explored. Nada de eso hacía falta para contestar
+        la pregunta de arriba, y todo eso fue de donde salieron los fallos de las últimas semanas.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Nucleo.Grafo</AssemblyName>
+    <RootNamespace>Nucleo</RootNamespace>
+    <!-- Sin WPF, sin Windows: el grafo no sabe qué es una ventana. Si algún día lo necesitara,
+         sería la señal de que se le está metiendo algo que no le toca. -->
+  </PropertyGroup>
+
+</Project>

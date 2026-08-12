@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml.cs": {
-    "mtime": 1786505377.843057,
-    "ast_hash": "dbf42daeaa00ecb2a2c7a863b87dc74f",
+    "mtime": 1786537328.04749,
+    "ast_hash": "6ea93ca46a6ec1130d95e5495649e00b",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FillPreviewWindow.cs": {
@@ -1012,6 +1012,11 @@
   "windows-client/src/Voice/NarradorDelArquitecto.cs": {
     "mtime": 1786506575.7735562,
     "ast_hash": "43aa38976b1ecc7b958d1bf5e2510117",
+    "semantic_hash": ""
+  },
+  "windows-client/src/Navigation/MapaVivo.cs": {
+    "mtime": 1786537279.6628633,
+    "ast_hash": "95d5db61b990c8d0596e3096b1d3af95",
     "semantic_hash": ""
   }
 }
