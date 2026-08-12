@@ -630,8 +630,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786457635.794104,
-    "ast_hash": "2d7e5f0770237a8d1789fb505a94bc1f",
+    "mtime": 1786492592.4490585,
+    "ast_hash": "b2df1a04a1bbcf1772022b9e32093193",
     "semantic_hash": ""
   },
   "PRODUCTION.md": {
@@ -810,8 +810,8 @@
     "semantic_hash": ""
   },
   "versiones/nucleo/v1.cs": {
-    "mtime": 1786457716.4987233,
-    "ast_hash": "79ab11959a1af48c2a7e73aad5f7d9af",
+    "mtime": 1786458500.5218248,
+    "ast_hash": "b6d45dbb84a46c3a9ad47a45646c31a0",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Arquitecto.cs": {
@@ -907,6 +907,91 @@
   "docs/plan-plata-real.md": {
     "mtime": 1786458394.6539776,
     "ast_hash": "cae8b195260f6c3013c734686d560f0b",
+    "semantic_hash": ""
+  },
+  "scripts/verificar.ps1": {
+    "mtime": 1786492592.4501283,
+    "ast_hash": "9967702506c2dd8abad19d327fe93b53",
+    "semantic_hash": ""
+  },
+  ".claude/rules/aviso-en-slack.md": {
+    "mtime": 1786492592.4393137,
+    "ast_hash": "271d82b9d7066f4cad076c5eb5e23323",
+    "semantic_hash": ""
+  },
+  ".claude/rules/compuerta-a-main.md": {
+    "mtime": 1786492592.4404776,
+    "ast_hash": "541ccd08951de919fd25546b14e593f0",
+    "semantic_hash": ""
+  },
+  ".claude/rules/flujo-sdd.md": {
+    "mtime": 1786492592.4404776,
+    "ast_hash": "42932438d3c23dd45d72cd148f59ec89",
+    "semantic_hash": ""
+  },
+  ".claude/rules/nucleo-congelado.md": {
+    "mtime": 1786492592.4404776,
+    "ast_hash": "af8555a3548c7fb7ff2a2381f22c84a6",
+    "semantic_hash": ""
+  },
+  ".claude/rules/patrones-de-desarrollo.md": {
+    "mtime": 1786492592.4416146,
+    "ast_hash": "818506a5d1a214cf929af9a98d32469d",
+    "semantic_hash": ""
+  },
+  ".claude/rules/ramas-y-commits.md": {
+    "mtime": 1786492592.4416146,
+    "ast_hash": "98ba5a2823e3bb6730432d18d9833975",
+    "semantic_hash": ""
+  },
+  ".claude/skills/a-main/SKILL.md": {
+    "mtime": 1786492592.4427326,
+    "ast_hash": "dbc2e4653dbd4cde9974d7ae42d16393",
+    "semantic_hash": ""
+  },
+  ".claude/skills/avisa/SKILL.md": {
+    "mtime": 1786492592.4427326,
+    "ast_hash": "71b2f11d4171e8dbb0024f59c4355187",
+    "semantic_hash": ""
+  },
+  ".claude/skills/especifica/SKILL.md": {
+    "mtime": 1786492592.4439218,
+    "ast_hash": "d5d3753cf8031c83972c00f7f2455f54",
+    "semantic_hash": ""
+  },
+  ".claude/skills/fases/SKILL.md": {
+    "mtime": 1786492592.4439218,
+    "ast_hash": "a7652f0ca84191ee3e1cf79e17578f3f",
+    "semantic_hash": ""
+  },
+  ".claude/skills/implementa/SKILL.md": {
+    "mtime": 1786492592.444943,
+    "ast_hash": "81f6cb89e4388660ea040e032c3958cd",
+    "semantic_hash": ""
+  },
+  ".claude/skills/promesas/SKILL.md": {
+    "mtime": 1786492592.4459395,
+    "ast_hash": "04570b74a6d07d5c4b25c2fe26c18525",
+    "semantic_hash": ""
+  },
+  ".claude/skills/verifica/SKILL.md": {
+    "mtime": 1786492592.4459395,
+    "ast_hash": "025ef08f271040df69843700cf4ff0ce",
+    "semantic_hash": ""
+  },
+  ".github/pull_request_template.md": {
+    "mtime": 1786492592.447677,
+    "ast_hash": "4bc01f177a7eeb0bc775958cf3cb84bc",
+    "semantic_hash": ""
+  },
+  ".github/workflows/contrato.yml": {
+    "mtime": 1786492592.447677,
+    "ast_hash": "2f7b8292ed27723b3ea44af76745970c",
+    "semantic_hash": ""
+  },
+  "docs/specs/PLANTILLA.md": {
+    "mtime": 1786492592.4490585,
+    "ast_hash": "22f2fe1d617732c53fff0dc6c59be8c6",
     "semantic_hash": ""
   }
 }
