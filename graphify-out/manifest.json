@@ -910,8 +910,8 @@
     "semantic_hash": ""
   },
   "scripts/verificar.ps1": {
-    "mtime": 1786492592.4501283,
-    "ast_hash": "9967702506c2dd8abad19d327fe93b53",
+    "mtime": 1786493250.8876283,
+    "ast_hash": "6fcebcbb1f65b814c5f682c9a6ce0633",
     "semantic_hash": ""
   },
   ".claude/rules/aviso-en-slack.md": {
