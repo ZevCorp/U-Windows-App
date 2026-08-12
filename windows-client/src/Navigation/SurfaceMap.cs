@@ -1030,7 +1030,34 @@ public sealed class SurfaceMap
 
         Version++;
         Save();
+
+        // UN SOLO SITIO DESDE EL QUE SE CUENTA UN CRUCE, y por eso está aquí dentro y no en quien
+        // llama. `LearnTraversal` tiene OCHO llamantes en cuatro archivos —el crawler, el
+        // explorador, cinco herramientas MCP— y avisar desde cada uno es la forma exacta del fallo
+        // que este repo ya pagó: el diagnóstico de la superficie SAP se cableó en dos de los tres
+        // sitios que la construían, y el que faltaba era justo el que usa el operador.
+        //
+        // Se avisa DESPUÉS de acuñar y no antes: los guardias de arriba —cambiar de app no es
+        // navegar, el gesto de atrás no acuña— salen por `return`, así que llegar aquí ya significa
+        // que hubo un cruce de verdad. Anunciar antes convertiría cada uno de esos rechazos en un
+        // hecho falso en quien escuche (2026-08-12).
+        SeCruzo?.Invoke(f, selector, t);
     }
+
+    /// <summary>
+    /// Un cruce APRENDIDO: se pulsó <c>selector</c> en <c>desde</c> y se acabó en <c>hasta</c>.
+    ///
+    /// Existe para que el núcleo nuevo (<c>nucleo/Grafo</c>, vía <c>MapaVivo</c>) se entere de lo
+    /// mismo que este mapa, sin que ninguno de los ocho llamantes tenga que acordarse. La dirección
+    /// de la dependencia no se invierte: esto ANUNCIA, y quien quiera escuchar se suscribe — el
+    /// núcleo nuevo sigue sin conocer a nadie de aquí.
+    ///
+    /// Hasta hoy `MapaVivo.Cruzado()` no lo llamaba nadie: el núcleo nuevo recibía observaciones
+    /// pero jamás un cruce, así que su tabla de destinos estaba siempre vacía y sus promesas 3 y 4
+    /// —«cruzar guarda a dónde llevó» y «el mismo selector puede llevar a sitios distintos»— eran
+    /// ciertas en su contrato e inertes en producción.
+    /// </summary>
+    public event Action<string, string, string>? SeCruzo;
 
     /// <summary>
     /// Esta puerta ya no está: se le quita la acción para que deje de usarse al trazar rutas.

@@ -101,6 +101,15 @@ internal static class Contrato
         Prueba("19. el archivo del bronce no contiene plata", ElDiscoNoMezcla);
         Prueba("20. una sección alcanzada solo por el mobiliario sigue teniendo hijos", ElCromoNoCortaLaRama);
 
+        // ── EL PUENTE AL NÚCLEO NUEVO ────────────────────────────────────────
+        //
+        // El núcleo nuevo (`nucleo/Grafo`) guarda dos hechos: «esto se vio aquí» y «esto, pulsado
+        // aquí, llevó allí». El primero le llega por el latido de `MapaVivo`; el segundo NO le
+        // llegaba: `Cruzado()` no tenía un solo llamante en todo el repo (medido el 2026-08-12).
+        // Sus promesas 3 y 4 —las dos que hablan de destinos— eran ciertas en su contrato e
+        // inertes en la app.
+        Prueba("21. un cruce aprendido se anuncia, y lo que el mapa rechaza no se anuncia", ElCruceSeAnuncia);
+
         return Resumir();
     }
 
@@ -261,6 +270,45 @@ internal static class Contrato
 
         Debe(m.Edges().Count(e => e.To == "uia://fake.exe/imagenes") == 2,
             "el mismo destino por dos puertas distintas son DOS aristas, no una que pisa a la otra");
+    }
+
+    /// <summary>
+    /// El aviso tiene que valer lo mismo que la arista: si se anunciara un cruce que el mapa
+    /// rechazó, el núcleo nuevo aprendería un destino que este mapa no cree — dos grafos que se
+    /// contradicen, que es peor que un solo grafo equivocado.
+    ///
+    /// Los dos rechazos que se ejercitan son los que ya tienen su propia promesa (la 6 y la 4), y
+    /// se comprueban aquí otra vez a propósito: son guardias que salen por `return` ANTES de acuñar,
+    /// así que un `SeCruzo` mal colocado —arriba del método en vez de abajo— los convertiría a los
+    /// dos en un hecho falso sin romper ninguna otra promesa.
+    /// </summary>
+    private static void ElCruceSeAnuncia(SurfaceMap m)
+    {
+        var anunciados = new List<(string Desde, string Selector, string Hasta)>();
+
+        var evento = typeof(SurfaceMap).GetEvent("SeCruzo");
+        if (evento == null) { Pendiente("SurfaceMap.SeCruzo", "el puente al núcleo nuevo"); return; }
+        evento.AddEventHandler(m, new Action<string, string, string>(
+            (d, s, h) => anunciados.Add((d, s, h))));
+
+        // 1 · El cruce de verdad: se acuña y se anuncia, una sola vez.
+        m.LearnTraversal("uia://fake.exe/inicio", "uia://fake.exe/dentro",
+            "uia:name=Entrar;ct=Button", Array.Empty<string>(), "Entrar", "Button");
+        Debe(anunciados.Count == 1, "un cruce aprendido se anuncia una vez");
+        Debe(anunciados.Count == 1 && anunciados[0] == ("uia://fake.exe/inicio",
+                "uia:name=Entrar;ct=Button", "uia://fake.exe/dentro"),
+            "…y dice de dónde, con qué y a dónde, en ese orden");
+
+        // 2 · El robo de foco: otra app no es una transición, y no puede anunciarse como tal.
+        m.LearnTraversal("uia://fake.exe/inicio", "uia://otra.exe/ventana",
+            "uia:name=Loquesea;ct=Button", Array.Empty<string>(), "Loquesea", "Button");
+        Debe(anunciados.Count == 1, "un robo de foco no acuña arista, así que tampoco se anuncia");
+
+        // 3 · El gesto de atrás: navega, pero no acuña — y lo que no se acuña no se cuenta.
+        m.AprenderAtras("fake.exe", "Atrás", humano: true);
+        m.LearnTraversal("uia://fake.exe/dentro", "uia://fake.exe/inicio",
+            "uia:aid=backButton;ct=Button", Array.Empty<string>(), "Atrás", "Button");
+        Debe(anunciados.Count == 1, "el gesto de volver no acuña arista, así que tampoco se anuncia");
     }
 
     private static void RoboDeFocoNoAprende(SurfaceMap m)

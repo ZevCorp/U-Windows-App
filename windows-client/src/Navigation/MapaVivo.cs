@@ -28,17 +28,31 @@ public sealed class MapaVivo : IDisposable
     private readonly Nucleo.ProyectorNeo4j _proyector = new();
     private readonly Func<string> _donde;
     private readonly Func<IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>> _loQueVeo;
+    private readonly SurfaceMap? _mapa;
     private System.Threading.Timer? _reloj;
 
     /// <summary>El núcleo, para que quien quiera preguntarle no tenga que pasar por aquí.</summary>
     public Nucleo.Grafo Nucleo => _grafo;
 
+    /// <param name="mapa">
+    /// El mapa del que se escuchan los CRUCES. Sin esto, el núcleo nuevo recibía observaciones y
+    /// nunca un cruce: su tabla de destinos quedaba vacía para siempre, y las dos promesas que
+    /// hablan de destinos eran ciertas en el contrato e inertes en la app (medido el 2026-08-12:
+    /// `Cruzado()` no tenía un solo llamante en todo el repo).
+    ///
+    /// Se escucha UN evento en vez de llamar desde los ocho sitios que aprenden un cruce, que es
+    /// lo que garantiza que un llamante nuevo no se olvide — ver la nota en <see cref="SurfaceMap.SeCruzo"/>.
+    /// </param>
     public MapaVivo(Func<string> donde,
-        Func<IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>> loQueVeo)
+        Func<IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>> loQueVeo,
+        SurfaceMap? mapa = null)
     {
         _donde = donde;
         _loQueVeo = loQueVeo;
         _proyector.Cuenta = m => LogBus.Log("mapa-vivo", m);
+
+        _mapa = mapa;
+        if (_mapa != null) _mapa.SeCruzo += Cruzado;
     }
 
     /// <summary>
@@ -79,15 +93,19 @@ public sealed class MapaVivo : IDisposable
     /// <summary>
     /// «Se pulsó esto aquí y acabamos allí». Lo llama quien de verdad cruzó algo — es el otro hecho
     /// que el núcleo guarda, y el único que no se puede deducir mirando.
+    ///
+    /// SOLO ANOTA; publicar es del latido. Antes proyectaba aquí mismo, y desde que esto lo dispara
+    /// <see cref="SurfaceMap.SeCruzo"/> el llamante es el hilo del crawler o el de una herramienta
+    /// MCP: meterles un HTTP de hasta 5 s en mitad del recorrido es poner la red en el camino
+    /// caliente. El latido va cada 900 ms y `Proyectar` no hace nada si la versión no cambió, así
+    /// que el retraso máximo es un latido y el coste para quien cruzó es cero (2026-08-12).
     /// </summary>
-    public void Cruzado(string desde, string selector, string hasta)
-    {
+    public void Cruzado(string desde, string selector, string hasta) =>
         _grafo.Cruzar(desde, selector, hasta);
-        _proyector.Proyectar(_grafo);
-    }
 
     public void Dispose()
     {
+        if (_mapa != null) _mapa.SeCruzo -= Cruzado;
         _reloj?.Dispose();
         _proyector.Dispose();
     }

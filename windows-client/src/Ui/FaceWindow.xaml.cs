@@ -254,7 +254,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                         .Select(e => (Uia.Reconocedor.SelectorDe(e), e.Label, e.ControlType))
                         .Where(t => t.Item1.Length > 0 && t.Label.Length > 0)
                         .ToList();
-                });
+                },
+                // Y EL MISMO MAPA DEL QUE TODO LO DEMÁS APRENDE, para enterarse de los CRUCES.
+                // Sin esto el núcleo nuevo solo sabía «qué se ve aquí» —la mitad barata— y nunca
+                // «a dónde llevó esto», que es el hecho que no se puede deducir mirando.
+                _surfaceMap);
             _mapaVivo.Arrancar();
 
             // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.
