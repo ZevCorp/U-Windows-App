@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml.cs": {
-    "mtime": 1786540013.1613011,
-    "ast_hash": "a02945600e6c6105153fe42267959245",
+    "mtime": 1786554467.2147503,
+    "ast_hash": "010736663b378283c0ac30c5d33d6c85",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FillPreviewWindow.cs": {
@@ -1015,13 +1015,13 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786540056.1759584,
-    "ast_hash": "3438ca6d3aeb77b311e9f709650a9363",
+    "mtime": 1786554889.8150706,
+    "ast_hash": "dc46549fd9a16699bc25a386bc88117e",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
-    "mtime": 1786553666.1006806,
-    "ast_hash": "3f43621cd2d3ce36cb5265022a7dc610",
+    "mtime": 1786554866.0757048,
+    "ast_hash": "8a2aa738ec40d8ce7303aab3e6a99da1",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.csproj": {
@@ -1030,8 +1030,8 @@
     "semantic_hash": ""
   },
   "nucleo/Grafo/Grafo.cs": {
-    "mtime": 1786553505.1340845,
-    "ast_hash": "b0d5a9dc9c965b8c0b53a9fcab70a4e1",
+    "mtime": 1786554840.0582714,
+    "ast_hash": "57e09a7df39988255055802a7b0f8b6d",
     "semantic_hash": ""
   },
   "nucleo/Grafo/Grafo.csproj": {
@@ -1045,8 +1045,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
-    "mtime": 1786540238.2887557,
-    "ast_hash": "8a3370f64896f6e4aaaa3ccc0e7aad48",
+    "mtime": 1786554523.6370301,
+    "ast_hash": "8050992e967d45861b9d4fba430fd2a3",
     "semantic_hash": ""
   }
 }

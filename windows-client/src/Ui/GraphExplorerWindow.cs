@@ -76,6 +76,7 @@ public sealed class GraphExplorerWindow : Window
     private readonly Button _crawlBtn;
     private Button _carruselBtn = null!;
     private Button _limpiarBtn = null!;
+    private Button _nucleoBtn = null!;
     private Button _pasoBtn = null!;
     private Button _olvidarBtn = null!;
     private Button _clasicoBtn = null!;
@@ -217,6 +218,9 @@ public sealed class GraphExplorerWindow : Window
     /// Nulo cuando no hay voz, y entonces el mapeo va callado sin que falle nada.
     /// </summary>
     public Voice.NarradorDelArquitecto? Narrador { get; set; }
+
+    /// <summary>El puente al núcleo nuevo, para poder vaciarlo desde aquí.</summary>
+    public Navigation.MapaVivo? MapaVivo { get; set; }
 
     public GraphExplorerWindow(SurfaceMap map, Func<SurfaceLocator.SurfaceLocation?> where)
     {
@@ -435,6 +439,29 @@ public sealed class GraphExplorerWindow : Window
         };
         _limpiarBtn.Click += (_, __) => LimpiarGrafo();
 
+        // VACIAR EL NÚCLEO NUEVO, que es OTRA COSA que el grafo viejo y por eso tiene su propio
+        // botón. Comparten la escoba como idea —una prueba del grafo empieza siempre desde cero,
+        // porque un grafo con historia esconde justo lo que se quiere medir— pero son dos almacenes
+        // distintos, y un botón que vaciara los dos haría imposible probar uno con el otro puesto.
+        _nucleoBtn = new Button
+        {
+            Content = "◎",
+            Width = 26, Height = 26, FontSize = 12,
+            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromArgb(0x33, 0x4C, 0x8D, 0xFF)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Vaciar el NÚCLEO (el grafo nuevo y lo que se ve de él en Neo4j)",
+        };
+        _nucleoBtn.Click += (_, __) =>
+        {
+            if (MapaVivo == null) { _status.Text = "el núcleo no está en marcha"; return; }
+            MapaVivo.Limpiar();
+            _status.Text = "núcleo vaciado: el grafo empieza de cero";
+        };
+
         // PARAR EN CADA PASO. El log cuenta lo que el sistema CREE que hizo; parar deja ver lo que
         // pasó de verdad en la pantalla, que es justo donde estaba el fallo de los puntos sin
         // refrescar (2026-08-06, pedido por el usuario).
@@ -558,6 +585,7 @@ public sealed class GraphExplorerWindow : Window
         };
 
         iconos.Children.Add(_limpiarBtn);
+        iconos.Children.Add(_nucleoBtn);
         iconos.Children.Add(_olvidarBtn);
         iconos.Children.Add(_pasoBtn);
 

@@ -2186,6 +2186,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // en vivo que atiende al micrófono: darle una suya sería una segunda conexión a Gemini
         // hablando por la misma boca, y las dos se pisarían.
         if (_vivo != null) _explorer.Narrador = new Voice.NarradorDelArquitecto(_vivo);
+        _explorer.MapaVivo = _mapaVivo;   // para poder vaciar el núcleo desde su botón
         _explorer.Closed += (_, __) => { _explorer = null; Dispatcher.Invoke(() => ExplorerBtn.Content = "🕸 Explorar el grafo"); };
         _explorer.Show();
         ExplorerBtn.Content = "🕸 Explorador: visible — clic para cerrar";

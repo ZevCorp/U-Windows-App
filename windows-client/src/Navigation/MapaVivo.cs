@@ -69,8 +69,7 @@ public sealed class MapaVivo : IDisposable
             // OBSERVAR: el mapeador cuenta lo que ve, el núcleo decide qué hacer con ello. Aquí no
             // se filtra ni se clasifica nada — meter criterio en el puente sería empezar otra vez a
             // repartir las reglas entre dos sitios.
-            var visibles = _loQueVeo()
-                .Where(v => v.Selector.Length > 0 && v.Etiqueta.Length > 0)
+            var visibles = SinEtiquetasDeControles(_loQueVeo())
                 .Select(v => new Nucleo.Elemento(v.Selector, v.Etiqueta, v.Tipo))
                 .ToList();
 
@@ -138,6 +137,47 @@ public sealed class MapaVivo : IDisposable
     {
         _grafo.Cruzar(desde, selector, hasta);
         _proyector.Proyectar(_grafo);
+    }
+
+    /// <summary>
+    /// EL TEXTO DE DENTRO DE UN BOTÓN NO ES OTRA COSA ALCANZABLE. UIA expone el control y, aparte,
+    /// la etiqueta que lleva dentro, las dos con el mismo nombre: «Catálogo» salía como Button y
+    /// como Text, y el anillo mostraba cada puerta por duplicado (2026-08-12, lo vio el usuario).
+    ///
+    /// VA AQUÍ Y NO EN EL NÚCLEO, y la frontera importa: el núcleo guarda fielmente lo que le
+    /// cuentan y no puede saber que un Text vive dentro de un Button — eso es conocimiento sobre
+    /// cómo se lee un árbol de interfaz, o sea, del mapeador. Meterlo en el grafo sería devolverle
+    /// las opiniones sobre la UI que acabamos de quitarle.
+    ///
+    /// La regla es la más estrecha que resuelve el caso: se descarta un Text SOLO si otro elemento
+    /// de la MISMA pantalla, que no es Text, se llama igual. Un texto suelto —un dato, un rótulo
+    /// sin dueño— se queda, porque ése sí es algo que hay en la pantalla.
+    /// </summary>
+    private static List<(string Selector, string Etiqueta, string Tipo)> SinEtiquetasDeControles(
+        IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> crudos)
+    {
+        var utiles = crudos.Where(v => v.Selector.Length > 0 && v.Etiqueta.Length > 0).ToList();
+        var conDueno = new HashSet<string>(
+            utiles.Where(v => !v.Tipo.Equals("Text", StringComparison.OrdinalIgnoreCase))
+                  .Select(v => v.Etiqueta),
+            StringComparer.OrdinalIgnoreCase);
+
+        return utiles
+            .Where(v => !v.Tipo.Equals("Text", StringComparison.OrdinalIgnoreCase)
+                        || !conDueno.Contains(v.Etiqueta))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Vaciar el núcleo y lo que se ve de él. Una prueba del grafo empieza siempre desde cero — un
+    /// grafo con historia esconde justo lo que se quiere medir.
+    /// </summary>
+    public void Limpiar()
+    {
+        _grafo.Olvidar();
+        _anterior = "";
+        _proyector.Vaciar();
+        LogBus.Log("mapa-vivo", "núcleo vaciado: el grafo empieza de cero");
     }
 
     /// <summary>Solo para el log: la identidad entera no cabe y lo que distingue está al final.</summary>

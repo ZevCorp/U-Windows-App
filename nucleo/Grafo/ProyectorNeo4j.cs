@@ -215,6 +215,23 @@ public sealed class ProyectorNeo4j : IDisposable
     }
 
     /// <summary>
+    /// Borrar lo proyectado. Se olvida también la última huella para que el siguiente volcado sea
+    /// completo: si no, el proyector creería que Neo4j ya tiene lo que acaba de perder.
+    /// </summary>
+    public void Vaciar()
+    {
+        _ultimaVersion = -1;
+        _ultimaHuella = "";
+        Mandar(JsonSerializer.Serialize(new
+        {
+            statements = new object[]
+            {
+                new { statement = "MATCH (n) WHERE n:Ubicacion OR n:Elemento DETACH DELETE n" },
+            },
+        }));
+    }
+
+    /// <summary>
     /// Estropear la base a propósito. EXISTE PARA QUE EL CONTRATO PUEDA PROBAR QUE
     /// <see cref="Verificar"/> sabe fallar: una comprobación que solo se ha visto en verde es
     /// indistinguible de una que devuelve verde siempre, y esa fue la forma del peor fallo que
