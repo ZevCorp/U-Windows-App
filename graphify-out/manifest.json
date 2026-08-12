@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml.cs": {
-    "mtime": 1786554467.2147503,
-    "ast_hash": "010736663b378283c0ac30c5d33d6c85",
+    "mtime": 1786556083.6648002,
+    "ast_hash": "beeeab82be564618219ea8be8a584779",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FillPreviewWindow.cs": {
@@ -355,8 +355,8 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786506586.067877,
-    "ast_hash": "50de6c7237a5313c68b69308163e7f6b",
+    "mtime": 1786556063.1429071,
+    "ast_hash": "b40fd85d6b37a9884168b440d6157110",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/GraphHealthText.cs": {
@@ -1015,8 +1015,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786554889.8150706,
-    "ast_hash": "dc46549fd9a16699bc25a386bc88117e",
+    "mtime": 1786555999.73902,
+    "ast_hash": "4467f7c2c374c9ea61e88f04840be19e",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
@@ -1040,8 +1040,8 @@
     "semantic_hash": ""
   },
   "nucleo/Grafo/ProyectorNeo4j.cs": {
-    "mtime": 1786553650.5305405,
-    "ast_hash": "e80158293914e9be5f436206e403e825",
+    "mtime": 1786556011.6660235,
+    "ast_hash": "588381e5599cf1c513753f3be16dbe27",
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {

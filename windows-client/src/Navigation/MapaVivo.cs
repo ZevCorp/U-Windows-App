@@ -66,6 +66,14 @@ public sealed class MapaVivo : IDisposable
             string aqui = _donde();
             if (aqui.Length == 0) return;
 
+            // EL CLIC SE MIRA ANTES DE LEER LA PANTALLA, no después. Leer el árbol UIA entero
+            // cuesta ~1 s (medido en la Maqueta) y bastante más en apps grandes; si la edad del
+            // clic se comprobara al final, esa lectura se le sumaría y un clic perfectamente
+            // reciente podría llegar «viejo» a la comparación. Es una carrera silenciosa: nadie
+            // vería el fallo, solo faltarían caminos (2026-08-12).
+            var clic = Clics?.Last;
+            var cuando = DateTime.UtcNow;
+
             // OBSERVAR: el mapeador cuenta lo que ve, el núcleo decide qué hacer con ello. Aquí no
             // se filtra ni se clasifica nada — meter criterio en el puente sería empezar otra vez a
             // repartir las reglas entre dos sitios.
@@ -79,8 +87,8 @@ public sealed class MapaVivo : IDisposable
             // que ninguna, porque el asistente la usaría para volver y pulsaría otra cosa.
             if (_anterior.Length > 0 && !_anterior.Equals(aqui, StringComparison.OrdinalIgnoreCase))
             {
-                var clic = Clics?.Last;
-                bool reciente = clic != null && (DateTime.UtcNow - clic.When).TotalSeconds < 6;
+                double edad = clic == null ? -1 : (cuando - clic.When).TotalSeconds;
+                bool reciente = clic != null && edad < 6;
                 bool salioDeAlli = clic != null
                     && global::Nucleo.Grafo.AppDe(_anterior)
                         .StartsWith(clic.Process, StringComparison.OrdinalIgnoreCase);
@@ -110,12 +118,17 @@ public sealed class MapaVivo : IDisposable
                 {
                     // Se dice, y no se calla: un salto que no supimos atribuir dice dónde el
                     // mapeador no llega, que es justo lo que hay que ver.
-                    LogBus.Log("mapa-vivo", $"salto de {Corto(_anterior)} a {Corto(aqui)} SIN atribuir "
-                        + (clic == null ? "(no hay clic)"
-                           : !reciente ? "(el clic es viejo)"
-                           : !salioDeAlli ? "(el clic no salió de allí)"
-                           : !mismaApp ? "(es otra app: fue un cambio de ventana, no navegación)"
-                           : "(el núcleo no reconoce ese elemento aquí)"));
+                    // SE DICE QUÉ CLIC SE MIRÓ Y CUÁNTO HACE. Sin eso, «el clic es viejo» no
+                    // distingue «tardamos demasiado» de «ese clic no se llegó a registrar y
+                    // estamos mirando uno anterior» — y esas dos cosas se arreglan en sitios
+                    // distintos. Un mensaje que no separa sus causas cuesta un diagnóstico entero.
+                    string porQue = clic == null ? "(no hay ningún clic registrado)"
+                        : !reciente ? $"(el último clic registrado es «{clic.Label}», de hace {edad:N1} s "
+                                    + "— o tardamos, o ese clic no se registró y estamos viendo uno anterior)"
+                        : !salioDeAlli ? $"(el clic «{clic.Label}» fue en «{clic.Process}», no en donde estábamos)"
+                        : !mismaApp ? "(es otra app: fue un cambio de ventana, no navegación)"
+                        : $"(el núcleo no conoce «{clic.Label}» ({clic.ControlType}) en esa pantalla)";
+                    LogBus.Log("mapa-vivo", $"salto de {Corto(_anterior)} a {Corto(aqui)} SIN atribuir {porQue}");
                 }
             }
             _anterior = aqui;
