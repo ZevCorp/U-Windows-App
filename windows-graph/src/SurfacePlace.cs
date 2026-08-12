@@ -98,6 +98,28 @@ public static class SurfacePlace
         (origin ?? "").StartsWith("web://", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// ¿Esta superficie es SAP vista por el Scripting? Se pregunta por el ESQUEMA, que es lo único
+    /// que lo sabe: `sapgui://` lo produce <c>SapGuiSurface.Identity()</c>, y solo cuando el
+    /// scripting responde. Así que esto no es «hay SAP en la pantalla» sino algo más útil —
+    /// «podemos preguntarle a SAP» — que es justo la condición para leer sus campos.
+    ///
+    /// Vive aquí, con las demás preguntas sobre lugares, porque quien decide qué cuenta como el
+    /// mismo sitio tiene que decidir también qué cuenta como SAP, o acabarían siendo dos criterios
+    /// que se separan en silencio.
+    ///
+    /// NO SE PREGUNTA POR EL NOMBRE DEL PROCESO, y esa confusión dejó al cerebro sin los campos de
+    /// SAP desde que existe la rama que los lee (medido el 2026-08-12):
+    /// `AppAligner.ProcessFromOrigin` quita el esquema, así que `sapgui://QAS` da `"QAS"` —que no
+    /// empieza por «sap»— y el respaldo `uia://saplogon.exe` da `"saplogon"`, que sí. Exactamente al
+    /// revés de lo que hace falta.
+    ///
+    /// Acepta la URL entera o solo el origen: las dos formas circulan por el cliente y exigir una
+    /// sería otra identidad de dos formas (aprendizaje nº16).
+    /// </summary>
+    public static bool EsSap(string urlUOrigen) =>
+        (urlUOrigen ?? "").TrimStart().StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Normaliza un pathname para comparar LUGARES. Estructural: se conserva lo significativo
     /// (alfanumérico + jerarquía). Título vivo: solo letras, porque el resto es estado del momento.
     /// </summary>

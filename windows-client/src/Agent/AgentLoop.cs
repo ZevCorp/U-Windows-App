@@ -225,8 +225,17 @@ public sealed class AgentLoop
 
         // SAP GUI Scripting SE AÑADE al árbol de lectura (UIA apenas ve dentro de SAP): si la app en
         // foco es SAP, el cerebro recibe además los campos reales de la pantalla SAP.
-        string proc = loc != null ? AppAligner.ProcessFromOrigin(loc.Origin) : "";
-        if (proc.StartsWith("sap", StringComparison.OrdinalIgnoreCase))
+        //
+        // POR EL ESQUEMA, NO POR EL PROCESO. Aquí ponía
+        // `ProcessFromOrigin(loc.Origin).StartsWith("sap")`, y esa función QUITA el esquema:
+        // `sapgui://QAS` daba «QAS», que no empieza por «sap», así que cuando el scripting FUNCIONA
+        // esta rama no entraba nunca; y cuando NO funciona, la identidad cae al respaldo
+        // `uia://saplogon.exe` → «saplogon», que sí entraba, para que `Read()` devolviera null.
+        //
+        // Al revés de lo que hace falta, en las dos direcciones: el cerebro no ha recibido jamás los
+        // campos reales de una pantalla SAP — justo el dato que esta rama existe para darle, porque
+        // UIA no ve dentro de SAP. Promesa 22 (2026-08-12).
+        if (loc != null && U.Graph.SurfacePlace.EsSap(loc.Origin))
         {
             string? sap = await Task.Run(() => _sapContext.Read());
             if (!string.IsNullOrWhiteSpace(sap))

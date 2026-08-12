@@ -109,6 +109,7 @@ internal static class Contrato
         // Sus promesas 3 y 4 —las dos que hablan de destinos— eran ciertas en su contrato e
         // inertes en la app.
         Prueba("21. un cruce aprendido se anuncia, y lo que el mapa rechaza no se anuncia", ElCruceSeAnuncia);
+        Prueba("22. una superficie SAP se reconoce por su esquema, no por el nombre del proceso", SapSeReconocePorSuEsquema);
 
         return Resumir();
     }
@@ -270,6 +271,41 @@ internal static class Contrato
 
         Debe(m.Edges().Count(e => e.To == "uia://fake.exe/imagenes") == 2,
             "el mismo destino por dos puertas distintas son DOS aristas, no una que pisa a la otra");
+    }
+
+    /// <summary>
+    /// LA PREGUNTA ES DEL ESQUEMA, NO DEL PROCESO, y confundirlas dejó al cerebro sin los campos de
+    /// SAP desde que existe esa rama. `AgentLoop` preguntaba
+    /// `ProcessFromOrigin(origin).StartsWith("sap")`, y esa función quita el esquema:
+    ///
+    ///     ProcessFromOrigin("sapgui://QAS")            → "QAS"       → NO empieza por "sap"
+    ///     ProcessFromOrigin("uia://saplogon.exe/Logon") → "saplogon"  → SÍ empieza por "sap"
+    ///
+    /// Es decir, exactamente al revés de lo que hace falta: cuando el scripting FUNCIONA la identidad
+    /// es `sapgui://` y no entraba; cuando NO funciona cae al respaldo `uia://saplogon.exe` y sí
+    /// entraba, para que `SapContextReader.Read()` devolviera null. La rama nunca sirvió.
+    ///
+    /// Es la familia del aprendizaje nº16 —comparar identidades de formas distintas— y el aviso
+    /// sigue siendo el mismo: los dos lados salían de funciones distintas.
+    /// </summary>
+    private static void SapSeReconocePorSuEsquema(SurfaceMap _)
+    {
+        var m = typeof(U.Graph.SurfacePlace).GetMethod("EsSap", new[] { typeof(string) });
+        if (m == null) { Pendiente("SurfacePlace.EsSap", "una sola respuesta a «esto es SAP»"); return; }
+        bool EsSap(string s) => (bool)m.Invoke(null, new object[] { s })!;
+
+        Debe(EsSap("sapgui://QAS"), "el origen que produce el scripting cuando funciona, es SAP");
+        Debe(EsSap("sapgui://QAS/NWP1/SAPLN_WP_FRAMEWORK/0100"), "…y también con su ruta entera");
+        Debe(!EsSap("uia://saplogon.exe/SAP Logon"),
+            "el respaldo UIA NO es SAP: ahí el scripting no responde, y llamarlo solo gasta un viaje COM");
+        Debe(!EsSap("uia://explorer.exe/Escritorio"), "una app cualquiera no es SAP");
+        Debe(!EsSap("web://sap.com/inicio"), "una web de SAP tampoco: el esquema es web");
+        Debe(!EsSap(""), "sin origen no se afirma nada");
+
+        // Y la trampa concreta, escrita para que no vuelva: la función del proceso NO contesta esto.
+        Debe(!U.WindowsClient.Uia.AppAligner.ProcessFromOrigin("sapgui://QAS")
+                .StartsWith("sap", StringComparison.OrdinalIgnoreCase),
+            "el nombre del proceso de una superficie SAP no empieza por «sap» — por eso no puede ser el criterio");
     }
 
     /// <summary>

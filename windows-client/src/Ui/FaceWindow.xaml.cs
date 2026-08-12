@@ -2038,7 +2038,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // Inmediato: de esto depende traer SAP al frente o no, y con el valor cacheado se decidía
         // sobre una pantalla de hasta 800 ms antes.
         var loc = _locator?.DondeEstoy();
-        bool enSap = loc != null && loc.Origin.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase);
+        // La MISMA vara que usa AgentLoop. Este sitio ya preguntaba bien —por el esquema— y el otro
+        // preguntaba por el nombre del proceso; que dos sitios contesten «esto es SAP» por caminos
+        // distintos es como empieza el desacuerdo, aunque hoy coincidan (aprendizaje nº16).
+        bool enSap = loc != null && U.Graph.SurfacePlace.EsSap(loc.Origin);
         if (!enSap)
         {
             // Los datos ya están; lo único que falta es SAP. Se trae al frente UNA vez
