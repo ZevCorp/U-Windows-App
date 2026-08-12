@@ -18,6 +18,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>contrato-nucleo</AssemblyName>
     <RootNamespace>Nucleo.Pruebas</RootNamespace>
+
+    <!--
+      CORRE CON EL .NET QUE HAYA, no solo con el 8. Sin esto, una maquina con el SDK 10 y sin el
+      runtime 8 compila el contrato y despues se niega a ejecutarlo:
+
+        You must install or update .NET to run this application.
+        Framework: 'Microsoft.NETCore.App', version '8.0.0'
+
+      Y eso vacia de sentido lo que hace valioso a este contrato — que es net8.0 puro, sin WPF, y se
+      puede juzgar en cualquier maquina sin abrir una ventana. Un juez portatil que solo arranca en
+      la maquina donde se escribio no es portatil (medido en macOS, 2026-08-12).
+    -->
+    <RollForward>Major</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
