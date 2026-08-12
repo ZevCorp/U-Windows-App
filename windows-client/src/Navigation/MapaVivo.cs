@@ -40,6 +40,13 @@ public sealed class MapaVivo : IDisposable
     /// <summary>El núcleo, para que quien quiera preguntarle no tenga que pasar por aquí.</summary>
     public Nucleo.Grafo Nucleo => _grafo;
 
+    /// <summary>
+    /// Pulsar un elemento por su identidad, con las mismas manos que usa todo lo demás. Lo inyecta
+    /// quien tiene el lector UIA; aquí solo se guarda para que la ventanita del núcleo pueda
+    /// ejecutar lo que el núcleo decide.
+    /// </summary>
+    public Func<string, string, bool>? Pulsar { get; set; }
+
     public MapaVivo(Func<string> donde,
         Func<IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>> loQueVeo)
     {
@@ -54,6 +61,14 @@ public sealed class MapaVivo : IDisposable
     /// </summary>
     public void Arrancar(int cadaMs = 900)
     {
+        // LO PRIMERO ES ACORDARSE. Sin esto el núcleo arrancaba vacío y su primera proyección
+        // —que borra y reescribe— se llevaba por delante todo lo mapeado en sesiones anteriores.
+        // Reiniciar la app perdía el mapa entero, y no se notaba porque siempre limpiábamos a mano
+        // antes de cada prueba (2026-08-12).
+        int volvieron = _proyector.Restaurar(_grafo);
+        if (volvieron > 0)
+            LogBus.Log("mapa-vivo", $"memoria recuperada: {volvieron} ubicación(es) de sesiones anteriores");
+
         _reloj?.Dispose();
         _reloj = new System.Threading.Timer(_ => Latido(), null, 500, cadaMs);
         LogBus.Log("mapa-vivo", $"observando cada {cadaMs} ms y proyectando el núcleo en Neo4j");

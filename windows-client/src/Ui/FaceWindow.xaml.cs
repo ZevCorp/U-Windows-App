@@ -37,6 +37,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>El mapa vivo publicado en Neo4j. Ver <see cref="Navigation.MapaVivo"/>.</summary>
     private Navigation.MapaVivo? _mapaVivo;
 
+    /// <summary>La ventanita por la que se le puede pedir al núcleo que nos lleve a un sitio.</summary>
+    private Navigation.ServidorDelNucleo? _servidorNucleo;
+
     /// <summary>Hay una frase escribiéndose: los trozos que lleguen la actualizan, no la repiten.</summary>
     private bool _turnoAbierto;
     private readonly VideoLibrary _videoLibrary = new();
@@ -259,7 +262,34 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // está y qué ve, pero nunca QUÉ LE TRAJO — y sin eso el grafo no se arma, se queda en
             // islas sueltas sin caminos entre ellas.
             _mapaVivo.Clics = _clickWatcher;
+
+            // LAS MANOS. El núcleo decide qué pulsar; pulsarlo es del mapeador, y se hace con el
+            // mismo UiaSurface que ya usa todo lo demás — no hay un segundo camino de accionar.
+            _mapaVivo.Pulsar = (selector, etiqueta) =>
+            {
+                try
+                {
+                    var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
+                    return superficie.Execute(new U.Graph.PlanStep
+                    {
+                        StepOrder = 1, ActionType = "click", Selector = selector, Label = etiqueta,
+                    }, out _);
+                }
+                catch (Exception e)
+                {
+                    LogBus.Log("nucleo-http", $"no pude pulsar «{etiqueta}»: {e.Message}");
+                    return false;
+                }
+            };
             _mapaVivo.Arrancar();
+
+            // LA VENTANITA DEL NÚCLEO, para que el visor pueda pedirle que nos lleve a un sitio sin
+            // que nadie toque el núcleo ni el explorador viejo.
+            _servidorNucleo = new Navigation.ServidorDelNucleo(
+                _mapaVivo.Nucleo,
+                () => _locator?.DondeEstoy()?.Id ?? "",
+                (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false);
+            _servidorNucleo.Arrancar();
 
             // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.
             // Hace falta porque este WebSocket va DIRECTO a Google: Graph no ve la

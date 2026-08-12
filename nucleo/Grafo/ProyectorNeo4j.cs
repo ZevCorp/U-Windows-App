@@ -215,6 +215,88 @@ public sealed class ProyectorNeo4j : IDisposable
     }
 
     /// <summary>
+    /// DEVOLVERLE AL NÚCLEO LO QUE RECUERDA. Lee Neo4j y lo replica dentro del grafo. Devuelve
+    /// cuántas ubicaciones volvieron.
+    /// </summary>
+    /// <remarks>
+    /// Hasta hoy el núcleo no leía nada al arrancar: empezaba vacío, y su primera proyección
+    /// —que borra y reescribe— se llevaba por delante todo lo mapeado en sesiones anteriores.
+    /// Reiniciar la app perdía el mapa entero, y nadie lo había notado porque siempre lo
+    /// limpiábamos a mano antes de cada prueba (2026-08-12, salió al explicarle el modelo al
+    /// usuario). Neo4j deja de ser solo el espejo y pasa a ser también la memoria.
+    ///
+    /// ENTRA POR LA MISMA PUERTA QUE TODO LO DEMÁS: `Recordar` y `Cruzar`, no escribiendo en los
+    /// diccionarios del grafo. Así las reglas del núcleo se aplican también a lo que viene del
+    /// disco — si Neo4j trae un destino de un elemento que no existe en su ubicación, `Cruzar` lo
+    /// rechaza igual que lo rechazaría en vivo. Una puerta trasera para «restaurar rápido» sería
+    /// justo por donde entraría lo que las promesas no vigilan.
+    ///
+    /// Y VUELVE COMO MEMORIA, NO COMO VIVO: nada de lo restaurado está en pantalla, porque estamos
+    /// arrancando. Decir lo contrario mandaría al asistente a pulsar cosas que no están delante.
+    /// </remarks>
+    public int Restaurar(Grafo grafo)
+    {
+        var consulta = new
+        {
+            statements = new object[]
+            {
+                new
+                {
+                    statement = """
+                    MATCH (u:Ubicacion)-[:ALCANZA]->(e:Elemento)
+                    OPTIONAL MATCH (e)-[:LLEVA_A]->(d:Ubicacion)
+                    RETURN u.id AS donde, e.selector AS sel, e.etiqueta AS etq, e.tipo AS tipo,
+                           d.id AS destino
+                    """,
+                },
+            },
+        };
+
+        string cuerpo = Pedir(JsonSerializer.Serialize(consulta));
+        if (cuerpo.Length == 0) return 0;
+
+        var porUbicacion = new Dictionary<string, List<Elemento>>(StringComparer.OrdinalIgnoreCase);
+        var caminos = new List<(string Donde, string Sel, string Destino)>();
+        try
+        {
+            using var doc = JsonDocument.Parse(cuerpo);
+            if (!doc.RootElement.TryGetProperty("results", out var res) || res.GetArrayLength() == 0) return 0;
+            foreach (var fila in res[0].GetProperty("data").EnumerateArray())
+            {
+                var row = fila.GetProperty("row");
+                string donde = row[0].GetString() ?? "";
+                string sel = row[1].ValueKind == JsonValueKind.Null ? "" : row[1].GetString() ?? "";
+                if (donde.Length == 0 || sel.Length == 0) continue;
+
+                if (!porUbicacion.TryGetValue(donde, out var lista))
+                    porUbicacion[donde] = lista = new List<Elemento>();
+                lista.Add(new Elemento(sel, row[2].GetString() ?? "", row[3].GetString() ?? ""));
+
+                if (row[4].ValueKind != JsonValueKind.Null)
+                    caminos.Add((donde, sel, row[4].GetString() ?? ""));
+            }
+        }
+        catch (Exception e)
+        {
+            Cuenta?.Invoke($"no pude leer la memoria de Neo4j: {e.Message}");
+            return 0;
+        }
+
+        // PRIMERO LOS ELEMENTOS Y DESPUÉS LOS CAMINOS, y el orden no es casual: `Cruzar` exige que
+        // el elemento ya se conozca en esa ubicación, así que al revés se rechazaría todo.
+        foreach (var (donde, elementos) in porUbicacion) grafo.Recordar(donde, elementos);
+        int rechazados = caminos.Count(c => !grafo.Cruzar(c.Donde, c.Sel, c.Destino));
+        if (rechazados > 0)
+            Cuenta?.Invoke($"al restaurar, {rechazados} camino(s) de Neo4j no pasaron las reglas del núcleo y se descartaron");
+
+        // La huella se pone al día para que la primera proyección no sea un volcado completo de lo
+        // que Neo4j ya tiene: acabamos de leerlo de ahí.
+        _ultimaHuella = HuellaDeContenido(grafo);
+        _ultimaVersion = grafo.Version;
+        return porUbicacion.Count;
+    }
+
+    /// <summary>
     /// Borrar lo proyectado. Se olvida también la última huella para que el siguiente volcado sea
     /// completo: si no, el proyector creería que Neo4j ya tiene lo que acaba de perder.
     /// </summary>

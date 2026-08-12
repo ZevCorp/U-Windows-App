@@ -149,6 +149,33 @@ public sealed class Grafo
     }
 
     /// <summary>
+    /// «Esto se supo antes». Mete en el grafo lo que se recuerda de una ubicación SIN decir que
+    /// esté en pantalla: es como vuelve la memoria al arrancar.
+    /// </summary>
+    /// <remarks>
+    /// NO ES OBSERVAR, Y LA DIFERENCIA ES TODA LA HONESTIDAD DEL MODELO. Observar significa «lo
+    /// estoy viendo ahora», y usarlo para restaurar marcaría vivo todo un mapa de pantallas que no
+    /// están delante — el asistente creería que puede pulsar cualquier cosa de cualquier sitio.
+    /// Lo que vuelve del disco es memoria, y entra como memoria.
+    ///
+    /// Tampoco toca <see cref="Aqui"/>: recordar dónde estuviste no es estar allí.
+    /// </remarks>
+    public void Recordar(string ubicacion, IReadOnlyList<Elemento> elementos)
+    {
+        if (string.IsNullOrWhiteSpace(ubicacion)) return;
+        lock (_llave)
+        {
+            if (!_vistos.TryGetValue(ubicacion, out var aqui))
+                _vistos[ubicacion] = aqui = new Dictionary<string, Elemento>(StringComparer.Ordinal);
+            foreach (var e in elementos)
+            {
+                if (string.IsNullOrWhiteSpace(e.Selector)) continue;
+                if (!aqui.ContainsKey(e.Selector)) { aqui[e.Selector] = e; Version++; }
+            }
+        }
+    }
+
+    /// <summary>
     /// EL SIGUIENTE PASO hacia un destino: qué hay que pulsar AHORA, aquí. Vacío si no se sabe
     /// llegar.
     /// </summary>

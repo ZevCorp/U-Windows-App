@@ -28,6 +28,7 @@ internal static class Contrato
         Prueba("8. cambiar de sitio ES un cambio, aunque se vea lo mismo", MoverseEsCambio);
         Prueba("9. un destino de algo que nunca se vio aquí se RECHAZA, no se traga", NadaDeFantasmas);
         Prueba("10. navegar es UN paso cada vez, y el paso tiene que estar vivo", ElSiguientePaso);
+        Prueba("11. lo que se recuerda vuelve como MEMORIA, nunca como vivo", RecordarNoEsVer);
 
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
@@ -195,6 +196,34 @@ internal static class Contrato
             Console.WriteLine("   " + trasMoverse.Replace("\n", "\n   "));
         }
 
+        // IDA Y VUELTA: se apaga la app (un núcleo nuevo y vacío), se restaura desde Neo4j, y tiene
+        // que salir el MISMO grafo. Es la prueba de que Neo4j es memoria y no solo espejo — sin
+        // esto, reiniciar perdía el mapa entero y nadie lo notaba porque siempre limpiábamos a mano
+        // antes de cada prueba (2026-08-12).
+        var resucitado = new Grafo();
+        int volvieron = p.Restaurar(resucitado);
+
+        // Se compara la ESTRUCTURA —qué ubicaciones, qué elementos, a dónde llevan— y NO qué está
+        // vivo. Lo vivo no se restaura ni debe restaurarse: al arrancar no hay nada en pantalla, y
+        // pretender lo contrario mandaría al asistente a pulsar cosas que no están delante. Que
+        // esta comparación excluya `vivo` no es aflojarla: es medir lo que la persistencia promete.
+        string Esqueleto(Grafo x) => string.Join("\n", x.Ubicaciones().Select(u =>
+            u + " => " + string.Join(",", x.DesdeAqui(u)
+                .OrderBy(a => a.Que.Selector, StringComparer.Ordinal)
+                .Select(a => $"{a.Que.Selector}->{a.Destino}"))));
+
+        if (volvieron > 0 && Esqueleto(resucitado) == Esqueleto(g))
+            Console.WriteLine($"✔ …y SOBREVIVE AL REINICIO: {volvieron} ubicación(es), misma estructura");
+        else
+        {
+            _fallos++;
+            Console.WriteLine("✘ la memoria no sobrevive al reinicio:");
+            Console.WriteLine("   esperado: " + Esqueleto(g).Replace("\n", " | "));
+            Console.WriteLine("   volvió:   " + Esqueleto(resucitado).Replace("\n", " | "));
+        }
+        Debe(resucitado.DesdeAqui(resucitado.Ubicaciones().First()).All(a => !a.Vivo),
+            "y lo restaurado NO está vivo: al arrancar no hay nada en pantalla");
+
         p.Sabotear("MATCH (e:Elemento {selector:'s:x'}) DETACH DELETE e");
         string trasElSabotaje = p.Verificar(g);
         if (trasElSabotaje.Length > 0)
@@ -277,6 +306,24 @@ internal static class Contrato
         g.Observar("app://inicio", new[] { aCallejon });   // «Ir al medio» deja de verse
         Debe(g.SiguientePaso("app://inicio", "app://fondo") == null,
             "si el paso no está VIVO no se ofrece: el mapa recuerda, la pantalla manda");
+    }
+
+    private static void RecordarNoEsVer(Grafo g)
+    {
+        // Es como vuelve el mapa al arrancar la app. Si entrara como «observado», el grafo diría
+        // que todo está en pantalla —cientos de elementos de pantallas que no están delante— y el
+        // asistente creería que puede pulsar cualquier cosa desde cualquier sitio.
+        g.Recordar("app://lejos", new[] { new Elemento("s:algo", "Algo", "Button") });
+
+        var d = g.DesdeAqui("app://lejos");
+        Debe(d.Count == 1, "lo recordado está en el grafo");
+        Debe(!d[0].Vivo, "…pero NO vivo: no lo estamos viendo, lo recordamos");
+        Debe(g.Aqui.Length == 0, "y recordar dónde estuviste no es estar allí");
+
+        // Y las reglas siguen rigiendo sobre lo que viene de fuera: un camino de algo que no está
+        // en esa ubicación se rechaza igual que se rechazaría en vivo.
+        Debe(!g.Cruzar("app://lejos", "s:fantasma", "app://otra"),
+            "restaurar no es una puerta trasera: lo que no cumple las reglas tampoco entra por aquí");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
