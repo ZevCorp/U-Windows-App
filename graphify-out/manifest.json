@@ -355,8 +355,8 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786494737.6838176,
-    "ast_hash": "81603dae8bec32f854609e265c34d5e0",
+    "mtime": 1786495233.1402338,
+    "ast_hash": "9b3e9bbcceef2e657c5aff2170f46faa",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/GraphHealthText.cs": {
@@ -992,6 +992,21 @@
   "docs/specs/PLANTILLA.md": {
     "mtime": 1786492592.4490585,
     "ast_hash": "22f2fe1d617732c53fff0dc6c59be8c6",
+    "semantic_hash": ""
+  },
+  "laboratorio/Maqueta/Maqueta.csproj": {
+    "mtime": 1786498921.2025468,
+    "ast_hash": "b9ffe470974875ea81776b45ffabc253",
+    "semantic_hash": ""
+  },
+  "laboratorio/Maqueta/Programa.cs": {
+    "mtime": 1786499158.8061793,
+    "ast_hash": "9a0702a84a7b911efd5ab09c301d7731",
+    "semantic_hash": ""
+  },
+  "laboratorio/Maqueta/verdad.json": {
+    "mtime": 1786499071.4693632,
+    "ast_hash": "786276a5f2eca4309d4a35d1627b3d65",
     "semantic_hash": ""
   }
 }
