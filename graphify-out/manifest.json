@@ -780,8 +780,8 @@
     "semantic_hash": ""
   },
   "scripts/ci-local.ps1": {
-    "mtime": 1786207404.4423728,
-    "ast_hash": "548f997cb309279f692de16d77c17e59",
+    "mtime": 1786493344.9415827,
+    "ast_hash": "ba5d81a4717daccd4d268a850e79ce3c",
     "semantic_hash": ""
   },
   "scripts/contrato-del-grafo.ps1": {

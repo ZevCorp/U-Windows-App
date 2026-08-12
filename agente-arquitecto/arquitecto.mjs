@@ -49,6 +49,39 @@ const CONTINUAR = process.argv.includes("--continuar");
 const CHAT = process.argv.includes("--chat");
 const SOLO_CHAT = process.argv.includes("--solo-chat");
 
+// CON QUÉ MODELO PIENSA, elegido por quien lo lanza y no adivinado del SDK. Antes no se decía —el
+// SDK elegía por su cuenta, y las primeras corridas salieron en opus-5 sin que nadie lo pidiera—.
+// Sus conclusiones dependen del modelo tanto como del código: comparar dos auditorías sin saber
+// cuál las escribió es comparar dos cosas distintas creyendo que son la misma. Se puede fijar con
+// --model=sonnet (o el id completo, --model=claude-opus-5) para correr sin consola —scripts como
+// noche-arquitecto.ps1—, y si no se fija y hay una consola de verdad delante, se pregunta siempre:
+// no hay «el modelo del arquitecto», hay el que elegiste hoy.
+const MODELOS = {
+  opus: "claude-opus-5", sonnet: "claude-sonnet-5",
+  haiku: "claude-haiku-4-5-20251001", fable: "claude-fable-5",
+};
+async function elegirModelo() {
+  const bandera = process.argv.find((a) => a.startsWith("--model="))?.slice("--model=".length);
+  if (bandera) return MODELOS[bandera.toLowerCase()] ?? bandera;
+
+  // SIN CONSOLA NO HAY A QUIÉN PREGUNTARLE: sonnet-5 por defecto, más barato que opus para una
+  // corrida desatendida, y no bloquear a quien lanzó esto desde un script o la sonda.
+  if (!process.stdin.isTTY) return "claude-sonnet-5";
+
+  const readline = await import("node:readline/promises");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  console.log("¿Con qué modelo piensa el arquitecto?");
+  console.log("  1) opus-5    — el más capaz, el más caro");
+  console.log("  2) sonnet-5  — el de por defecto");
+  console.log("  3) haiku-4.5 — el más rápido y barato");
+  let r = "";
+  try { r = (await rl.question("modelo [2] > ")).trim().toLowerCase(); } catch { /* stdin cerrado */ }
+  rl.close();
+  const porNumero = { "1": "opus", "2": "sonnet", "3": "haiku", "": "sonnet" };
+  return MODELOS[porNumero[r] ?? r] ?? MODELOS.sonnet;
+}
+const MODELO = await elegirModelo();
+
 // SU sesión, no «la última». `continueConversation` retoma la conversación más reciente del
 // DIRECTORIO, y este directorio es el repo — donde el usuario también corre Claude Code. Al
 // probar el turno de preguntas, el arquitecto retomó la sesión del usuario y contestó que no
@@ -264,7 +297,7 @@ const PERMITIDAS = [
 const PROHIBIDAS = ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"];
 
 // ── A correr ─────────────────────────────────────────────────────────────────
-console.log(`ARQUITECTO sobre «${APP}» · presupuesto ${TURNOS} turnos`
+console.log(`ARQUITECTO sobre «${APP}» · presupuesto ${TURNOS} turnos · modelo elegido: ${MODELO}`
   + `${CONTINUAR ? " · CONTINÚA la corrida anterior" : ""}\n`);
 
 const corrida = query({
@@ -285,6 +318,7 @@ const corrida = query({
     disallowedTools: PROHIBIDAS,
     permissionMode: "bypassPermissions",
     maxTurns: TURNOS,
+    model: MODELO,
     ...(CONTINUAR && SESION ? { resume: SESION } : {}),
   },
 });
@@ -363,6 +397,7 @@ async function turnoDePreguntas() {
           disallowedTools: PROHIBIDAS,
           permissionMode: "bypassPermissions",
           maxTurns: 30,
+          model: MODELO,
           ...(sesionGuardada() ? { resume: sesionGuardada() } : {}),
         },
       });

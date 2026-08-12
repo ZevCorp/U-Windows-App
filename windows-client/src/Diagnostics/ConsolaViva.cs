@@ -57,6 +57,7 @@ public static class ConsolaViva
                     Console.WriteLine(new string('─', 70));
                 }
                 SetConsoleTitle(titulo);
+                SinSeleccionRapida();
                 if (h != IntPtr.Zero) { NoRobarElFoco(h); ShowWindow(h, SW_RESTORE); ShowWindow(h, SW_SHOW); }
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {titulo}");
             }
@@ -104,6 +105,43 @@ public static class ConsolaViva
         catch { }
     }
 
+    /// <summary>
+    /// QUITAR LA SELECCIÓN RÁPIDA (QuickEdit), que viene puesta de fábrica en toda consola de
+    /// Windows. Con ella, pinchar o arrastrar dentro de la ventana la pone en modo selección y
+    /// BLOQUEA cualquier escritura hasta que se pulse Enter o Esc.
+    ///
+    /// Eso no es una molestia visual: <see cref="Escribir"/> se llama desde el manejador que drena
+    /// la salida del arquitecto, así que un clic tuyo aquí bloquea el manejador, la tubería se
+    /// llena, y node se queda parado intentando escribir. EL AGENTE SE CONGELA. Medido el
+    /// 2026-08-11: siete minutos sin una línea y después veinte líneas con el MISMO segundo —todas
+    /// soltadas de golpe al desbloquear—, y el usuario ya había notado que «tenía que oprimir enter
+    /// para que actualizara».
+    ///
+    /// Es el mismo problema que WS_EX_NOACTIVATE vino a resolver —una ventana que está para
+    /// MIRARSE no puede alterar lo que muestra— y le faltaba esta mitad: no robar el foco no basta
+    /// si además puede parar al que observa. Seleccionar con el ratón se pierde; el menú del
+    /// sistema (clic derecho → Editar → Marcar) sigue estando para copiar.
+    /// </summary>
+    private static void SinSeleccionRapida()
+    {
+        try
+        {
+            var entrada = GetStdHandle(STD_INPUT_HANDLE);
+            if (entrada == IntPtr.Zero || entrada == new IntPtr(-1)) return;
+            if (!GetConsoleMode(entrada, out uint modo)) return;
+            // EXTENDED_FLAGS hay que ponerlo SIEMPRE al tocar QUICK_EDIT: sin él, Windows ignora
+            // el cambio en silencio y todo parece hecho sin estarlo.
+            SetConsoleMode(entrada, (modo & ~ENABLE_QUICK_EDIT_MODE) | ENABLE_EXTENDED_FLAGS);
+        }
+        catch { }
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr GetStdHandle(int n);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetConsoleMode(IntPtr h, out uint modo);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetConsoleMode(IntPtr h, uint modo);
+    private const int STD_INPUT_HANDLE = -10;
+    private const uint ENABLE_QUICK_EDIT_MODE = 0x0040, ENABLE_EXTENDED_FLAGS = 0x0080;
+
     [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr h, int i);
     [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr h, int i, int v);
     private const int GWL_EXSTYLE = -20;
@@ -129,15 +167,38 @@ public static class ConsolaViva
         catch { return null; }
     }
 
-    /// <summary>Una línea, con su hora. No hace nada si nunca se abrió la consola.</summary>
+    /// <summary>
+    /// Una línea, con su hora. No hace nada si nunca se abrió la consola.
+    /// </summary>
+    /// <remarks>
+    /// NUNCA BLOQUEA A QUIEN LLAMA, y esa es toda la razón de que haya una cola. Esto se invoca
+    /// desde el manejador que drena la salida del arquitecto: si escribir en la consola se para
+    /// —selección rápida, un scroll, la ventana ocupada—, el manejador se para con ella, la tubería
+    /// se llena y el agente se congela al escribir. Quitar QuickEdit tapa la causa conocida
+    /// (ver <see cref="SinSeleccionRapida"/>); esto quita la POSIBILIDAD: la consola es una ventana
+    /// de diagnóstico, y una ventana de diagnóstico no puede detener lo que diagnostica.
+    ///
+    /// La hora se sella AQUÍ, al ocurrir, y no en el hilo que escribe: si se sellara al pintar,
+    /// un atasco haría que veinte líneas figuraran con el mismo segundo y perderíamos justo la
+    /// prueba de que hubo atasco (2026-08-11, que es como se encontró este fallo).
+    /// </remarks>
     public static void Escribir(string linea)
     {
         if (_rota) return;
-        try
-        {
-            if (GetConsoleWindow() == IntPtr.Zero) return;
-            lock (_lock) Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {linea}");
-        }
-        catch { _rota = true; }
+        if (GetConsoleWindow() == IntPtr.Zero) return;
+        _cola.Add($"[{DateTime.Now:HH:mm:ss}] {linea}");
     }
+
+    private static readonly System.Collections.Concurrent.BlockingCollection<string> _cola = new();
+
+    // Un solo hilo escribiendo, de fondo y en segundo plano: si la app se cierra con líneas por
+    // pintar, se van con ella —son diagnóstico, no datos— y no impiden salir.
+    private static readonly Task _pintor = Task.Factory.StartNew(() =>
+    {
+        foreach (var l in _cola.GetConsumingEnumerable())
+        {
+            try { lock (_lock) Console.WriteLine(l); }
+            catch { _rota = true; return; }
+        }
+    }, TaskCreationOptions.LongRunning);
 }

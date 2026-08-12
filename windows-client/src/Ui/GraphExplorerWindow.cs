@@ -1905,8 +1905,13 @@ public sealed class GraphExplorerWindow : Window
     /// </summary>
     private async Task AuditarConArquitectoAsync(string app)
     {
+        // SE ELIGE ANTES DE MOVER NADA. Si se preguntara después de poner el modo prueba, cancelar
+        // dejaría la capa colocada y el grafo escondido por una corrida que nunca empezó.
+        string? modelo = await ElegirModeloAsync();
+        if (modelo == null) { _status.Text = "arquitecto: no se lanzó (sin modelo elegido)"; return; }
+
         _crawlBtn.Content = "⏹ Detener el arquitecto";
-        _status.Text = $"arquitecto: auditando «{app}»… no toques el ratón";
+        _status.Text = $"arquitecto: auditando «{app}» con {modelo}… no toques el ratón";
 
         // MODO PRUEBA: la capa se pone donde ESTÁ LA APP y el grafo se esconde.
         //
@@ -1954,7 +1959,7 @@ public sealed class GraphExplorerWindow : Window
 
         try
         {
-            string r = await Navigation.Arquitecto.AuditarAsync(app, 40,
+            string r = await Navigation.Arquitecto.AuditarAsync(app, 40, modelo,
                 linea => Dispatcher.BeginInvoke(new Action(() => _status.Text = "🧠 " + linea)),
                 _crawlCts!.Token);
             _status.Text = r;
@@ -2132,6 +2137,74 @@ public sealed class GraphExplorerWindow : Window
             BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1), Child = col,
         };
+        v.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; v.Close(); } };
+        v.Closed += (_, __) => tcs.TrySetResult(tcs.Task.IsCompleted ? tcs.Task.Result : null);
+        v.Show();
+        v.Activate();
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// CON QUÉ MODELO PIENSA EL ARQUITECTO, elegido cada vez que se lanza.
+    /// </summary>
+    /// <remarks>
+    /// Se pregunta AQUÍ y no en el propio agente aunque él tenga consola, y la razón es que esa
+    /// consola no es suya: la abre la app con AllocConsole y la salida del agente le llega por una
+    /// tubería, así que su <c>stdin</c> no está conectado a la ventana que ves. Preguntar desde
+    /// Node salía sin preguntar —<c>isTTY</c> falso— y arrancaba con el de por defecto, que es
+    /// justo lo que pasó la primera vez que se probó (2026-08-11).
+    ///
+    /// Y se pregunta SIEMPRE, sin recordar la última: sus conclusiones dependen del modelo tanto
+    /// como del código, y una elección heredada en silencio es la forma de comparar dos auditorías
+    /// creyendo que las escribió el mismo.
+    /// </remarks>
+    private Task<string?> ElegirModeloAsync()
+    {
+        var tcs = new TaskCompletionSource<string?>();
+        var v = new Window
+        {
+            WindowStyle = WindowStyle.None, AllowsTransparency = true,
+            Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+        };
+        var col = new StackPanel { MinWidth = 380 };
+        col.Children.Add(new TextBlock
+        {
+            Text = "¿Con qué modelo piensa el arquitecto?", Foreground = Brushes.White,
+            FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4),
+        });
+        col.Children.Add(new TextBlock
+        {
+            Text = "Sus conclusiones dependen del modelo tanto como del código.",
+            Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
+            FontSize = 11, Margin = new Thickness(0, 0, 0, 12), TextWrapping = TextWrapping.Wrap,
+        });
+
+        foreach (var (id, etiqueta, color) in new[]
+        {
+            ("claude-opus-5", "Opus 5   —   el más capaz, el más caro", Color.FromArgb(0x55, 0xAB, 0x47, 0xBC)),
+            ("claude-sonnet-5", "Sonnet 5   —   el equilibrado", Color.FromArgb(0x55, 0x66, 0xBB, 0x6A)),
+            ("claude-haiku-4-5-20251001", "Haiku 4.5   —   el más rápido y barato", Color.FromArgb(0x55, 0x42, 0xA5, 0xF5)),
+        })
+        {
+            var b = Boton(etiqueta, color);
+            b.HorizontalAlignment = HorizontalAlignment.Stretch;
+            b.MinWidth = 340;
+            b.Margin = new Thickness(0, 0, 0, 6);
+            b.Click += (_, __) => { tcs.TrySetResult(id); v.Close(); };
+            col.Children.Add(b);
+        }
+
+        v.Content = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x18, 0x18, 0x1C)),
+            CornerRadius = new CornerRadius(14), Padding = new Thickness(18),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1), Child = col,
+        };
+        // Escape es «déjalo», no «el de por defecto»: null cancela la corrida entera. Arrancar una
+        // auditoría de cuarenta turnos porque alguien cerró un diálogo sería cobrarle un descuido.
         v.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; v.Close(); } };
         v.Closed += (_, __) => tcs.TrySetResult(tcs.Task.IsCompleted ? tcs.Task.Result : null);
         v.Show();
