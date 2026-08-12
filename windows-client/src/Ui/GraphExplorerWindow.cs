@@ -209,6 +209,15 @@ public sealed class GraphExplorerWindow : Window
     private string _huellaDibujo = "";
     private CancellationTokenSource? _crawlCts;
 
+    /// <summary>
+    /// Quien cuenta en voz alta lo que el arquitecto va haciendo, si la voz en vivo está encendida.
+    ///
+    /// Lo pone la carita —que es quien tiene la voz— en vez de crearlo aquí: esta ventana no sabe
+    /// nada de Gemini ni debe, y darle su propia conexión sería un segundo camino a la misma voz.
+    /// Nulo cuando no hay voz, y entonces el mapeo va callado sin que falle nada.
+    /// </summary>
+    public Voice.NarradorDelArquitecto? Narrador { get; set; }
+
     public GraphExplorerWindow(SurfaceMap map, Func<SurfaceLocator.SurfaceLocation?> where)
     {
         _map = map;
@@ -1917,6 +1926,12 @@ public sealed class GraphExplorerWindow : Window
         _crawlBtn.Content = "⏹ Detener el arquitecto";
         _status.Text = $"arquitecto: auditando «{app}» con {modelo}… no toques el ratón";
 
+        // QUE LO CUENTE MIENTRAS PASA. Sin esto la app se mueve sola durante minutos y quien mira
+        // no sabe por qué; con esto se oye a alguien entendiendo la app en voz alta. Va aquí y no
+        // dentro del arquitecto porque el arquitecto no sabe hablar: solo escribe en el log, y el
+        // narrador es quien lo escucha (2026-08-12, pedido por el usuario).
+        Narrador?.Empezar(app);
+
         // MODO PRUEBA: la capa se pone donde ESTÁ LA APP y el grafo se esconde.
         //
         // Las dos cosas van juntas porque responden a la misma pregunta —qué necesita verse
@@ -1982,6 +1997,10 @@ public sealed class GraphExplorerWindow : Window
         finally
         {
             latido.Stop();
+            // Se deja de narrar pase lo que pase —también si la auditoría revienta o se detiene—:
+            // un narrador que sigue enganchado al log después de terminar contaría los pasos de la
+            // siguiente cosa que pase por ahí como si fueran de esta.
+            Narrador?.Parar();
             // El modo prueba era un préstamo: se devuelve la vista que había, y con ella el grafo.
             // Terminada la auditoría, lo primero que hace falta es MIRAR lo que hizo.
             _vista = vistaAntes == VistaGrafo.Oculto ? VistaGrafo.Plata : vistaAntes;

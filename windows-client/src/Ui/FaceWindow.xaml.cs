@@ -2154,6 +2154,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // dos lecturas estables de la superficie, y contra un valor que se refresca cada 800 ms eso
         // son ~1,6 s de reloj por arista, más que el clic y la carga de la pantalla juntos.
         _explorer = new GraphExplorerWindow(_surfaceMap, () => _locator?.DondeEstoy());
+        // LA VOZ SE PRESTA, NO SE DUPLICA. El explorador narra el mapeo con la MISMA conversación
+        // en vivo que atiende al micrófono: darle una suya sería una segunda conexión a Gemini
+        // hablando por la misma boca, y las dos se pisarían.
+        if (_vivo != null) _explorer.Narrador = new Voice.NarradorDelArquitecto(_vivo);
         _explorer.Closed += (_, __) => { _explorer = null; Dispatcher.Invoke(() => ExplorerBtn.Content = "🕸 Explorar el grafo"); };
         _explorer.Show();
         ExplorerBtn.Content = "🕸 Explorador: visible — clic para cerrar";
