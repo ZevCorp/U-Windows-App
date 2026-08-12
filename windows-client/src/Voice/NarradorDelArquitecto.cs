@@ -31,6 +31,7 @@ public sealed class NarradorDelArquitecto : IDisposable
     private readonly object _llave = new();
     private bool _hablando;
     private bool _encendido;
+    private bool _laEncendimosNosotros;
     private string _app = "";
 
     /// <summary>
@@ -50,16 +51,26 @@ public sealed class NarradorDelArquitecto : IDisposable
     }
 
     /// <summary>
-    /// Empieza a narrar el mapeo de una app. Silencioso si la voz no está viva: encenderla por
-    /// nuestra cuenta sería abrirle el micrófono a alguien que no lo pidió.
+    /// Empieza a narrar el mapeo de una app, ENCENDIENDO LA VOZ si hiciera falta.
+    ///
+    /// La enciende en vez de exigir que ya lo esté porque lanzar el arquitecto ES pedir que te
+    /// cuenten el mapeo: obligar a acordarse de pulsar el micrófono antes convertía la narración en
+    /// algo que se pierde justo cuando más se quiere (2026-08-12, corregido por el usuario). Se
+    /// apaga sola al terminar solo si la encendimos nosotros: si ya estaba abierta era una
+    /// conversación suya, y colgársela sería quitarle algo que no habíamos dado.
     /// </summary>
-    public void Empezar(string app)
+    public async Task EmpezarAsync(string app)
     {
         if (!_voz.Viva)
         {
-            LogBus.Log("narrador", "la voz en vivo no está encendida: el mapeo va sin narrar. "
-                                 + "Pulsa el micrófono de la carita antes de lanzar al arquitecto.");
-            return;
+            LogBus.Log("narrador", "la voz en vivo estaba apagada: se enciende para narrar el mapeo");
+            await _voz.ArrancarAsync();
+            _laEncendimosNosotros = _voz.Viva;
+            if (!_voz.Viva)
+            {
+                LogBus.Log("narrador", "no se pudo encender la voz: el mapeo va callado");
+                return;
+            }
         }
         lock (_llave)
         {
@@ -79,16 +90,30 @@ public sealed class NarradorDelArquitecto : IDisposable
               + "cállatelo: es mejor un silencio que rellenar. Empieza ya.");
     }
 
-    /// <summary>Deja de narrar. El último turno que ya salió se termina de decir.</summary>
-    public void Parar()
+    /// <summary>
+    /// Deja de narrar. El último turno que ya salió se termina de decir.
+    ///
+    /// Y APAGA LA VOZ SOLO SI LA ENCENDIMOS NOSOTROS. Si el micrófono ya estaba abierto cuando
+    /// arrancó el mapeo, es que había una conversación en curso: cerrarla al terminar de narrar
+    /// sería colgarle a alguien a mitad de frase.
+    /// </summary>
+    public async Task PararAsync()
     {
+        bool apagar;
         lock (_llave)
         {
             if (!_encendido) return;
             _encendido = false;
             _cola.Clear();
+            apagar = _laEncendimosNosotros;
+            _laEncendimosNosotros = false;
         }
         LogBus.Logged -= Oir;
+        if (apagar)
+        {
+            LogBus.Log("narrador", "terminó el mapeo: se apaga la voz que habíamos encendido");
+            await _voz.TerminarAsync();
+        }
     }
 
     /// <summary>
@@ -205,7 +230,7 @@ public sealed class NarradorDelArquitecto : IDisposable
 
     public void Dispose()
     {
-        Parar();
+        _ = PararAsync();
         _voz.Cerro -= TerminoDeHablar;
     }
 }

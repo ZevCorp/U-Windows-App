@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml.cs": {
-    "mtime": 1786457635.945011,
-    "ast_hash": "ae455fe79d13eb82e5351253bb85a38a",
+    "mtime": 1786505377.843057,
+    "ast_hash": "dbf42daeaa00ecb2a2c7a863b87dc74f",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FillPreviewWindow.cs": {
@@ -355,8 +355,8 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786495233.1402338,
-    "ast_hash": "9b3e9bbcceef2e657c5aff2170f46faa",
+    "mtime": 1786505366.1207223,
+    "ast_hash": "e0d0115526603143c6196210a5e65ce6",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/GraphHealthText.cs": {
@@ -1007,6 +1007,11 @@
   "laboratorio/Maqueta/verdad.json": {
     "mtime": 1786499071.4693632,
     "ast_hash": "786276a5f2eca4309d4a35d1627b3d65",
+    "semantic_hash": ""
+  },
+  "windows-client/src/Voice/NarradorDelArquitecto.cs": {
+    "mtime": 1786505436.9860752,
+    "ast_hash": "d448f46bf2a5bf199141fd41f48c34d3",
     "semantic_hash": ""
   }
 }

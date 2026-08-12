@@ -1930,7 +1930,7 @@ public sealed class GraphExplorerWindow : Window
         // no sabe por qué; con esto se oye a alguien entendiendo la app en voz alta. Va aquí y no
         // dentro del arquitecto porque el arquitecto no sabe hablar: solo escribe en el log, y el
         // narrador es quien lo escucha (2026-08-12, pedido por el usuario).
-        Narrador?.Empezar(app);
+        if (Narrador != null) await Narrador.EmpezarAsync(app);
 
         // MODO PRUEBA: la capa se pone donde ESTÁ LA APP y el grafo se esconde.
         //
@@ -2000,7 +2000,7 @@ public sealed class GraphExplorerWindow : Window
             // Se deja de narrar pase lo que pase —también si la auditoría revienta o se detiene—:
             // un narrador que sigue enganchado al log después de terminar contaría los pasos de la
             // siguiente cosa que pase por ahí como si fueran de esta.
-            Narrador?.Parar();
+            if (Narrador != null) await Narrador.PararAsync();
             // El modo prueba era un préstamo: se devuelve la vista que había, y con ella el grafo.
             // Terminada la auditoría, lo primero que hace falta es MIRAR lo que hizo.
             _vista = vistaAntes == VistaGrafo.Oculto ? VistaGrafo.Plata : vistaAntes;
