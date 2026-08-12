@@ -1,0 +1,134 @@
+<meta charset="utf-8">
+<title>El núcleo, en vivo</title>
+
+<!--
+  EL VISOR DEL NÚCLEO. Un archivo, sin dependencias, sin servidor.
+
+  Existe porque ni Neo4j Browser ni NeoDash contestaban lo que hacía falta: el primero no se
+  refresca solo —hay que volver a lanzar la consulta a mano— y el segundo se quedaba pegado en la
+  pantalla anterior. Y la pregunta que este visor tiene que contestar es de las que solo sirven si
+  se contestan CONTINUAMENTE: «¿dónde estoy y qué alcanzo desde aquí, ahora mismo?».
+
+  Habla con Neo4j directamente desde el navegador porque Neo4j manda «Access-Control-Allow-Origin:
+  *» en su API HTTP (comprobado, 2026-08-12). Eso ahorra el servidor intermedio que habría hecho
+  falta si no, y con él la posibilidad de que el intermediario enseñe algo distinto de lo que hay.
+
+  NO INTERPRETA NADA. Dibuja lo que el núcleo dice y nada más: no ordena por niveles, no agrupa por
+  cromo, no deduce jerarquías. Si el dibujo y el núcleo discrepan, el fallo es de este archivo —y
+  esa es exactamente la propiedad que se busca, porque el problema que nos trajo aquí fue mirar un
+  dibujo que opinaba por su cuenta.
+-->
+
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0d0f14; color:#e6e8ec; font:13px/1.5 system-ui, sans-serif; overflow:hidden; }
+  #cabecera { position:fixed; top:0; left:0; right:0; padding:12px 18px; z-index:2;
+              background:linear-gradient(#0d0f14ee, #0d0f1400); pointer-events:none; }
+  #donde { font-size:17px; font-weight:600; }
+  #app { color:#8a919e; font-size:12px; }
+  #cuenta { color:#8a919e; font-size:12px; margin-top:2px; }
+  #estado { position:fixed; bottom:10px; left:18px; color:#5a6170; font-size:11px; z-index:2; }
+  .vivo   { fill:#4c8dff; }
+  .memoria{ fill:#3a4050; }
+  .puerta { stroke:#5cc28d; }
+  text { font:11px system-ui, sans-serif; fill:#c9ced8; }
+  text.gris { fill:#5a6170; }
+</style>
+
+<div id="cabecera">
+  <div id="donde">esperando al núcleo…</div>
+  <div id="app"></div>
+  <div id="cuenta"></div>
+</div>
+<svg id="lienzo"></svg>
+<div id="estado"></div>
+
+<script>
+const URL  = "http://127.0.0.1:7474/db/neo4j/tx/commit";
+const AUTH = "Basic " + btoa("neo4j:grafo-local-2026");
+
+// La consulta ES el modelo: dónde estoy, qué alcanzo, y de eso qué está vivo y a dónde lleva.
+// No hay una segunda pregunta, porque el núcleo no guarda una segunda cosa.
+const CONSULTA = `
+MATCH (u:Ubicacion {actual:true})
+OPTIONAL MATCH (u)-[a:ALCANZA]->(e:Elemento)
+OPTIONAL MATCH (e)-[:LLEVA_A]->(d:Ubicacion)
+RETURN u.id AS donde, u.app AS app,
+       collect({etq:e.etiqueta, tipo:e.tipo, vivo:a.vivo, destino:d.id}) AS hijos`;
+
+let ultimo = "";
+
+async function tick() {
+  try {
+    const r = await fetch(URL, {
+      method: "POST",
+      headers: { "content-type": "application/json", "authorization": AUTH },
+      body: JSON.stringify({ statements: [{ statement: CONSULTA }] }),
+    });
+    const j = await r.json();
+    const fila = j.results?.[0]?.data?.[0]?.row;
+    if (!fila) { estado("el núcleo aún no ha publicado ninguna ubicación"); return; }
+
+    const [donde, app, hijos] = fila;
+    const limpios = (hijos || []).filter(h => h && h.etq);
+    // Se redibuja solo si algo cambió: repintar sesenta veces por minuto lo mismo hace parpadear
+    // el dibujo y esconde justo el instante en que algo se movió, que es lo único que se mira.
+    const huella = donde + "|" + limpios.map(h => h.etq + h.vivo + (h.destino || "")).join(",");
+    if (huella === ultimo) { estado("sin cambios · " + new Date().toLocaleTimeString()); return; }
+    ultimo = huella;
+
+    document.getElementById("donde").textContent = corto(donde);
+    document.getElementById("app").textContent = app || "";
+    const vivos = limpios.filter(h => h.vivo).length;
+    const puertas = limpios.filter(h => h.destino).length;
+    document.getElementById("cuenta").textContent =
+      `${limpios.length} alcanzables · ${vivos} vivos ahora · ${limpios.length - vivos} solo en memoria · ${puertas} cruzados`;
+
+    dibujar(limpios);
+    estado("actualizado " + new Date().toLocaleTimeString());
+  } catch (e) {
+    estado("no llego a Neo4j: " + e.message);
+  }
+}
+
+function corto(id) {
+  const i = (id || "").lastIndexOf("/");
+  return i > 0 ? id.slice(i + 1) : (id || "");
+}
+
+function dibujar(hijos) {
+  const svg = document.getElementById("lienzo");
+  const an = window.innerWidth, al = window.innerHeight;
+  svg.setAttribute("width", an); svg.setAttribute("height", al);
+  const cx = an / 2, cy = al / 2 + 20;
+
+  // El radio crece con la población para que ochenta elementos no se apilen unos sobre otros;
+  // con pocos, el anillo se queda cerca y se lee de un vistazo.
+  const radio = Math.min(Math.max(150, hijos.length * 5.5), Math.min(an, al) / 2 - 90);
+  let s = "";
+
+  hijos.forEach((h, i) => {
+    const ang = (i / hijos.length) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(ang) * radio, y = cy + Math.sin(ang) * radio;
+    const color = h.vivo ? "#2b3a55" : "#1a1d24";
+    const borde = h.destino ? "#5cc28d" : (h.vivo ? "#4c8dff" : "#2a2f3a");
+    s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${h.vivo ? '#28324a' : '#1a1d24'}" stroke-width="1"/>`;
+    s += `<circle cx="${x}" cy="${y}" r="6" fill="${color}" stroke="${borde}" stroke-width="${h.destino ? 2 : 1}"/>`;
+    const der = Math.cos(ang) > -0.1;
+    s += `<text x="${x + (der ? 11 : -11)}" y="${y + 4}" text-anchor="${der ? 'start' : 'end'}"`
+       + ` class="${h.vivo ? '' : 'gris'}">${escapar(h.etq).slice(0, 34)}</text>`;
+  });
+
+  // El centro se dibuja al final para que quede por encima de las líneas.
+  s += `<circle cx="${cx}" cy="${cy}" r="34" fill="#1b2740" stroke="#4c8dff" stroke-width="2"/>`;
+  s += `<text x="${cx}" y="${cy + 5}" text-anchor="middle" style="font-size:12px;fill:#e6e8ec">aquí</text>`;
+  svg.innerHTML = s;
+}
+
+const escapar = t => (t || "").replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+const estado = t => document.getElementById("estado").textContent = t;
+
+tick();
+setInterval(tick, 1000);
+window.addEventListener("resize", () => { ultimo = ""; tick(); });
+</script>

@@ -155,9 +155,9 @@
     "semantic_hash": "f80b4dfd141d6d3471dc0b37479bfddc"
   },
   "windows-client/WindowsClient.csproj": {
-    "mtime": 1785932290.1756704,
-    "ast_hash": "4fded4e4c453c21a0dc30efaf127b464",
-    "semantic_hash": "4fded4e4c453c21a0dc30efaf127b464"
+    "mtime": 1786539060.8634894,
+    "ast_hash": "cc1d5beb9887f841aa1b18697ab67747",
+    "semantic_hash": ""
   },
   "windows-client/scripts/publish-release.ps1": {
     "mtime": 1785119331.795828,
@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml.cs": {
-    "mtime": 1786537328.04749,
-    "ast_hash": "6ea93ca46a6ec1130d95e5495649e00b",
+    "mtime": 1786539070.022537,
+    "ast_hash": "19421e46374ade16fe3c26c845793d7c",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FillPreviewWindow.cs": {
@@ -770,8 +770,8 @@
     "semantic_hash": ""
   },
   "agente-arquitecto/arquitecto.mjs": {
-    "mtime": 1786493859.9694054,
-    "ast_hash": "1aae2f2967d1a3523072deddc86164e9",
+    "mtime": 1786538589.9128697,
+    "ast_hash": "14d25681dd0312fd181a0196b4990478",
     "semantic_hash": ""
   },
   "agente-arquitecto/package.json": {
@@ -1015,8 +1015,33 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786537279.6628633,
-    "ast_hash": "95d5db61b990c8d0596e3096b1d3af95",
+    "mtime": 1786539102.7824955,
+    "ast_hash": "a70fb673bb9a91c5ac973bfc5d230401",
+    "semantic_hash": ""
+  },
+  "nucleo/Contrato/Contrato.cs": {
+    "mtime": 1786538953.6647775,
+    "ast_hash": "580031ec7018b33ed6e3a841b0f94423",
+    "semantic_hash": ""
+  },
+  "nucleo/Contrato/Contrato.csproj": {
+    "mtime": 1786538915.612843,
+    "ast_hash": "62ce4b12e4aa9a3ee67880d6ba4d2696",
+    "semantic_hash": ""
+  },
+  "nucleo/Grafo/Grafo.cs": {
+    "mtime": 1786539032.2592459,
+    "ast_hash": "3b948bb72ca495580991e59b4d2b17a0",
+    "semantic_hash": ""
+  },
+  "nucleo/Grafo/Grafo.csproj": {
+    "mtime": 1786538831.8417482,
+    "ast_hash": "ec9cdc2b1f90c33a3a8edde9bab102ec",
+    "semantic_hash": ""
+  },
+  "nucleo/Grafo/ProyectorNeo4j.cs": {
+    "mtime": 1786538902.5048866,
+    "ast_hash": "a842b1fb1732f5e075910978eefc5dd8",
     "semantic_hash": ""
   }
 }

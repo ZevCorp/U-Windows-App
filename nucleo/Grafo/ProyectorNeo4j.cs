@@ -37,21 +37,38 @@ public sealed class ProyectorNeo4j : IDisposable
     }
 
     /// <summary>
-    /// Vuelca el grafo entero. No hace nada si no ha cambiado desde la última vez: republicar lo
+    /// Vuelca el grafo ENTERO. No hace nada si no ha cambiado desde la última vez: republicar lo
     /// mismo llenaría de ruido la única ventana que tenemos para ver cuándo pasó algo de verdad.
     /// </summary>
-    public bool Proyectar(Grafo grafo, string app)
+    /// <remarks>
+    /// EL GRAFO ES UNO, AUNQUE TENGA VARIAS APPS. La primera versión recibía «la app actual» y la
+    /// usaba para dos cosas a la vez: borrar lo suyo y etiquetar lo que escribía. El resultado fue
+    /// que CADA ubicación —de cualquier app— quedaba marcada con la app de donde estuvieras en ese
+    /// momento: con la Maqueta delante, «uia://chrome.exe» figuraba como app «claude.exe»
+    /// (2026-08-12, lo vio el usuario). Y como el borrado iba por esa misma etiqueta, cada pasada
+    /// arrasaba lo que la anterior acababa de mal-etiquetar.
+    ///
+    /// La app de una ubicación sale de SU PROPIO id y de ningún otro sitio. Y el borrado se lleva
+    /// todo lo que el núcleo proyecta, porque el núcleo es el dueño de estas etiquetas: dejar
+    /// restos de una pasada anterior es exactamente la clase de mentira que este visor existe para
+    /// hacer imposible.
+    /// </remarks>
+    public bool Proyectar(Grafo grafo)
     {
         if (grafo.Version == _ultimaVersion) return false;
         _ultimaVersion = grafo.Version;
 
-        var ubicaciones = grafo.Ubicaciones();
+        var ubicaciones = grafo.Ubicaciones()
+            .Select(u => new { id = u, app = Grafo.AppDe(u), actual = u == grafo.Aqui })
+            .ToList();
+
         var filas = new List<object>();
-        foreach (string u in ubicaciones)
+        foreach (string u in grafo.Ubicaciones())
             foreach (var a in grafo.DesdeAqui(u))
                 filas.Add(new
                 {
                     donde = u,
+                    app = Grafo.AppDe(u),
                     sel = a.Que.Selector,
                     etq = a.Que.Etiqueta,
                     tipo = a.Que.Tipo,
@@ -67,14 +84,14 @@ public sealed class ProyectorNeo4j : IDisposable
                 // actualizaciones parciales, un elemento que desaparece del grafo se queda para
                 // siempre en la pantalla de Neo4j, y entonces el visor miente igual que mentía el
                 // dibujo anterior.
-                new { statement = "MATCH (n {app:$app}) DETACH DELETE n", parameters = new { app } },
+                new { statement = "MATCH (n) WHERE n:Ubicacion OR n:Elemento DETACH DELETE n" },
                 new
                 {
                     statement = """
                     UNWIND $ubis AS u
-                      MERGE (p:Ubicacion {id:u}) SET p.app = $app, p.actual = (u = $aqui)
+                      MERGE (p:Ubicacion {id:u.id}) SET p.app = u.app, p.actual = u.actual
                     """,
-                    parameters = new { ubis = ubicaciones, app, aqui = grafo.Aqui },
+                    parameters = new { ubis = ubicaciones },
                 },
                 new
                 {
@@ -83,13 +100,13 @@ public sealed class ProyectorNeo4j : IDisposable
                       MATCH (p:Ubicacion {id:f.donde})
                       MERGE (e:Elemento {id: f.donde + '|' + f.sel})
                         SET e.selector = f.sel, e.etiqueta = f.etq, e.tipo = f.tipo,
-                            e.vivo = f.vivo, e.app = $app
+                            e.vivo = f.vivo, e.app = f.app
                       MERGE (p)-[m:ALCANZA]->(e) SET m.vivo = f.vivo
                     WITH e, f WHERE f.destino <> ''
-                      MERGE (d:Ubicacion {id:f.destino}) ON CREATE SET d.app = $app, d.actual = false
+                      MERGE (d:Ubicacion {id:f.destino}) ON CREATE SET d.app = f.app, d.actual = false
                       MERGE (e)-[:LLEVA_A]->(d)
                     """,
-                    parameters = new { filas, app },
+                    parameters = new { filas },
                 },
             },
         };

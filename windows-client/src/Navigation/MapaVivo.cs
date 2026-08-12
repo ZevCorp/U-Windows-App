@@ -68,7 +68,7 @@ public sealed class MapaVivo : IDisposable
                 .ToList();
 
             _grafo.Observar(aqui, visibles);
-            _proyector.Proyectar(_grafo, global::Nucleo.Grafo.AppDe(aqui));
+            _proyector.Proyectar(_grafo);
         }
         catch (Exception e)
         {
@@ -83,7 +83,7 @@ public sealed class MapaVivo : IDisposable
     public void Cruzado(string desde, string selector, string hasta)
     {
         _grafo.Cruzar(desde, selector, hasta);
-        _proyector.Proyectar(_grafo, global::Nucleo.Grafo.AppDe(desde));
+        _proyector.Proyectar(_grafo);
     }
 
     public void Dispose()

@@ -241,7 +241,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // pantalla— y no el dibujo: un visor que leyera al pintor heredaría sus mentiras, que
             // es justo lo que este visor existe para detectar (2026-08-12, pedido por el usuario).
             _mapaVivo = new Navigation.MapaVivo(
-                () => _locator?.DondeEstoy()?.Origin ?? "",
+                // `Id` y NO `Origin`: Origin es solo la app —«uia://Maqueta.exe»— así que TODAS las
+                // pantallas de una app colapsaban en un único nodo y navegar por dentro no movía
+                // nada. La ubicación es la pantalla, que es justo lo que el núcleo llama nodo
+                // (2026-08-12, lo vio el usuario al probar la Maqueta).
+                () => _locator?.DondeEstoy()?.Id ?? "",
                 () =>
                 {
                     var lector = new Uia.UiaReader();
