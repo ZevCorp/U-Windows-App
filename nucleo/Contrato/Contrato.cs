@@ -11,11 +11,37 @@ namespace Nucleo.Pruebas;
 /// </summary>
 internal static class Contrato
 {
+    /// <summary>
+    /// PROMESAS incumplidas, no aserciones. La diferencia costó una medida el 2026-08-12: se rompió
+    /// UNA cosa en el grafo —que `Observar` olvidara, como hacía el núcleo anterior—, cayeron DOS
+    /// promesas (la 2 y la 6), y el contrato reportó «3 promesa(s) incumplida(s)» con código 3.
+    /// La 2 sumaba dos veces: una por su `Debe` fallido y otra por la excepción que vino detrás.
+    ///
+    /// El recuento por aserción es el aprendizaje nº10 —«el denominador es el plan»— cometido en el
+    /// numerador, y aquí duele más que en otros sitios: quien lee este número es la compuerta.
+    /// </summary>
     private static int _fallos;
 
-    private static int Main()
+    /// <summary>Cuántas se juzgaron. El total lo dice quien sabe contarlo, no un grep del log.</summary>
+    private static int _promesas;
+
+    /// <summary>¿La promesa EN CURSO ya falló? Se sigue evaluando: queremos ver las tres aserciones
+    /// rotas, no sólo la primera — pero cuentan como una promesa incumplida, que es lo que son.</summary>
+    private static bool _rota;
+
+    /// <summary>La fidelidad no es una promesa del grafo: es del proyector. Cuenta aparte para que
+    /// «el núcleo está roto» y «lo que se ve no es el núcleo» no se confundan en un solo número.</summary>
+    private static int _fallosDeFidelidad;
+
+    private static int Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
+
+        // El juez juzgándose a sí mismo. Un arnés que sólo se ha visto en verde es indistinguible de
+        // uno que devuelve verde siempre — el mismo argumento que ya hace `Sabotear` con Neo4j más
+        // abajo, aplicado al contador que decide si algo entra a `main`.
+        if (args.Contains("--autoprueba")) return Autoprueba();
+
         Console.WriteLine("CONTRATO DEL NÚCLEO (el grafo, aislado)\n");
 
         Prueba("1. lo que se ve queda alcanzable desde donde se vio", LoVistoQueda);
@@ -36,11 +62,28 @@ internal static class Contrato
         Console.WriteLine();
         ComprobarFidelidad();
 
+        return Resumir("NÚCLEO");
+    }
+
+    /// <summary>
+    /// La línea que los scripts LEEN, en vez de grepear el log. `verificar.ps1` contaba los
+    /// pendientes con `Select-String "PENDIENTE"`, que es case-insensitive por defecto y se comía
+    /// la propia línea de resumen y cualquier «pendiente» en minúscula de otro texto. Un número lo
+    /// dice quien sabe contarlo.
+    /// </summary>
+    private static int Resumir(string quien)
+    {
         Console.WriteLine();
+        Console.WriteLine($"CONTRATO: {_promesas} promesas, {_promesas - _fallos} verdes, "
+                        + $"{_fallos} incumplidas, 0 pendientes");
         Console.WriteLine(_fallos == 0
-            ? "NÚCLEO ÍNTEGRO: el grafo promete lo que dice prometer."
-            : $"NÚCLEO ROTO: {_fallos} promesa(s) incumplida(s).");
-        return _fallos;
+            ? $"{quien} ÍNTEGRO: el grafo promete lo que dice prometer."
+            : $"{quien} ROTO: {_fallos} promesa(s) incumplida(s).");
+
+        // La fidelidad bloquea igual —un visor que miente sobre el núcleo es tan malo como un núcleo
+        // roto— pero suma aparte del recuento de promesas, para que el veredicto diga cuál de las
+        // dos cosas pasó.
+        return _fallos + _fallosDeFidelidad;
     }
 
     // ── Las promesas ─────────────────────────────────────────────────────────
@@ -162,7 +205,7 @@ internal static class Contrato
             Console.WriteLine("✔ fidelidad de la proyección: lo que hay en Neo4j ES lo que dice el núcleo");
         else
         {
-            _fallos++;
+            _fallosDeFidelidad++;
             Console.WriteLine("✘ fidelidad de la proyección:");
             Console.WriteLine("   " + veredicto.Replace("\n", "\n   "));
             return;
@@ -181,7 +224,7 @@ internal static class Contrato
             Console.WriteLine("✔ …y SABE FALLAR: al borrar un elemento por detrás, lo detectó");
         else
         {
-            _fallos++;
+            _fallosDeFidelidad++;
             Console.WriteLine("✘ la comprobación de fidelidad NO detectó un elemento borrado a mano: "
                             + "está dando verde sin mirar");
         }
@@ -199,21 +242,61 @@ internal static class Contrato
 
     private static void Prueba(string nombre, Action<Grafo> cuerpo)
     {
-        int antes = _fallos;
+        _promesas++;
+        _rota = false;
         try { cuerpo(new Grafo()); }
         catch (Exception e)
         {
-            _fallos++;
+            _rota = true;
+            // La cadena ENTERA: un TypeInitializationException dice «el inicializador lanzó una
+            // excepción» y se guarda para sí POR QUÉ, que es lo único que sirve.
             for (var x = e; x != null; x = x.InnerException)
                 Console.WriteLine($"   ✘ {x.GetType().Name}: {x.Message}");
         }
-        Console.WriteLine($"{(_fallos == antes ? "✔" : "✘")} {nombre}");
+        if (_rota) _fallos++;
+        Console.WriteLine($"{(_rota ? "✘" : "✔")} {nombre}");
     }
 
+    /// <summary>
+    /// Marca la promesa en curso como rota y SIGUE. No suma al total: eso lo hace <see cref="Prueba"/>
+    /// una sola vez, porque tres aserciones rotas siguen siendo una promesa incumplida.
+    /// </summary>
     private static void Debe(bool condicion, string promesa)
     {
         if (condicion) return;
-        _fallos++;
+        _rota = true;
         Console.WriteLine($"   ✘ {promesa}");
+    }
+
+    // ── El juez juzgándose ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Tres promesas de mentira con un resultado conocido: una verde, una con TRES aserciones
+    /// falsas, y una que revienta. El arnés tiene que salir con **2** —dos promesas incumplidas—
+    /// y no con 4, que es lo que sumaría contando aserciones.
+    ///
+    /// Sin esto, arreglar el contador sería exactamente el vicio que el contador tiene: dar por
+    /// bueno un número porque lo escribió quien lo iba a leer.
+    /// </summary>
+    private static int Autoprueba()
+    {
+        Console.WriteLine("AUTOPRUEBA DEL ARNÉS (tres promesas de mentira, resultado conocido)\n");
+
+        Prueba("A. verde", _ => Debe(true, "esto se cumple"));
+        Prueba("B. una promesa con TRES aserciones rotas", _ =>
+        {
+            Debe(false, "la primera");
+            Debe(false, "la segunda");
+            Debe(false, "la tercera");
+        });
+        Prueba("C. una promesa que revienta", _ => throw new InvalidOperationException("a propósito"));
+
+        Console.WriteLine();
+        bool bien = _promesas == 3 && _fallos == 2;
+        Console.WriteLine(bien
+            ? "✔ EL ARNÉS SABE CONTAR: 3 promesas, 2 incumplidas — no 4 aserciones."
+            : $"✘ EL ARNÉS NO SABE CONTAR: dijo {_promesas} promesas y {_fallos} incumplidas; "
+              + "esperaba 3 y 2. Todo veredicto que dé este contrato es sospechoso.");
+        return bien ? 0 : 1;
     }
 }
