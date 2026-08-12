@@ -34,6 +34,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>La conversación en vivo, si el mapa está disponible. Ver <see cref="GeminiLive"/>.</summary>
     private GeminiLive? _vivo;
 
+    /// <summary>El mapa vivo publicado en Neo4j. Ver <see cref="Navigation.MapaVivo"/>.</summary>
+    private Navigation.MapaVivo? _mapaVivo;
+
     /// <summary>Hay una frase escribiéndose: los trozos que lleguen la actualizan, no la repiten.</summary>
     private bool _turnoAbierto;
     private readonly VideoLibrary _videoLibrary = new();
@@ -232,6 +235,24 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // ubicación, la verificación de llegadas y los vetos — y duplicar una protección es la
             // forma más segura de que una de las dos copias se quede atrás.
             _vivo = new GeminiLive(mcp.Map);
+
+            // EL MAPA VIVO: el nodo donde estás rodeado de lo alcanzable, publicado en Neo4j para
+            // poder mirarlo mientras ocurre. Lee las MISMAS fuentes que todo lo demás —el mapa y la
+            // pantalla— y no el dibujo: un visor que leyera al pintor heredaría sus mentiras, que
+            // es justo lo que este visor existe para detectar (2026-08-12, pedido por el usuario).
+            _mapaVivo = new Navigation.MapaVivo(
+                _surfaceMap,
+                () => _locator?.DondeEstoy()?.Origin ?? "",
+                () =>
+                {
+                    var lector = new Uia.UiaReader();
+                    lector.Read();
+                    return lector.Elements
+                        .Select(e => (Uia.Reconocedor.SelectorDe(e), e.Label, e.ControlType))
+                        .Where(t => t.Item1.Length > 0 && t.Label.Length > 0)
+                        .ToList();
+                });
+            _mapaVivo.Arrancar();
 
             // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.
             // Hace falta porque este WebSocket va DIRECTO a Google: Graph no ve la

@@ -355,8 +355,8 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786505366.1207223,
-    "ast_hash": "e0d0115526603143c6196210a5e65ce6",
+    "mtime": 1786506586.067877,
+    "ast_hash": "50de6c7237a5313c68b69308163e7f6b",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/GraphHealthText.cs": {
@@ -1010,8 +1010,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Voice/NarradorDelArquitecto.cs": {
-    "mtime": 1786505436.9860752,
-    "ast_hash": "d448f46bf2a5bf199141fd41f48c34d3",
+    "mtime": 1786506575.7735562,
+    "ast_hash": "43aa38976b1ecc7b958d1bf5e2510117",
     "semantic_hash": ""
   }
 }
