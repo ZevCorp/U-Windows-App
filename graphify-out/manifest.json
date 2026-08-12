@@ -1015,8 +1015,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786570510.5163808,
-    "ast_hash": "050805ec0f7811b45ba61b6824200169",
+    "mtime": 1786577246.0254996,
+    "ast_hash": "50590c51a299bc2865970ae2fa7d9653",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
@@ -1045,8 +1045,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
-    "mtime": 1786575787.2251024,
-    "ast_hash": "8dc71d1188ff4a9278bdd27c64734d41",
+    "mtime": 1786576324.3260229,
+    "ast_hash": "f9646a24356a13787b4a86bec8813e7f",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/ServidorDelNucleo.cs": {

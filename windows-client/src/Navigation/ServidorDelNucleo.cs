@@ -150,17 +150,49 @@ public sealed class ServidorDelNucleo : IDisposable
                 });
 
             bool pulsado = _pulsar(paso.Que.Selector, paso.Que.Etiqueta);
-            LogBus.Log("nucleo-http", pulsado
-                ? $"paso hacia «{Corto(destino)}»: pulsado «{paso.Que.Etiqueta}»"
-                : $"paso hacia «{Corto(destino)}»: NO pude pulsar «{paso.Que.Etiqueta}»");
+            if (!pulsado)
+            {
+                LogBus.Log("nucleo-http", $"paso hacia «{Corto(destino)}»: NO pude pulsar «{paso.Que.Etiqueta}»");
+                return Json(new { ok = false, paso = paso.Que.Etiqueta, porque = "el mapeador no consiguió pulsarlo" });
+            }
 
+            // ¿NOS MOVIÓ? Un paso que no mueve no se repite. Sin esto, un camino equivocado en el
+            // grafo —«pulsa Datos adjuntos para ir a Escritorio», cuando ya estás en Datos
+            // adjuntos— hacía que el mismo clic se calculara y se pulsara una y otra vez: doce
+            // veces seguidas hasta agotar el límite, sin avanzar un paso (2026-08-12, lo midió el
+            // usuario pidiendo ir a «facturas»).
+            //
+            // Repetir algo que acaba de no funcionar no es insistir, es no estar mirando. Y decirlo
+            // en voz alta importa el doble aquí, porque el motivo casi siempre es que el grafo
+            // aprendió mal ese tramo — quedarse callado esconde justo el dato que lo delata.
+            string despues = aqui;
+            for (int i = 0; i < 12 && despues.Equals(aqui, StringComparison.OrdinalIgnoreCase); i++)
+            {
+                Thread.Sleep(150);
+                despues = _donde();
+            }
+
+            if (despues.Equals(aqui, StringComparison.OrdinalIgnoreCase))
+            {
+                LogBus.Log("nucleo-http", $"paso hacia «{Corto(destino)}»: pulsé «{paso.Que.Etiqueta}» "
+                    + "y la pantalla NO cambió — ese tramo del grafo no lleva a donde dice");
+                return Json(new
+                {
+                    ok = false,
+                    paso = paso.Que.Etiqueta,
+                    porque = $"pulsé «{paso.Que.Etiqueta}» y no nos movió. El grafo cree que ese tramo "
+                           + "lleva a otro sitio, y no es cierto: hay que volver a recorrerlo para corregirlo",
+                });
+            }
+
+            LogBus.Log("nucleo-http", $"paso hacia «{Corto(destino)}»: pulsado «{paso.Que.Etiqueta}» → {Corto(despues)}");
             return Json(new
             {
-                ok = pulsado,
+                ok = true,
                 paso = paso.Que.Etiqueta,
                 selector = paso.Que.Selector,
-                llegado = false,
-                porque = pulsado ? "" : "el mapeador no consiguió pulsarlo",
+                llegado = despues.Equals(destino, StringComparison.OrdinalIgnoreCase),
+                porque = "",
             });
         }
 
