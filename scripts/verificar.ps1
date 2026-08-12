@@ -68,7 +68,20 @@ $tocados = @(git -C $repo diff --name-only origin/main...HEAD 2>$null)
 if ($LASTEXITCODE -ne 0 -or $tocados.Count -eq 0) {
   Anotar "Diff vs main" "NO CORRIDO" "no se pudo comparar con origin/main (haz git fetch origin)"
 } else {
-  $colados = @($tocados | Where-Object { $f = $_; @($prohibido | Where-Object { $f -like "*$_*" }).Count -gt 0 })
+  # EL PATRON ES DE SEGMENTO DE RUTA, NO DE SUBCADENA. Estos patrones estan copiados del
+  # .gitignore, donde «out/» significa «una carpeta llamada out»; con -like «*out/*» significa
+  # «cualquier ruta que contenga esas letras», y eso caza tambien «graphify-out/» — que en este
+  # repo SI esta versionado (214 archivos en main; el .gitignore solo aparta las instantaneas con
+  # fecha, graphify-out/20*/). Como el hook de graphify regenera esa carpeta en cada commit, la
+  # compuerta declaraba «se cuelan 24 archivos» en CUALQUIER rama y no habia forma de pasarla
+  # (2026-08-11, tropezado en el primer PR que la uso).
+  #
+  # Se ancla a «/» delante: un segmento empieza al principio de la ruta o despues de una barra.
+  # Asi «out/» sigue cazando out\evidencia.md y deja pasar graphify-out\graph.json.
+  $colados = @($tocados | Where-Object {
+    $f = "/" + ($_ -replace '\\', '/')
+    @($prohibido | Where-Object { $f -like "*/$($_.TrimStart('/'))*" }).Count -gt 0
+  })
   if ($colados.Count -gt 0) {
     Anotar "Nada colado" "FALLO" ("se cuelan: {0}" -f ($colados -join ", "))
     $bloquea = $true
