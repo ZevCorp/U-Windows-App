@@ -288,7 +288,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             _servidorNucleo = new Navigation.ServidorDelNucleo(
                 _mapaVivo.Nucleo,
                 () => _locator?.DondeEstoy()?.Id ?? "",
-                (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false);
+                (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
+                proc => Uia.AppAligner.FocusOrLaunch(proc));
             _servidorNucleo.Arrancar();
 
             // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.

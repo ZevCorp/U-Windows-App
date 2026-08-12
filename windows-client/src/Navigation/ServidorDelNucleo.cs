@@ -35,13 +35,16 @@ public sealed class ServidorDelNucleo : IDisposable
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
     private readonly Func<string, string, bool> _pulsar;   // (selector, etiqueta) → ¿se pulsó?
+    private readonly Func<string, bool> _enfocar;          // (proceso) → ¿está delante?
     private HttpListener? _oreja;
 
-    public ServidorDelNucleo(Nucleo.Grafo grafo, Func<string> donde, Func<string, string, bool> pulsar)
+    public ServidorDelNucleo(Nucleo.Grafo grafo, Func<string> donde,
+        Func<string, string, bool> pulsar, Func<string, bool> enfocar)
     {
         _grafo = grafo;
         _donde = donde;
         _pulsar = pulsar;
+        _enfocar = enfocar;
     }
 
     public bool Arrancar()
@@ -119,6 +122,21 @@ public sealed class ServidorDelNucleo : IDisposable
             if (destino.Length == 0) return Json(new { ok = false, porque = "falta el destino" });
 
             string aqui = _donde();
+
+            // PRIMERO LA APP CORRECTA DELANTE. Para pulsar algo hay que tenerlo delante: no hay
+            // forma de navegar una aplicación sin enfocarla, y fingir lo contrario sería pulsar a
+            // ciegas. Que el foco se mueva aquí no es un descuido, es el trabajo — lo que la capa
+            // sin activación evita es que sea EL CLIC EN EL GRAFO el que rompa el hilo.
+            string appDestino = Nucleo.Grafo.AppDe(destino);
+            if (!Nucleo.Grafo.AppDe(aqui).Equals(appDestino, StringComparison.OrdinalIgnoreCase))
+            {
+                string proc = appDestino.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+                if (!_enfocar(proc))
+                    return Json(new { ok = false, porque = $"no pude traer «{appDestino}» al frente" });
+                Thread.Sleep(700);   // que la ventana se asiente antes de leer dónde estamos
+                aqui = _donde();
+            }
+
             if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase))
                 return Json(new { ok = true, llegado = true, porque = "ya estás ahí" });
 

@@ -180,7 +180,7 @@ async function tickMapa() {
   const enlaces = nodos.reduce((t, n) => t + n.caminos.length, 0);
   cabecera(aqui ? corto(aqui.id) : "—", `${new Set(nodos.map(n => n.app)).size} app(s)`,
            `${nodos.length} ubicaciones · ${enlaces} camino(s) aprendido(s)`);
-  leyenda("cada punto es una PANTALLA · las flechas son caminos ya probados");
+  leyenda("cada punto es una PANTALLA · las flechas son caminos probados · Ctrl+Shift+clic en un nodo para ir");
 
   // Se agrupa por app en anillos concéntricos: sin agrupar, dos apps distintas se mezclan y el
   // dibujo sugiere una vecindad que no existe. Dentro de cada anillo el orden es alfabético para
@@ -207,12 +207,52 @@ async function tickMapa() {
     s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#2f6b4f" stroke-width="1.5" marker-end="url(#f)"/>`;
   }));
   Object.values(pos).forEach(({ x, y, n }) => {
-    s += `<circle cx="${x}" cy="${y}" r="${n.actual ? 11 : 7}"`
-       + ` fill="${n.actual ? '#1b2740' : '#22262f'}" stroke="${n.actual ? '#4c8dff' : '#3a4050'}" stroke-width="${n.actual ? 3 : 1}"/>`;
+    // El círculo lleva su id encima: es lo que permite que Ctrl+Shift+clic sepa a dónde ir sin
+    // que la página tenga que calcular nada. El destino sale del dibujo, y el dibujo del núcleo.
+    s += `<circle class="nodo" data-id="${escapar(n.id)}" cx="${x}" cy="${y}" r="${n.actual ? 11 : 7}"`
+       + ` fill="${n.actual ? '#1b2740' : '#22262f'}" stroke="${n.actual ? '#4c8dff' : '#3a4050'}"`
+       + ` stroke-width="${n.actual ? 3 : 1}" style="cursor:pointer"/>`;
     s += rotulo(x + 13, y + 4, "start", corto(n.id), !n.actual);
   });
   pintar(s);
+  document.querySelectorAll("circle.nodo").forEach(c =>
+    c.addEventListener("click", ev => { if (ev.ctrlKey && ev.shiftKey) irA(c.dataset.id); }));
   estado("actualizado " + hora());
+}
+
+// ── NAVEGAR: Ctrl+Shift+clic sobre un nodo ────────────────────────────────
+//
+// UN PASO CADA VEZ, porque es lo único que el núcleo contesta. Se le vuelve a preguntar después de
+// cada clic en lugar de pedirle la ruta entera: el mapa es vivo, y una ruta calculada de golpe es
+// una promesa sobre pantallas que todavía no se han visto.
+//
+// La página NO decide nada. Manda el destino y obedece lo que el núcleo responda; si dice que no
+// sabe llegar, se para y lo dice. Calcular aquí el camino sería tener dos opiniones sobre lo mismo,
+// que es el problema que este proyecto entero persigue.
+let navegando = false;
+
+async function irA(destino) {
+  if (navegando) { estado("ya voy hacia otro sitio; espera a que termine"); return; }
+  navegando = true;
+  try {
+    for (let paso = 1; paso <= 12; paso++) {
+      estado(`yendo a «${corto(destino)}» · paso ${paso}…`);
+      const r = await fetch("http://127.0.0.1:8792/ir", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ destino }),
+      });
+      const j = await r.json();
+      if (j.llegado) { estado(`llegado a «${corto(destino)}» en ${paso - 1} paso(s)`); return; }
+      if (!j.ok) { estado(`no pude llegar: ${j.porque}`); return; }
+      // Se espera a que la pantalla se asiente: preguntar el siguiente paso antes de que el núcleo
+      // haya visto dónde estamos daría el mismo paso otra vez.
+      await new Promise(t => setTimeout(t, 1400));
+    }
+    estado("me planté a los 12 pasos: o hay un bucle, o el destino no se alcanza así");
+  } catch (e) {
+    estado("no llego a la app: " + e.message);
+  } finally { navegando = false; }
 }
 
 // ── piezas ────────────────────────────────────────────────────────────────
