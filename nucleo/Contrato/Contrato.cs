@@ -27,6 +27,7 @@ internal static class Contrato
         Prueba("7. no se inventa nada: sin cruzar, no hay destino", SinCruzarNoHayDestino);
         Prueba("8. cambiar de sitio ES un cambio, aunque se vea lo mismo", MoverseEsCambio);
         Prueba("9. un destino de algo que nunca se vio aquí se RECHAZA, no se traga", NadaDeFantasmas);
+        Prueba("10. navegar es UN paso cada vez, y el paso tiene que estar vivo", ElSiguientePaso);
 
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
@@ -244,6 +245,38 @@ internal static class Contrato
             "…y no deja rastro fantasma en el grafo");
         Debe(g.Cruzar("app://a", "uia:name=Ir;ct=Button", "app://b"),
             "y el mismo elemento, nombrado como se observó, SÍ se acepta");
+    }
+
+    private static void ElSiguientePaso(Grafo g)
+    {
+        // Un pasillo de tres: inicio → medio → fondo, y desde inicio también un callejón.
+        var aMedio = new Elemento("s:medio", "Ir al medio", "Button");
+        var aCallejon = new Elemento("s:callejon", "Callejón", "Button");
+        var aFondo = new Elemento("s:fondo", "Ir al fondo", "Button");
+
+        g.Observar("app://inicio", new[] { aMedio, aCallejon });
+        g.Cruzar("app://inicio", "s:medio", "app://medio");
+        g.Cruzar("app://inicio", "s:callejon", "app://callejon");
+        g.Observar("app://medio", new[] { aFondo });
+        g.Cruzar("app://medio", "s:fondo", "app://fondo");
+        g.Observar("app://inicio", new[] { aMedio, aCallejon });   // se vuelve: el pasillo sigue vivo
+
+        var paso = g.SiguientePaso("app://inicio", "app://fondo");
+        Debe(paso?.Que.Selector == "s:medio",
+            "para llegar al fondo, el siguiente paso es el del MEDIO — no el destino final");
+        Debe(paso!.Vivo, "y se devuelve porque está en pantalla ahora");
+
+        Debe(g.SiguientePaso("app://inicio", "app://ninguna-parte") == null,
+            "a donde no se sabe llegar se contesta que no se sabe, en vez de improvisar");
+        Debe(g.SiguientePaso("app://inicio", "app://inicio") == null,
+            "ya estar allí no es un paso");
+
+        // Y AHORA EL CASO QUE IMPORTA: el camino sigue en el mapa, pero la puerta ya no está en
+        // pantalla —un panel plegado, una lista con scroll—. Devolverla sería mandar a pulsar el
+        // vacío, que es el fallo que este modelo entero vino a quitar.
+        g.Observar("app://inicio", new[] { aCallejon });   // «Ir al medio» deja de verse
+        Debe(g.SiguientePaso("app://inicio", "app://fondo") == null,
+            "si el paso no está VIVO no se ofrece: el mapa recuerda, la pantalla manda");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

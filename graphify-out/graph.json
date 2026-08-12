@@ -10,8 +10,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "windows_client_src_navigation_mapavivo",
-      "community": 116,
-      "community_name": "U.WindowsClient.Navigation",
+      "community": 112,
+      "community_name": "Grafo",
       "norm_label": "mapavivo.cs"
     },
     {
@@ -166,7 +166,7 @@
       "label": ".Cruzado()",
       "file_type": "code",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L149",
+      "source_location": "L164",
       "metadata": {
         "namespace": "U.WindowsClient.Navigation",
         "scope_chain": [
@@ -184,7 +184,7 @@
       "label": ".SinEtiquetasDeControles()",
       "file_type": "code",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L169",
+      "source_location": "L184",
       "metadata": {
         "namespace": "U.WindowsClient.Navigation",
         "scope_chain": [
@@ -216,8 +216,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "selector",
-      "community": 222,
-      "community_name": ".SinEtiquetasDeControles",
+      "community": 134,
+      "community_name": ".ObserveExits",
       "norm_label": "selector"
     },
     {
@@ -257,7 +257,7 @@
       "label": ".Limpiar()",
       "file_type": "code",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L188",
+      "source_location": "L203",
       "metadata": {
         "namespace": "U.WindowsClient.Navigation",
         "scope_chain": [
@@ -275,7 +275,7 @@
       "label": ".Corto()",
       "file_type": "code",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L197",
+      "source_location": "L212",
       "metadata": {
         "namespace": "U.WindowsClient.Navigation",
         "scope_chain": [
@@ -293,7 +293,7 @@
       "label": ".Dispose()",
       "file_type": "code",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L203",
+      "source_location": "L218",
       "metadata": {
         "namespace": "U.WindowsClient.Navigation",
         "scope_chain": [
@@ -693,8 +693,8 @@
       "source_file": "windows-client/src/Ui/FaceWindow.xaml.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 109,
-      "community_name": "U.WindowsClient.Ui",
+      "community": 116,
+      "community_name": "U.WindowsClient.Navigation",
       "norm_label": "facewindow.xaml.cs",
       "id": "windows_client_src_ui_facewindow_xaml"
     },
@@ -740,7 +740,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 53,
+      "community": 54,
       "community_name": "Window",
       "norm_label": "window",
       "id": "window"
@@ -2274,7 +2274,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".onopenvideos()",
       "id": "windows_client_src_ui_facewindow_xaml_u_windowsclient_ui_facewindow_onopenvideos"
     },
@@ -3789,8 +3789,8 @@
       "source_file": "windows-client/src/Ui/GraphExplorerWindow.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": "graphexplorerwindow.cs",
       "id": "windows_client_src_ui_graphexplorerwindow"
     },
@@ -3874,8 +3874,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": "canvas",
       "id": "canvas"
     },
@@ -4153,8 +4153,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": ".vigilarmodificadores()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_vigilarmodificadores"
     },
@@ -4164,8 +4164,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": "int",
       "id": "windows_client_src_ui_graphexplorerwindow_cs_int"
     },
@@ -4182,8 +4182,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": ".getasynckeystate()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_getasynckeystate"
     },
@@ -4211,8 +4211,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": ".onsourceinitialized()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_onsourceinitialized"
     },
@@ -4222,8 +4222,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": "eventargs",
       "id": "windows_client_src_ui_graphexplorerwindow_cs_eventargs"
     },
@@ -4630,8 +4630,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 151,
-      "community_name": "GraphExplorerWindow",
+      "community": 142,
+      "community_name": ".AppDe",
       "norm_label": ".setcollapsed()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_setcollapsed"
     },
@@ -5041,8 +5041,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 41,
+      "community_name": ".DibujarConProfundidad",
       "norm_label": "ireadonlylist",
       "id": "windows_client_src_ui_graphexplorerwindow_cs_ireadonlylist"
     },
@@ -5189,8 +5189,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 151,
-      "community_name": "GraphExplorerWindow",
+      "community": 142,
+      "community_name": ".AppDe",
       "norm_label": ".rotularvista()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_graphexplorerwindow_rotularvista"
     },
@@ -5378,8 +5378,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": "highlightoverlay",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay"
     },
@@ -5396,8 +5396,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": ".getwindowlong()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_getwindowlong"
     },
@@ -5414,8 +5414,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": ".setwindowlong()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_setwindowlong"
     },
@@ -5425,8 +5425,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": "rectangle",
       "id": "windows_client_src_ui_graphexplorerwindow_cs_rectangle"
     },
@@ -5443,8 +5443,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": ".onsourceinitialized()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_onsourceinitialized"
     },
@@ -5461,8 +5461,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 41,
+      "community_name": ".DibujarConProfundidad",
       "norm_label": ".showrect()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_showrect"
     },
@@ -5472,8 +5472,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 41,
+      "community_name": ".DibujarConProfundidad",
       "norm_label": "rect",
       "id": "windows_client_src_ui_graphexplorerwindow_cs_rect"
     },
@@ -5490,8 +5490,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 41,
+      "community_name": ".DibujarConProfundidad",
       "norm_label": ".showrects()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_showrects"
     },
@@ -5508,8 +5508,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 151,
+      "community_name": "GraphExplorerWindow",
       "norm_label": ".nuevorecuadro()",
       "id": "windows_client_src_ui_graphexplorerwindow_u_windowsclient_ui_highlightoverlay_nuevorecuadro"
     },
@@ -6220,8 +6220,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 62,
-      "community_name": "SurfaceMap",
+      "community": 134,
+      "community_name": ".ObserveExits",
       "norm_label": "ienumerable",
       "id": "ienumerable"
     },
@@ -6689,8 +6689,8 @@
       "source_file": "windows-client/src/Voice/NarradorDelArquitecto.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 116,
+      "community_name": "U.WindowsClient.Navigation",
       "norm_label": "narradordelarquitecto.cs",
       "id": "windows_client_src_voice_narradordelarquitecto"
     },
@@ -6705,8 +6705,8 @@
         "namespace": "U.WindowsClient.Voice"
       },
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 116,
+      "community_name": "U.WindowsClient.Navigation",
       "norm_label": "u.windowsclient.voice",
       "id": "csharp_namespace:cd4950b1c8d340e9"
     },
@@ -8499,7 +8499,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": "info",
       "id": "info"
     },
@@ -8516,8 +8516,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 143,
-      "community_name": ".ObserveExits",
+      "community": 62,
+      "community_name": "SurfaceMap",
       "norm_label": ".siguealavista()",
       "id": "versiones_nucleo_v1_u_windowsclient_navigation_surfacemap_siguealavista"
     },
@@ -8570,7 +8570,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": ".observeexits()",
       "id": "versiones_nucleo_v1_u_windowsclient_navigation_surfacemap_observeexits"
@@ -8581,7 +8581,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": "label",
       "id": "label"
@@ -8592,7 +8592,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": "controltype",
       "id": "controltype"
@@ -8603,7 +8603,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": "alternatives",
       "id": "alternatives"
@@ -8614,7 +8614,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": "grupo",
       "id": "grupo"
@@ -8734,7 +8734,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": "hop",
       "id": "hop"
     },
@@ -8751,8 +8751,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 143,
-      "community_name": ".ObserveExits",
+      "community": 62,
+      "community_name": "SurfaceMap",
       "norm_label": ".escontenido()",
       "id": "versiones_nucleo_v1_u_windowsclient_navigation_surfacemap_escontenido"
     },
@@ -8895,8 +8895,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 62,
-      "community_name": "SurfaceMap",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": ".olvidartodo()",
       "id": "versiones_nucleo_v1_u_windowsclient_navigation_surfacemap_olvidartodo"
     },
@@ -8906,8 +8906,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": "nodos",
       "id": "nodos"
     },
@@ -8917,8 +8917,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 62,
-      "community_name": "SurfaceMap",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": "aristas",
       "id": "aristas"
     },
@@ -9199,8 +9199,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 143,
-      "community_name": ".ObserveExits",
+      "community": 62,
+      "community_name": "SurfaceMap",
       "norm_label": ".aplicarensenanza()",
       "id": "versiones_nucleo_v1_u_windowsclient_navigation_surfacemap_aplicarensenanza"
     },
@@ -9325,8 +9325,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 143,
-      "community_name": ".ObserveExits",
+      "community": 62,
+      "community_name": "SurfaceMap",
       "norm_label": ".heredada()",
       "id": "versiones_nucleo_v1_u_windowsclient_navigation_surfacemap_heredada"
     },
@@ -9459,7 +9459,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": "edgeinfo",
       "id": "edgeinfo"
@@ -10236,8 +10236,8 @@
       "source_file": "windows-client/src/Mcp/SurfaceMapTools.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 116,
+      "community_name": "U.WindowsClient.Navigation",
       "norm_label": "surfacemaptools.cs",
       "id": "windows_client_src_mcp_surfacemaptools"
     },
@@ -10252,8 +10252,8 @@
         "namespace": "U.WindowsClient.Mcp"
       },
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 116,
+      "community_name": "U.WindowsClient.Navigation",
       "norm_label": "u.windowsclient.mcp",
       "id": "csharp_namespace:ebb34b811774c5c6"
     },
@@ -10662,8 +10662,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 68,
-      "community_name": "SurfaceMapTools",
+      "community": 157,
+      "community_name": ".Log",
       "norm_label": ".aprendersubida()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_aprendersubida"
     },
@@ -10680,8 +10680,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 273,
-      "community_name": ".Marcados",
+      "community": 68,
+      "community_name": "SurfaceMapTools",
       "norm_label": ".getcursorpos()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_getcursorpos"
     },
@@ -10794,8 +10794,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 68,
-      "community_name": "SurfaceMapTools",
+      "community": 194,
+      "community_name": "RECT",
       "norm_label": "rect",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_rect"
     },
@@ -10805,8 +10805,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 68,
-      "community_name": "SurfaceMapTools",
+      "community": 194,
+      "community_name": "RECT",
       "norm_label": "int",
       "id": "windows_client_src_mcp_surfacemaptools_cs_int"
     },
@@ -10877,8 +10877,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 273,
-      "community_name": ".Marcados",
+      "community": 68,
+      "community_name": "SurfaceMapTools",
       "norm_label": ".excluir()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_excluir"
     },
@@ -11054,8 +11054,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 68,
-      "community_name": "SurfaceMapTools",
+      "community": 157,
+      "community_name": ".Log",
       "norm_label": ".existebotonsubir()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_existebotonsubir"
     },
@@ -11126,8 +11126,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 157,
-      "community_name": ".Log",
+      "community": 67,
+      "community_name": "DllImport",
       "norm_label": ".observarmenus()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_observarmenus"
     },
@@ -11461,8 +11461,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 68,
-      "community_name": "SurfaceMapTools",
+      "community": 9,
+      "community_name": ".Unblock",
       "norm_label": ".esdeclinar()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_esdeclinar"
     },
@@ -11515,8 +11515,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 68,
-      "community_name": "SurfaceMapTools",
+      "community": 9,
+      "community_name": ".Unblock",
       "norm_label": ".essalidadeventana()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_essalidadeventana"
     },
@@ -12526,8 +12526,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 62,
-      "community_name": "SurfaceMap",
+      "community": 104,
+      "community_name": "Plata",
       "norm_label": ".derivadade()",
       "id": "windows_client_src_navigation_plata_u_windowsclient_navigation_plata_derivadade"
     },
@@ -12767,7 +12767,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".observe()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_observe"
     },
@@ -12785,7 +12785,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".commit()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_commit"
     },
@@ -12814,7 +12814,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".clave()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_clave"
     },
@@ -12832,7 +12832,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".edges()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_edges"
     },
@@ -12843,7 +12843,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": "ienumerable",
       "id": "windows_client_src_navigation_surfacemap_cs_ienumerable"
     },
@@ -12854,7 +12854,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": "from",
       "id": "windows_client_src_navigation_surfacemap_cs_from"
     },
@@ -12865,7 +12865,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": "to",
       "id": "windows_client_src_navigation_surfacemap_cs_to"
     },
@@ -12883,7 +12883,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".siguealavista()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_siguealavista"
     },
@@ -12901,7 +12901,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".destinopuerta()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_destinopuerta"
     },
@@ -12919,7 +12919,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".espuerta()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_espuerta"
     },
@@ -12936,7 +12936,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": ".observeexits()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_observeexits"
@@ -12955,7 +12955,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".fijarnivel()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_fijarnivel"
     },
@@ -12973,7 +12973,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".ubicuidad()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_ubicuidad"
     },
@@ -12991,7 +12991,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".escromoglobal()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_escromoglobal"
     },
@@ -13008,8 +13008,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 104,
+      "community_name": "Plata",
       "norm_label": ".selectorescromo()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_selectorescromo"
     },
@@ -13019,8 +13019,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 104,
+      "community_name": "Plata",
       "norm_label": "hashset",
       "id": "windows_client_src_navigation_surfacemap_cs_hashset"
     },
@@ -13056,7 +13056,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".atajohacia()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_atajohacia"
     },
@@ -13073,7 +13073,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": ".escontenido()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_escontenido"
@@ -13092,7 +13092,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".esrelativo()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_esrelativo"
     },
@@ -13110,7 +13110,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".appde()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_appde"
     },
@@ -13128,7 +13128,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".mismaapp()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_mismaapp"
     },
@@ -13146,7 +13146,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".destinoconocidode()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_destinoconocidode"
     },
@@ -13164,7 +13164,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".resolverpuertasiguales()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_resolverpuertasiguales"
     },
@@ -13182,7 +13182,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".learntraversal()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_learntraversal"
     },
@@ -13200,7 +13200,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".recalcularprofundidades()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_recalcularprofundidades"
     },
@@ -13217,8 +13217,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": ".olvidartodo()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_olvidartodo"
     },
@@ -13235,8 +13235,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": ".olvidarapp()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_olvidarapp"
     },
@@ -13254,7 +13254,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".olvidaraccion()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_olvidaraccion"
     },
@@ -13292,7 +13292,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".route()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_route"
     },
@@ -13303,7 +13303,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": "list",
       "id": "windows_client_src_navigation_surfacemap_cs_list"
     },
@@ -13321,7 +13321,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".exitsfrom()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_exitsfrom"
     },
@@ -13399,7 +13399,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".esgestodeatras()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_esgestodeatras"
     },
@@ -13416,8 +13416,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": ".aprenderatras()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_aprenderatras"
     },
@@ -13470,8 +13470,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": ".olvidarjerarquiade()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_olvidarjerarquiade"
     },
@@ -13488,7 +13488,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": ".aplicarensenanza()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_aplicarensenanza"
@@ -13506,8 +13506,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": ".aprender()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_aprender"
     },
@@ -13524,8 +13524,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": ".clasificarsalida()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_clasificarsalida"
     },
@@ -13542,8 +13542,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": ".aprenderclase()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_aprenderclase"
     },
@@ -13560,8 +13560,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": ".guardarensenanzas()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_guardarensenanzas"
     },
@@ -13597,7 +13597,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".cromode()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_cromode"
     },
@@ -13614,7 +13614,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": ".heredada()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_heredada"
@@ -13633,7 +13633,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".norm()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_norm"
     },
@@ -13651,7 +13651,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".shortid()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_shortid"
     },
@@ -13709,7 +13709,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 134,
-      "community_name": ".Edges",
+      "community_name": ".ObserveExits",
       "norm_label": ".load()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_load"
     },
@@ -13726,8 +13726,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
-      "community_name": ".Edges",
+      "community": 143,
+      "community_name": ".Save",
       "norm_label": ".save()",
       "id": "windows_client_src_navigation_surfacemap_u_windowsclient_navigation_surfacemap_save"
     },
@@ -17374,8 +17374,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 194,
-      "community_name": "OlvidarJerarquias",
+      "community": 43,
+      "community_name": "SurfaceMap",
       "norm_label": ".olvidarjerarquiade()",
       "id": "versiones_nucleo_v0_u_windowsclient_navigation_surfacemap_olvidarjerarquiade"
     },
@@ -18009,8 +18009,8 @@
       "source_file": "windows-client/src/Actions/Gestures.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 96,
+      "community_name": "U.WindowsClient.SystemApi",
       "norm_label": "gestures.cs",
       "id": "windows_client_src_actions_gestures"
     },
@@ -18025,8 +18025,8 @@
         "namespace": "U.WindowsClient.Actions"
       },
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 96,
+      "community_name": "U.WindowsClient.SystemApi",
       "norm_label": "u.windowsclient.actions",
       "id": "csharp_namespace:7657b4ec99ce487c"
     },
@@ -18279,8 +18279,8 @@
       "source_file": "windows-client/src/Actions/InputExecutor.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 96,
+      "community_name": "U.WindowsClient.SystemApi",
       "norm_label": "inputexecutor.cs",
       "id": "windows_client_src_actions_inputexecutor"
     },
@@ -19299,8 +19299,8 @@
         "namespace": "U.WindowsClient.Capture"
       },
       "_origin": "ast",
-      "community": 116,
-      "community_name": "U.WindowsClient.Navigation",
+      "community": 7,
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "u.windowsclient.capture",
       "id": "csharp_namespace:1ab641519afcb24e"
     },
@@ -19455,7 +19455,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "clinicalbridge.cs",
       "id": "windows_client_src_clinical_clinicalbridge"
     },
@@ -19471,7 +19471,7 @@
       },
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "u.windowsclient.clinical",
       "id": "csharp_namespace:28dda780a7674adf"
     },
@@ -19490,7 +19490,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "clinicalvalue",
       "id": "windows_client_src_clinical_clinicalbridge_u_windowsclient_clinical_clinicalvalue"
     },
@@ -19618,7 +19618,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "conceptbinder.cs",
       "id": "windows_client_src_clinical_conceptbinder"
     },
@@ -19637,7 +19637,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "binding",
       "id": "windows_client_src_clinical_conceptbinder_u_windowsclient_clinical_binding"
     },
@@ -19656,7 +19656,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "conceptbinder",
       "id": "windows_client_src_clinical_conceptbinder_u_windowsclient_clinical_conceptbinder"
     },
@@ -19667,7 +19667,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "string",
       "id": "windows_client_src_clinical_conceptbinder_cs_string"
     },
@@ -19685,7 +19685,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": ".bind()",
       "id": "windows_client_src_clinical_conceptbinder_u_windowsclient_clinical_conceptbinder_bind"
     },
@@ -19696,7 +19696,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "ireadonlylist",
       "id": "windows_client_src_clinical_conceptbinder_cs_ireadonlylist"
     },
@@ -19714,7 +19714,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": ".bindpressure()",
       "id": "windows_client_src_clinical_conceptbinder_u_windowsclient_clinical_conceptbinder_bindpressure"
     },
@@ -19725,7 +19725,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "list",
       "id": "windows_client_src_clinical_conceptbinder_cs_list"
     },
@@ -19736,7 +19736,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "field",
       "id": "field"
     },
@@ -19747,7 +19747,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "key",
       "id": "windows_client_src_clinical_conceptbinder_cs_key"
     },
@@ -19758,7 +19758,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "hashset",
       "id": "windows_client_src_clinical_conceptbinder_cs_hashset"
     },
@@ -19776,7 +19776,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": ".matches()",
       "id": "windows_client_src_clinical_conceptbinder_u_windowsclient_clinical_conceptbinder_matches"
     },
@@ -19794,7 +19794,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": ".normalize()",
       "id": "windows_client_src_clinical_conceptbinder_u_windowsclient_clinical_conceptbinder_normalize"
     },
@@ -20203,8 +20203,8 @@
       "source_file": "windows-client/src/Mcp/LocalMcp.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 96,
+      "community_name": "U.WindowsClient.SystemApi",
       "norm_label": "localmcp.cs",
       "id": "windows_client_src_mcp_localmcp"
     },
@@ -20309,8 +20309,8 @@
       "source_file": "windows-client/src/Mcp/McpDevProbe.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 116,
+      "community_name": "U.WindowsClient.Navigation",
       "norm_label": "mcpdevprobe.cs",
       "id": "windows_client_src_mcp_mcpdevprobe"
     },
@@ -22169,8 +22169,8 @@
       "source_file": "windows-client/src/Navigation/MaestroDeApps.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 116,
-      "community_name": "U.WindowsClient.Navigation",
+      "community": 7,
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "maestrodeapps.cs",
       "id": "windows_client_src_navigation_maestrodeapps"
     },
@@ -23134,7 +23134,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 143,
+      "community": 134,
       "community_name": ".ObserveExits",
       "norm_label": ".clasificar()",
       "id": "windows_client_src_navigation_safetoclick_u_windowsclient_navigation_safetoclick_clasificar"
@@ -25082,7 +25082,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "screenrecorder",
       "id": "windows_client_src_teach_screenrecorder_u_windowsclient_teach_screenrecorder"
@@ -25093,7 +25093,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "iasyncdisposable",
       "id": "iasyncdisposable"
@@ -25104,7 +25104,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "string",
       "id": "windows_client_src_teach_screenrecorder_cs_string"
@@ -25115,7 +25115,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "recorder",
       "id": "recorder"
@@ -25133,7 +25133,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".startasync()",
       "id": "windows_client_src_teach_screenrecorder_u_windowsclient_teach_screenrecorder_startasync"
@@ -25144,7 +25144,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "cancellationtoken",
       "id": "windows_client_src_teach_screenrecorder_cs_cancellationtoken"
@@ -25155,7 +25155,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "task",
       "id": "windows_client_src_teach_screenrecorder_cs_task"
@@ -25173,7 +25173,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".logaudiodevices()",
       "id": "windows_client_src_teach_screenrecorder_u_windowsclient_teach_screenrecorder_logaudiodevices"
@@ -25191,7 +25191,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".describe()",
       "id": "windows_client_src_teach_screenrecorder_u_windowsclient_teach_screenrecorder_describe"
@@ -25202,7 +25202,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "ireadonlylist",
       "id": "windows_client_src_teach_screenrecorder_cs_ireadonlylist"
@@ -25213,7 +25213,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "audiodevice",
       "id": "audiodevice"
@@ -25231,7 +25231,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".stopasync()",
       "id": "windows_client_src_teach_screenrecorder_u_windowsclient_teach_screenrecorder_stopasync"
@@ -25249,7 +25249,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".disposeasync()",
       "id": "windows_client_src_teach_screenrecorder_u_windowsclient_teach_screenrecorder_disposeasync"
@@ -25260,7 +25260,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "valuetask",
       "id": "windows_client_src_teach_screenrecorder_cs_valuetask"
@@ -25569,7 +25569,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "teachsession",
       "id": "windows_client_src_teach_teachsession_u_windowsclient_teach_teachsession"
@@ -25580,7 +25580,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "string",
       "id": "windows_client_src_teach_teachsession_cs_string"
@@ -25591,7 +25591,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "httpclient",
       "id": "windows_client_src_teach_teachsession_cs_httpclient"
@@ -25609,7 +25609,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".startasync()",
       "id": "windows_client_src_teach_teachsession_u_windowsclient_teach_teachsession_startasync"
@@ -25620,7 +25620,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "cancellationtoken",
       "id": "windows_client_src_teach_teachsession_cs_cancellationtoken"
@@ -25631,7 +25631,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": "task",
       "id": "windows_client_src_teach_teachsession_cs_task"
@@ -25649,7 +25649,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".restartasync()",
       "id": "windows_client_src_teach_teachsession_u_windowsclient_teach_teachsession_restartasync"
@@ -25667,7 +25667,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".discardasync()",
       "id": "windows_client_src_teach_teachsession_u_windowsclient_teach_teachsession_discardasync"
@@ -25685,7 +25685,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".stopasync()",
       "id": "windows_client_src_teach_teachsession_u_windowsclient_teach_teachsession_stopasync"
@@ -25703,7 +25703,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".processasync()",
       "id": "windows_client_src_teach_teachsession_u_windowsclient_teach_teachsession_processasync"
@@ -25721,7 +25721,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".uploadtogeminiasync()",
       "id": "windows_client_src_teach_teachsession_u_windowsclient_teach_teachsession_uploadtogeminiasync"
@@ -25739,7 +25739,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".archiveasync()",
       "id": "windows_client_src_teach_teachsession_u_windowsclient_teach_teachsession_archiveasync"
@@ -25757,7 +25757,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
+      "community": 53,
       "community_name": "TeachSession",
       "norm_label": ".waitactiveasync()",
       "id": "windows_client_src_teach_teachsession_u_windowsclient_teach_teachsession_waitactiveasync"
@@ -25775,8 +25775,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 99,
-      "community_name": "WorkflowTeachSession",
+      "community": 53,
+      "community_name": "TeachSession",
       "norm_label": ".disposeasync()",
       "id": "windows_client_src_teach_teachsession_u_windowsclient_teach_teachsession_disposeasync"
     },
@@ -25786,8 +25786,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 99,
-      "community_name": "WorkflowTeachSession",
+      "community": 53,
+      "community_name": "TeachSession",
       "norm_label": "valuetask",
       "id": "windows_client_src_teach_teachsession_cs_valuetask"
     },
@@ -25941,8 +25941,8 @@
       "source_file": "windows-client/src/Teach/VideoLibrary.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 3,
-      "community_name": "TeachSession",
+      "community": 172,
+      "community_name": "VideoLibrary",
       "norm_label": "videolibrary.cs",
       "id": "windows_client_src_teach_videolibrary"
     },
@@ -25960,8 +25960,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 3,
-      "community_name": "TeachSession",
+      "community": 172,
+      "community_name": "VideoLibrary",
       "norm_label": "teachvideo",
       "id": "windows_client_src_teach_videolibrary_u_windowsclient_teach_teachvideo"
     },
@@ -25979,8 +25979,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 3,
-      "community_name": "TeachSession",
+      "community": 172,
+      "community_name": "VideoLibrary",
       "norm_label": "videolibrary",
       "id": "windows_client_src_teach_videolibrary_u_windowsclient_teach_videolibrary"
     },
@@ -25997,8 +25997,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
-      "community_name": "TeachSession",
+      "community": 172,
+      "community_name": "VideoLibrary",
       "norm_label": ".newrecordingpath()",
       "id": "windows_client_src_teach_videolibrary_u_windowsclient_teach_videolibrary_newrecordingpath"
     },
@@ -26015,8 +26015,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
-      "community_name": "TeachSession",
+      "community": 172,
+      "community_name": "VideoLibrary",
       "norm_label": ".list()",
       "id": "windows_client_src_teach_videolibrary_u_windowsclient_teach_videolibrary_list"
     },
@@ -26026,8 +26026,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 3,
-      "community_name": "TeachSession",
+      "community": 172,
+      "community_name": "VideoLibrary",
       "norm_label": "ireadonlylist",
       "id": "windows_client_src_teach_videolibrary_cs_ireadonlylist"
     },
@@ -26044,8 +26044,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
-      "community_name": "TeachSession",
+      "community": 172,
+      "community_name": "VideoLibrary",
       "norm_label": ".savesummary()",
       "id": "windows_client_src_teach_videolibrary_u_windowsclient_teach_videolibrary_savesummary"
     },
@@ -26062,8 +26062,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
-      "community_name": "TeachSession",
+      "community": 172,
+      "community_name": "VideoLibrary",
       "norm_label": ".readsummary()",
       "id": "windows_client_src_teach_videolibrary_u_windowsclient_teach_videolibrary_readsummary"
     },
@@ -26080,8 +26080,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
-      "community_name": "TeachSession",
+      "community": 172,
+      "community_name": "VideoLibrary",
       "norm_label": ".summarypathfor()",
       "id": "windows_client_src_teach_videolibrary_u_windowsclient_teach_videolibrary_summarypathfor"
     },
@@ -26098,8 +26098,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 3,
-      "community_name": "TeachSession",
+      "community": 172,
+      "community_name": "VideoLibrary",
       "norm_label": ".delete()",
       "id": "windows_client_src_teach_videolibrary_u_windowsclient_teach_videolibrary_delete"
     },
@@ -26331,8 +26331,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 99,
-      "community_name": "WorkflowTeachSession",
+      "community": 92,
+      "community_name": "WorkflowLibraryWindow",
       "norm_label": ".disposeasync()",
       "id": "windows_client_src_teach_workflowteachsession_u_windowsclient_teach_workflowteachsession_disposeasync"
     },
@@ -26342,8 +26342,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 99,
-      "community_name": "WorkflowTeachSession",
+      "community": 92,
+      "community_name": "WorkflowLibraryWindow",
       "norm_label": "valuetask",
       "id": "windows_client_src_teach_workflowteachsession_cs_valuetask"
     },
@@ -29382,7 +29382,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 54,
-      "community_name": ".BindPressure",
+      "community_name": "Window",
       "norm_label": "fillpreviewwindow.cs",
       "id": "windows_client_src_ui_fillpreviewwindow"
     },
@@ -29400,7 +29400,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 53,
+      "community": 54,
       "community_name": "Window",
       "norm_label": "fillpreviewwindow",
       "id": "windows_client_src_ui_fillpreviewwindow_u_windowsclient_ui_fillpreviewwindow"
@@ -29411,7 +29411,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 53,
+      "community": 54,
       "community_name": "Window",
       "norm_label": "taskcompletionsource",
       "id": "windows_client_src_ui_fillpreviewwindow_cs_taskcompletionsource"
@@ -29422,7 +29422,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 53,
+      "community": 54,
       "community_name": "Window",
       "norm_label": "brush",
       "id": "windows_client_src_ui_fillpreviewwindow_cs_brush"
@@ -29440,7 +29440,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 53,
+      "community": 54,
       "community_name": "Window",
       "norm_label": ".row()",
       "id": "windows_client_src_ui_fillpreviewwindow_u_windowsclient_ui_fillpreviewwindow_row"
@@ -29451,7 +29451,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 53,
+      "community": 54,
       "community_name": "Window",
       "norm_label": "uielement",
       "id": "windows_client_src_ui_fillpreviewwindow_cs_uielement"
@@ -29469,7 +29469,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 53,
+      "community": 54,
       "community_name": "Window",
       "norm_label": ".button()",
       "id": "windows_client_src_ui_fillpreviewwindow_u_windowsclient_ui_fillpreviewwindow_button"
@@ -29480,7 +29480,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 53,
+      "community": 54,
       "community_name": "Window",
       "norm_label": "button",
       "id": "windows_client_src_ui_fillpreviewwindow_cs_button"
@@ -31210,8 +31210,8 @@
       "source_file": "windows-client/src/Ui/OlvidarJerarquias.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 194,
-      "community_name": "OlvidarJerarquias",
+      "community": 129,
+      "community_name": ".Calcular",
       "norm_label": "olvidarjerarquias.cs",
       "id": "windows_client_src_ui_olvidarjerarquias"
     },
@@ -31229,8 +31229,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 194,
-      "community_name": "OlvidarJerarquias",
+      "community": 129,
+      "community_name": ".Calcular",
       "norm_label": "olvidarjerarquias",
       "id": "windows_client_src_ui_olvidarjerarquias_u_windowsclient_ui_olvidarjerarquias"
     },
@@ -31240,8 +31240,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 194,
-      "community_name": "OlvidarJerarquias",
+      "community": 129,
+      "community_name": ".Calcular",
       "norm_label": "stackpanel",
       "id": "windows_client_src_ui_olvidarjerarquias_cs_stackpanel"
     },
@@ -31251,8 +31251,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 194,
-      "community_name": "OlvidarJerarquias",
+      "community": 129,
+      "community_name": ".Calcular",
       "norm_label": "list",
       "id": "windows_client_src_ui_olvidarjerarquias_cs_list"
     },
@@ -31269,8 +31269,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 194,
-      "community_name": "OlvidarJerarquias",
+      "community": 129,
+      "community_name": ".Calcular",
       "norm_label": ".boton()",
       "id": "windows_client_src_ui_olvidarjerarquias_u_windowsclient_ui_olvidarjerarquias_boton"
     },
@@ -31280,8 +31280,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 194,
-      "community_name": "OlvidarJerarquias",
+      "community": 129,
+      "community_name": ".Calcular",
       "norm_label": "color",
       "id": "windows_client_src_ui_olvidarjerarquias_cs_color"
     },
@@ -31291,8 +31291,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 194,
-      "community_name": "OlvidarJerarquias",
+      "community": 129,
+      "community_name": ".Calcular",
       "norm_label": "button",
       "id": "windows_client_src_ui_olvidarjerarquias_cs_button"
     },
@@ -31309,8 +31309,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 194,
-      "community_name": "OlvidarJerarquias",
+      "community": 129,
+      "community_name": ".Calcular",
       "norm_label": ".pintar()",
       "id": "windows_client_src_ui_olvidarjerarquias_u_windowsclient_ui_olvidarjerarquias_pintar"
     },
@@ -31327,8 +31327,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 194,
-      "community_name": "OlvidarJerarquias",
+      "community": 129,
+      "community_name": ".Calcular",
       "norm_label": ".olvidar()",
       "id": "windows_client_src_ui_olvidarjerarquias_u_windowsclient_ui_olvidarjerarquias_olvidar"
     },
@@ -31612,8 +31612,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 211,
-      "community_name": ".GetWindowLong",
+      "community": 118,
+      "community_name": "PanelDeAcciones",
       "norm_label": ".getwindowlong()",
       "id": "windows_client_src_ui_paneldeacciones_u_windowsclient_ui_paneldeacciones_getwindowlong"
     },
@@ -31623,8 +31623,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 211,
-      "community_name": ".GetWindowLong",
+      "community": 118,
+      "community_name": "PanelDeAcciones",
       "norm_label": "intptr",
       "id": "windows_client_src_ui_paneldeacciones_cs_intptr"
     },
@@ -31634,8 +31634,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 211,
-      "community_name": ".GetWindowLong",
+      "community": 118,
+      "community_name": "PanelDeAcciones",
       "norm_label": "dllimport",
       "id": "windows_client_src_ui_paneldeacciones_cs_dllimport"
     },
@@ -31652,8 +31652,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 211,
-      "community_name": ".GetWindowLong",
+      "community": 118,
+      "community_name": "PanelDeAcciones",
       "norm_label": ".setwindowlong()",
       "id": "windows_client_src_ui_paneldeacciones_u_windowsclient_ui_paneldeacciones_setwindowlong"
     },
@@ -31745,8 +31745,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 211,
-      "community_name": ".GetWindowLong",
+      "community": 118,
+      "community_name": "PanelDeAcciones",
       "norm_label": ".onsourceinitialized()",
       "id": "windows_client_src_ui_paneldeacciones_u_windowsclient_ui_paneldeacciones_onsourceinitialized"
     },
@@ -31756,8 +31756,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 211,
-      "community_name": ".GetWindowLong",
+      "community": 118,
+      "community_name": "PanelDeAcciones",
       "norm_label": "eventargs",
       "id": "windows_client_src_ui_paneldeacciones_cs_eventargs"
     },
@@ -31922,8 +31922,8 @@
       "source_file": "windows-client/src/Ui/Pantallas.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 142,
+      "community_name": ".AppDe",
       "norm_label": "pantallas.cs",
       "id": "windows_client_src_ui_pantallas"
     },
@@ -31941,8 +31941,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 142,
+      "community_name": ".AppDe",
       "norm_label": "pantallas",
       "id": "windows_client_src_ui_pantallas_u_windowsclient_ui_pantallas"
     },
@@ -31959,8 +31959,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 41,
+      "community_name": ".DibujarConProfundidad",
       "norm_label": ".alvisual()",
       "id": "windows_client_src_ui_pantallas_u_windowsclient_ui_pantallas_alvisual"
     },
@@ -31970,8 +31970,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 41,
+      "community_name": ".DibujarConProfundidad",
       "norm_label": "visual",
       "id": "visual"
     },
@@ -31981,8 +31981,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 41,
+      "community_name": ".DibujarConProfundidad",
       "norm_label": "point",
       "id": "windows_client_src_ui_pantallas_cs_point"
     },
@@ -31992,8 +31992,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 92,
-      "community_name": "HighlightOverlay",
+      "community": 41,
+      "community_name": ".DibujarConProfundidad",
       "norm_label": "rect",
       "id": "windows_client_src_ui_pantallas_cs_rect"
     },
@@ -32126,8 +32126,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 142,
-      "community_name": ".AppDe",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": ".esperarasync()",
       "id": "windows_client_src_ui_pasoapaso_u_windowsclient_ui_pasoapaso_esperarasync"
     },
@@ -32137,8 +32137,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 142,
-      "community_name": ".AppDe",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": "task",
       "id": "windows_client_src_ui_pasoapaso_cs_task"
     },
@@ -32175,8 +32175,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 172,
-      "community_name": "Ventana",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": "ventana",
       "id": "windows_client_src_ui_pasoapaso_u_windowsclient_ui_ventana"
     },
@@ -32186,8 +32186,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 172,
-      "community_name": "Ventana",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": "textblock",
       "id": "windows_client_src_ui_pasoapaso_cs_textblock"
     },
@@ -32197,8 +32197,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 172,
-      "community_name": "Ventana",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": "textbox",
       "id": "windows_client_src_ui_pasoapaso_cs_textbox"
     },
@@ -32208,8 +32208,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 172,
-      "community_name": "Ventana",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": "taskcompletionsource",
       "id": "windows_client_src_ui_pasoapaso_cs_taskcompletionsource"
     },
@@ -32226,8 +32226,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 172,
-      "community_name": "Ventana",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": ".boton()",
       "id": "windows_client_src_ui_pasoapaso_u_windowsclient_ui_ventana_boton"
     },
@@ -32237,8 +32237,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 172,
-      "community_name": "Ventana",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": "color",
       "id": "windows_client_src_ui_pasoapaso_cs_color"
     },
@@ -32248,8 +32248,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 172,
-      "community_name": "Ventana",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": "button",
       "id": "windows_client_src_ui_pasoapaso_cs_button"
     },
@@ -32266,8 +32266,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 172,
-      "community_name": "Ventana",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": ".mostrar()",
       "id": "windows_client_src_ui_pasoapaso_u_windowsclient_ui_ventana_mostrar"
     },
@@ -32284,8 +32284,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 172,
-      "community_name": "Ventana",
+      "community": 111,
+      "community_name": "PasoAPaso",
       "norm_label": ".responder()",
       "id": "windows_client_src_ui_pasoapaso_u_windowsclient_ui_ventana_responder"
     },
@@ -32295,8 +32295,8 @@
       "source_file": "windows-client/src/Ui/ProfundidadClasica.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 116,
-      "community_name": "U.WindowsClient.Navigation",
+      "community": 109,
+      "community_name": "U.WindowsClient.Ui",
       "norm_label": "profundidadclasica.cs",
       "id": "windows_client_src_ui_profundidadclasica"
     },
@@ -32314,8 +32314,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 116,
-      "community_name": "U.WindowsClient.Navigation",
+      "community": 109,
+      "community_name": "U.WindowsClient.Ui",
       "norm_label": "profundidadclasica",
       "id": "windows_client_src_ui_profundidadclasica_u_windowsclient_ui_profundidadclasica"
     },
@@ -33097,7 +33097,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "videolibrarywindow.xaml",
       "id": "windows_client_src_ui_videolibrarywindow"
     },
@@ -33108,7 +33108,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "window",
       "id": "windows_client_src_ui_videolibrarywindow_window"
     },
@@ -33128,7 +33128,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "videolibrarywindow",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow"
     },
@@ -33139,7 +33139,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "deletebtn",
       "id": "windows_client_src_ui_videolibrarywindow_deletebtn"
     },
@@ -33150,7 +33150,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "button",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_xaml_button"
     },
@@ -33168,7 +33168,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".ondelete()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_ondelete"
     },
@@ -33179,7 +33179,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "openfolderbtn",
       "id": "windows_client_src_ui_videolibrarywindow_openfolderbtn"
     },
@@ -33197,7 +33197,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".onopenfolder()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_onopenfolder"
     },
@@ -33208,7 +33208,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "list",
       "id": "windows_client_src_ui_videolibrarywindow_list"
     },
@@ -33219,7 +33219,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "listbox",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_xaml_listbox"
     },
@@ -33237,7 +33237,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".onselected()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_onselected"
     },
@@ -33248,7 +33248,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "player",
       "id": "windows_client_src_ui_videolibrarywindow_player"
     },
@@ -33259,7 +33259,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "mediaelement",
       "id": "xaml_mediaelement"
     },
@@ -33277,7 +33277,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".onmediaended()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_onmediaended"
     },
@@ -33288,7 +33288,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "empty",
       "id": "windows_client_src_ui_videolibrarywindow_empty"
     },
@@ -33299,7 +33299,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "textblock",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_xaml_textblock"
     },
@@ -33310,7 +33310,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "playbtn",
       "id": "windows_client_src_ui_videolibrarywindow_playbtn"
     },
@@ -33328,7 +33328,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".onplaypause()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_onplaypause"
     },
@@ -33339,7 +33339,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "caption",
       "id": "windows_client_src_ui_videolibrarywindow_caption"
     },
@@ -33349,8 +33349,8 @@
       "source_file": "windows-client/src/Ui/VideoLibraryWindow.xaml.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 109,
-      "community_name": "U.WindowsClient.Ui",
+      "community": 7,
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "videolibrarywindow.xaml.cs",
       "id": "windows_client_src_ui_videolibrarywindow_xaml"
     },
@@ -33361,7 +33361,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "bool",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_cs_bool"
     },
@@ -33379,7 +33379,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".reload()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_reload"
     },
@@ -33397,7 +33397,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".label()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_label"
     },
@@ -33415,7 +33415,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".trim()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_trim"
     },
@@ -33433,7 +33433,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".current()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_current"
     },
@@ -33444,7 +33444,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "routedeventargs",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_cs_routedeventargs"
     },
@@ -33462,7 +33462,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".stop()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_stop"
     },
@@ -33480,7 +33480,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": ".onclosed()",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_u_windowsclient_ui_videolibrarywindow_onclosed"
     },
@@ -33491,7 +33491,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 3,
-      "community_name": "TeachSession",
+      "community_name": "VideoLibraryWindow",
       "norm_label": "eventargs",
       "id": "windows_client_src_ui_videolibrarywindow_xaml_cs_eventargs"
     },
@@ -33786,7 +33786,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "workflowlibrarywindow.xaml",
       "id": "windows_client_src_ui_workflowlibrarywindow"
     },
@@ -33797,7 +33797,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "window",
       "id": "windows_client_src_ui_workflowlibrarywindow_window"
     },
@@ -33816,7 +33816,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": "workflowlibrarywindow",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow"
@@ -33828,7 +33828,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "connstatus",
       "id": "windows_client_src_ui_workflowlibrarywindow_connstatus"
     },
@@ -33839,7 +33839,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "textblock",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_xaml_textblock"
     },
@@ -33850,7 +33850,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "teachdescription",
       "id": "windows_client_src_ui_workflowlibrarywindow_teachdescription"
     },
@@ -33861,7 +33861,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "textbox",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_xaml_textbox"
     },
@@ -33872,7 +33872,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "teachbtn",
       "id": "windows_client_src_ui_workflowlibrarywindow_teachbtn"
     },
@@ -33883,7 +33883,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "button",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_xaml_button"
     },
@@ -33900,7 +33900,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".ontoggleteach()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_ontoggleteach"
@@ -33912,7 +33912,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "runbtn",
       "id": "windows_client_src_ui_workflowlibrarywindow_runbtn"
     },
@@ -33929,7 +33929,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".onrunselected()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_onrunselected"
@@ -33941,7 +33941,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "forcesurface",
       "id": "windows_client_src_ui_workflowlibrarywindow_forcesurface"
     },
@@ -33952,7 +33952,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "checkbox",
       "id": "xaml_checkbox"
     },
@@ -33963,7 +33963,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "reloadbtn",
       "id": "windows_client_src_ui_workflowlibrarywindow_reloadbtn"
     },
@@ -33980,7 +33980,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".onreload()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_onreload"
@@ -33992,7 +33992,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "workflowlist",
       "id": "windows_client_src_ui_workflowlibrarywindow_workflowlist"
     },
@@ -34003,7 +34003,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "listbox",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_xaml_listbox"
     },
@@ -34014,7 +34014,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "statusline",
       "id": "windows_client_src_ui_workflowlibrarywindow_statusline"
     },
@@ -34025,7 +34025,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "progresslog",
       "id": "windows_client_src_ui_workflowlibrarywindow_progresslog"
     },
@@ -34036,7 +34036,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "notebox",
       "id": "windows_client_src_ui_workflowlibrarywindow_notebox"
     },
@@ -34054,7 +34054,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": ".onnotechanged()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_onnotechanged"
     },
@@ -34065,7 +34065,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "autofillstatus",
       "id": "windows_client_src_ui_workflowlibrarywindow_autofillstatus"
     },
@@ -34076,7 +34076,7 @@
       "source_location": "L71",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "matcheslist",
       "id": "windows_client_src_ui_workflowlibrarywindow_matcheslist"
     },
@@ -34093,7 +34093,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".onapplymatch()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_onapplymatch"
@@ -34111,7 +34111,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".onrejectmatch()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_onrejectmatch"
@@ -34123,7 +34123,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "label",
       "id": "binding_label"
     },
@@ -34134,7 +34134,7 @@
       "source_location": "L84",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "value",
       "id": "binding_value"
     },
@@ -34145,7 +34145,7 @@
       "source_location": "L85",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "confidencelabel",
       "id": "binding_confidencelabel"
     },
@@ -34166,7 +34166,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": "string",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_cs_string"
@@ -34177,7 +34177,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": "bool",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_cs_bool"
@@ -34188,7 +34188,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": "cancellationtokensource",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_cs_cancellationtokensource"
@@ -34199,7 +34199,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": "dispatchertimer",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_cs_dispatchertimer"
@@ -34210,7 +34210,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": "list",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_cs_list"
@@ -34257,7 +34257,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": "routedeventargs",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_cs_routedeventargs"
@@ -34275,7 +34275,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".startteachingasync()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_startteachingasync"
@@ -34286,7 +34286,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": "task",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_cs_task"
@@ -34304,7 +34304,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".stopteachingasync()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_stopteachingasync"
@@ -34322,7 +34322,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".setteachingui()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_setteachingui"
@@ -34340,7 +34340,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".reloadworkflowsasync()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_reloadworkflowsasync"
@@ -34358,7 +34358,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".appendprogress()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_appendprogress"
@@ -34376,7 +34376,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".appendprogressline()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_appendprogressline"
@@ -34388,7 +34388,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community_name": "Window",
       "norm_label": "textchangedeventargs",
       "id": "textchangedeventargs"
     },
@@ -34405,8 +34405,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "IUiSurface",
+      "community": 92,
+      "community_name": "WorkflowLibraryWindow",
       "norm_label": ".runautofillmatchasync()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_runautofillmatchasync"
     },
@@ -34423,7 +34423,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".removerow()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_removerow"
@@ -34441,7 +34441,7 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": ".onclosed()",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_u_windowsclient_ui_workflowlibrarywindow_onclosed"
@@ -34452,7 +34452,7 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 78,
+      "community": 92,
       "community_name": "WorkflowLibraryWindow",
       "norm_label": "eventargs",
       "id": "windows_client_src_ui_workflowlibrarywindow_xaml_cs_eventargs"
@@ -35013,8 +35013,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 173,
-      "community_name": ".Same",
+      "community": 24,
+      "community_name": "WorkflowMapWindow",
       "norm_label": ".setcurrent()",
       "id": "windows_client_src_ui_workflowmapwindow_u_windowsclient_ui_workflowmapwindow_setcurrent"
     },
@@ -35031,8 +35031,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 173,
-      "community_name": ".Same",
+      "community": 24,
+      "community_name": "WorkflowMapWindow",
       "norm_label": ".renderterrainifstale()",
       "id": "windows_client_src_ui_workflowmapwindow_u_windowsclient_ui_workflowmapwindow_renderterrainifstale"
     },
@@ -35042,8 +35042,8 @@
       "source_file": "windows-client/src/Uia/AppAligner.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 96,
-      "community_name": "U.WindowsClient.SystemApi",
+      "community": 7,
+      "community_name": "U.WindowsClient.Diagnostics",
       "norm_label": "appaligner.cs",
       "id": "windows_client_src_uia_appaligner"
     },
@@ -38897,8 +38897,8 @@
       "source_file": "windows-client/src/Update/Updater.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 157,
+      "community_name": ".Log",
       "norm_label": "updater.cs",
       "id": "windows_client_src_update_updater"
     },
@@ -38913,8 +38913,8 @@
         "namespace": "U.WindowsClient.Update"
       },
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 157,
+      "community_name": ".Log",
       "norm_label": "u.windowsclient.update",
       "id": "csharp_namespace:f282fd03dd628923"
     },
@@ -39077,8 +39077,8 @@
       "source_file": "windows-client/src/Voice/GeminiLive.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 116,
+      "community_name": "U.WindowsClient.Navigation",
       "norm_label": "geminilive.cs",
       "id": "windows_client_src_voice_geminilive"
     },
@@ -39775,8 +39775,8 @@
       "source_file": "windows-client/src/Voice/LiveAudio.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 116,
+      "community_name": "U.WindowsClient.Navigation",
       "norm_label": "liveaudio.cs",
       "id": "windows_client_src_voice_liveaudio"
     },
@@ -39990,8 +39990,8 @@
       "source_file": "windows-client/src/Voice/LiveVideo.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 116,
+      "community_name": "U.WindowsClient.Navigation",
       "norm_label": "livevideo.cs",
       "id": "windows_client_src_voice_livevideo"
     },
@@ -40413,8 +40413,8 @@
       "source_file": "windows-client/src/Voice/VoiceIO.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 7,
-      "community_name": "U.WindowsClient.Diagnostics",
+      "community": 116,
+      "community_name": "U.WindowsClient.Navigation",
       "norm_label": "voiceio.cs",
       "id": "windows_client_src_voice_voiceio"
     },
@@ -40880,8 +40880,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 28,
-      "community_name": "WorkflowRecorder",
+      "community": 33,
+      "community_name": "Contracts.cs",
       "norm_label": "jsonelement",
       "id": "windows_graph_src_contracts_cs_jsonelement"
     },
@@ -41022,8 +41022,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "IUiSurface",
+      "community": 17,
+      "community_name": ".RunAsync",
       "norm_label": ".surface()",
       "id": "windows_graph_src_contracts_u_graph_planstep_surface"
     },
@@ -41783,8 +41783,8 @@
       "source_file": "windows-graph/src/GraphConfig.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 99,
-      "community_name": "WorkflowTeachSession",
+      "community": 173,
+      "community_name": "GraphConfig",
       "norm_label": "graphconfig.cs",
       "id": "windows_graph_src_graphconfig"
     },
@@ -41802,8 +41802,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 99,
-      "community_name": "WorkflowTeachSession",
+      "community": 173,
+      "community_name": "GraphConfig",
       "norm_label": "graphconfig",
       "id": "windows_graph_src_graphconfig_u_graph_graphconfig"
     },
@@ -41820,8 +41820,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 99,
-      "community_name": "WorkflowTeachSession",
+      "community": 173,
+      "community_name": "GraphConfig",
       "norm_label": ".load()",
       "id": "windows_graph_src_graphconfig_u_graph_graphconfig_load"
     },
@@ -41838,8 +41838,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 99,
-      "community_name": "WorkflowTeachSession",
+      "community": 173,
+      "community_name": "GraphConfig",
       "norm_label": ".save()",
       "id": "windows_graph_src_graphconfig_u_graph_graphconfig_save"
     },
@@ -42156,8 +42156,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 173,
-      "community_name": ".Same",
+      "community": 24,
+      "community_name": "WorkflowMapWindow",
       "norm_label": "surfaceplace",
       "id": "windows_graph_src_surfaceplace_u_graph_surfaceplace"
     },
@@ -42174,8 +42174,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 173,
-      "community_name": ".Same",
+      "community": 24,
+      "community_name": "WorkflowMapWindow",
       "norm_label": ".sameorigin()",
       "id": "windows_graph_src_surfaceplace_u_graph_surfaceplace_sameorigin"
     },
@@ -42192,8 +42192,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 173,
-      "community_name": ".Same",
+      "community": 24,
+      "community_name": "WorkflowMapWindow",
       "norm_label": ".same()",
       "id": "windows_graph_src_surfaceplace_u_graph_surfaceplace_same"
     },
@@ -42228,8 +42228,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 173,
-      "community_name": ".Same",
+      "community": 24,
+      "community_name": "WorkflowMapWindow",
       "norm_label": ".originof()",
       "id": "windows_graph_src_surfaceplace_u_graph_surfaceplace_originof"
     },
@@ -42246,8 +42246,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 173,
-      "community_name": ".Same",
+      "community": 24,
+      "community_name": "WorkflowMapWindow",
       "norm_label": ".pathnameof()",
       "id": "windows_graph_src_surfaceplace_u_graph_surfaceplace_pathnameof"
     },
@@ -42264,8 +42264,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 173,
-      "community_name": ".Same",
+      "community": 24,
+      "community_name": "WorkflowMapWindow",
       "norm_label": ".hasstructuralpath()",
       "id": "windows_graph_src_surfaceplace_u_graph_surfaceplace_hasstructuralpath"
     },
@@ -42282,8 +42282,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 173,
-      "community_name": ".Same",
+      "community": 24,
+      "community_name": "WorkflowMapWindow",
       "norm_label": ".normalize()",
       "id": "windows_graph_src_surfaceplace_u_graph_surfaceplace_normalize"
     },
@@ -42588,8 +42588,8 @@
       "source_file": "windows-graph/src/Surfaces/IUiSurface.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 163,
-      "community_name": "IUiSurface",
+      "community": 28,
+      "community_name": "WorkflowRecorder",
       "norm_label": "iuisurface.cs",
       "id": "windows_graph_src_surfaces_iuisurface"
     },
@@ -42645,8 +42645,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "IUiSurface",
+      "community": 28,
+      "community_name": "WorkflowRecorder",
       "norm_label": "surfaceavailability",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_surfaceavailability"
     },
@@ -42663,8 +42663,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "IUiSurface",
+      "community": 28,
+      "community_name": "WorkflowRecorder",
       "norm_label": ".no()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_surfaceavailability_no"
     },
@@ -42700,8 +42700,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "IUiSurface",
+      "community": 28,
+      "community_name": "WorkflowRecorder",
       "norm_label": ".check()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_check"
     },
@@ -42801,8 +42801,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "IUiSurface",
+      "community": 92,
+      "community_name": "WorkflowLibraryWindow",
       "norm_label": ".readfields()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_readfields"
     },
@@ -42812,8 +42812,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 163,
-      "community_name": "IUiSurface",
+      "community": 92,
+      "community_name": "WorkflowLibraryWindow",
       "norm_label": "ireadonlylist",
       "id": "windows_graph_src_surfaces_iuisurface_cs_ireadonlylist"
     },
@@ -42823,8 +42823,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 163,
-      "community_name": "IUiSurface",
+      "community": 92,
+      "community_name": "WorkflowLibraryWindow",
       "norm_label": "detectedfield",
       "id": "windows_graph_src_surfaces_iuisurface_cs_detectedfield"
     },
@@ -42841,8 +42841,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 78,
-      "community_name": "WorkflowLibraryWindow",
+      "community": 163,
+      "community_name": "IUiSurface",
       "norm_label": ".execute()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_execute"
     },
@@ -42877,8 +42877,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 28,
-      "community_name": "WorkflowRecorder",
+      "community": 163,
+      "community_name": "IUiSurface",
       "norm_label": ".stopobserving()",
       "id": "windows_graph_src_surfaces_iuisurface_u_graph_surfaces_iuisurface_stopobserving"
     },
@@ -46655,8 +46655,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 163,
-      "community_name": "IUiSurface",
+      "community": 28,
+      "community_name": "WorkflowRecorder",
       "norm_label": ".check()",
       "id": "windows_graph_src_surfaces_uiasurface_u_graph_surfaces_uiasurface_check"
     },
@@ -55804,7 +55804,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L197",
+      "source_location": "L212",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
@@ -55815,7 +55815,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L149",
+      "source_location": "L164",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
@@ -55826,7 +55826,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L203",
+      "source_location": "L218",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
@@ -55848,7 +55848,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L188",
+      "source_location": "L203",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
@@ -55859,7 +55859,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L169",
+      "source_location": "L184",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
@@ -56179,7 +56179,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L113",
+      "source_location": "L128",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
@@ -56191,7 +56191,19 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L136",
+      "source_location": "L123",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
+      "target": "nucleo_grafo_grafo_nucleo_grafo_desdeaqui"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L151",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
@@ -56203,7 +56215,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L137",
+      "source_location": "L152",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
@@ -56215,7 +56227,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L115",
+      "source_location": "L130",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
@@ -56226,7 +56238,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L115",
+      "source_location": "L130",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
@@ -56251,7 +56263,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L151",
+      "source_location": "L166",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_cruzado",
@@ -56263,7 +56275,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L152",
+      "source_location": "L167",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_cruzado",
@@ -56273,7 +56285,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L169",
+      "source_location": "L184",
       "weight": 1.0,
       "context": "generic_arg",
       "metadata": {
@@ -56288,7 +56300,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L169",
+      "source_location": "L184",
       "weight": 1.0,
       "context": "parameter_type",
       "metadata": {
@@ -56303,7 +56315,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L169",
+      "source_location": "L184",
       "weight": 1.0,
       "context": "return_type",
       "metadata": {
@@ -56318,7 +56330,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L169",
+      "source_location": "L184",
       "weight": 1.0,
       "context": "generic_arg",
       "metadata": {
@@ -56333,7 +56345,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L169",
+      "source_location": "L184",
       "weight": 1.0,
       "context": "generic_arg",
       "metadata": {
@@ -56515,7 +56527,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L190",
+      "source_location": "L205",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_limpiar",
@@ -56527,7 +56539,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L192",
+      "source_location": "L207",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_limpiar",
@@ -56539,7 +56551,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L193",
+      "source_location": "L208",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_limpiar",
@@ -56551,7 +56563,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L206",
+      "source_location": "L221",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_dispose",
@@ -154681,5 +154693,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "fd5afc16afc5260298ff0cfe4ec51d82a7b36ab9"
+  "built_at_commit": "c4480ed427d5c37e0c158c441e22578ed7572ed3"
 }

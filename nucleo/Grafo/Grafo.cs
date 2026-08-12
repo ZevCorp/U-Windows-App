@@ -149,6 +149,68 @@ public sealed class Grafo
     }
 
     /// <summary>
+    /// EL SIGUIENTE PASO hacia un destino: qué hay que pulsar AHORA, aquí. Vacío si no se sabe
+    /// llegar.
+    /// </summary>
+    /// <remarks>
+    /// NO DEVUELVE UNA RUTA, Y ESO ES EL DISEÑO ENTERO. Una ruta completa es una promesa sobre el
+    /// futuro —«luego pulsa esto, y después esto»— y el mapa es vivo: para cuando se llegue al
+    /// tercer tramo, la pantalla puede haber cambiado. Se contesta un solo paso y se vuelve a
+    /// preguntar al llegar. Eso es «caminar mirando» en vez de «seguir un plano», que es la idea
+    /// que el usuario trajo el 2026-08-12 y de la que sale todo este núcleo.
+    ///
+    /// EL PRIMER PASO TIENE QUE ESTAR VIVO. Se puede buscar el camino a través de lo recordado
+    /// —para eso se recuerda— pero lo que se va a pulsar AHORA tiene que estar en pantalla ahora.
+    /// Devolver algo que el mapa recuerda y la pantalla ya no tiene es mandar a pulsar el vacío,
+    /// que es exactamente el fallo que este modelo vino a quitar.
+    /// </remarks>
+    public Alcanzable? SiguientePaso(string desde, string hasta)
+    {
+        if (string.IsNullOrWhiteSpace(desde) || string.IsNullOrWhiteSpace(hasta)) return null;
+        if (desde.Equals(hasta, StringComparison.OrdinalIgnoreCase)) return null;
+
+        lock (_llave)
+        {
+            // Anchura desde donde estamos: el camino más corto en número de clics, que es la única
+            // medida que le importa a quien lo va a recorrer.
+            var visto = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { desde };
+            var cola = new Queue<(string Donde, Alcanzable Primero)>();
+
+            foreach (var a in Salidas(desde))
+            {
+                if (a.Destino.Length == 0) continue;
+                if (a.Destino.Equals(hasta, StringComparison.OrdinalIgnoreCase))
+                    return a.Vivo ? a : null;   // está aquí mismo… si sigue en pantalla
+                if (visto.Add(a.Destino)) cola.Enqueue((a.Destino, a));
+            }
+
+            while (cola.Count > 0)
+            {
+                var (donde, primero) = cola.Dequeue();
+                foreach (var a in Salidas(donde))
+                {
+                    if (a.Destino.Length == 0) continue;
+                    if (a.Destino.Equals(hasta, StringComparison.OrdinalIgnoreCase))
+                        return primero.Vivo ? primero : null;
+                    if (visto.Add(a.Destino)) cola.Enqueue((a.Destino, primero));
+                }
+            }
+            return null;
+        }
+    }
+
+    /// <summary>Las salidas de una ubicación, ya resueltas. Sin tomar el candado: quien llama lo tiene.</summary>
+    private List<Alcanzable> Salidas(string ubicacion)
+    {
+        if (!_vistos.TryGetValue(ubicacion, out var aqui)) return new List<Alcanzable>();
+        _vivosAhora.TryGetValue(ubicacion, out var vivos);
+        return aqui.Values
+            .Select(e => new Alcanzable(e, vivos?.Contains(e.Selector) == true,
+                _destinos.TryGetValue(ubicacion + "\n" + e.Selector, out var d) ? d : ""))
+            .ToList();
+    }
+
+    /// <summary>
     /// De qué app es una ubicación. Vive aquí porque la identidad es asunto del grafo: quien
     /// decide qué cuenta como «el mismo sitio» tiene que decidir también qué cuenta como «la misma
     /// app», o acabarían siendo dos criterios que se separan en silencio.
