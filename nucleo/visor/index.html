@@ -25,22 +25,53 @@
 -->
 
 <style>
-  :root { color-scheme: dark; }
-  body { margin:0; background:#0d0f14; color:#e6e8ec; font:13px/1.5 system-ui, sans-serif; }
+  /* EL TEMA VIVE EN VARIABLES, no en colores sueltos por el archivo — la misma razón por la que el
+     panel del mapeador no calcula nada dos veces: un color repetido en diez sitios es diez sitios
+     que pueden quedar desincronizados el día que alguien cambie uno solo. El claro y el oscuro son
+     las DOS ÚNICAS fuentes; todo lo demás —CSS y el SVG que dibuja el propio JS— lee de aquí. */
+  :root {
+    color-scheme: dark;
+    --bg:#0d0f14; --texto:#e6e8ec; --texto-svg:#c9ced8; --mutado:#8a919e; --mutado3:#5a6170; --gris:#5a6170;
+    --panel-bg:#1b1e25; --panel-border:#2a2e38; --tab-on-bg:#1e2e4d;
+    --cabecera-desde:rgba(13,15,20,.93); --cabecera-hasta:rgba(13,15,20,0);
+    --verde:#5cc28d; --rojo:#ff6b6b; --rojo-suave:#ff9b9b; --ambar:#e0c07a; --ambar-fuerte:#c9a227; --azul:#4c8dff;
+    --fondo-vivo:#2b3a55; --fondo-memoria:#1a1d24; --borde-memoria:#2a2f3a;
+    --linea-vivo:#28324a; --linea-memoria:#1a1d24;
+    --fondo-actual:#1b2740; --fondo-nodo:#22262f; --borde-nodo:#3a4050; --linea-camino:#2f6b4f;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg:#f4f5f7; --texto:#1c1f26; --texto-svg:#262b33; --mutado:#5b6470; --mutado3:#7a8290; --gris:#7c8490;
+    --panel-bg:#ffffff; --panel-border:#d9dce2; --tab-on-bg:#dde8ff;
+    --cabecera-desde:rgba(244,245,247,.93); --cabecera-hasta:rgba(244,245,247,0);
+    --verde:#187a4f; --rojo:#d1453a; --rojo-suave:#ad4c40; --ambar:#9c6b12; --ambar-fuerte:#8a640a; --azul:#2f6fe0;
+    --fondo-vivo:#dce7f8; --fondo-memoria:#eef0f3; --borde-memoria:#c7cbd3;
+    --linea-vivo:#cfdcf0; --linea-memoria:#e6e8eb;
+    --fondo-actual:#e3edfc; --fondo-nodo:#eceef1; --borde-nodo:#cdd2d9; --linea-camino:#5c9d7c;
+  }
+  body { margin:0; background:var(--bg); color:var(--texto); font:13px/1.5 system-ui, sans-serif; }
   #cabecera { position:fixed; top:0; left:0; right:0; padding:12px 18px; z-index:3;
-              background:linear-gradient(#0d0f14ee, #0d0f1400); }
+              background:linear-gradient(var(--cabecera-desde), var(--cabecera-hasta)); }
   #donde { font-size:17px; font-weight:600; }
-  #app { color:#8a919e; font-size:12px; }
-  #cuenta { color:#8a919e; font-size:12px; margin-top:2px; }
-  #pestanas { position:fixed; top:12px; right:18px; z-index:4; display:flex; gap:6px; }
-  .tab { padding:6px 14px; border-radius:7px; background:#1b1e25; border:1px solid #2a2e38;
-         cursor:pointer; font-size:12px; color:#8a919e; user-select:none; }
-  .tab.on { background:#1e2e4d; border-color:#4c8dff; color:#e6e8ec; }
-  #estado { position:fixed; bottom:10px; left:18px; color:#5a6170; font-size:11px; z-index:3; }
-  #leyenda { position:fixed; bottom:10px; right:18px; color:#5a6170; font-size:11px; z-index:3; }
-  text { font:11px system-ui, sans-serif; fill:#c9ced8; }
-  text.gris { fill:#5a6170; }
+  #app { color:var(--mutado); font-size:12px; }
+  #cuenta { color:var(--mutado); font-size:12px; margin-top:2px; }
+  #pestanas { position:fixed; top:12px; right:18px; z-index:4; display:flex; gap:6px; align-items:center; }
+  .tab { padding:6px 14px; border-radius:7px; background:var(--panel-bg); border:1px solid var(--panel-border);
+         cursor:pointer; font-size:12px; color:var(--mutado); user-select:none; }
+  .tab.on { background:var(--tab-on-bg); border-color:var(--azul); color:var(--texto); }
+  #tema { padding:6px 10px; border-radius:7px; background:var(--panel-bg); border:1px solid var(--panel-border);
+          cursor:pointer; font-size:13px; user-select:none; line-height:1; }
+  #estado { position:fixed; bottom:10px; left:18px; color:var(--mutado3); font-size:11px; z-index:3; }
+  #leyenda { position:fixed; bottom:10px; right:18px; color:var(--mutado3); font-size:11px; z-index:3; }
+  text { font:11px system-ui, sans-serif; fill:var(--texto-svg); }
+  text.gris { fill:var(--gris); }
 </style>
+
+<!-- SE APLICA ANTES DE PINTAR NADA, para que no haya un parpadeo oscuro→claro en cada carga. Lee
+     la preferencia guardada; si no hay ninguna, se queda con el oscuro de :root de siempre. -->
+<script>
+  if (localStorage.getItem("nucleo-visor-tema") === "light") document.documentElement.dataset.theme = "light";
+</script>
 
 <div id="cabecera">
   <div id="donde">esperando al núcleo…</div>
@@ -52,6 +83,7 @@
   <div class="tab" data-v="mapa">Mapa completo</div>
   <div class="tab" data-v="reglas">Reglas</div>
   <div class="tab" data-v="mapeador">Mapeador</div>
+  <div id="tema" title="cambiar entre claro y oscuro"></div>
 </div>
 <svg id="lienzo"></svg>
 <div id="estado"></div>
@@ -60,6 +92,41 @@
 <script>
 const URL  = "http://127.0.0.1:7474/db/neo4j/tx/commit";
 const AUTH = "Basic " + btoa("neo4j:grafo-local-2026");
+
+// EL SVG NO LO PINTA EL NAVEGADOR, LO ARMA ESTE SCRIPT como texto — así que el cambio de tema no
+// llega solo con CSS, como llegaría a #cabecera o a las pestañas. `COL` es la MISMA paleta que las
+// variables de arriba, leída una vez por tema y no reinventada aquí: si hubiera dos tablas de
+// colores, una en CSS y otra tecleada en JS, acabarían diciendo cosas distintas tarde o temprano.
+let COL = {};
+function refrescarColores() {
+  const v = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  COL = {
+    texto: v("--texto"), textoSvg: v("--texto-svg"), mutado: v("--mutado"), gris: v("--gris"),
+    verde: v("--verde"), rojo: v("--rojo"), rojoSuave: v("--rojo-suave"),
+    ambar: v("--ambar"), ambarFuerte: v("--ambar-fuerte"), azul: v("--azul"),
+    fondoVivo: v("--fondo-vivo"), fondoMemoria: v("--fondo-memoria"), bordeMemoria: v("--borde-memoria"),
+    lineaVivo: v("--linea-vivo"), lineaMemoria: v("--linea-memoria"),
+    fondoActual: v("--fondo-actual"), fondoNodo: v("--fondo-nodo"), bordeNodo: v("--borde-nodo"),
+    lineaCamino: v("--linea-camino"),
+  };
+}
+
+// EL BOTÓN DE TEMA. Guarda la preferencia para que la próxima carga no vuelva a parpadear, y
+// redibuja: sin esto el fondo cambiaría pero los nodos y el texto del SVG se quedarían con los
+// colores del tema anterior, que es justo la clase de discrepancia que este visor existe para
+// hacer imposible.
+function aplicarTema(claro) {
+  document.documentElement.dataset.theme = claro ? "light" : "";
+  localStorage.setItem("nucleo-visor-tema", claro ? "light" : "dark");
+  document.getElementById("tema").textContent = claro ? "🌙" : "☀️";
+  refrescarColores();
+  ultimo = "";
+  tick();
+}
+document.getElementById("tema").onclick = () =>
+  aplicarTema(document.documentElement.dataset.theme !== "light");
+refrescarColores();
+document.getElementById("tema").textContent = document.documentElement.dataset.theme === "light" ? "🌙" : "☀️";
 
 // «Aquí»: dónde estoy y qué alcanzo. Una sola consulta, porque el núcleo guarda una sola cosa.
 const Q_AQUI = `
@@ -147,18 +214,18 @@ async function tickReglas() {
     const x0 = enFila ? 46 + i * ancho : 46;
     let y = enFila ? 130 : siguiente;
 
-    s += `<text x="${x0}" y="${y}" style="font-size:12px;fill:#7d8798;letter-spacing:.08em">${escapar(c.titulo)}</text>`;
+    s += `<text x="${x0}" y="${y}" style="font-size:12px;fill:${COL.mutado};letter-spacing:.08em">${escapar(c.titulo)}</text>`;
     y += 28;
 
     if (c.j.error) {
-      s += `<text x="${x0}" y="${y}" style="font-size:13px;fill:#c9a227">${escapar(c.j.error)}</text>`;
+      s += `<text x="${x0}" y="${y}" style="font-size:13px;fill:${COL.ambarFuerte}">${escapar(c.j.error)}</text>`;
       y += 24;
-      s += `<text x="${x0}" y="${y}" style="font-size:12px;fill:#7d8798">corre: dotnet run --project ${c.de}/Contrato.csproj</text>`;
+      s += `<text x="${x0}" y="${y}" style="font-size:12px;fill:${COL.mutado}">corre: dotnet run --project ${c.de}/Contrato.csproj</text>`;
       y += 30;
     } else {
       c.j.reglas.forEach(x => {
-        s += `<text x="${x0}" y="${y}" style="font-size:15px;fill:${x.cumple ? '#5cc28d' : '#ff6b6b'}">${x.cumple ? '✔' : '✘'}</text>`;
-        s += `<text x="${x0 + 26}" y="${y}" style="font-size:13px;fill:${x.cumple ? '#c9ced8' : '#ff9b9b'}">${escapar(x.regla)}</text>`;
+        s += `<text x="${x0}" y="${y}" style="font-size:15px;fill:${x.cumple ? COL.verde : COL.rojo}">${x.cumple ? '✔' : '✘'}</text>`;
+        s += `<text x="${x0 + 26}" y="${y}" style="font-size:13px;fill:${x.cumple ? COL.textoSvg : COL.rojoSuave}">${escapar(x.regla)}</text>`;
         y += 30;
       });
     }
@@ -193,22 +260,22 @@ async function tickMapeador() {
   leyenda("son los contadores del propio mapeador · el panel no calcula nada");
 
   let y = 128, s = "";
-  const titulo = t => { y += 14; s += `<text x="46" y="${y}" style="font-size:11px;fill:#8a919e;font-weight:600">${t}</text>`; y += 24; };
+  const titulo = t => { y += 14; s += `<text x="46" y="${y}" style="font-size:11px;fill:${COL.mutado};font-weight:600">${t}</text>`; y += 24; };
   const fila = (etq, val, color) => {
-    s += `<text x="60" y="${y}" style="font-size:13px;fill:#c9ced8">${escapar(etq)}</text>`;
-    s += `<text x="560" y="${y}" text-anchor="end" style="font-size:13px;fill:${color || '#e6e8ec'}">${escapar(String(val))}</text>`;
+    s += `<text x="60" y="${y}" style="font-size:13px;fill:${COL.textoSvg}">${escapar(etq)}</text>`;
+    s += `<text x="560" y="${y}" text-anchor="end" style="font-size:13px;fill:${color || COL.texto}">${escapar(String(val))}</text>`;
     y += 26;
   };
 
   titulo("SATURACIÓN — el invariante que protege la velocidad: nada se apila");
-  fila("vueltas de ubicación descartadas", j.saturacion.ubicacion, j.saturacion.ubicacion ? "#ff9b9b" : "#5cc28d");
-  fila("vueltas de pantalla descartadas", j.saturacion.pantalla, j.saturacion.pantalla ? "#ff9b9b" : "#5cc28d");
-  if (sat) fila("↑ si esto sube, hay que SUBIR el intervalo, no bajarlo", "", "#8a919e");
+  fila("vueltas de ubicación descartadas", j.saturacion.ubicacion, j.saturacion.ubicacion ? COL.rojoSuave : COL.verde);
+  fila("vueltas de pantalla descartadas", j.saturacion.pantalla, j.saturacion.pantalla ? COL.rojoSuave : COL.verde);
+  if (sat) fila("↑ si esto sube, hay que SUBIR el intervalo, no bajarlo", "", COL.mutado);
 
   titulo("ATRIBUCIONES — todo salto se explica, o se dice por qué no");
   fila("saltos de pantalla", j.atribuciones.saltos);
-  fila("explicados con un clic", j.atribuciones.aprendidas, "#5cc28d");
-  (j.atribuciones.rechazos || []).forEach(x => fila("· " + x.motivo, x.veces, "#e0c07a"));
+  fila("explicados con un clic", j.atribuciones.aprendidas, COL.verde);
+  (j.atribuciones.rechazos || []).forEach(x => fila("· " + x.motivo, x.veces, COL.ambar));
 
   // POR APP, que es lo que decide si hay que modularizar. En el total agregado, «los fallos son los
   // mismos en todas las apps» y «cada app falla a su manera» dan EL MISMO NÚMERO. Aquí se ven
@@ -218,12 +285,12 @@ async function tickMapeador() {
   (j.atribuciones.porApp || []).forEach(a => {
     const pct = a.saltos ? Math.round(100 * a.aprendidas / a.saltos) : 0;
     fila(a.app, a.saltos ? `${a.aprendidas} de ${a.saltos} explicados (${pct}%)` : "sin navegación registrada",
-         !a.saltos ? "#8a919e" : pct >= 80 ? "#5cc28d" : pct >= 50 ? "#e0c07a" : "#ff9b9b");
-    (a.rechazos || []).forEach(r => fila("    · " + r.motivo, r.veces, "#8a919e"));
+         !a.saltos ? COL.mutado : pct >= 80 ? COL.verde : pct >= 50 ? COL.ambar : COL.rojoSuave);
+    (a.rechazos || []).forEach(r => fila("    · " + r.motivo, r.veces, COL.mutado));
     // Fuera del porcentaje a propósito: rechazar un alt-tab es acertar, no fallar.
-    if (a.noEranNavegacion) fila("    · cambios de ventana (bien rechazados)", a.noEranNavegacion, "#7d8798");
+    if (a.noEranNavegacion) fila("    · cambios de ventana (bien rechazados)", a.noEranNavegacion, COL.mutado);
     // El fallo que no cuelga de ningún salto: si sube, la identidad de esa app no distingue pantallas.
-    if (a.sinCambiarDeSitio) fila("    · cambió la pantalla y NO el sitio", a.sinCambiarDeSitio, "#ff9b9b");
+    if (a.sinCambiarDeSitio) fila("    · cambió la pantalla y NO el sitio", a.sinCambiarDeSitio, COL.rojoSuave);
   });
 
   titulo("COSTES — cronometrados por quien hace el trabajo");
@@ -232,13 +299,13 @@ async function tickMapeador() {
     // Un colgado envenena la media: 22 ms reales se leían como 1.461 por UNA muestra de 21 minutos.
     // Verlo aquí es la diferencia entre «va lento» y «una vez se quedó clavado», que se arreglan
     // en sitios distintos.
-    if (x.colgadas) fila("    · vueltas que se dieron por perdidas (la media no vale)", x.colgadas, "#ff9b9b");
+    if (x.colgadas) fila("    · vueltas que se dieron por perdidas (la media no vale)", x.colgadas, COL.rojoSuave);
   });
 
   titulo("EMBUDO — de lo que se ve a lo que llega al núcleo");
   fila("elementos leídos", j.embudo.leidos);
-  fila("entregados al núcleo", j.embudo.entregados, "#5cc28d");
-  (j.embudo.filtrados || []).forEach(x => fila("· descartados: " + x.motivo, x.veces, "#8a919e"));
+  fila("entregados al núcleo", j.embudo.entregados, COL.verde);
+  (j.embudo.filtrados || []).forEach(x => fila("· descartados: " + x.motivo, x.veces, COL.mutado));
 
   const svg = document.getElementById("lienzo");
   svg.setAttribute("width", innerWidth); svg.setAttribute("height", Math.max(innerHeight, y + 40));
@@ -267,14 +334,14 @@ async function tickAqui() {
   limpios.forEach((h, i) => {
     const ang = (i / limpios.length) * Math.PI * 2 - Math.PI / 2;
     const x = cx + Math.cos(ang) * radio, y = cy + Math.sin(ang) * radio;
-    s += linea(cx, cy, x, y, h.vivo ? "#28324a" : "#1a1d24");
-    s += `<circle cx="${x}" cy="${y}" r="6" fill="${h.vivo ? '#2b3a55' : '#1a1d24'}"`
-       + ` stroke="${h.destino ? '#5cc28d' : (h.vivo ? '#4c8dff' : '#2a2f3a')}" stroke-width="${h.destino ? 2 : 1}"/>`;
+    s += linea(cx, cy, x, y, h.vivo ? COL.lineaVivo : COL.lineaMemoria);
+    s += `<circle cx="${x}" cy="${y}" r="6" fill="${h.vivo ? COL.fondoVivo : COL.fondoMemoria}"`
+       + ` stroke="${h.destino ? COL.verde : (h.vivo ? COL.azul : COL.bordeMemoria)}" stroke-width="${h.destino ? 2 : 1}"/>`;
     const der = Math.cos(ang) > -0.1;
     s += rotulo(x + (der ? 11 : -11), y + 4, der ? "start" : "end", h.etq, !h.vivo);
   });
-  s += `<circle cx="${cx}" cy="${cy}" r="34" fill="#1b2740" stroke="#4c8dff" stroke-width="2"/>`;
-  s += `<text x="${cx}" y="${cy + 5}" text-anchor="middle" style="font-size:12px;fill:#e6e8ec">aquí</text>`;
+  s += `<circle cx="${cx}" cy="${cy}" r="34" fill="${COL.fondoActual}" stroke="${COL.azul}" stroke-width="2"/>`;
+  s += `<text x="${cx}" y="${cy + 5}" text-anchor="middle" style="font-size:12px;fill:${COL.texto}">aquí</text>`;
   pintar(s);
   estado("actualizado " + hora());
 }
@@ -313,17 +380,17 @@ async function tickMapa() {
   });
 
   let s = `<defs><marker id="f" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
-             <path d="M0,0 L0,6 L8,3 z" fill="#5cc28d"/></marker></defs>`;
+             <path d="M0,0 L0,6 L8,3 z" fill="${COL.verde}"/></marker></defs>`;
   nodos.forEach(n => n.caminos.forEach(c => {
     const a = pos[n.id], b = pos[c.hacia];
     if (!a || !b) return;
-    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#2f6b4f" stroke-width="1.5" marker-end="url(#f)"/>`;
+    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${COL.lineaCamino}" stroke-width="1.5" marker-end="url(#f)"/>`;
   }));
   Object.values(pos).forEach(({ x, y, n }) => {
     // El círculo lleva su id encima: es lo que permite que un clic sepa a dónde ir sin que la
     // página tenga que calcular nada. El destino sale del dibujo, y el dibujo del núcleo.
     s += `<circle class="nodo" data-id="${escapar(n.id)}" cx="${x}" cy="${y}" r="${n.actual ? 11 : 7}"`
-       + ` fill="${n.actual ? '#1b2740' : '#22262f'}" stroke="${n.actual ? '#4c8dff' : '#3a4050'}"`
+       + ` fill="${n.actual ? COL.fondoActual : COL.fondoNodo}" stroke="${n.actual ? COL.azul : COL.bordeNodo}"`
        + ` stroke-width="${n.actual ? 3 : 1}" style="cursor:pointer"/>`;
     s += rotulo(x + 13, y + 4, "start", corto(n.id), !n.actual);
   });
