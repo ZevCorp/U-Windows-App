@@ -226,6 +226,23 @@ internal static class Contrato
     private static void ComprobarFidelidad()
     {
         var g = new Grafo();
+        using var p = new ProyectorNeo4j();
+        p.Cuenta = m => Console.WriteLine($"   {m}");
+
+        // RECOGER LO PROPIO PASE LO QUE PASE. Iba al final del método, detrás de tres `return`
+        // tempranos, así que justo cuando la comprobación se saltaba —lo más frecuente, porque basta
+        // con que la app esté corriendo— la basura se quedaba. Una limpieza que solo ocurre en el
+        // camino feliz no es una limpieza (2026-08-13).
+        try { Juzgar(g, p); }
+        finally
+        {
+            p.Retirar(g.Ubicaciones()
+                       .Concat(g.Ubicaciones().SelectMany(u => g.DesdeAqui(u).Select(a => a.Destino))));
+        }
+    }
+
+    private static void Juzgar(Grafo g, ProyectorNeo4j p)
+    {
         var atras = new Elemento("s:atras", "Atrás", "Button");
         g.Observar("uia://una.exe/inicio", new[] { atras, new Elemento("s:ir", "Ir", "Button") });
         g.Cruzar("uia://una.exe/inicio", "s:ir", "uia://una.exe/dentro");
@@ -235,8 +252,6 @@ internal static class Contrato
         // Y uno que se ve y luego desaparece: lo GRABADO no puede confundirse con lo VIVO.
         g.Observar("uia://una.exe/inicio", new[] { new Elemento("s:ir", "Ir", "Button") });
 
-        using var p = new ProyectorNeo4j();
-        p.Cuenta = m => Console.WriteLine($"   {m}");
         if (!p.Proyectar(g))
         {
             Console.WriteLine("⚪ fidelidad de la proyección: NO COMPROBADA (Neo4j no respondió)");
@@ -395,7 +410,7 @@ internal static class Contrato
             Console.WriteLine("✘ la comprobación de fidelidad NO detectó un elemento borrado a mano: "
                             + "está dando verde sin mirar");
         }
-        p.Proyectar(g);   // se deja el mundo como estaba
+        p.Proyectar(g);   // se deja el mundo como estaba; el envoltorio se lleva lo de mentira
     }
 
     private static void MoverseEsCambio(Grafo g)

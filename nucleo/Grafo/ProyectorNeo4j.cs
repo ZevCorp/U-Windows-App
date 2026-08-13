@@ -358,6 +358,45 @@ public sealed class ProyectorNeo4j : IDisposable
     }
 
     /// <summary>
+    /// Quitar de Neo4j SOLO estas ubicaciones y lo que cuelga de ellas.
+    /// </summary>
+    /// <remarks>
+    /// LO USA EL CONTRATO PARA RECOGER LO SUYO. Neo4j Community tiene UNA base de datos, así que el
+    /// contrato proyecta su grafo de mentira —«uia://una.exe/inicio», «uia://otra.exe/sola»— en la
+    /// misma donde vive el mapa de verdad. Y no lo retiraba: después de cada build aparecían en el
+    /// visor como nodos más, indistinguibles de los reales y clicables. El usuario pulsó uno y el
+    /// log contestó «no pude traer "una.exe" al frente», que es lo más parecido a una alucinación
+    /// que puede tener un mapa (2026-08-13).
+    ///
+    /// No vale <see cref="Vaciar"/>: eso se llevaría por delante el mapa del usuario. Se borra por
+    /// id, que es lo único que distingue lo propio de lo ajeno.
+    /// </remarks>
+    public void Retirar(IEnumerable<string> ubicaciones)
+    {
+        var ids = ubicaciones.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (ids.Count == 0) return;
+        foreach (string u in ids) _huellaPorUbicacion.Remove(u);
+        _ultimaVersion = -1;
+        _ultimaHuella = "";
+        Mandar(JsonSerializer.Serialize(new
+        {
+            statements = new object[]
+            {
+                new
+                {
+                    statement = """
+                    UNWIND $ids AS id
+                      MATCH (u:Ubicacion {id:id})
+                      OPTIONAL MATCH (u)-[:ALCANZA]->(e:Elemento)
+                      DETACH DELETE u, e
+                    """,
+                    parameters = new { ids },
+                },
+            },
+        }));
+    }
+
+    /// <summary>
     /// Estropear la base a propósito. EXISTE PARA QUE EL CONTRATO PUEDA PROBAR QUE
     /// <see cref="Verificar"/> sabe fallar: una comprobación que solo se ha visto en verde es
     /// indistinguible de una que devuelve verde siempre, y esa fue la forma del peor fallo que
