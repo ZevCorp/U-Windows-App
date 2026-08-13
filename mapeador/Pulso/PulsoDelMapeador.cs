@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace U.WindowsClient.Navigation;
+namespace Mapeador;
 
 /// <summary>
 /// LO QUE EL MAPEADOR SABE DE SÍ MISMO. Contadores que él mismo lleva mientras trabaja.
@@ -28,17 +28,24 @@ public sealed class PulsoDelMapeador
     public DateTime Desde { get; } = DateTime.Now;
 
     // ── SATURACIÓN: nada debe apilarse ───────────────────────────────────────
-    private int _descartadasUbicacion, _descartadasPantalla;
 
-    /// <summary>Una vuelta que llegó con otra en curso y se tiró. En uso normal debe ser ~0.</summary>
-    public void Descartada(bool esUbicacion)
-    {
-        if (esUbicacion) Interlocked.Increment(ref _descartadasUbicacion);
-        else Interlocked.Increment(ref _descartadasPantalla);
-    }
+    /// <summary>
+    /// LOS DOS RELOJES DEL MAPEADOR, cada uno con su candado. Saber dónde estoy es barato y va
+    /// rápido; leer la pantalla es caro y va lento. Tienen candados separados porque si compartieran
+    /// uno, la vuelta cara bloquearía a la barata y perderíamos justo lo que hace que el sitio
+    /// actual esté al día.
+    ///
+    /// EL CONTADOR DE DESCARTES VIVE DENTRO DEL CANDADO, no aquí al lado. Tenerlo en los dos sitios
+    /// era tener dos opiniones sobre el mismo hecho, que es exactamente la avería que este panel
+    /// existe para no repetir.
+    /// </summary>
+    public VueltaUnica Ubicacion { get; } = new("ubicación");
 
-    public int DescartadasUbicacion => _descartadasUbicacion;
-    public int DescartadasPantalla => _descartadasPantalla;
+    /// <inheritdoc cref="Ubicacion"/>
+    public VueltaUnica Pantalla { get; } = new("pantalla");
+
+    public int DescartadasUbicacion => Ubicacion.Descartadas;
+    public int DescartadasPantalla => Pantalla.Descartadas;
 
     // ── ATRIBUCIONES: toda transición se explica, o se dice por qué no ───────
     private int _aprendidas, _saltos;

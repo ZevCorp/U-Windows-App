@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    LAS PROMESAS DEL MAPEADOR, escritas como pruebas que llaman al código real.
+
+    Aparte del contrato del núcleo, y la separación importa: aquel juzga el GRAFO —qué se sabe—,
+    este juzga el PROCESO que lo alimenta —cómo se sabe—. Mezclarlos haría imposible leer cuál se
+    rompió, y la única razón por la que el fallo de la velocidad tardó un día en aparecer es que no
+    había ningún sitio donde esa clase de promesa cupiera.
+
+    Corre sin abrir una sola ventana ni tocar UIA: por eso dura menos de un segundo, y por eso se
+    corre. Lo que cuesta minuto y medio se deja de correr.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>contrato-mapeador</AssemblyName>
+    <RootNamespace>Mapeador.Pruebas</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pulso\Pulso.csproj" />
+  </ItemGroup>
+
+</Project>

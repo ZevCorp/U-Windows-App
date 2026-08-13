@@ -1,3 +1,4 @@
+using Mapeador;
 using U.WindowsClient.Diagnostics;
 
 namespace U.WindowsClient.Navigation;
@@ -31,23 +32,18 @@ public sealed class MapaVivo : IDisposable
     private System.Threading.Timer? _reloj;
     private System.Threading.Timer? _relojUbicacion;
     private string _anterior = "";
-    private int _mirando;
-    private int _leyendo;
 
     /// <summary>
-    /// CUÁNTAS VUELTAS SE HAN DESCARTADO POR LLEGAR CON OTRA EN CURSO, y desde cuándo.
+    /// EL AVISO POR EL LOG cuando se descartan demasiadas vueltas seguidas.
     /// </summary>
     /// <remarks>
-    /// LA REGLA QUE SE PROTEGE AQUÍ NO ES UNA VELOCIDAD, ES UN INVARIANTE: nada se apila. Un umbral
-    /// de tiempo —«menos de 500 ms»— sería una mala promesa: falla en una máquina cargada, con una
-    /// página enorme delante, o un martes, y un juez que da rojos por motivos ajenos al código
-    /// enseña a desconfiar del juez.
+    /// El candado en sí ya no vive aquí: es <see cref="Mapeador.VueltaUnica"/>, una pieza con nombre
+    /// y con su propio contrato. Mientras fueron dos `Interlocked` sueltos dentro de esta clase de
+    /// WPF, el invariante no se podía nombrar en una promesa ni probar sin levantar la app entera.
     ///
-    /// Lo que de verdad se rompió el 2026-08-12 fue que pedíamos ocho vueltas por segundo de algo
-    /// que a veces costaba 200 ms. El temporizador las encolaba, la cola crecía sola, y leer la
-    /// Maqueta pasó de 0,4 s a 2,2 — cinco veces más lento sin que nadie tocara nada de eso. El
-    /// candado impide que se apilen; esto hace VISIBLE que estamos pidiendo de más, que es lo que
-    /// faltó: el fallo no fue ser lento, fue ser lento en silencio.
+    /// Lo que queda aquí es lo único que es del cliente: DECIRLO. El candado impide que se apilen;
+    /// esto hace VISIBLE que estamos pidiendo de más, que es lo que faltó el 2026-08-12 — el fallo
+    /// no fue ser lento, fue ser lento en silencio.
     ///
     /// Se dice una vez por minuto como mucho: un aviso que sale cada vuelta es ruido, y el ruido se
     /// aprende a ignorar.
@@ -57,7 +53,7 @@ public sealed class MapaVivo : IDisposable
 
     private void Descarte(bool esUbicacion = true)
     {
-        PulsoDelMapeador.Actual.Descartada(esUbicacion);
+        _ = esUbicacion;   // la cuenta la lleva el propio candado; aquí solo se avisa
         if (Interlocked.Increment(ref _descartadas) < 20) return;
         if ((DateTime.UtcNow - _ultimoAviso).TotalSeconds < 60) return;
         _ultimoAviso = DateTime.UtcNow;
@@ -157,7 +153,7 @@ public sealed class MapaVivo : IDisposable
         //
         // Se DESCARTA la vuelta que llega con otra en curso, no se encola: mirar dónde estás es una
         // pregunta cuya respuesta caduca, y contestarla tarde no vale de nada.
-        if (Interlocked.Exchange(ref _mirando, 1) == 1) { Descarte(); return; }
+        if (!PulsoDelMapeador.Actual.Ubicacion.MeToca()) { Descarte(); return; }
         try
         {
             // SE CRONOMETRA DONDE OCURRE EL TRABAJO. Un cronómetro externo mide también su propio
@@ -285,7 +281,7 @@ public sealed class MapaVivo : IDisposable
         {
             LogBus.Log("mapa-vivo", $"no pude mirar dónde estoy: {e.Message}");
         }
-        finally { Interlocked.Exchange(ref _mirando, 0); }
+        finally { PulsoDelMapeador.Actual.Ubicacion.Termine(); }
     }
 
     /// <summary>
@@ -296,7 +292,7 @@ public sealed class MapaVivo : IDisposable
     {
         // La misma valla: leer la pantalla puede tardar segundos en una app cargada, y encolar
         // lecturas es la forma más rápida de convertir un observador en un lastre.
-        if (Interlocked.Exchange(ref _leyendo, 1) == 1) { Descarte(esUbicacion: false); return; }
+        if (!PulsoDelMapeador.Actual.Pantalla.MeToca()) { Descarte(esUbicacion: false); return; }
         try
         {
             string aqui = _donde();
@@ -323,7 +319,7 @@ public sealed class MapaVivo : IDisposable
         {
             LogBus.Log("mapa-vivo", $"no pude observar: {e.Message}");
         }
-        finally { Interlocked.Exchange(ref _leyendo, 0); }
+        finally { PulsoDelMapeador.Actual.Pantalla.Termine(); }
     }
 
     /// <summary>

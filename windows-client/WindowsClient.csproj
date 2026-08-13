@@ -82,6 +82,12 @@
     <!-- EL NÚCLEO. La dependencia va en UNA dirección y no se invierte nunca: el cliente conoce al
          grafo, el grafo no conoce al cliente. Ver nucleo/Grafo/Grafo.csproj. -->
     <ProjectReference Include="..\nucleo\Grafo\Grafo.csproj" />
+
+    <!-- LO QUE EL MAPEADOR SABE DE SÍ MISMO. Va fuera del cliente por la misma razón que el grafo:
+         para poder juzgarlo sin abrir una ventana. Mientras el candado de reentrada vivió aquí
+         dentro como dos `Interlocked` sueltos, el invariante no se podía nombrar en una promesa ni
+         probar sin levantar la app entera — y se rompió en silencio (2026-08-12). -->
+    <ProjectReference Include="..\mapeador\Pulso\Pulso.csproj" />
   </ItemGroup>
 
 </Project>

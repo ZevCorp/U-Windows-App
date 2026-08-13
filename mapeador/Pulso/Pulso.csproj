@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    LO QUE EL MAPEADOR SABE DE SÍ MISMO, aparte del cliente que lo usa.
+
+    El núcleo se puede mirar: tiene su grafo en Neo4j. El mapeador no era mirable —era un proceso
+    sin ventana— y por eso sus fallos se encontraban leyendo el log línea a línea, que es
+    arqueología.
+
+    Va en su propio proyecto por la misma razón que el grafo: para poder JUZGARLO SIN ABRIR UNA
+    VENTANA. Mientras la guarda de reentrada vivió como dos `Interlocked` sueltos dentro de una
+    clase de WPF, no había forma de probarla sin levantar la app entera —y lo que no se puede
+    probar barato no se prueba—. El 2026-08-12 se apilaron las vueltas y leer la Maqueta pasó de
+    0,4 s a 2,2 sin que nadie tocara nada de eso.
+
+    Sin WPF y sin Windows: aquí no se sabe qué es una ventana ni qué es UIA. Si algún día hiciera
+    falta, sería la señal de que se le está metiendo algo que no le toca.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Mapeador.Pulso</AssemblyName>
+    <RootNamespace>Mapeador</RootNamespace>
+  </PropertyGroup>
+
+</Project>
