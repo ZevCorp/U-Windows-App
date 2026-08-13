@@ -51,6 +51,7 @@
   <div class="tab on" data-v="aqui">Aquí</div>
   <div class="tab" data-v="mapa">Mapa completo</div>
   <div class="tab" data-v="reglas">Reglas</div>
+  <div class="tab" data-v="mapeador">Mapeador</div>
 </div>
 <svg id="lienzo"></svg>
 <div id="estado"></div>
@@ -96,6 +97,7 @@ async function tick() {
   try {
     if (vista === "aqui") await tickAqui();
     else if (vista === "mapa") await tickMapa();
+    else if (vista === "mapeador") await tickMapeador();
     else await tickReglas();
   } catch (e) { estado("no llego: " + e.message); }
 }
@@ -129,6 +131,58 @@ async function tickReglas() {
   });
   const svg = document.getElementById("lienzo");
   svg.setAttribute("width", an); svg.setAttribute("height", Math.max(innerHeight, y + 40));
+  svg.innerHTML = s;
+  estado("actualizado " + hora());
+}
+
+// EL MAPEADOR CONTÁNDOSE A SÍ MISMO. Esta función no calcula NADA: pinta los contadores que el
+// mapeador ya lleva. Si dedujera aquí una media o un veredicto, tendríamos dos opiniones sobre el
+// mismo hecho — y es exactamente el error que mató al pintor anterior.
+//
+// La única excepción son los COLORES, y son de forma, no de contenido: rojo si hay saturación,
+// porque cero es el valor esperado y cualquier otro merece mirarse.
+async function tickMapeador() {
+  const r = await fetch("http://127.0.0.1:8792/mapeador");
+  const j = await r.json();
+  if (j.error) { cabecera("Mapeador", "", j.error); pintar(""); estado(hora()); return; }
+
+  const sat = j.saturacion.ubicacion + j.saturacion.pantalla;
+  const huella = "map|" + JSON.stringify(j);
+  if (huella === ultimo) { estado("sin cambios · " + hora()); return; }
+  ultimo = huella;
+
+  cabecera("Cómo se está mapeando", `contando desde ${j.desde}`,
+           `${j.atribuciones.saltos} salto(s) de pantalla · ${j.atribuciones.aprendidas} explicados · ${j.embudo.leidos} elementos leídos`);
+  leyenda("son los contadores del propio mapeador · el panel no calcula nada");
+
+  let y = 128, s = "";
+  const titulo = t => { y += 14; s += `<text x="46" y="${y}" style="font-size:11px;fill:#8a919e;font-weight:600">${t}</text>`; y += 24; };
+  const fila = (etq, val, color) => {
+    s += `<text x="60" y="${y}" style="font-size:13px;fill:#c9ced8">${escapar(etq)}</text>`;
+    s += `<text x="560" y="${y}" text-anchor="end" style="font-size:13px;fill:${color || '#e6e8ec'}">${escapar(String(val))}</text>`;
+    y += 26;
+  };
+
+  titulo("SATURACIÓN — el invariante que protege la velocidad: nada se apila");
+  fila("vueltas de ubicación descartadas", j.saturacion.ubicacion, j.saturacion.ubicacion ? "#ff9b9b" : "#5cc28d");
+  fila("vueltas de pantalla descartadas", j.saturacion.pantalla, j.saturacion.pantalla ? "#ff9b9b" : "#5cc28d");
+  if (sat) fila("↑ si esto sube, hay que SUBIR el intervalo, no bajarlo", "", "#8a919e");
+
+  titulo("ATRIBUCIONES — todo salto se explica, o se dice por qué no");
+  fila("saltos de pantalla", j.atribuciones.saltos);
+  fila("explicados con un clic", j.atribuciones.aprendidas, "#5cc28d");
+  (j.atribuciones.rechazos || []).forEach(x => fila("· " + x.motivo, x.veces, "#e0c07a"));
+
+  titulo("COSTES — cronometrados por quien hace el trabajo");
+  (j.costes || []).forEach(x => fila(`${x.que}  (${x.veces} veces)`, `${x.mediaMs} ms de media · ${x.peorMs} la peor`));
+
+  titulo("EMBUDO — de lo que se ve a lo que llega al núcleo");
+  fila("elementos leídos", j.embudo.leidos);
+  fila("entregados al núcleo", j.embudo.entregados, "#5cc28d");
+  (j.embudo.filtrados || []).forEach(x => fila("· descartados: " + x.motivo, x.veces, "#8a919e"));
+
+  const svg = document.getElementById("lienzo");
+  svg.setAttribute("width", innerWidth); svg.setAttribute("height", Math.max(innerHeight, y + 40));
   svg.innerHTML = s;
   estado("actualizado " + hora());
 }

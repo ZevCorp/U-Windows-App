@@ -180,6 +180,27 @@ internal static class Contrato
             return;
         }
 
+        // LA VELOCIDAD TAMBIÉN SE PROMETE. Va antes que nada porque, a diferencia de las de abajo,
+        // esta se puede juzgar con la app corriendo: solo pregunta si están los índices.
+        //
+        // Se comprueba la CAUSA y no el cronómetro a propósito. Un umbral de milisegundos en esta
+        // máquina daría rojos por tener el portátil ocupado, y un juez que da rojos falsos enseña a
+        // desconfiar del juez —ya nos pasó—. «¿Está el índice?» es determinista, es lo que de
+        // verdad decide, y no depende de la carga: sin él, proyectar 1.740 elementos costaba entre
+        // 0,2 y 21 segundos según la caché; con él, 113-367 ms (2026-08-13, medido en la misma base
+        // con las mismas filas, cinco pasadas cada uno).
+        string sinIndices = p.IndicesQueFaltan();
+        if (sinIndices.Length == 0)
+        {
+            Console.WriteLine("✔ velocidad: Neo4j tiene los índices que hacen barata la proyección");
+            Extra("proyectar es barato: los ids están indexados", true);
+        }
+        else
+        {
+            _fallos++;
+            Console.WriteLine("✘ velocidad: " + sinIndices);
+        }
+
         // ESTAS COMPROBACIONES NECESITAN NEO4J PARA ELLAS SOLAS. La de ida y vuelta restaura TODO
         // lo que haya, así que con la app corriendo se traía su grafo y fallaba por la sola
         // presencia del vecino. Un rojo que no significa «el núcleo está roto» es peor que no

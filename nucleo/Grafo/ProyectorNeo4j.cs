@@ -12,9 +12,10 @@ namespace Nucleo;
 /// sería que «hoy no está Neo4j». Aquí se proyecta lo que el grafo ya decidió; ninguna regla vive
 /// en este archivo.
 ///
-/// LO QUE SE VE ES LO QUE HAY. La proyección borra y reescribe la app entera en cada pasada, así
-/// que Neo4j no puede quedarse con restos de una versión anterior — que es exactamente el fallo que
-/// este visor existe para hacer imposible: mirar algo distinto de lo que se está construyendo.
+/// LO QUE SE VE ES LO QUE HAY. Se escribe solo lo que cambió, pero <see cref="Verificar"/> lee de
+/// vuelta y compara hecho por hecho, así que Neo4j no puede quedarse con restos de una versión
+/// anterior sin que se note — que es exactamente el fallo que este visor existe para hacer
+/// imposible: mirar algo distinto de lo que se está construyendo.
 /// </summary>
 public sealed class ProyectorNeo4j : IDisposable
 {
@@ -53,6 +54,76 @@ public sealed class ProyectorNeo4j : IDisposable
         _auth = Convert.ToBase64String(Encoding.UTF8.GetBytes(
             (usuario ?? Environment.GetEnvironmentVariable("U_NEO4J_USER") ?? "neo4j") + ":" +
             (clave ?? Environment.GetEnvironmentVariable("U_NEO4J_PASS") ?? "grafo-local-2026")));
+        AsegurarIndices();
+    }
+
+    /// <summary>
+    /// Decirle a Neo4j que los ids son ÚNICOS. Sin esto la proyección era entre 70 y 150 veces más
+    /// lenta, y de forma errática.
+    /// </summary>
+    /// <remarks>
+    /// EL FALLO: `MERGE (e:Elemento {id:…})` sin un índice sobre `id` recorre TODOS los elementos
+    /// para saber si ese ya existe. Con 7.692 elementos y ~1.700 MERGE por pasada eso son trece
+    /// millones de comparaciones, y cada pasada tardaba más que el timeout de 5 s del cliente: la
+    /// escritura se perdía, el visor enseñaba lo de antes, y el latido tiraba 224 vueltas seguidas
+    /// por encontrar la anterior aún en curso (2026-08-13, medido con el panel del mapeador recién
+    /// hecho — fue lo primero que enseñó).
+    ///
+    /// Medido en la misma base y con las mismas 1.740 filas, cinco pasadas cada uno:
+    ///   sin índice → 18.121 · 214 · 21.154 · 9.661 · 9.501 ms
+    ///   con índice →    367 · 146 ·    114 ·   137 ·   113 ms
+    /// Lo que más importa no es la media sino que desaparece la varianza: sin índice el coste
+    /// depende de qué haya en caché, y un coste que salta de 0,2 s a 21 s no se puede presupuestar.
+    ///
+    /// Se pide en el constructor y con IF NOT EXISTS: crear un índice que ya está no cuesta nada, y
+    /// que dependa de un paso manual es garantizar que algún día se arranque sin él y nadie sepa
+    /// por qué «hoy va lento». Una RESTRICCIÓN y no un índice a secas porque además es verdad: dos
+    /// ubicaciones con el mismo id serían la misma ubicación.
+    /// </remarks>
+    private void AsegurarIndices() => Mandar(JsonSerializer.Serialize(new
+    {
+        statements = new object[]
+        {
+            new { statement = "CREATE CONSTRAINT ubicacion_id IF NOT EXISTS FOR (u:Ubicacion) REQUIRE u.id IS UNIQUE" },
+            new { statement = "CREATE CONSTRAINT elemento_id IF NOT EXISTS FOR (e:Elemento) REQUIRE e.id IS UNIQUE" },
+        },
+    }));
+
+    /// <summary>
+    /// ¿Están puestas las restricciones que hacen que proyectar sea barato? Devuelve lo que falta,
+    /// o vacío si está todo. Lo usa el contrato: es la única de las promesas de velocidad que se
+    /// puede comprobar sin cronómetro, y por eso es la que se puede exigir siempre.
+    /// </summary>
+    public string IndicesQueFaltan()
+    {
+        string cuerpo = Pedir(JsonSerializer.Serialize(new
+        {
+            statements = new object[]
+            {
+                new { statement = "SHOW INDEXES YIELD labelsOrTypes, properties RETURN labelsOrTypes, properties" },
+            },
+        }));
+        if (cuerpo.Length == 0) return "no pude preguntarle a Neo4j por sus índices";
+
+        var hay = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            using var doc = JsonDocument.Parse(cuerpo);
+            if (!doc.RootElement.TryGetProperty("results", out var res) || res.GetArrayLength() == 0)
+                return "Neo4j no contestó a la pregunta por sus índices";
+            foreach (var fila in res[0].GetProperty("data").EnumerateArray())
+            {
+                var row = fila.GetProperty("row");
+                if (row[0].ValueKind != JsonValueKind.Array || row[0].GetArrayLength() == 0) continue;
+                if (row[1].ValueKind != JsonValueKind.Array || row[1].GetArrayLength() == 0) continue;
+                hay.Add(row[0][0].GetString() + "." + row[1][0].GetString());
+            }
+        }
+        catch (Exception e) { return $"no entendí la respuesta de Neo4j: {e.Message}"; }
+
+        var faltan = new[] { "Ubicacion.id", "Elemento.id" }.Where(x => !hay.Contains(x)).ToList();
+        return faltan.Count == 0 ? "" : "sin índice sobre " + string.Join(" y ", faltan) +
+            " — proyectar pasa de ~130 ms a segundos y de forma errática";
     }
 
     /// <summary>

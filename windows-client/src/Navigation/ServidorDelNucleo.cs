@@ -211,7 +211,42 @@ public sealed class ServidorDelNucleo : IDisposable
             catch (Exception e) { return Json(new { error = e.Message }); }
         }
 
-        return Json(new { error = "no conozco esa ruta", rutas = new[] { "/nucleo", "/ir", "/reglas" } });
+        // EL PULSO DEL MAPEADOR. Se sirven los contadores que él mismo lleva, sin tocarlos: ni una
+        // media, ni un porcentaje, ni un veredicto. Todo eso lo calcula quien los lleva o no se
+        // calcula — si esta ruta dedujera algo, tendríamos dos opiniones sobre el mismo hecho, que
+        // es lo que llevamos la semana entera pagando.
+        if (ruta.EndsWith("/mapeador"))
+        {
+            var p = PulsoDelMapeador.Actual;
+            return Json(new
+            {
+                desde = p.Desde.ToString("yyyy-MM-dd HH:mm:ss"),
+                saturacion = new { ubicacion = p.DescartadasUbicacion, pantalla = p.DescartadasPantalla },
+                atribuciones = new
+                {
+                    saltos = p.Saltos,
+                    aprendidas = p.Aprendidas,
+                    rechazos = p.Rechazos.OrderByDescending(x => x.Value)
+                        .Select(x => new { motivo = x.Key, veces = x.Value }),
+                },
+                costes = p.Tiempos.OrderByDescending(x => x.Value.TotalMs)
+                    .Select(x => new
+                    {
+                        que = x.Key, veces = x.Value.Veces,
+                        mediaMs = x.Value.Veces == 0 ? 0 : x.Value.TotalMs / x.Value.Veces,
+                        peorMs = x.Value.PeorMs,
+                    }),
+                embudo = new
+                {
+                    leidos = p.Leidos,
+                    entregados = p.Entregados,
+                    filtrados = p.Filtrados.OrderByDescending(x => x.Value)
+                        .Select(x => new { motivo = x.Key, veces = x.Value }),
+                },
+            });
+        }
+
+        return Json(new { error = "no conozco esa ruta", rutas = new[] { "/nucleo", "/ir", "/reglas", "/mapeador" } });
     }
 
     private static string LeerDestino(HttpListenerRequest req)

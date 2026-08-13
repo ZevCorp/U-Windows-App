@@ -55,8 +55,9 @@ public sealed class MapaVivo : IDisposable
     private int _descartadas;
     private DateTime _ultimoAviso = DateTime.MinValue;
 
-    private void Descarte()
+    private void Descarte(bool esUbicacion = true)
     {
+        PulsoDelMapeador.Actual.Descartada(esUbicacion);
         if (Interlocked.Increment(ref _descartadas) < 20) return;
         if ((DateTime.UtcNow - _ultimoAviso).TotalSeconds < 60) return;
         _ultimoAviso = DateTime.UtcNow;
@@ -159,7 +160,13 @@ public sealed class MapaVivo : IDisposable
         if (Interlocked.Exchange(ref _mirando, 1) == 1) { Descarte(); return; }
         try
         {
+            // SE CRONOMETRA DONDE OCURRE EL TRABAJO. Un cronómetro externo mide también su propio
+            // coste: dos veces esta semana el instrumento engañó al que medía —un `docker exec` de
+            // 1,7 s, y comparar Gmail con el explorador— y las dos estuvo a punto de sacarse la
+            // conclusión contraria a la verdad.
+            var crono = System.Diagnostics.Stopwatch.StartNew();
             string aqui = _donde();
+            PulsoDelMapeador.Actual.Costo("localizar", crono.ElapsedMilliseconds);
             if (aqui.Length == 0) return;
             if (aqui.Equals(_anterior, StringComparison.OrdinalIgnoreCase)) return;
 
@@ -230,6 +237,7 @@ public sealed class MapaVivo : IDisposable
                     && _grafo.Cruzar(_anterior, selectorObservado, aqui))
                 {
                     _clicYaUsado = clic.DownIndex;
+                    PulsoDelMapeador.Actual.Aprendida();
                     LogBus.Log("mapa-vivo", $"aprendido: «{clic.Label}» lleva de {Corto(_anterior)} a {Corto(aqui)}");
                 }
                 else
@@ -251,6 +259,17 @@ public sealed class MapaVivo : IDisposable
                             ? $"(«{clic.Label}» ({clic.ControlType}) nombra a {candidatos.Count} cosas en esa "
                             + "pantalla: no es una identidad, y adivinar acuñaría un camino falso)"
                             : $"(el núcleo no conoce «{clic.Label}» ({clic.ControlType}) en esa pantalla)";
+                    // EL MOTIVO, EN UNA PALABRA, para poder contarlos por causa. El texto largo va
+                    // al log; aquí hace falta una etiqueta estable que se pueda agrupar y comparar
+                    // entre sesiones — «rechazadas: 12» no dice nada, «clic ya usado: 12» lo dice todo.
+                    string causa = clic == null ? "no hubo clic"
+                        : !sinEstrenar ? "el clic ya explicó otro salto"
+                        : !reciente ? "el clic era viejo"
+                        : !salioDeAlli ? "el clic fue en otra app"
+                        : !mismaApp ? "cambio de ventana, no navegación"
+                        : candidatos.Count > 1 ? "la etiqueta nombra a varias cosas"
+                        : "el núcleo no conoce ese elemento allí";
+                    PulsoDelMapeador.Actual.Rechazada(causa);
                     LogBus.Log("mapa-vivo", $"salto de {Corto(_anterior)} a {Corto(aqui)} SIN atribuir {porQue}");
                 }
             }
@@ -277,7 +296,7 @@ public sealed class MapaVivo : IDisposable
     {
         // La misma valla: leer la pantalla puede tardar segundos en una app cargada, y encolar
         // lecturas es la forma más rápida de convertir un observador en un lastre.
-        if (Interlocked.Exchange(ref _leyendo, 1) == 1) { Descarte(); return; }
+        if (Interlocked.Exchange(ref _leyendo, 1) == 1) { Descarte(esUbicacion: false); return; }
         try
         {
             string aqui = _donde();
@@ -286,12 +305,19 @@ public sealed class MapaVivo : IDisposable
             // El mapeador cuenta lo que ve, el núcleo decide qué hacer con ello. Aquí no se filtra
             // ni se clasifica nada — meter criterio en el puente sería empezar otra vez a repartir
             // las reglas entre dos sitios.
-            var visibles = SinEtiquetasDeControles(_loQueVeo())
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            var crudos = _loQueVeo();
+            PulsoDelMapeador.Actual.Costo("leer la pantalla", crono.ElapsedMilliseconds);
+
+            var visibles = SinEtiquetasDeControles(crudos)
                 .Select(v => new Nucleo.Elemento(v.Selector, v.Etiqueta, v.Tipo))
                 .ToList();
+            PulsoDelMapeador.Actual.Embudo(crudos.Count, visibles.Count);
 
             _grafo.Observar(aqui, visibles);
+            crono.Restart();
             _proyector.Proyectar(_grafo);
+            PulsoDelMapeador.Actual.Costo("proyectar", crono.ElapsedMilliseconds);
         }
         catch (Exception e)
         {
@@ -328,15 +354,20 @@ public sealed class MapaVivo : IDisposable
         IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> crudos)
     {
         var utiles = crudos.Where(v => v.Selector.Length > 0 && v.Etiqueta.Length > 0).ToList();
+        if (crudos.Count > utiles.Count)
+            PulsoDelMapeador.Actual.Filtrado("sin nombre o sin selector", crudos.Count - utiles.Count);
         var conDueno = new HashSet<string>(
             utiles.Where(v => !v.Tipo.Equals("Text", StringComparison.OrdinalIgnoreCase))
                   .Select(v => v.Etiqueta),
             StringComparer.OrdinalIgnoreCase);
 
-        return utiles
+        var quedan = utiles
             .Where(v => !v.Tipo.Equals("Text", StringComparison.OrdinalIgnoreCase)
                         || !conDueno.Contains(v.Etiqueta))
             .ToList();
+        if (utiles.Count > quedan.Count)
+            PulsoDelMapeador.Actual.Filtrado("texto de dentro de un control", utiles.Count - quedan.Count);
+        return quedan;
     }
 
     /// <summary>
