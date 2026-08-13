@@ -35,6 +35,38 @@ public sealed class MapaVivo : IDisposable
     private int _leyendo;
 
     /// <summary>
+    /// CUÁNTAS VUELTAS SE HAN DESCARTADO POR LLEGAR CON OTRA EN CURSO, y desde cuándo.
+    /// </summary>
+    /// <remarks>
+    /// LA REGLA QUE SE PROTEGE AQUÍ NO ES UNA VELOCIDAD, ES UN INVARIANTE: nada se apila. Un umbral
+    /// de tiempo —«menos de 500 ms»— sería una mala promesa: falla en una máquina cargada, con una
+    /// página enorme delante, o un martes, y un juez que da rojos por motivos ajenos al código
+    /// enseña a desconfiar del juez.
+    ///
+    /// Lo que de verdad se rompió el 2026-08-12 fue que pedíamos ocho vueltas por segundo de algo
+    /// que a veces costaba 200 ms. El temporizador las encolaba, la cola crecía sola, y leer la
+    /// Maqueta pasó de 0,4 s a 2,2 — cinco veces más lento sin que nadie tocara nada de eso. El
+    /// candado impide que se apilen; esto hace VISIBLE que estamos pidiendo de más, que es lo que
+    /// faltó: el fallo no fue ser lento, fue ser lento en silencio.
+    ///
+    /// Se dice una vez por minuto como mucho: un aviso que sale cada vuelta es ruido, y el ruido se
+    /// aprende a ignorar.
+    /// </remarks>
+    private int _descartadas;
+    private DateTime _ultimoAviso = DateTime.MinValue;
+
+    private void Descarte()
+    {
+        if (Interlocked.Increment(ref _descartadas) < 20) return;
+        if ((DateTime.UtcNow - _ultimoAviso).TotalSeconds < 60) return;
+        _ultimoAviso = DateTime.UtcNow;
+        int cuantas = Interlocked.Exchange(ref _descartadas, 0);
+        LogBus.Log("mapa-vivo", $"SATURADO: {cuantas} vuelta(s) descartadas por llegar con otra en curso. "
+            + "Se está pidiendo más de lo que la máquina puede dar; si esto se repite, hay que subir "
+            + "el intervalo, no bajarlo.");
+    }
+
+    /// <summary>
     /// EL NÚMERO DEL ÚLTIMO CLIC QUE YA SE USÓ. Un clic explica UNA transición y solo una.
     ///
     /// Sin esto, el mismo clic se atribuía dos veces y la segunda siempre era falsa. El patrón está
@@ -124,7 +156,7 @@ public sealed class MapaVivo : IDisposable
         //
         // Se DESCARTA la vuelta que llega con otra en curso, no se encola: mirar dónde estás es una
         // pregunta cuya respuesta caduca, y contestarla tarde no vale de nada.
-        if (Interlocked.Exchange(ref _mirando, 1) == 1) return;
+        if (Interlocked.Exchange(ref _mirando, 1) == 1) { Descarte(); return; }
         try
         {
             string aqui = _donde();
@@ -245,7 +277,7 @@ public sealed class MapaVivo : IDisposable
     {
         // La misma valla: leer la pantalla puede tardar segundos en una app cargada, y encolar
         // lecturas es la forma más rápida de convertir un observador en un lastre.
-        if (Interlocked.Exchange(ref _leyendo, 1) == 1) return;
+        if (Interlocked.Exchange(ref _leyendo, 1) == 1) { Descarte(); return; }
         try
         {
             string aqui = _donde();

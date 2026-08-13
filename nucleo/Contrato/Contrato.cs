@@ -30,6 +30,7 @@ internal static class Contrato
         Prueba("10. navegar es UN paso cada vez, y el paso tiene que estar vivo", ElSiguientePaso);
         Prueba("11. lo que se recuerda vuelve como MEMORIA, nunca como vivo", RecordarNoEsVer);
         Prueba("12. saber dónde estoy no dice nada de lo que se ve", EstarNoEsVer);
+        Prueba("13. un grafo grande no encarece contestar «qué alcanzo desde aquí»", ElTamanoNoPesa);
 
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
@@ -386,6 +387,41 @@ internal static class Contrato
         int antes = g.Version;
         g.Estoy("app://b");
         Debe(g.Version == antes, "repetir dónde estás no cambia nada: no es una novedad");
+    }
+
+    private static void ElTamanoNoPesa(Grafo g)
+    {
+        // LO ÚNICO DE LA VELOCIDAD QUE EL NÚCLEO SÍ CONTROLA. Leer la pantalla es del mapeador y
+        // depende de la máquina; contestar «qué alcanzo desde aquí» es suyo, y tiene que costar lo
+        // mismo con diez ubicaciones que con dos mil. Si algún día alguien recorre el grafo entero
+        // para contestar por una sola pantalla, esta promesa lo caza.
+        //
+        // NO SE MIDE EN MILISEGUNDOS, y es deliberado: un umbral de tiempo falla en una máquina
+        // cargada o un martes, y un juez que da rojos por motivos ajenos al código enseña a
+        // desconfiar del juez. Se compara el coste consigo mismo — si crecer 200 veces multiplicara
+        // el trabajo, se notaría de sobra aunque el reloj vaya flojo ese día.
+        var uno = new[] { new Elemento("s:1", "Uno", "Button") };
+        g.Estoy("app://sola"); g.Observar("app://sola", uno);
+
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        for (int i = 0; i < 200; i++) g.DesdeAqui("app://sola");
+        long chico = reloj.ElapsedTicks;
+
+        for (int i = 0; i < 2000; i++)
+        {
+            g.Estoy($"app://relleno{i}");
+            g.Observar($"app://relleno{i}", new[] { new Elemento($"s:{i}", $"E{i}", "Button") });
+        }
+        g.Estoy("app://sola");
+
+        reloj.Restart();
+        for (int i = 0; i < 200; i++) g.DesdeAqui("app://sola");
+        long grande = reloj.ElapsedTicks;
+
+        Debe(g.Ubicaciones().Count > 2000, "el grafo creció de verdad");
+        Debe(grande < Math.Max(chico, 1) * 20,
+            $"contestar sigue costando lo mismo con 2.000 ubicaciones que con una "
+            + $"({chico} → {grande} ticks): la respuesta mira SU pantalla, no el grafo entero");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
