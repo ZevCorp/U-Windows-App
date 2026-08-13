@@ -259,6 +259,17 @@ public sealed class ServidorDelNucleo : IDisposable
                     aprendidas = p.Aprendidas,
                     rechazos = p.Rechazos.OrderByDescending(x => x.Value)
                         .Select(x => new { motivo = x.Key, veces = x.Value }),
+                    // EL DESGLOSE POR APP, que es lo que decide si los fallos de mapeo son propios
+                    // de cada aplicación o los mismos en todas. En el total agregado esas dos cosas
+                    // se ven idénticas, y de esa respuesta depende si hay que modularizar.
+                    porApp = p.Apps.OrderByDescending(x => x.Value.Saltos).Select(x => new
+                    {
+                        app = x.Key,
+                        saltos = x.Value.Saltos,
+                        aprendidas = x.Value.Aprendidas,
+                        rechazos = x.Value.Rechazos.OrderByDescending(r => r.Value)
+                            .Select(r => new { motivo = r.Key, veces = r.Value }),
+                    }),
                 },
                 costes = p.Tiempos.OrderByDescending(x => x.Value.TotalMs)
                     .Select(x => new

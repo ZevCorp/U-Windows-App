@@ -36,6 +36,7 @@ internal static class Contrato
         Prueba("11. la coincidencia exacta manda sobre la caída al control", ExactoPrimero);
         Prueba("12. una etiqueta que nombra a varias cosas NO se atribuye", AmbiguoNoSeAtribuye);
         Prueba("13. un clic en un control no cae nunca a un texto suelto", NoSeCaeHaciaTexto);
+        Prueba("14. cada app lleva su propia cuenta, y el total se deriva de ellas", CadaAppPorSuLado);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -202,10 +203,38 @@ internal static class Contrato
     {
         var p = PulsoDelMapeador.Actual;
         int antes = p.Saltos;
-        p.Rechazada("el clic ya explicó otro salto");
+        p.Rechazada("el clic ya explicó otro salto", "prueba.exe");
         Debe(p.Saltos == antes + 1, "un rechazo cuenta como salto: el salto ocurrió igual");
         Debe(p.Rechazos.ContainsKey("el clic ya explicó otro salto"), "y queda apuntado con su causa");
         Debe(p.Rechazos.Keys.All(m => !string.IsNullOrWhiteSpace(m)), "ningún motivo está en blanco");
+    }
+
+    /// <remarks>
+    /// SIN ESTE DESGLOSE NO SE PUEDE CONTESTAR si el mapeo tiene que ser específico por aplicación o
+    /// puede ser universal — y de esa respuesta depende la arquitectura entera. En el total
+    /// agregado, «la misma causa en todas las apps» y «una causa distinta en cada app» dan
+    /// exactamente el mismo número. La promesa fija que los totales SE DERIVAN del desglose: dos
+    /// contadores sumando en paralelo acabarían discrepando, y entonces no se podría creer a
+    /// ninguno de los dos.
+    /// </remarks>
+    private static void CadaAppPorSuLado()
+    {
+        var p = PulsoDelMapeador.Actual;
+        int saltosAntes = p.Saltos, aprendidasAntes = p.Aprendidas;
+
+        p.Aprendida("una.exe");
+        p.Rechazada("el clic era viejo", "una.exe");
+        p.Rechazada("el clic era viejo", "otra.exe");
+
+        Debe(p.Apps["una.exe"].Saltos == 2 && p.Apps["una.exe"].Aprendidas == 1,
+            "lo de una.exe se cuenta en una.exe");
+        Debe(p.Apps["otra.exe"].Saltos == 1 && p.Apps["otra.exe"].Aprendidas == 0,
+            "y lo de otra.exe, en otra.exe: no se mezclan");
+        Debe(p.Apps["una.exe"].Rechazos["el clic era viejo"] == 1,
+            "el mismo motivo en dos apps NO se suma en una sola");
+
+        Debe(p.Saltos == saltosAntes + 3 && p.Aprendidas == aprendidasAntes + 1,
+            "y el total es exactamente la suma de las partes, porque se deriva de ellas");
     }
 
     /// <remarks>

@@ -239,7 +239,7 @@ public sealed class MapaVivo : IDisposable
                     && _grafo.Cruzar(_anterior, selectorObservado, aqui))
                 {
                     _clicYaUsado = clic.DownIndex;
-                    PulsoDelMapeador.Actual.Aprendida();
+                    PulsoDelMapeador.Actual.Aprendida(global::Nucleo.Grafo.AppDe(_anterior));
                     LogBus.Log("mapa-vivo", $"aprendido: «{clic.Label}» lleva de {Corto(_anterior)} a {Corto(aqui)}");
                 }
                 else
@@ -271,7 +271,7 @@ public sealed class MapaVivo : IDisposable
                         : !mismaApp ? "cambio de ventana, no navegación"
                         : atribucion.Candidatos > 1 ? "la etiqueta nombra a varias cosas"
                         : "el núcleo no conoce ese elemento allí";
-                    PulsoDelMapeador.Actual.Rechazada(causa);
+                    PulsoDelMapeador.Actual.Rechazada(causa, global::Nucleo.Grafo.AppDe(_anterior));
                     LogBus.Log("mapa-vivo", $"salto de {Corto(_anterior)} a {Corto(aqui)} SIN atribuir {porQue}");
                 }
             }

@@ -1015,8 +1015,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786622496.4273846,
-    "ast_hash": "0519b1805b7dd58023c4023b9cab528b",
+    "mtime": 1786623895.2647123,
+    "ast_hash": "a6b4e2e85cc2288e6827215ac72d5816",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786623287.3836062,
-    "ast_hash": "f956c4af6f2f794f80ff05f0b96e4cc2",
+    "mtime": 1786623978.5644567,
+    "ast_hash": "2a34832fcf47cb2219f853001088079c",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.cs": {
-    "mtime": 1786623192.1475797,
-    "ast_hash": "bb308d61a62fe6811104f23f694d2a81",
+    "mtime": 1786623926.9542592,
+    "ast_hash": "2c0eadc0e107de9cc2115287d3404d66",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.csproj": {
@@ -1090,8 +1090,13 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786623290.396589,
-    "ast_hash": "17a6c2c3d5c0692fb6ef61c29745bf79",
+    "mtime": 1786623980.597433,
+    "ast_hash": "cb06f915e630f49f3fc130e6849b0e62",
+    "semantic_hash": ""
+  },
+  "mapeador/Pulso/AQuienSeLeDioClic.cs": {
+    "mtime": 1786623871.4244294,
+    "ast_hash": "2ee95dc6314f1c0f51782f1be66198f3",
     "semantic_hash": ""
   }
 }

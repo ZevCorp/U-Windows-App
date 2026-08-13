@@ -210,6 +210,17 @@ async function tickMapeador() {
   fila("explicados con un clic", j.atribuciones.aprendidas, "#5cc28d");
   (j.atribuciones.rechazos || []).forEach(x => fila("· " + x.motivo, x.veces, "#e0c07a"));
 
+  // POR APP, que es lo que decide si hay que modularizar. En el total agregado, «los fallos son los
+  // mismos en todas las apps» y «cada app falla a su manera» dan EL MISMO NÚMERO. Aquí se ven
+  // separados: si cada app trae una causa que ninguna otra tiene, hacen falta módulos; si todas
+  // repiten las mismas causas, el mapeo es universal y modularizar sería inventar trabajo.
+  titulo("POR APP — ¿los fallos son propios de cada una, o los mismos en todas?");
+  (j.atribuciones.porApp || []).forEach(a => {
+    const pct = a.saltos ? Math.round(100 * a.aprendidas / a.saltos) : 0;
+    fila(a.app, `${a.aprendidas} de ${a.saltos} explicados (${pct}%)`, pct >= 80 ? "#5cc28d" : pct >= 50 ? "#e0c07a" : "#ff9b9b");
+    (a.rechazos || []).forEach(r => fila("    · " + r.motivo, r.veces, "#8a919e"));
+  });
+
   titulo("COSTES — cronometrados por quien hace el trabajo");
   (j.costes || []).forEach(x => fila(`${x.que}  (${x.veces} veces)`, `${x.mediaMs} ms de media · ${x.peorMs} la peor`));
 

@@ -48,29 +48,71 @@ public sealed class PulsoDelMapeador
     public int DescartadasPantalla => Pantalla.Descartadas;
 
     // ── ATRIBUCIONES: toda transición se explica, o se dice por qué no ───────
-    private int _aprendidas, _saltos;
-    private readonly ConcurrentDictionary<string, int> _rechazos = new();
+
+    /// <summary>Lo que sabemos de UNA app: cuántos saltos supimos explicar y por qué no los demás.</summary>
+    public sealed class PorApp
+    {
+        internal int _aprendidas, _saltos;
+        internal readonly ConcurrentDictionary<string, int> _rechazos = new();
+
+        public int Aprendidas => _aprendidas;
+        public int Saltos => _saltos;
+        public IReadOnlyDictionary<string, int> Rechazos => _rechazos;
+    }
+
+    /// <summary>
+    /// LAS ATRIBUCIONES, SEPARADAS POR APP. Sin este desglose no se puede contestar la única
+    /// pregunta que decide la arquitectura: ¿los fallos de mapeo son propios de cada aplicación, o
+    /// son los mismos en todas?
+    /// </summary>
+    /// <remarks>
+    /// Con el total agregado, «universal» y «particular» se ven EXACTAMENTE IGUAL: cien rechazos
+    /// pueden ser una causa en todas las apps o una causa distinta en cada una, y el número es el
+    /// mismo. La respuesta cambia el problema de escala —hay una docena de toolkits y millones de
+    /// aplicaciones—, así que merece un instrumento y no una impresión.
+    ///
+    /// La app es la de DONDE VENÍAMOS, no la de destino: el rechazo dice que no supimos reconocer
+    /// algo en la pantalla que dejamos, y es esa pantalla la que estamos juzgando.
+    /// </remarks>
+    private readonly ConcurrentDictionary<string, PorApp> _porApp = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Un salto de pantalla que sí supimos explicar con un clic.</summary>
-    public void Aprendida()
+    public void Aprendida(string app)
     {
-        Interlocked.Increment(ref _saltos);
-        Interlocked.Increment(ref _aprendidas);
+        var a = _porApp.GetOrAdd(app ?? "", _ => new PorApp());
+        Interlocked.Increment(ref a._saltos);
+        Interlocked.Increment(ref a._aprendidas);
     }
 
     /// <summary>
     /// Un salto que NO supimos explicar, con su motivo. El motivo es el dato: «no se atribuyó»
     /// sin causa obliga a volver al log, que es de donde este panel viene a sacarnos.
     /// </summary>
-    public void Rechazada(string motivo)
+    public void Rechazada(string motivo, string app)
     {
-        Interlocked.Increment(ref _saltos);
-        _rechazos.AddOrUpdate(motivo, 1, (_, n) => n + 1);
+        var a = _porApp.GetOrAdd(app ?? "", _ => new PorApp());
+        Interlocked.Increment(ref a._saltos);
+        a._rechazos.AddOrUpdate(motivo, 1, (_, n) => n + 1);
     }
 
-    public int Aprendidas => _aprendidas;
-    public int Saltos => _saltos;
-    public IReadOnlyDictionary<string, int> Rechazos => _rechazos;
+    public IReadOnlyDictionary<string, PorApp> Apps => _porApp;
+
+    // LOS TOTALES SE DERIVAN, no se llevan aparte. Un contador global sumando en paralelo al de
+    // cada app serían dos opiniones sobre el mismo hecho, y ya sabemos cómo acaba eso.
+    public int Aprendidas => _porApp.Values.Sum(a => a.Aprendidas);
+    public int Saltos => _porApp.Values.Sum(a => a.Saltos);
+
+    public IReadOnlyDictionary<string, int> Rechazos
+    {
+        get
+        {
+            var todos = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var a in _porApp.Values)
+                foreach (var (motivo, veces) in a.Rechazos)
+                    todos[motivo] = todos.TryGetValue(motivo, out int n) ? n + veces : veces;
+            return todos;
+        }
+    }
 
     // ── COSTES: cuánto tarda cada cosa, cronometrado por quien la hace ───────
     private readonly ConcurrentDictionary<string, (long Veces, long TotalMs, long PeorMs)> _tiempos = new();
