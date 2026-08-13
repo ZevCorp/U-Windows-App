@@ -40,6 +40,9 @@ internal static class Contrato
         Prueba("15. cambiar de ventana no es navegar, y no cuenta como fallo", CambiarDeVentanaNoEsFallar);
         Prueba("16. «cambió la pantalla y no el sitio» se cuenta, aunque no deje salto", ElFalloQueNoDejaSalto);
         Prueba("17. el clic que te trajo aquí NO puede ser el que te saca", ElQueTeTrajoNoTeSaca);
+        Prueba("18. lo que no contesta a tiempo se abandona, y se dice", NoEsperarParaSiempre);
+        Prueba("19. mientras una sigue colgada NO se lanza otra: nada de fuga de hilos", UnaColgadaALaVez);
+        Prueba("20. cuando la colgada vuelve, se sigue trabajando", DelCuelgueSeSale);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -402,6 +405,77 @@ internal static class Contrato
         // duda no se acuña: una arista falsa manda al navegador a pulsar lo que no es, para siempre.
         Debe(!AQuienSeLeDioClic.PuedeExplicarLaSalida(llegamos, llegamos),
             "y en el empate se rechaza: sin camino se sigue explorando, con uno falso no");
+    }
+
+    /// <remarks>
+    /// LA VALLA CONTRA UIA. Aquí el cuelgue se simula con un candado que no se abre, que es
+    /// exactamente lo que hace una ventana que no bombea mensajes: no falla, no vuelve.
+    ///
+    /// Sin esta prueba, el mecanismo solo se vería funcionar el día que algo se cuelgue de verdad
+    /// —y ese día ya sería tarde—. Un mecanismo de seguridad cuyo fallo es SILENCIOSO es justo el
+    /// que hay que probar a mano: el 2026-08-13 estuvimos veintiún minutos ciegos sin un error.
+    /// </remarks>
+    private static void NoEsperarParaSiempre()
+    {
+        using var nuncaSeAbre = new ManualResetEventSlim(false);
+        var v = new SinColgarse(TimeSpan.FromMilliseconds(150));
+        int avisos = 0;
+
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        string r = v.Pregunta(() => { nuncaSeAbre.Wait(); return "tarde"; }, alColgarse: () => avisos++);
+        reloj.Stop();
+
+        Debe(r.Length == 0, "lo que no contesta a tiempo devuelve vacío: «no sé dónde estoy»");
+        Debe(avisos == 1, "…y se avisa, que es lo que hace visible un mapa ciego");
+        Debe(reloj.ElapsedMilliseconds < 1000, $"…y se deja de esperar pronto (esperó {reloj.ElapsedMilliseconds} ms)");
+        Debe(v.Colgada, "la pregunta sigue ahí fuera, y el vigía lo sabe");
+
+        nuncaSeAbre.Set();   // se suelta para no dejar el hilo colgado al acabar la prueba
+    }
+
+    /// <remarks>
+    /// LO QUE CONVIERTE LA VALLA EN SEGURA. Abandonar la espera y volver a preguntar cada 250 ms
+    /// contra la MISMA ventana muerta cambiaría un cuelgue por una fuga: cientos de hilos parados.
+    /// </remarks>
+    private static void UnaColgadaALaVez()
+    {
+        using var nuncaSeAbre = new ManualResetEventSlim(false);
+        var v = new SinColgarse(TimeSpan.FromMilliseconds(150));
+        int arranques = 0;
+
+        string Trabajo() { Interlocked.Increment(ref arranques); nuncaSeAbre.Wait(); return "tarde"; }
+
+        v.Pregunta(Trabajo);
+        for (int i = 0; i < 20; i++) Debe(v.Pregunta(Trabajo).Length == 0, "sigue sin saberse dónde estamos");
+
+        Debe(arranques == 1, $"veintiuna preguntas y UN solo hilo lanzado (fueron {arranques})");
+
+        nuncaSeAbre.Set();
+    }
+
+    /// <remarks>
+    /// Y NO SE QUEDA ATASCADO PARA SIEMPRE: cuando la ventana revive, la siguiente vuelta trabaja.
+    /// Lo que trae la que volvió se descarta a propósito —contesta dónde estabas hace un buen rato,
+    /// y una respuesta caducada sobre dónde estás es la mentira que rebobinaba el mapa (2026-08-12)—.
+    /// </remarks>
+    private static void DelCuelgueSeSale()
+    {
+        using var puerta = new ManualResetEventSlim(false);
+        var v = new SinColgarse(TimeSpan.FromMilliseconds(150));
+        int volvio = 0;
+
+        v.Pregunta(() => { puerta.Wait(); return "la caducada"; });
+        Debe(v.Colgada, "colgada");
+
+        puerta.Set();
+        Thread.Sleep(120);   // se le da tiempo a la abandonada para terminar
+
+        string r = v.Pregunta(() => "nueva", alVolver: () => volvio++);
+        Debe(volvio == 1, "se avisa de que la colgada volvió");
+        Debe(r.Length == 0, "…y su respuesta se TIRA: dice dónde estabas hace rato, no dónde estás");
+        Debe(!v.Colgada, "ya no hay ninguna colgada");
+
+        Debe(v.Pregunta(() => "por fin") == "por fin", "y la siguiente pregunta funciona con normalidad");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

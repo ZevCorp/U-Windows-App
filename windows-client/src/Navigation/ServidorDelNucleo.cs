@@ -281,6 +281,9 @@ public sealed class ServidorDelNucleo : IDisposable
                         que = x.Key, veces = x.Value.Veces,
                         mediaMs = x.Value.Veces == 0 ? 0 : x.Value.TotalMs / x.Value.Veces,
                         peorMs = x.Value.PeorMs,
+                        // APARTE, porque la media no sobrevive a un colgado: 22 ms reales se leían
+                        // como 1.461 de media por UNA muestra de veintiún minutos.
+                        colgadas = p.Colgadas.TryGetValue(x.Key, out int c) ? c : 0,
                     }),
                 embudo = new
                 {

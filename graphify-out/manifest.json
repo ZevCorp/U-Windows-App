@@ -1015,13 +1015,13 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786626288.5112517,
-    "ast_hash": "b8d050f4fa351c528dfb3f00cbd24eca",
+    "mtime": 1786636620.27132,
+    "ast_hash": "db23133488cc54aa7565f19dfbc3c62e",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
-    "mtime": 1786620857.1973107,
-    "ast_hash": "05a9e59da6a99178d23c292391b49f58",
+    "mtime": 1786636521.1546361,
+    "ast_hash": "2dcb0d93015428dbfe606eda407f0439",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.csproj": {
@@ -1040,8 +1040,8 @@
     "semantic_hash": ""
   },
   "nucleo/Grafo/ProyectorNeo4j.cs": {
-    "mtime": 1786620833.5482616,
-    "ast_hash": "33a915e592c2172d7e8f8bf1898260ad",
+    "mtime": 1786636592.457497,
+    "ast_hash": "3e29f0e5a0d929a8870df5868b7383fb",
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786626378.7333312,
-    "ast_hash": "8c1f4289491d8eabaca5a4c99dfaa802",
+    "mtime": 1786636651.6653388,
+    "ast_hash": "6806b64e6d2db9891582967d7e825082",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.cs": {
-    "mtime": 1786626349.3923337,
-    "ast_hash": "59c9b0a6a80edc996c3995d08427851f",
+    "mtime": 1786636442.9497879,
+    "ast_hash": "2f9a99afec1421669ee5e967a3e78ca8",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.csproj": {
@@ -1090,13 +1090,13 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786626380.6012907,
-    "ast_hash": "5f565b635ebcd68029714eb1de0c7e69",
+    "mtime": 1786636654.2407317,
+    "ast_hash": "dc333800679df6cefa78ff44bcaf10d5",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
-    "mtime": 1786623871.4244294,
-    "ast_hash": "2ee95dc6314f1c0f51782f1be66198f3",
+    "mtime": 1786636620.354572,
+    "ast_hash": "131e0a57edc9fb64c5997dc7240ae6fb",
     "semantic_hash": ""
   }
 }

@@ -227,7 +227,13 @@ async function tickMapeador() {
   });
 
   titulo("COSTES — cronometrados por quien hace el trabajo");
-  (j.costes || []).forEach(x => fila(`${x.que}  (${x.veces} veces)`, `${x.mediaMs} ms de media · ${x.peorMs} la peor`));
+  (j.costes || []).forEach(x => {
+    fila(`${x.que}  (${x.veces} veces)`, `${x.mediaMs} ms de media · ${x.peorMs} la peor`);
+    // Un colgado envenena la media: 22 ms reales se leían como 1.461 por UNA muestra de 21 minutos.
+    // Verlo aquí es la diferencia entre «va lento» y «una vez se quedó clavado», que se arreglan
+    // en sitios distintos.
+    if (x.colgadas) fila("    · vueltas que se dieron por perdidas (la media no vale)", x.colgadas, "#ff9b9b");
+  });
 
   titulo("EMBUDO — de lo que se ve a lo que llega al núcleo");
   fila("elementos leídos", j.embudo.leidos);

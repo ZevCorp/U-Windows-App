@@ -150,6 +150,25 @@ public sealed class PulsoDelMapeador
         _tiempos.AddOrUpdate(que, (1, ms, ms),
             (_, v) => (v.Veces + 1, v.TotalMs + ms, Math.Max(v.PeorMs, ms)));
 
+    private readonly ConcurrentDictionary<string, int> _colgadas = new();
+
+    /// <summary>
+    /// Una vuelta que no volvió a tiempo y se dio por perdida.
+    /// </summary>
+    /// <remarks>
+    /// SE CUENTA APARTE PORQUE LA MEDIA NO SOBREVIVE A UN COLGADO. Medido el 2026-08-13: `localizar`
+    /// costaba 22 ms de verdad —160 llamadas en 40 s— y el panel decía 1.461 ms de media, porque UNA
+    /// sola muestra de 1.251.056 ms (veintiún minutos) se comía el promedio. Con la media envenenada,
+    /// la lectura obvia era «localizar va lento» y la verdad era «localizar va perfecto y una vez se
+    /// quedó clavado». Se arreglan en sitios distintos.
+    ///
+    /// Y el colgado importa mucho más que la media: mientras dura, el candado de reentrada no suelta
+    /// y el mapa deja de enterarse de dónde estás. Veintiún minutos ciego, sin un solo error.
+    /// </remarks>
+    public void Colgada(string que) => _colgadas.AddOrUpdate(que, 1, (_, n) => n + 1);
+
+    public IReadOnlyDictionary<string, int> Colgadas => _colgadas;
+
     public IReadOnlyDictionary<string, (long Veces, long TotalMs, long PeorMs)> Tiempos => _tiempos;
 
     // ── EL EMBUDO: de lo que se ve a lo que llega al núcleo ──────────────────

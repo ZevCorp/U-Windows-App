@@ -169,7 +169,7 @@ public sealed class MapaVivo : IDisposable
             // 1,7 s, y comparar Gmail con el explorador— y las dos estuvo a punto de sacarse la
             // conclusión contraria a la verdad.
             var crono = System.Diagnostics.Stopwatch.StartNew();
-            string aqui = _donde();
+            string aqui = DondeEstoySinColgarme();
             PulsoDelMapeador.Actual.Costo("localizar", crono.ElapsedMilliseconds);
             if (aqui.Length == 0) return;
             if (aqui.Equals(_anterior, StringComparison.OrdinalIgnoreCase)) return;
@@ -351,6 +351,38 @@ public sealed class MapaVivo : IDisposable
         }
         finally { PulsoDelMapeador.Actual.Ubicacion.Termine(); }
     }
+
+    /// <summary>
+    /// LA VALLA CONTRA UIA SIN TIEMPO DE ESPERA. La lógica vive en el mapeador, que es donde se
+    /// puede probar: un mecanismo de seguridad cuyo fallo es SILENCIOSO no puede depender de que
+    /// alguien levante la app y espere a que algo se cuelgue de verdad.
+    ///
+    /// Cuatro segundos: veinte veces el coste normal (24 ms de media, 94 la peor), así que no puede
+    /// dispararse por una máquina cargada — solo por algo que de verdad no va a contestar.
+    /// </summary>
+    private readonly Mapeador.SinColgarse _vigia = new(TimeSpan.FromSeconds(4));
+
+    private string DondeEstoySinColgarme() => _vigia.Pregunta(
+        _donde,
+        alColgarse: () =>
+        {
+            PulsoDelMapeador.Actual.Colgada("localizar");
+            if (!_yaDijeQueEstoyCiego)
+            {
+                _yaDijeQueEstoyCiego = true;
+                LogBus.Log("mapa-vivo", "la app de delante no contesta a UIA: dejo de esperarla. El "
+                                      + "mapa no sabrá dónde está hasta que vuelva — ciego, pero no mintiendo.");
+            }
+        },
+        alVolver: () =>
+        {
+            _yaDijeQueEstoyCiego = false;
+            LogBus.Log("mapa-vivo", "la consulta de ubicación que se había colgado por fin volvió; "
+                                  + "el mapa vuelve a saber dónde está");
+        });
+
+    /// <summary>Para decir «estoy ciego» UNA vez y no cuatro veces por segundo mientras dure.</summary>
+    private bool _yaDijeQueEstoyCiego;
 
     /// <summary>
     /// LA MITAD CARA, a su ritmo: qué hay en la pantalla de delante. Cuesta unos 400 ms de lectura
