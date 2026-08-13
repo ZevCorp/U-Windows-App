@@ -355,8 +355,18 @@ public sealed class ServidorDelNucleo : IDisposable
     private (string Selector, string Porque) BuscarVivo(string aqui, string etiqueta)
     {
         var aca = _grafo.DesdeAqui(aqui);
+
+        // SE PUEDE PEDIR POR ETIQUETA O POR IDENTIDAD, y para algunos elementos solo vale lo
+        // segundo: el campo del captcha de la Procuraduría se LLAMA con la pregunta que hace, que
+        // cambia en cada carga, y su identidad es siempre la misma —`txtRespuestaPregunta`—. Pedirlo
+        // por nombre es pedirlo por algo que no existirá la próxima vez.
+        //
+        // Basta con el id a secas («txtRespuestaPregunta»); no hace falta escribir el selector
+        // entero. Quien redacta un workflow no tiene por qué saberse el formato interno.
         var conEseNombre = aca
-            .Where(a => a.Que.Etiqueta.Equals(etiqueta, StringComparison.OrdinalIgnoreCase))
+            .Where(a => a.Que.Etiqueta.Equals(etiqueta, StringComparison.OrdinalIgnoreCase)
+                     || a.Que.Selector.Equals(etiqueta, StringComparison.OrdinalIgnoreCase)
+                     || a.Que.Selector.StartsWith($"uia:aid={etiqueta};", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (conEseNombre.Count == 0)

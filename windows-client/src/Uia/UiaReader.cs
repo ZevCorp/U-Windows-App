@@ -33,8 +33,14 @@ public sealed class UiaReader
     /// elemento —«Carpeta de archivos», «Imagen PNG»—, y es la diferencia entre entrar en una
     /// carpeta y abrir una foto en otra aplicación.
     /// </summary>
+    /// <param name="AutomationId">
+    /// LA IDENTIDAD QUE NO CAMBIA cuando el texto sí. En una página web es el `id` del HTML, y por
+    /// eso el campo del captcha de la Procuraduría —cuyo NOMBRE es la pregunta que hace, distinta en
+    /// cada carga— se llama siempre `txtRespuestaPregunta` (2026-08-13, medido). Vacío si el control
+    /// no lo expone.
+    /// </param>
     public sealed record UiElement(string Label, string ControlType, System.Windows.Rect Bounds,
-        AutomationElement Native, string ItemType = "");
+        AutomationElement Native, string ItemType = "", string AutomationId = "");
 
     /// <summary>Snapshot de accionables del último <see cref="Read"/>. Sirve para taps por etiqueta.</summary>
     public IReadOnlyList<UiElement> Elements { get; private set; } = Array.Empty<UiElement>();
@@ -185,10 +191,18 @@ public sealed class UiaReader
                 if (string.IsNullOrWhiteSpace(label) || r.IsEmpty || r.Width < 1 || r.Height < 1) continue;
                 if (acc.Any(e => e.Label.Equals(label, StringComparison.OrdinalIgnoreCase)
                               && e.ControlType.Equals("MenuItem", StringComparison.OrdinalIgnoreCase))) continue;
-                acc.Add(new UiElement(label, "MenuItem", r, el, ItemTypeDe(el)));
+                acc.Add(new UiElement(label, "MenuItem", r, el, ItemTypeDe(el), AidDe(el)));
             }
             catch { }
         }
+    }
+
+    /// <summary>El AutomationId del elemento, o vacío. Es la identidad que sobrevive a que le
+    /// cambien la etiqueta.</summary>
+    private static string AidDe(AutomationElement el)
+    {
+        try { return (el.Current.AutomationId ?? "").Trim(); }
+        catch { return ""; }
     }
 
     /// <summary>Lo que la app declara que es el elemento. Vacío si no lo dice.</summary>
@@ -217,7 +231,7 @@ public sealed class UiaReader
                     // con rect=Empty). Aceptado no es ejecutado, y aquí ni siquiera es accionable.
                     var r = info.BoundingRectangle;
                     if (!string.IsNullOrWhiteSpace(label) && !r.IsEmpty && r.Width >= 1 && r.Height >= 1)
-                        acc.Add(new UiElement(label, ControlTypeName(ct), r, child, ItemTypeDe(child)));
+                        acc.Add(new UiElement(label, ControlTypeName(ct), r, child, ItemTypeDe(child), AidDe(child)));
                 }
             }
             catch { /* nodo muerto */ }

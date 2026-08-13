@@ -590,8 +590,8 @@
     "semantic_hash": "9e0b3615e348d339b1ef8b452b79171c"
   },
   "windows-graph/src/Surfaces/UiaSurface.cs": {
-    "mtime": 1786457716.5115771,
-    "ast_hash": "a71ebdb046ad20afac544f8d59ea5688",
+    "mtime": 1786663336.5779889,
+    "ast_hash": "21555e6e01fbc39c91992f8ba807b2ab",
     "semantic_hash": ""
   },
   "windows-graph/src/UserPaths.cs": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786661837.9971027,
-    "ast_hash": "f8fcde874bf4b80b51e9dd0708fe408d",
+    "mtime": 1786663381.5602524,
+    "ast_hash": "ab22e3e6f365b533cb32331d87f5d305",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786661841.2858295,
-    "ast_hash": "f7b7c9cd39768f142fcd585b4a351c97",
+    "mtime": 1786663386.173321,
+    "ast_hash": "dd07ef867580f5c1162cbd3502ef33a8",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
@@ -1107,6 +1107,11 @@
   "docs/specs/001-hablarle-a-la-carita-por-el-omi.md": {
     "mtime": 1786657531.7213466,
     "ast_hash": "66e3d1c7fd29641c70a2f6384a26bef1",
+    "semantic_hash": ""
+  },
+  "mapeador/Pulso/Patron.cs": {
+    "mtime": 1786661907.0156999,
+    "ast_hash": "e08ab2a090095904df16de3c3185c689",
     "semantic_hash": ""
   }
 }

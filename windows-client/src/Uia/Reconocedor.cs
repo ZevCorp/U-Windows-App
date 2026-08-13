@@ -43,8 +43,32 @@ public static class Reconocedor
     /// Cómo se le pide a UIA este mismo elemento más tarde. Es el formato que ya entiende
     /// <c>UiaExecutor</c>; se pone aquí para que quien reconoce y quien pulsa no puedan discrepar.
     /// </summary>
-    public static string SelectorDe(UiaReader.UiElement e) =>
-        $"uia:name={e.Label};ct={e.ControlType}";
+    /// <remarks>
+    /// EL AutomationId MANDA CUANDO LO HAY, y esto no es una regla nueva: es la que
+    /// <c>UiaSurface.SelectorsFor</c> ya aplicaba por su cuenta desde el 2026-08-01. Tenerla en un
+    /// solo sitio otra vez era el problema de siempre —el vigilante de clics escribía
+    /// «uia:aid=…» y el observador «uia:name=…», dos vocabularios para la misma cosa, y de diez
+    /// caminos aprendidos llegaban tres—.
+    ///
+    /// LO QUE ARREGLA: hay elementos cuyo NOMBRE cambia a propósito. El campo del captcha de la
+    /// Procuraduría se llama con la pregunta que hace —«¿Cuanto es 9 - 2?», «los tres primeros
+    /// dígitos», «los dos últimos dígitos»: tres cargas, tres nombres— y su id es siempre
+    /// `txtRespuestaPregunta`. Apuntar por nombre a eso es apuntar a nada, y además llenaba el grafo
+    /// de un elemento muerto por cada pregunta vista (2026-08-13, medido).
+    ///
+    /// UN aid NUMÉRICO NO ES UNA IDENTIDAD, ES UNA POSICIÓN. En la lista del explorador cada fila
+    /// lleva su índice, así que «uia:aid=1;ct=ListItem» significa «el segundo de lo que haya ahora»
+    /// y apunta a otro archivo en cuanto se reordena. Ahí el nombre, con todos sus defectos, sí
+    /// describe la cosa. Es la misma excepción que ya hacía el ejecutor.
+    /// </remarks>
+    public static string SelectorDe(UiaReader.UiElement e)
+    {
+        string aid = (e.AutomationId ?? "").Trim();
+        bool esPosicion = aid.Length > 0 && aid.All(char.IsDigit);
+        return aid.Length > 0 && !esPosicion
+            ? $"uia:aid={aid};ct={e.ControlType}"
+            : $"uia:name={e.Label};ct={e.ControlType}";
+    }
 
     /// <summary>
     /// Los elementos a los que puede referirse <paramref name="dicho"/>, del más ajustado al menos.
