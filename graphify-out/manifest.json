@@ -1045,28 +1045,28 @@
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
-    "mtime": 1786620141.6669717,
-    "ast_hash": "4843255fc4415a1a2d165d5b666bc76b",
+    "mtime": 1786623247.272962,
+    "ast_hash": "938c6d9708ae3b37d5dfc8e02fb0ba8b",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/ServidorDelNucleo.cs": {
-    "mtime": 1786622496.4273846,
-    "ast_hash": "797b7792c2edab55770469ba18c465ea",
+    "mtime": 1786623203.130077,
+    "ast_hash": "3303fa219392a7f4d88c5be15fe71dd0",
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786622611.8062532,
-    "ast_hash": "a45f8dd003c1393ed7c1ceb56125ff1c",
+    "mtime": 1786623287.3836062,
+    "ast_hash": "f956c4af6f2f794f80ff05f0b96e4cc2",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
-    "mtime": 1786621092.0392866,
-    "ast_hash": "efab933aebceace0fd56cbd7f62eba8c",
+    "mtime": 1786623386.711435,
+    "ast_hash": "974af8e43fe7ea58230ce7481c902396",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.cs": {
-    "mtime": 1786622424.5458012,
-    "ast_hash": "1be4bcdb7f3a46283e4453c59898fa5a",
+    "mtime": 1786623192.1475797,
+    "ast_hash": "bb308d61a62fe6811104f23f694d2a81",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.csproj": {
@@ -1087,6 +1087,11 @@
   "mapeador/Pulso/VueltaUnica.cs": {
     "mtime": 1786622550.421721,
     "ast_hash": "0bee192f42baaf13b5b5794545cc84b2",
+    "semantic_hash": ""
+  },
+  "nucleo/visor/reglas-mapeador.json": {
+    "mtime": 1786623290.396589,
+    "ast_hash": "17a6c2c3d5c0692fb6ef61c29745bf79",
     "semantic_hash": ""
   }
 }

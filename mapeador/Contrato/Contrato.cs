@@ -32,6 +32,10 @@ internal static class Contrato
         Prueba("7. todo rechazo lleva motivo", RechazoConMotivo);
         Prueba("8. de cada coste se guarda también LA PEOR, no solo la media", SeGuardaLaPeor);
         Prueba("9. el pulso no opina: no hay veredictos, solo cuentas", ElPulsoNoOpina);
+        Prueba("10. el clic sobre las letras de un botón ES el botón", ElTextoEsSuControl);
+        Prueba("11. la coincidencia exacta manda sobre la caída al control", ExactoPrimero);
+        Prueba("12. una etiqueta que nombra a varias cosas NO se atribuye", AmbiguoNoSeAtribuye);
+        Prueba("13. un clic en un control no cae nunca a un texto suelto", NoSeCaeHaciaTexto);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -235,6 +239,76 @@ internal static class Contrato
             .ToList();
         Debe(juicios.Count == 0,
             "el pulso solo cuenta, no dictamina" + (juicios.Count == 0 ? "" : ": sobra " + string.Join(", ", juicios)));
+    }
+
+    /// <remarks>
+    /// LA PANTALLA ES LA DE VERDAD: es lo que el núcleo conocía de «maqueta-inicio» el 2026-08-13,
+    /// leído de Neo4j. El observador ya había descartado los `Text` duplicados, así que solo quedan
+    /// los `Button` — y el vigilante de clics, que resuelve al elemento más interno, devolvía
+    /// «Ajustes» como `Text`. Ahí se perdían las aristas.
+    /// </remarks>
+    private static readonly List<(string Selector, string Etiqueta, string Tipo)> MaquetaInicio = new()
+    {
+        ("uia:name=Inicio;ct=Button",     "Inicio",     "Button"),
+        ("uia:name=Catálogo;ct=Button",   "Catálogo",   "Button"),
+        ("uia:name=Informes;ct=Button",   "Informes",   "Button"),
+        ("uia:name=Documentos;ct=Button", "Documentos", "Button"),
+        ("uia:name=Ajustes;ct=Button",    "Ajustes",    "Button"),
+    };
+
+    private static void ElTextoEsSuControl()
+    {
+        var a = AQuienSeLeDioClic.Resolver(MaquetaInicio, "Ajustes", "Text");
+        Debe(a.Hay, "un clic sobre las letras de «Ajustes» sí se atribuye");
+        Debe(a.Selector == "uia:name=Ajustes;ct=Button", "y se atribuye al BOTÓN, que es lo que se pulsó");
+
+        // El caso que dejó «maqueta-familia-c» con 35 elementos y cero salidas.
+        Debe(AQuienSeLeDioClic.Resolver(MaquetaInicio, "Catálogo", "Text").Hay,
+            "y lo mismo con «Catálogo», que falló seis veces seguidas");
+    }
+
+    /// <remarks>
+    /// Si en la pantalla hay a la vez un `Text` y un `Button` con el mismo nombre —pasa: el filtro
+    /// del observador solo quita el `Text` cuando los ve juntos en la MISMA lectura— gana el que
+    /// coincide de verdad. Caer al control cuando existe la coincidencia exacta sería inventar.
+    /// </remarks>
+    private static void ExactoPrimero()
+    {
+        var pantalla = new List<(string, string, string)>
+        {
+            ("sel:texto", "Familia C", "Text"),
+            ("sel:boton", "Familia C", "Button"),
+        };
+        Debe(AQuienSeLeDioClic.Resolver(pantalla, "Familia C", "Text").Selector == "sel:texto",
+            "clic en el texto → el texto, que es la coincidencia exacta");
+        Debe(AQuienSeLeDioClic.Resolver(pantalla, "Familia C", "Button").Selector == "sel:boton",
+            "clic en el botón → el botón");
+    }
+
+    /// <remarks>
+    /// En el escritorio de Windows hay dos cosas llamadas «Nombre» —la columna y la celda— y elegir
+    /// una a ojo acuñó una arista falsa que dejó al navegador pulsando lo que no era, para siempre.
+    /// Sin camino se puede seguir explorando; con un camino equivocado, no.
+    /// </remarks>
+    private static void AmbiguoNoSeAtribuye()
+    {
+        var pantalla = new List<(string, string, string)>
+        {
+            ("sel:columna", "Nombre", "Header"),
+            ("sel:celda",   "Nombre", "SplitButton"),
+        };
+        var a = AQuienSeLeDioClic.Resolver(pantalla, "Nombre", "Text");
+        Debe(!a.Hay, "dos cosas se llaman igual: no se atribuye");
+        Debe(a.Candidatos == 2, "…y se dice cuántas eran, para poder contarlo por causa");
+    }
+
+    private static void NoSeCaeHaciaTexto()
+    {
+        var pantalla = new List<(string, string, string)> { ("sel:rotulo", "Total", "Text") };
+        Debe(!AQuienSeLeDioClic.Resolver(pantalla, "Total", "Button").Hay,
+            "un clic en un Button no se resuelve a un texto suelto del mismo nombre");
+        Debe(AQuienSeLeDioClic.Resolver(pantalla, "Total", "Text").Hay,
+            "…pero un texto suelto sigue siendo alcanzable por sí mismo");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

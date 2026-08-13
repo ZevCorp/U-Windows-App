@@ -221,12 +221,18 @@ public sealed class MapaVivo : IDisposable
                 // nombra a varias cosas en la misma pantalla no es una identidad, y adivinar entre
                 // ellas es justo cómo nació la arista falsa. Sin camino se puede seguir explorando;
                 // con un camino equivocado, el navegador va a pulsar lo que no es para siempre.
-                var candidatos = clic == null ? new List<Nucleo.Alcanzable>()
-                    : _grafo.DesdeAqui(_anterior)
-                        .Where(a => a.Que.Etiqueta.Equals(clic.Label, StringComparison.OrdinalIgnoreCase)
-                                 && a.Que.Tipo.Equals(clic.ControlType, StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-                string selectorObservado = candidatos.Count == 1 ? candidatos[0].Que.Selector : "";
+                //
+                // Y QUIÉN CASA CON EL CLIC LO DECIDE `AQuienSeLeDioClic`, fuera del cliente. Está
+                // ahí porque es lógica pura con un fallo caro detrás —el clic sobre las letras de un
+                // botón resuelve al Text de dentro, que el observador ya había descartado por
+                // duplicado— y aquí dentro no se podía probar sin levantar la app entera.
+                var atribucion = clic == null
+                    ? default
+                    : AQuienSeLeDioClic.Resolver(
+                        _grafo.DesdeAqui(_anterior)
+                              .Select(a => (a.Que.Selector, a.Que.Etiqueta, a.Que.Tipo)).ToList(),
+                        clic.Label, clic.ControlType);
+                string selectorObservado = atribucion.Selector;
 
                 if (clic != null && reciente && sinEstrenar && salioDeAlli && mismaApp
                     && selectorObservado.Length > 0
@@ -251,8 +257,8 @@ public sealed class MapaVivo : IDisposable
                                     + "— o tardamos, o ese clic no se registró y estamos viendo uno anterior)"
                         : !salioDeAlli ? $"(el clic «{clic.Label}» fue en «{clic.Process}», no en donde estábamos)"
                         : !mismaApp ? "(es otra app: fue un cambio de ventana, no navegación)"
-                        : candidatos.Count > 1
-                            ? $"(«{clic.Label}» ({clic.ControlType}) nombra a {candidatos.Count} cosas en esa "
+                        : atribucion.Candidatos > 1
+                            ? $"(«{clic.Label}» ({clic.ControlType}) nombra a {atribucion.Candidatos} cosas en esa "
                             + "pantalla: no es una identidad, y adivinar acuñaría un camino falso)"
                             : $"(el núcleo no conoce «{clic.Label}» ({clic.ControlType}) en esa pantalla)";
                     // EL MOTIVO, EN UNA PALABRA, para poder contarlos por causa. El texto largo va
@@ -263,7 +269,7 @@ public sealed class MapaVivo : IDisposable
                         : !reciente ? "el clic era viejo"
                         : !salioDeAlli ? "el clic fue en otra app"
                         : !mismaApp ? "cambio de ventana, no navegación"
-                        : candidatos.Count > 1 ? "la etiqueta nombra a varias cosas"
+                        : atribucion.Candidatos > 1 ? "la etiqueta nombra a varias cosas"
                         : "el núcleo no conoce ese elemento allí";
                     PulsoDelMapeador.Actual.Rechazada(causa);
                     LogBus.Log("mapa-vivo", $"salto de {Corto(_anterior)} a {Corto(aqui)} SIN atribuir {porQue}");
