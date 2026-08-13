@@ -192,16 +192,31 @@ async function tickReglas() {
   if (huella === ultimo) { estado("sin cambios · " + hora()); return; }
   ultimo = huella;
 
-  // El VEREDICTO ES CONJUNTO a propósito: un verde que solo cuenta la mitad es peor que ningún
-  // verde. Basta con que uno esté roto para que arriba no ponga que todo cumple.
+  // TRES ESTADOS, NO DOS, y el tercero es el que faltaba: NO HABER PODIDO PREGUNTAR.
+  //
+  // Con la app apagada las dos consultas fallan, así que no hay ninguna regla que contar — y la
+  // versión anterior calculaba «0 rotas» sobre ese vacío y titulaba «0 promesa(s) INCUMPLIDA(S)»,
+  // que se lee como un aprobado. Es EXACTAMENTE la avería que este proyecto persigue: la misma
+  // forma que «sin_situar» contestando «no queda nada» sobre un grafo vacío. No saber y estar bien
+  // son cosas distintas, y un panel que las confunde no sirve para vigilar nada (2026-08-13, lo
+  // vio el usuario).
   const vivos = cols.filter(c => !c.j.error);
   const rotas = vivos.reduce((n, c) => n + c.j.reglas.filter(x => !x.cumple).length, 0);
   const total = vivos.reduce((n, c) => n + c.j.reglas.length, 0);
-  cabecera(vivos.length && rotas === 0 ? "El núcleo y el mapeador cumplen lo que prometen"
-                                       : `${rotas} promesa(s) INCUMPLIDA(S)`,
-           vivos.map(c => c.j.cuando).join(" · "),
-           `${total} reglas · son las de los contratos, no una descripción: esto es el resultado de correrlas`);
-  leyenda("se actualizan solas en cada build: scripts/version-nucleo.ps1 -Construir");
+
+  if (vivos.length === 0) {
+    cabecera("NO SE PUDO PREGUNTAR", "",
+             "la app no está respondiendo en el 8792 · esto NO significa que las promesas se cumplan");
+    leyenda("las reglas las sirve la app: arráncala y vuelve a mirar");
+  } else {
+    cabecera(rotas === 0
+               ? (vivos.length === cols.length ? "El núcleo y el mapeador cumplen lo que prometen"
+                                               : "Cumple lo que se pudo preguntar")
+               : `${rotas} promesa(s) INCUMPLIDA(S)`,
+             vivos.map(c => c.j.cuando).join(" · "),
+             `${total} reglas · son las de los contratos, no una descripción: esto es el resultado de correrlas`);
+    leyenda("se actualizan solas en cada build: scripts/version-nucleo.ps1 -Construir");
+  }
 
   // Se pinta como listas y no como grafo: son enunciados, no cosas conectadas entre sí. Dibujar
   // aristas donde no las hay sería inventar una estructura para que quede bonito.
@@ -325,6 +340,24 @@ async function tickAqui() {
 
   const vivos = limpios.filter(h => h.vivo).length;
   const cruzados = limpios.filter(h => h.destino).length;
+
+  // UN ANILLO VACÍO NO EXPLICA POR QUÉ ESTÁ VACÍO, y las dos razones posibles son muy distintas:
+  // que el núcleo no haya llegado a mirar esta pantalla, o que de verdad no haya nada alcanzable.
+  // Dibujar el círculo solo, sin decirlo, deja al que mira pensando que el visor se rompió — pasó
+  // con «Taskmgr» tras apagar la app antes de que se leyera esa pantalla (2026-08-13).
+  if (limpios.length === 0) {
+    cabecera(corto(donde), app, "el núcleo todavía no ha mirado qué hay aquí — no es que no haya nada");
+    leyenda("si la app está corriendo, espera un latido; si no, arráncala");
+    pintar(`<circle cx="${innerWidth / 2}" cy="${innerHeight / 2 + 20}" r="34" fill="${COL.fondoActual}"`
+         + ` stroke="${COL.azul}" stroke-width="2"/>`
+         + `<text x="${innerWidth / 2}" y="${innerHeight / 2 + 25}" text-anchor="middle"`
+         + ` style="font-size:12px;fill:${COL.texto}">aquí</text>`
+         + `<text x="${innerWidth / 2}" y="${innerHeight / 2 + 90}" text-anchor="middle"`
+         + ` style="font-size:12px;fill:${COL.mutado}">sin nada observado todavía</text>`);
+    estado("actualizado " + hora());
+    return;
+  }
+
   cabecera(corto(donde), app, `${limpios.length} alcanzables · ${vivos} vivos · ${limpios.length - vivos} en memoria · ${cruzados} cruzados`);
   leyenda("azul = vivo ahora · gris = solo memoria · borde verde = ya se cruzó");
 
