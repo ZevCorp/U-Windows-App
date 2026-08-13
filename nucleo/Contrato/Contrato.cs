@@ -29,6 +29,7 @@ internal static class Contrato
         Prueba("9. un destino de algo que nunca se vio aquí se RECHAZA, no se traga", NadaDeFantasmas);
         Prueba("10. navegar es UN paso cada vez, y el paso tiene que estar vivo", ElSiguientePaso);
         Prueba("11. lo que se recuerda vuelve como MEMORIA, nunca como vivo", RecordarNoEsVer);
+        Prueba("12. saber dónde estoy no dice nada de lo que se ve", EstarNoEsVer);
 
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
@@ -353,6 +354,26 @@ internal static class Contrato
         // en esa ubicación se rechaza igual que se rechazaría en vivo.
         Debe(!g.Cruzar("app://lejos", "s:fantasma", "app://otra"),
             "restaurar no es una puerta trasera: lo que no cumple las reglas tampoco entra por aquí");
+    }
+
+    private static void EstarNoEsVer(Grafo g)
+    {
+        // Son dos hechos con velocidades distintas: dónde estoy vale 32 ms, leer la pantalla 400.
+        // Pasar por un sitio deprisa tiene que dejar constancia de que se pasó, sin inventarse que
+        // se vio nada — si no, un sitio atravesado rápido no existiría y el camino se grabaría
+        // como si fuera directo.
+        g.Observar("app://a", new[] { new Elemento("s:1", "Uno", "Button") });
+        g.Estoy("app://b");
+
+        Debe(g.Aqui == "app://b", "el grafo sabe que estamos en B");
+        Debe(g.Ubicaciones().Contains("app://b"), "…y B existe, aunque no se haya mirado qué hay");
+        Debe(g.DesdeAqui("app://b").Count == 0, "pero NO se inventa ningún elemento allí");
+        Debe(g.DesdeAqui("app://a").Count == 1 && g.DesdeAqui("app://a")[0].Vivo,
+            "y lo que se sabía de A sigue intacto: pasar por otro sitio no borra lo visto");
+
+        int antes = g.Version;
+        g.Estoy("app://b");
+        Debe(g.Version == antes, "repetir dónde estás no cambia nada: no es una novedad");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

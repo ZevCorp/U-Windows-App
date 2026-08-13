@@ -4,21 +4,21 @@
   "graph": {},
   "nodes": [
     {
-      "label": "ServidorDelNucleo.cs",
+      "label": "MapaVivo.cs",
       "file_type": "code",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "windows_client_src_navigation_servidordelnucleo",
+      "id": "windows_client_src_navigation_mapavivo",
       "community": 9,
       "community_name": "Contrato",
-      "norm_label": "servidordelnucleo.cs"
+      "norm_label": "mapavivo.cs"
     },
     {
       "label": "U.WindowsClient.Navigation",
       "file_type": "code",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L8",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L3",
       "type": "namespace",
       "metadata": {
         "kind": "csharp_namespace",
@@ -29,239 +29,6 @@
       "community": 169,
       "community_name": "U.WindowsClient.Navigation",
       "norm_label": "u.windowsclient.navigation"
-    },
-    {
-      "label": "ServidorDelNucleo",
-      "file_type": "code",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L31",
-      "metadata": {
-        "namespace": "U.WindowsClient.Navigation",
-        "scope_chain": [
-          "s129"
-        ]
-      },
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": "servidordelnucleo"
-    },
-    {
-      "label": "IDisposable",
-      "file_type": "code",
-      "source_file": "",
-      "source_location": "",
-      "_origin": "ast",
-      "id": "idisposable",
-      "community": 60,
-      "community_name": "IDisposable",
-      "norm_label": "idisposable"
-    },
-    {
-      "label": "int",
-      "file_type": "code",
-      "source_file": "",
-      "source_location": "",
-      "_origin": "ast",
-      "id": "int",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": "int"
-    },
-    {
-      "label": "Grafo",
-      "file_type": "code",
-      "source_file": "",
-      "source_location": "",
-      "_origin": "ast",
-      "id": "grafo",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": "grafo"
-    },
-    {
-      "label": "Func",
-      "file_type": "code",
-      "source_file": "",
-      "source_location": "",
-      "_origin": "ast",
-      "id": "func",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": "func"
-    },
-    {
-      "label": "HttpListener",
-      "file_type": "code",
-      "source_file": "",
-      "source_location": "",
-      "_origin": "ast",
-      "id": "httplistener",
-      "community": 5,
-      "community_name": ".Call",
-      "norm_label": "httplistener"
-    },
-    {
-      "label": ".Arrancar()",
-      "file_type": "code",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L50",
-      "metadata": {
-        "namespace": "U.WindowsClient.Navigation",
-        "scope_chain": [
-          "s129"
-        ]
-      },
-      "_callable": true,
-      "_origin": "ast",
-      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_arrancar",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": ".arrancar()"
-    },
-    {
-      "label": ".Atender()",
-      "file_type": "code",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L68",
-      "metadata": {
-        "namespace": "U.WindowsClient.Navigation",
-        "scope_chain": [
-          "s129"
-        ]
-      },
-      "_callable": true,
-      "_origin": "ast",
-      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_atender",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": ".atender()"
-    },
-    {
-      "label": "Task",
-      "file_type": "code",
-      "source_file": "",
-      "source_location": "",
-      "_origin": "ast",
-      "id": "task",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": "task"
-    },
-    {
-      "label": ".Responder()",
-      "file_type": "code",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L95",
-      "metadata": {
-        "namespace": "U.WindowsClient.Navigation",
-        "scope_chain": [
-          "s129"
-        ]
-      },
-      "_callable": true,
-      "_origin": "ast",
-      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": ".responder()"
-    },
-    {
-      "label": "HttpListenerRequest",
-      "file_type": "code",
-      "source_file": "",
-      "source_location": "",
-      "_origin": "ast",
-      "id": "httplistenerrequest",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": "httplistenerrequest"
-    },
-    {
-      "label": ".LeerDestino()",
-      "file_type": "code",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L217",
-      "metadata": {
-        "namespace": "U.WindowsClient.Navigation",
-        "scope_chain": [
-          "s129"
-        ]
-      },
-      "_callable": true,
-      "_origin": "ast",
-      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_leerdestino",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": ".leerdestino()"
-    },
-    {
-      "label": ".Corto()",
-      "file_type": "code",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L229",
-      "metadata": {
-        "namespace": "U.WindowsClient.Navigation",
-        "scope_chain": [
-          "s129"
-        ]
-      },
-      "_callable": true,
-      "_origin": "ast",
-      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_corto",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": ".corto()"
-    },
-    {
-      "label": ".Json()",
-      "file_type": "code",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L235",
-      "metadata": {
-        "namespace": "U.WindowsClient.Navigation",
-        "scope_chain": [
-          "s129"
-        ]
-      },
-      "_callable": true,
-      "_origin": "ast",
-      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_json",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": ".json()"
-    },
-    {
-      "label": ".Dispose()",
-      "file_type": "code",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L241",
-      "metadata": {
-        "namespace": "U.WindowsClient.Navigation",
-        "scope_chain": [
-          "s129"
-        ]
-      },
-      "_callable": true,
-      "_origin": "ast",
-      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_dispose",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": ".dispose()"
-    },
-    {
-      "label": "MapaVivo.cs",
-      "file_type": "code",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": "mapavivo.cs",
-      "id": "windows_client_src_navigation_mapavivo"
     },
     {
       "label": "MapaVivo",
@@ -277,10 +44,32 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
+      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
       "community": 9,
       "community_name": "Contrato",
-      "norm_label": "mapavivo",
-      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo"
+      "norm_label": "mapavivo"
+    },
+    {
+      "label": "IDisposable",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "idisposable",
+      "community": 60,
+      "community_name": "IDisposable",
+      "norm_label": "idisposable"
+    },
+    {
+      "label": "Grafo",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "grafo",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": "grafo"
     },
     {
       "label": "ProyectorNeo4j",
@@ -288,10 +77,21 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
+      "id": "proyectorneo4j",
       "community": 9,
       "community_name": "Contrato",
-      "norm_label": "proyectorneo4j",
-      "id": "proyectorneo4j"
+      "norm_label": "proyectorneo4j"
+    },
+    {
+      "label": "Func",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "func",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": "func"
     },
     {
       "label": "Timer",
@@ -299,10 +99,10 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
+      "id": "timer",
       "community": 9,
       "community_name": "Contrato",
-      "norm_label": "timer",
-      "id": "timer"
+      "norm_label": "timer"
     },
     {
       "label": "string",
@@ -310,10 +110,21 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
+      "id": "string",
       "community": 9,
       "community_name": "Contrato",
-      "norm_label": "string",
-      "id": "string"
+      "norm_label": "string"
+    },
+    {
+      "label": "int",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "int",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": "int"
     },
     {
       "label": "ClickWatcher",
@@ -321,31 +132,13 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
+      "id": "clickwatcher",
       "community": 9,
       "community_name": "Contrato",
-      "norm_label": "clickwatcher",
-      "id": "clickwatcher"
+      "norm_label": "clickwatcher"
     },
     {
       "label": ".Arrancar()",
-      "file_type": "code",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L62",
-      "metadata": {
-        "namespace": "U.WindowsClient.Navigation",
-        "scope_chain": [
-          "s38"
-        ]
-      },
-      "_callable": true,
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "Contrato",
-      "norm_label": ".arrancar()",
-      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_arrancar"
-    },
-    {
-      "label": ".Latido()",
       "file_type": "code",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
       "source_location": "L77",
@@ -357,16 +150,16 @@
       },
       "_callable": true,
       "_origin": "ast",
+      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_arrancar",
       "community": 9,
       "community_name": "Contrato",
-      "norm_label": ".latido()",
-      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido"
+      "norm_label": ".arrancar()"
     },
     {
-      "label": ".Cruzado()",
+      "label": ".Latido()",
       "file_type": "code",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L197",
+      "source_location": "L92",
       "metadata": {
         "namespace": "U.WindowsClient.Navigation",
         "scope_chain": [
@@ -375,13 +168,13 @@
       },
       "_callable": true,
       "_origin": "ast",
+      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
       "community": 9,
       "community_name": "Contrato",
-      "norm_label": ".cruzado()",
-      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_cruzado"
+      "norm_label": ".latido()"
     },
     {
-      "label": ".SinEtiquetasDeControles()",
+      "label": ".Cruzado()",
       "file_type": "code",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
       "source_location": "L217",
@@ -393,10 +186,28 @@
       },
       "_callable": true,
       "_origin": "ast",
+      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_cruzado",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": ".cruzado()"
+    },
+    {
+      "label": ".SinEtiquetasDeControles()",
+      "file_type": "code",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L237",
+      "metadata": {
+        "namespace": "U.WindowsClient.Navigation",
+        "scope_chain": [
+          "s38"
+        ]
+      },
+      "_callable": true,
+      "_origin": "ast",
+      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles",
       "community": 222,
       "community_name": ".SinEtiquetasDeControles",
-      "norm_label": ".sinetiquetasdecontroles()",
-      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles"
+      "norm_label": ".sinetiquetasdecontroles()"
     },
     {
       "label": "IReadOnlyList",
@@ -404,10 +215,10 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
+      "id": "ireadonlylist",
       "community": 222,
       "community_name": ".SinEtiquetasDeControles",
-      "norm_label": "ireadonlylist",
-      "id": "ireadonlylist"
+      "norm_label": "ireadonlylist"
     },
     {
       "label": "Selector",
@@ -415,10 +226,10 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
+      "id": "selector",
       "community": 222,
       "community_name": ".SinEtiquetasDeControles",
-      "norm_label": "selector",
-      "id": "selector"
+      "norm_label": "selector"
     },
     {
       "label": "Etiqueta",
@@ -426,10 +237,10 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
+      "id": "etiqueta",
       "community": 222,
       "community_name": ".SinEtiquetasDeControles",
-      "norm_label": "etiqueta",
-      "id": "etiqueta"
+      "norm_label": "etiqueta"
     },
     {
       "label": "Tipo",
@@ -437,10 +248,10 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
+      "id": "tipo",
       "community": 222,
       "community_name": ".SinEtiquetasDeControles",
-      "norm_label": "tipo",
-      "id": "tipo"
+      "norm_label": "tipo"
     },
     {
       "label": "List",
@@ -448,16 +259,16 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
+      "id": "list",
       "community": 62,
       "community_name": "SurfaceMap",
-      "norm_label": "list",
-      "id": "list"
+      "norm_label": "list"
     },
     {
       "label": ".Limpiar()",
       "file_type": "code",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L236",
+      "source_location": "L256",
       "metadata": {
         "namespace": "U.WindowsClient.Navigation",
         "scope_chain": [
@@ -466,20 +277,191 @@
       },
       "_callable": true,
       "_origin": "ast",
+      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_limpiar",
       "community": 9,
       "community_name": "Contrato",
-      "norm_label": ".limpiar()",
-      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_limpiar"
+      "norm_label": ".limpiar()"
     },
     {
       "label": ".Corto()",
       "file_type": "code",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L245",
+      "source_location": "L265",
       "metadata": {
         "namespace": "U.WindowsClient.Navigation",
         "scope_chain": [
           "s38"
+        ]
+      },
+      "_callable": true,
+      "_origin": "ast",
+      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_corto",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": ".corto()"
+    },
+    {
+      "label": ".Dispose()",
+      "file_type": "code",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L271",
+      "metadata": {
+        "namespace": "U.WindowsClient.Navigation",
+        "scope_chain": [
+          "s38"
+        ]
+      },
+      "_callable": true,
+      "_origin": "ast",
+      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_dispose",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": ".dispose()"
+    },
+    {
+      "label": "ServidorDelNucleo.cs",
+      "file_type": "code",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": "servidordelnucleo.cs",
+      "id": "windows_client_src_navigation_servidordelnucleo"
+    },
+    {
+      "label": "ServidorDelNucleo",
+      "file_type": "code",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L31",
+      "metadata": {
+        "namespace": "U.WindowsClient.Navigation",
+        "scope_chain": [
+          "s129"
+        ]
+      },
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": "servidordelnucleo",
+      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo"
+    },
+    {
+      "label": "HttpListener",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "community": 143,
+      "community_name": "LocalMcp",
+      "norm_label": "httplistener",
+      "id": "httplistener"
+    },
+    {
+      "label": ".Arrancar()",
+      "file_type": "code",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L50",
+      "metadata": {
+        "namespace": "U.WindowsClient.Navigation",
+        "scope_chain": [
+          "s129"
+        ]
+      },
+      "_callable": true,
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": ".arrancar()",
+      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_arrancar"
+    },
+    {
+      "label": ".Atender()",
+      "file_type": "code",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L68",
+      "metadata": {
+        "namespace": "U.WindowsClient.Navigation",
+        "scope_chain": [
+          "s129"
+        ]
+      },
+      "_callable": true,
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": ".atender()",
+      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_atender"
+    },
+    {
+      "label": "Task",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": "task",
+      "id": "task"
+    },
+    {
+      "label": ".Responder()",
+      "file_type": "code",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L95",
+      "metadata": {
+        "namespace": "U.WindowsClient.Navigation",
+        "scope_chain": [
+          "s129"
+        ]
+      },
+      "_callable": true,
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": ".responder()",
+      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder"
+    },
+    {
+      "label": "HttpListenerRequest",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": "httplistenerrequest",
+      "id": "httplistenerrequest"
+    },
+    {
+      "label": ".LeerDestino()",
+      "file_type": "code",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L217",
+      "metadata": {
+        "namespace": "U.WindowsClient.Navigation",
+        "scope_chain": [
+          "s129"
+        ]
+      },
+      "_callable": true,
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": ".leerdestino()",
+      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_leerdestino"
+    },
+    {
+      "label": ".Corto()",
+      "file_type": "code",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L229",
+      "metadata": {
+        "namespace": "U.WindowsClient.Navigation",
+        "scope_chain": [
+          "s129"
         ]
       },
       "_callable": true,
@@ -487,17 +469,35 @@
       "community": 9,
       "community_name": "Contrato",
       "norm_label": ".corto()",
-      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_corto"
+      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_corto"
+    },
+    {
+      "label": ".Json()",
+      "file_type": "code",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L235",
+      "metadata": {
+        "namespace": "U.WindowsClient.Navigation",
+        "scope_chain": [
+          "s129"
+        ]
+      },
+      "_callable": true,
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Contrato",
+      "norm_label": ".json()",
+      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_json"
     },
     {
       "label": ".Dispose()",
       "file_type": "code",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L251",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L241",
       "metadata": {
         "namespace": "U.WindowsClient.Navigation",
         "scope_chain": [
-          "s38"
+          "s129"
         ]
       },
       "_callable": true,
@@ -505,7 +505,7 @@
       "community": 9,
       "community_name": "Contrato",
       "norm_label": ".dispose()",
-      "id": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_dispose"
+      "id": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_dispose"
     },
     {
       "label": "int",
@@ -10724,8 +10724,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 67,
+      "community_name": "DllImport",
       "norm_label": "func",
       "id": "windows_client_src_mcp_surfacemaptools_cs_func"
     },
@@ -10769,7 +10769,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": "list",
       "id": "windows_client_src_mcp_surfacemaptools_cs_list"
     },
@@ -10808,8 +10808,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".anotar()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_anotar"
     },
@@ -10844,8 +10844,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 67,
+      "community_name": "DllImport",
       "norm_label": ".getforegroundwindow()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_getforegroundwindow"
     },
@@ -10856,7 +10856,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community_name": "DllImport",
       "norm_label": "intptr",
       "id": "windows_client_src_mcp_surfacemaptools_cs_intptr"
     },
@@ -10867,7 +10867,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community_name": "DllImport",
       "norm_label": "dllimport",
       "id": "windows_client_src_mcp_surfacemaptools_cs_dllimport"
     },
@@ -10885,7 +10885,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community_name": "DllImport",
       "norm_label": ".setforegroundwindow()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_setforegroundwindow"
     },
@@ -10903,7 +10903,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community_name": "DllImport",
       "norm_label": ".isiconic()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_isiconic"
     },
@@ -10921,7 +10921,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community_name": "DllImport",
       "norm_label": ".showwindow()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_showwindow"
     },
@@ -10939,7 +10939,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community_name": "DllImport",
       "norm_label": ".iswindowvisible()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_iswindowvisible"
     },
@@ -10957,7 +10957,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community_name": "DllImport",
       "norm_label": ".enumwindows()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_enumwindows"
     },
@@ -10968,7 +10968,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community_name": "DllImport",
       "norm_label": "enumproc",
       "id": "enumproc"
     },
@@ -10985,8 +10985,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".getwindowthreadprocessid()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_getwindowthreadprocessid"
     },
@@ -11004,7 +11004,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community_name": "DllImport",
       "norm_label": ".getwindowtext()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_getwindowtext"
     },
@@ -11015,7 +11015,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community_name": "DllImport",
       "norm_label": "stringbuilder",
       "id": "stringbuilder"
     },
@@ -11032,8 +11032,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".keybd_event()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_keybd_event"
     },
@@ -11050,8 +11050,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".espaneldelshell()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_espaneldelshell"
     },
@@ -11068,8 +11068,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".appde()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_appde"
     },
@@ -11086,8 +11086,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".asegurarfoco()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_asegurarfoco"
     },
@@ -11122,8 +11122,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 273,
-      "community_name": ".LoQueSenala",
+      "community": 148,
+      "community_name": "SurfaceMapTools",
       "norm_label": ".getcursorpos()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_getcursorpos"
     },
@@ -11176,8 +11176,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 273,
-      "community_name": ".LoQueSenala",
+      "community": 148,
+      "community_name": "SurfaceMapTools",
       "norm_label": ".espuertavisible()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_espuertavisible"
     },
@@ -11205,8 +11205,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 67,
+      "community_name": "DllImport",
       "norm_label": ".getwindowrect()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_getwindowrect"
     },
@@ -11236,8 +11236,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 165,
+      "community_name": "RECT",
       "norm_label": "rect",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_rect"
     },
@@ -11247,8 +11247,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 165,
+      "community_name": "RECT",
       "norm_label": "int",
       "id": "windows_client_src_mcp_surfacemaptools_cs_int"
     },
@@ -11265,8 +11265,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 67,
+      "community_name": "DllImport",
       "norm_label": ".zonapedida()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_zonapedida"
     },
@@ -11283,8 +11283,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 273,
-      "community_name": ".LoQueSenala",
+      "community": 148,
+      "community_name": "SurfaceMapTools",
       "norm_label": ".loquesenala()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_loquesenala"
     },
@@ -11319,8 +11319,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 273,
-      "community_name": ".LoQueSenala",
+      "community": 148,
+      "community_name": "SurfaceMapTools",
       "norm_label": ".excluir()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_excluir"
     },
@@ -11338,7 +11338,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 273,
-      "community_name": ".LoQueSenala",
+      "community_name": ".Marcados",
       "norm_label": ".marcados()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_marcados"
     },
@@ -11349,7 +11349,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 273,
-      "community_name": ".LoQueSenala",
+      "community_name": ".Marcados",
       "norm_label": "ireadonlylist",
       "id": "windows_client_src_mcp_surfacemaptools_cs_ireadonlylist"
     },
@@ -11360,7 +11360,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 273,
-      "community_name": ".LoQueSenala",
+      "community_name": ".Marcados",
       "norm_label": "caja",
       "id": "caja"
     },
@@ -11371,7 +11371,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 273,
-      "community_name": ".LoQueSenala",
+      "community_name": ".Marcados",
       "norm_label": "que",
       "id": "que"
     },
@@ -11442,8 +11442,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".openapp()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_openapp"
     },
@@ -11460,8 +11460,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".esescritorio()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_esescritorio"
     },
@@ -11478,8 +11478,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".learnapp()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_learnapp"
     },
@@ -11568,8 +11568,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 67,
+      "community_name": "DllImport",
       "norm_label": ".observarmenus()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_observarmenus"
     },
@@ -11622,8 +11622,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".comprobarubicacion()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_comprobarubicacion"
     },
@@ -11640,8 +11640,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".escapasobrelapantalla()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_escapasobrelapantalla"
     },
@@ -11658,8 +11658,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".coinciden()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_coinciden"
     },
@@ -11676,8 +11676,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".esperarcoincidencia()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_esperarcoincidencia"
     },
@@ -11694,8 +11694,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".appenfrente()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_appenfrente"
     },
@@ -11831,8 +11831,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 68,
+      "community_name": ".Unblock",
       "norm_label": ".run()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_run"
     },
@@ -11849,8 +11849,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 68,
+      "community_name": ".Unblock",
       "norm_label": ".recortar()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_recortar"
     },
@@ -11868,7 +11868,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": ".unblock()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_unblock"
     },
@@ -11886,7 +11886,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": ".opcionsegura()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_opcionsegura"
     },
@@ -11904,7 +11904,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": ".esdeclinar()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_esdeclinar"
     },
@@ -11922,7 +11922,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": ".escompromiso()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_escompromiso"
     },
@@ -11940,7 +11940,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": ".escuentaopago()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_escuentaopago"
     },
@@ -11958,7 +11958,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": ".essalidadeventana()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_essalidadeventana"
     },
@@ -11994,7 +11994,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": ".leerinterrupcion()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_leerinterrupcion"
     },
@@ -12005,7 +12005,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": "titulo",
       "id": "titulo"
     },
@@ -12016,7 +12016,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": "textos",
       "id": "textos"
     },
@@ -12027,7 +12027,7 @@
       "source_location": "",
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": "opciones",
       "id": "opciones"
     },
@@ -12045,7 +12045,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 68,
-      "community_name": ".ComprobarUbicacion",
+      "community_name": ".Unblock",
       "norm_label": ".leerinterrupcionvieja()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_leerinterrupcionvieja"
     },
@@ -12260,8 +12260,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".goto()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_goto"
     },
@@ -12278,8 +12278,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".nombrede()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_nombrede"
     },
@@ -12296,8 +12296,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".verytomar()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_verytomar"
     },
@@ -12332,8 +12332,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 67,
-      "community_name": ".AsegurarFoco",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".type()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_type"
     },
@@ -12350,8 +12350,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".esperarpantallalista()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_esperarpantallalista"
     },
@@ -12368,8 +12368,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".cuantosaccionables()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_cuantosaccionables"
     },
@@ -12404,8 +12404,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 148,
-      "community_name": "SurfaceMapTools",
+      "community": 116,
+      "community_name": ".GoTo",
       "norm_label": ".llego()",
       "id": "windows_client_src_mcp_surfacemaptools_u_windowsclient_mcp_surfacemaptools_llego"
     },
@@ -18486,8 +18486,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": "gestures",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures"
     },
@@ -18504,8 +18504,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": ".keybd_event()",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures_keybd_event"
     },
@@ -18515,8 +18515,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": "uintptr",
       "id": "windows_client_src_actions_gestures_cs_uintptr"
     },
@@ -18526,8 +18526,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": "dllimport",
       "id": "windows_client_src_actions_gestures_cs_dllimport"
     },
@@ -18537,8 +18537,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": "uint",
       "id": "windows_client_src_actions_gestures_cs_uint"
     },
@@ -18548,8 +18548,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": "byte",
       "id": "windows_client_src_actions_gestures_cs_byte"
     },
@@ -18566,8 +18566,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": ".showdesktop()",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures_showdesktop"
     },
@@ -18584,8 +18584,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": ".navigateback()",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures_navigateback"
     },
@@ -18602,8 +18602,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": ".startmenu()",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures_startmenu"
     },
@@ -18620,8 +18620,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": ".notificationcenter()",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures_notificationcenter"
     },
@@ -18638,8 +18638,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": ".switchwindow()",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures_switchwindow"
     },
@@ -18656,8 +18656,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": ".combo()",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures_combo"
     },
@@ -18674,8 +18674,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": ".tap()",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures_tap"
     },
@@ -18692,8 +18692,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": ".down()",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures_down"
     },
@@ -18710,8 +18710,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 142,
+      "community_name": "Gestures",
       "norm_label": ".up()",
       "id": "windows_client_src_actions_gestures_u_windowsclient_actions_gestures_up"
     },
@@ -20664,8 +20664,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": "localmcp",
       "id": "windows_client_src_mcp_localmcp_u_windowsclient_mcp_localmcp"
     },
@@ -20711,8 +20711,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 13,
-      "community_name": "UiaReader",
+      "community": 158,
+      "community_name": ".RunLearnedTaps",
       "norm_label": ".runlearnedtaps()",
       "id": "windows_client_src_mcp_localmcp_u_windowsclient_mcp_localmcp_runlearnedtaps"
     },
@@ -20729,8 +20729,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": ".isknown()",
       "id": "windows_client_src_mcp_localmcp_u_windowsclient_mcp_localmcp_isknown"
     },
@@ -20740,8 +20740,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": "hashset",
       "id": "windows_client_src_mcp_localmcp_cs_hashset"
     },
@@ -20770,8 +20770,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": "mcpdevprobe",
       "id": "windows_client_src_mcp_mcpdevprobe_u_windowsclient_mcp_mcpdevprobe"
     },
@@ -20781,8 +20781,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": "int",
       "id": "windows_client_src_mcp_mcpdevprobe_cs_int"
     },
@@ -20799,8 +20799,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": ".startifenabled()",
       "id": "windows_client_src_mcp_mcpdevprobe_u_windowsclient_mcp_mcpdevprobe_startifenabled"
     },
@@ -20817,8 +20817,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": ".start()",
       "id": "windows_client_src_mcp_mcpdevprobe_u_windowsclient_mcp_mcpdevprobe_start"
     },
@@ -20835,8 +20835,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": ".bucleasync()",
       "id": "windows_client_src_mcp_mcpdevprobe_u_windowsclient_mcp_mcpdevprobe_bucleasync"
     },
@@ -20846,8 +20846,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": "task",
       "id": "windows_client_src_mcp_mcpdevprobe_cs_task"
     },
@@ -20864,8 +20864,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": ".invocar()",
       "id": "windows_client_src_mcp_mcpdevprobe_u_windowsclient_mcp_mcpdevprobe_invocar"
     },
@@ -20882,8 +20882,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 143,
+      "community_name": "LocalMcp",
       "norm_label": ".stop()",
       "id": "windows_client_src_mcp_mcpdevprobe_u_windowsclient_mcp_mcpdevprobe_stop"
     },
@@ -24843,8 +24843,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 152,
+      "community_name": ".EstaDelante",
       "norm_label": ".keybd_event()",
       "id": "windows_client_src_systemapi_windowssystemapi_u_windowsclient_systemapi_windowssystemapi_keybd_event"
     },
@@ -24854,8 +24854,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 152,
+      "community_name": ".EstaDelante",
       "norm_label": "uintptr",
       "id": "windows_client_src_systemapi_windowssystemapi_cs_uintptr"
     },
@@ -24865,8 +24865,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 152,
+      "community_name": ".EstaDelante",
       "norm_label": "dllimport",
       "id": "windows_client_src_systemapi_windowssystemapi_cs_dllimport"
     },
@@ -24923,8 +24923,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 152,
+      "community_name": ".EstaDelante",
       "norm_label": ".getforegroundwindow()",
       "id": "windows_client_src_systemapi_windowssystemapi_u_windowsclient_systemapi_windowssystemapi_getforegroundwindow"
     },
@@ -24934,8 +24934,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 152,
+      "community_name": ".EstaDelante",
       "norm_label": "intptr",
       "id": "windows_client_src_systemapi_windowssystemapi_cs_intptr"
     },
@@ -24952,8 +24952,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 152,
+      "community_name": ".EstaDelante",
       "norm_label": ".getwindowthreadprocessid()",
       "id": "windows_client_src_systemapi_windowssystemapi_u_windowsclient_systemapi_windowssystemapi_getwindowthreadprocessid"
     },
@@ -24988,8 +24988,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 5,
-      "community_name": ".Call",
+      "community": 152,
+      "community_name": ".EstaDelante",
       "norm_label": ".estadelante()",
       "id": "windows_client_src_systemapi_windowssystemapi_u_windowsclient_systemapi_windowssystemapi_estadelante"
     },
@@ -39053,8 +39053,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 13,
-      "community_name": "UiaReader",
+      "community": 158,
+      "community_name": ".RunLearnedTaps",
       "norm_label": ".taptargetforlabel()",
       "id": "windows_client_src_uia_uiareader_u_windowsclient_uia_uiareader_taptargetforlabel"
     },
@@ -39064,8 +39064,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 13,
-      "community_name": "UiaReader",
+      "community": 158,
+      "community_name": ".RunLearnedTaps",
       "norm_label": "x",
       "id": "x"
     },
@@ -39075,8 +39075,8 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 13,
-      "community_name": "UiaReader",
+      "community": 158,
+      "community_name": ".RunLearnedTaps",
       "norm_label": "y",
       "id": "y"
     },
@@ -39093,8 +39093,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 13,
-      "community_name": "UiaReader",
+      "community": 158,
+      "community_name": ".RunLearnedTaps",
       "norm_label": ".invokelabel()",
       "id": "windows_client_src_uia_uiareader_u_windowsclient_uia_uiareader_invokelabel"
     },
@@ -39111,8 +39111,8 @@
       },
       "_callable": true,
       "_origin": "ast",
-      "community": 13,
-      "community_name": "UiaReader",
+      "community": 158,
+      "community_name": ".RunLearnedTaps",
       "norm_label": ".match()",
       "id": "windows_client_src_uia_uiareader_u_windowsclient_uia_uiareader_match"
     },
@@ -50540,8 +50540,8 @@
       "source_file": "CLAUDE.md",
       "source_location": "L140",
       "_origin": "ast",
-      "community": 49,
-      "community_name": "windows-client \u2014 el inspector visual",
+      "community": 80,
+      "community_name": "Inspector visual (overlay click-through)",
       "norm_label": "aprendizajes de metodo",
       "id": "claude_aprendizajes_de_m\u00e9todo"
     },
@@ -50981,7 +50981,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 133,
-      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "norm_label": "arquitectura \u2014 la separacion cliente / cerebro",
       "id": "backend_architecture_arquitectura_la_separaci\u00f3n_cliente_cerebro"
     },
@@ -50992,7 +50992,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "community": 133,
-      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "norm_label": "el problema que resuelve (heredado de android)",
       "id": "backend_architecture_el_problema_que_resuelve_heredado_de_android"
     },
@@ -51003,7 +51003,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "community": 133,
-      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "norm_label": "donde se corta el bucle",
       "id": "backend_architecture_d\u00f3nde_se_corta_el_bucle"
     },
@@ -51014,7 +51014,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "community": 133,
-      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "norm_label": "por que el cliente conduce el bucle (y no el servidor)",
       "id": "backend_architecture_por_qu\u00e9_el_cliente_conduce_el_bucle_y_no_el_servidor"
     },
@@ -51025,7 +51025,7 @@
       "source_location": "L53",
       "_origin": "ast",
       "community": 133,
-      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "norm_label": "mapa al core kotlin",
       "id": "backend_architecture_mapa_al_core_kotlin"
     },
@@ -51036,7 +51036,7 @@
       "source_location": "L68",
       "_origin": "ast",
       "community": 133,
-      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "norm_label": "puntos de extension (fases siguientes)",
       "id": "backend_architecture_puntos_de_extensi\u00f3n_fases_siguientes"
     },
@@ -51047,7 +51047,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "community": 37,
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "desplegar el backend en vercel",
       "id": "backend_deploy_desplegar_el_backend_en_vercel"
     },
@@ -51058,7 +51058,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "community": 37,
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "opcion a \u2014 cli de vercel (rapida, recomendada)",
       "id": "backend_deploy_opci\u00f3n_a_cli_de_vercel_r\u00e1pida_recomendada"
     },
@@ -51069,7 +51069,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "community": 37,
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "opcion b \u2014 importar el repo en vercel.com",
       "id": "backend_deploy_opci\u00f3n_b_importar_el_repo_en_vercel_com"
     },
@@ -51080,7 +51080,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "community": 37,
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "comprobar",
       "id": "backend_deploy_comprobar"
     },
@@ -51091,7 +51091,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "community": 37,
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "cambiar de proveedor (openai)",
       "id": "backend_deploy_cambiar_de_proveedor_openai"
     },
@@ -51102,7 +51102,7 @@
       "source_location": "L46",
       "_origin": "ast",
       "community": 37,
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "apuntar el cliente",
       "id": "backend_deploy_apuntar_el_cliente"
     },
@@ -51112,7 +51112,7 @@
       "source_file": "backend/README.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 133,
+      "community": 37,
       "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "u \u00b7 backend (el cerebro)",
       "id": "backend_readme_\u00fc_backend_el_cerebro"
@@ -51123,7 +51123,7 @@
       "source_file": "backend/README.md",
       "source_location": "L12",
       "_origin": "ast",
-      "community": 133,
+      "community": 37,
       "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "el contrato (una sola ruta)",
       "id": "backend_readme_el_contrato_una_sola_ruta"
@@ -51134,7 +51134,7 @@
       "source_file": "backend/README.md",
       "source_location": "L30",
       "_origin": "ast",
-      "community": 133,
+      "community": 37,
       "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "arquitectura",
       "id": "backend_readme_arquitectura"
@@ -51145,7 +51145,7 @@
       "source_file": "backend/README.md",
       "source_location": "L53",
       "_origin": "ast",
-      "community": 133,
+      "community": 37,
       "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "providers (openai / gemini)",
       "id": "backend_readme_providers_openai_gemini"
@@ -51156,7 +51156,7 @@
       "source_file": "backend/README.md",
       "source_location": "L65",
       "_origin": "ast",
-      "community": 133,
+      "community": 37,
       "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "desarrollo",
       "id": "backend_readme_desarrollo"
@@ -51167,7 +51167,7 @@
       "source_file": "backend/README.md",
       "source_location": "L87",
       "_origin": "ast",
-      "community": 133,
+      "community": 37,
       "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "despliegue en vercel",
       "id": "backend_readme_despliegue_en_vercel"
@@ -51178,7 +51178,7 @@
       "source_file": "backend/README.md",
       "source_location": "L95",
       "_origin": "ast",
-      "community": 133,
+      "community": 37,
       "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "norm_label": "estado (primera construccion)",
       "id": "backend_readme_estado_primera_construcci\u00f3n"
@@ -52322,7 +52322,7 @@
       "source_file": "windows-client/README.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 141,
+      "community": 139,
       "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "norm_label": "u \u00b7 cliente windows (el frontend tonto)",
       "id": "windows_client_readme_\u00fc_cliente_windows_el_frontend_tonto"
@@ -52333,7 +52333,7 @@
       "source_file": "windows-client/README.md",
       "source_location": "L10",
       "_origin": "ast",
-      "community": 141,
+      "community": 139,
       "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "norm_label": "que hace (y que no)",
       "id": "windows_client_readme_qu\u00e9_hace_y_qu\u00e9_no"
@@ -52344,7 +52344,7 @@
       "source_file": "windows-client/README.md",
       "source_location": "L21",
       "_origin": "ast",
-      "community": 141,
+      "community": 139,
       "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "norm_label": "estructura",
       "id": "windows_client_readme_estructura"
@@ -52355,7 +52355,7 @@
       "source_file": "windows-client/README.md",
       "source_location": "L42",
       "_origin": "ast",
-      "community": 141,
+      "community": 139,
       "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "norm_label": "como la lectura del arbol usa uia",
       "id": "windows_client_readme_c\u00f3mo_la_lectura_del_\u00e1rbol_usa_uia"
@@ -52366,7 +52366,7 @@
       "source_file": "windows-client/README.md",
       "source_location": "L56",
       "_origin": "ast",
-      "community": 141,
+      "community": 139,
       "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "norm_label": "compilar y ejecutar (windows 10/11)",
       "id": "windows_client_readme_compilar_y_ejecutar_windows_10_11"
@@ -52410,8 +52410,8 @@
       "source_file": "windows-graph/CLAUDE.md",
       "source_location": "L37",
       "_origin": "ast",
-      "community": 168,
-      "community_name": "\u00c1rboles (`GuiTree`)",
+      "community": 126,
+      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
       "norm_label": "arboles (`guitree`)",
       "id": "windows_graph_claude_\u00e1rboles_guitree"
     },
@@ -52421,8 +52421,8 @@
       "source_file": "windows-graph/CLAUDE.md",
       "source_location": "L39",
       "_origin": "ast",
-      "community": 168,
-      "community_name": "\u00c1rboles (`GuiTree`)",
+      "community": 126,
+      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
       "norm_label": "una fila no tiene id propio",
       "id": "windows_graph_claude_una_fila_no_tiene_id_propio"
     },
@@ -52432,8 +52432,8 @@
       "source_file": "windows-graph/CLAUDE.md",
       "source_location": "L52",
       "_origin": "ast",
-      "community": 168,
-      "community_name": "\u00c1rboles (`GuiTree`)",
+      "community": 126,
+      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
       "norm_label": "la seleccion de un arbol de columnas vive en `selecteditemnode`",
       "id": "windows_graph_claude_la_selecci\u00f3n_de_un_\u00e1rbol_de_columnas_vive_en_selecteditemnode"
     },
@@ -52443,8 +52443,8 @@
       "source_file": "windows-graph/CLAUDE.md",
       "source_location": "L67",
       "_origin": "ast",
-      "community": 168,
-      "community_name": "\u00c1rboles (`GuiTree`)",
+      "community": 126,
+      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
       "norm_label": "la geometria por fila si existe: los getters piden `(clave, columna)`",
       "id": "windows_graph_claude_la_geometr\u00eda_por_fila_s\u00ed_existe_los_getters_piden_clave_columna"
     },
@@ -52454,8 +52454,8 @@
       "source_file": "windows-graph/CLAUDE.md",
       "source_location": "L91",
       "_origin": "ast",
-      "community": 168,
-      "community_name": "\u00c1rboles (`GuiTree`)",
+      "community": 126,
+      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
       "norm_label": "contar filas: `col.count`, no `elementat` por clave",
       "id": "windows_graph_claude_contar_filas_col_count_no_elementat_por_clave"
     },
@@ -52465,8 +52465,8 @@
       "source_file": "windows-graph/CLAUDE.md",
       "source_location": "L99",
       "_origin": "ast",
-      "community": 168,
-      "community_name": "\u00c1rboles (`GuiTree`)",
+      "community": 126,
+      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
       "norm_label": "posiciones repetidas = centinela",
       "id": "windows_graph_claude_posiciones_repetidas_centinela"
     },
@@ -53205,9 +53205,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 49,
+      "community": 55,
       "norm_label": "guia del repo u windows",
-      "community_name": "windows-client \u2014 el inspector visual",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "claude_guia_windows"
     },
@@ -53220,9 +53220,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 49,
+      "community": 55,
       "norm_label": "windows-client (cliente c#/wpf)",
-      "community_name": "windows-client \u2014 el inspector visual",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "claude_windows_client"
     },
@@ -53235,9 +53235,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 126,
+      "community": 141,
       "norm_label": "windows-graph (workflows sobre sap gui)",
-      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
+      "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
       "id": "claude_windows_graph"
     },
@@ -53250,9 +53250,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 49,
+      "community": 55,
       "norm_label": "graph \u2014 el cerebro remoto",
-      "community_name": "windows-client \u2014 el inspector visual",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "claude_graph_cerebro"
     },
@@ -53265,9 +53265,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 126,
+      "community": 141,
       "norm_label": "uia \u2014 superficie generica de windows",
-      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
+      "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
       "id": "claude_uia"
     },
@@ -53280,9 +53280,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 126,
+      "community": 141,
       "norm_label": "sap gui scripting (com)",
-      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
+      "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
       "id": "claude_sap_gui_scripting"
     },
@@ -53295,9 +53295,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 49,
+      "community": 80,
       "norm_label": "logbus \u2014 el log es la fuente de verdad",
-      "community_name": "windows-client \u2014 el inspector visual",
+      "community_name": "Inspector visual (overlay click-through)",
       "_origin": "semantic",
       "id": "claude_logbus"
     },
@@ -53370,7 +53370,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 141,
       "norm_label": "el puente consciente (computer-use)",
       "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
@@ -53385,7 +53385,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 141,
       "norm_label": "el agente que se rescata solo",
       "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
@@ -53400,7 +53400,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 141,
       "norm_label": "prependalignmentstepasync",
       "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
@@ -53460,9 +53460,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 80,
+      "community": 72,
       "norm_label": "workflow nwp1 (admision de paciente)",
-      "community_name": "GuiTree \u2014 \u00e1rboles de SAP",
+      "community_name": "GuiSession",
       "_origin": "semantic",
       "id": "claude_workflow_nwp1"
     },
@@ -53490,9 +53490,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 37,
+      "community": 55,
       "norm_label": "u.exe \u2014 el asistente entregable",
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "production_u_exe"
     },
@@ -53505,9 +53505,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 139,
+      "community": 37,
       "norm_label": "backend en vercel (fase 1)",
-      "community_name": "src/Update/Updater.cs",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "_origin": "semantic",
       "id": "production_backend_vercel"
     },
@@ -53520,9 +53520,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 139,
+      "community": 37,
       "norm_label": "client_token \u2014 candado del endpoint",
-      "community_name": "src/Update/Updater.cs",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "_origin": "semantic",
       "id": "production_client_token"
     },
@@ -53537,7 +53537,7 @@
       "contributor": null,
       "community": 37,
       "norm_label": "provider=gemini / gemini_api_key",
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "_origin": "semantic",
       "id": "production_gemini_provider"
     },
@@ -53550,9 +53550,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 37,
+      "community": 55,
       "norm_label": "ensenanza por video (\ud83c\udf93)",
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "production_ensenanza_video"
     },
@@ -53565,9 +53565,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 37,
+      "community": 55,
       "norm_label": "screenrecorderlib (ensamblado mixto c++/cli)",
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "production_screenrecorderlib"
     },
@@ -53580,9 +53580,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 37,
+      "community": 55,
       "norm_label": "bucket privado teach-videos (supabase)",
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "production_supabase_teach_videos"
     },
@@ -53595,9 +53595,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 139,
+      "community": 37,
       "norm_label": "windows-client/src/config.cs",
-      "community_name": "src/Update/Updater.cs",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "_origin": "semantic",
       "id": "production_config_cs"
     },
@@ -53627,7 +53627,7 @@
       "contributor": null,
       "community": 37,
       "norm_label": "get /api/health",
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "_origin": "semantic",
       "id": "production_api_health"
     },
@@ -53655,9 +53655,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 141,
+      "community": 133,
       "norm_label": "macos-client (u.app)",
-      "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "_origin": "semantic",
       "id": "production_macos_client"
     },
@@ -53685,9 +53685,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 133,
+      "community": 55,
       "norm_label": "backend/ (legacy u-windows-backend)",
-      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "readme_backend_legacy"
     },
@@ -53700,9 +53700,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 55,
       "norm_label": "graph_api_key (miracle_...)",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "readme_graph_api_key"
     },
@@ -53715,9 +53715,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 55,
       "norm_label": "/api/v1/agent/turn (graph)",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "readme_api_v1_agent_turn"
     },
@@ -53747,7 +53747,7 @@
       "contributor": null,
       "community": 139,
       "norm_label": "src/update/updater.cs",
-      "community_name": "src/Update/Updater.cs",
+      "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "_origin": "semantic",
       "id": "releasing_windows_updater_cs"
     },
@@ -53777,7 +53777,7 @@
       "contributor": null,
       "community": 139,
       "norm_label": "ui/facewindow.xaml (updatebtn)",
-      "community_name": "src/Update/Updater.cs",
+      "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "_origin": "semantic",
       "id": "releasing_windows_face_window"
     },
@@ -53792,7 +53792,7 @@
       "contributor": null,
       "community": 139,
       "norm_label": "bucket publico `windows` (supabase miracle-app)",
-      "community_name": "src/Update/Updater.cs",
+      "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "_origin": "semantic",
       "id": "releasing_windows_bucket"
     },
@@ -53807,7 +53807,7 @@
       "contributor": null,
       "community": 139,
       "norm_label": "releases.win.json (el indice del feed)",
-      "community_name": "src/Update/Updater.cs",
+      "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "_origin": "semantic",
       "id": "releasing_windows_releases_json"
     },
@@ -53837,7 +53837,7 @@
       "contributor": null,
       "community": 139,
       "norm_label": "vpk upload s3",
-      "community_name": "src/Update/Updater.cs",
+      "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "_origin": "semantic",
       "id": "releasing_windows_vpk_upload_s3"
     },
@@ -53865,9 +53865,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 141,
+      "community": 133,
       "norm_label": "backend/src/domain/actions.ts (el contrato)",
-      "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "_origin": "semantic",
       "id": "windows_actions_ts"
     },
@@ -53880,9 +53880,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 141,
+      "community": 133,
       "norm_label": "windows-client/src/domain/protocol.cs",
-      "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "_origin": "semantic",
       "id": "windows_protocol_cs"
     },
@@ -53895,9 +53895,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 141,
+      "community": 133,
       "norm_label": "la prueba de la separacion (macos sin tocar el backend)",
-      "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "_origin": "semantic",
       "id": "windows_prueba_separacion"
     },
@@ -53942,7 +53942,7 @@
       "contributor": null,
       "community": 139,
       "norm_label": "paso \u00absubir a supabase (compatible con s3)\u00bb",
-      "community_name": "src/Update/Updater.cs",
+      "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "_origin": "semantic",
       "id": "github_workflows_windows_release_upload_s3"
     },
@@ -53957,7 +53957,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "resolveturn",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_architecture_resolve_turn"
     },
@@ -53972,7 +53972,7 @@
       "contributor": null,
       "community": 133,
       "norm_label": "executionengine.run (core android)",
-      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
+      "community_name": "Arquitectura \u2014 la separaci\u00f3n cliente / cerebro",
       "_origin": "semantic",
       "id": "backend_architecture_execution_engine"
     },
@@ -53987,7 +53987,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "container.ts \u2014 puntos de extension de persistencia",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_architecture_container_ts"
     },
@@ -54002,7 +54002,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "sesion firmada / backend stateless",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_architecture_session_firmada"
     },
@@ -54017,7 +54017,7 @@
       "contributor": null,
       "community": 37,
       "norm_label": "variables de entorno del backend",
-      "community_name": "Desplegar el backend en Vercel",
+      "community_name": "\u00dc \u00b7 Backend (el cerebro)",
       "_origin": "semantic",
       "id": "backend_deploy_env_vars"
     },
@@ -54032,7 +54032,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "post /api/agent/turn",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_readme_turn"
     },
@@ -54047,7 +54047,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "brain/openai.ts",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_readme_openai"
     },
@@ -54062,7 +54062,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "brain/gemini.ts",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_readme_gemini"
     },
@@ -54077,7 +54077,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "brain/provider.ts (interfaz comun)",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_readme_provider"
     },
@@ -54092,7 +54092,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "brain/prompt.ts (system prompt y reglas)",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_readme_prompt"
     },
@@ -54105,7 +54105,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 141,
       "norm_label": "domain/mcp.ts (catalogo mcp, solo declaracion)",
       "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
@@ -54122,7 +54122,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "domain/session.ts (blob hmac)",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_readme_session"
     },
@@ -54137,7 +54137,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "application/engine.ts (orquesta un turno)",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_readme_engine"
     },
@@ -54152,7 +54152,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "memory/store.ts",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_readme_memory_store"
     },
@@ -54167,7 +54167,7 @@
       "contributor": null,
       "community": 66,
       "norm_label": "learning/workflows.ts",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "application/engine.ts (orquesta un turno)",
       "_origin": "semantic",
       "id": "backend_readme_learning_workflows"
     },
@@ -54315,9 +54315,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 126,
+      "community": 141,
       "norm_label": "uiareader (collectmenus, collectfromchildren)",
-      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
+      "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
       "id": "docs_graphify_uia_reader"
     },
@@ -54555,9 +54555,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 126,
+      "community": 141,
       "norm_label": "fase 4 \u00b7 la tarea aprendida (workflows)",
-      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
+      "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
       "id": "docs_plan_producto_fase4"
     },
@@ -54570,9 +54570,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 49,
+      "community": 80,
       "norm_label": "inspector visual (overlay click-through)",
-      "community_name": "windows-client \u2014 el inspector visual",
+      "community_name": "Inspector visual (overlay click-through)",
       "_origin": "semantic",
       "id": "windows_client_claude_inspector"
     },
@@ -54585,9 +54585,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 49,
+      "community": 80,
       "norm_label": "paleta del inspector \u2014 cada color es una afirmacion",
-      "community_name": "windows-client \u2014 el inspector visual",
+      "community_name": "Inspector visual (overlay click-through)",
       "_origin": "semantic",
       "id": "windows_client_claude_paleta"
     },
@@ -54600,9 +54600,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 49,
+      "community": 80,
       "norm_label": "inspectordiagnostics",
-      "community_name": "windows-client \u2014 el inspector visual",
+      "community_name": "Inspector visual (overlay click-through)",
       "_origin": "semantic",
       "id": "windows_client_claude_diagnostics"
     },
@@ -54615,9 +54615,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 49,
+      "community": 80,
       "norm_label": "sapinspectorreader",
-      "community_name": "windows-client \u2014 el inspector visual",
+      "community_name": "Inspector visual (overlay click-through)",
       "_origin": "semantic",
       "id": "windows_client_claude_sap_inspector_reader"
     },
@@ -54630,7 +54630,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 141,
       "norm_label": "agentloop (compuerta de origen)",
       "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
@@ -54677,7 +54677,7 @@
       "contributor": null,
       "community": 80,
       "norm_label": "contraste geometria (asercion viva)",
-      "community_name": "GuiTree \u2014 \u00e1rboles de SAP",
+      "community_name": "Inspector visual (overlay click-through)",
       "_origin": "semantic",
       "id": "windows_client_claude_contraste_geometria"
     },
@@ -54690,9 +54690,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 126,
+      "community": 141,
       "norm_label": "uiareader.read()",
-      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
+      "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
       "id": "windows_client_readme_uia_reader"
     },
@@ -54705,7 +54705,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 141,
       "norm_label": "screenshotter",
       "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
@@ -54720,7 +54720,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 141,
       "norm_label": "inputexecutor (sendinput)",
       "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
@@ -54735,9 +54735,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 55,
       "norm_label": "backendclient",
-      "community_name": "AgentLoop (compuerta de origen)",
+      "community_name": "Publicar actualizaciones (\u00dc Windows)",
       "_origin": "semantic",
       "id": "windows_client_readme_backend_client"
     },
@@ -54750,7 +54750,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 141,
       "norm_label": "localmcp (registro nombre\u2192ejecutor local)",
       "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
@@ -54765,7 +54765,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 141,
       "norm_label": "gestures / windowssystemapi",
       "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
@@ -54780,7 +54780,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 141,
+      "community": 139,
       "norm_label": "voiceio (tts/stt)",
       "community_name": "\u00dc \u00b7 Cliente Windows (el frontend tonto)",
       "_origin": "semantic",
@@ -54825,9 +54825,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 80,
+      "community": 72,
       "norm_label": "guitree \u2014 arboles de sap",
-      "community_name": "GuiTree \u2014 \u00e1rboles de SAP",
+      "community_name": "GuiSession",
       "_origin": "semantic",
       "id": "windows_graph_claude_gui_tree"
     },
@@ -54840,9 +54840,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 80,
+      "community": 72,
       "norm_label": "selecteditemnode (arbol de columnas)",
-      "community_name": "GuiTree \u2014 \u00e1rboles de SAP",
+      "community_name": "GuiSession",
       "_origin": "semantic",
       "id": "windows_graph_claude_selected_item_node"
     },
@@ -54857,7 +54857,7 @@
       "contributor": null,
       "community": 80,
       "norm_label": "visibletreerows (geometria por fila)",
-      "community_name": "GuiTree \u2014 \u00e1rboles de SAP",
+      "community_name": "Inspector visual (overlay click-through)",
       "_origin": "semantic",
       "id": "windows_graph_claude_visible_tree_rows"
     },
@@ -54870,9 +54870,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 80,
+      "community": 72,
       "norm_label": "findbyposition (no resuelve en este sap)",
-      "community_name": "GuiTree \u2014 \u00e1rboles de SAP",
+      "community_name": "GuiSession",
       "_origin": "semantic",
       "id": "windows_graph_claude_find_by_position"
     },
@@ -54885,9 +54885,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 80,
+      "community": 72,
       "norm_label": "presstoolbarbutton (#tbbtn=nv44)",
-      "community_name": "GuiTree \u2014 \u00e1rboles de SAP",
+      "community_name": "GuiSession",
       "_origin": "semantic",
       "id": "windows_graph_claude_press_toolbar_button"
     },
@@ -54945,9 +54945,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 80,
+      "community": 72,
       "norm_label": "identity() con subdynpro (sub y ssub)",
-      "community_name": "GuiTree \u2014 \u00e1rboles de SAP",
+      "community_name": "GuiSession",
       "_origin": "semantic",
       "id": "windows_graph_claude_identity"
     },
@@ -54960,9 +54960,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 49,
+      "community": 80,
       "norm_label": "vacio no es ausente (?? y cadena vacia)",
-      "community_name": "windows-client \u2014 el inspector visual",
+      "community_name": "Inspector visual (overlay click-through)",
       "_origin": "semantic",
       "id": "windows_graph_claude_vacio_no_ausente"
     },
@@ -54990,9 +54990,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 126,
+      "community": 141,
       "norm_label": "investigacion sap gui scripting y uia",
-      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
+      "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
       "id": "windows_graph_investigacion_sapgui_uia_doc"
     },
@@ -55275,9 +55275,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 126,
+      "community": 141,
       "norm_label": "sap_frontend_session (class name)",
-      "community_name": "windows-graph \u2014 SAP GUI Scripting: hechos duros",
+      "community_name": "AgentLoop (compuerta de origen)",
       "_origin": "semantic",
       "id": "windows_graph_investigacion_sapgui_uia_sap_frontend_session"
     },
@@ -55796,23 +55796,23 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L8",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L3",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo",
+      "source": "windows_client_src_navigation_mapavivo",
       "target": "csharp_namespace:4d63fb182534ce06",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L31",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L25",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "source": "windows_client_src_navigation_mapavivo",
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
       "confidence_score": 1.0
     },
     {
@@ -55962,17 +55962,6 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L3",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo",
-      "target": "csharp_namespace:4d63fb182534ce06"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/NavStrategies.cs",
       "source_location": "L7",
       "weight": 1.0,
@@ -56012,6 +56001,17 @@
       "_origin": "ast",
       "confidence_score": 1.0,
       "source": "windows_client_src_navigation_safetoclick",
+      "target": "csharp_namespace:4d63fb182534ce06"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L8",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo",
       "target": "csharp_namespace:4d63fb182534ce06"
     },
     {
@@ -56124,23 +56124,38 @@
     {
       "relation": "references",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L38",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L53",
+      "weight": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "ClickWatcher"
+      },
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "clickwatcher",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L63",
       "weight": 1.0,
       "context": "field",
       "metadata": {
         "ref_token": "Func"
       },
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
       "target": "func",
       "confidence_score": 1.0
     },
     {
       "relation": "references",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L35",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L56",
       "weight": 1.0,
       "context": "field",
       "metadata": {
@@ -56149,129 +56164,163 @@
         "ref_qualifier": "Nucleo"
       },
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
       "target": "grafo",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L39",
-      "weight": 1.0,
-      "context": "field",
-      "metadata": {
-        "ref_token": "HttpListener"
-      },
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
-      "target": "httplistener",
       "confidence_score": 1.0
     },
     {
       "relation": "implements",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L31",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L25",
       "weight": 1.0,
       "metadata": {
         "ref_token": "IDisposable"
       },
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
       "target": "idisposable",
       "confidence_score": 1.0
     },
     {
       "relation": "references",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L33",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L47",
       "weight": 1.0,
       "context": "field",
       "metadata": {
         "ref_token": "int"
       },
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
       "target": "int",
       "confidence_score": 1.0
     },
     {
-      "relation": "method",
+      "relation": "references",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L50",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L28",
       "weight": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "ProyectorNeo4j",
+        "qualified": true,
+        "ref_qualifier": "Nucleo"
+      },
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_arrancar",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "proyectorneo4j",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L32",
+      "weight": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "string"
+      },
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "string",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L31",
+      "weight": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "Timer",
+        "qualified": true,
+        "ref_qualifier": "System.Threading"
+      },
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "timer",
       "confidence_score": 1.0
     },
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L68",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L77",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_atender",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_arrancar",
       "confidence_score": 1.0
     },
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L229",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L265",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_corto",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_corto",
       "confidence_score": 1.0
     },
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L241",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_dispose",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L235",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_json",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
       "source_location": "L217",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_leerdestino",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_cruzado",
       "confidence_score": 1.0
     },
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L95",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L271",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_dispose",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L92",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L256",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_limpiar",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
+      "source_location": "L237",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles",
       "confidence_score": 1.0
     },
     {
@@ -56305,15 +56354,15 @@
     {
       "relation": "implements",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L25",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L31",
       "weight": 1.0,
       "metadata": {
         "ref_token": "IDisposable"
       },
       "_origin": "ast",
       "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
       "target": "idisposable"
     },
     {
@@ -56487,38 +56536,8 @@
     {
       "relation": "references",
       "confidence": "EXTRACTED",
-      "source_file": "laboratorio/Maqueta/Programa.cs",
-      "source_location": "L54",
-      "weight": 1.0,
-      "context": "field",
-      "metadata": {
-        "ref_token": "int"
-      },
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "laboratorio_maqueta_programa_maqueta_ventana",
-      "target": "int"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "versiones/nucleo/v1.cs",
-      "source_location": "L1871",
-      "weight": 1.0,
-      "context": "field",
-      "metadata": {
-        "ref_token": "int"
-      },
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "versiones_nucleo_v1_u_windowsclient_navigation_surfacemap",
-      "target": "int"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L41",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L35",
       "weight": 1.0,
       "context": "field",
       "metadata": {
@@ -56528,7 +56547,7 @@
       },
       "_origin": "ast",
       "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
       "target": "grafo"
     },
     {
@@ -56549,8 +56568,8 @@
     {
       "relation": "references",
       "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L48",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L38",
       "weight": 1.0,
       "context": "field",
       "metadata": {
@@ -56558,352 +56577,8 @@
       },
       "_origin": "ast",
       "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
       "target": "func"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Mcp/McpDevProbe.cs",
-      "source_location": "L28",
-      "weight": 1.0,
-      "context": "field",
-      "metadata": {
-        "ref_token": "HttpListener"
-      },
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_mcp_mcpdevprobe_u_windowsclient_mcp_mcpdevprobe",
-      "target": "httplistener"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L58",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_arrancar",
-      "target": "windows_client_src_diagnostics_logbus_u_windowsclient_diagnostics_logbus_log"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "windows-client/src/Ui/FaceWindow.xaml.cs",
-      "source_location": "L293",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_ui_facewindow_xaml_u_windowsclient_ui_facewindow_onloaded",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_arrancar"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L68",
-      "weight": 1.0,
-      "context": "return_type",
-      "metadata": {
-        "ref_token": "Task"
-      },
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_atender",
-      "target": "task",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L78",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_atender",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_json",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L77",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_atender",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L95",
-      "weight": 1.0,
-      "context": "parameter_type",
-      "metadata": {
-        "ref_token": "HttpListenerRequest"
-      },
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
-      "target": "httplistenerrequest",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L110",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
-      "target": "nucleo_grafo_grafo_nucleo_grafo_desdeaqui"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L143",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
-      "target": "nucleo_grafo_grafo_nucleo_grafo_siguientepaso"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L109",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
-      "target": "nucleo_grafo_grafo_nucleo_grafo_ubicaciones"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L155",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
-      "target": "windows_client_src_diagnostics_logbus_u_windowsclient_diagnostics_logbus_log"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L155",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_corto",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L105",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_json",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L121",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
-      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_leerdestino",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
-      "source_location": "L217",
-      "weight": 1.0,
-      "context": "parameter_type",
-      "metadata": {
-        "ref_token": "HttpListenerRequest"
-      },
-      "_origin": "ast",
-      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_leerdestino",
-      "target": "httplistenerrequest",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L25",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L38",
-      "weight": 1.0,
-      "context": "field",
-      "metadata": {
-        "ref_token": "ClickWatcher"
-      },
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "clickwatcher"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L28",
-      "weight": 1.0,
-      "context": "field",
-      "metadata": {
-        "ref_token": "ProyectorNeo4j",
-        "qualified": true,
-        "ref_qualifier": "Nucleo"
-      },
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "proyectorneo4j"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L32",
-      "weight": 1.0,
-      "context": "field",
-      "metadata": {
-        "ref_token": "string"
-      },
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "string"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L31",
-      "weight": 1.0,
-      "context": "field",
-      "metadata": {
-        "ref_token": "Timer",
-        "qualified": true,
-        "ref_qualifier": "System.Threading"
-      },
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "timer"
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L62",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_arrancar"
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L245",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_corto"
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L197",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_cruzado"
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L251",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_dispose"
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L77",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido"
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L236",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_limpiar"
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L217",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles"
     },
     {
       "relation": "references",
@@ -56968,6 +56643,51 @@
     {
       "relation": "references",
       "confidence": "EXTRACTED",
+      "source_file": "laboratorio/Maqueta/Programa.cs",
+      "source_location": "L54",
+      "weight": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "int"
+      },
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "laboratorio_maqueta_programa_maqueta_ventana",
+      "target": "int"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "versiones/nucleo/v1.cs",
+      "source_location": "L1871",
+      "weight": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "int"
+      },
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "versiones_nucleo_v1_u_windowsclient_navigation_surfacemap",
+      "target": "int"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L33",
+      "weight": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "int"
+      },
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "target": "int"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
       "source_file": "versiones/nucleo/v1.cs",
       "source_location": "L252",
       "weight": 1.0,
@@ -57016,7 +56736,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L68",
+      "source_location": "L83",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_arrancar",
@@ -57028,7 +56748,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L70",
+      "source_location": "L85",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_arrancar",
@@ -57039,12 +56759,12 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L73",
+      "source_location": "L88",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_arrancar",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido"
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -57064,7 +56784,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L158",
+      "source_location": "L175",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
@@ -57076,7 +56796,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L151",
+      "source_location": "L167",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
@@ -57088,7 +56808,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L184",
+      "source_location": "L204",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
@@ -57100,7 +56820,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L185",
+      "source_location": "L205",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
@@ -57112,7 +56832,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L160",
+      "source_location": "L178",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
@@ -57123,24 +56843,24 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L160",
+      "source_location": "L178",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_corto"
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_corto",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L95",
+      "source_location": "L110",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_latido",
-      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles"
+      "target": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -57148,7 +56868,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L199",
+      "source_location": "L219",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_cruzado",
@@ -57160,7 +56880,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L200",
+      "source_location": "L220",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_cruzado",
@@ -57170,76 +56890,76 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L217",
+      "source_location": "L237",
       "weight": 1.0,
       "context": "generic_arg",
       "metadata": {
         "ref_token": "Etiqueta"
       },
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles",
-      "target": "etiqueta"
+      "target": "etiqueta",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L217",
+      "source_location": "L237",
       "weight": 1.0,
       "context": "parameter_type",
       "metadata": {
         "ref_token": "IReadOnlyList"
       },
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles",
-      "target": "ireadonlylist"
+      "target": "ireadonlylist",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L217",
+      "source_location": "L237",
       "weight": 1.0,
       "context": "return_type",
       "metadata": {
         "ref_token": "List"
       },
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles",
-      "target": "list"
+      "target": "list",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L217",
+      "source_location": "L237",
       "weight": 1.0,
       "context": "generic_arg",
       "metadata": {
         "ref_token": "Selector"
       },
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles",
-      "target": "selector"
+      "target": "selector",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L217",
+      "source_location": "L237",
       "weight": 1.0,
       "context": "generic_arg",
       "metadata": {
         "ref_token": "Tipo"
       },
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_sinetiquetasdecontroles",
-      "target": "tipo"
+      "target": "tipo",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -57472,7 +57192,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L238",
+      "source_location": "L258",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_limpiar",
@@ -57484,7 +57204,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L240",
+      "source_location": "L260",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_limpiar",
@@ -57496,7 +57216,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L241",
+      "source_location": "L261",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_limpiar",
@@ -57508,11 +57228,306 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "windows-client/src/Navigation/MapaVivo.cs",
-      "source_location": "L254",
+      "source_location": "L274",
       "weight": 1.0,
       "_origin": "ast",
       "source": "windows_client_src_navigation_mapavivo_u_windowsclient_navigation_mapavivo_dispose",
       "target": "nucleo_grafo_proyectorneo4j_nucleo_proyectorneo4j_dispose"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L31",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L39",
+      "weight": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "HttpListener"
+      },
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "target": "httplistener"
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L50",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_arrancar"
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L68",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_atender"
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L229",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_corto"
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L241",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_dispose"
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L235",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_json"
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L217",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_leerdestino"
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L95",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Mcp/McpDevProbe.cs",
+      "source_location": "L28",
+      "weight": 1.0,
+      "context": "field",
+      "metadata": {
+        "ref_token": "HttpListener"
+      },
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_mcp_mcpdevprobe_u_windowsclient_mcp_mcpdevprobe",
+      "target": "httplistener"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L58",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_arrancar",
+      "target": "windows_client_src_diagnostics_logbus_u_windowsclient_diagnostics_logbus_log"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "windows-client/src/Ui/FaceWindow.xaml.cs",
+      "source_location": "L293",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "windows_client_src_ui_facewindow_xaml_u_windowsclient_ui_facewindow_onloaded",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_arrancar"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L68",
+      "weight": 1.0,
+      "context": "return_type",
+      "metadata": {
+        "ref_token": "Task"
+      },
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_atender",
+      "target": "task"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L78",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_atender",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_json"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L77",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_atender",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L95",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "HttpListenerRequest"
+      },
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
+      "target": "httplistenerrequest"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L110",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
+      "target": "nucleo_grafo_grafo_nucleo_grafo_desdeaqui"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L143",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
+      "target": "nucleo_grafo_grafo_nucleo_grafo_siguientepaso"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L109",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
+      "target": "nucleo_grafo_grafo_nucleo_grafo_ubicaciones"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L155",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
+      "target": "windows_client_src_diagnostics_logbus_u_windowsclient_diagnostics_logbus_log"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L155",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_corto"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L105",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_json"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L121",
+      "weight": 1.0,
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_responder",
+      "target": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_leerdestino"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "windows-client/src/Navigation/ServidorDelNucleo.cs",
+      "source_location": "L217",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "metadata": {
+        "ref_token": "HttpListenerRequest"
+      },
+      "_origin": "ast",
+      "confidence_score": 1.0,
+      "source": "windows_client_src_navigation_servidordelnucleo_u_windowsclient_navigation_servidordelnucleo_leerdestino",
+      "target": "httplistenerrequest"
     },
     {
       "relation": "contains",
@@ -156142,5 +156157,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "80a46e8271f5fd79072ef7ee26df1af4d9da1a25"
+  "built_at_commit": "f62df0879d2034ff661d384b9fe9cac8febb62bb"
 }

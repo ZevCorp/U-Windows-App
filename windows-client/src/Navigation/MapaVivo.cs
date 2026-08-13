@@ -29,6 +29,7 @@ public sealed class MapaVivo : IDisposable
     private readonly Func<string> _donde;
     private readonly Func<IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>> _loQueVeo;
     private System.Threading.Timer? _reloj;
+    private System.Threading.Timer? _relojUbicacion;
     private string _anterior = "";
 
     /// <summary>
@@ -84,32 +85,39 @@ public sealed class MapaVivo : IDisposable
         if (volvieron > 0)
             LogBus.Log("mapa-vivo", $"memoria recuperada: {volvieron} ubicación(es) de sesiones anteriores");
 
+        // DOS CADENCIAS, PORQUE SON DOS COSTES. Saber dónde estoy vale 32 ms; leer la pantalla
+        // entera, 400 (medido el 2026-08-12). Con las dos en el mismo latido, lo barato heredaba la
+        // lentitud de lo caro: el cambio de sitio tardaba más de un segundo en registrarse, y si se
+        // navegaba rápido una ubicación intermedia no llegaba a verse — el camino quedaba grabado
+        // como A→C cuando en realidad fue A→B→C.
+        //
+        // Ahora el DÓNDE se mira diez veces por segundo y el QUÉ HAY a su ritmo. La atribución del
+        // clic vive con el dónde, que es lo que la hace fiable: cuanto antes se detecte el salto,
+        // más fresco es el clic que lo explica.
         _reloj?.Dispose();
-        _reloj = new System.Threading.Timer(_ => Latido(), null, 500, cadaMs);
-        LogBus.Log("mapa-vivo", $"observando cada {cadaMs} ms y proyectando el núcleo en Neo4j");
+        _relojUbicacion?.Dispose();
+        _relojUbicacion = new System.Threading.Timer(_ => MirarDonde(), null, 200, 120);
+        _reloj = new System.Threading.Timer(_ => Latido(), null, 600, cadaMs);
+        LogBus.Log("mapa-vivo", $"ubicación cada 120 ms · pantalla cada {cadaMs} ms · proyectando en Neo4j");
     }
 
-    private void Latido()
+    /// <summary>
+    /// LA MITAD BARATA, diez veces por segundo: dónde estamos, y qué nos trajo.
+    ///
+    /// La atribución del clic vive AQUÍ y no en el latido lento, y eso es lo que la hace fiable:
+    /// cuanto antes se detecte el salto, más fresco es el clic que lo explica. Con las dos cosas
+    /// juntas, entre el salto y la atribución se colaba la lectura de la pantalla entera.
+    /// </summary>
+    private void MirarDonde()
     {
         try
         {
             string aqui = _donde();
             if (aqui.Length == 0) return;
+            if (aqui.Equals(_anterior, StringComparison.OrdinalIgnoreCase)) return;
 
-            // EL CLIC SE MIRA ANTES DE LEER LA PANTALLA, no después. Leer el árbol UIA entero
-            // cuesta ~1 s (medido en la Maqueta) y bastante más en apps grandes; si la edad del
-            // clic se comprobara al final, esa lectura se le sumaría y un clic perfectamente
-            // reciente podría llegar «viejo» a la comparación. Es una carrera silenciosa: nadie
-            // vería el fallo, solo faltarían caminos (2026-08-12).
             var clic = Clics?.Last;
             var cuando = DateTime.UtcNow;
-
-            // OBSERVAR: el mapeador cuenta lo que ve, el núcleo decide qué hacer con ello. Aquí no
-            // se filtra ni se clasifica nada — meter criterio en el puente sería empezar otra vez a
-            // repartir las reglas entre dos sitios.
-            var visibles = SinEtiquetasDeControles(_loQueVeo())
-                .Select(v => new Nucleo.Elemento(v.Selector, v.Etiqueta, v.Tipo))
-                .ToList();
 
             // ¿CAMBIAMOS DE SITIO? Entonces algo nos trajo, y ese «algo» es el otro hecho que el
             // núcleo guarda. Se atribuye al ÚLTIMO CLIC si es reciente y salió de donde estábamos;
@@ -201,6 +209,36 @@ public sealed class MapaVivo : IDisposable
             }
             _anterior = aqui;
 
+            // SE APUNTA EL SITIO AUNQUE NO SE HAYA MIRADO QUÉ HAY. Pasar por un sitio deprisa tiene
+            // que dejar constancia de que se pasó: si no, la ubicación intermedia no existiría y el
+            // camino quedaría grabado como si fuera directo.
+            _grafo.Estoy(aqui);
+            _proyector.Proyectar(_grafo);
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("mapa-vivo", $"no pude mirar dónde estoy: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// LA MITAD CARA, a su ritmo: qué hay en la pantalla de delante. Cuesta unos 400 ms de lectura
+    /// UIA, así que va aparte de la ubicación — que cuesta 32.
+    /// </summary>
+    private void Latido()
+    {
+        try
+        {
+            string aqui = _donde();
+            if (aqui.Length == 0) return;
+
+            // El mapeador cuenta lo que ve, el núcleo decide qué hacer con ello. Aquí no se filtra
+            // ni se clasifica nada — meter criterio en el puente sería empezar otra vez a repartir
+            // las reglas entre dos sitios.
+            var visibles = SinEtiquetasDeControles(_loQueVeo())
+                .Select(v => new Nucleo.Elemento(v.Selector, v.Etiqueta, v.Tipo))
+                .ToList();
+
             _grafo.Observar(aqui, visibles);
             _proyector.Proyectar(_grafo);
         }
@@ -271,6 +309,7 @@ public sealed class MapaVivo : IDisposable
     public void Dispose()
     {
         _reloj?.Dispose();
+        _relojUbicacion?.Dispose();
         _proyector.Dispose();
     }
 }

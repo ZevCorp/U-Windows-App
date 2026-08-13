@@ -54,6 +54,33 @@ public sealed class Grafo
     /// marcado como no vivo: el mapa es memoria además de espejo, y olvidar en cuanto algo se
     /// oculta —un menú cerrado, una lista con scroll— haría que el grafo se vaciara solo.
     /// </summary>
+    /// <summary>
+    /// «Estoy aquí», sin decir nada de lo que se ve. Es la mitad BARATA de observar.
+    /// </summary>
+    /// <remarks>
+    /// SON DOS HECHOS CON VELOCIDADES DISTINTAS, y juntarlos costaba caro. Saber dónde estoy vale
+    /// 32 ms; leer la pantalla entera, 400. Al llegar los dos por la misma puerta, lo barato
+    /// heredaba la lentitud de lo caro: el cambio de sitio se enteraba con más de un segundo de
+    /// retraso, y si se navegaba rápido una ubicación intermedia no llegaba a verse nunca — el
+    /// camino se grababa como A→C cuando en realidad fue A→B→C (2026-08-12, medido).
+    ///
+    /// Separarlas permite preguntar «¿dónde estoy?» diez veces por segundo sin pagar la lectura.
+    /// </remarks>
+    public void Estoy(string ubicacion)
+    {
+        if (string.IsNullOrWhiteSpace(ubicacion)) return;
+        lock (_llave)
+        {
+            if (string.Equals(Aqui, ubicacion, StringComparison.OrdinalIgnoreCase)) return;
+            Aqui = ubicacion;
+            // Se apunta la ubicación aunque todavía no se sepa qué hay: existir es un hecho, y
+            // tener elementos es otro. Si no, un sitio por el que se pasó rápido no existiría.
+            if (!_vistos.ContainsKey(ubicacion))
+                _vistos[ubicacion] = new Dictionary<string, Elemento>(StringComparer.Ordinal);
+            Version++;
+        }
+    }
+
     public void Observar(string ubicacion, IReadOnlyList<Elemento> visibles)
     {
         if (string.IsNullOrWhiteSpace(ubicacion)) return;
