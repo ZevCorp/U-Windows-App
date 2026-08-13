@@ -35,17 +35,22 @@ public sealed class ServidorDelNucleo : IDisposable
 
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
-    private readonly Func<string, string, bool> _pulsar;   // (selector, etiqueta) → ¿se pulsó?
-    private readonly Func<string, bool> _enfocar;          // (proceso) → ¿está delante?
+    private readonly Func<string, string, bool> _pulsar;    // (selector, etiqueta) → ¿se pulsó?
+    private readonly Func<string, bool> _enfocar;           // (proceso) → ¿está delante?
+    private readonly Func<string, string, bool> _escribir;  // (selector, texto) → ¿se escribió?
+    private readonly Func<string, string, bool> _elegir;    // (selector, opción) → ¿se eligió?
     private HttpListener? _oreja;
 
     public ServidorDelNucleo(Nucleo.Grafo grafo, Func<string> donde,
-        Func<string, string, bool> pulsar, Func<string, bool> enfocar)
+        Func<string, string, bool> pulsar, Func<string, bool> enfocar,
+        Func<string, string, bool>? escribir = null, Func<string, string, bool>? elegir = null)
     {
         _grafo = grafo;
         _donde = donde;
         _pulsar = pulsar;
         _enfocar = enfocar;
+        _escribir = escribir ?? ((_, _) => false);
+        _elegir = elegir ?? ((_, _) => false);
     }
 
     public bool Arrancar()
@@ -145,7 +150,7 @@ public sealed class ServidorDelNucleo : IDisposable
         if (ruta.EndsWith("/ir"))
         {
             string destino = LeerDestino(req);
-            if (destino.Length == 0) return Json(new { ok = false, porque = "falta el destino" });
+            if (destino.Length == 0) return NoPude("", "falta el destino");
 
             string aqui = _donde();
 
@@ -158,7 +163,7 @@ public sealed class ServidorDelNucleo : IDisposable
             {
                 string proc = appDestino.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
                 if (!_enfocar(proc))
-                    return Json(new { ok = false, porque = $"no pude traer «{appDestino}» al frente" });
+                    return NoPude(destino, $"no pude traer «{appDestino}» al frente");
                 Thread.Sleep(700);   // que la ventana se asiente antes de leer dónde estamos
                 aqui = _donde();
             }
@@ -166,21 +171,21 @@ public sealed class ServidorDelNucleo : IDisposable
             if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase))
                 return Json(new { ok = true, llegado = true, porque = "ya estás ahí" });
 
-            var paso = _grafo.SiguientePaso(aqui, destino);
-            if (paso == null)
-                return Json(new
-                {
-                    ok = false,
-                    porque = "el núcleo no sabe llegar desde aquí, o el paso que haría falta no está "
-                           + "en pantalla ahora mismo",
-                });
+            // DOS «NO» MUY DISTINTOS, y hasta hoy salían como uno solo. «No sé llegar» pide seguir
+            // explorando; «sé llegar pero la puerta no está delante» pide esperar, desplegar el
+            // panel o volver atrás. Quien navega necesita saber cuál de las dos le toca.
+            var camino = _grafo.ComoLlego(aqui, destino);
+            if (camino.Paso == null)
+                return NoPude(destino, camino.ConocidoEnMemoria
+                    ? $"sé llegar desde «{Corto(aqui)}», pero la puerta que hace falta no está en "
+                    + "pantalla ahora mismo: despliega el panel, haz scroll, o vuelve atrás"
+                    : $"no hay ningún camino aprendido de «{Corto(aqui)}» hasta ahí: hay que "
+                    + "recorrerlo a mano una vez para que el núcleo lo aprenda");
+            var paso = camino.Paso;
 
             bool pulsado = _pulsar(paso.Que.Selector, paso.Que.Etiqueta);
             if (!pulsado)
-            {
-                LogBus.Log("nucleo-http", $"paso hacia «{Corto(destino)}»: NO pude pulsar «{paso.Que.Etiqueta}»");
-                return Json(new { ok = false, paso = paso.Que.Etiqueta, porque = "el mapeador no consiguió pulsarlo" });
-            }
+                return NoPude(destino, $"el mapeador no consiguió pulsar «{paso.Que.Etiqueta}»", paso.Que.Etiqueta);
 
             // ¿NOS MOVIÓ? Un paso que no mueve no se repite. Sin esto, un camino equivocado en el
             // grafo —«pulsa Datos adjuntos para ir a Escritorio», cuando ya estás en Datos
@@ -219,6 +224,39 @@ public sealed class ServidorDelNucleo : IDisposable
                 selector = paso.Que.Selector,
                 llegado = despues.Equals(destino, StringComparison.OrdinalIgnoreCase),
                 porque = "",
+            });
+        }
+
+        // ESCRIBIR Y ELEGIR. Navegar no basta para trabajar: un formulario se rellena, y hasta hoy
+        // el núcleo solo sabía pulsar. Las manos son las MISMAS que ya pulsan —`UiaSurface` sabe
+        // `input` y `select` desde antes que nosotros—; lo que se añade aquí es la puerta, con la
+        // misma disciplina de siempre.
+        //
+        // Y LA DISCIPLINA ES LA QUE IMPORTA: el elemento se busca POR ETIQUETA entre lo que el
+        // núcleo dice que está VIVO en la pantalla de ahora, y si la etiqueta nombra a varias cosas
+        // NO se acciona. Escribir a ciegas en «el segundo campo de texto» es exactamente la clase de
+        // suposición que llena formularios oficiales con datos en la casilla equivocada, y eso no se
+        // deshace con un ctrl+Z.
+        if (ruta.EndsWith("/escribir") || ruta.EndsWith("/elegir"))
+        {
+            bool esEscribir = ruta.EndsWith("/escribir");
+            var cuerpo = LeerCuerpo(req);
+            string etiqueta = Campo(cuerpo, "elemento");
+            string dato = Campo(cuerpo, esEscribir ? "texto" : "opcion");
+            if (etiqueta.Length == 0) return Json(new { ok = false, porque = "falta «elemento»" });
+
+            string aqui = _donde();
+            var (selector, porque) = BuscarVivo(aqui, etiqueta);
+            if (selector.Length == 0) return Json(new { ok = false, porque });
+
+            bool hecho = esEscribir ? _escribir(selector, dato) : _elegir(selector, dato);
+            LogBus.Log("nucleo-http", hecho
+                ? $"{(esEscribir ? "escrito" : "elegido")} «{dato}» en «{etiqueta}»"
+                : $"NO pude {(esEscribir ? "escribir" : "elegir")} «{dato}» en «{etiqueta}»");
+            return Json(new
+            {
+                ok = hecho, elemento = etiqueta, selector, dato,
+                porque = hecho ? "" : "el mapeador no consiguió accionar ese elemento",
             });
         }
 
@@ -295,7 +333,63 @@ public sealed class ServidorDelNucleo : IDisposable
             });
         }
 
-        return Json(new { error = "no conozco esa ruta", rutas = new[] { "/visor", "/nucleo", "/ir", "/reglas", "/mapeador" } });
+        return Json(new { error = "no conozco esa ruta",
+                          rutas = new[] { "/visor", "/nucleo", "/ir", "/escribir", "/elegir", "/reglas", "/mapeador" } });
+    }
+
+    /// <summary>
+    /// EL ELEMENTO QUE SE VA A TOCAR, buscado por etiqueta entre lo que está VIVO aquí y ahora.
+    /// Devuelve su selector, o vacío y el motivo.
+    /// </summary>
+    /// <remarks>
+    /// TRES «NO» DISTINTOS, y los tres importan porque piden cosas distintas de quien pregunta:
+    /// que no exista pide mapear; que exista pero no esté en pantalla pide desplegar o esperar; que
+    /// la etiqueta nombre a varias cosas pide precisar. Devolver un «no» genérico obligaría a
+    /// adivinar cuál de los tres es.
+    ///
+    /// Y NO SE ACCIONA LO AMBIGUO, nunca. En el escritorio de Windows hay dos cosas llamadas
+    /// «Nombre» y elegir a ojo ya nos costó una arista falsa (2026-08-12). Escribiendo el daño es
+    /// mayor que navegando: un clic equivocado se ve, un número escrito en la casilla que no es se
+    /// envía.
+    /// </remarks>
+    private (string Selector, string Porque) BuscarVivo(string aqui, string etiqueta)
+    {
+        var aca = _grafo.DesdeAqui(aqui);
+        var conEseNombre = aca
+            .Where(a => a.Que.Etiqueta.Equals(etiqueta, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (conEseNombre.Count == 0)
+            return ("", $"el núcleo no conoce «{etiqueta}» en «{Corto(aqui)}»: hay que mapear esta "
+                      + "pantalla una vez para que sepa que existe");
+
+        var vivos = conEseNombre.Where(a => a.Vivo).ToList();
+        if (vivos.Count == 0)
+            return ("", $"«{etiqueta}» está en el grafo pero NO en pantalla ahora mismo: es memoria, "
+                      + "no una promesa. Despliega el panel, haz scroll, o espera a que cargue");
+
+        if (vivos.Count > 1)
+            return ("", $"«{etiqueta}» nombra a {vivos.Count} cosas vivas en esta pantalla: no es una "
+                      + "identidad, y accionar a ojo escribiría en la casilla equivocada");
+
+        return (vivos[0].Que.Selector, "");
+    }
+
+    /// <summary>
+    /// NO PODER IR TAMBIÉN SE ESCRIBE. Antes solo se dejaba rastro cuando se conseguía pulsar, así
+    /// que el caso que importa —el fallo— era invisible: buscando por qué un clic en el grafo no
+    /// hizo nada, el log no tenía NI UNA línea de esa petición y la conclusión obvia era que la
+    /// petición nunca había llegado. Había llegado, y había contestado que no sabía llegar
+    /// (2026-08-13; me costó el diagnóstico entero).
+    ///
+    /// Un registro que solo cuenta los aciertos no es un registro, es un escaparate.
+    /// </summary>
+    private static string NoPude(string destino, string porque, string? paso = null)
+    {
+        LogBus.Log("nucleo-http", destino.Length == 0
+            ? $"no pude ir: {porque}"
+            : $"paso hacia «{Corto(destino)}»: NO — {porque}");
+        return Json(new { ok = false, paso, porque });
     }
 
     private static string LeerDestino(HttpListenerRequest req)
@@ -306,6 +400,30 @@ public sealed class ServidorDelNucleo : IDisposable
             using var r = new StreamReader(req.InputStream, Encoding.UTF8);
             using var doc = JsonDocument.Parse(r.ReadToEnd());
             return doc.RootElement.TryGetProperty("destino", out var d) ? d.GetString() ?? "" : "";
+        }
+        catch { return ""; }
+    }
+
+    /// <summary>El cuerpo de la petición, tal cual. Vacío si no se pudo leer.</summary>
+    private static string LeerCuerpo(HttpListenerRequest req)
+    {
+        try
+        {
+            if (req.HttpMethod == "GET") return "";
+            using var r = new StreamReader(req.InputStream, Encoding.UTF8);
+            return r.ReadToEnd();
+        }
+        catch { return ""; }
+    }
+
+    /// <summary>Un campo del cuerpo JSON, o de la cadena de consulta si vino por GET.</summary>
+    private static string Campo(string cuerpo, string nombre)
+    {
+        if (cuerpo.Length == 0) return "";
+        try
+        {
+            using var doc = JsonDocument.Parse(cuerpo);
+            return doc.RootElement.TryGetProperty(nombre, out var v) ? v.GetString() ?? "" : "";
         }
         catch { return ""; }
     }

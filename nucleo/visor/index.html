@@ -448,26 +448,26 @@ async function tickMapa() {
 let navegando = false;
 
 async function irA(destino) {
-  if (navegando) { estado("ya voy hacia otro sitio; espera a que termine"); return; }
+  if (navegando) { estado("ya voy hacia otro sitio; espera a que termine", true); return; }
   navegando = true;
   try {
     for (let paso = 1; paso <= 12; paso++) {
-      estado(`yendo a «${corto(destino)}» · paso ${paso}…`);
+      estado(`yendo a «${corto(destino)}» · paso ${paso}…`, true);
       const r = await fetch("http://127.0.0.1:8792/ir", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ destino }),
       });
       const j = await r.json();
-      if (j.llegado) { estado(`llegado a «${corto(destino)}» en ${paso - 1} paso(s)`); return; }
-      if (!j.ok) { estado(`no pude llegar: ${j.porque}`); return; }
+      if (j.llegado) { estado(`llegado a «${corto(destino)}» en ${paso - 1} paso(s)`, true); return; }
+      if (!j.ok) { estado(`no pude llegar: ${j.porque}`, true); return; }
       // Se espera a que la pantalla se asiente: preguntar el siguiente paso antes de que el núcleo
       // haya visto dónde estamos daría el mismo paso otra vez.
       await new Promise(t => setTimeout(t, 1400));
     }
-    estado("me planté a los 12 pasos: o hay un bucle, o el destino no se alcanza así");
+    estado("me planté a los 12 pasos: o hay un bucle, o el destino no se alcanza así", true);
   } catch (e) {
-    estado("no llego a la app: " + e.message);
+    estado("no llego a la app: " + e.message, true);
   } finally { navegando = false; }
 }
 
@@ -477,7 +477,19 @@ const rotulo = (x, y, anchor, t, gris) =>
   `<text x="${x}" y="${y}" text-anchor="${anchor}" class="${gris ? 'gris' : ''}">${escapar(t).slice(0, 32)}</text>`;
 const escapar = t => (t || "").replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
 const hora = () => new Date().toLocaleTimeString();
-const estado = t => document.getElementById("estado").textContent = t;
+// EL LATIDO NO PISA LO QUE DICE LA NAVEGACIÓN. `tick()` corre cada segundo y escribía «sin cambios»
+// encima de «no pude llegar: …», así que el motivo del fallo duraba menos de un segundo en pantalla
+// y lo que quedaba era un clic que aparentemente no hizo nada (2026-08-13, lo sufrió el usuario:
+// hizo clic en un nodo, el núcleo contestó que no sabía llegar, y ese mensaje se borró solo).
+//
+// Lo que dice la navegación manda mientras dura y unos segundos después, porque es una respuesta a
+// algo que TÚ hiciste; el latido solo informa de que sigue vivo.
+let hastaCuandoMandaLaNavegacion = 0;
+const estado = (t, deNavegacion) => {
+  if (deNavegacion) hastaCuandoMandaLaNavegacion = Date.now() + 8000;
+  else if (Date.now() < hastaCuandoMandaLaNavegacion) return;
+  document.getElementById("estado").textContent = t;
+};
 const leyenda = t => document.getElementById("leyenda").textContent = t;
 function cabecera(d, a, c) {
   document.getElementById("donde").textContent = d;

@@ -31,6 +31,8 @@ internal static class Contrato
         Prueba("11. lo que se recuerda vuelve como MEMORIA, nunca como vivo", RecordarNoEsVer);
         Prueba("12. saber dónde estoy no dice nada de lo que se ve", EstarNoEsVer);
         Prueba("13. un grafo grande no encarece contestar «qué alcanzo desde aquí»", ElTamanoNoPesa);
+        Prueba("14. si la puerta corta no se ve, se prueba la ruta larga que sí", OtraPuertaQueSiSeVe);
+        Prueba("15. «no sé llegar» y «sé pero no se ve» son respuestas distintas", DosNoDistintos);
 
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
@@ -153,6 +155,67 @@ internal static class Contrato
         // Y no se acepta un destino inventado: cruzar a donde ya estás no es cruzar.
         g.Cruzar("app://z", "s:misterio", "app://z");
         Debe(g.DesdeAqui("app://z")[0].Destino.Length == 0, "cruzar a uno mismo no acuña nada");
+    }
+
+    /// <remarks>
+    /// LA VERSIÓN ANTERIOR SE RENDÍA. Tomaba el camino más corto y, si su primera puerta no estaba
+    /// en pantalla, devolvía nulo —aunque hubiera otra ruta más larga cuya puerta SÍ estuviera
+    /// delante—. Eso no es prudencia, es dejar de mirar: el mapa es vivo justamente para poder
+    /// preferir lo que se ve.
+    ///
+    /// El montaje es el del mundo real: desde «inicio» se llega a «fondo» en un paso por el atajo y
+    /// en dos por el pasillo. Se quita el atajo de la pantalla —sigue en memoria— y tiene que salir
+    /// el pasillo.
+    /// </remarks>
+    private static void OtraPuertaQueSiSeVe(Grafo g)
+    {
+        var atajo = new Elemento("s:atajo", "Atajo", "Button");
+        var pasillo = new Elemento("s:pasillo", "Pasillo", "Button");
+
+        g.Observar("app://inicio", new[] { atajo, pasillo });
+        g.Cruzar("app://inicio", "s:atajo", "app://fondo");
+        g.Cruzar("app://inicio", "s:pasillo", "app://medio");
+        g.Observar("app://medio", new[] { new Elemento("s:sigue", "Sigue", "Button") });
+        g.Cruzar("app://medio", "s:sigue", "app://fondo");
+
+        // Con las dos puertas a la vista gana la corta: menos clics.
+        g.Observar("app://inicio", new[] { atajo, pasillo });
+        Debe(g.SiguientePaso("app://inicio", "app://fondo")?.Que.Selector == "s:atajo",
+            "con todo a la vista se va por el camino más corto");
+
+        // Y ahora el atajo deja de verse. Sigue en el grafo, pero no se puede pulsar.
+        g.Observar("app://inicio", new[] { pasillo });
+        var paso = g.SiguientePaso("app://inicio", "app://fondo");
+        Debe(paso != null, "no se rinde: hay otra puerta que sí está en pantalla");
+        Debe(paso?.Que.Selector == "s:pasillo", "…y es el pasillo, la ruta larga pero visible");
+        Debe(paso is null || paso.Vivo, "el paso que se devuelve SIEMPRE está vivo: es lo único pulsable");
+    }
+
+    /// <remarks>
+    /// DOS «NO» QUE PIDEN COSAS OPUESTAS. «No sé llegar» pide seguir explorando; «sé llegar pero la
+    /// puerta no está delante» pide esperar, desplegar el panel o volver atrás. Devolver nulo para
+    /// las dos dejaba al que navega sin saber cuál le tocaba — el usuario hizo clic en un nodo y
+    /// solo obtuvo «no sé llegar desde aquí, O el paso no está en pantalla» (2026-08-13).
+    /// </remarks>
+    private static void DosNoDistintos(Grafo g)
+    {
+        var puerta = new Elemento("s:puerta", "Puerta", "Button");
+        g.Observar("app://a", new[] { puerta });
+        g.Cruzar("app://a", "s:puerta", "app://b");
+
+        var conLaPuertaDelante = g.ComoLlego("app://a", "app://b");
+        Debe(conLaPuertaDelante.Paso != null, "con la puerta a la vista, hay paso");
+        Debe(conLaPuertaDelante.ConocidoEnMemoria, "y por supuesto se conoce el camino");
+
+        g.Observar("app://a", Array.Empty<Elemento>());   // la puerta deja de verse
+        var sinVerla = g.ComoLlego("app://a", "app://b");
+        Debe(sinVerla.Paso == null, "sin la puerta delante no hay paso que dar");
+        Debe(sinVerla.ConocidoEnMemoria,
+            "…pero SE SABE llegar: es «espera o vuelve atrás», no «hay que explorar»");
+
+        var jamas = g.ComoLlego("app://a", "app://nunca-vista");
+        Debe(jamas.Paso == null && !jamas.ConocidoEnMemoria,
+            "y a donde no se ha ido nunca, ni paso ni camino: eso sí es «hay que explorar»");
     }
 
     /// <summary>

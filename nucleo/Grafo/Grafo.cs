@@ -222,39 +222,76 @@ public sealed class Grafo
     /// Devolver algo que el mapa recuerda y la pantalla ya no tiene es mandar a pulsar el vacío,
     /// que es exactamente el fallo que este modelo vino a quitar.
     /// </remarks>
-    public Alcanzable? SiguientePaso(string desde, string hasta)
+    public Alcanzable? SiguientePaso(string desde, string hasta) => ComoLlego(desde, hasta).Paso;
+
+    /// <summary>El siguiente paso y, si no lo hay, SI AL MENOS SE CONOCE EL CAMINO.</summary>
+    /// <param name="Paso">Qué pulsar ahora, o nulo.</param>
+    /// <param name="ConocidoEnMemoria">Si el grafo sabe llegar aunque el paso no esté en pantalla.</param>
+    public readonly record struct Camino(Alcanzable? Paso, bool ConocidoEnMemoria);
+
+    /// <summary>
+    /// Cómo llegar de un sitio a otro, y por qué no se puede cuando no se puede.
+    /// </summary>
+    /// <remarks>
+    /// DOS «NO» MUY DISTINTOS, Y ANTES SALÍAN COMO UNO. «No sé llegar» y «sé llegar pero la puerta
+    /// no está delante ahora mismo» piden cosas opuestas de quien pregunta: la primera, seguir
+    /// explorando; la segunda, esperar, desplegar el panel o volver atrás. Devolver nulo para las
+    /// dos dejaba al que navega sin saber cuál de las dos le tocaba (2026-08-13, el usuario hizo
+    /// clic en un nodo y solo obtuvo «no sé llegar desde aquí, o el paso no está en pantalla»).
+    ///
+    /// Y SE PRUEBAN LAS OTRAS RUTAS. La versión anterior tomaba el camino más corto y, si su primer
+    /// paso no estaba vivo, se rendía —aunque hubiera otra ruta más larga cuya puerta SÍ estuviera
+    /// delante—. Eso no es ser prudente, es dejar de mirar: el mapa es vivo justamente para poder
+    /// preferir lo que se ve.
+    ///
+    /// SOLO EL PRIMER PASO TIENE QUE ESTAR VIVO. Los demás se vuelven a decidir al llegar, que es lo
+    /// que significa un mapa vivo; exigir que la ruta entera esté visible desde aquí sería pedirle
+    /// al núcleo una promesa sobre pantallas que todavía no se han visto.
+    /// </remarks>
+    public Camino ComoLlego(string desde, string hasta)
     {
-        if (string.IsNullOrWhiteSpace(desde) || string.IsNullOrWhiteSpace(hasta)) return null;
-        if (desde.Equals(hasta, StringComparison.OrdinalIgnoreCase)) return null;
+        if (string.IsNullOrWhiteSpace(desde) || string.IsNullOrWhiteSpace(hasta)) return new(null, false);
+        if (desde.Equals(hasta, StringComparison.OrdinalIgnoreCase)) return new(null, false);
 
         lock (_llave)
         {
-            // Anchura desde donde estamos: el camino más corto en número de clics, que es la única
-            // medida que le importa a quien lo va a recorrer.
-            var visto = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { desde };
-            var cola = new Queue<(string Donde, Alcanzable Primero)>();
+            var porLoVivo = Buscar(desde, hasta, soloPuertasVivas: true);
+            if (porLoVivo != null) return new(porLoVivo, true);
+            return new(null, Buscar(desde, hasta, soloPuertasVivas: false) != null);
+        }
+    }
 
-            foreach (var a in Salidas(desde))
+    /// <summary>
+    /// Anchura desde donde estamos: el camino más corto en número de clics, que es la única medida
+    /// que le importa a quien lo va a recorrer. Devuelve el PRIMER paso de ese camino.
+    /// </summary>
+    private Alcanzable? Buscar(string desde, string hasta, bool soloPuertasVivas)
+    {
+        var visto = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { desde };
+        var cola = new Queue<(string Donde, Alcanzable Primero)>();
+
+        // La condición de «vivo» se aplica SOLO aquí, en las puertas de donde estamos: son las
+        // únicas que se pueden pulsar ahora. Descartarlas ya, en vez de al final, es lo que permite
+        // que el recorrido encuentre otra ruta cuando la más corta no está a la vista.
+        foreach (var a in Salidas(desde))
+        {
+            if (a.Destino.Length == 0) continue;
+            if (soloPuertasVivas && !a.Vivo) continue;
+            if (a.Destino.Equals(hasta, StringComparison.OrdinalIgnoreCase)) return a;
+            if (visto.Add(a.Destino)) cola.Enqueue((a.Destino, a));
+        }
+
+        while (cola.Count > 0)
+        {
+            var (donde, primero) = cola.Dequeue();
+            foreach (var a in Salidas(donde))
             {
                 if (a.Destino.Length == 0) continue;
-                if (a.Destino.Equals(hasta, StringComparison.OrdinalIgnoreCase))
-                    return a.Vivo ? a : null;   // está aquí mismo… si sigue en pantalla
-                if (visto.Add(a.Destino)) cola.Enqueue((a.Destino, a));
+                if (a.Destino.Equals(hasta, StringComparison.OrdinalIgnoreCase)) return primero;
+                if (visto.Add(a.Destino)) cola.Enqueue((a.Destino, primero));
             }
-
-            while (cola.Count > 0)
-            {
-                var (donde, primero) = cola.Dequeue();
-                foreach (var a in Salidas(donde))
-                {
-                    if (a.Destino.Length == 0) continue;
-                    if (a.Destino.Equals(hasta, StringComparison.OrdinalIgnoreCase))
-                        return primero.Vivo ? primero : null;
-                    if (visto.Add(a.Destino)) cola.Enqueue((a.Destino, primero));
-                }
-            }
-            return null;
         }
+        return null;
     }
 
     /// <summary>Las salidas de una ubicación, ya resueltas. Sin tomar el candado: quien llama lo tiene.</summary>

@@ -285,11 +285,38 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             // LA VENTANITA DEL NÚCLEO, para que el visor pueda pedirle que nos lleve a un sitio sin
             // que nadie toque el núcleo ni el explorador viejo.
+            // ESCRIBIR Y ELEGIR, con las MISMAS manos que ya pulsan. No hay un segundo camino de
+            // accionar: `UiaSurface.Execute` sabe `input` (ValuePattern.SetValue) y `select`
+            // (SelectionItemPattern sobre la opción por su nombre) desde antes que nosotros, y
+            // reescribirlo aquí sería tener dos formas de tocar la pantalla que se desincronizarían.
+            //
+            // Lo único que cambia respecto a pulsar es el verbo. La identidad, el foco y la
+            // verificación de que el elemento está vivo son las de siempre.
+            Func<string, string, string, bool> accionar = (accion, selector, dato) =>
+            {
+                try
+                {
+                    var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
+                    return superficie.Execute(new U.Graph.PlanStep
+                    {
+                        StepOrder = 1, ActionType = accion, Selector = selector,
+                        Value = dato, SelectedValue = accion == "select" ? dato : null,
+                    }, out _);
+                }
+                catch (Exception e)
+                {
+                    LogBus.Log("nucleo-http", $"no pude {accion} «{dato}»: {e.Message}");
+                    return false;
+                }
+            };
+
             _servidorNucleo = new Navigation.ServidorDelNucleo(
                 _mapaVivo.Nucleo,
                 () => _locator?.DondeEstoy()?.Id ?? "",
                 (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
-                proc => Uia.AppAligner.FocusOrLaunch(proc));
+                proc => Uia.AppAligner.FocusOrLaunch(proc),
+                (sel, texto) => accionar("input", sel, texto),
+                (sel, opcion) => accionar("select", sel, opcion));
             _servidorNucleo.Arrancar();
 
             // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.
