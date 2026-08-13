@@ -73,16 +73,16 @@ public sealed class ServidorDelNucleo : IDisposable
             try { ctx = await _oreja.GetContextAsync(); }
             catch { return; }   // se cerró: no es un fallo
 
-            string cuerpo;
-            try { cuerpo = Responder(ctx.Request); }
-            catch (Exception e) { cuerpo = Json(new { error = e.Message }); }
+            string cuerpo, tipo;
+            try { (cuerpo, tipo) = Responder(ctx.Request); }
+            catch (Exception e) { (cuerpo, tipo) = (Json(new { error = e.Message }), Json_); }
 
             var bytes = Encoding.UTF8.GetBytes(cuerpo);
             // CORS abierto porque quien pregunta es una página local abierta con file://, que no
             // tiene origen. Escucha SOLO en 127.0.0.1, así que abierto aquí significa «esta máquina».
             ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
             ctx.Response.Headers["Access-Control-Allow-Headers"] = "content-type";
-            ctx.Response.ContentType = "application/json; charset=utf-8";
+            ctx.Response.ContentType = tipo;
             try
             {
                 await ctx.Response.OutputStream.WriteAsync(bytes);
@@ -92,7 +92,32 @@ public sealed class ServidorDelNucleo : IDisposable
         }
     }
 
-    private string Responder(HttpListenerRequest req)
+    private const string Json_ = "application/json; charset=utf-8";
+
+    /// <summary>
+    /// EL VISOR SE SIRVE DESDE AQUÍ. Antes había que abrirlo con `file://` y saberse la ruta del
+    /// repo de memoria; ahora basta con la dirección que ya se usa para todo lo demás. No es
+    /// comodidad: una herramienta que cuesta abrir se deja de abrir, y este visor existe justo para
+    /// mirar lo que si no se mira acaba en arqueología del log.
+    ///
+    /// Se lee del repo en cada petición, sin caché, para que editar el visor y recargar baste.
+    /// </summary>
+    private (string Cuerpo, string Tipo) Responder(HttpListenerRequest req)
+    {
+        if ((req.Url?.AbsolutePath.TrimEnd('/') ?? "").EndsWith("/visor"))
+        {
+            try
+            {
+                string f = Path.Combine(Navigation.NucleoVersiones.Repo(), "nucleo", "visor", "index.html");
+                if (File.Exists(f)) return (File.ReadAllText(f, Encoding.UTF8), "text/html; charset=utf-8");
+                return (Json(new { error = "no encuentro el visor", donde = f }), Json_);
+            }
+            catch (Exception e) { return (Json(new { error = e.Message }), Json_); }
+        }
+        return (Contestar(req), Json_);
+    }
+
+    private string Contestar(HttpListenerRequest req)
     {
         string ruta = req.Url?.AbsolutePath.TrimEnd('/') ?? "";
         if (req.HttpMethod == "OPTIONS") return "{}";
@@ -246,7 +271,7 @@ public sealed class ServidorDelNucleo : IDisposable
             });
         }
 
-        return Json(new { error = "no conozco esa ruta", rutas = new[] { "/nucleo", "/ir", "/reglas", "/mapeador" } });
+        return Json(new { error = "no conozco esa ruta", rutas = new[] { "/visor", "/nucleo", "/ir", "/reglas", "/mapeador" } });
     }
 
     private static string LeerDestino(HttpListenerRequest req)

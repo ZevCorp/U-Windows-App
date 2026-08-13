@@ -1015,13 +1015,13 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786592163.7153604,
-    "ast_hash": "3e40b07eb9219732b83ddd6fb7d51092",
+    "mtime": 1786620064.759197,
+    "ast_hash": "f17e2c583fd7db9276112884262e761b",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
-    "mtime": 1786592204.69268,
-    "ast_hash": "cec149babecab2741eabffdd8a606a13",
+    "mtime": 1786620857.1973107,
+    "ast_hash": "05a9e59da6a99178d23c292391b49f58",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.csproj": {
@@ -1040,23 +1040,33 @@
     "semantic_hash": ""
   },
   "nucleo/Grafo/ProyectorNeo4j.cs": {
-    "mtime": 1786591266.1155362,
-    "ast_hash": "dc52382ea121bceba2f1596c7a4456ec",
+    "mtime": 1786620833.5482616,
+    "ast_hash": "33a915e592c2172d7e8f8bf1898260ad",
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
-    "mtime": 1786576324.3260229,
-    "ast_hash": "f9646a24356a13787b4a86bec8813e7f",
+    "mtime": 1786620141.6669717,
+    "ast_hash": "4843255fc4415a1a2d165d5b666bc76b",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/ServidorDelNucleo.cs": {
-    "mtime": 1786578906.5936706,
-    "ast_hash": "588b50b71d8bee65d887e592b48d4922",
+    "mtime": 1786620085.9534018,
+    "ast_hash": "d41e3803a3ad91780db61bb0f176c786",
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786592223.5193079,
-    "ast_hash": "04b4ee3c97d748e67c74fdf675592f91",
+    "mtime": 1786620914.8014972,
+    "ast_hash": "7cff71a18c63d7235d3118ca033af4cf",
+    "semantic_hash": ""
+  },
+  "windows-client/src/Navigation/PulsoDelMapeador.cs": {
+    "mtime": 1786620010.8879418,
+    "ast_hash": "6656bfdc46a42684008bf1177282d90f",
+    "semantic_hash": ""
+  },
+  "docs/velocidad.md": {
+    "mtime": 1786621092.0392866,
+    "ast_hash": "efab933aebceace0fd56cbd7f62eba8c",
     "semantic_hash": ""
   }
 }
