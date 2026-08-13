@@ -1020,8 +1020,8 @@
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
-    "mtime": 1786661517.2444158,
-    "ast_hash": "57227d96350331381519ed8b44d0bc3f",
+    "mtime": 1786661790.995639,
+    "ast_hash": "33c3adafd2085172f8b1eb40d5a58132",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.csproj": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786661639.076348,
-    "ast_hash": "1777d16b5c83e9a9e8c83612e6856c2a",
+    "mtime": 1786661837.9971027,
+    "ast_hash": "f8fcde874bf4b80b51e9dd0708fe408d",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786661641.488,
-    "ast_hash": "ffcca7ddbfb1539c6dede677e4c0a80b",
+    "mtime": 1786661841.2858295,
+    "ast_hash": "f7b7c9cd39768f142fcd585b4a351c97",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {

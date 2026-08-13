@@ -1088,16 +1088,74 @@ public sealed class UiaSurface : IUiSurface
             // Enter posterior (keybd_event) iría a otra ventana y no submitearía —era el bug de SAP: se
             // escribía la transacción pero el Enter no navegaba—. Best-effort: si el control no enfoca, ni modo.
             try { el.SetFocus(); } catch { }
-            return true;
+
+            // Y SE COMPRUEBA, por la misma razón que en `Select`: una mano que informa de un éxito
+            // que no ocurrió hace avanzar al workflow entero sobre una suposición falsa. Un campo
+            // con máscara, con longitud máxima o que rechaza el formato acepta el SetValue sin
+            // quejarse y se queda con otra cosa — y eso, en un formulario, se envía.
+            //
+            // SE ESPERA A QUE EL PROVEEDOR SE PONGA AL DÍA ANTES DE DAR NADA POR MALO. Leer el valor
+            // en el mismo instante devolvía el ANTERIOR en Chrome: el texto ya estaba escrito en
+            // pantalla y esto contestaba que había fallado (2026-08-13, se vio en la captura). Un
+            // juez que da falsos negativos enseña a desconfiar del juez igual que uno que da falsos
+            // positivos; la diferencia es que del segundo te enteras tarde y del primero nunca.
+            string quedo = "";
+            for (int i = 0; i < 8; i++)
+            {
+                try { quedo = v.Current.Value ?? ""; } catch { }
+                if (string.Equals(quedo, value, StringComparison.Ordinal)) return true;
+                Thread.Sleep(80);
+            }
+
+            error = quedo.Length == 0
+                ? $"escribí «{value}» y el campo sigue vacío medio segundo después"
+                : $"escribí «{value}» y el campo quedó en «{quedo}»";
+            return false;
         }
         error = "el campo no soporta ValuePattern (no se puede escribir por UIA)";
         return false;
     }
 
+    /// <summary>
+    /// Elegir una opción de un desplegable, por su nombre.
+    /// </summary>
+    /// <remarks>
+    /// PRIMERO SE ABRE, Y ESA ES TODA LA HISTORIA. Un `select` de HTML no expone sus opciones
+    /// mientras está cerrado: UIA devuelve CERO ListItem. La versión anterior buscaba sin abrir, no
+    /// encontraba nada, y caía al plan B —`ValuePattern.SetValue`— que en un combo de Chrome NO
+    /// cambia la selección pero tampoco falla. Resultado: devolvía `true` sin haber elegido nada.
+    ///
+    /// Medido en vivo sobre la Procuraduría el 2026-08-13, con el mismo combo:
+    ///   cerrado  → 0 opciones alcanzables   → plan B → «éxito» y el campo seguía en «Seleccione...»
+    ///   abierto  → 6 opciones alcanzables   → Select → el campo pasó a «Cédula de ciudadanía»
+    ///
+    /// Y LO PEOR NO ERA FALLAR, ERA MENTIR. El usuario pidió rellenar el formulario, esto contestó
+    /// que sí, y la página se quedó protestando en rojo «Seleccione un tipo de identificación». Una
+    /// mano que informa de un éxito que no ocurrió hace avanzar al workflow entero sobre una
+    /// suposición falsa — y en un formulario oficial eso acaba en un envío con datos incompletos.
+    /// Por eso ahora se COMPRUEBA leyendo de vuelta, y el plan B solo vale si de verdad cambió algo.
+    /// </remarks>
     private static bool Select(AutomationElement el, string value, out string error)
     {
         error = "";
-        // El valor puede venir como texto de la opción: se busca entre los hijos ListItem.
+        string antes = ValorDe(el);
+
+        // Se abre si se puede, y se deja como estaba al salir: abrir es un medio para ver las
+        // opciones, no un efecto que el que llama haya pedido.
+        ExpandCollapsePattern? desplegable = null;
+        try
+        {
+            if (el.TryGetCurrentPattern(ExpandCollapsePattern.Pattern, out var ecp)
+                && ecp is ExpandCollapsePattern ec
+                && ec.Current.ExpandCollapseState != ExpandCollapseState.Expanded)
+            {
+                ec.Expand();
+                desplegable = ec;
+                Thread.Sleep(250);   // que el desplegable acabe de pintarse antes de mirar dentro
+            }
+        }
+        catch { }
+
         try
         {
             var item = el.FindFirst(TreeScope.Descendants, new AndCondition(
@@ -1109,20 +1167,69 @@ public sealed class UiaSurface : IUiSurface
                 sp is SelectionItemPattern sel)
             {
                 sel.Select();
-                return true;
+                Thread.Sleep(150);
+                try { desplegable?.Collapse(); } catch { }
+                return Cuajo(el, value, antes, out error);
             }
         }
         catch { }
 
-        // Algunos combos aceptan el texto directamente.
+        try { desplegable?.Collapse(); } catch { }
+
+        // Algunos combos aceptan el texto directamente. Se intenta, pero NO se da por bueno sin
+        // mirar: es justo este camino el que devolvía «sí» sin cambiar nada.
         if (el.TryGetCurrentPattern(ValuePattern.Pattern, out var p) && p is ValuePattern v && !v.Current.IsReadOnly)
         {
             v.SetValue(value);
-            return true;
+            Thread.Sleep(150);
+            return Cuajo(el, value, antes, out error);
         }
 
         error = $"no se pudo seleccionar «{value}»: la opción no existe o el control no lo permite";
         return false;
+    }
+
+    /// <summary>
+    /// ¿Cuajó de verdad? Se lee el valor de vuelta y se compara. Si no cambió a lo pedido, es un
+    /// fallo aunque la llamada no haya lanzado ninguna excepción.
+    /// </summary>
+    private static bool Cuajo(AutomationElement el, string queria, string antes, out string error)
+    {
+        // Se le da margen al proveedor: Chrome tarda un poco en reflejar el cambio en su árbol UIA,
+        // y preguntar en el mismo instante devuelve el valor de antes.
+        string ahora = "";
+        for (int i = 0; i < 8; i++)
+        {
+            ahora = ValorDe(el);
+            if (string.Equals(ahora, queria, StringComparison.OrdinalIgnoreCase)) { error = ""; return true; }
+            Thread.Sleep(80);
+        }
+
+        error = ahora == antes
+            ? $"pedí «{queria}» y el control sigue en «{ahora}»: no cambió nada"
+            : $"pedí «{queria}» y el control quedó en «{ahora}»";
+        return false;
+    }
+
+    /// <summary>Lo que el control dice tener elegido ahora mismo. Vacío si no lo cuenta.</summary>
+    private static string ValorDe(AutomationElement el)
+    {
+        try
+        {
+            if (el.TryGetCurrentPattern(ValuePattern.Pattern, out var p) && p is ValuePattern v)
+                return v.Current.Value ?? "";
+        }
+        catch { }
+        try
+        {
+            if (el.TryGetCurrentPattern(SelectionPattern.Pattern, out var sp) && sp is SelectionPattern s)
+            {
+                var sel = s.Current.GetSelection();
+                if (sel.Length > 0) return sel[0].Current.Name ?? "";
+            }
+        }
+        catch { }
+        return "";
     }
 
     /// <summary>Suma este elemento a la selección actual, sin sustituirla.</summary>
