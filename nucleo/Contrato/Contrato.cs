@@ -62,7 +62,18 @@ internal static class Contrato
         var d = g.DesdeAqui("app://inicio");
         Debe(d.Count == 1 && d[0].Que.Etiqueta == "Catálogo", "lo observado se puede volver a preguntar");
         Debe(d[0].Vivo, "y está vivo, porque se acaba de ver");
-        Debe(g.Aqui == "app://inicio", "el grafo sabe dónde está");
+
+        // OBSERVAR NO ES ESTAR. Esta promesa exigía que observar fijara además «dónde estoy», y esa
+        // exigencia era la que rompía el sistema en marcha: leer la pantalla tarda ~400 ms, así que
+        // el observador fijaba la ubicación con un valor viejo y REBOBINABA el sitio actual al
+        // anterior. Con la ubicación mirándose cada 120 ms, el lento pisaba al rápido sin parar y
+        // el grafo se quedaba clavado — «vaya donde vaya, se queda en claude.exe» (2026-08-12).
+        //
+        // Se cambia AQUÍ y no solo en el código, porque el contrato es donde vive el acuerdo: esta
+        // promesa daba por buena una mezcla de dos hechos que ahora sabemos que hay que separar.
+        Debe(g.Aqui.Length == 0, "…pero observar NO afirma que estemos ahí: eso lo dice «Estoy»");
+        g.Estoy("app://inicio");
+        Debe(g.Aqui == "app://inicio", "y dicho eso, el grafo sabe dónde está");
     }
 
     private static void ObservarNoBorra(Grafo g)
@@ -277,11 +288,12 @@ internal static class Contrato
         // el dibujo se queda marcando B como actual para siempre. DÓNDE ESTOY ES UN HECHO DEL
         // GRAFO, tanto como qué se ve; que sea el más volátil de todos no lo hace menos hecho.
         var mismo = new[] { new Elemento("s:a", "Algo", "Button") };
-        g.Observar("app://a", mismo);
-        g.Observar("app://b", new[] { new Elemento("s:b", "Otro", "Button") });
+        g.Estoy("app://a"); g.Observar("app://a", mismo);
+        g.Estoy("app://b"); g.Observar("app://b", new[] { new Elemento("s:b", "Otro", "Button") });
 
         int antes = g.Version;
-        g.Observar("app://a", mismo);   // se vuelve a A, y A no ha cambiado en nada
+        g.Estoy("app://a");             // se vuelve a A…
+        g.Observar("app://a", mismo);   // …y A no ha cambiado en nada
 
         Debe(g.Aqui == "app://a", "el grafo sabe que volvimos a A");
         Debe(g.Version != antes,

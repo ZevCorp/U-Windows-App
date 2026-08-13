@@ -102,10 +102,13 @@ public sealed class ProyectorNeo4j : IDisposable
                 cambiadas.Add(u);
             }
 
-            var declaraciones = new List<object>
-            {
-                // DÓNDE ESTAMOS, siempre y aparte: es lo que más cambia y lo más barato de escribir.
-                new
+            var declaraciones = new List<object>();
+
+            // DÓNDE ESTAMOS, aparte: es lo que más cambia y lo más barato de escribir. Solo si el
+            // núcleo lo sabe — desde que observar dejó de afirmar presencia, puede no saberlo aún,
+            // y escribir una ubicación vacía crearía un nodo fantasma con id «».
+            if (grafo.Aqui.Length > 0)
+                declaraciones.Add(new
                 {
                     statement = """
                     MATCH (p:Ubicacion {actual:true}) WHERE p.id <> $aqui SET p.actual = false
@@ -113,8 +116,7 @@ public sealed class ProyectorNeo4j : IDisposable
                     MERGE (n:Ubicacion {id:$aqui}) SET n.actual = true, n.app = $app
                     """,
                     parameters = new { aqui = grafo.Aqui, app = Grafo.AppDe(grafo.Aqui) },
-                },
-            };
+                });
 
             if (cambiadas.Count > 0)
             {

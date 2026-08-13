@@ -1015,13 +1015,13 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786579146.65388,
-    "ast_hash": "4bc076d2575358656bdc6939c4aa540b",
+    "mtime": 1786579731.3526766,
+    "ast_hash": "2c7be0836b8b7737ec12dec5b08ba358",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
-    "mtime": 1786575212.795851,
-    "ast_hash": "d3f79e69fb3f24baa8b5f71c98aa3299",
+    "mtime": 1786579666.624399,
+    "ast_hash": "402e2ce88c212434fa5e87b5e28bcf42",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.csproj": {
@@ -1030,8 +1030,8 @@
     "semantic_hash": ""
   },
   "nucleo/Grafo/Grafo.cs": {
-    "mtime": 1786575102.8458421,
-    "ast_hash": "8daa7829f071d51992f0e570a059b019",
+    "mtime": 1786579636.819842,
+    "ast_hash": "b2370d4dc50d97ea1dfbe6d814a948df",
     "semantic_hash": ""
   },
   "nucleo/Grafo/Grafo.csproj": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786575228.0091438,
-    "ast_hash": "0079b096f393ba46fb69bfa0af3fafcd",
+    "mtime": 1786579748.0664015,
+    "ast_hash": "23a80b855d61d144d5e17943de3d65f6",
     "semantic_hash": ""
   }
 }

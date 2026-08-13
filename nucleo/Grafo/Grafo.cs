@@ -86,14 +86,18 @@ public sealed class Grafo
         if (string.IsNullOrWhiteSpace(ubicacion)) return;
         lock (_llave)
         {
-            // MOVERSE ES UN CAMBIO, aunque lo que se vea sea idéntico. «Dónde estoy» es un hecho
-            // del grafo tanto como «qué se ve aquí»; que sea el más volátil de todos no lo hace
-            // menos hecho. Sin esto, ir de A a B y volver a A no movía la versión —porque A no
-            // había cambiado— así que quien pinta se saltaba la pasada y el dibujo se quedaba
-            // marcando B como el sitio actual. El usuario lo vio así: «lo que estoy enfocando ya lo
-            // detectó la url, pero la visualización marca un app diferente» (2026-08-12).
-            bool cambio = !string.Equals(Aqui, ubicacion, StringComparison.OrdinalIgnoreCase);
-            Aqui = ubicacion;
+            // OBSERVAR NO DICE DÓNDE ESTOY. Dice qué hay EN UN SITIO —el que le pasan— y nada más.
+            // Quien decide dónde estamos es `Estoy`, y solo él.
+            //
+            // Las dos cosas estuvieron juntas y costó caro: leer la pantalla tarda ~400 ms, así que
+            // quien observaba fijaba la ubicación con un valor de hace 400 ms y REBOBINABA el sitio
+            // actual al anterior. Con la ubicación mirándose cada 120 ms, el lento pisaba
+            // constantemente al rápido y el grafo se quedaba clavado en la app de antes — el
+            // usuario lo vio como «vaya donde vaya, se queda en claude.exe» (2026-08-12).
+            //
+            // Que `Observar` reciba la ubicación como parámetro ya lo decía: quien llama sabe de
+            // dónde leyó. Deducir de ahí que además ESTAMOS allí era una suposición de más.
+            bool cambio = false;
             if (!_vistos.TryGetValue(ubicacion, out var aqui))
                 _vistos[ubicacion] = aqui = new Dictionary<string, Elemento>(StringComparer.Ordinal);
 
