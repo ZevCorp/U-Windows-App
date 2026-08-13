@@ -36,25 +36,40 @@ saturación: 44 vueltas de pantalla descartadas en 90 s
 explorador de archivos (40 elementos) no dice nada: ya lo intentamos y casi nos lleva a la conclusión
 contraria. Al anotar una medida, se anota **qué app estaba delante y cuántos elementos tenía**.
 
-## 3. La regla que protege esto
+## 3. Las reglas que protegen esto
 
-Está en el contrato del núcleo, y falla en rojo si se pierde:
+Son tres, en dos contratos, y **las tres corren solas en cada build**
+(`scripts/version-nucleo.ps1 -Construir`). Hasta el 2026-08-13 el build solo corría el contrato del
+núcleo VIEJO y estas había que lanzarlas a mano: protegían mientras alguien se acordara. Una promesa
+que nadie ejecuta no es una promesa, es una nota.
 
-> **proyectar es barato: los ids están indexados**
+| dónde | promesa | qué impide |
+|---|---|---|
+| núcleo | *observar NO afirma que estemos ahí* (1, 11, 12) | el rebobinado que dejaba el mapa clavado en una app |
+| núcleo | *proyectar es barato: los ids están indexados* | que `MERGE` recorra los 7.692 elementos |
+| mapeador | *una vuelta a la vez* (9 promesas) | que las vueltas se apilen y todo se ralentice |
 
-Comprueba que existen las restricciones de unicidad sobre `Ubicacion.id` y `Elemento.id`
-(`ProyectorNeo4j.IndicesQueFaltan`). El proyector las crea solo al arrancar, así que la promesa
-vigila que nadie las quite y que nadie proyecte contra una base ajena que no las tenga.
+**Ninguna mide milisegundos, y es deliberado.** Un umbral daría rojos por tener el portátil ocupado,
+y un juez que da rojos falsos enseña a desconfiar del juez —ya nos pasó con la comprobación de
+fidelidad—. Se comprueba la **causa**: ¿está el índice?, ¿cierra el candado?, ¿quién fija la
+ubicación? Todas deterministas.
 
-**Comprueba la causa, no el cronómetro, y es deliberado.** Un umbral en milisegundos daría rojos por
-tener el portátil ocupado, y un juez que da rojos falsos enseña a desconfiar del juez —ya nos pasó
-con la comprobación de fidelidad—. «¿Está el índice?» es determinista y es lo que de verdad decide.
+El veredicto de las dos últimas se ve sin correr nada en la pestaña **Reglas** del visor
+(`http://127.0.0.1:8792/visor`), con su hora.
 
-Correrla:
+A mano, si hace falta:
 
 ```bash
 dotnet run --project nucleo/Contrato/Contrato.csproj -c Release
 ```
+
+```bash
+dotnet run --project mapeador/Contrato/Contrato.csproj -c Release
+```
+
+**Las promesas de un solo hilo no bastan para un candado.** Con el `Interlocked` quitado, las cinco
+primeras del mapeador siguen en verde —un solo hilo nunca ve la carrera— y solo la sexta, la de ocho
+hilos, lo caza. Sin ella el contrato certificaría un candado que no cierra.
 
 ## 4. Plan de acción cuando vaya lento
 

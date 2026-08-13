@@ -37,8 +37,47 @@ internal static class Contrato
         Console.WriteLine(_fallos == 0
             ? "MAPEADOR ÍNTEGRO: el proceso promete lo que dice prometer."
             : $"MAPEADOR ROTO: {_fallos} promesa(s) incumplida(s).");
+
+        Apuntar();
         return _fallos;
     }
+
+    /// <summary>
+    /// Deja el veredicto en disco, junto al del núcleo, para poder mirarlo sin correr nada.
+    /// </summary>
+    /// <remarks>
+    /// EN LA MISMA CARPETA Y EN LA MISMA PESTAÑA que el del núcleo, y no en un panel aparte. Las dos
+    /// contestan la misma pregunta —«¿qué está garantizado?»— y partirla en dos sitios obliga a
+    /// acordarse de mirar los dos; el que se olvida es siempre el que está en rojo. Lo que sí es
+    /// otra pregunta es el pulso —«¿qué está pasando AHORA?»—, y por eso esa sí tiene su pestaña.
+    ///
+    /// Y lo que se enseña es el RESULTADO de correrlas, con su hora, no una lista que alguien
+    /// tecleó: una descripción envejece en silencio en cuanto alguien toca el código.
+    /// </remarks>
+    private static void Apuntar()
+    {
+        try
+        {
+            // Se sube desde el binario buscando el repo —el que tenga `nucleo/visor` dentro—. Si no
+            // aparece, se calla: no poder dejar la nota no puede tumbar al juez.
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "nucleo", "visor"))) dir = dir.Parent;
+            if (dir == null) return;
+
+            var filas = _veredicto.Select(v =>
+                $"{{\"regla\":{Cita(v.Nombre)},\"cumple\":{(v.Cumple ? "true" : "false")}}}");
+            File.WriteAllText(Path.Combine(dir.FullName, "nucleo", "visor", "reglas-mapeador.json"),
+                "{\"cuando\":" + Cita(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"))
+                + ",\"integro\":" + (_fallos == 0 ? "true" : "false")
+                + ",\"reglas\":[" + string.Join(",", filas) + "]}",
+                System.Text.Encoding.UTF8);
+        }
+        catch { }
+    }
+
+    private static string Cita(string s) => "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+    private static readonly List<(string Nombre, bool Cumple)> _veredicto = new();
 
     // ── Las promesas ─────────────────────────────────────────────────────────
 
@@ -210,7 +249,9 @@ internal static class Contrato
             for (var x = e; x != null; x = x.InnerException)
                 Console.WriteLine($"   ✘ {x.GetType().Name}: {x.Message}");
         }
-        Console.WriteLine($"{(_fallos == antes ? "✔" : "✘")} {nombre}");
+        bool cumple = _fallos == antes;
+        _veredicto.Add((nombre, cumple));
+        Console.WriteLine($"{(cumple ? "✔" : "✘")} {nombre}");
     }
 
     private static void Debe(bool condicion, string promesa)

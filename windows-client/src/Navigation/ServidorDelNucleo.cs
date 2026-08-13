@@ -225,14 +225,19 @@ public sealed class ServidorDelNucleo : IDisposable
         // LAS REGLAS: el veredicto de la última vez que el contrato juzgó al núcleo. Se sirve el
         // archivo tal cual, sin interpretarlo — describirlas aquí crearía una segunda versión de
         // las reglas que envejecería en silencio, que es exactamente lo que este proyecto persigue.
-        if (ruta.EndsWith("/reglas"))
+        //
+        // DOS CONTRATOS, DOS ARCHIVOS, UNA SOLA PESTAÑA. El del núcleo dice qué se sabe; el del
+        // mapeador, cómo se sabe. Contestan la misma pregunta —«¿qué está garantizado?»— y por eso
+        // se miran juntos: partirlas en dos paneles obliga a acordarse de abrir los dos, y el que
+        // se olvida es siempre el que está en rojo.
+        if (ruta.EndsWith("/reglas") || ruta.EndsWith("/reglas-mapeador"))
         {
             try
             {
-                string repo = Navigation.NucleoVersiones.Repo();
-                string f = Path.Combine(repo, "nucleo", "visor", "reglas.json");
+                string cual = ruta.EndsWith("/reglas-mapeador") ? "reglas-mapeador.json" : "reglas.json";
+                string f = Path.Combine(Navigation.NucleoVersiones.Repo(), "nucleo", "visor", cual);
                 if (File.Exists(f)) return File.ReadAllText(f, Encoding.UTF8);
-                return Json(new { error = "el contrato todavía no ha dejado su veredicto", donde = f });
+                return Json(new { error = "ese contrato todavía no ha dejado su veredicto", donde = f });
             }
             catch (Exception e) { return Json(new { error = e.Message }); }
         }
