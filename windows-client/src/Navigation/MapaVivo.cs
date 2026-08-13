@@ -31,6 +31,8 @@ public sealed class MapaVivo : IDisposable
     private System.Threading.Timer? _reloj;
     private System.Threading.Timer? _relojUbicacion;
     private string _anterior = "";
+    private int _mirando;
+    private int _leyendo;
 
     /// <summary>
     /// EL NÚMERO DEL ÚLTIMO CLIC QUE YA SE USÓ. Un clic explica UNA transición y solo una.
@@ -91,18 +93,22 @@ public sealed class MapaVivo : IDisposable
         // navegaba rápido una ubicación intermedia no llegaba a verse — el camino quedaba grabado
         // como A→C cuando en realidad fue A→B→C.
         //
-        // Ahora el DÓNDE se mira diez veces por segundo y el QUÉ HAY a su ritmo. La atribución del
-        // clic vive con el dónde, que es lo que la hace fiable: cuanto antes se detecte el salto,
-        // más fresco es el clic que lo explica.
+        // Ahora el DÓNDE se mira cuatro veces por segundo y el QUÉ HAY a su ritmo. La atribución
+        // del clic vive con el dónde, que es lo que la hace fiable: cuanto antes se detecte el
+        // salto, más fresco es el clic que lo explica.
+        //
+        // 250 ms y no 120: con 120 la vuelta siguiente llegaba antes de terminar la anterior y se
+        // apilaban. El candado de reentrada lo impide de todas formas, pero pedir cuatro veces por
+        // segundo algo que a veces cuesta 200 ms ya es pedir de más.
         _reloj?.Dispose();
         _relojUbicacion?.Dispose();
-        _relojUbicacion = new System.Threading.Timer(_ => MirarDonde(), null, 200, 120);
+        _relojUbicacion = new System.Threading.Timer(_ => MirarDonde(), null, 200, 250);
         _reloj = new System.Threading.Timer(_ => Latido(), null, 600, cadaMs);
-        LogBus.Log("mapa-vivo", $"ubicación cada 120 ms · pantalla cada {cadaMs} ms · proyectando en Neo4j");
+        LogBus.Log("mapa-vivo", $"ubicación cada 250 ms · pantalla cada {cadaMs} ms · proyectando en Neo4j");
     }
 
     /// <summary>
-    /// LA MITAD BARATA, diez veces por segundo: dónde estamos, y qué nos trajo.
+    /// LA MITAD BARATA, cuatro veces por segundo: dónde estamos, y qué nos trajo.
     ///
     /// La atribución del clic vive AQUÍ y no en el latido lento, y eso es lo que la hace fiable:
     /// cuanto antes se detecte el salto, más fresco es el clic que lo explica. Con las dos cosas
@@ -110,6 +116,15 @@ public sealed class MapaVivo : IDisposable
     /// </summary>
     private void MirarDonde()
     {
+        // NUNCA DOS A LA VEZ. Un System.Threading.Timer no espera a que termine la vuelta anterior:
+        // si la lectura tarda más que el intervalo, ENCOLA la siguiente y se van apilando sobre el
+        // grupo de hilos. Con 120 ms de intervalo eso saturó la máquina y arrastró a todo lo demás
+        // — leer la Maqueta pasó de 0,4 s a 2,2 s, cinco veces más lento, sin que la app hubiera
+        // cambiado (2026-08-12, lo noto el usuario y se midió).
+        //
+        // Se DESCARTA la vuelta que llega con otra en curso, no se encola: mirar dónde estás es una
+        // pregunta cuya respuesta caduca, y contestarla tarde no vale de nada.
+        if (Interlocked.Exchange(ref _mirando, 1) == 1) return;
         try
         {
             string aqui = _donde();
@@ -219,6 +234,7 @@ public sealed class MapaVivo : IDisposable
         {
             LogBus.Log("mapa-vivo", $"no pude mirar dónde estoy: {e.Message}");
         }
+        finally { Interlocked.Exchange(ref _mirando, 0); }
     }
 
     /// <summary>
@@ -227,6 +243,9 @@ public sealed class MapaVivo : IDisposable
     /// </summary>
     private void Latido()
     {
+        // La misma valla: leer la pantalla puede tardar segundos en una app cargada, y encolar
+        // lecturas es la forma más rápida de convertir un observador en un lastre.
+        if (Interlocked.Exchange(ref _leyendo, 1) == 1) return;
         try
         {
             string aqui = _donde();
@@ -246,6 +265,7 @@ public sealed class MapaVivo : IDisposable
         {
             LogBus.Log("mapa-vivo", $"no pude observar: {e.Message}");
         }
+        finally { Interlocked.Exchange(ref _leyendo, 0); }
     }
 
     /// <summary>
