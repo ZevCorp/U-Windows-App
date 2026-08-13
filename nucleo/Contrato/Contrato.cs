@@ -201,17 +201,6 @@ internal static class Contrato
             Console.WriteLine("✘ velocidad: " + sinIndices);
         }
 
-        // ESTAS COMPROBACIONES NECESITAN NEO4J PARA ELLAS SOLAS. La de ida y vuelta restaura TODO
-        // lo que haya, así que con la app corriendo se traía su grafo y fallaba por la sola
-        // presencia del vecino. Un rojo que no significa «el núcleo está roto» es peor que no
-        // comprobar: enseña a desconfiar del juez (2026-08-12).
-        if (p.HayOtroInquilino(g.Ubicaciones()))
-        {
-            Console.WriteLine("⚪ fidelidad e ida y vuelta: NO COMPROBADAS — la app está usando Neo4j. "
-                            + "Ciérrala y vuelve a correr esto para juzgarlas.");
-            return;
-        }
-
         string veredicto = p.Verificar(g);
         if (veredicto.Length == 0)
         {
@@ -251,6 +240,52 @@ internal static class Contrato
             _fallos++;
             Console.WriteLine("✘ el atajo de «solo me moví» rompió la fidelidad:");
             Console.WriteLine("   " + trasMoverse.Replace("\n", "\n   "));
+        }
+
+        // CAMBIAR UN DESTINO NO DEJA EL ANTERIOR. El núcleo guarda UN destino por (ubicación,
+        // selector) y lo sobrescribe; la proyección solo hacía MERGE y nunca quitaba el `LLEVA_A`
+        // viejo, así que Neo4j se quedaba con los dos y dejaba de ser un espejo para volverse un
+        // archivo histórico.
+        //
+        // No es hipotético: «datos-adjuntos + Datos adjuntos» apuntaba a `documentos` Y a
+        // `escritorio` a la vez. El navegador siguió el tramo, pulsó la carpeta donde YA ESTABA y no
+        // se movió nunca — el usuario lo vio como «le pedí ir a documentos y llegó a datos
+        // adjuntos» (2026-08-13).
+        //
+        // Y llevaba días pudiendo pasar sin que nadie lo viera, porque esta comprobación se saltaba
+        // en cuanto Neo4j tenía datos de otro grafo. Ya no: `Verificar` solo mira las ubicaciones
+        // que ESTE grafo conoce, así que puede correr con la app en marcha. Una promesa que se salta
+        // no es una promesa.
+        g.Cruzar("uia://una.exe/inicio", "s:ir", "uia://una.exe/otro-sitio");
+        p.Proyectar(g);
+        string trasCambiarDestino = p.Verificar(g);
+        if (trasCambiarDestino.Length == 0)
+        {
+            Console.WriteLine("✔ …y cambiar un destino REEMPLAZA el anterior, no lo acumula");
+            Extra("cambiar un destino reemplaza el anterior en Neo4j", true);
+        }
+        else
+        {
+            _fallos++;
+            Console.WriteLine("✘ al cambiar un destino, Neo4j se quedó con los dos:");
+            Console.WriteLine("   " + trasCambiarDestino.Replace("\n", "\n   "));
+        }
+
+        // ESTA NECESITA NEO4J PARA ELLA SOLA: restaura TODO lo que haya, así que con la app
+        // corriendo se trae su grafo y falla por la sola presencia del vecino. Un rojo que no
+        // significa «el núcleo está roto» es peor que no comprobar (2026-08-12).
+        // LO NUESTRO INCLUYE LOS DESTINOS, no solo lo observado. `Cruzar` apunta a dónde llevó algo
+        // sin que eso convierta el destino en una ubicación observada, pero la proyección sí crea
+        // ese nodo. Sin contarlo, el contrato se tomaba a sí mismo por un inquilino ajeno y se
+        // saltaba la comprobación — un juez que se descalifica solo.
+        var mias = g.Ubicaciones()
+            .Concat(g.Ubicaciones().SelectMany(u => g.DesdeAqui(u).Select(a => a.Destino)))
+            .Where(x => x.Length > 0);
+        if (p.HayOtroInquilino(mias))
+        {
+            Console.WriteLine("⚪ ida y vuelta: NO COMPROBADA — hay otro grafo en Neo4j. "
+                            + "Cierra la app y vuelve a correr esto para juzgarla.");
+            return;
         }
 
         // IDA Y VUELTA: se apaga la app (un núcleo nuevo y vacío), se restaura desde Neo4j, y tiene

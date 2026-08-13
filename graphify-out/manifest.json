@@ -1015,8 +1015,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786624927.50617,
-    "ast_hash": "709d4be6c9a501c9299c37428f2aad2b",
+    "mtime": 1786626288.5112517,
+    "ast_hash": "b8d050f4fa351c528dfb3f00cbd24eca",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
@@ -1045,18 +1045,18 @@
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
-    "mtime": 1786624811.323429,
-    "ast_hash": "01c630d88033cde5bbaa5b10cf86b3a8",
+    "mtime": 1786626318.3678231,
+    "ast_hash": "86df65b6d46caad649e73aa643aead14",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/ServidorDelNucleo.cs": {
-    "mtime": 1786624795.0828285,
-    "ast_hash": "3c9cd0288a57fa1eed69ed4a506ba3a1",
+    "mtime": 1786626299.278605,
+    "ast_hash": "53a630fd630e245035019ce1cb53204d",
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786624955.8994608,
-    "ast_hash": "713f2ee5b78eb74d99ebbfccc7182fba",
+    "mtime": 1786626378.7333312,
+    "ast_hash": "8c1f4289491d8eabaca5a4c99dfaa802",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.cs": {
-    "mtime": 1786624835.094579,
-    "ast_hash": "f8450fbc2e379825aa90f311ddaba99c",
+    "mtime": 1786626349.3923337,
+    "ast_hash": "59c9b0a6a80edc996c3995d08427851f",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.csproj": {
@@ -1080,8 +1080,8 @@
     "semantic_hash": ""
   },
   "mapeador/Pulso/PulsoDelMapeador.cs": {
-    "mtime": 1786624771.587703,
-    "ast_hash": "b3ce937e10fcad066712ad7e0f8de2af",
+    "mtime": 1786626214.9551866,
+    "ast_hash": "d8da302e138320ab15686cf6e98a5225",
     "semantic_hash": ""
   },
   "mapeador/Pulso/VueltaUnica.cs": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786624959.1852167,
-    "ast_hash": "3dfb5260362e6d8f27da24f5b8c09d28",
+    "mtime": 1786626380.6012907,
+    "ast_hash": "5f565b635ebcd68029714eb1de0c7e69",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {

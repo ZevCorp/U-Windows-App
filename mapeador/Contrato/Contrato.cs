@@ -39,6 +39,7 @@ internal static class Contrato
         Prueba("14. cada app lleva su propia cuenta, y el total se deriva de ellas", CadaAppPorSuLado);
         Prueba("15. cambiar de ventana no es navegar, y no cuenta como fallo", CambiarDeVentanaNoEsFallar);
         Prueba("16. «cambió la pantalla y no el sitio» se cuenta, aunque no deje salto", ElFalloQueNoDejaSalto);
+        Prueba("17. el clic que te trajo aquí NO puede ser el que te saca", ElQueTeTrajoNoTeSaca);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -378,6 +379,29 @@ internal static class Contrato
             "un clic en un Button no se resuelve a un texto suelto del mismo nombre");
         Debe(AQuienSeLeDioClic.Resolver(pantalla, "Total", "Text").Hay,
             "…pero un texto suelto sigue siendo alcanzable por sí mismo");
+    }
+
+    /// <remarks>
+    /// Los tiempos son los reales del 2026-08-13, en segundos desde el arranque de la prueba: se
+    /// llega a datos-adjuntos a los 15, el clic que llevó allí ocurrió también a los 15 —justo
+    /// antes—, y a los 18 se sale hacia escritorio. Sin esta valla, ese clic explicaba la salida.
+    /// </remarks>
+    private static void ElQueTeTrajoNoTeSaca()
+    {
+        var t0 = new DateTime(2026, 8, 13, 10, 35, 0, DateTimeKind.Utc);
+        var elClicQueNosTrajo = t0.AddSeconds(14.6);
+        var llegamos          = t0.AddSeconds(15.0);
+        var elClicQueNosSaca  = t0.AddSeconds(17.8);
+
+        Debe(!AQuienSeLeDioClic.PuedeExplicarLaSalida(elClicQueNosTrajo, llegamos),
+            "el clic anterior a la llegada NO explica la salida");
+        Debe(AQuienSeLeDioClic.PuedeExplicarLaSalida(elClicQueNosSaca, llegamos),
+            "…y el posterior sí");
+
+        // El borde exacto: un clic simultáneo a la llegada es el que trajo, no el que saca. Ante la
+        // duda no se acuña: una arista falsa manda al navegador a pulsar lo que no es, para siempre.
+        Debe(!AQuienSeLeDioClic.PuedeExplicarLaSalida(llegamos, llegamos),
+            "y en el empate se rechaza: sin camino se sigue explorando, con uno falso no");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

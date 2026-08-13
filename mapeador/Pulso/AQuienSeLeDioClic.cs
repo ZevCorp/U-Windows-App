@@ -60,4 +60,28 @@ public static class AQuienSeLeDioClic
     }
 
     private static bool EsTexto(string tipo) => tipo.Equals("Text", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// ¿PUEDE ESTE CLIC EXPLICAR QUE NOS FUÉRAMOS DE AQUÍ? Solo si ocurrió DESPUÉS de que
+    /// llegáramos: el clic que te trajo no puede ser el que te saca.
+    /// </summary>
+    /// <remarks>
+    /// LA ARISTA FALSA QUE ESTO MATA (2026-08-13, el usuario pidió ir a «documentos» y el navegador
+    /// se quedó en «datos-adjuntos»):
+    ///
+    ///   10:35:15  salto documentos→datos-adjuntos SIN atribuir («Documentos» ya explicó…)
+    ///   10:35:15  pulsado «Datos adjuntos» → datos-adjuntos
+    ///   10:35:18  aprendido: «Datos adjuntos» lleva de datos-adjuntos a escritorio   ← falsa
+    ///
+    /// «Datos adjuntos» es el clic que nos METIÓ en datos-adjuntos. Como el salto de entrada se
+    /// rechazó por otro motivo, ese clic nunca quedó marcado como usado y siguió disponible para
+    /// explicar el salto SIGUIENTE. La guarda de «un clic explica UNA transición» no lo cubre: solo
+    /// marca los clics que llegaron a explicar algo, y este no explicó nada — por eso pudo mentir.
+    ///
+    /// El grafo acuñó «datos-adjuntos --[Datos adjuntos]--> documentos». El navegador la siguió
+    /// fielmente, pulsó la carpeta en la que YA ESTABA, y no se movió nunca. Una arista falsa no es
+    /// un dato de menos: es un dato que hace daño.
+    /// </remarks>
+    public static bool PuedeExplicarLaSalida(DateTime cuandoElClic, DateTime cuandoLlegamos) =>
+        cuandoElClic > cuandoLlegamos;
 }

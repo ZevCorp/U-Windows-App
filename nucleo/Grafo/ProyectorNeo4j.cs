@@ -209,6 +209,18 @@ public sealed class ProyectorNeo4j : IDisposable
                     """,
                     parameters = new { ubis = cambiadas.Select(u => new { id = u, app = Grafo.AppDe(u) }) },
                 });
+                // UN ELEMENTO LLEVA A UN SITIO, NO A DOS. El núcleo guarda UN destino por
+                // (ubicación, selector) —`_destinos[clave] = destino`, se sobrescribe—, pero aquí
+                // solo había MERGE y nunca se quitaba el `LLEVA_A` anterior. Al cambiar el destino,
+                // Neo4j se quedaba con los dos.
+                //
+                // Pasó de verdad: «datos-adjuntos + Datos adjuntos» acabó apuntando a `documentos` Y
+                // a `escritorio` a la vez (2026-08-13, buscándolo porque el navegador se atascó).
+                // La proyección dejó de ser un espejo y pasó a ser un archivo histórico — que es
+                // exactamente la mentira que este visor existe para hacer imposible.
+                //
+                // Se borra ANTES de escribir, y también cuando el núcleo no tiene destino: si allí
+                // no hay camino, aquí tampoco puede haberlo.
                 declaraciones.Add(new
                 {
                     statement = """
@@ -218,7 +230,10 @@ public sealed class ProyectorNeo4j : IDisposable
                         SET e.selector = f.sel, e.etiqueta = f.etq, e.tipo = f.tipo,
                             e.vivo = f.vivo, e.app = f.app
                       MERGE (p)-[m:ALCANZA]->(e) SET m.vivo = f.vivo
-                    WITH e, f WHERE f.destino <> ''
+                    WITH e, f
+                      OPTIONAL MATCH (e)-[vieja:LLEVA_A]->(otra:Ubicacion) WHERE otra.id <> f.destino
+                      DELETE vieja
+                    WITH DISTINCT e, f WHERE f.destino <> ''
                       MERGE (d:Ubicacion {id:f.destino}) ON CREATE SET d.app = f.app, d.actual = false
                       MERGE (e)-[:LLEVA_A]->(d)
                     """,

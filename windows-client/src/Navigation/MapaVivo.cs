@@ -82,6 +82,10 @@ public sealed class MapaVivo : IDisposable
     /// cuenta una vez: si no, una pantalla que se refresca sola dispararía el contador sin parar.</summary>
     private int _clicYaContadoSinSitio = -1;
 
+    /// <summary>CUÁNDO LLEGAMOS a la pantalla en la que estamos. Es lo que permite exigir que el clic
+    /// que explica una salida sea POSTERIOR a la llegada: el que te trajo no puede ser el que te saca.</summary>
+    private DateTime _llegadaAlAnterior = DateTime.MinValue;
+
     /// <summary>
     /// Quién sabe qué se acaba de pulsar. Sin esto el núcleo solo aprende «esto se ve aquí» y nunca
     /// «esto llevó allí», así que el grafo no se arma nunca: quedan islas sin caminos entre ellas.
@@ -197,7 +201,7 @@ public sealed class MapaVivo : IDisposable
                         .Equals(global::Nucleo.Grafo.AppDe(aqui), StringComparison.OrdinalIgnoreCase))
                 {
                     PulsoDelMapeador.Actual.NoEraNavegacion(global::Nucleo.Grafo.AppDe(_anterior));
-                    _anterior = aqui;
+                    _anterior = aqui; _llegadaAlAnterior = cuando;
                     _grafo.Estoy(aqui);
                     _proyector.Proyectar(_grafo);
                     return;
@@ -206,6 +210,27 @@ public sealed class MapaVivo : IDisposable
                 double edad = clic == null ? -1 : (cuando - clic.When).TotalSeconds;
                 bool reciente = clic != null && edad < 6;
                 bool sinEstrenar = clic != null && clic.DownIndex != _clicYaUsado;
+
+                // EL CLIC QUE TE TRAJO AQUÍ NO PUEDE SER EL QUE TE SACA. Para explicar una SALIDA,
+                // el clic tiene que haber ocurrido DESPUÉS de que llegáramos.
+                //
+                // Es la valla que faltaba, y sin ella el navegador se quedó atascado de verdad
+                // (2026-08-13, lo pidió el usuario ir a «documentos» y llegó a «datos-adjuntos»):
+                //
+                //   10:35:15  salto documentos→datos-adjuntos SIN atribuir («Documentos» ya explicó…)
+                //   10:35:15  pulsado «Datos adjuntos» → datos-adjuntos
+                //   10:35:18  aprendido: «Datos adjuntos» lleva de datos-adjuntos a escritorio  ← FALSA
+                //
+                // «Datos adjuntos» es el clic que nos METIÓ en datos-adjuntos. Como el salto de
+                // entrada se rechazó por otro motivo, el clic quedó «sin estrenar» y el salto
+                // SIGUIENTE se lo comió. `_clicYaUsado` no cubre esto: solo marca los clics que sí
+                // llegaron a explicar algo, y este no explicó nada — precisamente por eso siguió
+                // disponible para mentir.
+                //
+                // El grafo acuñó «datos-adjuntos --[Datos adjuntos]--> documentos», el navegador la
+                // siguió fielmente, pulsó la carpeta en la que YA ESTABA, y no se movió nunca.
+                bool despuesDeLlegar = clic != null
+                    && AQuienSeLeDioClic.PuedeExplicarLaSalida(clic.When, _llegadaAlAnterior);
                 // ¿EL CLIC OCURRIÓ DONDE ESTÁBAMOS? Solo se puede preguntar cuando la ubicación se
                 // nombra por su PROCESO. Una superficie web se nombra por su DOMINIO —«chatgpt.com»,
                 // no «chrome»— y comparar un dominio con un proceso no es una comprobación: es un
@@ -266,7 +291,7 @@ public sealed class MapaVivo : IDisposable
                         clic.Label, clic.ControlType);
                 string selectorObservado = atribucion.Selector;
 
-                if (clic != null && reciente && sinEstrenar && salioDeAlli
+                if (clic != null && reciente && sinEstrenar && despuesDeLlegar && salioDeAlli
                     && selectorObservado.Length > 0
                     && _grafo.Cruzar(_anterior, selectorObservado, aqui))
                 {
@@ -285,6 +310,8 @@ public sealed class MapaVivo : IDisposable
                     string porQue = clic == null ? "(no hay ningún clic registrado)"
                         : !sinEstrenar ? $"(«{clic.Label}» ya explicó la transición anterior: un clic explica UNA, "
                                        + "y el que nos trajo aquí todavía no se ha registrado)"
+                        : !despuesDeLlegar ? $"(«{clic.Label}» es el clic que nos TRAJO aquí: ocurrió antes "
+                                           + "de llegar, así que no puede ser el que nos saca)"
                         : !reciente ? $"(el último clic registrado es «{clic.Label}», de hace {edad:N1} s "
                                     + "— o tardamos, o ese clic no se registró y estamos viendo uno anterior)"
                         : !salioDeAlli ? $"(el clic «{clic.Label}» fue en «{clic.Process}», no en donde estábamos)"
@@ -297,6 +324,7 @@ public sealed class MapaVivo : IDisposable
                     // entre sesiones — «rechazadas: 12» no dice nada, «clic ya usado: 12» lo dice todo.
                     string causa = clic == null ? "no hubo clic"
                         : !sinEstrenar ? "el clic ya explicó otro salto"
+                        : !despuesDeLlegar ? "ese clic nos trajo aquí, no nos saca"
                         : !reciente ? "el clic era viejo"
                         : !salioDeAlli ? "el clic fue en otra app"
                         : atribucion.Candidatos > 1 ? "la etiqueta nombra a varias cosas"
@@ -305,7 +333,11 @@ public sealed class MapaVivo : IDisposable
                     LogBus.Log("mapa-vivo", $"salto de {Corto(_anterior)} a {Corto(aqui)} SIN atribuir {porQue}");
                 }
             }
-            _anterior = aqui;
+            if (!aqui.Equals(_anterior, StringComparison.OrdinalIgnoreCase))
+            {
+                _anterior = aqui;
+                _llegadaAlAnterior = cuando;
+            }
 
             // SE APUNTA EL SITIO AUNQUE NO SE HAYA MIRADO QUÉ HAY. Pasar por un sitio deprisa tiene
             // que dejar constancia de que se pasó: si no, la ubicación intermedia no existiría y el
