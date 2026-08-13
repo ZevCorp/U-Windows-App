@@ -37,6 +37,8 @@ internal static class Contrato
         Prueba("12. una etiqueta que nombra a varias cosas NO se atribuye", AmbiguoNoSeAtribuye);
         Prueba("13. un clic en un control no cae nunca a un texto suelto", NoSeCaeHaciaTexto);
         Prueba("14. cada app lleva su propia cuenta, y el total se deriva de ellas", CadaAppPorSuLado);
+        Prueba("15. cambiar de ventana no es navegar, y no cuenta como fallo", CambiarDeVentanaNoEsFallar);
+        Prueba("16. «cambió la pantalla y no el sitio» se cuenta, aunque no deje salto", ElFalloQueNoDejaSalto);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -235,6 +237,44 @@ internal static class Contrato
 
         Debe(p.Saltos == saltosAntes + 3 && p.Aprendidas == aprendidasAntes + 1,
             "y el total es exactamente la suma de las partes, porque se deriva de ellas");
+    }
+
+    /// <remarks>
+    /// «NO ERA NAVEGACIÓN» Y «NO SUPIMOS EXPLICAR LA NAVEGACIÓN» SON COSAS OPUESTAS, y hasta el
+    /// 2026-08-13 salían en el mismo número. Rechazar un alt-tab es el sistema ACERTANDO: sin esa
+    /// valla el grafo acuñó «pulsar Ajustes en la Maqueta lleva a la terminal». Pero al contarlo
+    /// como salto fallido, Spotify aparecía con 0 de 2 explicados cuando sus dos saltos eran
+    /// cambios de ventana correctos, y el porcentaje decía «mapeamos mal» donde no había nada que
+    /// mapear. El usuario lo detectó al ver su propia prueba ensuciada.
+    /// </remarks>
+    private static void CambiarDeVentanaNoEsFallar()
+    {
+        var p = PulsoDelMapeador.Actual;
+        p.NoEraNavegacion("tercera.exe");
+        p.NoEraNavegacion("tercera.exe");
+
+        var a = p.Apps["tercera.exe"];
+        Debe(a.NoEranNavegacion == 2, "los cambios de ventana se cuentan");
+        Debe(a.Saltos == 0, "…pero NO como saltos: no lo eran");
+        Debe(a.Rechazos.Count == 0, "…ni como rechazos: no hubo navegación que rechazar");
+    }
+
+    /// <remarks>
+    /// EL FALLO QUE NO CUELGA DE NINGÚN SALTO. Todo lo demás que cuenta el panel nace de un cambio
+    /// de sitio: sin salto no hay atribución que rechazar ni motivo que apuntar. Una app cuya
+    /// identidad no se mueve al navegar —Spotify recorriendo varias pantallas y dejando dos
+    /// ubicaciones— salía con cero errores, que se lee como «aquí no pasa nada» cuando lo que pasa
+    /// es que no nos enteramos. Callar un fallo entero es peor que contarlo mal.
+    /// </remarks>
+    private static void ElFalloQueNoDejaSalto()
+    {
+        var p = PulsoDelMapeador.Actual;
+        p.CambioLaPantallaYNoElSitio("cuarta.exe");
+
+        var a = p.Apps["cuarta.exe"];
+        Debe(a.CambioLaPantallaYNoElSitio == 1, "se cuenta que la pantalla cambió sin cambiar de sitio");
+        Debe(a.Saltos == 0 && a.Rechazos.Count == 0,
+            "…y no se disfraza de salto ni de rechazo: es una avería distinta y se mira aparte");
     }
 
     /// <remarks>

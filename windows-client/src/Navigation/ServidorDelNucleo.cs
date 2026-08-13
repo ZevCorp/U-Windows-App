@@ -267,6 +267,10 @@ public sealed class ServidorDelNucleo : IDisposable
                         app = x.Key,
                         saltos = x.Value.Saltos,
                         aprendidas = x.Value.Aprendidas,
+                        // Aparte del porcentaje: rechazar un alt-tab es acertar, no fallar.
+                        noEranNavegacion = x.Value.NoEranNavegacion,
+                        // Y el fallo que no cuelga de ningún salto, así que no se ve en los rechazos.
+                        sinCambiarDeSitio = x.Value.CambioLaPantallaYNoElSitio,
                         rechazos = x.Value.Rechazos.OrderByDescending(r => r.Value)
                             .Select(r => new { motivo = r.Key, veces = r.Value }),
                     }),

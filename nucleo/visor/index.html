@@ -217,8 +217,13 @@ async function tickMapeador() {
   titulo("POR APP — ¿los fallos son propios de cada una, o los mismos en todas?");
   (j.atribuciones.porApp || []).forEach(a => {
     const pct = a.saltos ? Math.round(100 * a.aprendidas / a.saltos) : 0;
-    fila(a.app, `${a.aprendidas} de ${a.saltos} explicados (${pct}%)`, pct >= 80 ? "#5cc28d" : pct >= 50 ? "#e0c07a" : "#ff9b9b");
+    fila(a.app, a.saltos ? `${a.aprendidas} de ${a.saltos} explicados (${pct}%)` : "sin navegación registrada",
+         !a.saltos ? "#8a919e" : pct >= 80 ? "#5cc28d" : pct >= 50 ? "#e0c07a" : "#ff9b9b");
     (a.rechazos || []).forEach(r => fila("    · " + r.motivo, r.veces, "#8a919e"));
+    // Fuera del porcentaje a propósito: rechazar un alt-tab es acertar, no fallar.
+    if (a.noEranNavegacion) fila("    · cambios de ventana (bien rechazados)", a.noEranNavegacion, "#7d8798");
+    // El fallo que no cuelga de ningún salto: si sube, la identidad de esa app no distingue pantallas.
+    if (a.sinCambiarDeSitio) fila("    · cambió la pantalla y NO el sitio", a.sinCambiarDeSitio, "#ff9b9b");
   });
 
   titulo("COSTES — cronometrados por quien hace el trabajo");

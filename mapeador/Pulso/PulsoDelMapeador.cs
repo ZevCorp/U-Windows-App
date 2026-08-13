@@ -52,12 +52,28 @@ public sealed class PulsoDelMapeador
     /// <summary>Lo que sabemos de UNA app: cuántos saltos supimos explicar y por qué no los demás.</summary>
     public sealed class PorApp
     {
-        internal int _aprendidas, _saltos;
+        internal int _aprendidas, _saltos, _noEranNavegacion, _cambioLaPantallaYNoElSitio;
         internal readonly ConcurrentDictionary<string, int> _rechazos = new();
 
         public int Aprendidas => _aprendidas;
         public int Saltos => _saltos;
         public IReadOnlyDictionary<string, int> Rechazos => _rechazos;
+
+        /// <summary>
+        /// Cambios de ventana —alt-tab, la barra de tareas— que NO eran navegación. Se cuentan
+        /// aparte de <see cref="Saltos"/> a propósito: rechazarlos es el sistema portándose bien, y
+        /// meterlos en el porcentaje hacía que «no había nada que mapear» se leyera como «mapeamos
+        /// mal». Spotify salía con 0 de 2 explicados cuando sus dos saltos eran alt-tabs correctos.
+        /// </summary>
+        public int NoEranNavegacion => _noEranNavegacion;
+
+        /// <summary>
+        /// Veces que un clic cambió lo que se ve pero NO el sitio. Es el fallo que no aparecía por
+        /// ningún lado: sin salto no hay rechazo que contar, así que una app donde la identidad no
+        /// se mueve —Electron, una web de una sola dirección— salía con un grafo diminuto y ni un
+        /// solo error. Callar un fallo entero es peor que contarlo mal.
+        /// </summary>
+        public int CambioLaPantallaYNoElSitio => _cambioLaPantallaYNoElSitio;
     }
 
     /// <summary>
@@ -94,6 +110,14 @@ public sealed class PulsoDelMapeador
         Interlocked.Increment(ref a._saltos);
         a._rechazos.AddOrUpdate(motivo, 1, (_, n) => n + 1);
     }
+
+    /// <summary>Un cambio de ventana que no era navegación. No cuenta como salto: no lo era.</summary>
+    public void NoEraNavegacion(string app) =>
+        Interlocked.Increment(ref _porApp.GetOrAdd(app ?? "", _ => new PorApp())._noEranNavegacion);
+
+    /// <summary>Un clic cambió lo que se ve, pero el sitio siguió siendo el mismo.</summary>
+    public void CambioLaPantallaYNoElSitio(string app) =>
+        Interlocked.Increment(ref _porApp.GetOrAdd(app ?? "", _ => new PorApp())._cambioLaPantallaYNoElSitio);
 
     public IReadOnlyDictionary<string, PorApp> Apps => _porApp;
 

@@ -78,6 +78,10 @@ public sealed class MapaVivo : IDisposable
     /// </summary>
     private int _clicYaUsado = -1;
 
+    /// <summary>El último clic que ya se contó como «cambió la pantalla y no el sitio». Un clic
+    /// cuenta una vez: si no, una pantalla que se refresca sola dispararía el contador sin parar.</summary>
+    private int _clicYaContadoSinSitio = -1;
+
     /// <summary>
     /// Quién sabe qué se acaba de pulsar. Sin esto el núcleo solo aprende «esto se ve aquí» y nunca
     /// «esto llevó allí», así que el grafo no se arma nunca: quedan islas sin caminos entre ellas.
@@ -175,20 +179,48 @@ public sealed class MapaVivo : IDisposable
             // que ninguna, porque el asistente la usaría para volver y pulsaría otra cosa.
             if (_anterior.Length > 0 && !_anterior.Equals(aqui, StringComparison.OrdinalIgnoreCase))
             {
+                // ¿ESTO FUE NAVEGACIÓN, SIQUIERA? Se pregunta ANTES que nada, y el orden importa:
+                // «no era navegación» y «era navegación y no supimos explicarla» son cosas opuestas
+                // y hasta hoy salían mezcladas en el mismo número.
+                //
+                // Un clic no te lleva a otra app. Si el destino es de otra aplicación, lo que pasó
+                // fue un cambio de ventana —alt-tab, la barra de tareas, un clic fuera—. Rechazarlo
+                // es el sistema PORTÁNDOSE BIEN: sin esta valla el grafo acuñó «pulsar Ajustes en la
+                // Maqueta lleva a la terminal», que es falso y además peligroso (2026-08-12).
+                //
+                // Pero al preguntarlo el ÚLTIMO, un alt-tab con un clic viejo salía como «el clic
+                // era viejo» y contaba como navegación fallida: Spotify aparecía con 0 de 2
+                // explicados cuando sus dos saltos eran cambios de ventana correctamente rechazados,
+                // y el porcentaje decía «mapeamos mal» donde el sistema no tenía nada que mapear
+                // (2026-08-13, lo notó el usuario al ensuciarse su propia prueba).
+                if (!global::Nucleo.Grafo.AppDe(_anterior)
+                        .Equals(global::Nucleo.Grafo.AppDe(aqui), StringComparison.OrdinalIgnoreCase))
+                {
+                    PulsoDelMapeador.Actual.NoEraNavegacion(global::Nucleo.Grafo.AppDe(_anterior));
+                    _anterior = aqui;
+                    _grafo.Estoy(aqui);
+                    _proyector.Proyectar(_grafo);
+                    return;
+                }
+
                 double edad = clic == null ? -1 : (cuando - clic.When).TotalSeconds;
                 bool reciente = clic != null && edad < 6;
                 bool sinEstrenar = clic != null && clic.DownIndex != _clicYaUsado;
+                // ¿EL CLIC OCURRIÓ DONDE ESTÁBAMOS? Solo se puede preguntar cuando la ubicación se
+                // nombra por su PROCESO. Una superficie web se nombra por su DOMINIO —«chatgpt.com»,
+                // no «chrome»— y comparar un dominio con un proceso no es una comprobación: es un
+                // «no» garantizado. Así se tiraron cuatro navegaciones web reales seguidas, con el
+                // sitio cambiando correctamente de es-419 a images a library a plugins, todas con el
+                // motivo «el clic "Imágenes" fue en "chrome", no en donde estábamos» (2026-08-13; el
+                // usuario avisó de que en Chrome no había hecho alt-tab, y tenía razón).
+                //
+                // Para lo web la valla que sirve es la de arriba —misma superficie, mismo dominio—,
+                // que ya pasó. Preguntar además por el proceso no añadía seguridad: solo rechazaba.
+                bool porProceso = _anterior.StartsWith("uia://", StringComparison.OrdinalIgnoreCase);
                 bool salioDeAlli = clic != null
-                    && global::Nucleo.Grafo.AppDe(_anterior)
-                        .StartsWith(clic.Process, StringComparison.OrdinalIgnoreCase);
-
-                // UN CLIC NO TE LLEVA A OTRA APP. Si el destino es de otra aplicación, lo que pasó
-                // fue un cambio de ventana —alt-tab, la barra de tareas, un clic fuera— y no una
-                // navegación. Sin esta valla el grafo acuñó «pulsar Ajustes en la Maqueta lleva a
-                // la terminal», que es falso y además peligroso: el asistente lo usaría para
-                // volver y pulsaría otra cosa (2026-08-12, visto en el primer camino aprendido).
-                bool mismaApp = global::Nucleo.Grafo.AppDe(_anterior)
-                    .Equals(global::Nucleo.Grafo.AppDe(aqui), StringComparison.OrdinalIgnoreCase);
+                    && (!porProceso
+                        || global::Nucleo.Grafo.AppDe(_anterior)
+                            .StartsWith(clic.Process, StringComparison.OrdinalIgnoreCase));
 
                 // EL CLIC SE TRADUCE AL ELEMENTO QUE EL NÚCLEO CONOCE, buscándolo POR ETIQUETA
                 // entre lo observado. Dos motivos, los dos medidos:
@@ -234,7 +266,7 @@ public sealed class MapaVivo : IDisposable
                         clic.Label, clic.ControlType);
                 string selectorObservado = atribucion.Selector;
 
-                if (clic != null && reciente && sinEstrenar && salioDeAlli && mismaApp
+                if (clic != null && reciente && sinEstrenar && salioDeAlli
                     && selectorObservado.Length > 0
                     && _grafo.Cruzar(_anterior, selectorObservado, aqui))
                 {
@@ -256,7 +288,6 @@ public sealed class MapaVivo : IDisposable
                         : !reciente ? $"(el último clic registrado es «{clic.Label}», de hace {edad:N1} s "
                                     + "— o tardamos, o ese clic no se registró y estamos viendo uno anterior)"
                         : !salioDeAlli ? $"(el clic «{clic.Label}» fue en «{clic.Process}», no en donde estábamos)"
-                        : !mismaApp ? "(es otra app: fue un cambio de ventana, no navegación)"
                         : atribucion.Candidatos > 1
                             ? $"(«{clic.Label}» ({clic.ControlType}) nombra a {atribucion.Candidatos} cosas en esa "
                             + "pantalla: no es una identidad, y adivinar acuñaría un camino falso)"
@@ -268,7 +299,6 @@ public sealed class MapaVivo : IDisposable
                         : !sinEstrenar ? "el clic ya explicó otro salto"
                         : !reciente ? "el clic era viejo"
                         : !salioDeAlli ? "el clic fue en otra app"
-                        : !mismaApp ? "cambio de ventana, no navegación"
                         : atribucion.Candidatos > 1 ? "la etiqueta nombra a varias cosas"
                         : "el núcleo no conoce ese elemento allí";
                     PulsoDelMapeador.Actual.Rechazada(causa, global::Nucleo.Grafo.AppDe(_anterior));
@@ -316,7 +346,28 @@ public sealed class MapaVivo : IDisposable
                 .ToList();
             PulsoDelMapeador.Actual.Embudo(crudos.Count, visibles.Count);
 
+            // ¿PULSASTE ALGO Y CAMBIÓ LO QUE SE VE, PERO SEGUIMOS «EN EL MISMO SITIO»?
+            //
+            // Ese es el fallo que no aparecía POR NINGÚN LADO. Todo lo que el panel cuenta cuelga de
+            // un salto: sin salto no hay atribución que rechazar, ni motivo que apuntar. Así que una
+            // app cuya identidad no se mueve al navegar —Spotify paseando por varias pantallas y
+            // dejando dos ubicaciones— salía con un grafo diminuto y CERO errores, que se lee como
+            // «aquí no pasa nada» cuando lo que pasa es que no nos enteramos (2026-08-13).
+            //
+            // Se cuenta UNA VEZ POR CLIC, no por vuelta: si no, una pantalla que se refresca sola
+            // dispararía el contador para siempre y volvería a ser ruido que se aprende a ignorar.
+            long antesDeMirar = _grafo.Version;
             _grafo.Observar(aqui, visibles);
+            var clic = Clics?.Last;
+            if (clic != null && clic.DownIndex != _clicYaContadoSinSitio
+                && (DateTime.UtcNow - clic.When).TotalSeconds < 6
+                && _grafo.Version != antesDeMirar
+                && aqui.Equals(_anterior, StringComparison.OrdinalIgnoreCase))
+            {
+                _clicYaContadoSinSitio = clic.DownIndex;
+                PulsoDelMapeador.Actual.CambioLaPantallaYNoElSitio(global::Nucleo.Grafo.AppDe(aqui));
+            }
+
             crono.Restart();
             _proyector.Proyectar(_grafo);
             PulsoDelMapeador.Actual.Costo("proyectar", crono.ElapsedMilliseconds);
