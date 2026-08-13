@@ -475,8 +475,8 @@
     "semantic_hash": "0cf1fd4b6e9acfc11c4b5788b99e96e0"
   },
   "windows-client/src/Uia/UiaReader.cs": {
-    "mtime": 1785983245.0339622,
-    "ast_hash": "5b712baf63c1666342a112f2e77d5a86",
+    "mtime": 1786663867.9885976,
+    "ast_hash": "f4add9340ded66a5cf13fa51e3ac75e9",
     "semantic_hash": ""
   },
   "windows-client/src/Update/Updater.cs": {
@@ -755,8 +755,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Uia/Reconocedor.cs": {
-    "mtime": 1785941468.5693944,
-    "ast_hash": "7b914136fc1548aed8061c448915a6f7",
+    "mtime": 1786663887.4074295,
+    "ast_hash": "416d6cd993d66f586672b528c411931a",
     "semantic_hash": ""
   },
   "GUIA-INSTALACION-GRAPHIFY.html": {
@@ -1050,13 +1050,13 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/ServidorDelNucleo.cs": {
-    "mtime": 1786661612.4006703,
-    "ast_hash": "a93790776aa868722dcb24aba1352c82",
+    "mtime": 1786663900.6610537,
+    "ast_hash": "863f1561f8381ec6ae5a47bd498a2dd5",
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786663381.5602524,
-    "ast_hash": "ab22e3e6f365b533cb32331d87f5d305",
+    "mtime": 1786663934.5738435,
+    "ast_hash": "291ebb9edb05a88433c3bb992e9286d8",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786663386.173321,
-    "ast_hash": "dd07ef867580f5c1162cbd3502ef33a8",
+    "mtime": 1786663938.627684,
+    "ast_hash": "d6323a6f6587011ba5f5b36eb2d02496",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
