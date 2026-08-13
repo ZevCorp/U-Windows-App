@@ -32,6 +32,21 @@ public sealed class MapaVivo : IDisposable
     private string _anterior = "";
 
     /// <summary>
+    /// EL NÚMERO DEL ÚLTIMO CLIC QUE YA SE USÓ. Un clic explica UNA transición y solo una.
+    ///
+    /// Sin esto, el mismo clic se atribuía dos veces y la segunda siempre era falsa. El patrón está
+    /// en los logs con dos segundos de separación: pulsas «Datos adjuntos», se atribuye bien
+    /// descargas→datos-adjuntos; pulsas «Escritorio» pero aún no se ha registrado, así que el
+    /// último clic sigue siendo el anterior y se le atribuye TAMBIÉN datos-adjuntos→escritorio.
+    /// Nace «pulsa Datos adjuntos para ir a Escritorio», que estando ya en Datos adjuntos no mueve
+    /// nada — y el navegador se quedaba dando vueltas sobre ese tramo (2026-08-12, lo midió el
+    /// usuario pidiendo ir a «facturas»).
+    ///
+    /// Por eso «funcionaba antes»: la primera atribución era correcta. La falsa entraba después.
+    /// </summary>
+    private int _clicYaUsado = -1;
+
+    /// <summary>
     /// Quién sabe qué se acaba de pulsar. Sin esto el núcleo solo aprende «esto se ve aquí» y nunca
     /// «esto llevó allí», así que el grafo no se arma nunca: quedan islas sin caminos entre ellas.
     /// </summary>
@@ -104,6 +119,7 @@ public sealed class MapaVivo : IDisposable
             {
                 double edad = clic == null ? -1 : (cuando - clic.When).TotalSeconds;
                 bool reciente = clic != null && edad < 6;
+                bool sinEstrenar = clic != null && clic.DownIndex != _clicYaUsado;
                 bool salioDeAlli = clic != null
                     && global::Nucleo.Grafo.AppDe(_anterior)
                         .StartsWith(clic.Process, StringComparison.OrdinalIgnoreCase);
@@ -154,9 +170,11 @@ public sealed class MapaVivo : IDisposable
                         .ToList();
                 string selectorObservado = candidatos.Count == 1 ? candidatos[0].Que.Selector : "";
 
-                if (clic != null && reciente && salioDeAlli && mismaApp && selectorObservado.Length > 0
+                if (clic != null && reciente && sinEstrenar && salioDeAlli && mismaApp
+                    && selectorObservado.Length > 0
                     && _grafo.Cruzar(_anterior, selectorObservado, aqui))
                 {
+                    _clicYaUsado = clic.DownIndex;
                     LogBus.Log("mapa-vivo", $"aprendido: «{clic.Label}» lleva de {Corto(_anterior)} a {Corto(aqui)}");
                 }
                 else
@@ -168,6 +186,8 @@ public sealed class MapaVivo : IDisposable
                     // estamos mirando uno anterior» — y esas dos cosas se arreglan en sitios
                     // distintos. Un mensaje que no separa sus causas cuesta un diagnóstico entero.
                     string porQue = clic == null ? "(no hay ningún clic registrado)"
+                        : !sinEstrenar ? $"(«{clic.Label}» ya explicó la transición anterior: un clic explica UNA, "
+                                       + "y el que nos trajo aquí todavía no se ha registrado)"
                         : !reciente ? $"(el último clic registrado es «{clic.Label}», de hace {edad:N1} s "
                                     + "— o tardamos, o ese clic no se registró y estamos viendo uno anterior)"
                         : !salioDeAlli ? $"(el clic «{clic.Label}» fue en «{clic.Process}», no en donde estábamos)"
