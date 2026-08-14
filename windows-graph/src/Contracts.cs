@@ -340,6 +340,18 @@ public sealed class DetectedField
     [JsonPropertyName("controlType")] public string ControlType { get; set; } = "";
     [JsonPropertyName("allowedOptions")] public List<FieldOption>? AllowedOptions { get; set; }
     [JsonPropertyName("currentValue")] public string? CurrentValue { get; set; }
+
+    /// <summary>
+    /// ¿Se puede escribir en él AHORA MISMO? En SAP no es una propiedad del campo sino del momento:
+    /// hay campos que se abren y se cierran según lo que ya haya puesto en la pantalla.
+    /// </summary>
+    /// <remarks>
+    /// No viaja al emparejador —no forma parte de su contrato— pero sirve para no MANDARLE lo que
+    /// no se puede escribir. Sin este filtro el modelo emparejaba «Fecha Crea» y «Hora Crea», que
+    /// son de solo lectura, y al intentar escribirlas SAP lanzaba (2026-08-14). Ofrecerle sitios
+    /// donde no se puede escribir no es solo ruido: gasta sus decisiones en campos imposibles.
+    /// </remarks>
+    [JsonIgnore] public bool Editable { get; set; } = true;
 }
 
 public sealed class AutofillRequest

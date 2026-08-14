@@ -425,7 +425,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // botón: el operador no tiene que acordarse de activarlo para que su compañero pueda
         // exportar desde la web. Sin trabajo no hace nada más que una petición cada tres segundos.
         _exportador = new EjecutorDeExportaciones(_graphConfig, _rellenador,
-            () => _locator?.DondeEstoy()?.Id ?? "");
+            () => _locator?.DondeEstoy()?.Id ?? "", Dispatcher);
         _exportador.Cuenta += m => Dispatcher.Invoke(() => { SetStatus(m); ShowTalk(); });
         _exportador.Arrancar();
         Closed += (_, __) => _exportador?.Dispose();
@@ -2327,6 +2327,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private async Task ClinicalTickAsync()
     {
         if (!_clinical.Active || _clinical.Stopped || _offering || _teaching || _runningDirect) return;
+
+        // EL CAMINO NUEVO MANDA. Mientras el ejecutor de exportaciones esté escuchando, este puente
+        // se calla: son dos sistemas queriendo llenar la MISMA pantalla, y el viejo abre una ventana
+        // de aprobación que roba el foco a mitad de la escritura del nuevo. El usuario lo vio en
+        // vivo el 2026-08-14 — el popup de «voy a escribir 2 dato(s)» apareciendo encima mientras el
+        // exportador estaba trabajando.
+        //
+        // No se borra: el puente sigue entero y vuelve solo si el ejecutor no está. Pero dos cosas
+        // escribiendo a la vez en una historia clínica no es una redundancia útil, es una carrera.
+        if (_exportador?.Encendido == true) return;
 
         // ── PASO 1: ¿la nota ya está guardada allá? ─────────────────────────────
         var data = await _clinical.FetchAsync(CancellationToken.None);

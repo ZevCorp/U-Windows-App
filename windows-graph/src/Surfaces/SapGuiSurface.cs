@@ -370,6 +370,43 @@ public sealed class SapGuiSurface : IUiSurface
     }
 
     /// <summary>
+    /// El valor de UN campo, leído directo por su selector. Devuelve null si no existe.
+    /// </summary>
+    /// <remarks>
+    /// EXISTE POR VELOCIDAD, y la diferencia es de dos órdenes de magnitud. Comprobar una escritura
+    /// releyendo con <see cref="ReadFields"/> recorre el árbol ENTERO de la pantalla —cientos de
+    /// componentes— para mirar uno solo. Haciéndolo antes y después de cada campo, rellenar seis
+    /// campos tardaba un minuto; el mismo trabajo por VBS, yendo directo al nodo, tardaba dos
+    /// segundos (2026-08-14, medido con el usuario mirando).
+    ///
+    /// Y NO ES SOLO LENTITUD: cada recorrido completo crea y tira cientos de proxies COM, y entre
+    /// medias la pantalla puede viajar al servidor. Ir directo al nodo también quita esa ventana.
+    /// </remarks>
+    public string? ValorActual(string selector)
+    {
+        dynamic? session;
+        try { session = Session(); } catch { return null; }
+        if (session == null) return null;
+
+        string id = SapSelector.IdOf(selector);
+        if (id.Length == 0) return null;
+
+        try
+        {
+            dynamic? node = session.FindById(id, false);
+            if (node == null) return null;
+            string type = Str(node.Type);
+            return type.ToLowerInvariant() switch
+            {
+                "guicombobox" => Str(node.Key),
+                "guicheckbox" or "guiradiobutton" => ((bool)node.Selected).ToString(),
+                _ => Str(node.Text),
+            };
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
     /// Huella estructural: los IDS de los componentes interactivos de la ventana activa, ordenados y
     /// resumidos en un hash corto. Mismo recorrido que <see cref="ReadinessCount"/> —que solo cuenta—,
     /// pero quedándose con QUIÉNES son y no cuántos: dos pantallas distintas pueden tener 36 elementos.
@@ -1440,6 +1477,7 @@ public sealed class SapGuiSurface : IUiSurface
                 ControlType = GraphControlType(type),
                 CurrentValue = ValueOf(node, type),
                 AllowedOptions = OptionsOf(node, type),
+                Editable = EsEditable(node),
             };
         }
         catch { return null; }
@@ -1545,6 +1583,16 @@ public sealed class SapGuiSurface : IUiSurface
     }
 
     /// <summary>Las opciones de un combo. En SAP la clave interna (Key) y el texto visible difieren.</summary>
+    /// <summary>
+    /// ¿SAP deja escribir en este campo ahora? Ante la duda se dice que SÍ: un botón o un shell no
+    /// exponen `Changeable`, y tratarlos como bloqueados los sacaría del inventario por error.
+    /// </summary>
+    private static bool EsEditable(dynamic node)
+    {
+        try { return (bool)node.Changeable; }
+        catch { return true; }
+    }
+
     private static List<FieldOption>? OptionsOf(dynamic node, string type)
     {
         if (!type.Equals("GuiComboBox", StringComparison.OrdinalIgnoreCase)) return null;

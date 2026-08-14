@@ -40,6 +40,22 @@ public sealed class EjecutorDeExportaciones : IDisposable
     private readonly Func<string> _donde;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
+    /// <summary>
+    /// EL HILO DONDE SE TOCA SAP, y no es un detalle de implementación: es el hilo de la interfaz.
+    /// </summary>
+    /// <remarks>
+    /// El motor de scripting de SAP se resuelve por la TABLA DE OBJETOS EN EJECUCIÓN de COM
+    /// (`saprotwr.dll` → `GetROTEntry("SAPGUI")`), y eso exige un hilo STA. Este bucle vive en el
+    /// pool de hilos —que es MTA—, así que la resolución devolvía null y el ejecutor contestaba «no
+    /// hay ninguna sesión de SAP GUI abierta» CON SAP ABIERTO DELANTE (2026-08-14, lo vio el usuario
+    /// con «intento 2» dando vueltas en la web).
+    ///
+    /// Se manda el trabajo al hilo de la interfaz porque es donde ya corren los workflows cuando los
+    /// lanza una persona: mismo hilo, mismas garantías, ningún modelo de hilos nuevo que mantener.
+    /// Pedir la red sigue en el pool; solo cruza lo que habla con SAP.
+    /// </remarks>
+    private readonly System.Windows.Threading.Dispatcher _hiloConSap;
+
     private CancellationTokenSource? _vida;
     private Task? _bucle;
 
@@ -50,11 +66,13 @@ public sealed class EjecutorDeExportaciones : IDisposable
     /// </summary>
     private static readonly TimeSpan Ritmo = TimeSpan.FromSeconds(3);
 
-    public EjecutorDeExportaciones(GraphConfig config, RellenadorSap rellenador, Func<string> donde)
+    public EjecutorDeExportaciones(GraphConfig config, RellenadorSap rellenador, Func<string> donde,
+        System.Windows.Threading.Dispatcher hiloConSap)
     {
         _config = config;
         _rellenador = rellenador;
         _donde = donde;
+        _hiloConSap = hiloConSap;
     }
 
     /// <summary>Qué está pasando, para pintarlo donde se vea.</summary>
@@ -139,28 +157,38 @@ public sealed class EjecutorDeExportaciones : IDisposable
             return;
         }
 
-        // 1. LLEGAR. El workflow navega hasta la pantalla; enfocar SAP es parte de su trabajo y ya
-        //    lo hace el alineador que el reproductor lleva dentro.
-        string error = await NavegarAsync(workflow, ct);
-        if (error.Length > 0)
+        // TODO LO QUE TOCA SAP VA AL HILO DE LA INTERFAZ: navegar, comprobar dónde acabamos y
+        // escribir. Desde el pool de hilos, COM ni siquiera encuentra la sesión (ver _hiloConSap).
+        var hecho = await _hiloConSap.InvokeAsync(async () =>
         {
-            LogBus.Log("exportar", $"trabajo {id}: no se pudo llegar a la pantalla — {error}");
-            await ReportarAsync(id, "error", detalle: "NAVEGACION_FALLIDA", ct: ct);
+            // 1. LLEGAR. El workflow navega hasta la pantalla; enfocar SAP es parte de su trabajo y
+            //    ya lo hace el alineador que el reproductor lleva dentro.
+            string error = await NavegarAsync(workflow, ct);
+            if (error.Length > 0) return (Fallo: "NAVEGACION_FALLIDA", Porque: error,
+                Escritos: (IReadOnlyList<LoEscrito>)Array.Empty<LoEscrito>(),
+                SinLlenar: (IReadOnlyList<string>)Array.Empty<string>());
+
+            // 2. COMPROBAR DÓNDE SE ACABÓ. El workflow puede decir que terminó y haber dejado otra
+            //    pantalla delante; escribir ahí sería meter datos clínicos en el formulario de otro.
+            string aqui = _donde();
+            if (!RellenadorSap.EsLaPantallaDeTriage(aqui))
+                return (Fallo: "PANTALLA_INESPERADA", Porque: $"el workflow acabó en «{aqui}»",
+                    Escritos: (IReadOnlyList<LoEscrito>)Array.Empty<LoEscrito>(),
+                    SinLlenar: (IReadOnlyList<string>)Array.Empty<string>());
+
+            // 3. LLENAR. Con verificación por relectura, campo a campo.
+            var (esc, sin) = await _rellenador.RellenarConNotaAsync(nota, ct);
+            return (Fallo: "", Porque: "", Escritos: esc, SinLlenar: sin);
+        }).Task.Unwrap();
+
+        if (hecho.Fallo.Length > 0)
+        {
+            LogBus.Log("exportar", $"trabajo {id}: {hecho.Porque}");
+            await ReportarAsync(id, "error", detalle: hecho.Fallo, ct: ct);
             return;
         }
 
-        // 2. COMPROBAR DÓNDE SE ACABÓ. El workflow puede decir que terminó y haber dejado otra
-        //    pantalla delante; escribir ahí sería meter datos clínicos en el formulario de otro.
-        string aqui = _donde();
-        if (!RellenadorSap.EsLaPantallaDeTriage(aqui))
-        {
-            LogBus.Log("exportar", $"trabajo {id}: el workflow acabó en «{aqui}», que no es la pantalla de triage");
-            await ReportarAsync(id, "error", detalle: "PANTALLA_INESPERADA", ct: ct);
-            return;
-        }
-
-        // 3. LLENAR. Con verificación por relectura, campo a campo.
-        var (escritos, sinLlenar) = await _rellenador.RellenarConNotaAsync(nota, ct);
+        var (escritos, sinLlenar) = (hecho.Escritos, hecho.SinLlenar);
         LogBus.Log("exportar", $"trabajo {id}: {escritos.Count} campo(s) escritos, {sinLlenar.Count} sin llenar");
 
         if (escritos.Count == 0)

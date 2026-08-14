@@ -157,10 +157,7 @@ public sealed class RellenadorSap
             if (escritos.Count == antes) break;
         }
 
-        var pendientes = _sap.ReadFields()
-            .Where(f => f.Selector.Length > 0 && f.Label.Length > 0)
-            .Where(f => f.ActionType is "input" or "select" or "click")
-            .Where(f => !_yaPuesto.ContainsKey(f.StepOrder))
+        var pendientes = CamposQueFaltan()
             .Where(f => string.IsNullOrWhiteSpace(f.CurrentValue))
             .Select(f => f.Label)
             .Distinct()
@@ -179,11 +176,7 @@ public sealed class RellenadorSap
         // Los campos se leen AHORA, no al arrancar: en SAP la editabilidad cambia —hay campos que
         // se abren y se cierran según lo que ya haya puesto— y un inventario viejo ofrecería sitios
         // donde ya no se puede escribir (2026-08-13, visto con la presión arterial).
-        var campos = _sap.ReadFields()
-            .Where(f => f.Selector.Length > 0 && f.Label.Length > 0)
-            .Where(f => f.ActionType is "input" or "select" or "click")
-            .Where(f => !_yaPuesto.ContainsKey(f.StepOrder))
-            .ToList();
+        var campos = CamposQueFaltan();
 
         if (campos.Count == 0) { Cuenta?.Invoke("No quedan campos por llenar."); return; }
 
@@ -276,8 +269,22 @@ public sealed class RellenadorSap
         return EscribirLoEmparejado(matches, campos, ct);
     }
 
+    /// <summary>
+    /// Lo que se le ofrece al emparejador: solo campos ESCRIBIBLES y con nombre de verdad.
+    /// </summary>
+    /// <remarks>
+    /// Se filtra por tres cosas, y cada una salió de un fallo visto:
+    ///   · `Editable`: «Fecha Crea» y «Hora Crea» son de solo lectura, el modelo las emparejaba y
+    ///     SAP lanzaba al escribirlas (2026-08-14).
+    ///   · Etiquetas que no nombran nada: en esta pantalla la casilla diastólica se llama «/», y
+    ///     ofrecer un campo llamado «/» es invitar a que caiga ahí cualquier número suelto — pasó:
+    ///     quedó con un 100 que nadie pidió.
+    ///   · Los ya puestos, para no pisarlos ni gastar decisiones del modelo en ellos.
+    /// </remarks>
     private List<DetectedField> CamposQueFaltan() => _sap.ReadFields()
-        .Where(f => f.Selector.Length > 0 && f.Label.Length > 0)
+        .Where(f => f.Selector.Length > 0)
+        .Where(f => f.Editable)
+        .Where(f => f.Label.Trim().Length >= 3 && f.Label.Any(char.IsLetter))
         .Where(f => f.ActionType is "input" or "select" or "click")
         .Where(f => !_yaPuesto.ContainsKey(f.StepOrder))
         .ToList();
@@ -354,16 +361,16 @@ public sealed class RellenadorSap
         return new LoEscrito(campo, antes, despues);
     }
 
-    /// <summary>El valor de un campo, releído de SAP en este instante.</summary>
-    private string LeerAhora(DetectedField campo)
-    {
-        try
-        {
-            var f = _sap.ReadFields().FirstOrDefault(x => x.Selector == campo.Selector);
-            return f?.CurrentValue ?? "";
-        }
-        catch { return ""; }
-    }
+    /// <summary>
+    /// El valor de un campo, releído de SAP en este instante — YENDO AL NODO, no recorriendo todo.
+    /// </summary>
+    /// <remarks>
+    /// Esto usaba `ReadFields()`, que recorre el árbol entero de la pantalla, y se llamaba DOS VECES
+    /// por campo (antes y después). Rellenar seis campos tardaba un minuto entero, con esperas de
+    /// hasta 14 segundos entre uno y otro; el mismo trabajo por VBS, yendo directo al nodo, tardaba
+    /// dos segundos (2026-08-14, lo sufrió el usuario mirando la pantalla).
+    /// </remarks>
+    private string LeerAhora(DetectedField campo) => _sap.ValorActual(campo.Selector) ?? "";
 
     /// <summary>
     /// Deshacer el último llenado. Existe porque esto escribe SIN pedir permiso: la salida de
