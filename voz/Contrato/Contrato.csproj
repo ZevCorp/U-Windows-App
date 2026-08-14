@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    LAS PROMESAS DE LA VOZ POR EL COLLAR, escritas como pruebas que llaman al código real.
+
+    Cuarto contrato del repo, junto al del grafo (tests/ContratoDelGrafo, el núcleo anterior), el del
+    núcleo nuevo (nucleo/Contrato) y el del mapeador (mapeador/Contrato). Separado por la misma razón
+    que los otros: mezclarlos haría imposible saber cuál se rompió.
+
+    NO va a tests/ContratoDelGrafo, y hay dos motivos medidos (spec 001): el arnés de aquel entrega un
+    SurfaceMap a cada promesa y estas no tienen nada que ver con el grafo; y aquel es el único que
+    referencia U.dll por binario, que es justo el ensamblado que sube de TFM para poder hablar con
+    WinRT. Un juez que se cae por un cambio ajeno no dice «no sé», dice «culpable».
+
+    Corre sin abrir una ventana y sin Bluetooth: por eso puede correr en la nube en cada PR.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>contrato-voz</AssemblyName>
+    <RootNamespace>Omi.Pruebas</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Omi\Omi.csproj" />
+  </ItemGroup>
+
+</Project>

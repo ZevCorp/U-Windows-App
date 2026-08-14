@@ -9,7 +9,14 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- 10.0.19041.0 y no «net8.0-windows» a secas: las proyecciones de WinRT
+         (Windows.Devices.Bluetooth) solo existen con la version de Windows en el TFM, y sin ellas no
+         se puede hablar por BLE con el collar Omi (spec 001, fase 1). No cambia el runtime minimo ni
+         obliga a Windows 10 2004 para EJECUTAR: es la version del SDK contra la que se COMPILA.
+         Medido el 2026-08-13: con este TFM el contrato del grafo sigue dando 20/20, que era el
+         riesgo real — ese contrato referencia U.dll por binario y un juez que no compila no dice
+         «no se», dice «culpable» (aprendizaje n.17). -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -62,6 +69,10 @@
   <ItemGroup>
     <!-- TTS/STT integrados de Windows (paquete NuGet en .NET moderno). -->
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <!-- Opus en C# PURO, sin DLL nativa: el collar Omi entrega Opus y hay que decodificarlo. Se
+         eligió sobre los binding de libopus justamente por eso — una dependencia nativa más en el
+         instalador de Velopack es una forma nueva de que la app no arranque en una máquina limpia. -->
+    <PackageReference Include="Concentus" Version="2.2.2" />
     <PackageReference Include="System.Speech" Version="8.0.0" />
     <!-- Captura de pantalla (GDI) para computer-use. -->
     <PackageReference Include="System.Drawing.Common" Version="8.0.7" />
@@ -88,6 +99,11 @@
          dentro como dos `Interlocked` sueltos, el invariante no se podía nombrar en una promesa ni
          probar sin levantar la app entera — y se rompió en silencio (2026-08-12). -->
     <ProjectReference Include="..\mapeador\Pulso\Pulso.csproj" />
+
+    <!-- LO QUE SE SABE DEL COLLAR sin saber de Bluetooth: códec, cabecera, reposición del silencio.
+         Fuera del cliente por la misma razón que los dos de arriba — un net8.0 puro se juzga en la
+         nube en cada PR; esto, con WinRT dentro, no. Ver voz\Contrato y la spec 001. -->
+    <ProjectReference Include="..\voz\Omi\Omi.csproj" />
   </ItemGroup>
 
 </Project>

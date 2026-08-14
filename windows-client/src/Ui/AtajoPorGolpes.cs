@@ -52,6 +52,8 @@ public sealed class AtajoPorGolpes : IDisposable
 
     private readonly Action _soloCtrl;
     private readonly Action _ctrlShift;
+    private readonly Action? _tripleCtrl;
+    private int _golpesSolo;         // cuántos Ctrl limpios seguidos llevamos
     private Gancho? _fn;             // referencia viva: si se la lleva el recolector, Windows cae
     private IntPtr _h;
 
@@ -64,15 +66,24 @@ public sealed class AtajoPorGolpes : IDisposable
     /// ve nunca. Medido en la máquina del usuario: pulsando Ctrl+Fn 59 veces solo llegó el Ctrl
     /// (vk=0xA2), ni una vez la Fn (2026-08-06).</param>
     /// <param name="ctrlShift">Doble Ctrl+Shift.</param>
-    public AtajoPorGolpes(Action soloCtrl, Action ctrlShift)
+    /// <param name="tripleCtrl">Triple Ctrl. Opcional: sin él, el tercer golpe no hace nada.</param>
+    public AtajoPorGolpes(Action soloCtrl, Action ctrlShift, Action? tripleCtrl = null)
     {
         _soloCtrl = soloCtrl;
         _ctrlShift = ctrlShift;
+        _tripleCtrl = tripleCtrl;
         _fn = Teclado;
         _h = SetWindowsHookEx(WH_KEYBOARD_LL, _fn, IntPtr.Zero, 0);
         LogBus.Log("atajo", _h != IntPtr.Zero
-            ? "doble Ctrl (voz) y doble Ctrl+Shift (panel): activos"
+            ? $"doble Ctrl (voz), doble Ctrl+Shift (panel){(tripleCtrl != null ? ", triple Ctrl (collar)" : "")}: activos"
             : "doble Ctrl / Ctrl+Shift: NO se pudo enganchar el teclado");
+    }
+
+    /// <summary>Dispara un gesto sin que un fallo suyo se lleve el gancho del teclado por delante.</summary>
+    private static void Disparar(Action gesto, string cual)
+    {
+        try { gesto(); }
+        catch (Exception e) { LogBus.Log("atajo", $"{cual} falló: {e.Message}"); }
     }
 
     /// <summary>
@@ -134,20 +145,42 @@ public sealed class AtajoPorGolpes : IDisposable
 
                     // Cada gesto lleva su propia cuenta: si compartieran una, un Ctrl+Shift seguido
                     // de un Ctrl a secas contaría como pareja y dispararía lo que no toca.
-                    ref var ultimo = ref (conShift ? ref _ultimoConShift : ref _ultimoSolo);
-                    if (ahora - ultimo <= Seguidos)
+                    bool seguido = ahora - (conShift ? _ultimoConShift : _ultimoSolo) <= Seguidos;
+
+                    if (conShift)
                     {
-                        ultimo = DateTime.MinValue;   // dos golpes son UN gesto, no tres
-                        _ultimoSolo = _ultimoConShift = DateTime.MinValue;
-                        try { (conShift ? _ctrlShift : _soloCtrl)(); }
-                        catch (Exception e) { LogBus.Log("atajo", $"falló: {e.Message}"); }
+                        // Ctrl+Shift sigue siendo de dos golpes y nada más: el panel no tiene tercera.
+                        if (seguido)
+                        {
+                            _ultimoSolo = _ultimoConShift = DateTime.MinValue;
+                            Disparar(_ctrlShift, "doble Ctrl+Shift");
+                        }
+                        else
+                        {
+                            _ultimoConShift = ahora;
+                            _ultimoSolo = DateTime.MinValue;   // empezar un gesto invalida el otro
+                            _golpesSolo = 0;
+                        }
                     }
                     else
                     {
-                        ultimo = ahora;
-                        // Empezar un gesto invalida el otro: no se está a medias de los dos.
-                        if (conShift) _ultimoSolo = DateTime.MinValue;
-                        else _ultimoConShift = DateTime.MinValue;
+                        // EL CTRL SOLO SÍ CUENTA HASTA TRES. Dos abre el micrófono como siempre, y un
+                        // tercero seguido pasa la voz al collar. El segundo dispara igual y no se
+                        // retrasa esperando a ver si viene un tercero: meterle 600 ms de espera al
+                        // gesto que ya existe, para estrenar uno nuevo, sería cobrarle al que funciona.
+                        // Lo que se ve al hacer triple es el micrófono abriéndose y mudándose al
+                        // collar, que es exactamente lo que se pidió.
+                        _golpesSolo = seguido ? _golpesSolo + 1 : 1;
+                        _ultimoSolo = ahora;
+                        _ultimoConShift = DateTime.MinValue;
+
+                        if (_golpesSolo == 2) Disparar(_soloCtrl, "doble Ctrl");
+                        else if (_golpesSolo >= 3)
+                        {
+                            _golpesSolo = 0;
+                            _ultimoSolo = DateTime.MinValue;
+                            if (_tripleCtrl != null) Disparar(_tripleCtrl, "triple Ctrl");
+                        }
                     }
                 }
             }

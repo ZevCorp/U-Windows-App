@@ -370,7 +370,22 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // quedaba dibujado y sin nadie que lo moviera (2026-08-05).
                 ActualizarBoca();
                 PintarBotonVoz();
+
+                // Al COLGAR vuelve a su reposo. Sin esto la pastilla se quedaba encendida para
+                // siempre: quien la enciende es la conversación, y quien la apagaba era apartar el
+                // ratón — que con el botón del collar no ocurre nunca.
+                if (!viva && !ZonaVoz.IsMouseOver && !CollapsedFace.IsMouseOver)
+                {
+                    CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: false);
+                    EsconderBotonVoz();
+                }
             });
+            // La pastilla repinta AL MOMENTO en que cambia el origen, y no sólo cuando Ü habla: el
+            // temporizador de la boca vive únicamente mientras Ü está hablando, así que encender la
+            // voz con el botón del collar se quedaba pintado en gris para siempre si Ü no llegaba a
+            // decir palabra (2026-08-14, visto por el usuario con el audio ya entrando por el collar).
+            _vivo.FuenteCambio += () => Dispatcher.BeginInvoke(PintarBotonVoz);
+
             Closed += (_, __) => _vivo?.Dispose();
         }
         // Sonda de desarrollo: permite invocar las MISMAS herramientas MCP desde fuera para
@@ -387,6 +402,33 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // La superficie actual viaja en cada turno (scoping de workflows) y las llamadas
         // workflow_* del cerebro se ejecutan con el WorkflowPlayer (subconsciente).
         _workflowRunner = new WorkflowMcpRunner(_graphConfig, this);
+
+        // EL DICTADO CLÍNICO. Se arma aquí porque necesita la configuración de Graph —la clave con
+        // la que se pide la sesión de Soniox y se llama al emparejador— y la superficie de SAP.
+        // Nace apagado: hasta que no se pulsa el fonendoscopio no abre micrófono ni toca nada.
+        _rellenador = new RellenadorSap(_graphConfig, _clinicalSap);
+        _dictadoClinico = new DictadoSoniox(_graphConfig, _audioDictado);
+        _dictadoClinico.Frase += f => _rellenador.Oido(f);
+        // Lo provisional se pinta pero NO se actúa: son palabras que Soniox aún puede corregir.
+        _dictadoClinico.Parcial += t => Dispatcher.Invoke(() => SetStatus("🩺 " + Recorte(t, 90)));
+        _dictadoClinico.Fallo += m => Dispatcher.Invoke(() => SetStatus("Dictado: " + m));
+        _dictadoClinico.Cambio += viva => Dispatcher.Invoke(() =>
+        {
+            PintarDictado(viva);
+            if (viva) { _rellenador.Empezar(); SetStatus("🩺 Escuchando… dicta y los campos se van llenando."); }
+            else SetStatus("Dictado terminado.");
+        });
+        _rellenador.Cuenta += m => Dispatcher.Invoke(() => SetStatus("🩺 " + m));
+
+        // EL EJECUTOR DE EXPORTACIONES. Pregunta al backend si el médico pulsó «Exportar a HC» y,
+        // cuando lo hizo, navega y llena la historia clínica. Va encendido desde el arranque y sin
+        // botón: el operador no tiene que acordarse de activarlo para que su compañero pueda
+        // exportar desde la web. Sin trabajo no hace nada más que una petición cada tres segundos.
+        _exportador = new EjecutorDeExportaciones(_graphConfig, _rellenador,
+            () => _locator?.DondeEstoy()?.Id ?? "");
+        _exportador.Cuenta += m => Dispatcher.Invoke(() => { SetStatus(m); ShowTalk(); });
+        _exportador.Arrancar();
+        Closed += (_, __) => _exportador?.Dispose();
         // La superficie se PREGUNTA, igual que en el camino del mapa. Aquí se quedó el valor
         // cacheado —que se refresca cada 800 ms— porque este código es anterior a que existiera
         // Ahora(), y nadie volvió a mirarlo: el consciente decidía su siguiente paso sobre dónde
@@ -1004,6 +1046,71 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_talkOpen) HideTalk(); else ShowTalk(focusInput: true);
     }
 
+    /// <summary>La pastilla en rojo mientras escucha: un micrófono abierto que no se ve es lo último
+    /// que quiere nadie, y aquí además está escribiendo en una historia clínica.</summary>
+    private void PintarDictado(bool escuchando)
+    {
+        DictadoFondo.Color = escuchando
+            ? System.Windows.Media.Color.FromRgb(0xE5, 0x3E, 0x3E)
+            : System.Windows.Media.Color.FromArgb(0x80, 0xA8, 0xA8, 0xAE);
+        ZonaDictado.ToolTip = escuchando
+            ? "Dictando… pulsa para parar"
+            : "Dictar y rellenar los campos de SAP";
+    }
+
+    private static string Recorte(string t, int n) => t.Length <= n ? t : "…" + t[^n..];
+
+    private void OnZonaDictadoEntra(object sender, System.Windows.Input.MouseEventArgs e)
+        => CrecerPastilla(DictadoCuerpo, DictadoFondo, DictadoIcono, crece: true);
+
+    private void OnZonaDictadoSale(object sender, System.Windows.Input.MouseEventArgs e)
+        => CrecerPastilla(DictadoCuerpo, DictadoFondo, DictadoIcono, crece: false);
+
+    /// <summary>
+    /// EL FONENDOSCOPIO: dictar y que los campos se vayan llenando solos.
+    /// </summary>
+    /// <remarks>
+    /// NO ES UN MODO DEL MICRÓFONO, y por eso tiene botón propio. El micrófono abre una CONVERSACIÓN
+    /// con Ü —oye, piensa, contesta en voz alta, llama herramientas—. Esto no conversa: transcribe
+    /// con Soniox, organiza la nota, y escribe. Meterlo dentro del micrófono habría obligado a
+    /// decidir en cada frase si era una orden o un dato clínico, y equivocarse ahí significa o bien
+    /// contestarle a un médico que está dictando, o bien escribir en la historia lo que era una
+    /// orden para Ü.
+    ///
+    /// LA COMPUERTA ES LA PANTALLA, no un permiso: fuera del triage no hay campos que llenar, así
+    /// que encenderlo sería prometer un trabajo imposible. Se dice dónde hay que estar en vez de
+    /// quedarse mudo — un botón que no hace nada y no explica por qué se prueba tres veces.
+    /// </remarks>
+    private async void OnDictadoDesdePastilla(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        PlayTick();
+        if (_dictadoClinico == null) { SetStatus("El dictado clínico no está disponible."); ShowTalk(); return; }
+
+        if (_dictadoClinico.Activo) { await _dictadoClinico.PararAsync(); return; }
+
+        // DOS MICRÓFONOS ABIERTOS ES PEOR QUE NINGUNO: se mezclarían dos flujos y, peor, lo dicho
+        // iría a la vez a la conversación y a la historia clínica. Se dice cuál hay que cerrar en
+        // vez de cerrarla por nuestra cuenta: el que está hablando es quien decide.
+        if (_vivo?.Viva == true)
+        {
+            SetStatus("Cuelga la conversación antes de dictar: no pueden oírte los dos a la vez.");
+            ShowTalk();
+            return;
+        }
+
+        string donde = _locator?.DondeEstoy()?.Id ?? "";
+        if (!RellenadorSap.EsLaPantallaDeTriage(donde))
+        {
+            SetStatus("El dictado clínico solo funciona en la pantalla de triage de SAP.");
+            ShowTalk();
+            return;
+        }
+
+        ShowTalk();
+        await _dictadoClinico.ArrancarAsync();
+    }
+
     private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e) => EsconderBotonVoz();
 
     /// <summary>
@@ -1030,6 +1137,26 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // encendida. Lo que está pasando ahora mismo no puede depender de dónde tengas el ratón.
         if (viva && !ZonaVoz.IsMouseOver)
             CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: true);
+
+        // Y EL GRUPO ENTERO TIENE QUE ESTAR VISIBLE, que es lo que faltaba: nace con Opacity=0 y sólo
+        // se encendía al acercar el ratón a la carita. La pastilla crecía dentro de un contenedor
+        // transparente, así que con la voz abierta por el botón del collar —sin ratón de por medio—
+        // no se veía absolutamente nada (2026-08-13, lo vio el usuario). Crecer no es aparecer.
+        if (viva)
+        {
+            VoiceDotGrupo.BeginAnimation(OpacityProperty, null);
+            VoiceDotGrupo.Opacity = 1;
+            VoiceDotGrupo.IsHitTestVisible = true;
+        }
+
+        // DE QUÉ COLOR SE ESTÁ OYENDO. Azul = por el collar; el gris de siempre = por un micrófono
+        // del PC. Es la única forma de saber cuál de los dos te está escuchando sin abrir el log, y
+        // cambia sola si hay relevo a media conversación.
+        VozFondo.Color = !viva
+            ? System.Windows.Media.Color.FromArgb(0x80, 0xA8, 0xA8, 0xAE)
+            : _vivo!.PorElCollar
+                ? System.Windows.Media.Color.FromRgb(0x3E, 0x9B, 0xFF)
+                : System.Windows.Media.Color.FromArgb(0xC0, 0xA8, 0xA8, 0xAE);
 
         if (!viva)
         {
@@ -1195,6 +1322,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private async void OnMic(object sender, RoutedEventArgs e)
     {
+        // MANTENER PULSADO EL MICRÓFONO = entrar por el collar. Se pregunta ANTES de alternar, para
+        // que la sesión nazca ya pidiendo collar en vez de abrir con el micrófono local y mudarse.
+        // El clic corto sigue haciendo exactamente lo de siempre: el gesto nuevo no le quita nada al
+        // que ya existía (2026-08-13, pedido por el usuario).
+        if (TomarPulsacionLarga()) PasarLaVozAlCollar();
+
         if (_vivo != null) { await _vivo.AlternarAsync(); return; }
 
         SetStatus("Escuchando…");
@@ -1203,6 +1336,90 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (string.IsNullOrWhiteSpace(heard)) { SetStatus("No te escuché"); return; }
         if (_pendingAnswer != null && !_pendingAnswer.Task.IsCompleted) { _pendingAnswer.TrySetResult(heard); return; }
         _ = StartGoal(heard);
+    }
+
+    // ── EL COLLAR OMI: los dos gestos que lo piden (spec 001) ────────────────────
+    //
+    // Sin variable de entorno y sin ajuste escondido: se pide con la mano, en el momento. Un
+    // interruptor que hay que saber que existe obliga a arrancar la aplicación de una forma
+    // especial, y entonces «probarlo» ya no es lo mismo que usarlo.
+
+    /// <summary>Cuánto hay que mantener pulsado el micrófono para pedir el collar.</summary>
+    private static readonly TimeSpan Sostenido = TimeSpan.FromMilliseconds(500);
+
+    private DateTime _micPulsado;
+
+    private void OnMicDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        => _micPulsado = DateTime.UtcNow;
+
+    /// <summary>
+    /// ¿El clic que se acaba de soltar venía de mantener pulsado? Se CONSUME al preguntar.
+    ///
+    /// Consumirlo importa: a <c>OnMic</c> se llega también por el doble clic en la carita, por el
+    /// atajo global y por la pastilla de voz, y esos no pasan por el botón. Sin borrar la marca, una
+    /// pulsación larga de hace media hora haría que el siguiente doble clic pidiera collar sin que
+    /// nadie lo hubiera pedido.
+    /// </summary>
+    private bool TomarPulsacionLarga()
+    {
+        if (_micPulsado == default) return false;
+        bool largo = DateTime.UtcNow - _micPulsado >= Sostenido;
+        _micPulsado = default;
+        return largo;
+    }
+
+    private PanelDelCollar? _panelCollar;
+
+    /// <summary>La pantalla del collar: enlazar, ver el estado, quitar el enlace.</summary>
+    private void OnCollar(object sender, RoutedEventArgs e)
+    {
+        PlayTick();
+        if (_panelCollar is { IsVisible: true }) { _panelCollar.Activate(); return; }
+        _panelCollar = new PanelDelCollar { Owner = this };
+        _panelCollar.Closed += (_, __) => _panelCollar = null;
+        _panelCollar.Show();
+    }
+
+    /// <summary>
+    /// EL BOTÓN DEL COLLAR ENCIENDE Y APAGA EL HABLA, y se engancha al SERVICIO y no a la sesión de
+    /// voz. Ahí está la diferencia: colgado del servicio, el botón llega también con la voz apagada,
+    /// que es la única forma de que pueda ENCENDERLA. Colgado de la conversación sólo podía apagar.
+    ///
+    /// Y va al mismo <see cref="StartMicByFace"/> que el doble clic en la carita y el doble Ctrl: un
+    /// solo sitio decide qué es «alternar», así que ningún gesto puede quedar desincronizado.
+    /// </summary>
+    private void EngancharCollar()
+    {
+        CollarPermanente.BotonPulsado += () => Dispatcher.BeginInvoke(() => StartMicByFace());
+        CollarPermanente.Cambio += () => Dispatcher.BeginInvoke(PintarCollar);
+        CollarPermanente.Restaurar();
+        PintarCollar();
+    }
+
+    /// <summary>
+    /// La pieza del collar dice el estado sin abrir nada: verde conectado, ámbar enlazado pero sin
+    /// conexión, blanco sin enlazar. Mismo criterio que el popup — una sola verdad, dos sitios donde
+    /// se ve, y ninguno puede contradecir al otro porque los dos leen del servicio.
+    /// </summary>
+    private void PintarCollar()
+    {
+        if (CollarPunto == null) return;
+        CollarPunto.Fill = CollarPermanente.Conectado
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x6E, 0xD8, 0x8B))
+            : CollarPermanente.Permanente
+                ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xA5, 0x1F))
+                : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE8, 0xFF, 0xFF, 0xFF));
+    }
+
+    /// <summary>
+    /// La voz pasa a entrar por el collar. Vale con la conversación abierta y sin abrir.
+    /// </summary>
+    private void PasarLaVozAlCollar()
+    {
+        Voice.LiveAudio.UsarCollar = true;
+        _vivo?.PasarAlCollar();
+        SetStatus("Buscando el collar Omi…");
+        LogBus.Log("voz-viva", "el collar lo pidió el usuario con un gesto");
     }
 
     private void OnStop(object sender, RoutedEventArgs e)
@@ -1526,9 +1743,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // pidió aparece por su cuenta. Abrir el micrófono es EXACTAMENTE lo del doble clic sobre la
         // cara —el mismo gesto, dicho con el teclado— y el panel es una ventana aparte, centrada
         // (2026-08-07, pedido por el usuario).
+        // Y TRIPLE Ctrl pasa la voz al collar Omi. El doble sigue abriendo el micrófono como siempre,
+        // así que lo que se ve al hacer triple es la conversación abriéndose y mudándose al collar —
+        // el gesto nuevo no le cobra ni un milisegundo de espera al que ya funcionaba.
+        EngancharCollar();
+
         _golpes = new AtajoPorGolpes(
             soloCtrl: () => Dispatcher.BeginInvoke(() => StartMicByFace()),
-            ctrlShift: () => Dispatcher.BeginInvoke(() => AlternarPanelDesarrollo()));
+            ctrlShift: () => Dispatcher.BeginInvoke(() => AlternarPanelDesarrollo()),
+            tripleCtrl: () => Dispatcher.BeginInvoke(() =>
+            {
+                PasarLaVozAlCollar();
+                // Si no había conversación, el triple la abre: pedir el collar sin nada que oír
+                // dejaría el gesto sin efecto visible y parecería que no funcionó.
+                if (_vivo?.Viva != true) StartMicByFace();
+            }));
         Closed += (_, __) => { _golpes?.Dispose(); CerrarPanelDesarrollo(); };
 
         // Zona segura: menú y barra cancelan el cierre al entrar y lo agendan al salir.
@@ -2016,6 +2245,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     private bool _stepMode;
     private StepDebuggerWindow? _debugger;
+
+    // ── Dictado clínico: hablar y que los campos se llenen ──────────────────────
+    //
+    // VA APARTE DEL PUENTE DE ABAJO, que es otra cosa: aquel trae valores YA GUARDADOS por el
+    // médico en el portal y los ofrece para aprobación; esto escucha en directo y escribe sin
+    // preguntar. Comparten la superficie de SAP y nada más.
+    private DictadoSoniox? _dictadoClinico;
+    private RellenadorSap? _rellenador;
+
+    /// <summary>Quien atiende los «Exportar a HC» que llegan de la web. Vive todo el rato.</summary>
+    private EjecutorDeExportaciones? _exportador;
+
+    /// <summary>Su propio micrófono, y NO el de la conversación viva. Son dos sesiones de audio con
+    /// destinos distintos; compartir una obligaría a decidir en cada frase a quién iba dirigida.</summary>
+    private readonly Voice.LiveAudio _audioDictado = new();
 
     // ── Puente con la consulta del portal ───────────────────────────────────────
     private readonly ClinicalBridge _clinical = new();

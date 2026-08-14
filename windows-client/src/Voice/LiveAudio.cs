@@ -1,4 +1,5 @@
 using NAudio.Wave;
+using Omi;
 using U.WindowsClient.Diagnostics;
 
 namespace U.WindowsClient.Voice;
@@ -25,8 +26,61 @@ public sealed class LiveAudio : IDisposable
     private WaveOutEvent? _altavoz;
     private readonly object _candado = new();
 
+    // ── EL COLLAR (spec 001) ──────────────────────────────────────────────────
+    private Relevo? _relevo;
+    private Timer? _vigilante;
+
+    /// <summary>
+    /// Red de seguridad para la conexión colgada: sigue diciendo «conectado» y no manda una trama más.
+    ///
+    /// NO MIDE SILENCIO. Con 4 s medía silencio y la voz se caía sola mientras el usuario ESCUCHABA
+    /// a Ü (2026-08-13, 21:25:01 del log): el collar no transmite silencio, así que estar callado se
+    /// veía idéntico a haberse ido. Quien dice si el collar sigue ahí es Bluetooth; esto sólo cubre
+    /// el caso en que Bluetooth no se entera, y por eso es medio minuto y no cuatro segundos.
+    /// </summary>
+    private const int UmbralRelevoMs = 30000;
+
+    /// <summary>Cuánto se espera antes de volver a buscar el collar tras perderlo.</summary>
+    private const int ReintentoCollarMs = 10000;
+
+    /// <summary>
+    /// Esta sesión de voz debe entrar por el collar.
+    ///
+    /// LO PONE UN GESTO DEL USUARIO —mantener pulsado el micrófono, o triple Ctrl—, y no una variable
+    /// de entorno. Un interruptor que hay que saber que existe no se puede probar: obliga a arrancar
+    /// la aplicación de una forma especial, y entonces «probarlo» ya no es lo mismo que usarlo
+    /// (2026-08-13, pedido por el usuario). <c>U_OMI</c> sigue valiendo para arrancar ya con collar,
+    /// pero no hace falta para nada.
+    /// </summary>
+    public static bool UsarCollar { get; set; }
+
+    /// <summary>
+    /// Si esta conversación tiene que oír por el collar.
+    ///
+    /// SI HAY COLLAR ENLAZADO Y PRESENTE, ÉSE ES EL MICRÓFONO — y esa cláusula es la que faltaba.
+    /// Sin ella, encender la voz con el botón del collar abría la conversación pero seguía oyendo
+    /// por el micrófono del portátil: se pulsaba el collar para hablarle al collar y el collar no
+    /// escuchaba (2026-08-13, visto en el log — «collar abierto» sin un «la voz entra por el collar»
+    /// detrás). El micrófono del PC pasa a ser lo que siempre debió ser: el respaldo.
+    /// </summary>
+    private static bool QuiereCollar => UsarCollar
+        || CollarPermanente.Conectado
+        || (Environment.GetEnvironmentVariable("U_OMI") ?? "").Trim().ToLowerInvariant() is "1" or "true" or "si" or "sí";
+
+    /// <summary>
+    /// Pasa la voz al collar AHORA, con la sesión ya abierta o sin abrir. Es lo que hace el gesto.
+    ///
+    /// Si ya hay collar no se toca nada: pedirlo dos veces no puede cortar la conversación en curso.
+    /// </summary>
+    public void PasarAlCollar()
+    {
+        UsarCollar = true;
+        if (!_usandoCollar) _ = Task.Run(AbrirCollarAsync);
+    }
+
     /// <summary>Un trozo de micrófono, ya en el formato que espera el modelo.</summary>
     public event Action<byte[]>? Capturado;
+
 
     /// <summary>¿El altavoz tiene algo pendiente por decir? La carita lo usa para animarse.</summary>
     public bool Hablando
@@ -82,17 +136,47 @@ public sealed class LiveAudio : IDisposable
         int max = 0;
         for (int i = 0; i + 1 < pcm.Length; i += 2)
         {
-            int m = Math.Abs((short)(pcm[i] | (pcm[i + 1] << 8)));
+            // (int) ANTES del Abs, y no es cosmético: con un short, C# elige Math.Abs(short), y
+            // Math.Abs(-32768) LANZA OverflowException —el +32768 no existe en 16 bits—. Basta una
+            // muestra en el tope, que en audio fuerte llega, para tumbar el cálculo del nivel desde
+            // dentro de Reproducir. Se cazó el 2026-08-13 cuando la misma línea, copiada en la sonda
+            // del collar, mató el proceso; aquí llevaba más tiempo esperando.
+            int m = Math.Abs((int)(short)(pcm[i] | (pcm[i + 1] << 8)));
             if (m > max) max = m;
         }
         return max / 32768.0;
     }
 
+    /// <summary>
+    /// Abre la entrada de voz. El micrófono local entra YA; si hay collar, releva en cuanto aparezca.
+    ///
+    /// Ese orden es deliberado: buscar el collar cuesta hasta ocho segundos de rastreo BLE, y
+    /// arrancar mudo mientras tanto sería peor que no tener collar. Se empieza a oír al instante y
+    /// se mejora la fuente cuando se encuentra, sin que quien escucha se entere: los dos entregan
+    /// PCM16 a 16 kHz mono, que es la promesa 3 del contrato de la voz.
+    /// </summary>
     public void AbrirMicrofono()
+    {
+        // Con el collar YA conectado se va directo a él: no hay rastreo que esperar, así que abrir
+        // el micrófono local para cerrarlo dos milisegundos después sólo consigue que los dos oigan
+        // a la vez durante ese hueco.
+        if (CollarPermanente.Conectado) { _ = Task.Run(AbrirCollarAsync); return; }
+
+        AbrirLocal();
+        if (QuiereCollar && !_usandoCollar) _ = Task.Run(AbrirCollarAsync);
+    }
+
+    private void AbrirLocal()
     {
         lock (_candado)
         {
             if (_mic != null) return;
+
+            // DOS MICRÓFONOS A LA VEZ ES PEOR QUE NINGUNO: se mezclarían dos flujos con relojes
+            // distintos y el modelo oiría todo dicho dos veces, desfasado. Pasa de verdad cuando el
+            // gesto pide el collar ANTES de que la sesión esté abierta: el collar engancha primero y
+            // luego GeminiLive llama aquí como si nada.
+            if (_usandoCollar) return;
             _mic = new WaveInEvent
             {
                 WaveFormat = new WaveFormat(RitmoEntrada, 16, 1),
@@ -114,6 +198,7 @@ public sealed class LiveAudio : IDisposable
 
     public void CerrarMicrofono()
     {
+        CerrarCollar();
         lock (_candado)
         {
             if (_mic == null) return;
@@ -121,6 +206,124 @@ public sealed class LiveAudio : IDisposable
             _mic = null;
             LogBus.Log("voz-viva", "micrófono cerrado");
         }
+    }
+
+    /// <summary>
+    /// Busca el collar y, si aparece, se queda con la entrada. No lanza nunca: no encontrar collar es
+    /// un resultado normal, y tumbar la sesión de voz por eso sería mucho peor que seguir con el
+    /// micrófono del portátil.
+    /// </summary>
+    private bool _abriendoCollar;
+
+    /// <summary>Esta conversación está oyendo por el collar. NO significa que el enlace sea nuestro.</summary>
+    private bool _usandoCollar;
+
+    /// <summary>Por dónde está entrando la voz AHORA. La carita lo pinta.</summary>
+    public bool PorElCollar => _usandoCollar;
+
+    /// <summary>
+    /// Cambió de dónde entra la voz: collar ↔ micrófono local. AHORA, no en el próximo cuadro.
+    ///
+    /// Sin este aviso, lo único que repintaba el color era el temporizador de la boca —y ese sólo
+    /// vive mientras Ü está HABLANDO, no mientras escucha—. Encender la voz con el botón del collar
+    /// pintaba gris en el instante de abrir la sesión —antes de que <c>AbrirCollarAsync</c> terminara
+    /// en segundo plano— y se quedaba así para siempre si Ü no llegaba a decir una palabra. El log ya
+    /// probaba que el audio SÍ entraba por el collar; era el dibujo el que no se enteraba
+    /// (2026-08-14).
+    /// </summary>
+    public event Action? FuenteCambio;
+
+    /// <summary>
+    /// Empieza a oír por el collar. EL ENLACE NO ES DE ESTA CLASE.
+    ///
+    /// Lo lleva <see cref="CollarPermanente"/>, que vive por encima de la conversación. Ese reparto
+    /// es lo que hace posible las dos cosas que se pidieron: que el botón del collar ENCIENDA la voz
+    /// —con la voz apagada tiene que haber alguien escuchando el botón— y que colgar no desenlace.
+    /// </summary>
+    private async Task AbrirCollarAsync()
+    {
+        // Una búsqueda a la vez: el gesto se puede repetir mientras dura el rastreo.
+        lock (_candado)
+        {
+            if (_abriendoCollar || _usandoCollar) return;
+            _abriendoCollar = true;
+        }
+
+        try
+        {
+            if (!CollarPermanente.Conectado && !await CollarPermanente.ConectarAsync())
+            {
+                // Y SE ABRE EL LOCAL, no se supone que ya estaba: cuando se entra aquí porque el
+                // collar estaba conectado, AbrirMicrofono se lo saltó a propósito. Sin esta línea,
+                // un collar que se cae entre medias deja la conversación sin ningún micrófono.
+                AbrirLocal();
+                LogBus.Log("voz-viva", "sigue el micrófono local: no se abrió ningún collar");
+                return;
+            }
+
+            CollarPermanente.Capturado += TrozoDelCollar;
+
+            lock (_candado)
+            {
+                // El local se cierra DESPUÉS de que el collar esté entregando, no antes: entre cerrar
+                // uno y abrir el otro no puede haber un hueco sin oír a nadie.
+                if (_mic != null) { try { _mic.StopRecording(); _mic.Dispose(); } catch { } _mic = null; }
+                _usandoCollar = true;
+                _relevo = new Relevo(UmbralRelevoMs);
+            }
+
+            _vigilante = new Timer(_ => Vigilar(), null, 1000, 1000);
+            LogBus.Log("voz-viva", "la voz entra por el collar Omi; el micrófono local queda de reserva");
+            FuenteCambio?.Invoke();
+        }
+        finally { lock (_candado) _abriendoCollar = false; }
+    }
+
+    private void TrozoDelCollar(byte[] trozo) => Capturado?.Invoke(trozo);
+
+    /// <summary>
+    /// Decide si esta conversación deja de oír por el collar. NO desenlaza: el enlace sobrevive.
+    /// </summary>
+    private void Vigilar()
+    {
+        var relevo = _relevo;
+        if (!_usandoCollar || relevo == null) return;
+
+        if (!CollarPermanente.Conectado) { VolverAlLocal("el collar dejó de entregar audio"); return; }
+        if (relevo.HayQueRelevar(CollarPermanente.SinTrama, CollarPermanente.MsDesconectado))
+            VolverAlLocal(relevo.Motivo);
+    }
+
+    private void VolverAlLocal(string motivo)
+    {
+        CerrarCollar();
+        AbrirLocal();
+        LogBus.Log("voz-viva", "la voz vuelve al micrófono local · " + motivo);
+
+        // Y se vuelve a intentar mientras se siga queriendo el collar: perderlo por salirse del
+        // alcance es reversible, y sin reintento la única salida era colgar y volver a pedirlo — que
+        // desde fuera no se lee como «se cayó», se lee como «esto es inestable» (2026-08-13).
+        if (!UsarCollar) return;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(ReintentoCollarMs);
+            if (UsarCollar && !_usandoCollar) await AbrirCollarAsync();
+        });
+    }
+
+    /// <summary>Deja de oír por el collar. Soltar el ENLACE es cosa de la pantalla, no de colgar.</summary>
+    private void CerrarCollar()
+    {
+        lock (_candado)
+        {
+            if (!_usandoCollar) return;
+            _usandoCollar = false;
+            _relevo = null;
+        }
+        CollarPermanente.Capturado -= TrozoDelCollar;
+        try { _vigilante?.Dispose(); } catch (Exception e) { LogBus.Log("voz-viva", $"al parar el vigía: {e.Message}"); }
+        _vigilante = null;
+        FuenteCambio?.Invoke();
     }
 
     /// <summary>Encola audio del modelo. Se reproduce en cuanto llega, sin esperar a la frase entera.</summary>

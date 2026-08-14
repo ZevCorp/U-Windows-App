@@ -1,11 +1,11 @@
 # Plan de implementación: hablarle a la carita por el collar
 
-Estado: **propuesto** · Nace del diagnóstico del 2026-08-13 · Rama: `jose/integrar-plata-derivada`
+Estado: **propuesto** · Nace del diagnóstico del 2026-08-13 · Rama: `jose/captcha-y-formularios`
 
 Que Ü se pueda oír desde un collar Omi CV1 en vez de desde el micrófono del portátil, sin móvil de
 por medio y sin pasar por la nube de Omi.
 
-> **Sobre la rama.** Esto va sobre `jose/integrar-plata-derivada` por decisión del dueño, no desde
+> **Sobre la rama.** Esto va sobre `jose/captcha-y-formularios` por decisión del dueño, no desde
 > `main` como pide `.claude/rules/ramas-y-commits.md`. El coste, medido y no supuesto: esa rama lleva
 > **56 commits sobre `main` y hoy está verde** (contrato 20/20, 2026-08-13), o sea que era mergeable
 > antes de esto. Al colgarle el Omi, esos 56 commits esperan a que el Omi termine. Queda escrito
@@ -122,11 +122,60 @@ silencio, así que contar paquetes es la implementación que parece correcta y n
 
 ## Las fases
 
-Pendiente de `/fases`. Lo que ya está decidido por el diagnóstico:
+Ocho commits sobre `jose/captcha-y-formularios`. **Ninguna necesita autorización del dueño:** no se
+toca `SurfaceMap.cs` ni `tests\ContratoDelGrafo\*`, que es todo lo que el guardián protege.
 
-- **Fase 1** — el contrato de la voz entra en `verificar.ps1` y en CI. Vacío, pero convocado.
-- **Fase 2** — el TFM, solo. Termina cuando el contrato del grafo sigue en 20/20.
-- **Fase 4 (promesa 2) es el corazón.** Las demás se pueden reordenar; esa no se puede posponer.
+La restricción que ordena la lista, y que sale de la forma: **todo lo que una promesa juzga tiene que
+vivir en `voz/Omi` (puro, `net8.0`).** Un contrato `net8.0` no puede referenciar `windows-client`, así
+que cualquier lógica que se meta allí queda fuera del alcance de las promesas por construcción.
+
+| Fase | Promesa que pone verde | Qué toca | Terminado cuando |
+|---|---|---|---|
+| **0** | ninguna — **arnés** | `voz/Omi/Omi.csproj` y `voz/Contrato/` (vacíos), `scripts/verificar.ps1`, `.github/workflows/contrato.yml` | las 5 promesas salen **ROJAS** al correr la compuerta, y el grafo sigue 20/20 |
+| **1** | ninguna — **arnés** | `windows-client/WindowsClient.csproj` (una línea) | **el contrato del grafo sigue dando 20/20** |
+| **2** | 1 · el códec se pregunta, y el desconocido se rechaza nombrándolo | `voz/Omi/Codec.cs` | promesa 1 verde |
+| **3** | 5 · un paquete corto o vacío no produce muestras ni tumba la sesión | `voz/Omi/Trama.cs` | promesa 5 verde, 1 intacta |
+| **4** | **2 · se repone el silencio** ← el corazón | `voz/Omi/Reposicion.cs` | promesa 2 verde, 1 y 5 intactas |
+| **5** | 3 · el formato es el mismo venga de donde venga | `voz/Omi/Fuente.cs` | promesa 3 verde, 1–2 y 5 intactas |
+| **6** | 4 · perder el collar no deja muda a Ü | `voz/Omi/Relevo.cs` | promesa 4 verde, las cuatro anteriores intactas |
+| **7** | ninguna — **nivel 4** | `windows-client/src/Voice/FuenteOmi.cs`, `LiveAudio.cs`, `GeminiLive.cs` | le hablas al collar y **la carita contesta**, en ≥2 pantallas |
+
+### Por qué el arnés va en dos fases y por qué tan pronto
+
+**Fase 0** existe por el aprendizaje nº18: un cuarto juez que no está en `verificar.ps1` es un juez
+que nadie convoca, y las cinco promesas podrían estar rojas mientras la compuerta dice OK. El
+entregable de esta fase es **el rojo**, no el verde.
+
+**Fase 1** es el único riesgo desconocido de toda la spec. Si el salto de TFM tumba al juez viejo
+—que referencia `U.dll` por binario—, el veredicto sale como «CONTRATO ROTO» sin haber juzgado nada
+(aprendizaje nº17). Va antes que el código para que, si se cae, la spec cambie de forma **antes** de
+haber escrito nada y no después de seis fases.
+
+### Riesgos por fase
+
+| Fase | Riesgo | Qué lo desactiva |
+|---|---|---|
+| 1 | el contrato viejo no compila contra un `U.dll` de TFM mayor | criterio de terminado explícito: 20/20, medido, no supuesto |
+| 4 | cumplir la promesa contando paquetes en vez de mirando el reloj | el fixture lleva **numeración consecutiva** a través del hueco: contar paquetes lo falla |
+| 7 | dar por bueno «funciona» porque llega audio | el criterio no es que llegue audio: es que **conteste** |
+
+**Sitios con esta clase de error (patrón nº5): 1.** Contado con `grep` sobre `windows-client/src/Voice`:
+el único sitio que acumula audio es `LiveAudio`, y el micrófono local no suprime silencio. La
+reconstrucción temporal nace con el Omi, así que no hay un segundo sitio donde el mismo fallo esté
+esperando.
+
+### El orden en que se ven los rojos volverse verdes
+
+```
+fase 0 → ✘✘✘✘✘   las cinco rojas, y la compuerta por fin las mira
+fase 1 → ✘✘✘✘✘   igual de rojas, pero el juez viejo sigue en pie (20/20)
+fase 2 → ✔✘✘✘✘
+fase 3 → ✔✔✘✘✘
+fase 4 → ✔✔✔✘✘   ← aquí deja de ser cosmético
+fase 5 → ✔✔✔✔✘
+fase 6 → ✔✔✔✔✔   CONTRATO INTACTO
+fase 7 → se le habla al collar y contesta
+```
 
 ## Lo que NO entra
 
@@ -149,6 +198,14 @@ Pendiente de `/fases`. Lo que ya está decidido por el diagnóstico:
   `tests/ContratoDelGrafo/Contrato.cs` «numeradas en continuación». **Esa regla ya no describe el
   repo**: esta rama creó `nucleo/Contrato` y `mapeador/Contrato`, cada uno numerando desde su 1.
   La regla hay que actualizarla o el siguiente que llegue meterá promesas donde no van.
+- **2026-08-13, encontrado al correr la fase 0** — **la compuerta contaba mal los pendientes y
+  acusaba de regresión a una fase que iba según el plan.** `Select-String -SimpleMatch "PENDIENTE"`
+  engancha también la línea resumen «(N de ellas PENDIENTES: …)», así que el recuento se pasaba por
+  uno y `$regresiones` salía **negativo**: la voz reportó `0/5 verdes; -1 incumplida(s) con codigo y
+  6 pendiente(s)` y se rotuló FALLO en vez de «pendientes declaradas». Estaba **latente en el bloque
+  del grafo** desde siempre —sólo se ve con pendientes > 0, y hoy tiene cero—. **Sitios con esta
+  clase de error: 4** (contados, no de memoria): los dos bloques de `verificar.ps1` y los dos jobs de
+  `contrato.yml`. Arreglados los cuatro exigiendo los dos puntos: `"PENDIENTE:"`.
 - **2026-08-13** — `verificar.ps1` y `contrato.yml` juzgan **uno de los tres** contratos. Los del
   núcleo y el mapeador se corren a mano, así que pueden estar rojos mientras la compuerta dice OK.
   No es de esta spec, pero es la clase de guardia que se cree puesto (aprendizaje nº18).

@@ -49,6 +49,25 @@ public sealed class GeminiLive : IDisposable
     /// </summary>
     public double NivelVoz => Viva ? _audio.NivelSalida : 0;
 
+    /// <summary>
+    /// Pasa la voz al collar Omi sin cortar la conversación. Lo pide la carita con un gesto.
+    ///
+    /// No abre ni cierra la sesión: sólo cambia de dónde entra el audio. Los dos orígenes entregan
+    /// PCM16 a 16 kHz mono, así que desde aquí abajo no se nota (promesa 3 del contrato de la voz).
+    /// </summary>
+    public void PasarAlCollar() => _audio.PasarAlCollar();
+
+    /// <summary>Si lo que se está oyendo entra por el collar. Cambia sola si hay relevo a media sesión.</summary>
+    public bool PorElCollar => _audio.PorElCollar;
+
+    /// <summary>Cambió de dónde entra la voz. La carita repinta con esto, no esperando a que Ü hable.</summary>
+    public event Action? FuenteCambio
+    {
+        add => _audio.FuenteCambio += value;
+        remove => _audio.FuenteCambio -= value;
+    }
+
+
     /// <summary>Texto para la carita: lo que se oye, lo que responde, y qué está haciendo.</summary>
     public event Action<string>? Dice;
 
