@@ -335,13 +335,13 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml": {
-    "mtime": 1786725642.356816,
-    "ast_hash": "eabd5d1cd08704e70a35c5db2f24c3e1",
+    "mtime": 1786836574.0516932,
+    "ast_hash": "edafa667a297cddf3613ea5b0fde6905",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml.cs": {
-    "mtime": 1786732036.9651752,
-    "ast_hash": "6dac0f588a224e57988f986567eebf3d",
+    "mtime": 1786836590.4738545,
+    "ast_hash": "4495c8bb73822139e69f0232957e6c38",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FillPreviewWindow.cs": {
@@ -480,13 +480,13 @@
     "semantic_hash": ""
   },
   "windows-client/src/Update/Updater.cs": {
-    "mtime": 1784227221.1149545,
-    "ast_hash": "1ba6aa004c899ebdbd55e31854e50b82",
-    "semantic_hash": "1ba6aa004c899ebdbd55e31854e50b82"
+    "mtime": 1786836546.8634293,
+    "ast_hash": "2a12d3f25aed623f4a3d389f29184a9a",
+    "semantic_hash": ""
   },
   "windows-client/src/Voice/GeminiLive.cs": {
-    "mtime": 1786825909.312833,
-    "ast_hash": "ef81d41ad20495c03569b68e8d5888ec",
+    "mtime": 1786836421.8015914,
+    "ast_hash": "3f574f2f31560df7c17eca33d90a7b5c",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/LiveAudio.cs": {
@@ -625,8 +625,8 @@
     "semantic_hash": "4270c451a56f7db2ccd6373617357e4e"
   },
   ".github/workflows/windows-release.yml": {
-    "mtime": 1786825941.9596546,
-    "ast_hash": "940148c97e8cc525a23c3286cb48f870",
+    "mtime": 1786833438.3214548,
+    "ast_hash": "3ebfa6d90b17af314dc5910c57acf1a8",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786732279.7082562,
-    "ast_hash": "b8d9b48bd43462f4ad05b1e7b5386750",
+    "mtime": 1786836721.9423532,
+    "ast_hash": "5a5da13bc5cb29fc391be9c22f0e523f",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786732284.0122483,
-    "ast_hash": "e2cf481b9f8970015297d241edd79abd",
+    "mtime": 1786836724.4733286,
+    "ast_hash": "0d8d193498b4b96b1f9e561f8e975d93",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {

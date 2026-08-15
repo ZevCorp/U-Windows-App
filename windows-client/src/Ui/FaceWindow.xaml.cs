@@ -1293,6 +1293,34 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         OnMic(this, new RoutedEventArgs());
     }
 
+    /// <summary>
+    /// Doble Ctrl. Si Ü está oculta, REAPARECE; si está a la vista, abre o cierra el micrófono.
+    /// </summary>
+    /// <remarks>
+    /// REAPARECER TIENE PRIORIDAD SOBRE ALTERNAR EL MICRÓFONO, y no es una preferencia estética: el
+    /// gesto de siempre llama a `OnMic`, que ALTERNA — y `self_hide` deja la conversación VIVA. Así
+    /// que estando oculta, el doble Ctrl de antes habría colgado la conversación sin traerla de
+    /// vuelta: exactamente lo contrario de lo que pide quien hace el gesto para recuperarla
+    /// (2026-08-15, pedido por el usuario: «que aparezca de nuevo con doble Ctrl»).
+    ///
+    /// Estando oculta NO se toca el micrófono. Quien la escondió por voz sigue hablando con ella; lo
+    /// único que falta es verla.
+    /// </remarks>
+    private void DobleCtrl()
+    {
+        if (!IsVisible)
+        {
+            _prevForeground = GetForegroundWindow();   // para poder devolver el teclado con Esc
+            if (_collapsed) ToggleCollapsed();
+            Show();
+            Activate();
+            PlayTick();
+            LogBus.Log("atajo", "doble Ctrl: Ü estaba oculta y vuelve a la vista");
+            return;
+        }
+        StartMicByFace();
+    }
+
     // --- Sonidos (los MISMOS WAV de Android): tick al clic, carrillón al micrófono ---
 
     private System.Media.SoundPlayer? _tick;
@@ -1512,7 +1540,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             case "self_hide":
                 if (_collapsed) ToggleCollapsed();
                 Hide();
-                return "Me oculto. Ctrl+Alt+U para que vuelva.";
+                // Se ofrece el doble Ctrl y no Ctrl+Alt+U porque es el gesto que ya usa para
+                // hablarle: una tecla menos que recordar, y la misma que tenía en la mano.
+                return "Me oculto. Doble Ctrl para que vuelva.";
 
             case "self_close":
                 LogBus.Log("atajo", "self_close pedido por voz: cerrando en 2,5 s para dar tiempo a la despedida");
@@ -1823,7 +1853,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         EngancharCollar();
 
         _golpes = new AtajoPorGolpes(
-            soloCtrl: () => Dispatcher.BeginInvoke(() => StartMicByFace()),
+            soloCtrl: () => Dispatcher.BeginInvoke(() => DobleCtrl()),
             ctrlShift: () => Dispatcher.BeginInvoke(() => AlternarPanelDesarrollo()),
             tripleCtrl: () => Dispatcher.BeginInvoke(() =>
             {

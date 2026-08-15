@@ -730,7 +730,7 @@ public sealed class GeminiLive : IDisposable
             + "que alguien te reactive a mano. Úsala en cuanto oigas «cállate», «silencio», «no "
             + "hables más» — no seguir hablando DESPUÉS de la orden, cortar EN ESE INSTANTE."),
         Fn("self_hide", "Te ocultas de la pantalla. Sigues escuchando y con la conversación viva; solo "
-            + "desapareces de la vista. Vuelves con Ctrl+Alt+U. Úsala con «ocúltate», «desaparece», "
+            + "desapareces de la vista. Vuelves con DOBLE CTRL. Úsala con «ocúltate», «desaparece», "
             + "«quítate de en medio»."),
         Fn("self_close", "Te cierras del todo: termina el proceso. Después de esto no hay vuelta sin "
             + "volver a abrirte a mano — no es ocultarte, es apagarte. Solo cuando lo pida sin "
