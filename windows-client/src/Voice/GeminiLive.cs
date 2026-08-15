@@ -429,6 +429,20 @@ public sealed class GeminiLive : IDisposable
         Ve contando lo que haces mientras lo haces («voy al explorador», «creando la carpeta»), no al
         final: lo que se está viendo en pantalla y lo que oye tienen que ir juntos.
 
+        SI TE INTERRUMPEN A MITAD DE UNA HERRAMIENTA, la petición ORIGINAL sigue en pie — no
+        desaparece porque tú la sueltes. Cuando retiras una llamada porque el usuario habló encima,
+        vuelve a ella en cuanto puedas, con la MISMA intención de antes; no la sustituyas en silencio
+        por otra cosa distinta y la dejes ahí. Si lo nuevo que dijo el usuario era sobre lo mismo,
+        síguelo; si no tenía nada que ver, resuelve eso y DESPUÉS retoma lo que ibas a hacer — no las
+        dejes las dos a medias. Y si terminas sin haber completado lo que se pidió, DILO: «no llegué
+        a ver qué había en la carpeta, ¿seguimos?» es honesto; quedarte callado no lo es.
+
+        Y tienes self_mute/self_hide/self_close, que son sobre TI y no sobre lo que hay en pantalla.
+        «Cállate»/«silencio» → self_mute. «Ocúltate»/«desaparece» → self_hide (sigues escuchando, solo
+        desapareces de la vista). «Ciérrate»/«apágate»/«sal de mi computador» → self_close, y solo
+        cuando lo pidan sin ambigüedad: es apagarte del todo, no ocultarte. Antes de self_close di una
+        despedida CORTA en la misma frase de siempre, no después — no hay después.
+
         EL CURSOR MANDA SOBRE TU INTERPRETACIÓN. Cuando el usuario diga «esto», «este», «el que estoy
         señalando», «mira aquí» —o cuando en el vídeo veas su puntero sobre algo— usa map_pointing_at
         ANTES que nada. No adivines de qué elemento habla por el nombre que creas haber entendido:
@@ -707,7 +721,34 @@ public sealed class GeminiLive : IDisposable
             + "Es del disco: no toca la caja de búsqueda del explorador ni deja la ventana en un estado raro.",
             ("query", "Parte del nombre que buscas."),
             ("path", "Dónde buscar. Vacío = la carpeta abierta ahora.")),
+
+        // SOBRE Ü MISMO, no sobre lo que hay en pantalla. Van aparte de las map_*/file_* —esas
+        // accionan OTRAS aplicaciones; estas te accionan a TI— y por eso las ejecuta quien tiene la
+        // ventana, no SurfaceMapTools (2026-08-15, pedido por el usuario: poder callarte, ocultarte
+        // y cerrarte con la voz).
+        Fn("self_mute", "Te callas AHORA MISMO: cortas lo que estés diciendo y dejas de hablar hasta "
+            + "que alguien te reactive a mano. Úsala en cuanto oigas «cállate», «silencio», «no "
+            + "hables más» — no seguir hablando DESPUÉS de la orden, cortar EN ESE INSTANTE."),
+        Fn("self_hide", "Te ocultas de la pantalla. Sigues escuchando y con la conversación viva; solo "
+            + "desapareces de la vista. Vuelves con Ctrl+Alt+U. Úsala con «ocúltate», «desaparece», "
+            + "«quítate de en medio»."),
+        Fn("self_close", "Te cierras del todo: termina el proceso. Después de esto no hay vuelta sin "
+            + "volver a abrirte a mano — no es ocultarte, es apagarte. Solo cuando lo pida sin "
+            + "ambigüedad: «ciérrate», «apágate», «sal de mi computador».")
     };
+
+    /// <summary>Los nombres «self_mute», «self_hide», «self_close», para distinguirlos de las
+    /// herramientas del mapa en el despacho — esas van a <see cref="_mapa"/>, estas a <see cref="Autocontrol"/>.</summary>
+    private static readonly HashSet<string> HerramientasDeAutocontrol =
+        new(StringComparer.Ordinal) { "self_mute", "self_hide", "self_close" };
+
+    /// <summary>
+    /// Quien atiende «self_mute»/«self_hide»/«self_close». Se inyecta desde la ventana, porque
+    /// callarse, ocultarse y cerrarse son del CHROME —lo maneja quien tiene la ventana—, no del
+    /// mapa de pantallas que sabe accionar OTRAS aplicaciones. Recibe el nombre de la herramienta y
+    /// devuelve la frase que Ü puede decir de vuelta («Vale, me callo.»).
+    /// </summary>
+    public Func<string, string>? Autocontrol { get; set; }
 
     /// <summary>
     /// Qué se está haciendo, en las palabras que usaría alguien al contarlo.
@@ -735,6 +776,9 @@ public sealed class GeminiLive : IDisposable
             "map_show" or "map_pointing_at" => "señalando…",
             "map_run" => "haciendo la secuencia…",
             "map_learn_app" => $"aprendiendo {V("app")}… (esto tarda)",
+            "self_mute" => "callándome…",
+            "self_hide" => "ocultándome…",
+            "self_close" => "cerrándome…",
             _ => tool,
         };
     }
@@ -1294,7 +1338,16 @@ public sealed class GeminiLive : IDisposable
 
             LogBus.Log("voz-viva", $"ejecutando «{nombre}»…");
             string resultado;
-            if (!SurfaceMapTools.IsMapTool(nombre))
+            if (HerramientasDeAutocontrol.Contains(nombre))
+            {
+                // Va ANTES que el mapa y sin pasar por SurfaceMapTools: esto no acciona una app de
+                // fuera, acciona la propia ventana, y solo quien la tiene (FaceWindow) puede hacerlo.
+                Accion?.Invoke(EnCurso(nombre, args), false);
+                try { resultado = Autocontrol?.Invoke(nombre) ?? "no puedo: nadie conectó esta herramienta todavía"; }
+                catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; }
+                Accion?.Invoke(Terminado(nombre, args, resultado, 0), true);
+            }
+            else if (!SurfaceMapTools.IsMapTool(nombre))
                 resultado = $"«{nombre}» no es una herramienta del mapa";
             else
             {

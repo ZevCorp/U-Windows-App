@@ -445,8 +445,9 @@
                         <TextBlock Text="Acciones" Style="{StaticResource SectionLabel}"/>
                         <!-- Cinco: se añadió 📿 (el collar Omi) el 2026-08-13. Va aquí y no escondido
                              en el panel de desarrollo porque enlazar el collar lo hace el usuario una
-                             vez, no es una herramienta de diagnóstico. -->
-                        <UniformGrid Columns="5" Margin="0,4,0,10">
+                             vez, no es una herramienta de diagnóstico.
+                             Seis desde el 2026-08-15 con 🔄 (buscar actualizaciones a mano). -->
+                        <UniformGrid Columns="6" Margin="0,4,0,10">
                             <!-- PreviewMouseLeftButtonDown y no MouseDown: el estilo del botón marca el
                                  evento como manejado, así que sin Preview no llega nunca y el gesto de
                                  mantener pulsado no se podría medir. -->
@@ -467,6 +468,13 @@
                                     AutomationProperties.Name="Collar Omi"/>
                             <Button x:Name="MuteBtn" Content="🔊" Style="{StaticResource BarBtn}" Click="OnToggleMute"
                                     Margin="0" ToolTip="Callar a Ü ahora mismo" AutomationProperties.Name="Silencio"/>
+                            <!-- Buscar actualizaciones AHORA. El sondeo automático mira cada 30 min y
+                                 no dice nada mientras tanto —correcto para no molestar—, pero deja sin
+                                 respuesta a quien acaba de enterarse de que hay versión nueva. Sin
+                                 esto, la única forma de forzarlo era cerrar y volver a abrir. -->
+                            <Button x:Name="CheckUpdateBtn" Content="🔄" Style="{StaticResource BarBtn}" Click="OnCheckUpdate"
+                                    Margin="0" ToolTip="Buscar actualizaciones ahora"
+                                    AutomationProperties.Name="Buscar actualizaciones"/>
                         </UniformGrid>
 
                         <!-- ── Ejecutar workflow: lo que el operador usa a diario ─────────────── -->

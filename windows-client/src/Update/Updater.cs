@@ -89,6 +89,58 @@ public sealed class Updater
         UpdateReady?.Invoke(version);
     }
 
+    /// <summary>Cómo salió un «buscar actualizaciones» pedido a mano.</summary>
+    public enum Busqueda { NoAplica, AlDia, YaEstabaLista, Descargada, Fallo }
+
+    /// <summary>
+    /// Buscar AHORA, porque alguien lo pidió. Devuelve qué pasó, para poder decírselo.
+    /// </summary>
+    /// <remarks>
+    /// EXISTE PORQUE EL SONDEO SOLO NO BASTA PARA UNA PERSONA. El bucle mira cada 30 minutos y no
+    /// dice nada mientras tanto — que es lo correcto para no molestar, pero deja sin respuesta a
+    /// quien acaba de enterarse de que hay versión nueva y quiere tenerla YA. Sin este camino, la
+    /// única forma de forzarlo era cerrar y volver a abrir, que es justo lo que la
+    /// auto-actualización venía a evitar (2026-08-15, pedido por el usuario).
+    ///
+    /// DEVUELVE UN VEREDICTO Y NO UN BOOLEANO. «No pasó nada» tiene tres causas que se arreglan en
+    /// sitios distintos: estar al día, no ser una instalación de Velopack —correr desde la carpeta
+    /// suelta o en desarrollo—, y que el feed no conteste. Un `false` para las tres obligaría a
+    /// mirar el log para saber cuál fue, que es lo que este botón viene a ahorrar.
+    /// </remarks>
+    public async Task<(Busqueda Que, string Detalle)> BuscarAhoraAsync()
+    {
+        if (!Enabled)
+            return (Busqueda.NoAplica,
+                "esta copia no se instaló con el instalador, así que no hay de dónde actualizarse");
+
+        if (_ready != null)
+            return (Busqueda.YaEstabaLista, _ready.Version.ToString());
+
+        try
+        {
+            UpdateInfo? info = await _mgr.CheckForUpdatesAsync();
+            if (info == null)
+            {
+                LogBus.Log("update", "búsqueda a mano: ya está en la última versión");
+                return (Busqueda.AlDia, CurrentVersion);
+            }
+
+            string version = info.TargetFullRelease.Version.ToString();
+            LogBus.Log("update", $"búsqueda a mano: hay {version}, descargando…");
+            await _mgr.DownloadUpdatesAsync(info);
+
+            _ready = info.TargetFullRelease;
+            LogBus.Log("update", $"búsqueda a mano: {version} descargada y lista");
+            UpdateReady?.Invoke(version);
+            return (Busqueda.Descargada, version);
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("update", $"búsqueda a mano: falló — {e.Message}");
+            return (Busqueda.Fallo, e.Message);
+        }
+    }
+
     /// <summary>Aplica ya y relanza la carita. Lo que hace la pastilla al tocarla.</summary>
     public void ApplyAndRestart()
     {

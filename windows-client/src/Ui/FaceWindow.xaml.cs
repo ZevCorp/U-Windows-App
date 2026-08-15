@@ -238,6 +238,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // ubicación, la verificación de llegadas y los vetos — y duplicar una protección es la
             // forma más segura de que una de las dos copias se quede atrás.
             _vivo = new GeminiLive(mcp.Map);
+            // «Cállate», «ocúltate», «ciérrate»: van al chrome de la ventana, no al mapa de
+            // pantallas — por eso se resuelven aquí y no dentro de SurfaceMapTools.
+            _vivo.Autocontrol = AtenderAutocontrol;
 
             // EL MAPA VIVO: el nodo donde estás rodeado de lo alcanzable, publicado en Neo4j para
             // poder mirarlo mientras ocurre. Lee las MISMAS fuentes que todo lo demás —el mapa y la
@@ -576,6 +579,38 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         SetStatus("Actualizando Ü…");
         _updater?.ApplyAndRestart(); // no retorna: reinicia el proceso
+    }
+
+    /// <summary>
+    /// «Buscar actualizaciones» pulsado a mano. SIEMPRE contesta algo — incluso «ya estás al día».
+    /// </summary>
+    /// <remarks>
+    /// Un botón que no responde se pulsa tres veces. El sondeo automático puede permitirse el
+    /// silencio porque nadie lo está mirando; éste no: alguien acaba de pulsarlo y está esperando.
+    /// Por eso cada rama de <see cref="Updater.Busqueda"/> tiene su frase, incluida la de «esta
+    /// copia no se instaló con el instalador», que es la que explica por qué en desarrollo no pasa
+    /// nada por más que se insista.
+    /// </remarks>
+    private async void OnCheckUpdate(object sender, RoutedEventArgs e)
+    {
+        if (_updater == null) { SetStatus("El actualizador no está disponible."); ShowTalk(); return; }
+
+        CheckUpdateBtn.IsEnabled = false;
+        SetStatus("Buscando actualizaciones…");
+        ShowTalk();
+        try
+        {
+            var (que, detalle) = await _updater.BuscarAhoraAsync();
+            SetStatus(que switch
+            {
+                Updater.Busqueda.AlDia => $"Ya tienes la última versión ({detalle}).",
+                Updater.Busqueda.Descargada => $"Versión {detalle} descargada. Pulsa ⬇ para reiniciar, o se instala sola al cerrar.",
+                Updater.Busqueda.YaEstabaLista => $"La versión {detalle} ya estaba lista. Pulsa ⬇ para reiniciar.",
+                Updater.Busqueda.NoAplica => $"No se puede actualizar: {detalle}.",
+                _ => $"No pude comprobarlo: {detalle}",
+            });
+        }
+        finally { CheckUpdateBtn.IsEnabled = true; }
     }
 
     /// <summary>
@@ -1451,6 +1486,45 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         MuteBtn.Content = muted ? "🔇" : "🔊";
         MuteBtn.ToolTip = muted ? "Ü está en silencio — clic para que vuelva a hablar" : "Callar a Ü ahora mismo";
     }
+
+    /// <summary>
+    /// Lo que hace Ü con self_mute/self_hide/self_close, pedido por VOZ. Es <see cref="GeminiLive.Autocontrol"/>.
+    /// </summary>
+    /// <remarks>
+    /// SIEMPRE EN EL HILO DE LA VENTANA. Esto se llama desde el bucle que recibe mensajes del
+    /// WebSocket de Gemini, que no es el hilo de UI de WPF — tocar `Hide()` o el Dispatcher fuera de
+    /// su hilo lanza o, peor, funciona a veces y otras no. `Dispatcher.Invoke` (no InvokeAsync)
+    /// porque quien llama necesita la frase de vuelta YA, para devolvérsela al modelo.
+    ///
+    /// self_close NO cierra en este mismo tick: si `Application.Current.Shutdown()` corriera aquí
+    /// dentro, mataría el proceso ANTES de que la respuesta de la herramienta saliera por el
+    /// WebSocket, y Ü se callaría a media frase de despedida en vez de decirla. Se deja un respiro
+    /// para que la respuesta viaje y el modelo pueda hablar antes de que el proceso termine.
+    /// </remarks>
+    private string AtenderAutocontrol(string herramienta) => Dispatcher.Invoke(() =>
+    {
+        switch (herramienta)
+        {
+            case "self_mute":
+                SetMuted(true);
+                return "Silenciado. Un clic en el altavoz para que vuelva a hablar.";
+
+            case "self_hide":
+                if (_collapsed) ToggleCollapsed();
+                Hide();
+                return "Me oculto. Ctrl+Alt+U para que vuelva.";
+
+            case "self_close":
+                LogBus.Log("atajo", "self_close pedido por voz: cerrando en 2,5 s para dar tiempo a la despedida");
+                var cierre = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+                cierre.Tick += (_, __) => { cierre.Stop(); Application.Current.Shutdown(); };
+                cierre.Start();
+                return "Cerrándome. Hasta luego.";
+
+            default:
+                return $"«{herramienta}» no es una herramienta de autocontrol conocida";
+        }
+    });
 
     // --- Enseñanza activa (grabar pantalla+voz) ---
 
