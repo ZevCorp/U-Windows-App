@@ -66,12 +66,41 @@ jobs:
       - name: Empaquetar con Velopack
         if: ${{ inputs.dry_run != true }}
         shell: pwsh
+        env:
+          # FIRMA DE CÓDIGO (opcional hasta que haya certificado). Sin estos secretos el paquete sale
+          # SIN FIRMAR y Windows avisa «no se pudo verificar el publicador» en cada instalación —
+          # saltable con «Más información → Ejecutar de todas formas», pero es fricción real: el
+          # 2026-08-15 bloqueó una instalación en mitad de una demo.
+          #
+          # Para activarlo, dos secretos en Settings → Secrets and variables → Actions:
+          #   WINDOWS_CERT_PFX       el .pfx en base64  (certutil -encode cert.pfx cert.txt)
+          #   WINDOWS_CERT_PASSWORD  su contraseña
+          #
+          # QUÉ CERTIFICADO COMPRAR, porque no todos resuelven lo mismo:
+          #   · OV (~200-400 €/año): firma, pero SmartScreen SIGUE avisando hasta que el binario
+          #     acumula reputación (semanas o cientos de descargas). No arregla una demo de mañana.
+          #   · EV (~300-600 €/año, con token físico o HSM): confianza desde la primera descarga.
+          #     Es el único que quita el aviso de verdad.
+          #   · Autofirmado: NO sirve para máquinas ajenas — Windows no confía en él salvo que se
+          #     instale como raíz en cada equipo, que no escala y toca la seguridad del destino.
+          CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           $packArgs = @('-u','U','-v','${{ inputs.version }}','-p','out\assistant','-e','U.exe','-o','out\releases')
           if (Test-Path 'windows-client\U.ico') {
             $packArgs += @('--icon','windows-client\U.ico')
           } else {
             Write-Host 'U.ico no está commiteado en el repo; se empaqueta sin icono personalizado.'
+          }
+          if ($env:CERT_PFX) {
+            # El .pfx nunca se commitea: viaja como secreto en base64 y se materializa aquí, en el
+            # runner efímero. Se borra al terminar el job con la máquina entera.
+            $pfx = Join-Path $env:RUNNER_TEMP 'firma.pfx'
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT_PFX))
+            $packArgs += @('--signParams', "/fd sha256 /f `"$pfx`" /p `"$env:CERT_PASSWORD`" /tr http://timestamp.digicert.com /td sha256")
+            Write-Host 'Firmando el paquete con el certificado del secreto.'
+          } else {
+            Write-Host 'SIN certificado (WINDOWS_CERT_PFX no está puesto): el paquete sale sin firmar y Windows avisará al instalar.'
           }
           vpk pack @packArgs
 
