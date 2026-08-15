@@ -36,7 +36,25 @@
     <!-- ScreenRecorderLib requiere plataforma especÃ­fica, no AnyCPU. Platform es propiedad MSBuild
          (distinta de RuntimeIdentifier de .NET 5+). -->
     <Platform>x64</Platform>
+
+    <!-- Key de Gemini embebida SOLO en builds de DISTRIBUCIÓN. MISMO patrón que GraphDefaultApiKey
+         en GraphWorkflows.csproj: el CI la inyecta desde un secreto, VACÍA por defecto → los builds
+         del repo no llevan ninguna key. Con ella, la voz en vivo funciona en el Setup.exe distribuido
+         sin que el usuario final teclee nada; sigue siendo sobreescribible por GEMINI_API_KEY en la
+         máquina (ver GeminiLive.Clave), que es lo que ya usa quien desarrolla.
+
+         DECISIÓN CONSCIENTE, no la ideal: el comentario de GeminiLive.Clave dice que en producción
+         debería EMITIRLA el backend por sesión —como ya hace DictadoSoniox con Soniox—, porque una
+         key de Gemini es de alcance completo y esto la reparte IDÉNTICA en cada copia distribuida:
+         si se filtra o se agota el saldo, afecta a todas las instalaciones a la vez (2026-08-14, el
+         propio usuario se quedó sin saldo en la key de desarrollo ese mismo día). Se elige este
+         camino por velocidad, sabiendo el cambio pendiente. -->
+    <GeminiDefaultApiKey Condition="'$(GeminiDefaultApiKey)' == ''"></GeminiDefaultApiKey>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="GeminiDefaultApiKey" Value="$(GeminiDefaultApiKey)" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Ver StartupObject arriba: App.xaml se compila como Page para que el SDK no genere un Main que

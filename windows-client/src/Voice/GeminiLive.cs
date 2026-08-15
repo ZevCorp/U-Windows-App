@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Net.WebSockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using U.WindowsClient.Diagnostics;
@@ -155,13 +156,29 @@ public sealed class GeminiLive : IDisposable
     }
 
     /// <summary>
-    /// La llave. En producción la emite el backend —el cliente NO tiene keys, que es regla vieja de
-    /// este proyecto y por eso la enseñanza por video pide un token firmado— y en la máquina de
-    /// quien desarrolla vale su propia GEMINI_API_KEY, igual que ya funciona GRAPH_API_KEY. Una key
-    /// que el usuario ya tiene en SU equipo no se está repartiendo a nadie.
+    /// La llave. Tres escalones, en orden:
+    ///   1. GEMINI_API_KEY en la máquina — quien desarrolla pone la suya, igual que GRAPH_API_KEY.
+    ///   2. La key EMBEBIDA en el build de distribución (AssemblyMetadata GeminiDefaultApiKey), que
+    ///      el CI inyecta desde un secreto — mismo mecanismo que GraphDefaultApiKey. Vacía en los
+    ///      builds del repo: cero secretos en código o historial.
+    ///   3. Vacío: no hay voz en vivo, y se dice por qué.
+    ///
+    /// ESTO ES UN ATAJO, dicho en voz alta (2026-08-14, decisión consciente del usuario, no la
+    /// recomendada): la key de Gemini es de alcance COMPLETO, y embeberla reparte la MISMA key en
+    /// cada copia distribuida — si se filtra o se agota el saldo, afecta a todas las instalaciones a
+    /// la vez. Lo correcto sería que el backend la EMITIERA por sesión, como ya hace
+    /// <see cref="U.WindowsClient.Clinical.DictadoSoniox"/> con Soniox (clave temporal de 60 s, el
+    /// cliente nunca ve la real). Se elige embeber por velocidad; el cambio queda pendiente.
     /// </summary>
-    private static string Clave() =>
-        Environment.GetEnvironmentVariable("GEMINI_API_KEY")?.Trim() ?? "";
+    private static string Clave()
+    {
+        string desdeElEntorno = Environment.GetEnvironmentVariable("GEMINI_API_KEY")?.Trim() ?? "";
+        if (desdeElEntorno.Length > 0) return desdeElEntorno;
+
+        return typeof(GeminiLive).Assembly
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => a.Key == "GeminiDefaultApiKey")?.Value?.Trim() ?? "";
+    }
 
     public async Task AlternarAsync()
     {

@@ -53,6 +53,12 @@ jobs:
           # (una key miracle_ generada en Provider Studio → API keys). Si el secreto no existe, el
           # build sigue funcionando pero sin key embebida (el usuario tendría que ponerla a mano).
           GraphDefaultApiKey: ${{ secrets.GRAPH_DEFAULT_API_KEY }}
+          # MISMO mecanismo para la voz en vivo (WindowsClient.csproj → AssemblyMetadata
+          # GeminiDefaultApiKey). Secreto: GEMINI_DEFAULT_API_KEY (una key AIza... de AI Studio, con
+          # saldo — si se agota, la voz en vivo falla en TODAS las instalaciones a la vez, porque es
+          # la MISMA key en cada copia distribuida. Decisión consciente 2026-08-14: lo ideal es que
+          # el backend la emita por sesión, como ya hace con Soniox; se embebe por velocidad).
+          GeminiDefaultApiKey: ${{ secrets.GEMINI_DEFAULT_API_KEY }}
         run: >
           dotnet publish windows-client\WindowsClient.csproj
           -c Release -r win-x64 --self-contained true -o out\assistant
