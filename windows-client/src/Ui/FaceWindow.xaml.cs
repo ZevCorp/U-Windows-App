@@ -317,7 +317,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 _mapaVivo.Nucleo,
                 () => _locator?.DondeEstoy()?.Id ?? "",
                 (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
-                proc => Uia.AppAligner.FocusOrLaunch(proc),
+                superficie => Uia.AppAligner.PonerDelante(superficie),
                 (sel, texto) => accionar("input", sel, texto),
                 (sel, opcion) => accionar("select", sel, opcion));
             _servidorNucleo.Arrancar();

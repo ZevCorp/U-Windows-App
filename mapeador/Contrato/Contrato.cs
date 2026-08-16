@@ -43,6 +43,8 @@ internal static class Contrato
         Prueba("18. lo que no contesta a tiempo se abandona, y se dice", NoEsperarParaSiempre);
         Prueba("19. mientras una sigue colgada NO se lanza otra: nada de fuga de hilos", UnaColgadaALaVez);
         Prueba("20. cuando la colgada vuelve, se sigue trabajando", DelCuelgueSeSale);
+        Prueba("21. una página se alcanza por su PESTAÑA, no lanzando un programa", LoWebVaPorPestanas);
+        Prueba("22. lo que no se reconoce se dice: NUNCA se abre algo al azar", NoAdivinarQueAbrir);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -476,6 +478,40 @@ internal static class Contrato
         Debe(!v.Colgada, "ya no hay ninguna colgada");
 
         Debe(v.Pregunta(() => "por fin") == "por fin", "y la siguiente pregunta funciona con normalidad");
+    }
+
+    /// <remarks>
+    /// EL FALLO, TRES VECES LA MISMA FORMA: coger la parte izquierda del id y tratarla como el nombre
+    /// de un ejecutable. «web://itsmiracleai.com.co/…» buscaba un proceso con ese nombre y, al no
+    /// haberlo, intentaba LANZAR un programa llamado así — el usuario lo vio como «no pude traer
+    /// "itsmiracleai.com.co" al frente» (2026-08-14). Con SAP habría intentado lanzar «QAS».
+    /// </remarks>
+    private static void LoWebVaPorPestanas()
+    {
+        var web = ComoMePongoDelante.De("web://itsmiracleai.com.co/servicios");
+        Debe(web.Via == ComoMePongoDelante.Via.PestanaDelNavegador, "una página se alcanza por su pestaña");
+        Debe(web.Que == "itsmiracleai.com.co", "…y se busca por el DOMINIO, que es lo que la memoria indexa");
+
+        var sap = ComoMePongoDelante.De("sapgui://QAS/NWP1/SAPLN_WP_FRAMEWORK/0100");
+        Debe(sap.Via == ComoMePongoDelante.Via.SapGui, "SAP tiene su propia vía");
+        Debe(sap.Que != "QAS", "…y NO se busca «QAS»: es un sistema, no un ejecutable");
+
+        var nativa = ComoMePongoDelante.De("uia://explorer.exe/documentos");
+        Debe(nativa.Via == ComoMePongoDelante.Via.Proceso, "una app nativa sí va por su proceso");
+        Debe(nativa.Que == "explorer", "…sin el «.exe», que es como se lanza y se enfoca");
+    }
+
+    /// <remarks>
+    /// LA PROMESA QUE MÁS PROTEGE. Un workflow sellado en «uia://desktop» hizo que se intentara
+    /// «lanzar un programa llamado desktop», y el shell resolvió… Docker Desktop (2026-07-31). Abrir
+    /// un programa al azar en la máquina de alguien es de las cosas más molestas que puede hacer un
+    /// agente, y encima la alineación fallaba igual. Rendirse diciéndolo es seguro; adivinar no.
+    /// </remarks>
+    private static void NoAdivinarQueAbrir()
+    {
+        foreach (string raro in new[] { "", "   ", "desktop", "sapgui://", "web://", "uia://", "vaya://cosa" })
+            Debe(ComoMePongoDelante.De(raro).Via == ComoMePongoDelante.Via.NoSe,
+                $"«{raro}» no se reconoce, y eso se dice en vez de abrir algo al azar");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

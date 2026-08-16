@@ -36,7 +36,7 @@ public sealed class ServidorDelNucleo : IDisposable
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
     private readonly Func<string, string, bool> _pulsar;    // (selector, etiqueta) → ¿se pulsó?
-    private readonly Func<string, bool> _enfocar;           // (proceso) → ¿está delante?
+    private readonly Func<string, bool> _enfocar;           // (id de superficie) → ¿está delante?
     private readonly Func<string, string, bool> _escribir;  // (selector, texto) → ¿se escribió?
     private readonly Func<string, string, bool> _elegir;    // (selector, opción) → ¿se eligió?
     private HttpListener? _oreja;
@@ -158,12 +158,23 @@ public sealed class ServidorDelNucleo : IDisposable
             // forma de navegar una aplicación sin enfocarla, y fingir lo contrario sería pulsar a
             // ciegas. Que el foco se mueva aquí no es un descuido, es el trabajo — lo que la capa
             // sin activación evita es que sea EL CLIC EN EL GRAFO el que rompa el hilo.
+            // SE PIDE «PONME DELANTE DE ESTA SUPERFICIE», no «tráeme este proceso». La diferencia no
+            // es de estilo: la «app» de un id web es un DOMINIO y la de SAP es un SISTEMA, y
+            // pasarlos como nombre de proceso hacía que se buscara —y se intentara LANZAR— un
+            // programa llamado «itsmiracleai.com.co» o «QAS». El usuario lo vio como «no pude traer
+            // "itsmiracleai.com.co" al frente» (2026-08-14).
+            //
+            // Cómo ponerse delante de cada tipo de superficie es del MAPEADOR, no del núcleo: aquí
+            // solo se le pasa el destino tal cual y él sabe si eso es una ventana, una pestaña o una
+            // sesión de SAP.
             string appDestino = Nucleo.Grafo.AppDe(destino);
             if (!Nucleo.Grafo.AppDe(aqui).Equals(appDestino, StringComparison.OrdinalIgnoreCase))
             {
-                string proc = appDestino.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
-                if (!_enfocar(proc))
-                    return NoPude(destino, $"no pude traer «{appDestino}» al frente");
+                if (!_enfocar(destino))
+                    return NoPude(destino, destino.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
+                        ? $"«{appDestino}» no está abierto en ninguna pestaña del navegador: ábrelo "
+                        + "una vez y el núcleo sabrá volver"
+                        : $"no pude ponerme delante de «{appDestino}»");
                 Thread.Sleep(700);   // que la ventana se asiente antes de leer dónde estamos
                 aqui = _donde();
             }
