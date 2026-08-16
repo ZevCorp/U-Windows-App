@@ -6,11 +6,13 @@ namespace U.WindowsClient.Telemetry;
 /// Manda al backend cada línea del log, para poder mirar desde otra máquina qué está haciendo esta.
 ///
 /// POR QUÉ EXISTE. El panel de Windows del Provider Studio —lista de equipos, eventos en vivo por
-/// SSE, grafo por usuario— ya estaba entero y llevaba meses enseñando una pantalla vacía: el carril
-/// de telemetría existía en las dos puntas, pero <c>TelemetryBus.Emit</c> no tenía UN SOLO llamador.
-/// Había tubería y no había agua. La consecuencia práctica era que, para saber qué había pasado en
-/// el equipo de otra persona, tocaba pedirle que buscara %LOCALAPPDATA%\U\logs y lo mandara a mano
-/// (2026-08-16, pedido: «necesito poder ver sus logs, grafo, todo desde mi pc»).
+/// SSE, grafo por usuario— ya estaba entero, y el cliente ya emitía: arranques y finales de corrida,
+/// pasos de workflow, acciones. Lo que NO viajaba era el log. Y la diferencia importa, porque los
+/// eventos cuentan QUÉ se intentó y el log cuenta POR QUÉ salió como salió: el elemento que no se
+/// encontró, la pantalla en la que se creía estar, el campo que no cuajó. Sin él, mirar el panel de
+/// otra máquina decía que un paso falló pero no daba con qué arreglarlo, y tocaba pedirle a esa
+/// persona que buscara %LOCALAPPDATA%\U\logs y lo mandara a mano (2026-08-16, pedido: «necesito
+/// poder ver sus logs, grafo, todo desde mi pc»).
 ///
 /// SE ENGANCHA AL LOG Y NO A CADA SITIO QUE INFORMA. La alternativa era ir sembrando <c>Emit</c> por
 /// el código, y entonces lo que se ve en remoto y lo que se ve en el archivo se van separando en
