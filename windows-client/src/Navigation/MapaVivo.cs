@@ -53,14 +53,22 @@ public sealed class MapaVivo : IDisposable
 
     private void Descarte(bool esUbicacion = true)
     {
-        _ = esUbicacion;   // la cuenta la lleva el propio candado; aquí solo se avisa
-        AflojarElPaso();
+        // CADA RELOJ SE AFLOJA CON SUS PROPIOS DESCARTES. El parámetro llevaba aquí desde antes sin
+        // usarse, y al colgar de aquí el ajuste del ritmo pasó a importar: una lectura de PANTALLA
+        // que llega tarde estaba frenando el reloj de la UBICACIÓN, que es otro trabajo y otro
+        // coste. Frenar el que sí llegaba a tiempo por culpa del que no, además, empeora justo lo
+        // que peor lleva ir lento: la atribución del clic vive en el de ubicación (2026-08-16).
+        if (esUbicacion) AflojarElPaso();
         if (Interlocked.Increment(ref _descartadas) < 20) return;
         if ((DateTime.UtcNow - _ultimoAviso).TotalSeconds < 60) return;
         _ultimoAviso = DateTime.UtcNow;
         int cuantas = Interlocked.Exchange(ref _descartadas, 0);
-        LogBus.Log("mapa-vivo", $"SATURADO: {cuantas} vuelta(s) descartadas por llegar con otra en curso; "
-            + $"se ha aflojado a {_msUbicacion} ms para dejar de pedir más de lo que esta máquina da.");
+        // SE DICE CUÁL DE LOS DOS. Los dos relojes escriben aquí y el mensaje no los distinguía, así
+        // que «SATURADO» podía ser la ubicación o la lectura de pantalla —trabajos distintos, costes
+        // distintos y arreglos distintos— y no había forma de saberlo leyendo el log.
+        LogBus.Log("mapa-vivo", $"SATURADO ({(esUbicacion ? "ubicación" : "lectura de pantalla")}): "
+            + $"{cuantas} vuelta(s) descartadas por llegar con otra en curso"
+            + (esUbicacion ? $"; la ubicación va ya cada {_msUbicacion} ms." : "."));
     }
 
     // ── El ritmo se ajusta solo ───────────────────────────────────────────────────────────────
