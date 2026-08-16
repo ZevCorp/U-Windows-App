@@ -289,7 +289,23 @@ public sealed class SurfaceMapTools
     /// Se busca en lo que hay AHORA en pantalla, no en el mapa: la pregunta es «¿lo ves?», no
     /// «¿te acuerdas de él?».
     /// </summary>
-    private string Mostrar(string que)
+    /// <summary>
+    /// Todo lo que se llama así, SIN agrupar y en el orden en que se lee la pantalla: de arriba
+    /// abajo y de izquierda a derecha. Ese orden es el que hace que «el primero» y «el segundo»
+    /// signifiquen lo mismo para quien mira y para quien señala.
+    /// </summary>
+    private static List<UiaReader.UiElement> Homonimos(
+        IReadOnlyList<UiaReader.UiElement> aLaVista, string que)
+    {
+        string q = que.Trim();
+        return aLaVista
+            .Where(e => e.Label.Trim().Equals(q, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(e => e.Bounds.Top).ThenBy(e => e.Bounds.Left)
+            .Take(12)
+            .ToList();
+    }
+
+    private string Mostrar(string que, int cual = 0)
     {
         if (que.Length == 0) return "falta `exit`: qué elemento hay que señalar";
 
@@ -361,8 +377,26 @@ public sealed class SurfaceMapTools
             // El MISMO reconocedor que usa map_take para pulsar. Cuando señalar y pulsar buscaban
             // cada uno a su manera, pasaba lo del 2026-08-05: veía la barra de búsqueda y decía que
             // no podía pulsarla. Si lo señalo, lo puedo pulsar — y al revés.
-            elegidos = Uia.Reconocedor.Buscar(candidatos, que).Take(1).ToList();
-            comoSeLlama = que;
+            // SI EL NOMBRE COINCIDE CON VARIOS, NO SE ELIGE UNO A DEDO. Aquí había un `.Take(1)`:
+            // señalaba el primero del árbol y se quedaba tan ancho, así que cuando Ü preguntaba
+            // «¿cuál de los dos «Code»?» no tenía forma de enseñar CUÁL era cada uno — que es
+            // justo el momento en el que señalar sirve para algo (2026-08-16, pedido por el usuario:
+            // «que sea como este, y va y lo señala, o este, y va y señala el otro»).
+            //
+            // Con `cual` se señala uno concreto —el 1.º, el 2.º…— y sin él se señalan todos, que es
+            // la respuesta honesta a un nombre que nombra a varios.
+            // SEÑALAR NECESITA VER LOS HOMÓNIMOS; PULSAR NO. `Reconocedor.Buscar` agrupa por nombre
+            // y devuelve uno —«el mismo nombre, una vez»—, que es lo correcto para pulsar: no vas a
+            // pulsar dos cosas. Pero para PREGUNTAR «¿cuál de los dos?» hay que poder enseñar los
+            // dos, y ahí ese acierto se convierte en el impedimento. Se buscan aquí, sin agrupar, y
+            // no se toca el reconocedor: lo usa `map_take`, y cambiarlo movería el suelo de la
+            // navegación entera para arreglar una forma de señalar (2026-08-16).
+            var homonimos = Homonimos(candidatos, que);
+            elegidos = cual >= 1 && cual <= homonimos.Count
+                ? new List<UiaReader.UiElement> { homonimos[cual - 1] }
+                : homonimos.Count > 0 ? homonimos : Uia.Reconocedor.Buscar(candidatos, que).ToList();
+            comoSeLlama = cual >= 1 && cual <= homonimos.Count
+                ? $"{que} ({cual} de {homonimos.Count})" : que;
         }
 
         if (elegidos.Count == 0)
@@ -396,8 +430,14 @@ public sealed class SurfaceMapTools
             : (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
               + (h.Info.NivelFijado ? " · fijado" : "");
 
-        return $"SÍ veo «{el.Label}» ({el.ControlType}) y lo estoy señalando: recuadro encendido y "
-             + $"la carita puesta a su lado. En el mapa: {enMapa}. Lo puedo pulsar ahora mismo con "
+        // SE DICE CUÁL DE ELLOS. Con tres «Descargas» en pantalla, «lo estoy señalando» no distingue
+        // nada: ni quien mira el panel ni el propio modelo sabrían a cuál se refiere en el turno
+        // siguiente. Al preguntar «¿este o este?» hay que poder nombrar el que se está enseñando.
+        string posicion = comoSeLlama.Contains(" (") && comoSeLlama.EndsWith(")")
+            ? " " + comoSeLlama[comoSeLlama.IndexOf(" (", StringComparison.Ordinal)..].Trim()
+            : "";
+        return $"SÍ veo «{el.Label}»{posicion} ({el.ControlType}) y lo estoy señalando: recuadro encendido "
+             + $"y la carita puesta a su lado. En el mapa: {enMapa}. Lo puedo pulsar ahora mismo con "
              + $"map_take exit=«{el.Label}» — que lo vea basta.";
     }
 
@@ -1227,7 +1267,7 @@ public sealed class SurfaceMapTools
             "map_pointing_at" => LoQueSenala(),
             "map_pointed_trail" => LoQueMeAcabasDeMostrar(A("seconds")),
             "map_exclude" => Excluir(A("exit")),
-            "map_show" => Mostrar(A("exit")),
+            "map_show" => Mostrar(A("exit"), int.TryParse(A("which"), out int cual) ? cual : 0),
             // SE MIRA ANTES DE FIJAR. Fijar un nivel busca la SALIDA con ese nombre en el mapa, y
             // el mapa solo anota cuando se le pide: un elemento perfectamente visible —con su punto
             // gris encima— podía no estar registrado todavía, y la respuesta era «no lo veo en la
@@ -2625,7 +2665,9 @@ public sealed class SurfaceMapTools
             if (vistos.Count > 1)
                 return $"«{salida}» coincide con {vistos.Count} cosas que tengo a la vista: "
                      + string.Join("; ", vistos.Take(8).Select(v => $"«{v.Label}» [{Uia.Reconocedor.SelectorDe(v)}]"))
-                     + ". Repite `exit` con el selector de la que quieras.";
+                     + ". Repite `exit` con el selector de la que quieras. Y si vas a preguntarle a "
+                     + $"la persona cuál es, SEÑÁLASELAS: map_show con exit=«{salida}» y which=1, "
+                     + "luego which=2, mientras se lo dices.";
 
             if (vistos.Count == 0)
             {
@@ -2815,7 +2857,10 @@ public sealed class SurfaceMapTools
         if (candidatas.Count > 1)
             return $"«{salida}» coincide con {candidatas.Count} salidas: "
                  + string.Join("; ", candidatas.Select(h => $"«{h.Info.Label}» [{h.Info.Selector}]"))
-                 + ". Repite `exit` con el SELECTOR de la que quieras (o con su AutomationId).";
+                 + ". Repite `exit` con el SELECTOR de la que quieras (o con su AutomationId). "
+                 + "Y si le estás preguntando a la persona cuál quiere, SEÑÁLASELAS mientras se lo "
+                 + $"preguntas: map_show con exit=«{salida}» y which=1, luego which=2… Ver cuál es "
+                 + "cada una es más rápido que leerle dos selectores.";
 
         var elegida = candidatas[0];
         _ultimaApp = AppDe(actual.Id).Length > 0 ? AppDe(actual.Id) : _ultimaApp;

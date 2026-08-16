@@ -781,7 +781,12 @@ public sealed class GeminiLive : IDisposable
                    + "—«Escritorio, Descargas, Notas, Imágenes»— y los ilumina todos a la vez. Pásale "
                    + "SIEMPRE nombres concretos, nunca el nombre de una zona («la columna izquierda»): "
                    + "qué elementos forman esa zona lo decides TÚ mirando el vídeo y cruzándolo con "
-                   + "map_what_i_see, y aquí traes ya la lista elegida.")),
+                   + "map_what_i_see, y aquí traes ya la lista elegida."),
+            ("which", "Cuando ese nombre coincide con VARIOS, cuál de ellos: «1», «2»… Sin esto se "
+                    + "señalan todos. ÚSALO PARA PREGUNTAR: si tienes que elegir entre dos «Code», "
+                    + "señala el 1 y di «¿este?», señala el 2 y di «¿o este?». Enseñar cuál es cada "
+                    + "uno es más rápido y más claro que leerle dos selectores en voz alta, y hace "
+                    + "que se vea que estás mirando su pantalla de verdad.")),
         Fn("map_set_level", "Corrige a mano a qué NIVEL pertenece una salida, para toda la app y de "
             + "forma permanente. Nivel 1 = navegación principal. IMPORTANTE: «quítalo del primer "
             + "nivel», «esto no va ahí» o «no es del menú principal» se hace con level = -1 (SOLTAR), "
