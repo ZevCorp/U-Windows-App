@@ -53,6 +53,10 @@ jobs:
           # (una key miracle_ generada en Provider Studio → API keys). Si el secreto no existe, el
           # build sigue funcionando pero sin key embebida (el usuario tendría que ponerla a mano).
           GraphDefaultApiKey: ${{ secrets.GRAPH_DEFAULT_API_KEY }}
+          # Token de SOLO LECTURA con el que la copia distribuida consulta si hay versión nueva.
+          # Este repo es privado y el feed ahora son sus releases, así que sin esto el botón de
+          # actualizar responde «no autorizado». Ver WindowsClient.csproj → UpdateGithubToken.
+          UpdateGithubToken: ${{ secrets.UPDATE_GITHUB_TOKEN }}
           # MISMO mecanismo para la voz en vivo (WindowsClient.csproj → AssemblyMetadata
           # GeminiDefaultApiKey). Secreto: GEMINI_DEFAULT_API_KEY (una key AIza... de AI Studio, con
           # saldo — si se agota, la voz en vivo falla en TODAS las instalaciones a la vez, porque es
@@ -104,63 +108,49 @@ jobs:
           }
           vpk pack @packArgs
 
-      # SE SUBE EN PARTES, Y POR ESO NO SE USA `vpk upload s3`.
+      # EL FEED VIVE EN LAS RELEASES DE ESTE REPO, NO EN SUPABASE.
       #
-      # `vpk` sube cada archivo en UNA sola petición PUT. El paquete pesa ~80 MB
-      # y el instalador ~85 MB, y la pasarela S3 de Supabase rechaza una petición
-      # de ese tamaño con `RequestEntityTooLarge`. Eso es lo que hizo fallar los
-      # SIETE intentos de publicación desde el 2026-07-22: el build, el publish y
-      # el empaquetado terminaban bien y la subida moría en la última línea, así
-      # que nunca llegó NADA al bucket y el botón de actualizar del cliente no
-      # tenía de dónde traerse nada (2026-08-16).
+      # Estuvo en un bucket de Supabase y NO PODIA funcionar: el plan gratuito
+      # corta las subidas en 50 MB —tope GLOBAL, que manda sobre el 1 GB
+      # configurado en el bucket— y el paquete pesa 80. Siete intentos desde el
+      # 2026-07-22 murieron todos en la ultima linea, cada vez por un motivo que
+      # parecia el definitivo: primero `--endpoint`/`--region`, luego el PUT
+      # unico (`RequestEntityTooLarge`), luego el CRC32 que la CLI de aws mete
+      # en cada parte. Ninguno era la causa de fondo. Lo era el plan, y por eso
+      # ningun metodo de subida iba a salvarlo (2026-08-16).
       #
-      # No era el cupo, aunque lo pareciera: el límite del bucket es 1 GB POR
-      # ARCHIVO y todo el proyecto ocupaba 34 MB. Era el tamaño de la PETICIÓN,
-      # no el del archivo — por eso cambiar `--endpoint`/`--region` nunca lo
-      # arregló, que fue la corrección anterior.
+      # La consecuencia practica fue que el bucket estuvo SIEMPRE vacio, asi que
+      # el boton de actualizar del cliente solo podia contestar «ya estas al
+      # dia»: no mentia, es que al otro lado no habia nada que encontrar.
       #
-      # La CLI de aws parte los archivos grandes en trozos automáticamente
-      # (multipart), que es justo lo que a la pasarela le falta, y viene ya
-      # instalada en el runner de Windows. Aquí solo se copian archivos
-      # estáticos: el feed es una carpeta, no una API.
-      #
-      # Se sobrescribe el feed con lo que acaba de empaquetarse, así que las
-      # versiones viejas dejan de aparecer listadas. Es inocuo: el cliente solo
-      # busca la ÚLTIMA, y los .nupkg antiguos siguen en el bucket.
-      - name: Subir a Supabase (en partes)
+      # GitHub admite 2 GB por archivo y no cuesta nada. Como el repo es privado,
+      # la copia distribuida lleva embebido un token de SOLO LECTURA para poder
+      # consultarlo (ver el paso «Publicar U.exe» y WindowsClient.csproj).
+      - name: Publicar la release
         if: ${{ inputs.dry_run != true }}
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.SUPABASE_S3_REGION }}
-          ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
-          # SIN ESTO, LOS TROZOS SE RECHAZAN UNO A UNO. Desde la v2.23 la CLI de aws añade una suma
-          # de verificación (CRC32) a cada subida por su cuenta, y la pasarela de Supabase no la
-          # acepta en las partes de un multipart: devuelve un error VACÍO —«An error occurred ()
-          # when calling the UploadPart operation:»— que no dice nada de checksums. Los archivos
-          # pequeños pasaban igual porque van en una sola petición, y eso fue justo lo que despistó:
-          # el feed quedó publicado anunciando una versión cuyo paquete no había subido (2026-08-16).
-          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
-          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # PowerShell no corta el paso porque un comando de dentro falle, y el `ls` de abajo dejaba
-          # el código de salida en 0: la vez anterior la subida falló, el paso salió VERDE y el feed
-          # quedó anunciando una versión que nadie podía descargar. Un release que miente es peor que
-          # uno que no ocurre, así que se comprueba a mano.
-          aws s3 cp out\releases s3://windows/ --recursive --endpoint-url $env:ENDPOINT --only-show-errors
-          if ($LASTEXITCODE -ne 0) { throw "la subida falló (código $LASTEXITCODE): el feed NO se ha publicado" }
+          vpk upload github -o outeleases -c win `
+            --repoUrl https://github.com/${{ github.repository }} `
+            --token $env:GITHUB_TOKEN `
+            --tag v${{ inputs.version }} `
+            --releaseName "U ${{ inputs.version }}" `
+            --publish --merge
+          if ($LASTEXITCODE -ne 0) { throw "la publicacion fallo (codigo $LASTEXITCODE): NO hay release" }
 
-          Write-Host '--- lo que quedó publicado en el feed:'
-          aws s3 ls s3://windows/ --endpoint-url $env:ENDPOINT
-
-          # Y que el feed sea COHERENTE: que el paquete que anuncia esté de verdad ahí. Es la
-          # comprobación que habría cazado el publicado a medias sin tener que mirar el bucket.
-          $esperado = (Get-Content out\releases\releases.win.json | ConvertFrom-Json).Assets[0].FileName
-          $subidos  = aws s3 ls s3://windows/ --endpoint-url $env:ENDPOINT
-          if ($subidos -notmatch [regex]::Escape($esperado)) {
-            throw "el feed anuncia $esperado pero ese archivo no está en el bucket"
+          # QUE LA RELEASE NO ANUNCIE LO QUE NO TIENE. La vez anterior la subida
+          # fallo, el paso salio VERDE porque el codigo de salida era el del
+          # comando siguiente, y quedo publicado un feed que anunciaba una
+          # version cuyo paquete no existia: el cliente la veia, la intentaba
+          # bajar y fallaba cada 30 minutos. Un release que miente es peor que
+          # uno que no ocurre.
+          $esperado = (Get-Content outeleaseseleases.win.json | ConvertFrom-Json).Assets[0].FileName
+          $publicados = gh release view v${{ inputs.version }} --json assets --jq '.assets[].name'
+          if ($publicados -notcontains $esperado) {
+            throw "la release anuncia $esperado pero ese archivo no esta subido"
           }
-          Write-Host "feed coherente: $esperado está publicado"
+          Write-Host "release coherente: $esperado esta publicado"
 
       - name: Smoke test (dry run)
         if: ${{ inputs.dry_run == true }}

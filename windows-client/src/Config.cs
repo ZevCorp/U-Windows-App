@@ -19,6 +19,10 @@ public sealed class Config
     /// </summary>
     public const string LegacyBackendUrl = "https://u-windows-backend.vercel.app";
 
+    /// <summary>El feed viejo, en el bucket de Supabase. Ver la migración en <see cref="Load"/>.</summary>
+    public const string LegacyUpdateFeedUrl =
+        "https://zyvfamlhlmztliexvmej.supabase.co/storage/v1/object/public/windows";
+
     /// <summary>
     /// El cerebro ya no es el backend dedicado de Windows: es Graph, el backend central, que expone
     /// las mismas rutas bajo /api/v1 (ver <see cref="Backend.BackendClient"/>). La auth también
@@ -104,12 +108,22 @@ public sealed class Config
 
     /// <summary>
     /// De dónde baja la carita sus propias actualizaciones (ver <see cref="Update.Updater"/> y
-    /// RELEASING-WINDOWS.md). Es el bucket PÚBLICO `windows` de Supabase — público a propósito: el
-    /// updater tiene que poder leerlo sin credenciales, igual que el bucket `apks` de Android. Aquí solo
-    /// viajan binarios del cliente, que no contienen secretos del cerebro.
+    /// RELEASING-WINDOWS.md). Son las *releases* de este repositorio.
+    ///
+    /// ANTES ERA EL BUCKET PÚBLICO DE SUPABASE, y se cambió porque no podía funcionar: el plan
+    /// gratuito corta las subidas en 50 MB —tope global, que manda sobre el 1 GB configurado en el
+    /// bucket— y el paquete pesa 80. El .nupkg no llegó a subir ni una sola vez en siete intentos
+    /// desde el 2026-07-22, así que el botón de actualizar solo podía contestar «ya estás al día»:
+    /// no mentía, es que al otro lado no había nada que encontrar (2026-08-16).
+    ///
+    /// El repositorio es privado, así que esto ya NO se lee sin credenciales: el build de
+    /// distribución lleva embebido un token de solo lectura (WindowsClient.csproj → UpdateGithubToken).
+    ///
+    /// Sigue admitiendo una URL de carpeta estática: cualquier valor que no apunte a github.com se
+    /// trata como antes.
     /// </summary>
     public string UpdateFeedUrl { get; set; } =
-        "https://zyvfamlhlmztliexvmej.supabase.co/storage/v1/object/public/windows";
+        "https://github.com/ZevCorp/U-Windows-App";
 
     private static string Path =>
         System.IO.Path.Combine(U.Graph.UserPaths.Roaming, "U", "config.json");
@@ -133,6 +147,14 @@ public sealed class Config
         // si es EXACTAMENTE el default viejo: una URL puesta a mano en el panel Backend se respeta.
         if (string.Equals(cfg.BackendUrl?.TrimEnd('/'), LegacyBackendUrl, StringComparison.OrdinalIgnoreCase))
             cfg.BackendUrl = "https://graph-eight-pied.vercel.app";
+
+        // Lo mismo con el feed de actualizaciones, y por una razón peor: el bucket de Supabase al
+        // que apuntaban las instalaciones viejas NO PUEDE alojar el paquete —tope de 50 MB del plan
+        // gratuito contra 80 MB del .nupkg—, así que sin esto se quedarían preguntando para siempre
+        // a un sitio donde nunca va a haber nada. Igual que arriba, solo se migra el default exacto:
+        // si alguien apuntó su propio feed a mano, se respeta.
+        if (string.Equals(cfg.UpdateFeedUrl?.TrimEnd('/'), LegacyUpdateFeedUrl, StringComparison.OrdinalIgnoreCase))
+            cfg.UpdateFeedUrl = "https://github.com/ZevCorp/U-Windows-App";
 
         // Vía de emergencia: si Graph se cae o el port sale mal, `set U_BACKEND_URL=<url>` (p.ej. la
         // LegacyBackendUrl de arriba) manda sobre lo persistido y sobre la migración, sin tocar disco.

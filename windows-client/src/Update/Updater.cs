@@ -30,12 +30,51 @@ public sealed class Updater
     /// <summary>Se dispara (con el número de versión) cuando hay una versión ya descargada y lista.</summary>
     public event Action<string>? UpdateReady;
 
-    /// <param name="feedUrl">Base del feed estático; ver <see cref="Config.UpdateFeedUrl"/>.</param>
+    /// <param name="feedUrl">
+    /// De dónde se leen las versiones. Si apunta a un repositorio de GitHub se usan sus *releases*;
+    /// cualquier otra cosa se trata como una carpeta estática. Ver <see cref="Config.UpdateFeedUrl"/>.
+    /// </param>
     public Updater(string feedUrl)
     {
         // Sin canal explícito a propósito: Velopack usa el mismo con el que se empaquetó ("win"), y
         // pasarle uno distinto haría que pidiera un releases.<canal>.json que no existe → 404.
-        _mgr = new UpdateManager(feedUrl);
+        //
+        // EL FEED SE MUDÓ A GITHUB Y POR ESO HAY DOS CAMINOS. Vivía en un bucket de Supabase, que es
+        // una carpeta de archivos y no necesitaba nada más que la URL. Pero el plan gratuito corta
+        // las subidas en 50 MB —tope global, por encima del ajuste del bucket— y el paquete pesa 80:
+        // el .nupkg no llegó a subir NUNCA, así que durante meses el botón de actualizar solo podía
+        // decir «ya estás al día» porque al otro lado no había nada (2026-08-16). Las releases de
+        // GitHub admiten 2 GB por archivo.
+        //
+        // Se conserva el camino de carpeta estática, y no se sustituye: es el que sirve para
+        // publicar en cualquier sitio sin credenciales, y el que usan las pruebas locales.
+        _mgr = EsRepositorioDeGithub(feedUrl)
+            ? new UpdateManager(new Velopack.Sources.GithubSource(feedUrl, TokenDeLectura(), prerelease: false))
+            : new UpdateManager(feedUrl);
+    }
+
+    private static bool EsRepositorioDeGithub(string url) =>
+        url.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// El token de solo lectura embebido en el build de distribución (ver WindowsClient.csproj).
+    ///
+    /// Devuelve null si no hay: <c>GithubSource</c> lo acepta y entonces solo puede leer releases
+    /// públicas. Es lo correcto para un build hecho en una máquina de desarrollo, donde no hay
+    /// secreto que embeber — mejor que buscar actualizaciones falle por no estar autorizado, a que
+    /// el build no compile por faltar algo que solo hace falta al distribuir.
+    /// </summary>
+    private static string? TokenDeLectura()
+    {
+        try
+        {
+            string? t = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+                .Cast<System.Reflection.AssemblyMetadataAttribute>()
+                .FirstOrDefault(a => a.Key == "UpdateGithubToken")?.Value;
+            return string.IsNullOrWhiteSpace(t) ? null : t;
+        }
+        catch { return null; }
     }
 
     /// <summary>False en desarrollo o si se corre la carpeta suelta sin instalar: ahí no hay nada que actualizar.</summary>

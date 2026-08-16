@@ -50,10 +50,26 @@
          propio usuario se quedó sin saldo en la key de desarrollo ese mismo día). Se elige este
          camino por velocidad, sabiendo el cambio pendiente. -->
     <GeminiDefaultApiKey Condition="'$(GeminiDefaultApiKey)' == ''"></GeminiDefaultApiKey>
+
+    <!-- Token de SOLO LECTURA con el que la carita mira si hay versión nueva. El feed pasó a vivir
+         en las releases de este repo, que es privado, así que hace falta identificarse para leerlo.
+         Ver src/Update/Updater.cs.
+
+         POR QUÉ AQUÍ Y NO EN SUPABASE, que era lo de antes: el plan gratuito de Supabase corta las
+         subidas en 50 MB —tope GLOBAL, manda sobre el ajuste del bucket— y el paquete pesa 80. No
+         hay método de subida que lo salve; ni en una petición, ni en partes. GitHub admite 2 GB por
+         archivo y no cuesta nada (2026-08-16).
+
+         Que sea de solo lectura es lo que hace aceptable repartirlo: con él no se puede publicar,
+         ni borrar, ni leer código — solo bajarse lo que ya se distribuye a esas mismas personas.
+         Aun así vale lo mismo que se dijo de la key de Gemini: va IDÉNTICO en cada copia, así que
+         retirarlo obliga a rotarlo para todos a la vez. -->
+    <UpdateGithubToken Condition="'$(UpdateGithubToken)' == ''"></UpdateGithubToken>
   </PropertyGroup>
 
   <ItemGroup>
     <AssemblyMetadata Include="GeminiDefaultApiKey" Value="$(GeminiDefaultApiKey)" />
+    <AssemblyMetadata Include="UpdateGithubToken" Value="$(UpdateGithubToken)" />
   </ItemGroup>
 
   <ItemGroup>
