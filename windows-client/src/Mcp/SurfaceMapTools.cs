@@ -1352,13 +1352,33 @@ public sealed class SurfaceMapTools
         string interrupcion = DescribirInterrupcion();
         if (interrupcion.Length > 0) return interrupcion;
 
-        ObservarAqui(loc.Id);
+        // NO SE RELEE LA PANTALLA PARA CONTESTAR DÓNDE ESTÁS.
+        //
+        // Esto llamaba a `ObservarAqui`, que hace un `Read()` completo de UIA: 4 907 ms de media
+        // según el medidor. Y es trabajo REPETIDO — el mapeador relee la pantalla él solo cada 900
+        // ms, así que preguntar «¿dónde estoy?» disparaba otra vez lo que se acababa de hacer.
+        //
+        // El usuario lo vio como lo que es: dijo «hola, ¿me escuchas?» y Ü tardó cinco segundos en
+        // contestar, ocupada mirando dónde estaba (2026-08-16). Una pregunta que el sistema ya
+        // tiene contestada no puede costar cinco segundos: en una conversación, eso no es lentitud,
+        // es no estar.
+        //
+        // Se lee SOLO si el mapa no sabe nada de aquí, que es cuando la respuesta sería inútil.
+        // Y la frase no miente por esto: dice «el mapa conoce N salidas», que es exactamente lo que
+        // el mapa conoce. Para mirar de nuevo a propósito está `map_what_i_see`.
         var salidas = _map.ExitsFrom(loc.Id);
+        if (salidas.Count == 0)
+        {
+            ObservarAqui(loc.Id);
+            salidas = _map.ExitsFrom(loc.Id);
+        }
         int recorribles = salidas.Count(h => h.Info.Selector.Length > 0);
-        var sel = SeleccionActual();
+        // QUÉ HAY SELECCIONADO NO ES DÓNDE ESTOY, y preguntarlo cuesta: `SeleccionActual` recorre
+        // UIA buscando lo marcado y en una pantalla con cientos de elementos eso son cientos de
+        // milisegundos por cada «¿dónde estoy?». Vive en `map_what_i_see`, que es la herramienta de
+        // MIRAR; ésta es la de UBICARSE, y tiene que contestar como quien contesta un saludo.
         return $"Estás en «{loc.Id}». Desde aquí el mapa conoce {salidas.Count} salida(s), "
              + $"{recorribles} de ellas recorribles."
-             + (sel.Count > 0 ? $" Seleccionado ahora mismo: {string.Join(", ", sel.Select(s => $"«{s}»"))}." : "")
              + (DestinoDeAtras().Length > 0 ? $" «Atrás» llevaría a «{DestinoDeAtras()}»." : "");
     }
 

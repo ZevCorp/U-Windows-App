@@ -225,8 +225,8 @@
     "semantic_hash": "275bc8ba78be31a8ac456833edcaa275"
   },
   "windows-client/src/Mcp/SurfaceMapTools.cs": {
-    "mtime": 1786886665.0538197,
-    "ast_hash": "793cc9e3409d38b54a73e5d37b826b46",
+    "mtime": 1786887829.7101629,
+    "ast_hash": "2a3901147585cab7449556051f15c9eb",
     "semantic_hash": ""
   },
   "windows-client/src/Mcp/WorkflowMcpRunner.cs": {
@@ -485,8 +485,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Voice/GeminiLive.cs": {
-    "mtime": 1786887069.8071537,
-    "ast_hash": "dc7416bc523e2166fbafffdf6aa4f9c7",
+    "mtime": 1786887830.1041255,
+    "ast_hash": "679b9ce71c5e08375edaa12f24bed44a",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/LiveAudio.cs": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786887420.1338542,
-    "ast_hash": "d749b3919d9a293aebd7697dd941d606",
+    "mtime": 1786887866.7163303,
+    "ast_hash": "74305d82073e573dad682445889e7821",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786887424.0680408,
-    "ast_hash": "405227bd8d5ec9db8f2a5523498f57a7",
+    "mtime": 1786887870.1749413,
+    "ast_hash": "45472e2cf13642c519fb3c7a22031cb9",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
@@ -1222,6 +1222,11 @@
   "puente-omi/DESACTIVADO.md": {
     "mtime": 1786886154.348516,
     "ast_hash": "a62bb2b02db1ac0c7afd7ef8e4dfa1f4",
+    "semantic_hash": ""
+  },
+  "windows-client/src/Uia/Desplazamiento.cs": {
+    "mtime": 1786887816.738463,
+    "ast_hash": "4044ea4c0939538455b325ac0045dcc5",
     "semantic_hash": ""
   }
 }
