@@ -35,13 +35,21 @@ public sealed class PanelDeAcciones : Window
     [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
-    /// <summary>Cuántas acciones se conservan a la vista. Suficiente para ver la secuencia de una
-    /// conversación sin convertirse en un log: para eso ya está el log.</summary>
-    private const int Memoria = 7;
+    /// <summary>Cuántas líneas se conservan a la vista. Suficiente para ver la secuencia de una
+    /// conversación sin convertirse en un log: para eso ya está el log. Sube de 7 a 10 desde que
+    /// aquí también va lo dicho: si la conversación y la maquinaria se reparten las mismas filas,
+    /// dos herramientas seguidas te borran la pregunta que las provocó.</summary>
+    private const int Memoria = 10;
 
-    /// <summary>Cuánto aguanta en pantalla sin nada nuevo. Es maquinaria, no conversación: cuando
-    /// deja de pasar algo, sobra.</summary>
-    private static readonly TimeSpan Caducidad = TimeSpan.FromSeconds(20);
+    /// <summary>
+    /// Cuánto aguanta en pantalla sin nada nuevo.
+    ///
+    /// Eran 20 s cuando esto solo enseñaba maquinaria —cuando deja de pasar algo, sobra—. Ahora
+    /// también lleva la conversación, y una pausa de veinte segundos pensando qué pedir no es que
+    /// sobre: es parte de hablar. Se sube a 90, que sigue siendo «se va solo» y no «hay que
+    /// cerrarlo».
+    /// </summary>
+    private static readonly TimeSpan Caducidad = TimeSpan.FromSeconds(90);
 
     public enum Estado { EnCurso, Hecho, Fallo, Omitido }
 
@@ -110,6 +118,50 @@ public sealed class PanelDeAcciones : Window
 
     /// <summary>Cierra la que estaba en curso con su desenlace.</summary>
     public void Termina(string texto, bool ok) => Resolver(ok ? Estado.Hecho : Estado.Fallo, texto);
+
+    /// <summary>La frase que se está diciendo ahora mismo: la tuya y la de Ü, cada una en su fila.</summary>
+    private Border? _loQueDigo, _loQueDiceU;
+
+    /// <summary>
+    /// LO QUE SE OYE Y LO QUE SE CONTESTA, EN EL MISMO SITIO QUE LO QUE SE HACE.
+    /// </summary>
+    /// <remarks>
+    /// La conversación se veía en la burbuja y la maquinaria aquí, así que para saber si te entendió
+    /// había que mirar a dos sitios a la vez — y la burbuja REEMPLAZA, así que lo que dijiste hace
+    /// dos frases ya no estaba. Cuando algo no funciona, la primera pregunta es «¿me oyó bien?», y
+    /// no había forma de contestarla mirando (2026-08-16, lo pidió el usuario).
+    ///
+    /// Se ACTUALIZA LA FILA en vez de añadir una por trozo: la transcripción llega palabra a palabra
+    /// y una fila por trozo convierte una frase en una columna de palabras sueltas. Lo que se busca
+    /// es verla escribirse, que es lo que dice que te está oyendo AHORA.
+    /// </remarks>
+    public void Habla(string texto, bool esDeU)
+    {
+        var fila = esDeU ? _loQueDiceU : _loQueDigo;
+
+        // Si su fila ya se fue por arriba —solo caben unas pocas— se empieza otra: actualizar una
+        // fila que ya no está en pantalla es escribir donde nadie mira.
+        if (fila != null && !_filas.Children.Contains(fila)) fila = null;
+
+        if (fila == null)
+        {
+            fila = Fila(esDeU ? UiPalette.Vivo : UiPalette.Trabajando, esDeU ? "Ü" : "🗣", texto);
+            if (esDeU) _loQueDiceU = fila; else _loQueDigo = fila;
+            Anadir(fila);
+            return;
+        }
+
+        if (fila.Child is StackPanel sp && sp.Children.Count == 2 && sp.Children[1] is TextBlock cuerpo)
+            cuerpo.Text = texto;
+        Toca();
+    }
+
+    /// <summary>Se acabó el turno: lo dicho queda fijo y la siguiente frase empieza fila nueva.</summary>
+    public void CierraTurno()
+    {
+        _loQueDigo = null;
+        _loQueDiceU = null;
+    }
 
     private void Resolver(Estado estado, string texto)
     {

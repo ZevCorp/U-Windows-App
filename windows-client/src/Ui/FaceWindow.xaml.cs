@@ -368,6 +368,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // La maquinaria va a su propio panel y NO a la burbuja: la burbuja reemplaza, así que un
             // «abriendo Descargas…» borraba la última frase de la conversación, y además solo dejaba
             // ver el último paso. En el panel se acumulan y se ve la secuencia entera.
+            // LA CONVERSACIÓN, EN EL MISMO PANEL QUE LA MAQUINARIA. Para saber si te entendió había
+            // que mirar a dos sitios —la burbuja y este panel— y la burbuja REEMPLAZA, así que lo
+            // que dijiste hace dos frases ya no estaba. Cuando algo no funciona, la primera pregunta
+            // es «¿me oyó bien?» (2026-08-16, pedido por el usuario).
+            _vivo.Transcribe += (texto, esDeU) => Dispatcher.BeginInvoke(() =>
+            {
+                _acciones ??= new PanelDeAcciones();
+                _acciones.Habla(texto, esDeU);
+            });
+            _vivo.TurnoCerrado += () => Dispatcher.BeginInvoke(() => _acciones?.CierraTurno());
             _vivo.Accion += (texto, listo) => Dispatcher.BeginInvoke(() =>
             {
                 _acciones ??= new PanelDeAcciones();

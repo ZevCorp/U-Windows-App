@@ -88,6 +88,24 @@ public sealed class GeminiLive : IDisposable
     /// </summary>
     public event Action<string, bool>? Accion;
 
+    /// <summary>
+    /// LO QUE SE OYE Y LO QUE SE CONTESTA, con quién lo dijo. <c>esDeU</c> distingue a Ü de ti.
+    /// </summary>
+    /// <remarks>
+    /// Va aparte de <see cref="Dice"/> —que ya lleva lo mismo— porque <c>Dice</c> nació para la
+    /// burbuja, que REEMPLAZA: enseña la última frase y borra la anterior. Quien quiera pintar la
+    /// conversación ACUMULADA, al lado de lo que se está haciendo, necesita saber además de quién es
+    /// cada frase, y deducirlo del prefijo del texto sería atarse a cómo está escrito hoy.
+    ///
+    /// El texto llega ACUMULADO: la transcripción viene palabra a palabra y cada aviso trae la frase
+    /// entera hasta ese momento, para que quien pinte reemplace la línea en vez de añadir una por
+    /// palabra.
+    /// </remarks>
+    public event Action<string, bool>? Transcribe;
+
+    /// <summary>El turno acabó: lo dicho queda fijo y lo siguiente empieza en su propia línea.</summary>
+    public event Action? TurnoCerrado;
+
     /// <summary>Llamadas que el modelo retiró: ni se ejecutan ni se responden.</summary>
     private readonly HashSet<string> _canceladas = new();
     private readonly object _candadoCancel = new();
@@ -1351,6 +1369,7 @@ public sealed class GeminiLive : IDisposable
             {
                 _fraseUsuario.Append(tMio.GetString());
                 Dice?.Invoke($"Tú: {_fraseUsuario}");
+                Transcribe?.Invoke($"Tú: {_fraseUsuario}", false);
             }
 
             if (contenido.TryGetProperty("outputTranscription", out var suyo)
@@ -1358,12 +1377,14 @@ public sealed class GeminiLive : IDisposable
             {
                 _fraseU.Append(tSuyo.GetString());
                 Dice?.Invoke($"Ü: {_fraseU}");
+                Transcribe?.Invoke($"Ü: {_fraseU}", true);
             }
 
             // Turno cerrado: lo dicho queda fijo y la siguiente frase empieza línea nueva.
             if (contenido.TryGetProperty("turnComplete", out _)
                 || contenido.TryGetProperty("generationComplete", out _))
             {
+                TurnoCerrado?.Invoke();
                 if (_fraseU.Length > 0) LogBus.Log("voz-viva", $"Ü dijo: {_fraseU}");
                 if (_fraseUsuario.Length > 0) LogBus.Log("voz-viva", $"usuario dijo: {_fraseUsuario}");
                 _fraseU.Clear();
