@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    LA MAQUETA: una aplicación de mentira cuya estructura verdadera CONOCEMOS.
+
+    Existe porque hasta hoy medíamos el mapeador contra explorer.exe y GitHub, cuyas jerarquías
+    reales nadie ha escrito nunca. Cuando el grafo y la app discrepaban no había árbitro: se
+    discutía si el fallo era del mapa o de nuestra idea de la app, y eso convierte cada prueba en
+    una opinión (2026-08-12, pedido por el usuario).
+
+    Aquí la verdad está escrita en `verdad.json`, al lado del código que la produce. Una prueba deja
+    de ser «¿parece bien?» y pasa a ser «¿coincide con el patrón?».
+
+    NO CONOCE A NUESTRO SISTEMA: no referencia windows-client ni windows-graph, no habla con la
+    sonda, no sabe que existe un grafo. Se deja mapear como se dejaría cualquier app ajena — que es
+    exactamente lo que hay que probar. Si compartiera una sola línea con el mapeador, la prueba
+    estaría midiendo un acuerdo entre primos.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Maqueta</AssemblyName>
+    <RootNamespace>Maqueta</RootNamespace>
+    <!-- El nombre del proceso ES parte de la identidad de superficie (uia://Maqueta.exe/...), así
+         que se fija a propósito y no se deja al azar del nombre de carpeta. -->
+    <StartupObject>Maqueta.Programa</StartupObject>
+    <UseWindowsForms>false</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="verdad.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

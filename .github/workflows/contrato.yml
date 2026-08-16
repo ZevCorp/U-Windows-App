@@ -49,7 +49,10 @@ jobs:
           }
 
           $total = @(Select-String -Path tests/ContratoDelGrafo/Contrato.cs -Pattern '^\s*Prueba\("').Count
-          $pend  = @(Select-String -Path $log -SimpleMatch 'PENDIENTE').Count
+          # CON LOS DOS PUNTOS: sin ellos tambien engancha la linea resumen "(N de ellas
+          # PENDIENTES: ...)" y el recuento se pasa por uno, dejando el numero de incumplidas en
+          # negativo. Un recuento que puede mentir es el aprendizaje n.10 (2026-08-13).
+          $pend  = @(Select-String -Path $log -SimpleMatch 'PENDIENTE:').Count
           # Con el arnes caido el codigo no es un recuento de promesas: el verde se cuenta desde 0
           # en vez de dar un negativo que parezca un dato.
           $verdes = [Math]::Max(0, $total - $codigo)
@@ -74,3 +77,63 @@ jobs:
             exit 1
           }
           Write-Host "CONTRATO INTACTO: $total/$total promesas."
+
+  # EL CONTRATO DE LA VOZ (spec 001): lo que promete la parte que convierte tramas del collar Omi en
+  # muestras. Job aparte y no un paso mas, por dos razones:
+  #
+  #   1. Es independiente. voz/Omi es net8.0 puro: no necesita U.dll, ni WPF, ni que windows-client
+  #      compile. Si el contrato del grafo se cae, este sigue dando su veredicto — y al reves.
+  #   2. Se lee de un vistazo cual se rompio. Mezclar los dos en un job obliga a abrir el log para
+  #      saber de cual estamos hablando, que es justo lo que separa a los contratos hermanos.
+  #
+  # Lo que NO cubre: el transporte BLE. No hay Bluetooth ni collar en un runner, y eso se verifica a
+  # mano (nivel 4). Que este job este verde no dice que el collar funcione; dice que la logica que
+  # convierte sus tramas en muestras cumple lo que promete.
+  voz:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Juzgar el contrato de la voz
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'contrato-voz.txt'
+          try {
+            & ./scripts/contrato-de-la-voz.ps1 *>&1 | Tee-Object -FilePath $log
+            $codigo = $LASTEXITCODE
+          } catch {
+            # Nunca un catch mudo: si el arnes se cae, el motivo entero va al log y al resumen.
+            "ARNES CAIDO: $_" | Tee-Object -FilePath $log -Append
+            $codigo = 99
+          }
+
+          $total = @(Select-String -Path voz/Contrato/Contrato.cs -Pattern '^\s*Prueba\("').Count
+          # CON LOS DOS PUNTOS: sin ellos tambien engancha la linea resumen "(N de ellas
+          # PENDIENTES: ...)" y el recuento se pasa por uno, dejando el numero de incumplidas en
+          # negativo. Un recuento que puede mentir es el aprendizaje n.10 (2026-08-13).
+          $pend  = @(Select-String -Path $log -SimpleMatch 'PENDIENTE:').Count
+          $verdes = [Math]::Max(0, $total - $codigo)
+
+          $resumen = @(
+            '## Contrato de la voz'
+            ''
+            "| Promesas | Verdes | Incumplidas | Pendientes (sin codigo aun) |"
+            "|---|---|---|---|"
+            "| $total | $verdes | $([Math]::Max(0, $codigo - $pend)) | $pend |"
+            ''
+            '```'
+            (Get-Content $log -Raw)
+            '```'
+          )
+          $resumen -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+          if ($codigo -ne 0) {
+            Write-Host "::error::VOZ ROTA: $codigo promesa(s) incumplida(s) ($pend de ellas sin codigo todavia). Esto no puede entrar a main."
+            exit 1
+          }
+          Write-Host "VOZ INTEGRA: $total/$total promesas."

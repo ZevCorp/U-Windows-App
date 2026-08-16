@@ -62,7 +62,14 @@ public static class Arquitecto
     /// ocurre —sus decisiones y sus llamadas— porque una auditoría que solo se ve al final no deja
     /// pararla cuando va por mal camino.
     /// </summary>
-    public static async Task<string> AuditarAsync(string app, int turnos, Action<string> cuenta, CancellationToken ct)
+    /// <param name="modelo">
+    /// Con qué modelo piensa. Lo elige quien lanza (ver <c>ElegirModeloAsync</c>) y viaja como
+    /// bandera porque el agente no puede preguntarlo: su consola la abre la app y su <c>stdin</c>
+    /// no está conectado a ella, así que preguntar desde Node salía sin preguntar y arrancaba con
+    /// el de por defecto (2026-08-11, medido). Vacío = que decida el agente.
+    /// </param>
+    public static async Task<string> AuditarAsync(string app, int turnos, string modelo,
+        Action<string> cuenta, CancellationToken ct)
     {
         var (puede, porque) = Disponible();
         if (!puede) return porque;
@@ -70,7 +77,8 @@ public static class Arquitecto
         string script = Script();
         var psi = new System.Diagnostics.ProcessStartInfo("node")
         {
-            Arguments = $"\"{script}\" \"{app}\" {turnos}",
+            Arguments = $"\"{script}\" \"{app}\" {turnos}"
+                      + (string.IsNullOrWhiteSpace(modelo) ? "" : $" --model={modelo}"),
             WorkingDirectory = Path.GetDirectoryName(script)!,
             UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true,

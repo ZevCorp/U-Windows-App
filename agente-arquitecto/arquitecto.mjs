@@ -49,6 +49,39 @@ const CONTINUAR = process.argv.includes("--continuar");
 const CHAT = process.argv.includes("--chat");
 const SOLO_CHAT = process.argv.includes("--solo-chat");
 
+// CON QUÉ MODELO PIENSA, elegido por quien lo lanza y no adivinado del SDK. Antes no se decía —el
+// SDK elegía por su cuenta, y las primeras corridas salieron en opus-5 sin que nadie lo pidiera—.
+// Sus conclusiones dependen del modelo tanto como del código: comparar dos auditorías sin saber
+// cuál las escribió es comparar dos cosas distintas creyendo que son la misma. Se puede fijar con
+// --model=sonnet (o el id completo, --model=claude-opus-5) para correr sin consola —scripts como
+// noche-arquitecto.ps1—, y si no se fija y hay una consola de verdad delante, se pregunta siempre:
+// no hay «el modelo del arquitecto», hay el que elegiste hoy.
+const MODELOS = {
+  opus: "claude-opus-5", sonnet: "claude-sonnet-5",
+  haiku: "claude-haiku-4-5-20251001", fable: "claude-fable-5",
+};
+async function elegirModelo() {
+  const bandera = process.argv.find((a) => a.startsWith("--model="))?.slice("--model=".length);
+  if (bandera) return MODELOS[bandera.toLowerCase()] ?? bandera;
+
+  // SIN CONSOLA NO HAY A QUIÉN PREGUNTARLE: sonnet-5 por defecto, más barato que opus para una
+  // corrida desatendida, y no bloquear a quien lanzó esto desde un script o la sonda.
+  if (!process.stdin.isTTY) return "claude-sonnet-5";
+
+  const readline = await import("node:readline/promises");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  console.log("¿Con qué modelo piensa el arquitecto?");
+  console.log("  1) opus-5    — el más capaz, el más caro");
+  console.log("  2) sonnet-5  — el de por defecto");
+  console.log("  3) haiku-4.5 — el más rápido y barato");
+  let r = "";
+  try { r = (await rl.question("modelo [2] > ")).trim().toLowerCase(); } catch { /* stdin cerrado */ }
+  rl.close();
+  const porNumero = { "1": "opus", "2": "sonnet", "3": "haiku", "": "sonnet" };
+  return MODELOS[porNumero[r] ?? r] ?? MODELOS.sonnet;
+}
+const MODELO = await elegirModelo();
+
 // SU sesión, no «la última». `continueConversation` retoma la conversación más reciente del
 // DIRECTORIO, y este directorio es el repo — donde el usuario también corre Claude Code. Al
 // probar el turno de preguntas, el arquitecto retomó la sesión del usuario y contestó que no
@@ -136,7 +169,7 @@ const herramientas = createSdkMcpServer({
       { pantalla: z.string().optional().describe("identidad de la pantalla; vacío = donde estés ahora") },
       (a) => sonda("map_routes_from", a.pantalla ? { surface: a.pantalla } : {})),
 
-    t("fijar_nivel", "Declarar el nivel de una salida (1 = navegación transversal de la app entera). cromo=true si además te sigue a todas partes. NO muevas lo que declaró una persona: si discrepas, dilo con feedback.",
+    t("fijar_nivel", "Declarar el nivel de una salida. ÚSALO POCO: el sistema deriva la estructura solo, y tu declaración no sube la cobertura — si el bronce no la sostiene, sale marcada como «declarada sin evidencia», que es lo contrario de haber avanzado. Resérvalo para lo que has COMPROBADO cruzando y el cálculo aún no puede ver. NO muevas lo que declaró una persona: si discrepas, dilo con feedback.",
       {
         salida: z.string().describe("nombre de la salida O SU SELECTOR (uia:name=X;ct=TreeItem). Usa el SELECTOR siempre que el nombre se repita en la app: por nombre se aplica a TODAS las apariciones a la vez"),
         nivel: z.number().int().min(1).max(6),
@@ -144,7 +177,10 @@ const herramientas = createSdkMcpServer({
       },
       (a) => sonda("map_set_level", { app: APP, exit: a.salida, level: String(a.nivel), ...(a.cromo === undefined ? {} : { cromo: String(a.cromo) }) })),
 
-    t("sin_situar", "TU LISTA DE TRABAJO: las pantallas y salidas que el mapa NO sabe situar todavía, con el grupo que declaró la página. Mientras esta lista no esté vacía, la estructura está incompleta.",
+    t("cuanto_entiende", "TU CRITERIO DE TERMINADO: cuánto entiende el sistema por sí solo (cobertura derivada), qué puertas siguen SIN CRUZAR —esa es tu lista de trabajo real— y en qué discrepan el cálculo y lo declarado. Empieza y termina aquí.",
+      {}, () => sonda("map_silver", { app: APP })),
+
+    t("sin_situar", "Lo que nadie ha DECLARADO todavía. Es información, no tu meta: se vacía escribiendo niveles, y escribir no es entender. Para saber si avanzas, mira «cuanto_entiende».",
       {}, () => sonda("map_unsituated", { app: APP })),
 
     tFoto("mirar", "Una FOTO de la ventana que hay delante. Úsala cuando los nombres no basten para decidir qué es navegación y qué es contenido: un panel lateral se reconoce de un vistazo."),
@@ -157,6 +193,18 @@ const herramientas = createSdkMcpServer({
       { salida: z.string().describe("nombre de la salida, tal como se ve") },
       (a) => sonda("map_set_kind", { app: APP, exit: a.salida, kind: "accion" })),
 
+    // CLASIFICAR ES HOY TU ÚNICO ENTREGABLE ESTRUCTURAL, y no se usa todavía para nada: no mueve
+    // rutas, no cambia el dibujo, no sube ninguna métrica. Se recoge porque saber QUÉ ES cada cosa
+    // es el dato que hará falta después, y porque recogerlo ahora —mientras alguien mira una app
+    // de verdad— es infinitamente más barato que reconstruirlo luego a partir de nombres
+    // (2026-08-12, decidido por el usuario: «que clasifique y ya, luego veremos qué hacer con eso»).
+    t("clasificar", "Decir QUÉ ES una salida. Es tu entregable principal: recorre cada pantalla y clasifica lo que ves. Cuatro clases: «navegacion» (lleva a otra pantalla), «accion» (hace algo y te deja donde estás), «contenido» (un dato de una lista: un archivo, una fila, una foto — no es estructura de la app) y «cromo» (mobiliario que se ve desde muchas pantallas, como una barra lateral o una barra superior). Acepta nombre o SELECTOR; usa el selector si el nombre se repite en la app.",
+      {
+        salida: z.string().describe("nombre de la salida O su selector (uia:name=X;ct=Button)"),
+        clase: z.enum(["navegacion", "accion", "contenido", "cromo"]),
+      },
+      (a) => sonda("map_set_kind", { app: APP, exit: a.salida, kind: a.clase })),
+
     t("feedback", "Dejar escrito un HALLAZGO para el equipo: un desajuste entre la jerarquía real de la app y la del grafo, un nivel que no cuadra, una puerta que el grafo no vio. Es tu entregable.",
       { hallazgo: z.string().describe("el hallazgo, concreto: qué esperabas, qué hay, y por qué importa") },
       (a) => sonda("map_feedback", { app: APP, finding: a.hallazgo })),
@@ -165,20 +213,72 @@ const herramientas = createSdkMcpServer({
 
 // ── La misión ────────────────────────────────────────────────────────────────
 const MISION = `Eres el ARQUITECTO del grafo de navegación. Delante tienes la app «${APP}», ya abierta,
-y un grafo que el sistema construye solo mientras navega. Tu misión NO es mapear por mapear: es
+y un grafo que el sistema construye solo mientras navega.
+
+═══ LO PRIMERO, PORQUE CAMBIÓ EL 2026-08-12 Y CONTRADICE LO DE ABAJO ═══
+
+El modelo del grafo se simplificó y esto es ahora tu trabajo principal:
+
+  El grafo NO responde «¿cuál es la ruta hasta X?». Responde «¿qué es alcanzable desde donde
+  estoy?». Navegar es caminar mirando: en cada pantalla se comprueba EN VIVO qué hay delante, y de
+  eso se elige. No hay jerarquía que calcular.
+
+Consecuencia directa: LOS NIVELES YA NO IMPORTAN. No pierdas turnos en «fijar_nivel» — esa
+herramienta sigue existiendo pero ya no es tu entregable, y ponerle números a las cosas no mide
+nada. Si la usas, que sea porque comprobaste algo cruzando, no para subir una cuenta.
+
+TU ENTREGABLE AHORA SON DOS COSAS, en este orden:
+
+  1. CRUZAR lo que nadie ha cruzado. Cada puerta que abres convierte una incógnita en un hecho, y
+     eso es lo único que hace crecer el mapa de verdad. Agota una rama hasta el fondo antes de
+     saltar a otra.
+
+  2. CLASIFICAR con «clasificar» lo que ves en cada pantalla, en cuatro clases:
+       · navegacion — lleva a otra pantalla
+       · accion     — hace algo y te deja donde estabas
+       · contenido  — un dato de una lista (un archivo, una fila, una foto): no es estructura
+       · cromo      — mobiliario que se ve desde muchas pantallas (barra lateral, barra superior)
+     Esta clasificación HOY NO SE USA PARA NADA: no mueve rutas, no cambia el dibujo, no sube
+     ninguna métrica. Se recoge igual, y es deliberado — saber qué es cada cosa es el dato que hará
+     falta después, y recogerlo ahora, mientras alguien mira la app de verdad, es infinitamente más
+     barato que reconstruirlo luego adivinando por los nombres.
+
+Y sigue valiendo, más que nunca, «feedback»: si algo del grafo no se corresponde con la app,
+escríbelo. Es lo que más nos ha servido de ti.
+
+═══ EL RESTO SIGUE VIGENTE, CON LOS NIVELES YA DESCONTADOS ═══
+
+Tu misión NO es mapear por mapear: es
 JUZGAR si la jerarquía que el grafo está construyendo se corresponde con la arquitectura real de
 la app, corregir el grafo donde te den autoridad tus herramientas, y dejar constancia del resto.
 
-TU TRABAJO ES LLEVAR ESTA APP DE BRONCE A PLATA, y esas dos palabras tienen un significado exacto
-aquí:
-  · BRONCE es lo que hay ahora: todo lo visible anotado en crudo, sin jerarquía. El mapa lo tiene
-    todo y no sabe qué es qué.
-  · PLATA es lo mismo ORDENADO: cada salida en su nivel, el mobiliario marcado como cromo, el
-    gesto de volver identificado, y lo que no es navegación fuera de en medio.
+TU TRABAJO ES LLEVAR ESTA APP DE BRONCE A PLATA, y esas dos palabras cambiaron de significado el
+2026-08-10. Léelas otra vez aunque creas que las sabes:
+  · BRONCE es lo observado en crudo: pantallas, puertas, tipos, y si cada puerta se llegó a cruzar.
+  · PLATA es lo que el sistema DERIVA de ese bronce y puede sostener con evidencia — qué es
+    mobiliario porque está en 9 de 11 pantallas, qué es relativo porque lleva a dos sitios
+    distintos, qué es contenido porque tiene cuarenta hermanos iguales, y a qué profundidad vive
+    cada pantalla.
 
-CÓMO SE MIDE QUE HAS TERMINADO, y no es una opinión: la herramienta «sin_situar» enumera lo que el
-mapa todavía no sabe colocar. Empiezas mirándola y terminas cuando esté vacía o cuando lo que
-quede esté explicado en el feedback. Ese es tu criterio de terminado.
+PLATA NO ES LO QUE TÚ DECLARES. Esto es lo importante y es lo que ha cambiado: antes tu trabajo era
+ponerle nivel a todo, y con eso el sistema PARECÍA entender la app mientras seguía sin entenderla.
+Declarar mueve un número; no enseña nada a nadie. Ahora la estructura la calcula el sistema, y tu
+trabajo es DARLE EL MATERIAL QUE LE FALTA Y DECIRLE DÓNDE SE EQUIVOCA.
+
+CÓMO SE MIDE QUE HAS TERMINADO, y no es una opinión: la herramienta «cuanto_entiende» da la
+COBERTURA DERIVADA —qué parte de la app se sostiene con evidencia— y la lista de puertas SIN CRUZAR.
+Empiezas ahí y terminas ahí. Esa cobertura sube de dos maneras, las dos honestas:
+  1. CRUZANDO puertas que nadie ha cruzado. Es tu trabajo principal: cada puerta que abres convierte
+     una incógnita en un hecho, y ninguna otra cosa que hagas vale tanto.
+  2. REPORTANDO con feedback dónde el cálculo se equivoca, con el caso concreto delante.
+
+Y no sube declarando. Si declaras algo que el bronce no sostiene, aparece marcado como «declarada
+sin evidencia» — o sea, contado como deuda, no como avance. Usa «fijar_nivel» solo para lo que hayas
+COMPROBADO cruzando y el cálculo todavía no pueda ver.
+
+Los DESACUERDOS entre el cálculo y lo declarado son tu material más valioso: cada uno es o una regla
+que hay que mejorar o una declaración que estaba mal. Míralos uno a uno y explica en el feedback de
+qué lado está la razón.
 
 QUÉ ES CADA NIVEL:
   · NIVEL 1 + CROMO = el mobiliario que TE SIGUE. Si te vas a cualquier otra pantalla de la app y
@@ -194,9 +294,10 @@ BAJAR EN PROFUNDIDAD SIGUE IMPORTANDO. Un mapa de un solo nivel no es una jerarq
 Si al terminar todo cuelga del inicio, has fallado aunque no te hayas equivocado en nada.
 
 Método de trabajo:
-0. Empieza por «sin_situar» (tu lista) y «mirar» (una foto). Los nombres solos engañan: un panel
-   lateral y una lista de archivos son indistinguibles en texto y obvios en una imagen. Y marca
-   pronto el gesto de volver con «marcar_atras» — cada vuelta sin marcar ensucia el grafo.
+0. Empieza por «cuanto_entiende» (tu criterio y tu lista de puertas sin cruzar) y «mirar» (una foto).
+   Los nombres solos engañan: un panel lateral y una lista de archivos son indistinguibles en texto
+   y obvios en una imagen. Y marca pronto el gesto de volver con «marcar_atras» — cada vuelta sin
+   marcar ensucia el grafo.
 1. Sigue por jerarquia_del_grafo y que_veo: qué cree el grafo, qué hay de verdad.
 2. BAJA. Elige una sección con contenido, entra, y desde DENTRO vuelve a mirar (que_veo y
    rutas_desde): ahí aparecen las puertas del nivel 2. Entra en una de ellas y repite. Agota una
@@ -213,14 +314,19 @@ Método de trabajo:
    subpágina SEGUIRÍA ahí (panel lateral entero, pestañas, menú principal). Lo que solo existe en
    una pantalla no lo es, por grande que se vea. Y lo que está DENTRO de una sección es nivel 2 o
    más: no lo declares de nivel 1 solo porque lo veas.
-6. Contrasta: ¿lo que el grafo declara nivel 1 es de verdad transversal? ¿Hay navegación
-   transversal que el grafo aún no declara? Corrígelo con fijar_nivel — SALVO lo que dijo una
-   persona: eso no se toca; si discrepas, feedback.
+6. Contrasta contra el CÁLCULO, no contra el vacío: vuelve a «cuanto_entiende» cada pocas puertas.
+   ¿Lo que deriva como mobiliario es de verdad transversal? ¿Hay algo transversal que el cálculo no
+   ve, y por qué —cuántas pantallas te faltan por visitar para que lo vea—? Cada desacuerdo que
+   aparezca, míralo: o la regla se equivoca (feedback) o la declaración estaba mal. Lo que dijo una
+   persona no se toca; si discrepas, feedback.
 7. Cada desajuste real va a feedback en el momento, concreto: qué esperabas, qué hay, por qué
-   importa. Nada de «todo bien» genérico.
-8. Cierra SIEMPRE con un feedback final: la arquitectura real de la app en forma de árbol con sus
-   niveles, hasta qué profundidad llegaste, qué tan fiel es el grafo (un porcentaje honesto) y los
-   3 desajustes más importantes.
+   importa. Nada de «todo bien» genérico. Y si una REGLA de derivación falla, es el hallazgo más
+   valioso que puedes traer: dilo con el caso delante (qué salida, qué dice el cálculo, qué es en
+   realidad y cómo lo comprobaste). Arreglar una regla vale por cien declaraciones.
+8. Cierra SIEMPRE con un feedback final: la cobertura con la que empezaste y con la que terminas,
+   cuántas puertas cruzaste, la arquitectura real de la app en forma de árbol, hasta qué
+   profundidad llegaste, y los 3 desajustes más importantes. Si la cobertura no subió, dilo: una
+   corrida honesta que no avanzó enseña más que un informe que dice que todo está bien.
 
 Límites duros: no puedes editar código ni archivos —no tienes herramientas para ello—, solo
 organizar el grafo y reportar. Si la app se cierra o algo se cruza, dilo en feedback y termina.
@@ -232,13 +338,13 @@ const PERMITIDAS = [
   "mcp__grafo__donde_estoy", "mcp__grafo__que_veo", "mcp__grafo__cruzar",
   "mcp__grafo__ir_a", "mcp__grafo__jerarquia_del_grafo", "mcp__grafo__rutas_desde",
   "mcp__grafo__fijar_nivel", "mcp__grafo__feedback",
-  "mcp__grafo__sin_situar", "mcp__grafo__mirar",
-  "mcp__grafo__marcar_atras", "mcp__grafo__marcar_accion",
+  "mcp__grafo__cuanto_entiende", "mcp__grafo__sin_situar", "mcp__grafo__mirar",
+  "mcp__grafo__marcar_atras", "mcp__grafo__marcar_accion", "mcp__grafo__clasificar",
 ];
 const PROHIBIDAS = ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"];
 
 // ── A correr ─────────────────────────────────────────────────────────────────
-console.log(`ARQUITECTO sobre «${APP}» · presupuesto ${TURNOS} turnos`
+console.log(`ARQUITECTO sobre «${APP}» · presupuesto ${TURNOS} turnos · modelo elegido: ${MODELO}`
   + `${CONTINUAR ? " · CONTINÚA la corrida anterior" : ""}\n`);
 
 const corrida = query({
@@ -247,9 +353,10 @@ const corrida = query({
   // explícitamente arriesga gastar los turnos nuevos en seguir explorando y quedarse otra vez sin
   // escribirlo.
   prompt: CONTINUAR
-    ? `Se te acabaron los turnos y te doy más. Retoma donde estabas con «${APP}»: mira «sin_situar», `
-      + `termina de declarar lo que falte y CIERRA con tu informe final en feedback. El informe es `
-      + `lo único que nos llevamos: escríbelo aunque no hayas terminado de nivelarlo todo.`
+    ? `Se te acabaron los turnos y te doy más. Retoma donde estabas con «${APP}»: mira `
+      + `«cuanto_entiende», cruza las puertas que más suban la cobertura y CIERRA con tu informe `
+      + `final en feedback. El informe es lo único que nos llevamos: escríbelo aunque la cobertura `
+      + `se haya quedado corta, y di con cuál terminaste.`
     : `Audita la jerarquía de «${APP}». La app ya está abierta y la sonda viva.`,
   options: {
     systemPrompt: MISION,
@@ -258,6 +365,7 @@ const corrida = query({
     disallowedTools: PROHIBIDAS,
     permissionMode: "bypassPermissions",
     maxTurns: TURNOS,
+    model: MODELO,
     ...(CONTINUAR && SESION ? { resume: SESION } : {}),
   },
 });
@@ -336,6 +444,7 @@ async function turnoDePreguntas() {
           disallowedTools: PROHIBIDAS,
           permissionMode: "bypassPermissions",
           maxTurns: 30,
+          model: MODELO,
           ...(sesionGuardada() ? { resume: sesionGuardada() } : {}),
         },
       });

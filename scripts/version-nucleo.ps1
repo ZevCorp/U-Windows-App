@@ -103,6 +103,23 @@ function Compilar($n) {
     if ($LASTEXITCODE -ne 0) { throw "el contrato no compila contra v$n" }
     & (Join-Path $binTest "contrato-del-grafo.exe")
     if ($LASTEXITCODE -ne 0) { throw "v$n ROMPE el contrato: la build queda, pero no la uses sin arreglarlo" }
+
+    # LOS CONTRATOS DE LO NUEVO. Hasta hoy solo corria el de arriba —el del nucleo VIEJO— y los dos
+    # nuevos habia que lanzarlos a mano, asi que protegian solo mientras alguien se acordara. Una
+    # promesa que nadie ejecuta no es una promesa: es una nota.
+    #
+    # El del nucleo cazo el 2026-08-12 el fallo de que observar fijara la ubicacion (el «vaya donde
+    # vaya, se queda en claude.exe»). El del mapeador caza que el candado de reentrada deje de
+    # cerrar, que fue el 0,4 s -> 2,2 s. Ninguno abre una ventana ni toca UIA: juntos duran un
+    # segundo, y por eso pueden ir aqui.
+    foreach ($c in @(
+      @{ Nombre = "nucleo";   Proyecto = "nucleo\Contrato\Contrato.csproj" },
+      @{ Nombre = "mapeador"; Proyecto = "mapeador\Contrato\Contrato.csproj" }
+    )) {
+      Write-Host ("contrato del {0}..." -f $c.Nombre) -ForegroundColor Cyan
+      dotnet run --project (Join-Path $repo $c.Proyecto) -c Release --nologo -v quiet
+      if ($LASTEXITCODE -ne 0) { throw ("v{0} ROMPE el contrato del {1}: la build queda, pero no la uses sin arreglarlo" -f $n, $c.Nombre) }
+    }
   }
   Write-Host ("v{0} lista." -f $n) -ForegroundColor Green
 }

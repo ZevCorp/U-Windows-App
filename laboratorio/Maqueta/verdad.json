@@ -1,0 +1,135 @@
+{
+  "_porque": [
+    "LA VERDAD DE LA MAQUETA, escrita a mano y a propósito.",
+    "Existe para que una prueba del mapeador deje de ser «¿parece bien?» y pase a ser",
+    "«¿coincide con el patrón?». Se escribe AQUÍ y no se deriva del código: si se generara",
+    "automáticamente estaríamos comparando el mapeador contra el mismo programa que dice",
+    "medir, que es como corregirse el examen con la chuleta.",
+    "Si cambia Programa.cs, este archivo se actualiza a mano. Ese es el precio y vale."
+  ],
+
+  "app": "Maqueta.exe",
+  "identidadDePantalla": "el TÍTULO de la ventana: «Maqueta — <ubicación>»",
+
+  "ubicaciones": [
+    { "nombre": "Inicio",          "nivel": 1, "llegaDesde": ["cromo:navInicio"] },
+    { "nombre": "Catálogo",        "nivel": 1, "llegaDesde": ["cromo:navCatalogo"] },
+    { "nombre": "Informes",        "nivel": 1, "llegaDesde": ["cromo:navInformes"] },
+    { "nombre": "Ajustes",         "nivel": 1, "llegaDesde": ["cromo:navAjustes"] },
+    { "nombre": "Familia A",       "nivel": 2, "llegaDesde": ["Catálogo:navFamiliaA"] },
+    { "nombre": "Familia B",       "nivel": 2, "llegaDesde": ["Catálogo:navFamiliaB"] },
+    { "nombre": "Familia C",       "nivel": 2, "llegaDesde": ["Catálogo:navFamiliaC"] },
+    { "nombre": "Subfamilia A1",   "nivel": 3, "llegaDesde": ["Familia A:navSubfamiliaA1"] },
+    { "nombre": "Subfamilia A2",   "nivel": 3, "llegaDesde": ["Familia A:navSubfamiliaA2"] },
+    { "nombre": "Lote A1-1",       "nivel": 4, "llegaDesde": ["Subfamilia A1:navLoteA11"], "esHoja": true },
+    { "nombre": "Lote A1-2",       "nivel": 4, "llegaDesde": ["Subfamilia A1:navLoteA12"], "esHoja": true },
+    { "nombre": "Ficha maestra",   "nivel": 2, "llegaDesde": ["Catálogo:articuloFichaMaestra"],
+      "nota": "se llega desde la LISTA DE CONTENIDO. Es la puerta escondida entre el relleno." },
+    { "nombre": "Documentos",      "nivel": 2, "llegaDesde": ["Ajustes:navDocumentos"] },
+    { "nombre": "Cuenta",          "nivel": 2, "llegaDesde": ["Ajustes:navCuenta"] }
+  ],
+
+  "cromo": [
+    {
+      "que": "riel de navegación",
+      "dominio": "TODA la app",
+      "nivel": 1,
+      "elementos": ["navInicio", "navCatalogo", "navInformes", "navAjustes"]
+    },
+    {
+      "que": "barra superior",
+      "dominio": "TODA la app",
+      "nivel": 1,
+      "elementos": ["botonAtras", "botonActualizar", "botonBuscar"]
+    },
+    {
+      "que": "barra de vista del catálogo",
+      "dominio": "Catálogo y todo lo que cuelga de él (Familia, Subfamilia, Lote, Ficha maestra)",
+      "nivel": 2,
+      "elementos": ["vistaTarjetas", "vistaLista", "filtroCatalogo"],
+      "nota": "SUBCROMO. En Inicio, Informes y Ajustes NO existe. Un mapa que lo declare cromo global promete un clic que falla en cuatro pantallas."
+    }
+  ],
+
+  "acciones": {
+    "_que": "hacen algo y NO llevan a otra pantalla. No se borran del mapa: el asistente las necesita para ejecutar.",
+    "elementos": ["accionExportar", "accionImprimir", "accionDuplicar", "accionMarcarLote",
+                  "botonBuscar", "botonActualizar", "vistaTarjetas", "vistaLista", "filtroCatalogo",
+                  "menuProgramar", "menuPlantilla", "menuArchivar"]
+  },
+
+  "gestoDeVolver": "botonAtras",
+
+  "contenido": {
+    "_que": "no es estructura y no debe recibir nivel. 41 elementos en la lista del catálogo.",
+    "contenedor": "listaArticulos",
+    "cuantos": 41,
+    "excepcion": {
+      "elemento": "articuloFichaMaestra",
+      "porque": "ES una puerta y abre pantalla propia. Está entre 40 que no lo son — es la lección del explorador: la carpeta es ListItem igual que el archivo."
+    }
+  },
+
+  "trampas": [
+    {
+      "n": 1, "nombre": "cromo global repetido",
+      "mide": "que el mapa declare el riel UNA vez y no una por pantalla",
+      "falloQueReproduce": "vaciar la lista de pendientes costaba O(controles × pantallas)"
+    },
+    {
+      "n": 2, "nombre": "subcromo con dominio",
+      "mide": "que «cromo» necesite un dominio, no un sí/no",
+      "falloQueReproduce": "«Colección» de Galería declarado cromo global fallaba en 6 pantallas de explorer"
+    },
+    {
+      "n": 3, "nombre": "acciones que no navegan",
+      "mide": "que se clasifiquen sin borrarlas"
+    },
+    {
+      "n": 4, "nombre": "contenido que ahoga",
+      "mide": "que 40 artículos no se ofrezcan como camino",
+      "falloQueReproduce": "las 1.831 imágenes de Galería ofrecidas como puertas cruzables"
+    },
+    {
+      "n": 5, "nombre": "la puerta escondida en el contenido",
+      "mide": "que ocultar el contenido entero no tape la única fuente de profundidad",
+      "falloQueReproduce": "las 15 carpetas de C:\\ ocultas como contenido; el mapa quedaba plano"
+    },
+    {
+      "n": 6, "nombre": "homónimos con roles distintos",
+      "mide": "que el selector distinga por identidad y no por nombre",
+      "detalle": "«Documentos» es navegación en Ajustes (navDocumentos) y contenido en Catálogo (articulo07)",
+      "falloQueReproduce": "fijar «Documentos» a nivel 1 arrastraba al hijo de OneDrive que era nivel 2"
+    },
+    {
+      "n": 7, "nombre": "nombre plantilla",
+      "mide": "que la lista de pendientes agrupe por identidad y no por etiqueta",
+      "detalle": "botonActualizar tiene AutomationId fijo y Name cambiante: «Actualizar \"Catálogo\" (F5)»",
+      "falloQueReproduce": "cinco «Actualizar \"X\" (F5)» contaban como cinco pendientes distintos"
+    },
+    {
+      "n": 8, "nombre": "pestañas sin cambio de identidad",
+      "mide": "el problema de identidad de superficie",
+      "detalle": "Resumen/Actividad/Favoritos sustituyen el contenido entero y NO cambian el título. El mapa dirá «la pantalla no cambió» y la captura demostrará lo contrario.",
+      "falloQueReproduce": "Recientes/Favoritos/Compartido de explorer: tres aristas reales que el grafo no puede aprender",
+      "esperado": "HOY ESTO DEBE FALLAR. Es la trampa que aún no sabemos resolver."
+    },
+    {
+      "n": 9, "nombre": "menú efímero",
+      "mide": "que un menú sea una ubicación con dueño y vida, no un grafo aparte",
+      "detalle": "menuMasOpciones abre tres entradas que existen mientras Informes esté delante"
+    },
+    {
+      "n": 10, "nombre": "profundidad finita y escrita",
+      "mide": "que «llegué al fondo» sea comprobable",
+      "detalle": "Catálogo › Familia A › Subfamilia A1 › Lote A1-1. Nivel 4 y se acabó — a diferencia de un disco, aquí el fondo existe."
+    }
+  ],
+
+  "loQueDebeSalirEnBRONCE": {
+    "_que": "bronce es lo OBSERVADO, sin jerarquía. Contra esto se mide el primer volcado.",
+    "pantallas": 14,
+    "nota": "14 ubicaciones si se recorren todas. Las pestañas de Inicio NO suman: comparten identidad (trampa 8).",
+    "sinNivelNinguno": "en bronce NADA tiene nivel. Si el primer volcado trae niveles, algo los está inventando."
+  }
+}

@@ -60,6 +60,11 @@ public static class PestanasAbiertas
     {
         public string Proc { get; set; } = "";
         public List<string> Titulos { get; set; } = new();
+
+        /// <summary>Con qué esquema se vio este dominio. Suponer «https» rompe los sitios que solo
+        /// hablan http —un portal cautivo, un equipo de la red local— y el fallo sería mudo: el
+        /// navegador abre, no carga, y nadie dice por qué.</summary>
+        public string Esquema { get; set; } = "";
     }
 
     private static readonly Dictionary<string, Rastro> _rastros = new(StringComparer.OrdinalIgnoreCase);
@@ -75,7 +80,7 @@ public static class PestanasAbiertas
     /// Apuntar que este dominio se está viendo con este título. Lo llama el localizador, que es
     /// quien tiene delante las tres cosas a la vez.
     /// </summary>
-    public static void Apunta(string dominio, string proc, string tituloVentana)
+    public static void Apunta(string dominio, string proc, string tituloVentana, string esquema = "")
     {
         if (string.IsNullOrWhiteSpace(dominio)) return;
         string t = TituloDePagina(tituloVentana);
@@ -84,6 +89,7 @@ public static class PestanasAbiertas
             Cargar();
             if (!_rastros.TryGetValue(dominio, out var r)) _rastros[dominio] = r = new Rastro();
             if (proc.Length > 0) r.Proc = proc.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? proc : proc + ".exe";
+            if (esquema.Length > 0) r.Esquema = esquema;
             if (t.Length >= 4)
             {
                 r.Titulos.RemoveAll(x => string.Equals(x, t, StringComparison.OrdinalIgnoreCase));
@@ -101,6 +107,54 @@ public static class PestanasAbiertas
         {
             Cargar();
             return _rastros.TryGetValue(dominio ?? "", out var r) ? r.Proc : "";
+        }
+    }
+
+    /// <summary>
+    /// ¿ESTE NOMBRE ES UN SITIO QUE YA CONOCEMOS? «github» → «github.com». Vacío si no, o si suena
+    /// a varios.
+    /// </summary>
+    /// <remarks>
+    /// Se pidió «abre github» y se intentó arrancar un ejecutable llamado «github»: seis segundos
+    /// para acabar en «no pude abrir github», y Ü se lo contó al usuario como si GitHub no se
+    /// pudiera abrir. Era mentira: un minuto antes su pestaña se había traído al frente en un
+    /// segundo (2026-08-16, en el log).
+    ///
+    /// SOLO SE CONTESTA SI ES INEQUÍVOCO, y solo entre los dominios POR LOS QUE YA SE PASÓ: no se
+    /// inventa «github.com» a partir de una cadena, se reconoce lo que está en la memoria. Con dos
+    /// candidatos —«google.com» y «docs.google.com» ante «google»— se devuelve vacío: elegir a ojo
+    /// entre dos sitios es la misma forma de fallo que acuñar una arista adivinando cuál de dos
+    /// puertas con el mismo nombre era.
+    /// </remarks>
+    public static string DominioQueSuena(string nombre)
+    {
+        string n = (nombre ?? "").Trim().TrimEnd('/').ToLowerInvariant();
+        if (n.Length < 3) return "";
+
+        lock (_candado)
+        {
+            Cargar();
+            var claves = _rastros.Keys.ToList();
+
+            // Tal cual, o con el punto puesto: «github.com» y «github» son la misma petición.
+            var exacto = claves.Where(d => d.Equals(n, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (exacto.Count == 1) return exacto[0];
+
+            // Por la primera etiqueta del dominio: «github» reconoce «github.com», y «google» NO
+            // reconoce nada porque suena igual a «google.com» y a «docs.google.com».
+            var porEtiqueta = claves.Where(d =>
+                d.Split('.').FirstOrDefault()?.Equals(n, StringComparison.OrdinalIgnoreCase) == true).ToList();
+            return porEtiqueta.Count == 1 ? porEtiqueta[0] : "";
+        }
+    }
+
+    /// <summary>Con qué esquema se vio este dominio. Vacío si no consta.</summary>
+    public static string EsquemaDe(string dominio)
+    {
+        lock (_candado)
+        {
+            Cargar();
+            return _rastros.TryGetValue(dominio ?? "", out var r) ? r.Esquema : "";
         }
     }
 
@@ -248,6 +302,62 @@ public static class PestanasAbiertas
         }
 
         LogBus.Log("pestañas", $"«{dominio}» no está abierto en ninguna de las {ventanas.Count} ventana(s) de navegador");
+        return false;
+    }
+
+    /// <summary>
+    /// ABRIRLA, cuando no está abierta. Devuelve si se llegó, comprobado releyendo la dirección.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="IrA"/> devuelve false cuando el sitio no está en ninguna pestaña, y su contrato ya
+    /// decía que entonces «quien llama SÍ debe abrirlo». Nadie lo hacía: hacer clic en un nodo web
+    /// del mapa funcionaba solo si la pestaña ya estaba abierta y, si no, no pasaba nada. Media
+    /// función es peor que ninguna, porque parece que funciona (2026-08-16, lo vio el usuario).
+    ///
+    /// SE ABRE EN EL NAVEGADOR DONDE SE VIO, no en el predeterminado del sistema: ahí es donde está
+    /// la sesión iniciada, y llegar a un sitio pidiendo login otra vez no es llegar.
+    ///
+    /// Y SE COMPRUEBA POR CONSECUENCIA, como todo lo demás aquí: lanzar es una petición, no una
+    /// llegada. Se espera a que la barra de direcciones diga el dominio; si no lo dice, se devuelve
+    /// false y quien preguntó se entera, en vez de creer que ya está donde no está.
+    /// </remarks>
+    public static bool Abrir(string url, string dominio)
+    {
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(dominio)) return false;
+
+        string navegador = NavegadorDe(dominio);
+        try
+        {
+            if (navegador.Length > 0)
+                Process.Start(new ProcessStartInfo(navegador, url) { UseShellExecute = true });
+            else
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            LogBus.Log("pestañas", $"«{dominio}» no estaba abierto: abriendo {url}"
+                                 + (navegador.Length > 0 ? $" en {navegador}" : " en el navegador del sistema"));
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("pestañas", $"no pude abrir {url}: {e.Message}");
+            return false;
+        }
+
+        // Abrir una pestaña y cargar una página tardan lo suyo, y más si el navegador no estaba
+        // arrancado. Se espera hasta 12 s mirando TODAS las ventanas: la pestaña nueva puede caer en
+        // cualquiera de ellas, o en una recién creada.
+        for (int intento = 0; intento < 40; intento++)
+        {
+            System.Threading.Thread.Sleep(300);
+            foreach (var h in VentanasDeNavegador())
+            {
+                var ahora = SurfaceLocator.LeerUrlDelNavegador(h);
+                if (ahora == null || !MismoSitio(ahora.Host, dominio)) continue;
+                bool alFrente = AppAligner.TraerAlFrente(h);
+                LogBus.Log("pestañas", $"«{dominio}» abierto y cargado tras ~{(intento + 1) * 300} ms"
+                                     + (alFrente ? "" : " (pero no pude traer la ventana al frente)"));
+                return alFrente;
+            }
+        }
+        LogBus.Log("pestañas", $"abrí {url} pero a los 12 s la barra de direcciones seguía sin decir «{dominio}»");
         return false;
     }
 

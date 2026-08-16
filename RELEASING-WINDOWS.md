@@ -16,7 +16,7 @@ instalados. El equivalente de [`RELEASING.md`](RELEASING.md), que cubre la app A
 - Cuando está descargada, la carita muestra una pastilla azul: **"⬇ Versión X lista — reiniciar"**.
   - Si el cliente la toca → se actualiza y reinicia en el momento.
   - Si la ignora → se instala sola **al cerrar Ü**. El siguiente arranque ya es la versión nueva.
-- El feed es el **bucket público `windows`** de Supabase. Publicar = subir 2-3 archivos ahí.
+- El feed son las **releases de este repo** (`ZevCorp/U-Windows-App`). Publicar = lanzar el workflow.
 - Después de la primera versión, las descargas son **deltas** (KB, no los ~70 MB completos).
 
 Código relevante:
@@ -27,52 +27,57 @@ Código relevante:
 
 ---
 
-## 2. Infraestructura (ya creada, no hay que volver a hacerla)
+## 2. Dónde vive el feed
 
-- Proyecto Supabase: **`miracle-app`** · ref **`zyvfamlhlmztliexvmej`** (el mismo de Android).
-- **Bucket público `windows`**. URL base del feed:
-  `https://zyvfamlhlmztliexvmej.supabase.co/storage/v1/object/public/windows`
-- Es público a propósito: el updater lee sin credenciales, igual que el bucket `apks`. Ahí solo viajan
-  binarios del **cliente tonto**, que no contienen prompts, catálogo MCP ni la key del modelo — todo eso
-  vive en el backend. Lo único sensible que viaja embebido es la key de Gemini de 🎓 (ver `Config.cs`);
-  si eso preocupa, dejá `GeminiApiKey` vacía en el build que publiques.
+Son las **releases de este mismo repositorio**. Cada versión es una release `v<version>` con
+`releases.win.json` (el índice), el `.nupkg` y el `U-win-Setup.exe`.
 
-**No hay tabla ni Edge Function**, a diferencia de Android: Velopack lee un JSON estático del bucket.
-No hay token de admin que proteger — el control de acceso es *quién puede subir al bucket*.
+**Estuvo en un bucket de Supabase y no podía funcionar.** El plan gratuito corta las subidas en
+**50 MB** —un tope *global*, que manda por encima del 1 GB configurado en el bucket— y el paquete
+pesa 80. Siete intentos entre el 2026-07-22 y el 2026-08-16 murieron todos en la última línea, cada
+uno por una causa que parecía la definitiva: `--endpoint` contra `--region`, el PUT único
+(`RequestEntityTooLarge`), el CRC32 que la CLI de `aws` añade a cada parte. Los tres eran problemas
+reales y ninguno era la causa de fondo. El bucket estuvo **siempre vacío**, así que el botón de
+actualizar sólo podía contestar «ya estás al día»: no mentía, es que al otro lado no había nada.
+
+Si alguna vez se vuelve a mirar hacia un almacenamiento con plan gratuito, la pregunta que ahorra
+una semana es **cuál es el tope de subida del PLAN**, no el del bucket.
+
+El repositorio es privado, así que —al revés que el bucket— esto **no se lee sin credenciales**:
+
+- El **workflow** publica con el token del run, que necesita `permissions: contents: write`. Sin eso
+  GitHub responde `Resource not accessible by integration`, un 403 que no menciona permisos.
+- La **copia distribuida** consulta con un token de **solo lectura** embebido en el build
+  (`WindowsClient.csproj` → `UpdateGithubToken`, secreto `UPDATE_GITHUB_TOKEN`). No puede publicar,
+  ni borrar, ni leer código: sólo bajarse lo que ya se reparte a esas mismas personas. Va idéntico
+  en cada copia, así que retirarlo obliga a rotarlo para todos a la vez.
 
 ---
 
-## 3. Sacar una versión nueva (paso a paso)
+## 3. Sacar una versión nueva
 
-1. **Compilá y empaquetá** (desde `windows-client`, en Windows con .NET 8 SDK):
+Desde la pestaña Actions → **Windows release** → *Run workflow*, con la versión (SemVer, mayor que
+la publicada) y un `request_id` cualquiera. O desde la terminal:
 
-   ```powershell
-   dotnet tool install -g vpk        # solo la primera vez
-   .\scripts\publish-release.ps1 -Version 1.0.1
-   ```
+```bash
+gh workflow run windows-release.yml -f version=1.1.3 -f request_id=lo-que-sea
+```
 
-   La versión **debe ser mayor** que la publicada (SemVer). El script imprime qué subir.
+El workflow compila, empaqueta, publica la release **y comprueba que el paquete anunciado esté de
+verdad subido**. Esa última comprobación existe porque una vez el paso salió en verde con el índice
+publicado y el `.nupkg` ausente: el cliente veía la versión, la intentaba bajar y fallaba cada 30
+minutos. Un release que miente es peor que uno que no ocurre.
 
-2. **Subí al bucket `windows`** (panel de Supabase → Storage → `windows` → Upload), desde
-   `out\releases`:
-   - `releases.win.json` ← **el índice; siempre, o nadie ve la versión nueva**
-   - `U-<version>-full.nupkg`
-   - `U-<version>-delta.nupkg` (si existe)
-
-   > **No borres los `.nupkg` viejos**: son la base contra la que se aplican los deltas.
-
-3. Listo. Cada cliente lo recoge en ~30 min o al siguiente arranque.
-
-**Cliente nuevo** (primera instalación): mandale `out\releases\U-Setup.exe`. A partir de ahí no vuelve
-a instalar nada nunca.
+**Cliente nuevo** (primera instalación): mandale el `U-win-Setup.exe` de la release. A partir de ahí
+no vuelve a instalar nada nunca.
 
 ---
 
 ## 4. Verificar que salió bien
 
-```powershell
-# El índice tiene que responder y nombrar la versión nueva:
-curl.exe https://zyvfamlhlmztliexvmej.supabase.co/storage/v1/object/public/windows/releases.win.json
+```bash
+# La release tiene que existir y traer su paquete dentro (no sólo el índice):
+gh release view v1.1.3 --json assets --jq '.assets[].name'
 ```
 
 En la máquina del cliente: el panel **Backend** de la carita muestra `Versión X` abajo, y 📜 (Logs)
@@ -83,10 +88,9 @@ tiene las líneas con tag `update`.
 ## 5. Checklist
 
 - [ ] Versión incrementada respecto a la publicada.
-- [ ] `publish-release.ps1` terminó sin errores.
-- [ ] `releases.win.json` subido (**el que más se olvida**).
-- [ ] `.nupkg` nuevo subido; los viejos **siguen** en el bucket.
-- [ ] `curl` al `releases.win.json` devuelve la versión nueva.
+- [ ] El workflow terminó en verde (comprueba solo que el paquete esté publicado).
+- [ ] La release trae `releases.win.json` **y** el `.nupkg`.
+- [ ] Las releases viejas **siguen** publicadas: son la base de los deltas.
 
 ---
 
@@ -102,9 +106,3 @@ tiene las líneas con tag `update`.
   es false y `Updater` no hace nada. Para probar el update de verdad hay que instalar con el Setup.
 - **La config del usuario sobrevive**: vive en `%APPDATA%\U\config.json`, fuera de la carpeta de
   instalación que Velopack reemplaza.
-
-## 7. Mejora futura: publicar sin subir a mano
-
-Velopack trae `vpk upload s3`, y el storage de Supabase es compatible con S3. Con las credenciales S3
-del proyecto, el paso 2 se convertiría en un flag del script y publicar sería **un solo comando**. No
-implementado: hace falta generar esas credenciales en el panel de Supabase.

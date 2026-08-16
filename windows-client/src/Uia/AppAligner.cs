@@ -21,6 +21,58 @@ public static class AppAligner
     [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
     private const int SW_RESTORE = 9;
 
+    /// <summary>
+    /// PONERSE DELANTE DE UNA SUPERFICIE, sea del tipo que sea. Devuelve si se consiguió.
+    /// </summary>
+    /// <remarks>
+    /// NO TODA SUPERFICIE ES UN PROCESO, y tratarlas como si lo fueran es un fallo que ya nos ha
+    /// mordido por los dos lados. La navegación del núcleo tomaba la «app» del id y la pasaba a
+    /// <see cref="FocusOrLaunch"/>:
+    ///
+    ///   · «web://itsmiracleai.com.co/…» → buscaba un proceso «itsmiracleai.com.co» y, al no
+    ///     encontrarlo, INTENTABA LANZAR un programa con ese nombre. El usuario lo vio como «no pude
+    ///     traer "itsmiracleai.com.co" al frente» (2026-08-14).
+    ///   · «sapgui://QAS/…» → intentaría lanzar «QAS».
+    ///
+    /// Es el mismo error de identidad que tumbaba la atribución de clics en web: comparar —o usar—
+    /// un DOMINIO como si fuera un PROCESO.
+    ///
+    /// Para lo web NO SE INVENTA NADA NUEVO: <see cref="PestanasAbiertas"/> ya sabe qué navegador
+    /// aloja cada dominio y con qué título, precisamente porque el navegador solo publica el título
+    /// y «github.com» no aparece en «joseph1356k/Graph». Y activa la pestaña COMPROBANDO POR
+    /// CONSECUENCIA: vuelve a leer la barra de direcciones antes de decir que sí.
+    ///
+    /// Se devuelve false —y no se adivina— cuando el esquema no se conoce. Rendirse diciéndolo es
+    /// seguro; abrir un programa al azar en la máquina de alguien no.
+    /// </remarks>
+    /// <remarks>
+    /// LA DECISIÓN vive en <see cref="Mapeador.ComoMePongoDelante"/>, fuera del cliente y pura, con
+    /// sus promesas. Aquí solo se EJECUTA lo que allí se decidió: la regla que se equivocaba tres
+    /// veces era la decisión, no la ejecución, y allí se puede probar sin abrir una ventana.
+    /// </remarks>
+    public static bool PonerDelante(string idDeSuperficie)
+    {
+        var plan = Mapeador.ComoMePongoDelante.De(idDeSuperficie);
+        switch (plan.Via)
+        {
+            case Mapeador.ComoMePongoDelante.Via.PestanaDelNavegador:
+                // PRIMERO LA QUE YA ESTÁ, y solo si no está se abre. El orden importa: ir a un sitio
+                // y crear OTRA copia del sitio no son la misma acción, y la segunda deja al usuario
+                // con dos estados de la misma página y pierde lo que tuviera a medias en la primera.
+                if (PestanasAbiertas.IrA(plan.Que)) return true;
+                return PestanasAbiertas.Abrir(
+                    Mapeador.ComoMePongoDelante.UrlDe(idDeSuperficie, PestanasAbiertas.EsquemaDe(plan.Que)),
+                    plan.Que);
+            case Mapeador.ComoMePongoDelante.Via.SapGui:
+            case Mapeador.ComoMePongoDelante.Via.Proceso:
+                return FocusOrLaunch(plan.Que);
+            default:
+                LogBus.Log("align", $"no sé ponerme delante de «{idDeSuperficie}»: no reconozco ese "
+                                  + "tipo de superficie, y prefiero decirlo a abrir algo al azar");
+                return false;
+        }
+    }
+
     /// <summary>uia://notepad.exe(/loquesea) → "notepad".</summary>
     public static string ProcessFromOrigin(string origin)
     {

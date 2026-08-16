@@ -68,7 +68,20 @@ $tocados = @(git -C $repo diff --name-only origin/main...HEAD 2>$null)
 if ($LASTEXITCODE -ne 0 -or $tocados.Count -eq 0) {
   Anotar "Diff vs main" "NO CORRIDO" "no se pudo comparar con origin/main (haz git fetch origin)"
 } else {
-  $colados = @($tocados | Where-Object { $f = $_; @($prohibido | Where-Object { $f -like "*$_*" }).Count -gt 0 })
+  # EL PATRON ES DE SEGMENTO DE RUTA, NO DE SUBCADENA. Estos patrones estan copiados del
+  # .gitignore, donde «out/» significa «una carpeta llamada out»; con -like «*out/*» significa
+  # «cualquier ruta que contenga esas letras», y eso caza tambien «graphify-out/» — que en este
+  # repo SI esta versionado (214 archivos en main; el .gitignore solo aparta las instantaneas con
+  # fecha, graphify-out/20*/). Como el hook de graphify regenera esa carpeta en cada commit, la
+  # compuerta declaraba «se cuelan 24 archivos» en CUALQUIER rama y no habia forma de pasarla
+  # (2026-08-11, tropezado en el primer PR que la uso).
+  #
+  # Se ancla a «/» delante: un segmento empieza al principio de la ruta o despues de una barra.
+  # Asi «out/» sigue cazando out\evidencia.md y deja pasar graphify-out\graph.json.
+  $colados = @($tocados | Where-Object {
+    $f = "/" + ($_ -replace '\\', '/')
+    @($prohibido | Where-Object { $f -like "*/$($_.TrimStart('/'))*" }).Count -gt 0
+  })
   if ($colados.Count -gt 0) {
     Anotar "Nada colado" "FALLO" ("se cuelan: {0}" -f ($colados -join ", "))
     $bloquea = $true
@@ -110,7 +123,12 @@ if (-not $bloquea) {
   # depende de la codificacion con que se lea, y un recuento que puede encoger es exactamente el
   # vicio del aprendizaje n.10 (el denominador es el plan, nunca lo ejecutado).
   $total = @(Select-String -Path (Join-Path $repo "tests\ContratoDelGrafo\Contrato.cs") -Pattern '^\s*Prueba\("').Count
-  $pendientes = @(Select-String -Path $log -SimpleMatch "PENDIENTE").Count
+  # "PENDIENTE:" CON LOS DOS PUNTOS, y no es un detalle: sin ellos tambien engancha la linea resumen
+  # "(N de ellas PENDIENTES: ...)" y el recuento se pasa por uno. Con eso, $regresiones sale NEGATIVO
+  # y la compuerta rotula como FALLO lo que es un rojo intermedio legitimo — o sea, acusa de
+  # regresion a la fase que va segun el plan. Latente aqui mientras el grafo tenga cero pendientes;
+  # salio a la luz en el contrato de la voz el 2026-08-13.
+  $pendientes = @(Select-String -Path $log -SimpleMatch "PENDIENTE:").Count
 
   if ($fallos -eq 0) {
     Anotar "Contrato" "OK" "$total/$total promesas, 0 pendientes"
@@ -121,6 +139,37 @@ if (-not $bloquea) {
     Anotar "Contrato" "FALLO" "$($total - $fallos)/$total verdes; $regresiones incumplida(s) con codigo y $pendientes pendiente(s)"
     $bloquea = $true
   }
+}
+
+# --- Nivel 2b: el contrato de la voz ------------------------------------------
+# Las promesas de la parte que convierte tramas del collar Omi en muestras (spec 001).
+#
+# CORRE AUNQUE ALGO ANTERIOR BLOQUEE, y es a proposito: voz\Omi es net8.0 puro y no depende ni de
+# U.dll ni de que windows-client compile, asi que puede dar su veredicto igual. Saltarselo solo
+# conseguiria esconder informacion que ya esta pagada.
+#
+# Existe este bloque porque un juez que no esta en la compuerta es un juez que nadie convoca: los
+# contratos del nucleo y del mapeador siguen fuera de aqui, y por eso pueden estar rojos mientras
+# verificar.ps1 dice OK (aprendizaje n.18, anotado en la spec 001).
+Write-Host "`n2b. el contrato de la voz" -ForegroundColor Cyan
+$logVoz = Join-Path $env:TEMP "u-verificar-voz.txt"
+& $psExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\contrato-de-la-voz.ps1") *>&1 |
+  Tee-Object -FilePath $logVoz
+$fallosVoz = $LASTEXITCODE
+
+# El total sale del CODIGO FUENTE, no de la salida impresa: un denominador que puede encoger es el
+# vicio del aprendizaje n.10.
+$totalVoz = @(Select-String -Path (Join-Path $repo "voz\Contrato\Contrato.cs") -Pattern '^\s*Prueba\("').Count
+$pendVoz  = @(Select-String -Path $logVoz -SimpleMatch "PENDIENTE:").Count
+
+if ($fallosVoz -eq 0) {
+  Anotar "Contrato voz" "OK" "$totalVoz/$totalVoz promesas, 0 pendientes"
+} elseif ($PermitirPendientes -and $fallosVoz -eq $pendVoz) {
+  Anotar "Contrato voz" "NO CORRIDO" "$($totalVoz - $fallosVoz)/$totalVoz verdes, $pendVoz PENDIENTES declaradas (fase intermedia: NO puede ir a main)"
+} else {
+  $regreVoz = $fallosVoz - $pendVoz
+  Anotar "Contrato voz" "FALLO" "$($totalVoz - $fallosVoz)/$totalVoz verdes; $regreVoz incumplida(s) con codigo y $pendVoz pendiente(s)"
+  $bloquea = $true
 }
 
 # --- Nivel 3: los escenarios sobre el terreno real -----------------------------

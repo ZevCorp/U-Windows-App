@@ -1,4 +1,4 @@
-﻿using U.Graph;
+using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Navigation;
@@ -34,6 +34,12 @@ public sealed class SurfaceMapTools
 
     /// <summary>La app con la que se estaba trabajando. Se usa para volver a ella si algo roba el foco.</summary>
     private string _ultimaApp = "";
+
+    /// <summary>
+    /// Dónde estábamos al terminar la llamada ANTERIOR. Es contra esto —y no contra la cadena que
+    /// teclea el modelo— contra lo que se comprueba si el mundo se ha movido.
+    /// </summary>
+    private string _dondeQuedamos = "";
     private List<string> _seleccionPrevia = new();
 
     /// <summary>Lo último que se intentó. Sin esto, quien deba decidir ante un diálogo no sabe
@@ -289,7 +295,23 @@ public sealed class SurfaceMapTools
     /// Se busca en lo que hay AHORA en pantalla, no en el mapa: la pregunta es «¿lo ves?», no
     /// «¿te acuerdas de él?».
     /// </summary>
-    private string Mostrar(string que)
+    /// <summary>
+    /// Todo lo que se llama así, SIN agrupar y en el orden en que se lee la pantalla: de arriba
+    /// abajo y de izquierda a derecha. Ese orden es el que hace que «el primero» y «el segundo»
+    /// signifiquen lo mismo para quien mira y para quien señala.
+    /// </summary>
+    private static List<UiaReader.UiElement> Homonimos(
+        IReadOnlyList<UiaReader.UiElement> aLaVista, string que)
+    {
+        string q = que.Trim();
+        return aLaVista
+            .Where(e => e.Label.Trim().Equals(q, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(e => e.Bounds.Top).ThenBy(e => e.Bounds.Left)
+            .Take(12)
+            .ToList();
+    }
+
+    private string Mostrar(string que, int cual = 0)
     {
         if (que.Length == 0) return "falta `exit`: qué elemento hay que señalar";
 
@@ -361,8 +383,26 @@ public sealed class SurfaceMapTools
             // El MISMO reconocedor que usa map_take para pulsar. Cuando señalar y pulsar buscaban
             // cada uno a su manera, pasaba lo del 2026-08-05: veía la barra de búsqueda y decía que
             // no podía pulsarla. Si lo señalo, lo puedo pulsar — y al revés.
-            elegidos = Uia.Reconocedor.Buscar(candidatos, que).Take(1).ToList();
-            comoSeLlama = que;
+            // SI EL NOMBRE COINCIDE CON VARIOS, NO SE ELIGE UNO A DEDO. Aquí había un `.Take(1)`:
+            // señalaba el primero del árbol y se quedaba tan ancho, así que cuando Ü preguntaba
+            // «¿cuál de los dos «Code»?» no tenía forma de enseñar CUÁL era cada uno — que es
+            // justo el momento en el que señalar sirve para algo (2026-08-16, pedido por el usuario:
+            // «que sea como este, y va y lo señala, o este, y va y señala el otro»).
+            //
+            // Con `cual` se señala uno concreto —el 1.º, el 2.º…— y sin él se señalan todos, que es
+            // la respuesta honesta a un nombre que nombra a varios.
+            // SEÑALAR NECESITA VER LOS HOMÓNIMOS; PULSAR NO. `Reconocedor.Buscar` agrupa por nombre
+            // y devuelve uno —«el mismo nombre, una vez»—, que es lo correcto para pulsar: no vas a
+            // pulsar dos cosas. Pero para PREGUNTAR «¿cuál de los dos?» hay que poder enseñar los
+            // dos, y ahí ese acierto se convierte en el impedimento. Se buscan aquí, sin agrupar, y
+            // no se toca el reconocedor: lo usa `map_take`, y cambiarlo movería el suelo de la
+            // navegación entera para arreglar una forma de señalar (2026-08-16).
+            var homonimos = Homonimos(candidatos, que);
+            elegidos = cual >= 1 && cual <= homonimos.Count
+                ? new List<UiaReader.UiElement> { homonimos[cual - 1] }
+                : homonimos.Count > 0 ? homonimos : Uia.Reconocedor.Buscar(candidatos, que).ToList();
+            comoSeLlama = cual >= 1 && cual <= homonimos.Count
+                ? $"{que} ({cual} de {homonimos.Count})" : que;
         }
 
         if (elegidos.Count == 0)
@@ -396,8 +436,14 @@ public sealed class SurfaceMapTools
             : (h.Info.NivelNav >= 0 ? $"nivel {h.Info.NivelNav}" : "sin nivel")
               + (h.Info.NivelFijado ? " · fijado" : "");
 
-        return $"SÍ veo «{el.Label}» ({el.ControlType}) y lo estoy señalando: recuadro encendido y "
-             + $"la carita puesta a su lado. En el mapa: {enMapa}. Lo puedo pulsar ahora mismo con "
+        // SE DICE CUÁL DE ELLOS. Con tres «Descargas» en pantalla, «lo estoy señalando» no distingue
+        // nada: ni quien mira el panel ni el propio modelo sabrían a cuál se refiere en el turno
+        // siguiente. Al preguntar «¿este o este?» hay que poder nombrar el que se está enseñando.
+        string posicion = comoSeLlama.Contains(" (") && comoSeLlama.EndsWith(")")
+            ? " " + comoSeLlama[comoSeLlama.IndexOf(" (", StringComparison.Ordinal)..].Trim()
+            : "";
+        return $"SÍ veo «{el.Label}»{posicion} ({el.ControlType}) y lo estoy señalando: recuadro encendido "
+             + $"y la carita puesta a su lado. En el mapa: {enMapa}. Lo puedo pulsar ahora mismo con "
              + $"map_take exit=«{el.Label}» — que lo vea basta.";
     }
 
@@ -732,12 +778,39 @@ public sealed class SurfaceMapTools
         app = app.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim();
         _ultimaApp = app;
 
+        // ¿ES UN SITIO WEB Y NO UN PROGRAMA? Se mira ANTES de intentar lanzar nada.
+        //
+        // El modelo pidió «abre github» y esto trató de arrancar un ejecutable llamado «github»:
+        // seis segundos para acabar en «no pude abrir github ni traerla al frente», y Ü se lo dijo
+        // al usuario como si GitHub no se pudiera abrir (2026-08-16, en el log). La herramienta
+        // buena era `map_go_to web://github.com`, que un minuto antes había traído la pestaña al
+        // frente en un segundo — pero eso el modelo no lo sabía y aquí tampoco se le decía.
+        //
+        // Intentarlo como programa PRIMERO no es neutral: lanzar algo con un nombre inventado es la
+        // clase de cosa que abrió Docker Desktop cuando se le pidió «desktop» (2026-07-31).
+        string dominio = Uia.PestanasAbiertas.DominioQueSuena(app);
+        if (dominio.Length > 0)
+        {
+            LogBus.Log("mapa-mcp", $"«{app}» no es un programa, es el sitio «{dominio}»: se va por su pestaña");
+            if (Uia.AppAligner.PonerDelante("web://" + dominio))
+            {
+                EsperarPantallaLista(2000);
+                return $"Estás en «{_where()?.Id ?? dominio}».";
+            }
+            return $"«{dominio}» es un sitio web y no pude abrirlo en el navegador.";
+        }
+
         if (!AsegurarFoco(app))
         {
             LogBus.Log("mapa-mcp", $"«{app}» no estaba delante; se abre");
             AppAligner.FocusOrLaunch(app);
             if (!AsegurarFoco(app))
-                return $"no pude abrir «{app}» ni traerla al frente; ahora hay «{AppEnFrente()}»";
+                // SE DICE QUÉ HACER, no solo qué falló. El mensaje anterior dejaba al modelo sin
+                // salida y contestaba al usuario «no he podido abrir GitHub», que era mentira: sí se
+                // podía, por otra puerta.
+                return $"no pude abrir «{app}» ni traerla al frente; ahora hay «{AppEnFrente()}». "
+                     + "Si «" + app + "» es una página y no un programa, pídelo con "
+                     + $"map_go_to y `surface` = «web://{app}.com» o el dominio que sea.";
         }
 
         EsperarPantallaLista(2000);
@@ -765,7 +838,18 @@ public sealed class SurfaceMapTools
                 return $"abrí «{app}» pero sigo viendo el escritorio; puede que la ventana tarde en salir";
             EsperarPantallaLista(1500);
         }
-        if (donde.Length > 0) { Anotar("", donde); ObservarAqui(donde); }
+        // SOLO SE LEE LA PANTALLA SI NO SE CONOCE. Esto releía siempre —un `Read()` completo de
+        // UIA— y es la mayor parte del coste de abrir una app: 15,5 s en el explorador, 7 en Chrome
+        // (2026-08-16, medido). Volver a una pantalla en la que ya se ha estado no enseña nada
+        // nuevo, y quien vuelve suele venir con prisa.
+        //
+        // Se conserva entera para lo NUEVO, que es cuando leer sí aporta: una app que se acaba de
+        // abrir y de la que el mapa no sabe nada seguiría sin salidas si no se mirara.
+        if (donde.Length > 0)
+        {
+            Anotar("", donde);
+            if (_map.ExitsFrom(donde).Count == 0) ObservarAqui(donde);
+        }
         return donde.Length > 0
             ? $"«{app}» está delante. Estás en «{donde}»."
             : $"«{app}» está delante, pero aún no sé identificar la pantalla.";
@@ -988,6 +1072,36 @@ public sealed class SurfaceMapTools
     /// recupera el foco primero, porque «no estoy donde creía» y «algo me tapó» son cosas distintas
     /// y solo la segunda tiene arreglo automático.
     /// </summary>
+    /// <summary>
+    /// Cuántas letras hay que cambiar para pasar de una a otra. Se corta pronto: solo interesa
+    /// saber si es «lo mismo mal escrito», y para eso no hace falta medir distancias grandes.
+    /// </summary>
+    private static int Distancia(string a, string b)
+    {
+        a = (a ?? "").ToLowerInvariant();
+        b = (b ?? "").ToLowerInvariant();
+        if (Math.Abs(a.Length - b.Length) > 2) return 99;
+
+        var fila = new int[b.Length + 1];
+        for (int j = 0; j <= b.Length; j++) fila[j] = j;
+        for (int i = 1; i <= a.Length; i++)
+        {
+            int previa = fila[0];
+            fila[0] = i;
+            int mejorDeLaFila = fila[0];
+            for (int j = 1; j <= b.Length; j++)
+            {
+                int actual = fila[j];
+                fila[j] = Math.Min(Math.Min(fila[j] + 1, fila[j - 1] + 1),
+                                   previa + (a[i - 1] == b[j - 1] ? 0 : 1));
+                previa = actual;
+                mejorDeLaFila = Math.Min(mejorDeLaFila, fila[j]);
+            }
+            if (mejorDeLaFila > 2) return 99;   // ya no puede bajar de ahí
+        }
+        return fila[b.Length];
+    }
+
     private string ComprobarUbicacion(string esperada)
     {
         if (esperada.Length == 0) return "";   // no lo declaró: se actúa como antes
@@ -1046,6 +1160,40 @@ public sealed class SurfaceMapTools
         if (interrupcion.Length > 0)
             return $"NO actúo: creías estar en «{esperada}» y lo que hay delante es otra cosa.\n{interrupcion}";
 
+        // ¿SE HA MOVIDO EL MUNDO, O SOLO SE EQUIVOCÓ AL ESCRIBIRLO?
+        //
+        // El ancla existe para que un paso que falla no deje los siguientes ejecutándose en otra
+        // pantalla —así se pegaron archivos dentro de su propia carpeta de origen (2026-08-02)—.
+        // Eso es un cambio del MUNDO. Pero se comprobaba contra una CADENA que teclea el modelo, y
+        // ahí falla por otra cosa: pidió actuar en «…/ZecCorp/…» estando en «…/ZevCorp/…», una
+        // letra. Se le contestó con la cadena correcta DENTRO del mensaje y reintentó escribiendo
+        // «ZeevCorp» — otra vez mal (2026-08-16, dos veces seguidas en el log). Un id largo no se
+        // transcribe de memoria, y exigirlo convierte el freno en un muro.
+        //
+        // La comprobación buena es contra DÓNDE QUEDAMOS al terminar la llamada anterior: si la
+        // pantalla es la misma que cuando el modelo miró por última vez, el mundo no se ha movido y
+        // su falta de ortografía no cambia eso. La garantía queda intacta —si la pantalla SÍ cambió
+        // desde entonces, se rechaza como siempre— y se pierde solo el caso que nunca fue peligro.
+        // DOS CONDICIONES, Y LA SEGUNDA ES LA QUE SALVA LA GARANTÍA.
+        //
+        // Con solo la primera —«la pantalla no se ha movido»— esto se rompía en el caso para el que
+        // el ancla existe: si un paso falla y la pantalla deriva, la llamada de ESE paso deja
+        // «dónde quedamos» ya en la pantalla derivada, y el siguiente pasaría tan campante. Lo vi al
+        // comprobarlo, no al escribirlo.
+        //
+        // Por eso además se exige que lo que pidió se PAREZCA a donde estamos: «documentoss» por
+        // «documentos» es alguien nombrando esta pantalla y tecleándola mal; «notas» por
+        // «documentos» es alguien hablando de otra pantalla, que es exactamente lo que hay que
+        // frenar. Una letra o dos, no más.
+        if (aqui.Length > 0 && _dondeQuedamos.Length > 0
+            && string.Equals(aqui, _dondeQuedamos, StringComparison.OrdinalIgnoreCase)
+            && Distancia(esperada, aqui) <= 2)
+        {
+            LogBus.Log("mapa-mcp", $"pediste actuar en «{esperada}» y estamos en «{aqui}»: es la misma "
+                + "pantalla mal escrita y no se ha movido desde tu última llamada. Se actúa aquí");
+            return "";
+        }
+
         // RESOLVER UN BLOQUEO Y REANUDAR LA TAREA SON DOS COSAS DISTINTAS, y solo estaba la primera.
         // Medido el 2026-08-03: apareció «Ubicación no disponible», se detectó, se pulsó «Aceptar»
         // correctamente… y el explorador quedó en «Notas». A partir de ahí el ancla rechazó 27
@@ -1074,8 +1222,21 @@ public sealed class SurfaceMapTools
             finally { _reanudando = false; }
         }
 
-        return $"NO actúo: creías estar en «{esperada}» pero estamos en «{aqui}», y no he sabido volver. "
-             + "Algo salió distinto en un paso anterior; comprueba dónde estás antes de seguir.";
+        // EL RECHAZO TIENE QUE SER ACCIONABLE, NO SOLO CORRECTO. Antes acababa en «comprueba dónde
+        // estás antes de seguir», y eso mandaba al modelo a INVESTIGAR: en Neon (2026-08-15) el
+        // usuario pidió crear un proyecto, el ancla rechazó bien —creía estar en «welcome» y
+        // estábamos en «projects»— y el modelo, en vez de reintentar con la pantalla real que este
+        // mismo mensaje le estaba diciendo, le preguntó al usuario «¿qué estás viendo ahora?». La
+        // tarea murió en un rechazo que ya traía la respuesta dentro.
+        //
+        // Ahora se le dice DÓNDE está y se le invita a repetir la misma petición con esa ubicación.
+        // La garantía no se toca: no se actúa a ciegas, y quien decide que la acción sigue teniendo
+        // sentido en la pantalla real es el modelo, en una llamada nueva y deliberada — no esta
+        // herramienta por su cuenta. Rechazar sigue siendo el freno; deja de ser un callejón.
+        return $"NO actúo: creías estar en «{esperada}» pero estamos en «{aqui}», y no he sabido volver.\n"
+             + $"Estás en «{aqui}». Si lo que ibas a hacer sigue teniendo sentido AQUÍ, vuelve a "
+             + $"pedírmelo con at=«{aqui}» y lo hago. Si no, mira primero qué hay con map_what_i_see. "
+             + "No le preguntes al usuario dónde está: acabo de decírtelo.";
     }
 
     /// <summary>
@@ -1093,9 +1254,35 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>El sistema y el localizador dicen los dos que estamos en esta app.</summary>
-    private bool Coinciden(string app) =>
-        AppEnFrente().Equals(app, StringComparison.OrdinalIgnoreCase)
-        && AppDe(_where()?.Id ?? "").Equals(app, StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// ¿Está delante la app que pido? Se exigen LAS DOS FUENTES —el proceso en primer plano y la
+    /// superficie que ve el localizador— porque conformarse con la primera dejaba calcular rutas
+    /// desde un sitio donde ya no estábamos: tras cerrarse un panel del shell el foco ya era
+    /// correcto pero el localizador seguía diciendo «SearchHost» (2026-08-02).
+    /// </summary>
+    /// <remarks>
+    /// UN NAVEGADOR MOSTRANDO UNA PÁGINA SE LLAMA COMO LA PÁGINA, y eso rompía la segunda fuente
+    /// para siempre: con YouTube delante la superficie es «web://youtube.com», cuya app es
+    /// «youtube.com» y nunca «chrome». Así que `map_open_app chrome` no podía tener éxito jamás
+    /// estando Chrome delante — esperaba tres segundos, relanzaba Chrome, volvía a esperar, y a los
+    /// 16,7 s contestaba «no pude traer chrome al frente; ahora hay chrome» (2026-08-16, en el log
+    /// del usuario). Y mientras tanto peleaba por el foco con las demás llamadas, que es lo que hizo
+    /// aparecer el explorador en medio de la tarea.
+    ///
+    /// La garantía no se afloja: para una app nativa siguen exigiéndose las dos. Lo que se añade es
+    /// que una superficie web EN el navegador pedido cuenta como estar en ese navegador, que es lo
+    /// que cualquiera diría mirando la pantalla.
+    /// </remarks>
+    private bool Coinciden(string app)
+    {
+        if (!AppEnFrente().Equals(app, StringComparison.OrdinalIgnoreCase)) return false;
+
+        string id = _where()?.Id ?? "";
+        if (AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase)) return true;
+
+        return id.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
+            && Uia.PestanasAbiertas.EsNavegador(app);
+    }
 
     private bool EsperarCoincidencia(string app)
     {
@@ -1124,13 +1311,32 @@ public sealed class SurfaceMapTools
         _where = where;
     }
 
+    /// <summary>
+    /// EL NÚCLEO NUEVO, para las superficies que este mapa no sabe alcanzar. Si nadie lo conecta,
+    /// todo sigue exactamente como estaba.
+    /// </summary>
+    /// <remarks>
+    /// «Ir a una superficie» estaba resuelto en tres sitios y los tres contestaban distinto: aquí
+    /// por PROCESO —así que fallaba en cualquier web y en SAP—, en el panel de niveles por pestaña
+    /// pero solo si ya estaba abierta, y en el núcleo nuevo entero. El modelo de voz usaba este, o
+    /// sea el peor: no podía llegar a una página aunque el panel de al lado sí supiera (2026-08-16,
+    /// lo preguntó el usuario).
+    ///
+    /// SE REPARTE POR TIPO DE SUPERFICIE Y NO POR «A VER SI SUENA». La navegación del explorador de
+    /// archivos por voz es rápida y funciona, y no se toca: `uia://` sigue entero por aquí. Lo que
+    /// pasa al núcleo nuevo es solo lo que aquí nunca funcionó. Una escalera —probar uno y si falla
+    /// el otro— sería peor que cualquiera de los dos: impide saber cuál hizo el trabajo, que es
+    /// justo lo que el propio interruptor SOLO GRAFO existe para poder medir.
+    /// </remarks>
+    public Func<string, string>? PorElNucleo { get; set; }
+
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
         or "map_hierarchy" or "map_feedback" or "map_unsituated" or "map_learn_back" or "map_shot"
-        or "map_set_kind"
+        or "map_set_kind" or "map_silver" or "map_scroll"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1143,6 +1349,7 @@ public sealed class SurfaceMapTools
         // lanzador de apps.
         string args_ = string.Join(" ", args.Select(kv => $"{kv.Key}={kv.Value}"));
         LogBus.Log("mapa-mcp", $"→ {tool} {args_}".TrimEnd());
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
 
         // Si se pasa a hacer otra cosa, ya no se está mirando lo de antes: se suelta. Señalar es un
         // gesto que acompaña a una frase, no un estado en el que quedarse.
@@ -1167,7 +1374,7 @@ public sealed class SurfaceMapTools
             "map_pointing_at" => LoQueSenala(),
             "map_pointed_trail" => LoQueMeAcabasDeMostrar(A("seconds")),
             "map_exclude" => Excluir(A("exit")),
-            "map_show" => Mostrar(A("exit")),
+            "map_show" => Mostrar(A("exit"), int.TryParse(A("which"), out int cual) ? cual : 0),
             // SE MIRA ANTES DE FIJAR. Fijar un nivel busca la SALIDA con ese nombre en el mapa, y
             // el mapa solo anota cuando se le pide: un elemento perfectamente visible —con su punto
             // gris encima— podía no estar registrado todavía, y la respuesta era «no lo veo en la
@@ -1181,8 +1388,12 @@ public sealed class SurfaceMapTools
             "map_learn_app" => LearnApp(A("app")),
             "map_run" => Run(A("steps")),
             "map_unsituated" => SinSituar(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
+            "map_silver" => CuantoEntiende(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
             "map_learn_back" => AprenderGestoAtras(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("exit")),
             "map_shot" => Foto(),
+            // DESPLAZAR ES ACCIONAR, no mirar: va con el resto de manos. Faltaba entero — el modelo
+            // contestaba «no puedo scrolear directamente» porque era verdad (2026-08-16).
+            "map_scroll" => Uia.Desplazamiento.Mover(Uia.Desplazamiento.Leer(A("direction"))),
             "map_set_kind" => Clasificar(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("exit"), A("kind")),
             "map_hierarchy" => Jerarquia(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? "")),
             "map_feedback" => Feedback(A("app").Length > 0 ? A("app") : SurfaceMap.AppDe(_where()?.Id ?? ""), A("finding")),
@@ -1196,7 +1407,24 @@ public sealed class SurfaceMapTools
             _ => $"herramienta de mapa no soportada: {tool}",
         };
 
-        LogBus.Log("mapa-mcp", "← " + (r.Length > 200 ? r[..200] + "…" : r).Replace("\n", " | "));
+        // CADA HERRAMIENTA CON SU RELOJ, Y AQUÍ PORQUE AQUÍ PASAN TODOS. El tiempo ya se medía en la
+        // voz —el «✓ … (817 ms)» del panel— pero solo ahí: la sonda de desarrollo y el bucle del
+        // agente llaman directo a este método, así que sus llamadas no se cronometraban y una
+        // medición hecha con la sonda salía vacía (2026-08-16, me pasó al intentar comprobarlo).
+        //
+        // Va al MISMO pulso donde ya viven «localizar», «leer la pantalla» y «proyectar», con el
+        // mismo trato —veces, media y LA PEOR—, porque compiten por los mismos milisegundos y dos
+        // tablas de tiempos obligarían a mirar en dos sitios para compararlos.
+        //
+        // El prefijo agrupa sin mezclar: lo que cuesta atender una orden no es lo que el mapeador
+        // hace por su cuenta, y confundirlos es la misma trampa que comparar Gmail con el explorador.
+        reloj.Stop();
+        // DÓNDE QUEDAMOS, para la próxima. Lo que el modelo sabe de la pantalla es lo que esta
+        // llamada le acaba de contar; comparar contra esto es comparar contra su último vistazo.
+        try { _dondeQuedamos = _where()?.Id ?? _dondeQuedamos; } catch { }
+        Mapeador.PulsoDelMapeador.Actual.Costo("voz: " + tool, reloj.ElapsedMilliseconds);
+        LogBus.Log("mapa-mcp", $"← ({reloj.ElapsedMilliseconds} ms) "
+            + (r.Length > 200 ? r[..200] + "…" : r).Replace("\n", " | "));
         return r;
     }
 
@@ -1274,13 +1502,33 @@ public sealed class SurfaceMapTools
         string interrupcion = DescribirInterrupcion();
         if (interrupcion.Length > 0) return interrupcion;
 
-        ObservarAqui(loc.Id);
+        // NO SE RELEE LA PANTALLA PARA CONTESTAR DÓNDE ESTÁS.
+        //
+        // Esto llamaba a `ObservarAqui`, que hace un `Read()` completo de UIA: 4 907 ms de media
+        // según el medidor. Y es trabajo REPETIDO — el mapeador relee la pantalla él solo cada 900
+        // ms, así que preguntar «¿dónde estoy?» disparaba otra vez lo que se acababa de hacer.
+        //
+        // El usuario lo vio como lo que es: dijo «hola, ¿me escuchas?» y Ü tardó cinco segundos en
+        // contestar, ocupada mirando dónde estaba (2026-08-16). Una pregunta que el sistema ya
+        // tiene contestada no puede costar cinco segundos: en una conversación, eso no es lentitud,
+        // es no estar.
+        //
+        // Se lee SOLO si el mapa no sabe nada de aquí, que es cuando la respuesta sería inútil.
+        // Y la frase no miente por esto: dice «el mapa conoce N salidas», que es exactamente lo que
+        // el mapa conoce. Para mirar de nuevo a propósito está `map_what_i_see`.
         var salidas = _map.ExitsFrom(loc.Id);
+        if (salidas.Count == 0)
+        {
+            ObservarAqui(loc.Id);
+            salidas = _map.ExitsFrom(loc.Id);
+        }
         int recorribles = salidas.Count(h => h.Info.Selector.Length > 0);
-        var sel = SeleccionActual();
+        // QUÉ HAY SELECCIONADO NO ES DÓNDE ESTOY, y preguntarlo cuesta: `SeleccionActual` recorre
+        // UIA buscando lo marcado y en una pantalla con cientos de elementos eso son cientos de
+        // milisegundos por cada «¿dónde estoy?». Vive en `map_what_i_see`, que es la herramienta de
+        // MIRAR; ésta es la de UBICARSE, y tiene que contestar como quien contesta un saludo.
         return $"Estás en «{loc.Id}». Desde aquí el mapa conoce {salidas.Count} salida(s), "
              + $"{recorribles} de ellas recorribles."
-             + (sel.Count > 0 ? $" Seleccionado ahora mismo: {string.Join(", ", sel.Select(s => $"«{s}»"))}." : "")
              + (DestinoDeAtras().Length > 0 ? $" «Atrás» llevaría a «{DestinoDeAtras()}»." : "");
     }
 
@@ -1756,6 +2004,78 @@ public sealed class SurfaceMapTools
     /// <summary>
     /// LO QUE EL MAPA NO SABE SITUAR: la lista de trabajo del arquitecto.
     ///
+    /// <summary>
+    /// CUÁNTO ENTIENDE EL SISTEMA POR SÍ SOLO, y qué le falta para entender más.
+    ///
+    /// Es la herramienta que sustituye a <see cref="SinSituar"/> como criterio de terminado, y la
+    /// diferencia entre las dos es la razón de ser de todo este trabajo: aquella cuenta lo
+    /// DECLARADO, así que se vacía escribiendo niveles y un agente puede cerrarla sin haber
+    /// entendido una pantalla más. Ésta mide lo DERIVADO —lo que el bronce sostiene con evidencia—
+    /// y solo sube de dos maneras honestas: cruzando puertas que nadie ha cruzado, o corrigiendo
+    /// una regla que se equivoca.
+    ///
+    /// Por eso lo que enumera no son «cosas a las que ponerles nivel» sino **puertas sin cruzar**:
+    /// el trabajo pendiente de verdad. Un agente que las abra sube la cobertura sin declarar nada.
+    /// </summary>
+    private string CuantoEntiende(string app)
+    {
+        if (app.Length == 0) return "falta `app`";
+        // Cualificado: este archivo importa el namespace entero y un método llamado «Plata» habría
+        // competido con el tipo. El nombre del método dice qué contesta, no de dónde sale.
+        var p = Navigation.Plata.DerivadaDe(_map, app);
+        var m = p.M;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"PLATA de «{app}» — lo que el sistema entiende SOLO, sin que nadie se lo diga:\n");
+        sb.AppendLine($"  cobertura {m.Cobertura:P0} ({m.SalidasConEvidencia} de {m.SalidasTotal} salidas con evidencia)");
+        sb.AppendLine($"  {m.PantallasSituadas} pantalla(s) situada(s) de {m.PantallasObservadas} observada(s)");
+        sb.AppendLine($"  {m.SinCruzar} salida(s) SIN CRUZAR");
+        sb.AppendLine($"  {m.Desacuerdos} desacuerdo(s) entre el cálculo y lo que alguien declaró");
+        if (m.DeclaradasSinEvidencia > 0)
+            sb.AppendLine($"  {m.DeclaradasSinEvidencia} declarada(s) SIN EVIDENCIA: alguien lo afirmó y el bronce no lo sostiene");
+        if (p.Raiz.Length == 0)
+            sb.AppendLine("  ⚠ sin raíz observada: nada tiene desde dónde contarse, y por eso no hay nada situado");
+
+        var sinCruzar = p.SalidasPorSelector.Values
+            .Where(s => s.Clase == Navigation.Plata.Clase.SinCruzar)
+            .OrderByDescending(s => s.EnCuantasPantallas)
+            .ThenBy(s => s.Etiqueta, StringComparer.OrdinalIgnoreCase)
+            .Take(20).ToList();
+        if (sinCruzar.Count > 0)
+        {
+            sb.AppendLine("\nSIN CRUZAR — esto es lo que sube la cobertura si lo abres:");
+            foreach (var s in sinCruzar)
+                sb.AppendLine($"  «{s.Etiqueta}» ({s.ControlType}) · vista en {s.EnCuantasPantallas} pantalla(s)");
+        }
+
+        if (p.Desacuerdos.Count > 0)
+        {
+            sb.AppendLine("\nDESACUERDOS — el cálculo y alguien dicen cosas distintas:");
+            foreach (var d in p.Desacuerdos.Take(15))
+                sb.AppendLine($"  «{d.Etiqueta}»: el cálculo dice {d.Derivado}, declarado {d.Declarado}"
+                    + (d.DeUnaPersona ? " POR UNA PERSONA (manda la persona: no lo toques)"
+                                      : " por un modelo (no manda: si el cálculo acierta, deja constancia)"));
+        }
+
+        var contenedores = p.Pantallas.Values.Where(x => x.EsContenedor).Take(8).ToList();
+        if (contenedores.Count > 0)
+        {
+            sb.AppendLine("\nCONTENEDORES detectados — pantallas con contenido, no con estructura:");
+            foreach (var c in contenedores)
+                sb.AppendLine($"  {c.Id} · ~{c.CuantosAprox} «{c.TipoDeContenido}»"
+                    + (c.Afordancias.Count > 0
+                        ? $" · se estrecha con: {string.Join(", ", c.Afordancias)}"
+                        : " · SIN afordancia conocida para estrecharlo"));
+        }
+
+        sb.AppendLine("\nTU CRITERIO DE TERMINADO: que la cobertura sea alta y los desacuerdos estén");
+        sb.AppendLine("explicados. Declarar niveles NO la sube — sube cruzar puertas y reportar dónde");
+        sb.AppendLine("el cálculo se equivoca. Si declaras algo que el bronce no sostiene, aparecerá");
+        sb.AppendLine("aquí como «declarada sin evidencia», que es lo contrario de haber avanzado.");
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Es la otra cara de <see cref="Jerarquia"/>. El dibujo fiel al mapa manda a una fila aparte
     /// todo lo que nadie ha situado, y ese número es la medida honesta de cuánto falta para que la
     /// estructura esté completa. Aquí se enumera, para poder atacarlo uno a uno en vez de mirar un
@@ -1812,8 +2132,19 @@ public sealed class SurfaceMapTools
                      StringComparer.Ordinal)
             .OrderByDescending(g => g.Count()).Take(40).ToList();
 
+        // ESTA LISTA YA NO ES LA META, Y TIENE QUE DECIRLO. Vaciarla es escribir niveles, y eso se
+        // puede hacer sin entender una pantalla más — el fallo que el propio arquitecto describió
+        // como «corrompe el juicio, no el dato». La medida de verdad es la cobertura derivada, así
+        // que viaja pegada a cada respuesta: dos herramientas que se leen juntas no pueden dar
+        // impresiones contrarias (2026-08-10, fase 4 del plan).
+        var derivada = Navigation.Plata.DerivadaDe(_map, app).M;
+        string laMedidaDeVerdad =
+            $"\nY LO QUE DE VERDAD MIDE EL AVANCE: cobertura derivada {derivada.Cobertura:P0} "
+            + $"({derivada.SalidasConEvidencia}/{derivada.SalidasTotal}), {derivada.SinCruzar} sin cruzar. "
+            + "Declarar niveles NO la sube; cruzar puertas, sí. Ver `map_silver`.";
+
         if (pantallas.Count == 0 && puertas.Count == 0)
-            return $"«{app}» está ENTERA situada: no queda nada sin nivel. Eso es la meta.";
+            return $"«{app}» no tiene nada sin declarar — pero eso no es la meta." + laMedidaDeVerdad;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"SIN SITUAR en «{app}» — esto es lo que falta para completar la estructura:\n");
@@ -1835,6 +2166,7 @@ public sealed class SurfaceMapTools
                 + (i.Nivel.Length > 0 ? $" · grupo: {i.Nivel}" : " · sin grupo")
                 + $" · vista en {g.Count()} pantalla(s)");
         }
+        sb.Append(laMedidaDeVerdad);
         return sb.ToString();
     }
 
@@ -2088,6 +2420,17 @@ public sealed class SurfaceMapTools
     private string GoTo(string destino)
     {
         if (destino.Length == 0) return "falta `surface`: a dónde hay que ir";
+
+        // LO QUE ESTE MAPA NO SABE ALCANZAR, AL NÚCLEO NUEVO. Va lo primero y no toca nada de lo de
+        // abajo: el camino `uia://` —la navegación del explorador por voz, que es rápida y funciona—
+        // se queda exactamente como estaba. Aquí solo se desvía lo que aquí nunca funcionó: una
+        // página web o una sesión de SAP, cuyo id no nombra un proceso y por eso `AsegurarFoco`
+        // fallaba siempre (2026-08-16).
+        if (PorElNucleo != null && !destino.StartsWith("uia://", StringComparison.OrdinalIgnoreCase))
+        {
+            LogBus.Log("mapa-mcp", $"«{destino}» no es una superficie de este mapa: lo lleva el núcleo nuevo");
+            return PorElNucleo(destino);
+        }
 
         // El destino dice a qué app pertenece la tarea: si el foco se ha ido, se recupera antes de
         // calcular nada. Planificar una ruta desde el centro de notificaciones no tiene sentido.
@@ -2432,7 +2775,9 @@ public sealed class SurfaceMapTools
             if (vistos.Count > 1)
                 return $"«{salida}» coincide con {vistos.Count} cosas que tengo a la vista: "
                      + string.Join("; ", vistos.Take(8).Select(v => $"«{v.Label}» [{Uia.Reconocedor.SelectorDe(v)}]"))
-                     + ". Repite `exit` con el selector de la que quieras.";
+                     + ". Repite `exit` con el selector de la que quieras. Y si vas a preguntarle a "
+                     + $"la persona cuál es, SEÑÁLASELAS: map_show con exit=«{salida}» y which=1, "
+                     + "luego which=2, mientras se lo dices.";
 
             if (vistos.Count == 0)
             {
@@ -2622,7 +2967,10 @@ public sealed class SurfaceMapTools
         if (candidatas.Count > 1)
             return $"«{salida}» coincide con {candidatas.Count} salidas: "
                  + string.Join("; ", candidatas.Select(h => $"«{h.Info.Label}» [{h.Info.Selector}]"))
-                 + ". Repite `exit` con el SELECTOR de la que quieras (o con su AutomationId).";
+                 + ". Repite `exit` con el SELECTOR de la que quieras (o con su AutomationId). "
+                 + "Y si le estás preguntando a la persona cuál quiere, SEÑÁLASELAS mientras se lo "
+                 + $"preguntas: map_show con exit=«{salida}» y which=1, luego which=2… Ver cuál es "
+                 + "cada una es más rápido que leerle dos selectores.";
 
         var elegida = candidatas[0];
         _ultimaApp = AppDe(actual.Id).Length > 0 ? AppDe(actual.Id) : _ultimaApp;

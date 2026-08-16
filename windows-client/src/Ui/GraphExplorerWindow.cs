@@ -76,13 +76,14 @@ public sealed class GraphExplorerWindow : Window
     private readonly Button _crawlBtn;
     private Button _carruselBtn = null!;
     private Button _limpiarBtn = null!;
+    private Button _nucleoBtn = null!;
     private Button _pasoBtn = null!;
     private Button _olvidarBtn = null!;
     private Button _clasicoBtn = null!;
     private CarruselDeApps? _carrusel;
 
     /// <summary>
-    /// Las cuatro formas de mirar el MISMO grafo. No son estilos: son etapas del sistema, y verlas
+    /// Las cinco formas de mirar el MISMO grafo. No son estilos: son etapas del sistema, y verlas
     /// una al lado de otra es la única manera de saber cuánto falta (2026-08-08, pedido por el
     /// usuario con el modelo bronce/plata/oro).
     /// </summary>
@@ -90,6 +91,10 @@ public sealed class GraphExplorerWindow : Window
     {
         /// <summary>Lo que el MAPA sabe: niveles declarados, y lo que no, en «sin situar».</summary>
         Plata,
+        /// <summary>Lo mismo, pero DERIVADO del bronce en vez de declarado encima: cada fila sale
+        /// de una evidencia contable. Es a donde se quiere llegar; convive con la declarada hasta
+        /// que le gane (2026-08-10). Ver <see cref="Navigation.Plata"/>.</summary>
+        PlataReal,
         /// <summary>Las cinco fuentes de siempre. La referencia contra la que se mide plata.</summary>
         Clasico,
         /// <summary>Lo observado en CRUDO: nodos y aristas por pura topología, sin jerarquía.</summary>
@@ -204,6 +209,18 @@ public sealed class GraphExplorerWindow : Window
     /// <summary>Para no repetir la misma línea de log en cada redibujo.</summary>
     private string _huellaDibujo = "";
     private CancellationTokenSource? _crawlCts;
+
+    /// <summary>
+    /// Quien cuenta en voz alta lo que el arquitecto va haciendo, si la voz en vivo está encendida.
+    ///
+    /// Lo pone la carita —que es quien tiene la voz— en vez de crearlo aquí: esta ventana no sabe
+    /// nada de Gemini ni debe, y darle su propia conexión sería un segundo camino a la misma voz.
+    /// Nulo cuando no hay voz, y entonces el mapeo va callado sin que falle nada.
+    /// </summary>
+    public Voice.NarradorDelArquitecto? Narrador { get; set; }
+
+    /// <summary>El puente al núcleo nuevo, para poder vaciarlo desde aquí.</summary>
+    public Navigation.MapaVivo? MapaVivo { get; set; }
 
     public GraphExplorerWindow(SurfaceMap map, Func<SurfaceLocator.SurfaceLocation?> where)
     {
@@ -422,6 +439,29 @@ public sealed class GraphExplorerWindow : Window
         };
         _limpiarBtn.Click += (_, __) => LimpiarGrafo();
 
+        // VACIAR EL NÚCLEO NUEVO, que es OTRA COSA que el grafo viejo y por eso tiene su propio
+        // botón. Comparten la escoba como idea —una prueba del grafo empieza siempre desde cero,
+        // porque un grafo con historia esconde justo lo que se quiere medir— pero son dos almacenes
+        // distintos, y un botón que vaciara los dos haría imposible probar uno con el otro puesto.
+        _nucleoBtn = new Button
+        {
+            Content = "◎",
+            Width = 26, Height = 26, FontSize = 12,
+            MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromArgb(0x33, 0x4C, 0x8D, 0xFF)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Vaciar el NÚCLEO (el grafo nuevo y lo que se ve de él en Neo4j)",
+        };
+        _nucleoBtn.Click += (_, __) =>
+        {
+            if (MapaVivo == null) { _status.Text = "el núcleo no está en marcha"; return; }
+            MapaVivo.Limpiar();
+            _status.Text = "núcleo vaciado: el grafo empieza de cero";
+        };
+
         // PARAR EN CADA PASO. El log cuenta lo que el sistema CREE que hizo; parar deja ver lo que
         // pasó de verdad en la pantalla, que es justo donde estaba el fallo de los puntos sin
         // refrescar (2026-08-06, pedido por el usuario).
@@ -461,7 +501,11 @@ public sealed class GraphExplorerWindow : Window
             Foreground = Brushes.White,
             BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand,
-            ToolTip = "Dibujo CLÁSICO (5 fuentes) vs. dibujo fiel al mapa · el mismo grafo, dos lecturas",
+            // El nombre viejo —«dibujo clásico»— describía dos vistas, y ahora son cinco: decía qué
+            // hacía el botón el día que nació, no lo que hace (2026-08-11, lo notó el usuario).
+            ToolTip = "Cambiar de VISTA sobre el mismo grafo · ⚖ plata declarada → ⚗ plata real "
+                    + "(derivada) → ◈ clásico (referencia) → ⛁ bronce (crudo) → ◌ oculto"
+                    + "\nMantener pulsado: llevarlo al otro monitor",
         };
         // PULSAR CICLA LAS VISTAS; MANTENER PULSADO SE LO LLEVA AL OTRO MONITOR. Dos gestos en un
         // botón porque son la misma pregunta —«qué quiero ver y dónde»— y porque el sitio donde
@@ -485,14 +529,15 @@ public sealed class GraphExplorerWindow : Window
         _clasicoBtn.Click += (_, __) =>
         {
             if (seLoLlevo) return;
-            _vista = (VistaGrafo)(((int)_vista + 1) % 4);
+            _vista = (VistaGrafo)(((int)_vista + 1) % 5);
             _clasicoBtn.Content = _vista switch
             {
-                VistaGrafo.Plata => "⚖", VistaGrafo.Clasico => "◈",
+                VistaGrafo.Plata => "⚖", VistaGrafo.PlataReal => "⚗", VistaGrafo.Clasico => "◈",
                 VistaGrafo.Bronce => "⛁", _ => "◌",
             };
             _clasicoBtn.Background = new SolidColorBrush(_vista switch
             {
+                VistaGrafo.PlataReal => Color.FromArgb(0x66, 0x4D, 0xB6, 0xAC),
                 VistaGrafo.Clasico => Color.FromArgb(0x66, 0xBA, 0x68, 0xC8),
                 VistaGrafo.Bronce => Color.FromArgb(0x66, 0xA1, 0x88, 0x7F),
                 VistaGrafo.Oculto => Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF),
@@ -501,6 +546,7 @@ public sealed class GraphExplorerWindow : Window
             _status.Text = _vista switch
             {
                 VistaGrafo.Plata => "PLATA: lo que el mapa sabe; lo que no, en «sin situar»",
+                VistaGrafo.PlataReal => "PLATA REAL: derivada del bronce, cada fila con su evidencia",
                 VistaGrafo.Clasico => "CLÁSICO: las cinco fuentes de siempre (referencia)",
                 VistaGrafo.Bronce => "BRONCE: lo observado en crudo, sin jerarquía ninguna",
                 _ => "grafo OCULTO: el arquitecto trabaja sin ruido visual",
@@ -539,6 +585,7 @@ public sealed class GraphExplorerWindow : Window
         };
 
         iconos.Children.Add(_limpiarBtn);
+        iconos.Children.Add(_nucleoBtn);
         iconos.Children.Add(_olvidarBtn);
         iconos.Children.Add(_pasoBtn);
 
@@ -872,6 +919,12 @@ public sealed class GraphExplorerWindow : Window
     private string _huellaEstructura = "";
     private string _huellaPuente = "";
     private readonly Dictionary<string, string> _porQueDeclarado = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>La última derivación de PLATA REAL, para que el rótulo pueda leer sus métricas sin
+    /// volver a pedirla. Quien la sirve —y quien decide cuándo se recalcula— es
+    /// <see cref="Navigation.Plata.DerivadaDe"/>.</summary>
+    private Navigation.Plata.PlataApp? _plata;
+    private string _huellaPlata = "";
 
     /// <summary>
     /// Lo último que se leyó de la pantalla, para poder señalar en la app real un nodo del grafo.
@@ -1893,8 +1946,19 @@ public sealed class GraphExplorerWindow : Window
     /// </summary>
     private async Task AuditarConArquitectoAsync(string app)
     {
+        // SE ELIGE ANTES DE MOVER NADA. Si se preguntara después de poner el modo prueba, cancelar
+        // dejaría la capa colocada y el grafo escondido por una corrida que nunca empezó.
+        string? modelo = await ElegirModeloAsync();
+        if (modelo == null) { _status.Text = "arquitecto: no se lanzó (sin modelo elegido)"; return; }
+
         _crawlBtn.Content = "⏹ Detener el arquitecto";
-        _status.Text = $"arquitecto: auditando «{app}»… no toques el ratón";
+        _status.Text = $"arquitecto: auditando «{app}» con {modelo}… no toques el ratón";
+
+        // QUE LO CUENTE MIENTRAS PASA. Sin esto la app se mueve sola durante minutos y quien mira
+        // no sabe por qué; con esto se oye a alguien entendiendo la app en voz alta. Va aquí y no
+        // dentro del arquitecto porque el arquitecto no sabe hablar: solo escribe en el log, y el
+        // narrador es quien lo escucha (2026-08-12, pedido por el usuario).
+        if (Narrador != null) await Narrador.EmpezarAsync(app);
 
         // MODO PRUEBA: la capa se pone donde ESTÁ LA APP y el grafo se esconde.
         //
@@ -1942,7 +2006,7 @@ public sealed class GraphExplorerWindow : Window
 
         try
         {
-            string r = await Navigation.Arquitecto.AuditarAsync(app, 40,
+            string r = await Navigation.Arquitecto.AuditarAsync(app, 40, modelo,
                 linea => Dispatcher.BeginInvoke(new Action(() => _status.Text = "🧠 " + linea)),
                 _crawlCts!.Token);
             _status.Text = r;
@@ -1961,6 +2025,10 @@ public sealed class GraphExplorerWindow : Window
         finally
         {
             latido.Stop();
+            // Se deja de narrar pase lo que pase —también si la auditoría revienta o se detiene—:
+            // un narrador que sigue enganchado al log después de terminar contaría los pasos de la
+            // siguiente cosa que pase por ahí como si fueran de esta.
+            if (Narrador != null) await Narrador.PararAsync();
             // El modo prueba era un préstamo: se devuelve la vista que había, y con ella el grafo.
             // Terminada la auditoría, lo primero que hace falta es MIRAR lo que hizo.
             _vista = vistaAntes == VistaGrafo.Oculto ? VistaGrafo.Plata : vistaAntes;
@@ -2120,6 +2188,74 @@ public sealed class GraphExplorerWindow : Window
             BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1), Child = col,
         };
+        v.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; v.Close(); } };
+        v.Closed += (_, __) => tcs.TrySetResult(tcs.Task.IsCompleted ? tcs.Task.Result : null);
+        v.Show();
+        v.Activate();
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// CON QUÉ MODELO PIENSA EL ARQUITECTO, elegido cada vez que se lanza.
+    /// </summary>
+    /// <remarks>
+    /// Se pregunta AQUÍ y no en el propio agente aunque él tenga consola, y la razón es que esa
+    /// consola no es suya: la abre la app con AllocConsole y la salida del agente le llega por una
+    /// tubería, así que su <c>stdin</c> no está conectado a la ventana que ves. Preguntar desde
+    /// Node salía sin preguntar —<c>isTTY</c> falso— y arrancaba con el de por defecto, que es
+    /// justo lo que pasó la primera vez que se probó (2026-08-11).
+    ///
+    /// Y se pregunta SIEMPRE, sin recordar la última: sus conclusiones dependen del modelo tanto
+    /// como del código, y una elección heredada en silencio es la forma de comparar dos auditorías
+    /// creyendo que las escribió el mismo.
+    /// </remarks>
+    private Task<string?> ElegirModeloAsync()
+    {
+        var tcs = new TaskCompletionSource<string?>();
+        var v = new Window
+        {
+            WindowStyle = WindowStyle.None, AllowsTransparency = true,
+            Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+        };
+        var col = new StackPanel { MinWidth = 380 };
+        col.Children.Add(new TextBlock
+        {
+            Text = "¿Con qué modelo piensa el arquitecto?", Foreground = Brushes.White,
+            FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4),
+        });
+        col.Children.Add(new TextBlock
+        {
+            Text = "Sus conclusiones dependen del modelo tanto como del código.",
+            Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
+            FontSize = 11, Margin = new Thickness(0, 0, 0, 12), TextWrapping = TextWrapping.Wrap,
+        });
+
+        foreach (var (id, etiqueta, color) in new[]
+        {
+            ("claude-opus-5", "Opus 5   —   el más capaz, el más caro", Color.FromArgb(0x55, 0xAB, 0x47, 0xBC)),
+            ("claude-sonnet-5", "Sonnet 5   —   el equilibrado", Color.FromArgb(0x55, 0x66, 0xBB, 0x6A)),
+            ("claude-haiku-4-5-20251001", "Haiku 4.5   —   el más rápido y barato", Color.FromArgb(0x55, 0x42, 0xA5, 0xF5)),
+        })
+        {
+            var b = Boton(etiqueta, color);
+            b.HorizontalAlignment = HorizontalAlignment.Stretch;
+            b.MinWidth = 340;
+            b.Margin = new Thickness(0, 0, 0, 6);
+            b.Click += (_, __) => { tcs.TrySetResult(id); v.Close(); };
+            col.Children.Add(b);
+        }
+
+        v.Content = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x18, 0x18, 0x1C)),
+            CornerRadius = new CornerRadius(14), Padding = new Thickness(18),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1), Child = col,
+        };
+        // Escape es «déjalo», no «el de por defecto»: null cancela la corrida entera. Arrancar una
+        // auditoría de cuarenta turnos porque alguien cerró un diálogo sería cobrarle un descuido.
         v.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; v.Close(); } };
         v.Closed += (_, __) => tcs.TrySetResult(tcs.Task.IsCompleted ? tcs.Task.Result : null);
         v.Show();
@@ -2544,6 +2680,13 @@ public sealed class GraphExplorerWindow : Window
             prof = ProfundidadClasica.Calcular(_map, appActual, raiz, centro, pisados, traza,
                 NivelDe, declarados, _porQueDeclarado, ref _huellaPuente);
             _profDeclarada = declarados;
+            // EL RÓTULO TAMBIÉN AQUÍ, porque esta rama se va sin pasar por el final. Sin esto el
+            // título se quedaba con el de la vista ANTERIOR —«PLATA REAL», que es la que precede a
+            // CLÁSICO en el ciclo—, así que el botón mostraba el dibujo clásico bajo un letrero que
+            // prometía otra cosa, y el ciclo parecía tener dos «plata real» seguidas (2026-08-11,
+            // observado por el usuario). Un dibujo que dice ser otro es exactamente lo que este
+            // trabajo persigue.
+            RotularVista(appActual, 0);
             DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, 0);
             return;
         }
@@ -2580,16 +2723,59 @@ public sealed class GraphExplorerWindow : Window
         foreach (var n in todos)
             if (!prof.ContainsKey(n)) { prof[n] = filaSinSituar; sinSituar++; }
 
+        // PLATA REAL: la estructura DERIVADA del bronce, no la declarada encima de él.
+        //
+        // Se dibuja aparte y no sustituye a nada todavía, por la misma razón por la que existe el
+        // modo clásico: sin las dos a la vista sobre el mismo grafo no hay forma de saber si el
+        // cálculo gana o pierde contra lo que un humano escribió a mano. Cuando gane, esta pasa a
+        // ser LA plata y la declarada se queda como override (2026-08-10, pedido por el usuario:
+        // «que tome todo lo crudo en bronce y haga una transformación real»).
+        //
+        // Se deriva una vez por versión del mapa y no por cuadro: el pintor repinta seguido y esto
+        // recorre las aristas varias veces. Es la lección nº8 —el costo por iteración antes que la
+        // cadencia— aplicada de entrada en vez de después de la cacería.
+        if (_vista == VistaGrafo.PlataReal)
+        {
+            // La derivación se pide, no se guarda: `DerivadaDe` ya la sirve una vez por versión del
+            // mapa. Aquí había una segunda caché con la misma llave, y dos cachés del mismo hecho
+            // acaban contestando cosas distintas — es el mismo error que este trabajo persigue, en
+            // pequeño. El registro en el log sí es de aquí: solo cuando el resumen cambia.
+            var plata = Navigation.Plata.DerivadaDe(_map, appActual);
+            _plata = plata;
+            string huella = Navigation.Plata.Resumen(plata);
+            if (huella != _huellaPlata) { _huellaPlata = huella; Navigation.Plata.Registrar(plata); }
+
+            prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
+            _profDeclarada.Clear();
+            _porQueDeclarado.Clear();
+            foreach (var (id, pp) in plata.Pantallas)
+            {
+                if (pp.Profundidad < 0) continue;
+                prof[id] = Math.Max(suelo, pp.Profundidad);
+                _profDeclarada[id] = pp.Profundidad;
+                // El PORQUÉ viaja hasta el log de estructura: aquí es donde se ve la diferencia
+                // entre «alguien lo escribió» y «visto en 9 de 11 pantallas».
+                _porQueDeclarado[id] = $"{pp.Porque.Regla}: {pp.Porque.Evidencia}";
+            }
+            sinSituar = 0;
+            foreach (var n in todos)
+                if (!prof.ContainsKey(n)) { prof[n] = filaSinSituar; sinSituar++; }
+        }
+
         // BRONCE: lo observado, sin jerarquía. La fila es la DISTANCIA en saltos desde la raíz y
         // nada más — ni niveles, ni cromo, ni declaraciones. Es lo que el sistema tiene antes de
         // que nadie ordene nada, y verlo aparte es lo que permite decir qué añadió plata.
+        //
+        // AHORA SE LEE, NO SE CALCULA AQUÍ. Este bloque se construía su propio bronce con un
+        // recorrido por anchura, así que la etapa de partida del pipeline significaba una cosa para
+        // el dibujo y otra para el derivador — y con dos definiciones de dónde se empieza no se
+        // puede decir qué añadió la etapa siguiente. La distancia sale de `Bronce.De`, que es el
+        // único sitio donde vive (2026-08-10, fase 1 del plan).
         if (_vista == VistaGrafo.Bronce)
         {
+            var bronce = Navigation.Bronce.De(_map, appActual);
             prof = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [raiz] = 0 };
-            for (int pasada = 0; pasada < 10; pasada++)
-                foreach (var (f, t) in aristasMapa)
-                    if (prof.TryGetValue(f, out int d) && (!prof.TryGetValue(t, out int dt) || dt > d + 1))
-                        prof[t] = d + 1;
+            foreach (var (id, d) in bronce.Distancias) prof[id] = d;
             sinSituar = 0;
             foreach (var n in todos)
                 if (!prof.ContainsKey(n)) { prof[n] = 1; sinSituar++; }
@@ -2597,13 +2783,39 @@ public sealed class GraphExplorerWindow : Window
             _porQueDeclarado.Clear();
         }
 
-        // EL RÓTULO DICE QUÉ SE ESTÁ MIRANDO, siempre. Y en plata, además, cuánto falta: el número
-        // de «sin situar» es la medida de avance, y tenerlo en pantalla evita ir al log para saber
-        // si una prueba mejoró o empeoró.
+        RotularVista(appActual, sinSituar);
+
+        DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, sinSituar);
+    }
+
+    /// <summary>
+    /// EL RÓTULO DICE QUÉ SE ESTÁ MIRANDO, siempre. Y en plata, además, cuánto falta: el número de
+    /// «sin situar» es la medida de avance, y tenerlo en pantalla evita ir al log para saber si una
+    /// prueba mejoró o empeoró.
+    /// </summary>
+    /// <remarks>
+    /// EN UN SITIO, no en cada rama que dibuja. Vivía al final de <c>DibujarGrafo</c>, y la rama
+    /// del modo clásico se va antes con un <c>return</c>: el título se quedaba con el de la vista
+    /// anterior. Copiarlo en las dos habría arreglado el síntoma y dejado dos definiciones de lo
+    /// mismo, que es como vuelven estos fallos.
+    /// </remarks>
+    private void RotularVista(string appActual, int sinSituar)
+    {
         _rotuloVista.Text = _vista switch
         {
             VistaGrafo.Plata => $"PLATA · {appActual} · {_profDeclarada.Count} situada(s)"
                               + (sinSituar > 0 ? $" · {sinSituar} SIN SITUAR" : " · completo"),
+            // La medida de PLATA REAL no es cuántas hay declaradas —esa sube escribiendo— sino
+            // cuánto explica la derivación y en qué discrepa de lo que alguien afirmó.
+            VistaGrafo.PlataReal when _plata is { } pl =>
+                $"PLATA REAL · {appActual} · cobertura {pl.M.Cobertura:P0} · "
+                + $"{pl.M.SinCruzar} sin cruzar · {pl.M.Desacuerdos} desacuerdo(s)"
+                + (pl.M.DeclaradasSinEvidencia > 0
+                    ? $" · {pl.M.DeclaradasSinEvidencia} declarada(s) SIN EVIDENCIA" : ""),
+            // SIN el `when`, esta rama también cubre el caso de que la derivación aún no se haya
+            // pedido: antes caía al `_ => ""` y la vista se quedaba MUDA, que desde fuera es
+            // indistinguible de un título pegado.
+            VistaGrafo.PlataReal => $"PLATA REAL · {appActual} · (derivando…)",
             VistaGrafo.Clasico => $"CLÁSICO (referencia) · {appActual}",
             VistaGrafo.Bronce => $"BRONCE · {appActual} · lo observado en crudo, sin jerarquía",
             _ => "",
@@ -2612,11 +2824,10 @@ public sealed class GraphExplorerWindow : Window
         {
             VistaGrafo.Plata => sinSituar > 0
                 ? Color.FromArgb(0xEE, 0xFF, 0xC1, 0x07) : Color.FromArgb(0xEE, 0x81, 0xC7, 0x84),
+            VistaGrafo.PlataReal => Color.FromArgb(0xEE, 0x4D, 0xB6, 0xAC),
             VistaGrafo.Clasico => Color.FromArgb(0xEE, 0xBA, 0x68, 0xC8),
             _ => Color.FromArgb(0xEE, 0xC8, 0xA6, 0x7F),
         });
-
-        DibujarConProfundidad(prof, raiz, centro, appActual, traza, pisados, sinSituar);
     }
 
     /// <summary>

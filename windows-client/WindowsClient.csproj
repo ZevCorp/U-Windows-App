@@ -9,7 +9,14 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- 10.0.19041.0 y no «net8.0-windows» a secas: las proyecciones de WinRT
+         (Windows.Devices.Bluetooth) solo existen con la version de Windows en el TFM, y sin ellas no
+         se puede hablar por BLE con el collar Omi (spec 001, fase 1). No cambia el runtime minimo ni
+         obliga a Windows 10 2004 para EJECUTAR: es la version del SDK contra la que se COMPILA.
+         Medido el 2026-08-13: con este TFM el contrato del grafo sigue dando 20/20, que era el
+         riesgo real — ese contrato referencia U.dll por binario y un juez que no compila no dice
+         «no se», dice «culpable» (aprendizaje n.17). -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -29,7 +36,41 @@
     <!-- ScreenRecorderLib requiere plataforma especÃ­fica, no AnyCPU. Platform es propiedad MSBuild
          (distinta de RuntimeIdentifier de .NET 5+). -->
     <Platform>x64</Platform>
+
+    <!-- Key de Gemini embebida SOLO en builds de DISTRIBUCIÓN. MISMO patrón que GraphDefaultApiKey
+         en GraphWorkflows.csproj: el CI la inyecta desde un secreto, VACÍA por defecto → los builds
+         del repo no llevan ninguna key. Con ella, la voz en vivo funciona en el Setup.exe distribuido
+         sin que el usuario final teclee nada; sigue siendo sobreescribible por GEMINI_API_KEY en la
+         máquina (ver GeminiLive.Clave), que es lo que ya usa quien desarrolla.
+
+         DECISIÓN CONSCIENTE, no la ideal: el comentario de GeminiLive.Clave dice que en producción
+         debería EMITIRLA el backend por sesión —como ya hace DictadoSoniox con Soniox—, porque una
+         key de Gemini es de alcance completo y esto la reparte IDÉNTICA en cada copia distribuida:
+         si se filtra o se agota el saldo, afecta a todas las instalaciones a la vez (2026-08-14, el
+         propio usuario se quedó sin saldo en la key de desarrollo ese mismo día). Se elige este
+         camino por velocidad, sabiendo el cambio pendiente. -->
+    <GeminiDefaultApiKey Condition="'$(GeminiDefaultApiKey)' == ''"></GeminiDefaultApiKey>
+
+    <!-- Token de SOLO LECTURA con el que la carita mira si hay versión nueva. El feed pasó a vivir
+         en las releases de este repo, que es privado, así que hace falta identificarse para leerlo.
+         Ver src/Update/Updater.cs.
+
+         POR QUÉ AQUÍ Y NO EN SUPABASE, que era lo de antes: el plan gratuito de Supabase corta las
+         subidas en 50 MB —tope GLOBAL, manda sobre el ajuste del bucket— y el paquete pesa 80. No
+         hay método de subida que lo salve; ni en una petición, ni en partes. GitHub admite 2 GB por
+         archivo y no cuesta nada (2026-08-16).
+
+         Que sea de solo lectura es lo que hace aceptable repartirlo: con él no se puede publicar,
+         ni borrar, ni leer código — solo bajarse lo que ya se distribuye a esas mismas personas.
+         Aun así vale lo mismo que se dijo de la key de Gemini: va IDÉNTICO en cada copia, así que
+         retirarlo obliga a rotarlo para todos a la vez. -->
+    <UpdateGithubToken Condition="'$(UpdateGithubToken)' == ''"></UpdateGithubToken>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="GeminiDefaultApiKey" Value="$(GeminiDefaultApiKey)" />
+    <AssemblyMetadata Include="UpdateGithubToken" Value="$(UpdateGithubToken)" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Ver StartupObject arriba: App.xaml se compila como Page para que el SDK no genere un Main que
@@ -62,6 +103,10 @@
   <ItemGroup>
     <!-- TTS/STT integrados de Windows (paquete NuGet en .NET moderno). -->
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <!-- Opus en C# PURO, sin DLL nativa: el collar Omi entrega Opus y hay que decodificarlo. Se
+         eligió sobre los binding de libopus justamente por eso — una dependencia nativa más en el
+         instalador de Velopack es una forma nueva de que la app no arranque en una máquina limpia. -->
+    <PackageReference Include="Concentus" Version="2.2.2" />
     <PackageReference Include="System.Speech" Version="8.0.0" />
     <!-- Captura de pantalla (GDI) para computer-use. -->
     <PackageReference Include="System.Drawing.Common" Version="8.0.7" />
@@ -76,6 +121,23 @@
          publicada tal cual, asÃ­ que convive con ScreenRecorderLib (ensamblado mixto C++/CLI) sin
          necesitar PublishSingleFile, que es justo lo que este proyecto no puede usar. -->
     <PackageReference Include="Velopack" Version="1.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- EL NÚCLEO. La dependencia va en UNA dirección y no se invierte nunca: el cliente conoce al
+         grafo, el grafo no conoce al cliente. Ver nucleo/Grafo/Grafo.csproj. -->
+    <ProjectReference Include="..\nucleo\Grafo\Grafo.csproj" />
+
+    <!-- LO QUE EL MAPEADOR SABE DE SÍ MISMO. Va fuera del cliente por la misma razón que el grafo:
+         para poder juzgarlo sin abrir una ventana. Mientras el candado de reentrada vivió aquí
+         dentro como dos `Interlocked` sueltos, el invariante no se podía nombrar en una promesa ni
+         probar sin levantar la app entera — y se rompió en silencio (2026-08-12). -->
+    <ProjectReference Include="..\mapeador\Pulso\Pulso.csproj" />
+
+    <!-- LO QUE SE SABE DEL COLLAR sin saber de Bluetooth: códec, cabecera, reposición del silencio.
+         Fuera del cliente por la misma razón que los dos de arriba — un net8.0 puro se juzga en la
+         nube en cada PR; esto, con WinRT dentro, no. Ver voz\Contrato y la spec 001. -->
+    <ProjectReference Include="..\voz\Omi\Omi.csproj" />
   </ItemGroup>
 
 </Project>

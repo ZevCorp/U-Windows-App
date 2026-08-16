@@ -158,7 +158,9 @@ cd windows-client
 dotnet build -c Release
 ```
 
-Ejecutar `bin\x64\Release\net8.0-windows\U.exe`. **No usar `dotnet run`** para sesiones largas: el
+Ejecutar `bin\x64\Release\net8.0-windows10.0.19041.0\U.exe` — la carpeta lleva la versión del SDK
+desde el 2026-08-13, cuando el TFM subió para poder hablar por BLE con el collar Omi (spec 001).
+**No usar `dotnet run`** para sesiones largas: el
 wrapper sale con 255 cuando se cierra la ventana y confunde el diagnóstico.
 
 Si el build falla con `MSB3027 / U.exe está bloqueado`, hay una instancia corriendo:

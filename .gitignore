@@ -26,3 +26,9 @@ graphify-out/20*/
 
 # Temporales que deja el compilador de WPF al construir
 *_wpftmp.csproj
+
+# puente-omi: entorno virtual de Python (85 MB) y drivers de terceros (VB-Cable).
+# El codigo propio del puente (puente.py, arrancar.bat) SI se versiona; lo demas se
+# reinstala con pip y con el instalador de VB-Cable, y no tiene por que viajar en el repo.
+puente-omi/.venv/
+puente-omi/vbcable-installer/

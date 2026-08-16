@@ -1,4 +1,4 @@
-# CI LOCAL: reproduce los escenarios grabados contra una version del nucleo, en un entorno limpio.
+﻿# CI LOCAL: reproduce los escenarios grabados contra una version del nucleo, en un entorno limpio.
 #
 #   .\scripts\ci-local.ps1              # contra la version en edicion
 #   .\scripts\ci-local.ps1 -Version 0   # contra la v0 (la original): ¿lo nuevo rompio lo viejo?

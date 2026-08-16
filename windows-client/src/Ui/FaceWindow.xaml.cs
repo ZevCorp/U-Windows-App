@@ -34,6 +34,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>La conversación en vivo, si el mapa está disponible. Ver <see cref="GeminiLive"/>.</summary>
     private GeminiLive? _vivo;
 
+    /// <summary>El mapa vivo publicado en Neo4j. Ver <see cref="Navigation.MapaVivo"/>.</summary>
+    private Navigation.MapaVivo? _mapaVivo;
+
+    /// <summary>La ventanita por la que se le puede pedir al núcleo que nos lleve a un sitio.</summary>
+    private Navigation.ServidorDelNucleo? _servidorNucleo;
+
     /// <summary>Hay una frase escribiéndose: los trozos que lleguen la actualizan, no la repiten.</summary>
     private bool _turnoAbierto;
     private readonly VideoLibrary _videoLibrary = new();
@@ -232,6 +238,99 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // ubicación, la verificación de llegadas y los vetos — y duplicar una protección es la
             // forma más segura de que una de las dos copias se quede atrás.
             _vivo = new GeminiLive(mcp.Map);
+            // «Cállate», «ocúltate», «ciérrate»: van al chrome de la ventana, no al mapa de
+            // pantallas — por eso se resuelven aquí y no dentro de SurfaceMapTools.
+            _vivo.Autocontrol = AtenderAutocontrol;
+
+            // EL MAPA VIVO: el nodo donde estás rodeado de lo alcanzable, publicado en Neo4j para
+            // poder mirarlo mientras ocurre. Lee las MISMAS fuentes que todo lo demás —el mapa y la
+            // pantalla— y no el dibujo: un visor que leyera al pintor heredaría sus mentiras, que
+            // es justo lo que este visor existe para detectar (2026-08-12, pedido por el usuario).
+            _mapaVivo = new Navigation.MapaVivo(
+                // `Id` y NO `Origin`: Origin es solo la app —«uia://Maqueta.exe»— así que TODAS las
+                // pantallas de una app colapsaban en un único nodo y navegar por dentro no movía
+                // nada. La ubicación es la pantalla, que es justo lo que el núcleo llama nodo
+                // (2026-08-12, lo vio el usuario al probar la Maqueta).
+                () => _locator?.DondeEstoy()?.Id ?? "",
+                () =>
+                {
+                    var lector = new Uia.UiaReader();
+                    lector.Read();
+                    return lector.Elements
+                        .Select(e => (Uia.Reconocedor.SelectorDe(e), e.Label, e.ControlType))
+                        .Where(t => t.Item1.Length > 0 && t.Label.Length > 0)
+                        .ToList();
+                });
+            // El mismo vigilante de clics que ya usa el mapa viejo: sin él, el núcleo aprende dónde
+            // está y qué ve, pero nunca QUÉ LE TRAJO — y sin eso el grafo no se arma, se queda en
+            // islas sueltas sin caminos entre ellas.
+            _mapaVivo.Clics = _clickWatcher;
+
+            // LAS MANOS. El núcleo decide qué pulsar; pulsarlo es del mapeador, y se hace con el
+            // mismo UiaSurface que ya usa todo lo demás — no hay un segundo camino de accionar.
+            _mapaVivo.Pulsar = (selector, etiqueta) =>
+            {
+                try
+                {
+                    var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
+                    return superficie.Execute(new U.Graph.PlanStep
+                    {
+                        StepOrder = 1, ActionType = "click", Selector = selector, Label = etiqueta,
+                    }, out _);
+                }
+                catch (Exception e)
+                {
+                    LogBus.Log("nucleo-http", $"no pude pulsar «{etiqueta}»: {e.Message}");
+                    return false;
+                }
+            };
+            _mapaVivo.Arrancar();
+
+            // LA VENTANITA DEL NÚCLEO, para que el visor pueda pedirle que nos lleve a un sitio sin
+            // que nadie toque el núcleo ni el explorador viejo.
+            // ESCRIBIR Y ELEGIR, con las MISMAS manos que ya pulsan. No hay un segundo camino de
+            // accionar: `UiaSurface.Execute` sabe `input` (ValuePattern.SetValue) y `select`
+            // (SelectionItemPattern sobre la opción por su nombre) desde antes que nosotros, y
+            // reescribirlo aquí sería tener dos formas de tocar la pantalla que se desincronizarían.
+            //
+            // Lo único que cambia respecto a pulsar es el verbo. La identidad, el foco y la
+            // verificación de que el elemento está vivo son las de siempre.
+            Func<string, string, string, bool> accionar = (accion, selector, dato) =>
+            {
+                try
+                {
+                    var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
+                    return superficie.Execute(new U.Graph.PlanStep
+                    {
+                        StepOrder = 1, ActionType = accion, Selector = selector,
+                        Value = dato, SelectedValue = accion == "select" ? dato : null,
+                    }, out _);
+                }
+                catch (Exception e)
+                {
+                    LogBus.Log("nucleo-http", $"no pude {accion} «{dato}»: {e.Message}");
+                    return false;
+                }
+            };
+
+            // LA VOZ EMPIEZA A USAR EL NÚCLEO NUEVO. Solo para lo que el mapa viejo nunca supo
+            // alcanzar —web y SAP—: el camino del explorador por voz es rápido y funciona, y se
+            // queda entero donde está. `PasoDelNucleo` es la MISMA pieza que usan el visor y la
+            // ventanita HTTP, así que las tres puertas contestan lo mismo (2026-08-16).
+            mcp.Map.PorElNucleo = destino => new Navigation.PasoDelNucleo(
+                _mapaVivo!.Nucleo,
+                () => _locator?.DondeEstoy()?.Id ?? "",
+                (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
+                superficie => Uia.AppAligner.PonerDelante(superficie)).Hasta(destino);
+
+            _servidorNucleo = new Navigation.ServidorDelNucleo(
+                _mapaVivo.Nucleo,
+                () => _locator?.DondeEstoy()?.Id ?? "",
+                (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
+                superficie => Uia.AppAligner.PonerDelante(superficie),
+                (sel, texto) => accionar("input", sel, texto),
+                (sel, opcion) => accionar("select", sel, opcion));
+            _servidorNucleo.Arrancar();
 
             // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.
             // Hace falta porque este WebSocket va DIRECTO a Google: Graph no ve la
@@ -269,6 +368,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // La maquinaria va a su propio panel y NO a la burbuja: la burbuja reemplaza, así que un
             // «abriendo Descargas…» borraba la última frase de la conversación, y además solo dejaba
             // ver el último paso. En el panel se acumulan y se ve la secuencia entera.
+            // LA CONVERSACIÓN, EN EL MISMO PANEL QUE LA MAQUINARIA. Para saber si te entendió había
+            // que mirar a dos sitios —la burbuja y este panel— y la burbuja REEMPLAZA, así que lo
+            // que dijiste hace dos frases ya no estaba. Cuando algo no funciona, la primera pregunta
+            // es «¿me oyó bien?» (2026-08-16, pedido por el usuario).
+            _vivo.Transcribe += (texto, esDeU) => Dispatcher.BeginInvoke(() =>
+            {
+                _acciones ??= new PanelDeAcciones();
+                _acciones.Habla(texto, esDeU);
+            });
+            _vivo.TurnoCerrado += () => Dispatcher.BeginInvoke(() => _acciones?.CierraTurno());
             _vivo.Accion += (texto, listo) => Dispatcher.BeginInvoke(() =>
             {
                 _acciones ??= new PanelDeAcciones();
@@ -284,7 +393,22 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // quedaba dibujado y sin nadie que lo moviera (2026-08-05).
                 ActualizarBoca();
                 PintarBotonVoz();
+
+                // Al COLGAR vuelve a su reposo. Sin esto la pastilla se quedaba encendida para
+                // siempre: quien la enciende es la conversación, y quien la apagaba era apartar el
+                // ratón — que con el botón del collar no ocurre nunca.
+                if (!viva && !ZonaVoz.IsMouseOver && !CollapsedFace.IsMouseOver)
+                {
+                    CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: false);
+                    EsconderBotonVoz();
+                }
             });
+            // La pastilla repinta AL MOMENTO en que cambia el origen, y no sólo cuando Ü habla: el
+            // temporizador de la boca vive únicamente mientras Ü está hablando, así que encender la
+            // voz con el botón del collar se quedaba pintado en gris para siempre si Ü no llegaba a
+            // decir palabra (2026-08-14, visto por el usuario con el audio ya entrando por el collar).
+            _vivo.FuenteCambio += () => Dispatcher.BeginInvoke(PintarBotonVoz);
+
             Closed += (_, __) => _vivo?.Dispose();
         }
         // Sonda de desarrollo: permite invocar las MISMAS herramientas MCP desde fuera para
@@ -298,9 +422,38 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // subconsciente + logs) al backend. No-op si el usuario no dio su correo.
         InitTelemetry();
         Closed += (_, __) => TelemetryBus.Shutdown();
+        // La primera vez, que se presente ella. No hace nada en los arranques siguientes.
+        OfrecerElPrimerEncuentro();
         // La superficie actual viaja en cada turno (scoping de workflows) y las llamadas
         // workflow_* del cerebro se ejecutan con el WorkflowPlayer (subconsciente).
         _workflowRunner = new WorkflowMcpRunner(_graphConfig, this);
+
+        // EL DICTADO CLÍNICO. Se arma aquí porque necesita la configuración de Graph —la clave con
+        // la que se pide la sesión de Soniox y se llama al emparejador— y la superficie de SAP.
+        // Nace apagado: hasta que no se pulsa el fonendoscopio no abre micrófono ni toca nada.
+        _rellenador = new RellenadorSap(_graphConfig, _clinicalSap);
+        _dictadoClinico = new DictadoSoniox(_graphConfig, _audioDictado);
+        _dictadoClinico.Frase += f => _rellenador.Oido(f);
+        // Lo provisional se pinta pero NO se actúa: son palabras que Soniox aún puede corregir.
+        _dictadoClinico.Parcial += t => Dispatcher.Invoke(() => SetStatus("🩺 " + Recorte(t, 90)));
+        _dictadoClinico.Fallo += m => Dispatcher.Invoke(() => SetStatus("Dictado: " + m));
+        _dictadoClinico.Cambio += viva => Dispatcher.Invoke(() =>
+        {
+            PintarDictado(viva);
+            if (viva) { _rellenador.Empezar(); SetStatus("🩺 Escuchando… dicta y los campos se van llenando."); }
+            else SetStatus("Dictado terminado.");
+        });
+        _rellenador.Cuenta += m => Dispatcher.Invoke(() => SetStatus("🩺 " + m));
+
+        // EL EJECUTOR DE EXPORTACIONES. Pregunta al backend si el médico pulsó «Exportar a HC» y,
+        // cuando lo hizo, navega y llena la historia clínica. Va encendido desde el arranque y sin
+        // botón: el operador no tiene que acordarse de activarlo para que su compañero pueda
+        // exportar desde la web. Sin trabajo no hace nada más que una petición cada tres segundos.
+        _exportador = new EjecutorDeExportaciones(_graphConfig, _rellenador,
+            () => _locator?.DondeEstoy()?.Id ?? "", Dispatcher);
+        _exportador.Cuenta += m => Dispatcher.Invoke(() => { SetStatus(m); ShowTalk(); });
+        _exportador.Arrancar();
+        Closed += (_, __) => _exportador?.Dispose();
         // La superficie se PREGUNTA, igual que en el camino del mapa. Aquí se quedó el valor
         // cacheado —que se refresca cada 800 ms— porque este código es anterior a que existiera
         // Ahora(), y nadie volvió a mirarlo: el consciente decidía su siguiente paso sobre dónde
@@ -422,6 +575,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             OsVersion = Environment.OSVersion.VersionString
         };
         TelemetryBus.Init(_backend, identity);
+        // Después de Init y no antes: el espejo escribe una línea al encenderse, y sin cliente
+        // levantado esa primera línea se perdería y no se sabría si quedó reflejando o no.
+        Telemetry.EspejoDelLog.Encender();
     }
 
     // --- Auto-actualización ---
@@ -448,6 +604,38 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         SetStatus("Actualizando Ü…");
         _updater?.ApplyAndRestart(); // no retorna: reinicia el proceso
+    }
+
+    /// <summary>
+    /// «Buscar actualizaciones» pulsado a mano. SIEMPRE contesta algo — incluso «ya estás al día».
+    /// </summary>
+    /// <remarks>
+    /// Un botón que no responde se pulsa tres veces. El sondeo automático puede permitirse el
+    /// silencio porque nadie lo está mirando; éste no: alguien acaba de pulsarlo y está esperando.
+    /// Por eso cada rama de <see cref="Updater.Busqueda"/> tiene su frase, incluida la de «esta
+    /// copia no se instaló con el instalador», que es la que explica por qué en desarrollo no pasa
+    /// nada por más que se insista.
+    /// </remarks>
+    private async void OnCheckUpdate(object sender, RoutedEventArgs e)
+    {
+        if (_updater == null) { SetStatus("El actualizador no está disponible."); ShowTalk(); return; }
+
+        CheckUpdateBtn.IsEnabled = false;
+        SetStatus("Buscando actualizaciones…");
+        ShowTalk();
+        try
+        {
+            var (que, detalle) = await _updater.BuscarAhoraAsync();
+            SetStatus(que switch
+            {
+                Updater.Busqueda.AlDia => $"Ya tienes la última versión ({detalle}).",
+                Updater.Busqueda.Descargada => $"Versión {detalle} descargada. Pulsa ⬇ para reiniciar, o se instala sola al cerrar.",
+                Updater.Busqueda.YaEstabaLista => $"La versión {detalle} ya estaba lista. Pulsa ⬇ para reiniciar.",
+                Updater.Busqueda.NoAplica => $"No se puede actualizar: {detalle}.",
+                _ => $"No pude comprobarlo: {detalle}",
+            });
+        }
+        finally { CheckUpdateBtn.IsEnabled = true; }
     }
 
     /// <summary>
@@ -918,6 +1106,71 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_talkOpen) HideTalk(); else ShowTalk(focusInput: true);
     }
 
+    /// <summary>La pastilla en rojo mientras escucha: un micrófono abierto que no se ve es lo último
+    /// que quiere nadie, y aquí además está escribiendo en una historia clínica.</summary>
+    private void PintarDictado(bool escuchando)
+    {
+        DictadoFondo.Color = escuchando
+            ? System.Windows.Media.Color.FromRgb(0xE5, 0x3E, 0x3E)
+            : System.Windows.Media.Color.FromArgb(0x80, 0xA8, 0xA8, 0xAE);
+        ZonaDictado.ToolTip = escuchando
+            ? "Dictando… pulsa para parar"
+            : "Dictar y rellenar los campos de SAP";
+    }
+
+    private static string Recorte(string t, int n) => t.Length <= n ? t : "…" + t[^n..];
+
+    private void OnZonaDictadoEntra(object sender, System.Windows.Input.MouseEventArgs e)
+        => CrecerPastilla(DictadoCuerpo, DictadoFondo, DictadoIcono, crece: true);
+
+    private void OnZonaDictadoSale(object sender, System.Windows.Input.MouseEventArgs e)
+        => CrecerPastilla(DictadoCuerpo, DictadoFondo, DictadoIcono, crece: false);
+
+    /// <summary>
+    /// EL FONENDOSCOPIO: dictar y que los campos se vayan llenando solos.
+    /// </summary>
+    /// <remarks>
+    /// NO ES UN MODO DEL MICRÓFONO, y por eso tiene botón propio. El micrófono abre una CONVERSACIÓN
+    /// con Ü —oye, piensa, contesta en voz alta, llama herramientas—. Esto no conversa: transcribe
+    /// con Soniox, organiza la nota, y escribe. Meterlo dentro del micrófono habría obligado a
+    /// decidir en cada frase si era una orden o un dato clínico, y equivocarse ahí significa o bien
+    /// contestarle a un médico que está dictando, o bien escribir en la historia lo que era una
+    /// orden para Ü.
+    ///
+    /// LA COMPUERTA ES LA PANTALLA, no un permiso: fuera del triage no hay campos que llenar, así
+    /// que encenderlo sería prometer un trabajo imposible. Se dice dónde hay que estar en vez de
+    /// quedarse mudo — un botón que no hace nada y no explica por qué se prueba tres veces.
+    /// </remarks>
+    private async void OnDictadoDesdePastilla(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        PlayTick();
+        if (_dictadoClinico == null) { SetStatus("El dictado clínico no está disponible."); ShowTalk(); return; }
+
+        if (_dictadoClinico.Activo) { await _dictadoClinico.PararAsync(); return; }
+
+        // DOS MICRÓFONOS ABIERTOS ES PEOR QUE NINGUNO: se mezclarían dos flujos y, peor, lo dicho
+        // iría a la vez a la conversación y a la historia clínica. Se dice cuál hay que cerrar en
+        // vez de cerrarla por nuestra cuenta: el que está hablando es quien decide.
+        if (_vivo?.Viva == true)
+        {
+            SetStatus("Cuelga la conversación antes de dictar: no pueden oírte los dos a la vez.");
+            ShowTalk();
+            return;
+        }
+
+        string donde = _locator?.DondeEstoy()?.Id ?? "";
+        if (!RellenadorSap.EsLaPantallaDeTriage(donde))
+        {
+            SetStatus("El dictado clínico solo funciona en la pantalla de triage de SAP.");
+            ShowTalk();
+            return;
+        }
+
+        ShowTalk();
+        await _dictadoClinico.ArrancarAsync();
+    }
+
     private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e) => EsconderBotonVoz();
 
     /// <summary>
@@ -944,6 +1197,26 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // encendida. Lo que está pasando ahora mismo no puede depender de dónde tengas el ratón.
         if (viva && !ZonaVoz.IsMouseOver)
             CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: true);
+
+        // Y EL GRUPO ENTERO TIENE QUE ESTAR VISIBLE, que es lo que faltaba: nace con Opacity=0 y sólo
+        // se encendía al acercar el ratón a la carita. La pastilla crecía dentro de un contenedor
+        // transparente, así que con la voz abierta por el botón del collar —sin ratón de por medio—
+        // no se veía absolutamente nada (2026-08-13, lo vio el usuario). Crecer no es aparecer.
+        if (viva)
+        {
+            VoiceDotGrupo.BeginAnimation(OpacityProperty, null);
+            VoiceDotGrupo.Opacity = 1;
+            VoiceDotGrupo.IsHitTestVisible = true;
+        }
+
+        // DE QUÉ COLOR SE ESTÁ OYENDO. Azul = por el collar; el gris de siempre = por un micrófono
+        // del PC. Es la única forma de saber cuál de los dos te está escuchando sin abrir el log, y
+        // cambia sola si hay relevo a media conversación.
+        VozFondo.Color = !viva
+            ? System.Windows.Media.Color.FromArgb(0x80, 0xA8, 0xA8, 0xAE)
+            : _vivo!.PorElCollar
+                ? System.Windows.Media.Color.FromRgb(0x3E, 0x9B, 0xFF)
+                : System.Windows.Media.Color.FromArgb(0xC0, 0xA8, 0xA8, 0xAE);
 
         if (!viva)
         {
@@ -1045,6 +1318,34 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         OnMic(this, new RoutedEventArgs());
     }
 
+    /// <summary>
+    /// Doble Ctrl. Si Ü está oculta, REAPARECE; si está a la vista, abre o cierra el micrófono.
+    /// </summary>
+    /// <remarks>
+    /// REAPARECER TIENE PRIORIDAD SOBRE ALTERNAR EL MICRÓFONO, y no es una preferencia estética: el
+    /// gesto de siempre llama a `OnMic`, que ALTERNA — y `self_hide` deja la conversación VIVA. Así
+    /// que estando oculta, el doble Ctrl de antes habría colgado la conversación sin traerla de
+    /// vuelta: exactamente lo contrario de lo que pide quien hace el gesto para recuperarla
+    /// (2026-08-15, pedido por el usuario: «que aparezca de nuevo con doble Ctrl»).
+    ///
+    /// Estando oculta NO se toca el micrófono. Quien la escondió por voz sigue hablando con ella; lo
+    /// único que falta es verla.
+    /// </remarks>
+    private void DobleCtrl()
+    {
+        if (!IsVisible)
+        {
+            _prevForeground = GetForegroundWindow();   // para poder devolver el teclado con Esc
+            if (_collapsed) ToggleCollapsed();
+            Show();
+            Activate();
+            PlayTick();
+            LogBus.Log("atajo", "doble Ctrl: Ü estaba oculta y vuelve a la vista");
+            return;
+        }
+        StartMicByFace();
+    }
+
     // --- Sonidos (los MISMOS WAV de Android): tick al clic, carrillón al micrófono ---
 
     private System.Media.SoundPlayer? _tick;
@@ -1109,6 +1410,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private async void OnMic(object sender, RoutedEventArgs e)
     {
+        // MANTENER PULSADO EL MICRÓFONO = entrar por el collar. Se pregunta ANTES de alternar, para
+        // que la sesión nazca ya pidiendo collar en vez de abrir con el micrófono local y mudarse.
+        // El clic corto sigue haciendo exactamente lo de siempre: el gesto nuevo no le quita nada al
+        // que ya existía (2026-08-13, pedido por el usuario).
+        if (TomarPulsacionLarga()) PasarLaVozAlCollar();
+
         if (_vivo != null) { await _vivo.AlternarAsync(); return; }
 
         SetStatus("Escuchando…");
@@ -1117,6 +1424,90 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (string.IsNullOrWhiteSpace(heard)) { SetStatus("No te escuché"); return; }
         if (_pendingAnswer != null && !_pendingAnswer.Task.IsCompleted) { _pendingAnswer.TrySetResult(heard); return; }
         _ = StartGoal(heard);
+    }
+
+    // ── EL COLLAR OMI: los dos gestos que lo piden (spec 001) ────────────────────
+    //
+    // Sin variable de entorno y sin ajuste escondido: se pide con la mano, en el momento. Un
+    // interruptor que hay que saber que existe obliga a arrancar la aplicación de una forma
+    // especial, y entonces «probarlo» ya no es lo mismo que usarlo.
+
+    /// <summary>Cuánto hay que mantener pulsado el micrófono para pedir el collar.</summary>
+    private static readonly TimeSpan Sostenido = TimeSpan.FromMilliseconds(500);
+
+    private DateTime _micPulsado;
+
+    private void OnMicDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        => _micPulsado = DateTime.UtcNow;
+
+    /// <summary>
+    /// ¿El clic que se acaba de soltar venía de mantener pulsado? Se CONSUME al preguntar.
+    ///
+    /// Consumirlo importa: a <c>OnMic</c> se llega también por el doble clic en la carita, por el
+    /// atajo global y por la pastilla de voz, y esos no pasan por el botón. Sin borrar la marca, una
+    /// pulsación larga de hace media hora haría que el siguiente doble clic pidiera collar sin que
+    /// nadie lo hubiera pedido.
+    /// </summary>
+    private bool TomarPulsacionLarga()
+    {
+        if (_micPulsado == default) return false;
+        bool largo = DateTime.UtcNow - _micPulsado >= Sostenido;
+        _micPulsado = default;
+        return largo;
+    }
+
+    private PanelDelCollar? _panelCollar;
+
+    /// <summary>La pantalla del collar: enlazar, ver el estado, quitar el enlace.</summary>
+    private void OnCollar(object sender, RoutedEventArgs e)
+    {
+        PlayTick();
+        if (_panelCollar is { IsVisible: true }) { _panelCollar.Activate(); return; }
+        _panelCollar = new PanelDelCollar { Owner = this };
+        _panelCollar.Closed += (_, __) => _panelCollar = null;
+        _panelCollar.Show();
+    }
+
+    /// <summary>
+    /// EL BOTÓN DEL COLLAR ENCIENDE Y APAGA EL HABLA, y se engancha al SERVICIO y no a la sesión de
+    /// voz. Ahí está la diferencia: colgado del servicio, el botón llega también con la voz apagada,
+    /// que es la única forma de que pueda ENCENDERLA. Colgado de la conversación sólo podía apagar.
+    ///
+    /// Y va al mismo <see cref="StartMicByFace"/> que el doble clic en la carita y el doble Ctrl: un
+    /// solo sitio decide qué es «alternar», así que ningún gesto puede quedar desincronizado.
+    /// </summary>
+    private void EngancharCollar()
+    {
+        CollarPermanente.BotonPulsado += () => Dispatcher.BeginInvoke(() => StartMicByFace());
+        CollarPermanente.Cambio += () => Dispatcher.BeginInvoke(PintarCollar);
+        CollarPermanente.Restaurar();
+        PintarCollar();
+    }
+
+    /// <summary>
+    /// La pieza del collar dice el estado sin abrir nada: verde conectado, ámbar enlazado pero sin
+    /// conexión, blanco sin enlazar. Mismo criterio que el popup — una sola verdad, dos sitios donde
+    /// se ve, y ninguno puede contradecir al otro porque los dos leen del servicio.
+    /// </summary>
+    private void PintarCollar()
+    {
+        if (CollarPunto == null) return;
+        CollarPunto.Fill = CollarPermanente.Conectado
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x6E, 0xD8, 0x8B))
+            : CollarPermanente.Permanente
+                ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xA5, 0x1F))
+                : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE8, 0xFF, 0xFF, 0xFF));
+    }
+
+    /// <summary>
+    /// La voz pasa a entrar por el collar. Vale con la conversación abierta y sin abrir.
+    /// </summary>
+    private void PasarLaVozAlCollar()
+    {
+        Voice.LiveAudio.UsarCollar = true;
+        _vivo?.PasarAlCollar();
+        SetStatus("Buscando el collar Omi…");
+        LogBus.Log("voz-viva", "el collar lo pidió el usuario con un gesto");
     }
 
     private void OnStop(object sender, RoutedEventArgs e)
@@ -1147,6 +1538,128 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _config.Muted = muted;
         MuteBtn.Content = muted ? "🔇" : "🔊";
         MuteBtn.ToolTip = muted ? "Ü está en silencio — clic para que vuelva a hablar" : "Callar a Ü ahora mismo";
+    }
+
+    /// <summary>
+    /// Lo que hace Ü con self_mute/self_hide/self_close, pedido por VOZ. Es <see cref="GeminiLive.Autocontrol"/>.
+    /// </summary>
+    /// <remarks>
+    /// SIEMPRE EN EL HILO DE LA VENTANA. Esto se llama desde el bucle que recibe mensajes del
+    /// WebSocket de Gemini, que no es el hilo de UI de WPF — tocar `Hide()` o el Dispatcher fuera de
+    /// su hilo lanza o, peor, funciona a veces y otras no. `Dispatcher.Invoke` (no InvokeAsync)
+    /// porque quien llama necesita la frase de vuelta YA, para devolvérsela al modelo.
+    ///
+    /// self_close NO cierra en este mismo tick: si `Application.Current.Shutdown()` corriera aquí
+    /// dentro, mataría el proceso ANTES de que la respuesta de la herramienta saliera por el
+    /// WebSocket, y Ü se callaría a media frase de despedida en vez de decirla. Se deja un respiro
+    /// para que la respuesta viaje y el modelo pueda hablar antes de que el proceso termine.
+    /// </remarks>
+    private string AtenderAutocontrol(string herramienta) => Dispatcher.Invoke(() =>
+    {
+        switch (herramienta)
+        {
+            case "self_mute":
+                SetMuted(true);
+                return "Silenciado. Un clic en el altavoz para que vuelva a hablar.";
+
+            case "self_hide":
+                if (_collapsed) ToggleCollapsed();
+                Hide();
+                // Se ofrece el doble Ctrl y no Ctrl+Alt+U porque es el gesto que ya usa para
+                // hablarle: una tecla menos que recordar, y la misma que tenía en la mano.
+                return "Me oculto. Doble Ctrl para que vuelva.";
+
+            case "self_close":
+                LogBus.Log("atajo", "self_close pedido por voz: cerrando en 2,5 s para dar tiempo a la despedida");
+                var cierre = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+                cierre.Tick += (_, __) => { cierre.Stop(); Application.Current.Shutdown(); };
+                cierre.Start();
+                return "Cerrándome. Hasta luego.";
+
+            // No es autocontrol —no se acciona a sí misma— pero se despacha por aquí porque mira
+            // ESTE equipo, y eso lo sabe la ventana y no el mapa de pantallas de otras apps.
+            case "scan_computer":
+                return Onboarding.Presentacion.Escanear();
+
+            default:
+                return $"«{herramienta}» no es una herramienta de autocontrol conocida";
+        }
+    });
+
+    /// <summary>
+    /// Que la primera vez se presente ELLA, en voz alta, y ofrezca mirar el equipo.
+    ///
+    /// POR QUÉ. Recién instalada aparecía una carita en la esquina y nadie decía para qué servía:
+    /// quien la recibe tiene que adivinar que se le habla y qué se le puede pedir. Presentarse es la
+    /// diferencia entre un icono raro y una herramienta (2026-08-16, pedido por el usuario).
+    ///
+    /// SE MARCA ANTES DE HABLAR, NO DESPUÉS. Si se marcara al terminar, cualquier fallo a mitad
+    /// —sin red, sin micrófono— dejaría el saludo pendiente y volvería a soltarlo en cada arranque,
+    /// que es peor que no haberlo dado: una presentación repetida dice que no te recuerda.
+    /// </summary>
+    private void OfrecerElPrimerEncuentro()
+    {
+        // SE DICE SIEMPRE POR QUÉ, TAMBIÉN CUANDO NO PASA NADA. Un camino que solo escribe en el log
+        // cuando funciona es indistinguible de uno que no existe: al probar la primera experiencia
+        // no había NI UNA línea sobre ella, y la explicación —que ya se había dado por hecha en una
+        // prueba anterior— no estaba escrita en ningún sitio (2026-08-16, lo pidió el usuario:
+        // «aquí no veo la ejecución que hizo»). Callar el caso normal es lo que deja a oscuras el
+        // caso raro, porque son el mismo silencio.
+        if (!_config.Onboarded)
+        {
+            LogBus.Log("presentacion", "no me presento: todavía no hay correo (onboarding sin terminar)");
+            return;
+        }
+        if (_config.PresentacionHecha)
+        {
+            LogBus.Log("presentacion", "no me presento: ya lo hice en este equipo. "
+                + @"Para volver a verlo: cierra Ü, pon ""PresentacionHecha"": false en "
+                + @"%APPDATA%\U\config.json y vuelve a abrir.");
+            return;
+        }
+
+        LogBus.Log("presentacion", $"PRIMER ENCUENTRO: es la primera vez en este equipo"
+            + (string.IsNullOrWhiteSpace(_config.DisplayName) ? "" : $" · usuario «{_config.DisplayName}»"));
+        _config.PresentacionHecha = true;
+        _config.Save();
+
+        // Se espera a que la ventana esté puesta: hablarle a alguien que todavía no te ha visto
+        // aparecer es una voz saliendo de ningún sitio.
+        var arranque = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        arranque.Tick += async (_, __) =>
+        {
+            arranque.Stop();
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                if (_vivo is null)
+                {
+                    LogBus.Log("presentacion", "ABORTADO: no hay capa de voz montada, así que no hay con qué hablar");
+                    return;
+                }
+
+                if (!_vivo.Viva) { LogBus.Log("presentacion", "abriendo la voz para saludar…"); StartMicByFace(); }
+                else LogBus.Log("presentacion", "la voz ya estaba abierta");
+
+                // Abrir la sesión es ir y volver por la red, y no avisa cuando termina. Se le da
+                // margen comprobando, en vez de dormir a ciegas un número redondo: así el saludo
+                // sale en cuanto está lista y no siempre en el peor caso.
+                for (int i = 0; i < 40 && _vivo?.Viva != true; i++) await Task.Delay(250);
+                if (_vivo?.Viva != true)
+                {
+                    LogBus.Log("presentacion", $"ABORTADO: la voz no abrió en {crono.ElapsedMilliseconds} ms. "
+                        + "No hay saludo — mira las líneas «voz-viva» de justo antes para saber por qué.");
+                    return;
+                }
+
+                LogBus.Log("presentacion", $"voz lista en {crono.ElapsedMilliseconds} ms · mandando el saludo");
+                await _vivo.EnviarTextoAsync(Onboarding.Presentacion.Saludo(_config.DisplayName));
+                LogBus.Log("presentacion", "saludo entregado. Lo que Ü diga a partir de aquí sale en «voz-viva»; "
+                    + "si acepta el escaneo, se verá «ejecutando «scan_computer»» y luego el resultado.");
+            }
+            catch (Exception ex) { LogBus.Log("presentacion", $"ABORTADO por excepción: {ex.Message}"); }
+        };
+        arranque.Start();
     }
 
     // --- Enseñanza activa (grabar pantalla+voz) ---
@@ -1440,9 +1953,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // pidió aparece por su cuenta. Abrir el micrófono es EXACTAMENTE lo del doble clic sobre la
         // cara —el mismo gesto, dicho con el teclado— y el panel es una ventana aparte, centrada
         // (2026-08-07, pedido por el usuario).
+        // Y TRIPLE Ctrl pasa la voz al collar Omi. El doble sigue abriendo el micrófono como siempre,
+        // así que lo que se ve al hacer triple es la conversación abriéndose y mudándose al collar —
+        // el gesto nuevo no le cobra ni un milisegundo de espera al que ya funcionaba.
+        EngancharCollar();
+
         _golpes = new AtajoPorGolpes(
-            soloCtrl: () => Dispatcher.BeginInvoke(() => StartMicByFace()),
-            ctrlShift: () => Dispatcher.BeginInvoke(() => AlternarPanelDesarrollo()));
+            soloCtrl: () => Dispatcher.BeginInvoke(() => DobleCtrl()),
+            ctrlShift: () => Dispatcher.BeginInvoke(() => AlternarPanelDesarrollo()),
+            tripleCtrl: () => Dispatcher.BeginInvoke(() =>
+            {
+                PasarLaVozAlCollar();
+                // Si no había conversación, el triple la abre: pedir el collar sin nada que oír
+                // dejaría el gesto sin efecto visible y parecería que no funcionó.
+                if (_vivo?.Viva != true) StartMicByFace();
+            }));
         Closed += (_, __) => { _golpes?.Dispose(); CerrarPanelDesarrollo(); };
 
         // Zona segura: menú y barra cancelan el cierre al entrar y lo agendan al salir.
@@ -1931,6 +2456,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private bool _stepMode;
     private StepDebuggerWindow? _debugger;
 
+    // ── Dictado clínico: hablar y que los campos se llenen ──────────────────────
+    //
+    // VA APARTE DEL PUENTE DE ABAJO, que es otra cosa: aquel trae valores YA GUARDADOS por el
+    // médico en el portal y los ofrece para aprobación; esto escucha en directo y escribe sin
+    // preguntar. Comparten la superficie de SAP y nada más.
+    private DictadoSoniox? _dictadoClinico;
+    private RellenadorSap? _rellenador;
+
+    /// <summary>Quien atiende los «Exportar a HC» que llegan de la web. Vive todo el rato.</summary>
+    private EjecutorDeExportaciones? _exportador;
+
+    /// <summary>Su propio micrófono, y NO el de la conversación viva. Son dos sesiones de audio con
+    /// destinos distintos; compartir una obligaría a decidir en cada frase a quién iba dirigida.</summary>
+    private readonly Voice.LiveAudio _audioDictado = new();
+
     // ── Puente con la consulta del portal ───────────────────────────────────────
     private readonly ClinicalBridge _clinical = new();
     private readonly SapGuiSurface _clinicalSap = new();
@@ -1997,6 +2537,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private async Task ClinicalTickAsync()
     {
         if (!_clinical.Active || _clinical.Stopped || _offering || _teaching || _runningDirect) return;
+
+        // EL CAMINO NUEVO MANDA. Mientras el ejecutor de exportaciones esté escuchando, este puente
+        // se calla: son dos sistemas queriendo llenar la MISMA pantalla, y el viejo abre una ventana
+        // de aprobación que roba el foco a mitad de la escritura del nuevo. El usuario lo vio en
+        // vivo el 2026-08-14 — el popup de «voy a escribir 2 dato(s)» apareciendo encima mientras el
+        // exportador estaba trabajando.
+        //
+        // No se borra: el puente sigue entero y vuelve solo si el ejecutor no está. Pero dos cosas
+        // escribiendo a la vez en una historia clínica no es una redundancia útil, es una carrera.
+        if (_exportador?.Encendido == true) return;
 
         // ── PASO 1: ¿la nota ya está guardada allá? ─────────────────────────────
         var data = await _clinical.FetchAsync(CancellationToken.None);
@@ -2154,6 +2704,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // dos lecturas estables de la superficie, y contra un valor que se refresca cada 800 ms eso
         // son ~1,6 s de reloj por arista, más que el clic y la carga de la pantalla juntos.
         _explorer = new GraphExplorerWindow(_surfaceMap, () => _locator?.DondeEstoy());
+        // LA VOZ SE PRESTA, NO SE DUPLICA. El explorador narra el mapeo con la MISMA conversación
+        // en vivo que atiende al micrófono: darle una suya sería una segunda conexión a Gemini
+        // hablando por la misma boca, y las dos se pisarían.
+        if (_vivo != null) _explorer.Narrador = new Voice.NarradorDelArquitecto(_vivo);
+        _explorer.MapaVivo = _mapaVivo;   // para poder vaciar el núcleo desde su botón
         _explorer.Closed += (_, __) => { _explorer = null; Dispatcher.Invoke(() => ExplorerBtn.Content = "🕸 Explorar el grafo"); };
         _explorer.Show();
         ExplorerBtn.Content = "🕸 Explorador: visible — clic para cerrar";
@@ -2894,6 +3449,22 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             _bocaPaso++;
             bool enVivo = _vivo?.Viva == true;
+
+            // LA BOCA TIENE QUE SABER PARARSE SOLA. Al temporizador solo lo apagaba RefreshMood, y
+            // a RefreshMood solo se le llamaba desde aquí abajo MIENTRAS había sesión viva. Si la
+            // sesión moría con la cara en «Hablando» —que es exactamente lo que pasa al cortarla a
+            // media frase, o al decirle «cállate»— nadie volvía a evaluar el estado: el temporizador
+            // seguía corriendo, se quedaba sin nivel al que seguir y caía al vaivén de más abajo.
+            // La boca se movía sola, en silencio, hasta que otra cosa cambiara el ánimo
+            // (2026-08-15, visto por el usuario: «cuando se queda ya callado la boca se sigue
+            // moviendo sola»). Depender de que otro se dé cuenta era el fallo; ahora se comprueba
+            // aquí, que es el único sitio que sigue vivo cuando todo lo demás se apagó.
+            if (!enVivo && !_voice.Activity.Hablando)
+            {
+                MoverLaBoca(false);   // se para y cierra la boca; Stop() impide otro tick
+                RefreshMood();        // y se corrige el ánimo, que se quedó en «Hablando»
+                return;
+            }
 
             // CON NIVEL REAL, EL SILENCIO CIERRA LA BOCA. Caer al vaivén cuando el nivel es bajo
             // haría que la carita moviera los labios durante las pausas de la conversación —y en una

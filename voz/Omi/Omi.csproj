@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    LO QUE SE SABE DEL COLLAR, sin saber nada de Bluetooth.
+
+    Aquí vive la parte que convierte «una trama que llegó en tal instante» en muestras: el códec, la
+    cabecera, y la reposición del silencio que el collar no transmite. El transporte —BLE, WinRT,
+    reconexión— se queda en windows-client y NO entra aquí.
+
+    La separación no es estética y la fija la spec 001: CI no tiene Bluetooth ni collar, así que
+    cualquier lógica que se meta en windows-client queda fuera del alcance de las promesas POR
+    CONSTRUCCIÓN. Un net8.0 puro se juzga en la nube; un net8.0-windows con WinRT, no.
+
+    Mismo patrón que nucleo/Grafo y mapeador/Pulso, y por la misma razón: poder juzgarlo sin abrir
+    una ventana.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Omi</AssemblyName>
+    <RootNamespace>Omi</RootNamespace>
+  </PropertyGroup>
+
+</Project>

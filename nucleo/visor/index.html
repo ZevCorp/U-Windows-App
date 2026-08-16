@@ -1,0 +1,584 @@
+<meta charset="utf-8">
+<title>El núcleo, en vivo</title>
+
+<!--
+  EL VISOR DEL NÚCLEO. Un archivo, sin dependencias, sin servidor.
+
+  Existe porque ni Neo4j Browser ni NeoDash contestaban lo que hacía falta: el primero no se
+  refresca solo —hay que relanzar la consulta a mano— y el segundo se quedaba pegado en la pantalla
+  anterior. Y la pregunta que este visor contesta solo sirve si se contesta CONTINUAMENTE.
+
+  DOS VISTAS DE LA MISMA VERDAD, porque son dos preguntas distintas:
+    · AQUÍ  — dónde estoy y qué alcanzo desde aquí, ahora mismo. Es la pregunta que el asistente
+              se hace en cada paso.
+    · MAPA  — cómo se va armando el grafo entero según navegas: las ubicaciones y los caminos que
+              se han probado entre ellas. Es la pregunta de quien construye el núcleo.
+
+  Habla con Neo4j directo desde el navegador porque su API HTTP manda «Access-Control-Allow-Origin:
+  *» (comprobado). Eso ahorra el servidor intermedio, y con él la posibilidad de que el
+  intermediario enseñe algo distinto de lo que hay.
+
+  NO INTERPRETA NADA. Dibuja lo que el núcleo dice: no ordena por niveles, no agrupa por cromo, no
+  deduce jerarquías. Si el dibujo y el núcleo discrepan, el fallo es de este archivo — y ésa es
+  exactamente la propiedad que se busca, porque el problema que nos trajo aquí fue mirar un dibujo
+  que opinaba por su cuenta.
+-->
+
+<style>
+  /* EL TEMA VIVE EN VARIABLES, no en colores sueltos por el archivo — la misma razón por la que el
+     panel del mapeador no calcula nada dos veces: un color repetido en diez sitios es diez sitios
+     que pueden quedar desincronizados el día que alguien cambie uno solo. El claro y el oscuro son
+     las DOS ÚNICAS fuentes; todo lo demás —CSS y el SVG que dibuja el propio JS— lee de aquí. */
+  :root {
+    color-scheme: dark;
+    --bg:#0d0f14; --texto:#e6e8ec; --texto-svg:#c9ced8; --mutado:#8a919e; --mutado3:#5a6170; --gris:#5a6170;
+    --panel-bg:#1b1e25; --panel-border:#2a2e38; --tab-on-bg:#1e2e4d;
+    --cabecera-desde:rgba(13,15,20,.93); --cabecera-hasta:rgba(13,15,20,0);
+    --verde:#5cc28d; --rojo:#ff6b6b; --rojo-suave:#ff9b9b; --ambar:#e0c07a; --ambar-fuerte:#c9a227; --azul:#4c8dff;
+    --fondo-vivo:#2b3a55; --fondo-memoria:#1a1d24; --borde-memoria:#2a2f3a;
+    --linea-vivo:#28324a; --linea-memoria:#1a1d24;
+    --fondo-actual:#1b2740; --fondo-nodo:#22262f; --borde-nodo:#3a4050; --linea-camino:#2f6b4f;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg:#f4f5f7; --texto:#1c1f26; --texto-svg:#262b33; --mutado:#5b6470; --mutado3:#7a8290; --gris:#7c8490;
+    --panel-bg:#ffffff; --panel-border:#d9dce2; --tab-on-bg:#dde8ff;
+    --cabecera-desde:rgba(244,245,247,.93); --cabecera-hasta:rgba(244,245,247,0);
+    --verde:#187a4f; --rojo:#d1453a; --rojo-suave:#ad4c40; --ambar:#9c6b12; --ambar-fuerte:#8a640a; --azul:#2f6fe0;
+    --fondo-vivo:#dce7f8; --fondo-memoria:#eef0f3; --borde-memoria:#c7cbd3;
+    --linea-vivo:#cfdcf0; --linea-memoria:#e6e8eb;
+    --fondo-actual:#e3edfc; --fondo-nodo:#eceef1; --borde-nodo:#cdd2d9; --linea-camino:#5c9d7c;
+  }
+  body { margin:0; background:var(--bg); color:var(--texto); font:13px/1.5 system-ui, sans-serif; }
+  #cabecera { position:fixed; top:0; left:0; right:0; padding:12px 18px; z-index:3;
+              background:linear-gradient(var(--cabecera-desde), var(--cabecera-hasta)); }
+  #donde { font-size:17px; font-weight:600; }
+  #app { color:var(--mutado); font-size:12px; }
+  #cuenta { color:var(--mutado); font-size:12px; margin-top:2px; }
+  #pestanas { position:fixed; top:12px; right:18px; z-index:4; display:flex; gap:6px; align-items:center; }
+  .tab { padding:6px 14px; border-radius:7px; background:var(--panel-bg); border:1px solid var(--panel-border);
+         cursor:pointer; font-size:12px; color:var(--mutado); user-select:none; }
+  .tab.on { background:var(--tab-on-bg); border-color:var(--azul); color:var(--texto); }
+  #tema { padding:6px 10px; border-radius:7px; background:var(--panel-bg); border:1px solid var(--panel-border);
+          cursor:pointer; font-size:13px; user-select:none; line-height:1; }
+  #estado { position:fixed; bottom:10px; left:18px; color:var(--mutado3); font-size:11px; z-index:3; }
+  #leyenda { position:fixed; bottom:10px; right:18px; color:var(--mutado3); font-size:11px; z-index:3; }
+  text { font:11px system-ui, sans-serif; fill:var(--texto-svg); }
+  text.gris { fill:var(--gris); }
+</style>
+
+<!-- SE APLICA ANTES DE PINTAR NADA, para que no haya un parpadeo oscuro→claro en cada carga. Lee
+     la preferencia guardada; si no hay ninguna, se queda con el oscuro de :root de siempre. -->
+<script>
+  if (localStorage.getItem("nucleo-visor-tema") === "light") document.documentElement.dataset.theme = "light";
+</script>
+
+<div id="cabecera">
+  <div id="donde">esperando al núcleo…</div>
+  <div id="app"></div>
+  <div id="cuenta"></div>
+</div>
+<div id="pestanas">
+  <div class="tab on" data-v="aqui">Aquí</div>
+  <div class="tab" data-v="mapa">Mapa completo</div>
+  <div class="tab" data-v="reglas">Reglas</div>
+  <div class="tab" data-v="mapeador">Mapeador</div>
+  <div id="tema" title="cambiar entre claro y oscuro"></div>
+</div>
+<svg id="lienzo"></svg>
+<div id="estado"></div>
+<div id="leyenda"></div>
+
+<script>
+const URL  = "http://127.0.0.1:7474/db/neo4j/tx/commit";
+const AUTH = "Basic " + btoa("neo4j:grafo-local-2026");
+
+// EL SVG NO LO PINTA EL NAVEGADOR, LO ARMA ESTE SCRIPT como texto — así que el cambio de tema no
+// llega solo con CSS, como llegaría a #cabecera o a las pestañas. `COL` es la MISMA paleta que las
+// variables de arriba, leída una vez por tema y no reinventada aquí: si hubiera dos tablas de
+// colores, una en CSS y otra tecleada en JS, acabarían diciendo cosas distintas tarde o temprano.
+let COL = {};
+function refrescarColores() {
+  const v = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  COL = {
+    texto: v("--texto"), textoSvg: v("--texto-svg"), mutado: v("--mutado"), gris: v("--gris"),
+    verde: v("--verde"), rojo: v("--rojo"), rojoSuave: v("--rojo-suave"),
+    ambar: v("--ambar"), ambarFuerte: v("--ambar-fuerte"), azul: v("--azul"),
+    fondoVivo: v("--fondo-vivo"), fondoMemoria: v("--fondo-memoria"), bordeMemoria: v("--borde-memoria"),
+    lineaVivo: v("--linea-vivo"), lineaMemoria: v("--linea-memoria"),
+    fondoActual: v("--fondo-actual"), fondoNodo: v("--fondo-nodo"), bordeNodo: v("--borde-nodo"),
+    lineaCamino: v("--linea-camino"),
+  };
+}
+
+// EL BOTÓN DE TEMA. Guarda la preferencia para que la próxima carga no vuelva a parpadear, y
+// redibuja: sin esto el fondo cambiaría pero los nodos y el texto del SVG se quedarían con los
+// colores del tema anterior, que es justo la clase de discrepancia que este visor existe para
+// hacer imposible.
+function aplicarTema(claro) {
+  document.documentElement.dataset.theme = claro ? "light" : "";
+  localStorage.setItem("nucleo-visor-tema", claro ? "light" : "dark");
+  document.getElementById("tema").textContent = claro ? "🌙" : "☀️";
+  refrescarColores();
+  ultimo = "";
+  tick();
+}
+document.getElementById("tema").onclick = () =>
+  aplicarTema(document.documentElement.dataset.theme !== "light");
+refrescarColores();
+document.getElementById("tema").textContent = document.documentElement.dataset.theme === "light" ? "🌙" : "☀️";
+
+// «Aquí»: dónde estoy y qué alcanzo. Una sola consulta, porque el núcleo guarda una sola cosa.
+const Q_AQUI = `
+MATCH (u:Ubicacion {actual:true})
+OPTIONAL MATCH (u)-[a:ALCANZA]->(e:Elemento)
+OPTIONAL MATCH (e)-[:LLEVA_A]->(d:Ubicacion)
+RETURN u.id AS donde, u.app AS app,
+       collect({etq:e.etiqueta, vivo:a.vivo, destino:d.id}) AS hijos`;
+
+// «Mapa completo»: las ubicaciones y los caminos PROBADOS entre ellas. No se pintan los elementos
+// —serían miles— sino lo que conectan, que es lo que hace que el grafo sea un grafo.
+const Q_MAPA = `
+MATCH (u:Ubicacion)
+OPTIONAL MATCH (u)-[:ALCANZA]->(e:Elemento)-[:LLEVA_A]->(d:Ubicacion)
+RETURN u.id AS id, u.app AS app, u.actual AS actual,
+       collect(DISTINCT {hacia:d.id, por:e.etiqueta}) AS caminos`;
+
+let vista = "aqui", ultimo = "";
+
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  vista = t.dataset.v; ultimo = ""; tick();
+});
+
+async function pedir(q) {
+  const r = await fetch(URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", "authorization": AUTH },
+    body: JSON.stringify({ statements: [{ statement: q }] }),
+  });
+  return (await r.json()).results?.[0]?.data ?? [];
+}
+
+async function tick() {
+  try {
+    if (vista === "aqui") await tickAqui();
+    else if (vista === "mapa") await tickMapa();
+    else if (vista === "mapeador") await tickMapeador();
+    else await tickReglas();
+  } catch (e) { estado("no llego: " + e.message); }
+}
+
+// LAS REGLAS SON LAS PROMESAS, y lo que se enseña es el RESULTADO de correrlas, no una lista que
+// alguien escribió. La diferencia importa: una descripción tecleada envejece en silencio en cuanto
+// alguien toca el núcleo; esto dice qué se verificó y cuándo, y si algo está en rojo se ve.
+// LOS DOS CONTRATOS, JUNTOS. El del núcleo dice QUÉ SE SABE; el del mapeador, CÓMO SE SABE. Es la
+// misma pregunta —«¿qué está garantizado?»— y por eso se miran a la vez: en dos paneles separados
+// hay que acordarse de abrir los dos, y el que se olvida es siempre el que está en rojo.
+//
+// Lo que sí es otra pregunta es el pulso —«¿qué está pasando AHORA?»— y por eso tiene su pestaña.
+async function tickReglas() {
+  const [nuc, map] = await Promise.all([
+    fetch("http://127.0.0.1:8792/reglas").then(r => r.json()).catch(e => ({ error: e.message })),
+    fetch("http://127.0.0.1:8792/reglas-mapeador").then(r => r.json()).catch(e => ({ error: e.message })),
+  ]);
+
+  const cols = [
+    { titulo: "EL NÚCLEO — qué se sabe", j: nuc, de: "nucleo/Contrato" },
+    { titulo: "EL MAPEADOR — cómo se sabe", j: map, de: "mapeador/Contrato" },
+  ];
+
+  const huella = "reglas|" + cols.map(c => c.j.cuando || c.j.error).join("|");
+  if (huella === ultimo) { estado("sin cambios · " + hora()); return; }
+  ultimo = huella;
+
+  // TRES ESTADOS, NO DOS, y el tercero es el que faltaba: NO HABER PODIDO PREGUNTAR.
+  //
+  // Con la app apagada las dos consultas fallan, así que no hay ninguna regla que contar — y la
+  // versión anterior calculaba «0 rotas» sobre ese vacío y titulaba «0 promesa(s) INCUMPLIDA(S)»,
+  // que se lee como un aprobado. Es EXACTAMENTE la avería que este proyecto persigue: la misma
+  // forma que «sin_situar» contestando «no queda nada» sobre un grafo vacío. No saber y estar bien
+  // son cosas distintas, y un panel que las confunde no sirve para vigilar nada (2026-08-13, lo
+  // vio el usuario).
+  const vivos = cols.filter(c => !c.j.error);
+  const rotas = vivos.reduce((n, c) => n + c.j.reglas.filter(x => !x.cumple).length, 0);
+  const total = vivos.reduce((n, c) => n + c.j.reglas.length, 0);
+
+  if (vivos.length === 0) {
+    cabecera("NO SE PUDO PREGUNTAR", "",
+             "la app no está respondiendo en el 8792 · esto NO significa que las promesas se cumplan");
+    leyenda("las reglas las sirve la app: arráncala y vuelve a mirar");
+  } else {
+    cabecera(rotas === 0
+               ? (vivos.length === cols.length ? "El núcleo y el mapeador cumplen lo que prometen"
+                                               : "Cumple lo que se pudo preguntar")
+               : `${rotas} promesa(s) INCUMPLIDA(S)`,
+             vivos.map(c => c.j.cuando).join(" · "),
+             `${total} reglas · son las de los contratos, no una descripción: esto es el resultado de correrlas`);
+    leyenda("se actualizan solas en cada build: scripts/version-nucleo.ps1 -Construir");
+  }
+
+  // Se pinta como listas y no como grafo: son enunciados, no cosas conectadas entre sí. Dibujar
+  // aristas donde no las hay sería inventar una estructura para que quede bonito.
+  const an = innerWidth;
+  const enFila = an >= 980;                       // estrecho: una debajo de la otra, sin cortar texto
+  const ancho = enFila ? (an - 92) / 2 : an - 92;
+  let s = "", masBajo = 0, siguiente = 130;   // «siguiente» solo se usa apiladas
+
+  cols.forEach((c, i) => {
+    const x0 = enFila ? 46 + i * ancho : 46;
+    let y = enFila ? 130 : siguiente;
+
+    s += `<text x="${x0}" y="${y}" style="font-size:12px;fill:${COL.mutado};letter-spacing:.08em">${escapar(c.titulo)}</text>`;
+    y += 28;
+
+    if (c.j.error) {
+      s += `<text x="${x0}" y="${y}" style="font-size:13px;fill:${COL.ambarFuerte}">${escapar(c.j.error)}</text>`;
+      y += 24;
+      s += `<text x="${x0}" y="${y}" style="font-size:12px;fill:${COL.mutado}">corre: dotnet run --project ${c.de}/Contrato.csproj</text>`;
+      y += 30;
+    } else {
+      c.j.reglas.forEach(x => {
+        s += `<text x="${x0}" y="${y}" style="font-size:15px;fill:${x.cumple ? COL.verde : COL.rojo}">${x.cumple ? '✔' : '✘'}</text>`;
+        s += `<text x="${x0 + 26}" y="${y}" style="font-size:13px;fill:${x.cumple ? COL.textoSvg : COL.rojoSuave}">${escapar(x.regla)}</text>`;
+        y += 30;
+      });
+    }
+    masBajo = Math.max(masBajo, y);
+    siguiente = y + 40;
+  });
+
+  const svg = document.getElementById("lienzo");
+  svg.setAttribute("width", an); svg.setAttribute("height", Math.max(innerHeight, masBajo + 40));
+  svg.innerHTML = s;
+  estado("actualizado " + hora());
+}
+
+// EL MAPEADOR CONTÁNDOSE A SÍ MISMO. Esta función no calcula NADA: pinta los contadores que el
+// mapeador ya lleva. Si dedujera aquí una media o un veredicto, tendríamos dos opiniones sobre el
+// mismo hecho — y es exactamente el error que mató al pintor anterior.
+//
+// La única excepción son los COLORES, y son de forma, no de contenido: rojo si hay saturación,
+// porque cero es el valor esperado y cualquier otro merece mirarse.
+async function tickMapeador() {
+  const r = await fetch("http://127.0.0.1:8792/mapeador");
+  const j = await r.json();
+  if (j.error) { cabecera("Mapeador", "", j.error); pintar(""); estado(hora()); return; }
+
+  const sat = j.saturacion.ubicacion + j.saturacion.pantalla;
+  const huella = "map|" + JSON.stringify(j);
+  if (huella === ultimo) { estado("sin cambios · " + hora()); return; }
+  ultimo = huella;
+
+  cabecera("Cómo se está mapeando", `contando desde ${j.desde}`,
+           `${j.atribuciones.saltos} salto(s) de pantalla · ${j.atribuciones.aprendidas} explicados · ${j.embudo.leidos} elementos leídos`);
+  leyenda("son los contadores del propio mapeador · el panel no calcula nada");
+
+  let y = 128, s = "";
+  const titulo = t => { y += 14; s += `<text x="46" y="${y}" style="font-size:11px;fill:${COL.mutado};font-weight:600">${t}</text>`; y += 24; };
+  const fila = (etq, val, color) => {
+    s += `<text x="60" y="${y}" style="font-size:13px;fill:${COL.textoSvg}">${escapar(etq)}</text>`;
+    s += `<text x="560" y="${y}" text-anchor="end" style="font-size:13px;fill:${color || COL.texto}">${escapar(String(val))}</text>`;
+    y += 26;
+  };
+
+  titulo("SATURACIÓN — el invariante que protege la velocidad: nada se apila");
+  fila("vueltas de ubicación descartadas", j.saturacion.ubicacion, j.saturacion.ubicacion ? COL.rojoSuave : COL.verde);
+  fila("vueltas de pantalla descartadas", j.saturacion.pantalla, j.saturacion.pantalla ? COL.rojoSuave : COL.verde);
+  if (sat) fila("↑ si esto sube, hay que SUBIR el intervalo, no bajarlo", "", COL.mutado);
+
+  titulo("ATRIBUCIONES — todo salto se explica, o se dice por qué no");
+  fila("saltos de pantalla", j.atribuciones.saltos);
+  fila("explicados con un clic", j.atribuciones.aprendidas, COL.verde);
+  (j.atribuciones.rechazos || []).forEach(x => fila("· " + x.motivo, x.veces, COL.ambar));
+
+  // POR APP, que es lo que decide si hay que modularizar. En el total agregado, «los fallos son los
+  // mismos en todas las apps» y «cada app falla a su manera» dan EL MISMO NÚMERO. Aquí se ven
+  // separados: si cada app trae una causa que ninguna otra tiene, hacen falta módulos; si todas
+  // repiten las mismas causas, el mapeo es universal y modularizar sería inventar trabajo.
+  titulo("POR APP — ¿los fallos son propios de cada una, o los mismos en todas?");
+  (j.atribuciones.porApp || []).forEach(a => {
+    const pct = a.saltos ? Math.round(100 * a.aprendidas / a.saltos) : 0;
+    fila(a.app, a.saltos ? `${a.aprendidas} de ${a.saltos} explicados (${pct}%)` : "sin navegación registrada",
+         !a.saltos ? COL.mutado : pct >= 80 ? COL.verde : pct >= 50 ? COL.ambar : COL.rojoSuave);
+    (a.rechazos || []).forEach(r => fila("    · " + r.motivo, r.veces, COL.mutado));
+    // Fuera del porcentaje a propósito: rechazar un alt-tab es acertar, no fallar.
+    if (a.noEranNavegacion) fila("    · cambios de ventana (bien rechazados)", a.noEranNavegacion, COL.mutado);
+    // El fallo que no cuelga de ningún salto: si sube, la identidad de esa app no distingue pantallas.
+    if (a.sinCambiarDeSitio) fila("    · cambió la pantalla y NO el sitio", a.sinCambiarDeSitio, COL.rojoSuave);
+  });
+
+  // LO DE LA VOZ, APARTE. Compiten por los mismos milisegundos pero son cosas distintas: una es lo
+  // que el mapeador hace por su cuenta y la otra lo que cuesta atender una orden hablada. Mezclarlas
+  // en una tabla es la misma trampa que comparar Gmail con el explorador.
+  titulo("COSTES — cronometrados por quien hace el trabajo");
+  (j.costes || []).filter(x => !x.que.startsWith("voz:")).forEach(x => {
+    fila(`${x.que}  (${x.veces} veces)`, `${x.mediaMs} ms de media · ${x.peorMs} la peor`);
+    // Un colgado envenena la media: 22 ms reales se leían como 1.461 por UNA muestra de 21 minutos.
+    // Verlo aquí es la diferencia entre «va lento» y «una vez se quedó clavado», que se arreglan
+    // en sitios distintos.
+    if (x.colgadas) fila("    · vueltas que se dieron por perdidas (la media no vale)", x.colgadas, COL.rojoSuave);
+  });
+
+  const porVoz = (j.costes || []).filter(x => x.que.startsWith("voz:"));
+  if (porVoz.length) {
+    titulo("POR VOZ — cuánto tarda cada orden hablada, de la más lenta a la más rápida");
+    porVoz.forEach(x => fila(`${x.que.slice(5)}  (${x.veces} veces)`,
+                             `${x.mediaMs} ms de media · ${x.peorMs} la peor`,
+                             x.mediaMs > 3000 ? "#ff9b9b" : x.mediaMs > 1200 ? "#e0c07a" : "#5cc28d"));
+  }
+
+  titulo("EMBUDO — de lo que se ve a lo que llega al núcleo");
+  fila("elementos leídos", j.embudo.leidos);
+  fila("entregados al núcleo", j.embudo.entregados, COL.verde);
+  (j.embudo.filtrados || []).forEach(x => fila("· descartados: " + x.motivo, x.veces, COL.mutado));
+
+  const svg = document.getElementById("lienzo");
+  svg.setAttribute("width", innerWidth); svg.setAttribute("height", Math.max(innerHeight, y + 40));
+  svg.innerHTML = s;
+  estado("actualizado " + hora());
+}
+
+async function tickAqui() {
+  const filas = await pedir(Q_AQUI);
+  if (!filas.length) { estado("el núcleo aún no ha publicado ninguna ubicación"); return; }
+  const [donde, app, hijos] = filas[0].row;
+  const limpios = (hijos || []).filter(h => h && h.etq);
+
+  const huella = "aqui|" + donde + "|" + limpios.map(h => h.etq + h.vivo + (h.destino || "")).join(",");
+  if (huella === ultimo) { estado("sin cambios · " + hora()); return; }
+  ultimo = huella;
+
+  const vivos = limpios.filter(h => h.vivo).length;
+  const cruzados = limpios.filter(h => h.destino).length;
+
+  // UN ANILLO VACÍO NO EXPLICA POR QUÉ ESTÁ VACÍO, y las dos razones posibles son muy distintas:
+  // que el núcleo no haya llegado a mirar esta pantalla, o que de verdad no haya nada alcanzable.
+  // Dibujar el círculo solo, sin decirlo, deja al que mira pensando que el visor se rompió — pasó
+  // con «Taskmgr» tras apagar la app antes de que se leyera esa pantalla (2026-08-13).
+  if (limpios.length === 0) {
+    cabecera(corto(donde), app, "el núcleo todavía no ha mirado qué hay aquí — no es que no haya nada");
+    leyenda("si la app está corriendo, espera un latido; si no, arráncala");
+    pintar(`<circle cx="${innerWidth / 2}" cy="${innerHeight / 2 + 20}" r="34" fill="${COL.fondoActual}"`
+         + ` stroke="${COL.azul}" stroke-width="2"/>`
+         + `<text x="${innerWidth / 2}" y="${innerHeight / 2 + 25}" text-anchor="middle"`
+         + ` style="font-size:12px;fill:${COL.texto}">aquí</text>`
+         + `<text x="${innerWidth / 2}" y="${innerHeight / 2 + 90}" text-anchor="middle"`
+         + ` style="font-size:12px;fill:${COL.mutado}">sin nada observado todavía</text>`);
+    estado("actualizado " + hora());
+    return;
+  }
+
+  cabecera(corto(donde), app, `${limpios.length} alcanzables · ${vivos} vivos · ${limpios.length - vivos} en memoria · ${cruzados} cruzados`);
+  leyenda("azul = vivo ahora · gris = solo memoria · borde verde = ya se cruzó");
+
+  const an = innerWidth, al = innerHeight, cx = an / 2, cy = al / 2 + 20;
+  const radio = Math.min(Math.max(150, limpios.length * 5.5), Math.min(an, al) / 2 - 90);
+  let s = "";
+  limpios.forEach((h, i) => {
+    const ang = (i / limpios.length) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(ang) * radio, y = cy + Math.sin(ang) * radio;
+    s += linea(cx, cy, x, y, h.vivo ? COL.lineaVivo : COL.lineaMemoria);
+    s += `<circle cx="${x}" cy="${y}" r="6" fill="${h.vivo ? COL.fondoVivo : COL.fondoMemoria}"`
+       + ` stroke="${h.destino ? COL.verde : (h.vivo ? COL.azul : COL.bordeMemoria)}" stroke-width="${h.destino ? 2 : 1}"/>`;
+    const der = Math.cos(ang) > -0.1;
+    s += rotulo(x + (der ? 11 : -11), y + 4, der ? "start" : "end", h.etq, !h.vivo);
+  });
+  s += `<circle cx="${cx}" cy="${cy}" r="34" fill="${COL.fondoActual}" stroke="${COL.azul}" stroke-width="2"/>`;
+  s += `<text x="${cx}" y="${cy + 5}" text-anchor="middle" style="font-size:12px;fill:${COL.texto}">aquí</text>`;
+  pintar(s);
+  estado("actualizado " + hora());
+}
+
+async function tickMapa() {
+  const filas = await pedir(Q_MAPA);
+  if (!filas.length) { estado("todavía no hay ninguna ubicación"); return; }
+  const nodos = filas.map(f => ({ id: f.row[0], app: f.row[1], actual: f.row[2],
+                                  caminos: (f.row[3] || []).filter(c => c && c.hacia) }));
+
+  const huella = "mapa|" + nodos.map(n => n.id + n.actual + n.caminos.map(c => c.hacia).join("")).join("|");
+  if (huella === ultimo) { estado("sin cambios · " + hora()); return; }
+  ultimo = huella;
+
+  const aqui = nodos.find(n => n.actual);
+  const enlaces = nodos.reduce((t, n) => t + n.caminos.length, 0);
+  cabecera(aqui ? corto(aqui.id) : "—", `${new Set(nodos.map(n => n.app)).size} app(s)`,
+           `${nodos.length} ubicaciones · ${enlaces} camino(s) aprendido(s)`);
+  leyenda("cada punto es una PANTALLA · las flechas son caminos probados · clic en un nodo para ir");
+
+  // CADA APP, SU ISLA. Antes eran anillos concéntricos alrededor del MISMO centro, y con 191
+  // ubicaciones en treinta apps el dibujo sugería una vecindad que no existe: nodos de SAP pegados a
+  // nodos del explorador solo porque les tocó el mismo radio. Un dibujo que insinúa relaciones
+  // falsas es peor que uno feo — es la misma familia de error que perseguimos en el núcleo.
+  //
+  // Ahora cada app ocupa su propia región, con su nombre y un disco de fondo, y las flechas que
+  // cruzan de una isla a otra se ven POR LO QUE SON: saltos entre aplicaciones, largos y raros.
+  //
+  // El orden es alfabético y el tamaño solo depende de cuántas ubicaciones tiene la app: dos cosas
+  // deterministas, para que un nodo no salte de sitio entre dos refrescos. Un dibujo que se mueve
+  // solo no se puede leer, y este se repinta cada segundo.
+  const porApp = {};
+  nodos.forEach(n => (porApp[n.app] ||= []).push(n));
+  const apps = Object.keys(porApp).sort();
+  const an = innerWidth;
+
+  // El radio crece con la RAÍZ del número de nodos, no con el número: así una app con 60 pantallas
+  // no se come el lienzo entero. Y las de una o dos pantallas se aprietan a propósito: son 40 de las
+  // 69 —ventanas por las que solo se pasó— y con el tamaño de las demás ocupaban la mitad del alto
+  // sin decir nada. Que quepan no es cosmética: lo que hay que poder leer de un vistazo es dónde
+  // está la estructura, y la estructura vive en las islas grandes.
+  const islas = apps.map(app => {
+    const lista = porApp[app].slice().sort((a, b) => a.id.localeCompare(b.id));
+    const n = lista.length;
+    return { app, lista, radio: n <= 2 ? 14 + n * 6 : Math.max(34, Math.min(150, 20 + Math.sqrt(n) * 26)) };
+  });
+
+  // Se colocan en filas de izquierda a derecha, saltando de línea cuando no cabe otra isla. No es
+  // una rejilla fija: las islas grandes piden más sitio y las pequeñas no lo desperdician.
+  const HUECO = 34, ALTO_TITULO = 26;
+  let x = HUECO, y = 120, altoFila = 0;
+  const pos = {}, marcos = [];
+  islas.forEach(isla => {
+    const ancho = isla.radio * 2;
+    if (x + ancho > an - HUECO && x > HUECO) { x = HUECO; y += altoFila + HUECO + ALTO_TITULO; altoFila = 0; }
+    const cx = x + isla.radio, cy = y + isla.radio + ALTO_TITULO;
+    marcos.push({ cx, cy, ...isla });
+
+    // Dentro de la isla, en anillos: uno solo hasta 12 nodos, y a partir de ahí se reparten en dos
+    // para que no se toquen. El ángulo sale del índice, así que es estable entre refrescos.
+    const n = isla.lista.length;
+    const dos = n > 12;
+    isla.lista.forEach((nodo, i) => {
+      const dentro = dos && i % 2 === 1;
+      const r = n === 1 ? 0 : isla.radio * (dentro ? 0.55 : 0.92);
+      const cuantos = dos ? Math.ceil(n / 2) : n;
+      const idx = dos ? Math.floor(i / 2) : i;
+      const ang = (idx / Math.max(cuantos, 1)) * Math.PI * 2 - Math.PI / 2;
+      pos[nodo.id] = { x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r, n: nodo };
+    });
+
+    x += ancho + HUECO;
+    altoFila = Math.max(altoFila, isla.radio * 2);
+  });
+  const alto = y + altoFila + ALTO_TITULO + 60;
+
+  let s = `<defs><marker id="f" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+             <path d="M0,0 L0,6 L8,3 z" fill="${COL.verde}"/></marker></defs>`;
+
+  // Primero el terreno: el disco de cada isla y su nombre, por debajo de todo lo demás.
+  marcos.forEach(m => {
+    s += `<circle cx="${m.cx}" cy="${m.cy}" r="${m.radio + 16}" fill="${COL.fondoMemoria}"`
+       + ` stroke="${COL.bordeMemoria}" stroke-width="1" opacity="0.55"/>`;
+    s += `<text x="${m.cx}" y="${m.cy - m.radio - 24}" text-anchor="middle"`
+       + ` style="font-size:12px;fill:${COL.mutado};font-weight:600">${escapar(m.app)}</text>`;
+    s += `<text x="${m.cx}" y="${m.cy - m.radio - 24 + 14}" text-anchor="middle"`
+       + ` style="font-size:10px;fill:${COL.gris}">${m.lista.length} pantalla(s)</text>`;
+  });
+
+  // LAS QUE CRUZAN DE ISLA, DISTINTAS. Un camino dentro de una app y un salto entre apps no son la
+  // misma clase de hecho, y pintarlos igual era parte de por qué el dibujo confundía.
+  nodos.forEach(n => n.caminos.forEach(c => {
+    const a = pos[n.id], b = pos[c.hacia];
+    if (!a || !b) return;
+    const entreApps = a.n.app !== b.n.app;
+    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${COL.lineaCamino}"`
+       + ` stroke-width="${entreApps ? 1 : 1.5}"${entreApps ? ' stroke-dasharray="5 4" opacity="0.6"' : ''}`
+       + ` marker-end="url(#f)"/>`;
+  }));
+  Object.values(pos).forEach(({ x, y, n }) => {
+    // El círculo lleva su id encima: es lo que permite que un clic sepa a dónde ir sin que la
+    // página tenga que calcular nada. El destino sale del dibujo, y el dibujo del núcleo.
+    s += `<circle class="nodo" data-id="${escapar(n.id)}" cx="${x}" cy="${y}" r="${n.actual ? 11 : 6}"`
+       + ` fill="${n.actual ? COL.fondoActual : COL.fondoNodo}" stroke="${n.actual ? COL.azul : COL.bordeNodo}"`
+       + ` stroke-width="${n.actual ? 3 : 1}" style="cursor:pointer"><title>${escapar(n.id)}</title></circle>`;
+    // El rótulo se acorta y se apoya en el ratón: con islas apretadas, un nombre largo tapa a sus
+    // vecinos, y el nombre completo sigue disponible en el `title` del círculo.
+    s += rotulo(x + 10, y + 3.5, "start", corto(n.id).slice(0, 18), !n.actual);
+  });
+
+  // EL LIENZO CRECE CON EL CONTENIDO. Antes se fijaba a la altura de la ventana porque todo cabía en
+  // un anillo; con islas en varias filas, recortar a `innerHeight` escondería las de abajo — y un
+  // mapa que oculta parte de lo que sabe es la clase de mentira que este visor existe para evitar.
+  const svg = document.getElementById("lienzo");
+  svg.setAttribute("width", an);
+  svg.setAttribute("height", Math.max(innerHeight, alto));
+  svg.innerHTML = s;
+  // CLIC LLANO. Ctrl+Shift no hacía falta en la práctica —el navegador nunca acaba de garantizar
+  // que ambas teclas lleguen limpias a un evento de clic sobre SVG— y esta vista solo tiene una
+  // acción posible sobre un nodo: ir. No hay ambigüedad que combinar teclas tuviera que resolver.
+  document.querySelectorAll("circle.nodo").forEach(c =>
+    c.addEventListener("click", () => irA(c.dataset.id)));
+  estado("actualizado " + hora());
+}
+
+// ── NAVEGAR: clic sobre un nodo ─────────────────────────────────────────
+//
+// UN PASO CADA VEZ, porque es lo único que el núcleo contesta. Se le vuelve a preguntar después de
+// cada clic en lugar de pedirle la ruta entera: el mapa es vivo, y una ruta calculada de golpe es
+// una promesa sobre pantallas que todavía no se han visto.
+//
+// La página NO decide nada. Manda el destino y obedece lo que el núcleo responda; si dice que no
+// sabe llegar, se para y lo dice. Calcular aquí el camino sería tener dos opiniones sobre lo mismo,
+// que es el problema que este proyecto entero persigue.
+let navegando = false;
+
+async function irA(destino) {
+  if (navegando) { estado("ya voy hacia otro sitio; espera a que termine", true); return; }
+  navegando = true;
+  try {
+    for (let paso = 1; paso <= 12; paso++) {
+      estado(`yendo a «${corto(destino)}» · paso ${paso}…`, true);
+      const r = await fetch("http://127.0.0.1:8792/ir", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ destino }),
+      });
+      const j = await r.json();
+      if (j.llegado) { estado(`llegado a «${corto(destino)}» en ${paso - 1} paso(s)`, true); return; }
+      if (!j.ok) { estado(`no pude llegar: ${j.porque}`, true); return; }
+      // Se espera a que la pantalla se asiente: preguntar el siguiente paso antes de que el núcleo
+      // haya visto dónde estamos daría el mismo paso otra vez.
+      await new Promise(t => setTimeout(t, 1400));
+    }
+    estado("me planté a los 12 pasos: o hay un bucle, o el destino no se alcanza así", true);
+  } catch (e) {
+    estado("no llego a la app: " + e.message, true);
+  } finally { navegando = false; }
+}
+
+// ── piezas ────────────────────────────────────────────────────────────────
+const linea = (x1, y1, x2, y2, c) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="1"/>`;
+const rotulo = (x, y, anchor, t, gris) =>
+  `<text x="${x}" y="${y}" text-anchor="${anchor}" class="${gris ? 'gris' : ''}">${escapar(t).slice(0, 32)}</text>`;
+const escapar = t => (t || "").replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+const hora = () => new Date().toLocaleTimeString();
+// EL LATIDO NO PISA LO QUE DICE LA NAVEGACIÓN. `tick()` corre cada segundo y escribía «sin cambios»
+// encima de «no pude llegar: …», así que el motivo del fallo duraba menos de un segundo en pantalla
+// y lo que quedaba era un clic que aparentemente no hizo nada (2026-08-13, lo sufrió el usuario:
+// hizo clic en un nodo, el núcleo contestó que no sabía llegar, y ese mensaje se borró solo).
+//
+// Lo que dice la navegación manda mientras dura y unos segundos después, porque es una respuesta a
+// algo que TÚ hiciste; el latido solo informa de que sigue vivo.
+let hastaCuandoMandaLaNavegacion = 0;
+const estado = (t, deNavegacion) => {
+  if (deNavegacion) hastaCuandoMandaLaNavegacion = Date.now() + 8000;
+  else if (Date.now() < hastaCuandoMandaLaNavegacion) return;
+  document.getElementById("estado").textContent = t;
+};
+const leyenda = t => document.getElementById("leyenda").textContent = t;
+function cabecera(d, a, c) {
+  document.getElementById("donde").textContent = d;
+  document.getElementById("app").textContent = a || "";
+  document.getElementById("cuenta").textContent = c;
+}
+function corto(id) { const i = (id || "").lastIndexOf("/"); return i > 0 ? id.slice(i + 1) : (id || ""); }
+function pintar(s) {
+  const svg = document.getElementById("lienzo");
+  svg.setAttribute("width", innerWidth); svg.setAttribute("height", innerHeight);
+  svg.innerHTML = s;
+}
+
+tick();
+setInterval(tick, 1000);
+addEventListener("resize", () => { ultimo = ""; tick(); });
+</script>
