@@ -32,3 +32,8 @@ graphify-out/20*/
 # reinstala con pip y con el instalador de VB-Cable, y no tiene por que viajar en el repo.
 puente-omi/.venv/
 puente-omi/vbcable-installer/
+
+# Swift (cliente de Mac). `.build/` son 378 MB que regenera `swift build`, y `U.app` lo arma
+# `hacer-app.sh` desde el binario. Ninguno es fuente: el repo entero pesa menos que ese .build.
+mac-client/.build/
+mac-client/U.app/
