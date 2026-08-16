@@ -705,8 +705,10 @@ public sealed class GeminiLive : IDisposable
             ("app", "Filtra por aplicación, por ejemplo «explorer». Vacío = todas.")),
         Fn("map_routes_from", "Qué se puede hacer desde una pantalla: a dónde se puede ir y qué acciones hay.",
             ("surface", "La pantalla, por ejemplo «uia://explorer.exe/documentos». Vacío = donde estés.")),
-        Fn("map_go_to", "Va a una pantalla conocida recorriendo el mapa, comprobando cada tramo.",
-            ("surface", "La pantalla de destino, tal como la devuelve map_places.")),
+        Fn("map_go_to", "Va a una pantalla, comprobando cada tramo. TAMBIÉN es la forma de ir a una "
+            + "PÁGINA WEB: con surface=«web://github.com» abre o activa su pestaña, aunque no estuviera "
+            + "abierta y aunque el mapa no conozca ningún camino hasta ella.",
+            ("surface", "La pantalla de destino: la que devuelve map_places, o «web://dominio» para una web.")),
         Fn("map_take", "Pulsa CUALQUIER cosa que esté en la pantalla: entrar en una carpeta, «Nuevo», "
             + "«Cortar», «Pegar», una barra de búsqueda, una casilla… No hace falta que el mapa la "
             + "conozca: si no la tiene, la busca en la pantalla de ahora, la pulsa y la aprende.",
@@ -769,9 +771,11 @@ public sealed class GeminiLive : IDisposable
             + "justo el que se quería excluir.",
             ("exit", "Nombre del que sobra (o varios separados por comas). Vacío = el que esté bajo el cursor, "
                    + "que es como se dice «excepto ESTE».")),
-        Fn("map_open_app", "ABRE una aplicación (o la trae al frente si ya estaba) y dice en qué pantalla "
-            + "quedas. Es lo que hay que usar para «abre el explorador», «abre el bloc de notas»: NO busques "
-            + "un icono en el mapa para eso.",
+        Fn("map_open_app", "ABRE un PROGRAMA del ordenador (o lo trae al frente si ya estaba) y dice en "
+            + "qué pantalla quedas. Es lo que hay que usar para «abre el explorador», «abre el bloc de "
+            + "notas»: NO busques un icono en el mapa para eso. Para una PÁGINA WEB —GitHub, Gmail, "
+            + "Canva— NO uses esto: usa map_go_to con surface=«web://github.com». Pedir una web por aquí "
+            + "hace que se busque un programa que no existe.",
             ("app", "El proceso, por ejemplo «explorer», «notepad», «chrome».")),
         Fn("map_learn_app", "Recorre una aplicación entera y aprende sus pantallas. Tarda; úsala solo si hace "
             + "falta conocer una app que el mapa no tiene, no para abrirla.",

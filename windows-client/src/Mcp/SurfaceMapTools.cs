@@ -732,12 +732,39 @@ public sealed class SurfaceMapTools
         app = app.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim();
         _ultimaApp = app;
 
+        // ¿ES UN SITIO WEB Y NO UN PROGRAMA? Se mira ANTES de intentar lanzar nada.
+        //
+        // El modelo pidió «abre github» y esto trató de arrancar un ejecutable llamado «github»:
+        // seis segundos para acabar en «no pude abrir github ni traerla al frente», y Ü se lo dijo
+        // al usuario como si GitHub no se pudiera abrir (2026-08-16, en el log). La herramienta
+        // buena era `map_go_to web://github.com`, que un minuto antes había traído la pestaña al
+        // frente en un segundo — pero eso el modelo no lo sabía y aquí tampoco se le decía.
+        //
+        // Intentarlo como programa PRIMERO no es neutral: lanzar algo con un nombre inventado es la
+        // clase de cosa que abrió Docker Desktop cuando se le pidió «desktop» (2026-07-31).
+        string dominio = Uia.PestanasAbiertas.DominioQueSuena(app);
+        if (dominio.Length > 0)
+        {
+            LogBus.Log("mapa-mcp", $"«{app}» no es un programa, es el sitio «{dominio}»: se va por su pestaña");
+            if (Uia.AppAligner.PonerDelante("web://" + dominio))
+            {
+                EsperarPantallaLista(2000);
+                return $"Estás en «{_where()?.Id ?? dominio}».";
+            }
+            return $"«{dominio}» es un sitio web y no pude abrirlo en el navegador.";
+        }
+
         if (!AsegurarFoco(app))
         {
             LogBus.Log("mapa-mcp", $"«{app}» no estaba delante; se abre");
             AppAligner.FocusOrLaunch(app);
             if (!AsegurarFoco(app))
-                return $"no pude abrir «{app}» ni traerla al frente; ahora hay «{AppEnFrente()}»";
+                // SE DICE QUÉ HACER, no solo qué falló. El mensaje anterior dejaba al modelo sin
+                // salida y contestaba al usuario «no he podido abrir GitHub», que era mentira: sí se
+                // podía, por otra puerta.
+                return $"no pude abrir «{app}» ni traerla al frente; ahora hay «{AppEnFrente()}». "
+                     + "Si «" + app + "» es una página y no un programa, pídelo con "
+                     + $"map_go_to y `surface` = «web://{app}.com» o el dominio que sea.";
         }
 
         EsperarPantallaLista(2000);

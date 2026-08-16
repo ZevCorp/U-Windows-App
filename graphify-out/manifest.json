@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml.cs": {
-    "mtime": 1786861841.594909,
-    "ast_hash": "07102290dca17e09e22be741ccb58e5f",
+    "mtime": 1786886437.360696,
+    "ast_hash": "06a655cfb3059d0b809577eec868962b",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FillPreviewWindow.cs": {
@@ -485,8 +485,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Voice/GeminiLive.cs": {
-    "mtime": 1786884941.2957773,
-    "ast_hash": "c234f51971cd032027d2783594283721",
+    "mtime": 1786886425.7690542,
+    "ast_hash": "8aee06c185a6562564423e4a58077f9c",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/LiveAudio.cs": {
@@ -735,8 +735,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/PanelDeAcciones.cs": {
-    "mtime": 1786207404.502875,
-    "ast_hash": "20a8a196930e55c69f450d4f30f02aa9",
+    "mtime": 1786886395.2615602,
+    "ast_hash": "397c5a6f2dc3447a66f16cf2c9ff302a",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/PasoAPaso.cs": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786885021.273879,
-    "ast_hash": "219448fd8f414a336faf82be970a2a3c",
+    "mtime": 1786886496.7774563,
+    "ast_hash": "053de02f8fd063345eaa66d7cd4c4173",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786885024.4642723,
-    "ast_hash": "99ebe77d4dba3b204d2e4255eddcaba4",
+    "mtime": 1786886502.7372067,
+    "ast_hash": "0c569cb220d122fd663ecfa1cbf587ff",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
@@ -1217,6 +1217,11 @@
   "windows-client/src/Navigation/PasoDelNucleo.cs": {
     "mtime": 1786884318.0261507,
     "ast_hash": "72d5d24129194d36b2d4c05a5b56a0cb",
+    "semantic_hash": ""
+  },
+  "puente-omi/DESACTIVADO.md": {
+    "mtime": 1786886154.348516,
+    "ast_hash": "a62bb2b02db1ac0c7afd7ef8e4dfa1f4",
     "semantic_hash": ""
   }
 }

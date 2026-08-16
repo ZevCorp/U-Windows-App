@@ -110,6 +110,44 @@ public static class PestanasAbiertas
         }
     }
 
+    /// <summary>
+    /// ¿ESTE NOMBRE ES UN SITIO QUE YA CONOCEMOS? «github» → «github.com». Vacío si no, o si suena
+    /// a varios.
+    /// </summary>
+    /// <remarks>
+    /// Se pidió «abre github» y se intentó arrancar un ejecutable llamado «github»: seis segundos
+    /// para acabar en «no pude abrir github», y Ü se lo contó al usuario como si GitHub no se
+    /// pudiera abrir. Era mentira: un minuto antes su pestaña se había traído al frente en un
+    /// segundo (2026-08-16, en el log).
+    ///
+    /// SOLO SE CONTESTA SI ES INEQUÍVOCO, y solo entre los dominios POR LOS QUE YA SE PASÓ: no se
+    /// inventa «github.com» a partir de una cadena, se reconoce lo que está en la memoria. Con dos
+    /// candidatos —«google.com» y «docs.google.com» ante «google»— se devuelve vacío: elegir a ojo
+    /// entre dos sitios es la misma forma de fallo que acuñar una arista adivinando cuál de dos
+    /// puertas con el mismo nombre era.
+    /// </remarks>
+    public static string DominioQueSuena(string nombre)
+    {
+        string n = (nombre ?? "").Trim().TrimEnd('/').ToLowerInvariant();
+        if (n.Length < 3) return "";
+
+        lock (_candado)
+        {
+            Cargar();
+            var claves = _rastros.Keys.ToList();
+
+            // Tal cual, o con el punto puesto: «github.com» y «github» son la misma petición.
+            var exacto = claves.Where(d => d.Equals(n, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (exacto.Count == 1) return exacto[0];
+
+            // Por la primera etiqueta del dominio: «github» reconoce «github.com», y «google» NO
+            // reconoce nada porque suena igual a «google.com» y a «docs.google.com».
+            var porEtiqueta = claves.Where(d =>
+                d.Split('.').FirstOrDefault()?.Equals(n, StringComparison.OrdinalIgnoreCase) == true).ToList();
+            return porEtiqueta.Count == 1 ? porEtiqueta[0] : "";
+        }
+    }
+
     /// <summary>Con qué esquema se vio este dominio. Vacío si no consta.</summary>
     public static string EsquemaDe(string dominio)
     {
