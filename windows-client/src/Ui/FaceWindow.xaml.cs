@@ -553,6 +553,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             OsVersion = Environment.OSVersion.VersionString
         };
         TelemetryBus.Init(_backend, identity);
+        // Después de Init y no antes: el espejo escribe una línea al encenderse, y sin cliente
+        // levantado esa primera línea se perdería y no se sabría si quedó reflejando o no.
+        Telemetry.EspejoDelLog.Encender();
     }
 
     // --- Auto-actualización ---

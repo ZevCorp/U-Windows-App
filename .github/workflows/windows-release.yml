@@ -134,10 +134,33 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.SUPABASE_S3_REGION }}
           ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
+          # SIN ESTO, LOS TROZOS SE RECHAZAN UNO A UNO. Desde la v2.23 la CLI de aws añade una suma
+          # de verificación (CRC32) a cada subida por su cuenta, y la pasarela de Supabase no la
+          # acepta en las partes de un multipart: devuelve un error VACÍO —«An error occurred ()
+          # when calling the UploadPart operation:»— que no dice nada de checksums. Los archivos
+          # pequeños pasaban igual porque van en una sola petición, y eso fue justo lo que despistó:
+          # el feed quedó publicado anunciando una versión cuyo paquete no había subido (2026-08-16).
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
         run: |
-          aws s3 cp out\releases s3://windows/ --recursive --endpoint-url $env:ENDPOINT
+          # PowerShell no corta el paso porque un comando de dentro falle, y el `ls` de abajo dejaba
+          # el código de salida en 0: la vez anterior la subida falló, el paso salió VERDE y el feed
+          # quedó anunciando una versión que nadie podía descargar. Un release que miente es peor que
+          # uno que no ocurre, así que se comprueba a mano.
+          aws s3 cp out\releases s3://windows/ --recursive --endpoint-url $env:ENDPOINT --only-show-errors
+          if ($LASTEXITCODE -ne 0) { throw "la subida falló (código $LASTEXITCODE): el feed NO se ha publicado" }
+
           Write-Host '--- lo que quedó publicado en el feed:'
           aws s3 ls s3://windows/ --endpoint-url $env:ENDPOINT
+
+          # Y que el feed sea COHERENTE: que el paquete que anuncia esté de verdad ahí. Es la
+          # comprobación que habría cazado el publicado a medias sin tener que mirar el bucket.
+          $esperado = (Get-Content out\releases\releases.win.json | ConvertFrom-Json).Assets[0].FileName
+          $subidos  = aws s3 ls s3://windows/ --endpoint-url $env:ENDPOINT
+          if ($subidos -notmatch [regex]::Escape($esperado)) {
+            throw "el feed anuncia $esperado pero ese archivo no está en el bucket"
+          }
+          Write-Host "feed coherente: $esperado está publicado"
 
       - name: Smoke test (dry run)
         if: ${{ inputs.dry_run == true }}

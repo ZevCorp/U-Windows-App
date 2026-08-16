@@ -27,6 +27,17 @@ public static class LogBus
 
     public static event EventHandler<string>? Logged;
 
+    /// <summary>
+    /// Lo mismo que <see cref="Logged"/> pero con la etiqueta y el texto SEPARADOS, no pegados en una
+    /// línea ya formateada.
+    ///
+    /// Existe porque quien reenvía el log a otro sitio necesita la etiqueta para decidir: el espejo
+    /// que lo sube al backend tiene que poder callar los suyos propios, y volver a sacarla de la línea
+    /// con un recorte sería adivinar sobre un formato pensado para leerse, no para analizarse. Ver
+    /// <see cref="U.WindowsClient.Telemetry.EspejoDelLog"/>.
+    /// </summary>
+    public static event Action<string, string>? Anotado;
+
     public static void Log(string tag, string message)
     {
         string line = $"[{DateTime.Now:HH:mm:ss}] {tag}: {message}";
@@ -37,6 +48,9 @@ public static class LogBus
             AppendToFile(line);
         }
         Logged?.Invoke(null, line);
+        // Nunca puede tumbar a quien está logueando: escribir una línea no es hacerse cargo de lo que
+        // otros hagan con ella.
+        try { Anotado?.Invoke(tag, message); } catch { }
     }
 
     public static IReadOnlyList<string> Snapshot()
