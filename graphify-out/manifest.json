@@ -155,8 +155,8 @@
     "semantic_hash": "f80b4dfd141d6d3471dc0b37479bfddc"
   },
   "windows-client/WindowsClient.csproj": {
-    "mtime": 1786825865.522939,
-    "ast_hash": "7fb32d525cfb761be528e11ba6908863",
+    "mtime": 1786841259.217529,
+    "ast_hash": "1f3fd1cc9a67d6a51fad85917a40c950",
     "semantic_hash": ""
   },
   "windows-client/scripts/publish-release.ps1": {
@@ -200,14 +200,14 @@
     "semantic_hash": "c4ad64f4845142fc6ff68a0ee76768ab"
   },
   "windows-client/src/Config.cs": {
-    "mtime": 1785854979.5718794,
-    "ast_hash": "693b65cb157a600a098158b4e8cef0d3",
-    "semantic_hash": "693b65cb157a600a098158b4e8cef0d3"
+    "mtime": 1786845898.0435336,
+    "ast_hash": "5286df95c4f69bad559640ba534666e4",
+    "semantic_hash": ""
   },
   "windows-client/src/Diagnostics/LogBus.cs": {
-    "mtime": 1785703471.0377736,
-    "ast_hash": "ac8e4ca28976a782d24cc55c08a3801b",
-    "semantic_hash": "ac8e4ca28976a782d24cc55c08a3801b"
+    "mtime": 1786841149.728703,
+    "ast_hash": "778d5742af2e3eef4ba6e2ebbe00b587",
+    "semantic_hash": ""
   },
   "windows-client/src/Domain/Protocol.cs": {
     "mtime": 1784647123.7117782,
@@ -225,8 +225,8 @@
     "semantic_hash": "275bc8ba78be31a8ac456833edcaa275"
   },
   "windows-client/src/Mcp/SurfaceMapTools.cs": {
-    "mtime": 1786458520.6453938,
-    "ast_hash": "25a8f3cc5197c535dc8d5fc7af9a3f2d",
+    "mtime": 1786841149.730756,
+    "ast_hash": "bc5ab04525b0b3c8e930d061542fef8b",
     "semantic_hash": ""
   },
   "windows-client/src/Mcp/WorkflowMcpRunner.cs": {
@@ -260,8 +260,8 @@
     "semantic_hash": "aec373cf4f3b1d2bf2256dd3eb60d0b9"
   },
   "windows-client/src/Navigation/SurfaceMap.cs": {
-    "mtime": 1786458500.5218248,
-    "ast_hash": "b6d45dbb84a46c3a9ad47a45646c31a0",
+    "mtime": 1786841149.735769,
+    "ast_hash": "f3dba7b349173ca714516d1a146d20ce",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/SurfaceNavigator.cs": {
@@ -335,13 +335,13 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml": {
-    "mtime": 1786836574.0516932,
+    "mtime": 1786841149.7387686,
     "ast_hash": "edafa667a297cddf3613ea5b0fde6905",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml.cs": {
-    "mtime": 1786836590.4738545,
-    "ast_hash": "4495c8bb73822139e69f0232957e6c38",
+    "mtime": 1786845909.1436179,
+    "ast_hash": "f8c1041f28f8090ba90eeee909c8b1c6",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FillPreviewWindow.cs": {
@@ -355,7 +355,7 @@
     "semantic_hash": "017008d8f741ce4f5cf005abbc21111c"
   },
   "windows-client/src/Ui/GraphExplorerWindow.cs": {
-    "mtime": 1786556063.1429071,
+    "mtime": 1786841149.7418852,
     "ast_hash": "b40fd85d6b37a9884168b440d6157110",
     "semantic_hash": ""
   },
@@ -480,17 +480,17 @@
     "semantic_hash": ""
   },
   "windows-client/src/Update/Updater.cs": {
-    "mtime": 1786836546.8634293,
-    "ast_hash": "2a12d3f25aed623f4a3d389f29184a9a",
+    "mtime": 1786841276.2512581,
+    "ast_hash": "21175b4c8090b2f00614c27341bb8f63",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/GeminiLive.cs": {
-    "mtime": 1786836421.8015914,
-    "ast_hash": "3f574f2f31560df7c17eca33d90a7b5c",
+    "mtime": 1786846344.1962447,
+    "ast_hash": "dc164aa8190ad95dc69965e65e0a9a3c",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/LiveAudio.cs": {
-    "mtime": 1786717070.9432425,
+    "mtime": 1786841149.745728,
     "ast_hash": "28136b94831d55673bbdcf384bf20549",
     "semantic_hash": ""
   },
@@ -510,7 +510,7 @@
     "semantic_hash": "1c0f682bd6eb61e272c223e4c63e4140"
   },
   "windows-graph/src/Contracts.cs": {
-    "mtime": 1786732115.6793454,
+    "mtime": 1786841149.7477276,
     "ast_hash": "b85e2b241c48e48eb79b096faeaefdb3",
     "semantic_hash": ""
   },
@@ -565,7 +565,7 @@
     "semantic_hash": "ffd7ffa6502f3f7b5962f9d6d2293200"
   },
   "windows-graph/src/Surfaces/SapGuiSurface.cs": {
-    "mtime": 1786732153.4368308,
+    "mtime": 1786841149.7487283,
     "ast_hash": "c939c7a317fff42be5b479b63e363d00",
     "semantic_hash": ""
   },
@@ -625,12 +625,12 @@
     "semantic_hash": "4270c451a56f7db2ccd6373617357e4e"
   },
   ".github/workflows/windows-release.yml": {
-    "mtime": 1786833438.3214548,
-    "ast_hash": "3ebfa6d90b17af314dc5910c57acf1a8",
+    "mtime": 1786841613.1057608,
+    "ast_hash": "bd7d6eb8d5d055428158e9342556a8ca",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786717070.9311814,
+    "mtime": 1786841149.5445552,
     "ast_hash": "7250adc84513779b167b6208ece24a46",
     "semantic_hash": ""
   },
@@ -645,9 +645,9 @@
     "semantic_hash": ""
   },
   "RELEASING-WINDOWS.md": {
-    "mtime": 1784227221.098302,
-    "ast_hash": "d50811519d8a03eca0948fc31a437f64",
-    "semantic_hash": "d50811519d8a03eca0948fc31a437f64"
+    "mtime": 1786841883.7293775,
+    "ast_hash": "7d809033e97ae8d7251e8672ac952d33",
+    "semantic_hash": ""
   },
   "WINDOWS.md": {
     "mtime": 1784227221.098302,
@@ -770,7 +770,7 @@
     "semantic_hash": ""
   },
   "agente-arquitecto/arquitecto.mjs": {
-    "mtime": 1786538589.9128697,
+    "mtime": 1786841149.5455625,
     "ast_hash": "14d25681dd0312fd181a0196b4990478",
     "semantic_hash": ""
   },
@@ -780,7 +780,7 @@
     "semantic_hash": ""
   },
   "scripts/ci-local.ps1": {
-    "mtime": 1786493344.9415827,
+    "mtime": 1786841149.7175908,
     "ast_hash": "ba5d81a4717daccd4d268a850e79ce3c",
     "semantic_hash": ""
   },
@@ -790,13 +790,13 @@
     "semantic_hash": ""
   },
   "scripts/version-nucleo.ps1": {
-    "mtime": 1786622568.4175234,
+    "mtime": 1786841149.7185907,
     "ast_hash": "af0eb445634b11295c80d6e044494643",
     "semantic_hash": ""
   },
   "tests/ContratoDelGrafo/Contrato.cs": {
-    "mtime": 1786458657.358247,
-    "ast_hash": "f8cd20eebdfe143b32eed2de45a79bdb",
+    "mtime": 1786841149.7195904,
+    "ast_hash": "9d788862da2468262156d90d6d2bb32a",
     "semantic_hash": ""
   },
   "tests/ContratoDelGrafo/ContratoDelGrafo.csproj": {
@@ -810,17 +810,17 @@
     "semantic_hash": ""
   },
   "versiones/nucleo/v1.cs": {
-    "mtime": 1786458500.5218248,
-    "ast_hash": "b6d45dbb84a46c3a9ad47a45646c31a0",
+    "mtime": 1786841149.7216942,
+    "ast_hash": "f3dba7b349173ca714516d1a146d20ce",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Arquitecto.cs": {
-    "mtime": 1786494747.4101145,
+    "mtime": 1786841149.7317624,
     "ast_hash": "4101e27759a21f7960f947cf8b89ff51",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/EscenarioCi.cs": {
-    "mtime": 1786458394.6594992,
+    "mtime": 1786841149.7337618,
     "ast_hash": "5c60e6dc923bf2e62cd5344a2d3380be",
     "semantic_hash": ""
   },
@@ -830,7 +830,7 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/AtajoPorGolpes.cs": {
-    "mtime": 1786717070.9351776,
+    "mtime": 1786841149.7377682,
     "ast_hash": "2c8987ff4d2832e3d3b3d2e8996f816c",
     "semantic_hash": ""
   },
@@ -855,7 +855,7 @@
     "semantic_hash": ""
   },
   "windows-client/src/Diagnostics/ConsolaViva.cs": {
-    "mtime": 1786494671.4856813,
+    "mtime": 1786841149.728703,
     "ast_hash": "f23da395e4d1a6c288fd409f07455854",
     "semantic_hash": ""
   },
@@ -895,22 +895,22 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Bronce.cs": {
-    "mtime": 1786458394.6575096,
+    "mtime": 1786841149.7327623,
     "ast_hash": "d376cf01ad8d7f9aeb4925fa41de84d5",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/Plata.cs": {
-    "mtime": 1786458394.6594992,
+    "mtime": 1786841149.734763,
     "ast_hash": "7053bab388fa20afa1a3c21ef2cf8cc3",
     "semantic_hash": ""
   },
   "docs/plan-plata-real.md": {
-    "mtime": 1786458394.6539776,
+    "mtime": 1786841149.54657,
     "ast_hash": "cae8b195260f6c3013c734686d560f0b",
     "semantic_hash": ""
   },
   "scripts/verificar.ps1": {
-    "mtime": 1786717070.9331822,
+    "mtime": 1786841149.7185907,
     "ast_hash": "9c53c35e4bc095bfb0def4adeb3fa65c",
     "semantic_hash": ""
   },
@@ -985,7 +985,7 @@
     "semantic_hash": ""
   },
   ".github/workflows/contrato.yml": {
-    "mtime": 1786717070.9291637,
+    "mtime": 1786841149.5419421,
     "ast_hash": "444fdd66b660c0318afeda87fde541a6",
     "semantic_hash": ""
   },
@@ -995,203 +995,218 @@
     "semantic_hash": ""
   },
   "laboratorio/Maqueta/Maqueta.csproj": {
-    "mtime": 1786498921.2025468,
-    "ast_hash": "b9ffe470974875ea81776b45ffabc253",
+    "mtime": 1786841149.706559,
+    "ast_hash": "de5eb6ef533ac7abfdd7fcfe17bd12bd",
     "semantic_hash": ""
   },
   "laboratorio/Maqueta/Programa.cs": {
-    "mtime": 1786502596.3072426,
-    "ast_hash": "506264c786bd07cd222de07626fc04e1",
+    "mtime": 1786841149.7075584,
+    "ast_hash": "8237f4b69faeccec5c9ea2a6f739dd5f",
     "semantic_hash": ""
   },
   "laboratorio/Maqueta/verdad.json": {
-    "mtime": 1786499071.4693632,
-    "ast_hash": "786276a5f2eca4309d4a35d1627b3d65",
+    "mtime": 1786841149.7075584,
+    "ast_hash": "428e0542690fb64fa2b9488ce10da4fb",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/NarradorDelArquitecto.cs": {
-    "mtime": 1786506575.7735562,
-    "ast_hash": "43aa38976b1ecc7b958d1bf5e2510117",
+    "mtime": 1786841149.7467272,
+    "ast_hash": "81f93f9b49e02d6c035923dd60c5e70a",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786642523.2072847,
-    "ast_hash": "a8b35127a4860f4c25d56376958d3787",
+    "mtime": 1786846452.4000273,
+    "ast_hash": "b43a4dcea9590a74ad63f6f7c68d65b5",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
-    "mtime": 1786717028.8343797,
+    "mtime": 1786841149.7120721,
     "ast_hash": "2b1287fecc8fc12eba7dc45103117d56",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.csproj": {
-    "mtime": 1786538915.612843,
-    "ast_hash": "62ce4b12e4aa9a3ee67880d6ba4d2696",
+    "mtime": 1786841149.7120721,
+    "ast_hash": "e5d10d65851c818a13eede2c336cc11c",
     "semantic_hash": ""
   },
   "nucleo/Grafo/Grafo.cs": {
-    "mtime": 1786661542.054016,
-    "ast_hash": "d96b84e22724c9625dbb60b5f6b2e284",
+    "mtime": 1786841149.7130716,
+    "ast_hash": "2f26c1e1b8c6525f6257a4c2fc41b495",
     "semantic_hash": ""
   },
   "nucleo/Grafo/Grafo.csproj": {
-    "mtime": 1786538831.8417482,
-    "ast_hash": "ec9cdc2b1f90c33a3a8edde9bab102ec",
+    "mtime": 1786841149.7130716,
+    "ast_hash": "3e4c29e96835024577cb5dd311160d87",
     "semantic_hash": ""
   },
   "nucleo/Grafo/ProyectorNeo4j.cs": {
-    "mtime": 1786717028.837415,
+    "mtime": 1786841149.7140727,
     "ast_hash": "3e29f0e5a0d929a8870df5868b7383fb",
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
-    "mtime": 1786661404.8430576,
-    "ast_hash": "f4fa4d9db959da6f0ed9447d643dc6a4",
+    "mtime": 1786841149.7140727,
+    "ast_hash": "3f9f7c9f56a1d967dd25d2d93e3988be",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/ServidorDelNucleo.cs": {
-    "mtime": 1786717028.8417878,
+    "mtime": 1786841149.734763,
     "ast_hash": "aa1db7c654e40f96f09c6bef665509ca",
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786836721.9423532,
-    "ast_hash": "5a5da13bc5cb29fc391be9c22f0e523f",
+    "mtime": 1786841149.7155797,
+    "ast_hash": "b58cac9b1a31041bbfbd9f4d168e5026",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
-    "mtime": 1786623386.711435,
-    "ast_hash": "974af8e43fe7ea58230ce7481c902396",
+    "mtime": 1786841149.547573,
+    "ast_hash": "48dd92b4ebeec80b69a392101b3f730f",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.cs": {
-    "mtime": 1786642555.4415681,
-    "ast_hash": "56238b9fc09148676b6e8da0e4933b77",
+    "mtime": 1786841149.7085586,
+    "ast_hash": "fdee5a6808041250c0e2914d1f1eb326",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.csproj": {
-    "mtime": 1786622330.9087715,
-    "ast_hash": "a17672adafb438f9b2358ea08885080b",
+    "mtime": 1786841149.7085586,
+    "ast_hash": "4571fdffa9e2ac3d1f720c91fa3c1136",
     "semantic_hash": ""
   },
   "mapeador/Pulso/Pulso.csproj": {
-    "mtime": 1786622269.821397,
-    "ast_hash": "23e3c3a746f24f0504905bf3078c03b8",
+    "mtime": 1786841149.7100644,
+    "ast_hash": "dce4aa2615a03537fe2436ae3b01f90b",
     "semantic_hash": ""
   },
   "mapeador/Pulso/PulsoDelMapeador.cs": {
-    "mtime": 1786642253.1279724,
-    "ast_hash": "46b93514e069a300ba8db6a023e02f69",
+    "mtime": 1786841149.7100644,
+    "ast_hash": "d58e7133fff34473bfe9c91629f21d79",
     "semantic_hash": ""
   },
   "mapeador/Pulso/VueltaUnica.cs": {
-    "mtime": 1786622550.421721,
-    "ast_hash": "0bee192f42baaf13b5b5794545cc84b2",
+    "mtime": 1786841149.71107,
+    "ast_hash": "7aeaa36d2c2356cac708ab58593a806f",
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786836724.4733286,
-    "ast_hash": "0d8d193498b4b96b1f9e561f8e975d93",
+    "mtime": 1786841149.7155797,
+    "ast_hash": "a6b49b32b84ed2037b15754e74c650fa",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
-    "mtime": 1786636620.354572,
-    "ast_hash": "131e0a57edc9fb64c5997dc7240ae6fb",
+    "mtime": 1786841149.7095585,
+    "ast_hash": "2118969e3043d098a21db09de478ec64",
     "semantic_hash": ""
   },
   "mapeador/Pulso/SinColgarse.cs": {
-    "mtime": 1786642591.7646563,
-    "ast_hash": "2072189dc8aeef402cb65abed3fabde4",
+    "mtime": 1786841149.71107,
+    "ast_hash": "14657fcad825b4a80bb1bd38bdc90757",
     "semantic_hash": ""
   },
   "scripts/contrato-de-la-voz.ps1": {
-    "mtime": 1786717071.073621,
+    "mtime": 1786841149.7175908,
     "ast_hash": "e94183d070f18e554243b67e5b035252",
     "semantic_hash": ""
   },
   "voz/Contrato/Contrato.cs": {
-    "mtime": 1786717071.073621,
+    "mtime": 1786841149.7216942,
     "ast_hash": "9bb01b705f0f1b34c2404dfff6c64613",
     "semantic_hash": ""
   },
   "voz/Contrato/Contrato.csproj": {
-    "mtime": 1786717071.0751302,
+    "mtime": 1786841149.7227006,
     "ast_hash": "edc318f192a1042bda1b6e46ce08221b",
     "semantic_hash": ""
   },
   "voz/Omi/Codec.cs": {
-    "mtime": 1786717071.076138,
+    "mtime": 1786841149.7227006,
     "ast_hash": "96e556b479854847705ec26fa1ca0916",
     "semantic_hash": ""
   },
   "voz/Omi/Fuente.cs": {
-    "mtime": 1786717071.076138,
+    "mtime": 1786841149.7236998,
     "ast_hash": "b581182abeae5d58613f50553c43b28c",
     "semantic_hash": ""
   },
   "voz/Omi/Omi.csproj": {
-    "mtime": 1786717071.077137,
+    "mtime": 1786841149.7236998,
     "ast_hash": "0821a5a650f4579416647da89daddd22",
     "semantic_hash": ""
   },
   "voz/Omi/Relevo.cs": {
-    "mtime": 1786717071.077137,
+    "mtime": 1786841149.7236998,
     "ast_hash": "2e2f0a5007e78f2f410673772fde8610",
     "semantic_hash": ""
   },
   "voz/Omi/Reposicion.cs": {
-    "mtime": 1786717071.0784092,
+    "mtime": 1786841149.7247002,
     "ast_hash": "c7e822e88b78631071fa616c04f65be6",
     "semantic_hash": ""
   },
   "voz/Omi/Trama.cs": {
-    "mtime": 1786717071.0794182,
+    "mtime": 1786841149.7247002,
     "ast_hash": "361ebf9a2e14a48ea35b57dd2ef40c01",
     "semantic_hash": ""
   },
   "voz/Omi/Voz.cs": {
-    "mtime": 1786717071.0804293,
+    "mtime": 1786841149.7247002,
     "ast_hash": "0b98514ae36295cbfc2cbf45cda26a96",
     "semantic_hash": ""
   },
   "windows-client/src/Clinical/DictadoSoniox.cs": {
-    "mtime": 1786725512.3986318,
-    "ast_hash": "930b999080c7ad72f4ad9836b4d8e950",
+    "mtime": 1786841149.726702,
+    "ast_hash": "5f35615a36a21c4a147f0c2b65c7d5dc",
     "semantic_hash": ""
   },
   "windows-client/src/Clinical/EjecutorDeExportaciones.cs": {
-    "mtime": 1786731150.5053687,
-    "ast_hash": "2ee9347261b88e332ce1c93880f21f7b",
+    "mtime": 1786841149.726702,
+    "ast_hash": "2fe098441ceb97c7204598e88caf1e44",
     "semantic_hash": ""
   },
   "windows-client/src/Clinical/RellenadorSap.cs": {
-    "mtime": 1786732207.6411948,
-    "ast_hash": "d88fa32c95aa1a5b1c4e8d8e9575787b",
+    "mtime": 1786841149.727702,
+    "ast_hash": "72bd7cc189c5fca9fa442c912e9cdea9",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/PanelDelCollar.cs": {
-    "mtime": 1786717071.0824325,
+    "mtime": 1786841149.742885,
     "ast_hash": "adcc1103df858477d46074f1fe700559",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/CollarPermanente.cs": {
-    "mtime": 1786717071.0834298,
+    "mtime": 1786841149.743885,
     "ast_hash": "e538e09ac6990ed95313fee7876be54b",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/FuenteOmi.cs": {
-    "mtime": 1786717071.0860054,
+    "mtime": 1786841149.743885,
     "ast_hash": "a50e581debf4e045fbaace9cfdb9720d",
     "semantic_hash": ""
   },
   "docs/specs/001-hablarle-a-la-carita-por-el-omi.md": {
-    "mtime": 1786717070.9321897,
+    "mtime": 1786841149.547573,
     "ast_hash": "8f1c03fca529abdb2f4fe978c8c49e2e",
     "semantic_hash": ""
   },
   "puente-omi/puente.py": {
-    "mtime": 1786737144.5890043,
-    "ast_hash": "62226833a8399d593cc166ff7e3b73f9",
+    "mtime": 1786841149.7165902,
+    "ast_hash": "bc53c4c8295f49d16da838d1fb37dc5f",
+    "semantic_hash": ""
+  },
+  "windows-client/src/Telemetry/EspejoDelLog.cs": {
+    "mtime": 1786841149.7367687,
+    "ast_hash": "6410a656230282f96395df36c9c3e8fe",
+    "semantic_hash": ""
+  },
+  ".github/workflows/limpiar-feed-windows.yml": {
+    "mtime": 1786841121.6427844,
+    "ast_hash": "07cc8d32c84f76c178ee7dd000bc1ab6",
+    "semantic_hash": ""
+  },
+  "windows-client/src/Onboarding/Presentacion.cs": {
+    "mtime": 1786845838.9678507,
+    "ast_hash": "793ebbbc685e4626ef032298201b07bf",
     "semantic_hash": ""
   }
 }

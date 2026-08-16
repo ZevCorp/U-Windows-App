@@ -395,39 +395,103 @@ async function tickMapa() {
            `${nodos.length} ubicaciones · ${enlaces} camino(s) aprendido(s)`);
   leyenda("cada punto es una PANTALLA · las flechas son caminos probados · clic en un nodo para ir");
 
-  // Se agrupa por app en anillos concéntricos: sin agrupar, dos apps distintas se mezclan y el
-  // dibujo sugiere una vecindad que no existe. Dentro de cada anillo el orden es alfabético para
-  // que un nodo no salte de sitio entre dos refrescos — un dibujo que se mueve solo no se puede leer.
+  // CADA APP, SU ISLA. Antes eran anillos concéntricos alrededor del MISMO centro, y con 191
+  // ubicaciones en treinta apps el dibujo sugería una vecindad que no existe: nodos de SAP pegados a
+  // nodos del explorador solo porque les tocó el mismo radio. Un dibujo que insinúa relaciones
+  // falsas es peor que uno feo — es la misma familia de error que perseguimos en el núcleo.
+  //
+  // Ahora cada app ocupa su propia región, con su nombre y un disco de fondo, y las flechas que
+  // cruzan de una isla a otra se ven POR LO QUE SON: saltos entre aplicaciones, largos y raros.
+  //
+  // El orden es alfabético y el tamaño solo depende de cuántas ubicaciones tiene la app: dos cosas
+  // deterministas, para que un nodo no salte de sitio entre dos refrescos. Un dibujo que se mueve
+  // solo no se puede leer, y este se repinta cada segundo.
   const porApp = {};
   nodos.forEach(n => (porApp[n.app] ||= []).push(n));
   const apps = Object.keys(porApp).sort();
-  const an = innerWidth, al = innerHeight, cx = an / 2, cy = al / 2 + 20;
-  const pos = {};
-  apps.forEach((app, ia) => {
-    const lista = porApp[app].sort((a, b) => a.id.localeCompare(b.id));
-    const radio = 120 + ia * Math.min(160, (Math.min(an, al) / 2 - 140) / Math.max(1, apps.length - 1 || 1));
-    lista.forEach((n, i) => {
-      const ang = (i / lista.length) * Math.PI * 2 - Math.PI / 2 + ia * 0.4;
-      pos[n.id] = { x: cx + Math.cos(ang) * radio, y: cy + Math.sin(ang) * radio, n };
-    });
+  const an = innerWidth;
+
+  // El radio crece con la RAÍZ del número de nodos, no con el número: así una app con 60 pantallas
+  // no se come el lienzo entero. Y las de una o dos pantallas se aprietan a propósito: son 40 de las
+  // 69 —ventanas por las que solo se pasó— y con el tamaño de las demás ocupaban la mitad del alto
+  // sin decir nada. Que quepan no es cosmética: lo que hay que poder leer de un vistazo es dónde
+  // está la estructura, y la estructura vive en las islas grandes.
+  const islas = apps.map(app => {
+    const lista = porApp[app].slice().sort((a, b) => a.id.localeCompare(b.id));
+    const n = lista.length;
+    return { app, lista, radio: n <= 2 ? 14 + n * 6 : Math.max(34, Math.min(150, 20 + Math.sqrt(n) * 26)) };
   });
+
+  // Se colocan en filas de izquierda a derecha, saltando de línea cuando no cabe otra isla. No es
+  // una rejilla fija: las islas grandes piden más sitio y las pequeñas no lo desperdician.
+  const HUECO = 34, ALTO_TITULO = 26;
+  let x = HUECO, y = 120, altoFila = 0;
+  const pos = {}, marcos = [];
+  islas.forEach(isla => {
+    const ancho = isla.radio * 2;
+    if (x + ancho > an - HUECO && x > HUECO) { x = HUECO; y += altoFila + HUECO + ALTO_TITULO; altoFila = 0; }
+    const cx = x + isla.radio, cy = y + isla.radio + ALTO_TITULO;
+    marcos.push({ cx, cy, ...isla });
+
+    // Dentro de la isla, en anillos: uno solo hasta 12 nodos, y a partir de ahí se reparten en dos
+    // para que no se toquen. El ángulo sale del índice, así que es estable entre refrescos.
+    const n = isla.lista.length;
+    const dos = n > 12;
+    isla.lista.forEach((nodo, i) => {
+      const dentro = dos && i % 2 === 1;
+      const r = n === 1 ? 0 : isla.radio * (dentro ? 0.55 : 0.92);
+      const cuantos = dos ? Math.ceil(n / 2) : n;
+      const idx = dos ? Math.floor(i / 2) : i;
+      const ang = (idx / Math.max(cuantos, 1)) * Math.PI * 2 - Math.PI / 2;
+      pos[nodo.id] = { x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r, n: nodo };
+    });
+
+    x += ancho + HUECO;
+    altoFila = Math.max(altoFila, isla.radio * 2);
+  });
+  const alto = y + altoFila + ALTO_TITULO + 60;
 
   let s = `<defs><marker id="f" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
              <path d="M0,0 L0,6 L8,3 z" fill="${COL.verde}"/></marker></defs>`;
+
+  // Primero el terreno: el disco de cada isla y su nombre, por debajo de todo lo demás.
+  marcos.forEach(m => {
+    s += `<circle cx="${m.cx}" cy="${m.cy}" r="${m.radio + 16}" fill="${COL.fondoMemoria}"`
+       + ` stroke="${COL.bordeMemoria}" stroke-width="1" opacity="0.55"/>`;
+    s += `<text x="${m.cx}" y="${m.cy - m.radio - 24}" text-anchor="middle"`
+       + ` style="font-size:12px;fill:${COL.mutado};font-weight:600">${escapar(m.app)}</text>`;
+    s += `<text x="${m.cx}" y="${m.cy - m.radio - 24 + 14}" text-anchor="middle"`
+       + ` style="font-size:10px;fill:${COL.gris}">${m.lista.length} pantalla(s)</text>`;
+  });
+
+  // LAS QUE CRUZAN DE ISLA, DISTINTAS. Un camino dentro de una app y un salto entre apps no son la
+  // misma clase de hecho, y pintarlos igual era parte de por qué el dibujo confundía.
   nodos.forEach(n => n.caminos.forEach(c => {
     const a = pos[n.id], b = pos[c.hacia];
     if (!a || !b) return;
-    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${COL.lineaCamino}" stroke-width="1.5" marker-end="url(#f)"/>`;
+    const entreApps = a.n.app !== b.n.app;
+    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${COL.lineaCamino}"`
+       + ` stroke-width="${entreApps ? 1 : 1.5}"${entreApps ? ' stroke-dasharray="5 4" opacity="0.6"' : ''}`
+       + ` marker-end="url(#f)"/>`;
   }));
   Object.values(pos).forEach(({ x, y, n }) => {
     // El círculo lleva su id encima: es lo que permite que un clic sepa a dónde ir sin que la
     // página tenga que calcular nada. El destino sale del dibujo, y el dibujo del núcleo.
-    s += `<circle class="nodo" data-id="${escapar(n.id)}" cx="${x}" cy="${y}" r="${n.actual ? 11 : 7}"`
+    s += `<circle class="nodo" data-id="${escapar(n.id)}" cx="${x}" cy="${y}" r="${n.actual ? 11 : 6}"`
        + ` fill="${n.actual ? COL.fondoActual : COL.fondoNodo}" stroke="${n.actual ? COL.azul : COL.bordeNodo}"`
-       + ` stroke-width="${n.actual ? 3 : 1}" style="cursor:pointer"/>`;
-    s += rotulo(x + 13, y + 4, "start", corto(n.id), !n.actual);
+       + ` stroke-width="${n.actual ? 3 : 1}" style="cursor:pointer"><title>${escapar(n.id)}</title></circle>`;
+    // El rótulo se acorta y se apoya en el ratón: con islas apretadas, un nombre largo tapa a sus
+    // vecinos, y el nombre completo sigue disponible en el `title` del círculo.
+    s += rotulo(x + 10, y + 3.5, "start", corto(n.id).slice(0, 18), !n.actual);
   });
-  pintar(s);
+
+  // EL LIENZO CRECE CON EL CONTENIDO. Antes se fijaba a la altura de la ventana porque todo cabía en
+  // un anillo; con islas en varias filas, recortar a `innerHeight` escondería las de abajo — y un
+  // mapa que oculta parte de lo que sabe es la clase de mentira que este visor existe para evitar.
+  const svg = document.getElementById("lienzo");
+  svg.setAttribute("width", an);
+  svg.setAttribute("height", Math.max(innerHeight, alto));
+  svg.innerHTML = s;
   // CLIC LLANO. Ctrl+Shift no hacía falta en la práctica —el navegador nunca acaba de garantizar
   // que ambas teclas lleguen limpias a un evento de clic sobre SVG— y esta vista solo tiene una
   // acción posible sobre un nodo: ir. No hay ambigüedad que combinar teclas tuviera que resolver.
