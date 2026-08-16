@@ -838,7 +838,18 @@ public sealed class SurfaceMapTools
                 return $"abrí «{app}» pero sigo viendo el escritorio; puede que la ventana tarde en salir";
             EsperarPantallaLista(1500);
         }
-        if (donde.Length > 0) { Anotar("", donde); ObservarAqui(donde); }
+        // SOLO SE LEE LA PANTALLA SI NO SE CONOCE. Esto releía siempre —un `Read()` completo de
+        // UIA— y es la mayor parte del coste de abrir una app: 15,5 s en el explorador, 7 en Chrome
+        // (2026-08-16, medido). Volver a una pantalla en la que ya se ha estado no enseña nada
+        // nuevo, y quien vuelve suele venir con prisa.
+        //
+        // Se conserva entera para lo NUEVO, que es cuando leer sí aporta: una app que se acaba de
+        // abrir y de la que el mapa no sabe nada seguiría sin salidas si no se mirara.
+        if (donde.Length > 0)
+        {
+            Anotar("", donde);
+            if (_map.ExitsFrom(donde).Count == 0) ObservarAqui(donde);
+        }
         return donde.Length > 0
             ? $"«{app}» está delante. Estás en «{donde}»."
             : $"«{app}» está delante, pero aún no sé identificar la pantalla.";
@@ -1243,9 +1254,35 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>El sistema y el localizador dicen los dos que estamos en esta app.</summary>
-    private bool Coinciden(string app) =>
-        AppEnFrente().Equals(app, StringComparison.OrdinalIgnoreCase)
-        && AppDe(_where()?.Id ?? "").Equals(app, StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// ¿Está delante la app que pido? Se exigen LAS DOS FUENTES —el proceso en primer plano y la
+    /// superficie que ve el localizador— porque conformarse con la primera dejaba calcular rutas
+    /// desde un sitio donde ya no estábamos: tras cerrarse un panel del shell el foco ya era
+    /// correcto pero el localizador seguía diciendo «SearchHost» (2026-08-02).
+    /// </summary>
+    /// <remarks>
+    /// UN NAVEGADOR MOSTRANDO UNA PÁGINA SE LLAMA COMO LA PÁGINA, y eso rompía la segunda fuente
+    /// para siempre: con YouTube delante la superficie es «web://youtube.com», cuya app es
+    /// «youtube.com» y nunca «chrome». Así que `map_open_app chrome` no podía tener éxito jamás
+    /// estando Chrome delante — esperaba tres segundos, relanzaba Chrome, volvía a esperar, y a los
+    /// 16,7 s contestaba «no pude traer chrome al frente; ahora hay chrome» (2026-08-16, en el log
+    /// del usuario). Y mientras tanto peleaba por el foco con las demás llamadas, que es lo que hizo
+    /// aparecer el explorador en medio de la tarea.
+    ///
+    /// La garantía no se afloja: para una app nativa siguen exigiéndose las dos. Lo que se añade es
+    /// que una superficie web EN el navegador pedido cuenta como estar en ese navegador, que es lo
+    /// que cualquiera diría mirando la pantalla.
+    /// </remarks>
+    private bool Coinciden(string app)
+    {
+        if (!AppEnFrente().Equals(app, StringComparison.OrdinalIgnoreCase)) return false;
+
+        string id = _where()?.Id ?? "";
+        if (AppDe(id).Equals(app, StringComparison.OrdinalIgnoreCase)) return true;
+
+        return id.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
+            && Uia.PestanasAbiertas.EsNavegador(app);
+    }
 
     private bool EsperarCoincidencia(string app)
     {

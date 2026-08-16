@@ -225,8 +225,8 @@
     "semantic_hash": "275bc8ba78be31a8ac456833edcaa275"
   },
   "windows-client/src/Mcp/SurfaceMapTools.cs": {
-    "mtime": 1786888765.0894823,
-    "ast_hash": "d948d555caef6a479ab40ff45bf0ea9c",
+    "mtime": 1786889748.8775148,
+    "ast_hash": "f7d39a496ac4f268f1c93d2cf613fdba",
     "semantic_hash": ""
   },
   "windows-client/src/Mcp/WorkflowMcpRunner.cs": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786888822.5002427,
-    "ast_hash": "8bf2fa7a20fc88dde6ce9c5f00f8e5cd",
+    "mtime": 1786889801.6689384,
+    "ast_hash": "1e994afe47e3a5d37a22a3966af756ef",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786888826.0056772,
-    "ast_hash": "59c8b6a7fa32144e4f906cda7772d154",
+    "mtime": 1786889806.1992612,
+    "ast_hash": "6d22694cc24e635dccaa366de861a723",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
