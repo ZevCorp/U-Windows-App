@@ -69,6 +69,12 @@ public sealed class Config
     public bool Onboarded => !string.IsNullOrWhiteSpace(Email);
 
     /// <summary>
+    /// Si Ü ya se presentó en voz alta en este equipo. Se marca ANTES de hablar, no después: ver
+    /// <c>FaceWindow.OfrecerElPrimerEncuentro</c>.
+    /// </summary>
+    public bool PresentacionHecha { get; set; }
+
+    /// <summary>
     /// Asistente mudo (botón 🔇 de la carita). Se persiste a propósito: quien lo silencia suele estar
     /// en una consulta o una reunión, y que volviera a hablar solo por reiniciar Ü sería justo el
     /// problema que el botón viene a resolver.

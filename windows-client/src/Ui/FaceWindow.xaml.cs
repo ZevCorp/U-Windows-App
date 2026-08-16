@@ -402,6 +402,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // subconsciente + logs) al backend. No-op si el usuario no dio su correo.
         InitTelemetry();
         Closed += (_, __) => TelemetryBus.Shutdown();
+        // La primera vez, que se presente ella. No hace nada en los arranques siguientes.
+        OfrecerElPrimerEncuentro();
         // La superficie actual viaja en cada turno (scoping de workflows) y las llamadas
         // workflow_* del cerebro se ejecutan con el WorkflowPlayer (subconsciente).
         _workflowRunner = new WorkflowMcpRunner(_graphConfig, this);
@@ -1554,10 +1556,56 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 cierre.Start();
                 return "Cerrándome. Hasta luego.";
 
+            // No es autocontrol —no se acciona a sí misma— pero se despacha por aquí porque mira
+            // ESTE equipo, y eso lo sabe la ventana y no el mapa de pantallas de otras apps.
+            case "scan_computer":
+                return Onboarding.Presentacion.Escanear();
+
             default:
                 return $"«{herramienta}» no es una herramienta de autocontrol conocida";
         }
     });
+
+    /// <summary>
+    /// Que la primera vez se presente ELLA, en voz alta, y ofrezca mirar el equipo.
+    ///
+    /// POR QUÉ. Recién instalada aparecía una carita en la esquina y nadie decía para qué servía:
+    /// quien la recibe tiene que adivinar que se le habla y qué se le puede pedir. Presentarse es la
+    /// diferencia entre un icono raro y una herramienta (2026-08-16, pedido por el usuario).
+    ///
+    /// SE MARCA ANTES DE HABLAR, NO DESPUÉS. Si se marcara al terminar, cualquier fallo a mitad
+    /// —sin red, sin micrófono— dejaría el saludo pendiente y volvería a soltarlo en cada arranque,
+    /// que es peor que no haberlo dado: una presentación repetida dice que no te recuerda.
+    /// </summary>
+    private void OfrecerElPrimerEncuentro()
+    {
+        if (_config.PresentacionHecha || !_config.Onboarded) return;
+        _config.PresentacionHecha = true;
+        _config.Save();
+
+        // Se espera a que la ventana esté puesta: hablarle a alguien que todavía no te ha visto
+        // aparecer es una voz saliendo de ningún sitio.
+        var arranque = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        arranque.Tick += async (_, __) =>
+        {
+            arranque.Stop();
+            try
+            {
+                if (_vivo is null) return;
+                if (!_vivo.Viva) StartMicByFace();
+
+                // Abrir la sesión es ir y volver por la red, y no avisa cuando termina. Se le da
+                // margen comprobando, en vez de dormir a ciegas un número redondo: así el saludo
+                // sale en cuanto está lista y no siempre en el peor caso.
+                for (int i = 0; i < 40 && _vivo?.Viva != true; i++) await Task.Delay(250);
+                if (_vivo?.Viva != true) { LogBus.Log("presentacion", "no se pudo abrir la voz: no hay saludo"); return; }
+                await _vivo.EnviarTextoAsync(Onboarding.Presentacion.Saludo(_config.DisplayName));
+                LogBus.Log("presentacion", "primer encuentro: saludo enviado");
+            }
+            catch (Exception ex) { LogBus.Log("presentacion", $"el saludo falló: {ex.Message}"); }
+        };
+        arranque.Start();
+    }
 
     // --- Enseñanza activa (grabar pantalla+voz) ---
 

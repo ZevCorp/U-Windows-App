@@ -734,13 +734,19 @@ public sealed class GeminiLive : IDisposable
             + "«quítate de en medio»."),
         Fn("self_close", "Te cierras del todo: termina el proceso. Después de esto no hay vuelta sin "
             + "volver a abrirte a mano — no es ocultarte, es apagarte. Solo cuando lo pida sin "
-            + "ambigüedad: «ciérrate», «apágate», «sal de mi computador».")
+            + "ambigüedad: «ciérrate», «apágate», «sal de mi computador»."),
+
+        Fn("scan_computer", "Miras qué aplicaciones hay instaladas y cuáles están abiertas, y te "
+            + "devuelve cuáles de ellas sabes conducir. Sirve para contarle a esta persona qué "
+            + "puedes hacer POR ELLA en vez de hablar en general. Úsala cuando te lo pida "
+            + "(«¿qué puedes hacer?», «revisa mi computador», «sí» tras ofrecérselo). No abre nada "
+            + "ni mira archivos ni documentos: solo la lista de aplicaciones.")
     };
 
     /// <summary>Los nombres «self_mute», «self_hide», «self_close», para distinguirlos de las
     /// herramientas del mapa en el despacho — esas van a <see cref="_mapa"/>, estas a <see cref="Autocontrol"/>.</summary>
     private static readonly HashSet<string> HerramientasDeAutocontrol =
-        new(StringComparer.Ordinal) { "self_mute", "self_hide", "self_close" };
+        new(StringComparer.Ordinal) { "self_mute", "self_hide", "self_close", "scan_computer" };
 
     /// <summary>
     /// Quien atiende «self_mute»/«self_hide»/«self_close». Se inyecta desde la ventana, porque
@@ -779,6 +785,7 @@ public sealed class GeminiLive : IDisposable
             "self_mute" => "callándome…",
             "self_hide" => "ocultándome…",
             "self_close" => "cerrándome…",
+            "scan_computer" => "mirando qué tienes instalado…",
             _ => tool,
         };
     }
