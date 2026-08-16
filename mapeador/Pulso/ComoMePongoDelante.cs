@@ -69,6 +69,37 @@ public static class ComoMePongoDelante
     }
 
     /// <summary>
+    /// ¿Estar en ESTE sitio ya es haber llegado? Solo cuando el destino nombra el sitio entero.
+    /// </summary>
+    /// <remarks>
+    /// «Abre GitHub» con GitHub YA abierto en «…/settings/secrets/actions» contestaba «no hay
+    /// ningún camino aprendido de actions hasta ahí»: se traía la pestaña al frente, se comparaba
+    /// esa dirección con «web://github.com», no eran iguales, y se buscaba una ruta A PIE dentro de
+    /// una web. Decía que no sabía llegar estando ya allí (2026-08-16, lo vio el usuario en el
+    /// panel).
+    ///
+    /// «web://github.com» —sin ruta— nombra el SITIO, y a un sitio se llega estando en cualquiera
+    /// de sus páginas; es lo que significa «abre GitHub». Con ruta —«web://github.com/BasedHardware/
+    /// omi»— se pide una página concreta y estar en otra NO es haber llegado.
+    ///
+    /// Y quien lo diga tiene que decir DÓNDE está de verdad: «ya estabas en github.com» a secas
+    /// sería cierto y aun así engañoso.
+    /// </remarks>
+    public static bool EstarEnElSitioBasta(string destino, string donde)
+    {
+        string d = (destino ?? "").Trim().TrimEnd('/');
+        string a = (donde ?? "").Trim();
+        if (!d.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) return false;
+        if (!a.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) return false;
+
+        string sitio = d[6..];
+        if (sitio.Length == 0 || sitio.Contains('/')) return false;   // pide una página, no el sitio
+
+        string suyo = a[6..].Split('/')[0];
+        return suyo.Equals(sitio, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// La dirección que hay que abrir para llegar a una superficie web. Vacío si no es web.
     /// </summary>
     /// <remarks>

@@ -46,6 +46,7 @@ internal static class Contrato
         Prueba("21. una página se alcanza por su PESTAÑA, no lanzando un programa", LoWebVaPorPestanas);
         Prueba("22. lo que no se reconoce se dice: NUNCA se abre algo al azar", NoAdivinarQueAbrir);
         Prueba("23. la dirección de una página sale de su id, con el esquema que se vio", LaUrlSaleDelId);
+        Prueba("24. estar en el sitio ES llegar, si lo que se pidió era el sitio", LlegarAlSitioEsLlegar);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -541,6 +542,30 @@ internal static class Contrato
         foreach (string noEsWeb in new[] { "uia://explorer.exe/documentos", "sapgui://QAS/NWP1", "web://", "" })
             Debe(ComoMePongoDelante.UrlDe(noEsWeb, "https").Length == 0,
                 $"«{noEsWeb}» no es una página: no se inventa una dirección");
+    }
+
+    /// <remarks>
+    /// «Abre GitHub» con GitHub YA abierto en «…/settings/secrets/actions» contestaba «no hay ningún
+    /// camino aprendido de actions hasta ahí»: se traía la pestaña al frente, se comparaba esa
+    /// dirección con «web://github.com», no eran iguales, y se buscaba una ruta A PIE dentro de una
+    /// web. Decía que no sabía llegar estando ya allí (2026-08-16, lo vio el usuario en el panel).
+    /// </remarks>
+    private static void LlegarAlSitioEsLlegar()
+    {
+        Debe(ComoMePongoDelante.EstarEnElSitioBasta("web://github.com",
+                "web://github.com/ZevCorp/U-Windows-App/settings/secrets/actions"),
+            "pedir el SITIO y estar en una de sus páginas es haber llegado");
+        Debe(ComoMePongoDelante.EstarEnElSitioBasta("web://github.com/", "web://github.com"),
+            "y la barra final no cambia lo que se pidió");
+
+        // CON RUTA SE PIDE UNA PÁGINA, y estar en otra NO es haber llegado. Aflojar esto convertiría
+        // «llévame a mis notificaciones» en «te dejo en cualquier parte de GitHub».
+        Debe(!ComoMePongoDelante.EstarEnElSitioBasta("web://github.com/notifications", "web://github.com"),
+            "pedir una PÁGINA y estar en el sitio NO es haber llegado");
+        Debe(!ComoMePongoDelante.EstarEnElSitioBasta("web://github.com", "web://gitlab.com/algo"),
+            "otro sitio no cuenta, aunque se parezca");
+        Debe(!ComoMePongoDelante.EstarEnElSitioBasta("uia://explorer.exe/documentos", "uia://explorer.exe/videos"),
+            "esto es de la web: dos carpetas distintas siguen siendo dos sitios distintos");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

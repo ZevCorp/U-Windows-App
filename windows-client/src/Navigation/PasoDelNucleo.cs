@@ -85,11 +85,23 @@ public sealed class PasoDelNucleo
                 aqui = _donde();
                 if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase))
                     return new(true, true, "", "", "");
+
+                // LLEGAR AL SITIO ES LLEGAR, cuando lo que se pidió era el sitio. «abre GitHub» con
+                // GitHub ya abierto en «…/settings/secrets/actions» contestaba «no hay ningún camino
+                // aprendido de actions hasta ahí»: se traía la pestaña al frente y acto seguido se
+                // buscaba una ruta A PIE dentro de una web. Decía que no sabía llegar estando ya
+                // allí (2026-08-16, lo vio el usuario en el panel).
+                //
+                // Se dice DÓNDE se está de verdad: «ya estabas en github.com» a secas sería cierto
+                // y aun así engañoso.
+                if (Mapeador.ComoMePongoDelante.EstarEnElSitioBasta(destino, aqui))
+                    return new(true, true, "", "", $"estás en «{Corto(aqui)}», que es parte de ese sitio");
                 Thread.Sleep(100);
             }
         }
 
-        if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase))
+        if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase)
+            || Mapeador.ComoMePongoDelante.EstarEnElSitioBasta(destino, aqui))
             return new(true, true, "", "", "", yaEstaba);
 
         // DOS «NO» MUY DISTINTOS. «No sé llegar» pide seguir explorando; «sé llegar pero la puerta no

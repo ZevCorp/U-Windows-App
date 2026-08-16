@@ -439,15 +439,7 @@ public sealed class GeminiLive : IDisposable
                 inputAudioTranscription = new { },
                 outputAudioTranscription = new { },
 
-                // QUIÉN DECIDE QUE ESTÁS HABLANDO: nosotros, no el servidor.
-                //
-                // Con la detección automática, el micrófono abierto de continuo bastaba para que
-                // cualquier ruido de sala se leyera como que alguien interrumpe: el modelo abortaba
-                // el turno y llegaba «toolCallCancellation» sin que la llamada nos llegara siquiera.
-                // Bajar la sensibilidad no lo arregló. Apagarla y marcar nosotros el principio y el
-                // final de cada intervención sí, porque el criterio pasa a estar donde se puede
-                // medir: en el volumen del trozo que acabamos de capturar (2026-08-04).
-                realtimeInputConfig = new { automaticActivityDetection = new { disabled = true } },
+                realtimeInputConfig = DeteccionDeVoz,
 
                 // QUE LA CONVERSACIÓN SOBREVIVA A LA CONEXIÓN. El servidor corta el socket cuando le
                 // parece —se midieron cortes a los 36 s, a los 2 min y a los 3 min en la misma
@@ -477,12 +469,59 @@ public sealed class GeminiLive : IDisposable
                 tools = new object[] { new { functionDeclarations = Herramientas() } },
                 inputAudioTranscription = new { },
                 outputAudioTranscription = new { },
-                realtimeInputConfig = new { automaticActivityDetection = new { disabled = true } },
+                realtimeInputConfig = DeteccionDeVoz,
                 sessionResumption = new { handle = pase },
             },
         };
         return JsonSerializer.Serialize(setup);
     }
+
+    /// <summary>
+    /// QUIÉN DECIDE QUE ESTÁS HABLANDO: el servidor, que es como Live API está pensada.
+    ///
+    /// Esto estuvo APAGADO —<c>disabled = true</c>— desde el 2026-08-04 hasta el 2026-08-16, con un
+    /// detector propio en su lugar: umbral aprendido sobre el ruido de sala, más un margen sobre el
+    /// eco de la propia Ü. Funcionaba para lo que se escribió (que el eco no la interrumpiera) y
+    /// hacía IMPOSIBLE lo otro:
+    ///
+    ///   interrumpir = hablar MIENTRAS Ü habla = justo cuando aquel umbral estaba más alto.
+    ///
+    /// No era cuestión de calibrarlo mejor. El diseño usaba UN número —el volumen— para contestar
+    /// dos preguntas que por volumen son indistinguibles: «¿esto es el eco de Ü?» y «¿esto es quien
+    /// me habla, interrumpiéndola?». Cuanto mejor tapaba el eco, más había que gritar para cortarla.
+    /// De ahí los dos síntomas que lo destaparon: «nunca puedo interrumpirlo» y «me toca hablarle
+    /// muy duro» (2026-08-16, dicho por el usuario).
+    ///
+    /// El servidor no tiene ese problema porque no juzga por volumen. Y el barge-in es su
+    /// comportamiento por defecto: <c>activityHandling</c> vale <c>START_OF_ACTIVITY_INTERRUPTS</c>
+    /// salvo que se pida lo contrario, así que basta con no estorbar y atender el aviso
+    /// <c>serverContent.interrupted</c>, que ya se atendía.
+    ///
+    /// Las cuatro perillas, y por qué estas y no otras:
+    ///
+    ///   · startOfSpeechSensitivity = LOW — el motivo por el que se apagó todo esto era que el ruido
+    ///     de sala se leía como voz. ESTA es la perilla para eso, y por defecto viene en HIGH. El
+    ///     comentario viejo decía «bajar la sensibilidad no lo arregló», pero se probó peleando
+    ///     contra el ECO, que es otra cosa y no se arregla con sensibilidad.
+    ///   · endOfSpeechSensitivity = LOW — no dar el turno por terminado a la primera pausa; cortar a
+    ///     media frase se siente como no ser escuchado.
+    ///   · silenceDurationMs = 700 — dentro de la banda recomendada (500–800). Por debajo, la
+    ///     documentación avisa de que el audio se fragmenta y la transcripción se degrada.
+    ///   · prefixPaddingMs = 20 — que no se coma el arranque de la primera sílaba.
+    ///
+    /// UNA SOLA COPIA, compartida por abrir y por reanudar. Estaban duplicadas, y dos copias del
+    /// mismo criterio divergen: basta que alguien afine una.
+    /// </summary>
+    private static readonly object DeteccionDeVoz = new
+    {
+        automaticActivityDetection = new
+        {
+            startOfSpeechSensitivity = "START_SENSITIVITY_LOW",
+            endOfSpeechSensitivity = "END_SENSITIVITY_LOW",
+            prefixPaddingMs = 20,
+            silenceDurationMs = 700,
+        },
+    };
 
     /// <summary>Elegida a mano en el catálogo de voces de AI Studio (2026-08-10). Es la voz de Ü.</summary>
     private const string Voz = "Iapetus";
@@ -964,166 +1003,42 @@ public sealed class GeminiLive : IDisposable
         return Math.Sqrt(suma / n) / short.MaxValue;
     }
 
-    /// <summary>
-    /// Cuánto hay que subir la voz sobre el ruido de la sala para que cuente como hablar.
-    ///
-    /// Era un número fijo (0,045) medido en UN equipo, y eso lo hacía una lotería: con un micrófono
-    /// de menos ganancia la puerta no se abría NUNCA, así que no se enviaba ni un byte y la sesión
-    /// se quedaba abierta sin oír nada —«dice te escucho y no me escucha» (2026-08-04)—. El nivel de
-    /// un micrófono depende del aparato, del sistema y de la sala; fijarlo a mano es adivinar.
-    ///
-    /// Ahora se aprende el silencio de esta sala y se exige destacar sobre ÉL. El suelo absoluto es
-    /// solo una red para micrófonos con ruido eléctrico.
-    /// </summary>
-    /// Y hay que dejar sitio para el ruido QUE NO ES SUELO: un teclazo, una silla, un ventilador.
-    /// El suelo aprendido de esta sala midió 0,004–0,007 y los golpes sueltos 0,02–0,03, mientras que
-    /// la voz de verdad midió 0,15–0,20 — treinta veces el suelo, no tres. Con ×3 la puerta quedaba
-    /// dentro del ruido y se abría sola: 81 «interrumpe» en una sesión, y el turno no se cerraba
-    /// nunca (2026-08-06). ×8 deja los golpes fuera y la voz dentro con holgura.
-    private const double SueloAbsoluto = 0.008;
-    private const double VecesSobreElRuido = 8.0;
+    /// <summary>Cada cuánto se anota el nivel de entrada. Es diagnóstico, no criterio.</summary>
+    private static readonly TimeSpan CadenciaDelAforo = TimeSpan.FromSeconds(5);
 
-    /// <summary>
-    /// Cuánto puede durar UN turno hablado antes de darlo por cerrado a la fuerza.
-    ///
-    /// Es la red de seguridad de todo esto. Como la detección automática está desactivada, el turno
-    /// lo cerramos nosotros con activityEnd, y ese cierre es lo único que le dice al modelo «te
-    /// toca». Si el umbral se queda por debajo del ruido, el cierre no llega NUNCA: el 2026-08-06 la
-    /// sala se leyó como voz continua y el modelo estuvo 62 segundos esperando un final que no
-    /// existía, con la carita cargando y sin decir nada. Nadie le habla doce segundos seguidos y sin
-    /// pausa a un asistente; si el micro dice que sí, es que el micro se está equivocando.
-    /// </summary>
-    private static readonly TimeSpan TurnoMaximo = TimeSpan.FromSeconds(12);
-
-    /// <summary>Cuánto hay que destacar sobre el eco propio para que cuente como interrupción. No es
-    /// mucho a propósito: cortarle a media frase es media gracia de hablar en vivo, así que se pide
-    /// sonar algo más fuerte que el eco, no gritar.</summary>
-    private const double MargenSobreElEco = 1.6;
-
-    /// <summary>Qué parte de lo que sale por el altavoz vuelve por el micrófono. Se aprende sola;
-    /// este valor solo es por dónde empieza mientras no haya medido nada.</summary>
-    private double _gananciaEco = 0.5;
-
-    /// <summary>Tramos seguidos por encima del umbral. Mientras hablamos se piden dos —200 ms— porque
-    /// el eco da picos sueltos y una voz de verdad no dura un solo tramo.</summary>
-    private int _tramosAltos;
-
-    private double _ruidoSala = 0.02;
-    private bool _usuarioHablando;
-    private DateTime _ultimaVoz;
-
-    /// <summary>Desde cuándo llevamos el turno abierto. Lo vigila <see cref="TurnoMaximo"/>.</summary>
-    private DateTime _desdeQueHabla;
     private DateTime _ultimoAforo = DateTime.MinValue;
     private double _picoDelTramo;
 
+    /// <summary>
+    /// EL AUDIO VIAJA ENTERO Y SIN JUZGAR. Quien decide qué es voz es el servidor.
+    ///
+    /// Aquí vivían ~120 líneas que decidían por su cuenta cuándo empezaba y terminaba una
+    /// intervención: umbral aprendido sobre el ruido de sala, ganancia de eco, dos tramos seguidos
+    /// para confirmar, cierre por reloj a los 12 s, y los avisos activityStart/activityEnd. Todo eso
+    /// existía porque la detección del servidor estaba apagada; con ella encendida es al revés —
+    /// filtrar aquí es esconderle al servidor justo lo que necesita para detectar que le hablas.
+    ///
+    /// Se borró entero el 2026-08-16 (patrón nº6 del repo: cuando cae la limitación que justificaba
+    /// la maquinaria de compensación, se BORRA, no se parchea). Lo que hacía falta no era afinar
+    /// aquel umbral: era dejar de tener uno.
+    ///
+    /// Lo único que queda es un aforo del nivel de entrada cada 5 s, y no decide nada — está para
+    /// contestar «¿el micrófono está oyendo algo?» cuando alguien diga que no le escucha, que es una
+    /// pregunta que sin este número solo se puede responder adivinando.
+    /// </summary>
     private async void MandarTrozo(byte[] pcm)
     {
         if (!Viva || _ws?.State != WebSocketState.Open) return;
 
-        // EL TURNO SE ABRE Y SE CIERRA A MANO. Mientras el volumen no llega a voz, no se manda nada:
-        // el silencio no tiene por qué viajar, y sobre todo no puede leerse como una interrupción.
-        // Cuando arranca, se avisa con activityStart; cuando lleva un rato callado, activityEnd — y
-        // ese cierre es lo que le dice al modelo «ya, te toca». Sin él esperaría eternamente.
-        //
-        // El umbral sube mientras Ü habla, no se cierra del todo: cortarle a media frase es media
-        // gracia de hablar en vivo, pero su propia voz por los altavoces no puede valer como corte.
         double vol = Volumen(pcm);
-
-        // El silencio se APRENDE: baja deprisa hacia lo más bajo que se oye y sube muy despacio, de
-        // modo que una frase larga no lo arrastre consigo. Así el umbral se calibra solo en cualquier
-        // equipo, que es justo lo que un número fijo no podía hacer.
-        _ruidoSala = vol < _ruidoSala ? (_ruidoSala * 0.90) + (vol * 0.10)
-                                      : (_ruidoSala * 0.999) + (vol * 0.001);
-        double umbral = Math.Max(SueloAbsoluto, _ruidoSala * VecesSobreElRuido);
-
-        // OÍRSE A UNO MISMO NO ES QUE TE INTERRUMPAN. Lo que sale por el altavoz vuelve a entrar por
-        // el micrófono, y con el volumen alto entra MÁS FUERTE que la voz de quien está delante: el
-        // asistente se cortaba a sí mismo a media frase (2026-08-05). Antes esto se defendía con un
-        // «×2» fijo, que es el mismo error que ya cometimos con el umbral: un número medido en un
-        // equipo y a un volumen no vale para otro.
-        //
-        // Cuánto eco vuelve depende del volumen, de los altavoces y de la sala, así que SE APRENDE:
-        // mientras hablamos y nadie nos interrumpe, todo lo que entra por el micro ES nuestro eco, y
-        // la proporción entre lo que suena y lo que se cuela es justo lo que hay que medir. Sube
-        // deprisa y baja despacio, porque quedarse corto deja pasar el eco y pasarse solo exige
-        // hablar un poco más alto para interrumpir.
-        double salida = _audio.NivelSalida;
-        if (salida > 0.01)
-        {
-            if (!_usuarioHablando)
-            {
-                double proporcion = vol / salida;
-                _gananciaEco = proporcion > _gananciaEco
-                    ? (_gananciaEco * 0.7) + (proporcion * 0.3)
-                    : (_gananciaEco * 0.995) + (proporcion * 0.005);
-                _gananciaEco = Math.Min(_gananciaEco, 2.0);   // por encima de esto ya no es eco
-            }
-            umbral = Math.Max(umbral, salida * _gananciaEco * MargenSobreElEco);
-        }
-
-        // Se publica lo que se está oyendo. Sin esto, «no me escucha» y «no le llega audio» se ven
-        // exactamente igual desde fuera, que es lo que costó encontrar este fallo.
-        _picoDelTramo = Math.Max(_picoDelTramo, vol);
-        if ((DateTime.UtcNow - _ultimoAforo).TotalSeconds >= 2)
+        if (vol > _picoDelTramo) _picoDelTramo = vol;
+        if (DateTime.UtcNow - _ultimoAforo >= CadenciaDelAforo)
         {
             _ultimoAforo = DateTime.UtcNow;
-            LogBus.Log("voz-viva", $"micrófono: pico {_picoDelTramo:F3} · ruido {_ruidoSala:F3} · "
-                + $"umbral {umbral:F3}"
-                + (salida > 0.01 ? $" · Ü sonando {salida:F3} (eco ×{_gananciaEco:F2})" : "")
-                + $" · {(_usuarioHablando ? "HABLANDO" : "en silencio")}");
+            LogBus.Log("voz-viva", $"micrófono: pico {_picoDelTramo:F3} en los últimos "
+                + $"{CadenciaDelAforo.TotalSeconds:F0} s (el turno lo decide el servidor)");
             _picoDelTramo = 0;
         }
-
-        if (vol >= umbral)
-        {
-            _tramosAltos++;
-
-            // UN PICO SUELTO NO ES UNA FRASE. Mientras sonamos, el eco cruza el umbral a ratos —una
-            // consonante fuerte, un golpe de voz— y bastaba uno para dar el turno por interrumpido.
-            // Quien interrumpe de verdad sigue hablando el tramo siguiente. Cuando estamos callados
-            // no se pide nada: ahí no hay eco que confundir y el retardo sí se notaría.
-            int hacenFalta = salida > 0.01 ? 2 : 1;
-            if (_tramosAltos >= hacenFalta)
-            {
-                _ultimaVoz = DateTime.UtcNow;
-                if (!_usuarioHablando)
-                {
-                    _usuarioHablando = true;
-                    _desdeQueHabla = DateTime.UtcNow;
-                    LogBus.Log("voz-viva", $"interrumpe: pico {vol:F3} sobre umbral {umbral:F3} "
-                        + $"(salida {salida:F3} · eco aprendido ×{_gananciaEco:F2})");
-                    await EnviarAsync("""{"realtimeInput":{"activityStart":{}}}""", _cts?.Token ?? default);
-                }
-                // EL TURNO NO PUEDE QUEDARSE ABIERTO PARA SIEMPRE. Aquí arriba se refresca _ultimaVoz
-                // en cada tramo, así que mientras el ruido siga cruzando el umbral la rama del cierre
-                // por silencio —700 ms más abajo— no se alcanza jamás. Ese es exactamente el camino
-                // por el que el modelo se quedó un minuto esperando. Se cierra por reloj y se DICE
-                // que fue por reloj, con lo que se estaba midiendo: si esto aparece en el log, el
-                // umbral está mal puesto, no es que alguien hablara doce segundos.
-                else if (DateTime.UtcNow - _desdeQueHabla > TurnoMaximo)
-                {
-                    _usuarioHablando = false;
-                    _tramosAltos = 0;
-                    LogBus.Log("voz-viva", $"turno cerrado por reloj tras {TurnoMaximo.TotalSeconds:F0} s "
-                        + $"seguidos sobre el umbral (pico {vol:F3} · umbral {umbral:F3} · ruido {_ruidoSala:F3}). "
-                        + "El umbral está por debajo del ruido de la sala.");
-                    await EnviarAsync("""{"realtimeInput":{"activityEnd":{}}}""", _cts?.Token ?? default);
-                    return;
-                }
-            }
-            else return;   // aún no cuenta: no se manda nada
-        }
-        else if (_tramosAltos > 0 && !_usuarioHablando) _tramosAltos = 0;
-        else if (_usuarioHablando && (DateTime.UtcNow - _ultimaVoz).TotalMilliseconds > 700)
-        {
-            _usuarioHablando = false;
-            _tramosAltos = 0;
-            await EnviarAsync("""{"realtimeInput":{"activityEnd":{}}}""", _cts?.Token ?? default);
-            return;
-        }
-
-        if (!_usuarioHablando) return;
 
         try
         {

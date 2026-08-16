@@ -225,8 +225,8 @@
     "semantic_hash": "275bc8ba78be31a8ac456833edcaa275"
   },
   "windows-client/src/Mcp/SurfaceMapTools.cs": {
-    "mtime": 1786884940.9069686,
-    "ast_hash": "ae1b3924784cdbd1c6007dee9414a455",
+    "mtime": 1786886665.0538197,
+    "ast_hash": "793cc9e3409d38b54a73e5d37b826b46",
     "semantic_hash": ""
   },
   "windows-client/src/Mcp/WorkflowMcpRunner.cs": {
@@ -485,8 +485,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Voice/GeminiLive.cs": {
-    "mtime": 1786886425.7690542,
-    "ast_hash": "8aee06c185a6562564423e4a58077f9c",
+    "mtime": 1786886716.9410338,
+    "ast_hash": "6881e6cb93f165d1f1f9b2c8e3c78ef5",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/LiveAudio.cs": {
@@ -840,8 +840,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Uia/PestanasAbiertas.cs": {
-    "mtime": 1786861222.4744394,
-    "ast_hash": "80bfe0410fb43a04ba632f9c5c668d0a",
+    "mtime": 1786886680.7732608,
+    "ast_hash": "7f1d3e79590e6b4643461b291c5b0e34",
     "semantic_hash": ""
   },
   ".claude/hooks/guardia-nucleo.ps1": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786886496.7774563,
-    "ast_hash": "053de02f8fd063345eaa66d7cd4c4173",
+    "mtime": 1786886768.4518898,
+    "ast_hash": "3682d5b74f46ba2bc29257a237c9a69c",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786886502.7372067,
-    "ast_hash": "0c569cb220d122fd663ecfa1cbf587ff",
+    "mtime": 1786886774.0404468,
+    "ast_hash": "66d119b86fa501f5249a00398982d141",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
