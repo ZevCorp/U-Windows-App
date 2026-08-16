@@ -131,7 +131,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          vpk upload github -o outeleases -c win `
+          vpk upload github -o out/releases -c win `
             --repoUrl https://github.com/${{ github.repository }} `
             --token $env:GITHUB_TOKEN `
             --tag v${{ inputs.version }} `
@@ -145,7 +145,7 @@ jobs:
           # version cuyo paquete no existia: el cliente la veia, la intentaba
           # bajar y fallaba cada 30 minutos. Un release que miente es peor que
           # uno que no ocurre.
-          $esperado = (Get-Content outeleaseseleases.win.json | ConvertFrom-Json).Assets[0].FileName
+          $esperado = (Get-Content out/releases/releases.win.json | ConvertFrom-Json).Assets[0].FileName
           $publicados = gh release view v${{ inputs.version }} --json assets --jq '.assets[].name'
           if ($publicados -notcontains $esperado) {
             throw "la release anuncia $esperado pero ese archivo no esta subido"
