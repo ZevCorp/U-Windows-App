@@ -1074,8 +1074,21 @@ public sealed class SurfaceMapTools
             finally { _reanudando = false; }
         }
 
-        return $"NO actúo: creías estar en «{esperada}» pero estamos en «{aqui}», y no he sabido volver. "
-             + "Algo salió distinto en un paso anterior; comprueba dónde estás antes de seguir.";
+        // EL RECHAZO TIENE QUE SER ACCIONABLE, NO SOLO CORRECTO. Antes acababa en «comprueba dónde
+        // estás antes de seguir», y eso mandaba al modelo a INVESTIGAR: en Neon (2026-08-15) el
+        // usuario pidió crear un proyecto, el ancla rechazó bien —creía estar en «welcome» y
+        // estábamos en «projects»— y el modelo, en vez de reintentar con la pantalla real que este
+        // mismo mensaje le estaba diciendo, le preguntó al usuario «¿qué estás viendo ahora?». La
+        // tarea murió en un rechazo que ya traía la respuesta dentro.
+        //
+        // Ahora se le dice DÓNDE está y se le invita a repetir la misma petición con esa ubicación.
+        // La garantía no se toca: no se actúa a ciegas, y quien decide que la acción sigue teniendo
+        // sentido en la pantalla real es el modelo, en una llamada nueva y deliberada — no esta
+        // herramienta por su cuenta. Rechazar sigue siendo el freno; deja de ser un callejón.
+        return $"NO actúo: creías estar en «{esperada}» pero estamos en «{aqui}», y no he sabido volver.\n"
+             + $"Estás en «{aqui}». Si lo que ibas a hacer sigue teniendo sentido AQUÍ, vuelve a "
+             + $"pedírmelo con at=«{aqui}» y lo hago. Si no, mira primero qué hay con map_what_i_see. "
+             + "No le preguntes al usuario dónde está: acabo de decírtelo.";
     }
 
     /// <summary>
