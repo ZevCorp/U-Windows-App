@@ -28,6 +28,15 @@ concurrency:
   group: windows-release
   cancel-in-progress: false
 
+# El feed son las releases de este repo, así que el token del run tiene que poder CREARLAS. Por
+# defecto es de solo lectura y GitHub lo rechaza con «Resource not accessible by integration», un
+# 403 que no menciona permisos y se lee como si faltara el token (2026-08-16).
+#
+# Se declara aquí y no se deja en el default amplio: nombrar `contents: write` apaga todo lo demás
+# —issues, paquetes, deployments—, así que este workflow puede publicar versiones y nada más.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
