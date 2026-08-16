@@ -54,13 +54,64 @@ public sealed class MapaVivo : IDisposable
     private void Descarte(bool esUbicacion = true)
     {
         _ = esUbicacion;   // la cuenta la lleva el propio candado; aquí solo se avisa
+        AflojarElPaso();
         if (Interlocked.Increment(ref _descartadas) < 20) return;
         if ((DateTime.UtcNow - _ultimoAviso).TotalSeconds < 60) return;
         _ultimoAviso = DateTime.UtcNow;
         int cuantas = Interlocked.Exchange(ref _descartadas, 0);
-        LogBus.Log("mapa-vivo", $"SATURADO: {cuantas} vuelta(s) descartadas por llegar con otra en curso. "
-            + "Se está pidiendo más de lo que la máquina puede dar; si esto se repite, hay que subir "
-            + "el intervalo, no bajarlo.");
+        LogBus.Log("mapa-vivo", $"SATURADO: {cuantas} vuelta(s) descartadas por llegar con otra en curso; "
+            + $"se ha aflojado a {_msUbicacion} ms para dejar de pedir más de lo que esta máquina da.");
+    }
+
+    // ── El ritmo se ajusta solo ───────────────────────────────────────────────────────────────
+
+    /// <summary>Lo más rápido que se mira dónde estamos. Es un suelo, no una promesa.</summary>
+    private const int MinUbicacionMs = 250;
+
+    /// <summary>
+    /// El techo. Por encima de un segundo, un cambio de pantalla puede ir y venir sin que se vea, y
+    /// entonces el camino queda grabado como A→C habiendo pasado por B: preferimos ir lento a
+    /// grabar un recorrido que nadie hizo.
+    /// </summary>
+    private const int MaxUbicacionMs = 1000;
+
+    private int _msUbicacion = MinUbicacionMs;
+    private int _vueltasLimpias;
+
+    /// <summary>
+    /// SE AJUSTA SOLO PORQUE EL NÚMERO BUENO NO EXISTE.
+    ///
+    /// Este intervalo ya se corrigió una vez a mano —de 120 ms a 250, tras medir que apilar vueltas
+    /// hacía cinco veces más lenta la lectura de una pantalla (2026-08-12)— y el propio aviso de
+    /// saturación decía qué hacer si volvía a pasar: subirlo. Volvió a pasar, con 250, en otra
+    /// máquina: 20 vueltas descartadas y un minuto después 59, o sea a peor (2026-08-16).
+    ///
+    /// Elegir otra constante solo mueve el problema al siguiente equipo, porque lo que cuesta
+    /// localizar depende de la app que haya delante —una pantalla de SAP no cuesta lo que el
+    /// escritorio— y eso cambia cada minuto, no cada instalación. Así que se afloja cuando se
+    /// descarta y se aprieta cuando se va sobrado, y el ritmo lo pone la máquina.
+    ///
+    /// Se afloja de golpe y se aprieta despacio, a propósito: quedarse corto cuesta vueltas
+    /// perdidas, y pasarse solo cuesta un poco de retraso.
+    /// </summary>
+    private void AflojarElPaso()
+    {
+        _vueltasLimpias = 0;
+        int nuevo = Math.Min(MaxUbicacionMs, _msUbicacion + _msUbicacion / 2);
+        if (nuevo == _msUbicacion) return;
+        _msUbicacion = nuevo;
+        try { _relojUbicacion?.Change(_msUbicacion, _msUbicacion); } catch { }
+    }
+
+    /// <summary>Una vuelta que terminó sin estorbar a nadie. Tras unas cuantas, se vuelve a apretar.</summary>
+    private void VueltaLimpia()
+    {
+        if (_msUbicacion <= MinUbicacionMs) return;
+        if (++_vueltasLimpias < 20) return;   // ~5 s seguidos yendo bien antes de volver a pedir más
+        _vueltasLimpias = 0;
+        _msUbicacion = Math.Max(MinUbicacionMs, _msUbicacion - _msUbicacion / 4);
+        try { _relojUbicacion?.Change(_msUbicacion, _msUbicacion); } catch { }
+        LogBus.Log("mapa-vivo", $"la máquina va sobrada: se aprieta a {_msUbicacion} ms");
     }
 
     /// <summary>
@@ -139,9 +190,12 @@ public sealed class MapaVivo : IDisposable
         // segundo algo que a veces cuesta 200 ms ya es pedir de más.
         _reloj?.Dispose();
         _relojUbicacion?.Dispose();
-        _relojUbicacion = new System.Threading.Timer(_ => MirarDonde(), null, 200, 250);
+        _msUbicacion = MinUbicacionMs;
+        _vueltasLimpias = 0;
+        _relojUbicacion = new System.Threading.Timer(_ => MirarDonde(), null, 200, _msUbicacion);
         _reloj = new System.Threading.Timer(_ => Latido(), null, 600, cadaMs);
-        LogBus.Log("mapa-vivo", $"ubicación cada 250 ms · pantalla cada {cadaMs} ms · proyectando en Neo4j");
+        LogBus.Log("mapa-vivo", $"ubicación cada {_msUbicacion} ms (se ajusta sola entre "
+            + $"{MinUbicacionMs} y {MaxUbicacionMs}) · pantalla cada {cadaMs} ms · proyectando en Neo4j");
     }
 
     /// <summary>
@@ -349,7 +403,12 @@ public sealed class MapaVivo : IDisposable
         {
             LogBus.Log("mapa-vivo", $"no pude mirar dónde estoy: {e.Message}");
         }
-        finally { PulsoDelMapeador.Actual.Ubicacion.Termine(); }
+        finally
+        {
+            PulsoDelMapeador.Actual.Ubicacion.Termine();
+            // Terminó sin que nadie chocara con ella: se cuenta para poder volver a apretar.
+            VueltaLimpia();
+        }
     }
 
     /// <summary>

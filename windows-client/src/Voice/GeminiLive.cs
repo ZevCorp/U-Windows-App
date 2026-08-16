@@ -186,7 +186,12 @@ public sealed class GeminiLive : IDisposable
         await ArrancarAsync();
     }
 
-    public async Task ArrancarAsync()
+    /// <param name="intento">
+    /// Cuántas veces se ha probado ya (0 la primera). Solo lo usa el reintento de más abajo: sirve
+    /// para que un corte de red pasajero no se le note al usuario, y para que tampoco se convierta
+    /// en un bucle si la red no vuelve.
+    /// </param>
+    public async Task ArrancarAsync(int intento = 0)
     {
         if (Viva) return;
         string clave = Clave();
@@ -237,9 +242,53 @@ public sealed class GeminiLive : IDisposable
         catch (Exception e)
         {
             LogBus.Log("voz-viva", $"no se pudo abrir la sesión: {e.Message}");
-            Dice?.Invoke($"No pude abrir la voz en vivo: {e.Message}");
             await TerminarAsync();
+
+            // UN CORTE DE RED DE UNOS SEGUNDOS NO DEBERÍA COSTARLE UN GESTO AL USUARIO. Antes se
+            // rendía al primer intento: alguien pulsaba el micrófono, el DNS fallaba un instante
+            // —«Host desconocido (generativelanguage.googleapis.com)»— y la única salida era darse
+            // cuenta y volver a pulsar. Y para darse cuenta hay que leer un mensaje que habla de
+            // resolución de nombres (2026-08-16, le pasó al usuario; a los pocos minutos el mismo
+            // host respondía sin tocar nada).
+            //
+            // Solo se reintenta lo que puede arreglarse solo. Una clave inválida o un permiso
+            // denegado van a fallar igual las tres veces, y reintentarlos solo retrasa el momento de
+            // enterarse: ahí se informa y punto.
+            if (EsDeRed(e) && intento < 2)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1 + intento));
+                LogBus.Log("voz-viva", $"reintentando abrir la voz ({intento + 2}/3)…");
+                await ArrancarAsync(intento + 1);
+                return;
+            }
+
+            Dice?.Invoke(EsDeRed(e)
+                ? "No pude abrir la voz: no hay conexión con el servidor. Lo intenté 3 veces — "
+                + "revisa tu internet y vuelve a pulsar el micrófono."
+                : $"No pude abrir la voz en vivo: {e.Message}");
         }
+    }
+
+    /// <summary>
+    /// Si el fallo es de red —de los que se arreglan solos— y no del otro lado diciendo que no.
+    ///
+    /// Se mira el TIPO y no el texto del mensaje: los mensajes vienen traducidos al idioma de
+    /// Windows («Host desconocido», «Unknown host»), así que buscar palabras dentro funcionaría en
+    /// la máquina donde se escribió y en ninguna otra.
+    /// </summary>
+    private static bool EsDeRed(Exception e)
+    {
+        for (Exception? x = e; x != null; x = x.InnerException)
+        {
+            if (x is System.Net.Sockets.SocketException
+                  or System.Net.WebSockets.WebSocketException
+                  or TaskCanceledException
+                  or TimeoutException) return true;
+            // Una petición HTTP que ni siquiera llegó a tener respuesta: no hay veredicto del
+            // servidor, así que es del camino. Si trae código de estado, ya no lo es.
+            if (x is HttpRequestException http && http.StatusCode is null) return true;
+        }
+        return false;
     }
 
     // ── Cuánto ha costado esta conversación ──────────────────────────────────
