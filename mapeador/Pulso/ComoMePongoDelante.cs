@@ -67,4 +67,32 @@ public static class ComoMePongoDelante
 
         return new(Via.NoSe, "");
     }
+
+    /// <summary>
+    /// La dirección que hay que abrir para llegar a una superficie web. Vacío si no es web.
+    /// </summary>
+    /// <remarks>
+    /// SE RECONSTRUYE DESDE EL ID PORQUE EL ID ES LO QUE HAY. El núcleo guarda «web://dominio/ruta»
+    /// —sin query ni fragmento, que son estado volátil y no ubicación— y esa es exactamente la
+    /// dirección a la que hay que ir para estar en esa pantalla.
+    ///
+    /// EL ESQUEMA SE RECUERDA, NO SE SUPONE. Poner «https://» a ciegas rompe los sitios que solo
+    /// hablan http —un portal cautivo, un equipo en la red local— y el fallo sería mudo: el
+    /// navegador abre, no carga, y el mapa dice que no llegó sin decir por qué. Se pasa el que se
+    /// vio al mapear; «https» solo cuando no consta ninguno.
+    /// </remarks>
+    public static string UrlDe(string idDeSuperficie, string esquemaVisto = "")
+    {
+        string id = (idDeSuperficie ?? "").Trim();
+        if (!id.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) return "";
+
+        string resto = id[6..].TrimEnd('/');
+        if (resto.Split('/')[0].Length == 0) return "";
+
+        string esquema = string.IsNullOrWhiteSpace(esquemaVisto) ? "https" : esquemaVisto.Trim().ToLowerInvariant();
+        // Solo lo que un navegador entiende. Si lo recordado fuera cualquier otra cosa, abrirlo sería
+        // pedirle al sistema que ejecute algo que no sabemos qué es.
+        if (esquema != "http" && esquema != "https") esquema = "https";
+        return esquema + "://" + resto;
+    }
 }

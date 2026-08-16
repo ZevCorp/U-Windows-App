@@ -253,7 +253,7 @@ public sealed class SurfaceLocator : IDisposable
                 // aloja y el título de la página. Sin apuntarlo ahora, luego no hay forma de volver
                 // a una pestaña de fondo: el navegador solo publica su TÍTULO, y «github.com» no
                 // aparece en «joseph1356k/Graph» (ver PestanasAbiertas).
-                PestanasAbiertas.Apunta(url.Host, proc, title);
+                PestanasAbiertas.Apunta(url.Host, proc, title, url.Scheme);
                 string path = url.AbsolutePath.TrimEnd('/');
                 return new SurfaceLocation($"web://{url.Host}{path}", $"web://{url.Host}", path.Length == 0 ? "/" : path);
             }

@@ -45,6 +45,7 @@ internal static class Contrato
         Prueba("20. cuando la colgada vuelve, se sigue trabajando", DelCuelgueSeSale);
         Prueba("21. una página se alcanza por su PESTAÑA, no lanzando un programa", LoWebVaPorPestanas);
         Prueba("22. lo que no se reconoce se dice: NUNCA se abre algo al azar", NoAdivinarQueAbrir);
+        Prueba("23. la dirección de una página sale de su id, con el esquema que se vio", LaUrlSaleDelId);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -512,6 +513,34 @@ internal static class Contrato
         foreach (string raro in new[] { "", "   ", "desktop", "sapgui://", "web://", "uia://", "vaya://cosa" })
             Debe(ComoMePongoDelante.De(raro).Via == ComoMePongoDelante.Via.NoSe,
                 $"«{raro}» no se reconoce, y eso se dice en vez de abrir algo al azar");
+    }
+
+    /// <remarks>
+    /// SI LA PESTAÑA NO ESTÁ ABIERTA HAY QUE ABRIRLA, y para eso hace falta la dirección. Sale del
+    /// id, que es lo que hay: el núcleo guarda «web://dominio/ruta» sin query ni fragmento, porque
+    /// esos son estado volátil y no ubicación — y esa es justo la dirección de esa pantalla.
+    ///
+    /// EL ESQUEMA SE RECUERDA, NO SE SUPONE. Poner «https» a ciegas rompe los sitios que solo hablan
+    /// http —un portal cautivo, un equipo de la red local— y el fallo sería MUDO: el navegador abre,
+    /// no carga, y el mapa dice que no llegó sin decir por qué.
+    /// </remarks>
+    private static void LaUrlSaleDelId()
+    {
+        Debe(ComoMePongoDelante.UrlDe("web://github.com/BasedHardware/omi", "https")
+             == "https://github.com/BasedHardware/omi", "la ruta se conserva entera");
+        Debe(ComoMePongoDelante.UrlDe("web://canva.com", "https") == "https://canva.com",
+            "un dominio sin ruta da su raíz");
+        Debe(ComoMePongoDelante.UrlDe("web://app.datawifi.co/portal", "http")
+             == "http://app.datawifi.co/portal", "y se usa el esquema QUE SE VIO, no el supuesto");
+
+        Debe(ComoMePongoDelante.UrlDe("web://canva.com", "") == "https://canva.com",
+            "sin esquema recordado se cae a https, que es lo habitual");
+        Debe(ComoMePongoDelante.UrlDe("web://canva.com", "javascript") == "https://canva.com",
+            "y un esquema que no es de navegador NO se ejecuta: se cae a https");
+
+        foreach (string noEsWeb in new[] { "uia://explorer.exe/documentos", "sapgui://QAS/NWP1", "web://", "" })
+            Debe(ComoMePongoDelante.UrlDe(noEsWeb, "https").Length == 0,
+                $"«{noEsWeb}» no es una página: no se inventa una dirección");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

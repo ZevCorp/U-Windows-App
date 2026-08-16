@@ -56,7 +56,13 @@ public static class AppAligner
         switch (plan.Via)
         {
             case Mapeador.ComoMePongoDelante.Via.PestanaDelNavegador:
-                return PestanasAbiertas.IrA(plan.Que);
+                // PRIMERO LA QUE YA ESTÁ, y solo si no está se abre. El orden importa: ir a un sitio
+                // y crear OTRA copia del sitio no son la misma acción, y la segunda deja al usuario
+                // con dos estados de la misma página y pierde lo que tuviera a medias en la primera.
+                if (PestanasAbiertas.IrA(plan.Que)) return true;
+                return PestanasAbiertas.Abrir(
+                    Mapeador.ComoMePongoDelante.UrlDe(idDeSuperficie, PestanasAbiertas.EsquemaDe(plan.Que)),
+                    plan.Que);
             case Mapeador.ComoMePongoDelante.Via.SapGui:
             case Mapeador.ComoMePongoDelante.Via.Proceso:
                 return FocusOrLaunch(plan.Que);

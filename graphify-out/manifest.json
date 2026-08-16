@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FaceWindow.xaml.cs": {
-    "mtime": 1786845909.1436179,
-    "ast_hash": "f8c1041f28f8090ba90eeee909c8b1c6",
+    "mtime": 1786860808.688877,
+    "ast_hash": "328bd9ec34c99413657d0698f1ef28f8",
     "semantic_hash": ""
   },
   "windows-client/src/Ui/FillPreviewWindow.cs": {
@@ -435,8 +435,8 @@
     "semantic_hash": "3f86362a2b9060456aee2a7f585b6763"
   },
   "windows-client/src/Uia/AppAligner.cs": {
-    "mtime": 1785983245.0325065,
-    "ast_hash": "37d9c043d069f77e2b84301369d46714",
+    "mtime": 1786860124.2007837,
+    "ast_hash": "e8e8e0f69192b2e9663e6550d3b2d748",
     "semantic_hash": ""
   },
   "windows-client/src/Uia/Escritorio.cs": {
@@ -485,8 +485,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Voice/GeminiLive.cs": {
-    "mtime": 1786846344.1962447,
-    "ast_hash": "dc164aa8190ad95dc69965e65e0a9a3c",
+    "mtime": 1786860294.2996418,
+    "ast_hash": "2a068aba9bdb308eca8d04db5db9514c",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/LiveAudio.cs": {
@@ -810,7 +810,7 @@
     "semantic_hash": ""
   },
   "versiones/nucleo/v1.cs": {
-    "mtime": 1786841149.7216942,
+    "mtime": 1786841149.735769,
     "ast_hash": "f3dba7b349173ca714516d1a146d20ce",
     "semantic_hash": ""
   },
@@ -1015,8 +1015,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786846452.4000273,
-    "ast_hash": "b43a4dcea9590a74ad63f6f7c68d65b5",
+    "mtime": 1786860899.9423623,
+    "ast_hash": "930c43e5ec13c427f9457e94f2434295",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
@@ -1045,18 +1045,18 @@
     "semantic_hash": ""
   },
   "nucleo/visor/index.html": {
-    "mtime": 1786841149.7140727,
-    "ast_hash": "3f9f7c9f56a1d967dd25d2d93e3988be",
+    "mtime": 1786859641.4579163,
+    "ast_hash": "c16dfa49978a27cb14a7c1500ce8439f",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/ServidorDelNucleo.cs": {
-    "mtime": 1786841149.734763,
-    "ast_hash": "aa1db7c654e40f96f09c6bef665509ca",
+    "mtime": 1786859887.858006,
+    "ast_hash": "2ab2d097ebad7a3adc5ce714f4e0cf63",
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786841149.7155797,
-    "ast_hash": "b58cac9b1a31041bbfbd9f4d168e5026",
+    "mtime": 1786860189.0150552,
+    "ast_hash": "462e936ffe0dd0c064cf78818335dd08",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.cs": {
-    "mtime": 1786841149.7085586,
-    "ast_hash": "fdee5a6808041250c0e2914d1f1eb326",
+    "mtime": 1786860143.996079,
+    "ast_hash": "4dd8ce1a3305d4fcaf0485e97a6cb9dc",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.csproj": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786841149.7155797,
-    "ast_hash": "a6b49b32b84ed2037b15754e74c650fa",
+    "mtime": 1786860192.1123836,
+    "ast_hash": "35cba4b2a236d728fcc7eaf71c7d73ba",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
@@ -1205,8 +1205,13 @@
     "semantic_hash": ""
   },
   "windows-client/src/Onboarding/Presentacion.cs": {
-    "mtime": 1786845838.9678507,
-    "ast_hash": "793ebbbc685e4626ef032298201b07bf",
+    "mtime": 1786860818.3781116,
+    "ast_hash": "65963506598f00da82141e3a875dd6ba",
+    "semantic_hash": ""
+  },
+  "mapeador/Pulso/ComoMePongoDelante.cs": {
+    "mtime": 1786860160.0651917,
+    "ast_hash": "0ac9c9e1d58aeb61a83760093f904070",
     "semantic_hash": ""
   }
 }
