@@ -765,6 +765,9 @@ public sealed class GeminiLive : IDisposable
             + "bajo el cursor —con su nombre real— y la ilumina. Úsala en cuanto oigas «esto», «este», "
             + "«el que estoy señalando», «mira aquí», o cuando en el vídeo veas su puntero sobre algo. "
             + "Apuntar es más exacto que describir: no adivines el nombre, pregúntalo aquí."),
+        Fn("map_scroll", "DESPLAZA la pantalla y te dice en qué punto quedaste. Es lo que hay que usar "
+            + "para «baja», «sube», «vete al final de la página»: no busques un botón para eso.",
+            ("direction", "«abajo», «arriba», «inicio» (del todo arriba) o «final» (del todo abajo).")),
         Fn("map_what_i_see", "El INVENTARIO de lo que hay en pantalla ahora: el nombre exacto y el TIPO "
             + "de control de cada elemento (TreeItem, Button, ListItem, Edit…), más lo que el mapa sabe "
             + "de él. Pídelo SIEMPRE antes de iluminar un grupo que te han descrito con palabras («los "

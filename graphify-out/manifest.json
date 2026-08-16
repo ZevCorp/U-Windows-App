@@ -485,8 +485,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Voice/GeminiLive.cs": {
-    "mtime": 1786886716.9410338,
-    "ast_hash": "6881e6cb93f165d1f1f9b2c8e3c78ef5",
+    "mtime": 1786887069.8071537,
+    "ast_hash": "dc7416bc523e2166fbafffdf6aa4f9c7",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/LiveAudio.cs": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786886768.4518898,
-    "ast_hash": "3682d5b74f46ba2bc29257a237c9a69c",
+    "mtime": 1786887420.1338542,
+    "ast_hash": "d749b3919d9a293aebd7697dd941d606",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.cs": {
-    "mtime": 1786884272.2511115,
-    "ast_hash": "c5a7a4cb22329a35de8544e90872cad4",
+    "mtime": 1786887340.6663265,
+    "ast_hash": "e4c777ef4a457ed45e1a7085364cc2cd",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.csproj": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786886774.0404468,
-    "ast_hash": "66d119b86fa501f5249a00398982d141",
+    "mtime": 1786887424.0680408,
+    "ast_hash": "405227bd8d5ec9db8f2a5523498f57a7",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
@@ -1210,13 +1210,13 @@
     "semantic_hash": ""
   },
   "mapeador/Pulso/ComoMePongoDelante.cs": {
-    "mtime": 1786884272.253592,
-    "ast_hash": "4a80f86dd51da89861e49cf1e58aa44c",
+    "mtime": 1786887236.8410902,
+    "ast_hash": "b199b0deed3cd8a15fafe0c90f33bd70",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/PasoDelNucleo.cs": {
-    "mtime": 1786884318.0261507,
-    "ast_hash": "72d5d24129194d36b2d4c05a5b56a0cb",
+    "mtime": 1786887310.8866417,
+    "ast_hash": "8757f17d0b0d09ac4605e8e58cd4716d",
     "semantic_hash": ""
   },
   "puente-omi/DESACTIVADO.md": {
