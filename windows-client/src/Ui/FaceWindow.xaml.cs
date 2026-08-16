@@ -3344,6 +3344,22 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             _bocaPaso++;
             bool enVivo = _vivo?.Viva == true;
 
+            // LA BOCA TIENE QUE SABER PARARSE SOLA. Al temporizador solo lo apagaba RefreshMood, y
+            // a RefreshMood solo se le llamaba desde aquí abajo MIENTRAS había sesión viva. Si la
+            // sesión moría con la cara en «Hablando» —que es exactamente lo que pasa al cortarla a
+            // media frase, o al decirle «cállate»— nadie volvía a evaluar el estado: el temporizador
+            // seguía corriendo, se quedaba sin nivel al que seguir y caía al vaivén de más abajo.
+            // La boca se movía sola, en silencio, hasta que otra cosa cambiara el ánimo
+            // (2026-08-15, visto por el usuario: «cuando se queda ya callado la boca se sigue
+            // moviendo sola»). Depender de que otro se dé cuenta era el fallo; ahora se comprueba
+            // aquí, que es el único sitio que sigue vivo cuando todo lo demás se apagó.
+            if (!enVivo && !_voice.Activity.Hablando)
+            {
+                MoverLaBoca(false);   // se para y cierra la boca; Stop() impide otro tick
+                RefreshMood();        // y se corrige el ánimo, que se quedó en «Hablando»
+                return;
+            }
+
             // CON NIVEL REAL, EL SILENCIO CIERRA LA BOCA. Caer al vaivén cuando el nivel es bajo
             // haría que la carita moviera los labios durante las pausas de la conversación —y en una
             // conversación se calla más de lo que se habla—, que es peor que no moverlos: parece que

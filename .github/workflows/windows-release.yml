@@ -104,22 +104,40 @@ jobs:
           }
           vpk pack @packArgs
 
-      # SIN --region. `vpk upload s3` rechaza que se le den `--region` y
-      # `--endpoint` a la vez ("please choose one") y sale con código 1. Es lo
-      # que ha hecho fallar los SEIS intentos de publicación reales desde el
-      # 2026-07-22: el build, el publish y el empaquetado terminaban bien y la
-      # subida moría en la última línea, así que nunca llegó nada al bucket.
-      # Supabase no es AWS: se identifica por endpoint, no por región.
-      - name: Subir a Supabase (compatible con S3)
+      # SE SUBE EN PARTES, Y POR ESO NO SE USA `vpk upload s3`.
+      #
+      # `vpk` sube cada archivo en UNA sola petición PUT. El paquete pesa ~80 MB
+      # y el instalador ~85 MB, y la pasarela S3 de Supabase rechaza una petición
+      # de ese tamaño con `RequestEntityTooLarge`. Eso es lo que hizo fallar los
+      # SIETE intentos de publicación desde el 2026-07-22: el build, el publish y
+      # el empaquetado terminaban bien y la subida moría en la última línea, así
+      # que nunca llegó NADA al bucket y el botón de actualizar del cliente no
+      # tenía de dónde traerse nada (2026-08-16).
+      #
+      # No era el cupo, aunque lo pareciera: el límite del bucket es 1 GB POR
+      # ARCHIVO y todo el proyecto ocupaba 34 MB. Era el tamaño de la PETICIÓN,
+      # no el del archivo — por eso cambiar `--endpoint`/`--region` nunca lo
+      # arregló, que fue la corrección anterior.
+      #
+      # La CLI de aws parte los archivos grandes en trozos automáticamente
+      # (multipart), que es justo lo que a la pasarela le falta, y viene ya
+      # instalada en el runner de Windows. Aquí solo se copian archivos
+      # estáticos: el feed es una carpeta, no una API.
+      #
+      # Se sobrescribe el feed con lo que acaba de empaquetarse, así que las
+      # versiones viejas dejan de aparecer listadas. Es inocuo: el cliente solo
+      # busca la ÚLTIMA, y los .nupkg antiguos siguen en el bucket.
+      - name: Subir a Supabase (en partes)
         if: ${{ inputs.dry_run != true }}
         env:
-          VPK_S3_ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
-          VPK_S3_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
-          VPK_S3_SECRET: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
-        run: >
-          vpk upload s3 -o out\releases -c win --bucket windows
-          --endpoint $env:VPK_S3_ENDPOINT
-          --keyId $env:VPK_S3_KEY_ID --secret $env:VPK_S3_SECRET
+          AWS_ACCESS_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.SUPABASE_S3_REGION }}
+          ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
+        run: |
+          aws s3 cp out\releases s3://windows/ --recursive --endpoint-url $env:ENDPOINT
+          Write-Host '--- lo que quedó publicado en el feed:'
+          aws s3 ls s3://windows/ --endpoint-url $env:ENDPOINT
 
       - name: Smoke test (dry run)
         if: ${{ inputs.dry_run == true }}
