@@ -225,8 +225,8 @@
     "semantic_hash": "275bc8ba78be31a8ac456833edcaa275"
   },
   "windows-client/src/Mcp/SurfaceMapTools.cs": {
-    "mtime": 1786888242.5268323,
-    "ast_hash": "781f2b882924bedd562368d387d94e61",
+    "mtime": 1786888765.0894823,
+    "ast_hash": "d948d555caef6a479ab40ff45bf0ea9c",
     "semantic_hash": ""
   },
   "windows-client/src/Mcp/WorkflowMcpRunner.cs": {
@@ -485,8 +485,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Voice/GeminiLive.cs": {
-    "mtime": 1786887830.1041255,
-    "ast_hash": "679b9ce71c5e08375edaa12f24bed44a",
+    "mtime": 1786888444.6684284,
+    "ast_hash": "7cb87ff86df00f235b5c9dd8d997447b",
     "semantic_hash": ""
   },
   "windows-client/src/Voice/LiveAudio.cs": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786888277.2570803,
-    "ast_hash": "42cc4dd9636dcdf35131de1fd97200f7",
+    "mtime": 1786888822.5002427,
+    "ast_hash": "8bf2fa7a20fc88dde6ce9c5f00f8e5cd",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786888279.7878368,
-    "ast_hash": "d64669029b7ee40599bfd6329e724f35",
+    "mtime": 1786888826.0056772,
+    "ast_hash": "59c8b6a7fa32144e4f906cda7772d154",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {

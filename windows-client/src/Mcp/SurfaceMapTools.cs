@@ -34,6 +34,12 @@ public sealed class SurfaceMapTools
 
     /// <summary>La app con la que se estaba trabajando. Se usa para volver a ella si algo roba el foco.</summary>
     private string _ultimaApp = "";
+
+    /// <summary>
+    /// Dónde estábamos al terminar la llamada ANTERIOR. Es contra esto —y no contra la cadena que
+    /// teclea el modelo— contra lo que se comprueba si el mundo se ha movido.
+    /// </summary>
+    private string _dondeQuedamos = "";
     private List<string> _seleccionPrevia = new();
 
     /// <summary>Lo último que se intentó. Sin esto, quien deba decidir ante un diálogo no sabe
@@ -1055,6 +1061,36 @@ public sealed class SurfaceMapTools
     /// recupera el foco primero, porque «no estoy donde creía» y «algo me tapó» son cosas distintas
     /// y solo la segunda tiene arreglo automático.
     /// </summary>
+    /// <summary>
+    /// Cuántas letras hay que cambiar para pasar de una a otra. Se corta pronto: solo interesa
+    /// saber si es «lo mismo mal escrito», y para eso no hace falta medir distancias grandes.
+    /// </summary>
+    private static int Distancia(string a, string b)
+    {
+        a = (a ?? "").ToLowerInvariant();
+        b = (b ?? "").ToLowerInvariant();
+        if (Math.Abs(a.Length - b.Length) > 2) return 99;
+
+        var fila = new int[b.Length + 1];
+        for (int j = 0; j <= b.Length; j++) fila[j] = j;
+        for (int i = 1; i <= a.Length; i++)
+        {
+            int previa = fila[0];
+            fila[0] = i;
+            int mejorDeLaFila = fila[0];
+            for (int j = 1; j <= b.Length; j++)
+            {
+                int actual = fila[j];
+                fila[j] = Math.Min(Math.Min(fila[j] + 1, fila[j - 1] + 1),
+                                   previa + (a[i - 1] == b[j - 1] ? 0 : 1));
+                previa = actual;
+                mejorDeLaFila = Math.Min(mejorDeLaFila, fila[j]);
+            }
+            if (mejorDeLaFila > 2) return 99;   // ya no puede bajar de ahí
+        }
+        return fila[b.Length];
+    }
+
     private string ComprobarUbicacion(string esperada)
     {
         if (esperada.Length == 0) return "";   // no lo declaró: se actúa como antes
@@ -1112,6 +1148,40 @@ public sealed class SurfaceMapTools
         string interrupcion = DescribirInterrupcion();
         if (interrupcion.Length > 0)
             return $"NO actúo: creías estar en «{esperada}» y lo que hay delante es otra cosa.\n{interrupcion}";
+
+        // ¿SE HA MOVIDO EL MUNDO, O SOLO SE EQUIVOCÓ AL ESCRIBIRLO?
+        //
+        // El ancla existe para que un paso que falla no deje los siguientes ejecutándose en otra
+        // pantalla —así se pegaron archivos dentro de su propia carpeta de origen (2026-08-02)—.
+        // Eso es un cambio del MUNDO. Pero se comprobaba contra una CADENA que teclea el modelo, y
+        // ahí falla por otra cosa: pidió actuar en «…/ZecCorp/…» estando en «…/ZevCorp/…», una
+        // letra. Se le contestó con la cadena correcta DENTRO del mensaje y reintentó escribiendo
+        // «ZeevCorp» — otra vez mal (2026-08-16, dos veces seguidas en el log). Un id largo no se
+        // transcribe de memoria, y exigirlo convierte el freno en un muro.
+        //
+        // La comprobación buena es contra DÓNDE QUEDAMOS al terminar la llamada anterior: si la
+        // pantalla es la misma que cuando el modelo miró por última vez, el mundo no se ha movido y
+        // su falta de ortografía no cambia eso. La garantía queda intacta —si la pantalla SÍ cambió
+        // desde entonces, se rechaza como siempre— y se pierde solo el caso que nunca fue peligro.
+        // DOS CONDICIONES, Y LA SEGUNDA ES LA QUE SALVA LA GARANTÍA.
+        //
+        // Con solo la primera —«la pantalla no se ha movido»— esto se rompía en el caso para el que
+        // el ancla existe: si un paso falla y la pantalla deriva, la llamada de ESE paso deja
+        // «dónde quedamos» ya en la pantalla derivada, y el siguiente pasaría tan campante. Lo vi al
+        // comprobarlo, no al escribirlo.
+        //
+        // Por eso además se exige que lo que pidió se PAREZCA a donde estamos: «documentoss» por
+        // «documentos» es alguien nombrando esta pantalla y tecleándola mal; «notas» por
+        // «documentos» es alguien hablando de otra pantalla, que es exactamente lo que hay que
+        // frenar. Una letra o dos, no más.
+        if (aqui.Length > 0 && _dondeQuedamos.Length > 0
+            && string.Equals(aqui, _dondeQuedamos, StringComparison.OrdinalIgnoreCase)
+            && Distancia(esperada, aqui) <= 2)
+        {
+            LogBus.Log("mapa-mcp", $"pediste actuar en «{esperada}» y estamos en «{aqui}»: es la misma "
+                + "pantalla mal escrita y no se ha movido desde tu última llamada. Se actúa aquí");
+            return "";
+        }
 
         // RESOLVER UN BLOQUEO Y REANUDAR LA TAREA SON DOS COSAS DISTINTAS, y solo estaba la primera.
         // Medido el 2026-08-03: apareció «Ubicación no disponible», se detectó, se pulsó «Aceptar»
@@ -1312,6 +1382,9 @@ public sealed class SurfaceMapTools
         // El prefijo agrupa sin mezclar: lo que cuesta atender una orden no es lo que el mapeador
         // hace por su cuenta, y confundirlos es la misma trampa que comparar Gmail con el explorador.
         reloj.Stop();
+        // DÓNDE QUEDAMOS, para la próxima. Lo que el modelo sabe de la pantalla es lo que esta
+        // llamada le acaba de contar; comparar contra esto es comparar contra su último vistazo.
+        try { _dondeQuedamos = _where()?.Id ?? _dondeQuedamos; } catch { }
         Mapeador.PulsoDelMapeador.Actual.Costo("voz: " + tool, reloj.ElapsedMilliseconds);
         LogBus.Log("mapa-mcp", $"← ({reloj.ElapsedMilliseconds} ms) "
             + (r.Length > 200 ? r[..200] + "…" : r).Replace("\n", " | "));
