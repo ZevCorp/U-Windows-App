@@ -69,14 +69,16 @@ public sealed class MapaVivo : IDisposable
     private const int MinUbicacionMs = 250;
 
     /// <summary>
-    /// El techo. Por encima de un segundo, un cambio de pantalla puede ir y venir sin que se vea, y
-    /// entonces el camino queda grabado como A→C habiendo pasado por B: preferimos ir lento a
-    /// grabar un recorrido que nadie hizo.
+    /// El techo. Alto a propósito: hay pantallas que cuestan segundos de leer —una ventana de
+    /// Electron con quinientos elementos, medido— y fingir que se puede preguntar cada segundo no
+    /// las hace más rápidas: solo llena el grupo de hilos de vueltas que se van a tirar.
     /// </summary>
-    private const int MaxUbicacionMs = 1000;
+    private const int MaxUbicacionMs = 4000;
 
     private int _msUbicacion = MinUbicacionMs;
-    private int _vueltasLimpias;
+
+    /// <summary>Lo que cuesta de verdad localizar, suavizado. Es de dónde sale el ritmo.</summary>
+    private double _costeTipico;
 
     /// <summary>
     /// SE AJUSTA SOLO PORQUE EL NÚMERO BUENO NO EXISTE.
@@ -96,22 +98,42 @@ public sealed class MapaVivo : IDisposable
     /// </summary>
     private void AflojarElPaso()
     {
-        _vueltasLimpias = 0;
-        int nuevo = Math.Min(MaxUbicacionMs, _msUbicacion + _msUbicacion / 2);
-        if (nuevo == _msUbicacion) return;
-        _msUbicacion = nuevo;
-        try { _relojUbicacion?.Change(_msUbicacion, _msUbicacion); } catch { }
+        Ritmo(Math.Min(MaxUbicacionMs, _msUbicacion + _msUbicacion / 2), "descarté una vuelta");
     }
 
-    /// <summary>Una vuelta que terminó sin estorbar a nadie. Tras unas cuantas, se vuelve a apretar.</summary>
-    private void VueltaLimpia()
+    /// <summary>
+    /// EL RITMO SALE DEL COSTE MEDIDO, no de reaccionar a los descartes.
+    ///
+    /// Reaccionar solo al descarte no basta, y está medido: con el techo en 1000 ms se seguían
+    /// tirando 35 de cada 60 vueltas, minuto tras minuto, porque localizar costaba ~2 s con una
+    /// ventana de Electron delante (2026-08-16, log del usuario). El bucle se quedó pegado al techo
+    /// sin poder salir: para volver a apretar hacen falta vueltas limpias, y no había ninguna.
+    ///
+    /// Ya se cronometra cada localización para el pulso, así que el número existía y solo había que
+    /// usarlo. Se pide con un margen sobre lo que cuesta —no justo lo que cuesta— porque una vuelta
+    /// que empieza exactamente cuando acaba la anterior no deja hueco a nada más en la máquina.
+    ///
+    /// Suavizado y no el último valor: el coste salta mucho entre una pantalla y otra, y perseguir
+    /// cada salto cambiaría el reloj varias veces por segundo.
+    /// </summary>
+    private void AjustarAlCoste(long ms)
     {
-        if (_msUbicacion <= MinUbicacionMs) return;
-        if (++_vueltasLimpias < 20) return;   // ~5 s seguidos yendo bien antes de volver a pedir más
-        _vueltasLimpias = 0;
-        _msUbicacion = Math.Max(MinUbicacionMs, _msUbicacion - _msUbicacion / 4);
+        _costeTipico = _costeTipico <= 0 ? ms : _costeTipico * 0.8 + ms * 0.2;
+        int quiero = (int)Math.Clamp(_costeTipico * 1.4, MinUbicacionMs, MaxUbicacionMs);
+
+        // Solo si el cambio es grande: mover el reloj por un 5% es ruido, y cada cambio reinicia la
+        // cuenta del temporizador.
+        if (Math.Abs(quiero - _msUbicacion) * 100 / Math.Max(1, _msUbicacion) < 25) return;
+        Ritmo(quiero, $"localizar cuesta ~{_costeTipico:N0} ms");
+    }
+
+    private void Ritmo(int ms, string porque)
+    {
+        if (ms == _msUbicacion) return;
+        bool afloja = ms > _msUbicacion;
+        _msUbicacion = ms;
         try { _relojUbicacion?.Change(_msUbicacion, _msUbicacion); } catch { }
-        LogBus.Log("mapa-vivo", $"la máquina va sobrada: se aprieta a {_msUbicacion} ms");
+        LogBus.Log("mapa-vivo", $"ubicación cada {_msUbicacion} ms ({(afloja ? "más lento" : "más rápido")}): {porque}");
     }
 
     /// <summary>
@@ -191,7 +213,7 @@ public sealed class MapaVivo : IDisposable
         _reloj?.Dispose();
         _relojUbicacion?.Dispose();
         _msUbicacion = MinUbicacionMs;
-        _vueltasLimpias = 0;
+        _costeTipico = 0;
         _relojUbicacion = new System.Threading.Timer(_ => MirarDonde(), null, 200, _msUbicacion);
         _reloj = new System.Threading.Timer(_ => Latido(), null, 600, cadaMs);
         LogBus.Log("mapa-vivo", $"ubicación cada {_msUbicacion} ms (se ajusta sola entre "
@@ -225,6 +247,8 @@ public sealed class MapaVivo : IDisposable
             var crono = System.Diagnostics.Stopwatch.StartNew();
             string aqui = DondeEstoySinColgarme();
             PulsoDelMapeador.Actual.Costo("localizar", crono.ElapsedMilliseconds);
+            // El mismo número que alimenta el pulso decide cada cuánto se vuelve a preguntar.
+            AjustarAlCoste(crono.ElapsedMilliseconds);
             if (aqui.Length == 0) return;
             if (aqui.Equals(_anterior, StringComparison.OrdinalIgnoreCase)) return;
 
@@ -403,12 +427,7 @@ public sealed class MapaVivo : IDisposable
         {
             LogBus.Log("mapa-vivo", $"no pude mirar dónde estoy: {e.Message}");
         }
-        finally
-        {
-            PulsoDelMapeador.Actual.Ubicacion.Termine();
-            // Terminó sin que nadie chocara con ella: se cuenta para poder volver a apretar.
-            VueltaLimpia();
-        }
+        finally { PulsoDelMapeador.Actual.Ubicacion.Termine(); }
     }
 
     /// <summary>

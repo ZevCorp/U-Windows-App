@@ -1579,7 +1579,27 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void OfrecerElPrimerEncuentro()
     {
-        if (_config.PresentacionHecha || !_config.Onboarded) return;
+        // SE DICE SIEMPRE POR QUÉ, TAMBIÉN CUANDO NO PASA NADA. Un camino que solo escribe en el log
+        // cuando funciona es indistinguible de uno que no existe: al probar la primera experiencia
+        // no había NI UNA línea sobre ella, y la explicación —que ya se había dado por hecha en una
+        // prueba anterior— no estaba escrita en ningún sitio (2026-08-16, lo pidió el usuario:
+        // «aquí no veo la ejecución que hizo»). Callar el caso normal es lo que deja a oscuras el
+        // caso raro, porque son el mismo silencio.
+        if (!_config.Onboarded)
+        {
+            LogBus.Log("presentacion", "no me presento: todavía no hay correo (onboarding sin terminar)");
+            return;
+        }
+        if (_config.PresentacionHecha)
+        {
+            LogBus.Log("presentacion", "no me presento: ya lo hice en este equipo. "
+                + @"Para volver a verlo: cierra Ü, pon ""PresentacionHecha"": false en "
+                + @"%APPDATA%\U\config.json y vuelve a abrir.");
+            return;
+        }
+
+        LogBus.Log("presentacion", $"PRIMER ENCUENTRO: es la primera vez en este equipo"
+            + (string.IsNullOrWhiteSpace(_config.DisplayName) ? "" : $" · usuario «{_config.DisplayName}»"));
         _config.PresentacionHecha = true;
         _config.Save();
 
@@ -1589,20 +1609,35 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         arranque.Tick += async (_, __) =>
         {
             arranque.Stop();
+            var crono = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                if (_vivo is null) return;
-                if (!_vivo.Viva) StartMicByFace();
+                if (_vivo is null)
+                {
+                    LogBus.Log("presentacion", "ABORTADO: no hay capa de voz montada, así que no hay con qué hablar");
+                    return;
+                }
+
+                if (!_vivo.Viva) { LogBus.Log("presentacion", "abriendo la voz para saludar…"); StartMicByFace(); }
+                else LogBus.Log("presentacion", "la voz ya estaba abierta");
 
                 // Abrir la sesión es ir y volver por la red, y no avisa cuando termina. Se le da
                 // margen comprobando, en vez de dormir a ciegas un número redondo: así el saludo
                 // sale en cuanto está lista y no siempre en el peor caso.
                 for (int i = 0; i < 40 && _vivo?.Viva != true; i++) await Task.Delay(250);
-                if (_vivo?.Viva != true) { LogBus.Log("presentacion", "no se pudo abrir la voz: no hay saludo"); return; }
+                if (_vivo?.Viva != true)
+                {
+                    LogBus.Log("presentacion", $"ABORTADO: la voz no abrió en {crono.ElapsedMilliseconds} ms. "
+                        + "No hay saludo — mira las líneas «voz-viva» de justo antes para saber por qué.");
+                    return;
+                }
+
+                LogBus.Log("presentacion", $"voz lista en {crono.ElapsedMilliseconds} ms · mandando el saludo");
                 await _vivo.EnviarTextoAsync(Onboarding.Presentacion.Saludo(_config.DisplayName));
-                LogBus.Log("presentacion", "primer encuentro: saludo enviado");
+                LogBus.Log("presentacion", "saludo entregado. Lo que Ü diga a partir de aquí sale en «voz-viva»; "
+                    + "si acepta el escaneo, se verá «ejecutando «scan_computer»» y luego el resultado.");
             }
-            catch (Exception ex) { LogBus.Log("presentacion", $"el saludo falló: {ex.Message}"); }
+            catch (Exception ex) { LogBus.Log("presentacion", $"ABORTADO por excepción: {ex.Message}"); }
         };
         arranque.Start();
     }

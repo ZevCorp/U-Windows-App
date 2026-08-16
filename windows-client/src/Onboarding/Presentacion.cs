@@ -106,8 +106,18 @@ public static class Presentacion
                  + "la aprendo, y luego la repito sola cuando se lo pidas.");
 
         string resumen = string.Join("\n", partes);
+
+        // SE ANOTA QUÉ SE ENCONTRÓ, NO SOLO CUÁNTO. Un recuento dice que el escaneo corrió; los
+        // nombres dicen si acertó. Cuando alguien reporte «no me reconoció el SAP que tengo
+        // abierto», la respuesta tiene que estar en el log y no en una nueva sesión de pruebas.
         LogBus.Log("presentacion",
-            $"escaneo: {instaladas.Count} instaladas, {abiertas.Count} abiertas, {reconocidas.Count} reconocidas");
+            $"ESCANEO: {instaladas.Count} app(s) instaladas · {abiertas.Count} abierta(s) · "
+            + $"{reconocidas.Count} que sé conducir");
+        LogBus.Log("presentacion", reconocidas.Count > 0
+            ? "reconocidas: " + string.Join(", ",
+                reconocidas.Select(r => r.Nombre + (abiertas.Contains(r.Proceso) ? " (abierta)" : "")))
+            : "ninguna reconocida. Procesos abiertos ahora: "
+              + string.Join(", ", abiertas.OrderBy(x => x).Take(25)));
         return resumen;
     }
 
@@ -122,8 +132,12 @@ public static class Presentacion
         "[instrucción del sistema, no la leas en voz alta] Es la PRIMERA vez que te abren en este "
         + $"equipo{(string.IsNullOrWhiteSpace(nombre) ? "" : $" y la persona se llama {nombre}")}. "
         + "Preséntate en dos frases cortas: quién eres y que trabajas sobre las aplicaciones que ya "
-        + "usa. Después pregúntale si quieres que revises su computador para contarle qué puedes "
+        + "usa. Después haz UNA pregunta: si quiere que mires su computador para contarle qué puedes "
         + "hacer por él. Si dice que sí, llama a scan_computer y cuéntale el resultado con tus "
         + "palabras, sin leer la lista entera: lo más útil primero. Si dice que no, dilo bien y "
-        + "quédate esperando. No hagas nada más en este primer turno.";
+        + "quédate esperando.\n"
+        + "ESA ES LA ÚNICA PREGUNTA DE CORTESÍA QUE HARÁS EN TODA LA CONVERSACIÓN. Se pregunta "
+        + "porque mirar el equipo es idea TUYA y nadie te la pidió. A partir de ahí, todo lo que te "
+        + "pidan lo haces sin volver a pedir permiso: la presentación no puede dejar la costumbre de "
+        + "consultar antes de cada paso. No hagas nada más en este primer turno.";
 }
