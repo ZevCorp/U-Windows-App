@@ -313,6 +313,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 }
             };
 
+            // LA VOZ EMPIEZA A USAR EL NÚCLEO NUEVO. Solo para lo que el mapa viejo nunca supo
+            // alcanzar —web y SAP—: el camino del explorador por voz es rápido y funciona, y se
+            // queda entero donde está. `PasoDelNucleo` es la MISMA pieza que usan el visor y la
+            // ventanita HTTP, así que las tres puertas contestan lo mismo (2026-08-16).
+            mcp.Map.PorElNucleo = destino => new Navigation.PasoDelNucleo(
+                _mapaVivo!.Nucleo,
+                () => _locator?.DondeEstoy()?.Id ?? "",
+                (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
+                superficie => Uia.AppAligner.PonerDelante(superficie)).Hasta(destino);
+
             _servidorNucleo = new Navigation.ServidorDelNucleo(
                 _mapaVivo.Nucleo,
                 () => _locator?.DondeEstoy()?.Id ?? "",

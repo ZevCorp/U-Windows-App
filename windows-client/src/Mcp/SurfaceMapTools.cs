@@ -1137,6 +1137,25 @@ public sealed class SurfaceMapTools
         _where = where;
     }
 
+    /// <summary>
+    /// EL NÚCLEO NUEVO, para las superficies que este mapa no sabe alcanzar. Si nadie lo conecta,
+    /// todo sigue exactamente como estaba.
+    /// </summary>
+    /// <remarks>
+    /// «Ir a una superficie» estaba resuelto en tres sitios y los tres contestaban distinto: aquí
+    /// por PROCESO —así que fallaba en cualquier web y en SAP—, en el panel de niveles por pestaña
+    /// pero solo si ya estaba abierta, y en el núcleo nuevo entero. El modelo de voz usaba este, o
+    /// sea el peor: no podía llegar a una página aunque el panel de al lado sí supiera (2026-08-16,
+    /// lo preguntó el usuario).
+    ///
+    /// SE REPARTE POR TIPO DE SUPERFICIE Y NO POR «A VER SI SUENA». La navegación del explorador de
+    /// archivos por voz es rápida y funciona, y no se toca: `uia://` sigue entero por aquí. Lo que
+    /// pasa al núcleo nuevo es solo lo que aquí nunca funcionó. Una escalera —probar uno y si falla
+    /// el otro— sería peor que cualquiera de los dos: impide saber cuál hizo el trabajo, que es
+    /// justo lo que el propio interruptor SOLO GRAFO existe para poder medir.
+    /// </remarks>
+    public Func<string, string>? PorElNucleo { get; set; }
+
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
@@ -2186,6 +2205,17 @@ public sealed class SurfaceMapTools
     private string GoTo(string destino)
     {
         if (destino.Length == 0) return "falta `surface`: a dónde hay que ir";
+
+        // LO QUE ESTE MAPA NO SABE ALCANZAR, AL NÚCLEO NUEVO. Va lo primero y no toca nada de lo de
+        // abajo: el camino `uia://` —la navegación del explorador por voz, que es rápida y funciona—
+        // se queda exactamente como estaba. Aquí solo se desvía lo que aquí nunca funcionó: una
+        // página web o una sesión de SAP, cuyo id no nombra un proceso y por eso `AsegurarFoco`
+        // fallaba siempre (2026-08-16).
+        if (PorElNucleo != null && !destino.StartsWith("uia://", StringComparison.OrdinalIgnoreCase))
+        {
+            LogBus.Log("mapa-mcp", $"«{destino}» no es una superficie de este mapa: lo lleva el núcleo nuevo");
+            return PorElNucleo(destino);
+        }
 
         // El destino dice a qué app pertenece la tarea: si el foco se ha ido, se recupera antes de
         // calcular nada. Planificar una ruta desde el centro de notificaciones no tiene sentido.

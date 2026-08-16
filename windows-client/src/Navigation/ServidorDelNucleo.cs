@@ -39,6 +39,7 @@ public sealed class ServidorDelNucleo : IDisposable
     private readonly Func<string, bool> _enfocar;           // (id de superficie) → ¿está delante?
     private readonly Func<string, string, bool> _escribir;  // (selector, texto) → ¿se escribió?
     private readonly Func<string, string, bool> _elegir;    // (selector, opción) → ¿se eligió?
+    private readonly PasoDelNucleo _paso;
     private HttpListener? _oreja;
 
     public ServidorDelNucleo(Nucleo.Grafo grafo, Func<string> donde,
@@ -51,6 +52,7 @@ public sealed class ServidorDelNucleo : IDisposable
         _enfocar = enfocar;
         _escribir = escribir ?? ((_, _) => false);
         _elegir = elegir ?? ((_, _) => false);
+        _paso = new PasoDelNucleo(grafo, donde, pulsar, enfocar);
     }
 
     public bool Arrancar()
@@ -152,89 +154,22 @@ public sealed class ServidorDelNucleo : IDisposable
             string destino = LeerDestino(req);
             if (destino.Length == 0) return NoPude("", "falta el destino");
 
-            string aqui = _donde();
+            // EL PASO LO DA `PasoDelNucleo`, que es la ÚNICA implementación de «ir a» y la que usan
+            // también el visor y la voz. Aquí estaba la copia buena y en el núcleo viejo la mala; el
+            // modelo de voz usaba la mala y no podía llegar a una página web aunque el panel de al
+            // lado sí supiera (2026-08-16). Una pregunta se contesta en un sitio.
+            var r = _paso.Hacia(destino);
+            if (!r.Ok) return NoPude(destino, r.Porque, r.Paso.Length > 0 ? r.Paso : null);
 
-            // PRIMERO LA APP CORRECTA DELANTE. Para pulsar algo hay que tenerlo delante: no hay
-            // forma de navegar una aplicación sin enfocarla, y fingir lo contrario sería pulsar a
-            // ciegas. Que el foco se mueva aquí no es un descuido, es el trabajo — lo que la capa
-            // sin activación evita es que sea EL CLIC EN EL GRAFO el que rompa el hilo.
-            // SE PIDE «PONME DELANTE DE ESTA SUPERFICIE», no «tráeme este proceso». La diferencia no
-            // es de estilo: la «app» de un id web es un DOMINIO y la de SAP es un SISTEMA, y
-            // pasarlos como nombre de proceso hacía que se buscara —y se intentara LANZAR— un
-            // programa llamado «itsmiracleai.com.co» o «QAS». El usuario lo vio como «no pude traer
-            // "itsmiracleai.com.co" al frente» (2026-08-14).
-            //
-            // Cómo ponerse delante de cada tipo de superficie es del MAPEADOR, no del núcleo: aquí
-            // solo se le pasa el destino tal cual y él sabe si eso es una ventana, una pestaña o una
-            // sesión de SAP.
-            string appDestino = Nucleo.Grafo.AppDe(destino);
-            if (!Nucleo.Grafo.AppDe(aqui).Equals(appDestino, StringComparison.OrdinalIgnoreCase))
-            {
-                if (!_enfocar(destino))
-                    return NoPude(destino, destino.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
-                        ? $"«{appDestino}» no está abierto en ninguna pestaña del navegador: ábrelo "
-                        + "una vez y el núcleo sabrá volver"
-                        : $"no pude ponerme delante de «{appDestino}»");
-                Thread.Sleep(700);   // que la ventana se asiente antes de leer dónde estamos
-                aqui = _donde();
-            }
-
-            if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase))
-                return Json(new { ok = true, llegado = true, porque = "ya estás ahí" });
-
-            // DOS «NO» MUY DISTINTOS, y hasta hoy salían como uno solo. «No sé llegar» pide seguir
-            // explorando; «sé llegar pero la puerta no está delante» pide esperar, desplegar el
-            // panel o volver atrás. Quien navega necesita saber cuál de las dos le toca.
-            var camino = _grafo.ComoLlego(aqui, destino);
-            if (camino.Paso == null)
-                return NoPude(destino, camino.ConocidoEnMemoria
-                    ? $"sé llegar desde «{Corto(aqui)}», pero la puerta que hace falta no está en "
-                    + "pantalla ahora mismo: despliega el panel, haz scroll, o vuelve atrás"
-                    : $"no hay ningún camino aprendido de «{Corto(aqui)}» hasta ahí: hay que "
-                    + "recorrerlo a mano una vez para que el núcleo lo aprenda");
-            var paso = camino.Paso;
-
-            bool pulsado = _pulsar(paso.Que.Selector, paso.Que.Etiqueta);
-            if (!pulsado)
-                return NoPude(destino, $"el mapeador no consiguió pulsar «{paso.Que.Etiqueta}»", paso.Que.Etiqueta);
-
-            // ¿NOS MOVIÓ? Un paso que no mueve no se repite. Sin esto, un camino equivocado en el
-            // grafo —«pulsa Datos adjuntos para ir a Escritorio», cuando ya estás en Datos
-            // adjuntos— hacía que el mismo clic se calculara y se pulsara una y otra vez: doce
-            // veces seguidas hasta agotar el límite, sin avanzar un paso (2026-08-12, lo midió el
-            // usuario pidiendo ir a «facturas»).
-            //
-            // Repetir algo que acaba de no funcionar no es insistir, es no estar mirando. Y decirlo
-            // en voz alta importa el doble aquí, porque el motivo casi siempre es que el grafo
-            // aprendió mal ese tramo — quedarse callado esconde justo el dato que lo delata.
-            string despues = aqui;
-            for (int i = 0; i < 12 && despues.Equals(aqui, StringComparison.OrdinalIgnoreCase); i++)
-            {
-                Thread.Sleep(150);
-                despues = _donde();
-            }
-
-            if (despues.Equals(aqui, StringComparison.OrdinalIgnoreCase))
-            {
-                LogBus.Log("nucleo-http", $"paso hacia «{Corto(destino)}»: pulsé «{paso.Que.Etiqueta}» "
-                    + "y la pantalla NO cambió — ese tramo del grafo no lleva a donde dice");
-                return Json(new
-                {
-                    ok = false,
-                    paso = paso.Que.Etiqueta,
-                    porque = $"pulsé «{paso.Que.Etiqueta}» y no nos movió. El grafo cree que ese tramo "
-                           + "lleva a otro sitio, y no es cierto: hay que volver a recorrerlo para corregirlo",
-                });
-            }
-
-            LogBus.Log("nucleo-http", $"paso hacia «{Corto(destino)}»: pulsado «{paso.Que.Etiqueta}» → {Corto(despues)}");
+            if (r.Paso.Length > 0)
+                LogBus.Log("nucleo-http", $"paso hacia «{Corto(destino)}»: pulsado «{r.Paso}»");
             return Json(new
             {
                 ok = true,
-                paso = paso.Que.Etiqueta,
-                selector = paso.Que.Selector,
-                llegado = despues.Equals(destino, StringComparison.OrdinalIgnoreCase),
-                porque = "",
+                paso = r.Paso,
+                selector = r.Selector,
+                llegado = r.Llegado,
+                porque = r.Llegado && r.Paso.Length == 0 ? "ya estás ahí" : "",
             });
         }
 

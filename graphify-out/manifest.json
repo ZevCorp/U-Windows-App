@@ -435,8 +435,8 @@
     "semantic_hash": "3f86362a2b9060456aee2a7f585b6763"
   },
   "windows-client/src/Uia/AppAligner.cs": {
-    "mtime": 1786860124.2007837,
-    "ast_hash": "e8e8e0f69192b2e9663e6550d3b2d748",
+    "mtime": 1786861230.2577586,
+    "ast_hash": "cf73b05c0d9f505f30e68bae6e5096af",
     "semantic_hash": ""
   },
   "windows-client/src/Uia/Escritorio.cs": {
@@ -465,8 +465,8 @@
     "semantic_hash": "5c441a22a0f9d1ab2dfc2778796aee1e"
   },
   "windows-client/src/Uia/SurfaceLocator.cs": {
-    "mtime": 1786226900.9123073,
-    "ast_hash": "782ddf4b543a118e4c65e5b8ef3485fa",
+    "mtime": 1786861202.703653,
+    "ast_hash": "de39bcf99e7f52552201f4cf5e5af456",
     "semantic_hash": ""
   },
   "windows-client/src/Uia/UiInspector.cs": {
@@ -840,8 +840,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Uia/PestanasAbiertas.cs": {
-    "mtime": 1786207404.5079947,
-    "ast_hash": "8abb76d739cd575767d8afb96071dc4b",
+    "mtime": 1786861222.4744394,
+    "ast_hash": "80bfe0410fb43a04ba632f9c5c668d0a",
     "semantic_hash": ""
   },
   ".claude/hooks/guardia-nucleo.ps1": {
@@ -1015,8 +1015,8 @@
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/MapaVivo.cs": {
-    "mtime": 1786860899.9423623,
-    "ast_hash": "930c43e5ec13c427f9457e94f2434295",
+    "mtime": 1786861409.3382325,
+    "ast_hash": "596adea004420dcd4275d90c23c985e4",
     "semantic_hash": ""
   },
   "nucleo/Contrato/Contrato.cs": {
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786860189.0150552,
-    "ast_hash": "462e936ffe0dd0c064cf78818335dd08",
+    "mtime": 1786861292.3168826,
+    "ast_hash": "a543cfa6a9da586bf7ff0627959e9585",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.cs": {
-    "mtime": 1786860143.996079,
-    "ast_hash": "4dd8ce1a3305d4fcaf0485e97a6cb9dc",
+    "mtime": 1786861249.3853076,
+    "ast_hash": "67a8e33d532706221ae31e9fe211b2f3",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.csproj": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786860192.1123836,
-    "ast_hash": "35cba4b2a236d728fcc7eaf71c7d73ba",
+    "mtime": 1786861294.6125193,
+    "ast_hash": "0b599eba5270fd7a4b8ca417cb91463d",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
@@ -1210,8 +1210,8 @@
     "semantic_hash": ""
   },
   "mapeador/Pulso/ComoMePongoDelante.cs": {
-    "mtime": 1786860160.0651917,
-    "ast_hash": "0ac9c9e1d58aeb61a83760093f904070",
+    "mtime": 1786861182.6411972,
+    "ast_hash": "6543ed6ad941a88f725d14a7f154e0ec",
     "semantic_hash": ""
   }
 }
