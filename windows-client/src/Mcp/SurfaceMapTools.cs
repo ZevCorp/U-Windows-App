@@ -1,4 +1,4 @@
-﻿using U.Graph;
+using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Navigation;
@@ -1175,6 +1175,7 @@ public sealed class SurfaceMapTools
         // lanzador de apps.
         string args_ = string.Join(" ", args.Select(kv => $"{kv.Key}={kv.Value}"));
         LogBus.Log("mapa-mcp", $"→ {tool} {args_}".TrimEnd());
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
 
         // Si se pasa a hacer otra cosa, ya no se está mirando lo de antes: se suelta. Señalar es un
         // gesto que acompaña a una frase, no un estado en el que quedarse.
@@ -1229,7 +1230,21 @@ public sealed class SurfaceMapTools
             _ => $"herramienta de mapa no soportada: {tool}",
         };
 
-        LogBus.Log("mapa-mcp", "← " + (r.Length > 200 ? r[..200] + "…" : r).Replace("\n", " | "));
+        // CADA HERRAMIENTA CON SU RELOJ, Y AQUÍ PORQUE AQUÍ PASAN TODOS. El tiempo ya se medía en la
+        // voz —el «✓ … (817 ms)» del panel— pero solo ahí: la sonda de desarrollo y el bucle del
+        // agente llaman directo a este método, así que sus llamadas no se cronometraban y una
+        // medición hecha con la sonda salía vacía (2026-08-16, me pasó al intentar comprobarlo).
+        //
+        // Va al MISMO pulso donde ya viven «localizar», «leer la pantalla» y «proyectar», con el
+        // mismo trato —veces, media y LA PEOR—, porque compiten por los mismos milisegundos y dos
+        // tablas de tiempos obligarían a mirar en dos sitios para compararlos.
+        //
+        // El prefijo agrupa sin mezclar: lo que cuesta atender una orden no es lo que el mapeador
+        // hace por su cuenta, y confundirlos es la misma trampa que comparar Gmail con el explorador.
+        reloj.Stop();
+        Mapeador.PulsoDelMapeador.Actual.Costo("voz: " + tool, reloj.ElapsedMilliseconds);
+        LogBus.Log("mapa-mcp", $"← ({reloj.ElapsedMilliseconds} ms) "
+            + (r.Length > 200 ? r[..200] + "…" : r).Replace("\n", " | "));
         return r;
     }
 

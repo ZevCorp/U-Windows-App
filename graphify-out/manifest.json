@@ -435,7 +435,7 @@
     "semantic_hash": "3f86362a2b9060456aee2a7f585b6763"
   },
   "windows-client/src/Uia/AppAligner.cs": {
-    "mtime": 1786861230.2577586,
+    "mtime": 1786884272.259318,
     "ast_hash": "cf73b05c0d9f505f30e68bae6e5096af",
     "semantic_hash": ""
   },
@@ -465,8 +465,8 @@
     "semantic_hash": "5c441a22a0f9d1ab2dfc2778796aee1e"
   },
   "windows-client/src/Uia/SurfaceLocator.cs": {
-    "mtime": 1786861202.703653,
-    "ast_hash": "de39bcf99e7f52552201f4cf5e5af456",
+    "mtime": 1786884272.259318,
+    "ast_hash": "a23a6079a6812d8160c07a211806b868",
     "semantic_hash": ""
   },
   "windows-client/src/Uia/UiInspector.cs": {
@@ -715,7 +715,7 @@
     "semantic_hash": ""
   },
   "windows-client/src/SystemApi/Explorador.cs": {
-    "mtime": 1786207404.4753952,
+    "mtime": 1786884272.259318,
     "ast_hash": "ee0f43d645ad1a6cbae30b07f925aaaf",
     "semantic_hash": ""
   },
@@ -1055,8 +1055,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas.json": {
-    "mtime": 1786861991.350376,
-    "ast_hash": "d4b50e6ebae9185533e5ae5266d24337",
+    "mtime": 1786884356.463935,
+    "ast_hash": "84e17393f61eb4e385c1a7e606ccf883",
     "semantic_hash": ""
   },
   "docs/velocidad.md": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.cs": {
-    "mtime": 1786861249.3853076,
-    "ast_hash": "67a8e33d532706221ae31e9fe211b2f3",
+    "mtime": 1786884272.2511115,
+    "ast_hash": "c5a7a4cb22329a35de8544e90872cad4",
     "semantic_hash": ""
   },
   "mapeador/Contrato/Contrato.csproj": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "nucleo/visor/reglas-mapeador.json": {
-    "mtime": 1786861994.3439972,
-    "ast_hash": "16c4f5a5dfd53737cc6e5d683a8b838d",
+    "mtime": 1786884361.0648303,
+    "ast_hash": "7ac77b51f7f3c5d33b4c1f629792bd03",
     "semantic_hash": ""
   },
   "mapeador/Pulso/AQuienSeLeDioClic.cs": {
@@ -1210,13 +1210,13 @@
     "semantic_hash": ""
   },
   "mapeador/Pulso/ComoMePongoDelante.cs": {
-    "mtime": 1786861182.6411972,
-    "ast_hash": "6543ed6ad941a88f725d14a7f154e0ec",
+    "mtime": 1786884272.253592,
+    "ast_hash": "4a80f86dd51da89861e49cf1e58aa44c",
     "semantic_hash": ""
   },
   "windows-client/src/Navigation/PasoDelNucleo.cs": {
-    "mtime": 1786861960.966046,
-    "ast_hash": "2a7f1ce5e36f35237fa87bb4fa6ac3d8",
+    "mtime": 1786884318.0261507,
+    "ast_hash": "72d5d24129194d36b2d4c05a5b56a0cb",
     "semantic_hash": ""
   }
 }

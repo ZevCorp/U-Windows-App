@@ -308,14 +308,25 @@ async function tickMapeador() {
     if (a.sinCambiarDeSitio) fila("    · cambió la pantalla y NO el sitio", a.sinCambiarDeSitio, COL.rojoSuave);
   });
 
+  // LO DE LA VOZ, APARTE. Compiten por los mismos milisegundos pero son cosas distintas: una es lo
+  // que el mapeador hace por su cuenta y la otra lo que cuesta atender una orden hablada. Mezclarlas
+  // en una tabla es la misma trampa que comparar Gmail con el explorador.
   titulo("COSTES — cronometrados por quien hace el trabajo");
-  (j.costes || []).forEach(x => {
+  (j.costes || []).filter(x => !x.que.startsWith("voz:")).forEach(x => {
     fila(`${x.que}  (${x.veces} veces)`, `${x.mediaMs} ms de media · ${x.peorMs} la peor`);
     // Un colgado envenena la media: 22 ms reales se leían como 1.461 por UNA muestra de 21 minutos.
     // Verlo aquí es la diferencia entre «va lento» y «una vez se quedó clavado», que se arreglan
     // en sitios distintos.
     if (x.colgadas) fila("    · vueltas que se dieron por perdidas (la media no vale)", x.colgadas, COL.rojoSuave);
   });
+
+  const porVoz = (j.costes || []).filter(x => x.que.startsWith("voz:"));
+  if (porVoz.length) {
+    titulo("POR VOZ — cuánto tarda cada orden hablada, de la más lenta a la más rápida");
+    porVoz.forEach(x => fila(`${x.que.slice(5)}  (${x.veces} veces)`,
+                             `${x.mediaMs} ms de media · ${x.peorMs} la peor`,
+                             x.mediaMs > 3000 ? "#ff9b9b" : x.mediaMs > 1200 ? "#e0c07a" : "#5cc28d"));
+  }
 
   titulo("EMBUDO — de lo que se ve a lo que llega al núcleo");
   fila("elementos leídos", j.embudo.leidos);

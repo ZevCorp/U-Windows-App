@@ -875,6 +875,36 @@ public sealed class GeminiLive : IDisposable
         return $"{(mal ? "✋" : "✓")} {primera}  ({ms} ms)";
     }
 
+    /// <summary>
+    /// CADA HERRAMIENTA, CON SU RELOJ, EN UN SITIO QUE SE PUEDA COMPARAR DESPUÉS.
+    /// </summary>
+    /// <remarks>
+    /// El tiempo ya se medía y ya se enseñaba —el «✓ … (817 ms)» del panel— pero solo se veía PASAR:
+    /// no quedaba en ningún sitio, así que no se podía contestar «¿qué es lo lento?» sin volver a
+    /// hacerlo todo mirando. Y esa es justo la pregunta que hay que contestar para que navegar por
+    /// voz vaya tan rápido como el explorador (2026-08-16, pedido por el usuario).
+    ///
+    /// Va al MISMO pulso donde ya viven «localizar», «leer la pantalla» y «proyectar», y con el
+    /// mismo trato: veces, media y LA PEOR. Un panel con dos tablas de tiempos distintas obligaría a
+    /// mirar en dos sitios para comparar lo que compite por los mismos milisegundos.
+    ///
+    /// El prefijo «voz:» las agrupa sin mezclarlas con lo que hace el mapeador por su cuenta: son
+    /// costes de cosas distintas y confundirlos es como comparar Gmail con el explorador.
+    /// </remarks>
+    private static void Apuntar(string tool, IReadOnlyDictionary<string, string> args, string resultado, long ms)
+    {
+        Mapeador.PulsoDelMapeador.Actual.Costo("voz: " + tool, ms);
+        string donde = args.TryGetValue("surface", out var s) && s.Length > 0 ? s
+                     : args.TryGetValue("path", out var p) && p.Length > 0 ? p
+                     : args.TryGetValue("app", out var a) ? a : "";
+        // UNA LÍNEA POR LLAMADA, con lo que hace falta para ordenar por lentitud y saber sobre qué
+        // fue. SE RECORTA SOLO EL RESULTADO, nunca el reloj: cortar la línea entera se llevaría por
+        // delante justo el número que se viene a buscar.
+        string linea = resultado.Split('\n')[0].Trim();
+        if (linea.Length > 90) linea = linea[..90] + "…";
+        LogBus.Log("voz-tiempo", $"{ms,6} ms · {tool}{(donde.Length > 0 ? $" «{donde}»" : "")} → {linea}");
+    }
+
     /// <summary>La cola de una superficie, que es la parte que una persona reconoce.</summary>
     private static string Corto(string superficie)
     {
@@ -1414,9 +1444,14 @@ public sealed class GeminiLive : IDisposable
                 // Va ANTES que el mapa y sin pasar por SurfaceMapTools: esto no acciona una app de
                 // fuera, acciona la propia ventana, y solo quien la tiene (FaceWindow) puede hacerlo.
                 Accion?.Invoke(EnCurso(nombre, args), false);
+                var relojPropio = System.Diagnostics.Stopwatch.StartNew();
                 try { resultado = Autocontrol?.Invoke(nombre) ?? "no puedo: nadie conectó esta herramienta todavía"; }
                 catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; }
-                Accion?.Invoke(Terminado(nombre, args, resultado, 0), true);
+                relojPropio.Stop();
+                // Se cronometra IGUAL que las demás. Antes se reportaba 0 ms, y un cero no significa
+                // «instantáneo»: significa «nadie miró». Las dos cosas se leen igual en un panel.
+                Accion?.Invoke(Terminado(nombre, args, resultado, relojPropio.ElapsedMilliseconds), true);
+                Apuntar(nombre, args, resultado, relojPropio.ElapsedMilliseconds);
             }
             else if (!SurfaceMapTools.IsMapTool(nombre))
                 resultado = $"«{nombre}» no es una herramienta del mapa";
@@ -1431,6 +1466,9 @@ public sealed class GeminiLive : IDisposable
                 try { resultado = _mapa.Call(nombre, args); }
                 catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; }
                 reloj.Stop();
+                // El pulso lo apunta SurfaceMapTools.Call, por donde pasan todos los que llaman
+                // —la voz, la sonda y el bucle del agente—. Contarlo aquí también sería contarlo dos
+                // veces, y dos cuentas del mismo hecho acaban discrepando.
                 Accion?.Invoke(Terminado(nombre, args, resultado, reloj.ElapsedMilliseconds), true);
             }
 
