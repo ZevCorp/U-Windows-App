@@ -63,15 +63,30 @@ public sealed class PasoDelNucleo
         // Se pide «ponme delante de ESTA SUPERFICIE», no «tráeme este proceso»: la «app» de un id
         // web es un DOMINIO y la de SAP es un SISTEMA, y pasarlos como nombre de proceso hacía que
         // se intentara LANZAR un programa llamado «itsmiracleai.com.co» o «QAS» (2026-08-14).
-        string appDestino = Nucleo.Grafo.AppDe(destino);
-        if (!Nucleo.Grafo.AppDe(aqui).Equals(appDestino, StringComparison.OrdinalIgnoreCase))
+        //
+        // DENTRO DEL EXPLORADOR NO SE ATAJA. Se probó saltar a la carpeta por su ruta —es diez veces
+        // más rápido— y a la primera medición pedir «documentos» acabó en Desktop y «videos» en
+        // Downloads: sin recordar la ruta exacta, la misma hoja significa un sitio distinto según
+        // dónde estés. Llegar rápido al sitio equivocado es peor que llegar despacio al correcto,
+        // porque el que preguntó se cree que llegó. Aquí se camina, y quien quiera saltar tiene
+        // `file_open`, que va por disco y ya es rápido (2026-08-16).
+        if (!Nucleo.Grafo.AppDe(aqui).Equals(Nucleo.Grafo.AppDe(destino), StringComparison.OrdinalIgnoreCase))
         {
             if (!_ponerDelante(destino))
                 return new(false, false, "", "", destino.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
-                    ? $"no pude abrir ni encontrar «{appDestino}» en el navegador"
-                    : $"no pude ponerme delante de «{appDestino}»");
-            Thread.Sleep(700);   // que la ventana se asiente antes de leer dónde estamos
-            aqui = _donde();
+                    ? $"no pude abrir ni encontrar «{Nucleo.Grafo.AppDe(destino)}» en el navegador"
+                    : $"no pude ponerme delante de «{Nucleo.Grafo.AppDe(destino)}»");
+
+            // COMPROBADO POR CONSECUENCIA: ponerse delante es una petición, no una llegada. Se
+            // sondea y se sale EN CUANTO llega, en vez de esperar un plazo fijo — un plazo fijo se
+            // equivoca en las dos direcciones a la vez.
+            for (int i = 0; i < 30; i++)
+            {
+                aqui = _donde();
+                if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase))
+                    return new(true, true, "", "", "");
+                Thread.Sleep(100);
+            }
         }
 
         if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase))
