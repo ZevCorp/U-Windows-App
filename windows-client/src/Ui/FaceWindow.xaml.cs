@@ -1468,6 +1468,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _panelCollar.Show();
     }
 
+    private U.WindowsClient.Radicacion.PanelDeRadicacion? _panelRadicacion;
+
+    /// <summary>Demo aparte del núcleo — ver windows-client/src/Radicacion/. Mismo patrón que OnCollar.</summary>
+    private void OnRadicacion(object sender, RoutedEventArgs e)
+    {
+        PlayTick();
+        if (_panelRadicacion is { IsVisible: true }) { _panelRadicacion.Activate(); return; }
+        _panelRadicacion = new U.WindowsClient.Radicacion.PanelDeRadicacion { Owner = this };
+        _panelRadicacion.Closed += (_, __) => _panelRadicacion = null;
+        _panelRadicacion.Show();
+    }
+
     /// <summary>
     /// EL BOTÓN DEL COLLAR ENCIENDE Y APAGA EL HABLA, y se engancha al SERVICIO y no a la sesión de
     /// voz. Ahí está la diferencia: colgado del servicio, el botón llega también con la voz apagada,

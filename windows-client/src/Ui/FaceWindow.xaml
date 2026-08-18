@@ -466,6 +466,11 @@
                             <Button x:Name="CollarBtn" Content="📿" Style="{StaticResource BarBtn}" Click="OnCollar"
                                     Margin="0" ToolTip="Collar Omi — enlazar y ver su estado"
                                     AutomationProperties.Name="Collar Omi"/>
+                            <!-- Demo: radicación por chat. Aparte del núcleo a propósito — ver
+                                 windows-client/src/Radicacion/. -->
+                            <Button x:Name="RadicacionBtn" Content="🧾" Style="{StaticResource BarBtn}" Click="OnRadicacion"
+                                    Margin="0" ToolTip="Radicación por chat (demo) — adjuntar y clasificar documentos"
+                                    AutomationProperties.Name="Radicación"/>
                             <Button x:Name="MuteBtn" Content="🔊" Style="{StaticResource BarBtn}" Click="OnToggleMute"
                                     Margin="0" ToolTip="Callar a Ü ahora mismo" AutomationProperties.Name="Silencio"/>
                             <!-- Buscar actualizaciones AHORA. El sondeo automático mira cada 30 min y
