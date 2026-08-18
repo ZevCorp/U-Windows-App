@@ -14,12 +14,40 @@ import AppKit
 ///     contexto no cambia los caminos; recalcular el dibujo entero 60 veces por segundo sí.
 final class FaceView: NSView {
 
+    /// EL MARGEN INVISIBLE, y por qué la ventana es más grande que la carita.
+    ///
+    /// La carita se dibujaba ocupando la vista entera. Funcionaba mientras no girara: al ladearse,
+    /// las esquinas se salen y el sistema las corta —se veía como un tajo recto en la esquina de
+    /// abajo (2026-08-16, al entrar el ladeo de la atención).
+    ///
+    /// **Un squircle no es un círculo, y ahí está la trampa**: sus puntos a 45° quedan a 1,19 radios
+    /// del centro en vez de a 1, así que al girar barren bastante más de lo que mide su propia caja.
+    /// El punto más lejano tras un giro θ vale `max_t(cosθ·|cos t|^½ + sinθ·|sin t|^½)` radios.
+    ///
+    /// Cuánto margen hace falta se calcula con el PEOR CASO, y el peor caso no es un ladeo: es la
+    /// SUMA de los que pueden coincidir —atención 9,9° + balanceo de «trabajando» 3° + el de una
+    /// reacción 7° = ~20°—, donde ese factor llega a 1,117 y exige un 11,2 % de margen. Ocho puntos
+    /// sobre 104 son el 15 %: aire de sobra sin agrandar la ventana más de lo necesario.
+    enum Medidas {
+        /// Lo que mide LA CARITA. Es el número que se ve, y el que hay que tocar para hacerla
+        /// grande o pequeña.
+        static let cara: CGFloat = 104
+        /// El aire alrededor, por cada lado. Transparente: no se ve, pero la ventana lo ocupa.
+        static let margen: CGFloat = 8
+        /// Lo que mide la ventana.
+        static let lado: CGFloat = cara + margen * 2
+    }
+
     // ── Lo que se puede pedir desde fuera ────────────────────────────────────────────────────────
 
     var theme: FaceTheme = .light { didSet { needsDisplay = true } }
 
     var mood: FaceMood = .reposo {
-        didSet { guard mood != oldValue else { return }; onMoodChanged(mood) }
+        didSet {
+            guard mood != oldValue else { return }
+            empezarCambio(desde: oldValue)
+            onMoodChanged(mood)
+        }
     }
 
     /// 0 = ojo abierto, 1 = cerrado. UNO POR OJO, y no uno para los dos.
@@ -76,11 +104,38 @@ final class FaceView: NSView {
     private var disculpaDesde: CFTimeInterval?
     private var disculpa = Disculpa()
 
+    /// La celebración: desde cuándo, y DÓNDE ESTABA LA VENTANA antes de brincar. Sin guardar el
+    /// sitio de origen no hay forma de devolverla exactamente, y una carita que acaba dos puntos más
+    /// allá cada vez que termina algo se va caminando sola por la pantalla.
+    private var celebracionDesde: CFTimeInterval?
+    private var origenAlCelebrar: CGPoint?
+    private var celebracion = Celebracion.Paso()
+
+    /// Se avisa al acabar el brinco. Quién manda entonces no lo sabe la vista: depende de si hay
+    /// alguien conversando con ella, y eso lo sabe quien lleva la conversación.
+    var alAcabarDeCelebrar: (() -> Void)?
+
+    /// El cambio de una cara a otra. Cambiar de estado siempre fue instantáneo aquí; lo sigue
+    /// siendo para todas las caras cuyo `tarda` es cero, que son todas menos «pensando».
+    private var poseAnterior: FacePose?
+    private var cambioDesde: CFTimeInterval?
+    private var cambioDura: TimeInterval = 0
+    private var pesoCambio: CGFloat = 1
+
+    /// La atención: cuánto pesa ahora mismo (0 = nada, 1 = entera), y desde cuándo entra o sale.
+    private var atencionDesde: CFTimeInterval?
+    private var atencionSaleDesde: CFTimeInterval?
+    private var atencionAlSalir: CGFloat = 0
+    private(set) var atencion: CGFloat = 0
+    /// Los grados que aporta la atención, vaivén incluido. Lo consume `inclinacionActual`.
+    private var ladeoAtencion: CGFloat = 0
+
     private var reloj: Timer?
     private var proximoOcioso: CFTimeInterval = 0
 
     private enum Envolvente {
-        static let entra: TimeInterval = 0.130   // rápido: una reacción tardona no reacciona a nada
+        // Lo que tarda en ENTRAR ya no vive aquí: lo dice cada reacción (`Reaccion.entra`), porque
+        // resultó ser parte de qué emoción es y no un ajuste común. Salir sí es igual para todas.
         static let sale: TimeInterval  = 0.340   // más lenta: soltar la cara de golpe parece un corte
     }
 
@@ -128,7 +183,7 @@ final class FaceView: NSView {
             // tiene que notarse mientras dura el micrófono (8 s como mucho).
             continua = .respirar
             continuaDesde = CACurrentMediaTime()
-        case .trabajando:
+        case .trabajando, .pensando:
             // Balanceo mínimo. Es una rotación, no un repintado: cuesta cero por cuadro.
             continua = .balancear
             continuaDesde = CACurrentMediaTime()
@@ -136,10 +191,14 @@ final class FaceView: NSView {
             // No un pulso y ya: la disculpa entera, que dura casi tres segundos y manda sobre todo
             // lo demás mientras pasa.
             disculpaDesde = CACurrentMediaTime()
+        case .logrado:
+            celebracionDesde = CACurrentMediaTime()
+            origenAlCelebrar = window?.frame.origin
         default:
             break
         }
         if mood != .fallo { disculpaDesde = nil }
+        if mood != .logrado { cancelarCelebracion() }
         needsDisplay = true
     }
 
@@ -189,12 +248,14 @@ final class FaceView: NSView {
     /// Cuánto pesa la reacción ahora mismo: 0 = la cara de siempre, 1 = la reacción entera.
     private func pesoReaccion(_ ahora: CFTimeInterval) -> CGFloat {
         guard let r = reaccion else { return 0 }
+        // Congelada: la reacción no avanza ni caduca, para poder afinarla quieta.
+        if let fijo = Reaccion.congelada { return fijo }
         let t = ahora - reaccionDesde
-        let total = Envolvente.entra + r.aguanta + Envolvente.sale
+        let total = r.entra + r.aguanta + Envolvente.sale
         if t >= total { reaccion = nil; return 0 }
-        if t < Envolvente.entra { return CGFloat(t / Envolvente.entra) }
-        if t < Envolvente.entra + r.aguanta { return 1 }
-        return CGFloat(1 - (t - Envolvente.entra - r.aguanta) / Envolvente.sale)
+        if t < r.entra { return CGFloat(t / r.entra) }
+        if t < r.entra + r.aguanta { return 1 }
+        return CGFloat(1 - (t - r.entra - r.aguanta) / Envolvente.sale)
     }
 
     /// Mirar hacia un lado y QUEDARSE mirando, hasta que se suelte.
@@ -213,6 +274,114 @@ final class FaceView: NSView {
         mirandoFijo = false
         mirada = .soltar(desde: eyeShift)
         miradaDesde = CACurrentMediaTime()
+    }
+
+    // ── La atención: el ladeo de estarte oyendo ──────────────────────────────────────────────────
+
+    /// Se ladea porque le estás hablando. Ver [`Atencion`](Atencion.swift) para los tres tiempos.
+    ///
+    /// Llamarla veinte veces seguidas no reinicia nada, y eso es lo que la hace usable desde donde
+    /// se usa: mientras hablas llega un resultado parcial por palabra, así que esto se invoca varias
+    /// veces por segundo. Reiniciando en cada una, el ladeo se quedaría temblando en el primer tramo
+    /// de la curva sin llegar nunca a ladearse.
+    func atender() {
+        guard disculpaDesde == nil else { return }      // pidiendo perdón no está para escuchar
+        guard atencionDesde == nil else { return }      // ya venía atendiendo
+        // Si estaba a media salida, se retoma DESDE DONDE IBA. Volver a empezar de cero da un tirón
+        // justo en el momento en que retomas la palabra, que es cuando peor se ve.
+        atencionDesde = CACurrentMediaTime() - Atencion.entra * Double(atencion)
+        atencionSaleDesde = nil
+    }
+
+    /// Si está atendiendo AHORA. Saliendo ya no cuenta: el gesto terminó, solo le queda volver.
+    var atendiendo: Bool { atencionDesde != nil }
+
+    /// Deja de atender: la cabeza vuelve a su sitio.
+    func dejarDeAtender() {
+        guard atencionDesde != nil else { return }
+        atencionDesde = nil
+        atencionSaleDesde = CACurrentMediaTime()
+        atencionAlSalir = atencion
+    }
+
+    /// Corta el brinco. `devolviendo` es `false` cuando la corta el usuario agarrándola: ahí mandar
+    /// la ventana de vuelta al sitio de origen sería pelearse con su dedo.
+    func cancelarCelebracion(devolviendo: Bool = true) {
+        guard celebracionDesde != nil else { return }
+        celebracionDesde = nil
+        if devolviendo, let w = window, let base = origenAlCelebrar { w.setFrameOrigin(base) }
+        origenAlCelebrar = nil
+        celebracion = Celebracion.Paso()
+    }
+
+    private func actualizarCelebracion(_ ahora: CFTimeInterval) {
+        guard let desde = celebracionDesde else { celebracion = Celebracion.Paso(); return }
+        celebracion = Celebracion.en(Celebracion.congelada ?? (ahora - desde))
+
+        if celebracion.terminada {
+            cancelarCelebracion()            // devuelve la ventana a su sitio exacto
+            alAcabarDeCelebrar?()
+            return
+        }
+        // Si todavía no había ventana cuando arrancó, el brinco se queda en el ladeo y ya. Preferible
+        // a no celebrar: media celebración se entiende, ninguna no.
+        if let w = window, let base = origenAlCelebrar {
+            w.setFrameOrigin(CGPoint(x: base.x + celebracion.dx, y: base.y + celebracion.dy))
+        }
+    }
+
+    private func empezarCambio(desde anterior: FaceMood) {
+        cambioDura = mood.tarda
+        guard cambioDura > 0 else { poseAnterior = nil; cambioDesde = nil; pesoCambio = 1; return }
+        poseAnterior = FacePose.pose(anterior)
+        cambioDesde = CACurrentMediaTime()
+        pesoCambio = 0
+    }
+
+    private func actualizarCambio(_ ahora: CFTimeInterval) {
+        guard cambioDesde != nil else { pesoCambio = 1; return }
+        // Congelada para poder afinarla quieta:  U_CARA=pensando U_TRANSICION=0.5
+        if let fijo = Self.transicionCongelada { pesoCambio = fijo; return }
+        let t = ahora - cambioDesde!
+        if t >= cambioDura {
+            cambioDesde = nil; poseAnterior = nil; pesoCambio = 1
+        } else {
+            pesoCambio = splineMirada.eval(CGFloat(t / cambioDura))
+        }
+    }
+
+    /// `let` y no `var`: se consulta en cada cuadro.
+    private static let transicionCongelada: CGFloat? = {
+        guard let v = ProcessInfo.processInfo.environment["U_TRANSICION"], let n = Double(v) else { return nil }
+        return CGFloat(min(1, max(0, n)))
+    }()
+
+    private func actualizarAtencion(_ ahora: CFTimeInterval) {
+        // Mientras pide perdón, no. Los dos ladeos sumados —7° de la disculpa y 9° de la atención—
+        // no son dos gestos, son un descuadre.
+        if disculpaDesde != nil, atencionDesde != nil { dejarDeAtender() }
+
+        if let desde = atencionDesde {
+            let t = ahora - desde
+            atencion = t >= Atencion.entra ? 1 : Atencion.curvaEntra.eval(CGFloat(t / Atencion.entra))
+        } else if let salio = atencionSaleDesde {
+            let t = ahora - salio
+            if t >= Atencion.sale {
+                atencion = 0
+                atencionSaleDesde = nil
+            } else {
+                atencion = atencionAlSalir * (1 - Atencion.curvaSale.eval(CGFloat(t / Atencion.sale)))
+            }
+        }
+
+        if let fija = Atencion.congelada { atencion = fija }
+
+        // El vaivén va MULTIPLICADO por el peso, no encendido a partir de cierto punto: un vaivén
+        // que arranca de golpe al completarse la entrada mete un salto de casi un grado justo donde
+        // el gesto tenía que estar asentándose.
+        let vaiven = Atencion.deriva * atencion
+            * (2 * Easing.autoReverse(CGFloat(ahora), period: Atencion.cicloDeriva) - 1)
+        ladeoAtencion = Atencion.sentido * (Atencion.ladeo * atencion + vaiven)
     }
 
     // ── Gestos casuales en reposo ────────────────────────────────────────────────────────────────
@@ -268,6 +437,15 @@ final class FaceView: NSView {
             disculpa = Disculpa()
             eyeShiftY = 0
         }
+
+        actualizarCelebracion(ahora)
+        if celebracionDesde != nil { vivo = true }
+
+        actualizarCambio(ahora)
+        if cambioDesde != nil { vivo = true }
+
+        actualizarAtencion(ahora)
+        if atencion > 0 { vivo = true }
 
         let calladita = disculpaDesde != nil && disculpa.mandaElla
         if ahora >= proximoOcioso {
@@ -363,6 +541,8 @@ final class FaceView: NSView {
         if continua == .balancear {
             g += -3 + 6 * Easing.autoReverse(CGFloat(ahora - continuaDesde), period: 4.800)
         }
+        g += ladeoAtencion
+        g += celebracion.ladeo
         if let r = reaccion { g += r.inclina * peso }
         return g
     }
@@ -375,11 +555,14 @@ final class FaceView: NSView {
         guard w > 0, h > 0 else { return }
 
         let ahora = CACurrentMediaTime()
-        let s = min(w, h) / 150.0          // unidades del viewBox → px
+        // TODO se mide contra el lado de la CARITA, no contra el de la vista: alrededor hay un
+        // margen invisible para que las esquinas quepan al ladearse. Ver `Medidas`.
+        let lado = min(w, h) * (Medidas.cara / Medidas.lado)
+        let s = lado / 150.0               // unidades del viewBox → px
         let cx = w / 2, cy = h / 2
         func X(_ v: CGFloat) -> CGFloat { cx + v * s }
         func Y(_ v: CGFloat) -> CGFloat { cy + v * s }
-        let r = min(w, h) / 2 - s
+        let r = lado / 2 - s
 
         // Pulso/respiración y balanceo, alrededor del centro. La geometría no se entera.
         ctx.saveGState()
@@ -408,6 +591,14 @@ final class FaceView: NSView {
         // carácter y se distingue de reojo, que es de lo que se trata.
         // La cara de siempre, mezclada con la reacción que esté en curso.
         var pose = FacePose.pose(mood)
+        // Viniendo de otra cara, se mezcla desde ella en vez de saltar.
+        if let antes = poseAnterior { pose = antes.mezclando(hacia: pose, pesoCambio) }
+        // La atención se mezcla ANTES que la reacción: si algo le da risa mientras te oye, la risa
+        // se lleva el momento y la atención sigue debajo cuando pasa. Al revés, escuchar borraría
+        // la reacción — y lo que se estaba escuchando es justo lo que la provocó.
+        if atencion > 0 {
+            pose = pose.mezclando(hacia: FacePose.pose(.escuchando), atencion)
+        }
         var bocaAbierta = mouthOpen
         var bocaRedonda = mouthRound
         if let r = reaccion, peso > 0 {
@@ -470,12 +661,24 @@ final class FaceView: NSView {
         ctx.rotate(by: -2 * .pi / 180)
         ctx.translateBy(x: -cx, y: -cy)
 
-        // Cejas: bezier cuadrática sobre cada ojo.
-        for (bx, bh, c) in [(CGFloat(-30), pose.browL, pose.curveL), (CGFloat(30), pose.browR, pose.curveR)] {
+        // Cejas: bezier cuadrática sobre cada ojo, con arco y con inclinación.
+        //
+        // La inclinación reparte a MEDIAS —el extremo de dentro baja lo mismo que sube el de fuera—
+        // en vez de bajar solo uno. Así el centro de la ceja se queda donde estaba y la cara no
+        // parece que además frunza; y al mezclar dos poses no hay un desplazamiento vertical que
+        // acompañe al giro.
+        //
+        // El extremo «de dentro» no es el mismo lado en las dos cejas: en la izquierda es el de la
+        // derecha y viceversa. De ahí el ±10 en vez de una constante.
+        for (bx, bh, c, xDentro) in [(CGFloat(-30), pose.browL, pose.curveL, CGFloat( 10)),
+                                     (CGFloat( 30), pose.browR, pose.curveR, CGFloat(-10))] {
+            let media = pose.browTilt / 2
+            let yDentro = -34 - bh + media
+            let yFuera  = -34 - bh - media
             let ceja = CGMutablePath()
-            ceja.move(to: CGPoint(x: X(bx - 10), y: Y(-34 - bh)))
-            ceja.addQuadCurve(to: CGPoint(x: X(bx + 10), y: Y(-34 - bh)),
-                              control: CGPoint(x: X(bx), y: Y(-34 - bh - c * 15)))
+            ceja.move(to: CGPoint(x: X(bx - xDentro), y: Y(yFuera)))
+            ceja.addQuadCurve(to: CGPoint(x: X(bx + xDentro), y: Y(yDentro)),
+                              control: CGPoint(x: X(bx), y: Y((yDentro + yFuera) / 2 - c * 15)))
             ctx.addPath(ceja)
             ctx.strokePath()
         }
@@ -483,11 +686,42 @@ final class FaceView: NSView {
         // Ojos: líneas verticales (el cierre los acorta casi del todo; eyeShift los corre a un lado).
         // Cada ojo lleva su propio cierre, que es lo que permite el guiño.
         let eyeBase = 25 * pose.eyeOpen * (1 - pose.squint * 0.4)
-        for (ex, cierre) in [(CGFloat(-30), blinkL), (CGFloat(30), blinkR)] {
+        for (ex, cierreBlink, esDerecho) in [(CGFloat(-30), blinkL, false), (CGFloat(30), blinkR, true)] {
+            // Dos cierres distintos que conviven: el del PARPADEO, que acorta la rayita, y el del
+            // GUIÑO de la pose, que además la curva. Manda el mayor de los dos.
+            // Dos formas de cerrar el ojo en arco, y manda la mayor: el guiño (uno solo, con el
+            // lado en el signo) y la cara de contenta (los dos a la vez).
+            let porGuino = esDerecho ? max(0, pose.guino) : max(0, -pose.guino)
+            let porPose = max(porGuino, pose.ojosArco)
+
+            // Y CURVAN AL REVÉS SEGÚN DE CUÁL VENGAN, que no es un capricho de dibujo:
+            //
+            //  · El guiño curva HACIA ARRIBA, igual que la ceja. Es un ojo que se aprieta.
+            //  · La alegría curva HACIA ABAJO, como una sonrisa pequeña. Ahí está toda la cara de
+            //    contenta: dos arcos que repiten la forma de la boca en vez de la de las cejas.
+            //    Curvados hacia arriba salen cuatro arcos iguales apilados y la cara no dice nada.
+            let arribaAbajo: CGFloat = pose.ojosArco >= porGuino ? -1 : 1
+            let cierre = max(cierreBlink, porPose)
             let eyeLen = eyeBase * (1 - cierre * 0.92)
             let ey = -14 + eyeShiftY
-            ctx.move(to: CGPoint(x: X(ex + eyeShift), y: Y(ey - eyeLen / 2)))
-            ctx.addLine(to: CGPoint(x: X(ex + eyeShift), y: Y(ey + eyeLen / 2)))
+            let x0 = ex + eyeShift
+
+            // UNA SOLA CURVA PARA LAS DOS FORMAS. Los extremos y el control van interpolando entre
+            // la línea vertical de siempre y el arco del ojo cerrado.
+            //
+            // Y no hay caso especial para el cero: una bezier cuadrática con el control en el punto
+            // medio ES el segmento recto —sale de la propia fórmula—, así que con `guino` en cero
+            // esto dibuja exactamente la misma rayita que antes, no una parecida.
+            let arco = porPose
+            let ancho = 9.0 * arco          // cuánto se abre el arco a los lados
+            let alza  = 5.0 * arco * arribaAbajo   // por dónde se comba: + arriba, − abajo
+            func mez(_ recta: CGFloat, _ curva: CGFloat) -> CGFloat { recta + (curva - recta) * arco }
+
+            let ojo = CGMutablePath()
+            ojo.move(to: CGPoint(x: X(mez(x0, x0 - ancho)), y: Y(mez(ey - eyeLen / 2, ey))))
+            ojo.addQuadCurve(to: CGPoint(x: X(mez(x0, x0 + ancho)), y: Y(mez(ey + eyeLen / 2, ey))),
+                             control: CGPoint(x: X(x0), y: Y(mez(ey, ey - alza))))
+            ctx.addPath(ojo)
             ctx.strokePath()
         }
 
@@ -499,19 +733,76 @@ final class FaceView: NSView {
         let shift = (pose.cornerR - pose.cornerL) * 10
         let half = pose.mouthWidth / 2
 
+        // LA LENGUA ASOMADA POR LA COMISURA.
+        //
+        // Va ANTES que la boca a propósito: la línea de la boca se pinta encima y le corta la parte
+        // de arriba. Así se ve una lengua que ASOMA por debajo del labio; dibujada después sería un
+        // óvalo pegado a la cara, que es lo que parece cuando se hace al revés.
+        //
+        // Y se apaga al abrir la boca: si está hablando, la lengua que importa es la de dentro —la
+        // que ya existía—, y las dos a la vez son dos lenguas.
+        let asomada = pose.lengua * (1 - Easing.clamp01(bocaAbierta))
+        if abs(asomada) > 0.01 {
+            let lado: CGFloat = asomada < 0 ? -1 : 1
+            let cuanto = min(1, abs(asomada))
+            let yComisura = lado < 0 ? leftY : rightY
+            // EN LA COMISURA, no dentro de la boca (0,90 del semiancho y no 0,74): la primera
+            // versión la puso a tres cuartos y quedaba una lengua que sale del centro del labio.
+            let rx = 9.2 * cuanto, ry = 5.8 * cuanto
+            let caja = CGRect(x: X(lado * half * 0.90) - rx * s,
+                              y: Y(yComisura + 0.8 + 3.4 * cuanto) - ry * s,
+                              width: rx * s * 2, height: ry * s * 2)
+            ctx.setFillColor(UiPalette.lengua)
+            ctx.fillEllipse(in: caja)
+            // Contorno FINO, y el número importa: con la pluma de los rasgos (4) la lengua salía
+            // negra —el borde se comía el relleno y quedaba un punto oscuro, no una lengua—. Con 1,5
+            // el rosa manda y la línea solo la perfila.
+            ctx.setLineWidth(1.5 * s)
+            ctx.strokeEllipse(in: caja)
+            ctx.setLineWidth(4 * s)          // devolver la pluma de los rasgos para la boca
+        }
+
         // ABIERTA O CERRADA. Cerrada es la sonrisa de siempre —una línea— y así se queda en reposo:
         // esto no puede cambiar la cara que ya existía. Abierta, la MISMA curva pasa a ser el labio
         // de arriba y se le añade otro por debajo, cerrando una figura que se rellena. Un solo dibujo
         // con dos estados, en vez de dos bocas distintas que habría que mantener a la par.
         let abierta = Easing.clamp01(bocaAbierta)
         if abierta <= 0.02 {
-            let linea = CGMutablePath()
-            linea.move(to: CGPoint(x: X(-half), y: Y(leftY)))
-            linea.addCurve(to: CGPoint(x: X(half), y: Y(rightY)),
-                           control1: CGPoint(x: X(-half * 0.3 + shift), y: Y(midY)),
-                           control2: CGPoint(x: X(half * 0.3 + shift), y: Y(midY)))
-            ctx.addPath(linea)
-            ctx.strokePath()
+            // LA LÍNEA Y EL ARO SE RELEVAN, NO CONVIVEN. Escalando los dos con el mismo número se
+            // solapaban en toda la mitad de la transición y salía un bulto que no es ninguna de las
+            // dos formas. Así la boca se encoge primero y el aro empieza cuando ya no queda línea:
+            // se lee como una boca que se cierra en «o», que es lo que hace una boca de verdad.
+            let aro = Easing.clamp01(pose.bocaO)
+            // El relevo NO PUEDE DEJAR HUECO. Con la línea acabando en 0,60 y el aro empezando en
+            // 0,60 desde cero, había un instante con la carita SIN BOCA — poco, pero se ve, y una
+            // cara sin boca no es una cara. Así que el aro entra ya con tamaño (45 %) justo cuando
+            // la línea se acaba. Ese salto no es un defecto: una boca que se abre en «o» se abre de
+            // golpe, no crece desde un punto.
+            let pesoLinea = 1 - Easing.clamp01((aro - 0.35) / 0.20)   // llega a cero en 0,55
+            let pesoAro   = aro < 0.55 ? 0 : 0.45 + 0.55 * Easing.clamp01((aro - 0.55) / 0.45)
+            let media = half * pesoLinea
+
+            if media > 0.5 {
+                // La onda: un control sube y el otro baja. Con `mouthWave` en cero los dos vuelven a
+                // la misma altura y la boca es exactamente la de siempre.
+                let onda = pose.mouthWave * 9
+                let linea = CGMutablePath()
+                linea.move(to: CGPoint(x: X(-media), y: Y(leftY)))
+                linea.addCurve(to: CGPoint(x: X(media), y: Y(rightY)),
+                               control1: CGPoint(x: X(-media * 0.3 + shift), y: Y(midY - onda)),
+                               control2: CGPoint(x: X(media * 0.3 + shift), y: Y(midY + onda)))
+                ctx.addPath(linea)
+                ctx.strokePath()
+            }
+
+            if pesoAro > 0.01 {
+                // Un pelo más alta que ancha: un círculo perfecto se lee como un agujero, y un óvalo
+                // de pie se lee como una boca.
+                let rx = 6.0 * pesoAro, ry = 7.0 * pesoAro
+                let cyAro = (leftY + rightY) / 2
+                ctx.strokeEllipse(in: CGRect(x: X(shift * 0.3) - rx * s, y: Y(cyAro) - ry * s,
+                                             width: rx * s * 2, height: ry * s * 2))
+            }
         } else {
             // Redonda estrecha la boca; ancha la deja como está. Es lo que separa una «o» de una «e».
             let redonda = Easing.clamp01(bocaRedonda)
@@ -581,6 +872,19 @@ final class FaceView: NSView {
     // Solo dependen de (cx, cy, r), que solo cambian si la vista cambia de tamaño — es decir, casi
     // nunca. Sin caché se reconstruían 2 × 73 puntos con dos `pow` cada uno EN CADA REPINTADO, y hay
     // repintados de sobra: cada parpadeo repinta a la velocidad del cuadro varias veces por minuto.
+
+    /// Si un punto —en coordenadas de la vista— cae DENTRO de la carita, y no en el aire de
+    /// alrededor. Se prueba contra el squircle de verdad y no contra un círculo: por las esquinas un
+    /// círculo se queda nueve puntos corto, y esas esquinas son carita que se puede tocar.
+    ///
+    /// Contra el squircle SIN girar, a sabiendas: mientras está ladeada las esquinas quedan un pelo
+    /// desplazadas respecto a lo que se ve, y el ladeo dura lo que dura una frase.
+    func dentroDeLaCarita(_ p: CGPoint) -> Bool {
+        if let camino = cacheFuera { return camino.contains(p) }
+        // Antes del primer dibujo todavía no hay camino que probar.
+        let c = CGPoint(x: bounds.midX, y: bounds.midY)
+        return hypot(p.x - c.x, p.y - c.y) <= Medidas.cara / 2
+    }
 
     private var cacheFuera: CGPath?
     private var claveFuera: CGFloat = .nan

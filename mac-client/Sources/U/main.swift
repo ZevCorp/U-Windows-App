@@ -12,6 +12,11 @@ final class Delegado: NSObject, NSApplicationDelegate {
     var despierta = false
     /// Cuándo fue la última vez que le hablaste. Con esto decide cuándo volver a dormirse.
     var ultimoRoce = Date.distantPast
+    /// El turno que acaba de hablar venía del modelo, no de una frase de trámite («todavía no tengo
+    /// llave para pensar»). Solo esos se celebran: una carita que brinca por decirte que no puede
+    /// hacer algo se está riendo de ti.
+    var turnoDelModelo = false
+
     /// Cuánto aguanta despierta sin que le digas nada.
     ///
     /// Medio minuto: lo bastante para pensar la siguiente frase, pedirle otra cosa o corregirla, y
@@ -64,10 +69,31 @@ final class Delegado: NSObject, NSApplicationDelegate {
         // CERRARLO NO ES OPCIONAL: con el micrófono abierto mientras suena su propia voz, se oye a sí
         // misma, se transcribe, y contesta a lo que acaba de decir — y otra vez, y otra. Un bucle que
         // no para y que además cuesta dinero en cada vuelta.
+        // Al acabar el brinco, la cara vuelve a lo que toque. Lo decide aquí y no la vista porque
+        // depende de si hay alguien conversando con ella, que es cosa de la conversación.
+        panel.face.alAcabarDeCelebrar = { [weak self] in
+            guard let self else { return }
+            panel.face.mood = despierta ? .conversando : .reposo
+        }
+
         voz.alTerminar = { [weak self] in
             guard let self else { return }
             self.ultimoRoce = Date()   // acabar de hablar cuenta como roce: no se duerme recién dicha
-            if panel.face.mood == .hablando { panel.face.mood = despierta ? .conversando : .reposo }
+            if panel.face.mood == .hablando {
+                // TERMINÓ SU PROCESO → celebra. Y hay que decir qué significa hoy «su proceso»:
+                // significa que le preguntaste, fue al modelo, y acabó de contestarte. No hay nada
+                // más que completar en este cliente todavía.
+                //
+                // Cuando Ü empiece a OPERAR APPS en el Mac, el sitio de esta llamada es el final de
+                // la tarea, no el final de la frase — y entonces `turnoDelModelo` sobra. Se deja
+                // aquí, y anotado, para que se mueva a sabiendas y no por descubrimiento.
+                if turnoDelModelo {
+                    turnoDelModelo = false
+                    panel.face.mood = .logrado
+                } else {
+                    panel.face.mood = despierta ? .conversando : .reposo
+                }
+            }
             // Un respiro antes de reabrir: el altavoz tarda un instante en callarse de verdad, y la
             // cola de ese instante entra como si fuera una frase tuya.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
@@ -77,8 +103,29 @@ final class Delegado: NSObject, NSApplicationDelegate {
 
         if let k = Llave.gemini { cerebro = Cerebro(llave: k) }
 
+        // SE LADEA MIENTRAS LE HABLAS. La señal no hubo que inventarla: `alOir` llega con cada
+        // resultado parcial, o sea cada vez que el reconocedor entiende una palabra más de lo que
+        // estás diciendo. Estaba declarada y nadie la escuchaba.
+        //
+        // Y NO CON CUALQUIER `alOir`, que es lo que la salva de ser un tic: dormida, casi nada de
+        // lo que se oye va para ella —la llamada que tienes con otro, la tele, el ventilador— y una
+        // carita que se ladea con cada frase ajena no está atenta, está fingiendo. Se ladea si ya
+        // está despierta, o si lo que va oyendo EMPIEZA POR SU NOMBRE.
+        oido.alOir = { [weak self] texto in
+            guard let self else { return }
+            guard self.despierta || Llamado.resto(de: texto) != nil else { return }
+            panel.face.atender()
+        }
+
         oido.alEntender = { [weak self] texto in
             guard let self else { return }
+            // Terminaste de hablar: la cabeza vuelve a su sitio, por el camino que sea. Va aquí
+            // arriba y no en cada rama porque hay cinco salidas, y la que se olvide deja la carita
+            // ladeada para siempre.
+            //
+            // El instante que tarda no es un descuido: `alEntender` llega 0,55 s después de que te
+            // calles, así que aguanta la atención un momento más — que es lo que hace una persona.
+            panel.face.dejarDeAtender()
 
             // ¿Me están hablando A MÍ?
             //
@@ -108,6 +155,14 @@ final class Delegado: NSObject, NSApplicationDelegate {
             self.ultimoRoce = Date()
             guard Self.valeLaPenaContestar(loQuePregunta) else {
                 Registro.di("👂 ignoro «\(loQuePregunta)» (ruido)")
+                // ESTANDO EN CONVERSACIÓN, no entender no puede ser NO HACER NADA. Desde fuera,
+                // cero reacción es indistinguible de no haberte oído —y lo que hace uno entonces es
+                // repetir más alto, que es justo lo que rompe la conversación. Pone la cara de
+                // pregunta y así sabes que llegaste, pero no llegó el qué.
+                //
+                // Solo despierta: dormida esto se dispara con la tele y con el ventilador, y una
+                // carita que pregunta «¿eh?» al aire no está atenta, está estorbando.
+                if self.despierta { panel.face.reaccionar(.perdido) }
                 oido.reanudar()
                 return
             }
@@ -120,9 +175,14 @@ final class Delegado: NSObject, NSApplicationDelegate {
 
             // Mientras piensa, la cara lo dice. Un silencio sin cara es lo que hace dudar de si te
             // oyó — y volver a hablarle encima es lo que rompe la conversación.
-            panel.face.mood = .trabajando
+            panel.face.mood = .pensando
+            // AQUÍ SE PROBÓ A METER EL GUIÑO DE «entendido» y se quitó (2026-08-17): encima de la
+            // cara de pensar las dos se estorban —el guiño se come la lengua, y lo que sale no es
+            // ninguna de las dos—. `entendido` se queda como cara propia, que es donde funciona: la
+            // elige el modelo cuando de verdad arranca una tarea.
 
             Registro.di("🧠 le pregunto: «\(pregunta)»")
+            self.turnoDelModelo = true
             let arranque = Date()
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -144,6 +204,7 @@ final class Delegado: NSObject, NSApplicationDelegate {
                     // Pegarle el error crudo detrás de «perdón» era leerle a la cara una URL de
                     // facturación en inglés.
                     Registro.di("🧠 ✘ \(error)")
+                    self.turnoDelModelo = false       // lo que falla no se celebra
                     self.panel.face.mood = .fallo     // pide perdón y se pone a buscar, sola
                     self.voz.decir(error.localizedDescription)
                 }
@@ -181,6 +242,10 @@ final class Delegado: NSObject, NSApplicationDelegate {
         if let n = ProcessInfo.processInfo.environment["U_CARA"], let m = FaceMood(rawValue: n) {
             panel.face.mood = m
         }
+        // Y lo mismo para las reacciones:  U_TALANTE=enojado U_PESO=0.6
+        if let n = ProcessInfo.processInfo.environment["U_TALANTE"], let t = Talante(rawValue: n) {
+            panel.face.reaccionar(t)
+        }
     }
 
     private func construirMenu() -> NSMenu {
@@ -207,7 +272,8 @@ final class Delegado: NSObject, NSApplicationDelegate {
         }
 
         m.addItem(.separator())
-        for (titulo, sel) in [("Guiñar", #selector(guinar)),
+        for (titulo, sel) in [("Te escucho (ladeo) ⇄", #selector(alternarAtencion)),
+                              ("Guiñar", #selector(guinar)),
                               ("Parpadear dos veces", #selector(parpadear2)),
                               ("Pulso", #selector(pulso)),
                               ("Mirar a un lado", #selector(mirar)),
@@ -243,6 +309,12 @@ final class Delegado: NSObject, NSApplicationDelegate {
     @objc private func reaccionar(_ sender: NSMenuItem) {
         guard let t = sender.representedObject as? Talante else { return }
         panel.face.reaccionar(t)
+    }
+
+    /// El ladeo se enciende y se apaga con el mismo item: dura lo que dure la frase de quien habla,
+    /// así que no hay una duración que enseñar — hay que poder dejarla puesta y mirarla.
+    @objc private func alternarAtencion() {
+        if panel.face.atendiendo { panel.face.dejarDeAtender() } else { panel.face.atender() }
     }
 
     @objc private func guinar()    { panel.face.guinar(izquierdo: false) }

@@ -18,7 +18,10 @@ enum Vuelo {
         // Si venía lanzada de verdad, manda la dirección del lanzamiento; si no, el lado más cercano.
         let izquierda: Bool = abs(velocidad.x) > 320 ? velocidad.x < 0 : centro < zona.midX
 
-        let margen: CGFloat = 24
+        // 24 puntos de LA CARITA al borde. El aire invisible que la ventana lleva alrededor para
+        // que las esquinas quepan al ladearse no cuenta como separación: si contara, la carita
+        // acabaría ocho puntos más adentro de lo que se pidió, y al lanzarla se vería despegada.
+        let margen: CGFloat = 24 - FaceView.Medidas.margen
         let destinoX = izquierda ? zona.minX + margen : zona.maxX - f.width - margen
 
         // Vertical: se queda donde está, pero sin salirse de la pantalla.
