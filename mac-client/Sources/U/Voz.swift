@@ -20,6 +20,9 @@ final class Voz: NSObject, AVSpeechSynthesizerDelegate {
     private var fase: CGFloat = 0
 
     /// Se avisa al terminar de hablar TODO, para que la carita vuelva a lo suyo.
+    /// Empezó a sonar. La voz tampoco pone la cara: avisa, y la cara se deriva de que esté hablando.
+    var alEmpezar: (() -> Void)?
+
     var alTerminar: (() -> Void)?
 
     /// Frases encoladas que aún no han terminado de sonar.
@@ -54,8 +57,50 @@ final class Voz: NSObject, AVSpeechSynthesizerDelegate {
             return v
         }
 
+        // UN ARCHIVO, NO UNA CONSTANTE: `~/.u/voz.txt` con el nombre de la voz. Cambiarla no puede
+        // exigir recompilar — es una preferencia de gusto y se cambia oyéndolas, no editando Swift.
+        let apuntada = (try? String(contentsOf: FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".u/voz.txt"), encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // EN ESPAÑOL, aunque el nombre coincida en otro idioma. Varias voces existen en los dos
+        // —hay un «Reed» en es-MX y otro en en-US— y buscar solo por nombre agarraba el inglés:
+        // el 2026-08-19 salió `voz de ~/.u/voz.txt: Reed (en-US)`, que leería español con acento
+        // gringo. Se filtra el idioma ANTES de comparar el nombre.
+        // Y con es-MX DELANTE de es-ES: varias voces existen en los dos españoles, y el de la casa
+        // es el mexicano. Sin ordenar, `first(where:)` devolvía el de España por puro orden de lista.
+        let enEspanol = AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.hasPrefix("es") }
+            .sorted { ($0.language == "es-MX" ? 0 : 1) < ($1.language == "es-MX" ? 0 : 1) }
+        if !apuntada.isEmpty,
+           let v = enEspanol.first(where: {
+               $0.identifier == apuntada
+                   || $0.name.compare(apuntada, options: .caseInsensitive) == .orderedSame
+                   || $0.name.localizedCaseInsensitiveContains(apuntada)
+           }) ?? AVSpeechSynthesisVoice.speechVoices().first(where: { $0.identifier == apuntada }) {
+            Registro.di("🔊 voz de ~/.u/voz.txt: \(v.name) (\(v.language))")
+            return v
+        }
+
         let candidatas = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("es") }
-        let mejor = candidatas.max { a, b in
+
+        // MASCULINA, PEDIDO EXPRESO DE ISABEL EL 2026-08-19 («no me gustó la voz de Paulina»).
+        //
+        // Y hay que nombrarlas una por una porque `voice.gender` NO SIRVE aquí: las voces Eloquence
+        // —que son las únicas masculinas en español que trae macOS de fábrica— declaran género
+        // `.unspecified`, así que un filtro por `gender == .male` no encuentra NINGUNA y se cae de
+        // vuelta a Paulina sin decir por qué. Medido con una sonda el mismo día.
+        let masculinas = ["Reed", "Rocko", "Eddy", "Grandpa", "Jorge", "Diego", "Juan", "Carlos"]
+        let hombres = candidatas.filter { v in
+            v.gender == .male || masculinas.contains(where: {
+                v.name.localizedCaseInsensitiveContains($0)
+            })
+        }
+        if hombres.isEmpty {
+            Registro.di("🔊 ⚠︎ no hay ninguna voz masculina en español instalada — va la que haya")
+        }
+        let candidatas2 = hombres.isEmpty ? candidatas : hombres
+        _ = candidatas2
+        let mejor = candidatas2.max { a, b in
             if a.quality.rawValue != b.quality.rawValue { return a.quality.rawValue < b.quality.rawValue }
             // A igual calidad, el español de México antes que el de España: es el acento del usuario.
             let am = a.language == "es-MX" ? 1 : 0, bm = b.language == "es-MX" ? 1 : 0
@@ -103,7 +148,7 @@ final class Voz: NSObject, AVSpeechSynthesizerDelegate {
 
     private func arrancarBoca() {
         guard reloj == nil else { return }
-        cara?.mood = .hablando
+        alEmpezar?()
         // A ~16 cuadros por segundo, no a 60: la boca al hablar cambia de forma, y una forma nueva hay
         // que dibujarla entera. A 60 serían cuatro veces más repintados para un movimiento que a esta
         // velocidad ya se ve continuo.
