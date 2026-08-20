@@ -115,6 +115,12 @@ final class FaceView: NSView {
     /// alguien conversando con ella, y eso lo sabe quien lleva la conversación.
     var alAcabarDeCelebrar: (() -> Void)?
 
+    /// Acabó de pedir perdón. La vista NO decide qué viene después: avisa, y quien lleva el estado
+    /// lo deriva. Antes se lo cambiaba a sí misma (`if mood == .fallo { mood = .trabajando }`), y una
+    /// vista que se reasigna el estado es un segundo sitio que opina sobre lo mismo — justo lo que
+    /// la derivación existe para impedir.
+    var alAcabarDeDisculparse: (() -> Void)?
+
     /// El cambio de una cara a otra. Cambiar de estado siempre fue instantáneo aquí; lo sigue
     /// siendo para todas las caras cuyo `tarda` es cero, que son todas menos «pensando».
     private var poseAnterior: FacePose?
@@ -430,7 +436,7 @@ final class FaceView: NSView {
             if disculpa.terminada {
                 disculpaDesde = nil
                 eyeShiftY = 0
-                if mood == .fallo { mood = .trabajando }
+                if mood == .fallo { alAcabarDeDisculparse?() }
             }
             vivo = true
         } else {

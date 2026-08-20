@@ -12,9 +12,31 @@ import Foundation
 /// tener nombre: enseña a desconfiar de él. Por eso se aceptan todas sus formas.
 enum Llamado {
 
-    /// Todo lo que el reconocedor escribe cuando alguien dice «Ü».
+    /// Todo lo que el reconocedor escribe cuando alguien dice «Ü» — y «Mira», que es como la llaman
+    /// de verdad.
+    ///
+    /// **«Mira» no es un alias de cortesía: es el nombre que funciona.** Está medido sobre el
+    /// registro del 2026-08-18, 822 frases oídas de una sesión real de trabajo:
+    ///
+    /// | Cómo empezó la frase | Veces |
+    /// |---|---|
+    /// | alguna forma de «Ü» (`u`, `you`, `hu`…) | **0** |
+    /// | «mira» | **6** |
+    ///
+    /// El nombre «Ü» es una vocal suelta, y una vocal suelta en español hablado se pierde: el
+    /// reconocedor la escribe de siete maneras y ninguna cayó nunca al principio de una frase. En
+    /// todo el historial despertó tres veces, y las tres por accidente («Hola You me escuchas»,
+    /// «You You», «You're broke»). Un nombre que responde 3 de 822 no es un nombre, es una lotería.
+    ///
+    /// EL PRECIO, dicho por delante: «mira» también es una palabra corriente, y dicha al principio de
+    /// una frase que va para otra persona («mira, te cuento…») la va a despertar. Se acepta a
+    /// propósito y no se filtra por lo que venga detrás — se probó contra las 6 llamadas reales y un
+    /// filtro por la palabra siguiente tiraba dos de ellas («Mira acá pues…», «Mira una de las…»),
+    /// o sea que rechazaba llamadas de verdad para evitar interrupciones que duran 30 segundos y se
+    /// cortan solas. Anotado en PENDIENTES.md por si en el uso diario cansa.
     private static let nombre: Set<String> = [
         "u", "ú", "you", "yu", "hu", "uh", "uu", "úe", "ue", "hoo", "who",
+        "mira", "mire",
     ]
 
     /// Palabras que pueden ir DELANTE del nombre sin cambiar que es una llamada.
