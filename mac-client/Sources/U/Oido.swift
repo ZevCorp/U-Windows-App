@@ -12,7 +12,11 @@ import Speech
 /// rompe la ilusión de estar hablando con alguien.
 final class Oido {
 
-    private let reconocedor = SFSpeechRecognizer(locale: Locale(identifier: "es-MX"))
+    /// RECIÉN HECHO EN CADA APERTURA. Era un `let` de toda la vida de la app, y un `SFSpeechRecognizer`
+    /// que ya vio morir su tarea sigue diciendo `isAvailable == true` y aceptando tareas nuevas que no
+    /// transcriben NADA. Se vio el 2026-08-19 después de cada sesión en vivo: el audio entraba —el
+    /// vigía dejaba de quejarse— y aun así no salía una sola palabra.
+    private var reconocedor = SFSpeechRecognizer(locale: Locale(identifier: "es-MX"))
     private let motor = AVAudioEngine()
     private var peticion: SFSpeechAudioBufferRecognitionRequest?
     private var tarea: SFSpeechRecognitionTask?
@@ -51,6 +55,17 @@ final class Oido {
 
     private(set) var escuchando = false
 
+    /// Alguien le está hablando AHORA MISMO: hay palabras entrando, no solo el micrófono abierto.
+    ///
+    /// La distinción es la que hace que la cara de `escuchando` sirva de algo. «Micrófono abierto»
+    /// lo está siempre —está razonado en `arrancar()`— y por eso no vale como estado: sería una cara
+    /// fija. Esto dura lo que dura tu frase, que es exactamente para lo que se dibujó.
+    private(set) var hayVoz = false
+
+    /// Algo cambió en el oído (abrió, cerró, empezó a oírte). Quien lleva la cara lo necesita para
+    /// volver a derivarla: el oído sigue sin tocarla, solo avisa de que hay algo nuevo que mirar.
+    var alCambiar: (() -> Void)?
+
     /// Modo conversación: el micrófono se vuelve a abrir solo después de cada respuesta.
     ///
     /// Es lo que separa un compañero de una herramienta. Tener que tocarlo antes de cada frase
@@ -61,9 +76,56 @@ final class Oido {
 
     /// Vuelve a abrir el micrófono, si no estaba ya abierto. A diferencia de `escuchar()`, esto
     /// NUNCA apaga: es para que la conversación siga sola, no para alternar.
+    /// Ü está hablando por el altavoz AHORA MISMO. Lo pone quien maneja la voz.
+    ///
+    /// Sin esto, el oído se reabría mientras ella hablaba y **se transcribía a sí misma**: el
+    /// 2026-08-19 dijo «las nutrias se agarran de las manos mientras duermen», se oyó «las frutas se
+    /// agarran de las manos», se lo preguntó al modelo, y el modelo contestó «creo que se te cruzaron
+    /// los cables con las nutrias». Un bucle de realimentación entero, cobrado, y desde fuera se ve
+    /// como que va lenta y habla cortado.
+    ///
+    /// No es un detector por volumen —eso está prohibido y con razón—: es un hecho que sabemos, no
+    /// algo que se infiera del audio.
+    private(set) var mudaPorqueHabla = false
+
+    func mientrasHabla(_ hablando: Bool) {
+        mudaPorqueHabla = hablando
+        if hablando { parar() } else { reanudar() }
+    }
+
     func reanudar() {
-        guard continuo, !escuchando else { return }
+        guard continuo, !cedido, !escuchando else { return }
+        guard !mudaPorqueHabla else { Registro.di("👂 no abro: estoy hablando"); return }
         escuchar()
+    }
+
+    /// El oído le CEDIÓ el micrófono a la conversación en vivo.
+    ///
+    /// Distinto de `callarse()`, y la diferencia importa para la cara: callarse es «me apagaste tú»
+    /// y se dibuja `detenido`; ceder es «hay otra boca usando el micrófono» y la carita sigue en
+    /// conversación. Hace falta la bandera porque `reanudar()` se llama desde cinco sitios y
+    /// cualquiera de ellos reabriría el micrófono por debajo de la sesión viva — y dos motores de
+    /// audio sobre el mismo micrófono no se turnan, se pisan.
+    private(set) var cedido = false
+
+    func ceder() {
+        guard !cedido else { return }
+        cedido = true
+        parar()
+        Registro.di("👂 le cedo el micrófono a la voz en vivo")
+    }
+
+    /// Le da al aparato un respiro antes de volver a tomarlo. Reabrir 50 ms después de que la voz
+    /// viva soltara el micrófono era justo lo que dejaba el tap mudo (ver `vigilarQueLlegueAudio`).
+    private static let respiroTrasCeder = 0.8
+
+    func recuperar() {
+        guard cedido else { return }
+        cedido = false
+        Registro.di("👂 recupero el micrófono (espero \(Self.respiroTrasCeder)s a que el aparato quede libre)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.respiroTrasCeder) { [weak self] in
+            self?.reanudar()
+        }
     }
 
     /// Pide los permisos la primera vez y arranca.
@@ -73,6 +135,13 @@ final class Oido {
     /// de audio arranca sin quejarse y entrega puro silencio — la carita se queda escuchando para
     /// siempre y no contesta nunca, sin un solo error por ninguna parte.
     func escuchar() {
+        // LA CESIÓN SE COMPRUEBA AQUÍ TAMBIÉN, y no solo en `reanudar()`. Estaba solo allí, y el
+        // camino que la saltaba era justo el que corre al arrancar: se piden los permisos, el usuario
+        // concede, y el callback llama a `arrancar()` por debajo — sin pasar por `reanudar()`. En el
+        // log del 2026-08-18 se vio entero: «le cedo el micrófono a la voz en vivo» y catorce
+        // segundos después «escuchando (44100 Hz, 2 canales)», con la sesión viva ya abierta a
+        // 48000. Dos motores de audio sobre el mismo micrófono.
+        guard !cedido else { Registro.di("👂 no abro: el micrófono lo tiene la voz en vivo"); return }
         guard !escuchando else { Registro.di("👂 ya estaba escuchando → paro"); parar(); return }
 
         if permisosDados { arrancar(); return }
@@ -102,6 +171,11 @@ final class Oido {
     }
 
     private func arrancar() {
+        // El mismo portazo que en `escuchar()`, y hace falta porque el camino de los permisos entra
+        // POR AQUÍ: el callback de «micrófono concedido» llama directo, sin pasar por arriba.
+        guard !cedido else { Registro.di("👂 no arranco: el micrófono lo tiene la voz en vivo"); return }
+        guard !mudaPorqueHabla else { Registro.di("👂 no arranco: estoy hablando"); return }
+        reconocedor = SFSpeechRecognizer(locale: Locale(identifier: "es-MX"))
         guard let reconocedor, reconocedor.isAvailable else {
             Registro.di("👂 ✘ el reconocedor es-MX no está disponible")
             alFallar?("El reconocimiento de voz en español no está disponible en este Mac.")
@@ -113,10 +187,23 @@ final class Oido {
         peticion = p
 
         let entrada = motor.inputNode
+        // APAGAR LA CANCELACIÓN DE ECO ANTES DE NADA, y es la causa de raíz de que Ü se quedara
+        // sorda después de cada conversación en vivo.
+        //
+        // `AudioVivo` la ENCIENDE sobre este mismo micrófono para no oírse a sí misma. Es un ajuste
+        // del aparato, no del motor: cuando la sesión viva cierra, el nodo de entrada de aquí sigue
+        // en modo procesado y el tap no entrega un solo búfer. Sale `👂 escuchando` y no se oye nada
+        // NUNCA MÁS. Medido el 2026-08-19: despertar → sesión viva → dormirse → hablarle = silencio.
+        //
+        // Y un motor recién creado NO lo arregla: se probó y salió peor —el aparato aparecía con 3
+        // canales y el tap seguía mudo—. Lo que hay que deshacer es el ajuste, no el motor.
+        try? entrada.setVoiceProcessingEnabled(false)
         let formato = entrada.outputFormat(forBus: 0)
         entrada.removeTap(onBus: 0)
-        entrada.installTap(onBus: 0, bufferSize: 1024, format: formato) { buffer, _ in
+        trozosLlegados = 0
+        entrada.installTap(onBus: 0, bufferSize: 1024, format: formato) { [weak self] buffer, _ in
             p.append(buffer)
+            self?.trozosLlegados += 1
         }
 
         motor.prepare()
@@ -129,8 +216,10 @@ final class Oido {
         }
 
         escuchando = true
+        alCambiar?()
         generacion += 1
         let mia = generacion
+        vigilarQueLlegueAudio(mia)
         // El oído NO toca la cara. Con el micrófono abierto de continuo, «estoy escuchando» dejó de
         // ser un estado que valga la pena mostrar —lo está siempre— y lo que hay que mostrar es otra
         // cosa: si está dormida o en conversación. Eso lo sabe quien lleva la conversación, no el
@@ -145,6 +234,8 @@ final class Oido {
             if let resultado {
                 let texto = resultado.bestTranscription.formattedString
                 Registro.di("👂 oigo: «\(texto)»")
+                self.hayVoz = true
+                self.alCambiar?()
                 self.alOir?(texto)
                 // Cada vez que sigue hablando se reinicia la cuenta del silencio.
                 self.reprogramarCorte(con: texto)
@@ -156,8 +247,58 @@ final class Oido {
                 self.parar()
                 self.reanudar()          // que un tropiezo no la deje sorda el resto del día
             } else if resultado?.isFinal ?? false {
+                // Y VUELVE A ARRANCAR. Aquí solo había `parar()`, y ese olvido es EL fallo de
+                // estabilidad: `SFSpeechRecognizer` cierra la tarea por su cuenta —al minuto largo
+                // de audio, o cuando decide que la frase acabó—, y entonces el oído se paraba y no
+                // lo reabría nadie. Ü se quedaba sorda para el resto del día SIN UN SOLO RENGLÓN en
+                // el registro: ni error, ni aviso, ni cara distinta. Desde fuera, idéntico a «no me
+                // contesta». Medido el 2026-08-19: el registro se cortó a las 20:41:45 y no volvió a
+                // escribir nada.
+                //
+                // La rama del error, tres líneas más arriba, sí reanudaba. Son las dos formas que
+                // tiene una escucha de terminar y solo una sabía volver.
+                Registro.di("👂 la escucha terminó sola — la reabro")
                 self.parar()
+                self.reanudar()
             }
+        }
+    }
+
+    /// Cuántos búferes entraron por el tap desde que se armó esta escucha.
+    private var trozosLlegados = 0
+    private var reaperturasEnVano = 0
+
+    /// EL VIGÍA: «arrancó el motor» NO ES «está entrando audio».
+    ///
+    /// `motor.start()` devuelve sin error y `👂 escuchando` se imprime igual cuando el dispositivo
+    /// todavía lo tiene otro — y entonces el tap no entrega un solo búfer. El mensaje afirmaba una
+    /// cosa que no había comprobado, que es el antipatrón nº2 del repo cometido en su propia casa.
+    ///
+    /// Se reproduce así, medido el 2026-08-19: se despierta a Ü, la sesión en vivo abre y toma el
+    /// micrófono, a los 30 s se duerme y `recuperar()` reabre el oído 50 ms después de que el motor
+    /// de la voz viva soltara el aparato. Sale `👂 escuchando` y no vuelve a oírse nada NUNCA. Desde
+    /// fuera: «le hablo y no me contesta», con la app abierta y la carita en reposo.
+    ///
+    /// Comprobar en vez de suponer cuesta un temporizador.
+    private func vigilarQueLlegueAudio(_ mia: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            guard let self, mia == self.generacion, self.escuchando else { return }
+            guard self.trozosLlegados == 0 else { self.reaperturasEnVano = 0; return }
+            // CON TOPE. Un reintento sin tope es un bucle, y este repo ya pagó uno de 2.089 vueltas.
+            // Si tres aperturas seguidas no traen audio, el problema no se arregla reabriendo: se
+            // dice, con todas las letras, y se para.
+            self.reaperturasEnVano += 1
+            guard self.reaperturasEnVano < 3 else {
+                Registro.di("👂 ✘✘ tres aperturas seguidas sin audio — me rindo. El micrófono se queda tomado por la sesión en vivo que acaba de cerrar; hay que reabrir la app.")
+                self.parar()
+                self.alFallar?("Me quedé sin micrófono. Ciérrame y ábreme otra vez.")
+                return
+            }
+            Registro.di("👂 ✘ armé la escucha y no entró un solo búfer — el micrófono no es mío todavía, reabro (\(self.reaperturasEnVano)/3)")
+            self.parar()
+            // Un respiro antes de reintentar: si el aparato sigue ocupado, reabrir al instante vuelve
+            // a fallar igual y se convierte en un bucle.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.reanudar() }
         }
     }
 
@@ -176,6 +317,8 @@ final class Oido {
     func parar() {
         guard escuchando else { return }
         escuchando = false
+        hayVoz = false
+        alCambiar?()
         generacion += 1          // lo que llegue de aquí en adelante es de una escucha muerta
         cortaPorSilencio?.cancel(); cortaPorSilencio = nil
         motor.inputNode.removeTap(onBus: 0)
@@ -190,12 +333,14 @@ final class Oido {
         continuo = false
         parar()
         Registro.di("👂 modo conversación APAGADO")
+        alCambiar?()
     }
 
     /// Enciende el modo conversación y abre el micrófono.
     func ponerseAOir() {
         continuo = true
         Registro.di("👂 modo conversación ENCENDIDO")
+        alCambiar?()
         reanudar()
     }
 }
