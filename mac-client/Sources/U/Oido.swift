@@ -224,12 +224,50 @@ final class Oido {
         } catch {
             Registro.di("👂 ✘ no pude apagar la cancelación de eco: \((error as NSError).domain) \((error as NSError).code) · \(error.localizedDescription)")
         }
-        let formato = entrada.outputFormat(forBus: 0)
+        let formatoDelAparato = entrada.outputFormat(forBus: 0)
+
         entrada.removeTap(onBus: 0)
         trozosLlegados = 0
-        entrada.installTap(onBus: 0, bufferSize: 1024, format: formato) { [weak self] buffer, _ in
-            p.append(buffer)
+
+        // A MONO, VENGAN LOS CANALES QUE VENGAN. Y no es defensivo por si acaso: es la única forma
+        // que ha demostrado funcionar en esta casa.
+        //
+        // El micrófono de este Mac entrega 9 canales; con la cancelación de eco de por medio la
+        // entrada aparece con 3; y si el aparato se quedó sucio de un proceso anterior, con 6. Pelear
+        // con ese número —apagar el procesado, ciclarlo, crear motores nuevos— se probó las tres
+        // formas el 2026-08-19 y ninguna lo deja fijo en 1.
+        //
+        // `AudioVivo` ya resolvió exactamente esto y su lección está pagada: un conversor de N a 1
+        // NO MEZCLA sin `channelMap` —devuelve ceros y contesta que sí—. Así que se pide el canal 0,
+        // que es el que trae la voz.
+        let formatoMono = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                        sampleRate: formatoDelAparato.sampleRate,
+                                        channels: 1,
+                                        interleaved: false)
+        var conversor: AVAudioConverter?
+        if formatoDelAparato.channelCount != 1, let mono = formatoMono {
+            conversor = AVAudioConverter(from: formatoDelAparato, to: mono)
+            conversor?.channelMap = [0]
+            Registro.di("👂 entrada de \(formatoDelAparato.channelCount) canales → me quedo con el 0")
+        }
+
+        entrada.installTap(onBus: 0, bufferSize: 1024, format: formatoDelAparato) { [weak self] buffer, _ in
             self?.trozosLlegados += 1
+            guard let conversor, let mono = formatoMono else { p.append(buffer); return }
+            let capacidad = AVAudioFrameCount(buffer.frameLength)
+            guard capacidad > 0,
+                  let salida = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: capacidad) else { return }
+            var entregado = false
+            var fallo: NSError?
+            conversor.convert(to: salida, error: &fallo) { _, estado in
+                if entregado { estado.pointee = .noDataNow; return nil }
+                entregado = true; estado.pointee = .haveData; return buffer
+            }
+            if let fallo {
+                Registro.di("👂 ✘ convirtiendo a mono: \(fallo.localizedDescription)")
+                return
+            }
+            p.append(salida)
         }
 
         motor.prepare()
@@ -250,7 +288,7 @@ final class Oido {
         // ser un estado que valga la pena mostrar —lo está siempre— y lo que hay que mostrar es otra
         // cosa: si está dormida o en conversación. Eso lo sabe quien lleva la conversación, no el
         // micrófono, así que la cara la pone él.
-        Registro.di("👂 escuchando (formato \(formato.sampleRate) Hz, \(formato.channelCount) canal/es)")
+        Registro.di("👂 escuchando (aparato \(Int(formatoDelAparato.sampleRate)) Hz / \(formatoDelAparato.channelCount) canal(es) → mono)")
 
         tarea = reconocedor.recognitionTask(with: p) { [weak self] resultado, error in
             guard let self else { return }
