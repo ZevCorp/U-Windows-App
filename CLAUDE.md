@@ -63,6 +63,7 @@ Las reglas completas viven en `.claude/rules/` y se cargan con el proyecto:
 @.claude/rules/compuerta-a-main.md
 @.claude/rules/nucleo-congelado.md
 @.claude/rules/aviso-en-slack.md
+@.claude/rules/solo-mac.md
 
 Lo que separa una rama de `main` —los cuatro niveles, en orden de coste:
 
