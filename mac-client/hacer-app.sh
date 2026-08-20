@@ -53,3 +53,27 @@ PLIST
 codesign --force --deep --sign - "$APP" 2>/dev/null || echo "  (aviso: no se pudo firmar; los permisos se pedirán de nuevo en cada build)"
 
 echo "▸ listo: $(pwd)/$APP"
+
+# EL CONTRATO, EN CADA BUILD. Esto es lo que lo convierte en compuerta y no en un informe que nadie
+# corre: si algo que ya funcionaba se rompió, se sabe AHORA y no tres días después hablándole a la
+# carita. Va el modo rápido —las siete promesas que no necesitan micrófono, unos dos minutos—;
+# las de micrófono se corren aparte y con la habitación en silencio:
+#
+#     swift run -c release Contrato            todas
+#     swift run -c release Contrato 8 9 10     solo las del micrófono
+#
+# Y se puede saltar cuando solo se está tanteando algo:  SIN_CONTRATO=1 ./hacer-app.sh
+if [ "${SIN_CONTRATO:-0}" = "1" ]; then
+  echo "▸ contrato: saltado (SIN_CONTRATO=1)"
+  exit 0
+fi
+
+echo "▸ corriendo el contrato (modo rápido)…"
+if swift run -c "$CONFIG" Contrato --rapido; then
+  exit 0
+else
+  echo ""
+  echo "  ⚠︎  El binario quedó compilado en $APP, pero el contrato NO está intacto."
+  echo "      Míralo antes de dar nada por bueno."
+  exit 1
+fi
