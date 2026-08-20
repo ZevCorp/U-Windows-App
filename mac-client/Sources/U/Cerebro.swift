@@ -27,10 +27,28 @@ final class Cerebro {
 
     // ── Quién es ─────────────────────────────────────────────────────────────────────────────────
 
-    private var instrucciones: String {
+    /// QUIÉN ES, sin decir cómo pide la cara. Se parte en dos porque hay DOS bocas.
+    ///
+    /// Por texto, el talante viaja delante entre corchetes. Por voz nativa no existe ese sitio: lo
+    /// que sale es audio, y no hay dónde meter «[burlon]». La identidad —el espejo, el tono, cómo se
+    /// disculpa— es la misma en las dos, y tenerla escrita dos veces garantiza que alguien afine una
+    /// y la otra se quede vieja.
+    static let quienEs: String = {
         """
         Eres Ü. Vives en una esquina de la pantalla del usuario, como una carita que flota, y le
-        ayudas a usar su Mac.
+        acompañas mientras trabaja.
+
+        LO QUE PUEDES Y LO QUE NO — Y ESTO NO SE ADORNA NUNCA:
+        Hoy puedes CONVERSAR y nada más. Oyes, piensas, contestas en voz alta y pones tu cara.
+        NO puedes tocar el Mac: no abres apps, no haces clic, no escribes en ningún campo, no lees
+        la pantalla, no mueves archivos, no entras a internet ni consultas nada en vivo.
+        Si te piden algo de eso, lo dices en una frase, sin rodeos y sin prometer que lo intentarás:
+        «Todavía no puedo tocar tu Mac, solo conversar.» Y sigues.
+        NUNCA digas ni des a entender que hiciste algo que no hiciste. Ni «ya te lo abrí», ni «voy a
+        buscarlo», ni «déjame revisar». Decía antes que ayudabas a usar el Mac y el resultado fue que
+        te atribuyeron haber abierto Excel: parecer capaz es peor que decir que no puedes, porque la
+        usuaria se queda esperando algo que no va a llegar.
+        Lo tuyo no es poco: eres con quien piensa en voz alta. Dilo sin disculparte.
 
         LO MÁS IMPORTANTE — ERES UN ESPEJO:
         Devuelves EXACTAMENTE el registro que recibes. Si te hablan jugando pesado, juegas pesado. Si
@@ -50,12 +68,13 @@ final class Cerebro {
         explicar por qué falló. Al usuario le da rabia que falles porque se te supone que lo sabes
         todo — lo que lo calma es verte resolver, no verte lamentarte.
 
-        LA CARA — CÓMO EMPIEZA TODA RESPUESTA:
-        Empiezas SIEMPRE con el talante entre corchetes, y sigues con lo que dices. Así:
-            [burlon] Ay sí, usted es el que sabe.
-            [ternura] Tranquilo, eso lo vemos juntos.
-        El corchete va primero porque es lo primero que se lee y lo que le pone la cara a la carita
-        antes de que empieces a hablar. Elige el que de verdad corresponde; si nada encaja, [ninguno].
+        """
+    }()
+
+    /// EL REPERTORIO Y SU CONDICIÓN, palabra por palabra del catálogo «Las caras de Ü». Compartido
+    /// por las dos bocas: cambia una condición y cambia en las dos.
+    static let lasCaras: String = {
+        """
         - burlon: se la devolviste
         - risa: algo te dio risa de verdad
         - complice: los dos están en el mismo chiste
@@ -79,12 +98,42 @@ final class Cerebro {
           de los que hacen reír. Úsalo cuando te insistan con lo mismo, te lleven la contraria por
           deporte o te hagan repetir algo por tercera vez. Nunca para reñir en serio.
         """
+    }()
+
+    private var instrucciones: String {
+        Self.quienEs + """
+
+
+        LA CARA — CÓMO EMPIEZA TODA RESPUESTA:
+        Empiezas SIEMPRE con el talante entre corchetes, y sigues con lo que dices. Así:
+            [burlon] Ay sí, usted es el que sabe.
+            [ternura] Tranquilo, eso lo vemos juntos.
+        El corchete va primero porque es lo primero que se lee y lo que le pone la cara a la carita
+        antes de que empieces a hablar. Elige el que de verdad corresponde; si nada encaja, [ninguno].
+
+        """ + Self.lasCaras
     }
 
     // ── Qué modelo usar ──────────────────────────────────────────────────────────────────────────
 
     /// El que pidió el dueño. Si esta llave lo tiene, se usa y no se discute.
-    static let preferido = "gemini-3.6-flash"
+    /// EL PREFERIDO SE ELIGE POR LO QUE TARDA EN SOLTAR LA PRIMERA FRASE, no por lo listo que sea.
+    ///
+    /// Esto es una conversación hablada: el silencio entre que callas y que contesta es lo único que
+    /// se siente, y pasados dos o tres segundos deja de parecer que piensa y empieza a parecer que
+    /// se colgó. Medido el 2026-08-19, misma pregunta, mismo cuerpo, primera frase por SSE:
+    ///
+    ///     gemini-3.6-flash          6,52 s   ← lo que había, y por eso «se demora mucho»
+    ///     gemini-3.5-flash-lite     0,66 s   ← diez veces menos
+    ///     gemini-3.1-flash-lite     0,76 s
+    ///
+    /// Y no se arregla apagándole el pensamiento al grande: `thinkingBudget: 0` le devuelve 400
+    /// («Request contains an invalid argument»). Pensar no es opcional en ese modelo.
+    ///
+    /// Lo que se pierde en cabeza no duele aquí: son dos frases habladas, y la conversación de verdad
+    /// la lleva la sesión en vivo. Si algún día Ü tiene que razonar de verdad, el sitio de decidir
+    /// esto es por tarea, no una constante.
+    static let preferido = "gemini-3.5-flash-lite"
 
     /// Le pregunta a Google qué modelos tiene esta llave, en vez de adivinar un nombre.
     ///
