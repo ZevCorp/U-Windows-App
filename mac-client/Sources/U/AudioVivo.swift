@@ -198,11 +198,24 @@ final class AudioVivo {
         guard abierto else { return }
         abierto = false
         motor.inputNode.removeTap(onBus: 0)
-        // SE DEVUELVE EL PROCESADO DE VOZ. Dejarlo encendido cambia la unidad de entrada del sistema
-        // para todo el proceso, y quien la hereda es el oído local cuando recupera el micrófono.
-        try? motor.inputNode.setVoiceProcessingEnabled(false)
         reproductor.stop()
         if motor.isRunning { motor.stop() }
+
+        // SE DEVUELVE EL PROCESADO DE VOZ, Y **DESPUÉS** DE PARAR EL MOTOR. El orden es el arreglo.
+        //
+        // Estaba antes del `stop()` y con `try?`: apagarlo sobre un motor EN MARCHA falla, el `try?`
+        // se comía el motivo, y la unidad de entrada del proceso se quedaba en modo procesado para
+        // siempre. Quien lo heredaba era el oído local al recuperar el micrófono, que abría y veía
+        // la entrada con 3 CANALES en vez de 1 y no recibía un solo búfer: Ü sorda después de cada
+        // conversación, sin un renglón que lo explicara. Ni reabrir la app lo curaba.
+        //
+        // Cuesta creer que sea el orden hasta que se mide: la sonda (`U_SONDA=1`) mostró que hacerlo
+        // sobre un motor parado deja la entrada en 1 canal y transcribiendo. 2026-08-19.
+        do {
+            try motor.inputNode.setVoiceProcessingEnabled(false)
+        } catch {
+            Registro.di("🎙 ✘ no pude devolver el procesado de voz: \((error as NSError).code) · \(error.localizedDescription)")
+        }
         motor.detach(reproductor)
         conversor = nil
         candado.lock(); enCola = 0; pico = 0; candado.unlock()

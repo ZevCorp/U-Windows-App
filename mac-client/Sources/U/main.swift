@@ -422,6 +422,14 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
         panel.face.menu = menu
 
+        // La sonda del micrófono, y SALE. Va la primera de todas: mide el aparato, y para eso el
+        // oído, la voz y la sesión en vivo tienen que no haber tocado nada.
+        if Sonda.pedida {
+            oido.callarse()
+            Thread.detachNewThread { Sonda.correr() }
+            return
+        }
+
         // Retratarse y salir. Va ANTES de todo lo demás: no tiene sentido abrir el micrófono ni la
         // conversación para hacer fotos, y el oído encendido metería ladeos en los retratos.
         if Retratos.pedidos {

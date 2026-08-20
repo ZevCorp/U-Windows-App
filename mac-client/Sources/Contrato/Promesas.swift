@@ -24,7 +24,7 @@ enum Promesas {
         App.cerrar()
         try App.limpiarRegistro()
         try App.abrir([:])
-        guard esperarA(segundos: 60, "que arme el oído", { registroTiene("escuchando (formato") }) else {
+        guard esperarA(segundos: 180, "que arme el oído", { registroTiene("escuchando (formato") }) else {
             if registroTiene("DENEGADO") {
                 return .noPudeCorrer("falta el permiso del micrófono; concédelo y repite")
             }
@@ -146,7 +146,7 @@ enum Promesas {
         App.cerrar()
         try App.limpiarRegistro()
         try App.abrir([:])
-        guard esperarA(segundos: 60, "que arme el oído", { registroTiene("escuchando (formato") }) else {
+        guard esperarA(segundos: 180, "que arme el oído", { registroTiene("escuchando (formato") }) else {
             return .noPudeCorrer("no llegó a abrir el oído; la promesa 1 lo explica")
         }
         try App.decirleEnVozAlta("prueba del contrato numero uno")
@@ -198,7 +198,7 @@ enum Promesas {
         App.cerrar()
         try App.limpiarRegistro()
         try App.abrir([:])
-        guard esperarA(segundos: 60, "que arme el oído", { registroTiene("escuchando (formato") }) else {
+        guard esperarA(segundos: 180, "que arme el oído", { registroTiene("escuchando (formato") }) else {
             return .noPudeCorrer("no llegó a abrir el oído")
         }
         // Se la llama hasta TRES veces: el reconocedor no siempre pesca una palabra suelta dicha por

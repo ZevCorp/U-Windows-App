@@ -48,7 +48,10 @@ enum App {
         // matar el proceso, y relanzar antes deja la sesión colgada abriendo — sin error, sin nada.
         // Se pagó varias veces el 2026-08-19 antes de entender que el fallo era del arnés.
         esperarA(segundos: 25, "que el proceso muera") { !corriendo }
-        Thread.sleep(forTimeInterval: 6)
+        // DOCE SEGUNDOS, no seis. Medido el 2026-08-19 después de una tarde entera de arranques
+        // seguidos: el subsistema de audio se resiente y el permiso del micrófono llegó a tardar 96 s
+        // en contestar. Correr un contrato no puede dejar la máquina peor que como la encontró.
+        Thread.sleep(forTimeInterval: 12)
     }
 
     static var corriendo: Bool {

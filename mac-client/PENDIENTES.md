@@ -142,7 +142,7 @@ de verdad.
 
 ---
 
-## ABIERTO · El oído queda sordo después de cada conversación en vivo
+## CERRADO (2026-08-19) · El oído quedaba sordo después de cada conversación en vivo
 
 **Es el fallo que la usuaria reporta como «le hablo y no me responde».** Descubierto el 2026-08-19,
 reproducido cinco veces seguidas. No es nuevo: está en el registro de las 20:37 de ese mismo día,
@@ -189,3 +189,33 @@ Preguntarle a la API antes de creerle al código (aprendizaje nº13): una sonda 
 motor de la voz viva, lo cierre, y pruebe a transcribir — sin la app de por medio. Sospechosos por
 orden: la sesión de audio del proceso, no del nodo; y que `SFSpeechRecognizer` necesite que el tap
 entregue el formato exacto que negoció.
+
+
+### Cómo se cerró: era EL ORDEN de dos líneas
+
+Lo encontró la sonda (`open --env U_SONDA=1 U.app`, informe en `~/.u/sonda.txt`), y en cinco minutos
+descartó de un golpe lo que llevaba una tarde:
+
+```
+5 · captura limpia OTRA VEZ    ✅ 30 búferes · pico 0.1024 · 1 canal
+6 · transcripción OTRA VEZ     ✅ «123456»
+```
+
+**El aparato NO se ensucia.** Encender la cancelación de eco, apagarla, y volver a capturar y
+transcribir funciona perfecto fuera de la app. O sea que la sordera era nuestra, y las tres
+hipótesis de arriba miraban al sitio equivocado porque partían de una premisa falsa.
+
+La causa, en `AudioVivo.cerrar()`: se apagaba el procesado de voz **con el motor todavía corriendo**,
+y con `try?`. Apagarlo sobre un motor en marcha FALLA, el `try?` se comía el motivo, y la unidad de
+entrada del proceso se quedaba en modo procesado. Quien lo heredaba era el oído local, que abría y
+veía la entrada con **3 canales en vez de 1** y no recibía un solo búfer.
+
+El arreglo es mover una línea debajo de otra —parar el motor y después apagarlo— y quitar el `try?`.
+En `Oido.arrancar()`, además, motor nuevo **y** apagar el eco: por separado ninguna de las dos sirve,
+y probarlas de una en una fue lo que las descartó en falso.
+
+Juzgado por la promesa 10 del contrato, hoy en verde.
+
+**Lo que deja como aprendizaje:** las tres hipótesis se descartaron *dentro* de la app, donde había
+cinco culpables posibles para un síntoma. Veinte minutos de sonda fuera de la app dejaron uno solo.
+Es el aprendizaje nº13 del repo, y esta vez se pagó por no aplicarlo antes.

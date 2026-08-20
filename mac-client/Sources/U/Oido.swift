@@ -17,7 +17,20 @@ final class Oido {
     /// transcriben NADA. Se vio el 2026-08-19 después de cada sesión en vivo: el audio entraba —el
     /// vigía dejaba de quejarse— y aun así no salía una sola palabra.
     private var reconocedor = SFSpeechRecognizer(locale: Locale(identifier: "es-MX"))
-    private let motor = AVAudioEngine()
+    /// MOTOR NUEVO EN CADA APERTURA — y no vale sin la línea que lo acompaña en `arrancar()`.
+    ///
+    /// La sonda del 2026-08-19 (`U_SONDA=1`) demostró que el aparato NO se ensucia: encender la
+    /// cancelación de eco, apagarla, y volver a capturar y transcribir funciona perfecto —30 búferes,
+    /// pico 0.10, «123456» transcrito—. O sea que la sordera era de la app, no del micrófono.
+    ///
+    /// Lo que la sonda hace y aquí no se hacía son DOS cosas a la vez, y ese es el detalle que costó
+    /// tres intentos fallidos: motor recién creado **Y** `setVoiceProcessingEnabled(false)` sobre su
+    /// entrada antes de leer el formato. Por separado, ninguna sirve:
+    ///
+    ///   · motor nuevo solo          → la entrada aparece con 3 canales y el tap queda mudo
+    ///   · apagar el eco solo        → entra audio pero el reconocedor no transcribe
+    ///   · las dos juntas            → funciona
+    private var motor = AVAudioEngine()
     private var peticion: SFSpeechAudioBufferRecognitionRequest?
     private var tarea: SFSpeechRecognitionTask?
     private var cortaPorSilencio: DispatchWorkItem?
@@ -186,6 +199,11 @@ final class Oido {
         p.shouldReportPartialResults = true
         peticion = p
 
+        // El motor viejo, a la basura: ver el comentario de `motor`. Va JUNTO con apagar la
+        // cancelación de eco de la línea siguiente; una sin la otra no arregla nada.
+        if motor.isRunning { motor.stop() }
+        motor = AVAudioEngine()
+
         let entrada = motor.inputNode
         // APAGAR LA CANCELACIÓN DE ECO ANTES DE NADA, y es la causa de raíz de que Ü se quedara
         // sorda después de cada conversación en vivo.
@@ -197,7 +215,15 @@ final class Oido {
         //
         // Y un motor recién creado NO lo arregla: se probó y salió peor —el aparato aparecía con 3
         // canales y el tap seguía mudo—. Lo que hay que deshacer es el ajuste, no el motor.
-        try? entrada.setVoiceProcessingEnabled(false)
+        // CON EL MOTIVO A LA VISTA. Iba con `try?` y eso convirtió «falló al apagarlo» en «no hace
+        // falta apagarlo»: la entrada seguía apareciendo con 3 canales y el tap mudo, sin una sola
+        // línea que dijera por qué. Un catch mudo es el antipatrón nº3 del repo, cometido aquí mismo
+        // mientras se arreglaba otra cosa.
+        do {
+            try entrada.setVoiceProcessingEnabled(false)
+        } catch {
+            Registro.di("👂 ✘ no pude apagar la cancelación de eco: \((error as NSError).domain) \((error as NSError).code) · \(error.localizedDescription)")
+        }
         let formato = entrada.outputFormat(forBus: 0)
         entrada.removeTap(onBus: 0)
         trozosLlegados = 0
@@ -284,6 +310,8 @@ final class Oido {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
             guard let self, mia == self.generacion, self.escuchando else { return }
             guard self.trozosLlegados == 0 else { self.reaperturasEnVano = 0; return }
+            // (el contador vuelve a cero en cuanto UNA apertura trae audio; si no, tras rendirse una
+            //  vez la app se quedaba rindiéndose para siempre aunque el micrófono ya estuviera libre)
             // CON TOPE. Un reintento sin tope es un bucle, y este repo ya pagó uno de 2.089 vueltas.
             // Si tres aperturas seguidas no traen audio, el problema no se arregla reabriendo: se
             // dice, con todas las letras, y se para.

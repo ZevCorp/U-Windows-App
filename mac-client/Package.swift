@@ -11,5 +11,6 @@ let package = Package(
         // juzga se cae con ello, y entonces «no pude correr» y «la promesa falló» se confunden —
         // que es lo peor que puede decir un juez (aprendizaje nº17 del repo).
         .executableTarget(name: "Contrato", path: "Sources/Contrato"),
+
     ]
 )
