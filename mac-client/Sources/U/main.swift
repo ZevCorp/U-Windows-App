@@ -1,12 +1,20 @@
 import AppKit
 
 /// Ü para Mac. De momento: la carita, flotando, para poder verla y tocarla.
-final class Delegado: NSObject, NSApplicationDelegate {
+final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     var panel: FacePanel!
     var voz: Voz!
     var oido: Oido!
     var cerebro: Cerebro?
+    /// La conversación en vivo. `nil` mientras no haya llave.
+    var vivo: Vivo?
+    /// Mueve la boca con el sonido REAL mientras habla la voz en vivo. Por texto la mueve `Voz`
+    /// leyendo la palabra que toca; aquí no hay palabras que leer, hay una onda — y seguirla es más
+    /// fiel que adivinar la vocal.
+    var bocaViva: Timer?
+    var itemMicrofono: NSMenuItem?
+    var itemVoz: NSMenuItem?
 
     /// Está en conversación. Dormida, solo reacciona a su nombre.
     var despierta = false
@@ -23,19 +31,126 @@ final class Delegado: NSObject, NSApplicationDelegate {
     /// lo bastante poco para que no se quede escuchando la reunión entera porque la llamaste una vez.
     let cuantoAguantaDespierta: TimeInterval = 30
 
+    // ── La carita como semáforo ──────────────────────────────────────────────────────────────────
+    //
+    // El estado NO se asigna a mano desde cada sitio: se DERIVA de los flags, en una sola función.
+    // Es la regla que ya regía en Windows (`ResolveMood`, FaceWindow.xaml.cs) y que aquí se había
+    // perdido: había OCHO sitios escribiendo `mood = .algo` por su cuenta —el oído, la voz, la vista
+    // y cinco puntos de la conversación— y por eso salían caras donde no tocaba. Dos partes del
+    // código afirmando cosas distintas sobre lo mismo siempre acaba en que gana la última que corrió,
+    // que no es la que sabe.
+    //
+    // Efecto colateral que se cobra solo: `escuchando` y `detenido` estaban dibujados, con su pose y
+    // su color, y no los ponía NADIE. Código muerto que aquí es peor que en otro sitio, porque lo que
+    // muere es la única forma que tiene Ü de contarte en qué estado está.
+
+    /// Está pensando la respuesta: se le preguntó al modelo y todavía no llegó la primera frase.
+    var pensando = false
+    /// La última vez salió mal. Se limpia al empezar el turno siguiente.
+    var fallando = false
+    /// Ya pidió perdón; ahora busca la solución sola.
+    var disculpaHecha = false
+    /// Está en mitad del brinco de celebración.
+    var celebrando = false
+
+    /// El orden de las ramas ES la prioridad: primero lo que pasa AHORA, después lo que acaba de
+    /// pasar.
+    ///
+    /// `detenido` va por encima de `conversando` a propósito. Si te callé el micrófono en mitad de
+    /// una conversación, `despierta` sigue puesto — pero conversar ya no puede pasar, y enseñar la
+    /// cara de conversar mientras está sorda es la peor mentira que puede decir esta carita: te deja
+    /// hablándole a algo que no te oye.
+    func resolverCara() -> FaceMood { resolverCaraConMotivo().0 }
+
+    /// La misma derivación, pero diciendo QUÉ RAMA ganó.
+    ///
+    /// No es adorno de diagnóstico: nueve ramas ordenadas por prioridad son nueve
+    /// condiciones que pueden estar cableadas y no dispararse nunca —le pasó ya a
+    /// `escuchando` y a `detenido`, dibujados y sin que los pusiera nadie—. Y desde
+    /// fuera, una rama muerta y una rama que gana se ven exactamente igual: una cara.
+    /// Con `U_CARAS_LOG=1` el registro dice cuál ganó, y entonces se puede CONTAR.
+    func resolverCaraConMotivo() -> (FaceMood, String) {
+        if celebrando            { return (.logrado, "1 celebrando") }
+        if fallando              { return disculpaHecha ? (.trabajando, "2 fallando+disculpaHecha") : (.fallo, "2 fallando") }
+        if vivo?.hablando == true { return (.hablando, "3 vivo.hablando") }
+        if voz.hablando          { return (.hablando, "3 voz.hablando") }
+        if pensando              { return (.pensando, "4 pensando") }
+        if !oido.continuo        { return (.detenido, "5 !oido.continuo") }
+        // En vivo no hay «pensando»: no hay ida y vuelta que esperar, contesta mientras te oye.
+        if vivo?.viva == true    { return (.conversando, "6 vivo.viva") }
+        // `escuchando` NO es «el micrófono está abierto» —lo está siempre, y eso sería una cara fija;
+        // está razonado en `Oido.arrancar()`—. Es «te estoy oyendo decir algo AHORA», acotado a tu
+        // frase, que es la misma semántica que tiene en Windows y para la que se dibujó. Y solo si ya
+        // está despierta: dormida, lo que entra es la tele y la llamada que tienes con otro.
+        // ESCUCHANDO SE DISPARA SOLA, y la condición es literal del catálogo «Las caras de Ü»:
+        // «en cuanto el reconocedor te oye — solo si está despierta o si la llamaste por su nombre».
+        // Es la misma condición que ya gobierna el ladeo (`atender()`), y tiene que serlo: son la
+        // misma cara contada dos veces, el estado y el gesto.
+        //
+        // NO es «el micrófono está abierto». Eso, dice el catálogo, es `reposo`: «ahí, sin nadie
+        // hablándole». Se probó lo contrario el 2026-08-18 y se deshizo el mismo día — y ya había
+        // aviso: en Windows, el 2026-08-05, esta cara puesta durante una conversación entera se leyó
+        // como «ojos como platos que jadea sin parar delante de alguien que trabaja».
+        if despierta && oido.hayVoz          { return (.escuchando, "7 oido.hayVoz") }
+        if despierta && vivo?.teOye == true  { return (.escuchando, "7 vivo.teOye") }
+        if despierta             { return (.conversando, "8 despierta") }
+        return (.reposo, "9 —")
+    }
+
+    /// Una cara elegida A MANO desde el menú, que manda sobre la derivación hasta que se suelte.
+    ///
+    /// Hace falta justo PORQUE ahora se deriva: sin esto, elegir «Grabando» en el menú la pintaría
+    /// un instante y el siguiente `refrescarCara()` —que llega con la primera palabra que se oiga—
+    /// la borraría. Mirar una cara para afinarla es el trabajo de todos los días aquí; no puede
+    /// depender de que nadie hable cerca.
+    var caraForzada: FaceMood? {
+        didSet { refrescarCara() }
+    }
+
+    /// Recalcula y aplica. Se puede llamar todas las veces que haga falta: el setter de la vista
+    /// ignora el valor repetido, así que derivar de más no cuesta un repintado.
+    func refrescarCara() {
+        let (derivada, motivo) = resolverCaraConMotivo()
+        let cara = caraForzada ?? derivada
+        // Solo cuando CAMBIA: a 16 cuadros por segundo, un registro por refresco es un registro que
+        // nadie lee. Y se anota el motivo, no solo la cara: dos ramas distintas dan `conversando`.
+        if Delegado.registrarCaras, cara != ultimaCaraAnotada {
+            ultimaCaraAnotada = cara
+            Registro.di("🎭 cara «\(cara.rawValue)» ← rama \(caraForzada != nil ? "MENU (forzada)" : motivo)")
+        }
+        panel.face.mood = cara
+    }
+
+    /// `U_CARAS_LOG=1` — el registro dice qué rama ganó cada vez que la cara cambia.
+    static let registrarCaras = ProcessInfo.processInfo.environment["U_CARAS_LOG"] == "1"
+    private var ultimaCaraAnotada: FaceMood?
+
     func despertar() {
         guard !despierta else { return }
         despierta = true
         ultimoRoce = Date()
         Registro.di("👂 ✦ me despertaron")
-        panel.face.mood = .conversando
+        // EL PORTERO SE QUEDA, y esta es la decisión de diseño que sostiene todo lo demás. El oído
+        // local reconoce el nombre sin que salga un byte de este Mac y sin costar un céntimo; la
+        // sesión viva solo se abre cuando de verdad te está atendiendo. Al revés —el caño abierto
+        // todo el día— sería mandarle a Google la reunión entera y pagarla.
+        //
+        // EL MICRÓFONO NO SE CEDE AQUÍ. Cederlo al ARRANCAR la sesión es apostar a que va a abrir:
+        // si no abre —y el 2026-08-19 no abrió tres veces de tres, colgada y sin un solo renglón de
+        // error—, el oído local se queda callado para siempre y Ü se vuelve sorda justo después de
+        // que la llames. Se cede en `alCambiar(true)`, que es el único sitio que sabe que la sesión
+        // existe de verdad. Es el mismo vicio que el contador de reintentos: abrir no es conversar.
+        if let vivo, !vivo.viva { vivo.arrancar() }
+        refrescarCara()
     }
 
     func dormirse() {
         guard despierta else { return }
         despierta = false
         Registro.di("👂 ✧ me duermo (nadie me habla hace \(Int(cuantoAguantaDespierta))s)")
-        panel.face.mood = .reposo
+        vivo?.terminar()
+        oido.recuperar()
+        refrescarCara()
         panel.face.parpadear(2)
     }
 
@@ -54,14 +169,16 @@ final class Delegado: NSObject, NSApplicationDelegate {
         panel.alTocarDoble = { [weak self] in
             guard let self else { return }
             Registro.di("👆 doble toque")
-            if voz.hablando { voz.callar(); return }
-            if oido.continuo {
-                oido.callarse()
-                panel.face.reaccionar(.pillado)
-            } else {
-                oido.ponerseAOir()
-                panel.face.reaccionar(.complice)
-            }
+            // Si la cortas a media frase, NO se celebra: cortar es lo contrario de haber terminado,
+            // y el brinco de «lo logré» encima de un «cállate» se lee como burla.
+            if voz.hablando { turnoDelModelo = false; voz.callar(); refrescarCara(); return }
+            // Aquí se reaccionaba con `.pillado` al apagar y `.complice` al encender, y estaba mal:
+            // esos son TALANTES DEL ESPEJO, con su condición escrita —«lo cacharon», «los dos sabemos
+            // de qué va esto»—, y un micrófono apagado no es ninguna de las dos. Gastados como acuse
+            // de recibo de un botón, además, duran medio segundo: un segundo después la cara volvía a
+            // estar igual y no sabías en qué había quedado. Lo que hace falta no es un aplauso, es un
+            // ESTADO que se quede puesto, y ese es `detenido`.
+            oido.continuo ? oido.callarse() : oido.ponerseAOir()
         }
 
         // El micrófono se cierra mientras ella habla y se vuelve a abrir cuando termina.
@@ -73,35 +190,70 @@ final class Delegado: NSObject, NSApplicationDelegate {
         // depende de si hay alguien conversando con ella, que es cosa de la conversación.
         panel.face.alAcabarDeCelebrar = { [weak self] in
             guard let self else { return }
-            panel.face.mood = despierta ? .conversando : .reposo
+            celebrando = false
+            refrescarCara()
         }
+
+        panel.face.alAcabarDeDisculparse = { [weak self] in
+            guard let self else { return }
+            disculpaHecha = true
+            refrescarCara()
+        }
+
+        // EMPIEZA A HABLAR → EL OÍDO SE CALLA. Iba solo la cara, y el oído se quedaba abierto: Ü se
+        // transcribía a sí misma y le preguntaba al modelo por lo que ella acababa de decir. El
+        // relato entero está en `Oido.mudaPorqueHabla`.
+        voz.alEmpezar = { [weak self] in
+            self?.oido.mientrasHabla(true)
+            self?.refrescarCara()
+        }
+        // Abrió, cerró, o empezó a oírte: hay algo nuevo que mirar. El oído sigue sin tocar la cara.
+        oido.alCambiar = { [weak self] in self?.refrescarCara() }
 
         voz.alTerminar = { [weak self] in
             guard let self else { return }
             self.ultimoRoce = Date()   // acabar de hablar cuenta como roce: no se duerme recién dicha
-            if panel.face.mood == .hablando {
-                // TERMINÓ SU PROCESO → celebra. Y hay que decir qué significa hoy «su proceso»:
-                // significa que le preguntaste, fue al modelo, y acabó de contestarte. No hay nada
-                // más que completar en este cliente todavía.
-                //
-                // Cuando Ü empiece a OPERAR APPS en el Mac, el sitio de esta llamada es el final de
-                // la tarea, no el final de la frase — y entonces `turnoDelModelo` sobra. Se deja
-                // aquí, y anotado, para que se mueva a sabiendas y no por descubrimiento.
-                if turnoDelModelo {
-                    turnoDelModelo = false
-                    panel.face.mood = .logrado
-                } else {
-                    panel.face.mood = despierta ? .conversando : .reposo
-                }
+            self.pensando = false
+            // TERMINÓ SU PROCESO → celebra. Y hay que decir qué significa hoy «su proceso»:
+            // significa que le preguntaste, fue al modelo, y acabó de contestarte. No hay nada más
+            // que completar en este cliente todavía.
+            //
+            // Cuando Ü empiece a OPERAR APPS en el Mac, el sitio de esta llamada es el final de la
+            // tarea, no el final de la frase — y entonces `turnoDelModelo` sobra. Se deja aquí, y
+            // anotado, para que se mueva a sabiendas y no por descubrimiento.
+            //
+            // La condición que había aquí era `mood == .hablando`, o sea: preguntarle a la CARA si
+            // se había hablado. Con el estado derivado eso ya no se puede —la cara es la consecuencia,
+            // no la fuente—, y tampoco se debía: `turnoDelModelo` es el que sabe, y es el único que
+            // distingue una respuesta del modelo de una frase de trámite.
+            // LO QUE FALLA NO SE CELEBRA, y hace falta decirlo AQUÍ y no solo en el `catch`.
+            //
+            // El 2026-08-18 la carita bailó después de decir «no pude abrir la voz en vivo». La
+            // celebración no miraba si lo que se acababa de decir era una respuesta o una excusa:
+            // solo miraba que hubiera un turno abierto. Y un turno abierto lo hay también cuando lo
+            // que suena es el mensaje de un fallo — la voz es la misma boca.
+            //
+            // El baile dice «terminé lo que me pediste». Encima de un «no pude», dice lo contrario
+            // de lo que pasó, y eso es peor que no reaccionar: enseña a no creerle a la cara.
+            if turnoDelModelo, !fallando {
+                turnoDelModelo = false
+                celebrando = true
             }
+            turnoDelModelo = false
+            refrescarCara()
             // Un respiro antes de reabrir: el altavoz tarda un instante en callarse de verdad, y la
             // cola de ese instante entra como si fuera una frase tuya.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-                self?.oido.reanudar()
+                self?.oido.mientrasHabla(false)
             }
         }
 
-        if let k = Llave.gemini { cerebro = Cerebro(llave: k) }
+        if let k = Llave.gemini {
+            cerebro = Cerebro(llave: k)
+            vivo = armarVozViva(llave: k)
+        } else {
+            Registro.di("🧠 sin llave: no hay cerebro ni voz en vivo (falta ~/.u/gemini-key.txt)")
+        }
 
         // SE LADEA MIENTRAS LE HABLAS. La señal no hubo que inventarla: `alOir` llega con cada
         // resultado parcial, o sea cada vez que el reconocedor entiende una palabra más de lo que
@@ -140,6 +292,30 @@ final class Delegado: NSObject, NSApplicationDelegate {
                     return
                 }
                 self.despertar()
+
+                // SI LA VOZ EN VIVO SE HIZO CARGO, EL CAMINO DE TEXTO NO CORRE. Sin esto contestaban
+                // las dos a la vez: el 2026-08-18 el log mostró «le cedo el micrófono a la voz en
+                // vivo» y en el mismo milisegundo «🧠 le pregunto: me escuchas». Dos cerebros sobre
+                // la misma frase, y el de texto además dejaba el turno abierto — que es de donde
+                // salió el baile encima del mensaje de fallo.
+                //
+                // Lo que venía detrás del nombre no se pierde: se le pasa a la sesión por escrito.
+                //
+                // LA CONDICIÓN PREGUNTA POR LA SESIÓN, Y SOLO POR ELLA. Decía
+                // `vivo.viva || cerebro != nil`, y ese segundo término es cierto SIEMPRE que hay
+                // llave: la rama ganaba con la sesión cerrada, `decirle` tiraba la frase al suelo
+                // por su `guard viva`, y el `return` se llevaba por delante el camino de texto —que
+                // funciona—. Desde fuera: la llamas por su nombre y no contesta nunca. Medido el
+                // 2026-08-19, con el puente HTTP verificado sano en la misma sesión.
+                //
+                // Es el aprendizaje nº16 entero: los dos lados de la comparación contestan preguntas
+                // distintas. «¿Se hizo cargo la voz viva?» solo la contesta `viva`.
+                if let vivo, vivo.viva {
+                    if !resto.isEmpty { vivo.decirle(resto) }
+                    else { panel.face.reaccionar(.complice) }
+                    return
+                }
+
                 // «Ü, abre el correo» de un tirón: si detrás del nombre venía la petición, se atiende
                 // ya. Obligar a llamarla, esperar, y recién ahí pedir, es una conversación que nadie
                 // tiene con nadie.
@@ -175,7 +351,10 @@ final class Delegado: NSObject, NSApplicationDelegate {
 
             // Mientras piensa, la cara lo dice. Un silencio sin cara es lo que hace dudar de si te
             // oyó — y volver a hablarle encima es lo que rompe la conversación.
-            panel.face.mood = .pensando
+            self.pensando = true
+            self.fallando = false          // turno nuevo: lo de antes ya no es lo que está pasando
+            self.disculpaHecha = false
+            refrescarCara()
             // AQUÍ SE PROBÓ A METER EL GUIÑO DE «entendido» y se quitó (2026-08-17): encima de la
             // cara de pensar las dos se estorban —el guiño se come la lengua, y lo que sale no es
             // ninguna de las dos—. `entendido` se queda como cara propia, que es donde funciona: la
@@ -205,7 +384,9 @@ final class Delegado: NSObject, NSApplicationDelegate {
                     // facturación en inglés.
                     Registro.di("🧠 ✘ \(error)")
                     self.turnoDelModelo = false       // lo que falla no se celebra
-                    self.panel.face.mood = .fallo     // pide perdón y se pone a buscar, sola
+                    self.pensando = false
+                    self.fallando = true              // pide perdón y se pone a buscar, sola
+                    self.refrescarCara()
                     self.voz.decir(error.localizedDescription)
                 }
             }
@@ -213,7 +394,9 @@ final class Delegado: NSObject, NSApplicationDelegate {
 
         oido.alFallar = { [weak self] motivo in
             guard let self else { return }
-            panel.face.mood = .fallo
+            fallando = true
+            disculpaHecha = false
+            refrescarCara()
             voz.decir(motivo)
         }
 
@@ -235,17 +418,146 @@ final class Delegado: NSObject, NSApplicationDelegate {
             panel.face.theme = panel.face.theme == .light ? .dark : .light
         }
 
-        panel.face.menu = construirMenu()
+        let menu = construirMenu()
+        menu.delegate = self
+        panel.face.menu = menu
+
+        // Retratarse y salir. Va ANTES de todo lo demás: no tiene sentido abrir el micrófono ni la
+        // conversación para hacer fotos, y el oído encendido metería ladeos en los retratos.
+        if Retratos.pedidos {
+            oido.callarse()
+            Retratos.tomarTodos(panel.face, delegado: self) {
+                NSApplication.shared.terminate(nil)
+            }
+            return
+        }
+
+        // Abrir la conversación en vivo NADA MÁS ARRANCAR, sin tener que llamarla por su nombre:
+        //   U_VIVO=1 ./U.app/Contents/MacOS/U
+        // Está para poder PROBAR el audio —que es donde se rompe— sin depender de que el
+        // reconocedor acierte el nombre. Sin esto, comprobar un arreglo del micrófono exige que
+        // funcione antes el oído, y entonces un fallo no dice cuál de los dos falló.
+        if ProcessInfo.processInfo.environment["U_VIVO"] == "1" {
+            Registro.di("🎙 U_VIVO=1 · abro la conversación en vivo al arrancar")
+            despertar()
+            // Y con U_DECIR se le manda una frase por escrito en cuanto la sesión está abierta, para
+            // poder comprobar la vuelta ENTERA —que contesta, que suena, y que pide su cara— sin
+            // tener que hablarle. Sin esto, «abrió el socket» y «habla» se confunden, y son cosas
+            // muy distintas cuando lo que falla es el altavoz.
+            if let frase = ProcessInfo.processInfo.environment["U_DECIR"], !frase.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+                    self?.vivo?.decirle(frase)
+                }
+            }
+        }
+
+        // U_PREGUNTAR — una frase POR EL CAMINO DE TEXTO, sin micrófono y sin llamarla por su
+        // nombre. Es el gemelo de `U_DECIR`, que solo llega a la voz en vivo, y hacía falta: el
+        // 2026-08-19, con el puente HTTP sano y verificado a mano, «le hablo y no me contesta» no
+        // se pudo reproducir en un día porque probar el cerebro de texto exigía que acertaran antes
+        // el micrófono Y el reconocedor Y el nombre. Cuatro piezas para juzgar una.
+        if let frase = ProcessInfo.processInfo.environment["U_PREGUNTAR"], !frase.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                Registro.di("🧪 U_PREGUNTAR: entro por el camino de texto con «\(frase)»")
+                self?.despierta = true
+                self?.oido.alEntender?(frase)
+            }
+        }
 
         // Para afinar una cara sin tener que buscarla en el menú cada vez que se recompila:
         //   U_CARA=fallo ./U.app/Contents/MacOS/U
         if let n = ProcessInfo.processInfo.environment["U_CARA"], let m = FaceMood(rawValue: n) {
-            panel.face.mood = m
+            caraForzada = m
         }
         // Y lo mismo para las reacciones:  U_TALANTE=enojado U_PESO=0.6
         if let n = ProcessInfo.processInfo.environment["U_TALANTE"], let t = Talante(rawValue: n) {
             panel.face.reaccionar(t)
         }
+    }
+
+    private func armarVozViva(llave: String) -> Vivo {
+        let v = Vivo(llave: llave)
+
+        v.alCambiar = { [weak self] abierta in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                // Y AQUÍ se cede el micrófono, no antes: éste es el único punto del programa que
+                // sabe que la sesión viva existe. Mientras no abra, el oído local sigue trabajando
+                // y el camino de texto puede contestar — que es lo que hace que Ü nunca se quede
+                // muda por un fallo de la voz en vivo.
+                if abierta { self.oido.ceder() } else { self.oido.recuperar() }
+                self.refrescarCara()
+                if abierta { self.arrancarBocaViva() } else { self.pararBocaViva() }
+            }
+        }
+
+        v.alTalante = { [weak self] t in self?.panel.face.reaccionar(t) }
+
+        v.alTranscribir = { [weak self] texto, esDeU in
+            guard let self else { return }
+            Registro.di(esDeU ? "🎙 dice: «\(texto)»" : "🎙 oye: «\(texto)»")
+            // SE LADEA MIENTRAS LE HABLAS, también en vivo. El catálogo lo pide «en cuanto el
+            // reconocedor te oye», y en una sesión viva quien oye es Gemini, no el reconocedor local.
+            if !esDeU {
+                DispatchQueue.main.async {
+                    self.panel.face.atender()
+                    self.refrescarCara()
+                }
+            } else {
+                DispatchQueue.main.async { self.panel.face.dejarDeAtender() }
+            }
+            // HABLAR CUENTA COMO ROCE, y sin esto la sesión se moría a los 30 segundos en mitad de
+            // la conversación: el vigía mide desde `ultimoRoce`, que por texto lo actualiza el oído
+            // — y el oído está cedido, así que no lo tocaba nadie.
+            DispatchQueue.main.async { self.ultimoRoce = Date() }
+        }
+
+        v.alFallar = { [weak self] motivo in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                self.fallando = true
+                self.disculpaHecha = false
+                self.turnoDelModelo = false   // lo que falla no se celebra
+                self.oido.recuperar()      // que un fallo de la voz viva no la deje sorda
+                self.refrescarCara()
+                self.voz.decir(motivo)
+            }
+        }
+        return v
+    }
+
+    /// A ~16 cuadros por segundo, el mismo ritmo que la boca de `Voz`: la boca al hablar cambia de
+    /// FORMA, y una forma nueva hay que dibujarla entera.
+    private func arrancarBocaViva() {
+        guard bocaViva == nil else { return }
+        let t = Timer(timeInterval: 1.0 / 16.0, repeats: true) { [weak self] _ in
+            guard let self, let vivo else { return }
+            guard vivo.hablando else {
+                panel.face.mouthOpen = 0
+                panel.face.mouthRound = 0
+                return
+            }
+            // El nivel crudo se queda corto para la vista: una boca que solo se abre un 20 % no se
+            // lee como hablar. Se estira y se acota, con un mínimo que la deja siempre en movimiento
+            // mientras suene.
+            let n = min(1.0, vivo.nivelVoz * 1.8)
+            panel.face.mouthOpen = max(0.12, CGFloat(n) * 0.85)
+            panel.face.mouthRound = 0.30
+        }
+        RunLoop.main.add(t, forMode: .common)
+        bocaViva = t
+    }
+
+    private func pararBocaViva() {
+        bocaViva?.invalidate(); bocaViva = nil
+        panel.face.mouthOpen = 0
+        panel.face.mouthRound = 0
+    }
+
+    @objc private func alternarVozViva() {
+        guard let vivo else { return }
+        // Ceder y recuperar los hace `alCambiar`, que es quien sabe si la sesión abrió de verdad.
+        if vivo.viva { vivo.terminar() } else { vivo.arrancar() }
     }
 
     private func construirMenu() -> NSMenu {
@@ -263,6 +575,11 @@ final class Delegado: NSObject, NSApplicationDelegate {
 
         m.addItem(.separator())
         m.addItem(withTitle: "Qué está haciendo", action: nil, keyEquivalent: "")
+        // Primero la salida. Una cara clavada a mano y sin forma visible de soltarla es una carita
+        // que se queda mintiendo hasta el siguiente reinicio.
+        let auto = NSMenuItem(title: "   ↩︎ Automático (soltar)", action: #selector(soltarCara), keyEquivalent: "")
+        auto.target = self
+        m.addItem(auto)
         for mood in FaceMood.allCases {
             let it = NSMenuItem(title: "   " + mood.rawValue.capitalized,
                                 action: #selector(elegirEstado(_:)), keyEquivalent: "")
@@ -270,6 +587,19 @@ final class Delegado: NSObject, NSApplicationDelegate {
             it.representedObject = mood
             m.addItem(it)
         }
+
+        m.addItem(.separator())
+        // ARRIBA DEL TODO de los gestos, y con el estado escrito en el propio título. El doble toque
+        // ya hacía esto, pero un gesto que nadie te enseña es un gesto que no existe: en 6.800 líneas
+        // de registro no hay UN SOLO doble toque. Y el título dice en qué estado está porque un item
+        // que solo dice «micrófono» no te saca de la duda que te trajo al menú.
+        itemMicrofono = NSMenuItem(title: "", action: #selector(alternarMicrofono), keyEquivalent: "")
+        itemMicrofono?.target = self
+        m.addItem(itemMicrofono!)
+
+        itemVoz = NSMenuItem(title: "", action: #selector(alternarVozViva), keyEquivalent: "")
+        itemVoz?.target = self
+        m.addItem(itemVoz!)
 
         m.addItem(.separator())
         for (titulo, sel) in [("Te escucho (ladeo) ⇄", #selector(alternarAtencion)),
@@ -303,8 +633,10 @@ final class Delegado: NSObject, NSApplicationDelegate {
 
     @objc private func elegirEstado(_ sender: NSMenuItem) {
         guard let mood = sender.representedObject as? FaceMood else { return }
-        panel.face.mood = mood
+        caraForzada = mood
     }
+
+    @objc private func soltarCara() { caraForzada = nil }
 
     @objc private func reaccionar(_ sender: NSMenuItem) {
         guard let t = sender.representedObject as? Talante else { return }
@@ -315,6 +647,22 @@ final class Delegado: NSObject, NSApplicationDelegate {
     /// así que no hay una duración que enseñar — hay que poder dejarla puesta y mirarla.
     @objc private func alternarAtencion() {
         if panel.face.atendiendo { panel.face.dejarDeAtender() } else { panel.face.atender() }
+    }
+
+    /// El título se escribe al abrirse el menú, no al construirlo: se construye una vez y el estado
+    /// cambia todo el rato.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        itemMicrofono?.title = oido.continuo ? "🎙 Te está oyendo — callarla" : "🔇 Está callada — que oiga"
+        if let vivo {
+            itemVoz?.isHidden = false
+            itemVoz?.title = vivo.viva ? "⚡︎ Voz en vivo — colgar" : "⚡︎ Hablar en vivo con Gemini"
+        } else {
+            itemVoz?.isHidden = true
+        }
+    }
+
+    @objc private func alternarMicrofono() {
+        oido.continuo ? oido.callarse() : oido.ponerseAOir()
     }
 
     @objc private func guinar()    { panel.face.guinar(izquierdo: false) }
