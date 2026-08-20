@@ -15,7 +15,7 @@ import Foundation
 
 enum Promesas {
 
-    static var todas: [Promesa] { [uno, dos, tres, cuatro, cinco, seis, siete, ocho, nueve, diez] }
+    static var todas: [Promesa] { [uno, dos, tres, cuatro, cinco, seis, siete, ocho, nueve, diez, once] }
 
     // ── Las que no necesitan micrófono ───────────────────────────────────────────────────────────
 
@@ -229,6 +229,31 @@ enum Promesas {
             Tres hipótesis ya descartadas (respiro, motor nuevo, apagar la cancelación de eco):
             están en PENDIENTES.md — no volver a probarlas.
             """)
+    }
+
+
+    /// 11 · EL PORTERO. Mientras la sesión en vivo está abierta, todo lo que suena en la sala se manda
+    ///      a Google y SE PAGA — ahí dentro no hay filtro de nombre. Esta promesa es de dinero: acota
+    ///      el peor caso, el del descuido.
+    static let once = Promesa(numero: 11, enunciado: "La sesión en vivo se cuelga sola y no gasta de más") {
+        App.cerrar()
+        try App.limpiarRegistro()
+        // Con el tope bajito para poder juzgarlo en segundos en vez de en minutos. Lo que se juzga es
+        // que el tope MANDE, no cuánto vale: el valor es una decisión de dinero y vive en el código.
+        try App.abrir(["U_VIVO": "1", "U_TOPE_VIVO": "20"])
+        guard esperarA(segundos: 90, "que abra la sesión en vivo", { registroTiene("sesión de voz abierta") }) else {
+            return .noPudeCorrer("la sesión en vivo no abrió; sin caño abierto no hay gasto que acotar")
+        }
+        guard esperarA(segundos: 90, "que se cuelgue sola", { registroTiene("💸 la sesión en vivo estuvo abierta") }) else {
+            return .rota("la sesión siguió abierta pasado el tope — el caño se queda abierto y se paga")
+        }
+        guard let l = primeraLinea(con: "💸 la sesión en vivo estuvo abierta"),
+              let seg = Int(l.split(separator: "abierta ").last?.split(separator: "s").first ?? "") else {
+            return .noPudeCorrer("se cerró pero no pude leer cuánto estuvo abierta")
+        }
+        // Margen de 15 s: el vigía mira cada 2 s y no corta a mitad de una frase suya.
+        guard seg <= 35 else { return .rota("estuvo abierta \(seg)s con un tope de 20") }
+        return .cumplida("se colgó sola a los \(seg)s y dijo lo que costó")
     }
 
     static func ultimasLineas(_ n: Int) -> String {

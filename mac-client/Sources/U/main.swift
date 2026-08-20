@@ -14,6 +14,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// fiel que adivinar la vocal.
     var bocaViva: Timer?
     var itemMicrofono: NSMenuItem?
+    var interruptor: Interruptor?
     var itemVoz: NSMenuItem?
 
     /// Está en conversación. Dormida, solo reacciona a su nombre.
@@ -30,6 +31,28 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Medio minuto: lo bastante para pensar la siguiente frase, pedirle otra cosa o corregirla, y
     /// lo bastante poco para que no se quede escuchando la reunión entera porque la llamaste una vez.
     let cuantoAguantaDespierta: TimeInterval = 30
+
+    /// EL TOPE DURO DE LA SESIÓN EN VIVO, y es una decisión de dinero, no de ingeniería.
+    ///
+    /// Mientras la sesión está abierta, **todo lo que suena en la sala se manda a Google y se paga**.
+    /// El portero del nombre solo existe en el oído local: dentro de la sesión viva no hay filtro
+    /// ninguno, así que un descuido de veinte minutos es una factura de veinte minutos.
+    ///
+    /// Los 30 s de silencio ya la cierran, pero solo cubren el caso de que NADIE hable. Una
+    /// conversación ajena cerca, una reunión, la tele: eso la mantendría abierta indefinidamente.
+    /// Este tope acota el peor caso a un número que se puede mirar y decidir.
+    ///
+    /// Volver a llamarla por su nombre la reabre al instante, así que el coste de equivocarse por
+    /// abajo es decir «mira» otra vez. El de equivocarse por arriba es una factura.
+    let topeDeSesionViva: TimeInterval = {
+        if let t = ProcessInfo.processInfo.environment["U_TOPE_VIVO"], let n = Double(t), n > 0 {
+            return n
+        }
+        return 180
+    }()
+
+    /// Cuándo se abrió la sesión viva que está corriendo ahora.
+    var vivaDesde: Date?
 
     // ── La carita como semáforo ──────────────────────────────────────────────────────────────────
     //
@@ -144,6 +167,19 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refrescarCara()
     }
 
+    /// AL SALIR SE DEJA EL MICRÓFONO COMO SE ENCONTRÓ.
+    ///
+    /// La cancelación de eco es un ajuste del APARATO, no del proceso: dejarla puesta al morir deja
+    /// sordo al siguiente arranque —y a cualquier otra app que grabe—. `AudioVivo.cerrar()` lo
+    /// devuelve, pero solo corre si a Ü la cierran por las buenas; con un `pkill` no corre nada.
+    /// Esto cubre el cierre ordenado, que es el caso que sí podemos cubrir; el resto lo recoge el
+    /// ciclado de `Oido.arrancar()`.
+    func applicationWillTerminate(_ note: Notification) {
+        vivo?.terminar()
+        oido.parar()
+        Registro.di("👋 me cierro y devuelvo el micrófono como lo encontré")
+    }
+
     func dormirse() {
         guard despierta else { return }
         despierta = false
@@ -178,7 +214,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // de recibo de un botón, además, duran medio segundo: un segundo después la cara volvía a
             // estar igual y no sabías en qué había quedado. Lo que hace falta no es un aplauso, es un
             // ESTADO que se quede puesto, y ese es `detenido`.
-            oido.continuo ? oido.callarse() : oido.ponerseAOir()
+            alternarOido()
         }
 
         // El micrófono se cierra mientras ella habla y se vuelve a abrir cuando termina.
@@ -408,6 +444,14 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if Date().timeIntervalSince(self.ultimoRoce) > self.cuantoAguantaDespierta,
                !self.voz.hablando {
                 self.dormirse()
+                return
+            }
+            // EL TOPE MANDA POR ENCIMA DE LA CONVERSACIÓN, incluso si de verdad le estás hablando.
+            // Es a propósito: el caso que arruina no es el que conversa, es el que se olvidó.
+            if let desde = self.vivaDesde, self.vivo?.viva == true,
+               Date().timeIntervalSince(desde) > self.topeDeSesionViva, !self.voz.hablando {
+                Registro.di("🎙 ⏹ tope de sesión en vivo (\(Int(self.topeDeSesionViva))s) — cuelgo. Dime «mira» y vuelvo.")
+                self.dormirse()
             }
         }
         RunLoop.main.add(vigia, forMode: .common)
@@ -421,6 +465,23 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = construirMenu()
         menu.delegate = self
         panel.face.menu = menu
+
+        // EL INTERRUPTOR EN LA BARRA DE MENÚS. El doble toque sobre la carita sigue funcionando, pero
+        // deja de ser la única forma: un gesto que hay que saber no es un botón, y la carita se puede
+        // arrastrar fuera de vista con el interruptor dentro.
+        interruptor = Interruptor(cables: .init(
+            encendida:  { [weak self] in self?.oido.continuo ?? false },
+            alternar:   { [weak self] in self?.alternarOido() },
+            vivaAhora:  { [weak self] in self?.vivo?.viva ?? false },
+            colgarLaVoz: { [weak self] in
+                guard let self, let vivo, vivo.viva else { return }
+                Registro.di("🎙 ⏹ me colgaste desde la barra de menús")
+                self.dormirse()
+            },
+            mostrarLaCarita: { [weak self] in
+                self?.panel.center()
+                self?.panel.orderFrontRegardless()
+            }))
 
         // La sonda del micrófono, y SALE. Va la primera de todas: mide el aparato, y para eso el
         // oído, la voz y la sesión en vivo tienen que no haber tocado nada.
@@ -493,7 +554,18 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 // sabe que la sesión viva existe. Mientras no abra, el oído local sigue trabajando
                 // y el camino de texto puede contestar — que es lo que hace que Ü nunca se quede
                 // muda por un fallo de la voz en vivo.
-                if abierta { self.oido.ceder() } else { self.oido.recuperar() }
+                if abierta {
+                    self.vivaDesde = Date()
+                    self.oido.ceder()
+                } else {
+                    // EL GASTO, DICHO. Un caño abierto que no deja rastro de cuánto estuvo abierto es
+                    // un caño que nadie audita — y este cuesta dinero por segundo.
+                    if let desde = self.vivaDesde {
+                        Registro.di("🎙 💸 la sesión en vivo estuvo abierta \(Int(Date().timeIntervalSince(desde)))s")
+                    }
+                    self.vivaDesde = nil
+                    self.oido.recuperar()
+                }
                 self.refrescarCara()
                 if abierta { self.arrancarBocaViva() } else { self.pararBocaViva() }
             }
@@ -514,9 +586,18 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
             } else {
                 DispatchQueue.main.async { self.panel.face.dejarDeAtender() }
             }
-            // HABLAR CUENTA COMO ROCE, y sin esto la sesión se moría a los 30 segundos en mitad de
-            // la conversación: el vigía mide desde `ultimoRoce`, que por texto lo actualiza el oído
-            // — y el oído está cedido, así que no lo tocaba nadie.
+            // ROCE ES QUE **TÚ** HABLES. Lo que dice ELLA no cuenta, y ahí estaba el agujero del
+            // portero: contaba las dos, así que Ü se mantenía despierta a sí misma. Y como dentro de
+            // la sesión viva contesta a cualquier voz de la sala —no hay filtro de nombre ahí—, el
+            // ciclo se cerraba solo: la tele hablaba, Ü contestaba, su respuesta renovaba los 30 s, y
+            // el caño seguía abierto mandándole a Google la habitación entera. Con factura.
+            //
+            // Se vio literal en el registro: Ü preguntando «¿me están hablando a mí?» a una
+            // conversación ajena, y la sesión sin cerrarse nunca.
+            //
+            // Sin esto, `cuantoAguantaDespierta` no medía el silencio de la sala: medía si Ü se
+            // estaba callada.
+            guard !esDeU else { return }
             DispatchQueue.main.async { self.ultimoRoce = Date() }
         }
 
@@ -669,8 +750,24 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func alternarMicrofono() {
-        oido.continuo ? oido.callarse() : oido.ponerseAOir()
+    @objc private func alternarMicrofono() { alternarOido() }
+
+    /// UN SOLO SITIO QUE ENCIENDE Y APAGA. Hay tres formas de hacerlo —el doble toque, el menú de la
+    /// carita y el botón de la barra— y si cada una lo hiciera por su cuenta, el icono de la barra
+    /// diría una cosa mientras el oído hace otra. Un interruptor que miente sobre su estado es peor
+    /// que no tener interruptor: te hace hablarle a algo que no te oye, o creerte apagada cuando no.
+    func alternarOido() {
+        if oido.continuo {
+            oido.callarse()
+            // Apagarla es apagarla ENTERA: si estaba conversando en vivo, ese caño también se cierra.
+            // Dejarlo abierto con el micrófono «apagado» sería seguir mandando y pagando con el
+            // interruptor en «off», que es exactamente lo que nadie espera de un botón de apagado.
+            if despierta { dormirse() }
+        } else {
+            oido.ponerseAOir()
+        }
+        interruptor?.pintar()
+        refrescarCara()
     }
 
     @objc private func guinar()    { panel.face.guinar(izquierdo: false) }
