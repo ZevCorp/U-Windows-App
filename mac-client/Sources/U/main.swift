@@ -483,6 +483,22 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.panel.orderFrontRegardless()
             }))
 
+        // MIRAR, Y SALE. El prototipo acotado de computer-use: mira la pantalla, dice qué ve, y
+        // termina. No arranca el oído ni la voz — está aislado a propósito, ver Mirar.swift.
+        if Mirar.pedido {
+            oido.callarse()
+            if let k = Llave.gemini {
+                Task {
+                    await Mirar.correr(llave: k)
+                    NSApplication.shared.terminate(nil)
+                }
+            } else {
+                Registro.di("👁 ✘ sin llave en ~/.u/gemini-key.txt, no puedo preguntarle al modelo")
+                NSApplication.shared.terminate(nil)
+            }
+            return
+        }
+
         // La sonda del micrófono, y SALE. Va la primera de todas: mide el aparato, y para eso el
         // oído, la voz y la sesión en vivo tienen que no haber tocado nada.
         if Sonda.pedida {
