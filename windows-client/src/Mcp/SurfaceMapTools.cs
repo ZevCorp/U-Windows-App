@@ -1580,8 +1580,21 @@ public sealed class SurfaceMapTools
         var reloj = System.Diagnostics.Stopwatch.StartNew();
         int hechos = 0;
 
+        // UN GRUPO DE PASOS ES LO MÁS LARGO QUE HACE Ü, y por tanto lo primero que alguien querrá
+        // parar. La puerta ya impide que las acciones lleguen a la máquina (ver Actions.Freno), así
+        // que sin esto no se rompe nada — pero se seguirían recorriendo los pasos que quedan, cada
+        // uno fallando y esperando lo suyo, y desde fuera eso se ve exactamente igual que ignorar el
+        // Escape. Parar de verdad es también dejar de intentarlo.
+        Actions.Freno.Empezar($"ejecutar {pasos.Count} paso(s)");
+        try
+        {
         foreach (var p in pasos)
         {
+            if (Actions.Freno.Pidieron)
+            {
+                informe.AppendLine($"— paraste tú: quedaban {pasos.Count - hechos} paso(s) sin hacer.");
+                break;
+            }
             string op = p.TryGetValue("op", out var o) ? o.Trim().ToLowerInvariant() : "";
             string V(string k) => p.TryGetValue(k, out var v) ? v.Trim() : "";
             long t0 = reloj.ElapsedMilliseconds;
@@ -1613,6 +1626,8 @@ public sealed class SurfaceMapTools
                      + "  No sigo tras un fallo: continuar es cómo un error se vuelve daño más adelante.";
             }
         }
+        }
+        finally { Actions.Freno.Termine(); }
 
         reloj.Stop();
         LogBus.Log("mapa-mcp", $"PLAN completo: {hechos} paso(s) en {reloj.ElapsedMilliseconds} ms");

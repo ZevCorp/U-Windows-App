@@ -34,8 +34,24 @@ public static class InputExecutor
     private const int SM_CXSCREEN = 0, SM_CYSCREEN = 1;
     #endregion
 
+    /// <summary>
+    /// LA PUERTA. Nada sale de aquí con el freno echado.
+    /// </summary>
+    /// <remarks>
+    /// El freno nació como una bandera que cada bucle largo tenía que acordarse de consultar, y el
+    /// usuario vio el fallo del diseño antes que nosotros: «me parece raro que tengamos que fijarnos
+    /// por nosotros mismos que esc esté habilitado en todo» (2026-08-22). Tenía razón — así se
+    /// protegen los bucles que ya existen y ninguno de los que se escriban mañana.
+    ///
+    /// Puesto AQUÍ, en el único sitio por donde salen las teclas y el ratón, es imposible escribir
+    /// código que ignore Escape: no hay que acordarse de nada. Es la misma diferencia que hay entre
+    /// un documento que pide algo y un hook que lo garantiza.
+    /// </remarks>
+    private static bool Parado => Freno.Pidieron;
+
     public static bool Tap(int x, int y)
     {
+        if (Parado) return false;
         MoveTo(x, y);
         Thread.Sleep(30);
         Mouse(MOUSEEVENTF_LEFTDOWN);
@@ -45,6 +61,7 @@ public static class InputExecutor
 
     public static bool Type(int x, int y, string text)
     {
+        if (Parado) return false;
         Tap(x, y);
         Thread.Sleep(60);
         return TypeText(text);
@@ -52,6 +69,7 @@ public static class InputExecutor
 
     public static bool TypeText(string text)
     {
+        if (Parado) return false;
         foreach (char c in text)
         {
             SendKeyUnicode(c, false);
@@ -62,6 +80,7 @@ public static class InputExecutor
 
     public static bool Scroll(bool down)
     {
+        if (Parado) return false;
         var inp = new INPUT
         {
             type = INPUT_MOUSE,
@@ -73,6 +92,7 @@ public static class InputExecutor
 
     public static bool Swipe(int x1, int y1, int x2, int y2, int ms)
     {
+        if (Parado) return false;
         MoveTo(x1, y1);
         Mouse(MOUSEEVENTF_LEFTDOWN);
         int steps = Math.Max(10, ms / 15);
@@ -90,6 +110,7 @@ public static class InputExecutor
     /// <summary>Teclas semánticas que el cerebro envía normalizadas (enter/back/tab/…).</summary>
     public static bool Key(string key)
     {
+        if (Parado) return false;
         ushort vk = key.ToLowerInvariant() switch
         {
             "enter" => 0x0D,

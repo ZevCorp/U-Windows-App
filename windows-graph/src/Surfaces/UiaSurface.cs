@@ -689,9 +689,30 @@ public sealed class UiaSurface : IUiSurface
 
     // ── Ejecución ────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// ¿HAY QUE PARAR? Lo contesta quien sepa —el freno vive en el cliente, que está por encima de
+    /// este proyecto y no se puede referenciar al revés—. Mientras nadie lo rellene vale null y aquí
+    /// no cambia nada.
+    /// </summary>
+    /// <remarks>
+    /// Es un enganche y no una dependencia a propósito: invertir la flecha (que windows-graph
+    /// conociera al cliente) por una sola pregunta arrastraría todo el cliente a este proyecto. Lo
+    /// rellena <c>U.WindowsClient.Actions.Freno</c> en su constructor estático, así que está puesto
+    /// desde el primer uso del freno y nadie tiene que acordarse.
+    /// </remarks>
+    public static Func<bool>? HayQueParar;
+
+    /// <summary>Lo que se contesta al negarse. Dice QUIÉN paró: un «no se encontró» mandaría a
+    /// buscar un elemento que sí estaba.</summary>
+    public const string ParasteTu = "paraste tú con Escape; no sigo hasta que arranques otra cosa";
+
     public bool Execute(PlanStep step, out string error)
     {
         error = "";
+
+        // LA PUERTA. Con el freno echado no se toca la pantalla, venga la orden de donde venga y
+        // sepa o no quien la manda que el freno existe. Ver el remark de HayQueParar.
+        if (HayQueParar?.Invoke() == true) { error = ParasteTu; return false; }
 
         // Tecla de acción (Enter…): no resuelve un elemento, va al foco. Se maneja antes de la resolución.
         if (string.Equals(step.ActionType, "key", StringComparison.OrdinalIgnoreCase))

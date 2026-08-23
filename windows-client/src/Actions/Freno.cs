@@ -26,6 +26,20 @@ namespace U.WindowsClient.Actions;
 /// </remarks>
 public static class Freno
 {
+    /// <summary>
+    /// SE ENCHUFA SOLO. La puerta de la pantalla (<c>U.Graph.Surfaces.UiaSurface</c>) vive en un
+    /// proyecto por debajo de este y no puede ver el freno, así que expone un enganche y lo rellena
+    /// quien sí puede: nosotros, aquí, en cuanto alguien toca el freno por primera vez.
+    ///
+    /// Va en el constructor estático y no en <see cref="Escuchar"/> a propósito: `Escuchar` la llama
+    /// la ventana al arrancar, y lo que garantiza esta clase no puede depender de que haya ventana.
+    /// El contrato, por ejemplo, no levanta ninguna.
+    /// </summary>
+    static Freno()
+    {
+        U.Graph.Surfaces.UiaSurface.HayQueParar = () => Pidieron;
+    }
+
     private static int _pidieron;
     private static int _haciendoAlgo;
 
@@ -42,6 +56,16 @@ public static class Freno
     /// <summary>Avisa de que alguien ha pedido parar. Para que la carita y la voz puedan reaccionar.</summary>
     public static event Action? Pidio;
 
+    /// <summary>
+    /// LO QUE Ü DICE AL SOLTARSE. Pararse en silencio se vive igual que colgarse, y son cosas
+    /// opuestas: en una te obedeció y en la otra te dejó tirado. La frase existe para que quien
+    /// acaba de pulsar Escape sepa CUÁL de las dos pasó (2026-08-22, pedido por el usuario).
+    /// </summary>
+    public static event Action<string>? Dice;
+
+    /// <summary>La frase, en un solo sitio: la dicen la carita y la voz, y tienen que decir lo mismo.</summary>
+    public const string DevuelvoElControl = "Listo, tienes el control de vuelta.";
+
     /// <summary>Arranca una acción interrumpible. Desarma el freno: lo de antes ya no cuenta.</summary>
     public static void Empezar(string tarea)
     {
@@ -54,6 +78,14 @@ public static class Freno
     public static void Termine()
     {
         Interlocked.Exchange(ref _haciendoAlgo, 0);
+        // Y SE SUELTA EL FRENO. Antes solo se apagaba «estoy haciendo algo» y el alto se quedaba
+        // pedido hasta el siguiente Empezar. Daba igual mientras el freno fuera una bandera que solo
+        // miraban los bucles —fuera de una tarea no hay bucle que mire—, pero al ponerlo en la
+        // PUERTA pasó a importar mucho: entre una tarea y la siguiente el teclado y el ratón
+        // quedaban muertos, y nada lo decía. Lo encontró la promesa 26 el mismo día que se escribió
+        // (2026-08-22): es exactamente el fallo que aparece cuando una garantía cambia de sitio y
+        // el resto del código todavía piensa con las reglas de antes.
+        Volatile.Write(ref _pidieron, 0);
         Tarea = "";
     }
 
@@ -80,6 +112,7 @@ public static class Freno
         if (Interlocked.Exchange(ref _pidieron, 1) == 1) return;
         LogBus.Log("freno", $"alto pedido ({porque}); paro «{Tarea}»");
         try { Pidio?.Invoke(); } catch { }
+        try { Dice?.Invoke(DevuelvoElControl); } catch { }
     }
 
     /// <summary>Empieza a mirar el teclado. Se llama una vez al arrancar la app.</summary>
