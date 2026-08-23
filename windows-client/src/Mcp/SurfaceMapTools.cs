@@ -569,6 +569,19 @@ public sealed class SurfaceMapTools
             bool iluminado = !caja.IsEmpty && caja.Width >= 1 && caja.Height >= 1;
             if (iluminado) Ui.Senalador.Senalar(caja, nombre);
 
+            // LA RESPUESTA LA COMPONE EL NÚCLEO. Leer la pantalla —todo lo de arriba— es trabajo de
+            // UIA y se queda aquí; decidir QUÉ se contesta sobre lo señalado es lo único que puede
+            // equivocarse en silencio, y eso vive en Navigation/LoQueSenalas, donde se puede juzgar
+            // sin un cursor delante.
+            //
+            // Lo que se decía antes era «nivel 3 · fijado a mano», y terminaba sugiriendo
+            // map_set_level. O sea: la herramienta más usada del sistema (168 veces en 26 días)
+            // anunciaba otra en CADA respuesta — y de ahí salían los 63 usos de aquella. Era
+            // evidencia inducida. Lo que de verdad decide la frase siguiente de la conversación no
+            // es un nivel: es si eso se puede pulsar ahora (2026-08-22).
+            if (Senalar != null)
+                return Senalar(new Navigation.LoQueSenalas.Senalado(nombre, tipo, iluminado));
+
             string aqui = _where()?.Id ?? "";
             var h = aqui.Length > 0
                 ? _map.ExitsFrom(aqui).FirstOrDefault(x => x.Info.Label.Equals(nombre, StringComparison.OrdinalIgnoreCase))
@@ -1335,6 +1348,12 @@ public sealed class SurfaceMapTools
     /// vale null se contesta como siempre. Ver <see cref="Navigation.AquiSegunElNucleo"/>.
     /// </summary>
     public Func<string>? Situarse { get; set; }
+
+    /// <summary>
+    /// SEÑALAR, contestado por el núcleo. Recibe lo que UIA ya resolvió bajo el cursor y devuelve la
+    /// frase. Ver <see cref="Navigation.LoQueSenalas"/>.
+    /// </summary>
+    public Func<Navigation.LoQueSenalas.Senalado, string>? Senalar { get; set; }
 
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
