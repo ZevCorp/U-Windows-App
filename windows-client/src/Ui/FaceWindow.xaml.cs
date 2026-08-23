@@ -422,6 +422,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // subconsciente + logs) al backend. No-op si el usuario no dio su correo.
         InitTelemetry();
         Closed += (_, __) => TelemetryBus.Shutdown();
+
+        // ESC PARA LO QUE Ü ESTÉ HACIENDO. Va aquí y no en GlobalHotkeys porque aquel REGISTRA las
+        // teclas —se las quita al resto del sistema— y Escape no se le puede quitar a nadie: es la
+        // tecla de «déjame en paz» de todas las apps. Actions.Freno solo la mira pasar y la deja
+        // seguir su camino. Ver Actions/Freno.cs.
+        Actions.Freno.Escuchar();
         // La primera vez, que se presente ella. No hace nada en los arranques siguientes.
         OfrecerElPrimerEncuentro();
         // La superficie actual viaja en cada turno (scoping de workflows) y las llamadas
