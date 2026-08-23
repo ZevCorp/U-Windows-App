@@ -112,6 +112,9 @@ internal static class Contrato
         Prueba("41. lo señalado CADUCA: un gesto viejo no decide lo que se pide ahora", LoSenaladoCaduca);
         Prueba("42. una app INSTALADA con ese nombre gana a una pestaña abierta", LaAppInstaladaGanaALaPestana);
         Prueba("43. «Copilot» se refiere a «Copilot anclado»: no hay que decirlo clavado", SenalarNoExigeElNombreClavado);
+        Prueba("44. pulsar y que no se mueva nada NO se cuenta como llegada", PulsarSinMoverNoEsLlegar);
+        Prueba("45. un clic que no se pudo dar no se cuenta como dado", PulsarQueNoSePudoNoCuenta);
+        Prueba("46. lo que se cruza queda aprendido, y manda el terreno", PulsarAprendeADondeLlevoDeVerdad);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1015,6 +1018,73 @@ internal static class Contrato
             "y tampoco con las mayúsculas ni la coletilla de las ventanas");
         Debe(!LoQueSenalas.SeRefiereA("spotify", "Copilot anclado"),
             "pero dos cosas distintas siguen siendo distintas");
+    }
+
+    // ── PULSAR ───────────────────────────────────────────────────────────────
+    //
+    // La versión mínima de IR: ir no es más que preguntar el siguiente paso y pulsarlo, en bucle.
+    // Por eso va antes — construir el bucle antes que el paso es construir sobre nada.
+
+    private static PulsarSegunElNucleo PulsarCon(Nucleo.Grafo g, string antes, string despues, bool loLogra, List<string> tocados)
+    {
+        string donde = antes;
+        return new PulsarSegunElNucleo(g, () => donde,
+            (sel, et) => { tocados.Add(et); if (loLogra) donde = despues; return loLogra; })
+            { EsperaMaximaMs = 240 };   // el arnés no necesita esperar a ninguna pantalla
+    }
+
+    private static void PulsarSinMoverNoEsLlegar(SurfaceMap _)
+    {
+        var g = new Nucleo.Grafo();
+        var r = PulsarCon(g, "uia://x.exe/uno", "uia://x.exe/uno", true, new List<string>())
+            .Pulsa("uia:name=Guardar", "Guardar");
+
+        Debe(r.SePudo && !r.CambioLaPantalla,
+            "se pudo pulsar y la pantalla NO cambió, y son dos cosas distintas");
+        Debe(r.Cuenta.Contains("no cambió"),
+            $"y se dice tal cual (dijo: «{r.Cuenta}»). Un botón de acción —Guardar, Copiar— hace "
+            + "su trabajo sin cambiar de pantalla: llamar a eso un fracaso sería reportar mal algo "
+            + "que salió bien");
+    }
+
+    private static void PulsarQueNoSePudoNoCuenta(SurfaceMap _)
+    {
+        // Esta promesa sustituye a una que escribí mal: «si no se movió, no se acuña el tramo» NO
+        // podía ponerse roja, porque el propio núcleo lo impide (Grafo.Cruzar rechaza un destino
+        // igual al origen). Una promesa que la capa de abajo ya garantiza es un verde que no prueba
+        // nada — justo lo que este contrato existe para no tener (2026-08-23).
+        //
+        // Esto sí puede romperse: dar por hecho un clic que ni siquiera se llegó a dar. Y es de los
+        // fallos que más caro salen, porque lo siguiente se pide creyendo que estamos en otro sitio.
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x.exe/uno", new[] { new Nucleo.Elemento("uia:name=Ir", "Ir", "Button") });
+
+        var tocados = new List<string>();
+        var r = PulsarCon(g, "uia://x.exe/uno", "uia://x.exe/otro", loLogra: false, tocados)
+            .Pulsa("uia:name=Ir", "Ir");
+
+        Debe(!r.SePudo, "un clic que la pantalla no aceptó se dice que NO se pudo");
+        Debe(!r.CambioLaPantalla && !r.Aprendido,
+            "y no se inventa ni movimiento ni aprendizaje a partir de él");
+        Debe(r.Desde == r.Hasta && r.Desde == "uia://x.exe/uno",
+            $"y se sigue estando donde se estaba (dijo: de «{r.Desde}» a «{r.Hasta}»). Dar por hecho "
+            + "un clic que no ocurrió hace que lo SIGUIENTE se pida creyéndose en otro sitio");
+    }
+
+    private static void PulsarAprendeADondeLlevoDeVerdad(SurfaceMap _)
+    {
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x.exe/uno", new[] { new Nucleo.Elemento("uia:name=Ir", "Ir", "Button") });
+
+        var r = PulsarCon(g, "uia://x.exe/uno", "uia://x.exe/OTRO-distinto", true, new List<string>())
+            .Pulsa("uia:name=Ir", "Ir");
+
+        Debe(r.CambioLaPantalla && r.Aprendido, "cruzar de verdad SÍ se aprende");
+        Debe(r.Hasta == "uia://x.exe/OTRO-distinto",
+            $"y se aprende a dónde llevó DE VERDAD (dijo: «{r.Hasta}»), no a dónde se creía. "
+            + "El terreno manda sobre el mapa: así el grafo se corrige solo yendo");
+        Debe(g.DesdeAqui("uia://x.exe/uno").Any(a => a.Destino == "uia://x.exe/OTRO-distinto"),
+            "y queda en el grafo, no solo en la respuesta");
     }
 
     private static void SenalarDistingueLasTres(SurfaceMap _)

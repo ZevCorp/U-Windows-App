@@ -1493,6 +1493,13 @@ public sealed class SurfaceMapTools
     /// </summary>
     public Func<string, string>? AbrirPorElNucleo { get; set; }
 
+    /// <summary>
+    /// PULSAR, contestado por el núcleo: se toca, se comprueba qué pasó y el grafo lo aprende.
+    /// Resolver el selector y escalar al doble clic siguen siendo de UIA.
+    /// Ver <see cref="Navigation.PulsarSegunElNucleo"/>.
+    /// </summary>
+    public Func<string, string, string>? PulsarPorElNucleo { get; set; }
+
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
