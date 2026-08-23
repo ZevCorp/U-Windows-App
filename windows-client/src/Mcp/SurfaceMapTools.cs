@@ -32,6 +32,10 @@ public sealed class SurfaceMapTools
     private readonly UiaSurface _uia = new() { Log = s => LogBus.Log("mapa-mcp", s), SoloEnFoco = true };
     private readonly UiaReader _lector = new();
 
+    /// <summary>Lo último que se señaló, con su identidad de UIA. Ver <see cref="LoQueSenala"/> y
+    /// el rescate al final de <see cref="Take"/>.</summary>
+    private (string Nombre, string Selector, System.Windows.Automation.AutomationElement Que, DateTime Cuando)? _ultimoSenalado;
+
     /// <summary>La app con la que se estaba trabajando. Se usa para volver a ella si algo roba el foco.</summary>
     private string _ultimaApp = "";
 
@@ -684,6 +688,16 @@ public sealed class SurfaceMapTools
             // comprobar de un vistazo que hablan del mismo sitio.
             bool iluminado = !caja.IsEmpty && caja.Width >= 1 && caja.Height >= 1;
             if (iluminado) Ui.Senalador.Senalar(caja, nombre);
+
+            // SE GUARDA LO SEÑALADO, CON SU IDENTIDAD. Señalar ya sabe encontrar cosas que el mapa
+            // de esta pantalla NO tiene —un botón de la barra de tareas, otra ventana— pero pulsar
+            // solo buscaba en la pantalla de delante, así que «¿ves esto? ábrelo» no funcionaba:
+            // «no veo nada que se llame «Copilot anclado» en «web://copilot.microsoft.com»»
+            // (2026-08-23, con el usuario señalando el icono de la barra).
+            //
+            // Se guarda el ELEMENTO, no su caja: pulsar por coordenadas acierta hasta que algo se
+            // mueve, y entonces falla en silencio diciendo que funcionó.
+            _ultimoSenalado = (nombre, sels.FirstOrDefault() ?? $"uia:name={nombre}", el, DateTime.UtcNow);
 
             // LA RESPUESTA LA COMPONE EL NÚCLEO. Leer la pantalla —todo lo de arriba— es trabajo de
             // UIA y se queda aquí; decidir QUÉ se contesta sobre lo señalado es lo único que puede
@@ -2964,6 +2978,37 @@ public sealed class SurfaceMapTools
 
             if (vistos.Count == 0)
             {
+                // ¿ES LO QUE ME ACABAS DE SEÑALAR? Señalar sabe encontrar cosas que esta pantalla no
+                // tiene —un botón de la barra de tareas, otra ventana— y pulsar solo miraba aquí
+                // delante. El resultado: «¿ves este icono? ábrelo» contestaba «no veo nada que se
+                // llame «Copilot anclado» en «web://copilot.microsoft.com»», que es cierto y no
+                // sirve: sí lo veía, hacía dos segundos, y hasta lo iluminó (2026-08-23).
+                //
+                // Se actúa sobre el ELEMENTO guardado, no sobre su posición: pulsar por coordenadas
+                // acierta hasta que algo se mueve, y entonces falla en silencio diciendo que sí.
+                if (_ultimoSenalado is { } ult
+                    && Navigation.LoQueSenalas.SigueValiendo(ult.Cuando, DateTime.UtcNow)
+                    && Navigation.LoQueSenalas.SeRefiereA(salida, ult.Nombre))
+                {
+                    var pasoSenalado = new PlanStep
+                    {
+                        StepOrder = 1,
+                        ActionType = accionPedida.Length > 0 ? accionPedida : "click",
+                        Selector = ult.Selector,
+                        Label = ult.Nombre,
+                    };
+                    if (_uia.EjecutarSobre(ult.Que, pasoSenalado, out string errSenalado))
+                    {
+                        LogBus.Log("mapa-mcp", $"«{salida}» no estaba en esta pantalla: se pulsa lo que me señalaste");
+                        EsperarPantallaLista(1200);
+                        string tras = _where()?.Id ?? "";
+                        return tras.Length > 0 && tras != actual.Id
+                            ? $"pulsé «{salida}», lo que me señalaste, y ahora estás en «{tras}»."
+                            : $"pulsé «{salida}», lo que me señalaste. Seguimos en «{actual.Id}».";
+                    }
+                    LogBus.Log("mapa-mcp", $"lo señalado «{salida}» ya no se deja pulsar: {errSenalado}");
+                }
+
                 // Se dice QUÉ HAY, no solo que no está lo pedido. Quien pregunta por voz dice «la
                 // barra de búsqueda» y el elemento se llama «Buscar en Notas»: con la lista delante
                 // el reintento es inmediato, y sin ella hay que adivinar a ciegas (2026-08-05).

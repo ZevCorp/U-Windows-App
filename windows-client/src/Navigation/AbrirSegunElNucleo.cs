@@ -91,41 +91,45 @@ public sealed class AbrirSegunElNucleo
     /// </remarks>
     public static IReadOnlyList<AppDelSistema> Emparejar(string pedido, IEnumerable<AppDelSistema> instaladas)
     {
-        string q = Aplanar(pedido);
+        string q = Nombres.Aplanar(pedido);
         if (q.Length == 0) return Array.Empty<AppDelSistema>();
 
         var todas = instaladas.ToList();
 
-        var exactas = todas.Where(a => Aplanar(a.Nombre) == q).ToList();
+        var exactas = todas.Where(a => Nombres.Aplanar(a.Nombre) == q).ToList();
         if (exactas.Count > 0) return exactas;
 
-        var empiezan = todas.Where(a => Aplanar(a.Nombre).StartsWith(q, StringComparison.Ordinal)).ToList();
+        var empiezan = todas.Where(a => Nombres.Aplanar(a.Nombre).StartsWith(q, StringComparison.Ordinal)).ToList();
         if (empiezan.Count > 0) return empiezan;
 
-        return todas.Where(a => Aplanar(a.Nombre).Contains(q, StringComparison.Ordinal)).ToList();
+        return todas.Where(a => Nombres.Aplanar(a.Nombre).Contains(q, StringComparison.Ordinal)).ToList();
     }
 
-    /// <summary>Sin mayúsculas, sin tildes y sin espacios de más: «Microsoft To Do» y «microsoft
-    /// to  do» son la misma app, y quien habla no escribe los acentos.</summary>
-    private static string Aplanar(string s)
-    {
-        s = (s ?? "").Trim().ToLowerInvariant();
-        var sb = new System.Text.StringBuilder(s.Length);
-        bool espacio = false;
-        foreach (char c in s.Normalize(System.Text.NormalizationForm.FormD))
-        {
-            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
-                == System.Globalization.UnicodeCategory.NonSpacingMark) continue;
-            if (char.IsWhiteSpace(c)) { if (!espacio && sb.Length > 0) { sb.Append(' '); espacio = true; } continue; }
-            sb.Append(c); espacio = false;
-        }
-        return sb.ToString().TrimEnd();
-    }
 
     public string Abrir(string pedido)
     {
         string que = (pedido ?? "").Trim();
         if (que.Length == 0) return "falta decir QUÉ abrir.";
+
+        // LA APP INSTALADA GANA A LA PESTAÑA ABIERTA. Se preguntaba primero por la pestaña, así que
+        // cualquier app cuyo nombre se pareciera a una web abierta era INALCANZABLE: pedir «copilot»
+        // con copilot.microsoft.com abierto llevaba a la web, y el usuario tuvo que decirlo con
+        // todas las letras — «no quiero la aplicación web Copilot, quiero la instalada» (2026-08-23).
+        // Antes había pasado igual con Claude, y no se reprodujo porque la pestaña no estaba abierta.
+        //
+        // Se exige coincidencia EXACTA para dar esta preferencia. Con «contiene» bastaría que
+        // existiera cualquier app con esa palabra dentro para secuestrar «abre github», y pedir una
+        // web es igual de legítimo que pedir un programa: lo que decide es que exista una app que
+        // se llame ASÍ, no que se le parezca.
+        var instalada = Emparejar(que, _instaladas())
+            .Where(a => Nombres.Aplanar(a.Nombre) == Nombres.Aplanar(que)).ToList();
+        if (instalada.Count == 1 && _lanzar(instalada[0].ComoSeLanza))
+        {
+            string llegue = EsperarACambiar(_donde() ?? "");
+            return llegue.Length > 0
+                ? $"«{instalada[0].Nombre}» está delante. Estás en «{llegue}»."
+                : $"abrí «{instalada[0].Nombre}», pero todavía no sé identificar la pantalla.";
+        }
 
         var plan = ComoMePongoDelante.De(ComoSeLlamaEsoDeVerdad(que));
         if (plan.Via == ComoMePongoDelante.Via.NoSe)
