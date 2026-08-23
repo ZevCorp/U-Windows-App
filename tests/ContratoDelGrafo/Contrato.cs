@@ -87,6 +87,11 @@ internal static class Contrato
         Prueba("23. el alto se avisa UNA vez por tarea, aunque se pida diez", FrenoAvisaUnaSolaVez);
         Prueba("24. dormir se corta en cuanto se pide el alto, no al agotar el plazo", FrenoCortaElSueno);
         Prueba("25. al terminar, Escape vuelve a ser una tecla cualquiera", FrenoSueltaAlTerminar);
+        // Y estas tres son la diferencia entre pedir y garantizar: que ninguna acción llegue a la
+        // máquina con el freno echado NO puede depender de que cada bucle se acuerde de mirarlo.
+        Prueba("26. con el freno echado, NADA llega al teclado ni al ratón", FrenoCierraLaPuertaDeEntrada);
+        Prueba("27. con el freno echado, la puerta de la pantalla se niega y dice por qué", FrenoCierraLaPuertaDeUia);
+        Prueba("28. al soltarse, Ü avisa de que devuelve el control", FrenoDevuelveElControlHablando);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -698,6 +703,74 @@ internal static class Contrato
         Debe(!Freno.Pidieron,
             "acabada la tarea, Escape vuelve a ser una tecla cualquiera: quien no está haciendo nada "
             + "no se entera de nada");
+    }
+
+    // ── El freno, EN LA PUERTA ───────────────────────────────────────────────
+    //
+    // Las promesas 21-25 describen cuándo un alto cuenta. Estas tres describen algo distinto y más
+    // fuerte: que con el alto echado NO SE PUEDE actuar, aunque el código que actúa no sepa que el
+    // freno existe.
+    //
+    // El porqué lo dijo el usuario mirando el diseño anterior (2026-08-22): «me parece raro que
+    // tengamos que fijarnos por nosotros mismos que esc esté habilitado en todo». Tenía razón. Un
+    // freno que cada bucle debe acordarse de consultar protege los bucles que ya existen y ninguno
+    // de los que se escriban mañana. Puesto en la puerta, es imposible escribir código que lo
+    // ignore — que es la misma diferencia que hay entre un documento y un hook.
+
+    private static void FrenoCierraLaPuertaDeEntrada(SurfaceMap _)
+    {
+        Freno.Empezar("algo que mueve el ratón");
+        Freno.Pide("Escape");
+
+        Debe(!InputExecutor.Key("tab"), "una tecla NO se manda con el freno echado");
+        Debe(!InputExecutor.Tap(10, 10), "un clic NO se manda con el freno echado");
+        Debe(!InputExecutor.TypeText("hola"), "escribir NO se manda con el freno echado");
+        Debe(!InputExecutor.Scroll(true), "desplazar NO se manda con el freno echado");
+
+        Freno.Termine();
+        // Se sonda con texto VACÍO: pasa por la misma guarda y no teclea nada. El contrato corre
+        // sobre la máquina de verdad, y una prueba que escribe de verdad acaba escribiendo en la
+        // ventana de alguien.
+        Debe(InputExecutor.TypeText(""),
+            "y al soltarse vuelve a funcionar: el freno no puede dejar la máquina muerta");
+    }
+
+    private static void FrenoCierraLaPuertaDeUia(SurfaceMap _)
+    {
+        Freno.Empezar("pulsar algo en pantalla");
+        Freno.Pide("Escape");
+
+        var puerta = new U.Graph.Surfaces.UiaSurface();
+        bool hizo = puerta.Execute(
+            new U.Graph.PlanStep { StepOrder = 1, ActionType = "click", Selector = "uia:name=loQueSea", Label = "loQueSea" },
+            out string error);
+
+        Freno.Termine();
+
+        Debe(!hizo, "la puerta de la pantalla se NIEGA a actuar con el freno echado");
+        Debe(error.Contains("paraste", StringComparison.OrdinalIgnoreCase)
+             || error.Contains("Escape", StringComparison.OrdinalIgnoreCase)
+             || error.Contains("freno", StringComparison.OrdinalIgnoreCase),
+            $"y DICE que fue el freno, no un fallo cualquiera (dijo: «{error}»). Un «no se encontró» "
+            + "haría que quien lo lea busque el elemento en vez de entender que lo paraste tú");
+    }
+
+    private static void FrenoDevuelveElControlHablando(SurfaceMap _)
+    {
+        string dicho = "";
+        void Oir(string t) => dicho = t;
+        Freno.Dice += Oir;
+        try
+        {
+            Freno.Empezar("algo largo");
+            Freno.Pide("Escape");
+            Debe(dicho.Length > 0,
+                "al pararse, Ü DICE algo: pararse en silencio se vive igual que colgarse, y la "
+                + "diferencia entre las dos es justo lo que hay que comunicar");
+            Debe(dicho.Contains("control", StringComparison.OrdinalIgnoreCase),
+                $"y lo que dice es que devuelve el control (dijo: «{dicho}»)");
+        }
+        finally { Freno.Dice -= Oir; Freno.Termine(); }
     }
 
     private static void Prueba(string nombre, Action<SurfaceMap> cuerpo)

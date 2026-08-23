@@ -428,6 +428,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // tecla de «déjame en paz» de todas las apps. Actions.Freno solo la mira pasar y la deja
         // seguir su camino. Ver Actions/Freno.cs.
         Actions.Freno.Escuchar();
+        // Y SE DICE. Pararse en silencio se vive igual que colgarse, y son cosas opuestas: en una te
+        // obedeció y en la otra te dejó tirado. La frase vive en Freno.DevuelvoElControl para que la
+        // carita y la voz digan lo MISMO (2026-08-22, pedido por el usuario).
+        Actions.Freno.Dice += frase => Dispatcher.BeginInvoke(() =>
+        {
+            try { SetStatus(frase); } catch { }
+        });
         // La primera vez, que se presente ella. No hace nada en los arranques siguientes.
         OfrecerElPrimerEncuentro();
         // La superficie actual viaja en cada turno (scoping de workflows) y las llamadas
