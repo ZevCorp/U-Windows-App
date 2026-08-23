@@ -102,6 +102,7 @@ internal static class Contrato
         Prueba("31. sin saber dónde estamos se dice, no se inventa", SituarseNoAdivina);
         Prueba("32. señalar distingue «puedo pulsarlo» de «lo recuerdo» y de «no lo conozco»", SenalarDistingueLasTres);
         Prueba("33. sin nada con nombre bajo el cursor se pide mover, no se inventa", SenalarNoAdivina);
+        Prueba("34. lo señalado es lo más pequeño que contiene el punto, esté arriba o abajo", SenalarEligeLoMasPequeno);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -879,6 +880,30 @@ internal static class Contrato
         string desconocido = senalar.Con(new LoQueSenalas.Senalado("Jamás visto", "Button", true));
         Debe(desconocido.Contains("no lo tengo en el mapa"),
             $"y lo que no se conoce se dice desconocido (dijo: «{desconocido}»)");
+    }
+
+    private static void SenalarEligeLoMasPequeno(SurfaceMap _)
+    {
+        // El caso real de la barra de tareas de Windows 11, medido el 2026-08-22: bajo el cursor
+        // hay un Pane SIN NOMBRE cuyo padre tampoco lo tiene, y el nombre está en los DESCENDIENTES.
+        var punto = new System.Windows.Point(660, 1055);
+        var candidatos = new[]
+        {
+            new LoQueSenalas.Candidato("", "Pane", new System.Windows.Rect(0, 1040, 1920, 40)),
+            new LoQueSenalas.Candidato("Aplicaciones en ejecución", "Pane", new System.Windows.Rect(400, 1040, 660, 40)),
+            new LoQueSenalas.Candidato("Vista de tareas", "Button", new System.Windows.Rect(640, 1040, 82, 40)),
+            new LoQueSenalas.Candidato("Otra cosa lejos", "Button", new System.Windows.Rect(0, 0, 50, 50)),
+        };
+
+        var elegido = LoQueSenalas.Elegir(candidatos, punto);
+        Debe(elegido?.Nombre == "Vista de tareas",
+            $"se elige el MÁS PEQUEÑO que contiene el punto (eligió: «{elegido?.Nombre}»). "
+            + "Bajo un mismo píxel hay siempre varias cosas y todas lo contienen; la que una persona diría "
+            + "que señala es la más específica, nunca el panel entero");
+
+        Debe(LoQueSenalas.Elegir(candidatos, new System.Windows.Point(1900, 20)) == null,
+            "y donde no hay nada con nombre no se devuelve lo más cercano: se devuelve nada. "
+            + "Acercarse no es acertar");
     }
 
     private static void SenalarNoAdivina(SurfaceMap _)

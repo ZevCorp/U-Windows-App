@@ -3636,6 +3636,12 @@ public sealed class HighlightOverlay : Window
         Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0xA9, 0x6B, 0xF6)), // violeta del inspector
         StrokeThickness = 3,
         Fill = new SolidColorBrush(Color.FromArgb(0x28, 0xA9, 0x6B, 0xF6)),
+        // Esquinas redondeadas: esto dejó de ser una herramienta de inspección el día que se pintó
+        // para todo el mundo, y una caja de ángulos vivos encima de la pantalla de alguien se lee
+        // como un error del sistema. 6 px es lo que usa el propio Windows 11 en sus controles
+        // (2026-08-22, pedido por el usuario).
+        RadiusX = 6,
+        RadiusY = 6,
         Visibility = Visibility.Collapsed,
     };
 
@@ -3705,6 +3711,10 @@ public sealed class HighlightOverlay : Window
         Stroke = new SolidColorBrush(Color.FromArgb(0xCC, 0xA9, 0x6B, 0xF6)),
         StrokeThickness = 2,
         Fill = new SolidColorBrush(Color.FromArgb(0x1C, 0xA9, 0x6B, 0xF6)),
+        // Redondeadas igual que la primera: si al señalar varias unas salen con esquinas y otras no,
+        // parecen dos cosas distintas.
+        RadiusX = 6,
+        RadiusY = 6,
     };
 
     public void HideRect()
