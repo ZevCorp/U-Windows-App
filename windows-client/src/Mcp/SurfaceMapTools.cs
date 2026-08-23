@@ -560,6 +560,44 @@ public sealed class SurfaceMapTools
                 }
             }
 
+            // Y SI ARRIBA NO HAY NOMBRE, SE MIRA ABAJO. La barra de tareas de Windows 11 es XAML:
+            // `FromPoint` cae en un Pane sin nombre cuyo padre tampoco lo tiene, así que subir por
+            // el árbol no encuentra nada y señalar contestaba «no hay nada con nombre» sobre una
+            // barra llena de botones (2026-08-22, reproducido). El nombre estaba en los
+            // DESCENDIENTES: ese Pane tenía 29, y dos contenían el punto —«Aplicaciones en
+            // ejecución» (26.400 px²) y «Vista de tareas» (3.300 px²)—. El pequeño era el bueno.
+            //
+            // Quién gana lo decide Navigation/LoQueSenalas.Elegir, que es donde se puede juzgar sin
+            // pantalla: el más pequeño con nombre que contiene el punto.
+            if (nombre.Length == 0)
+            {
+                var candidatos = new List<Navigation.LoQueSenalas.Candidato>();
+                try
+                {
+                    foreach (System.Windows.Automation.AutomationElement d in el.FindAll(
+                        System.Windows.Automation.TreeScope.Descendants,
+                        System.Windows.Automation.Condition.TrueCondition))
+                    {
+                        try
+                        {
+                            candidatos.Add(new Navigation.LoQueSenalas.Candidato(
+                                (d.Current.Name ?? "").Trim(),
+                                d.Current.ControlType.ProgrammaticName.Replace("ControlType.", ""),
+                                d.Current.BoundingRectangle));
+                        }
+                        catch { }
+                    }
+                }
+                catch (Exception e) { LogBus.Log("mapa-mcp", $"señalar: no pude mirar dentro: {e.Message}"); }
+
+                var elegido = Navigation.LoQueSenalas.Elegir(candidatos, punto);
+                if (elegido is { } c)
+                {
+                    nombre = c.Nombre; tipo = c.Tipo; caja = c.Caja;
+                    LogBus.Log("mapa-mcp", $"señalar: el nombre estaba dentro, no arriba: «{nombre}»");
+                }
+            }
+
             if (nombre.Length == 0)
                 return "bajo el cursor no hay nada con nombre, ni en él ni en lo que lo contiene. "
                      + "Muévelo un poco y vuelve a preguntar.";

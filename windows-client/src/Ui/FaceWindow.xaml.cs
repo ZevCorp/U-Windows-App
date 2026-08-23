@@ -37,6 +37,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>El mapa vivo publicado en Neo4j. Ver <see cref="Navigation.MapaVivo"/>.</summary>
     private Navigation.MapaVivo? _mapaVivo;
 
+    /// <summary>El recuadro que se pinta sobre lo señalado. Nace al primer señalamiento y no antes:
+    /// quien nunca señala no paga una ventana de más.</summary>
+    private HighlightOverlay? _iluminacion;
+
     /// <summary>La ventanita por la que se le puede pedir al núcleo que nos lleve a un sitio.</summary>
     private Navigation.ServidorDelNucleo? _servidorNucleo;
 
@@ -156,6 +160,30 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // es lo que convierte «lo veo» en algo comprobable: si se planta junto a otra cosa, se ve al
         // instante. Es la misma idea que el recuadro, dicha con el cuerpo (2026-08-05).
         Senalador.Senala += (caja, _) => Dispatcher.BeginInvoke(() => IrJuntoA(caja));
+
+        // ILUMINAR ES PARA QUIEN MIRA, NO PARA QUIEN PROGRAMA. El recuadro se pintaba solo desde
+        // GraphExplorerWindow —la ventana del grafo, una herramienta de desarrollo— así que señalar
+        // solo se veía si esa ventana estaba abierta. Para todo el mundo demás, Ü decía «lo estoy
+        // iluminando» y no se iluminaba nada: prometer algo que no pasa es peor que no prometerlo
+        // (2026-08-22, observado por el usuario).
+        //
+        // La carita ya se movía al lado de la caja; lo que faltaba era la caja. Va aquí, que es la
+        // ventana que SIEMPRE está.
+        Senalador.SenalaVarias += cajas => Dispatcher.BeginInvoke(() =>
+        {
+            try
+            {
+                // Y SE MUESTRA. Sin este Show() la ventana existe, recibe las cajas y no la ve
+                // nadie: exactamente el mismo síntoma que veníamos a arreglar, con otra causa. Lo
+                // enseñó una captura de pantalla —la carita se movía al lado del icono y no había
+                // recuadro— que es la única forma de haberlo cazado (2026-08-22).
+                if (_iluminacion == null) { _iluminacion = new HighlightOverlay(); _iluminacion.Show(); }
+                _iluminacion.ShowRects(cajas);
+            }
+            catch { }
+        });
+        Senalador.Suelta += () => Dispatcher.BeginInvoke(() => { try { _iluminacion?.HideRect(); } catch { } });
+        Closed += (_, __) => { try { _iluminacion?.Close(); } catch { } };
 
         // VARIAS COSAS SE SEÑALAN RECORRIÉNDOLAS. Plantarse junto a una de las seis y quedarse ahí
         // era el gesto de señalar UNA, heredado sin más al señalar varias: los recuadros decían seis
@@ -442,6 +470,19 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // tecla de «déjame en paz» de todas las apps. Actions.Freno solo la mira pasar y la deja
         // seguir su camino. Ver Actions/Freno.cs.
         Actions.Freno.Escuchar();
+        // ESCAPE TAMBIÉN APAGA LO ILUMINADO, corra algo o no. Un recuadro encendido sobre la
+        // pantalla de alguien es algo de lo que hay que poder salir, y ahí no hay nada que «parar»:
+        // por eso cuelga de la tecla (SePulso) y no del alto (Pidio), que a propósito se desentiende
+        // cuando no hay tarea (promesa 21).
+        Actions.Freno.SePulso += () => Dispatcher.BeginInvoke(() =>
+        {
+            // Se anota SOLO si de verdad había algo encendido: Escape se pulsa cien veces al día
+            // para cerrar diálogos ajenos, y un log por cada una sería ruido que se aprende a
+            // ignorar — y el log que se ignora no sirve el día que hace falta.
+            if (Senalador.Actual == null) return;
+            LogBus.Log("señalar", $"Escape apaga lo iluminado («{Senalador.Actual?.Que}»)");
+            try { Senalador.Soltar(); } catch { }
+        });
         // Y SE DICE. Pararse en silencio se vive igual que colgarse, y son cosas opuestas: en una te
         // obedeció y en la otra te dejó tirado. La frase vive en Freno.DevuelvoElControl para que la
         // carita y la voz digan lo MISMO (2026-08-22, pedido por el usuario).

@@ -66,6 +66,21 @@ public static class Freno
     /// <summary>La frase, en un solo sitio: la dicen la carita y la voz, y tienen que decir lo mismo.</summary>
     public const string DevuelvoElControl = "Listo, tienes el control de vuelta.";
 
+    /// <summary>
+    /// SE PULSÓ ESCAPE. Siempre, haya algo corriendo o no.
+    /// </summary>
+    /// <remarks>
+    /// No es lo mismo que <see cref="Pidio"/> y la diferencia importa. «Alto pedido» solo tiene
+    /// sentido si hay algo que parar —la promesa 21 dice que un Escape en vacío NO deja el freno
+    /// armado, y eso protege el trabajo siguiente—. Pero hay cosas que Escape tiene que apagar
+    /// aunque no se esté haciendo nada: lo iluminado, por ejemplo. Un recuadro encendido sobre la
+    /// pantalla de alguien es algo de lo que hay que poder salir, y no hay nada «corriendo» que
+    /// parar (2026-08-22, pedido por el usuario).
+    ///
+    /// Cuelga de la MISMA tecla y del MISMO gancho: no se instala un segundo espía del teclado.
+    /// </remarks>
+    public static event Action? SePulso;
+
     /// <summary>Arranca una acción interrumpible. Desarma el freno: lo de antes ya no cuenta.</summary>
     public static void Empezar(string tarea)
     {
@@ -136,7 +151,11 @@ public static class Freno
         {
             if (codigo >= 0 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)
                 && Marshal.ReadInt32(lParam) == VK_ESCAPE)
+            {
+                // El aviso de la TECLA va siempre; el del ALTO solo si hay algo que parar.
+                try { SePulso?.Invoke(); } catch { }
                 Pide("Escape");
+            }
         }
         catch { }
         // SIEMPRE se deja pasar: aquí se mira la tecla, no se secuestra.

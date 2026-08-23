@@ -37,6 +37,35 @@ public sealed class LoQueSenalas
     /// <summary>Lo que hay bajo el cursor, ya resuelto por quien sabe leer la pantalla.</summary>
     public readonly record struct Senalado(string Nombre, string Tipo, bool SePudoIluminar);
 
+    /// <summary>Un candidato a «lo que estás señalando»: algo con nombre y con caja.</summary>
+    public readonly record struct Candidato(string Nombre, string Tipo, System.Windows.Rect Caja);
+
+    /// <summary>
+    /// CUÁL DE TODOS ES EL QUE SEÑALAS: el más pequeño que contiene el punto.
+    /// </summary>
+    /// <remarks>
+    /// Bajo un mismo píxel hay siempre varias cosas —la ventana, el panel, la fila, el botón, el
+    /// texto del botón— y todas «contienen» el cursor. La que una persona diría que está señalando
+    /// es SIEMPRE la más pequeña con nombre: es la más específica.
+    ///
+    /// Se mira ARRIBA Y ABAJO, y eso es el arreglo. Antes solo se subía por el árbol buscando un
+    /// nombre, y en la barra de tareas de Windows 11 eso no encuentra nada: `FromPoint` cae en un
+    /// `Pane` sin nombre cuyo padre tampoco lo tiene, porque la barra es XAML. Medido el 2026-08-22:
+    /// ese Pane tiene 29 descendientes y dos contienen el punto —«Aplicaciones en ejecución» (Pane,
+    /// 26.400 px²) y «Vista de tareas» (Button, 3.300 px²)—. El pequeño es el que el usuario
+    /// señalaba, y estaba justo debajo.
+    ///
+    /// El empate se rompe por área y no por profundidad en el árbol: dos elementos anidados pueden
+    /// tener la misma caja —un botón y su texto— y entonces da igual cuál se coja; lo que nunca da
+    /// igual es coger el panel entero.
+    /// </remarks>
+    public static Candidato? Elegir(IEnumerable<Candidato> candidatos, System.Windows.Point punto)
+        => candidatos
+            .Where(c => c.Nombre.Trim().Length > 0 && !c.Caja.IsEmpty && c.Caja.Contains(punto))
+            .OrderBy(c => c.Caja.Width * c.Caja.Height)
+            .Select(c => (Candidato?)c)
+            .FirstOrDefault();
+
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
 
