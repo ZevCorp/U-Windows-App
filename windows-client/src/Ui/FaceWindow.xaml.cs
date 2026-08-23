@@ -382,6 +382,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
                 superficie => Uia.AppAligner.PonerDelante(superficie)).Hasta(destino);
 
+            // PULSAR, sobre el núcleo. Es la versión mínima de ir —ir no es más que preguntar el
+            // siguiente paso y pulsarlo, en bucle— así que va antes y lo demás se apoya en esto.
+            // Resolver el selector y escalar al doble clic siguen siendo de UIA y no se tocan: aquí
+            // entra «pulsa esto» y sale «esto pasó».
+            var pulsar = new Navigation.PulsarSegunElNucleo(
+                _mapaVivo.Nucleo,
+                () => _locator?.DondeEstoy()?.Id ?? "",
+                (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false);
+            if (mcp.Map != null) mcp.Map.PulsarPorElNucleo = (sel, etq) => pulsar.Pulsa(sel, etq).Cuenta;
+
             _servidorNucleo = new Navigation.ServidorDelNucleo(
                 _mapaVivo.Nucleo,
                 () => _locator?.DondeEstoy()?.Id ?? "",
