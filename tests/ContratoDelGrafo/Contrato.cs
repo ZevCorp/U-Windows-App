@@ -100,6 +100,8 @@ internal static class Contrato
         Prueba("29. situarse separa lo que se alcanza AHORA de lo que solo se recuerda", SituarseSeparaVivoDeMemoria);
         Prueba("30. de un sitio sin mirar se dice que no se ha mirado, no que esté vacío", SituarseNoConfundeVacioConSinMirar);
         Prueba("31. sin saber dónde estamos se dice, no se inventa", SituarseNoAdivina);
+        Prueba("32. señalar distingue «puedo pulsarlo» de «lo recuerdo» y de «no lo conozco»", SenalarDistingueLasTres);
+        Prueba("33. sin nada con nombre bajo el cursor se pide mover, no se inventa", SenalarNoAdivina);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -840,6 +842,51 @@ internal static class Contrato
         Debe(situarse.Ahora() == AquiSegunElNucleo.NiIdea,
             "sin ubicación no se contesta con la última conocida ni con una aproximación: se dice "
             + "que no se sabe. Una ubicación inventada envenena todo lo que se apoye en ella");
+    }
+
+    // ── SEÑALAR ──────────────────────────────────────────────────────────────
+    //
+    // La capacidad más usada de todas (168 veces en 26 días) y la que nadie diseñó como tal.
+    //
+    // Lo que se juzga aquí NO es leer la pantalla —eso es UIA y necesita un cursor— sino lo único
+    // que puede equivocarse en silencio: qué se contesta sobre lo señalado. Las tres respuestas
+    // posibles llevan a conversaciones distintas, y fundirlas en «no puedo» haría que quien
+    // pregunta se rinda en los dos casos en los que sí había salida.
+
+    private static void SenalarDistingueLasTres(SurfaceMap _)
+    {
+        const string donde = "uia://falsa.exe/pantalla";
+        var g = new Nucleo.Grafo();
+        g.Observar(donde, new[]
+        {
+            new Nucleo.Elemento("uia:name=Guardar", "Guardar", "Button"),
+            new Nucleo.Elemento("uia:name=Cerrar", "Cerrar", "Button"),
+        });
+        // Ahora solo se ve «Guardar»: «Cerrar» pasa a ser recuerdo.
+        g.Observar(donde, new[] { new Nucleo.Elemento("uia:name=Guardar", "Guardar", "Button") });
+
+        var senalar = new LoQueSenalas(g, () => donde);
+
+        string vivo = senalar.Con(new LoQueSenalas.Senalado("Guardar", "Button", true));
+        Debe(vivo.Contains("puedo pulsarlo"), $"lo que se ve AHORA se ofrece (dijo: «{vivo}»)");
+
+        string recordado = senalar.Con(new LoQueSenalas.Senalado("Cerrar", "Button", true));
+        Debe(recordado.Contains("recuerdo"),
+            $"lo que se recuerda pero no se ve se dice ASÍ, no como imposible (dijo: «{recordado}»)");
+        Debe(!recordado.Contains("puedo pulsarlo"),
+            "y sobre todo NO se ofrece como pulsable: ofrecerlo manda a alguien contra una pared");
+
+        string desconocido = senalar.Con(new LoQueSenalas.Senalado("Jamás visto", "Button", true));
+        Debe(desconocido.Contains("no lo tengo en el mapa"),
+            $"y lo que no se conoce se dice desconocido (dijo: «{desconocido}»)");
+    }
+
+    private static void SenalarNoAdivina(SurfaceMap _)
+    {
+        var senalar = new LoQueSenalas(new Nucleo.Grafo(), () => "uia://falsa.exe/x");
+        Debe(senalar.Con(null) == LoQueSenalas.NadaDebajo,
+            "sin nada con nombre bajo el cursor se pide mover el cursor. Contestar con lo último "
+            + "señalado sería peor que no contestar: quien pregunta creería que acertó");
     }
 
     private static void Prueba(string nombre, Action<SurfaceMap> cuerpo)

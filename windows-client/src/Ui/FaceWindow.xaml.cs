@@ -293,6 +293,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             var aqui = new Navigation.AquiSegunElNucleo(_mapaVivo.Nucleo, () => _locator?.DondeEstoy()?.Id ?? "");
             if (mcp.Map != null) mcp.Map.Situarse = aqui.Ahora;
 
+            // SEÑALAR, igual: la lectura de la pantalla se queda en SurfaceMapTools —es UIA— y lo
+            // que se CONTESTA sobre lo señalado lo compone el núcleo. Es la capacidad más usada de
+            // todas: 168 veces en 26 días.
+            var senalar = new Navigation.LoQueSenalas(
+                _mapaVivo.Nucleo, () => _locator?.DondeEstoy()?.Id ?? "");
+            if (mcp.Map != null) mcp.Map.Senalar = visto => senalar.Con(visto);
+
             // LA VENTANITA DEL NÚCLEO, para que el visor pueda pedirle que nos lleve a un sitio sin
             // que nadie toque el núcleo ni el explorador viejo.
             // ESCRIBIR Y ELEGIR, con las MISMAS manos que ya pulsan. No hay un segundo camino de
