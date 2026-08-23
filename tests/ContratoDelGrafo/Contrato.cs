@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using U.WindowsClient.Actions;
 using U.WindowsClient.Navigation;
 
 namespace ContratoDelGrafo;
@@ -74,6 +75,18 @@ internal static class Contrato
         Prueba("18. una app sin raíz observada no sitúa nada, y lo dice", SinRaizNoSeSitua);
         Prueba("19. el archivo del bronce no contiene plata", ElDiscoNoMezcla);
         Prueba("20. una sección alcanzada solo por el mobiliario sigue teniendo hijos", ElCromoNoCortaLaRama);
+
+        // ── EL FRENO ─────────────────────────────────────────────────────────
+        // Lo que promete Actions.Freno: que el ordenador siga siendo de quien está delante.
+        // Aquí se juzga la LÓGICA, que es lo determinista. Que el gancho de teclado esté puesto y
+        // que Escape se vea de verdad no se puede probar sin un teclado, y meterlo aquí volvería
+        // caprichoso a un juez que ahora es fiable — se comprueba a mano y se declara en el PR.
+        Console.WriteLine();
+        Prueba("21. sin nada en marcha, pedir el alto no deja el freno armado", FrenoOciosoNoSeArma);
+        Prueba("22. empezar desarma lo pedido antes: un Escape viejo no aborta lo siguiente", FrenoSeArmaAlEmpezar);
+        Prueba("23. el alto se avisa UNA vez por tarea, aunque se pida diez", FrenoAvisaUnaSolaVez);
+        Prueba("24. dormir se corta en cuanto se pide el alto, no al agotar el plazo", FrenoCortaElSueno);
+        Prueba("25. al terminar, Escape vuelve a ser una tecla cualquiera", FrenoSueltaAlTerminar);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -610,6 +623,82 @@ internal static class Contrato
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
+
+    // ── El freno ─────────────────────────────────────────────────────────────
+    //
+    // Nació de un incidente: una recolocación del escritorio se quedó en bucle moviendo el cursor
+    // entre dos casillas, y no había forma de intervenir salvo matar la app (2026-08-16). El bucle
+    // se arregló; la ausencia de freno no era un fallo, era que nunca se había puesto.
+    //
+    // Estas cinco promesas no hablan de teclas: hablan de CUÁNDO un alto cuenta y cuándo no. Es la
+    // parte que se puede romper en silencio — la tecla, si deja de verse, se nota al primer intento.
+
+    private static void FrenoOciosoNoSeArma(SurfaceMap _)
+    {
+        Freno.Termine();                       // nada en marcha
+        Freno.Pide("prueba");
+        Debe(!Freno.Pidieron,
+            "un alto pedido sin nada en marcha NO deja el freno armado; si lo dejara, el siguiente "
+            + "trabajo nacería abortado sin que nadie hubiera pedido nada");
+    }
+
+    private static void FrenoSeArmaAlEmpezar(SurfaceMap _)
+    {
+        Freno.Empezar("lo primero");
+        Freno.Pide("el usuario se arrepintió");
+        Debe(Freno.Pidieron, "con algo en marcha, pedir el alto SÍ arma el freno");
+
+        Freno.Termine();
+        Freno.Empezar("lo siguiente");
+        Debe(!Freno.Pidieron,
+            "empezar una tarea nueva desarma lo pedido antes: un Escape de hace diez minutos, para "
+            + "otra cosa, no puede abortar lo que se pida ahora");
+        Freno.Termine();
+    }
+
+    private static void FrenoAvisaUnaSolaVez(SurfaceMap _)
+    {
+        int avisos = 0;
+        void Contar() => Interlocked.Increment(ref avisos);
+        Freno.Pidio += Contar;
+        try
+        {
+            Freno.Empezar("algo largo");
+            for (int i = 0; i < 10; i++) Freno.Pide($"insistencia {i}");
+            Debe(avisos == 1,
+                $"se avisa UNA vez por tarea, no una por pulsación (llegaron {avisos}); quien escucha "
+                + "esto suelta el ratón y habla, y hacerlo diez veces se ve como un tartamudeo");
+        }
+        finally { Freno.Pidio -= Contar; Freno.Termine(); }
+    }
+
+    private static void FrenoCortaElSueno(SurfaceMap _)
+    {
+        Freno.Empezar("una pausa larga");
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        var pide = new Thread(() => { Thread.Sleep(120); Freno.Pide("Escape"); });
+        pide.Start();
+
+        bool hayQueParar = Freno.Duerme(3000);
+        reloj.Stop();
+        pide.Join();
+        Freno.Termine();
+
+        Debe(hayQueParar, "dormir devuelve true cuando se pidió el alto mientras dormía");
+        Debe(reloj.ElapsedMilliseconds < 1000,
+            $"y CORTA de verdad: tardó {reloj.ElapsedMilliseconds} ms de 3000. Dormir de un tirón es "
+            + "tiempo sin poder pararse, y son justo los ratos en que alguien decide que ya vio bastante");
+    }
+
+    private static void FrenoSueltaAlTerminar(SurfaceMap _)
+    {
+        Freno.Empezar("algo");
+        Freno.Termine();
+        Freno.Pide("Escape después de acabar");
+        Debe(!Freno.Pidieron,
+            "acabada la tarea, Escape vuelve a ser una tecla cualquiera: quien no está haciendo nada "
+            + "no se entera de nada");
+    }
 
     private static void Prueba(string nombre, Action<SurfaceMap> cuerpo)
     {
