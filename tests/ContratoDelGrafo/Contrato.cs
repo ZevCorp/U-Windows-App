@@ -93,6 +93,14 @@ internal static class Contrato
         Prueba("27. con el freno echado, la puerta de la pantalla se niega y dice por qué", FrenoCierraLaPuertaDeUia);
         Prueba("28. al soltarse, Ü avisa de que devuelve el control", FrenoDevuelveElControlHablando);
 
+        // ── LAS CINCO CAPACIDADES, SOBRE EL NÚCLEO ───────────────────────────
+        // Salen de contar 26 días de uso real, no de decidir qué es importante: señalar, situarse,
+        // abrir, pulsar e ir. Cada una se muda al núcleo en su propia rama y con sus promesas.
+        Console.WriteLine();
+        Prueba("29. situarse separa lo que se alcanza AHORA de lo que solo se recuerda", SituarseSeparaVivoDeMemoria);
+        Prueba("30. de un sitio sin mirar se dice que no se ha mirado, no que esté vacío", SituarseNoConfundeVacioConSinMirar);
+        Prueba("31. sin saber dónde estamos se dice, no se inventa", SituarseNoAdivina);
+
         Console.WriteLine();
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
@@ -771,6 +779,67 @@ internal static class Contrato
                 $"y lo que dice es que devuelve el control (dijo: «{dicho}»)");
         }
         finally { Freno.Dice -= Oir; Freno.Termine(); }
+    }
+
+    // ── SITUARSE ─────────────────────────────────────────────────────────────
+    //
+    // La segunda capacidad más pedida por una persona en 26 días (105 veces) y la que sostiene a las
+    // otras cuatro: señalar, pulsar e ir heredan lo que esta diga. Por eso se muda la primera.
+    //
+    // Las tres promesas son sobre lo mismo: NO PROMETER TERRENO QUE NO ESTÁ. Un mapa que cuenta
+    // cuarenta salidas cuando treinta y ocho son recuerdo no está informando, está apostando — y la
+    // apuesta la paga quien intente cruzarlas.
+
+    private static Nucleo.Grafo GrafoConUnaPantalla(out string donde)
+    {
+        donde = "uia://falsa.exe/pantalla";
+        var g = new Nucleo.Grafo();
+        g.Observar(donde, new[]
+        {
+            new Nucleo.Elemento("uia:name=Uno", "Uno", "Button"),
+            new Nucleo.Elemento("uia:name=Dos", "Dos", "Button"),
+        });
+        return g;
+    }
+
+    private static void SituarseSeparaVivoDeMemoria(SurfaceMap _)
+    {
+        var g = GrafoConUnaPantalla(out string donde);
+        var situarse = new AquiSegunElNucleo(g, () => donde);
+
+        string conLasDos = situarse.Ahora();
+        Debe(conLasDos.Contains("2 salida"),
+            $"con las dos a la vista se dicen dos (dijo: «{conLasDos}»)");
+
+        // Ahora solo se ve una: la otra pasa a ser recuerdo, y eso TIENE que notarse.
+        g.Observar(donde, new[] { new Nucleo.Elemento("uia:name=Uno", "Uno", "Button") });
+        string conUna = situarse.Ahora();
+
+        Debe(conUna.Contains("1 salida"),
+            $"cuando solo se ve una, se dice una (dijo: «{conUna}»)");
+        Debe(conUna.Contains("recuerdo"),
+            "y se DICE que hay más recordadas: callarlas haría creer que desaparecieron, y "
+            + "contarlas como vivas prometería un camino que ahora no está delante");
+    }
+
+    private static void SituarseNoConfundeVacioConSinMirar(SurfaceMap _)
+    {
+        var g = new Nucleo.Grafo();
+        var situarse = new AquiSegunElNucleo(g, () => "uia://falsa.exe/jamas-mirada");
+        string r = situarse.Ahora();
+
+        Debe(r.Contains("no he mirado", StringComparison.OrdinalIgnoreCase),
+            $"de un sitio sin mirar se dice que no se ha mirado (dijo: «{r}»). «Aquí no hay nada» "
+            + "invita a rendirse; «no he mirado» invita a mirar, y solo una de las dos es cierta");
+        Debe(!r.Contains("0 salida"), "y NO se cuenta como cero");
+    }
+
+    private static void SituarseNoAdivina(SurfaceMap _)
+    {
+        var situarse = new AquiSegunElNucleo(new Nucleo.Grafo(), () => "");
+        Debe(situarse.Ahora() == AquiSegunElNucleo.NiIdea,
+            "sin ubicación no se contesta con la última conocida ni con una aproximación: se dice "
+            + "que no se sabe. Una ubicación inventada envenena todo lo que se apoye en ella");
     }
 
     private static void Prueba(string nombre, Action<SurfaceMap> cuerpo)
