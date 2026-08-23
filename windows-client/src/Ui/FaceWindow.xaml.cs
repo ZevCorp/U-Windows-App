@@ -286,6 +286,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             };
             _mapaVivo.Arrancar();
 
+            // SITUARSE PASA AL NÚCLEO. Se enchufa aquí y no en el constructor de SurfaceMapTools
+            // porque el mapa vivo nace después; hasta entonces la herramienta contesta como
+            // siempre. Es la primera de las cinco capacidades que la voz usa de verdad
+            // (2026-08-22, medido sobre 26 días de log).
+            var aqui = new Navigation.AquiSegunElNucleo(_mapaVivo.Nucleo, () => _locator?.DondeEstoy()?.Id ?? "");
+            if (mcp.Map != null) mcp.Map.Situarse = aqui.Ahora;
+
             // LA VENTANITA DEL NÚCLEO, para que el visor pueda pedirle que nos lleve a un sitio sin
             // que nadie toque el núcleo ni el explorador viejo.
             // ESCRIBIR Y ELEGIR, con las MISMAS manos que ya pulsan. No hay un segundo camino de

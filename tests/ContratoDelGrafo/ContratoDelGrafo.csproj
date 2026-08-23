@@ -17,5 +17,9 @@
   <ItemGroup>
     <Reference Include="U"><HintPath>$(UBin)\U.dll</HintPath></Reference>
     <Reference Include="U.Graph"><HintPath>$(UBin)\U.Graph.dll</HintPath></Reference>
+    <!-- El núcleo. Entra el 2026-08-22, cuando las cinco capacidades que la voz usa de verdad
+         empiezan a mudarse aquí: sin esto el contrato solo podría juzgar el mapa viejo, que es
+         justo lo que estamos dejando atrás. -->
+    <Reference Include="Nucleo.Grafo"><HintPath>$(UBin)\Nucleo.Grafo.dll</HintPath></Reference>
   </ItemGroup>
 </Project>

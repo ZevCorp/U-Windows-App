@@ -1330,6 +1330,12 @@ public sealed class SurfaceMapTools
     /// </remarks>
     public Func<string, string>? PorElNucleo { get; set; }
 
+    /// <summary>
+    /// SITUARSE, contestado por el núcleo. Lo enchufa la ventana cuando el mapa vivo existe; si
+    /// vale null se contesta como siempre. Ver <see cref="Navigation.AquiSegunElNucleo"/>.
+    /// </summary>
+    public Func<string>? Situarse { get; set; }
+
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
@@ -1508,6 +1514,18 @@ public sealed class SurfaceMapTools
         // que responder para poder seguir.
         string interrupcion = DescribirInterrupcion();
         if (interrupcion.Length > 0) return interrupcion;
+
+        // SITUARSE LO CONTESTA EL NÚCLEO cuando está disponible. Es la primera de las cinco
+        // capacidades que la voz usa de verdad —105 veces en 26 días— y la primera que se muda:
+        // las otras cuatro se apoyan en ella, así que si esta no es fiable heredan la mentira.
+        //
+        // El núcleo separa gratis lo que se ve AHORA de lo que solo se recuerda, y esa distinción
+        // es la que aquí abajo no existía: se contaban juntas «salidas que conozco», y conocer no
+        // es poder. Ver Navigation/AquiSegunElNucleo.
+        //
+        // El camino viejo queda debajo y sin tocar: mientras haya pantallas que solo vivan en el
+        // mapa antiguo, quitarlo dejaría a Ü sin saber dónde está en ellas.
+        if (Situarse != null) return Situarse();
 
         // NO SE RELEE LA PANTALLA PARA CONTESTAR DÓNDE ESTÁS.
         //
