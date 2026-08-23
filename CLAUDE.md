@@ -369,6 +369,11 @@ Estos costaron caro. Aplicarlos ahorra rondas enteras.
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
+**graphify-out/ is NOT committed** (see .gitignore). It is generated output: after cloning, run
+`graphify update .` once and it appears. It was tracked until 2026-08-21 and the problem was not
+its size — it was that every commit touching code dragged a 138,000-line diff in graph.json, which
+makes a pull request impossible to review.
+
 Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
