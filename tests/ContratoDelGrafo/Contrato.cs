@@ -104,6 +104,9 @@ internal static class Contrato
         Prueba("33. sin nada con nombre bajo el cursor se pide mover, no se inventa", SenalarNoAdivina);
         Prueba("34. lo señalado es lo más pequeño que contiene el punto, esté arriba o abajo", SenalarEligeLoMasPequeno);
         Prueba("35. elegir no depende del orden en que lleguen los candidatos", ElegirNoDependeDelOrden);
+        Prueba("36. si ya estás delante, abrir no relanza nada", AbrirNoRelanzaLoQueYaEsta);
+        Prueba("37. abrir se comprueba por consecuencia: dice dónde quedamos", AbrirDiceDondeQuedamos);
+        Prueba("38. si no se pudo, se dice QUÉ hay ahora, no solo que no se pudo", AbrirDiceDondeEstamosAlFallar);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -854,6 +857,57 @@ internal static class Contrato
     // que puede equivocarse en silencio: qué se contesta sobre lo señalado. Las tres respuestas
     // posibles llevan a conversaciones distintas, y fundirlas en «no puedo» haría que quien
     // pregunta se rinda en los dos casos en los que sí había salida.
+
+    // ── ABRIR ────────────────────────────────────────────────────────────────
+    //
+    // 92 veces en 26 días. CÓMO se llega no se decide aquí —eso es del mapeador, que tiene sus
+    // propias promesas— sino las tres cosas que se hacían mal: relanzar lo que ya estaba, dar por
+    // hecho que lanzar es llegar, y fallar sin decir dónde te deja.
+
+    /// <summary>Un abridor de mentira: la ubicación CAMBIA cuando se logra traer algo al frente,
+    /// que es lo que pasa de verdad. Un arnés con una ubicación fija no podría distinguir «miró
+    /// después» de «contestó lo que ya sabía», que es justo lo que la promesa 37 juzga.</summary>
+    private static AbrirSegunElNucleo AbrirCon(string antes, string despues, bool loLogra, List<string> lanzados)
+    {
+        string donde = antes;
+        return new(() => donde,
+            plan => { lanzados.Add(plan.Que); if (loLogra) donde = despues; return loLogra; },
+            _ => "");
+    }
+
+    private static void AbrirNoRelanzaLoQueYaEsta(SurfaceMap _)
+    {
+        var lanzados = new List<string>();
+        string r = AbrirCon("uia://chrome.exe/inicio", "uia://chrome.exe/inicio", true, lanzados).Abrir("chrome");
+
+        Debe(lanzados.Count == 0,
+            "estando ya delante NO se toca nada: relanzar deja dos ventanas de lo mismo y pierde lo "
+            + "que hubiera a medias en la primera");
+        Debe(r.Contains("ya estás"), $"y se dice que ya estabas (dijo: «{r}»)");
+    }
+
+    private static void AbrirDiceDondeQuedamos(SurfaceMap _)
+    {
+        var lanzados = new List<string>();
+        string r = AbrirCon("uia://chrome.exe/inicio", "uia://notepad.exe/sin-titulo", true, lanzados).Abrir("notepad");
+
+        Debe(lanzados.Count == 1, "no estando delante, sí se abre");
+        Debe(r.Contains("uia://notepad.exe/sin-titulo"),
+            $"y se contesta con DÓNDE quedamos, mirando DESPUÉS (dijo: «{r}»). Lanzar es una "
+            + "petición, no una llegada: un «lo abrí» sin mirar es éxito declarado");
+        Debe(!r.Contains("chrome"), "y no con dónde estábamos antes");
+    }
+
+    private static void AbrirDiceDondeEstamosAlFallar(SurfaceMap _)
+    {
+        var lanzados = new List<string>();
+        string r = AbrirCon("uia://otracosa.exe/loquesea", "", false, lanzados).Abrir("notepad");
+
+        Debe(r.Contains("uia://otracosa.exe/loquesea"),
+            $"al fallar se dice QUÉ hay ahora (dijo: «{r}»). Un «no pude» pelado deja a quien lo lee "
+            + "sin saber si está donde creía — y el 2026-08-21 eso costó un mensaje que se "
+            + "desmentía a sí mismo: «no pude traerla al frente; ahora hay saplogon»");
+    }
 
     private static void SenalarDistingueLasTres(SurfaceMap _)
     {
