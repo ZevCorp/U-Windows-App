@@ -1,5 +1,44 @@
 # Ü Windows — guía para trabajar en este repo
 
+## EL CICLO — léelo antes que nada
+
+Esto es lo único que hay que recordar. Todo lo demás de este archivo explica el porqué.
+
+```
+1.  git switch main && git pull            ← SIEMPRE desde main fresco, nunca desde tu rama anterior
+2.  git switch -c jose/lo-que-sea          ← una rama = UNA cosa
+3.  escribe la PROMESA primero             ← en tests/ContratoDelGrafo/Contrato.cs, y compruébala ROJA
+4.  escribe el código hasta que salga verde
+5.  ROMPE el código a propósito            ← si la promesa no se pone roja, no vale nada
+6.  pruébalo sobre el PC real              ← el contrato no puede tocar la pantalla; tú sí
+7.  git push                               ← el portero decide (~60 s)
+8.  PR con la evidencia → squash merge → borra la rama
+```
+
+**El portero** (`.githooks/pre-push`) no se puede olvidar: bloquea el empujón directo a `main`, exige
+que compile, que los contratos estén intactos, y que la rama traiga su propia promesa. Se activa una
+vez por clon:
+
+```powershell
+git config core.hooksPath .githooks
+```
+
+**Los tres pasos que la gente se salta y son los que valen:**
+
+- **El 3, la promesa antes que el código.** Una prueba escrita después se escribe para que pase.
+- **El 5, romper a propósito.** Una promesa que solo se ha visto en verde es indistinguible de una
+  que siempre dice que sí. El 2026-08-21 un sabotaje no llegó a aplicarse —el archivo usaba CRLF y
+  el patrón usaba `\n`— y el contrato salió verde: si nos fiamos de aquel verde, damos por probadas
+  cinco promesas sin haberlas probado. **El sabotaje también hay que comprobarlo.**
+- **El 6, el PC real.** El contrato juzga la lógica en un segundo y sin pantalla. Que el gancho de
+  teclado esté puesto, que SAP conteste, que el icono se mueva: eso solo lo dice la máquina. Se hace
+  a mano y **se pega el log en el PR** — con horas, no con «probado».
+
+**Qué NO bloquea, y a propósito:** los escenarios (`ci-local.ps1`). Hay uno solo para toda la app y
+el 2026-08-21 se quedó trece minutos colgado. Un paso obligatorio que nadie corre no protege nada y
+enseña a saltarse el resto. Vuelve al portero cuando sea fiable — un juez solo puede bloquear cuando
+ya se ganó que le crean.
+
 ## Qué es
 
 Un asistente que **aprende a operar aplicaciones de escritorio mirando a un humano** y después las
