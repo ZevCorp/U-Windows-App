@@ -340,7 +340,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     Mapeador.ComoMePongoDelante.Via.SapGui => "sapgui://" + plan.Que,
                     _ => "uia://" + plan.Que + ".exe",
                 }),
-                Uia.PestanasAbiertas.DominioQueSuena);
+                Uia.PestanasAbiertas.DominioQueSuena,
+                SystemApi.AppsDelSistema.Todas,
+                SystemApi.AppsDelSistema.Lanzar);
             if (mcp.Map != null) mcp.Map.AbrirPorElNucleo = abrir.Abrir;
 
             // LA VENTANITA DEL NÚCLEO, para que el visor pueda pedirle que nos lleve a un sitio sin

@@ -107,6 +107,8 @@ internal static class Contrato
         Prueba("36. si ya estás delante, abrir no relanza nada", AbrirNoRelanzaLoQueYaEsta);
         Prueba("37. abrir se comprueba por consecuencia: dice dónde quedamos", AbrirDiceDondeQuedamos);
         Prueba("38. si no se pudo, se dice QUÉ hay ahora, no solo que no se pudo", AbrirDiceDondeEstamosAlFallar);
+        Prueba("39. una app instalada se encuentra por su nombre hablado, tildes aparte", AbrirEncuentraLaAppInstalada);
+        Prueba("40. si de verdad hay empate, se devuelven TODAS: no se adivina", AbrirNoAdivinaElEmpate);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -907,6 +909,44 @@ internal static class Contrato
             $"al fallar se dice QUÉ hay ahora (dijo: «{r}»). Un «no pude» pelado deja a quien lo lee "
             + "sin saber si está donde creía — y el 2026-08-21 eso costó un mensaje que se "
             + "desmentía a sí mismo: «no pude traerla al frente; ahora hay saplogon»");
+    }
+
+    /// <summary>El catálogo real de esta máquina, medido el 2026-08-23 en shell:AppsFolder.</summary>
+    private static readonly AbrirSegunElNucleo.AppDelSistema[] Instaladas =
+    {
+        new("Microsoft To Do", "Microsoft.Todos_8wekyb3d8bbwe!App"),
+        new("Click to Do", "MicrosoftWindows.Client.CoreAI_cw5n1h2txyewy!ClickToDoApp"),
+        new("Claude", "Claude_pzs8sxrjxfjjc!Claude"),
+        new("Spotify", "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify"),
+        new("Calculadora", "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"),
+    };
+
+    private static void AbrirEncuentraLaAppInstalada(SurfaceMap _)
+    {
+        var r = AbrirSegunElNucleo.Emparejar("microsoft to do", Instaladas);
+        Debe(r.Count == 1 && r[0].ComoSeLanza.StartsWith("Microsoft.Todos"),
+            $"«microsoft to do» encuentra Microsoft To Do (encontró {r.Count}). Hasta hoy abrir "
+            + "asumía que todo era un .exe, y las apps empaquetadas NO se podían abrir: el menú "
+            + "Inicio tiene 93 accesos directos y To Do no está entre ellos");
+
+        Debe(AbrirSegunElNucleo.Emparejar("CALCULADORA", Instaladas).Count == 1,
+            "las mayúsculas no cuentan");
+        Debe(AbrirSegunElNucleo.Emparejar("calculadora", Instaladas).Count == 1
+             && AbrirSegunElNucleo.Emparejar("cálculadora", Instaladas).Count == 1,
+            "y las tildes tampoco: quien habla no escribe los acentos");
+        Debe(AbrirSegunElNucleo.Emparejar("spotify", Instaladas).Count == 1, "y un nombre suelto acierta");
+        Debe(AbrirSegunElNucleo.Emparejar("pepito", Instaladas).Count == 0,
+            "y lo que no está no se parece a nada: cero, no lo más cercano");
+    }
+
+    private static void AbrirNoAdivinaElEmpate(SurfaceMap _)
+    {
+        // «to do» encaja de verdad con las dos, y no hay forma honesta de saber cuál.
+        var r = AbrirSegunElNucleo.Emparejar("to do", Instaladas);
+        Debe(r.Count == 2,
+            $"con un empate real se devuelven TODAS (devolvió {r.Count}). Elegir por longitud o por "
+            + "orden alfabético es acertar la mitad de las veces y equivocarse EN SILENCIO la otra "
+            + "mitad, que es peor que preguntar");
     }
 
     private static void SenalarDistingueLasTres(SurfaceMap _)
