@@ -501,6 +501,72 @@ public sealed class SurfaceMapTools
     /// sistema ya puede preguntarle a Windows qué hay en ese punto y obtener el nombre exacto
     /// (2026-08-04, a propuesta del usuario de señalar con el ratón).
     /// </summary>
+    /// <summary>
+    /// Si lo que hay bajo el cursor es una ventana NUESTRA, devuelve lo que hay debajo de ella.
+    /// Null si debajo tampoco hay nada que no seamos nosotros.
+    /// </summary>
+    /// <remarks>
+    /// Se recorren las ventanas de arriba abajo en el orden en que las pinta Windows y se coge la
+    /// primera visible que contenga el punto y NO sea de este proceso. Es lo mismo que hace una
+    /// persona al apartar un papel para leer el de abajo.
+    ///
+    /// Se decide por PROCESO y no por título: llamarse «Ü» es una casualidad que cualquier app puede
+    /// repetir —y entonces la estaríamos saltando sin motivo—; ser nuestro proceso no lo es.
+    /// </remarks>
+    private static System.Windows.Automation.AutomationElement? SaltarNuestrasVentanas(
+        System.Windows.Automation.AutomationElement el, System.Drawing.Point p)
+    {
+        int mio = Environment.ProcessId;
+        try { if (el.Current.ProcessId != mio) return el; } catch { return el; }
+
+        var punto = new System.Windows.Point(p.X, p.Y);
+        System.Windows.Automation.AutomationElement? debajo = null;
+
+        EnumWindows((h, _) =>
+        {
+            if (!IsWindowVisible(h)) return true;
+            GetWindowThreadProcessId(h, out uint pid);
+            if ((int)pid == mio) return true;                     // seguimos siendo nosotros
+            if (!GetWindowRect(h, out var r)) return true;
+            if (p.X < r.Left || p.X > r.Right || p.Y < r.Top || p.Y > r.Bottom) return true;
+
+            try
+            {
+                var v = System.Windows.Automation.AutomationElement.FromHandle(h);
+                if (v == null) return true;
+                // Dentro de esa ventana, lo más pequeño con nombre que contenga el punto: la misma
+                // regla que se usa para todo lo demás (ver Navigation.LoQueSenalas.Elegir).
+                var candidatos = new List<Navigation.LoQueSenalas.Candidato>();
+                foreach (System.Windows.Automation.AutomationElement d in v.FindAll(
+                    System.Windows.Automation.TreeScope.Descendants,
+                    System.Windows.Automation.Condition.TrueCondition))
+                {
+                    try
+                    {
+                        candidatos.Add(new Navigation.LoQueSenalas.Candidato(
+                            (d.Current.Name ?? "").Trim(),
+                            d.Current.ControlType.ProgrammaticName.Replace("ControlType.", ""),
+                            d.Current.BoundingRectangle));
+                    }
+                    catch { }
+                }
+                if (Navigation.LoQueSenalas.Elegir(candidatos, punto) is { } c)
+                {
+                    debajo = v.FindAll(System.Windows.Automation.TreeScope.Descendants,
+                        new System.Windows.Automation.PropertyCondition(
+                            System.Windows.Automation.AutomationElement.NameProperty, c.Nombre))
+                        .Cast<System.Windows.Automation.AutomationElement>().FirstOrDefault() ?? v;
+                    return false;   // encontrado: se deja de buscar
+                }
+            }
+            catch { }
+            return true;
+        }, IntPtr.Zero);
+
+        if (debajo != null) LogBus.Log("mapa-mcp", "señalar: la carita estaba encima; miro lo que hay debajo");
+        return debajo;
+    }
+
     private string LoQueSenala()
     {
         try
@@ -509,6 +575,18 @@ public sealed class SurfaceMapTools
             var el = System.Windows.Automation.AutomationElement.FromPoint(
                 new System.Windows.Point(p.X, p.Y));
             if (el == null) return "bajo el cursor no hay ningún elemento que UIA reconozca";
+
+            // Ü NO SE SEÑALA A SÍ MISMA. La carita flota por encima de todo y, peor, SE MUEVE al
+            // lado de lo que ilumina — así que en cuanto señalas algo una vez, se coloca justo ahí y
+            // tapa lo que quieras señalar después. Barriendo la barra de tareas el 2026-08-23:
+            // x=660, 740, 820 y 1000 contestaban «señalas «Ü» (Window)» en vez del botón de debajo.
+            //
+            // Se salta preguntando de quién es la ventana, no por su nombre: llamarse «Ü» es una
+            // casualidad que cualquier app puede repetir; ser NUESTRO proceso no. Y se mira lo que
+            // hay debajo con WindowFromPoint saltando nuestras ventanas, que es exactamente lo que
+            // haría alguien apartando un papel para leer el de abajo.
+            el = SaltarNuestrasVentanas(el, p);
+            if (el == null) return "bajo el cursor solo está la propia Ü; muévela o aparta el cursor.";
 
             var (etiqueta, tipo, sels) = UiaSurface.DescribeElement(el);
             string nombre = etiqueta.Length > 0 ? etiqueta : (el.Current.Name ?? "").Trim();
