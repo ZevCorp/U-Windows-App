@@ -103,6 +103,7 @@ internal static class Contrato
         Prueba("32. señalar distingue «puedo pulsarlo» de «lo recuerdo» y de «no lo conozco»", SenalarDistingueLasTres);
         Prueba("33. sin nada con nombre bajo el cursor se pide mover, no se inventa", SenalarNoAdivina);
         Prueba("34. lo señalado es lo más pequeño que contiene el punto, esté arriba o abajo", SenalarEligeLoMasPequeno);
+        Prueba("35. elegir no depende del orden en que lleguen los candidatos", ElegirNoDependeDelOrden);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -904,6 +905,22 @@ internal static class Contrato
         Debe(LoQueSenalas.Elegir(candidatos, new System.Windows.Point(1900, 20)) == null,
             "y donde no hay nada con nombre no se devuelve lo más cercano: se devuelve nada. "
             + "Acercarse no es acertar");
+    }
+
+    private static void ElegirNoDependeDelOrden(SurfaceMap _)
+    {
+        // El árbol de UIA devuelve los descendientes en un orden que no controlamos, y al saltar
+        // nuestra propia ventana se recorren además VARIAS ventanas seguidas. Si elegir dependiera
+        // del orden, lo señalado cambiaría entre dos preguntas idénticas — y eso es de los fallos
+        // que solo aparecen en la máquina de otro (2026-08-23).
+        var punto = new System.Windows.Point(660, 1055);
+        var grande = new LoQueSenalas.Candidato("El panel entero", "Pane", new System.Windows.Rect(0, 1040, 1920, 40));
+        var chico  = new LoQueSenalas.Candidato("El botón", "Button", new System.Windows.Rect(640, 1040, 82, 40));
+
+        Debe(LoQueSenalas.Elegir(new[] { grande, chico }, punto)?.Nombre == "El botón",
+            "el pequeño gana llegando el segundo");
+        Debe(LoQueSenalas.Elegir(new[] { chico, grande }, punto)?.Nombre == "El botón",
+            "y también llegando el primero: dos preguntas iguales tienen que dar la misma respuesta");
     }
 
     private static void SenalarNoAdivina(SurfaceMap _)
