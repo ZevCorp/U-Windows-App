@@ -59,6 +59,34 @@ public sealed class LoQueSenalas
     /// tener la misma caja —un botón y su texto— y entonces da igual cuál se coja; lo que nunca da
     /// igual es coger el panel entero.
     /// </remarks>
+    /// <summary>
+    /// CUÁLES ILUMINAR cuando un nombre encaja con varias cosas.
+    /// </summary>
+    /// <remarks>
+    /// Se emparejan por SELECTOR y NUNCA por etiqueta, y ese es todo el asunto: si dos se llaman
+    /// igual —que es exactamente el caso que estamos resolviendo— buscar por nombre devolvería las
+    /// dos para cada una y se iluminaría cualquier cosa. El selector es lo único que las distingue.
+    ///
+    /// Se conserva el ORDEN en que llegan los selectores, porque la respuesta las numera —«la 1
+    /// es…, la 2 es…»— y quien elige lo hace por ese número. Si el orden cambiara entre lo que se
+    /// dice y lo que se pinta, la persona señalaría la 2 y se pulsaría la 1.
+    ///
+    /// Y lo que no se encuentre se cae en silencio: enseñar tres de cuatro es mejor que no enseñar
+    /// ninguna, y el aviso útil es la respuesta que ya se está devolviendo (2026-08-23).
+    /// </remarks>
+    public static IReadOnlyList<Candidato> Iluminables(
+        IEnumerable<string> selectoresPedidos,
+        IReadOnlyDictionary<string, Candidato> loQueHayEnPantalla)
+    {
+        var salida = new List<Candidato>();
+        foreach (string sel in selectoresPedidos)
+        {
+            if (!loQueHayEnPantalla.TryGetValue(sel, out var c)) continue;
+            if (c.Caja.IsEmpty || c.Caja.Width < 1 || c.Caja.Height < 1) continue;
+            salida.Add(c);
+        }
+        return salida;
+    }
     public static Candidato? Elegir(IEnumerable<Candidato> candidatos, System.Windows.Point punto)
         => candidatos
             .Where(c => c.Nombre.Trim().Length > 0 && !c.Caja.IsEmpty && c.Caja.Contains(punto))

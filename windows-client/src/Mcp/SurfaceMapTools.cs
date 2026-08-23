@@ -571,6 +571,37 @@ public sealed class SurfaceMapTools
         return debajo;
     }
 
+    /// <summary>
+    /// Ilumina en pantalla las candidatas de un nombre ambiguo, para que se pueda elegir mirando.
+    /// </summary>
+    /// <remarks>
+    /// Se buscan por SELECTOR y no por etiqueta: si hay dos que se llaman igual —que es justo el
+    /// caso— buscar por nombre volvería a devolver las dos y no se sabría cuál es cuál.
+    ///
+    /// Si alguna no se puede localizar en pantalla no se dice nada y se enseñan las demás: el aviso
+    /// útil es la respuesta que ya se está devolviendo, y un «no pude iluminar la segunda» sobra
+    /// cuando la persona tiene la primera delante.
+    /// </remarks>
+    private void IluminarCandidatas(IReadOnlyList<string> selectores)
+    {
+        try
+        {
+            _lector.Read();
+            var enPantalla = new Dictionary<string, Navigation.LoQueSenalas.Candidato>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in _lector.Elements)
+            {
+                string s = Uia.Reconocedor.SelectorDe(e);
+                if (s.Length > 0 && !enPantalla.ContainsKey(s))
+                    enPantalla[s] = new Navigation.LoQueSenalas.Candidato(e.Label, e.ControlType, e.Bounds);
+            }
+            var elegidas = Navigation.LoQueSenalas.Iluminables(selectores, enPantalla);
+            var cajas = elegidas.Select(c => (c.Caja, c.Nombre)).ToList();
+            if (cajas.Count > 0) Ui.Senalador.SenalarVarias(cajas);
+            LogBus.Log("mapa-mcp", $"homónimos: ilumino {cajas.Count} de {selectores.Count}");
+        }
+        catch (Exception e) { LogBus.Log("mapa-mcp", $"no pude iluminar las candidatas: {e.Message}"); }
+    }
+
     private string LoQueSenala()
     {
         try
@@ -2977,11 +3008,19 @@ public sealed class SurfaceMapTools
             var vistos = Uia.Reconocedor.Buscar(_lector.Elements, salida);
 
             if (vistos.Count > 1)
-                return $"«{salida}» coincide con {vistos.Count} cosas que tengo a la vista: "
-                     + string.Join("; ", vistos.Take(8).Select(v => $"«{v.Label}» [{Uia.Reconocedor.SelectorDe(v)}]"))
-                     + ". Repite `exit` con el selector de la que quieras. Y si vas a preguntarle a "
-                     + $"la persona cuál es, SEÑÁLASELAS: map_show con exit=«{salida}» y which=1, "
-                     + "luego which=2, mientras se lo dices.";
+            {
+                // Igual que con las del mapa: se enseñan AQUÍ. Estas ya están leídas y con su caja,
+                // así que iluminarlas no cuesta ni una lectura más.
+                var cajas = vistos.Take(8)
+                    .Where(v => v.Bounds.Width >= 1 && v.Bounds.Height >= 1)
+                    .Select(v => (v.Bounds, v.Label)).ToList();
+                if (cajas.Count > 0) Ui.Senalador.SenalarVarias(cajas);
+
+                return $"«{salida}» coincide con {vistos.Count} cosas que tengo a la vista y LAS ESTOY "
+                     + "ILUMINANDO: "
+                     + string.Join("; ", vistos.Take(8).Select((v, i) => $"la {i + 1} es «{v.Label}» [{Uia.Reconocedor.SelectorDe(v)}]"))
+                     + ". Pregúntale cuál quiere —las tiene delante— y repite `exit` con su selector.";
+            }
 
             if (vistos.Count == 0)
             {
@@ -3200,12 +3239,21 @@ public sealed class SurfaceMapTools
         }
 
         if (candidatas.Count > 1)
-            return $"«{salida}» coincide con {candidatas.Count} salidas: "
-                 + string.Join("; ", candidatas.Select(h => $"«{h.Info.Label}» [{h.Info.Selector}]"))
-                 + ". Repite `exit` con el SELECTOR de la que quieras (o con su AutomationId). "
-                 + "Y si le estás preguntando a la persona cuál quiere, SEÑÁLASELAS mientras se lo "
-                 + $"preguntas: map_show con exit=«{salida}» y which=1, luego which=2… Ver cuál es "
-                 + "cada una es más rápido que leerle dos selectores.";
+        {
+            // SE ILUMINAN AQUÍ MISMO, no se pide otra llamada. Antes esta respuesta terminaba
+            // sugiriendo «map_show con which=1, luego which=2…», y el modelo casi nunca la hacía:
+            // contestaba directamente con un selector, así que la persona oía «hay dos que se
+            // llaman Pausar» sin ver NINGUNA (2026-08-23, observado por el usuario con Spotify).
+            //
+            // Preguntar «¿cuál de las dos?» sin enseñarlas es pedirle a alguien que elija a ciegas.
+            // Y no hace falta pedir permiso para enseñar algo: mirar no cambia nada.
+            IluminarCandidatas(candidatas.Select(h => h.Info.Selector).ToList());
+
+            return $"«{salida}» coincide con {candidatas.Count} salidas y LAS ESTOY ILUMINANDO: "
+                 + string.Join("; ", candidatas.Select((h, i) => $"la {i + 1} es «{h.Info.Label}» [{h.Info.Selector}]"))
+                 + ". Pregúntale a la persona cuál quiere —las tiene delante, marcadas— y repite "
+                 + "`exit` con el SELECTOR de esa.";
+        }
 
         var elegida = candidatas[0];
         _ultimaApp = AppDe(actual.Id).Length > 0 ? AppDe(actual.Id) : _ultimaApp;

@@ -115,6 +115,7 @@ internal static class Contrato
         Prueba("44. pulsar y que no se mueva nada NO se cuenta como llegada", PulsarSinMoverNoEsLlegar);
         Prueba("45. un clic que no se pudo dar no se cuenta como dado", PulsarQueNoSePudoNoCuenta);
         Prueba("46. lo que se cruza queda aprendido, y manda el terreno", PulsarAprendeADondeLlevoDeVerdad);
+        Prueba("47. las homónimas se iluminan por SELECTOR y en el orden que se dicen", IluminarHomonimasPorSelector);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1085,6 +1086,33 @@ internal static class Contrato
             + "El terreno manda sobre el mapa: así el grafo se corrige solo yendo");
         Debe(g.DesdeAqui("uia://x.exe/uno").Any(a => a.Destino == "uia://x.exe/OTRO-distinto"),
             "y queda en el grafo, no solo en la respuesta");
+    }
+
+    private static void IluminarHomonimasPorSelector(SurfaceMap _)
+    {
+        // Dos cosas que se llaman IGUAL — que es justo el caso que se está resolviendo.
+        var pantalla = new Dictionary<string, LoQueSenalas.Candidato>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["uia:name=Pausar;ct=Button"]     = new("Pausar", "Button", new System.Windows.Rect(10, 10, 40, 40)),
+            ["uia:aid=pausar2;ct=Button"]     = new("Pausar", "Button", new System.Windows.Rect(90, 10, 40, 40)),
+            ["uia:name=Otra;ct=Button"]       = new("Otra",   "Button", new System.Windows.Rect(200, 10, 40, 40)),
+            ["uia:name=SinCaja;ct=Button"]    = new("SinCaja","Button", System.Windows.Rect.Empty),
+        };
+
+        var r = LoQueSenalas.Iluminables(
+            new[] { "uia:aid=pausar2;ct=Button", "uia:name=Pausar;ct=Button" }, pantalla);
+
+        Debe(r.Count == 2, $"se iluminan las DOS homónimas (fueron {r.Count})");
+        Debe(r[0].Caja.X == 90 && r[1].Caja.X == 10,
+            "y EN EL ORDEN en que se piden, no en el de la pantalla: la respuesta las numera —«la 1 "
+            + "es…, la 2 es…»— y quien elige lo hace por ese número. Si el orden cambiara entre lo "
+            + "que se dice y lo que se pinta, señalaría la 2 y se pulsaría la 1");
+
+        Debe(LoQueSenalas.Iluminables(new[] { "uia:name=SinCaja;ct=Button" }, pantalla).Count == 0,
+            "lo que no tiene caja no se ilumina: un recuadro de tamaño cero no enseña nada");
+        Debe(LoQueSenalas.Iluminables(new[] { "uia:name=NoExiste" }, pantalla).Count == 0,
+            "y lo que no está en pantalla se cae en silencio: enseñar tres de cuatro es mejor que "
+            + "no enseñar ninguna");
     }
 
     private static void SenalarDistingueLasTres(SurfaceMap _)
