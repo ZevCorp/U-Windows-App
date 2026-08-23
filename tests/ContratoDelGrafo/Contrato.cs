@@ -109,6 +109,9 @@ internal static class Contrato
         Prueba("38. si no se pudo, se dice QUÉ hay ahora, no solo que no se pudo", AbrirDiceDondeEstamosAlFallar);
         Prueba("39. una app instalada se encuentra por su nombre hablado, tildes aparte", AbrirEncuentraLaAppInstalada);
         Prueba("40. si de verdad hay empate, se devuelven TODAS: no se adivina", AbrirNoAdivinaElEmpate);
+        Prueba("41. lo señalado CADUCA: un gesto viejo no decide lo que se pide ahora", LoSenaladoCaduca);
+        Prueba("42. una app INSTALADA con ese nombre gana a una pestaña abierta", LaAppInstaladaGanaALaPestana);
+        Prueba("43. «Copilot» se refiere a «Copilot anclado»: no hay que decirlo clavado", SenalarNoExigeElNombreClavado);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -947,6 +950,71 @@ internal static class Contrato
             $"con un empate real se devuelven TODAS (devolvió {r.Count}). Elegir por longitud o por "
             + "orden alfabético es acertar la mitad de las veces y equivocarse EN SILENCIO la otra "
             + "mitad, que es peor que preguntar");
+    }
+
+    private static void LoSenaladoCaduca(SurfaceMap _)
+    {
+        var ahora = new DateTime(2026, 8, 23, 15, 0, 0, DateTimeKind.Utc);
+
+        Debe(LoQueSenalas.SigueValiendo(ahora.AddSeconds(-5), ahora),
+            "lo señalado hace cinco segundos vale: se señala, se pregunta, se contesta y se pide");
+        Debe(!LoQueSenalas.SigueValiendo(ahora.AddMinutes(-10), ahora),
+            "lo señalado hace diez minutos NO. Señalar hace que algo sea accionable aunque no esté "
+            + "en el mapa de esta pantalla; si eso no caducara, un «púlsalo» dicho mucho después "
+            + "actuaría sobre algo que ya no está delante, y con la confianza de haber acertado");
+    }
+
+    private static void LaAppInstaladaGanaALaPestana(SurfaceMap _)
+    {
+        // El caso real del 2026-08-23: pedir «copilot» con copilot.microsoft.com abierto llevaba a
+        // la WEB, y el usuario tuvo que decir «no quiero la web, quiero la instalada». Antes pasó
+        // igual con Claude y no se reprodujo porque la pestaña no estaba abierta.
+        var lanzadas = new List<string>();
+        var instaladas = new[]
+        {
+            new AbrirSegunElNucleo.AppDelSistema("Copilot", "Microsoft.Copilot_8wekyb3d8bbwe!App"),
+            new AbrirSegunElNucleo.AppDelSistema("Microsoft 365 Copilot", "Microsoft.MicrosoftOfficeHub_8wekyb3d8bbwe!App"),
+        };
+        // La ubicación CAMBIA al lanzar, que es lo que pasa de verdad: un arnés con una ubicación
+        // fija no distingue «miró después» de «contestó lo que ya sabía».
+        string donde = "web://copilot.microsoft.com";
+        var abrir = new AbrirSegunElNucleo(
+            () => donde,
+            _ => false,
+            _ => "copilot.microsoft.com",              // sí suena a una pestaña abierta
+            () => instaladas,
+            id => { lanzadas.Add(id); donde = "uia://mscopilot.exe/copilot"; return true; });
+
+        string r = abrir.Abrir("copilot");
+        Debe(lanzadas.Count == 1 && lanzadas[0].StartsWith("Microsoft.Copilot"),
+            $"se abre la app INSTALADA, no la pestaña (lanzó {lanzadas.Count}). Una web que se llama "
+            + "igual que una app no es esa app");
+        Debe(r.Contains("uia://mscopilot.exe/copilot") && !r.Contains("web://"),
+            $"y se acaba EN LA APP, no en la web (dijo: «{r}»)");
+
+        // Pero NO se secuestra lo que solo se PARECE: pedir una web es igual de legítimo.
+        var soloParecido = new List<string>();
+        var abrir2 = new AbrirSegunElNucleo(
+            () => "uia://chrome.exe/x", _ => true, _ => "github.com",
+            () => new[] { new AbrirSegunElNucleo.AppDelSistema("GitHub Desktop", "GitHubDesktop!App") },
+            id => { soloParecido.Add(id); return true; });
+        abrir2.Abrir("github");
+        Debe(soloParecido.Count == 0,
+            "«github» NO abre «GitHub Desktop»: lo que da la preferencia es llamarse ASÍ, no "
+            + "parecerse. Con «contiene» bastaría una app con esa palabra dentro para secuestrar "
+            + "cualquier web");
+    }
+
+    private static void SenalarNoExigeElNombreClavado(SurfaceMap _)
+    {
+        Debe(LoQueSenalas.SeRefiereA("Copilot", "Copilot anclado"),
+            "«Copilot» se refiere a «Copilot anclado». Windows llama a las cosas como le da la gana "
+            + "y nadie dice «anclado»: exigir el nombre clavado hacía fallar «¿ves esto? ábrelo» "
+            + "SIEMPRE que el nombre real llevara una palabra de más, que es casi siempre");
+        Debe(LoQueSenalas.SeRefiereA("claude", "Claude- 2 ventanas de ejecución"),
+            "y tampoco con las mayúsculas ni la coletilla de las ventanas");
+        Debe(!LoQueSenalas.SeRefiereA("spotify", "Copilot anclado"),
+            "pero dos cosas distintas siguen siendo distintas");
     }
 
     private static void SenalarDistingueLasTres(SurfaceMap _)

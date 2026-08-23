@@ -75,6 +75,39 @@ public sealed class LoQueSenalas
         _donde = donde;
     }
 
+    /// <summary>
+    /// CUÁNTO VALE UN SEÑALAMIENTO. Pasado esto, «púlsalo» ya no puede referirse a ello.
+    /// </summary>
+    /// <remarks>
+    /// Señalar hace que lo apuntado sea accionable aunque no esté en el mapa de esta pantalla —así
+    /// funciona «¿ves este icono? ábrelo»—. Pero eso abre un riesgo: si lo señalado no caduca, un
+    /// «púlsalo» dicho diez minutos después actúa sobre algo que ya no está delante, y encima con
+    /// la confianza de haber acertado. Es el mismo fallo que el freno resolvió con las tareas: un
+    /// gesto viejo no puede decidir lo que se pida ahora (promesa 22).
+    ///
+    /// Un minuto es lo que dura una frase con su respuesta: se señala, se pregunta, se contesta y
+    /// se pide. Más allá, quien habla ya está en otra cosa.
+    /// </remarks>
+    public static readonly TimeSpan LoSenaladoCaduca = TimeSpan.FromMinutes(1);
+
+    /// <summary>¿Sigue valiendo lo que se señaló entonces?</summary>
+    public static bool SigueValiendo(DateTime cuandoSeSenalo, DateTime ahora)
+        => ahora - cuandoSeSenalo <= LoSenaladoCaduca;
+    /// <summary>
+    /// ¿SE REFIERE A LO QUE SEÑALASTE? Sin exigir que lo diga clavado.
+    /// </summary>
+    /// <remarks>
+    /// Windows llama a las cosas como le da la gana: el icono de la barra es «Copilot anclado» y
+    /// una ventana abierta es «Claude- 2 ventanas de ejecución». Nadie dice eso. Se dice «Copilot».
+    ///
+    /// Exigir la igualdad exacta hacía que «¿ves este icono? ábrelo» fallara SIEMPRE en cuanto el
+    /// nombre real llevara una palabra de más — que es casi siempre (2026-08-23, probado por el
+    /// usuario). Basta con que uno contenga al otro: quien señala y quien habla están mirando lo
+    /// mismo, y el riesgo de confusión ya lo acota que caduque en un minuto.
+    /// </remarks>
+    public static bool SeRefiereA(string pedido, string loSenalado)
+        => Nombres.HablanDeLoMismo(pedido, loSenalado);
+
     /// <summary>Cuando bajo el cursor no hay nada con nombre. Se pide mover, no se adivina.</summary>
     public const string NadaDebajo =
         "bajo el cursor no hay nada con nombre. Muévelo un poco y vuelve a preguntar.";
