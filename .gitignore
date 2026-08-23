@@ -37,3 +37,8 @@ puente-omi/vbcable-installer/
 # `hacer-app.sh` desde el binario. Ninguno es fuente: el repo entero pesa menos que ese .build.
 mac-client/.build/
 mac-client/U.app/
+# graphify: TODO lo de graphify-out se genera con `graphify update .` y NO se commitea.
+# Estuvo dentro hasta el 2026-08-21 y el problema no era el peso (11 MB de los 15 que
+# seguia git): era que cada commit que tocaba codigo arrastraba un diff de 138.000 lineas
+# en graph.json, y con eso ningun PR se puede revisar. Tras clonar: `graphify update .`
+graphify-out/

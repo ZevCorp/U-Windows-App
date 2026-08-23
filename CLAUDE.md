@@ -74,6 +74,38 @@ Lo que separa una rama de `main` —los cuatro niveles, en orden de coste:
 Y en la nube, en cada PR: [`.github/workflows/contrato.yml`](.github/workflows/contrato.yml). Los
 escenarios NO corren allí y no es un olvido: abren apps de verdad sobre un escritorio real.
 
+### El portero: lo único que no se puede olvidar
+
+Todo lo de arriba se puede saltar sin querer, porque son **peticiones**. Hasta el 2026-08-21 este
+repo tenía seis archivos de reglas y siete skills describiendo el proceso, y en `.git/hooks/` solo
+`post-checkout` y `post-commit`: ni una sola comprobación que impidiera nada. La consecuencia,
+dicha por el usuario: *«hay demasiada burocracia para pasar a main pero no siento que me esté
+verificando lo que necesito»*. Y tenía razón — era papeleo sin portero.
+
+Lo que TIENE que pasar vive ahora en [`.githooks/pre-push`](.githooks/pre-push). **Se activa una
+vez por clon, con una línea:**
+
+```powershell
+git config core.hooksPath .githooks
+```
+
+Tarda ~60 s y comprueba cuatro cosas:
+
+| | qué exige |
+|---|---|
+| 0 | **a `main` no se empuja directo** — solo por PR |
+| 1 | **compila** en Release |
+| 2 | **los contratos** del grafo y de la voz están INTACTOS |
+| 3 | **la rama trae su propia promesa** — si cambia código y no toca ningún `Contrato.cs`, no pasa |
+
+La nº 3 es la que hace crecer la carpeta de tests **sola**, en vez de por disciplina. Se exime a
+`chore/`, `docs/`, `refactor/` y `hotfix/`, que por definición no añaden comportamiento: si tu rama
+de verdad no cambia lo que el sistema promete, renómbrala y pasa.
+
+Los escenarios (nivel 3 de la compuerta) **no** están en el portero a propósito: hay uno solo para
+toda la app y el 2026-08-21 se quedó trece minutos colgado. Un paso obligatorio que nadie corre no
+protege nada y enseña a saltarse el resto. Vuelve cuando sea fiable.
+
 ## Ramas: `<persona>/<que-hace>`
 
 Somos tres. Cada rama lleva delante el nombre de quien la abre — `jero`, `jose` o `pipe`, en
@@ -368,6 +400,11 @@ Estos costaron caro. Aplicarlos ahorra rondas enteras.
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+**graphify-out/ is NOT committed** (see .gitignore). It is generated output: after cloning, run
+`graphify update .` once and it appears. It was tracked until 2026-08-21 and the problem was not
+its size — it was that every commit touching code dragged a 138,000-line diff in graph.json, which
+makes a pull request impossible to review.
 
 Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
