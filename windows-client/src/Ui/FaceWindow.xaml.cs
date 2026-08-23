@@ -328,6 +328,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 _mapaVivo.Nucleo, () => _locator?.DondeEstoy()?.Id ?? "");
             if (mcp.Map != null) mcp.Map.Senalar = visto => senalar.Con(visto);
 
+            // ABRIR. La vía —programa, pestaña del navegador o SAP— la decide el mapeador, que ya
+            // tiene sus promesas; traer al frente de verdad es Win32 y se queda en AppAligner. Lo
+            // que se muda es lo que se hacía mal: relanzar lo que ya estaba delante, dar por hecho
+            // que lanzar es llegar, y fallar sin decir dónde te deja.
+            var abrir = new Navigation.AbrirSegunElNucleo(
+                () => _locator?.DondeEstoy()?.Id ?? "",
+                plan => Uia.AppAligner.PonerDelante(plan.Via switch
+                {
+                    Mapeador.ComoMePongoDelante.Via.PestanaDelNavegador => "web://" + plan.Que,
+                    Mapeador.ComoMePongoDelante.Via.SapGui => "sapgui://" + plan.Que,
+                    _ => "uia://" + plan.Que + ".exe",
+                }),
+                Uia.PestanasAbiertas.DominioQueSuena);
+            if (mcp.Map != null) mcp.Map.AbrirPorElNucleo = abrir.Abrir;
+
             // LA VENTANITA DEL NÚCLEO, para que el visor pueda pedirle que nos lleve a un sitio sin
             // que nadie toque el núcleo ni el explorador viejo.
             // ESCRIBIR Y ELEGIR, con las MISMAS manos que ya pulsan. No hay un segundo camino de

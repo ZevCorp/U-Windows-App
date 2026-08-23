@@ -21,5 +21,9 @@
          empiezan a mudarse aquí: sin esto el contrato solo podría juzgar el mapa viejo, que es
          justo lo que estamos dejando atrás. -->
     <Reference Include="Nucleo.Grafo"><HintPath>$(UBin)\Nucleo.Grafo.dll</HintPath></Reference>
+    <!-- El mapeador. Entra con «abrir» (2026-08-23): quién decide CÓMO se llega a un sitio
+         —programa, pestaña o SAP— ya vive ahí y tiene sus propias promesas. Decidirlo otra vez
+         aquí habría creado una segunda opinión sobre el mismo hecho. -->
+    <Reference Include="Mapeador.Pulso"><HintPath>$(UBin)\Mapeador.Pulso.dll</HintPath></Reference>
   </ItemGroup>
 </Project>

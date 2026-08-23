@@ -903,6 +903,7 @@ public sealed class SurfaceMapTools
 
     private string OpenApp(string app)
     {
+        if (AbrirPorElNucleo != null) return AbrirPorElNucleo(app);
         if (app.Length == 0) return "falta `app`: qué abrir (por ejemplo «explorer» o «notepad»)";
         app = app.Replace(".exe", "", StringComparison.OrdinalIgnoreCase).Trim();
         _ultimaApp = app;
@@ -1470,6 +1471,13 @@ public sealed class SurfaceMapTools
     /// frase. Ver <see cref="Navigation.LoQueSenalas"/>.
     /// </summary>
     public Func<Navigation.LoQueSenalas.Senalado, string>? Senalar { get; set; }
+
+    /// <summary>
+    /// ABRIR, contestado por el núcleo. La vía —programa, pestaña o SAP— la decide el
+    /// mapeador; traer al frente de verdad sigue siendo Win32 y se queda aquí.
+    /// Ver <see cref="Navigation.AbrirSegunElNucleo"/>.
+    /// </summary>
+    public Func<string, string>? AbrirPorElNucleo { get; set; }
 
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
