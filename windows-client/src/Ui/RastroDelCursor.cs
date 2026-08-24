@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Runtime.InteropServices;
+using U.WindowsClient.Diagnostics;
+using U.WindowsClient.Navigation;
 
 namespace U.WindowsClient.Ui;
 
@@ -87,6 +89,7 @@ public static class RastroDelCursor
 
             // Sin nombre se sube, igual que hace map_pointing_at: un contenedor anónimo no es lo que
             // alguien está enseñando, pero lo que lo contiene suele serlo.
+            var origen = el;
             for (int i = 0; i < 4 && nombre.Length == 0; i++)
             {
                 try
@@ -99,6 +102,40 @@ public static class RastroDelCursor
                     caja = el.Current.BoundingRectangle;
                 }
                 catch { break; }
+            }
+
+            // Y SI ARRIBA NO HAY NOMBRE, SE MIRA ABAJO — la misma razón por la que map_pointing_at
+            // (LoQueSenala, en SurfaceMapTools) lo necesita: la barra de tareas de Windows 11 es
+            // XAML, `FromPoint` cae en un Pane sin nombre cuyo padre TAMPOCO lo tiene, y el nombre
+            // real vive en un DESCENDIENTE. Sin este paso, pasar el ratón por la barra de tareas no
+            // dejaba NINGUNA marca — «no has pasado el ratón por encima de nada» sobre una barra
+            // llena de iconos (2026-08-24, reproducido con map_pointed_trail). Se parte del elemento
+            // ORIGINAL bajo el cursor, no del que quedó tras subir: subir ya fracasó, bajar desde ahí
+            // solo repetiría el mismo callejón sin salida.
+            if (nombre.Length == 0)
+            {
+                var candidatos = new List<LoQueSenalas.Candidato>();
+                try
+                {
+                    foreach (AutomationElement d in origen.FindAll(TreeScope.Descendants,
+                        System.Windows.Automation.Condition.TrueCondition))
+                    {
+                        try
+                        {
+                            candidatos.Add(new LoQueSenalas.Candidato(
+                                (d.Current.Name ?? "").Trim(),
+                                d.Current.ControlType.ProgrammaticName.Replace("ControlType.", ""),
+                                d.Current.BoundingRectangle));
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+
+                if (LoQueSenalas.Elegir(candidatos, new Point(p.X, p.Y)) is { } elegido)
+                {
+                    nombre = elegido.Nombre; tipo = elegido.Tipo; caja = elegido.Caja;
+                }
             }
 
             if (nombre.Length == 0 || caja.IsEmpty || caja.Width < 1 || caja.Height < 1) return;
@@ -116,7 +153,11 @@ public static class RastroDelCursor
                 var yaEsta = _marcas.FindIndex(m =>
                     m.Nombre.Equals(nombre, StringComparison.OrdinalIgnoreCase) && m.Caja == caja);
                 if (yaEsta >= 0) _marcas[yaEsta] = _marcas[yaEsta] with { Cuando = ahora };
-                else _marcas.Add(new Marca(nombre, tipo, caja, ahora));
+                else
+                {
+                    _marcas.Add(new Marca(nombre, tipo, caja, ahora));
+                    LogBus.Log("rastro", $"marca: «{nombre}» ({tipo})");
+                }
             }
         }
         catch { /* el árbol de UI se mueve bajo los pies: se mira otra vez dentro de 180 ms */ }

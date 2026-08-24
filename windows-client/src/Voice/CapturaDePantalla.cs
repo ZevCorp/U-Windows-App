@@ -2,80 +2,32 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
-using U.WindowsClient.Diagnostics;
 
 namespace U.WindowsClient.Voice;
 
 /// <summary>
-/// Los ojos de la conversación en vivo: la pantalla, en fotogramas sueltos.
-///
-/// Live API recibe vídeo por el MISMO canal que el audio —realtimeInput con imágenes JPEG— así que
-/// no hace falta nada nuevo del otro lado. Y es barato porque no es vídeo de verdad: se manda un
-/// fotograma por segundo, no treinta. Para lo que sirve —ver qué hay en pantalla y hacia dónde
-/// apunta el usuario— un segundo de resolución temporal sobra.
+/// UNA FOTO DE LA PANTALLA, cuando hace falta. Antes se llamaba <c>LiveVideo</c> y mandaba un
+/// fotograma por segundo sin que nadie lo pidiera: Gemini recibía vídeo por el mismo caño que el
+/// audio, así que había que estarlo alimentando aunque nadie mirara. OpenAI no tiene ese caño —y el
+/// usuario, al verlo, prefirió que fuera así también aquí—: Ü PIDE ver cuando lo necesita
+/// (<c>map_look</c>), o se le manda la foto justo cuando el usuario señala algo. Un fotograma que
+/// nadie pidió es trabajo que nadie usa.
 ///
 /// SE DIBUJA EL CURSOR. Las capturas de Windows NO lo incluyen, y sin él «te estoy señalando esto»
-/// no significa nada: el modelo vería la pantalla sin saber dónde miras. Es el detalle que separa
-/// esta función de una que parece funcionar (2026-08-04).
+/// no significa nada: quien mira la foto no sabría dónde apuntaba. Es el detalle que separa esta
+/// función de una que parece funcionar (2026-08-04).
 /// </summary>
-public sealed class LiveVideo : IDisposable
+public static class CapturaDePantalla
 {
-    /// <summary>Un fotograma listo para enviar, ya comprimido.</summary>
-    public event Action<byte[]>? Capturado;
-
-    private System.Threading.Timer? _reloj;
-    private readonly object _candado = new();
-    private bool _corriendo;
-
     /// <summary>Ancho al que se reduce. 1024 basta para leer botones y no dispara el coste.</summary>
     private const int AnchoMaximo = 1024;
     private const long Calidad = 60L;
 
-    public bool Viendo { get; private set; }
-
-    public void Abrir(int msEntreFotogramas = 1000)
-    {
-        lock (_candado)
-        {
-            if (Viendo) return;
-            Viendo = true;
-            _reloj = new System.Threading.Timer(_ => Tick(), null, 300, msEntreFotogramas);
-            LogBus.Log("voz-viva", $"vídeo abierto: 1 fotograma cada {msEntreFotogramas} ms");
-        }
-    }
-
-    public void Cerrar()
-    {
-        lock (_candado)
-        {
-            if (!Viendo) return;
-            Viendo = false;
-            try { _reloj?.Dispose(); } catch { }
-            _reloj = null;
-            LogBus.Log("voz-viva", "vídeo cerrado");
-        }
-    }
-
-    private void Tick()
-    {
-        // Un fotograma que tarda más que su turno no se acumula: se salta. Encolar capturas viejas
-        // solo serviría para que el modelo viera el pasado.
-        if (_corriendo || !Viendo) return;
-        _corriendo = true;
-        try
-        {
-            byte[]? jpeg = Capturar();
-            if (jpeg != null) Capturado?.Invoke(jpeg);
-        }
-        catch (Exception e) { LogBus.Log("voz-viva", $"no pude capturar la pantalla: {e.Message}"); }
-        finally { _corriendo = false; }
-    }
-
-    private static byte[]? Capturar()
+    /// <summary>Un fotograma de AHORA MISMO, comprimido a JPEG. Null si algo impidió capturarlo.</summary>
+    public static byte[]? Capturar()
     {
         // Tamaño por Win32 y no por WinForms: activar WinForms en un proyecto WPF hace ambiguos
-        // Brush, Application, MouseEventArgs y media docena más en toda la aplicación. Una función
-        // nueva no puede costarle eso al resto (2026-08-04).
+        // Brush, Application, MouseEventArgs y media docena más en toda la aplicación.
         var pantalla = new Rectangle(0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
         if (pantalla.Width <= 0 || pantalla.Height <= 0) return null;
 
@@ -110,10 +62,10 @@ public sealed class LiveVideo : IDisposable
     /// <summary>
     /// Dibuja el cursor REAL, porque Windows no lo mete en la captura.
     ///
-    /// No es una carencia de Live API ni un descuido nuestro: el puntero no vive en el contenido de
-    /// la pantalla, lo compone el sistema por encima al presentar. Cualquier copia del framebuffer
-    /// —BitBlt, CopyFromScreen, duplicación de escritorio— sale sin él. Por eso Windows expone
-    /// GetCursorInfo/DrawIconEx: la forma oficial de saber qué puntero hay y pintarlo.
+    /// No es una carencia nuestra: el puntero no vive en el contenido de la pantalla, lo compone el
+    /// sistema por encima al presentar. Cualquier copia del framebuffer —BitBlt, CopyFromScreen,
+    /// duplicación de escritorio— sale sin él. Por eso Windows expone GetCursorInfo/DrawIconEx: la
+    /// forma oficial de saber qué puntero hay y pintarlo.
     ///
     /// Se dibuja el icono de verdad, con su punto caliente restado, en vez de un círculo inventado:
     /// así lo que ve el modelo es lo mismo que ve el usuario, incluido el cambio de forma cuando el
@@ -128,7 +80,6 @@ public sealed class LiveVideo : IDisposable
             if (!GetCursorInfo(ref ci) || ci.flags != CURSOR_SHOWING || ci.hCursor == IntPtr.Zero)
                 return;
 
-            // El icono se copia: el original es del sistema y puede cambiar mientras se dibuja.
             IntPtr copia = CopyIcon(ci.hCursor);
             if (copia == IntPtr.Zero) return;
             try
@@ -136,8 +87,6 @@ public sealed class LiveVideo : IDisposable
                 int x = ci.ptScreenPos.X, y = ci.ptScreenPos.Y;
                 if (GetIconInfo(copia, out ICONINFO ii))
                 {
-                    // El puntero se dibuja desde su esquina, no desde la punta: sin restar el punto
-                    // caliente, la flecha aparece desplazada respecto a donde de verdad apunta.
                     x -= (int)ii.xHotspot;
                     y -= (int)ii.yHotspot;
                     if (ii.hbmMask != IntPtr.Zero) DeleteObject(ii.hbmMask);
@@ -180,6 +129,4 @@ public sealed class LiveVideo : IDisposable
     [DllImport("user32.dll")] private static extern bool DrawIconEx(IntPtr hdc, int x, int y,
         IntPtr hIcon, int cx, int cy, int istepIfAniCur, IntPtr hbrFlickerFreeDraw, int diFlags);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr hObject);
-
-    public void Dispose() => Cerrar();
 }

@@ -138,6 +138,10 @@
          Fuera del cliente por la misma razón que los dos de arriba — un net8.0 puro se juzga en la
          nube en cada PR; esto, con WinRT dentro, no. Ver voz\Contrato y la spec 001. -->
     <ProjectReference Include="..\voz\Omi\Omi.csproj" />
+
+    <!-- CÓMO SE HABLA CON EL SERVIDOR DE VOZ. Reemplaza a Gemini Live (2026-08-24): el proveedor
+         cambió, la conversación no. Ver voz\Realtime\IProtocolo.cs. -->
+    <ProjectReference Include="..\voz\Realtime\Realtime.csproj" />
   </ItemGroup>
 
 </Project>

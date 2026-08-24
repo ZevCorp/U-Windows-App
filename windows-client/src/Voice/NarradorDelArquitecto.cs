@@ -26,7 +26,7 @@ namespace U.WindowsClient.Voice;
 /// </summary>
 public sealed class NarradorDelArquitecto : IDisposable
 {
-    private readonly GeminiLive _voz;
+    private readonly ConversacionEnVivo _voz;
     private readonly Queue<string> _cola = new();
     private readonly object _llave = new();
     private bool _hablando;
@@ -44,7 +44,7 @@ public sealed class NarradorDelArquitecto : IDisposable
     /// </summary>
     private const int TopeCola = 4;
 
-    public NarradorDelArquitecto(GeminiLive voz)
+    public NarradorDelArquitecto(ConversacionEnVivo voz)
     {
         _voz = voz;
         _voz.Cerro += TerminoDeHablar;

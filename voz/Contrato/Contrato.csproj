@@ -26,6 +26,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Omi\Omi.csproj" />
+    <!-- El protocolo con el servidor de voz (Gemini→OpenAI, 2026-08-24). Es net8.0 puro y sin
+         estado a propósito —ver voz\Realtime\IProtocolo.cs— para que estas promesas se juzguen
+         igual: sin socket, sin micrófono y sin clave. -->
+    <ProjectReference Include="..\Realtime\Realtime.csproj" />
   </ItemGroup>
 
 </Project>

@@ -31,8 +31,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private readonly UiaReader _uia = new();
     private readonly VoiceIO _voice = new();
 
-    /// <summary>La conversación en vivo, si el mapa está disponible. Ver <see cref="GeminiLive"/>.</summary>
-    private GeminiLive? _vivo;
+    /// <summary>La conversación en vivo, si el mapa está disponible. Ver <see cref="ConversacionEnVivo"/>.</summary>
+    private ConversacionEnVivo? _vivo;
 
     /// <summary>El mapa vivo publicado en Neo4j. Ver <see cref="Navigation.MapaVivo"/>.</summary>
     private Navigation.MapaVivo? _mapaVivo;
@@ -265,7 +265,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // hablada su propio camino para actuar habría significado duplicar el ancla de
             // ubicación, la verificación de llegadas y los vetos — y duplicar una protección es la
             // forma más segura de que una de las dos copias se quede atrás.
-            _vivo = new GeminiLive(mcp.Map);
+            _vivo = new ConversacionEnVivo(mcp.Map);
             // «Cállate», «ocúltate», «ciérrate»: van al chrome de la ventana, no al mapa de
             // pantallas — por eso se resuelven aquí y no dentro de SurfaceMapTools.
             _vivo.Autocontrol = AtenderAutocontrol;
@@ -1640,7 +1640,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
     /// <summary>
-    /// Lo que hace Ü con self_mute/self_hide/self_close, pedido por VOZ. Es <see cref="GeminiLive.Autocontrol"/>.
+    /// Lo que hace Ü con self_mute/self_hide/self_close, pedido por VOZ. Es <see cref="ConversacionEnVivo.Autocontrol"/>.
     /// </summary>
     /// <remarks>
     /// SIEMPRE EN EL HILO DE LA VENTANA. Esto se llama desde el bucle que recibe mensajes del

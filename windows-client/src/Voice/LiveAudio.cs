@@ -12,19 +12,37 @@ namespace U.WindowsClient.Voice;
 /// turno lo decide un temporizador de 8 s, aquí lo decide el modelo mientras te oye. Por eso hace
 /// falta PCM crudo y no un reconocedor.
 ///
-/// Los dos ritmos son distintos a propósito y los fija Google: se ENVÍA a 16 kHz y se RECIBE a
-/// 24 kHz, ambos mono y de 16 bits. Mezclarlos suena a acelerado o a ralentizado, que es el primer
-/// síntoma cuando algo va mal aquí.
+/// LOS DOS RITMOS SON DISTINTOS A PROPÓSITO. La salida es fija —24 kHz, lo que entregan tanto
+/// Gemini como OpenAI— pero la ENTRADA la decide quien abre la conversación: Gemini pedía 16 kHz y
+/// OpenAI exige un mínimo de 24 kHz (comprobado contra su servidor real, 2026-08-24). Por eso el
+/// ritmo de entrada es un parámetro del constructor y no una constante — la última vez que fue fija
+/// hubo que cambiar el archivo entero para cambiar de proveedor.
 /// </summary>
 public sealed class LiveAudio : IDisposable
 {
-    public const int RitmoEntrada = 16000;
+    public int RitmoEntrada { get; }
     public const int RitmoSalida = 24000;
+
+    /// <summary>El collar entrega SIEMPRE 16 kHz: es el firmware de Omi, no algo que decidamos aquí.</summary>
+    private const int RitmoDelCollar = 16000;
 
     private WaveInEvent? _mic;
     private BufferedWaveProvider? _cola;
     private WaveOutEvent? _altavoz;
     private readonly object _candado = new();
+
+    /// <summary>
+    /// Sube el ritmo del collar cuando hace falta. Solo existe si <see cref="RitmoEntrada"/> no es
+    /// ya 16 kHz — crearlo sin necesidad sería un remuestreador trabajando para no cambiar nada.
+    /// </summary>
+    private readonly RemuestreadorPcm16? _remuestreadorCollar;
+
+    public LiveAudio(int ritmoEntrada = 16000)
+    {
+        RitmoEntrada = ritmoEntrada;
+        if (ritmoEntrada != RitmoDelCollar)
+            _remuestreadorCollar = new RemuestreadorPcm16(RitmoDelCollar, ritmoEntrada);
+    }
 
     // ── EL COLLAR (spec 001) ──────────────────────────────────────────────────
     private Relevo? _relevo;
@@ -279,7 +297,13 @@ public sealed class LiveAudio : IDisposable
         finally { lock (_candado) _abriendoCollar = false; }
     }
 
-    private void TrozoDelCollar(byte[] trozo) => Capturado?.Invoke(trozo);
+    private void TrozoDelCollar(byte[] trozo)
+    {
+        // SE REMUESTREA AQUÍ, en el único punto por el que pasa TODO lo que sale del collar — así
+        // no hay dos copias de esta decisión, una por cada quien construya LiveAudio.
+        var listo = _remuestreadorCollar?.Remuestrear(trozo) ?? trozo;
+        if (listo.Length > 0) Capturado?.Invoke(listo);
+    }
 
     /// <summary>
     /// Decide si esta conversación deja de oír por el collar. NO desenlaza: el enlace sobrevive.
@@ -381,5 +405,6 @@ public sealed class LiveAudio : IDisposable
             try { _altavoz?.Stop(); _altavoz?.Dispose(); } catch { }
             _altavoz = null; _cola = null;
         }
+        try { _remuestreadorCollar?.Dispose(); } catch { }
     }
 }
