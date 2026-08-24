@@ -38,16 +38,28 @@ enum Mirar {
 
     /// Mira, le pregunta al modelo qué ve, y lo dice. NO TOCA NADA — ni el teclado ni el ratón.
     static func correr(llave: String) async {
-        Registro.di("👁 U_MIRAR=1 · pido el permiso de grabación de pantalla si hace falta")
+        Registro.di("👁 U_MIRAR=1 · miro la pantalla")
         Registro.di("👁 primer plano: \(Frente.descripcion)")
 
+        // LA COMPUERTA QUE FALTABA, y es la razón por la que este prototipo dio un falso positivo el
+        // 2026-08-21: `CGWindowListCreateImage` SIN permiso no falla ni da nil — entrega una captura
+        // "segura" con solo el fondo de pantalla, indistinguible a simple vista de una captura real.
+        // El modelo entonces «acertó» que había una Calculadora porque leyó su nombre en la barra de
+        // menú (que SÍ viaja en la imagen degradada), sin haber visto un solo botón ni el resultado.
+        // Una caja que miente es peor que no tener caja: se pregunta ANTES, con la única API que
+        // distingue esto sin ambigüedad, y si no hay permiso de verdad, no se manda nada al modelo.
+        guard CGPreflightScreenCaptureAccess() else {
+            Registro.di("👁 ✘ sin permiso de Grabación de pantalla — CGPreflightScreenCaptureAccess() = false")
+            Registro.di("👁 ✋ pidiéndolo ahora. Ajustes del Sistema debería abrirse solo; si no, ve a"
+                + " Privacidad y seguridad → Grabación de pantalla, quita a Ü si ya está en la lista"
+                + " (queda obsoleta al recompilar, la firma ad-hoc cambia), actívala de nuevo, y"
+                + " vuelve a correr U_MIRAR=1.")
+            CGRequestScreenCaptureAccess()
+            return
+        }
+
         guard let imagen = capturar() else {
-            // SIN PERMISO, `CGWindowListCreateImage` no lanza un error: devuelve `nil` o una imagen
-            // en negro, y eso es indistinguible de un fallo real si no se dice explícito. macOS pide
-            // el permiso solo la primera vez que se llama, y bloquea hasta que el usuario contesta en
-            // el diálogo del sistema — no hay callback que avisar.
-            Registro.di("👁 ✘ no pude capturar. Si es la primera vez, concede «Grabación de pantalla» en"
-                + " Ajustes del Sistema → Privacidad y seguridad, y vuelve a correr U_MIRAR=1.")
+            Registro.di("👁 ✘ tengo el permiso pero no pude capturar de todos modos")
             return
         }
         guard let b64 = aBase64Jpeg(imagen) else {

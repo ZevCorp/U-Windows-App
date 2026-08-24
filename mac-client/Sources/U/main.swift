@@ -483,6 +483,16 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.panel.orderFrontRegardless()
             }))
 
+        // SUMAR, Y SALE. El prototipo acotado de la mitad que ACTÚA. Aislado igual que Mirar.
+        if Operador.pedido {
+            oido.callarse()
+            Task {
+                await Operador.correr()
+                NSApplication.shared.terminate(nil)
+            }
+            return
+        }
+
         // MIRAR, Y SALE. El prototipo acotado de computer-use: mira la pantalla, dice qué ve, y
         // termina. No arranca el oído ni la voz — está aislado a propósito, ver Mirar.swift.
         if Mirar.pedido {
