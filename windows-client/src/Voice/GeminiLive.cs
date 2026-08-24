@@ -807,6 +807,12 @@ public sealed class GeminiLive : IDisposable
             + "uno y otro. Es la forma rápida: úsala para las tareas que ya sabes hacer enteras.",
             ("steps", "JSON: lista de pasos. Cada uno {\"op\":\"go_to|take|type|unblock\", …} con los "
                     + "mismos argumentos que las herramientas sueltas.")),
+        Fn("map_esto_es", "GUARDA lo que el usuario te está ENSEÑANDO sobre lo que acaba de señalar: "
+            + "qué es o para qué sirve. «salo cuando diga cosas como «esto es el número de factura», "
+            + "«aquí va X cuando Y», «este botón sirve para…». Primero tiene que haber señalado algo "
+            + "(map_pointing_at); esto le pone el significado. Lo recordarás la próxima vez que vuelvas.",
+            ("significado", "Lo que ha dicho que es, con sus palabras. No lo resumas: «aquí va el número "
+                          + "de factura, nunca el nombre» es más útil que «número de factura».")),
         Fn("map_pointed_trail", "«Ilumina TODO ESTO que te estoy mostrando». Devuelve y señala todo aquello "
             + "por encima de lo que el usuario acaba de pasar el ratón. Úsala SIEMPRE que hable en plural "
             + "señalando —«todos estos», «esto que te muestro», «los que te acabo de pasar»— en vez de "

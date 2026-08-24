@@ -116,6 +116,10 @@ internal static class Contrato
         Prueba("45. un clic que no se pudo dar no se cuenta como dado", PulsarQueNoSePudoNoCuenta);
         Prueba("46. lo que se cruza queda aprendido, y manda el terreno", PulsarAprendeADondeLlevoDeVerdad);
         Prueba("47. las homónimas se iluminan por SELECTOR y en el orden que se dicen", IluminarHomonimasPorSelector);
+        Prueba("48. señalar algo lo anota aunque no se diga qué es", EnsenarAnotaAlSenalar);
+        Prueba("49. volver a señalar NO borra el significado ya enseñado", EnsenarNoOlvidaAlVolverAMirar);
+        Prueba("50. el significado de algo que nadie miró no se guarda", EnsenarExigeQueSeHayaSenalado);
+        Prueba("51. lo enseñado se cuelga de una identidad que se pueda reencontrar", EnsenarExigeIdentidadUtil);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1114,6 +1118,75 @@ internal static class Contrato
             "y lo que no está en pantalla se cae en silencio: enseñar tres de cuatro es mejor que "
             + "no enseñar ninguna");
     }
+
+    // ── ENSEÑAR ──────────────────────────────────────────────────────────────
+    //
+    // El grafo ya aprende CAMINOS solo pulsando. Lo que no sabía guardar es lo que se pidió el
+    // primer día: «ves esto de aquí, aquí vas a escribir X cuando Y». Un camino no es un
+    // significado — y sin significado no se pueden pedir tareas por lo que son, solo por dónde
+    // están.
+
+    private static LoQueMeEnsenas EnsenanzasNuevas()
+        => new(Path.Combine(_raiz, "ensenanzas-" + Guid.NewGuid().ToString("N")[..6]));
+
+    private static void EnsenarAnotaAlSenalar(SurfaceMap _)
+    {
+        var e = EnsenanzasNuevas();
+        var a = e.Senalado("uia://x.exe/factura", "uia:aid=num", "Número", "Edit", "foto.png");
+
+        Debe(a.Significado.Length == 0, "se anota SIN significado todavía");
+        Debe(a.Captura == "foto.png",
+            "y CON la foto. Enseñar es un gesto de dos tiempos —se apunta y luego se explica— y "
+            + "guardar solo al llegar la explicación perdería el primero");
+        Debe(e.Todas.Count == 1, "y queda anotado");
+        Debe(e.De("uia://x.exe/factura").Count == 0,
+            "pero NO se cuenta como enseñado: mirar algo no es saber para qué sirve");
+    }
+
+    private static void EnsenarNoOlvidaAlVolverAMirar(SurfaceMap _)
+    {
+        var e = EnsenanzasNuevas();
+        e.Senalado("uia://x.exe/factura", "uia:aid=num", "Número", "Edit", "vieja.png");
+        Debe(e.Significa("uia://x.exe/factura", "uia:aid=num", "aquí va el número de factura, nunca el nombre"),
+            "se le puede dar significado a lo señalado");
+
+        // Y ahora se vuelve a señalar lo mismo.
+        var otra = e.Senalado("uia://x.exe/factura", "uia:aid=num", "Número", "Edit", "nueva.png");
+
+        Debe(e.Todas.Count == 1, "señalar dos veces lo mismo NO crea dos cosas: es mirarlo dos veces");
+        Debe(otra.Significado.Contains("número de factura"),
+            "y sobre todo NO se pierde lo enseñado. Perder el significado por volver a mirar sería "
+            + "un castigo absurdo: mirar es justo lo que se hace antes de hablar de algo");
+        Debe(otra.Captura == "nueva.png", "la foto sí se refresca: la pantalla de ahora es la que vale");
+    }
+
+    private static void EnsenarExigeQueSeHayaSenalado(SurfaceMap _)
+    {
+        var e = EnsenanzasNuevas();
+        Debe(!e.Significa("uia://x.exe/factura", "uia:aid=jamas-visto", "esto es el total"),
+            "el significado de algo que nadie ha mirado NO se guarda: sería una frase sin sujeto, y "
+            + "después nadie sabría a qué se refería");
+        Debe(e.Todas.Count == 0, "y no queda rastro de ese intento");
+    }
+
+    private static void EnsenarExigeIdentidadUtil(SurfaceMap _)
+    {
+        // Medido el 2026-08-23 en ensenanzas.json: se guardó «uia:path=;ct=Pane» — el selector del
+        // CONTENEDOR, no el del botón, porque el nombre apareció en un descendiente. Un selector
+        // así no vuelve a encontrar nada, y lo enseñado cuelga de él: no es un detalle de formato,
+        // es una enseñanza perdida el día que se vuelve a esa pantalla.
+        Debe(!SirveComoIdentidad("uia:path=;ct=Pane"),
+            "un selector con la ruta VACÍA no sirve como identidad: no distingue nada");
+        Debe(!SirveComoIdentidad(""), "y uno vacío tampoco");
+        Debe(SirveComoIdentidad("uia:name=Guardar;ct=Button"),
+            "uno con nombre y tipo sí: con eso se vuelve a encontrar");
+        Debe(SirveComoIdentidad("uia:aid=btnGuardar;ct=Button"),
+            "y uno con AutomationId, que es el mejor de todos");
+    }
+
+    /// <summary>La misma regla que usa SurfaceMapTools al anotar lo señalado.</summary>
+    private static bool SirveComoIdentidad(string sel)
+        => sel.Length > 0 && !sel.Contains("path=;") && !sel.StartsWith("uia:path=;");
 
     private static void SenalarDistingueLasTres(SurfaceMap _)
     {

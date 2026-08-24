@@ -392,6 +392,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false);
             if (mcp.Map != null) mcp.Map.PulsarPorElNucleo = (sel, etq) => pulsar.Pulsa(sel, etq).Cuenta;
 
+            // LO QUE SE VA ENSEÑANDO. Vive en disco, junto a las fotos: el significado se dice
+            // mirando algo, y sin ese algo la frase se queda coja.
+            if (mcp.Map != null) mcp.Map.Ensenanzas = new Navigation.LoQueMeEnsenas();
+
             _servidorNucleo = new Navigation.ServidorDelNucleo(
                 _mapaVivo.Nucleo,
                 () => _locator?.DondeEstoy()?.Id ?? "",

@@ -602,6 +602,69 @@ public sealed class SurfaceMapTools
         catch (Exception e) { LogBus.Log("mapa-mcp", $"no pude iluminar las candidatas: {e.Message}"); }
     }
 
+    /// <summary>
+    /// Guarda la ventana que se está mirando, junto a lo enseñado. Devuelve la ruta, o vacío.
+    /// </summary>
+    /// <remarks>
+    /// Se guarda la VENTANA y no solo el recuadro del elemento: «aquí va el número de factura» se
+    /// entiende viendo el formulario entero, no un botón recortado. El contexto es la mitad de la
+    /// enseñanza.
+    ///
+    /// Y se guarda con la fecha en el nombre para poder ver DESPUÉS si lo aprendido sigue teniendo
+    /// sentido cuando la pantalla cambie — que es la única forma de saber si una enseñanza envejeció
+    /// mal en vez de enterarse el día que falla.
+    /// </remarks>
+    private string GuardarFotoDeLoSenalado(string nombre)
+    {
+        if (Ensenanzas == null) return "";
+        try
+        {
+            string b64 = Capture.Screenshotter.CaptureVentanaBase64Png(AppAligner.VentanaDelUsuario()) ?? "";
+            if (b64.Length == 0) return "";
+
+            string limpio = new string(nombre.Where(c => char.IsLetterOrDigit(c) || c == ' ').ToArray())
+                .Trim().Replace(' ', '-').ToLowerInvariant();
+            if (limpio.Length > 40) limpio = limpio[..40];
+            if (limpio.Length == 0) limpio = "sin-nombre";
+
+            string carpeta = System.IO.Path.Combine(Ensenanzas.Carpeta, "fotos");
+            System.IO.Directory.CreateDirectory(carpeta);
+            string ruta = System.IO.Path.Combine(carpeta, $"{DateTime.Now:yyyyMMdd-HHmmss}-{limpio}.png");
+            System.IO.File.WriteAllBytes(ruta, Convert.FromBase64String(b64));
+            return ruta;
+        }
+        catch (Exception e) { LogBus.Log("enseñar", $"no pude guardar la foto: {e.Message}"); return ""; }
+    }
+    /// <summary>
+    /// «ESTO ES X» / «aquí va el número de factura»: le pone significado a lo último señalado.
+    /// </summary>
+    /// <remarks>
+    /// No lleva `exit` a propósito. Enseñar es un gesto de dos tiempos y el primero ya ocurrió: se
+    /// apuntó con el cursor. Pedir además el nombre de lo señalado obligaría a decir en voz alta
+    /// «Número de factura de la cabecera», que es justo lo que se evita señalando — y encima con
+    /// dos cosas que se llaman igual no serviría.
+    ///
+    /// Se exige haber señalado hace poco (LoQueSenalas.LoSenaladoCaduca): un significado dicho diez
+    /// minutos después de apuntar se colgaría de lo que fuera que se mirara entonces.
+    /// </remarks>
+    private string EstoEs(string significado)
+    {
+        if (significado.Length == 0)
+            return "falta `significado`: qué es o para qué sirve lo que se está señalando.";
+        if (Ensenanzas == null) return "todavía no sé guardar lo que me enseñas.";
+
+        if (_ultimoSenalado is not { } ult)
+            return "no me has señalado nada. Ponme el cursor encima y dime qué es.";
+        if (!Navigation.LoQueSenalas.SigueValiendo(ult.Cuando, DateTime.UtcNow))
+            return "hace rato que no me señalas nada. Vuelve a apuntarlo y me lo dices.";
+
+        string donde = _where()?.Id ?? "";
+        if (!Ensenanzas.Significa(donde, ult.Selector, significado))
+            return $"no tenía anotado «{ult.Nombre}» en esta pantalla; señálalo otra vez y te escucho.";
+
+        LogBus.Log("enseñar", $"«{ult.Nombre}» en «{donde}» → {significado}");
+        return $"anotado: «{ult.Nombre}» es {significado}. Lo recordaré cuando vuelva aquí.";
+    }
     private string LoQueSenala()
     {
         try
@@ -728,7 +791,32 @@ public sealed class SurfaceMapTools
             //
             // Se guarda el ELEMENTO, no su caja: pulsar por coordenadas acierta hasta que algo se
             // mueve, y entonces falla en silencio diciendo que funcionó.
-            _ultimoSenalado = (nombre, sels.FirstOrDefault() ?? $"uia:name={nombre}", el, DateTime.UtcNow);
+            // LA IDENTIDAD TIENE QUE SER LA DE LO SEÑALADO, no la de por dónde se llegó. `sels` se
+            // saca del elemento que hay bajo el punto, y cuando el nombre aparece MÁS ABAJO —la barra
+            // de tareas, un contenedor XAML— ese selector es el del PADRE: se guardaba
+            // «uia:path=;ct=Pane», que no vuelve a encontrar nada. Y lo enseñado se cuelga de esa
+            // identidad, así que un selector malo no es un detalle: es una enseñanza perdida
+            // (2026-08-23, visto en ensenanzas.json).
+            string suyo = sels.FirstOrDefault() ?? "";
+            bool sirve = suyo.Length > 0 && !suyo.Contains("path=;") && !suyo.StartsWith("uia:path=;");
+            _ultimoSenalado = (nombre, sirve ? suyo : $"uia:name={nombre};ct={tipo}", el, DateTime.UtcNow);
+
+            // SE ANOTA LO SEÑALADO, CON SU FOTO. El significado llega después —«esto es el número
+            // de factura»— pero la foto hay que sacarla AHORA, mirando lo mismo que mira quien habla.
+            // Sin ella, «aquí va el número» se queda sin el «aquí» (2026-08-23, pedido por el usuario).
+            try
+            {
+                if (Ensenanzas != null)
+                {
+                    string archivo = GuardarFotoDeLoSenalado(nombre);
+                    var anotada = Ensenanzas.Senalado(_where()?.Id ?? "", _ultimoSenalado!.Value.Selector,
+                        nombre, tipo, archivo);
+                    LogBus.Log("enseñar", $"anotado «{nombre}»"
+                        + (anotada.Significado.Length > 0 ? $" — ya me habías dicho que es: {anotada.Significado}" : " (sin significado todavía)")
+                        + (archivo.Length > 0 ? $" · foto {System.IO.Path.GetFileName(archivo)}" : " · sin foto"));
+                }
+            }
+            catch (Exception ex) { LogBus.Log("enseñar", $"no pude anotar lo señalado: {ex.Message}"); }
 
             // LA RESPUESTA LA COMPONE EL NÚCLEO. Leer la pantalla —todo lo de arriba— es trabajo de
             // UIA y se queda aquí; decidir QUÉ se contesta sobre lo señalado es lo único que puede
@@ -1531,13 +1619,19 @@ public sealed class SurfaceMapTools
     /// </summary>
     public Func<string, string, string>? PulsarPorElNucleo { get; set; }
 
+    /// <summary>
+    /// Lo que se va enseñando: qué es cada cosa y para qué sirve, con su foto.
+    /// Ver <see cref="Navigation.LoQueMeEnsenas"/>.
+    /// </summary>
+    public Navigation.LoQueMeEnsenas? Ensenanzas { get; set; }
+
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
         or "map_type" or "map_unblock" or "map_run" or "map_learn_app" or "map_open_app"
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
         or "map_hierarchy" or "map_feedback" or "map_unsituated" or "map_learn_back" or "map_shot"
-        or "map_set_kind" or "map_silver" or "map_scroll" or "map_tidy_desktop"
+        or "map_set_kind" or "map_silver" or "map_scroll" or "map_tidy_desktop" or "map_esto_es"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1594,6 +1688,7 @@ public sealed class SurfaceMapTools
             "map_shot" => Foto(),
             // DESPLAZAR ES ACCIONAR, no mirar: va con el resto de manos. Faltaba entero — el modelo
             // contestaba «no puedo scrolear directamente» porque era verdad (2026-08-16).
+            "map_esto_es" => EstoEs(A("significado")),
             "map_scroll" => Uia.Desplazamiento.Mover(Uia.Desplazamiento.Leer(A("direction"))),
             "map_tidy_desktop" => A("undo").Equals("true", StringComparison.OrdinalIgnoreCase)
                 ? Uia.AcomodarEscritorio.Deshacer()
@@ -1720,7 +1815,18 @@ public sealed class SurfaceMapTools
         //
         // El camino viejo queda debajo y sin tocar: mientras haya pantallas que solo vivan en el
         // mapa antiguo, quitarlo dejaría a Ü sin saber dónde está en ellas.
-        if (Situarse != null) return Situarse();
+        // LO QUE ME ENSEÑASTE AQUÍ VA CON LA UBICACIÓN. De nada sirve guardar significados si no
+        // aparecen justo cuando se está en el sitio: quien pregunta «¿dónde estoy?» necesita saber
+        // que en esta pantalla ya le contaron para qué sirven dos campos (2026-08-23).
+        if (Situarse != null)
+        {
+            string donde = Situarse();
+            var sabidas = Ensenanzas?.De(loc.Id) ?? Array.Empty<Navigation.LoQueMeEnsenas.Ensenanza>();
+            if (sabidas.Count > 0)
+                donde += " Aquí me enseñaste: "
+                       + string.Join("; ", sabidas.Select(e => $"«{e.Etiqueta}» es {e.Significado}")) + ".";
+            return donde;
+        }
 
         // NO SE RELEE LA PANTALLA PARA CONTESTAR DÓNDE ESTÁS.
         //
