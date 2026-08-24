@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    EL PROTOCOLO DE LA VOZ EN VIVO. Traduce, y nada más.
+
+    Existe porque cambiar de proveedor no puede costar un archivo de 1.400 líneas. Todo lo que rodea
+    a la conversación —el micrófono, el collar, el autocontrol, las herramientas, las instrucciones,
+    la reconexión, el consumo— es NUESTRO y no cambia según quién esté al otro lado. Lo único que
+    cambia es cómo se dicen las cosas por el cable.
+
+    Sin WPF y sin dependencias, como el núcleo y el mapeador: así el contrato puede juzgar la
+    traducción sin abrir una ventana, sin micrófono y sin clave. Un traductor que solo se puede
+    probar hablando con el servidor de verdad no se prueba nunca.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Voz.Realtime</AssemblyName>
+    <RootNamespace>Voz.Realtime</RootNamespace>
+  </PropertyGroup>
+
+</Project>

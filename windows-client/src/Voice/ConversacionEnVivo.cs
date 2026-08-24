@@ -1,16 +1,15 @@
 using System.IO;
-using System.Net.Http;
 using System.Net.WebSockets;
-using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Mcp;
+using Voz.Realtime;
 
 namespace U.WindowsClient.Voice;
 
 /// <summary>
-/// Conversación en vivo con Gemini, con las manos puestas en el grafo.
+/// Conversación en vivo, con las manos puestas en el grafo.
 ///
 /// La diferencia con <see cref="VoiceIO"/> no es la calidad de la voz: es QUIÉN decide el turno. El
 /// dictado de Windows abre el micrófono, espera una frase y se cierra; aquí el caño está abierto en
@@ -18,25 +17,35 @@ namespace U.WindowsClient.Voice;
 /// mitad de la explicación. Eso es lo que permite decir «ve al explorador y crea una carpeta» y
 /// verlo ocurrir mientras se habla, en vez de dictar → esperar → ejecutar.
 ///
+/// REEMPLAZA A <c>GeminiLive</c> (2026-08-24). El proveedor cambió —de Gemini Live a GPT Realtime,
+/// por problemas de turno que no se lograban estabilizar— y esta clase no sabe de ninguno de los
+/// dos: todo lo que aquí pasa —el micrófono, el collar, el autocontrol, las herramientas, el
+/// reintento, el consumo— es NUESTRO y no cambia según quién esté al otro lado del cable. Lo único
+/// que sabe hablar el idioma del proveedor es <see cref="IProtocolo"/>, y eso vive aparte
+/// (<c>voz/Realtime</c>) precisamente para que la PRÓXIMA vez que haga falta cambiar de proveedor
+/// no cueste un archivo de mil cuatrocientas líneas.
+///
 /// Las manos son las MISMAS de siempre: <see cref="SurfaceMapTools"/>, que ya sabe anclarse a una
 /// ubicación, verificar cada llegada y negarse cuando la pantalla no es la que se creía. Aquí no se
 /// añade ninguna capacidad de actuar — se le da voz a la que ya había. Todos los vetos siguen
 /// puestos, y eso es deliberado: el camino de voz es más rápido de invocar que el de texto y sería
 /// justo el peor sitio para relajar las protecciones.
 /// </summary>
-public sealed class GeminiLive : IDisposable
+public sealed class ConversacionEnVivo : IDisposable
 {
-    private const string Host = "wss://generativelanguage.googleapis.com/ws/"
-        + "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
-
     private readonly SurfaceMapTools _mapa;
-    private readonly LiveAudio _audio = new();
-    private readonly LiveVideo _video = new();
+    private readonly IProtocolo _protocolo;
+    private readonly LiveAudio _audio;
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
     private readonly SemaphoreSlim _envio = new(1, 1);
 
-    public GeminiLive(SurfaceMapTools mapa) => _mapa = mapa;
+    public ConversacionEnVivo(SurfaceMapTools mapa, IProtocolo? protocolo = null)
+    {
+        _mapa = mapa;
+        _protocolo = protocolo ?? new ProtocoloOpenAI();
+        _audio = new LiveAudio(_protocolo.RitmoDeEntrada);
+    }
 
     /// <summary>Está en curso una sesión de voz viva.</summary>
     public bool Viva { get; private set; }
@@ -53,8 +62,8 @@ public sealed class GeminiLive : IDisposable
     /// <summary>
     /// Pasa la voz al collar Omi sin cortar la conversación. Lo pide la carita con un gesto.
     ///
-    /// No abre ni cierra la sesión: sólo cambia de dónde entra el audio. Los dos orígenes entregan
-    /// PCM16 a 16 kHz mono, así que desde aquí abajo no se nota (promesa 3 del contrato de la voz).
+    /// No abre ni cierra la sesión: sólo cambia de dónde entra el audio. <see cref="LiveAudio"/> ya
+    /// remuestrea el collar al ritmo que este protocolo pida, así que desde aquí arriba no se nota.
     /// </summary>
     public void PasarAlCollar() => _audio.PasarAlCollar();
 
@@ -67,7 +76,6 @@ public sealed class GeminiLive : IDisposable
         add => _audio.FuenteCambio += value;
         remove => _audio.FuenteCambio -= value;
     }
-
 
     /// <summary>Texto para la carita: lo que se oye, lo que responde, y qué está haciendo.</summary>
     public event Action<string>? Dice;
@@ -110,7 +118,11 @@ public sealed class GeminiLive : IDisposable
     private readonly HashSet<string> _canceladas = new();
     private readonly object _candadoCancel = new();
 
-    /// <summary>El pase de reanudación más reciente, y si el último cierre no lo pedimos nosotros.</summary>
+    /// <summary>
+    /// El pase de reanudación más reciente. Solo lo usan los protocolos con <see
+    /// cref="IProtocolo.SabeVolver"/>; para los que no, se queda vacío y ReconectarAsync abre una
+    /// sesión nueva en vez de fingir que continúa una que el servidor ya olvidó.
+    /// </summary>
     private string _pase = "";
     private bool _cayoSolo;
     private int _reintentos;
@@ -118,90 +130,34 @@ public sealed class GeminiLive : IDisposable
     private readonly StringBuilder _fraseU = new();
     private readonly StringBuilder _fraseUsuario = new();
 
-    private static string _modelo = "";
-
-    /// <summary>
-    /// Qué modelo atiende la voz. SE PREGUNTA, no se supone.
-    ///
-    /// Escribir aquí un identificador a mano —«gemini-3.1-flash-live»— es apostar a que el catálogo
-    /// de Google no se mueva, y se mueve más rápido que nuestros despliegues: el día que cambie, la
-    /// voz deja de arrancar con un error que no dice nada. La API sabe cuáles hablan en vivo, y lo
-    /// dice: son los que soportan `bidiGenerateContent`. Preguntar cuesta una llamada al abrir la
-    /// sesión y quita una suposición del sistema.
-    ///
-    /// U_LIVE_MODEL lo fuerza si algún día hace falta un modelo concreto.
-    /// </summary>
-    private static async Task<string> ModeloAsync(string clave, CancellationToken ct)
-    {
-        string forzado = Environment.GetEnvironmentVariable("U_LIVE_MODEL")?.Trim() ?? "";
-        if (forzado.Length > 0) return forzado;
-        if (_modelo.Length > 0) return _modelo;
-
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-        string json = await http.GetStringAsync(
-            $"https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key={Uri.EscapeDataString(clave)}", ct);
-
-        using var doc = JsonDocument.Parse(json);
-        var vivos = new List<string>();
-        if (doc.RootElement.TryGetProperty("models", out var modelos))
-            foreach (var m in modelos.EnumerateArray())
-            {
-                if (!m.TryGetProperty("supportedGenerationMethods", out var metodos)) continue;
-                bool habla = metodos.EnumerateArray()
-                    .Any(x => (x.GetString() ?? "").Equals("bidiGenerateContent", StringComparison.OrdinalIgnoreCase));
-                if (!habla) continue;
-                string nombre = (m.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "")
-                    .Replace("models/", "");
-                if (nombre.Length > 0) vivos.Add(nombre);
-            }
-
-        if (vivos.Count == 0)
-            throw new InvalidOperationException("esta clave no tiene acceso a ningún modelo de voz en vivo");
-
-        // No todo lo que habla en vivo sirve para esto: la lista real trae también un modelo de
-        // robótica y uno de traducción simultánea, que hablarían pero no son un asistente. Se
-        // descartan por nombre y entre los que quedan se prefiere «flash-live», que es la familia
-        // que Google publica para conversación en tiempo real; en una conversación el retardo
-        // importa más que el tamaño del modelo.
-        var utiles = vivos.Where(v => !v.Contains("robotics", StringComparison.OrdinalIgnoreCase)
-                                   && !v.Contains("translate", StringComparison.OrdinalIgnoreCase)).ToList();
-        if (utiles.Count == 0) utiles = vivos;
-        _modelo = utiles.FirstOrDefault(v => v.Contains("flash-live", StringComparison.OrdinalIgnoreCase))
-               ?? utiles.FirstOrDefault(v => v.Contains("flash", StringComparison.OrdinalIgnoreCase))
-               ?? utiles[0];
-        LogBus.Log("voz-viva", $"modelos con voz en vivo: {string.Join(", ", vivos)} → se usa «{_modelo}»");
-        return _modelo;
-    }
-
-    /// <summary>
-    /// La llave. Tres escalones, en orden:
-    ///   1. GEMINI_API_KEY en la máquina — quien desarrolla pone la suya, igual que GRAPH_API_KEY.
-    ///   2. La key EMBEBIDA en el build de distribución (AssemblyMetadata GeminiDefaultApiKey), que
-    ///      el CI inyecta desde un secreto — mismo mecanismo que GraphDefaultApiKey. Vacía en los
-    ///      builds del repo: cero secretos en código o historial.
-    ///   3. Vacío: no hay voz en vivo, y se dice por qué.
-    ///
-    /// ESTO ES UN ATAJO, dicho en voz alta (2026-08-14, decisión consciente del usuario, no la
-    /// recomendada): la key de Gemini es de alcance COMPLETO, y embeberla reparte la MISMA key en
-    /// cada copia distribuida — si se filtra o se agota el saldo, afecta a todas las instalaciones a
-    /// la vez. Lo correcto sería que el backend la EMITIERA por sesión, como ya hace
-    /// <see cref="U.WindowsClient.Clinical.DictadoSoniox"/> con Soniox (clave temporal de 60 s, el
-    /// cliente nunca ve la real). Se elige embeber por velocidad; el cambio queda pendiente.
-    /// </summary>
-    private static string Clave()
-    {
-        string desdeElEntorno = Environment.GetEnvironmentVariable("GEMINI_API_KEY")?.Trim() ?? "";
-        if (desdeElEntorno.Length > 0) return desdeElEntorno;
-
-        return typeof(GeminiLive).Assembly
-            .GetCustomAttributes<AssemblyMetadataAttribute>()
-            .FirstOrDefault(a => a.Key == "GeminiDefaultApiKey")?.Value?.Trim() ?? "";
-    }
+    private string _sesionId = "";
+    private DateTime _inicioSesion = DateTime.UtcNow;
 
     public async Task AlternarAsync()
     {
         if (Viva) { await TerminarAsync(); return; }
         await ArrancarAsync();
+    }
+
+    /// <summary>
+    /// La clave del proveedor activo. SE LEE DEL ENTORNO, no se embebe en el binario: repartir la
+    /// MISMA clave de alcance completo en cada instalación era ya una deuda conocida con Gemini, y
+    /// no hay motivo para arrastrarla al cambiar de proveedor. Lo correcto de verdad —una clave
+    /// temporal emitida por sesión, como ya hace <see cref="U.WindowsClient.Clinical.DictadoSoniox"/>
+    /// con Soniox— sigue pendiente.
+    ///
+    /// SE MIRA EL PROCESO Y, SI NO ESTÁ, EL REGISTRO DE USUARIO. `setx`/`SetEnvironmentVariable`
+    /// escriben el registro pero NO el bloque de entorno de un proceso ya vivo, y un proceso hijo
+    /// hereda el de su padre en el instante en que nace — no lo relee después. Pasó de verdad la
+    /// primera vez que se configuró esta clave (2026-08-24): el registro ya la tenía y U seguía
+    /// diciendo que faltaba, porque el proceso que lo lanzó arrancó antes del cambio. El registro es
+    /// el último recurso, no el primero: si el proceso ya la trae, ni hace falta tocarlo.
+    /// </summary>
+    private static string Clave()
+    {
+        string v = (Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "").Trim();
+        if (v.Length > 0) return v;
+        return (Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User) ?? "").Trim();
     }
 
     /// <param name="intento">
@@ -215,46 +171,42 @@ public sealed class GeminiLive : IDisposable
         string clave = Clave();
         if (clave.Length == 0)
         {
-            Dice?.Invoke("No hay voz en vivo: falta la clave de Gemini. "
-                       + "Una sola vez: setx GEMINI_API_KEY \"tu_key\" y reinicia Ü.");
-            LogBus.Log("voz-viva", "sin GEMINI_API_KEY: no se arranca");
+            Dice?.Invoke($"No hay voz en vivo: falta la clave de {_protocolo.Quien}. "
+                       + "Una sola vez: setx OPENAI_API_KEY \"tu_key\" y reinicia Ü.");
+            LogBus.Log("voz-viva", "sin OPENAI_API_KEY: no se arranca");
             return;
         }
 
         try
         {
             _cts = new CancellationTokenSource();
-            string modelo = await ModeloAsync(clave, _cts.Token);
             _ws = new ClientWebSocket();
-            await _ws.ConnectAsync(new Uri($"{Host}?key={Uri.EscapeDataString(clave)}"), _cts.Token);
-            await EnviarAsync(Configuracion(modelo), _cts.Token);
+            foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
+            await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
+            foreach (string msg in _protocolo.Apertura(Instrucciones, Herramientas(), ""))
+                await EnviarAsync(msg, _cts.Token);
 
             // Sesión nueva, cuentas nuevas: ni llamadas retiradas de antes, ni el pase de la
             // conversación anterior —volver con él nos devolvería a una charla que ya terminó.
             lock (_candadoCancel) _canceladas.Clear();
             _pase = ""; _cayoSolo = false; _reintentos = 0;
 
-            // Cuentas del consumo, también a cero. El id de sesión viaja hasta el
-            // ledger y hace de clave de idempotencia: si el envío se reintenta
-            // tras un corte de red, la misma conversación no se cobra dos veces.
             _entrada = _salida = _total = 0;
             _turnos = 0;
-            _modeloVivo = modelo;
             _sesionId = Guid.NewGuid().ToString("n");
             _inicioSesion = DateTime.UtcNow;
 
             Viva = true;
             Cambio?.Invoke(true);
-            LogBus.Log("voz-viva", $"sesión abierta con «{modelo}»");
+            LogBus.Log("voz-viva", $"sesión abierta con «{_protocolo.Modelo}» ({_protocolo.Quien})");
             Dice?.Invoke("Te escucho.");
 
             _audio.Capturado += MandarTrozo;
             _audio.AbrirMicrofono();
 
-            // OJOS. Un fotograma por segundo, con el cursor pintado: es lo que permite decir «esto
-            // que estoy señalando» y que signifique algo. Va por el mismo canal que el audio.
-            _video.Capturado += MandarFotograma;
-            _video.Abrir(1000);
+            // NO HAY VÍDEO EN DIRECTO. Ver es ahora un GESTO, no un caño abierto: una foto sale al
+            // señalar algo, y otra cuando el propio modelo pide mirar (map_look). Las dos pasan por
+            // EjecutarNucleoAsync, no por aquí.
             _ = Task.Run(() => RecibirAsync(_cts.Token));
         }
         catch (Exception e)
@@ -262,16 +214,9 @@ public sealed class GeminiLive : IDisposable
             LogBus.Log("voz-viva", $"no se pudo abrir la sesión: {e.Message}");
             await TerminarAsync();
 
-            // UN CORTE DE RED DE UNOS SEGUNDOS NO DEBERÍA COSTARLE UN GESTO AL USUARIO. Antes se
-            // rendía al primer intento: alguien pulsaba el micrófono, el DNS fallaba un instante
-            // —«Host desconocido (generativelanguage.googleapis.com)»— y la única salida era darse
-            // cuenta y volver a pulsar. Y para darse cuenta hay que leer un mensaje que habla de
-            // resolución de nombres (2026-08-16, le pasó al usuario; a los pocos minutos el mismo
-            // host respondía sin tocar nada).
-            //
-            // Solo se reintenta lo que puede arreglarse solo. Una clave inválida o un permiso
-            // denegado van a fallar igual las tres veces, y reintentarlos solo retrasa el momento de
-            // enterarse: ahí se informa y punto.
+            // UN CORTE DE RED DE UNOS SEGUNDOS NO DEBERÍA COSTARLE UN GESTO AL USUARIO. Solo se
+            // reintenta lo que puede arreglarse solo: una clave inválida o un permiso denegado van a
+            // fallar igual las tres veces, y reintentarlos solo retrasa el momento de enterarse.
             if (EsDeRed(e) && intento < 2)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1 + intento));
@@ -297,24 +242,12 @@ public sealed class GeminiLive : IDisposable
     private static bool EsDeRed(Exception e)
     {
         for (Exception? x = e; x != null; x = x.InnerException)
-        {
-            if (x is System.Net.Sockets.SocketException
-                  or System.Net.WebSockets.WebSocketException
-                  or TaskCanceledException
-                  or TimeoutException) return true;
-            // Una petición HTTP que ni siquiera llegó a tener respuesta: no hay veredicto del
-            // servidor, así que es del camino. Si trae código de estado, ya no lo es.
-            if (x is HttpRequestException http && http.StatusCode is null) return true;
-        }
+            if (x is System.Net.Sockets.SocketException or System.Net.Http.HttpRequestException
+                or WebSocketException { WebSocketErrorCode: WebSocketError.Faulted })
+                return true;
         return false;
     }
 
-    // ── Cuánto ha costado esta conversación ──────────────────────────────────
-
-    /// <summary>
-    /// Lo que Ü le manda a Graph al acabar la conversación, para que el panel de
-    /// costos la vea. Solo cifras: ni una palabra de lo que se dijo.
-    /// </summary>
     public sealed record ConsumoVivo(
         string Modelo, long Entrada, long Salida, long Total, int Turnos, long DuracionMs, string Sesion);
 
@@ -326,41 +259,6 @@ public sealed class GeminiLive : IDisposable
 
     private long _entrada, _salida, _total;
     private int _turnos;
-    private string _modeloVivo = "";
-    private string _sesionId = "";
-    private DateTime _inicioSesion = DateTime.UtcNow;
-
-    /// <summary>
-    /// La Live API va mandando <c>usageMetadata</c> con el TOTAL ACUMULADO de la
-    /// sesión, no con el incremento de cada mensaje. Por eso se REEMPLAZA y no se
-    /// suma: sumarlo multiplicaría el consumo por el número de mensajes recibidos,
-    /// que en una conversación de dos minutos son cientos.
-    /// </summary>
-    private void AnotarConsumo(JsonElement raiz)
-    {
-        if (!raiz.TryGetProperty("usageMetadata", out var uso)) return;
-
-        // El ValueKind se comprueba ANTES de pedir el número: TryGetInt64 no
-        // devuelve false sobre un texto o un null, lanza InvalidOperationException
-        // — y una excepción aquí dentro tumbaría el bucle que recibe la voz.
-        static long Leer(JsonElement padre, params string[] nombres)
-        {
-            foreach (var nombre in nombres)
-                if (padre.TryGetProperty(nombre, out var v)
-                    && v.ValueKind == JsonValueKind.Number
-                    && v.TryGetInt64(out long n) && n > 0)
-                    return n;
-            return 0;
-        }
-
-        long total = Leer(uso, "totalTokenCount");
-        if (total <= 0) return;
-
-        _entrada = Leer(uso, "promptTokenCount");
-        _salida = Leer(uso, "responseTokenCount", "candidatesTokenCount");
-        _total = total;
-        _turnos++;
-    }
 
     /// <summary>
     /// Manda el consumo acumulado y lo pone a cero. Nunca lanza y nunca espera:
@@ -369,13 +267,11 @@ public sealed class GeminiLive : IDisposable
     /// </summary>
     private void ReportarConsumo()
     {
-        // Copia local: entre la comprobación y el envío diferido, otro hilo podría
-        // dejar la propiedad en null y el `await` reventaría dentro del Task.
         var reporta = ReportaConsumo;
         if (_total <= 0 || reporta is null) { _entrada = _salida = _total = 0; _turnos = 0; return; }
 
         var parte = new ConsumoVivo(
-            _modeloVivo, _entrada, _salida, _total, _turnos,
+            _protocolo.Modelo, _entrada, _salida, _total, _turnos,
             (long)(DateTime.UtcNow - _inicioSesion).TotalMilliseconds, _sesionId);
         _entrada = _salida = _total = 0;
         _turnos = 0;
@@ -395,8 +291,6 @@ public sealed class GeminiLive : IDisposable
         _audio.Capturado -= MandarTrozo;
         _audio.CerrarMicrofono();
         _audio.Callar();
-        _video.Capturado -= MandarFotograma;
-        _video.Cerrar();
         try { _cts?.Cancel(); } catch { }
         try
         {
@@ -415,117 +309,9 @@ public sealed class GeminiLive : IDisposable
     /// <summary>
     /// El mensaje de apertura: quién es, qué puede tocar, y cómo queremos que se comporte.
     ///
-    /// Se piden las DOS transcripciones —la de entrada y la de salida— porque la carita tiene que
-    /// poder enseñar la conversación: una voz que actúa sobre el equipo sin dejar rastro escrito de
-    /// lo que se le pidió no es auditable, y aquí se están moviendo archivos de verdad.
+    /// PROVEEDOR-AGNÓSTICO A PROPÓSITO. Estas palabras describen a Ü, no a Gemini ni a OpenAI: el
+    /// día que se vuelva a cambiar de proveedor, esto no debería tener que tocarse.
     /// </summary>
-    private static string Configuracion(string modelo)
-    {
-        var setup = new
-        {
-            setup = new
-            {
-                model = $"models/{modelo}",
-                // LA VOZ ES FIJA: Iapetus, elegida a mano en el catálogo de AI Studio. Sin esto el
-                // servidor sortea una de las 30 en cada sesión nueva, así que Ü sonaba distinto cada
-                // vez que se abría una conversación (2026-08-10).
-                generationConfig = new
-                {
-                    responseModalities = new[] { "AUDIO" },
-                    speechConfig = new { voiceConfig = new { prebuiltVoiceConfig = new { voiceName = Voz } } },
-                },
-                systemInstruction = new { parts = new[] { new { text = Instrucciones } } },
-                tools = new object[] { new { functionDeclarations = Herramientas() } },
-                inputAudioTranscription = new { },
-                outputAudioTranscription = new { },
-
-                realtimeInputConfig = DeteccionDeVoz,
-
-                // QUE LA CONVERSACIÓN SOBREVIVA A LA CONEXIÓN. El servidor corta el socket cuando le
-                // parece —se midieron cortes a los 36 s, a los 2 min y a los 3 min en la misma
-                // tarde— y sin esto cada corte era el final: la conversación se apagaba a media
-                // frase (2026-08-05). Pidiéndolo, el servidor va mandando un pase con el que se
-                // puede volver a entrar donde lo dejamos, en vez de empezar de cero sin memoria.
-                sessionResumption = new { },
-            },
-        };
-        return JsonSerializer.Serialize(setup);
-    }
-
-    /// <summary>El pase para volver a la MISMA conversación si se cae la conexión.</summary>
-    private static string Reanudacion(string modelo, string pase)
-    {
-        var setup = new
-        {
-            setup = new
-            {
-                model = $"models/{modelo}",
-                generationConfig = new
-                {
-                    responseModalities = new[] { "AUDIO" },
-                    speechConfig = new { voiceConfig = new { prebuiltVoiceConfig = new { voiceName = Voz } } },
-                },
-                systemInstruction = new { parts = new[] { new { text = Instrucciones } } },
-                tools = new object[] { new { functionDeclarations = Herramientas() } },
-                inputAudioTranscription = new { },
-                outputAudioTranscription = new { },
-                realtimeInputConfig = DeteccionDeVoz,
-                sessionResumption = new { handle = pase },
-            },
-        };
-        return JsonSerializer.Serialize(setup);
-    }
-
-    /// <summary>
-    /// QUIÉN DECIDE QUE ESTÁS HABLANDO: el servidor, que es como Live API está pensada.
-    ///
-    /// Esto estuvo APAGADO —<c>disabled = true</c>— desde el 2026-08-04 hasta el 2026-08-16, con un
-    /// detector propio en su lugar: umbral aprendido sobre el ruido de sala, más un margen sobre el
-    /// eco de la propia Ü. Funcionaba para lo que se escribió (que el eco no la interrumpiera) y
-    /// hacía IMPOSIBLE lo otro:
-    ///
-    ///   interrumpir = hablar MIENTRAS Ü habla = justo cuando aquel umbral estaba más alto.
-    ///
-    /// No era cuestión de calibrarlo mejor. El diseño usaba UN número —el volumen— para contestar
-    /// dos preguntas que por volumen son indistinguibles: «¿esto es el eco de Ü?» y «¿esto es quien
-    /// me habla, interrumpiéndola?». Cuanto mejor tapaba el eco, más había que gritar para cortarla.
-    /// De ahí los dos síntomas que lo destaparon: «nunca puedo interrumpirlo» y «me toca hablarle
-    /// muy duro» (2026-08-16, dicho por el usuario).
-    ///
-    /// El servidor no tiene ese problema porque no juzga por volumen. Y el barge-in es su
-    /// comportamiento por defecto: <c>activityHandling</c> vale <c>START_OF_ACTIVITY_INTERRUPTS</c>
-    /// salvo que se pida lo contrario, así que basta con no estorbar y atender el aviso
-    /// <c>serverContent.interrupted</c>, que ya se atendía.
-    ///
-    /// Las cuatro perillas, y por qué estas y no otras:
-    ///
-    ///   · startOfSpeechSensitivity = LOW — el motivo por el que se apagó todo esto era que el ruido
-    ///     de sala se leía como voz. ESTA es la perilla para eso, y por defecto viene en HIGH. El
-    ///     comentario viejo decía «bajar la sensibilidad no lo arregló», pero se probó peleando
-    ///     contra el ECO, que es otra cosa y no se arregla con sensibilidad.
-    ///   · endOfSpeechSensitivity = LOW — no dar el turno por terminado a la primera pausa; cortar a
-    ///     media frase se siente como no ser escuchado.
-    ///   · silenceDurationMs = 700 — dentro de la banda recomendada (500–800). Por debajo, la
-    ///     documentación avisa de que el audio se fragmenta y la transcripción se degrada.
-    ///   · prefixPaddingMs = 20 — que no se coma el arranque de la primera sílaba.
-    ///
-    /// UNA SOLA COPIA, compartida por abrir y por reanudar. Estaban duplicadas, y dos copias del
-    /// mismo criterio divergen: basta que alguien afine una.
-    /// </summary>
-    private static readonly object DeteccionDeVoz = new
-    {
-        automaticActivityDetection = new
-        {
-            startOfSpeechSensitivity = "START_SENSITIVITY_LOW",
-            endOfSpeechSensitivity = "END_SENSITIVITY_LOW",
-            prefixPaddingMs = 20,
-            silenceDurationMs = 700,
-        },
-    };
-
-    /// <summary>Elegida a mano en el catálogo de voces de AI Studio (2026-08-10). Es la voz de Ü.</summary>
-    private const string Voz = "Iapetus";
-
     private const string Instrucciones = """
         Eres Ü, un asistente que maneja el ordenador de quien te habla. Respondes en español, en voz,
         con frases cortas: quien te escucha está mirando la pantalla, no esperando un discurso.
@@ -564,12 +350,64 @@ public sealed class GeminiLive : IDisposable
         cuando lo pidan sin ambigüedad: es apagarte del todo, no ocultarte. Antes de self_close di una
         despedida CORTA en la misma frase de siempre, no después — no hay después.
 
-        EL CURSOR MANDA SOBRE TU INTERPRETACIÓN. Cuando el usuario diga «esto», «este», «el que estoy
-        señalando», «mira aquí» —o cuando en el vídeo veas su puntero sobre algo— usa map_pointing_at
-        ANTES que nada. No adivines de qué elemento habla por el nombre que creas haber entendido:
-        él está apuntando, y apuntar es más exacto que describir. map_pointing_at te da la puerta que
-        hay bajo el cursor, con su nombre real, y la ilumina. Con ese nombre ya puedes usar
-        map_set_level o map_take.
+        NO TIENES OJOS ABIERTOS TODO EL TIEMPO. Nadie te está mandando vídeo: ves cuando lo pides.
+        Dos formas de pedirlo, cada una para su momento:
+
+          · SEÑALAR PRIMERO. Cuando el usuario diga «esto», «este», «el que estoy señalando», «mira
+            aquí», usa map_pointing_at ANTES que nada. No adivines de qué elemento habla por el
+            nombre que creas haber entendido: él está apuntando, y apuntar es más exacto que
+            describir. Te devuelve la puerta que hay bajo el cursor, con su nombre real, y la
+            ilumina. Con ese nombre ya puedes pulsarlo (map_take), corregir dónde vive en el menú
+            (map_set_level), o —lo más frecuente— aprender qué es si te lo van a explicar
+            (map_esto_es). Si necesitas VER lo que rodeaba el elemento, pide map_look aparte: señalar
+            no manda foto por su cuenta.
+          · CUANDO NECESITES VER ALGO QUE NADIE TE HA SEÑALADO —el diseño de una pantalla, un color,
+            un error pintado en rojo, si algo se parece a otra cosa— pide map_look. Te manda una foto
+            de lo que hay AHORA. No la pidas para saber nombres o tipos: para eso está map_what_i_see,
+            que es más barato y no depende de que acertaras dónde mirar.
+
+        UNA FOTO NUNCA DECIDE DÓNDE ESTÁS — eso lo dice map_where_am_i, y solo eso. Una foto te
+        puede engañar: un chat, un editor de código y una app de escritorio pueden PARECERSE a un
+        navegador con solo mirarlos, y map_look no sabe nada del proceso real, del título de la
+        ventana ni de la URL — solo ve píxeles. Pasó de verdad: se preguntó «¿qué ves?», adivinaste
+        «un navegador» mirando una foto, y era otra cosa; y al preguntarte «¿seguro?» seguiste
+        fiándote de la misma foto en vez de comprobarlo. NO VUELVAS A HACER ESO.
+
+          · Si te preguntan DÓNDE ESTÁS, EN QUÉ APP ESTÁS, o «¿es esto un navegador/X?» — o sea,
+            cualquier pregunta sobre IDENTIDAD, no sobre apariencia— llama a map_where_am_i y contesta
+            con ESO, aunque ya tengas una foto reciente y aunque tu impresión visual diga otra cosa.
+          · Si map_look o lo que viste antes sugiere algo distinto de lo que dice map_where_am_i, GANA
+            map_where_am_i siempre: es el mismo dato del que vive todo lo demás —a dónde puedes ir,
+            qué recuerdas de aquí, qué has aprendido en este sitio— y una foto no tiene esa certeza.
+          · Puedes usar la foto para describir lo que HAY —el diseño, el contenido, los colores— pero
+            la IDENTIDAD de la pantalla —qué app, qué pestaña, qué sitio— la dice siempre
+            map_where_am_i. Las dos cosas juntas, cada una con su fuente, no una adivinando por la otra.
+
+        ERES UN APRENDIZ QUE EJECUTA LO QUE APRENDE. No estás aquí solo para obedecer: cada vez que
+        alguien te señala algo y te dice qué es, tienes la oportunidad de saber más la próxima vez.
+        El objetivo no es un ejecutor que repite lo mismo para siempre — es un aprendiz que, con el
+        tiempo, sabe más que quien lo enseñó a base de acumular RECUERDOS.
+
+          · CUANDO TE EXPLIQUEN QUÉ ES ALGO O PARA QUÉ SIRVE —«esto es el número de factura», «aquí
+            se radican los pacientes», «este botón sirve para X cuando Y»— eso es una lección, no
+            una orden de acción: crea un RECUERDO con map_esto_es (necesitas haber señalado antes
+            con map_pointing_at). No la resumas: «aquí va el número de factura, nunca el nombre»
+            enseña más que «número de factura».
+          · UN RECUERDO SE QUEDA, para siempre y no solo en esta charla: vive pegado a ESE elemento
+            en ESA pantalla, en el mismo sitio donde vive el mapa. La próxima vez que llegues ahí,
+            map_where_am_i te lo recuerda solo («Aquí me enseñaste: «X» es Y»). ÚSALO DE VERDAD: si
+            lo que te piden coincide con un recuerdo que ya tienes, actúa con esa pista en vez de
+            preguntar otra vez o adivinar a ciegas. Un aprendiz que vuelve a preguntar lo que ya le
+            explicaron no aprendió nada.
+          · SUPERA AL MAESTRO, CON CUIDADO. No te quedes solo con la frase exacta que te dijeron: si
+            tienes un recuerdo de un campo en una pantalla y encuentras uno parecido, sin explicar,
+            en una pantalla vecina de la MISMA app, puedes proponer la misma lectura — pero DILO, no
+            lo des por hecho en silencio («¿este también es el número de factura, como el de
+            antes?»). Generalizar bien es parte de aprender; generalizar sin decirlo es adivinar
+            disfrazado de memoria.
+          · ENSEÑAR Y ACTUAR PUEDEN IR EN LA MISMA FRASE. «Esto es donde se radican los pacientes,
+            entra» son dos cosas a la vez: crea el recuerdo CON map_esto_es Y entra con map_take o
+            map_go_to. No elijas solo una de las dos.
 
         SEÑALAR ANTES QUE AFIRMAR. Si te preguntan «¿ves X?» o «¿dónde está X?», usa map_show: dice
         si está y además lo marca en pantalla y lleva la carita a su lado. Contestar «sí, lo veo» sin
@@ -580,30 +418,51 @@ public sealed class GeminiLive : IDisposable
         lo que te está permitido tocar. Nunca digas «lo veo pero como no lo conozco no puedo
         pulsarlo»: eso es falso. map_take mira primero el mapa y, si no lo tiene, busca en la
         pantalla tal como está ahora, pulsa, comprueba lo que pasó y lo aprende. Así que si algo está
-        a la vista —en el vídeo o en map_show— llama a map_take y ya está. Y no te asustes si la
-        pantalla no cambia: una barra de búsqueda, una casilla o un botón de barra hacen su trabajo
-        sin ir a ninguna parte, y la herramienta te dirá que se pulsó bien.
+        a la vista —en una foto que pediste o en map_show— llama a map_take y ya está. Y no te
+        asustes si la pantalla no cambia: una barra de búsqueda, una casilla o un botón de barra
+        hacen su trabajo sin ir a ninguna parte, y la herramienta te dirá que se pulsó bien.
 
-        VARIAS COSAS: DOS CAMINOS, Y ELIGES TÚ CUÁL.
+        VARIAS COSAS: EMPIEZA SIEMPRE POR EL GESTO, NO POR LA IMAGEN.
 
-        (a) LO QUE TE ENSEÑAN CON LA MANO. Si acaban de pasar el ratón por encima de varias cosas
-        —«ilumina todos estos», «esto que te estoy mostrando»— usa map_pointed_trail: te dice por
-        encima de qué pasó el cursor y lo ilumina. Es exacto porque no adivina nada: repite el gesto.
+        map_pointed_trail es tu HERRAMIENTA PRINCIPAL para señalar varias cosas — no una alternativa
+        a la vista, la PRIMERA que pruebas. Es exacta porque no adivina nada: repite el gesto que ya
+        hizo el usuario con el ratón, en vez de que tú intentes reconstruirlo mirando una foto.
 
-        (b) LO QUE TE DESCRIBEN CON PALABRAS. «Todos los de esa barra lateral», «las carpetas de la
-        izquierda», «los botones de arriba», «solo los de este tipo». Aquí NO hay gesto que repetir,
-        así que lo resuelves TÚ, razonando, en tres pasos y en este orden:
+        (a) SI HAY UN GESTO QUE REPETIR —el usuario acaba de mover o pasar el cursor por varias
+        cosas, o habla de ellas en PLURAL sin nombrarlas todas: «¿ves estos?», «estos tres», «los
+        que te estoy señalando», «los que estoy pulsando», «ilumina todos estos», «esto que te
+        muestro»— PRUEBA map_pointed_trail PRIMERO, siempre, aunque no haya un verbo explícito de
+        pasar la mano. Te dice por encima de qué pasó el cursor y lo ilumina TODO DE UNA VEZ.
 
-          1. MIRA EL VÍDEO y decide a qué se refieren. El vídeo es lo único que te dice qué es «esa
-             barra», dónde está «arriba» y cuál es «este tipo» — es tu comprensión de la pantalla.
+          · SOLO UNA LLAMADA, no una por elemento. map_pointing_at —la de UN elemento— ve
+            exclusivamente lo que hay bajo el cursor EN ESTE INSTANTE: llamarla varias veces seguidas
+            no recupera tres posiciones pasadas, solo repite la actual una y otra vez. Si el usuario
+            habla en plural de algo que ya señaló, es map_pointed_trail o no es nada — nunca
+            map_pointing_at repetido.
+          · SI SALE VACÍA —«no has pasado el ratón por encima de nada en los últimos N segundos»—
+            es que el gesto ya caducó (10 s por defecto; pide más segundos con el argumento `seconds`
+            si hace falta, o dile al usuario que vuelva a pasar el cursor). AHÍ, y solo ahí, cae al
+            camino (b).
+
+        (b) SOLO SI NO HAY NINGÚN GESTO —el usuario describe una ZONA con puras palabras, sin haber
+        movido el cursor por nada: «todos los de esa barra lateral», «las carpetas de la izquierda»,
+        «los botones de arriba», «solo los de este tipo»— resuelves TÚ, razonando, en tres pasos y en
+        este orden. Y AUNQUE USES ESTE CAMINO, la lista final es SOLO lo que pidieron: en una prueba
+        real, "¿ves estos elementos de aquí?" volvió con TODO el escritorio marcado —once iconos—
+        cuando el usuario señalaba tres. Eso es justo la regla de más abajo de «no metas nada de
+        fuera de lo que te han pedido», y aquí es donde más se paga romperla.
+
+          1. PIDE map_look y decide a qué se refieren. Es la única forma de saber qué es «esa
+             barra», dónde está «arriba» y cuál es «este tipo» — es tu comprensión de la pantalla, y
+             aquí SÍ hace falta pedirla: sin ver no hay zona que interpretar.
           2. PIDE map_what_i_see. Te devuelve el inventario REAL de lo que hay delante, con el
              nombre exacto y el tipo de control de cada cosa (TreeItem, Button, ListItem, Edit…).
-             El vídeo te da el sentido; esta lista te da los nombres con los que se puede actuar.
-          3. CRUZA LAS DOS y elige a mano el subconjunto: los del inventario que, según lo que ves
-             en el vídeo, están en esa zona Y son de ese tipo. Luego llama a map_show pasando esos
+             La foto te da el sentido; esta lista te da los nombres con los que se puede actuar.
+          3. CRUZA LAS DOS y elige a mano el subconjunto: los del inventario que, según lo que viste
+             en la foto, están en esa zona Y son de ese tipo. Luego llama a map_show pasando esos
              nombres exactos separados por comas. map_show acepta una lista y los ilumina todos.
 
-        Lo que hace que esto funcione es la división: el VÍDEO para entender de qué te hablan, el
+        Lo que hace que esto funcione es la división: LA FOTO para entender de qué te hablan, el
         INVENTARIO para nombrarlo sin equivocarte. Ninguno de los dos solo basta.
 
         Y tres reglas al elegir el subconjunto:
@@ -618,7 +477,7 @@ public sealed class GeminiLive : IDisposable
 
         NUNCA le pases a map_show el nombre de una zona («la columna izquierda», «el panel de
         arriba») esperando que lo entienda: una franja de pantalla no sabe qué agrupa, y pidiendo la
-        columna izquierda salió la barra de título. La zona la interpretas tú con el vídeo; a la
+        columna izquierda salió la barra de título. La zona la interpretas tú con map_look; a la
         herramienta le pasas SIEMPRE nombres concretos.
 
         UNA SELECCIÓN SE CORRIGE, NO SE REHACE. Lo que marcas SE QUEDA marcado, y las frases que
@@ -637,6 +496,9 @@ public sealed class GeminiLive : IDisposable
         vista— y acierta casi siempre. Cuando el usuario te diga que algo pertenece o no al nivel
         principal, o te señale elementos, usa map_set_level: queda fijo para esa app y la deducción
         ya no lo mueve. Si te señala varios seguidos, uno por uno, y confirma en voz cuáles quedaron.
+
+        ESTO ES ESTRUCTURA, NO SIGNIFICADO: map_set_level corrige DÓNDE vive algo en el menú. Si en
+        cambio te dicen QUÉ ES o PARA QUÉ SIRVE, eso es una lección — map_esto_es, no esto.
 
         Cómo trabajar:
         - Para ABRIR una aplicación, map_open_app. No busques su icono en el mapa: el mapa guarda
@@ -730,13 +592,10 @@ public sealed class GeminiLive : IDisposable
         """;
 
     /// <summary>
-    /// Las herramientas del mapa, descritas para el modelo.
-    ///
-    /// Se declaran a mano en vez de generarlas: el texto de cada una es lo que decide si el modelo
-    /// la usa bien, y esa redacción es conocimiento del proyecto —«pasa `at` con dónde crees estar»
-    /// es una lección que costó varias tareas rotas— no un detalle que convenga derivar de una firma.
+    /// El catálogo de manos, en la forma neutra que <see cref="IProtocolo"/> traduce. Ver <see
+    /// cref="Fn"/>: cada protocolo decide cómo se envuelve esto en su propio JSON.
     /// </summary>
-    private static object[] Herramientas() => new object[]
+    private static IReadOnlyList<Utensilio> Herramientas() => new[]
     {
         Fn("map_where_am_i", "Dice en qué pantalla estás ahora mismo y qué salidas conoce el mapa desde ahí. "
             + "Si hay un diálogo delante, lo describe en vez de fingir que es un lugar."),
@@ -761,18 +620,29 @@ public sealed class GeminiLive : IDisposable
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
             ("at", "La superficie a la que hay que volver después."),
             ("choose", "La opción a pulsar. Vacío = solo si hay una única salida posible.")),
-        Fn("map_pointing_at", "PRIORITARIA cuando el usuario señala algo. Devuelve la PUERTA que hay "
-            + "bajo el cursor —con su nombre real— y la ilumina. Úsala en cuanto oigas «esto», «este», "
-            + "«el que estoy señalando», «mira aquí», o cuando en el vídeo veas su puntero sobre algo. "
-            + "Apuntar es más exacto que describir: no adivines el nombre, pregúntalo aquí."),
+        Fn("map_pointing_at", "PRIORITARIA cuando el usuario señala UN SOLO elemento. Devuelve la "
+            + "PUERTA que hay bajo el cursor EN ESTE INSTANTE —con su nombre real— y la ilumina; "
+            + "además te llega una FOTO de ese instante, así que también VES lo que rodeaba el cursor "
+            + "cuando dijo «esto». Úsala en cuanto oigas «esto», «este», «el que estoy señalando», "
+            + "«mira aquí», EN SINGULAR. SI HABLA EN PLURAL de varias cosas que señaló —«estos», "
+            + "«estos tres», «los que te estoy mostrando»— NO llames a esta varias veces seguidas: "
+            + "solo ve el instante actual y repetirla no recupera posiciones pasadas. Para plural usa "
+            + "map_pointed_trail, una sola vez."),
+        Fn("map_look", "MIRA LA PANTALLA ahora mismo: te llega una FOTO de lo que hay delante en este "
+            + "instante. No es para saber nombres ni tipos —eso es map_what_i_see, que es más barato "
+            + "y más exacto para eso— es para lo que solo se ve: colores, diseño, si algo se parece a "
+            + "otra cosa, si hay un error pintado en rojo, cómo está distribuida la pantalla. Pídela "
+            + "cuando de verdad necesites VER y no solo saber qué hay. NO SIRVE PARA SABER EN QUÉ APP "
+            + "O SITIO ESTÁS: una foto se PARECE a cosas —un chat cualquiera parece un navegador— pero "
+            + "no sabe qué proceso ni qué URL hay detrás. Eso, siempre, es map_where_am_i."),
         Fn("map_scroll", "DESPLAZA la pantalla y te dice en qué punto quedaste. Es lo que hay que usar "
             + "para «baja», «sube», «vete al final de la página»: no busques un botón para eso.",
             ("direction", "«abajo», «arriba», «inicio» (del todo arriba) o «final» (del todo abajo).")),
         Fn("map_what_i_see", "El INVENTARIO de lo que hay en pantalla ahora: el nombre exacto y el TIPO "
             + "de control de cada elemento (TreeItem, Button, ListItem, Edit…), más lo que el mapa sabe "
             + "de él. Pídelo SIEMPRE antes de iluminar un grupo que te han descrito con palabras («los "
-            + "de esa barra», «solo las carpetas»): el vídeo te dice a qué se refieren, y esta lista te "
-            + "da los nombres exactos y el tipo con los que elegir el subconjunto sin equivocarte."),
+            + "de esa barra», «solo las carpetas»): map_look te dice a qué se refieren, y esta lista "
+            + "te da los nombres exactos y el tipo con los que elegir el subconjunto sin equivocarte."),
         Fn("map_show", "¿VES este elemento? Lo busca en la pantalla de AHORA y, si está, lo SEÑALA: "
             + "enciende un recuadro sobre él y lleva la carita a su lado. Úsala siempre que el usuario "
             + "pregunte «¿ves X?» o «¿dónde está X?» — responder que sí sin señalarlo no le sirve de "
@@ -780,7 +650,7 @@ public sealed class GeminiLive : IDisposable
             ("exit", "Uno: su nombre tal como se ve. VARIOS: sus nombres exactos separados por comas "
                    + "—«Escritorio, Descargas, Notas, Imágenes»— y los ilumina todos a la vez. Pásale "
                    + "SIEMPRE nombres concretos, nunca el nombre de una zona («la columna izquierda»): "
-                   + "qué elementos forman esa zona lo decides TÚ mirando el vídeo y cruzándolo con "
+                   + "qué elementos forman esa zona lo decides TÚ pidiendo map_look y cruzándolo con "
                    + "map_what_i_see, y aquí traes ya la lista elegida."),
             ("which", "Cuando ese nombre coincide con VARIOS, cuál de ellos: «1», «2»… Sin esto se "
                     + "señalan todos. ÚSALO PARA PREGUNTAR: si tienes que elegir entre dos «Code», "
@@ -807,16 +677,23 @@ public sealed class GeminiLive : IDisposable
             + "uno y otro. Es la forma rápida: úsala para las tareas que ya sabes hacer enteras.",
             ("steps", "JSON: lista de pasos. Cada uno {\"op\":\"go_to|take|type|unblock\", …} con los "
                     + "mismos argumentos que las herramientas sueltas.")),
-        Fn("map_esto_es", "GUARDA lo que el usuario te está ENSEÑANDO sobre lo que acaba de señalar: "
-            + "qué es o para qué sirve. «salo cuando diga cosas como «esto es el número de factura», "
-            + "«aquí va X cuando Y», «este botón sirve para…». Primero tiene que haber señalado algo "
-            + "(map_pointing_at); esto le pone el significado. Lo recordarás la próxima vez que vuelvas.",
+        Fn("map_esto_es", "CREA UN RECUERDO con lo que el usuario te está ENSEÑANDO sobre lo que "
+            + "acaba de señalar: qué es o para qué sirve. Úsala cuando diga cosas como «esto es el "
+            + "número de factura», «aquí va X cuando Y», «este botón sirve para…». Primero tiene que "
+            + "haber señalado algo (map_pointing_at); esto le pone el significado. QUEDA GUARDADO "
+            + "PARA SIEMPRE, pegado a ese elemento en esa pantalla: "
+            + "map_where_am_i te lo recordará solo la próxima vez que vuelvas, sin que nadie tenga "
+            + "que volver a explicarlo.",
             ("significado", "Lo que ha dicho que es, con sus palabras. No lo resumas: «aquí va el número "
                           + "de factura, nunca el nombre» es más útil que «número de factura».")),
-        Fn("map_pointed_trail", "«Ilumina TODO ESTO que te estoy mostrando». Devuelve y señala todo aquello "
-            + "por encima de lo que el usuario acaba de pasar el ratón. Úsala SIEMPRE que hable en plural "
-            + "señalando —«todos estos», «esto que te muestro», «los que te acabo de pasar»— en vez de "
-            + "adivinar una zona de la pantalla por su nombre.",
+        Fn("map_pointed_trail", "TU HERRAMIENTA PRINCIPAL para señalar VARIAS cosas — pruébala PRIMERO, "
+            + "antes que map_look o map_what_i_see. Devuelve y señala TODO de una sola llamada: todo "
+            + "aquello por encima de lo que el usuario acaba de pasar o mover el cursor. Úsala SIEMPRE "
+            + "que hable en plural de algo que señaló, aunque no diga el verbo «pasar»: «todos estos», "
+            + "«esto que te muestro», «los que te acabo de pasar», «¿ves estos?», «estos tres», «los "
+            + "que estoy pulsando/señalando». Si sale vacía, el gesto ya caducó: pide más segundos o "
+            + "dile al usuario que vuelva a pasar el cursor — NO caigas en adivinar una zona por su "
+            + "nombre ni en llamar a map_pointing_at varias veces, que solo ve un instante cada vez.",
             ("seconds", "Cuántos segundos hacia atrás mirar. Vacío = 10, que es lo que dura enseñar algo con la mano.")),
         Fn("map_exclude", "QUITA uno de los que ya están marcados y deja el resto encendido. Es lo que "
             + "hay que usar para «excepto este», «ese no», «quita el de X»: NO vuelvas a llamar a "
@@ -919,6 +796,7 @@ public sealed class GeminiLive : IDisposable
             "map_where_am_i" => "mirando dónde estamos…",
             "map_what_i_see" => "mirando la pantalla…",
             "map_show" or "map_pointing_at" => "señalando…",
+            "map_look" => "mirando la pantalla…",
             "map_run" => "haciendo la secuencia…",
             "map_learn_app" => $"aprendiendo {V("app")}… (esto tarda)",
             "self_mute" => "callándome…",
@@ -937,7 +815,6 @@ public sealed class GeminiLive : IDisposable
     private static string Terminado(string tool, IReadOnlyDictionary<string, string> a,
         string resultado, long ms)
     {
-        // Las herramientas contestan en prosa, así que «no se pudo» se reconoce por cómo empieza.
         bool mal = resultado.StartsWith("No ", StringComparison.OrdinalIgnoreCase)
                 || resultado.StartsWith("Falta", StringComparison.OrdinalIgnoreCase)
                 || resultado.StartsWith("Nada ", StringComparison.OrdinalIgnoreCase)
@@ -947,34 +824,23 @@ public sealed class GeminiLive : IDisposable
 
         string primera = resultado.Split('\n')[0].Trim();
         if (primera.Length > 70) primera = primera[..70] + "…";
+
+        // UN RECUERDO NUEVO SE MARCA DISTINTO — no es una acción más, es la única herramienta que
+        // deja algo que dura más que la conversación. Un ✓ genérico se pierde entre los demás; esto
+        // es lo mínimo para que se note que acaba de pasar algo que se va a recordar (2026-08-24,
+        // pedido por el usuario: que se sienta cuando se crea un recuerdo).
+        if (tool == "map_esto_es" && !mal) return $"🧠 {primera}  ({ms} ms)";
+
         return $"{(mal ? "✋" : "✓")} {primera}  ({ms} ms)";
     }
 
-    /// <summary>
-    /// CADA HERRAMIENTA, CON SU RELOJ, EN UN SITIO QUE SE PUEDA COMPARAR DESPUÉS.
-    /// </summary>
-    /// <remarks>
-    /// El tiempo ya se medía y ya se enseñaba —el «✓ … (817 ms)» del panel— pero solo se veía PASAR:
-    /// no quedaba en ningún sitio, así que no se podía contestar «¿qué es lo lento?» sin volver a
-    /// hacerlo todo mirando. Y esa es justo la pregunta que hay que contestar para que navegar por
-    /// voz vaya tan rápido como el explorador (2026-08-16, pedido por el usuario).
-    ///
-    /// Va al MISMO pulso donde ya viven «localizar», «leer la pantalla» y «proyectar», y con el
-    /// mismo trato: veces, media y LA PEOR. Un panel con dos tablas de tiempos distintas obligaría a
-    /// mirar en dos sitios para comparar lo que compite por los mismos milisegundos.
-    ///
-    /// El prefijo «voz:» las agrupa sin mezclarlas con lo que hace el mapeador por su cuenta: son
-    /// costes de cosas distintas y confundirlos es como comparar Gmail con el explorador.
-    /// </remarks>
+    /// <summary>CADA HERRAMIENTA, CON SU RELOJ, EN UN SITIO QUE SE PUEDA COMPARAR DESPUÉS.</summary>
     private static void Apuntar(string tool, IReadOnlyDictionary<string, string> args, string resultado, long ms)
     {
         Mapeador.PulsoDelMapeador.Actual.Costo("voz: " + tool, ms);
         string donde = args.TryGetValue("surface", out var s) && s.Length > 0 ? s
                      : args.TryGetValue("path", out var p) && p.Length > 0 ? p
                      : args.TryGetValue("app", out var a) ? a : "";
-        // UNA LÍNEA POR LLAMADA, con lo que hace falta para ordenar por lentitud y saber sobre qué
-        // fue. SE RECORTA SOLO EL RESULTADO, nunca el reloj: cortar la línea entera se llevaría por
-        // delante justo el número que se viene a buscar.
         string linea = resultado.Split('\n')[0].Trim();
         if (linea.Length > 90) linea = linea[..90] + "…";
         LogBus.Log("voz-tiempo", $"{ms,6} ms · {tool}{(donde.Length > 0 ? $" «{donde}»" : "")} → {linea}");
@@ -987,88 +853,15 @@ public sealed class GeminiLive : IDisposable
         return barra >= 0 && barra < superficie.Length - 1 ? superficie[(barra + 1)..] : superficie;
     }
 
-    private static object Fn(string nombre, string descripcion, params (string Nombre, string Que)[] args)
-    {
-        var props = new Dictionary<string, object>();
-        foreach (var (n, q) in args) props[n] = new { type = "string", description = q };
-        return new
-        {
-            name = nombre,
-            description = descripcion,
-            parameters = new { type = "object", properties = props },
-        };
-    }
+    private static Utensilio Fn(string nombre, string descripcion, params (string Nombre, string Que)[] args)
+        => new(nombre, descripcion, args.Select(a => new Argumento(a.Nombre, a.Que)).ToList());
 
     // ── El caño ──────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Cuánto sonido trae el trozo (0..1). Sirve para distinguir «alguien habla» de «hay sala».
-    /// </summary>
-    private static double Volumen(byte[] pcm)
-    {
-        if (pcm.Length < 2) return 0;
-        double suma = 0;
-        int n = pcm.Length / 2;
-        for (int i = 0; i + 1 < pcm.Length; i += 2)
-        {
-            short m = (short)(pcm[i] | (pcm[i + 1] << 8));
-            suma += (double)m * m;
-        }
-        return Math.Sqrt(suma / n) / short.MaxValue;
-    }
-
-    /// <summary>Cada cuánto se anota el nivel de entrada. Es diagnóstico, no criterio.</summary>
-    private static readonly TimeSpan CadenciaDelAforo = TimeSpan.FromSeconds(5);
-
-    private DateTime _ultimoAforo = DateTime.MinValue;
-    private double _picoDelTramo;
-
-    /// <summary>
-    /// EL AUDIO VIAJA ENTERO Y SIN JUZGAR. Quien decide qué es voz es el servidor.
-    ///
-    /// Aquí vivían ~120 líneas que decidían por su cuenta cuándo empezaba y terminaba una
-    /// intervención: umbral aprendido sobre el ruido de sala, ganancia de eco, dos tramos seguidos
-    /// para confirmar, cierre por reloj a los 12 s, y los avisos activityStart/activityEnd. Todo eso
-    /// existía porque la detección del servidor estaba apagada; con ella encendida es al revés —
-    /// filtrar aquí es esconderle al servidor justo lo que necesita para detectar que le hablas.
-    ///
-    /// Se borró entero el 2026-08-16 (patrón nº6 del repo: cuando cae la limitación que justificaba
-    /// la maquinaria de compensación, se BORRA, no se parchea). Lo que hacía falta no era afinar
-    /// aquel umbral: era dejar de tener uno.
-    ///
-    /// Lo único que queda es un aforo del nivel de entrada cada 5 s, y no decide nada — está para
-    /// contestar «¿el micrófono está oyendo algo?» cuando alguien diga que no le escucha, que es una
-    /// pregunta que sin este número solo se puede responder adivinando.
-    /// </summary>
     private async void MandarTrozo(byte[] pcm)
     {
         if (!Viva || _ws?.State != WebSocketState.Open) return;
-
-        double vol = Volumen(pcm);
-        if (vol > _picoDelTramo) _picoDelTramo = vol;
-        if (DateTime.UtcNow - _ultimoAforo >= CadenciaDelAforo)
-        {
-            _ultimoAforo = DateTime.UtcNow;
-            LogBus.Log("voz-viva", $"micrófono: pico {_picoDelTramo:F3} en los últimos "
-                + $"{CadenciaDelAforo.TotalSeconds:F0} s (el turno lo decide el servidor)");
-            _picoDelTramo = 0;
-        }
-
-        try
-        {
-            var msg = new
-            {
-                realtimeInput = new
-                {
-                    audio = new
-                    {
-                        data = Convert.ToBase64String(pcm),
-                        mimeType = $"audio/pcm;rate={LiveAudio.RitmoEntrada}",
-                    },
-                },
-            };
-            await EnviarAsync(JsonSerializer.Serialize(msg), _cts?.Token ?? CancellationToken.None);
-        }
+        try { await EnviarAsync(_protocolo.Audio(pcm), _cts?.Token ?? CancellationToken.None); }
         catch { /* el caño se cierra solo al terminar; un trozo perdido no merece tirar la sesión */ }
     }
 
@@ -1085,50 +878,31 @@ public sealed class GeminiLive : IDisposable
     {
         if (!Viva || _ws?.State != WebSocketState.Open || string.IsNullOrWhiteSpace(texto)) return;
         Dice?.Invoke($"Tú: {texto}");
-        var msg = new
-        {
-            clientContent = new
-            {
-                turns = new[] { new { role = "user", parts = new[] { new { text = texto } } } },
-                turnComplete = true,
-            },
-        };
-        await EnviarAsync(JsonSerializer.Serialize(msg), _cts?.Token ?? CancellationToken.None);
+        await EnviarAsync(_protocolo.Texto(texto), _cts?.Token ?? CancellationToken.None);
     }
 
     /// <summary>
-    /// Un fotograma de la pantalla, por el mismo caño que el audio.
-    ///
-    /// Va sin cola: si el envío anterior no ha terminado, este se pierde y no pasa nada. Un
-    /// fotograma viejo no informa de nada —lo que importa es lo que hay AHORA— y acumularlos solo
-    /// serviría para retrasar lo siguiente.
+    /// Manda UNA foto suelta, fuera del audio. La llaman <see cref="EjecutarNucleoAsync"/> —tras
+    /// señalar, o cuando el modelo pide mirar— nunca un temporizador: aquí ver es un gesto, no un
+    /// caño que hay que seguir alimentando.
     /// </summary>
-    private async void MandarFotograma(byte[] jpeg)
+    private async Task MandarFotoAsync(byte[] jpeg, CancellationToken ct)
     {
         if (!Viva || _ws?.State != WebSocketState.Open || jpeg.Length == 0) return;
         try
         {
-            var msg = new
-            {
-                realtimeInput = new
-                {
-                    video = new { data = Convert.ToBase64String(jpeg), mimeType = "image/jpeg" },
-                },
-            };
-            await EnviarAsync(JsonSerializer.Serialize(msg), _cts?.Token ?? CancellationToken.None);
+            string msg = _protocolo.Fotograma(jpeg);
+            if (msg.Length > 0) await EnviarAsync(msg, ct);
         }
-        catch { }
+        catch (Exception e) { LogBus.Log("voz-viva", $"no pude mandar la foto: {e.Message}"); }
     }
 
     /// <summary>Un único escritor por socket: WebSocket no admite envíos solapados.</summary>
     private async Task EnviarAsync(string json, CancellationToken ct)
     {
-        if (_ws == null) return;
+        if (_ws == null || json.Length == 0) return;
         await _envio.WaitAsync(ct);
-        try
-        {
-            await _ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct);
-        }
+        try { await _ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct); }
         finally { _envio.Release(); }
     }
 
@@ -1143,10 +917,6 @@ public sealed class GeminiLive : IDisposable
                 var r = await _ws.ReceiveAsync(buf, ct);
                 if (r.MessageType == WebSocketMessageType.Close)
                 {
-                    // SE SALÍA DE AQUÍ EN SILENCIO, y desde fuera «lo colgué yo» y «se cayó solo»
-                    // eran exactamente lo mismo: micrófono cerrado, vídeo cerrado, sesión cerrada, y
-                    // ni una pista de por qué (2026-08-05). Quien cierra tiene un motivo y lo manda;
-                    // no anotarlo era tirarlo.
                     LogBus.Log("voz-viva", $"el servidor cerró la conexión: {r.CloseStatus} "
                         + $"«{r.CloseStatusDescription}»");
                     _cayoSolo = true;
@@ -1169,23 +939,18 @@ public sealed class GeminiLive : IDisposable
         }
         finally
         {
-            // CAERSE NO ES COLGAR. Si el socket se fue solo —y se va, a los 36 s o a los 3 min, sin
-            // avisar— la conversación no ha terminado: la persona sigue hablando. Se vuelve a entrar
-            // con el pase de reanudación, que devuelve la MISMA conversación con su memoria.
             if (_cayoSolo && Viva && !ct.IsCancellationRequested) await ReconectarAsync();
             else if (Viva) await TerminarAsync();
         }
     }
 
     /// <summary>
-    /// Vuelve a entrar en la MISMA conversación después de un corte que no pedimos.
+    /// Vuelve a entrar tras un corte que no pedimos.
     ///
-    /// Sin ruido para quien habla: no se cierra el micrófono ni la cámara, no se dice «se cayó la
-    /// conexión». Alguien que está a media frase no necesita un parte de red, necesita seguir. Solo
-    /// se avisa si de verdad no se puede volver, que entonces sí cambia lo que tiene que hacer.
-    ///
-    /// Se reintenta unas pocas veces y con espera creciente: si lo que falla es la red o la clave,
-    /// insistir a toda velocidad no lo arregla y sí quema la cuota.
+    /// SI EL PROTOCOLO SABE VOLVER, vuelve a la MISMA conversación —sin cerrar el micrófono ni la
+    /// cámara, sin decir «se cayó la conexión»— igual que hacía con Gemini. SI NO SABE, la sesión
+    /// que se abre es NUEVA: no hay pase que la una a la anterior, así que fingir continuidad sería
+    /// mentir. Se avisa una vez, con una frase corta, y se sigue.
     /// </summary>
     private async Task ReconectarAsync()
     {
@@ -1204,16 +969,22 @@ public sealed class GeminiLive : IDisposable
         try
         {
             await Task.Delay(300 * _reintentos, _cts.Token);
-            string modelo = await ModeloAsync(clave, _cts.Token);
 
             try { _ws?.Dispose(); } catch { }
             _ws = new ClientWebSocket();
-            await _ws.ConnectAsync(new Uri($"{Host}?key={Uri.EscapeDataString(clave)}"), _cts.Token);
-            await EnviarAsync(_pase.Length > 0 ? Reanudacion(modelo, _pase) : Configuracion(modelo), _cts.Token);
+            foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
+            await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
+            foreach (string msg in _protocolo.Apertura(Instrucciones, Herramientas(), _pase))
+                await EnviarAsync(msg, _cts.Token);
 
-            LogBus.Log("voz-viva", _pase.Length > 0
-                ? $"reconectada y reanudada donde iba (intento {_reintentos})"
-                : $"reconectada, pero SIN pase: la conversación empieza de cero (intento {_reintentos})");
+            if (_protocolo.SabeVolver && _pase.Length > 0)
+                LogBus.Log("voz-viva", $"reconectada y reanudada donde iba (intento {_reintentos})");
+            else
+            {
+                LogBus.Log("voz-viva", $"reconectada SIN continuidad: la conversación empieza de "
+                    + $"cero (intento {_reintentos})");
+                Dice?.Invoke("Se cortó un instante. Sigo, pero olvidé lo último que hablábamos.");
+            }
 
             _ = Task.Run(() => RecibirAsync(_cts.Token), _cts.Token);
         }
@@ -1226,128 +997,97 @@ public sealed class GeminiLive : IDisposable
         }
     }
 
+    /// <summary>Traduce lo que llegó a hechos, y reacciona a cada uno. La traducción vive en <see
+    /// cref="IProtocolo.Leer"/>; aquí solo se decide QUÉ HACER con cada hecho, igual venga de donde
+    /// venga.</summary>
     private void Procesar(string json, CancellationToken ct)
     {
         using var doc = JsonDocument.Parse(json);
-        var raiz = doc.RootElement;
-
-        AnotarConsumo(raiz);
-
-        // TODO lo que llega se anota. Atender solo lo que se sabe interpretar y tirar el resto en
-        // silencio deja el peor de los diagnósticos posibles: la sesión abierta, el micrófono en
-        // rojo, y ninguna pista de por qué no contesta. Un error del servidor tiene que verse.
-        // EL PASE PARA VOLVER. Llega cada pocos segundos y antes se tiraba por «no dice nada»: sí lo
-        // dice, dice cómo recuperar esta misma conversación si se cae el socket. Solo vale el que
-        // viene marcado como reanudable.
-        if (raiz.TryGetProperty("sessionResumptionUpdate", out var pase))
+        IReadOnlyList<Hecho> hechos;
+        try { hechos = _protocolo.Leer(doc.RootElement); }
+        catch (Exception e)
         {
-            bool sirve = !pase.TryGetProperty("resumable", out var res) || res.ValueKind != JsonValueKind.False;
-            if (sirve && pase.TryGetProperty("newHandle", out var h) && h.GetString() is { Length: > 0 } valor)
-                _pase = valor;
+            LogBus.Log("voz-viva", $"no pude traducir un mensaje del servidor: {e.Message}");
+            return;
         }
 
-        if (!raiz.TryGetProperty("serverContent", out _) && !raiz.TryGetProperty("toolCall", out _)
-            && !raiz.TryGetProperty("sessionResumptionUpdate", out _))   // llega cada segundo; no dice nada
+        if (hechos.Count == 0)
         {
-            // Aplanado: el log es de una línea por entrada, y un JSON con saltos se veía como «{».
             string plano = System.Text.RegularExpressions.Regex.Replace(json, @"\s+", " ");
             LogBus.Log("voz-viva", "← " + (plano.Length > 400 ? plano[..400] + "…" : plano));
+            return;
         }
 
-        // CANCELADA ES CANCELADA. Cuando el usuario habla encima, el modelo retira las llamadas que
-        // había pedido — y aquí no se atendía ese aviso: se seguían ejecutando igual, en serie y
-        // tardando segundos, y encima se le contestaba a algo que él ya había dado por muerto.
-        //
-        // El resultado era un bucle que se comía la conversación: el usuario hablaba, se cancelaban
-        // las llamadas, el modelo volvía a pedir LAS MISMAS, y mientras tanto la cola de trabajo
-        // seguía creciendo con las viejas. Nunca terminaba una tanda, así que nunca llegaba a
-        // responder: «le hablaba y no me respondía» (2026-08-05). Se llegaron a ejecutar llamadas
-        // después de colgar la sesión.
-        if (raiz.TryGetProperty("toolCallCancellation", out var cancelacion)
-            && cancelacion.TryGetProperty("ids", out var ids))
+        foreach (var hecho in hechos) Reaccionar(hecho, ct);
+    }
+
+    private void Reaccionar(Hecho hecho, CancellationToken ct)
+    {
+        switch (hecho)
         {
-            lock (_candadoCancel)
-            {
-                // No crece sin fin: los identificadores son de un solo uso y solo importan mientras
-                // su tanda esté en la cola.
-                if (_canceladas.Count > 200) _canceladas.Clear();
-                foreach (var x in ids.EnumerateArray())
-                {
-                    string s = x.GetString() ?? "";
-                    if (s.Length > 0) _canceladas.Add(s);
-                }
-            }
-            LogBus.Log("voz-viva", "canceladas por el modelo: " + string.Join(", ",
-                ids.EnumerateArray().Select(x => x.GetString())));
-        }
+            case Hecho.Suena s:
+                _audio.Reproducir(s.Pcm);
+                break;
 
-        if (raiz.TryGetProperty("serverContent", out var contenido))
-        {
-            // Hay conversación de verdad otra vez: el contador de caídas seguidas vuelve a cero. Si
-            // no, una sesión larga con un corte cada media hora acabaría rindiéndose por sumar
-            // cuatro caídas que no tenían nada que ver entre sí.
-            _reintentos = 0;
-
-            // INTERRUMPIDO: el usuario habló encima. Lo que ya nos habían mandado sigue en nuestra
-            // cola de audio, y seguir diciéndolo es la sensación exacta de no ser escuchado.
-            if (contenido.TryGetProperty("interrupted", out _)) _audio.Callar();
-
-            // LA TRANSCRIPCIÓN LLEGA A TROZOS, no por frases: «Voy a», « intentar», « crear»… Pintar
-            // cada trozo como una línea propia convertía la conversación en una columna de palabras
-            // sueltas, cada una con su «Ü:» delante (2026-08-04, visto en pantalla). Se acumula y se
-            // manda la frase entera cada vez; la carita reemplaza la última línea en vez de añadir,
-            // que es lo que hace que se vea escribiéndose en directo en lugar de a saltos.
-            if (contenido.TryGetProperty("inputTranscription", out var mio)
-                && mio.TryGetProperty("text", out var tMio))
-            {
-                _fraseUsuario.Append(tMio.GetString());
+            case Hecho.DiceElUsuario d:
+                _fraseUsuario.Append(d.Trozo);
                 Dice?.Invoke($"Tú: {_fraseUsuario}");
                 Transcribe?.Invoke($"Tú: {_fraseUsuario}", false);
-            }
+                break;
 
-            if (contenido.TryGetProperty("outputTranscription", out var suyo)
-                && suyo.TryGetProperty("text", out var tSuyo))
-            {
-                _fraseU.Append(tSuyo.GetString());
+            case Hecho.DiceU d:
+                _fraseU.Append(d.Trozo);
                 Dice?.Invoke($"Ü: {_fraseU}");
                 Transcribe?.Invoke($"Ü: {_fraseU}", true);
-            }
+                break;
 
-            // Turno cerrado: lo dicho queda fijo y la siguiente frase empieza línea nueva.
-            if (contenido.TryGetProperty("turnComplete", out _)
-                || contenido.TryGetProperty("generationComplete", out _))
-            {
+            case Hecho.CierraElTurno:
                 TurnoCerrado?.Invoke();
                 if (_fraseU.Length > 0) LogBus.Log("voz-viva", $"Ü dijo: {_fraseU}");
                 if (_fraseUsuario.Length > 0) LogBus.Log("voz-viva", $"usuario dijo: {_fraseUsuario}");
                 _fraseU.Clear();
                 _fraseUsuario.Clear();
+                _reintentos = 0;   // hay conversación de verdad: el contador de caídas seguidas vuelve a cero
                 Cerro?.Invoke();
-            }
+                break;
 
-            if (contenido.TryGetProperty("modelTurn", out var turno)
-                && turno.TryGetProperty("parts", out var partes))
-                foreach (var p in partes.EnumerateArray())
-                    if (p.TryGetProperty("inlineData", out var dato)
-                        && dato.TryGetProperty("data", out var b64))
-                        _audio.Reproducir(Convert.FromBase64String(b64.GetString() ?? ""));
-        }
+            // HABLÓ ENCIMA. Lo que ya nos habían mandado sigue en nuestra cola de audio, y seguir
+            // diciéndolo es la sensación exacta de no ser escuchado.
+            case Hecho.HablaronEncima:
+                _audio.Callar();
+                break;
 
-        if (raiz.TryGetProperty("toolCall", out var llamada)
-            && llamada.TryGetProperty("functionCalls", out var funciones))
-        {
-            // Se anota que LLEGÓ, antes de intentar nada. Una llamada con un nombre que no
-            // reconocemos no dejaba rastro en ninguna parte, y desde fuera eso es idéntico a que el
-            // modelo no hubiera pedido nada: dos diagnósticos opuestos con la misma cara.
-            LogBus.Log("voz-viva", "llamada recibida: " + System.Text.RegularExpressions.Regex
-                .Replace(funciones.GetRawText(), @"\s+", " "));
+            case Hecho.Pide p:
+                LogBus.Log("voz-viva", "llamada recibida: " + string.Join(", ", p.Cuales.Select(x => x.Nombre)));
+                _ = Task.Run(() => EjecutarAsync(p.Cuales, ct), ct);
+                break;
 
-            // El clon se saca AQUÍ, no dentro de la tarea. Dentro se evaluaba cuando el `using` de
-            // esta función ya había liberado el documento, así que reventaba con ObjectDisposed…
-            // y como nadie espera la tarea, la excepción se perdía: la llamada llegaba, no se
-            // ejecutaba nada, y a los 20 s el modelo la cancelaba (2026-08-04).
-            var copia = funciones.Clone();
-            _ = Task.Run(() => EjecutarAsync(copia, ct), ct);
+            // CANCELADA ES CANCELADA. Cuando el usuario habla encima, el modelo retira las llamadas
+            // que había pedido, y ejecutarlas igual —o contestarlas igual— es lo que hacía que las
+            // volviera a pedir en bucle: la cola nunca terminaba una tanda (2026-08-05).
+            case Hecho.Retira r:
+                lock (_candadoCancel)
+                {
+                    if (_canceladas.Count > 200) _canceladas.Clear();
+                    foreach (var id in r.Ids) _canceladas.Add(id);
+                }
+                LogBus.Log("voz-viva", "canceladas por el modelo: " + string.Join(", ", r.Ids));
+                break;
+
+            case Hecho.PaseParaVolver v:
+                _pase = v.Handle;
+                break;
+
+            // CADA HECHO ES UN INCREMENTO, no un acumulado: así lo entrega OpenAI —uso por
+            // respuesta— y sumarlo aquí es lo único que hace que el reporte final cuente la
+            // conversación entera y no solo su último turno.
+            case Hecho.Consumo c:
+                _entrada += c.Entrada; _salida += c.Salida; _total += c.Total; _turnos++;
+                break;
+
+            case Hecho.Falla f:
+                LogBus.Log("voz-viva", $"el servidor dice: {f.Que}");
+                break;
         }
     }
 
@@ -1359,81 +1099,91 @@ public sealed class GeminiLive : IDisposable
     /// respuesta: cuando la herramienta dice «NO actúo porque no estás donde creías», ese texto es
     /// justo lo que el modelo necesita para recolocarse — resumirlo le quitaría la pista.
     /// </summary>
-    private async Task EjecutarAsync(JsonElement funciones, CancellationToken ct)
+    private async Task EjecutarAsync(IReadOnlyList<Llamada> llamadas, CancellationToken ct)
     {
-        try { await EjecutarNucleoAsync(funciones, ct); }
-        // Una tarea suelta que revienta se lleva su excepción a la tumba: nadie la espera. Y el
-        // síntoma desde fuera es el peor posible — la llamada llega, no pasa nada, y a los 20 s el
-        // modelo la cancela sin que en el log haya una sola pista.
-        catch (Exception e) { LogBus.Log("voz-viva", $"la ejecución se cayó: {e.GetType().Name}: {e.Message}"); }
+        try { await EjecutarNucleoAsync(llamadas, ct); }
+        catch (Exception e) { LogBus.Log("voz-viva", $"la ejecución de una llamada reventó: {e.Message}"); }
     }
 
-    private async Task EjecutarNucleoAsync(JsonElement funciones, CancellationToken ct)
-    {
-        var respuestas = new List<object>();
-        foreach (var f in funciones.EnumerateArray())
-        {
-            string nombre = f.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-            string id = f.TryGetProperty("id", out var i) ? i.GetString() ?? "" : "";
-            var args = new Dictionary<string, string>();
-            if (f.TryGetProperty("args", out var a) && a.ValueKind == JsonValueKind.Object)
-                foreach (var p in a.EnumerateObject())
-                    args[p.Name] = p.Value.ValueKind == JsonValueKind.String
-                        ? p.Value.GetString() ?? "" : p.Value.ToString();
+    /// <summary>
+    /// «MIRA LA PANTALLA», a pedido del modelo. No es una herramienta del mapa —no accionA nada, no
+    /// pasa por <see cref="SurfaceMapTools"/>— así que se resuelve aquí, igual que el autocontrol.
+    /// </summary>
+    private const string HerramientaMirar = "map_look";
 
+    private async Task EjecutarNucleoAsync(IReadOnlyList<Llamada> llamadas, CancellationToken ct)
+    {
+        var hechas = new List<(string Id, string Nombre, string Resultado)>();
+        // LAS FOTOS QUE HAY QUE MANDAR TRAS ESTA TANDA. Se acumulan y se envían DESPUÉS de los
+        // resultados y ANTES de pedir respuesta: el modelo necesita ver la imagen antes de hablar
+        // sobre ella, no después.
+        var fotos = new List<byte[]>();
+
+        foreach (var f in llamadas)
+        {
             // Se mira JUSTO ANTES de cada una, no al empezar la tanda: una tanda de tres puede tardar
             // diez segundos, y si el usuario habla en la primera, las otras dos ya sobran.
             bool anulada;
-            lock (_candadoCancel) anulada = id.Length > 0 && _canceladas.Contains(id);
+            lock (_candadoCancel) anulada = f.Id.Length > 0 && _canceladas.Contains(f.Id);
             if (anulada)
             {
-                LogBus.Log("voz-viva", $"«{nombre}» se cancela: el modelo la retiró (habló el usuario)");
+                LogBus.Log("voz-viva", $"«{f.Nombre}» se cancela: el modelo la retiró (habló el usuario)");
                 continue;   // y NO se responde: contestar a algo retirado es lo que lo hacía repetirla
             }
 
-            LogBus.Log("voz-viva", $"ejecutando «{nombre}»…");
+            LogBus.Log("voz-viva", $"ejecutando «{f.Nombre}»…");
             string resultado;
-            if (HerramientasDeAutocontrol.Contains(nombre))
+            if (f.Nombre == HerramientaMirar)
             {
-                // Va ANTES que el mapa y sin pasar por SurfaceMapTools: esto no acciona una app de
-                // fuera, acciona la propia ventana, y solo quien la tiene (FaceWindow) puede hacerlo.
-                Accion?.Invoke(EnCurso(nombre, args), false);
+                Accion?.Invoke(EnCurso(f.Nombre, f.Args), false);
+                var relojMirar = System.Diagnostics.Stopwatch.StartNew();
+                if (!_protocolo.Mira)
+                    resultado = $"no puedo mandar imágenes con {_protocolo.Quien}: descríbeme qué "
+                              + "necesitas ver y lo resuelvo con map_what_i_see o señalando.";
+                else
+                {
+                    byte[]? jpeg = CapturaDePantalla.Capturar();
+                    if (jpeg == null) resultado = "no pude capturar la pantalla ahora mismo.";
+                    else { fotos.Add(jpeg); resultado = "aquí tienes lo que hay en pantalla ahora mismo."; }
+                }
+                relojMirar.Stop();
+                Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, relojMirar.ElapsedMilliseconds), true);
+            }
+            else if (HerramientasDeAutocontrol.Contains(f.Nombre))
+            {
+                Accion?.Invoke(EnCurso(f.Nombre, f.Args), false);
                 var relojPropio = System.Diagnostics.Stopwatch.StartNew();
-                try { resultado = Autocontrol?.Invoke(nombre) ?? "no puedo: nadie conectó esta herramienta todavía"; }
+                try { resultado = Autocontrol?.Invoke(f.Nombre) ?? "no puedo: nadie conectó esta herramienta todavía"; }
                 catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; }
                 relojPropio.Stop();
-                // Se cronometra IGUAL que las demás. Antes se reportaba 0 ms, y un cero no significa
-                // «instantáneo»: significa «nadie miró». Las dos cosas se leen igual en un panel.
-                Accion?.Invoke(Terminado(nombre, args, resultado, relojPropio.ElapsedMilliseconds), true);
-                Apuntar(nombre, args, resultado, relojPropio.ElapsedMilliseconds);
+                Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, relojPropio.ElapsedMilliseconds), true);
+                Apuntar(f.Nombre, f.Args, resultado, relojPropio.ElapsedMilliseconds);
             }
-            else if (!SurfaceMapTools.IsMapTool(nombre))
-                resultado = $"«{nombre}» no es una herramienta del mapa";
+            else if (!SurfaceMapTools.IsMapTool(f.Nombre))
+                resultado = $"«{f.Nombre}» no es una herramienta del mapa";
             else
             {
-                // SE AVISA ANTES, Y EN CASTELLANO. Esto ya se disparaba antes de la llamada —el
-                // instante bueno— pero decía «⚙ file_open path=descargas», que es el nombre de una
-                // función, no lo que está pasando. Quien mira la pantalla necesita saber qué se está
-                // haciendo mientras se hace; la mitad de la sensación de tiempo real es esta línea.
-                Accion?.Invoke(EnCurso(nombre, args), false);
+                Accion?.Invoke(EnCurso(f.Nombre, f.Args), false);
                 var reloj = System.Diagnostics.Stopwatch.StartNew();
-                try { resultado = _mapa.Call(nombre, args); }
+                try { resultado = _mapa.Call(f.Nombre, f.Args); }
                 catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; }
                 reloj.Stop();
-                // El pulso lo apunta SurfaceMapTools.Call, por donde pasan todos los que llaman
-                // —la voz, la sonda y el bucle del agente—. Contarlo aquí también sería contarlo dos
-                // veces, y dos cuentas del mismo hecho acaban discrepando.
-                Accion?.Invoke(Terminado(nombre, args, resultado, reloj.ElapsedMilliseconds), true);
+                // El pulso lo apunta SurfaceMapTools.Call; contarlo aquí también sería contarlo dos veces.
+                Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, reloj.ElapsedMilliseconds), true);
             }
 
-            respuestas.Add(new { id, name = nombre, response = new { result = resultado } });
+            hechas.Add((f.Id, f.Nombre, resultado));
         }
 
-        if (respuestas.Count == 0) return;
+        if (hechas.Count == 0) return;
         try
         {
-            await EnviarAsync(JsonSerializer.Serialize(
-                new { toolResponse = new { functionResponses = respuestas } }), ct);
+            foreach (string msg in _protocolo.Resultados(hechas))
+                await EnviarAsync(msg, ct);
+            foreach (byte[] jpeg in fotos)
+                await MandarFotoAsync(jpeg, ct);
+            string pide = _protocolo.PedirRespuesta();
+            if (pide.Length > 0) await EnviarAsync(pide, ct);
         }
         catch (Exception e) { LogBus.Log("voz-viva", $"no pude devolver el resultado: {e.Message}"); }
     }

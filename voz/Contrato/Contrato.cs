@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Text.Json;
+using Voz.Realtime;
 
 namespace Omi.Pruebas;
 
@@ -36,6 +38,14 @@ internal static class Contrato
         Prueba("5. un paquete corto o vacío no produce muestras ni tumba la sesión", UnPaqueteMaloNoTumbaNada);
         Prueba("6. callarse no es desconectarse: mientras el collar siga conectado se le sigue esperando", CallarNoEsIrse);
         Prueba("7. un parpadeo de la conexión no es una pérdida: se le da tiempo a Windows a rehacerla", ElParpadeoNoEsPerdida);
+
+        // EL PROTOCOLO CON EL SERVIDOR (Gemini→OpenAI, 2026-08-24). Se prueba SIN socket, sin
+        // micrófono y sin clave —justo la promesa de diseño de IProtocolo— dándole mensajes tal
+        // como los manda el servidor real (capturados de la sonda contra la API en vivo) y mirando
+        // qué hechos saca.
+        Prueba("8. un trozo de audio del servidor se traduce en un hecho que suena, con el PCM correcto", ElAudioSeTraduce);
+        Prueba("9. una respuesta cancelada retira la llamada retirada, no la ejecuta ni la calla en silencio", LaCanceladaSeRetira);
+        Prueba("10. pedir que conteste es un paso APARTE de mandar los resultados, y solo se pide una vez", ContestarNoVaEscondido);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -231,6 +241,91 @@ internal static class Contrato
 
         var motivo = Propiedad(r!.GetType(), "Motivo", r) as string ?? "";
         Debe(motivo.Length == 0, "y no se anuncia una pérdida que no ha ocurrido");
+    }
+
+    // ── El protocolo con OpenAI (2026-08-24) ────────────────────────────────
+
+    private static JsonElement Mensaje(string json) => JsonDocument.Parse(json).RootElement;
+
+    /// <remarks>
+    /// EL FALLO QUE ESTO IMPIDE: un delta vacío ("") produciendo un "hecho de sonido" de cero bytes.
+    /// El servidor manda algún mensaje con el campo presente pero vacío entre trozos reales, y
+    /// tratarlo como audio de verdad metería silencio inaudible en la cola sin que nadie lo pidiera.
+    /// </remarks>
+    private static void ElAudioSeTraduce()
+    {
+        IProtocolo p = new ProtocoloOpenAI();
+        byte[] pcm = { 1, 2, 3, 4, 250, 251, 0, 255 };
+        string b64 = Convert.ToBase64String(pcm);
+
+        var hechos = p.Leer(Mensaje($$"""{"type":"response.output_audio.delta","delta":"{{b64}}"}"""));
+        Debe(hechos.Count == 1 && hechos[0] is Hecho.Suena,
+            "un trozo de audio del servidor se traduce en UN Hecho.Suena");
+        Debe(hechos[0] is Hecho.Suena s && s.Pcm.SequenceEqual(pcm),
+            "con el PCM decodificado EXACTO, no una aproximación ni una copia truncada");
+
+        var vacio = p.Leer(Mensaje("""{"type":"response.output_audio.delta","delta":""}"""));
+        Debe(vacio.Count == 0, "y un delta vacío no produce un hecho de sonido de la nada");
+    }
+
+    /// <remarks>
+    /// LA MISMA AVERÍA QUE YA SE VIO CON GEMINI EL 2026-08-05, ahora del lado de OpenAI: si el
+    /// usuario habla encima, lo que el modelo iba a pedir se CANCELA, y ejecutarlo o contestarlo
+    /// igual es lo que hacía que el modelo lo volviera a pedir en bucle sin que la conversación
+    /// avanzara nunca. Aquí el aviso no es un evento aparte —"toolCallCancellation" en Gemini— sino
+    /// un <c>response.done</c> con <c>status:"cancelled"</c> y la llamada retirada dentro de su
+    /// <c>output</c>: si no se mira ahí dentro, la cancelación se pierde en silencio.
+    /// </remarks>
+    private static void LaCanceladaSeRetira()
+    {
+        IProtocolo p = new ProtocoloOpenAI();
+
+        var cancelada = p.Leer(Mensaje("""
+            {"type":"response.done","response":{"status":"cancelled","output":[
+                {"type":"function_call","call_id":"call_abc123"}
+            ]}}
+            """));
+        Debe(cancelada.Any(h => h is Hecho.CierraElTurno), "una respuesta cancelada SIGUE cerrando el turno");
+        Debe(cancelada.OfType<Hecho.Retira>().Any(r => r.Ids.SequenceEqual(new[] { "call_abc123" })),
+            "y retira la llamada que traía dentro, con su id exacto");
+
+        var completa = p.Leer(Mensaje("""
+            {"type":"response.done","response":{"status":"completed","output":[
+                {"type":"function_call","call_id":"call_no_deberia_retirarse"}
+            ]}}
+            """));
+        Debe(!completa.Any(h => h is Hecho.Retira),
+            "una respuesta COMPLETADA no retira nada, aunque su output tenga una function_call: "
+            + "esa llamada ya se está atendiendo, no se retiró");
+
+        var sinLlamadas = p.Leer(Mensaje("""
+            {"type":"response.done","response":{"status":"cancelled","output":[
+                {"type":"message"}
+            ]}}
+            """));
+        Debe(!sinLlamadas.Any(h => h is Hecho.Retira),
+            "y una cancelada sin ninguna function_call dentro no inventa una retirada vacía");
+    }
+
+    /// <remarks>
+    /// SIN ESTO EL MODELO SE QUEDA CON EL RESULTADO EN LA MANO Y CALLADO — el síntoma exacto del
+    /// que se venía huyendo con Gemini, con otra cara. `Resultados` y `PedirRespuesta` se separaron
+    /// a propósito el 2026-08-24 (antes iban juntos) para que "devolver lo que pidió" y "pedirle que
+    /// hable" fueran dos pasos que quien llama controla por separado; esta promesa es la que impide
+    /// que alguien los vuelva a fusionar sin darse cuenta.
+    /// </remarks>
+    private static void ContestarNoVaEscondido()
+    {
+        IProtocolo p = new ProtocoloOpenAI();
+        var hechas = new List<(string Id, string Nombre, string Resultado)> { ("call_1", "map_where_am_i", "estás en el escritorio") };
+
+        var resultados = p.Resultados(hechas).ToList();
+        Debe(resultados.Count == 1, "una llamada resuelta produce UN mensaje de resultado, no dos");
+        Debe(!resultados.Any(m => m.Contains("response.create")),
+            "y ESE mensaje no pide respuesta por su cuenta: eso es un paso aparte");
+
+        string pide = p.PedirRespuesta();
+        Debe(pide.Contains("response.create"), "PedirRespuesta sí la pide, explícitamente, cuando se llama");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

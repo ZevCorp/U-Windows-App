@@ -13,11 +13,11 @@ namespace U.WindowsClient.Clinical;
 /// frases según Soniox las cierra.
 /// </summary>
 /// <remarks>
-/// VA APARTE DE <see cref="GeminiLive"/> A PROPÓSITO, y no es duplicación: son dos mecanismos
-/// distintos para dos cosas distintas. Gemini mantiene una CONVERSACIÓN —oye, piensa, contesta con
-/// voz, llama herramientas— y su transcripción es un subproducto. Esto no conversa: transcribe y se
-/// calla, que es lo que hace falta cuando alguien está dictando una historia clínica y no quiere
-/// que le respondan a media frase.
+/// VA APARTE DE <see cref="ConversacionEnVivo"/> A PROPÓSITO, y no es duplicación: son dos mecanismos
+/// distintos para dos cosas distintas. La voz en vivo mantiene una CONVERSACIÓN —oye, piensa,
+/// contesta con voz, llama herramientas— y su transcripción es un subproducto. Esto no conversa:
+/// transcribe y se calla, que es lo que hace falta cuando alguien está dictando una historia clínica
+/// y no quiere que le respondan a media frase.
 ///
 /// EL CAMINO, tal como lo hace el portal (public/shared/deepgram-dictation.js):
 ///   1. Se pide una sesión al backend. Trae una clave TEMPORAL de 60 s, no la permanente.
@@ -88,7 +88,7 @@ public sealed class DictadoSoniox : IDisposable
         string url = Texto(sesion, "websocket_url");
         if (url.Length == 0) { Avisar("el backend no devolvió la dirección del stream"); return; }
 
-        string arranque = MensajeDeArranque(sesion);
+        string arranque = MensajeDeArranque(sesion, _audio.RitmoEntrada);
         if (arranque.Length == 0) { Avisar("el backend no devolvió la configuración del stream"); return; }
 
         _vida = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -270,7 +270,7 @@ public sealed class DictadoSoniox : IDisposable
     /// quien lo estrenó fue el navegador, que manda WebM con cabecera; nosotros mandamos PCM crudo,
     /// que no tiene ninguna, así que «auto» no tiene nada que detectar.
     /// </remarks>
-    private static string MensajeDeArranque(JsonElement sesion)
+    private static string MensajeDeArranque(JsonElement sesion, int ritmoEntrada)
     {
         if (!sesion.TryGetProperty("start_message", out var inicio) || inicio.ValueKind != JsonValueKind.Object)
             return "";
@@ -286,7 +286,7 @@ public sealed class DictadoSoniox : IDisposable
                 campo.WriteTo(w);
             }
             w.WriteString("audio_format", "pcm_s16le");
-            w.WriteNumber("sample_rate", LiveAudio.RitmoEntrada);
+            w.WriteNumber("sample_rate", ritmoEntrada);
             w.WriteNumber("num_channels", 1);
             w.WriteEndObject();
         }
