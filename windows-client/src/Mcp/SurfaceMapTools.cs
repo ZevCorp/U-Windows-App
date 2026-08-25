@@ -36,6 +36,17 @@ public sealed class SurfaceMapTools
     /// el rescate al final de <see cref="Take"/>.</summary>
     private (string Nombre, string Selector, System.Windows.Automation.AutomationElement Que, DateTime Cuando)? _ultimoSenalado;
 
+    /// <summary>
+    /// La ruta de la foto del ÚLTIMO RECUERDO creado. Vacío si el último «esto es X» no llegó a
+    /// crear uno (nada señalado, o caducado).
+    ///
+    /// Existe para que quien tiene la voz —<c>ConversacionEnVivo</c>— pueda mandarle esa misma
+    /// imagen al modelo justo después de un <c>map_esto_es</c> que tuvo éxito: el usuario acaba de
+    /// enseñar algo, y sin la foto el modelo solo tiene el texto, no lo que había alrededor cuando
+    /// se dijo.
+    /// </summary>
+    public string UltimaFotoDeRecuerdo { get; private set; } = "";
+
     /// <summary>La app con la que se estaba trabajando. Se usa para volver a ella si algo roba el foco.</summary>
     private string _ultimaApp = "";
 
@@ -603,67 +614,309 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
-    /// Guarda la ventana que se está mirando, junto a lo enseñado. Devuelve la ruta, o vacío.
+    /// Guarda la ventana que se está mirando, junto al recuerdo que se acaba de crear. Devuelve la
+    /// ruta, o vacío.
     /// </summary>
     /// <remarks>
     /// Se guarda la VENTANA y no solo el recuadro del elemento: «aquí va el número de factura» se
-    /// entiende viendo el formulario entero, no un botón recortado. El contexto es la mitad de la
-    /// enseñanza.
+    /// entiende viendo el formulario entero, no un botón recortado. El contexto es la mitad del
+    /// recuerdo.
     ///
-    /// Y se guarda con la fecha en el nombre para poder ver DESPUÉS si lo aprendido sigue teniendo
-    /// sentido cuando la pantalla cambie — que es la única forma de saber si una enseñanza envejeció
+    /// Y se guarda con la fecha en el nombre para poder ver DESPUÉS si lo recordado sigue teniendo
+    /// sentido cuando la pantalla cambie — que es la única forma de saber si un recuerdo envejeció
     /// mal en vez de enterarse el día que falla.
     /// </remarks>
-    private string GuardarFotoDeLoSenalado(string nombre)
+    private static string GuardarFotoDeLoSenalado(string nombre)
     {
-        if (Ensenanzas == null) return "";
         try
         {
-            string b64 = Capture.Screenshotter.CaptureVentanaBase64Png(AppAligner.VentanaDelUsuario()) ?? "";
-            if (b64.Length == 0) return "";
-
-            string limpio = new string(nombre.Where(c => char.IsLetterOrDigit(c) || c == ' ').ToArray())
-                .Trim().Replace(' ', '-').ToLowerInvariant();
-            if (limpio.Length > 40) limpio = limpio[..40];
-            if (limpio.Length == 0) limpio = "sin-nombre";
-
-            string carpeta = System.IO.Path.Combine(Ensenanzas.Carpeta, "fotos");
-            System.IO.Directory.CreateDirectory(carpeta);
-            string ruta = System.IO.Path.Combine(carpeta, $"{DateTime.Now:yyyyMMdd-HHmmss}-{limpio}.png");
-            System.IO.File.WriteAllBytes(ruta, Convert.FromBase64String(b64));
-            return ruta;
+            return Navigation.FotosDeLosRecuerdos.Guardar(nombre,
+                Capture.Screenshotter.CaptureVentanaBase64Png(AppAligner.VentanaDelUsuario()) ?? "");
         }
-        catch (Exception e) { LogBus.Log("enseñar", $"no pude guardar la foto: {e.Message}"); return ""; }
+        catch (Exception e) { LogBus.Log("recuerdo", $"no pude guardar la foto: {e.Message}"); return ""; }
     }
     /// <summary>
-    /// «ESTO ES X» / «aquí va el número de factura»: le pone significado a lo último señalado.
+    /// «ESTO ES X» / «recuerda que aquí va el número de factura»: crea un RECUERDO, sobre lo último
+    /// señalado o sobre un elemento nombrado (<paramref name="sobre"/>).
     /// </summary>
     /// <remarks>
-    /// No lleva `exit` a propósito. Enseñar es un gesto de dos tiempos y el primero ya ocurrió: se
-    /// apuntó con el cursor. Pedir además el nombre de lo señalado obligaría a decir en voz alta
-    /// «Número de factura de la cabecera», que es justo lo que se evita señalando — y encima con
-    /// dos cosas que se llaman igual no serviría.
+    /// DOS FORMAS DE DECIR SOBRE QUÉ, porque enseñar ocurre de dos maneras y solo se cubría una:
+    ///
+    ///   · SEÑALANDO, que es el gesto natural —se apunta y se explica— y no obliga a decir en voz
+    ///     alta «Número de factura de la cabecera», que es justo lo que se evita apuntando.
+    ///   · NOMBRÁNDOLO (`sobre`), para lo que se enseña SIN la mano encima: «recuerda que para
+    ///     iniciar sesión se hace clic en Acceder al sistema» se dice mirando la pantalla, no
+    ///     necesariamente con el cursor sobre el botón. Exigir el gesto dejaba esa frase sin
+    ///     ningún sitio donde caer, y el modelo contestaba «lo tengo en mente» sin guardar nada
+    ///     (2026-08-24, visto en el log: dos lecciones perdidas en un minuto).
+    ///
+    /// El cursor MANDA cuando hay gesto reciente: si se acaba de señalar algo, eso gana sobre el
+    /// nombre, porque apuntar es más exacto que describir y con dos elementos homónimos el nombre
+    /// no distingue.
     ///
     /// Se exige haber señalado hace poco (LoQueSenalas.LoSenaladoCaduca): un significado dicho diez
     /// minutos después de apuntar se colgaría de lo que fuera que se mirara entonces.
+    ///
+    /// LA FOTO SE TOMA SOLO CUANDO EL RECUERDO YA EXISTE (2026-08-24, pedido por el usuario). Antes
+    /// se tomaba una en CADA señalado, se convirtiera o no en un recuerdo — la mayoría de los
+    /// señalados son solo mirar, y cada uno dejaba un PNG que nadie iba a volver a ver. Y la primera
+    /// versión de este arreglo todavía fallaba: tomaba la foto ANTES de saber si `Ensenar` iba a
+    /// aceptar, así que un intento fallido —«no tenía anotado»— igual dejaba el PNG en disco.
+    /// Reproducido con la sonda de desarrollo el 2026-08-24: tres intentos fallidos, tres archivos.
+    /// Por eso son DOS llamadas a `Ensenar`: la primera, sin foto, es la que de verdad decide si hay
+    /// recuerdo; solo si esa contesta que sí se toma la foto y se vuelve a llamar para colgarla.
     /// </remarks>
-    private string EstoEs(string significado)
+    private string EstoEs(string significado, string sobre)
     {
         if (significado.Length == 0)
-            return "falta `significado`: qué es o para qué sirve lo que se está señalando.";
-        if (Ensenanzas == null) return "todavía no sé guardar lo que me enseñas.";
-
-        if (_ultimoSenalado is not { } ult)
-            return "no me has señalado nada. Ponme el cursor encima y dime qué es.";
-        if (!Navigation.LoQueSenalas.SigueValiendo(ult.Cuando, DateTime.UtcNow))
-            return "hace rato que no me señalas nada. Vuelve a apuntarlo y me lo dices.";
+            return "falta `significado`: qué es o para qué sirve lo que se está enseñando.";
+        if (Ensenar == null) return "todavía no sé guardar lo que me enseñas.";
 
         string donde = _where()?.Id ?? "";
-        if (!Ensenanzas.Significa(donde, ult.Selector, significado))
-            return $"no tenía anotado «{ult.Nombre}» en esta pantalla; señálalo otra vez y te escucho.";
+        bool hayGesto = _ultimoSenalado is { } s
+                     && Navigation.LoQueSenalas.SigueValiendo(s.Cuando, DateTime.UtcNow);
 
-        LogBus.Log("enseñar", $"«{ult.Nombre}» en «{donde}» → {significado}");
-        return $"anotado: «{ult.Nombre}» es {significado}. Lo recordaré cuando vuelva aquí.";
+        string selector, nombre, tipo;
+        if (hayGesto)
+        {
+            var ult = _ultimoSenalado!.Value;
+            selector = ult.Selector;
+            nombre = ult.Nombre;
+            tipo = "";
+        }
+        else if (sobre.Length > 0)
+        {
+            if (BuscarEnPantalla(sobre) is not { } visto)
+                return $"no veo nada que se llame «{sobre}» en esta pantalla, así que no sé a qué "
+                     + "colgarle eso. Señálamelo con el cursor y te escucho, o dime el nombre tal "
+                     + "como se lee.";
+            selector = Uia.Reconocedor.SelectorDe(visto);
+            nombre = visto.Label;
+            tipo = visto.ControlType;
+        }
+        // LO QUE SE ACABA DE HACER TAMBIÉN SE PUEDE ENSEÑAR. «Recuérdalo, después de escribir NWP1
+        // siempre hay que hacer scroll hasta el fondo» se dice JUSTO DESPUÉS del scroll, sin señalar
+        // nada: la lección es sobre la acción, y el sujeto es el panel que se acaba de desplazar.
+        // Sin esto, esa frase no tenía dónde caer y se perdía — pasó tres veces seguidas
+        // (2026-08-24). Va la última porque el gesto y el nombre son más explícitos: solo se recurre
+        // a la última acción cuando no hay nada mejor.
+        else if (Uia.Desplazamiento.UltimoDesplazado.Selector.Length > 0)
+        {
+            var d = Uia.Desplazamiento.UltimoDesplazado;
+            selector = d.Selector; nombre = d.Etiqueta; tipo = d.Tipo;
+            LogBus.Log("recuerdo", $"sin gesto ni nombre: lo cuelgo de lo último desplazado, «{nombre}»");
+        }
+        else
+        {
+            return "no me has señalado nada ni me has dicho de qué hablas. Ponme el cursor encima, "
+                 + "o pásame `sobre` con el nombre del elemento tal como se lee en pantalla.";
+        }
+
+        // SE PRESENTA ANTES DE ENSEÑAR. El grafo solo acepta un recuerdo sobre algo que haya visto
+        // en esta pantalla —y hace bien: una frase sin sujeto no se puede volver a encontrar—, pero
+        // su lista son las PUERTAS, lo que se puede pulsar. Un panel que se desplaza no es una
+        // puerta, así que señalarlo, verlo, iluminarlo… y aun así oír «no tenía anotado eso aquí»
+        // (2026-08-24, dos rechazos seguidos con el elemento delante y encendido en pantalla).
+        //
+        // Presentarlo no afloja la regla: la cumple. Lo estamos viendo AQUÍ, ahora mismo — eso es
+        // exactamente lo que la regla pide, solo que quien lo vio fue el cursor y no el mapeador.
+        Presentar?.Invoke(donde, selector, nombre, tipo);
+
+        // REESCRIBIR UN RECUERDO SE DICE. Volver a enseñar algo es legítimo —se explica mejor, se
+        // corrige— pero pisar en silencio lo que alguien enseñó no: cuando pasó de verdad, el
+        // recuerdo del usuario quedó sustituido por un resumen que el propio modelo acababa de
+        // recitar, y no había forma de enterarse (2026-08-24). Queda en el log lo de antes y lo de
+        // ahora, que es lo único que permite recuperarlo si el cambio no era el que se quería.
+        string previo = RecuerdosAqui?.Invoke(donde)
+            .FirstOrDefault(r => r.Selector.Equals(selector, StringComparison.OrdinalIgnoreCase))
+            .Significado ?? "";
+        if (previo.Length > 0 && !previo.Equals(significado, StringComparison.Ordinal))
+            LogBus.Log("recuerdo", $"REESCRITO «{nombre}»: antes «{previo}» → ahora «{significado}»");
+
+        if (!Ensenar(donde, selector, significado, ""))
+            return $"no tenía anotado «{nombre}» en esta pantalla; señálalo otra vez y te escucho.";
+
+        // AHORA SÍ HAY RECUERDO: la foto se toma y se cuelga con una segunda llamada. Si esta
+        // segunda fallara —no debería, el elemento seguía ahí hace un instante— el recuerdo ya
+        // creado se queda sin foto, que es mejor que un recuerdo a medias por una foto que falló.
+        string foto = GuardarFotoDeLoSenalado(nombre);
+        if (foto.Length > 0) Ensenar(donde, selector, significado, foto);
+
+        UltimaFotoDeRecuerdo = foto;
+        LogBus.Log("recuerdo", $"«{nombre}» en «{donde}» → {significado}"
+            + (foto.Length > 0 ? $" · foto {System.IO.Path.GetFileName(foto)}" : " · sin foto"));
+        return $"nuevo recuerdo: «{nombre}» es {significado}. Lo recordaré cuando vuelva aquí.";
+    }
+
+    /// <summary>
+    /// «¿QUÉ SABES DE ESTA PANTALLA?»: enseña los recuerdos de aquí, UNO A UNO y señalándolos.
+    /// </summary>
+    /// <remarks>
+    /// Contarlos de corrido —«aquí me enseñaste A, B y C»— es lo que ya hacía map_where_am_i, y se
+    /// queda corto por lo mismo que «sí, lo veo» se queda corto sin señalar: quien pregunta qué
+    /// sabes de una pantalla está comprobando que lo aprendido corresponde con lo que él tiene
+    /// delante, y eso solo se sabe VIÉNDOLO marcado (2026-08-24, pedido por el usuario tras oír los
+    /// dos recuerdos recitados sin que se encendiera nada).
+    ///
+    /// UNO POR LLAMADA, Y ESA ES TODA LA COREOGRAFÍA. Iluminarlos todos a la vez y soltar la lista
+    /// de un tirón desincroniza lo que se oye de lo que se ve: para cuando la voz llega al tercero,
+    /// los tres llevan encendidos diez segundos. Devolviendo uno cada vez, la voz habla ENTRE
+    /// llamadas y el recuadro va donde va la frase, sin necesidad de temporizadores ni de adivinar
+    /// cuánto tarda en decirse cada cosa.
+    ///
+    /// EL QUE YA NO ESTÁ TAMBIÉN SE CUENTA. Un recuerdo cuyo elemento no aparece en pantalla se dice
+    /// igual, avisando de que no se pudo señalar: callarlo sería esconder justo lo que hay que
+    /// revisar —una pantalla que cambió— y dejar al usuario creyendo que ese recuerdo se perdió.
+    /// </remarks>
+    private string Recuerdos(string cualPedido)
+    {
+        string donde = _where()?.Id ?? "";
+        if (donde.Length == 0) return "no sé dónde estoy, así que no sé qué recuerdos son de aquí.";
+
+        var todos = RecuerdosAqui?.Invoke(donde) ?? Array.Empty<(string, string, string)>();
+        if (todos.Count == 0)
+        {
+            Ui.Senalador.Soltar();
+            TurnoDeContar.Reiniciar();
+            SiguienteRecuerdoPendiente = 0;
+            return $"todavía no me has enseñado nada en «{donde}». Señálame algo y dime qué es.";
+        }
+
+        // PEDIR EL PRIMERO EMPIEZA UNA TANDA NUEVA. Sin esto, la segunda vez que alguien pregunta
+        // «¿qué recuerdas de aquí?» arrastraría la cuenta de la vez anterior y el primero se
+        // encontraría con que «ya se contó».
+        if (cualPedido.Trim().Length == 0) TurnoDeContar.Reiniciar();
+
+        // Sin número: se empieza por el primero. Con número: ese. Fuera de rango se dice, no se
+        // recorta en silencio a otro — contar un recuerdo distinto del que se pidió es peor que decir
+        // que ese no existe.
+        int cual = int.TryParse(cualPedido.Trim(), out int n) ? n : 1;
+        if (cual < 1 || cual > todos.Count)
+            return $"aquí tengo {todos.Count} recuerdo(s), del 1 al {todos.Count}: no hay un número {cual}.";
+
+        // UNO NO SE CUENTA HASTA HABER CONTADO EL ANTERIOR. Ver ElTurnoDeContar: encadenar las
+        // llamadas sin hablar deja el recuadro sobre el último mientras la voz cuenta todos, que es
+        // exactamente lo contrario de señalar de lo que se habla.
+        if (!TurnoDeContar.PuedeContar(cual))
+        {
+            // DOS MOTIVOS DISTINTOS PARA ESPERAR, y conviene decir cuál: uno se arregla hablando y
+            // el otro se arregla solo, esperando a que la persona termine. El segundo se da cuando
+            // se está corrigiendo una tarjeta abierta desde el panel mientras la voz narra.
+            if (Ui.TarjetasDeRecuerdo.EscribiendoAlguna)
+            {
+                LogBus.Log("recuerdo", $"pidió el {cual} mientras se corrige a mano: espera");
+                return "[interno] está corrigiendo un recuerdo a mano. No pases al siguiente ni "
+                     + "digas nada de esto; espera a que termine.";
+            }
+
+            LogBus.Log("recuerdo", $"pidió el {cual} sin haber contado el anterior: se le hace esperar");
+            return $"[interno] todavía no has contado el {cual - 1} en voz. Cuéntalo y vuelve a "
+                 + $"pedir el {cual}. No leas esto en voz alta.";
+        }
+
+        var r = todos[cual - 1];
+        TurnoDeContar.SeConto(cual);
+        SiguienteRecuerdoPendiente = cual < todos.Count ? cual + 1 : 0;
+        bool marcado = IluminarUno(r.Selector, r.Etiqueta);
+
+        LogBus.Log("recuerdo", $"contando {cual}/{todos.Count} en «{donde}»: «{r.Etiqueta}»"
+            + (marcado ? " · iluminado" : " · NO está en pantalla"));
+
+        // LO QUE VUELVE DE AQUÍ SE ACABA DICIENDO EN VOZ ALTA, así que solo puede llevar lo que
+        // valga la pena decir. Llevaba «Pídeme el 2 cuando termines de contar este» —una frase
+        // dirigida al modelo— y el modelo se la leía al usuario tal cual: «ahora vuelve a pedirme el
+        // recuerdo 2 cuando…». Desde fuera parecía que el sistema le pedía a la persona que hiciera
+        // el trabajo (2026-08-24, visto en pantalla por el usuario).
+        //
+        // Y LO QUE SE LE PIDA AQUÍ ES LO ÚNICO QUE VA A HACER. La primera versión de esta nota decía
+        // «quedan 1; sigue con el 2» y el modelo hizo exactamente eso: pidió el 2 un segundo después
+        // SIN haber contado el 1. La nota le dijo que avanzara, no que contara — y avanzó. Aquí solo
+        // se le pide CONTAR; avanzar lo empuja el continuador cuando ya ha hablado, que es quien
+        // sabe si habló.
+        return $"recuerdo {cual} de {todos.Count} — «{r.Etiqueta}»: {r.Significado}"
+             + (marcado ? "" : " [interno] ese elemento ya no está en pantalla; dilo al contarlo.")
+             + " [interno] cuéntalo en voz AHORA, con tus palabras. No pidas otro todavía.";
+    }
+
+    /// <summary>
+    /// TODOS los recuerdos de esta pantalla que se puedan localizar, con su caja. Para verlos de un
+    /// vistazo desde el panel, sin pedírselo a la voz.
+    /// </summary>
+    /// <remarks>
+    /// Los que ya no están en pantalla se quedan fuera y no se dicen: aquí no hay una voz que pueda
+    /// explicar «este lo recuerdo pero no lo veo», y un cartel flotando sobre nada sería peor que su
+    /// ausencia. Quien quiera esa distinción la tiene contándolos con map_recuerdos, que sí la dice.
+    /// </remarks>
+    public IReadOnlyList<(System.Windows.Rect Caja, string Selector, string Etiqueta, string Significado)> RecuerdosEnPantalla()
+    {
+        var salida = new List<(System.Windows.Rect, string, string, string)>();
+        string donde = _where()?.Id ?? "";
+        if (donde.Length == 0) return salida;
+
+        var todos = RecuerdosAqui?.Invoke(donde) ?? Array.Empty<(string, string, string)>();
+        if (todos.Count == 0) return salida;
+
+        try
+        {
+            _lector.Read();
+            foreach (var r in todos)
+            {
+                var visto = _lector.Elements.FirstOrDefault(
+                                e => Uia.Reconocedor.SelectorDe(e).Equals(r.Selector, StringComparison.OrdinalIgnoreCase))
+                            ?? _lector.Elements.FirstOrDefault(
+                                e => e.Label.Equals(r.Etiqueta, StringComparison.OrdinalIgnoreCase));
+                if (visto != null) salida.Add((visto.Bounds, r.Selector, r.Etiqueta, r.Significado));
+            }
+        }
+        catch (Exception e) { LogBus.Log("recuerdo", $"no pude localizar los recuerdos: {e.Message}"); }
+
+        LogBus.Log("recuerdo", $"vista de recuerdos en «{donde}»: {salida.Count} de {todos.Count} localizados");
+        return salida;
+    }
+
+    /// <summary>Enciende UN elemento por su selector. False si ya no está en pantalla.</summary>
+    /// <remarks>
+    /// SOLO EL RECUADRO, SIN EL TEXTO. Se probó enseñando también la nota mientras se narra y
+    /// estorbaba: la voz ya está diciendo lo mismo, así que el texto encima es una segunda copia
+    /// tapando la pantalla (2026-08-24, dicho por el usuario: «ahora que muestra el texto es
+    /// incómodo»). El texto se lee cuando se pide con los ojos —el botón del panel—, no cuando se
+    /// está escuchando.
+    /// </remarks>
+    private bool IluminarUno(string selector, string etiqueta)
+    {
+        try
+        {
+            _lector.Read();
+            var visto = _lector.Elements.FirstOrDefault(
+                            e => Uia.Reconocedor.SelectorDe(e).Equals(selector, StringComparison.OrdinalIgnoreCase))
+                        // Por etiqueta como último recurso: un selector puede envejecer —cambia una
+                        // ruta, se renombra un automation id— y el elemento seguir ahí con su nombre.
+                        ?? _lector.Elements.FirstOrDefault(
+                            e => e.Label.Equals(etiqueta, StringComparison.OrdinalIgnoreCase));
+            if (visto == null) return false;
+
+            Ui.Senalador.Senalar(visto.Bounds, etiqueta);
+            return true;
+        }
+        catch (Exception e) { LogBus.Log("recuerdo", $"no pude iluminar «{etiqueta}»: {e.Message}"); }
+        return false;
+    }
+
+    /// <summary>
+    /// El elemento que se llama así en la pantalla de AHORA, o null. Exacto primero, y si no,
+    /// el que lo contenga — quien enseña dice «Acceder al sistema» y el botón puede llamarse
+    /// «Acceder al sistema (Enter)».
+    /// </summary>
+    private UiaReader.UiElement? BuscarEnPantalla(string nombre)
+    {
+        try
+        {
+            _lector.Read();
+            var puertas = _lector.Elements.Where(e => e.Label.Length > 0 && EsPuertaVisible(e)).ToList();
+            return puertas.FirstOrDefault(e => e.Label.Equals(nombre, StringComparison.OrdinalIgnoreCase))
+                ?? puertas.FirstOrDefault(e => e.Label.Contains(nombre, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception e) { LogBus.Log("recuerdo", $"no pude buscar «{nombre}»: {e.Message}"); return null; }
     }
     private string LoQueSenala()
     {
@@ -794,29 +1047,18 @@ public sealed class SurfaceMapTools
             // LA IDENTIDAD TIENE QUE SER LA DE LO SEÑALADO, no la de por dónde se llegó. `sels` se
             // saca del elemento que hay bajo el punto, y cuando el nombre aparece MÁS ABAJO —la barra
             // de tareas, un contenedor XAML— ese selector es el del PADRE: se guardaba
-            // «uia:path=;ct=Pane», que no vuelve a encontrar nada. Y lo enseñado se cuelga de esa
-            // identidad, así que un selector malo no es un detalle: es una enseñanza perdida
+            // «uia:path=;ct=Pane», que no vuelve a encontrar nada. Y un recuerdo se cuelga de esa
+            // identidad, así que un selector malo no es un detalle: es un recuerdo perdido
             // (2026-08-23, visto en ensenanzas.json).
+            //
+            // NO SE TOMA FOTO NI SE ESCRIBE NADA EN EL GRAFO TODAVÍA (2026-08-24, pedido por el
+            // usuario). Señalar no es enseñar: la mayoría de los señalados son solo mirar, y una
+            // foto que nadie va a volver a ver es trabajo tirado. La foto se toma en map_esto_es,
+            // justo cuando se sabe que hace falta de verdad — ver GuardarFotoDeLoSenalado.
             string suyo = sels.FirstOrDefault() ?? "";
             bool sirve = suyo.Length > 0 && !suyo.Contains("path=;") && !suyo.StartsWith("uia:path=;");
             _ultimoSenalado = (nombre, sirve ? suyo : $"uia:name={nombre};ct={tipo}", el, DateTime.UtcNow);
-
-            // SE ANOTA LO SEÑALADO, CON SU FOTO. El significado llega después —«esto es el número
-            // de factura»— pero la foto hay que sacarla AHORA, mirando lo mismo que mira quien habla.
-            // Sin ella, «aquí va el número» se queda sin el «aquí» (2026-08-23, pedido por el usuario).
-            try
-            {
-                if (Ensenanzas != null)
-                {
-                    string archivo = GuardarFotoDeLoSenalado(nombre);
-                    var anotada = Ensenanzas.Senalado(_where()?.Id ?? "", _ultimoSenalado!.Value.Selector,
-                        nombre, tipo, archivo);
-                    LogBus.Log("enseñar", $"anotado «{nombre}»"
-                        + (anotada.Significado.Length > 0 ? $" — ya me habías dicho que es: {anotada.Significado}" : " (sin significado todavía)")
-                        + (archivo.Length > 0 ? $" · foto {System.IO.Path.GetFileName(archivo)}" : " · sin foto"));
-                }
-            }
-            catch (Exception ex) { LogBus.Log("enseñar", $"no pude anotar lo señalado: {ex.Message}"); }
+            LogBus.Log("mapa-mcp", $"señalado «{nombre}»");
 
             // LA RESPUESTA LA COMPONE EL NÚCLEO. Leer la pantalla —todo lo de arriba— es trabajo de
             // UIA y se queda aquí; decidir QUÉ se contesta sobre lo señalado es lo único que puede
@@ -1620,10 +1862,77 @@ public sealed class SurfaceMapTools
     public Func<string, string, string>? PulsarPorElNucleo { get; set; }
 
     /// <summary>
-    /// Lo que se va enseñando: qué es cada cosa y para qué sirve, con su foto.
-    /// Ver <see cref="Navigation.LoQueMeEnsenas"/>.
+    /// ENSEÑAR: «esto es X». (ubicación, selector, significado, ruta de la foto) → si se guardó.
+    ///
+    /// Va al grafo, no a un archivo al lado. El significado es del elemento igual que su etiqueta;
+    /// guardarlo aparte con las mismas claves eran dos sitios que sabían de lo mismo, y dos sitios
+    /// se desincronizan sin avisar. Además así «llévame a donde se radican las facturas» es UNA
+    /// consulta: se busca por significado y desde ese elemento ya se sabe el camino (2026-08-23).
     /// </summary>
-    public Navigation.LoQueMeEnsenas? Ensenanzas { get; set; }
+    public Func<string, string, string, string, bool>? Ensenar { get; set; }
+
+    /// <summary>
+    /// «ESTO EXISTE AQUÍ»: (ubicación, selector, etiqueta, tipo). Le cuenta al grafo un elemento que
+    /// tenemos delante y que su lista de puertas no tiene —un panel que se desplaza, un contenedor—
+    /// para poder colgarle un recuerdo.
+    ///
+    /// Entra como MEMORIA y no como vivo: que lo veamos bajo el cursor no lo convierte en algo que
+    /// se pueda pulsar, y decir lo contrario mandaría al asistente a accionar un panel.
+    /// </summary>
+    public Action<string, string, string, string>? Presentar { get; set; }
+
+    /// <summary>
+    /// Quién decide si ya se puede pasar al siguiente recuerdo. Lo alimenta la voz —es la única que
+    /// sabe si Ü habló— y lo consulta <see cref="Recuerdos"/>. Ver <see cref="Navigation.ElTurnoDeContar"/>.
+    /// </summary>
+    public Navigation.ElTurnoDeContar TurnoDeContar { get; } = new();
+
+    /// <summary>
+    /// Cuál toca contar después, o 0 si no queda ninguno. Lo lee la voz para RETOMAR sola.
+    /// </summary>
+    /// <remarks>
+    /// Hace falta porque hablar CIERRA el turno: se cuenta el primero, se dice en voz, el turno
+    /// termina — y ahí ya no hay nada que despierte al modelo para pedir el segundo. Se probó el
+    /// 2026-08-24: contó el 1 perfectamente y se quedó ahí, con el otro recuerdo sin contar y sin
+    /// que nadie se enterara de que faltaba. La regla de uno-en-uno impedía atropellarlos; esto es
+    /// lo que hace que además LLEGUEN todos.
+    /// </remarks>
+    public int SiguienteRecuerdoPendiente { get; private set; }
+
+    /// <summary>
+    /// CORREGIR A MANO un recuerdo de esta pantalla, desde su tarjeta. Devuelve si se guardó.
+    /// </summary>
+    /// <remarks>
+    /// Es la misma puerta que usa la voz —<c>Ensenar</c>— y por eso pasa por las mismas reglas: si
+    /// el elemento ya no se conoce aquí, se rechaza igual. Escribir a mano no es un atajo para
+    /// meter en el grafo algo que la voz no habría podido meter.
+    ///
+    /// LA FOTO NO SE TOCA: la de un recuerdo es la de cuando se enseñó, y corregir la frase no
+    /// cambia lo que había en pantalla aquel día.
+    /// </remarks>
+    public bool CorregirRecuerdo(string selector, string significado)
+    {
+        string donde = _where()?.Id ?? "";
+        if (donde.Length == 0 || Ensenar == null) return false;
+
+        var previo = RecuerdosAqui?.Invoke(donde)
+            .FirstOrDefault(r => r.Selector.Equals(selector, StringComparison.OrdinalIgnoreCase));
+        string foto = "";   // se conserva sola: Ensenar no la borra si no llega una nueva
+
+        bool ok = Ensenar(donde, selector, significado, foto);
+        LogBus.Log("recuerdo", ok
+            ? $"corregido a mano «{previo?.Etiqueta ?? selector}» en «{donde}» → {significado}"
+            : $"NO pude corregir «{selector}» en «{donde}»: el grafo no lo tiene aquí");
+        return ok;
+    }
+
+    /// <summary>Lo enseñado en una pantalla: (etiqueta, significado). Para contarlo al llegar.</summary>
+    /// <remarks>
+    /// LLEVA EL SELECTOR, no solo la etiqueta: es lo único con lo que se puede volver a encontrar el
+    /// elemento EN PANTALLA para iluminarlo. Con dos cosas llamadas igual —que es justo el caso que
+    /// obliga a tener selectores— la etiqueta señalaría las dos.
+    /// </remarks>
+    public Func<string, IReadOnlyList<(string Selector, string Etiqueta, string Significado)>>? RecuerdosAqui { get; set; }
 
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_places" or "map_routes_from" or "map_go_to" or "map_take"
@@ -1631,7 +1940,7 @@ public sealed class SurfaceMapTools
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
         or "map_hierarchy" or "map_feedback" or "map_unsituated" or "map_learn_back" or "map_shot"
-        or "map_set_kind" or "map_silver" or "map_scroll" or "map_tidy_desktop" or "map_esto_es"
+        or "map_set_kind" or "map_silver" or "map_scroll" or "map_tidy_desktop" or "map_esto_es" or "map_recuerdos"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1688,7 +1997,8 @@ public sealed class SurfaceMapTools
             "map_shot" => Foto(),
             // DESPLAZAR ES ACCIONAR, no mirar: va con el resto de manos. Faltaba entero — el modelo
             // contestaba «no puedo scrolear directamente» porque era verdad (2026-08-16).
-            "map_esto_es" => EstoEs(A("significado")),
+            "map_esto_es" => EstoEs(A("significado"), A("sobre")),
+            "map_recuerdos" => Recuerdos(A("cual")),
             "map_scroll" => Uia.Desplazamiento.Mover(Uia.Desplazamiento.Leer(A("direction"))),
             "map_tidy_desktop" => A("undo").Equals("true", StringComparison.OrdinalIgnoreCase)
                 ? Uia.AcomodarEscritorio.Deshacer()
@@ -1821,10 +2131,18 @@ public sealed class SurfaceMapTools
         if (Situarse != null)
         {
             string donde = Situarse();
-            var sabidas = Ensenanzas?.De(loc.Id) ?? Array.Empty<Navigation.LoQueMeEnsenas.Ensenanza>();
+            var sabidas = RecuerdosAqui?.Invoke(loc.Id)
+                          ?? (IReadOnlyList<(string Selector, string Etiqueta, string Significado)>)
+                             Array.Empty<(string, string, string)>();
+
+            // SE DICE CUÁNTOS HAY, NO SE RECITAN. Volcarlos aquí enteros hacía que se contaran de
+            // corrido en una sola frase y sin señalar nada — el usuario los oyó los dos de golpe y
+            // pidió justo lo contrario: uno a uno y marcándolos (2026-08-24). Contarlos es trabajo
+            // de map_recuerdos, que ilumina el que está contando; esto solo avisa de que los hay.
             if (sabidas.Count > 0)
-                donde += " Aquí me enseñaste: "
-                       + string.Join("; ", sabidas.Select(e => $"«{e.Etiqueta}» es {e.Significado}")) + ".";
+                donde += $" Y aquí me has enseñado {sabidas.Count} cosa(s): "
+                       + string.Join(", ", sabidas.Select(e => $"«{e.Etiqueta}»"))
+                       + ". Para contarlas usa map_recuerdos, que las señala una a una.";
             return donde;
         }
 

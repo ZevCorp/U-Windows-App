@@ -633,6 +633,15 @@
                                         Click="OnToggleMap" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
                                         ToolTip="Dibuja los workflows como un grafo de pantallas. Dos workflows que pasan por la misma pantalla comparten nodo: ahí se concatenan."/>
 
+                                <!-- QUÉ HE APRENDIDO AQUÍ, sin preguntárselo en voz. Los recuerdos de esta
+                                     pantalla, todos a la vez y con su texto encima de cada elemento.
+                                     Es la versión de un vistazo de map_recuerdos: aquella los cuenta de
+                                     uno en uno para que la voz vaya sincronizada, y esta los enseña
+                                     juntos para revisarlos con los ojos. Ver MostrarRecuerdos. -->
+                                <Button x:Name="RecuerdosBtn" Content="🧠 Ver recuerdos de aquí" Height="26" Margin="0,6,0,0"
+                                        Click="OnVerRecuerdos" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
+                                        ToolTip="Ilumina de golpe todo lo que te han enseñado en esta pantalla, con el texto del recuerdo sobre cada elemento. Escape lo apaga."/>
+
                                 <!-- TODO ENCENDIDO DE UN GOLPE. Ver la pantalla entera anotada exige cuatro
                                      interruptores, y hasta ahora había que acordarse de los cuatro y del
                                      orden. Un solo botón para el modo «quiero verlo todo». -->

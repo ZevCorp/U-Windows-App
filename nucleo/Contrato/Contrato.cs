@@ -33,6 +33,9 @@ internal static class Contrato
         Prueba("13. un grafo grande no encarece contestar «qué alcanzo desde aquí»", ElTamanoNoPesa);
         Prueba("14. si la puerta corta no se ve, se prueba la ruta larga que sí", OtraPuertaQueSiSeVe);
         Prueba("15. «no sé llegar» y «sé pero no se ve» son respuestas distintas", DosNoDistintos);
+        Prueba("16. lo enseñado vive EN el grafo, colgado del elemento", LoEnsenadoVaConElElemento);
+        Prueba("17. no se puede enseñar sobre algo que nunca se vio aquí", NoSeEnsenaSobreLoQueNoExiste);
+        Prueba("18. los recuerdos de una pantalla salen SIEMPRE en el mismo orden", ElOrdenDeLosRecuerdosNoBaila);
 
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
@@ -189,6 +192,85 @@ internal static class Contrato
         Debe(paso != null, "no se rinde: hay otra puerta que sí está en pantalla");
         Debe(paso?.Que.Selector == "s:pasillo", "…y es el pasillo, la ruta larga pero visible");
         Debe(paso is null || paso.Vivo, "el paso que se devuelve SIEMPRE está vivo: es lo único pulsable");
+    }
+
+    // ── LO ENSEÑADO ──────────────────────────────────────────────────────────
+    //
+    // Se probó primero en un archivo aparte, con las mismas claves que el grafo. El usuario lo vio
+    // en cuanto se lo enseñé: «¿es paralelo al grafo?». Sí lo era — y dos sitios que saben de lo
+    // mismo se desincronizan sin avisar. Ya nos costó tener dos mapas (2026-08-23).
+    //
+    // Aquí dentro, además, «llévame a donde se radican las facturas» es UNA consulta: se busca por
+    // significado y desde ese elemento ya se sabe el camino. En dos almacenes son dos consultas y
+    // un pegado a mano.
+
+    private static void LoEnsenadoVaConElElemento(Grafo g)
+    {
+        const string donde = "uia://x.exe/factura";
+        g.Observar(donde, new[] { new Elemento("uia:aid=num", "Número", "Edit") });
+
+        Debe(g.Ensenar(donde, "uia:aid=num", "aquí va el número de factura, nunca el nombre", "C:/fotos/a.png"),
+            "se puede enseñar sobre un elemento que se ha visto aquí");
+
+        var todo = g.RecuerdosDe(donde);
+        Debe(todo.Count == 1 && todo[0].Que.Etiqueta == "Número",
+            "y lo enseñado sale CON su elemento, no en una lista aparte: quien pregunta por esta "
+            + "pantalla recibe las dos cosas juntas");
+        Debe(todo[0].Eso.Significado.Contains("número de factura"), "con su significado");
+        Debe(todo[0].Eso.Foto == "C:/fotos/a.png",
+            "y con la RUTA de la foto, no la foto: un PNG de 190 KB dentro de un grafo no aporta "
+            + "nada y lo engorda mucho");
+
+        // Volver a explicarlo no borra la imagen de cuando se explicó la primera vez.
+        g.Ensenar(donde, "uia:aid=num", "el número, y va sin guiones");
+        Debe(g.RecuerdoSobre(donde, "uia:aid=num")!.Foto == "C:/fotos/a.png",
+            "y volver a explicarlo conserva la foto: explicar mejor algo no es olvidar dónde era");
+    }
+
+    private static void ElOrdenDeLosRecuerdosNoBaila(Grafo g)
+    {
+        // SE CUENTAN DE UNO EN UNO —«recuerdo 1 de 2», y luego «el 2»— así que «el 2» tiene que ser
+        // el mismo entre una llamada y la siguiente. Salían en el orden del diccionario, o sea en el
+        // que se fueron viendo: la misma pantalla los numeraba distinto en cada arranque (visto el
+        // 2026-08-24: «FortiClient VPN» era el 1 y tras reiniciar pasó a serlo «SAP Logon 64»), y
+        // bastaba que entrara un elemento nuevo para reordenarlo todo a media narración.
+        const string donde = "uia://x.exe/pantalla";
+        g.Observar(donde, new[]
+        {
+            new Elemento("s:zeta", "Zeta", "Button"),
+            new Elemento("s:alfa", "Alfa", "Button"),
+        });
+        g.Ensenar(donde, "s:zeta", "esto es lo último");
+        g.Ensenar(donde, "s:alfa", "esto es lo primero");
+
+        var antes = g.RecuerdosDe(donde).Select(r => r.Que.Selector).ToList();
+        Debe(antes.SequenceEqual(new[] { "s:alfa", "s:zeta" }),
+            "el orden lo decide el selector, no el azar de cuándo se vio cada cosa");
+
+        // Y AHORA ENTRA UNO NUEVO, que es lo que pasa en cuanto se lee la pantalla otra vez.
+        g.Observar(donde, new[]
+        {
+            new Elemento("s:zeta", "Zeta", "Button"),
+            new Elemento("s:alfa", "Alfa", "Button"),
+            new Elemento("s:beta", "Beta", "Button"),
+        });
+        var despues = g.RecuerdosDe(donde).Select(r => r.Que.Selector).ToList();
+        Debe(despues.SequenceEqual(antes),
+            "y ver algo nuevo NO reordena los recuerdos: si el 2 cambiara a media cuenta, se estaría "
+            + "señalando uno mientras se habla de otro");
+    }
+
+    private static void NoSeEnsenaSobreLoQueNoExiste(Grafo g)
+    {
+        const string donde = "uia://x.exe/factura";
+        g.Observar(donde, new[] { new Elemento("uia:aid=num", "Número", "Edit") });
+
+        Debe(!g.Ensenar(donde, "uia:aid=jamas-visto", "esto es el total"),
+            "el significado de algo que nadie ha visto aquí NO se guarda: sería una frase sin "
+            + "sujeto, y después nadie sabría a qué se refería");
+        Debe(!g.Ensenar("uia://x.exe/otra-pantalla", "uia:aid=num", "esto es el total"),
+            "ni el de un elemento que existe en OTRA pantalla: lo enseñado es de un sitio concreto");
+        Debe(g.RecuerdosDe(donde).Count == 0, "y no queda rastro de esos intentos");
     }
 
     /// <remarks>
@@ -355,6 +437,12 @@ internal static class Contrato
         // que salir el MISMO grafo. Es la prueba de que Neo4j es memoria y no solo espejo — sin
         // esto, reiniciar perdía el mapa entero y nadie lo notaba porque siempre limpiábamos a mano
         // antes de cada prueba (2026-08-12).
+        // Y LO ENSEÑADO TIENE QUE VOLVER TAMBIÉN. Es lo que el usuario dijo con la boca: quiere
+        // enseñarle qué es cada cosa y que lo recuerde. Un significado que se pierde al reiniciar no
+        // es haber enseñado nada.
+        g.Ensenar("uia://una.exe/inicio", "s:ir", "esto lleva al otro sitio", "C:/fotos/ir.png");
+        p.Proyectar(g);
+
         var resucitado = new Grafo();
         int volvieron = p.Restaurar(resucitado);
 
@@ -365,7 +453,12 @@ internal static class Contrato
         string Esqueleto(Grafo x) => string.Join("\n", x.Ubicaciones().Select(u =>
             u + " => " + string.Join(",", x.DesdeAqui(u)
                 .OrderBy(a => a.Que.Selector, StringComparer.Ordinal)
-                .Select(a => $"{a.Que.Selector}->{a.Destino}"))));
+                .Select(a => $"{a.Que.Selector}->{a.Destino}"
+                            + Coletilla(x.RecuerdoSobre(u, a.Que.Selector))))));
+
+        // El significado y la ruta de la foto entran en la comparación; la fecha no, porque cambia
+        // sola y haría fallar la promesa por algo que a nadie le importa.
+        static string Coletilla(Recuerdo? e) => e == null ? "" : $"[{e.Significado}|{e.Foto}]";
 
         if (volvieron > 0 && Esqueleto(resucitado) == Esqueleto(g))
         {
@@ -381,6 +474,25 @@ internal static class Contrato
         }
         Debe(resucitado.DesdeAqui(resucitado.Ubicaciones().First()).All(a => !a.Vivo),
             "y lo restaurado NO está vivo: al arrancar no hay nada en pantalla");
+
+        // UN RECUERDO NO SE BORRA POR NO TENERLO A MANO — y esto no es hipotético: dos recuerdos
+        // reales del usuario murieron así el 2026-08-24. La proyección escribía el significado con
+        // un SET incondicional, así que un núcleo que no lo tenía cargado —una restauración
+        // incompleta, una pantalla aún sin leer— escribía la cadena VACÍA encima del que estaba
+        // guardado. El nodo seguía en Neo4j, con el significado en blanco: no se veía como una
+        // pérdida, se veía como si nunca se hubiera enseñado nada.
+        //
+        // Se proyecta un grafo que NO sabe nada de recuerdos sobre una base que sí los tiene: si lo
+        // guardado sobrevive a eso, sobrevive al caso real.
+        var amnesico = new Grafo();
+        amnesico.Recordar("uia://una.exe/inicio", new[] { new Elemento("s:ir", "Ir", "Button") });
+        p.Proyectar(amnesico);
+
+        var traslaAmnesia = new Grafo();
+        p.Restaurar(traslaAmnesia);
+        Debe(traslaAmnesia.RecuerdoSobre("uia://una.exe/inicio", "s:ir")?.Significado == "esto lleva al otro sitio",
+            "proyectar un grafo SIN el recuerdo cargado no borra el que ya estaba guardado: vacío "
+            + "significa «no lo tengo», nunca «bórralo»");
 
         p.Sabotear("MATCH (e:Elemento {selector:'s:x'}) DETACH DELETE e");
         string trasElSabotaje = p.Verificar(g);
