@@ -116,10 +116,15 @@ internal static class Contrato
         Prueba("45. un clic que no se pudo dar no se cuenta como dado", PulsarQueNoSePudoNoCuenta);
         Prueba("46. lo que se cruza queda aprendido, y manda el terreno", PulsarAprendeADondeLlevoDeVerdad);
         Prueba("47. las homónimas se iluminan por SELECTOR y en el orden que se dicen", IluminarHomonimasPorSelector);
-        Prueba("48. señalar algo lo anota aunque no se diga qué es", EnsenarAnotaAlSenalar);
-        Prueba("49. volver a señalar NO borra el significado ya enseñado", EnsenarNoOlvidaAlVolverAMirar);
-        Prueba("50. el significado de algo que nadie miró no se guarda", EnsenarExigeQueSeHayaSenalado);
-        Prueba("51. lo enseñado se cuelga de una identidad que se pueda reencontrar", EnsenarExigeIdentidadUtil);
+        // Lo que el significado promete —que se guarda, que no se traga frases sin sujeto, que
+        // volver a explicar no borra la foto— se juzga ahora en el contrato del NÚCLEO (16 y 17),
+        // porque ahí es donde vive. Aquí se queda lo que es de este lado: que la identidad de la
+        // que cuelga se pueda volver a encontrar en pantalla.
+        Prueba("48. lo enseñado se cuelga de una identidad que se pueda reencontrar", EnsenarExigeIdentidadUtil);
+        Prueba("49. una lección se reconoce por cómo se dice, no solo por «esto es X»", UnaLeccionSeReconoce);
+        Prueba("50. hablar de memoria no es enseñar: no todo lo que dice «recuerda» es una lección", NoTodoLoQueSuenaEsLeccion);
+        Prueba("51. los recuerdos se cuentan de uno en uno: sin hablar no hay siguiente", DeUnoEnUnoONoHaySiguiente);
+        Prueba("52. repetir o volver atrás sí se puede: solo AVANZAR exige haber hablado", VolverAtrasNoEsAvanzar);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1126,48 +1131,6 @@ internal static class Contrato
     // significado — y sin significado no se pueden pedir tareas por lo que son, solo por dónde
     // están.
 
-    private static LoQueMeEnsenas EnsenanzasNuevas()
-        => new(Path.Combine(_raiz, "ensenanzas-" + Guid.NewGuid().ToString("N")[..6]));
-
-    private static void EnsenarAnotaAlSenalar(SurfaceMap _)
-    {
-        var e = EnsenanzasNuevas();
-        var a = e.Senalado("uia://x.exe/factura", "uia:aid=num", "Número", "Edit", "foto.png");
-
-        Debe(a.Significado.Length == 0, "se anota SIN significado todavía");
-        Debe(a.Captura == "foto.png",
-            "y CON la foto. Enseñar es un gesto de dos tiempos —se apunta y luego se explica— y "
-            + "guardar solo al llegar la explicación perdería el primero");
-        Debe(e.Todas.Count == 1, "y queda anotado");
-        Debe(e.De("uia://x.exe/factura").Count == 0,
-            "pero NO se cuenta como enseñado: mirar algo no es saber para qué sirve");
-    }
-
-    private static void EnsenarNoOlvidaAlVolverAMirar(SurfaceMap _)
-    {
-        var e = EnsenanzasNuevas();
-        e.Senalado("uia://x.exe/factura", "uia:aid=num", "Número", "Edit", "vieja.png");
-        Debe(e.Significa("uia://x.exe/factura", "uia:aid=num", "aquí va el número de factura, nunca el nombre"),
-            "se le puede dar significado a lo señalado");
-
-        // Y ahora se vuelve a señalar lo mismo.
-        var otra = e.Senalado("uia://x.exe/factura", "uia:aid=num", "Número", "Edit", "nueva.png");
-
-        Debe(e.Todas.Count == 1, "señalar dos veces lo mismo NO crea dos cosas: es mirarlo dos veces");
-        Debe(otra.Significado.Contains("número de factura"),
-            "y sobre todo NO se pierde lo enseñado. Perder el significado por volver a mirar sería "
-            + "un castigo absurdo: mirar es justo lo que se hace antes de hablar de algo");
-        Debe(otra.Captura == "nueva.png", "la foto sí se refresca: la pantalla de ahora es la que vale");
-    }
-
-    private static void EnsenarExigeQueSeHayaSenalado(SurfaceMap _)
-    {
-        var e = EnsenanzasNuevas();
-        Debe(!e.Significa("uia://x.exe/factura", "uia:aid=jamas-visto", "esto es el total"),
-            "el significado de algo que nadie ha mirado NO se guarda: sería una frase sin sujeto, y "
-            + "después nadie sabría a qué se refería");
-        Debe(e.Todas.Count == 0, "y no queda rastro de ese intento");
-    }
 
     private static void EnsenarExigeIdentidadUtil(SurfaceMap _)
     {
@@ -1187,6 +1150,125 @@ internal static class Contrato
     /// <summary>La misma regla que usa SurfaceMapTools al anotar lo señalado.</summary>
     private static bool SirveComoIdentidad(string sel)
         => sel.Length > 0 && !sel.Contains("path=;") && !sel.StartsWith("uia:path=;");
+
+    // ── QUE UNA LECCIÓN NO SE PIERDA EN SILENCIO ─────────────────────────────
+    //
+    // Estas dos existen por un fallo medido, no por completitud. El catálogo de herramientas y el
+    // prompt ya PEDÍAN guardar lo enseñado, con los disparadores escritos uno por uno. Se probó el
+    // 2026-08-24 con el arreglo puesto: tres lecciones seguidas —«SIEMPRE hacemos clic aquí»,
+    // «lo primero que haremos SIEMPRE será…», «SIEMPRE escribirás NWP1»— trece llamadas a
+    // herramientas, y map_esto_es CERO veces.
+    //
+    // Una petición en el prompt no es una garantía. Lo que sí se puede garantizar desde este lado es
+    // que la omisión SE VEA: si aquí se dice «esto era una lección» y no se creó ningún recuerdo,
+    // sale un aviso. Por eso lo que hay que juzgar es este juicio — y se puede, sin micrófono.
+
+    private static void UnaLeccionSeReconoce(SurfaceMap _)
+    {
+        // LAS TRES QUE SE PERDIERON DE VERDAD. Si alguna de estas dejara de reconocerse, volveríamos
+        // exactamente al día en que el usuario dijo «no sé cuándo está aprendiendo».
+        Debe(UnaLeccion.Parece("Para atender a un paciente, siempre hacemos clic aquí en acceder al sistema"),
+            "«siempre hacemos X» es enseñar un procedimiento, aunque no diga «esto es»");
+        Debe(UnaLeccion.Parece("Lo primero que haremos siempre será verificar si tenemos contexto"),
+            "«lo primero que haremos» también, y esta no lleva ningún «esto es» por ningún lado");
+        Debe(UnaLeccion.Parece("aquí vamos a escribir NWP1, siempre escribirás NWP1"),
+            "y «siempre escribirás X» es la más clara de las tres");
+
+        // LOS IMPERATIVOS DE MEMORIA, que son los que no tienen forma de definición y por eso se
+        // escapaban: quien enseña un procedimiento no dice «esto es», dice «recuerda que».
+        Debe(UnaLeccion.Parece("Recuérdalo, recuerda que para iniciar sesión se hace clic en acceder al sistema"),
+            "«recuerda que…» es una lección");
+        Debe(UnaLeccion.Parece("antes de abrir SAP, verifica que FortiClient esté habilitado"),
+            "«antes de X, hay que Y» enseña el orden de las cosas");
+        Debe(UnaLeccion.Parece("de ahora en adelante el número de factura va sin guiones"),
+            "«de ahora en adelante» dice literalmente que esto tiene que quedarse");
+
+        // Y las definiciones de toda la vida, que ya funcionaban y no pueden dejar de hacerlo.
+        Debe(UnaLeccion.Parece("esto es el número de factura, nunca el nombre"), "«esto es X» sigue contando");
+        Debe(UnaLeccion.Parece("este botón sirve para radicar las cuentas"), "«sirve para» también");
+    }
+
+    // ── CONTAR LOS RECUERDOS DE UNO EN UNO ───────────────────────────────────
+    //
+    // Tercera vez en esta sesión que una petición del prompt no basta. El catálogo decía «te dice
+    // recuerdo 1 de N, lo ilumina, y tú lo CUENTAS EN VOZ; cuando termines, pídeme el 2», y el
+    // modelo encadenó las dos llamadas igual. La secuencia del servidor, medida el 2026-08-24:
+    //
+    //   20:10:39  respuesta A → map_recuerdos          · CERO audio
+    //   20:10:40  respuesta B → map_recuerdos cual=2   · CERO audio
+    //   20:10:43  respuesta C → la única voz, contando LOS DOS
+    //
+    // El recuadro del primero duró un segundo. Lo que se juzga aquí es la regla que lo impide.
+
+    private static void DeUnoEnUnoONoHaySiguiente(SurfaceMap _)
+    {
+        var turno = new ElTurnoDeContar();
+
+        Debe(turno.PuedeContar(1), "el primero siempre se puede contar: no hay nada anterior que contar antes");
+        turno.SeConto(1);
+
+        Debe(!turno.PuedeContar(2),
+            "pedir el 2 SIN haber hablado se niega — es exactamente lo que pasó: dos llamadas "
+            + "seguidas sin una palabra en medio, y el recuadro saltó al segundo en un segundo");
+
+        turno.Hablo();
+        Debe(turno.PuedeContar(2), "y en cuanto habla, el 2 se le da: la negativa era por el silencio, no por el número");
+
+        // Y no se queda desbloqueado para siempre: cada entrega vuelve a exigir su turno de voz.
+        turno.SeConto(2);
+        Debe(!turno.PuedeContar(3),
+            "haber hablado UNA vez no compra todos los siguientes: cada recuerdo pide el suyo");
+    }
+
+    private static void VolverAtrasNoEsAvanzar(SurfaceMap _)
+    {
+        var turno = new ElTurnoDeContar();
+        turno.SeConto(1);
+        turno.Hablo();
+        turno.SeConto(2);   // ya va por el 2 y todavía no ha hablado de él
+
+        Debe(turno.PuedeContar(2),
+            "repetir el que se está contando se deja pasar: no adelanta el recuadro, así que no "
+            + "puede desincronizar nada");
+        Debe(turno.PuedeContar(1),
+            "y volver atrás también — «espera, ¿cuál era el primero?» es lo más natural del mundo "
+            + "y negarlo convertiría una garantía en un estorbo");
+        Debe(!turno.PuedeContar(3), "pero avanzar sigue exigiendo haber hablado");
+
+        // Preguntar otra vez «¿qué recuerdas de aquí?» empieza de cero.
+        turno.Reiniciar();
+        Debe(turno.PuedeContar(1),
+            "y una tanda nueva arranca limpia: sin esto, la segunda vez que alguien pregunta se "
+            + "encontraría con que el primero «ya se contó»");
+    }
+
+    private static void NoTodoLoQueSuenaEsLeccion(SurfaceMap _)
+    {
+        // AVISAR DE MÁS TIENE UN COSTE. Un aviso que salta en cada frase se vuelve ruido, y un ruido
+        // que se ignora es exactamente igual de inútil que no avisar — solo que además estorba.
+        Debe(!UnaLeccion.Parece("sí"), "un «sí» no enseña nada");
+        Debe(!UnaLeccion.Parece("dale"), "ni un «dale»");
+        Debe(!UnaLeccion.Parece("ábreme el explorador"), "una orden no es una lección: se ejecuta y ya");
+        Debe(!UnaLeccion.Parece("¿recuerdas dónde estábamos?"),
+            "PREGUNTAR por la memoria no es enseñar — quien pregunta no está dando un dato nuevo");
+
+        // LA FRASE EXACTA CON LA QUE SE ESTRENA map_recuerdos. Saltó el aviso de «te enseñó algo y
+        // no lo guardé» mientras el asistente contestaba perfectamente: la marca «recuerda» encajaba
+        // dentro de «recuerdas», y el filtro solo cubría «¿recuerdas» pegado — con el interrogativo
+        // en medio («¿QUÉ recuerdas») dejaba de pegar (2026-08-24, visto por el usuario).
+        Debe(!UnaLeccion.Parece("Cuéntame qué sabes sobre esta pantalla, ¿qué recuerdas"),
+            "preguntar QUÉ sabe de una pantalla es la pregunta que estrena los recuerdos, no una "
+            + "lección: avisar ahí acusa al asistente justo cuando está haciéndolo bien");
+        Debe(!UnaLeccion.Parece("¿qué te enseñé aquí la última vez?"),
+            "y preguntar qué se le enseñó tampoco: se está pidiendo lo guardado, no dando algo nuevo");
+        Debe(!UnaLeccion.Parece("¿no recuerdas algo sobre esta área de acá?"),
+            "ni preguntarlo en negativo, que es como se pregunta cuando uno duda de si lo enseñó");
+        Debe(!UnaLeccion.Parece("no recuerdo cómo se llamaba"),
+            "y decir que NO se acuerda es lo contrario de enseñar");
+        Debe(!UnaLeccion.Parece("puedes hacerlo siempre y cuando esté abierto"),
+            "«siempre y cuando» es una condición, no un «siempre haz esto»");
+        Debe(!UnaLeccion.Parece("como siempre, gracias"), "ni «como siempre», que es una muletilla");
+    }
 
     private static void SenalarDistingueLasTres(SurfaceMap _)
     {

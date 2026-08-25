@@ -194,12 +194,21 @@ public sealed class ProyectorNeo4j : IDisposable
                 var filas = new List<object>();
                 foreach (string u in cambiadas)
                     foreach (var a in grafo.DesdeAqui(u))
+                    {
+                        var eso = grafo.RecuerdoSobre(u, a.Que.Selector);
                         filas.Add(new
                         {
                             donde = u, app = Grafo.AppDe(u),
                             sel = a.Que.Selector, etq = a.Que.Etiqueta, tipo = a.Que.Tipo,
                             vivo = a.Vivo, destino = a.Destino,
+                            // LO ENSEÑADO VIAJA CON SU ELEMENTO, no en un nodo aparte. Es una
+                            // propiedad de ESE botón en ESA pantalla; separarlo obligaría a pegar dos
+                            // cosas a mano cada vez que se pregunta «¿qué hay aquí?».
+                            significado = eso?.Significado ?? "",
+                            foto = eso?.Foto ?? "",
+                            cuando = eso?.Cuando.ToString("o") ?? "",
                         });
+                    }
 
                 declaraciones.Add(new
                 {
@@ -229,6 +238,18 @@ public sealed class ProyectorNeo4j : IDisposable
                       MERGE (e:Elemento {id: f.donde + '|' + f.sel})
                         SET e.selector = f.sel, e.etiqueta = f.etq, e.tipo = f.tipo,
                             e.vivo = f.vivo, e.app = f.app
+                      // UN RECUERDO NO SE BORRA POR NO TENERLO A MANO. Esto era un SET incondicional
+                      // y destruía datos: cuando el núcleo no tiene el significado de un elemento
+                      // —porque la restauración no lo trajo, porque aún no ha leído esa pantalla—
+                      // escribía la cadena VACÍA encima del que sí estaba guardado. Dos recuerdos
+                      // reales del usuario murieron así (2026-08-24, «FortiClient VPN» y «SAP Logon
+                      // 64»: el nodo seguía ahí, con el significado en blanco).
+                      //
+                      // Vacío significa «no lo tengo», no «bórralo». Solo se escribe cuando hay algo
+                      // que escribir; olvidar de verdad es cosa de `Olvidar`, que sí borra a
+                      // propósito y por su propio botón.
+                      FOREACH (_ IN CASE WHEN f.significado <> '' THEN [1] ELSE [] END |
+                        SET e.significado = f.significado, e.foto = f.foto, e.cuando = f.cuando)
                       MERGE (p)-[m:ALCANZA]->(e) SET m.vivo = f.vivo
                     WITH e, f
                       OPTIONAL MATCH (e)-[vieja:LLEVA_A]->(otra:Ubicacion) WHERE otra.id <> f.destino
@@ -252,7 +273,14 @@ public sealed class ProyectorNeo4j : IDisposable
     {
         var sb = new StringBuilder();
         foreach (var a in grafo.DesdeAqui(u))
-            sb.Append(a.Que.Selector).Append(a.Vivo ? '+' : '-').Append(a.Destino).Append(';');
+        {
+            sb.Append(a.Que.Selector).Append(a.Vivo ? '+' : '-').Append(a.Destino);
+            // El significado ENTRA en la huella. Si no entrara, enseñar «aquí va el número de
+            // factura» no cambiaría nada de esta cadena, la ubicación no contaría como cambiada, y
+            // lo enseñado se quedaría sin escribir hasta que por casualidad se moviera otra cosa.
+            sb.Append('=').Append(grafo.RecuerdoSobre(u, a.Que.Selector)?.Significado ?? "");
+            sb.Append(';');
+        }
         return sb.ToString();
     }
 
@@ -288,7 +316,7 @@ public sealed class ProyectorNeo4j : IDisposable
                     MATCH (u:Ubicacion)-[:ALCANZA]->(e:Elemento)
                     OPTIONAL MATCH (e)-[:LLEVA_A]->(d:Ubicacion)
                     RETURN u.id AS donde, e.selector AS sel, e.etiqueta AS etq, e.tipo AS tipo,
-                           d.id AS destino
+                           d.id AS destino, e.significado AS significado, e.foto AS foto
                     """,
                 },
             },
@@ -299,6 +327,7 @@ public sealed class ProyectorNeo4j : IDisposable
 
         var porUbicacion = new Dictionary<string, List<Elemento>>(StringComparer.OrdinalIgnoreCase);
         var caminos = new List<(string Donde, string Sel, string Destino)>();
+        var recuerdos = new List<(string Donde, string Sel, string Que, string Foto)>();
         try
         {
             using var doc = JsonDocument.Parse(cuerpo);
@@ -316,6 +345,13 @@ public sealed class ProyectorNeo4j : IDisposable
 
                 if (row[4].ValueKind != JsonValueKind.Null)
                     caminos.Add((donde, sel, row[4].GetString() ?? ""));
+
+                string significado = row.GetArrayLength() > 5 && row[5].ValueKind != JsonValueKind.Null
+                    ? row[5].GetString() ?? "" : "";
+                if (significado.Length > 0)
+                    recuerdos.Add((donde, sel, significado,
+                        row.GetArrayLength() > 6 && row[6].ValueKind != JsonValueKind.Null
+                            ? row[6].GetString() ?? "" : ""));
             }
         }
         catch (Exception e)
@@ -328,6 +364,18 @@ public sealed class ProyectorNeo4j : IDisposable
         // el elemento ya se conozca en esa ubicación, así que al revés se rechazaría todo.
         foreach (var (donde, elementos) in porUbicacion) grafo.Recordar(donde, elementos);
         int rechazados = caminos.Count(c => !grafo.Cruzar(c.Donde, c.Sel, c.Destino));
+        // LOS RECUERDOS VUELVEN POR LA MISMA PUERTA, `Ensenar`, y por eso van después de `Recordar`:
+        // el núcleo exige que el elemento ya se conozca aquí, y esa exigencia debe valer también
+        // para lo que llega de la base de datos.
+        int recuerdosPerdidos = recuerdos.Count(e => !grafo.Ensenar(e.Donde, e.Sel, e.Que, e.Foto));
+        // SE DICE CUÁNTOS RECUERDOS VUELVEN, y no solo cuántas ubicaciones. Un arranque que decía
+        // «memoria recuperada: 200 ubicación(es)» sonaba perfecto mientras los recuerdos se
+        // quedaban por el camino en silencio, y sin este número no había forma de notarlo desde
+        // fuera: el usuario preguntaba qué sabía de una pantalla y la respuesta era «nada»
+        // (2026-08-24).
+        if (recuerdos.Count > 0)
+            Cuenta?.Invoke($"recuerdos recuperados: {recuerdos.Count - recuerdosPerdidos} de {recuerdos.Count}"
+                + (recuerdosPerdidos > 0 ? $" — {recuerdosPerdidos} NO pasaron las reglas del núcleo" : ""));
         if (rechazados > 0)
             Cuenta?.Invoke($"al restaurar, {rechazados} camino(s) de Neo4j no pasaron las reglas del núcleo y se descartaron");
 

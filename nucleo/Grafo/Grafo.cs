@@ -18,6 +18,13 @@ public sealed record Elemento(string Selector, string Etiqueta, string Tipo);
 /// A dónde llevó cuando se cruzó, o vacío si nunca se cruzó. Vacío no es un fallo: es el estado
 /// honesto de una puerta que nadie ha abierto todavía.
 /// </param>
+/// <summary>
+/// UN RECUERDO: lo que una persona enseñó sobre un elemento. La foto es una RUTA, no la imagen —y
+/// solo existe cuando el recuerdo se creó DE VERDAD, con significado; señalar algo sin explicarlo
+/// no deja recuerdo ni foto (2026-08-24, para que una foto en disco signifique algo cada vez).
+/// </summary>
+public sealed record Recuerdo(string Significado, string Foto, DateTime Cuando);
+
 public sealed record Alcanzable(Elemento Que, bool Vivo, string Destino);
 
 /// <summary>
@@ -38,6 +45,22 @@ public sealed class Grafo
     // La memoria, y es toda: qué se vio en cada sitio, y a dónde llevó cada cosa.
     private readonly Dictionary<string, Dictionary<string, Elemento>> _vistos = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _destinos = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// LO QUE ALGUIEN ENSEÑÓ sobre un elemento: qué es y para qué sirve, con la foto de cuando lo
+    /// dijo. Clave igual que <see cref="_destinos"/>: ubicación + selector.
+    /// </summary>
+    /// <remarks>
+    /// VIVE AQUÍ Y NO EN UN ARCHIVO APARTE, y esa es toda la decisión. Se probó lo otro el mismo
+    /// día —un JSON en disco con las mismas claves— y el usuario lo vio enseguida: dos sitios que
+    /// saben de lo mismo se desincronizan sin avisar, y encima no se puede preguntar por
+    /// significado y trazar el camino en la misma consulta. Que es justo lo que se quiere hacer:
+    /// «llévame a donde se radican las facturas» (2026-08-23).
+    ///
+    /// LA FOTO NO ENTRA, solo su ruta. Un PNG de 190 KB dentro de un grafo no aporta nada y lo
+    /// engorda mucho; el grafo guarda DÓNDE está, que es lo que hace falta para volver a verla.
+    /// </remarks>
+    private readonly Dictionary<string, Recuerdo> _recuerdos = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HashSet<string>> _vivosAhora = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _llave = new();
 
@@ -306,6 +329,54 @@ public sealed class Grafo
     }
 
     /// <summary>
+    /// «Esto es X»: crea un RECUERDO con lo que alguien enseñó sobre un elemento de esta ubicación.
+    /// </summary>
+    /// <remarks>
+    /// Se exige que el elemento SE HAYA VISTO aquí, igual que <see cref="Cruzar"/> exige que la
+    /// puerta exista antes de acuñar por dónde lleva. Guardar el significado de algo que nadie ha
+    /// mirado sería una frase sin sujeto: después nadie sabría a qué se refería.
+    /// </remarks>
+    public bool Ensenar(string ubicacion, string selector, string significado, string foto = "")
+    {
+        if (string.IsNullOrWhiteSpace(ubicacion) || string.IsNullOrWhiteSpace(selector)) return false;
+        if (string.IsNullOrWhiteSpace(significado)) return false;
+        lock (_llave)
+        {
+            if (!_vistos.TryGetValue(ubicacion, out var aqui) || !aqui.ContainsKey(selector)) return false;
+
+            string clave = ubicacion + "\n" + selector;
+            // La foto vieja se conserva si no llega una nueva: volver a explicar algo no borra la
+            // imagen de cuando se explicó la primera vez.
+            string laFoto = foto.Length > 0 ? foto
+                : _recuerdos.TryGetValue(clave, out var ya) ? ya.Foto : "";
+            _recuerdos[clave] = new Recuerdo(significado.Trim(), laFoto, DateTime.UtcNow);
+            Version++;
+            return true;
+        }
+    }
+
+    /// <summary>Los recuerdos de una ubicación, para poder contarlos al llegar.</summary>
+    public IReadOnlyList<(Elemento Que, Recuerdo Eso)> RecuerdosDe(string ubicacion)
+    {
+        lock (_llave)
+        {
+            if (!_vistos.TryGetValue(ubicacion, out var aqui)) return Array.Empty<(Elemento, Recuerdo)>();
+            var salida = new List<(Elemento, Recuerdo)>();
+            foreach (var e in aqui.Values)
+                if (_recuerdos.TryGetValue(ubicacion + "\n" + e.Selector, out var ens))
+                    salida.Add((e, ens));
+            return salida;
+        }
+    }
+
+    /// <summary>El recuerdo sobre UN elemento, o null.</summary>
+    public Recuerdo? RecuerdoSobre(string ubicacion, string selector)
+    {
+        lock (_llave)
+            return _recuerdos.TryGetValue(ubicacion + "\n" + selector, out var e) ? e : null;
+    }
+
+    /// <summary>
     /// De qué app es una ubicación. Vive aquí porque la identidad es asunto del grafo: quien
     /// decide qué cuenta como «el mismo sitio» tiene que decidir también qué cuenta como «la misma
     /// app», o acabarían siendo dos criterios que se separan en silencio.
@@ -329,6 +400,7 @@ public sealed class Grafo
         lock (_llave)
         {
             _vistos.Clear(); _destinos.Clear(); _vivosAhora.Clear();
+            _recuerdos.Clear();
             Aqui = ""; Version++;
         }
     }

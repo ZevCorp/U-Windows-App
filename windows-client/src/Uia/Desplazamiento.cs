@@ -38,14 +38,30 @@ public static class Desplazamiento
         return Hacia.Abajo;
     }
 
+    /// <summary>
+    /// SOBRE QUÉ SE DESPLAZÓ LA ÚLTIMA VEZ. Vacío si se cayó al teclado y no se supo sobre qué.
+    /// </summary>
+    /// <remarks>
+    /// Existe para poder ENSEÑAR sobre lo que se acaba de hacer. El usuario dijo «recuérdalo, justo
+    /// después de escribir NWP1 siempre tendrás que hacer scroll hasta el fondo» inmediatamente
+    /// después de un scroll que había salido bien, y no había ningún sitio donde colgar esa lección:
+    /// no estaba señalando nada con el cursor y el panel no tiene un nombre que se pueda decir en
+    /// voz alta. El sistema SÍ sabía sobre qué había desplazado —lo acababa de hacer— pero no se lo
+    /// contaba a nadie (2026-08-24, tres intentos fallidos seguidos).
+    /// </remarks>
+    public static (string Selector, string Etiqueta, string Tipo) UltimoDesplazado { get; private set; }
+        = ("", "", "");
+
     /// <summary>Desplaza y cuenta qué pasó, en castellano y para quien preguntó.</summary>
     public static string Mover(Hacia hacia)
     {
         var ventana = GetForegroundWindow();
-        var scroll = BuscarScroll(ventana);
+        var hallado = BuscarScroll(ventana);
+        Anotar(hallado?.Quien);
 
-        if (scroll != null)
+        if (hallado is { } h)
         {
+            var scroll = h.Patron;
             double antes = scroll.Current.VerticalScrollPercent;
             try
             {
@@ -138,7 +154,11 @@ public static class Desplazamiento
     /// lateral, un desplegable— y quedarse con el primero que aparezca en el árbol mueve el que no
     /// es. El que tiene el foco es el que la persona está mirando.
     /// </summary>
-    private static ScrollPattern? BuscarScroll(IntPtr ventana)
+    /// <summary>
+    /// Qué se puede desplazar aquí. Devuelve el ELEMENTO además del patrón: sin él no se puede
+    /// decir después sobre qué se desplazó, que es lo que hace falta para poder enseñar sobre ello.
+    /// </summary>
+    private static (ScrollPattern Patron, AutomationElement Quien)? BuscarScroll(IntPtr ventana)
     {
         try
         {
@@ -149,7 +169,7 @@ public static class Desplazamiento
             for (var e = desde; e != null; e = Padre(e))
             {
                 if (e.TryGetCurrentPattern(ScrollPattern.Pattern, out var p)
-                    && p is ScrollPattern sp && sp.Current.VerticallyScrollable) return sp;
+                    && p is ScrollPattern sp && sp.Current.VerticallyScrollable) return (sp, e);
                 if (e.Equals(raiz)) break;
             }
 
@@ -158,10 +178,26 @@ public static class Desplazamiento
                 new PropertyCondition(AutomationElement.IsScrollPatternAvailableProperty, true));
             foreach (AutomationElement e in todos)
                 if (e.TryGetCurrentPattern(ScrollPattern.Pattern, out var p)
-                    && p is ScrollPattern sp2 && sp2.Current.VerticallyScrollable) return sp2;
+                    && p is ScrollPattern sp2 && sp2.Current.VerticallyScrollable) return (sp2, e);
         }
         catch (Exception e) { LogBus.Log("scroll", $"buscando qué desplazar: {e.Message}"); }
         return null;
+    }
+
+    /// <summary>Se apunta sobre qué se desplazó, para poder enseñar sobre ello después.</summary>
+    private static void Anotar(AutomationElement? quien)
+    {
+        if (quien == null) { UltimoDesplazado = ("", "", ""); return; }
+        try
+        {
+            var (etiqueta, tipo, sels) = U.Graph.Surfaces.UiaSurface.DescribeElement(quien);
+            string sel = sels.FirstOrDefault() ?? "";
+            // Un selector con la ruta vacía no vuelve a encontrar nada: mejor no ofrecer nada que
+            // ofrecer una identidad que mañana no sirve (la misma regla que al señalar).
+            if (sel.Length == 0 || sel.Contains("path=;")) sel = $"uia:name={etiqueta};ct={tipo}";
+            UltimoDesplazado = (sel, etiqueta.Length > 0 ? etiqueta : "el panel que se desplaza", tipo);
+        }
+        catch { UltimoDesplazado = ("", "", ""); }
     }
 
     private static AutomationElement? Padre(AutomationElement e)

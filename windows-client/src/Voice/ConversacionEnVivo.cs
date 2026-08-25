@@ -359,8 +359,7 @@ public sealed class ConversacionEnVivo : IDisposable
             describir. Te devuelve la puerta que hay bajo el cursor, con su nombre real, y la
             ilumina. Con ese nombre ya puedes pulsarlo (map_take), corregir dónde vive en el menú
             (map_set_level), o —lo más frecuente— aprender qué es si te lo van a explicar
-            (map_esto_es). Si necesitas VER lo que rodeaba el elemento, pide map_look aparte: señalar
-            no manda foto por su cuenta.
+            (map_esto_es), que es donde SÍ llega una foto — ver más abajo.
           · CUANDO NECESITES VER ALGO QUE NADIE TE HA SEÑALADO —el diseño de una pantalla, un color,
             un error pintado en rojo, si algo se parece a otra cosa— pide map_look. Te manda una foto
             de lo que hay AHORA. No la pidas para saber nombres o tipos: para eso está map_what_i_see,
@@ -388,11 +387,41 @@ public sealed class ConversacionEnVivo : IDisposable
         El objetivo no es un ejecutor que repite lo mismo para siempre — es un aprendiz que, con el
         tiempo, sabe más que quien lo enseñó a base de acumular RECUERDOS.
 
+          · «¿QUÉ SABES DE ESTA PANTALLA?» SE CONTESTA SEÑALANDO, NO RECITANDO. Usa map_recuerdos y
+            ve UNO POR UNO: la llamas, te da el recuerdo 1 y lo ilumina, tú lo cuentas en voz; y
+            cuando hayas terminado de contarlo, la llamas con cual=2 y sigues. Nunca sueltes los dos
+            o tres de golpe en una sola frase —pasó, y el usuario vio dos recuerdos recitados
+            seguidos sin que se encendiera nada (2026-08-24)—. Es la misma razón por la que «sí, lo
+            veo» no vale sin map_show: quien pregunta qué sabes está comprobando que lo que
+            aprendiste es lo que él tiene delante, y eso solo se comprueba VIÉNDOLO marcado.
+          · «TOMO NOTA» NO ES TOMAR NOTA. Lo único que hace que algo se te quede es LLAMAR a
+            map_esto_es. Decir «lo tengo en mente», «tomo nota», «lo recordaré» sin haberla llamado
+            es la peor respuesta posible: quien te enseña se queda tranquilo creyendo que aprendiste
+            y no hay nada guardado. Pasó de verdad — dos lecciones seguidas contestadas con «lo
+            tengo en mente» y cero recuerdos creados (2026-08-24). Si vas a decir que lo recuerdas,
+            GUÁRDALO PRIMERO y luego dilo.
           · CUANDO TE EXPLIQUEN QUÉ ES ALGO O PARA QUÉ SIRVE —«esto es el número de factura», «aquí
             se radican los pacientes», «este botón sirve para X cuando Y»— eso es una lección, no
-            una orden de acción: crea un RECUERDO con map_esto_es (necesitas haber señalado antes
-            con map_pointing_at). No la resumas: «aquí va el número de factura, nunca el nombre»
-            enseña más que «número de factura».
+            una orden de acción: crea un RECUERDO con map_esto_es. No la resumas: «aquí va el
+            número de factura, nunca el nombre» enseña más que «número de factura». Y AQUÍ SÍ TE
+            LLEGA UNA FOTO —del instante en que se creó el recuerdo, no de cuando señalaste— así que
+            además VES lo que rodeaba el elemento.
+          · LOS IMPERATIVOS DE MEMORIA TAMBIÉN SON LECCIONES, y son los que más se escapan porque no
+            tienen la forma «esto es X»: «recuerda que…», «recuérdalo», «toma nota», «no olvides»,
+            «siempre que… hay que…», «de ahora en adelante…». Todos ésos → map_esto_es, sin excepción.
+          · SI TE ENSEÑAN ALGO QUE NO ESTÁN SEÑALANDO —«recuerda que para iniciar sesión se hace
+            clic en Acceder al sistema»— pásale a map_esto_es el argumento `sobre` con el nombre del
+            elemento tal como se lee. No hace falta que tengan la mano encima para que puedas
+            aprender; lo que no puedes es dejarlo sin guardar.
+          · SI LA LECCIÓN ES SOBRE ALGO QUE ACABAS DE HACER —«recuérdalo, justo después de escribir
+            NWP1 siempre hay que hacer scroll hasta el fondo», dicho JUSTO DESPUÉS de que tú
+            desplazaras— llama a map_esto_es con `sobre` VACÍO: se cuelga solo del panel que acabas
+            de desplazar, porque tú sabes sobre qué actuaste. NUNCA le pidas a alguien que te señale
+            lo que tú mismo acabas de tocar: es la respuesta más frustrante que puedes dar, y pasó
+            tres veces seguidas con el mismo scroll (2026-08-24).
+          · ENSEÑAR NO ES EJECUTAR. Si te dicen «recuerda que hay que verificar esto antes», eso se
+            GUARDA; no es una orden de pulsarlo ahora. Pulsar lo que te acaban de explicar en vez de
+            aprenderlo es perder la lección y además hacer algo que nadie pidió.
           · UN RECUERDO SE QUEDA, para siempre y no solo en esta charla: vive pegado a ESE elemento
             en ESA pantalla, en el mismo sitio donde vive el mapa. La próxima vez que llegues ahí,
             map_where_am_i te lo recuerda solo («Aquí me enseñaste: «X» es Y»). ÚSALO DE VERDAD: si
@@ -506,9 +535,20 @@ public sealed class ConversacionEnVivo : IDisposable
         - Empieza por map_where_am_i si no sabes dónde estás.
         - map_go_to lleva a una pantalla conocida; map_places dice cuáles hay; map_routes_from dice
           qué se puede hacer desde donde estás.
-        - map_take pulsa una salida o ejecuta una acción; map_type escribe.
-        - Pasa SIEMPRE `at` con la superficie donde crees estar. Si la realidad no coincide, la
-          herramienta se negará a actuar: eso es una protección, no un error. Léela y recolócate.
+        - map_take pulsa una salida o ejecuta una acción; map_type escribe. Si te piden DOBLE CLIC
+          —o si hay que ABRIR algo que con un clic solo se selecciona: un icono del escritorio, un
+          archivo, una entrada de SAP Logon— es map_take con action=«doubleclick». No lo intentes
+          con action=«click» diciendo que es un doble clic: son cosas distintas y la de arriba
+          existe.
+        - `at` NO SE ESCRIBE DE MEMORIA. Es una cadena exacta y opaca, no un nombre que se pueda
+          deducir de la app: se COPIA tal cual de map_where_am_i o de la última respuesta de una
+          herramienta. Si nunca la has visto en esta conversación, pide map_where_am_i primero.
+        - Cuando la herramienta rechace por el ancla, la respuesta TRAE DENTRO la ubicación real y
+          te dice «vuelve a pedírmelo con at=…». COPIA ESA, entera y sin retocar, y repite la misma
+          llamada. Pasó de verdad: se rechazó tres veces seguidas porque en cada intento se inventó
+          una variante nueva —«sapgui-splash-screen», «saplogon-800», «sap-splash-screen»— cuando la
+          buena, «sap-logon-800», venía escrita en el propio rechazo cada vez (2026-08-24). Un
+          rechazo con la respuesta dentro no es un callejón: es un paso más.
         - Si algo se bloquea, map_unblock. Si te ofrece una decisión de verdad, pregúntasela al
           usuario en voz: esa elección es suya.
         - Si una app no está mapeada, map_learn_app la aprende sola.
@@ -611,8 +651,13 @@ public sealed class ConversacionEnVivo : IDisposable
             + "«Cortar», «Pegar», una barra de búsqueda, una casilla… No hace falta que el mapa la "
             + "conozca: si no la tiene, la busca en la pantalla de ahora, la pulsa y la aprende.",
             ("exit", "Nombre de lo que hay que pulsar («Nuevo», «Buscar», «Pegar») o un selector «uia:name=X;ct=ListItem»."),
-            ("action", "Vacío para lo normal. «addselect» para añadir a la selección sin perder lo anterior."),
-            ("at", "La superficie donde CREES estar. Si no coincide con la realidad, no se actúa.")),
+            ("action", "Vacío para lo normal. «doubleclick» cuando te pidan DOBLE CLIC o cuando haga "
+                     + "falta ABRIR algo que con un clic solo se selecciona: un icono del escritorio, "
+                     + "un archivo de una lista, una entrada de SAP Logon. «addselect» para añadir a "
+                     + "la selección sin perder lo anterior. «click» para forzar el clic simple."),
+            ("at", "La superficie donde CREES estar, COPIADA TAL CUAL de map_where_am_i o de la última "
+                 + "respuesta de una herramienta. NUNCA la escribas de memoria ni la deduzcas del "
+                 + "nombre de la app: si no coincide EXACTA, no se actúa.")),
         Fn("map_type", "Escribe texto en el campo abierto; sirve para nombrar una carpeta recién creada.",
             ("text", "Lo que hay que escribir."),
             ("target", "Selector del campo. Vacío = el que tenga el foco, y solo si es un campo de texto."),
@@ -677,15 +722,32 @@ public sealed class ConversacionEnVivo : IDisposable
             + "uno y otro. Es la forma rápida: úsala para las tareas que ya sabes hacer enteras.",
             ("steps", "JSON: lista de pasos. Cada uno {\"op\":\"go_to|take|type|unblock\", …} con los "
                     + "mismos argumentos que las herramientas sueltas.")),
-        Fn("map_esto_es", "CREA UN RECUERDO con lo que el usuario te está ENSEÑANDO sobre lo que "
-            + "acaba de señalar: qué es o para qué sirve. Úsala cuando diga cosas como «esto es el "
-            + "número de factura», «aquí va X cuando Y», «este botón sirve para…». Primero tiene que "
-            + "haber señalado algo (map_pointing_at); esto le pone el significado. QUEDA GUARDADO "
-            + "PARA SIEMPRE, pegado a ese elemento en esa pantalla: "
-            + "map_where_am_i te lo recordará solo la próxima vez que vuelvas, sin que nadie tenga "
-            + "que volver a explicarlo.",
+        Fn("map_recuerdos", "«¿QUÉ SABES DE ESTA PANTALLA?» / «¿qué te he enseñado aquí?» / «¿qué "
+            + "recuerdas?». Te devuelve los recuerdos de aquí DE UNO EN UNO y SEÑALA en pantalla el "
+            + "elemento del que habla cada uno. Llámala sin `cual` para empezar; te dice «recuerdo 1 "
+            + "de N», lo ilumina, y tú lo CUENTAS EN VOZ. Cuando termines de contarlo, vuelve a "
+            + "llamarla con cual=2, y así hasta el último. NO los recites todos de corrido: uno por "
+            + "llamada es lo que hace que el recuadro esté sobre aquello de lo que estás hablando "
+            + "justo mientras hablas.",
+            ("cual", "Cuál contar, empezando en 1. Vacío = el primero.")),
+        Fn("map_esto_es", "CREA UN RECUERDO con lo que el usuario te está ENSEÑANDO. Es la ÚNICA "
+            + "forma de que algo se te quede: si no la llamas, no aprendiste nada por mucho que "
+            + "digas que lo tienes en mente. Úsala en cuanto oigas «esto es X», «aquí va X cuando "
+            + "Y», «este botón sirve para…», y TAMBIÉN con los imperativos de memoria: «recuerda "
+            + "que…», «recuérdalo», «toma nota», «no olvides», «siempre que…», «de ahora en "
+            + "adelante…». QUEDA GUARDADO PARA SIEMPRE, pegado a ese elemento en esa pantalla, CON "
+            + "UNA FOTO del instante: map_where_am_i te lo recordará solo la próxima vez que "
+            + "vuelvas, sin que nadie tenga que volver a explicarlo.",
             ("significado", "Lo que ha dicho que es, con sus palabras. No lo resumas: «aquí va el número "
-                          + "de factura, nunca el nombre» es más útil que «número de factura».")),
+                          + "de factura, nunca el nombre» es más útil que «número de factura»."),
+            ("sobre", "SOLO si NO acaba de señalarlo con el cursor: el nombre del elemento al que se "
+                    + "refiere, tal como se lee en pantalla («Acceder al sistema»). Si sí lo señaló "
+                    + "(map_pointing_at hace un momento), deja esto vacío — el cursor es más exacto "
+                    + "que el nombre y con dos cosas homónimas el nombre no distingue. Y si la "
+                    + "lección es sobre algo que ACABAS DE HACER —«recuérdalo, aquí siempre hay que "
+                    + "hacer scroll hasta el fondo» justo después de desplazar— déjalo vacío "
+                    + "TAMBIÉN: se cuelga solo del panel que acabas de desplazar. NO le pidas al "
+                    + "usuario que te señale algo que tú mismo acabas de tocar.")),
         Fn("map_pointed_trail", "TU HERRAMIENTA PRINCIPAL para señalar VARIAS cosas — pruébala PRIMERO, "
             + "antes que map_look o map_what_i_see. Devuelve y señala TODO de una sola llamada: todo "
             + "aquello por encima de lo que el usuario acaba de pasar o mover el cursor. Úsala SIEMPRE "
@@ -1033,12 +1095,18 @@ public sealed class ConversacionEnVivo : IDisposable
                 _fraseUsuario.Append(d.Trozo);
                 Dice?.Invoke($"Tú: {_fraseUsuario}");
                 Transcribe?.Invoke($"Tú: {_fraseUsuario}", false);
+                VigilarLaLeccion(_fraseUsuario.ToString());
                 break;
 
             case Hecho.DiceU d:
                 _fraseU.Append(d.Trozo);
                 Dice?.Invoke($"Ü: {_fraseU}");
                 Transcribe?.Invoke($"Ü: {_fraseU}", true);
+                // HABLAR ES LO QUE DESBLOQUEA EL SIGUIENTE RECUERDO. Se apunta aquí, sobre la voz
+                // de verdad, y no al cerrar el turno: el turno se cierra también en respuestas que
+                // son solo una llamada a herramienta, sin una palabra — que es justo el caso que
+                // hay que distinguir (ver Navigation.ElTurnoDeContar).
+                _mapa.TurnoDeContar.Hablo();
                 break;
 
             case Hecho.CierraElTurno:
@@ -1111,6 +1179,167 @@ public sealed class ConversacionEnVivo : IDisposable
     /// </summary>
     private const string HerramientaMirar = "map_look";
 
+    /// <summary>Crear un recuerdo. Se vigila desde fuera porque el modelo se la saltaba.</summary>
+    private const string HerramientaRecordar = "map_esto_es";
+
+    /// <summary>
+    /// Contar lo que ya se sabe. Llamarla PRUEBA que la frase era una pregunta, no una lección.
+    /// </summary>
+    private const string HerramientaContarRecuerdos = "map_recuerdos";
+
+    /// <summary>Cuánto se espera a que guarde antes de dar la lección por perdida.</summary>
+    private static readonly TimeSpan MargenParaGuardar = TimeSpan.FromSeconds(9);
+
+    private readonly object _candadoLeccion = new();
+    private string _leccionPendiente = "";
+    private System.Threading.Timer? _relojDeLaLeccion;
+
+    /// <summary>
+    /// SE VIGILA QUE LO ENSEÑADO SE GUARDE, y si no, se dice en voz alta.
+    /// </summary>
+    /// <remarks>
+    /// No fuerza el recuerdo: quien decide qué merece guardarse sigue siendo el modelo, y crear
+    /// recuerdos por nuestra cuenta llenaría el grafo de frases que nadie pidió guardar. Lo que sí
+    /// garantiza es que la omisión NO SEA SILENCIOSA — que era el problema de verdad: el modelo
+    /// contestaba «lo tengo en mente», no guardaba nada, y desde fuera eso es idéntico a haber
+    /// aprendido (2026-08-24, tres lecciones perdidas seguidas sin una sola señal).
+    ///
+    /// Va por reloj y no por «fin de turno» porque el turno se cierra ANTES de que se ejecuten sus
+    /// herramientas: mirar ahí daría por perdida una lección que se está guardando en ese instante.
+    /// </remarks>
+    private void VigilarLaLeccion(string dicho)
+    {
+        if (!Navigation.UnaLeccion.Parece(dicho)) return;
+
+        lock (_candadoLeccion)
+        {
+            // La misma frase va creciendo trozo a trozo: se vigila UNA vez por lección, y el reloj
+            // se reinicia mientras siga hablando —el margen cuenta desde que termina de enseñar.
+            _leccionPendiente = dicho;
+            _relojDeLaLeccion?.Dispose();
+            _relojDeLaLeccion = new System.Threading.Timer(
+                _ => JuzgarLaLeccion(), null, MargenParaGuardar, System.Threading.Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    /// <summary>
+    /// QUEDAN RECUERDOS POR CONTAR: se le pide el siguiente en cuanto termina de contar este.
+    /// </summary>
+    /// <remarks>
+    /// HABLAR CIERRA EL TURNO, y ahí se acababa la historia: contaba el primer recuerdo, lo decía
+    /// bien, el turno terminaba, y el segundo se quedaba sin contar porque ya no había nada que
+    /// despertara al modelo. Pasó tal cual el 2026-08-24 — «contando 1/2», una respuesta impecable,
+    /// y silencio.
+    ///
+    /// Las dos reglas se necesitan y hacen cosas distintas: ElTurnoDeContar impide ATROPELLARLOS
+    /// —no dar el siguiente sin haber hablado del anterior— y esto impide ABANDONARLOS. Con solo la
+    /// primera, la conversación se queda a medias educadamente.
+    ///
+    /// SE PARA SI EL USUARIO HABLA. Quien interrumpe cambió de tema, y seguir empujándole recuerdos
+    /// encima sería justo lo contrario de escuchar.
+    /// </remarks>
+    private void SeguirContandoSiQuedan()
+    {
+        int siguiente = _mapa.SiguienteRecuerdoPendiente;
+        if (siguiente <= 0 || !Viva) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await EnviarTextoAlModeloAsync(
+                    $"[aviso del sistema] Quedan recuerdos por contar en esta pantalla. Ya has "
+                    + $"contado el {siguiente - 1}; pide AHORA map_recuerdos con cual={siguiente} y "
+                    + "cuéntalo igual que el anterior. No preguntes si quiere seguir: te lo pidió al "
+                    + "principio y esto es terminar de contestarle.");
+            }
+            catch (Exception e) { LogBus.Log("recuerdo", $"no pude pedir el siguiente recuerdo: {e.Message}"); }
+        });
+        LogBus.Log("recuerdo", $"contado el {siguiente - 1}; le pido que siga con el {siguiente}");
+    }
+
+    /// <summary>
+    /// NO ERA UNA LECCIÓN, ERA UNA PREGUNTA: se cancela el aviso sin acusar a nadie.
+    /// </summary>
+    /// <remarks>
+    /// LO DECIDE LO QUE PASÓ, NO CÓMO SONABA LA FRASE. Que el modelo contestara RECITANDO lo que ya
+    /// sabe es la prueba de que le estaban preguntando: nadie recita recuerdos para responder a una
+    /// lección. Mirar el hecho es mucho más fiable que afinar la lista de palabras, porque hay mil
+    /// formas de preguntar y todas llevan dentro el verbo «recordar».
+    ///
+    /// Y HACÍA FALTA DE VERDAD, porque el falso positivo no era cosmético: el aviso empuja al modelo
+    /// a guardar, y el modelo obedecía guardando un resumen de lo que acababa de recitar ENCIMA del
+    /// recuerdo original. Preguntar «¿qué recuerdas de aquí?» degradaba la frase que el usuario
+    /// había enseñado, y a la segunda vuelta intentó guardar «en esta pantalla recuerdo que X e Y
+    /// son importantes» — un recuerdo sobre su propia recitación (2026-08-24, visto por el usuario).
+    /// Un vigilante que corrompe justo lo que vigila es peor que no tenerlo.
+    /// </remarks>
+    private void EraUnaPregunta()
+    {
+        bool habia;
+        lock (_candadoLeccion) habia = _leccionPendiente.Length > 0;
+        if (habia) LogBus.Log("recuerdo", "no era una lección: contestó con lo que ya sabía. Retiro el aviso.");
+        LaLeccionSeGuardo();
+    }
+
+    /// <summary>Se guardó lo que se estaba enseñando: se cancela el aviso.</summary>
+    private void LaLeccionSeGuardo()
+    {
+        lock (_candadoLeccion)
+        {
+            _leccionPendiente = "";
+            _relojDeLaLeccion?.Dispose();
+            _relojDeLaLeccion = null;
+        }
+    }
+
+    private void JuzgarLaLeccion()
+    {
+        string perdida;
+        lock (_candadoLeccion)
+        {
+            perdida = _leccionPendiente;
+            _leccionPendiente = "";
+            _relojDeLaLeccion?.Dispose();
+            _relojDeLaLeccion = null;
+        }
+        if (perdida.Length == 0 || !Viva) return;
+
+        string corta = perdida.Length > 60 ? perdida[..60] + "…" : perdida;
+        LogBus.Log("recuerdo", $"LECCIÓN PERDIDA: «{corta}» sonaba a enseñanza y no se creó ningún "
+                             + "recuerdo. Se lo recuerdo al modelo.");
+        Accion?.Invoke("⚠ te enseñó algo y no lo guardé", true);
+
+        // Y SE LE DICE, una sola vez y corto. Es la diferencia entre un aviso para el humano —que ya
+        // no puede hacer nada— y una segunda oportunidad de guardarlo mientras la pantalla sigue
+        // siendo la misma.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await EnviarTextoAlModeloAsync(
+                    "[aviso del sistema] Lo último que te dijeron sonaba a una lección y no llamaste "
+                    + "a map_esto_es, así que no se guardó nada. Si de verdad era algo que debes "
+                    + "recordar, guárdalo AHORA con map_esto_es (usa `sobre` con el nombre del "
+                    + "elemento si no te lo señalaron). Si no lo era, sigue sin decir nada de esto.");
+            }
+            catch (Exception e) { LogBus.Log("recuerdo", $"no pude avisar al modelo: {e.Message}"); }
+        });
+    }
+
+    /// <summary>
+    /// Le mete una nota al modelo SIN que parezca dicha por el usuario en la carita: no se pinta en
+    /// la burbuja, porque nadie la dijo en voz alta.
+    /// </summary>
+    private async Task EnviarTextoAlModeloAsync(string texto)
+    {
+        if (!Viva || _ws?.State != WebSocketState.Open) return;
+        var ct = _cts?.Token ?? CancellationToken.None;
+        await EnviarAsync(_protocolo.Texto(texto), ct);
+        string pide = _protocolo.PedirRespuesta();
+        if (pide.Length > 0) await EnviarAsync(pide, ct);
+    }
+
     private async Task EjecutarNucleoAsync(IReadOnlyList<Llamada> llamadas, CancellationToken ct)
     {
         var hechas = new List<(string Id, string Nombre, string Resultado)>();
@@ -1170,6 +1399,29 @@ public sealed class ConversacionEnVivo : IDisposable
                 reloj.Stop();
                 // El pulso lo apunta SurfaceMapTools.Call; contarlo aquí también sería contarlo dos veces.
                 Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, reloj.ElapsedMilliseconds), true);
+
+                // UN RECUERDO NUEVO MANDA SU FOTO SOLA. La foto se toma en el momento de crear el
+                // recuerdo —no al señalar, que puede no terminar en nada— así que solo se envía
+                // cuando map_esto_es tuvo éxito de verdad: el texto de éxito empieza por «nuevo
+                // recuerdo:», que es como SurfaceMapTools distingue haberlo creado de haber fallado.
+                // CONTAR LO QUE YA SE SABE DESARMA AL VIGILANTE: si contestó recitando recuerdos,
+                // le estaban preguntando. Va antes que nada porque el daño de no hacerlo no es un
+                // aviso de más — es que el modelo, empujado por ese aviso, sobrescriba con un
+                // resumen suyo el recuerdo que acaba de leer.
+                if (f.Nombre == HerramientaContarRecuerdos) EraUnaPregunta();
+
+                if (f.Nombre == HerramientaRecordar
+                    && resultado.StartsWith("nuevo recuerdo:", StringComparison.Ordinal))
+                {
+                    // Se guardó: el vigilante de lecciones se calla.
+                    LaLeccionSeGuardo();
+
+                    if (_protocolo.Mira && _mapa.UltimaFotoDeRecuerdo.Length > 0)
+                    {
+                        try { fotos.Add(await File.ReadAllBytesAsync(_mapa.UltimaFotoDeRecuerdo, ct)); }
+                        catch (Exception e) { LogBus.Log("voz-viva", $"no pude leer la foto del recuerdo: {e.Message}"); }
+                    }
+                }
             }
 
             hechas.Add((f.Id, f.Nombre, resultado));

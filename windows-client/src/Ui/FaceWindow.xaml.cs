@@ -392,9 +392,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false);
             if (mcp.Map != null) mcp.Map.PulsarPorElNucleo = (sel, etq) => pulsar.Pulsa(sel, etq).Cuenta;
 
-            // LO QUE SE VA ENSEÑANDO. Vive en disco, junto a las fotos: el significado se dice
-            // mirando algo, y sin ese algo la frase se queda coja.
-            if (mcp.Map != null) mcp.Map.Ensenanzas = new Navigation.LoQueMeEnsenas();
+            // LO QUE SE VA ENSEÑANDO VIVE EN EL GRAFO, colgado del elemento. Estuvo un rato en un
+            // archivo aparte con las mismas claves, y el usuario lo vio en cuanto se lo dibujé:
+            // «¿es paralelo al grafo?». Lo era, y dos sitios que saben de lo mismo se desincronizan
+            // sin avisar. Solo la foto se queda en disco: la ruta va al grafo, el PNG no.
+            if (mcp.Map != null)
+            {
+                mcp.Map.Ensenar = (donde, sel, que, foto) => _mapaVivo.Nucleo.Ensenar(donde, sel, que, foto);
+                mcp.Map.RecuerdosAqui = donde => _mapaVivo.Nucleo.RecuerdosDe(donde)
+                    .Select(x => (x.Que.Selector, x.Que.Etiqueta, x.Eso.Significado)).ToList();
+                // Entra por `Recordar` y no por `Observar`: observar significa «esto es lo que hay
+                // en pantalla» y REEMPLAZA la lista viva entera, así que presentar un panel suelto
+                // borraría de un plumazo todas las puertas de esta ubicación.
+                mcp.Map.Presentar = (donde, sel, etq, tipo) =>
+                    _mapaVivo.Nucleo.Recordar(donde, new[] { new Nucleo.Elemento(sel, etq, tipo) });
+            }
 
             _servidorNucleo = new Navigation.ServidorDelNucleo(
                 _mapaVivo.Nucleo,
