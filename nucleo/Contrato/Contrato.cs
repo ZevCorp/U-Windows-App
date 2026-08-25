@@ -35,6 +35,7 @@ internal static class Contrato
         Prueba("15. «no sé llegar» y «sé pero no se ve» son respuestas distintas", DosNoDistintos);
         Prueba("16. lo enseñado vive EN el grafo, colgado del elemento", LoEnsenadoVaConElElemento);
         Prueba("17. no se puede enseñar sobre algo que nunca se vio aquí", NoSeEnsenaSobreLoQueNoExiste);
+        Prueba("18. los recuerdos de una pantalla salen SIEMPRE en el mismo orden", ElOrdenDeLosRecuerdosNoBaila);
 
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
@@ -224,6 +225,39 @@ internal static class Contrato
         g.Ensenar(donde, "uia:aid=num", "el número, y va sin guiones");
         Debe(g.RecuerdoSobre(donde, "uia:aid=num")!.Foto == "C:/fotos/a.png",
             "y volver a explicarlo conserva la foto: explicar mejor algo no es olvidar dónde era");
+    }
+
+    private static void ElOrdenDeLosRecuerdosNoBaila(Grafo g)
+    {
+        // SE CUENTAN DE UNO EN UNO —«recuerdo 1 de 2», y luego «el 2»— así que «el 2» tiene que ser
+        // el mismo entre una llamada y la siguiente. Salían en el orden del diccionario, o sea en el
+        // que se fueron viendo: la misma pantalla los numeraba distinto en cada arranque (visto el
+        // 2026-08-24: «FortiClient VPN» era el 1 y tras reiniciar pasó a serlo «SAP Logon 64»), y
+        // bastaba que entrara un elemento nuevo para reordenarlo todo a media narración.
+        const string donde = "uia://x.exe/pantalla";
+        g.Observar(donde, new[]
+        {
+            new Elemento("s:zeta", "Zeta", "Button"),
+            new Elemento("s:alfa", "Alfa", "Button"),
+        });
+        g.Ensenar(donde, "s:zeta", "esto es lo último");
+        g.Ensenar(donde, "s:alfa", "esto es lo primero");
+
+        var antes = g.RecuerdosDe(donde).Select(r => r.Que.Selector).ToList();
+        Debe(antes.SequenceEqual(new[] { "s:alfa", "s:zeta" }),
+            "el orden lo decide el selector, no el azar de cuándo se vio cada cosa");
+
+        // Y AHORA ENTRA UNO NUEVO, que es lo que pasa en cuanto se lee la pantalla otra vez.
+        g.Observar(donde, new[]
+        {
+            new Elemento("s:zeta", "Zeta", "Button"),
+            new Elemento("s:alfa", "Alfa", "Button"),
+            new Elemento("s:beta", "Beta", "Button"),
+        });
+        var despues = g.RecuerdosDe(donde).Select(r => r.Que.Selector).ToList();
+        Debe(despues.SequenceEqual(antes),
+            "y ver algo nuevo NO reordena los recuerdos: si el 2 cambiara a media cuenta, se estaría "
+            + "señalando uno mientras se habla de otro");
     }
 
     private static void NoSeEnsenaSobreLoQueNoExiste(Grafo g)

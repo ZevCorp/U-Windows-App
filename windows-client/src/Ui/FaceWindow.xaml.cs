@@ -79,6 +79,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private ClickWatcher? _clickWatcher;
     private WorkflowMcpRunner? _workflowRunner;
 
+    /// <summary>Las manos del asistente, para poder preguntarles desde el panel. Ver OnVerRecuerdos.</summary>
+    private Mcp.SurfaceMapTools? _mapaDeMano;
+
     // Selector de workflow directo en el panel Backend: lista cargada de Graph + un GraphClient propio
     // para listar/ejecutar sin abrir la biblioteca. El slider indexa esta lista.
     private GraphClient? _directGraph;
@@ -182,7 +185,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             }
             catch { }
         });
-        Senalador.Suelta += () => Dispatcher.BeginInvoke(() => { try { _iluminacion?.HideRect(); } catch { } });
+        Senalador.Suelta += () => Dispatcher.BeginInvoke(() =>
+        {
+            try { _iluminacion?.HideRect(); } catch { }
+            // Y LAS TARJETAS CON ÉL. Soltar lo señalado es «ya no estoy mirando eso»; dejar el
+            // texto encima diría lo contrario. TarjetasDeRecuerdo respeta al que esté escribiendo.
+            try { TarjetasDeRecuerdo.Cerrar(); } catch { }
+        });
         Closed += (_, __) => { try { _iluminacion?.Close(); } catch { } };
 
         // VARIAS COSAS SE SEÑALAN RECORRIÉNDOLAS. Plantarse junto a una de las seis y quedarse ahí
@@ -229,6 +238,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             _badge?.SetText(loc.Id);
             _surfaceMap?.Observe(loc.Id); // el terreno se aprende navegando, sin enseñar nada
             _map?.SetCurrent(loc.Id);     // y el mapa ilumina el nodo donde estás parado
+            // LOS RECUERDOS SIGUEN A LA PANTALLA. Con la vista encendida, moverse a otro sitio
+            // dejaba los carteles del anterior flotando encima: texto de una pantalla sobre otra,
+            // que es peor que no enseñar nada (2026-08-24, pedido por el usuario). Es una VISTA de
+            // «lo que sé de aquí», no una foto de lo que sabía cuando la encendí.
+            if (_recuerdosALaVista) RefrescarRecuerdosALaVista();
         });
         _locator.Start();
 
@@ -260,6 +274,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // en varios segundos de espera por algo que ya había pasado.
         {
             mcp.Map = new SurfaceMapTools(_surfaceMap, () => _locator?.DondeEstoy());
+            // Se guarda para el panel: «ver recuerdos de aquí» pregunta por lo aprendido en esta
+            // pantalla, y quien lo sabe es este mismo objeto — no una copia con su propio lector.
+            _mapaDeMano = mcp.Map;
+
+            // CORREGIR UN RECUERDO DESDE SU TARJETA entra por la misma puerta que enseñarlo de viva
+            // voz, con sus mismas reglas. Y el narrador se entera de que hay alguien escribiendo,
+            // para no pasar al siguiente y borrárselo a media frase.
+            TarjetasDeRecuerdo.Guardar = (sel, texto) => mcp.Map.CorregirRecuerdo(sel, texto);
+            mcp.Map.TurnoDeContar.EscribiendoAlguien = () => TarjetasDeRecuerdo.EscribiendoAlguna;
+            // Y no se pasa al siguiente mientras siga sonando el anterior: quien sabe si queda voz
+            // por oír es el altavoz, no el servidor. Ver ElTurnoDeContar.SigueSonando.
+            mcp.Map.TurnoDeContar.SigueSonando = () => _vivo?.SigueSonando == true;
 
             // La voz en vivo usa EXACTAMENTE estas manos, no unas propias. Darle a la conversación
             // hablada su propio camino para actuar habría significado duplicar el ancla de
@@ -522,6 +548,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // Se anota SOLO si de verdad había algo encendido: Escape se pulsa cien veces al día
             // para cerrar diálogos ajenos, y un log por cada una sería ruido que se aprende a
             // ignorar — y el log que se ignora no sirve el día que hace falta.
+            // LA VISTA DE RECUERDOS SE APAGA AUNQUE NO HAYA NADA ENCENDIDO, y va antes del corte de
+            // abajo: es un MODO que sigue a la pantalla, así que en un sitio sin recuerdos está
+            // puesta y vacía. Si dependiera de que hubiera algo iluminado, Escape no podría salir
+            // justo de esos sitios — y el botón seguiría diciendo «clic para apagar».
+            if (_recuerdosALaVista)
+            {
+                LogBus.Log("recuerdo", "Escape apaga la vista de recuerdos");
+                try { _iluminacion?.HideRect(); } catch { }
+                MarcarRecuerdosALaVista(false);
+            }
+
+            // LAS TARJETAS SE VAN SIEMPRE CON ESCAPE, esté la vista puesta o no: también las
+            // enseña la narración por voz, y ahí no hay ningún botón que pulsar para quitarlas.
+            try { TarjetasDeRecuerdo.Cerrar(); } catch { }
+
+            // Se anota SOLO si de verdad había algo encendido: Escape se pulsa cien veces al día
+            // para cerrar diálogos ajenos, y un log por cada una sería ruido.
             if (Senalador.Actual == null) return;
             LogBus.Log("señalar", $"Escape apaga lo iluminado («{Senalador.Actual?.Que}»)");
             try { Senalador.Soltar(); } catch { }
@@ -3104,6 +3147,107 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     /// <summary>Si el modo «verlo todo» está puesto. Ver <see cref="OnToggleFullTooltips"/>.</summary>
     private bool _fullTooltips;
+
+    /// <summary>
+    /// QUÉ ME HAN ENSEÑADO AQUÍ, de un vistazo: todo iluminado y con su texto encima.
+    /// </summary>
+    /// <remarks>
+    /// Es la misma información que cuenta la voz con map_recuerdos, pero para los ojos. Aquella los
+    /// da de uno en uno a propósito —habla entre uno y otro, y el recuadro debe estar sobre lo que
+    /// se está contando— y eso solo tiene sentido si hay conversación. Para revisar lo aprendido no
+    /// se puede depender de tener que pedírselo en voz alta (2026-08-24, pedido por el usuario).
+    ///
+    /// SE APAGA COMO TODO LO DEMÁS: con Escape, por el freno, que es donde ya vive «deja de
+    /// iluminar». No se inventa un segundo gesto para apagar algo que ya sabe apagarse.
+    /// </remarks>
+    private void OnVerRecuerdos(object sender, RoutedEventArgs e)
+    {
+        // EL MISMO BOTÓN LOS APAGA. Encender con un clic y tener que buscar OTRA forma de apagar no
+        // es un interruptor, es una trampa: quien lo pulsó espera que vuelva a pulsarse
+        // (2026-08-24, dicho por el usuario).
+        if (_recuerdosALaVista) { OcultarRecuerdos(); return; }
+        if (_mapaDeMano == null) { SetStatus("todavía no puedo mirar los recuerdos"); return; }
+
+        MarcarRecuerdosALaVista(true);
+        RefrescarRecuerdosALaVista();
+    }
+
+    /// <summary>Están encendidos los recuerdos de esta pantalla.</summary>
+    private bool _recuerdosALaVista;
+
+    /// <summary>
+    /// Pinta los recuerdos de DONDE ESTAMOS AHORA. Se llama al encender y en cada cambio de
+    /// pantalla mientras la vista siga puesta.
+    /// </summary>
+    /// <remarks>
+    /// ENCENDER Y REFRESCAR SON LO MISMO, y por eso comparten este camino: si fueran dos, el día que
+    /// se cambie cómo se pintan habría que acordarse de los dos sitios, y uno de los dos se quedaría
+    /// atrás. Encender es el primer refresco.
+    ///
+    /// UNA PANTALLA SIN RECUERDOS NO APAGA LA VISTA: se queda encendida y vacía, esperando. Apagarla
+    /// sola al pasar por un sitio donde no se ha enseñado nada obligaría a volver a pulsar el botón
+    /// cada vez que se cruza una pantalla cualquiera, que es justo lo contrario de un modo.
+    /// </remarks>
+    private void RefrescarRecuerdosALaVista()
+    {
+        if (_mapaDeMano == null) return;
+        try
+        {
+            // NO SE REDIBUJA ENCIMA DE QUIEN ESCRIBE. La ubicación se mira sola cada pocos cientos
+            // de milisegundos, así que sin esto una corrección a media frase se borraría sola.
+            if (TarjetasDeRecuerdo.EscribiendoAlguna) return;
+
+            var recuerdos = _mapaDeMano.RecuerdosEnPantalla();
+            if (recuerdos.Count == 0)
+            {
+                Senalador.Soltar();
+                try { _iluminacion?.HideRect(); } catch { }
+                TarjetasDeRecuerdo.Cerrar();
+                SetStatus("aquí no te he aprendido nada todavía · la vista sigue puesta");
+                return;
+            }
+
+            // PASA POR EL SEÑALADOR aunque el dibujo lo haga el overlay, y no es un rodeo: el
+            // Señalador es quien responde «¿hay algo encendido?», y de esa respuesta cuelga Escape
+            // —que se sale antes de tiempo si Actual está vacío—. Pintando por fuera, lo iluminado
+            // existía para los ojos y no para el resto del sistema: Escape no lo apagaba.
+            Senalador.SenalarVarias(recuerdos.Select(r => (r.Caja, r.Etiqueta)).ToList());
+
+            if (_iluminacion == null) { _iluminacion = new HighlightOverlay(); _iluminacion.Show(); }
+            _iluminacion.ShowRects(recuerdos.Select(r => r.Caja).ToList());
+            // EL TEXTO LO PONEN LAS TARJETAS, no el overlay: son las mismas que usa la narración, y
+            // además se pueden corregir. Dos formas de pintar lo mismo acabarían divergiendo — y una
+            // de las dos sería la que no deja escribir.
+            TarjetasDeRecuerdo.Mostrar(recuerdos.Select(r => (r.Caja, r.Selector, r.Etiqueta, r.Significado)).ToList());
+
+            SetStatus(recuerdos.Count == 1
+                ? "1 recuerdo · edítalo escribiendo encima · Escape lo apaga"
+                : $"{recuerdos.Count} recuerdos · edítalos escribiendo encima · Escape los apaga");
+        }
+        catch (Exception ex) { LogBus.Log("recuerdo", $"no pude enseñar los recuerdos: {ex.Message}"); }
+    }
+
+    private void OcultarRecuerdos()
+    {
+        try { Senalador.Soltar(); } catch { }
+        try { _iluminacion?.HideRect(); } catch { }
+        // LAS TARJETAS TAMBIÉN. Son ventanas propias, así que no se van con el recuadro: apagar la
+        // vista y que el texto siguiera flotando encima de la pantalla dejaba algo que no se podía
+        // quitar de ninguna forma (2026-08-24, visto por el usuario).
+        try { TarjetasDeRecuerdo.Cerrar(); } catch { }
+        MarcarRecuerdosALaVista(false);
+        SetStatus("recuerdos apagados");
+    }
+
+    /// <summary>
+    /// El botón dice en qué estado está. Un interruptor que se ve igual encendido que apagado
+    /// obliga a mirar la pantalla para saber si funcionó.
+    /// </summary>
+    private void MarcarRecuerdosALaVista(bool si)
+    {
+        _recuerdosALaVista = si;
+        RecuerdosBtn.Content = si ? "🧠 Recuerdos a la vista — clic para apagar" : "🧠 Ver recuerdos de aquí";
+    }
 
     /// <summary>
     /// TODO ENCENDIDO DE UN GOLPE: inspector, ID de superficie, explorador del grafo y mapa.

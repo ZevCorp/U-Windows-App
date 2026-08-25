@@ -52,14 +52,54 @@ public sealed class ElTurnoDeContar
         lock (_llave) { _ultimoContado = 0; _habloDesdeEntonces = false; }
     }
 
+    /// <summary>
+    /// Alguien está corrigiendo un recuerdo a mano ahora mismo. Se inyecta desde la interfaz —es
+    /// quien tiene las tarjetas— y para el avance mientras dure.
+    /// </summary>
+    /// <remarks>
+    /// Pasar al siguiente con alguien a media frase le quitaría el foco y le borraría lo escrito.
+    /// Y es un caso que se da solo: se está contando lo aprendido, la persona ve que una frase no
+    /// es la que quería, y se pone a arreglarla justo mientras la voz sigue (2026-08-24, pedido por
+    /// el usuario). Esperar aquí no cuesta nada; atropellarla cuesta su corrección.
+    /// </remarks>
+    public Func<bool>? EscribiendoAlguien { get; set; }
+
+    /// <summary>
+    /// Todavía se está OYENDO lo anterior. Lo contesta el altavoz —queda cola por sonar— y no el
+    /// servidor.
+    /// </summary>
+    /// <remarks>
+    /// SONAR NO ES RECIBIR, y es la misma confusión que ya costó un bug en 2026-08-06 (ver
+    /// <see cref="U.WindowsClient.Voice.LiveAudio.NivelSalida"/>): el modelo manda el audio mucho
+    /// más rápido de lo que se oye, así que cuando el servidor dice «terminé» quedan segundos de voz
+    /// en la cola. Medido el 2026-08-24 contando recuerdos:
+    ///
+    ///   23:02:02  recuadro sobre el primero
+    ///   23:02:05  el servidor termina de MANDAR su narración (~40 palabras, ~16 s de habla)
+    ///   23:02:05  el recuadro salta al segundo
+    ///
+    /// Tres segundos de recuadro para dieciséis de voz: se oía bien el primero mientras se señalaba
+    /// el segundo. El usuario lo describió exacto — «menciona bien el primer elemento, pero a
+    /// destiempo con la señalización».
+    /// </remarks>
+    public Func<bool>? SigueSonando { get; set; }
+
     /// <summary>Si se puede entregar ese recuerdo ahora mismo.</summary>
     public bool PuedeContar(int cual)
     {
+        // ESCRIBIR MANDA SOBRE TODO LO DEMÁS, incluso sobre repetir: si está corrigiendo la tarjeta
+        // que tiene delante, volver a pintarla le tiraría lo escrito.
+        if (EscribiendoAlguien?.Invoke() == true) return false;
+
         lock (_llave)
         {
             if (_ultimoContado == 0) return true;      // el primero de la tanda
             if (cual <= _ultimoContado) return true;   // repetir o volver atrás no adelanta nada
-            return _habloDesdeEntonces;                // avanzar, solo tras haber hablado
+            if (!_habloDesdeEntonces) return false;    // avanzar exige haber hablado
         }
+
+        // Y QUE SE HAYA ACABADO DE OÍR. Haber hablado no basta: la voz llega en un segundo y se oye
+        // en dieciséis. Se pregunta FUERA del candado porque quien contesta es el altavoz.
+        return SigueSonando?.Invoke() != true;
     }
 }

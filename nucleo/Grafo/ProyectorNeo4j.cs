@@ -19,7 +19,29 @@ namespace Nucleo;
 /// </summary>
 public sealed class ProyectorNeo4j : IDisposable
 {
+    /// <summary>
+    /// El caño de siempre: CORTO a propósito. Por aquí pasa el latido de la proyección, que corre
+    /// mientras alguien usa el ordenador — quedarse esperando a una base de datos lenta se notaría
+    /// como que la app se cuelga.
+    /// </summary>
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
+
+    /// <summary>
+    /// El caño de LEER LA MEMORIA, con paciencia. Es otra cosa distinta y necesita lo contrario:
+    /// ocurre UNA vez, al arrancar, y tiene que salir bien.
+    /// </summary>
+    /// <remarks>
+    /// Compartían los cinco segundos, y el día que el grafo creció lo suficiente dejó de caber:
+    /// «The request was canceled due to the configured HttpClient.Timeout of 5 seconds elapsing»
+    /// con 205 ubicaciones, y Ü arrancó sin un solo recuerdo. Desde fuera no se veía como un fallo
+    /// de red — se veía como «no me has enseñado nada aquí», que es exactamente la frase que hace
+    /// dudar de si el sistema aprende (2026-08-24, tras preguntarle por unos recuerdos que sí
+    /// estaban guardados).
+    ///
+    /// Y no es un caso raro que vaya a desaparecer: el grafo solo crece. Un minuto de espera una
+    /// vez al arrancar no se lo quita a nadie; perder la memoria entera, sí.
+    /// </remarks>
+    private readonly HttpClient _paraLeerLaMemoria = new() { Timeout = TimeSpan.FromSeconds(60) };
     private readonly string _url;
     private readonly string _auth;
     private int _ultimaVersion = -1;
@@ -322,8 +344,16 @@ public sealed class ProyectorNeo4j : IDisposable
             },
         };
 
-        string cuerpo = Pedir(JsonSerializer.Serialize(consulta));
-        if (cuerpo.Length == 0) return 0;
+        string cuerpo = Pedir(JsonSerializer.Serialize(consulta), conPaciencia: true);
+        if (cuerpo.Length == 0)
+        {
+            // SE DICE FUERTE. Volver con las manos vacías de aquí no es «no había nada guardado»:
+            // es «no pude leer lo que hay», y las dos cosas se veían igual desde fuera —Ü contestaba
+            // «no me has enseñado nada aquí» sobre recuerdos que seguían en la base (2026-08-24).
+            Cuenta?.Invoke("NO PUDE LEER LA MEMORIA de Neo4j: arranco sin nada recordado. "
+                         + "Lo guardado NO se ha perdido; vuelve a abrir Ü para recuperarlo.");
+            return 0;
+        }
 
         var porUbicacion = new Dictionary<string, List<Elemento>>(StringComparer.OrdinalIgnoreCase);
         var caminos = new List<(string Donde, string Sel, string Destino)>();
@@ -558,7 +588,7 @@ public sealed class ProyectorNeo4j : IDisposable
     private static string Linea(string donde, string sel, bool vivo, string destino) =>
         $"{donde}{sel}{(vivo ? "vivo" : "memoria")}{destino}";
 
-    private string Pedir(string cuerpo)
+    private string Pedir(string cuerpo, bool conPaciencia = false)
     {
         try
         {
@@ -567,7 +597,7 @@ public sealed class ProyectorNeo4j : IDisposable
                 Content = new StringContent(cuerpo, Encoding.UTF8, "application/json"),
             };
             req.Headers.Add("Authorization", "Basic " + _auth);
-            using var res = _http.Send(req);
+            using var res = (conPaciencia ? _paraLeerLaMemoria : _http).Send(req);
             return res.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         }
         catch (Exception e)
@@ -608,5 +638,9 @@ public sealed class ProyectorNeo4j : IDisposable
         }
     }
 
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _http.Dispose();
+        _paraLeerLaMemoria.Dispose();
+    }
 }

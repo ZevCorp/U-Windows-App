@@ -799,46 +799,104 @@ public sealed class SurfaceMapTools
         // exactamente lo contrario de señalar de lo que se habla.
         if (!TurnoDeContar.PuedeContar(cual))
         {
+            // DOS MOTIVOS DISTINTOS PARA ESPERAR, y conviene decir cuál: uno se arregla hablando y
+            // el otro se arregla solo, esperando a que la persona termine. El segundo se da cuando
+            // se está corrigiendo una tarjeta abierta desde el panel mientras la voz narra.
+            if (Ui.TarjetasDeRecuerdo.EscribiendoAlguna)
+            {
+                LogBus.Log("recuerdo", $"pidió el {cual} mientras se corrige a mano: espera");
+                return "[interno] está corrigiendo un recuerdo a mano. No pases al siguiente ni "
+                     + "digas nada de esto; espera a que termine.";
+            }
+
             LogBus.Log("recuerdo", $"pidió el {cual} sin haber contado el anterior: se le hace esperar");
-            return $"todavía no has contado el recuerdo {cual - 1} en voz. Cuéntaselo primero —para "
-                 + "eso está iluminado ahora mismo— y cuando termines vuelve a pedirme el "
-                 + $"{cual}. Si los cuentas todos de seguido, el recuadro deja de estar sobre "
-                 + "aquello de lo que hablas.";
+            return $"[interno] todavía no has contado el {cual - 1} en voz. Cuéntalo y vuelve a "
+                 + $"pedir el {cual}. No leas esto en voz alta.";
         }
 
         var r = todos[cual - 1];
         TurnoDeContar.SeConto(cual);
         SiguienteRecuerdoPendiente = cual < todos.Count ? cual + 1 : 0;
         bool marcado = IluminarUno(r.Selector, r.Etiqueta);
-        string quedan = cual < todos.Count
-            ? $" Pídeme el {cual + 1} cuando termines de contar este."
-            : " Ese era el último.";
 
         LogBus.Log("recuerdo", $"contando {cual}/{todos.Count} en «{donde}»: «{r.Etiqueta}»"
             + (marcado ? " · iluminado" : " · NO está en pantalla"));
 
-        return $"recuerdo {cual} de {todos.Count} — «{r.Etiqueta}»: {r.Significado}."
-             + (marcado ? " Lo estoy señalando en pantalla." : " (no lo veo ahora en pantalla, así que no puedo señalarlo.)")
-             + quedan;
+        // LO QUE VUELVE DE AQUÍ SE ACABA DICIENDO EN VOZ ALTA, así que solo puede llevar lo que
+        // valga la pena decir. Llevaba «Pídeme el 2 cuando termines de contar este» —una frase
+        // dirigida al modelo— y el modelo se la leía al usuario tal cual: «ahora vuelve a pedirme el
+        // recuerdo 2 cuando…». Desde fuera parecía que el sistema le pedía a la persona que hiciera
+        // el trabajo (2026-08-24, visto en pantalla por el usuario).
+        //
+        // Y LO QUE SE LE PIDA AQUÍ ES LO ÚNICO QUE VA A HACER. La primera versión de esta nota decía
+        // «quedan 1; sigue con el 2» y el modelo hizo exactamente eso: pidió el 2 un segundo después
+        // SIN haber contado el 1. La nota le dijo que avanzara, no que contara — y avanzó. Aquí solo
+        // se le pide CONTAR; avanzar lo empuja el continuador cuando ya ha hablado, que es quien
+        // sabe si habló.
+        return $"recuerdo {cual} de {todos.Count} — «{r.Etiqueta}»: {r.Significado}"
+             + (marcado ? "" : " [interno] ese elemento ya no está en pantalla; dilo al contarlo.")
+             + " [interno] cuéntalo en voz AHORA, con tus palabras. No pidas otro todavía.";
+    }
+
+    /// <summary>
+    /// TODOS los recuerdos de esta pantalla que se puedan localizar, con su caja. Para verlos de un
+    /// vistazo desde el panel, sin pedírselo a la voz.
+    /// </summary>
+    /// <remarks>
+    /// Los que ya no están en pantalla se quedan fuera y no se dicen: aquí no hay una voz que pueda
+    /// explicar «este lo recuerdo pero no lo veo», y un cartel flotando sobre nada sería peor que su
+    /// ausencia. Quien quiera esa distinción la tiene contándolos con map_recuerdos, que sí la dice.
+    /// </remarks>
+    public IReadOnlyList<(System.Windows.Rect Caja, string Selector, string Etiqueta, string Significado)> RecuerdosEnPantalla()
+    {
+        var salida = new List<(System.Windows.Rect, string, string, string)>();
+        string donde = _where()?.Id ?? "";
+        if (donde.Length == 0) return salida;
+
+        var todos = RecuerdosAqui?.Invoke(donde) ?? Array.Empty<(string, string, string)>();
+        if (todos.Count == 0) return salida;
+
+        try
+        {
+            _lector.Read();
+            foreach (var r in todos)
+            {
+                var visto = _lector.Elements.FirstOrDefault(
+                                e => Uia.Reconocedor.SelectorDe(e).Equals(r.Selector, StringComparison.OrdinalIgnoreCase))
+                            ?? _lector.Elements.FirstOrDefault(
+                                e => e.Label.Equals(r.Etiqueta, StringComparison.OrdinalIgnoreCase));
+                if (visto != null) salida.Add((visto.Bounds, r.Selector, r.Etiqueta, r.Significado));
+            }
+        }
+        catch (Exception e) { LogBus.Log("recuerdo", $"no pude localizar los recuerdos: {e.Message}"); }
+
+        LogBus.Log("recuerdo", $"vista de recuerdos en «{donde}»: {salida.Count} de {todos.Count} localizados");
+        return salida;
     }
 
     /// <summary>Enciende UN elemento por su selector. False si ya no está en pantalla.</summary>
+    /// <remarks>
+    /// SOLO EL RECUADRO, SIN EL TEXTO. Se probó enseñando también la nota mientras se narra y
+    /// estorbaba: la voz ya está diciendo lo mismo, así que el texto encima es una segunda copia
+    /// tapando la pantalla (2026-08-24, dicho por el usuario: «ahora que muestra el texto es
+    /// incómodo»). El texto se lee cuando se pide con los ojos —el botón del panel—, no cuando se
+    /// está escuchando.
+    /// </remarks>
     private bool IluminarUno(string selector, string etiqueta)
     {
         try
         {
             _lector.Read();
-            foreach (var e in _lector.Elements)
-            {
-                if (!Uia.Reconocedor.SelectorDe(e).Equals(selector, StringComparison.OrdinalIgnoreCase)) continue;
-                Ui.Senalador.Senalar(e.Bounds, etiqueta);
-                return true;
-            }
-            // Por etiqueta como último recurso: un selector puede envejecer —cambia una ruta, se
-            // renombra un automation id— y el elemento seguir estando ahí con el mismo nombre.
-            var porNombre = _lector.Elements.FirstOrDefault(
-                e => e.Label.Equals(etiqueta, StringComparison.OrdinalIgnoreCase));
-            if (porNombre != null) { Ui.Senalador.Senalar(porNombre.Bounds, etiqueta); return true; }
+            var visto = _lector.Elements.FirstOrDefault(
+                            e => Uia.Reconocedor.SelectorDe(e).Equals(selector, StringComparison.OrdinalIgnoreCase))
+                        // Por etiqueta como último recurso: un selector puede envejecer —cambia una
+                        // ruta, se renombra un automation id— y el elemento seguir ahí con su nombre.
+                        ?? _lector.Elements.FirstOrDefault(
+                            e => e.Label.Equals(etiqueta, StringComparison.OrdinalIgnoreCase));
+            if (visto == null) return false;
+
+            Ui.Senalador.Senalar(visto.Bounds, etiqueta);
+            return true;
         }
         catch (Exception e) { LogBus.Log("recuerdo", $"no pude iluminar «{etiqueta}»: {e.Message}"); }
         return false;
@@ -1841,8 +1899,32 @@ public sealed class SurfaceMapTools
     /// </remarks>
     public int SiguienteRecuerdoPendiente { get; private set; }
 
-    /// <summary>Se deja de retomar la cuenta: quien preguntaba cambió de tema.</summary>
-    public void OlvidarLosQueFaltan() => SiguienteRecuerdoPendiente = 0;
+    /// <summary>
+    /// CORREGIR A MANO un recuerdo de esta pantalla, desde su tarjeta. Devuelve si se guardó.
+    /// </summary>
+    /// <remarks>
+    /// Es la misma puerta que usa la voz —<c>Ensenar</c>— y por eso pasa por las mismas reglas: si
+    /// el elemento ya no se conoce aquí, se rechaza igual. Escribir a mano no es un atajo para
+    /// meter en el grafo algo que la voz no habría podido meter.
+    ///
+    /// LA FOTO NO SE TOCA: la de un recuerdo es la de cuando se enseñó, y corregir la frase no
+    /// cambia lo que había en pantalla aquel día.
+    /// </remarks>
+    public bool CorregirRecuerdo(string selector, string significado)
+    {
+        string donde = _where()?.Id ?? "";
+        if (donde.Length == 0 || Ensenar == null) return false;
+
+        var previo = RecuerdosAqui?.Invoke(donde)
+            .FirstOrDefault(r => r.Selector.Equals(selector, StringComparison.OrdinalIgnoreCase));
+        string foto = "";   // se conserva sola: Ensenar no la borra si no llega una nueva
+
+        bool ok = Ensenar(donde, selector, significado, foto);
+        LogBus.Log("recuerdo", ok
+            ? $"corregido a mano «{previo?.Etiqueta ?? selector}» en «{donde}» → {significado}"
+            : $"NO pude corregir «{selector}» en «{donde}»: el grafo no lo tiene aquí");
+        return ok;
+    }
 
     /// <summary>Lo enseñado en una pantalla: (etiqueta, significado). Para contarlo al llegar.</summary>
     /// <remarks>

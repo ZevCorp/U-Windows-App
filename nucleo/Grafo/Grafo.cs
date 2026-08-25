@@ -365,6 +365,17 @@ public sealed class Grafo
             foreach (var e in aqui.Values)
                 if (_recuerdos.TryGetValue(ubicacion + "\n" + e.Selector, out var ens))
                     salida.Add((e, ens));
+
+            // EN UN ORDEN QUE NO CAMBIE. Salían en el orden del diccionario, o sea en el orden en que
+            // se fueron viendo los elementos: la misma pantalla numeraba sus recuerdos distinto en
+            // cada arranque, y basta que entre un elemento nuevo para que la lista se reordene sola.
+            // Se cuentan de uno en uno —«recuerdo 1 de 2», «ahora el 2»— así que «el 2» tiene que
+            // seguir siendo el mismo entre una llamada y la siguiente; si no, se señala uno mientras
+            // se habla de otro, que es exactamente lo que contarlos de uno en uno vino a evitar.
+            //
+            // Por SELECTOR y no por etiqueta: dos cosas pueden llamarse igual —es la razón de que
+            // haya selectores— y entonces el desempate volvería a depender del azar.
+            salida.Sort((a, b) => string.CompareOrdinal(a.Item1.Selector, b.Item1.Selector));
             return salida;
         }
     }

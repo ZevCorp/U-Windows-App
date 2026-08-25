@@ -126,6 +126,8 @@ internal static class Contrato
         Prueba("51. los recuerdos se cuentan de uno en uno: sin hablar no hay siguiente", DeUnoEnUnoONoHaySiguiente);
         Prueba("52. repetir o volver atrás sí se puede: solo AVANZAR exige haber hablado", VolverAtrasNoEsAvanzar);
         Prueba("53. contar el primero no es haber contestado: se sabe cuál falta", ContarNoEsAbandonarAMedias);
+        Prueba("54. mientras alguien corrige un recuerdo, la narración espera", EscribirDetieneLaNarracion);
+        Prueba("55. el recuadro no adelanta a la voz: sonar no es recibir", ElRecuadroNoAdelantaALaVoz);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1262,6 +1264,60 @@ internal static class Contrato
             "pero contado el último NO queda ninguno: seguir empujando después de terminar sería "
             + "insistir sobre una pregunta ya contestada");
         Debe(SiguienteTras(1, 1) == 0, "y con uno solo se termina en el primero");
+    }
+
+    private static void EscribirDetieneLaNarracion(SurfaceMap _)
+    {
+        bool escribiendo = false;
+        var turno = new ElTurnoDeContar { EscribiendoAlguien = () => escribiendo };
+
+        turno.SeConto(1);
+        turno.Hablo();
+        Debe(turno.PuedeContar(2), "sin nadie escribiendo, contado y hablado el 1, el 2 se da");
+
+        // Y AHORA ALGUIEN SE PONE A CORREGIR la tarjeta que tiene delante.
+        escribiendo = true;
+        Debe(!turno.PuedeContar(2),
+            "con alguien escribiendo NO se pasa al siguiente: cambiar de recuerdo a media frase le "
+            + "quita el foco y le borra la corrección");
+        Debe(!turno.PuedeContar(1),
+            "y tampoco se REPITE el actual, aunque repetir normalmente se deje: repintar la tarjeta "
+            + "que está editando es exactamente lo que le tiraría lo escrito");
+
+        escribiendo = false;
+        Debe(turno.PuedeContar(2), "y en cuanto suelta el teclado, la narración sigue donde iba");
+    }
+
+    private static void ElRecuadroNoAdelantaALaVoz(SurfaceMap _)
+    {
+        // SONAR NO ES RECIBIR. El turno se cierra cuando el servidor termina de MANDAR el audio, y
+        // para entonces quedan segundos de voz en la cola del altavoz. Medido el 2026-08-24:
+        //
+        //   23:02:02  recuadro sobre el primero
+        //   23:02:05  el servidor termina de mandar (~40 palabras ≈ 16 s de habla)
+        //   23:02:05  el recuadro salta al segundo
+        //
+        // Tres segundos de recuadro para dieciséis de voz. El usuario lo dijo exacto: «menciona
+        // bien el primer elemento, pero a destiempo con la señalización».
+        bool sonando = true;
+        var turno = new ElTurnoDeContar { SigueSonando = () => sonando };
+
+        turno.SeConto(1);
+        turno.Hablo();   // ya generó su narración: el servidor terminó
+
+        Debe(!turno.PuedeContar(2),
+            "haber hablado NO basta si todavía se está oyendo: el audio llega en un segundo y se "
+            + "oye en dieciséis, así que aquí es donde el recuadro adelantaba a la voz");
+
+        sonando = false;
+        Debe(turno.PuedeContar(2),
+            "y en cuanto el altavoz se vacía, sí: lo que manda es haber terminado de SONAR");
+
+        // Y no se cuela por la puerta de repetir: mientras suene, tampoco se repinta.
+        turno.SeConto(2);
+        turno.Hablo();
+        sonando = true;
+        Debe(!turno.PuedeContar(3), "sigue sin poder avanzar mientras suene el anterior");
     }
 
     private static void NoTodoLoQueSuenaEsLeccion(SurfaceMap _)

@@ -60,6 +60,13 @@ public sealed class ConversacionEnVivo : IDisposable
     public double NivelVoz => Viva ? _audio.NivelSalida : 0;
 
     /// <summary>
+    /// Queda voz por OÍRSE. No es lo mismo que estar generando: el audio llega mucho más rápido de
+    /// lo que se reproduce, así que esto sigue siendo cierto bastante después de que el servidor
+    /// haya terminado. Lo consulta quien no pueda adelantarse a la voz — ver ElTurnoDeContar.
+    /// </summary>
+    public bool SigueSonando => Viva && _audio.Hablando;
+
+    /// <summary>
     /// Pasa la voz al collar Omi sin cortar la conversación. Lo pide la carita con un gesto.
     ///
     /// No abre ni cierra la sesión: sólo cambia de dónde entra el audio. <see cref="LiveAudio"/> ya
@@ -387,6 +394,11 @@ public sealed class ConversacionEnVivo : IDisposable
         El objetivo no es un ejecutor que repite lo mismo para siempre — es un aprendiz que, con el
         tiempo, sabe más que quien lo enseñó a base de acumular RECUERDOS.
 
+          · LO QUE VENGA MARCADO «[interno]» ES PARA TI, NO PARA DECIRLO. Son indicaciones de la
+            propia herramienta —qué hacer después, por qué no pudo— y leerlas en voz alta suena a
+            que le estás pidiendo a la persona que haga tu trabajo: pasó tal cual con «ahora vuelve
+            a pedirme el recuerdo 2 cuando…», que era una nota para ti (2026-08-24). Haz lo que
+            digan y cuenta solo lo que hay antes de la marca.
           · «¿QUÉ SABES DE ESTA PANTALLA?» SE CONTESTA SEÑALANDO, NO RECITANDO. Usa map_recuerdos y
             ve UNO POR UNO: la llamas, te da el recuerdo 1 y lo ilumina, tú lo cuentas en voz; y
             cuando hayas terminado de contarlo, la llamas con cual=2 y sigues. Nunca sueltes los dos
@@ -723,12 +735,13 @@ public sealed class ConversacionEnVivo : IDisposable
             ("steps", "JSON: lista de pasos. Cada uno {\"op\":\"go_to|take|type|unblock\", …} con los "
                     + "mismos argumentos que las herramientas sueltas.")),
         Fn("map_recuerdos", "«¿QUÉ SABES DE ESTA PANTALLA?» / «¿qué te he enseñado aquí?» / «¿qué "
-            + "recuerdas?». Te devuelve los recuerdos de aquí DE UNO EN UNO y SEÑALA en pantalla el "
-            + "elemento del que habla cada uno. Llámala sin `cual` para empezar; te dice «recuerdo 1 "
-            + "de N», lo ilumina, y tú lo CUENTAS EN VOZ. Cuando termines de contarlo, vuelve a "
-            + "llamarla con cual=2, y así hasta el último. NO los recites todos de corrido: uno por "
-            + "llamada es lo que hace que el recuadro esté sobre aquello de lo que estás hablando "
-            + "justo mientras hablas.",
+            + "recuerdas?». Te devuelve los recuerdos de aquí DE UNO EN UNO e ilumina en pantalla el "
+            + "elemento de cada uno. EL ORDEN ES: la llamas → te da UNO → lo CUENTAS EN VOZ, entero "
+            + "y con tus palabras → SOLO ENTONCES pides el siguiente. Nunca encadenes dos llamadas "
+            + "seguidas: si pides el 2 sin haber contado el 1, el usuario ve dos recuadros y no oye "
+            + "ninguno. El texto no aparece en pantalla durante la narración —lo dices tú, esa es "
+            + "toda tu tarea aquí—. Y sigue HASTA EL ÚLTIMO: quedarse en el primero deja la pregunta "
+            + "a medias.",
             ("cual", "Cuál contar, empezando en 1. Vacío = el primero.")),
         Fn("map_esto_es", "CREA UN RECUERDO con lo que el usuario te está ENSEÑANDO. Es la ÚNICA "
             + "forma de que algo se te quede: si no la llamas, no aprendiste nada por mucho que "
@@ -1092,11 +1105,6 @@ public sealed class ConversacionEnVivo : IDisposable
                 break;
 
             case Hecho.DiceElUsuario d:
-                // QUIEN HABLA MANDA. Si el usuario dice algo mientras se le cuentan los recuerdos,
-                // se deja de retomar: cambió de tema, y seguir empujándole los que faltan sería lo
-                // contrario de escuchar. Los recuerdos no se pierden — vuelve a preguntar y se
-                // cuentan desde el principio.
-                _mapa.OlvidarLosQueFaltan();
                 _fraseUsuario.Append(d.Trozo);
                 Dice?.Invoke($"Tú: {_fraseUsuario}");
                 Transcribe?.Invoke($"Tú: {_fraseUsuario}", false);
@@ -1245,8 +1253,13 @@ public sealed class ConversacionEnVivo : IDisposable
     /// —no dar el siguiente sin haber hablado del anterior— y esto impide ABANDONARLOS. Con solo la
     /// primera, la conversación se queda a medias educadamente.
     ///
-    /// SE PARA SI EL USUARIO HABLA. Quien interrumpe cambió de tema, y seguir empujándole recuerdos
-    /// encima sería justo lo contrario de escuchar.
+    /// NO SE CANCELA PORQUE EL USUARIO HAGA UN RUIDO. Lo hacía —«quien interrumpe cambió de tema»—
+    /// y la idea era buena pero el disparador no: el micrófono transcribe carraspeos, un «ajá», o
+    /// directamente ruido («Inola»), y cualquiera de esos mataba la cuenta. Se contaba el primer
+    /// recuerdo y el segundo no llegaba nunca (2026-08-24, medido en el log).
+    ///
+    /// Esto solo SUGIERE seguir; no obliga. Si el usuario de verdad cambió de tema, el modelo lo ha
+    /// oído y decide él — que es quien puede distinguir un «no, para» de un carraspeo.
     /// </remarks>
     private void SeguirContandoSiQuedan()
     {
@@ -1257,6 +1270,20 @@ public sealed class ConversacionEnVivo : IDisposable
         {
             try
             {
+                // SE ESPERA A QUE SE ACABE DE OÍR, no a que se acabe de recibir. El turno se cierra
+                // cuando el servidor termina de MANDAR, y para entonces quedan segundos de voz en la
+                // cola del altavoz: pedir el siguiente ahí movía el recuadro al segundo elemento
+                // mientras aún se oía el primero (2026-08-24, medido: 3 s de recuadro para 16 s de
+                // narración).
+                var hasta = DateTime.UtcNow + EsperaMaximaAQueSeOiga;
+                while (Viva && _audio.Hablando && DateTime.UtcNow < hasta)
+                    await Task.Delay(200);
+
+                // Y se vuelve a mirar: en esos segundos el usuario puede haber apagado la voz, o
+                // haber preguntado otra cosa que ya cambió la cuenta.
+                if (!Viva || _mapa.SiguienteRecuerdoPendiente != siguiente) return;
+
+                LogBus.Log("recuerdo", $"terminó de oírse el {siguiente - 1}; le pido que siga con el {siguiente}");
                 await EnviarTextoAlModeloAsync(
                     $"[aviso del sistema] Quedan recuerdos por contar en esta pantalla. Ya has "
                     + $"contado el {siguiente - 1}; pide AHORA map_recuerdos con cual={siguiente} y "
@@ -1265,8 +1292,13 @@ public sealed class ConversacionEnVivo : IDisposable
             }
             catch (Exception e) { LogBus.Log("recuerdo", $"no pude pedir el siguiente recuerdo: {e.Message}"); }
         });
-        LogBus.Log("recuerdo", $"contado el {siguiente - 1}; le pido que siga con el {siguiente}");
     }
+
+    /// <summary>
+    /// Cuánto se espera como mucho a que el altavoz se vacíe. Es una red de seguridad: si algo
+    /// dejara la cola sin drenar, la cuenta seguiría en vez de quedarse colgada para siempre.
+    /// </summary>
+    private static readonly TimeSpan EsperaMaximaAQueSeOiga = TimeSpan.FromSeconds(45);
 
     /// <summary>
     /// NO ERA UNA LECCIÓN, ERA UNA PREGUNTA: se cancela el aviso sin acusar a nadie.
