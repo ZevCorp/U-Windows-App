@@ -645,8 +645,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // cuando lo hizo, navega y llena la historia clínica. Va encendido desde el arranque y sin
         // botón: el operador no tiene que acordarse de activarlo para que su compañero pueda
         // exportar desde la web. Sin trabajo no hace nada más que una petición cada tres segundos.
-        _exportador = new EjecutorDeExportaciones(_graphConfig, _rellenador,
-            () => _locator?.DondeEstoy()?.Id ?? "", Dispatcher);
+        _exportador = new EjecutorDeExportaciones(_graphConfig, _rellenador, Dispatcher);
         _exportador.Cuenta += m => Dispatcher.Invoke(() => { SetStatus(m); ShowTalk(); });
         _exportador.Arrancar();
         Closed += (_, __) => _exportador?.Dispose();

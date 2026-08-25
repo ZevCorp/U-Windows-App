@@ -37,7 +37,6 @@ public sealed class EjecutorDeExportaciones : IDisposable
 {
     private readonly GraphConfig _config;
     private readonly RellenadorSap _rellenador;
-    private readonly Func<string> _donde;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     /// <summary>
@@ -66,12 +65,53 @@ public sealed class EjecutorDeExportaciones : IDisposable
     /// </summary>
     private static readonly TimeSpan Ritmo = TimeSpan.FromSeconds(3);
 
-    public EjecutorDeExportaciones(GraphConfig config, RellenadorSap rellenador, Func<string> donde,
+    /// <summary>
+    /// Cuántas vueltas seguidas han fallado. Manda dos cosas: cuánto se espera antes de volver a
+    /// preguntar, y cada cuánto se dice en el log.
+    /// </summary>
+    /// <remarks>
+    /// EL 25-08-2026 ESTE ARCHIVO ESCRIBIÓ 719 LÍNEAS IDÉNTICAS. El DNS de la red no resolvía el
+    /// dominio del backend, y el bucle preguntó cada 3 s durante ocho horas y media: castigó a una
+    /// red que ya estaba caída y enterró bajo ruido las cuatro líneas que sí decían algo (un 500,
+    /// un 429, dos errores de envío). Preguntar a ciegas al mismo ritmo no acerca la respuesta.
+    ///
+    /// Por eso el fallo cuesta espera: 3 s, 6, 12, 24, 48, y de ahí un minuto fijo. Un backend que
+    /// contesta 429 —«vas muy rápido»— recibe justo lo que pide, en vez de más de lo mismo. Y el
+    /// primer acierto lo perdona entero: quien vuelve a estar sano no arrastra la penitencia.
+    /// </remarks>
+    private int _fallosSeguidos;
+
+    /// <summary>La espera extra que se ha ganado el fallo: ninguna cuando todo va bien.</summary>
+    private TimeSpan Castigo => _fallosSeguidos == 0
+        ? TimeSpan.Zero
+        : TimeSpan.FromSeconds(Math.Min(60, 3 * Math.Pow(2, Math.Min(_fallosSeguidos, 5))));
+
+    /// <summary>
+    /// Cuenta el fallo y lo dice SOLO cuando aporta: la primera vez y luego cada veinte, con el
+    /// total a cuestas. Repetir el mismo renglón setecientas veces no informa de nada nuevo.
+    /// </summary>
+    private void Quejarse(string porque)
+    {
+        _fallosSeguidos++;
+        if (_fallosSeguidos == 1)
+            LogBus.Log("exportar", porque);
+        else if (_fallosSeguidos % 20 == 0)
+            LogBus.Log("exportar", $"{porque} · {_fallosSeguidos} veces seguidas, esperando {Castigo.TotalSeconds:N0} s entre intentos");
+    }
+
+    /// <summary>Se acabó la mala racha: ni espera extra ni cuenta pendiente.</summary>
+    private void SaleBien()
+    {
+        if (_fallosSeguidos == 0) return;
+        LogBus.Log("exportar", $"el backend volvió a contestar tras {_fallosSeguidos} fallos seguidos");
+        _fallosSeguidos = 0;
+    }
+
+    public EjecutorDeExportaciones(GraphConfig config, RellenadorSap rellenador,
         System.Windows.Threading.Dispatcher hiloConSap)
     {
         _config = config;
         _rellenador = rellenador;
-        _donde = donde;
         _hiloConSap = hiloConSap;
     }
 
@@ -116,9 +156,9 @@ public sealed class EjecutorDeExportaciones : IDisposable
             {
                 // Un fallo de red no puede tumbar el bucle: el médico pulsará el botón otra vez y
                 // esto tiene que seguir escuchando.
-                LogBus.Log("exportar", $"la vuelta falló: {e.Message}");
+                Quejarse($"la vuelta falló: {e.Message}");
             }
-            try { await Task.Delay(Ritmo, ct); } catch { break; }
+            try { await Task.Delay(Ritmo + Castigo, ct); } catch { break; }
         }
     }
 
@@ -132,12 +172,15 @@ public sealed class EjecutorDeExportaciones : IDisposable
         Firmar(req);
 
         using var res = await Http.SendAsync(req, ct);
-        if (res.StatusCode == System.Net.HttpStatusCode.NoContent) return null;
+        // Un 204 es una respuesta sana: «no hay trabajo». Cuenta como acierto, porque el backend
+        // contestó — que es lo único que este bucle necesita saber para no ir más despacio.
+        if (res.StatusCode == System.Net.HttpStatusCode.NoContent) { SaleBien(); return null; }
         if (!res.IsSuccessStatusCode)
         {
-            LogBus.Log("exportar", $"el backend rechazó el claim: HTTP {(int)res.StatusCode}");
+            Quejarse($"el backend rechazó el claim: HTTP {(int)res.StatusCode}");
             return null;
         }
+        SaleBien();
         return JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct)).RootElement.Clone();
     }
 
@@ -170,7 +213,11 @@ public sealed class EjecutorDeExportaciones : IDisposable
 
             // 2. COMPROBAR DÓNDE SE ACABÓ. El workflow puede decir que terminó y haber dejado otra
             //    pantalla delante; escribir ahí sería meter datos clínicos en el formulario de otro.
-            string aqui = _donde();
+            //    Se le pregunta A SAP, no al locator: el locator contesta dónde mira el usuario, y
+            //    el 2026-08-25 el médico seguía el progreso desde la web — el workflow había llegado
+            //    perfecto al Triage y aun así esto abortó con «acabó en web://…». La escritura va
+            //    por COM sin necesitar el foco; su guardián tiene que mirar por el mismo canal.
+            string aqui = _rellenador.DondeEstaSap();
             if (!RellenadorSap.EsLaPantallaDeTriage(aqui))
                 return (Fallo: "PANTALLA_INESPERADA", Porque: $"el workflow acabó en «{aqui}»",
                     Escritos: (IReadOnlyList<LoEscrito>)Array.Empty<LoEscrito>(),

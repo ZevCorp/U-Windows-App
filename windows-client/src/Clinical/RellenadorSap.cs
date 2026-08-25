@@ -49,6 +49,20 @@ public sealed class RellenadorSap
         ubicacion.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)
         && ubicacion.Contains("SAPLY000", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Qué pantalla está mostrando SAP, preguntado a SAP MISMO — no dónde tiene puesta la
+    /// atención el usuario.
+    /// </summary>
+    /// <remarks>
+    /// La diferencia costó una exportación el 2026-08-25: el workflow llegó perfecto al formulario
+    /// de Triage, pero el médico estaba mirando la página web para seguir el progreso, y el
+    /// ejecutor —que preguntaba al locator, o sea al primer plano— creyó que el workflow había
+    /// acabado en «web://…» y abortó con PANTALLA_INESPERADA. La escritura va por scripting COM,
+    /// que no necesita el foco; la comprobación tiene que ir por el mismo canal que la escritura,
+    /// o vigila una cosa distinta de la que protege.
+    /// </remarks>
+    public string DondeEstaSap() => _sap.Identity().Url;
+
     private readonly StringBuilder _dicho = new();
     private string _nota = "";
     private string _sesion = Guid.NewGuid().ToString();
