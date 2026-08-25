@@ -69,6 +69,13 @@ public sealed class MapaVivo : IDisposable
         LogBus.Log("mapa-vivo", $"SATURADO ({(esUbicacion ? "ubicación" : "lectura de pantalla")}): "
             + $"{cuantas} vuelta(s) descartadas por llegar con otra en curso"
             + (esUbicacion ? $"; la ubicación va ya cada {_msUbicacion} ms." : "."));
+
+        // NO ES UNA QUEJA DE RENDIMIENTO. Una lectura descartada es TERRENO QUE NADIE MIRÓ, y lo que
+        // no se miró no está en el grafo. Solo cuenta la de pantalla: descartar una vuelta de
+        // ubicación no pierde elementos, solo retrasa saber dónde estamos.
+        if (!esUbicacion)
+            PulsoDelMapeador.Actual.Roto.Anotar(QueSeRompio.TerrenoNoLeido, _anterior ?? "",
+                $"{cuantas} lectura(s) de pantalla descartadas por no dar abasto");
     }
 
     // ── El ritmo se ajusta solo ───────────────────────────────────────────────────────────────
@@ -417,6 +424,13 @@ public sealed class MapaVivo : IDisposable
                         : "el núcleo no conoce ese elemento allí";
                     PulsoDelMapeador.Actual.Rechazada(causa, global::Nucleo.Grafo.AppDe(_anterior));
                     LogBus.Log("mapa-vivo", $"salto de {Corto(_anterior)} a {Corto(aqui)} SIN atribuir {porQue}");
+
+                    // ESTE ES EL ERROR MÁS GRAVE DEL TERRENO: se cambió de pantalla y ningún clic lo
+                    // explica, así que ese camino NO EXISTE en el grafo y nadie va a volver a pasar
+                    // por aquí a crearlo. Ya se cantaba en el log; ahora además se cuenta, que es lo
+                    // que permite saber cuántas veces pasa y en qué apps.
+                    PulsoDelMapeador.Actual.Roto.Anotar(QueSeRompio.AristaNoCreada, _anterior,
+                        $"salto a «{aqui}» {porQue}");
                 }
             }
             if (!aqui.Equals(_anterior, StringComparison.OrdinalIgnoreCase))

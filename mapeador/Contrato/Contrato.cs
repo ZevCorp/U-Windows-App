@@ -48,6 +48,14 @@ internal static class Contrato
         Prueba("23. la dirección de una página sale de su id, con el esquema que se vio", LaUrlSaleDelId);
         Prueba("24. estar en el sitio ES llegar, si lo que se pidió era el sitio", LlegarAlSitioEsLlegar);
 
+        // MEDIR EL TERRENO. Los errores del grafo ya se detectaban —el código los canta desde hace
+        // semanas— pero como texto suelto en el log, y con texto suelto no se puede contestar cuál
+        // falla más y en qué apps. Ver docs/specs/medir-el-terreno.md.
+        Prueba("25. lo que rompe el grafo se distingue de lo que solo se queda corto", LoQueRompeYLoQueNo);
+        Prueba("26. un error sabe de qué app es, sin que nadie se lo diga", ElErrorSabeSuApp);
+        Prueba("27. el instante se guarda en UTC: es la clave que cruza con el vídeo", ElInstanteCruzaConElVideo);
+        Prueba("28. lo urgente va primero aunque pase menos veces", LoUrgenteNoSeEntierra);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "MAPEADOR ÍNTEGRO: el proceso promete lo que dice prometer."
@@ -569,6 +577,115 @@ internal static class Contrato
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
+
+    // ── MEDIR EL TERRENO ─────────────────────────────────────────────────────
+
+    private static void LoQueRompeYLoQueNo()
+    {
+        // LA DIFERENCIA QUE DECIDE POR DÓNDE EMPEZAR. No todos los errores duelen igual: un camino
+        // que no se aprendió es un agujero permanente en el mapa —nadie va a volver a pasar por ahí
+        // a arreglarlo— mientras que una lectura descartada se arregla sola en la siguiente vuelta.
+        // Mezclarlos en una sola lista de «errores» haría que lo urgente se perdiera entre lo que se
+        // cura solo.
+        Debe(Roto(QueSeRompio.AristaNoCreada) == Gravedad.RompeElGrafo,
+            "una arista que no se creó ROMPE el grafo: ese camino no existe para siempre");
+        Debe(Roto(QueSeRompio.ElementoNoReconocido) == Gravedad.RompeElGrafo,
+            "y un clic que no se supo atribuir es la misma herida, vista un paso antes");
+        Debe(Roto(QueSeRompio.IdentidadTransitoria) == Gravedad.RompeElGrafo,
+            "un nodo que no corresponde a ninguna pantalla real ensucia MÁS que la ausencia de uno: "
+            + "manda a buscar algo que no existe");
+
+        Debe(Roto(QueSeRompio.TerrenoNoLeido) == Gravedad.SeQuedaCorto,
+            "una lectura descartada deja terreno sin ver, pero no acuña nada falso: la próxima "
+            + "vuelta lo recoge");
+        Debe(Roto(QueSeRompio.UbicacionEquivocada) == Gravedad.SeQuedaCorto,
+            "y que el ancla frene es que el sistema hizo bien su trabajo, no que el grafo quedara mal");
+
+        // LA GRAVEDAD ES DEL ERROR, NO DE QUIEN LO DETECTA. Si la decidiera quien lo crea, dos
+        // sitios podrían discrepar sobre el mismo hecho — y ya hemos pagado eso antes: el observador
+        // y el vigilante de clics opinando distinto sobre un mismo botón dejó una app entera sin
+        // aristas (ver AQuienSeLeDioClic).
+        var aqui = new ErrorDelTerreno(QueSeRompio.AristaNoCreada, "uia://x.exe/a", "d", DateTime.UtcNow);
+        var alla = new ErrorDelTerreno(QueSeRompio.AristaNoCreada, "uia://otra.exe/z", "otro", DateTime.UtcNow);
+        Debe(aqui.Cuanto == alla.Cuanto,
+            "el mismo tipo de error pesa lo mismo lo detecte quien lo detecte y pase donde pase");
+    }
+
+    private static void ElErrorSabeSuApp()
+    {
+        // «¿QUÉ APP FALLA MÁS?» ES LA PREGUNTA. Se contesta agrupando, y agrupar exige que la app
+        // salga del propio error y no de que quien lo crea se acuerde de pasarla — de ese olvido
+        // vive la mitad de los datos que no sirven para nada.
+        Debe(new ErrorDelTerreno(QueSeRompio.PasoDeLargo, "uia://saplogon.exe/sap-logon-800", "", DateTime.UtcNow)
+            .App == "saplogon.exe", "de una ubicación de UIA sale el proceso");
+        Debe(new ErrorDelTerreno(QueSeRompio.PasoDeLargo, "web://chatgpt.com/c/abc", "", DateTime.UtcNow)
+            .App == "chatgpt.com", "de una web, su dominio");
+        Debe(new ErrorDelTerreno(QueSeRompio.PasoDeLargo, "sapgui://QAS/NWP1/X/0100", "", DateTime.UtcNow)
+            .App == "QAS", "y de SAP, su sistema");
+
+        // Sin ubicación no se inventa una app: quedarse sin agrupar es honesto, agrupar mal no.
+        Debe(new ErrorDelTerreno(QueSeRompio.PasoDeLargo, "", "", DateTime.UtcNow).App.Length == 0,
+            "y sin ubicación no se inventa nada");
+        Debe(new ErrorDelTerreno(QueSeRompio.PasoDeLargo, "una-cosa-rara", "", DateTime.UtcNow).App.Length == 0,
+            "ni con una ubicación que no tenga la forma esperada");
+    }
+
+    private static void ElInstanteCruzaConElVideo()
+    {
+        // TODA LA CORRELACIÓN CON EL VÍDEO ES UNA RESTA: el segundo del clip es la hora del error
+        // menos la hora en que empezó el trozo grabado. Por eso el instante tiene que ser UTC — con
+        // hora local, un error a las 02:30 del cambio de horario cae en dos sitios o en ninguno, y
+        // el clip se recorta del momento equivocado justo el día que peor viene.
+        var arranque = new DateTime(2026, 8, 24, 20, 0, 0, DateTimeKind.Utc);
+        var e = new ErrorDelTerreno(QueSeRompio.AristaNoCreada, "uia://x.exe/a", "d",
+            arranque.AddSeconds(37));
+
+        Debe(e.Cuando.Kind == DateTimeKind.Utc, "el instante es UTC, no la hora del reloj de esa máquina");
+        Debe((e.Cuando - arranque).TotalSeconds == 37,
+            "y el segundo del vídeo sale de restar: no hace falta sincronizar relojes ni marcar el vídeo");
+
+        // Y se puede leer sin abrir nada: la línea dice qué pasó y dónde.
+        Debe(e.Linea().Contains("AristaNoCreada") && e.Linea().Contains("uia://x.exe/a"),
+            "la línea del log lleva qué se rompió y dónde, para poder buscarla con los ojos");
+    }
+
+    private static Gravedad Roto(QueSeRompio q)
+        => new ErrorDelTerreno(q, "uia://x.exe/a", "", DateTime.UtcNow).Cuanto;
+
+    private static void LoUrgenteNoSeEntierra()
+    {
+        var roto = new LoQueSeHaRoto();
+
+        // Treinta lecturas descartadas y UNA arista perdida. Ordenar por frecuencia pondría lo que
+        // se cura solo por encima del agujero permanente, y quien mire la tabla empezaría por lo
+        // que no hay que arreglar.
+        for (int i = 0; i < 30; i++)
+            roto.Anotar(QueSeRompio.TerrenoNoLeido, "uia://x.exe/a", "vuelta descartada");
+        roto.Anotar(QueSeRompio.AristaNoCreada, "uia://x.exe/a", "salto sin clic que lo explique");
+
+        var tabla = roto.PorTipo();
+        Debe(tabla[0].Que == QueSeRompio.AristaNoCreada,
+            "la arista perdida va PRIMERA aunque pasara una vez contra treinta: no se arregla sola");
+        Debe(tabla[0].Veces == 1 && tabla[1].Veces == 30, "y las cuentas siguen siendo las de verdad");
+
+        // POR APP, SOLO LO QUE ROMPE. Saber que una app acumula lecturas descartadas dice que va
+        // lenta; saber que acumula aristas perdidas dice que su terreno está mal, que es lo que se
+        // viene a buscar.
+        roto.Anotar(QueSeRompio.AristaNoCreada, "uia://saplogon.exe/z", "otra más");
+        roto.Anotar(QueSeRompio.AristaNoCreada, "uia://saplogon.exe/w", "y otra");
+        var apps = roto.PorApp();
+        Debe(apps[0].App == "saplogon.exe" && apps[0].Veces == 2, "la app que más terreno rompe, primera");
+        Debe(apps.All(a => a.App != "x.exe" || a.Veces == 1),
+            "y las lecturas descartadas de x.exe NO inflan su cuenta: ahí solo se cuenta lo que rompe");
+
+        // AVISA AL INSTANTE. Quien graba o escribe se engancha aquí, y si el aviso no saliera, el
+        // recorte de vídeo se perdería el momento — que es justo para lo que existe todo esto.
+        ErrorDelTerreno? avisado = null;
+        var otro = new LoQueSeHaRoto();
+        otro.Ocurrio += e => avisado = e;
+        otro.Anotar(QueSeRompio.ElementoNoReconocido, "uia://y.exe/b", "no casó con nada conocido");
+        Debe(avisado?.Que == QueSeRompio.ElementoNoReconocido, "el aviso sale en el momento, no al final");
+    }
 
     private static void Prueba(string nombre, Action cuerpo)
     {

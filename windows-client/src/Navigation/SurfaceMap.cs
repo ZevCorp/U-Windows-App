@@ -283,6 +283,13 @@ public sealed class SurfaceMap
                 _pasadasDeLargo++;
                 LogBus.Log("mapa", $"pasó de largo por «{ShortId(_pendingId)}» "
                     + $"({(now - _pendingSince).TotalMilliseconds:F0} ms): el clic guardado ya no explica el viaje");
+
+                // El nodo queda registrado pero SUELTO: sin cómo se entra ni cómo se sale. Se cuenta
+                // aparte de la arista perdida porque se arregla distinto — aquí el problema es que
+                // se cruzó demasiado rápido, no que no se supiera atribuir el clic.
+                Mapeador.PulsoDelMapeador.Actual.Roto.Anotar(
+                    Mapeador.QueSeRompio.PasoDeLargo, _pendingId,
+                    $"cruzada en {(now - _pendingSince).TotalMilliseconds:F0} ms: el clic guardado ya no explica el viaje");
             }
         }
 
@@ -306,8 +313,17 @@ public sealed class SurfaceMap
             && _lastCommitted.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
             && AppDe(id).Equals(AppDe(_lastCommitted), StringComparison.OrdinalIgnoreCase)
             && (when - _lastCommitTime).TotalMilliseconds < 4000)
+        {
             LogBus.Log("mapa", $"SPA: «{ShortId(_lastCommitted)}» → «{ShortId(id)}» en "
                 + $"{(when - _lastCommitTime).TotalMilliseconds:F0} ms — posible identidad transitoria");
+
+            // UN NODO FALSO ENSUCIA MÁS QUE LA AUSENCIA DE UNO: manda a buscar una pantalla que no
+            // existe. Por eso cuenta como algo que ROMPE el grafo y no como algo que se queda corto.
+            Mapeador.PulsoDelMapeador.Actual.Roto.Anotar(
+                Mapeador.QueSeRompio.IdentidadTransitoria, id,
+                $"llegó desde «{_lastCommitted}» en {(when - _lastCommitTime).TotalMilliseconds:F0} ms: "
+                + "la dirección puede haber cambiado sola");
+        }
         _lastCommitTime = when;
 
         if (!_nodes.TryGetValue(id, out var n))

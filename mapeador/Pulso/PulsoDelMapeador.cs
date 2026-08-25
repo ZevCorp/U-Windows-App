@@ -27,6 +27,14 @@ public sealed class PulsoDelMapeador
 
     public DateTime Desde { get; } = DateTime.Now;
 
+    /// <summary>
+    /// DÓNDE SE ESTÁ ROMPIENDO EL TERRENO. Cuelga del pulso porque es de la misma familia que lo que
+    /// ya vive aquí —cuánto cuesta cada cosa, qué se saturó— solo que en vez de contar lo que tarda,
+    /// cuenta lo que sale mal. Y por el mismo motivo: para poder mirarlo desde fuera sin adivinar.
+    /// Ver docs/specs/medir-el-terreno.md.
+    /// </summary>
+    public LoQueSeHaRoto Roto { get; } = new();
+
     // ── SATURACIÓN: nada debe apilarse ───────────────────────────────────────
 
     /// <summary>
