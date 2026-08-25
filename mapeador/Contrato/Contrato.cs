@@ -55,6 +55,9 @@ internal static class Contrato
         Prueba("26. un error sabe de qué app es, sin que nadie se lo diga", ElErrorSabeSuApp);
         Prueba("27. el instante se guarda en UTC: es la clave que cruza con el vídeo", ElInstanteCruzaConElVideo);
         Prueba("28. lo urgente va primero aunque pase menos veces", LoUrgenteNoSeEntierra);
+        Prueba("29. lo limpio pero reciente NO se borra: es el «antes» del error que viene", LoRecienteNoSeBorra);
+        Prueba("30. los errores que se juntan salen en UNA franja, no en varias solapadas", LosErroresJuntosSeFunden);
+        Prueba("31. un clip son los trozos que TOCAN la franja, y en orden", LosTrozosQueTocan);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -685,6 +688,100 @@ internal static class Contrato
         otro.Ocurrio += e => avisado = e;
         otro.Anotar(QueSeRompio.ElementoNoReconocido, "uia://y.exe/b", "no casó con nada conocido");
         Debe(avisado?.Que == QueSeRompio.ElementoNoReconocido, "el aviso sale en el momento, no al final");
+    }
+
+    // ── LOS TROZOS DE GRABACIÓN ──────────────────────────────────────────────
+
+    private static void LoRecienteNoSeBorra()
+    {
+        var ahora = new DateTime(2026, 8, 24, 12, 0, 0, DateTimeKind.Utc);
+        var sinErrores = Array.Empty<DateTime>();
+
+        // ESTE ES EL CASO QUE PUEDE BORRAR LA PRUEBA DEL FALLO. Lo tentador es borrar todo lo que no
+        // tenga un error dentro; y estaría mal, porque el clip de un error lleva veinte segundos de
+        // ANTES. Un trozo limpio que acaba de pasar es exactamente el «antes» del error que puede
+        // ocurrir dentro de un instante.
+        var reciente = new Segmento(ahora.AddSeconds(-25), "a.mp4");   // terminó hace 5 s
+        Debe(!LosSegmentos.SePuedeBorrar(reciente, ahora, sinErrores),
+            "un trozo limpio pero RECIENTE no se borra: si ahora falla algo, este es su «antes», y "
+            + "sin él el clip empieza de golpe en el error, sin lo que explica cómo se llegó ahí");
+
+        // Y uno lo bastante viejo sí, o esto no serviría para no llenar el disco.
+        var viejo = new Segmento(ahora.AddSeconds(-300), "b.mp4");
+        Debe(LosSegmentos.SePuedeBorrar(viejo, ahora, sinErrores),
+            "uno viejo y limpio SÍ se borra: ningún error futuro puede alcanzarlo ya");
+
+        // Con un error dentro no se borra por viejo que sea: es justo lo que se viene a mirar.
+        var conError = new[] { ahora.AddSeconds(-295) };
+        Debe(!LosSegmentos.SePuedeBorrar(viejo, ahora, conError),
+            "pero si un error lo pisa, no se borra nunca — ese es el clip");
+
+        // Ni el vecino, que es su «antes».
+        var vecino = new Segmento(ahora.AddSeconds(-320), "c.mp4");
+        Debe(!LosSegmentos.SePuedeBorrar(vecino, ahora, conError),
+            "y el de al lado tampoco: los veinte segundos de antes salen de él");
+    }
+
+    private static void LosErroresJuntosSeFunden()
+    {
+        var t = new DateTime(2026, 8, 24, 12, 0, 0, DateTimeKind.Utc);
+
+        // Tres errores en diez segundos. Tres clips solapados contarían la misma historia tres veces
+        // y ninguno la contaría entera.
+        var franjas = LosSegmentos.FranjasQueGuardar(new[]
+        {
+            t, t.AddSeconds(5), t.AddSeconds(10),
+        });
+        Debe(franjas.Count == 1, "tres errores seguidos son UNA franja, no tres");
+        Debe(franjas[0].Desde == t - LosSegmentos.Margen,
+            "que empieza veinte segundos antes del PRIMERO");
+        Debe(franjas[0].Hasta == t.AddSeconds(10) + LosSegmentos.Margen,
+            "y termina veinte segundos después del ÚLTIMO, tal como se pidió");
+
+        // Lejos, dos franjas: fundir lo que no se toca daría un clip larguísimo con un hueco vacío
+        // en medio, que es peor que dos clips.
+        var lejos = LosSegmentos.FranjasQueGuardar(new[] { t, t.AddMinutes(10) });
+        Debe(lejos.Count == 2, "dos errores lejanos siguen siendo dos franjas");
+
+        // UNA RISTRA LARGA ES UNA SOLA FRANJA. Se compara contra el FIN de la anterior y no contra
+        // su error: mirando el error saldrían parejas sueltas en vez de una franja continua.
+        var ristra = LosSegmentos.FranjasQueGuardar(new[]
+        {
+            t, t.AddSeconds(30), t.AddSeconds(60), t.AddSeconds(90),
+        });
+        Debe(ristra.Count == 1,
+            "y una ristra encadenada sale entera: cada uno alcanza al siguiente aunque el primero "
+            + "no alcance al último");
+
+        Debe(LosSegmentos.FranjasQueGuardar(Array.Empty<DateTime>()).Count == 0,
+            "sin errores no hay nada que guardar");
+    }
+
+    private static void LosTrozosQueTocan()
+    {
+        var t = new DateTime(2026, 8, 24, 12, 0, 0, DateTimeKind.Utc);
+        var trozos = new[]
+        {
+            new Segmento(t, "1.mp4"),
+            new Segmento(t.AddSeconds(20), "2.mp4"),
+            new Segmento(t.AddSeconds(40), "3.mp4"),
+            new Segmento(t.AddSeconds(60), "4.mp4"),
+        };
+
+        // Un error a los 45 s: su franja va de 25 a 65, así que toca el 2, el 3 y el 4.
+        var franja = LosSegmentos.FranjasQueGuardar(new[] { t.AddSeconds(45) })[0];
+        var cubren = LosSegmentos.LosQueCubren(trozos, franja.Desde, franja.Hasta);
+        Debe(cubren.Count == 3, "el clip son los trozos que TOCAN la franja, aunque sea a medias");
+        Debe(cubren[0].Archivo == "2.mp4" && cubren[2].Archivo == "4.mp4",
+            "y salen EN ORDEN: un clip con los trozos desordenados no se puede ver");
+
+        // El que no la toca no entra, ni por un instante de diferencia.
+        Debe(cubren.All(c => c.Archivo != "1.mp4"), "el que termina justo antes no entra");
+
+        // Y si no hay ninguno, se dice que no hay: devolver el más cercano sería enseñar otro
+        // momento como si fuera el del fallo.
+        Debe(LosSegmentos.LosQueCubren(trozos, t.AddHours(5), t.AddHours(6)).Count == 0,
+            "y si no hay grabación de esa franja no se ofrece la de al lado");
     }
 
     private static void Prueba(string nombre, Action cuerpo)
