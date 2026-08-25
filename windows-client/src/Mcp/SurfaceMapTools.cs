@@ -874,6 +874,44 @@ public sealed class SurfaceMapTools
         return salida;
     }
 
+    /// <summary>
+    /// «map_batch»: la lista de pasos llega como JSON y se le entrega al recorredor. Aquí solo se
+    /// TRADUCE — la compuerta, el freno y el relato viven en Navigation/RecorrerSegunElNucleo,
+    /// donde se pueden juzgar sin pantalla.
+    /// </summary>
+    private string Batch(string pasosJson)
+    {
+        if (RecorrerPorElNucleo == null) return "todavía no sé recorrer en batch.";
+        if (string.IsNullOrWhiteSpace(pasosJson))
+            return "falta `pasos`: una lista JSON de pasos, p. ej. "
+                 + "[{\"exit\":\"Descargas\"},{\"exit\":\"Facturas\"},{\"text\":\"informe\"}].";
+
+        var pasos = new List<Navigation.RecorrerSegunElNucleo.Paso>();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(pasosJson);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
+                return "«pasos» tiene que ser una LISTA de pasos, no un objeto suelto.";
+            foreach (var p in doc.RootElement.EnumerateArray())
+            {
+                string exit = p.TryGetProperty("exit", out var e) ? e.GetString() ?? "" : "";
+                string text = p.TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
+                if (exit.Length == 0 && text.Length == 0)
+                    return $"el paso {pasos.Count + 1} no trae ni `exit` ni `text`: no sé qué hacer con él.";
+                pasos.Add(new Navigation.RecorrerSegunElNucleo.Paso(exit, text));
+            }
+        }
+        catch (Exception ex) { return $"no entendí `pasos` como JSON: {ex.Message}"; }
+
+        if (pasos.Count == 0) return "la lista de pasos vino vacía.";
+
+        LogBus.Log("batch", $"recorrido de {pasos.Count} paso(s): "
+            + string.Join(" → ", pasos.Select(p => p.Texto.Length > 0 ? $"escribir «{p.Texto}»" : $"«{p.Exit}»")));
+        string cuenta = RecorrerPorElNucleo(pasos);
+        LogBus.Log("batch", "← " + cuenta);
+        return cuenta;
+    }
+
     /// <summary>Enciende UN elemento por su selector. False si ya no está en pantalla.</summary>
     /// <remarks>
     /// SOLO EL RECUADRO, SIN EL TEXTO. Se probó enseñando también la nota mientras se narra y
@@ -1862,6 +1900,12 @@ public sealed class SurfaceMapTools
     public Func<string, string, string>? PulsarPorElNucleo { get; set; }
 
     /// <summary>
+    /// RECORRER EN BATCH: N pasos por llamada con la compuerta de vida antes de cada uno.
+    /// Ver <see cref="Navigation.RecorrerSegunElNucleo"/> y docs/plan-batch-sobre-nodos-vivos.md.
+    /// </summary>
+    public Func<IReadOnlyList<Navigation.RecorrerSegunElNucleo.Paso>, string>? RecorrerPorElNucleo { get; set; }
+
+    /// <summary>
     /// ENSEÑAR: «esto es X». (ubicación, selector, significado, ruta de la foto) → si se guardó.
     ///
     /// Va al grafo, no a un archivo al lado. El significado es del elemento igual que su etiqueta;
@@ -1940,7 +1984,7 @@ public sealed class SurfaceMapTools
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
         or "map_hierarchy" or "map_feedback" or "map_unsituated" or "map_learn_back" or "map_shot"
-        or "map_set_kind" or "map_silver" or "map_scroll" or "map_tidy_desktop" or "map_esto_es" or "map_recuerdos"
+        or "map_set_kind" or "map_silver" or "map_scroll" or "map_tidy_desktop" or "map_esto_es" or "map_recuerdos" or "map_batch"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1999,6 +2043,7 @@ public sealed class SurfaceMapTools
             // contestaba «no puedo scrolear directamente» porque era verdad (2026-08-16).
             "map_esto_es" => EstoEs(A("significado"), A("sobre")),
             "map_recuerdos" => Recuerdos(A("cual")),
+            "map_batch" => Batch(A("pasos")),
             "map_scroll" => Uia.Desplazamiento.Mover(Uia.Desplazamiento.Leer(A("direction"))),
             "map_tidy_desktop" => A("undo").Equals("true", StringComparison.OrdinalIgnoreCase)
                 ? Uia.AcomodarEscritorio.Deshacer()

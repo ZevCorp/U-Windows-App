@@ -418,6 +418,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false);
             if (mcp.Map != null) mcp.Map.PulsarPorElNucleo = (sel, etq) => pulsar.Pulsa(sel, etq).Cuenta;
 
+            // RECORRER EN BATCH: N pasos por llamada con la compuerta de vida antes de cada uno.
+            // Usa EL MISMO pulsar de arriba —mismas manos, misma verificación por consecuencia,
+            // mismo aprendizaje de aristas— y el freno de siempre: Escape corta la tanda donde va.
+            var recorrer = new Navigation.RecorrerSegunElNucleo(
+                _mapaVivo.Nucleo,
+                () => _locator?.DondeEstoy()?.Id ?? "",
+                pulsar,
+                escribir: texto => (mcp.Map?.Call("map_type",
+                        new Dictionary<string, string> { ["text"] = texto }) ?? "no")
+                    .StartsWith("escrib", StringComparison.OrdinalIgnoreCase),
+                hayQueParar: () => Actions.Freno.Pidieron)
+            // Una página web tarda en cargar Y en ser leída (la pantalla se relee cada 900 ms), así
+            // que la compuerta espera más que en una app nativa. Sale en cuanto lo ve: una pantalla
+            // rápida no paga la espera de una lenta.
+            { EsperaMaximaMs = 4000 };
+            if (mcp.Map != null) mcp.Map.RecorrerPorElNucleo = pasos => recorrer.Recorre(pasos).Cuenta;
+
             // LO QUE SE VA ENSEÑANDO VIVE EN EL GRAFO, colgado del elemento. Estuvo un rato en un
             // archivo aparte con las mismas claves, y el usuario lo vio en cuanto se lo dibujé:
             // «¿es paralelo al grafo?». Lo era, y dos sitios que saben de lo mismo se desincronizan

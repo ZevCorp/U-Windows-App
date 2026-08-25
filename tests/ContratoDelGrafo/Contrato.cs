@@ -128,6 +128,10 @@ internal static class Contrato
         Prueba("53. contar el primero no es haber contestado: se sabe cuál falta", ContarNoEsAbandonarAMedias);
         Prueba("54. mientras alguien corrige un recuerdo, la narración espera", EscribirDetieneLaNarracion);
         Prueba("55. el recuadro no adelanta a la voz: sonar no es recibir", ElRecuadroNoAdelantaALaVoz);
+        Prueba("56. un paso que no está VIVO no se pulsa: el batch para en la compuerta", LaCompuertaDelBatchMuerde);
+        Prueba("57. el batch cuenta lo que hizo: N de M, dónde quedó y qué hay vivo", ElBatchNoMiente);
+        Prueba("58. cada paso del batch deja su arista: el grafo se conecta ejecutando", ElBatchFabricaAristas);
+        Prueba("59. Escape corta el batch donde va, y se dice", ElFrenoCortaElBatch);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1044,6 +1048,208 @@ internal static class Contrato
         return new PulsarSegunElNucleo(g, () => donde,
             (sel, et) => { tocados.Add(et); if (loLogra) donde = despues; return loLogra; })
             { EsperaMaximaMs = 240 };   // el arnés no necesita esperar a ninguna pantalla
+    }
+
+    // ── RECORRER EN BATCH ────────────────────────────────────────────────────
+    //
+    // El patrón del computer_batch del Agent SDK sobre nuestro terreno: N pasos por llamada, la
+    // compuerta de VIDA antes de cada uno, y parar honesto devolviendo el control. Ver
+    // docs/plan-batch-sobre-nodos-vivos.md. Las cuatro promesas son las cuatro formas en que esto
+    // puede mentir: pulsar lo que no está, contar lo que no hizo, no aprender lo que cruzó, y
+    // seguir cuando le pidieron parar.
+
+    /// <summary>Un mundo de tres pantallas encadenadas, con el dedo falso que mueve el mapa.</summary>
+    private static (RecorrerSegunElNucleo Batch, Func<string> Donde, List<string> Tocados) BatchCon(
+        Nucleo.Grafo g, string inicio, Dictionary<string, string> rutas, Func<int, bool>? frenoTrasTocar = null)
+    {
+        string donde = inicio;
+        var tocados = new List<string>();
+        var pulsar = new PulsarSegunElNucleo(g, () => donde,
+            (sel, et) =>
+            {
+                tocados.Add(et);
+                if (rutas.TryGetValue(donde + "|" + sel, out var alla)) donde = alla;
+                return true;
+            })
+        { EsperaMaximaMs = 240 };
+
+        var batch = new RecorrerSegunElNucleo(g, () => donde, pulsar,
+            hayQueParar: () => frenoTrasTocar?.Invoke(tocados.Count) ?? false)
+        { EsperaMaximaMs = 240 };
+        return (batch, () => donde, tocados);
+    }
+
+    private static Nucleo.Grafo MundoDeTres()
+    {
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:1", "Uno", "Button") });
+        g.Observar("uia://x.exe/b", new[] { new Nucleo.Elemento("s:2", "Dos", "Button") });
+        g.Observar("uia://x.exe/c", new[] { new Nucleo.Elemento("s:3", "Tres", "Button") });
+        return g;
+    }
+
+    private static readonly Dictionary<string, string> RutasDeTres = new()
+    {
+        ["uia://x.exe/a|s:1"] = "uia://x.exe/b",
+        ["uia://x.exe/b|s:2"] = "uia://x.exe/c",
+        ["uia://x.exe/c|s:3"] = "uia://x.exe/d",
+    };
+
+    private static void LaCompuertaDelBatchMuerde(SurfaceMap _)
+    {
+        // «Viejo» se vio aquí una vez y ya no está: recordado, NO vivo. Es exactamente lo que la
+        // compuerta existe para no pulsar — pulsar de memoria es pulsar donde ya no hay nada.
+        var g = MundoDeTres();
+        g.Observar("uia://x.exe/a", new[]
+        {
+            new Nucleo.Elemento("s:1", "Uno", "Button"),
+            new Nucleo.Elemento("s:v", "Viejo", "Button"),
+        });
+        g.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:1", "Uno", "Button") });
+
+        var (batch, _, tocados) = BatchCon(g, "uia://x.exe/a", RutasDeTres);
+        var r = batch.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Viejo"), new RecorrerSegunElNucleo.Paso("Uno") });
+
+        Debe(tocados.Count == 0,
+            $"un paso RECORDADO pero no vivo NO se pulsa (se pulsaron {tocados.Count}): pulsar de "
+            + "memoria es pulsar donde ya no hay nada, y el clic cae en lo que sea que esté ahí ahora");
+        Debe(r.Hechos == 0 && !r.Termino, "y el batch para AHÍ, no salta el paso para seguir con el resto");
+        Debe(r.Cuenta.Contains("no lo veo") || r.Cuenta.Contains("ahora no"),
+            $"y distingue «lo conozco pero AHORA no lo veo» de no conocerlo (dijo: «{r.Cuenta}») — es "
+            + "la promesa 15 del núcleo hablando por el batch");
+
+        var (batch2, _, tocados2) = BatchCon(g, "uia://x.exe/a", RutasDeTres);
+        var r2 = batch2.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Fantasma") });
+        Debe(tocados2.Count == 0 && r2.Cuenta.Contains("no lo conozco"),
+            $"y lo que nunca se vio aquí se dice como desconocido, sin pulsar nada (dijo: «{r2.Cuenta}»)");
+
+        // LO EXACTO GANA A LO DIFUSO. Encontrado en terreno real (Wikipedia, 2026-08-24): una
+        // página web observa FRAGMENTOS de texto como elementos —«,», «[1]», «El»— y el
+        // emparejamiento por contención hacía que la basura «El» se tragara el exit «El portal
+        // asociado a este artículo»: el batch pulsó «El» y reportó «no pude pulsar "El"». Si hay
+        // un vivo cuyo nombre es EXACTAMENTE el pedido, ese manda; lo difuso queda para cuando no
+        // hay exacto (que es el caso de «Copilot» → «Copilot anclado», promesa 43).
+        var g4 = new Nucleo.Grafo();
+        g4.Observar("uia://x.exe/wiki", new[]
+        {
+            new Nucleo.Elemento("s:basura", "El", "Text"),
+            new Nucleo.Elemento("s:portal", "El portal asociado a este artículo", "Hyperlink"),
+        });
+        var rutas4 = new Dictionary<string, string> { ["uia://x.exe/wiki|s:portal"] = "uia://x.exe/portal" };
+        var (batch4, donde4, tocados4) = BatchCon(g4, "uia://x.exe/wiki", rutas4);
+        var r4 = batch4.Recorre(new[] { new RecorrerSegunElNucleo.Paso("El portal asociado a este artículo") });
+        Debe(tocados4.Count == 1 && tocados4[0] == "El portal asociado a este artículo",
+            $"con un vivo EXACTO y otro que solo se le parece, se pulsa el exacto (se pulsó "
+            + $"«{(tocados4.Count > 0 ? tocados4[0] : "nada")}»): un fragmento de texto de dos letras "
+            + "no puede tragarse un enlace entero");
+        Debe(donde4() == "uia://x.exe/portal", "y se llegó a donde el enlace de verdad lleva");
+
+        // Y EL DIFUSO VA EN UNA SOLA DIRECCIÓN: lo pedido puede ser un TROZO del nombre real
+        // («Copilot» → «Copilot anclado», promesa 43), pero un trozo de página NO puede reclamar lo
+        // pedido. Encontrado en la misma prueba real: el fragmento «que» se tragó «Paso Que No
+        // Existe» por contención inversa, y el batch contestó «no pude pulsar "que"» — un
+        // diagnóstico equivocado sobre un paso que simplemente no existía (Wikipedia, 2026-08-24).
+        var g5 = new Nucleo.Grafo();
+        g5.Observar("uia://x.exe/wiki", new[] { new Nucleo.Elemento("s:frag", "que", "Text") });
+        var (batch5, _, tocados5) = BatchCon(g5, "uia://x.exe/wiki", new Dictionary<string, string>());
+        var r5 = batch5.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Paso Que No Existe") });
+        Debe(tocados5.Count == 0 && r5.Cuenta.Contains("no lo conozco"),
+            $"un fragmento de la página no reclama lo pedido: «Paso Que No Existe» se contesta como "
+            + $"desconocido, no pulsando «que» (dijo: «{r5.Cuenta}»)");
+
+        // DOS VIVOS CON EL MISMO NOMBRE: no se adivina — la misma regla que abrir (promesa 40).
+        var g3 = new Nucleo.Grafo();
+        g3.Observar("uia://x.exe/a", new[]
+        {
+            new Nucleo.Elemento("s:g1", "Guardar", "Button"),
+            new Nucleo.Elemento("s:g2", "Guardar", "Button"),
+        });
+        var (batch3, _, tocados3) = BatchCon(g3, "uia://x.exe/a", RutasDeTres);
+        var r3 = batch3.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Guardar") });
+        Debe(tocados3.Count == 0 && r3.Cuenta.Contains("s:g1") && r3.Cuenta.Contains("s:g2"),
+            $"con dos vivos homónimos no se adivina: se paran y se dan los DOS selectores para que "
+            + $"el que pide elija (dijo: «{r3.Cuenta}»)");
+    }
+
+    private static void ElBatchNoMiente(SurfaceMap _)
+    {
+        // Paso 1 va bien (a→b), el 2 pide algo que no existe: se hizo UNO, y se dice uno.
+        var g = MundoDeTres();
+        var (batch, donde, _) = BatchCon(g, "uia://x.exe/a", RutasDeTres);
+        var r = batch.Recorre(new[]
+        {
+            new RecorrerSegunElNucleo.Paso("Uno"),
+            new RecorrerSegunElNucleo.Paso("Fantasma"),
+            new RecorrerSegunElNucleo.Paso("Tres"),
+        });
+
+        Debe(r.Hechos == 1 && r.Total == 3 && !r.Termino,
+            $"hizo 1 de 3 y lo dice como 1 de 3 (dijo {r.Hechos} de {r.Total}): el progreso parcial "
+            + "contado como total haría que el modelo siguiera creyendo que ya está donde no está");
+        Debe(r.Cuenta.Contains("1 de 3"), $"y el relato lleva la cuenta tal cual (dijo: «{r.Cuenta}»)");
+        Debe(r.Donde == "uia://x.exe/b" && donde() == "uia://x.exe/b",
+            $"y dice DÓNDE quedó de verdad (dijo «{r.Donde}»)");
+        Debe(r.Cuenta.Contains("Dos"),
+            $"y cuenta qué SÍ está vivo ahí —«Dos»— para que el modelo replanifique sin gastar otra "
+            + $"llamada de reconocimiento (dijo: «{r.Cuenta}»)");
+
+        // Y cuando lo hace todo, lo dice completo y con el destino final.
+        var (batch2, _, _) = BatchCon(MundoDeTres(), "uia://x.exe/a", RutasDeTres);
+        var r2 = batch2.Recorre(new[]
+        {
+            new RecorrerSegunElNucleo.Paso("Uno"),
+            new RecorrerSegunElNucleo.Paso("Dos"),
+        });
+        Debe(r2.Termino && r2.Hechos == 2 && r2.Donde == "uia://x.exe/c",
+            $"los 2 de 2 terminan en «c» y así se cuenta (dijo: {r2.Hechos} de {r2.Total}, en «{r2.Donde}»)");
+    }
+
+    private static void ElBatchFabricaAristas(SurfaceMap _)
+    {
+        // La tesis entera del plan: las aristas entre ubicaciones no se deducen mirando, se GANAN
+        // ejecutando. Tras un batch de tres pasos, los tres tramos tienen que estar en el grafo —
+        // aquí la atribución es trivial porque el que pulsó fuimos nosotros.
+        var g = MundoDeTres();
+        var (batch, _, _) = BatchCon(g, "uia://x.exe/a", RutasDeTres);
+        var r = batch.Recorre(new[]
+        {
+            new RecorrerSegunElNucleo.Paso("Uno"),
+            new RecorrerSegunElNucleo.Paso("Dos"),
+            new RecorrerSegunElNucleo.Paso("Tres"),
+        });
+
+        Debe(r.Termino && r.Hechos == 3, $"los tres pasos se hicieron ({r.Hechos} de {r.Total})");
+        Debe(g.DesdeAqui("uia://x.exe/a").Single(x => x.Que.Selector == "s:1").Destino == "uia://x.exe/b",
+            "la arista del paso 1 quedó: a —s:1→ b");
+        Debe(g.DesdeAqui("uia://x.exe/b").Single(x => x.Que.Selector == "s:2").Destino == "uia://x.exe/c",
+            "la del paso 2: b —s:2→ c");
+        Debe(g.DesdeAqui("uia://x.exe/c").Single(x => x.Que.Selector == "s:3").Destino == "uia://x.exe/d",
+            "y la del paso 3: c —s:3→ d. Un batch que navega sin dejar aristas deja el grafo tan "
+            + "incomunicado como estaba — y era EL problema que esto vino a resolver");
+    }
+
+    private static void ElFrenoCortaElBatch(SurfaceMap _)
+    {
+        // Escape se pulsa DURANTE el batch: después del primer paso, antes del segundo. El freno se
+        // pregunta antes de CADA paso — preguntarlo solo al empezar dejaría una tanda de veinte
+        // pasos corriendo entera con el usuario gritando que pare.
+        var g = MundoDeTres();
+        var (batch, _, tocados) = BatchCon(g, "uia://x.exe/a", RutasDeTres,
+            frenoTrasTocar: yaTocados => yaTocados >= 1);
+        var r = batch.Recorre(new[]
+        {
+            new RecorrerSegunElNucleo.Paso("Uno"),
+            new RecorrerSegunElNucleo.Paso("Dos"),
+            new RecorrerSegunElNucleo.Paso("Tres"),
+        });
+
+        Debe(tocados.Count == 1,
+            $"tras el Escape no se pulsó ni uno más (se pulsaron {tocados.Count}): el freno manda "
+            + "sobre la tanda entera, no solo sobre el arranque");
+        Debe(r.Hechos == 1 && !r.Termino, $"y se cuenta como 1 de 3, no como terminado");
+        Debe(r.Cuenta.Contains("Escape") || r.Cuenta.Contains("paraste"),
+            $"y se DICE que fue el freno (dijo: «{r.Cuenta}»): pararse en silencio se vive igual "
+            + "que colgarse, y son cosas opuestas");
     }
 
     private static void PulsarSinMoverNoEsLlegar(SurfaceMap _)
