@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Text.Json;
 using U.WindowsClient.Actions;
+using U.WindowsClient.Mcp;
 using U.WindowsClient.Navigation;
 
 namespace ContratoDelGrafo;
@@ -132,6 +134,9 @@ internal static class Contrato
         Prueba("57. el batch cuenta lo que hizo: N de M, dónde quedó y qué hay vivo", ElBatchNoMiente);
         Prueba("58. cada paso del batch deja su arista: el grafo se conecta ejecutando", ElBatchFabricaAristas);
         Prueba("59. Escape corta el batch donde va, y se dice", ElFrenoCortaElBatch);
+        Prueba("60. el servidor MCP se presenta como MCP manda", ElMcpSePresenta);
+        Prueba("61. tools/list publica el catálogo con su esquema", ElMcpPublicaElCatalogo);
+        Prueba("62. tools/call despacha por el mismo camino y contesta en content", ElMcpDespachaYContesta);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1250,6 +1255,116 @@ internal static class Contrato
         Debe(r.Cuenta.Contains("Escape") || r.Cuenta.Contains("paraste"),
             $"y se DICE que fue el freno (dijo: «{r.Cuenta}»): pararse en silencio se vive igual "
             + "que colgarse, y son cosas opuestas");
+    }
+
+    // ── EL SERVIDOR MCP (F2 del plan de batch) ───────────────────────────────
+    //
+    // La puerta por la que entra el Agent SDK. La sonda 8791 NO habla MCP —es un shim de
+    // desarrollo— y estas tres promesas son lo que un cliente genérico necesita para funcionar sin
+    // saber nada de U: presentarse bien, publicar el catálogo con esquemas, y despachar sin
+    // inventar. Se juzga el protocolo puro (ProtocoloMcp), sin HTTP: el cable no puede equivocarse
+    // en silencio; el protocolo sí.
+
+    private static ProtocoloMcp McpCon(List<(string Tool, string Args)> llamadas, string contesta = "estás en «x»")
+        => new(
+            new[]
+            {
+                new Voz.Realtime.Utensilio("map_where_am_i", "Dice dónde estás.", Array.Empty<Voz.Realtime.Argumento>()),
+                new Voz.Realtime.Utensilio("map_batch", "N pasos por llamada.",
+                    new[] { new Voz.Realtime.Argumento("pasos", "Lista JSON de pasos.") }),
+            },
+            (tool, args) =>
+            {
+                llamadas.Add((tool, string.Join(",", args.Select(a => $"{a.Key}={a.Value}"))));
+                return contesta;
+            });
+
+    private static JsonElement Json(string? s)
+    {
+        Debe(s != null, "hubo respuesta donde tenía que haberla");
+        return JsonDocument.Parse(s!).RootElement;
+    }
+
+    private static void ElMcpSePresenta(SurfaceMap _)
+    {
+        var p = McpCon(new());
+
+        var r = Json(p.Atiende("""{"jsonrpc":"2.0","id":7,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"inspector","version":"1.0"}}}"""));
+        Debe(r.GetProperty("jsonrpc").GetString() == "2.0", "contesta JSON-RPC 2.0, no un JSON cualquiera");
+        Debe(r.GetProperty("id").GetInt32() == 7,
+            "con el MISMO id que preguntó: el id es cómo el cliente casa pregunta y respuesta, y sin "
+            + "él las respuestas se asignan a la petición equivocada");
+        var res = r.GetProperty("result");
+        Debe(res.GetProperty("protocolVersion").GetString() == "2025-06-18",
+            "y acepta la versión de protocolo que el cliente trae: contestar otra obliga al cliente a renegociar o rendirse");
+        Debe(res.TryGetProperty("capabilities", out var cap) && cap.TryGetProperty("tools", out JsonElement _tools),
+            "declara que tiene herramientas: sin esa capacidad, el cliente ni pregunta por ellas");
+        Debe(res.GetProperty("serverInfo").GetProperty("name").GetString()!.Length > 0, "y dice quién es");
+
+        Debe(p.Atiende("""{"jsonrpc":"2.0","method":"notifications/initialized"}""") == null,
+            "una NOTIFICACIÓN no se contesta: no trae id, y contestar a quien no preguntó rompe el flujo del cliente");
+
+        var mal = Json(p.Atiende("esto no es json"));
+        Debe(mal.GetProperty("error").GetProperty("code").GetInt32() == -32700,
+            "el JSON roto se contesta con el error -32700 del estándar, no con silencio ni con prosa");
+
+        var desconocido = Json(p.Atiende("""{"jsonrpc":"2.0","id":8,"method":"metodo/inventado"}"""));
+        Debe(desconocido.GetProperty("error").GetProperty("code").GetInt32() == -32601,
+            "y un método que no existe se dice con -32601: el cliente genérico SABE leer ese código");
+    }
+
+    private static void ElMcpPublicaElCatalogo(SurfaceMap _)
+    {
+        var p = McpCon(new());
+        var r = Json(p.Atiende("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}"""));
+        var tools = r.GetProperty("result").GetProperty("tools");
+
+        var nombres = tools.EnumerateArray().Select(t => t.GetProperty("name").GetString()).ToList();
+        Debe(nombres.Contains("map_where_am_i") && nombres.Contains("map_batch"),
+            $"el catálogo trae las herramientas del mapa (trajo: {string.Join(", ", nombres)})");
+
+        foreach (var t in tools.EnumerateArray())
+        {
+            Debe(t.GetProperty("description").GetString()!.Length > 0,
+                $"«{t.GetProperty("name")}» lleva descripción: sin ella el modelo no sabe cuándo usarla");
+            var schema = t.GetProperty("inputSchema");
+            Debe(schema.GetProperty("type").GetString() == "object",
+                "y un inputSchema de objeto, que es lo que el estándar exige aunque no haya argumentos");
+        }
+
+        var batch = tools.EnumerateArray().First(t => t.GetProperty("name").GetString() == "map_batch");
+        var pasos = batch.GetProperty("inputSchema").GetProperty("properties").GetProperty("pasos");
+        Debe(pasos.GetProperty("type").GetString() == "string" && pasos.GetProperty("description").GetString()!.Length > 0,
+            "cada argumento va tipado y descrito: el esquema ES la documentación que el cliente enseña al modelo");
+    }
+
+    private static void ElMcpDespachaYContesta(SurfaceMap _)
+    {
+        var llamadas = new List<(string Tool, string Args)>();
+        var p = McpCon(llamadas, contesta: "Estás en «uia://x.exe/uno». Veo 3 salida(s).");
+
+        var r = Json(p.Atiende("""{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"map_where_am_i","arguments":{}}}"""));
+        Debe(llamadas.Count == 1 && llamadas[0].Tool == "map_where_am_i",
+            "la llamada llegó al MISMO despachador de siempre — el MCP no inventa un segundo camino de acción");
+        var content = r.GetProperty("result").GetProperty("content");
+        Debe(content[0].GetProperty("type").GetString() == "text"
+             && content[0].GetProperty("text").GetString()!.Contains("uia://x.exe/uno"),
+            "y lo que la herramienta contestó vuelve TAL CUAL en content: resumirlo le quitaría al "
+            + "modelo justo la pista que necesita");
+        Debe(r.GetProperty("id").GetInt32() == 9, "con su id");
+
+        var antes = llamadas.Count;
+        var mal = Json(p.Atiende("""{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"tool_inventada","arguments":{}}}"""));
+        Debe(mal.TryGetProperty("error", out var err) && err.GetProperty("code").GetInt32() == -32602,
+            "una herramienta que no está en el catálogo se rechaza con -32602");
+        Debe(llamadas.Count == antes,
+            "y NO se despacha: ejecutar lo que no se publicó sería un catálogo de mentira");
+
+        // Los argumentos llegan como los manda el cliente (números incluidos) y se aplanan a texto,
+        // que es lo que nuestras herramientas hablan.
+        p.Atiende("""{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"map_batch","arguments":{"pasos":"[{\"exit\":\"Uno\"}]"}}}""");
+        Debe(llamadas.Last().Args.Contains("pasos=[{\"exit\":\"Uno\"}]"),
+            $"los argumentos llegan enteros al despachador (llegó: {llamadas.Last().Args})");
     }
 
     private static void PulsarSinMoverNoEsLlegar(SurfaceMap _)

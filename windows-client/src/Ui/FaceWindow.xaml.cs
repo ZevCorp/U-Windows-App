@@ -82,6 +82,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>Las manos del asistente, para poder preguntarles desde el panel. Ver OnVerRecuerdos.</summary>
     private Mcp.SurfaceMapTools? _mapaDeMano;
 
+    /// <summary>La puerta MCP real (127.0.0.1:8790/mcp) por la que entra el Agent SDK.</summary>
+    private Mcp.ServidorMcp? _servidorMcp;
+
     // Selector de workflow directo en el panel Backend: lista cargada de Graph + un GraphClient propio
     // para listar/ejecutar sin abrir la biblioteca. El slider indexa esta lista.
     private GraphClient? _directGraph;
@@ -543,6 +546,28 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // comprobar si el terreno es navegable, sin depender de que el modelo decida usarlas.
         // Solo con U_MCP_PROBE=1; en la app del usuario no arranca.
         McpDevProbe.StartIfEnabled(mcp);
+
+        // EL SERVIDOR MCP DE VERDAD (F2 del plan de batch): la puerta por la que el Agent SDK —o
+        // cualquier cliente MCP genérico— conduce el terreno. El catálogo es EL MISMO de la voz,
+        // filtrado a lo que el mapa despacha, más map_batch (que la voz aún no usa; F4 unifica);
+        // el despacho es el MISMO LocalMcp: mismas manos, mismos vetos, mismo freno.
+        var catalogoMcp = Voice.ConversacionEnVivo.Herramientas()
+            .Where(u => SurfaceMapTools.IsMapTool(u.Nombre))
+            .Append(new Voz.Realtime.Utensilio("map_batch",
+                "RECORRE VARIOS PASOS DE UNA SOLA LLAMADA sobre el mapa del computador, con una "
+                + "compuerta antes de cada paso: solo se pulsa lo que está VIVO en pantalla ahora. "
+                + "Llega tan lejos como el terreno deje; al primer paso no-vivo PARA y te dice N de "
+                + "M, dónde quedó, por qué, y qué SÍ está vivo ahí — con eso replanificas sin gastar "
+                + "otra llamada. Es tu RUTA PREDILECTA para navegar: una llamada en vez de una por "
+                + "clic. Cada paso verificado deja su tramo aprendido en el mapa.",
+                new[] { new Voz.Realtime.Argumento("pasos",
+                    "Lista JSON de pasos, en orden. Cada paso: {\"exit\":\"nombre o selector\"} para "
+                    + "pulsar, o {\"text\":\"...\"} para escribir en el campo con foco. Ejemplo: "
+                    + "[{\"exit\":\"Recibidos\"},{\"exit\":\"Correo de Jerónimo\"}]") }))
+            .ToList();
+        _servidorMcp = new ServidorMcp(new ProtocoloMcp(catalogoMcp, (tool, args) => mcp.Call(tool, args)));
+        _servidorMcp.Start();
+        Closed += (_, __) => _servidorMcp?.Dispose();
         // El backend es Graph: la credencial (X-API-Key) sale del MISMO GraphConfig que usa la
         // ventana de workflows — una sola fuente de key para toda la app.
         _backend = new BackendClient(_config, _graphConfig);
