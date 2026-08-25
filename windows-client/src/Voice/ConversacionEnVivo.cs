@@ -1092,6 +1092,11 @@ public sealed class ConversacionEnVivo : IDisposable
                 break;
 
             case Hecho.DiceElUsuario d:
+                // QUIEN HABLA MANDA. Si el usuario dice algo mientras se le cuentan los recuerdos,
+                // se deja de retomar: cambió de tema, y seguir empujándole los que faltan sería lo
+                // contrario de escuchar. Los recuerdos no se pierden — vuelve a preguntar y se
+                // cuentan desde el principio.
+                _mapa.OlvidarLosQueFaltan();
                 _fraseUsuario.Append(d.Trozo);
                 Dice?.Invoke($"Tú: {_fraseUsuario}");
                 Transcribe?.Invoke($"Tú: {_fraseUsuario}", false);
@@ -1113,10 +1118,15 @@ public sealed class ConversacionEnVivo : IDisposable
                 TurnoCerrado?.Invoke();
                 if (_fraseU.Length > 0) LogBus.Log("voz-viva", $"Ü dijo: {_fraseU}");
                 if (_fraseUsuario.Length > 0) LogBus.Log("voz-viva", $"usuario dijo: {_fraseUsuario}");
+                // SOLO SE RETOMA SI DE VERDAD HABLÓ en este turno. Un turno que fue únicamente una
+                // llamada a herramienta no ha contado nada todavía, y empujar ahí lo atropellaría
+                // — que es justo lo que la regla de uno-en-uno existe para impedir.
+                bool hablo = _fraseU.Length > 0;
                 _fraseU.Clear();
                 _fraseUsuario.Clear();
                 _reintentos = 0;   // hay conversación de verdad: el contador de caídas seguidas vuelve a cero
                 Cerro?.Invoke();
+                if (hablo) SeguirContandoSiQuedan();
                 break;
 
             // HABLÓ ENCIMA. Lo que ya nos habían mandado sigue en nuestra cola de audio, y seguir

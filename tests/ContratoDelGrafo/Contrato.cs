@@ -125,6 +125,7 @@ internal static class Contrato
         Prueba("50. hablar de memoria no es enseñar: no todo lo que dice «recuerda» es una lección", NoTodoLoQueSuenaEsLeccion);
         Prueba("51. los recuerdos se cuentan de uno en uno: sin hablar no hay siguiente", DeUnoEnUnoONoHaySiguiente);
         Prueba("52. repetir o volver atrás sí se puede: solo AVANZAR exige haber hablado", VolverAtrasNoEsAvanzar);
+        Prueba("53. contar el primero no es haber contestado: se sabe cuál falta", ContarNoEsAbandonarAMedias);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1240,6 +1241,27 @@ internal static class Contrato
         Debe(turno.PuedeContar(1),
             "y una tanda nueva arranca limpia: sin esto, la segunda vez que alguien pregunta se "
             + "encontraría con que el primero «ya se contó»");
+    }
+
+    /// <summary>
+    /// La cuenta de «cuál falta», con la misma aritmética que usa la herramienta.
+    /// </summary>
+    private static int SiguienteTras(int contado, int total) => contado < total ? contado + 1 : 0;
+
+    private static void ContarNoEsAbandonarAMedias(SurfaceMap _)
+    {
+        // HABLAR CIERRA EL TURNO. Contó el 1 de 2, lo dijo bien, y el segundo se quedó sin contar
+        // porque después de hablar ya no hay nada que despierte al modelo (2026-08-24, medido:
+        // «contando 1/2», una respuesta impecable, y silencio). La regla de uno-en-uno impide
+        // atropellarlos; sin esta otra, la conversación se queda a medias educadamente.
+        Debe(SiguienteTras(1, 2) == 2, "contado el 1 de 2, se sabe que falta el 2: quedarse ahí es dejar a medias");
+        Debe(SiguienteTras(1, 3) == 2, "y con tres, igual");
+        Debe(SiguienteTras(2, 3) == 3, "y se sigue sabiendo por el segundo");
+
+        Debe(SiguienteTras(2, 2) == 0,
+            "pero contado el último NO queda ninguno: seguir empujando después de terminar sería "
+            + "insistir sobre una pregunta ya contestada");
+        Debe(SiguienteTras(1, 1) == 0, "y con uno solo se termina en el primero");
     }
 
     private static void NoTodoLoQueSuenaEsLeccion(SurfaceMap _)

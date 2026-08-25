@@ -1841,6 +1841,9 @@ public sealed class SurfaceMapTools
     /// </remarks>
     public int SiguienteRecuerdoPendiente { get; private set; }
 
+    /// <summary>Se deja de retomar la cuenta: quien preguntaba cambió de tema.</summary>
+    public void OlvidarLosQueFaltan() => SiguienteRecuerdoPendiente = 0;
+
     /// <summary>Lo enseñado en una pantalla: (etiqueta, significado). Para contarlo al llegar.</summary>
     /// <remarks>
     /// LLEVA EL SELECTOR, no solo la etiqueta: es lo único con lo que se puede volver a encontrar el
