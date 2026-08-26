@@ -6,6 +6,10 @@ ya están construidos y probados aquí; ese archivo queda como doctrina de refer
 código, la tesis, los números).
 
 **El lema sigue: nosotros creamos el terreno, el Agent SDK lo navega.**
+**Regla fija (pedida por José David, 2026-08-26): el despacho entre mundos vive en UN solo sitio
+(`MundoQueToca.cs`). El grafo, el batch, la compuerta y el MCP no saben en qué mundo miran, pulsan
+o escriben. Cada superficie futura es un adaptador más ahí dentro — nunca un `if` regado por el
+sistema.**
 **LA MÉTRICA sigue: viajes al modelo por tarea.** Baseline probado en Wikipedia: 28 viajes/fracaso
 → 8 viajes/19 s/éxito tras la tanda de estabilidad. Banco de pruebas nuevo: **SAP Logon**.
 
@@ -56,7 +60,33 @@ sabría pulsar un campo SAP.
 - c) *la ubicación SAP es la sesión*: `sapgui://SID/TCODE/PROGRAMA/DYNPRO` — cambiar de dynpro es
   cambiar de nodo.
 
-**Prueba real:** SAP Logon abierto → entrar a una sesión → `map_what_i_see` lista los campos DE
+**RESULTADO (2026-08-26, sesión QAS/NWP1 viva) — T1 HECHO y probado:**
+
+- Promesas 68 (sentido), 69 (mano), 70 (filas de árbol), 71 (lápiz), todas rojo→verde→sabotaje
+  verificado. El despacho quedó en `MundoQueToca.cs`; `EscribirEnElFoco` en `SapGuiSurface`.
+- El sentido solo trajo 12 puertas (todas de la toolbar): TODO el contenido de NWP1 son dos
+  `GuiShell[Tree]`. Con las filas visibles como puertas (70): **12 → 35 puertas**, con el menú
+  clínico real (Órdenes Clínicas, Admisiones, Censo Pacientes C.E., …).
+- Cadena entera cerrada: homónimos con selectores exactos (`#node=vw00216`/`vw00324`) → cruce por
+  identidad → pantalla nueva (`…/ssubVIEW_SCREEN:SAPLN_WP_INP_MOVEMENTS:0001`) → arista aprendida
+  y verificada en Neo4j. La ubicación SAP distingue SUBPANTALLAS del mismo dynpro: grano fino.
+- Escribir: `SystemFocus` no rastrea el campo de comandos (vive en la toolbar) → el lápiz escribe
+  sobre LO ÚLTIMO PULSADO por Id y relee para comprobar. Batch [«comando» → «nwp1» → Enter]: 2 de
+  3 a la primera (el 3º pidió desempate de «Continuar», legítimo).
+
+**Deudas descubiertas, para sus fases:**
+- El árbol de SAP Easy Access da 0 filas visibles de 205 claves (geometría distinta) — mismo
+  síntoma que tenía NWP1 antes del 70; pendiente de mirar su `ItemGeometry`.
+- «Ponerse delante» de una sesión SAP falla («no pude ponerme delante de QAS») — falta el
+  equivalente SAP de la promesa 25 (SAP direccionable: OpenConnection / okcd, no solo enfocar el
+  Logon).
+- «Atrás» desde una lista de NWP1 SALE de la transacción entera (a Easy Access): la compuerta paró
+  honesta, y la vuelta necesita el comando. El terreno lo aprenderá como arista más.
+- PELIGRO documentado: si aparece el diálogo de licencia («el usuario ya ha entrado al sistema»),
+  JAMÁS elegir «finalizar entradas existentes» — mata sesiones ajenas con datos sin grabar. Se
+  cancela y se avisa.
+
+**Prueba real original (referencia):** SAP Logon abierto → entrar a una sesión → `map_what_i_see` lista los campos DE
 VERDAD (no 12 elementos UIA del marco) → un `map_batch` de 2 pasos (okcd + Enter) cruza a una
 transacción y fabrica la arista. Gotcha vigente: sondear COM con `cscript`/VBS, no PowerShell.
 
@@ -120,16 +150,22 @@ El ciclo que pediste, ya con todo conectado:
 
 1. Tarea SAP real 0→100 por el piloto (arranque: login → transacción → campos → guardar).
 2. Tú miras el visor («Terreno») mientras corre; yo mido LA MÉTRICA y leo dónde paró cada batch.
-3. Analizo qué le faltó al terreno para llegar más hondo (¿un dynpro sin nombrar bien?, ¿un campo
+3. **El desempate por destino** (hallazgo del 2026-08-26): el menú clínico repite nombres —dos
+   «Órdenes Clínicas», dos «Admisiones», dos «Censo Pacientes C.E.»— y hoy cada homónimo cuesta un
+   viaje al modelo. Cuando el terreno recuerde a dónde lleva cada puerta, el desempate se hace por
+   DESTINO (la escalera ya tiene ese peldaño: «pedir el destino vale como pedir la puerta») — sin
+   preguntar, sin LLM, determinista. Los recuerdos enseñados (map_esto_es) quedan para cuando dos
+   puertas homónimas van a destinos DISTINTOS y solo una persona sabe cuál es cuál.
+4. Analizo qué le faltó al terreno para llegar más hondo (¿un dynpro sin nombrar bien?, ¿un campo
    que es puerta y está clasificado como contenido?, ¿una espera?) — se arregla con promesa.
-4. Ronda siguiente: el batch debe llegar más hondo y la métrica bajar. Se apunta la curva en el
+5. Ronda siguiente: el batch debe llegar más hondo y la métrica bajar. Se apunta la curva en el
    plan (aquí) con fecha.
 
 **Curva a llenar:**
 
 | fecha | tarea | viajes | profundidad máxima de un batch | qué faltó |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| 2026-08-26 | NWP1: cruzar fila de árbol (manual por MCP) | n/a (sin piloto) | 2 pasos hechos de una llamada (comando+texto); 3º pidió desempate | escribir SAP (arreglado), desempate por destino, Easy Access sin filas |
 
 ---
 

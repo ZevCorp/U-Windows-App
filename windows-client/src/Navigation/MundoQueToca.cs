@@ -67,6 +67,34 @@ public sealed class ManoPorMundo
             : _uia(selector ?? "", etiqueta);
 }
 
+public sealed class EscribirPorMundo
+{
+    private readonly Func<string> _donde;
+    private readonly Func<string, bool> _uia;
+    private readonly Func<string, bool> _sap;
+
+    public EscribirPorMundo(Func<string> donde, Func<string, bool> uia, Func<string, bool> sap)
+    {
+        _donde = donde;
+        _uia = uia;
+        _sap = sap;
+    }
+
+    /// <summary>
+    /// Escribir por el lápiz del mundo en el que estamos. Devuelve si el texto quedó puesto.
+    /// </summary>
+    /// <remarks>
+    /// LA UBICACIÓN DECIDE (como el sentido): dentro de una sesión SAP, teclear por UIA hacia «el
+    /// foco de Windows» es mandar letras al aire — lo exigió la prueba real del 2026-08-26, el
+    /// batch [«comando» → «NWP1» → «Continuar»] parado en «no pude escribir». En SAP el texto se
+    /// le pone AL CAMPO por su identidad (.Text) y se relee para comprobar que quedó.
+    /// </remarks>
+    public bool Escribe(string texto) =>
+        (_donde() ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)
+            ? _sap(texto)
+            : _uia(texto);
+}
+
 /// <summary>
 /// LA TRADUCCIÓN de lo que la Scripting API devuelve al vocabulario del núcleo. Es donde se decide
 /// qué es PUERTA para el grafo — la misma pregunta que ParecePuerta contesta para la web.

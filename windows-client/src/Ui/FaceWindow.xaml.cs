@@ -36,6 +36,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     /// <summary>El mapa vivo publicado en Neo4j. Ver <see cref="Navigation.MapaVivo"/>.</summary>
     private Navigation.MapaVivo? _mapaVivo;
+    /// <summary>Lo último que la mano SAP pulsó: el destino del lápiz cuando el foco calla.</summary>
+    private string _ultimoSapPulsado = "";
 
     /// <summary>El recuadro que se pinta sobre lo señalado. Nace al primer señalamiento y no antes:
     /// quien nunca señala no paga una ventana de más.</summary>
@@ -380,6 +382,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     {
                         var sap = _locator?.SuperficieSap;
                         if (sap == null) return false;
+                        // El lápiz escribe sobre lo último pulsado cuando el foco no dice nada:
+                        // el campo de comandos vive en la toolbar y SystemFocus no lo rastrea.
+                        _ultimoSapPulsado = selector;
                         // «click» es la intención; Execute resuelve por el selector la acción real
                         // (press, seleccionar la fila, el botón de toolbar) — ahí vive ese saber.
                         bool ok = sap.Execute(new U.Graph.PlanStep
@@ -483,9 +488,36 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 _mapaVivo.Nucleo,
                 () => _locator?.DondeEstoy()?.Id ?? "",
                 pulsar,
-                escribir: texto => (mcp.Map?.Call("map_type",
-                        new Dictionary<string, string> { ["text"] = texto }) ?? "no")
-                    .StartsWith("escrib", StringComparison.OrdinalIgnoreCase),
+                // EL LÁPIZ TAMBIÉN DESPACHA POR MUNDO (promesa 71): en SAP el texto va al
+                // campo con el foco por la Scripting API; fuera, map_type como siempre.
+                escribir: new Navigation.EscribirPorMundo(
+                    donde: () => _locator?.DondeEstoy()?.Id ?? "",
+                    uia: texto => (mcp.Map?.Call("map_type",
+                            new Dictionary<string, string> { ["text"] = texto }) ?? "no")
+                        .StartsWith("escrib", StringComparison.OrdinalIgnoreCase),
+                    sap: texto =>
+                    {
+                        var sap = _locator?.SuperficieSap;
+                        if (sap == null) return false;
+                        bool ok = sap.EscribirEnElFoco(texto, out string porque);
+                        // EL RESPALDO POR IDENTIDAD: SystemFocus solo rastrea campos del dynpro, y
+                        // el campo de comandos vive en la toolbar (2026-08-26, «nada tiene el
+                        // foco»). El paso anterior del batch pulsó DÓNDE escribir; se escribe ahí
+                        // por su Id y se relee para comprobar que quedó.
+                        if (!ok && _ultimoSapPulsado.Length > 0)
+                        {
+                            ok = sap.Execute(new U.Graph.PlanStep
+                            {
+                                StepOrder = 1, ActionType = "input",
+                                Selector = _ultimoSapPulsado, Value = texto,
+                            }, out string error)
+                            && string.Equals(sap.ValorActual(_ultimoSapPulsado) ?? "", texto,
+                                StringComparison.OrdinalIgnoreCase);
+                            if (!ok) porque += $"; y por Id sobre lo último pulsado tampoco: {error}";
+                        }
+                        if (!ok) LogBus.Log("sentido-sap", $"no pude escribir «{texto}»: {porque}");
+                        return ok;
+                    }).Escribe,
                 hayQueParar: () => Actions.Freno.Pidieron)
             // Una página web tarda en cargar Y en ser leída (la pantalla se relee cada 900 ms), así
             // que la compuerta espera más que en una app nativa. Sale en cuanto lo ve: una pantalla

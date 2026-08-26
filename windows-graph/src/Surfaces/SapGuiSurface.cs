@@ -407,6 +407,52 @@ public sealed class SapGuiSurface : IUiSurface
     }
 
     /// <summary>
+    /// ESCRIBIR EN LO QUE TIENE EL FOCO de la sesión, por la Scripting API, y comprobar releyendo.
+    /// </summary>
+    /// <remarks>
+    /// Existe para el paso «text» del batch (despacho de escritura, promesa 71): el paso anterior
+    /// pulsó el campo —el click de <see cref="Execute"/> hace SetFocus— y este pone el texto POR
+    /// IDENTIDAD sobre ese foco, que SAP mismo reporta (<c>ActiveWindow.SystemFocus</c>). Teclear
+    /// por UIA aquí era mandar letras al aire (2026-08-26, «no pude escribir NWP1»).
+    ///
+    /// A un botón no se le pone texto: si el foco no es un campo, se dice y no se toca nada. Y el
+    /// texto se RELEE tras ponerlo —sin distinguir caja: el campo de comandos devuelve «nwp1» como
+    /// «NWP1»— porque poner no es quedar.
+    /// </remarks>
+    public bool EscribirEnElFoco(string texto, out string error)
+    {
+        error = "";
+        dynamic? session;
+        try { session = Session(); } catch (Exception e) { error = e.Message; return false; }
+        if (session == null) { error = "sin sesión SAP"; return false; }
+
+        try
+        {
+            dynamic? foco = session.ActiveWindow.SystemFocus;
+            if (foco == null) { error = "nada tiene el foco en la sesión"; return false; }
+
+            string tipo = Str(foco.Type);
+            bool esCampo = tipo.IndexOf("Field", StringComparison.OrdinalIgnoreCase) >= 0
+                        || tipo.Equals("GuiComboBox", StringComparison.OrdinalIgnoreCase);
+            if (!esCampo)
+            {
+                error = $"el foco está en un {tipo}, que no es un campo: pulsa primero el campo donde escribir";
+                return false;
+            }
+
+            foco.Text = texto ?? "";
+            string leido = Str(foco.Text);
+            if (!leido.Equals(texto ?? "", StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"puse «{texto}» y el campo dice «{leido}»";
+                return false;
+            }
+            return true;
+        }
+        catch (Exception e) { error = e.Message; return false; }
+    }
+
+    /// <summary>
     /// Huella estructural: los IDS de los componentes interactivos de la ventana activa, ordenados y
     /// resumidos en un hash corto. Mismo recorrido que <see cref="ReadinessCount"/> —que solo cuenta—,
     /// pero quedándose con QUIÉNES son y no cuántos: dos pantallas distintas pueden tener 36 elementos.

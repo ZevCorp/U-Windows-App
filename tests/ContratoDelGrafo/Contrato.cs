@@ -145,6 +145,7 @@ internal static class Contrato
         Prueba("68. cada mundo se OBSERVA por su propia puerta: SAP por scripting, no por UIA", CadaMundoSeObservaPorSuPuerta);
         Prueba("69. cada mundo se PULSA por su propia mano, y el selector decide", CadaMundoSePulsaPorSuMano);
         Prueba("70. en SAP el contenido navegable son las FILAS del árbol, no el árbol", LasFilasDelArbolSonPuertas);
+        Prueba("71. cada mundo se ESCRIBE por su propio lápiz: en SAP el texto va al campo, no al aire", CadaMundoSeEscribePorSuLapiz);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -820,6 +821,36 @@ internal static class Contrato
         // Sin árboles en pantalla, la traducción es la de antes: nada cambia para el resto.
         Debe(SentidoSap.Traducir(vistos).Count == 1,
             "sin filas que pasar, solo entra lo interactivo de siempre");
+    }
+
+    /// <remarks>
+    /// LA TERCERA PATA DEL DESPACHO, y la exigió una prueba real (2026-08-26): el batch
+    /// [«comando» → escribir «NWP1» → «Continuar»] en Easy Access paró en el paso 2 con «no pude
+    /// escribir». El pulsar ya despachaba por mundo; el escribir seguía yendo SIEMPRE por
+    /// map_type —teclear por UIA hacia el foco de Windows—, y dentro de SAP eso es mandar letras
+    /// al aire. La Scripting API deja hacer lo honesto: ponerle el texto AL CAMPO por su identidad
+    /// (.Text) y releerlo para comprobar que quedó.
+    ///
+    /// El mismo patrón que el sentido: la UBICACIÓN decide el lápiz, con fakes se juzga la
+    /// decisión, y nadie aguas arriba —batch, compuerta, MCP— sabe en qué mundo escribe.
+    /// </remarks>
+    private static void CadaMundoSeEscribePorSuLapiz(SurfaceMap _)
+    {
+        var escrito = new List<string>();
+        string donde = "sapgui://QAS/SESSION_MANAGER/SAPLSMTR_NAVIGATION/0100";
+        var lapiz = new EscribirPorMundo(
+            donde: () => donde,
+            uia: texto => { escrito.Add("uia→" + texto); return true; },
+            sap: texto => { escrito.Add("sap→" + texto); return true; });
+
+        Debe(lapiz.Escribe("NWP1"), "en una sesión SAP se puede escribir");
+        Debe(escrito.Count == 1 && escrito[0] == "sap→NWP1",
+            "…y va por el lápiz de SAP: al campo por su identidad, no al aire");
+
+        donde = "uia://notepad.exe/sin-titulo";
+        Debe(lapiz.Escribe("hola"), "fuera de SAP también");
+        Debe(escrito.Count == 2 && escrito[1] == "uia→hola",
+            "…por el camino de siempre: el despacho no cambia a nadie más");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
