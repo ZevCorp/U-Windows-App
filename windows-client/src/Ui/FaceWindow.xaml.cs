@@ -311,11 +311,25 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 () => _locator?.DondeEstoy()?.Id ?? "",
                 () =>
                 {
-                    var lector = new Uia.UiaReader();
-                    lector.Read();
-                    return lector.Elements
-                        .Select(e => (Uia.Reconocedor.SelectorDe(e), e.Label, e.ControlType))
-                        .Where(t => t.Item1.Length > 0 && t.Label.Length > 0)
+                    // CADA MUNDO POR SU PUERTA (promesa 68): dentro de una sesión SAP, UIA ve un
+                    // Pane opaco — ahí se mira por la Scripting API. El marco de SAP Logon sigue
+                    // siendo uia:// y va por el camino de siempre.
+                    var sentido = new Navigation.SentidoPorMundo(
+                        uia: () =>
+                        {
+                            var lector = new Uia.UiaReader();
+                            lector.Read();
+                            return lector.Elements
+                                .Select(e => new Nucleo.Elemento(
+                                    Uia.Reconocedor.SelectorDe(e), e.Label, e.ControlType))
+                                .Where(el => el.Selector.Length > 0 && el.Etiqueta.Length > 0)
+                                .ToList();
+                        },
+                        sap: () => Navigation.SentidoSap.Traducir(
+                            _locator?.SuperficieSap.ReadVisibleElements()
+                                ?? (IReadOnlyList<U.Graph.Surfaces.SapVisualElement>)Array.Empty<U.Graph.Surfaces.SapVisualElement>()));
+                    return sentido.Lee(_locator?.DondeEstoy()?.Id ?? "")
+                        .Select(el => (el.Selector, el.Etiqueta, el.Tipo))
                         .ToList();
                 });
             // El mismo vigilante de clics que ya usa el mapa viejo: sin él, el núcleo aprende dónde
@@ -325,22 +339,47 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             // LAS MANOS. El núcleo decide qué pulsar; pulsarlo es del mapeador, y se hace con el
             // mismo UiaSurface que ya usa todo lo demás — no hay un segundo camino de accionar.
-            _mapaVivo.Pulsar = (selector, etiqueta) =>
-            {
-                try
+            // CADA MUNDO POR SU MANO (promesa 69): el selector decide. Un `sap:…` va por la
+            // Scripting API — la única que ve dentro de la sesión—; lo demás, por UIA como siempre.
+            var manoPorMundo = new Navigation.ManoPorMundo(
+                uia: (selector, etiqueta) =>
                 {
-                    var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
-                    return superficie.Execute(new U.Graph.PlanStep
+                    try
                     {
-                        StepOrder = 1, ActionType = "click", Selector = selector, Label = etiqueta,
-                    }, out _);
-                }
-                catch (Exception e)
+                        var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
+                        return superficie.Execute(new U.Graph.PlanStep
+                        {
+                            StepOrder = 1, ActionType = "click", Selector = selector, Label = etiqueta,
+                        }, out _);
+                    }
+                    catch (Exception e)
+                    {
+                        LogBus.Log("nucleo-http", $"no pude pulsar «{etiqueta}»: {e.Message}");
+                        return false;
+                    }
+                },
+                sap: (selector, etiqueta) =>
                 {
-                    LogBus.Log("nucleo-http", $"no pude pulsar «{etiqueta}»: {e.Message}");
-                    return false;
-                }
-            };
+                    try
+                    {
+                        var sap = _locator?.SuperficieSap;
+                        if (sap == null) return false;
+                        // «click» es la intención; Execute resuelve por el selector la acción real
+                        // (press, seleccionar la fila, el botón de toolbar) — ahí vive ese saber.
+                        bool ok = sap.Execute(new U.Graph.PlanStep
+                        {
+                            StepOrder = 1, ActionType = "click", Selector = selector, Label = etiqueta,
+                        }, out string error);
+                        if (!ok) LogBus.Log("nucleo-http", $"SAP no pudo pulsar «{etiqueta}»: {error}");
+                        return ok;
+                    }
+                    catch (Exception e)
+                    {
+                        LogBus.Log("nucleo-http", $"no pude pulsar «{etiqueta}» en SAP: {e.Message}");
+                        return false;
+                    }
+                });
+            _mapaVivo.Pulsar = manoPorMundo.Pulsa;
             _mapaVivo.Arrancar();
 
             // SITUARSE PASA AL NÚCLEO. Se enchufa aquí y no en el constructor de SurfaceMapTools
@@ -561,8 +600,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 + "otra llamada. Es tu RUTA PREDILECTA para navegar: una llamada en vez de una por "
                 + "clic. Cada paso verificado deja su tramo aprendido en el mapa.",
                 new[] { new Voz.Realtime.Argumento("pasos",
-                    "Lista JSON de pasos, en orden. Cada paso: {\"exit\":\"nombre o selector\"} para "
-                    + "pulsar, o {\"text\":\"...\"} para escribir en el campo con foco. Ejemplo: "
+                    "Lista JSON de pasos, en orden. Cada paso: {\"exit\":\"...\"} para cruzar, o "
+                    + "{\"text\":\"...\"} para escribir en el campo con foco. En exit puedes poner "
+                    + "el NOMBRE de la puerta tal como se ve, su selector, O EL NOMBRE DEL DESTINO "
+                    + "al que quieres llegar («Portal:Ajedrez», «Descargas») — si el mapa ya "
+                    + "aprendió qué puerta lleva ahí, la usa solo. Ejemplo: "
                     + "[{\"exit\":\"Recibidos\"},{\"exit\":\"Correo de Jerónimo\"}]") }))
             .ToList();
         _servidorMcp = new ServidorMcp(new ProtocoloMcp(catalogoMcp, (tool, args) => mcp.Call(tool, args)));

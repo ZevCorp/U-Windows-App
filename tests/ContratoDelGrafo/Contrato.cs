@@ -137,6 +137,13 @@ internal static class Contrato
         Prueba("60. el servidor MCP se presenta como MCP manda", ElMcpSePresenta);
         Prueba("61. tools/list publica el catálogo con su esquema", ElMcpPublicaElCatalogo);
         Prueba("62. tools/call despacha por el mismo camino y contesta en content", ElMcpDespachaYContesta);
+        Prueba("63. pedir el DESTINO vale tanto como pedir la puerta", PedirElDestinoValeComoLaPuerta);
+        Prueba("64. dos puertas al mismo nombre de destino no se adivinan", DosDestinosNoSeAdivinan);
+        Prueba("65. la basura de la web ni reclama pasos ni se cuenta como puerta", LaBasuraNoEsUnaPuerta);
+        Prueba("66. una web es DIRECCIONABLE: sin camino aprendido se va directo, no se rinde", UnaWebSeVaDirecto);
+        Prueba("67. una herramienta colgada no cuelga la puerta MCP", UnaHerramientaColgadaNoCuelgaLaPuerta);
+        Prueba("68. cada mundo se OBSERVA por su propia puerta: SAP por scripting, no por UIA", CadaMundoSeObservaPorSuPuerta);
+        Prueba("69. cada mundo se PULSA por su propia mano, y el selector decide", CadaMundoSePulsaPorSuMano);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -670,6 +677,94 @@ internal static class Contrato
         _pendientes++;
         Console.WriteLine($"   ⧗ PENDIENTE: «{capacidad}» todavía no existe (fase {fase} del plan). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar.");
+    }
+
+    /// <remarks>
+    /// EL HUECO QUE DEJABA A SAP FUERA DEL TERRENO (T1 del plan terreno-profundo, 2026-08-25):
+    /// `MapaVivo` observaba SIEMPRE con el lector UIA, y dentro de una ventana SAP el sistema
+    /// operativo ve un Pane opaco — el grafo aprendía 12 elementos del marco y ninguno de la
+    /// sesión. SAP tiene su propia puerta (la Scripting API) y su propio vocabulario de identidad
+    /// (`sap:wnd[0]/…`), ya construidos y probados en este repo. Lo que faltaba era el DESPACHO:
+    /// que el sentido mire por la puerta del mundo en el que está.
+    ///
+    /// La traducción al núcleo también se juzga aquí, porque es donde se decide qué es PUERTA:
+    /// lo interactivo entra con su Id envuelto como selector `sap:`; el decorado (GuiLabel) no
+    /// entra — un rótulo no se pulsa—; y el campo de comandos (GuiOkCodeField) entra CON NOMBRE
+    /// aunque SAP no le ponga etiqueta, porque es la puerta a cualquier transacción.
+    /// </remarks>
+    private static void CadaMundoSeObservaPorSuPuerta(SurfaceMap _)
+    {
+        // El despacho: la ubicación decide el sentido. Con fakes, que es como se juzga sin pantalla.
+        bool leyoUia = false, leyoSap = false;
+        var sentido = new SentidoPorMundo(
+            uia: () => { leyoUia = true; return new List<Nucleo.Elemento> { new("uia:name=A;ct=Button", "A", "Button") }; },
+            sap: () => { leyoSap = true; return new List<Nucleo.Elemento> { new("sap:wnd[0]/tbar[0]/okcd", "comando", "GuiOkCodeField") }; });
+
+        var enSap = sentido.Lee("sapgui://QAS/SESSION_MANAGER/SAPLSMTR_NAVIGATION/0100");
+        Debe(leyoSap && !leyoUia, "en una ubicación sapgui:// se mira por la puerta de SAP, no por UIA");
+        Debe(enSap.Count == 1 && enSap[0].Selector.StartsWith("sap:", StringComparison.Ordinal),
+            "y lo leído llega con la identidad de SAP");
+
+        leyoUia = leyoSap = false;
+        sentido.Lee("uia://saplogon.exe/sap-logon-800");
+        Debe(leyoUia && !leyoSap,
+            "el MARCO de SAP Logon sigue siendo una ventana normal: ahí se mira por UIA como siempre");
+
+        // La traducción: qué entra al núcleo desde lo que la Scripting API devuelve.
+        var vistos = new[]
+        {
+            new U.Graph.Surfaces.SapVisualElement("wnd[0]/usr/btnBUSCAR", "GuiButton", "", "Buscar", null,
+                0, 0, 10, 10, true, "click", "button", false, null),
+            new U.Graph.Surfaces.SapVisualElement("wnd[0]/usr/txtPACIENTE", "GuiTextField", "", "Paciente", "",
+                0, 0, 10, 10, true, "input", "text", false, null),
+            new U.Graph.Surfaces.SapVisualElement("wnd[0]/usr/lblTITULO", "GuiLabel", "", "Datos del ingreso", null,
+                0, 0, 10, 10, true, "input", "text", false, null),
+            new U.Graph.Surfaces.SapVisualElement("wnd[0]/tbar[0]/okcd", "GuiOkCodeField", "", "GuiOkCodeField", "",
+                0, 0, 10, 10, true, "input", "text", false, null),
+        };
+        var elementos = SentidoSap.Traducir(vistos);
+
+        Debe(elementos.Any(e => e.Selector == "sap:wnd[0]/usr/btnBUSCAR" && e.Etiqueta == "Buscar"),
+            "un botón entra como puerta, con su Id envuelto en el vocabulario sap:");
+        Debe(elementos.Any(e => e.Selector == "sap:wnd[0]/usr/txtPACIENTE"),
+            "un campo entra: es donde luego se escribe por identidad");
+        Debe(!elementos.Any(e => e.Selector.Contains("lblTITULO")),
+            "un rótulo NO entra: un GuiLabel no se pulsa, y ofrecerlo sería la basura de la web otra vez");
+        var okcd = elementos.FirstOrDefault(e => e.Selector == "sap:wnd[0]/tbar[0]/okcd");
+        Debe(okcd != null && okcd.Etiqueta == "comando",
+            "el campo de comandos entra CON NOMBRE aunque SAP no lo etiquete: es la puerta a cualquier transacción");
+    }
+
+    /// <remarks>
+    /// LA OTRA MITAD DEL DESPACHO: pulsar. La mano UIA no puede tocar un control SAP (el Pane
+    /// opaco otra vez), y mandarle un selector `sap:` sería pedirle a Windows algo que no ve —
+    /// fallaría en silencio o, peor, acertaría sobre otra cosa. El SELECTOR decide la mano, porque
+    /// el selector ES la identidad y lleva escrito de qué mundo viene (`SapSelector.Owns`). La
+    /// misma regla de la casa dicha al revés: nunca por coordenadas, siempre por identidad — y la
+    /// identidad sabe quién la entiende.
+    /// </remarks>
+    private static void CadaMundoSePulsaPorSuMano(SurfaceMap _)
+    {
+        var pulsadas = new List<string>();
+        var mano = new ManoPorMundo(
+            uia: (sel, etq) => { pulsadas.Add("uia→" + sel); return true; },
+            sap: (sel, etq) => { pulsadas.Add("sap→" + sel); return true; });
+
+        Debe(mano.Pulsa("sap:wnd[0]/usr/btnBUSCAR", "Buscar"),
+            "un selector sap: se pulsa");
+        Debe(pulsadas.Count == 1 && pulsadas[0] == "sap→sap:wnd[0]/usr/btnBUSCAR",
+            "…por la mano de SAP, que es la única que ve dentro de la sesión");
+
+        Debe(mano.Pulsa("uia:name=Aceptar;ct=Button", "Aceptar"),
+            "un selector uia: se pulsa");
+        Debe(pulsadas.Count == 2 && pulsadas[1] == "uia→uia:name=Aceptar;ct=Button",
+            "…por la mano UIA de siempre: el despacho no cambia el camino de nadie más");
+
+        // Los selectores con fragmento (fila de árbol, botón de toolbar, fila de ALV) son de SAP
+        // aunque lleven cola: el vocabulario los reconoce enteros.
+        mano.Pulsa("sap:wnd[0]/shellcont/shell#node=vw00073", "Órdenes Clínicas");
+        Debe(pulsadas.Count == 3 && pulsadas[2].StartsWith("sap→", StringComparison.Ordinal),
+            "una fila de árbol —selector con fragmento— también va por la mano de SAP");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
@@ -1365,6 +1460,168 @@ internal static class Contrato
         p.Atiende("""{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"map_batch","arguments":{"pasos":"[{\"exit\":\"Uno\"}]"}}}""");
         Debe(llamadas.Last().Args.Contains("pasos=[{\"exit\":\"Uno\"}]"),
             $"los argumentos llegan enteros al despachador (llegó: {llamadas.Last().Args})");
+    }
+
+    // ── LA RESOLUCIÓN ESTABLE (la lección de la primera corrida real del piloto) ─────────────
+    //
+    // Medido el 2026-08-25 con el Agent SDK de verdad sobre Wikipedia: el terreno TENÍA las dos
+    // aristas que la tarea necesitaba, y aun así costó 24 viajes al modelo y no terminó. Dos causas,
+    // y ninguna era falta de mapa: (1) el modelo pide por el nombre del DESTINO —«Portal:Ajedrez»—
+    // y la puerta se llama «El portal asociado a este artículo»; (2) una página web observa
+    // FRAGMENTOS de texto como elementos —«,», «[1]», «, dos», párrafos enteros— que reclaman pasos
+    // por contención y ensucian la lista de «vivo aquí» hasta volverla inservible para replanificar.
+
+    private static void PedirElDestinoValeComoLaPuerta(SurfaceMap _)
+    {
+        // El caso real, tal cual: la puerta se llama de una manera y el sitio de otra.
+        var g = new Nucleo.Grafo();
+        g.Observar("web://x/Ajedrez", new[] { new Nucleo.Elemento("s:portal", "El portal asociado a este artículo", "Hyperlink") });
+        g.Cruzar("web://x/Ajedrez", "s:portal", "web://x/Portal:Ajedrez");
+
+        var rutas = new Dictionary<string, string> { ["web://x/Ajedrez|s:portal"] = "web://x/Portal:Ajedrez" };
+        var (batch, _, tocados) = BatchCon(g, "web://x/Ajedrez", rutas);
+        var r = batch.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Portal:Ajedrez") });
+
+        Debe(r.Hechos == 1 && r.Donde == "web://x/Portal:Ajedrez",
+            $"«Portal:Ajedrez» no es ninguna puerta de aquí, pero SÍ es a dónde lleva una arista "
+            + $"aprendida: se cruza por ella (hizo {r.Hechos}, quedó en «{r.Donde}»). El modelo "
+            + "piensa en destinos; obligarlo a saberse el nombre exacto del enlace es tirar las "
+            + "aristas que el grafo ya ganó — le costó 24 viajes en la primera corrida real");
+        Debe(tocados.Count == 1 && tocados[0] == "El portal asociado a este artículo",
+            "y la puerta pulsada fue LA DE VERDAD, con su nombre real");
+
+        // Lo mismo en una app nativa, por la cola de la ubicación.
+        var g2 = new Nucleo.Grafo();
+        g2.Observar("uia://explorer.exe/documentos", new[] { new Nucleo.Elemento("s:d", "Descargas (acceso)", "ListItem") });
+        g2.Cruzar("uia://explorer.exe/documentos", "s:d", "uia://explorer.exe/descargas");
+        var (batch2, _, tocados2) = BatchCon(g2, "uia://explorer.exe/documentos",
+            new Dictionary<string, string> { ["uia://explorer.exe/documentos|s:d"] = "uia://explorer.exe/descargas" });
+        var r2 = batch2.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Descargas") });
+        Debe(r2.Hechos == 1 && tocados2.Count == 1,
+            $"«Descargas» resuelve por la cola del destino «uia://explorer.exe/descargas» aunque la "
+            + $"puerta se llame «Descargas (acceso)» (dijo: «{r2.Cuenta}»)");
+
+        // Y la puerta MUERTA con destino conocido se dice con las dos mitades: sé llegar, y por
+        // dónde — el nombre de la puerta es justo lo que el modelo necesita para reintentarlo bien.
+        var g3 = new Nucleo.Grafo();
+        g3.Observar("web://x/Ajedrez", new[] { new Nucleo.Elemento("s:portal", "El portal asociado a este artículo", "Hyperlink") });
+        g3.Cruzar("web://x/Ajedrez", "s:portal", "web://x/Portal:Ajedrez");
+        g3.Observar("web://x/Ajedrez", new[] { new Nucleo.Elemento("s:otro", "Otra cosa", "Hyperlink") });
+        var (batch3, _, tocados3) = BatchCon(g3, "web://x/Ajedrez", rutas);
+        var r3 = batch3.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Portal:Ajedrez") });
+        Debe(tocados3.Count == 0 && r3.Hechos == 0,
+            "con la puerta muerta no se pulsa nada — la compuerta sigue mandando");
+        Debe(r3.Cuenta.Contains("El portal asociado a este artículo"),
+            $"pero se dice POR DÓNDE se sabía llegar (dijo: «{r3.Cuenta}»): con el nombre real de "
+            + "la puerta, el siguiente intento del modelo ya no adivina");
+    }
+
+    private static void DosDestinosNoSeAdivinan(SurfaceMap _)
+    {
+        // Dos aristas cuyos destinos se llaman igual en la cola: «uno» está en un uia y en un web.
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x.exe/a", new[]
+        {
+            new Nucleo.Elemento("s:1", "Primera puerta", "Button"),
+            new Nucleo.Elemento("s:2", "Segunda puerta", "Button"),
+        });
+        g.Cruzar("uia://x.exe/a", "s:1", "uia://x.exe/uno");
+        g.Cruzar("uia://x.exe/a", "s:2", "web://y/uno");
+
+        var (batch, _, tocados) = BatchCon(g, "uia://x.exe/a", RutasDeTres);
+        var r = batch.Recorre(new[] { new RecorrerSegunElNucleo.Paso("uno") });
+
+        Debe(tocados.Count == 0 && r.Hechos == 0,
+            "con dos caminos que llevan a un «uno» no se adivina cuál quería: se para");
+        Debe(r.Cuenta.Contains("s:1") && r.Cuenta.Contains("s:2"),
+            $"y se dan los DOS selectores para que quien pidió elija (dijo: «{r.Cuenta}») — la misma "
+            + "regla de siempre: si de verdad hay empate, se devuelven todas (promesa 40)");
+    }
+
+    private static void LaBasuraNoEsUnaPuerta(SurfaceMap _)
+    {
+        // Los elementos REALES que Wikipedia puso vivos en la corrida del 2026-08-25.
+        var g = new Nucleo.Grafo();
+        g.Observar("web://x/pagina", new[]
+        {
+            new Nucleo.Elemento("s:ok", "Discusión", "Hyperlink"),
+            new Nucleo.Elemento("s:coma", ",", "Text"),
+            new Nucleo.Elemento("s:cita", "[1]", "Hyperlink"),
+            new Nucleo.Elemento("s:css", "_r_1fi7_", "Text"),
+            new Nucleo.Elemento("s:frag", ", dos", "Text"),
+            new Nucleo.Elemento("s:parrafo", ". Se trata de un juego de estrategia en el que el objetivo es encerrar al rey del oponente sin que el otro jugador pueda protegerlo", "Text"),
+        });
+
+        // (a) La basura NO reclama pasos por contención: «, dos» contiene «dos», y sin el filtro se
+        // lo tragaba — pulsar un fragmento de párrafo es pulsar un punto ciego de la página.
+        var (batch, _, tocados) = BatchCon(g, "web://x/pagina", RutasDeTres);
+        var r = batch.Recorre(new[] { new RecorrerSegunElNucleo.Paso("dos") });
+        Debe(tocados.Count == 0 && r.Cuenta.Contains("no lo conozco"),
+            $"«dos» no lo reclama el fragmento «, dos»: un trozo de párrafo no es una puerta "
+            + $"(dijo: «{r.Cuenta}»)");
+
+        // (b) Y la lista de «vivo aquí» —lo que el modelo usa para REPLANIFICAR— trae puertas, no
+        // escombros: en la corrida real la lista era «,», «[1]», párrafos… y con eso no se
+        // replanifica nada; se gasta otra llamada de reconocimiento, que es lo que veníamos a evitar.
+        Debe(r.Cuenta.Contains("Discusión"), $"la puerta real SÍ se cuenta (dijo: «{r.Cuenta}»)");
+        Debe(!r.Cuenta.Contains("«,»") && !r.Cuenta.Contains("[1]") && !r.Cuenta.Contains("_r_1fi7_")
+             && !r.Cuenta.Contains("Se trata de un juego"),
+            $"y los escombros no: ni puntuación suelta, ni notas al pie, ni clases CSS, ni párrafos "
+            + $"(dijo: «{r.Cuenta}»)");
+    }
+
+    private static void UnaWebSeVaDirecto(SurfaceMap _)
+    {
+        // El caso real (2026-08-25, revancha del piloto): estando en Portal:Ajedrez se pidió ir a
+        // Ajedrez —mismo dominio— y map_go_to contestó tres veces «no hay ningún camino aprendido»
+        // pudiendo abrir la URL directo. La regresión venía DEL APRENDIZAJE: con el destino ya
+        // conocido en el grafo, el camino directo del navegador dejaba de intentarse. Una web no es
+        // un laberinto: CADA ubicación tiene puerta directa desde cualquier parte — la URL.
+        var g = new Nucleo.Grafo();
+        var puestos = new List<string>();
+        string donde = "web://x/Portal:Ajedrez";
+        var paso = new PasoDelNucleo(g, () => donde,
+            (_, __) => true,
+            destino => { puestos.Add(destino); donde = destino; return true; });
+
+        var r = paso.Hacia("web://x/Ajedrez");
+        Debe(puestos.Count == 1 && puestos[0] == "web://x/Ajedrez",
+            $"sin camino aprendido, a una web se va DIRECTO (se pidió ponerse delante {puestos.Count} vez/veces): "
+            + "rendirse con «no hay camino aprendido» teniendo la URL en la mano costó tres rebotes "
+            + "seguidos en la corrida real");
+        Debe(r.Llegado, $"y se llega (dijo: «{r.Porque}»)");
+
+        // EL EXPLORADOR NO SE ATAJA — la regla de siempre (2026-08-16): sin recordar la ruta, la
+        // misma hoja significa sitios distintos según dónde estés. El salto directo es de la web.
+        var g2 = new Nucleo.Grafo();
+        var puestos2 = new List<string>();
+        string donde2 = "uia://explorer.exe/documentos";
+        var paso2 = new PasoDelNucleo(g2, () => donde2, (_, __) => true,
+            destino => { puestos2.Add(destino); donde2 = destino; return true; });
+        var r2 = paso2.Hacia("uia://explorer.exe/fotos-de-2019");
+        Debe(puestos2.Count == 0 && !r2.Llegado,
+            "dentro del explorador NO se salta: llegar rápido al sitio equivocado es peor que llegar "
+            + "despacio al correcto");
+    }
+
+    private static void UnaHerramientaColgadaNoCuelgaLaPuerta(SurfaceMap _)
+    {
+        // Medido el 2026-08-25: map_what_i_see se quedó 1014 SEGUNDOS sin contestar y, como la
+        // puerta atendía en serie, TODO lo demás murió detrás — «The operation timed out» en cadena
+        // y la tarea entera perdida. Una herramienta puede colgarse; la puerta no puede colgarse
+        // con ella.
+        var p = new ProtocoloMcp(
+            new[] { new Voz.Realtime.Utensilio("lenta", "tarda demasiado", Array.Empty<Voz.Realtime.Argumento>()) },
+            (_, __) => { Thread.Sleep(600); return "llegué tardísimo"; })
+        { TiempoMaximoDeHerramienta = TimeSpan.FromMilliseconds(150) };
+
+        var r = Json(p.Atiende("""{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"lenta","arguments":{}}}"""));
+        var res = r.GetProperty("result");
+        Debe(res.GetProperty("isError").GetBoolean(),
+            "pasado el plazo se contesta ERROR, no se espera para siempre");
+        Debe(res.GetProperty("content")[0].GetProperty("text").GetString()!.Contains("no contestó"),
+            "y el texto dice qué pasó — que la herramienta no contestó a tiempo — no un silencio");
+        Debe(r.GetProperty("id").GetInt32() == 5, "con su id, para que el cliente sepa cuál murió");
     }
 
     private static void PulsarSinMoverNoEsLlegar(SurfaceMap _)

@@ -231,6 +231,28 @@ public static class PestanasAbiertas
     // ── Ir a lo que ya está abierto ─────────────────────────────────────────
 
     /// <summary>
+    /// ¿Alguna ventana tiene ESTA PÁGINA como pestaña activa? Si sí, se trae al frente y ya
+    /// estamos delante. Si no, quien llama debe ir por la dirección: activar el dominio no basta
+    /// cuando lo pedido es una página (promesa 25 del mapeador — la revancha del piloto,
+    /// 2026-08-25).
+    /// </summary>
+    public static bool PaginaActiva(string idDeSuperficie)
+    {
+        foreach (var h in VentanasDeNavegador())
+        {
+            var url = SurfaceLocator.LeerUrlDelNavegador(h);
+            if (url == null) continue;
+            if (!Mapeador.ComoMePongoDelante.EsLaMismaPagina(idDeSuperficie, url.Host, url.AbsolutePath))
+                continue;
+            bool ok = AppAligner.TraerAlFrente(h);
+            LogBus.Log("pestañas", $"la página pedida ya era la pestaña activa de una ventana → "
+                                 + (ok ? "al frente" : "NO se pudo enfocar"));
+            return ok;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Llevar el foco al dominio si ya está abierto. Devuelve false si no lo está —y entonces quien
     /// llama SÍ debe abrirlo: no encontrarlo es una respuesta legítima, no un fallo.
     ///

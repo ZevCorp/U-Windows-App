@@ -62,6 +62,13 @@ public sealed class SurfaceLocator : IDisposable
     /// </summary>
     private readonly SapGuiSurface _sap = new();
 
+    /// <summary>
+    /// LA MISMA superficie SAP que acuña las ubicaciones, para quien necesite leer o accionar la
+    /// sesión (el sentido y la mano del despacho entre mundos, promesas 68-69). Compartirla evita
+    /// dos resoluciones COM por lectura y —más importante— dos opiniones sobre la misma sesión.
+    /// </summary>
+    public SapGuiSurface SuperficieSap => _sap;
+
     public SurfaceLocation? Current { get; private set; }
     public bool Active { get; private set; }
     public event Action<SurfaceLocation>? Changed;

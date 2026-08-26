@@ -47,6 +47,7 @@ internal static class Contrato
         Prueba("22. lo que no se reconoce se dice: NUNCA se abre algo al azar", NoAdivinarQueAbrir);
         Prueba("23. la dirección de una página sale de su id, con el esquema que se vio", LaUrlSaleDelId);
         Prueba("24. estar en el sitio ES llegar, si lo que se pidió era el sitio", LlegarAlSitioEsLlegar);
+        Prueba("25. una PÁGINA no se alcanza activando el dominio: o está delante, o se va por su dirección", UnaPaginaNoSeAlcanzaPorElDominio);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -566,6 +567,48 @@ internal static class Contrato
             "otro sitio no cuenta, aunque se parezca");
         Debe(!ComoMePongoDelante.EstarEnElSitioBasta("uia://explorer.exe/documentos", "uia://explorer.exe/videos"),
             "esto es de la web: dos carpetas distintas siguen siendo dos sitios distintos");
+    }
+
+    /// <remarks>
+    /// EL COMPLEMENTO DE LA 24, y faltaba: pedir el SITIO se satisface con cualquiera de sus
+    /// páginas, pero pedir una PÁGINA no se satisface con cualquiera del sitio. «Ponme delante de
+    /// wiki/Ajedrez» estando en Portal:Ajedrez activaba la pestaña del dominio —que ya estaba
+    /// delante—, contestaba «conseguido» sin navegar, y el paso del núcleo esperaba 3 s a una
+    /// llegada que nunca iba a ocurrir: tres «no hay ningún camino aprendido» seguidos con la
+    /// dirección en la mano (2026-08-25, revancha del piloto). El arreglo de «una web es
+    /// DIRECCIONABLE» ya estaba puesto y NO mordió, porque descansaba en un «ponerse delante» que
+    /// solo sabía de dominios.
+    ///
+    /// La decisión es esta, y es pura: ¿el id pide una página o el sitio?, y ¿la pestaña activa YA
+    /// es esa página? Con esas dos respuestas el ejecutor sabe si activar el dominio basta o si hay
+    /// que ir por la dirección.
+    /// </remarks>
+    private static void UnaPaginaNoSeAlcanzaPorElDominio()
+    {
+        Debe(ComoMePongoDelante.PideUnaPagina("web://es.wikipedia.org/wiki/Ajedrez"),
+            "con ruta se pide una PÁGINA, y el dominio no basta");
+        Debe(!ComoMePongoDelante.PideUnaPagina("web://es.wikipedia.org"),
+            "sin ruta se pide el SITIO, y ahí el dominio sí basta");
+        Debe(!ComoMePongoDelante.PideUnaPagina("web://es.wikipedia.org/"),
+            "la barra final no convierte el sitio en página");
+        Debe(!ComoMePongoDelante.PideUnaPagina("uia://explorer.exe/documentos"),
+            "esto es de la web: una carpeta no es una página");
+
+        Debe(ComoMePongoDelante.EsLaMismaPagina("web://es.wikipedia.org/wiki/Ajedrez",
+                "es.wikipedia.org", "/wiki/Ajedrez"),
+            "la pestaña que YA muestra la página es estar delante: no se toca nada");
+        Debe(ComoMePongoDelante.EsLaMismaPagina("web://es.wikipedia.org/wiki/Ajedrez",
+                "es.wikipedia.org", "/wiki/Ajedrez/"),
+            "la barra final de la barra de direcciones no la cambia");
+        Debe(!ComoMePongoDelante.EsLaMismaPagina("web://es.wikipedia.org/wiki/Ajedrez",
+                "es.wikipedia.org", "/wiki/Portal:Ajedrez"),
+            "otra página del mismo sitio NO es esta página — el fallo exacto de la revancha");
+        Debe(!ComoMePongoDelante.EsLaMismaPagina("web://es.wikipedia.org/wiki/Ajedrez",
+                "en.wikipedia.org", "/wiki/Ajedrez"),
+            "la misma ruta en otro sitio tampoco cuenta");
+        Debe(!ComoMePongoDelante.EsLaMismaPagina("uia://explorer.exe/documentos",
+                "es.wikipedia.org", "/documentos"),
+            "y lo que no es web no casa con ninguna pestaña");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

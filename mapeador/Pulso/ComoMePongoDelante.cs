@@ -100,6 +100,48 @@ public static class ComoMePongoDelante
     }
 
     /// <summary>
+    /// ¿Este id pide una PÁGINA concreta, y no el sitio entero? Solo entonces activar la pestaña
+    /// del dominio NO basta para estar delante.
+    /// </summary>
+    /// <remarks>
+    /// EL COMPLEMENTO DE <see cref="EstarEnElSitioBasta"/>, y faltaba: «ponme delante de
+    /// wiki/Ajedrez» estando en Portal:Ajedrez activaba la pestaña del dominio —que ya estaba
+    /// delante—, contestaba «conseguido» sin navegar, y quien esperaba la llegada esperaba en vano
+    /// (2026-08-25, revancha del piloto). Pedir el sitio se satisface con cualquiera de sus
+    /// páginas; pedir una página, solo con esa.
+    /// </remarks>
+    public static bool PideUnaPagina(string idDeSuperficie)
+    {
+        string id = (idDeSuperficie ?? "").Trim().TrimEnd('/');
+        if (!id.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) return false;
+        return id[6..].Contains('/');
+    }
+
+    /// <summary>
+    /// ¿La pestaña activa —host y ruta de su barra de direcciones— YA es esta página? Si lo es,
+    /// estar delante no requiere tocar nada; si no, hay que ir por la dirección.
+    /// </summary>
+    /// <remarks>
+    /// Se compara contra host y ruta ABSOLUTA porque eso es exactamente lo que el localizador lee
+    /// del navegador y lo que el id guarda («web://host/ruta», sin query ni fragmento — estado
+    /// volátil, no ubicación). La barra final se ignora en los dos lados por la misma razón de
+    /// siempre: «/wiki/Ajedrez/» y «/wiki/Ajedrez» son la misma pantalla.
+    /// </remarks>
+    public static bool EsLaMismaPagina(string idDeSuperficie, string host, string rutaAbsoluta)
+    {
+        string id = (idDeSuperficie ?? "").Trim().TrimEnd('/');
+        if (!id.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) return false;
+
+        string resto = id[6..];
+        int corte = resto.IndexOf('/');
+        string sitio = corte < 0 ? resto : resto[..corte];
+        string ruta = corte < 0 ? "" : resto[corte..];
+
+        if (!sitio.Equals((host ?? "").Trim(), StringComparison.OrdinalIgnoreCase)) return false;
+        return ruta.Equals((rutaAbsoluta ?? "").Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// La dirección que hay que abrir para llegar a una superficie web. Vacío si no es web.
     /// </summary>
     /// <remarks>
