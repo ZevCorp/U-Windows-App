@@ -83,9 +83,41 @@ public static class SentidoSap
         "GuiCheckBox", "GuiRadioButton", "GuiButton", "GuiOkCodeField", "GuiTab",
     };
 
-    public static List<Nucleo.Elemento> Traducir(IReadOnlyList<SapVisualElement> vistos)
+    public static List<Nucleo.Elemento> Traducir(IReadOnlyList<SapVisualElement> vistos) =>
+        Traducir(vistos, null);
+
+    /// <summary>
+    /// Lo mismo, sumando las FILAS VISIBLES de cada árbol (clave: el id del árbol).
+    /// </summary>
+    /// <remarks>
+    /// EL CONTENIDO NAVEGABLE DE SAP VIVE EN LOS ÁRBOLES, medido contra el SAP real (2026-08-26,
+    /// QAS/NWP1): el sentido trajo 12 puertas y todas eran de la barra de herramientas, porque
+    /// TODO el contenido de esa pantalla son dos `GuiShell[Tree]` bajo un splitter. Un árbol no se
+    /// pulsa —se pulsa una de sus filas—, así que sin filas el terreno tenía la orilla y ningún
+    /// camino tierra adentro.
+    ///
+    /// SOLO LAS VISIBLES, que es la bandera Vivo diciendo lo de siempre: un árbol clínico trae
+    /// 1197 claves cargadas del servidor y ofrecerlas todas sería prometer pantalla para lo que
+    /// solo es memoria. Quien llama pasa lo que `VisibleTreeRows` filtró por geometría.
+    /// </remarks>
+    public static List<Nucleo.Elemento> Traducir(
+        IReadOnlyList<SapVisualElement> vistos,
+        IReadOnlyDictionary<string, IReadOnlyList<SapGuiSurface.TreeRow>>? filasPorArbol)
     {
         var r = new List<Nucleo.Elemento>();
+
+        foreach (var (arbol, filas) in filasPorArbol ?? new Dictionary<string, IReadOnlyList<SapGuiSurface.TreeRow>>())
+            foreach (var fila in filas ?? Array.Empty<SapGuiSurface.TreeRow>())
+            {
+                if (fila.Key.Length == 0) continue;
+                // El texto es lo que el operador lee; si el árbol no lo suelta, la clave al menos
+                // identifica la fila — callarla sería perder una puerta que SÍ se puede accionar.
+                r.Add(new Nucleo.Elemento(
+                    SapSelector.ByNode(arbol, fila.Key),
+                    fila.Text.Length > 0 ? fila.Text : fila.Key,
+                    fila.IsFolder ? "GuiTreeCarpeta" : "GuiTreeFila"));
+            }
+
         foreach (var v in vistos ?? Array.Empty<SapVisualElement>())
         {
             if (v.Id.Length == 0) continue;

@@ -325,9 +325,25 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                                 .Where(el => el.Selector.Length > 0 && el.Etiqueta.Length > 0)
                                 .ToList();
                         },
-                        sap: () => Navigation.SentidoSap.Traducir(
-                            _locator?.SuperficieSap.ReadVisibleElements()
-                                ?? (IReadOnlyList<U.Graph.Surfaces.SapVisualElement>)Array.Empty<U.Graph.Surfaces.SapVisualElement>()));
+                        sap: () =>
+                        {
+                            var sap = _locator?.SuperficieSap;
+                            if (sap == null) return new List<Nucleo.Elemento>();
+                            var vistos = sap.ReadVisibleElements();
+
+                            // LAS FILAS DEL ÁRBOL SON EL CONTENIDO NAVEGABLE (promesa 70). Se piden
+                            // solo las VISIBLES y con la altura del propio árbol, que es lo que
+                            // decide qué cabe en pantalla.
+                            var filas = new Dictionary<string, IReadOnlyList<U.Graph.Surfaces.SapGuiSurface.TreeRow>>();
+                            foreach (var arbol in vistos.Where(v =>
+                                         v.SubType.IndexOf("Tree", StringComparison.OrdinalIgnoreCase) >= 0))
+                            {
+                                var suyas = sap.VisibleTreeRows(arbol.Id, arbol.Height, out string porque);
+                                if (suyas.Count > 0) filas[arbol.Id] = suyas;
+                                else LogBus.Log("sentido-sap", $"«{arbol.Label}» no dio filas: {porque}");
+                            }
+                            return Navigation.SentidoSap.Traducir(vistos, filas);
+                        });
                     return sentido.Lee(_locator?.DondeEstoy()?.Id ?? "")
                         .Select(el => (el.Selector, el.Etiqueta, el.Tipo))
                         .ToList();

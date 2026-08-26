@@ -144,6 +144,7 @@ internal static class Contrato
         Prueba("67. una herramienta colgada no cuelga la puerta MCP", UnaHerramientaColgadaNoCuelgaLaPuerta);
         Prueba("68. cada mundo se OBSERVA por su propia puerta: SAP por scripting, no por UIA", CadaMundoSeObservaPorSuPuerta);
         Prueba("69. cada mundo se PULSA por su propia mano, y el selector decide", CadaMundoSePulsaPorSuMano);
+        Prueba("70. en SAP el contenido navegable son las FILAS del árbol, no el árbol", LasFilasDelArbolSonPuertas);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -765,6 +766,60 @@ internal static class Contrato
         mano.Pulsa("sap:wnd[0]/shellcont/shell#node=vw00073", "Órdenes Clínicas");
         Debe(pulsadas.Count == 3 && pulsadas[2].StartsWith("sap→", StringComparison.Ordinal),
             "una fila de árbol —selector con fragmento— también va por la mano de SAP");
+    }
+
+    /// <remarks>
+    /// EL TECHO DE PROFUNDIDAD, MEDIDO CONTRA EL SAP REAL (2026-08-26, sesión QAS/NWP1 viva): el
+    /// sentido de SAP entró al terreno y trajo 12 puertas… todas de la barra de herramientas
+    /// («Atrás», «Continuar», «comando»). El recorrido del árbol de componentes explicó por qué:
+    /// TODO el contenido de esa pantalla son dos `GuiShell[Tree]` bajo un splitter, y un árbol no
+    /// se pulsa — se pulsa una de sus filas. Sin filas, el terreno tenía la orilla y ningún camino
+    /// tierra adentro.
+    ///
+    /// SOLO LAS VISIBLES, y eso no es una limitación: es la bandera Vivo diciendo lo mismo de
+    /// siempre. Un árbol clínico trae 1197 claves cargadas del servidor; ofrecerlas todas como
+    /// puertas sería prometer pantalla para lo que solo es memoria —y ahogar la respuesta, que es
+    /// justo el daño que ya hizo la basura de la web (promesa 65)—. `VisibleTreeRows` filtra por
+    /// geometría: las que están en pantalla AHORA.
+    /// </remarks>
+    private static void LasFilasDelArbolSonPuertas(SurfaceMap _)
+    {
+        const string arbol = "wnd[0]/shellcont/shellcont/shell/shellcont[0]/shell";
+        var vistos = new[]
+        {
+            // El árbol mismo: se ve, ocupa sitio, y NO es una puerta.
+            new U.Graph.Surfaces.SapVisualElement(arbol, "GuiShell", "Tree", "Área de trabajo", null,
+                0, 0, 300, 400, true, "click", "text", false, null),
+            new U.Graph.Surfaces.SapVisualElement("wnd[0]/tbar[0]/okcd", "GuiOkCodeField", "", "GuiOkCodeField", "",
+                0, 0, 10, 10, true, "input", "text", false, null),
+        };
+        var filas = new Dictionary<string, IReadOnlyList<U.Graph.Surfaces.SapGuiSurface.TreeRow>>
+        {
+            [arbol] = new[]
+            {
+                new U.Graph.Surfaces.SapGuiSurface.TreeRow("vw00073", "Órdenes Clínicas", 10, 16, false),
+                new U.Graph.Surfaces.SapGuiSurface.TreeRow("vw00081", "Favoritos", 26, 16, true),
+            },
+        };
+
+        var elementos = SentidoSap.Traducir(vistos, filas);
+
+        Debe(!elementos.Any(e => e.Selector == "sap:" + arbol),
+            "el árbol NO entra como puerta: un árbol no se pulsa");
+
+        var orden = elementos.FirstOrDefault(e => e.Etiqueta == "Órdenes Clínicas");
+        Debe(orden != null, "una fila visible SÍ entra: es contenido navegable, y es lo único que hay aquí");
+        Debe(orden != null && orden.Selector == "sap:" + arbol + "#node=vw00073",
+            "…con la identidad entera —árbol MÁS clave—, porque la fila sola no resuelve por FindById");
+
+        Debe(elementos.Any(e => e.Etiqueta == "Favoritos"),
+            "una carpeta también es puerta: desplegarla es navegar");
+        Debe(elementos.Any(e => e.Selector == "sap:wnd[0]/tbar[0]/okcd"),
+            "y lo de siempre sigue entrando: las filas se SUMAN, no sustituyen");
+
+        // Sin árboles en pantalla, la traducción es la de antes: nada cambia para el resto.
+        Debe(SentidoSap.Traducir(vistos).Count == 1,
+            "sin filas que pasar, solo entra lo interactivo de siempre");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
