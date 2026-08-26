@@ -146,6 +146,7 @@ internal static class Contrato
         Prueba("69. cada mundo se PULSA por su propia mano, y el selector decide", CadaMundoSePulsaPorSuMano);
         Prueba("70. en SAP el contenido navegable son las FILAS del árbol, no el árbol", LasFilasDelArbolSonPuertas);
         Prueba("71. cada mundo se ESCRIBE por su propio lápiz: en SAP el texto va al campo, no al aire", CadaMundoSeEscribePorSuLapiz);
+        Prueba("72. la sesión SAP es la de la ventana que está DELANTE, no «la primera»", LaSesionEsLaDeDelante);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -851,6 +852,30 @@ internal static class Contrato
         Debe(lapiz.Escribe("hola"), "fuera de SAP también");
         Debe(escrito.Count == 2 && escrito[1] == "uia→hola",
             "…por el camino de siempre: el despacho no cambia a nadie más");
+    }
+
+    /// <remarks>
+    /// LO DESTAPÓ EL PILOTO con dos ventanas SAP abiertas (2026-08-26): una sesión buena
+    /// (GCALDERO, mandante 300) y un login paralelo. `Session()` tomaba «la primera sesión de la
+    /// primera conexión», así que el localizador acuñó «sapgui://QAS/S000/SAPMSYST/0020» —la
+    /// pantalla de login— mientras la ventana de delante era otra. Una identidad que describe OTRA
+    /// ventana es la mentira más desorientadora posible: todo lo demás (compuerta, batch, aristas)
+    /// se apoya en ella.
+    ///
+    /// La regla: la sesión cuya ventana está DELANTE. Sin casar y con UNA sola sesión, esa (el
+    /// caso de siempre, y las sondas de fondo siguen funcionando); sin casar y con VARIAS, ninguna
+    /// — «no sé» es mejor que la identidad de otra ventana.
+    /// </remarks>
+    private static void LaSesionEsLaDeDelante(SurfaceMap _)
+    {
+        Debe(U.Graph.Surfaces.CualSesion.Elige(new long[] { 111, 222, 333 }, delante: 222) == 1,
+            "con varias sesiones, manda la que tiene su ventana delante");
+        Debe(U.Graph.Surfaces.CualSesion.Elige(new long[] { 111 }, delante: 999) == 0,
+            "con UNA sola sesión y el foco en otra parte, esa: es el caso de siempre y las sondas de fondo viven de él");
+        Debe(U.Graph.Surfaces.CualSesion.Elige(new long[] { 111, 222 }, delante: 999) == -1,
+            "con varias y ninguna delante, NINGUNA: mejor «no sé» que la identidad de otra ventana");
+        Debe(U.Graph.Surfaces.CualSesion.Elige(Array.Empty<long>(), delante: 111) == -1,
+            "sin sesiones no hay nada que elegir");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

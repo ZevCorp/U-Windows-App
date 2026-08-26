@@ -228,19 +228,51 @@ public sealed class SapGuiSurface : IUiSurface
             "GetScriptingEngine", BindingFlags.InvokeMethod, null, rot, null);
     }
 
-    /// <summary>La sesión con la que trabajamos: la primera de la primera conexión.</summary>
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+
+    /// <summary>
+    /// La sesión con la que trabajamos: LA DE LA VENTANA QUE ESTÁ DELANTE. La decisión —y sus
+    /// porqués— vive en <see cref="CualSesion"/> (promesa 72); aquí solo se juntan los handles.
+    /// </summary>
+    /// <remarks>
+    /// Antes era «la primera de la primera conexión», y con dos ventanas SAP (una sesión buena y
+    /// un login paralelo) el localizador acuñaba la identidad de la otra ventana (2026-08-26, lo
+    /// destapó el piloto). El handle sale de <c>ActiveWindow</c> para que un modal (wnd[1]) cuente
+    /// como la misma sesión cuando es él quien está delante.
+    /// </remarks>
     private static dynamic? Session(bool useCache = true)
     {
         object? engine = ScriptingEngine(useCache);
         if (engine == null) return null;
 
         dynamic app = engine;
-        if ((int)app.Connections.Count == 0) return null;
+        var sesiones = new List<dynamic>();
+        var ventanas = new List<long>();
+        try
+        {
+            int nc = (int)app.Connections.Count;
+            for (int c = 0; c < nc; c++)
+            {
+                dynamic conn = app.Connections.ElementAt(c);
+                int ns = (int)conn.Sessions.Count;
+                for (int i = 0; i < ns; i++)
+                {
+                    dynamic ses = conn.Sessions.ElementAt(i);
+                    long h = 0;
+                    try { h = (long)ses.ActiveWindow.Handle; }
+                    catch
+                    {
+                        try { h = (long)ses.FindById("wnd[0]").Handle; } catch { }
+                    }
+                    sesiones.Add(ses);
+                    ventanas.Add(h);
+                }
+            }
+        }
+        catch { /* la lista puede cambiar bajo los pies; se decide con lo reunido */ }
 
-        dynamic conn = app.Connections.ElementAt(0);
-        if ((int)conn.Sessions.Count == 0) return null;
-
-        return conn.Sessions.ElementAt(0);
+        int cual = CualSesion.Elige(ventanas, (long)GetForegroundWindow());
+        return cual >= 0 ? sesiones[cual] : null;
     }
 
     // ── Identidad ────────────────────────────────────────────────────────────
