@@ -85,6 +85,17 @@ sabría pulsar un campo SAP.
 - PELIGRO documentado: si aparece el diálogo de licencia («el usuario ya ha entrado al sistema»),
   JAMÁS elegir «finalizar entradas existentes» — mata sesiones ajenas con datos sin grabar. Se
   cancela y se avisa.
+- **«DÓNDE ESTOY» LEE LA VENTANA EN PRIMER PLANO, y el pulsar SAP no la necesita** (2026-08-26,
+  batch [«comando» → «NWP1» → «Continuar»]): el 3er paso pulsó el botón correcto por scripting —
+  la sesión SÍ avanzó de SESSION_MANAGER a NWP1, confirmado leyendo la sesión directo por COM— pero
+  el batch contestó «quedaste en uia://claude.exe/claude», porque `SurfaceLocator.Compute` solo
+  pregunta a `SapGuiSurface.Identity()` cuando el PROCESO en primer plano empieza por «sap»
+  (`IsSap(proc)`); con esta terminal delante, la sesión que SÍ se movió quedó invisible para
+  «comprobar por consecuencia». Correcto para UIA (ahí no hay acción sin foco); FALSO para SAP
+  scripting, que actúa sin necesitar la ventana al frente. Debe ser la primera promesa de la
+  siguiente ronda: cuando hay sesión SAP viva Y la ubicación actual ya era `sapgui://`, su propia
+  identidad manda sobre el proceso en primer plano — hasta que una persona visiblemente cambie a
+  otra app real.
 
 **Prueba real original (referencia):** SAP Logon abierto → entrar a una sesión → `map_what_i_see` lista los campos DE
 VERDAD (no 12 elementos UIA del marco) → un `map_batch` de 2 pasos (okcd + Enter) cruza a una
@@ -166,6 +177,7 @@ El ciclo que pediste, ya con todo conectado:
 | fecha | tarea | viajes | profundidad máxima de un batch | qué faltó |
 |---|---|---|---|---|
 | 2026-08-26 | NWP1: cruzar fila de árbol (manual por MCP) | n/a (sin piloto) | 2 pasos hechos de una llamada (comando+texto); 3º pidió desempate | escribir SAP (arreglado), desempate por destino, Easy Access sin filas |
+| 2026-08-26 | SESSION_MANAGER→NWP1: [comando, escribir «NWP1», Continuar] (manual por MCP) | n/a (sin piloto) | 3 de 3 (homónimo de «Continuar» desempatado por selector exacto) — confirmado por scripting que el dynpro cambió | «dónde estoy» ciego a SAP fuera de foco: el batch reportó mal el destino aunque el cruce fue real |
 
 ---
 

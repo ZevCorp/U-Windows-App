@@ -56,6 +56,16 @@ public sealed class ServidorMcp : IDisposable
             try { ctx = await _listener.GetContextAsync(); }
             catch { return; }   // listener cerrado
 
+            // CADA PETICIÓN EN SU PROPIA TAREA. Atendiendo en serie, una herramienta lenta ponía en
+            // cola TODO lo que llegara detrás — y cuando map_what_i_see se colgó, hasta el
+            // map_where_am_i más barato moría de timeout esperando turno (2026-08-25). El protocolo
+            // ya tiene su propio plazo por herramienta; el cable no puede añadir una cola encima.
+            _ = Task.Run(() => AtenderAsync(ctx));
+        }
+    }
+
+    private async Task AtenderAsync(HttpListenerContext ctx)
+    {
             try
             {
                 if (ctx.Request.HttpMethod != "POST")
@@ -64,7 +74,7 @@ public sealed class ServidorMcp : IDisposable
                     // sesión que no existe. 405 es la respuesta del estándar para ambos.
                     ctx.Response.StatusCode = 405;
                     ctx.Response.Close();
-                    continue;
+                    return;
                 }
 
                 using var lector = new System.IO.StreamReader(ctx.Request.InputStream, Encoding.UTF8);
@@ -77,7 +87,7 @@ public sealed class ServidorMcp : IDisposable
                     // transporte.
                     ctx.Response.StatusCode = 202;
                     ctx.Response.Close();
-                    continue;
+                    return;
                 }
 
                 byte[] bytes = Encoding.UTF8.GetBytes(salida);
@@ -91,7 +101,6 @@ public sealed class ServidorMcp : IDisposable
                 LogBus.Log("mcp", $"petición malograda: {e.Message}");
                 try { ctx.Response.StatusCode = 500; ctx.Response.Close(); } catch { }
             }
-        }
     }
 
     public void Dispose()

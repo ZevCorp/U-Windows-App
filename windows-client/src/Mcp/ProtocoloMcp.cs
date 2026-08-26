@@ -33,6 +33,9 @@ public sealed class ProtocoloMcp
         _ejecutar = ejecutar;
     }
 
+    /// <summary>Cuánto puede tardar una herramienta antes de contestarle al cliente que no llegó.</summary>
+    public TimeSpan TiempoMaximoDeHerramienta { get; init; } = TimeSpan.FromSeconds(120);
+
     /// <summary>
     /// Atiende UN mensaje JSON-RPC. Devuelve el JSON de respuesta, o null si era una notificación
     /// (esas no se contestan: contestar a una notificación es hablar cuando nadie preguntó).
@@ -115,10 +118,29 @@ public sealed class ProtocoloMcp
                     // hablan — la misma regla del catálogo de la voz.
                     : campo.Value.GetRawText();
 
+        // UNA HERRAMIENTA COLGADA NO CUELGA LA PUERTA. map_what_i_see se quedó 1014 segundos sin
+        // contestar y todo lo que llegó detrás murió en cadena — «The operation timed out» tras
+        // «The operation timed out», y la tarea entera perdida (2026-08-25, revancha del piloto).
+        // Pasado el plazo se contesta ERROR con el porqué; la llamada huérfana puede seguir
+        // corriendo por debajo, y se dice, porque fingir que se canceló sería mentir.
         string texto;
         bool fallo = false;
-        try { texto = _ejecutar(nombre, args); }
-        catch (Exception e) { texto = $"la herramienta reventó: {e.Message}"; fallo = true; }
+        var trabajo = System.Threading.Tasks.Task.Run(() =>
+        {
+            try { return (Texto: _ejecutar(nombre, args), Fallo: false); }
+            catch (Exception e) { return (Texto: $"la herramienta reventó: {e.Message}", Fallo: true); }
+        });
+        if (trabajo.Wait(TiempoMaximoDeHerramienta))
+        {
+            (texto, fallo) = trabajo.Result;
+        }
+        else
+        {
+            texto = $"«{nombre}» no contestó en {TiempoMaximoDeHerramienta.TotalSeconds:0} s y suelto "
+                  + "la llamada para no colgar la puerta. Puede seguir corriendo por debajo: mira el "
+                  + "estado con map_where_am_i antes de repetirla.";
+            fallo = true;
+        }
 
         // Lo que la herramienta contestó vuelve TAL CUAL: nuestras herramientas hablan prosa con
         // el porqué dentro, y resumirla le quitaría al modelo justo la pista que necesita.
