@@ -67,6 +67,20 @@
     <UpdateGithubToken Condition="'$(UpdateGithubToken)' == ''"></UpdateGithubToken>
   </PropertyGroup>
 
+  <!-- INSTALARU ES UN PROYECTO APARTE que vive DENTRO de esta carpeta, así que los globos por
+       defecto del SDK se comen sus fuentes y —peor— su carpeta obj: los AssemblyInfo que MSBuild
+       le genera entran aquí y chocan con los nuestros («atributo TargetFrameworkAttribute
+       duplicado»). El síntoma es desconcertante porque aparece SOLO después de compilar el
+       instalador alguna vez, y tumba la compilación del cliente entero (2026-08-26, lo cazó el
+       portero al subir el traspaso). Un proyecto anidado siempre se excluye del padre. -->
+  <ItemGroup>
+    <Compile Remove="InstalarU\**" />
+    <Page Remove="InstalarU\**" />
+    <None Remove="InstalarU\**" />
+    <EmbeddedResource Remove="InstalarU\**" />
+    <ApplicationDefinition Remove="InstalarU\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <AssemblyMetadata Include="GeminiDefaultApiKey" Value="$(GeminiDefaultApiKey)" />
     <AssemblyMetadata Include="UpdateGithubToken" Value="$(UpdateGithubToken)" />
