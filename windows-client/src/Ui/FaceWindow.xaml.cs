@@ -525,6 +525,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             { EsperaMaximaMs = 4000 };
             if (mcp.Map != null) mcp.Map.RecorrerPorElNucleo = pasos => recorrer.Recorre(pasos).Cuenta;
 
+            // EL TERRENO POR DELANTE (T3): la consulta de la profundidad, sobre el mismo grafo.
+            var terreno = new Navigation.TerrenoPorDelante(_mapaVivo.Nucleo);
+            if (mcp.Map != null) mcp.Map.TerrenoPorElNucleo = (puerta, niveles) =>
+                terreno.Cuenta(_locator?.DondeEstoy()?.Id ?? "", puerta,
+                    int.TryParse(niveles, out int n) ? n : 2);
+
             // LO QUE SE VA ENSEÑANDO VIVE EN EL GRAFO, colgado del elemento. Estuvo un rato en un
             // archivo aparte con las mismas claves, y el usuario lo vio en cuanto se lo dibujé:
             // «¿es paralelo al grafo?». Lo era, y dos sitios que saben de lo mismo se desincronizan
@@ -654,6 +660,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     + "al que quieres llegar («Portal:Ajedrez», «Descargas») — si el mapa ya "
                     + "aprendió qué puerta lleva ahí, la usa solo. Ejemplo: "
                     + "[{\"exit\":\"Recibidos\"},{\"exit\":\"Correo de Jerónimo\"}]") }))
+            .Append(new Voz.Realtime.Utensilio("map_ahead",
+                "MIRA EL TERRENO POR DELANTE sin tocar nada: qué habrá tras una puerta, según lo "
+                + "que el mapa aprendió al cruzarla otras veces. Úsala ANTES de map_batch para "
+                + "planificar varios pasos de una vez: te dice a qué pantalla lleva cada puerta "
+                + "cruzada y qué recuerda allí. Lo nunca cruzado se anuncia «por descubrir» — ahí "
+                + "no hay promesa, solo se aprende yendo. La predicción es memoria: el batch "
+                + "igualmente verifica que cada cosa esté viva antes de pulsarla.",
+                new[]
+                {
+                    new Voz.Realtime.Argumento("exit",
+                        "La puerta que te interesa (su nombre o su selector). Vacío = el panorama: "
+                        + "todas las puertas cruzadas desde aquí y a dónde llevan."),
+                    new Voz.Realtime.Argumento("levels",
+                        "Cuántas pantallas hacia delante (1-3, por defecto 2)."),
+                }))
             .ToList();
         _servidorMcp = new ServidorMcp(new ProtocoloMcp(catalogoMcp, (tool, args) => mcp.Call(tool, args)));
         _servidorMcp.Start();

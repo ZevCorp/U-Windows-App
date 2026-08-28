@@ -1905,6 +1905,9 @@ public sealed class SurfaceMapTools
     /// </summary>
     public Func<IReadOnlyList<Navigation.RecorrerSegunElNucleo.Paso>, string>? RecorrerPorElNucleo { get; set; }
 
+    /// <summary>El terreno por delante (puerta, niveles) → la cuenta. T3: la consulta de la profundidad.</summary>
+    public Func<string, string, string>? TerrenoPorElNucleo { get; set; }
+
     /// <summary>
     /// ENSEÑAR: «esto es X». (ubicación, selector, significado, ruta de la foto) → si se guardó.
     ///
@@ -1984,7 +1987,7 @@ public sealed class SurfaceMapTools
         or "map_set_level" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude"
         or "map_hierarchy" or "map_feedback" or "map_unsituated" or "map_learn_back" or "map_shot"
-        or "map_set_kind" or "map_silver" or "map_scroll" or "map_tidy_desktop" or "map_esto_es" or "map_recuerdos" or "map_batch"
+        or "map_set_kind" or "map_silver" or "map_scroll" or "map_tidy_desktop" or "map_esto_es" or "map_recuerdos" or "map_batch" or "map_ahead"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -2044,6 +2047,9 @@ public sealed class SurfaceMapTools
             "map_esto_es" => EstoEs(A("significado"), A("sobre")),
             "map_recuerdos" => Recuerdos(A("cual")),
             "map_batch" => Batch(A("pasos")),
+            "map_ahead" => TerrenoPorElNucleo == null
+                ? "todavía no sé mirar el terreno por delante."
+                : TerrenoPorElNucleo(A("exit"), A("levels")),
             "map_scroll" => Uia.Desplazamiento.Mover(Uia.Desplazamiento.Leer(A("direction"))),
             "map_tidy_desktop" => A("undo").Equals("true", StringComparison.OrdinalIgnoreCase)
                 ? Uia.AcomodarEscritorio.Deshacer()

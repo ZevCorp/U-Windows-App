@@ -136,6 +136,16 @@ su rastro consultable en `/batches` (el anillo no crece sin límite).
 
 ## T3 — Terreno por delante para el MODELO: `map_ahead`
 
+**RESULTADO (2026-08-28) — T3 HECHO y probado con el piloto:**
+- Promesas 73 (se cuenta) y 74 (no inventa, no ahoga), rojo→verde→sabotaje verificado. La consulta
+  vive en `TerrenoPorDelante.cs` (pura; la sirven el MCP hoy y el 8792 en T2). Los nombres cortos
+  de SAP llevan la transacción («NWP1·0100») porque la cola sola era ambigua.
+- El piloto la usó A LA PRIMERA para armar el batch profundo perfecto:
+  [comando → nwp1 → Enter → fila del árbol] — 4 pasos, 2 pantallas, UNA llamada, éxito en 23 s.
+- Hallazgo: el árbol de NWP1 es POR USUARIO — la predicción enseña memoria (que puede ser de otra
+  cuenta) y la compuerta lo detecta en vivo («lo conozco pero AHORA no lo veo»). La predicción
+  propone, el terreno dispone: funcionó exactamente así en la corrida 23✗ de la curva.
+
 La misma consulta de T2, como herramienta MCP para que el piloto planifique batches profundos:
 
 ```
@@ -178,6 +188,9 @@ El ciclo que pediste, ya con todo conectado:
 |---|---|---|---|---|
 | 2026-08-26 | NWP1: cruzar fila de árbol (manual por MCP) | n/a (sin piloto) | 2 pasos hechos de una llamada (comando+texto); 3º pidió desempate | escribir SAP (arreglado), desempate por destino, Easy Access sin filas |
 | 2026-08-26 | SESSION_MANAGER→NWP1: [comando, escribir «NWP1», Continuar] (manual por MCP) | n/a (sin piloto) | 3 de 3 (homónimo de «Continuar» desempatado por selector exacto) — confirmado por scripting que el dynpro cambió | «dónde estoy» ciego a SAP fuera de foco: el batch reportó mal el destino aunque el cruce fue real |
+| 2026-08-28 | NWP1+Cirugías, 2 ventanas SAP | 28 ✗ | — | identidad de la OTRA ventana → promesa 72 |
+| 2026-08-28 | NWP1+Cirugías (árbol ajeno) | 23 ✗ | 3 de 4 | la fila era de OTRO usuario; parcial honesto ✓ |
+| 2026-08-28 | NWP1+Favoritos, con map_ahead | **10 ✓** | **4 pasos / 2 pantallas** | — |
 
 ---
 

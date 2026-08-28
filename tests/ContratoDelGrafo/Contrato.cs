@@ -147,6 +147,8 @@ internal static class Contrato
         Prueba("70. en SAP el contenido navegable son las FILAS del árbol, no el árbol", LasFilasDelArbolSonPuertas);
         Prueba("71. cada mundo se ESCRIBE por su propio lápiz: en SAP el texto va al campo, no al aire", CadaMundoSeEscribePorSuLapiz);
         Prueba("72. la sesión SAP es la de la ventana que está DELANTE, no «la primera»", LaSesionEsLaDeDelante);
+        Prueba("73. el terreno por delante se CUENTA: tras cada puerta cruzada, lo que recuerda allí", ElTerrenoPorDelanteSeCuenta);
+        Prueba("74. el terreno por delante no INVENTA: lo no cruzado es «por descubrir» y la lista no ahoga", ElTerrenoNoInventa);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -876,6 +878,109 @@ internal static class Contrato
             "con varias y ninguna delante, NINGUNA: mejor «no sé» que la identidad de otra ventana");
         Debe(U.Graph.Surfaces.CualSesion.Elige(Array.Empty<long>(), delante: 111) == -1,
             "sin sesiones no hay nada que elegir");
+    }
+
+    /// <summary>El terreno de tres pantallas SAP para juzgar la consulta por delante.</summary>
+    /// <remarks>
+    /// La forma del caso real (QAS/NWP1, 2026-08-26): un menú con puertas cruzadas y sin cruzar,
+    /// y detrás de cada cruzada una pantalla cuyos elementos el grafo RECUERDA aunque no estemos
+    /// allí. Eso es lo que la profundidad explota: `_vistos` de sitios donde no estás.
+    /// </remarks>
+    private static Nucleo.Grafo TerrenoDeTres()
+    {
+        var g = new Nucleo.Grafo();
+        const string menu = "sapgui://QAS/NWP1/FRAME/0100";
+        const string censo = "sapgui://QAS/NWP1/FRAME/0100/ssubCENSO";
+        const string triage = "sapgui://QAS/NWP1/FRAME/0100/ssubCENSO/subTRIAGE";
+
+        g.Estoy(menu);
+        g.Observar(menu, new[]
+        {
+            new Nucleo.Elemento("sap:shell#node=vw1", "Censo Pacientes", "GuiTreeFila"),
+            new Nucleo.Elemento("sap:shell#node=vw2", "Cirugías Avaladas", "GuiTreeFila"),
+            new Nucleo.Elemento("sap:wnd[0]/tbar[0]/okcd", "comando", "GuiOkCodeField"),
+        });
+        g.Cruzar(menu, "sap:shell#node=vw1", censo);
+
+        g.Observar(censo, new[]
+        {
+            new Nucleo.Elemento("sap:usr/btnTRIAGE", "Crear Triage", "GuiButton"),
+            new Nucleo.Elemento("sap:usr/txtPACIENTE", "Paciente", "GuiTextField"),
+        });
+        g.Cruzar(censo, "sap:usr/btnTRIAGE", triage);
+
+        g.Observar(triage, new[] { new Nucleo.Elemento("sap:usr/btnGRABAR", "Grabar", "GuiButton") });
+
+        // De vuelta al menú: lo de allí es MEMORIA ahora, no pantalla.
+        g.Estoy(menu);
+        return g;
+    }
+
+    /// <remarks>
+    /// LA NOVEDAD DE LA PROFUNDIDAD (T3 del plan terreno-profundo): el grafo YA recuerda qué hay
+    /// en pantallas donde no estamos —`_vistos` por ubicación— y cada cruce sabe su destino. Lo
+    /// que faltaba era la PREGUNTA: «¿qué habrá tras esta puerta?». Con la respuesta, el modelo
+    /// planifica batches que atraviesan pantallas que aún no ve — y la compuerta de vida sigue
+    /// mandando en ejecución: la predicción propone, el terreno vivo dispone.
+    /// </remarks>
+    private static void ElTerrenoPorDelanteSeCuenta(SurfaceMap _)
+    {
+        var g = TerrenoDeTres();
+        var t = new TerrenoPorDelante(g);
+
+        string desde0 = t.Cuenta("sapgui://QAS/NWP1/FRAME/0100", "", 1);
+        Debe(desde0.Contains("Censo Pacientes") && desde0.Contains("ssubCENSO"),
+            "sin puerta concreta, cuenta las cruzadas de aquí y a dónde llevan");
+
+        string tras = t.Cuenta("sapgui://QAS/NWP1/FRAME/0100", "Censo Pacientes", 2);
+        Debe(tras.Contains("ssubCENSO"),
+            "tras la puerta nombra el destino aprendido");
+        Debe(tras.Contains("Crear Triage") && tras.Contains("Paciente"),
+            "…y lo que RECUERDA allí, que es la predicción que el batch necesita");
+        Debe(tras.Contains("subTRIAGE") && tras.Contains("Grabar"),
+            "…y con niveles de sobra, sigue por las cruzadas de allí: profundidad 2 real");
+
+        Debe(t.Cuenta("sapgui://QAS/NWP1/FRAME/0100", "Censo Pacientes", 1).Contains("Crear Triage") == true
+             && !t.Cuenta("sapgui://QAS/NWP1/FRAME/0100", "Censo Pacientes", 1).Contains("Grabar"),
+            "el nivel pedido es un tope de verdad: a 1 nivel no se asoma al triage");
+    }
+
+    /// <remarks>
+    /// LAS DOS MENTIRAS QUE ESTA CONSULTA PODRÍA DECIR, prohibidas de nacimiento: prometer destino
+    /// para una puerta que nadie cruzó (el grafo «no se inventa nada» — regla del núcleo), y
+    /// ahogar la respuesta en cien puertas (la basura de la web, promesa 65; y la regla 8 del
+    /// génesis: respuestas cortas — el SDK manda a archivo lo que pasa de 25k tokens y el modelo
+    /// pierde el hilo).
+    /// </remarks>
+    private static void ElTerrenoNoInventa(SurfaceMap _)
+    {
+        var g = TerrenoDeTres();
+        var t = new TerrenoPorDelante(g);
+
+        string porDescubrir = t.Cuenta("sapgui://QAS/NWP1/FRAME/0100", "Cirugías Avaladas", 2);
+        Debe(porDescubrir.Contains("por descubrir"),
+            "una puerta sin cruzar se anuncia como por descubrir, con sus palabras");
+        Debe(!porDescubrir.Contains("ssub"),
+            "…y NO se le inventa ningún destino");
+
+        Debe(t.Cuenta("sapgui://QAS/NWP1/FRAME/0100", "comando", 2).Contains("por descubrir"),
+            "el campo de comandos también: puerta a cualquier parte, destino de ninguna hasta cruzarla");
+
+        // Una pantalla con 30 puertas recordadas no se vuelca entera.
+        var lleno = new Nucleo.Grafo();
+        lleno.Estoy("a://x");
+        lleno.Observar("a://x", new[] { new Nucleo.Elemento("s0", "puerta", "Button") });
+        lleno.Cruzar("a://x", "s0", "a://y");
+        lleno.Observar("a://y", Enumerable.Range(0, 30)
+            .Select(i => new Nucleo.Elemento($"sy{i}", $"puerta {i:D2}", "Button")).ToList());
+        lleno.Estoy("a://x");
+        string corto = new TerrenoPorDelante(lleno).Cuenta("a://x", "puerta", 1);
+        Debe(corto.Contains("más") && !corto.Contains("puerta 29"),
+            "pasadas ~12 puertas se dice «y N más», no se vuelca el inventario");
+
+        Debe(new TerrenoPorDelante(g).Cuenta("sapgui://QAS/NWP1/FRAME/0100", "no-existe", 1)
+                .Contains("no"),
+            "una puerta que no está ni en memoria se dice, no se adivina");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

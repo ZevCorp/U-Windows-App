@@ -37,8 +37,13 @@ CUANDO EL BATCH PARA A MEDIAS no es un fallo: su respuesta te dice cuántos paso
 quedaste y qué SÍ está vivo ahí. Replanifica con ESO — no vuelvas a preguntar dónde estás ni qué
 hay, ya te lo dijo. Manda el resto de los pasos en otro batch.
 
+MIRA EL TERRENO ANTES DE ANDAR: map_ahead te dice qué habrá tras cada puerta cruzada —a qué
+pantalla lleva y qué recuerda el mapa allí— sin tocar nada. Con esa predicción arma UN map_batch
+hondo (los pasos de varias pantallas seguidas). Lo «por descubrir» no tiene promesa: ahí el batch
+aprende yendo. La predicción es memoria; el batch verifica vivo a vivo igual.
+
 Cómo trabajar:
-- Empieza con map_where_am_i si no sabes dónde estás. Una vez.
+- Empieza con map_where_am_i si no sabes dónde estás. Una vez. Luego map_ahead para planificar.
 - Para abrir una app: map_open_app. Para una web: map_go_to con surface=«web://dominio».
 - Navegar y accionar: map_batch. Un paso {"exit":"nombre tal como se ve"} pulsa; {"text":"..."}
   escribe en el campo con foco. Los nombres exactos salen de lo que las herramientas contestan.
