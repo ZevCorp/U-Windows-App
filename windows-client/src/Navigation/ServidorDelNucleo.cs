@@ -55,7 +55,10 @@ public sealed class ServidorDelNucleo : IDisposable
         _paso = new PasoDelNucleo(grafo, donde, pulsar, enfocar);
     }
 
-    public bool Arrancar()
+    /// <summary>El rastro de los batches (promesa 76), puesto por quien los corre. Nulo = sin pestaña.</summary>
+    public RastroDeBatches? Rastro { get; set; }
+
+public bool Arrancar()
     {
         try
         {
@@ -132,6 +135,24 @@ public sealed class ServidorDelNucleo : IDisposable
 
         // DÓNDE ESTOY Y QUÉ ALCANZO, leído DEL NÚCLEO y no de Neo4j. Es la lectura más fiel que
         // existe: sin proyección de por medio, no hay nada que pueda desviarse.
+        // EL TERRENO POR DELANTE PARA EL VISOR (T2, promesa 75): el mismo árbol que map_ahead
+        // cuenta al modelo, en datos. Vivo solo en la pantalla actual; lo demás es memoria y va
+        // punteado. ?niveles=1..3 (por defecto 2), ?desde= para mirar desde otra ubicación.
+        if (ruta.EndsWith("/terreno"))
+        {
+            string desdeQ = req.QueryString["desde"] ?? _donde();
+            int niveles = int.TryParse(req.QueryString["niveles"], out int n) ? n : 2;
+            return Json(TerrenoParaElVisor.Arbol(_grafo, desdeQ, niveles));
+        }
+
+        // EL RASTRO DE LOS BATCHES (promesa 76): lo que cada tanda contestó, lo último primero.
+        if (ruta.EndsWith("/batches"))
+            return Json(new
+            {
+                corridas = (Rastro?.Ultimas() ?? new List<RastroDeBatches.Corrida>())
+                    .Select(c => new { cuando = c.Cuando.ToString("HH:mm:ss"), cuenta = c.Cuenta }),
+            });
+
         if (ruta.EndsWith("/nucleo") || ruta.Length == 0)
         {
             string aqui = _donde();
@@ -280,7 +301,7 @@ public sealed class ServidorDelNucleo : IDisposable
         }
 
         return Json(new { error = "no conozco esa ruta",
-                          rutas = new[] { "/visor", "/nucleo", "/ir", "/escribir", "/elegir", "/reglas", "/mapeador" } });
+                          rutas = new[] { "/visor", "/nucleo", "/terreno", "/batches", "/ir", "/escribir", "/elegir", "/reglas", "/mapeador" } });
     }
 
     /// <summary>
@@ -384,6 +405,9 @@ public sealed class ServidorDelNucleo : IDisposable
         JsonSerializer.Serialize(o, new JsonSerializerOptions
         {
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            // camelCase: los records de C# (PascalCase) y el visor (minúsculas) hablan igual.
+            // Las rutas viejas no cambian: sus propiedades anónimas ya eran minúsculas.
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         });
 
     public void Dispose()

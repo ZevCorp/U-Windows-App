@@ -523,7 +523,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // que la compuerta espera más que en una app nativa. Sale en cuanto lo ve: una pantalla
             // rápida no paga la espera de una lenta.
             { EsperaMaximaMs = 4000 };
-            if (mcp.Map != null) mcp.Map.RecorrerPorElNucleo = pasos => recorrer.Recorre(pasos).Cuenta;
+            // EL RASTRO (promesa 76): cada relato de batch queda en el anillo que sirve el 8792
+            // para la pestaña «Terreno» del visor.
+            var rastroDeBatches = new Navigation.RastroDeBatches();
+            if (mcp.Map != null) mcp.Map.RecorrerPorElNucleo = pasos =>
+            {
+                string cuenta = recorrer.Recorre(pasos).Cuenta;
+                rastroDeBatches.Agrega(cuenta);
+                return cuenta;
+            };
 
             // EL TERRENO POR DELANTE (T3): la consulta de la profundidad, sobre el mismo grafo.
             var terreno = new Navigation.TerrenoPorDelante(_mapaVivo.Nucleo);
@@ -554,6 +562,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 superficie => Uia.AppAligner.PonerDelante(superficie),
                 (sel, texto) => accionar("input", sel, texto),
                 (sel, opcion) => accionar("select", sel, opcion));
+            _servidorNucleo.Rastro = rastroDeBatches;
             _servidorNucleo.Arrancar();
 
             // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.

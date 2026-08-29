@@ -105,6 +105,21 @@ transacción y fabrica la arista. Gotcha vigente: sondear COM con `cscript`/VBS,
 
 ## T2 — El visor: pestaña «Terreno» (verte lo que construimos, en el archivo que ya te gusta)
 
+**RESULTADO (2026-08-28) — T2 HECHO:**
+- Promesas 75 (el árbol del visor: vivo/recordado/destino sin inventar) y 76 (rastro de batches en
+  anillo con tope), rojo→verde→sabotaje verificado. `TerrenoParaElVisor` + `RastroDeBatches`.
+- Rutas nuevas del 8792: `GET /terreno?niveles=1..3&desde=` (el árbol en JSON, camelCase) y
+  `GET /batches` (las últimas corridas). El visor gana la pestaña «Terreno»: árbol sangrado con
+  vivo en trazo lleno y recordado punteado, «por descubrir» dicho con palabras, y debajo los
+  últimos batches con ✔/✘.
+- VIVO SOLO DONDE ESTAMOS: la bandera del grafo es «estaba en la última observación de ESA
+  pantalla»; el árbol la apaga fuera de la pantalla actual — pintarla sería prometer pantalla.
+- MIRAR EL VISOR NO CAMBIA EL TERRENO: con el navegador delante, la pestaña recuerda la última app
+  real y mira desde ella, rotulándolo «ÚLTIMA APP · …».
+- Verificado contra el SAP real: el árbol pinta el menú clínico de la sesión (los pisos del
+  hospital) con la arista aprendida «Atrás (F3) → SESSION_MANAGER·0100».
+
+
 **Veredicto sobre tu duda:** el visor NO está sobre el concepto viejo. Lee Neo4j en
 `127.0.0.1:7474`, y eso es la proyección del núcleo nuevo (`ProyectorNeo4j`), que corre en cada
 observación. «Aquí» y «Mapa completo» ya son nodos-ubicación con vivo/recordado. Lo que le falta

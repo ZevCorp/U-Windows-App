@@ -149,6 +149,8 @@ internal static class Contrato
         Prueba("72. la sesión SAP es la de la ventana que está DELANTE, no «la primera»", LaSesionEsLaDeDelante);
         Prueba("73. el terreno por delante se CUENTA: tras cada puerta cruzada, lo que recuerda allí", ElTerrenoPorDelanteSeCuenta);
         Prueba("74. el terreno por delante no INVENTA: lo no cruzado es «por descubrir» y la lista no ahoga", ElTerrenoNoInventa);
+        Prueba("75. el visor recibe el terreno como ÁRBOL: vivo, recordado y destino, sin inventar", ElArbolDelVisor);
+        Prueba("76. cada batch deja rastro consultable, y el anillo no crece sin tope", ElRastroDeLosBatches);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -981,6 +983,60 @@ internal static class Contrato
         Debe(new TerrenoPorDelante(g).Cuenta("sapgui://QAS/NWP1/FRAME/0100", "no-existe", 1)
                 .Contains("no"),
             "una puerta que no está ni en memoria se dice, no se adivina");
+    }
+
+    /// <remarks>
+    /// T2 DEL PLAN: la misma pregunta del terreno por delante, contestada en DATOS para que el
+    /// visor la pinte — vivo en trazo lleno, recordado punteado, que es la distinción que el
+    /// núcleo ya hace y el dibujo solo repite. El visor no lee al pintor ni a Neo4j para esto:
+    /// lee el grafo por el 8792, la fuente sin proyección de por medio.
+    /// </remarks>
+    private static void ElArbolDelVisor(SurfaceMap _)
+    {
+        var g = TerrenoDeTres();   // estamos en el menú; lo del censo es memoria
+        var raiz = TerrenoParaElVisor.Arbol(g, "sapgui://QAS/NWP1/FRAME/0100", 2);
+
+        Debe(raiz.Puertas.Any(p => p.Etiqueta == "Censo Pacientes" && p.Vivo),
+            "lo vivo de aquí llega marcado vivo");
+        var censo = raiz.Puertas.First(p => p.Etiqueta == "Censo Pacientes");
+        Debe(censo.Destino.EndsWith("ssubCENSO", StringComparison.Ordinal),
+            "una puerta cruzada lleva su destino");
+        Debe(raiz.Puertas.Any(p => p.Etiqueta == "comando" && p.Destino.Length == 0),
+            "una puerta sin cruzar va SIN destino: el árbol tampoco inventa");
+
+        var dentro = raiz.Dentro.FirstOrDefault(d => d.Id.EndsWith("ssubCENSO", StringComparison.Ordinal));
+        Debe(dentro != null, "detrás de la cruzada viene la pantalla recordada");
+        Debe(dentro != null && dentro.Puertas.Any(p => p.Etiqueta == "Crear Triage" && !p.Vivo),
+            "…y lo de allí llega como RECORDADO (no vivo): no estamos allí");
+        Debe(dentro != null && dentro.Dentro.Any(d2 => d2.Id.EndsWith("subTRIAGE", StringComparison.Ordinal)),
+            "la profundidad sigue por las cruzadas de allí");
+
+        Debe(TerrenoParaElVisor.Arbol(g, "sapgui://QAS/NWP1/FRAME/0100", 1).Dentro
+                .First(d => d.Id.EndsWith("ssubCENSO", StringComparison.Ordinal)).Dentro.Count == 0,
+            "el tope de niveles corta de verdad");
+    }
+
+    /// <remarks>
+    /// LO QUE EL BATCH CONTESTÓ SE PUEDE VOLVER A MIRAR. Hasta ahora el relato de cada tanda vivía
+    /// solo en la respuesta MCP y en el log — el visor no tenía de dónde pintarlo. Un anillo corto:
+    /// lo último manda, lo viejo se cae, y no crece sin tope (un visor que pagina historia es un
+    /// archivo, no un pulso).
+    /// </remarks>
+    private static void ElRastroDeLosBatches(SurfaceMap _)
+    {
+        var r = new RastroDeBatches(tope: 3);
+        r.Agrega("hice 1 de 1: A");
+        r.Agrega("hice 2 de 2: B");
+        Debe(r.Ultimas().Count == 2 && r.Ultimas()[0].Cuenta.EndsWith(": B", StringComparison.Ordinal),
+            "lo más reciente sale primero");
+
+        r.Agrega("hice 0 de 3: C");
+        r.Agrega("hice 3 de 3: D");
+        Debe(r.Ultimas().Count == 3, "el anillo respeta su tope");
+        Debe(!r.Ultimas().Any(c => c.Cuenta.EndsWith(": A", StringComparison.Ordinal)),
+            "…y lo que se cae es LO MÁS VIEJO");
+        Debe(r.Ultimas()[0].Cuenta.EndsWith(": D", StringComparison.Ordinal),
+            "el último batch es el primero de la lista");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
