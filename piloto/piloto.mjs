@@ -70,7 +70,7 @@ for await (const msg of query({
     systemPrompt: SISTEMA,
     mcpServers: { u: { type: "http", url: "http://127.0.0.1:8790/mcp" } },
     allowedTools: ["mcp__u__*"],
-    maxTurns: 15,
+    maxTurns: 30,
     // EL CLAUDE DE LA MÁQUINA, no el que trae el SDK en node_modules: la sesión de esta máquina ya
     // está autenticada con él, y el empaquetado intentó refrescar un OAuth que no era el suyo —
     // «OAuth session expired and could not be refreshed» (2026-08-24, primera corrida).

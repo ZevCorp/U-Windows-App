@@ -218,6 +218,7 @@ El ciclo que pediste, ya con todo conectado:
 | 2026-08-30 | **Piloto sobre terreno enseñado**: Triage→Easy→Triage | **12 ✓** | **3 pasos / 3 pantallas** | — |
 | 2026-08-30 | R9: dos «Triage» (Adultos/Pediatría) — LA CARPETA ES PARTE DEL NOMBRE (81) + fila desplazada por identidad (80) | — | — | vista:Urgencias Adultos Triage; RutaDelNodo con cache |
 | 2026-08-30 | **Flujo clínico completo por batch**: fila GIRALDO + botón Triage JUNTOS → pantalla del triage del paciente (SAPLY000) | — ✓ | **2 pasos de rejilla / 1 batch** | regla enseñada al piloto: fila+botón juntos (la selección caduca) |
+| 2026-08-30 | **🏁 PILOTO 0→100: «ábrele el triage a GIRALDO»** — árbol con carpeta + fila y botón juntos | **21 ✓ · 2 batches · 67 s** | **4 pantallas** | la meta del plan, cumplida sobre terreno enseñado a mano |
 
 ---
 
