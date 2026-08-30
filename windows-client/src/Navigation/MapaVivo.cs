@@ -374,7 +374,10 @@ public sealed class MapaVivo : IDisposable
                     : AQuienSeLeDioClic.Resolver(
                         _grafo.DesdeAqui(_anterior)
                               .Select(a => (a.Que.Selector, a.Que.Etiqueta, a.Que.Tipo)).ToList(),
-                        clic.Label, clic.ControlType);
+                        clic.Label, clic.ControlType,
+                        // La identidad exacta del clic, si la trae (los nombrados por SAP la
+                        // traen): con ella entre lo conocido no hay nada que adivinar (promesa 26).
+                        clic.Selector);
                 string selectorObservado = atribucion.Selector;
 
                 if (clic != null && reciente && sinEstrenar && despuesDeLlegar && salioDeAlli

@@ -42,9 +42,18 @@ public static class AQuienSeLeDioClic
     /// </summary>
     public static Atribucion Resolver(
         IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> conocidos,
-        string etiqueta, string tipo)
+        string etiqueta, string tipo, string selector = "")
     {
         if (conocidos.Count == 0 || string.IsNullOrEmpty(etiqueta)) return new("", 0);
+
+        // UN CLIC QUE TRAE IDENTIDAD EXACTA NO SE RE-ADIVINA (promesa 26, 2026-08-30): el clic en
+        // «Triage» llegó con su selector de árbol+clave y re-adivinar por etiqueta lo estrelló
+        // contra tres homónimos. La valla anti-homónimos es para clics que llegan SOLO con
+        // etiqueta; la identidad, si el observador la conoce, ES la respuesta — y si no la
+        // conoce, no salta ninguna valla: se cae a la regla de siempre.
+        if (!string.IsNullOrEmpty(selector)
+            && conocidos.Any(c => c.Selector.Equals(selector, StringComparison.Ordinal)))
+            return new(selector, 1);
 
         var exactos = conocidos.Where(c =>
             c.Etiqueta.Equals(etiqueta, StringComparison.OrdinalIgnoreCase) &&

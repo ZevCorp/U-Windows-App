@@ -48,6 +48,7 @@ internal static class Contrato
         Prueba("23. la dirección de una página sale de su id, con el esquema que se vio", LaUrlSaleDelId);
         Prueba("24. estar en el sitio ES llegar, si lo que se pidió era el sitio", LlegarAlSitioEsLlegar);
         Prueba("25. una PÁGINA no se alcanza activando el dominio: o está delante, o se va por su dirección", UnaPaginaNoSeAlcanzaPorElDominio);
+        Prueba("26. un clic que trae identidad EXACTA no se re-adivina: los homónimos no lo frenan", ElClicConIdentidadNoSeReadivina);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -609,6 +610,38 @@ internal static class Contrato
         Debe(!ComoMePongoDelante.EsLaMismaPagina("uia://explorer.exe/documentos",
                 "es.wikipedia.org", "/documentos"),
             "y lo que no es web no casa con ninguna pestaña");
+    }
+
+    /// <remarks>
+    /// EL ÚLTIMO CANDADO DE LA RONDA 4 (2026-08-30): el clic del usuario en «Triage» llegó
+    /// nombrado con su selector exacto (árbol + clave de nodo) y el juez lo TIRÓ para re-adivinar
+    /// por etiqueta — y «Triage» nombra a tres cosas en esa pantalla (la fila del árbol, el botón
+    /// de la rejilla…), así que el salto quedó sin atribuir. La valla anti-homónimos es correcta
+    /// para los clics que llegan solo con etiqueta (los de UIA, cuyo selector usa otro
+    /// vocabulario); un clic cuya identidad YA es la del observador no tiene nada que adivinar.
+    /// </remarks>
+    private static void ElClicConIdentidadNoSeReadivina()
+    {
+        var conocidos = new (string Selector, string Etiqueta, string Tipo)[]
+        {
+            ("sap:shell#node=vw00722", "Triage", "GuiTreeFila"),
+            ("sap:grid#tbbtn=ZMEDTRIAGE", "Triage", "GuiGridBoton"),
+            ("sap:shell#node=vw00990", "Triage", "GuiTreeFila"),
+        };
+
+        var directa = AQuienSeLeDioClic.Resolver(conocidos, "Triage", "GuiTreeFila",
+            selector: "sap:shell#node=vw00722");
+        Debe(directa.Selector == "sap:shell#node=vw00722",
+            "con la identidad exacta entre lo conocido, esa es la respuesta — tres homónimos no la frenan");
+
+        var adivinada = AQuienSeLeDioClic.Resolver(conocidos, "Triage", "GuiTreeFila", selector: "");
+        Debe(adivinada.Selector == "" && adivinada.Candidatos > 1,
+            "sin identidad, la valla de siempre: entre homónimos NO se adivina");
+
+        var ajena = AQuienSeLeDioClic.Resolver(conocidos, "Triage", "GuiTreeFila",
+            selector: "sap:shell#node=vw99999");
+        Debe(ajena.Selector == "" && ajena.Candidatos > 1,
+            "una identidad que el observador NO conoce no salta la valla: se cae a la regla de siempre");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
