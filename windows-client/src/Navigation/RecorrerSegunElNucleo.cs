@@ -57,6 +57,14 @@ public sealed class RecorrerSegunElNucleo
     /// juzgar la pantalla de antes.</summary>
     public int EsperaMaximaMs { get; init; } = 1800;
 
+    /// <summary>
+    /// Qué selectores se pueden INTENTAR aunque no estén a la vista (promesa 80). El batch no
+    /// sabe de mundos: quien cablea decide — hoy, las filas de árbol de SAP (sap:…#node=), cuya
+    /// clave cargada se alcanza por identidad: seleccionarla la TRAE a la vista. La verificación
+    /// por consecuencia sigue juzgando; sin delegado, la compuerta muerde como siempre.
+    /// </summary>
+    public Func<string, bool>? AccionableAunSinVerse { get; init; }
+
     public Resultado Recorre(IReadOnlyList<Paso> pasos)
     {
         if (pasos.Count == 0)
@@ -219,6 +227,22 @@ public sealed class RecorrerSegunElNucleo
 
                 if (ido >= EsperaMaximaMs)
                 {
+                    // LA FILA DESPLAZADA SE INTENTA (promesa 80): conocida y accionable por
+                    // identidad —lo dice el delegado, no el batch—, se pulsa aunque no se vea;
+                    // la consecuencia juzga. El atasco real: tras un relogin el árbol de NWP1
+                    // quedó arriba y «Triage» —cruzada, con destino— quedó fuera de la vista
+                    // (2026-08-30, la corrida completa del piloto).
+                    if (AccionableAunSinVerse != null)
+                    {
+                        var desplazada = todos.FirstOrDefault(a => !a.Vivo
+                            && AccionableAunSinVerse(a.Que.Selector)
+                            && (a.Que.Selector.Equals(exit, StringComparison.Ordinal)
+                                || Nombres.Aplanar(a.Que.Etiqueta) == Nombres.Aplanar(exit)
+                                || (a.Destino.Length > 0
+                                    && Nombres.Aplanar(Cola(a.Destino)) == Nombres.Aplanar(exit))));
+                        if (desplazada != null) return (desplazada, nada, null, aqui);
+                    }
+
                     // Se acabó la espera: se redacta el motivo MÁS útil que el terreno permita.
                     if (porSelector != null)
                         return (null, nada, $"«{exit}» lo conozco aquí pero AHORA no lo veo.", aqui);

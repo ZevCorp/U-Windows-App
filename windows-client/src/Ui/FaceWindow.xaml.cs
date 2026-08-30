@@ -660,7 +660,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // Una página web tarda en cargar Y en ser leída (la pantalla se relee cada 900 ms), así
             // que la compuerta espera más que en una app nativa. Sale en cuanto lo ve: una pantalla
             // rápida no paga la espera de una lenta.
-            { EsperaMaximaMs = 4000 };
+            {
+                EsperaMaximaMs = 4000,
+                // Filas de árbol y de rejilla de SAP: su clave cargada se alcanza por identidad
+                // aunque estén desplazadas — seleccionarlas las trae a la vista (promesa 80).
+                AccionableAunSinVerse = sel => sel.StartsWith("sap:", StringComparison.OrdinalIgnoreCase)
+                    && (sel.Contains("#node=", StringComparison.Ordinal)
+                        || sel.Contains("#row=", StringComparison.Ordinal)),
+            };
             // EL RASTRO (promesa 76): cada relato de batch queda en el anillo que sirve el 8792
             // para la pestaña «Terreno» del visor.
             var rastroDeBatches = new Navigation.RastroDeBatches();

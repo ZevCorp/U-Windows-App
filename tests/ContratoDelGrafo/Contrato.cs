@@ -154,6 +154,7 @@ internal static class Contrato
         Prueba("77. el cruce HUMANO en SAP también enseña: el clic se nombra por la puerta de SAP", ElClicHumanoEnSapEnsena);
         Prueba("78. la REJILLA entra al terreno: sus botones y sus filas visibles son puertas", LaRejillaEntraAlTerreno);
         Prueba("79. en el Puesto de trabajo la VISTA elegida es parte del LUGAR", LaVistaEsElLugar);
+        Prueba("80. una fila CONOCIDA de un árbol a la vista se alcanza por identidad, aunque esté desplazada", LaFilaDesplazadaSeAlcanza);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1178,6 +1179,60 @@ internal static class Contrato
         Debe(U.Graph.Surfaces.LaVistaEsElLugarDelPuesto.Sufijo(
                 "ssubVIEW_SCREEN:SAPLN1LSTAMB:0007", "Censo / Pacientes") == "vista:Censo Pacientes",
             "la barra se limpia: el separador de la identidad no puede venir dentro del nombre");
+    }
+
+    /// <remarks>
+    /// EL ATASCO DE LA CORRIDA COMPLETA (2026-08-30): tras el relogin, el árbol de NWP1 quedó
+    /// arriba del todo y «Triage» —conocida, cruzada, con destino— quedó fuera de la vista. La
+    /// compuerta contestó «lo conozco pero AHORA no lo veo» y el piloto se quedó dando vueltas
+    /// (el scroll genérico mueve otro panel). Pero en SAP una clave CARGADA se alcanza por
+    /// identidad: seleccionarla LA TRAE a la vista — no es pulsar de memoria a ciegas, y la
+    /// verificación por consecuencia sigue juzgando el resultado.
+    ///
+    /// El batch NO sabe de SAP (regla del despacho): recibe un delegado que dice qué selectores
+    /// son accionables sin verse, y quién lo cablea decide (hoy: filas de árbol sap:…#node=).
+    /// Sin delegado, la compuerta muerde como siempre — la promesa 15 sigue intacta para todo lo
+    /// demás.
+    /// </remarks>
+    private static void LaFilaDesplazadaSeAlcanza(SurfaceMap _)
+    {
+        // «Triage» se observó una vez (con su clave de árbol) y ahora está desplazada: recordada,
+        // no viva. El mundo falso la deja cruzar igual — como SAP.
+        Nucleo.Grafo Mundo()
+        {
+            var g = new Nucleo.Grafo();
+            g.Observar("sapgui://q/n", new[]
+            {
+                new Nucleo.Elemento("sap:shell#node=vw1", "Triage", "GuiTreeFila"),
+                new Nucleo.Elemento("sap:b", "Otro", "GuiButton"),
+            });
+            g.Observar("sapgui://q/n", new[] { new Nucleo.Elemento("sap:b", "Otro", "GuiButton") });
+            return g;
+        }
+        var rutas = new Dictionary<string, string> { ["sapgui://q/n|sap:shell#node=vw1"] = "sapgui://q/n/vista" };
+
+        var (batch, donde, tocados) = BatchCon(Mundo(), "sapgui://q/n", rutas);
+        var sinDelegado = batch.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Triage") });
+        Debe(sinDelegado.Hechos == 0 && sinDelegado.Cuenta.Contains("AHORA no lo veo"),
+            "sin delegado, la compuerta muerde como siempre: lo desplazado no se promete");
+
+        var g2 = Mundo();
+        string donde2 = "sapgui://q/n";
+        var pulsar2 = new PulsarSegunElNucleo(g2, () => donde2,
+            (sel, et) => { if (rutas.TryGetValue(donde2 + "|" + sel, out var alla)) donde2 = alla; return true; })
+        { EsperaMaximaMs = 240 };
+        var batch2 = new RecorrerSegunElNucleo(g2, () => donde2, pulsar2)
+        {
+            EsperaMaximaMs = 240,
+            AccionableAunSinVerse = sel => sel.Contains("#node=", StringComparison.Ordinal),
+        };
+        var r = batch2.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Triage") });
+        Debe(r.Hechos == 1 && r.Donde == "sapgui://q/n/vista",
+            "con el delegado, la fila desplazada SE INTENTA por identidad y la consecuencia manda");
+
+        var r2 = batch2.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Otro paso inexistente") });
+        Debe(r2.Hechos == 0 && r2.Cuenta.Contains("no lo conozco"),
+            "…y lo desconocido sigue siendo desconocido: el delegado no abre esa puerta");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
