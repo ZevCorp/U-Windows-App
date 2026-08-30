@@ -244,6 +244,16 @@ public sealed class SurfaceLocator : IDisposable
         {
             try
             {
+                // UNA PANTALLA EN TRÁNSITO NO SE ACUÑA. Durante el round-trip SAP actualiza la
+                // transacción ANTES que el programa, y sondeando cada ~300 ms se llegó a acuñar la
+                // QUIMERA «sapgui://QAS/NWP1/SAPLSMTR_NAVIGATION/0100» — una pantalla que no
+                // existe. El clic humano sobre «NWP1» quedó explicando un salto partido en dos
+                // (real→quimera→real) y la atribución lo rechazó: la quimera no tiene puertas
+                // (2026-08-30, cazada a cuatro ojos con el usuario). SAP mismo dice cuándo está
+                // en tránsito: Busy. Mientras tanto se sostiene la ubicación anterior, que sigue
+                // siendo la última pantalla REAL que hubo.
+                if (_sap.IsBusy() && Current != null) return Current;
+
                 var id = _sap.Identity();
                 if (id.Origin != SurfaceIdentity.Unknown.Origin && id.Url.Length > 0)
                     return new SurfaceLocation(id.Url, id.Origin, id.Pathname);

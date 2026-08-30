@@ -237,9 +237,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _clickWatcher.ResolverSap = (x, y) =>
         {
             var sap = _locator?.SuperficieSap;
-            if (sap == null) return null;
+            if (sap == null) { LogBus.Log("clic-sap", "sin superficie SAP"); return null; }
             var id = _locator?.DondeEstoy()?.Id ?? "";
-            if (!id.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)) return null;
+            if (!id.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
+            {
+                LogBus.Log("clic-sap", $"delante no es SAP («{id}»): que lo intente UIA");
+                return null;
+            }
 
             // RÁPIDO O INÚTIL: el salto de pantalla se procesa ~600 ms tras el clic, y un nombrado
             // que tarde más llega huérfano — pasó de verdad: «Triage» se nombró bien y la arista
@@ -250,17 +254,20 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             List<(string Id, string Type, string Label)> arboles;
             lock (_arbolesVistos) arboles = new(_arbolesVistos);
+            if (arboles.Count == 0) { LogBus.Log("clic-sap", "sin árboles vistos: la observación aún no pasó por aquí"); return null; }
             foreach (var arbol in arboles)
             {
-                var n = sap.SelectedTreeNode(arbol.Id, out _);
-                if (n == null) continue;
+                var n = sap.SelectedTreeNode(arbol.Id, out string porqueNo);
+                if (n == null) { LogBus.Log("clic-sap", $"árbol …{arbol.Id[^Math.Min(30, arbol.Id.Length)..]} sin selección: {porqueNo}"); continue; }
                 bool conocido = seleccionVista.TryGetValue(arbol.Id, out string? antes);
                 seleccionVista[arbol.Id] = n.Value.Key;
+                LogBus.Log("clic-sap", $"árbol …{arbol.Id[^Math.Min(24, arbol.Id.Length)..]} selección {antes ?? "(nueva)"} → {n.Value.Key} «{n.Value.Text}»");
                 if (conocido && antes != n.Value.Key)
                     return Navigation.AtribucionSap.NombraElClic(
                         arbol.Id, arbol.Type, arbol.Label, (n.Value.Key, n.Value.Text));
             }
-            return null;   // ningún árbol cambió: que lo intente UIA (botones de toolbar sí se ven)
+            LogBus.Log("clic-sap", "ningún árbol cambió de selección: que lo intente UIA");
+            return null;
         };
         _clickWatcher.Start();
         _surfaceMap.Clicks = _clickWatcher;
