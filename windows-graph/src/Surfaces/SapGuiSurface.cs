@@ -67,6 +67,9 @@ public sealed class SapGuiSurface : IUiSurface
     /// del Puesto apareciera con esa forma). Solo se consultan cuando el subdynpro es el del
     /// visor genérico (promesa 79).
     /// </summary>
+    /// <summary>La última vista leída con éxito por pantalla (tcode|subdynpro): ver el remark de Identity.</summary>
+    private static readonly Dictionary<string, string> _vistaRecordada = new(StringComparer.OrdinalIgnoreCase);
+
     private static readonly string[] DockTreeCandidates =
     {
         "wnd[0]/shellcont/shellcont/shell/shellcont[0]/shell",
@@ -350,13 +353,27 @@ public sealed class SapGuiSurface : IUiSurface
             // navegación, en los dos amarres conocidos del dock.
             if (sub.StartsWith("ssubVIEW_SCREEN:", StringComparison.OrdinalIgnoreCase))
             {
+                // LA VISTA LEÍDA SE RECUERDA. Los getters de selección PARPADEAN («ningún getter
+                // respondió» a media caminata) y con cada fallo la identidad perdía el «vista:» —
+                // el lugar aleteaba entre la base y la vista, fabricando saltos fantasma que
+                // consumían el clic del usuario (2026-08-30, ronda 5). La vista solo cambia cuando
+                // una lectura EXITOSA dice otra cosa; un fallo momentáneo sostiene la última — la
+                // misma medicina que el Busy le dio a las quimeras de transición.
+                string clave = tcode + "|" + sub;
+                string sufijo = "";
                 foreach (string arbol in DockTreeCandidates)
                 {
                     var n = SelectedTreeNode(arbol, out _);
                     if (n == null) continue;
-                    string sufijo = LaVistaEsElLugarDelPuesto.Sufijo(sub, n.Value.Text);
-                    if (sufijo.Length > 0) { path.Append('/').Append(sufijo); break; }
+                    sufijo = LaVistaEsElLugarDelPuesto.Sufijo(sub, n.Value.Text);
+                    break;
                 }
+                lock (_vistaRecordada)
+                {
+                    if (sufijo.Length > 0) _vistaRecordada[clave] = sufijo;
+                    else _vistaRecordada.TryGetValue(clave, out sufijo);
+                }
+                if (!string.IsNullOrEmpty(sufijo)) path.Append('/').Append(sufijo);
             }
 
             return new SurfaceIdentity(
