@@ -207,6 +207,8 @@ El ciclo que pediste, ya con todo conectado:
 | 2026-08-28 | NWP1+Cirugías (árbol ajeno) | 23 ✗ | 3 de 4 | la fila era de OTRO usuario; parcial honesto ✓ |
 | 2026-08-28 | NWP1+Favoritos, con map_ahead | **10 ✓** | **4 pasos / 2 pantallas** | — |
 | 2026-08-30 | R1-R2 T4 (flujo triage de José, a cuatro ojos) | — | — | tres huecos arreglados: clic humano por selección (77), árbol sin columnas, rejilla ALV (78: 36→49 puertas), y la QUIMERA de transición (Busy no se acuña). El doble clic humano en NWP1 escribió su arista ✓ |
+| 2026-08-30 | R3-R7: enseñar recorriendo (77b/c, 79, 26 + vista pegajosa, frescura del clic) | — | — | el clic humano YA escribe aristas: Easy→NWP1 y NWP1→vista:Triage nacieron de las manos de José |
+| 2026-08-30 | **Piloto sobre terreno enseñado**: Triage→Easy→Triage | **12 ✓** | **3 pasos / 3 pantallas** | — |
 
 ---
 
