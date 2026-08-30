@@ -264,10 +264,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 string deDonde;
                 lock (_arbolesVistos) { arboles = new(_arbolesVistos); deDonde = _ubicacionDeArboles; }
 
-                string ahora = _locator?.DondeEstoy()?.Id ?? "";
-                if (arboles.Count == 0 || !deDonde.Equals(ahora, StringComparison.OrdinalIgnoreCase))
+                // LA REFERENCIA ES LA PANTALLA DEL CLIC, no la de ahora: el clic navega, la
+                // ubicación cambia ~600 ms después, y comparar contra «ahora» descartaba los
+                // árboles CORRECTOS —los de donde se clicó— y el nombre llegaba 3 s tarde,
+                // perdiendo la carrera contra el salto (2026-08-30, ronda 6).
+                if (arboles.Count == 0 || !deDonde.Equals(id, StringComparison.OrdinalIgnoreCase))
                 {
-                    LogBus.Log("clic-sap", $"árboles de «{(deDonde.Length > 0 ? deDonde[(deDonde.LastIndexOf('/') + 1)..] : "nadie")}» y estamos en otra pantalla: espero a la observación");
+                    LogBus.Log("clic-sap", $"árboles de «{(deDonde.Length > 0 ? deDonde[(deDonde.LastIndexOf('/') + 1)..] : "nadie")}» y el clic fue en «{id[(id.LastIndexOf('/') + 1)..]}»: espero a la observación");
                     continue;
                 }
 
