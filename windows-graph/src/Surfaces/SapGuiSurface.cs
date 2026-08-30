@@ -365,7 +365,10 @@ public sealed class SapGuiSurface : IUiSurface
                 {
                     var n = SelectedTreeNode(arbol, out _);
                     if (n == null) continue;
-                    sufijo = LaVistaEsElLugarDelPuesto.Sufijo(sub, n.Value.Text);
+                    // CON SU CARPETA (promesa 81): «Triage» de adultos y de pediatría son vistas
+                    // DISTINTAS, y con la hoja sola sus aprendizajes se mezclaban.
+                    string ruta = RutaDelNodo(arbol, n.Value.Key);
+                    sufijo = LaVistaEsElLugarDelPuesto.Sufijo(sub, ruta.Length > 0 ? ruta : n.Value.Text);
                     break;
                 }
                 lock (_vistaRecordada)
@@ -903,7 +906,13 @@ public sealed class SapGuiSurface : IUiSurface
     /// Una fila VISIBLE del árbol, con la posición que SAP le atribuye. <paramref name="Top"/> va relativo
     /// al borde del árbol y <paramref name="Height"/> en píxeles: ambos LEÍDOS, nunca estimados.
     /// </summary>
-    public sealed record TreeRow(string Key, string Text, int Top, int Height, bool IsFolder);
+    /// <param name="Ruta">
+    /// El nombre CON SU CARPETA («Urgencias Adultos/Triage»), o vacío si la fila es de primer
+    /// nivel o la ruta no se pudo leer. Existe porque hay un «Triage» por servicio y la hoja sola
+    /// mandó al piloto al de pediatría (2026-08-30, lo vio el usuario) — la lección que este
+    /// archivo ya sabía: el texto no identifica la fila, la ruta sí.
+    /// </param>
+    public sealed record TreeRow(string Key, string Text, int Top, int Height, bool IsFolder, string Ruta = "");
 
     /// <summary>
     /// Geometría REAL de una fila, si SAP la suelta. Devuelve alto 0 si no.
@@ -1005,6 +1014,57 @@ public sealed class SapGuiSurface : IUiSurface
     /// (típicamente 0), así que ese grupo se descarta en bloque. Es la regla que evita confundir "invisible"
     /// con "primera fila" sin tener que adivinar cuál es el centinela.
     /// </summary>
+    /// <summary>Cache de rutas por (árbol|clave): las claves del menú son estables por sesión.</summary>
+    private static readonly Dictionary<string, string> _rutaDeNodo = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// EL NOMBRE CON SU CARPETA: «Urgencias Adultos/Triage». Ancestros por GetNodePathByKey →
+    /// GetNodeKeyByPath → texto (columna primero, texto plano de respaldo). Vacío si no hay
+    /// ancestros o la API no contesta — la hoja sola sigue valiendo entonces.
+    /// </summary>
+    public string RutaDelNodo(string treeId, string nodeKey)
+    {
+        string cacheKey = treeId + "|" + nodeKey;
+        lock (_rutaDeNodo)
+            if (_rutaDeNodo.TryGetValue(cacheKey, out string? ya)) return ya;
+
+        string resultado = "";
+        try
+        {
+            dynamic? session = Session();
+            dynamic? tree = session?.FindById(SapSelector.Normalize(treeId), false);
+            if (tree != null)
+            {
+                var columns = TreeColumnNames(tree);
+                string hoja = NodeText(tree, nodeKey, columns);
+                string ruta = "";
+                try { ruta = Str(tree.GetNodePathByKey(nodeKey)); } catch { }
+                var tramos = new List<string>();
+                if (ruta.Length > 0 && hoja.Length > 0)
+                {
+                    var partes = ruta.Split('\\');
+                    string acum = "";
+                    for (int i = 0; i + 1 < partes.Length; i++)
+                    {
+                        acum = acum.Length == 0 ? partes[i] : acum + "\\" + partes[i];
+                        try
+                        {
+                            string ak = Str(tree.GetNodeKeyByPath(acum));
+                            string atx = NodeText(tree, ak, columns);
+                            if (atx.Length > 0) tramos.Add(atx);
+                        }
+                        catch { }
+                    }
+                    if (tramos.Count > 0) resultado = string.Join("/", tramos) + "/" + hoja;
+                }
+            }
+        }
+        catch { /* sin ruta, la hoja sola sigue valiendo */ }
+
+        lock (_rutaDeNodo) _rutaDeNodo[cacheKey] = resultado;
+        return resultado;
+    }
+
     public IReadOnlyList<TreeRow> VisibleTreeRows(string treeId, int treeHeight, out string reason)
     {
         var rows = new List<TreeRow>();
@@ -1039,7 +1099,8 @@ public sealed class SapGuiSurface : IUiSurface
 
         foreach (var p in placed.Where(p => !bogus.Contains(p.Top)).OrderBy(p => p.Top))
             rows.Add(new TreeRow(
-                p.Key, NodeText(tree, p.Key, columns), p.Top, p.Height, BoolOf(tree, "IsFolder", p.Key)));
+                p.Key, NodeText(tree, p.Key, columns), p.Top, p.Height, BoolOf(tree, "IsFolder", p.Key),
+                RutaDelNodo(treeId, p.Key)));
 
         reason = $"{rows.Count} filas visibles de {keys.Count} claves" +
                  (dropped > 0 ? $"; {dropped} descartadas por compartir posición (centinela)" : "");

@@ -225,11 +225,14 @@ public static class SentidoSap
             foreach (var fila in filas ?? Array.Empty<SapGuiSurface.TreeRow>())
             {
                 if (fila.Key.Length == 0) continue;
-                // El texto es lo que el operador lee; si el árbol no lo suelta, la clave al menos
-                // identifica la fila — callarla sería perder una puerta que SÍ se puede accionar.
+                // LA CARPETA ES PARTE DEL NOMBRE (promesa 81): hay un «Triage» por servicio, y la
+                // hoja sola mandó al piloto al de pediatría. Si la ruta no vino, la hoja; y si el
+                // árbol no suelta ni eso, la clave — callarla sería perder una puerta accionable.
+                string etiquetaFila = fila.Ruta.Length > 0 ? fila.Ruta
+                    : fila.Text.Length > 0 ? fila.Text : fila.Key;
                 r.Add(new Nucleo.Elemento(
                     SapSelector.ByNode(arbol, fila.Key),
-                    fila.Text.Length > 0 ? fila.Text : fila.Key,
+                    etiquetaFila,
                     fila.IsFolder ? "GuiTreeCarpeta" : "GuiTreeFila"));
             }
 

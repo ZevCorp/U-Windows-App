@@ -303,9 +303,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     if (n != null)
                     {
                         bool corrobora = fila is { } fx && fx.Key == n.Value.Key;
-                        LogBus.Log("clic-sap", $"clic en el árbol → selección «{n.Value.Text}»"
+                        // El nombre CON CARPETA de la observación, si lo hay: el juez casa por
+                        // etiqueta y las puertas ya se llaman así (promesa 81).
+                        string textoSel = arbol.Filas.FirstOrDefault(fl => fl.Key == n.Value.Key).Text ?? "";
+                        if (string.IsNullOrEmpty(textoSel)) textoSel = n.Value.Text;
+                        LogBus.Log("clic-sap", $"clic en el árbol → selección «{textoSel}»"
                             + (corrobora ? " · la geometría corrobora" : ""));
-                        return Nombrar(arbol, (n.Value.Key, n.Value.Text));
+                        return Nombrar(arbol, (n.Value.Key, textoSel));
                     }
 
                     if (fila is { } fsolo)
@@ -465,7 +469,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                                 {
                                     _arbolesVistos.Add((arbol.Id, arbol.Type, arbol.Label,
                                         arbol.ScreenLeft, arbol.ScreenTop, arbol.Width, arbol.Height,
-                                        suyas.Select(fl => (fl.Key, fl.Text, fl.Top, fl.Height, fl.IsFolder)).ToList()));
+                                        suyas.Select(fl => (fl.Key, fl.Ruta.Length > 0 ? fl.Ruta : fl.Text, fl.Top, fl.Height, fl.IsFolder)).ToList()));
                                     _ubicacionDeArboles = _locator?.DondeEstoy()?.Id ?? "";
                                 }
                                 if (suyas.Count > 0) filas[arbol.Id] = suyas;

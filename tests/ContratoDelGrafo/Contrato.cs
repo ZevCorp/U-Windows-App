@@ -155,6 +155,7 @@ internal static class Contrato
         Prueba("78. la REJILLA entra al terreno: sus botones y sus filas visibles son puertas", LaRejillaEntraAlTerreno);
         Prueba("79. en el Puesto de trabajo la VISTA elegida es parte del LUGAR", LaVistaEsElLugar);
         Prueba("80. una fila CONOCIDA de un árbol a la vista se alcanza por identidad, aunque esté desplazada", LaFilaDesplazadaSeAlcanza);
+        Prueba("81. la CARPETA es parte del nombre: dos «Triage» en carpetas distintas son dos puertas distinguibles", LaCarpetaEsParteDelNombre);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1233,6 +1234,41 @@ internal static class Contrato
         var r2 = batch2.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Otro paso inexistente") });
         Debe(r2.Hechos == 0 && r2.Cuenta.Contains("no lo conozco"),
             "…y lo desconocido sigue siendo desconocido: el delegado no abre esa puerta");
+    }
+
+    /// <remarks>
+    /// LO VIO JOSÉ DAVID EN LA RONDA FINAL (2026-08-30): hay un «Triage» bajo «Urgencias Adultos»
+    /// y otro bajo «Urgencias Pediatría», y con la hoja sola como nombre el piloto abrió el de
+    /// pediatría (vacío) creyendo que era el suyo — y la identidad «vista:Triage» mezclaba los
+    /// aprendizajes de ambos. El propio archivo ya sabía la lección para otro caso: «"Órdenes
+    /// Clínicas" aparece 17 veces, una por servicio; el texto nunca identifica la fila — la RUTA
+    /// sí». El sistema debe manejar la estructura de carpetas de SAP: la carpeta es parte del
+    /// nombre.
+    /// </remarks>
+    private static void LaCarpetaEsParteDelNombre(SurfaceMap _)
+    {
+        const string arbol = "wnd[0]/shellcont/shell";
+        var filas = new Dictionary<string, IReadOnlyList<U.Graph.Surfaces.SapGuiSurface.TreeRow>>
+        {
+            [arbol] = new[]
+            {
+                new U.Graph.Surfaces.SapGuiSurface.TreeRow("vw00722", "Triage", 10, 16, false,
+                    Ruta: "Urgencias Adultos/Triage"),
+                new U.Graph.Surfaces.SapGuiSurface.TreeRow("vw00736", "Triage", 40, 16, false,
+                    Ruta: "Urgencias Pediatría/Triage"),
+                new U.Graph.Surfaces.SapGuiSurface.TreeRow("vw00001", "Favoritos", 70, 16, true),
+            },
+        };
+        var elementos = SentidoSap.Traducir(Array.Empty<U.Graph.Surfaces.SapVisualElement>(), filas, null);
+
+        Debe(elementos.Any(e => e.Etiqueta == "Urgencias Adultos/Triage"
+                             && e.Selector == "sap:" + arbol + "#node=vw00722"),
+            "el Triage de adultos se llama con su carpeta, y conserva su clave");
+        Debe(elementos.Any(e => e.Etiqueta == "Urgencias Pediatría/Triage"
+                             && e.Selector == "sap:" + arbol + "#node=vw00736"),
+            "…y el de pediatría con la suya: dos puertas DISTINGUIBLES, que era todo el problema");
+        Debe(elementos.Any(e => e.Etiqueta == "Favoritos"),
+            "sin ruta que contar, la hoja se llama como siempre: nada más cambia");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
