@@ -2271,6 +2271,15 @@ public sealed class SapGuiSurface : IUiSurface
         var columns = TreeColumnNames(tree);
         string wanted = (step.Label ?? "").Trim();
 
+        // LA HOJA DE UNA ETIQUETA CON CARPETA ES EL RÓTULO. Desde la promesa 81 las puertas se
+        // llaman «Favoritos/NWP1 - IS-H: …», y el árbol vivo contesta la hoja sola — comparar la
+        // etiqueta entera contra la hoja rechazaba filas CORRECTAS («no pude pulsar», 2026-08-30,
+        // la corrida limpia). La carpeta desambigua en el terreno; aquí, para casar con lo vivo,
+        // vale su hoja. La protección contra árboles de otro usuario sigue: la hoja también tiene
+        /// que cuadrar.
+        int barra = wanted.LastIndexOf('/');
+        if (barra > 0 && barra < wanted.Length - 1) wanted = wanted[(barra + 1)..].Trim();
+
         // 1. La clave tal cual.
         string current = NodeText(tree, recordedKey, columns);
         if (current.Length > 0 &&
