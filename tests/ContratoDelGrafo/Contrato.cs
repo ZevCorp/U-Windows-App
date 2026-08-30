@@ -153,6 +153,7 @@ internal static class Contrato
         Prueba("76. cada batch deja rastro consultable, y el anillo no crece sin tope", ElRastroDeLosBatches);
         Prueba("77. el cruce HUMANO en SAP también enseña: el clic se nombra por la puerta de SAP", ElClicHumanoEnSapEnsena);
         Prueba("78. la REJILLA entra al terreno: sus botones y sus filas visibles son puertas", LaRejillaEntraAlTerreno);
+        Prueba("79. en el Puesto de trabajo la VISTA elegida es parte del LUGAR", LaVistaEsElLugar);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1086,6 +1087,21 @@ internal static class Contrato
             "sin etiqueta no hay paso: la misma valla que el camino UIA");
         Debe(AtribucionSap.NombraElClic("", "GuiButton", "Continuar", nodo: null) == null,
             "sin Id no hay identidad, y sin identidad no se atribuye nada");
+
+        // EL PUNTO CIEGO DEL CAMBIO DE SELECCIÓN (ronda 3, 2026-08-30): el clic del usuario en
+        // «Triage» cayó en la fila YA seleccionada de su visita anterior — sin cambio, sin nombre.
+        // La geometría lo resuelve: si el punto del clic cae dentro del rectángulo de la fila,
+        // esa fila ES el clic, cambie o no cambie la selección.
+        var filasConCaja = new (string Key, string Text, int Top, int Height)[]
+        {
+            ("vw00722", "Triage", 90, 30), ("vw00723", "Consulta", 120, 30),
+        };
+        Debe(AtribucionSap.FilaEnElPunto(yLocal: 105, filasConCaja) is { } f1 && f1.Key == "vw00722",
+            "el punto dentro del rectángulo nombra la fila, aunque ya estuviera seleccionada");
+        Debe(AtribucionSap.FilaEnElPunto(yLocal: 121, filasConCaja) is { } f2 && f2.Key == "vw00723",
+            "…y el límite entre filas respeta a la de abajo");
+        Debe(AtribucionSap.FilaEnElPunto(yLocal: 400, filasConCaja) == null,
+            "un punto fuera de toda fila no nombra nada: mejor mudo que equivocado");
     }
 
     /// <remarks>
@@ -1123,6 +1139,37 @@ internal static class Contrato
 
         Debe(!elementos.Any(e => e.Etiqueta == "sin id"),
             "un botón sin id no entra: sin identidad no hay puerta");
+    }
+
+    /// <remarks>
+    /// EL BLOQUEO DE LA RONDA 3 (2026-08-30): el usuario clicó «Consulta» y luego «Triage», el
+    /// resolver nombró los dos clics… y no se aprendió nada, porque NO HUBO SALTO: ambas vistas
+    /// son el visor genérico de listas (ssubVIEW_SCREEN:SAPLN1LSTAMB:0007) y compartían identidad.
+    /// El propio remark de Identity lo anticipó: «si algún día dos paneles distintos resultan
+    /// indistinguibles sin subdynpro, se extiende AQUÍ». Llegó el día.
+    ///
+    /// El discriminador correcto es semántico: en el Puesto de trabajo, la fila seleccionada del
+    /// árbol de navegación ES la vista que la pantalla muestra — cambiarla ES navegar. Fuera del
+    /// patrón del Puesto (subdynpros normales) NO se toca nada: en Easy Access la selección cambia
+    /// sin navegar, y una identidad que aletea con cada clic sería peor que una gruesa.
+    /// </remarks>
+    private static void LaVistaEsElLugar(SurfaceMap _)
+    {
+        Debe(U.Graph.Surfaces.LaVistaEsElLugarDelPuesto.Sufijo(
+                "ssubVIEW_SCREEN:SAPLN1LSTAMB:0007", "Triage") == "vista:Triage",
+            "en el visor genérico del Puesto, la vista elegida entra al lugar");
+        Debe(U.Graph.Surfaces.LaVistaEsElLugarDelPuesto.Sufijo(
+                "ssubVIEW_SCREEN:SAPLN1LSTAMB:0007", "Consulta") == "vista:Consulta",
+            "…y otra vista es OTRO lugar: eso es lo que faltaba para que el salto exista");
+        Debe(U.Graph.Surfaces.LaVistaEsElLugarDelPuesto.Sufijo(
+                "subPATEINST:SAPLNCHD:2000", "Triage") == "",
+            "fuera del patrón del Puesto no se toca nada: un subdynpro normal ya distingue solo");
+        Debe(U.Graph.Surfaces.LaVistaEsElLugarDelPuesto.Sufijo(
+                "ssubVIEW_SCREEN:SAPLN1LSTAMB:0007", "  ") == "",
+            "sin selección legible no se añade nada: una identidad que aletea es peor que una gruesa");
+        Debe(U.Graph.Surfaces.LaVistaEsElLugarDelPuesto.Sufijo(
+                "ssubVIEW_SCREEN:SAPLN1LSTAMB:0007", "Censo / Pacientes") == "vista:Censo Pacientes",
+            "la barra se limpia: el separador de la identidad no puede venir dentro del nombre");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

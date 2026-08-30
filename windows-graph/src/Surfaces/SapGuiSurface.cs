@@ -61,6 +61,18 @@ public sealed class SapGuiSurface : IUiSurface
     /// </summary>
     private const string OkCodeId = "wnd[0]/tbar[0]/okcd";
 
+    /// <summary>
+    /// Dónde vive el árbol de navegación del Puesto de trabajo: el dock de la izquierda, en sus
+    /// dos amarres vistos contra el SAP real (el segundo es el de Easy Access, por si el patrón
+    /// del Puesto apareciera con esa forma). Solo se consultan cuando el subdynpro es el del
+    /// visor genérico (promesa 79).
+    /// </summary>
+    private static readonly string[] DockTreeCandidates =
+    {
+        "wnd[0]/shellcont/shellcont/shell/shellcont[0]/shell",
+        "wnd[0]/usr/cntlIMAGE_CONTAINER/shellcont/shell/shellcont[0]/shell",
+    };
+
     // ── Estado de observación (hilo STA dedicado, ver StartObserving) ───────────
     private readonly object _obsGate = new();
     private volatile bool _observing;
@@ -330,6 +342,22 @@ public sealed class SapGuiSurface : IUiSurface
             // Si algún día dos paneles distintos resultan indistinguibles sin subdynpro, se extiende AQUÍ.
             string sub = UserAreaSubscreen(session);
             if (sub.Length > 0) path.Append('/').Append(sub);
+
+            // LA VISTA DEL PUESTO DE TRABAJO (promesa 79): «Triage» y «Consulta» comparten el
+            // visor genérico de listas y sin esto eran EL MISMO lugar — el usuario cambiaba de
+            // vista y el localizador no veía salto (2026-08-30, ronda 3). La decisión es pura y
+            // vive en LaVistaEsElLugarDelPuesto; aquí solo se lee la selección del árbol de
+            // navegación, en los dos amarres conocidos del dock.
+            if (sub.StartsWith("ssubVIEW_SCREEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (string arbol in DockTreeCandidates)
+                {
+                    var n = SelectedTreeNode(arbol, out _);
+                    if (n == null) continue;
+                    string sufijo = LaVistaEsElLugarDelPuesto.Sufijo(sub, n.Value.Text);
+                    if (sufijo.Length > 0) { path.Append('/').Append(sufijo); break; }
+                }
+            }
 
             return new SurfaceIdentity(
                 Origin: $"sapgui://{(system.Length > 0 ? system : "sap")}",

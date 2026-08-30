@@ -38,8 +38,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private Navigation.MapaVivo? _mapaVivo;
     /// <summary>Lo último que la mano SAP pulsó: el destino del lápiz cuando el foco calla.</summary>
     private string _ultimoSapPulsado = "";
-    /// <summary>Los árboles de la última observación SAP: el nombrado del clic pregunta solo a estos.</summary>
-    private readonly List<(string Id, string Type, string Label)> _arbolesVistos = new();
+    /// <summary>
+    /// Los árboles de la última observación SAP, con su caja de pantalla y sus filas visibles
+    /// (clave, texto y rectángulo local). El nombrado del clic humano vive de esto: geometría
+    /// primero, selección como corroboración.
+    /// </summary>
+    private readonly List<(string Id, string Type, string Label, int X, int Y, int W, int H,
+        List<(string Key, string Text, int Top, int Height)> Filas)> _arbolesVistos = new();
 
     /// <summary>El recuadro que se pinta sobre lo señalado. Nace al primer señalamiento y no antes:
     /// quien nunca señala no paga una ventana de más.</summary>
@@ -237,7 +242,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _clickWatcher.ResolverSap = (x, y) =>
         {
             var sap = _locator?.SuperficieSap;
-            if (sap == null) { LogBus.Log("clic-sap", "sin superficie SAP"); return null; }
+            if (sap == null) return null;
             var id = _locator?.DondeEstoy()?.Id ?? "";
             if (!id.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
             {
@@ -245,28 +250,53 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 return null;
             }
 
-            // RÁPIDO O INÚTIL: el salto de pantalla se procesa ~600 ms tras el clic, y un nombrado
-            // que tarde más llega huérfano — pasó de verdad: «Triage» se nombró bien y la arista
-            // no se escribió porque el salto ya había pasado SIN atribuir (2026-08-30, a cuatro
-            // ojos con el usuario). Por eso NO se recorre nada aquí: los árboles ya los conoce la
-            // última observación del sentido; solo se les pregunta la selección.
-            System.Threading.Thread.Sleep(150);
-
-            List<(string Id, string Type, string Label)> arboles;
-            lock (_arbolesVistos) arboles = new(_arbolesVistos);
-            if (arboles.Count == 0) { LogBus.Log("clic-sap", "sin árboles vistos: la observación aún no pasó por aquí"); return null; }
-            foreach (var arbol in arboles)
+            // GEOMETRÍA PRIMERO: la fila bajo el punto ES el clic, cambie o no la selección — el
+            // punto ciego de la ronda 3: las filas retienen selección entre visitas y el clic
+            // sobre la ya seleccionada quedaba mudo. La selección corrobora cuando responde.
+            // Y dos intentos: recién cambiada la pantalla, la observación (cada 900 ms) puede no
+            // haber pasado aún — se le da una segunda oportunidad, no la espalda.
+            for (int intento = 0; intento < 2; intento++)
             {
-                var n = sap.SelectedTreeNode(arbol.Id, out string porqueNo);
-                if (n == null) { LogBus.Log("clic-sap", $"árbol …{arbol.Id[^Math.Min(30, arbol.Id.Length)..]} sin selección: {porqueNo}"); continue; }
-                bool conocido = seleccionVista.TryGetValue(arbol.Id, out string? antes);
-                seleccionVista[arbol.Id] = n.Value.Key;
-                LogBus.Log("clic-sap", $"árbol …{arbol.Id[^Math.Min(24, arbol.Id.Length)..]} selección {antes ?? "(nueva)"} → {n.Value.Key} «{n.Value.Text}»");
-                if (conocido && antes != n.Value.Key)
-                    return Navigation.AtribucionSap.NombraElClic(
-                        arbol.Id, arbol.Type, arbol.Label, (n.Value.Key, n.Value.Text));
+                System.Threading.Thread.Sleep(intento == 0 ? 150 : 600);
+                List<(string Id, string Type, string Label, int X, int Y, int W, int H,
+                    List<(string Key, string Text, int Top, int Height)> Filas)> arboles;
+                lock (_arbolesVistos) arboles = new(_arbolesVistos);
+                if (arboles.Count == 0)
+                {
+                    LogBus.Log("clic-sap", "sin árboles vistos: la observación aún no pasó por aquí"
+                        + (intento == 0 ? " — reintento" : ""));
+                    continue;
+                }
+
+                foreach (var arbol in arboles)
+                {
+                    bool dentro = x >= arbol.X && x < arbol.X + arbol.W && y >= arbol.Y && y < arbol.Y + arbol.H;
+                    if (!dentro) continue;
+
+                    var fila = Navigation.AtribucionSap.FilaEnElPunto(y - arbol.Y, arbol.Filas);
+                    var n = sap.SelectedTreeNode(arbol.Id, out string porqueNo);
+                    if (n != null) seleccionVista[arbol.Id] = n.Value.Key;
+
+                    if (fila is { } fg)
+                    {
+                        LogBus.Log("clic-sap", $"geometría: fila «{fg.Text}» bajo el punto"
+                            + (n != null ? (n.Value.Key == fg.Key ? " · la selección corrobora" : $" · OJO: la selección dice «{n.Value.Text}»") : " · sin selección que corrobore"));
+                        // Si la selección responde y NO coincide, manda la selección: es SAP
+                        // diciendo qué quedó elegido tras el clic; la geometría pudo envejecer.
+                        var elegida = (n != null && n.Value.Key != fg.Key) ? (n.Value.Key, n.Value.Text) : (fg.Key, fg.Text);
+                        return Navigation.AtribucionSap.NombraElClic(arbol.Id, arbol.Type, arbol.Label, elegida);
+                    }
+                    if (n != null)
+                    {
+                        LogBus.Log("clic-sap", $"sin fila bajo el punto; la selección dice «{n.Value.Text}» y se usa");
+                        return Navigation.AtribucionSap.NombraElClic(arbol.Id, arbol.Type, arbol.Label, (n.Value.Key, n.Value.Text));
+                    }
+                    LogBus.Log("clic-sap", $"punto dentro del árbol pero sin fila ni selección ({porqueNo})");
+                    return null;
+                }
+                LogBus.Log("clic-sap", "el punto no cae en ningún árbol visto: que lo intente UIA");
+                return null;
             }
-            LogBus.Log("clic-sap", "ningún árbol cambió de selección: que lo intente UIA");
             return null;
         };
         _clickWatcher.Start();
@@ -388,9 +418,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                             foreach (var arbol in vistos.Where(v =>
                                          v.SubType.IndexOf("Tree", StringComparison.OrdinalIgnoreCase) >= 0))
                             {
-                                lock (_arbolesVistos)
-                                    _arbolesVistos.Add((arbol.Id, arbol.Type, arbol.Label));
                                 var suyas = sap.VisibleTreeRows(arbol.Id, arbol.Height, out string porque);
+                                lock (_arbolesVistos)
+                                    _arbolesVistos.Add((arbol.Id, arbol.Type, arbol.Label,
+                                        arbol.ScreenLeft, arbol.ScreenTop, arbol.Width, arbol.Height,
+                                        suyas.Select(fl => (fl.Key, fl.Text, fl.Top, fl.Height)).ToList()));
                                 if (suyas.Count > 0) filas[arbol.Id] = suyas;
                                 else LogBus.Log("sentido-sap", $"«{arbol.Label}» no dio filas: {porque}");
                             }

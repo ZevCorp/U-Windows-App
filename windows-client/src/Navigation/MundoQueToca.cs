@@ -126,6 +126,24 @@ public static class AtribucionSap
 
         return (SapSelector.ById(id), etiqueta, tipo);
     }
+
+    /// <summary>
+    /// ¿QUÉ FILA HAY BAJO EL PUNTO del clic? El punto ciego del cambio de selección, resuelto por
+    /// geometría (ronda 3, 2026-08-30): el clic del usuario en «Triage» cayó en la fila YA
+    /// seleccionada de su visita anterior — sin cambio no había nombre, y las filas retienen su
+    /// selección entre visitas, así que el patrón más común del mundo real quedaba mudo. Las
+    /// filas observadas traen su rectángulo; si el punto cae dentro, esa fila ES el clic.
+    /// Fuera de toda fila: null — mejor mudo que equivocado.
+    /// </summary>
+    /// <param name="yLocal">La y del clic RELATIVA al árbol (y de pantalla menos el techo del árbol).</param>
+    public static (string Key, string Text)? FilaEnElPunto(
+        int yLocal, IReadOnlyList<(string Key, string Text, int Top, int Height)> filas)
+    {
+        foreach (var f in filas ?? Array.Empty<(string, string, int, int)>())
+            if (f.Height > 0 && yLocal >= f.Top && yLocal < f.Top + f.Height)
+                return (f.Key, f.Text);
+        return null;
+    }
 }
 
 /// <summary>
