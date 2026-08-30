@@ -109,11 +109,38 @@ public sealed class PasoDelNucleo
         // cuál de las dos le toca, y devolver lo mismo para ambas lo dejaba a ciegas.
         var camino = _grafo.ComoLlego(aqui, destino);
         if (camino.Paso == null)
+        {
+            // UNA WEB ES DIRECCIONABLE: cada ubicación tiene puerta directa desde cualquier parte —
+            // la URL. Sin camino aprendido (o con la puerta tapada), rendirse teniendo la dirección
+            // en la mano es absurdo, y pasó de verdad: desde Portal:Ajedrez se pidió ir a Ajedrez
+            // —mismo dominio, así que el «ponme delante» de arriba no corría— y se contestó tres
+            // veces «no hay ningún camino aprendido» (2026-08-25, revancha del piloto). La
+            // regresión venía DEL APRENDIZAJE: mientras el destino fue desconocido, el navegador lo
+            // abría directo; en cuanto el grafo lo conoció, se le exigía ruta a pie.
+            //
+            // Solo web: dentro del explorador NO se ataja (2026-08-16, medido — la misma hoja
+            // significa sitios distintos según dónde estés), y en SAP las transacciones tienen su
+            // propio camino.
+            if (destino.StartsWith("web://", StringComparison.OrdinalIgnoreCase) && _ponerDelante(destino))
+            {
+                // Hasta 8 s: aquí puede estar cargando una página entera, no solo cambiando el
+                // foco, y navegar bien para luego contestar «no hay camino» sería la mentira cara.
+                for (int i = 0; i < 80; i++)
+                {
+                    aqui = _donde();
+                    if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase)
+                        || Mapeador.ComoMePongoDelante.EstarEnElSitioBasta(destino, aqui))
+                        return new(true, true, "", "", "fui directo: una web se abre por su dirección");
+                    Thread.Sleep(100);
+                }
+            }
+
             return new(false, false, "", "", camino.ConocidoEnMemoria
                 ? $"sé llegar desde «{Corto(aqui)}», pero la puerta que hace falta no está en pantalla "
                 + "ahora mismo: despliega el panel, haz scroll, o vuelve atrás"
                 : $"no hay ningún camino aprendido de «{Corto(aqui)}» hasta ahí: hay que recorrerlo a "
                 + "mano una vez para que el núcleo lo aprenda");
+        }
 
         var paso = camino.Paso;
         if (!_pulsar(paso.Que.Selector, paso.Que.Etiqueta))

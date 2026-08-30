@@ -61,6 +61,21 @@ public sealed class SapGuiSurface : IUiSurface
     /// </summary>
     private const string OkCodeId = "wnd[0]/tbar[0]/okcd";
 
+    /// <summary>
+    /// Dónde vive el árbol de navegación del Puesto de trabajo: el dock de la izquierda, en sus
+    /// dos amarres vistos contra el SAP real (el segundo es el de Easy Access, por si el patrón
+    /// del Puesto apareciera con esa forma). Solo se consultan cuando el subdynpro es el del
+    /// visor genérico (promesa 79).
+    /// </summary>
+    /// <summary>La última vista leída con éxito por pantalla (tcode|subdynpro): ver el remark de Identity.</summary>
+    private static readonly Dictionary<string, string> _vistaRecordada = new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly string[] DockTreeCandidates =
+    {
+        "wnd[0]/shellcont/shellcont/shell/shellcont[0]/shell",
+        "wnd[0]/usr/cntlIMAGE_CONTAINER/shellcont/shell/shellcont[0]/shell",
+    };
+
     // ── Estado de observación (hilo STA dedicado, ver StartObserving) ───────────
     private readonly object _obsGate = new();
     private volatile bool _observing;
@@ -228,19 +243,51 @@ public sealed class SapGuiSurface : IUiSurface
             "GetScriptingEngine", BindingFlags.InvokeMethod, null, rot, null);
     }
 
-    /// <summary>La sesión con la que trabajamos: la primera de la primera conexión.</summary>
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+
+    /// <summary>
+    /// La sesión con la que trabajamos: LA DE LA VENTANA QUE ESTÁ DELANTE. La decisión —y sus
+    /// porqués— vive en <see cref="CualSesion"/> (promesa 72); aquí solo se juntan los handles.
+    /// </summary>
+    /// <remarks>
+    /// Antes era «la primera de la primera conexión», y con dos ventanas SAP (una sesión buena y
+    /// un login paralelo) el localizador acuñaba la identidad de la otra ventana (2026-08-26, lo
+    /// destapó el piloto). El handle sale de <c>ActiveWindow</c> para que un modal (wnd[1]) cuente
+    /// como la misma sesión cuando es él quien está delante.
+    /// </remarks>
     private static dynamic? Session(bool useCache = true)
     {
         object? engine = ScriptingEngine(useCache);
         if (engine == null) return null;
 
         dynamic app = engine;
-        if ((int)app.Connections.Count == 0) return null;
+        var sesiones = new List<dynamic>();
+        var ventanas = new List<long>();
+        try
+        {
+            int nc = (int)app.Connections.Count;
+            for (int c = 0; c < nc; c++)
+            {
+                dynamic conn = app.Connections.ElementAt(c);
+                int ns = (int)conn.Sessions.Count;
+                for (int i = 0; i < ns; i++)
+                {
+                    dynamic ses = conn.Sessions.ElementAt(i);
+                    long h = 0;
+                    try { h = (long)ses.ActiveWindow.Handle; }
+                    catch
+                    {
+                        try { h = (long)ses.FindById("wnd[0]").Handle; } catch { }
+                    }
+                    sesiones.Add(ses);
+                    ventanas.Add(h);
+                }
+            }
+        }
+        catch { /* la lista puede cambiar bajo los pies; se decide con lo reunido */ }
 
-        dynamic conn = app.Connections.ElementAt(0);
-        if ((int)conn.Sessions.Count == 0) return null;
-
-        return conn.Sessions.ElementAt(0);
+        int cual = CualSesion.Elige(ventanas, (long)GetForegroundWindow());
+        return cual >= 0 ? sesiones[cual] : null;
     }
 
     // ── Identidad ────────────────────────────────────────────────────────────
@@ -298,6 +345,39 @@ public sealed class SapGuiSurface : IUiSurface
             // Si algún día dos paneles distintos resultan indistinguibles sin subdynpro, se extiende AQUÍ.
             string sub = UserAreaSubscreen(session);
             if (sub.Length > 0) path.Append('/').Append(sub);
+
+            // LA VISTA DEL PUESTO DE TRABAJO (promesa 79): «Triage» y «Consulta» comparten el
+            // visor genérico de listas y sin esto eran EL MISMO lugar — el usuario cambiaba de
+            // vista y el localizador no veía salto (2026-08-30, ronda 3). La decisión es pura y
+            // vive en LaVistaEsElLugarDelPuesto; aquí solo se lee la selección del árbol de
+            // navegación, en los dos amarres conocidos del dock.
+            if (sub.StartsWith("ssubVIEW_SCREEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                // LA VISTA LEÍDA SE RECUERDA. Los getters de selección PARPADEAN («ningún getter
+                // respondió» a media caminata) y con cada fallo la identidad perdía el «vista:» —
+                // el lugar aleteaba entre la base y la vista, fabricando saltos fantasma que
+                // consumían el clic del usuario (2026-08-30, ronda 5). La vista solo cambia cuando
+                // una lectura EXITOSA dice otra cosa; un fallo momentáneo sostiene la última — la
+                // misma medicina que el Busy le dio a las quimeras de transición.
+                string clave = tcode + "|" + sub;
+                string sufijo = "";
+                foreach (string arbol in DockTreeCandidates)
+                {
+                    var n = SelectedTreeNode(arbol, out _);
+                    if (n == null) continue;
+                    // CON SU CARPETA (promesa 81): «Triage» de adultos y de pediatría son vistas
+                    // DISTINTAS, y con la hoja sola sus aprendizajes se mezclaban.
+                    string ruta = RutaDelNodo(arbol, n.Value.Key);
+                    sufijo = LaVistaEsElLugarDelPuesto.Sufijo(sub, ruta.Length > 0 ? ruta : n.Value.Text);
+                    break;
+                }
+                lock (_vistaRecordada)
+                {
+                    if (sufijo.Length > 0) _vistaRecordada[clave] = sufijo;
+                    else _vistaRecordada.TryGetValue(clave, out sufijo);
+                }
+                if (!string.IsNullOrEmpty(sufijo)) path.Append('/').Append(sufijo);
+            }
 
             return new SurfaceIdentity(
                 Origin: $"sapgui://{(system.Length > 0 ? system : "sap")}",
@@ -404,6 +484,52 @@ public sealed class SapGuiSurface : IUiSurface
             };
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// ESCRIBIR EN LO QUE TIENE EL FOCO de la sesión, por la Scripting API, y comprobar releyendo.
+    /// </summary>
+    /// <remarks>
+    /// Existe para el paso «text» del batch (despacho de escritura, promesa 71): el paso anterior
+    /// pulsó el campo —el click de <see cref="Execute"/> hace SetFocus— y este pone el texto POR
+    /// IDENTIDAD sobre ese foco, que SAP mismo reporta (<c>ActiveWindow.SystemFocus</c>). Teclear
+    /// por UIA aquí era mandar letras al aire (2026-08-26, «no pude escribir NWP1»).
+    ///
+    /// A un botón no se le pone texto: si el foco no es un campo, se dice y no se toca nada. Y el
+    /// texto se RELEE tras ponerlo —sin distinguir caja: el campo de comandos devuelve «nwp1» como
+    /// «NWP1»— porque poner no es quedar.
+    /// </remarks>
+    public bool EscribirEnElFoco(string texto, out string error)
+    {
+        error = "";
+        dynamic? session;
+        try { session = Session(); } catch (Exception e) { error = e.Message; return false; }
+        if (session == null) { error = "sin sesión SAP"; return false; }
+
+        try
+        {
+            dynamic? foco = session.ActiveWindow.SystemFocus;
+            if (foco == null) { error = "nada tiene el foco en la sesión"; return false; }
+
+            string tipo = Str(foco.Type);
+            bool esCampo = tipo.IndexOf("Field", StringComparison.OrdinalIgnoreCase) >= 0
+                        || tipo.Equals("GuiComboBox", StringComparison.OrdinalIgnoreCase);
+            if (!esCampo)
+            {
+                error = $"el foco está en un {tipo}, que no es un campo: pulsa primero el campo donde escribir";
+                return false;
+            }
+
+            foco.Text = texto ?? "";
+            string leido = Str(foco.Text);
+            if (!leido.Equals(texto ?? "", StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"puse «{texto}» y el campo dice «{leido}»";
+                return false;
+            }
+            return true;
+        }
+        catch (Exception e) { error = e.Message; return false; }
     }
 
     /// <summary>
@@ -608,6 +734,114 @@ public sealed class SapGuiSurface : IUiSurface
     /// con x/y en coordenadas de pantalla; con <c>raise=false</c> devuelve null en vez de lanzar cuando
     /// no hay nada. Devuelve el <c>Id</c> del componente, o null si SAP no está o no hay componente ahí.
     /// </summary>
+    /// <summary>Un botón de la toolbar de una rejilla ALV, y una fila visible de la misma.</summary>
+    public sealed record BotonDeRejilla(string Id, string Texto);
+    public sealed record FilaDeRejilla(string Clave, string Texto);
+
+    /// <summary>
+    /// LEER UNA REJILLA ALV: sus botones de toolbar y sus filas visibles. Es el contenido del
+    /// panel derecho del Puesto de trabajo (promesa 78) — botones y filas viven DENTRO del
+    /// control y el recorrido de componentes no los ve.
+    /// </summary>
+    /// <remarks>
+    /// Los botones van por los métodos Get* (GetToolbarButtonId/Text/Tooltip — los sin «Get» no
+    /// existen en este SAP GUI 800, sondeado 2026-08-30). La CLAVE de la fila son pares
+    /// columna=valor de las primeras columnas con dato — nunca el índice: «la fila 0» describe
+    /// una posición y mañana es otro paciente (la regla de <see cref="SapSelector.RowMark"/>).
+    /// El texto legible sale de las primeras celdas con letra.
+    /// </remarks>
+    public (List<BotonDeRejilla> Botones, List<FilaDeRejilla> Filas) LeerRejilla(string gridId)
+    {
+        var botones = new List<BotonDeRejilla>();
+        var filas = new List<FilaDeRejilla>();
+        dynamic? session;
+        try { session = Session(); } catch { return (botones, filas); }
+        if (session == null) return (botones, filas);
+
+        dynamic? g = null;
+        try { g = session.FindById(SapSelector.Normalize(gridId), false); } catch { }
+        if (g == null) { try { g = session.FindById(gridId, false); } catch { } }
+        if (g == null) return (botones, filas);
+
+        try
+        {
+            int nb = (int)g.ToolbarButtonCount;
+            for (int i = 0; i < nb && i < 40; i++)
+            {
+                try
+                {
+                    string tipo = Str(g.GetToolbarButtonType(i));
+                    if (!tipo.Contains("Button", StringComparison.OrdinalIgnoreCase)) continue;
+                    string id = Str(g.GetToolbarButtonId(i));
+                    if (id.Length == 0) continue;
+                    string texto = Str(g.GetToolbarButtonText(i));
+                    if (texto.Length == 0) texto = Str(g.GetToolbarButtonTooltip(i));
+                    if (texto.Length == 0) continue;
+                    botones.Add(new BotonDeRejilla(id, texto));
+                }
+                catch { }
+            }
+        }
+        catch { /* una rejilla sin toolbar es legal */ }
+
+        try
+        {
+            var columnas = new List<string>();
+            dynamic orden = g.ColumnOrder;
+            int nc = (int)orden.Count;
+            for (int i = 0; i < nc && i < 30; i++)
+                try { columnas.Add(Str(orden.ElementAt(i))); } catch { }
+
+            int desde = 0, visibles = 0, total = 0;
+            try { desde = (int)g.FirstVisibleRow; } catch { }
+            try { visibles = (int)g.VisibleRowCount; } catch { }
+            try { total = (int)g.RowCount; } catch { }
+            int hasta = Math.Min(total, desde + Math.Max(visibles, 1));
+
+            for (int f = desde; f < hasta && filas.Count < 20; f++)
+            {
+                var pares = new List<string>();
+                var letras = new List<string>();
+                foreach (string col in columnas)
+                {
+                    string v = "";
+                    try { v = Str(g.GetCellValue(f, col)).Trim(); } catch { }
+                    if (v.Length == 0 || v.StartsWith("@", StringComparison.Ordinal)) continue;
+                    if (pares.Count < 3) pares.Add(col + "=" + v);
+                    if (letras.Count < 4 && v.Any(char.IsLetterOrDigit)) letras.Add(v);
+                }
+                if (pares.Count == 0) continue;
+                filas.Add(new FilaDeRejilla(string.Join("|", pares), string.Join(" · ", letras)));
+            }
+        }
+        catch { /* sin filas legibles, los botones ya valen */ }
+
+        return (botones, filas);
+    }
+
+    /// <summary>
+    /// QUÉ COMPONENTE CLICÓ EL HUMANO, con nombre: Id, tipo, subtipo y etiqueta. Es
+    /// <see cref="HitTest"/> más lo que la atribución necesita para nombrar el clic (promesa 77) —
+    /// dentro de SAP, UIA ve un Pane sin etiquetas y el vigilante de clics se quedaba mudo.
+    /// </summary>
+    public (string Id, string Tipo, string SubTipo, string Etiqueta)? ComponenteEn(int screenX, int screenY)
+    {
+        dynamic? session;
+        try { session = Session(); } catch { return null; }
+        if (session == null) return null;
+
+        try
+        {
+            dynamic comp = session.FindByPosition(screenX, screenY, false);
+            if (comp == null) return null;
+            string id = Str(comp.Id);
+            if (id.Length == 0) return null;
+            string tipo = ""; try { tipo = Str(comp.Type); } catch { }
+            return (id, tipo, SubTypeOf(comp), LabelOf(comp));
+        }
+        catch { return null; }
+    }
+
     public string? HitTest(int screenX, int screenY)
     {
         dynamic? session;
@@ -672,7 +906,13 @@ public sealed class SapGuiSurface : IUiSurface
     /// Una fila VISIBLE del árbol, con la posición que SAP le atribuye. <paramref name="Top"/> va relativo
     /// al borde del árbol y <paramref name="Height"/> en píxeles: ambos LEÍDOS, nunca estimados.
     /// </summary>
-    public sealed record TreeRow(string Key, string Text, int Top, int Height, bool IsFolder);
+    /// <param name="Ruta">
+    /// El nombre CON SU CARPETA («Urgencias Adultos/Triage»), o vacío si la fila es de primer
+    /// nivel o la ruta no se pudo leer. Existe porque hay un «Triage» por servicio y la hoja sola
+    /// mandó al piloto al de pediatría (2026-08-30, lo vio el usuario) — la lección que este
+    /// archivo ya sabía: el texto no identifica la fila, la ruta sí.
+    /// </param>
+    public sealed record TreeRow(string Key, string Text, int Top, int Height, bool IsFolder, string Ruta = "");
 
     /// <summary>
     /// Geometría REAL de una fila, si SAP la suelta. Devuelve alto 0 si no.
@@ -699,6 +939,17 @@ public sealed class SapGuiSurface : IUiSurface
             itemHeight = h;
             itemTop = TreeInt(tree, "GetItemTop", key, col);
             return;
+        }
+
+        // UN ÁRBOL SIMPLE NO TIENE COLUMNAS — y por eso el de Favoritos de Easy Access daba
+        // «0 filas visibles de 205 claves» y el acceso NWP1 del usuario no existía en el terreno
+        // (2026-08-30, primera ronda de T4). SAP acepta la columna VACÍA para estos árboles:
+        // GetItemHeight(key, "") devuelve la fila real (30 px, probado contra el árbol vivo).
+        int sinCol = TreeInt(tree, "GetItemHeight", key, "");
+        if (sinCol > 0)
+        {
+            itemHeight = sinCol;
+            itemTop = TreeInt(tree, "GetItemTop", key, "");
         }
     }
 
@@ -763,6 +1014,57 @@ public sealed class SapGuiSurface : IUiSurface
     /// (típicamente 0), así que ese grupo se descarta en bloque. Es la regla que evita confundir "invisible"
     /// con "primera fila" sin tener que adivinar cuál es el centinela.
     /// </summary>
+    /// <summary>Cache de rutas por (árbol|clave): las claves del menú son estables por sesión.</summary>
+    private static readonly Dictionary<string, string> _rutaDeNodo = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// EL NOMBRE CON SU CARPETA: «Urgencias Adultos/Triage». Ancestros por GetNodePathByKey →
+    /// GetNodeKeyByPath → texto (columna primero, texto plano de respaldo). Vacío si no hay
+    /// ancestros o la API no contesta — la hoja sola sigue valiendo entonces.
+    /// </summary>
+    public string RutaDelNodo(string treeId, string nodeKey)
+    {
+        string cacheKey = treeId + "|" + nodeKey;
+        lock (_rutaDeNodo)
+            if (_rutaDeNodo.TryGetValue(cacheKey, out string? ya)) return ya;
+
+        string resultado = "";
+        try
+        {
+            dynamic? session = Session();
+            dynamic? tree = session?.FindById(SapSelector.Normalize(treeId), false);
+            if (tree != null)
+            {
+                var columns = TreeColumnNames(tree);
+                string hoja = NodeText(tree, nodeKey, columns);
+                string ruta = "";
+                try { ruta = Str(tree.GetNodePathByKey(nodeKey)); } catch { }
+                var tramos = new List<string>();
+                if (ruta.Length > 0 && hoja.Length > 0)
+                {
+                    var partes = ruta.Split('\\');
+                    string acum = "";
+                    for (int i = 0; i + 1 < partes.Length; i++)
+                    {
+                        acum = acum.Length == 0 ? partes[i] : acum + "\\" + partes[i];
+                        try
+                        {
+                            string ak = Str(tree.GetNodeKeyByPath(acum));
+                            string atx = NodeText(tree, ak, columns);
+                            if (atx.Length > 0) tramos.Add(atx);
+                        }
+                        catch { }
+                    }
+                    if (tramos.Count > 0) resultado = string.Join("/", tramos) + "/" + hoja;
+                }
+            }
+        }
+        catch { /* sin ruta, la hoja sola sigue valiendo */ }
+
+        lock (_rutaDeNodo) _rutaDeNodo[cacheKey] = resultado;
+        return resultado;
+    }
+
     public IReadOnlyList<TreeRow> VisibleTreeRows(string treeId, int treeHeight, out string reason)
     {
         var rows = new List<TreeRow>();
@@ -797,7 +1099,8 @@ public sealed class SapGuiSurface : IUiSurface
 
         foreach (var p in placed.Where(p => !bogus.Contains(p.Top)).OrderBy(p => p.Top))
             rows.Add(new TreeRow(
-                p.Key, NodeText(tree, p.Key, columns), p.Top, p.Height, BoolOf(tree, "IsFolder", p.Key)));
+                p.Key, NodeText(tree, p.Key, columns), p.Top, p.Height, BoolOf(tree, "IsFolder", p.Key),
+                RutaDelNodo(treeId, p.Key)));
 
         reason = $"{rows.Count} filas visibles de {keys.Count} claves" +
                  (dropped > 0 ? $"; {dropped} descartadas por compartir posición (centinela)" : "");
@@ -1869,9 +2172,15 @@ public sealed class SapGuiSurface : IUiSurface
         string? key = ResolveNodeKey(tree, recordedKey, step);
         if (key == null)
         {
+            // Qué es la clave grabada HOY: si tiene otro rótulo, el árbol es de otro usuario (las
+            // claves de NWP1 son por menú) y el mensaje debe decirlo — «ya no está» a secas manda
+            // a buscar carpetas plegadas cuando lo que cambió fue la cuenta (2026-08-27).
+            string ahora = NodeText(tree, recordedKey, TreeColumnNames(tree));
             error = $"la fila «{step.Label}» ya no está en el árbol " +
                     $"(clave grabada {recordedKey}, ruta {step.NodePath ?? "?"}). " +
-                    "Si cuelga de una carpeta plegada, hay que expandirla antes.";
+                    (ahora.Length > 0
+                        ? $"Esa clave hoy se llama «{ahora}»: este árbol es de otro usuario de SAP."
+                        : "Si cuelga de una carpeta plegada, hay que expandirla antes.");
             return false;
         }
 
@@ -1962,6 +2271,15 @@ public sealed class SapGuiSurface : IUiSurface
         var columns = TreeColumnNames(tree);
         string wanted = (step.Label ?? "").Trim();
 
+        // LA HOJA DE UNA ETIQUETA CON CARPETA ES EL RÓTULO. Desde la promesa 81 las puertas se
+        // llaman «Favoritos/NWP1 - IS-H: …», y el árbol vivo contesta la hoja sola — comparar la
+        // etiqueta entera contra la hoja rechazaba filas CORRECTAS («no pude pulsar», 2026-08-30,
+        // la corrida limpia). La carpeta desambigua en el terreno; aquí, para casar con lo vivo,
+        // vale su hoja. La protección contra árboles de otro usuario sigue: la hoja también tiene
+        /// que cuadrar.
+        int barra = wanted.LastIndexOf('/');
+        if (barra > 0 && barra < wanted.Length - 1) wanted = wanted[(barra + 1)..].Trim();
+
         // 1. La clave tal cual.
         string current = NodeText(tree, recordedKey, columns);
         if (current.Length > 0 &&
@@ -1991,8 +2309,13 @@ public sealed class SapGuiSurface : IUiSurface
             if (only != null) return only;
         }
 
-        // La clave existía aunque el texto no cuadre: último recurso antes de rendirse.
-        return current.Length > 0 ? recordedKey : null;
+        // Si el paso no grabó rótulo, la clave viva es lo único que hay: se usa. Pero si el rótulo
+        // NO cuadra, rendirse es lo correcto: las claves del árbol de NWP1 son POR USUARIO, y el
+        // 2026-08-27 la clave grabada como «Triage» (vw00576, menú de una doctora) apuntaba a
+        // «Consulta Externa a Facturar» en el menú de otro usuario. Accionar por clave con el
+        // rótulo en contra es un clic por coordenadas con otro nombre: acierta en el lugar y falla
+        // en la identidad — y aquí abre la vista de OTRO flujo clínico reportando éxito.
+        return wanted.Length == 0 && current.Length > 0 ? recordedKey : null;
     }
 
     /// <summary>

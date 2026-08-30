@@ -56,7 +56,24 @@ public static class AppAligner
         switch (plan.Via)
         {
             case Mapeador.ComoMePongoDelante.Via.PestanaDelNavegador:
-                // PRIMERO LA QUE YA ESTÁ, y solo si no está se abre. El orden importa: ir a un sitio
+                // UNA PÁGINA NO SE ALCANZA ACTIVANDO EL DOMINIO. «Ponme delante de wiki/Ajedrez»
+                // estando en Portal:Ajedrez activaba la pestaña del dominio —que ya estaba
+                // delante—, contestaba «conseguido» sin navegar, y el paso del núcleo esperaba 3 s
+                // a una llegada que nunca iba a ocurrir: tres «no hay ningún camino aprendido»
+                // seguidos con la dirección en la mano (2026-08-25, revancha del piloto). Con ruta
+                // se pide una PÁGINA: o ya está delante, o se va por su dirección — que es lo que
+                // hace una persona: escribirla. La decisión es del mapeador (promesa 25); aquí
+                // solo se ejecuta.
+                if (Mapeador.ComoMePongoDelante.PideUnaPagina(idDeSuperficie))
+                {
+                    if (PestanasAbiertas.PaginaActiva(idDeSuperficie)) return true;
+                    return PestanasAbiertas.Abrir(
+                        Mapeador.ComoMePongoDelante.UrlDe(idDeSuperficie, PestanasAbiertas.EsquemaDe(plan.Que)),
+                        plan.Que);
+                }
+
+                // SIN RUTA se pide el SITIO: primero la pestaña que ya está, y solo si no está se
+                // abre. El orden importa: ir a un sitio
                 // y crear OTRA copia del sitio no son la misma acción, y la segunda deja al usuario
                 // con dos estados de la misma página y pierde lo que tuviera a medias en la primera.
                 if (PestanasAbiertas.IrA(plan.Que)) return true;

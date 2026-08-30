@@ -647,7 +647,11 @@ public sealed class ConversacionEnVivo : IDisposable
     /// El catálogo de manos, en la forma neutra que <see cref="IProtocolo"/> traduce. Ver <see
     /// cref="Fn"/>: cada protocolo decide cómo se envuelve esto en su propio JSON.
     /// </summary>
-    private static IReadOnlyList<Utensilio> Herramientas() => new[]
+    // INTERNAL y no private: el servidor MCP publica ESTE mismo catálogo (filtrado a lo que el
+    // mapa despacha) para que una pregunta se responda en un solo sitio — dos catálogos del mismo
+    // terreno se desincronizan en silencio. La unificación completa (que la voz y el MCP compartan
+    // también map_batch) es la F4 del plan de batch.
+    internal static IReadOnlyList<Utensilio> Herramientas() => new[]
     {
         Fn("map_where_am_i", "Dice en qué pantalla estás ahora mismo y qué salidas conoce el mapa desde ahí. "
             + "Si hay un diálogo delante, lo describe en vez de fingir que es un lugar."),

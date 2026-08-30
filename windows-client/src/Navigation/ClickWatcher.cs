@@ -92,6 +92,14 @@ public sealed class ClickWatcher : IDisposable
         string ClickPos, DateTime When, int DownIndex, string Process, bool IsSystemNavigator);
 
     /// <summary>
+    /// QUIÉN NOMBRA UN CLIC DENTRO DE SAP. Dentro de una sesión, UIA ve un Pane sin etiquetas y
+    /// el clic humano quedaba mudo — «salto SIN atribuir» en cada cruce a mano (lo encontró el
+    /// usuario en la primera ronda de T4, 2026-08-30). El COM vive fuera; aquí solo se pregunta.
+    /// Devuelve null si el punto no cae en una sesión SAP, y entonces sigue el camino UIA.
+    /// </summary>
+    public Func<int, int, (string Selector, string Etiqueta, string Tipo)?>? ResolverSap { get; set; }
+
+    /// <summary>
     /// Clases de ventana del NAVEGADOR DEL SISTEMA: barra de tareas, miniaturas, vista de tareas.
     ///
     /// Merecen trato aparte porque son un VERBO, no un LUGAR. Como nodo no existen —nadie "vuelve"
@@ -200,6 +208,22 @@ public sealed class ClickWatcher : IDisposable
     {
         try
         {
+            // PRIMERO SAP: si el punto cae en una sesión, su propia puerta nombra el clic — UIA
+            // ahí solo vería el Pane opaco. El mismo centinela de incertidumbre que abajo: si la
+            // ventana de delante cambió mientras resolvíamos, resolvimos la pantalla equivocada.
+            var deSap = ResolverSap?.Invoke(x, y);
+            if (deSap is { } sap)
+            {
+                if (GetForegroundWindow() != foregroundAntes) return;
+                lock (_gate)
+                {
+                    _last = new Click(sap.Selector, Array.Empty<string>(), sap.Etiqueta, sap.Tipo,
+                        $"{x},{y}", DateTime.UtcNow, downIndex, "saplogon", false);
+                    _count++;
+                }
+                return;
+            }
+
             var el = AutomationElement.FromPoint(new System.Windows.Point(x, y));
             if (el == null) return;
 

@@ -36,6 +36,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     /// <summary>El mapa vivo publicado en Neo4j. Ver <see cref="Navigation.MapaVivo"/>.</summary>
     private Navigation.MapaVivo? _mapaVivo;
+    /// <summary>Lo último que la mano SAP pulsó: el destino del lápiz cuando el foco calla.</summary>
+    private string _ultimoSapPulsado = "";
+    /// <summary>
+    /// Los árboles de la última observación SAP, con su caja de pantalla y sus filas visibles
+    /// (clave, texto y rectángulo local). El nombrado del clic humano vive de esto: geometría
+    /// primero, selección como corroboración.
+    /// </summary>
+    private readonly List<(string Id, string Type, string Label, int X, int Y, int W, int H,
+        List<(string Key, string Text, int Top, int Height, bool EsCarpeta)> Filas)> _arbolesVistos = new();
+
+    /// <summary>De qué ubicación son los árboles compartidos: contra otra pantalla, están rancios.</summary>
+    private string _ubicacionDeArboles = "";
 
     /// <summary>El recuadro que se pinta sobre lo señalado. Nace al primer señalamiento y no antes:
     /// quien nunca señala no paga una ventana de más.</summary>
@@ -81,6 +93,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     /// <summary>Las manos del asistente, para poder preguntarles desde el panel. Ver OnVerRecuerdos.</summary>
     private Mcp.SurfaceMapTools? _mapaDeMano;
+
+    /// <summary>La puerta MCP real (127.0.0.1:8790/mcp) por la que entra el Agent SDK.</summary>
+    private Mcp.ServidorMcp? _servidorMcp;
 
     // Selector de workflow directo en el panel Backend: lista cargada de Graph + un GraphClient propio
     // para listar/ejecutar sin abrir la biblioteca. El slider indexa esta lista.
@@ -217,6 +232,119 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // conectan; con él dicen CÓMO pasar de una a otra, que es lo que permite navegar sin
         // haber grabado un workflow. Siempre activo, porque el terreno se aprende viviendo.
         _clickWatcher = new ClickWatcher();
+        // EL CLIC HUMANO EN SAP SE NOMBRA POR SU PUERTA (promesa 77): findByPosition dice el
+        // componente; si era un árbol, la fila clicada ES la seleccionada (las filas no tienen
+        // geometría propia). El nombrado es puro (AtribucionSap); aquí solo se juntan las piezas.
+        // EL CLIC HUMANO EN SAP SE NOMBRA SIN COORDENADAS (promesa 77). El plan A era
+        // findByPosition y está MUERTO en este SAP GUI 800: un barrido entero de la ventana no
+        // resolvió ni un punto (2026-08-30, sondeado por COM). La vía que sí es de SAP: un clic en
+        // un árbol CAMBIA SU SELECCIÓN — se compara la selección de cada árbol visible contra la
+        // última vista, y el árbol que cambió nombra la fila. Un árbol recién visto solo se
+        // apunta (atribuir su selección vieja al primer clic colgaría filas a clics de botones).
+        _clickWatcher.ResolverSap = (x, y) =>
+        {
+            var sap = _locator?.SuperficieSap;
+            if (sap == null) return null;
+            var id = _locator?.DondeEstoy()?.Id ?? "";
+            if (!id.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
+            {
+                LogBus.Log("clic-sap", $"delante no es SAP («{id}»): que lo intente UIA");
+                return null;
+            }
+
+            // TRES INTENTOS CON PACIENCIA CRECIENTE: recién cambiada la pantalla, la observación
+            // (cada 900 ms, y con árboles tarda) aún no pasó — y unos árboles de OTRA ubicación
+            // son rancios, no válidos (ronda 4: los clics de NWP1 se compararon contra los árboles
+            // de Easy Access).
+            foreach (int espera in new[] { 150, 700, 1400 })
+            {
+                System.Threading.Thread.Sleep(espera);
+                List<(string Id, string Type, string Label, int X, int Y, int W, int H,
+                    List<(string Key, string Text, int Top, int Height, bool EsCarpeta)> Filas)> arboles;
+                string deDonde;
+                lock (_arbolesVistos) { arboles = new(_arbolesVistos); deDonde = _ubicacionDeArboles; }
+
+                // LA REFERENCIA ES LA PANTALLA DEL CLIC, no la de ahora: el clic navega, la
+                // ubicación cambia ~600 ms después, y comparar contra «ahora» descartaba los
+                // árboles CORRECTOS —los de donde se clicó— y el nombre llegaba 3 s tarde,
+                // perdiendo la carrera contra el salto (2026-08-30, ronda 6).
+                if (arboles.Count == 0 || !deDonde.Equals(id, StringComparison.OrdinalIgnoreCase))
+                {
+                    LogBus.Log("clic-sap", $"árboles de «{(deDonde.Length > 0 ? deDonde[(deDonde.LastIndexOf('/') + 1)..] : "nadie")}» y el clic fue en «{id[(id.LastIndexOf('/') + 1)..]}»: espero a la observación");
+                    continue;
+                }
+
+                foreach (var arbol in arboles)
+                {
+                    bool dentro = x >= arbol.X && x < arbol.X + arbol.W && y >= arbol.Y && y < arbol.Y + arbol.H;
+                    if (!dentro) continue;
+
+                    var fila = Navigation.AtribucionSap.FilaEnElPunto(y - arbol.Y,
+                        arbol.Filas.Select(fl => (fl.Key, fl.Text, fl.Top, fl.Height)).ToList());
+                    var n = sap.SelectedTreeNode(arbol.Id, out string porqueNo);
+
+                    // LA SELECCIÓN ES LA PALABRA DE SAP — pero durante una navegación el árbol
+                    // MUERE y la palabra llega rancia: el doble clic en «NWP1» se nombró
+                    // «Favoritos» porque la selección aún era la vieja (ronda 4). Si discrepan,
+                    // se relee ASENTADA; y si el árbol ya no contesta es que el clic NAVEGÓ — y
+                    // entonces la fila bajo el punto era la verdad.
+                    if (n != null && fila is { } fg && n.Value.Key != fg.Key)
+                    {
+                        System.Threading.Thread.Sleep(350);
+                        var n2 = sap.SelectedTreeNode(arbol.Id, out _);
+                        if (n2 == null)
+                        {
+                            LogBus.Log("clic-sap", $"discrepaban y el árbol murió: el clic navegó — manda la geometría «{fg.Text}»");
+                            return Nombrar(arbol, (fg.Key, fg.Text));
+                        }
+                        n = n2;
+                    }
+
+                    if (n != null)
+                    {
+                        bool corrobora = fila is { } fx && fx.Key == n.Value.Key;
+                        // El nombre CON CARPETA de la observación, si lo hay: el juez casa por
+                        // etiqueta y las puertas ya se llaman así (promesa 81).
+                        string textoSel = arbol.Filas.FirstOrDefault(fl => fl.Key == n.Value.Key).Text ?? "";
+                        if (string.IsNullOrEmpty(textoSel)) textoSel = n.Value.Text;
+                        LogBus.Log("clic-sap", $"clic en el árbol → selección «{textoSel}»"
+                            + (corrobora ? " · la geometría corrobora" : ""));
+                        return Nombrar(arbol, (n.Value.Key, textoSel));
+                    }
+
+                    if (fila is { } fsolo)
+                    {
+                        // Sin selección que hable: si el árbol tampoco resuelve ya, el clic navegó
+                        // y la geometría es lo único y lo suficiente; si el árbol vive pero calla,
+                        // mudo antes que arista falsa (la de «Consulta» nació así).
+                        bool muerto = porqueNo.Contains("no resuelto", StringComparison.OrdinalIgnoreCase);
+                        if (muerto)
+                        {
+                            LogBus.Log("clic-sap", $"el árbol murió tras el clic: navegó — manda la geometría «{fsolo.Text}»");
+                            return Nombrar(arbol, (fsolo.Key, fsolo.Text));
+                        }
+                        LogBus.Log("clic-sap", $"punto en el árbol pero la selección calla ({porqueNo}): mudo antes que arista falsa");
+                        return null;
+                    }
+
+                    LogBus.Log("clic-sap", $"punto dentro del árbol pero sin fila ni selección ({porqueNo})");
+                    return null;
+                }
+                LogBus.Log("clic-sap", "el punto no cae en ningún árbol visto: que lo intente UIA");
+                return null;
+            }
+            return null;
+
+            (string, string, string)? Nombrar(
+                (string Id, string Type, string Label, int X, int Y, int W, int H,
+                 List<(string Key, string Text, int Top, int Height, bool EsCarpeta)> Filas) arbol,
+                (string Key, string Text) elegida)
+            {
+                bool esCarpeta = arbol.Filas.Any(fl => fl.Key == elegida.Key && fl.EsCarpeta);
+                return Navigation.AtribucionSap.NombraElClic(
+                    arbol.Id, arbol.Type, arbol.Label, elegida, esCarpeta);
+            }
+        };
         _clickWatcher.Start();
         _surfaceMap.Clicks = _clickWatcher;
 
@@ -308,11 +436,60 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 () => _locator?.DondeEstoy()?.Id ?? "",
                 () =>
                 {
-                    var lector = new Uia.UiaReader();
-                    lector.Read();
-                    return lector.Elements
-                        .Select(e => (Uia.Reconocedor.SelectorDe(e), e.Label, e.ControlType))
-                        .Where(t => t.Item1.Length > 0 && t.Label.Length > 0)
+                    // CADA MUNDO POR SU PUERTA (promesa 68): dentro de una sesión SAP, UIA ve un
+                    // Pane opaco — ahí se mira por la Scripting API. El marco de SAP Logon sigue
+                    // siendo uia:// y va por el camino de siempre.
+                    var sentido = new Navigation.SentidoPorMundo(
+                        uia: () =>
+                        {
+                            var lector = new Uia.UiaReader();
+                            lector.Read();
+                            return lector.Elements
+                                .Select(e => new Nucleo.Elemento(
+                                    Uia.Reconocedor.SelectorDe(e), e.Label, e.ControlType))
+                                .Where(el => el.Selector.Length > 0 && el.Etiqueta.Length > 0)
+                                .ToList();
+                        },
+                        sap: () =>
+                        {
+                            var sap = _locator?.SuperficieSap;
+                            if (sap == null) return new List<Nucleo.Elemento>();
+                            var vistos = sap.ReadVisibleElements();
+
+                            // LAS FILAS DEL ÁRBOL SON EL CONTENIDO NAVEGABLE (promesa 70). Se piden
+                            // solo las VISIBLES y con la altura del propio árbol, que es lo que
+                            // decide qué cabe en pantalla.
+                            var filas = new Dictionary<string, IReadOnlyList<U.Graph.Surfaces.SapGuiSurface.TreeRow>>();
+                            lock (_arbolesVistos) _arbolesVistos.Clear();
+                            foreach (var arbol in vistos.Where(v =>
+                                         v.SubType.IndexOf("Tree", StringComparison.OrdinalIgnoreCase) >= 0))
+                            {
+                                var suyas = sap.VisibleTreeRows(arbol.Id, arbol.Height, out string porque);
+                                lock (_arbolesVistos)
+                                {
+                                    _arbolesVistos.Add((arbol.Id, arbol.Type, arbol.Label,
+                                        arbol.ScreenLeft, arbol.ScreenTop, arbol.Width, arbol.Height,
+                                        suyas.Select(fl => (fl.Key, fl.Ruta.Length > 0 ? fl.Ruta : fl.Text, fl.Top, fl.Height, fl.IsFolder)).ToList()));
+                                    _ubicacionDeArboles = _locator?.DondeEstoy()?.Id ?? "";
+                                }
+                                if (suyas.Count > 0) filas[arbol.Id] = suyas;
+                                else LogBus.Log("sentido-sap", $"«{arbol.Label}» no dio filas: {porque}");
+                            }
+                            // LAS REJILLAS (promesa 78): el panel derecho del Puesto de trabajo.
+                            var rejillas = new List<Navigation.SentidoSap.RejillaVista>();
+                            foreach (var shell in vistos.Where(v =>
+                                         v.SubType.IndexOf("Grid", StringComparison.OrdinalIgnoreCase) >= 0))
+                            {
+                                var (botones, filasG) = sap.LeerRejilla(shell.Id);
+                                if (botones.Count > 0 || filasG.Count > 0)
+                                    rejillas.Add(new Navigation.SentidoSap.RejillaVista(shell.Id,
+                                        botones.Select(bt => (bt.Id, bt.Texto)).ToList(),
+                                        filasG.Select(fl => (fl.Clave, fl.Texto)).ToList()));
+                            }
+                            return Navigation.SentidoSap.Traducir(vistos, filas, rejillas);
+                        });
+                    return sentido.Lee(_locator?.DondeEstoy()?.Id ?? "")
+                        .Select(el => (el.Selector, el.Etiqueta, el.Tipo))
                         .ToList();
                 });
             // El mismo vigilante de clics que ya usa el mapa viejo: sin él, el núcleo aprende dónde
@@ -322,22 +499,50 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             // LAS MANOS. El núcleo decide qué pulsar; pulsarlo es del mapeador, y se hace con el
             // mismo UiaSurface que ya usa todo lo demás — no hay un segundo camino de accionar.
-            _mapaVivo.Pulsar = (selector, etiqueta) =>
-            {
-                try
+            // CADA MUNDO POR SU MANO (promesa 69): el selector decide. Un `sap:…` va por la
+            // Scripting API — la única que ve dentro de la sesión—; lo demás, por UIA como siempre.
+            var manoPorMundo = new Navigation.ManoPorMundo(
+                uia: (selector, etiqueta) =>
                 {
-                    var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
-                    return superficie.Execute(new U.Graph.PlanStep
+                    try
                     {
-                        StepOrder = 1, ActionType = "click", Selector = selector, Label = etiqueta,
-                    }, out _);
-                }
-                catch (Exception e)
+                        var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
+                        return superficie.Execute(new U.Graph.PlanStep
+                        {
+                            StepOrder = 1, ActionType = "click", Selector = selector, Label = etiqueta,
+                        }, out _);
+                    }
+                    catch (Exception e)
+                    {
+                        LogBus.Log("nucleo-http", $"no pude pulsar «{etiqueta}»: {e.Message}");
+                        return false;
+                    }
+                },
+                sap: (selector, etiqueta) =>
                 {
-                    LogBus.Log("nucleo-http", $"no pude pulsar «{etiqueta}»: {e.Message}");
-                    return false;
-                }
-            };
+                    try
+                    {
+                        var sap = _locator?.SuperficieSap;
+                        if (sap == null) return false;
+                        // El lápiz escribe sobre lo último pulsado cuando el foco no dice nada:
+                        // el campo de comandos vive en la toolbar y SystemFocus no lo rastrea.
+                        _ultimoSapPulsado = selector;
+                        // «click» es la intención; Execute resuelve por el selector la acción real
+                        // (press, seleccionar la fila, el botón de toolbar) — ahí vive ese saber.
+                        bool ok = sap.Execute(new U.Graph.PlanStep
+                        {
+                            StepOrder = 1, ActionType = "click", Selector = selector, Label = etiqueta,
+                        }, out string error);
+                        if (!ok) LogBus.Log("nucleo-http", $"SAP no pudo pulsar «{etiqueta}»: {error}");
+                        return ok;
+                    }
+                    catch (Exception e)
+                    {
+                        LogBus.Log("nucleo-http", $"no pude pulsar «{etiqueta}» en SAP: {e.Message}");
+                        return false;
+                    }
+                });
+            _mapaVivo.Pulsar = manoPorMundo.Pulsa;
             _mapaVivo.Arrancar();
 
             // SITUARSE PASA AL NÚCLEO. Se enchufa aquí y no en el constructor de SurfaceMapTools
@@ -418,6 +623,71 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false);
             if (mcp.Map != null) mcp.Map.PulsarPorElNucleo = (sel, etq) => pulsar.Pulsa(sel, etq).Cuenta;
 
+            // RECORRER EN BATCH: N pasos por llamada con la compuerta de vida antes de cada uno.
+            // Usa EL MISMO pulsar de arriba —mismas manos, misma verificación por consecuencia,
+            // mismo aprendizaje de aristas— y el freno de siempre: Escape corta la tanda donde va.
+            var recorrer = new Navigation.RecorrerSegunElNucleo(
+                _mapaVivo.Nucleo,
+                () => _locator?.DondeEstoy()?.Id ?? "",
+                pulsar,
+                // EL LÁPIZ TAMBIÉN DESPACHA POR MUNDO (promesa 71): en SAP el texto va al
+                // campo con el foco por la Scripting API; fuera, map_type como siempre.
+                escribir: new Navigation.EscribirPorMundo(
+                    donde: () => _locator?.DondeEstoy()?.Id ?? "",
+                    uia: texto => (mcp.Map?.Call("map_type",
+                            new Dictionary<string, string> { ["text"] = texto }) ?? "no")
+                        .StartsWith("escrib", StringComparison.OrdinalIgnoreCase),
+                    sap: texto =>
+                    {
+                        var sap = _locator?.SuperficieSap;
+                        if (sap == null) return false;
+                        bool ok = sap.EscribirEnElFoco(texto, out string porque);
+                        // EL RESPALDO POR IDENTIDAD: SystemFocus solo rastrea campos del dynpro, y
+                        // el campo de comandos vive en la toolbar (2026-08-26, «nada tiene el
+                        // foco»). El paso anterior del batch pulsó DÓNDE escribir; se escribe ahí
+                        // por su Id y se relee para comprobar que quedó.
+                        if (!ok && _ultimoSapPulsado.Length > 0)
+                        {
+                            ok = sap.Execute(new U.Graph.PlanStep
+                            {
+                                StepOrder = 1, ActionType = "input",
+                                Selector = _ultimoSapPulsado, Value = texto,
+                            }, out string error)
+                            && string.Equals(sap.ValorActual(_ultimoSapPulsado) ?? "", texto,
+                                StringComparison.OrdinalIgnoreCase);
+                            if (!ok) porque += $"; y por Id sobre lo último pulsado tampoco: {error}";
+                        }
+                        if (!ok) LogBus.Log("sentido-sap", $"no pude escribir «{texto}»: {porque}");
+                        return ok;
+                    }).Escribe,
+                hayQueParar: () => Actions.Freno.Pidieron)
+            // Una página web tarda en cargar Y en ser leída (la pantalla se relee cada 900 ms), así
+            // que la compuerta espera más que en una app nativa. Sale en cuanto lo ve: una pantalla
+            // rápida no paga la espera de una lenta.
+            {
+                EsperaMaximaMs = 4000,
+                // Filas de árbol y de rejilla de SAP: su clave cargada se alcanza por identidad
+                // aunque estén desplazadas — seleccionarlas las trae a la vista (promesa 80).
+                AccionableAunSinVerse = sel => sel.StartsWith("sap:", StringComparison.OrdinalIgnoreCase)
+                    && (sel.Contains("#node=", StringComparison.Ordinal)
+                        || sel.Contains("#row=", StringComparison.Ordinal)),
+            };
+            // EL RASTRO (promesa 76): cada relato de batch queda en el anillo que sirve el 8792
+            // para la pestaña «Terreno» del visor.
+            var rastroDeBatches = new Navigation.RastroDeBatches();
+            if (mcp.Map != null) mcp.Map.RecorrerPorElNucleo = pasos =>
+            {
+                string cuenta = recorrer.Recorre(pasos).Cuenta;
+                rastroDeBatches.Agrega(cuenta);
+                return cuenta;
+            };
+
+            // EL TERRENO POR DELANTE (T3): la consulta de la profundidad, sobre el mismo grafo.
+            var terreno = new Navigation.TerrenoPorDelante(_mapaVivo.Nucleo);
+            if (mcp.Map != null) mcp.Map.TerrenoPorElNucleo = (puerta, niveles) =>
+                terreno.Cuenta(_locator?.DondeEstoy()?.Id ?? "", puerta,
+                    int.TryParse(niveles, out int n) ? n : 2);
+
             // LO QUE SE VA ENSEÑANDO VIVE EN EL GRAFO, colgado del elemento. Estuvo un rato en un
             // archivo aparte con las mismas claves, y el usuario lo vio en cuanto se lo dibujé:
             // «¿es paralelo al grafo?». Lo era, y dos sitios que saben de lo mismo se desincronizan
@@ -441,6 +711,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 superficie => Uia.AppAligner.PonerDelante(superficie),
                 (sel, texto) => accionar("input", sel, texto),
                 (sel, opcion) => accionar("select", sel, opcion));
+            _servidorNucleo.Rastro = rastroDeBatches;
             _servidorNucleo.Arrancar();
 
             // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.
@@ -526,6 +797,46 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // comprobar si el terreno es navegable, sin depender de que el modelo decida usarlas.
         // Solo con U_MCP_PROBE=1; en la app del usuario no arranca.
         McpDevProbe.StartIfEnabled(mcp);
+
+        // EL SERVIDOR MCP DE VERDAD (F2 del plan de batch): la puerta por la que el Agent SDK —o
+        // cualquier cliente MCP genérico— conduce el terreno. El catálogo es EL MISMO de la voz,
+        // filtrado a lo que el mapa despacha, más map_batch (que la voz aún no usa; F4 unifica);
+        // el despacho es el MISMO LocalMcp: mismas manos, mismos vetos, mismo freno.
+        var catalogoMcp = Voice.ConversacionEnVivo.Herramientas()
+            .Where(u => SurfaceMapTools.IsMapTool(u.Nombre))
+            .Append(new Voz.Realtime.Utensilio("map_batch",
+                "RECORRE VARIOS PASOS DE UNA SOLA LLAMADA sobre el mapa del computador, con una "
+                + "compuerta antes de cada paso: solo se pulsa lo que está VIVO en pantalla ahora. "
+                + "Llega tan lejos como el terreno deje; al primer paso no-vivo PARA y te dice N de "
+                + "M, dónde quedó, por qué, y qué SÍ está vivo ahí — con eso replanificas sin gastar "
+                + "otra llamada. Es tu RUTA PREDILECTA para navegar: una llamada en vez de una por "
+                + "clic. Cada paso verificado deja su tramo aprendido en el mapa.",
+                new[] { new Voz.Realtime.Argumento("pasos",
+                    "Lista JSON de pasos, en orden. Cada paso: {\"exit\":\"...\"} para cruzar, o "
+                    + "{\"text\":\"...\"} para escribir en el campo con foco. En exit puedes poner "
+                    + "el NOMBRE de la puerta tal como se ve, su selector, O EL NOMBRE DEL DESTINO "
+                    + "al que quieres llegar («Portal:Ajedrez», «Descargas») — si el mapa ya "
+                    + "aprendió qué puerta lleva ahí, la usa solo. Ejemplo: "
+                    + "[{\"exit\":\"Recibidos\"},{\"exit\":\"Correo de Jerónimo\"}]") }))
+            .Append(new Voz.Realtime.Utensilio("map_ahead",
+                "MIRA EL TERRENO POR DELANTE sin tocar nada: qué habrá tras una puerta, según lo "
+                + "que el mapa aprendió al cruzarla otras veces. Úsala ANTES de map_batch para "
+                + "planificar varios pasos de una vez: te dice a qué pantalla lleva cada puerta "
+                + "cruzada y qué recuerda allí. Lo nunca cruzado se anuncia «por descubrir» — ahí "
+                + "no hay promesa, solo se aprende yendo. La predicción es memoria: el batch "
+                + "igualmente verifica que cada cosa esté viva antes de pulsarla.",
+                new[]
+                {
+                    new Voz.Realtime.Argumento("exit",
+                        "La puerta que te interesa (su nombre o su selector). Vacío = el panorama: "
+                        + "todas las puertas cruzadas desde aquí y a dónde llevan."),
+                    new Voz.Realtime.Argumento("levels",
+                        "Cuántas pantallas hacia delante (1-3, por defecto 2)."),
+                }))
+            .ToList();
+        _servidorMcp = new ServidorMcp(new ProtocoloMcp(catalogoMcp, (tool, args) => mcp.Call(tool, args)));
+        _servidorMcp.Start();
+        Closed += (_, __) => _servidorMcp?.Dispose();
         // El backend es Graph: la credencial (X-API-Key) sale del MISMO GraphConfig que usa la
         // ventana de workflows — una sola fuente de key para toda la app.
         _backend = new BackendClient(_config, _graphConfig);
@@ -603,8 +914,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // cuando lo hizo, navega y llena la historia clínica. Va encendido desde el arranque y sin
         // botón: el operador no tiene que acordarse de activarlo para que su compañero pueda
         // exportar desde la web. Sin trabajo no hace nada más que una petición cada tres segundos.
-        _exportador = new EjecutorDeExportaciones(_graphConfig, _rellenador,
-            () => _locator?.DondeEstoy()?.Id ?? "", Dispatcher);
+        _exportador = new EjecutorDeExportaciones(_graphConfig, _rellenador, Dispatcher);
         _exportador.Cuenta += m => Dispatcher.Invoke(() => { SetStatus(m); ShowTalk(); });
         _exportador.Arrancar();
         Closed += (_, __) => _exportador?.Dispose();

@@ -25,5 +25,8 @@
          —programa, pestaña o SAP— ya vive ahí y tiene sus propias promesas. Decidirlo otra vez
          aquí habría creado una segunda opinión sobre el mismo hecho. -->
     <Reference Include="Mapeador.Pulso"><HintPath>$(UBin)\Mapeador.Pulso.dll</HintPath></Reference>
+    <!-- El catálogo neutro de herramientas (Utensilio). Entra con el servidor MCP (2026-08-24):
+         las promesas 60-62 construyen el catálogo con estos tipos. -->
+    <Reference Include="Voz.Realtime"><HintPath>$(UBin)\Voz.Realtime.dll</HintPath></Reference>
   </ItemGroup>
 </Project>

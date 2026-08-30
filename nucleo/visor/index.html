@@ -81,6 +81,7 @@
 <div id="pestanas">
   <div class="tab on" data-v="aqui">Aquí</div>
   <div class="tab" data-v="mapa">Mapa completo</div>
+  <div class="tab" data-v="terreno">Terreno</div>
   <div class="tab" data-v="reglas">Reglas</div>
   <div class="tab" data-v="mapeador">Mapeador</div>
   <div id="tema" title="cambiar entre claro y oscuro"></div>
@@ -164,6 +165,7 @@ async function tick() {
   try {
     if (vista === "aqui") await tickAqui();
     else if (vista === "mapa") await tickMapa();
+    else if (vista === "terreno") await tickTerreno();
     else if (vista === "mapeador") await tickMapeador();
     else await tickReglas();
   } catch (e) { estado("no llego: " + e.message); }
@@ -337,6 +339,114 @@ async function tickMapeador() {
   svg.setAttribute("width", innerWidth); svg.setAttribute("height", Math.max(innerHeight, y + 40));
   svg.innerHTML = s;
   estado("actualizado " + hora());
+}
+
+// EL TERRENO POR DELANTE (T2 del plan terreno-profundo): lo que map_ahead le cuenta al modelo,
+// pintado. La fuente es el 8792 —el grafo sin proyección de por medio—, no Neo4j: para «qué habrá
+// tras esta puerta» un espejo con retardo sería mentira fresca. Vivo = trazo lleno; recordado =
+// punteado — la distinción del núcleo, repetida, no reinterpretada. Debajo, el rastro de los
+// últimos batches: qué se pidió, hasta dónde llegó, por qué paró.
+let ultimaAppReal = "";   // el terreno se mira desde la app que se conduce, no desde este visor
+
+async function tickTerreno() {
+  // MIRAR EL VISOR NO CAMBIA EL TERRENO. Con el navegador delante, «aquí» es el navegador — y el
+  // árbol saldría lleno de pestañas y botones del propio visor. Se recuerda la última app real
+  // (ni claude ni este navegador con el visor) y se mira desde ella, DICIÉNDOLO en la cabecera.
+  let aquiReal = "";
+  try {
+    const n = await fetch("http://127.0.0.1:8792/nucleo").then(r => r.json());
+    aquiReal = n.aqui || "";
+  } catch (e) { /* el /terreno de abajo contará el fallo */ }
+  const esObservador = /claude\.exe|msedge|chrome/i.test(aquiReal) || aquiReal === "";
+  if (!esObservador) ultimaAppReal = aquiReal;
+  const desde = esObservador && ultimaAppReal ? ultimaAppReal : aquiReal;
+
+  const [terreno, batches] = await Promise.all([
+    fetch("http://127.0.0.1:8792/terreno?niveles=2&desde=" + encodeURIComponent(desde))
+      .then(r => r.json()).catch(e => ({ error: e.message })),
+    fetch("http://127.0.0.1:8792/batches").then(r => r.json()).catch(() => ({ corridas: [] })),
+  ]);
+  const desdeRecordado = esObservador && ultimaAppReal;
+
+  if (terreno.error) {
+    cabecera("EL TERRENO NO CONTESTA", "", "la app no responde en el 8792");
+    leyenda("arranca U y vuelve a mirar");
+    pintar(`<text x="46" y="130" style="font-size:13px;fill:${COL.ambarFuerte}">${escapar(terreno.error)}</text>`);
+    return;
+  }
+
+  const corridas = batches.corridas || [];
+  const huella = "terreno|" + JSON.stringify(terreno).length + "|" + (corridas[0]?.cuenta || "") + corridas.length;
+  if (huella === ultimo) { estado("sin cambios · " + hora()); return; }
+  ultimo = huella;
+
+  const an = innerWidth;
+  let st = "", y = 120;
+  const linea = (x, txt, color, tam, extra) => {
+    st += `<text x="${x}" y="${y}" style="font-size:${tam || 13}px;fill:${color}${extra || ""}">${txt}</text>`;
+  };
+
+  // ── el árbol ──
+  const pantalla = (p, x, esAqui) => {
+    linea(x, (esAqui ? (desdeRecordado ? "ÚLTIMA APP · " : "AQUÍ · ") : "") + escapar(p.corto || p.id),
+          esAqui ? COL.textoSvg : COL.mutado, 14, ";font-weight:600");
+    y += 24;
+    const vivas = p.puertas.filter(q => q.vivo), memoria = p.puertas.filter(q => !q.vivo);
+    for (const q of p.puertas) {
+      const cruzada = (q.destino || "").length > 0;
+      // vivo lleno / recordado punteado: el guion antes del nombre ES el trazo
+      st += `<line x1="${x + 4}" y1="${y - 4}" x2="${x + 22}" y2="${y - 4}" `
+          + `stroke="${q.vivo ? COL.lineaVivo : COL.lineaMemoria}" stroke-width="2" `
+          + `${q.vivo ? "" : 'stroke-dasharray="3,3"'} />`;
+      linea(x + 30,
+            escapar(q.etiqueta) + (cruzada ? "  →  " + escapar(cortoDeId(q.destino)) : "   (por descubrir)"),
+            q.vivo ? COL.textoSvg : COL.mutado, 12.5);
+      y += 20;
+    }
+    y += 6;
+    for (const d of (p.dentro || [])) {
+      st += `<line x1="${x + 10}" y1="${y - 12}" x2="${x + 10}" y2="${y + 4}" stroke="${COL.lineaCamino}" stroke-width="1.5"/>`;
+      pantalla(d, x + 34, false);
+    }
+  };
+  pantalla(terreno, 46, true);
+
+  // ── el rastro de batches ──
+  y += 26;
+  linea(46, "LOS ÚLTIMOS BATCHES", COL.mutado, 12, ";letter-spacing:.08em");
+  y += 24;
+  if (corridas.length === 0) { linea(46, "todavía ninguno en esta sesión", COL.mutado, 12.5); y += 20; }
+  for (const c of corridas.slice(0, 8)) {
+    const bien = /^hice los /.test(c.cuenta);
+    linea(46, c.cuando + "  " + (bien ? "✔" : "✘"), bien ? COL.verde : COL.rojo, 12.5);
+    // el relato, recortado a lo que cabe
+    const max = Math.floor((an - 180) / 6.2);
+    linea(150, escapar(c.cuenta.length > max ? c.cuenta.slice(0, max) + "…" : c.cuenta), COL.textoSvg, 12);
+    y += 20;
+  }
+
+  const svg = document.getElementById("lienzo");
+  svg.setAttribute("width", an); svg.setAttribute("height", Math.max(innerHeight, y + 40));
+  svg.innerHTML = st;
+
+  cabecera("El terreno por delante — la predicción propone, lo vivo dispone",
+           escapar(terreno.corto || ""),
+           "vivo = trazo lleno · recordado = punteado · «por descubrir» = nadie lo ha cruzado");
+  leyenda("es lo mismo que map_ahead le cuenta al modelo, leído del 8792");
+  estado("actualizado " + hora());
+}
+
+function cortoDeId(id) {
+  id = id || "";
+  if (id.startsWith("sapgui://")) {
+    const partes = id.slice(9).split("/");
+    if (partes.length >= 2) {
+      const cola = partes[partes.length - 1];
+      return partes[1] + (cola && cola.toLowerCase() !== partes[1].toLowerCase() ? "·" + cola : "");
+    }
+  }
+  const i = id.lastIndexOf("/");
+  return i > 0 ? id.slice(i + 1) : id;
 }
 
 async function tickAqui() {
