@@ -277,22 +277,20 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     var n = sap.SelectedTreeNode(arbol.Id, out string porqueNo);
                     if (n != null) seleccionVista[arbol.Id] = n.Value.Key;
 
-                    if (fila is { } fg)
+                    // LA GEOMETRÍA SOLA NO NOMBRA. Nombró «Consulta» estando el clic sobre otra
+                    // fila (las filas se desplazan entre la observación y el clic) y nació la
+                    // arista FALSA «Consulta lleva de vista:Consulta a vista:Triage» (2026-08-30,
+                    // la vio el usuario en su visor). La selección es la palabra de SAP sobre qué
+                    // quedó elegido: sin ella, mejor mudo que arista falsa — y con ella, la
+                    // geometría solo corrobora que el clic fue EN el árbol y no en otra parte.
+                    if (n == null)
                     {
-                        LogBus.Log("clic-sap", $"geometría: fila «{fg.Text}» bajo el punto"
-                            + (n != null ? (n.Value.Key == fg.Key ? " · la selección corrobora" : $" · OJO: la selección dice «{n.Value.Text}»") : " · sin selección que corrobore"));
-                        // Si la selección responde y NO coincide, manda la selección: es SAP
-                        // diciendo qué quedó elegido tras el clic; la geometría pudo envejecer.
-                        var elegida = (n != null && n.Value.Key != fg.Key) ? (n.Value.Key, n.Value.Text) : (fg.Key, fg.Text);
-                        return Navigation.AtribucionSap.NombraElClic(arbol.Id, arbol.Type, arbol.Label, elegida);
+                        LogBus.Log("clic-sap", $"punto en el árbol pero la selección calla ({porqueNo}): mudo antes que arista falsa");
+                        return null;
                     }
-                    if (n != null)
-                    {
-                        LogBus.Log("clic-sap", $"sin fila bajo el punto; la selección dice «{n.Value.Text}» y se usa");
-                        return Navigation.AtribucionSap.NombraElClic(arbol.Id, arbol.Type, arbol.Label, (n.Value.Key, n.Value.Text));
-                    }
-                    LogBus.Log("clic-sap", $"punto dentro del árbol pero sin fila ni selección ({porqueNo})");
-                    return null;
+                    LogBus.Log("clic-sap", $"clic en el árbol → selección «{n.Value.Text}»"
+                        + (fila is { } fg2 && fg2.Key != n.Value.Key ? $" (la geometría decía «{fg2.Text}»: manda la selección)" : ""));
+                    return Navigation.AtribucionSap.NombraElClic(arbol.Id, arbol.Type, arbol.Label, (n.Value.Key, n.Value.Text));
                 }
                 LogBus.Log("clic-sap", "el punto no cae en ningún árbol visto: que lo intente UIA");
                 return null;
