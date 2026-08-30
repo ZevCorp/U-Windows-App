@@ -75,6 +75,13 @@ sabría pulsar un campo SAP.
   3 a la primera (el 3º pidió desempate de «Continuar», legítimo).
 
 **Deudas descubiertas, para sus fases:**
+- CONTAMINACIÓN EN MEMORIA (2026-08-30, ronda 8): puertas de Claude («Menu», «Copiar»…) aparecen
+  bajo NWP1 en el grafo EN RAM —nunca en Neo4j, que está limpio— por la carrera Estoy/Observar
+  cuando el foco cambia en mala hora. Cura de hoy: reiniciar U restaura limpio. Causa raíz
+  pendiente: emparejar cada observación con la ubicación leída EN EL MISMO instante.
+- «Finalizar (Shift+F3)» CIERRA LA SESIÓN de SAP (salir del sistema) y su confirmación colgó un
+  batch 120 s hasta desloguear al usuario (2026-08-30, mea culpa del agente). Los regresos van por
+  «Atrás/Back», nunca por Finalizar; candidata a puerta marcada-peligrosa en el terreno.
 - El árbol de SAP Easy Access da 0 filas visibles de 205 claves (geometría distinta) — mismo
   síntoma que tenía NWP1 antes del 70; pendiente de mirar su `ItemGeometry`.
 - «Ponerse delante» de una sesión SAP falla («no pude ponerme delante de QAS») — falta el
