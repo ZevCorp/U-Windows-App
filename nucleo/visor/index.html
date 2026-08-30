@@ -393,7 +393,6 @@ async function tickTerreno() {
     y += 24;
     const vivas = p.puertas.filter(q => q.vivo), memoria = p.puertas.filter(q => !q.vivo);
     for (const q of p.puertas) {
-      if (y > 4000) return;
       const cruzada = (q.destino || "").length > 0;
       // vivo lleno / recordado punteado: el guion antes del nombre ES el trazo
       st += `<line x1="${x + 4}" y1="${y - 4}" x2="${x + 22}" y2="${y - 4}" `
@@ -404,7 +403,6 @@ async function tickTerreno() {
             q.vivo ? COL.textoSvg : COL.mutado, 12.5);
       y += 20;
     }
-    if (p.puertasOcultas > 0) { linea(x + 30, `…y ${p.puertasOcultas} más`, COL.mutado, 11.5); y += 20; }
     y += 6;
     for (const d of (p.dentro || [])) {
       st += `<line x1="${x + 10}" y1="${y - 12}" x2="${x + 10}" y2="${y + 4}" stroke="${COL.lineaCamino}" stroke-width="1.5"/>`;

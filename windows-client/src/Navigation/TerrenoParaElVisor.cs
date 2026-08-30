@@ -24,11 +24,7 @@ public static class TerrenoParaElVisor
     public sealed record PantallaVista(
         string Id, string Corto,
         IReadOnlyList<PuertaVista> Puertas,
-        IReadOnlyList<PantallaVista> Dentro,
-        int PuertasOcultas);
-
-    /// <summary>Cuántas puertas por pantalla entrega, con las vivas y cruzadas primero.</summary>
-    private const int PuertasPorPantalla = 30;
+        IReadOnlyList<PantallaVista> Dentro);
 
     public static PantallaVista Arbol(Nucleo.Grafo grafo, string desde, int niveles)
     {
@@ -51,7 +47,11 @@ public static class TerrenoParaElVisor
         // ESA pantalla»; para cualquier pantalla que no es la actual eso es memoria con fecha, y
         // pintarla de vivo prometería pantalla donde no la hay — la mentira que la promesa 75
         // prohíbe. El árbol la apaga fuera de aquí; el batch la re-verificará en vivo al llegar.
-        var puertas = orden.Take(PuertasPorPantalla)
+        // NI UNA PUERTA OCULTA (2026-08-30, lo pidió José David mirando su NWP1): la prosa que va
+        // AL MODELO recorta porque el tamaño le cuesta tokens; aquí el lienzo crece y la página
+        // hace scroll, así que un «…y N más» no resume nada — deja una pregunta sin contestar
+        // justo en la herramienta que existe para no tener que ir a preguntar al log.
+        var puertas = orden
             .Select(a => new PuertaVista(a.Que.Etiqueta, a.Que.Selector, a.Que.Tipo, esAqui && a.Vivo, a.Destino))
             .ToList();
 
@@ -63,8 +63,7 @@ public static class TerrenoParaElVisor
                 dentro.Add(Pantalla(grafo, a.Destino, esAqui: false, nivelesQueQuedan - 1, vistas));
             }
 
-        return new PantallaVista(id, Corto(id), puertas, dentro,
-            Math.Max(0, alli.Count - puertas.Count));
+        return new PantallaVista(id, Corto(id), puertas, dentro);
     }
 
     private static string Corto(string id)

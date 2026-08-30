@@ -151,6 +151,7 @@ internal static class Contrato
         Prueba("74. el terreno por delante no INVENTA: lo no cruzado es «por descubrir» y la lista no ahoga", ElTerrenoNoInventa);
         Prueba("75. el visor recibe el terreno como ÁRBOL: vivo, recordado y destino, sin inventar", ElArbolDelVisor);
         Prueba("76. cada batch deja rastro consultable, y el anillo no crece sin tope", ElRastroDeLosBatches);
+        Prueba("77. el cruce HUMANO en SAP también enseña: el clic se nombra por la puerta de SAP", ElClicHumanoEnSapEnsena);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1014,6 +1015,19 @@ internal static class Contrato
         Debe(TerrenoParaElVisor.Arbol(g, "sapgui://QAS/NWP1/FRAME/0100", 1).Dentro
                 .First(d => d.Id.EndsWith("ssubCENSO", StringComparison.Ordinal)).Dentro.Count == 0,
             "el tope de niveles corta de verdad");
+
+        // NI UNA PUERTA OCULTA. Lo pidió José David mirando su NWP1 (2026-08-30): la pestaña decía
+        // «…y 10 más» y esa frase, en un visor, no es un resumen — es una pregunta sin contestar.
+        // El recorte tenía sentido en la respuesta AL MODELO, donde el tamaño cuesta tokens; aquí
+        // el lienzo crece y la página hace scroll, así que ocultar solo esconde terreno.
+        var muchas = new Nucleo.Grafo();
+        muchas.Estoy("a://x");
+        muchas.Observar("a://x", Enumerable.Range(0, 40)
+            .Select(i => new Nucleo.Elemento($"s{i:D2}", $"puerta {i:D2}", "Button")).ToList());
+        var todas = TerrenoParaElVisor.Arbol(muchas, "a://x", 1);
+        Debe(todas.Puertas.Count == 40, "el visor recibe TODAS las puertas, sean 3 o 40");
+        Debe(todas.Puertas.Any(q => q.Etiqueta == "puerta 39"),
+            "…incluida la última: nada se queda fuera del lienzo");
     }
 
     /// <remarks>
@@ -1037,6 +1051,40 @@ internal static class Contrato
             "…y lo que se cae es LO MÁS VIEJO");
         Debe(r.Ultimas()[0].Cuenta.EndsWith(": D", StringComparison.Ordinal),
             "el último batch es el primero de la lista");
+    }
+
+    /// <remarks>
+    /// LO ENCONTRÓ JOSÉ DAVID EN LA PRIMERA RONDA DE T4 (2026-08-30): hizo el recorrido del triage
+    /// A MANO —nwp1, el árbol, Triage, el paciente— y al volver, sus puertas seguían «por
+    /// descubrir». No leyó mal: sus PANTALLAS entraron al terreno (Observar), pero sus CRUCES no
+    /// dejaron arista, porque la atribución del clic humano nombra lo clicado con UIA — y dentro
+    /// de SAP, UIA ve un Pane sin etiquetas. «Salto SIN atribuir», cada vez.
+    ///
+    /// SAP sabe decir qué se clicó (findByPosition, y en un árbol la fila clicada ES la
+    /// seleccionada). Esta promesa juzga el NOMBRADO —la parte pura—: las mismas vallas que el
+    /// camino UIA (sin etiqueta no hay paso), y la identidad entera para las filas (árbol MÁS
+    /// clave, como la promesa 70). El casado contra lo observado sigue siendo de
+    /// AQuienSeLeDioClic, con sus vallas de ambigüedad: dos «Consultas» → no se atribuye.
+    /// </remarks>
+    private static void ElClicHumanoEnSapEnsena(SurfaceMap _)
+    {
+        var boton = AtribucionSap.NombraElClic("wnd[0]/tbar[1]/btn[19]", "GuiButton", "Otro menú", nodo: null);
+        Debe(boton != null && boton.Value.Etiqueta == "Otro menú" && boton.Value.Tipo == "GuiButton",
+            "un botón clicado se nombra con su etiqueta y tipo de SAP");
+        Debe(boton != null && boton.Value.Selector == "sap:wnd[0]/tbar[1]/btn[19]",
+            "…y con su Id envuelto en el vocabulario sap:");
+
+        var fila = AtribucionSap.NombraElClic("wnd[0]/shellcont/shell", "GuiShell", "Tree",
+            nodo: ("vw00576", "Triage"));
+        Debe(fila != null && fila.Value.Etiqueta == "Triage" && fila.Value.Tipo == "GuiTreeFila",
+            "un clic en el árbol se nombra por la FILA seleccionada, no por el árbol");
+        Debe(fila != null && fila.Value.Selector == "sap:wnd[0]/shellcont/shell#node=vw00576",
+            "…con la identidad entera: árbol MÁS clave (promesa 70)");
+
+        Debe(AtribucionSap.NombraElClic("wnd[0]/usr/lbl", "GuiLabel", "", nodo: null) == null,
+            "sin etiqueta no hay paso: la misma valla que el camino UIA");
+        Debe(AtribucionSap.NombraElClic("", "GuiButton", "Continuar", nodo: null) == null,
+            "sin Id no hay identidad, y sin identidad no se atribuye nada");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
