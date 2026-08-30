@@ -333,6 +333,64 @@ public sealed class FuenteOmi : IDisposable
         LogBus.Log("omi", ahora
             ? "Bluetooth dice que el collar volvió a conectarse"
             : "Bluetooth dice que el collar se desconectó");
+
+        // VOLVER A CONECTARSE NO ES VOLVER A ESTAR SUSCRITO, y confundirlo dejaba el collar como un
+        // cascarón: Bluetooth decía «conectado», el panel lo pintaba en verde y el punto salía azul
+        // —pero no llegaba NI UNA trama de audio NI UNA pulsación del botón—.
+        //
+        // WinRT tira las suscripciones GATT cuando se cae el enlace, y aquí solo se anotaba el
+        // cambio. Con MaintainConnection Windows rehace el enlace solo cada ~31 s, así que bastaba
+        // el primer ciclo para quedarse sordo el resto de la sesión. Medido el 2026-08-25, con el
+        // usuario delante de una demo: «botón del collar suscrito» UNA vez a las 09:51, veinte
+        // reconexiones después, «botón del collar pulsado» CERO veces, y 3.358.464 ms —56 minutos—
+        // sin una sola trama con el collar «conectado».
+        //
+        // Se rearma en segundo plano: esto es un aviso de WinRT y bloquearlo colgaría su hilo.
+        if (ahora) _ = ReengancharAsync();
+    }
+
+    /// <summary>Un rearme a la vez: los avisos de conexión llegan en ráfaga cuando el enlace baila.</summary>
+    private int _reenganchando;
+
+    /// <summary>
+    /// Vuelve a suscribir audio y botón tras una reconexión. Sin esto el collar queda conectado y
+    /// mudo — ver <see cref="AlCambiarConexion"/>.
+    /// </summary>
+    private async Task ReengancharAsync()
+    {
+        if (System.Threading.Interlocked.Exchange(ref _reenganchando, 1) == 1) return;
+        try
+        {
+            // Un instante de gracia: recién avisada la reconexión, el GATT todavía no acepta
+            // escrituras de descriptor y el rearme fallaría por llegar antes de tiempo.
+            await Task.Delay(300);
+            if (!_conectado || _audio == null) return;
+
+            var estado = await _audio.WriteClientCharacteristicConfigurationDescriptorAsync(
+                GattClientCharacteristicConfigurationDescriptorValue.Notify);
+            LogBus.Log("omi", estado == GattCommunicationStatus.Success
+                ? "audio reenganchado tras la reconexión"
+                : $"el audio NO se pudo reenganchar: {estado}");
+
+            // VENTANA LIMPIA PARA LA RED DE SEGURIDAD. El reloj de «sin trama» seguía corriendo
+            // desde la última trama de verdad, así que al volver el collar la red lo mataba antes
+            // de que llegara la primera: en el log, la voz entró por el collar a las 10:48:19 y a
+            // las 10:48:21 ya se había rendido con «3358464 ms sin una sola trama» — 56 minutos de
+            // reloj viejo juzgando un enlace de dos segundos. Acabamos de rearmar: lo que se mide
+            // desde ahora es si ESTE enganche entrega.
+            if (estado == GattCommunicationStatus.Success)
+                lock (_candado) { _ultimaTrama = _reloj.ElapsedMilliseconds; _reposicion.Reiniciar(); }
+
+            // El botón se vuelve a buscar entero: su servicio también murió con el enlace, y
+            // quedarse con el objeto viejo es quedarse con una suscripción que no notifica.
+            if (_boton != null) { try { _boton.ValueChanged -= AlPulsarBoton; } catch { } }
+            _boton = null;
+            try { _servicioBoton?.Dispose(); } catch { }
+            _servicioBoton = null;
+            await BotonAsync();
+        }
+        catch (Exception e) { LogBus.Log("omi", $"al reenganchar: {e.GetType().Name}: {e.Message}"); }
+        finally { System.Threading.Interlocked.Exchange(ref _reenganchando, 0); }
     }
 
     /// <summary>
