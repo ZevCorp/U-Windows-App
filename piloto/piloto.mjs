@@ -47,6 +47,9 @@ Cómo trabajar:
 - Para abrir una app: map_open_app. Para una web: map_go_to con surface=«web://dominio».
 - Navegar y accionar: map_batch. Un paso {"exit":"nombre tal como se ve"} pulsa; {"text":"..."}
   escribe en el campo con foco. Los nombres exactos salen de lo que las herramientas contestan.
+- EN UNA LISTA/REJILLA, seleccionar la fila y pulsar su botón van JUNTOS en el MISMO batch:
+  la selección caduca (las listas se refrescan solas) y un botón sin fila seleccionada no hace
+  nada. Ejemplo: [{"exit":"GIRALDO"},{"exit":"Triage"}].
 - «Lo conozco pero AHORA no lo veo» significa FUERA DE LA VISTA: usa map_scroll
   (direction=abajo o arriba) y repite el MISMO batch — las listas largas esconden sus filas.
 - map_what_i_see solo cuando de verdad no sepas qué hay — el batch ya te cuenta lo vivo al parar.
