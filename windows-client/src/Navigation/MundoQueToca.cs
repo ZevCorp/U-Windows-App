@@ -109,16 +109,18 @@ public static class AtribucionSap
 {
     /// <param name="nodo">La fila seleccionada del árbol clicado (clave y texto), si lo era.</param>
     public static (string Selector, string Etiqueta, string Tipo)? NombraElClic(
-        string id, string tipo, string etiqueta, (string Key, string Text)? nodo)
+        string id, string tipo, string etiqueta, (string Key, string Text)? nodo, bool esCarpeta = false)
     {
         if (string.IsNullOrWhiteSpace(id)) return null;
 
         // Un clic en el árbol es un clic en su FILA: la identidad entera (árbol MÁS clave), la
         // misma de la promesa 70 — la que el observador ya escribe y la mano ya sabe pulsar.
+        // Y CON SU TIPO EXACTO: «Favoritos» nombrada GuiTreeFila fue rechazada por el juez —que
+        // exige tipo exacto— aunque la puerta existía como GuiTreeCarpeta (ronda 4, 2026-08-30).
         if (nodo is { } n && !string.IsNullOrWhiteSpace(n.Key))
             return (SapSelector.ByNode(id, n.Key),
                     string.IsNullOrWhiteSpace(n.Text) ? n.Key : n.Text,
-                    "GuiTreeFila");
+                    esCarpeta ? "GuiTreeCarpeta" : "GuiTreeFila");
 
         // Sin etiqueta no hay paso: la misma valla que el camino UIA. Una arista con acción
         // anónima no describe nada.

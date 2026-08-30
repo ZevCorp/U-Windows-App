@@ -1102,6 +1102,14 @@ internal static class Contrato
             "…y el límite entre filas respeta a la de abajo");
         Debe(AtribucionSap.FilaEnElPunto(yLocal: 400, filasConCaja) == null,
             "un punto fuera de toda fila no nombra nada: mejor mudo que equivocado");
+
+        // FILA Y CARPETA NO SON EL MISMO TIPO (ronda 4, 2026-08-30): el clic en «Favoritos» se
+        // nombró GuiTreeFila, el observador la había escrito GuiTreeCarpeta, y el juez —que exige
+        // tipo exacto— rechazó una puerta que existía.
+        var carpeta = AtribucionSap.NombraElClic("wnd[0]/shell", "GuiShell", "Tree",
+            nodo: ("Favo", "Favoritos"), esCarpeta: true);
+        Debe(carpeta != null && carpeta.Value.Tipo == "GuiTreeCarpeta",
+            "una carpeta clicada se nombra carpeta: el juez exige el tipo exacto y hay que dárselo");
     }
 
     /// <remarks>
