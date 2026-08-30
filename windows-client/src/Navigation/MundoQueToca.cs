@@ -96,6 +96,39 @@ public sealed class EscribirPorMundo
 }
 
 /// <summary>
+/// EL NOMBRADO DEL CLIC HUMANO EN SAP: qué puerta fue, dicha en el idioma del terreno.
+/// </summary>
+/// <remarks>
+/// Lo encontró José David en la primera ronda de T4 (2026-08-30): recorrió el triage a mano y sus
+/// cruces no dejaron arista — la atribución nombraba lo clicado con UIA, que dentro de SAP ve un
+/// Pane sin etiquetas. SAP sí sabe qué se clicó (findByPosition; y en un árbol, la fila clicada
+/// ES la seleccionada). Aquí vive solo el NOMBRADO, puro (promesa 77); el casado contra lo
+/// observado sigue siendo de AQuienSeLeDioClic con sus vallas — dos «Consultas», no se atribuye.
+/// </remarks>
+public static class AtribucionSap
+{
+    /// <param name="nodo">La fila seleccionada del árbol clicado (clave y texto), si lo era.</param>
+    public static (string Selector, string Etiqueta, string Tipo)? NombraElClic(
+        string id, string tipo, string etiqueta, (string Key, string Text)? nodo)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+
+        // Un clic en el árbol es un clic en su FILA: la identidad entera (árbol MÁS clave), la
+        // misma de la promesa 70 — la que el observador ya escribe y la mano ya sabe pulsar.
+        if (nodo is { } n && !string.IsNullOrWhiteSpace(n.Key))
+            return (SapSelector.ByNode(id, n.Key),
+                    string.IsNullOrWhiteSpace(n.Text) ? n.Key : n.Text,
+                    "GuiTreeFila");
+
+        // Sin etiqueta no hay paso: la misma valla que el camino UIA. Una arista con acción
+        // anónima no describe nada.
+        if (string.IsNullOrWhiteSpace(etiqueta)) return null;
+
+        return (SapSelector.ById(id), etiqueta, tipo);
+    }
+}
+
+/// <summary>
 /// LA TRADUCCIÓN de lo que la Scripting API devuelve al vocabulario del núcleo. Es donde se decide
 /// qué es PUERTA para el grafo — la misma pregunta que ParecePuerta contesta para la web.
 /// </summary>
@@ -111,8 +144,22 @@ public static class SentidoSap
         "GuiCheckBox", "GuiRadioButton", "GuiButton", "GuiOkCodeField", "GuiTab",
     };
 
+    /// <summary>
+    /// Una rejilla ALV tal como la entrega la superficie: sus botones de toolbar (id y texto) y
+    /// sus filas visibles (clave de pares columna=valor, y texto legible).
+    /// </summary>
+    public sealed record RejillaVista(
+        string Id,
+        IReadOnlyList<(string BtnId, string Texto)> Botones,
+        IReadOnlyList<(string ClaveFila, string Texto)> Filas);
+
     public static List<Nucleo.Elemento> Traducir(IReadOnlyList<SapVisualElement> vistos) =>
-        Traducir(vistos, null);
+        Traducir(vistos, null, null);
+
+    public static List<Nucleo.Elemento> Traducir(
+        IReadOnlyList<SapVisualElement> vistos,
+        IReadOnlyDictionary<string, IReadOnlyList<SapGuiSurface.TreeRow>>? filasPorArbol) =>
+        Traducir(vistos, filasPorArbol, null);
 
     /// <summary>
     /// Lo mismo, sumando las FILAS VISIBLES de cada árbol (clave: el id del árbol).
@@ -130,9 +177,29 @@ public static class SentidoSap
     /// </remarks>
     public static List<Nucleo.Elemento> Traducir(
         IReadOnlyList<SapVisualElement> vistos,
-        IReadOnlyDictionary<string, IReadOnlyList<SapGuiSurface.TreeRow>>? filasPorArbol)
+        IReadOnlyDictionary<string, IReadOnlyList<SapGuiSurface.TreeRow>>? filasPorArbol,
+        IReadOnlyList<RejillaVista>? rejillas)
     {
         var r = new List<Nucleo.Elemento>();
+
+        // LA REJILLA (promesa 78): la observación 3 de la primera ronda de T4 — el panel derecho
+        // del Triage era UNA caja ámbar y ni un botón suyo era puerta. Sus botones y filas viven
+        // DENTRO del control ALV; se leen por su API y entran con identidad entera (#tbbtn, #row
+        // por pares columna=valor — «la fila 0» es una posición, los pares dicen a QUIÉN).
+        foreach (var g in rejillas ?? Array.Empty<RejillaVista>())
+        {
+            foreach (var (btnId, texto) in g.Botones ?? Array.Empty<(string, string)>())
+            {
+                if (string.IsNullOrWhiteSpace(btnId) || string.IsNullOrWhiteSpace(texto)) continue;
+                r.Add(new Nucleo.Elemento(SapSelector.ByToolbarButton(g.Id, btnId), texto, "GuiGridBoton"));
+            }
+            foreach (var (clave, texto) in g.Filas ?? Array.Empty<(string, string)>())
+            {
+                if (string.IsNullOrWhiteSpace(clave)) continue;
+                r.Add(new Nucleo.Elemento(SapSelector.ByRow(g.Id, clave),
+                    string.IsNullOrWhiteSpace(texto) ? clave : texto, "GuiGridFila"));
+            }
+        }
 
         foreach (var (arbol, filas) in filasPorArbol ?? new Dictionary<string, IReadOnlyList<SapGuiSurface.TreeRow>>())
             foreach (var fila in filas ?? Array.Empty<SapGuiSurface.TreeRow>())

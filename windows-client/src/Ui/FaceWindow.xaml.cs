@@ -38,6 +38,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private Navigation.MapaVivo? _mapaVivo;
     /// <summary>Lo último que la mano SAP pulsó: el destino del lápiz cuando el foco calla.</summary>
     private string _ultimoSapPulsado = "";
+    /// <summary>Los árboles de la última observación SAP: el nombrado del clic pregunta solo a estos.</summary>
+    private readonly List<(string Id, string Type, string Label)> _arbolesVistos = new();
 
     /// <summary>El recuadro que se pinta sobre lo señalado. Nace al primer señalamiento y no antes:
     /// quien nunca señala no paga una ventana de más.</summary>
@@ -222,6 +224,44 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // conectan; con él dicen CÓMO pasar de una a otra, que es lo que permite navegar sin
         // haber grabado un workflow. Siempre activo, porque el terreno se aprende viviendo.
         _clickWatcher = new ClickWatcher();
+        // EL CLIC HUMANO EN SAP SE NOMBRA POR SU PUERTA (promesa 77): findByPosition dice el
+        // componente; si era un árbol, la fila clicada ES la seleccionada (las filas no tienen
+        // geometría propia). El nombrado es puro (AtribucionSap); aquí solo se juntan las piezas.
+        // EL CLIC HUMANO EN SAP SE NOMBRA SIN COORDENADAS (promesa 77). El plan A era
+        // findByPosition y está MUERTO en este SAP GUI 800: un barrido entero de la ventana no
+        // resolvió ni un punto (2026-08-30, sondeado por COM). La vía que sí es de SAP: un clic en
+        // un árbol CAMBIA SU SELECCIÓN — se compara la selección de cada árbol visible contra la
+        // última vista, y el árbol que cambió nombra la fila. Un árbol recién visto solo se
+        // apunta (atribuir su selección vieja al primer clic colgaría filas a clics de botones).
+        var seleccionVista = new Dictionary<string, string>(StringComparer.Ordinal);
+        _clickWatcher.ResolverSap = (x, y) =>
+        {
+            var sap = _locator?.SuperficieSap;
+            if (sap == null) return null;
+            var id = _locator?.DondeEstoy()?.Id ?? "";
+            if (!id.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)) return null;
+
+            // RÁPIDO O INÚTIL: el salto de pantalla se procesa ~600 ms tras el clic, y un nombrado
+            // que tarde más llega huérfano — pasó de verdad: «Triage» se nombró bien y la arista
+            // no se escribió porque el salto ya había pasado SIN atribuir (2026-08-30, a cuatro
+            // ojos con el usuario). Por eso NO se recorre nada aquí: los árboles ya los conoce la
+            // última observación del sentido; solo se les pregunta la selección.
+            System.Threading.Thread.Sleep(150);
+
+            List<(string Id, string Type, string Label)> arboles;
+            lock (_arbolesVistos) arboles = new(_arbolesVistos);
+            foreach (var arbol in arboles)
+            {
+                var n = sap.SelectedTreeNode(arbol.Id, out _);
+                if (n == null) continue;
+                bool conocido = seleccionVista.TryGetValue(arbol.Id, out string? antes);
+                seleccionVista[arbol.Id] = n.Value.Key;
+                if (conocido && antes != n.Value.Key)
+                    return Navigation.AtribucionSap.NombraElClic(
+                        arbol.Id, arbol.Type, arbol.Label, (n.Value.Key, n.Value.Text));
+            }
+            return null;   // ningún árbol cambió: que lo intente UIA (botones de toolbar sí se ven)
+        };
         _clickWatcher.Start();
         _surfaceMap.Clicks = _clickWatcher;
 
@@ -337,14 +377,28 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                             // solo las VISIBLES y con la altura del propio árbol, que es lo que
                             // decide qué cabe en pantalla.
                             var filas = new Dictionary<string, IReadOnlyList<U.Graph.Surfaces.SapGuiSurface.TreeRow>>();
+                            lock (_arbolesVistos) _arbolesVistos.Clear();
                             foreach (var arbol in vistos.Where(v =>
                                          v.SubType.IndexOf("Tree", StringComparison.OrdinalIgnoreCase) >= 0))
                             {
+                                lock (_arbolesVistos)
+                                    _arbolesVistos.Add((arbol.Id, arbol.Type, arbol.Label));
                                 var suyas = sap.VisibleTreeRows(arbol.Id, arbol.Height, out string porque);
                                 if (suyas.Count > 0) filas[arbol.Id] = suyas;
                                 else LogBus.Log("sentido-sap", $"«{arbol.Label}» no dio filas: {porque}");
                             }
-                            return Navigation.SentidoSap.Traducir(vistos, filas);
+                            // LAS REJILLAS (promesa 78): el panel derecho del Puesto de trabajo.
+                            var rejillas = new List<Navigation.SentidoSap.RejillaVista>();
+                            foreach (var shell in vistos.Where(v =>
+                                         v.SubType.IndexOf("Grid", StringComparison.OrdinalIgnoreCase) >= 0))
+                            {
+                                var (botones, filasG) = sap.LeerRejilla(shell.Id);
+                                if (botones.Count > 0 || filasG.Count > 0)
+                                    rejillas.Add(new Navigation.SentidoSap.RejillaVista(shell.Id,
+                                        botones.Select(bt => (bt.Id, bt.Texto)).ToList(),
+                                        filasG.Select(fl => (fl.Clave, fl.Texto)).ToList()));
+                            }
+                            return Navigation.SentidoSap.Traducir(vistos, filas, rejillas);
                         });
                     return sentido.Lee(_locator?.DondeEstoy()?.Id ?? "")
                         .Select(el => (el.Selector, el.Etiqueta, el.Tipo))

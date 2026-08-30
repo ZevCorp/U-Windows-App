@@ -152,6 +152,7 @@ internal static class Contrato
         Prueba("75. el visor recibe el terreno como ÁRBOL: vivo, recordado y destino, sin inventar", ElArbolDelVisor);
         Prueba("76. cada batch deja rastro consultable, y el anillo no crece sin tope", ElRastroDeLosBatches);
         Prueba("77. el cruce HUMANO en SAP también enseña: el clic se nombra por la puerta de SAP", ElClicHumanoEnSapEnsena);
+        Prueba("78. la REJILLA entra al terreno: sus botones y sus filas visibles son puertas", LaRejillaEntraAlTerreno);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1085,6 +1086,43 @@ internal static class Contrato
             "sin etiqueta no hay paso: la misma valla que el camino UIA");
         Debe(AtribucionSap.NombraElClic("", "GuiButton", "Continuar", nodo: null) == null,
             "sin Id no hay identidad, y sin identidad no se atribuye nada");
+    }
+
+    /// <remarks>
+    /// LA OBSERVACIÓN 3 DE JOSÉ DAVID, confirmada a cuatro ojos (2026-08-30): en la pantalla del
+    /// Triage el inspector pintaba el panel derecho como UNA caja ámbar —«shell · GridView · sin
+    /// mapear»— y el terreno no tenía ni un botón de allí. Los botones («Triage», «Pasar a
+    /// Consulta»…) y la fila del paciente viven DENTRO del control ALV: no son GuiComponents, el
+    /// recorrido no los ve. Sondeada la rejilla viva: 12 botones con id propio (ZMEDTRIAGE, APPST…)
+    /// y las filas con sus 23 columnas — todo legible, nada era puerta.
+    ///
+    /// La fila entra por PARES columna=valor, no por índice (la regla del vocabulario, SapSelector
+    /// .RowMark): «la fila 0» es una posición y mañana es otro paciente; los pares dicen a QUIÉN.
+    /// </remarks>
+    private static void LaRejillaEntraAlTerreno(SurfaceMap _)
+    {
+        const string rejilla = "wnd[0]/usr/ssubVIEW_SCREEN:SAPLN1LSTAMB:0007/cntlISH_VIEW_007/shellcont/shell";
+        var rejillas = new[]
+        {
+            new SentidoSap.RejillaVista(rejilla,
+                Botones: new[] { ("ZMEDTRIAGE", "Triage"), ("APPST", "Pasar a Consulta"), ("", "sin id") },
+                Filas: new[] { ("FALNR=2394346|PATNNAME=GIRALDO", "GIRALDO HERNAN · 2394346") }),
+        };
+        var elementos = SentidoSap.Traducir(
+            Array.Empty<U.Graph.Surfaces.SapVisualElement>(), filasPorArbol: null, rejillas);
+
+        var triage = elementos.FirstOrDefault(e => e.Etiqueta == "Triage");
+        Debe(triage != null, "un botón de la toolbar de la rejilla es una puerta");
+        Debe(triage != null && triage.Selector == "sap:" + rejilla + "#tbbtn=ZMEDTRIAGE",
+            "…con su identidad entera: rejilla MÁS id de botón, que es como se pulsa sin coordenadas");
+
+        var fila = elementos.FirstOrDefault(e => e.Etiqueta.Contains("GIRALDO"));
+        Debe(fila != null, "una fila visible de la rejilla es una puerta: es el contenido con el que se trabaja");
+        Debe(fila != null && fila.Selector == "sap:" + rejilla + "#row=FALNR=2394346|PATNNAME=GIRALDO",
+            "…identificada por PARES columna=valor, nunca por índice: los pares dicen a QUIÉN se señala");
+
+        Debe(!elementos.Any(e => e.Etiqueta == "sin id"),
+            "un botón sin id no entra: sin identidad no hay puerta");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

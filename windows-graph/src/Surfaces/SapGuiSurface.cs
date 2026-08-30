@@ -686,6 +686,114 @@ public sealed class SapGuiSurface : IUiSurface
     /// con x/y en coordenadas de pantalla; con <c>raise=false</c> devuelve null en vez de lanzar cuando
     /// no hay nada. Devuelve el <c>Id</c> del componente, o null si SAP no está o no hay componente ahí.
     /// </summary>
+    /// <summary>Un botón de la toolbar de una rejilla ALV, y una fila visible de la misma.</summary>
+    public sealed record BotonDeRejilla(string Id, string Texto);
+    public sealed record FilaDeRejilla(string Clave, string Texto);
+
+    /// <summary>
+    /// LEER UNA REJILLA ALV: sus botones de toolbar y sus filas visibles. Es el contenido del
+    /// panel derecho del Puesto de trabajo (promesa 78) — botones y filas viven DENTRO del
+    /// control y el recorrido de componentes no los ve.
+    /// </summary>
+    /// <remarks>
+    /// Los botones van por los métodos Get* (GetToolbarButtonId/Text/Tooltip — los sin «Get» no
+    /// existen en este SAP GUI 800, sondeado 2026-08-30). La CLAVE de la fila son pares
+    /// columna=valor de las primeras columnas con dato — nunca el índice: «la fila 0» describe
+    /// una posición y mañana es otro paciente (la regla de <see cref="SapSelector.RowMark"/>).
+    /// El texto legible sale de las primeras celdas con letra.
+    /// </remarks>
+    public (List<BotonDeRejilla> Botones, List<FilaDeRejilla> Filas) LeerRejilla(string gridId)
+    {
+        var botones = new List<BotonDeRejilla>();
+        var filas = new List<FilaDeRejilla>();
+        dynamic? session;
+        try { session = Session(); } catch { return (botones, filas); }
+        if (session == null) return (botones, filas);
+
+        dynamic? g = null;
+        try { g = session.FindById(SapSelector.Normalize(gridId), false); } catch { }
+        if (g == null) { try { g = session.FindById(gridId, false); } catch { } }
+        if (g == null) return (botones, filas);
+
+        try
+        {
+            int nb = (int)g.ToolbarButtonCount;
+            for (int i = 0; i < nb && i < 40; i++)
+            {
+                try
+                {
+                    string tipo = Str(g.GetToolbarButtonType(i));
+                    if (!tipo.Contains("Button", StringComparison.OrdinalIgnoreCase)) continue;
+                    string id = Str(g.GetToolbarButtonId(i));
+                    if (id.Length == 0) continue;
+                    string texto = Str(g.GetToolbarButtonText(i));
+                    if (texto.Length == 0) texto = Str(g.GetToolbarButtonTooltip(i));
+                    if (texto.Length == 0) continue;
+                    botones.Add(new BotonDeRejilla(id, texto));
+                }
+                catch { }
+            }
+        }
+        catch { /* una rejilla sin toolbar es legal */ }
+
+        try
+        {
+            var columnas = new List<string>();
+            dynamic orden = g.ColumnOrder;
+            int nc = (int)orden.Count;
+            for (int i = 0; i < nc && i < 30; i++)
+                try { columnas.Add(Str(orden.ElementAt(i))); } catch { }
+
+            int desde = 0, visibles = 0, total = 0;
+            try { desde = (int)g.FirstVisibleRow; } catch { }
+            try { visibles = (int)g.VisibleRowCount; } catch { }
+            try { total = (int)g.RowCount; } catch { }
+            int hasta = Math.Min(total, desde + Math.Max(visibles, 1));
+
+            for (int f = desde; f < hasta && filas.Count < 20; f++)
+            {
+                var pares = new List<string>();
+                var letras = new List<string>();
+                foreach (string col in columnas)
+                {
+                    string v = "";
+                    try { v = Str(g.GetCellValue(f, col)).Trim(); } catch { }
+                    if (v.Length == 0 || v.StartsWith("@", StringComparison.Ordinal)) continue;
+                    if (pares.Count < 3) pares.Add(col + "=" + v);
+                    if (letras.Count < 4 && v.Any(char.IsLetterOrDigit)) letras.Add(v);
+                }
+                if (pares.Count == 0) continue;
+                filas.Add(new FilaDeRejilla(string.Join("|", pares), string.Join(" · ", letras)));
+            }
+        }
+        catch { /* sin filas legibles, los botones ya valen */ }
+
+        return (botones, filas);
+    }
+
+    /// <summary>
+    /// QUÉ COMPONENTE CLICÓ EL HUMANO, con nombre: Id, tipo, subtipo y etiqueta. Es
+    /// <see cref="HitTest"/> más lo que la atribución necesita para nombrar el clic (promesa 77) —
+    /// dentro de SAP, UIA ve un Pane sin etiquetas y el vigilante de clics se quedaba mudo.
+    /// </summary>
+    public (string Id, string Tipo, string SubTipo, string Etiqueta)? ComponenteEn(int screenX, int screenY)
+    {
+        dynamic? session;
+        try { session = Session(); } catch { return null; }
+        if (session == null) return null;
+
+        try
+        {
+            dynamic comp = session.FindByPosition(screenX, screenY, false);
+            if (comp == null) return null;
+            string id = Str(comp.Id);
+            if (id.Length == 0) return null;
+            string tipo = ""; try { tipo = Str(comp.Type); } catch { }
+            return (id, tipo, SubTypeOf(comp), LabelOf(comp));
+        }
+        catch { return null; }
+    }
+
     public string? HitTest(int screenX, int screenY)
     {
         dynamic? session;
@@ -777,6 +885,17 @@ public sealed class SapGuiSurface : IUiSurface
             itemHeight = h;
             itemTop = TreeInt(tree, "GetItemTop", key, col);
             return;
+        }
+
+        // UN ÁRBOL SIMPLE NO TIENE COLUMNAS — y por eso el de Favoritos de Easy Access daba
+        // «0 filas visibles de 205 claves» y el acceso NWP1 del usuario no existía en el terreno
+        // (2026-08-30, primera ronda de T4). SAP acepta la columna VACÍA para estos árboles:
+        // GetItemHeight(key, "") devuelve la fila real (30 px, probado contra el árbol vivo).
+        int sinCol = TreeInt(tree, "GetItemHeight", key, "");
+        if (sinCol > 0)
+        {
+            itemHeight = sinCol;
+            itemTop = TreeInt(tree, "GetItemTop", key, "");
         }
     }
 
@@ -1947,9 +2066,15 @@ public sealed class SapGuiSurface : IUiSurface
         string? key = ResolveNodeKey(tree, recordedKey, step);
         if (key == null)
         {
+            // Qué es la clave grabada HOY: si tiene otro rótulo, el árbol es de otro usuario (las
+            // claves de NWP1 son por menú) y el mensaje debe decirlo — «ya no está» a secas manda
+            // a buscar carpetas plegadas cuando lo que cambió fue la cuenta (2026-08-27).
+            string ahora = NodeText(tree, recordedKey, TreeColumnNames(tree));
             error = $"la fila «{step.Label}» ya no está en el árbol " +
                     $"(clave grabada {recordedKey}, ruta {step.NodePath ?? "?"}). " +
-                    "Si cuelga de una carpeta plegada, hay que expandirla antes.";
+                    (ahora.Length > 0
+                        ? $"Esa clave hoy se llama «{ahora}»: este árbol es de otro usuario de SAP."
+                        : "Si cuelga de una carpeta plegada, hay que expandirla antes.");
             return false;
         }
 
@@ -2069,8 +2194,13 @@ public sealed class SapGuiSurface : IUiSurface
             if (only != null) return only;
         }
 
-        // La clave existía aunque el texto no cuadre: último recurso antes de rendirse.
-        return current.Length > 0 ? recordedKey : null;
+        // Si el paso no grabó rótulo, la clave viva es lo único que hay: se usa. Pero si el rótulo
+        // NO cuadra, rendirse es lo correcto: las claves del árbol de NWP1 son POR USUARIO, y el
+        // 2026-08-27 la clave grabada como «Triage» (vw00576, menú de una doctora) apuntaba a
+        // «Consulta Externa a Facturar» en el menú de otro usuario. Accionar por clave con el
+        // rótulo en contra es un clic por coordenadas con otro nombre: acierta en el lugar y falla
+        // en la identidad — y aquí abre la vista de OTRO flujo clínico reportando éxito.
+        return wanted.Length == 0 && current.Length > 0 ? recordedKey : null;
     }
 
     /// <summary>
