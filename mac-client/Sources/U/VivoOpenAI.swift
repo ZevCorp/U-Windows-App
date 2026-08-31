@@ -128,6 +128,45 @@ final class VivoOpenAI: NSObject, URLSessionWebSocketDelegate {
 
     // ── El setup ─────────────────────────────────────────────────────────────────────────────────
 
+    /// QUIÉN DECIDE QUE TERMINASTE DE HABLAR, y por CUÁNTO TIEMPO EN SILENCIO — pedido así el
+    /// 2026-08-31: «se queda con cara de que escucha y no responde» es el síntoma exacto de
+    /// `semantic_vad`, que decide por SIGNIFICADO y trae un tope de espera que no se controla
+    /// directo (`eagerness`, solo low/medium/high/auto). `server_vad` es la otra mitad del catálogo
+    /// documentado por OpenAI: decide por silencio cronometrado, con `silence_duration_ms` como
+    /// perilla explícita — lo mismo que ya se afinó una vez para Gemini (700 ms, «dentro de la banda
+    /// recomendada 500-800» según su propia nota).
+    ///
+    /// Los valores de abajo son ESE MISMO punto de partida portado, no una medición nueva contra
+    /// OpenAI — falta afinarlos con uso real, y por eso `U_SILENCIO_MS` los deja tocar sin
+    /// recompilar.
+    ///
+    /// La interrupción va atada a la MISMA perilla que ya gobierna si el micrófono se calla
+    /// mientras ella habla (`mandarTrozo`, más abajo): pedirle al servidor que permita interrumpir
+    /// (`interrupt_response`) mientras el cliente NO manda audio durante su turno sería una promesa
+    /// que nunca se puede cumplir. Las dos tienen que decir lo mismo.
+    private static var deteccionDeVoz: [String: Any] {
+        // REVERTIDO el 2026-08-31: probado en vivo, `server_vad` con estos valores dejó la sesión
+        // COMPLETAMENTE MUDA — ni un solo evento del servidor durante casi 2 minutos, ni siquiera
+        // un «error». Es peor que el síntoma que intentaba arreglar (demora, no silencio total), y
+        // no se pudo diagnosticar la causa exacta sin arriesgar dejar la voz rota más tiempo. Vuelve
+        // a `semantic_vad`, que SÍ está probado funcionando hoy mismo, hasta investigar aparte por
+        // qué `server_vad` se calla — sospecha sin confirmar: puede que mandar audio continuo
+        // (`mandarTrozo`) A LA VEZ que un `response.create` manual por texto confunda al VAD del
+        // servidor sobre si el turno sigue abierto.
+        let dejanInterrumpir = ProcessInfo.processInfo.environment["U_BARGE_IN"] == "1"
+        // «high» en vez de «auto» — pedido el 2026-08-31 porque «a veces no responde». Documentado
+        // por OpenAI como «qué tan pronta es a responder, ajustando el tope de espera máximo» — un
+        // cambio DENTRO de semantic_vad, sin tocar el tipo, que es lo que se probó y se rompió.
+        // Puede tocarse sin recompilar con U_EAGERNESS para volver a «auto» si esto empeora algo.
+        let eagerness = ProcessInfo.processInfo.environment["U_EAGERNESS"] ?? "high"
+        return [
+            "type": "semantic_vad",
+            "eagerness": eagerness,
+            "create_response": true,
+            "interrupt_response": dejanInterrumpir,
+        ]
+    }
+
     private func configuracion(modelo m: String) -> [String: Any] {
         [
             "type": "session.update",
@@ -138,9 +177,7 @@ final class VivoOpenAI: NSObject, URLSessionWebSocketDelegate {
                 "audio": [
                     "input": [
                         "format": ["type": "audio/pcm", "rate": Int(audio.ritmoEntrada)],
-                        // QUIÉN DECIDE QUE TERMINASTE DE HABLAR: el servidor, por SIGNIFICADO y no
-                        // por silencio cronometrado — la misma lección que Gemini, dicha distinto.
-                        "turn_detection": ["type": "semantic_vad", "eagerness": "auto"],
+                        "turn_detection": Self.deteccionDeVoz,
                         "transcription": ["model": "gpt-4o-mini-transcribe"],
                     ],
                     "output": [
