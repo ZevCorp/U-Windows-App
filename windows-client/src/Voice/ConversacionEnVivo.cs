@@ -958,7 +958,9 @@ public sealed class ConversacionEnVivo : IDisposable
             // MEDIR ANTES DE TEORIZAR (lección nº1): mientras la compuerta traga, una línea por
             // segundo con el RMS real y la base aprendida — con 30 s de prueba se ve si el piso y
             // el factor están bien puestos para ESTE micrófono y ESTOS parlantes.
-            if (cerrada && ahora - _ultimaMedicionMs >= 1000)
+            // La medición vive y muere con el detector: con él apagado, una línea de rms/umbral
+            // en el log se lee como «detector armado» y no lo está (lo señaló la sesión de la voz).
+            if (DetectorPorEnergia && cerrada && ahora - _ultimaMedicionMs >= 1000)
             {
                 _ultimaMedicionMs = ahora;
                 LogBus.Log("voz-viva", $"medición barge-in: rms={rms:F0} · base={_interrupcion.LineaBase:F0} "
