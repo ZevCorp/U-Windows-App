@@ -1756,7 +1756,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         StartMicByFace();
     }
 
-    // --- Sonidos (los MISMOS WAV de Android): tick al clic, carrillón al micrófono ---
+    // --- Sonidos: tick al clic, carrillón al micrófono. Sintetizados a propósito (2026-08-31):
+    //     los WAV heredados de Android sonaban a otro sistema. Estos siguen la gramática de los
+    //     de Apple — cortos, ataque suave (nada de clic digital), caída exponencial, frecuencias
+    //     cálidas y volumen contenido: el tick es un «thock» de 45 ms (cuerpo 190 Hz + tap
+    //     1,2 kHz) y el carrillón dos notas que SUBEN (D5→A5, escuchar = abrirse), 550 ms. ---
 
     private System.Media.SoundPlayer? _tick;
     private System.Media.SoundPlayer? _chime;
