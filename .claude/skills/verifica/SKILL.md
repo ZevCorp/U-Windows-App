@@ -23,7 +23,7 @@ Deja la evidencia en `out\evidencia.md`. Si el script no está disponible, los c
 |---|---|---|---|
 | 1 | compila | `dotnet build windows-client\WindowsClient.csproj -c Release` | siempre |
 | 2 | contrato | `.\scripts\contrato-del-grafo.ps1` | siempre |
-| 3 | escenarios | `.\scripts\ci-local.ps1` | si hay escenarios de lo tocado |
+| 3 | escenarios | `.\scripts\ci-terreno.ps1` | si hay escenarios de lo tocado |
 | 4 | a mano | `U.exe` sobre ≥2 pantallas | si se tocó UI o SAP |
 
 **2 y 3 no se sustituyen.** El contrato vigila las promesas y corre en la nube sin tocar pantalla;

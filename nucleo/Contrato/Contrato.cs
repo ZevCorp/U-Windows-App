@@ -37,6 +37,16 @@ internal static class Contrato
         Prueba("17. no se puede enseñar sobre algo que nunca se vio aquí", NoSeEnsenaSobreLoQueNoExiste);
         Prueba("18. los recuerdos de una pantalla salen SIEMPRE en el mismo orden", ElOrdenDeLosRecuerdosNoBaila);
 
+        // HEREDERAS DEL CONTRATO VIEJO (gran limpieza, 2026-08-30). Las promesas 2 y 8 del núcleo
+        // retirado —«la enseñanza sobrevive a borrar el grafo» y «guardar y cargar no pierde
+        // nada»— no podían morir sin descendencia: son las dos cosas que el usuario paga con su
+        // tiempo cuando fallan. Aquí se juzgan PURAS, sin Neo4j: la parte del núcleo es que lo
+        // extraído se reaplique entero por sus propias puertas (Recordar→Cruzar→Ensenar, el mismo
+        // orden que usa el restaurador de verdad); que la base lo conserve lo juzga aparte
+        // ComprobarFidelidad cuando la base está.
+        Prueba("19. apagar y volver no pierde nada: lo extraído se reaplica y da el mismo grafo", ApagarYVolverNoPierde);
+        Prueba("20. la enseñanza sobrevive al olvido del terreno y se reengancha sola", LaEnsenanzaSobreviveAlOlvido);
+
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
         // el proyector PRETENDE hacer, y lo que hace falta saber es lo que hizo.
@@ -653,6 +663,89 @@ internal static class Contrato
         Debe(grande < Math.Max(chico, 1) * 20,
             $"contestar sigue costando lo mismo con 2.000 ubicaciones que con una "
             + $"({chico} → {grande} ticks): la respuesta mira SU pantalla, no el grafo entero");
+    }
+
+    /// <summary>
+    /// Lo que el grafo sabe, extraído por su API pública en la misma forma de filas que el
+    /// proyector escribe y el restaurador lee: (dónde, elemento, destino, recuerdo).
+    /// </summary>
+    private static List<(string Donde, Elemento Que, string Destino, Recuerdo? Eso)> Filas(Grafo g) =>
+        g.Ubicaciones().SelectMany(u => g.DesdeAqui(u)
+            .Select(a => (u, a.Que, a.Destino, g.RecuerdoSobre(u, a.Que.Selector))))
+        .ToList();
+
+    /// <summary>Reaplica filas a un grafo virgen POR LAS PUERTAS DEL NÚCLEO y en su orden:
+    /// primero los elementos (Recordar), luego los caminos (Cruzar), luego lo enseñado (Ensenar).
+    /// Es el mismo orden del restaurador real, porque Cruzar y Ensenar rechazan lo que aún no se
+    /// conoce — al revés se perdería todo, en silencio.</summary>
+    private static Grafo Renacido(List<(string Donde, Elemento Que, string Destino, Recuerdo? Eso)> filas)
+    {
+        var g = new Grafo();
+        foreach (var grupo in filas.GroupBy(f => f.Donde))
+            g.Recordar(grupo.Key, grupo.Select(f => f.Que).ToList());
+        foreach (var f in filas.Where(f => f.Destino.Length > 0))
+            g.Cruzar(f.Donde, f.Que.Selector, f.Destino);
+        foreach (var f in filas.Where(f => f.Eso != null))
+            g.Ensenar(f.Donde, f.Que.Selector, f.Eso!.Significado, f.Eso.Foto);
+        return g;
+    }
+
+    private static void ApagarYVolverNoPierde(Grafo g)
+    {
+        // Un mundo pequeño pero con TODO lo que el grafo sabe guardar: elementos en dos
+        // ubicaciones, un camino cruzado, una puerta sin cruzar y un recuerdo con foto.
+        g.Estoy("app://inicio");
+        g.Observar("app://inicio", new[]
+        {
+            new Elemento("s:ir", "Ir", "Button"),
+            new Elemento("s:misterio", "Misterio", "Button"),
+        });
+        g.Cruzar("app://inicio", "s:ir", "app://fondo");
+        g.Estoy("app://fondo");
+        g.Observar("app://fondo", new[] { new Elemento("s:volver", "Volver", "Button") });
+        g.Ensenar("app://inicio", "s:ir", "esto lleva a donde se radica", "C:/fotos/ir.png");
+
+        var otraVida = Renacido(Filas(g));
+
+        // La comparación incluye el recuerdo (significado y foto; la fecha no, cambia sola) y
+        // excluye lo vivo: lo vivo no se restaura ni debe — al arrancar no hay nada en pantalla.
+        static string Huella(Grafo x) => string.Join("\n", x.Ubicaciones().Select(u =>
+            u + " => " + string.Join(",", x.DesdeAqui(u)
+                .OrderBy(a => a.Que.Selector, StringComparer.Ordinal)
+                .Select(a => $"{a.Que.Selector}|{a.Que.Etiqueta}|{a.Que.Tipo}->{a.Destino}"
+                    + (x.RecuerdoSobre(u, a.Que.Selector) is { } e ? $"[{e.Significado}|{e.Foto}]" : "")))));
+
+        Debe(Huella(otraVida) == Huella(g),
+            "el grafo renacido es EL MISMO: ubicaciones, elementos, caminos, puertas sin cruzar y recuerdos");
+        Debe(otraVida.Ubicaciones().All(u => otraVida.DesdeAqui(u).All(a => !a.Vivo)),
+            "y nada renace vivo: la memoria vuelve como memoria");
+        Debe(otraVida.Aqui.Length == 0, "ni renace el «aquí»: recordar dónde estuviste no es estar allí");
+    }
+
+    private static void LaEnsenanzaSobreviveAlOlvido(Grafo g)
+    {
+        // La promesa 2 del contrato viejo, en el mundo nuevo: se enseña algo, el terreno se borra
+        // entero, la memoria lo trae de vuelta… y al VOLVER A VER el elemento, el recuerdo sigue
+        // colgado de él — sin que nadie lo repita.
+        g.Observar("app://inicio", new[] { new Elemento("s:num", "Número", "Edit") });
+        g.Ensenar("app://inicio", "s:num", "aquí va el número de factura, nunca el nombre");
+        var filas = Filas(g);
+
+        g.Olvidar();
+        Debe(g.Ubicaciones().Count == 0 && g.RecuerdoSobre("app://inicio", "s:num") == null,
+            "borrar el grafo borra el terreno entero, recuerdos incluidos: no hay copias escondidas");
+
+        var devuelta = Renacido(filas);
+        Debe(devuelta.RecuerdoSobre("app://inicio", "s:num")?.Significado
+                == "aquí va el número de factura, nunca el nombre",
+            "…pero lo extraído lo trae de vuelta, colgado del mismo elemento");
+
+        // El mundo se vuelve a ver desde cero, y la lección sigue puesta: enseñar una vez basta.
+        devuelta.Observar("app://inicio", new[] { new Elemento("s:num", "Número", "Edit") });
+        var alcanzable = devuelta.DesdeAqui("app://inicio").Single(a => a.Que.Selector == "s:num");
+        Debe(alcanzable.Vivo, "el elemento vuelve a estar vivo al verse otra vez");
+        Debe(devuelta.RecuerdoSobre("app://inicio", "s:num") != null,
+            "y volver a verlo NO borra lo enseñado: observar actualiza el terreno, no la memoria");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

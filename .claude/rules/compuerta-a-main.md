@@ -9,7 +9,7 @@ lo barato primero, para que un fallo de veinte segundos no espere a una prueba d
 |---|---|---|---|---|---|
 | 1 | **Compila** | `dotnet build windows-client\WindowsClient.csproj -c Release` | ~30 s | que exista | sí |
 | 2 | **El contrato** | `.\scripts\contrato-del-grafo.ps1` | ~30 s | las **promesas** del núcleo | sí |
-| 3 | **Los escenarios** | `.\scripts\ci-local.ps1` | minutos | el **resultado sobre el terreno real** | sí, si hay escenarios de lo tocado |
+| 3 | **Los escenarios** | `.\scripts\ci-terreno.ps1` | minutos | el **resultado sobre el terreno real** | sí, si hay escenarios de lo tocado |
 | 4 | **La corrida a mano** | `U.exe` sobre ≥2 pantallas | minutos | lo que nadie automatizó | sí, si se tocó UI o SAP |
 
 Todo junto: `.\scripts\verificar.ps1`, que además deja la tabla de evidencia para el PR.

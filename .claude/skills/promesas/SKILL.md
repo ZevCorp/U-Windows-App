@@ -14,13 +14,6 @@ CONTRATO ROTO: 7 promesa(s) incumplida(s). El cambio no puede entrar así.
 (4 de ellas PENDIENTES: la capacidad todavía no existe.)
 ```
 
-## Antes de empezar: el candado
-
-`tests\ContratoDelGrafo\*` está **protegido** por [`guardia-nucleo.ps1`](../../hooks/guardia-nucleo.ps1).
-Escribe primero `C:\U-versiones\intencion.txt` **en UTF-8** (caduca a los 20 min), con qué promesas
-vas a añadir y de qué spec salen. Sin declaración fresca el hook bloquea la edición. Ver
-[`nucleo-congelado.md`](../../rules/nucleo-congelado.md).
-
 ## Cómo se escribe una promesa
 
 Registrarla con **el enunciado literal de la spec**, en continuación de la numeración:
