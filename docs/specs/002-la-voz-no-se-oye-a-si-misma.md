@@ -145,6 +145,16 @@ una rama posterior si el nivel 4 de las fases 1-2 sale limpio y urge integrar.
 
 ## Hallazgos
 
+- 2026-08-30 · Fases 1 y 2 implementadas y verdes (voz 14/14, grafo 81/81 intacto). Sabotajes
+  comprobados, no supuestos: una muestra escapada pone rojas la 11 y la 12; sin gracia y contando
+  lo que fluye, la 12 y la 13; con AEC y compuerta apagados a la vez, la 14.
+- 2026-08-30 · La fase 3 (AEC de WASAPI) se queda para una rama posterior, como esta spec ya
+  permitía: la garantía determinística está completa sin ella, y hoy `AecDelSistema` es una
+  constante `false` en `ConversacionEnVivo` que esa fase pondrá a verdad.
+- 2026-08-30 · Falta el nivel 4, que aquí no es «pantallas» sino escenarios de sonido: altavoces a
+  volumen alto (el caso que disparaba el bug) y auriculares (el que no debe empeorar). Lo juzga el
+  log: `compuerta de eco: tragó N ms` y ningún `speech_started` mientras Ü suena sola.
+
 - 2026-08-30 · La auto-interrupción no deja NI UNA línea de log: `speech_started` se traduce y el
   handler calla en silencio. Cuatro rondas de agosto se diagnosticaron sin poder ver el disparo.
 - 2026-08-30 · El comentario de `ConversacionEnVivo.cs:56-58` cita un «detector de voz» que ya no
