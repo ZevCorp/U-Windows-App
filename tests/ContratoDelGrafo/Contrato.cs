@@ -137,6 +137,17 @@ internal static class Contrato
         Prueba("80. una fila CONOCIDA de un árbol a la vista se alcanza por identidad, aunque esté desplazada", LaFilaDesplazadaSeAlcanza);
         Prueba("81. la CARPETA es parte del nombre: dos «Triage» en carpetas distintas son dos puertas distinguibles", LaCarpetaEsParteDelNombre);
 
+        // ── El gesto (spec 003) ──────────────────────────────────────────────
+        //
+        // En main hoy la mano manda SIEMPRE «click» (FaceWindow.xaml.cs:465) y nadie escala al
+        // doble: un batch que llega a una carpeta del Explorador la SELECCIONA y no la abre. El
+        // comentario de FaceWindow:571 dice que la escalada «sigue siendo de UIA» — y es falso, se
+        // borró con el codigo viejo. Estas dos son el port de la leccion medida el 2026-08-26 sobre
+        // la arquitectura anterior: el gesto se ensaya UNA vez, se guarda EN LA ARISTA (promesa 21
+        // del nucleo), y jamas se deduce del tipo — el tipo solo acota que es SEGURO ensayar.
+        Prueba("82. el gesto aprendido no se vuelve a ensayar: la segunda vez va directo", ElGestoAprendidoNoSeEnsaya);
+        Prueba("83. el doble solo se ensaya sobre contenido: un botón jamás recibe un segundo clic", ElBotonNoRecibeSegundoClic);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -1120,6 +1131,96 @@ internal static class Contrato
     // seguir cuando le pidieron parar.
 
     /// <summary>Un mundo de tres pantallas encadenadas, con el dedo falso que mueve el mapa.</summary>
+    /// <summary>
+    /// Un pulsador cuya mano REGISTRA (etiqueta, gesto) y navega según el gesto que le llegue.
+    /// Pide la mano de TRES argumentos por reflexión: mientras no exista, devuelve null y la
+    /// promesa falla con su motivo — llamarla directo romperia la compilacion de todo el contrato.
+    /// </summary>
+    private static (object? Pulsador, Func<string> Donde, List<(string Etiqueta, string Gesto)> Toques) PulsadorConGesto(
+        Nucleo.Grafo g, string inicio, Func<string, string, string?> rutaSegunGesto)
+    {
+        var toques = new List<(string, string)>();
+        string donde = inicio;
+        var ctor = typeof(PulsarSegunElNucleo).GetConstructors()
+            .FirstOrDefault(c => c.GetParameters() is { Length: 3 } p
+                && p[2].ParameterType == typeof(Func<string, string, string, bool>));
+        if (ctor == null) return (null, () => donde, toques);
+
+        var pulsador = ctor.Invoke(new object[]
+        {
+            g,
+            (Func<string>)(() => donde),
+            (Func<string, string, string, bool>)((sel, et, gesto) =>
+            {
+                toques.Add((et, gesto));
+                var alla = rutaSegunGesto(sel, gesto);
+                if (alla != null) donde = alla;
+                return true;
+            }),
+        });
+        typeof(PulsarSegunElNucleo).GetProperty("EsperaMaximaMs")?.SetValue(pulsador, 240);
+        return (pulsador, () => donde, toques);
+    }
+
+    private static PulsarSegunElNucleo.Resultado Pulsa(object pulsador, string selector, string etiqueta)
+        => (PulsarSegunElNucleo.Resultado)typeof(PulsarSegunElNucleo)
+            .GetMethod("Pulsa")!.Invoke(pulsador, new object[] { selector, etiqueta })!;
+
+    private static void ElGestoAprendidoNoSeEnsaya()
+    {
+        // Una carpeta del Explorador: el clic simple SELECCIONA (no navega), solo el doble abre.
+        // La mano falsa reproduce exactamente eso: navega únicamente cuando le llega «doubleclick».
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x.exe/docs", new[] { new Nucleo.Elemento("s:carpeta", "specs", "ListItem") });
+
+        var (pulsador, donde, toques) = PulsadorConGesto(g, "uia://x.exe/docs",
+            (sel, gesto) => sel == "s:carpeta" && gesto == "doubleclick" ? "uia://x.exe/specs" : null);
+        Debe(pulsador != null,
+            "todavía no existe la mano con gesto (fase 2 de la spec 003). La promesa está escrita "
+            + "y en rojo, que es donde tiene que estar");
+        if (pulsador == null) return;
+
+        var r1 = Pulsa(pulsador, "s:carpeta", "specs");
+        Debe(r1.CambioLaPantalla && donde() == "uia://x.exe/specs",
+            $"la primera vez ABRE: ensaya el clic, no alcanza, sube al doble (quedó en «{donde()}»)");
+        Debe(toques.Count == 2 && toques[0].Gesto == "" && toques[1].Gesto == "doubleclick",
+            $"y el ensayo es UNA escalera —clic, luego doble— no una ráfaga ({string.Join(" → ", toques.Select(t => $"'{t.Gesto}'"))})");
+
+        // Se vuelve a la lista (como volvería el usuario) y se pulsa la MISMA puerta otra vez.
+        g.Observar("uia://x.exe/docs", new[] { new Nucleo.Elemento("s:carpeta", "specs", "ListItem") });
+        toques.Clear();
+        var r2 = Pulsa(pulsador, "s:carpeta", "specs");
+        Debe(r2.CambioLaPantalla,
+            "la segunda vez también abre");
+        Debe(toques.Count == 1 && toques[0].Gesto == "doubleclick",
+            $"pero SIN ensayar: un solo toque, directo con el gesto aprendido "
+            + $"({toques.Count} toque(s): {string.Join(" → ", toques.Select(t => $"'{t.Gesto}'"))}). "
+            + "Ensayar otra vez es pagar el mismo riesgo dos veces por algo que ya se sabe — y el "
+            + "clic de más cae sobre la pantalla real");
+    }
+
+    private static void ElBotonNoRecibeSegundoClic()
+    {
+        // «Guardar» hace su trabajo SIN cambiar de pantalla. Escalar ahí es guardar dos veces: el
+        // tipo no dice qué gesto hace falta (2026-08-03, Configuración anula con el segundo clic),
+        // pero SÍ dice qué es seguro ensayar — y sobre un botón, el doble no lo es.
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x.exe/form", new[] { new Nucleo.Elemento("s:guardar", "Guardar", "Button") });
+
+        var (pulsador, _, toques) = PulsadorConGesto(g, "uia://x.exe/form", (_, _) => null);
+        Debe(pulsador != null,
+            "todavía no existe la mano con gesto (fase 2 de la spec 003). La promesa está escrita "
+            + "y en rojo, que es donde tiene que estar");
+        if (pulsador == null) return;
+
+        var r = Pulsa(pulsador, "s:guardar", "Guardar");
+        Debe(r.SePudo && !r.CambioLaPantalla,
+            "se pulsó y la pantalla no cambió: un botón de acción hizo su trabajo");
+        Debe(toques.Count == 1,
+            $"y recibió EXACTAMENTE un clic ({toques.Count} toque(s)): el doble solo se ensaya "
+            + "sobre contenido de lista, porque sobre un botón el segundo clic es repetir la acción");
+    }
+
     private static (RecorrerSegunElNucleo Batch, Func<string> Donde, List<string> Tocados) BatchCon(
         Nucleo.Grafo g, string inicio, Dictionary<string, string> rutas, Func<int, bool>? frenoTrasTocar = null)
     {

@@ -46,6 +46,12 @@ internal static class Contrato
         // ComprobarFidelidad cuando la base está.
         Prueba("19. apagar y volver no pierde nada: lo extraído se reaplica y da el mismo grafo", ApagarYVolverNoPierde);
         Prueba("20. la enseñanza sobrevive al olvido del terreno y se reengancha sola", LaEnsenanzaSobreviveAlOlvido);
+        // El gesto (spec 003). Una arista que sabe A DÓNDE lleva pero no CÓMO se cruza obliga a
+        // volver a averiguarlo cada vez — y averiguarlo son clics de más sobre la pantalla real.
+        // Medido sobre la arquitectura anterior el 2026-08-26: tres clics físicos por acción, cada
+        // vez, para siempre; y el doble cayendo ENCIMA de un clic que ya había funcionado cuando la
+        // app tardaba más que la ventana de espera.
+        Prueba("21. el gesto que abrió una puerta viaja con su arista", ElGestoViajaConLaArista);
 
         // LA FIDELIDAD DE LA PROYECCIÓN, que es donde estaban los fallos de verdad. Se comprueba
         // leyendo de vuelta desde Neo4j, no revisando el código: revisar el código demuestra lo que
@@ -720,6 +726,39 @@ internal static class Contrato
         Debe(otraVida.Ubicaciones().All(u => otraVida.DesdeAqui(u).All(a => !a.Vivo)),
             "y nada renace vivo: la memoria vuelve como memoria");
         Debe(otraVida.Aqui.Length == 0, "ni renace el «aquí»: recordar dónde estuviste no es estar allí");
+    }
+
+    private static void ElGestoViajaConLaArista(Grafo g)
+    {
+        // POR REFLEXIÓN mientras no exista: este proyecto referencia al Grafo por proyecto, así que
+        // llamar GestoDe directo romperia la COMPILACION del contrato entero y las 20 anteriores no
+        // podrian ni juzgarse. Ausente => la promesa falla con su motivo, no en silencio.
+        var gestoDe = typeof(Grafo).GetMethod("GestoDe", new[] { typeof(string), typeof(string) });
+        var cruzar4 = typeof(Grafo).GetMethods()
+            .FirstOrDefault(m => m.Name == "Cruzar" && m.GetParameters().Length == 4);
+        Debe(gestoDe != null && cruzar4 != null,
+            "todavía no existe «GestoDe»/«Cruzar con gesto» (fase 1 de la spec 003). La promesa "
+            + "está escrita y en rojo, que es donde tiene que estar");
+        if (gestoDe == null || cruzar4 == null) return;
+
+        g.Observar("app://lista", new[] { new Elemento("s:carpeta", "specs", "ListItem") });
+
+        Debe((string)gestoDe.Invoke(g, new object[] { "app://lista", "s:carpeta" })! == "",
+            "sin cruzar, el gesto es vacío: no se inventa un cómo que nadie ejecutó");
+
+        cruzar4.Invoke(g, new object[] { "app://lista", "s:carpeta", "app://carpeta", "doubleclick" });
+        Debe((string)gestoDe.Invoke(g, new object[] { "app://lista", "s:carpeta" })! == "doubleclick",
+            "cruzada con doble, la arista RECUERDA el doble: la próxima vez no hay que averiguarlo "
+            + "a base de clics de más sobre la pantalla real");
+
+        // El gesto es DE LA ARISTA, no del selector: el mismo selector cruzado desde otro sitio
+        // con otro gesto guarda el suyo — misma razon por la que el destino ya se guarda por
+        // ubicacion Y selector (promesa 4).
+        g.Observar("app://menu", new[] { new Elemento("s:carpeta", "specs", "ListItem") });
+        cruzar4.Invoke(g, new object[] { "app://menu", "s:carpeta", "app://otro", "" });
+        Debe((string)gestoDe.Invoke(g, new object[] { "app://menu", "s:carpeta" })! == ""
+             && (string)gestoDe.Invoke(g, new object[] { "app://lista", "s:carpeta" })! == "doubleclick",
+            "cada arista lleva su gesto: aprender uno no reescribe el otro");
     }
 
     private static void LaEnsenanzaSobreviveAlOlvido(Grafo g)
