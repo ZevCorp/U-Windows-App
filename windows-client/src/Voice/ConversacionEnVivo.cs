@@ -45,7 +45,34 @@ public sealed class ConversacionEnVivo : IDisposable
         _mapa = mapa;
         _protocolo = protocolo ?? new ProtocoloOpenAI();
         _audio = new LiveAudio(_protocolo.RitmoDeEntrada);
+        _compuerta = new CompuertaDeEco(GraciaEcoMs, _protocolo.RitmoDeEntrada);
     }
+
+    // ── La compuerta de eco (spec 002, 2026-08-30) ──────────────────────────
+
+    /// <summary>
+    /// Cuánto sigue tragando la compuerta tras vaciarse la cola: cubre los 120 ms de latencia
+    /// declarada del altavoz (LiveAudio.DesiredLatency) más el resto de sala. Se ajusta con el
+    /// log de «tragó N ms», no con teoría.
+    /// </summary>
+    private const int GraciaEcoMs = 300;
+
+    private readonly CompuertaDeEco _compuerta;
+    private long _tragadoAnunciado;
+    private string _ultimoFalloEnvio = "";
+
+    /// <summary>
+    /// La captura de hoy es WaveIn clásico, SIN AEC del sistema: mientras eso sea verdad, la
+    /// compuerta es la única defensa y actúa siempre (promesa 14). La fase 3 de la spec 002 —la
+    /// captura WASAPI que le pide el AEC a Windows— es quien puede poner esto a verdadero.
+    /// </summary>
+    private const bool AecDelSistema = false;
+
+    /// <summary>La perilla de esta máquina: fuerza la compuerta aunque haya AEC. Solo puede
+    /// ENCENDER la garantía, jamás apagarla.</summary>
+    private static bool CompuertaForzada =>
+        (Environment.GetEnvironmentVariable("U_COMPUERTA_ECO") ?? "").Trim().ToLowerInvariant()
+            is "1" or "true" or "si" or "sí";
 
     /// <summary>Está en curso una sesión de voz viva.</summary>
     public bool Viva { get; private set; }
@@ -53,9 +80,9 @@ public sealed class ConversacionEnVivo : IDisposable
     /// <summary>
     /// Lo fuerte que está sonando Ü ahora mismo (0–1). La carita mueve la boca con esto.
     ///
-    /// Es la MISMA medida que usa el detector de voz para no confundir su propio eco con el usuario:
-    /// una sola fuente para «cuánto estoy sonando», y así la boca no puede acabar diciendo una cosa
-    /// distinta de lo que se oye.
+    /// (El «detector de voz» que compartía esta medida se enterró el 2026-08-16; desde la spec 002
+    /// el eco no se detecta por volumen sino que se corta en la compuerta, que se llavea de
+    /// <see cref="LiveAudio.Hablando"/>. Esto queda solo para la boca.)
     /// </summary>
     public double NivelVoz => Viva ? _audio.NivelSalida : 0;
 
@@ -862,8 +889,42 @@ public sealed class ConversacionEnVivo : IDisposable
     private async void MandarTrozo(byte[] pcm)
     {
         if (!Viva || _ws?.State != WebSocketState.Open) return;
-        try { await EnviarAsync(_protocolo.Audio(pcm), _cts?.Token ?? CancellationToken.None); }
-        catch { /* el caño se cierra solo al terminar; un trozo perdido no merece tirar la sesión */ }
+
+        // LA COMPUERTA DE ECO (spec 002). Mientras nuestra cola de reproducción suena —más la
+        // gracia—, el micrófono viaja como silencio del mismo tamaño: así el semantic_vad del
+        // servidor no puede confundir el eco de Ü con alguien hablándole encima. La llave es
+        // _audio.Hablando (la cola, nuestra), jamás el volumen (enterrado el 2026-08-16). Cubre
+        // las dos fuentes —micrófono local y collar— porque las dos entran por Capturado.
+        if (ModoDeCaptura.CompuertaActiva(AecDelSistema, CompuertaForzada))
+        {
+            var filtrado = _compuerta.Filtrar(pcm, _audio.Hablando, Environment.TickCount64);
+
+            // Lo tragado deja rastro (patrón nº10), pero por episodio y no por trozo: la línea
+            // sale al reabrirse la compuerta, con el total del episodio que acaba de cerrar.
+            if (ReferenceEquals(filtrado, pcm) && _compuerta.MsTragados > _tragadoAnunciado)
+            {
+                LogBus.Log("voz-viva", $"compuerta de eco: tragó {_compuerta.MsTragados - _tragadoAnunciado} ms "
+                    + "de micrófono mientras Ü sonaba; el micrófono vuelve a viajar");
+                _tragadoAnunciado = _compuerta.MsTragados;
+            }
+            pcm = filtrado;
+        }
+
+        try
+        {
+            await EnviarAsync(_protocolo.Audio(pcm), _cts?.Token ?? CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            // El caño se cierra solo al terminar y un trozo perdido no merece tirar la sesión,
+            // pero perderlo EN SILENCIO era un mensaje mudo (patrón nº3): se dice una vez por
+            // motivo, no por trozo, para no inundar el log a 10 trozos por segundo.
+            if (e.Message != _ultimoFalloEnvio)
+            {
+                _ultimoFalloEnvio = e.Message;
+                LogBus.Log("voz-viva", $"un trozo de micrófono no llegó al servidor: {e.GetType().Name}: {e.Message}");
+            }
+        }
     }
 
     /// <summary>
@@ -1065,7 +1126,15 @@ public sealed class ConversacionEnVivo : IDisposable
 
             // HABLÓ ENCIMA. Lo que ya nos habían mandado sigue en nuestra cola de audio, y seguir
             // diciéndolo es la sensación exacta de no ser escuchado.
+            //
+            // Y DEJA LÍNEA, que hasta el 2026-08-30 no dejaba: la auto-interrupción por eco
+            // (spec 002) se diagnosticó a ciegas porque este callar era invisible en el log. La
+            // línea describe el paso, no concluye la causa (patrón nº2): «el servidor oyó voz» no
+            // dice si era el usuario o un eco que se coló — eso lo dice el contexto de al lado
+            // (si la compuerta estaba tragando, eco no pudo ser).
             case Hecho.HablaronEncima:
+                LogBus.Log("voz-viva", "el servidor oyó voz encima (speech_started): se calla la cola local"
+                    + (_audio.Hablando ? " · Ü estaba sonando" : " · Ü ya no sonaba"));
                 _audio.Callar();
                 break;
 

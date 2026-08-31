@@ -47,6 +47,17 @@ internal static class Contrato
         Prueba("9. una respuesta cancelada retira la llamada retirada, no la ejecuta ni la calla en silencio", LaCanceladaSeRetira);
         Prueba("10. pedir que conteste es un paso APARTE de mandar los resultados, y solo se pide una vez", ContestarNoVaEscondido);
 
+        // LA COMPUERTA DE ECO (spec 002, 2026-08-30). El bucle que estas cuatro cortan: el micrófono
+        // capta lo que suena por los altavoces, el semantic_vad del servidor cree que le hablan
+        // encima, manda speech_started y Ü se calla a media frase — oyéndose a sí misma. La llave es
+        // EL ESTADO DE NUESTRA COLA DE REPRODUCCIÓN, jamás el volumen: las defensas por volumen se
+        // enterraron el 2026-08-16 («nunca puedo interrumpirlo») porque un número no distingue
+        // «¿esto es el eco de Ü?» de «¿esto es quien me habla?».
+        Prueba("11. mientras Ü suena, el micrófono viaja al servidor como silencio del mismo tamaño: ni una muestra de la sala", SonandoViajaSilencio);
+        Prueba("12. al vaciarse la cola la compuerta no se abre de golpe: aguanta la gracia que tarda el eco en morir, y pasada la gracia el micrófono viaja intacto", LaGraciaSeAguanta);
+        Prueba("13. lo tragado deja rastro: la compuerta cuenta los milisegundos que sustituyó y el total se puede leer", LoTragadoSeCuenta);
+        Prueba("14. con el AEC del sistema puesto la compuerta no actúa, y sin él —o forzada— actúa siempre: nunca los dos, nunca ninguno", OCompuertaOAec);
+
         Console.WriteLine();
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
@@ -326,6 +337,120 @@ internal static class Contrato
 
         string pide = p.PedirRespuesta();
         Debe(pide.Contains("response.create"), "PedirRespuesta sí la pide, explícitamente, cuando se llama");
+    }
+
+    // ── La compuerta de eco (spec 002, 2026-08-30) ──────────────────────────
+
+    /// <summary>El ensamblado del protocolo, donde vive la compuerta. Se busca por nombre: la
+    /// capacidad todavía no existe cuando estas promesas se escriben, y así el contrato compila.</summary>
+    private static readonly Assembly Realtime = typeof(ProtocoloOpenAI).Assembly;
+
+    /// <summary>100 ms de PCM16 mono a 24 kHz (4.800 bytes), con NINGUNA muestra nula: si una sola
+    /// sobreviviera a la compuerta, la comprobación de «todo ceros» la caza.</summary>
+    private static byte[] VozDeLaSala()
+    {
+        var voz = new byte[4800];
+        for (int i = 0; i < voz.Length; i++) voz[i] = (byte)(i % 251 + 1);
+        return voz;
+    }
+
+    private static object? Compuerta(int graciaMs, int ritmoHz)
+    {
+        var t = Realtime.GetType("Voz.Realtime.CompuertaDeEco");
+        return t == null ? null : Activator.CreateInstance(t, graciaMs, ritmoHz);
+    }
+
+    private static byte[]? Filtrar(object c, byte[] trozo, bool sonando, long ahoraMs)
+        => c.GetType().GetMethod("Filtrar")?.Invoke(c, new object[] { trozo, sonando, ahoraMs }) as byte[];
+
+    /// <remarks>
+    /// LA QUE CIERRA EL ASUNTO: mientras no exista, el eco sigue llegando al VAD del servidor y Ü
+    /// sigue callándose sola. Silencio DEL MISMO TAMAÑO y no ausencia, a propósito: no mandar nada
+    /// rompería el compás del buffer del servidor (audio_end_ms dejaría de cuadrar con el reloj).
+    /// </remarks>
+    private static void SonandoViajaSilencio()
+    {
+        var c = Compuerta(300, 24000);
+        if (c == null) { Pendiente("Voz.Realtime.CompuertaDeEco", "1"); return; }
+
+        var voz = VozDeLaSala();
+        var sale = Filtrar(c, voz, sonando: true, ahoraMs: 0);
+        Debe(sale != null && sale.Length == voz.Length,
+            "el trozo sale del mismo tamaño: el compás del buffer no se pierde");
+        Debe(sale != null && sale.All(b => b == 0),
+            "y todo ceros: ni una muestra de la sala viaja al servidor");
+    }
+
+    /// <remarks>
+    /// La gracia existe porque «la cola se vació» no es «se dejó de oír»: el altavoz lleva 120 ms de
+    /// latencia declarada y la sala añade el resto. Y una compuerta que naciera cerrada dejaría muda
+    /// la sesión hasta que Ü hablara por primera vez — por eso la primera comprobación es que recién
+    /// nacida deja pasar.
+    /// </remarks>
+    private static void LaGraciaSeAguanta()
+    {
+        var c = Compuerta(300, 24000);
+        if (c == null) { Pendiente("Voz.Realtime.CompuertaDeEco", "1"); return; }
+
+        var voz = VozDeLaSala();
+        var recienNacida = Filtrar(c, voz, sonando: false, ahoraMs: 0);
+        Debe(recienNacida != null && recienNacida.SequenceEqual(voz),
+            "antes de que Ü haya sonado nunca, el micrófono pasa intacto: la compuerta nace abierta");
+
+        Filtrar(c, voz, sonando: true, ahoraMs: 1000);
+        var enGracia = Filtrar(c, voz, sonando: false, ahoraMs: 1100);
+        Debe(enGracia != null && enGracia.All(b => b == 0),
+            "recién vaciada la cola sigue tragando: el eco tarda la gracia en morir");
+
+        var pasada = Filtrar(c, voz, sonando: false, ahoraMs: 1400);
+        Debe(pasada != null && pasada.SequenceEqual(voz),
+            "pasada la gracia el micrófono viaja intacto, byte a byte, no una copia recortada");
+    }
+
+    /// <remarks>
+    /// Patrón nº10: un paso no ejecutado deja rastro. Sin este contador, la interrupción que la
+    /// compuerta evita y el micrófono que la compuerta calla serían igual de invisibles que el
+    /// speech_started que hoy no deja ni una línea de log. Y la cuenta es de lo TRAGADO, no de lo
+    /// enviado — contar lo enviado es justo el denominador que encoge (el 29/30 del salto-adelante).
+    /// </remarks>
+    private static void LoTragadoSeCuenta()
+    {
+        var c = Compuerta(300, 24000);
+        if (c == null) { Pendiente("Voz.Realtime.CompuertaDeEco", "1"); return; }
+
+        var voz = VozDeLaSala(); // 100 ms exactos a 24 kHz
+        Filtrar(c, voz, sonando: true, ahoraMs: 0);
+        Filtrar(c, voz, sonando: true, ahoraMs: 100);
+        Filtrar(c, voz, sonando: true, ahoraMs: 200);
+        var tragados = Propiedad(c.GetType(), "MsTragados", c);
+        Debe(300L.Equals(tragados),
+            $"tres trozos de 100 ms tragados son 300 ms contados (salieron {tragados})");
+
+        Filtrar(c, voz, sonando: false, ahoraMs: 5000);
+        var despues = Propiedad(c.GetType(), "MsTragados", c);
+        Debe(300L.Equals(despues),
+            "lo que pasa intacto no engorda la cuenta: se cuenta lo tragado, no lo que fluye");
+    }
+
+    /// <remarks>
+    /// La decisión de modo es lo ÚNICO determinístico del AEC físico, y por eso es lo único que se
+    /// promete: los dos encendidos a la vez harían el AEC inútil (la compuerta calla todo igual), y
+    /// los dos apagados son exactamente el bug del que viene la spec 002.
+    /// </remarks>
+    private static void OCompuertaOAec()
+    {
+        var m = Realtime.GetType("Voz.Realtime.ModoDeCaptura")
+            ?.GetMethod("CompuertaActiva", BindingFlags.Public | BindingFlags.Static);
+        if (m == null) { Pendiente("Voz.Realtime.ModoDeCaptura", "2"); return; }
+
+        Debe(false.Equals(m.Invoke(null, new object[] { true, false })),
+            "con el AEC del sistema puesto la compuerta no actúa: el barge-in es del AEC");
+        Debe(true.Equals(m.Invoke(null, new object[] { false, false })),
+            "sin AEC la compuerta actúa: es la garantía determinística");
+        Debe(true.Equals(m.Invoke(null, new object[] { true, true })),
+            "y forzada actúa aunque haya AEC: la perilla de esta máquina manda");
+        Debe(true.Equals(m.Invoke(null, new object[] { false, true })),
+            "forzada sin AEC también: forzar nunca puede APAGAR la garantía");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
