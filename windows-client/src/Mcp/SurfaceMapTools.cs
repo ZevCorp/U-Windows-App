@@ -47,20 +47,6 @@ public sealed class SurfaceMapTools
     public string UltimaFotoDeRecuerdo { get; private set; } = "";
 
     /// <summary>La app con la que se estaba trabajando. Se usa para volver a ella si algo roba el foco.</summary>
-    /// <summary>
-    /// Dónde estábamos al terminar la llamada ANTERIOR. Es contra esto —y no contra la cadena que
-    /// teclea el modelo— contra lo que se comprueba si el mundo se ha movido.
-    /// </summary>
-
-    /// <summary>Lo último que se intentó. Sin esto, quien deba decidir ante un diálogo no sabe
-    /// para qué apareció, y «continuar o no» depende justamente de eso.</summary>
-    private string _ultimaAccion = "";
-
-    /// <summary>Ya estamos volviendo a la ubicación esperada: la vuelta no puede pedir otra vuelta.</summary>
-    private bool _reanudando;
-
-    /// <summary>Ya estamos buscando un camino alternativo: un solo reintento, no una cadena.</summary>
-    private bool _reenrutando;
 
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
     private static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int max);
@@ -1567,7 +1553,6 @@ public sealed class SurfaceMapTools
                  + $"  Diálogo: «{titulo}»\n"
                  + $"  Dice: {string.Join(" ", textos.Take(3))}\n"
                  + $"  Opciones: {string.Join(", ", opciones.Select(o => $"«{o}»"))}\n"
-                 + (_ultimaAccion.Length > 0 ? $"  Veníamos de: {_ultimaAccion}\n" : "")
                  + "  Hay una DECISIÓN aquí, y depende de lo que estuvieras intentando: continuar o "
                  + "no es tuyo, no mío. Vuelve a llamarme con `choose` indicando la opción.";
 

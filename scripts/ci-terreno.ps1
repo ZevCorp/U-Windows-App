@@ -1,5 +1,5 @@
 # CI DEL TERRENO: levanta una instancia limpia de la app y comprueba que el terreno CONTESTA por
-# sus dos puertas reales — el servidor MCP (8790) y el servidor del nucleo (8792).
+# sus dos puertas reales - el servidor MCP (8790) y el servidor del nucleo (8792).
 #
 #   .\scripts\ci-terreno.ps1              # compila a un directorio de usar y tirar y juzga
 #   .\scripts\ci-terreno.ps1 -Exe <ruta>  # juzga un U.exe ya compilado
@@ -15,7 +15,7 @@
 #
 # Es LOCAL porque abre la app en tu escritorio; y es LIMPIO porque corre con un U_DATA_DIR de usar
 # y tirar y SIN credencial de Graph/Neo4j: ni hereda tu memoria ni escribe en ella (la regla de
-# «pruebas desde cero»). Por lo mismo NO mata nada: si el puerto ya tiene dueno —tu app viva—, se
+# "pruebas desde cero"). Por lo mismo NO mata nada: si el puerto ya tiene dueno -tu app viva-, se
 # niega y te lo dice, porque juzgar tu instancia real contaminaria tu terreno.
 
 [CmdletBinding()]
@@ -29,7 +29,7 @@ $fallos = 0
 
 function Juzgar($nombre, $ok, $detalle) {
   $color = if ($ok) { "Green" } else { "Red" }
-  Write-Host ("  {0}  {1} — {2}" -f ($(if ($ok) { "OK " } else { "FALLO" })), $nombre, $detalle) -ForegroundColor $color
+  Write-Host ("  {0}  {1} - {2}" -f ($(if ($ok) { "OK " } else { "FALLO" })), $nombre, $detalle) -ForegroundColor $color
   if (-not $ok) { $script:fallos++ }
 }
 
