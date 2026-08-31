@@ -219,3 +219,36 @@ Juzgado por la promesa 10 del contrato, hoy en verde.
 **Lo que deja como aprendizaje:** las tres hipótesis se descartaron *dentro* de la app, donde había
 cinco culpables posibles para un síntoma. Veinte minutos de sonda fuera de la app dejaron uno solo.
 Es el aprendizaje nº13 del repo, y esta vez se pagó por no aplicarlo antes.
+
+---
+
+## ABIERTO (2026-08-31) · El contrato quedó desactualizado tras el cambio a OpenAI y quitar «mira»
+
+El mismo día se tomaron dos decisiones que cambian lo que el sistema promete de verdad, y el
+contrato solo se actualizó a medias:
+
+1. **La voz en vivo pasó de Gemini a OpenAI Realtime** — `vivo` ahora existe siempre que hay llave
+   de OpenAI, y el camino de texto (Gemini) quedó como respaldo SOLO para cuando `vivo` es `nil`.
+2. **Se quitó «mira» como alias del nombre** — a partir de ahora solo despiertan formas de «Ü»,
+   sabiendo que eso es más frágil (medido: 0 de 822 disparos reales en el registro del 2026-08-18).
+
+**Lo que se arregló ya:** la promesa 2 («contesta en menos de 3 segundos») se reescribió para medir
+el camino real —`U_LLAMAR` en vez de `U_PREGUNTAR`, y `🎙 dice:` en vez de `🧠 dice a los`—. Probada
+tres veces seguidas: 1,16 s · 1,00 s · 0,98 s · 1,14 s. Verde de verdad, no por casualidad.
+
+**Lo que sigue roto o ciego, y por qué, promesa por promesa:**
+
+| # | Qué prueba | Por qué falla hoy |
+|---|---|---|
+| 3 | No promete tocar el Mac | Usa `U_PREGUNTAR`, que fuerza `despierta=true` sin `vivo.arrancar()` — la frase se descarta por el arreglo de la carrera del mismo día. Necesita el mismo cambio que la 2: leer «🎙 dice:», no «🧠 dice». |
+| 4 | Voz masculina en español | Depende de que la 3 la haga hablar por el camino de TEXTO — ese subsistema (macOS TTS de respaldo) sigue vivo pero casi nunca se ejerce ahora que `vivo` casi siempre existe. Hay que decidir si sigue midiéndose por ahí o se retira. |
+| 5 | La cara se deriva sola | Misma causa que la 3: usa `U_PREGUNTAR`, nunca la hace hablar. |
+| 6 | No se transcribe a sí misma | Depende de la 5. |
+| 9 | Despierta con «Mira» | **Esta ya no debe pasar — es el comportamiento correcto.** Probaba que «mira» despertara, y se quitó a propósito el 2026-08-31. Hay que reescribir el enunciado y el cuerpo para probar SOLO formas de «Ü», sabiendo que el riesgo medido es real (ver `Llamado.swift`). |
+| 11 | El portero de la sesión en vivo | Usa `U_VIVO=1`, que en el código actual sigue apuntando bien a `vivo` (OpenAI) — pero no se pudo verificar en esta sesión por el mismo desgaste del subsistema de audio de tantas corridas seguidas. Repetir en frío antes de dar por roto.
+
+**Por qué no se arregló todo de una vez:** cinco promesas rediseñadas bajo presión de tiempo es
+exactamente el apuro que el patrón nº14 de este repo advierte no tomar («no optimizar la cadencia
+antes del costo por iteración» — aquí, no apurar cinco arneses antes de pensar cada uno). Se arregló
+la que de verdad importaba medir hoy (la 2, la velocidad de respuesta que motivó toda la sesión) y
+se dejó el resto escrito, no escondido.

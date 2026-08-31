@@ -34,22 +34,36 @@ enum Promesas {
     }
 
     /// 2 · Contesta rápido. En una conversación hablada, el silencio es lo único que se siente.
+    /// REESCRITA el 2026-08-31: medía el camino de TEXTO (`U_PREGUNTAR` → Gemini), que dejó de ser
+    /// el camino principal el mismo día que se escribió esta promesa. Con `vivo` existiendo siempre
+    /// que hay llave de OpenAI, `U_PREGUNTAR` fuerza `despierta = true` SIN llamar a
+    /// `vivo.arrancar()` — algo que en el uso real nunca pasa — y el arreglo de la carrera de ese
+    /// mismo día descarta la frase creyendo que la sesión en vivo está por hacerse cargo. Se quedaba
+    /// esperando una respuesta de texto que nunca iba a llegar: no era el código, era el arnés
+    /// midiendo un camino que ya no es el que se usa.
+    ///
+    /// Ahora mide lo que de verdad importa: la VOZ EN VIVO, por el camino real (`U_LLAMAR`, que sí
+    /// pasa por `despertar()` → `vivo.arrancar()`, igual que una llamada de verdad).
     static let dos = Promesa(numero: 2, enunciado: "Contesta en menos de 3 segundos") {
         App.cerrar()
         try App.limpiarRegistro()
-        try App.abrir(["U_PREGUNTAR": "mira, cuéntame algo corto"])
-        guard esperarA(segundos: 90, "que conteste", { registroTiene("🧠 dice a los") }) else {
-            if registroTiene("🧠 ✘") {
-                return .rota("el cerebro falló: \(primeraLinea(con: "🧠 ✘") ?? "")")
-            }
-            return .noPudeCorrer("no contestó ni falló en 90 s — ¿hay llave en ~/.u/gemini-key.txt?")
+        try App.abrir(["U_LLAMAR": "you cuéntame algo corto"])
+        guard esperarA(segundos: 30, "que le pase la frase a la voz en vivo",
+                       { registroTiene("le paso lo que dijiste al despertarla") }) else {
+            return .noPudeCorrer("no llegó a abrir la voz en vivo en 30 s — ¿hay llave en ~/.u/openai-key.txt?")
         }
-        guard let l = primeraLinea(con: "🧠 dice a los"),
-              let seg = Double(l.split(separator: " a los ").last?.split(separator: "s").first ?? "") else {
-            return .noPudeCorrer("contestó pero no pude leer el tiempo de «\(primeraLinea(con: "🧠 dice a los") ?? "")»")
+        guard let inicio = primeraLinea(con: "le paso lo que dijiste al despertarla").flatMap(instante) else {
+            return .noPudeCorrer("no pude fechar cuándo se mandó la frase")
         }
-        return seg < 3.0 ? .cumplida("primera frase a los \(seg) s")
-                         : .rota("tardó \(seg) s en la primera frase (el tope son 3)")
+        guard esperarA(segundos: 15, "que conteste", { registroTiene("🎙 dice:") }) else {
+            return .rota("le pasé la frase y no contestó en 15 s")
+        }
+        guard let l = primeraLinea(con: "🎙 dice:"), let fin = instante(l) else {
+            return .noPudeCorrer("contestó pero no pude leer cuándo")
+        }
+        let seg = fin - inicio
+        return seg < 3.0 ? .cumplida("primera frase a los \(String(format: "%.2f", seg)) s")
+                         : .rota("tardó \(String(format: "%.2f", seg)) s en la primera frase (el tope son 3)")
     }
 
     /// 3 · No promete lo que no puede. Hoy Ü no toca el Mac, y decir que sí deja a alguien esperando.
