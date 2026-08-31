@@ -8,7 +8,13 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var oido: Oido!
     var cerebro: Cerebro?
     /// La conversación en vivo. `nil` mientras no haya llave.
-    var vivo: Vivo?
+    /// LA VOZ EN VIVO, POR OPENAI. Reemplaza a `Vivo` (Gemini) como camino principal el 2026-08-31 —
+    /// `Vivo.swift` se queda en el repo, probado y sin borrar, para el día que haga falta volver o
+    /// comparar, pero ya no es lo que arranca `armarVozViva()`.
+    var vivo: VivoOpenAI?
+    /// El arnés de prueba aislado sigue existiendo por separado — `U_VIVO_OPENAI=1` construye el
+    /// suyo propio, sin tocar esta propiedad.
+    var vivoOpenAI: VivoOpenAI?
     /// Mueve la boca con el sonido REAL mientras habla la voz en vivo. Por texto la mueve `Voz`
     /// leyendo la palabra que toca; aquí no hay palabras que leer, hay una onda — y seguirla es más
     /// fiel que adivinar la vocal.
@@ -284,11 +290,20 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
+        // LA VOZ EN VIVO ES OPENAI, EL TEXTO DE RESPALDO SIGUE EN GEMINI — a propósito, y son dos
+        // llaves distintas. `Cerebro` (el camino de texto, sin voz nativa) no se tocó: sigue
+        // llamando a Gemini. Lo que cambió es la conversación EN VIVO, que era la que se caía a
+        // diario con «Socket is not connected» cuando la cuenta de Gemini se quedó sin saldo
+        // (2026-08-31) — Felipe ya había resuelto exactamente esto en Windows con el mismo cambio.
         if let k = Llave.gemini {
             cerebro = Cerebro(llave: k)
+        } else {
+            Registro.di("🧠 sin llave de Gemini: no hay camino de texto de respaldo (falta ~/.u/gemini-key.txt)")
+        }
+        if let k = Llave.openai {
             vivo = armarVozViva(llave: k)
         } else {
-            Registro.di("🧠 sin llave: no hay cerebro ni voz en vivo (falta ~/.u/gemini-key.txt)")
+            Registro.di("🎙 sin llave de OpenAI: no hay voz en vivo (falta ~/.u/openai-key.txt)")
         }
 
         // SE LADEA MIENTRAS LE HABLAS. La señal no hubo que inventarla: `alOir` llega con cada
@@ -509,6 +524,32 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
+        // U_VIVO_OPENAI=1 — el prototipo acotado de la voz por OpenAI Realtime, AISLADO del resto:
+        // no toca `vivo` (Gemini), no pasa por `despertar()`, no entra al bucle normal. Solo prueba
+        // que el protocolo nuevo abre, oye, contesta y pide su cara, de punta a punta.
+        //
+        //   open --env U_VIVO_OPENAI=1 --env "U_DECIR=hola, cuéntame algo" "…/U.app"
+        if ProcessInfo.processInfo.environment["U_VIVO_OPENAI"] == "1" {
+            oido.callarse()
+            guard let k = Llave.openai else {
+                Registro.di("🎙 ✘ sin llave en ~/.u/openai-key.txt, no puedo abrir OpenAI Realtime")
+                return
+            }
+            Registro.di("🎙 U_VIVO_OPENAI=1 · abro la conversación en vivo con OpenAI")
+            let v = VivoOpenAI(llave: k)
+            v.alTranscribir = { texto, esDeU in
+                Registro.di(esDeU ? "🎙 dice: «\(texto)»" : "🎙 oye: «\(texto)»")
+            }
+            v.alTalante = { [weak self] t in self?.panel.face.reaccionar(t) }
+            v.alFallar = { motivo in Registro.di("🎙 ✘ falló: \(motivo)") }
+            vivoOpenAI = v
+            v.arrancar()
+            if let frase = ProcessInfo.processInfo.environment["U_DECIR"], !frase.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { v.decirle(frase) }
+            }
+            return
+        }
+
         // La sonda del micrófono, y SALE. Va la primera de todas: mide el aparato, y para eso el
         // oído, la voz y la sesión en vivo tienen que no haber tocado nada.
         if Sonda.pedida {
@@ -570,8 +611,8 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func armarVozViva(llave: String) -> Vivo {
-        let v = Vivo(llave: llave)
+    private func armarVozViva(llave: String) -> VivoOpenAI {
+        let v = VivoOpenAI(llave: llave)
 
         v.alCambiar = { [weak self] abierta in
             guard let self else { return }

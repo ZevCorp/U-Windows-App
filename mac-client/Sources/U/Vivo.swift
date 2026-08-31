@@ -353,7 +353,7 @@ final class Vivo: NSObject, URLSessionWebSocketDelegate {
         let mensaje: [String: Any] = [
             "realtimeInput": [
                 "audio": [
-                    "mimeType": "audio/pcm;rate=\(Int(AudioVivo.ritmoEntrada))",
+                    "mimeType": "audio/pcm;rate=\(Int(audio.ritmoEntrada))",
                     "data": pcm.base64EncodedString(),
                 ],
             ],
