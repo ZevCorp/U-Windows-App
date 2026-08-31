@@ -447,7 +447,12 @@
                              de ancho completo obligaban a leer una lista; una fila de iconos con
                              tooltip se recorre de un vistazo. El estado de cada toggle se dice con
                              el FONDO (acento = encendido), el patrón que TeachBtn ya tenía. -->
-                        <UniformGrid Columns="4" Margin="0,4,0,10">
+                        <UniformGrid Columns="5" Margin="0,4,0,10">
+                            <!-- DEMO de punta a punta (2026-08-31): del Easy Access a los campos
+                                 clínicos llenos, todo por batches del terreno. -->
+                            <Button x:Name="DemoBtn" Content="🚀" Style="{StaticResource BarBtn}" Click="OnDemoPuntaAPunta"
+                                    Margin="0" ToolTip="DEMO: de Easy Access al triage del paciente, con campos clínicos llenos — todo en batch"
+                                    AutomationProperties.Name="Demo de punta a punta"/>
                             <!-- Enseñanza activa: graba pantalla+voz para que Ü aprenda a usar una
                                  app. En rojo mientras graba (SetTeachingUi). -->
                             <Button x:Name="TeachBtn" Content="🎓" Style="{StaticResource BarBtn}" Click="OnToggleTeach"
