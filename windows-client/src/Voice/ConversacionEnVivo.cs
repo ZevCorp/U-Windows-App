@@ -62,6 +62,7 @@ public sealed class ConversacionEnVivo : IDisposable
     /// <summary>El barge-in de la compuerta (spec 002, fase 4): voz sostenida por encima del eco
     /// aprendido corta la cola y reabre la compuerta. Sostén 240 ms · 3× la línea base · piso 1500.</summary>
     private readonly DetectorDeInterrupcion _interrupcion = new(240, 3.0, 1500);
+    private long _ultimaMedicionMs;
     private long _tragadoAnunciado;
     private string _ultimoFalloEnvio = "";
 
@@ -901,21 +902,36 @@ public sealed class ConversacionEnVivo : IDisposable
         // las dos fuentes —micrófono local y collar— porque las dos entran por Capturado.
         if (ModoDeCaptura.CompuertaActiva(AecDelSistema, CompuertaForzada))
         {
-            bool sonando = _audio.Hablando;
+            long ahora = Environment.TickCount64;
+            var filtrado = _compuerta.Filtrar(pcm, _audio.Hablando, ahora);
 
             // EL BARGE-IN (promesas 15-17): con la compuerta tragando, este es el único oído que
-            // queda. Si el trozo ORIGINAL trae voz sostenida muy por encima del eco aprendido, se
-            // corta la cola y se reabre la compuerta A LA ORDEN — así la primera sílaba de quien
-            // interrumpe viaja al servidor, que desde ahí retoma con su propio VAD.
-            if (sonando && _interrupcion.Oye(Rms(pcm), sonando: true, Environment.TickCount64))
+            // queda. El detector vive en LA ERA DE LA COMPUERTA (trozo sustituido = eco), no en el
+            // estado crudo del buffer: el audio llega a ráfagas y el buffer parpadea; con el estado
+            // crudo cada parpadeo re-arrancaba la siembra y el detector jamás disparaba (2026-08-31,
+            // medido en vivo por la sesión de la voz). Si el trozo ORIGINAL trae voz sostenida muy
+            // por encima del eco aprendido: cola cortada, compuerta reabierta, y ESTE MISMO trozo
+            // viaja intacto — la primera sílaba es justo lo que el VAD del servidor necesita oír.
+            bool cerrada = !ReferenceEquals(filtrado, pcm);
+            double rms = cerrada ? Rms(pcm) : 0;
+            if (cerrada && _interrupcion.Oye(rms, sonando: true, ahora))
             {
                 _audio.Callar();
                 _compuerta.Abrir();
+                filtrado = pcm;
                 LogBus.Log("voz-viva", "te oí encima: corto mi voz y te escucho (barge-in de la compuerta)");
             }
-            else if (!sonando) _interrupcion.Oye(0, sonando: false, Environment.TickCount64);
+            else if (!cerrada) _interrupcion.Oye(0, sonando: false, ahora);
 
-            var filtrado = _compuerta.Filtrar(pcm, _audio.Hablando, Environment.TickCount64);
+            // MEDIR ANTES DE TEORIZAR (lección nº1): mientras la compuerta traga, una línea por
+            // segundo con el RMS real y la base aprendida — con 30 s de prueba se ve si el piso y
+            // el factor están bien puestos para ESTE micrófono y ESTOS parlantes.
+            if (cerrada && ahora - _ultimaMedicionMs >= 1000)
+            {
+                _ultimaMedicionMs = ahora;
+                LogBus.Log("voz-viva", $"medición barge-in: rms={rms:F0} · base={_interrupcion.LineaBase:F0} "
+                    + $"· umbral={Math.Max(1500, _interrupcion.LineaBase * 3.0):F0}");
+            }
 
             // Lo tragado deja rastro (patrón nº10), pero por episodio y no por trozo: la línea
             // sale al reabrirse la compuerta, con el total del episodio que acaba de cerrar.

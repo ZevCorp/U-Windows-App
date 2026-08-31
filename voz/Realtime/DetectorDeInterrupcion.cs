@@ -50,7 +50,17 @@ public sealed class DetectorDeInterrupcion
     /// <summary>
     /// «Oí este trozo (su RMS) con la cola en este estado». Devuelve true UNA vez por episodio:
     /// el momento de cortar la cola y reabrir la compuerta.
+    ///
+    /// OJO CON EL PARPADEO (2026-08-31, medido por la sesión de la voz: cero disparos en tres
+    /// sesiones): <paramref name="sonando"/> debe ser LA ERA DE LA COMPUERTA (cerrada = eco), no
+    /// el estado crudo del buffer. El audio del servidor llega a ráfagas y el buffer se vacía por
+    /// milisegundos entre una y otra; con el estado crudo, cada parpadeo re-arrancaba la siembra
+    /// y el detector vivía sembrando — jamás disparó. La compuerta ya absorbe el parpadeo con su
+    /// gracia; quien llama le pasa ESA verdad.
     /// </summary>
+    /// <summary>La línea base aprendida, para poder MEDIR la calibración contra la sala real.</summary>
+    public double LineaBase => _lineaBase;
+
     public bool Oye(double rms, bool sonando, long ahoraMs)
     {
         long antes = _anteriorMs;
