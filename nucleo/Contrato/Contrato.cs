@@ -675,22 +675,26 @@ internal static class Contrato
     /// Lo que el grafo sabe, extraído por su API pública en la misma forma de filas que el
     /// proyector escribe y el restaurador lee: (dónde, elemento, destino, recuerdo).
     /// </summary>
-    private static List<(string Donde, Elemento Que, string Destino, Recuerdo? Eso)> Filas(Grafo g) =>
+    private static List<(string Donde, Elemento Que, string Destino, string Gesto, Recuerdo? Eso)> Filas(Grafo g) =>
         g.Ubicaciones().SelectMany(u => g.DesdeAqui(u)
-            .Select(a => (u, a.Que, a.Destino, g.RecuerdoSobre(u, a.Que.Selector))))
+            .Select(a => (u, a.Que, a.Destino, g.GestoDe(u, a.Que.Selector), g.RecuerdoSobre(u, a.Que.Selector))))
         .ToList();
 
     /// <summary>Reaplica filas a un grafo virgen POR LAS PUERTAS DEL NÚCLEO y en su orden:
     /// primero los elementos (Recordar), luego los caminos (Cruzar), luego lo enseñado (Ensenar).
     /// Es el mismo orden del restaurador real, porque Cruzar y Ensenar rechazan lo que aún no se
     /// conoce — al revés se perdería todo, en silencio.</summary>
-    private static Grafo Renacido(List<(string Donde, Elemento Que, string Destino, Recuerdo? Eso)> filas)
+    private static Grafo Renacido(List<(string Donde, Elemento Que, string Destino, string Gesto, Recuerdo? Eso)> filas)
     {
         var g = new Grafo();
         foreach (var grupo in filas.GroupBy(f => f.Donde))
             g.Recordar(grupo.Key, grupo.Select(f => f.Que).ToList());
         foreach (var f in filas.Where(f => f.Destino.Length > 0))
-            g.Cruzar(f.Donde, f.Que.Selector, f.Destino);
+            // EL GESTO VUELVE CON SU CAMINO (promesa 21). Restaurar con el Cruzar de tres
+            // argumentos parecia inocuo y no lo era: el gesto simplemente no volvia, y cada arista
+            // re-pagaba el ensayo entero UNA VEZ POR SESION, para siempre — justo la metrica que la
+            // spec 003 vino a bajar (lo vio el agente optimizador el 2026-08-31).
+            g.Cruzar(f.Donde, f.Que.Selector, f.Destino, f.Gesto);
         foreach (var f in filas.Where(f => f.Eso != null))
             g.Ensenar(f.Donde, f.Que.Selector, f.Eso!.Significado, f.Eso.Foto);
         return g;
@@ -708,17 +712,26 @@ internal static class Contrato
         });
         g.Cruzar("app://inicio", "s:ir", "app://fondo");
         g.Estoy("app://fondo");
-        g.Observar("app://fondo", new[] { new Elemento("s:volver", "Volver", "Button") });
+        g.Observar("app://fondo", new[]
+        {
+            new Elemento("s:volver", "Volver", "Button"),
+            // Una carpeta cruzada CON DOBLE: el gesto es la mitad nueva del saber (promesa 21) y
+            // tiene que sobrevivir al apagado igual que el destino — si no, cada arista re-paga el
+            // ensayo una vez por sesión, para siempre.
+            new Elemento("s:carpeta", "Docs", "ListItem"),
+        });
+        g.Cruzar("app://fondo", "s:carpeta", "app://docs", "doubleclick");
         g.Ensenar("app://inicio", "s:ir", "esto lleva a donde se radica", "C:/fotos/ir.png");
 
         var otraVida = Renacido(Filas(g));
 
-        // La comparación incluye el recuerdo (significado y foto; la fecha no, cambia sola) y
-        // excluye lo vivo: lo vivo no se restaura ni debe — al arrancar no hay nada en pantalla.
+        // La comparación incluye el recuerdo (significado y foto; la fecha no, cambia sola), el
+        // GESTO del camino, y excluye lo vivo: lo vivo no se restaura ni debe — al arrancar no hay
+        // nada en pantalla.
         static string Huella(Grafo x) => string.Join("\n", x.Ubicaciones().Select(u =>
             u + " => " + string.Join(",", x.DesdeAqui(u)
                 .OrderBy(a => a.Que.Selector, StringComparer.Ordinal)
-                .Select(a => $"{a.Que.Selector}|{a.Que.Etiqueta}|{a.Que.Tipo}->{a.Destino}"
+                .Select(a => $"{a.Que.Selector}|{a.Que.Etiqueta}|{a.Que.Tipo}->{a.Destino}~{x.GestoDe(u, a.Que.Selector)}"
                     + (x.RecuerdoSobre(u, a.Que.Selector) is { } e ? $"[{e.Significado}|{e.Foto}]" : "")))));
 
         Debe(Huella(otraVida) == Huella(g),
@@ -759,6 +772,14 @@ internal static class Contrato
         Debe((string)gestoDe.Invoke(g, new object[] { "app://menu", "s:carpeta" })! == ""
              && (string)gestoDe.Invoke(g, new object[] { "app://lista", "s:carpeta" })! == "doubleclick",
             "cada arista lleva su gesto: aprender uno no reescribe el otro");
+
+        // «NO SE EL GESTO» NO ES «FUE UN CLIC SIMPLE». Re-cruzar SIN decir gesto —el clic humano
+        // atribuido, la restauracion— no borra lo sabido: quien no sabe, no borra. El primer
+        // borrador de Cruzar delegaba con "" y cada visita manual degradaba la arista al ensayo
+        // eterno (encontrado por el optimizador el 2026-08-31, el mismo dia que nacio).
+        g.Cruzar("app://lista", "s:carpeta", "app://carpeta");
+        Debe((string)gestoDe.Invoke(g, new object[] { "app://lista", "s:carpeta" })! == "doubleclick",
+            "re-cruzar sin decir el gesto CONSERVA el aprendido: el clic humano no desaprende");
     }
 
     private static void LaEnsenanzaSobreviveAlOlvido(Grafo g)

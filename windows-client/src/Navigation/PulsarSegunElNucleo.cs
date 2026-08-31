@@ -118,6 +118,14 @@ public sealed class PulsarSegunElNucleo
     /// </summary>
     private bool EsContenido(string ubicacion, string selector)
     {
+        // LA LISTA ES UIA-ONLY A PROPOSITO (2026-08-31). Los tipos SAP (GuiTreeFila, GuiGridFila)
+        // NO estan aqui, y esta guarda trabaja EN PAREJA con la de FaceWindow: alli SapSelector.Owns
+        // descarta el gesto y manda la mano vieja, porque en SAP Execute ya resuelve la accion real
+        // por el selector (doubleClickNode en filas) y nuestro «doble» seria una segunda opinion.
+        // Si algun dia se añade un tipo SAP aqui SIN tocar aquella guarda, el ensayo mandara un
+        // doubleclick que FaceWindow degradara a clic simple: clic+clic sobre una fila SAP y una
+        // arista que aprende un gesto que se reproducira como otro. Las dos guardas se cambian
+        // JUNTAS o ninguna (lo vio el agente optimizador antes de que pasara).
         foreach (var a in _grafo.DesdeAqui(ubicacion))
             if (a.Que.Selector == selector)
                 return a.Que.Tipo is "ListItem" or "TreeItem" or "DataItem";

@@ -164,8 +164,14 @@ public sealed class Grafo
     /// los siete perdidos no dejaron rastro (2026-08-12, medido). Un rechazo ruidoso habría
     /// enseñado el problema el primer día.
     /// </returns>
+    // «NO SE EL GESTO» NO ES «FUE UN CLIC SIMPLE». Los llamadores de tres argumentos —la
+    // atribucion del clic humano en MapaVivo, la restauracion del proyector— no saben como se
+    // cruzo, y delegar con "" borraba el gesto ya aprendido: cada visita MANUAL del usuario a una
+    // arista degradaba el saber, y el siguiente Pulsa re-pagaba el ensayo entero (~3,6 s y tres
+    // clics). Es la clase «vacio no es ausente» (aprendizaje n.9), encontrada por el agente
+    // optimizador el 2026-08-31 el mismo dia que nacio el bug. Conservar: quien no sabe, no borra.
     public bool Cruzar(string ubicacion, string selector, string destino)
-        => Cruzar(ubicacion, selector, destino, "");
+        => Cruzar(ubicacion, selector, destino, GestoDe(ubicacion, selector));
 
     /// <summary>
     /// Cruzar diciendo CÓMO se cruzó. Promesa 21: el gesto viaja con su arista.

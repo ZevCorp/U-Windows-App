@@ -29,26 +29,37 @@ Write-Host "2/2 juzgando..." -ForegroundColor Cyan
 # exe y ErrorActionPreference='Stop' mataria el script sin decir nada; el bloqueo es intermitente,
 # asi que se reintenta; y si ni el apphost ni el host de .NET arrancan, se dice "no se" con exit 99
 # en vez de devolver un codigo que se lea como recuento de promesas rotas.
+# EAP='Continue' SOLO alrededor del juez (mismo arreglo probado que en contrato-del-grafo.ps1, ver
+# alli el porque con la medida): con 'Stop' y 2>&1, una linea de stderr de un juez QUE SI CORRIO
+# lanzaba y mataba el script antes del exit 99.
 $salida = @(); $codigo = -1; $arranco = $false
-foreach ($intento in 1..3) {
-  try {
-    $salida = & (Join-Path $binTest "contrato-voz.exe") 2>&1
-    $codigo = $LASTEXITCODE
-    $arranco = $true
-    break
-  } catch {
-    Write-Host ("   x intento {0}/3 - no se pudo ni ARRANCAR el juez: {1}" -f $intento, $_.Exception.Message) -ForegroundColor Red
-    if ($intento -lt 3) { Start-Sleep -Seconds 3 }
+$eapAntes = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  foreach ($intento in 1..3) {
+    try {
+      $salida = & (Join-Path $binTest "contrato-voz.exe") 2>&1
+      $codigo = $LASTEXITCODE
+      $arranco = $true
+      break
+    } catch {
+      Write-Host ("   x intento {0}/3 - el juez no llego a correr o murio sin veredicto: {1}" -f $intento, $_.Exception.Message) -ForegroundColor Red
+      if ($intento -lt 3) { Start-Sleep -Seconds 3 }
+    }
   }
-}
-if (-not $arranco) {
-  $dll = Join-Path $binTest "contrato-voz.dll"
-  if (Test-Path $dll) {
-    Write-Host "   -> el .exe no arranca; se prueba con el host de .NET (dotnet <dll>)" -ForegroundColor DarkYellow
-    $salida = & dotnet $dll 2>&1
-    $codigo = $LASTEXITCODE
+  if (-not $arranco) {
+    $dll = Join-Path $binTest "contrato-voz.dll"
+    if (Test-Path $dll) {
+      Write-Host "   -> el .exe no arranca; se prueba con el host de .NET (dotnet <dll>)" -ForegroundColor DarkYellow
+      try {
+        $salida = & dotnet $dll 2>&1
+        $codigo = $LASTEXITCODE
+      } catch {
+        Write-Host ("   x el respaldo tampoco: {0}" -f $_.Exception.Message) -ForegroundColor Red
+      }
+    }
   }
-}
+} finally { $ErrorActionPreference = $eapAntes }
 $salida | ForEach-Object { Write-Host $_ }
 
 # Se busca "NTEGRA" sin la tilde a proposito: el veredicto es "VOZ INTEGRA" con I acentuada, y

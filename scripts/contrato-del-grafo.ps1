@@ -49,18 +49,29 @@ Write-Host "3/3 juzgando..." -ForegroundColor Cyan
 #
 # TRES INTENTOS porque el bloqueo es INTERMITENTE: el mismo binario, sin tocar nada, arranca a la
 # segunda mas veces de las que uno querria (medido el 2026-08-26). Si las tres fallan, no se insiste.
+# EAP='Continue' SOLO alrededor del juez, y es un arreglo probado, no estetico: con 'Stop' y 2>&1,
+# PowerShell 5.1 LANZA en cuanto el exe escribe UNA linea a stderr AUNQUE haya arrancado y corrido
+# (probado el 2026-08-31: cmd /c "echo ok & echo boom 1>&2 & exit 7" -> catch, codigo=-1, salida
+# vacia). Un juez que crashea A MITAD escribe su excepcion a stderr: con 'Stop' eso caia al catch
+# de "no se pudo ni ARRANCAR" -- un mensaje que no distingue sus causas (aprendizaje n.2) -- y el
+# respaldo de abajo volvia a lanzar y mataba el script ANTES del exit 99. El agujero estaba
+# exactamente en el escenario que motivo el escudo.
 $salida = @(); $codigo = -1; $arranco = $false
-foreach ($intento in 1..3) {
-  try {
-    $salida = & (Join-Path $binTest "contrato-del-grafo.exe") 2>&1
-    $codigo = $LASTEXITCODE
-    $arranco = $true
-    break
-  } catch {
-    Write-Host ("   x intento {0}/3 - no se pudo ni ARRANCAR el juez: {1}" -f $intento, $_.Exception.Message) -ForegroundColor Red
-    if ($intento -lt 3) { Start-Sleep -Seconds 3 }
+$eapAntes = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  foreach ($intento in 1..3) {
+    try {
+      $salida = & (Join-Path $binTest "contrato-del-grafo.exe") 2>&1
+      $codigo = $LASTEXITCODE
+      $arranco = $true
+      break
+    } catch {
+      Write-Host ("   x intento {0}/3 - el juez no llego a correr o murio sin veredicto: {1}" -f $intento, $_.Exception.Message) -ForegroundColor Red
+      if ($intento -lt 3) { Start-Sleep -Seconds 3 }
+    }
   }
-}
+} finally { $ErrorActionPreference = $eapAntes }
 
 # RESPALDO: EL MISMO CODIGO, POR EL HOST DE .NET EN VEZ DEL .EXE.
 #
@@ -72,8 +83,17 @@ if (-not $arranco) {
   $dll = Join-Path $binTest "contrato-del-grafo.dll"
   if (Test-Path $dll) {
     Write-Host "   -> el .exe no arranca; se prueba con el host de .NET (dotnet <dll>)" -ForegroundColor DarkYellow
-    $salida = & dotnet $dll 2>&1
-    $codigo = $LASTEXITCODE
+    # Mismo escudo que arriba: sin el, una linea de stderr del respaldo mataba el script entero
+    # antes de poder decir "no se" (probado el 2026-08-31).
+    $ErrorActionPreference = 'Continue'
+    try {
+      try {
+        $salida = & dotnet $dll 2>&1
+        $codigo = $LASTEXITCODE
+      } catch {
+        Write-Host ("   x el respaldo tampoco: {0}" -f $_.Exception.Message) -ForegroundColor Red
+      }
+    } finally { $ErrorActionPreference = $eapAntes }
   }
 }
 $salida | ForEach-Object { Write-Host $_ }

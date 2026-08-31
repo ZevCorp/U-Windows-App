@@ -223,6 +223,10 @@ public sealed class ProyectorNeo4j : IDisposable
                             donde = u, app = Grafo.AppDe(u),
                             sel = a.Que.Selector, etq = a.Que.Etiqueta, tipo = a.Que.Tipo,
                             vivo = a.Vivo, destino = a.Destino,
+                            // EL GESTO VIAJA CON SU CAMINO (promesa 21): sin proyectarlo, moria en
+                            // cada apagado y cada arista re-pagaba el ensayo una vez por sesion,
+                            // para siempre (2026-08-31, lo vio el agente optimizador).
+                            gesto = grafo.GestoDe(u, a.Que.Selector),
                             // LO ENSEÑADO VIAJA CON SU ELEMENTO, no en un nodo aparte. Es una
                             // propiedad de ESE botón en ESA pantalla; separarlo obligaría a pegar dos
                             // cosas a mano cada vez que se pregunta «¿qué hay aquí?».
@@ -278,7 +282,7 @@ public sealed class ProyectorNeo4j : IDisposable
                       DELETE vieja
                     WITH DISTINCT e, f WHERE f.destino <> ''
                       MERGE (d:Ubicacion {id:f.destino}) ON CREATE SET d.app = f.app, d.actual = false
-                      MERGE (e)-[:LLEVA_A]->(d)
+                      MERGE (e)-[l:LLEVA_A]->(d) SET l.gesto = f.gesto
                     """,
                     parameters = new { filas },
                 });
@@ -297,6 +301,10 @@ public sealed class ProyectorNeo4j : IDisposable
         foreach (var a in grafo.DesdeAqui(u))
         {
             sb.Append(a.Que.Selector).Append(a.Vivo ? '+' : '-').Append(a.Destino);
+            // El GESTO tambien entra, por la misma razon que el significado (abajo): aprender que
+            // una carpeta se abre con doble no cambiaba la huella, la ubicacion no contaba como
+            // cambiada, y el gesto se quedaba sin proyectar hasta que otra cosa se moviera.
+            sb.Append('~').Append(grafo.GestoDe(u, a.Que.Selector));
             // El significado ENTRA en la huella. Si no entrara, enseñar «aquí va el número de
             // factura» no cambiaría nada de esta cadena, la ubicación no contaría como cambiada, y
             // lo enseñado se quedaría sin escribir hasta que por casualidad se moviera otra cosa.
@@ -336,9 +344,10 @@ public sealed class ProyectorNeo4j : IDisposable
                 {
                     statement = """
                     MATCH (u:Ubicacion)-[:ALCANZA]->(e:Elemento)
-                    OPTIONAL MATCH (e)-[:LLEVA_A]->(d:Ubicacion)
+                    OPTIONAL MATCH (e)-[l:LLEVA_A]->(d:Ubicacion)
                     RETURN u.id AS donde, e.selector AS sel, e.etiqueta AS etq, e.tipo AS tipo,
-                           d.id AS destino, e.significado AS significado, e.foto AS foto
+                           d.id AS destino, e.significado AS significado, e.foto AS foto,
+                           l.gesto AS gesto
                     """,
                 },
             },
@@ -356,7 +365,7 @@ public sealed class ProyectorNeo4j : IDisposable
         }
 
         var porUbicacion = new Dictionary<string, List<Elemento>>(StringComparer.OrdinalIgnoreCase);
-        var caminos = new List<(string Donde, string Sel, string Destino)>();
+        var caminos = new List<(string Donde, string Sel, string Destino, string Gesto)>();
         var recuerdos = new List<(string Donde, string Sel, string Que, string Foto)>();
         try
         {
@@ -374,7 +383,11 @@ public sealed class ProyectorNeo4j : IDisposable
                 lista.Add(new Elemento(sel, row[2].GetString() ?? "", row[3].GetString() ?? ""));
 
                 if (row[4].ValueKind != JsonValueKind.Null)
-                    caminos.Add((donde, sel, row[4].GetString() ?? ""));
+                    // El gesto es la columna 7 y puede faltar (aristas proyectadas antes de la
+                    // promesa 21, o cruzadas con el clic de siempre): ausente o null = "".
+                    caminos.Add((donde, sel, row[4].GetString() ?? "",
+                        row.GetArrayLength() > 7 && row[7].ValueKind != JsonValueKind.Null
+                            ? row[7].GetString() ?? "" : ""));
 
                 string significado = row.GetArrayLength() > 5 && row[5].ValueKind != JsonValueKind.Null
                     ? row[5].GetString() ?? "" : "";
@@ -393,7 +406,7 @@ public sealed class ProyectorNeo4j : IDisposable
         // PRIMERO LOS ELEMENTOS Y DESPUÉS LOS CAMINOS, y el orden no es casual: `Cruzar` exige que
         // el elemento ya se conozca en esa ubicación, así que al revés se rechazaría todo.
         foreach (var (donde, elementos) in porUbicacion) grafo.Recordar(donde, elementos);
-        int rechazados = caminos.Count(c => !grafo.Cruzar(c.Donde, c.Sel, c.Destino));
+        int rechazados = caminos.Count(c => !grafo.Cruzar(c.Donde, c.Sel, c.Destino, c.Gesto));
         // LOS RECUERDOS VUELVEN POR LA MISMA PUERTA, `Ensenar`, y por eso van después de `Recordar`:
         // el núcleo exige que el elemento ya se conozca aquí, y esa exigencia debe valer también
         // para lo que llega de la base de datos.

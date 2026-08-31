@@ -116,11 +116,66 @@ quedó probado sobre el Explorador real antes del port: menú de 16 opciones, lo
   pulsación se hacía desde `specs` sin haber vuelto a `docs`, o sea sobre OTRA arista — que
   correctamente no sabía nada (promesa 4 del núcleo). El arnés ganó un `volver()` explícito y el
   comentario que explica por qué.
+- **2026-08-31 (agente optimizador)** — Tres bugs reales el mismo día que nació el código, todos
+  arreglados y con sabotaje que los caza:
+  1. **Los scripts de contrato tenían un agujero probado**: con `EAP='Stop'` + `2>&1`, una línea de
+     stderr de un juez QUE SÍ CORRIÓ lanzaba y mataba el script antes del `exit 99` — el «no sé» se
+     convertía en abort crudo o en un recuento inventado. Escudo `EAP='Continue'` alrededor de las
+     invocaciones, con el porqué medido en el comentario.
+  2. **El `Cruzar` de 3 args borraba el gesto aprendido** («no sé el gesto» ≠ «fue clic simple»):
+     cada clic humano atribuido sobre una arista aprendida la degradaba al ensayo eterno. Ahora
+     conserva (`GestoDe` como default), y la promesa 21 ganó el `Debe` que lo caza.
+  3. **El gesto no se proyectaba a Neo4j ni volvía**: moría en cada apagado y cada arista re-pagaba
+     el ensayo una vez por sesión. Ahora viaja en `LLEVA_A.gesto`, vuelve por el `Cruzar` de 4 args,
+     entra en la huella (aprenderlo dispara re-proyección) y la promesa 19 lo compara.
+- **2026-08-31 (agente optimizador, hueco conocido SIN arreglar)** — El ListItem que de verdad no
+  navega paga la factura completa en cada visita (2×1800 ms + 3 clics): no hay arista, así que no
+  queda rastro de «ya se ensayó y no navega». Guardar conocimiento negativo es decisión de spec,
+  no parche — queda aquí como pendiente explícito.
+- **2026-08-31 (agente tester, con dientes)** — **El vigía pasivo acuñó una arista falsa con
+  NUESTRO doble clic sintético**: `mapa-vivo: aprendido: «Fecha de modificación» lleva de docs a
+  specs` (11:55:24 y 11:57:25). `RecorrerSegunElNucleo` existe justo porque «el que pulsó fuimos
+  nosotros», pero el atribuidor de clics humanos corre en paralelo y le colgó el cruce a la
+  cabecera de columna. Quien pida ruta docs→specs puede recibir «pulsa Fecha de modificación». Es
+  EL pecado que el GENESIS del terreno nombra como la fuente de aristas falsas del sistema viejo.
+  Arreglarlo pide suprimir la atribución mientras hay una pulsación sintética en vuelo — promesa
+  propia, fase propia.
+- **2026-08-31 (agente tester)** — Tras la primera visita, «specs» por etiqueta se vuelve ambiguo
+  (la pestaña y las migas que la propia visita creó también se llaman así): el guardia de
+  ambigüedad rehúsa honesto y hay que pasar el selector. El camino rápido del gesto aprendido queda
+  detrás de ese guardia justo después de estrenarse. Anotado; el guardia hace lo correcto.
+- **2026-08-31 (agente tester)** — La mano del gesto (`new UiaSurface` en FaceWindow) no engancha
+  `Log`, así que «clic físico» del camino nuevo no deja línea: la evidencia por clic se reconstruye
+  de `clic-sap` y duraciones. Cosmético pero incómodo para diagnosticar.
+
+## La corrida a mano (nivel 4)
+
+La hizo un agente tester independiente el **2026-08-31**, sobre U.exe PID 20392 (`C:\U-dev2\bin`),
+por el servidor MCP real (`127.0.0.1:8790/mcp/`, JSON-RPC `tools/call` → `map_take`) con el
+foreground y la llamada en el mismo proceso. **Dos pantallas, con nombre: Explorador en
+`…\U-Windows-App\docs` y `…\docs\specs`** (ida-vuelta-ida). Log: `u-20260831.log`.
+
+| Qué | Evidencia |
+|---|---|
+| 1ª toma de «specs»: ENSAYÓ | 11:55:19→11:55:24 · dos clics con 3 s entre ellos · **5.618 ms** · llegó a `…/specs` |
+| Vuelta con «Atrás» (Button, un clic) | 11:56:54 · 1.541 ms |
+| 2ª toma de «specs»: DIRECTA | 11:57:23 · UN evento de clic · **1.501 ms** · llegó a `…/specs` |
+| El argumento que no depende de contar líneas | 1.501 ms < 1.800 ms (la ventana mínima que un ensayo tiene que agotar): un ensayo **no cabe físicamente** en esa duración |
+| Promesa 83 (botón que no navega) | «Actualizar (F5)»: 2.858 ms ≈ un clic + UNA espera; un ensayo habría necesitado ~5,6 s |
+
+**De 5.618 ms y 3 clics a 1.501 ms y 1 clic.** La métrica del GENESIS —costo por paso— bajando en
+la pantalla real.
 
 ## Cierre
 
-- [ ] Promesa 21 verde en `nucleo/Contrato` (y las 20 anteriores intactas)
-- [ ] Promesas 82-83 verdes en `tests/ContratoDelGrafo` (y las 81 anteriores intactas)
-- [ ] Rotas a propósito, una por una
-- [ ] Probado a mano en ≥2 pantallas, con nombre: …
-- [ ] Estado: **implementado** (AAAA-MM-DD)
+- [x] Promesa 21 verde en `nucleo/Contrato` (21/21 ÍNTEGRO; la 19 ahora compara también el gesto)
+- [x] Promesas 82-83 verdes en `tests/ContratoDelGrafo` (63 promesas numeradas 21-83, INTACTO)
+- [x] Rotas a propósito: 6 sabotajes de la fase inicial (S1 rehecho con diff tras pillarse a sí
+      mismo sin aplicar) + 2 de los arreglos del optimizador (restauración sin gesto → 19; el
+      3-args que borra → 21). Cada uno cazado por su promesa exacta.
+- [x] Probado a mano en 2 pantallas por agente independiente: `explorer.exe/docs` y
+      `explorer.exe/specs` (tabla arriba)
+- [x] Verificado por agente independiente: 3 jueces re-corridos, spec↔contrato literal, rama limpia
+- [ ] Pendientes con nombre: arista falsa del vigía pasivo (hallazgo con dientes), conocimiento
+      negativo del ensayo fallido, `accionPedida` descartada en `Take`, gesto en `PasoDelNucleo`
+- [ ] Estado: **implementado** (2026-08-31)
