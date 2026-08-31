@@ -1136,15 +1136,20 @@ internal static class Contrato
     /// Pide la mano de TRES argumentos por reflexión: mientras no exista, devuelve null y la
     /// promesa falla con su motivo — llamarla directo romperia la compilacion de todo el contrato.
     /// </summary>
-    private static (object? Pulsador, Func<string> Donde, List<(string Etiqueta, string Gesto)> Toques) PulsadorConGesto(
+    private static (object? Pulsador, Func<string> Donde, Action<string> Volver, List<(string Etiqueta, string Gesto)> Toques) PulsadorConGesto(
         Nucleo.Grafo g, string inicio, Func<string, string, string?> rutaSegunGesto)
     {
         var toques = new List<(string, string)>();
         string donde = inicio;
+        // «Volver» simula lo que en la pantalla real hace el usuario o el botón Atrás: el gesto
+        // aprendido es DE LA ARISTA (ubicación + selector), así que para pulsar la misma puerta
+        // dos veces hay que estar dos veces en el mismo sitio — pulsarla desde el destino sería
+        // otra arista, y esa no ha aprendido nada (promesa 4 del núcleo).
+        Action<string> volver = a => donde = a;
         var ctor = typeof(PulsarSegunElNucleo).GetConstructors()
             .FirstOrDefault(c => c.GetParameters() is { Length: 3 } p
                 && p[2].ParameterType == typeof(Func<string, string, string, bool>));
-        if (ctor == null) return (null, () => donde, toques);
+        if (ctor == null) return (null, () => donde, volver, toques);
 
         var pulsador = ctor.Invoke(new object[]
         {
@@ -1159,7 +1164,7 @@ internal static class Contrato
             }),
         });
         typeof(PulsarSegunElNucleo).GetProperty("EsperaMaximaMs")?.SetValue(pulsador, 240);
-        return (pulsador, () => donde, toques);
+        return (pulsador, () => donde, volver, toques);
     }
 
     private static PulsarSegunElNucleo.Resultado Pulsa(object pulsador, string selector, string etiqueta)
@@ -1173,7 +1178,7 @@ internal static class Contrato
         var g = new Nucleo.Grafo();
         g.Observar("uia://x.exe/docs", new[] { new Nucleo.Elemento("s:carpeta", "specs", "ListItem") });
 
-        var (pulsador, donde, toques) = PulsadorConGesto(g, "uia://x.exe/docs",
+        var (pulsador, donde, volver, toques) = PulsadorConGesto(g, "uia://x.exe/docs",
             (sel, gesto) => sel == "s:carpeta" && gesto == "doubleclick" ? "uia://x.exe/specs" : null);
         Debe(pulsador != null,
             "todavía no existe la mano con gesto (fase 2 de la spec 003). La promesa está escrita "
@@ -1186,7 +1191,10 @@ internal static class Contrato
         Debe(toques.Count == 2 && toques[0].Gesto == "" && toques[1].Gesto == "doubleclick",
             $"y el ensayo es UNA escalera —clic, luego doble— no una ráfaga ({string.Join(" → ", toques.Select(t => $"'{t.Gesto}'"))})");
 
-        // Se vuelve a la lista (como volvería el usuario) y se pulsa la MISMA puerta otra vez.
+        // Se vuelve a la lista (como volvería el usuario con Atrás) y se pulsa la MISMA puerta otra
+        // vez. Sin volver, la segunda pulsación sería desde «specs» — OTRA arista, que no sabe nada
+        // (así falló el primer borrador de esta promesa, y el fallo era del arnés).
+        volver("uia://x.exe/docs");
         g.Observar("uia://x.exe/docs", new[] { new Nucleo.Elemento("s:carpeta", "specs", "ListItem") });
         toques.Clear();
         var r2 = Pulsa(pulsador, "s:carpeta", "specs");
@@ -1207,7 +1215,7 @@ internal static class Contrato
         var g = new Nucleo.Grafo();
         g.Observar("uia://x.exe/form", new[] { new Nucleo.Elemento("s:guardar", "Guardar", "Button") });
 
-        var (pulsador, _, toques) = PulsadorConGesto(g, "uia://x.exe/form", (_, _) => null);
+        var (pulsador, _, _, toques) = PulsadorConGesto(g, "uia://x.exe/form", (_, _) => null);
         Debe(pulsador != null,
             "todavía no existe la mano con gesto (fase 2 de la spec 003). La promesa está escrita "
             + "y en rojo, que es donde tiene que estar");

@@ -132,6 +132,11 @@ if (-not $bloquea) {
 
   if ($fallos -eq 0) {
     Anotar "Contrato" "OK" "$total/$total promesas, 0 pendientes"
+  } elseif ($fallos -eq 99) {
+    # 99 = el contrato no emitio veredicto (ver scripts\contrato-del-grafo.ps1). Se rotula distinto
+    # a proposito: decir "N/$total verdes" con un codigo que no es un recuento seria inventarse el dato.
+    Anotar "Contrato" "FALLO" "NO SE PUDO JUZGAR: el contrato no emitio veredicto. No se sabe nada de las promesas (log en $log)"
+    $bloquea = $true
   } elseif ($PermitirPendientes -and $fallos -eq $pendientes) {
     Anotar "Contrato" "NO CORRIDO" "$($total - $fallos)/$total verdes, $pendientes PENDIENTES declaradas (fase intermedia: NO puede ir a main)"
   } else {
@@ -139,6 +144,13 @@ if (-not $bloquea) {
     Anotar "Contrato" "FALLO" "$($total - $fallos)/$total verdes; $regresiones incumplida(s) con codigo y $pendientes pendiente(s)"
     $bloquea = $true
   }
+} else {
+  # SI NO CORRIO, HAY QUE DECIRLO. Antes esta seccion no aparecia en la tabla cuando un nivel
+  # anterior ya bloqueaba, y una fila ausente se lee como una fila que no existe: el informe quedaba
+  # con "Compila OK" y "Contrato voz OK" y NADA sobre el nucleo, que es justo lo que la compuerta
+  # existe para vigilar. Medido el 2026-08-25: una carpeta sin commitear ajena a la rama dejo el
+  # contrato sin correr y la tabla no lo dijo en ninguna parte.
+  Anotar "Contrato" "NO CORRIDO" "saltado porque un nivel anterior ya bloquea. La tabla NO dice nada sobre las promesas del nucleo"
 }
 
 # --- Nivel 2b: el contrato de la voz ------------------------------------------
@@ -164,6 +176,10 @@ $pendVoz  = @(Select-String -Path $logVoz -SimpleMatch "PENDIENTE:").Count
 
 if ($fallosVoz -eq 0) {
   Anotar "Contrato voz" "OK" "$totalVoz/$totalVoz promesas, 0 pendientes"
+} elseif ($fallosVoz -eq 99) {
+  # 99 = no emitio veredicto (ver scripts\contrato-de-la-voz.ps1). Mismo trato que el del grafo.
+  Anotar "Contrato voz" "FALLO" "NO SE PUDO JUZGAR: el contrato de la voz no emitio veredicto. No se sabe nada de sus promesas (log en $logVoz)"
+  $bloquea = $true
 } elseif ($PermitirPendientes -and $fallosVoz -eq $pendVoz) {
   Anotar "Contrato voz" "NO CORRIDO" "$($totalVoz - $fallosVoz)/$totalVoz verdes, $pendVoz PENDIENTES declaradas (fase intermedia: NO puede ir a main)"
 } else {

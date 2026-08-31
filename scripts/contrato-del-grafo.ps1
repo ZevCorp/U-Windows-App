@@ -41,5 +41,58 @@ dotnet build (Join-Path $repo "tests\ContratoDelGrafo\ContratoDelGrafo.csproj") 
 if ($LASTEXITCODE -ne 0) { throw "el contrato no compila (codigo $LASTEXITCODE)" }
 
 Write-Host "3/3 juzgando..." -ForegroundColor Cyan
-& (Join-Path $binTest "contrato-del-grafo.exe")
-exit $LASTEXITCODE
+
+# EL & LANZA SI EL EXE NO ARRANCA. Con $ErrorActionPreference='Stop' (arriba), que Smart App Control
+# bloquee el binario no da un codigo de salida: mata el script aqui mismo, antes de que pueda decir
+# "no pude juzgar". Se captura para poder decirlo, y se IMPRIME el motivo entero - que es lo
+# contrario de un catch mudo (patron n.3).
+#
+# TRES INTENTOS porque el bloqueo es INTERMITENTE: el mismo binario, sin tocar nada, arranca a la
+# segunda mas veces de las que uno querria (medido el 2026-08-26). Si las tres fallan, no se insiste.
+$salida = @(); $codigo = -1; $arranco = $false
+foreach ($intento in 1..3) {
+  try {
+    $salida = & (Join-Path $binTest "contrato-del-grafo.exe") 2>&1
+    $codigo = $LASTEXITCODE
+    $arranco = $true
+    break
+  } catch {
+    Write-Host ("   x intento {0}/3 - no se pudo ni ARRANCAR el juez: {1}" -f $intento, $_.Exception.Message) -ForegroundColor Red
+    if ($intento -lt 3) { Start-Sleep -Seconds 3 }
+  }
+}
+
+# RESPALDO: EL MISMO CODIGO, POR EL HOST DE .NET EN VEZ DEL .EXE.
+#
+# Un .exe de .NET framework-dependent es un "apphost": unos kilobytes cuyo unico trabajo es cargar
+# el .dll de al lado. `dotnet app.dll` es la forma estandar y documentada de ejecutar lo mismo, y es
+# lo que hacen muchas CI. Lo que SAC bloquea es el APPHOST, que nace sin firma en cada compilacion.
+# No se le da la vuelta a nada: mismo binario, misma maquina, la puerta que .NET documenta.
+if (-not $arranco) {
+  $dll = Join-Path $binTest "contrato-del-grafo.dll"
+  if (Test-Path $dll) {
+    Write-Host "   -> el .exe no arranca; se prueba con el host de .NET (dotnet <dll>)" -ForegroundColor DarkYellow
+    $salida = & dotnet $dll 2>&1
+    $codigo = $LASTEXITCODE
+  }
+}
+$salida | ForEach-Object { Write-Host $_ }
+
+# UN JUEZ QUE NO PUEDE CORRER NO DICE "NO SE": DICE UN NUMERO, Y EL NUMERO SE LEE COMO VEREDICTO.
+#
+# Medido el 2026-08-25, saboteando a proposito para comprobar unas promesas nuevas: el exe reventaba
+# al cargar el ensamblado y salia con un codigo cualquiera, SIN HABER JUZGADO NADA. Quien lo llamaba
+# lo tomaba por "tantas promesas incumplidas": verificar.ps1 llegaba a imprimir "N/81 verdes" con un
+# numero inventado, y un guion de sabotaje contaba "cero rojas", que se lee igual que "la promesa no
+# sirve". Estuve a un paso de retirar una promesa buena por esto.
+#
+# Es el aprendizaje n.17 con el signo cambiado, que es peor: no dijo "culpable", dijo "inocente".
+#
+# 99 y no otro: el codigo normal es el numero de promesas incumplidas, y 81 no llegan ahi.
+if (-not ($salida -match 'CONTRATO (INTACTO|ROTO)')) {
+  Write-Host ""
+  Write-Host "NO SE PUDO JUZGAR: el contrato no llego a emitir veredicto." -ForegroundColor Red
+  Write-Host "Esto NO es un verde ni un rojo: es un no-se. Mira la salida de arriba." -ForegroundColor Red
+  exit 99
+}
+exit $codigo

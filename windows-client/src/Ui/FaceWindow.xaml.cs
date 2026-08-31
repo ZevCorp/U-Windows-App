@@ -568,12 +568,34 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             // PULSAR, sobre el núcleo. Es la versión mínima de ir —ir no es más que preguntar el
             // siguiente paso y pulsarlo, en bucle— así que va antes y lo demás se apoya en esto.
-            // Resolver el selector y escalar al doble clic siguen siendo de UIA y no se tocan: aquí
-            // entra «pulsa esto» y sale «esto pasó».
+            // Resolver el selector es de UIA; el GESTO lo decide PulsarSegunElNucleo y esta mano lo
+            // EJECUTA (spec 003). Antes aquí decía que la escalada al doble «sigue siendo de UIA»:
+            // era falso — murió con el código viejo y ningún batch abría una carpeta del Explorador
+            // (clic simple = seleccionar). Un gesto distinto del clic va por UIA con su ActionType;
+            // en SAP el gesto se ignora a propósito, porque Execute ya resuelve la acción real por
+            // el selector (doubleClickNode en filas, press en botones) y mandarle nuestro «doble»
+            // sería una segunda opinión sobre lo mismo.
             var pulsar = new Navigation.PulsarSegunElNucleo(
                 _mapaVivo.Nucleo,
                 () => _locator?.DondeEstoy()?.Id ?? "",
-                (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false);
+                (sel, etq, gesto) =>
+                {
+                    if (gesto.Length == 0 || U.Graph.Surfaces.SapSelector.Owns(sel))
+                        return _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false;
+                    try
+                    {
+                        var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
+                        return superficie.Execute(new U.Graph.PlanStep
+                        {
+                            StepOrder = 1, ActionType = gesto, Selector = sel, Label = etq,
+                        }, out _);
+                    }
+                    catch (Exception e)
+                    {
+                        LogBus.Log("nucleo-http", $"no pude pulsar «{etq}» con gesto «{gesto}»: {e.Message}");
+                        return false;
+                    }
+                });
             if (mcp.Map != null) mcp.Map.PulsarPorElNucleo = (sel, etq) => pulsar.Pulsa(sel, etq).Cuenta;
 
             // RECORRER EN BATCH: N pasos por llamada con la compuerta de vida antes de cada uno.

@@ -105,6 +105,17 @@ quedó probado sobre el Explorador real antes del port: menú de 16 opciones, lo
 - **2026-08-26 (port)** — Main cree que escala al doble y no escala: el comentario de
   `FaceWindow.xaml.cs:571` afirma una capacidad que ninguna capa tiene ya. Un comentario que
   documenta código borrado es un mapa de un territorio que no existe.
+- **2026-08-26 (port)** — **`Take` descarta `accionPedida` en silencio** (`SurfaceMapTools.cs:1813`):
+  recibe el parámetro y construye `Paso(salida)` sin usarlo. Las acciones que el propio catálogo de
+  la voz documenta (`click|addselect|doubleclick`, línea 1514) hoy no hacen nada — quien pida
+  `addselect` cree que sumó a la selección y no sumó. Por eso el `rightclick` portado se queda en el
+  ejecutor (`UiaSurface`) y NO se cablea aquí de tapadillo: llevar el gesto pedido a través del
+  batch es su propia fase, con su promesa (un parámetro que se ignora en silencio es exactamente la
+  clase de fallo que este repo colecciona — patrón nº16 de espíritu).
+- **2026-08-26 (fase 2)** — El primer rojo de la 82 fue **del arnés, no del código**: la segunda
+  pulsación se hacía desde `specs` sin haber vuelto a `docs`, o sea sobre OTRA arista — que
+  correctamente no sabía nada (promesa 4 del núcleo). El arnés ganó un `volver()` explícito y el
+  comentario que explica por qué.
 
 ## Cierre
 

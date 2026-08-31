@@ -12,7 +12,7 @@ namespace U.WindowsClient.Navigation;
 /// Encaja además con cómo se quiere enseñar: señalar algo y pulsarlo es NAVEGAR EN CORTO, y de ahí
 /// sale lo que el grafo aprende. Navegar en largo es repetir eso siguiendo lo aprendido.
 ///
-/// LAS TRES COSAS QUE SE PUEDEN ROMPER EN SILENCIO, y que son todo lo que promete esta clase:
+/// LAS CUATRO COSAS QUE SE PUEDEN ROMPER EN SILENCIO, y que son todo lo que promete esta clase:
 ///
 ///   1. PULSAR NO ES HABER LLEGADO. Un clic es una petición; se mira la pantalla después y se
 ///      contesta con lo que hay, no con lo que se pretendía.
@@ -20,19 +20,33 @@ namespace U.WindowsClient.Navigation;
 ///      el grafo, y esa mentira la paga cada ruta que pase por ahí a partir de entonces.
 ///   3. SI LLEVÓ A OTRO SITIO, MANDA EL TERRENO. Se aprende a dónde llevó de verdad, no a dónde se
 ///      creía. El mapa se corrige solo yendo.
+///   4. EL GESTO SE ENSAYA UNA VEZ Y SE RECUERDA (promesas 82-83, spec 003). En una lista el clic
+///      simple selecciona y solo el doble abre; en un menú el doble ANULA (2026-08-03). El tipo no
+///      dice qué hace falta — se prueba lo suave, se sube a lo fuerte solo sobre CONTENIDO, y lo
+///      que funcionó viaja con la arista (promesa 21 del núcleo) para no volver a ensayarlo. Sin
+///      esto eran tres clics físicos por visita, para siempre, medido el 2026-08-26.
 ///
-/// LO QUE NO ESTÁ AQUÍ: resolver el selector, escalar al doble clic, decidir si algo es una acción o
-/// una puerta. Eso es leer y accionar la pantalla —UIA— y vive donde vive. Aquí entra «pulsa esto» y
-/// sale «esto pasó», que es lo único que se puede juzgar sin una pantalla delante.
+/// LO QUE NO ESTÁ AQUÍ: resolver el selector y EJECUTAR el gesto. Eso es leer y accionar la
+/// pantalla —UIA, SAP— y vive donde vive. Aquí se DECIDE el gesto (porque decidirlo exige juzgar
+/// la consecuencia, y la consecuencia se juzga aquí); ejecutarlo es de la mano. Antes este
+/// comentario decía que escalar al doble «vive en UIA» — era un mapa de un territorio borrado: la
+/// escalada murió con el código viejo y ninguna capa la tenía (2026-08-26, port de la spec 003).
 /// </remarks>
 public sealed class PulsarSegunElNucleo
 {
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
-    private readonly Func<string, string, bool> _pulsar;
+    private readonly Func<string, string, string, bool> _pulsar;
 
     /// <param name="pulsar">Selector y etiqueta → ¿se pudo tocar? Lo hace quien sabe de UIA.</param>
+    /// <remarks>La mano vieja no sabe de gestos: se adapta ignorándolos. Sigue siendo válida para
+    /// quien solo necesite el clic de siempre — el arnés del contrato la usa así.</remarks>
     public PulsarSegunElNucleo(Nucleo.Grafo grafo, Func<string> donde, Func<string, string, bool> pulsar)
+        : this(grafo, donde, (sel, et, _) => pulsar(sel, et)) { }
+
+    /// <param name="pulsar">Selector, etiqueta y GESTO («» = clic simple, «doubleclick», …) →
+    /// ¿se pudo tocar? La mano ejecuta el gesto que se le pide; decidirlo es de esta clase.</param>
+    public PulsarSegunElNucleo(Nucleo.Grafo grafo, Func<string> donde, Func<string, string, string, bool> pulsar)
     {
         _grafo = grafo;
         _donde = donde;
@@ -54,11 +68,32 @@ public sealed class PulsarSegunElNucleo
     {
         string desde = _donde() ?? "";
 
-        if (!_pulsar(selector, etiqueta))
+        // EL GESTO APRENDIDO VA DIRECTO (promesa 82). Si esta arista ya se cruzó, la arista sabe
+        // cómo: repetir el ensayo es pagar el mismo riesgo dos veces — y el clic de más cae sobre
+        // la pantalla real (2026-08-26: tres clics físicos por visita, cada visita).
+        string gesto = _grafo.GestoDe(desde, selector);
+
+        if (!_pulsar(selector, etiqueta, gesto))
             return new(false, false, desde, desde, false,
                 $"no pude pulsar «{etiqueta}».");
 
         string hasta = EsperarACambiar(desde);
+        string gestoUsado = gesto;
+
+        // EL ENSAYO, y solo cuando toca: nada cambió, el gesto de esta arista aún no se conoce, y
+        // lo tocado es CONTENIDO (promesa 83). Sobre un botón el doble no se ensaya jamás — «hacer
+        // su trabajo sin cambiar de pantalla» es lo normal de un «Guardar», y un segundo clic sería
+        // repetir la acción, no averiguar nada.
+        if ((hasta.Length == 0 || hasta == desde) && gesto.Length == 0 && EsContenido(desde, selector)
+            && _pulsar(selector, etiqueta, "doubleclick"))
+        {
+            string tras = EsperarACambiar(desde);
+            if (tras.Length > 0 && tras != desde)
+            {
+                hasta = tras;
+                gestoUsado = "doubleclick";
+            }
+        }
 
         // NO MOVERSE NO SIEMPRE ES UN FALLO. Un botón de acción —«Guardar», «Copiar»— hace su
         // trabajo sin cambiar de pantalla, y llamar a eso un fracaso sería reportar mal algo que
@@ -67,12 +102,26 @@ public sealed class PulsarSegunElNucleo
             return new(true, false, desde, desde, false,
                 $"pulsé «{etiqueta}» y la pantalla no cambió.");
 
-        // EL TERRENO MANDA SOBRE EL MAPA: se aprende a dónde llevó DE VERDAD.
-        bool aprendido = _grafo.Cruzar(desde, selector, hasta);
+        // EL TERRENO MANDA SOBRE EL MAPA: se aprende a dónde llevó DE VERDAD — y CON QUÉ GESTO,
+        // que es la mitad del saber que antes se tiraba (promesa 21).
+        bool aprendido = _grafo.Cruzar(desde, selector, hasta, gestoUsado);
 
         return new(true, true, desde, hasta, aprendido,
             $"pulsé «{etiqueta}» y ahora estás en «{hasta}»."
             + (aprendido ? " Queda aprendido." : ""));
+    }
+
+    /// <summary>
+    /// ¿Lo tocado es contenido de lista? Decide QUÉ ES SEGURO ENSAYAR, nunca el gesto: la lección
+    /// del 2026-08-03 (Configuración anula con el segundo clic) es que el tipo no sabe el gesto,
+    /// pero un ListItem admite el ensayo sin romper nada y un Button no.
+    /// </summary>
+    private bool EsContenido(string ubicacion, string selector)
+    {
+        foreach (var a in _grafo.DesdeAqui(ubicacion))
+            if (a.Que.Selector == selector)
+                return a.Que.Tipo is "ListItem" or "TreeItem" or "DataItem";
+        return false;
     }
 
     private string EsperarACambiar(string desde)
