@@ -2173,10 +2173,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     // --- Toggle: procesar (o no) el video con IA al enseñar ---
 
+    /// <summary>
+    /// El estado de un toggle-icono se dice con el FONDO (acento = encendido) y el detalle con el
+    /// tooltip: el mismo patrón que TeachBtn. Un interruptor que se ve igual encendido que apagado
+    /// obliga a mirar la pantalla para saber si funcionó.
+    /// </summary>
+    private static void PintarToggle(System.Windows.Controls.Button btn, bool on, string tip)
+    {
+        btn.Background = new System.Windows.Media.SolidColorBrush(on
+            ? System.Windows.Media.Color.FromArgb(0x88, 0x3B, 0x82, 0xF6)   // azul, como UpdateBtn
+            : System.Windows.Media.Color.FromArgb(0x1A, 255, 255, 255));    // el fondo normal de BarBtn
+        btn.ToolTip = tip;
+    }
+
     private void UpdateVideoLlmToggle() =>
-        VideoLlmToggle.Content = _config.ProcessTeachVideo
-            ? "🎬 Video → IA: activado"
-            : "🎬 Video → IA: desactivado";
+        PintarToggle(VideoLlmToggle, _config.ProcessTeachVideo, _config.ProcessTeachVideo
+            ? "Video → IA: ACTIVADO. Al enseñar, el video se manda al LLM. Clic para apagarlo."
+            : "Video → IA: apagado. El video se graba igual y lo ves en 🎞 Videos, pero no se manda al LLM (evita el timeout).");
 
     /// <summary>
     /// Alterna si la enseñanza procesa el video con el LLM. Apagado evita el timeout (504) del backend;
@@ -3066,14 +3079,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void MarcarRecuerdosALaVista(bool si)
     {
         _recuerdosALaVista = si;
-        RecuerdosBtn.Content = si ? "🧠 Recuerdos a la vista — clic para apagar" : "🧠 Ver recuerdos de aquí";
+        PintarToggle(RecuerdosBtn, si, si
+            ? "Recuerdos a la vista — clic (o Escape) para apagar"
+            : "Ilumina de golpe todo lo que te han enseñado en esta pantalla, con el texto del recuerdo sobre cada elemento. Escape lo apaga.");
     }
 
     private void OnToggleInspector(object sender, RoutedEventArgs e)
     {
         _inspector ??= new UiInspector();
         bool on = _inspector.Toggle();
-        InspectorBtn.Content = on ? "🔍 Inspector activo — clic para apagar" : "🔍 Inspector de elementos";
+        PintarToggle(InspectorBtn, on, on
+            ? "Inspector activo — clic para apagar"
+            : "Inspector de elementos: recuadros sobre la pantalla. Al hacer clic: amarillo si coincide con lo que el asistente tocaría, rojo (ambos) si no.");
         SetStatus(on ? "Inspector de elementos activo" : "Inspector apagado");
     }
 
@@ -3281,13 +3298,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_idALaVista)
         {
             _badge.Show();
-            LocatorBtn.Content = "📍 ID visible — clic para ocultar";
+            PintarToggle(LocatorBtn, on: true, "ID visible — clic para ocultar");
             SetStatus("ID de superficie a la vista");
         }
         else
         {
             _badge.Hide();
-            LocatorBtn.Content = "📍 ID oculto — clic para mostrar";
+            PintarToggle(LocatorBtn, on: false,
+                "ID de superficie: muestra dónde estás parado como URL (uia://app.exe/ventana). Es el ID con el que se cargan los workflows.");
             SetStatus("ID oculto (se sigue midiendo)");
         }
     }
