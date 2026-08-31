@@ -12,35 +12,38 @@ import Foundation
 /// tener nombre: enseña a desconfiar de él. Por eso se aceptan todas sus formas.
 enum Llamado {
 
-    /// Todo lo que el reconocedor escribe cuando alguien dice «Ü» — y «Mira», que es como la llaman
-    /// de verdad.
+    /// Todo lo que el reconocedor escribe cuando alguien dice «Ü», y solo eso — pedido así el
+    /// 2026-08-31, a propósito y sabiendo el riesgo.
     ///
-    /// **«Mira» no es un alias de cortesía: es el nombre que funciona.** Está medido sobre el
-    /// registro del 2026-08-18, 822 frases oídas de una sesión real de trabajo:
+    /// **El riesgo, medido y no supuesto:** el 2026-08-18, sobre 822 frases reales de una sesión de
+    /// trabajo, alguna forma de «Ü» (`u`, `you`, `hu`…) disparó **0 veces** al principio de una
+    /// frase — las tres veces que sí despertó en todo ese historial fueron accidentes («Hola You me
+    /// escuchas», «You You», «You're broke»). Por eso se había añadido «mira» como alias: no por
+    /// cortesía, sino porque era la única forma que de verdad funcionaba (6 de esas 822).
     ///
-    /// | Cómo empezó la frase | Veces |
-    /// |---|---|
-    /// | alguna forma de «Ü» (`u`, `you`, `hu`…) | **0** |
-    /// | «mira» | **6** |
-    ///
-    /// El nombre «Ü» es una vocal suelta, y una vocal suelta en español hablado se pierde: el
-    /// reconocedor la escribe de siete maneras y ninguna cayó nunca al principio de una frase. En
-    /// todo el historial despertó tres veces, y las tres por accidente («Hola You me escuchas»,
-    /// «You You», «You're broke»). Un nombre que responde 3 de 822 no es un nombre, es una lotería.
-    ///
-    /// EL PRECIO, dicho por delante: «mira» también es una palabra corriente, y dicha al principio de
-    /// una frase que va para otra persona («mira, te cuento…») la va a despertar. Se acepta a
-    /// propósito y no se filtra por lo que venga detrás — se probó contra las 6 llamadas reales y un
-    /// filtro por la palabra siguiente tiraba dos de ellas («Mira acá pues…», «Mira una de las…»),
-    /// o sea que rechazaba llamadas de verdad para evitar interrupciones que duran 30 segundos y se
-    /// cortan solas. Anotado en PENDIENTES.md por si en el uso diario cansa.
+    /// Se quita ahora porque así se pidió, no porque el riesgo haya cambiado. Si vuelve el síntoma
+    /// de «le hablo y no me contesta», la causa más probable es esta: «Ü» es una vocal suelta y se
+    /// pierde en el habla. La medida de vuelta es la misma receta de siempre — leer
+    /// `👂 no era para mí · lo comparo como «…»` en el registro para ver qué escribió el reconocedor
+    /// de verdad, no lo que uno cree haber dicho.
     private static let nombre: Set<String> = [
         "u", "ú", "you", "yu", "hu", "uh", "uu", "úe", "ue", "hoo", "who",
-        "mira", "mire",
     ]
 
     /// Palabras que pueden ir DELANTE del nombre sin cambiar que es una llamada.
     private static let antesala: Set<String> = ["oye", "oiga", "hey", "ey", "eh", "hola", "ola"]
+
+    /// LO QUE SE LE AVISA AL RECONOCEDOR QUE PUEDE OÍR, vía `contextualStrings` — la palanca de
+    /// Apple para justo este problema: sesgar el modelo hacia vocabulario raro que de otro modo se
+    /// pierde entre miles de palabras del español. No sesga hacia UNA sola forma: se le pasan todas
+    /// las variantes conocidas más los pares con "oye"/"hola" delante, porque el reconocedor pesa
+    /// FRASES completas, no solo palabras sueltas — «oye u» tiene más chance de sobrevivir entera
+    /// que «u» a secas, que se estaba borrando 819 de 822 veces.
+    static var pistasParaElReconocedor: [String] {
+        var pistas = Array(nombre)
+        for antes in antesala { for n in nombre { pistas.append("\(antes) \(n)") } }
+        return pistas
+    }
 
     /// Si esto es una llamada, devuelve lo que se dijo DESPUÉS del nombre.
     ///

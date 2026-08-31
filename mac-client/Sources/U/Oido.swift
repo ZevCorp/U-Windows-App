@@ -197,6 +197,12 @@ final class Oido {
 
         let p = SFSpeechAudioBufferRecognitionRequest()
         p.shouldReportPartialResults = true
+        // LE DECIMOS QUÉ ESPERAR. `contextualStrings` es la palanca que Apple da exactamente para
+        // esto: sesgar el reconocedor hacia vocabulario raro que de otro modo se pierde. «Ü» es una
+        // vocal suelta y el 2026-08-18 se midió que el reconocedor la borraba de la frase 819 de 822
+        // veces — esta es la primera vez que se le avisa que esa palabra puede aparecer, en vez de
+        // esperar a que la adivine sola entre miles de palabras del español.
+        p.contextualStrings = Llamado.pistasParaElReconocedor
         peticion = p
 
         // El motor viejo, a la basura: ver el comentario de `motor`. Va JUNTO con apagar la
