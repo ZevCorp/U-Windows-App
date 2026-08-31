@@ -58,6 +58,10 @@ public sealed class ConversacionEnVivo : IDisposable
     private const int GraciaEcoMs = 300;
 
     private readonly CompuertaDeEco _compuerta;
+
+    /// <summary>El barge-in de la compuerta (spec 002, fase 4): voz sostenida por encima del eco
+    /// aprendido corta la cola y reabre la compuerta. Sostén 240 ms · 3× la línea base · piso 1500.</summary>
+    private readonly DetectorDeInterrupcion _interrupcion = new(240, 3.0, 1500);
     private long _tragadoAnunciado;
     private string _ultimoFalloEnvio = "";
 
@@ -897,6 +901,20 @@ public sealed class ConversacionEnVivo : IDisposable
         // las dos fuentes —micrófono local y collar— porque las dos entran por Capturado.
         if (ModoDeCaptura.CompuertaActiva(AecDelSistema, CompuertaForzada))
         {
+            bool sonando = _audio.Hablando;
+
+            // EL BARGE-IN (promesas 15-17): con la compuerta tragando, este es el único oído que
+            // queda. Si el trozo ORIGINAL trae voz sostenida muy por encima del eco aprendido, se
+            // corta la cola y se reabre la compuerta A LA ORDEN — así la primera sílaba de quien
+            // interrumpe viaja al servidor, que desde ahí retoma con su propio VAD.
+            if (sonando && _interrupcion.Oye(Rms(pcm), sonando: true, Environment.TickCount64))
+            {
+                _audio.Callar();
+                _compuerta.Abrir();
+                LogBus.Log("voz-viva", "te oí encima: corto mi voz y te escucho (barge-in de la compuerta)");
+            }
+            else if (!sonando) _interrupcion.Oye(0, sonando: false, Environment.TickCount64);
+
             var filtrado = _compuerta.Filtrar(pcm, _audio.Hablando, Environment.TickCount64);
 
             // Lo tragado deja rastro (patrón nº10), pero por episodio y no por trozo: la línea
@@ -1482,5 +1500,19 @@ public sealed class ConversacionEnVivo : IDisposable
         try { TerminarAsync().GetAwaiter().GetResult(); } catch { }
         _audio.Dispose();
         _envio.Dispose();
+    }
+
+    /// <summary>RMS de un trozo PCM16 mono (0..32768). Solo para el detector de interrupción.</summary>
+    private static double Rms(byte[] pcm)
+    {
+        if (pcm.Length < 2) return 0;
+        double suma = 0;
+        int n = pcm.Length / 2;
+        for (int i = 0; i < pcm.Length - 1; i += 2)
+        {
+            short m = (short)(pcm[i] | (pcm[i + 1] << 8));
+            suma += (double)m * m;
+        }
+        return Math.Sqrt(suma / n);
     }
 }

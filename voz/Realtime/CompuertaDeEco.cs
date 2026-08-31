@@ -49,6 +49,14 @@ public sealed class CompuertaDeEco
     /// o el eco aún no murió. <paramref name="sonando"/> es «la cola de reproducción tiene audio»
     /// (LiveAudio.Hablando); <paramref name="ahoraMs"/> es un reloj monótono cualquiera.
     /// </summary>
+    /// <summary>
+    /// Reabrirse A LA ORDEN, sin esperar la gracia. Existe para el barge-in (promesa 15): al
+    /// detectarse voz encima se corta la cola y ESTE método deja que el arranque de la frase del
+    /// usuario viaje ya — la gracia protege del eco moribundo, pero quien acaba de interrumpir
+    /// necesita que el servidor oiga su primera sílaba, no la número tres.
+    /// </summary>
+    public void Abrir() => _ultimoSonandoMs = long.MinValue;
+
     public byte[] Filtrar(byte[] trozo, bool sonando, long ahoraMs)
     {
         if (sonando) _ultimoSonandoMs = ahoraMs;
