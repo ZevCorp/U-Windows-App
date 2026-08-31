@@ -443,21 +443,11 @@
                              trabaja. Se conservan enteros, con su nombre y su manejador: mover algo
                              de sitio no es reescribirlo (2026-08-07). -->
                         <TextBlock Text="Acciones" Style="{StaticResource SectionLabel}"/>
-                        <!-- Cinco: se añadió 📿 (el collar Omi) el 2026-08-13. Va aquí y no escondido
-                             en el panel de desarrollo porque enlazar el collar lo hace el usuario una
-                             vez, no es una herramienta de diagnóstico.
-                             Seis desde el 2026-08-15 con 🔄 (buscar actualizaciones a mano). -->
-                        <UniformGrid Columns="6" Margin="0,4,0,10">
-                            <!-- PreviewMouseLeftButtonDown y no MouseDown: el estilo del botón marca el
-                                 evento como manejado, así que sin Preview no llega nunca y el gesto de
-                                 mantener pulsado no se podría medir. -->
-                            <Button x:Name="MicBtn" Content="🎤" Style="{StaticResource BarBtn}" Click="OnMic"
-                                    PreviewMouseLeftButtonDown="OnMicDown"
-                                    Margin="0" ToolTip="Hablarle a Ü · mantener pulsado = por el collar Omi"
-                                    AutomationProperties.Name="Micrófono"/>
-                            <Button x:Name="TalkBtn" Content="💬" Style="{StaticResource BarBtn}"
-                                    Margin="0" ToolTip="Conversación: estado, respuestas y entrada de texto"
-                                    AutomationProperties.Name="Conversación"/>
+                        <!-- Tres desde la limpieza del panel (2026-08-31): hablar, escribir y callar
+                             ya viven en la carita —las pastillas y la conversación—, así que sus
+                             botones aquí eran una segunda copia del mismo gesto. Quedan los que no
+                             tienen otro sitio: enseñar, el collar y buscar actualizaciones. -->
+                        <UniformGrid Columns="3" Margin="0,4,0,10">
                             <!-- Enseñanza activa: graba pantalla+voz para que Ü aprenda a usar una
                                  app. En rojo mientras graba (SetTeachingUi). -->
                             <Button x:Name="TeachBtn" Content="🎓" Style="{StaticResource BarBtn}" Click="OnToggleTeach"
@@ -466,8 +456,6 @@
                             <Button x:Name="CollarBtn" Content="📿" Style="{StaticResource BarBtn}" Click="OnCollar"
                                     Margin="0" ToolTip="Collar Omi — enlazar y ver su estado"
                                     AutomationProperties.Name="Collar Omi"/>
-                            <Button x:Name="MuteBtn" Content="🔊" Style="{StaticResource BarBtn}" Click="OnToggleMute"
-                                    Margin="0" ToolTip="Callar a Ü ahora mismo" AutomationProperties.Name="Silencio"/>
                             <!-- Buscar actualizaciones AHORA. El sondeo automático mira cada 30 min y
                                  no dice nada mientras tanto —correcto para no molestar—, pero deja sin
                                  respuesta a quien acaba de enterarse de que hay versión nueva. Sin
@@ -515,84 +503,37 @@
                                 HorizontalContentAlignment="Center" FontWeight="SemiBold" FontSize="12" IsEnabled="False"
                                 ToolTip="Corre el workflow seleccionado contra Graph (se alinea solo si la pantalla no coincide)"/>
 
-                        <!-- Ensayo en seco: recorre el plan y dice qué pasaría, SIN tocar la pantalla.
-                             Va debajo del verde y en gris a propósito: no es una acción, es una
-                             comprobación — se pulsa ANTES de ejecutar, y sobre todo antes de un demo. -->
-                        <Button x:Name="DryRunBtn" Content="🧪 Ensayo en seco" Height="26" Margin="0,6,0,0"
-                                Click="OnDryRunWorkflow" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
-                                Foreground="#CCFFFFFF" IsEnabled="False"
-                                ToolTip="Comprueba el workflow sin ejecutarlo: qué pasos no resolverían y dónde cambia de pantalla sin un paso que lo provoque. El detalle va a 📜 Logs."/>
-
-                        <!-- Paso a paso: no ejecuta distinto, ejecuta PAUSADO. Se queda encendido
-                             entre corridas a propósito: si lo enciendes es porque estás depurando. -->
-                        <Button x:Name="StepModeBtn" Height="26" Margin="0,6,0,0" Click="OnToggleStepMode"
-                                Style="{StaticResource MenuBtn}" Background="#33FFFFFF" Foreground="#CCFFFFFF"
-                                ToolTip="Ejecuta el workflow paso a paso: se detiene ANTES de cada paso y muestra el veredicto y cómo se veía la pantalla al enseñarlo."/>
-
-                        <!-- Biblioteca y videos: utilidades del mismo mundo que el runner. -->
+                        <!-- El mundo de los workflows, junto: la biblioteca, las grabaciones de las
+                             enseñanzas, y qué se hace con esas grabaciones al enseñar. -->
                         <Button x:Name="WorkflowsBtn" Content="🧭 Workflows" Height="26" Margin="0,10,0,0"
                                 Click="OnOpenWorkflows" Style="{StaticResource MenuBtn}"
                                 ToolTip="Biblioteca de workflows: ejecutar contra Graph (SAP GUI / UIA) + autofill"/>
                         <Button x:Name="VideosBtn" Content="🎞 Videos" Height="26" Margin="0,6,0,0"
                                 Click="OnOpenVideos" Style="{StaticResource MenuBtn}"
                                 ToolTip="Las grabaciones de tus enseñanzas"/>
+                        <!-- Toggle: al enseñar, ¿procesar el video con IA (LLM)? Off = se graba el
+                             video y se ve en 🎞 Videos, pero NO se manda al LLM (evita el 504). -->
+                        <Button x:Name="VideoLlmToggle" Height="26" Margin="0,6,0,0" Click="OnToggleVideoLlm"
+                                Style="{StaticResource MenuBtn}" Background="#33FFFFFF" Foreground="#CCFFFFFF"
+                                ToolTip="Al enseñar: si está OFF, el video NO se manda al LLM (evita el timeout); igual se graba y lo ves en 🎞 Videos."/>
 
                         <Border Style="{StaticResource Sep}"/>
 
-                        <!-- ── Puente con la consulta del portal: se pega el código que el médico
-                             generó allá, y cuando SAP muestre una pantalla con signos vitales, Ü
-                             ofrece llenarlos. Nunca escribe sin que el operador lo apruebe. ────── -->
-                        <TextBlock Text="Consulta del portal" Margin="0,0,0,4"
-                                   Style="{StaticResource SectionLabel}"/>
-                        <DockPanel LastChildFill="True">
-                            <Button x:Name="ClinicalPairBtn" Content="Emparejar" DockPanel.Dock="Right"
-                                    Width="86" Height="26" Margin="6,0,0,0" Click="OnClinicalPair"
-                                    Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
-                                    Foreground="#CCFFFFFF" HorizontalContentAlignment="Center"/>
-                            <TextBox x:Name="ClinicalCodeBox" Height="26" MaxLength="8"
-                                     CharacterCasing="Upper" FontFamily="Consolas" FontSize="12"
-                                     VerticalContentAlignment="Center" Padding="6,0,0,0"
-                                     Background="#22FFFFFF" Foreground="White" BorderThickness="0"
-                                     ToolTip="El código de 8 caracteres que aparece en la consulta del portal."/>
-                        </DockPanel>
-                        <TextBlock x:Name="ClinicalStatus" Margin="0,4,0,0" FontSize="10"
-                                   Foreground="#99FFFFFF" TextWrapping="Wrap"
-                                   Text="Sin emparejar."/>
-
-                        <Border Style="{StaticResource Sep}"/>
-
-                        <!-- ── Backend: herramientas de desarrollo. Sección secundaria, PLEGADA por
-                             defecto — se abre y se cierra CON CLIC, y no compite visualmente con lo
-                             que usa el operador. El contenido conserva su apariencia técnica.
-                             El hover que la abría se quitó: rozarla la desplegaba sola y el clic
-                             entonces no cambiaba nada, así que el control parecía roto. ────────── -->
+                        <!-- ── Backend: herramientas de desarrollo, TODAS a la vista. El desplegable
+                             que las escondía murió en la limpieza del panel (2026-08-31): abrirlo
+                             era un clic que no compraba nada — quien llega hasta aquí ya está
+                             mirando el panel entero, y un estado oculto es un estado que se olvida.
+                             La señal de conexión con Graph vive en el propio texto de estado. ──── -->
                         <StackPanel x:Name="BackendZone">
-                            <Border x:Name="BackendHeader" CornerRadius="8" Background="#1CFFFFFF" Height="30"
-                                    Cursor="Hand" Focusable="True"
-                                    ToolTip="Clic para abrir o cerrar las herramientas de desarrollo"
-                                    AutomationProperties.Name="Backend — herramientas de desarrollo">
-                                <DockPanel LastChildFill="True" Margin="10,0">
-                                    <Path x:Name="BackendChevron" DockPanel.Dock="Left" Data="M 0 0 L 4.5 4.5 L 0 9"
-                                          Stroke="#CCFFFFFF" StrokeThickness="1.6" StrokeLineJoin="Round"
-                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                          VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
-                                        <Path.RenderTransform>
-                                            <RotateTransform x:Name="BackendRot" Angle="0"/>
-                                        </Path.RenderTransform>
-                                    </Path>
-                                    <!-- Señal de conexión con Graph, visible sin abrir la sección. NO
-                                         dice «hay API key» —eso decía antes, y por eso estaba verde
-                                         mientras el DNS fallaba—: dice qué pasó la última vez que se
-                                         habló con Graph, y el tooltip añade cuándo. Los siete estados
-                                         y sus colores viven en GraphHealthText. -->
-                                    <Ellipse x:Name="BackendDot" DockPanel.Dock="Right" Width="7" Height="7"
-                                             Fill="#8A8A8E" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Backend" Foreground="#CCFFFFFF" FontSize="11"
-                                               Margin="8,0,0,0" VerticalAlignment="Center"/>
-                                </DockPanel>
-                            </Border>
+                            <DockPanel LastChildFill="True" Margin="0,0,0,4">
+                                <!-- La misma señal de salud que tenía la cabecera plegada: qué pasó la
+                                     última vez que se habló con Graph (colores en GraphHealthText). -->
+                                <Ellipse x:Name="BackendDot" DockPanel.Dock="Right" Width="7" Height="7"
+                                         Fill="#8A8A8E" VerticalAlignment="Center"/>
+                                <TextBlock Text="Backend" Style="{StaticResource SectionLabel}"/>
+                            </DockPanel>
 
-                            <StackPanel x:Name="BackendBody" Visibility="Collapsed" Margin="0,6,0,0">
+                            <StackPanel x:Name="BackendBody" Margin="0,0,0,0">
                                 <!-- El backend ya no se configura a mano: la URL tiene default sano y la
                                      API key llega sola (key embebida en el build de distribución, o env
                                      GRAPH_API_KEY en dev). Esto es solo un estado de diagnóstico. Ver
@@ -628,25 +569,6 @@
                                 <Button x:Name="RecuerdosBtn" Content="🧠 Ver recuerdos de aquí" Height="26" Margin="0,6,0,0"
                                         Click="OnVerRecuerdos" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
                                         ToolTip="Ilumina de golpe todo lo que te han enseñado en esta pantalla, con el texto del recuerdo sobre cada elemento. Escape lo apaga."/>
-
-                                <!-- TODO ENCENDIDO DE UN GOLPE. Ver la pantalla entera anotada exige cuatro
-                                     interruptores, y hasta ahora había que acordarse de los cuatro y del
-                                     orden. Un solo botón para el modo «quiero verlo todo». -->
-                                <Button x:Name="FullTooltipsBtn" Content="👁 Full Tooltips" Height="26" Margin="0,6,0,0"
-                                        Click="OnToggleFullTooltips" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
-                                        ToolTip="Enciende de una vez el inspector, el ID de superficie, el explorador del grafo y el mapa. Volver a pulsarlo lo apaga todo."/>
-
-                                <!-- INTERRUPTOR DE MEDICIÓN, duro y sin respaldo. Ver AgentLoop.SoloGrafo:
-                                     con computer-use de red no se puede saber cuál de los dos llegó. -->
-                                <Button x:Name="SoloGrafoBtn" Content="🕸 Navegación: GRAFO + coordenadas" Height="26" Margin="0,6,0,0"
-                                        Click="OnToggleSoloGrafo" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
-                                        ToolTip="Botón de DESARROLLO, para medir. Al ponerlo en SOLO GRAFO el asistente pierde tap/type/scroll/swipe/key: solo puede moverse con rutas del grafo (ir_a). Si el grafo no conoce el camino, se detiene — no lo rodea con clics a coordenadas. Cada negativa queda en el log con la marca «SOLO GRAFO»."/>
-
-                                <!-- Toggle: al enseñar, ¿procesar el video con IA (LLM)? Off = se graba el
-                                     video y se ve en 🎞 Videos, pero NO se manda al LLM (evita el 504). -->
-                                <Button x:Name="VideoLlmToggle" Height="26" Margin="0,6,0,0" Click="OnToggleVideoLlm"
-                                        Style="{StaticResource MenuBtn}" Background="#33FFFFFF" Foreground="#CCFFFFFF"
-                                        ToolTip="Al enseñar: si está OFF, el video NO se manda al LLM (evita el timeout); igual se graba y lo ves en 🎞 Videos."/>
 
                                 <Button x:Name="LogsBtn" Content="📜 Logs" Height="26" Margin="0,6,0,0"
                                         Click="OnOpenLogs" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"

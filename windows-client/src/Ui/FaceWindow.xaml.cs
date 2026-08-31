@@ -113,7 +113,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // Aquí y no al crear la WorkflowTeachSession: esa se construye en CADA pulsación de «Enseñar»
         // y acumularía una suscripción por intento, multiplicando cada línea en el registro.
         _teachSapSurface.Diagnostic += (_, msg) => LogBus.Log("teach-sap", msg);
-        SetStepModeUi(); // el botón nace con su etiqueta puesta, no vacío hasta el primer clic
         Loaded += OnLoaded;
     }
 
@@ -150,19 +149,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         UpdateVideoLlmToggle();
         SetMuted(_config.Muted); // si lo silenciaron en una sesión anterior, sigue mudo
 
-        // Puente clínico: si ya se emparejó en otra sesión, se retoma solo. Sin esto había que
-        // teclear el código en CADA arranque de Ü, que es la fricción que sobra en una consulta.
-        if (_config.ClinicalCode.Length == 8)
-        {
-            _clinical.Pair(_config.ClinicalCode);
-            if (_clinical.Active)
-            {
-                ClinicalCodeBox.Text = _clinical.Code;
-                ClinicalPairBtn.Content = "Soltar";
-                _clinicalStep = -1;
-                SetClinicalStep(1, "Esperando a que guardes la nota en el portal.");
-            }
-        }
         Closed += (_, __) =>
         {
             _inspector?.Dispose(); // suelta el hook global de mouse al cerrar
@@ -363,20 +349,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // estoy mostrando», ya ha PASADO el ratón por encima. Si se empezara a mirar al oír la
         // frase, lo que se quiere enseñar ya habría ocurrido.
         RastroDelCursor.Arrancar();
-
-        // Puente clínico: se sondea cada 3 s, no en cada cambio de pantalla. El médico
-        // puede guardar la nota DESPUÉS de que SAP ya esté en la pantalla, así que
-        // reaccionar solo al cambio de superficie perdería justo ese caso. Cuando no hay
-        // código emparejado esto no hace ni una llamada.
-        var clinicalTimer = new System.Windows.Threading.DispatcherTimer(
-            System.Windows.Threading.DispatcherPriority.Background)
-        { Interval = TimeSpan.FromSeconds(3) };
-        clinicalTimer.Tick += async (_, __) =>
-        {
-            try { await ClinicalTickAsync(); }
-            catch (Exception ex) { LogBus.Log("clinico", $"tick falló: {ex.Message}"); }
-        };
-        clinicalTimer.Start();
 
         var mcp = new LocalMcp(_uia);
         // El terreno, al alcance del cerebro. Desde la gran limpieza (2026-08-30) las
@@ -749,8 +721,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             });
             _vivo.Cambio += viva => Dispatcher.Invoke(() =>
             {
-                MicBtn.Content = viva ? "🔴" : "🎤";
-                MicBtn.ToolTip = viva ? "Conversación en vivo — clic para colgar" : "Hablarle a Ü";
                 if (viva) ShowTalk();
                 // La boca la mueve el audio EN VIVO, que no pasa por VoiceIO: sin esto el gesto
                 // quedaba dibujado y sin nadie que lo moviera (2026-08-05).
@@ -1111,7 +1081,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         foreach (string s in _hotkeys.Activos)
         {
             if (s.Contains("invocar")) MenuActivator.ToolTip = $"Más herramientas (hover abre · clic fija · Esc cierra) · {s.Split(' ')[0]} llama a Ü";
-            if (s.Contains("micrófono")) MicBtn.ToolTip = $"Hablarle a Ü · {s.Split(' ')[0]}";
         }
         if (_hotkeys.Resumen.Length > 0) HotkeyStatus.Text = _hotkeys.Resumen;
     }
@@ -1851,11 +1820,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private async void OnMic(object sender, RoutedEventArgs e)
     {
-        // MANTENER PULSADO EL MICRÓFONO = entrar por el collar. Se pregunta ANTES de alternar, para
-        // que la sesión nazca ya pidiendo collar en vez de abrir con el micrófono local y mudarse.
-        // El clic corto sigue haciendo exactamente lo de siempre: el gesto nuevo no le quita nada al
-        // que ya existía (2026-08-13, pedido por el usuario).
-        if (TomarPulsacionLarga()) PasarLaVozAlCollar();
 
         if (_vivo != null) { await _vivo.AlternarAsync(); return; }
 
@@ -1872,30 +1836,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     // Sin variable de entorno y sin ajuste escondido: se pide con la mano, en el momento. Un
     // interruptor que hay que saber que existe obliga a arrancar la aplicación de una forma
     // especial, y entonces «probarlo» ya no es lo mismo que usarlo.
-
-    /// <summary>Cuánto hay que mantener pulsado el micrófono para pedir el collar.</summary>
-    private static readonly TimeSpan Sostenido = TimeSpan.FromMilliseconds(500);
-
-    private DateTime _micPulsado;
-
-    private void OnMicDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        => _micPulsado = DateTime.UtcNow;
-
-    /// <summary>
-    /// ¿El clic que se acaba de soltar venía de mantener pulsado? Se CONSUME al preguntar.
-    ///
-    /// Consumirlo importa: a <c>OnMic</c> se llega también por el doble clic en la carita, por el
-    /// atajo global y por la pastilla de voz, y esos no pasan por el botón. Sin borrar la marca, una
-    /// pulsación larga de hace media hora haría que el siguiente doble clic pidiera collar sin que
-    /// nadie lo hubiera pedido.
-    /// </summary>
-    private bool TomarPulsacionLarga()
-    {
-        if (_micPulsado == default) return false;
-        bool largo = DateTime.UtcNow - _micPulsado >= Sostenido;
-        _micPulsado = default;
-        return largo;
-    }
 
     private PanelDelCollar? _panelCollar;
 
@@ -1962,23 +1902,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         ShowStop(false);
     }
 
-    /// <summary>
-    /// Callar/dejar hablar a Ü. Un solo clic corta la frase en curso y lo deja mudo — antes, si arrancaba
-    /// a hablar en mal momento, no había forma de pararlo salvo cerrar la aplicación.
-    /// </summary>
-    private void OnToggleMute(object sender, RoutedEventArgs e)
-    {
-        SetMuted(!_voice.Muted);
-        _config.Save();
-        SetStatus(_voice.Muted ? "Ü en silencio" : "Ü vuelve a hablar");
-    }
-
     private void SetMuted(bool muted)
     {
         _voice.Muted = muted;   // el setter ya corta en seco lo que estuviera diciendo
         _config.Muted = muted;
-        MuteBtn.Content = muted ? "🔇" : "🔊";
-        MuteBtn.ToolTip = muted ? "Ü está en silencio — clic para que vuelva a hablar" : "Callar a Ü ahora mismo";
     }
 
     /// <summary>
@@ -2361,7 +2288,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
         if (!RootPanel.Children.Contains(MenuPanel)) RootPanel.Children.Add(MenuPanel);
     }
-    private bool _backendOpen;
     private bool _talkOpen;
     private System.Windows.Threading.DispatcherTimer _menuOpenTimer = null!, _menuCloseTimer = null!;
 
@@ -2417,12 +2343,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         BarPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
         BarPanel.MouseLeave += (_, __) => ScheduleMenuClose();
 
-        // Backend: solo clic. Sin MouseEnter/MouseLeave a propósito — ver la nota de arriba.
-        BackendHeader.MouseLeftButtonUp += (_, __) => ToggleBackend();
-        BackendHeader.KeyDown += (_, e) => { if (e.Key is Key.Enter or Key.Space) { ToggleBackend(); e.Handled = true; } };
-
-        // Globo de conversación: 💬 lo alterna, ✕ lo cierra.
-        TalkBtn.Click += (_, __) => { if (_talkOpen) HideTalk(); else ShowTalk(focusInput: true); };
+        // Globo de conversación: ✕ lo cierra; abrirlo va por las pastillas de la carita.
         TalkCloseBtn.Click += (_, __) => HideTalk();
 
         // Esc cierra lo más volátil primero: menú, luego conversación. Y al cerrar la conversación
@@ -2666,35 +2587,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             UpdateChevron();
         });
         UpdateChevron();
-        // Backend se queda como lo dejaste. Antes se replegaba al cerrar el menú porque podía haberse
-        // abierto de refilón, por hover; ahora abrirlo cuesta un clic deliberado y deshacerlo a sus
-        // espaldas sería contradecir lo que el usuario pidió.
-    }
-
-    /// <summary>Abrir/cerrar Backend con clic (o Enter/Espacio) en su cabecera.</summary>
-    private void ToggleBackend()
-    {
-        if (_backendOpen) CloseBackend(); else OpenBackend();
-    }
-
-    private void OpenBackend()
-    {
-        if (_backendOpen) return;
-        _backendOpen = true;
-        BackendBody.Visibility = Visibility.Visible;
-        BackendBody.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
-        Rotate(BackendRot, 90);
-    }
-
-    private void CloseBackend()
-    {
-        if (!_backendOpen) return;
-        _backendOpen = false;
-        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(120));
-        fade.Completed += (_, __) => { if (!_backendOpen) BackendBody.Visibility = Visibility.Collapsed; };
-        BackendBody.BeginAnimation(OpacityProperty, fade);
-        Rotate(BackendRot, 0);
     }
 
     // ── Globo de conversación (estado + narración + entrada de texto) ─────────────────────────
@@ -2793,7 +2685,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             WorkflowPrev.IsEnabled = many;
             WorkflowNext.IsEnabled = many;
             RunWorkflowBtn.IsEnabled = true;
-            DryRunBtn.IsEnabled = true;
             WorkflowDeleteBtn.IsEnabled = true;
             SetDirectIndex(_directIndex);
         }
@@ -2813,7 +2704,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         WorkflowPrev.IsEnabled = false;
         WorkflowNext.IsEnabled = false;
         RunWorkflowBtn.IsEnabled = false;
-        DryRunBtn.IsEnabled = false;
         WorkflowDeleteBtn.IsEnabled = false;
     }
 
@@ -2894,8 +2784,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
     }
 
-    private bool _stepMode;
-    private StepDebuggerWindow? _debugger;
 
     // ── Dictado clínico: hablar y que los campos se llenen ──────────────────────
     //
@@ -2903,6 +2791,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     // médico en el portal y los ofrece para aprobación; esto escucha en directo y escribe sin
     // preguntar. Comparten la superficie de SAP y nada más.
     private DictadoSoniox? _dictadoClinico;
+    private readonly SapGuiSurface _clinicalSap = new();
     private RellenadorSap? _rellenador;
 
     /// <summary>Quien atiende los «Exportar a HC» que llegan de la web. Vive todo el rato.</summary>
@@ -2911,244 +2800,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>Su propio micrófono, y NO el de la conversación viva. Son dos sesiones de audio con
     /// destinos distintos; compartir una obligaría a decidir en cada frase a quién iba dirigida.</summary>
     private readonly Voice.LiveAudio _audioDictado = new();
-
-    // ── Puente con la consulta del portal ───────────────────────────────────────
-    private readonly ClinicalBridge _clinical = new();
-    private readonly SapGuiSurface _clinicalSap = new();
-    private bool _offering;             // ya hay un ofrecimiento en pantalla
-    private string _offeredRev = "";    // no ofrecer dos veces lo mismo
-    private string _focusedRev = "";    // no robar el foco más de una vez por versión
-    private int _clinicalStep = -1;
-
-    /// <summary>
-    /// El paso del circuito, a la vista. Sin esto el operador solo veía «Emparejado» y no
-    /// tenía forma de saber cuál de las dos condiciones faltaba —la nota guardada o la
-    /// pantalla de SAP—, que es justo lo que hay que poder mirar de un vistazo en vivo.
-    ///
-    /// Solo se escribe cuando el paso CAMBIA: repintar el mismo texto cada 3 s haría
-    /// parpadear el panel y ensuciaría el registro.
-    /// </summary>
-    private void SetClinicalStep(int step, string text)
-    {
-        if (_clinicalStep == step) return;
-        _clinicalStep = step;
-        string[] marks = { "①", "②", "③", "④" };
-        string prefix = step >= 1 && step <= 4 ? $"{marks[step - 1]} " : "";
-        Dispatcher.Invoke(() => ClinicalStatus.Text = prefix + text);
-        LogBus.Log("clinico", $"paso {step}: {text}");
-    }
-
-    private void OnClinicalPair(object sender, RoutedEventArgs e)
-    {
-        if (_clinical.Active)
-        {
-            _clinical.Unpair();
-            ClinicalCodeBox.Text = "";
-            ClinicalPairBtn.Content = "Emparejar";
-            ClinicalStatus.Text = "Sin emparejar.";
-            _config.ClinicalCode = "";   // soltar es soltar: no debe resucitar al reiniciar
-            _config.Save();
-            return;
-        }
-
-        _clinical.Pair(ClinicalCodeBox.Text);
-        if (!_clinical.Active)
-        {
-            ClinicalStatus.Text = "El código son 8 caracteres.";
-            return;
-        }
-
-        _config.ClinicalCode = _clinical.Code;   // se teclea una vez por instalación, no por arranque
-        _config.Save();
-
-        _offeredRev = "";
-        _focusedRev = "";
-        _clinicalStep = -1;
-        ClinicalPairBtn.Content = "Soltar";
-        SetClinicalStep(1, "Esperando a que guardes la nota en el portal.");
-    }
-
-    /// <summary>
-    /// ¿Esta pantalla admite datos de la consulta? Se decide INTENTANDO emparejar los
-    /// conceptos con los campos que hay delante, no comparando la transacción contra una
-    /// lista. Es autoverificable: si en la pantalla no existen «Talla», «Peso» y compañía,
-    /// no se empareja nada y no se ofrece — sin depender de un código de transacción que
-    /// puede cambiar entre hospitales o entre versiones.
-    /// </summary>
-    private async Task ClinicalTickAsync()
-    {
-        if (!_clinical.Active || _clinical.Stopped || _offering || _teaching || _runningDirect) return;
-
-        // EL CAMINO NUEVO MANDA. Mientras el ejecutor de exportaciones esté escuchando, este puente
-        // se calla: son dos sistemas queriendo llenar la MISMA pantalla, y el viejo abre una ventana
-        // de aprobación que roba el foco a mitad de la escritura del nuevo. El usuario lo vio en
-        // vivo el 2026-08-14 — el popup de «voy a escribir 2 dato(s)» apareciendo encima mientras el
-        // exportador estaba trabajando.
-        //
-        // No se borra: el puente sigue entero y vuelve solo si el ejecutor no está. Pero dos cosas
-        // escribiendo a la vez en una historia clínica no es una redundancia útil, es una carrera.
-        if (_exportador?.Encendido == true) return;
-
-        // ── PASO 1: ¿la nota ya está guardada allá? ─────────────────────────────
-        var data = await _clinical.FetchAsync(CancellationToken.None);
-        if (data.Count == 0)
-        {
-            SetClinicalStep(1, "Esperando a que guardes la nota en el portal.");
-            return;
-        }
-
-        // ── PASO 2: ¿SAP está delante? ──────────────────────────────────────────
-        // Inmediato: de esto depende traer SAP al frente o no, y con el valor cacheado se decidía
-        // sobre una pantalla de hasta 800 ms antes.
-        var loc = _locator?.DondeEstoy();
-        bool enSap = loc != null && loc.Origin.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase);
-        if (!enSap)
-        {
-            // Los datos ya están; lo único que falta es SAP. Se trae al frente UNA vez
-            // por versión de la nota: insistir cada 3 s le robaría el teclado al operador
-            // mientras escribe en otro sitio, que es exactamente lo que no debe pasar.
-            SetClinicalStep(2, $"{data.Count} dato(s) listos. Abriendo SAP…");
-            if (_clinical.LastRev != _focusedRev)
-            {
-                _focusedRev = _clinical.LastRev;
-                LogBus.Log("clinico", "datos listos y SAP no está delante: se trae al frente");
-                try { await AppAligner.EnsureAsync("sapgui://", () => _locator?.DondeEstoy()?.Origin ?? "", CancellationToken.None); }
-                catch (Exception e) { LogBus.Log("clinico", $"no se pudo traer SAP al frente: {e.Message}"); }
-            }
-            return;
-        }
-
-        if (_clinical.LastRev == _offeredRev) return;   // ya se ofreció esta versión
-
-        string donde = loc?.Id ?? "SAP";
-
-        // ── PASO 3: ¿esta pantalla tiene los campos? ────────────────────────────
-        IReadOnlyList<DetectedField> fields;
-        try { fields = await Task.Run(() => _clinicalSap.ReadFields()); }
-        catch { return; }
-
-        var bindings = ConceptBinder.Bind(data, fields);
-        int escribibles = bindings.Count(b => !b.Occupied);
-        if (escribibles == 0)
-        {
-            string why = bindings.Count == 0
-                ? "Estás en SAP, pero esta pantalla no tiene campos de signos vitales."
-                : "Todos los campos ya tienen valor: no se toca nada.";
-            SetClinicalStep(3, why);
-            LogBus.Log("clinico", $"{why} ({fields.Count} campo(s) leídos en '{loc!.Id}')");
-            return;
-        }
-
-        // ── PASO 4: todo listo, se pide aprobación ──────────────────────────────
-        _offering = true;
-        _offeredRev = _clinical.LastRev;
-        try
-        {
-            SetClinicalStep(4, $"Esperando tu aprobación para {escribibles} dato(s).");
-            LogBus.Log("clinico", $"ofreciendo {escribibles} dato(s) en '{donde}'");
-
-            var preview = new FillPreviewWindow(bindings, donde);
-            bool ok = await preview.AskAsync();
-            if (!ok)
-            {
-                LogBus.Log("clinico", "el operador canceló: no se escribió nada");
-                _clinicalStep = -1;
-                SetClinicalStep(3, "Cancelado. Se vuelve a ofrecer si cambias de pantalla o de nota.");
-                _offeredRev = ""; // cancelar no es rechazar para siempre
-                return;
-            }
-
-            int escritos = await Task.Run(() => Write(bindings));
-            LogBus.Log("clinico", $"escritos {escritos}/{escribibles} dato(s) en SAP");
-            _clinicalStep = -1;
-            SetClinicalStep(4, $"✓ Escritos {escritos} dato(s) en SAP.");
-        }
-        finally { _offering = false; }
-    }
-
-    /// <summary>
-    /// Escribe lo aprobado. Los ocupados NO se tocan — la regla no se comprueba solo al
-    /// mostrar: se vuelve a comprobar aquí, porque entre la vista previa y el clic el
-    /// operador pudo haber escrito en el campo.
-    /// </summary>
-    private int Write(IReadOnlyList<Binding> bindings)
-    {
-        int n = 0;
-        foreach (Binding b in bindings)
-        {
-            if (b.Occupied) continue;
-            var step = PlanStep.ForAutofill(b.Field, new FieldMatch { StepOrder = b.Field.StepOrder, Value = b.Data.Value });
-            try
-            {
-                if (_clinicalSap.Execute(step, out string err)) n++;
-                else LogBus.Log("clinico", $"«{b.FieldLabel}» no se pudo escribir: {err}");
-            }
-            catch (Exception e) { LogBus.Log("clinico", $"«{b.FieldLabel}» lanzó: {e.Message}"); }
-        }
-        return n;
-    }
-
-    private void OnToggleStepMode(object sender, RoutedEventArgs e)
-    {
-        _stepMode = !_stepMode;
-        SetStepModeUi();
-        SetStatus(_stepMode
-            ? "Paso a paso ACTIVO: la próxima ejecución se detendrá antes de cada paso."
-            : "Paso a paso apagado.");
-    }
-
-    private void SetStepModeUi()
-    {
-        StepModeBtn.Content = _stepMode ? "👣 Paso a paso: ACTIVO" : "👣 Paso a paso: apagado";
-        StepModeBtn.Foreground = _stepMode
-            ? System.Windows.Media.Brushes.White
-            : new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
-    }
-
-    /// <summary>
-    /// Ensayo en seco del workflow que apunta el slider: dice qué pasaría SIN tocar la pantalla.
-    ///
-    /// Se construye el MISMO player que ejecutaría de verdad —mismas superficies, mismo plan, mismo
-    /// colapso de tecleos— porque un ensayo sobre una lista distinta de la que se ejecuta no vale nada.
-    /// El detalle va al registro; en el globo solo el veredicto, que es lo que se mira de un vistazo
-    /// cinco minutos antes de un demo.
-    /// </summary>
-    private async void OnDryRunWorkflow(object sender, RoutedEventArgs e)
-    {
-        if (_runningDirect) return;
-        if (_directIndex < 0 || _directIndex >= _directWorkflows.Count) { SetStatus("Selecciona un workflow primero."); return; }
-        var wf = _directWorkflows[_directIndex];
-
-        DryRunBtn.IsEnabled = false;
-        SetStatus($"Ensayando «{wf.Title}» en seco…");
-        try
-        {
-            _directGraph ??= new GraphClient(_graphConfig);
-            var uia = new UiaSurface { Log = s => LogBus.Log("uia", s) };
-            var sap = new SapGuiSurface();
-            sap.Diagnostic += (_, msg) => LogBus.Log("sap", msg);
-            var player = new WorkflowPlayer(_directGraph, _graphConfig, uia, sap)
-            {
-                Log = s => LogBus.Log("ensayo", s)
-            };
-
-            DryRunReport report = await player.DryRunAsync(wf.Id, null, CancellationToken.None);
-
-            string veredicto = report.Clean
-                ? $"✓ Ensayo limpio: {report.Steps} pasos, sin bloqueantes"
-                : $"✋ {report.Count(DryRunLevel.Bloqueante)} bloqueante(s) de {report.Steps} pasos";
-            int avisos = report.Count(DryRunLevel.Aviso);
-            SetStatus($"{veredicto}{(avisos > 0 ? $" · {avisos} aviso(s)" : "")} — detalle en 📜 Logs");
-            Narrate(veredicto);
-        }
-        catch (Exception ex)
-        {
-            LogBus.Log("ensayo", $"el ensayo falló: {ex}");
-            SetStatus($"El ensayo no pudo completarse: {ex.Message}");
-        }
-        finally { DryRunBtn.IsEnabled = true; }
-    }
 
     /// <summary>
     /// Ejecuta el workflow que apunta el slider, igual que "Ejecutar ahora" de la biblioteca: pide el
@@ -3194,11 +2845,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     System.IO.Path.Combine(StepShotCamera.FolderFor(id), $"step_{order}.png"),
             };
 
-            if (_stepMode)
-            {
-                _debugger ??= new StepDebuggerWindow();
-                player.OnStepPause = pause => _debugger.AskAsync(pause);
-            }
             player.StepDone += (_, o) => Narrate(o.Ok ? $"✓ {o.Label}" : $"✗ {o.Label}: {o.Error}");
 
             RunResult result = await player.RunAsync(wf.Id, null, strictSurface: true, _cts.Token);
@@ -3208,18 +2854,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // Un workflow que se detiene NO lanza excepción: devuelve un resultado que dice que no
             // llegó. Sin esta línea la cara se quedaría tan contenta tras una corrida fallida.
             falló = !result.Ok && !_cts.IsCancellationRequested;
-
-            // Una ejecución nueva es una oportunidad nueva. El puente clínico se calla cuando ya
-            // ofreció ESTA versión de la nota, y está bien para no repetir el ofrecimiento en la
-            // misma pantalla — pero un workflow que acaba de navegar deja delante una pantalla
-            // NUEVA y vacía, donde esos mismos datos sí hacen falta. Sin esto, correr el workflow
-            // por segunda vez con la misma nota no ofrece nada y parece que el puente se rompió
-            // (visto el 2026-07-28: 7/7 ejecutado y ni un ofrecimiento después).
-            if (result.Ok && _clinical.Active)
-            {
-                _offeredRev = "";
-                _clinicalStep = -1;
-            }
 
             if (result.Ok && result.AlignedConsciously)
                 _ = _directGraph.PrependAlignmentStepAsync(wf.Id, CancellationToken.None); // aprende a alcanzar su superficie
@@ -3253,8 +2887,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // tiene que poder decir cuál fue.
             SetOutcome(paróElUsuario, falló);
             _cts = null;
-            // Se oculta, no se cierra: cerrar dispara el Closing, que significa «el operador paró».
-            _debugger?.Finish();
         }
 
         // Fuera del try/finally: StartGoal crea su PROPIO _cts (adentro lo pisaría el finally).
@@ -3298,7 +2930,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 : GraphHealth.CurrentFor(_graphConfig.BaseUrl) with { Link = GraphLink.SinKey });
         BackendStatus.Text = text;
         BackendDot.Fill = dot;
-        BackendHeader.ToolTip = text;
     }
 
     private void OnGraphHealthChanged(object? sender, GraphObservation obs) =>
@@ -3336,37 +2967,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         catch (Exception ex) { LogBus.Log("backend", $"sonda de vida falló de forma inesperada: {ex.Message}"); }
     }
 
-    /// <summary>
-    /// Enciende/apaga el inspector visual de elementos (overlay click-through con recuadros +
-    /// diagnóstico de clic amarillo/rojo). Ver <see cref="UiInspector"/>.
-    /// </summary>
-    /// <summary>
-    /// SOLO GRAFO: le quita al asistente las acciones a coordenadas, para medir hasta dónde llega
-    /// el grafo por sí solo. Ver <see cref="Agent.AgentLoop.SoloGrafo"/>.
-    ///
-    /// El texto del botón dice el ESTADO, no la acción — «GRAFO + coordenadas» / «SOLO GRAFO» — y no
-    /// «activar solo grafo». Un botón que nombra lo que hará obliga a deducir dónde estás, y este se
-    /// mira justo cuando se está midiendo, que es cuando peor se deduce.
-    /// </summary>
-    private void OnToggleSoloGrafo(object sender, RoutedEventArgs e)
-    {
-        bool on = !Agent.AgentLoop.SoloGrafo;
-        Agent.AgentLoop.SoloGrafo = on;
-
-        SoloGrafoBtn.Content = on ? "🕸 Navegación: SOLO GRAFO" : "🕸 Navegación: GRAFO + coordenadas";
-        SoloGrafoBtn.Background = new System.Windows.Media.SolidColorBrush(on
-            ? System.Windows.Media.Color.FromArgb(0x66, 0x21, 0x96, 0xF3)   // el mismo azul que el cromo del grafo
-            : System.Windows.Media.Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
-        SetStatus(on
-            ? "SOLO GRAFO: sin tap/type/scroll. Si el grafo no sabe llegar, se detiene."
-            : "Grafo + coordenadas: si el grafo no sabe llegar, computer-use lo rodea.");
-        LogBus.Log("agent", on
-            ? "🕸 SOLO GRAFO puesto: las acciones a coordenadas quedan prohibidas (medición)"
-            : "🕸 SOLO GRAFO quitado: vuelve el respaldo por coordenadas");
-    }
-
-    /// <summary>Si el modo «verlo todo» está puesto. Ver <see cref="OnToggleFullTooltips"/>.</summary>
-    private bool _fullTooltips;
 
     /// <summary>
     /// QUÉ ME HAN ENSEÑADO AQUÍ, de un vistazo: todo iluminado y con su texto encima.
@@ -3467,31 +3067,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         _recuerdosALaVista = si;
         RecuerdosBtn.Content = si ? "🧠 Recuerdos a la vista — clic para apagar" : "🧠 Ver recuerdos de aquí";
-    }
-
-    /// <summary>
-    /// TODO ENCENDIDO DE UN GOLPE: inspector, ID de superficie, explorador del grafo y mapa.
-    ///
-    /// Ver la pantalla entera anotada exigía cuatro interruptores, y había que acordarse de los
-    /// cuatro. Cuando lo que quieres es mirar, quieres mirarlo todo (2026-08-08, pedido por el
-    /// usuario).
-    ///
-    /// Reutiliza los manejadores de siempre en vez de duplicar lo que hacen, y por eso pregunta
-    /// primero por el estado de cada uno: son TOGGLES, así que llamarlos a ciegas apagaría lo que ya
-    /// estuviera encendido — pulsar «encender todo» con el inspector puesto lo habría apagado. Cada
-    /// uno se toca solo si no está ya como queremos.
-    /// </summary>
-    private void OnToggleFullTooltips(object sender, RoutedEventArgs e)
-    {
-        _fullTooltips = !_fullTooltips;
-
-        if ((_inspector?.Active ?? false) != _fullTooltips) OnToggleInspector(sender, e);
-        if (_idALaVista != _fullTooltips) OnToggleLocator(sender, e);
-
-        FullTooltipsBtn.Content = _fullTooltips ? "👁 Full Tooltips: TODO a la vista" : "👁 Full Tooltips";
-        SetStatus(_fullTooltips
-            ? "Todo a la vista: inspector, ID, explorador y mapa"
-            : "Todo apagado");
     }
 
     private void OnToggleInspector(object sender, RoutedEventArgs e)
