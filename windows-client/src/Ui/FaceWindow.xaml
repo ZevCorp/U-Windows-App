@@ -443,16 +443,22 @@
                              trabaja. Se conservan enteros, con su nombre y su manejador: mover algo
                              de sitio no es reescribirlo (2026-08-07). -->
                         <TextBlock Text="Acciones" Style="{StaticResource SectionLabel}"/>
-                        <!-- Dos desde la limpieza de la tira (2026-08-31): hablar, escribir, callar
-                             y el collar ya viven en la carita y su tira, así que sus botones aquí
-                             eran segundas copias del mismo gesto. Quedan los que no tienen otro
-                             sitio: enseñar y buscar actualizaciones. -->
-                        <UniformGrid Columns="2" Margin="0,4,0,10">
+                        <!-- TODO lo del producto como iconos, en una fila (2026-08-31): los botones
+                             de ancho completo obligaban a leer una lista; una fila de iconos con
+                             tooltip se recorre de un vistazo. El estado de cada toggle se dice con
+                             el FONDO (acento = encendido), el patrón que TeachBtn ya tenía. -->
+                        <UniformGrid Columns="4" Margin="0,4,0,10">
                             <!-- Enseñanza activa: graba pantalla+voz para que Ü aprenda a usar una
                                  app. En rojo mientras graba (SetTeachingUi). -->
                             <Button x:Name="TeachBtn" Content="🎓" Style="{StaticResource BarBtn}" Click="OnToggleTeach"
                                     Margin="0" ToolTip="Enseñar: Ü graba la pantalla y tu voz para aprender un workflow"
                                     AutomationProperties.Name="Enseñar"/>
+                            <Button x:Name="WorkflowsBtn" Content="🧭" Style="{StaticResource BarBtn}" Click="OnOpenWorkflows"
+                                    Margin="0" ToolTip="Biblioteca de workflows: ejecutar contra Graph (SAP GUI / UIA) + autofill"
+                                    AutomationProperties.Name="Workflows"/>
+                            <Button x:Name="VideosBtn" Content="🎞" Style="{StaticResource BarBtn}" Click="OnOpenVideos"
+                                    Margin="0" ToolTip="Las grabaciones de tus enseñanzas"
+                                    AutomationProperties.Name="Videos"/>
                             <!-- Buscar actualizaciones AHORA. El sondeo automático mira cada 30 min y
                                  no dice nada mientras tanto —correcto para no molestar—, pero deja sin
                                  respuesta a quien acaba de enterarse de que hay versión nueva. Sin
@@ -500,20 +506,6 @@
                                 HorizontalContentAlignment="Center" FontWeight="SemiBold" FontSize="12" IsEnabled="False"
                                 ToolTip="Corre el workflow seleccionado contra Graph (se alinea solo si la pantalla no coincide)"/>
 
-                        <!-- El mundo de los workflows, junto: la biblioteca, las grabaciones de las
-                             enseñanzas, y qué se hace con esas grabaciones al enseñar. -->
-                        <Button x:Name="WorkflowsBtn" Content="🧭 Workflows" Height="26" Margin="0,10,0,0"
-                                Click="OnOpenWorkflows" Style="{StaticResource MenuBtn}"
-                                ToolTip="Biblioteca de workflows: ejecutar contra Graph (SAP GUI / UIA) + autofill"/>
-                        <Button x:Name="VideosBtn" Content="🎞 Videos" Height="26" Margin="0,6,0,0"
-                                Click="OnOpenVideos" Style="{StaticResource MenuBtn}"
-                                ToolTip="Las grabaciones de tus enseñanzas"/>
-                        <!-- Toggle: al enseñar, ¿procesar el video con IA (LLM)? Off = se graba el
-                             video y se ve en 🎞 Videos, pero NO se manda al LLM (evita el 504). -->
-                        <Button x:Name="VideoLlmToggle" Height="26" Margin="0,6,0,0" Click="OnToggleVideoLlm"
-                                Style="{StaticResource MenuBtn}" Background="#33FFFFFF" Foreground="#CCFFFFFF"
-                                ToolTip="Al enseñar: si está OFF, el video NO se manda al LLM (evita el timeout); igual se graba y lo ves en 🎞 Videos."/>
-
                         <Border Style="{StaticResource Sep}"/>
 
                         <!-- ── Backend: herramientas de desarrollo, TODAS a la vista. El desplegable
@@ -545,31 +537,34 @@
                                 <TextBlock x:Name="HotkeyStatus" Foreground="#88FFFFFF" FontSize="10"
                                            TextWrapping="Wrap" Margin="0,2,0,0"/>
 
-                                <!-- Inspector visual de elementos (estilo TalkBack): dibuja recuadros sobre
-                                     la pantalla; al hacer clic, amarillo si coincide con lo que el asistente
-                                     tocaría, rojo doble si no. Ver UiInspector. -->
-                                <Button x:Name="InspectorBtn" Content="🔍 Inspector de elementos" Height="26" Margin="0,8,0,0"
-                                        Click="OnToggleInspector" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
-                                        ToolTip="Muestra recuadros sobre los elementos de la pantalla. Al hacer clic: amarillo si coincide con lo que el asistente tocaría, rojo (ambos) si no."/>
-
-                                <!-- El "location bar de Windows": ID de superficie actual, arriba a la derecha.
-                                     Mismo formato que source_url de los workflows (uia:// y web://). -->
-                                <Button x:Name="LocatorBtn" Content="📍 ID visible — clic para ocultar" Height="26" Margin="0,6,0,0"
-                                        Click="OnToggleLocator" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
-                                        ToolTip="Muestra dónde estás parado como URL: uia://app.exe/ventana o web://dominio/ruta. Es el ID con el que se cargan los workflows."/>
-
-                                <!-- QUÉ HE APRENDIDO AQUÍ, sin preguntárselo en voz. Los recuerdos de esta
-                                     pantalla, todos a la vez y con su texto encima de cada elemento.
-                                     Es la versión de un vistazo de map_recuerdos: aquella los cuenta de
-                                     uno en uno para que la voz vaya sincronizada, y esta los enseña
-                                     juntos para revisarlos con los ojos. Ver MostrarRecuerdos. -->
-                                <Button x:Name="RecuerdosBtn" Content="🧠 Ver recuerdos de aquí" Height="26" Margin="0,6,0,0"
-                                        Click="OnVerRecuerdos" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
-                                        ToolTip="Ilumina de golpe todo lo que te han enseñado en esta pantalla, con el texto del recuerdo sobre cada elemento. Escape lo apaga."/>
-
-                                <Button x:Name="LogsBtn" Content="📜 Logs" Height="26" Margin="0,6,0,0"
-                                        Click="OnOpenLogs" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
-                                        ToolTip="Registro (para diagnosticar errores)"/>
+                                <!-- Las herramientas, como iconos (misma regla que Acciones): el estado
+                                     de cada toggle lo dice el fondo, y el tooltip cuenta el detalle.
+                                     🔍 inspector (recuadros estilo TalkBack, ver UiInspector) ·
+                                     📍 el location bar de Windows (mismo formato que source_url) ·
+                                     🧠 los recuerdos de esta pantalla de golpe (ver MostrarRecuerdos) ·
+                                     🎬 qué se hace con el video al enseñar · 📜 el registro. -->
+                                <UniformGrid Columns="5" Margin="0,8,0,0">
+                                    <Button x:Name="InspectorBtn" Content="🔍" Style="{StaticResource BarBtn}"
+                                            Click="OnToggleInspector" Margin="0"
+                                            ToolTip="Inspector de elementos: recuadros sobre la pantalla. Al hacer clic: amarillo si coincide con lo que el asistente tocaría, rojo (ambos) si no."
+                                            AutomationProperties.Name="Inspector de elementos"/>
+                                    <Button x:Name="LocatorBtn" Content="📍" Style="{StaticResource BarBtn}"
+                                            Click="OnToggleLocator" Margin="0"
+                                            ToolTip="ID de superficie: muestra dónde estás parado como URL (uia://app.exe/ventana). Es el ID con el que se cargan los workflows."
+                                            AutomationProperties.Name="ID de superficie"/>
+                                    <Button x:Name="RecuerdosBtn" Content="🧠" Style="{StaticResource BarBtn}"
+                                            Click="OnVerRecuerdos" Margin="0"
+                                            ToolTip="Ilumina de golpe todo lo que te han enseñado en esta pantalla, con el texto del recuerdo sobre cada elemento. Escape lo apaga."
+                                            AutomationProperties.Name="Ver recuerdos de aquí"/>
+                                    <Button x:Name="VideoLlmToggle" Content="🎬" Style="{StaticResource BarBtn}"
+                                            Click="OnToggleVideoLlm" Margin="0"
+                                            ToolTip="Al enseñar: si está apagado, el video NO se manda al LLM (evita el timeout); igual se graba y lo ves en 🎞 Videos."
+                                            AutomationProperties.Name="Video a IA al enseñar"/>
+                                    <Button x:Name="LogsBtn" Content="📜" Style="{StaticResource BarBtn}"
+                                            Click="OnOpenLogs" Margin="0"
+                                            ToolTip="Registro (para diagnosticar errores)"
+                                            AutomationProperties.Name="Logs"/>
+                                </UniformGrid>
 
                                 <!-- Para soporte: saber qué versión tiene el cliente delante sin pedir nada. -->
                                 <TextBlock x:Name="VersionText" Text="" Foreground="#66FFFFFF" FontSize="10"
