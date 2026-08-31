@@ -55,15 +55,6 @@ public sealed class Config
     /// </summary>
     public string InstallId { get; set; } = "";
 
-    /// <summary>
-    /// Código de la consulta del portal (puente clínico). Se persiste para que el operador lo teclee
-    /// UNA VEZ por instalación y no en cada arranque: vivía solo en memoria y se perdía al cerrar Ü.
-    ///
-    /// Es un código de emparejamiento, no una credencial: quien lo tenga obtiene signos vitales, nunca
-    /// la nota ni el paciente. Por eso puede vivir en el config.json junto al resto de preferencias.
-    /// </summary>
-    public string ClinicalCode { get; set; } = "";
-
     /// <summary>¿Ya se capturó nombre+correo? Evita re-preguntar en cada arranque.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public bool Onboarded => !string.IsNullOrWhiteSpace(Email);
