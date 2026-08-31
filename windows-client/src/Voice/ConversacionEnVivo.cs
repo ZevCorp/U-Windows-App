@@ -66,6 +66,10 @@ public sealed class ConversacionEnVivo : IDisposable
     private readonly DetectorDeInterrupcion _interrupcion = new(240, 3.0, 500);
     private long _ultimaMedicionMs;
 
+    /// <summary>El barge-in por energía se enciende por máquina: aquí está muerto (medido).</summary>
+    private static bool DetectorPorEnergia =>
+        Environment.GetEnvironmentVariable("U_BARGEIN_ENERGIA") == "1";
+
     /// <summary>Hasta cuándo NO se reproduce lo que llegue: la interrupción manual tiró la cola,
     /// y el resto de la frase que el servidor ya tenía en vuelo no debe resucitarla.</summary>
     private long _silencioHastaMs;
@@ -935,9 +939,14 @@ public sealed class ConversacionEnVivo : IDisposable
             // medido en vivo por la sesión de la voz). Si el trozo ORIGINAL trae voz sostenida muy
             // por encima del eco aprendido: cola cortada, compuerta reabierta, y ESTE MISMO trozo
             // viaja intacto — la primera sílaba es justo lo que el VAD del servidor necesita oír.
+            // EL DETECTOR POR ENERGÍA, APAGADO POR DEFECTO EN ESTA MÁQUINA (2026-08-31): la
+            // sonda controlada midió que aquí la voz del usuario sola (máx 418) es ~3x MÁS DÉBIL
+            // en el micrófono que el eco de los altavoces (máx 1155) — el único capaz de cruzar
+            // el umbral sería el propio eco, o sea puro falso positivo. En hardware donde la
+            // energía sí separe, U_BARGEIN_ENERGIA=1 lo enciende. La interrupción aquí es Escape.
             bool cerrada = !ReferenceEquals(filtrado, pcm);
             double rms = cerrada ? Rms(pcm) : 0;
-            if (cerrada && _interrupcion.Oye(rms, sonando: true, ahora))
+            if (DetectorPorEnergia && cerrada && _interrupcion.Oye(rms, sonando: true, ahora))
             {
                 _audio.Callar();
                 _compuerta.Abrir();
