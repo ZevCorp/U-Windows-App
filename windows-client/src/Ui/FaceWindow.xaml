@@ -620,19 +620,6 @@
                                         Click="OnToggleLocator" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
                                         ToolTip="Muestra dónde estás parado como URL: uia://app.exe/ventana o web://dominio/ruta. Es el ID con el que se cargan los workflows."/>
 
-                                <!-- El grafo TOCABLE: la ventana actual expone sus elementos como aristas;
-                                     hover = iluminar el botón real, clic = pulsarlo de verdad y aprender la
-                                     arista con certeza absoluta. Ver GraphExplorerWindow. -->
-                                <Button x:Name="ExplorerBtn" Content="🕸 Explorar el grafo" Height="26" Margin="0,6,0,0"
-                                        Click="OnToggleExplorer" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
-                                        ToolTip="Las aristas de la pantalla actual, en vivo. Hover: ilumina el elemento real. Clic: lo pulsa de verdad y aprende la ruta."/>
-
-                                <!-- El grafo pre-aprendido, visible: pantallas como nodos, saltos como aristas,
-                                     y el nodo actual iluminado mientras navegas. Ver WorkflowMapWindow. -->
-                                <Button x:Name="MapBtn" Content="🗺 Mapa del grafo" Height="26" Margin="0,6,0,0"
-                                        Click="OnToggleMap" Style="{StaticResource MenuBtn}" Background="#33FFFFFF"
-                                        ToolTip="Dibuja los workflows como un grafo de pantallas. Dos workflows que pasan por la misma pantalla comparten nodo: ahí se concatenan."/>
-
                                 <!-- QUÉ HE APRENDIDO AQUÍ, sin preguntárselo en voz. Los recuerdos de esta
                                      pantalla, todos a la vez y con su texto encima de cada elemento.
                                      Es la versión de un vistazo de map_recuerdos: aquella los cuenta de

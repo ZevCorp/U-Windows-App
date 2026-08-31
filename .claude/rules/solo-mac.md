@@ -21,7 +21,7 @@ carpeta, se dice y se para — no se toca y se avisa después.
 ## Por qué, y no es orden por gusto
 
 1. **No se puede verificar.** La compuerta de Windows —`verificar.ps1`, `contrato-del-grafo.ps1`,
-   `ci-local.ps1`— es PowerShell + .NET sobre un escritorio con SAP GUI. En este Mac **no corre
+   `ci-terreno.ps1`— es PowerShell + .NET sobre un escritorio con SAP GUI. En este Mac **no corre
    ninguno de los cuatro niveles**. Un cambio en `windows-client/` desde aquí entra a ciegas, y eso
    es exactamente lo que la compuerta existe para impedir.
 2. **Es la zona de choque.** `CLAUDE.md` ya lo dice: la UI de `windows-client` es riesgo **alto** —

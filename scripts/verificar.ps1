@@ -1,7 +1,7 @@
 # LA COMPUERTA: lo que tiene que ser cierto para que algo entre a main.
 #
 #   .\scripts\verificar.ps1                       # niveles 1-2 (compila + contrato)
-#   .\scripts\verificar.ps1 -Escenarios           # + nivel 3: el CI local sobre el escritorio real
+#   .\scripts\verificar.ps1 -Escenarios           # + nivel 3: el CI del terreno sobre el escritorio real
 #   .\scripts\verificar.ps1 -PermitirPendientes   # verificacion de FASE INTERMEDIA, nunca para main
 #
 # Por que existe: main roto bloquea a los tres, y hasta hoy la unica forma de saber si una rama
@@ -20,7 +20,7 @@
 [CmdletBinding()]
 param(
   [switch]$PermitirPendientes,   # deja pasar promesas PENDIENTE: solo para verificar una fase
-  [switch]$Escenarios,           # incluye ci-local.ps1 (minutos, usa tu escritorio de verdad)
+  [switch]$Escenarios,           # incluye ci-terreno.ps1 (abre la app en tu escritorio)
   [switch]$SinCompilar,          # el contrato ya compila; salta el nivel 1 si acabas de hacerlo
   [string]$Salida = ""           # donde dejar la evidencia (por defecto out\evidencia.md)
 )
@@ -180,10 +180,10 @@ if (-not $Escenarios) {
 } elseif ($bloquea) {
   Anotar "Escenarios" "NO CORRIDO" "no se corrieron: algo anterior ya bloquea"
 } else {
-  Write-Host "`n3. escenarios (CI local; usa tu escritorio, no toques el raton)" -ForegroundColor Cyan
-  & $psExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\ci-local.ps1")
-  if ($LASTEXITCODE -eq 0) { Anotar "Escenarios" "OK" "ver salida de ci-local" }
-  else { Anotar "Escenarios" "FALLO" "ci-local.ps1 dice que la version no sostiene lo que ya funcionaba"; $bloquea = $true }
+  Write-Host "`n3. escenarios (CI del terreno; abre la app en tu escritorio)" -ForegroundColor Cyan
+  & $psExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\ci-terreno.ps1")
+  if ($LASTEXITCODE -eq 0) { Anotar "Escenarios" "OK" "ver salida de ci-terreno" }
+  else { Anotar "Escenarios" "FALLO" "ci-terreno.ps1 dice que el terreno no contesta como promete"; $bloquea = $true }
 }
 
 # --- Nivel 4: la corrida a mano -----------------------------------------------

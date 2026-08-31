@@ -16,7 +16,7 @@ qué promesa pasa a verde, no es una fase: es «trabajo».
 | Campo | Regla |
 |---|---|
 | **Promesa que pone verde** | exactamente una, por número. Dos promesas = dos fases |
-| **Qué toca** | los archivos, nombrados. Si aparece `SurfaceMap.cs`, la fase necesita al dueño (ver [`nucleo-congelado.md`](../../rules/nucleo-congelado.md)) |
+| **Qué toca** | los archivos, nombrados |
 | **Terminado** | «promesa N verde, 1..N-1 intactas». Nada de «funciona bien» |
 | **Tamaño** | medio día. Si no cabe, son dos fases |
 

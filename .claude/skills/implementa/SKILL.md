@@ -12,9 +12,6 @@ formas de fallo que este repo ya pagó, con fecha.
 
 ## 1. Situarse
 
-- ¿La fase toca `SurfaceMap.cs` o `tests\ContratoDelGrafo\`? Entonces **declara la intención** en
-  `C:\U-versiones\intencion.txt` (UTF-8, caduca a los 20 min) y avisa al usuario de que va a salir el
-  popup de contraseña. Ver [`nucleo-congelado.md`](../../rules/nucleo-congelado.md).
 - ¿El arreglo de fondo va en `windows-graph`? Casi siempre sí: es quien sabe de SAP. `windows-client`
   es presentación y diagnóstico.
 - `graphify query "<qué toco>"` antes que grep, si el grafo existe.

@@ -34,10 +34,10 @@ git config core.hooksPath .githooks
   teclado esté puesto, que SAP conteste, que el icono se mueva: eso solo lo dice la máquina. Se hace
   a mano y **se pega el log en el PR** — con horas, no con «probado».
 
-**Qué NO bloquea, y a propósito:** los escenarios (`ci-local.ps1`). Hay uno solo para toda la app y
-el 2026-08-21 se quedó trece minutos colgado. Un paso obligatorio que nadie corre no protege nada y
-enseña a saltarse el resto. Vuelve al portero cuando sea fiable — un juez solo puede bloquear cuando
-ya se ganó que le crean.
+**Qué NO bloquea, y a propósito:** los escenarios (`ci-terreno.ps1`, heredero del ci-local que se
+colgaba trece minutos). Un paso obligatorio que nadie corre no protege nada y enseña a saltarse el
+resto. Vuelve al portero cuando sea fiable — un juez solo puede bloquear cuando ya se ganó que le
+crean.
 
 ## Qué es
 
@@ -100,7 +100,6 @@ Las reglas completas viven en `.claude/rules/` y se cargan con el proyecto:
 @.claude/rules/patrones-de-desarrollo.md
 @.claude/rules/ramas-y-commits.md
 @.claude/rules/compuerta-a-main.md
-@.claude/rules/nucleo-congelado.md
 @.claude/rules/aviso-en-slack.md
 @.claude/rules/solo-mac.md
 
