@@ -65,6 +65,27 @@ public sealed class ConversacionEnVivo : IDisposable
     /// mataba todo disparo; 500 queda por encima del eco y por debajo de la voz.</summary>
     private readonly DetectorDeInterrupcion _interrupcion = new(240, 3.0, 500);
     private long _ultimaMedicionMs;
+
+    /// <summary>Hasta cuándo NO se reproduce lo que llegue: la interrupción manual tiró la cola,
+    /// y el resto de la frase que el servidor ya tenía en vuelo no debe resucitarla.</summary>
+    private long _silencioHastaMs;
+
+    /// <summary>
+    /// LA INTERRUPCIÓN A LA ORDEN (Escape, 2026-08-31). La vía por energía resultó ciega en este
+    /// hardware —el AGC de Windows comprime la entrada y la voz del usuario mide lo mismo que el
+    /// eco (rms ~220 vs base 88-219, medido)—, así que el gesto determinista es el que manda
+    /// mientras la fase 3 (AEC real) no exista: corta la cola YA, suprime el goteo restante y
+    /// reabre la compuerta para que el servidor oiga la primera sílaba de quien interrumpió.
+    /// </summary>
+    public bool Interrumpir()
+    {
+        if (!Viva || !_audio.Hablando) return false;
+        _audio.Callar();
+        _compuerta.Abrir();
+        _silencioHastaMs = Environment.TickCount64 + 1500;
+        LogBus.Log("voz-viva", "interrupción a la orden (Escape): corto mi voz y escucho");
+        return true;
+    }
     private long _tragadoAnunciado;
     private string _ultimoFalloEnvio = "";
 
@@ -1124,6 +1145,9 @@ public sealed class ConversacionEnVivo : IDisposable
         switch (hecho)
         {
             case Hecho.Suena s:
+                // Tras una interrupción manual, el resto de la frase que ya venía en vuelo
+                // no debe resucitar la voz: se tira hasta que pase la ventana o hables tú.
+                if (Environment.TickCount64 < _silencioHastaMs) break;
                 _audio.Reproducir(s.Pcm);
                 break;
 

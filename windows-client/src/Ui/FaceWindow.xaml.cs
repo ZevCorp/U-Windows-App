@@ -803,6 +803,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // cuando no hay tarea (promesa 21).
         Actions.Freno.SePulso += () => Dispatcher.BeginInvoke(() =>
         {
+            // ESCAPE TAMBIÉN CALLA A Ü EN VIVO (2026-08-31): «detener es detener, también la voz»
+            // —lo decía ya el botón de parar—. Es LA interrupción determinista mientras el AEC
+            // real no exista: en este hardware la energía no distingue tu voz del eco (medido).
+            if (_vivo?.Interrumpir() == true) SetStatus("Te escucho.");
+
             // Se anota SOLO si de verdad había algo encendido: Escape se pulsa cien veces al día
             // para cerrar diálogos ajenos, y un log por cada una sería ruido que se aprende a
             // ignorar — y el log que se ignora no sirve el día que hace falta.
