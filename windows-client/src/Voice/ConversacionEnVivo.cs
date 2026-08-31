@@ -364,9 +364,9 @@ public sealed class ConversacionEnVivo : IDisposable
             aquí», usa map_pointing_at ANTES que nada. No adivines de qué elemento habla por el
             nombre que creas haber entendido: él está apuntando, y apuntar es más exacto que
             describir. Te devuelve la puerta que hay bajo el cursor, con su nombre real, y la
-            ilumina. Con ese nombre ya puedes pulsarlo (map_take), corregir dónde vive en el menú
-            (map_set_level), o —lo más frecuente— aprender qué es si te lo van a explicar
-            (map_esto_es), que es donde SÍ llega una foto — ver más abajo.
+            ilumina. Con ese nombre ya puedes pulsarlo (map_take) o —lo más frecuente— aprender
+            qué es si te lo van a explicar (map_esto_es), que es donde SÍ llega una foto — ver
+            más abajo.
           · CUANDO NECESITES VER ALGO QUE NADIE TE HA SEÑALADO —el diseño de una pantalla, un color,
             un error pintado en rojo, si algo se parece a otra cosa— pide map_look. Te manda una foto
             de lo que hay AHORA. No la pidas para saber nombres o tipos: para eso está map_what_i_see,
@@ -532,21 +532,12 @@ public sealed class ConversacionEnVivo : IDisposable
         es exactamente lo contrario de lo que te piden. Cuando dudes de qué hay marcado, la
         respuesta de la última llamada te lo dice: léela antes de decidir.
 
-        LA JERARQUÍA SE PUEDE CORREGIR, y el usuario manda. El sistema deduce solo a qué nivel
-        pertenece cada cosa —nivel 1 es la navegación principal de la app, la que está siempre a la
-        vista— y acierta casi siempre. Cuando el usuario te diga que algo pertenece o no al nivel
-        principal, o te señale elementos, usa map_set_level: queda fijo para esa app y la deducción
-        ya no lo mueve. Si te señala varios seguidos, uno por uno, y confirma en voz cuáles quedaron.
-
-        ESTO ES ESTRUCTURA, NO SIGNIFICADO: map_set_level corrige DÓNDE vive algo en el menú. Si en
-        cambio te dicen QUÉ ES o PARA QUÉ SIRVE, eso es una lección — map_esto_es, no esto.
-
         Cómo trabajar:
         - Para ABRIR una aplicación, map_open_app. No busques su icono en el mapa: el mapa guarda
           pantallas, no accesos directos, y un icono aprendido en otra app no estará donde estás.
-        - Empieza por map_where_am_i si no sabes dónde estás.
-        - map_go_to lleva a una pantalla conocida; map_places dice cuáles hay; map_routes_from dice
-          qué se puede hacer desde donde estás.
+        - Empieza por map_where_am_i si no sabes dónde estás: te dice dónde estás y qué salidas
+          conoce el mapa desde ahí.
+        - map_go_to lleva a una pantalla conocida.
         - map_take pulsa una salida o ejecuta una acción; map_type escribe. Si te piden DOBLE CLIC
           —o si hay que ABRIR algo que con un clic solo se selecciona: un icono del escritorio, un
           archivo, una entrada de SAP Logon— es map_take con action=«doubleclick». No lo intentes
@@ -563,11 +554,6 @@ public sealed class ConversacionEnVivo : IDisposable
           rechazo con la respuesta dentro no es un callejón: es un paso más.
         - Si algo se bloquea, map_unblock. Si te ofrece una decisión de verdad, pregúntasela al
           usuario en voz: esa elección es suya.
-        - Si una app no está mapeada, map_learn_app la aprende sola.
-
-        TAREAS QUE YA SE SABEN HACER. Cuando la petición es una de estas, no la improvises paso a
-        paso: manda la secuencia entera de una vez con map_run. Una llamada en vez de treinta es la
-        diferencia entre verlo ocurrir y verlo pensar.
 
         EL EXPLORADOR DE ARCHIVOS ES DISTINTO A TODO LO DEMÁS: lo que hay NO es lo que se ve.
         En cualquier otra app te fías de la pantalla. Aquí no puedes: en la ventana caben veinte
@@ -588,40 +574,6 @@ public sealed class ConversacionEnVivo : IDisposable
         equivocarse de elemento. Ir pulsando carpeta por carpeta son varios saltos y cada uno puede
         fallar.
 
-        · «organiza la carpeta de pruebas» / «ordena los archivos por tipo» →
-          map_run con steps = el JSON de abajo, tal cual. Di en voz que vas a organizarlos por tipo
-          y que son tres grupos, y luego lánzalo.
-
-        [{"op":"go_to","surface":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Nuevo","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Carpeta","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"type","text":"Docs","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"factura-enero","action":"click","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"factura-febrero","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"contrato-servicios","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Cortar","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"uia:name=Docs;ct=ListItem","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Pegar","at":"uia://explorer.exe/docs"},
-         {"op":"go_to","surface":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Nuevo","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Carpeta","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"type","text":"Fotos","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"logo-empresa","action":"click","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"captura-error","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"foto-equipo","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Cortar","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"uia:name=Fotos;ct=ListItem","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Pegar","at":"uia://explorer.exe/fotos"},
-         {"op":"go_to","surface":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Nuevo","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Carpeta","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"type","text":"Datos","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"presupuesto-2026.xlsx","action":"click","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"inventario.xlsx","action":"addselect","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Cortar","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"uia:name=Datos;ct=ListItem","at":"uia://explorer.exe/u-prueba-organizar"},
-         {"op":"take","exit":"Pegar","at":"uia://explorer.exe/datos"}]
-
         DI LO QUE VAS A HACER, Y LUEGO HAZLO. Antes de cada llamada, una frase corta en voz —«voy a
         Descargas», «busco el informe»— y a continuación la herramienta. No al revés y no en
         silencio: quien te habla está mirando la pantalla, y unos segundos sin que digas nada no se
@@ -631,8 +583,7 @@ public sealed class ConversacionEnVivo : IDisposable
         Y UNA COSA CADA VEZ mientras se conversa. Si te dicen «ve a descargas», ve y cuenta qué hay;
         si luego te dicen «no, mejor documentos», ve allí y vuelve a contar. No te guardes los pasos
         para hacerlos todos juntos al final: quien habla quiere corregirte a mitad de camino, y no
-        puede corregir lo que todavía no ha visto. map_run es para las tareas largas que ya te han
-        pedido enteras de una vez, no para una conversación.
+        puede corregir lo que todavía no ha visto.
 
         Si una herramienta responde que no actuó, dilo en voz alta y explica por qué. No lo maquilles
         ni sigas como si hubiera funcionado.
@@ -655,14 +606,10 @@ public sealed class ConversacionEnVivo : IDisposable
     {
         Fn("map_where_am_i", "Dice en qué pantalla estás ahora mismo y qué salidas conoce el mapa desde ahí. "
             + "Si hay un diálogo delante, lo describe en vez de fingir que es un lugar."),
-        Fn("map_places", "Lista las pantallas que el mapa ya conoce.",
-            ("app", "Filtra por aplicación, por ejemplo «explorer». Vacío = todas.")),
-        Fn("map_routes_from", "Qué se puede hacer desde una pantalla: a dónde se puede ir y qué acciones hay.",
-            ("surface", "La pantalla, por ejemplo «uia://explorer.exe/documentos». Vacío = donde estés.")),
         Fn("map_go_to", "Va a una pantalla, comprobando cada tramo. TAMBIÉN es la forma de ir a una "
             + "PÁGINA WEB: con surface=«web://github.com» abre o activa su pestaña, aunque no estuviera "
             + "abierta y aunque el mapa no conozca ningún camino hasta ella.",
-            ("surface", "La pantalla de destino: la que devuelve map_places, o «web://dominio» para una web.")),
+            ("surface", "La pantalla de destino: una que map_where_am_i haya nombrado, o «web://dominio» para una web.")),
         Fn("map_take", "Pulsa CUALQUIER cosa que esté en la pantalla: entrar en una carpeta, «Nuevo», "
             + "«Cortar», «Pegar», una barra de búsqueda, una casilla… No hace falta que el mapa la "
             + "conozca: si no la tiene, la busca en la pantalla de ahora, la pulsa y la aprende.",
@@ -718,26 +665,6 @@ public sealed class ConversacionEnVivo : IDisposable
                     + "señala el 1 y di «¿este?», señala el 2 y di «¿o este?». Enseñar cuál es cada "
                     + "uno es más rápido y más claro que leerle dos selectores en voz alta, y hace "
                     + "que se vea que estás mirando su pantalla de verdad.")),
-        Fn("map_set_level", "Corrige a mano a qué NIVEL pertenece una salida, para toda la app y de "
-            + "forma permanente. Nivel 1 = navegación principal. IMPORTANTE: «quítalo del primer "
-            + "nivel», «esto no va ahí» o «no es del menú principal» se hace con level = -1 (SOLTAR), "
-            + "nunca inventando otro nivel: un nivel declarado CLAVA el elemento en esa fila y la "
-            + "jerarquía real ya no puede colocarlo — quitar no es mover, es soltar. Declara un nivel "
-            + "concreto solo cuando el usuario lo diga con número o señale dónde va.",
-            ("exit", "La salida por su nombre tal como se ve («Notas») o su selector. VARIAS a la vez: "
-                   + "sus nombres separados por comas —«Escritorio, Descargas, Notas, Música»—, que es "
-                   + "como se corrige una barra entera sin repetir la llamada veinte veces. Te dirá "
-                   + "cuáles quedaron fijados y cuáles no encontró."),
-            ("level", "El nivel: 1 para la navegación principal, 2 o más para lo de dentro, -1 para soltar."),
-            ("cromo", "«true» si es navegación PERSISTENTE de su nivel (se marca en azul): una barra "
-                    + "que sigue ahí mientras te mueves dentro de esa sección. El cromo puede vivir en "
-                    + "cualquier nivel — una web puede tener barra de cromo en el nivel 1 Y otra dentro "
-                    + "de cada sección (nivel 2). Vacío = nivel 1 es cromo y los demás no."),
-            ("app", "La app; vacío = donde estés ahora.")),
-        Fn("map_run", "Ejecuta una SECUENCIA de pasos de una sola vez, sin volver a consultarte entre "
-            + "uno y otro. Es la forma rápida: úsala para las tareas que ya sabes hacer enteras.",
-            ("steps", "JSON: lista de pasos. Cada uno {\"op\":\"go_to|take|type|unblock\", …} con los "
-                    + "mismos argumentos que las herramientas sueltas.")),
         Fn("map_recuerdos", "«¿QUÉ SABES DE ESTA PANTALLA?» / «¿qué te he enseñado aquí?» / «¿qué "
             + "recuerdas?». Te devuelve los recuerdos de aquí DE UNO EN UNO e ilumina en pantalla el "
             + "elemento de cada uno. EL ORDEN ES: la llamas → te da UNO → lo CUENTAS EN VOZ, entero "
@@ -786,9 +713,6 @@ public sealed class ConversacionEnVivo : IDisposable
             + "Canva— NO uses esto: usa map_go_to con surface=«web://github.com». Pedir una web por aquí "
             + "hace que se busque un programa que no existe.",
             ("app", "El proceso, por ejemplo «explorer», «notepad», «chrome».")),
-        Fn("map_learn_app", "Recorre una aplicación entera y aprende sus pantallas. Tarda; úsala solo si hace "
-            + "falta conocer una app que el mapa no tiene, no para abrirla.",
-            ("app", "El proceso, por ejemplo «explorer» o «notepad».")),
 
         // EL EXPLORADOR DE ARCHIVOS SE PREGUNTA AL DISCO. En cualquier otra app, lo que hay es lo
         // que se ve; aquí no. UIA solo ve lo que cabe en pantalla —una carpeta de 300 archivos son
@@ -876,8 +800,6 @@ public sealed class ConversacionEnVivo : IDisposable
             "map_what_i_see" => "mirando la pantalla…",
             "map_show" or "map_pointing_at" => "señalando…",
             "map_look" => "mirando la pantalla…",
-            "map_run" => "haciendo la secuencia…",
-            "map_learn_app" => $"aprendiendo {V("app")}… (esto tarda)",
             "self_mute" => "callándome…",
             "self_hide" => "ocultándome…",
             "self_close" => "cerrándome…",

@@ -84,10 +84,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>La lista de lo que va pasando. Ver <see cref="PanelDeAcciones"/>.</summary>
     private PanelDeAcciones? _acciones;
 
-    private WorkflowMapWindow? _map;
     // El mapa base del computador (la capa gris): se alimenta SIEMPRE del caudal del locator,
     // esté o no abierta la visualización — el terreno se acumula mientras el usuario vive su día.
-    private SurfaceMap? _surfaceMap;
     private ClickWatcher? _clickWatcher;
     private WorkflowMcpRunner? _workflowRunner;
 
@@ -227,7 +225,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _badge = new LocatorBadge();
         _badge.Show();
         _locator = new SurfaceLocator();
-        _surfaceMap = SurfaceMap.Load();
         // El vigilante de clics: sin él las aristas del terreno solo dicen que dos pantallas
         // conectan; con él dicen CÓMO pasar de una a otra, que es lo que permite navegar sin
         // haber grabado un workflow. Siempre activo, porque el terreno se aprende viviendo.
@@ -346,26 +343,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             }
         };
         _clickWatcher.Start();
-        _surfaceMap.Clicks = _clickWatcher;
 
-        // Modo prueba: con U_AUTO_EXPLORER=1 el explorador del grafo se abre solo al arrancar, para
-        // que una instancia recién compilada quede lista para lanzar un mapeo sin tocar la carita.
-        // Lo pone dev-paralelo.ps1; en la app del usuario esa variable no existe y no cambia nada.
-        if (Environment.GetEnvironmentVariable("U_AUTO_EXPLORER") == "1")
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                try { OnToggleExplorer(this, new RoutedEventArgs()); } catch { }
-            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         Closed += (_, __) =>
         {
-            _surfaceMap?.Save();
             _clickWatcher?.Dispose(); // un hook huérfano ralentiza el ratón de TODA la máquina
         };
         _locator.Changed += loc => Dispatcher.Invoke(() =>
         {
             _badge?.SetText(loc.Id);
-            _surfaceMap?.Observe(loc.Id); // el terreno se aprende navegando, sin enseñar nada
-            _map?.SetCurrent(loc.Id);     // y el mapa ilumina el nodo donde estás parado
             // LOS RECUERDOS SIGUEN A LA PANTALLA. Con la vista encendida, moverse a otro sitio
             // dejaba los carteles del anterior flotando encima: texto de una pantalla sobre otra,
             // que es peor que no enseñar nada (2026-08-24, pedido por el usuario). Es una VISTA de
@@ -394,14 +379,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         clinicalTimer.Start();
 
         var mcp = new LocalMcp(_uia);
-        // El terreno aprendido, al alcance del cerebro: puede consultar dónde está, qué pantallas
-        // conoce y recorrer rutas que nadie enseñó como workflow.
-        if (_surfaceMap != null)
-            // Lectura INMEDIATA de la superficie, no el valor cacheado: navegar verificando cada
-            // salto contra un dato que se refresca cada 800 ms convertía una ruta de cinco tramos
-            // en varios segundos de espera por algo que ya había pasado.
+        // El terreno, al alcance del cerebro. Desde la gran limpieza (2026-08-30) las
+        // herramientas del mapa hablan SOLO con el núcleo por sus delegados.
         {
-            mcp.Map = new SurfaceMapTools(_surfaceMap, () => _locator?.DondeEstoy());
+            mcp.Map = new SurfaceMapTools(() => _locator?.DondeEstoy());
             // Se guarda para el panel: «ver recuerdos de aquí» pregunta por lo aprendido en esta
             // pantalla, y quien lo sabe es este mismo objeto — no una copia con su propio lector.
             _mapaDeMano = mcp.Map;
@@ -793,10 +774,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             Closed += (_, __) => _vivo?.Dispose();
         }
-        // Sonda de desarrollo: permite invocar las MISMAS herramientas MCP desde fuera para
-        // comprobar si el terreno es navegable, sin depender de que el modelo decida usarlas.
-        // Solo con U_MCP_PROBE=1; en la app del usuario no arranca.
-        McpDevProbe.StartIfEnabled(mcp);
 
         // EL SERVIDOR MCP DE VERDAD (F2 del plan de batch): la puerta por la que el Agent SDK —o
         // cualquier cliente MCP genérico— conduce el terreno. El catálogo es EL MISMO de la voz,
@@ -3111,73 +3088,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         return n;
     }
 
-    /// <summary>
-    /// Muestra u oculta el mapa del grafo. Se reconstruye al abrir —no en cada tick— porque los
-    /// workflows cambian al grabar, no al navegar; y la iluminación del nodo actual sí es en vivo,
-    /// por el mismo evento del locator que alimenta el badge.
-    /// </summary>
-    private async void OnToggleMap(object sender, RoutedEventArgs e)
-    {
-        if (_map != null)
-        {
-            _map.Close();
-            _map = null;
-            MapBtn.Content = "🗺 Mapa del grafo";
-            return;
-        }
-
-        if (!_graphConfig.IsConfigured)
-        {
-            SetStatus("Configura Graph (URL + API key) para ver el mapa.");
-            return;
-        }
-
-        _map = new WorkflowMapWindow(_surfaceMap);
-        _map.Show();
-        MapBtn.Content = "🗺 Mapa: cargando…";
-        _directGraph ??= new GraphClient(_graphConfig);
-        try
-        {
-            await _map.LoadAsync(_directGraph, CancellationToken.None);
-            MapBtn.Content = "🗺 Mapa: visible — clic para ocultar";
-            _map.SetCurrent(_locator?.DondeEstoy()?.Id ?? "");
-        }
-        catch (Exception ex)
-        {
-            LogBus.Log("mapa", $"no se pudo construir el grafo: {ex.Message}");
-            SetStatus($"El mapa no cargó: {ex.Message}");
-            _map.Close();
-            _map = null;
-            MapBtn.Content = "🗺 Mapa del grafo";
-        }
-    }
-
-    private GraphExplorerWindow? _explorer;
-
-    private void OnToggleExplorer(object sender, RoutedEventArgs e)
-    {
-        if (_explorer != null)
-        {
-            _explorer.Close();
-            _explorer = null;
-            ExplorerBtn.Content = "🕸 Explorar el grafo";
-            return;
-        }
-        if (_surfaceMap == null) { SetStatus("El mapa del terreno no está cargado."); return; }
-        // Lectura inmediata también para el MAPEO: el recorrido confirma cada transición esperando
-        // dos lecturas estables de la superficie, y contra un valor que se refresca cada 800 ms eso
-        // son ~1,6 s de reloj por arista, más que el clic y la carga de la pantalla juntos.
-        _explorer = new GraphExplorerWindow(_surfaceMap, () => _locator?.DondeEstoy());
-        // LA VOZ SE PRESTA, NO SE DUPLICA. El explorador narra el mapeo con la MISMA conversación
-        // en vivo que atiende al micrófono: darle una suya sería una segunda conexión a Gemini
-        // hablando por la misma boca, y las dos se pisarían.
-        if (_vivo != null) _explorer.Narrador = new Voice.NarradorDelArquitecto(_vivo);
-        _explorer.MapaVivo = _mapaVivo;   // para poder vaciar el núcleo desde su botón
-        _explorer.Closed += (_, __) => { _explorer = null; Dispatcher.Invoke(() => ExplorerBtn.Content = "🕸 Explorar el grafo"); };
-        _explorer.Show();
-        ExplorerBtn.Content = "🕸 Explorador: visible — clic para cerrar";
-    }
-
     private void OnToggleStepMode(object sender, RoutedEventArgs e)
     {
         _stepMode = !_stepMode;
@@ -3577,8 +3487,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         if ((_inspector?.Active ?? false) != _fullTooltips) OnToggleInspector(sender, e);
         if (_idALaVista != _fullTooltips) OnToggleLocator(sender, e);
-        if ((_explorer != null) != _fullTooltips) OnToggleExplorer(sender, e);
-        if ((_map != null) != _fullTooltips) OnToggleMap(sender, e);
 
         FullTooltipsBtn.Content = _fullTooltips ? "👁 Full Tooltips: TODO a la vista" : "👁 Full Tooltips";
         SetStatus(_fullTooltips
