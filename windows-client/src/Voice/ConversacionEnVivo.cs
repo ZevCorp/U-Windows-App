@@ -60,8 +60,10 @@ public sealed class ConversacionEnVivo : IDisposable
     private readonly CompuertaDeEco _compuerta;
 
     /// <summary>El barge-in de la compuerta (spec 002, fase 4): voz sostenida por encima del eco
-    /// aprendido corta la cola y reabre la compuerta. Sostén 240 ms · 3× la línea base · piso 1500.</summary>
-    private readonly DetectorDeInterrupcion _interrupcion = new(240, 3.0, 1500);
+    /// aprendido corta la cola y reabre la compuerta. Sostén 240 ms · 3× la línea base · piso 500 —
+    /// medido contra ESTA sala (2026-08-31): el eco real ronda base 60-250 y el piso de 1500
+    /// mataba todo disparo; 500 queda por encima del eco y por debajo de la voz.</summary>
+    private readonly DetectorDeInterrupcion _interrupcion = new(240, 3.0, 500);
     private long _ultimaMedicionMs;
     private long _tragadoAnunciado;
     private string _ultimoFalloEnvio = "";
@@ -930,7 +932,7 @@ public sealed class ConversacionEnVivo : IDisposable
             {
                 _ultimaMedicionMs = ahora;
                 LogBus.Log("voz-viva", $"medición barge-in: rms={rms:F0} · base={_interrupcion.LineaBase:F0} "
-                    + $"· umbral={Math.Max(1500, _interrupcion.LineaBase * 3.0):F0}");
+                    + $"· umbral={Math.Max(500, _interrupcion.LineaBase * 3.0):F0}");
             }
 
             // Lo tragado deja rastro (patrón nº10), pero por episodio y no por trozo: la línea
