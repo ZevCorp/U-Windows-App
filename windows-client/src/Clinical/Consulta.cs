@@ -57,7 +57,7 @@ public sealed class Consulta
 {
     private readonly SesionMiracle _sesion;
     private readonly ClinicaClient _clinica;
-    private readonly Func<CancellationToken, Task> _abrirMicrofono;
+    private readonly Func<CancellationToken, Task<bool>> _abrirMicrofono;
     private readonly Func<Task<string>> _pararYRecogerLoDicho;
 
     /// <summary>
@@ -68,7 +68,7 @@ public sealed class Consulta
     private readonly Func<string, NotaClinica, string, Task<bool>>? _espejar;
 
     public Consulta(SesionMiracle sesion, ClinicaClient clinica,
-        Func<CancellationToken, Task> abrirMicrofono,
+        Func<CancellationToken, Task<bool>> abrirMicrofono,
         Func<Task<string>> pararYRecogerLoDicho,
         Func<string, NotaClinica, string, Task<bool>>? espejar = null)
     {
@@ -136,7 +136,16 @@ public sealed class Consulta
                 return false;
             }
 
-            await _abrirMicrofono(ct);
+            // SE MIRA SI ABRIÓ, y esta línea es la promesa 95. El 2026-09-01 el stream contestó
+            // «Unable to connect to the remote server», esto siguió adelante, y la consulta se
+            // declaró GRABANDO: alguien le habló diecisiete segundos a una app que no escuchaba.
+            if (!await _abrirMicrofono(ct))
+            {
+                Fallar("no se pudo abrir el dictado: no hubo conexión con el servicio de "
+                     + "transcripción. Comprueba la red y vuelve a intentarlo", "");
+                return false;
+            }
+
             Motivo = "";
             CodigoDeFallo = "";
             Nota = null;
@@ -176,7 +185,11 @@ public sealed class Consulta
         // que no entregó nada.
         if (string.IsNullOrWhiteSpace(dicho))
         {
-            Fallar("no se oyó nada que transcribir: comprueba el micrófono y vuelve a grabar", "");
+            // Llegar aquí significa que el dictado SÍ conectó (si no, no se habría llegado a
+            // grabar) y aun así no entregó texto. Ahora sí es del lado del audio, y por eso este
+            // mensaje puede nombrar el micrófono sin mandar a nadie al sitio equivocado.
+            Fallar("el dictado estaba conectado pero no llegó ni una palabra: revisa que el "
+                 + "micrófono correcto esté seleccionado en Windows", "");
             return;
         }
 

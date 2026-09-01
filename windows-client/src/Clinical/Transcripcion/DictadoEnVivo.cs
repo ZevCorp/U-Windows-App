@@ -83,9 +83,17 @@ public sealed class DictadoEnVivo : IDisposable
 
     // ── arrancar y parar ─────────────────────────────────────────────────────
 
-    public async Task ArrancarAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Abre el micrófono y el stream. DEVUELVE SI DE VERDAD ARRANCÓ.
+    /// </summary>
+    /// <remarks>
+    /// Antes no devolvía nada, y por eso el 2026-09-01 la consulta pudo declararse «grabando» con
+    /// el stream sin conectar: quien llamaba no tenía forma de enterarse. Un arranque que puede
+    /// fallar y no lo dice obliga a suponer, y suponer aquí cuesta una consulta entera.
+    /// </remarks>
+    public async Task<bool> ArrancarAsync(CancellationToken ct = default)
     {
-        if (Activo) return;
+        if (Activo) return true;
         Dicho.Limpiar();
 
         SesionDeStream sesion;
@@ -93,7 +101,7 @@ public sealed class DictadoEnVivo : IDisposable
         catch (Exception e)
         {
             Avisar($"no pude pedir la sesión de dictado: {e.Message}");
-            return;
+            return false;
         }
 
         _lector = sesion.Lector;
@@ -117,7 +125,7 @@ public sealed class DictadoEnVivo : IDisposable
         {
             Avisar($"no pude abrir el stream de dictado: {e.Message}");
             Limpiar();
-            return;
+            return false;
         }
 
         Activo = true;
@@ -127,6 +135,7 @@ public sealed class DictadoEnVivo : IDisposable
 
         LogBus.Log("dictado", $"escuchando · {sesion.Proveedor} · {sesion.Modelo} · {sesion.Idioma}");
         Cambio?.Invoke(true);
+        return true;
     }
 
     /// <summary>Para de dictar y devuelve TODO lo dicho.</summary>

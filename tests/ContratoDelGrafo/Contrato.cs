@@ -205,6 +205,19 @@ internal static class Contrato
         Prueba("93. una consulta grabada en Windows se VE en el portal: el espejo se escribe, no se supone", ElEspejoSeEscribe);
         Prueba("94. elegir plantilla deja de ser un paso: la consulta arranca sola", NadieEligePlantilla);
 
+        // ── EL MICRÓFONO QUE NO ABRIÓ (2026-09-01, visto en el log del usuario) ──
+        //
+        //   [15:51:47] clinica: encounter 76cc7aec… created
+        //   [15:51:48] dictado: no pude abrir el stream de dictado: Unable to connect…
+        //   [15:51:48] consulta: grabando · encounter 76cc7aec…          ← y era MENTIRA
+        //   [15:52:05] consulta: falló · no se oyó nada que transcribir: comprueba el micrófono
+        //
+        // El stream nunca conectó y la consulta se declaró GRABANDO igual: el usuario habló
+        // diecisiete segundos a una app que no escuchaba, y al parar se le mandó a revisar el
+        // MICRÓFONO — que no tenía nada que ver. Es el patrón nº10 (un paso no ejecutado deja
+        // rastro) y el aprendizaje nº2 (un mensaje que no distingue sus causas) a la vez.
+        Prueba("95. si el micrófono no llegó a abrir, la consulta NO dice que está grabando", SinMicrofonoNoSeGraba);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -2237,8 +2250,10 @@ internal static class Contrato
 
         bool microfonoAbierto = false;
         var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
-            (Func<CancellationToken, Task>)(_ => { microfonoAbierto = true; return Task.CompletedTask; }),
-            (Func<Task<string>>)(() => Task.FromResult("")))!;
+            (Func<CancellationToken, Task<bool>>)(_ => { microfonoAbierto = true; return Task.FromResult(true); }),
+            (Func<Task<string>>)(() => Task.FromResult("")),
+            // El espejo va explícito aunque sea opcional: Activator no rellena los que faltan.
+            null)!;
 
         bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
             .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
@@ -2581,8 +2596,9 @@ internal static class Contrato
 
         var clinica = Activator.CreateInstance(tClinica, "https://graph.test", sesion, backend)!;
         var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
-            (Func<CancellationToken, Task>)(_ => Task.CompletedTask),
-            (Func<Task<string>>)(() => Task.FromResult("El paciente refiere cefalea.")))!;
+            (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(true)),
+            (Func<Task<string>>)(() => Task.FromResult("El paciente refiere cefalea.")),
+            null)!;
 
         bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
             .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
@@ -2783,6 +2799,82 @@ internal static class Contrato
              || todo.Contains("estructura", StringComparison.OrdinalIgnoreCase),
             "y la instrucción le pide al organizador que ESTRUCTURE lo que se dijo, que es lo más "
             + "cerca de una plantilla dinámica que se puede llegar sin tocar Graph");
+    }
+
+    /// <remarks>
+    /// LA SEGUNDA MITAD ES LA QUE DUELE: que el motivo distinga «el dictado no conectó» de «el
+    /// micrófono no entregó audio». Son dos averías con dos arreglos opuestos —una es la red, la
+    /// otra es el aparato— y hasta hoy las dos salían como «comprueba el micrófono», que manda a
+    /// desenchufar cables cuando lo que falla es el wifi.
+    /// </remarks>
+    private static void SinMicrofonoNoSeGraba()
+    {
+        var tConsulta = Capacidad("U.WindowsClient.Clinical.Consulta");
+        var tClinica = Capacidad("U.WindowsClient.Clinical.ClinicaClient");
+        var tSesion = Capacidad("U.WindowsClient.Cuenta.SesionMiracle");
+        if (tConsulta == null || tClinica == null || tSesion == null)
+        {
+            Pendiente("Clinical.Consulta", "95");
+            return;
+        }
+
+        // El micrófono se pide como una función que CONTESTA si abrió. Si siguiera siendo una que
+        // no devuelve nada, esta promesa no se podría ni escribir: es la firma la que hace posible
+        // enterarse.
+        var abrir = tConsulta.GetConstructors()[0].GetParameters()
+            .FirstOrDefault(p => p.Name != null && p.Name.Contains("icrofono"));
+        if (abrir == null || abrir.ParameterType != typeof(Func<CancellationToken, Task<bool>>))
+        {
+            Pendiente("Consulta(abrirMicrofono que CONTESTE si abrió)", "95");
+            return;
+        }
+
+        var backend = new BackendDeMentira(req =>
+            req.RequestUri!.AbsolutePath.Contains("/auth/v1/token")
+                ? (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "unico", 3600))
+                : (HttpStatusCode.Created, "{\"encounter_id\":\"enc-1\",\"status\":\"created\"}"));
+
+        var sesion = Activator.CreateInstance(tSesion,
+            "https://supabase.test", "publishable", backend,
+            (Func<DateTimeOffset>)(() => DateTimeOffset.UtcNow))!;
+        ((Task<bool>)tSesion.GetMethod("EntrarAsync")!
+            .Invoke(sesion, new object?[] { "medico@miracle.app", "clave", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        var clinica = Activator.CreateInstance(tClinica, "https://graph.test", sesion, backend)!;
+
+        // El micrófono dice que NO abrió — exactamente lo que pasó con «Unable to connect».
+        var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
+            (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(false)),
+            (Func<Task<string>>)(() => Task.FromResult("")),
+            null)!;
+
+        bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
+            .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        string estado = tConsulta.GetProperty("Estado")!.GetValue(consulta)!.ToString()!;
+        string motivo = (string)tConsulta.GetProperty("Motivo")!.GetValue(consulta)!;
+
+        Debe(!arranco, "si el micrófono no abrió, empezar contesta que NO");
+        Debe(estado != "Grabando",
+            $"y sobre todo la consulta NO se declara grabando; dice «{estado}». Decir que graba sin "
+            + "grabar es dejar que alguien le hable diecisiete segundos a nada");
+        Debe(motivo.Length > 0 && !motivo.Contains("micrófono", StringComparison.OrdinalIgnoreCase),
+            $"el motivo NO manda a revisar el micrófono cuando lo que falló fue el dictado: "
+            + $"son dos averías con arreglos opuestos. Dice: «{motivo}»");
+
+        // Y con el micrófono abriendo bien, sí se graba: una promesa que solo sabe decir que no
+        // pasaría igual con un EmpezarAsync que devolviera false siempre.
+        var buena = Activator.CreateInstance(tConsulta, sesion, clinica,
+            (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(true)),
+            (Func<Task<string>>)(() => Task.FromResult("algo dicho")),
+            null)!;
+        Debe(((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
+                 .Invoke(buena, new object?[] { "plantilla-x", CancellationToken.None })!)
+                 .GetAwaiter().GetResult()
+             && tConsulta.GetProperty("Estado")!.GetValue(buena)!.ToString() == "Grabando",
+            "con el micrófono abierto de verdad, la consulta sí graba");
     }
 
     private static void Prueba(string nombre, Action cuerpo)
