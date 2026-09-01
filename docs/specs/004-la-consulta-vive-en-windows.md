@@ -307,6 +307,23 @@ para el puente con el portal clínico.
 
 ## Hallazgos
 
+0. **`update_own_profile` estaba ROTO en producción, y no era nuestro** (2026-09-01). Al construir
+   el guardado del nombre, la RPC contestó `400 · 42703 · column "updated_at" of relation
+   "profiles" does not exist`. La función escribía `updated_at = now()` y esa columna **nunca
+   existió**: contado con grep sobre `supabase/migrations`, se referencia en **un solo sitio** —esa
+   función— y ninguna migración la crea.
+
+   No bloqueaba solo a Windows: la pantalla de Configuración de cuenta del **portal web** usa la
+   misma RPC, así que ningún médico podía editar su perfil desde ningún sitio. Arreglado quitando
+   la línea (nadie lee ese dato; crear una columna para que una función deje de fallar sería
+   inventar esquema para tapar un error de escritura) y verificado extremo a extremo con el JWT de
+   `medico@miracle.app`: `HTTP 204`, el nombre cambió, se revirtió, y la especialidad y el país
+   quedaron intactos — que es justo lo que la promesa 100 protege.
+
+   **Queda fuera de este repo**: el arreglo se aplicó a la base de Supabase, pero la migración
+   versionada vive en `Pagina-web-clientes-final/supabase/migrations/`. Ahí hay que replicarlo o el
+   siguiente `db reset` lo revierte.
+
 > Se rellena durante la implementación. Lo de aquí salió de la medición del 2026-09-01, **antes** de
 > escribir código — que es justo para lo que sirve esta etapa.
 

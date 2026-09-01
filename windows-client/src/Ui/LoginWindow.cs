@@ -42,7 +42,13 @@ public sealed class LoginWindow : Window
     /// <summary>En modo alta se pide el nombre y el boton crea la cuenta.</summary>
     private bool _creando;
 
-    public LoginWindow(SesionMiracle sesion)
+    /// <param name="sesion">La sesión en la que entrar o darse de alta.</param>
+    /// <param name="empezarCreando">
+    /// Abre directo en el modo de crear cuenta. Lo usa el selector de cuenta de la consulta cuando
+    /// se pulsa «Agregar cuenta»: no tiene sentido aterrizar en «Entrar» para tener que cambiar de
+    /// modo a mano justo después de haber pedido lo contrario.
+    /// </param>
+    public LoginWindow(SesionMiracle sesion, bool empezarCreando = false)
     {
         _sesion = sesion;
 
@@ -233,7 +239,7 @@ public sealed class LoginWindow : Window
             if (e.Key == Key.Escape) { DialogResult = false; Close(); }
         };
 
-        Modo(creando: false);
+        Modo(creando: empezarCreando);
     }
 
     // ── los dos modos ────────────────────────────────────────────────────────

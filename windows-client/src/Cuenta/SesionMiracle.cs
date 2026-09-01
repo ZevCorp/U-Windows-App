@@ -394,6 +394,112 @@ public sealed class SesionMiracle
     }
 
     /// <summary>
+    /// Guarda el nombre del médico en su perfil. Es el único camino de ESCRITURA de esta clase —
+    /// todo lo demás lee.
+    /// </summary>
+    /// <remarks>
+    /// SE LEE EL PERFIL ACTUAL ANTES DE GUARDAR, y no por prudencia: la RPC
+    /// <c>update_own_profile</c> reescribe los siete campos a la vez sin <c>COALESCE</c> con lo que
+    /// ya había (promesa 100). Sin este paso, guardar el nombre de alguien que ya tuviera su
+    /// especialidad o su documento llenos se los borraría — un dato que el portal también lee.
+    /// </remarks>
+    public async Task<(bool Ok, string Mensaje)> GuardarNombreAsync(string nombreNuevo,
+        CancellationToken ct = default)
+    {
+        string limpio = (nombreNuevo ?? "").Trim();
+        // El mismo mínimo que la RPC, comprobado ANTES de salir a la red: el error de Postgres
+        // llega en un JSON que hay que parsear, y «al menos 3 caracteres» se ve solo.
+        if (limpio.Length < 3) return (false, "El nombre es demasiado corto.");
+        if (limpio.Length > 120) return (false, "El nombre no puede pasar de 120 caracteres.");
+        if (_credencial == null) return (false, "No hay sesión activa.");
+
+        try
+        {
+            string token = await TokenVigenteAsync(ct);
+            if (token.Length == 0) return (false, "No hay sesión activa.");
+
+            var actual = await LeerPerfilActualAsync(token, ct);
+            string cuerpo = PerfilRpc.CuerpoDeGuardarNombre(limpio, actual);
+
+            using var req = new HttpRequestMessage(HttpMethod.Post,
+                $"{_urlSupabase}/rest/v1/rpc/update_own_profile")
+            { Content = new StringContent(cuerpo, Encoding.UTF8, "application/json") };
+            req.Headers.Add("apikey", _clavePublicable);
+            req.Headers.Add("Authorization", $"Bearer {token}");
+
+            using var res = await _http.SendAsync(req, ct);
+            if (!res.IsSuccessStatusCode)
+            {
+                string cuerpoError = await res.Content.ReadAsStringAsync(ct);
+                LogBus.Log("cuenta", $"guardar nombre → HTTP {(int)res.StatusCode}");
+                return (false, MensajeDeGuardarNombre((int)res.StatusCode, cuerpoError));
+            }
+
+            _credencial = _credencial! with { Nombre = limpio };
+            Guardar();
+            LogBus.Log("cuenta", "nombre guardado en el perfil");
+            return (true, "");
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("cuenta", $"guardar nombre falló: {e.GetType().Name}: {e.Message}");
+            return (false, "No se pudo guardar. Revisa la conexión e inténtalo de nuevo.");
+        }
+    }
+
+    /// <summary>Los seis campos del perfil profesional que NO son el nombre, tal como están hoy.</summary>
+    private async Task<PerfilProfesional> LeerPerfilActualAsync(string token, CancellationToken ct)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get,
+                $"{_urlSupabase}/rest/v1/profiles?id=eq.{Uri.EscapeDataString(_credencial!.UsuarioId)}"
+                + "&select=identification_number,professional_registration,specialty_code,"
+                + "specialty_name,practice_country,practice_city");
+            req.Headers.Add("apikey", _clavePublicable);
+            req.Headers.Add("Authorization", $"Bearer {token}");
+
+            using var res = await _http.SendAsync(req, ct);
+            if (!res.IsSuccessStatusCode) return PerfilProfesional.Vacio;
+
+            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
+            if (doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0)
+                return PerfilProfesional.Vacio;
+
+            var f = doc.RootElement[0];
+            return new PerfilProfesional(
+                Texto(f, "identification_number"), Texto(f, "professional_registration"),
+                Texto(f, "specialty_code"), Texto(f, "specialty_name"),
+                Texto(f, "practice_country"), Texto(f, "practice_city"));
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("cuenta", $"no se pudo leer el perfil antes de guardar: {e.Message}");
+            return PerfilProfesional.Vacio;
+        }
+    }
+
+    /// <summary>
+    /// El mensaje del RPC ya viene en castellano y listo para mostrar («El nombre es demasiado
+    /// corto.»): PostgREST lo entrega en <c>message</c>. Se usa tal cual antes que inventar uno
+    /// propio que diría lo mismo peor.
+    /// </summary>
+    private static string MensajeDeGuardarNombre(int codigo, string cuerpo)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(cuerpo);
+            string msg = Texto(doc.RootElement, "message");
+            if (msg.Length > 0) return msg;
+        }
+        catch (JsonException) { /* el cuerpo no es JSON: se cae a los genéricos de abajo */ }
+
+        if (codigo is 401 or 403) return "No tienes permiso para editar este perfil.";
+        if (codigo >= 500) return "Miracle no está respondiendo ahora mismo. Inténtalo en un minuto.";
+        return "No se pudo guardar el nombre.";
+    }
+
+    /// <summary>
     /// Trae el nombre real desde `profiles`. Best-effort: no tenerlo no impide trabajar.
     /// </summary>
     /// <remarks>

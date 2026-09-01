@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -39,8 +40,13 @@ namespace U.WindowsClient.Ui;
 ///
 /// NADIE ELIGE PLANTILLA (promesa 94): se resuelve sola con <see cref="PlantillaAbierta"/>.
 ///
+/// EL NOMBRE DEL MÉDICO ES EL SELECTOR DE CUENTA: un clic despliega cambiar de cuenta, agregar una
+/// nueva, o cerrar sesión. Las tres cierran la sesión actual, y eso se bloquea mientras se está
+/// grabando (<see cref="Consulta.PuedeCambiarDeUsuario"/>, promesa 99) — cerrar sesión con el
+/// micrófono abierto dejaría un dictado huérfano que nadie para ni guarda.
+///
 /// ESTA VENTANA NO DECIDE NADA. Lo que pesa vive en clases que el contrato juzga sin pantalla:
-/// <see cref="SesionMiracle"/> (84-86, 90), <see cref="Consulta"/> (84, 91),
+/// <see cref="SesionMiracle"/> (84-86, 90), <see cref="Consulta"/> (84, 91, 99),
 /// <see cref="DictadoEnVivo"/> (88, 89), <see cref="EspejoDeConsulta"/> (93) y
 /// <see cref="PlantillaAbierta"/> (94).
 /// </remarks>
@@ -53,7 +59,9 @@ public sealed class ConsultaWindow : Window
     private readonly Consulta _consulta;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
+    private readonly Button _quienBoton;
     private readonly TextBlock _quien;
+    private readonly Popup _menuCuenta;
     private readonly Button _tabConsultas;
     private readonly Button _tabNota;
     private readonly ScrollViewer _superficie;
@@ -134,6 +142,9 @@ public sealed class ConsultaWindow : Window
         botonera.Children.Add(cerrar);
         DockPanel.SetDock(botonera, Dock.Right);
 
+        // EL NOMBRE ES EL SELECTOR DE CUENTA. Un clic despliega cambiar de cuenta, agregar una
+        // nueva, o cerrar sesión — el mismo patrón que cualquier app con varias cuentas, y evita
+        // una segunda ventana de «gestionar cuenta» para tres acciones que caben en un menú.
         _quien = new TextBlock
         {
             Foreground = Estudio.Tinta,
@@ -142,8 +153,47 @@ public sealed class ConsultaWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
+        var chevron = new TextBlock
+        {
+            Text = "",   // ChevronDown de Segoe MDL2: el mismo lenguaje que minimizar/cerrar
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 8,
+            Foreground = Estudio.TintaTenue,
+            Margin = new Thickness(7, 3, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var contenidoQuien = new StackPanel { Orientation = Orientation.Horizontal };
+        contenidoQuien.Children.Add(_quien);
+        contenidoQuien.Children.Add(chevron);
+
+        _quienBoton = new Button
+        {
+            Content = contenidoQuien,
+            // Sin esto, el DockPanel estiraría el botón a todo el ancho que sobra y su plantilla
+            // (que centra el contenido) dejaría el nombre flotando en medio de la barra en vez de
+            // pegado al borde izquierdo, que es donde estaba siempre.
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(6, 4, 8, 4),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(Estudio.RadioChico),
+        };
+        _quienBoton.MouseEnter += (_, __) => _quienBoton.Background = Estudio.SuperficieSuave;
+        _quienBoton.MouseLeave += (_, __) => _quienBoton.Background = Brushes.Transparent;
+        _quienBoton.Click += (_, __) => AlternarMenuCuenta();
+
+        _menuCuenta = new Popup
+        {
+            PlacementTarget = _quienBoton,
+            Placement = PlacementMode.Bottom,
+            StaysOpen = false,
+            AllowsTransparency = true,
+            PopupAnimation = PopupAnimation.Fade,
+        };
+
         cabecera.Children.Add(botonera);
-        cabecera.Children.Add(_quien);
+        cabecera.Children.Add(_quienBoton);
         Grid.SetRow(cabecera, 0);
         raiz.Children.Add(cabecera);
 
@@ -341,6 +391,184 @@ public sealed class ConsultaWindow : Window
             Estado("Sin conexión con Miracle. Comprueba la red y vuelve a pulsar grabar.");
             LogBus.Log("consulta-ui", $"plantilla: {e.GetType().Name}: {e.Message}");
         }
+    }
+
+    // ── la cuenta ────────────────────────────────────────────────────────────
+
+    private void AlternarMenuCuenta()
+    {
+        if (_menuCuenta.IsOpen) { _menuCuenta.IsOpen = false; return; }
+        // Se reconstruye en cada apertura y no una sola vez al crear la ventana: el estado que
+        // decide qué se puede pulsar —si se está grabando— cambia mientras la ventana vive, y un
+        // menú fijo mostraría opciones activas que la promesa 99 ya no permite tocar.
+        _menuCuenta.Child = ConstruirMenuCuenta();
+        _menuCuenta.IsOpen = true;
+    }
+
+    private UIElement ConstruirMenuCuenta()
+    {
+        bool puede = _consulta.PuedeCambiarDeUsuario;
+
+        var tarjeta = Estudio.Tarjeta(16);
+        tarjeta.Padding = new Thickness(6);
+
+        var pila = new StackPanel { Width = 224 };
+
+        pila.Children.Add(ConstruirNombreEditable());
+        pila.Children.Add(SeparadorMenu());
+
+        string motivoBloqueo = "Termina la consulta antes de cambiar de cuenta.";
+        pila.Children.Add(ItemDeMenu("Cambiar de cuenta", puede,
+            () => _ = CambiarCuentaAsync(creando: false), motivoBloqueo));
+        pila.Children.Add(ItemDeMenu("Agregar cuenta", puede,
+            () => _ = CambiarCuentaAsync(creando: true), motivoBloqueo));
+        pila.Children.Add(SeparadorMenu());
+        pila.Children.Add(ItemDeMenu("Cerrar sesión", puede, CerrarSesion, motivoBloqueo));
+
+        tarjeta.Child = pila;
+        // Margen extra para que la sombra del menú no se recorte contra el borde del Popup: un
+        // Popup se dimensiona justo al contenido, y sin este aire el desenfoque queda cortado.
+        var elevado = Estudio.Elevar(tarjeta, Estudio.Sombra2);
+        elevado.Margin = new Thickness(12);
+        return elevado;
+    }
+
+    /// <summary>
+    /// El nombre, editable. Es la respuesta a «no guardo mi nombre, quedo con mi correo»: una
+    /// cuenta que se creó sin nombre —o que nunca lo tuvo— antes no tenía NINGÚN sitio donde
+    /// ponérselo. Se guarda al pulsar Enter o al salir del campo; nunca al escribir letra a letra,
+    /// que gastaría una llamada de red por tecla.
+    /// </summary>
+    private UIElement ConstruirNombreEditable()
+    {
+        var cabecera = new StackPanel { Margin = new Thickness(10, 8, 10, 8) };
+
+        var caja = new TextBox
+        {
+            Text = _sesion.MedicoNombre,
+            Foreground = Estudio.Tinta, FontSize = 13.5, FontWeight = FontWeights.SemiBold,
+            Background = Brushes.Transparent,
+            // El filete de abajo es la única pista de que esto se puede tocar: un TextBox sin
+            // ningún borde no se distingue de una etiqueta.
+            BorderThickness = new Thickness(0, 0, 0, 1), BorderBrush = Estudio.Borde,
+            Padding = new Thickness(0, 0, 0, 3),
+            CaretBrush = Estudio.Acento, SelectionBrush = Estudio.Acento,
+        };
+
+        var estado = new TextBlock
+        {
+            FontSize = 10.5, Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed,
+        };
+
+        bool guardando = false;
+        async Task GuardarSiCambioAsync()
+        {
+            string nuevo = caja.Text.Trim();
+            // Comparar contra MedicoNombre y no contra el valor con el que se abrió la caja: tras
+            // guardar bien, MedicoNombre ya es el nuevo, así que un segundo disparo (Enter y luego
+            // LostFocus) no vuelve a gastar una llamada.
+            if (guardando || nuevo.Length == 0 || nuevo == _sesion.MedicoNombre) return;
+            guardando = true;
+            estado.Text = "Guardando…"; estado.Foreground = Estudio.TintaTenue;
+            estado.Visibility = Visibility.Visible;
+            try
+            {
+                var (ok, mensaje) = await _sesion.GuardarNombreAsync(nuevo);
+                if (!caja.IsLoaded) return;   // el menú se cerró mientras se guardaba
+                if (ok)
+                {
+                    estado.Visibility = Visibility.Collapsed;
+                    _quien.Text = _sesion.MedicoNombre;   // refresca la cabecera de la ventana
+                }
+                else
+                {
+                    estado.Text = mensaje; estado.Foreground = Estudio.Alerta;
+                }
+            }
+            finally { guardando = false; }
+        }
+
+        caja.KeyDown += async (_, e) =>
+        {
+            if (e.Key != Key.Enter) return;
+            e.Handled = true;
+            await GuardarSiCambioAsync();
+        };
+        caja.LostFocus += async (_, __) => await GuardarSiCambioAsync();
+
+        cabecera.Children.Add(caja);
+        cabecera.Children.Add(new TextBlock
+        {
+            Text = _sesion.MedicoEmail, Foreground = Estudio.TintaTenue, FontSize = 11.5,
+            Margin = new Thickness(0, 6, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        cabecera.Children.Add(estado);
+        return cabecera;
+    }
+
+    private UIElement ItemDeMenu(string texto, bool activo, Action accion, string motivoInactivo)
+    {
+        var t = new TextBlock
+        {
+            Text = texto, FontSize = 13,
+            Foreground = activo ? Estudio.Tinta : Estudio.TintaTenue,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var b = new Border
+        {
+            CornerRadius = new CornerRadius(Estudio.RadioChico),
+            Padding = new Thickness(10, 9, 10, 9),
+            Background = Brushes.Transparent,
+            Child = t,
+            Cursor = activo ? Cursors.Hand : Cursors.Arrow,
+            ToolTip = activo ? null : motivoInactivo,
+        };
+        if (activo)
+        {
+            b.MouseEnter += (_, __) => b.Background = Estudio.SuperficieSuave;
+            b.MouseLeave += (_, __) => b.Background = Brushes.Transparent;
+            b.MouseLeftButtonUp += (_, __) => { _menuCuenta.IsOpen = false; accion(); };
+        }
+        return b;
+    }
+
+    private static Border SeparadorMenu() => new()
+    {
+        Height = 1, Background = Estudio.Borde, Margin = new Thickness(4, 6, 4, 6),
+    };
+
+    /// <summary>
+    /// Cambia de cuenta o agrega una nueva: cierra la sesión actual y abre el login. Sin sesión
+    /// nueva, la consulta se cierra entera (promesa 84: sin médico no hay consulta).
+    /// </summary>
+    private async Task CambiarCuentaAsync(bool creando)
+    {
+        // Guardia por si el menú quedó abierto de antes de que se empezara a grabar: el clic pasó
+        // por ItemDeMenu con `activo` ya calculado, pero comprobar aquí también no cuesta nada y
+        // es la misma promesa 99 aplicada dos veces por seguridad, no una segunda opinión.
+        if (!_consulta.PuedeCambiarDeUsuario) return;
+
+        _consulta.Cerrar();
+        _sesion.Salir();
+
+        var login = new LoginWindow(_sesion, empezarCreando: creando) { Owner = this };
+        if (login.ShowDialog() != true) { Close(); return; }
+
+        _plantillaId = "";
+        _plantillaNombre = "";
+        _nota.Children.Clear();
+        _vivo.Text = "";
+        _vacioNota.Visibility = Visibility.Visible;
+        _listaConsultas.Children.Clear();
+        Mostrar(nota: true);
+        await ArrancarAsync();
+    }
+
+    private void CerrarSesion()
+    {
+        if (!_consulta.PuedeCambiarDeUsuario) return;
+        _sesion.Salir();
+        Close();
     }
 
     // ── las pestañas ─────────────────────────────────────────────────────────
