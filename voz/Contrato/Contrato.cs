@@ -80,6 +80,7 @@ internal static class Contrato
         Prueba("19. sin referencia pendiente sale SILENCIO del tamaño del marco: el cancelador nunca espera", SinReferenciaSaleSilencio);
         Prueba("20. vaciar la referencia tira lo pendiente: lo que ya no va a sonar no puede restarse", VaciarTiraLoPendiente);
         Prueba("21. sin camino de eco declarado (auriculares) la compuerta se aparta, y forzarla gana igual: la garantía solo se enciende", SinCaminoDeEcoAbreLaCompuerta);
+        Prueba("22. por defecto el micrófono viaja SIEMPRE (la experiencia OpenAI de fábrica); solo U_SIN_ECO=0 devuelve la compuerta", ElDefaultEsLaExperienciaOpenAI);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -615,6 +616,26 @@ internal static class Contrato
     /// promete: los dos encendidos a la vez harían el AEC inútil (la compuerta calla todo igual), y
     /// los dos apagados son exactamente el bug del que viene la spec 002.
     /// </remarks>
+    /// <remarks>
+    /// La decisión del dueño (2026-08-31): interrumpir con la voz como en la documentación de
+    /// OpenAI, sin capas en medio — y con altavoces, audífonos. El default tiene que decirlo el
+    /// CÓDIGO y no una variable que alguien recuerde poner: sin declarar nada, el micrófono viaja.
+    /// </remarks>
+    private static void ElDefaultEsLaExperienciaOpenAI()
+    {
+        var t = Realtime.GetType("Voz.Realtime.ModoDeCaptura");
+        var m = t?.GetMethod("SinEcoDeclarado");
+        if (t == null || m == null) { Pendiente("ModoDeCaptura.SinEcoDeclarado", "3"); return; }
+
+        bool SinEco(string? valor) => (bool)m.Invoke(null, new object?[] { valor })!;
+
+        Debe(SinEco(null), "sin declarar nada, el micrófono viaja: el default es el de la doc de OpenAI");
+        Debe(SinEco(""), "la variable vacía tampoco cambia el default");
+        Debe(SinEco("1"), "declararlo explícito también vale");
+        Debe(!SinEco("0"), "y U_SIN_ECO=0 devuelve la compuerta a quien use parlantes");
+        Debe(!SinEco("false"), "en cualquiera de sus grafías");
+    }
+
     private static void SinCaminoDeEcoAbreLaCompuerta()
     {
         var t = Realtime.GetType("Voz.Realtime.ModoDeCaptura");

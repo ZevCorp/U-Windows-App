@@ -104,12 +104,16 @@ public sealed class ConversacionEnVivo : IDisposable
 
     /// <summary>La perilla de esta máquina: fuerza la compuerta aunque haya AEC. Solo puede
     /// ENCENDER la garantía, jamás apagarla.</summary>
-    /// <summary>AURICULARES: el usuario declara que el altavoz no llega al micrófono. Sin camino
-    /// de eco no hay nada que tragar — la compuerta se aparta y la interrupción por voz natural
-    /// vuelve entera (promesa 21). U_SIN_ECO=1 mientras no haya botón en el panel.</summary>
+    /// <summary>
+    /// LA EXPERIENCIA POR DEFECTO ES LA DE OPENAI TAL CUAL (decidido por el dueño, 2026-08-31):
+    /// el micrófono viaja SIEMPRE y el semantic_vad del servidor decide los turnos — interrumpir
+    /// con la voz funciona como en la documentación. El precio conocido: con altavoces Ü puede
+    /// oírse a sí misma; la respuesta del dueño fue «si me toca usarla con audífonos, la uso así».
+    /// U_SIN_ECO=0 devuelve la compuerta para quien quiera parlantes sin auto-interrupciones
+    /// (y U_COMPUERTA_ECO=1 la fuerza gane quien gane, promesa 21).
+    /// </summary>
     private static bool SinCaminoDeEco =>
-        (Environment.GetEnvironmentVariable("U_SIN_ECO") ?? "").Trim().ToLowerInvariant()
-            is "1" or "true" or "si" or "sí";
+        ModoDeCaptura.SinEcoDeclarado(Environment.GetEnvironmentVariable("U_SIN_ECO"));
 
     private static bool CompuertaForzada =>
         (Environment.GetEnvironmentVariable("U_COMPUERTA_ECO") ?? "").Trim().ToLowerInvariant()
@@ -813,7 +817,11 @@ public sealed class ConversacionEnVivo : IDisposable
         // accionan OTRAS aplicaciones; estas te accionan a TI— y por eso las ejecuta quien tiene la
         // ventana, no SurfaceMapTools (2026-08-15, pedido por el usuario: poder callarte, ocultarte
         // y cerrarte con la voz).
-        Fn("self_mute", "Te callas AHORA MISMO: cortas lo que estés diciendo y dejas de hablar hasta "
+        Fn("self_mute", "SOLO si te lo piden con TODAS LAS LETRAS («cállate», «silencio», «no hables "
+            + "más»). Si lo que oíste es confuso, corto o no lo entendiste, NO la llames: preguntá "
+            + "en voz qué necesitan. Silenciarte por una transcripción dudosa deja al usuario sin "
+            + "asistente y sin saber por qué (2026-08-31: pasó con una frase mal transcrita). "
+            + "Te callas AHORA MISMO: cortas lo que estés diciendo y dejas de hablar hasta "
             + "que alguien te reactive a mano. Úsala en cuanto oigas «cállate», «silencio», «no "
             + "hables más» — no seguir hablando DESPUÉS de la orden, cortar EN ESE INSTANTE."),
         Fn("self_hide", "Te ocultas de la pantalla. Sigues escuchando y con la conversación viva; solo "

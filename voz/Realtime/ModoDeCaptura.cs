@@ -18,4 +18,13 @@ public static class ModoDeCaptura
     /// el barge-in por voz natural vuelve entero, vía el VAD del servidor (promesa 21).</param>
     public static bool CompuertaActiva(bool aecDelSistema, bool forzada, bool sinCaminoDeEco = false)
         => forzada || (!aecDelSistema && !sinCaminoDeEco);
+
+    /// <summary>
+    /// EL DEFAULT ES LA EXPERIENCIA OPENAI DE FÁBRICA (decisión del dueño, 2026-08-31): sin
+    /// declarar nada, el micrófono viaja siempre y el semantic_vad del servidor decide los
+    /// turnos — interrumpir con la voz funciona como en la documentación, y con altavoces se
+    /// asume el eco o se usan audífonos. Solo U_SIN_ECO=0 devuelve la compuerta (promesa 22).
+    /// </summary>
+    public static bool SinEcoDeclarado(string? valorDeEntorno)
+        => (valorDeEntorno ?? "").Trim().ToLowerInvariant() is not ("0" or "false" or "no");
 }
