@@ -11,5 +11,11 @@ namespace Voz.Realtime;
 /// </summary>
 public static class ModoDeCaptura
 {
-    public static bool CompuertaActiva(bool aecDelSistema, bool forzada) => forzada || !aecDelSistema;
+    /// <param name="aecDelSistema">El eco se está RESTANDO de verdad (AEC medido y activo).</param>
+    /// <param name="forzada">La perilla que solo ENCIENDE la garantía, jamás la apaga.</param>
+    /// <param name="sinCaminoDeEco">Declarado por quien puede saberlo: AURICULARES puestos — el
+    /// altavoz no llega al micrófono y no hay eco que tragar. Con esto la compuerta se aparta y
+    /// el barge-in por voz natural vuelve entero, vía el VAD del servidor (promesa 21).</param>
+    public static bool CompuertaActiva(bool aecDelSistema, bool forzada, bool sinCaminoDeEco = false)
+        => forzada || (!aecDelSistema && !sinCaminoDeEco);
 }
