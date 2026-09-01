@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    LA SONDA DE FASE 0: una consola que se lleva al hospital y contesta, con horas y no con
+    teoría, las preguntas caras del medidor ANTES de escribir la rama SAP fina (aprendizaje nº13:
+    pregúntale a la API antes de creerle al código). Es desechable pero se conserva como
+    herramienta: la próxima vez que SAP cambie de versión, se vuelve a correr.
+
+    Referencia a windows-graph para usar el mismo SapGuiSurface que la App — si la sonda dice que
+    dos engines conviven, la App puede confiar en ello. net8.0-windows por el COM.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>medidor-sonda</AssemblyName>
+    <RootNamespace>Medidor.Sonda</RootNamespace>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\windows-graph\GraphWorkflows.csproj" />
+    <ProjectReference Include="..\Dominio\Dominio.csproj" />
+  </ItemGroup>
+
+</Project>

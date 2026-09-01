@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    UMedidor.exe — el medidor del trabajo clínico. Proceso SEPARADO de U.exe a propósito (decisión
+    del dueño, 2026-09-01): U.exe es el asistente; esto es el instrumento del estudio. Conviven en
+    el mismo PC y solo comparten la capa SAP (referencia a windows-graph, sin tocarla).
+
+    Sin XAML: las dos ventanas que hay se construyen en código. No es estilo — es que este
+    proyecto se desarrolla y compila también desde Linux (EnableWindowsTargeting) donde el juez del
+    dominio corre en CI, y el markup de WPF es una superficie de fallo de build que no compra nada
+    para una app de bandeja.
+
+    WinForms además de WPF: solo por NotifyIcon (el icono de bandeja). La exigencia viene de la
+    spec anterior (medir-el-terreno.md): «un indicador permanente y un atajo para parar no son
+    cortesía» — sin bandeja visible esto sería una cámara oculta.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>UMedidor</AssemblyName>
+    <RootNamespace>Medidor.App</RootNamespace>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+
+    <!-- API key de Graph embebida SOLO en builds de distribución, mismo mecanismo que
+         GraphWorkflows (GraphDefaultApiKey): el CI la inyecta con
+         -p:MedidorDefaultApiKey=miracle_xxx; VACÍA por defecto → cero secretos en el repo.
+         Sobreescribible en la máquina (medidor.json / env MEDIDOR_API_KEY). -->
+    <MedidorDefaultApiKey Condition="'$(MedidorDefaultApiKey)' == ''"></MedidorDefaultApiKey>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="MedidorDefaultApiKey" Value="$(MedidorDefaultApiKey)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dominio\Dominio.csproj" />
+    <ProjectReference Include="..\..\windows-graph\GraphWorkflows.csproj" />
+  </ItemGroup>
+
+</Project>

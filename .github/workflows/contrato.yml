@@ -137,3 +137,54 @@ jobs:
             exit 1
           }
           Write-Host "VOZ INTEGRA: $total/$total promesas."
+
+  # El contrato del MEDIDOR corre en Linux a proposito: su Dominio es net8.0 puro (sin WPF, sin
+  # COM, sin pantalla), asi que un runner sin escritorio lo juzga entero y en segundos. La App del
+  # medidor (WPF + la referencia COM a windows-graph) NO se compila aqui — es nivel 4, sobre el PC
+  # real, como el resto de windows-client. Aqui se juzga lo juzgable sin pantalla, que es el punto
+  # de haber partido Dominio y App.
+  medidor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Juzgar el contrato del medidor
+        id: medidor
+        shell: bash
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/medidor.txt"
+          if dotnet run -c Release --project medidor/Contrato 2>&1 | tee "$log"; then
+            codigo=0
+          else
+            codigo=$?
+          fi
+
+          total=$(grep -cE '^\s*Prueba\("' medidor/Contrato/Contrato.cs)
+          # Los PENDIENTES de fases futuras (19-21 hoy son de fase 2) se cuentan aparte para no
+          # confundir "aun sin codigo" con "incumplida" — aprendizaje n.10.
+          pend=$(grep -c 'aún sin implementar' "$log" || true)
+          verdes=$(( total - codigo )); [ $verdes -lt 0 ] && verdes=0
+
+          {
+            echo '## Contrato del medidor'
+            echo ''
+            echo "| Promesas | Verdes | Incumplidas |"
+            echo "|---|---|---|"
+            echo "| $total | $verdes | $codigo |"
+            echo ''
+            echo '```'
+            cat "$log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$codigo" -ne 0 ]; then
+            echo "::error::MEDIDOR ROTO: $codigo promesa(s) incumplida(s). No puede entrar a main."
+            exit 1
+          fi
+          echo "MEDIDOR INTEGRO: $total/$total promesas."

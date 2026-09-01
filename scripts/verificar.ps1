@@ -172,6 +172,27 @@ if ($fallosVoz -eq 0) {
   $bloquea = $true
 }
 
+# --- Nivel 2c: el contrato del medidor -----------------------------------------
+# El Dominio del medidor es net8.0 puro (sin WPF, sin COM): su contrato corre en cualquier maquina,
+# aqui y en la nube. Se juzga con `dotnet run`, no con un .ps1 dedicado, porque no necesita compilar
+# el nucleo antes. La App del medidor (WPF + COM) es nivel 4, sobre el PC real.
+Write-Host "`n2c. el contrato del medidor" -ForegroundColor Cyan
+$logMed = Join-Path $env:TEMP "u-verificar-medidor.txt"
+& dotnet run -c Release --project (Join-Path $repo "medidor\Contrato") *>&1 | Tee-Object -FilePath $logMed
+$fallosMed = $LASTEXITCODE
+$totalMed = @(Select-String -Path (Join-Path $repo "medidor\Contrato\Contrato.cs") -Pattern '^\s*Prueba\("').Count
+$pendMed  = @(Select-String -Path $logMed -SimpleMatch "aún sin implementar").Count
+
+if ($fallosMed -eq 0) {
+  Anotar "Contrato medidor" "OK" "$totalMed/$totalMed promesas, 0 pendientes"
+} elseif ($PermitirPendientes -and $fallosMed -eq $pendMed) {
+  Anotar "Contrato medidor" "NO CORRIDO" "$($totalMed - $fallosMed)/$totalMed verdes, $pendMed PENDIENTES declaradas (fase intermedia: NO puede ir a main)"
+} else {
+  $regreMed = $fallosMed - $pendMed
+  Anotar "Contrato medidor" "FALLO" "$($totalMed - $fallosMed)/$totalMed verdes; $regreMed incumplida(s) con codigo y $pendMed pendiente(s)"
+  $bloquea = $true
+}
+
 # --- Nivel 3: los escenarios sobre el terreno real -----------------------------
 # El contrato vigila las promesas; esto vigila el RESULTADO sobre el escritorio de verdad. Ninguno
 # sustituye al otro, y por eso este es local: un runner en la nube no tiene este escritorio.
