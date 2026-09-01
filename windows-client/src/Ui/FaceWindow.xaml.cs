@@ -110,6 +110,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     public FaceWindow()
     {
         InitializeComponent();
+        // La misma barra de scroll rehecha que las ventanas claras, en su variante para suelo
+        // oscuro: un pulgar redondeado sin flechas ni carril. La de Windows por defecto era lo
+        // único de este panel que seguía pareciendo de otra aplicación.
+        this.PonerLaBarraDeScroll(sobreOscuro: true);
         // Aquí y no al crear la WorkflowTeachSession: esa se construye en CADA pulsación de «Enseñar»
         // y acumularía una suscripción por intento, multiplicando cada línea en el registro.
         _teachSapSurface.Diagnostic += (_, msg) => LogBus.Log("teach-sap", msg);

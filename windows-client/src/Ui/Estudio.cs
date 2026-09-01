@@ -87,6 +87,54 @@ public static class Estudio
 
     public static readonly Brush AlertaSuave = Congelado(0xFD, 0xEC, 0xEF);
 
+    // ── la rampa FLOTANTE ────────────────────────────────────────────────────
+    //
+    // LA CARITA Y SU PANEL SE QUEDAN OSCUROS, y no es una excepción al sistema: es una superficie
+    // distinta del sistema. Un sistema de diseño no es un color, es un conjunto de reglas —radios,
+    // escala de sombra, jerarquía de texto, semántica del color— y esas se comparten enteras. Lo
+    // que cambia es el suelo, porque el trabajo es otro:
+    //
+    //   · La ventana de consulta es un DOCUMENTO que el médico mira. Vive sola en su rectángulo y
+    //     puede permitirse el papel blanco.
+    //   · La carita es una HERRAMIENTA que flota ENCIMA de lo que el médico está mirando —SAP,
+    //     Chrome, Excel—, con Topmost y sin barra de tareas. Sobre el azul claro de SAP, un panel
+    //     blanco se confunde con la aplicación de debajo; el fondo oscuro es justo lo que lo hace
+    //     leerse como «capa del sistema» y no como contenido.
+    //
+    // Y hay una razón medida además de la estética: los colores de estado de UiPalette están
+    // calibrados para fondo oscuro. El ámbar de «atención» (#FFA51F) da 1,9:1 sobre blanco — no es
+    // que se lea mal, es que no se ve. Cambiar el suelo obligaría a re-inventar los cuatro colores
+    // que UiPalette existe precisamente para que no se re-inventen.
+
+    /// <summary>El suelo de un panel flotante. Casi opaco: deja intuir lo de debajo sin competir.</summary>
+    public static readonly Brush FondoFlotante = CongeladoAlfa(0xF2, 0x0F, 0x13, 0x1C);
+
+    /// <summary>Lo elevado sobre un panel flotante: campos, botones activos.</summary>
+    public static readonly Brush SuperficieFlotante = CongeladoAlfa(0x1A, 0xFF, 0xFF, 0xFF);
+
+    /// <summary>Texto principal sobre suelo flotante.</summary>
+    public static readonly Brush TintaFlotante = CongeladoAlfa(0xF2, 0xEA, 0xF2, 0xFF);
+
+    /// <summary>Texto secundario sobre suelo flotante.</summary>
+    public static readonly Brush TintaFlotanteMedia = CongeladoAlfa(0x99, 0xEA, 0xF2, 0xFF);
+
+    /// <summary>El filete de un panel flotante: lo que lo despega de lo que hay detrás.</summary>
+    public static readonly Brush BordeFlotante = CongeladoAlfa(0x38, 0xFF, 0xFF, 0xFF);
+
+    // ── radios ───────────────────────────────────────────────────────────────
+    //
+    // Una escala corta y compartida. Antes había 4, 6, 7, 9, 10, 14 y 18 repartidos por el XAML sin
+    // criterio: siete radios son siete decisiones que nadie tomó.
+
+    /// <summary>Lo pequeño: chips, botones de icono.</summary>
+    public const double RadioChico = 10;
+
+    /// <summary>Lo mediano: botones de texto, campos.</summary>
+    public const double RadioMedio = 14;
+
+    /// <summary>Un panel.</summary>
+    public const double RadioPanel = 20;
+
     // ── sombra ───────────────────────────────────────────────────────────────
 
     /// <summary>Nivel 1: apenas despegado. Botones y pestañas en reposo.</summary>
@@ -270,9 +318,15 @@ public static class Estudio
     /// Los <c>RepeatButton</c> siguen ahí con opacidad cero, no borrados: son los que hacen que
     /// pulsar el carril avance una página. Quitarlos habría cambiado el comportamiento por pintar.
     /// </remarks>
-    public static Style BarraDeScroll()
+    public static Style BarraDeScroll(bool sobreOscuro = false)
     {
-        const string xaml = """
+        // El pulgar tiene que contrastar con SU suelo, no con uno imaginario: gris sobre claro,
+        // blanco translúcido sobre el panel flotante. Es el mismo pulgar con el mismo gesto.
+        string reposo = sobreOscuro ? "#59FFFFFF" : "#C3CAD6";
+        string encima = sobreOscuro ? "#8CFFFFFF" : "#98A2B3";
+        string arrastrando = sobreOscuro ? "#BFFFFFFF" : "#7C8697";
+
+        string xaml = """
             <Style xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                    TargetType="{x:Type ScrollBar}">
@@ -298,15 +352,15 @@ public static class Estudio
                               <ControlTemplate TargetType="{x:Type Thumb}">
                                 <Border x:Name="Cuerpo" Width="5" CornerRadius="3"
                                         HorizontalAlignment="Center"
-                                        Background="#C3CAD6" Opacity="0.85"/>
+                                        Background="{REPOSO}" Opacity="0.9"/>
                                 <ControlTemplate.Triggers>
                                   <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="Cuerpo" Property="Width" Value="7"/>
-                                    <Setter TargetName="Cuerpo" Property="Background" Value="#98A2B3"/>
+                                    <Setter TargetName="Cuerpo" Property="Background" Value="{ENCIMA}"/>
                                   </Trigger>
                                   <Trigger Property="IsDragging" Value="True">
                                     <Setter TargetName="Cuerpo" Property="Width" Value="7"/>
-                                    <Setter TargetName="Cuerpo" Property="Background" Value="#7C8697"/>
+                                    <Setter TargetName="Cuerpo" Property="Background" Value="{ARRASTRANDO}"/>
                                   </Trigger>
                                 </ControlTemplate.Triggers>
                               </ControlTemplate>
@@ -320,12 +374,15 @@ public static class Estudio
               </Setter>
             </Style>
             """;
+        xaml = xaml.Replace("{REPOSO}", reposo)
+                   .Replace("{ENCIMA}", encima)
+                   .Replace("{ARRASTRANDO}", arrastrando);
         return (Style)XamlReader.Parse(xaml);
     }
 
     /// <summary>Deja la barra rehecha puesta en todo lo que cuelgue de esta ventana.</summary>
-    public static void PonerLaBarraDeScroll(this FrameworkElement raiz) =>
-        raiz.Resources.Add(typeof(ScrollBar), BarraDeScroll());
+    public static void PonerLaBarraDeScroll(this FrameworkElement raiz, bool sobreOscuro = false) =>
+        raiz.Resources.Add(typeof(ScrollBar), BarraDeScroll(sobreOscuro));
 
     // ── texto ────────────────────────────────────────────────────────────────
 
@@ -352,6 +409,13 @@ public static class Estudio
     private static SolidColorBrush Congelado(byte r, byte g, byte b)
     {
         var brocha = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brocha.Freeze();
+        return brocha;
+    }
+
+    private static SolidColorBrush CongeladoAlfa(byte a, byte r, byte g, byte b)
+    {
+        var brocha = new SolidColorBrush(Color.FromArgb(a, r, g, b));
         brocha.Freeze();
         return brocha;
     }
