@@ -2,7 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Reflection;
+using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Text.Json;
 using U.WindowsClient.Actions;
 using U.WindowsClient.Mcp;
@@ -147,6 +152,33 @@ internal static class Contrato
         // del nucleo), y jamas se deduce del tipo — el tipo solo acota que es SEGURO ensayar.
         Prueba("82. el gesto aprendido no se vuelve a ensayar: la segunda vez va directo", ElGestoAprendidoNoSeEnsaya);
         Prueba("83. el doble solo se ensaya sobre contenido: un botón jamás recibe un segundo clic", ElBotonNoRecibeSegundoClic);
+
+        // ── LA CONSULTA CLÍNICA EN WINDOWS (spec 004) ────────────────────────
+        //
+        // La web ya graba la conversación médico-paciente, la transcribe y organiza la nota. Traer
+        // eso aquí no es portar el audio —`DictadoSoniox` ya transcribía contra el MISMO backend
+        // desde el 2026-08-14—: es darle al cliente una IDENTIDAD DE MÉDICO y el hilo que va del
+        // micrófono al encounter.
+        //
+        // Las ocho se escriben antes que su código porque las tres piezas se dan por buenas a sí
+        // mismas: la sesión diría que está viva teniendo un token vencido (aprendizaje nº9, vacío
+        // no es ausente), la transcripción diría que mandó todo sin haber mandado la última frase
+        // (patrón nº10, un paso no ejecutado deja rastro), y el dictado diría «el backend no
+        // contestó» cuando lo que pasa es que contestó Deepgram y solo sabemos leer Soniox
+        // (aprendizaje nº2, un mensaje no debe concluir). Las tres fallan EN VERDE.
+        //
+        // Ninguna toca la red, el micrófono ni la pantalla: el backend es de mentira y ANOTA lo
+        // que se le pidió, que es lo que permite distinguir «no se creó el encounter» de «se creó
+        // y falló».
+        Console.WriteLine();
+        Prueba("84. sin médico con sesión, la consulta no empieza: ni micrófono ni encounter", SinSesionLaConsultaNoEmpieza);
+        Prueba("85. un token vencido se renueva ANTES de usarse, no cuando el backend lo rechaza", ElTokenSeRenuevaAntesDeUsarse);
+        Prueba("86. cerrar sesión no deja el token en disco", SalirNoDejaRastro);
+        Prueba("87. cada fallo del backend clínico dice una cosa distinta, no «no se pudo»", CadaFalloClinicoDiceLoSuyo);
+        Prueba("88. se manda TODO lo dicho: la frase que quedó sin cerrar al parar también viaja", ElVerbatimNoSeDejaLaUltimaFrase);
+        Prueba("89. el lector del stream lo elige la SESIÓN, no lo que se compiló", ElLectorLoEligeLaSesion);
+        Prueba("90. la consulta se atribuye al MÉDICO que entró, no a la máquina", LaConsultaEsDelMedico);
+        Prueba("91. si la nota no se generó, la consulta NO se declara terminada", SinNotaNoHayConsultaTerminada);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -2070,6 +2102,485 @@ internal static class Contrato
         Debe(senalar.Con(null) == LoQueSenalas.NadaDebajo,
             "sin nada con nombre bajo el cursor se pide mover el cursor. Contestar con lo último "
             + "señalado sería peor que no contestar: quien pregunta creería que acertó");
+    }
+
+    // ── LA CONSULTA CLÍNICA (spec 004): el arnés ─────────────────────────────
+
+    /// <summary>
+    /// El ensamblado del cliente. Las capacidades de la spec 004 se piden por NOMBRE y con
+    /// reflexión, como manda <c>.claude/rules/flujo-sdd.md</c>: así el contrato sigue compilando
+    /// contra un núcleo que todavía no las tiene, y una promesa sin código dice PENDIENTE —que
+    /// cuenta como incumplida— en vez de «no aplicable», que se sumaría al verde y haría que el
+    /// contrato certificara el vacío.
+    /// </summary>
+    private static readonly Assembly Cliente = typeof(Freno).Assembly;
+
+    private static Type? Capacidad(string nombre) => Cliente.GetType(nombre);
+
+    private static void Pendiente(string que, string promesa)
+    {
+        _fallos++;
+        Console.WriteLine($"   ⧗ PENDIENTE: «{que}» todavía no existe (spec 004). La promesa "
+                        + $"{promesa} está escrita y en ROJO, que es donde tiene que estar.");
+    }
+
+    /// <summary>
+    /// Un backend de mentira que ANOTA lo que se le pidió.
+    /// </summary>
+    /// <remarks>
+    /// El registro no es comodidad: es lo único que distingue «no se creó el encounter» de «se creó
+    /// y falló», y esa distinción ES la promesa 84. Un doble que solo devuelve respuestas dejaría
+    /// pasar exactamente el bug que se quiere impedir — un criterio que no puede fallar con el bug
+    /// presente no es un criterio (patrón nº7).
+    /// </remarks>
+    private sealed class BackendDeMentira : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, (HttpStatusCode, string)> _responder;
+
+        public BackendDeMentira(Func<HttpRequestMessage, (HttpStatusCode, string)> responder)
+            => _responder = responder;
+
+        /// <summary>Método + ruta de cada petición, en orden. Sin cuerpo: aquí no viaja PHI.</summary>
+        public List<string> Peticiones { get; } = new();
+
+        /// <summary>Las cabeceras de la última petición, para juzgar la atribución.</summary>
+        public Dictionary<string, string> UltimasCabeceras { get; } = new();
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct)
+        {
+            Peticiones.Add($"{req.Method} {req.RequestUri?.PathAndQuery}");
+            UltimasCabeceras.Clear();
+            foreach (var h in req.Headers) UltimasCabeceras[h.Key] = string.Join(",", h.Value);
+
+            var (codigo, cuerpo) = _responder(req);
+            return Task.FromResult(new HttpResponseMessage(codigo)
+            {
+                Content = new StringContent(cuerpo, Encoding.UTF8, "application/json"),
+            });
+        }
+    }
+
+    /// <summary>
+    /// Un JWT con la forma de uno de Supabase: cabecera, carga y firma en base64url. No se firma de
+    /// verdad y da igual — quien lo verifica es el backend; aquí solo hace falta que el cliente sepa
+    /// sacarle el <c>sub</c>, que es el uuid que Graph valida contra `profiles`.
+    /// </summary>
+    private static string JwtDeMentira(string sub, string marca = "x")
+    {
+        static string B64(string s) => Convert.ToBase64String(Encoding.UTF8.GetBytes(s))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        return B64("{\"alg\":\"HS256\",\"typ\":\"JWT\"}") + "."
+             + B64($"{{\"sub\":\"{sub}\",\"email\":\"medico@miracle.app\",\"marca\":\"{marca}\"}}") + "."
+             + B64("firma-de-mentira");
+    }
+
+    /// <summary>La respuesta de <c>POST /auth/v1/token</c> tal como la devuelve Supabase.</summary>
+    private static string RespuestaDeLogin(string sub, string marca, int duracionSegundos) =>
+        $"{{\"access_token\":\"{JwtDeMentira(sub, marca)}\",\"refresh_token\":\"refresh-{marca}\","
+        + $"\"expires_in\":{duracionSegundos},\"token_type\":\"bearer\","
+        + $"\"user\":{{\"id\":\"{sub}\",\"email\":\"medico@miracle.app\"}}}}";
+
+    // ── LA CONSULTA CLÍNICA (spec 004): las promesas ─────────────────────────
+
+    /// <remarks>
+    /// LA QUE ABRE TODO. Sin el JWT del médico, `/api/clinical/*` contesta 401 —el backend lo exige
+    /// con `requireClinicalAuth`—, así que sin esta promesa no hay encounter, no hay nota, y «misma
+    /// base de datos que la web» es una frase y no un hecho.
+    ///
+    /// Se juzga por lo que NO pasó, y por eso hacen falta las tres afirmaciones: que conteste «no»
+    /// es lo barato; que no abra el micrófono de alguien que no ha entrado y que no deje un
+    /// encounter huérfano en la base es lo que de verdad protege.
+    /// </remarks>
+    private static void SinSesionLaConsultaNoEmpieza()
+    {
+        var tConsulta = Capacidad("U.WindowsClient.Clinical.Consulta");
+        var tClinica = Capacidad("U.WindowsClient.Clinical.ClinicaClient");
+        var tSesion = Capacidad("U.WindowsClient.Cuenta.SesionMiracle");
+        if (tConsulta == null || tClinica == null || tSesion == null)
+        {
+            Pendiente("Clinical.Consulta · Clinical.ClinicaClient · Cuenta.SesionMiracle", "84");
+            return;
+        }
+
+        var backend = new BackendDeMentira(_ => (HttpStatusCode.OK, "{}"));
+        var sesion = Activator.CreateInstance(tSesion,
+            "https://supabase.test", "publishable", backend,
+            (Func<DateTimeOffset>)(() => DateTimeOffset.UnixEpoch))!;
+        // Nadie ha entrado. No se llama a EntrarAsync a propósito: ESE es el escenario.
+
+        var clinica = Activator.CreateInstance(tClinica, "https://graph.test", sesion, backend)!;
+
+        bool microfonoAbierto = false;
+        var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
+            (Func<CancellationToken, Task>)(_ => { microfonoAbierto = true; return Task.CompletedTask; }),
+            (Func<Task<string>>)(() => Task.FromResult("")))!;
+
+        bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
+            .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        Debe(!arranco, "sin sesión, empezar la consulta contesta que NO");
+        Debe(!microfonoAbierto,
+            "y sobre todo NO se abre el micrófono: grabar a un paciente sin saber de quién es la "
+            + "consulta es lo único aquí que no tiene vuelta atrás");
+        Debe(backend.Peticiones.Count == 0,
+            "ni se crea un encounter que quedaría huérfano en la base. La cuenta es sobre lo que se "
+            + $"PIDIÓ, no sobre lo que falló: se pidieron {backend.Peticiones.Count}");
+    }
+
+    /// <remarks>
+    /// POR ADELANTADO Y CON MARGEN, no cuando llega el 401. Un refresco reactivo convierte cada
+    /// expiración en una llamada fallida visible, y en mitad de una consulta eso es una frase
+    /// perdida. Se mide con RELOJ FALSO: esperar cinco minutos en una prueba la volvería caprichosa,
+    /// y un juez caprichoso deja de creerse.
+    ///
+    /// Las dos mitades son la promesa entera: que renueve cuando toca (si no, se usa un token
+    /// muerto) y que NO renueve cuando no toca (una llamada de red por consulta, por gusto).
+    /// </remarks>
+    private static void ElTokenSeRenuevaAntesDeUsarse()
+    {
+        var t = Capacidad("U.WindowsClient.Cuenta.SesionMiracle");
+        if (t == null) { Pendiente("Cuenta.SesionMiracle", "85"); return; }
+
+        var t0 = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+        var ahora = t0;
+        int refrescos = 0;
+
+        var backend = new BackendDeMentira(req =>
+        {
+            string url = req.RequestUri?.ToString() ?? "";
+            if (url.Contains("refresh_token"))
+            {
+                refrescos++;
+                return (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "renovado", 3600));
+            }
+            return (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "primero", 300));
+        });
+
+        var sesion = Activator.CreateInstance(t,
+            "https://supabase.test", "publishable", backend, (Func<DateTimeOffset>)(() => ahora))!;
+
+        ((Task<bool>)t.GetMethod("EntrarAsync")!
+            .Invoke(sesion, new object?[] { "medico@miracle.app", "clave", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        var pedirToken = t.GetMethod("TokenVigenteAsync")!;
+        string primero = ((Task<string>)pedirToken.Invoke(sesion, new object?[] { CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+        Debe(refrescos == 0,
+            "recién entrado el token está fresco (le quedan 300 s): pedirlo no gasta una llamada de red");
+
+        // Quedan 50 s de vida. NO ha caducado —un refresco reactivo aquí no haría nada—, pero está
+        // dentro del margen, que es exactamente el hueco donde se pierde la frase.
+        ahora = t0.AddSeconds(250);
+        string segundo = ((Task<string>)pedirToken.Invoke(sesion, new object?[] { CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        Debe(refrescos == 1, $"dentro del margen se renueva UNA vez, no {refrescos}");
+        Debe(segundo != primero && segundo.Length > 0,
+            "y lo que se entrega es el token NUEVO: renovar y seguir usando el viejo es no renovar");
+    }
+
+    /// <remarks>
+    /// Cerrar sesión en un ordenador compartido —que es el caso del hospital— tiene que dejar la
+    /// máquina como si nadie hubiera entrado. Se mira el ARCHIVO, no un booleano en memoria: un
+    /// `Salir()` que solo pone una bandera deja el refresh token en disco, y con él se vuelve a
+    /// entrar sin contraseña.
+    /// </remarks>
+    private static void SalirNoDejaRastro()
+    {
+        var t = Capacidad("U.WindowsClient.Cuenta.SesionMiracle");
+        if (t == null) { Pendiente("Cuenta.SesionMiracle", "86"); return; }
+
+        var backend = new BackendDeMentira(_ =>
+            (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "unico", 3600)));
+        var sesion = Activator.CreateInstance(t,
+            "https://supabase.test", "publishable", backend,
+            (Func<DateTimeOffset>)(() => DateTimeOffset.UtcNow))!;
+
+        string archivo = (string)t.GetProperty("RutaDeLaCredencial",
+            BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!;
+
+        ((Task<bool>)t.GetMethod("EntrarAsync")!
+            .Invoke(sesion, new object?[] { "medico@miracle.app", "clave", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+        Debe(File.Exists(archivo),
+            "entrar deja la credencial guardada (si no, no habría nada que juzgar en esta promesa)");
+
+        t.GetMethod("Salir")!.Invoke(sesion, null);
+        Debe(!File.Exists(archivo), $"salir la borra del disco, y no solo de la memoria: {archivo}");
+        Debe((bool)t.GetProperty("HayMedico")!.GetValue(sesion)! == false,
+            "y la sesión deja de decir que hay médico");
+    }
+
+    /// <remarks>
+    /// Los doce códigos del contrato del backend (docs/backend-clinical-api-contract.md) tienen que
+    /// llegar al médico como doce cosas distintas. Un `catch` que contesta «no se pudo generar la
+    /// nota» para los doce es el aprendizaje nº2 —un mensaje que no distingue sus causas manda la
+    /// investigación al lugar equivocado— cometido otra vez, y aquí el que investiga es alguien con
+    /// un paciente delante: «falta configurar el proveedor» y «el texto está vacío» se arreglan de
+    /// formas opuestas.
+    /// </remarks>
+    private static void CadaFalloClinicoDiceLoSuyo()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.MensajesClinicos");
+        if (t == null) { Pendiente("Clinical.MensajesClinicos", "87"); return; }
+
+        string[] codigos =
+        {
+            "TEMPLATE_NOT_FOUND", "TEMPLATE_INVALID", "ENCOUNTER_NOT_FOUND", "ENCOUNTER_INVALID",
+            "TRANSCRIPT_REQUIRED", "TRANSCRIPT_TOO_LONG", "LLM_NOT_CONFIGURED",
+            "NOTE_GENERATION_FAILED", "NOTE_JSON_INVALID", "UNAUTHORIZED",
+            "SUPABASE_NOT_CONFIGURED", "INTERNAL_ERROR",
+        };
+
+        var traducir = t.GetMethod("Traducir", new[] { typeof(string) })!;
+        var dichos = codigos.Select(c => (string)traducir.Invoke(null, new object?[] { c })!).ToList();
+
+        Debe(dichos.All(d => !string.IsNullOrWhiteSpace(d)), "ningún código se queda sin frase");
+        Debe(dichos.Distinct().Count() == codigos.Length,
+            $"los {codigos.Length} códigos del contrato dicen {codigos.Length} cosas distintas; "
+            + $"hoy dicen {dichos.Distinct().Count()}");
+
+        // Y un código que no conocemos NO se disfraza de conocido: se dice tal cual, para que el
+        // día que el backend añada uno se vea en el log en vez de perderse en un genérico.
+        string desconocido = (string)traducir.Invoke(null, new object?[] { "ALGO_NUEVO_DEL_BACKEND" })!;
+        Debe(desconocido.Contains("ALGO_NUEVO_DEL_BACKEND"),
+            "un código desconocido se nombra, no se traga: si no, el backend puede cambiar sin que "
+            + "nadie se entere");
+    }
+
+    /// <remarks>
+    /// Es el patrón nº10 —un paso no ejecutado deja rastro— aplicado al texto: el médico para de
+    /// grabar a media frase y esa frase, que suele ser la conclusión, se queda dentro del
+    /// acumulador si el verbatim solo cuenta lo CERRADO. El sabotaje que lo destapa es de una
+    /// línea: que `Todo` devuelva únicamente las frases cerradas.
+    /// </remarks>
+    private static void ElVerbatimNoSeDejaLaUltimaFrase()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.Transcripcion.Verbatim");
+        if (t == null) { Pendiente("Clinical.Transcripcion.Verbatim", "88"); return; }
+
+        var v = Activator.CreateInstance(t)!;
+        var confirmar = t.GetMethod("Confirmar")!;
+        var cerrar = t.GetMethod("CerrarFrase")!;
+
+        confirmar.Invoke(v, new object?[] { "El paciente refiere cefalea de tres días." });
+        cerrar.Invoke(v, null);                          // <end>: Soniox cerró la frase
+        confirmar.Invoke(v, new object?[] { " Impresión: cefalea tensional" });
+        // Y AQUÍ SE PARA DE GRABAR. Sin <end>: es lo que pasa de verdad cuando alguien deja de
+        // hablar y pulsa el botón.
+
+        string todo = (string)t.GetProperty("Todo")!.GetValue(v)!;
+        Debe(todo.Contains("cefalea de tres días"), "lo cerrado viaja");
+        Debe(todo.Contains("cefalea tensional"),
+            "y lo que quedó sin cerrar TAMBIÉN viaja: se dijo. Perderlo es perder justo la frase "
+            + "por la que se grabó la consulta");
+
+        // Que cuente lo que hay: un verbatim vacío tiene que poder distinguirse de uno con texto,
+        // porque de esa distinción depende que se llame o no a /transcript (400 TRANSCRIPT_REQUIRED).
+        var vacio = Activator.CreateInstance(t)!;
+        Debe((bool)t.GetProperty("Vacio")!.GetValue(vacio)! == true, "recién nacido está vacío");
+        Debe((bool)t.GetProperty("Vacio")!.GetValue(v)! == false, "y con texto dentro, no");
+    }
+
+    /// <remarks>
+    /// EL PROVEEDOR LO DECIDE EL PROVIDER STUDIO, no el nombre del archivo. Hoy el cliente solo sabe
+    /// leer Soniox (`DictadoSoniox.MensajeDeArranque` devuelve "" si la sesión no trae
+    /// `start_message`), así que el día que se conmute a Deepgram el dictado muere diciendo «el
+    /// backend no devolvió la configuración del stream» — un mensaje que no distingue «es Deepgram»
+    /// de «el backend falló». El motor de la web lleva desde siempre hablando los dos.
+    ///
+    /// Se juzgan las dos mitades: cómo se ABRE el socket (subprotocolo o primer mensaje) y cómo se
+    /// LEE lo que llega. Solo la primera dejaría pasar un lector que conecta y no entiende nada.
+    /// </remarks>
+    private static void ElLectorLoEligeLaSesion()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.Transcripcion.SesionDeStream");
+        var tVerbatim = Capacidad("U.WindowsClient.Clinical.Transcripcion.Verbatim");
+        if (t == null || tVerbatim == null)
+        {
+            Pendiente("Clinical.Transcripcion.SesionDeStream", "89");
+            return;
+        }
+
+        var leer = t.GetMethod("Leer", BindingFlags.Public | BindingFlags.Static)!;
+
+        // Soniox: autentica y se configura en el PRIMER MENSAJE, socket pelado.
+        var soniox = leer.Invoke(null, new object?[]
+        {
+            "{\"provider\":\"soniox\",\"auth_scheme\":\"message\",\"access_token\":\"tok-sx\","
+            + "\"websocket_url\":\"wss://stt.soniox.test/transcribe\","
+            + "\"start_message\":{\"api_key\":\"tok-sx\",\"model\":\"stt-rt\",\"audio_format\":\"auto\"}}",
+        })!;
+        var lectorSx = t.GetProperty("Lector")!.GetValue(soniox)!;
+        var tLector = lectorSx.GetType();
+
+        Debe((string)tLector.GetProperty("Nombre")!.GetValue(lectorSx)! == "soniox",
+            "una sesión con auth_scheme «message» se lee con el lector de Soniox");
+        Debe(((System.Collections.IEnumerable)tLector.GetProperty("Subprotocolos")!.GetValue(lectorSx)!)
+                .Cast<object>().Count() == 0,
+            "Soniox abre un socket PELADO: declarar subprotocolo lo cierra sin decir por qué");
+        string arranque = (string?)tLector.GetMethod("MensajeDeArranque")!
+            .Invoke(lectorSx, new object?[] { 16000 }) ?? "";
+        Debe(arranque.Contains("pcm_s16le") && arranque.Contains("16000"),
+            "y el formato se DECLARA: el backend pide «auto», que sirve para WebM (trae cabecera) "
+            + "pero no para el PCM crudo del micrófono, que no tiene ninguna (medido 2026-08-14)");
+
+        // Deepgram: autentica por subprotocolo, no manda primer mensaje.
+        var deepgram = leer.Invoke(null, new object?[]
+        {
+            "{\"provider\":\"deepgram\",\"auth_scheme\":\"bearer\",\"access_token\":\"tok-dg\","
+            + "\"websocket_url\":\"wss://api.deepgram.test/v1/listen\",\"start_message\":null}",
+        })!;
+        var lectorDg = t.GetProperty("Lector")!.GetValue(deepgram)!;
+        // Cada lector se interroga por SU tipo: son dos clases distintas —eso es justo lo que la
+        // promesa afirma— y pedirle a una las propiedades de la otra tira TargetException.
+        var tLectorDg = lectorDg.GetType();
+
+        Debe((string)tLectorDg.GetProperty("Nombre")!.GetValue(lectorDg)! == "deepgram",
+            "y una con auth_scheme «bearer» se lee con el de Deepgram");
+        var subs = ((System.Collections.IEnumerable)tLectorDg.GetProperty("Subprotocolos")!.GetValue(lectorDg)!)
+            .Cast<string>().ToList();
+        Debe(subs.Count == 2 && subs[0] == "bearer" && subs[1] == "tok-dg",
+            "Deepgram autentica en la TUPLA del subprotocolo: [esquema, token]");
+        Debe(tLectorDg.GetMethod("MensajeDeArranque")!.Invoke(lectorDg, new object?[] { 16000 }) == null,
+            "y no manda primer mensaje: mandarlo sería audio que Deepgram no espera");
+
+        // La otra mitad: que lo que llega se ENTIENDA. Dos formas de mensaje irreconciliables.
+        var vSx = Activator.CreateInstance(tVerbatim)!;
+        var vDg = Activator.CreateInstance(tVerbatim)!;
+        var digerir = tLector.GetMethod("Digerir")!;
+        var nada = (Action<string>)(_ => { });
+
+        digerir.Invoke(lectorSx, new object?[]
+        {
+            "{\"tokens\":[{\"text\":\"hola \",\"is_final\":true},{\"text\":\"doctor\",\"is_final\":true}]}",
+            vSx, nada, nada, nada,
+        });
+        tLectorDg.GetMethod("Digerir")!.Invoke(lectorDg, new object?[]
+        {
+            "{\"is_final\":true,\"channel\":{\"alternatives\":[{\"transcript\":\"hola doctor\"}]}}",
+            vDg, nada, nada, nada,
+        });
+
+        var todo = tVerbatim.GetProperty("Todo")!;
+        Debe(((string)todo.GetValue(vSx)!).Contains("hola doctor"),
+            "de Soniox se leen los tokens confirmados");
+        Debe(((string)todo.GetValue(vDg)!).Contains("hola doctor"),
+            "y de Deepgram, channel.alternatives[0].transcript — la misma frase por dos caminos que "
+            + "no se parecen en nada");
+    }
+
+    /// <remarks>
+    /// Es el aprendizaje nº16 —una comparación entre identidades de distinta forma da falso siempre,
+    /// y en silencio— por quinta vez en este repo. La web manda `X-Miracle-User-Id` con el uuid del
+    /// token y Graph lo valida contra `profiles`; el cliente Windows manda hoy
+    /// `X-Miracle-User-Email`. Los dos lados creen que están atribuyendo, y uno de los dos no lo
+    /// está: los minutos de transcripción de Windows no caen en la cuenta del médico.
+    /// </remarks>
+    private static void LaConsultaEsDelMedico()
+    {
+        var t = Capacidad("U.WindowsClient.Cuenta.SesionMiracle");
+        if (t == null) { Pendiente("Cuenta.SesionMiracle", "90"); return; }
+
+        const string uuid = "7b8a4c8e-1f2d-4c3b-9a10-0d1e2f3a4b5c";
+        var backend = new BackendDeMentira(_ =>
+            (HttpStatusCode.OK, RespuestaDeLogin(uuid, "unico", 3600)));
+        var sesion = Activator.CreateInstance(t,
+            "https://supabase.test", "publishable", backend,
+            (Func<DateTimeOffset>)(() => DateTimeOffset.UtcNow))!;
+
+        var cabeceras = t.GetMethod("CabecerasDeAtribucion")!;
+
+        // Antes de entrar no se atribuye nada. Inventar aquí un id de máquina sería atribuirle a
+        // alguien un consumo que no hizo.
+        var sinEntrar = (IReadOnlyDictionary<string, string>)cabeceras.Invoke(sesion, null)!;
+        Debe(!sinEntrar.ContainsKey("X-Miracle-User-Id"),
+            "sin médico dentro no se atribuye a nadie");
+
+        ((Task<bool>)t.GetMethod("EntrarAsync")!
+            .Invoke(sesion, new object?[] { "medico@miracle.app", "clave", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        var con = (IReadOnlyDictionary<string, string>)cabeceras.Invoke(sesion, null)!;
+        Debe(con.TryGetValue("X-Miracle-User-Id", out var id) && id == uuid,
+            "la atribución viaja con el UUID del token, que es lo que Graph valida contra profiles — "
+            + "no el correo, que es de otra forma y no casa");
+        Debe(con.TryGetValue("X-Miracle-App", out var app) && app == "windows_app",
+            "y se dice desde qué app, para poder separar este consumo del de la web");
+        Debe((string)t.GetProperty("MedicoId")!.GetValue(sesion)! == uuid,
+            "el mismo uuid es el que la consulta usa como identidad del médico: una sola fuente");
+    }
+
+    /// <remarks>
+    /// «Terminé» no es un veredicto: el puente consciente ya declaró éxito habiendo pulsado el botón
+    /// equivocado. Aquí lo mismo con la nota — si `generate-note` falla y la consulta se marca
+    /// terminada, el médico cree que su nota está en la base y no está.
+    ///
+    /// Y la otra mitad, que es la que hace la promesa útil: el `encounter_id` SOBREVIVE al fallo.
+    /// El contrato del backend permite repetir generate-note mientras haya transcript; reintentar
+    /// sobre el mismo encounter no duplica nada, y volver a crearlo sí.
+    /// </remarks>
+    private static void SinNotaNoHayConsultaTerminada()
+    {
+        var tConsulta = Capacidad("U.WindowsClient.Clinical.Consulta");
+        var tClinica = Capacidad("U.WindowsClient.Clinical.ClinicaClient");
+        var tSesion = Capacidad("U.WindowsClient.Cuenta.SesionMiracle");
+        if (tConsulta == null || tClinica == null || tSesion == null)
+        {
+            Pendiente("Clinical.Consulta", "91");
+            return;
+        }
+
+        var backend = new BackendDeMentira(req =>
+        {
+            string ruta = req.RequestUri?.AbsolutePath ?? "";
+            if (ruta.Contains("/auth/v1/token"))
+                return (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "unico", 3600));
+            if (ruta.EndsWith("/generate-note"))
+                return (HttpStatusCode.BadGateway,
+                    "{\"error\":{\"code\":\"NOTE_GENERATION_FAILED\",\"message\":\"el LLM falló\"}}");
+            if (ruta.EndsWith("/transcript"))
+                return (HttpStatusCode.OK,
+                    "{\"encounter_id\":\"enc-1\",\"status\":\"transcript_ready\",\"transcript_length\":42}");
+            return (HttpStatusCode.Created, "{\"encounter_id\":\"enc-1\",\"status\":\"created\"}");
+        });
+
+        var sesion = Activator.CreateInstance(tSesion,
+            "https://supabase.test", "publishable", backend,
+            (Func<DateTimeOffset>)(() => DateTimeOffset.UtcNow))!;
+        ((Task<bool>)tSesion.GetMethod("EntrarAsync")!
+            .Invoke(sesion, new object?[] { "medico@miracle.app", "clave", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        var clinica = Activator.CreateInstance(tClinica, "https://graph.test", sesion, backend)!;
+        var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
+            (Func<CancellationToken, Task>)(_ => Task.CompletedTask),
+            (Func<Task<string>>)(() => Task.FromResult("El paciente refiere cefalea.")))!;
+
+        bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
+            .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+        Debe(arranco, "con médico dentro, la consulta sí empieza (si no, esta promesa no juzga nada)");
+
+        ((Task)tConsulta.GetMethod("TerminarAsync")!
+            .Invoke(consulta, new object?[] { CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        string estado = tConsulta.GetProperty("Estado")!.GetValue(consulta)!.ToString()!;
+        string motivo = (string)tConsulta.GetProperty("Motivo")!.GetValue(consulta)!;
+
+        Debe(estado != "NotaLista",
+            $"con la nota sin generar, la consulta NO se declara terminada; dice «{estado}»");
+        Debe(motivo.Length > 0 && motivo != "no se pudo",
+            $"y el motivo se puede NOMBRAR, que es lo que decide si se reintenta o se llama a "
+            + $"alguien: «{motivo}»");
+        Debe((string)tConsulta.GetProperty("EncounterId")!.GetValue(consulta)! == "enc-1",
+            "el encounter SOBREVIVE al fallo: reintentar sobre él no duplica la consulta, volver a "
+            + "crearlo sí");
+        Debe(backend.Peticiones.Count(p => p.Contains("/transcript")) == 1,
+            "y el texto se guardó UNA vez: el fallo fue de la nota, no de la transcripción");
     }
 
     private static void Prueba(string nombre, Action cuerpo)
