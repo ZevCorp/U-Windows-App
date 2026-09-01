@@ -58,6 +58,18 @@ internal static class Contrato
         Prueba("13. lo tragado deja rastro: la compuerta cuenta los milisegundos que sustituyó y el total se puede leer", LoTragadoSeCuenta);
         Prueba("14. con el AEC del sistema puesto la compuerta no actúa, y sin él —o forzada— actúa siempre: nunca los dos, nunca ninguno", OCompuertaOAec);
 
+        // EL BARGE-IN DE LA COMPUERTA (spec 002, fase 4 · 2026-08-31). La compuerta arregló que Ü
+        // se oyera a sí misma y de paso la volvió ININTERRUMPIBLE: con el micrófono viajando como
+        // silencio, el servidor no puede oír a quien le habla encima («no lo puedo interrumpir»).
+        // La salida fina es el AEC del sistema (fase 3, aplazada); mientras la compuerta mande,
+        // este detector le devuelve la interrupción: la LLAVE sigue siendo el estado de la cola
+        // —el volumen jamás decide qué es eco—, y la energía solo decide UNA cosa acotada: que
+        // hay voz sostenida MUY por encima del eco aprendido, y entonces se corta la cola y se
+        // reabre la compuerta. Lo enterrado el 2026-08-16 (volumen para FILTRAR) sigue enterrado.
+        Prueba("15. hablarle encima con voz sostenida la interrumpe: el detector dispara sobre el eco aprendido y la compuerta reabierta deja viajar ese mismo trozo intacto", VozSostenidaInterrumpe);
+        Prueba("16. un golpe corto no la interrumpe: sin sostén no hay disparo, y el eco fuerte de Ü tampoco dispara — la línea base es suya", UnGolpeNoInterrumpe);
+        Prueba("17. tras disparar, el detector no ametralla: no re-dispara hasta que Ü vuelva a sonar", ElDisparoNoSeAmetralla);
+
         Console.WriteLine();
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
@@ -362,6 +374,102 @@ internal static class Contrato
 
     private static byte[]? Filtrar(object c, byte[] trozo, bool sonando, long ahoraMs)
         => c.GetType().GetMethod("Filtrar")?.Invoke(c, new object[] { trozo, sonando, ahoraMs }) as byte[];
+
+    // ── El detector de interrupción (promesas 15-17) ─────────────────────────
+
+    private static object? Detector(int sostenMs, double factor, double pisoRms)
+    {
+        var t = Realtime.GetType("Voz.Realtime.DetectorDeInterrupcion");
+        return t == null ? null : Activator.CreateInstance(t, sostenMs, factor, pisoRms);
+    }
+
+    private static bool? Oye(object d, double rms, bool sonando, long ahoraMs)
+        => d.GetType().GetMethod("Oye")?.Invoke(d, new object[] { rms, sonando, ahoraMs }) as bool?;
+
+    /// <remarks>
+    /// El guion del caso real: Ü suena (eco de RMS ~800 en la línea base), el usuario le habla
+    /// encima a RMS 6000 durante más del sostén. El disparo tiene que llegar, y la compuerta
+    /// reabierta (Abrir) tiene que dejar pasar EL MISMO trozo intacto — sin esperar la gracia,
+    /// porque el arranque de la frase del usuario es justo lo que el VAD del servidor necesita oír.
+    /// </remarks>
+    private static void VozSostenidaInterrumpe()
+    {
+        var d = Detector(240, 3.0, 1500);
+        if (d == null) { Pendiente("Voz.Realtime.DetectorDeInterrupcion", "4"); return; }
+
+        // la línea base del eco se aprende mientras Ü suena
+        long t = 0;
+        for (int i = 0; i < 10; i++) Debe(Oye(d, 800, sonando: true, t += 100) == false,
+            "el eco solo, aunque suene un rato, jamás dispara");
+
+        // voz sostenida encima del eco: dispara al cumplirse el sostén, no antes
+        bool disparo = false;
+        for (int i = 0; i < 5 && !disparo; i++) disparo = Oye(d, 6000, sonando: true, t += 100) == true;
+        Debe(disparo, "voz sostenida MUY por encima del eco aprendido dispara la interrupción");
+
+        // y la compuerta reabierta deja viajar el trozo YA, sin gracia
+        var c = Compuerta(300, 24000);
+        if (c == null) { Pendiente("Voz.Realtime.CompuertaDeEco", "1"); return; }
+        var voz = VozDeLaSala();
+        Filtrar(c, voz, sonando: true, ahoraMs: 5000);
+        bool tieneAbrir = c.GetType().GetMethod("Abrir") != null;
+        Debe(tieneAbrir, "la compuerta sabe reabrirse a la orden (Abrir)");
+        if (!tieneAbrir) return;
+        c.GetType().GetMethod("Abrir")!.Invoke(c, null);
+        var sale = Filtrar(c, voz, sonando: false, ahoraMs: 5050);
+        Debe(sale != null && sale.SequenceEqual(voz),
+            "reabierta a la orden, el arranque de la frase viaja intacto: la gracia no se lo come");
+    }
+
+    private static void UnGolpeNoInterrumpe()
+    {
+        var d = Detector(240, 3.0, 1500);
+        if (d == null) { Pendiente("Voz.Realtime.DetectorDeInterrupcion", "4"); return; }
+
+        long t = 0;
+        for (int i = 0; i < 10; i++) Oye(d, 800, sonando: true, t += 100);
+
+        // un portazo: un solo trozo fortísimo, y de vuelta al eco
+        Debe(Oye(d, 20000, sonando: true, t += 100) == false, "un golpe de un solo trozo no dispara");
+        Debe(Oye(d, 800, sonando: true, t += 100) == false, "y al volver el eco no queda nada armado");
+
+        // una ráfaga de DOS trozos (ventana de ~100 ms, menos que el sostén) tampoco: aquí es
+        // donde el sostén muerde de verdad — sin esta pareja, quitarle el sostén al detector
+        // pasaba el contrato entero (medido con sabotaje, 2026-08-31).
+        Debe(Oye(d, 20000, sonando: true, t += 100) == false, "ráfaga: el primer trozo no dispara");
+        Debe(Oye(d, 20000, sonando: true, t += 100) == false, "ráfaga: el segundo, aún bajo el sostén, tampoco");
+        Debe(Oye(d, 800, sonando: true, t += 100) == false, "y el eco de vuelta desarma la ráfaga");
+
+        // Ü arranca una frase nueva MÁS FUERTE tras un silencio: sus primeros trozos son SU eco
+        // —la siembra— y ponen la línea base ahí, así que su propio volumen no la interrumpe.
+        for (int i = 0; i < 3; i++) Oye(d, 400, sonando: false, t += 100);
+        for (int i = 0; i < 20; i++)
+            Debe(Oye(d, 2600, sonando: true, t += 100) != true,
+                "la frase nueva más fuerte siembra la base con su propio eco: no se interrumpe sola");
+    }
+
+    private static void ElDisparoNoSeAmetralla()
+    {
+        var d = Detector(240, 3.0, 1500);
+        if (d == null) { Pendiente("Voz.Realtime.DetectorDeInterrupcion", "4"); return; }
+
+        long t = 0;
+        for (int i = 0; i < 10; i++) Oye(d, 800, sonando: true, t += 100);
+        bool disparo = false;
+        for (int i = 0; i < 5 && !disparo; i++) disparo = Oye(d, 6000, sonando: true, t += 100) == true;
+        Debe(disparo, "el primer disparo llega");
+
+        // la voz sigue y la cola YA se cortó (sonando: false): ni un segundo disparo
+        for (int i = 0; i < 10; i++)
+            Debe(Oye(d, 6000, sonando: false, t += 100) != true,
+                "cortada la cola, seguir hablando no re-dispara: interrumpir una vez basta");
+
+        // Ü vuelve a sonar → el detector vuelve a estar en guardia
+        for (int i = 0; i < 10; i++) Oye(d, 800, sonando: true, t += 100);
+        disparo = false;
+        for (int i = 0; i < 5 && !disparo; i++) disparo = Oye(d, 6000, sonando: true, t += 100) == true;
+        Debe(disparo, "con Ü sonando otra vez, la guardia vuelve y el disparo también");
+    }
 
     /// <remarks>
     /// LA QUE CIERRA EL ASUNTO: mientras no exista, el eco sigue llegando al VAD del servidor y Ü

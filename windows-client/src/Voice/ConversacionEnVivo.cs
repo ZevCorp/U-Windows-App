@@ -58,6 +58,38 @@ public sealed class ConversacionEnVivo : IDisposable
     private const int GraciaEcoMs = 300;
 
     private readonly CompuertaDeEco _compuerta;
+
+    /// <summary>El barge-in de la compuerta (spec 002, fase 4): voz sostenida por encima del eco
+    /// aprendido corta la cola y reabre la compuerta. Sostén 240 ms · 3× la línea base · piso 500 —
+    /// medido contra ESTA sala (2026-08-31): el eco real ronda base 60-250 y el piso de 1500
+    /// mataba todo disparo; 500 queda por encima del eco y por debajo de la voz.</summary>
+    private readonly DetectorDeInterrupcion _interrupcion = new(240, 3.0, 500);
+    private long _ultimaMedicionMs;
+
+    /// <summary>El barge-in por energía se enciende por máquina: aquí está muerto (medido).</summary>
+    private static bool DetectorPorEnergia =>
+        Environment.GetEnvironmentVariable("U_BARGEIN_ENERGIA") == "1";
+
+    /// <summary>Hasta cuándo NO se reproduce lo que llegue: la interrupción manual tiró la cola,
+    /// y el resto de la frase que el servidor ya tenía en vuelo no debe resucitarla.</summary>
+    private long _silencioHastaMs;
+
+    /// <summary>
+    /// LA INTERRUPCIÓN A LA ORDEN (Escape, 2026-08-31). La vía por energía resultó ciega en este
+    /// hardware —el AGC de Windows comprime la entrada y la voz del usuario mide lo mismo que el
+    /// eco (rms ~220 vs base 88-219, medido)—, así que el gesto determinista es el que manda
+    /// mientras la fase 3 (AEC real) no exista: corta la cola YA, suprime el goteo restante y
+    /// reabre la compuerta para que el servidor oiga la primera sílaba de quien interrumpió.
+    /// </summary>
+    public bool Interrumpir()
+    {
+        if (!Viva || !_audio.Hablando) return false;
+        _audio.Callar();
+        _compuerta.Abrir();
+        _silencioHastaMs = Environment.TickCount64 + 1500;
+        LogBus.Log("voz-viva", "interrupción a la orden (Escape): corto mi voz y escucho");
+        return true;
+    }
     private long _tragadoAnunciado;
     private string _ultimoFalloEnvio = "";
 
@@ -897,7 +929,43 @@ public sealed class ConversacionEnVivo : IDisposable
         // las dos fuentes —micrófono local y collar— porque las dos entran por Capturado.
         if (ModoDeCaptura.CompuertaActiva(AecDelSistema, CompuertaForzada))
         {
-            var filtrado = _compuerta.Filtrar(pcm, _audio.Hablando, Environment.TickCount64);
+            long ahora = Environment.TickCount64;
+            var filtrado = _compuerta.Filtrar(pcm, _audio.Hablando, ahora);
+
+            // EL BARGE-IN (promesas 15-17): con la compuerta tragando, este es el único oído que
+            // queda. El detector vive en LA ERA DE LA COMPUERTA (trozo sustituido = eco), no en el
+            // estado crudo del buffer: el audio llega a ráfagas y el buffer parpadea; con el estado
+            // crudo cada parpadeo re-arrancaba la siembra y el detector jamás disparaba (2026-08-31,
+            // medido en vivo por la sesión de la voz). Si el trozo ORIGINAL trae voz sostenida muy
+            // por encima del eco aprendido: cola cortada, compuerta reabierta, y ESTE MISMO trozo
+            // viaja intacto — la primera sílaba es justo lo que el VAD del servidor necesita oír.
+            // EL DETECTOR POR ENERGÍA, APAGADO POR DEFECTO EN ESTA MÁQUINA (2026-08-31): la
+            // sonda controlada midió que aquí la voz del usuario sola (máx 418) es ~3x MÁS DÉBIL
+            // en el micrófono que el eco de los altavoces (máx 1155) — el único capaz de cruzar
+            // el umbral sería el propio eco, o sea puro falso positivo. En hardware donde la
+            // energía sí separe, U_BARGEIN_ENERGIA=1 lo enciende. La interrupción aquí es Escape.
+            bool cerrada = !ReferenceEquals(filtrado, pcm);
+            double rms = cerrada ? Rms(pcm) : 0;
+            if (DetectorPorEnergia && cerrada && _interrupcion.Oye(rms, sonando: true, ahora))
+            {
+                _audio.Callar();
+                _compuerta.Abrir();
+                filtrado = pcm;
+                LogBus.Log("voz-viva", "te oí encima: corto mi voz y te escucho (barge-in de la compuerta)");
+            }
+            else if (!cerrada) _interrupcion.Oye(0, sonando: false, ahora);
+
+            // MEDIR ANTES DE TEORIZAR (lección nº1): mientras la compuerta traga, una línea por
+            // segundo con el RMS real y la base aprendida — con 30 s de prueba se ve si el piso y
+            // el factor están bien puestos para ESTE micrófono y ESTOS parlantes.
+            // La medición vive y muere con el detector: con él apagado, una línea de rms/umbral
+            // en el log se lee como «detector armado» y no lo está (lo señaló la sesión de la voz).
+            if (DetectorPorEnergia && cerrada && ahora - _ultimaMedicionMs >= 1000)
+            {
+                _ultimaMedicionMs = ahora;
+                LogBus.Log("voz-viva", $"medición barge-in: rms={rms:F0} · base={_interrupcion.LineaBase:F0} "
+                    + $"· umbral={Math.Max(500, _interrupcion.LineaBase * 3.0):F0}");
+            }
 
             // Lo tragado deja rastro (patrón nº10), pero por episodio y no por trozo: la línea
             // sale al reabrirse la compuerta, con el total del episodio que acaba de cerrar.
@@ -1088,6 +1156,9 @@ public sealed class ConversacionEnVivo : IDisposable
         switch (hecho)
         {
             case Hecho.Suena s:
+                // Tras una interrupción manual, el resto de la frase que ya venía en vuelo
+                // no debe resucitar la voz: se tira hasta que pase la ventana o hables tú.
+                if (Environment.TickCount64 < _silencioHastaMs) break;
                 _audio.Reproducir(s.Pcm);
                 break;
 
@@ -1482,5 +1553,19 @@ public sealed class ConversacionEnVivo : IDisposable
         try { TerminarAsync().GetAwaiter().GetResult(); } catch { }
         _audio.Dispose();
         _envio.Dispose();
+    }
+
+    /// <summary>RMS de un trozo PCM16 mono (0..32768). Solo para el detector de interrupción.</summary>
+    private static double Rms(byte[] pcm)
+    {
+        if (pcm.Length < 2) return 0;
+        double suma = 0;
+        int n = pcm.Length / 2;
+        for (int i = 0; i < pcm.Length - 1; i += 2)
+        {
+            short m = (short)(pcm[i] | (pcm[i + 1] << 8));
+            suma += (double)m * m;
+        }
+        return Math.Sqrt(suma / n);
     }
 }

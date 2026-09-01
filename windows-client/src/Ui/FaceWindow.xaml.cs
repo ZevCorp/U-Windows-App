@@ -803,6 +803,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // cuando no hay tarea (promesa 21).
         Actions.Freno.SePulso += () => Dispatcher.BeginInvoke(() =>
         {
+            // ESCAPE TAMBIÉN CALLA A Ü EN VIVO (2026-08-31): «detener es detener, también la voz»
+            // —lo decía ya el botón de parar—. Es LA interrupción determinista mientras el AEC
+            // real no exista: en este hardware la energía no distingue tu voz del eco (medido).
+            if (_vivo?.Interrumpir() == true) SetStatus("Te escucho.");
+
             // Se anota SOLO si de verdad había algo encendido: Escape se pulsa cien veces al día
             // para cerrar diálogos ajenos, y un log por cada una sería ruido que se aprende a
             // ignorar — y el log que se ignora no sirve el día que hace falta.
@@ -3667,5 +3672,218 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // está trabajando. Que el micrófono sigue abierto ya lo dice su botón, en rojo.
         _ => "",
     };
+
+    // ── DEMO DE PUNTA A PUNTA (2026-08-31): del Easy Access de SAP a los campos clínicos
+    //    llenos, TODO por batches del terreno y por la misma puerta que usa el agente (el MCP
+    //    8790). Nada de coordenadas y nada de atajos: lo que se demuestra es el mecanismo real.
+    //    Los selectores de la fila del paciente y de los campos se toman del terreno VIVO en el
+    //    momento (la fila del censo cambia cada día; fijarla sería mentir).
+
+    private static readonly System.Net.Http.HttpClient _demoHttp = new() { Timeout = TimeSpan.FromSeconds(180) };
+    private bool _demoCorriendo;
+
+    private async Task<string> DemoTool(string name, object args)
+    {
+        string cuerpo = System.Text.Json.JsonSerializer.Serialize(new
+        { jsonrpc = "2.0", id = 1, method = "tools/call", @params = new { name, arguments = args } });
+        using var res = await _demoHttp.PostAsync("http://127.0.0.1:8790/mcp/",
+            new System.Net.Http.StringContent(cuerpo, System.Text.Encoding.UTF8, "application/json"));
+        using var doc = System.Text.Json.JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+        string r = doc.RootElement.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString() ?? "";
+        LogBus.Log("demo", $"{name} → " + (r.Length > 160 ? r[..160] : r));
+        return r;
+    }
+
+    private async Task<System.Text.Json.JsonElement> DemoTerreno()
+    {
+        string json = await _demoHttp.GetStringAsync("http://127.0.0.1:8792/terreno?niveles=1");
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        return doc.RootElement.Clone();
+    }
+
+    /// <summary>Primera puerta VIVA del terreno actual que cumple el criterio, o null.</summary>
+    private static string? DemoPuerta(System.Text.Json.JsonElement t, string tipo, string? etiqueta = null)
+    {
+        foreach (var p in t.GetProperty("puertas").EnumerateArray())
+        {
+            if (!p.GetProperty("vivo").GetBoolean()) continue;
+            if ((p.GetProperty("tipo").GetString() ?? "") != tipo) continue;
+            if (etiqueta != null && !string.Equals(p.GetProperty("etiqueta").GetString(), etiqueta,
+                    StringComparison.OrdinalIgnoreCase)) continue;
+            return p.GetProperty("selector").GetString();
+        }
+        return null;
+    }
+
+    /// <summary>Espera a que el terreno tenga una puerta viva del tipo pedido (el sentido tarda
+    /// unos segundos en leer la rejilla tras llegar). Devuelve el terreno, la tenga o no.</summary>
+    private async Task<System.Text.Json.JsonElement> DemoEsperarPuerta(string tipo, int intentos = 14)
+    {
+        var t = await DemoTerreno();
+        for (int i = 0; i < intentos && DemoPuerta(t, tipo) == null; i++)
+        {
+            await Task.Delay(900);
+            t = await DemoTerreno();
+        }
+        return t;
+    }
+
+    private static string DemoPasos(params object[] pasos) =>
+        System.Text.Json.JsonSerializer.Serialize(pasos);
+
+    private async void OnDemoPuntaAPunta(object sender, RoutedEventArgs e)
+    {
+        if (_demoCorriendo) return;
+        _demoCorriendo = true;
+        try
+        {
+            SetStatus("Demo: SAP al frente…");
+            await DemoTool("map_open_app", new { app = "saplogon" });
+            await Task.Delay(1000);
+
+            // ── Batch 1: del Easy Access a la vista de Triage (si no estamos ya) ──
+            var t = await DemoTerreno();
+            string aqui = t.GetProperty("id").GetString() ?? "";
+            bool yaEnFormulario = aqui.Contains("SAPLY000", StringComparison.OrdinalIgnoreCase);
+            if (!yaEnFormulario && !aqui.Contains("vista:Urgencias Adultos Triage", StringComparison.OrdinalIgnoreCase))
+            {
+                SetStatus("Demo: batch 1 — caminando a Urgencias/Triage…");
+                await DemoTool("map_batch", new { pasos = DemoPasos(
+                    new { exit = "Favoritos/NWP1 - IS-H: Pto.tbjo.clínico" },
+                    new { exit = "Urgencias Adultos/Triage" }) });
+                t = await DemoEsperarPuerta("GuiGridFila");
+            }
+            else t = await DemoEsperarPuerta("GuiGridFila");
+
+            // ── Batch 2: la fila del paciente y el botón Triage, por identidad viva ──
+            if (!yaEnFormulario)
+            {
+                string? fila = DemoPuerta(t, "GuiGridFila");
+                string? boton = DemoPuerta(t, "GuiGridBoton", "Triage");
+                if (fila == null || boton == null)
+                {
+                    SetStatus("Demo: el censo no muestra paciente o botón Triage — ¿la vista está a la vista?");
+                    return;
+                }
+                SetStatus("Demo: batch 2 — paciente y su triage…");
+                await DemoTool("map_batch", new { pasos = DemoPasos(new { exit = fila }, new { exit = boton }) });
+            }
+
+            // ── El envío único: TODO el formulario de un golpe, por identidad ──
+            await DemoEsperarPuerta("GuiTextField");   // el formulario tarda en entregar sus campos
+            SetStatus("Demo: llenando el formulario completo de un solo envío…");
+            int escritos = await Task.Run(DemoLlenarFormulario);
+            SetStatus(escritos > 0
+                ? $"✓ Demo completa: {escritos} campo(s) del triage llenos de un solo envío. Nada se graba."
+                : "Demo: llegué al triage pero no pude escribir los campos.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Demo se detuvo: {ex.Message}");
+            LogBus.Log("demo", ex.ToString());
+        }
+        finally { _demoCorriendo = false; }
+    }
+
+    /// <summary>
+    /// EL ENVÍO ÚNICO del demo: lee los campos del formulario que hay delante (la misma mano que
+    /// usa el dictado clínico) y los llena TODOS de una pasada — texto por `input`, combos por
+    /// `select` — con valores de demostración. Cada escritura es un SetText de la Scripting API
+    /// (~ms), así que el formulario entero aparece lleno de un golpe. No pisa lo que ya tenga
+    /// valor y jamás pulsa Grabar.
+    /// </summary>
+    private int DemoLlenarFormulario()
+    {
+        var campos = _clinicalSap.ReadFields();
+        int n = 0;
+        foreach (var c in campos)
+        {
+            if (!c.Editable || string.IsNullOrEmpty(c.Selector)) continue;
+            bool ocupado = !string.IsNullOrWhiteSpace(c.CurrentValue)
+                && c.CurrentValue.Trim() != "0" && c.CurrentValue.Trim() != "0,0";
+            if (ocupado) continue;
+
+            string clave = ((c.Selector ?? "") + "|" + (c.Label ?? "")).ToUpperInvariant();
+            var paso = new U.Graph.PlanStep { StepOrder = 1, Selector = c.Selector, Label = c.Label };
+
+            if (c.ActionType == "select" && c.AllowedOptions is { Count: > 0 })
+            {
+                var opcion = DemoOpcion(clave, c.AllowedOptions);
+                if (opcion == null) continue;
+                paso.ActionType = "select";
+                paso.SelectedValue = opcion.Value;
+                paso.SelectedLabel = opcion.Label;
+            }
+            else
+            {
+                string? valor = DemoValor(clave);
+                if (valor == null) continue;
+                paso.ActionType = "input";
+                paso.Value = valor;
+            }
+
+            if (_clinicalSap.Execute(paso, out string error)) { n++; LogBus.Log("demo", $"lleno «{c.Label}» "); }
+            else LogBus.Log("demo", $"no pude llenar «{c.Label}»: {error}");
+        }
+
+        // LOS EDITORES DE TEXTO LIBRE (Motivo de Consulta, Conducta) no son campos del dynpro:
+        // son shells GuiTextedit y ReadFields no los ve. Se identifican por su control contenedor.
+        foreach (var v in _clinicalSap.ReadVisibleElements())
+        {
+            if (!v.SubType.Equals("TextEdit", StringComparison.OrdinalIgnoreCase)) continue;
+            string id = v.Id.ToUpperInvariant();
+            string? texto =
+                  id.Contains("MTVCN") ? "Paciente refiere dolor torácico opresivo de 2 horas de evolución, irradiado a brazo izquierdo, acompañado de diaforesis."
+                : id.Contains("TXTOBS") ? "Se prioriza atención. Se indica toma de signos vitales seriados, EKG de 12 derivaciones y valoración médica inmediata."
+                : null;
+            if (texto == null) continue;
+            var paso = new U.Graph.PlanStep { StepOrder = 1, ActionType = "input", Selector = "sap:" + v.Id, Label = v.Label, Value = texto };
+            if (_clinicalSap.Execute(paso, out string error)) { n++; LogBus.Log("demo", $"lleno el editor {v.Id[^20..]}"); }
+            else LogBus.Log("demo", $"editor no aceptó texto: {error}");
+        }
+        return n;
+    }
+
+    /// <summary>El valor de demo para un campo de texto, por su identidad. Null = no se toca.</summary>
+    private static string? DemoValor(string clave)
+    {
+        if (clave.Contains("FRCAR")) return "78";
+        if (clave.Contains("FRRES")) return "16";
+        if (clave.Contains("PESO")) return "70";
+        if (clave.Contains("TALLA") || clave.Contains("ESTATURA")) return "170";
+        if (clave.Contains("TEMP")) return "36,5";
+        if (clave.Contains("SAT")) return "98";
+        if (clave.Contains("DOL")) return "3";
+        if (clave.Contains("TADIA") || clave.Contains("DIAST")) return "80";
+        if (clave.Contains("SIST") || clave.Contains("PASIS")) return "120";
+        if (clave.Contains("DIAST") || clave.Contains("PADIA")) return "80";
+        if (clave.Contains("PRESION") || clave.Contains("PRESIÓN") || clave.Contains("TENSI")) return "120";
+        return null;
+    }
+
+    /// <summary>
+    /// La opción de demo para un combo: por semántica cuando el combo se reconoce (Glasgow pleno,
+    /// paciente alerta, triage 3), y si no, la primera opción con texto — el demo enseña que TODO
+    /// se llena, no decide medicina.
+    /// </summary>
+    private static U.Graph.FieldOption? DemoOpcion(string clave, IReadOnlyList<U.Graph.FieldOption> opciones)
+    {
+        U.Graph.FieldOption? Busca(params string[] pistas) =>
+            opciones.FirstOrDefault(o => pistas.Any(p =>
+                (o.Label ?? "").Contains(p, StringComparison.OrdinalIgnoreCase)
+                || (o.Text ?? "").Contains(p, StringComparison.OrdinalIgnoreCase)));
+
+        U.Graph.FieldOption? elegida = null;
+        if (clave.Contains("APOCU")) elegida = Busca("Espont");
+        else if (clave.Contains("RTAVB")) elegida = Busca("Orientad");
+        else if (clave.Contains("RTAMT")) elegida = Busca("Obedec");
+        else if (clave.Contains("ETDCN") || clave.Contains("CONCIENCIA")) elegida = Busca("Alerta");
+        else if (clave.Contains("CLTRG") || clave.Contains("TRIAGE")) elegida = Busca("3", "III");
+        else if (clave.Contains("MLLEG")) elegida = Busca("Caminando", "Ambulat", "propios");
+
+        return elegida ?? opciones.FirstOrDefault(o =>
+            !string.IsNullOrWhiteSpace(o.Value) && !string.IsNullOrWhiteSpace(o.Label));
+    }
+
 }
 
