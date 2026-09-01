@@ -3,46 +3,51 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
 using U.WindowsClient.Cuenta;
 
 namespace U.WindowsClient.Ui;
 
 /// <summary>
-/// EL LOGIN DE VERDAD: correo y contraseña contra la MISMA cuenta de Supabase del portal. Reemplaza
-/// al popup de nombre+correo como identidad — aquel era una declaración, esto es una sesión.
+/// EL LOGIN: correo y contraseña contra la MISMA cuenta de Supabase del portal. Reemplaza al popup
+/// de nombre+correo como identidad — aquel era una declaración, esto es una sesión.
 /// </summary>
 /// <remarks>
-/// EL DISEÑO SE CONSERVA A PROPÓSITO (pedido por el usuario el 2026-09-01): la misma tarjeta
-/// negra-azulada de <see cref="OnboardingWindow"/>, el triángulo, el acento azul eléctrico, las
-/// esquinas de 18. Lo que cambia es lo que pide — contraseña en vez de nombre, porque el nombre ya
-/// no se teclea: lo sabe la base (`profiles.full_name`) y de ahí se saluda.
+/// LA FORMA SE CONSERVA DEL POPUP QUE LE GUSTÓ AL USUARIO —tarjeta única, marca arriba, dos campos,
+/// un botón ancho— y lo que cambia es la piel: el estudio claro de <see cref="Estudio"/>, igual que
+/// el resto de la app. Y lo que pide: contraseña en vez de nombre, porque el nombre ya no se
+/// teclea — lo sabe la base (`profiles.full_name`) y de ahí se saluda.
 ///
-/// Construida en código, sin XAML, por la misma razón que su antecesora: autocontenida.
+/// EL FALLO SE DICE DENTRO DE LA TARJETA, en su sitio fijo bajo los campos. Un MessageBox encima
+/// rompería justo la estética que se quiso conservar, y además tapa el formulario que hay que
+/// corregir.
+///
+/// SIN CHROME DE WINDOWS, como la ventana de consulta: es una tarjeta, no un documento.
 /// </remarks>
 public sealed class LoginWindow : Window
 {
     private static readonly Regex EmailRe = new(@"^[^\s@]+@[^\s@]+\.[^\s@]+$", RegexOptions.Compiled);
 
     private readonly SesionMiracle _sesion;
+    private readonly TextBox _nombre;
     private readonly TextBox _email;
     private readonly PasswordBox _clave;
+    private readonly Border _cajaNombre;
+    private readonly TextBlock _rotuloNombre;
+    private readonly TextBlock _titulo;
+    private readonly TextBlock _bajada;
     private readonly Button _entrar;
+    private readonly Button _cambiarModo;
     private readonly TextBlock _fallo;
 
-    private static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(0xEA, 0xF2, 0xFF));
-    private static readonly Brush Muted = new SolidColorBrush(Color.FromArgb(0x9E, 0xC8, 0xDC, 0xFF));
-    private static readonly Brush Blue = new SolidColorBrush(Color.FromRgb(0x4C, 0x8D, 0xFF));
-    private static readonly Brush FieldBg = new SolidColorBrush(Color.FromRgb(0x0A, 0x12, 0x22));
-    private static readonly Brush Line = new SolidColorBrush(Color.FromArgb(0x40, 0x60, 0x94, 0xEB));
-    private static readonly Brush Danger = new SolidColorBrush(Color.FromRgb(0xFF, 0x8A, 0x8A));
+    /// <summary>En modo alta se pide el nombre y el boton crea la cuenta.</summary>
+    private bool _creando;
 
     public LoginWindow(SesionMiracle sesion)
     {
         _sesion = sesion;
 
         Title = "Miracle";
-        Width = 440;
+        Width = 452;
         SizeToContent = SizeToContent.Height;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
@@ -50,185 +55,306 @@ public sealed class LoginWindow : Window
         Background = Brushes.Transparent;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         ShowInTaskbar = true;
-        Topmost = true;
 
-        var card = new Border
+        var tarjeta = new Border
         {
-            CornerRadius = new CornerRadius(18),
-            Background = new LinearGradientBrush(
-                Color.FromRgb(0x07, 0x0C, 0x18), Color.FromRgb(0x02, 0x04, 0x0A), 90),
-            BorderBrush = Line,
+            CornerRadius = new CornerRadius(34),
+            Background = Estudio.Fondo,
+            BorderBrush = Estudio.Borde,
             BorderThickness = new Thickness(1),
-            Margin = new Thickness(18),
-            Effect = new DropShadowEffect { BlurRadius = 40, ShadowDepth = 0, Opacity = 0.55, Color = Colors.Black }
+            Margin = new Thickness(0),
         };
 
-        var stack = new StackPanel { Margin = new Thickness(30, 28, 30, 26) };
+        var pila = new StackPanel { Margin = new Thickness(32, 26, 32, 28) };
 
-        // marca (triángulo Miracle)
-        var mark = new System.Windows.Shapes.Polygon
+        // ── el marco: solo cerrar. Aquí no hay nada que minimizar todavía ────
+        var cerrar = new Button
+        {
+            Content = new TextBlock
+            {
+                Text = "",
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 9.5,
+                Foreground = Estudio.TintaMedia,
+            },
+            Width = 30, Height = 30,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Cerrar",
+            Template = Estudio.Pastilla(15),
+            Margin = new Thickness(0, -6, -6, 2),
+        };
+        cerrar.Click += (_, __) => { DialogResult = false; Close(); };
+        cerrar.MouseEnter += (_, __) => cerrar.Background = Estudio.SuperficieSuave;
+        cerrar.MouseLeave += (_, __) => cerrar.Background = Brushes.Transparent;
+        pila.Children.Add(cerrar);
+
+        // ── marca ────────────────────────────────────────────────────────────
+        pila.Children.Add(new System.Windows.Shapes.Polygon
         {
             Points = new PointCollection { new Point(15, 2), new Point(28, 25), new Point(2, 25) },
-            Stroke = Blue,
-            StrokeThickness = 1.6,
-            Fill = new SolidColorBrush(Color.FromArgb(0x22, 0x4C, 0x8D, 0xFF)),
+            Stroke = Estudio.Acento,
+            StrokeThickness = 1.8,
+            Fill = Estudio.AcentoSuave,
             Width = 30, Height = 27,
             HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 0, 0, 16)
-        };
+            Margin = new Thickness(0, 0, 0, 18),
+        });
 
-        var title = new TextBlock
+        _titulo = new TextBlock
         {
-            Text = "Entra a tu cuenta",
-            Foreground = Ink,
-            FontSize = 21,
-            FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(0, 0, 0, 6)
+            Foreground = Estudio.Tinta,
+            FontSize = 22,
+            FontWeight = FontWeights.Bold,
+            Margin = new Thickness(0, 0, 0, 7),
         };
-        var subtitle = new TextBlock
+        _bajada = new TextBlock
         {
-            Text = "La misma cuenta con la que entras a Miracle en la web. Tus consultas quedan en el mismo sitio.",
-            Foreground = Muted,
+            Foreground = Estudio.TintaMedia,
             FontSize = 13,
+            LineHeight = 19,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 22)
+            Margin = new Thickness(0, 0, 0, 24),
         };
+        pila.Children.Add(_titulo);
+        pila.Children.Add(_bajada);
 
+        // ── los campos ───────────────────────────────────────────────────────
+        _nombre = new TextBox
+        {
+            Height = 42,
+            Background = Brushes.Transparent,
+            Foreground = Estudio.Tinta,
+            CaretBrush = Estudio.Acento,
+            SelectionBrush = Estudio.Acento,
+            BorderThickness = new Thickness(0),
+            FontSize = 14,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
         _email = new TextBox
         {
-            Height = 40,
+            Height = 42,
             Background = Brushes.Transparent,
-            Foreground = Ink,
-            CaretBrush = Blue,
+            Foreground = Estudio.Tinta,
+            CaretBrush = Estudio.Acento,
+            SelectionBrush = Estudio.Acento,
             BorderThickness = new Thickness(0),
             FontSize = 14,
             VerticalContentAlignment = VerticalAlignment.Center,
         };
         _clave = new PasswordBox
         {
-            Height = 40,
+            Height = 42,
             Background = Brushes.Transparent,
-            Foreground = Ink,
-            CaretBrush = Blue,
+            Foreground = Estudio.Tinta,
+            CaretBrush = Estudio.Acento,
+            SelectionBrush = Estudio.Acento,
             BorderThickness = new Thickness(0),
             FontSize = 14,
             VerticalContentAlignment = VerticalAlignment.Center,
         };
+        _nombre.TextChanged += (_, __) => Validar();
         _email.TextChanged += (_, __) => Validar();
         _clave.PasswordChanged += (_, __) => Validar();
 
-        // El fallo se dice DENTRO de la tarjeta, en su sitio fijo: un MessageBox encima del login
-        // rompería justo la estética que se quiso conservar.
+        _rotuloNombre = Estudio.Rotulo("Nombre completo");
+        _cajaNombre = Caja(_nombre);
+        pila.Children.Add(_rotuloNombre);
+        pila.Children.Add(_cajaNombre);
+        pila.Children.Add(Estudio.Rotulo("Correo"));
+        pila.Children.Add(Caja(_email));
+        pila.Children.Add(Estudio.Rotulo("Contraseña"));
+        pila.Children.Add(Caja(_clave));
+
         _fallo = new TextBlock
         {
-            Text = "",
-            Foreground = Danger,
+            Foreground = Estudio.Alerta,
             FontSize = 12.5,
+            LineHeight = 18,
             TextWrapping = TextWrapping.Wrap,
             Visibility = Visibility.Collapsed,
-            Margin = new Thickness(2, 2, 0, 0)
+            Margin = new Thickness(2, 2, 0, 0),
         };
+        pila.Children.Add(_fallo);
 
-        stack.Children.Add(mark);
-        stack.Children.Add(title);
-        stack.Children.Add(subtitle);
-        stack.Children.Add(FieldLabel("CORREO"));
-        stack.Children.Add(Wrap(_email));
-        stack.Children.Add(FieldLabel("CONTRASEÑA"));
-        stack.Children.Add(Wrap(_clave));
-        stack.Children.Add(_fallo);
-
+        // ── entrar ───────────────────────────────────────────────────────────
+        //
+        // ESTE SÍ ES AZUL, y es la excepción que confirma la regla del estudio: en una tarjeta con
+        // un solo camino posible, la acción principal se señala con color además de con relieve.
+        // En la ventana de consulta no hace falta porque el botón de grabar está SOLO — aquí
+        // compite con dos campos y un botón de cerrar.
         _entrar = new Button
         {
-            Content = "Entrar",
-            Height = 44,
-            Margin = new Thickness(0, 20, 0, 0),
+            Height = 48,
+            Margin = new Thickness(0, 22, 0, 0),
             Foreground = Brushes.White,
-            FontSize = 14,
+            Background = Estudio.Acento,
+            BorderThickness = new Thickness(0),
+            FontSize = 14.5,
             FontWeight = FontWeights.SemiBold,
             Cursor = Cursors.Hand,
             IsEnabled = false,
-            Opacity = 0.5,
-            BorderThickness = new Thickness(0),
-            Background = Blue,
-            Template = RoundedButtonTemplate()
+            Opacity = 0.45,
+            Template = Estudio.Pastilla(24),
         };
-        _entrar.Click += async (_, __) => await EntrarAsync();
-        stack.Children.Add(_entrar);
+        _entrar.ConRelieve(Estudio.Sombra1);
+        _entrar.Click += async (_, __) => await ConfirmarAsync();
+        pila.Children.Add(_entrar);
 
-        card.Child = stack;
-        Content = card;
+        // El cambio de modo es texto y no boton macizo: es la salida secundaria y no debe competir
+        // con la accion principal, que en esta tarjeta es la unica que importa.
+        _cambiarModo = new Button
+        {
+            Height = 34,
+            Margin = new Thickness(0, 12, 0, 0),
+            Foreground = Estudio.Acento,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            FontSize = 12.5,
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(17),
+        };
+        _cambiarModo.Click += (_, __) => Modo(!_creando);
+        pila.Children.Add(_cambiarModo);
+
+        tarjeta.Child = pila;
+        var marco = Estudio.Elevar(tarjeta, Estudio.Sombra3);
+        marco.Margin = new Thickness(22, 18, 22, 26);   // sitio para la sombra
+        Content = marco;
+        this.Nitida();
 
         MouseLeftButtonDown += (_, e) => { if (e.ButtonState == MouseButtonState.Pressed) DragMove(); };
         Loaded += (_, __) => _email.Focus();
-        KeyDown += async (_, e) => { if (e.Key == Key.Enter && _entrar.IsEnabled) await EntrarAsync(); };
+        KeyDown += async (_, e) =>
+        {
+            if (e.Key == Key.Enter && _entrar.IsEnabled) await ConfirmarAsync();
+            if (e.Key == Key.Escape) { DialogResult = false; Close(); }
+        };
+
+        Modo(creando: false);
+    }
+
+    // ── los dos modos ────────────────────────────────────────────────────────
+
+    private void Modo(bool creando)
+    {
+        _creando = creando;
+        _titulo.Text = creando ? "Crea tu cuenta" : "Entra a tu cuenta";
+        _bajada.Text = creando
+            ? "Con esta cuenta entras tambien al portal en la web. Las consultas quedan en el mismo sitio."
+            : "La misma con la que entras a Miracle en la web. Tus consultas quedan en el mismo sitio.";
+        _entrar.Content = creando ? "Crear cuenta" : "Entrar";
+        _cambiarModo.Content = creando ? "¿Ya tienes cuenta? Entra" : "¿No tienes cuenta? Crea una";
+
+        var visible = creando ? Visibility.Visible : Visibility.Collapsed;
+        _rotuloNombre.Visibility = visible;
+        _cajaNombre.Visibility = visible;
+
+        // EL CORREO ESCRITO NO SE PIERDE al cambiar de modo: quien viene a entrar y descubre que no
+        // tiene cuenta ya lo habia tecleado, y volver a pedirselo es castigarle por equivocarse.
+        _fallo.Visibility = Visibility.Collapsed;
+        Validar();
+        if (creando && _nombre.Text.Length == 0) _nombre.Focus();
     }
 
     private void Validar()
     {
-        bool ok = EmailRe.IsMatch(_email.Text.Trim()) && _clave.Password.Length > 0;
+        bool ok = EmailRe.IsMatch(_email.Text.Trim()) && _clave.Password.Length > 0
+                  && (!_creando || _nombre.Text.Trim().Length > 0);
         _entrar.IsEnabled = ok;
-        _entrar.Opacity = ok ? 1.0 : 0.5;
+        _entrar.Opacity = ok ? 1.0 : 0.45;
     }
 
-    private async Task EntrarAsync()
+    /// <summary>
+    /// Confirma lo que toque segun el modo. El alta tiene TRES finales y los tres se dicen
+    /// distinto (promesa 97); el de en medio -creada pero sin confirmar- es el que engana, porque
+    /// Supabase contesta "ok" igual que cuando la cuenta queda lista.
+    /// </summary>
+    private async Task ConfirmarAsync()
     {
         _entrar.IsEnabled = false;
-        _entrar.Content = "Entrando…";
+        _cambiarModo.IsEnabled = false;
+        _entrar.Content = _creando ? "Creando…" : "Entrando…";
         _fallo.Visibility = Visibility.Collapsed;
         try
         {
-            bool dentro = await _sesion.EntrarAsync(_email.Text.Trim().ToLowerInvariant(), _clave.Password);
-            if (dentro)
+            string email = _email.Text.Trim().ToLowerInvariant();
+
+            if (!_creando)
             {
-                DialogResult = true;
-                Close();
+                if (await _sesion.EntrarAsync(email, _clave.Password)) { DialogResult = true; Close(); return; }
+                Decir(_sesion.UltimoFallo.Length > 0 ? _sesion.UltimoFallo : "No se pudo entrar.", malo: true);
                 return;
             }
-            _fallo.Text = _sesion.UltimoFallo.Length > 0 ? _sesion.UltimoFallo : "No se pudo entrar.";
-            _fallo.Visibility = Visibility.Visible;
+
+            var alta = await _sesion.CrearCuentaAsync(_nombre.Text, email, _clave.Password);
+            switch (alta)
+            {
+                case ResultadoDeAlta.Entro:
+                    DialogResult = true;
+                    Close();
+                    return;
+
+                case ResultadoDeAlta.FaltaConfirmar:
+                    // NO SE ENTRA. Se vuelve al modo de entrar con el correo ya puesto: cuando el
+                    // medico vuelva del enlace solo tendra que escribir la contrasena.
+                    // SE DICEN LAS DOS POSIBILIDADES, y no es palabrería: Supabase contesta lo
+                    // MISMO cuando la cuenta es nueva y cuando ya existía, a propósito, para no
+                    // revelar qué correos están registrados. El 2026-09-01 el usuario probó con un
+                    // correo que ya tenía cuenta desde junio: el log dijo «user_repeated_signup»,
+                    // no se mandó ningún correo —no había nada que confirmar— y este mensaje le
+                    // dejó esperando un email que no iba a llegar nunca.
+                    //
+                    // No se puede distinguir desde aquí; lo que sí se puede es no dar por segura
+                    // una de las dos.
+                    Modo(creando: false);
+                    Decir("Listo. Si el correo era nuevo, te llega un enlace para confirmarlo. "
+                        + "Si ya tenías cuenta con él, no llega nada: entra con tu contraseña.",
+                        malo: false);
+                    return;
+
+                default:
+                    Decir(_sesion.UltimoFallo.Length > 0 ? _sesion.UltimoFallo
+                        : "No se pudo crear la cuenta.", malo: true);
+                    return;
+            }
         }
         finally
         {
             if (IsLoaded)
             {
-                _entrar.Content = "Entrar";
+                _entrar.Content = _creando ? "Crear cuenta" : "Entrar";
+                _cambiarModo.IsEnabled = true;
                 Validar();
             }
         }
     }
 
-    private static TextBlock FieldLabel(string text) => new()
+    /// <summary>
+    /// Lo que hay que decir. EL COLOR SEPARA un tropiezo de una buena noticia: "revisa tu correo"
+    /// en rojo se lee como un error, y quien lo lea creera que su alta fallo.
+    /// </summary>
+    private void Decir(string texto, bool malo)
     {
-        Text = text,
-        Foreground = Muted,
-        FontSize = 10.5,
-        FontWeight = FontWeights.SemiBold,
-        Margin = new Thickness(2, 0, 0, 6)
-    };
-
-    private static Border Wrap(UIElement inner) => new()
-    {
-        CornerRadius = new CornerRadius(10),
-        Background = FieldBg,
-        BorderBrush = Line,
-        BorderThickness = new Thickness(1),
-        Padding = new Thickness(12, 2, 12, 2),
-        Margin = new Thickness(0, 0, 0, 14),
-        Child = inner
-    };
-
-    private static ControlTemplate RoundedButtonTemplate()
-    {
-        var template = new ControlTemplate(typeof(Button));
-        var border = new FrameworkElementFactory(typeof(Border));
-        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(11));
-        border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
-        var content = new FrameworkElementFactory(typeof(ContentPresenter));
-        content.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Center);
-        content.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
-        border.AppendChild(content);
-        template.VisualTree = border;
-        return template;
+        _fallo.Text = texto;
+        _fallo.Foreground = malo ? Estudio.Alerta : Estudio.Acento;
+        _fallo.Visibility = Visibility.Visible;
     }
+
+    /// <summary>
+    /// La caja de un campo. HUNDIDA y no elevada: un campo de texto es un hueco donde se escribe,
+    /// no un objeto que sobresale — darle la sombra de un botón invitaría a pulsarlo.
+    /// </summary>
+    private static Border Caja(UIElement dentro) => new()
+    {
+        CornerRadius = new CornerRadius(14),
+        Background = Estudio.Superficie,
+        BorderBrush = Estudio.Borde,
+        BorderThickness = new Thickness(1),
+        Padding = new Thickness(14, 1, 14, 1),
+        Margin = new Thickness(0, 0, 0, 16),
+        Child = dentro,
+    };
 }

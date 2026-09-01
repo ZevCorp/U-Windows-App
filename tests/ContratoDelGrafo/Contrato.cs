@@ -180,6 +180,76 @@ internal static class Contrato
         Prueba("90. la consulta se atribuye al MÉDICO que entró, no a la máquina", LaConsultaEsDelMedico);
         Prueba("91. si la nota no se generó, la consulta NO se declara terminada", SinNotaNoHayConsultaTerminada);
 
+        // ── EL ARRANQUE QUE NO SE MUERE EN SILENCIO ──────────────────────────
+        //
+        // Medido en el log el 2026-09-01: `U.exe --consulta`, el medico entró bien
+        // («cuenta: médico dentro · 67530d77…») y esa fue la ÚLTIMA LÍNEA DEL ARCHIVO. Sin
+        // excepción, sin ventana, sin nada. La causa: `OnStartup` corre antes de que StartupUri
+        // cree la carita, así que el login era la única ventana y al cerrarse
+        // ShutdownMode.OnLastWindowClose dio la aplicación por terminada.
+        //
+        // El bug de WPF en sí es nivel 4 y se dice: solo se caza ejecutando. Lo que SÍ se puede
+        // prometer —y es lo que impide que la próxima vez vuelva a ser invisible— es que el
+        // arranque nombre el paso en el que se quedó. Un fallo que no se ve no se arregla.
+        Console.WriteLine();
+        Prueba("92. arrancar la consulta dice EN QUÉ PASO se quedó: morir callado no es un resultado", ElArranqueDiceDondeSeQuedo);
+
+        // ── QUE LA CONSULTA SEA DE VERDAD LA MISMA (2026-09-01) ──────────────
+        //
+        // Al mirar dónde lista el portal sus consultas apareció un hueco que llevaba escrito en la
+        // spec como si estuviera resuelto: el portal lista la tabla `consultations`, y quien la
+        // escribe es EL PROPIO PORTAL (upsertConsultation(encounterToConsultation(...)), en
+        // en-vivo/page.tsx:655). Windows creaba el `clinical_encounter` —que existe— y nada más,
+        // así que una consulta grabada aquí era INVISIBLE en la web. «Misma base de datos» era
+        // cierto de la mitad de abajo y falso de la que ve el médico.
+        Prueba("93. una consulta grabada en Windows se VE en el portal: el espejo se escribe, no se supone", ElEspejoSeEscribe);
+        Prueba("94. elegir plantilla deja de ser un paso: la consulta arranca sola", NadieEligePlantilla);
+
+        // ── EL MICRÓFONO QUE NO ABRIÓ (2026-09-01, visto en el log del usuario) ──
+        //
+        //   [15:51:47] clinica: encounter 76cc7aec… created
+        //   [15:51:48] dictado: no pude abrir el stream de dictado: Unable to connect…
+        //   [15:51:48] consulta: grabando · encounter 76cc7aec…          ← y era MENTIRA
+        //   [15:52:05] consulta: falló · no se oyó nada que transcribir: comprueba el micrófono
+        //
+        // El stream nunca conectó y la consulta se declaró GRABANDO igual: el usuario habló
+        // diecisiete segundos a una app que no escuchaba, y al parar se le mandó a revisar el
+        // MICRÓFONO — que no tenía nada que ver. Es el patrón nº10 (un paso no ejecutado deja
+        // rastro) y el aprendizaje nº2 (un mensaje que no distingue sus causas) a la vez.
+        Prueba("95. si el micrófono no llegó a abrir, la consulta NO dice que está grabando", SinMicrofonoNoSeGraba);
+
+        // ── UN TROPIEZO DE RED NO ES UNA AVERÍA (2026-09-01, medido) ─────────
+        //
+        // El dictado se rendía al primer fallo. Medido en la máquina del usuario, en tres segundos
+        // seguidos: el DNS de stt-rt.soniox.com contestó «Host desconocido», el TCP a :443 no
+        // abrió... y el WebSocket al MISMO host abrió a la primera. El DNS de ese equipo falla de
+        // forma intermitente, y con un solo intento eso se lleva la consulta entera por delante.
+        //
+        // El motor del portal, del que se portó todo lo demás, lleva desde siempre cuatro intentos
+        // con espera creciente (useDictation.ts:40 — MAX_RECONNECT_ATTEMPTS y RECONNECT_DELAYS_MS).
+        // Eso NO se portó, y es el hueco.
+        Prueba("96. un tropiezo de red no tumba la grabación: se reintenta antes de rendirse", ElDictadoReintenta);
+
+        // ── CREAR CUENTA DESDE LA APP (2026-09-01) ───────────────────────────
+        //
+        // Supabase contesta lo MISMO —«ok»— tanto cuando la cuenta queda lista como cuando queda
+        // creada pero pendiente de confirmar por correo; lo único que las separa es si vino sesión
+        // en la respuesta. Confundirlas mandaría al médico a una consulta con una sesión que no
+        // existe, y el 401 llegaría después, sin relación aparente con el alta.
+        Prueba("97. una cuenta que pide confirmación NO cuenta como haber entrado", CrearCuentaNoEsEntrar);
+
+        // ── LA IDENTIDAD SE PIDE UNA VEZ (2026-09-01, lo vio el usuario) ─────
+        //
+        // Con la Dra. Rincón ya dentro de la consulta, la carita le planto encima el popup viejo de
+        // «Te damos la bienvenida», pidiéndole otra vez nombre y correo. Son DOS identidades
+        // conviviendo: la de verdad —la sesión de Supabase, que sabe quién es y tiene su token— y
+        // la vieja de máquina, un correo tecleado en config.json que la carita seguía mirando.
+        //
+        // Al reemplazar el login se cambió el camino de --consulta y se dejó el de la carita, así
+        // que cada uno pregunta por su cuenta. Es el aprendizaje nº16 otra vez: dos identidades de
+        // distinta forma, y quien las junta hereda el desacuerdo.
+        Prueba("98. con un médico dentro, la identidad NO se vuelve a pedir", LaIdentidadSePideUnaVez);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -2212,8 +2282,10 @@ internal static class Contrato
 
         bool microfonoAbierto = false;
         var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
-            (Func<CancellationToken, Task>)(_ => { microfonoAbierto = true; return Task.CompletedTask; }),
-            (Func<Task<string>>)(() => Task.FromResult("")))!;
+            (Func<CancellationToken, Task<bool>>)(_ => { microfonoAbierto = true; return Task.FromResult(true); }),
+            (Func<Task<string>>)(() => Task.FromResult("")),
+            // El espejo va explícito aunque sea opcional: Activator no rellena los que faltan.
+            null)!;
 
         bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
             .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
@@ -2556,8 +2628,9 @@ internal static class Contrato
 
         var clinica = Activator.CreateInstance(tClinica, "https://graph.test", sesion, backend)!;
         var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
-            (Func<CancellationToken, Task>)(_ => Task.CompletedTask),
-            (Func<Task<string>>)(() => Task.FromResult("El paciente refiere cefalea.")))!;
+            (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(true)),
+            (Func<Task<string>>)(() => Task.FromResult("El paciente refiere cefalea.")),
+            null)!;
 
         bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
             .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
@@ -2581,6 +2654,411 @@ internal static class Contrato
             + "crearlo sí");
         Debe(backend.Peticiones.Count(p => p.Contains("/transcript")) == 1,
             "y el texto se guardó UNA vez: el fallo fue de la nota, no de la transcripción");
+    }
+
+    /// <remarks>
+    /// Las tres afirmaciones son la promesa entera, y la tercera es la que más costó: **cancelar no
+    /// es fallar**. Si cerrar el login sin entrar disparara el aviso, el aviso se volvería ruido —
+    /// y un aviso que sale cuando no pasa nada se aprende a ignorar, que es como se pierde el que
+    /// sí importa.
+    /// </remarks>
+    private static void ElArranqueDiceDondeSeQuedo()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.ArranqueDeConsulta");
+        var correr = t?.GetMethod("Correr");
+        if (t == null || correr == null) { Pendiente("Clinical.ArranqueDeConsulta", "92"); return; }
+
+        object Armar(Func<bool> restaurar, Func<bool> login, Action abrir, Action<string, string> avisar)
+            => Activator.CreateInstance(t, restaurar, login, abrir, avisar)!;
+
+        // 1. La ventana revienta: se avisa, con el PASO nombrado y el porqué REAL.
+        string paso = "", porque = "";
+        var revienta = Armar(() => false, () => true,
+            () => throw new InvalidOperationException("no hay micrófono en este equipo"),
+            (p, q) => { paso = p; porque = q; });
+        Debe((bool)correr.Invoke(revienta, null)! == false,
+            "si la ventana no abre, el arranque contesta que NO");
+        Debe(paso.Length > 0 && !paso.Equals("no se pudo", StringComparison.OrdinalIgnoreCase),
+            $"y nombra el PASO en el que se quedó, no una conclusión: «{paso}»");
+        Debe(porque.Contains("no hay micrófono en este equipo"),
+            $"con el motivo REAL dentro, no un genérico que manda a mirar donde no es: «{porque}»");
+
+        // 2. Cancelar el login NO es un fallo: no se avisa de nada.
+        bool avisaron = false;
+        var cancela = Armar(() => false, () => false, () => { }, (_, _) => avisaron = true);
+        Debe((bool)correr.Invoke(cancela, null)! == false, "cancelar tampoco abre la ventana");
+        Debe(!avisaron,
+            "pero NO se avisa: cerrar el login sin entrar es una decisión, no una avería, y un "
+            + "aviso que salta cuando no pasa nada se aprende a ignorar");
+
+        // 3. Con sesión restaurada no se pide contraseña, y el camino feliz no avisa de nada.
+        bool pidioLogin = false, avisoEnFeliz = false, abrio = false;
+        var feliz = Armar(() => true, () => { pidioLogin = true; return true; },
+            () => abrio = true, (_, _) => avisoEnFeliz = true);
+        Debe((bool)correr.Invoke(feliz, null)! && abrio, "con sesión guardada se abre la ventana");
+        Debe(!pidioLogin,
+            "y no se pide la contraseña otra vez: para eso se guardó la sesión (promesa 85)");
+        Debe(!avisoEnFeliz, "el camino feliz no enseña ningún aviso");
+    }
+
+    /// <remarks>
+    /// EL MAPEO ES EL DEL PORTAL, campo por campo (lib/clinical/encounter-to-consultation.ts): si
+    /// aquí se inventara otro, la misma consulta se vería distinta en cada sitio — que es peor que
+    /// no verse, porque nadie sospecharía. Se juzga la FILA que se manda, no que la llamada no
+    /// falle: un POST que sale con `note` vacío devuelve 201 igual.
+    /// </remarks>
+    private static void ElEspejoSeEscribe()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.EspejoDeConsulta");
+        var fabricar = t?.GetMethod("Fila", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || fabricar == null) { Pendiente("Clinical.EspejoDeConsulta.Fila", "93"); return; }
+
+        var tNota = Capacidad("U.WindowsClient.Clinical.NotaClinica")!;
+        var nota = tNota.GetMethod("Leer", BindingFlags.Public | BindingFlags.Static)!
+            .Invoke(null, new object?[]
+            {
+                JsonDocument.Parse(
+                    "{\"summary\":\"Cefalea de tres días sin signos de alarma.\","
+                    + "\"sections\":[{\"key\":\"motivo_consulta\",\"label\":\"Motivo de consulta\","
+                    + "\"content\":\"Cefalea de 3 días.\"},{\"key\":\"plan\",\"label\":\"Plan\","
+                    + "\"content\":\"Hidratación y control.\"}],"
+                    + "\"warnings\":[],\"missing_required_sections\":[]}").RootElement,
+            })!;
+
+        string json = (string)fabricar.Invoke(null, new object?[]
+        {
+            "enc-1", nota, "El paciente refiere cefalea.", "Consulta inicial adulto",
+            "medicina_general", new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero),
+        })!;
+
+        using var fila = JsonDocument.Parse(json);
+        var r = fila.RootElement;
+
+        string Str(string campo) => r.TryGetProperty(campo, out var v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString() ?? "" : "";
+
+        Debe(Str("id") == "enc-1",
+            "la fila usa el MISMO id que el encounter: así el puente es 1:1 e idempotente, y "
+            + "/app/consultas/<id> del portal lleva a esta consulta");
+        Debe(Str("estado") == "borrador",
+            "nace en borrador, que es lo que la mete en el ciclo de revisión y firma del portal");
+        Debe(Str("resumen").Contains("Cefalea de tres días"), "el resumen viaja");
+        Debe(Str("motivo").Contains("Cefalea de 3 días"),
+            $"y el motivo sale de la sección «motivo…», como en el portal: «{Str("motivo")}»");
+        Debe(Str("plantilla") == "Consulta inicial adulto", "la plantilla se nombra");
+
+        // La nota: sections del contrato → el shape del portal (id/titulo/kind/texto). Un nombre de
+        // campo distinto aquí y el detalle del portal pinta secciones vacías sin dar ningún error.
+        Debe(r.TryGetProperty("note", out var note) && note.ValueKind == JsonValueKind.Array
+             && note.GetArrayLength() == 2, "las dos secciones viajan");
+        var primera = note[0];
+        Debe(primera.TryGetProperty("id", out var sid) && sid.GetString() == "motivo_consulta"
+             && primera.TryGetProperty("titulo", out _) && primera.TryGetProperty("kind", out var k)
+             && k.GetString() == "texto" && primera.TryGetProperty("texto", out var tx)
+             && (tx.GetString() ?? "").Contains("Cefalea de 3 días"),
+            "con los nombres de campo del portal: id/titulo/kind/texto — no key/label/content");
+
+        // El verbatim se espeja como turnos, que es como el detalle sabe pintarlo.
+        Debe(r.TryGetProperty("transcript", out var tr) && tr.ValueKind == JsonValueKind.Array
+             && tr.GetArrayLength() == 1
+             && (tr[0].TryGetProperty("texto", out var tt) ? tt.GetString() ?? "" : "")
+                .Contains("cefalea"),
+            "y la transcripción verbatim va como un turno, tal cual se dijo");
+
+        // Sin transcripción no se fabrica una: vacío es vacío (aprendizaje nº9).
+        string sinTexto = (string)fabricar.Invoke(null, new object?[]
+        {
+            "enc-2", nota, "   ", "P", "medicina_general", DateTimeOffset.UtcNow,
+        })!;
+        using var fila2 = JsonDocument.Parse(sinTexto);
+        Debe(fila2.RootElement.GetProperty("transcript").GetArrayLength() == 0,
+            "sin nada dicho, la transcripción va VACÍA: no se inventa un turno en blanco");
+    }
+
+    /// <remarks>
+    /// El médico no quiere elegir plantilla: quiere hablar. El backend EXIGE `template_id` al crear
+    /// el encounter, así que «ninguna» no es una opción — lo que se puede es que la elija el sistema
+    /// y no se pregunte nunca.
+    ///
+    /// La plantilla ABIERTA de verdad —que la IA diseñe las secciones de cada consulta— existe en
+    /// el backend solo para biopsias (SYSTEM_DYNAMIC en BiopsyExtractionService) y pedirla para
+    /// consultas es trabajo del repo Graph. Lo que esta promesa cubre es lo de este lado: que nadie
+    /// tenga que elegir, y que si la plantilla abierta no existe todavía se CREE en vez de caer a
+    /// una cualquiera del catálogo — caer a una cualquiera es elegir por el médico sin decírselo.
+    /// </remarks>
+    private static void NadieEligePlantilla()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.PlantillaAbierta");
+        var elegir = t?.GetMethod("Elegir", BindingFlags.Public | BindingFlags.Static);
+        var secciones = t?.GetMethod("Secciones", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || elegir == null || secciones == null)
+        {
+            Pendiente("Clinical.PlantillaAbierta", "94");
+            return;
+        }
+
+        var tPlantilla = Capacidad("U.WindowsClient.Clinical.PlantillaClinica")!;
+        object Plantilla(string id, string nombre) =>
+            Activator.CreateInstance(tPlantilla, id, nombre, "medicina_general", false)!;
+
+        var lista = (System.Collections.IList)Activator.CreateInstance(
+            typeof(List<>).MakeGenericType(tPlantilla))!;
+
+        // Catálogo sin la abierta: NO se cae a una cualquiera.
+        lista.Add(Plantilla("inst-1", "Consulta inicial adulto"));
+        lista.Add(Plantilla("inst-2", "Atención general de urgencias"));
+        object? sinAbierta = elegir.Invoke(null, new object?[] { lista });
+        Debe(sinAbierta == null,
+            "con 204 plantillas institucionales y ninguna abierta, NO se elige una cualquiera: "
+            + "elegir por el médico sin decírselo es peor que preguntarle");
+
+        // Con la abierta dentro: se usa esa, sin preguntar.
+        string nombreAbierta = (string)t.GetProperty("Nombre",
+            BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!;
+        lista.Add(Plantilla("mia-9", nombreAbierta));
+        object? conAbierta = elegir.Invoke(null, new object?[] { lista });
+        Debe(conAbierta != null
+             && (string)tPlantilla.GetProperty("Id")!.GetValue(conAbierta)! == "mia-9",
+            "y cuando existe, se usa esa y no se pregunta nada");
+
+        // Las secciones con las que nace: pocas, anchas, y con instrucción de organizar libre.
+        var trozos = ((System.Collections.IEnumerable)secciones.Invoke(null, null)!)
+            .Cast<object>().ToList();
+        Debe(trozos.Count is >= 2 and <= 30,
+            $"el contrato del backend exige entre 2 y 30 secciones; se piden {trozos.Count}");
+        string todo = string.Join(" ", trozos.Select(x => x?.ToString() ?? ""));
+        Debe(todo.Contains("organiza", StringComparison.OrdinalIgnoreCase)
+             || todo.Contains("estructura", StringComparison.OrdinalIgnoreCase),
+            "y la instrucción le pide al organizador que ESTRUCTURE lo que se dijo, que es lo más "
+            + "cerca de una plantilla dinámica que se puede llegar sin tocar Graph");
+    }
+
+    /// <remarks>
+    /// LA SEGUNDA MITAD ES LA QUE DUELE: que el motivo distinga «el dictado no conectó» de «el
+    /// micrófono no entregó audio». Son dos averías con dos arreglos opuestos —una es la red, la
+    /// otra es el aparato— y hasta hoy las dos salían como «comprueba el micrófono», que manda a
+    /// desenchufar cables cuando lo que falla es el wifi.
+    /// </remarks>
+    private static void SinMicrofonoNoSeGraba()
+    {
+        var tConsulta = Capacidad("U.WindowsClient.Clinical.Consulta");
+        var tClinica = Capacidad("U.WindowsClient.Clinical.ClinicaClient");
+        var tSesion = Capacidad("U.WindowsClient.Cuenta.SesionMiracle");
+        if (tConsulta == null || tClinica == null || tSesion == null)
+        {
+            Pendiente("Clinical.Consulta", "95");
+            return;
+        }
+
+        // El micrófono se pide como una función que CONTESTA si abrió. Si siguiera siendo una que
+        // no devuelve nada, esta promesa no se podría ni escribir: es la firma la que hace posible
+        // enterarse.
+        var abrir = tConsulta.GetConstructors()[0].GetParameters()
+            .FirstOrDefault(p => p.Name != null && p.Name.Contains("icrofono"));
+        if (abrir == null || abrir.ParameterType != typeof(Func<CancellationToken, Task<bool>>))
+        {
+            Pendiente("Consulta(abrirMicrofono que CONTESTE si abrió)", "95");
+            return;
+        }
+
+        var backend = new BackendDeMentira(req =>
+            req.RequestUri!.AbsolutePath.Contains("/auth/v1/token")
+                ? (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "unico", 3600))
+                : (HttpStatusCode.Created, "{\"encounter_id\":\"enc-1\",\"status\":\"created\"}"));
+
+        var sesion = Activator.CreateInstance(tSesion,
+            "https://supabase.test", "publishable", backend,
+            (Func<DateTimeOffset>)(() => DateTimeOffset.UtcNow))!;
+        ((Task<bool>)tSesion.GetMethod("EntrarAsync")!
+            .Invoke(sesion, new object?[] { "medico@miracle.app", "clave", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        var clinica = Activator.CreateInstance(tClinica, "https://graph.test", sesion, backend)!;
+
+        // El micrófono dice que NO abrió — exactamente lo que pasó con «Unable to connect».
+        var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
+            (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(false)),
+            (Func<Task<string>>)(() => Task.FromResult("")),
+            null)!;
+
+        bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
+            .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        string estado = tConsulta.GetProperty("Estado")!.GetValue(consulta)!.ToString()!;
+        string motivo = (string)tConsulta.GetProperty("Motivo")!.GetValue(consulta)!;
+
+        Debe(!arranco, "si el micrófono no abrió, empezar contesta que NO");
+        Debe(estado != "Grabando",
+            $"y sobre todo la consulta NO se declara grabando; dice «{estado}». Decir que graba sin "
+            + "grabar es dejar que alguien le hable diecisiete segundos a nada");
+        Debe(motivo.Length > 0 && !motivo.Contains("micrófono", StringComparison.OrdinalIgnoreCase),
+            $"el motivo NO manda a revisar el micrófono cuando lo que falló fue el dictado: "
+            + $"son dos averías con arreglos opuestos. Dice: «{motivo}»");
+
+        // Y con el micrófono abriendo bien, sí se graba: una promesa que solo sabe decir que no
+        // pasaría igual con un EmpezarAsync que devolviera false siempre.
+        var buena = Activator.CreateInstance(tConsulta, sesion, clinica,
+            (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(true)),
+            (Func<Task<string>>)(() => Task.FromResult("algo dicho")),
+            null)!;
+        Debe(((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
+                 .Invoke(buena, new object?[] { "plantilla-x", CancellationToken.None })!)
+                 .GetAwaiter().GetResult()
+             && tConsulta.GetProperty("Estado")!.GetValue(buena)!.ToString() == "Grabando",
+            "con el micrófono abierto de verdad, la consulta sí graba");
+    }
+
+    /// <remarks>
+    /// La espera se INYECTA para que esta promesa no duerma nueve segundos. Una prueba lenta se
+    /// acaba saltando, y un juez que no se corre no juzga nada.
+    /// </remarks>
+    private static void ElDictadoReintenta()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.Transcripcion.PoliticaDeReintento");
+        var hasta = t?.GetMethod("HastaQueSalgaAsync");
+        if (t == null || hasta == null) { Pendiente("Transcripcion.PoliticaDeReintento", "96"); return; }
+
+        var dormido = new List<int>();
+        object Politica() => Activator.CreateInstance(t,
+            (Func<int, CancellationToken, Task>)((ms, _) => { dormido.Add(ms); return Task.CompletedTask; }))!;
+
+        bool Correr(object p, Func<CancellationToken, Task<bool>> intento) =>
+            ((Task<bool>)hasta.Invoke(p, new object?[] { intento, CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        // 1. A la primera: ni se reintenta ni se espera. Un tropiezo que no ocurrió no cuesta nada.
+        dormido.Clear();
+        var alaPrimera = Politica();
+        Debe(Correr(alaPrimera, _ => Task.FromResult(true)), "lo que sale a la primera, sale");
+        Debe((int)t.GetProperty("Intentos")!.GetValue(alaPrimera)! == 1 && dormido.Count == 0,
+            "un intento y cero esperas: nadie paga por un fallo que no hubo");
+
+        // 2. Falla dos veces y a la tercera abre — que es EXACTAMENTE lo que se midió.
+        dormido.Clear();
+        int veces = 0;
+        var terca = Politica();
+        Debe(Correr(terca, _ => Task.FromResult(++veces >= 3)),
+            "dos tropiezos seguidos no tumban la grabación: al tercer intento entra");
+        Debe((int)t.GetProperty("Intentos")!.GetValue(terca)! == 3,
+            "y se intentó tres veces, ni una más");
+        Debe(dormido.Count == 2 && dormido[0] < dormido[1],
+            $"esperando cada vez un poco más entre intentos: [{string.Join(", ", dormido)}] ms. "
+            + "Reintentar de golpe contra un servicio caído es martillearlo");
+
+        // 3. Si de verdad no hay red, se rinde — pero con un tope, no eternamente, y sabiendo
+        //    cuántas veces lo intentó. Rendirse en silencio es lo que había antes.
+        dormido.Clear();
+        var imposible = Politica();
+        Debe(!Correr(imposible, _ => Task.FromResult(false)), "sin red de verdad, se rinde");
+        int gastados = (int)t.GetProperty("Intentos")!.GetValue(imposible)!;
+        Debe(gastados is >= 3 and <= 6,
+            $"con un presupuesto acotado ({gastados} intentos): reintentar sin tope deja al médico "
+            + "mirando un botón que no contesta");
+        Debe(gastados > 1 && dormido.Count == gastados - 1,
+            "y se esperó entre todos ellos menos antes del primero");
+    }
+
+    /// <remarks>
+    /// El mínimo de contraseña es el MISMO que el del portal (8), y se comprueba antes de salir a
+    /// la red: no por ahorrar una llamada, sino porque el error de Supabase llega en inglés y
+    /// genérico, y «la contraseña necesita al menos 8 caracteres» se arregla solo.
+    /// </remarks>
+    private static void CrearCuentaNoEsEntrar()
+    {
+        var t = Capacidad("U.WindowsClient.Cuenta.SesionMiracle");
+        var alta = t?.GetMethod("CrearCuentaAsync");
+        if (t == null || alta == null) { Pendiente("SesionMiracle.CrearCuentaAsync", "97"); return; }
+
+        object Sesion(Func<HttpRequestMessage, (HttpStatusCode, string)> responde, out BackendDeMentira b)
+        {
+            b = new BackendDeMentira(responde);
+            return Activator.CreateInstance(t, "https://supabase.test", "publishable", b,
+                (Func<DateTimeOffset>)(() => DateTimeOffset.UtcNow))!;
+        }
+        string Correr(object s, string clave) =>
+            ((Task<object>)typeof(Contrato).GetMethod(nameof(ComoTexto),
+                BindingFlags.NonPublic | BindingFlags.Static)!
+                .MakeGenericMethod(alta!.ReturnType.GetGenericArguments()[0])
+                .Invoke(null, new object?[] { alta.Invoke(s, new object?[]
+                    { "Dra. Prueba", "nueva@miracle.app", clave, CancellationToken.None }) })!)
+            .GetAwaiter().GetResult().ToString()!;
+
+        // 1. Supabase contesta 200 SIN sesión: la cuenta se creó y falta confirmar el correo.
+        var sinSesion = Sesion(_ => (HttpStatusCode.OK,
+            "{\"id\":\"u-1\",\"email\":\"nueva@miracle.app\",\"confirmation_sent_at\":\"2026-09-01T12:00:00Z\"}"),
+            out _);
+        string r1 = Correr(sinSesion, "contrasena-larga");
+        Debe(r1.Contains("Confirm", StringComparison.OrdinalIgnoreCase),
+            $"sin sesión en la respuesta, el resultado dice que falta confirmar: «{r1}»");
+        Debe((bool)t.GetProperty("HayMedico")!.GetValue(sinSesion)! == false,
+            "y NO hay médico dentro: mandarle a grabar con una sesión que no existe haría que el "
+            + "401 llegara después, sin relación aparente con el alta");
+        Debe(!File.Exists((string)t.GetProperty("RutaDeLaCredencial",
+                BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!),
+            "ni se guarda credencial de una sesión que no llegó");
+
+        // 2. Con sesión en la respuesta (confirmación desactivada): entra directo.
+        var conSesion = Sesion(_ => (HttpStatusCode.OK,
+            RespuestaDeLogin("7b8a4c8e-1f2d-4c3b-9a10-0d1e2f3a4b5c", "alta", 3600)), out _);
+        string r2 = Correr(conSesion, "contrasena-larga");
+        Debe(r2.Contains("Entro", StringComparison.OrdinalIgnoreCase),
+            $"con sesión, el alta entra directo: «{r2}»");
+        Debe((bool)t.GetProperty("HayMedico")!.GetValue(conSesion)! == true,
+            "y ahí sí hay médico dentro");
+
+        // 3. Una contraseña corta se para AQUÍ, sin salir a la red.
+        var corta = Sesion(_ => (HttpStatusCode.OK, "{}"), out var backendCorta);
+        string r3 = Correr(corta, "1234");
+        Debe(r3.Contains("Fallo", StringComparison.OrdinalIgnoreCase)
+             && backendCorta.Peticiones.Count == 0,
+            "una contraseña de 4 caracteres no llega a viajar: se dice antes y no se gasta una "
+            + "llamada en que Supabase conteste en inglés");
+        Debe(((string)t.GetProperty("UltimoFallo")!.GetValue(corta)!).Contains("8"),
+            "y el motivo dice el mínimo concreto, no «contraseña inválida»");
+    }
+
+    /// <summary>Adaptador para await-ear un Task&lt;T&gt; que solo se conoce por reflexión.</summary>
+    private static async Task<object> ComoTexto<T>(object tarea) => (await (Task<T>)tarea)!;
+
+    /// <remarks>
+    /// LA PREGUNTA SE HACE UNA VEZ Y LA CONTESTA UN SOLO SITIO. Se juzga el DECISOR —quién manda
+    /// cuando las dos identidades no coinciden— y no la ventana: la ventana es nivel 4, pero la
+    /// regla de precedencia es lo que se rompió, y eso sí se puede escribir.
+    ///
+    /// Las cuatro combinaciones importan. La tercera es la que estaba mal el 2026-09-01 (había
+    /// médico y se preguntaba igual) y la cuarta es la que impide «arreglarlo» silenciando el popup
+    /// siempre: en un equipo sin médico y sin correo, preguntar sigue siendo lo correcto.
+    /// </remarks>
+    private static void LaIdentidadSePideUnaVez()
+    {
+        var t = Capacidad("U.WindowsClient.Cuenta.Identidad");
+        var hay = t?.GetMethod("HayQuePreguntar", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || hay == null) { Pendiente("Cuenta.Identidad.HayQuePreguntar", "98"); return; }
+
+        bool Preguntar(bool medicoDentro, string correoDeMaquina) =>
+            (bool)hay.Invoke(null, new object?[] { medicoDentro, correoDeMaquina })!;
+
+        Debe(Preguntar(false, "") == true,
+            "equipo nuevo, sin médico y sin correo: preguntar es lo correcto");
+        Debe(Preguntar(false, "alguien@hospital.co") == false,
+            "con el correo de máquina ya puesto no se vuelve a preguntar (lo de siempre)");
+        Debe(Preguntar(true, "") == false,
+            "CON MÉDICO DENTRO NO SE PREGUNTA, aunque no haya correo de máquina: la sesión de "
+            + "Supabase ya sabe quién es, y volver a pedírselo es no haberla mirado");
+        Debe(Preguntar(true, "otro@hospital.co") == false,
+            "y con las dos, tampoco: manda la sesión");
+
+        // Y de dónde sale el correo cuando hay médico: del token, no de lo que teclearon una vez.
+        var deQuien = t.GetMethod("CorreoQueMandaEnLaMaquina", BindingFlags.Public | BindingFlags.Static);
+        if (deQuien == null) { Pendiente("Identidad.CorreoQueMandaEnLaMaquina", "98"); return; }
+        Debe((string)deQuien.Invoke(null, new object?[] { "medico@miracle.app", "viejo@teclado.co" })!
+                == "medico@miracle.app",
+            "el correo que manda es el de la SESIÓN, no el que se tecleó una vez en config.json");
+        Debe((string)deQuien.Invoke(null, new object?[] { "", "viejo@teclado.co" })!
+                == "viejo@teclado.co",
+            "y sin sesión se conserva el de máquina: los workflows y la telemetría que ya lo usaban "
+            + "no se quedan sin identidad de golpe");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

@@ -110,6 +110,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     public FaceWindow()
     {
         InitializeComponent();
+        // La misma barra de scroll rehecha que las ventanas claras, en su variante para suelo
+        // oscuro: un pulgar redondeado sin flechas ni carril. La de Windows por defecto era lo
+        // único de este panel que seguía pareciendo de otra aplicación.
+        this.PonerLaBarraDeScroll(sobreOscuro: true);
         // Aquí y no al crear la WorkflowTeachSession: esa se construye en CADA pulsación de «Enseñar»
         // y acumularía una suscripción por intento, multiplicando cada línea en el registro.
         _teachSapSurface.Diagnostic += (_, msg) => LogBus.Log("teach-sap", msg);
@@ -984,7 +988,38 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 _config.InstallId = Guid.NewGuid().ToString("N");
                 _config.Save();
             }
-            if (_config.Onboarded) return;
+            // ¿SABE YA ALGUIEN QUIÉN ES? Se mira la sesión de Supabase ANTES de preguntar: si la
+            // Dra. Rincón acaba de entrar en la ventana de consulta, plantarle encima el popup de
+            // «Te damos la bienvenida» es no haber mirado (promesa 98, 2026-09-01).
+            //
+            // La sesión se restaura de disco aquí mismo, sin red: es leer un archivo cifrado. La
+            // carita no se queda esperando a nadie.
+            var sesion = new Cuenta.SesionMiracle(Cuenta.Nube.SupabaseUrl, Cuenta.Nube.ClavePublicable);
+            bool hayMedico = sesion.Restaurar();
+
+            if (hayMedico)
+            {
+                // El correo que manda pasa a ser el del token. La identidad de máquina no se borra
+                // —los workflows y la telemetría la usan desde antes—, pero deja de ser la que
+                // decide quién es esta persona.
+                string correo = Cuenta.Identidad.CorreoQueMandaEnLaMaquina(sesion.MedicoEmail, _config.Email);
+                if (!string.IsNullOrWhiteSpace(correo) && correo != _config.Email)
+                {
+                    _config.Email = correo;
+                    _config.UserId = correo;
+                    if (sesion.MedicoNombre.Length > 0) _config.DisplayName = sesion.MedicoNombre;
+                    _config.Save();
+                    LogBus.Log("onboarding", $"identidad tomada de la sesión del médico · {sesion.MedicoId}");
+                }
+            }
+
+            if (!Cuenta.Identidad.HayQuePreguntar(hayMedico, _config.Email))
+            {
+                LogBus.Log("onboarding", hayMedico
+                    ? "no pregunto quién eres: ya hay un médico con sesión iniciada"
+                    : "no pregunto quién eres: ya había correo en este equipo");
+                return;
+            }
 
             var win = new OnboardingWindow { Owner = this };
             if (win.ShowDialog() == true && !string.IsNullOrWhiteSpace(win.EnteredEmail))

@@ -83,41 +83,66 @@ public sealed class DictadoEnVivo : IDisposable
 
     // ── arrancar y parar ─────────────────────────────────────────────────────
 
-    public async Task ArrancarAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Abre el micrófono y el stream. DEVUELVE SI DE VERDAD ARRANCÓ.
+    /// </summary>
+    /// <remarks>
+    /// Antes no devolvía nada, y por eso el 2026-09-01 la consulta pudo declararse «grabando» con
+    /// el stream sin conectar: quien llamaba no tenía forma de enterarse. Un arranque que puede
+    /// fallar y no lo dice obliga a suponer, y suponer aquí cuesta una consulta entera.
+    /// </remarks>
+    public async Task<bool> ArrancarAsync(CancellationToken ct = default)
     {
-        if (Activo) return;
+        if (Activo) return true;
         Dicho.Limpiar();
 
-        SesionDeStream sesion;
-        try { sesion = SesionDeStream.Leer(await PedirSesionAsync(ct)); }
-        catch (Exception e)
-        {
-            Avisar($"no pude pedir la sesión de dictado: {e.Message}");
-            return;
-        }
-
-        _lector = sesion.Lector;
         _vida = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        try
-        {
-            var ws = new ClientWebSocket();
-            foreach (var sub in _lector.Subprotocolos) ws.Options.AddSubProtocol(sub);
-            _ws = ws;
-            await ws.ConnectAsync(new Uri(sesion.Url), _vida.Token);
 
-            // EL PRIMER MENSAJE VA ANTES QUE CUALQUIER BYTE DE AUDIO. Si llega audio primero, el
-            // proveedor cierra sin decir por qué. Cuando es null —Deepgram— no se manda nada, y eso
-            // es la respuesta correcta, no un hueco.
-            string? arranque = _lector.MensajeDeArranque(_audio.RitmoEntrada);
-            if (arranque != null)
-                await ws.SendAsync(Encoding.UTF8.GetBytes(arranque), WebSocketMessageType.Text, true,
-                    _vida.Token);
-        }
-        catch (Exception e)
+        // TODO EL ARRANQUE VA DENTRO DEL REINTENTO —pedir la sesión Y abrir el socket—, y no solo
+        // el socket: la clave temporal dura ~60 s, así que reusar la sesión de hace tres intentos
+        // sería presentarse con una credencial muerta. Cada intento pide la suya.
+        var politica = new PoliticaDeReintento();
+        SesionDeStream? sesion = null;
+        string ultimoTropiezo = "";
+
+        bool abrio = await politica.HastaQueSalgaAsync(async _ =>
         {
-            Avisar($"no pude abrir el stream de dictado: {e.Message}");
+            try
+            {
+                sesion = SesionDeStream.Leer(await PedirSesionAsync(_vida.Token));
+                _lector = sesion.Lector;
+
+                var ws = new ClientWebSocket();
+                foreach (var sub in _lector.Subprotocolos) ws.Options.AddSubProtocol(sub);
+                _ws = ws;
+                await ws.ConnectAsync(new Uri(sesion.Url), _vida.Token);
+
+                // EL PRIMER MENSAJE VA ANTES QUE CUALQUIER BYTE DE AUDIO. Si llega audio primero,
+                // el proveedor cierra sin decir por qué. Cuando es null —Deepgram— no se manda
+                // nada, y eso es la respuesta correcta, no un hueco.
+                string? arranque = _lector.MensajeDeArranque(_audio.RitmoEntrada);
+                if (arranque != null)
+                    await ws.SendAsync(Encoding.UTF8.GetBytes(arranque), WebSocketMessageType.Text,
+                        true, _vida.Token);
+                return true;
+            }
+            catch (Exception e)
+            {
+                ultimoTropiezo = $"{e.GetType().Name}: {e.Message}";
+                // El socket a medio abrir no se reusa en el intento siguiente.
+                try { _ws?.Dispose(); } catch { }
+                _ws = null;
+                return false;
+            }
+        }, _vida.Token);
+
+        if (!abrio || sesion == null)
+        {
+            // SE DICE CUÁNTAS VECES SE INTENTÓ. «No pude abrir el stream» a secas no distingue un
+            // parpadeo de un servicio caído, y son dos cosas que se atienden distinto.
+            Avisar($"no pude abrir el dictado tras {politica.Intentos} intentos · {ultimoTropiezo}");
             Limpiar();
-            return;
+            return false;
         }
 
         Activo = true;
@@ -127,6 +152,7 @@ public sealed class DictadoEnVivo : IDisposable
 
         LogBus.Log("dictado", $"escuchando · {sesion.Proveedor} · {sesion.Modelo} · {sesion.Idioma}");
         Cambio?.Invoke(true);
+        return true;
     }
 
     /// <summary>Para de dictar y devuelve TODO lo dicho.</summary>

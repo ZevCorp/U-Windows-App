@@ -93,6 +93,29 @@ public sealed class ClinicaClient
         return id;
     }
 
+    /// <summary>
+    /// Crea una plantilla PERSONAL del médico. Se usa una sola vez, para que exista la plantilla
+    /// abierta con la que arranca todo (promesa 94); a partir de ahí se encuentra en el catálogo.
+    /// </summary>
+    public async Task<PlantillaClinica> CrearPlantillaAsync(string nombre, string especialidad,
+        IReadOnlyList<object> secciones, CancellationToken ct = default)
+    {
+        string cuerpo = JsonSerializer.Serialize(new
+        {
+            name = nombre,
+            specialty = especialidad,
+            description = "Plantilla abierta: la estructura la pone el organizador, no el médico.",
+            sections = secciones,
+        });
+        var raiz = await PedirAsync(HttpMethod.Post, "/api/clinical/templates", cuerpo, ct);
+        var t = raiz.TryGetProperty("template", out var x) ? x : raiz;
+        var creada = new PlantillaClinica(
+            Id: Texto(t, "id"), Nombre: Texto(t, "name"),
+            Especialidad: Texto(t, "specialty"), EsLaPorDefecto: false);
+        LogBus.Log("clinica", $"plantilla propia creada · {creada.Id}");
+        return creada;
+    }
+
     /// <summary>Guarda lo que se dijo. Devuelve cuántos caracteres aceptó el backend.</summary>
     public async Task<int> GuardarTranscripcionAsync(string encounterId, string texto,
         CancellationToken ct = default)
