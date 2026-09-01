@@ -230,6 +230,14 @@ internal static class Contrato
         // Eso NO se portó, y es el hueco.
         Prueba("96. un tropiezo de red no tumba la grabación: se reintenta antes de rendirse", ElDictadoReintenta);
 
+        // ── CREAR CUENTA DESDE LA APP (2026-09-01) ───────────────────────────
+        //
+        // Supabase contesta lo MISMO —«ok»— tanto cuando la cuenta queda lista como cuando queda
+        // creada pero pendiente de confirmar por correo; lo único que las separa es si vino sesión
+        // en la respuesta. Confundirlas mandaría al médico a una consulta con una sesión que no
+        // existe, y el 401 llegaría después, sin relación aparente con el alta.
+        Prueba("97. una cuenta que pide confirmación NO cuenta como haber entrado", CrearCuentaNoEsEntrar);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -2938,6 +2946,68 @@ internal static class Contrato
         Debe(gastados > 1 && dormido.Count == gastados - 1,
             "y se esperó entre todos ellos menos antes del primero");
     }
+
+    /// <remarks>
+    /// El mínimo de contraseña es el MISMO que el del portal (8), y se comprueba antes de salir a
+    /// la red: no por ahorrar una llamada, sino porque el error de Supabase llega en inglés y
+    /// genérico, y «la contraseña necesita al menos 8 caracteres» se arregla solo.
+    /// </remarks>
+    private static void CrearCuentaNoEsEntrar()
+    {
+        var t = Capacidad("U.WindowsClient.Cuenta.SesionMiracle");
+        var alta = t?.GetMethod("CrearCuentaAsync");
+        if (t == null || alta == null) { Pendiente("SesionMiracle.CrearCuentaAsync", "97"); return; }
+
+        object Sesion(Func<HttpRequestMessage, (HttpStatusCode, string)> responde, out BackendDeMentira b)
+        {
+            b = new BackendDeMentira(responde);
+            return Activator.CreateInstance(t, "https://supabase.test", "publishable", b,
+                (Func<DateTimeOffset>)(() => DateTimeOffset.UtcNow))!;
+        }
+        string Correr(object s, string clave) =>
+            ((Task<object>)typeof(Contrato).GetMethod(nameof(ComoTexto),
+                BindingFlags.NonPublic | BindingFlags.Static)!
+                .MakeGenericMethod(alta!.ReturnType.GetGenericArguments()[0])
+                .Invoke(null, new object?[] { alta.Invoke(s, new object?[]
+                    { "Dra. Prueba", "nueva@miracle.app", clave, CancellationToken.None }) })!)
+            .GetAwaiter().GetResult().ToString()!;
+
+        // 1. Supabase contesta 200 SIN sesión: la cuenta se creó y falta confirmar el correo.
+        var sinSesion = Sesion(_ => (HttpStatusCode.OK,
+            "{\"id\":\"u-1\",\"email\":\"nueva@miracle.app\",\"confirmation_sent_at\":\"2026-09-01T12:00:00Z\"}"),
+            out _);
+        string r1 = Correr(sinSesion, "contrasena-larga");
+        Debe(r1.Contains("Confirm", StringComparison.OrdinalIgnoreCase),
+            $"sin sesión en la respuesta, el resultado dice que falta confirmar: «{r1}»");
+        Debe((bool)t.GetProperty("HayMedico")!.GetValue(sinSesion)! == false,
+            "y NO hay médico dentro: mandarle a grabar con una sesión que no existe haría que el "
+            + "401 llegara después, sin relación aparente con el alta");
+        Debe(!File.Exists((string)t.GetProperty("RutaDeLaCredencial",
+                BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!),
+            "ni se guarda credencial de una sesión que no llegó");
+
+        // 2. Con sesión en la respuesta (confirmación desactivada): entra directo.
+        var conSesion = Sesion(_ => (HttpStatusCode.OK,
+            RespuestaDeLogin("7b8a4c8e-1f2d-4c3b-9a10-0d1e2f3a4b5c", "alta", 3600)), out _);
+        string r2 = Correr(conSesion, "contrasena-larga");
+        Debe(r2.Contains("Entro", StringComparison.OrdinalIgnoreCase),
+            $"con sesión, el alta entra directo: «{r2}»");
+        Debe((bool)t.GetProperty("HayMedico")!.GetValue(conSesion)! == true,
+            "y ahí sí hay médico dentro");
+
+        // 3. Una contraseña corta se para AQUÍ, sin salir a la red.
+        var corta = Sesion(_ => (HttpStatusCode.OK, "{}"), out var backendCorta);
+        string r3 = Correr(corta, "1234");
+        Debe(r3.Contains("Fallo", StringComparison.OrdinalIgnoreCase)
+             && backendCorta.Peticiones.Count == 0,
+            "una contraseña de 4 caracteres no llega a viajar: se dice antes y no se gasta una "
+            + "llamada en que Supabase conteste en inglés");
+        Debe(((string)t.GetProperty("UltimoFallo")!.GetValue(corta)!).Contains("8"),
+            "y el motivo dice el mínimo concreto, no «contraseña inválida»");
+    }
+
+    /// <summary>Adaptador para await-ear un Task&lt;T&gt; que solo se conoce por reflexión.</summary>
+    private static async Task<object> ComoTexto<T>(object tarea) => (await (Task<T>)tarea)!;
 
     private static void Prueba(string nombre, Action cuerpo)
     {

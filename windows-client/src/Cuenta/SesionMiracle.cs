@@ -115,6 +115,96 @@ public sealed class SesionMiracle
     }
 
     /// <summary>
+    /// Crea una cuenta nueva contra Supabase Auth. Las mismas reglas que el registro del portal
+    /// (app/registro/actions.ts): el nombre es obligatorio y va como metadato, y la contraseña
+    /// pide 8 caracteres como mínimo.
+    /// </summary>
+    /// <remarks>
+    /// LO QUE ESTA FUNCIÓN NO PUEDE CONFUNDIR, y es la promesa 97: Supabase contesta «ok» tanto
+    /// cuando la cuenta queda lista como cuando queda creada PENDIENTE DE CONFIRMAR por correo. Lo
+    /// único que las separa es si vino sesión en el cuerpo. Darlas por iguales metería al médico en
+    /// una consulta con una sesión que no existe, y el 401 aparecería mucho después, sin relación
+    /// aparente con el alta.
+    ///
+    /// NO SE MANDA `emailRedirectTo`: sin él, Supabase usa la Site URL del proyecto, que es el
+    /// portal. El médico confirma en el navegador y vuelve aquí a entrar — que es el único camino
+    /// que funciona, porque un enlace de correo no sabe abrir una ventana de WPF.
+    ///
+    /// UN CORREO YA REGISTRADO NO SE DELATA. Con la confirmación activa, Supabase contesta «ok» con
+    /// un usuario sin identities justamente para no revelar qué cuentas existen; el portal enseña
+    /// el mismo «revisa tu correo» y aquí se hace igual. Quien ya tenga cuenta recibirá el aviso de
+    /// Supabase.
+    /// </remarks>
+    public async Task<ResultadoDeAlta> CrearCuentaAsync(string nombre, string email, string clave,
+        CancellationToken ct = default)
+    {
+        UltimoFallo = "";
+
+        if (string.IsNullOrWhiteSpace(nombre))
+        {
+            UltimoFallo = "Escribe tu nombre completo.";
+            return ResultadoDeAlta.Fallo;
+        }
+        // SE PARA AQUÍ Y NO EN EL SERVIDOR. Supabase contesta en inglés y en genérico; «al menos 8
+        // caracteres» se arregla solo, sin gastar una llamada ni hacer leer un error ajeno.
+        if (clave.Length < 8)
+        {
+            UltimoFallo = "La contraseña necesita al menos 8 caracteres.";
+            return ResultadoDeAlta.Fallo;
+        }
+
+        try
+        {
+            string cuerpo = JsonSerializer.Serialize(new
+            {
+                email,
+                password = clave,
+                // El nombre viaja como metadato, igual que en el portal: de ahí lo recoge el
+                // trigger que crea el perfil y la organización personal.
+                data = new { full_name = nombre.Trim() },
+            });
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{_urlSupabase}/auth/v1/signup")
+            { Content = new StringContent(cuerpo, Encoding.UTF8, "application/json") };
+            req.Headers.Add("apikey", _clavePublicable);
+
+            using var res = await _http.SendAsync(req, ct);
+            string texto = await res.Content.ReadAsStringAsync(ct);
+
+            if (!res.IsSuccessStatusCode)
+            {
+                UltimoFallo = MensajeDeAlta((int)res.StatusCode, texto);
+                LogBus.Log("cuenta", $"alta → HTTP {(int)res.StatusCode}");
+                return ResultadoDeAlta.Fallo;
+            }
+
+            using var doc = JsonDocument.Parse(texto);
+            string access = Texto(doc.RootElement, "access_token");
+
+            // SIN SESIÓN NO SE ENTRA. Aquí está la promesa 97 entera.
+            if (access.Length == 0)
+            {
+                LogBus.Log("cuenta", "cuenta creada; falta confirmar el correo");
+                return ResultadoDeAlta.FaltaConfirmar;
+            }
+
+            _credencial = LeerCredencial(doc.RootElement, access);
+            await CompletarNombreAsync(ct);
+            if (_credencial.Nombre.Length == 0) _credencial = _credencial with { Nombre = nombre.Trim() };
+            Guardar();
+            LogBus.Log("cuenta", $"cuenta creada y sesión abierta · {_credencial.UsuarioId}");
+            Cambio?.Invoke(true);
+            return ResultadoDeAlta.Entro;
+        }
+        catch (Exception e)
+        {
+            UltimoFallo = "No se pudo conectar con Miracle. Revisa la conexión e inténtalo de nuevo.";
+            LogBus.Log("cuenta", $"alta falló: {e.GetType().Name}: {e.Message}");
+            return ResultadoDeAlta.Fallo;
+        }
+    }
+
+    /// <summary>
     /// El token con el que hablar con el backend clínico, renovado si le queda poco. Cadena vacía si
     /// no hay médico dentro — y vacío significa AUSENTE, no «da igual»: quien llame tiene que mirarlo.
     /// </summary>
@@ -259,6 +349,16 @@ public sealed class SesionMiracle
             return null;
         }
 
+        return LeerCredencial(raiz, access);
+    }
+
+    /// <summary>
+    /// La credencial que viene en un cuerpo de Supabase. La comparten entrar, renovar y crear
+    /// cuenta: tres caminos que devuelven la misma forma, y leerla en tres sitios distintos sería
+    /// tres formas de equivocarse.
+    /// </summary>
+    private Credencial LeerCredencial(JsonElement raiz, string access)
+    {
         int duracion = raiz.TryGetProperty("expires_in", out var e) && e.TryGetInt32(out int s) ? s : 3600;
         var usuario = raiz.TryGetProperty("user", out var u) && u.ValueKind == JsonValueKind.Object
             ? u : default;
@@ -270,11 +370,27 @@ public sealed class SesionMiracle
 
         return new Credencial(
             AccessToken: access,
-            RefreshToken: refresh,
+            RefreshToken: Texto(raiz, "refresh_token"),
             Caduca: _ahora().AddSeconds(duracion),
             UsuarioId: id,
             Email: Texto(usuario, "email"),
             Nombre: "");
+    }
+
+    /// <summary>Qué contestarle a alguien que no pudo crear la cuenta. Cada causa dice lo suyo.</summary>
+    private static string MensajeDeAlta(int codigo, string cuerpo)
+    {
+        string texto = cuerpo.ToLowerInvariant();
+        if (texto.Contains("already registered") || texto.Contains("already been registered"))
+            return "Ese correo ya tiene cuenta. Entra con tu contraseña.";
+        if (texto.Contains("password"))
+            return "La contraseña no cumple los requisitos del servidor.";
+        if (texto.Contains("email") && texto.Contains("invalid"))
+            return "Ese correo no parece válido.";
+        if (codigo == 422) return "Faltan datos o alguno no es válido.";
+        if (codigo == 429) return "Demasiados intentos. Espera un momento e inténtalo de nuevo.";
+        if (codigo >= 500) return "Miracle no está respondiendo ahora mismo. Inténtalo en un minuto.";
+        return $"No se pudo crear la cuenta (HTTP {codigo}).";
     }
 
     /// <summary>
@@ -364,6 +480,23 @@ public sealed class SesionMiracle
     private static string Texto(JsonElement o, string campo) =>
         o.ValueKind == JsonValueKind.Object && o.TryGetProperty(campo, out var v)
         && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+}
+
+/// <summary>
+/// En qué quedó un intento de crear cuenta. Son TRES y no dos a propósito: «creada pero falta
+/// confirmar» no es entrar, y tampoco es un fallo — decirle a alguien que su alta falló cuando
+/// tiene el correo esperándole es mandarle a repetirla.
+/// </summary>
+public enum ResultadoDeAlta
+{
+    /// <summary>Cuenta creada y sesión abierta: se puede empezar a trabajar.</summary>
+    Entro,
+
+    /// <summary>Cuenta creada; Supabase mandó el correo de confirmación y hay que abrirlo.</summary>
+    FaltaConfirmar,
+
+    /// <summary>No se creó. El motivo está en <see cref="SesionMiracle.UltimoFallo"/>.</summary>
+    Fallo,
 }
 
 /// <summary>
