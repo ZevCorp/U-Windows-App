@@ -117,6 +117,11 @@
   <ItemGroup>
     <!-- TTS/STT integrados de Windows (paquete NuGet en .NET moderno). -->
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <!-- AEC por software (spec 002, fase 3 reescrita): el eco se resta en el cliente con
+         nuestra propia cola como referencia. El AEC del sistema es decorativo en el hardware
+         medido (A/B: 0,0 dB), asi que la resta la hace speexdsp. -->
+    <PackageReference Include="SpeexDSPSharp.Core" Version="1.2.1" />
+    <PackageReference Include="SpeexDSPSharp.Natives" Version="1.3.0" />
     <!-- Opus en C# PURO, sin DLL nativa: el collar Omi entrega Opus y hay que decodificarlo. Se
          eligió sobre los binding de libopus justamente por eso — una dependencia nativa más en el
          instalador de Velopack es una forma nueva de que la app no arranque en una máquina limpia. -->

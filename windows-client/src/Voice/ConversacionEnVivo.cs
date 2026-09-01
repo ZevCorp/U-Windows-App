@@ -98,10 +98,19 @@ public sealed class ConversacionEnVivo : IDisposable
     /// compuerta es la única defensa y actúa siempre (promesa 14). La fase 3 de la spec 002 —la
     /// captura WASAPI que le pide el AEC a Windows— es quien puede poner esto a verdadero.
     /// </summary>
-    private const bool AecDelSistema = false;
+    /// <summary>Ya no es una constante (fase 3): es la verdad del AEC por software — si el eco
+    /// se está restando de verdad, la compuerta se aparta y el barge-in por voz vuelve.</summary>
+    private bool AecDelSistema => _audio.AecPorSoftware;
 
     /// <summary>La perilla de esta máquina: fuerza la compuerta aunque haya AEC. Solo puede
     /// ENCENDER la garantía, jamás apagarla.</summary>
+    /// <summary>AURICULARES: el usuario declara que el altavoz no llega al micrófono. Sin camino
+    /// de eco no hay nada que tragar — la compuerta se aparta y la interrupción por voz natural
+    /// vuelve entera (promesa 21). U_SIN_ECO=1 mientras no haya botón en el panel.</summary>
+    private static bool SinCaminoDeEco =>
+        (Environment.GetEnvironmentVariable("U_SIN_ECO") ?? "").Trim().ToLowerInvariant()
+            is "1" or "true" or "si" or "sí";
+
     private static bool CompuertaForzada =>
         (Environment.GetEnvironmentVariable("U_COMPUERTA_ECO") ?? "").Trim().ToLowerInvariant()
             is "1" or "true" or "si" or "sí";
@@ -927,7 +936,7 @@ public sealed class ConversacionEnVivo : IDisposable
         // servidor no puede confundir el eco de Ü con alguien hablándole encima. La llave es
         // _audio.Hablando (la cola, nuestra), jamás el volumen (enterrado el 2026-08-16). Cubre
         // las dos fuentes —micrófono local y collar— porque las dos entran por Capturado.
-        if (ModoDeCaptura.CompuertaActiva(AecDelSistema, CompuertaForzada))
+        if (ModoDeCaptura.CompuertaActiva(AecDelSistema, CompuertaForzada, SinCaminoDeEco))
         {
             long ahora = Environment.TickCount64;
             var filtrado = _compuerta.Filtrar(pcm, _audio.Hablando, ahora);

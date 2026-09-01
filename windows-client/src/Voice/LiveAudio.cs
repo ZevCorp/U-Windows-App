@@ -37,8 +37,19 @@ public sealed class LiveAudio : IDisposable
     /// </summary>
     private readonly RemuestreadorPcm16? _remuestreadorCollar;
 
+    /// <summary>El AEC por software (spec 002, fase 3). Nulo si la llave está apagada; su
+    /// <c>Activo</c> además exige que el nativo haya cargado. Con él activo, la compuerta se
+    /// aparta (promesa 14) y el barge-in por voz vuelve.</summary>
+    private readonly CancelaEco? _aec;
+
+    /// <summary>¿El eco se está restando de verdad? Es lo que la compuerta consulta para apartarse.</summary>
+    public bool AecPorSoftware => _aec?.Activo == true;
+
     public LiveAudio(int ritmoEntrada = 16000)
     {
+        // U_AEC_SOFTWARE=1 lo enciende (validación en curso); =0 o ausente, la compuerta manda.
+        if (Environment.GetEnvironmentVariable("U_AEC_SOFTWARE") == "1")
+            _aec = new CancelaEco(ritmoEntrada);
         RitmoEntrada = ritmoEntrada;
         if (ritmoEntrada != RitmoDelCollar)
             _remuestreadorCollar = new RemuestreadorPcm16(RitmoDelCollar, ritmoEntrada);
@@ -207,6 +218,9 @@ public sealed class LiveAudio : IDisposable
                 if (e.BytesRecorded <= 0) return;
                 var trozo = new byte[e.BytesRecorded];
                 Buffer.BlockCopy(e.Buffer, 0, trozo, 0, e.BytesRecorded);
+                // El eco se resta AQUÍ, antes de que nadie más lo vea: compuerta, detector y
+                // servidor reciben ya el micrófono limpio (o crudo tal cual, si no hay AEC).
+                if (_aec != null) trozo = _aec.Procesa(trozo);
                 Capturado?.Invoke(trozo);
             };
             _mic.StartRecording();
@@ -366,7 +380,10 @@ public sealed class LiveAudio : IDisposable
                     DiscardOnBufferOverflow = true,
                 };
                 _altavoz = new WaveOutEvent { DesiredLatency = 120 };
-                _altavoz.Init(_cola);
+                // EL GRIFO DEL CONSUMO (fase 3): la referencia del AEC se toma de lo que el
+                // dispositivo LEE, no de lo que se encola — la cola adelanta frases enteras y
+                // una referencia adelantada no casa con el eco que de verdad suena.
+                _altavoz.Init(_aec == null ? _cola : new GrifoDeConsumo(_cola, _aec.Referencia));
                 _altavoz.Play();
             }
             _cola!.AddSamples(pcm, 0, pcm.Length);
@@ -395,6 +412,8 @@ public sealed class LiveAudio : IDisposable
     public void Callar()
     {
         lock (_candado) { try { _cola?.ClearBuffer(); } catch { } }
+        // Lo pendiente de la referencia tampoco va a sonar ya (promesa 20).
+        _aec?.Vacia();
     }
 
     public void Dispose()
@@ -404,6 +423,7 @@ public sealed class LiveAudio : IDisposable
         {
             try { _altavoz?.Stop(); _altavoz?.Dispose(); } catch { }
             _altavoz = null; _cola = null;
+            try { _aec?.Dispose(); } catch { }
         }
         try { _remuestreadorCollar?.Dispose(); } catch { }
     }

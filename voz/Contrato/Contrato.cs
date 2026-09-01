@@ -70,6 +70,17 @@ internal static class Contrato
         Prueba("16. un golpe corto no la interrumpe: sin sostén no hay disparo, y el eco fuerte de Ü tampoco dispara — la línea base es suya", UnGolpeNoInterrumpe);
         Prueba("17. tras disparar, el detector no ametralla: no re-dispara hasta que Ü vuelva a sonar", ElDisparoNoSeAmetralla);
 
+        // EL AEC POR SOFTWARE (spec 002, fase 3 reescrita · 2026-08-31). El AEC del sistema es
+        // decorativo en el hardware medido (A/B: 0,0 dB), así que el eco se resta EN EL CLIENTE
+        // con la ventaja que nadie más tiene: la referencia es NUESTRA PROPIA cola, tapeada en el
+        // consumo del dispositivo. El cancelador es speexdsp (nativo); lo que se promete aquí es
+        // la parte PURA que lo alimenta: el compás de la referencia. El canceladorreal se juzga
+        // con el arnés de medición (atenuación en dB), no con este contrato.
+        Prueba("18. la referencia baja de 24k a 16k sin perder el compás: por cada 3 muestras entran 2, byte a byte contables", LaReferenciaBajaDeRitmo);
+        Prueba("19. sin referencia pendiente sale SILENCIO del tamaño del marco: el cancelador nunca espera", SinReferenciaSaleSilencio);
+        Prueba("20. vaciar la referencia tira lo pendiente: lo que ya no va a sonar no puede restarse", VaciarTiraLoPendiente);
+        Prueba("21. sin camino de eco declarado (auriculares) la compuerta se aparta, y forzarla gana igual: la garantía solo se enciende", SinCaminoDeEcoAbreLaCompuerta);
+
         Console.WriteLine();
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
@@ -386,6 +397,65 @@ internal static class Contrato
     private static bool? Oye(object d, double rms, bool sonando, long ahoraMs)
         => d.GetType().GetMethod("Oye")?.Invoke(d, new object[] { rms, sonando, ahoraMs }) as bool?;
 
+    // ── La referencia del eco (promesas 18-20) ───────────────────────────────
+
+    private static object? Referencia(int marcoMuestras)
+    {
+        var t = Realtime.GetType("Voz.Realtime.ReferenciaDelEco");
+        return t == null ? null : Activator.CreateInstance(t, marcoMuestras);
+    }
+
+    private static void Empuja(object r, byte[] pcm24k)
+        => r.GetType().GetMethod("Empuja")!.Invoke(r, new object[] { pcm24k });
+
+    private static byte[]? SacaMarco(object r)
+        => r.GetType().GetMethod("SacaMarco")!.Invoke(r, null) as byte[];
+
+    /// <remarks>
+    /// 24000 y 16000 comparten compás 3:2. Si la bajada pierde o inventa muestras, el cancelador
+    /// compara el micrófono contra una referencia corrida en el tiempo y no resta nada — el mismo
+    /// tipo de descuadre que audio_end_ms castigaba en la promesa 11.
+    /// </remarks>
+    private static void LaReferenciaBajaDeRitmo()
+    {
+        var r = Referencia(320);
+        if (r == null) { Pendiente("Voz.Realtime.ReferenciaDelEco", "3"); return; }
+
+        // 960 muestras a 24k (40 ms) = 1920 bytes → deben volverse 640 muestras a 16k = dos marcos
+        var pcm = new byte[1920];
+        for (int i = 0; i < pcm.Length; i++) pcm[i] = (byte)(i * 31);   // señal no trivial
+        Empuja(r, pcm);
+
+        var m1 = SacaMarco(r); var m2 = SacaMarco(r);
+        Debe(m1 != null && m1.Length == 640, "el primer marco sale entero: 320 muestras, 640 bytes");
+        Debe(m2 != null && m2.Length == 640, "y el segundo también: 3 entran, 2 salen, nada se pierde");
+        Debe(m1 != null && m1.Any(b => b != 0), "y no es silencio: la señal viaja, no se inventa");
+    }
+
+    private static void SinReferenciaSaleSilencio()
+    {
+        var r = Referencia(320);
+        if (r == null) { Pendiente("Voz.Realtime.ReferenciaDelEco", "3"); return; }
+
+        var marco = SacaMarco(r);
+        Debe(marco != null && marco.Length == 640,
+            "sin nada empujado, el marco sale igual del tamaño exacto: el cancelador nunca espera");
+        Debe(marco != null && marco.All(b => b == 0),
+            "y es silencio puro: cuando Ü no suena, restar nada es restar cero");
+    }
+
+    private static void VaciarTiraLoPendiente()
+    {
+        var r = Referencia(320);
+        if (r == null) { Pendiente("Voz.Realtime.ReferenciaDelEco", "3"); return; }
+
+        Empuja(r, new byte[1920]);
+        r.GetType().GetMethod("Vacia")!.Invoke(r, null);
+        var marco = SacaMarco(r);
+        Debe(marco != null && marco.All(b => b == 0),
+            "tras vaciar (la cola se calló), lo pendiente no sale: lo que no va a sonar no se resta");
+    }
+
     /// <remarks>
     /// El guion del caso real: Ü suena (eco de RMS ~800 en la línea base), el usuario le habla
     /// encima a RMS 6000 durante más del sostén. El disparo tiene que llegar, y la compuerta
@@ -545,19 +615,37 @@ internal static class Contrato
     /// promete: los dos encendidos a la vez harían el AEC inútil (la compuerta calla todo igual), y
     /// los dos apagados son exactamente el bug del que viene la spec 002.
     /// </remarks>
+    private static void SinCaminoDeEcoAbreLaCompuerta()
+    {
+        var t = Realtime.GetType("Voz.Realtime.ModoDeCaptura");
+        var m = t?.GetMethod("CompuertaActiva");
+        if (t == null || m == null || m.GetParameters().Length < 3)
+        { Pendiente("ModoDeCaptura.CompuertaActiva(sinCaminoDeEco)", "3"); return; }
+
+        bool Activa(bool aec, bool forzada, bool sinEco) =>
+            (bool)m.Invoke(null, new object[] { aec, forzada, sinEco })!;
+
+        Debe(!Activa(false, false, true),
+            "con auriculares declarados la compuerta se aparta: no hay eco que tragar y el barge-in vuelve");
+        Debe(Activa(false, false, false),
+            "sin declarar nada, la compuerta sigue mandando como siempre");
+        Debe(Activa(false, true, true),
+            "y forzarla GANA incluso con auriculares: forzar solo enciende la garantía, jamás la apaga");
+    }
+
     private static void OCompuertaOAec()
     {
         var m = Realtime.GetType("Voz.Realtime.ModoDeCaptura")
             ?.GetMethod("CompuertaActiva", BindingFlags.Public | BindingFlags.Static);
         if (m == null) { Pendiente("Voz.Realtime.ModoDeCaptura", "2"); return; }
 
-        Debe(false.Equals(m.Invoke(null, new object[] { true, false })),
+        Debe(false.Equals(m.Invoke(null, new object[] { true, false, false })),
             "con el AEC del sistema puesto la compuerta no actúa: el barge-in es del AEC");
-        Debe(true.Equals(m.Invoke(null, new object[] { false, false })),
+        Debe(true.Equals(m.Invoke(null, new object[] { false, false, false })),
             "sin AEC la compuerta actúa: es la garantía determinística");
-        Debe(true.Equals(m.Invoke(null, new object[] { true, true })),
+        Debe(true.Equals(m.Invoke(null, new object[] { true, true, false })),
             "y forzada actúa aunque haya AEC: la perilla de esta máquina manda");
-        Debe(true.Equals(m.Invoke(null, new object[] { false, true })),
+        Debe(true.Equals(m.Invoke(null, new object[] { false, true, false })),
             "forzada sin AEC también: forzar nunca puede APAGAR la garantía");
     }
 
