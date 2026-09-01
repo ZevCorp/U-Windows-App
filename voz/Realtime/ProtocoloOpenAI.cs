@@ -87,6 +87,13 @@ public sealed class ProtocoloOpenAI : IProtocolo
                         // pantalla lo que el servidor creyó oír, que es la primera pista cuando algo
                         // no se entiende.
                         transcription = new { model = "gpt-4o-mini-transcribe" },
+
+                        // CAMPO LEJANO: el micrófono del portátil oye la sala entera —incluidos los
+                        // altavoces— y no una boca pegada. `far_field` es el preprocesado que el
+                        // propio servidor trae para ese escenario; sin él, lo que llega es la sala
+                        // cruda y la transcripción alucina (2026-08-31: «дай видимо скуча» sobre
+                        // una frase en español, y Ü se auto-silenció creyendo que se lo pedían).
+                        noise_reduction = new { type = "far_field" },
                     },
                     output = new
                     {
