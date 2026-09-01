@@ -180,6 +180,20 @@ internal static class Contrato
         Prueba("90. la consulta se atribuye al MÉDICO que entró, no a la máquina", LaConsultaEsDelMedico);
         Prueba("91. si la nota no se generó, la consulta NO se declara terminada", SinNotaNoHayConsultaTerminada);
 
+        // ── EL ARRANQUE QUE NO SE MUERE EN SILENCIO ──────────────────────────
+        //
+        // Medido en el log el 2026-09-01: `U.exe --consulta`, el medico entró bien
+        // («cuenta: médico dentro · 67530d77…») y esa fue la ÚLTIMA LÍNEA DEL ARCHIVO. Sin
+        // excepción, sin ventana, sin nada. La causa: `OnStartup` corre antes de que StartupUri
+        // cree la carita, así que el login era la única ventana y al cerrarse
+        // ShutdownMode.OnLastWindowClose dio la aplicación por terminada.
+        //
+        // El bug de WPF en sí es nivel 4 y se dice: solo se caza ejecutando. Lo que SÍ se puede
+        // prometer —y es lo que impide que la próxima vez vuelva a ser invisible— es que el
+        // arranque nombre el paso en el que se quedó. Un fallo que no se ve no se arregla.
+        Console.WriteLine();
+        Prueba("92. arrancar la consulta dice EN QUÉ PASO se quedó: morir callado no es un resultado", ElArranqueDiceDondeSeQuedo);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -2581,6 +2595,51 @@ internal static class Contrato
             + "crearlo sí");
         Debe(backend.Peticiones.Count(p => p.Contains("/transcript")) == 1,
             "y el texto se guardó UNA vez: el fallo fue de la nota, no de la transcripción");
+    }
+
+    /// <remarks>
+    /// Las tres afirmaciones son la promesa entera, y la tercera es la que más costó: **cancelar no
+    /// es fallar**. Si cerrar el login sin entrar disparara el aviso, el aviso se volvería ruido —
+    /// y un aviso que sale cuando no pasa nada se aprende a ignorar, que es como se pierde el que
+    /// sí importa.
+    /// </remarks>
+    private static void ElArranqueDiceDondeSeQuedo()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.ArranqueDeConsulta");
+        var correr = t?.GetMethod("Correr");
+        if (t == null || correr == null) { Pendiente("Clinical.ArranqueDeConsulta", "92"); return; }
+
+        object Armar(Func<bool> restaurar, Func<bool> login, Action abrir, Action<string, string> avisar)
+            => Activator.CreateInstance(t, restaurar, login, abrir, avisar)!;
+
+        // 1. La ventana revienta: se avisa, con el PASO nombrado y el porqué REAL.
+        string paso = "", porque = "";
+        var revienta = Armar(() => false, () => true,
+            () => throw new InvalidOperationException("no hay micrófono en este equipo"),
+            (p, q) => { paso = p; porque = q; });
+        Debe((bool)correr.Invoke(revienta, null)! == false,
+            "si la ventana no abre, el arranque contesta que NO");
+        Debe(paso.Length > 0 && !paso.Equals("no se pudo", StringComparison.OrdinalIgnoreCase),
+            $"y nombra el PASO en el que se quedó, no una conclusión: «{paso}»");
+        Debe(porque.Contains("no hay micrófono en este equipo"),
+            $"con el motivo REAL dentro, no un genérico que manda a mirar donde no es: «{porque}»");
+
+        // 2. Cancelar el login NO es un fallo: no se avisa de nada.
+        bool avisaron = false;
+        var cancela = Armar(() => false, () => false, () => { }, (_, _) => avisaron = true);
+        Debe((bool)correr.Invoke(cancela, null)! == false, "cancelar tampoco abre la ventana");
+        Debe(!avisaron,
+            "pero NO se avisa: cerrar el login sin entrar es una decisión, no una avería, y un "
+            + "aviso que salta cuando no pasa nada se aprende a ignorar");
+
+        // 3. Con sesión restaurada no se pide contraseña, y el camino feliz no avisa de nada.
+        bool pidioLogin = false, avisoEnFeliz = false, abrio = false;
+        var feliz = Armar(() => true, () => { pidioLogin = true; return true; },
+            () => abrio = true, (_, _) => avisoEnFeliz = true);
+        Debe((bool)correr.Invoke(feliz, null)! && abrio, "con sesión guardada se abre la ventana");
+        Debe(!pidioLogin,
+            "y no se pide la contraseña otra vez: para eso se guardó la sesión (promesa 85)");
+        Debe(!avisoEnFeliz, "el camino feliz no enseña ningún aviso");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

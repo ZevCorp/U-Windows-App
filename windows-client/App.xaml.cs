@@ -59,14 +59,44 @@ public partial class App : Application
         // no puede costar la contraseña otra vez.
         if (e.Args.Any(a => string.Equals(a, "--consulta", StringComparison.OrdinalIgnoreCase)))
         {
+            AbrirLaConsulta();
+        }
+    }
+
+    /// <summary>
+    /// El camino de <c>--consulta</c>, con la aplicación sostenida mientras dura.
+    /// </summary>
+    /// <remarks>
+    /// EL <c>ShutdownMode</c> NO ES UN DETALLE: es lo que mató a esta app en silencio el
+    /// 2026-09-01. `OnStartup` corre ANTES de que `StartupUri` cree la carita, así que mientras el
+    /// login está abierto es la ÚNICA ventana del proceso. Al cerrarse —con el login YA
+    /// resuelto— `ShutdownMode.OnLastWindowClose`, que es el de fábrica, dio la aplicación por
+    /// terminada: `ConsultaWindow.Show()` no pintó nada, `app.Run()` retornó y U.exe se cerró.
+    ///
+    /// El síntoma fue perfecto en su inutilidad: ni excepción, ni ventana, ni mensaje. El log lo
+    /// dijo todo con un silencio — «cuenta: médico dentro · 67530d77…» y ni una línea más.
+    ///
+    /// `OnExplicitShutdown` mientras dura el arranque, y se devuelve el modo anterior en cuanto hay
+    /// ventana. No se deja puesto: con él, cerrar todas las ventanas dejaría el proceso vivo e
+    /// invisible, que es la avería opuesta y peor.
+    /// </remarks>
+    private void AbrirLaConsulta()
+    {
+        var modoPrevio = ShutdownMode;
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        try
+        {
             var sesion = new U.WindowsClient.Cuenta.SesionMiracle(
                 U.WindowsClient.Cuenta.Nube.SupabaseUrl, U.WindowsClient.Cuenta.Nube.ClavePublicable);
-            if (!sesion.Restaurar())
-            {
-                var login = new Ui.LoginWindow(sesion);
-                if (login.ShowDialog() != true) return; // sin médico no hay consulta (promesa 84)
-            }
-            new Ui.ConsultaWindow(sesion, U.Graph.GraphConfig.Load()).Show();
+
+            var arranque = new U.WindowsClient.Clinical.ArranqueDeConsulta(
+                restaurarSesion: sesion.Restaurar,
+                pedirCredenciales: () => new Ui.LoginWindow(sesion).ShowDialog() == true,
+                abrirLaVentana: () => new Ui.ConsultaWindow(sesion, U.Graph.GraphConfig.Load()).Show(),
+                avisarDelFallo: Ui.Aviso.Fallo);
+
+            arranque.Correr();
         }
+        finally { ShutdownMode = modoPrevio; }
     }
 }
