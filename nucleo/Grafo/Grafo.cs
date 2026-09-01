@@ -46,6 +46,10 @@ public sealed class Grafo
     private readonly Dictionary<string, Dictionary<string, Elemento>> _vistos = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _destinos = new(StringComparer.Ordinal);
 
+    /// <summary>Cómo se cruzó cada arista («doubleclick»…). Solo lo distinto del clic simple; clave
+    /// igual que <see cref="_destinos"/>. Promesa 21.</summary>
+    private readonly Dictionary<string, string> _gestos = new(StringComparer.Ordinal);
+
     /// <summary>
     /// LO QUE ALGUIEN ENSEÑÓ sobre un elemento: qué es y para qué sirve, con la foto de cuando lo
     /// dijo. Clave igual que <see cref="_destinos"/>: ubicación + selector.
@@ -160,7 +164,29 @@ public sealed class Grafo
     /// los siete perdidos no dejaron rastro (2026-08-12, medido). Un rechazo ruidoso habría
     /// enseñado el problema el primer día.
     /// </returns>
+    // «NO SE EL GESTO» NO ES «FUE UN CLIC SIMPLE». Los llamadores de tres argumentos —la
+    // atribucion del clic humano en MapaVivo, la restauracion del proyector— no saben como se
+    // cruzo, y delegar con "" borraba el gesto ya aprendido: cada visita MANUAL del usuario a una
+    // arista degradaba el saber, y el siguiente Pulsa re-pagaba el ensayo entero (~3,6 s y tres
+    // clics). Es la clase «vacio no es ausente» (aprendizaje n.9), encontrada por el agente
+    // optimizador el 2026-08-31 el mismo dia que nacio el bug. Conservar: quien no sabe, no borra.
     public bool Cruzar(string ubicacion, string selector, string destino)
+        => Cruzar(ubicacion, selector, destino, GestoDe(ubicacion, selector));
+
+    /// <summary>
+    /// Cruzar diciendo CÓMO se cruzó. Promesa 21: el gesto viaja con su arista.
+    /// </summary>
+    /// <remarks>
+    /// El gesto es DE LA ARISTA y no del selector, por la misma razón por la que el destino ya se
+    /// guarda por ubicación Y selector (promesa 4): la misma puerta puede necesitar otra cosa
+    /// según desde dónde se toque.
+    ///
+    /// Vacío significa «el gesto de siempre» (el clic simple) — no «desconocido». La distinción
+    /// que importa es tener la arista o no tenerla: una arista existente con gesto vacío dice «se
+    /// cruzó con un clic», y eso también es saber (medido el 2026-08-26: sin recordar el gesto, un
+    /// «take» sobre contenido eran tres clics físicos por visita, para siempre).
+    /// </remarks>
+    public bool Cruzar(string ubicacion, string selector, string destino, string gesto)
     {
         if (string.IsNullOrWhiteSpace(ubicacion) || string.IsNullOrWhiteSpace(selector)) return false;
         if (string.IsNullOrWhiteSpace(destino) || destino.Equals(ubicacion, StringComparison.OrdinalIgnoreCase)) return false;
@@ -169,11 +195,22 @@ public sealed class Grafo
             if (!_vistos.TryGetValue(ubicacion, out var aqui) || !aqui.ContainsKey(selector)) return false;
 
             string clave = ubicacion + "\n" + selector;
-            if (_destinos.TryGetValue(clave, out var ya) && ya == destino) return true;
+            string g = gesto?.Trim() ?? "";
+            bool mismoDestino = _destinos.TryGetValue(clave, out var ya) && ya == destino;
+            bool mismoGesto = (_gestos.TryGetValue(clave, out var gya) ? gya : "") == g;
+            if (mismoDestino && mismoGesto) return true;
             _destinos[clave] = destino;
+            if (g.Length > 0) _gestos[clave] = g; else _gestos.Remove(clave);
             Version++;
             return true;
         }
+    }
+
+    /// <summary>Con qué gesto se cruzó esta arista, o vacío si con el clic de siempre (o nunca).</summary>
+    public string GestoDe(string ubicacion, string selector)
+    {
+        lock (_llave)
+            return _gestos.TryGetValue(ubicacion + "\n" + selector, out var g) ? g : "";
     }
 
     /// <summary>
@@ -410,7 +447,7 @@ public sealed class Grafo
     {
         lock (_llave)
         {
-            _vistos.Clear(); _destinos.Clear(); _vivosAhora.Clear();
+            _vistos.Clear(); _destinos.Clear(); _gestos.Clear(); _vivosAhora.Clear();
             _recuerdos.Clear();
             Aqui = ""; Version++;
         }

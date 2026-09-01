@@ -71,6 +71,9 @@ public sealed class UiaSurface : IUiSurface
     private const int SW_RESTORE = 9;
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004, MOUSEEVENTF_WHEEL = 0x0800;
+    // El boton derecho entra el 2026-08-26: hasta entonces el repo entero no sabia abrir un menu
+    // contextual (cero coincidencias de rightclick en windows-client y windows-graph).
+    private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008, MOUSEEVENTF_RIGHTUP = 0x0010;
 
     /// <summary>
     /// Doble clic REAL sobre el elemento. Reutiliza <see cref="RealClick"/> dos veces para heredar
@@ -873,6 +876,10 @@ public sealed class UiaSurface : IUiSurface
                 // entraba en una subcarpeta: la superficie no cambiaba, así que se concluía «acción
                 // local, nada que aprender». No era falta de criterio, era falta de esta acción.
                 "doubleclick" => RealDoubleClick(el, out error),
+                // Clic derecho (2026-08-26). Abre el menu contextual del elemento; lo que se elija
+                // dentro es un paso aparte, porque el menu es otra pantalla y se mira como tal.
+                // Probado sobre el Explorador real: menu de 16 opciones, log "clic DERECHO en (952,324)".
+                "rightclick" => RealRightClick(el, out error),
                 _ => Fail($"actionType no soportado en UIA: {step.ActionType}", out error),
             };
             L($"  resultado acción: ok={ok}{(ok ? "" : $" · motivo='{error}'")}");
@@ -1162,6 +1169,46 @@ public sealed class UiaSurface : IUiSurface
             return false;
         }
         catch (Exception e) { error = e.Message; return false; }
+    }
+
+    /// <summary>CLIC DERECHO: abrir el menú contextual de algo. Entra el 2026-08-26.</summary>
+    /// <remarks>
+    /// NO se hace con <c>RealClick</c> y luego el botón derecho, que es lo que parece más corto:
+    /// RealClick pulsa con el IZQUIERDO, y un clic izquierdo antes del derecho no sale gratis — en
+    /// una lista selecciona, y sobre según qué control activa lo que haya debajo. Aquí se hace lo
+    /// caro que RealClick hace (traer a la vista, colocar el cursor) y se pulsa el derecho, sin que
+    /// el izquierdo llegue a tocar nada.
+    ///
+    /// Se coloca por la CAJA del elemento y no por un punto grabado: el menú que sale depende de
+    /// qué hay bajo el cursor, así que abrirlo en un píxel aproximado abre el menú de otra cosa —
+    /// y las opciones que se elijan después serán las de esa otra cosa, sin que nada avise.
+    ///
+    /// Probado a mano el 2026-08-26 sobre el Explorador real (antes del port a esta base): el menú
+    /// de una carpeta salió con sus 16 opciones — «Abrir», «Anclar a Inicio», «Propiedades»,
+    /// «Copiar como ruta de acceso»… — y quedó en el log como «clic DERECHO en (952,324)».
+    /// </remarks>
+    private bool RealRightClick(AutomationElement el, out string error)
+    {
+        error = "";
+        try
+        {
+            TraerALaVistaEstatico(el);
+            var r = el.Current.BoundingRectangle;
+            if (r.IsEmpty || r.Width <= 0 || r.Height <= 0)
+            {
+                error = "el elemento no tiene caja en pantalla: no hay dónde abrir el menú";
+                return false;
+            }
+
+            int cx = (int)(r.Left + r.Width / 2), cy = (int)(r.Top + r.Height / 2);
+            SmoothMove(cx, cy);
+            Thread.Sleep(30);
+            mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, IntPtr.Zero);
+            mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, IntPtr.Zero);
+            L($"    → clic DERECHO en ({cx},{cy})");
+            return true;
+        }
+        catch (Exception e) { error = $"el clic derecho falló: {e.Message}"; return false; }
     }
 
     private static void TraerALaVistaEstatico(AutomationElement el)

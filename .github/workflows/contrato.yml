@@ -33,7 +33,10 @@ jobs:
 
       # El script compila el nucleo en RELEASE y despues el contrato contra esos binarios recien
       # hechos, para que lo aprobado sea exactamente lo que se va a ejecutar. Su codigo de salida
-      # es el numero de promesas incumplidas: 0 = CONTRATO INTACTO.
+      # es el numero de promesas incumplidas: 0 = CONTRATO INTACTO. EXCEPCION: 99 significa "el
+      # juez no llego a emitir veredicto" (desde 2026-08-31, cuando Smart App Control enseño que
+      # un juez que no corre no puede leerse como recuento) — se rotula aparte, porque presentar
+      # un "no se" como "99 incumplidas" manda la investigacion al sitio equivocado.
       - name: Juzgar el contrato
         id: contrato
         shell: pwsh
@@ -54,8 +57,11 @@ jobs:
           # negativo. Un recuento que puede mentir es el aprendizaje n.10 (2026-08-13).
           $pend  = @(Select-String -Path $log -SimpleMatch 'PENDIENTE:').Count
           # Con el arnes caido el codigo no es un recuento de promesas: el verde se cuenta desde 0
-          # en vez de dar un negativo que parezca un dato.
-          $verdes = [Math]::Max(0, $total - $codigo)
+          # en vez de dar un negativo que parezca un dato. Y con 99 ("no emitio veredicto") no hay
+          # NINGUN numero que dar: la tabla dice "?" en vez de inventarse 99 incumplidas.
+          $sinVeredicto = ($codigo -eq 99)
+          $verdes = if ($sinVeredicto) { '?' } else { [Math]::Max(0, $total - $codigo) }
+          $incumplidas = if ($sinVeredicto) { 'NO SE PUDO JUZGAR' } else { [Math]::Max(0, $codigo - $pend) }
 
           # El resumen del run dice el veredicto sin que nadie abra los logs, y distingue sus causas
           # (una promesa sin codigo todavia no es lo mismo que una regresion).
@@ -64,7 +70,7 @@ jobs:
             ''
             "| Promesas | Verdes | Incumplidas | Pendientes (sin codigo aun) |"
             "|---|---|---|---|"
-            "| $total | $verdes | $([Math]::Max(0, $codigo - $pend)) | $pend |"
+            "| $total | $verdes | $incumplidas | $pend |"
             ''
             '```'
             (Get-Content $log -Raw)
@@ -72,6 +78,10 @@ jobs:
           )
           $resumen -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
+          if ($codigo -eq 99) {
+            Write-Host "::error::NO SE PUDO JUZGAR: el contrato no emitio veredicto. No es un rojo ni un verde: no se sabe nada de las promesas. Mira el log del summary."
+            exit 1
+          }
           if ($codigo -ne 0) {
             Write-Host "::error::CONTRATO ROTO: $codigo promesa(s) incumplida(s) ($pend de ellas sin codigo todavia). Esto no puede entrar a main."
             exit 1
@@ -117,14 +127,17 @@ jobs:
           # PENDIENTES: ...)" y el recuento se pasa por uno, dejando el numero de incumplidas en
           # negativo. Un recuento que puede mentir es el aprendizaje n.10 (2026-08-13).
           $pend  = @(Select-String -Path $log -SimpleMatch 'PENDIENTE:').Count
-          $verdes = [Math]::Max(0, $total - $codigo)
+          # 99 = sin veredicto: "?" en vez de inventarse un recuento (igual que el job del grafo).
+          $sinVeredicto = ($codigo -eq 99)
+          $verdes = if ($sinVeredicto) { '?' } else { [Math]::Max(0, $total - $codigo) }
+          $incumplidas = if ($sinVeredicto) { 'NO SE PUDO JUZGAR' } else { [Math]::Max(0, $codigo - $pend) }
 
           $resumen = @(
             '## Contrato de la voz'
             ''
             "| Promesas | Verdes | Incumplidas | Pendientes (sin codigo aun) |"
             "|---|---|---|---|"
-            "| $total | $verdes | $([Math]::Max(0, $codigo - $pend)) | $pend |"
+            "| $total | $verdes | $incumplidas | $pend |"
             ''
             '```'
             (Get-Content $log -Raw)
@@ -132,6 +145,10 @@ jobs:
           )
           $resumen -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
+          if ($codigo -eq 99) {
+            Write-Host "::error::NO SE PUDO JUZGAR: el contrato de la voz no emitio veredicto. No es un rojo ni un verde: no se sabe nada de sus promesas. Mira el log del summary."
+            exit 1
+          }
           if ($codigo -ne 0) {
             Write-Host "::error::VOZ ROTA: $codigo promesa(s) incumplida(s) ($pend de ellas sin codigo todavia). Esto no puede entrar a main."
             exit 1
