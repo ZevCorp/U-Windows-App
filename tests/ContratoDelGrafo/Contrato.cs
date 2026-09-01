@@ -273,6 +273,23 @@ internal static class Contrato
         // cosa.
         Prueba("100. guardar el nombre no borra los demás campos del perfil profesional", GuardarNombreNoBorraElResto);
 
+        // ── Enseñar por demostración (spec 005) ──────────────────────────────
+        //
+        // La cadena demostración→artefacto→reproducción existe entera salvo el EMPAQUETADOR, y el
+        // vigía de clics acuña los sintéticos como humanos (nunca consulta LLMHF_INJECTED): la
+        // arista falsa del 2026-08-31, medida por el tester. Seis promesas; la 102 cierra el asunto
+        // pero la 101 va primero — sin el filtro, cada reproducción re-contamina el grafo.
+        //
+        // Nacieron como 84-89 y spec 004 en la rama; al rebasar sobre main (2026-09-01) esos
+        // números ya los tenía la consulta clínica (#43-#45). Los números no se reciclan: 101-106.
+        Console.WriteLine();
+        Prueba("101. una pulsación sintética no se acuña como clic humano: el vigía la deja pasar", ElVigiaNoAcunaLoSintetico);
+        Prueba("102. una demostración termina en una skill con nombre: los pasos en orden, de dónde parte y a dónde llega cada paso", LaDemoTerminaEnSkill);
+        Prueba("103. reproducir una skill exige la llegada de cada paso: acabar en otro sitio no es haberlo hecho", ReproducirExigeLaLlegada);
+        Prueba("104. una demo descartada no publica nada: ni video, ni pasos, ni skill", LaDemoDescartadaNoPublica);
+        Prueba("105. lo dicho durante la demo viaja con su paso: la frase queda anclada al paso que sonaba", LoDichoViajaConSuPaso);
+        Prueba("106. las skills enseñadas se anuncian al cerebro: se piden por nombre, y el catálogo dice cuándo usarlas", LasSkillsSeAnuncian);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -1352,6 +1369,201 @@ internal static class Contrato
         Debe(toques.Count == 1,
             $"y recibió EXACTAMENTE un clic ({toques.Count} toque(s)): el doble solo se ensaya "
             + "sobre contenido de lista, porque sobre un botón el segundo clic es repetir la acción");
+    }
+
+    // ── Enseñar por demostración (spec 004) ──────────────────────────────────
+
+    /// <summary>Capacidad de la spec 004 pedida por nombre; ausente = rojo con su fase.</summary>
+    /// <remarks>Por el ensamblado de U.dll y no por «Nucleo.GetType»: en este contrato «Nucleo» es
+    /// el ESPACIO DE NOMBRES del terreno, no el alias de ensamblado que tenía el contrato viejo —
+    /// la primera versión de este helper confundió los dos y no compilaba (2026-09-01).</remarks>
+    private static Type? Cap004(string tipo) => typeof(PulsarSegunElNucleo).Assembly.GetType(tipo);
+
+    private static void ElVigiaNoAcunaLoSintetico()
+    {
+        // La arista falsa del 2026-08-31, medida: el vigía atribuyó NUESTRO doble sintético a
+        // «Fecha de modificación» y acuñó docs→specs por una cabecera de columna. El hook de
+        // Windows YA dice quién inyecta (LLMHF_INJECTED en flags); ClickWatcher lo marshalea y
+        // jamás lo consulta. Sin este filtro, reproducir una skill re-contamina el grafo en cada
+        // corrida — por eso esta promesa va ANTES que el empaquetador.
+        var m = Cap004("U.WindowsClient.Navigation.ClickWatcher")
+            ?.GetMethod("EsSintetico", new[] { typeof(uint) });
+        Debe(m != null, "todavía no existe «ClickWatcher.EsSintetico» (fase 1 de la spec 004). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (m == null) return;
+
+        Debe(m.Invoke(null, new object[] { 0x1u }) is true,
+            "un golpe con LLMHF_INJECTED es sintético: el vigía lo deja pasar sin atribuirlo");
+        Debe(m.Invoke(null, new object[] { 0x2u }) is true,
+            "y el inyectado a menor integridad (bit 1) también: inyectado es inyectado");
+        Debe(m.Invoke(null, new object[] { 0x0u }) is false,
+            "un golpe sin banderas de inyección es del humano, y ese SÍ enseña");
+    }
+
+    private static void LaDemoTerminaEnSkill()
+    {
+        // EL ESLABÓN QUE NO EXISTE (2026-09-01, medido por cinco lectores): el grafo guarda
+        // aristas sueltas sin orden ni nombre, y el único empaquetador manda PlanStep a un formato
+        // que map_batch no lee. La skill es el artefacto: nombre, disparador, de dónde parte, y
+        // los pasos EN EL ORDEN de la demo con la llegada que la demo vio.
+        var tSkill = Cap004("U.WindowsClient.Navigation.SkillEnsenada");
+        var tPaso = Cap004("U.WindowsClient.Navigation.PasoEnsenado");
+        var emp = tSkill?.GetMethod("Empaquetar");
+        Debe(tSkill != null && tPaso != null && emp != null,
+            "todavía no existen «SkillEnsenada/PasoEnsenado/Empaquetar» (fase 2 de la spec 004). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tSkill == null || tPaso == null || emp == null) return;
+
+        object P(string exit, string texto, string llegada, string dicho)
+            => Activator.CreateInstance(tPaso, exit, texto, llegada, dicho)!;
+        var lista = (System.Collections.IList)Activator.CreateInstance(
+            typeof(List<>).MakeGenericType(tPaso))!;
+        lista.Add(P("sap:wnd[0]#tbbtn=NV44", "", "sapgui://QAS/NV2000", "aquí se crea el triage"));
+        lista.Add(P("", "12345", "", ""));   // lo tecleado, que solo el recorder ve
+
+        var skill = emp.Invoke(null, new object?[] { "radicar-factura", "cuando pidan radicar", "sapgui://QAS/NWP1", lista });
+        Debe(skill != null, "una demo con pasos SÍ produce skill");
+        if (skill == null) return;
+
+        var pasos = (System.Collections.IList)tSkill.GetProperty("Pasos")!.GetValue(skill)!;
+        string ExitDe(int i) => (string)tPaso.GetProperty("Exit")!.GetValue(pasos[i])!;
+        Debe((string)tSkill.GetProperty("Nombre")!.GetValue(skill)! == "radicar-factura"
+             && (string)tSkill.GetProperty("DondeEmpieza")!.GetValue(skill)! == "sapgui://QAS/NWP1",
+            "la skill lleva su nombre y de dónde parte: sin eso no es invocable ni reproducible");
+        Debe(pasos.Count == 2 && ExitDe(0).Contains("NV44")
+             && (string)tPaso.GetProperty("Texto")!.GetValue(pasos[1])! == "12345",
+            "los pasos quedan EN EL ORDEN de la demo, con el valor tecleado incluido");
+        Debe((string)tPaso.GetProperty("Llegada")!.GetValue(pasos[0])! == "sapgui://QAS/NV2000",
+            "y cada paso que navegó recuerda A DÓNDE llegó: esa llegada es lo que la reproducción exigirá");
+
+        var vacia = emp.Invoke(null, new object?[] { "x", "y", "sitio",
+            Activator.CreateInstance(typeof(List<>).MakeGenericType(tPaso)) });
+        Debe(vacia == null,
+            "una demo SIN pasos no produce skill: empaquetar el vacío sería una skill que no enseña nada");
+    }
+
+    private static void ReproducirExigeLaLlegada()
+    {
+        // El pendiente histórico nº1 («terminé» no es un veredicto) hecho promesa: la skill trae
+        // la llegada porque la demo la vio, y el batch la exige porque puede — el destino ya vive
+        // en la arista y nadie lo pedía (medido 2026-09-01).
+        var pLlegada = typeof(RecorrerSegunElNucleo.Paso).GetProperty("Llegada");
+        Debe(pLlegada != null,
+            "todavía no existe «Paso.Llegada» en el batch (fase 3 de la spec 004). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (pLlegada == null) return;
+
+        // La ruta real lleva a OTRO sitio distinto del prometido.
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:1", "Uno", "Button") });
+        var rutas = new Dictionary<string, string> { ["uia://x.exe/a|s:1"] = "uia://x.exe/OTRO" };
+        var (batch, _, _) = BatchCon(g, "uia://x.exe/a", rutas);
+
+        var paso = (RecorrerSegunElNucleo.Paso)Activator.CreateInstance(
+            typeof(RecorrerSegunElNucleo.Paso), "Uno", "", "uia://x.exe/PROMETIDO")!;
+        var r = batch.Recorre(new[] { paso });
+        Debe(!r.Termino && r.Hechos == 0,
+            $"aterrizar en «OTRO» cuando la skill prometía «PROMETIDO» NO cuenta como hecho "
+            + $"(dijo hechos={r.Hechos}, terminó={r.Termino}): contar eso sería el «29 de 30» otra vez");
+
+        // Y cuando la llegada coincide, el paso cuenta.
+        var g2 = new Nucleo.Grafo();
+        g2.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:1", "Uno", "Button") });
+        var (batch2, _, _) = BatchCon(g2, "uia://x.exe/a",
+            new Dictionary<string, string> { ["uia://x.exe/a|s:1"] = "uia://x.exe/PROMETIDO" });
+        var r2 = batch2.Recorre(new[] { (RecorrerSegunElNucleo.Paso)Activator.CreateInstance(
+            typeof(RecorrerSegunElNucleo.Paso), "Uno", "", "uia://x.exe/PROMETIDO")! });
+        Debe(r2.Termino && r2.Hechos == 1,
+            "llegar a donde la demo llegó SÍ es haberlo hecho: la exigencia no vuelve imposible lo posible");
+    }
+
+    private static void LaDemoDescartadaNoPublica()
+    {
+        // «Me equivoqué» hoy sube el video igual: DiscardAsync existe con CERO llamadores y el
+        // botón está Collapsed (medido 2026-09-01). La decisión se juzga aquí; el borrado real de
+        // archivos es nivel 4.
+        var t = Cap004("U.WindowsClient.Teach.SesionDeDemo");
+        Debe(t != null, "todavía no existe «SesionDeDemo» (fase 4 de la spec 004). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null) return;
+
+        var descartada = Activator.CreateInstance(t)!;
+        t.GetMethod("Descartar")!.Invoke(descartada, null);
+        Debe(t.GetMethod("Entrega")!.Invoke(descartada, null) == null,
+            "descartada, la sesión no entrega NADA: ni video, ni pasos, ni skill — descartar que "
+            + "publica es peor que no poder descartar");
+
+        var cerrada = Activator.CreateInstance(t)!;
+        t.GetMethod("Cerrar")!.Invoke(cerrada, null);
+        Debe(t.GetMethod("Entrega")!.Invoke(cerrada, null) != null,
+            "y cerrada de verdad, SÍ entrega: la puerta existe para la demo mala, no para todas");
+
+        t.GetMethod("Descartar")!.Invoke(cerrada, null);
+        Debe(t.GetMethod("Entrega")!.Invoke(cerrada, null) != null,
+            "descartar DESPUÉS de cerrar no des-publica: lo entregado ya no es de la sesión");
+    }
+
+    private static void LoDichoViajaConSuPaso()
+    {
+        // «Aquí va el NIT» solo sirve colgado del campo que sonaba. Hoy la frase sobrevive como
+        // log y la hora del clic es la de la RESOLUCIÓN, no la del golpe (medido 2026-09-01).
+        var tA = Cap004("U.WindowsClient.Navigation.AncladorDeVoz");
+        var tF = Cap004("U.WindowsClient.Navigation.FraseDicha");
+        var m = tA?.GetMethod("Ancla");
+        Debe(tA != null && tF != null && m != null,
+            "todavía no existe «AncladorDeVoz/FraseDicha» (fase 5 de la spec 004). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tA == null || tF == null || m == null) return;
+
+        var frases = (System.Collections.IList)Activator.CreateInstance(
+            typeof(List<>).MakeGenericType(tF))!;
+        frases.Add(Activator.CreateInstance(tF, "aquí se crea el triage", 5_200L)!);
+        frases.Add(Activator.CreateInstance(tF, "esto es del hospital en general", 900_000L)!);
+
+        var horas = new List<long> { 5_000L, 60_000L };   // dos pasos, con su hora del golpe
+        var r = m.Invoke(null, new object?[] { frases, horas })!;
+        var porPaso = (IReadOnlyList<string>)r.GetType().GetProperty("DichoPorPaso")!.GetValue(r)!;
+        string contexto = (string)r.GetType().GetProperty("Contexto")!.GetValue(r)!;
+
+        Debe(porPaso.Count == 2 && porPaso[0].Contains("triage"),
+            "la frase que sonaba con el paso queda EN ese paso");
+        Debe(porPaso[1].Length == 0 && contexto.Contains("hospital"),
+            "y la frase lejos de todo paso queda como CONTEXTO general: inventarle un ancla sería "
+            + "colgar «aquí va el NIT» de un botón cualquiera");
+    }
+
+    private static void LasSkillsSeAnuncian()
+    {
+        // Sin catálogo no hay «reproduce radicar factura»: el cerebro no puede pedir lo que no se
+        // anuncia. El catálogo dice QUÉ hay y CUÁNDO usarla (la description-disparador, el patrón
+        // de las skills de Claude), y con cero skills dice cero — no se inventa.
+        var tSkill = Cap004("U.WindowsClient.Navigation.SkillEnsenada");
+        var guardar = tSkill?.GetMethod("Guardar");
+        var catalogo = tSkill?.GetMethod("Catalogo");
+        Debe(tSkill != null && guardar != null && catalogo != null,
+            "todavía no existen «Guardar/Catalogo» (fase 6 de la spec 004). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tSkill == null || guardar == null || catalogo == null) return;
+
+        string carpeta = Path.Combine(_raiz, "skills-" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(carpeta);
+        Debe(((System.Collections.IList)catalogo.Invoke(null, new object[] { carpeta })!).Count == 0,
+            "con cero skills el catálogo dice cero: anunciar lo que no hay es inventar");
+
+        var tPaso = Cap004("U.WindowsClient.Navigation.PasoEnsenado")!;
+        var lista = (System.Collections.IList)Activator.CreateInstance(
+            typeof(List<>).MakeGenericType(tPaso))!;
+        lista.Add(Activator.CreateInstance(tPaso, "s:x", "", "uia://x.exe/b", "")!);
+        var skill = tSkill.GetMethod("Empaquetar")!.Invoke(null,
+            new object?[] { "radicar-factura", "cuando pidan radicar una factura", "uia://x.exe/a", lista })!;
+        guardar.Invoke(skill, new object[] { carpeta });
+
+        var cat = (System.Collections.IList)catalogo.Invoke(null, new object[] { carpeta })!;
+        Debe(cat.Count == 1, $"guardada una, el catálogo anuncia una (dijo {cat.Count})");
+        var e0 = cat[0]!;
+        Debe((string)e0.GetType().GetProperty("Nombre")!.GetValue(e0)! == "radicar-factura"
+             && ((string)e0.GetType().GetProperty("Description")!.GetValue(e0)!).Contains("radicar"),
+            "y la anuncia con nombre y con su CUÁNDO: el disparador es lo que deja pedirla sin verla");
     }
 
     private static (RecorrerSegunElNucleo Batch, Func<string> Donde, List<string> Tocados) BatchCon(
