@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -51,5 +52,21 @@ public partial class App : Application
             LogBus.Log("unobserved-task", ex.Exception.ToString());
             ex.SetObserved();
         };
+
+        // EL ICONO DE LA CONSULTA (spec 004, fase 8). `U.exe --consulta` abre la ventana de la
+        // consulta clínica delante; la carita arranca igual por StartupUri — mismo proceso, no se
+        // le quita nada. La sesión se RESTAURA antes de pedir login: cerrar el portátil una noche
+        // no puede costar la contraseña otra vez.
+        if (e.Args.Any(a => string.Equals(a, "--consulta", StringComparison.OrdinalIgnoreCase)))
+        {
+            var sesion = new U.WindowsClient.Cuenta.SesionMiracle(
+                U.WindowsClient.Cuenta.Nube.SupabaseUrl, U.WindowsClient.Cuenta.Nube.ClavePublicable);
+            if (!sesion.Restaurar())
+            {
+                var login = new Ui.LoginWindow(sesion);
+                if (login.ShowDialog() != true) return; // sin médico no hay consulta (promesa 84)
+            }
+            new Ui.ConsultaWindow(sesion, U.Graph.GraphConfig.Load()).Show();
+        }
     }
 }

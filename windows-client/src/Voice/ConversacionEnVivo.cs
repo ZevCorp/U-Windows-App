@@ -222,7 +222,7 @@ public sealed class ConversacionEnVivo : IDisposable
     /// La clave del proveedor activo. SE LEE DEL ENTORNO, no se embebe en el binario: repartir la
     /// MISMA clave de alcance completo en cada instalación era ya una deuda conocida con Gemini, y
     /// no hay motivo para arrastrarla al cambiar de proveedor. Lo correcto de verdad —una clave
-    /// temporal emitida por sesión, como ya hace <see cref="U.WindowsClient.Clinical.DictadoSoniox"/>
+    /// temporal emitida por sesión, como ya hace <see cref="U.WindowsClient.Clinical.Transcripcion.DictadoEnVivo"/>
     /// con Soniox— sigue pendiente.
     ///
     /// SE MIRA EL PROCESO Y, SI NO ESTÁ, EL REGISTRO DE USUARIO. `setx`/`SetEnvironmentVariable`

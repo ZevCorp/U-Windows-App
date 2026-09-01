@@ -871,7 +871,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // la que se pide la sesión de Soniox y se llama al emparejador— y la superficie de SAP.
         // Nace apagado: hasta que no se pulsa el fonendoscopio no abre micrófono ni toca nada.
         _rellenador = new RellenadorSap(_graphConfig, _clinicalSap);
-        _dictadoClinico = new DictadoSoniox(_graphConfig, _audioDictado);
+        _dictadoClinico = new Clinical.Transcripcion.DictadoEnVivo(_graphConfig, _audioDictado);
         _dictadoClinico.Frase += f => _rellenador.Oido(f);
         // Lo provisional se pinta pero NO se actúa: son palabras que Soniox aún puede corregir.
         _dictadoClinico.Parcial += t => Dispatcher.Invoke(() => SetStatus("🩺 " + Recorte(t, 90)));
@@ -2834,7 +2834,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     // VA APARTE DEL PUENTE DE ABAJO, que es otra cosa: aquel trae valores YA GUARDADOS por el
     // médico en el portal y los ofrece para aprobación; esto escucha en directo y escribe sin
     // preguntar. Comparten la superficie de SAP y nada más.
-    private DictadoSoniox? _dictadoClinico;
+    private Clinical.Transcripcion.DictadoEnVivo? _dictadoClinico;
     private readonly SapGuiSurface _clinicalSap = new();
     private RellenadorSap? _rellenador;
 
