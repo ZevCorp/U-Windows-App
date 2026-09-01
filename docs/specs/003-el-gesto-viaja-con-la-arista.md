@@ -1,6 +1,6 @@
 # Plan de implementación: el gesto viaja con la arista, y el clic derecho existe
 
-Estado: **propuesto** · Nace del diagnóstico del 2026-08-26 · Rama: `jose/agente-sdk`
+Estado: **implementado** (2026-08-31) · Nace del diagnóstico del 2026-08-26 · Rama: `jose/agente-sdk`
 
 > **De dónde viene esto.** Es el port de una lección aprendida sobre la arquitectura anterior
 > (rama `jose/agente-sdk-antes-de-main`, commits `b33ccef..228de69`), reescrita para el terreno.
@@ -178,4 +178,4 @@ la pantalla real.
 - [x] Verificado por agente independiente: 3 jueces re-corridos, spec↔contrato literal, rama limpia
 - [ ] Pendientes con nombre: arista falsa del vigía pasivo (hallazgo con dientes), conocimiento
       negativo del ensayo fallido, `accionPedida` descartada en `Take`, gesto en `PasoDelNucleo`
-- [ ] Estado: **implementado** (2026-08-31)
+- [x] Estado: **implementado** (2026-08-31)
