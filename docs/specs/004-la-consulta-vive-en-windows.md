@@ -335,6 +335,16 @@ para el puente con el portal clínico.
 
 ---
 
+5. **El sabotaje de la 84 descubrió una defensa doble** (2026-09-01, durante la fase de romper a
+   propósito). Quitar la puerta de `Consulta` NO puso la promesa en rojo: `ClinicaClient` también se
+   niega a llamar sin token, y el comportamiento prometido se sostuvo con una sola de las dos capas.
+   Hubo que tumbar las dos para ver el rojo — que llegó, con su afirmación exacta («se pidieron 1»).
+   Las otras siete mordieron al primer corte. El sabotaje completo: 8/8 comprobadas.
+
+6. **PowerShell 5.1 lee los `.ps1` sin BOM como ANSI** (2026-09-01): un guión largo UTF-8 en
+   `atajo-consulta.ps1` partió el parser con un error que no menciona la codificación. Por eso los
+   scripts del repo no llevan acentos; ahora está escrito en el propio script.
+
 ## Cierre
 
 - [ ] Las ocho promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO)
