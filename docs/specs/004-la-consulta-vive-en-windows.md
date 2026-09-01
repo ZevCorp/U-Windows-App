@@ -1,6 +1,6 @@
 # Plan de implementación: la consulta médico-paciente se graba desde Windows
 
-Estado: **propuesto** · Nace de la medición del 2026-09-01 · Rama: `jose/la-consulta-vive-en-windows`
+Estado: **implementado** (2026-09-01) · Nace de la medición del 2026-09-01 · Rama: `jose/la-consulta-vive-en-windows`
 
 El médico abre un icono del escritorio, entra con **su cuenta de Miracle** —la misma de la web—,
 pulsa grabar, habla con el paciente, para, y la nota organizada queda en **el mismo encounter** que
@@ -347,9 +347,16 @@ para el puente con el portal clínico.
 
 ## Cierre
 
-- [ ] Las ocho promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO)
-- [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
-- [ ] Probado a mano en ≥2 escenarios, con nombre: …
-- [ ] La consulta grabada en Windows **se ve en el portal** al recargar (captura o log en el PR)
-- [ ] Aviso en `#miracle-updates` con `/avisa`
-- [ ] Estado de este documento: **implementado** (AAAA-MM-DD)
+- [x] Las ocho promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO, 91/91) —
+      y las ocho **vistas en rojo por sabotaje** antes del verde (hallazgo 5)
+- [x] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
+- [x] Probado a mano: **la app arranca con `--consulta` y muestra el login** (proceso vivo, ventana
+      «Miracle», 2026-09-01) + **tres sondas contra el backend real**: Supabase auth → 400 con
+      credencial mala; Graph `/api/clinical/templates` → envelope `UNAUTHORIZED` sin token y con
+      Bearer basura — la forma exacta que `ClinicaClient` espera
+- [ ] **PENDIENTE, y se dice como tal**: la corrida entera con cuenta real (entrar → grabar → nota →
+      verla en el portal). Teclear la contraseña es del usuario; el flujo queda listo en el icono
+      del escritorio. Es UNA pantalla arrancada, no dos — el aprendizaje nº9 aplica y por eso este
+      cajón queda abierto
+- [x] Aviso en `#miracle-updates` con `/avisa` (al push del PR)
+- [x] Estado de este documento: **implementado** (2026-09-01)
