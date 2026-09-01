@@ -250,6 +250,14 @@ internal static class Contrato
         // distinta forma, y quien las junta hereda el desacuerdo.
         Prueba("98. con un médico dentro, la identidad NO se vuelve a pedir", LaIdentidadSePideUnaVez);
 
+        // ── EL SELECTOR DE CUENTA (2026-09-01) ────────────────────────────────
+        //
+        // Click en el nombre del médico → cambiar de cuenta, agregar una nueva, o cerrar sesión.
+        // Los tres pasan por cerrar la sesión ACTUAL primero, y eso es justo lo que no se puede
+        // hacer a media consulta: cerrar sesión con el micrófono abierto deja un dictado huérfano
+        // —nadie lo para, nadie lo guarda— y el médico se queda sin saber que perdió lo grabado.
+        Prueba("99. cambiar de cuenta se bloquea mientras se está grabando", NoSeCambiaDeCuentaGrabando);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -3059,6 +3067,61 @@ internal static class Contrato
                 == "viejo@teclado.co",
             "y sin sesión se conserva el de máquina: los workflows y la telemetría que ya lo usaban "
             + "no se quedan sin identidad de golpe");
+    }
+
+    /// <remarks>
+    /// Se juzga el GUARDIA, no el menú: el menú es nivel 4. Lo que sí se puede escribir es que
+    /// <c>Consulta</c> sepa distinguir «estoy grabando» de todo lo demás, porque esa es la frase que
+    /// hoy sería falsa (nada impedía cerrar sesión a media consulta) y mañana tiene que ser
+    /// verdadera.
+    /// </remarks>
+    private static void NoSeCambiaDeCuentaGrabando()
+    {
+        var tConsulta = Capacidad("U.WindowsClient.Clinical.Consulta");
+        var tClinica = Capacidad("U.WindowsClient.Clinical.ClinicaClient");
+        var tSesion = Capacidad("U.WindowsClient.Cuenta.SesionMiracle");
+        var puede = tConsulta?.GetProperty("PuedeCambiarDeUsuario");
+        if (tConsulta == null || tClinica == null || tSesion == null || puede == null)
+        {
+            Pendiente("Clinical.Consulta.PuedeCambiarDeUsuario", "99");
+            return;
+        }
+
+        var backend = new BackendDeMentira(req =>
+            req.RequestUri!.AbsolutePath.Contains("/auth/v1/token")
+                ? (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "unico", 3600))
+                : (HttpStatusCode.Created, "{\"encounter_id\":\"enc-1\",\"status\":\"created\"}"));
+        var sesion = Activator.CreateInstance(tSesion,
+            "https://supabase.test", "publishable", backend,
+            (Func<DateTimeOffset>)(() => DateTimeOffset.UtcNow))!;
+        ((Task<bool>)tSesion.GetMethod("EntrarAsync")!
+            .Invoke(sesion, new object?[] { "medico@miracle.app", "clave", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+        var clinica = Activator.CreateInstance(tClinica, "https://graph.test", sesion, backend)!;
+
+        var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
+            (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(true)),
+            (Func<Task<string>>)(() => Task.FromResult("algo dicho")),
+            null)!;
+
+        Debe((bool)puede.GetValue(consulta)!,
+            "sin haber empezado nada, cambiar de cuenta está permitido");
+
+        ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
+            .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        Debe(!(bool)puede.GetValue(consulta)!,
+            "GRABANDO, se bloquea: cerrar sesión con el micrófono abierto dejaría un dictado "
+            + "huérfano que nadie para ni guarda");
+
+        ((Task)tConsulta.GetMethod("TerminarAsync")!
+            .Invoke(consulta, new object?[] { CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        Debe((bool)puede.GetValue(consulta)!,
+            "con la nota lista, se puede cambiar de cuenta otra vez: el bloqueo es SOLO mientras "
+            + "se graba, no para siempre después de la primera consulta");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

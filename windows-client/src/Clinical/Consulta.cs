@@ -102,6 +102,16 @@ public sealed class Consulta
     /// <summary>La nota organizada, cuando <see cref="Estado"/> es <see cref="EstadoDeConsulta.NotaLista"/>.</summary>
     public NotaClinica? Nota { get; private set; }
 
+    /// <summary>
+    /// ¿Se puede cambiar de cuenta ahora? Solo mientras no se está grabando (promesa 99).
+    /// </summary>
+    /// <remarks>
+    /// Cambiar de cuenta empieza por cerrar la sesión actual, y eso es justo lo que no se puede
+    /// hacer a media consulta: con el micrófono abierto, cerrar sesión dejaría un dictado huérfano
+    /// —nadie lo para, nadie lo guarda— y el médico se quedaría sin saber que perdió lo grabado.
+    /// </remarks>
+    public bool PuedeCambiarDeUsuario => Estado != EstadoDeConsulta.Grabando;
+
     /// <summary>Cambió el estado. La interfaz se pinta con esto; nadie más decide con esto.</summary>
     public event Action<EstadoDeConsulta>? Cambio;
 
