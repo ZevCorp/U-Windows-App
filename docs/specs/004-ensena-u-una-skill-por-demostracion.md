@@ -156,7 +156,26 @@ Explorador o SAP) es **nivel 4**, a mano, con log — como siempre.
 
 ## Hallazgos
 
-<!-- Se rellena durante la implementación. -->
+- **2026-09-01 (fase roja)** — Dos tropiezos de arnés, los dos con moraleja:
+  1. En el contrato de main, `Nucleo` es el **namespace** del terreno, no el alias de ensamblado
+     que tenía el contrato viejo — el helper de capacidades los confundió y no compilaba.
+  2. El scratch tenía un `U.dll` **del 31 de agosto** (la arquitectura pre-rebase) que el build
+     incremental nunca refrescó: los errores «no existe RecorrerSegunElNucleo» eran fantasmas de
+     un binario viejo, no del código. La pista que lo destapó: tipos que compilaban ayer
+     «desapareciendo» hoy en líneas que nadie tocó.
+- **2026-09-01 (fase verde)** — Lo que quedó **cableado de verdad** vs lo que es capacidad juzgada
+  a la espera de su integración:
+  | Pieza | Estado |
+  |---|---|
+  | Filtro de inyección (84) | **Cableado en el hook real** — `HookCallback` pregunta antes de resolver |
+  | Llegada exigida (86) | **Cableada en el batch real** — `Recorre` la exige cuando el paso la trae |
+  | Empaquetador + catálogo (85, 89) | Capacidad completa y juzgada; falta que `WorkflowTeachSession` la llame al cerrar y que el MCP anuncie el catálogo (`map_skills`) |
+  | Descarte (87) | La decisión existe y está juzgada; falta cablear `DiscardAsync` y el botón |
+  | Anclador (88) | Capacidad completa; falta capturar la hora del golpe en el hook y la frase con hora en la voz |
+- **2026-09-01** — La promesa 87 juzga la **decisión**, y tiene un punto ciego asumido: un
+  `Descartar` que no hiciera nada (sesión sigue «grabando») tampoco entregaría, así que el contrato
+  no lo distingue de un descarte bueno. El sabotaje elegido (descartar→publica) es el fallo con
+  dientes; el no-op lo tiene que cazar el nivel 4.
 
 ## Cierre
 

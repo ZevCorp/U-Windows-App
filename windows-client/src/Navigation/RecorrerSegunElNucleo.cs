@@ -28,8 +28,9 @@ namespace U.WindowsClient.Navigation;
 public sealed class RecorrerSegunElNucleo
 {
     /// <summary>Un paso: pulsar <paramref name="Exit"/> (etiqueta o selector), o escribir
-    /// <paramref name="Texto"/> si viene con texto.</summary>
-    public sealed record Paso(string Exit, string Texto = "");
+    /// <paramref name="Texto"/> si viene con texto. <paramref name="Llegada"/> es opcional y viene
+    /// de una skill enseñada: A DÓNDE llegó ese paso en la demostración — y si viene, SE EXIGE.</summary>
+    public sealed record Paso(string Exit, string Texto = "", string Llegada = "");
 
     /// <summary>Qué pasó: cuántos se hicieron, de cuántos, dónde quedamos, y el relato honesto.</summary>
     public readonly record struct Resultado(int Hechos, int Total, string Donde, bool Termino, string Cuenta);
@@ -114,6 +115,19 @@ public sealed class RecorrerSegunElNucleo
             var r = _pulsar.Pulsa(elegido.Que.Selector, elegido.Que.Etiqueta);
             if (!r.SePudo)
                 return Parcial(i, pasos.Count, r.Cuenta, conVivos: true);
+
+            // LA LLEGADA SE EXIGE CUANDO SE CONOCE (promesa 86, spec 004). Un paso de skill
+            // enseñada trae a dónde llegó en la demostración; aterrizar en otro sitio y seguir
+            // sería ejecutar el resto del plan sobre una pantalla que no es — el «29 de 30» del
+            // salto-adelante, otra vez. Contar el paso como hecho tampoco: «terminé» deja de ser
+            // opinión justo aquí. Sin llegada declarada, nada cambia: «Guardar» sigue siendo un
+            // paso legítimo que no va a ninguna parte.
+            if (paso.Llegada.Length > 0
+                && !paso.Llegada.Equals(r.Hasta, StringComparison.OrdinalIgnoreCase))
+                return Parcial(i, pasos.Count,
+                    $"pulsé «{paso.Exit}» y quedé en «{r.Hasta}», pero la demostración llegaba a "
+                    + $"«{paso.Llegada}»: eso NO es haberlo hecho, y no sigo sobre una pantalla que "
+                    + "no es la del plan.", conVivos: true);
 
             // Que la pantalla no cambiara NO para el batch: «Guardar» o «Cortar» hacen su trabajo
             // sin ir a ninguna parte. Quien juzga si el plan sigue teniendo sentido es la compuerta

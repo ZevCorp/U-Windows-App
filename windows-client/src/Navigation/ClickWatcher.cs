@@ -175,6 +175,15 @@ public sealed class ClickWatcher : IDisposable
             : "NO se pudo enganchar el ratón: las aristas quedarán sin acción (solo conectividad)");
     }
 
+    /// <summary>¿Este golpe lo inyectó software? Promesa 84: lo sintético no se acuña como humano.</summary>
+    /// <remarks>
+    /// Los dos bits del hook de bajo nivel: LLMHF_INJECTED (0x1, inyectado por cualquier proceso)
+    /// y LLMHF_LOWER_IL_INJECTED (0x2, inyectado por uno de menor integridad). Inyectado es
+    /// inyectado: los dos se dejan pasar sin atribuir. Función pública y pura a propósito — es lo
+    /// que el contrato juzga sin necesitar un hook real.
+    /// </remarks>
+    public static bool EsSintetico(uint flags) => (flags & 0x3u) != 0;
+
     private IntPtr HookCallback(int code, IntPtr wParam, IntPtr lParam)
     {
         // Lo mínimo posible aquí dentro. Nada de UIA, nada de logs, nada que pueda bloquear.
@@ -183,6 +192,15 @@ public sealed class ClickWatcher : IDisposable
             try
             {
                 var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+
+                // LO SINTÉTICO NO ENSEÑA (promesa 84). Este vigía existe para atribuir clics
+                // HUMANOS; los nuestros —RealClick, RealDoubleClick, el batch entero— llegan por el
+                // mismo hook y hasta hoy se acuñaban como humanos: el 2026-08-31 el doble sintético
+                // sobre «specs» se atribuyó a la cabecera «Fecha de modificación» y nació una
+                // arista falsa docs→specs. Windows YA lo dice en flags (LLMHF_INJECTED); solo había
+                // que preguntar. Sin esto, cada reproducción de una skill re-contamina el grafo.
+                if (EsSintetico(data.flags)) return CallNextHookEx(_hook, code, wParam, lParam);
+
                 int x = data.pt.X, y = data.pt.Y;
 
                 // DOBLE CLIC: se queda la resolución del PRIMER down y el segundo no re-resuelve.
