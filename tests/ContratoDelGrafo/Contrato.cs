@@ -238,6 +238,18 @@ internal static class Contrato
         // existe, y el 401 llegaría después, sin relación aparente con el alta.
         Prueba("97. una cuenta que pide confirmación NO cuenta como haber entrado", CrearCuentaNoEsEntrar);
 
+        // ── LA IDENTIDAD SE PIDE UNA VEZ (2026-09-01, lo vio el usuario) ─────
+        //
+        // Con la Dra. Rincón ya dentro de la consulta, la carita le planto encima el popup viejo de
+        // «Te damos la bienvenida», pidiéndole otra vez nombre y correo. Son DOS identidades
+        // conviviendo: la de verdad —la sesión de Supabase, que sabe quién es y tiene su token— y
+        // la vieja de máquina, un correo tecleado en config.json que la carita seguía mirando.
+        //
+        // Al reemplazar el login se cambió el camino de --consulta y se dejó el de la carita, así
+        // que cada uno pregunta por su cuenta. Es el aprendizaje nº16 otra vez: dos identidades de
+        // distinta forma, y quien las junta hereda el desacuerdo.
+        Prueba("98. con un médico dentro, la identidad NO se vuelve a pedir", LaIdentidadSePideUnaVez);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -3008,6 +3020,46 @@ internal static class Contrato
 
     /// <summary>Adaptador para await-ear un Task&lt;T&gt; que solo se conoce por reflexión.</summary>
     private static async Task<object> ComoTexto<T>(object tarea) => (await (Task<T>)tarea)!;
+
+    /// <remarks>
+    /// LA PREGUNTA SE HACE UNA VEZ Y LA CONTESTA UN SOLO SITIO. Se juzga el DECISOR —quién manda
+    /// cuando las dos identidades no coinciden— y no la ventana: la ventana es nivel 4, pero la
+    /// regla de precedencia es lo que se rompió, y eso sí se puede escribir.
+    ///
+    /// Las cuatro combinaciones importan. La tercera es la que estaba mal el 2026-09-01 (había
+    /// médico y se preguntaba igual) y la cuarta es la que impide «arreglarlo» silenciando el popup
+    /// siempre: en un equipo sin médico y sin correo, preguntar sigue siendo lo correcto.
+    /// </remarks>
+    private static void LaIdentidadSePideUnaVez()
+    {
+        var t = Capacidad("U.WindowsClient.Cuenta.Identidad");
+        var hay = t?.GetMethod("HayQuePreguntar", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || hay == null) { Pendiente("Cuenta.Identidad.HayQuePreguntar", "98"); return; }
+
+        bool Preguntar(bool medicoDentro, string correoDeMaquina) =>
+            (bool)hay.Invoke(null, new object?[] { medicoDentro, correoDeMaquina })!;
+
+        Debe(Preguntar(false, "") == true,
+            "equipo nuevo, sin médico y sin correo: preguntar es lo correcto");
+        Debe(Preguntar(false, "alguien@hospital.co") == false,
+            "con el correo de máquina ya puesto no se vuelve a preguntar (lo de siempre)");
+        Debe(Preguntar(true, "") == false,
+            "CON MÉDICO DENTRO NO SE PREGUNTA, aunque no haya correo de máquina: la sesión de "
+            + "Supabase ya sabe quién es, y volver a pedírselo es no haberla mirado");
+        Debe(Preguntar(true, "otro@hospital.co") == false,
+            "y con las dos, tampoco: manda la sesión");
+
+        // Y de dónde sale el correo cuando hay médico: del token, no de lo que teclearon una vez.
+        var deQuien = t.GetMethod("CorreoQueMandaEnLaMaquina", BindingFlags.Public | BindingFlags.Static);
+        if (deQuien == null) { Pendiente("Identidad.CorreoQueMandaEnLaMaquina", "98"); return; }
+        Debe((string)deQuien.Invoke(null, new object?[] { "medico@miracle.app", "viejo@teclado.co" })!
+                == "medico@miracle.app",
+            "el correo que manda es el de la SESIÓN, no el que se tecleó una vez en config.json");
+        Debe((string)deQuien.Invoke(null, new object?[] { "", "viejo@teclado.co" })!
+                == "viejo@teclado.co",
+            "y sin sesión se conserva el de máquina: los workflows y la telemetría que ya lo usaban "
+            + "no se quedan sin identidad de golpe");
+    }
 
     private static void Prueba(string nombre, Action cuerpo)
     {

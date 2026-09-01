@@ -300,9 +300,19 @@ public sealed class LoginWindow : Window
                 case ResultadoDeAlta.FaltaConfirmar:
                     // NO SE ENTRA. Se vuelve al modo de entrar con el correo ya puesto: cuando el
                     // medico vuelva del enlace solo tendra que escribir la contrasena.
+                    // SE DICEN LAS DOS POSIBILIDADES, y no es palabrería: Supabase contesta lo
+                    // MISMO cuando la cuenta es nueva y cuando ya existía, a propósito, para no
+                    // revelar qué correos están registrados. El 2026-09-01 el usuario probó con un
+                    // correo que ya tenía cuenta desde junio: el log dijo «user_repeated_signup»,
+                    // no se mandó ningún correo —no había nada que confirmar— y este mensaje le
+                    // dejó esperando un email que no iba a llegar nunca.
+                    //
+                    // No se puede distinguir desde aquí; lo que sí se puede es no dar por segura
+                    // una de las dos.
                     Modo(creando: false);
-                    Decir("Cuenta creada. Te mandamos un correo para confirmarla: abrelo y vuelve "
-                        + "aqui a entrar.", malo: false);
+                    Decir("Listo. Si el correo era nuevo, te llega un enlace para confirmarlo. "
+                        + "Si ya tenías cuenta con él, no llega nada: entra con tu contraseña.",
+                        malo: false);
                     return;
 
                 default:
