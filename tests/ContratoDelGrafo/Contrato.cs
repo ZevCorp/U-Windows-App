@@ -258,6 +258,21 @@ internal static class Contrato
         // —nadie lo para, nadie lo guarda— y el médico se queda sin saber que perdió lo grabado.
         Prueba("99. cambiar de cuenta se bloquea mientras se está grabando", NoSeCambiaDeCuentaGrabando);
 
+        // ── GUARDAR EL NOMBRE (2026-09-01, lo vio el usuario) ────────────────
+        //
+        // «no guardo mi nombre, quedo con mi correo en vez de mi nombre». El cliente solo LEÍA
+        // full_name; no había ningún camino para escribirlo. El portal lo hace con la RPC
+        // update_own_profile —una lista blanca de columnas (supabase/migrations/
+        // 20260829120100_update_own_profile.sql)— y no con un update directo, porque las dos
+        // políticas de UPDATE de `profiles` no sirven para autoeditarse sin abrir de más.
+        //
+        // La RPC pide los SIETE campos del perfil profesional a la vez y los reescribe todos. Si
+        // aquí solo se mandara el nombre y el resto en null, se BORRARÍAN el documento, el
+        // registro profesional y la especialidad de cualquier médico que ya los tuviera llenos —
+        // un dato compartido con el portal, dañado desde un cliente que solo quería cambiar una
+        // cosa.
+        Prueba("100. guardar el nombre no borra los demás campos del perfil profesional", GuardarNombreNoBorraElResto);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -3122,6 +3137,51 @@ internal static class Contrato
         Debe((bool)puede.GetValue(consulta)!,
             "con la nota lista, se puede cambiar de cuenta otra vez: el bloqueo es SOLO mientras "
             + "se graba, no para siempre después de la primera consulta");
+    }
+
+    /// <remarks>
+    /// SE JUZGA LA FUNCIÓN QUE ARMA EL CUERPO DE LA RPC, pura y sin red — como
+    /// <see cref="EspejoDeConsulta.Fila"/>. Ahí es donde vive el riesgo real: no en si la llamada
+    /// sale, sino en QUÉ lleva dentro. Un dato de otro médico —especialidad, documento, ciudad de
+    /// práctica— que se pierde por guardar el nombre es un daño silencioso al mismo perfil que lee
+    /// el portal, y nadie lo notaría hasta que ese médico volviera a mirar su configuración.
+    /// </remarks>
+    private static void GuardarNombreNoBorraElResto()
+    {
+        var tPerfil = Capacidad("U.WindowsClient.Cuenta.PerfilProfesional");
+        var tRpc = Capacidad("U.WindowsClient.Cuenta.PerfilRpc");
+        var metodo = tRpc?.GetMethod("CuerpoDeGuardarNombre", BindingFlags.Public | BindingFlags.Static);
+        if (tPerfil == null || tRpc == null || metodo == null)
+        {
+            Pendiente("Cuenta.PerfilRpc.CuerpoDeGuardarNombre", "100");
+            return;
+        }
+
+        object Perfil(string doc, string registro, string espCodigo, string espNombre, string pais, string ciudad) =>
+            Activator.CreateInstance(tPerfil, doc, registro, espCodigo, espNombre, pais, ciudad)!;
+
+        // Un médico con el perfil profesional lleno: los seis campos tienen que volver EXACTOS.
+        var lleno = Perfil("CC 1035 421 987", "RM-4471", "cardiologia", "Cardiología", "Colombia", "Medellín");
+        using var doc1 = JsonDocument.Parse((string)metodo.Invoke(null, new object?[] { "Nueva Dra.", lleno })!);
+        var r1 = doc1.RootElement;
+
+        string Str(JsonElement e, string campo) => e.GetProperty(campo).GetString() ?? "";
+
+        Debe(Str(r1, "p_full_name") == "Nueva Dra.", "el nombre nuevo viaja tal cual se pidió");
+        Debe(Str(r1, "p_identification_number") == "CC 1035 421 987",
+            "el documento NO se borra: viaja idéntico al que ya tenía");
+        Debe(Str(r1, "p_professional_registration") == "RM-4471",
+            "el registro profesional tampoco: cambiar el nombre no es lo mismo que cambiar esto");
+        Debe(Str(r1, "p_specialty_code") == "cardiologia" && Str(r1, "p_specialty_name") == "Cardiología",
+            "la especialidad se conserva — perderla aquí cambiaría qué secciones ve ese médico");
+        Debe(Str(r1, "p_practice_country") == "Colombia" && Str(r1, "p_practice_city") == "Medellín",
+            "y el país/ciudad de práctica, igual");
+
+        // Una cuenta nueva sin nada más que el nombre: no se INVENTA un valor donde no había.
+        var vacio = Perfil("", "", "", "", "", "");
+        using var doc2 = JsonDocument.Parse((string)metodo.Invoke(null, new object?[] { "Alguien", vacio })!);
+        Debe(Str(doc2.RootElement, "p_specialty_code") == "" && Str(doc2.RootElement, "p_practice_city") == "",
+            "sin dato previo, los demás campos viajan vacíos — no se fabrica una especialidad de la nada");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

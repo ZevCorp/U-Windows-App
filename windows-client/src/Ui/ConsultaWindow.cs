@@ -414,19 +414,7 @@ public sealed class ConsultaWindow : Window
 
         var pila = new StackPanel { Width = 224 };
 
-        var cabecera = new StackPanel { Margin = new Thickness(10, 8, 10, 8) };
-        cabecera.Children.Add(new TextBlock
-        {
-            Text = _sesion.MedicoNombre.Length > 0 ? _sesion.MedicoNombre : "Sin nombre",
-            Foreground = Estudio.Tinta, FontSize = 13.5, FontWeight = FontWeights.SemiBold,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        });
-        cabecera.Children.Add(new TextBlock
-        {
-            Text = _sesion.MedicoEmail, Foreground = Estudio.TintaTenue, FontSize = 11.5,
-            Margin = new Thickness(0, 2, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis,
-        });
-        pila.Children.Add(cabecera);
+        pila.Children.Add(ConstruirNombreEditable());
         pila.Children.Add(SeparadorMenu());
 
         string motivoBloqueo = "Termina la consulta antes de cambiar de cuenta.";
@@ -443,6 +431,79 @@ public sealed class ConsultaWindow : Window
         var elevado = Estudio.Elevar(tarjeta, Estudio.Sombra2);
         elevado.Margin = new Thickness(12);
         return elevado;
+    }
+
+    /// <summary>
+    /// El nombre, editable. Es la respuesta a «no guardo mi nombre, quedo con mi correo»: una
+    /// cuenta que se creó sin nombre —o que nunca lo tuvo— antes no tenía NINGÚN sitio donde
+    /// ponérselo. Se guarda al pulsar Enter o al salir del campo; nunca al escribir letra a letra,
+    /// que gastaría una llamada de red por tecla.
+    /// </summary>
+    private UIElement ConstruirNombreEditable()
+    {
+        var cabecera = new StackPanel { Margin = new Thickness(10, 8, 10, 8) };
+
+        var caja = new TextBox
+        {
+            Text = _sesion.MedicoNombre,
+            Foreground = Estudio.Tinta, FontSize = 13.5, FontWeight = FontWeights.SemiBold,
+            Background = Brushes.Transparent,
+            // El filete de abajo es la única pista de que esto se puede tocar: un TextBox sin
+            // ningún borde no se distingue de una etiqueta.
+            BorderThickness = new Thickness(0, 0, 0, 1), BorderBrush = Estudio.Borde,
+            Padding = new Thickness(0, 0, 0, 3),
+            CaretBrush = Estudio.Acento, SelectionBrush = Estudio.Acento,
+        };
+
+        var estado = new TextBlock
+        {
+            FontSize = 10.5, Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed,
+        };
+
+        bool guardando = false;
+        async Task GuardarSiCambioAsync()
+        {
+            string nuevo = caja.Text.Trim();
+            // Comparar contra MedicoNombre y no contra el valor con el que se abrió la caja: tras
+            // guardar bien, MedicoNombre ya es el nuevo, así que un segundo disparo (Enter y luego
+            // LostFocus) no vuelve a gastar una llamada.
+            if (guardando || nuevo.Length == 0 || nuevo == _sesion.MedicoNombre) return;
+            guardando = true;
+            estado.Text = "Guardando…"; estado.Foreground = Estudio.TintaTenue;
+            estado.Visibility = Visibility.Visible;
+            try
+            {
+                var (ok, mensaje) = await _sesion.GuardarNombreAsync(nuevo);
+                if (!caja.IsLoaded) return;   // el menú se cerró mientras se guardaba
+                if (ok)
+                {
+                    estado.Visibility = Visibility.Collapsed;
+                    _quien.Text = _sesion.MedicoNombre;   // refresca la cabecera de la ventana
+                }
+                else
+                {
+                    estado.Text = mensaje; estado.Foreground = Estudio.Alerta;
+                }
+            }
+            finally { guardando = false; }
+        }
+
+        caja.KeyDown += async (_, e) =>
+        {
+            if (e.Key != Key.Enter) return;
+            e.Handled = true;
+            await GuardarSiCambioAsync();
+        };
+        caja.LostFocus += async (_, __) => await GuardarSiCambioAsync();
+
+        cabecera.Children.Add(caja);
+        cabecera.Children.Add(new TextBlock
+        {
+            Text = _sesion.MedicoEmail, Foreground = Estudio.TintaTenue, FontSize = 11.5,
+            Margin = new Thickness(0, 6, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        cabecera.Children.Add(estado);
+        return cabecera;
     }
 
     private UIElement ItemDeMenu(string texto, bool activo, Action accion, string motivoInactivo)
