@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -13,23 +14,32 @@ using U.WindowsClient.Voice;
 namespace U.WindowsClient.Ui;
 
 /// <summary>
-/// LA CONSULTA, EN UNA VENTANA. Entrar → elegir plantilla → grabar → ver la transcripción en vivo →
-/// parar → leer la nota organizada. Nada más, a propósito: es la cadena mínima para probar que la
-/// consulta grabada aquí aparece en el portal.
+/// LA CONSULTA, EN UNA VENTANA. Dos pestañas arriba —Consultas y Nota—, el botón grabar abajo, y
+/// nada más.
 /// </summary>
 /// <remarks>
-/// HIPER-MINIMALISTA ES UNA DECISIÓN, no una carencia: cuatro cosas en pantalla (quién, con qué
-/// plantilla, el botón, lo que se va oyendo) y la nota al final. Editar, firmar y pacientes viven en
-/// el portal; el día que hagan falta aquí, son llamadas que <see cref="ClinicaClient"/> ya sabe
-/// hacer o aprenderá con su promesa delante.
+/// SIN CHROME DE WINDOWS (rediseño del 2026-09-01, pedido por el usuario). La barra de título del
+/// sistema y sus tres botones sobraban: esta ventana es un botón grande, no un documento. Se
+/// dibujan los propios —cerrar y minimizar— y NO hay maximizar: una ventana que quiere ser una
+/// pastilla en una esquina no tiene nada que hacer a pantalla completa, y el botón invitaría a
+/// romper el radio.
 ///
-/// ESTA VENTANA NO DECIDE NADA. Todo lo que pesa vive en clases que el contrato ya juzga sin
-/// pantalla: <see cref="SesionMiracle"/> (84-86, 90), <see cref="Consulta"/> (84, 91),
-/// <see cref="DictadoEnVivo"/> con sus lectores (88, 89) y <see cref="MensajesClinicos"/> (87).
-/// Aquí solo se pinta y se conecta, que es exactamente lo que la compuerta prueba a mano (nivel 4).
+/// EL RADIO ES MUY PRONUNCIADO Y ESO CUESTA UN DETALLE TÉCNICO: con `WindowStyle.None` +
+/// `AllowsTransparency` el marco lo pinta la app entera, así que arrastrar, cerrar y el borde
+/// redondeado son código nuestro. A cambio, el borde es exactamente el del boceto.
 ///
-/// LA NOTA SE PINTA PERO SU DESTINO NO ES PINTARSE: queda en <see cref="Consulta.Nota"/> tipada
-/// clave→texto, que es la materia prima del cierre recuerdos→batches→SAP (spec siguiente).
+/// LAS DOS PESTAÑAS CAMBIAN LA SUPERFICIE, no abren ventanas:
+///   · **Consultas** — las anteriores, leídas de la MISMA tabla que lista el portal.
+///   · **Nota** — el texto en vivo mientras se habla; al parar, la nota organizada.
+///
+/// NADIE ELIGE PLANTILLA (promesa 94). El selector de 204 plantillas era el primer obstáculo de una
+/// pantalla que quiere ser un botón: se resuelve sola con <see cref="PlantillaAbierta"/>, y si no
+/// existe se crea la primera vez.
+///
+/// ESTA VENTANA NO DECIDE NADA. Todo lo que pesa vive en clases que el contrato juzga sin pantalla:
+/// <see cref="SesionMiracle"/> (84-86, 90), <see cref="Consulta"/> (84, 91),
+/// <see cref="DictadoEnVivo"/> (88, 89), <see cref="EspejoDeConsulta"/> (93) y
+/// <see cref="PlantillaAbierta"/> (94). Aquí solo se pinta y se conecta.
 /// </remarks>
 public sealed class ConsultaWindow : Window
 {
@@ -38,24 +48,30 @@ public sealed class ConsultaWindow : Window
     private readonly LiveAudio _audio;
     private readonly DictadoEnVivo _dictado;
     private readonly Consulta _consulta;
+    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     private readonly TextBlock _quien;
-    private readonly ComboBox _plantillas;
-    private readonly Button _boton;
-    private readonly TextBlock _estado;
+    private readonly Button _tabConsultas;
+    private readonly Button _tabNota;
+    private readonly ScrollViewer _superficie;
+    private readonly StackPanel _listaConsultas;
+    private readonly StackPanel _panelNota;
     private readonly TextBlock _vivo;
     private readonly StackPanel _nota;
-    private readonly ScrollViewer _scrollNota;
-    private readonly Button _reintentar;
+    private readonly Button _grabar;
+    private readonly TextBlock _estado;
 
-    private IReadOnlyList<PlantillaClinica> _catalogo = Array.Empty<PlantillaClinica>();
+    private string _plantillaId = "";
+    private string _plantillaNombre = "";
+    private bool _enNota = true;
 
     private static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(0xEA, 0xF2, 0xFF));
     private static readonly Brush Muted = new SolidColorBrush(Color.FromArgb(0x9E, 0xC8, 0xDC, 0xFF));
+    private static readonly Brush Tenue = new SolidColorBrush(Color.FromArgb(0x55, 0xC8, 0xDC, 0xFF));
     private static readonly Brush Blue = new SolidColorBrush(Color.FromRgb(0x4C, 0x8D, 0xFF));
     private static readonly Brush Rec = new SolidColorBrush(Color.FromRgb(0xE8, 0x4C, 0x5C));
-    private static readonly Brush FieldBg = new SolidColorBrush(Color.FromRgb(0x0A, 0x12, 0x22));
-    private static readonly Brush Line = new SolidColorBrush(Color.FromArgb(0x40, 0x60, 0x94, 0xEB));
+    private static readonly Brush Tinta = new SolidColorBrush(Color.FromRgb(0x0D, 0x12, 0x1E));
+    private static readonly Brush Line = new SolidColorBrush(Color.FromArgb(0x33, 0x60, 0x94, 0xEB));
 
     public ConsultaWindow(SesionMiracle sesion, GraphConfig graphConfig)
     {
@@ -65,175 +81,246 @@ public sealed class ConsultaWindow : Window
         _dictado = new DictadoEnVivo(graphConfig, _audio, sesion);
         _consulta = new Consulta(sesion, _clinica,
             abrirMicrofono: ct => _dictado.ArrancarAsync(ct),
-            pararYRecogerLoDicho: () => _dictado.PararAsync());
+            pararYRecogerLoDicho: () => _dictado.PararAsync(),
+            espejar: async (encounterId, nota, verbatim) =>
+            {
+                string fila = EspejoDeConsulta.Fila(encounterId, nota, verbatim,
+                    _plantillaNombre, PlantillaAbierta.Especialidad, DateTimeOffset.UtcNow);
+                return await EspejoDeConsulta.EscribirAsync(_sesion, _http, fila);
+            });
 
-        Title = "Miracle — Consulta";
-        Width = 520;
+        // ── el marco ─────────────────────────────────────────────────────────
+        Title = "Miracle";
+        Width = 460;
         Height = 640;
-        MinWidth = 420;
-        MinHeight = 480;
+        MinWidth = 380;
+        MinHeight = 520;
+        WindowStyle = WindowStyle.None;      // sin barra de título ni botones del sistema
+        ResizeMode = ResizeMode.CanResize;   // sin maximizar: ver ChromeHook más abajo
+        AllowsTransparency = true;
+        Background = Brushes.Transparent;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = new LinearGradientBrush(
-            Color.FromRgb(0x07, 0x0C, 0x18), Color.FromRgb(0x02, 0x04, 0x0A), 90);
 
-        var raiz = new Grid { Margin = new Thickness(26, 20, 26, 20) };
-        raiz.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });          // quién
-        raiz.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });          // plantilla
-        raiz.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });          // botón
-        raiz.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });          // estado
-        raiz.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // vivo / nota
+        var tarjeta = new Border
+        {
+            // EL RADIO DEL BOCETO. 44 y no 18: la forma es casi una pastilla, y eso es lo que hace
+            // que no parezca una ventana.
+            CornerRadius = new CornerRadius(44),
+            Background = new LinearGradientBrush(
+                Color.FromRgb(0x07, 0x0C, 0x18), Color.FromRgb(0x02, 0x04, 0x0A), 90),
+            BorderBrush = Line,
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(16),
+            Effect = new DropShadowEffect { BlurRadius = 44, ShadowDepth = 0, Opacity = 0.6, Color = Colors.Black },
+        };
 
-        // ── quién ────────────────────────────────────────────────────────────
-        var cabecera = new DockPanel { Margin = new Thickness(0, 0, 0, 16) };
+        var raiz = new Grid { Margin = new Thickness(26, 20, 26, 26) };
+        raiz.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });                       // cabecera
+        raiz.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });                       // pestañas
+        raiz.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });  // superficie
+        raiz.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });                       // estado
+        raiz.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });                       // grabar
+
+        // ── cabecera: quién + los botones PROPIOS ────────────────────────────
+        var cabecera = new DockPanel { Margin = new Thickness(4, 0, 0, 18) };
+
+        var botonera = new StackPanel { Orientation = Orientation.Horizontal };
+        var minimizar = BotonDeMarco("─", "Minimizar");
+        minimizar.Click += (_, __) => WindowState = WindowState.Minimized;
+        var cerrar = BotonDeMarco("✕", "Cerrar");
+        cerrar.Click += (_, __) => Close();
+        botonera.Children.Add(minimizar);
+        botonera.Children.Add(cerrar);
+        DockPanel.SetDock(botonera, Dock.Right);
+
         _quien = new TextBlock
         {
-            Foreground = Ink, FontSize = 15, FontWeight = FontWeights.SemiBold,
-            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = Ink, FontSize = 14, FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        var salir = new Button
-        {
-            Content = "Salir", Foreground = Muted, Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0), FontSize = 12, Cursor = Cursors.Hand,
-            Padding = new Thickness(8, 4, 8, 4),
-        };
-        salir.Click += (_, __) => { _sesion.Salir(); Close(); };
-        DockPanel.SetDock(salir, Dock.Right);
-        cabecera.Children.Add(salir);
+        cabecera.Children.Add(botonera);
         cabecera.Children.Add(_quien);
         Grid.SetRow(cabecera, 0);
         raiz.Children.Add(cabecera);
 
-        // ── plantilla ────────────────────────────────────────────────────────
-        _plantillas = new ComboBox
+        // ── las dos pestañas ─────────────────────────────────────────────────
+        var pestanas = new StackPanel
         {
-            Height = 38, FontSize = 13, Margin = new Thickness(0, 0, 0, 18),
-            Background = FieldBg, Foreground = Colors(FieldBg), BorderBrush = Line,
-            VerticalContentAlignment = VerticalAlignment.Center,
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 18),
         };
-        Grid.SetRow(_plantillas, 1);
-        raiz.Children.Add(_plantillas);
+        _tabConsultas = Pestana("Consultas");
+        _tabNota = Pestana("Nota");
+        _tabConsultas.Click += async (_, __) => { Mostrar(nota: false); await CargarConsultasAsync(); };
+        _tabNota.Click += (_, __) => Mostrar(nota: true);
+        pestanas.Children.Add(_tabConsultas);
+        pestanas.Children.Add(_tabNota);
+        Grid.SetRow(pestanas, 1);
+        raiz.Children.Add(pestanas);
 
-        // ── el botón: el 60 % de la ventana es esto ──────────────────────────
-        _boton = new Button
-        {
-            Content = "●  GRABAR",
-            Height = 96, FontSize = 22, FontWeight = FontWeights.Bold,
-            Foreground = Brushes.White, Background = Blue, BorderThickness = new Thickness(0),
-            Cursor = Cursors.Hand, Margin = new Thickness(0, 0, 0, 14),
-            Template = Redondo(16),
-            Effect = new DropShadowEffect { BlurRadius = 24, ShadowDepth = 0, Opacity = 0.35, Color = Color.FromRgb(0x4C, 0x8D, 0xFF) },
-        };
-        _boton.Click += async (_, __) => await AlternarAsync();
-        Grid.SetRow(_boton, 2);
-        raiz.Children.Add(_boton);
-
-        // ── estado y reintento ───────────────────────────────────────────────
-        var filaEstado = new DockPanel { Margin = new Thickness(2, 0, 2, 10) };
-        _reintentar = new Button
-        {
-            Content = "Reintentar la nota", Visibility = Visibility.Collapsed,
-            Foreground = Blue, Background = Brushes.Transparent, BorderThickness = new Thickness(0),
-            FontSize = 12.5, FontWeight = FontWeights.SemiBold, Cursor = Cursors.Hand,
-        };
-        _reintentar.Click += async (_, __) =>
-        {
-            _reintentar.Visibility = Visibility.Collapsed;
-            Estado("Reintentando la nota…");
-            if (await _consulta.ReintentarNotaAsync()) PintarNota();
-            else PintarFallo();
-        };
-        DockPanel.SetDock(_reintentar, Dock.Right);
-        _estado = new TextBlock
-        {
-            Foreground = Muted, FontSize = 12.5, TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        filaEstado.Children.Add(_reintentar);
-        filaEstado.Children.Add(_estado);
-        Grid.SetRow(filaEstado, 3);
-        raiz.Children.Add(filaEstado);
-
-        // ── lo que se va oyendo / la nota ────────────────────────────────────
+        // ── la superficie que cambian las pestañas ───────────────────────────
+        _listaConsultas = new StackPanel { Visibility = Visibility.Collapsed };
         _vivo = new TextBlock
         {
-            Foreground = Muted, FontSize = 14, TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(2, 4, 2, 4),
+            Foreground = Ink, FontSize = 15, TextWrapping = TextWrapping.Wrap, LineHeight = 23,
+            Margin = new Thickness(4, 0, 4, 8),
         };
         _nota = new StackPanel();
-        var contenido = new StackPanel();
-        contenido.Children.Add(_vivo);
-        contenido.Children.Add(_nota);
-        _scrollNota = new ScrollViewer
+        _panelNota = new StackPanel();
+        _panelNota.Children.Add(_vivo);
+        _panelNota.Children.Add(_nota);
+
+        var superficie = new StackPanel();
+        superficie.Children.Add(_panelNota);
+        superficie.Children.Add(_listaConsultas);
+        _superficie = new ScrollViewer
         {
-            Content = contenido,
+            Content = superficie,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
-        Grid.SetRow(_scrollNota, 4);
-        raiz.Children.Add(_scrollNota);
+        Grid.SetRow(_superficie, 2);
+        raiz.Children.Add(_superficie);
 
-        Content = raiz;
+        // ── estado ───────────────────────────────────────────────────────────
+        _estado = new TextBlock
+        {
+            Foreground = Tenue, FontSize = 11.5, TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Center, Margin = new Thickness(8, 12, 8, 10),
+        };
+        Grid.SetRow(_estado, 3);
+        raiz.Children.Add(_estado);
 
-        // ── el cableado ──────────────────────────────────────────────────────
+        // ── el botón, abajo y en pastilla ────────────────────────────────────
+        _grabar = new Button
+        {
+            Content = "Grabar",
+            Width = 150, Height = 76,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Foreground = Brushes.White, Background = Tinta,
+            BorderThickness = new Thickness(0),
+            FontSize = 17, FontWeight = FontWeights.SemiBold,
+            Cursor = Cursors.Hand,
+            Template = Pastilla(38),
+            Effect = new DropShadowEffect { BlurRadius = 20, ShadowDepth = 0, Opacity = 0.4, Color = Colors.Black },
+        };
+        _grabar.Click += async (_, __) => await AlternarAsync();
+        Grid.SetRow(_grabar, 4);
+        raiz.Children.Add(_grabar);
+
+        tarjeta.Child = raiz;
+        Content = tarjeta;
+
+        // Sin barra de título, arrastrar es cosa nuestra. Los botones se tragan su clic.
+        MouseLeftButtonDown += (_, e) => { if (e.ButtonState == MouseButtonState.Pressed) DragMove(); };
+        KeyDown += (_, e) => { if (e.Key == Key.Escape) WindowState = WindowState.Minimized; };
+        // NO HAY MAXIMIZAR, y no basta con no dibujar el botón: Win+↑ sigue maximizando y la
+        // pastilla se convertiría en una pantalla completa con las esquinas redondeadas flotando.
+        // Se devuelve al tamaño normal en cuanto pasa.
+        StateChanged += (_, __) => { if (WindowState == WindowState.Maximized) WindowState = WindowState.Normal; };
+
         _dictado.Parcial += t => Dispatcher.BeginInvoke(() =>
         {
             _vivo.Text = t;
-            _scrollNota.ScrollToEnd();
+            if (_enNota) _superficie.ScrollToEnd();
         });
         _dictado.Fallo += m => Dispatcher.BeginInvoke(() => Estado("Dictado: " + m));
         _consulta.Cambio += _ => Dispatcher.BeginInvoke(PintarSegunEstado);
 
+        Mostrar(nota: true);
         Loaded += async (_, __) => await ArrancarAsync();
-        Closed += (_, __) => { _dictado.Dispose(); _audio.Dispose(); };
+        Closed += (_, __) => { _dictado.Dispose(); _audio.Dispose(); _http.Dispose(); };
     }
 
-    // ── el ciclo de la ventana ───────────────────────────────────────────────
+    // ── arranque ─────────────────────────────────────────────────────────────
 
     private async Task ArrancarAsync()
     {
         _quien.Text = _sesion.MedicoNombre.Length > 0 ? _sesion.MedicoNombre : _sesion.MedicoEmail;
-        Estado("Cargando plantillas…");
+        Estado("Preparando…");
         try
         {
-            _catalogo = await _clinica.PlantillasAsync();
-            _plantillas.ItemsSource = _catalogo.Select(p => p.Nombre).ToList();
-            int porDefecto = _catalogo.ToList().FindIndex(p => p.EsLaPorDefecto);
-            _plantillas.SelectedIndex = porDefecto >= 0 ? porDefecto : (_catalogo.Count > 0 ? 0 : -1);
-            Estado(_catalogo.Count > 0
-                ? "Listo. Elige la plantilla y pulsa grabar."
-                : "No hay plantillas disponibles para tu cuenta.");
+            var catalogo = await _clinica.PlantillasAsync();
+            var abierta = PlantillaAbierta.Elegir(catalogo);
+
+            // No existe todavía: se crea una vez y queda para siempre. NO se cae a una del
+            // catálogo — elegir por el médico sin decírselo es peor que preguntarle (promesa 94).
+            abierta ??= await _clinica.CrearPlantillaAsync(
+                PlantillaAbierta.Nombre, PlantillaAbierta.Especialidad, PlantillaAbierta.Secciones());
+
+            _plantillaId = abierta.Id;
+            _plantillaNombre = abierta.Nombre;
+            Estado("Listo. Pulsa grabar y habla.");
         }
         catch (ErrorClinico e) { Estado(e.Message); }
         catch (Exception e)
         {
             Estado("No se pudo hablar con el backend clínico.");
-            LogBus.Log("consulta-ui", $"plantillas: {e.Message}");
+            LogBus.Log("consulta-ui", $"arranque: {e.Message}");
         }
     }
 
+    // ── las pestañas ─────────────────────────────────────────────────────────
+
+    private void Mostrar(bool nota)
+    {
+        _enNota = nota;
+        _panelNota.Visibility = nota ? Visibility.Visible : Visibility.Collapsed;
+        _listaConsultas.Visibility = nota ? Visibility.Collapsed : Visibility.Visible;
+        PintarPestanas();
+        _superficie.ScrollToHome();
+    }
+
+    private void PintarPestanas()
+    {
+        _tabNota.Background = _enNota ? Blue : Brushes.Transparent;
+        _tabNota.Foreground = _enNota ? Brushes.White : Muted;
+        _tabConsultas.Background = _enNota ? Brushes.Transparent : Blue;
+        _tabConsultas.Foreground = _enNota ? Muted : Brushes.White;
+    }
+
+    private async Task CargarConsultasAsync()
+    {
+        _listaConsultas.Children.Clear();
+        _listaConsultas.Children.Add(Linea("Cargando…", Tenue, 12.5));
+        var previas = await EspejoDeConsulta.UltimasAsync(_sesion, _http);
+        _listaConsultas.Children.Clear();
+
+        if (previas.Count == 0)
+        {
+            // VACÍO NO ES FALLO, y se distingue: aquí se dice que no hay ninguna, no «no se pudo».
+            _listaConsultas.Children.Add(Linea(
+                "Todavía no hay consultas. La primera que grabes aparece aquí y en el portal.",
+                Tenue, 12.5));
+            return;
+        }
+        foreach (var c in previas) _listaConsultas.Children.Add(FilaDeConsulta(c));
+    }
+
+    // ── grabar / parar ───────────────────────────────────────────────────────
+
     private async Task AlternarAsync()
     {
-        _boton.IsEnabled = false;
+        _grabar.IsEnabled = false;
         try
         {
             if (_consulta.Estado == EstadoDeConsulta.Grabando)
             {
-                Estado("Guardando la transcripción y organizando la nota…");
+                Estado("Guardando y organizando la nota…");
                 await _consulta.TerminarAsync();
-                return; // PintarSegunEstado pinta el resultado
-            }
-
-            if (_plantillas.SelectedIndex < 0 || _plantillas.SelectedIndex >= _catalogo.Count)
-            {
-                Estado("Elige una plantilla primero.");
                 return;
             }
-            LimpiarNota();
+
+            if (_plantillaId.Length == 0) { Estado("Todavía no está lista la plantilla."); return; }
+
+            Mostrar(nota: true);
+            _nota.Children.Clear();
             _vivo.Text = "";
             Estado("Abriendo la consulta…");
-            bool arranco = await _consulta.EmpezarAsync(_catalogo[_plantillas.SelectedIndex].Id);
-            if (!arranco) Estado(_consulta.Motivo);
+            if (!await _consulta.EmpezarAsync(_plantillaId)) Estado(_consulta.Motivo);
         }
-        finally { _boton.IsEnabled = true; }
+        finally { _grabar.IsEnabled = true; }
     }
 
     private void PintarSegunEstado()
@@ -241,31 +328,28 @@ public sealed class ConsultaWindow : Window
         switch (_consulta.Estado)
         {
             case EstadoDeConsulta.Grabando:
-                _boton.Content = "■  PARAR";
-                _boton.Background = Rec;
-                Estado("Grabando. Habla con normalidad; puedes ver lo que se va oyendo abajo.");
-                break;
-            case EstadoDeConsulta.Transcrita:
-                Estado("Transcripción guardada.");
+                _grabar.Content = "Parar";
+                _grabar.Background = Rec;
+                Estado("Escuchando…");
                 break;
             case EstadoDeConsulta.GenerandoNota:
-                _boton.Content = "●  GRABAR";
-                _boton.Background = Blue;
-                Estado("El organizador está armando la nota…");
+                _grabar.Content = "Grabar";
+                _grabar.Background = Tinta;
+                Estado("Organizando la nota…");
                 break;
             case EstadoDeConsulta.NotaLista:
-                _boton.Content = "●  GRABAR";
-                _boton.Background = Blue;
+                _grabar.Content = "Grabar";
+                _grabar.Background = Tinta;
                 PintarNota();
                 break;
             case EstadoDeConsulta.Fallida:
-                _boton.Content = "●  GRABAR";
-                _boton.Background = Blue;
-                PintarFallo();
+                _grabar.Content = "Grabar";
+                _grabar.Background = Tinta;
+                Estado(_consulta.Motivo);
                 break;
             default:
-                _boton.Content = "●  GRABAR";
-                _boton.Background = Blue;
+                _grabar.Content = "Grabar";
+                _grabar.Background = Tinta;
                 break;
         }
     }
@@ -273,43 +357,84 @@ public sealed class ConsultaWindow : Window
     private void PintarNota()
     {
         var nota = _consulta.Nota;
-        LimpiarNota();
+        _nota.Children.Clear();
         _vivo.Text = "";
         if (nota == null) { Estado("La nota volvió vacía."); return; }
 
-        Estado($"Nota lista. La consulta ya está en tu cuenta ({_consulta.EncounterId[..Math.Min(8, _consulta.EncounterId.Length)]}…) y se ve en el portal.");
+        // SE DICE SI SE VIO O NO EN EL PORTAL. Suponerlo era justo el hueco que tenía esta app
+        // hasta hoy (promesa 93).
+        Estado(_consulta.VisibleEnElPortal
+            ? "Nota lista. Ya se ve en el portal."
+            : "Nota lista y guardada, pero NO se pudo espejar al portal: revisa el log.");
 
         if (nota.Resumen.Length > 0) _nota.Children.Add(Tarjeta("RESUMEN", nota.Resumen));
         foreach (var s in nota.Secciones)
-            _nota.Children.Add(Tarjeta(s.Titulo.ToUpperInvariant(), s.Contenido));
-
-        // Los avisos del organizador se enseñan: esconderlos sería decidir por el médico.
-        if (nota.Avisos.Count > 0 || nota.SeccionesQueFaltan.Count > 0)
         {
-            string avisos = string.Join("\n", nota.Avisos.Concat(
-                nota.SeccionesQueFaltan.Select(s => $"Falta información para: {s}")));
-            _nota.Children.Add(Tarjeta("AVISOS DEL ORGANIZADOR", avisos));
+            if (s.Contenido.Trim().Length == 0) continue;   // una casilla vacía no es información
+            _nota.Children.Add(Tarjeta(s.Titulo.ToUpperInvariant(), s.Contenido));
         }
-        _scrollNota.ScrollToHome();
-    }
-
-    private void PintarFallo()
-    {
-        Estado(_consulta.Motivo);
-        // Reintentar solo cuando reintentar puede servir: con LLM_NOT_CONFIGURED el botón sería
-        // una promesa falsa.
-        bool reintentable = _consulta.CodigoDeFallo is "NOTE_GENERATION_FAILED" or "INTERNAL_ERROR";
-        _reintentar.Visibility = reintentable ? Visibility.Visible : Visibility.Collapsed;
+        if (nota.Avisos.Count > 0)
+            _nota.Children.Add(Tarjeta("AVISOS", string.Join("\n", nota.Avisos)));
+        _superficie.ScrollToHome();
     }
 
     // ── piezas ───────────────────────────────────────────────────────────────
 
     private void Estado(string texto) => _estado.Text = texto;
 
-    private void LimpiarNota()
+    private static Button BotonDeMarco(string glifo, string queHace) => new()
     {
-        _nota.Children.Clear();
-        _reintentar.Visibility = Visibility.Collapsed;
+        Content = glifo,
+        Width = 30, Height = 30, Margin = new Thickness(6, 0, 0, 0),
+        Foreground = Muted, Background = Brushes.Transparent,
+        BorderThickness = new Thickness(0), FontSize = 12,
+        Cursor = Cursors.Hand, ToolTip = queHace,
+        Template = Pastilla(15),
+    };
+
+    private static Button Pestana(string texto) => new()
+    {
+        Content = texto,
+        Height = 38, MinWidth = 118, Margin = new Thickness(5, 0, 5, 0),
+        Foreground = Muted, Background = Brushes.Transparent,
+        BorderThickness = new Thickness(0), FontSize = 13.5,
+        Cursor = Cursors.Hand,
+        Template = Pastilla(19),
+    };
+
+    private static TextBlock Linea(string texto, Brush color, double tamano) => new()
+    {
+        Text = texto, Foreground = color, FontSize = tamano,
+        TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 6, 4, 6),
+    };
+
+    private static Border FilaDeConsulta(ConsultaVista c)
+    {
+        var pila = new StackPanel();
+        pila.Children.Add(new TextBlock
+        {
+            Text = c.Fecha == DateTimeOffset.MinValue ? "" : c.Fecha.ToLocalTime().ToString("d MMM · HH:mm"),
+            Foreground = Tenue, FontSize = 10.5, Margin = new Thickness(0, 0, 0, 4),
+        });
+        pila.Children.Add(new TextBlock
+        {
+            Text = c.Motivo.Length > 0 ? c.Motivo : (c.Resumen.Length > 0 ? c.Resumen : "Consulta sin motivo anotado"),
+            Foreground = Ink, FontSize = 13.5, TextWrapping = TextWrapping.Wrap,
+        });
+        if (c.Estado.Length > 0)
+        {
+            pila.Children.Add(new TextBlock
+            {
+                Text = c.Estado, Foreground = Muted, FontSize = 10.5, Margin = new Thickness(0, 5, 0, 0),
+            });
+        }
+        return new Border
+        {
+            CornerRadius = new CornerRadius(16),
+            Background = Tinta, BorderBrush = Line, BorderThickness = new Thickness(1),
+            Padding = new Thickness(15, 12, 15, 12), Margin = new Thickness(2, 0, 2, 9),
+            Child = pila,
+        };
     }
 
     private static Border Tarjeta(string titulo, string cuerpo)
@@ -317,37 +442,32 @@ public sealed class ConsultaWindow : Window
         var pila = new StackPanel();
         pila.Children.Add(new TextBlock
         {
-            Text = titulo, Foreground = Muted, FontSize = 10.5,
+            Text = titulo, Foreground = Muted, FontSize = 10,
             FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6),
         });
         pila.Children.Add(new TextBlock
         {
-            Text = cuerpo.Length > 0 ? cuerpo : "—",
-            Foreground = Ink, FontSize = 13.5, TextWrapping = TextWrapping.Wrap,
+            Text = cuerpo, Foreground = Ink, FontSize = 13.5,
+            TextWrapping = TextWrapping.Wrap, LineHeight = 21,
         });
         return new Border
         {
-            CornerRadius = new CornerRadius(12),
-            Background = FieldBg,
-            BorderBrush = Line,
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(14, 12, 14, 12),
-            Margin = new Thickness(0, 0, 0, 10),
+            CornerRadius = new CornerRadius(16),
+            Background = Tinta, BorderBrush = Line, BorderThickness = new Thickness(1),
+            Padding = new Thickness(15, 13, 15, 13), Margin = new Thickness(2, 0, 2, 9),
             Child = pila,
         };
     }
 
-    private static Brush Colors(Brush _) => Ink;
-
-    private static ControlTemplate Redondo(double radio)
+    private static ControlTemplate Pastilla(double radio)
     {
         var template = new ControlTemplate(typeof(Button));
         var border = new FrameworkElementFactory(typeof(Border));
         border.SetValue(Border.CornerRadiusProperty, new CornerRadius(radio));
         border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
         var content = new FrameworkElementFactory(typeof(ContentPresenter));
-        content.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Center);
-        content.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
+        content.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        content.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
         border.AppendChild(content);
         template.VisualTree = border;
         return template;

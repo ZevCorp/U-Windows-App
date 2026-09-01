@@ -60,15 +60,30 @@ public sealed class Consulta
     private readonly Func<CancellationToken, Task> _abrirMicrofono;
     private readonly Func<Task<string>> _pararYRecogerLoDicho;
 
+    /// <summary>
+    /// Escribe el espejo en `consultations` para que la consulta se VEA en el portal (promesa 93).
+    /// Se inyecta como funcion para que esta clase no sepa de Supabase — y para que el contrato
+    /// pueda juzgar la maquina de estados sin red.
+    /// </summary>
+    private readonly Func<string, NotaClinica, string, Task<bool>>? _espejar;
+
     public Consulta(SesionMiracle sesion, ClinicaClient clinica,
         Func<CancellationToken, Task> abrirMicrofono,
-        Func<Task<string>> pararYRecogerLoDicho)
+        Func<Task<string>> pararYRecogerLoDicho,
+        Func<string, NotaClinica, string, Task<bool>>? espejar = null)
     {
         _sesion = sesion;
         _clinica = clinica;
         _abrirMicrofono = abrirMicrofono;
         _pararYRecogerLoDicho = pararYRecogerLoDicho;
+        _espejar = espejar;
     }
+
+    /// <summary>Lo ultimo que se dijo en esta consulta. Es lo que viaja al espejo.</summary>
+    public string Verbatim { get; private set; } = "";
+
+    /// <summary>La consulta quedo visible en el portal. Falso si el espejo no se pudo escribir.</summary>
+    public bool VisibleEnElPortal { get; private set; }
 
     public EstadoDeConsulta Estado { get; private set; } = EstadoDeConsulta.SinEmpezar;
 
@@ -154,6 +169,7 @@ public sealed class Consulta
         }
 
         string dicho = await _pararYRecogerLoDicho();
+        Verbatim = dicho ?? "";
 
         // VACÍO SE DICE AQUÍ, no se manda. /transcript con texto vacío contesta 400
         // TRANSCRIPT_REQUIRED — un error evitable que además taparía el de verdad: el micrófono
@@ -171,6 +187,7 @@ public sealed class Consulta
 
             Pasar(EstadoDeConsulta.GenerandoNota);
             Nota = await _clinica.GenerarNotaAsync(EncounterId, ct);
+            await EspejarAsync();
             Pasar(EstadoDeConsulta.NotaLista);
             LogBus.Log("consulta", $"nota lista · encounter {EncounterId} · {Nota.Secciones.Count} sección(es)");
         }
@@ -202,6 +219,7 @@ public sealed class Consulta
         {
             Pasar(EstadoDeConsulta.GenerandoNota);
             Nota = await _clinica.GenerarNotaAsync(EncounterId, ct);
+            await EspejarAsync();
             Motivo = "";
             CodigoDeFallo = "";
             Pasar(EstadoDeConsulta.NotaLista);
@@ -230,6 +248,22 @@ public sealed class Consulta
     }
 
     // ── menudencias ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Espeja la consulta al portal. UN FALLO AQUI NO TUMBA LA CONSULTA: la nota ya esta a salvo en
+    /// el backend y perderla por no poder pintarla en una lista seria absurdo. Lo que si pasa es
+    /// que se DICE —queda en VisibleEnElPortal y en el log— en vez de suponer que se vio.
+    /// </summary>
+    private async Task EspejarAsync()
+    {
+        VisibleEnElPortal = false;
+        if (_espejar == null || Nota == null) return;
+        try { VisibleEnElPortal = await _espejar(EncounterId, Nota, Verbatim); }
+        catch (Exception e)
+        {
+            LogBus.Log("consulta", $"la consulta no se pudo espejar al portal: {e.Message}");
+        }
+    }
 
     private void Fallar(string motivo, string codigo)
     {

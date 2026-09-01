@@ -194,6 +194,17 @@ internal static class Contrato
         Console.WriteLine();
         Prueba("92. arrancar la consulta dice EN QUÉ PASO se quedó: morir callado no es un resultado", ElArranqueDiceDondeSeQuedo);
 
+        // ── QUE LA CONSULTA SEA DE VERDAD LA MISMA (2026-09-01) ──────────────
+        //
+        // Al mirar dónde lista el portal sus consultas apareció un hueco que llevaba escrito en la
+        // spec como si estuviera resuelto: el portal lista la tabla `consultations`, y quien la
+        // escribe es EL PROPIO PORTAL (upsertConsultation(encounterToConsultation(...)), en
+        // en-vivo/page.tsx:655). Windows creaba el `clinical_encounter` —que existe— y nada más,
+        // así que una consulta grabada aquí era INVISIBLE en la web. «Misma base de datos» era
+        // cierto de la mitad de abajo y falso de la que ve el médico.
+        Prueba("93. una consulta grabada en Windows se VE en el portal: el espejo se escribe, no se supone", ElEspejoSeEscribe);
+        Prueba("94. elegir plantilla deja de ser un paso: la consulta arranca sola", NadieEligePlantilla);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -2640,6 +2651,138 @@ internal static class Contrato
         Debe(!pidioLogin,
             "y no se pide la contraseña otra vez: para eso se guardó la sesión (promesa 85)");
         Debe(!avisoEnFeliz, "el camino feliz no enseña ningún aviso");
+    }
+
+    /// <remarks>
+    /// EL MAPEO ES EL DEL PORTAL, campo por campo (lib/clinical/encounter-to-consultation.ts): si
+    /// aquí se inventara otro, la misma consulta se vería distinta en cada sitio — que es peor que
+    /// no verse, porque nadie sospecharía. Se juzga la FILA que se manda, no que la llamada no
+    /// falle: un POST que sale con `note` vacío devuelve 201 igual.
+    /// </remarks>
+    private static void ElEspejoSeEscribe()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.EspejoDeConsulta");
+        var fabricar = t?.GetMethod("Fila", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || fabricar == null) { Pendiente("Clinical.EspejoDeConsulta.Fila", "93"); return; }
+
+        var tNota = Capacidad("U.WindowsClient.Clinical.NotaClinica")!;
+        var nota = tNota.GetMethod("Leer", BindingFlags.Public | BindingFlags.Static)!
+            .Invoke(null, new object?[]
+            {
+                JsonDocument.Parse(
+                    "{\"summary\":\"Cefalea de tres días sin signos de alarma.\","
+                    + "\"sections\":[{\"key\":\"motivo_consulta\",\"label\":\"Motivo de consulta\","
+                    + "\"content\":\"Cefalea de 3 días.\"},{\"key\":\"plan\",\"label\":\"Plan\","
+                    + "\"content\":\"Hidratación y control.\"}],"
+                    + "\"warnings\":[],\"missing_required_sections\":[]}").RootElement,
+            })!;
+
+        string json = (string)fabricar.Invoke(null, new object?[]
+        {
+            "enc-1", nota, "El paciente refiere cefalea.", "Consulta inicial adulto",
+            "medicina_general", new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero),
+        })!;
+
+        using var fila = JsonDocument.Parse(json);
+        var r = fila.RootElement;
+
+        string Str(string campo) => r.TryGetProperty(campo, out var v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString() ?? "" : "";
+
+        Debe(Str("id") == "enc-1",
+            "la fila usa el MISMO id que el encounter: así el puente es 1:1 e idempotente, y "
+            + "/app/consultas/<id> del portal lleva a esta consulta");
+        Debe(Str("estado") == "borrador",
+            "nace en borrador, que es lo que la mete en el ciclo de revisión y firma del portal");
+        Debe(Str("resumen").Contains("Cefalea de tres días"), "el resumen viaja");
+        Debe(Str("motivo").Contains("Cefalea de 3 días"),
+            $"y el motivo sale de la sección «motivo…», como en el portal: «{Str("motivo")}»");
+        Debe(Str("plantilla") == "Consulta inicial adulto", "la plantilla se nombra");
+
+        // La nota: sections del contrato → el shape del portal (id/titulo/kind/texto). Un nombre de
+        // campo distinto aquí y el detalle del portal pinta secciones vacías sin dar ningún error.
+        Debe(r.TryGetProperty("note", out var note) && note.ValueKind == JsonValueKind.Array
+             && note.GetArrayLength() == 2, "las dos secciones viajan");
+        var primera = note[0];
+        Debe(primera.TryGetProperty("id", out var sid) && sid.GetString() == "motivo_consulta"
+             && primera.TryGetProperty("titulo", out _) && primera.TryGetProperty("kind", out var k)
+             && k.GetString() == "texto" && primera.TryGetProperty("texto", out var tx)
+             && (tx.GetString() ?? "").Contains("Cefalea de 3 días"),
+            "con los nombres de campo del portal: id/titulo/kind/texto — no key/label/content");
+
+        // El verbatim se espeja como turnos, que es como el detalle sabe pintarlo.
+        Debe(r.TryGetProperty("transcript", out var tr) && tr.ValueKind == JsonValueKind.Array
+             && tr.GetArrayLength() == 1
+             && (tr[0].TryGetProperty("texto", out var tt) ? tt.GetString() ?? "" : "")
+                .Contains("cefalea"),
+            "y la transcripción verbatim va como un turno, tal cual se dijo");
+
+        // Sin transcripción no se fabrica una: vacío es vacío (aprendizaje nº9).
+        string sinTexto = (string)fabricar.Invoke(null, new object?[]
+        {
+            "enc-2", nota, "   ", "P", "medicina_general", DateTimeOffset.UtcNow,
+        })!;
+        using var fila2 = JsonDocument.Parse(sinTexto);
+        Debe(fila2.RootElement.GetProperty("transcript").GetArrayLength() == 0,
+            "sin nada dicho, la transcripción va VACÍA: no se inventa un turno en blanco");
+    }
+
+    /// <remarks>
+    /// El médico no quiere elegir plantilla: quiere hablar. El backend EXIGE `template_id` al crear
+    /// el encounter, así que «ninguna» no es una opción — lo que se puede es que la elija el sistema
+    /// y no se pregunte nunca.
+    ///
+    /// La plantilla ABIERTA de verdad —que la IA diseñe las secciones de cada consulta— existe en
+    /// el backend solo para biopsias (SYSTEM_DYNAMIC en BiopsyExtractionService) y pedirla para
+    /// consultas es trabajo del repo Graph. Lo que esta promesa cubre es lo de este lado: que nadie
+    /// tenga que elegir, y que si la plantilla abierta no existe todavía se CREE en vez de caer a
+    /// una cualquiera del catálogo — caer a una cualquiera es elegir por el médico sin decírselo.
+    /// </remarks>
+    private static void NadieEligePlantilla()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.PlantillaAbierta");
+        var elegir = t?.GetMethod("Elegir", BindingFlags.Public | BindingFlags.Static);
+        var secciones = t?.GetMethod("Secciones", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || elegir == null || secciones == null)
+        {
+            Pendiente("Clinical.PlantillaAbierta", "94");
+            return;
+        }
+
+        var tPlantilla = Capacidad("U.WindowsClient.Clinical.PlantillaClinica")!;
+        object Plantilla(string id, string nombre) =>
+            Activator.CreateInstance(tPlantilla, id, nombre, "medicina_general", false)!;
+
+        var lista = (System.Collections.IList)Activator.CreateInstance(
+            typeof(List<>).MakeGenericType(tPlantilla))!;
+
+        // Catálogo sin la abierta: NO se cae a una cualquiera.
+        lista.Add(Plantilla("inst-1", "Consulta inicial adulto"));
+        lista.Add(Plantilla("inst-2", "Atención general de urgencias"));
+        object? sinAbierta = elegir.Invoke(null, new object?[] { lista });
+        Debe(sinAbierta == null,
+            "con 204 plantillas institucionales y ninguna abierta, NO se elige una cualquiera: "
+            + "elegir por el médico sin decírselo es peor que preguntarle");
+
+        // Con la abierta dentro: se usa esa, sin preguntar.
+        string nombreAbierta = (string)t.GetProperty("Nombre",
+            BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!;
+        lista.Add(Plantilla("mia-9", nombreAbierta));
+        object? conAbierta = elegir.Invoke(null, new object?[] { lista });
+        Debe(conAbierta != null
+             && (string)tPlantilla.GetProperty("Id")!.GetValue(conAbierta)! == "mia-9",
+            "y cuando existe, se usa esa y no se pregunta nada");
+
+        // Las secciones con las que nace: pocas, anchas, y con instrucción de organizar libre.
+        var trozos = ((System.Collections.IEnumerable)secciones.Invoke(null, null)!)
+            .Cast<object>().ToList();
+        Debe(trozos.Count is >= 2 and <= 30,
+            $"el contrato del backend exige entre 2 y 30 secciones; se piden {trozos.Count}");
+        string todo = string.Join(" ", trozos.Select(x => x?.ToString() ?? ""));
+        Debe(todo.Contains("organiza", StringComparison.OrdinalIgnoreCase)
+             || todo.Contains("estructura", StringComparison.OrdinalIgnoreCase),
+            "y la instrucción le pide al organizador que ESTRUCTURE lo que se dijo, que es lo más "
+            + "cerca de una plantilla dinámica que se puede llegar sin tocar Graph");
     }
 
     private static void Prueba(string nombre, Action cuerpo)
