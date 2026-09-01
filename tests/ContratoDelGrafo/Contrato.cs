@@ -218,6 +218,18 @@ internal static class Contrato
         // rastro) y el aprendizaje nº2 (un mensaje que no distingue sus causas) a la vez.
         Prueba("95. si el micrófono no llegó a abrir, la consulta NO dice que está grabando", SinMicrofonoNoSeGraba);
 
+        // ── UN TROPIEZO DE RED NO ES UNA AVERÍA (2026-09-01, medido) ─────────
+        //
+        // El dictado se rendía al primer fallo. Medido en la máquina del usuario, en tres segundos
+        // seguidos: el DNS de stt-rt.soniox.com contestó «Host desconocido», el TCP a :443 no
+        // abrió... y el WebSocket al MISMO host abrió a la primera. El DNS de ese equipo falla de
+        // forma intermitente, y con un solo intento eso se lleva la consulta entera por delante.
+        //
+        // El motor del portal, del que se portó todo lo demás, lleva desde siempre cuatro intentos
+        // con espera creciente (useDictation.ts:40 — MAX_RECONNECT_ATTEMPTS y RECONNECT_DELAYS_MS).
+        // Eso NO se portó, y es el hueco.
+        Prueba("96. un tropiezo de red no tumba la grabación: se reintenta antes de rendirse", ElDictadoReintenta);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -2875,6 +2887,56 @@ internal static class Contrato
                  .GetAwaiter().GetResult()
              && tConsulta.GetProperty("Estado")!.GetValue(buena)!.ToString() == "Grabando",
             "con el micrófono abierto de verdad, la consulta sí graba");
+    }
+
+    /// <remarks>
+    /// La espera se INYECTA para que esta promesa no duerma nueve segundos. Una prueba lenta se
+    /// acaba saltando, y un juez que no se corre no juzga nada.
+    /// </remarks>
+    private static void ElDictadoReintenta()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.Transcripcion.PoliticaDeReintento");
+        var hasta = t?.GetMethod("HastaQueSalgaAsync");
+        if (t == null || hasta == null) { Pendiente("Transcripcion.PoliticaDeReintento", "96"); return; }
+
+        var dormido = new List<int>();
+        object Politica() => Activator.CreateInstance(t,
+            (Func<int, CancellationToken, Task>)((ms, _) => { dormido.Add(ms); return Task.CompletedTask; }))!;
+
+        bool Correr(object p, Func<CancellationToken, Task<bool>> intento) =>
+            ((Task<bool>)hasta.Invoke(p, new object?[] { intento, CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+
+        // 1. A la primera: ni se reintenta ni se espera. Un tropiezo que no ocurrió no cuesta nada.
+        dormido.Clear();
+        var alaPrimera = Politica();
+        Debe(Correr(alaPrimera, _ => Task.FromResult(true)), "lo que sale a la primera, sale");
+        Debe((int)t.GetProperty("Intentos")!.GetValue(alaPrimera)! == 1 && dormido.Count == 0,
+            "un intento y cero esperas: nadie paga por un fallo que no hubo");
+
+        // 2. Falla dos veces y a la tercera abre — que es EXACTAMENTE lo que se midió.
+        dormido.Clear();
+        int veces = 0;
+        var terca = Politica();
+        Debe(Correr(terca, _ => Task.FromResult(++veces >= 3)),
+            "dos tropiezos seguidos no tumban la grabación: al tercer intento entra");
+        Debe((int)t.GetProperty("Intentos")!.GetValue(terca)! == 3,
+            "y se intentó tres veces, ni una más");
+        Debe(dormido.Count == 2 && dormido[0] < dormido[1],
+            $"esperando cada vez un poco más entre intentos: [{string.Join(", ", dormido)}] ms. "
+            + "Reintentar de golpe contra un servicio caído es martillearlo");
+
+        // 3. Si de verdad no hay red, se rinde — pero con un tope, no eternamente, y sabiendo
+        //    cuántas veces lo intentó. Rendirse en silencio es lo que había antes.
+        dormido.Clear();
+        var imposible = Politica();
+        Debe(!Correr(imposible, _ => Task.FromResult(false)), "sin red de verdad, se rinde");
+        int gastados = (int)t.GetProperty("Intentos")!.GetValue(imposible)!;
+        Debe(gastados is >= 3 and <= 6,
+            $"con un presupuesto acotado ({gastados} intentos): reintentar sin tope deja al médico "
+            + "mirando un botón que no contesta");
+        Debe(gastados > 1 && dormido.Count == gastados - 1,
+            "y se esperó entre todos ellos menos antes del primero");
     }
 
     private static void Prueba(string nombre, Action cuerpo)
