@@ -12,8 +12,16 @@ import AVFoundation
 /// primer síntoma cuando algo va mal aquí.
 final class AudioVivo {
 
-    static let ritmoEntrada: Double = 16_000
-    static let ritmoSalida: Double = 24_000
+    /// Configurables porque no todos los proveedores piden el mismo ritmo: Gemini quiere 16 kHz de
+    /// entrada, OpenAI pide 24 kHz. Los valores por defecto son los de Gemini, para que el código
+    /// que ya funciona (`Vivo.swift`) no tenga que cambiar una línea.
+    let ritmoEntrada: Double
+    let ritmoSalida: Double
+
+    init(ritmoEntrada: Double = 16_000, ritmoSalida: Double = 24_000) {
+        self.ritmoEntrada = ritmoEntrada
+        self.ritmoSalida = ritmoSalida
+    }
 
     /// UN SOLO MOTOR para entrada y salida, y no es organización: es lo que hace posible la
     /// cancelación de eco.
@@ -120,7 +128,7 @@ final class AudioVivo {
         // formato del nodo, y quedarse con el de antes es convertir desde algo que ya no es.
         let formatoEntrada = entrada.outputFormat(forBus: 0)
         guard let destino = AVAudioFormat(commonFormat: .pcmFormatInt16,
-                                          sampleRate: Self.ritmoEntrada,
+                                          sampleRate: ritmoEntrada,
                                           channels: 1, interleaved: true) else {
             throw Fallo.sinFormato
         }
@@ -169,7 +177,7 @@ final class AudioVivo {
                                                 sampleRate: mezcla.sampleRate,
                                                 channels: 1, interleaved: false),
               let delModelo = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                            sampleRate: Self.ritmoSalida,
+                                            sampleRate: ritmoSalida,
                                             channels: 1, interleaved: false) else {
             throw Fallo.sinFormato
         }
@@ -190,8 +198,8 @@ final class AudioVivo {
         try motor.start()
         reproductor.play()
         abierto = true
-        Registro.di("🎙 audio vivo abierto · entra \(Int(formatoEntrada.sampleRate)) Hz → \(Int(Self.ritmoEntrada)) Hz"
-                  + " · sale \(Int(Self.ritmoSalida)) Hz → \(Int(mezcla.sampleRate)) Hz")
+        Registro.di("🎙 audio vivo abierto · entra \(Int(formatoEntrada.sampleRate)) Hz → \(Int(ritmoEntrada)) Hz"
+                  + " · sale \(Int(ritmoSalida)) Hz → \(Int(mezcla.sampleRate)) Hz")
     }
 
     func cerrar() {

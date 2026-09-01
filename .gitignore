@@ -42,3 +42,5 @@ mac-client/U.app/
 # seguia git): era que cada commit que tocaba codigo arrastraba un diff de 138.000 lineas
 # en graph.json, y con eso ningun PR se puede revisar. Tras clonar: `graphify update .`
 graphify-out/
+
+.DS_Store

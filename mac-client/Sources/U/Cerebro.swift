@@ -239,7 +239,23 @@ final class Cerebro {
         pet.httpBody = try JSONSerialization.data(withJSONObject: cuerpo)
         pet.timeoutInterval = 30
 
-        let (bytes, _) = try await URLSession.shared.bytes(for: pet)
+        let (bytes, respuesta) = try await URLSession.shared.bytes(for: pet)
+
+        // EL ERROR NO VIENE EN SSE — es un JSON normal, sin «data: » delante. Sin esto, un 429 (o
+        // cualquier otro fallo HTTP) entraba igual al bucle de abajo, que descarta toda línea sin
+        // ese prefijo: ni una coincidía, el bucle terminaba solo, y la función volvía COMO SI HUBIERA
+        // IDO BIEN — sin llamar a `alFrase` ni una vez, sin lanzar nada. Quien llama se queda con
+        // `pensando = true` para siempre, sin una sola pista de qué pasó. Medido el 2026-08-31: la
+        // cuenta sin créditos dejó a Ü con la cara de pensar puesta y ningún renglón de error detrás.
+        if let http = respuesta as? HTTPURLResponse, http.statusCode != 200 {
+            var cuerpo = Data()
+            for try await linea in bytes.lines { cuerpo.append(Data((linea + "\n").utf8)) }
+            if let raiz = try? JSONSerialization.jsonObject(with: cuerpo) as? [String: Any],
+               let e = raiz["error"] as? [String: Any], let m = e["message"] as? String {
+                throw Fallo.deGoogle(m)
+            }
+            throw Fallo.deGoogle("HTTP \(http.statusCode)")
+        }
 
         var completo = ""      // todo lo dicho, para la memoria de la conversación
         var pendiente = ""     // lo que aún no forma una frase entera

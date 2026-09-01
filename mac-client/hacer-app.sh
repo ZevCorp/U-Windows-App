@@ -48,9 +48,22 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# Firma local (ad-hoc). No sirve para distribuir, pero sí para que macOS le dé una identidad estable
-# y los permisos concedidos no se pierdan en cada recompilación.
-codesign --force --deep --sign - "$APP" 2>/dev/null || echo "  (aviso: no se pudo firmar; los permisos se pedirán de nuevo en cada build)"
+# FIRMA CON IDENTIDAD ESTABLE, no ad-hoc. Esto costó una tarde de diagnóstico el 2026-08-21: `--sign -`
+# (ad-hoc) genera una firma NUEVA en cada build, y macOS ata los permisos de Grabación de pantalla y
+# Accesibilidad a esa firma — no al nombre "U". Cada recompilación era, para TCC, otra app, y el
+# permiso que acababas de conceder quedaba huérfano. El síntoma: pedirlo una y otra vez sin parar.
+#
+# "U Dev Signing" es un certificado autofirmado creado una vez en este Mac (ver scripts/crear-firma.sh)
+# e importado al llavero con confianza para firmar código. Mientras exista esa identidad, TODAS las
+# builds la comparten y el permiso concedido sobrevive a recompilar. Si no existe todavía en esta
+# máquina (un compañero nuevo, por ejemplo), cae a ad-hoc — funciona, pero vuelve a pedir permiso en
+# cada build hasta que se cree la identidad.
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "U Dev Signing"; then
+  codesign --force --deep --sign "U Dev Signing" "$APP" 2>&1 | grep -v "^$" || true
+else
+  echo "  (sin identidad «U Dev Signing» en el llavero — firmando ad-hoc; corre scripts/crear-firma.sh una vez)"
+  codesign --force --deep --sign - "$APP" 2>/dev/null || echo "  (aviso: no se pudo firmar; los permisos se pedirán de nuevo en cada build)"
+fi
 
 echo "▸ listo: $(pwd)/$APP"
 

@@ -8,7 +8,26 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var oido: Oido!
     var cerebro: Cerebro?
     /// La conversación en vivo. `nil` mientras no haya llave.
-    var vivo: Vivo?
+    /// LA VOZ EN VIVO, POR OPENAI. Reemplaza a `Vivo` (Gemini) como camino principal el 2026-08-31 —
+    /// `Vivo.swift` se queda en el repo, probado y sin borrar, para el día que haga falta volver o
+    /// comparar, pero ya no es lo que arranca `armarVozViva()`.
+    var vivo: VivoOpenAI?
+    /// El arnés de prueba aislado sigue existiendo por separado — `U_VIVO_OPENAI=1` construye el
+    /// suyo propio, sin tocar esta propiedad.
+    var vivoOpenAI: VivoOpenAI?
+
+    /// LO QUE SE DIJO AL DESPERTARLA, EN ESPERA DE QUE LA SESIÓN ABRA. `vivo.arrancar()` es
+    /// asíncrono —abrir el socket de OpenAI tarda un par de segundos—, y comprobar `vivo.viva` justo
+    /// después de llamarlo siempre da `false`: la sesión todavía no existe. Antes eso hacía caer el
+    /// código al camino de TEXTO por error —Gemini, sin saldo desde el 2026-08-31— y el pedido se
+    /// quedaba con `pensando = true` para siempre porque el error ni siquiera se veía (ver el arreglo
+    /// en `Cerebro.responderEnVivo`). Medido en el registro: «le pregunto» a las 15:49:05.938 y la
+    /// sesión de OpenAI abriendo recién a las 15:49:08.357 — 2,4 s de carrera perdida cada vez.
+    ///
+    /// Si hay `vivo` (hay llave de OpenAI), el texto NUNCA debe disparar por su cuenta: se espera a
+    /// que la sesión abra de verdad y se manda ahí. El camino de texto queda solo para cuando NO hay
+    /// `vivo` en absoluto.
+    private var fraseEnEsperaParaVivo: String?
     /// Mueve la boca con el sonido REAL mientras habla la voz en vivo. Por texto la mueve `Voz`
     /// leyendo la palabra que toca; aquí no hay palabras que leer, hay una onda — y seguirla es más
     /// fiel que adivinar la vocal.
@@ -284,11 +303,20 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
+        // LA VOZ EN VIVO ES OPENAI, EL TEXTO DE RESPALDO SIGUE EN GEMINI — a propósito, y son dos
+        // llaves distintas. `Cerebro` (el camino de texto, sin voz nativa) no se tocó: sigue
+        // llamando a Gemini. Lo que cambió es la conversación EN VIVO, que era la que se caía a
+        // diario con «Socket is not connected» cuando la cuenta de Gemini se quedó sin saldo
+        // (2026-08-31) — Felipe ya había resuelto exactamente esto en Windows con el mismo cambio.
         if let k = Llave.gemini {
             cerebro = Cerebro(llave: k)
+        } else {
+            Registro.di("🧠 sin llave de Gemini: no hay camino de texto de respaldo (falta ~/.u/gemini-key.txt)")
+        }
+        if let k = Llave.openai {
             vivo = armarVozViva(llave: k)
         } else {
-            Registro.di("🧠 sin llave: no hay cerebro ni voz en vivo (falta ~/.u/gemini-key.txt)")
+            Registro.di("🎙 sin llave de OpenAI: no hay voz en vivo (falta ~/.u/openai-key.txt)")
         }
 
         // SE LADEA MIENTRAS LE HABLAS. La señal no hubo que inventarla: `alOir` llega con cada
@@ -329,26 +357,25 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
                 self.despertar()
 
-                // SI LA VOZ EN VIVO SE HIZO CARGO, EL CAMINO DE TEXTO NO CORRE. Sin esto contestaban
-                // las dos a la vez: el 2026-08-18 el log mostró «le cedo el micrófono a la voz en
-                // vivo» y en el mismo milisegundo «🧠 le pregunto: me escuchas». Dos cerebros sobre
-                // la misma frase, y el de texto además dejaba el turno abierto — que es de donde
-                // salió el baile encima del mensaje de fallo.
+                // SI HAY VOZ EN VIVO, EL CAMINO DE TEXTO NUNCA DISPARA — ni siquiera mientras la
+                // sesión todavía está abriendo. Antes la condición era `vivo.viva`, y `viva` es
+                // `false` durante los ~2 s que tarda el socket en abrir: el código caía al texto por
+                // esa ventana, disparaba a Gemini EN PARALELO con la sesión que estaba a punto de
+                // hacerse cargo, y si Gemini no tenía saldo (2026-08-31) la carita se quedaba con la
+                // cara de pensar puesta para siempre — el error ni se veía (ver el arreglo en
+                // `Cerebro.responderEnVivo`). Medido: «le pregunto» a las 15:49:05.938, la sesión de
+                // OpenAI abriendo recién a las 15:49:08.357.
                 //
-                // Lo que venía detrás del nombre no se pierde: se le pasa a la sesión por escrito.
-                //
-                // LA CONDICIÓN PREGUNTA POR LA SESIÓN, Y SOLO POR ELLA. Decía
-                // `vivo.viva || cerebro != nil`, y ese segundo término es cierto SIEMPRE que hay
-                // llave: la rama ganaba con la sesión cerrada, `decirle` tiraba la frase al suelo
-                // por su `guard viva`, y el `return` se llevaba por delante el camino de texto —que
-                // funciona—. Desde fuera: la llamas por su nombre y no contesta nunca. Medido el
-                // 2026-08-19, con el puente HTTP verificado sano en la misma sesión.
-                //
-                // Es el aprendizaje nº16 entero: los dos lados de la comparación contestan preguntas
-                // distintas. «¿Se hizo cargo la voz viva?» solo la contesta `viva`.
-                if let vivo, vivo.viva {
-                    if !resto.isEmpty { vivo.decirle(resto) }
-                    else { panel.face.reaccionar(.complice) }
+                // Ahora la pregunta es «¿existe `vivo`?», no «¿ya abrió?». Si existe, se espera: la
+                // frase se guarda en `fraseEnEsperaParaVivo` y `alCambiar(true)` la manda en cuanto
+                // la sesión esté lista de verdad — ver ese comentario para la medida completa. El
+                // texto queda solo para cuando no hay `vivo` en absoluto (sin llave de OpenAI).
+                if let vivo {
+                    if !resto.isEmpty {
+                        if vivo.viva { vivo.decirle(resto) } else { fraseEnEsperaParaVivo = resto }
+                    } else {
+                        panel.face.reaccionar(.complice)
+                    }
                     return
                 }
 
@@ -379,6 +406,22 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return
             }
             let pregunta = loQuePregunta
+
+            // SEGUNDA INSTANCIA DE LA MISMA CARRERA (2026-08-31), y esta no se veía en la primera
+            // corrida: el oído LOCAL sigue oyendo durante el hueco entre `despertar()` (que ya puso
+            // `despierta = true`) y que la sesión en vivo de verdad le quite el micrófono en
+            // `oido.ceder()` —unos 1-3 s—. Cualquier frase que capte en ese hueco entraba aquí y
+            // disparaba el texto igual, aunque ya hubiera una sesión en vivo a punto de encargarse.
+            // Medido en el registro: «Una huevona» y «El ombligo» —ruido de sala real, no dirigido a
+            // Ü— disparando `🧠 le pregunto` mientras `sesión de voz (OpenAI) abierta` llegaba un
+            // instante después. Si hay `vivo` y todavía no está lista, se descarta CON RASTRO —la
+            // sesión en vivo va a oír lo que se diga a partir de que tome el micrófono; no hace
+            // falta que el texto conteste algo que no era para ella.
+            if let vivo, !vivo.viva {
+                Registro.di("👂 ✋ descarto «\(pregunta)»: la sesión en vivo todavía no tomó el micrófono")
+                oido.reanudar()
+                return
+            }
 
             guard let cerebro else {
                 voz.decir("Todavía no tengo llave para pensar.")
@@ -483,6 +526,16 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.panel.orderFrontRegardless()
             }))
 
+        // SUMAR, Y SALE. El prototipo acotado de la mitad que ACTÚA. Aislado igual que Mirar.
+        if Operador.pedido {
+            oido.callarse()
+            Task {
+                await Operador.correr()
+                NSApplication.shared.terminate(nil)
+            }
+            return
+        }
+
         // MIRAR, Y SALE. El prototipo acotado de computer-use: mira la pantalla, dice qué ve, y
         // termina. No arranca el oído ni la voz — está aislado a propósito, ver Mirar.swift.
         if Mirar.pedido {
@@ -495,6 +548,32 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
             } else {
                 Registro.di("👁 ✘ sin llave en ~/.u/gemini-key.txt, no puedo preguntarle al modelo")
                 NSApplication.shared.terminate(nil)
+            }
+            return
+        }
+
+        // U_VIVO_OPENAI=1 — el prototipo acotado de la voz por OpenAI Realtime, AISLADO del resto:
+        // no toca `vivo` (Gemini), no pasa por `despertar()`, no entra al bucle normal. Solo prueba
+        // que el protocolo nuevo abre, oye, contesta y pide su cara, de punta a punta.
+        //
+        //   open --env U_VIVO_OPENAI=1 --env "U_DECIR=hola, cuéntame algo" "…/U.app"
+        if ProcessInfo.processInfo.environment["U_VIVO_OPENAI"] == "1" {
+            oido.callarse()
+            guard let k = Llave.openai else {
+                Registro.di("🎙 ✘ sin llave en ~/.u/openai-key.txt, no puedo abrir OpenAI Realtime")
+                return
+            }
+            Registro.di("🎙 U_VIVO_OPENAI=1 · abro la conversación en vivo con OpenAI")
+            let v = VivoOpenAI(llave: k)
+            v.alTranscribir = { texto, esDeU in
+                Registro.di(esDeU ? "🎙 dice: «\(texto)»" : "🎙 oye: «\(texto)»")
+            }
+            v.alTalante = { [weak self] t in self?.panel.face.reaccionar(t) }
+            v.alFallar = { motivo in Registro.di("🎙 ✘ falló: \(motivo)") }
+            vivoOpenAI = v
+            v.arrancar()
+            if let frase = ProcessInfo.processInfo.environment["U_DECIR"], !frase.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { v.decirle(frase) }
             }
             return
         }
@@ -549,6 +628,17 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
+        // U_LLAMAR — simula que la RECONOCIÓ diciendo el nombre + algo detrás, con `despierta` en
+        // `false` de verdad, para probar el CAMINO REAL de despertar-por-nombre sin depender de que
+        // el reconocedor acierte a transcribir «Ü» (que es justo lo que está en duda hoy). Sin esto,
+        // probar la carrera texto/voz-en-vivo del 2026-08-31 exigía hablarle en voz alta y rezar.
+        if let frase = ProcessInfo.processInfo.environment["U_LLAMAR"], !frase.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                Registro.di("🧪 U_LLAMAR: simulo que oí «\(frase)» con despierta=false")
+                self?.oido.alEntender?(frase)
+            }
+        }
+
         // Para afinar una cara sin tener que buscarla en el menú cada vez que se recompila:
         //   U_CARA=fallo ./U.app/Contents/MacOS/U
         if let n = ProcessInfo.processInfo.environment["U_CARA"], let m = FaceMood(rawValue: n) {
@@ -560,8 +650,8 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func armarVozViva(llave: String) -> Vivo {
-        let v = Vivo(llave: llave)
+    private func armarVozViva(llave: String) -> VivoOpenAI {
+        let v = VivoOpenAI(llave: llave)
 
         v.alCambiar = { [weak self] abierta in
             guard let self else { return }
@@ -573,6 +663,13 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if abierta {
                     self.vivaDesde = Date()
                     self.oido.ceder()
+                    // LA FRASE QUE ESPERABA A QUE ABRIERA, se manda AHORA — ver el comentario largo
+                    // en `frasEnEsperaParaVivo`. Este es el único sitio que sabe con certeza que la
+                    // sesión ya está lista para recibir texto.
+                    if let frase = self.fraseEnEsperaParaVivo {
+                        self.fraseEnEsperaParaVivo = nil
+                        v.decirle(frase)
+                    }
                 } else {
                     // EL GASTO, DICHO. Un caño abierto que no deja rastro de cuánto estuvo abierto es
                     // un caño que nadie audita — y este cuesta dinero por segundo.
