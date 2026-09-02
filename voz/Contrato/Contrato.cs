@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using Voz.Realtime;
@@ -81,6 +82,59 @@ internal static class Contrato
         Prueba("20. vaciar la referencia tira lo pendiente: lo que ya no va a sonar no puede restarse", VaciarTiraLoPendiente);
         Prueba("21. sin camino de eco declarado (auriculares) la compuerta se aparta, y forzarla gana igual: la garantía solo se enciende", SinCaminoDeEcoAbreLaCompuerta);
         Prueba("22. por defecto el micrófono viaja SIEMPRE (la experiencia OpenAI de fábrica); solo U_SIN_ECO=0 devuelve la compuerta", ElDefaultEsLaExperienciaOpenAI);
+
+        // EL COLLAR COMO MICRÓFONO DE LA CONSULTA (spec 005, 2026-09-01). Tres fuentes —el
+        // micrófono del PC, el collar por Bluetooth, y el collar a través del teléfono— y UN solo
+        // sitio que decide cuál manda. La ruta del teléfono se midió el 2026-09-01 contra un
+        // WebSocket propio: 100,7 s continuos, tramas de 640 bytes cada 20 ms, ~32.000 B/s, que es
+        // PCM16 16 kHz en tiempo real. Los 640 bytes son la firma del collar (320 muestras, la
+        // trama nativa del CV1), no del micrófono del teléfono.
+        //
+        // La que de verdad cierra el asunto es la 29, y el motivo tiene fechas: este repo ya pagó
+        // TRES veces el mismo fallo —el enlace decía «conectado» y no llegaba una sola trama—.
+        // 2026-08-25, con el usuario delante de una demo: 56 minutos en verde y cero audio. Un
+        // indicador nuevo sin la 29 es la cuarta oportunidad de repetirlo.
+        Prueba("23. la consulta se graba por UN solo captador, y ningún sitio nuevo abre un micrófono sin declararse", UnSoloSitioAbreCaptura);
+        Prueba("24. la fuente activa se puede leer y decir con su nombre: micrófono del PC, collar por Bluetooth, o collar por teléfono", LaFuenteSeSabeYSeDice);
+        Prueba("25. con el collar disponible manda el collar; al perderlo la voz vuelve al micrófono local, y el cambio deja el motivo", MandaElCollarYSeReleva);
+        Prueba("26. el enlace de emparejamiento lleva el código del médico, y un código que no cuadra se rechaza NOMBRANDO que no cuadra", ElEnlaceLlevaElCodigo);
+        Prueba("27. un código caducado no acepta audio, y lo dice con 410 y no con silencio", ElCodigoCaducadoLoDice);
+        Prueba("28. la fuente por teléfono declara su latencia nominal, y quien la consume la puede leer antes de esperar nada", LaLatenciaSeDeclara);
+        Prueba("29. el indicador no puede pintar «conectado» sin trama reciente: sin audio en N segundos, deja de decir que hay micrófono", SinTramaNoHayVerde);
+
+        // LO QUE ELIGE EL MÉDICO MANDA (2026-09-01, encontrado probando el selector recién hecho).
+        // Con el collar conectado no se podía volver al micrófono del PC ni pasar al teléfono: la
+        // elección se pintaba y al segundo siguiente la prioridad automática la deshacía. La causa
+        // está en LiveAudio.QuiereCollar, que devuelve true SIEMPRE que el collar esté conectado —
+        // una cláusula que se añadió el 2026-08-13 para arreglar el fallo contrario («se pulsaba el
+        // collar para hablarle al collar y el collar no escuchaba») y que al no tener contraparte
+        // dejó la puerta cerrada por dentro.
+        //
+        // La automática sigue mandando mientras nadie elija: es lo que hace que el collar se use
+        // solo al aparecer. Elegir es lo que la desactiva, y sólo lo deshace que la elegida
+        // desaparezca.
+        Prueba("30. lo que elige el médico manda sobre la prioridad automática, y elegir el micrófono del PC se respeta aunque el collar esté conectado", LoElegidoManda);
+
+        // RECONECTAR ES RECONSTRUIR (2026-09-01, medido con el collar en la mano). El log de la
+        // prueba del dueño: 149 reconexiones, 145 «ObjectDisposedException: Cannot access a disposed
+        // object» al reenganchar, y CINCO líneas con tramas en toda la sesión. Windows tira los
+        // objetos GATT al caer el enlace; reescribir el descriptor sobre la característica vieja no
+        // puede funcionar ni una sola vez, y el bucle se repetía cada segundo y medio.
+        //
+        // El parche de reenganche del 2026-08-30 nació para el fallo correcto —volver a conectarse
+        // no es volver a estar suscrito— y eligió el camino equivocado: remendar en vez de rehacer.
+        // Es el aprendizaje nº6, que este repo ya pagó con las tres capas de geometría.
+        Prueba("31. reconectar es reconstruir: tras una desconexión no se reutiliza NADA del enlace anterior", ReconectarEsReconstruir);
+
+        // EL VERDE PRUEBA LA FUENTE, NO EL AUDIO (2026-09-01, visto por el dueño). El icono se puso
+        // verde para el collar mientras el collar seguía en ROJO, o sea sin transmitir: llegaba
+        // audio —del micrófono del portátil— y el indicador lo daba por bueno para la fuente que
+        // tocaba pintar. Es la cuarta vez que este repo tropieza con la misma clase de mentira, y
+        // esta vez estaba DENTRO de la pieza escrita para impedirla.
+        //
+        // «Llega audio» y «llega audio POR ESTA FUENTE» no son la misma frase, y un indicador que
+        // no las distinga acaba certificando el respaldo como si fuera lo elegido.
+        Prueba("32. el verde prueba que llega audio POR ESA FUENTE: anotar tramas de una no puede hacer que otra parezca viva", CadaFuenteResponde);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -668,6 +722,352 @@ internal static class Contrato
             "y forzada actúa aunque haya AEC: la perilla de esta máquina manda");
         Debe(true.Equals(m.Invoke(null, new object[] { false, true, false })),
             "forzada sin AEC también: forzar nunca puede APAGAR la garantía");
+    }
+
+    // ── spec 005: el collar es el micrófono de la consulta ────────────────────────────────────
+
+    /// <remarks>
+    /// «Un solo captador» se cuenta MIRANDO EL REPO, no declarándolo: es un hecho sobre los archivos
+    /// y por eso lo mide el contrato leyéndolos. Contarlo desde el ensamblado puro sería imposible
+    /// —no ve windows-client— y afirmarlo sin medir sería justo el vicio que este contrato existe
+    /// para cortar.
+    ///
+    /// LA RUTA DE LA CONSULTA TIENE UNO: LiveAudio. Es lo que hace que elegir el micrófono en la
+    /// ventana de consulta signifique algo.
+    ///
+    /// Y HAY DOS SITIOS MÁS QUE ABREN MICRÓFONO, declarados aquí con su motivo (2026-09-02):
+    ///
+    ///   · ScreenRecorder — graba la SALA en un vídeo de enseñanza. No es «por dónde oye Ü al
+    ///     médico», es otra cosa: forzarlo por el selector sería un error, no un arreglo.
+    ///   · VoiceIO — el dictado de una frase de la carita cuando NO hay conversación viva. Es un
+    ///     segundo captador de verdad y un hueco real: con el collar puesto, ese camino sigue
+    ///     oyendo por el portátil. Queda anotado como deuda con nombre en la spec 005; no se tapa
+    ///     aquí porque un refactor a System.Speech con stream no cabe en el hueco en que se
+    ///     descubrió, y taparlo en falso sería peor que dejarlo dicho.
+    ///
+    /// Lo que la promesa protege desde hoy es un TRINQUETE: si aparece un cuarto sitio que abre un
+    /// micrófono, esto se pone rojo y obliga a la conversación. Es lo que impide que la cuenta
+    /// vuelva a crecer sin que nadie se entere, que es como llegó a tres.
+    /// </remarks>
+    private static void UnSoloSitioAbreCaptura()
+    {
+        // Las tres formas de abrir un micrófono que este repo usa. Si alguien añade una cuarta API,
+        // esta lista se queda corta — y por eso el criterio de terminado de cualquier fuente nueva
+        // incluye añadirla aquí.
+        string[] aperturas = { "new WaveInEvent", "SetInputToDefaultAudioDevice", "IsInputDeviceEnabled" };
+
+        var raiz = RaizDelRepo();
+        if (raiz == null)
+        {
+            // NO PUDE EJECUTARLA no es LO INCUMPLIÓ (aprendizaje nº17): un juez que no puede correr
+            // tiene que decir eso, y no «culpable».
+            Console.WriteLine("   ⚠ NO SE PUDO MIRAR: no encontré la raíz del repo desde "
+                + AppContext.BaseDirectory + ". La promesa 23 no se juzgó.");
+            _fallos++;
+            return;
+        }
+
+        var conCaptura = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var archivo in Directory.EnumerateFiles(
+                     Path.Combine(raiz, "windows-client", "src"), "*.cs", SearchOption.AllDirectories))
+        {
+            string texto = File.ReadAllText(archivo);
+            foreach (var a in aperturas)
+                if (texto.Contains(a, StringComparison.Ordinal)) { conCaptura.Add(Path.GetFileName(archivo)); break; }
+        }
+
+        // Los dos declarados, con su motivo escrito arriba. Cualquier otro es un sitio nuevo.
+        var declarados = new SortedSet<string>(new[] { "ScreenRecorder.cs", "VoiceIO.cs" }, StringComparer.OrdinalIgnoreCase);
+        var delaVoz = new SortedSet<string>(conCaptura.Where(f => !declarados.Contains(f)), StringComparer.OrdinalIgnoreCase);
+
+        Debe(delaVoz.Count == 1 && delaVoz.Contains("LiveAudio.cs"),
+            "fuera de los dos declarados, un solo archivo abre micrófono y es LiveAudio "
+            + $"(encontrados: {string.Join(", ", delaVoz)})");
+
+        Debe(conCaptura.Count == 3,
+            $"y en total siguen siendo tres sitios, ni uno más (encontrados: {string.Join(", ", conCaptura)})");
+    }
+
+    /// <summary>
+    /// La raíz del repo, subiendo desde ESTE archivo fuente hasta encontrar «windows-client».
+    ///
+    /// Se parte del <c>CallerFilePath</c> y no del binario a propósito: el arnés copia el ejecutable
+    /// a una carpeta temporal y desde allí no hay ningún repo encima — medido el 2026-09-02, la
+    /// primera versión de esta promesa no pudo mirar nada y lo dijo. El compilador deja escrita la
+    /// ruta del fuente, que sí apunta al sitio correcto.
+    /// </summary>
+    private static string? RaizDelRepo([System.Runtime.CompilerServices.CallerFilePath] string archivo = "")
+    {
+        var dir = new DirectoryInfo(Path.GetDirectoryName(archivo) ?? AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "windows-client", "src"))) return dir.FullName;
+            dir = dir.Parent;
+        }
+        return null;
+    }
+
+    /// <remarks>
+    /// El 2026-08-14 la carita pintaba gris con el audio entrando por el collar: el log probaba
+    /// que la voz SÍ entraba y era el dibujo el que no se enteraba. Un selector con tres opciones
+    /// multiplica por tres esa clase de mentira, así que la fuente activa tiene que ser un dato
+    /// que se pregunta, no un estado que cada pantalla deduce por su cuenta.
+    /// </remarks>
+    private static void LaFuenteSeSabeYSeDice()
+    {
+        var tipo = Ensamblado.GetType("Omi.Selector");
+        if (tipo == null) { Pendiente("Omi.Selector", "1"); return; }
+
+        var m = tipo.GetMethod("Nombre", BindingFlags.Public | BindingFlags.Static);
+        if (m == null) { Pendiente("Omi.Selector.Nombre", "1"); return; }
+
+        // Las tres fuentes se nombran, y con nombres distintos: un selector que llame igual a dos
+        // no distingue nada.
+        var local = m.Invoke(null, new object[] { 0 }) as string ?? "";
+        var ble = m.Invoke(null, new object[] { 1 }) as string ?? "";
+        var tele = m.Invoke(null, new object[] { 2 }) as string ?? "";
+
+        Debe(local.Length > 0 && ble.Length > 0 && tele.Length > 0,
+            "las tres fuentes tienen nombre: micrófono del PC, collar por Bluetooth, collar por teléfono");
+        Debe(local != ble && ble != tele && local != tele,
+            "y los tres nombres son distintos entre sí");
+    }
+
+    /// <remarks>
+    /// Es la promesa 4 llevada a tres fuentes. La 4 ya exige que perder el collar no deje muda a Ü;
+    /// aquí se añade lo que el selector introduce: que la PRIORIDAD sea explícita (con collar, manda
+    /// el collar) y que el cambio diga POR QUÉ. El 2026-08-13 el collar se «perdió» a los 4.416 ms
+    /// porque el umbral medía silencio y no ausencia, y el log no distinguía una cosa de la otra.
+    /// </remarks>
+    private static void MandaElCollarYSeReleva()
+    {
+        var tipo = Ensamblado.GetType("Omi.Selector");
+        var metodo = tipo?.GetMethod("Decidir", BindingFlags.Public | BindingFlags.Instance);
+        if (tipo == null || metodo == null) { Pendiente("Omi.Selector.Decidir", "1"); return; }
+
+        var s = Activator.CreateInstance(tipo);
+
+        // La decisión viaja como enum; aquí se compara por su número para no tener que referenciar
+        // el tipo. Es plomería de reflexión, no una rebaja de lo prometido.
+        int Decide(bool ble, bool tel) => Convert.ToInt32(metodo.Invoke(s, new object[] { ble, tel, 0L }));
+
+        // Con el collar vivo manda el collar, aunque el micrófono local esté disponible.
+        Debe(Decide(true, false) == 1, "con el collar por Bluetooth vivo, manda el collar");
+
+        // Sin collar y con teléfono, manda el teléfono; sin ninguno de los dos, el micrófono local.
+        Debe(Decide(false, true) == 2, "sin collar por Bluetooth pero con teléfono, manda el teléfono");
+        Debe(Decide(false, false) == 0, "sin collar y sin teléfono, la voz vuelve al micrófono del PC");
+
+        var motivo = Propiedad(s!.GetType(), "Motivo", s) as string ?? "";
+        Debe(motivo.Length > 0, "y el último cambio dice por qué cambió, no sólo que cambió");
+    }
+
+    /// <remarks>
+    /// El enlace se pega a mano en el teléfono de cada médico, así que va a viajar por WhatsApp,
+    /// se va a copiar mal y se va a reutilizar entre dos médicos del mismo servicio. Un rechazo
+    /// que diga «error» manda la investigación al sitio equivocado — es el aprendizaje nº2, que
+    /// este repo ya incumplió al escribirlo. Tiene que distinguir SUS causas: código ausente,
+    /// código que no cuadra, código de otro.
+    /// </remarks>
+    private static void ElEnlaceLlevaElCodigo()
+    {
+        var tipo = Ensamblado.GetType("Omi.Emparejamiento");
+        if (tipo == null) { Pendiente("Omi.Emparejamiento", "3"); return; }
+
+        var armar = tipo.GetMethod("Enlace", BindingFlags.Public | BindingFlags.Static);
+        var juzgar = tipo.GetMethod("Motivo", BindingFlags.Public | BindingFlags.Static);
+        if (armar == null || juzgar == null) { Pendiente("Omi.Emparejamiento.Enlace/Motivo", "3"); return; }
+
+        var enlace = armar.Invoke(null, new object[] { "https://ejemplo", "ABCD1234" }) as string ?? "";
+        Debe(enlace.Contains("ABCD1234"), "el enlace lleva el código del médico dentro");
+
+        var bueno = juzgar.Invoke(null, new object[] { "ABCD1234", "ABCD1234" }) as string ?? "no vacío";
+        Debe(bueno.Length == 0, "un código que cuadra no da motivo de rechazo");
+
+        var ajeno = juzgar.Invoke(null, new object[] { "ABCD1234", "OTRO5678" }) as string ?? "";
+        var vacio = juzgar.Invoke(null, new object[] { "ABCD1234", "" }) as string ?? "";
+        Debe(ajeno.Length > 0 && vacio.Length > 0, "un código ajeno y un código ausente se rechazan los dos");
+        Debe(ajeno != vacio,
+            "y se rechazan con motivos DISTINTOS: «no cuadra» no es lo mismo que «no venía ninguno»");
+    }
+
+    /// <remarks>
+    /// Medido el 2026-09-01 y es la razón de esta promesa: Omi apaga el envío del usuario tras
+    /// CIEN respuestas seguidas que no sean 2xx, y lo hace en silencio. Un código caducado que
+    /// conteste 200 deja a Omi mandando audio a un destino muerto para siempre; uno que conteste
+    /// 410 gasta ese presupuesto a propósito y el envío se apaga solo, que es lo correcto.
+    /// </remarks>
+    private static void ElCodigoCaducadoLoDice()
+    {
+        var tipo = Ensamblado.GetType("Omi.Emparejamiento");
+        var metodo = tipo?.GetMethod("Estado", BindingFlags.Public | BindingFlags.Static);
+        if (tipo == null || metodo == null) { Pendiente("Omi.Emparejamiento.Estado", "3"); return; }
+
+        // Emitido en t=0 con 8 horas de vida: a las 7 vale, a las 9 ya no.
+        Debe(200.Equals(metodo.Invoke(null, new object[] { 0L, 7L * 3600_000L })),
+            "dentro de su vida, el código acepta audio");
+        Debe(410.Equals(metodo.Invoke(null, new object[] { 0L, 9L * 3600_000L })),
+            "pasada su vida contesta 410, que es lo que hace que Omi deje de mandar");
+    }
+
+    /// <remarks>
+    /// Medido el 2026-09-01: por el webhook de Omi el audio llega en ráfagas de 4 s; por el
+    /// WebSocket directo, en tramas de 20 ms. Son dos productos distintos —uno sirve para dictar,
+    /// el otro para conversar— y quien consume la voz no puede tener que adivinar cuál le tocó.
+    /// </remarks>
+    private static void LaLatenciaSeDeclara()
+    {
+        var tipo = Ensamblado.GetType("Omi.Selector");
+        var metodo = tipo?.GetMethod("LatenciaNominalMs", BindingFlags.Public | BindingFlags.Static);
+        if (tipo == null || metodo == null) { Pendiente("Omi.Selector.LatenciaNominalMs", "1"); return; }
+
+        var local = (int)(metodo.Invoke(null, new object[] { 0 }) ?? -1);
+        var tele = (int)(metodo.Invoke(null, new object[] { 2 }) ?? -1);
+
+        Debe(local >= 0 && tele >= 0, "las fuentes declaran su latencia nominal en milisegundos");
+        Debe(tele > local, "y la del teléfono es mayor que la del micrófono del PC: el camino es más largo");
+    }
+
+    /// <remarks>
+    /// LA QUE CIERRA EL ASUNTO, y su fecha: 2026-08-25, con el usuario delante de una demo. El
+    /// panel decía «conectado», la carita pintaba el punto azul, y pasaron 3.358.464 ms —56
+    /// minutos— sin una sola trama. WinRT tira las suscripciones GATT al caer el enlace y nadie
+    /// resuscribía; el estado del socket decía la verdad y aun así el indicador mentía.
+    ///
+    /// Por eso el verde NO puede depender del estado de la conexión: depende de que haya llegado
+    /// audio hace poco. Un indicador que mire el socket vuelve a pintar el mismo verde falso.
+    /// </remarks>
+    private static void SinTramaNoHayVerde()
+    {
+        var tipo = Ensamblado.GetType("Omi.Vigia");
+        var metodo = tipo?.GetMethod("HayMicrofono", BindingFlags.Public | BindingFlags.Instance);
+        if (tipo == null || metodo == null) { Pendiente("Omi.Vigia", "4"); return; }
+
+        // Tolerancia de 3 s. El enlace dice «conectado» en los tres casos: es lo único que el bug
+        // del 2026-08-25 tenía a favor.
+        var v = Activator.CreateInstance(tipo, new object[] { 3000 });
+
+        Debe(true.Equals(metodo.Invoke(v, new object[] { true, 1000L, 2000L })),
+            "con una trama de hace un segundo, sí hay micrófono");
+        Debe(false.Equals(metodo.Invoke(v, new object[] { true, 1000L, 9000L })),
+            "con la última trama hace ocho segundos, NO hay micrófono aunque el enlace diga que sí");
+        Debe(false.Equals(metodo.Invoke(v, new object[] { true, 0L, 1000L })),
+            "y sin ninguna trama todavía, tampoco: conectarse no es entregar");
+
+        // Y EL REVÉS, que es la otra mitad de la misma regla y faltaba (2026-09-01): si está
+        // llegando audio, HAY micrófono, diga lo que diga la bandera del enlace. Se descubrió con
+        // el collar entregando 4.815 tramas y el icono sin ponerse verde: `Conectado` sale de un
+        // evento de TRANSICIÓN de Bluetooth, y al abrir sobre un aparato que ya estaba conectado no
+        // hay transición que lo dispare. Exigir las dos cosas convertía la prueba en una opinión.
+        Debe(true.Equals(metodo.Invoke(v, new object[] { false, 1000L, 2000L })),
+            "si llega audio hay micrófono, aunque la bandera del enlace diga que no: la trama es la prueba");
+    }
+
+    /// <remarks>
+    /// El fallo que la trajo, medido el 2026-09-01 con el selector recién dibujado: con el collar
+    /// conectado por Bluetooth, elegir «micrófono del PC» o «teléfono» no hacía nada. La elección se
+    /// pintaba y al segundo siguiente la prioridad automática la deshacía.
+    ///
+    /// Lo que se promete es la ASIMETRÍA: elegir apaga la automática, y sólo la ausencia de lo
+    /// elegido la vuelve a encender. Un selector en el que la automática pueda ganar a una elección
+    /// explícita no es un selector, es una sugerencia.
+    /// </remarks>
+    private static void LoElegidoManda()
+    {
+        var tipo = Ensamblado.GetType("Omi.Selector");
+        var decidir = tipo?.GetMethod("Decidir", BindingFlags.Public | BindingFlags.Instance);
+        var preferir = tipo?.GetMethod("Preferir", BindingFlags.Public | BindingFlags.Instance);
+        if (tipo == null || decidir == null || preferir == null) { Pendiente("Omi.Selector.Preferir", "1"); return; }
+
+        var origen = Ensamblado.GetType("Omi.Origen");
+        if (origen == null) { Pendiente("Omi.Origen", "1"); return; }
+
+        var s = Activator.CreateInstance(tipo);
+        int Decide(bool ble, bool tel) => Convert.ToInt32(decidir.Invoke(s, new object[] { ble, tel, 0L }));
+        // La preferencia viaja como enum anulable; aquí se construye desde su número para no tener
+        // que referenciar el tipo. Plomería de reflexión, no una rebaja de lo prometido.
+        void Preferir(int? n) => preferir.Invoke(s, new object?[] { n is null ? null : Enum.ToObject(origen, n.Value) });
+
+        // EL CASO EXACTO DEL FALLO: collar conectado, y el médico pide el micrófono del PC.
+        Preferir(0);
+        Debe(Decide(true, false) == 0,
+            "con el collar conectado, elegir el micrófono del PC se respeta: la automática no lo deshace");
+
+        // Y el otro medio del mismo fallo: del collar al teléfono.
+        Preferir(2);
+        Debe(Decide(true, true) == 2,
+            "con el collar conectado, elegir el teléfono se respeta");
+
+        // Lo elegido manda mientras EXISTA. Si desaparece, no se puede quedar muda esperándolo.
+        Debe(Decide(true, false) == 1,
+            "si lo elegido deja de estar, se cae a la mejor disponible en vez de quedarse callada");
+
+        // Y sin elección, la prioridad automática sigue mandando: es lo que hace que el collar se
+        // use solo en cuanto aparece, sin que nadie toque nada.
+        Preferir(null);
+        Debe(Decide(true, false) == 1, "sin elección, manda la prioridad automática");
+        Debe(Decide(false, false) == 0, "y sin nada disponible, el micrófono del PC");
+    }
+
+    /// <remarks>
+    /// Lo que se congela aquí es la POLÍTICA, que es la parte que se puede juzgar sin Bluetooth: qué
+    /// hay que hacer cuando el enlace vuelve. El transporte —soltar los objetos de WinRT, redescubrir
+    /// el servicio, releer el códec— vive en <c>windows-client</c> y se comprueba a mano.
+    ///
+    /// La medida que la trajo, del log del 2026-09-01: 149 «volvió a conectarse», 145
+    /// «ObjectDisposedException» al reenganchar, 5 líneas con tramas. Un remiendo que falla el 97 %
+    /// de las veces no es un remiendo: es la prueba de que el camino era otro.
+    /// </remarks>
+    private static void ReconectarEsReconstruir()
+    {
+        var tipo = Ensamblado.GetType("Omi.Enlace");
+        var metodo = tipo?.GetMethod("QueHacer", BindingFlags.Public | BindingFlags.Static);
+        if (tipo == null || metodo == null) { Pendiente("Omi.Enlace.QueHacer", "7"); return; }
+
+        // 0 = nada · 1 = reconstruir entero · 2 = relevar al micrófono local
+        int Hacer(bool conectado, bool huboCaida) => Convert.ToInt32(metodo.Invoke(null, new object[] { conectado, huboCaida }));
+
+        Debe(Hacer(true, true) == 1,
+            "tras una caída, volver a estar conectado obliga a RECONSTRUIR, no a remendar");
+        Debe(Hacer(true, false) == 0,
+            "sin caída de por medio no hay nada que rehacer: un aviso repetido no reconstruye");
+        Debe(Hacer(false, true) == 0,
+            "y mientras siga caído no se reconstruye contra nada: se espera a que vuelva");
+    }
+
+    /// <remarks>
+    /// El caso exacto, contado por el dueño el 2026-09-01: «se mostraba en verde el icono de
+    /// Bluetooth mientras el Omi aún se mostraba en rojo, es decir que el Omi realmente no estaba
+    /// transmitiendo todavía». Lo que pasaba: el reloj de la última trama era UNO SOLO para toda la
+    /// aplicación, y lo movía cualquier audio — incluido el del micrófono del portátil, que estaba
+    /// grabando de respaldo. El collar muerto heredaba la prueba de vida del micrófono.
+    ///
+    /// Lo que se congela: cada fuente responde por sí misma. Es lo que convierte el verde en una
+    /// prueba y no en una coincidencia.
+    /// </remarks>
+    private static void CadaFuenteResponde()
+    {
+        var tipo = Ensamblado.GetType("Omi.Testigo");
+        var anota = tipo?.GetMethod("Anota", BindingFlags.Public | BindingFlags.Instance);
+        var ultima = tipo?.GetMethod("UltimaTrama", BindingFlags.Public | BindingFlags.Instance);
+        var origen = Ensamblado.GetType("Omi.Origen");
+        if (tipo == null || anota == null || ultima == null || origen == null) { Pendiente("Omi.Testigo", "4"); return; }
+
+        var t = Activator.CreateInstance(tipo);
+        void Anotar(int o, long ms) => anota.Invoke(t, new object[] { Enum.ToObject(origen, o), ms });
+        long Ultima(int o) => Convert.ToInt64(ultima.Invoke(t, new object[] { Enum.ToObject(origen, o) }));
+
+        // Llega audio por el micrófono del PC (0). El collar (1) NO puede heredar esa prueba.
+        Anotar(0, 5000L);
+        Debe(Ultima(0) == 5000L, "la fuente que entregó queda anotada con su hora");
+        Debe(Ultima(1) == 0L,
+            "y la que no entregó sigue a cero: el audio de una no es prueba de vida de la otra");
+        Debe(Ultima(2) == 0L, "ni de la tercera");
+
+        // Cada una lleva su propio reloj, sin pisarse.
+        Anotar(1, 7000L);
+        Debe(Ultima(0) == 5000L && Ultima(1) == 7000L,
+            "dos fuentes entregando llevan dos relojes distintos, no uno compartido");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
