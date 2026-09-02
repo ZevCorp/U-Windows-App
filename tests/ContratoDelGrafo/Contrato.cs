@@ -290,6 +290,15 @@ internal static class Contrato
         Prueba("105. lo dicho durante la demo viaja con su paso: la frase queda anclada al paso que sonaba", LoDichoViajaConSuPaso);
         Prueba("106. las skills enseñadas se anuncian al cerebro: se piden por nombre, y el catálogo dice cuándo usarlas", LasSkillsSeAnuncian);
 
+        // ── El aura de aprendizaje (spec 006) ────────────────────────────────
+        //
+        // Mientras Ü aprende, lo único que lo decía era un botón de 24 px en rojo y la pose de la
+        // carita —plegada en una esquina, porque el operador está mirando SAP—, y ese rojo ya
+        // significa «fallo» en la misma superficie (UiPalette). La pantalla entera tiene que
+        // decirlo, en el color de Ü, sin tapar el trabajo (2026-09-02, pedido por el usuario).
+        Console.WriteLine();
+        Prueba("107. mientras Ü aprende, los bordes de la pantalla lo dicen: el aura se enciende al grabar, se apaga al terminar y deja el centro limpio", ElAuraDiceQueUAprende);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -3394,6 +3403,45 @@ internal static class Contrato
         using var doc2 = JsonDocument.Parse((string)metodo.Invoke(null, new object?[] { "Alguien", vacio })!);
         Debe(Str(doc2.RootElement, "p_specialty_code") == "" && Str(doc2.RootElement, "p_practice_city") == "",
             "sin dato previo, los demás campos viajan vacíos — no se fabrica una especialidad de la nada");
+    }
+
+    // ── El aura de aprendizaje (spec 006) ────────────────────────────────────
+
+    private static void ElAuraDiceQueUAprende()
+    {
+        // Se juzga LA REGLA, separada del dibujo, por el mismo camino que la 104 juzga
+        // SesionDeDemo: el overlay real construye sus pinceles muestreando esta misma función,
+        // así lo juzgado y lo pintado no pueden discrepar (aprendizaje nº16).
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelAura");
+        var decidir = t?.GetMethod("Decidir");
+        var opacidad = t?.GetMethod("Opacidad");
+        Debe(t != null && decidir != null && opacidad != null,
+            "todavía no existe «ReglaDelAura» (fase 1 de la spec 006). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || decidir == null || opacidad == null) return;
+
+        string Fase(bool ensenando, bool grabando)
+            => decidir.Invoke(null, new object[] { ensenando, grabando })!.ToString()!;
+
+        Debe(Fase(false, false) == "Apagada",
+            "sin enseñar no hay aura: un borde encendido en reposo no significaría nada");
+        Debe(Fase(true, false) == "Preparando",
+            "pulsado Enseñar y aún sin grabar (la cuenta atrás), el aura avisa TENUE: encendida "
+            + "del todo diría que ya graba, y todavía no");
+        Debe(Fase(true, true) == "Aprendiendo",
+            "grabando, el aura está encendida: es el momento que existe para decir");
+        Debe(Fase(false, true) == "Apagada",
+            "al pulsar terminar el aura se apaga AUNQUE el cierre siga subiendo el video: "
+            + "encendida diría que sigue aprendiendo lo que hagas ahora, y no");
+
+        double O(double distanciaAlBorde)
+            => (double)opacidad.Invoke(null, new object[] { distanciaAlBorde, 96.0 })!;
+
+        Debe(O(0) > 0.5, "en el borde mismo el aura se ve");
+        Debe(O(96) == 0 && O(500) == 0,
+            "a partir del grosor no queda NADA: el centro, donde está el trabajo, se deja limpio");
+        Debe(O(0) > O(32) && O(32) > O(64) && O(64) > O(95) && O(95) > 0,
+            "y entre medias baja sin escalones: es un degradado, no una franja");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

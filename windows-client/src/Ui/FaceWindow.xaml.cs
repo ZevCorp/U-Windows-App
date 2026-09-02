@@ -77,6 +77,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private readonly UiaSurface _teachUiaSurface = new() { Log = s => LogBus.Log("teach-uia", s) };
     private readonly SapGuiSurface _teachSapSurface = new();
     private bool _teaching;
+    // El aura en los bordes del monitor mientras Ü aprende (spec 006). Se crea la primera vez que
+    // hace falta y se reutiliza: ocultar y volver a mostrar es más barato que otra ventana por capas.
+    private AuraDeAprendizaje? _aura;
     private UiInspector? _inspector;
     private SurfaceLocator? _locator;
     private LocatorBadge? _badge;
@@ -2127,14 +2130,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             ProcessVideo = _config.ProcessTeachVideo, // toggle del panel Backend: procesar o no el video con IA
         };
         _teachSession.StatusChanged += (_, msg) => Dispatcher.Invoke(() => SetStatus(msg));
+        _teachSession.PasosEnviados += (_, n) => Dispatcher.Invoke(() => _aura?.Pasos(n));
 
-        SetTeachingUi(true);
+        SetTeachingUi(true); // el aura arranca TENUE aquí: enseñando, pero aún sin grabar
         ShowTalk(); // el conteo regresivo y el estado de la grabación se ven ahí
         try
         {
             // Título vacío: se autogenera al final desde lo aprendido (WorkflowLearner en Graph).
             // StartAsync incluye un countdown de 3s para que cambies a la app que vas a enseñar.
             await _teachSession.StartAsync("", CancellationToken.None);
+            PintarAura(); // ya graba: el aura se enciende del todo y respira
         }
         catch (Exception ex)
         {
@@ -2152,6 +2157,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         _teaching = teaching;
         RefreshMood();   // grabar es un estado de la cara, no solo un color de botón
+        PintarAura();    // y de la pantalla entera: el aura sigue a la misma bandera
         TeachBtn.Content = teaching ? "⏸" : "🎓";
         TeachBtn.ToolTip = teaching
             ? "Enseñando: clic para terminar y guardar lo aprendido"
@@ -2164,6 +2170,26 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // haya que acordarse de este sitio.
         RestartTeachBtn.Visibility = Visibility.Collapsed;
         UpdateContextZone();
+    }
+
+    /// <summary>
+    /// El aura de los bordes sigue a la REGLA (promesa 107, spec 006), y la regla se alimenta de
+    /// las dos banderas que ya existían: «enseñando» (el botón) y «grabando» (la sesión). No se
+    /// decide aquí en qué fase está: se pregunta, para que lo que se pinta sea lo que el contrato
+    /// juzga. Se llama desde los tres sitios en que cambia alguna de las dos: al pulsar Enseñar
+    /// (preparando), al arrancar la grabación (aprendiendo) y al terminar o fallar (apagada).
+    /// </summary>
+    private void PintarAura()
+    {
+        var fase = ReglaDelAura.Decidir(_teaching, _teachSession?.IsRecording == true);
+        if (fase == FaseDelAura.Apagada) { _aura?.Mostrar(fase); return; }
+
+        bool nueva = _aura == null;
+        _aura ??= new AuraDeAprendizaje();
+        _aura.Mostrar(fase);
+        // Las dos ventanas son Topmost y gana la última en aparecer: sin esto, la primera vez que
+        // el aura sale, la carita plegada en el borde queda DEBAJO del degradado.
+        if (nueva) { Topmost = false; Topmost = true; }
     }
 
     /// <summary>

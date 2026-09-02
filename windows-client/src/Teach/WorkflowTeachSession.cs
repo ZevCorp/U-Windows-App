@@ -36,6 +36,10 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
     /// <summary>Progreso legible para la UI: countdown, superficie detectada, pasos enviados, errores.</summary>
     public event EventHandler<string>? StatusChanged;
 
+    /// <summary>Cuántos pasos lleva enviados la demo, como NÚMERO. El aura de aprendizaje lo pinta
+    /// en su píldora; sacarlo del texto de <see cref="StatusChanged"/> sería parsear prosa.</summary>
+    public event EventHandler<int>? PasosEnviados;
+
     /// <summary>
     /// ¿Procesar el video con el LLM al detener? Si es false, el video se graba y guarda igual (visible
     /// en 🎞 Videos) pero NO se sube al LLM para resumir — se salta el paso que da timeout (504). Lo fija
@@ -122,6 +126,7 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
                 $"Grabando pasos… {status.StepsSent} enviados"
                 + (avisado ? " · ⚠ larga: mejor pártela en dos" : "")
                 + (status.LastError != null ? $" (último error: {status.LastError})" : ""));
+            PasosEnviados?.Invoke(this, status.StepsSent);
         };
 
         string workflowId = await recorder.StartAsync(description, ct);
