@@ -1,4 +1,7 @@
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -20,7 +23,23 @@ public partial class App : Application
     {
         try
         {
-            VelopackApp.Build().Run();
+            // EL ACCESO DIRECTO DE LA CONSULTA, CREADO POR EL INSTALADOR, y no a mano (2026-09-02,
+            // encontrado instalando en una máquina real): Velopack 1.2.0 ya crea solo el acceso
+            // directo GENÉRICO al instalar —sin argumentos—, así que abre la carita. Sin este hook,
+            // la única forma de llegar a la ventana de consulta era un script aparte
+            // (`scripts\atajo-consulta.ps1`) que nadie ejecuta en la máquina de un médico.
+            //
+            // Los tres momentos cubiertos, y por qué los tres: `OnAfterInstallFastCallback` para la
+            // instalación en limpio (el caso de hoy); `OnAfterUpdateFastCallback` para las máquinas
+            // que YA tienen una versión sin este acceso directo y sólo reciben la actualización;
+            // `OnFirstRun`, sin límite de tiempo, como red de seguridad si alguno de los dos
+            // «FastCallback» no llegara a dispararse. Los tres llaman al mismo método idempotente:
+            // repetirlo sólo vuelve a escribir el mismo archivo.
+            VelopackApp.Build()
+                .OnAfterInstallFastCallback(_ => CrearAccesoDirectoDeConsulta())
+                .OnAfterUpdateFastCallback(_ => CrearAccesoDirectoDeConsulta())
+                .OnFirstRun(_ => CrearAccesoDirectoDeConsulta())
+                .Run();
 
             var app = new App();
             app.InitializeComponent();
@@ -98,5 +117,53 @@ public partial class App : Application
             arranque.Correr();
         }
         finally { ShutdownMode = modoPrevio; }
+    }
+
+    /// <summary>
+    /// El acceso directo «Miracle Consulta.lnk» en el escritorio, apuntando a ESTE .exe con
+    /// <c>--consulta</c>. Idempotente: se puede llamar tantas veces como haga falta.
+    ///
+    /// SE HABLA COM POR REFLEXIÓN Y NO CON <c>dynamic</c> A PROPÓSITO: evita que el proyecto tenga
+    /// que referenciar <c>Microsoft.CSharp</c> por una sola llamada. Es exactamente el mismo objeto
+    /// —<c>WScript.Shell</c>— que ya usa <c>scripts\atajo-consulta.ps1</c>, que sigue viviendo como
+    /// la vía manual para desarrollo.
+    ///
+    /// SE LLAMA DESDE HOOKS «FastCallback» (30 s de margen antes de que Velopack mate el proceso),
+    /// así que cualquier fallo se traga y se anota: colgar la instalación por no poder dibujar un
+    /// icono sería un daño mucho mayor que el que arregla.
+    /// </summary>
+    private static void CrearAccesoDirectoDeConsulta()
+    {
+        try
+        {
+            string exe = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+            if (string.IsNullOrEmpty(exe)) { LogBus.Log("instalador", "sin ruta del .exe: no se crea el acceso directo"); return; }
+
+            string escritorio = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            string lnk = Path.Combine(escritorio, "Miracle Consulta.lnk");
+
+            var tipoShell = Type.GetTypeFromProgID("WScript.Shell");
+            if (tipoShell == null) { LogBus.Log("instalador", "WScript.Shell no está disponible: no se crea el acceso directo"); return; }
+
+            object shell = Activator.CreateInstance(tipoShell)!;
+            object atajo = shell.GetType().InvokeMember("CreateShortcut",
+                BindingFlags.InvokeMethod, null, shell, new object[] { lnk })!;
+            var tipoAtajo = atajo.GetType();
+
+            tipoAtajo.InvokeMember("TargetPath", BindingFlags.SetProperty, null, atajo, new object[] { exe });
+            tipoAtajo.InvokeMember("Arguments", BindingFlags.SetProperty, null, atajo, new object[] { "--consulta" });
+            tipoAtajo.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, atajo,
+                new object[] { Path.GetDirectoryName(exe) ?? "" });
+            tipoAtajo.InvokeMember("IconLocation", BindingFlags.SetProperty, null, atajo, new object[] { exe + ",0" });
+            tipoAtajo.InvokeMember("Description", BindingFlags.SetProperty, null, atajo,
+                new object[] { "Grabar una consulta médico-paciente con Miracle" });
+            tipoAtajo.InvokeMember("Save", BindingFlags.InvokeMethod, null, atajo, null);
+
+            LogBus.Log("instalador", "acceso directo de consulta creado: " + lnk);
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("instalador", $"no se pudo crear el acceso directo de consulta: {e.GetType().Name}: {e.Message}");
+        }
     }
 }

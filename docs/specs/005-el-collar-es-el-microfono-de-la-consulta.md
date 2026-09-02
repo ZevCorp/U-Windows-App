@@ -123,6 +123,24 @@ puede crecer en silencio, que es como llegó a tres.
 El otro declarado, `ScreenRecorder`, **no es deuda**: graba la sala en un vídeo de enseñanza, que es
 otro producto. Forzarlo por el selector sería un error, no un arreglo.
 
+## Deuda con nombre: dos identidades compitiendo al arrancar
+
+**2026-09-02, encontrado en una instalación real, con el usuario delante.** Al abrir `U.exe
+--consulta` en un equipo limpio salió el `OnboardingWindow` **viejo** —solo nombre y correo, sin
+contraseña— en vez del `LoginWindow` de `SesionMiracle` que la consulta necesita de verdad.
+
+La causa, leída en `FaceWindow.xaml.cs:996-1022`: la carita arranca **siempre** por `StartupUri`,
+`--consulta` sólo añade la ventana de consulta encima, y las dos disparan su propio arranque de
+identidad en paralelo. La carita mira si hay sesión de Supabase (`sesion.Restaurar()`); si en ese
+instante todavía no la hay —la ventana de consulta puede no haber llegado a pedirla— cae a
+`Identidad.HayQuePreguntar` y abre el onboarding viejo, que **no crea ninguna `SesionMiracle`**: es
+un sistema de identidad distinto y anterior, pensado para la telemetría, no para la clínica.
+
+El dueño, viéndolo: *«esa vieja ya no debería ni existir»*. Se anota como deuda y no se toca aquí, a
+propósito: es una carrera entre dos arranques dentro de la misma ventana de tiempo, y arreglarla bien
+es decidir **cuál de las dos identidades manda** —o fundirlas en una— con el mismo cuidado que
+`SesionMiracle`/`Identidad.cs` ya tuvieron, no un parche para ganar la carrera.
+
 ## Hallazgos
 
 - **2026-09-01, probando el selector recién dibujado** — **la puerta estaba cerrada por dentro.** Con
