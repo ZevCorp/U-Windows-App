@@ -18,6 +18,24 @@ public static class Nube
     public static string ClavePublicable =>
         Ambiente("MIRACLE_SUPABASE_KEY") ?? "sb_publishable_qroW231Ts7UYAEgr_f5cnQ_3SrW2ZrI";
 
+    /// <summary>
+    /// La referencia del proyecto, sacada de la propia URL en vez de escrita otra vez.
+    ///
+    /// Hace falta suelta porque Realtime no vive en <c>https://…</c> sino en
+    /// <c>wss://&lt;ref&gt;.supabase.co/realtime/v1/websocket</c>. Escribirla aparte sería tener el
+    /// mismo dato en dos sitios, y el día que se apunte a otro entorno con la variable de entorno
+    /// uno de los dos se quedaría viejo — que es el aprendizaje nº16 en su forma más barata.
+    /// </summary>
+    public static string ProyectoSupabase
+    {
+        get
+        {
+            var host = new Uri(SupabaseUrl).Host;          // zyvfamlhlmztliexvmej.supabase.co
+            int punto = host.IndexOf('.');
+            return punto > 0 ? host[..punto] : host;
+        }
+    }
+
     /// <summary>Vacío no es ausente: una variable puesta a "" cae al valor por defecto.</summary>
     private static string? Ambiente(string nombre)
     {

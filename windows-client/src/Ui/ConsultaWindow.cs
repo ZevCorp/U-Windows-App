@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Omi;
 using U.Graph;
 using U.WindowsClient.Clinical;
 using U.WindowsClient.Clinical.Transcripcion;
@@ -75,7 +76,61 @@ public sealed class ConsultaWindow : Window
     private readonly TextBlock _etiquetaDeGrabar;
     private readonly TextBlock _estado;
 
+    // ── el micrófono ─────────────────────────────────────────────────────────
+    private readonly Button _microfono;
+    private readonly Popup _menuMicrofono;
+    private readonly TextBlock _iconoMicrofono;
+
+    /// <summary>Quién manda entre las tres fuentes. La decisión es suya, no de esta ventana.</summary>
+    private readonly Omi.Selector _selector = new();
+
+    /// <summary>
+    /// Quién decide si se puede pintar verde. Tres segundos sin audio y deja de decir que lo hay.
+    ///
+    /// TRES Y NO TREINTA: esto sólo decide qué se PINTA, no cuándo se cambia de micrófono (eso es
+    /// <c>Omi.Relevo</c>, y su umbral es largo a propósito). Un verde que sobrevive medio minuto a
+    /// la avería es peor que un verde que parpadea — el del 2026-08-25 sobrevivió 56 minutos.
+    /// </summary>
+    private readonly Vigia _vigia = new(3000);
+
+    /// <summary>
+    /// Cuándo entregó cada fuente, POR SEPARADO.
+    ///
+    /// Era un solo reloj compartido y eso pintaba de verde al collar con el collar en rojo: el
+    /// micrófono del portátil grababa de respaldo y sus tramas avalaban al collar muerto
+    /// (2026-09-01, visto por el dueño). Cada fuente responde por sí misma — promesa 32.
+    /// </summary>
+    private readonly Testigo _testigo = new();
+
+    /// <summary>El código de este médico en este PC, y cuándo se emitió. Vacío hasta que se pida.</summary>
+    private string _codigo = "";
+    private long _codigoEmitidoMs;
+
+    /// <summary>
+    /// Dónde escucha el receptor del teléfono. Se puede pisar con <c>U_OMI_DIRECTO</c> para probar
+    /// contra otro despliegue sin recompilar.
+    /// </summary>
+    private static string BaseDelEnlace =>
+        Environment.GetEnvironmentVariable("U_OMI_DIRECTO") is { Length: > 0 } v
+            ? v
+            : "wss://zyvfamlhlmztliexvmej.supabase.co/functions/v1/omi-directo";
+
+    private const string GlifoMicrofono = "";
+    private const string GlifoBluetooth = "";
+    private const string GlifoTelefono = "";
+
     private readonly DispatcherTimer _cronometro = new() { Interval = TimeSpan.FromSeconds(1) };
+
+    /// <summary>
+    /// Repinta el indicador una vez por segundo, GRABANDO O NO.
+    ///
+    /// No se cuelga del cronómetro —que sólo corre mientras se graba— porque la pregunta «¿me va a
+    /// oír?» se hace ANTES de pulsar. Y no se cuelga sólo de los eventos de audio porque el estado
+    /// que hay que detectar es justo la AUSENCIA de eventos: un enlace que se quedó mudo no manda
+    /// ninguna notificación diciéndolo.
+    /// </summary>
+    private readonly DispatcherTimer _pulso = new() { Interval = TimeSpan.FromSeconds(1) };
+
     private DateTimeOffset _empezoAGrabar;
 
     private string _plantillaId = "";
@@ -192,8 +247,53 @@ public sealed class ConsultaWindow : Window
             PopupAnimation = PopupAnimation.Fade,
         };
 
+        // ── el micrófono, al lado del nombre ─────────────────────────────────
+        //
+        // UN ICONO Y NADA MÁS. Es una preferencia que se toca una vez cada varios días: no merece
+        // ni una etiqueta permanente ni un renglón propio. Lo que tiene que verse de un vistazo es
+        // el COLOR, que dice si está entrando voz; el resto se pregunta pulsando.
+        _microfono = new Button
+        {
+            Width = 28,
+            Height = 28,
+            Margin = new Thickness(2, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(14),
+        };
+        _iconoMicrofono = new TextBlock
+        {
+            // Segoe MDL2 y no un emoji, por lo mismo que la tira de la carita: un emoji lo pinta la
+            // fuente del sistema, trae su propio color y su propio peso, y rompe la línea.
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            Text = GlifoMicrofono,
+            FontSize = 13,
+            Foreground = Estudio.TintaMedia,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _microfono.Content = _iconoMicrofono;
+        _microfono.MouseEnter += (_, __) => _microfono.Background = Estudio.SuperficieSuave;
+        _microfono.MouseLeave += (_, __) => _microfono.Background = Brushes.Transparent;
+        _microfono.Click += (_, __) => { PintarMenuDeMicrofono(); _menuMicrofono.IsOpen = !_menuMicrofono.IsOpen; };
+
+        _menuMicrofono = new Popup
+        {
+            PlacementTarget = _microfono,
+            Placement = PlacementMode.Bottom,
+            StaysOpen = false,
+            AllowsTransparency = true,
+            PopupAnimation = PopupAnimation.Fade,
+        };
+
+        var izquierdaDeLaCabecera = new StackPanel { Orientation = Orientation.Horizontal };
+        izquierdaDeLaCabecera.Children.Add(_quienBoton);
+        izquierdaDeLaCabecera.Children.Add(_microfono);
+
         cabecera.Children.Add(botonera);
-        cabecera.Children.Add(_quienBoton);
+        cabecera.Children.Add(izquierdaDeLaCabecera);
         Grid.SetRow(cabecera, 0);
         raiz.Children.Add(cabecera);
 
@@ -352,9 +452,314 @@ public sealed class ConsultaWindow : Window
         _dictado.Fallo += m => Dispatcher.BeginInvoke(() => Estado("Dictado: " + m));
         _consulta.Cambio += _ => Dispatcher.BeginInvoke(PintarSegunEstado);
 
+        // LA ÚNICA PRUEBA DE QUE HAY MICRÓFONO ES QUE LLEGUE AUDIO. Anotar la hora de cada trozo es
+        // barato y es lo que impide repetir el verde falso del 2026-08-25: 56 minutos de «conectado»
+        // sin una sola trama, con el usuario delante de una demo.
+        // SE ANOTA A NOMBRE DE QUIEN ENTREGÓ, y esa es toda la diferencia: LiveAudio sabe si el
+        // trozo viene del collar o del micrófono del portátil, y sin preguntárselo el respaldo
+        // acaba avalando a la fuente que falló.
+        _audio.Capturado += _ => _testigo.Anota(
+            _audio.PorElCollar ? Origen.CollarPorBluetooth
+            : _audio.PorElTelefono ? Origen.CollarPorTelefono
+            : Origen.MicrofonoDelPc,
+            Environment.TickCount64);
+        _audio.FuenteCambio += () => Dispatcher.BeginInvoke(PintarMicrofono);
+        CollarPermanente.Cambio += () => Dispatcher.BeginInvoke(PintarMicrofono);
+        _pulso.Tick += (_, __) => PintarMicrofono();
+        _pulso.Start();
+
+        // SE RECONECTA SOLO AL ARRANCAR si el código sigue vivo, igual que el collar por Bluetooth
+        // se reconecta solo. Sin esto habría que volver a elegir «Teléfono» cada vez que se abre la
+        // app, aunque el teléfono ya esté configurado y mandando.
+        RestaurarElCodigo();
+        if (_codigo.Length > 0)
+        {
+            _selector.Preferir(Origen.CollarPorTelefono);
+            _ = _audio.PasarAlTelefonoAsync(Nube.ProyectoSupabase, Nube.ClavePublicable, _codigo);
+            LogBus.Log("telefono", "código recordado de una sesión anterior: volviendo a escuchar el canal");
+        }
+
+        PintarMicrofono();
+
         Mostrar(nota: true);
         Loaded += async (_, __) => await ArrancarAsync();
-        Closed += (_, __) => { _cronometro.Stop(); _dictado.Dispose(); _audio.Dispose(); _http.Dispose(); };
+        Closed += (_, __) => { _cronometro.Stop(); _pulso.Stop(); _dictado.Dispose(); _audio.Dispose(); _http.Dispose(); };
+    }
+
+    // ── el micrófono ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// El menú: tres líneas y nada más. Se repinta al abrirlo para marcar cuál manda.
+    ///
+    /// SIN TEXTOS DE AYUDA, y es una corrección con fecha (2026-09-01, dicha por el dueño mirando la
+    /// primera versión): «los usuarios no van a leer esos textos largos». Una preferencia de tres
+    /// opciones no necesita que le expliquen cada una — necesita que se vea cuál está puesta.
+    /// </summary>
+    private void PintarMenuDeMicrofono()
+    {
+        var lista = new StackPanel { Margin = new Thickness(5) };
+        lista.Children.Add(FilaDeMicrofono(Origen.MicrofonoDelPc, GlifoMicrofono, "Computador"));
+        lista.Children.Add(FilaDeMicrofono(Origen.CollarPorBluetooth, GlifoBluetooth, "Collar Omi"));
+        lista.Children.Add(FilaDeMicrofono(Origen.CollarPorTelefono, GlifoTelefono, "Teléfono"));
+
+        // El enlace SÓLO cuando el teléfono es lo elegido: hasta entonces no significa nada y sería
+        // una línea de ruido en un menú de tres.
+        if (_selector.Preferida == Origen.CollarPorTelefono) lista.Children.Add(CajaDelEnlace());
+
+        var caja = new Border
+        {
+            CornerRadius = new CornerRadius(14),
+            Background = Estudio.Superficie,
+            BorderBrush = Estudio.Borde,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(5),
+        };
+        caja.Child = lista;
+        _menuMicrofono.Child = Estudio.Elevar(caja, Estudio.Sombra2);
+    }
+
+    private Button FilaDeMicrofono(Origen origen, string glifo, string etiqueta)
+    {
+        bool manda = _selector.Activa == origen;
+
+        var fila = new StackPanel { Orientation = Orientation.Horizontal };
+        fila.Children.Add(new TextBlock
+        {
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            Text = glifo,
+            FontSize = 12,
+            Foreground = manda ? Estudio.Tinta : Estudio.TintaMedia,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(2, 0, 10, 0),
+            Width = 16,
+        });
+        fila.Children.Add(new TextBlock
+        {
+            Text = etiqueta,
+            FontSize = 13,
+            FontWeight = manda ? FontWeights.SemiBold : FontWeights.Normal,
+            Foreground = manda ? Estudio.Tinta : Estudio.TintaMedia,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+
+        var b = new Button
+        {
+            Content = fila,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            MinWidth = 148,
+            Padding = new Thickness(10, 7, 12, 7),
+            Background = manda ? Estudio.SuperficieSuave : Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(10),
+        };
+        b.Click += (_, __) =>
+        {
+            // CAMBIAR DE MICRÓFONO A MEDIA GRABACIÓN dejaría la mitad del dictado en una fuente y la
+            // otra mitad en otra, con el reloj partido. Se bloquea igual que el cambio de cuenta.
+            if (_consulta.Estado == EstadoDeConsulta.Grabando)
+            {
+                _menuMicrofono.IsOpen = false;
+                Estado("Estás grabando: para antes de cambiar de micrófono.");
+                return;
+            }
+
+            _selector.Preferir(origen);
+            // LO DE ANTES NO AVALA LO DE AHORA. Al elegir se rehace el enlace, y una trama de hace
+            // dos segundos pintaría verde un collar que todavía no ha entregado nada por el enlace
+            // nuevo — que es el fallo del 2026-08-25 con otro disfraz.
+            _testigo.Olvida(origen);
+            switch (origen)
+            {
+                case Origen.CollarPorBluetooth:
+                    _audio.PasarAlCollar();
+                    _ = CollarPermanente.Permanente ? CollarPermanente.ConectarAsync() : CollarPermanente.EncenderAsync();
+                    break;
+                case Origen.CollarPorTelefono:
+                    // El teléfono no usa el Bluetooth de este PC: si el collar estaba enlazado aquí,
+                    // hay que soltarlo o seguiría oyéndose por él. Un collar habla con un aparato.
+                    _audio.PasarAlLocal("se eligió oír por el teléfono");
+                    PrepararElEnlace();
+                    _ = _audio.PasarAlTelefonoAsync(Nube.ProyectoSupabase, Nube.ClavePublicable, _codigo);
+                    break;
+                default:
+                    _audio.PasarAlLocal("lo eligió el médico: micrófono del computador");
+                    break;
+            }
+
+            PintarMicrofono();
+            // El menú se queda abierto al elegir teléfono: el enlace es lo siguiente que hay que
+            // hacer, y cerrarlo obligaría a volver a abrirlo para nada.
+            if (origen == Origen.CollarPorTelefono) PintarMenuDeMicrofono();
+            else _menuMicrofono.IsOpen = false;
+        };
+        return b;
+    }
+
+    /// <summary>
+    /// El enlace, a la vista y con su botón de copiar.
+    ///
+    /// SE ENSEÑA, no sólo se copia al portapapeles (2026-09-01, pedido por el dueño): un mensaje que
+    /// diga «copiado» obliga a creerse que pasó algo invisible. Verlo y poder copiarlo otra vez es
+    /// lo que hace que se entienda sin leer una sola línea de ayuda.
+    /// </summary>
+    private UIElement CajaDelEnlace()
+    {
+        var caja = new StackPanel { Margin = new Thickness(6, 8, 6, 4) };
+        caja.Children.Add(Estudio.Rotulo("Pega esto en la app de Omi"));
+
+        var enlace = new TextBox
+        {
+            Text = _codigo.Length > 0 ? Emparejamiento.Enlace(BaseDelEnlace, _codigo) : "",
+            IsReadOnly = true,
+            FontSize = 10.5,
+            FontFamily = new FontFamily("Cascadia Mono, Consolas, monospace"),
+            Foreground = Estudio.TintaMedia,
+            Background = Estudio.SuperficieSuave,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(8, 6, 8, 6),
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 230,
+            Margin = new Thickness(0, 5, 0, 6),
+        };
+        enlace.GotFocus += (_, __) => enlace.SelectAll();
+
+        var textoDelBoton = new TextBlock { Text = "Copiar", FontSize = 12, FontWeight = FontWeights.SemiBold };
+        var copiar = new Button
+        {
+            Content = textoDelBoton,
+            Foreground = Estudio.Acento,
+            Background = Estudio.AcentoSuave,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(14, 6, 14, 6),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(12),
+        };
+        copiar.Click += (_, __) =>
+        {
+            try { Clipboard.SetText(enlace.Text); textoDelBoton.Text = "Copiado"; }
+            catch (Exception e)
+            {
+                // El portapapeles lo puede tener tomado otra aplicación. Que falle copiar no puede
+                // dejar al médico sin el enlace — por eso está a la vista y se puede copiar a mano.
+                LogBus.Log("consulta-ui", "no se pudo copiar el enlace: " + e.GetType().Name + ": " + e.Message);
+                textoDelBoton.Text = "Cópialo a mano";
+            }
+        };
+
+        caja.Children.Add(enlace);
+        caja.Children.Add(copiar);
+        return caja;
+    }
+
+    /// <summary>
+    /// Emite el código de este médico si no hay uno vivo, y lo deja en el portapapeles.
+    ///
+    /// EL CÓDIGO SOBREVIVE AL CIERRE DE LA APP, y sin esto la función no servía para trabajar: cada
+    /// arranque emitía uno nuevo, así que el médico tendría que volver a pegar el enlace en el
+    /// teléfono cada mañana. Un emparejamiento que hay que rehacer a diario no es un emparejamiento.
+    /// Vive las 8 horas del turno y después se renueva solo.
+    /// </summary>
+    private void PrepararElEnlace()
+    {
+        var ahora = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        if (_codigo.Length == 0 || !Emparejamiento.Vivo(_codigoEmitidoMs, ahora))
+        {
+            _codigo = Emparejamiento.Nuevo();
+            _codigoEmitidoMs = ahora;
+            GuardarElCodigo();
+            LogBus.Log("telefono", $"código de emparejamiento nuevo · vive {Emparejamiento.VidaMs / 3600000} h");
+        }
+        try { Clipboard.SetText(Emparejamiento.Enlace(BaseDelEnlace, _codigo)); } catch { /* está a la vista */ }
+    }
+
+    private static string RutaDelCodigo =>
+        System.IO.Path.Combine(UserPaths.Roaming, "U", "omi-telefono.json");
+
+    private void GuardarElCodigo()
+    {
+        try
+        {
+            var dir = System.IO.Path.GetDirectoryName(RutaDelCodigo);
+            if (dir != null) System.IO.Directory.CreateDirectory(dir);
+            System.IO.File.WriteAllText(RutaDelCodigo,
+                System.Text.Json.JsonSerializer.Serialize(new { codigo = _codigo, emitido = _codigoEmitidoMs }));
+        }
+        catch (Exception e) { LogBus.Log("telefono", $"no se pudo guardar el código: {e.GetType().Name}: {e.Message}"); }
+    }
+
+    private void RestaurarElCodigo()
+    {
+        try
+        {
+            if (!System.IO.File.Exists(RutaDelCodigo)) return;
+            using var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(RutaDelCodigo));
+            var raiz = doc.RootElement;
+            var codigo = raiz.TryGetProperty("codigo", out var c) ? c.GetString() ?? "" : "";
+            var emitido = raiz.TryGetProperty("emitido", out var e) ? e.GetInt64() : 0;
+            if (codigo.Length == 0) return;
+
+            // Un código caducado no se restaura: dejarlo puesto haría que el enlace del teléfono
+            // siguiera pareciendo válido cuando el receptor ya lo rechaza.
+            if (!Emparejamiento.Vivo(emitido, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())) return;
+
+            _codigo = codigo;
+            _codigoEmitidoMs = emitido;
+        }
+        catch (Exception e) { LogBus.Log("telefono", $"no se pudo leer el código guardado: {e.GetType().Name}: {e.Message}"); }
+    }
+
+    /// <summary>
+    /// Pinta el icono del micrófono: qué fuente manda y si está entregando de verdad.
+    ///
+    /// EL COLOR LO DA <see cref="Vigia"/>, NUNCA EL ESTADO DE LA CONEXIÓN. Es la promesa 29 y tiene
+    /// fecha: el 2026-08-25 el panel decía «conectado», la carita pintaba azul, y pasaron 56 minutos
+    /// sin una sola trama. Verde aquí significa exactamente una cosa: llegó audio hace menos de tres
+    /// segundos.
+    /// </summary>
+    private void PintarMicrofono()
+    {
+        var ahora = Environment.TickCount64;
+
+        // DISPONIBLE ES ENTREGANDO, no «elegido». Que el canal se una no prueba que llegue audio:
+        // el collar puede estar apagado al otro lado. LiveAudio sólo pone PorElTelefono cuando ha
+        // recibido la primera trama de verdad.
+        bool porTelefono = _audio.PorElTelefono;
+        var origen = _selector.Decidir(CollarPermanente.Conectado, porTelefono, ahora);
+
+        bool enlaceEnPie = origen switch
+        {
+            Origen.CollarPorBluetooth => CollarPermanente.Conectado,
+            Origen.CollarPorTelefono => _audio.PorElTelefono,
+            _ => true,                           // el micrófono del PC está siempre
+        };
+
+        long ultimaDeEsta = _testigo.UltimaTrama(origen);
+        bool entregando = _vigia.HayMicrofono(enlaceEnPie, ultimaDeEsta, ahora);
+        bool grabando = _consulta.Estado == EstadoDeConsulta.Grabando;
+
+        _iconoMicrofono.Text = origen switch
+        {
+            Origen.CollarPorBluetooth => GlifoBluetooth,
+            Origen.CollarPorTelefono => GlifoTelefono,
+            _ => GlifoMicrofono,
+        };
+
+        // EL VERDE SÓLO APARECE GRABANDO, y no es una limitación: sin grabar el micrófono está
+        // cerrado, así que no hay tramas que puedan probar nada. Lo demás sería adornar.
+        //
+        // Y el verde NO consulta el enlace, sólo la última trama (ver Omi.Vigia): el 2026-09-01 el
+        // collar entregó 4.815 tramas con el icono en gris porque `Conectado` seguía en false — sale
+        // de un evento de transición que no dispara al abrir sobre un aparato ya conectado.
+        _iconoMicrofono.Foreground =
+            entregando ? Estudio.Ok
+            : grabando ? Estudio.Alerta
+            : origen != Origen.MicrofonoDelPc && !enlaceEnPie ? Estudio.Espera
+            : Estudio.TintaMedia;
+
+        _microfono.ToolTip = Omi.Selector.Nombre((int)origen)
+            + (grabando || entregando ? " · " + _vigia.Estado(enlaceEnPie, ultimaDeEsta, ahora) : "");
     }
 
     // ── arranque ─────────────────────────────────────────────────────────────
@@ -666,7 +1071,21 @@ public sealed class ConsultaWindow : Window
             _nota.Children.Clear();
             _vivo.Text = "";
             _vacioNota.Visibility = Visibility.Visible;
-            Estado("Abriendo la consulta…");
+            // SE GRABA CON LO QUE HAY, PERO SE DICE CUÁL ES. El 2026-09-01 el dueño eligió
+            // «Teléfono», pulsó grabar, y la consulta se grabó con el micrófono del computador sin
+            // que nada lo dijera: la fuente elegida no entregaba y el sistema se cayó al respaldo en
+            // silencio. Eso es el aprendizaje nº10 en una pantalla — lo peor no es que falle, es que
+            // parezca que funcionó.
+            //
+            // No se BLOQUEA la grabación, y es a propósito: un médico con el paciente delante
+            // prefiere la nota tomada con el micrófono del portátil antes que un botón que se niega.
+            // Lo que no puede pasar es que no se entere.
+            if (_selector.Preferida is { } pedida && _selector.Activa != pedida)
+                Estado($"Grabando con «{Omi.Selector.Nombre((int)_selector.Activa)}»: "
+                     + $"«{Omi.Selector.Nombre((int)pedida)}» no está entregando audio.");
+            else
+                Estado("Abriendo la consulta…");
+
             if (!await _consulta.EmpezarAsync(_plantillaId)) Estado(_consulta.Motivo);
         }
         finally { _grabar.IsEnabled = true; }

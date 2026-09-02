@@ -92,9 +92,47 @@ public sealed class LiveAudio : IDisposable
     /// escuchaba (2026-08-13, visto en el log — «collar abierto» sin un «la voz entra por el collar»
     /// detrás). El micrófono del PC pasa a ser lo que siempre debió ser: el respaldo.
     /// </summary>
-    private static bool QuiereCollar => UsarCollar
-        || CollarPermanente.Conectado
-        || (Environment.GetEnvironmentVariable("U_OMI") ?? "").Trim().ToLowerInvariant() is "1" or "true" or "si" or "sí";
+    private static bool QuiereCollar => !EvitarCollar
+        && (UsarCollar
+            || CollarPermanente.Conectado
+            || (Environment.GetEnvironmentVariable("U_OMI") ?? "").Trim().ToLowerInvariant() is "1" or "true" or "si" or "sí");
+
+    /// <summary>
+    /// El médico pidió a mano NO oír por el collar. Apaga la cláusula de arriba.
+    ///
+    /// LA PUERTA ESTABA CERRADA POR DENTRO, y se descubrió el 2026-09-01 probando el selector recién
+    /// dibujado: con el collar conectado, elegir el micrófono del PC o el teléfono no hacía nada.
+    /// La causa es la cláusula «si hay collar presente, ése es el micrófono», que se añadió el
+    /// 2026-08-13 para arreglar el fallo CONTRARIO —se pulsaba el collar y el collar no escuchaba—
+    /// y que al no tener contraparte dejó al collar mandando para siempre.
+    ///
+    /// Las dos cláusulas son correctas y tienen que convivir: sin elección manda el collar en cuanto
+    /// aparece (que es lo cómodo), y con elección manda lo elegido (que es lo que se pidió). Esto es
+    /// sólo la mitad que faltaba. La regla vive en <see cref="Omi.Selector.Preferir"/>, que el
+    /// contrato juzga sin micrófono (promesa 30).
+    /// </summary>
+    public static bool EvitarCollar { get; set; }
+
+    /// <summary>
+    /// Devuelve la voz al micrófono del PC AHORA, aunque el collar siga conectado y entregando.
+    ///
+    /// Es la contraparte de <see cref="PasarAlCollar"/>. Cierra el collar en vez de esperar a que
+    /// el relevo lo dé por perdido: aquí no hay avería que detectar, hay una persona que eligió.
+    /// </summary>
+    public void PasarAlLocal(string motivo)
+    {
+        EvitarCollar = true;
+        UsarCollar = false;
+        bool veniaDelTelefono = _usandoTelefono;
+        CerrarTelefono();
+        if (_usandoCollar) VolverAlLocal(motivo);
+        else if (veniaDelTelefono)
+        {
+            AbrirLocal();
+            LogBus.Log("voz-viva", "la voz vuelve al micrófono local · " + motivo);
+            FuenteCambio?.Invoke();
+        }
+    }
 
     /// <summary>
     /// Pasa la voz al collar AHORA, con la sesión ya abierta o sin abrir. Es lo que hace el gesto.
@@ -103,6 +141,7 @@ public sealed class LiveAudio : IDisposable
     /// </summary>
     public void PasarAlCollar()
     {
+        EvitarCollar = false;   // elegir el collar deshace un «no quiero collar» anterior
         UsarCollar = true;
         if (!_usandoCollar) _ = Task.Run(AbrirCollarAsync);
     }
@@ -319,6 +358,86 @@ public sealed class LiveAudio : IDisposable
         if (listo.Length > 0) Capturado?.Invoke(listo);
     }
 
+    // ── el collar por el teléfono ────────────────────────────────────────────
+
+    private FuenteTelefono? _telefono;
+    private RemuestreadorPcm16? _remuestreadorTelefono;
+    private volatile bool _usandoTelefono;
+
+    /// <summary>Por dónde está entrando la voz AHORA, si es por el teléfono.</summary>
+    public bool PorElTelefono => _usandoTelefono;
+
+    /// <summary>
+    /// Empieza a oír por el teléfono: el collar habla con la app de Omi y ésta con nuestro canal.
+    ///
+    /// ENTREGA EL MISMO FORMATO QUE EL COLLAR —PCM16 16 kHz mono, medido el 2026-09-01 en tramas de
+    /// 640 bytes— así que reutiliza el mismo remuestreador y sale por el mismo <see cref="Capturado"/>.
+    /// Aguas abajo nadie se entera de cuál de las tres fuentes está puesta, que es la promesa 3.
+    /// </summary>
+    public async Task<bool> PasarAlTelefonoAsync(string proyecto, string clave, string codigo, CancellationToken ct = default)
+    {
+        EvitarCollar = true;          // un collar habla con un aparato: si va por el teléfono, no va por aquí
+        UsarCollar = false;
+        if (_usandoCollar) VolverAlLocal("se eligió oír por el teléfono");
+
+        CerrarTelefono();
+        var f = new FuenteTelefono(proyecto, clave, codigo);
+        _remuestreadorTelefono = RitmoEntrada == RitmoDelCollar ? null : new RemuestreadorPcm16(RitmoDelCollar, RitmoEntrada);
+
+        f.Capturado += TrozoDelTelefono;
+        f.Perdido += m => VolverAlLocalDesdeElTelefono(m);
+        f.Cambio += () => FuenteCambio?.Invoke();
+
+        if (!await f.AbrirAsync(ct)) { f.Dispose(); return false; }
+
+        _telefono = f;
+
+        // EL LOCAL SIGUE ABIERTO HASTA QUE LLEGUE LA PRIMERA TRAMA, y no es un descuido: unirse al
+        // canal no es recibir audio. Si se cerrara el micrófono aquí, un canal que se une y nunca
+        // entrega dejaría la consulta muda — que es exactamente el fallo del 2026-08-25 con otro
+        // disfraz. El cambio de verdad se hace en TrozoDelTelefono, con la prueba en la mano.
+        LogBus.Log("voz-viva", "canal del teléfono abierto; el micrófono local sigue hasta que llegue audio");
+        FuenteCambio?.Invoke();
+        return true;
+    }
+
+    private void TrozoDelTelefono(byte[] trozo)
+    {
+        if (!_usandoTelefono)
+        {
+            // LA PRIMERA TRAMA ES LA QUE MANDA. Aquí sí hay prueba de que el teléfono entrega, y
+            // sólo entonces se cierra el micrófono del portátil.
+            lock (_candado)
+            {
+                if (_mic != null) { try { _mic.StopRecording(); _mic.Dispose(); } catch { } _mic = null; }
+                _usandoTelefono = true;
+            }
+            LogBus.Log("voz-viva", "la voz entra por el teléfono; el micrófono local queda de reserva");
+            FuenteCambio?.Invoke();
+        }
+
+        var listo = _remuestreadorTelefono?.Remuestrear(trozo) ?? trozo;
+        if (listo.Length > 0) Capturado?.Invoke(listo);
+    }
+
+    private void VolverAlLocalDesdeElTelefono(string motivo)
+    {
+        CerrarTelefono();
+        AbrirLocal();
+        LogBus.Log("voz-viva", "la voz vuelve al micrófono local · " + motivo);
+        FuenteCambio?.Invoke();
+    }
+
+    private void CerrarTelefono()
+    {
+        var f = _telefono;
+        _telefono = null;
+        _usandoTelefono = false;
+        if (f == null) return;
+        try { f.Capturado -= TrozoDelTelefono; } catch { }
+        try { f.Dispose(); } catch { }
+    }
+
     /// <summary>
     /// Decide si esta conversación deja de oír por el collar. NO desenlaza: el enlace sobrevive.
     /// </summary>
@@ -426,5 +545,7 @@ public sealed class LiveAudio : IDisposable
             try { _aec?.Dispose(); } catch { }
         }
         try { _remuestreadorCollar?.Dispose(); } catch { }
+        CerrarTelefono();
+        try { _remuestreadorTelefono?.Dispose(); } catch { }
     }
 }

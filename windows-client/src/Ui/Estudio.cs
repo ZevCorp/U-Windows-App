@@ -87,6 +87,40 @@ public static class Estudio
 
     public static readonly Brush AlertaSuave = Congelado(0xFD, 0xEC, 0xEF);
 
+    /// <summary>
+    /// Verde de «esto está entregando», sobre superficie clara. 4,6:1 con blanco encima.
+    /// </summary>
+    /// <remarks>
+    /// Entra con el selector de micrófono (spec 005) y no antes, porque hasta ahora no había nada
+    /// que decir en verde: los estados de esta paleta eran «normal», «te estoy grabando» (Alerta) y
+    /// «esto es accionable» (Acento).
+    ///
+    /// NO es el #6ED88B de la carita, y la diferencia no es un descuido: aquel verde nació para un
+    /// punto de 4,8 px sobre fondo oscuro y sobre blanco da 1,8:1, ilegible. Mismo significado, la
+    /// luminosidad que exige el contraste sobre claro — la misma regla que ya siguen Acento y
+    /// Alerta respecto de UiPalette.
+    ///
+    /// Lo que este verde promete es ESTRECHO: no «conectado», sino «llegó audio hace poco». La
+    /// diferencia costó 56 minutos de demo el 2026-08-25 y vive en <c>Omi.Vigia</c>.
+    /// </remarks>
+    public static readonly Brush Ok = Congelado(0x1B, 0x8A, 0x5A);
+
+    /// <summary>El verde en su versión de fondo, para chips y estados.</summary>
+    public static readonly Brush OkSuave = Congelado(0xE4, 0xF4, 0xEC);
+
+    /// <summary>
+    /// Ámbar de «está en pie pero todavía no entrega»: enlazado esperando, o conectado y mudo.
+    /// </summary>
+    /// <remarks>
+    /// Existe para que el indicador no tenga que elegir entre mentir en verde y alarmar en rojo.
+    /// El collar recordado que aún no aparece no es un fallo — es el estado normal de los primeros
+    /// segundos — y pintarlo de rojo enseñaría a ignorar el rojo.
+    /// </remarks>
+    public static readonly Brush Espera = Congelado(0xB4, 0x6A, 0x0C);
+
+    /// <summary>El ámbar en su versión de fondo.</summary>
+    public static readonly Brush EsperaSuave = Congelado(0xFB, 0xF0, 0xDE);
+
     // ── la rampa FLOTANTE ────────────────────────────────────────────────────
     //
     // LA CARITA Y SU PANEL SE QUEDAN OSCUROS, y no es una excepción al sistema: es una superficie
