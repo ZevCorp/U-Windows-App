@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
+using U.Graph;
 using U.WindowsClient.Actions;
 using U.WindowsClient.Mcp;
 using U.WindowsClient.Navigation;
@@ -298,6 +299,21 @@ internal static class Contrato
         // decirlo, en el color de Ü, sin tapar el trabajo (2026-09-02, pedido por el usuario).
         Console.WriteLine();
         Prueba("107. mientras Ü aprende, los bordes de la pantalla lo dicen: el aura se enciende al grabar, se apaga al terminar y deja el centro limpio", ElAuraDiceQueUAprende);
+
+        // ── El workflow a la mano (spec 007) ─────────────────────────────────
+        //
+        // Medido contra el Graph vivo el 2026-09-02: de 4 workflows, 3 se llaman «Workflow sin
+        // descripción» y el cuarto «User workflow summary:» (un encabezado del LLM). La lista
+        // llega del más viejo al más nuevo y el carrusel no mueve el índice al terminar de
+        // enseñar: el recién guardado queda al final, sin nombre y sin elegir. Y darle play
+        // empieza por pedir el plan a Vercel (342-484 ms en caliente, 2,6 s en frío).
+        //
+        // La 107 es la del aura (spec 006); los números no se reciclan: 108-111.
+        Console.WriteLine();
+        Prueba("108. un workflow se presenta por lo que se sabe de él —app, ventana, cuándo, cuántos pasos— y nunca por el relleno del cerebro: «Workflow sin descripción» y «User workflow summary:» no son nombres", ElWorkflowSePresentaPorLoQueSeSabe);
+        Prueba("109. el nombre que le pones manda y sobrevive al reinicio: se guarda en disco por id, y sin nombre puesto se vuelve al derivado", ElNombrePuestoMandaYSobrevive);
+        Prueba("110. la lista va del más nuevo al más viejo, y el recién enseñado queda elegido; si no se sabe cuál es, se elige el más nuevo", ElRecienEnsenadoQuedaElegido);
+        Prueba("111. darle play no vuelve a pedir el plan si ya está en la mano: se pide al elegir el workflow y la corrida lo usa; sin plan a la mano se pide una sola vez", ElPlayNoVuelveAPedirElPlan);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -3442,6 +3458,140 @@ internal static class Contrato
             "a partir del grosor no queda NADA: el centro, donde está el trabajo, se deja limpio");
         Debe(O(0) > O(32) && O(32) > O(64) && O(64) > O(95) && O(95) > 0,
             "y entre medias baja sin escalones: es un degradado, no una franja");
+    }
+
+    // ── El workflow a la mano (spec 007) ─────────────────────────────────────
+
+    /// <summary>Un workflow tal como lo lista Graph, con el <c>createdAt</c> como entero Neo4j
+    /// <c>{low, high}</c> —que es como llega de verdad— para la hora local dada.</summary>
+    private static JsonElement WorkflowDeGraph(string id, string description, string origin, string titulo,
+        DateTimeOffset creado, int pasos, bool enteroNeo4j = true)
+    {
+        long ms = creado.ToUnixTimeMilliseconds();
+        object createdAt = enteroNeo4j
+            ? new { low = (int)(ms & 0xFFFFFFFF), high = (int)(ms >> 32) }
+            : (object)ms;
+        string json = JsonSerializer.Serialize(new
+        {
+            id, description, summary = "", sourceOrigin = origin, sourceTitle = titulo,
+            createdAt, totalSteps = pasos,
+        });
+        return JsonDocument.Parse(json).RootElement.Clone();
+    }
+
+    private static void ElWorkflowSePresentaPorLoQueSeSabe()
+    {
+        var t = Capacidad("U.WindowsClient.Workflows.NombreDeWorkflow");
+        var m = t?.GetMethod("Derivar");
+        Debe(t != null && m != null, "todavía no existe «NombreDeWorkflow.Derivar» (fase 1 de la spec 007). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || m == null) return;
+
+        string Nombre(JsonElement e) => (string)m.Invoke(null, new object[] { e })!;
+        var hora = new DateTimeOffset(2026, 9, 2, 13, 42, 0, TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 9, 2)));
+
+        string relleno = Nombre(WorkflowDeGraph("wf_1", "Workflow sin descripción", "uia://claude.exe", "Claude", hora, 6));
+        Debe(!relleno.Contains("sin descripción", StringComparison.OrdinalIgnoreCase),
+            "«Workflow sin descripción» no es un nombre: tres de cuatro se llamaban así");
+        Debe(relleno.Contains("Claude") && relleno.Contains("13:42") && relleno.Contains("6 pasos") && relleno.Contains("2 sep"),
+            $"con el relleno, el nombre se compone de lo que SÍ se sabe —app, cuándo, cuántos pasos—; salió «{relleno}»");
+
+        string encabezado = Nombre(WorkflowDeGraph("wf_2", "User workflow summary:", "uia://claude.exe", "Claude", hora, 3));
+        Debe(!encabezado.Contains("summary", StringComparison.OrdinalIgnoreCase) && encabezado.Contains("3 pasos"),
+            $"un encabezado del LLM («User workflow summary:») tampoco es un nombre; salió «{encabezado}»");
+
+        string vacio = Nombre(WorkflowDeGraph("wf_3", "", "sapgui://QAS/NWP1", "SAP Easy Access", hora, 9, enteroNeo4j: false));
+        Debe(vacio.Contains("SAP") && vacio.Contains("13:42"),
+            $"vacío tampoco, y el createdAt como número llano se lee igual que el entero Neo4j; salió «{vacio}»");
+
+        string real = Nombre(WorkflowDeGraph("wf_4", "Radicar factura en SAP", "sapgui://QAS/NWP1", "SAP", hora, 9));
+        Debe(real == "Radicar factura en SAP", "una descripción de verdad se respeta tal cual");
+    }
+
+    private static void ElNombrePuestoMandaYSobrevive()
+    {
+        var t = Capacidad("U.WindowsClient.Workflows.NombresDeWorkflows");
+        Debe(t != null, "todavía no existe «NombresDeWorkflows» (fase 2 de la spec 007). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null) return;
+
+        var poner = t.GetMethod("Poner")!;
+        var de = t.GetMethod("De")!;
+
+        var primero = Activator.CreateInstance(t)!;
+        poner.Invoke(primero, new object[] { "wf_9", "Radicar factura" });
+        Debe((string?)de.Invoke(primero, new object[] { "wf_9" }) == "Radicar factura", "puesto, se lee");
+
+        var otroArranque = Activator.CreateInstance(t)!;   // otra instancia = otro arranque de Ü
+        Debe((string?)de.Invoke(otroArranque, new object[] { "wf_9" }) == "Radicar factura",
+            "y sobrevive al reinicio: se guardó en disco por id");
+        Debe(de.Invoke(otroArranque, new object[] { "wf_otro" }) == null,
+            "un id sin nombre puesto devuelve nada, para que mande el derivado");
+
+        poner.Invoke(otroArranque, new object[] { "wf_9", "   " });
+        Debe(de.Invoke(otroArranque, new object[] { "wf_9" }) == null,
+            "poner vacío QUITA el nombre: vacío no es un nombre (patrón nº9), y se vuelve al derivado");
+        Debe(de.Invoke(Activator.CreateInstance(t)!, new object[] { "wf_9" }) == null,
+            "y el borrado también sobrevive al reinicio");
+    }
+
+    private static void ElRecienEnsenadoQuedaElegido()
+    {
+        var tSel = Capacidad("U.WindowsClient.Workflows.SelectorDeWorkflows");
+        var tRes = Capacidad("U.WindowsClient.Workflows.WorkflowSummary");
+        var ordenar = tSel?.GetMethod("Ordenar");
+        var indice = tSel?.GetMethod("IndiceDe");
+        var fromJson = tRes?.GetMethod("FromJson", new[] { typeof(JsonElement) });
+        Debe(ordenar != null && indice != null && fromJson != null,
+            "todavía no existe «SelectorDeWorkflows» (fase 3 de la spec 007). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (ordenar == null || indice == null || fromJson == null || tRes == null) return;
+
+        var t0 = new DateTimeOffset(2026, 9, 2, 10, 0, 0, TimeSpan.Zero);
+        var lista = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(tRes))!;
+        // Como llega de Graph: del más viejo al más nuevo.
+        lista.Add(fromJson.Invoke(null, new object[] { WorkflowDeGraph("wf_viejo", "", "uia://a.exe", "A", t0, 1) })!);
+        lista.Add(fromJson.Invoke(null, new object[] { WorkflowDeGraph("wf_medio", "", "uia://a.exe", "A", t0.AddMinutes(5), 1) })!);
+        lista.Add(fromJson.Invoke(null, new object[] { WorkflowDeGraph("wf_nuevo", "", "uia://a.exe", "A", t0.AddMinutes(9), 1) })!);
+
+        var ordenada = (System.Collections.IList)ordenar.Invoke(null, new object[] { lista })!;
+        string IdEn(int i) => (string)tRes.GetProperty("Id")!.GetValue(ordenada[i])!;
+        Debe(ordenada.Count == 3 && IdEn(0) == "wf_nuevo" && IdEn(2) == "wf_viejo",
+            "la lista va del más nuevo al más viejo: lo último que enseñaste es lo primero que ves");
+
+        Debe((int)indice.Invoke(null, new object[] { ordenada, "wf_medio" })! == 1,
+            "el recién enseñado se elige por su id, esté donde esté");
+        Debe((int)indice.Invoke(null, new object[] { ordenada, "wf_desconocido" })! == 0,
+            "y si no se sabe cuál es (el finish no volvió), se elige el más nuevo, no el que estaba");
+    }
+
+    private static void ElPlayNoVuelveAPedirElPlan()
+    {
+        var planSource = typeof(WorkflowPlayer).GetProperty("PlanSource");
+        Debe(planSource != null, "todavía no existe «WorkflowPlayer.PlanSource» (fase 4 de la spec 007). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (planSource == null) return;
+
+        // Un plan cuyo único paso vive en una superficie que este cliente no maneja: la corrida
+        // para ANTES de tocar la pantalla, que es lo que hace falta para juzgarla sin pantalla.
+        const string planJson = "{\"execution_plan\":{\"workflowId\":\"wf_p\",\"sourceOrigin\":\"marte://x\","
+            + "\"steps\":[{\"stepOrder\":1,\"actionType\":\"click\",\"selector\":\"marte:boton\",\"label\":\"b\"}]}}";
+        var backend = new BackendDeMentira(_ => (HttpStatusCode.OK, planJson));
+        var cfg = new GraphConfig { BaseUrl = "https://graph.test", ApiKey = "k" };
+        var graph = new GraphClient(cfg, new HttpClient(backend));
+        int Planes() => backend.Peticiones.Count(p => p.Contains("/plan"));
+
+        var conPlan = new WorkflowPlayer(graph, cfg);
+        var aLaMano = JsonSerializer.Deserialize<PlanResponse>(planJson)!.ExecutionPlan!;
+        planSource.SetValue(conPlan, (Func<string, CancellationToken, Task<ExecutionPlan>>)((_, _) => Task.FromResult(aLaMano)));
+        var r1 = conPlan.RunAsync("wf_p", null, true, CancellationToken.None).GetAwaiter().GetResult();
+        Debe(Planes() == 0, $"con el plan a la mano, darle play no le pide NADA a Graph ({Planes()} peticiones a /plan)");
+        Debe(!r1.Ok && (r1.Error ?? "").Contains("marte"),
+            "y la corrida usó ESE plan: se detuvo en la superficie que le dimos, no en otra");
+
+        var sinPlan = new WorkflowPlayer(graph, cfg);
+        sinPlan.RunAsync("wf_p", null, true, CancellationToken.None).GetAwaiter().GetResult();
+        Debe(Planes() == 1, $"sin plan a la mano se pide UNA vez, como siempre ({Planes()} peticiones)");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

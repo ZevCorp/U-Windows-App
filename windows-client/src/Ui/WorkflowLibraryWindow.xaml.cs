@@ -7,6 +7,7 @@ using U.Graph.Surfaces;
 using U.WindowsClient.Backend;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Teach;
+using U.WindowsClient.Workflows;
 
 namespace U.WindowsClient.Ui;
 
@@ -172,7 +173,12 @@ public partial class WorkflowLibraryWindow : Window
             if (raw.Count > 0)
                 LogBus.Log("workflow-ui", $"primer workflow crudo (para ajustar el parseo si hace falta): {raw[0]}");
 
-            WorkflowList.ItemsSource = raw.Select(WorkflowSummary.FromJson).ToList();
+            // Mismo nombre y mismo orden que el carrusel de la carita (spec 007): dos listas del
+            // mismo catálogo con nombres distintos serían dos catálogos.
+            var nombres = new NombresDeWorkflows();
+            var lista = SelectorDeWorkflows.Ordenar(raw.Select(WorkflowSummary.FromJson));
+            foreach (var wf in lista) wf.NombrePropio = nombres.De(wf.Id);
+            WorkflowList.ItemsSource = lista;
             StatusLine.Text = $"{raw.Count} workflow(s) cargado(s).";
         }
         catch (Exception ex)
@@ -193,16 +199,16 @@ public partial class WorkflowLibraryWindow : Window
 
         ProgressLog.Text = "";
         RunBtn.IsEnabled = false;
-        StatusLine.Text = $"Ejecutando «{wf.Title}»…";
+        StatusLine.Text = $"Ejecutando «{wf.Nombre}»…";
         _runCts = new CancellationTokenSource();
         try
         {
             RunResult result = await _player.RunAsync(wf.Id, null, ForceSurface.IsChecked != true, _runCts.Token);
             StatusLine.Text = result.Ok
                 ? (result.AlignedConsciously
-                    ? $"«{wf.Title}» terminó bien (me alineé abriendo la app): {result.Tally}."
-                    : $"«{wf.Title}» terminó bien: {result.Tally}.")
-                : $"«{wf.Title}» se detuvo: {result.Error}";
+                    ? $"«{wf.Nombre}» terminó bien (me alineé abriendo la app): {result.Tally}."
+                    : $"«{wf.Nombre}» terminó bien: {result.Tally}.")
+                : $"«{wf.Nombre}» se detuvo: {result.Error}";
             if (result.Ok && result.AlignedConsciously)
                 _ = _graphClient.PrependAlignmentStepAsync(wf.Id, _runCts.Token); // aprende a alcanzar su superficie
         }
@@ -328,38 +334,4 @@ public sealed class AutofillRow
     public string Value => Match.Value;
     public string ConfidenceLabel => $"confianza {Match.Confidence:P0}" +
         (string.IsNullOrWhiteSpace(Match.Evidence) ? "" : $" — \"{Match.Evidence}\"");
-}
-
-/// <summary>
-/// Vista liviana de un workflow para la lista. El shape exacto de GET /api/v1/workflows no está
-/// documentado en este repo (vive en el backend externo) — el parseo tolera varias formas razonables
-/// y el primer resultado crudo se loguea a LogBus para ajustar esto con datos reales.
-/// </summary>
-public sealed class WorkflowSummary
-{
-    public string Id { get; init; } = "";
-    public string Title { get; init; } = "";
-    public int StepCount { get; init; }
-
-    public override string ToString() => $"{Title} · {StepCount} paso(s)";
-
-    public static WorkflowSummary FromJson(JsonElement e)
-    {
-        string id = TryGetString(e, "id") ?? TryGetString(e, "workflowId") ?? TryGetString(e, "workflow_id") ?? "";
-        string title = TryGetString(e, "description") ?? TryGetString(e, "title") ?? TryGetString(e, "name") ?? "(sin nombre)";
-        int steps = TryGetInt(e, "stepCount") ?? TryGetInt(e, "step_count") ?? CountArray(e, "steps") ?? 0;
-        return new WorkflowSummary { Id = id, Title = title, StepCount = steps };
-    }
-
-    private static string? TryGetString(JsonElement e, string prop) =>
-        e.ValueKind == JsonValueKind.Object && e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String
-            ? v.GetString() : null;
-
-    private static int? TryGetInt(JsonElement e, string prop) =>
-        e.ValueKind == JsonValueKind.Object && e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number
-            ? v.GetInt32() : null;
-
-    private static int? CountArray(JsonElement e, string prop) =>
-        e.ValueKind == JsonValueKind.Object && e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Array
-            ? v.GetArrayLength() : null;
 }

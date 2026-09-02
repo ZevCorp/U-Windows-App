@@ -108,11 +108,33 @@ public sealed class WorkflowPlayer
     /// </summary>
     public Func<string, int, string>? TaughtShotFor { get; set; }
 
+    /// <summary>
+    /// De dónde sale el plan. Sin esto, se pide a Graph al empezar —342-484 ms en caliente y 2,6 s
+    /// en frío, medido el 2026-09-02— y ese tiempo cae en el camino crítico del botón de play. El
+    /// cliente lo pone para entregar el plan que ya pidió al ELEGIR el workflow (promesa 111,
+    /// spec 007). Recibe el id y el token; devuelve el plan ejecutable.
+    /// </summary>
+    public Func<string, CancellationToken, Task<ExecutionPlan>>? PlanSource { get; set; }
+
     public WorkflowPlayer(GraphClient graph, GraphConfig config, params IUiSurface[] surfaces)
     {
         _graph = graph;
         _config = config;
         _surfaces = surfaces;
+    }
+
+    /// <summary>El plan por la única puerta: la fuente a la mano si la hay, y si no, Graph.
+    /// <see cref="RunAsync"/> y <see cref="DryRunAsync"/> pasan por aquí para que lo ensayado sea
+    /// exactamente lo que se ejecuta.</summary>
+    private Task<ExecutionPlan> CargarPlanAsync(string workflowId, Dictionary<string, string>? variables, CancellationToken ct)
+    {
+        if (PlanSource != null && (variables == null || variables.Count == 0))
+            return PlanSource(workflowId, ct);
+        return _graph.GetPlanAsync(workflowId, variables, new Dictionary<string, string>
+        {
+            ["source"] = "windows-u",
+            ["surface"] = "native",
+        }, ct);
     }
 
     /// <summary>
@@ -130,11 +152,7 @@ public sealed class WorkflowPlayer
         ExecutionPlan plan;
         try
         {
-            plan = await _graph.GetPlanAsync(workflowId, variables, new Dictionary<string, string>
-            {
-                ["source"] = "windows-u",
-                ["surface"] = "native",
-            }, ct);
+            plan = await CargarPlanAsync(workflowId, variables, ct);
         }
         catch (GraphException e)
         {
@@ -155,11 +173,7 @@ public sealed class WorkflowPlayer
         ExecutionPlan plan;
         try
         {
-            plan = await _graph.GetPlanAsync(workflowId, variables, new Dictionary<string, string>
-            {
-                ["source"] = "windows-u",
-                ["surface"] = "native",
-            }, ct);
+            plan = await CargarPlanAsync(workflowId, variables, ct);
         }
         catch (GraphException e)
         {

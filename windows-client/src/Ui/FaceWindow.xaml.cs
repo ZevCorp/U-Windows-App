@@ -16,6 +16,7 @@ using U.WindowsClient.Telemetry;
 using U.WindowsClient.Uia;
 using U.WindowsClient.Update;
 using U.WindowsClient.Voice;
+using U.WindowsClient.Workflows;
 
 namespace U.WindowsClient.Ui;
 
@@ -105,6 +106,17 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private int _directIndex;            // workflow seleccionado (carrusel y lista comparten este índice)
     private bool _directListMode;        // false = carrusel, true = lista
     private bool _syncingWorkflowUi;     // evita el ida y vuelta carrusel ↔ lista al sincronizar
+    // El workflow a la mano (spec 007): los nombres que el operador pone, los planes pedidos por
+    // adelantado, y el id de lo que se acaba de enseñar para que quede elegido al recargar.
+    private readonly NombresDeWorkflows _nombres = new();
+    private PlanesALaMano? _planes;
+    private string? _nuevoWorkflowId;
+    // La precarga espera a que el carrusel se quede quieto: pasar por diez workflows con las
+    // flechas no tiene que pedir diez planes.
+    private readonly System.Windows.Threading.DispatcherTimer _precarga = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(300),
+    };
     private bool _runningDirect;
 
     // Para resolver preguntas del asistente desde la caja de texto.
@@ -113,6 +125,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     public FaceWindow()
     {
         InitializeComponent();
+        // La precarga del plan dispara cuando el carrusel lleva 300 ms quieto sobre un workflow (spec 007).
+        _precarga.Tick += (_, _) =>
+        {
+            _precarga.Stop();
+            if (_directIndex >= 0 && _directIndex < _directWorkflows.Count)
+                _planes?.Precarga(_directWorkflows[_directIndex].Id);
+        };
         // La misma barra de scroll rehecha que las ventanas claras, en su variante para suelo
         // oscuro: un pulgar redondeado sin flechas ni carril. La de Windows por defecto era lo
         // único de este panel que seguía pareciendo de otra aplicación.
@@ -2215,11 +2234,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             try
             {
                 FinishResponse finish = await _teachSession.StopAsync(CancellationToken.None);
-                // El título se autogeneró en Graph a partir de lo aprendido (el summary del finish).
                 // Sin voz aquí a propósito: el resultado se muestra en silencio en el estado.
-                string title = string.IsNullOrWhiteSpace(finish.Summary) ? "el workflow" : finish.Summary;
-                SetStatus($"Aprendido: {title}");
-                _ = ReloadDirectWorkflowsAsync(); // que el recién enseñado aparezca ya en el selector
+                // El nombre lo pone el selector al recargar (derivado o propio), no el summary del
+                // LLM: ese llegaba como «User workflow summary:» (spec 007).
+                _nuevoWorkflowId = finish.WorkflowId;
+                await ReloadDirectWorkflowsAsync(); // el recién enseñado queda elegido y con el cuadro de nombre abierto
+                SetStatus(_directWorkflows.Count > 0 && _directIndex < _directWorkflows.Count
+                    ? $"Aprendido: «{_directWorkflows[_directIndex].Nombre}». Ponle nombre y pulsa Enter."
+                    : "Aprendido.");
             }
             catch (FinishPendingException pending)
             {
@@ -2229,6 +2251,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 LogBus.Log("teach", $"cierre pendiente (HTTP {pending.StatusCode}): {pending.Message}");
                 SetStatus("Los pasos SÍ se guardaron; falta el resumen (Graph tardó de más). "
                         + "Se completa solo al reabrir la app.");
+                _nuevoWorkflowId = pending.WorkflowId;
                 _ = ReloadDirectWorkflowsAsync(); // el workflow existe aunque le falte el resumen
             }
             catch (Exception ex)
@@ -2767,11 +2790,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
 
         _directGraph ??= new GraphClient(_graphConfig);
+        _planes ??= new PlanesALaMano(_directGraph);
         try
         {
             var raw = await _directGraph.ListWorkflowsAsync(CancellationToken.None);
+            // Recargar es la señal de que algo cambió en Graph: los planes de antes pueden no valer.
+            _planes.OlvidaTodos();
+            // El id que tenía elegido, para no perderlo al reordenar (salvo que acabe de enseñar).
+            string? elegido = _directIndex >= 0 && _directIndex < _directWorkflows.Count
+                ? _directWorkflows[_directIndex].Id : null;
             _directWorkflows.Clear();
-            _directWorkflows.AddRange(raw.Select(WorkflowSummary.FromJson));
+            // Del más nuevo al más viejo (Graph los manda al revés), y cada uno con el nombre que
+            // el operador le puso, si le puso (promesas 108-110).
+            foreach (var wf in SelectorDeWorkflows.Ordenar(raw.Select(WorkflowSummary.FromJson)))
+            {
+                wf.NombrePropio = _nombres.De(wf.Id);
+                _directWorkflows.Add(wf);
+            }
 
             if (_directWorkflows.Count == 0)
             {
@@ -2785,13 +2820,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             WorkflowListBox.ItemsSource = _directWorkflows;
             _syncingWorkflowUi = false;
 
-            if (_directIndex >= _directWorkflows.Count) _directIndex = 0;
             bool many = _directWorkflows.Count > 1;
             WorkflowPrev.IsEnabled = many;
             WorkflowNext.IsEnabled = many;
             RunWorkflowBtn.IsEnabled = true;
             WorkflowDeleteBtn.IsEnabled = true;
-            SetDirectIndex(_directIndex);
+            WorkflowRenameBtn.IsEnabled = true;
+            // Lo recién enseñado queda ELEGIDO; si no hay nada recién enseñado, se conserva lo que
+            // estaba elegido, y si tampoco, el más nuevo (índice 0).
+            string? nuevo = _nuevoWorkflowId;
+            _nuevoWorkflowId = null;
+            SetDirectIndex(SelectorDeWorkflows.IndiceDe(_directWorkflows, nuevo ?? elegido));
+            if (nuevo != null) Bautizar();
         }
         catch (Exception ex)
         {
@@ -2810,6 +2850,63 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         WorkflowNext.IsEnabled = false;
         RunWorkflowBtn.IsEnabled = false;
         WorkflowDeleteBtn.IsEnabled = false;
+        WorkflowRenameBtn.IsEnabled = false;
+        WorkflowNameBox.Visibility = Visibility.Collapsed;
+    }
+
+    // ── Ponerle nombre (promesa 109) ─────────────────────────────────────────
+
+    /// <summary>
+    /// Abre el cuadro de nombre sobre el workflow elegido, con el nombre actual seleccionado para
+    /// que escribir lo reemplace. Se abre solo al terminar de enseñar —es el momento en que uno
+    /// sabe qué acaba de grabar— y con ✏ cuando se quiera.
+    /// </summary>
+    private void Bautizar()
+    {
+        if (_directIndex < 0 || _directIndex >= _directWorkflows.Count) return;
+        var wf = _directWorkflows[_directIndex];
+        OpenMenu(pin: true); // el cuadro vive en el panel: si el panel está cerrado, nadie lo vería
+        WorkflowNameBox.Text = wf.Nombre;
+        WorkflowNameBox.Visibility = Visibility.Visible;
+        // El foco DESPUÉS del pase de layout, como hace Input: enfocar en el mismo instante en que
+        // la caja se hace visible puede caer en el vacío.
+        Dispatcher.BeginInvoke(new Action(() => { WorkflowNameBox.Focus(); WorkflowNameBox.SelectAll(); }),
+            System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void OnRenameWorkflow(object sender, RoutedEventArgs e) => Bautizar();
+
+    private void OnWorkflowNameKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { GuardarNombre(); e.Handled = true; }
+        else if (e.Key == Key.Escape) { WorkflowNameBox.Visibility = Visibility.Collapsed; e.Handled = true; }
+    }
+
+    /// <summary>Perder el foco también guarda: cerrar el panel a medio escribir no tira el nombre.</summary>
+    private void OnWorkflowNameLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (WorkflowNameBox.Visibility == Visibility.Visible) GuardarNombre();
+    }
+
+    private void GuardarNombre()
+    {
+        WorkflowNameBox.Visibility = Visibility.Collapsed;
+        if (_directIndex < 0 || _directIndex >= _directWorkflows.Count) return;
+        var wf = _directWorkflows[_directIndex];
+        string texto = WorkflowNameBox.Text.Trim();
+        // Dejar el derivado tal cual no es «ponerle nombre»: no se guarda una copia del derivado,
+        // que se quedaría vieja si cambia cómo se deriva.
+        string? propio = texto.Length == 0 || texto == wf.Title ? null : texto;
+        if (propio == wf.NombrePropio) return;
+        _nombres.Poner(wf.Id, propio);
+        wf.NombrePropio = propio;
+        // La lista pinta ToString() al llenarse: se rellena para que el nombre nuevo se vea ya.
+        _syncingWorkflowUi = true;
+        WorkflowListBox.ItemsSource = null;
+        WorkflowListBox.ItemsSource = _directWorkflows;
+        _syncingWorkflowUi = false;
+        SetDirectIndex(_directIndex);
+        SetStatus(propio == null ? $"Sin nombre propio: «{wf.Nombre}»" : $"Se llama «{propio}»");
     }
 
     private void OnWorkflowPrev(object sender, RoutedEventArgs e) => StepWorkflow(-1);
@@ -2827,7 +2924,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         OpenMenu(pin: true);
 
         var confirm = MessageBox.Show(
-            $"¿Borrar «{wf.Title}»?\n\nNo se puede deshacer.",
+            $"¿Borrar «{wf.Nombre}»?\n\nNo se puede deshacer.",
             "Borrar workflow", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes) return;
 
@@ -2836,7 +2933,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             _directGraph ??= new GraphClient(_graphConfig);
             await _directGraph.DeleteWorkflowAsync(wf.Id, CancellationToken.None);
-            SetStatus($"Borrado: «{wf.Title}»");
+            _nombres.Poner(wf.Id, null); // el nombre propio muere con el workflow
+            SetStatus($"Borrado: «{wf.Nombre}»");
             await ReloadDirectWorkflowsAsync();
         }
         catch (Exception ex)
@@ -2878,7 +2976,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_directWorkflows.Count == 0) return;
         _directIndex = Math.Clamp(i, 0, _directWorkflows.Count - 1);
         var wf = _directWorkflows[_directIndex];
-        WorkflowPick.Text = $"{_directIndex + 1}/{_directWorkflows.Count} · {wf.Title} ({wf.StepCount} paso(s))";
+        WorkflowPick.Text = $"{_directIndex + 1}/{_directWorkflows.Count} · {wf.Nombre} ({wf.StepCount} paso(s))";
+        // El plan se pide en cuanto el carrusel se queda quieto sobre este (promesa 111).
+        _precarga.Stop();
+        _precarga.Start();
 
         if (!_syncingWorkflowUi && WorkflowListBox.SelectedIndex != _directIndex)
         {
@@ -2923,7 +3024,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _cts = new CancellationTokenSource();
         ShowStop(true);
         SetWorking(true);
-        SetStatus($"Ejecutando «{wf.Title}»…");
+        SetStatus($"Ejecutando «{wf.Nombre}»…");
         ShowTalk(); // el progreso se narra ahí, y el ⏹ de la barra ya quedó visible
         string? bridgeGoal = null; // puente subconsciente→consciente si el workflow se detiene
         bool paróElUsuario = false, falló = false;
@@ -2952,16 +3053,34 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             player.StepDone += (_, o) => Narrate(o.Ok ? $"✓ {o.Label}" : $"✗ {o.Label}: {o.Error}");
 
+            // El plan que ya se pidió al elegir el workflow (promesa 111). El log dice de dónde
+            // salió y cuánto tardó: es la única forma de saber si la precarga sirve de algo.
+            _planes ??= new PlanesALaMano(_directGraph);
+            var planes = _planes;
+            bool aLaMano = planes.EstaListo(wf.Id);
+            var playSw = System.Diagnostics.Stopwatch.StartNew();
+            player.PlanSource = async (id, ct) =>
+            {
+                var plan = await planes.Toma(id, ct);
+                LogBus.Log("workflow-ui", $"▶ play «{wf.Nombre}»: plan {(aLaMano ? "precargado" : "pedido")} en {playSw.ElapsedMilliseconds} ms");
+                return plan;
+            };
+
             RunResult result = await player.RunAsync(wf.Id, null, strictSurface: true, _cts.Token);
             SetStatus(result.Ok
-                ? $"«{wf.Title}» terminó: {result.Tally}."
-                : $"«{wf.Title}» se detuvo: {result.Error}");
+                ? $"«{wf.Nombre}» terminó: {result.Tally}."
+                : $"«{wf.Nombre}» se detuvo: {result.Error}");
             // Un workflow que se detiene NO lanza excepción: devuelve un resultado que dice que no
             // llegó. Sin esta línea la cara se quedaría tan contenta tras una corrida fallida.
             falló = !result.Ok && !_cts.IsCancellationRequested;
 
             if (result.Ok && result.AlignedConsciously)
-                _ = _directGraph.PrependAlignmentStepAsync(wf.Id, CancellationToken.None); // aprende a alcanzar su superficie
+            {
+                // Graph va a anteponer un paso: el plan que teníamos a la mano deja de ser el suyo.
+                planes.Olvida(wf.Id);
+                _ = _directGraph.PrependAlignmentStepAsync(wf.Id, CancellationToken.None)
+                    .ContinueWith(_ => planes.Precarga(wf.Id), TaskScheduler.Default); // aprende a alcanzar su superficie, y se vuelve a tener a la mano
+            }
 
             // PUENTE subconsciente→consciente: si el workflow se detuvo (y no fue cancelado por el
             // usuario), el cerebro consciente (computer-use) retoma desde la pantalla actual con el
@@ -2969,7 +3088,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // por ubicación hace el resto (se salta lo ya hecho).
             if (!result.Ok && !_cts.IsCancellationRequested)
                 bridgeGoal =
-                    $"Estaba ejecutando el workflow «{wf.Title}» y se detuvo en: {result.Error}. " +
+                    $"Estaba ejecutando el workflow «{wf.Nombre}» y se detuvo en: {result.Error}. " +
                     $"Del plan: {result.Tally}. Los omitidos NO se ejecutaron. " +
                     "Retoma desde la pantalla actual y termina la tarea del workflow. Si despejas el " +
                     "obstáculo, puedes invocar de nuevo la herramienta del workflow: se reanuda solo " +
