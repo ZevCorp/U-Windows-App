@@ -487,6 +487,12 @@
                                     Margin="0,0,6,0" Click="OnDeleteWorkflow" Style="{StaticResource FlatBtn}"
                                     Background="#33FF3B30" Foreground="#EEFFFFFF" FontSize="11" IsEnabled="False"
                                     ToolTip="Borrar el workflow que se muestra (no se puede deshacer)"/>
+                            <!-- Ponerle nombre (spec 007): el del cerebro llegaba como «Workflow sin
+                                 descripción» tres de cuatro veces. Se abre solo al terminar de enseñar. -->
+                            <Button x:Name="WorkflowRenameBtn" DockPanel.Dock="Right" Content="✏" Width="26" Height="20"
+                                    Margin="0,0,6,0" Click="OnRenameWorkflow" Style="{StaticResource FlatBtn}"
+                                    Background="#22FFFFFF" Foreground="#EEFFFFFF" FontSize="11" IsEnabled="False"
+                                    ToolTip="Ponerle nombre al workflow que se muestra"/>
                         </DockPanel>
 
                         <!-- Vista CARRUSEL: flecha ◀, título centrado, flecha ▶ -->
@@ -508,6 +514,15 @@
                         <ListBox x:Name="WorkflowListBox" Height="128" Visibility="Collapsed"
                                  Background="#14FFFFFF" Foreground="White" BorderThickness="0"
                                  SelectionChanged="OnWorkflowListSelected"/>
+
+                        <!-- El cuadro de nombre: aparece al terminar de enseñar (con el nombre derivado
+                             seleccionado, para que escribir lo reemplace) y con ✏. Enter guarda, Escape
+                             cancela, perder el foco también guarda. -->
+                        <TextBox x:Name="WorkflowNameBox" Visibility="Collapsed" Height="28" Margin="0,6,0,0"
+                                 VerticalContentAlignment="Center" Background="#22FFFFFF" Foreground="White"
+                                 BorderThickness="0" Padding="8,0" FontSize="12"
+                                 KeyDown="OnWorkflowNameKey" LostFocus="OnWorkflowNameLostFocus"
+                                 ToolTip="Nombre del workflow · Enter guarda · Escape cancela"/>
 
                         <Button x:Name="RunWorkflowBtn" Content="▶ Ejecutar ahora" Height="34" Margin="0,8,0,0"
                                 Click="OnRunWorkflowDirect" Style="{StaticResource MenuBtn}" Background="#2FB457"
