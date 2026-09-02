@@ -4,14 +4,14 @@ using System.Text.Json;
 namespace U.WindowsClient.Navigation;
 
 /// <summary>Un paso tal como la DEMOSTRACIÓN lo vio: qué se tocó (o tecleó), a dónde llegó, y qué
-/// estaba diciendo el humano mientras. Promesas 85 y 88 (spec 004).</summary>
+/// estaba diciendo el humano mientras. Promesas 102 y 105 (spec 005).</summary>
 public sealed record PasoEnsenado(string Exit, string Texto = "", string Llegada = "", string Dicho = "");
 
 /// <summary>Lo que un catálogo anuncia de una skill: lo justo para pedirla sin abrirla.</summary>
 public sealed record SkillAnunciada(string Nombre, string Description, string Archivo);
 
 /// <summary>
-/// UNA SKILL ENSEÑADA: el artefacto que sale de una demostración humana. Promesas 85 y 89.
+/// UNA SKILL ENSEÑADA: el artefacto que sale de una demostración humana. Promesas 102 y 106.
 /// </summary>
 /// <remarks>
 /// Es la copia deliberada del patrón de las skills de Claude (.claude/skills/*/SKILL.md): un nombre,
@@ -75,7 +75,7 @@ public sealed record SkillEnsenada(
     }
 
     /// <summary>
-    /// Lo que hay para anunciar (promesa 89): nombre y CUÁNDO usarla, por skill guardada. Con cero
+    /// Lo que hay para anunciar (promesa 106): nombre y CUÁNDO usarla, por skill guardada. Con cero
     /// skills, cero anuncios — anunciar lo que no hay es inventar.
     /// </summary>
     public static IReadOnlyList<SkillAnunciada> Catalogo(string carpeta)

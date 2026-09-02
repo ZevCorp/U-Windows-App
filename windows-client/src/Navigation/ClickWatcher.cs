@@ -175,7 +175,7 @@ public sealed class ClickWatcher : IDisposable
             : "NO se pudo enganchar el ratón: las aristas quedarán sin acción (solo conectividad)");
     }
 
-    /// <summary>¿Este golpe lo inyectó software? Promesa 84: lo sintético no se acuña como humano.</summary>
+    /// <summary>¿Este golpe lo inyectó software? Promesa 101: lo sintético no se acuña como humano.</summary>
     /// <remarks>
     /// Los dos bits del hook de bajo nivel: LLMHF_INJECTED (0x1, inyectado por cualquier proceso)
     /// y LLMHF_LOWER_IL_INJECTED (0x2, inyectado por uno de menor integridad). Inyectado es
@@ -193,7 +193,7 @@ public sealed class ClickWatcher : IDisposable
             {
                 var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
 
-                // LO SINTÉTICO NO ENSEÑA (promesa 84). Este vigía existe para atribuir clics
+                // LO SINTÉTICO NO ENSEÑA (promesa 101). Este vigía existe para atribuir clics
                 // HUMANOS; los nuestros —RealClick, RealDoubleClick, el batch entero— llegan por el
                 // mismo hook y hasta hoy se acuñaban como humanos: el 2026-08-31 el doble sintético
                 // sobre «specs» se atribuyó a la cabecera «Fecha de modificación» y nació una

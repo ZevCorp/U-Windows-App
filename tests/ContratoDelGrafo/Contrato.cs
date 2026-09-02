@@ -1371,9 +1371,9 @@ internal static class Contrato
             + "sobre contenido de lista, porque sobre un botón el segundo clic es repetir la acción");
     }
 
-    // ── Enseñar por demostración (spec 004) ──────────────────────────────────
+    // ── Enseñar por demostración (spec 005) ──────────────────────────────────
 
-    /// <summary>Capacidad de la spec 004 pedida por nombre; ausente = rojo con su fase.</summary>
+    /// <summary>Capacidad de la spec 005 pedida por nombre; ausente = rojo con su fase.</summary>
     /// <remarks>Por el ensamblado de U.dll y no por «Nucleo.GetType»: en este contrato «Nucleo» es
     /// el ESPACIO DE NOMBRES del terreno, no el alias de ensamblado que tenía el contrato viejo —
     /// la primera versión de este helper confundió los dos y no compilaba (2026-09-01).</remarks>
@@ -1388,7 +1388,7 @@ internal static class Contrato
         // corrida — por eso esta promesa va ANTES que el empaquetador.
         var m = Cap004("U.WindowsClient.Navigation.ClickWatcher")
             ?.GetMethod("EsSintetico", new[] { typeof(uint) });
-        Debe(m != null, "todavía no existe «ClickWatcher.EsSintetico» (fase 1 de la spec 004). "
+        Debe(m != null, "todavía no existe «ClickWatcher.EsSintetico» (fase 1 de la spec 005). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (m == null) return;
 
@@ -1410,7 +1410,7 @@ internal static class Contrato
         var tPaso = Cap004("U.WindowsClient.Navigation.PasoEnsenado");
         var emp = tSkill?.GetMethod("Empaquetar");
         Debe(tSkill != null && tPaso != null && emp != null,
-            "todavía no existen «SkillEnsenada/PasoEnsenado/Empaquetar» (fase 2 de la spec 004). "
+            "todavía no existen «SkillEnsenada/PasoEnsenado/Empaquetar» (fase 2 de la spec 005). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tSkill == null || tPaso == null || emp == null) return;
 
@@ -1449,7 +1449,7 @@ internal static class Contrato
         // en la arista y nadie lo pedía (medido 2026-09-01).
         var pLlegada = typeof(RecorrerSegunElNucleo.Paso).GetProperty("Llegada");
         Debe(pLlegada != null,
-            "todavía no existe «Paso.Llegada» en el batch (fase 3 de la spec 004). "
+            "todavía no existe «Paso.Llegada» en el batch (fase 3 de la spec 005). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (pLlegada == null) return;
 
@@ -1483,7 +1483,7 @@ internal static class Contrato
         // botón está Collapsed (medido 2026-09-01). La decisión se juzga aquí; el borrado real de
         // archivos es nivel 4.
         var t = Cap004("U.WindowsClient.Teach.SesionDeDemo");
-        Debe(t != null, "todavía no existe «SesionDeDemo» (fase 4 de la spec 004). "
+        Debe(t != null, "todavía no existe «SesionDeDemo» (fase 4 de la spec 005). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (t == null) return;
 
@@ -1511,7 +1511,7 @@ internal static class Contrato
         var tF = Cap004("U.WindowsClient.Navigation.FraseDicha");
         var m = tA?.GetMethod("Ancla");
         Debe(tA != null && tF != null && m != null,
-            "todavía no existe «AncladorDeVoz/FraseDicha» (fase 5 de la spec 004). "
+            "todavía no existe «AncladorDeVoz/FraseDicha» (fase 5 de la spec 005). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tA == null || tF == null || m == null) return;
 
@@ -1541,7 +1541,7 @@ internal static class Contrato
         var guardar = tSkill?.GetMethod("Guardar");
         var catalogo = tSkill?.GetMethod("Catalogo");
         Debe(tSkill != null && guardar != null && catalogo != null,
-            "todavía no existen «Guardar/Catalogo» (fase 6 de la spec 004). "
+            "todavía no existen «Guardar/Catalogo» (fase 6 de la spec 005). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tSkill == null || guardar == null || catalogo == null) return;
 

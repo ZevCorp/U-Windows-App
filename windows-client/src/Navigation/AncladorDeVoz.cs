@@ -7,7 +7,7 @@ public sealed record FraseDicha(string Texto, long HoraMs);
 public sealed record VozAnclada(IReadOnlyList<string> DichoPorPaso, string Contexto);
 
 /// <summary>
-/// EL ANCLADOR: qué frase estaba sonando con qué paso. Promesa 88 (spec 004).
+/// EL ANCLADOR: qué frase estaba sonando con qué paso. Promesa 105 (spec 005).
 /// </summary>
 /// <remarks>
 /// «Aquí va el NIT» solo sirve colgado del campo que sonaba; suelto es una frase perdida en un log

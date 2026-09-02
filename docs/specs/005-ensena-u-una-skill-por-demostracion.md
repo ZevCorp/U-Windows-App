@@ -1,6 +1,6 @@
 # Plan de implementación: enseñar a Ü por demostración — una skill por demo
 
-Estado: **propuesto** · Nace del diagnóstico del 2026-09-01 · Rama: `jose/ensena-u`
+Estado: **implementado** (2026-09-01: contrato verde, nivel 4 pendiente — ver Cierre) · Nace del diagnóstico del 2026-09-01 · Rama: `jose/ensena-u`
 
 > **La petición, en una frase:** copiar «teach a skill to Claude» para Ü — el humano demuestra un
 > flujo completo (pantalla grabada + rastro del ratón + narración por voz) y Ü lo aprende como una
@@ -77,18 +77,18 @@ En `tests/ContratoDelGrafo`, en continuación (la más alta hoy es la 83):
 
 | # | Promesa | Fase |
 |---|---|---|
-| 84 | una pulsación sintética no se acuña como clic humano: el vigía la deja pasar | 1 |
-| 85 | una demostración termina en una skill con nombre: los pasos en orden, de dónde parte y a dónde llega cada paso | 2 |
-| 86 | reproducir una skill exige la llegada de cada paso: acabar en otro sitio no es haberlo hecho | 3 |
-| 87 | una demo descartada no publica nada: ni video, ni pasos, ni skill | 4 |
-| 88 | lo dicho durante la demo viaja con su paso: la frase queda anclada al paso que sonaba | 5 |
-| 89 | las skills enseñadas se anuncian al cerebro: se piden por nombre, y el catálogo dice cuándo usarlas | 6 |
+| 101 | una pulsación sintética no se acuña como clic humano: el vigía la deja pasar | 1 |
+| 102 | una demostración termina en una skill con nombre: los pasos en orden, de dónde parte y a dónde llega cada paso | 2 |
+| 103 | reproducir una skill exige la llegada de cada paso: acabar en otro sitio no es haberlo hecho | 3 |
+| 104 | una demo descartada no publica nada: ni video, ni pasos, ni skill | 4 |
+| 105 | lo dicho durante la demo viaja con su paso: la frase queda anclada al paso que sonaba | 5 |
+| 106 | las skills enseñadas se anuncian al cerebro: se piden por nombre, y el catálogo dice cuándo usarlas | 6 |
 
-**La que cierra el asunto es la 85** — el eslabón que no existe. Pero **la 84 va primero y no es
+**La que cierra el asunto es la 102** — el eslabón que no existe. Pero **la 101 va primero y no es
 negociable**: sin el filtro de inyección, cada reproducción re-contamina el grafo con aristas
-falsas, y lo que la 85 empaqueta se reproduce sobre un terreno que miente.
+falsas, y lo que la 102 empaqueta se reproduce sobre un terreno que miente.
 
-La 86 es el pendiente histórico nº1 del repo («terminé» no es un veredicto) hecho promesa: la skill
+La 103 es el pendiente histórico nº1 del repo («terminé» no es un veredicto) hecho promesa: la skill
 trae la llegada de cada paso porque la demo la vio, y el batch la exige porque puede.
 
 ### El artefacto: qué es una «skill enseñada»
@@ -121,12 +121,12 @@ El contrato no toca la pantalla: las seis juzgan **decisiones y transformaciones
 
 | # | Se juzga con |
 |---|---|
-| 84 | La regla de inyección como función: flags con `LLMHF_INJECTED` → no se atribuye. Sin tocar hooks reales |
-| 85 | El empaquetador como función pura: lista de ObservedStep/cruces de una sesión → skill con nombre, pasos ordenados y llegada por paso; una sesión vacía NO produce skill |
-| 86 | El arnés del batch que ya existe: paso con llegada declarada que aterriza en otro sitio → parcial honesto, no «hecho» |
-| 87 | Descartar como decisión: la sesión descartada no entrega nada a ninguna de las tres salidas |
-| 88 | El anclador como función: (frases con hora, pasos con hora) → cada frase al paso que sonaba; frase sin paso cerca queda como contexto general, no se inventa el ancla |
-| 89 | El catálogo: con N skills en disco, la lista las anuncia con nombre y description; con cero, lista vacía — no se inventa |
+| 101 | La regla de inyección como función: flags con `LLMHF_INJECTED` → no se atribuye. Sin tocar hooks reales |
+| 102 | El empaquetador como función pura: lista de ObservedStep/cruces de una sesión → skill con nombre, pasos ordenados y llegada por paso; una sesión vacía NO produce skill |
+| 103 | El arnés del batch que ya existe: paso con llegada declarada que aterriza en otro sitio → parcial honesto, no «hecho» |
+| 104 | Descartar como decisión: la sesión descartada no entrega nada a ninguna de las tres salidas |
+| 105 | El anclador como función: (frases con hora, pasos con hora) → cada frase al paso que sonaba; frase sin paso cerca queda como contexto general, no se inventa el ancla |
+| 106 | El catálogo: con N skills en disco, la lista las anuncia con nombre y description; con cero, lista vacía — no se inventa |
 
 Que la demo real de punta a punta funcione (grabar → hablar → empaquetar → reproducir en el
 Explorador o SAP) es **nivel 4**, a mano, con log — como siempre.
@@ -135,12 +135,12 @@ Explorador o SAP) es **nivel 4**, a mano, con log — como siempre.
 
 | Fase | Promesa | Qué toca | Nota |
 |---|---|---|---|
-| 1 | 84 | `ClickWatcher.cs` | El filtro `LLMHF_INJECTED` — protege todo lo demás |
-| 2 | 85 | nuevo `Navigation/SkillEnsenada.cs` + `WorkflowTeachSession` (destino local además del Graph) | El eslabón inexistente |
-| 3 | 86 | `RecorrerSegunElNucleo.cs` (la llegada opcional por paso) | «Terminé» deja de ser opinión |
-| 4 | 87 | `TeachSession` (cablear `DiscardAsync`), UI mínima | Ya está escrito, cero llamadores |
-| 5 | 88 | `ClickWatcher` (hora del golpe), `ConversacionEnVivo` (frase con hora) + el anclador | La voz viaja con su paso |
-| 6 | 89 | `SurfaceMapTools` (catálogo `map_skills` o skills en `tools/list`) | El cerebro puede pedirlas |
+| 1 | 101 | `ClickWatcher.cs` | El filtro `LLMHF_INJECTED` — protege todo lo demás |
+| 2 | 102 | nuevo `Navigation/SkillEnsenada.cs` + `WorkflowTeachSession` (destino local además del Graph) | El eslabón inexistente |
+| 3 | 103 | `RecorrerSegunElNucleo.cs` (la llegada opcional por paso) | «Terminé» deja de ser opinión |
+| 4 | 104 | `TeachSession` (cablear `DiscardAsync`), UI mínima | Ya está escrito, cero llamadores |
+| 5 | 105 | `ClickWatcher` (hora del golpe), `ConversacionEnVivo` (frase con hora) + el anclador | La voz viaja con su paso |
+| 6 | 106 | `SurfaceMapTools` (catálogo `map_skills` o skills en `tools/list`) | El cerebro puede pedirlas |
 
 ## Lo que NO entra
 
@@ -167,20 +167,20 @@ Explorador o SAP) es **nivel 4**, a mano, con log — como siempre.
   a la espera de su integración:
   | Pieza | Estado |
   |---|---|
-  | Filtro de inyección (84) | **Cableado en el hook real** — `HookCallback` pregunta antes de resolver |
-  | Llegada exigida (86) | **Cableada en el batch real** — `Recorre` la exige cuando el paso la trae |
-  | Empaquetador + catálogo (85, 89) | Capacidad completa y juzgada; falta que `WorkflowTeachSession` la llame al cerrar y que el MCP anuncie el catálogo (`map_skills`) |
-  | Descarte (87) | La decisión existe y está juzgada; falta cablear `DiscardAsync` y el botón |
-  | Anclador (88) | Capacidad completa; falta capturar la hora del golpe en el hook y la frase con hora en la voz |
-- **2026-09-01** — La promesa 87 juzga la **decisión**, y tiene un punto ciego asumido: un
+  | Filtro de inyección (101) | **Cableado en el hook real** — `HookCallback` pregunta antes de resolver |
+  | Llegada exigida (103) | **Cableada en el batch real** — `Recorre` la exige cuando el paso la trae |
+  | Empaquetador + catálogo (102, 106) | Capacidad completa y juzgada; falta que `WorkflowTeachSession` la llame al cerrar y que el MCP anuncie el catálogo (`map_skills`) |
+  | Descarte (104) | La decisión existe y está juzgada; falta cablear `DiscardAsync` y el botón |
+  | Anclador (105) | Capacidad completa; falta capturar la hora del golpe en el hook y la frase con hora en la voz |
+- **2026-09-01** — La promesa 104 juzga la **decisión**, y tiene un punto ciego asumido: un
   `Descartar` que no hiciera nada (sesión sigue «grabando») tampoco entregaría, así que el contrato
   no lo distingue de un descarte bueno. El sabotaje elegido (descartar→publica) es el fallo con
   dientes; el no-op lo tiene que cazar el nivel 4.
 
 ## Cierre
 
-- [ ] Promesas 84-89 verdes (y las 83 anteriores intactas)
-- [ ] Rotas a propósito, una por una (verificación por diff, build sin silenciar, veredicto exigido)
+- [x] Promesas 101-106 verdes (y las 100 anteriores intactas)
+- [x] Rotas a propósito, una por una (verificación por diff, build sin silenciar, veredicto exigido)
 - [ ] Nivel 4: una demo real de punta a punta, grabada, empaquetada y reproducida, en ≥2 pantallas
       con nombre y log
 - [ ] Estado: **implementado** (AAAA-MM-DD)

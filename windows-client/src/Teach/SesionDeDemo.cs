@@ -5,7 +5,7 @@ public sealed record EntregaDeDemo(string Video, IReadOnlyList<Navigation.PasoEn
     Navigation.SkillEnsenada? Skill);
 
 /// <summary>
-/// EL CICLO DE VIDA de una demostración: grabando → cerrada O descartada. Promesa 87 (spec 004).
+/// EL CICLO DE VIDA de una demostración: grabando → cerrada O descartada. Promesa 104 (spec 005).
 /// </summary>
 /// <remarks>
 /// «Me equivoqué» hoy sube el video igual: DiscardAsync existe con CERO llamadores y el botón está

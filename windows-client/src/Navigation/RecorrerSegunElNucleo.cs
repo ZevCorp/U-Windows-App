@@ -116,7 +116,7 @@ public sealed class RecorrerSegunElNucleo
             if (!r.SePudo)
                 return Parcial(i, pasos.Count, r.Cuenta, conVivos: true);
 
-            // LA LLEGADA SE EXIGE CUANDO SE CONOCE (promesa 86, spec 004). Un paso de skill
+            // LA LLEGADA SE EXIGE CUANDO SE CONOCE (promesa 103, spec 005). Un paso de skill
             // enseñada trae a dónde llegó en la demostración; aterrizar en otro sitio y seguir
             // sería ejecutar el resto del plan sobre una pantalla que no es — el «29 de 30» del
             // salto-adelante, otra vez. Contar el paso como hecho tampoco: «terminé» deja de ser
