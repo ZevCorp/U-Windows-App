@@ -1471,6 +1471,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         else
         {
             EsconderGhost(inmediato: true);
+            Pista.IsOpen = false;
             CollapsedHost.Visibility = Visibility.Collapsed;
             BarPanel.Visibility = Visibility.Visible;
         }
@@ -1515,6 +1516,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         AnotarForegroundAjeno();
         _ghostTimer.Stop();
         MostrarGhost();
+        MostrarPistaSiToca();
         _reposoTimer.Start();
     }
 
@@ -1523,6 +1525,27 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _reposoTimer.Stop();
         _ratonSobreLaCara = false;
         _ghostTimer.Start();
+        Pista.IsOpen = false;
+    }
+
+    /// <summary>Un arranque en que ya se enseñó la pista: se cuenta una vez, no por cada roce.</summary>
+    private bool _pistaContadaEsteArranque;
+
+    /// <summary>
+    /// La pista de gestos bajo la carita, mientras ReglaDeDescubrimiento diga que toca (promesa
+    /// 116). Se cuenta al ENSEÑARLA y por arranque: no hay forma de saber si se leyó, y tres roces
+    /// seguidos en el primer minuto no son tres oportunidades de aprenderla.
+    /// </summary>
+    private void MostrarPistaSiToca()
+    {
+        if (_talkOpen || _anillo is { IsVisible: true }) return;   // ya está pasando algo: no estorbar
+        if (!ReglaDeDescubrimiento.Mostrar(_config.PistasDeLaCaritaMostradas)) return;
+        Pista.IsOpen = true;
+        if (_pistaContadaEsteArranque) return;
+        _pistaContadaEsteArranque = true;
+        _config.PistasDeLaCaritaMostradas++;
+        _config.Save();
+        LogBus.Log("carita", $"pista de gestos enseñada: arranque {_config.PistasDeLaCaritaMostradas} de {ReglaDeDescubrimiento.Veces}");
     }
 
     private void OnGhostEntra(object sender, System.Windows.Input.MouseEventArgs e)
@@ -1832,6 +1855,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void Ocultarse()
     {
         CerrarAnillo();
+        Pista.IsOpen = false;
         if (_collapsed) ToggleCollapsed();
         Hide();
     }

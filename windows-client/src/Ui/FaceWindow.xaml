@@ -615,6 +615,21 @@
                             <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="Black"/>
                         </ui:FaceControl.Effect>
                     </ui:FaceControl>
+
+                    <!-- LA PISTA (spec 008, promesa 116): los tres primeros arranques en que te acercas,
+                         una línea bajo la carita dice qué hacen los gestos; después calla
+                         (ReglaDeDescubrimiento). Es un Popup y no un TextBlock acoplado porque un Popup
+                         no cuenta para el tamaño de la ventana: un texto acoplado debajo levantaría la
+                         carita su propia altura al aparecer. Se mira, no se toca. -->
+                    <Popup x:Name="Pista" PlacementTarget="{Binding ElementName=CollapsedFace}" Placement="Bottom"
+                           AllowsTransparency="True" StaysOpen="True" PopupAnimation="Fade"
+                           HorizontalOffset="-84" VerticalOffset="8">
+                        <Border CornerRadius="10" Background="#F20F131C" BorderBrush="#38FFFFFF" BorderThickness="1"
+                                Padding="10,5" IsHitTestVisible="False">
+                            <TextBlock Text="toca: hablar · escribe: texto · mantén: menú"
+                                       Foreground="#EEFFFFFF" FontSize="11"/>
+                        </Border>
+                    </Popup>
                 </Grid>
 
                 <!-- LA FRASE CORTA: acompaña a la carita para que el estado no dependa de aprenderse
