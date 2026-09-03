@@ -315,6 +315,23 @@ internal static class Contrato
         Prueba("110. la lista va del más nuevo al más viejo, y el recién enseñado queda elegido; si no se sabe cuál es, se elige el más nuevo", ElRecienEnsenadoQuedaElegido);
         Prueba("111. darle play no vuelve a pedir el plan si ya está en la mano: se pide al elegir el workflow y la corrida lo usa; sin plan a la mano se pide una sola vez", ElPlayNoVuelveAPedirElPlan);
 
+        // ── La carita es el único botón (spec 008) ───────────────────────────
+        //
+        // Medido en el código el 2026-09-02: con la carita suelta, al acercar el ratón aparecen
+        // tres pastillas —hablar, escribir, dictar a SAP— y la de escribir NO HACE NADA en el
+        // único estado en que existe (ShowTalk se niega si _collapsed). Hablar, que es lo que más
+        // se hace, cuesta dos gestos escondidos; mantener oprimida está gastado en cambiar de
+        // tema; y el dictado a SAP no tiene más entrada que ese botón —ni atajo, ni voz, ni MCP—
+        // y el usuario dice que ya no se usa. Pidió quitar los botones y que la carita sea la
+        // interacción. Lo que promete cada gesto se juzga por reglas puras, como la 107: lo
+        // juzgado y lo pintado salen de la misma función.
+        Console.WriteLine();
+        Prueba("112. la carita es el único botón: no quedan pastillas ni dictado clínico colgando de ella", LaCaritaEsElUnicoBoton);
+        Prueba("113. un toque habla, dos abren la barra, mantener o clic derecho abren el anillo, arrastrar mueve", LosGestosDeLaCarita);
+        Prueba("114. escribir con el ratón encima abre el globo con esa letra; atajos, teclas F y Esc siguen su camino", EscribirSobreLaCarita);
+        Prueba("115. el anillo abre hacia el centro de la pantalla, cabe entero en el área de trabajo y ningún item pisa a otro ni a la carita", ElAnilloCabeYMiraAlCentro);
+        Prueba("116. la pista de gestos se enseña tres veces y calla", LaPistaSeCallaALaTercera);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -3592,6 +3609,167 @@ internal static class Contrato
         var sinPlan = new WorkflowPlayer(graph, cfg);
         sinPlan.RunAsync("wf_p", null, true, CancellationToken.None).GetAwaiter().GetResult();
         Debe(Planes() == 1, $"sin plan a la mano se pide UNA vez, como siempre ({Planes()} peticiones)");
+    }
+
+
+    // ── La carita es el único botón (spec 008) ───────────────────────────────
+
+    /// <summary>
+    /// Por reflexión sobre la ventana de la carita, sin instanciarla: el XAML genera un campo por
+    /// cada <c>x:Name</c>, así que «no queda pastilla» es «no queda campo». Y se comprueba a la vez
+    /// que quitar el botón NO borró la capacidad: la consulta (spec 004) sigue dictando con
+    /// <c>DictadoEnVivo</c>, y la exportación a HC sigue llenando SAP con el rellenador.
+    /// </summary>
+    private static void LaCaritaEsElUnicoBoton()
+    {
+        var cara = Capacidad("U.WindowsClient.Ui.FaceWindow");
+        Debe(cara != null, "FaceWindow no se encontró en U.dll");
+        if (cara == null) return;
+
+        var campos = cara.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        Debe(!campos.Any(f => f.FieldType.Name == "DictadoEnVivo"),
+            "la carita ya no arma el dictado clínico: no hay campo de tipo DictadoEnVivo");
+        Debe(!campos.Any(f => f.Name == "ZonaDictado"),
+            "y no queda la pastilla del fonendoscopio (ZonaDictado)");
+        Debe(!campos.Any(f => f.Name is "ZonaVoz" or "ZonaChat" or "VoiceDotGrupo"),
+            "ni las de hablar y escribir (ZonaVoz, ZonaChat, VoiceDotGrupo): la carita es el botón");
+
+        Debe(Capacidad("U.WindowsClient.Clinical.Transcripcion.DictadoEnVivo") != null,
+            "quitar el botón no borra la capacidad: DictadoEnVivo sigue existiendo para la consulta");
+        Debe(campos.Any(f => f.FieldType.Name == "RellenadorSap"),
+            "y el rellenador de SAP sigue en la carita: lo usa la exportación a HC, que no tiene botón");
+    }
+
+    /// <summary>
+    /// La regla que decide qué intención tiene cada gesto, separada del cableado de WPF para que
+    /// se juzgue sin ratón. Un toque es hablar porque es lo que más se hace; dos toques abren la
+    /// barra porque «doble clic = abrir» en todo Windows; mantener y clic derecho son el mismo
+    /// menú, para que el que no sepa el gesto tenga el clic derecho de siempre.
+    /// </summary>
+    private static void LosGestosDeLaCarita()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDeGestos");
+        var decidir = t?.GetMethod("Decidir");
+        var gesto = Capacidad("U.WindowsClient.Ui.Gesto");
+        Debe(t != null && decidir != null && gesto != null,
+            "todavía no existe «ReglaDeGestos» (fase 2 de la spec 008). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || decidir == null || gesto == null) return;
+
+        string I(string g) => decidir.Invoke(null, new[] { Enum.Parse(gesto, g) })!.ToString()!;
+
+        Debe(I("Toque") == "Hablar", "un toque habla: lo que más se hace cuesta un solo gesto");
+        Debe(I("DobleToque") == "AlternarBarra", "dos toques abren o cierran la barra, como abrir cualquier cosa en Windows");
+        Debe(I("Mantener") == "Anillo", "mantener oprimida abre el anillo, no cambia de tema");
+        Debe(I("ClicDerecho") == "Anillo", "y el clic derecho abre el MISMO anillo: el que no sepa el gesto tiene el de siempre");
+        Debe(I("Arrastre") == "Mover", "arrastrar sigue moviendo la carita");
+    }
+
+    /// <summary>
+    /// Escribirle no necesita botón: con el ratón sobre la carita, la primera letra abre el globo
+    /// con esa letra puesta. La regla dice QUÉ teclas abren, y sobre todo cuáles NO: un atajo con
+    /// Ctrl o Alt, una tecla F, Esc, Enter, Tab, las flechas y un espacio suelto siguen su camino
+    /// hacia la aplicación de debajo, porque robárselos a SAP con el cursor apoyado en la carita
+    /// sería peor que no tener el gesto.
+    /// </summary>
+    private static void EscribirSobreLaCarita()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDeEscritura");
+        var abre = t?.GetMethod("Abre");
+        Debe(t != null && abre != null,
+            "todavía no existe «ReglaDeEscritura» (fase 3 de la spec 008). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || abre == null) return;
+
+        bool A(uint vk, bool encima, bool ctrl = false, bool alt = false)
+            => (bool)abre.Invoke(null, new object[] { vk, encima, ctrl, alt })!;
+
+        const uint H = 0x48, Uno = 0x31, Coma = 0xBC, Numpad7 = 0x67, Espacio = 0x20, Retroceso = 0x08,
+                   Esc = 0x1B, Enter = 0x0D, Tab = 0x09, Izquierda = 0x25, F1 = 0x70, F5 = 0x74;
+
+        Debe(A(H, true), "una letra con el ratón encima abre el globo con esa letra");
+        Debe(A(Uno, true) && A(Coma, true) && A(Numpad7, true),
+            "y un dígito, un signo o el teclado numérico también: lo que se escribe, se escribe");
+        Debe(!A(H, false), "con el ratón en otra parte ninguna tecla es para Ü: no se roba nada");
+        Debe(!A(H, true, ctrl: true) && !A(H, true, alt: true),
+            "Ctrl+H o Alt+H con el ratón encima son un atajo de la app de debajo, no una letra");
+        Debe(!A(F1, true) && !A(F5, true), "las teclas F siguen su camino: F5 en SAP es F5 en SAP");
+        Debe(!A(Esc, true) && !A(Enter, true) && !A(Tab, true) && !A(Izquierda, true),
+            "Esc, Enter, Tab y las flechas tampoco abren nada: no escriben");
+        Debe(!A(Espacio, true) && !A(Retroceso, true),
+            "un espacio o un retroceso sueltos no abren un globo vacío");
+    }
+
+    /// <summary>
+    /// La geometría del anillo es pura y la usa el propio anillo para colocarse: si el contrato la
+    /// aprueba, lo que se pinta es lo aprobado (aprendizaje nº16). Se juzga en las cuatro esquinas
+    /// de un área de trabajo de 1920×1040, que es donde vive la carita (siempre pegada a un borde).
+    /// </summary>
+    private static void ElAnilloCabeYMiraAlCentro()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelAnillo");
+        var posiciones = t?.GetMethod("Posiciones");
+        var elegir = t?.GetMethod("ElegirEn");
+        Debe(t != null && posiciones != null && elegir != null,
+            "todavía no existe «ReglaDelAnillo» (fase 4 de la spec 008). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || posiciones == null || elegir == null) return;
+
+        double diametro = (double)t.GetField("DiametroItem")!.GetValue(null)!;
+        double radioCara = 36;   // la carita suelta mide 72
+        var area = new System.Windows.Rect(0, 0, 1920, 1040);
+        const int n = 5;
+
+        var esquinas = new (string Nombre, System.Windows.Point Centro, bool Izquierda)[]
+        {
+            ("arriba a la izquierda", new System.Windows.Point(64, 64), true),
+            ("arriba a la derecha", new System.Windows.Point(1856, 64), false),
+            ("abajo a la izquierda", new System.Windows.Point(64, 976), true),
+            ("abajo a la derecha", new System.Windows.Point(1856, 976), false),
+        };
+
+        foreach (var (nombre, centro, izquierda) in esquinas)
+        {
+            var puntos = ((System.Collections.Generic.IReadOnlyList<System.Windows.Point>)
+                posiciones.Invoke(null, new object[] { centro, izquierda, n, area })!).ToList();
+
+            Debe(puntos.Count == n, $"{nombre}: salen {n} posiciones, una por item ({puntos.Count})");
+            Debe(puntos.All(p => izquierda ? p.X > centro.X : p.X < centro.X),
+                $"{nombre}: todos los items quedan hacia el centro de la pantalla, no contra el borde");
+            Debe(puntos.All(p => p.X - diametro / 2 >= area.Left && p.X + diametro / 2 <= area.Right
+                              && p.Y - diametro / 2 >= area.Top && p.Y + diametro / 2 <= area.Bottom),
+                $"{nombre}: cada item cabe ENTERO en el área de trabajo");
+            Debe(puntos.All(p => (p - centro).Length >= radioCara + diametro / 2),
+                $"{nombre}: ningún item pisa la carita");
+            bool sinSolape = true;
+            for (int i = 0; i < puntos.Count; i++)
+                for (int j = i + 1; j < puntos.Count; j++)
+                    if ((puntos[i] - puntos[j]).Length < diametro) sinSolape = false;
+            Debe(sinSolape, $"{nombre}: ningún item pisa a otro");
+
+            object? Elige(System.Windows.Point cursor)
+                => elegir.Invoke(null, new object[] { puntos, cursor, 8.0 });
+
+            Debe(Equals(Elige(puntos[2]), 2), $"{nombre}: soltar sobre el tercer item elige el tercero");
+            Debe(Elige(centro) == null, $"{nombre}: soltar sobre la carita no elige nada — es cancelar");
+        }
+    }
+
+    /// <summary>Un gesto que hay que saber es un secreto; una pista que no se calla es un cartel.</summary>
+    private static void LaPistaSeCallaALaTercera()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDeDescubrimiento");
+        var mostrar = t?.GetMethod("Mostrar");
+        Debe(t != null && mostrar != null,
+            "todavía no existe «ReglaDeDescubrimiento» (fase 5 de la spec 008). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || mostrar == null) return;
+
+        bool M(int veces) => (bool)mostrar.Invoke(null, new object[] { veces })!;
+
+        Debe(M(0) && M(1) && M(2), "las tres primeras veces que te acercas, la pista se enseña");
+        Debe(!M(3), "a la cuarta ya no: quien la vio tres veces la sabe o no la quiere");
+        Debe(!M(9), "y no vuelve nunca sola");
     }
 
     private static void Prueba(string nombre, Action cuerpo)
