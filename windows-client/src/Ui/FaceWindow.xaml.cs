@@ -1462,14 +1462,20 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             CollapsedFace.Mood = Face.Mood; // que la carita suelta refleje el mismo estado
             CloseMenu();
-            RootPanel.Visibility = Visibility.Collapsed;
-            CollapsedGroup.Visibility = Visibility.Visible;
+            // Colapsada, el menú no puede quedar «hacia abajo»: eso ancla el borde SUPERIOR de la
+            // ventana, y el globo, al crecer, empujaría a la carita hacia abajo (spec 008, fase 3).
+            ApplyMenuDirection(false);
+            BarPanel.Visibility = Visibility.Collapsed;
+            CollapsedHost.Visibility = Visibility.Visible;
         }
         else
         {
-            CollapsedGroup.Visibility = Visibility.Collapsed;
-            RootPanel.Visibility = Visibility.Visible;
+            EsconderGhost(inmediato: true);
+            CollapsedHost.Visibility = Visibility.Collapsed;
+            BarPanel.Visibility = Visibility.Visible;
         }
+        // El globo se acopla a cualquiera de las dos, pero a ras de la que esté (ver MargenDelGlobo).
+        TalkPanel.Margin = MargenDelGlobo();
         // Colapsada, el contrato es «solo la carita»: la píldora no aparece y el semáforo ES la cara.
         UpdateChip(_mood);
     }
@@ -1477,16 +1483,146 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     // --- El botón de voz que asoma al pasar por encima de la carita suelta ---
 
 
-    /// <summary>
-    /// Acercar el ratón a la carita suelta. Hasta el 2026-09-02 aquí asomaban tres pastillas
-    /// —hablar, escribir, dictar a SAP—; se retiraron (spec 008) porque hablarle es lo que más se
-    /// hace y no puede estar detrás de acertarle a una barrita de 4,5 px. Lo que hoy hace el hover
-    /// es asegurarse de que el halo tenga el aspecto que toca; los ojos y la línea de texto llegan
-    /// en las fases 2 y 3 de la spec.
-    /// </summary>
-    private void OnCollapsedHoverIn(object sender, System.Windows.Input.MouseEventArgs e) => PintarHalo();
+    // ── Escribirle sin botón (spec 008, promesa 114) ─────────────────────────────────────────
+    //
+    // Hasta el 2026-09-02 al acercar el ratón a la carita suelta asomaban tres pastillas —hablar,
+    // escribir, dictar a SAP—, y la de escribir no hacía nada en ese estado. Se retiraron: hablarle
+    // es un toque, y escribirle es ESCRIBIR. Al acercarte, los ojos te siguen (WireFaceGestures) y
+    // asoma la línea «Escríbele…»; un clic en ella, o una tecla con el ratón encima, abren el globo
+    // con el foco puesto —y con esa letra ya escrita—.
 
-    private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e) { }
+    /// <summary>Cuánto lleva el ratón sobre la carita antes de que una tecla sea para Ü. Sin este
+    /// reposo, pasar por encima de camino a otra cosa robaría la letra que ibas a escribir en la
+    /// app de debajo.</summary>
+    private readonly System.Windows.Threading.DispatcherTimer _reposoTimer =
+        new() { Interval = TimeSpan.FromMilliseconds(250) };
+
+    /// <summary>La gracia entre salir de la carita y que la línea se esconda: la mano tiene que
+    /// poder ir de la una a la otra sin que desaparezca por el camino (el mismo motivo por el que
+    /// las pastillas vivían en un panel con la carita).</summary>
+    private readonly System.Windows.Threading.DispatcherTimer _ghostTimer =
+        new() { Interval = TimeSpan.FromMilliseconds(320) };
+
+    private bool _ratonSobreLaCara;
+    private bool _ghostVisible;
+
+    /// <summary>Con el ratón sobre la carita (tras el reposo) o sobre la propia línea.</summary>
+    private bool RatonSobreLaCarita => _ratonSobreLaCara || GhostInput.IsMouseOver;
+
+    private void OnCollapsedHoverIn(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        PintarHalo();   // que aparezca ya con el aspecto que toca, no con el de la vez anterior
+        AnotarForegroundAjeno();
+        _ghostTimer.Stop();
+        MostrarGhost();
+        _reposoTimer.Start();
+    }
+
+    private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        _reposoTimer.Stop();
+        _ratonSobreLaCara = false;
+        _ghostTimer.Start();
+    }
+
+    private void OnGhostEntra(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        AnotarForegroundAjeno();
+        _ghostTimer.Stop();
+    }
+
+    private void OnGhostSale(object sender, System.Windows.Input.MouseEventArgs e) => _ghostTimer.Start();
+
+    private void OnGhostClic(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;   // que no lo tome el arrastre de la fila
+        PlayTick();
+        AbrirElGloboParaEscribir();
+    }
+
+    /// <summary>
+    /// Anota de dónde viene el teclado ANTES de que la carita se lo quede, para que Esc lo devuelva
+    /// (DevolverElFoco), igual que hace el atajo global. Se anota al ENTRAR con el ratón y no al
+    /// hacer clic: un clic ya activó esta ventana antes de llegar aquí, y GetForegroundWindow
+    /// diría que el teclado venía de nosotros mismos.
+    /// </summary>
+    private void AnotarForegroundAjeno()
+    {
+        var fg = GetForegroundWindow();
+        var propio = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (fg != IntPtr.Zero && fg != propio) _prevForeground = fg;
+    }
+
+    private void MostrarGhost()
+    {
+        if (!_collapsed || _talkOpen || _ghostVisible) return;
+        // En pleno vuelo no: OnSizeChanged no compensa mientras la carita viaja, y un cambio de
+        // ancho ahora la haría aterrizar en otro sitio. Al volver a entrar con el ratón, sale.
+        if (Vuelo.EnCurso) return;
+        _ghostVisible = true;
+        FadeSlideIn(GhostInput, GhostShift, fromY: 4);
+    }
+
+    private void EsconderGhost(bool inmediato)
+    {
+        _ghostTimer.Stop();
+        if (!_ghostVisible) return;
+        if (!inmediato && Vuelo.EnCurso) { _ghostTimer.Start(); return; }   // que aterrice primero
+        _ghostVisible = false;
+        if (inmediato)
+        {
+            GhostInput.BeginAnimation(OpacityProperty, null);
+            GhostInput.Opacity = 0;
+            GhostInput.Visibility = Visibility.Collapsed;
+            return;
+        }
+        FadeSlideOut(GhostInput, GhostShift, toY: 4,
+            () => { if (!_ghostVisible) GhostInput.Visibility = Visibility.Collapsed; });
+    }
+
+    /// <summary>Trae a Ü al frente con el cursor ya dentro de la caja. El mismo camino que el atajo
+    /// global (InvocarPorAtajo), sin abrir la barra: el globo ya se acopla a la carita suelta.</summary>
+    private void AbrirElGloboParaEscribir()
+    {
+        Show();
+        Activate();
+        ShowTalk(focusInput: true);
+        if (!IsActive)
+            // Si esto sale en el registro de la máquina del hospital, hará falta el rodeo de
+            // SetForegroundWindow + AttachThreadInput. No se implementa por adelantado (ver
+            // InvocarPorAtajo): que la necesidad la demuestre el log y no una teoría.
+            LogBus.Log("carita", "Activate() no trajo la ventana al frente al ir a escribir");
+    }
+
+    /// <summary>
+    /// Corre DENTRO del gancho de teclado (AtajoPorGolpes), en el hilo de la UI, para cada tecla
+    /// normal. Devolver true es quedarse con ella: el gancho la traga, aquí se abre el globo, y la
+    /// tecla se le devuelve al sistema cuando la caja ya tiene el foco.
+    /// </summary>
+    private bool InterceptarTeclaSobreLaCarita(uint vk, uint scan, uint flags, bool ctrl, bool alt)
+    {
+        if (!_collapsed) return false;                 // con la barra abierta, la caja está a la vista
+        if (Input.IsKeyboardFocused) return false;     // ya se está escribiendo ahí: nada que robar
+        if (!ReglaDeEscritura.Abre(vk, RatonSobreLaCarita, ctrl, alt)) return false;
+
+        LogBus.Log("carita", $"tecla 0x{vk:X2} con el ratón encima: abre el globo y se la devuelve");
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            AbrirElGloboParaEscribir();
+            // La tecla se devuelve DESPUÉS de que el foco haya llegado a la caja: ShowTalk lo pide a
+            // prioridad Input, y Background va detrás. Se reinyecta la MISMA tecla física, no un
+            // carácter calculado, para que Windows la traduzca con la distribución, el Shift y las
+            // teclas muertas de siempre. Y se devuelve aunque el foco no haya llegado: entonces cae
+            // donde estaba, que es exactamente lo que habría pasado sin este gancho.
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!Input.IsKeyboardFocused)
+                    LogBus.Log("carita", "la caja no llegó a tener el foco: la tecla se devuelve a donde estaba");
+                TeclaReinyectada.Pulsar(vk, scan, flags);
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }));
+        return true;
+    }
 
     /// <summary>
     /// El halo dice si la conversación está viva, y respira con lo que se está diciendo.
@@ -1608,6 +1744,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // barra abierta el scroll es del menú, y robárselo sería quitarle una función que sí tiene.
         _ = new LanzarConScroll(this, () => _collapsed,
             (vx, vy) => EdgeSnap.Aplicar(this, vx, vy, OnWindowMoved));
+
+        // Escribirle sin botón (spec 008, fase 3): el reposo que hace que una tecla sea para Ü, y la
+        // gracia que deja ir de la carita a la línea sin que desaparezca por el camino.
+        _reposoTimer.Tick += (_, __) => { _reposoTimer.Stop(); _ratonSobreLaCara = true; };
+        _ghostTimer.Tick += (_, __) => { _ghostTimer.Stop(); EsconderGhost(inmediato: false); };
     }
 
     /// <summary>Lo que hace cada intención. Es el ÚNICO sitio que traduce intención a acción, para
@@ -2291,7 +2432,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // Si no había conversación, el triple la abre: pedir el collar sin nada que oír
                 // dejaría el gesto sin efecto visible y parecería que no funcionó.
                 if (_vivo?.Viva != true) StartMicByFace();
-            }));
+            }),
+            interceptarTecla: InterceptarTeclaSobreLaCarita);
         Closed += (_, __) => { _golpes?.Dispose(); CerrarPanelDesarrollo(); };
 
         // Zona segura: menú y barra cancelan el cierre al entrar y lo agendan al salir.
@@ -2363,7 +2505,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         MenuPanel.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
         BarRow.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-        CollapsedGroup.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        DockPanel.SetDock(CollapsedHost, left ? Dock.Left : Dock.Right);
+        DockPanel.SetDock(GhostInput, left ? Dock.Right : Dock.Left);
 
         // Los tooltips salían siempre por la izquierda: pegados al borde izquierdo se saldrían de la
         // pantalla. Es un ajuste por botón porque ToolTipService.Placement no se hereda.
@@ -2373,7 +2516,22 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         // Y la píldora respira hacia el lado contrario a la barra.
         StatusChip.Margin = left ? new Thickness(8, 0, 0, 14) : new Thickness(0, 0, 8, 14);
-        TalkPanel.Margin = left ? new Thickness(8, 0, 0, 0) : new Thickness(0, 0, 8, 0);
+        TalkPanel.Margin = MargenDelGlobo();
+        // La línea «Escríbele…» se mete 12 px en el aire de 28 que rodea a la carita: queda a 16 px
+        // de ella, y centrada en su altura (28 de aire + 36 de media carita − 15 de media línea).
+        GhostInput.Margin = left ? new Thickness(-12, 0, 0, 49) : new Thickness(0, 0, -12, 49);
+    }
+
+    /// <summary>
+    /// El globo respira hacia el lado contrario a la barra. Con la carita suelta, además, se mete
+    /// 12 px en el aire que la rodea (para quedar a 16 de ella y no a 36) y sube 28, que es ese
+    /// mismo aire por abajo: así queda a ras de la carita y no del borde de la ventana.
+    /// </summary>
+    private Thickness MargenDelGlobo()
+    {
+        double abajo = _collapsed ? 28 : 0;
+        double lado = _collapsed ? -12 : 8;
+        return _barLeft ? new Thickness(lado, 0, 0, abajo) : new Thickness(0, 0, lado, abajo);
     }
 
     private bool _sideApplied;
@@ -2437,6 +2595,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private bool ShouldOpenDown()
     {
+        // Con la carita suelta no hay menú que abrir, y decir «hacia abajo» anclaría el borde de
+        // arriba: el globo al crecer movería la carita (spec 008, fase 3).
+        if (_collapsed) return false;
         try
         {
             var wa = SystemParameters.WorkArea;
@@ -2538,7 +2699,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void ShowTalk(bool focusInput = false)
     {
-        if (_collapsed) return;
+        // Hasta la spec 008 (2026-09-02) esto empezaba con «if (_collapsed) return;»: el globo vivía
+        // en la barra y no tenía dónde ponerse con la carita suelta. Ahora se acopla a las dos, y
+        // la línea «Escríbele…» le cede el sitio.
+        EsconderGhost(inmediato: true);
         if (!_talkOpen)
         {
             _talkOpen = true;
@@ -2558,6 +2722,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _talkOpen = false;
         FadeSlideOut(TalkPanel, TalkShift, toY: 6, () => { if (!_talkOpen) TalkPanel.Visibility = Visibility.Collapsed; });
         UpdateChip(_mood);   // sin globo, la píldora vuelve a ser la que informa
+        if (CollapsedHost.IsMouseOver) MostrarGhost();   // y si la mano sigue ahí, la línea vuelve
     }
 
     // ── Microanimaciones compartidas: fundido + deslizamiento corto, sin rebotes ──────────────

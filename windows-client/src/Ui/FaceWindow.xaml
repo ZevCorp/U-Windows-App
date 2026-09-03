@@ -212,46 +212,12 @@
          El estado COLAPSADO (solo la carita suelta) se alterna con un clic en la carita, como siempre.
          Ver FaceWindow.xaml.cs (ToggleCollapsed y la región «menú extendido»). -->
     <Grid>
-        <!-- Estado COLAPSADO: solo la carita, como una burbuja flotante. Un toque → hablar · doble
-             toque → la barra · mantener oprimida o clic derecho → el anillo · arrastrar y soltar →
-             se lanza al borde. El mapa lo decide ReglaDeGestos (promesa 113), no este archivo.
-             El Margin de 28 deja aire alrededor para que la sombra (blur 24) no se recorte.
-
-             Hasta el 2026-09-02 aquí asomaban tres pastillas al acercar el ratón —hablar, escribir,
-             dictar a SAP—. Se retiraron (spec 008, promesa 112): hablarle es lo que más se hace y
-             no puede estar detrás de acertarle a una barrita de 4,5 px, la de escribir no hacía
-             nada en este estado, y el dictado a SAP no lo usaba nadie. La carita es el botón. -->
-        <!-- El halo va DETRÁS de la carita y en el mismo Grid: un Grid superpone a sus hijos, así
-             que crecer con la voz no empuja nada ni cambia el tamaño de la ventana. Hasta el
-             2026-09-02 vivía detrás de la pastilla del micrófono; sin pastillas, la señal de «te
-             estoy oyendo» es la carita misma. El color lo pone PintarHalo: azul por el collar,
-             gris por el micrófono del PC. -->
-        <StackPanel x:Name="CollapsedGroup" Orientation="Horizontal" Visibility="Collapsed"
-                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="28"
-                    Background="Transparent"
-                    MouseEnter="OnCollapsedHoverIn" MouseLeave="OnCollapsedHoverOut">
-            <Grid>
-                <Ellipse x:Name="VoiceHalo" Width="72" Height="72" Opacity="0"
-                         IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
-                    <Ellipse.Fill>
-                        <SolidColorBrush x:Name="VoiceHaloColor" Color="#A8A8AE"/>
-                    </Ellipse.Fill>
-                    <Ellipse.RenderTransform>
-                        <ScaleTransform x:Name="VoiceHaloEscala" ScaleX="1" ScaleY="1"/>
-                    </Ellipse.RenderTransform>
-                </Ellipse>
-                <ui:FaceControl x:Name="CollapsedFace" Width="72" Height="72" Cursor="Hand"
-                                ToolTip="Toca: hablar · doble toque: la barra · mantén o clic derecho: el anillo · arrastrar y soltar: mover">
-                    <ui:FaceControl.Effect>
-                        <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="Black"/>
-                    </ui:FaceControl.Effect>
-                </ui:FaceControl>
-            </Grid>
-        </StackPanel>
-
-        <!-- Estado NORMAL: menú extendido (arriba) + globo de conversación (izquierda) + barra (derecha).
-             La ventana mide lo que mida el contenido (SizeToContent) y OnSizeChanged la mantiene
-             anclada a la esquina inferior derecha: abrir el menú crece hacia arriba y a la izquierda. -->
+        <!-- Menú extendido (arriba) + fila inferior: globo de conversación o línea «Escríbele…»
+             (hacia el centro de la pantalla) y, del lado del borde, la barra O la carita suelta —los
+             dos estados viven en la misma fila desde la spec 008, ver CollapsedHost—. La ventana mide
+             lo que mida el contenido (SizeToContent) y OnSizeChanged la mantiene anclada a la
+             esquina: abrir el menú o el globo crece hacia arriba y hacia el centro, y ni la barra ni
+             la carita se mueven. -->
         <!-- Dos filas y no un StackPanel: la barra es la fila Auto y el menú la fila «*». Así, cuando
              el contenido excede el MaxHeight de la ventana, quien cede es el MENÚ (que hace scroll),
              nunca la barra. Con un StackPanel el recorte se comía el último hijo — es decir, la
@@ -485,6 +451,32 @@
                     </StackPanel>
                 </Border>
 
+                <!-- LA LÍNEA «ESCRÍBELE…» (spec 008, promesa 114): asoma al lado de la carita suelta
+                     cuando el ratón se acerca y el globo no está abierto. NO es un botón que abre otra
+                     cosa: es el sitio donde se escribe. Un clic la convierte en el globo con el foco
+                     puesto; y teclear con el ratón encima hace lo mismo sin el clic (el gancho de
+                     teclado le pregunta a ReglaDeEscritura). Tiene la misma forma que la caja de texto
+                     del globo, para que se lea como lo que es.
+
+                     Acoplada como el globo, del lado que mira al centro de la pantalla. Con la carita
+                     suelta la ventana se ancla por el borde de la carita, así que aparecer aquí no la
+                     mueve: la misma aritmética que el globo y la píldora.
+
+                     El fondo NO puede ser transparente del todo: con AllowsTransparency un píxel con
+                     alfa 0 es click-through y la línea no se dejaría pulsar. -->
+                <Border x:Name="GhostInput" DockPanel.Dock="Left" Visibility="Collapsed" Opacity="0"
+                        VerticalAlignment="Bottom" Height="30" MinWidth="150" Cursor="IBeam"
+                        CornerRadius="15" Background="#1AFFFFFF" BorderBrush="#2EFFFFFF" BorderThickness="1"
+                        Padding="12,0" Margin="0,0,-12,49"
+                        MouseEnter="OnGhostEntra" MouseLeave="OnGhostSale" MouseLeftButtonDown="OnGhostClic"
+                        ToolTip="Escríbele a Ü — o simplemente escribe con el ratón sobre la carita">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="GhostShift"/>
+                    </Border.RenderTransform>
+                    <TextBlock Text="Escríbele…" Foreground="#8CFFFFFF" FontSize="12"
+                               VerticalAlignment="Center" IsHitTestVisible="False"/>
+                </Border>
+
                 <!-- LA BARRA: vertical, estrecha, siempre disponible. Arrastrable por cualquier zona
                      libre (y por la carita). De arriba a abajo: la zona contextual (⬇ ⏹ 🔄, que
                      aparecen y desaparecen), el activador del menú, las acciones fijas y, abajo del
@@ -588,6 +580,42 @@
                                         ToolTip="Toca: hablar · doble toque: solo la carita · mantén o clic derecho: el anillo · arrastrar: mover"/>
                     </StackPanel>
                 </Border>
+
+                <!-- LA CARITA SUELTA (estado colapsado). Vive en la MISMA fila que la barra y no en un
+                     panel aparte, desde la spec 008 (2026-09-02): así el globo de conversación y la
+                     línea «Escríbele…» se acoplan a su lado exactamente igual que a la barra, sin
+                     duplicar la caja de texto ni su lógica. Antes era un StackPanel en la raíz, y el
+                     globo —que vive en esta fila— no podía abrirse con la carita suelta: la pastilla
+                     «Escribirle a Ü» no hacía nada en el único estado en que existía.
+
+                     Un toque → hablar · doble toque → la barra · mantener oprimida o clic derecho → el
+                     anillo · arrastrar y soltar → se lanza al borde (ReglaDeGestos, promesa 113).
+
+                     El Margin de 28 deja aire alrededor para que la sombra (blur 24) y el halo no se
+                     recorten. El halo va DETRÁS de la carita y en el mismo Grid: un Grid superpone a
+                     sus hijos, así que crecer con la voz no empuja nada ni cambia el tamaño de la
+                     ventana. Hasta el 2026-09-02 vivía detrás de la pastilla del micrófono; sin
+                     pastillas, la señal de «te estoy oyendo» es la carita misma. El color lo pone
+                     PintarHalo: azul por el collar, gris por el micrófono del PC. -->
+                <Grid x:Name="CollapsedHost" DockPanel.Dock="Right" Visibility="Collapsed"
+                      VerticalAlignment="Bottom" Margin="28" Background="Transparent"
+                      MouseEnter="OnCollapsedHoverIn" MouseLeave="OnCollapsedHoverOut">
+                    <Ellipse x:Name="VoiceHalo" Width="72" Height="72" Opacity="0"
+                             IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.Fill>
+                            <SolidColorBrush x:Name="VoiceHaloColor" Color="#A8A8AE"/>
+                        </Ellipse.Fill>
+                        <Ellipse.RenderTransform>
+                            <ScaleTransform x:Name="VoiceHaloEscala" ScaleX="1" ScaleY="1"/>
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+                    <ui:FaceControl x:Name="CollapsedFace" Width="72" Height="72" Cursor="Hand"
+                                    ToolTip="Toca: hablar · doble toque: la barra · mantén o clic derecho: el anillo · arrastrar y soltar: mover">
+                        <ui:FaceControl.Effect>
+                            <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="Black"/>
+                        </ui:FaceControl.Effect>
+                    </ui:FaceControl>
+                </Grid>
 
                 <!-- LA FRASE CORTA: acompaña a la carita para que el estado no dependa de aprenderse
                      los gestos. Va FUERA de la barra, a su izquierda, y por eso no rompe los 60 DIP de
