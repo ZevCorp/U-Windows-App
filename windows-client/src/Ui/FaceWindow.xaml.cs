@@ -698,6 +698,40 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 mcp.Map.Ensenar = (donde, sel, que, foto) => _mapaVivo.Nucleo.Ensenar(donde, sel, que, foto);
                 mcp.Map.RecuerdosAqui = donde => _mapaVivo.Nucleo.RecuerdosDe(donde)
                     .Select(x => (x.Que.Selector, x.Que.Etiqueta, x.Eso.Significado)).ToList();
+                // LO VIVO DEL TERRENO, para poder enseñar donde UIA no ve (promesa 117).
+                mcp.Map.PuertasVivas = donde => _mapaVivo.Nucleo.DesdeAqui(donde)
+                    .Where(a => a.Vivo)
+                    .Select(a => (a.Que.Selector, a.Que.Etiqueta, a.Que.Tipo)).ToList();
+
+                // LAS DOS MITADES SAP DEL DESPACHO (promesas 118 y 119): dónde está algo, y qué hay
+                // bajo un punto. La decisión de a quién preguntar vive en MundoQueToca; aquí solo se
+                // le pasa la mano de SAP, igual que con observar, pulsar y escribir.
+                mcp.Map.CajasEnSap = LeerCajasDeSap;
+                // SEÑALAR DENTRO DE SAP, con el hit-test que SÍ funciona. La nativa
+                // «FindByPosition» no resuelve nada en este SAP —medido el 2026-07-26 y escrito en
+                // windows-graph/CLAUDE.md: devuelve null en árboles Y en botones—, así que el punto
+                // se resuelve con la MISMA geometría que ya se lee para iluminar, y lo elige el
+                // MISMO elector que en UIA: el más pequeño que contiene el punto (promesas 34-35).
+                // Un mundo aporta candidatos; quién gana se decide en un solo sitio.
+                mcp.Map.SenaladoEnSap = (x, y) =>
+                {
+                    var punto = new System.Windows.Point(x, y);
+                    var cajas = LeerCajasDeSap();
+                    var elegido = Navigation.LoQueSenalas.Elegir(
+                        cajas.Select(c => new Navigation.LoQueSenalas.Candidato(
+                            c.Etiqueta.Length > 0 ? c.Etiqueta : c.Selector, c.Tipo, c.Caja, c.Selector)),
+                        punto);
+                    if (elegido is not { } e)
+                    {
+                        // POR QUÉ NO SE ENCONTRÓ, y no solo que no se encontró: si las cajas están
+                        // en otra escala que el cursor (DPI), esto lo canta a la primera.
+                        var muestra = cajas.FirstOrDefault();
+                        LogBus.Log("recuerdo", $"nada bajo ({x},{y}) entre {cajas.Count} caja(s) de SAP"
+                            + (cajas.Count > 0 ? $" · ejemplo: «{muestra.Etiqueta}» en {muestra.Caja}" : ""));
+                        return null;
+                    }
+                    return (e.Selector, e.Nombre, e.Tipo, e.Caja);
+                };
                 // Entra por `Recordar` y no por `Observar`: observar significa «esto es lo que hay
                 // en pantalla» y REEMPLAZA la lista viva entera, así que presentar un panel suelto
                 // borraría de un plumazo todas las puertas de esta ubicación.
@@ -897,6 +931,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // la que se pide la sesión de Soniox y se llama al emparejador— y la superficie de SAP.
         // Nace apagado: hasta que no se pulsa el fonendoscopio no abre micrófono ni toca nada.
         _rellenador = new RellenadorSap(_graphConfig, _clinicalSap);
+        // LO ENSEÑADO LLEGA A LA HORA DE ESCRIBIR (promesa 115). Se pregunta por la MISMA ubicación
+        // que usa la enseñanza —la del locator— para que las dos puntas del canal usen la misma
+        // llave; y por la misma identidad, que el grafo escribe con «sap:» y el formulario sin él.
+        _rellenador.RecuerdoDe = selector =>
+        {
+            string donde = _locator?.DondeEstoy()?.Id ?? "";
+            if (donde.Length == 0 || _mapaDeMano?.RecuerdosAqui == null) return "";
+            string busco = Clinical.LoQueVeElEmparejador.MismaIdentidad(selector);
+            foreach (var r in _mapaDeMano.RecuerdosAqui(donde))
+                if (Clinical.LoQueVeElEmparejador.MismaIdentidad(r.Selector)
+                        .Equals(busco, StringComparison.OrdinalIgnoreCase))
+                    return r.Significado;
+            return "";
+        };
+        // EL ✓ DE LA CONSULTA LLEGA POR AQUÍ (spec 008): la ventana de consulta nace antes que la
+        // carita y no ve las manos; se le cuelga esta función y ella la llama al pulsar ✓.
+        Clinical.PuenteASap.Enviar = EnviarEncargoAsync;
         _dictadoClinico = new Clinical.Transcripcion.DictadoEnVivo(_graphConfig, _audioDictado);
         _dictadoClinico.Frase += f => _rellenador.Oido(f);
         // Lo provisional se pinta pero NO se actúa: son palabras que Soniox aún puede corregir.
@@ -4044,6 +4095,223 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             else LogBus.Log("demo", $"editor no aceptó texto: {error}");
         }
         return n;
+    }
+
+    // ── Las cajas de SAP, con freno ──────────────────────────────────────────
+
+    private IReadOnlyList<(string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)> _cajasSap
+        = Array.Empty<(string, string, string, System.Windows.Rect)>();
+    private DateTime _cajasSapLeidas = DateTime.MinValue;
+    private bool _leyendoCajasSap;
+
+    /// <summary>
+    /// Dónde está cada elemento de SAP en pantalla. Con freno: como mucho una lectura cada segundo
+    /// y medio, y nunca dos a la vez.
+    /// </summary>
+    /// <remarks>
+    /// EL FRENO NO ES PRUDENCIA, ES UN CUELGUE YA VISTO. La vista de recuerdos se refresca en CADA
+    /// cambio de ubicación —el localizador mira cada 250 ms— y esto corre en el hilo de la interfaz,
+    /// que es donde el COM de SAP tiene que correr. Sin tope, sobre el triage la app se quedaba
+    /// clavada al pulsar 🧠 (2026-09-02, lo vio el dueño). Se devuelve la última lectura buena
+    /// mientras el freno esté echado: un recuadro un segundo viejo es infinitamente mejor que una
+    /// app parada.
+    /// </remarks>
+    private IReadOnlyList<(string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)> LeerCajasDeSap()
+    {
+        if (_leyendoCajasSap) return _cajasSap;
+        if ((DateTime.UtcNow - _cajasSapLeidas).TotalMilliseconds < 1500) return _cajasSap;
+
+        var sap = _locator?.SuperficieSap;
+        if (sap == null) return _cajasSap;
+
+        _leyendoCajasSap = true;
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var cajas = new List<(string, string, string, System.Windows.Rect)>();
+            var vistos = sap.ReadVisibleElements();
+            foreach (var v in vistos)
+            {
+                if (!v.BoundsKnown || v.Width <= 0 || v.Height <= 0) continue;
+                cajas.Add((U.Graph.Surfaces.SapSelector.ById(v.Id),
+                    (v.Label ?? "").Trim().Length > 0 ? v.Label!.Trim() : v.Id,
+                    v.Type ?? "",
+                    new System.Windows.Rect(v.ScreenLeft, v.ScreenTop, v.Width, v.Height)));
+            }
+
+            // LAS FILAS DE LOS ÁRBOLES SON CANDIDATAS, con la caja que SAP les da (promesa 70: en
+            // SAP el contenido navegable son las filas, no el árbol). Sin esto, señalar sobre el
+            // Puesto de trabajo contestaba el shell entero —lo más pequeño que había— porque una
+            // fila no es un componente y no sale en ReadVisibleElements (2026-09-02, 21:19, lo vio
+            // el dueño). Los MISMOS candidatos que el terreno: identidad árbol+clave, etiqueta con
+            // carpeta, y la banda top/alto que ya valida el «CONTRASTE geometría» del inspector.
+            //
+            // Las filas de una REJILLA no entran: SAP no da geometría por fila de un ALV, y una caja
+            // inventada es peor que ninguna (aprendizaje nº4). Quedan dichas como hueco.
+            foreach (var arbol in vistos.Where(v => v.SubType.IndexOf("Tree", StringComparison.OrdinalIgnoreCase) >= 0
+                                                  && v.BoundsKnown && v.Height > 0))
+            {
+                foreach (var fila in sap.VisibleTreeRows(arbol.Id, arbol.Height, out _))
+                {
+                    if (fila.Height <= 0 || fila.Key.Length == 0) continue;
+                    // La banda se recorta contra el borde inferior del árbol, como hace el inspector:
+                    // la última fila suele estar medio scrolleada.
+                    int alto = Math.Min(fila.Height, arbol.Height - fila.Top);
+                    if (alto < 3) continue;
+                    cajas.Add((U.Graph.Surfaces.SapSelector.ByNode(arbol.Id, fila.Key),
+                        fila.Ruta.Length > 0 ? fila.Ruta : (fila.Text.Length > 0 ? fila.Text : fila.Key),
+                        fila.IsFolder ? "GuiTreeCarpeta" : "GuiTreeFila",
+                        new System.Windows.Rect(arbol.ScreenLeft, arbol.ScreenTop + fila.Top, arbol.Width, alto)));
+                }
+            }
+            _cajasSap = cajas;
+            LogBus.Log("recuerdo", $"cajas de SAP: {cajas.Count} con geometría ({reloj.ElapsedMilliseconds} ms)");
+        }
+        catch (Exception e)
+        {
+            var porque = new System.Text.StringBuilder();
+            for (var x = e; x != null; x = x.InnerException)
+                porque.Append(porque.Length > 0 ? " ← " : "").Append($"{x.GetType().Name}: {x.Message}");
+            LogBus.Log("recuerdo", $"no pude leer la geometría de SAP: {porque}");
+        }
+        finally
+        {
+            _cajasSapLeidas = DateTime.UtcNow;
+            _leyendoCajasSap = false;
+        }
+        return _cajasSap;
+    }
+
+    // ── LA NOTA LLEGA AL TRIAGE CON UN ✓ (spec 008) ──────────────────────────
+    //
+    // El mismo camino de la demo del 31 para LLEGAR —los batches del terreno, por la puerta MCP—
+    // y el rellenador de siempre para ESCRIBIR, alimentado por la nota aprobada en vez de por
+    // valores de prueba. Nada de coordenadas, nada de voz, nada que grabe.
+
+    private bool _enviandoEncargo;
+
+    /// <summary>
+    /// Del Easy Access al triage del paciente por batches. Devuelve "" si llegó, o el motivo por el
+    /// que no — dicho para que el médico sepa qué hacer (entrar a SAP, abrir la vista).
+    /// </summary>
+    private async Task<string> LlegarAlTriageAsync(IProgress<string> progreso)
+    {
+        progreso.Report("SAP al frente…");
+        await DemoTool("map_open_app", new { app = "saplogon" });
+        await Task.Delay(800);
+
+        var t = await DemoTerreno();
+        string aqui = t.GetProperty("id").GetString() ?? "";
+        if (aqui.Contains("SAPLY000", StringComparison.OrdinalIgnoreCase)) return "";   // ya en el formulario
+
+        if (aqui.Contains("SAPMSYST", StringComparison.OrdinalIgnoreCase))
+            return "SAP está en la pantalla de entrada: entra con tu usuario y vuelve a pulsar ✓.";
+
+        // Batch 1: hasta la vista de Triage. Primero la secuencia que el dueño enseñó (comando →
+        // nwp1 → Continuar, validada el 2026-08-26); si el terreno para a medias, la puerta de
+        // Favoritos que usó la demo del 31.
+        if (!aqui.Contains("vista:Urgencias Adultos Triage", StringComparison.OrdinalIgnoreCase))
+        {
+            progreso.Report("Batch 1: NWP1 y Urgencias Adultos / Triage…");
+            // «Continuar» tiene DOS puertas vivas en el Easy Access (btn[0] y btn[84], medido el
+            // 2026-09-02 17:34): se pide por selector, que es lo que el batch contestó que necesita.
+            string cuenta = await DemoTool("map_batch", new { pasos = DemoPasos(
+                new { exit = "comando" }, new { text = "nwp1" }, new { exit = "sap:wnd[0]/tbar[0]/btn[0]" },
+                new { exit = "Urgencias Adultos/Triage" }) });
+            if (!cuenta.StartsWith("hice los", StringComparison.OrdinalIgnoreCase))
+            {
+                LogBus.Log("envio", $"batch 1 por comando paró: {cuenta} · se intenta por Favoritos");
+                // La fila se llama así en el terreno vivo (sin el «NWP1 - » que traía la demo del 31).
+                cuenta = await DemoTool("map_batch", new { pasos = DemoPasos(
+                    new { exit = "Favoritos/IS-H: Pto.tbjo.clínico" },
+                    new { exit = "Urgencias Adultos/Triage" }) });
+                if (!cuenta.StartsWith("hice los", StringComparison.OrdinalIgnoreCase))
+                    return $"no llegué a la vista de Triage: {cuenta}";
+            }
+        }
+
+        // Batch 2: la fila del paciente y el botón Triage, por identidad viva. La selección caduca
+        // (el censo se refresca solo), así que van JUNTOS en el mismo batch.
+        t = await DemoEsperarPuerta("GuiGridFila");
+        string? fila = DemoPuerta(t, "GuiGridFila");
+        string? boton = DemoPuerta(t, "GuiGridBoton", "Triage");
+        if (fila == null || boton == null)
+            return "el censo no muestra ningún paciente, o no veo el botón Triage: abre la vista de Urgencias Adultos / Triage y vuelve a pulsar ✓.";
+        string quien = "";
+        foreach (var p in t.GetProperty("puertas").EnumerateArray())
+            if ((p.GetProperty("selector").GetString() ?? "") == fila) { quien = p.GetProperty("etiqueta").GetString() ?? ""; break; }
+        progreso.Report($"Batch 2: el paciente {Recorte(quien, 40)} y su triage…");
+        string cuenta2 = await DemoTool("map_batch", new { pasos = DemoPasos(new { exit = fila }, new { exit = boton }) });
+        if (!cuenta2.StartsWith("hice los", StringComparison.OrdinalIgnoreCase))
+            return $"no pude abrir el triage del paciente: {cuenta2}";
+
+        await DemoEsperarPuerta("GuiTextField");   // el formulario tarda en entregar sus campos
+        return "";
+    }
+
+    /// <summary>
+    /// EL ENCARGO DE LA CONSULTA: llegar, comprobar que es el triage, escribir los campos con la
+    /// nota (relectura por campo, hasta cuatro pasadas), y los dos editores de texto libre. Devuelve
+    /// la cuenta honesta. Jamás pulsa Grabar.
+    /// </summary>
+    private async Task<string> EnviarEncargoAsync(Clinical.Encargo encargo, IProgress<string> progreso, CancellationToken ct)
+    {
+        if (encargo.EstaVacio) return "no hay nada marcado para enviar.";
+        if (_rellenador == null) return "las manos de SAP no están listas todavía.";
+        if (_enviandoEncargo) return "ya hay un envío en marcha; espera a que termine.";
+        _enviandoEncargo = true;
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            LogBus.Log("envio", $"encargo: {encargo.Secciones.Count} sección(es) · {encargo.Texto.Length} caracteres");
+            string noLlegue = await LlegarAlTriageAsync(progreso);
+            if (noLlegue.Length > 0) { LogBus.Log("envio", $"no se llegó: {noLlegue}"); return noLlegue; }
+
+            // LA COMPUERTA pregunta a SAP, no al foco (promesa 114).
+            var veredicto = Clinical.EnvioAlTriage.PuedeEscribir(_rellenador.DondeEstaSap());
+            if (!veredicto.Puede) { LogBus.Log("envio", veredicto.Motivo); return veredicto.Motivo; }
+
+            progreso.Report("Escribiendo los campos del triage…");
+            var (escritos, sinLlenar) = await _rellenador.RellenarConNotaAsync(encargo.Texto, ct);
+
+            // Los dos editores que el rellenador no ve (promesa 113).
+            var reparto = Clinical.EditoresDelTriage.Repartir(encargo.Secciones);
+            var editores = new List<string>();
+            if (reparto.Motivo.Length > 0 && EscribirEditor("MTVCN", reparto.Motivo)) editores.Add("Motivo de consulta");
+            if (reparto.Conducta.Length > 0 && EscribirEditor("TXTOBS", reparto.Conducta)) editores.Add("Conducta");
+
+            int total = escritos.Count + editores.Count;
+            string cuenta = total == 0
+                ? "llegué al triage pero no pude escribir ningún campo con esta sección."
+                : $"✓ {total} campo(s) en SAP: "
+                  + string.Join(", ", escritos.Select(e => e.Campo.Label).Concat(editores))
+                  + (sinLlenar.Count > 0 ? $" · sin llenar: {string.Join(", ", sinLlenar.Take(6))}" : "")
+                  + " · revisa y graba tú.";
+            LogBus.Log("envio", $"{cuenta} ({reloj.ElapsedMilliseconds} ms)");
+            return cuenta;
+        }
+        catch (Exception ex)
+        {
+            LogBus.Log("envio", $"el envío reventó: {ex.GetType().Name}: {ex.Message}");
+            return $"el envío se detuvo: {ex.Message}";
+        }
+        finally { _enviandoEncargo = false; }
+    }
+
+    /// <summary>Escribe uno de los editores de texto libre del triage (shell GuiTextedit), por su id.</summary>
+    private bool EscribirEditor(string idContiene, string texto)
+    {
+        foreach (var v in _clinicalSap.ReadVisibleElements())
+        {
+            if (!v.SubType.Equals("TextEdit", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!v.Id.Contains(idContiene, StringComparison.OrdinalIgnoreCase)) continue;
+            var paso = new U.Graph.PlanStep { StepOrder = 1, ActionType = "input", Selector = "sap:" + v.Id, Label = v.Label, Value = texto };
+            bool ok = _clinicalSap.Execute(paso, out string error);
+            LogBus.Log("envio", ok ? $"editor {idContiene} escrito ({texto.Length} car.)" : $"editor {idContiene} no aceptó texto: {error}");
+            return ok;
+        }
+        LogBus.Log("envio", $"no veo el editor {idContiene} en pantalla");
+        return false;
     }
 
     /// <summary>El valor de demo para un campo de texto, por su identidad. Null = no se toca.</summary>

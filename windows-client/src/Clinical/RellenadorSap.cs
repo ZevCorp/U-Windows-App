@@ -204,16 +204,9 @@ public sealed class RellenadorSap
             sequence = _secuencia,
             stages = new { transcription = false, note = true, autofill = true },
             note = new { title = "Triage", content = _nota },
-            fields = campos.Select(f => new
-            {
-                stepOrder = f.StepOrder,
-                actionType = f.ActionType,
-                label = f.Label,
-                selector = f.Selector,
-                controlType = f.ControlType,
-                allowedOptions = f.AllowedOptions?.Select(o => new { value = o.Value, label = o.Label }),
-                currentValue = f.CurrentValue,
-            }),
+            // El MISMO retrato que la otra pasada: dos formas de describir la misma pantalla se
+            // desincronizan sin avisar, y lo enseñado llegaría por un camino y por el otro no.
+            fields = campos.Select(Retratar),
             already_fulfilled = _yaPuesto.Select(p => new { stepOrder = p.Key, value = p.Value }),
             page_url = "sapgui://triage",
         });
@@ -295,19 +288,54 @@ public sealed class RellenadorSap
     ///     quedó con un 100 que nadie pidió.
     ///   · Los ya puestos, para no pisarlos ni gastar decisiones del modelo en ellos.
     /// </remarks>
-    private List<DetectedField> CamposQueFaltan() => _sap.ReadFields()
-        .Where(f => f.Selector.Length > 0)
-        .Where(f => f.Editable)
-        .Where(f => f.Label.Trim().Length >= 3 && f.Label.Any(char.IsLetter))
-        .Where(f => f.ActionType is "input" or "select" or "click")
-        .Where(f => !_yaPuesto.ContainsKey(f.StepOrder))
-        .ToList();
+    /// <summary>
+    /// Lo que se le haya ENSEÑADO a Ü sobre un campo de esta pantalla, por su selector. Lo pone quien
+    /// tiene el grafo delante (la carita); sin él, el rellenador se comporta como siempre.
+    /// </summary>
+    public Func<string, string>? RecuerdoDe { get; set; }
+
+    /// <summary>La etiqueta útil que precede a cada campo, por StepOrder. Ver <c>CamposQueFaltan</c>.</summary>
+    private readonly Dictionary<int, string> _etiquetaAnterior = new();
+
+    private List<DetectedField> CamposQueFaltan()
+    {
+        var todos = _sap.ReadFields().Where(f => f.Selector.Length > 0).ToList();
+
+        // QUIÉN NOMBRA A LA CASILLA DE AL LADO. Se recorre la pantalla EN ORDEN y cada campo se
+        // queda con la última etiqueta que de verdad nombraba algo: así «/» sabe que va con
+        // «Presión Arterial». Se calcula sobre TODOS los campos, antes de filtrar, porque el vecino
+        // que da el nombre puede ser uno que después se descarte.
+        _etiquetaAnterior.Clear();
+        string ultimaUtil = "";
+        foreach (var f in todos)
+        {
+            _etiquetaAnterior[f.StepOrder] = ultimaUtil;
+            if (LoQueVeElEmparejador.EsUtil(f.Label)) ultimaUtil = f.Label.Trim();
+        }
+
+        return todos
+            .Where(f => f.Editable)
+            .Where(f => f.ActionType is "input" or "select" or "click")
+            .Where(f => LoQueVeElEmparejador.MereceOfrecerse(
+                f.Label, _etiquetaAnterior.GetValueOrDefault(f.StepOrder, ""), Ensenado(f)))
+            .Where(f => !_yaPuesto.ContainsKey(f.StepOrder))
+            .ToList();
+    }
+
+    private string Ensenado(DetectedField f)
+    {
+        try { return RecuerdoDe?.Invoke(f.Selector) ?? ""; }
+        catch (Exception e) { LogBus.Log("dictado", $"no pude leer lo enseñado de «{f.Label}»: {e.Message}"); return ""; }
+    }
 
     private object Retratar(DetectedField f) => new
     {
         stepOrder = f.StepOrder,
         actionType = f.ActionType,
-        label = f.Label,
+        // LA ETIQUETA ES EL CANAL (promesas 115 y 116): el emparejador de Graph descarta cualquier
+        // propiedad que no esté en su lista, así que una pista mandada aparte no llegaría al modelo.
+        label = LoQueVeElEmparejador.EtiquetaCon(
+            f.Label, _etiquetaAnterior.GetValueOrDefault(f.StepOrder, ""), Ensenado(f)),
         selector = f.Selector,
         controlType = f.ControlType,
         allowedOptions = f.AllowedOptions?.Select(o => new { value = o.Value, label = o.Label }),
@@ -360,7 +388,14 @@ public sealed class RellenadorSap
         }
         catch (Exception e)
         {
-            LogBus.Log("dictado", $"«{campo.Label}» lanzó al escribir: {e.Message}");
+            // LA CADENA ENTERA, y no solo el mensaje de arriba (patrón nº3). El 2026-09-02 «Frec.
+            // Cardíaca» falló dos veces con un «Object reference not set» que no decía de dónde
+            // salía, y un catch mudo convierte un bug concreto en «SAP lo rechazó».
+            var porque = new System.Text.StringBuilder();
+            for (var x = e; x != null; x = x.InnerException)
+                porque.Append(porque.Length > 0 ? " ← " : "").Append($"{x.GetType().Name}: {x.Message}");
+            LogBus.Log("dictado", $"«{campo.Label}» lanzó al escribir: {porque}"
+                + $" · en {e.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}");
             return null;
         }
 

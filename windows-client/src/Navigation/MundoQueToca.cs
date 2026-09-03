@@ -96,6 +96,80 @@ public sealed class EscribirPorMundo
 }
 
 /// <summary>
+/// QUÉ HAY BAJO UN PUNTO DE LA PANTALLA, preguntado al mundo que manda aquí. Promesa 118.
+/// </summary>
+/// <remarks>
+/// EL CUARTO VERBO DEL DESPACHO, y llegó tarde. La regla de esta casa —fijada por José David el
+/// 2026-08-26— dice que el despacho entre mundos vive en UN solo sitio y que nadie más sabe en qué
+/// mundo mira, pulsa o escribe. Se migraron tres verbos: observar, pulsar y escribir. Señalar se
+/// quedó preguntándole a UIA directamente, y dentro de SAP eso devuelve el Pane opaco que lo
+/// contiene todo: señalando la casilla de la presión arterial contestaba «Gos Container» (medido el
+/// 2026-09-02, por el dueño). El síntoma es el mismo que obligó a nacer a <see cref="SentidoPorMundo"/>.
+///
+/// NO HAY RESPALDO A UIA DENTRO DE SAP, y es lo que arregla el bug de verdad. Si SAP manda aquí y
+/// no reconoce lo que hay bajo el punto, la respuesta es «no lo sé»: caer a UIA devolvería
+/// exactamente el panel opaco que se viene a evitar. Por eso la respuesta distingue las dos
+/// situaciones en vez de contestar null a las dos (aprendizaje nº2: un mensaje que no distingue sus
+/// causas manda la investigación al sitio equivocado).
+/// </remarks>
+public sealed class LoSenaladoPorMundo
+{
+    /// <param name="MandaSap">Si aquí decide SAP. Cuando es falso, lo resuelve el camino de UIA.</param>
+    /// <param name="Que">Lo que hay bajo el punto, CON SU CAJA. La caja viaja con el elemento y no se
+    /// busca después, porque en SAP sale de la misma lectura que lo encontró; sin ella habría que
+    /// releer la pantalla solo para poder iluminar, y señalar sin iluminar es decir un nombre que
+    /// nadie puede comprobar. Null con <c>MandaSap</c> significa que SAP no lo reconoce, y entonces
+    /// NO se pregunta a UIA: se dice que no se sabe.</param>
+    public readonly record struct Bajo(bool MandaSap,
+        (string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)? Que);
+
+    private readonly Func<string> _donde;
+    private readonly Func<int, int, (string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)?> _sap;
+
+    public LoSenaladoPorMundo(Func<string> donde,
+        Func<int, int, (string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)?> sap)
+    {
+        _donde = donde;
+        _sap = sap;
+    }
+
+    public Bajo ElPunto(int pantallaX, int pantallaY)
+    {
+        if (!(_donde() ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
+            return new Bajo(false, null);
+        return new Bajo(true, _sap(pantallaX, pantallaY));
+    }
+}
+
+/// <summary>
+/// DÓNDE ESTÁ ALGO EN LA PANTALLA, preguntado al mundo del que es. Promesa 119.
+/// </summary>
+/// <remarks>
+/// EL QUINTO VERBO. Iluminar un recuerdo pide su rectángulo, y eso se buscaba SIEMPRE en el lector
+/// de UIA: los seis recuerdos enseñados sobre el triage el 2026-09-02 no se encendían ninguno —«0
+/// de 6 localizados»— porque dentro de SAP UIA no ve ni un campo. SAP sí da geometría por elemento
+/// (<c>ScreenLeft/ScreenTop/Width/Height</c>), que es justo lo que este despacho necesita.
+///
+/// EL SELECTOR DECIDE, no la ubicación, y por la misma razón que en <see cref="ManoPorMundo"/>: el
+/// selector ES la identidad y lleva escrito de qué mundo viene. Así un recuerdo enseñado en SAP se
+/// localiza por SAP aunque se pregunte desde otro sitio.
+/// </remarks>
+public sealed class GeometriaPorMundo
+{
+    private readonly Func<string, System.Windows.Rect?> _uia;
+    private readonly Func<string, System.Windows.Rect?> _sap;
+
+    public GeometriaPorMundo(Func<string, System.Windows.Rect?> uia, Func<string, System.Windows.Rect?> sap)
+    {
+        _uia = uia;
+        _sap = sap;
+    }
+
+    public System.Windows.Rect? Caja(string selector) =>
+        SapSelector.Owns(selector ?? "") ? _sap(selector!) : _uia(selector ?? "");
+}
+
+/// <summary>
 /// EL NOMBRADO DEL CLIC HUMANO EN SAP: qué puerta fue, dicha en el idioma del terreno.
 /// </summary>
 /// <remarks>

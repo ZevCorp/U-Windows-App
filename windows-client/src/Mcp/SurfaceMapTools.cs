@@ -33,7 +33,11 @@ public sealed class SurfaceMapTools
 
     /// <summary>Lo último que se señaló, con su identidad de UIA. Ver <see cref="LoQueSenala"/> y
     /// el rescate al final de <see cref="Take"/>.</summary>
-    private (string Nombre, string Selector, System.Windows.Automation.AutomationElement Que, DateTime Cuando)? _ultimoSenalado;
+    /// <remarks>
+    /// <c>Que</c> es NULLABLE desde el 2026-09-02: lo señalado dentro de SAP no tiene elemento de
+    /// UIA —ahí no hay ninguno— y lo único que se usa de esta tupla es el nombre y el selector.
+    /// </remarks>
+    private (string Nombre, string Selector, System.Windows.Automation.AutomationElement? Que, DateTime Cuando)? _ultimoSenalado;
 
     /// <summary>
     /// La ruta de la foto del ÚLTIMO RECUERDO creado. Vacío si el último «esto es X» no llegó a
@@ -506,15 +510,29 @@ public sealed class SurfaceMapTools
             nombre = ult.Nombre;
             tipo = "";
         }
-        else if (sobre.Length > 0)
+        else if (sobre.Length > 0 && BuscarEnPantalla(sobre) is { } visto)
         {
-            if (BuscarEnPantalla(sobre) is not { } visto)
-                return $"no veo nada que se llame «{sobre}» en esta pantalla, así que no sé a qué "
-                     + "colgarle eso. Señálamelo con el cursor y te escucho, o dime el nombre tal "
-                     + "como se lee.";
             selector = Uia.Reconocedor.SelectorDe(visto);
             nombre = visto.Label;
             tipo = visto.ControlType;
+        }
+        // DENTRO DE SAP, WINDOWS NO VE NADA (promesa 117). El lector de arriba es UIA, y en una
+        // sesión de SAP se queda en un Pane opaco: enseñar un campo del triage por su nombre era
+        // imposible salvo con el cursor encima. El terreno SÍ los tiene, con su identidad
+        // «sap:wnd[0]/usr/...», así que cuando Windows no encuentra lo que se nombra se le pregunta
+        // al grafo por lo que hay VIVO aquí. Un empate no se adivina: lo dice ElCampoQueNombras.
+        else if (sobre.Length > 0 && PuertasVivas != null
+                 && Navigation.ElCampoQueNombras.Resolver(sobre, PuertasVivas(donde)) is { } enElTerreno)
+        {
+            selector = enElTerreno.Selector;
+            nombre = enElTerreno.Etiqueta;
+            tipo = enElTerreno.Tipo;
+        }
+        else if (sobre.Length > 0)
+        {
+            return $"no veo nada que se llame «{sobre}» en esta pantalla, así que no sé a qué "
+                 + "colgarle eso. Señálamelo con el cursor y te escucho, o dime el nombre tal "
+                 + "como se lee.";
         }
         // LO QUE SE ACABA DE HACER TAMBIÉN SE PUEDE ENSEÑAR. «Recuérdalo, después de escribir NWP1
         // siempre hay que hacer scroll hasta el fondo» se dice JUSTO DESPUÉS del scroll, sin señalar
@@ -680,14 +698,38 @@ public sealed class SurfaceMapTools
 
         try
         {
+            // CADA CAJA LA DA SU MUNDO (promesa 119). Buscarlas siempre en el lector de UIA dejaba
+            // los recuerdos de SAP sin encender —«0 de 6 localizados» sobre el triage el
+            // 2026-09-02—, porque dentro de una sesión de SAP UIA no ve ni un campo.
+            //
+            // A SAP SE LE PREGUNTA UNA VEZ, y solo si hay algo suyo que localizar: la lectura del
+            // dynpro es cara y esto corre en el hilo de la interfaz.
+            IReadOnlyList<(string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)>? cajasSap = null;
+            bool haySap = todos.Any(r => U.Graph.Surfaces.SapSelector.Owns(r.Selector));
+            var geometria = new Navigation.GeometriaPorMundo(uia: CajaPorUia, sap: s =>
+            {
+                if (!haySap || CajasEnSap == null) return null;
+                cajasSap ??= CajasEnSap() ?? Array.Empty<(string, string, string, System.Windows.Rect)>();
+                string busco = U.Graph.Surfaces.SapSelector.Normalize(s);
+                foreach (var c in cajasSap)
+                    if (U.Graph.Surfaces.SapSelector.Normalize(c.Selector)
+                            .Equals(busco, StringComparison.OrdinalIgnoreCase))
+                        return c.Caja;
+                return null;
+            });
             _lector.Read();
             foreach (var r in todos)
             {
-                var visto = _lector.Elements.FirstOrDefault(
-                                e => Uia.Reconocedor.SelectorDe(e).Equals(r.Selector, StringComparison.OrdinalIgnoreCase))
-                            ?? _lector.Elements.FirstOrDefault(
-                                e => e.Label.Equals(r.Etiqueta, StringComparison.OrdinalIgnoreCase));
-                if (visto != null) salida.Add((visto.Bounds, r.Selector, r.Etiqueta, r.Significado));
+                var caja = geometria.Caja(r.Selector);
+                if (caja == null && !U.Graph.Surfaces.SapSelector.Owns(r.Selector))
+                {
+                    // Respaldo por etiqueta, solo en el mundo de UIA: en SAP la identidad es exacta
+                    // y dos campos pueden compartir etiqueta.
+                    var porNombre = _lector.Elements.FirstOrDefault(
+                        e => e.Label.Equals(r.Etiqueta, StringComparison.OrdinalIgnoreCase));
+                    if (porNombre != null) caja = porNombre.Bounds;
+                }
+                if (caja is { } c) salida.Add((c, r.Selector, r.Etiqueta, r.Significado));
             }
         }
         catch (Exception e) { LogBus.Log("recuerdo", $"no pude localizar los recuerdos: {e.Message}"); }
@@ -746,6 +788,25 @@ public sealed class SurfaceMapTools
     {
         try
         {
+            // POR EL MUNDO DEL QUE ES (promesa 119). Este es el camino de «cuéntame los recuerdos de
+            // aquí», que los señala uno a uno: buscándolos siempre en UIA, los de SAP no se
+            // encendían ninguno — el mismo agujero que la vista de golpe.
+            if (U.Graph.Surfaces.SapSelector.Owns(selector))
+            {
+                var enSap = new Navigation.GeometriaPorMundo(uia: _ => null, sap: s =>
+                {
+                    string busco = U.Graph.Surfaces.SapSelector.Normalize(s);
+                    foreach (var c in CajasEnSap?.Invoke() ?? Array.Empty<(string, string, string, System.Windows.Rect)>())
+                        if (U.Graph.Surfaces.SapSelector.Normalize(c.Item1)
+                                .Equals(busco, StringComparison.OrdinalIgnoreCase))
+                            return c.Item4;
+                    return null;
+                }).Caja(selector);
+                if (enSap is not { } caja) return false;
+                Ui.Senalador.Senalar(caja, etiqueta);
+                return true;
+            }
+
             _lector.Read();
             var visto = _lector.Elements.FirstOrDefault(
                             e => Uia.Reconocedor.SelectorDe(e).Equals(selector, StringComparison.OrdinalIgnoreCase))
@@ -783,6 +844,35 @@ public sealed class SurfaceMapTools
         try
         {
             if (!GetCursorPos(out var p)) return "no pude leer dónde está el cursor";
+
+            // DENTRO DE SAP MANDA SAP (promesa 118). Preguntarle a UIA aquí devuelve el Pane opaco
+            // que lo contiene todo: señalando la casilla de la presión arterial contestaba «Gos
+            // Container» (2026-09-02, visto por el dueño). Y si SAP no reconoce el punto NO se cae a
+            // UIA: se dice que no se sabe, que es justo lo que evita volver al panel.
+            var senaladoSap = new Navigation.LoSenaladoPorMundo(
+                () => _where()?.Id ?? "", (x, y) => SenaladoEnSap?.Invoke(x, y));
+            var bajoElCursor = senaladoSap.ElPunto(p.X, p.Y);
+            if (bajoElCursor.MandaSap)
+            {
+                if (bajoElCursor.Que is not { } enSap)
+                    return "estás sobre SAP pero ahí no hay ningún campo que SAP reconozca; "
+                         + "apunta a un campo, un botón o una fila.";
+
+                // SE ENCIENDE DE VERDAD, y luego se dice. El 2026-09-02 esta rama contestaba «lo
+                // estoy iluminando» y salía sin llamar al señalador: la respuesta era cierta en el
+                // texto y falsa en la pantalla, que es la peor clase de mentira de este repo.
+                bool encendido = !enSap.Caja.IsEmpty && enSap.Caja.Width >= 1 && enSap.Caja.Height >= 1;
+                if (encendido) Ui.Senalador.Senalar(enSap.Caja, enSap.Etiqueta);
+
+                _ultimoSenalado = (enSap.Etiqueta, enSap.Selector, null, DateTime.UtcNow);
+                Senalar?.Invoke(new Navigation.LoQueSenalas.Senalado(enSap.Etiqueta, enSap.Tipo, encendido));
+                LogBus.Log("recuerdo", $"señalado en SAP: «{enSap.Etiqueta}» ({enSap.Tipo}) · "
+                    + $"{enSap.Selector} · {(encendido ? $"iluminado en {enSap.Caja}" : "SIN caja: no se pudo iluminar")}");
+                return encendido
+                    ? $"señalas «{enSap.Etiqueta}» ({enSap.Tipo}). Lo estoy iluminando."
+                    : $"señalas «{enSap.Etiqueta}» ({enSap.Tipo}), pero SAP no da su posición y no puedo marcarlo.";
+            }
+
             var el = System.Windows.Automation.AutomationElement.FromPoint(
                 new System.Windows.Point(p.X, p.Y));
             if (el == null) return "bajo el cursor no hay ningún elemento que UIA reconozca";
@@ -1327,6 +1417,39 @@ public sealed class SurfaceMapTools
     /// obliga a tener selectores— la etiqueta señalaría las dos.
     /// </remarks>
     public Func<string, IReadOnlyList<(string Selector, string Etiqueta, string Significado)>>? RecuerdosAqui { get; set; }
+
+    /// <summary>
+    /// Lo que el TERRENO ve vivo en una ubicación: (selector, etiqueta, tipo). Es lo que permite
+    /// enseñar dentro de SAP, donde el lector de UIA no ve nada (promesa 117).
+    /// </summary>
+    public Func<string, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>>? PuertasVivas { get; set; }
+
+    /// <summary>
+    /// DÓNDE ESTÁ TODO LO DE SAP en pantalla, de una sola lectura. Es la mitad SAP de
+    /// <see cref="Navigation.GeometriaPorMundo"/> (promesa 119).
+    /// </summary>
+    /// <remarks>
+    /// DEVUELVE LA PANTALLA ENTERA Y NO UN ELEMENTO, y eso es el arreglo de un cuelgue real: con una
+    /// función por selector, seis recuerdos eran seis recorridos COM completos del dynpro, en el
+    /// hilo de la interfaz — y como la vista se refresca en CADA cambio de pantalla, se apilaban
+    /// varias veces por segundo hasta dejar la app clavada (2026-09-02, lo vio el dueño sobre el
+    /// triage). Una lectura por refresco, y el emparejado se hace en memoria.
+    /// </remarks>
+    public Func<IReadOnlyList<(string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)>>? CajasEnSap { get; set; }
+
+    /// <summary>
+    /// QUÉ HAY bajo un punto de la pantalla, según SAP. Es la mitad SAP de
+    /// <see cref="Navigation.LoSenaladoPorMundo"/> (promesa 118).
+    /// </summary>
+    public Func<int, int, (string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)?>? SenaladoEnSap { get; set; }
+
+    /// <summary>La caja de un elemento de UIA por su selector, leyendo la pantalla ya cargada.</summary>
+    private System.Windows.Rect? CajaPorUia(string selector)
+    {
+        var visto = _lector.Elements.FirstOrDefault(
+            e => Uia.Reconocedor.SelectorDe(e).Equals(selector, StringComparison.OrdinalIgnoreCase));
+        return visto?.Bounds;
+    }
 
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_go_to" or "map_take" or "map_type" or "map_unblock"

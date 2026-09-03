@@ -38,7 +38,15 @@ public sealed class LoQueSenalas
     public readonly record struct Senalado(string Nombre, string Tipo, bool SePudoIluminar);
 
     /// <summary>Un candidato a «lo que estás señalando»: algo con nombre y con caja.</summary>
-    public readonly record struct Candidato(string Nombre, string Tipo, System.Windows.Rect Caja);
+    /// <param name="Selector">
+    /// La identidad, cuando quien ofrece el candidato ya la sabe. Existe desde el 2026-09-02 para que
+    /// SAP pueda usar ESTE mismo elector: allí los candidatos salen de la geometría por componente
+    /// —la nativa <c>FindByPosition</c> no resuelve nada en este SAP, medido el 2026-07-26— y sin el
+    /// selector habría que reencontrar el elemento por su nombre después de elegirlo. Opcional: el
+    /// camino de UIA sigue construyéndolos con tres argumentos.
+    /// </param>
+    public readonly record struct Candidato(
+        string Nombre, string Tipo, System.Windows.Rect Caja, string Selector = "");
 
     /// <summary>
     /// CUÁL DE TODOS ES EL QUE SEÑALAS: el más pequeño que contiene el punto.

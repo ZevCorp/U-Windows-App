@@ -315,6 +315,36 @@ internal static class Contrato
         Prueba("110. la lista va del más nuevo al más viejo, y el recién enseñado queda elegido; si no se sabe cuál es, se elige el más nuevo", ElRecienEnsenadoQuedaElegido);
         Prueba("111. darle play no vuelve a pedir el plan si ya está en la mano: se pide al elegir el workflow y la corrida lo usa; sin plan a la mano se pide una sola vez", ElPlayNoVuelveAPedirElPlan);
 
+        // ── La nota llega al triage con un ✓ (spec 008) ─────────────────────
+        //
+        // La experiencia core cerrada por el camino ya validado (2026-09-02, decisión del dueño):
+        // los dos batches de la demo del 31 llevan al triage y el rellenador escribe con la nota.
+        // Lo que puede fallar en silencio, y por eso va con promesa: mandar una sección que el
+        // médico no aprobó, inventar un motivo de consulta, y escribir fuera del triage.
+        Console.WriteLine();
+        Prueba("112. solo viaja lo marcado: una sección sin ✓ no entra en el envío a SAP", SoloViajaLoMarcado);
+        Prueba("113. el motivo de consulta y la conducta salen de las secciones por su título; sin una sección que lo diga, quedan vacíos y no se inventan", MotivoYConductaSalenPorTitulo);
+        Prueba("114. fuera de la pantalla del triage no se escribe nada: el envío dice dónde está y para", FueraDelTriageNoSeEscribe);
+
+        // Medido el 2026-09-02 (18:10): de 9 campos del triage se llenaron 3. Las dos causas NO eran
+        // que al modelo le falte capacidad, sino que le faltaba saber de la PANTALLA: la casilla
+        // diastólica se llama «/» y se escondía del inventario, y lo enseñado sobre un elemento
+        // —los recuerdos, que existen desde el 2026-08-23— no llegaba a la hora de decidir. La
+        // apuesta de esta etapa es que el dato vuelva de la prosa con inteligencia, así que se le
+        // quitan las vendas al modelo en vez de sustituirlo por reglas de dominio.
+        Prueba("115. lo que me enseñaron sobre un campo viaja con él cuando se decide qué escribir", LoEnsenadoViajaConSuCampo);
+        Prueba("116. una casilla que no se nombra a sí misma se ofrece diciendo de quién es; la que nadie puede nombrar no se ofrece", LaCasillaSinNombreSePresenta);
+        Prueba("117. enseñar funciona dentro de SAP: un campo se nombra por lo que ve el terreno, y dos que se llaman igual no se adivinan", EnsenarAlcanzaADentroDeSap);
+
+        // EL DESPACHO ENTRE MUNDOS SE COMPLETA. La regla de la casa (José David, 2026-08-26) dice
+        // que vive en UN solo sitio y que nadie más sabe en qué mundo mira: se migraron observar,
+        // pulsar y escribir, y ahí se paró. Señalar e iluminar seguían preguntándole a UIA —ocho
+        // sitios, contados con grep— y dentro de SAP eso devuelve el Pane opaco: señalar la casilla
+        // de la presión contestó «Gos Container», y los seis recuerdos del triage no se encendieron
+        // ninguno (medido por el dueño el 2026-09-02).
+        Prueba("118. lo que se señala dentro de SAP lo dice SAP, y si SAP no lo reconoce se dice que no se sabe en vez de devolver el panel que lo contiene todo", SenalarDentroDeSapLoDiceSap);
+        Prueba("119. un recuerdo se ilumina en el mundo del que es: el selector decide quién sabe dónde está en pantalla", CadaCajaLaDaSuMundo);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -1589,6 +1619,250 @@ internal static class Contrato
         Debe((string)e0.GetType().GetProperty("Nombre")!.GetValue(e0)! == "radicar-factura"
              && ((string)e0.GetType().GetProperty("Description")!.GetValue(e0)!).Contains("radicar"),
             "y la anuncia con nombre y con su CUÁNDO: el disparador es lo que deja pedirla sin verla");
+    }
+
+    // ── La nota llega al triage con un ✓ (spec 008): las promesas ────────────
+
+    private static U.WindowsClient.Clinical.NotaClinica NotaDeTres() =>
+        new("", new[]
+        {
+            new U.WindowsClient.Clinical.SeccionDeNota("motivo_consulta", "Motivo de consulta", "dolor torácico opresivo de dos horas"),
+            new U.WindowsClient.Clinical.SeccionDeNota("hallazgos", "Hallazgos y datos objetivos", "peso 70 kg, talla 170 cm, TA 120/80"),
+            new U.WindowsClient.Clinical.SeccionDeNota("plan", "Plan y recomendaciones", "reposo y control en 48 horas"),
+        }, Array.Empty<string>(), Array.Empty<string>());
+
+    private static void SoloViajaLoMarcado()
+    {
+        // El ✓ es la aprobación del médico. Un envío que mandara la nota entera por comodidad
+        // escribiría en la historia clínica secciones que nadie leyó — y eso se vería igual que
+        // un envío correcto. Se juzga por lo que NO viaja.
+        var t = Capacidad("U.WindowsClient.Clinical.Encargo");
+        var de = t?.GetMethod("De");
+        Debe(t != null && de != null, "todavía no existe «Clinical.Encargo.De» (fase 1 de la spec 008). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || de == null) return;
+
+        var nota = NotaDeTres();
+        var encargo = de.Invoke(null, new object[] { nota, new[] { "motivo_consulta", "plan" } })!;
+        var secciones = (System.Collections.IList)t.GetProperty("Secciones")!.GetValue(encargo)!;
+        string texto = (string)t.GetProperty("Texto")!.GetValue(encargo)!;
+
+        Debe(secciones.Count == 2, $"marcadas dos, viajan dos (viajaron {secciones.Count})");
+        Debe(texto.Contains("Motivo de consulta:") && texto.Contains("reposo y control"),
+            "y viajan con su título delante y su texto tal cual: el emparejador necesita saber qué es cada cosa");
+        Debe(!texto.Contains("peso 70"),
+            "la sección SIN ✓ no entra: «Hallazgos» no se marcó y su peso no puede llegar a SAP");
+
+        var vacio = de.Invoke(null, new object[] { nota, Array.Empty<string>() })!;
+        Debe(t.GetProperty("EstaVacio")!.GetValue(vacio) is true,
+            "sin nada marcado el encargo está vacío: no hay envío que hacer, y se sabe antes de tocar SAP");
+    }
+
+    private static void MotivoYConductaSalenPorTitulo()
+    {
+        // Los dos editores de texto libre del triage no los ve el rellenador (son shells
+        // GuiTextedit; la demo del 31 los escribía aparte con frases fijas). Se reparten por el
+        // título de la sección, y sin sección que lo diga quedan vacíos: un motivo de consulta
+        // inventado es peor que uno en blanco.
+        var t = Capacidad("U.WindowsClient.Clinical.EditoresDelTriage");
+        var repartir = t?.GetMethod("Repartir");
+        Debe(t != null && repartir != null, "todavía no existe «Clinical.EditoresDelTriage.Repartir» (fase 2 de la spec 008). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || repartir == null) return;
+
+        string De(object reparto, string prop) => (string)reparto.GetType().GetProperty(prop)!.GetValue(reparto)!;
+
+        var tres = repartir.Invoke(null, new object[] { NotaDeTres().Secciones })!;
+        Debe(De(tres, "Motivo") == "dolor torácico opresivo de dos horas",
+            "«Motivo de consulta» va al editor de motivo, tal cual se dijo");
+        Debe(De(tres, "Conducta") == "reposo y control en 48 horas",
+            "y «Plan y recomendaciones» va a Conducta");
+
+        var soloHallazgos = repartir.Invoke(null, new object[]
+        {
+            new[] { new U.WindowsClient.Clinical.SeccionDeNota("hallazgos", "Hallazgos", "peso 70 kg") },
+        })!;
+        Debe(De(soloHallazgos, "Motivo").Length == 0 && De(soloHallazgos, "Conducta").Length == 0,
+            "sin una sección que lo diga, los dos quedan vacíos: no se pega la nota entera en «Motivo» por llenar algo");
+    }
+
+    private static void FueraDelTriageNoSeEscribe()
+    {
+        // El guardián existía (RellenadorSap.EsLaPantallaDeTriage, lo usa el exportador desde el
+        // 2026-08-25) y nadie lo prometía: un ✓ que llegara a otra pantalla escribiría datos
+        // clínicos en el formulario que fuera. Se pregunta a SAP, no al foco.
+        var t = Capacidad("U.WindowsClient.Clinical.EnvioAlTriage");
+        var puede = t?.GetMethod("PuedeEscribir");
+        Debe(t != null && puede != null, "todavía no existe «Clinical.EnvioAlTriage.PuedeEscribir» (fase 3 de la spec 008). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || puede == null) return;
+
+        (bool Puede, string Motivo) V(string donde)
+        {
+            var v = puede.Invoke(null, new object[] { donde })!;
+            return ((bool)v.GetType().GetProperty("Puede")!.GetValue(v)!,
+                    (string)v.GetType().GetProperty("Motivo")!.GetValue(v)!);
+        }
+
+        Debe(V("sapgui://QAS/NWP1/SAPLY000/0100").Puede, "con el triage delante se escribe");
+        var puesto = V("sapgui://QAS/NWP1/SAPLN_WP_FRAMEWORK/0100");
+        Debe(!puesto.Puede && puesto.Motivo.Contains("SAPLN_WP_FRAMEWORK"),
+            "en el puesto de trabajo NO se escribe, y el motivo nombra la pantalla en la que está");
+        Debe(!V("uia://explorer.exe/descargas").Puede, "fuera de SAP tampoco");
+        Debe(!V("").Puede, "y sin saber qué muestra SAP, menos: no se escribe a ciegas");
+    }
+
+    private static void LoEnsenadoViajaConSuCampo()
+    {
+        // EL CANAL ENTRE ENSEÑAR Y HACER. Los recuerdos existen desde el 2026-08-23 y hasta hoy no
+        // tocaban lo que Ü escribe: se contaban al llegar a una pantalla y ahí morían. Esta promesa
+        // es la que convierte una enseñanza en comportamiento, sin una sola regla de dominio.
+        var t = Capacidad("U.WindowsClient.Clinical.LoQueVeElEmparejador");
+        var etiquetaCon = t?.GetMethod("EtiquetaCon");
+        var merece = t?.GetMethod("MereceOfrecerse");
+        var identidad = t?.GetMethod("MismaIdentidad");
+        Debe(t != null && etiquetaCon != null && merece != null && identidad != null,
+            "todavía no existe «Clinical.LoQueVeElEmparejador» (fase 5 de la spec 008). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || etiquetaCon == null || merece == null || identidad == null) return;
+
+        string Con(string etq, string ant, string rec) =>
+            (string)etiquetaCon.Invoke(null, new object[] { etq, ant, rec })!;
+
+        string conRecuerdo = Con("Frec. Cardíaca", "", "se escribe sin decimales y en pulsaciones por minuto");
+        Debe(conRecuerdo.Contains("Frec. Cardíaca") && conRecuerdo.Contains("pulsaciones por minuto"),
+            "el campo llega con su etiqueta Y con lo que se enseñó sobre él: si lo enseñado no viaja, "
+            + "enseñar no cambia nada de lo que Ü hace");
+        Debe(Con("Peso", "", "") == "Peso",
+            "y un campo sin nada enseñado llega tal cual: no se le inventa contexto");
+
+        // Un campo que NADIE sabe nombrar entra igual si alguien le enseñó qué es: la enseñanza
+        // basta por sí sola para hacerlo accionable.
+        Debe((bool)merece.Invoke(null, new object[] { "", "", "aquí va la frecuencia cardíaca" })! ,
+            "lo enseñado hace ofrecible un campo que ni su etiqueta ni su vecina nombran");
+
+        Debe((string)identidad.Invoke(null, new object[] { "sap:wnd[0]/usr/txtX" })!
+             == (string)identidad.Invoke(null, new object[] { "wnd[0]/usr/txtX" })!,
+            "y las dos formas del mismo selector —la del grafo, con «sap:», y la del formulario, sin "
+            + "él— se comparan por el mismo camino: si no, el recuerdo nunca casaría con su campo y "
+            + "el fallo sería mudo (aprendizaje nº16)");
+    }
+
+    private static void LaCasillaSinNombreSePresenta()
+    {
+        // La diastólica de «Presión Arterial» se llama «/». Estaba EXCLUIDA del inventario para que
+        // un número suelto no cayera ahí, y el efecto real era que la presión no se podía llenar
+        // entera NUNCA. Esconder un campo no es enseñar dónde va.
+        var t = Capacidad("U.WindowsClient.Clinical.LoQueVeElEmparejador");
+        var merece = t?.GetMethod("MereceOfrecerse");
+        var etiquetaCon = t?.GetMethod("EtiquetaCon");
+        Debe(t != null && merece != null && etiquetaCon != null,
+            "todavía no existe «Clinical.LoQueVeElEmparejador» (fase 5 de la spec 008). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || merece == null || etiquetaCon == null) return;
+
+        bool Merece(string etq, string ant) => (bool)merece.Invoke(null, new object[] { etq, ant, "" })!;
+        string Con(string etq, string ant) => (string)etiquetaCon.Invoke(null, new object[] { etq, ant, "" })!;
+
+        Debe(Merece("/", "Presión Arterial"),
+            "la casilla «/» que sigue a «Presión Arterial» SÍ se ofrece: escondida, la diastólica no "
+            + "se podía llenar nunca");
+        string presentada = Con("/", "Presión Arterial");
+        Debe(presentada.Contains("Presión Arterial") && presentada.Contains("/"),
+            "y se ofrece diciendo de quién es la casilla, que es lo que una persona deduce mirando");
+        Debe(Con("Peso", "Talla") == "Peso",
+            "una etiqueta que ya nombra su campo NO se ensucia con la vecina: «Peso» es «Peso», no «Peso, que sigue a Talla»");
+        Debe(!Merece("/", ""),
+            "pero una casilla que nadie puede nombrar —ni ella ni su vecina ni una enseñanza— no se "
+            + "ofrece: el modelo no tendría con qué decidir y adivinaría");
+    }
+
+    private static void EnsenarAlcanzaADentroDeSap()
+    {
+        // «Esto es X» por NOMBRE pasaba siempre por el lector de UIA, y dentro de SAP UIA ve un Pane
+        // opaco: enseñar un campo del triage era imposible salvo con el cursor encima. El terreno sí
+        // los ve, con su identidad «sap:...», desde la tanda de T1.
+        var t = Capacidad("U.WindowsClient.Navigation.ElCampoQueNombras");
+        var resolver = t?.GetMethod("Resolver");
+        Debe(t != null && resolver != null,
+            "todavía no existe «Navigation.ElCampoQueNombras» (fase 6 de la spec 008). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || resolver == null) return;
+
+        var puertas = new List<(string, string, string)>
+        {
+            ("sap:wnd[0]/usr/txtFRCAR", "Frec. Cardíaca", "GuiTextField"),
+            ("sap:wnd[0]/usr/txtFRRES", "Frec. Respiratoria", "GuiTextField"),
+            ("sap:wnd[0]/usr/txtPESO", "Peso", "GuiTextField"),
+        };
+        object? R(string nombre) => resolver.Invoke(null, new object[] { nombre, puertas });
+
+        // En una ValueTuple, «Item1» es un CAMPO y no una propiedad: pedirlo con GetProperty
+        // devuelve null y el arnés revienta con un NullReference que no habla de la promesa.
+        var frec = R("Frec. Cardíaca");
+        Debe(frec != null && ((string)frec.GetType().GetField("Item1")!.GetValue(frec)!).Contains("FRCAR"),
+            "un campo del formulario de SAP se encuentra por su nombre, aunque UIA no vea nada ahí dentro");
+
+        var peso = R("peso");
+        Debe(peso != null, "y sin exigir que se diga clavado: tildes y mayúsculas aparte");
+
+        Debe(R("Frec.") == null,
+            "«Frec.» nombra a DOS campos y no se adivina: colgar la enseñanza del elemento equivocado "
+            + "es peor que no guardarla — quien enseña se queda tranquilo y el dato acabará en otro sitio");
+        Debe(R("Temperatura") == null, "y lo que no está aquí no se resuelve por parecido lejano");
+    }
+
+    private static void SenalarDentroDeSapLoDiceSap()
+    {
+        // El bug, tal cual lo vio el dueño: cursor sobre la casilla de la presión arterial, y la
+        // respuesta fue «Gos Container» (Pane) — el contenedor opaco que UIA ve en lugar de SAP.
+        // Lo que se juzga aquí es el DESPACHO, que es la parte que puede equivocarse en silencio.
+        string donde = "uia://explorer.exe/x";
+        var pedidos = new List<string>();
+        var senalar = new LoSenaladoPorMundo(() => donde, (x, y) =>
+        {
+            pedidos.Add($"sap:{x},{y}");
+            return x == 100
+                ? ("sap:wnd[0]/usr/txtTASIS", "Y0000000-ZTXTTASIS", "GuiTextField",
+                   new System.Windows.Rect(90, 40, 60, 20))
+                : ((string, string, string, System.Windows.Rect)?)null;
+        });
+
+        var fuera = senalar.ElPunto(100, 50);
+        Debe(!fuera.MandaSap && pedidos.Count == 0,
+            "fuera de SAP no se le pregunta a SAP: lo resuelve el camino de siempre");
+
+        donde = "sapgui://QAS/NWP1/SAPLY000/0001";
+        var dentro = senalar.ElPunto(100, 50);
+        Debe(dentro.MandaSap && dentro.Que is { } q && q.Etiqueta == "Y0000000-ZTXTTASIS",
+            "dentro de SAP contesta SAP, con la identidad del campo y no la del panel");
+        Debe(dentro.Que is { } r && r.Caja.Width > 0 && r.Caja.Height > 0,
+            "y con su CAJA, porque señalar sin poder iluminar es decir un nombre que nadie puede "
+            + "comprobar — el 2026-09-02 contestó «lo estoy iluminando» sin encender nada");
+
+        var noSabe = senalar.ElPunto(900, 900);
+        Debe(noSabe.MandaSap && noSabe.Que == null,
+            "y si SAP no reconoce lo que hay bajo el punto se DICE que manda SAP y que no lo sabe: "
+            + "caer a UIA aquí devolvería justo el «Gos Container» que este despacho viene a evitar");
+    }
+
+    private static void CadaCajaLaDaSuMundo()
+    {
+        // Los seis recuerdos enseñados sobre el triage el 2026-09-02 no se encendieron ninguno: su
+        // rectángulo se buscaba siempre en el lector de UIA, que dentro de SAP no ve ni un campo.
+        var aQuienSePregunto = new List<string>();
+        var geo = new GeometriaPorMundo(
+            uia: sel => { aQuienSePregunto.Add("uia"); return new System.Windows.Rect(1, 1, 10, 10); },
+            sap: sel => { aQuienSePregunto.Add("sap"); return new System.Windows.Rect(2, 2, 20, 20); });
+
+        var deSap = geo.Caja("sap:wnd[0]/usr/txtY0000000-ZTXTFRCAR");
+        Debe(aQuienSePregunto.LastOrDefault() == "sap" && deSap is { Width: 20 },
+            "un recuerdo enseñado en SAP se localiza por la geometría de SAP: por UIA no se "
+            + "encendería ninguno");
+
+        var deUia = geo.Caja("uia:name=Guardar;ct=Button");
+        Debe(aQuienSePregunto.LastOrDefault() == "uia" && deUia is { Width: 10 },
+            "y uno de una ventana normal, por UIA: el SELECTOR decide, no dónde estemos parados");
     }
 
     private static (RecorrerSegunElNucleo Batch, Func<string> Donde, List<string> Tocados) BatchCon(
