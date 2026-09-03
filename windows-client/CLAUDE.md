@@ -104,23 +104,29 @@ Salen de la geometría que da SAP; el detalle está en
 - **Si no hay dato, no se dibuja.** Una caja que miente sobre qué fila señala es peor que ninguna:
   invita a confiar en ella.
 
-## Las tres herramientas de diagnóstico del panel
+## La carita: gestos, no botones (spec 008)
 
-Se añadieron el 2026-07-26 y resuelven cosas distintas. Vale la pena saber cuál usar:
+Desde el 2026-09-02 la carita no tiene botones al lado: **la carita es el botón**. Lo que hace cada
+gesto lo decide `Ui/ReglaDeGestos.cs` (promesa 113) y el cableado de `FaceWindow` solo lo pregunta:
 
-| | Cuándo | Qué cuesta |
-|---|---|---|
-| **🧪 Ensayo en seco** | Antes de ejecutar, y siempre antes de un demo | Nada: no toca la pantalla |
-| **👣 Paso a paso** | Cuando estás construyendo o depurando un flujo | **Ejecuta de verdad**: deja datos en QAS |
-| **Huella** | Sola, en cada corrida | Un recorrido por tick ocioso al grabar |
+| Gesto | Hace |
+|---|---|
+| Un toque | hablar (abre o cuelga la conversación) |
+| Doble toque | abrir o cerrar la barra |
+| Mantener 750 ms, o clic derecho | el anillo: 🎓 Enseñar · ▶ Workflows · 📿 Collar · 👁 Ocultar · ⋯ Más |
+| Arrastrar, lanzar, dos dedos en el trackpad | mover; al soltar se va a un borde |
+| Acercar el ratón | los ojos siguen al cursor y asoma la línea «Escríbele…» |
+| Teclear con el ratón encima | el globo se abre con esa letra (`ReglaDeEscritura`, promesa 114) |
 
-El ensayo **no navega**: solo comprueba en vivo lo que cae en la pantalla que tengas delante. Un ensayo
-limpio no garantiza una ejecución limpia — garantiza que los fallos detectables sin ejecutar no están.
-Está dicho en el propio informe para que nadie lo lea como semáforo verde.
+Tres cosas que no son de estilo: **Ctrl/Alt+tecla, F1-F12, Esc, Enter, Tab y flechas nunca se roban**
+a la app de debajo; **el anillo se coloca con `ReglaDelAnillo`** (promesa 115), que en las esquinas
+agranda el radio en vez de desplazar el abanico, para que ninguna burbuja pise la carita; y **la pista
+de gestos se enseña tres arranques y calla** (`ReglaDeDescubrimiento`, promesa 116). El tema claro/oscuro,
+que era lo que hacía mantener, vive en el 🌓 del panel (doble Ctrl+Shift).
 
-El paso a paso pone al lado **la captura de cuando enseñaste ese paso** (`StepShotCamera`, que llevaba
-meses grabando sin que nadie las mirara). Ese contraste es lo que lo hace un depurador y no un botón de
-«siguiente».
+Lo que hoy queda para diagnosticar una corrida es la **huella estructural** por paso (sola, en cada
+corrida; un recorrido por tick ocioso al grabar). Los botones **🧪 Ensayo en seco** y **👣 Paso a paso**
+se quitaron del panel en la limpieza del 2026-08-31; si vuelven, vuelven con su promesa.
 
 ## El consciente no teclea fuera de su app
 

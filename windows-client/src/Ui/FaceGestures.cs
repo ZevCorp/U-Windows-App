@@ -27,6 +27,17 @@ public sealed class FaceGestures
     public Action? DoubleTap { get; set; }
     /// <summary>Mantener oprimido en un lugar estático (sin arrastrar).</summary>
     public Action? LongPress { get; set; }
+    /// <summary>Clic con el botón derecho. Es el «más» de Windows y existe para que quien no sepa
+    /// el gesto de mantener tenga el de siempre (spec 008, 2026-09-02).</summary>
+    public Action? RightClick { get; set; }
+    /// <summary>Se acaba de apretar: lo que estuviera abierto por un gesto anterior (el anillo) se cierra.</summary>
+    public Action? Pressed { get; set; }
+    /// <summary>Tras «mantener», el cursor se mueve SIN soltar. Llega en DIPs de pantalla: es el
+    /// deslizar del menú en tarta, y quien abrió el anillo resalta lo que hay debajo.</summary>
+    public Action<Point>? LongPressMoved { get; set; }
+    /// <summary>Tras «mantener», se soltó. Llega en DIPs de pantalla: sobre una burbuja la elige,
+    /// sobre nada cancela. Antes de la spec 008 soltar tras mantener no contaba para nada.</summary>
+    public Action<Point>? LongPressReleased { get; set; }
 
     /// <summary>
     /// La ventana quedó en un sitio nuevo porque el usuario la movió. Llega con el destino FINAL.
@@ -42,7 +53,8 @@ public sealed class FaceGestures
     private const double MoveThresholdSq = 169;
 
     /// <summary>
-    /// Cuánto hay que mantener oprimido para cambiar de tema.
+    /// Cuánto hay que mantener oprimido para que cuente como «mantener» (hoy abre el anillo;
+    /// hasta el 2026-09-02 cambiaba de tema).
     ///
     /// Eran 450 ms, y ese era el motivo de que «los gestos no funcionaran»: un clic deliberado sobre
     /// un objetivo de 42 px dura tranquilamente medio segundo, así que al ir a colapsar la carita le
@@ -82,11 +94,20 @@ public sealed class FaceGestures
         _face.MouseLeftButtonDown += OnDown;
         _face.MouseMove += OnMove;
         _face.MouseLeftButtonUp += OnUp;
+        _face.MouseRightButtonUp += OnRightUp;
+    }
+
+    private void OnRightUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (_pressed) return;   // con el izquierdo aún apretado no es un clic derecho: es un tropiezo
+        RightClick?.Invoke();
     }
 
     private void OnDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true; // que el DragMove del Header no dispare además
+        Pressed?.Invoke();
         _face.CaptureMouse();
 
         // Corta cualquier fling en curso: fija la posición actual como base antes de seguir.
@@ -115,6 +136,15 @@ public sealed class FaceGestures
     {
         if (!_pressed) return;
         GetCursorPos(out POINT c);
+
+        // Con el mantener ya disparado, mover NO es arrastrar: es deslizar por el anillo. Hasta la
+        // spec 008 esto seguía de largo y la carita se iba con la mano mientras el anillo quedaba
+        // abierto en el sitio viejo.
+        if (_longFired)
+        {
+            LongPressMoved?.Invoke(new Point(c.X / _scaleX, c.Y / _scaleY));
+            return;
+        }
         double dx = c.X - _downCursor.X;
         double dy = c.Y - _downCursor.Y;
 
@@ -164,7 +194,14 @@ public sealed class FaceGestures
         _face.ReleaseMouseCapture();
         _longTimer.Stop();
 
-        if (_longFired) return; // el mantener-oprimido ya cambió de modo; el soltar no cuenta
+        if (_longFired)
+        {
+            // El mantener-oprimido ya cambió de modo: soltar no es un toque, es SOLTAR SOBRE algo
+            // (o sobre nada). Se le dice dónde a quien abrió el anillo (spec 008).
+            GetCursorPos(out POINT p);
+            LongPressReleased?.Invoke(new Point(p.X / _scaleX, p.Y / _scaleY));
+            return;
+        }
 
         if (_moved)
         {

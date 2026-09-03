@@ -86,6 +86,14 @@ public sealed class Config
     public string FaceTheme { get; set; } = "Light";
 
     /// <summary>
+    /// En cuántos arranques se ha enseñado ya la pista de gestos bajo la carita («toca: hablar ·
+    /// escribe: texto · mantén: menú»). Se persiste porque la pista se calla a la tercera
+    /// (<see cref="Ui.ReglaDeDescubrimiento"/>, promesa 116): un gesto que hay que saber es un
+    /// secreto, y una pista que no se calla es un cartel.
+    /// </summary>
+    public int PistasDeLaCaritaMostradas { get; set; }
+
+    /// <summary>
     /// Dónde dejó el usuario la barra. Se persiste porque el operador la aparta de la barra de
     /// herramientas de SAP una vez, y sin esto tendría que volver a apartarla en cada arranque.
     ///

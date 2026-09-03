@@ -275,16 +275,21 @@ paso 6    input RNPA1-PASSNR                                    ✓
 
 Lo que hay detrás de cada eslabón está en [`windows-graph/CLAUDE.md`](windows-graph/CLAUDE.md).
 
-Herramientas nuevas para diagnosticar, todas en el panel de la carita:
+Lo que queda para diagnosticar (los botones 🧪 Ensayo en seco y 👣 Paso a paso se quitaron del panel
+el 2026-08-31; esta sección los describía como si siguieran ahí):
 
-- **🧪 Ensayo en seco** — recorre el plan sin tocar la pantalla. Lo que más pesa: marca **cada cambio de
-  pantalla** y, si el paso anterior es un `input` (que no navega), lo declara bloqueante — falta el paso
-  que navega. Detecta en dos segundos el fallo que costó un día.
-- **👣 Paso a paso** — se detiene ANTES de cada paso, con el veredicto y **la captura de cuando lo
-  enseñaste** al lado. Esas capturas llevaban meses guardándose sin que las usara nadie.
 - **Huella estructural** por paso: hash de los ids de los elementos interactivos + el tamaño de cada
   shell. Detecta que sigues en la misma transacción pero la pantalla no está en el mismo estado. Hoy
   **avisa, no detiene** — hasta que tenga kilómetros encima.
+
+### La carita es el único botón (spec 008, 2026-09-02)
+
+Ya no hay pastillas al lado de la carita, y el dictado a SAP desde ella se fue del todo. Un toque
+habla, dos abren la barra, mantener o clic derecho abren **el anillo** (🎓 Enseñar · ▶ Workflows ·
+📿 Collar · 👁 Ocultar · ⋯ Más), y escribirle es acercarse y **escribir**: la línea «Escríbele…» asoma
+al lado y una tecla con el ratón encima abre el globo con esa letra. Cada gesto lo decide una regla
+pura que juzga el contrato (promesas 112-116): `ReglaDeGestos`, `ReglaDeEscritura`, `ReglaDelAnillo`,
+`ReglaDeDescubrimiento`. Detalle y tabla en [`windows-client/CLAUDE.md`](windows-client/CLAUDE.md).
 
 ### Pendientes reales
 

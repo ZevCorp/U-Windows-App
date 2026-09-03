@@ -61,89 +61,6 @@
         <!-- Botón de la BARRA: cuadrado, redondeado, solo icono. El hover es una capa que se funde en
              ~120 ms (no un salto), y el foco de teclado se ve como un aro — la barra se puede operar
              sin ratón. -->
-        <!-- El botón de voz que asoma al lado de la carita suelta.
-             Pequeño y redondo a propósito: acompaña a la carita, no compite con ella. Nace un poco
-             encogido y crece al entrar, que es lo que hace que aparecer se lea como aparecer y no
-             como un parpadeo. El micrófono va dibujado y no con un emoji: a 26 px un emoji sale
-             borroso y con el color de otro sistema. -->
-        <Style x:Key="VoiceDot" TargetType="Button">
-            <Setter Property="Width" Value="26"/>
-            <Setter Property="Height" Value="26"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Background" Value="#E6202022"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="ToolTipService.InitialShowDelay" Value="400"/>
-            <Setter Property="ToolTipService.Placement" Value="Top"/>
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Grid>
-                            <Grid.RenderTransform>
-                                <ScaleTransform x:Name="sc" ScaleX="1" ScaleY="1"/>
-                            </Grid.RenderTransform>
-                            <Ellipse x:Name="bg" Fill="{TemplateBinding Background}"/>
-                            <Ellipse x:Name="ring" Stroke="#33FFFFFF" StrokeThickness="1"/>
-                            <Ellipse x:Name="hover" Fill="#1FFFFFFF" Opacity="0"/>
-                            <!-- Micrófono: cápsula + arco + pie. Trazo fino, como el resto de la cara.
-                                 El color sale del Foreground para que pueda invertirse al hablar. -->
-                            <Canvas Width="26" Height="26">
-                                <Border Canvas.Left="10.5" Canvas.Top="6" Width="5" Height="9"
-                                        CornerRadius="2.5" Background="{TemplateBinding Foreground}"/>
-                                <Path Stroke="{TemplateBinding Foreground}" StrokeThickness="1.3"
-                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                      Data="M 8.2,12.4 A 4.8,4.8 0 0 0 17.8,12.4"/>
-                                <Line X1="13" Y1="17.2" X2="13" Y2="19.6" Stroke="{TemplateBinding Foreground}"
-                                      StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                            </Canvas>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="hover"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="1" Duration="0:0:0.12"/>
-                                            <DoubleAnimation Storyboard.TargetName="sc"
-                                                             Storyboard.TargetProperty="ScaleX"
-                                                             To="1.12" Duration="0:0:0.14"/>
-                                            <DoubleAnimation Storyboard.TargetName="sc"
-                                                             Storyboard.TargetProperty="ScaleY"
-                                                             To="1.12" Duration="0:0:0.14"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.EnterActions>
-                                <Trigger.ExitActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="hover"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="0" Duration="0:0:0.16"/>
-                                            <DoubleAnimation Storyboard.TargetName="sc"
-                                                             Storyboard.TargetProperty="ScaleX"
-                                                             To="1" Duration="0:0:0.18"/>
-                                            <DoubleAnimation Storyboard.TargetName="sc"
-                                                             Storyboard.TargetProperty="ScaleY"
-                                                             To="1" Duration="0:0:0.18"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.ExitActions>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bg" Property="Fill" Value="#FF3A3A3E"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.45" Color="Black"/>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
         <Style x:Key="BarBtn" TargetType="Button">
             <Setter Property="Width" Value="38"/>
             <Setter Property="Height" Value="38"/>
@@ -295,124 +212,12 @@
          El estado COLAPSADO (solo la carita suelta) se alterna con un clic en la carita, como siempre.
          Ver FaceWindow.xaml.cs (ToggleCollapsed y la región «menú extendido»). -->
     <Grid>
-        <!-- Estado COLAPSADO: solo la carita, como una burbuja flotante. Clic → barra · doble clic →
-             micrófono · mantener oprimido → cambia de tema · arrastrar y soltar → se lanza al borde.
-             El Margin de 28 deja aire alrededor para que la sombra (blur 24) no se recorte. -->
-        <!-- La carita suelta y, a su izquierda, el botón de voz que solo asoma al pasar por encima.
-             Van juntos en un panel para que el ratón pueda ir de una al otro sin que el botón se
-             desvanezca por el camino: si el hover se midiera solo sobre la carita, el botón
-             desaparecería justo cuando vas a pulsarlo. El sitio SIEMPRE está reservado (el botón
-             nace invisible, no ausente), así la carita no da un salto al aparecer. -->
-        <StackPanel x:Name="CollapsedGroup" Orientation="Horizontal" Visibility="Collapsed"
-                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="28"
-                    Background="Transparent"
-                    MouseEnter="OnCollapsedHoverIn" MouseLeave="OnCollapsedHoverOut">
-
-            <!-- DOS PASTILLAS DIMINUTAS que se convierten en botones al acercarse.
-                 Es el gesto del Dock de macOS —los iconos crecen cuando te acercas— con la forma
-                 del indicador de inicio de iOS: una barrita redondeada que no pide nada. En reposo
-                 solo insinúan que hay algo; el icono aparece cuando la mano ya va hacia él.
-
-                 La zona sensible mide 26x26 aunque la pastilla mida 4x16: el blanco de un gesto no
-                 puede ser tan pequeño como su dibujo, o acertarle se convierte en puntería. -->
-            <StackPanel x:Name="VoiceDotGrupo" Orientation="Vertical" VerticalAlignment="Center"
-                        Margin="0,0,10,0" Opacity="0">
-
-                <!-- Voz -->
-                <Grid x:Name="ZonaVoz" Width="26" Height="26" Background="Transparent" Cursor="Hand"
-                      ToolTip="Hablar con Ü"
-                      MouseEnter="OnZonaVozEntra" MouseLeave="OnZonaVozSale"
-                      MouseLeftButtonUp="OnMicDesdePastilla">
-                    <Ellipse x:Name="VoiceHalo" Width="26" Height="26" Opacity="0"
-                             Fill="#FFFFFF" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
-                        <Ellipse.RenderTransform>
-                            <ScaleTransform x:Name="VoiceHaloEscala" ScaleX="1" ScaleY="1"/>
-                        </Ellipse.RenderTransform>
-                    </Ellipse>
-                    <!-- Rectangle y no Border: su radio de esquina es un número y por tanto se puede
-                         ANIMAR. Con Border el radio es una estructura y no se anima, así que había
-                         que dejarlo fijo y grande — y un radio grande sobre algo estrecho no es un
-                         rectángulo redondeado, es un óvalo (2026-08-07). Aquí el radio viaja con el
-                         tamaño: de 1,5 (barrita) a 13 (círculo). -->
-                    <Rectangle x:Name="VozCuerpo" Width="4.5" Height="10" RadiusX="2" RadiusY="2"
-                               IsHitTestVisible="False">
-                        <Rectangle.Fill>
-                            <SolidColorBrush x:Name="VozFondo" Color="#80A8A8AE"/>
-                        </Rectangle.Fill>
-                    </Rectangle>
-                    <Canvas x:Name="VozIcono" Width="26" Height="26" Opacity="0" IsHitTestVisible="False">
-                        <Border Canvas.Left="10.5" Canvas.Top="6" Width="5" Height="9"
-                                CornerRadius="2.5" Background="White"/>
-                        <Path Stroke="White" StrokeThickness="1.3" StrokeStartLineCap="Round"
-                              StrokeEndLineCap="Round" Data="M 8.2,12.4 A 4.8,4.8 0 0 0 17.8,12.4"/>
-                        <Line X1="13" Y1="17.2" X2="13" Y2="19.6" Stroke="White"
-                              StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                    </Canvas>
-                </Grid>
-
-                <!-- Conversación -->
-                <Grid x:Name="ZonaChat" Width="26" Height="26" Background="Transparent" Cursor="Hand"
-                      Margin="0,1,0,0" ToolTip="Escribirle a Ü"
-                      MouseEnter="OnZonaChatEntra" MouseLeave="OnZonaChatSale"
-                      MouseLeftButtonUp="OnChatDesdePastilla">
-                    <Rectangle x:Name="ChatCuerpo" Width="4.5" Height="10" RadiusX="2" RadiusY="2"
-                               IsHitTestVisible="False">
-                        <Rectangle.Fill>
-                            <SolidColorBrush x:Name="ChatFondo" Color="#80A8A8AE"/>
-                        </Rectangle.Fill>
-                    </Rectangle>
-                    <Canvas x:Name="ChatIcono" Width="26" Height="26" Opacity="0" IsHitTestVisible="False">
-                        <!-- Bocadillo: cuerpo redondeado y la puntita abajo a la izquierda. -->
-                        <Border Canvas.Left="6" Canvas.Top="7" Width="14" Height="10"
-                                CornerRadius="5" BorderBrush="White" BorderThickness="1.4"/>
-                        <Path Stroke="White" StrokeThickness="1.4" StrokeStartLineCap="Round"
-                              StrokeEndLineCap="Round" Data="M 9.5,16.6 L 8.6,19.6 L 12.2,17.2"/>
-                    </Canvas>
-                </Grid>
-
-                <!-- Dictado clínico. VA AQUÍ Y NO EN LA REJILLA DEL MENÚ porque se usa con las manos
-                     puestas en otra cosa: el médico está mirando SAP, no buscando un botón dentro de
-                     un panel. Las otras dos pastillas hablan CON Ü; ésta no habla con nadie —
-                     transcribe y rellena— y por eso merece su propio gesto en vez de un modo del
-                     micrófono.
-
-                     Solo hace algo en la pantalla de triage: fuera de ahí no hay campos que llenar y
-                     encenderlo sería prometer un trabajo que no se puede hacer. -->
-                <Grid x:Name="ZonaDictado" Width="26" Height="26" Background="Transparent" Cursor="Hand"
-                      Margin="0,1,0,0" ToolTip="Dictar y rellenar los campos de SAP"
-                      MouseEnter="OnZonaDictadoEntra" MouseLeave="OnZonaDictadoSale"
-                      MouseLeftButtonUp="OnDictadoDesdePastilla">
-                    <Rectangle x:Name="DictadoCuerpo" Width="4.5" Height="10" RadiusX="2" RadiusY="2"
-                               IsHitTestVisible="False">
-                        <Rectangle.Fill>
-                            <SolidColorBrush x:Name="DictadoFondo" Color="#80A8A8AE"/>
-                        </Rectangle.Fill>
-                    </Rectangle>
-                    <Canvas x:Name="DictadoIcono" Width="26" Height="26" Opacity="0" IsHitTestVisible="False">
-                        <!-- Fonendoscopio: el tubo en U que baja de las olivas, y la campana. -->
-                        <Path Stroke="White" StrokeThickness="1.3" StrokeStartLineCap="Round"
-                              StrokeEndLineCap="Round" Fill="Transparent"
-                              Data="M 8,5.5 L 8,10.5 A 4.2,4.2 0 0 0 16.4,10.5 L 16.4,5.5"/>
-                        <Path Stroke="White" StrokeThickness="1.3" StrokeStartLineCap="Round"
-                              StrokeEndLineCap="Round" Fill="Transparent"
-                              Data="M 12.2,14.7 L 12.2,16.4 A 3.1,3.1 0 0 0 18.4,16.4"/>
-                        <Ellipse Canvas.Left="16.2" Canvas.Top="15.4" Width="4.4" Height="4.4"
-                                 Stroke="White" StrokeThickness="1.3"/>
-                    </Canvas>
-                </Grid>
-            </StackPanel>
-
-            <ui:FaceControl x:Name="CollapsedFace" Width="72" Height="72" Cursor="Hand"
-                            ToolTip="Clic: abrir la barra · doble clic: micrófono · mantener: cambiar tema · arrastrar y soltar: mover">
-                <ui:FaceControl.Effect>
-                    <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="Black"/>
-                </ui:FaceControl.Effect>
-            </ui:FaceControl>
-        </StackPanel>
-
-        <!-- Estado NORMAL: menú extendido (arriba) + globo de conversación (izquierda) + barra (derecha).
-             La ventana mide lo que mida el contenido (SizeToContent) y OnSizeChanged la mantiene
-             anclada a la esquina inferior derecha: abrir el menú crece hacia arriba y a la izquierda. -->
+        <!-- Menú extendido (arriba) + fila inferior: globo de conversación o línea «Escríbele…»
+             (hacia el centro de la pantalla) y, del lado del borde, la barra O la carita suelta —los
+             dos estados viven en la misma fila desde la spec 008, ver CollapsedHost—. La ventana mide
+             lo que mida el contenido (SizeToContent) y OnSizeChanged la mantiene anclada a la
+             esquina: abrir el menú o el globo crece hacia arriba y hacia el centro, y ni la barra ni
+             la carita se mueven. -->
         <!-- Dos filas y no un StackPanel: la barra es la fila Auto y el menú la fila «*». Así, cuando
              el contenido excede el MaxHeight de la ventana, quien cede es el MENÚ (que hace scroll),
              nunca la barra. Con un StackPanel el recorte se comía el último hijo — es decir, la
@@ -565,8 +370,10 @@
                                      🔍 inspector (recuadros estilo TalkBack, ver UiInspector) ·
                                      📍 el location bar de Windows (mismo formato que source_url) ·
                                      🧠 los recuerdos de esta pantalla de golpe (ver MostrarRecuerdos) ·
-                                     🎬 qué se hace con el video al enseñar · 📜 el registro. -->
-                                <UniformGrid Columns="5" Margin="0,8,0,0">
+                                     🎬 qué se hace con el video al enseñar · 📜 el registro ·
+                                     🌓 el tema de la carita (hasta el 2026-09-02 se cambiaba
+                                     manteniéndola oprimida; ese gesto abre ahora el anillo). -->
+                                <UniformGrid Columns="6" Margin="0,8,0,0">
                                     <Button x:Name="InspectorBtn" Content="🔍" Style="{StaticResource BarBtn}"
                                             Click="OnToggleInspector" Margin="0"
                                             ToolTip="Inspector de elementos: recuadros sobre la pantalla. Al hacer clic: amarillo si coincide con lo que el asistente tocaría, rojo (ambos) si no."
@@ -587,6 +394,10 @@
                                             Click="OnOpenLogs" Margin="0"
                                             ToolTip="Registro (para diagnosticar errores)"
                                             AutomationProperties.Name="Logs"/>
+                                    <Button x:Name="ThemeBtn" Content="🌓" Style="{StaticResource BarBtn}"
+                                            Click="OnCycleTheme" Margin="0"
+                                            ToolTip="Tema de la carita: claro ↔ oscuro"
+                                            AutomationProperties.Name="Tema de la carita"/>
                                 </UniformGrid>
 
                                 <!-- Para soporte: saber qué versión tiene el cliente delante sin pedir nada. -->
@@ -638,6 +449,32 @@
                                  Background="#22FFFFFF" Foreground="White" BorderThickness="0" Padding="8,0"
                                  KeyDown="OnInputKey" ToolTip="Escríbele a Ü y pulsa Enter"/>
                     </StackPanel>
+                </Border>
+
+                <!-- LA LÍNEA «ESCRÍBELE…» (spec 008, promesa 114): asoma al lado de la carita suelta
+                     cuando el ratón se acerca y el globo no está abierto. NO es un botón que abre otra
+                     cosa: es el sitio donde se escribe. Un clic la convierte en el globo con el foco
+                     puesto; y teclear con el ratón encima hace lo mismo sin el clic (el gancho de
+                     teclado le pregunta a ReglaDeEscritura). Tiene la misma forma que la caja de texto
+                     del globo, para que se lea como lo que es.
+
+                     Acoplada como el globo, del lado que mira al centro de la pantalla. Con la carita
+                     suelta la ventana se ancla por el borde de la carita, así que aparecer aquí no la
+                     mueve: la misma aritmética que el globo y la píldora.
+
+                     El fondo NO puede ser transparente del todo: con AllowsTransparency un píxel con
+                     alfa 0 es click-through y la línea no se dejaría pulsar. -->
+                <Border x:Name="GhostInput" DockPanel.Dock="Left" Visibility="Collapsed" Opacity="0"
+                        VerticalAlignment="Bottom" Height="30" MinWidth="150" Cursor="IBeam"
+                        CornerRadius="15" Background="#1AFFFFFF" BorderBrush="#2EFFFFFF" BorderThickness="1"
+                        Padding="12,0" Margin="0,0,-12,49"
+                        MouseEnter="OnGhostEntra" MouseLeave="OnGhostSale" MouseLeftButtonDown="OnGhostClic"
+                        ToolTip="Escríbele a Ü — o simplemente escribe con el ratón sobre la carita">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="GhostShift"/>
+                    </Border.RenderTransform>
+                    <TextBlock Text="Escríbele…" Foreground="#8CFFFFFF" FontSize="12"
+                               VerticalAlignment="Center" IsHitTestVisible="False"/>
                 </Border>
 
                 <!-- LA BARRA: vertical, estrecha, siempre disponible. Arrastrable por cualquier zona
@@ -734,15 +571,66 @@
                             </Canvas>
                         </Button>
 
-                        <!-- La carita (misma que Android), abajo del todo. Clic → colapsa a solo la
-                             carita · doble clic → micrófono · mantener oprimido → cambia de tema ·
-                             arrastrar → mover. Y además es el SEMÁFORO del sistema: su gesto y su
-                             color dicen qué está pasando (ver FaceMood). -->
+                        <!-- La carita (misma que Android), abajo del todo. Un toque → hablar · doble
+                             toque → colapsa a solo la carita · mantener o clic derecho → el anillo ·
+                             arrastrar → mover (ReglaDeGestos). Y además es el SEMÁFORO del sistema:
+                             su gesto y su color dicen qué está pasando (ver FaceMood). -->
                         <ui:FaceControl x:Name="Face" Width="42" Height="42" Cursor="Hand"
                                         HorizontalAlignment="Center" Margin="0,10,0,0"
-                                        ToolTip="Clic: solo la carita · doble clic: micrófono · mantener: cambiar tema · arrastrar: mover"/>
+                                        ToolTip="Toca: hablar · doble toque: solo la carita · mantén o clic derecho: el anillo · arrastrar: mover"/>
                     </StackPanel>
                 </Border>
+
+                <!-- LA CARITA SUELTA (estado colapsado). Vive en la MISMA fila que la barra y no en un
+                     panel aparte, desde la spec 008 (2026-09-02): así el globo de conversación y la
+                     línea «Escríbele…» se acoplan a su lado exactamente igual que a la barra, sin
+                     duplicar la caja de texto ni su lógica. Antes era un StackPanel en la raíz, y el
+                     globo —que vive en esta fila— no podía abrirse con la carita suelta: la pastilla
+                     «Escribirle a Ü» no hacía nada en el único estado en que existía.
+
+                     Un toque → hablar · doble toque → la barra · mantener oprimida o clic derecho → el
+                     anillo · arrastrar y soltar → se lanza al borde (ReglaDeGestos, promesa 113).
+
+                     El Margin de 28 deja aire alrededor para que la sombra (blur 24) y el halo no se
+                     recorten. El halo va DETRÁS de la carita y en el mismo Grid: un Grid superpone a
+                     sus hijos, así que crecer con la voz no empuja nada ni cambia el tamaño de la
+                     ventana. Hasta el 2026-09-02 vivía detrás de la pastilla del micrófono; sin
+                     pastillas, la señal de «te estoy oyendo» es la carita misma. El color lo pone
+                     PintarHalo: azul por el collar, gris por el micrófono del PC. -->
+                <Grid x:Name="CollapsedHost" DockPanel.Dock="Right" Visibility="Collapsed"
+                      VerticalAlignment="Bottom" Margin="28" Background="Transparent"
+                      MouseEnter="OnCollapsedHoverIn" MouseLeave="OnCollapsedHoverOut">
+                    <Ellipse x:Name="VoiceHalo" Width="72" Height="72" Opacity="0"
+                             IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.Fill>
+                            <SolidColorBrush x:Name="VoiceHaloColor" Color="#A8A8AE"/>
+                        </Ellipse.Fill>
+                        <Ellipse.RenderTransform>
+                            <ScaleTransform x:Name="VoiceHaloEscala" ScaleX="1" ScaleY="1"/>
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+                    <ui:FaceControl x:Name="CollapsedFace" Width="72" Height="72" Cursor="Hand"
+                                    ToolTip="Toca: hablar · doble toque: la barra · mantén o clic derecho: el anillo · arrastrar y soltar: mover">
+                        <ui:FaceControl.Effect>
+                            <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="Black"/>
+                        </ui:FaceControl.Effect>
+                    </ui:FaceControl>
+
+                    <!-- LA PISTA (spec 008, promesa 116): los tres primeros arranques en que te acercas,
+                         una línea bajo la carita dice qué hacen los gestos; después calla
+                         (ReglaDeDescubrimiento). Es un Popup y no un TextBlock acoplado porque un Popup
+                         no cuenta para el tamaño de la ventana: un texto acoplado debajo levantaría la
+                         carita su propia altura al aparecer. Se mira, no se toca. -->
+                    <Popup x:Name="Pista" PlacementTarget="{Binding ElementName=CollapsedFace}" Placement="Bottom"
+                           AllowsTransparency="True" StaysOpen="True" PopupAnimation="Fade"
+                           HorizontalOffset="-84" VerticalOffset="8">
+                        <Border CornerRadius="10" Background="#F20F131C" BorderBrush="#38FFFFFF" BorderThickness="1"
+                                Padding="10,5" IsHitTestVisible="False">
+                            <TextBlock Text="toca: hablar · escribe: texto · mantén: menú"
+                                       Foreground="#EEFFFFFF" FontSize="11"/>
+                        </Border>
+                    </Popup>
+                </Grid>
 
                 <!-- LA FRASE CORTA: acompaña a la carita para que el estado no dependa de aprenderse
                      los gestos. Va FUERA de la barra, a su izquierda, y por eso no rompe los 60 DIP de
