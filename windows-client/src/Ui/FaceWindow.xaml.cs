@@ -1710,6 +1710,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 DoubleTap = () => AtenderGesto(ReglaDeGestos.Decidir(Gesto.DobleToque)),
                 LongPress = () => AtenderGesto(ReglaDeGestos.Decidir(Gesto.Mantener)),
                 RightClick = () => AtenderGesto(ReglaDeGestos.Decidir(Gesto.ClicDerecho)),
+                // El anillo (spec 008, fase 4): apretar cierra el que hubiera; tras mantener, deslizar
+                // resalta y soltar elige.
+                Pressed = CerrarAnillo,
+                LongPressMoved = p => _anillo?.Resaltar(p),
+                LongPressReleased = SoltarSobreElAnillo,
                 // Un solo callback alimenta las tres cosas que dependen de dónde quedó la barra:
                 // recordar el sitio, espejar el layout al lado que toque, y hacia dónde abrirá el
                 // menú. Llega con el DESTINO, así que el espejo se aplica al empezar el vuelo y no
@@ -1727,6 +1732,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             bool? lado = null;
             f.MouseMove += (_, e) =>
             {
+                if (_anillo is { IsVisible: true }) return;   // está mirando al anillo: no se distrae
                 bool izquierda = e.GetPosition(f).X < f.ActualWidth / 2;
                 if (lado == izquierda) return;
                 lado = izquierda;
@@ -1734,6 +1740,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             };
             f.MouseLeave += (_, __) =>
             {
+                if (_anillo is { IsVisible: true }) { lado = null; return; }
                 if (lado == null) return;
                 lado = null;
                 f.DejarDeMirar();
@@ -1764,13 +1771,69 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
     }
 
-    /// <summary>El anillo llega en la fase 4 de la spec 008. Hasta entonces el gesto se reconoce y
-    /// se dice, para que probarlo no parezca que no hizo nada.</summary>
+    // ── El anillo de acciones (spec 008, promesa 115) ────────────────────────────────────────
+
+    private AnilloDeAcciones? _anillo;
+
+    /// <summary>
+    /// EL ANILLO: cinco burbujas en abanico alrededor de la carita, hacia el centro de la pantalla
+    /// (dónde exactamente lo decide ReglaDelAnillo, que es lo que juzga el contrato). Mantener →
+    /// deslizar → soltar elige en un solo gesto; con clic derecho, se hace clic en la burbuja. Esc,
+    /// un clic fuera o mover la carita lo cierran. Y la carita mira hacia él mientras está abierto.
+    /// </summary>
     private void MostrarAnillo()
     {
+        if (_anillo is { IsVisible: true }) { CerrarAnillo(); return; }
         PlayTick();
-        SetStatus("Mantener o clic derecho: el anillo de acciones (llega en la fase 4 de la spec 008).");
-        ShowTalk();
+        if (_anillo == null)
+        {
+            _anillo = new AnilloDeAcciones();
+            _anillo.Cerrado += () => { Face.DejarDeMirar(); CollapsedFace.DejarDeMirar(); };
+        }
+
+        // El centro de la carita en DIPs de pantalla: PointToScreen da píxeles físicos, y las
+        // ventanas se colocan en DIPs (el mismo cálculo que ShouldOpenDown).
+        var cara = _collapsed ? CollapsedFace : Face;
+        double escala = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX;
+        var p = cara.PointToScreen(new Point(cara.ActualWidth / 2, cara.ActualHeight / 2));
+        _anillo.Mostrar(new Point(p.X / escala, p.Y / escala), _barLeft, ItemsDelAnillo());
+        cara.MirarHacia(izquierda: !_barLeft);   // hacia las burbujas, que están del lado del centro
+    }
+
+    private void CerrarAnillo() => _anillo?.Cerrar();
+
+    /// <summary>Soltar tras mantener: sobre una burbuja la elige; sobre nada, cierra el anillo.</summary>
+    private void SoltarSobreElAnillo(Point cursor)
+    {
+        if (_anillo is not { IsVisible: true }) return;
+        var item = _anillo.ElegirEn(cursor);
+        _anillo.Cerrar();
+        if (item == null) return;
+        PlayTick();
+        item.Accion();
+    }
+
+    /// <summary>
+    /// Lo que hay en el anillo, de arriba a abajo. Cinco y no más: a 44 px por burbuja, con seis el
+    /// abanico ya no cabe en el radio natural y hay que alejarlo de la carita. Lo secundario vive
+    /// detrás de «Más», que es el panel de siempre.
+    /// </summary>
+    private IReadOnlyList<AnilloDeAcciones.Item> ItemsDelAnillo() => new AnilloDeAcciones.Item[]
+    {
+        new("🎓", _teaching ? "Terminar de enseñar" : "Enseñar", () => OnToggleTeach(this, new RoutedEventArgs())),
+        new("▶", "Workflows", () => OnOpenWorkflows(this, new RoutedEventArgs())),
+        new("📿", "Collar", () => OnCollar(this, new RoutedEventArgs())),
+        new("👁", "Ocultar (doble Ctrl para volver)", Ocultarse),
+        new("⋯", "Más herramientas", AlternarPanelDesarrollo),
+    };
+
+    /// <summary>Esconderse del todo; vuelve con doble Ctrl (DobleCtrl). Lo usan el anillo y la voz
+    /// (self_hide), por el mismo camino.</summary>
+    private void Ocultarse()
+    {
+        CerrarAnillo();
+        if (_collapsed) ToggleCollapsed();
+        Hide();
     }
 
     /// <summary>Un toque en la carita = micrófono (spec 008; hasta el 2026-09-02 era el doble clic,
@@ -1989,8 +2052,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 return "Silenciado. Un clic en el altavoz para que vuelva a hablar.";
 
             case "self_hide":
-                if (_collapsed) ToggleCollapsed();
-                Hide();
+                Ocultarse();
                 // Se ofrece el doble Ctrl y no Ctrl+Alt+U porque es el gesto que ya usa para
                 // hablarle: una tecla menos que recordar, y la misma que tenía en la mano.
                 return "Me oculto. Doble Ctrl para que vuelva.";
@@ -2450,13 +2512,20 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         PreviewKeyDown += (_, e) =>
         {
             if (e.Key != Key.Escape) return;
-            if (_menuOpen) { CloseMenu(); e.Handled = true; }
+            if (_anillo is { IsVisible: true }) { CerrarAnillo(); e.Handled = true; }
+            else if (_menuOpen) { CloseMenu(); e.Handled = true; }
             else if (_talkOpen) { HideTalk(); DevolverElFoco(); e.Handled = true; }
         };
 
-        // Clic fuera (en otra app estando esta ventana activa): el menú sin fijar se cierra.
+        // Clic fuera (en otra app estando esta ventana activa): el menú sin fijar se cierra, y el
+        // anillo también. El anillo mismo NO desactiva esta ventana (WS_EX_NOACTIVATE), así que
+        // pulsar una burbuja no lo cierra antes de tiempo.
         // El fijado sobrevive a propósito — fijar es pedir que se quede mientras trabajas al lado.
-        Deactivated += (_, __) => { if (_menuOpen && !_menuPinned) CloseMenu(); };
+        Deactivated += (_, __) => { if (_menuOpen && !_menuPinned) CloseMenu(); CerrarAnillo(); };
+
+        // Y si la carita se mueve —arrastrada, lanzada o recolocada—, el anillo no la sigue: se
+        // cierra. Seguirla en pleno vuelo sería una segunda ventana persiguiendo a la primera.
+        LocationChanged += (_, __) => CerrarAnillo();
 
         // Timers muertos al cerrar: un DispatcherTimer vivo mantiene la ventana en memoria. Y la
         // posición se escribe ya, sin esperar al debounce: si el usuario mueve la barra y cierra Ü
