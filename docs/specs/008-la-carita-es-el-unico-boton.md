@@ -1,6 +1,6 @@
 # Plan de implementación: la carita es el único botón
 
-Estado: **propuesto** · Nace del diagnóstico del 2026-09-02 · Rama: `jose/la-carita-es-el-unico-boton`
+Estado: **implementado, nivel 4 a mano pendiente** (2026-09-02) · Nace del diagnóstico del 2026-09-02 · Rama: `jose/la-carita-es-el-unico-boton`
 
 > **La petición, en una frase:** quitar los botones que asoman al lado de la carita y que la
 > carita misma sea la interacción —o una forma más rápida y sencilla de llegar a lo mismo—, y
@@ -133,11 +133,42 @@ voz se pinta desde **4** sitios (`_vivo.Cambio` `:776`, `FuenteCambio` `:791`, `
   fase 5.
 - **2026-09-02 (spec)** — `Presentacion.cs:33` presenta a Ü diciendo que rellena triage
   «dictándotela»; sin la pastilla eso deja de ser verdad desde Windows.
+- **2026-09-02 (rojo → verde)** — Las cinco salieron rojas por la razón escrita: la 112 con sus
+  tres `Debe` (pastillas y dictado presentes) y las 113-116 con «todavía no existe…»; las 111
+  anteriores intactas. Cada fase puso la suya en verde sin tocar las demás.
+- **2026-09-02 (el contrato encontró un bug antes que la pantalla)** — En la primera corrida de la
+  115, `Math.Clamp` lanzó en la esquina: cuando el abanico es exactamente el tramo disponible, el
+  mínimo y el máximo son el mismo número salvo por un ulp, y Clamp exige mínimo ≤ máximo. Se
+  sustituyó por `Max(min, Min(max, 0))`. Sin la prueba en las cuatro esquinas habría salido la
+  primera vez que alguien mantuviera la carita pegada arriba.
+- **2026-09-02 (un sabotaje que no era sabotaje)** — Bajar `Radio` de 72 a 40 no puso roja la 115:
+  la regla agranda el radio sola hasta que las burbujas caben, así que 40 acaba en 72 igual. El
+  sabotaje real fue invertir el lado del abanico: 8 `Debe` rojos, dos por esquina. Las 113, 114 y
+  116 cayeron con su primer sabotaje (toque → barra; Ctrl+H abre; la pista no calla).
+- **2026-09-02 (la carita suelta y el globo, en una fila)** — Para que el globo se acoplara a la
+  carita suelta sin duplicar la caja, `CollapsedGroup` dejó la raíz y pasó a ser `CollapsedHost`
+  dentro de `BarRow`, junto a la barra (solo uno de los dos se ve). Con eso la aritmética del
+  anclaje de `OnSizeChanged` sirve igual para los dos estados, con una condición nueva: colapsada,
+  el menú nunca queda «hacia abajo», porque eso ancla el borde de arriba y el globo empujaría la
+  carita.
+- **2026-09-02 (la tecla se devuelve aparte del freno)** — `InputExecutor` pasa por el freno del
+  agente (promesa 26), y la tecla que se reinyecta es del usuario, no del agente: va por
+  `TeclaReinyectada`, propio. Y la estructura `INPUT` lleva la unión entera (40 bytes en x64): una
+  versión «solo teclado» mide 32 y `SendInput` falla sin decir por qué.
+- **2026-09-02 (humo sobre el PC real)** — `U.exe` de Release arrancó 15 s sin excepción con el
+  XAML nuevo, y el log dice `tecla sobre la carita (globo): activos`. Había otra instancia de Ü
+  abierta desde `main-latest` (la del usuario); comparten log y config, y solo se cerró la nueva.
 
 ## Cierre
 
-- [ ] Promesas 112-116 verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO)
-- [ ] Rotas a propósito una por una, comprobadas por diff
-- [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
-- [ ] Probado en ≥2 pantallas, con nombre: …
+- [x] Promesas 112-116 verdes (CONTRATO INTACTO, 2026-09-02; 96/96 y voz 32/32)
+- [x] Rotas a propósito, comprobadas por `git diff --stat` antes de juzgar: 113, 114, 116 con un
+      sabotaje cada una; 115 con el segundo (el primero no rompía nada, ver hallazgos)
+- [x] `scripts/verificar.ps1` pasa (2026-09-02 21:03), evidencia en `out/evidencia.md`
+- [x] Humo sobre el PC real: arranca, carga el XAML, el gancho dice que está activo
+- [ ] Nivel 4 a mano, en ≥2 pantallas con nombre (SAP GUI y Chrome o el explorador): toque = carrillón
+      y escuchando · doble = barra · mantener y clic derecho = anillo en las cuatro esquinas ·
+      deslizar-soltar elige · hover + «h» abre el globo con «h» · Ctrl+S, F5 y Esc con el ratón
+      encima llegan a SAP · Esc devuelve el foco · el globo se abre junto a la carita suelta sin
+      moverla · la pista sale y calla al cuarto arranque
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)
