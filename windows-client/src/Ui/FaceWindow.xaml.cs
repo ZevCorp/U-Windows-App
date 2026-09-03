@@ -1533,7 +1533,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         VoiceHaloEscala.ScaleX = VoiceHaloEscala.ScaleY = escala;
     }
 
-    // --- Temas de la carita: se alternan manteniéndola oprimida (claro → oscuro → transparente) ---
+    // --- Temas de la carita: desde el botón 🌓 del panel (hasta el 2026-09-02, manteniéndola oprimida) ---
 
     private FaceTheme _theme = FaceTheme.Dark;
 
@@ -1544,6 +1544,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Face.Theme = theme;
         CollapsedFace.Theme = theme;
     }
+
+    private void OnCycleTheme(object sender, RoutedEventArgs e) => CycleTheme();
 
     /// <summary>Alterna el tema claro ↔ oscuro.</summary>
     private void CycleTheme()
@@ -1559,31 +1561,48 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>Conecta los gestos (toque/doble toque/mantener/arrastre) a ambas caritas.</summary>
     private void WireFaceGestures()
     {
-        // Carita de la barra: arrastra la barra entera, y al soltar se va a un lado como la suelta.
-        new FaceGestures(this, Face)
+        // LOS GESTOS NO SE DECIDEN AQUÍ. Se le preguntan a ReglaDeGestos, que es lo que juzga el
+        // contrato (promesa 113, spec 008): este cableado solo traduce lo que FaceGestures reconoce
+        // a una intención y la ejecuta, igual para la carita de la barra (que arrastra la barra
+        // entera) y para la suelta. Si un gesto hace algo distinto de lo que dice la regla, es que
+        // se cableó aquí a mano — y eso es exactamente lo que este bucle impide.
+        foreach (var cara in new[] { Face, CollapsedFace })
         {
-            SingleTap = () => { PlayTick(); ToggleCollapsed(); },
-            DoubleTap = StartMicByFace,
-            LongPress = CycleTheme,
-            // Un solo callback alimenta las tres cosas que dependen de dónde quedó la barra: recordar
-            // el sitio, espejar el layout al lado que toque, y hacia dónde abrirá el menú. Llega con
-            // el DESTINO, así que el espejo se aplica al empezar el vuelo y no al terminarlo — la
-            // barra viaja ya con su forma final en vez de darse la vuelta al aterrizar.
-            Moved = OnWindowMoved,
-        };
+            new FaceGestures(this, cara)
+            {
+                SingleTap = () => AtenderGesto(ReglaDeGestos.Decidir(Gesto.Toque)),
+                DoubleTap = () => AtenderGesto(ReglaDeGestos.Decidir(Gesto.DobleToque)),
+                LongPress = () => AtenderGesto(ReglaDeGestos.Decidir(Gesto.Mantener)),
+                RightClick = () => AtenderGesto(ReglaDeGestos.Decidir(Gesto.ClicDerecho)),
+                // Un solo callback alimenta las tres cosas que dependen de dónde quedó la barra:
+                // recordar el sitio, espejar el layout al lado que toque, y hacia dónde abrirá el
+                // menú. Llega con el DESTINO, así que el espejo se aplica al empezar el vuelo y no
+                // al terminarlo — la barra viaja ya con su forma final en vez de darse la vuelta al
+                // aterrizar.
+                Moved = OnWindowMoved,
+            };
 
-        // Carita suelta (colapsada): mismos gestos, mismo pegado al borde.
-        new FaceGestures(this, CollapsedFace)
-        {
-            SingleTap = () => { PlayTick(); ToggleCollapsed(); },
-            DoubleTap = StartMicByFace,
-            LongPress = CycleTheme,
-            // Un solo callback alimenta las tres cosas que dependen de dónde quedó la barra: recordar
-            // el sitio, espejar el layout al lado que toque, y hacia dónde abrirá el menú. Llega con
-            // el DESTINO, así que el espejo se aplica al empezar el vuelo y no al terminarlo — la
-            // barra viaja ya con su forma final en vez de darse la vuelta al aterrizar.
-            Moved = OnWindowMoved,
-        };
+            // LOS OJOS SIGUEN AL CURSOR. Es lo que sustituye a las pastillas como señal de «aquí
+            // hay algo»: al acercarte, Ü te ve venir. Solo se anima al CAMBIAR de lado, no en cada
+            // píxel: MirarHacia arranca una animación y arrancarla sesenta veces por segundo es
+            // temblar, no mirar. Al irte, vuelve al frente — salvo que no fuéramos nosotros quienes
+            // la pusimos a mirar (IrJuntoA también usa MirarHacia para señalar algo en pantalla).
+            var f = cara;
+            bool? lado = null;
+            f.MouseMove += (_, e) =>
+            {
+                bool izquierda = e.GetPosition(f).X < f.ActualWidth / 2;
+                if (lado == izquierda) return;
+                lado = izquierda;
+                f.MirarHacia(izquierda);
+            };
+            f.MouseLeave += (_, __) =>
+            {
+                if (lado == null) return;
+                lado = null;
+                f.DejarDeMirar();
+            };
+        }
 
         // Y con dos dedos en el trackpad, sin tener que agarrarla. Solo con la carita suelta: con la
         // barra abierta el scroll es del menú, y robárselo sería quitarle una función que sí tiene.
@@ -1591,9 +1610,31 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             (vx, vy) => EdgeSnap.Aplicar(this, vx, vy, OnWindowMoved));
     }
 
-    /// <summary>Doble clic en la carita = micrófono (como el doble toque de Android). El carrillón del
-    /// doble clic predomina: no se solapa con el tick del clic simple porque el gesto ya se resolvió
-    /// como doble antes de sonar nada.</summary>
+    /// <summary>Lo que hace cada intención. Es el ÚNICO sitio que traduce intención a acción, para
+    /// que la regla y lo que pasa no puedan discrepar.</summary>
+    private void AtenderGesto(Intencion intencion)
+    {
+        switch (intencion)
+        {
+            case Intencion.Hablar: StartMicByFace(); break;
+            case Intencion.AlternarBarra: PlayTick(); ToggleCollapsed(); break;
+            case Intencion.Anillo: MostrarAnillo(); break;
+            case Intencion.Mover: break;   // lo hace FaceGestures por su cuenta: arrastrar ES mover
+        }
+    }
+
+    /// <summary>El anillo llega en la fase 4 de la spec 008. Hasta entonces el gesto se reconoce y
+    /// se dice, para que probarlo no parezca que no hizo nada.</summary>
+    private void MostrarAnillo()
+    {
+        PlayTick();
+        SetStatus("Mantener o clic derecho: el anillo de acciones (llega en la fase 4 de la spec 008).");
+        ShowTalk();
+    }
+
+    /// <summary>Un toque en la carita = micrófono (spec 008; hasta el 2026-09-02 era el doble clic,
+    /// como el doble toque de Android). El carrillón suena cuando el toque ya se resolvió como
+    /// simple —250 ms después de soltar—, así que no se solapa con el tick del doble.</summary>
     private void StartMicByFace()
     {
         PlayChime();

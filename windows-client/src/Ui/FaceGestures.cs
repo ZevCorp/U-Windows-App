@@ -27,6 +27,9 @@ public sealed class FaceGestures
     public Action? DoubleTap { get; set; }
     /// <summary>Mantener oprimido en un lugar estático (sin arrastrar).</summary>
     public Action? LongPress { get; set; }
+    /// <summary>Clic con el botón derecho. Es el «más» de Windows y existe para que quien no sepa
+    /// el gesto de mantener tenga el de siempre (spec 008, 2026-09-02).</summary>
+    public Action? RightClick { get; set; }
 
     /// <summary>
     /// La ventana quedó en un sitio nuevo porque el usuario la movió. Llega con el destino FINAL.
@@ -42,7 +45,8 @@ public sealed class FaceGestures
     private const double MoveThresholdSq = 169;
 
     /// <summary>
-    /// Cuánto hay que mantener oprimido para cambiar de tema.
+    /// Cuánto hay que mantener oprimido para que cuente como «mantener» (hoy abre el anillo;
+    /// hasta el 2026-09-02 cambiaba de tema).
     ///
     /// Eran 450 ms, y ese era el motivo de que «los gestos no funcionaran»: un clic deliberado sobre
     /// un objetivo de 42 px dura tranquilamente medio segundo, así que al ir a colapsar la carita le
@@ -82,6 +86,14 @@ public sealed class FaceGestures
         _face.MouseLeftButtonDown += OnDown;
         _face.MouseMove += OnMove;
         _face.MouseLeftButtonUp += OnUp;
+        _face.MouseRightButtonUp += OnRightUp;
+    }
+
+    private void OnRightUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (_pressed) return;   // con el izquierdo aún apretado no es un clic derecho: es un tropiezo
+        RightClick?.Invoke();
     }
 
     private void OnDown(object sender, MouseButtonEventArgs e)

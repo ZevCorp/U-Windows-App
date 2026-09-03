@@ -212,8 +212,9 @@
          El estado COLAPSADO (solo la carita suelta) se alterna con un clic en la carita, como siempre.
          Ver FaceWindow.xaml.cs (ToggleCollapsed y la región «menú extendido»). -->
     <Grid>
-        <!-- Estado COLAPSADO: solo la carita, como una burbuja flotante. Clic → barra · doble clic →
-             micrófono · mantener oprimido → cambia de tema · arrastrar y soltar → se lanza al borde.
+        <!-- Estado COLAPSADO: solo la carita, como una burbuja flotante. Un toque → hablar · doble
+             toque → la barra · mantener oprimida o clic derecho → el anillo · arrastrar y soltar →
+             se lanza al borde. El mapa lo decide ReglaDeGestos (promesa 113), no este archivo.
              El Margin de 28 deja aire alrededor para que la sombra (blur 24) no se recorte.
 
              Hasta el 2026-09-02 aquí asomaban tres pastillas al acercar el ratón —hablar, escribir,
@@ -240,7 +241,7 @@
                     </Ellipse.RenderTransform>
                 </Ellipse>
                 <ui:FaceControl x:Name="CollapsedFace" Width="72" Height="72" Cursor="Hand"
-                                ToolTip="Clic: abrir la barra · doble clic: micrófono · mantener: cambiar tema · arrastrar y soltar: mover">
+                                ToolTip="Toca: hablar · doble toque: la barra · mantén o clic derecho: el anillo · arrastrar y soltar: mover">
                     <ui:FaceControl.Effect>
                         <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="Black"/>
                     </ui:FaceControl.Effect>
@@ -403,8 +404,10 @@
                                      🔍 inspector (recuadros estilo TalkBack, ver UiInspector) ·
                                      📍 el location bar de Windows (mismo formato que source_url) ·
                                      🧠 los recuerdos de esta pantalla de golpe (ver MostrarRecuerdos) ·
-                                     🎬 qué se hace con el video al enseñar · 📜 el registro. -->
-                                <UniformGrid Columns="5" Margin="0,8,0,0">
+                                     🎬 qué se hace con el video al enseñar · 📜 el registro ·
+                                     🌓 el tema de la carita (hasta el 2026-09-02 se cambiaba
+                                     manteniéndola oprimida; ese gesto abre ahora el anillo). -->
+                                <UniformGrid Columns="6" Margin="0,8,0,0">
                                     <Button x:Name="InspectorBtn" Content="🔍" Style="{StaticResource BarBtn}"
                                             Click="OnToggleInspector" Margin="0"
                                             ToolTip="Inspector de elementos: recuadros sobre la pantalla. Al hacer clic: amarillo si coincide con lo que el asistente tocaría, rojo (ambos) si no."
@@ -425,6 +428,10 @@
                                             Click="OnOpenLogs" Margin="0"
                                             ToolTip="Registro (para diagnosticar errores)"
                                             AutomationProperties.Name="Logs"/>
+                                    <Button x:Name="ThemeBtn" Content="🌓" Style="{StaticResource BarBtn}"
+                                            Click="OnCycleTheme" Margin="0"
+                                            ToolTip="Tema de la carita: claro ↔ oscuro"
+                                            AutomationProperties.Name="Tema de la carita"/>
                                 </UniformGrid>
 
                                 <!-- Para soporte: saber qué versión tiene el cliente delante sin pedir nada. -->
@@ -572,13 +579,13 @@
                             </Canvas>
                         </Button>
 
-                        <!-- La carita (misma que Android), abajo del todo. Clic → colapsa a solo la
-                             carita · doble clic → micrófono · mantener oprimido → cambia de tema ·
-                             arrastrar → mover. Y además es el SEMÁFORO del sistema: su gesto y su
-                             color dicen qué está pasando (ver FaceMood). -->
+                        <!-- La carita (misma que Android), abajo del todo. Un toque → hablar · doble
+                             toque → colapsa a solo la carita · mantener o clic derecho → el anillo ·
+                             arrastrar → mover (ReglaDeGestos). Y además es el SEMÁFORO del sistema:
+                             su gesto y su color dicen qué está pasando (ver FaceMood). -->
                         <ui:FaceControl x:Name="Face" Width="42" Height="42" Cursor="Hand"
                                         HorizontalAlignment="Center" Margin="0,10,0,0"
-                                        ToolTip="Clic: solo la carita · doble clic: micrófono · mantener: cambiar tema · arrastrar: mover"/>
+                                        ToolTip="Toca: hablar · doble toque: solo la carita · mantén o clic derecho: el anillo · arrastrar: mover"/>
                     </StackPanel>
                 </Border>
 
