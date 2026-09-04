@@ -144,7 +144,42 @@ public sealed class ConversacionEnVivo : IDisposable
     /// No abre ni cierra la sesión: sólo cambia de dónde entra el audio. <see cref="LiveAudio"/> ya
     /// remuestrea el collar al ritmo que este protocolo pida, así que desde aquí arriba no se nota.
     /// </summary>
+    /// <summary>Se queda enganchado mientras la voz vive, para soltarlo al cerrarla.</summary>
+    private Action? _oyendoElCambioDeMicrofono;
+
     public void PasarAlCollar() => _audio.PasarAlCollar();
+
+    /// <summary>
+    /// Pone el captador de esta conversación en la fuente que eligió la app. Promesa 146.
+    /// </summary>
+    /// <remarks>
+    /// Se llama al abrir la voz y cada vez que alguien cambia la elección. Quien decide QUÉ caño es
+    /// <see cref="ElMicrofonoDeLaApp"/>, que es puro; aquí solo se ejecuta — y no se toca nada si
+    /// ya está sonando lo que toca, porque reabrir el caño corta la voz en curso.
+    /// </remarks>
+    public void ObedecerAlMicrofonoDeLaApp()
+    {
+        var toca = ElMicrofonoDeLaApp.LoQueToca(
+            ElMicrofonoDeLaApp.Preferida, _audio.PorElCollar, _audio.PorElTelefono);
+        if (toca == ElMicrofonoDeLaApp.QueHacer.Nada) return;
+
+        LogBus.Log("voz-viva", $"el audio de la app entra por {ElMicrofonoDeLaApp.ComoSeLlama(ElMicrofonoDeLaApp.Preferida)}: {toca}");
+        switch (toca)
+        {
+            case ElMicrofonoDeLaApp.QueHacer.AbrirCollar:
+                _audio.PasarAlCollar();
+                break;
+            case ElMicrofonoDeLaApp.QueHacer.AbrirTelefono:
+                // Un collar habla con UN aparato: si estaba enlazado por Bluetooth aquí, se suelta.
+                _audio.PasarAlLocal("se eligió oír por el teléfono");
+                _ = _audio.PasarAlTelefonoAsync(
+                    Cuenta.Nube.ProyectoSupabase, Cuenta.Nube.ClavePublicable, ElMicrofonoDeLaApp.Codigo);
+                break;
+            default:
+                _audio.PasarAlLocal("lo eligió el médico: micrófono del computador");
+                break;
+        }
+    }
 
     /// <summary>Si lo que se está oyendo entra por el collar. Cambia sola si hay relevo a media sesión.</summary>
     public bool PorElCollar => _audio.PorElCollar;
@@ -288,6 +323,15 @@ public sealed class ConversacionEnVivo : IDisposable
 
             _audio.Capturado += MandarTrozo;
             _audio.AbrirMicrofono();
+            // DE DONDE LO ELIGIÓ LA APP, no del micrófono del portátil por defecto (promesa 146).
+            // Si el médico eligió el collar en la ventana de la consulta, hablar con Ü y ENSEÑARLE
+            // entran por ahí — que es lo que se pidió: un aparato, una elección.
+            ObedecerAlMicrofonoDeLaApp();
+            if (_oyendoElCambioDeMicrofono == null)
+            {
+                _oyendoElCambioDeMicrofono = () => { try { ObedecerAlMicrofonoDeLaApp(); } catch { } };
+                ElMicrofonoDeLaApp.Cambio += _oyendoElCambioDeMicrofono;
+            }
 
             // NO HAY VÍDEO EN DIRECTO. Ver es ahora un GESTO, no un caño abierto: una foto sale al
             // señalar algo, y otra cuando el propio modelo pide mirar (map_look). Las dos pasan por
@@ -370,6 +414,11 @@ public sealed class ConversacionEnVivo : IDisposable
 
     public async Task TerminarAsync()
     {
+        if (_oyendoElCambioDeMicrofono != null)
+        {
+            ElMicrofonoDeLaApp.Cambio -= _oyendoElCambioDeMicrofono;
+            _oyendoElCambioDeMicrofono = null;
+        }
         if (!Viva && _ws == null) return;
         ReportarConsumo();
         Viva = false;
