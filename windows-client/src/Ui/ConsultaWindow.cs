@@ -1133,16 +1133,143 @@ public sealed class ConsultaWindow : Window
             : "Nota guardada, pero no se pudo espejar al portal. Está en el log.");
 
         if (nota.Resumen.Length > 0) _nota.Children.Add(TarjetaDeTexto("Resumen", nota.Resumen));
+        _estadoDeSeccion.Clear();
+        var conTexto = new List<SeccionDeNota>();
         foreach (var s in nota.Secciones)
         {
             // Una casilla vacía no es información: la plantilla abierta deja en blanco lo que no se
             // dijo, y pintar «—» sería llenar la pantalla de nada.
             if (s.Contenido.Trim().Length == 0) continue;
-            _nota.Children.Add(TarjetaDeTexto(s.Titulo, s.Contenido));
+            conTexto.Add(s);
+            _nota.Children.Add(TarjetaConEnvio(s));
         }
+        if (conTexto.Count > 1) _nota.Children.Add(BotonTodoASap(conTexto));
         if (nota.Avisos.Count > 0)
             _nota.Children.Add(TarjetaDeTexto("Avisos", string.Join("\n", nota.Avisos)));
         _superficie.ScrollToHome();
+    }
+
+    // ── el ✓: la sección aprobada se va a SAP (spec 008) ─────────────────────
+
+    /// <summary>El renglón de estado de cada sección, para pintar «enviando…» y la cuenta.</summary>
+    private readonly Dictionary<string, TextBlock> _estadoDeSeccion = new();
+    private bool _enviando;
+
+    /// <summary>
+    /// Una sección con su ✓. Pulsarlo es aprobarla: solo ella viaja (promesa 112). El resultado se
+    /// pinta debajo del texto, en la misma tarjeta, para que se vea qué pasó con ESA sección.
+    /// </summary>
+    private UIElement TarjetaConEnvio(SeccionDeNota s)
+    {
+        var cabecera = new DockPanel();
+        var check = new Button
+        {
+            Width = 30,
+            Height = 30,
+            Background = Estudio.AcentoSuave,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Aprobar esta sección y escribirla en SAP",
+            Template = Estudio.Pastilla(15),
+            Content = new TextBlock
+            {
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                Text = "",
+                FontSize = 13,
+                Foreground = Estudio.Acento,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+        DockPanel.SetDock(check, Dock.Right);
+        cabecera.Children.Add(check);
+        var rotulo = Estudio.Rotulo(s.Titulo);
+        rotulo.VerticalAlignment = VerticalAlignment.Center;
+        cabecera.Children.Add(rotulo);
+
+        var estado = new TextBlock
+        {
+            Foreground = Estudio.TintaMedia,
+            FontSize = 12,
+            LineHeight = 17,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 8, 0, 0),
+            Visibility = Visibility.Collapsed,
+        };
+        _estadoDeSeccion[s.Clave] = estado;
+
+        check.Click += async (_, __) => await EnviarASapAsync(new[] { s.Clave });
+
+        var pila = new StackPanel();
+        pila.Children.Add(cabecera);
+        pila.Children.Add(Estudio.Parrafo(s.Contenido));
+        pila.Children.Add(estado);
+        var t = Estudio.Tarjeta(18);
+        t.Padding = new Thickness(16, 12, 16, 15);
+        t.Margin = new Thickness(2, 0, 2, 10);
+        t.Child = pila;
+        return Estudio.Elevar(t);
+    }
+
+    private UIElement BotonTodoASap(IReadOnlyList<SeccionDeNota> secciones)
+    {
+        var b = new Button
+        {
+            Content = "✓ Todo a SAP",
+            Height = 36,
+            MinWidth = 150,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 2, 0, 12),
+            Background = Estudio.AcentoSuave,
+            Foreground = Estudio.Acento,
+            BorderThickness = new Thickness(0),
+            FontSize = 13.5,
+            FontWeight = FontWeights.SemiBold,
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(18),
+        };
+        b.Click += async (_, __) => await EnviarASapAsync(secciones.Select(x => x.Clave).ToList());
+        return b;
+    }
+
+    /// <summary>
+    /// Manda lo marcado por el puente. La cuenta que vuelve es la que se pinta: la lleva el código
+    /// que releyó cada campo, no una frase de nadie.
+    /// </summary>
+    private async Task EnviarASapAsync(IReadOnlyList<string> claves)
+    {
+        if (_enviando) { Estado("Ya hay un envío en marcha."); return; }
+        if (_consulta.Nota == null) { Estado("No hay nota que enviar."); return; }
+        if (!PuenteASap.Disponible)
+        {
+            Estado("La carita no está lista para escribir en SAP: espera a que arranque y vuelve a pulsar ✓.");
+            return;
+        }
+
+        var encargo = Encargo.De(_consulta.Nota, claves);
+        if (encargo.EstaVacio) { Estado("Esa sección está vacía: no hay nada que enviar."); return; }
+
+        _enviando = true;
+        void Pinta(string texto)
+        {
+            Estado(texto);
+            foreach (string c in claves)
+                if (_estadoDeSeccion.TryGetValue(c, out var tb)) { tb.Text = texto; tb.Visibility = Visibility.Visible; }
+        }
+        try
+        {
+            Pinta("Enviando a SAP…");
+            LogBus.Log("consulta", $"✓ enviado: {string.Join(", ", claves)}");
+            string cuenta = await PuenteASap.Enviar!(encargo, new Progress<string>(Pinta), CancellationToken.None);
+            Pinta(cuenta);
+            LogBus.Log("consulta", $"cuenta del envío: {cuenta}");
+        }
+        catch (Exception e)
+        {
+            Pinta($"El envío se detuvo: {e.Message}");
+            LogBus.Log("consulta", $"el envío reventó: {e.GetType().Name}: {e.Message}");
+        }
+        finally { _enviando = false; }
     }
 
     // ── piezas ───────────────────────────────────────────────────────────────

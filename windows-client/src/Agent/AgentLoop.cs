@@ -83,7 +83,11 @@ public sealed class AgentLoop
     /// </summary>
     public async Task<string> RunAsync(string goal, CancellationToken ct, string requireOrigin = "")
     {
-        _voice.Narrate($"¡Vamos! {goal}");
+        // LO QUE SE NARRA ES QUE EMPEZAMOS, NO EL ENCARGO ENTERO. Desde que narrar se OYE
+        // (promesa 142), soltar aquí el objetivo tal cual hacía que Ü leyera en voz alta los 4442
+        // caracteres del encargo de comprobar, superficies y URLs incluidas — 2026-09-03 21:35:12,
+        // insufrible. El objetivo entero sigue yendo al log, que es donde sirve.
+        _voice.Narrate(goal.Length > 90 ? "¡Vamos!" : $"¡Vamos! {goal}");
         LogBus.Log("agent", $"▶ objetivo: «{Short(goal, 160)}»" +
             (requireOrigin.Length > 0 ? $" · compuerta: solo actúa en «{requireOrigin}»" : " · SIN compuerta de superficie"));
         // Telemetría "Windows Live": esta corrida consciente entera se correlaciona por runId.

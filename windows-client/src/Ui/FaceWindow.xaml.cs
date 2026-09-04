@@ -172,7 +172,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // _updater.UpdateReady. Y hay que soltarlo al cerrar: es un evento ESTÁTICO.
         GraphHealth.Changed += OnGraphHealthChanged;
         Closed += (_, __) => GraphHealth.Changed -= OnGraphHealthChanged;
-        UpdateVideoLlmToggle();
         SetMuted(_config.Muted); // si lo silenciaron en una sesión anterior, sigue mudo
 
         Closed += (_, __) =>
@@ -635,33 +634,62 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // campo con el foco por la Scripting API; fuera, map_type como siempre.
                 escribir: new Navigation.EscribirPorMundo(
                     donde: () => _locator?.DondeEstoy()?.Id ?? "",
-                    uia: texto => (mcp.Map?.Call("map_type",
+                    uia: (campo, texto) => (mcp.Map?.Call("map_type",
                             new Dictionary<string, string> { ["text"] = texto }) ?? "no")
                         .StartsWith("escrib", StringComparison.OrdinalIgnoreCase),
-                    sap: texto =>
+                    sap: (campo, texto) =>
                     {
                         var sap = _locator?.SuperficieSap;
                         if (sap == null) return false;
-                        bool ok = sap.EscribirEnElFoco(texto, out string porque);
-                        // EL RESPALDO POR IDENTIDAD: SystemFocus solo rastrea campos del dynpro, y
-                        // el campo de comandos vive en la toolbar (2026-08-26, «nada tiene el
-                        // foco»). El paso anterior del batch pulsó DÓNDE escribir; se escribe ahí
-                        // por su Id y se relee para comprobar que quedó.
-                        if (!ok && _ultimoSapPulsado.Length > 0)
+
+                        // EL CAMPO PRIMERO, y este orden se invirtió el 2026-09-03. Antes se
+                        // escribía siempre al foco y solo se caía al Id «de lo último pulsado» si
+                        // eso fallaba: un respaldo que acierta mientras el paso anterior sea justo
+                        // ese campo. Cuando el paso TRAE su campo —una skill enseñada siempre lo
+                        // trae— preguntar por el foco es tirar el dato bueno y quedarse con la
+                        // suposición. El foco sigue siendo el respaldo, que es donde le toca.
+                        string id = campo.Length > 0 ? campo : _ultimoSapPulsado;
+                        string porque = "";
+                        bool ok = false;
+                        if (id.Length > 0)
                         {
                             ok = sap.Execute(new U.Graph.PlanStep
                             {
-                                StepOrder = 1, ActionType = "input",
-                                Selector = _ultimoSapPulsado, Value = texto,
+                                StepOrder = 1, ActionType = "input", Selector = id, Value = texto,
                             }, out string error)
-                            && string.Equals(sap.ValorActual(_ultimoSapPulsado) ?? "", texto,
+                            && string.Equals(sap.ValorActual(id) ?? "", texto,
                                 StringComparison.OrdinalIgnoreCase);
-                            if (!ok) porque += $"; y por Id sobre lo último pulsado tampoco: {error}";
+                            if (!ok) porque = $"por Id «{id}»: {error}";
+                        }
+                        // SystemFocus solo rastrea campos del dynpro, y el campo de comandos vive en
+                        // la toolbar (2026-08-26, «nada tiene el foco»): por eso hay dos vías.
+                        if (!ok)
+                        {
+                            ok = sap.EscribirEnElFoco(texto, out string porFoco);
+                            if (!ok) porque += (porque.Length > 0 ? "; y al foco tampoco: " : "") + porFoco;
                         }
                         if (!ok) LogBus.Log("sentido-sap", $"no pude escribir «{texto}»: {porque}");
                         return ok;
                     }).Escribe,
-                hayQueParar: () => Actions.Freno.Pidieron)
+                hayQueParar: () => Actions.Freno.Pidieron,
+                // LA TECLA, POR EL MISMO DESPACHO (promesa 132). En SAP el Enter y las F son
+                // comandos del servidor y van por sendVKey aunque el foco esté en otra parte; fuera
+                // de SAP no hay servidor a quien mandarle un comando y la tecla va al teclado.
+                teclear: new Navigation.TeclearPorMundo(
+                    donde: () => _locator?.DondeEstoy()?.Id ?? "",
+                    uia: tecla => Actions.InputExecutor.Key(tecla),
+                    sap: tecla =>
+                    {
+                        var sap = _locator?.SuperficieSap;
+                        if (sap == null) return false;
+                        bool ok = sap.Execute(new U.Graph.PlanStep
+                        {
+                            StepOrder = 1, ActionType = "key",
+                            Selector = "key:" + tecla, Value = tecla,
+                        }, out string error);
+                        if (!ok) LogBus.Log("sentido-sap", $"no pude pulsar «{tecla}»: {error}");
+                        return ok;
+                    }).Teclea)
             // Una página web tarda en cargar Y en ser leída (la pantalla se relee cada 900 ms), así
             // que la compuerta espera más que en una app nativa. Sale en cuanto lo ve: una pantalla
             // rápida no paga la espera de una lenta.
@@ -678,9 +706,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             var rastroDeBatches = new Navigation.RastroDeBatches();
             if (mcp.Map != null) mcp.Map.RecorrerPorElNucleo = pasos =>
             {
-                string cuenta = recorrer.Recorre(pasos).Cuenta;
-                rastroDeBatches.Agrega(cuenta);
-                return cuenta;
+                var r = recorrer.Recorre(pasos);
+                rastroDeBatches.Agrega(r.Cuenta);
+                return r;
             };
 
             // EL TERRENO POR DELANTE (T3): la consulta de la profundidad, sobre el mismo grafo.
@@ -698,6 +726,40 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 mcp.Map.Ensenar = (donde, sel, que, foto) => _mapaVivo.Nucleo.Ensenar(donde, sel, que, foto);
                 mcp.Map.RecuerdosAqui = donde => _mapaVivo.Nucleo.RecuerdosDe(donde)
                     .Select(x => (x.Que.Selector, x.Que.Etiqueta, x.Eso.Significado)).ToList();
+                // LO VIVO DEL TERRENO, para poder enseñar donde UIA no ve (promesa 117).
+                mcp.Map.PuertasVivas = donde => _mapaVivo.Nucleo.DesdeAqui(donde)
+                    .Where(a => a.Vivo)
+                    .Select(a => (a.Que.Selector, a.Que.Etiqueta, a.Que.Tipo)).ToList();
+
+                // LAS DOS MITADES SAP DEL DESPACHO (promesas 118 y 119): dónde está algo, y qué hay
+                // bajo un punto. La decisión de a quién preguntar vive en MundoQueToca; aquí solo se
+                // le pasa la mano de SAP, igual que con observar, pulsar y escribir.
+                mcp.Map.CajasEnSap = LeerCajasDeSap;
+                // SEÑALAR DENTRO DE SAP, con el hit-test que SÍ funciona. La nativa
+                // «FindByPosition» no resuelve nada en este SAP —medido el 2026-07-26 y escrito en
+                // windows-graph/CLAUDE.md: devuelve null en árboles Y en botones—, así que el punto
+                // se resuelve con la MISMA geometría que ya se lee para iluminar, y lo elige el
+                // MISMO elector que en UIA: el más pequeño que contiene el punto (promesas 34-35).
+                // Un mundo aporta candidatos; quién gana se decide en un solo sitio.
+                mcp.Map.SenaladoEnSap = (x, y) =>
+                {
+                    var punto = new System.Windows.Point(x, y);
+                    var cajas = LeerCajasDeSap();
+                    var elegido = Navigation.LoQueSenalas.Elegir(
+                        cajas.Select(c => new Navigation.LoQueSenalas.Candidato(
+                            c.Etiqueta.Length > 0 ? c.Etiqueta : c.Selector, c.Tipo, c.Caja, c.Selector)),
+                        punto);
+                    if (elegido is not { } e)
+                    {
+                        // POR QUÉ NO SE ENCONTRÓ, y no solo que no se encontró: si las cajas están
+                        // en otra escala que el cursor (DPI), esto lo canta a la primera.
+                        var muestra = cajas.FirstOrDefault();
+                        LogBus.Log("recuerdo", $"nada bajo ({x},{y}) entre {cajas.Count} caja(s) de SAP"
+                            + (cajas.Count > 0 ? $" · ejemplo: «{muestra.Etiqueta}» en {muestra.Caja}" : ""));
+                        return null;
+                    }
+                    return (e.Selector, e.Nombre, e.Tipo, e.Caja);
+                };
                 // Entra por `Recordar` y no por `Observar`: observar significa «esto es lo que hay
                 // en pantalla» y REEMPLAZA la lista viva entera, así que presentar un panel suelto
                 // borraría de un plumazo todas las puertas de esta ubicación.
@@ -828,6 +890,30 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     new Voz.Realtime.Argumento("levels",
                         "Cuántas pantallas hacia delante (1-3, por defecto 2)."),
                 }))
+            // LAS TAREAS ENSEÑADAS, anunciadas al cerebro (spec 009). Sin catálogo no se puede
+            // pedir «haz lo que te enseñé»: el cerebro no puede pedir lo que no se anuncia.
+            .Append(new Voz.Realtime.Utensilio("map_skills",
+                "QUÉ TAREAS TE HAN ENSEÑADO en este computador, y cuáles están listas para usar. "
+                + "Cada una dice CUÁNDO usarla. Pregúntalo antes de resolver algo a mano: si ya te "
+                + "enseñaron a hacerlo, reproducirlo es más rápido y más seguro que improvisarlo. "
+                + "Las que salgan como PENDIENTE de comprobar todavía no se pueden ejecutar.",
+                Array.Empty<Voz.Realtime.Argumento>()))
+            .Append(new Voz.Realtime.Utensilio("map_skill_run",
+                "HAZ UNA TAREA QUE TE ENSEÑARON, con los datos de ahora. Se reproduce por el MISMO "
+                + "batch que todo lo demás: compuerta antes de cada paso, verificación por "
+                + "consecuencia y cuenta honesta. Los valores que se tecleaeron durante la "
+                + "demostración NUNCA se repiten — son huecos, y solo se llenan con los datos que "
+                + "le pases. Si la tarea termina en una puerta que no se puede deshacer (Grabar, "
+                + "Finalizar), se detiene ahí y te la deja a ti.",
+                new[]
+                {
+                    new Voz.Realtime.Argumento("nombre",
+                        "Cuál de las tareas enseñadas. Pídelas con map_skills."),
+                    new Voz.Realtime.Argumento("datos",
+                        "JSON con los datos de esta corrida, por su significado: "
+                        + "{\"peso\":\"68\",\"talla\":\"1,70\"}. Lo que no pases se queda vacío; "
+                        + "lo que no tenga hueco se te dice."),
+                }))
             .ToList();
         _servidorMcp = new ServidorMcp(new ProtocoloMcp(catalogoMcp, (tool, args) => mcp.Call(tool, args)));
         _servidorMcp.Start();
@@ -897,6 +983,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // la que se pide la sesión de Soniox y se llama al emparejador— y la superficie de SAP.
         // Nace apagado: hasta que no se pulsa el fonendoscopio no abre micrófono ni toca nada.
         _rellenador = new RellenadorSap(_graphConfig, _clinicalSap);
+        // LO ENSEÑADO LLEGA A LA HORA DE ESCRIBIR (promesa 115). Se pregunta por la MISMA ubicación
+        // que usa la enseñanza —la del locator— para que las dos puntas del canal usen la misma
+        // llave; y por la misma identidad, que el grafo escribe con «sap:» y el formulario sin él.
+        _rellenador.RecuerdoDe = selector =>
+        {
+            string donde = _locator?.DondeEstoy()?.Id ?? "";
+            if (donde.Length == 0 || _mapaDeMano?.RecuerdosAqui == null) return "";
+            string busco = Clinical.LoQueVeElEmparejador.MismaIdentidad(selector);
+            foreach (var r in _mapaDeMano.RecuerdosAqui(donde))
+                if (Clinical.LoQueVeElEmparejador.MismaIdentidad(r.Selector)
+                        .Equals(busco, StringComparison.OrdinalIgnoreCase))
+                    return r.Significado;
+            return "";
+        };
+        // EL ✓ DE LA CONSULTA LLEGA POR AQUÍ (spec 008): la ventana de consulta nace antes que la
+        // carita y no ve las manos; se le cuelga esta función y ella la llama al pulsar ✓.
+        Clinical.PuenteASap.Enviar = EnviarEncargoAsync;
         _dictadoClinico = new Clinical.Transcripcion.DictadoEnVivo(_graphConfig, _audioDictado);
         _dictadoClinico.Frase += f => _rellenador.Oido(f);
         // Lo provisional se pinta pero NO se actúa: son palabras que Soniox aún puede corregir.
@@ -2146,10 +2249,55 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _teachSession = new WorkflowTeachSession(
             graph, _graphConfig, _teachUiaSurface, _teachSapSurface, _backend!, _videoLibrary, _config.UserId)
         {
-            ProcessVideo = _config.ProcessTeachVideo, // toggle del panel Backend: procesar o no el video con IA
         };
         _teachSession.StatusChanged += (_, msg) => Dispatcher.Invoke(() => SetStatus(msg));
+        // LO QUE DICES MIENTRAS ENSEÑAS es lo que convierte un valor tecleado en un DATO con
+        // nombre (promesa 123) y un elemento en un recuerdo (124). Sin este enganche la demo ve las
+        // manos y no oye nada, que es como estaba desde julio.
+        if (_vivo != null)
+        {
+            var sesion = _teachSession;
+            _oyendoParaEnsenar = frase => sesion.Oyo(frase);
+            _vivo.DijoElUsuario += _oyendoParaEnsenar;
+
+            // EL MICRÓFONO SE ABRE SOLO AL ENSEÑAR (pedido por el dueño, 2026-09-03). Enseñar es
+            // hablar: lo que se dice mientras se hace es lo que convierte un valor tecleado en un
+            // DATO con nombre y un elemento en un recuerdo. Pedirle al humano que se acuerde de
+            // encender el micrófono es pedirle que se acuerde de la mitad de la función — y quien
+            // se olvide se lleva una demo muda sin enterarse hasta el final.
+            //
+            // Se recuerda si lo abrimos NOSOTROS para devolverlo como estaba al terminar: dejar el
+            // micrófono abierto en la cara de alguien que no lo pidió es la avería opuesta.
+            _vozAbiertaParaEnsenar = !_vivo.Viva;
+            if (_vozAbiertaParaEnsenar)
+            {
+                SetStatus("Abriendo el micrófono: cuéntame lo que vas haciendo…");
+                try { await _vivo.ArrancarAsync(); }
+                catch (Exception ex)
+                {
+                    // Sin voz se PUEDE enseñar, solo que sin datos con nombre. Se dice y se sigue:
+                    // perder la demo entera por el micrófono sería peor.
+                    _vozAbiertaParaEnsenar = false;
+                    LogBus.Log("teach", $"no pude abrir el micrófono para enseñar: {ex.Message}");
+                    SetStatus("No pude abrir el micrófono: enseñaré igual, pero sin lo que digas "
+                            + "no sabré qué es un dato y qué es parte de la tarea.");
+                }
+            }
+        }
         _teachSession.PasosEnviados += (_, n) => Dispatcher.Invoke(() => _aura?.Pasos(n));
+
+        // Ü PASA A APRENDIZ (promesa 138): sin manos y con las instrucciones de quien escucha. El
+        // 2026-09-03 la voz seguía siendo el asistente mientras se le enseñaba, y tomó «vas a hacer
+        // scroll» por una orden. Mismo micrófono, mismo socket: solo cambia quién es.
+        if (_vivo is { Viva: true })
+        {
+            try
+            {
+                await _vivo.CambiarModoAsync(Teach.ModoAprendiz.Instrucciones,
+                    Teach.ModoAprendiz.Utensilios(Voice.ConversacionEnVivo.Herramientas()));
+            }
+            catch (Exception ex) { LogBus.Log("teach", $"no pude poner la voz en modo aprendiz: {ex.Message}"); }
+        }
 
         SetTeachingUi(true); // el aura arranca TENUE aquí: enseñando, pero aún sin grabar
         ShowTalk(); // el conteo regresivo y el estado de la grabación se ven ahí
@@ -2223,9 +2371,238 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         SetStatus("Para rehacer: detén la enseñanza y vuelve a empezar.");
     }
 
+    // ── COMPROBAR EL APRENDIZAJE (spec 009) ──────────────────────────────────
+    //
+    // Ü repite la tarea que le acabas de enseñar y aprende de cada paso. Es OBLIGATORIO antes de
+    // poder usarla (decisión del dueño, 2026-09-03): una skill recién enseñada es una hipótesis
+    // —los pasos son lo que la demo VIO— y hasta que no se recorren no se sabe si se pueden volver
+    // a andar. Ejecutar sin repasar es justo la apuesta que este proyecto lleva dos meses
+    // aprendiendo a no hacer.
+
+    private bool _comprobando;
+
+    /// <summary>
+    /// EL BOTÓN GRANDE DICE LO QUE VA A PASAR. Con una tarea recién enseñada, lo siguiente no es
+    /// ejecutarla —no se puede, comprobar es obligatorio— sino comprobarla; así que el botón lo
+    /// dice y lo hace.
+    /// </summary>
+    /// <remarks>
+    /// Nace de perderse buscándolo (2026-09-03, el dueño): la comprobación vivía en un icono del
+    /// menú extendido y la acción principal seguía diciendo «Ejecutar ahora», que era justo lo único
+    /// que no se podía hacer. Un botón que ofrece lo imposible y esconde lo necesario se prueba tres
+    /// veces y se abandona.
+    /// </remarks>
+    private void PintarBotonDeAccion()
+    {
+        var (pendiente, _) = SkillPorComprobar();
+        _botonComprueba = pendiente != null;
+        RunWorkflowBtn.Content = _botonComprueba
+            ? $"🧭 Comprobar «{Recorte(pendiente!.Nombre, 26)}»"
+            : "▶ Ejecutar ahora";
+        RunWorkflowBtn.ToolTip = _botonComprueba
+            ? "Ü repite la tarea que le enseñaste, aprende de cada paso y la deja lista para usar. "
+              + "No graba nada: se detiene antes de cualquier puerta que no se pueda deshacer."
+            : null;
+        if (_botonComprueba) RunWorkflowBtn.IsEnabled = true;
+    }
+
+    /// <summary>¿El botón grande comprueba en vez de ejecutar? Lo decide PintarBotonDeAccion.</summary>
+    private bool _botonComprueba;
+
+    private async void OnComprobarAprendizaje(object sender, RoutedEventArgs e)
+    {
+        if (_comprobando) { SetStatus("Ya estoy comprobando una tarea."); return; }
+        if (_teaching) { SetStatus("Termina de enseñar primero: pulsa 🎓 para cerrar la grabación."); return; }
+        if (_loop == null || _mapaDeMano == null) { SetStatus("El piloto no está listo todavía."); ShowTalk(); return; }
+
+        // CUÁL SE COMPRUEBA: la última enseñada si sigue en memoria; si no, la primera pendiente del
+        // catálogo. No se elige «la más nueva» a ciegas: se elige la que le falta el repaso, que es
+        // la única que no se puede usar.
+        var (skill, archivo) = SkillPorComprobar();
+        if (skill == null)
+        {
+            SetStatus("No hay ninguna tarea pendiente de comprobar. Enseña una con 🎓.");
+            ShowTalk();
+            return;
+        }
+
+        // COMPROBAR ES UN ENCARGO, NO UN GUION (promesa 139). Hasta el 2026-09-03 esto instanciaba
+        // los pasos observados y los mandaba al batch: reproducía lo que las manos hicieron y tiraba
+        // todo lo demás —el scroll pedido por voz, «baja hasta el final», lo que el video entendió—.
+        // El dueño lo vio: «seguimos tratando la enseñanza como si fueran workflows». Ahora el
+        // piloto recibe el OBJETIVO y todo el contexto, va hacia él por identidad y con la
+        // compuerta, y cuelga un recuerdo de cada elemento que usa. Los pasos son pistas.
+        _comprobando = true;
+        ShowTalk();
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+
+        // LA VOZ SE ABRE PARA COMPROBAR (promesa 142). Ü va a narrar todo el recorrido, y sin la
+        // conversación viva esa narración sale por el sintetizador de Windows: el dueño lo oyó al
+        // instante —«habló con una voz diferente»— y tenía razón, eran dos voces para el mismo
+        // asistente. Se recuerda si la abrimos NOSOTROS para devolverla como estaba, igual que al
+        // enseñar: dejar el micrófono abierto en la cara de alguien que no lo pidió es la avería
+        // opuesta.
+        bool vozAbiertaParaComprobar = _vivo is { Viva: false };
+        if (vozAbiertaParaComprobar)
+        {
+            try { await _vivo!.ArrancarAsync(); }
+            catch (Exception ex)
+            {
+                vozAbiertaParaComprobar = false;
+                LogBus.Log("comprobar", $"sin voz: narraré por escrito ({ex.Message})");
+            }
+        }
+
+        try
+        {
+            LogBus.Log("comprobar", $"«{skill.Nombre}»: {skill.Pasos.Count} paso(s) de contexto, "
+                + $"{skill.Huecos.Count} hueco(s), {skill.Sugerencias.Count} sugerencia(s) · "
+                + $"de «{skill.DondeEmpieza}» a «{Navigation.ElEncargoDeComprobar.Destino(skill)}»");
+
+            // LO DICHO DURANTE LA DEMO SE CUELGA ANTES DE ARRANCAR (promesa 124): son recuerdos
+            // que ya son verdad —se dijeron sobre elementos que las manos tocaron— y le sirven al
+            // piloto desde el primer map_where_am_i. Por la MISMA puerta que la voz (Ensenar), con
+            // sus mismas reglas: escribir a mano no es un atajo para meter en el grafo algo que la
+            // voz no habría podido meter.
+            int colgados = 0, deLoDicho = 0;
+            var recuerdos = Navigation.RecuerdosDeUnaSkill.De(
+                skill, skill.Description,
+                skill.Sugerencias.Select(x => (x.Campo, x.Significado)).ToList());
+            foreach (var r in recuerdos)
+            {
+                if (r.DeDonde == "lo dicho") deLoDicho++;
+                _mapaDeMano.Presentar?.Invoke(r.Ubicacion, r.Selector, r.Selector, "");
+                if (_mapaDeMano.Ensenar?.Invoke(r.Ubicacion, r.Selector, r.Significado, "") == true) colgados++;
+                else LogBus.Log("comprobar", $"no pude colgar el recuerdo de «{r.Selector}» en «{r.Ubicacion}»");
+            }
+
+            // EL ENCARGO, atado a la app donde vive la tarea: la misma compuerta de superficie que
+            // usa el puente del workflow (2026-07-26: sin ella el consciente tecleó en otra app).
+            string encargo = Navigation.ElEncargoDeComprobar.Texto(skill);
+            string origen = _locator?.DondeEstoy()?.Origin ?? "";
+            LogBus.Log("comprobar", $"encargo de {encargo.Length} car."
+                + (origen.Length > 0 ? $" · atado a «{origen}»" : " · SIN origen conocido: va sin compuerta"));
+
+            SetStatus($"Comprobando «{skill.Nombre}»: voy a hacer la tarea yo…");
+            // QUE SE VEA DE QUÉ HABLA: cada elemento que vaya a tocar se enciende y la carita se
+            // pone a su lado (petición del dueño, 2026-09-03).
+            if (_mapaDeMano != null) _mapaDeMano.SenalarAlActuar = true;
+            _cts = new CancellationTokenSource();
+            ShowStop(true);
+            SetWorking(true);
+            string relato;
+            try { relato = await _loop.RunAsync(encargo, _cts.Token, origen); }
+            finally { SetWorking(false); ShowStop(false); }
+
+            // EL VEREDICTO LO DA LA COMPUERTA, NO EL MODELO (promesa 121): «terminé» no es un
+            // veredicto. Se compara dónde acabó la demo con dónde está el piloto AHORA.
+            string destino = Navigation.ElEncargoDeComprobar.Destino(skill);
+            string aqui = _locator?.DondeEstoy()?.Id ?? "";
+            var aterrizaje = Navigation.ElRescate.Aterrizo(destino, aqui);
+            LogBus.Log("comprobar", $"piloto: {relato}");
+            LogBus.Log("comprobar", aterrizaje.Llego
+                ? $"ATERRIZÓ en «{destino}»"
+                : $"NO aterrizó: {aterrizaje.Motivo}");
+
+            // LO APRENDIDO SE QUEDA PASE LO QUE PASE; lo que depende del veredicto es el SELLO.
+            if (aterrizaje.Llego)
+                skill.ConLaComprobacionHecha().Guardar(Navigation.SkillEnsenada.CarpetaPorDefecto);
+
+            string cuentaRecuerdos = Navigation.RecuerdosDeUnaSkill.Cuenta(
+                skill.Description, deLoDicho, colgados - deLoDicho);
+            SetStatus(aterrizaje.Llego
+                ? $"«{skill.Nombre}» comprobada: llegué a donde acabó la demo · {cuentaRecuerdos} Ya se puede usar."
+                : $"«{skill.Nombre}» SIGUE PENDIENTE: {aterrizaje.Motivo} · {cuentaRecuerdos} "
+                    + "Enséñamela otra vez o vuelve a comprobar desde la pantalla de partida.");
+            LogBus.Log("comprobar", $"«{skill.Nombre}» "
+                + (aterrizaje.Llego ? "COMPROBADA" : "SIGUE PENDIENTE")
+                + $" en {reloj.ElapsedMilliseconds} ms · {colgados} recuerdo(s) colgado(s) de "
+                + $"{recuerdos.Count} antes de arrancar · {archivo}");
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus($"Paraste la comprobación de «{skill.Nombre}»: sigue pendiente.");
+            LogBus.Log("comprobar", "parada por el usuario: sigue pendiente");
+        }
+        catch (Exception ex)
+        {
+            var porque = new System.Text.StringBuilder();
+            for (var x = ex; x != null; x = x.InnerException)
+                porque.Append(porque.Length > 0 ? " ← " : "").Append($"{x.GetType().Name}: {x.Message}");
+            SetStatus($"La comprobación se detuvo: {ex.Message}");
+            LogBus.Log("comprobar", $"reventó: {porque}");
+        }
+        finally
+        {
+            // EL ORDEN IMPORTA: primero se baja la bandera —para que lo que quede por narrar deje de
+            // ir a la voz— y después se cierra lo que abrimos.
+            _comprobando = false;
+            if (_mapaDeMano != null) _mapaDeMano.SenalarAlActuar = false;
+            if (vozAbiertaParaComprobar && _vivo is { Viva: true })
+            {
+                try { await _vivo.TerminarAsync(); }
+                catch (Exception ex) { LogBus.Log("comprobar", $"no pude cerrar la voz: {ex.Message}"); }
+            }
+            PintarBotonDeAccion();
+        }
+    }
+
+    /// <summary>
+    /// Cuál toca comprobar: la última enseñada, o la primera del catálogo que siga pendiente.
+    /// </summary>
+    /// <remarks>
+    /// NO SE ELIGE «LA MÁS NUEVA» sin mirar: se elige la que le falta el repaso, porque es la única
+    /// que no se puede usar. Si todas están comprobadas, no hay nada que hacer y se dice.
+    /// </remarks>
+    private (Navigation.SkillEnsenada? Skill, string Archivo) SkillPorComprobar()
+    {
+        var ultima = _teachSession?.UltimaSkill;
+        if (ultima is { Comprobada: false }) return (ultima, "(la recién enseñada)");
+
+        foreach (var c in Navigation.SkillEnsenada.Catalogo(Navigation.SkillEnsenada.CarpetaPorDefecto))
+        {
+            if (c.Comprobada) continue;
+            var s = Navigation.SkillEnsenada.Cargar(c.Archivo);
+            if (s != null) return (s, c.Archivo);
+        }
+        return (null, "");
+    }
+
+    /// <summary>El oído prestado a la enseñanza mientras dura, para poder soltarlo al parar.</summary>
+    private Action<string>? _oyendoParaEnsenar;
+
+    /// <summary>¿Abrimos NOSOTROS el micrófono para enseñar? Entonces al terminar se cierra.</summary>
+    private bool _vozAbiertaParaEnsenar;
+
     private async Task StopTeachingAsync()
     {
         SetTeachingUi(false);
+        // SE SUELTA EL OÍDO. Un manejador que sobrevive a su sesión seguiría metiendo frases en una
+        // demo que ya terminó — y peor, en la siguiente.
+        if (_oyendoParaEnsenar != null && _vivo != null)
+        {
+            try { _vivo.DijoElUsuario -= _oyendoParaEnsenar; } catch { }
+            _oyendoParaEnsenar = null;
+        }
+        // Y el micrófono vuelve como estaba: solo se cierra si lo abrimos para esto.
+        // Y VUELVE A SER EL ASISTENTE, con todas sus herramientas: el modo aprendiz dura lo que
+        // dura la demo. Se hace ANTES de decidir si se cierra el micrófono: si se queda abierto,
+        // tiene que quedarse siendo quien era.
+        if (_vivo is { Viva: true })
+        {
+            try
+            {
+                await _vivo.CambiarModoAsync(Voice.ConversacionEnVivo.InstruccionesNormales,
+                    Voice.ConversacionEnVivo.Herramientas());
+            }
+            catch (Exception ex) { LogBus.Log("teach", $"no pude devolver la voz a asistente: {ex.Message}"); }
+        }
+
+        if (_vozAbiertaParaEnsenar && _vivo is { Viva: true })
+        {
+            try { await _vivo.AlternarAsync(); } catch (Exception ex) { LogBus.Log("teach", $"no pude cerrar el micrófono: {ex.Message}"); }
+        }
+        _vozAbiertaParaEnsenar = false;
         SetStatus("Cerrando la enseñanza y estructurando el workflow…");
         ShowTalk(); // el cierre tarda y termina en un veredicto: que no pase en silencio
 
@@ -2301,25 +2678,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         btn.ToolTip = tip;
     }
 
-    private void UpdateVideoLlmToggle() =>
-        PintarToggle(VideoLlmToggle, _config.ProcessTeachVideo, _config.ProcessTeachVideo
-            ? "Video → IA: ACTIVADO. Al enseñar, el video se manda al LLM. Clic para apagarlo."
-            : "Video → IA: apagado. El video se graba igual y lo ves en 🎞 Videos, pero no se manda al LLM (evita el timeout).");
 
-    /// <summary>
-    /// Alterna si la enseñanza procesa el video con el LLM. Apagado evita el timeout (504) del backend;
-    /// el video se sigue grabando y guardando (visible en 🎞 Videos). Se persiste en Config y se aplica
-    /// a la próxima enseñanza (se lee al crear la WorkflowTeachSession).
-    /// </summary>
-    private void OnToggleVideoLlm(object sender, RoutedEventArgs e)
-    {
-        _config.ProcessTeachVideo = !_config.ProcessTeachVideo;
-        _config.Save();
-        UpdateVideoLlmToggle();
-        SetStatus(_config.ProcessTeachVideo
-            ? "Al enseñar, el video se procesará con IA"
-            : "Al enseñar, el video NO se procesa con IA (se graba igual; míralo en Videos)");
-    }
 
     // ── Menú extendido: activador con hover, cierre con retraso, fijado por clic ──────────────
     //
@@ -2808,6 +3167,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 _directWorkflows.Add(wf);
             }
 
+            PintarBotonDeAccion();
             if (_directWorkflows.Count == 0)
             {
                 SetWorkflowSelectorEmpty("No hay workflows todavía. Enseña uno con 🎓.");
@@ -3015,6 +3375,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private async void OnRunWorkflowDirect(object sender, RoutedEventArgs e)
     {
+        // LO PRIMERO QUE TOCA: si hay una tarea sin comprobar, el botón está ofreciendo comprobarla
+        // y eso es lo que hace. Ejecutar viene después, cuando ya se puede.
+        if (_botonComprueba) { OnComprobarAprendizaje(sender, e); return; }
         if (_runningDirect) return;
         if (_directIndex < 0 || _directIndex >= _directWorkflows.Count) { SetStatus("Selecciona un workflow primero."); return; }
         var wf = _directWorkflows[_directIndex];
@@ -3554,6 +3917,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         Bubble.Text = text;
         if (!string.IsNullOrWhiteSpace(text)) ShowTalk();
+        // MIENTRAS SE COMPRUEBA, LO QUE EL PILOTO NARRA SE OYE (promesa 142). Fuera de eso, narrar
+        // es un estado y va escrito: un asistente que lee en voz cada «voy por el paso 3» cansa.
+        if (_comprobando && !string.IsNullOrWhiteSpace(text) && _vivo is { Viva: true })
+            _ = _vivo.DiEstoAsync(text);
     });
     public void Speak(string text)
     {
@@ -3561,7 +3928,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // Durante una conversación en vivo la voz de Ü la pone Gemini. Añadir encima el sintetizador
         // de Windows serían dos Ü hablando a la vez, cada una su frase: el texto se sigue viendo,
         // que es lo que hace falta, pero se oye una sola.
-        if (_vivo?.Viva == true) return;
+        // SI LA VOZ DE Ü ESTÁ VIVA, HABLA ELLA (promesa 142). Antes esta rama solo CALLABA al
+        // sintetizador para no oír dos Ü a la vez, y daba por hecho que lo que había que decir ya lo
+        // estaba diciendo la conversación. En una comprobación no: quien decide qué se dice es el
+        // piloto, y sin esta línea su frase salía por el sintetizador de Windows — dos voces para
+        // el mismo asistente, que fue lo que el dueño oyó el 2026-09-03.
+        if (_vivo is { Viva: true }) { _ = _vivo.DiEstoAsync(text); return; }
         _voice.Speak(text);
     }
 
@@ -4044,6 +4416,238 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             else LogBus.Log("demo", $"editor no aceptó texto: {error}");
         }
         return n;
+    }
+
+    // ── Las cajas de SAP, con freno ──────────────────────────────────────────
+
+    private IReadOnlyList<(string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)> _cajasSap
+        = Array.Empty<(string, string, string, System.Windows.Rect)>();
+    private DateTime _cajasSapLeidas = DateTime.MinValue;
+    private bool _leyendoCajasSap;
+
+    /// <summary>
+    /// Dónde está cada elemento de SAP en pantalla. Con freno: como mucho una lectura cada segundo
+    /// y medio, y nunca dos a la vez.
+    /// </summary>
+    /// <remarks>
+    /// EL FRENO NO ES PRUDENCIA, ES UN CUELGUE YA VISTO. La vista de recuerdos se refresca en CADA
+    /// cambio de ubicación —el localizador mira cada 250 ms— y esto corre en el hilo de la interfaz,
+    /// que es donde el COM de SAP tiene que correr. Sin tope, sobre el triage la app se quedaba
+    /// clavada al pulsar 🧠 (2026-09-02, lo vio el dueño). Se devuelve la última lectura buena
+    /// mientras el freno esté echado: un recuadro un segundo viejo es infinitamente mejor que una
+    /// app parada.
+    /// </remarks>
+    private IReadOnlyList<(string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)> LeerCajasDeSap()
+    {
+        if (_leyendoCajasSap) return _cajasSap;
+        if ((DateTime.UtcNow - _cajasSapLeidas).TotalMilliseconds < 1500) return _cajasSap;
+
+        var sap = _locator?.SuperficieSap;
+        if (sap == null) return _cajasSap;
+
+        _leyendoCajasSap = true;
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var cajas = new List<(string, string, string, System.Windows.Rect)>();
+            var vistos = sap.ReadVisibleElements();
+            foreach (var v in vistos)
+            {
+                if (!v.BoundsKnown || v.Width <= 0 || v.Height <= 0) continue;
+                cajas.Add((U.Graph.Surfaces.SapSelector.ById(v.Id),
+                    (v.Label ?? "").Trim().Length > 0 ? v.Label!.Trim() : v.Id,
+                    v.Type ?? "",
+                    new System.Windows.Rect(v.ScreenLeft, v.ScreenTop, v.Width, v.Height)));
+            }
+
+            // LOS BOTONES DE LA BARRA DE UN ALV ENTRAN SIN CAJA, con su rótulo (promesa 144). SAP
+            // no les da geometría —medido con sonda el 2026-09-03: DumpState("Toolbar") no trae ni
+            // un getter geométrico— pero sí dice cómo se leen, y con ese rótulo UIA los encuentra:
+            // «Triage» → Button [793,227 84x30]. Aquí solo se aporta la MITAD que sabe SAP; la otra
+            // la pone LaCajaDeUnBotonDeBarra preguntándole a UIA. Sin esta línea el puente no tiene
+            // por dónde empezar, y el recuerdo del botón seguía sin dibujarse («0 de 1 localizados»,
+            // 21:29 y 21:31 del 2026-09-03, ya con el resto del arreglo puesto).
+            foreach (var rejilla in vistos.Where(v => v.SubType.IndexOf("Grid", StringComparison.OrdinalIgnoreCase) >= 0
+                                                   || v.SubType.IndexOf("ALV", StringComparison.OrdinalIgnoreCase) >= 0))
+            {
+                foreach (var b in sap.LeerRejilla(rejilla.Id).Botones)
+                    cajas.Add((U.Graph.Surfaces.SapSelector.ByToolbarButton(rejilla.Id, b.Id),
+                        b.Texto, "ToolbarButton", System.Windows.Rect.Empty));
+            }
+
+            // LAS FILAS DE LOS ÁRBOLES SON CANDIDATAS, con la caja que SAP les da (promesa 70: en
+            // SAP el contenido navegable son las filas, no el árbol). Sin esto, señalar sobre el
+            // Puesto de trabajo contestaba el shell entero —lo más pequeño que había— porque una
+            // fila no es un componente y no sale en ReadVisibleElements (2026-09-02, 21:19, lo vio
+            // el dueño). Los MISMOS candidatos que el terreno: identidad árbol+clave, etiqueta con
+            // carpeta, y la banda top/alto que ya valida el «CONTRASTE geometría» del inspector.
+            //
+            // Las filas de una REJILLA no entran: SAP no da geometría por fila de un ALV, y una caja
+            // inventada es peor que ninguna (aprendizaje nº4). Quedan dichas como hueco.
+            foreach (var arbol in vistos.Where(v => v.SubType.IndexOf("Tree", StringComparison.OrdinalIgnoreCase) >= 0
+                                                  && v.BoundsKnown && v.Height > 0))
+            {
+                foreach (var fila in sap.VisibleTreeRows(arbol.Id, arbol.Height, out _))
+                {
+                    if (fila.Height <= 0 || fila.Key.Length == 0) continue;
+                    // La banda se recorta contra el borde inferior del árbol, como hace el inspector:
+                    // la última fila suele estar medio scrolleada.
+                    int alto = Math.Min(fila.Height, arbol.Height - fila.Top);
+                    if (alto < 3) continue;
+                    cajas.Add((U.Graph.Surfaces.SapSelector.ByNode(arbol.Id, fila.Key),
+                        fila.Ruta.Length > 0 ? fila.Ruta : (fila.Text.Length > 0 ? fila.Text : fila.Key),
+                        fila.IsFolder ? "GuiTreeCarpeta" : "GuiTreeFila",
+                        new System.Windows.Rect(arbol.ScreenLeft, arbol.ScreenTop + fila.Top, arbol.Width, alto)));
+                }
+            }
+            _cajasSap = cajas;
+            LogBus.Log("recuerdo", $"cajas de SAP: {cajas.Count} con geometría ({reloj.ElapsedMilliseconds} ms)");
+        }
+        catch (Exception e)
+        {
+            var porque = new System.Text.StringBuilder();
+            for (var x = e; x != null; x = x.InnerException)
+                porque.Append(porque.Length > 0 ? " ← " : "").Append($"{x.GetType().Name}: {x.Message}");
+            LogBus.Log("recuerdo", $"no pude leer la geometría de SAP: {porque}");
+        }
+        finally
+        {
+            _cajasSapLeidas = DateTime.UtcNow;
+            _leyendoCajasSap = false;
+        }
+        return _cajasSap;
+    }
+
+    // ── LA NOTA LLEGA AL TRIAGE CON UN ✓ (spec 008) ──────────────────────────
+    //
+    // El mismo camino de la demo del 31 para LLEGAR —los batches del terreno, por la puerta MCP—
+    // y el rellenador de siempre para ESCRIBIR, alimentado por la nota aprobada en vez de por
+    // valores de prueba. Nada de coordenadas, nada de voz, nada que grabe.
+
+    private bool _enviandoEncargo;
+
+    /// <summary>
+    /// Del Easy Access al triage del paciente por batches. Devuelve "" si llegó, o el motivo por el
+    /// que no — dicho para que el médico sepa qué hacer (entrar a SAP, abrir la vista).
+    /// </summary>
+    private async Task<string> LlegarAlTriageAsync(IProgress<string> progreso)
+    {
+        progreso.Report("SAP al frente…");
+        await DemoTool("map_open_app", new { app = "saplogon" });
+        await Task.Delay(800);
+
+        var t = await DemoTerreno();
+        string aqui = t.GetProperty("id").GetString() ?? "";
+        if (aqui.Contains("SAPLY000", StringComparison.OrdinalIgnoreCase)) return "";   // ya en el formulario
+
+        if (aqui.Contains("SAPMSYST", StringComparison.OrdinalIgnoreCase))
+            return "SAP está en la pantalla de entrada: entra con tu usuario y vuelve a pulsar ✓.";
+
+        // Batch 1: hasta la vista de Triage. Primero la secuencia que el dueño enseñó (comando →
+        // nwp1 → Continuar, validada el 2026-08-26); si el terreno para a medias, la puerta de
+        // Favoritos que usó la demo del 31.
+        if (!aqui.Contains("vista:Urgencias Adultos Triage", StringComparison.OrdinalIgnoreCase))
+        {
+            progreso.Report("Batch 1: NWP1 y Urgencias Adultos / Triage…");
+            // «Continuar» tiene DOS puertas vivas en el Easy Access (btn[0] y btn[84], medido el
+            // 2026-09-02 17:34): se pide por selector, que es lo que el batch contestó que necesita.
+            string cuenta = await DemoTool("map_batch", new { pasos = DemoPasos(
+                new { exit = "comando" }, new { text = "nwp1" }, new { exit = "sap:wnd[0]/tbar[0]/btn[0]" },
+                new { exit = "Urgencias Adultos/Triage" }) });
+            if (!cuenta.StartsWith("hice los", StringComparison.OrdinalIgnoreCase))
+            {
+                LogBus.Log("envio", $"batch 1 por comando paró: {cuenta} · se intenta por Favoritos");
+                // La fila se llama así en el terreno vivo (sin el «NWP1 - » que traía la demo del 31).
+                cuenta = await DemoTool("map_batch", new { pasos = DemoPasos(
+                    new { exit = "Favoritos/IS-H: Pto.tbjo.clínico" },
+                    new { exit = "Urgencias Adultos/Triage" }) });
+                if (!cuenta.StartsWith("hice los", StringComparison.OrdinalIgnoreCase))
+                    return $"no llegué a la vista de Triage: {cuenta}";
+            }
+        }
+
+        // Batch 2: la fila del paciente y el botón Triage, por identidad viva. La selección caduca
+        // (el censo se refresca solo), así que van JUNTOS en el mismo batch.
+        t = await DemoEsperarPuerta("GuiGridFila");
+        string? fila = DemoPuerta(t, "GuiGridFila");
+        string? boton = DemoPuerta(t, "GuiGridBoton", "Triage");
+        if (fila == null || boton == null)
+            return "el censo no muestra ningún paciente, o no veo el botón Triage: abre la vista de Urgencias Adultos / Triage y vuelve a pulsar ✓.";
+        string quien = "";
+        foreach (var p in t.GetProperty("puertas").EnumerateArray())
+            if ((p.GetProperty("selector").GetString() ?? "") == fila) { quien = p.GetProperty("etiqueta").GetString() ?? ""; break; }
+        progreso.Report($"Batch 2: el paciente {Recorte(quien, 40)} y su triage…");
+        string cuenta2 = await DemoTool("map_batch", new { pasos = DemoPasos(new { exit = fila }, new { exit = boton }) });
+        if (!cuenta2.StartsWith("hice los", StringComparison.OrdinalIgnoreCase))
+            return $"no pude abrir el triage del paciente: {cuenta2}";
+
+        await DemoEsperarPuerta("GuiTextField");   // el formulario tarda en entregar sus campos
+        return "";
+    }
+
+    /// <summary>
+    /// EL ENCARGO DE LA CONSULTA: llegar, comprobar que es el triage, escribir los campos con la
+    /// nota (relectura por campo, hasta cuatro pasadas), y los dos editores de texto libre. Devuelve
+    /// la cuenta honesta. Jamás pulsa Grabar.
+    /// </summary>
+    private async Task<string> EnviarEncargoAsync(Clinical.Encargo encargo, IProgress<string> progreso, CancellationToken ct)
+    {
+        if (encargo.EstaVacio) return "no hay nada marcado para enviar.";
+        if (_rellenador == null) return "las manos de SAP no están listas todavía.";
+        if (_enviandoEncargo) return "ya hay un envío en marcha; espera a que termine.";
+        _enviandoEncargo = true;
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            LogBus.Log("envio", $"encargo: {encargo.Secciones.Count} sección(es) · {encargo.Texto.Length} caracteres");
+            string noLlegue = await LlegarAlTriageAsync(progreso);
+            if (noLlegue.Length > 0) { LogBus.Log("envio", $"no se llegó: {noLlegue}"); return noLlegue; }
+
+            // LA COMPUERTA pregunta a SAP, no al foco (promesa 114).
+            var veredicto = Clinical.EnvioAlTriage.PuedeEscribir(_rellenador.DondeEstaSap());
+            if (!veredicto.Puede) { LogBus.Log("envio", veredicto.Motivo); return veredicto.Motivo; }
+
+            progreso.Report("Escribiendo los campos del triage…");
+            var (escritos, sinLlenar) = await _rellenador.RellenarConNotaAsync(encargo.Texto, ct);
+
+            // Los dos editores que el rellenador no ve (promesa 113).
+            var reparto = Clinical.EditoresDelTriage.Repartir(encargo.Secciones);
+            var editores = new List<string>();
+            if (reparto.Motivo.Length > 0 && EscribirEditor("MTVCN", reparto.Motivo)) editores.Add("Motivo de consulta");
+            if (reparto.Conducta.Length > 0 && EscribirEditor("TXTOBS", reparto.Conducta)) editores.Add("Conducta");
+
+            int total = escritos.Count + editores.Count;
+            string cuenta = total == 0
+                ? "llegué al triage pero no pude escribir ningún campo con esta sección."
+                : $"✓ {total} campo(s) en SAP: "
+                  + string.Join(", ", escritos.Select(e => e.Campo.Label).Concat(editores))
+                  + (sinLlenar.Count > 0 ? $" · sin llenar: {string.Join(", ", sinLlenar.Take(6))}" : "")
+                  + " · revisa y graba tú.";
+            LogBus.Log("envio", $"{cuenta} ({reloj.ElapsedMilliseconds} ms)");
+            return cuenta;
+        }
+        catch (Exception ex)
+        {
+            LogBus.Log("envio", $"el envío reventó: {ex.GetType().Name}: {ex.Message}");
+            return $"el envío se detuvo: {ex.Message}";
+        }
+        finally { _enviandoEncargo = false; }
+    }
+
+    /// <summary>Escribe uno de los editores de texto libre del triage (shell GuiTextedit), por su id.</summary>
+    private bool EscribirEditor(string idContiene, string texto)
+    {
+        foreach (var v in _clinicalSap.ReadVisibleElements())
+        {
+            if (!v.SubType.Equals("TextEdit", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!v.Id.Contains(idContiene, StringComparison.OrdinalIgnoreCase)) continue;
+            var paso = new U.Graph.PlanStep { StepOrder = 1, ActionType = "input", Selector = "sap:" + v.Id, Label = v.Label, Value = texto };
+            bool ok = _clinicalSap.Execute(paso, out string error);
+            LogBus.Log("envio", ok ? $"editor {idContiene} escrito ({texto.Length} car.)" : $"editor {idContiene} no aceptó texto: {error}");
+            return ok;
+        }
+        LogBus.Log("envio", $"no veo el editor {idContiene} en pantalla");
+        return false;
     }
 
     /// <summary>El valor de demo para un campo de texto, por su identidad. Null = no se toca.</summary>

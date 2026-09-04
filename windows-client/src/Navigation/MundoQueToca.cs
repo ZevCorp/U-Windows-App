@@ -70,10 +70,11 @@ public sealed class ManoPorMundo
 public sealed class EscribirPorMundo
 {
     private readonly Func<string> _donde;
-    private readonly Func<string, bool> _uia;
-    private readonly Func<string, bool> _sap;
+    private readonly Func<string, string, bool> _uia;
+    private readonly Func<string, string, bool> _sap;
 
-    public EscribirPorMundo(Func<string> donde, Func<string, bool> uia, Func<string, bool> sap)
+    public EscribirPorMundo(Func<string> donde,
+        Func<string, string, bool> uia, Func<string, string, bool> sap)
     {
         _donde = donde;
         _uia = uia;
@@ -81,18 +82,132 @@ public sealed class EscribirPorMundo
     }
 
     /// <summary>
-    /// Escribir por el lápiz del mundo en el que estamos. Devuelve si el texto quedó puesto.
+    /// Escribir por el lápiz del mundo en el que estamos, EN SU CAMPO. Devuelve si el texto quedó
+    /// puesto. <paramref name="campo"/> puede venir vacío: entonces va a donde esté el foco.
     /// </summary>
     /// <remarks>
     /// LA UBICACIÓN DECIDE (como el sentido): dentro de una sesión SAP, teclear por UIA hacia «el
     /// foco de Windows» es mandar letras al aire — lo exigió la prueba real del 2026-08-26, el
     /// batch [«comando» → «NWP1» → «Continuar»] parado en «no pude escribir». En SAP el texto se
     /// le pone AL CAMPO por su identidad (.Text) y se relee para comprobar que quedó.
+    ///
+    /// EL CAMPO LLEGA HASTA AQUÍ desde el 2026-09-03 (promesa 133). Antes solo viajaba el texto y
+    /// quien cableaba adivinaba el campo por «el último elemento pulsado»: un respaldo que acierta
+    /// mientras el paso anterior sea justo ese campo, y falla mudo en cuanto no lo es — que es
+    /// exactamente lo que pasa al reproducir una skill, donde el paso YA SABE dónde escribió la
+    /// demo. Adivinar teniendo el dato en la mano es cómo se pierden los datos en silencio.
     /// </remarks>
-    public bool Escribe(string texto) =>
+    public bool Escribe(string campo, string texto) =>
         (_donde() ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)
-            ? _sap(texto)
-            : _uia(texto);
+            ? _sap(campo ?? "", texto)
+            : _uia(campo ?? "", texto);
+}
+
+/// <summary>
+/// PULSAR UNA TECLA POR EL MUNDO QUE TOCA. Promesa 132 (spec 009, segunda tanda).
+/// </summary>
+/// <remarks>
+/// EL QUINTO VERBO DEL DESPACHO, y como los otros cuatro vive AQUÍ y en ningún otro sitio (regla del
+/// dueño, 2026-08-26): nadie más tiene que saber en qué mundo está.
+///
+/// Y LOS DOS MUNDOS NO PULSAN IGUAL, ni de lejos. En SAP, Enter y las F son COMANDOS del servidor:
+/// se mandan por <c>sendVKey</c>, que dispara el round-trip aunque el foco esté en otra parte.
+/// Simular la tecla física ahí es esperar que Windows y SAP estén de acuerdo sobre quién tiene el
+/// foco — y cuando no lo están, la tecla se pierde sin decirlo. Fuera de SAP no hay servidor a
+/// quien mandarle un comando: la tecla va al teclado, y punto.
+/// </remarks>
+public sealed class TeclearPorMundo
+{
+    private readonly Func<string> _donde;
+    private readonly Func<string, bool> _uia;
+    private readonly Func<string, bool> _sap;
+
+    public TeclearPorMundo(Func<string> donde, Func<string, bool> uia, Func<string, bool> sap)
+    {
+        _donde = donde;
+        _uia = uia;
+        _sap = sap;
+    }
+
+    /// <summary>Pulsa la tecla por la vía del mundo en el que estamos. Devuelve si se pudo.</summary>
+    public bool Teclea(string tecla) =>
+        (_donde() ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)
+            ? _sap(tecla ?? "")
+            : _uia(tecla ?? "");
+}
+
+/// <summary>
+/// QUÉ HAY BAJO UN PUNTO DE LA PANTALLA, preguntado al mundo que manda aquí. Promesa 118.
+/// </summary>
+/// <remarks>
+/// EL CUARTO VERBO DEL DESPACHO, y llegó tarde. La regla de esta casa —fijada por José David el
+/// 2026-08-26— dice que el despacho entre mundos vive en UN solo sitio y que nadie más sabe en qué
+/// mundo mira, pulsa o escribe. Se migraron tres verbos: observar, pulsar y escribir. Señalar se
+/// quedó preguntándole a UIA directamente, y dentro de SAP eso devuelve el Pane opaco que lo
+/// contiene todo: señalando la casilla de la presión arterial contestaba «Gos Container» (medido el
+/// 2026-09-02, por el dueño). El síntoma es el mismo que obligó a nacer a <see cref="SentidoPorMundo"/>.
+///
+/// NO HAY RESPALDO A UIA DENTRO DE SAP, y es lo que arregla el bug de verdad. Si SAP manda aquí y
+/// no reconoce lo que hay bajo el punto, la respuesta es «no lo sé»: caer a UIA devolvería
+/// exactamente el panel opaco que se viene a evitar. Por eso la respuesta distingue las dos
+/// situaciones en vez de contestar null a las dos (aprendizaje nº2: un mensaje que no distingue sus
+/// causas manda la investigación al sitio equivocado).
+/// </remarks>
+public sealed class LoSenaladoPorMundo
+{
+    /// <param name="MandaSap">Si aquí decide SAP. Cuando es falso, lo resuelve el camino de UIA.</param>
+    /// <param name="Que">Lo que hay bajo el punto, CON SU CAJA. La caja viaja con el elemento y no se
+    /// busca después, porque en SAP sale de la misma lectura que lo encontró; sin ella habría que
+    /// releer la pantalla solo para poder iluminar, y señalar sin iluminar es decir un nombre que
+    /// nadie puede comprobar. Null con <c>MandaSap</c> significa que SAP no lo reconoce, y entonces
+    /// NO se pregunta a UIA: se dice que no se sabe.</param>
+    public readonly record struct Bajo(bool MandaSap,
+        (string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)? Que);
+
+    private readonly Func<string> _donde;
+    private readonly Func<int, int, (string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)?> _sap;
+
+    public LoSenaladoPorMundo(Func<string> donde,
+        Func<int, int, (string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja)?> sap)
+    {
+        _donde = donde;
+        _sap = sap;
+    }
+
+    public Bajo ElPunto(int pantallaX, int pantallaY)
+    {
+        if (!(_donde() ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
+            return new Bajo(false, null);
+        return new Bajo(true, _sap(pantallaX, pantallaY));
+    }
+}
+
+/// <summary>
+/// DÓNDE ESTÁ ALGO EN LA PANTALLA, preguntado al mundo del que es. Promesa 119.
+/// </summary>
+/// <remarks>
+/// EL QUINTO VERBO. Iluminar un recuerdo pide su rectángulo, y eso se buscaba SIEMPRE en el lector
+/// de UIA: los seis recuerdos enseñados sobre el triage el 2026-09-02 no se encendían ninguno —«0
+/// de 6 localizados»— porque dentro de SAP UIA no ve ni un campo. SAP sí da geometría por elemento
+/// (<c>ScreenLeft/ScreenTop/Width/Height</c>), que es justo lo que este despacho necesita.
+///
+/// EL SELECTOR DECIDE, no la ubicación, y por la misma razón que en <see cref="ManoPorMundo"/>: el
+/// selector ES la identidad y lleva escrito de qué mundo viene. Así un recuerdo enseñado en SAP se
+/// localiza por SAP aunque se pregunte desde otro sitio.
+/// </remarks>
+public sealed class GeometriaPorMundo
+{
+    private readonly Func<string, System.Windows.Rect?> _uia;
+    private readonly Func<string, System.Windows.Rect?> _sap;
+
+    public GeometriaPorMundo(Func<string, System.Windows.Rect?> uia, Func<string, System.Windows.Rect?> sap)
+    {
+        _uia = uia;
+        _sap = sap;
+    }
+
+    public System.Windows.Rect? Caja(string selector) =>
+        SapSelector.Owns(selector ?? "") ? _sap(selector!) : _uia(selector ?? "");
 }
 
 /// <summary>

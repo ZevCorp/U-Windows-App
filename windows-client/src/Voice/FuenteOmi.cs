@@ -224,7 +224,11 @@ public sealed class FuenteOmi : IDisposable
             // La cadena entera: un catch mudo aquí convertiría «no hay adaptador Bluetooth» en
             // indistinguible de «el collar está apagado» (aprendizaje nº3).
             for (var x = e; x != null; x = x.InnerException)
-                LogBus.Log("omi", $"no se pudo abrir el collar · {x.GetType().Name}: {x.Message}");
+                // CON SU HRESULT: el 2026-09-03 esta línea salió como «COMException:» con el
+                // mensaje VACÍO, que no distingue «no hay Bluetooth» de «el collar está apagado»
+                // de «WinRT se cayó». En COM el que identifica el fallo es el HResult, no el texto.
+                LogBus.Log("omi", $"no se pudo abrir el collar · {x.GetType().Name} (0x{x.HResult:X8}): "
+                    + (string.IsNullOrWhiteSpace(x.Message) ? "sin mensaje" : x.Message));
             return false;
         }
     }
