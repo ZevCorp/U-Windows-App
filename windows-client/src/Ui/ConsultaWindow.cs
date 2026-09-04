@@ -475,6 +475,7 @@ public sealed class ConsultaWindow : Window
         if (_codigo.Length > 0)
         {
             _selector.Preferir(Origen.CollarPorTelefono);
+            Voice.ElMicrofonoDeLaApp.Elegir(Origen.CollarPorTelefono, _codigo ?? "");
             _ = _audio.PasarAlTelefonoAsync(Nube.ProyectoSupabase, Nube.ClavePublicable, _codigo);
             LogBus.Log("telefono", "código recordado de una sesión anterior: volviendo a escuchar el canal");
         }
@@ -565,6 +566,10 @@ public sealed class ConsultaWindow : Window
             }
 
             _selector.Preferir(origen);
+            // Y SE ANUNCIA A TODA LA APP (promesa 146). Hasta hoy esta elección era privada de esta
+            // ventana: el médico elegía el collar aquí y al ponerse a ENSEÑAR volvía a hablarle al
+            // micrófono del portátil, porque la carita tiene su propio captador y no se enteraba.
+            Voice.ElMicrofonoDeLaApp.Elegir(origen, _codigo ?? "");
             // LO DE ANTES NO AVALA LO DE AHORA. Al elegir se rehace el enlace, y una trama de hace
             // dos segundos pintaría verde un collar que todavía no ha entregado nada por el enlace
             // nuevo — que es el fallo del 2026-08-25 con otro disfraz.

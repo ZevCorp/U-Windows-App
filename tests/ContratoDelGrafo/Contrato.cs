@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using Omi;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -400,6 +401,11 @@ internal static class Contrato
         Prueba("143. el recuerdo que se cuelga es lo ENTENDIDO, no la transcripción: donde el modelo tiene un significado para ese elemento, gana al balbuceo de la demo", ElRecuerdoEsLoEntendidoNoLoBalbuceado);
         Prueba("144. la caja de un botón de barra de SAP la da UIA y su identidad la da SAP: se casa por el texto que SAP declara, y si no se encuentra no se dibuja nada", LaCajaDelBotonDeBarraLaDaUia);
         Prueba("145. la caja de un selector de SAP se resuelve en UN solo sitio: los dos caminos —la vista de recuerdos y el señalar de uno— dan la MISMA respuesta, y un elemento sin caja no se ilumina", LaCajaDeSapSeResuelveEnUnSitio);
+
+        // UN SOLO MICRÓFONO PARA TODA LA APP (2026-09-04). El médico elige el collar en la ventana
+        // de la consulta y al ponerse a ENSEÑAR vuelve a hablarle al micrófono del portátil, porque
+        // la elección era privada de esa ventana.
+        Prueba("146. de dónde entra el audio se elige UNA vez y vale para toda la app: lo elegido en la consulta manda también al enseñar y al hablar con Ü, y pedir lo que ya está puesto no corta nada", UnSoloMicrofonoParaTodaLaApp);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -2688,6 +2694,83 @@ internal static class Contrato
         Debe(delOtro != null && DeQuien(delOtro, "Significado").Contains("triage", StringComparison.OrdinalIgnoreCase),
             "y donde el modelo no opinó, lo que se dijo se cuelga igual: se prefiere lo entendido, "
             + "no se depende de ello");
+    }
+
+    private static void UnSoloMicrofonoParaTodaLaApp()
+    {
+        // LO QUE PASA HOY, y no es un bug de nadie: nunca se cableó. `ConsultaWindow` tiene su
+        // propio `LiveAudio` y su propio `Omi.Selector` —los dos `private readonly … = new()`— y la
+        // carita tiene otro `LiveAudio` y NINGÚN selector. Elegir «collar por teléfono» en la
+        // consulta abre ese caño en la instancia de la consulta y en ninguna otra, así que al
+        // pulsar 🎓 la voz vuelve al micrófono del portátil sin decir nada.
+        //
+        // El dueño lo dijo corto: «solo necesito que el audio entre por el micrófono Omi si está
+        // conectado». Un aparato, una elección, y quien la cambie la cambia para todos.
+        var t = Cap004("U.WindowsClient.Voice.ElMicrofonoDeLaApp");
+        var loQueToca = t?.GetMethod("LoQueToca");
+        Debe(t != null && loQueToca != null,
+            "todavía no existe «Voice.ElMicrofonoDeLaApp.LoQueToca» (spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || loQueToca == null) return;
+
+        object Toca(Origen elegido, bool porCollar, bool porTelefono) =>
+            loQueToca.Invoke(null, new object[] { elegido, porCollar, porTelefono })!;
+        string Nombre(object v) => v.ToString() ?? "";
+
+        // SE ABRE LO QUE FALTA…
+        Debe(Nombre(Toca(Origen.CollarPorBluetooth, false, false)) == "AbrirCollar",
+            "con el collar elegido y nada abierto, se abre el collar");
+        Debe(Nombre(Toca(Origen.CollarPorTelefono, false, false)) == "AbrirTelefono",
+            "con el teléfono elegido y nada abierto, se abre el teléfono");
+        Debe(Nombre(Toca(Origen.MicrofonoDelPc, true, false)) == "VolverAlLocal",
+            "y elegir el micrófono del PC con el collar abierto lo cierra: lo que elige la persona "
+            + "manda sobre la preferencia automática (promesa 30, ahora para toda la app)");
+
+        // …Y NO SE TOCA LO QUE YA ESTÁ. Reabrir el caño que ya suena corta la conversación en
+        // curso: quien vuelve a elegir lo que ya tenía no está pidiendo que se le corte.
+        Debe(Nombre(Toca(Origen.CollarPorBluetooth, true, false)) == "Nada",
+            "pedir el collar cuando YA se oye por el collar no hace nada: reabrirlo cortaría la voz");
+        Debe(Nombre(Toca(Origen.CollarPorTelefono, false, true)) == "Nada",
+            "y lo mismo con el teléfono: pedirlo dos veces no puede cortar lo que ya funciona");
+        Debe(Nombre(Toca(Origen.MicrofonoDelPc, false, false)) == "Nada",
+            "y el micrófono del PC ya puesto tampoco se rehace");
+
+        // UN APARATO HABLA CON UNO SOLO: elegir el teléfono con el collar enlazado por Bluetooth
+        // aquí tiene que SOLTAR el Bluetooth, o el collar seguiría oyéndose por el otro camino.
+        Debe(Nombre(Toca(Origen.CollarPorTelefono, true, false)) == "AbrirTelefono",
+            "elegir el teléfono con el collar por Bluetooth abierto cambia de caño: un collar habla "
+            + "con un aparato, no con dos");
+
+        // Y LA ELECCIÓN ES UNA SOLA PARA TODOS, con aviso: el que la cambia no sabe quién más está
+        // escuchando, así que no puede ser él quien vaya avisando uno a uno.
+        var elegir = t.GetMethod("Elegir");
+        var preferida = t.GetProperty("Preferida");
+        var evento = t.GetEvent("Cambio");
+        Debe(elegir != null && preferida != null && evento != null,
+            "la elección vive en UN sitio, se puede leer, y avisa cuando cambia — sin el aviso, "
+            + "quien ya tenía el micrófono abierto se queda con el de antes y nadie se entera");
+        if (elegir == null || preferida == null || evento == null) return;
+
+        int avisos = 0;
+        Action oyente = () => avisos++;
+        evento.AddEventHandler(null, oyente);
+        try
+        {
+            elegir.Invoke(null, new object?[] { Origen.CollarPorTelefono, "ABC123" });
+            Debe((Origen)preferida.GetValue(null)! == Origen.CollarPorTelefono,
+                "lo elegido se lee desde cualquier parte de la app");
+            Debe(avisos == 1, $"y avisa UNA vez, no ninguna ni tres (avisó {avisos})");
+
+            elegir.Invoke(null, new object?[] { Origen.CollarPorTelefono, "ABC123" });
+            Debe(avisos == 1,
+                "elegir lo mismo otra vez no avisa: un aviso sin cambio haría que todo el mundo "
+                + "rehiciera su micrófono para nada");
+        }
+        finally
+        {
+            evento.RemoveEventHandler(null, oyente);
+            elegir.Invoke(null, new object?[] { Origen.MicrofonoDelPc, "" });
+        }
     }
 
     private static void LaCajaDeSapSeResuelveEnUnSitio()
