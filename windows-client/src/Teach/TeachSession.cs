@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -132,8 +133,14 @@ public sealed class TeachSession : IAsyncDisposable
         }
     }
 
-    /// <summary>Sube el mp4, lo procesa vía backend y guarda el resumen. Devuelve lo que Ü aprendió.</summary>
-    public async Task<string> ProcessAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Sube el mp4, lo procesa vía backend y guarda el resumen. Devuelve lo que Ü aprendió.
+    /// </summary>
+    /// <param name="pasos">Los pasos de ESTA demo (promesa 135). Si van, el cerebro además
+    /// interpreta cuáles fueron datos y qué significa cada elemento; si no van, se comporta como
+    /// siempre y solo devuelve el resumen.</param>
+    public async Task<VideoLeido> ProcessAsync(
+        IReadOnlyList<PasoQueSePregunta>? pasos = null, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(_recordingPath) || !File.Exists(_recordingPath))
         {
@@ -179,13 +186,74 @@ public sealed class TeachSession : IAsyncDisposable
 
         StatusChanged?.Invoke(this, "Analizando lo que enseñaste…");
         var result = await _backend.PostAsync<ProcessResult>(
-            "/teach/process-video", new ProcessRequest { FileUri = fileUri, UserId = _userId }, ct);
+            "/teach/process-video", new ProcessRequest
+            {
+                FileUri = fileUri,
+                UserId = _userId,
+                // LOS PASOS DE ESTA DEMO Y NADA MÁS (promesa 135). Van como HECHOS: el criterio y
+                // las palabras con las que se le pide viven en Graph, no aquí.
+                Steps = pasos?.Count > 0 ? pasos.Select(x => new StepToRead
+                {
+                    Order = x.Orden, Field = x.Campo, Value = x.Valor, Said = x.Dicho,
+                }).ToList() : null,
+            }, ct);
+
         string summary = result?.Summary ?? "";
-        LogBus.Log("teach", $"procesado: {result?.Notes?.Count ?? 0} nota(s). summary=\"{summary}\"");
+        // LA INTERPRETACIÓN VIAJA COMO JSON CRUDO a propósito: quien la entiende es
+        // LoQueElModeloInterpreta, que es puro y está juzgado por el contrato (promesas 129 y 130).
+        // Parsearla aquí sería un segundo lector del mismo hecho, y dos lectores se desincronizan.
+        string interpretacion = result?.Interpretation?.ToString() ?? "";
+        LogBus.Log("teach", $"procesado: {result?.Notes?.Count ?? 0} nota(s), "
+            + $"interpretación {(interpretacion.Length > 0 ? $"de {interpretacion.Length} car." : "AUSENTE")}"
+            + $". summary=\"{summary}\"");
 
         _library.SaveSummary(_recordingPath, summary);
         StatusChanged?.Invoke(this, summary.Length > 0 ? summary : "No encontré nada que aprender en el video.");
-        return summary;
+        return new VideoLeido(summary, interpretacion);
+    }
+
+    /// <summary>
+    /// Interpreta la demo SIN video: solo los pasos y lo que se narró. Promesa 136.
+    /// </summary>
+    /// <remarks>
+    /// EL SEGUNDO PELDAÑO. Se llama cuando el primero —el video— no pudo: sin saldo en la cuenta de
+    /// Gemini (2026-09-03), con un 504 en una demo larga, o sin red al subir el mp4. Devuelve el
+    /// mismo JSON crudo que el camino del video, porque quien lo lee es la misma pieza pura.
+    ///
+    /// UNA CADENA VACÍA SI FALLA, y nunca una excepción hacia arriba: este camino es en sí mismo un
+    /// respaldo, y que un respaldo tumbe la enseñanza sería peor que no tenerlo. Lo que queda
+    /// debajo es la regla del narrado, que es determinista y ya está en disco.
+    ///
+    /// ESTÁTICA porque se llama DESPUÉS de que la sesión de video se haya cerrado: lo único que
+    /// necesita es el puente con el backend, y colgarla de una instancia ya soltada sería pedirle
+    /// trabajo a un objeto que dijo que había terminado.
+    /// </remarks>
+    public static async Task<string> InterpretarPasosAsync(BackendClient backend,
+        IReadOnlyList<PasoQueSePregunta> pasos, string dondeEmpieza, CancellationToken ct = default)
+    {
+        if (backend == null || pasos == null || pasos.Count == 0) return "";
+        try
+        {
+            var res = await backend.PostAsync<InterpretResult>("/teach/interpret-steps", new InterpretRequest
+            {
+                StartsAt = dondeEmpieza ?? "",
+                Steps = pasos.Select(x => new StepToRead
+                {
+                    Order = x.Orden, Field = x.Campo, Value = x.Valor, Said = x.Dicho,
+                }).ToList(),
+            }, ct);
+
+            string json = res?.Interpretation?.ToString() ?? "";
+            LogBus.Log("teach", json.Length > 0
+                ? $"la demo se interpretó SIN video ({json.Length} car.)"
+                : "el cerebro contestó sin interpretación: se queda la regla del narrado");
+            return json;
+        }
+        catch (Exception ex)
+        {
+            LogBus.Log("teach", $"no se pudo interpretar sin video: {ex.Message}");
+            return "";
+        }
     }
 
     /// <summary>Paso 2 del resumable upload de Gemini. Sin key: la URL ya trae su token embebido.</summary>
@@ -284,12 +352,47 @@ public sealed record FileStateResponse
     public string? State { get; set; }
 }
 
+/// <summary>Lo que el video dejó: el resumen para el humano y la interpretación para la skill.</summary>
+/// <param name="Interpretacion">JSON crudo del cerebro, o vacío si no llegó. Lo lee
+/// <c>Navigation.LoQueElModeloInterpreta</c>, que distingue «no opinó» de «no hay nada».</param>
+public sealed record VideoLeido(string Resumen, string Interpretacion);
+
+/// <summary>Un paso de la demo, tal como viaja a Graph. Nombres en inglés: es el contrato HTTP.</summary>
+public sealed record StepToRead
+{
+    [JsonPropertyName("order")]
+    public int Order { get; set; }
+    [JsonPropertyName("field")]
+    public string Field { get; set; } = "";
+    [JsonPropertyName("value")]
+    public string Value { get; set; } = "";
+    [JsonPropertyName("said")]
+    public string Said { get; set; } = "";
+}
+
+public sealed record InterpretRequest
+{
+    [JsonPropertyName("startsAt")]
+    public string StartsAt { get; set; } = "";
+    [JsonPropertyName("steps")]
+    public List<StepToRead> Steps { get; set; } = new();
+}
+
+public sealed record InterpretResult
+{
+    [JsonPropertyName("interpretation")]
+    public System.Text.Json.JsonElement? Interpretation { get; set; }
+}
+
 public sealed record ProcessRequest
 {
     [JsonPropertyName("fileUri")]
     public required string FileUri { get; set; }
     [JsonPropertyName("userId")]
     public required string UserId { get; set; }
+    /// <summary>Los pasos de esta demo. Null cuando no hay ninguna: el contrato viejo sigue vivo.</summary>
+    [JsonPropertyName("steps")]
+    public List<StepToRead>? Steps { get; set; }
 }
 
 public sealed record TeachNote
@@ -304,6 +407,13 @@ public sealed record ProcessResult
 {
     [JsonPropertyName("summary")]
     public string? Summary { get; set; }
+    /// <summary>
+    /// Lo que el modelo entendió de los pasos: <c>{campos:[…], recuerdos:[…]}</c>. Se recibe como
+    /// JSON sin tipar y se pasa tal cual a quien sabe leerlo — un objeto tipado aquí sería un
+    /// segundo lector del mismo hecho, y el que ya existe está juzgado por el contrato.
+    /// </summary>
+    [JsonPropertyName("interpretation")]
+    public System.Text.Json.JsonElement? Interpretation { get; set; }
     [JsonPropertyName("notes")]
     public List<TeachNote>? Notes { get; set; }
     [JsonPropertyName("questions")]

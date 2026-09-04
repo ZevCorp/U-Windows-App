@@ -679,6 +679,27 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
+    /// La caja que UIA le da a un elemento POR SU NOMBRE, o null si no lo ve. Promesa 144.
+    /// </summary>
+    /// <remarks>
+    /// APLANANDO ANTES DE COMPARAR, y no es cosmético: en la sonda del 2026-09-03, de doce botones
+    /// de barra casaron ocho a la primera. Los dos lados escriben el mismo rótulo de forma distinta,
+    /// y comparar en crudo da falso EN SILENCIO — el aprendizaje nº16 de este repo.
+    ///
+    /// Lo exacto primero. Sin coincidencia, NADA: estirar esto a «contiene» encontraría «Triage» en
+    /// «Triage del paciente» y dibujaría la caja del vecino, que es peor que no dibujar (nº4).
+    /// </remarks>
+    private System.Windows.Rect? CajaPorNombreEnUia(string nombre)
+    {
+        string busco = Navigation.Nombres.Aplanar(nombre);
+        if (busco.Length == 0) return null;
+        foreach (var e in _lector.Elements)
+            if (Navigation.Nombres.Aplanar(e.Label) == busco && e.Bounds.Width > 0)
+                return e.Bounds;
+        return null;
+    }
+
+    /// <summary>
     /// TODOS los recuerdos de esta pantalla que se puedan localizar, con su caja. Para verlos de un
     /// vistazo desde el panel, sin pedírselo a la voz.
     /// </summary>
@@ -710,12 +731,7 @@ public sealed class SurfaceMapTools
             {
                 if (!haySap || CajasEnSap == null) return null;
                 cajasSap ??= CajasEnSap() ?? Array.Empty<(string, string, string, System.Windows.Rect)>();
-                string busco = U.Graph.Surfaces.SapSelector.Normalize(s);
-                foreach (var c in cajasSap)
-                    if (U.Graph.Surfaces.SapSelector.Normalize(c.Selector)
-                            .Equals(busco, StringComparison.OrdinalIgnoreCase))
-                        return c.Caja;
-                return null;
+                return Navigation.LaCajaDeUnaIdentidadDeSap.De(s, cajasSap, CajaPorNombreEnUia);
             });
             _lector.Read();
             foreach (var r in todos)
@@ -736,6 +752,100 @@ public sealed class SurfaceMapTools
 
         LogBus.Log("recuerdo", $"vista de recuerdos en «{donde}»: {salida.Count} de {todos.Count} localizados");
         return salida;
+    }
+
+    /// <summary>
+    /// «map_skills»: qué tareas me han enseñado, y cuáles están listas para usar. Promesas 106 y 127.
+    /// </summary>
+    /// <remarks>
+    /// EL CATÁLOGO DICE SI ESTÁ COMPROBADA, y eso no es un adorno: comprobar es obligatorio
+    /// (decisión del dueño, 2026-09-03), así que anunciar una skill sin decir que está pendiente
+    /// sería ofrecerle al cerebro algo que después le van a negar. Se anuncia el estado, no solo
+    /// el nombre.
+    /// </remarks>
+    private string Skills()
+    {
+        var catalogo = Navigation.SkillEnsenada.Catalogo(Navigation.SkillEnsenada.CarpetaPorDefecto);
+        if (catalogo.Count == 0)
+            return "no me han enseñado ninguna tarea todavía: pulsa Enseñar, hazla una vez hablando, "
+                 + "y después «Comprobar aprendizaje».";
+
+        var lineas = catalogo.Select(c =>
+            $"· «{c.Nombre}»{(c.Description.Length > 0 ? " — " + c.Description : "")}"
+            + (c.Comprobada ? " · lista" : " · PENDIENTE de comprobar, no se puede ejecutar"));
+        var salida = new List<string> { $"tareas que me has enseñado ({catalogo.Count}):" };
+        salida.AddRange(lineas);
+        salida.Add("Para correr una: map_skill_run con su nombre.");
+        return string.Join(Environment.NewLine, salida);
+    }
+
+    /// <summary>
+    /// «map_skill_run»: reproducir una tarea enseñada. Promesas 122, 123, 126 y 127.
+    /// </summary>
+    /// <remarks>
+    /// NO HAY SEGUNDO EJECUTOR: la skill se TRADUCE a pasos del batch y los corre el mismo
+    /// recorredor que todo lo demás — misma compuerta de vida, misma verificación por consecuencia,
+    /// misma cuenta honesta, mismo freno. Dos ejecutores del mismo hecho acabarían contradiciéndose
+    /// sin avisar, que es la razón por la que el player viejo se congela.
+    ///
+    /// LA COMPUERTA DE LA COMPROBACIÓN VA PRIMERO, antes de tocar nada: una skill sin repasar no se
+    /// ejecuta, y el «no» dice qué falta.
+    /// </remarks>
+    private string CorrerSkill(string nombre, string datosJson)
+    {
+        if (nombre.Length == 0)
+            return "falta `nombre`: cuál de las tareas enseñadas hay que hacer. Pídelas con map_skills.";
+        if (RecorrerPorElNucleo == null) return "todavía no sé recorrer en batch.";
+
+        var catalogo = Navigation.SkillEnsenada.Catalogo(Navigation.SkillEnsenada.CarpetaPorDefecto);
+        var anunciada = catalogo.FirstOrDefault(c => Navigation.Nombres.Aplanar(c.Nombre) == Navigation.Nombres.Aplanar(nombre))
+                     ?? catalogo.FirstOrDefault(c => Navigation.Nombres.Aplanar(c.Nombre)
+                            .Contains(Navigation.Nombres.Aplanar(nombre), StringComparison.Ordinal));
+        if (anunciada == null)
+            return $"no tengo ninguna tarea que se llame «{nombre}». Las que sí: "
+                 + (catalogo.Count > 0 ? string.Join(", ", catalogo.Select(c => $"«{c.Nombre}»")) : "ninguna todavía.");
+
+        var skill = Navigation.SkillEnsenada.Cargar(anunciada.Archivo);
+        if (skill == null) return $"«{anunciada.Nombre}» está en disco pero no se deja leer: {anunciada.Archivo}";
+
+        var veredicto = skill.PuedeCorrer();
+        if (!veredicto.Puede) return veredicto.Motivo;
+
+        var datos = LeerDatos(datosJson);
+        var pasos = Navigation.InstanciarSkill.Pasos(skill, datos);
+        if (pasos.Count == 0)
+            return $"«{skill.Nombre}» no dejó ningún paso que correr con estos datos: "
+                 + (skill.Huecos.Count > 0
+                    ? $"necesita {string.Join(", ", skill.Huecos.Select(h => $"«{h.Significado}»"))}."
+                    : "la skill está vacía.");
+
+        var sobrantes = Navigation.InstanciarSkill.Sobrantes(skill, datos);
+        LogBus.Log("skill", $"corriendo «{skill.Nombre}»: {pasos.Count} paso(s) de {skill.Pasos.Count} "
+            + $"· {datos.Count} dato(s)" + (sobrantes.Count > 0 ? $" · sin hueco: {string.Join(", ", sobrantes)}" : ""));
+
+        string cuenta = RecorrerPorElNucleo(pasos).Cuenta;
+        LogBus.Log("skill", "← " + cuenta);
+        return $"«{skill.Nombre}»: {cuenta}"
+             + (sobrantes.Count > 0
+                ? $" No supe dónde va: {string.Join(", ", sobrantes)} — enséñamelo y lo recuerdo."
+                : "");
+    }
+
+    /// <summary>Los datos de esta corrida: `{"peso":"68"}`. Vacío si no vienen o no se entienden.</summary>
+    private static Dictionary<string, string> LeerDatos(string json)
+    {
+        var datos = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(json)) return datos;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return datos;
+            foreach (var p in doc.RootElement.EnumerateObject())
+                datos[p.Name] = p.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? p.Value.GetString() ?? "" : p.Value.ToString();
+        }
+        catch (Exception e) { LogBus.Log("skill", $"no entendí `datos` como JSON: {e.Message}"); }
+        return datos;
     }
 
     /// <summary>
@@ -771,7 +881,7 @@ public sealed class SurfaceMapTools
 
         LogBus.Log("batch", $"recorrido de {pasos.Count} paso(s): "
             + string.Join(" → ", pasos.Select(p => p.Texto.Length > 0 ? $"escribir «{p.Texto}»" : $"«{p.Exit}»")));
-        string cuenta = RecorrerPorElNucleo(pasos);
+        string cuenta = RecorrerPorElNucleo(pasos).Cuenta;
         LogBus.Log("batch", "← " + cuenta);
         return cuenta;
     }
@@ -784,6 +894,16 @@ public sealed class SurfaceMapTools
     /// incómodo»). El texto se lee cuando se pide con los ojos —el botón del panel—, no cuando se
     /// está escuchando.
     /// </remarks>
+    /// <summary>
+    /// Enciende el recuadro de un elemento y lleva la carita a su lado. Devuelve si se pudo.
+    /// </summary>
+    /// <remarks>
+    /// LO USA LA COMPROBACIÓN: mientras Ü cuenta qué entendió de un elemento, el humano tiene que
+    /// poder ver DE CUÁL habla — «que vaya y lo señale, acercando la carita al lado de ese
+    /// elemento» (el dueño, 2026-09-03). Sin eso la narración es correcta y no se puede seguir.
+    /// </remarks>
+    public bool SenalarElemento(string selector, string etiqueta) => IluminarUno(selector, etiqueta);
+
     private bool IluminarUno(string selector, string etiqueta)
     {
         try
@@ -793,16 +913,14 @@ public sealed class SurfaceMapTools
             // encendían ninguno — el mismo agujero que la vista de golpe.
             if (U.Graph.Surfaces.SapSelector.Owns(selector))
             {
-                var enSap = new Navigation.GeometriaPorMundo(uia: _ => null, sap: s =>
-                {
-                    string busco = U.Graph.Surfaces.SapSelector.Normalize(s);
-                    foreach (var c in CajasEnSap?.Invoke() ?? Array.Empty<(string, string, string, System.Windows.Rect)>())
-                        if (U.Graph.Surfaces.SapSelector.Normalize(c.Item1)
-                                .Equals(busco, StringComparison.OrdinalIgnoreCase))
-                            return c.Item4;
-                    return null;
-                }).Caja(selector);
+                // POR EL ÚNICO SITIO QUE HAY (promesa 145). Aquí vivía una segunda copia del mapeo
+                // selector→caja, y dejó de coincidir con la otra en cuanto los botones de barra
+                // empezaron a entrar sin caja: ésta los habría iluminado en la esquina.
+                var enSap = Navigation.LaCajaDeUnaIdentidadDeSap.De(selector,
+                    CajasEnSap?.Invoke() ?? Array.Empty<(string, string, string, System.Windows.Rect)>(),
+                    CajaPorNombreEnUia);
                 if (enSap is not { } caja) return false;
+                _lector.Read();   // el buscador por rótulo del puente necesita la pantalla leída
                 Ui.Senalador.Senalar(caja, etiqueta);
                 return true;
             }
@@ -1340,7 +1458,14 @@ public sealed class SurfaceMapTools
     /// RECORRER EN BATCH: N pasos por llamada con la compuerta de vida antes de cada uno.
     /// Ver <see cref="Navigation.RecorrerSegunElNucleo"/> y docs/plan-batch-sobre-nodos-vivos.md.
     /// </summary>
-    public Func<IReadOnlyList<Navigation.RecorrerSegunElNucleo.Paso>, string>? RecorrerPorElNucleo { get; set; }
+    /// <remarks>
+    /// DEVUELVE EL RESULTADO ENTERO, no solo su prosa, y ese cambio es del 2026-09-03: quien
+    /// comprueba una skill necesita SABER cuántos pasos se anduvieron para decidir si el camino
+    /// quedó certificado (promesa 131). Sacar ese número de la frase sería parsear prosa, y la
+    /// frase existe para una persona, no para un `if`.
+    /// </remarks>
+    public Func<IReadOnlyList<Navigation.RecorrerSegunElNucleo.Paso>,
+        Navigation.RecorrerSegunElNucleo.Resultado>? RecorrerPorElNucleo { get; set; }
 
     /// <summary>El terreno por delante (puerta, niveles) → la cuenta. T3: la consulta de la profundidad.</summary>
     public Func<string, string, string>? TerrenoPorElNucleo { get; set; }
@@ -1456,6 +1581,7 @@ public sealed class SurfaceMapTools
         or "map_open_app" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude" or "map_shot" or "map_scroll"
         or "map_esto_es" or "map_recuerdos" or "map_batch" or "map_ahead"
+        or "map_skills" or "map_skill_run"
         or "file_where" or "file_list" or "file_open" or "file_find";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
@@ -1493,6 +1619,8 @@ public sealed class SurfaceMapTools
             "map_exclude" => Excluir(A("exit")),
             "map_show" => Mostrar(A("exit"), int.TryParse(A("which"), out int cual) ? cual : 0),
             "map_shot" => Foto(),
+            "map_skills" => Skills(),
+            "map_skill_run" => CorrerSkill(A("nombre"), A("datos")),
             // DESPLAZAR ES ACCIONAR, no mirar: va con el resto de manos. Faltaba entero — el modelo
             // contestaba «no puedo scrolear directamente» porque era verdad (2026-08-16).
             "map_esto_es" => EstoEs(A("significado"), A("sobre")),
@@ -1933,14 +2061,34 @@ public sealed class SurfaceMapTools
         return PorElNucleo != null ? PorElNucleo(destino) : "todavía no sé navegar: el núcleo no está conectado.";
     }
 
+    /// <summary>
+    /// Mientras está puesto, cada cosa que se va a pulsar se SEÑALA antes: se enciende su recuadro y
+    /// la carita se pone a su lado.
+    /// </summary>
+    /// <remarks>
+    /// LO PIDIÓ EL DUEÑO EL 2026-09-03, viendo la primera comprobación que narraba bien: «cuando
+    /// hable sobre algún elemento, que vaya y lo señale, acercando la carita al lado de ese
+    /// elemento». Sin eso la narración es correcta y aun así no se puede seguir — se oye de qué
+    /// habla y no se ve cuál es.
+    ///
+    /// SOLO DURANTE LA COMPROBACIÓN, y por eso es una bandera y no el comportamiento normal: en una
+    /// ejecución de verdad lo que se quiere es que la tarea salga, no un recuadro parpadeando en
+    /// cada clic.
+    /// </remarks>
+    public bool SenalarAlActuar { get; set; }
+
     private string Take(string salida, string accionPedida = "", string dondeCreoEstar = "")
     {
         if (salida.Length == 0) return "falta `exit`: qué puerta tomar (su nombre tal como se ve, o su selector)";
         if (RecorrerPorElNucleo == null) return "todavía no sé pulsar: el núcleo no está conectado.";
+        // SE SEÑALA ANTES DE PULSAR, no después: después ya cambió la pantalla y el recuadro caería
+        // sobre lo que haya ahora. Si no se sabe dónde está, no se ilumina nada y se pulsa igual —
+        // señalar es para que el humano siga, no un requisito para actuar.
+        if (SenalarAlActuar) { try { SenalarElemento(salida, salida); } catch { } }
         // TOMAR ES UN BATCH DE UN PASO (gran limpieza, 2026-08-30): la misma escalera de
         // resolución, la misma compuerta de vida, la misma verificación por consecuencia y el
         // mismo aprendizaje. Dos ejecutores de pasos serían dos opiniones del mismo hecho.
-        return RecorrerPorElNucleo(new[] { new Navigation.RecorrerSegunElNucleo.Paso(salida) });
+        return RecorrerPorElNucleo(new[] { new Navigation.RecorrerSegunElNucleo.Paso(salida) }).Cuenta;
     }
 
     /// <summary>

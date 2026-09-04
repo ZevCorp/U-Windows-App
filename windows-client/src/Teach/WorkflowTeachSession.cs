@@ -28,6 +28,36 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
     private WorkflowRecorder? _recorder;
     private TeachSession? _teach;
 
+    // ── LA TERCERA SALIDA DE LA DEMO: la skill local que map_batch sí sabe leer ──────────
+    //
+    // La spec 005 dejó juzgadas SkillEnsenada, AncladorDeVoz y SesionDeDemo (promesas 102, 104,
+    // 105 y 106) y NADIE las llamaba: la demo mandaba sus pasos a Graph y ahí se quedaban, en un
+    // formato que el batch no lee. Esto es el cableado que faltaba.
+    private Teach.SesionDeDemo? _demo;
+    private readonly List<(ObservedStep Paso, long HoraMs)> _observados = new();
+    private readonly List<Navigation.FraseDicha> _frases = new();
+    private System.Diagnostics.Stopwatch? _reloj;
+    private string _dondeEmpezo = "";
+
+    /// <summary>
+    /// Lo que el humano va diciendo mientras enseña, con su hora. Lo alimenta quien oye (la voz);
+    /// esta clase solo lo guarda para que <see cref="Navigation.AncladorDeVoz"/> lo reparta.
+    /// </summary>
+    /// <remarks>
+    /// UN SOLO RELOJ para las frases y para los pasos, y por eso la hora se toma AQUÍ y no la trae
+    /// quien habla: dos relojes distintos harían que el anclaje por cercanía comparara peras con
+    /// manzanas, y el síntoma sería una frase colgada del paso de al lado — imposible de distinguir
+    /// de un error del modelo.
+    /// </remarks>
+    public void Oyo(string frase)
+    {
+        if (_reloj == null || string.IsNullOrWhiteSpace(frase)) return;
+        lock (_frases) _frases.Add(new Navigation.FraseDicha(frase.Trim(), _reloj.ElapsedMilliseconds));
+    }
+
+    /// <summary>La skill que salió de la última demo cerrada, o null. La lee la interfaz.</summary>
+    public Navigation.SkillEnsenada? UltimaSkill { get; private set; }
+
     // Pantallazo por paso (meta visual para el computer-use). Ver StepShotCamera.
     private IUiSurface? _shotSurface;
     private EventHandler<ObservedStep>? _shotHandler;
@@ -40,12 +70,6 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
     /// en su píldora; sacarlo del texto de <see cref="StatusChanged"/> sería parsear prosa.</summary>
     public event EventHandler<int>? PasosEnviados;
 
-    /// <summary>
-    /// ¿Procesar el video con el LLM al detener? Si es false, el video se graba y guarda igual (visible
-    /// en 🎞 Videos) pero NO se sube al LLM para resumir — se salta el paso que da timeout (504). Lo fija
-    /// la UI desde el toggle del panel Backend (Config.ProcessTeachVideo). Ver StopAsync.
-    /// </summary>
-    public bool ProcessVideo { get; set; } = true;
 
     public bool IsRecording => _recorder != null;
 
@@ -73,22 +97,17 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
             throw new InvalidOperationException(
                 "Graph no está configurado: falta la URL o la API key (panel Workflows → Conexión).");
 
-        // Cuenta regresiva a propósito: si detectáramos la superficie ahora mismo, resolvería a ESTA
-        // MISMA ventana de Ü, no a la app que el operador va a enseñar. Le da tiempo a cambiar de foco.
-        for (int s = 3; s > 0; s--)
-        {
-            StatusChanged?.Invoke(this, $"Cambia a la ventana que vas a enseñar… grabando en {s}s");
-            await Task.Delay(1000, ct);
-        }
-
-        // La cuenta atrás es un PLAZO, no una garantía. Si al vencer el foco sigue en Ü, el detector
-        // resuelve «proceso en primer plano U (no es SAP)» y elige UIA — y una enseñanza sobre SAP
-        // grabada por UIA sale inservible: un paso por PULSACIÓN («n», «nw», «nwp», «nwp1») y clics
-        // sobre el Pane opaco, porque UIA no ve dentro de SAP. Ya pasó dos veces con la misma firma
-        // (wf_1785096110817 y wf_1785110820731 del 2026-07-26). Nadie puede enseñar la ventana de Ü,
-        // así que en lugar de dar por buena una respuesta que sabemos falsa, se espera a que el foco
-        // salga — y si no sale, se dice por qué en vez de grabar basura.
-        if (!await WaitForForeignForegroundAsync(ct))
+        // SE ESPERA A QUE PONGAS DELANTE LA APP; no se cuentan segundos (promesa 137). Aquí hubo
+        // hasta el 2026-09-03 una cuenta atrás de 3 s más 4 s de gracia, y ese plazo se comió dos
+        // demos seguidas el mismo día que el micrófono pasó a abrirse solo: Ü saludaba, el humano
+        // contestaba «¿y tú me escuchas?», y a los 7 s esto abortaba. El plazo no era corto — es que
+        // había dejado de ser suficiente cuando arriba apareció una conversación.
+        //
+        // Lo que NO cambia es por qué existe la compuerta: nadie puede enseñar la ventana de Ü. Con
+        // Ü delante el detector elige UIA, y una enseñanza de SAP por UIA sale inservible — un paso
+        // por PULSACIÓN («n», «nw», «nwp», «nwp1») y clics sobre el Pane opaco (wf_1785096110817 y
+        // wf_1785110820731, del 2026-07-26). Antes eso se abortaba; ahora se espera.
+        if (!await EsperarLaAppDelanteAsync(ct))
             throw new InvalidOperationException(
                 "No se puede enseñar la ventana de Ü. Pon delante la aplicación que vas a enseñar "
                 + "(SAP, el navegador…) y vuelve a pulsar Enseñar.");
@@ -101,7 +120,21 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
 
         var availability = surface.Check();
         if (!availability.Available)
-            throw new InvalidOperationException($"[{surface.Name}] {availability.Reason}");
+        {
+            // LA APP DE DELANTE NO DECIDE SI SE PUEDE ENSEÑAR. Medido el 2026-09-02, tres veces
+            // seguidas: con SAP Logon delante —el lanzador, sin sesión abierta— el detector elegía
+            // «sap», Check() decía «no hay ninguna conexión activa» y Enseñar se negaba en redondo.
+            // El Logon es una ventana normal de Windows y UIA la ve entera; la única razón para no
+            // grabarla era que nadie lo intentaba. Se cae al otro mundo y se DICE; si tampoco está
+            // disponible, ahí sí no se puede y se dice por qué.
+            var otra = ReferenceEquals(surface, _sap) ? _uia : _sap;
+            var deLaOtra = otra.Check();
+            if (!deLaOtra.Available)
+                throw new InvalidOperationException($"[{surface.Name}] {availability.Reason}");
+            LogBus.Log("workflow-teach",
+                $"«{surface.Name}» no está disponible ({availability.Reason}): se graba por «{otra.Name}»");
+            surface = otra;
+        }
 
         StatusChanged?.Invoke(this, $"Grabando pasos sobre «{surface.Name}»…");
 
@@ -137,10 +170,23 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
         // orden de llegada, el mismo con el que Graph numera los steps.
         _shotCount = 0;
         _shotSurface = surface;
-        _shotHandler = (_, _) =>
+
+        // DE DÓNDE PARTE LA SKILL: la pantalla que había al empezar a grabar. Es el objetivo del
+        // primer paso al reproducirla, y sin él la skill no sabría dónde se puede correr.
+        _demo = new Teach.SesionDeDemo();
+        _observados.Clear();
+        lock (_frases) _frases.Clear();
+        _reloj = System.Diagnostics.Stopwatch.StartNew();
+        _dondeEmpezo = "";
+        try { _dondeEmpezo = surface.Identity().Url ?? ""; } catch { }
+
+        _shotHandler = (_, paso) =>
         {
             int n = Interlocked.Increment(ref _shotCount);
             Task.Run(() => StepShotCamera.Capture(workflowId, n));
+            // EL PASO SE GUARDA CON SU HORA, del mismo reloj que las frases: es lo que permite
+            // saber qué estaba diciendo el humano mientras tocaba esto (promesa 105).
+            lock (_observados) _observados.Add((paso, _reloj?.ElapsedMilliseconds ?? 0));
         };
         surface.StepObserved += _shotHandler;
 
@@ -169,25 +215,48 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
         if (_recorder == null) throw new InvalidOperationException("No hay ninguna enseñanza de workflow en curso.");
         WorkflowRecorder recorder = _recorder;
         _recorder = null;
+
+        // DÓNDE ACABÓ LA DEMO, leído AHORA y no estimado (promesa 140): es la llegada del último
+        // paso, y la única forma de saberla es mirar la pantalla en el instante de parar. Se lee
+        // ANTES de soltar la superficie, y se insiste un poco: SAP contesta con retraso justo
+        // después de un round-trip.
+        string dondeTermino = "";
+        for (int intento = 0; intento < 4 && dondeTermino.Length == 0; intento++)
+        {
+            try { dondeTermino = _shotSurface?.Identity().Url ?? ""; } catch { }
+            if (dondeTermino.Length == 0) await Task.Delay(200, ct);
+        }
+        LogBus.Log("workflow-teach", dondeTermino.Length > 0
+            ? $"la demo acabó en «{dondeTermino}»"
+            : "✋ no pude leer dónde acabó la demo: la skill no tendrá destino y no se empaquetará");
         DetachShots();
 
+        // LOS PASOS SE ARMAN AQUÍ, ANTES DEL VIDEO, y ese orden es el cambio del 2026-09-03: al
+        // video hay que preguntarle POR ESTOS PASOS (promesa 135), así que tienen que existir antes
+        // de llamarlo. Lo único que todavía no se sabe es el nombre, que sale de lo que Graph
+        // devuelve al cerrar — y un nombre no hace falta para interpretar lo que se hizo.
+        var pasosDeLaDemo = PasosDeLaDemo();
+
+
         string? summary = null;
+        string interpretacion = "";
         if (_teach != null)
         {
             try
             {
                 await _teach.StopAsync(); // finaliza el mp4 en disco → visible en 🎞 Videos, se procese o no
 
-                if (ProcessVideo)
-                {
-                    StatusChanged?.Invoke(this, "Procesando video de contexto…");
-                    summary = await _teach.ProcessAsync(ct);
-                }
-                else
-                {
-                    LogBus.Log("workflow-teach", "procesamiento de video con IA DESACTIVADO: se graba el video pero no se manda al LLM");
-                    StatusChanged?.Invoke(this, "Video guardado sin procesar con IA (míralo en 🎞 Videos).");
-                }
+                // EL VIDEO SIEMPRE SE PROCESA (decisión del dueño, 2026-09-03). Tenía un
+                // interruptor en el panel para esquivar los 504 de flujos largos, y un interruptor
+                // que apaga la mitad de lo que la demo aprende es una trampa: quien lo deje apagado
+                // se lleva demos mudas sin enterarse. Si el proceso falla, se dice y la enseñanza
+                // sigue con los pasos y lo narrado — que es lo que la promesa 128 protege.
+                StatusChanged?.Invoke(this, "Procesando video de contexto…");
+                var leido = await _teach.ProcessAsync(
+                    Teach.LoQueSePregunta.De(new Navigation.SkillEnsenada(
+                        "demo", "", _dondeEmpezo, pasosDeLaDemo)), ct);
+                summary = leido.Resumen;
+                interpretacion = leido.Interpretacion;
             }
             catch (Exception ex)
             {
@@ -210,8 +279,185 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
             }
         }
 
+        // EL SEGUNDO PELDAÑO (promesa 136): si el video no llegó a interpretar —sin saldo, 504, sin
+        // red—, el mismo juicio se pide con los pasos y lo narrado, que no necesitan ver la
+        // pantalla. Debajo sigue estando la regla del narrado, que es determinista.
+        var comoQuedo = new Navigation.SkillEnsenada("demo", "", _dondeEmpezo, pasosDeLaDemo);
+        if (Teach.LoQueSePregunta.SinPantalla(comoQuedo, interpretacion))
+        {
+            StatusChanged?.Invoke(this, "El video no pudo; interpreto lo que hiciste y dijiste…");
+            interpretacion = await TeachSession.InterpretarPasosAsync(
+                _backend, Teach.LoQueSePregunta.De(comoQuedo), _dondeEmpezo, ct);
+        }
+
         StatusChanged?.Invoke(this, "Cerrando la grabación y pidiéndole a Graph que la estructure…");
-        return await recorder.StopAsync(ct);
+        var terminado = await recorder.StopAsync(ct);
+
+        // ── LA SKILL, aquí y no antes: hace falta el resumen de Graph para poder nombrarla ──
+        EmpaquetarLaSkill(terminado, summary, pasosDeLaDemo, interpretacion, dondeTermino);
+        return terminado;
+    }
+
+    /// <summary>
+    /// De lo observado a una skill en disco. Es la tercera salida de la demo, y la única que
+    /// <c>map_batch</c> sabe leer.
+    /// </summary>
+    /// <remarks>
+    /// LA LLEGADA DE UN PASO ES DÓNDE ESTABA EL SIGUIENTE. Cada <c>ObservedStep</c> trae la
+    /// superficie en la que OCURRIÓ, no a la que llevó — para los clics se lee antes de actuar, a
+    /// propósito, porque un clic que navega tarda lo bastante como para leer ya la pantalla nueva.
+    /// Así que la llegada del paso N es la superficie del paso N+1, y la del último es donde
+    /// acabamos. No se estima nada: es la cadena que la propia demo observó.
+    ///
+    /// EL NOMBRE NO SE PIDE EN VOZ ALTA (decisión del dueño, 2026-09-02: «no me interesa que Ü
+    /// hable el título»). Sale de lo que ya se sabe —app, ventana, cuándo, cuántos pasos— con
+    /// <see cref="Workflows.NombreDeWorkflow"/>, que es la pieza que la promesa 108 juzga; y la
+    /// descripción, del resumen de Graph solo si NO es relleno.
+    ///
+    /// UN FALLO AQUÍ NO TUMBA LA ENSEÑANZA: el workflow ya está en Graph y el video en disco. Lo
+    /// que se pierde es la skill local, y se DICE — no se traga.
+    /// </remarks>
+    private void EmpaquetarLaSkill(FinishResponse terminado, string? resumenDelVideo,
+        IReadOnlyList<Navigation.PasoEnsenado> pasos, string interpretacion, string dondeTermino)
+    {
+        var demo = _demo;
+        _demo = null;
+        if (demo == null) return;
+
+        try
+        {
+            if (pasos.Count == 0)
+            {
+                LogBus.Log("workflow-teach", "la demo no dejó ningún paso observado: no hay skill que empaquetar");
+                return;
+            }
+            var voz = Navigation.AncladorDeVoz.Ancla(
+                LasFrases(), LasHoras());
+
+            string nombre = NombreDeLaSkill(terminado);
+            string descripcion = Workflows.NombreDeWorkflow.EsRelleno(terminado?.Summary)
+                ? "" : (terminado?.Summary ?? "").Trim();
+            if (descripcion.Length == 0 && !string.IsNullOrWhiteSpace(resumenDelVideo))
+                descripcion = resumenDelVideo!.Trim();
+            if (descripcion.Length == 0 && voz.Contexto.Length > 0) descripcion = voz.Contexto;
+
+            demo.Pasos.AddRange(pasos);
+            var recienHecha = Navigation.SkillEnsenada.Empaquetar(
+                nombre, descripcion, _dondeEmpezo, pasos, dondeTermino);
+
+            // EL CRITERIO DEL MODELO, APLICADO (promesa 134). La regla del narrado ya dejó sus
+            // huecos dentro de `recienHecha`; esto los corrige donde el modelo opinó y los deja
+            // intactos donde no. Si el video no llegó —429, 504, sin red— `Leer` devuelve «no
+            // opinó» y la skill sale exactamente igual que antes de existir esta línea.
+            if (recienHecha != null)
+            {
+                var lo = Navigation.LoQueElModeloInterpreta.Leer(interpretacion, recienHecha);
+                if (Navigation.LoQueElModeloInterpreta.HuboInterpretacion(lo))
+                {
+                    int antes = recienHecha.Huecos.Count;
+                    recienHecha = recienHecha.ConLoInterpretado(lo);
+                    LogBus.Log("workflow-teach",
+                        $"el modelo interpretó la demo: {antes} hueco(s) por la regla → "
+                        + $"{recienHecha.Huecos.Count} tras su criterio, y {lo.Recuerdos.Count} "
+                        + "sugerencia(s) de significado para el repaso");
+                }
+                else LogBus.Log("workflow-teach",
+                    "el modelo no llegó a interpretar la demo: se queda lo que dedujo la regla del "
+                    + "narrado, que ya está en disco");
+            }
+
+            demo.Skill = recienHecha;
+            demo.Cerrar();
+
+            var entrega = demo.Entrega();
+            if (entrega?.Skill == null)
+            {
+                LogBus.Log("workflow-teach", $"no se pudo empaquetar la skill (pasos={pasos.Count}, "
+                    + $"empieza en «{_dondeEmpezo}», acaba en «{dondeTermino}»): sin nombre, sin punto "
+                    + "de partida o sin destino no es reproducible");
+                return;
+            }
+
+            string archivo = entrega.Skill.Guardar(Navigation.SkillEnsenada.CarpetaPorDefecto);
+            UltimaSkill = entrega.Skill;
+            LogBus.Log("workflow-teach",
+                $"skill «{entrega.Skill.Nombre}» guardada: {entrega.Skill.Pasos.Count} paso(s) · "
+                + $"{entrega.Skill.Huecos.Count} hueco(s) · empieza en «{entrega.Skill.DondeEmpieza}» · "
+                + $"acaba en «{entrega.Skill.DondeTermina}» · "
+                + $"SIN comprobar · {archivo}");
+            StatusChanged?.Invoke(this,
+                $"Aprendí «{entrega.Skill.Nombre}»: {entrega.Skill.Pasos.Count} pasos y "
+                + $"{entrega.Skill.Huecos.Count} datos. Pulsa «Comprobar aprendizaje» para poder usarla.");
+        }
+        catch (Exception ex)
+        {
+            // La cadena entera: un catch mudo aquí convertiría «no supe empaquetar» en «no había nada».
+            var porque = new System.Text.StringBuilder();
+            for (var x = ex; x != null; x = x.InnerException)
+                porque.Append(porque.Length > 0 ? " ← " : "").Append($"{x.GetType().Name}: {x.Message}");
+            LogBus.Log("workflow-teach", $"la skill no se pudo empaquetar: {porque}");
+        }
+    }
+
+    /// <summary>
+    /// Lo observado, vuelto pasos con su llegada y lo que se dijo en cada uno.
+    /// </summary>
+    /// <remarks>
+    /// LA LLEGADA DE UN PASO ES DÓNDE ESTABA EL SIGUIENTE. Cada <c>ObservedStep</c> trae la
+    /// superficie en la que OCURRIÓ, no a la que llevó — para los clics se lee antes de actuar, a
+    /// propósito, porque un clic que navega tarda lo bastante como para leer ya la pantalla nueva.
+    /// Así que la llegada del paso N es la superficie del paso N+1, y la del último es donde
+    /// acabamos. No se estima nada: es la cadena que la propia demo observó.
+    /// </remarks>
+    private List<Navigation.PasoEnsenado> PasosDeLaDemo()
+    {
+        List<(ObservedStep Paso, long HoraMs)> observados;
+        lock (_observados) observados = _observados.ToList();
+
+        // LO DICHO, REPARTIDO POR CERCANÍA (promesa 105). Lo que no le quede cerca de ningún paso
+        // va al contexto de la skill, no a un paso cualquiera.
+        var voz = Navigation.AncladorDeVoz.Ancla(LasFrases(), observados.Select(o => o.HoraMs).ToList());
+
+        var pasos = new List<Navigation.PasoEnsenado>();
+        for (int i = 0; i < observados.Count; i++)
+        {
+            var o = observados[i].Paso;
+            string llegada = i + 1 < observados.Count ? (observados[i + 1].Paso.Surface ?? "") : "";
+            string selector = (o.Selector ?? "").Trim();
+            string texto = o.ActionType is "input" or "select"
+                ? (o.SelectedValue ?? o.Value ?? "").Trim()
+                : "";
+            string dicho = i < voz.DichoPorPaso.Count ? voz.DichoPorPaso[i] : "";
+            pasos.Add(new Navigation.PasoEnsenado(selector, texto, llegada.Trim(), dicho));
+        }
+        return pasos;
+    }
+
+    private List<Navigation.FraseDicha> LasFrases()
+    {
+        lock (_frases) return _frases.ToList();
+    }
+
+    private List<long> LasHoras()
+    {
+        lock (_observados) return _observados.Select(o => o.HoraMs).ToList();
+    }
+
+    /// <summary>El nombre de la skill, por lo que se SABE de ella y nunca por el relleno del LLM.</summary>
+    private string NombreDeLaSkill(FinishResponse? terminado)
+    {
+        try
+        {
+            if (terminado?.Workflow is { } wf)
+            {
+                string derivado = Workflows.NombreDeWorkflow.Derivar(wf);
+                if (derivado.Trim().Length > 0) return derivado.Trim();
+            }
+        }
+        catch (Exception e) { LogBus.Log("workflow-teach", $"no pude derivar el nombre: {e.Message}"); }
+
+        string app = Workflows.NombreDeWorkflow.AppDe(_dondeEmpezo);
+        return (app.Length > 0 ? app : "tarea") + "-" + DateTime.Now.ToString("MMdd-HHmm");
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -220,35 +466,58 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
 
     /// <summary>
-    /// Espera a que el primer plano sea una ventana AJENA a Ü. Devuelve false si tras la gracia sigue
-    /// siendo la nuestra. La gracia es corta y el sondeo rápido: en el caso normal —el operador ya
-    /// cambió de ventana durante la cuenta atrás— esto sale en el primer sondeo y no cuesta nada.
+    /// Espera a que el primer plano sea una ventana AJENA a Ü, contándolo mientras espera.
+    /// Promesa 137. Devuelve false solo si se llega al techo.
     /// </summary>
-    private static async Task<bool> WaitForForeignForegroundAsync(CancellationToken ct)
+    /// <remarks>
+    /// QUIÉN DECIDE ES <see cref="ElArranqueDeLaDemo"/>, que es puro y está juzgado por el contrato.
+    /// Aquí solo se mira la ventana de delante y se duerme: el criterio —empezar, seguir, rendirse—
+    /// no puede vivir enredado con las llamadas a user32, porque entonces la única forma de probarlo
+    /// sería con una pantalla y dos manos.
+    ///
+    /// EL SONDEO ES RÁPIDO Y LO QUE SE DICE ES LENTO: se mira cada 150 ms para empezar en cuanto
+    /// aparezca la app, pero el mensaje solo se repite cuando cambia — un estado que parpadea
+    /// veinte veces por segundo no informa, molesta.
+    /// </remarks>
+    private async Task<bool> EsperarLaAppDelanteAsync(CancellationToken ct)
     {
-        const int GraceMs = 4000, PollMs = 150;
+        const int PollMs = 150;
         int ownPid = Environment.ProcessId;
+        string ultimoDicho = "";
 
-        for (int waited = 0; waited <= GraceMs; waited += PollMs)
+        for (int esperado = 0; ; esperado += PollMs)
         {
+            bool nuestro = true;
             IntPtr fg = GetForegroundWindow();
             if (fg != IntPtr.Zero)
             {
                 uint pid = 0;
                 try { GetWindowThreadProcessId(fg, out pid); } catch { }
-                if (pid != 0 && pid != ownPid)
-                {
-                    if (waited > 0) LogBus.Log("workflow-teach", $"el foco salió de Ü tras {waited} ms extra");
-                    return true;
-                }
+                if (pid != 0 && pid != ownPid) nuestro = false;
             }
-            if (waited < GraceMs) await Task.Delay(PollMs, ct);
-        }
 
-        LogBus.Log("workflow-teach",
-            $"✋ el primer plano sigue siendo Ü tras {GraceMs} ms de gracia — NO se graba: "
-            + "la detección habría elegido «uia» y una enseñanza de SAP por UIA sale inservible");
-        return false;
+            var paso = ElArranqueDeLaDemo.Juzgar(nuestro, esperado, ElArranqueDeLaDemo.TechoPorDefectoMs);
+            if (paso.Decir != ultimoDicho)
+            {
+                ultimoDicho = paso.Decir;
+                StatusChanged?.Invoke(this, paso.Decir);
+            }
+
+            if (paso.Empezar)
+            {
+                if (esperado > 0)
+                    LogBus.Log("workflow-teach", $"el foco salió de Ü tras {esperado} ms de espera");
+                return true;
+            }
+            if (!paso.Seguir)
+            {
+                LogBus.Log("workflow-teach",
+                    $"✋ el primer plano siguió siendo Ü {esperado} ms — NO se graba: la detección "
+                    + "habría elegido «uia» y una enseñanza de SAP por UIA sale inservible");
+                return false;
+            }
+            await Task.Delay(PollMs, ct);
+        }
     }
 
     /// <summary>Suelta la cámara de pasos (idempotente).</summary>

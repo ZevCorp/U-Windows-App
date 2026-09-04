@@ -193,6 +193,12 @@ public sealed class ConversacionEnVivo : IDisposable
     /// <summary>El turno acabó: lo dicho queda fijo y lo siguiente empieza en su propia línea.</summary>
     public event Action? TurnoCerrado;
 
+    /// <summary>
+    /// Una frase COMPLETA del humano, para quien esté aprendiendo de ella. La usa la sesión de
+    /// enseñanza para anclar lo dicho a cada paso; nadie más debería necesitarla.
+    /// </summary>
+    public event Action<string>? DijoElUsuario;
+
     /// <summary>Llamadas que el modelo retiró: ni se ejecutan ni se responden.</summary>
     private readonly HashSet<string> _canceladas = new();
     private readonly object _candadoCancel = new();
@@ -1021,6 +1027,46 @@ public sealed class ConversacionEnVivo : IDisposable
     /// micrófono delante, que es la diferencia entre una función verificable y una que hay que
     /// creerse.
     /// </summary>
+    /// <summary>
+    /// Hace que Ü DIGA esto, con su propia voz. Promesa 142.
+    /// </summary>
+    /// <remarks>
+    /// Durante una comprobación quien decide qué se dice es el PILOTO, que es otro cerebro. Sin
+    /// esto, su narración salía por el sintetizador de Windows —«habló con una voz diferente, como
+    /// de Windows», el dueño, 2026-09-03— y Ü sonaba a dos personas distintas según quién hablara.
+    ///
+    /// Se le DICTA en vez de mandárselo como mensaje del usuario: un mensaje de usuario le haría
+    /// contestar a lo que lee, y aquí no hay nada que contestar — hay algo que decir.
+    /// </remarks>
+    public async Task DiEstoAsync(string texto)
+    {
+        if (!Viva || _ws?.State != WebSocketState.Open || string.IsNullOrWhiteSpace(texto)) return;
+        await EnviarAsync(
+            _protocolo.PedirRespuesta($"Di exactamente esto, sin añadir nada ni comentarlo: {texto.Trim()}"),
+            _cts?.Token ?? CancellationToken.None);
+    }
+
+    /// <summary>Las instrucciones de siempre, para poder VOLVER a ellas tras un modo especial.</summary>
+    internal static string InstruccionesNormales => Instrucciones;
+
+    /// <summary>
+    /// Cambia quién es Ü a mitad de sesión: otras instrucciones y otro catálogo. Promesa 138.
+    /// </summary>
+    /// <remarks>
+    /// Es el MISMO mensaje de apertura, reenviado: el servidor lo acepta cuantas veces haga falta y
+    /// sustituye instrucciones y herramientas sin cortar el audio. Así 🎓 convierte al asistente en
+    /// aprendiz sin cerrar el micrófono que acaba de abrir —cerrarlo y reabrirlo costaba cuatro
+    /// segundos y un saludo, medido el 2026-09-03—, y al terminar lo devuelve tal como estaba.
+    /// </remarks>
+    public async Task CambiarModoAsync(string instrucciones, IReadOnlyList<Utensilio> utensilios)
+    {
+        if (!Viva || _ws?.State != WebSocketState.Open) return;
+        foreach (string msg in _protocolo.Apertura(instrucciones, utensilios, _pase ?? ""))
+            await EnviarAsync(msg, _cts?.Token ?? CancellationToken.None);
+        LogBus.Log("voz-viva", $"modo cambiado: {utensilios.Count} herramienta(s), "
+            + $"instrucciones de {instrucciones.Length} car.");
+    }
+
     public async Task EnviarTextoAsync(string texto)
     {
         if (!Viva || _ws?.State != WebSocketState.Open || string.IsNullOrWhiteSpace(texto)) return;
@@ -1201,6 +1247,12 @@ public sealed class ConversacionEnVivo : IDisposable
                 TurnoCerrado?.Invoke();
                 if (_fraseU.Length > 0) LogBus.Log("voz-viva", $"Ü dijo: {_fraseU}");
                 if (_fraseUsuario.Length > 0) LogBus.Log("voz-viva", $"usuario dijo: {_fraseUsuario}");
+                // LO QUE EL HUMANO DIJO, PARA QUIEN ESTÉ APRENDIENDO. Mientras se enseña con 🎓,
+                // cada frase completa del operador es candidata a explicar el paso que estaba
+                // dando: la frase se entrega al oyente y él la ancla por tiempo (promesa 105). Se
+                // emite al CERRAR la frase y no trozo a trozo — un anclaje sobre media palabra
+                // colgaría «aquí va el» de un campo.
+                if (_fraseUsuario.Length > 0) DijoElUsuario?.Invoke(_fraseUsuario.ToString());
                 // SOLO SE RETOMA SI DE VERDAD HABLÓ en este turno. Un turno que fue únicamente una
                 // llamada a herramienta no ha contado nada todavía, y empujar ahí lo atropellaría
                 // — que es justo lo que la regla de uno-en-uno existe para impedir.

@@ -70,10 +70,11 @@ public sealed class ManoPorMundo
 public sealed class EscribirPorMundo
 {
     private readonly Func<string> _donde;
-    private readonly Func<string, bool> _uia;
-    private readonly Func<string, bool> _sap;
+    private readonly Func<string, string, bool> _uia;
+    private readonly Func<string, string, bool> _sap;
 
-    public EscribirPorMundo(Func<string> donde, Func<string, bool> uia, Func<string, bool> sap)
+    public EscribirPorMundo(Func<string> donde,
+        Func<string, string, bool> uia, Func<string, string, bool> sap)
     {
         _donde = donde;
         _uia = uia;
@@ -81,18 +82,58 @@ public sealed class EscribirPorMundo
     }
 
     /// <summary>
-    /// Escribir por el lápiz del mundo en el que estamos. Devuelve si el texto quedó puesto.
+    /// Escribir por el lápiz del mundo en el que estamos, EN SU CAMPO. Devuelve si el texto quedó
+    /// puesto. <paramref name="campo"/> puede venir vacío: entonces va a donde esté el foco.
     /// </summary>
     /// <remarks>
     /// LA UBICACIÓN DECIDE (como el sentido): dentro de una sesión SAP, teclear por UIA hacia «el
     /// foco de Windows» es mandar letras al aire — lo exigió la prueba real del 2026-08-26, el
     /// batch [«comando» → «NWP1» → «Continuar»] parado en «no pude escribir». En SAP el texto se
     /// le pone AL CAMPO por su identidad (.Text) y se relee para comprobar que quedó.
+    ///
+    /// EL CAMPO LLEGA HASTA AQUÍ desde el 2026-09-03 (promesa 133). Antes solo viajaba el texto y
+    /// quien cableaba adivinaba el campo por «el último elemento pulsado»: un respaldo que acierta
+    /// mientras el paso anterior sea justo ese campo, y falla mudo en cuanto no lo es — que es
+    /// exactamente lo que pasa al reproducir una skill, donde el paso YA SABE dónde escribió la
+    /// demo. Adivinar teniendo el dato en la mano es cómo se pierden los datos en silencio.
     /// </remarks>
-    public bool Escribe(string texto) =>
+    public bool Escribe(string campo, string texto) =>
         (_donde() ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)
-            ? _sap(texto)
-            : _uia(texto);
+            ? _sap(campo ?? "", texto)
+            : _uia(campo ?? "", texto);
+}
+
+/// <summary>
+/// PULSAR UNA TECLA POR EL MUNDO QUE TOCA. Promesa 132 (spec 009, segunda tanda).
+/// </summary>
+/// <remarks>
+/// EL QUINTO VERBO DEL DESPACHO, y como los otros cuatro vive AQUÍ y en ningún otro sitio (regla del
+/// dueño, 2026-08-26): nadie más tiene que saber en qué mundo está.
+///
+/// Y LOS DOS MUNDOS NO PULSAN IGUAL, ni de lejos. En SAP, Enter y las F son COMANDOS del servidor:
+/// se mandan por <c>sendVKey</c>, que dispara el round-trip aunque el foco esté en otra parte.
+/// Simular la tecla física ahí es esperar que Windows y SAP estén de acuerdo sobre quién tiene el
+/// foco — y cuando no lo están, la tecla se pierde sin decirlo. Fuera de SAP no hay servidor a
+/// quien mandarle un comando: la tecla va al teclado, y punto.
+/// </remarks>
+public sealed class TeclearPorMundo
+{
+    private readonly Func<string> _donde;
+    private readonly Func<string, bool> _uia;
+    private readonly Func<string, bool> _sap;
+
+    public TeclearPorMundo(Func<string> donde, Func<string, bool> uia, Func<string, bool> sap)
+    {
+        _donde = donde;
+        _uia = uia;
+        _sap = sap;
+    }
+
+    /// <summary>Pulsa la tecla por la vía del mundo en el que estamos. Devuelve si se pudo.</summary>
+    public bool Teclea(string tecla) =>
+        (_donde() ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)
+            ? _sap(tecla ?? "")
+            : _uia(tecla ?? "");
 }
 
 /// <summary>

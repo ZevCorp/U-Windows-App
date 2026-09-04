@@ -84,7 +84,10 @@ public interface IProtocolo
     /// recibe un resultado —como hacía Gemini— y no en falso: mandar esto de más no es gratis, abre
     /// una respuesta que puede pisar a otra que ya estuviera en curso.
     /// </summary>
-    string PedirRespuesta();
+    /// <param name="instrucciones">Qué decir, si se le quiere dictar. Vacío —lo normal— es pedirle
+    /// turno y que conteste lo que crea. Con texto, Ü lo dice con SU voz: es lo que permite que
+    /// narre un recorrido que decide otro (el piloto) sin que hable el sintetizador del sistema.</param>
+    string PedirRespuesta(string instrucciones = "");
 
     /// <summary>Qué está diciendo el servidor, en hechos. Vacío si no dice nada que nos toque.</summary>
     IReadOnlyList<Hecho> Leer(JsonElement mensaje);

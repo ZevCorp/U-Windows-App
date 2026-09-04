@@ -29,8 +29,16 @@ public sealed class RecorrerSegunElNucleo
 {
     /// <summary>Un paso: pulsar <paramref name="Exit"/> (etiqueta o selector), o escribir
     /// <paramref name="Texto"/> si viene con texto. <paramref name="Llegada"/> es opcional y viene
-    /// de una skill enseñada: A DÓNDE llegó ese paso en la demostración — y si viene, SE EXIGE.</summary>
-    public sealed record Paso(string Exit, string Texto = "", string Llegada = "");
+    /// de una skill enseñada: A DÓNDE llegó ese paso en la demostración — y si viene, SE EXIGE.
+    /// <paramref name="Tecla"/> es la que se pulsa DESPUÉS de escribir (o sola, si no hay nada más).</summary>
+    /// <remarks>
+    /// LA TECLA NO ES UNA PUERTA, y esto costó una corrida entera. El grabador emite el Enter como
+    /// un paso con selector «key:enter», y el batch resuelve los pasos contra el terreno: no hay
+    /// ninguna puerta llamada «enter» en ningún sitio, así que TODA skill de SAP moría en el primer
+    /// paso — «hice 0 de 4 y paré en el paso 1: key:enter no lo conozco» (2026-09-03 12:14:08).
+    /// Pulsar una tecla es una ACCIÓN sobre lo que ya está, no un elemento que haya que encontrar.
+    /// </remarks>
+    public sealed record Paso(string Exit, string Texto = "", string Llegada = "", string Tecla = "");
 
     /// <summary>Qué pasó: cuántos se hicieron, de cuántos, dónde quedamos, y el relato honesto.</summary>
     public readonly record struct Resultado(int Hechos, int Total, string Donde, bool Termino, string Cuenta);
@@ -38,19 +46,31 @@ public sealed class RecorrerSegunElNucleo
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
     private readonly PulsarSegunElNucleo _pulsar;
-    private readonly Func<string, bool>? _escribir;
+    private readonly Func<string, string, bool>? _escribir;
+    private readonly Func<string, bool>? _teclear;
     private readonly Func<bool> _hayQueParar;
 
-    /// <param name="escribir">Texto → ¿se pudo escribir en el campo con foco? Lo hace quien sabe de UIA.</param>
+    /// <param name="escribir">(campo, texto) → ¿se pudo escribir? Lo hace quien sabe del mundo.</param>
     /// <param name="hayQueParar">El freno. Se pregunta antes de CADA paso, no al empezar la tanda.</param>
+    /// <param name="teclear">Nombre de tecla («enter», «f3») → ¿se pudo pulsar? Sin esto, un paso
+    /// con tecla no se ejecuta y se dice, en vez de darse por hecho.</param>
+    /// <remarks>
+    /// EL CAMPO VIAJA CON EL TEXTO (promesa 133). Hasta el 2026-09-03 este delegado recibía SOLO el
+    /// texto y escribía donde estuviera el foco; quien cableaba adivinaba el campo por el último
+    /// elemento pulsado, con un respaldo que fallaba en cuanto el paso anterior no era ese campo.
+    /// Adivinar cuando la respuesta ya viaja dentro del paso es cómo se pierden los datos en
+    /// silencio: el paso SABE en qué campo escribió la demo.
+    /// </remarks>
     public RecorrerSegunElNucleo(Nucleo.Grafo grafo, Func<string> donde, PulsarSegunElNucleo pulsar,
-        Func<string, bool>? escribir = null, Func<bool>? hayQueParar = null)
+        Func<string, string, bool>? escribir = null, Func<bool>? hayQueParar = null,
+        Func<string, bool>? teclear = null)
     {
         _grafo = grafo;
         _donde = donde;
         _pulsar = pulsar;
         _escribir = escribir;
         _hayQueParar = hayQueParar ?? (() => false);
+        _teclear = teclear;
     }
 
     /// <summary>Cuánto se espera a que un elemento aparezca vivo antes de rendirse: la pantalla
@@ -84,8 +104,29 @@ public sealed class RecorrerSegunElNucleo
             {
                 if (_escribir == null)
                     return Parcial(i, pasos.Count, "todavía no sé escribir dentro de un batch.", conVivos: false);
-                if (!_escribir(paso.Texto))
-                    return Parcial(i, pasos.Count, $"no pude escribir «{paso.Texto}».", conVivos: true);
+                if (!_escribir(paso.Exit, paso.Texto))
+                    return Parcial(i, pasos.Count,
+                        $"no pude escribir «{paso.Texto}»"
+                        + (paso.Exit.Length > 0 ? $" en «{paso.Exit}»." : "."), conVivos: true);
+
+                // ESCRIBIR NO NAVEGA; la tecla que va detrás, sí. Por eso el Enter viaja pegado al
+                // texto y la llegada del paso es la SUYA: exigir aquí la pantalla de antes sería
+                // exigir no haberse movido, y exigirla sin haber pulsado el Enter sería exigir un
+                // salto que nadie dio.
+                if (paso.Tecla.Length > 0 && !Teclea(paso.Tecla, out string porque))
+                    return Parcial(i, pasos.Count, porque, conVivos: true);
+
+                if (!LlegoDondeTocaba(paso, out string desvio))
+                    return Parcial(i, pasos.Count, desvio, conVivos: true);
+                continue;
+            }
+
+            // UNA TECLA SOLA es una acción sobre lo que ya está delante —un F3, un F8—: no hay
+            // elemento que buscar, así que no pasa por la compuerta de vida. Su llegada sí se exige.
+            if (paso.Exit.Length == 0 && paso.Tecla.Length > 0)
+            {
+                if (!Teclea(paso.Tecla, out string porque)) return Parcial(i, pasos.Count, porque, conVivos: true);
+                if (!LlegoDondeTocaba(paso, out string desvio)) return Parcial(i, pasos.Count, desvio, conVivos: true);
                 continue;
             }
 
@@ -129,6 +170,11 @@ public sealed class RecorrerSegunElNucleo
                     + $"«{paso.Llegada}»: eso NO es haberlo hecho, y no sigo sobre una pantalla que "
                     + "no es la del plan.", conVivos: true);
 
+            // La tecla que sigue a un clic (raro, pero la demo puede haberla dado) va después de
+            // haber juzgado la llegada del clic: son dos hechos distintos y se cuentan aparte.
+            if (paso.Tecla.Length > 0 && !Teclea(paso.Tecla, out string tras))
+                return Parcial(i, pasos.Count, tras, conVivos: true);
+
             // Que la pantalla no cambiara NO para el batch: «Guardar» o «Cortar» hacen su trabajo
             // sin ir a ninguna parte. Quien juzga si el plan sigue teniendo sentido es la compuerta
             // del paso SIGUIENTE — que mira el terreno, no la intención.
@@ -137,6 +183,48 @@ public sealed class RecorrerSegunElNucleo
         string fin = _donde() ?? "";
         return new(pasos.Count, pasos.Count, fin, true,
             $"hice los {pasos.Count} paso(s): quedaste en «{fin}».");
+    }
+
+    /// <summary>
+    /// Pulsa la tecla, o dice POR QUÉ no pudo — y distingue las dos causas, que le sirven distinto
+    /// a quien replanifica: «nadie me enseñó a teclear aquí» no es «la tecla no entró».
+    /// </summary>
+    private bool Teclea(string tecla, out string porque)
+    {
+        if (_teclear == null)
+        {
+            porque = $"el paso pide pulsar «{tecla}» y en este montaje no sé teclear.";
+            return false;
+        }
+        if (!_teclear(tecla)) { porque = $"no pude pulsar «{tecla}»."; return false; }
+        porque = "";
+        return true;
+    }
+
+    /// <summary>
+    /// ¿Aterrizó donde la demostración aterrizaba? La misma exigencia de la promesa 103, ahora
+    /// también para escribir y teclear: un Enter que no cambia de pantalla no hizo su trabajo, y
+    /// seguir el plan sobre la pantalla de antes es el «29 de 30» del salto-adelante otra vez.
+    /// </summary>
+    private bool LlegoDondeTocaba(Paso paso, out string desvio)
+    {
+        desvio = "";
+        if (paso.Llegada.Length == 0) return true;
+
+        // La pantalla nueva tarda en pintarse y en ser leída: declarar el desvío sin esperar sería
+        // juzgar la de antes, que es el mismo desfase que la compuerta evita antes de pulsar.
+        string donde = "";
+        for (int ido = 0; ido <= EsperaMaximaMs; ido += 120)
+        {
+            donde = _donde() ?? "";
+            if (paso.Llegada.Equals(donde, StringComparison.OrdinalIgnoreCase)) return true;
+            System.Threading.Thread.Sleep(120);
+        }
+
+        string que = paso.Texto.Length > 0 ? $"escribí «{paso.Texto}»" : $"pulsé «{paso.Tecla}»";
+        desvio = $"{que} y quedé en «{donde}», pero la demostración llegaba a «{paso.Llegada}»: eso "
+               + "NO es haberlo hecho, y no sigo sobre una pantalla que no es la del plan.";
+        return false;
     }
 
     /// <summary>

@@ -72,12 +72,6 @@ public sealed class Config
     /// </summary>
     public bool Muted { get; set; }
 
-    /// <summary>
-    /// Al enseñar, ¿mandar el video al LLM para resumirlo (contexto del workflow)? Ese paso es el que da
-    /// timeout (504) en Vercel. Con esto en false, la enseñanza NO procesa el video con IA —el video
-    /// igual se graba a disco y se ve en 🎞 Videos, y el workflow se guarda con sus pasos—. Default true.
-    /// </summary>
-    public bool ProcessTeachVideo { get; set; } = true;
 
     /// <summary>
     /// Tema de la carita (claro/oscuro), que se alterna manteniéndola oprimida. Se persiste para que

@@ -167,7 +167,23 @@ public sealed class ProtocoloOpenAI : IProtocolo
     /// entre que una herramienta sirva para algo o no. Quien llama manda esto UNA vez por tanda —
     /// mandarlo por cada resultado abriría varias respuestas a la vez y se pisarían.
     /// </summary>
-    public string PedirRespuesta() => JsonSerializer.Serialize(new { type = "response.create" });
+    /// <remarks>
+    /// SIN TEXTO ES LA DE SIEMPRE, y esa rama no se toca: pedir turno es lo que hace el resto de la
+    /// conversación, y meterle instrucciones a todas convertiría cada respuesta en un dictado.
+    ///
+    /// CON TEXTO, Ü lo dice con SU voz. Nació el 2026-09-03: durante una comprobación quien decide
+    /// qué se dice es el piloto —otro cerebro—, y el resumen salía por el sintetizador de Windows
+    /// porque la voz viva estaba cerrada. El dueño lo oyó al instante: «habló con una voz diferente,
+    /// como de Windows». Un asistente con dos voces no es un detalle de acabado: suena a otro.
+    /// </remarks>
+    public string PedirRespuesta(string instrucciones = "") =>
+        string.IsNullOrWhiteSpace(instrucciones)
+            ? JsonSerializer.Serialize(new { type = "response.create" })
+            : JsonSerializer.Serialize(new
+            {
+                type = "response.create",
+                response = new { instructions = instrucciones },
+            });
 
     public IReadOnlyList<Hecho> Leer(JsonElement m)
     {
