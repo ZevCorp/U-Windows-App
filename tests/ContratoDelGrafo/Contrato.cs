@@ -432,6 +432,19 @@ internal static class Contrato
         Prueba("161. Ü no anuncia lo que va a hacer: sus instrucciones prohíben el futuro, mandan hablar en pasado y solo cuando hay algo que decir", UNoAnunciaLoQueVaAHacer);
         Prueba("159. la ventana se agarra por el borde que se VE y no por el de su ventana —que vive 24 px más afuera, en el hueco de la sombra—, y en una esquina manda la esquina: redimensionar en una dirección donde se esperaban dos se siente como que la ventana se resiste", LaVentanaSeAgarraPorDondeSeVe);
 
+
+        // FUERA LAS PASTILLAS Y LOS CARTELES (spec 011, 2026-09-06). Rescate selectivo de la rama
+        // 008 tras probarla a mano: entran las pastillas fuera, el halo alrededor de la carita y
+        // escribirle sin boton; se quedan fuera el anillo, su modelo de gestos —main ya decidio lo
+        // contrario en la 147— y los ojos siguiendo al cursor. Y de paso se apagan los 44 textos
+        // que asomaban al pasar el raton, que es la promesa que de verdad cierra el asunto: una
+        // lista de 44 tachones deja que el 45 nazca manana.
+        Prueba("162. fuera las tres pastillas: la carita no lleva colgando voz, chat ni dictado a SAP — y quitarles la puerta no mata lo que la consulta, la demo y la exportación a HC usan por dentro", FueraLasTresPastillas);
+        Prueba("163. el halo de la voz rodea a la carita y cabe entero en el aire que tiene: un halo recortado contra el borde de su ventana no dibuja voz, dibuja un corte — y su color dice por dónde te oyen", ElHaloRodeaALaCarita);
+        Prueba("164. ningún elemento de la interfaz muestra texto al pasar el ratón: no queda ni una declaración viva, y el apagado es de una sola pieza para que lo que se escriba mañana tampoco lo muestre", NadieMuestraTextoAlPasarElRaton);
+        Prueba("165. la línea «Escríbele…» pide reposo: rozar la carita de camino a otra cosa no la llama, y arrastrarla tampoco — ir a agarrar algo no es ir a escribirle", LaLineaPideReposo);
+        Prueba("166. escribir con el ratón sobre la carita abre el globo con esa letra, y ni un atajo, tecla F, Esc, Enter, Tab o flecha se le roba a la app de debajo", EscribirleEsEscribir);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -4058,10 +4071,10 @@ internal static class Contrato
 
     private static Type? Capacidad(string nombre) => Cliente.GetType(nombre);
 
-    private static void Pendiente(string que, string promesa)
+    private static void Pendiente(string que, string promesa, string spec = "004")
     {
         _fallos++;
-        Console.WriteLine($"   ⧗ PENDIENTE: «{que}» todavía no existe (spec 004). La promesa "
+        Console.WriteLine($"   ⧗ PENDIENTE: «{que}» todavía no existe (spec {spec}). La promesa "
                         + $"{promesa} está escrita y en ROJO, que es donde tiene que estar.");
     }
 
@@ -5655,6 +5668,194 @@ internal static class Contrato
             + $"vive ahí— entra entera en la pantalla; salió {enElBorde}");
         Debe(enElBorde.X > 1300,
             "pero sin irse lejos: acotar no es reubicar");
+    }
+
+
+    // ────────────────────────────────────────────────────────────────────────────────────────
+    // SPEC 011 — FUERA LAS PASTILLAS Y LOS CARTELES (2026-09-06)
+    //
+    // Las cinco juzgan AUSENCIAS, y una ausencia no se comprueba mirando la pantalla: una captura
+    // no distingue «no está» de «está y no se ve». Se le pregunta al binario que se distribuye.
+    // ────────────────────────────────────────────────────────────────────────────────────────
+
+    private const BindingFlags TodosLosCampos =
+        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+    /// <summary>Promesa 162.</summary>
+    private static void FueraLasTresPastillas()
+    {
+        var cara = Capacidad("U.WindowsClient.Ui.FaceWindow");
+        if (cara == null) { Pendiente("FaceWindow", "162", "011"); return; }
+
+        // Los x:Name del XAML nacen como CAMPOS de la clase parcial generada, así que preguntar por
+        // el campo es preguntar por el elemento — sin abrir una ventana y sin tocar la pantalla.
+        foreach (var colgante in new[] { "VoiceDotGrupo", "ZonaVoz", "ZonaChat", "ZonaDictado" })
+            Debe(cara.GetField(colgante, TodosLosCampos) == null,
+                $"la carita ya no lleva «{colgante}» colgando: quitar un botón es quitar el elemento, no esconderlo");
+
+        var dictado = Capacidad("U.WindowsClient.Clinical.Transcripcion.DictadoEnVivo");
+        if (dictado == null)
+        {
+            Debe(false, "«DictadoEnVivo» tiene que seguir existiendo: la consulta (spec 004) lo usa");
+            return;
+        }
+
+        Debe(cara.GetFields(TodosLosCampos).All(f => f.FieldType != dictado),
+            "y no le queda ningún dictado clínico dentro: la puerta desde la carita se fue entera, no solo su icono");
+
+        // LO COMPARTIDO SIGUE EN PIE, y esta mitad no es adorno: sin ella, «quité la pastilla» y
+        // «rompí tres funciones» darían exactamente el mismo verde. El rellenador lo usa la
+        // exportación a la historia clínica, la superficie de SAP la usa la demo, y el dictado la
+        // consulta.
+        Debe(Capacidad("U.WindowsClient.Clinical.RellenadorSap") != null,
+            "«RellenadorSap» sigue vivo: lo usa la exportación a la historia clínica");
+        Debe(typeof(GraphClient).Assembly.GetType("U.Graph.Surfaces.SapGuiSurface") != null,
+            "«SapGuiSurface» sigue viva: la usan la demo y todo el camino de SAP");
+    }
+
+    /// <summary>Promesa 163.</summary>
+    private static void ElHaloRodeaALaCarita()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelHalo");
+        if (t == null) { Pendiente("ReglaDelHalo", "163", "011"); return; }
+
+        var escala = t.GetMethod("Escala", BindingFlags.Public | BindingFlags.Static);
+        var color  = t.GetMethod("Color",  BindingFlags.Public | BindingFlags.Static);
+        var caritaPx = t.GetField("CaritaPx")?.GetValue(null);
+        var airePx   = t.GetField("AirePx")?.GetValue(null);
+        if (escala == null || color == null || caritaPx == null || airePx == null)
+        { Pendiente("ReglaDelHalo.Escala/Color/CaritaPx/AirePx", "163", "011"); return; }
+
+        double carita = Convert.ToDouble(caritaPx), aire = Convert.ToDouble(airePx);
+        double ventana = carita + 2 * aire;
+
+        // CABE, y no «casi». La ventana de la carita suelta mide 72 + 2·28 = 128, y un halo que se
+        // pasa de ahí no se ve grande: se ve CORTADO contra un borde que es un círculo con esquina.
+        // Se barre el rango entero de voz y toda la fase del latido, porque el máximo puede estar
+        // en cualquier punto y una regla solo se conoce por su peor caso.
+        double mayor = 0;
+        for (double nivel = 0; nivel <= 1.0001; nivel += 0.01)
+            for (int paso = 0; paso < 80; paso++)
+                mayor = Math.Max(mayor, Convert.ToDouble(escala.Invoke(null, new object[] { nivel, paso })));
+        Debe(mayor * carita <= ventana,
+            $"el halo cabe entero en el aire de la carita en TODO el rango de voz: el mayor fue "
+            + $"{mayor:0.###}×{carita} = {mayor * carita:0.#} px y la ventana mide {ventana} px");
+
+        // Y LATE CON LA VOZ, o es un adorno. Sin esta línea, una regla que devolviera siempre 1
+        // pasaría la comprobación de arriba con nota — un criterio que no puede fallar con el bug
+        // presente no es un criterio (patrón nº7).
+        double callada  = Convert.ToDouble(escala.Invoke(null, new object[] { 0.0, 0 }));
+        double gritando = Convert.ToDouble(escala.Invoke(null, new object[] { 1.0, 0 }));
+        Debe(gritando > callada,
+            $"y late con la voz en vez de quedarse quieto: callada {callada:0.###}, a todo volumen {gritando:0.###}");
+
+        // EL COLOR DICE POR DÓNDE TE OYEN. Es la mitad que hace útil al halo: con el collar puesto,
+        // saber que te oye el collar y no el portátil no es decoración (promesa 157).
+        Debe(!Equals(color.Invoke(null, new object[] { true }), color.Invoke(null, new object[] { false })),
+            "el halo del collar y el del micrófono del computador no son el mismo color");
+    }
+
+    /// <summary>Promesa 164.</summary>
+    private static void NadieMuestraTextoAlPasarElRaton()
+    {
+        // NO PUDE ≠ CULPABLE (aprendizaje nº17). Esta promesa mira el CÓDIGO FUENTE, que es lo
+        // único capaz de volver a llenarse de carteles, así que necesita el repo. Se lo pasa
+        // scripts/contrato-del-grafo.ps1 en U_REPO. Sin eso el juez dice que NO PUDO, no que está
+        // roto: un arnés que no distingue las dos cosas manda la investigación al sitio equivocado.
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string fuentes = Path.Combine(repo, "windows-client", "src");
+        if (repo.Length == 0 || !Directory.Exists(fuentes))
+        {
+            _fallos++;
+            Console.WriteLine("   ⚠ NO PUDE JUZGARLA: sin U_REPO no hay fuentes que mirar "
+                            + "(lo pone scripts/contrato-del-grafo.ps1). No es que la promesa falle: "
+                            + "es que no llegué a probarla.");
+            return;
+        }
+
+        var vivos = new List<string>();
+        foreach (var f in Directory.EnumerateFiles(fuentes, "*.*", SearchOption.AllDirectories))
+        {
+            if (!f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+             && !f.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase)) continue;
+            // El apagador NOMBRA lo que apaga: contarlo sería pedirle que no se pueda escribir.
+            if (Path.GetFileName(f).Equals("SinCarteles.cs", StringComparison.OrdinalIgnoreCase)) continue;
+
+            // CUALQUIER mención, no tres formas concretas. El primer detector buscaba `ToolTip="`,
+            // `.ToolTip =` y `ToolTip = "`, y se dejó fuera el de CarruselDeApps.cs porque ese usa
+            // interpolación (`ToolTip = $"…"`): una comparación que enumera las formas que se me
+            // ocurrieron da falso en silencio para la que no (aprendizaje nº16). Aquí no hay formas
+            // que enumerar: si la palabra aparece, hay cartel.
+            int n = File.ReadLines(f).Count(l => l.Contains("ToolTip"));
+            if (n > 0) vivos.Add($"{Path.GetFileName(f)}×{n}");
+        }
+        Debe(vivos.Count == 0,
+            $"no queda ni una declaración de texto al pasar el ratón en windows-client; siguen vivas en: "
+            + string.Join(", ", vivos));
+
+        // Y EL APAGADO, que es lo que hace que esto no sea una lista de 44 tachones: un elemento
+        // que declare su cartel MAÑANA tampoco lo enseña. Se comprueba de verdad —creando un
+        // control y preguntándole— y no viendo si el método existe: existir no es hacer.
+        var t = Capacidad("U.WindowsClient.Ui.SinCarteles");
+        var aplicar = t?.GetMethod("Aplicar", BindingFlags.Public | BindingFlags.Static);
+        if (aplicar == null) { Pendiente("SinCarteles.Aplicar", "164", "011"); return; }
+
+        aplicar.Invoke(null, null);
+        var reciente = new System.Windows.Controls.Button { ToolTip = "un cartel escrito mañana" };
+        Debe(!System.Windows.Controls.ToolTipService.GetIsEnabled(reciente),
+            "y con el apagado puesto, un control que declare su cartel tampoco lo enseña: "
+            + "el apagado vive en UN sitio y alcanza a lo que aún no se ha escrito");
+    }
+
+    /// <summary>Promesa 165.</summary>
+    private static void LaLineaPideReposo()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDeLaLinea");
+        if (t == null) { Pendiente("ReglaDeLaLinea", "165", "011"); return; }
+
+        var asoma = t.GetMethod("Asoma", BindingFlags.Public | BindingFlags.Static);
+        var reposoMs = t.GetField("ReposoMs")?.GetValue(null);
+        if (asoma == null || reposoMs == null) { Pendiente("ReglaDeLaLinea.Asoma/ReposoMs", "165", "011"); return; }
+        int ms = Convert.ToInt32(reposoMs);
+        bool Asoma(int quieto, bool arrastrando) =>
+            (bool)asoma.Invoke(null, new object[] { quieto, arrastrando })!;
+
+        // Medio segundo es el suelo, y no es gusto: por debajo, ir a agarrar la carita ya invoca el
+        // cartel — que es exactamente el motivo por el que esto existe.
+        Debe(ms >= 500, $"el reposo es un reposo y no un parpadeo: son {ms} ms");
+        Debe(!Asoma(0, false), "rozarla de camino a otra cosa no la llama");
+        Debe(!Asoma(ms - 1, false), "ni fallando un milisegundo para el reposo");
+        Debe(Asoma(ms, false), "cumplido el reposo, asoma");
+        Debe(!Asoma(ms * 10, true), "pero arrastrándola no asoma por mucho que se tarde: ir a moverla no es ir a escribirle");
+    }
+
+    /// <summary>Promesa 166.</summary>
+    private static void EscribirleEsEscribir()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDeEscritura");
+        var abre = t?.GetMethod("Abre", BindingFlags.Public | BindingFlags.Static);
+        if (abre == null) { Pendiente("ReglaDeEscritura.Abre", "166", "011"); return; }
+        bool Abre(uint vk, bool encima, bool ctrl, bool alt) =>
+            (bool)abre.Invoke(null, new object[] { vk, encima, ctrl, alt })!;
+
+        Debe(Abre(0x41, true, false, false), "una letra con el ratón encima abre el globo");
+        Debe(Abre(0x31, true, false, false), "y un dígito también");
+        Debe(!Abre(0x41, false, false, false), "sin el ratón encima, ninguna tecla es para Ü");
+        Debe(!Abre(0x41, true, true, false), "Ctrl+A sigue siendo de la app de debajo");
+        Debe(!Abre(0x41, true, false, true), "y Alt+A también");
+
+        // LO IMPORTANTE NO ES QUÉ ABRE, SINO QUÉ NO SE ROBA. El cursor puede estar apoyado en la
+        // carita mientras alguien trabaja en SAP: quitarle un F5, un Enter o un Esc a esa persona
+        // sería peor que no tener el gesto.
+        var jamas = new (uint Vk, string Nombre)[]
+        {
+            (0x70, "F1"), (0x74, "F5"), (0x7B, "F12"), (0x1B, "Esc"), (0x0D, "Enter"),
+            (0x09, "Tab"), (0x25, "flecha izquierda"), (0x26, "flecha arriba"),
+            (0x20, "espacio"), (0x08, "retroceso"), (0x2E, "suprimir"),
+        };
+        foreach (var (vk, nombre) in jamas)
+            Debe(!Abre(vk, true, false, false),
+                $"«{nombre}» nunca se le roba a la app de debajo, ni con el ratón sobre la carita");
     }
 
     private static void Prueba(string nombre, Action cuerpo)
