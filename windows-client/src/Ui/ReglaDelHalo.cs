@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace U.WindowsClient.Ui;
 
@@ -43,9 +43,17 @@ public static class ReglaDelHalo
         return 1.12 + Fuerza(nivelVoz, pasoDeLaBoca) * 0.43;
     }
 
-    /// <summary>Lo transparente que queda: se ve que hay voz sin taparla.</summary>
+    /// <summary>
+    /// Lo opaco que queda: se ve que hay voz sin taparla.
+    /// </summary>
+    /// <remarks>
+    /// SUBIDO EL 2026-09-06 a petición del dueño —«que sea más claro para poder verlo»—: iba de
+    /// 0,12 a 0,38 y contra un escritorio claro no se distinguía de la sombra de la carita. Ahora va
+    /// de 0,26 a 0,68, que es donde se lee sin llegar a competir con la cara. Sigue siendo
+    /// translúcido: el halo dice que hay voz, no tapa a quien la pone.
+    /// </remarks>
     public static double Opacidad(double nivelVoz, int pasoDeLaBoca)
-        => 0.12 + Fuerza(nivelVoz, pasoDeLaBoca) * 0.26;
+        => 0.26 + Fuerza(nivelVoz, pasoDeLaBoca) * 0.42;
 
     /// <summary>
     /// De qué color: azul si te oye el collar, gris si te oye el micrófono del computador. No es

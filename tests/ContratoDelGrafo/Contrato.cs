@@ -454,6 +454,12 @@ internal static class Contrato
         // Los numeros NO se reciclan: la spec 011 y los commits de esta rama los citan por numero,
         // y reusarlos haria que un plan viejo hablara de otra cosa.
 
+        // LA LINEA «ESCRIBELE…» VUELVE, con el diseno original y esperando de verdad (2026-09-06).
+        // La 165 se retiro hace una hora porque la burbuja no convencia; el dueno pidio la de la
+        // rama 008 tal cual y que tardara «un segundo y medio». Numero NUEVO: 165 esta retirada y
+        // los numeros no se reciclan.
+        Prueba("167. la línea «Escríbele…» se hace esperar: segundo y medio de ratón quieto sobre la carita, y arrastrarla no la llama por mucho que se tarde", LaLineaSeHaceEsperar);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -5817,6 +5823,31 @@ internal static class Contrato
     }
 
 
+
+
+    /// <summary>Promesa 167.</summary>
+    private static void LaLineaSeHaceEsperar()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDeLaLinea");
+        if (t == null) { Pendiente("ReglaDeLaLinea", "167", "011"); return; }
+
+        var asoma = t.GetMethod("Asoma", BindingFlags.Public | BindingFlags.Static);
+        var reposoMs = t.GetField("ReposoMs")?.GetValue(null);
+        if (asoma == null || reposoMs == null) { Pendiente("ReglaDeLaLinea.Asoma/ReposoMs", "167", "011"); return; }
+        int ms = Convert.ToInt32(reposoMs);
+        bool Asoma(int quieto, bool arrastrando) =>
+            (bool)asoma.Invoke(null, new object[] { quieto, arrastrando })!;
+
+        // SEGUNDO Y MEDIO, y el suelo es alto a proposito: la primera version salia al instante y la
+        // segunda a 550 ms, y las dos se rechazaron por lo mismo — «lo veo muy rápido». Por debajo
+        // de 1,2 s esto vuelve a ser un cartel que se adelanta a lo que ibas a hacer.
+        Debe(ms >= 1200, $"la línea se hace esperar de verdad: son {ms} ms, y el dueño pidió segundo y medio");
+        Debe(!Asoma(0, false), "rozarla de camino a otra cosa no la llama");
+        Debe(!Asoma(ms - 1, false), "ni fallando un milisegundo para el reposo");
+        Debe(!Asoma(550, false), "ni con el reposo que tenía antes: 550 ms se rechazó por rápido");
+        Debe(Asoma(ms, false), "cumplido el reposo, asoma");
+        Debe(!Asoma(ms * 10, true), "pero arrastrándola no asoma por mucho que se tarde: ir a moverla no es ir a escribirle");
+    }
 
     private static void Prueba(string nombre, Action cuerpo)
     {
