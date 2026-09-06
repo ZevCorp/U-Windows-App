@@ -223,6 +223,28 @@
                     </ui:FaceControl.Effect>
                 </ui:FaceControl>
             </Grid>
+
+            <!-- «ESCRÍBELE…»: la puerta de escribirle, que hasta el 2026-09-06 era la pastilla del
+                 chat. Asoma tras segundo y medio de ratón quieto (ReglaDeLaLinea, promesa 167).
+
+                 EL DISEÑO ES EL ORIGINAL DE LA RAMA 008, pedido así por el dueño tras probar dos
+                 alternativas: cápsula de 30 px, cristal claro al 10 %, texto al 55 % de blanco.
+                 Solo se le quitó una cosa de aquel original: el cartel que llevaba, que hoy no puede existir
+                 (promesa 164). Lo que la línea hace se aprende pulsándola, no leyendo otro cartel.
+
+                 Es un Popup y no un hijo del StackPanel a propósito: así aparecer y desaparecer no
+                 cambia el ancho de la ventana ni dispara el reanclaje de OnSizeChanged sobre una
+                 carita que puede estar en pleno vuelo. -->
+            <Popup x:Name="GhostPista" PlacementTarget="{Binding ElementName=CollapsedFace}"
+                   Placement="Left" AllowsTransparency="True" StaysOpen="True">
+                <Border x:Name="GhostBorde" Height="30" MinWidth="150" Cursor="IBeam"
+                        CornerRadius="15" Background="#1AFFFFFF" BorderBrush="#2EFFFFFF"
+                        BorderThickness="1" Padding="12,0" Margin="0,0,12,0"
+                        MouseLeftButtonUp="OnGhostClic">
+                    <TextBlock Text="Escríbele…" Foreground="#8CFFFFFF" FontSize="12"
+                               VerticalAlignment="Center" IsHitTestVisible="False"/>
+                </Border>
+            </Popup>
         </StackPanel>
 
         <!-- Estado NORMAL: menú extendido (arriba) + globo de conversación (izquierda) + barra (derecha).
