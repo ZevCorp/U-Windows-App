@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 using U.WindowsClient.Diagnostics;
 
@@ -54,6 +54,33 @@ public static class CollarPermanente
     public static string Estado { get; private set; } = "sin enlazar";
 
     /// <summary>
+    /// HAY UN COLLAR DE VERDAD: se llegó a conectar alguna vez y todavía no se ha olvidado.
+    /// </summary>
+    /// <remarks>
+    /// NO ES <see cref="Permanente"/>, Y CONFUNDIRLOS ERA UN BUG QUE SE VEÍA (2026-09-06, lo cazó
+    /// el dueño): «Permanente» dice «quiero que se conecte solo» —una INTENCIÓN— y
+    /// <c>EncenderAsync</c> la pone en <c>true</c> ANTES de buscar nada. Así que elegir «Collar Omi»
+    /// en el menú bastaba para que el collar apareciera en la lista de aparatos enlazados, con su
+    /// botón de «Olvidar», sin que existiera ningún collar. Ofrecer olvidar algo que no está es la
+    /// misma clase de error que una caja que miente (aprendizaje nº4): invita a confiar en ella.
+    ///
+    /// Aquí vive el HECHO, y se enciende en un solo sitio: cuando la conexión de verdad prosperó.
+    /// Se guarda con el enlace porque un collar conocido lo sigue siendo mañana.
+    ///
+    /// Las dos propiedades conviven a propósito en vez de fundirse en una: quitarle a
+    /// <c>EncenderAsync</c> su <c>Permanente = true</c> cambiaría el bucle de reintento —que corre
+    /// mientras «Permanente»— y con él la reconexión del collar en el hospital. Eso es otra
+    /// conversación y no la de un arreglo de interfaz.
+    /// </remarks>
+    public static bool Enlazado
+    {
+        get => _enlazado;
+        private set { _enlazado = value; Guardar(); Cambio?.Invoke(); }
+    }
+
+    private static bool _enlazado;
+
+    /// <summary>
     /// Se llama al arrancar la app. Si el usuario dejó el enlace puesto, se reconecta solo.
     /// </summary>
     public static void Restaurar()
@@ -62,6 +89,10 @@ public static class CollarPermanente
         {
             if (!File.Exists(Archivo)) return;
             using var doc = JsonDocument.Parse(File.ReadAllText(Archivo));
+            // Un archivo de antes de 2026-09-06 no trae «enlazado». Se cae a false —que es lo
+            // honesto: no consta que ese collar se conectara— y se vuelve a poner solo en cuanto
+            // aparezca. Nada que migrar.
+            _enlazado = doc.RootElement.TryGetProperty("enlazado", out var en) && en.GetBoolean();
             if (doc.RootElement.TryGetProperty("permanente", out var p) && p.GetBoolean())
             {
                 _permanente = true;
@@ -82,7 +113,9 @@ public static class CollarPermanente
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Archivo)!);
-            File.WriteAllText(Archivo, $"{{\"permanente\":{(_permanente ? "true" : "false")}}}");
+            File.WriteAllText(Archivo,
+                $"{{\"permanente\":{(_permanente ? "true" : "false")},"
+                + $"\"enlazado\":{(_enlazado ? "true" : "false")}}}");
         }
         catch (Exception e) { LogBus.Log("omi", $"no se pudo guardar {Archivo}: {e.Message}"); }
     }
@@ -136,6 +169,10 @@ public static class CollarPermanente
 
             lock (Candado) _fuente = f;
             Estado = "enlazado";
+
+            // AQUÍ, y en ningún otro sitio: este es el único punto del programa en el que consta
+            // que un collar contestó. Todo lo de arriba es intención.
+            if (!_enlazado) { _enlazado = true; Guardar(); }
 
             // SE RECUERDA SOLO. Un collar que ya funcionó una vez es un collar conocido, y a partir
             // de ahí se comporta como cualquier aparato Bluetooth emparejado: aparece y se conecta.
@@ -225,6 +262,9 @@ public static class CollarPermanente
     {
         LogBus.Log("omi", "collar olvidado por el usuario");
         Apagar();
+        // Y deja de constar que hubo uno. Sin esto, el collar olvidado seguiría en la lista de
+        // aparatos enlazados — o sea, «Olvidar» no olvidaría.
+        Enlazado = false;
     }
 
     /// <summary>Cuánto lleva el collar sin mandar audio, para quien vigile el relevo.</summary>

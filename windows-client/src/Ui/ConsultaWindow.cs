@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -84,6 +84,9 @@ public sealed class ConsultaWindow : Window
     /// <summary>Quién manda entre las tres fuentes. La decisión es suya, no de esta ventana.</summary>
     private readonly Omi.Selector _selector = new();
 
+    /// <summary>Cómo llama el médico a cada aparato. Promesa 151 (spec 010).</summary>
+    private readonly Voice.NombresDeDispositivos _nombresDeDispositivos = new();
+
     /// <summary>
     /// Quién decide si se puede pintar verde. Tres segundos sin audio y deja de decir que lo hay.
     ///
@@ -165,6 +168,7 @@ public sealed class ConsultaWindow : Window
         Background = Brushes.Transparent;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         this.PonerLaBarraDeScroll();
+        DejarseAgarrarPorElBorde();
 
         var tarjeta = new Border
         {
@@ -282,7 +286,28 @@ public sealed class ConsultaWindow : Window
         _menuMicrofono = new Popup
         {
             PlacementTarget = _microfono,
-            Placement = PlacementMode.Bottom,
+            // CENTRADO EN SU BOTÓN, no colgando de su esquina (2026-09-05, lo pidió el dueño
+            // mirándolo: «está anclado a la esquina superior izquierda»). Con Bottom a secas, WPF
+            // alinea el borde IZQUIERDO del menú con el del botón, así que un menú ancho se
+            // desparrama hacia la derecha y el botón queda en una punta — se lee como si el menú
+            // perteneciera a otra cosa.
+            //
+            // Custom y no un HorizontalOffset a mano: el desplazamiento depende del ancho REAL del
+            // menú, que no se sabe hasta que se mide. Un número fijo se rompería en cuanto el menú
+            // creciera —y crece: la sección de dispositivos aparece y desaparece con lo que haya
+            // enlazado.
+            Placement = PlacementMode.Custom,
+            CustomPopupPlacementCallback = (menu, boton, _) => new[]
+            {
+                // El alto que se resta es el hueco que Estudio.Elevar reserva ARRIBA para que la
+                // sombra quepa: sin descontarlo, ese aire transparente se sumaría a la separación y
+                // el menú aparecería flotando lejos del botón que lo abrió. El centrado horizontal
+                // no necesita cuenta porque la holgura es igual a los dos lados.
+                new CustomPopupPlacement(
+                    new Point((boton.Width - menu.Width) / 2,
+                              boton.Height + 6 - Estudio.HolguraDe(Estudio.Sombra3).Top),
+                    PopupPrimaryAxis.Horizontal),
+            },
             StaysOpen = false,
             AllowsTransparency = true,
             PopupAnimation = PopupAnimation.Fade,
@@ -496,64 +521,319 @@ public sealed class ConsultaWindow : Window
     /// primera versión): «los usuarios no van a leer esos textos largos». Una preferencia de tres
     /// opciones no necesita que le expliquen cada una — necesita que se vea cuál está puesta.
     /// </summary>
+    /// <summary>Lo que mide el menú de lado a lado. Fijo para que no baile al cambiar el contenido.</summary>
+    private const double AnchoDelMenu = 292;
+
     private void PintarMenuDeMicrofono()
     {
-        var lista = new StackPanel { Margin = new Thickness(5) };
-        lista.Children.Add(FilaDeMicrofono(Origen.MicrofonoDelPc, GlifoMicrofono, "Computador"));
-        lista.Children.Add(FilaDeMicrofono(Origen.CollarPorBluetooth, GlifoBluetooth, "Collar Omi"));
-        lista.Children.Add(FilaDeMicrofono(Origen.CollarPorTelefono, GlifoTelefono, "Teléfono"));
+        var lista = new StackPanel { Margin = new Thickness(8) };
+        var real = FuenteReal();
+        lista.Children.Add(FilaDeMicrofono(Origen.MicrofonoDelPc, GlifoMicrofono, "Computador", real));
+        lista.Children.Add(FilaDeMicrofono(Origen.CollarPorBluetooth, GlifoBluetooth, "Collar Omi", real));
+        lista.Children.Add(FilaDeMicrofono(Origen.CollarPorTelefono, GlifoTelefono, "Teléfono", real));
 
         // El enlace SÓLO cuando el teléfono es lo elegido: hasta entonces no significa nada y sería
         // una línea de ruido en un menú de tres.
         if (_selector.Preferida == Origen.CollarPorTelefono) lista.Children.Add(CajaDelEnlace());
 
+        var aparatos = SeccionDeDispositivos();
+        if (aparatos != null) lista.Children.Add(aparatos);
+
         var caja = new Border
         {
-            CornerRadius = new CornerRadius(14),
+            Width = AnchoDelMenu,
+            CornerRadius = new CornerRadius(Estudio.RadioMedio),
             Background = Estudio.Superficie,
             BorderBrush = Estudio.Borde,
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(5),
         };
         caja.Child = lista;
-        _menuMicrofono.Child = Estudio.Elevar(caja, Estudio.Sombra2);
+        _menuMicrofono.Child = Estudio.Elevar(caja, Estudio.Sombra3);
     }
 
-    private Button FilaDeMicrofono(Origen origen, string glifo, string etiqueta)
+    /// <summary>
+    /// LOS APARATOS EMPAREJADOS CON ESTA MÁQUINA: cómo se llaman, cómo están, y cómo olvidarlos.
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ ESTÁ AQUÍ Y NO EN UNA VENTANA PROPIA. Lo estuvo: <c>PanelDelCollar</c>. Se retiró el
+    /// 2026-09-05 porque enlazar ya se hacía desde este mismo menú, y al retirarla se fueron con
+    /// ella las dos únicas puertas a <c>CollarPermanente.Olvidar()</c> y a su <c>Estado</c> — o sea,
+    /// se podía emparejar y no se podía deshacer. Esto lo devuelve donde de verdad se mira: al lado
+    /// de la elección que esos aparatos sirven.
+    ///
+    /// EL NOMBRE SE ESCRIBE ENCIMA, sin botón de «renombrar» ni diálogo: «Collar Omi» no distingue
+    /// un collar de otro y en un hospital se prestan. La caja parece texto hasta que se pulsa, que
+    /// es lo que hace que se descubra sin tener que explicarla.
+    ///
+    /// Devuelve <c>null</c> cuando no hay nada emparejado: una sección vacía titulada
+    /// «Dispositivos» promete algo que no está, y ofrecer «Olvidar» sobre un aparato que no existe
+    /// es peor que no ofrecer nada.
+    /// </remarks>
+    private UIElement? SeccionDeDispositivos()
+    {
+        // EL HECHO, NO LA INTENCIÓN: Enlazado y no Permanente. Ver CollarPermanente.Enlazado — con
+        // la intención, elegir «Collar Omi» en el menú de arriba hacía aparecer aquí un collar que
+        // no existía, con su botón de olvidar (2026-09-06, lo cazó el dueño).
+        var ids = DispositivosEnlazados.Listar(CollarPermanente.Enlazado);
+        if (ids.Length == 0) return null;
+
+        var caja = new StackPanel { Margin = new Thickness(6, 12, 6, 4) };
+        caja.Children.Add(new Border
+        {
+            Height = 1,
+            Background = Estudio.Borde,
+            Margin = new Thickness(0, 0, 0, 12),
+        });
+        caja.Children.Add(Estudio.Rotulo("Dispositivos enlazados"));
+
+        // En rejilla de dos columnas, como el diseño que dio el dueño: los aparatos son OBJETOS y
+        // se reconocen por su estampa, no por una línea de lista. Hoy cabe uno —el servicio recuerda
+        // un collar cada vez— y la rejilla ya está puesta para cuando sean varios.
+        var rejilla = new UniformGrid { Columns = 2, Margin = new Thickness(0, 8, 0, 0) };
+        foreach (string id in ids) rejilla.Children.Add(TarjetaDeDispositivo(id));
+        caja.Children.Add(rejilla);
+        return caja;
+    }
+
+    /// <summary>
+    /// La estampa de un aparato: su retrato, su nombre —editable— y el botón de olvidarlo.
+    /// </summary>
+    /// <remarks>
+    /// EL PUNTO VERDE NO ES ADORNO. Un collar enlazado puede estar apagado, lejos, o sin batería, y
+    /// las tres cosas se ven igual que uno funcionando si no se dice: el punto separa «lo tengo
+    /// emparejado» de «me está oyendo ahora». Verde vivo, gris apagado; y debajo, en palabras, lo
+    /// mismo — el color solo es un atajo para quien ya lo sabe, no la única forma de saberlo.
+    /// </remarks>
+    private UIElement TarjetaDeDispositivo(string id)
+    {
+        bool vivo = CollarPermanente.Conectado;
+
+        var tarjeta = new StackPanel { Margin = new Thickness(4, 0, 4, 6) };
+
+        // El retrato: un disco con la silueta del collar. Es un DIBUJO y no una foto porque no hay
+        // ninguna en el repo; el día que la haya, entra aquí y no cambia nada más.
+        var retrato = new Grid { Width = 92, Height = 92, HorizontalAlignment = HorizontalAlignment.Center };
+        retrato.Children.Add(new System.Windows.Shapes.Ellipse
+        {
+            Fill = Estudio.SuperficieSuave,
+            Stroke = vivo ? Estudio.Ok : Estudio.Borde,
+            StrokeThickness = vivo ? 2 : 1,
+        });
+        var dibujo = new Canvas { Width = 44, Height = 44, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        dibujo.Children.Add(new System.Windows.Shapes.Path
+        {
+            Stroke = Estudio.TintaMedia,
+            StrokeThickness = 2,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            Data = Geometry.Parse("M 10,9 C 10,25 34,25 34,9"),   // el cordón
+        });
+        dibujo.Children.Add(new System.Windows.Shapes.Ellipse
+        {
+            Width = 15, Height = 15, Fill = Estudio.TintaMedia,
+            Margin = new Thickness(14.5, 24, 0, 0),               // la pieza que cuelga
+        });
+        retrato.Children.Add(dibujo);
+        tarjeta.Children.Add(retrato);
+
+        // El nombre, editable en el sitio y centrado bajo su retrato.
+        var nombre = new TextBox
+        {
+            Text = _nombresDeDispositivos.ComoSeLlama(id),
+            FontSize = 13,
+            TextAlignment = TextAlignment.Center,
+            Foreground = Estudio.Tinta,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(2, 4, 2, 2),
+            ToolTip = "Escribe aquí para ponerle nombre a este collar",
+        };
+
+        // El nombre, editable en el sitio. Parece texto y se comporta como caja al pulsarlo.
+        nombre.GotKeyboardFocus += (_, __) => { nombre.Background = Estudio.SuperficieSuave; nombre.SelectAll(); };
+        void Guardar()
+        {
+            nombre.Background = Brushes.Transparent;
+            _nombresDeDispositivos.Poner(id, nombre.Text);
+            // Vacío QUITA el nombre, así que la caja tiene que volver a enseñar el de fábrica: si se
+            // quedara vacía, el aparato se vería sin nombre y no habría forma de saber cuál es.
+            nombre.Text = _nombresDeDispositivos.ComoSeLlama(id);
+        }
+        nombre.LostKeyboardFocus += (_, __) => Guardar();
+        nombre.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter) { Guardar(); Keyboard.ClearFocus(); e.Handled = true; }
+            else if (e.Key == Key.Escape) { nombre.Text = _nombresDeDispositivos.ComoSeLlama(id); Keyboard.ClearFocus(); e.Handled = true; }
+        };
+        tarjeta.Children.Add(nombre);
+
+        // EL ESTADO, EN PALABRAS. Es lo que decía el panel viejo y se perdió al retirarlo: un collar
+        // «recordado, esperando» no es lo mismo que uno conectado, y sin decirlo los dos se ven igual.
+        var estado = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 1, 0, 0),
+        };
+        estado.Children.Add(new System.Windows.Shapes.Ellipse
+        {
+            Width = 7, Height = 7,
+            Fill = vivo ? Estudio.Ok : Estudio.TintaTenue,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 5, 0),
+        });
+        estado.Children.Add(new TextBlock
+        {
+            Text = vivo ? "Activo" : CollarPermanente.Estado,
+            FontSize = 10.5,
+            Foreground = vivo ? Estudio.Ok : Estudio.TintaTenue,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        tarjeta.Children.Add(estado);
+
+        var olvidar = new Button
+        {
+            Content = new TextBlock { Text = "Olvidar", FontSize = 11.5 },
+            Foreground = Estudio.TintaMedia,
+            Background = Brushes.Transparent,
+            BorderBrush = Estudio.Borde,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10, 5, 10, 5),
+            Margin = new Thickness(0, 8, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(Estudio.RadioChico),
+            ToolTip = "Desenlazar este collar: habrá que volver a emparejarlo",
+        };
+        // El rojo solo al acercarse: en reposo sería una advertencia permanente sobre algo que
+        // funciona bien, y una interfaz que grita todo el rato deja de poder decir nada.
+        olvidar.MouseEnter += (_, __) => { olvidar.Background = Estudio.AlertaSuave; olvidar.Foreground = Estudio.Alerta; };
+        olvidar.MouseLeave += (_, __) => { olvidar.Background = Brushes.Transparent; olvidar.Foreground = Estudio.TintaMedia; };
+        olvidar.Click += (_, __) => OlvidarDispositivo(id);
+        tarjeta.Children.Add(olvidar);
+
+        return tarjeta;
+    }
+
+    /// <summary>
+    /// Desenlaza un aparato: se va él, se va su nombre, y si era el que estaba oyendo, la voz vuelve
+    /// al micrófono del computador.
+    /// </summary>
+    /// <remarks>
+    /// LO ÚLTIMO NO ES UN EXTRA. Olvidar el aparato por el que estás entrando y no mover la fuente
+    /// dejaría la consulta apuntando a algo que ya no existe: grabaría en silencio y lo diría al
+    /// final, cuando no hay nada que recuperar. El micrófono del computador es el único que no se
+    /// puede desenlazar, así que es el respaldo que siempre está.
+    /// </remarks>
+    private void OlvidarDispositivo(string id)
+    {
+        if (_consulta.Estado == EstadoDeConsulta.Grabando)
+        {
+            Estado("Estás grabando: para antes de desenlazar un dispositivo.");
+            return;
+        }
+
+        bool mandaba = _selector.Preferida == Origen.CollarPorBluetooth;
+
+        CollarPermanente.Olvidar();
+        _nombresDeDispositivos.Olvidar(id);
+        LogBus.Log("dispositivos", "collar desenlazado desde el selector de micrófono");
+
+        if (mandaba)
+        {
+            _selector.Preferir(Origen.MicrofonoDelPc);
+            Voice.ElMicrofonoDeLaApp.Elegir(Origen.MicrofonoDelPc, "");
+            _audio.PasarAlLocal("se desenlazó el aparato que estaba oyendo");
+        }
+
+        PintarMicrofono();
+        PintarMenuDeMicrofono();
+    }
+
+    /// <summary>
+    /// Obliga al menú abierto a volver a colocarse.
+    /// </summary>
+    /// <remarks>
+    /// HACE FALTA PORQUE WPF NO LO HACE SOLO (2026-09-06, lo vio el dueño: al elegir «Teléfono» el
+    /// menú saltaba de vuelta a la esquina). El menú CRECE cuando aparece la caja del enlace, pero
+    /// <c>Popup</c> solo pregunta a su <c>CustomPopupPlacementCallback</c> al abrirse: con el nuevo
+    /// tamaño y la colocación vieja, el centrado deja de estar centrado.
+    ///
+    /// Mover el desplazamiento y devolverlo es el empujón conocido para que vuelva a preguntar. Es
+    /// un rodeo y se dice que lo es: la alternativa —cerrar y reabrir— parpadea, y un menú que
+    /// parpadea cada vez que eliges algo se siente roto.
+    /// </remarks>
+    private void RecolocarElMenu()
+    {
+        if (!_menuMicrofono.IsOpen) return;
+        _menuMicrofono.HorizontalOffset += 1;
+        _menuMicrofono.HorizontalOffset -= 1;
+    }
+
+    private Button FilaDeMicrofono(Origen origen, string glifo, string etiqueta,
+                                   (Origen Origen, bool Entregando) real)
     {
         bool manda = _selector.Activa == origen;
 
-        var fila = new StackPanel { Orientation = Orientation.Horizontal };
-        fila.Children.Add(new TextBlock
+        // EL VERDE ES DE QUIEN ENTREGA, no de quien está elegido (2026-09-06, lo pidió el dueño:
+        // «que se ponga en verde el que realmente se está utilizando»). Elegido y oyendo son cosas
+        // distintas —un collar elegido puede estar apagado— y pintarlas igual es la misma mentira
+        // que hacía que la aplicación grabara por una fuente distinta de la que enseñaba.
+        bool activa = ReglaDeLaFuente.SeVeActiva(origen, real.Origen, real.Entregando);
+
+        // UNA REJILLA Y NO UNA FILA, y la diferencia se veía (2026-09-05, lo dijo el dueño: «están
+        // desalineados los textos y los íconos»). Con un StackPanel horizontal, cada glifo de Segoe
+        // MDL2 mide lo que mide —el del Bluetooth es estrecho, el del teléfono ancho— así que el
+        // texto empezaba en una x distinta en cada línea y las tres se leían torcidas. Con una
+        // columna de ancho FIJO para el icono, las tres etiquetas arrancan en el mismo sitio pase lo
+        // que pase con la fuente.
+        var fila = new Grid();
+        fila.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
+        fila.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var icono = new TextBlock
         {
             FontFamily = new FontFamily("Segoe MDL2 Assets"),
             Text = glifo,
-            FontSize = 12,
-            Foreground = manda ? Estudio.Tinta : Estudio.TintaMedia,
+            FontSize = 14,
+            Foreground = activa ? Estudio.Ok : manda ? Estudio.Acento : Estudio.TintaMedia,
+            HorizontalAlignment = HorizontalAlignment.Center,   // centrado EN SU COLUMNA
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(2, 0, 10, 0),
-            Width = 16,
-        });
-        fila.Children.Add(new TextBlock
+        };
+        Grid.SetColumn(icono, 0);
+        fila.Children.Add(icono);
+
+        var texto = new TextBlock
         {
             Text = etiqueta,
-            FontSize = 13,
+            FontSize = 14,
             FontWeight = manda ? FontWeights.SemiBold : FontWeights.Normal,
             Foreground = manda ? Estudio.Tinta : Estudio.TintaMedia,
             VerticalAlignment = VerticalAlignment.Center,
-        });
+            Margin = new Thickness(10, 0, 0, 0),
+        };
+        Grid.SetColumn(texto, 1);
+        fila.Children.Add(texto);
 
+        var reposo = manda ? Estudio.SuperficieSuave : Brushes.Transparent;
         var b = new Button
         {
             Content = fila,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-            MinWidth = 148,
-            Padding = new Thickness(10, 7, 12, 7),
-            Background = manda ? Estudio.SuperficieSuave : Brushes.Transparent,
+            // ESTIRADO, y de ahí depende la alineación entera. Con el contenido centrado —lo que
+            // hace la pastilla por defecto— la rejilla se encoge a su tamaño natural y se centra,
+            // así que cada fila empieza donde le dice su glifo. Ver Estudio.Pastilla(estirado).
+            Template = Estudio.Pastilla(Estudio.RadioChico, estirado: true),
+            Height = 46,                               // una tira delgada no se deja pulsar
+            Padding = new Thickness(10, 0, 10, 0),
+            Margin = new Thickness(0, 2, 0, 2),
+            Background = reposo,
             BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand,
-            Template = Estudio.Pastilla(10),
         };
+        // EL HOVER DICE QUÉ VAS A PULSAR. Sin él, un menú de opciones iguales obliga a fiarse de la
+        // puntería: se pulsa y se comprueba después cuál cayó.
+        b.MouseEnter += (_, __) => { if (!manda) b.Background = Estudio.SuperficieSuave; };
+        b.MouseLeave += (_, __) => b.Background = reposo;
         b.Click += (_, __) =>
         {
             // CAMBIAR DE MICRÓFONO A MEDIA GRABACIÓN dejaría la mitad del dictado en una fuente y la
@@ -574,6 +854,19 @@ public sealed class ConsultaWindow : Window
             // dos segundos pintaría verde un collar que todavía no ha entregado nada por el enlace
             // nuevo — que es el fallo del 2026-08-25 con otro disfraz.
             _testigo.Olvida(origen);
+            // LO QUE SE ELIGE ES LO QUE OYE, Y LO DEMÁS SE SUELTA. Antes, elegir el computador
+            // solo dejaba de LEER el collar: seguía conectado por Bluetooth, en azul, y su audio
+            // seguía llegando a la grabación. El dueño lo comprobó silenciando el micrófono del
+            // portátil por teclado y viendo que la voz entraba igual (2026-09-06). En una consulta
+            // clínica eso no es un detalle: quien silencia su micrófono lo hace por algo.
+            //
+            // Y se APAGA, no se desconecta: el servicio reintenta mientras la intención siga
+            // puesta, así que desconectar sin más lo devolvería solo a los pocos segundos. Apagar
+            // no pierde el emparejamiento —eso es «Enlazado», que es otra cosa desde la promesa
+            // 153— así que el collar sigue en la lista y se puede volver a elegir.
+            if (ReglaDeLaFuente.AlElegir(origen) == QueHacerConElCollar.Soltarlo)
+                CollarPermanente.Apagar();
+
             switch (origen)
             {
                 case Origen.CollarPorBluetooth:
@@ -581,8 +874,6 @@ public sealed class ConsultaWindow : Window
                     _ = CollarPermanente.Permanente ? CollarPermanente.ConectarAsync() : CollarPermanente.EncenderAsync();
                     break;
                 case Origen.CollarPorTelefono:
-                    // El teléfono no usa el Bluetooth de este PC: si el collar estaba enlazado aquí,
-                    // hay que soltarlo o seguiría oyéndose por él. Un collar habla con un aparato.
                     _audio.PasarAlLocal("se eligió oír por el teléfono");
                     PrepararElEnlace();
                     _ = _audio.PasarAlTelefonoAsync(Nube.ProyectoSupabase, Nube.ClavePublicable, _codigo);
@@ -595,7 +886,7 @@ public sealed class ConsultaWindow : Window
             PintarMicrofono();
             // El menú se queda abierto al elegir teléfono: el enlace es lo siguiente que hay que
             // hacer, y cerrarlo obligaría a volver a abrirlo para nada.
-            if (origen == Origen.CollarPorTelefono) PintarMenuDeMicrofono();
+            if (origen == Origen.CollarPorTelefono) { PintarMenuDeMicrofono(); RecolocarElMenu(); }
             else _menuMicrofono.IsOpen = false;
         };
         return b;
@@ -610,36 +901,44 @@ public sealed class ConsultaWindow : Window
     /// </summary>
     private UIElement CajaDelEnlace()
     {
-        var caja = new StackPanel { Margin = new Thickness(6, 8, 6, 4) };
+        var caja = new StackPanel { Margin = new Thickness(6, 10, 6, 4) };
         caja.Children.Add(Estudio.Rotulo("Pega esto en la app de Omi"));
 
-        var enlace = new TextBox
+        // NO SE ENSEÑA EL wss:// ENTERO (2026-09-06, el dueño: «estéticamente se ve muy mal»). Y no
+        // es solo estética: un churro de ochenta caracteres partido en tres renglones no se lee, no
+        // se comprueba de un vistazo, y ocupa el menú entero. Lo único que una persona necesita
+        // reconocer de ese enlace es SU CÓDIGO —ocho letras— que es lo que distingue el suyo del de
+        // otro; lo demás es fontanería y viaja igual al portapapeles.
+        var codigo = new TextBox
         {
-            Text = _codigo.Length > 0 ? Emparejamiento.Enlace(BaseDelEnlace, _codigo) : "",
+            Text = _codigo.Length > 0 ? _codigo : "…",
             IsReadOnly = true,
-            FontSize = 10.5,
+            FontSize = 17,
             FontFamily = new FontFamily("Cascadia Mono, Consolas, monospace"),
-            Foreground = Estudio.TintaMedia,
+            FontWeight = FontWeights.SemiBold,
+            TextAlignment = TextAlignment.Center,
+            Foreground = Estudio.Tinta,
             Background = Estudio.SuperficieSuave,
             BorderThickness = new Thickness(0),
-            Padding = new Thickness(8, 6, 8, 6),
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 230,
-            Margin = new Thickness(0, 5, 0, 6),
+            Padding = new Thickness(10, 9, 10, 9),
+            Margin = new Thickness(0, 6, 0, 8),
+            ToolTip = "El código de tu enlace. El botón copia la dirección completa.",
         };
-        enlace.GotFocus += (_, __) => enlace.SelectAll();
+        codigo.GotFocus += (_, __) => codigo.SelectAll();
+        var enlace = new TextBox { Text = _codigo.Length > 0 ? Emparejamiento.Enlace(BaseDelEnlace, _codigo) : "" };
+        caja.Children.Add(codigo);
 
-        var textoDelBoton = new TextBlock { Text = "Copiar", FontSize = 12, FontWeight = FontWeights.SemiBold };
+        var textoDelBoton = new TextBlock { Text = "Copiar el enlace", FontSize = 12.5, FontWeight = FontWeights.SemiBold };
         var copiar = new Button
         {
             Content = textoDelBoton,
             Foreground = Estudio.Acento,
             Background = Estudio.AcentoSuave,
             BorderThickness = new Thickness(0),
-            Padding = new Thickness(14, 6, 14, 6),
-            HorizontalAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(14, 9, 14, 9),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             Cursor = Cursors.Hand,
-            Template = Estudio.Pastilla(12),
+            Template = Estudio.Pastilla(Estudio.RadioChico),
         };
         copiar.Click += (_, __) =>
         {
@@ -653,7 +952,6 @@ public sealed class ConsultaWindow : Window
             }
         };
 
-        caja.Children.Add(enlace);
         caja.Children.Add(copiar);
         return caja;
     }
@@ -723,25 +1021,94 @@ public sealed class ConsultaWindow : Window
     /// sin una sola trama. Verde aquí significa exactamente una cosa: llegó audio hace menos de tres
     /// segundos.
     /// </summary>
-    private void PintarMicrofono()
+    /// <summary>
+    /// DEJA QUE SE LE CAMBIE EL TAMAÑO ARRASTRANDO SUS BORDES.
+    /// </summary>
+    /// <remarks>
+    /// <c>ResizeMode.CanResize</c> ya estaba puesto y aun así la ventana no se dejaba agarrar. Dos
+    /// razones que se suman y ninguna se ve mirando esa línea:
+    ///
+    ///   · con <c>WindowStyle.None</c> + <c>AllowsTransparency</c> la ventana NO TIENE área no
+    ///     cliente, que es donde Windows pone sus tiradores. Sin marco no hay dónde agarrar, así
+    ///     que hay que contestar a <c>WM_NCHITTEST</c> a mano;
+    ///   · y el borde que se ve está 24 px por dentro del borde de la ventana — el hueco que la
+    ///     sombra necesita (promesa 154). El cálculo vive en <see cref="ReglaDelBorde"/>.
+    ///
+    /// Se engancha en <c>SourceInitialized</c> y no antes: hasta que no hay HWND no hay a qué
+    /// engancharse.
+    /// </remarks>
+    private void DejarseAgarrarPorElBorde()
+    {
+        const int WM_NCHITTEST = 0x0084;
+
+        SourceInitialized += (_, __) =>
+        {
+            var fuente = (System.Windows.Interop.HwndSource)PresentationSource.FromVisual(this)!;
+            fuente.AddHook((IntPtr h, int msg, IntPtr wp, IntPtr lp, ref bool manejado) =>
+            {
+                if (msg != WM_NCHITTEST) return IntPtr.Zero;
+
+                // lParam trae la posición en píxeles de PANTALLA y con signo (un monitor a la
+                // izquierda da negativos): el cast a short es lo que lo respeta.
+                int px = unchecked((short)(long)lp), py = unchecked((short)((long)lp >> 16));
+                var enVentana = PointFromScreen(new Point(px, py));
+
+                // La caja de lo que se VE: la ventana menos el hueco de la sombra.
+                var hueco = Estudio.HolguraDe(Estudio.Sombra3);
+                var tarjeta = new Rect(hueco.Left, hueco.Top,
+                    Math.Max(0, ActualWidth - hueco.Left - hueco.Right),
+                    Math.Max(0, ActualHeight - hueco.Top - hueco.Bottom));
+
+                int codigo = ReglaDelBorde.De(enVentana, tarjeta) switch
+                {
+                    ZonaDelBorde.Izquierda => 10,        // HTLEFT
+                    ZonaDelBorde.Derecha => 11,          // HTRIGHT
+                    ZonaDelBorde.Arriba => 12,           // HTTOP
+                    ZonaDelBorde.ArribaIzquierda => 13,  // HTTOPLEFT
+                    ZonaDelBorde.ArribaDerecha => 14,    // HTTOPRIGHT
+                    ZonaDelBorde.Abajo => 15,            // HTBOTTOM
+                    ZonaDelBorde.AbajoIzquierda => 16,   // HTBOTTOMLEFT
+                    ZonaDelBorde.AbajoDerecha => 17,     // HTBOTTOMRIGHT
+                    _ => 0,
+                };
+                if (codigo == 0) return IntPtr.Zero;   // no es borde: que lo trate WPF como siempre
+
+                manejado = true;
+                return new IntPtr(codigo);
+            });
+        };
+    }
+
+    /// <summary>
+    /// Quién manda AHORA y si está entregando audio. En UN solo sitio: el icono grande y las tres
+    /// filas del menú tienen que decir lo mismo, y dos cálculos del mismo hecho acaban discrepando
+    /// (aprendizaje nº16).
+    /// </summary>
+    private (Origen Origen, bool Entregando) FuenteReal()
     {
         var ahora = Environment.TickCount64;
 
         // DISPONIBLE ES ENTREGANDO, no «elegido». Que el canal se una no prueba que llegue audio:
         // el collar puede estar apagado al otro lado. LiveAudio sólo pone PorElTelefono cuando ha
         // recibido la primera trama de verdad.
-        bool porTelefono = _audio.PorElTelefono;
-        var origen = _selector.Decidir(CollarPermanente.Conectado, porTelefono, ahora);
+        var origen = _selector.Decidir(CollarPermanente.Conectado, _audio.PorElTelefono, ahora);
+        return (origen, _vigia.HayMicrofono(EnlaceEnPie(origen), _testigo.UltimaTrama(origen), ahora));
+    }
 
-        bool enlaceEnPie = origen switch
-        {
-            Origen.CollarPorBluetooth => CollarPermanente.Conectado,
-            Origen.CollarPorTelefono => _audio.PorElTelefono,
-            _ => true,                           // el micrófono del PC está siempre
-        };
+    /// <summary>¿El canal de esa fuente está en pie? El micrófono del PC lo está siempre.</summary>
+    private bool EnlaceEnPie(Origen origen) => origen switch
+    {
+        Origen.CollarPorBluetooth => CollarPermanente.Conectado,
+        Origen.CollarPorTelefono => _audio.PorElTelefono,
+        _ => true,
+    };
 
+    private void PintarMicrofono()
+    {
+        var ahora = Environment.TickCount64;
+        var (origen, entregando) = FuenteReal();
+        bool enlaceEnPie = EnlaceEnPie(origen);
         long ultimaDeEsta = _testigo.UltimaTrama(origen);
-        bool entregando = _vigia.HayMicrofono(enlaceEnPie, ultimaDeEsta, ahora);
         bool grabando = _consulta.Estado == EstadoDeConsulta.Grabando;
 
         _iconoMicrofono.Text = origen switch

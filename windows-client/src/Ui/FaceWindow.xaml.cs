@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
@@ -163,6 +163,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             ColocarVentana();
             RefreshBarSide();          // si quedó a la izquierda, el layout se espeja antes de verse
             SizeChanged += OnSizeChanged;
+            // El muelle se enseña DESPUÉS del primer layout, por lo mismo que la carita: con
+            // SizeToContent no sabe cuánto ocupa hasta que se ha medido, y sin eso no puede pegarse
+            // al borde derecho — nacería centrado y daría un salto a su sitio.
+            _muelle?.Show();
             RefreshRestingChevron();   // ya se puede medir el hueco: el chevron dice hacia dónde abrirá
         }), System.Windows.Threading.DispatcherPriority.Loaded);
 
@@ -831,7 +835,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             });
             _vivo.Cambio += viva => Dispatcher.Invoke(() =>
             {
-                if (viva) ShowTalk();
+                // HABLAR POR VOZ NO ABRE EL CHAT (petición del dueño, 2026-09-05: «se me abre un
+                // chat que es superestorboso»). Abrir la conversación por voz es justo el momento
+                // en que NO hace falta leer nada: quien habla está mirando su trabajo, no el globo.
+                // Que está escuchando ya lo dicen la cara y la pastilla de voz, que se encienden
+                // solas — el globo era una tercera señal encima del trabajo de alguien.
+                //
+                // El globo NO desaparece: sigue abriéndose donde hay algo que leer (una pregunta,
+                // una narración, un fallo) y por el atajo de escribirle. Lo que se quita es que la
+                // voz lo abra por su cuenta.
                 // La boca la mueve el audio EN VIVO, que no pasa por VoiceIO: sin esto el gesto
                 // quedaba dibujado y sin nadie que lo moviera (2026-08-05).
                 ActualizarBoca();
@@ -1018,7 +1030,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // botón: el operador no tiene que acordarse de activarlo para que su compañero pueda
         // exportar desde la web. Sin trabajo no hace nada más que una petición cada tres segundos.
         _exportador = new EjecutorDeExportaciones(_graphConfig, _rellenador, Dispatcher);
-        _exportador.Cuenta += m => Dispatcher.Invoke(() => { SetStatus(m); ShowTalk(); });
+        _exportador.Cuenta += m => Dispatcher.Invoke(() => { SetStatus(m); ShowTalk(MotivoDelGlobo.SoloEsProgreso); });
         _exportador.Arrancar();
         Closed += (_, __) => _exportador?.Dispose();
         // La superficie se PREGUNTA, igual que en el camino del mapa. Aquí se quedó el valor
@@ -1030,19 +1042,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _loop = new AgentLoop(_backend, _uia, mcp, this, this, InstalledApps.List,
             () => _locator?.DondeEstoy(), _workflowRunner);
 
-        // Arrastrar por cualquier zona libre de la barra mueve la ventana (la carita tiene sus
-        // propios gestos abajo; los botones se tragan el clic, así que no interfieren). DragMove()
-        // es bloqueante y retorna al soltar, así que ahí mismo se anota dónde quedó.
-        void OnDragSurface(object _, MouseButtonEventArgs ev)
-        {
-            if (ev.ButtonState != MouseButtonState.Pressed) return;
-            DragMove();   // bloqueante: retorna al soltar
-            // Y de ahí se va a un lado, igual que si lo hubieras arrastrado por la carita. Sin
-            // velocidad que medir (DragMove no la da), así que manda el borde más cercano.
-            EdgeSnap.Aplicar(this, 0, 0, OnWindowMoved);
-        }
-        BarPanel.MouseLeftButtonDown += OnDragSurface;
-        TalkPanel.MouseLeftButtonDown += OnDragSurface;
+        // LA BARRA YA NO SE ARRASTRA, y no es un olvido. Arrastrarla por cualquier zona libre movía
+        // ESTA ventana con un DragMove; desde la spec 010 la barra vive en el muelle, contra el borde
+        // derecho, así que ese handler habría movido la ventana de la carita desde un clic dado en
+        // otra ventana — un gesto que mueve algo que no estás tocando. La carita conserva los suyos
+        // (ver WireFaceGestures), que es donde el arrastre significa algo.
 
         // El menú extendido: hover/clic/teclado sobre el activador, cierre con retraso, Backend
         // plegado. Toda la coreografía vive en la región «menú extendido» de abajo.
@@ -1068,8 +1072,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // SE ARRANCA EN LA CARITA, no en la barra. Abrir la aplicación desplegaba las siete
         // herramientas de golpe sobre el trabajo de alguien que no ha pedido ninguna todavía: lo
         // primero que se ve tiene que ser lo que representa a Ü, y lo demás llegar cuando se pida
-        // (2026-08-05). Un clic en la carita abre la barra de siempre, intacta.
-        ToggleCollapsed();
+        // (2026-08-05).
+        //
+        // Y DESDE LA SPEC 010 LA BARRA NI SIQUIERA ESTÁ AQUÍ: se muda entera al muelle, contra el
+        // borde derecho, donde siempre se le puede encontrar. Esta ventana se queda con lo que de
+        // verdad flota — la carita — y ya no alterna entre dos estados.
+        MudarElPanelAlMuelle();
 
         StartUpdater();
 
@@ -1216,11 +1224,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </remarks>
     private async void OnCheckUpdate(object sender, RoutedEventArgs e)
     {
-        if (_updater == null) { SetStatus("El actualizador no está disponible."); ShowTalk(); return; }
+        if (_updater == null) { SetStatus("El actualizador no está disponible."); ShowTalk(MotivoDelGlobo.AlgoFallo); return; }
 
         CheckUpdateBtn.IsEnabled = false;
         SetStatus("Buscando actualizaciones…");
-        ShowTalk();
+        ShowTalk(MotivoDelGlobo.SoloEsProgreso);
         try
         {
             var (que, detalle) = await _updater.BuscarAhoraAsync();
@@ -1279,10 +1287,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void InvocarPorAtajo()
     {
         _prevForeground = GetForegroundWindow();   // para poder devolver el teclado con Esc
-        if (_collapsed) ToggleCollapsed();
+        _muelle?.Desplegar("atajo: escribirle a Ü");
         Show();
-        Activate();
-        ShowTalk(focusInput: true);   // el mismo camino que ya usa AskAsync; no se duplica el foco
+        _muelle?.Show();
+        _muelle?.Activate();
+        ShowTalk(MotivoDelGlobo.LoPidioAlguien, focusInput: true);   // el mismo camino que ya usa AskAsync; no se duplica el foco
         if (!IsActive)
             // Si esto sale en el registro de la máquina del hospital, hará falta el rodeo de
             // SetForegroundWindow + AttachThreadInput. No se implementa por adelantado: que la
@@ -1293,7 +1302,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void MicPorAtajo()
     {
         _prevForeground = GetForegroundWindow();
-        if (_collapsed) ToggleCollapsed();
+        SacandoLaCaritaDelMuelle();
         Show();
         Activate();
         OnMic(this, new RoutedEventArgs());
@@ -1565,32 +1574,327 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     // --- Colapsar / expandir: la carita alterna entre la barra y solo ella misma ---
 
-    private bool _collapsed;
+    /// <summary>El muelle está plegado, o sea: el panel no se ve. Lo mantiene el propio muelle.</summary>
+    private bool _collapsed = true;
+
+    private Muelle? _muelle;
 
     /// <summary>
-    /// Alterna entre la barra (con sus flyouts) y SOLO la carita. Al colapsar se cierra el menú
-    /// extendido (si estaba abierto) y aparece la carita suelta; al expandir, la barra vuelve intacta
-    /// — incluido el globo de conversación si estaba abierto. El tamaño lo pone SizeToContent y el
-    /// cambio lo reancla <see cref="OnSizeChanged"/> a la esquina inferior derecha.
+    /// EL PANEL SE MUDA AL MUELLE, VIVO (spec 010, 2026-09-05).
     /// </summary>
+    /// <remarks>
+    /// Dos líneas y no un refactor, y la diferencia importa: <c>RootPanel</c> arrastra ~35 elementos
+    /// con nombre que maneja este mismo archivo, 4.695 líneas. Reparentar en vez de copiar mantiene
+    /// todo eso funcionando SIN TOCARLO, porque los handlers que el XAML cableó
+    /// (<c>Click="OnDemoPuntaAPunta"</c>) se compilan contra ESTA instancia y no contra el padre
+    /// visual. La ventana cambia; el dueño del panel sigue siendo FaceWindow.
+    /// </remarks>
+    /// <summary>
+    /// EL PANEL SE VISTE CON EL ESTUDIO, y no con hexadecimales sueltos en el XAML.
+    /// </summary>
+    /// <remarks>
+    /// El panel nació oscuro (<c>#F20F131C</c>) cuando era una tira de iconos flotando sobre el
+    /// escritorio. Desde que vive en el muelle es una superficie que se lee, no un adorno, y el
+    /// dueño pidió que siguiera el mismo manual que la ventana de la consulta clínica: fondo claro,
+    /// lo elevado blanco, y lo que los separa no es el color sino la SOMBRA
+    /// (<see cref="Estudio"/>, rediseño del 2026-09-01).
+    ///
+    /// SE PINTA DESDE CÓDIGO A PROPÓSITO. Copiar los hex al XAML habría dejado la paleta en dos
+    /// sitios, y dos sitios para un mismo hecho se desincronizan siempre — es el aprendizaje nº16,
+    /// que en este repo ya costó cuatro comparaciones falsas en un solo día. Si mañana cambia
+    /// <c>Estudio.Superficie</c>, cambia esto sin que nadie se acuerde de venir.
+    /// </remarks>
+    private void VestirElPanelConElEstudio()
+    {
+        // El panel: un ESTADIO, como el diseño que dio el dueño. El radio es la mitad del ancho, y
+        // por eso se calcula en vez de escribirse: con un número a mano, cambiar el ancho dejaría
+        // las puntas ovaladas sin que nadie entendiera por qué.
+        var estadio = new CornerRadius(BarPanel.Width / 2);
+        BarPanel.CornerRadius = estadio;
+        BarPanel.Background = Estudio.Superficie;
+        BarPanel.BorderBrush = Estudio.Borde;
+
+        // La placa: gemela, sin un solo hijo, y es la única que lleva el Effect. Ver el comentario
+        // del XAML y Estudio.Elevar — con la sombra puesta en el panel, cada letra de dentro caería
+        // en la textura del shader y saldría lavada.
+        BarPlaca.CornerRadius = estadio;
+        BarPlaca.Background = Estudio.Superficie;
+        BarPlaca.Effect = Estudio.Sombra3;
+
+        // Y EL HUECO PARA QUE ESA SOMBRA QUEPA. El muelle es SizeToContent sobre una ventana
+        // transparente: mide exactamente lo que mide el panel, así que sin reservar sitio el
+        // desenfoque se queda al otro lado del cristal y la sombra sale cortada contra el borde
+        // (2026-09-06, lo vio el dueño). Estos dos no pasan por Estudio.Elevar —la sombra está
+        // puesta a mano sobre una placa que declara el XAML— así que se pide la misma cuenta.
+        BarShell.Margin = Estudio.HolguraDe(Estudio.Sombra3);
+
+        foreach (var b in new[] { LearnBtn, WorkBtn })
+        {
+            b.Template = Estudio.Pastilla(b.Height / 2);
+            b.Background = Estudio.Superficie;
+            b.BorderBrush = Estudio.Borde;
+            b.BorderThickness = new Thickness(1);
+            b.Foreground = Estudio.Tinta;
+            b.FontSize = 14.5;
+            b.FontWeight = FontWeights.Medium;
+            b.Cursor = System.Windows.Input.Cursors.Hand;
+            b.ConRelieve();   // sube con el ratón encima y baja al pulsarlo: la única animación
+        }
+
+        // Lo secundario se lee como secundario: los iconos que nacieron blancos sobre negro serían
+        // invisibles sobre blanco, así que se les da la tinta del estudio uno a uno. No es un
+        // barrido genérico: cada uno dibuja con su propio pincel y un barrido dejaría alguno fuera.
+        // EL FONDO, UNO A UNO Y POR LO QUE SIGNIFICA CADA BOTÓN. El estilo BarBtn los pinta con
+        // blanco al 10 % (#1AFFFFFF): sobre el negro de antes era una pastilla tenue, sobre el
+        // blanco de ahora es NADA. Pero la respuesta no es la misma para todos, y ponerles a todos
+        // el mismo gris —lo que hice el 2026-09-05— borró el color de dos que SÍ lo tenían:
+        // «hay versión nueva» era azul y «detener» era rojo, y los dejé grises a los dos. El color
+        // ahí no es adorno: es lo único que distingue un botón que informa de uno que interrumpe.
+        UpdateBtn.Background = Estudio.AcentoSuave;   // hay algo nuevo
+        StopBtn.Background = Estudio.AlertaSuave;     // esto para lo que está pasando
+        UpdateBtn.Foreground = Estudio.Acento;
+        StopBtn.Foreground = Estudio.Alerta;
+
+        // Y LOS NEUTROS, SIN FONDO NINGUNO (2026-09-06, lo pidió el dueño mirando el del collar:
+        // «sin contorno, el ícono directo al fondo blanco»). Una pastilla gris permanente alrededor
+        // de un icono que no está pasando nada es ruido: sobre una superficie blanca el icono ya se
+        // lee solo. El realce aparece al acercar la mano, que es cuando dice algo.
+        foreach (var b in new System.Windows.Controls.Primitives.ButtonBase[]
+                 { RestartTeachBtn, ComprobarBtn, MenuActivator, CollarModoBtn })
+        {
+            b.Foreground = Estudio.Tinta;
+            b.Background = System.Windows.Media.Brushes.Transparent;
+        }
+
+        ActivatorChevron.Stroke = Estudio.TintaMedia;
+        foreach (var trazo in ((Canvas)CollarModoBtn.Content).Children)
+        {
+            if (trazo is System.Windows.Shapes.Path camino) camino.Stroke = Estudio.Tinta;
+            if (trazo is System.Windows.Shapes.Ellipse punto) punto.Fill = Estudio.Tinta;
+        }
+
+        SepContexto.Background = Estudio.Borde;
+        SepBarra.Background = Estudio.Borde;
+
+        // El globo de conversación y la píldora de estado, del mismo estudio: eran las dos únicas
+        // superficies que quedaban oscuras, y una interfaz con dos temas a la vez no se lee como
+        // dos temas, se lee como un fallo.
+        TalkPanel.Background = Estudio.Superficie;
+        TalkPanel.BorderBrush = Estudio.Borde;
+        TalkPanel.CornerRadius = new CornerRadius(Estudio.RadioPanel);
+        TalkPanel.Effect = Estudio.Sombra3;
+        var aireDelGlobo = Estudio.HolguraDe(Estudio.Sombra3);
+        // Por la derecha ya había 8 de separación con la barra; se conserva el mayor de los dos en
+        // vez de sumarlos, o el globo se despegaría el doble de lo que nadie pidió.
+        TalkPanel.Margin = new Thickness(aireDelGlobo.Left, aireDelGlobo.Top,
+            Math.Max(aireDelGlobo.Right, TalkPanel.Margin.Right), aireDelGlobo.Bottom);
+        Status.Foreground = Estudio.Tinta;
+        Bubble.Foreground = Estudio.TintaMedia;
+        Input.Background = Estudio.SuperficieSuave;
+        Input.Foreground = Estudio.Tinta;
+        Input.CaretBrush = Estudio.Tinta;
+        TalkCloseBtn.Background = Estudio.SuperficieSuave;
+        TalkCloseBtn.Foreground = Estudio.TintaMedia;
+
+        StatusChip.Background = Estudio.Superficie;
+        StatusChip.BorderBrush = Estudio.Borde;
+        StatusChip.CornerRadius = new CornerRadius(Estudio.RadioChico);
+        StatusChipText.Foreground = Estudio.Tinta;
+    }
+
+    private void MudarElPanelAlMuelle()
+    {
+        var raiz = (Grid)Content;
+        raiz.Children.Remove(RootPanel);
+        RootPanel.Visibility = Visibility.Visible;   // dentro del muelle, quien lo esconde es él
+        VestirElPanelConElEstudio();
+
+        // La barra vive SIEMPRE a la derecha ahora, así que el espejo de lados se aplica una vez y
+        // deja de depender de dónde ande la carita.
+        ApplyBarSide(false);
+
+        // La carita, en cambio, ya no alterna: flota siempre.
+        CollapsedGroup.Visibility = Visibility.Visible;
+
+        // EL GLOBO ABIERTO LO MANTIENE DESPLEGADO, LA VOZ NO. Con la voz contando, el panel se
+        // quedaba abierto toda la conversación — y desde que hablar ya no abre el chat, eso sería
+        // exactamente el estorbo que el dueño pidió quitar (2026-09-05). Lo que no se puede cerrar
+        // por debajo es lo que estás LEYENDO o ESCRIBIENDO; hablar no ocupa la pantalla.
+        _muelle = new Muelle(RootPanel, () => _talkOpen);
+        _muelle.Cambio += AlCambiarElMuelle;
+        Closed += (_, __) => { try { _muelle?.Close(); } catch { } };
+    }
+
+    private void AlCambiarElMuelle(bool desplegado)
+    {
+        _collapsed = !desplegado;
+        if (!desplegado) CloseMenu();
+        else CollapsedFace.Mood = Face.Mood;   // que las dos caras digan lo mismo al verse juntas
+        // Plegado, la píldora no aparece: su sitio está dentro del panel.
+        UpdateChip(_mood);
+    }
+
+    // ── Guardar la carita en el muelle, y sacarla de él (promesas 149 y 150) ─────────────────
+    //
+    // POR QUÉ EXISTE: la carita vive encima del trabajo de alguien. Cuando estorba, lo que se quería
+    // no era cerrarla —seguir hablándole por el collar o por el atajo tiene sentido— sino quitarla de
+    // en medio sin perderla. El muelle ya está siempre ahí y ya tiene su sitio; guardarla dentro
+    // hace que el escondite tenga una PUERTA VISIBLE, en vez de ser un estado que hay que recordar.
+
+    private bool _caritaGuardada;
+
+    /// <summary>Soltar la carita encima del muelle la guarda. Devuelve si se quedó el gesto.</summary>
+    private bool GuardarSiCaeEnElMuelle(double x, double y)
+    {
+        if (_muelle == null || _caritaGuardada) return false;
+        if (!ReglaDelMuelle.Guarda(_muelle.Caja, new Point(x, y))) return false;
+
+        _caritaGuardada = true;
+        _muelle.Guardando = true;
+        Face.Visibility = Visibility.Visible;   // ahora sí hay alguien sentado en esa silla
+        Hide();
+        PlayTick();
+        LogBus.Log("muelle", $"la carita se guarda: soltada en ({x:0},{y:0}), muelle en {_muelle.Caja}");
+        return true;
+    }
+
+    /// <summary>
+    /// SACAR LA CARITA Y QUE EL ARRASTRE LO LLEVE WINDOWS.
+    /// </summary>
+    /// <remarks>
+    /// ESTE ES EL ARREGLO DETERMINISTA, tras dos intentos que no lo eran. Los dos anteriores
+    /// intentaban conservar la captura del ratón de un elemento que vive dentro del muelle; el
+    /// muelle se pliega al salir el cursor, ese elemento deja de existir, y no hay forma de
+    /// conservar la captura de algo que ya no está.
+    ///
+    /// <c>DragMove()</c> no tiene ese problema porque no es nuestro: manda un
+    /// <c>WM_NCLBUTTONDOWN</c> con <c>HTCAPTION</c> y **Windows** entra en su propio bucle modal de
+    /// mover ventana. A partir de ahí, la ventana sigue al ratón hasta que se suelte el botón, y da
+    /// exactamente igual lo que le pase a nuestra interfaz por debajo: que el muelle se pliegue, que
+    /// el elemento se destruya, que otra ventana se ponga delante. No hay nada nuestro que se pueda
+    /// romper a medio gesto.
+    ///
+    /// Es BLOQUEANTE y eso es lo que lo hace cómodo: retorna cuando ya se soltó, así que el sitio
+    /// final se lee justo después. El repo ya usaba este mismo patrón para arrastrar la barra.
+    /// </remarks>
+    private void SacarYArrastrar()
+    {
+        SacandoLaCaritaDelMuelle();
+        try { DragMove(); }
+        catch (Exception e)
+        {
+            // DragMove exige el botón pulsado. Si se soltó en el intervalo, no es un fallo: es un
+            // tirón que no llegó a ser. Se DICE, que es lo contrario de un catch mudo (patrón nº3).
+            LogBus.Log("muelle", $"el tirón no llegó a arrastre: {e.GetType().Name}: {e.Message}");
+        }
+
+        // Al volver ya está soltada, y donde la dejó la mano. Solo queda acotarla a la pantalla y
+        // recordar el sitio.
+        var sitio = ReglaDelMuelle.SitioAlSacar(
+            new Point(Left, Top), new Size(ActualWidth, ActualHeight), SystemParameters.WorkArea);
+        MoveTo(sitio.X, sitio.Y);
+        OnWindowMoved(sitio.X, sitio.Y);
+    }
+
+    /// <summary>
+    /// La carita guardada vuelve a existir, centrada donde está el cursor.
+    /// </summary>
+    /// <remarks>
+    /// APARECE AL TIRAR Y NO AL SOLTAR. Si esperara al final, estarías arrastrando algo invisible y
+    /// no habría forma de ver dónde va a caer hasta que ya cayó — que es el mismo vicio que «una caja
+    /// que miente es peor que no tener caja» (aprendizaje nº4), con el dibujo ausente en vez de mal.
+    /// </remarks>
+    private void SacandoLaCaritaDelMuelle()
+    {
+        if (!_caritaGuardada) return;
+        _caritaGuardada = false;
+        if (_muelle != null) _muelle.Guardando = false;
+        // Y AL SACARLA, LA SILLA QUEDA VACÍA (petición del dueño, 2026-09-05). Dejarla puesta
+        // enseñaba dos caras a la vez —una flotando y otra dentro del panel— sin que nada dijera
+        // cuál era cuál: la del panel decía «Ü está guardada aquí» mintiendo.
+        Face.Visibility = Visibility.Collapsed;
+
+        // APARECE BAJO EL CURSOR. Escondida, su ventana conservaba el sitio donde se guardó —encima
+        // del muelle—, así que al enseñarla salía ahí y el arrastre continuaba desde ese punto: se
+        // veía como un salto y había que volver a agarrarla (2026-09-06, segunda vuelta del mismo
+        // fallo). Ver ReglaDelMuelle.SitioAlAparecer.
+        var cursor = PointToScreen(Mouse.GetPosition(this));
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+        var sitio = ReglaDelMuelle.SitioAlAparecer(
+            new Point(cursor.X / dpi.DpiScaleX, cursor.Y / dpi.DpiScaleY),
+            new Size(ActualWidth, ActualHeight), SystemParameters.WorkArea);
+        MoveTo(sitio.X, sitio.Y);
+
+        // Y SIN ROBARLE LA ACTIVACIÓN AL MUELLE, que es la otra mitad del fallo: quien tiene el
+        // ratón capturado es la carita PEQUEÑA, que vive en la ventana del muelle. Mostrar esta
+        // ventana con activación se la quita, Windows suelta la captura y el arrastre muere en el
+        // acto. Se queda en false para siempre: una carita flotante no debe robar el foco a nadie,
+        // y los atajos que sí quieren traerla al frente llaman a Activate(), que no depende de esto.
+        ShowActivated = false;
+        Show();
+    }
+
+    /// <summary>La carita se posa donde la soltaste, entera dentro de la pantalla.</summary>
+    private void PosarLaCarita(double x, double y)
+    {
+        var sitio = ReglaDelMuelle.SitioAlSacar(
+            new Point(x, y), new Size(ActualWidth, ActualHeight), SystemParameters.WorkArea);
+        MoveTo(sitio.X, sitio.Y);
+        OnWindowMoved(sitio.X, sitio.Y);   // recordar el sitio y espejar al lado que toque
+    }
+
+    /// <summary>
+    /// LIVE: la consulta clínica. Grabar en vivo y que la nota llegue al triage.
+    /// </summary>
+    /// <remarks>
+    /// Hasta hoy solo se llegaba por <c>U.exe --consulta</c> o por su acceso directo del
+    /// escritorio: la función más específica del producto no tenía puerta dentro de la aplicación.
+    ///
+    /// SI YA HAY UNA ABIERTA SE TRAE AL FRENTE en vez de abrir otra. Dos consultas vivas a la vez
+    /// serían dos grabaciones sobre el mismo paciente, y la segunda no tendría forma de saber de la
+    /// primera — un fallo que no se ve hasta que la nota llega partida en dos.
+    /// </remarks>
+    private void OnAbrirConsulta(object sender, RoutedEventArgs e)
+    {
+        var abierta = Application.Current.Windows.OfType<ConsultaWindow>().FirstOrDefault();
+
+        // AL FRENTE es «se ve Y tiene el foco». Minimizada NO es oculta para Windows —IsVisible
+        // sigue siendo true— y por eso el botón no hacía nada con la nota minimizada: existía, así
+        // que se daba por atendida, y Activate() sobre una minimizada no la levanta (2026-09-06).
+        bool alFrente = abierta != null
+                        && abierta.IsVisible
+                        && abierta.WindowState != WindowState.Minimized
+                        && abierta.IsActive;
+
+        PlayTick();
+        switch (ReglaDeLaVentana.AlPulsarSuBoton(abierta != null, alFrente))
+        {
+            case QueHacerConLaVentana.Abrir:
+                (Application.Current as App)?.AbrirLaConsulta();
+                break;
+
+            case QueHacerConLaVentana.TraerAlFrente:
+                if (!abierta!.IsVisible) abierta.Show();
+                if (abierta.WindowState == WindowState.Minimized) abierta.WindowState = WindowState.Normal;
+                abierta.Activate();
+                LogBus.Log("consulta", "la nota clínica se trae al frente");
+                break;
+
+            case QueHacerConLaVentana.Ocultar:
+                // Minimizar y no Hide: minimizada sigue en la barra de tareas, así que quien no se
+                // acuerde de este botón tiene otro camino de vuelta.
+                abierta!.WindowState = WindowState.Minimized;
+                LogBus.Log("consulta", "la nota clínica se quita de en medio");
+                break;
+        }
+    }
+
+    /// <summary>Alterna el muelle. Conserva el nombre porque lo llaman los atajos de siempre.</summary>
     private void ToggleCollapsed()
     {
-        _collapsed = !_collapsed;
-        if (_collapsed)
-        {
-            CollapsedFace.Mood = Face.Mood; // que la carita suelta refleje el mismo estado
-            CloseMenu();
-            RootPanel.Visibility = Visibility.Collapsed;
-            CollapsedGroup.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            CollapsedGroup.Visibility = Visibility.Collapsed;
-            EsconderBotonVoz();   // que no se quede encendido al volver a la barra
-            RootPanel.Visibility = Visibility.Visible;
-        }
-        // Colapsada, el contrato es «solo la carita»: la píldora no aparece y el semáforo ES la cara.
-        UpdateChip(_mood);
+        if (_muelle == null) return;
+        if (_muelle.EstaDesplegado) _muelle.Plegar("lo pidió la aplicación");
+        else _muelle.Desplegar("lo pidió la aplicación");
     }
 
     // --- El botón de voz que asoma al pasar por encima de la carita suelta ---
@@ -1700,7 +2004,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         e.Handled = true;
         PlayTick();
-        if (_talkOpen) HideTalk(); else ShowTalk(focusInput: true);
+        if (_talkOpen) HideTalk(); else ShowTalk(MotivoDelGlobo.LoPidioAlguien, focusInput: true);
     }
 
     /// <summary>La pastilla en rojo mientras escucha: un micrófono abierto que no se ve es lo último
@@ -1742,7 +2046,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         e.Handled = true;
         PlayTick();
-        if (_dictadoClinico == null) { SetStatus("El dictado clínico no está disponible."); ShowTalk(); return; }
+        if (_dictadoClinico == null) { SetStatus("El dictado clínico no está disponible."); ShowTalk(MotivoDelGlobo.AlgoFallo); return; }
 
         if (_dictadoClinico.Activo) { await _dictadoClinico.PararAsync(); return; }
 
@@ -1752,7 +2056,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_vivo?.Viva == true)
         {
             SetStatus("Cuelga la conversación antes de dictar: no pueden oírte los dos a la vez.");
-            ShowTalk();
+            ShowTalk(MotivoDelGlobo.AlgoFallo);
             return;
         }
 
@@ -1760,11 +2064,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (!RellenadorSap.EsLaPantallaDeTriage(donde))
         {
             SetStatus("El dictado clínico solo funciona en la pantalla de triage de SAP.");
-            ShowTalk();
+            ShowTalk(MotivoDelGlobo.AlgoFallo);
             return;
         }
 
-        ShowTalk();
+        ShowTalk(MotivoDelGlobo.SoloEsProgreso);
         await _dictadoClinico.ArrancarAsync();
     }
 
@@ -1874,29 +2178,62 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>Conecta los gestos (toque/doble toque/mantener/arrastre) a ambas caritas.</summary>
     private void WireFaceGestures()
     {
-        // Carita de la barra: arrastra la barra entera, y al soltar se va a un lado como la suelta.
-        new FaceGestures(this, Face)
+        // LA CARITA DEL PANEL NO USA FaceGestures, y es a propósito. FaceGestures arrastra moviendo
+        // la ventana en cada MouseMove, lo que exige conservar la captura del ratón durante todo el
+        // gesto — y este elemento vive DENTRO del muelle, que se pliega en cuanto el cursor sale de
+        // él. Al plegarse, Face desaparece del árbol visual, la captura se va con él y el arrastre
+        // muere justo al cruzar el borde del panel: exactamente lo que describió el dueño («tiene
+        // como un límite que es hasta dónde llega la ventana», 2026-09-06).
+        //
+        // Aquí el gesto es más simple y NO depende de que este elemento siga existiendo: en cuanto
+        // se reconoce como arrastre, se le entrega el trabajo a Windows. Ver SacarYArrastrar.
+        Point origenDelTiron = default;
+        bool tirando = false;
+
+        Face.MouseLeftButtonDown += (_, ev) =>
         {
-            SingleTap = () => { PlayTick(); ToggleCollapsed(); },
-            DoubleTap = StartMicByFace,
-            LongPress = CycleTheme,
-            // Un solo callback alimenta las tres cosas que dependen de dónde quedó la barra: recordar
-            // el sitio, espejar el layout al lado que toque, y hacia dónde abrirá el menú. Llega con
-            // el DESTINO, así que el espejo se aplica al empezar el vuelo y no al terminarlo — la
-            // barra viaja ya con su forma final en vez de darse la vuelta al aterrizar.
-            Moved = OnWindowMoved,
+            origenDelTiron = ev.GetPosition(this);
+            tirando = false;
+            Face.CaptureMouse();
+            ev.Handled = true;
+        };
+        Face.MouseMove += (_, ev) =>
+        {
+            if (tirando || ev.LeftButton != MouseButtonState.Pressed || !Face.IsMouseCaptured) return;
+            var ahora = ev.GetPosition(this);
+            // El mismo umbral que FaceGestures: por debajo, un pulso normal convertiría en arrastre
+            // lo que iba a ser un clic.
+            if ((ahora - origenDelTiron).LengthSquared <= 169) return;
+
+            tirando = true;
+            Face.ReleaseMouseCapture();
+            SacarYArrastrar();
+        };
+        Face.MouseLeftButtonUp += (_, ev) =>
+        {
+            if (Face.IsMouseCaptured) Face.ReleaseMouseCapture();
+            if (!tirando) StartMicByFace();
+            ev.Handled = true;
         };
 
-        // Carita suelta (colapsada): mismos gestos, mismo pegado al borde.
+        // Carita suelta: arrastra su propia ventana, y al soltar se va a un lado como la sueltas.
         new FaceGestures(this, CollapsedFace)
         {
-            SingleTap = () => { PlayTick(); ToggleCollapsed(); },
-            DoubleTap = StartMicByFace,
+            // UN CLIC HABLA (spec 010, 2026-09-05, pedido por el usuario). Antes el clic abría la
+            // barra y el micrófono estaba detrás de un doble clic: el gesto más usado escondido
+            // detrás del que hay que saberse. Ahora el clic ALTERNA la conversación, y sin doble
+            // toque que distinguir abre en el acto — ver ReglaDelToque.
+            SingleTap = StartMicByFace,
+            DoubleTap = null,
             LongPress = CycleTheme,
-            // Un solo callback alimenta las tres cosas que dependen de dónde quedó la barra: recordar
-            // el sitio, espejar el layout al lado que toque, y hacia dónde abrirá el menú. Llega con
-            // el DESTINO, así que el espejo se aplica al empezar el vuelo y no al terminarlo — la
-            // barra viaja ya con su forma final en vez de darse la vuelta al aterrizar.
+            // SOLTARLA ENCIMA DEL MUELLE LA GUARDA (promesa 149). Se pregunta antes que el borde
+            // porque el borde no es una opción: si no, la carita saldría disparada al lado derecho
+            // —que es justo donde está el muelle— y nunca llegaría a guardarse.
+            Soltada = GuardarSiCaeEnElMuelle,
+            // Un solo callback alimenta las dos cosas que dependen de dónde quedó: recordar el sitio
+            // y espejar la carita al lado que toque. Llega con el DESTINO, así que el espejo se
+            // aplica al empezar el vuelo y no al terminarlo — viaja ya con su forma final en vez de
+            // darse la vuelta al aterrizar.
             Moved = OnWindowMoved,
         };
 
@@ -1906,9 +2243,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             (vx, vy) => EdgeSnap.Aplicar(this, vx, vy, OnWindowMoved));
     }
 
-    /// <summary>Doble clic en la carita = micrófono (como el doble toque de Android). El carrillón del
-    /// doble clic predomina: no se solapa con el tick del clic simple porque el gesto ya se resolvió
-    /// como doble antes de sonar nada.</summary>
+    /// <summary>Un clic en la carita = micrófono (spec 010; era el doble clic hasta el 2026-09-05).
+    /// Suena el carrillón y no el tick: el tick acompañaba a abrir la barra, y abrir la conversación
+    /// es otra cosa — dos notas que SUBEN, escuchar = abrirse.</summary>
     private void StartMicByFace()
     {
         PlayChime();
@@ -1933,8 +2270,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (!IsVisible)
         {
             _prevForeground = GetForegroundWindow();   // para poder devolver el teclado con Esc
-            if (_collapsed) ToggleCollapsed();
+            // Si estaba GUARDADA en el muelle, sale de ahí: pedir que vuelva y que vuelva sin que el
+            // muelle deje de decir que la tiene dentro sería dejar la señal mintiendo.
+            SacandoLaCaritaDelMuelle();
             Show();
+            _muelle?.Show();
             Activate();
             PlayTick();
             LogBus.Log("atajo", "doble Ctrl: Ü estaba oculta y vuelve a la vista");
@@ -2014,8 +2354,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         if (_vivo != null) { await _vivo.AlternarAsync(); return; }
 
-        SetStatus("Escuchando…");
-        ShowTalk(); // que «Escuchando…» y lo que se entienda queden a la vista
+        SetStatus("Escuchando…");   // a la píldora, no al globo: ver el comentario de _vivo.Cambio
         string heard = await _voice.ListenOnceAsync(CancellationToken.None);
         if (string.IsNullOrWhiteSpace(heard)) { SetStatus("No te escuché"); return; }
         if (_pendingAnswer != null && !_pendingAnswer.Task.IsCompleted) { _pendingAnswer.TrySetResult(heard); return; }
@@ -2028,17 +2367,27 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     // interruptor que hay que saber que existe obliga a arrancar la aplicación de una forma
     // especial, y entonces «probarlo» ya no es lo mismo que usarlo.
 
-    private PanelDelCollar? _panelCollar;
-
-    /// <summary>La pantalla del collar: enlazar, ver el estado, quitar el enlace.</summary>
-    private void OnCollar(object sender, RoutedEventArgs e)
-    {
-        PlayTick();
-        if (_panelCollar is { IsVisible: true }) { _panelCollar.Activate(); return; }
-        _panelCollar = new PanelDelCollar { Owner = this };
-        _panelCollar.Closed += (_, __) => _panelCollar = null;
-        _panelCollar.Show();
-    }
+    /// <summary>
+    /// EL COLLAR ABRE LA VENTANA DE ANÁLISIS CLÍNICO (petición del dueño, 2026-09-05).
+    /// </summary>
+    /// <remarks>
+    /// Abría <c>PanelDelCollar</c>, una ventana propia con «Enlazar el collar» y «Olvidar este
+    /// collar». Esa pantalla quedó vieja: elegir por dónde se te oye —computador, collar por
+    /// Bluetooth, o collar por el teléfono— ya vive en el selector de micrófono de
+    /// <see cref="ConsultaWindow"/>, que además ANUNCIA la elección a toda la app (promesa 146),
+    /// cosa que el panel viejo no hacía. Dos puertas al mismo enlace, una de ellas sin enterarse
+    /// de la otra, es como se acaba con dos verdades sobre un mismo hecho.
+    ///
+    /// Se comprobó antes de borrarlo, y no de memoria: enlazar y conectar los hace igual el
+    /// selector (<c>Permanente ? ConectarAsync() : EncenderAsync()</c>), y el servicio
+    /// <c>CollarPermanente</c> —que es quien de verdad sabe del collar— no se toca: lo siguen
+    /// usando la carita y la consulta.
+    ///
+    /// LO QUE SÍ SE PIERDE, dicho para que conste: «Olvidar este collar». Era el único sitio que
+    /// llamaba a <c>CollarPermanente.Olvidar()</c>. Desenlazar deja de tener puerta hasta que se le
+    /// dé una en el selector de la consulta, que es donde le toca.
+    /// </remarks>
+    private void OnCollar(object sender, RoutedEventArgs e) => OnAbrirConsulta(sender, e);
 
     /// <summary>
     /// EL BOTÓN DEL COLLAR ENCIENDE Y APAGA EL HABLA, y se engancha al SERVICIO y no a la sesión de
@@ -2122,7 +2471,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 return "Silenciado. Un clic en el altavoz para que vuelva a hablar.";
 
             case "self_hide":
-                if (_collapsed) ToggleCollapsed();
+                // Las DOS ventanas. Esconder solo la carita habría dejado la pestaña del muelle
+                // contra el borde: «me oculto» y seguir viéndose es peor que no ocultarse.
+                _muelle?.Plegar("Ü se oculta");
+                _muelle?.Hide();
                 Hide();
                 // Se ofrece el doble Ctrl y no Ctrl+Alt+U porque es el gesto que ya usa para
                 // hablarle: una tecla menos que recordar, y la misma que tenía en la mano.
@@ -2300,7 +2652,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
 
         SetTeachingUi(true); // el aura arranca TENUE aquí: enseñando, pero aún sin grabar
-        ShowTalk(); // el conteo regresivo y el estado de la grabación se ven ahí
+        ShowTalk(MotivoDelGlobo.SoloEsProgreso); // el conteo regresivo y el estado de la grabación se ven ahí
         try
         {
             // Título vacío: se autogenera al final desde lo aprendido (WorkflowLearner en Graph).
@@ -2413,7 +2765,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         if (_comprobando) { SetStatus("Ya estoy comprobando una tarea."); return; }
         if (_teaching) { SetStatus("Termina de enseñar primero: pulsa 🎓 para cerrar la grabación."); return; }
-        if (_loop == null || _mapaDeMano == null) { SetStatus("El piloto no está listo todavía."); ShowTalk(); return; }
+        if (_loop == null || _mapaDeMano == null) { SetStatus("El piloto no está listo todavía."); ShowTalk(MotivoDelGlobo.AlgoFallo); return; }
 
         // CUÁL SE COMPRUEBA: la última enseñada si sigue en memoria; si no, la primera pendiente del
         // catálogo. No se elige «la más nueva» a ciegas: se elige la que le falta el repaso, que es
@@ -2422,7 +2774,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (skill == null)
         {
             SetStatus("No hay ninguna tarea pendiente de comprobar. Enseña una con 🎓.");
-            ShowTalk();
+            ShowTalk(MotivoDelGlobo.AlgoFallo);
             return;
         }
 
@@ -2433,7 +2785,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // piloto recibe el OBJETIVO y todo el contexto, va hacia él por identidad y con la
         // compuerta, y cuelga un recuerdo de cada elemento que usa. Los pasos son pistas.
         _comprobando = true;
-        ShowTalk();
+        ShowTalk(MotivoDelGlobo.SoloEsProgreso);
         var reloj = System.Diagnostics.Stopwatch.StartNew();
 
         // LA VOZ SE ABRE PARA COMPROBAR (promesa 142). Ü va a narrar todo el recorrido, y sin la
@@ -2604,7 +2956,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
         _vozAbiertaParaEnsenar = false;
         SetStatus("Cerrando la enseñanza y estructurando el workflow…");
-        ShowTalk(); // el cierre tarda y termina en un veredicto: que no pase en silencio
+        ShowTalk(MotivoDelGlobo.SoloEsProgreso); // el cierre tarda y termina en un veredicto: que no pase en silencio
 
         if (_teachSession != null)
         {
@@ -2888,29 +3240,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // En un DockPanel el orden de los hijos decide qué franja ocupa cada uno; invirtiendo los
         // Dock, el orden visual se invierte solo: [globo][píldora][barra] ↔ [barra][píldora][globo].
         DockPanel.SetDock(TalkPanel, left ? Dock.Right : Dock.Left);
-        DockPanel.SetDock(BarPanel, left ? Dock.Left : Dock.Right);
+        DockPanel.SetDock(BarShell, left ? Dock.Left : Dock.Right);
         DockPanel.SetDock(StatusChip, left ? Dock.Left : Dock.Right);
 
         MenuPanel.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
         BarRow.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-        CollapsedGroup.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-
-        // El botón de voz se pone del lado de FUERA: pegada al borde izquierdo, a la derecha de la
-        // carita; pegada al derecho, a su izquierda. Si no, quedaría contra el borde de la pantalla.
-        //
-        // SOLO SI DE VERDAD CAMBIA. Esto se llama en cada movimiento de la ventana —también al
-        // empezar un lanzamiento—, y sacar y volver a meter los hijos fuerza una pasada de layout
-        // entera sobre una ventana que se está midiendo sola (SizeToContent). Reconstruir el árbol
-        // para dejarlo exactamente igual es trabajo tirado, y trabajo tirado en mitad de una
-        // animación se nota.
-        bool caraPrimero = CollapsedGroup.Children.Count > 0 && CollapsedGroup.Children[0] == CollapsedFace;
-        if (caraPrimero != left)
-        {
-            CollapsedGroup.Children.Clear();
-            if (left) { CollapsedGroup.Children.Add(CollapsedFace); CollapsedGroup.Children.Add(VoiceDotGrupo); }
-            else { CollapsedGroup.Children.Add(VoiceDotGrupo); CollapsedGroup.Children.Add(CollapsedFace); }
-            VoiceDotGrupo.Margin = left ? new Thickness(10, 0, 0, 0) : new Thickness(0, 0, 10, 0);
-        }
 
         // Los tooltips salían siempre por la izquierda: pegados al borde izquierdo se saldrían de la
         // pantalla. Es un ajuste por botón porque ToolTipService.Placement no se hereda.
@@ -2925,6 +3259,37 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     private bool _sideApplied;
 
+    /// <summary>
+    /// El espejo de LA CARITA, que sí sigue viajando de un borde a otro.
+    /// </summary>
+    /// <remarks>
+    /// Vivía dentro de <see cref="ApplyBarSide"/> porque hasta la spec 010 la barra y la carita eran
+    /// la misma ventana y compartían lado. Ya no: la barra vive clavada a la derecha en el muelle y
+    /// la carita va donde la lancen, así que un solo lado para las dos habría espejado la barra cada
+    /// vez que alguien tirase la carita a la izquierda.
+    ///
+    /// El botón de voz se pone del lado de FUERA: pegada al borde izquierdo, a la derecha de la
+    /// carita; pegada al derecho, a su izquierda. Si no, quedaría contra el borde de la pantalla.
+    ///
+    /// SOLO SI DE VERDAD CAMBIA. Esto se llama en cada movimiento de la ventana —también al empezar
+    /// un lanzamiento—, y sacar y volver a meter los hijos fuerza una pasada de layout entera sobre
+    /// una ventana que se está midiendo sola (SizeToContent). Reconstruir el árbol para dejarlo
+    /// exactamente igual es trabajo tirado, y trabajo tirado en mitad de una animación se nota.
+    /// </remarks>
+    private void ApplyCaritaSide(bool left)
+    {
+        CollapsedGroup.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+
+        bool caraPrimero = CollapsedGroup.Children.Count > 0 && CollapsedGroup.Children[0] == CollapsedFace;
+        if (caraPrimero != left)
+        {
+            CollapsedGroup.Children.Clear();
+            if (left) { CollapsedGroup.Children.Add(CollapsedFace); CollapsedGroup.Children.Add(VoiceDotGrupo); }
+            else { CollapsedGroup.Children.Add(VoiceDotGrupo); CollapsedGroup.Children.Add(CollapsedFace); }
+            VoiceDotGrupo.Margin = left ? new Thickness(10, 0, 0, 0) : new Thickness(0, 0, 10, 0);
+        }
+    }
+
     private IEnumerable<Button> BarButtons()
     {
         foreach (object child in ((StackPanel)BarPanel.Child).Children)
@@ -2936,8 +3301,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
     }
 
-    /// <summary>Recoloca el espejo según dónde está la ventana. Barato: sale pronto si no cambia.</summary>
-    private void RefreshBarSide() => ApplyBarSide(EdgeSnap.EstáALaIzquierda(this));
+    /// <summary>Recoloca el espejo de la carita según dónde quedó. Barato: sale pronto si no cambia.</summary>
+    private void RefreshBarSide() => ApplyCaritaSide(EdgeSnap.EstáALaIzquierda(this));
 
     /// <summary>
     /// La ventana acabó en un sitio nuevo por voluntad del usuario. Llega con el DESTINO, así que
@@ -2947,8 +3312,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         SavePositionSoon(left, top);
         var wa = SystemParameters.WorkArea;
-        ApplyBarSide(left + ActualWidth / 2 < (wa.Left + wa.Right) / 2);
-        RefreshRestingChevron();
+        ApplyCaritaSide(left + ActualWidth / 2 < (wa.Left + wa.Right) / 2);
     }
 
     // ── Hacia dónde se abre el menú ───────────────────────────────────────────────────────────
@@ -3083,9 +3447,25 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// pregunta del asistente, una ejecución en curso. Con la carita colapsada no hace nada (mismo
     /// contrato de siempre: colapsado = solo la carita).
     /// </summary>
-    private void ShowTalk(bool focusInput = false)
+    /// <summary>
+    /// Pide el globo. Lo concede <see cref="ReglaDelGlobo"/>, no quien llama.
+    /// </summary>
+    /// <remarks>
+    /// TODA LLAMADA DECLARA SU MOTIVO, y no hay valor por defecto a propósito: el defecto sería
+    /// exactamente la decisión que aquí no se puede tomar de oficio. Veinte sitios abrían este
+    /// globo, ninguno se preguntaba si conversar era lo que tocaba, y el resultado fue un chat
+    /// saliendo encima del trabajo del dueño cada vez que Ü contaba algo (2026-09-06).
+    /// </remarks>
+    private void ShowTalk(MotivoDelGlobo motivo, bool focusInput = false)
     {
-        if (_collapsed) return;
+        // Un fallo saca el panel aunque no abra el globo: la píldora vive dentro.
+        if (_collapsed && ReglaDelGlobo.DespliegaElMuelle(motivo))
+            _muelle?.Desplegar(motivo == MotivoDelGlobo.AlgoFallo ? "algo falló" : "lo pidió alguien");
+
+        // El progreso deja su texto escrito y se va: quien abra el globo lo encontrará ahí.
+        if (!ReglaDelGlobo.SeAbre(motivo)) { UpdateChip(_mood); return; }
+
+        if (_muelle == null) return;
         if (!_talkOpen)
         {
             _talkOpen = true;
@@ -3388,7 +3768,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         ShowStop(true);
         SetWorking(true);
         SetStatus($"Ejecutando «{wf.Nombre}»…");
-        ShowTalk(); // el progreso se narra ahí, y el ⏹ de la barra ya quedó visible
+        ShowTalk(MotivoDelGlobo.SoloEsProgreso); // el progreso se narra ahí, y el ⏹ de la barra ya quedó visible
         string? bridgeGoal = null; // puente subconsciente→consciente si el workflow se detiene
         bool paróElUsuario = false, falló = false;
         try
@@ -3898,7 +4278,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         ShowStop(true);
         SetWorking(true);
         SetStatus("Pensando…");
-        ShowTalk(); // que se vea el estado (y quede a mano el ⏹) desde el primer segundo
+        ShowTalk(MotivoDelGlobo.SoloEsProgreso); // que se vea el estado (y quede a mano el ⏹) desde el primer segundo
         bool paró = false, falló = false;
         try
         {
@@ -3916,7 +4296,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     public void Narrate(string text) => Dispatcher.Invoke(() =>
     {
         Bubble.Text = text;
-        if (!string.IsNullOrWhiteSpace(text)) ShowTalk();
+        if (!string.IsNullOrWhiteSpace(text)) ShowTalk(MotivoDelGlobo.SoloEsProgreso);
         // MIENTRAS SE COMPRUEBA, LO QUE EL PILOTO NARRA SE OYE (promesa 142). Fuera de eso, narrar
         // es un estado y va escrito: un asistente que lee en voz cada «voy por el paso 3» cansa.
         if (_comprobando && !string.IsNullOrWhiteSpace(text) && _vivo is { Viva: true })
@@ -3924,7 +4304,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     });
     public void Speak(string text)
     {
-        Dispatcher.Invoke(() => { Bubble.Text = text; SetStatus(text); ShowTalk(); });
+        Dispatcher.Invoke(() => { Bubble.Text = text; SetStatus(text); ShowTalk(MotivoDelGlobo.SoloEsProgreso); });
         // Durante una conversación en vivo la voz de Ü la pone Gemini. Añadir encima el sintetizador
         // de Windows serían dos Ü hablando a la vez, cada una su frase: el texto se sigue viendo,
         // que es lo que hace falta, pero se oye una sola.
@@ -3963,7 +4343,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _turnoAbierto = true;
         if (lineas.Count > 40) lineas.RemoveRange(0, lineas.Count - 40);
         Bubble.Text = string.Join("\n", lineas);
-        ShowTalk();
+        ShowTalk(MotivoDelGlobo.SoloEsProgreso);
     }
 
     // --- IUserChannel ---
@@ -3972,7 +4352,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Dispatcher.Invoke(() =>
         {
             SetStatus(question);
-            ShowTalk(focusInput: true); // la pregunta necesita la caja de texto delante
+            ShowTalk(MotivoDelGlobo.HayQueContestar, focusInput: true); // la pregunta necesita la caja de texto delante
         });
         _pendingAnswer = new TaskCompletionSource<string>();
         ct.Register(() => _pendingAnswer?.TrySetResult(""));

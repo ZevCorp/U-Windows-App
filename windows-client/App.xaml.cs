@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -99,7 +99,10 @@ public partial class App : Application
     /// ventana. No se deja puesto: con él, cerrar todas las ventanas dejaría el proceso vivo e
     /// invisible, que es la avería opuesta y peor.
     /// </remarks>
-    private void AbrirLaConsulta()
+    /// <remarks>Internal y no private desde el 2026-09-05: el boton «Live» del panel abre esto
+    /// mismo. Un segundo camino que replicara el arranque tendria su propia forma de fallar en
+    /// silencio, que es justo de lo que este metodo nacio (ver arriba).</remarks>
+    internal void AbrirLaConsulta()
     {
         var modoPrevio = ShutdownMode;
         ShutdownMode = ShutdownMode.OnExplicitShutdown;

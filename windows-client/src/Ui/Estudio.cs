@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Markup;
@@ -17,10 +17,12 @@ namespace U.WindowsClient.Ui;
 /// no es el color, es la sombra.** Un botón oscuro sobre fondo claro grita; un botón blanco sobre
 /// gris muy claro, con una sombra suave debajo, se lee como un objeto físico que se puede pulsar.
 ///
-/// POR ESO EL FONDO NO ES BLANCO PURO. Si el lienzo fuera #FFFFFF, una tarjeta blanca encima sería
-/// invisible y solo quedaría la sombra flotando sin objeto. El fondo es un gris muy claro y
-/// ligeramente frío (<see cref="Fondo"/>), y lo elevado es blanco de verdad: esa diferencia de dos
-/// pasos es la que hace que el relieve se lea incluso antes de ver la sombra.
+/// EL LIENZO ES BLANCO DESDE EL 2026-09-06, y antes no lo era. La regla decía «el fondo no puede
+/// ser blanco puro, porque una tarjeta blanca encima sería invisible y solo quedaría la sombra
+/// flotando sin objeto», y el argumento sigue siendo cierto: lo que cambió es que el dueño prefiere
+/// pagarlo. Ahora lo elevado se lee SOLO por su sombra y su filete, sin el escalón de color que
+/// antes hacía la mitad del trabajo. Si una tarjeta deja de distinguirse, se le sube la sombra un
+/// nivel — no se devuelve el gris. Ver <see cref="Fondo"/>.
 ///
 /// LA ESCALA DE SOMBRA TIENE TRES NIVELES Y NO ES DECORACIÓN: dice a qué distancia está cada cosa.
 /// La ventana flota sobre el escritorio (nivel 3), las tarjetas sobre la ventana (nivel 2) y los
@@ -38,8 +40,17 @@ public static class Estudio
 {
     // ── color ────────────────────────────────────────────────────────────────
 
-    /// <summary>El lienzo. Gris muy claro y frío: sobre blanco puro, lo blanco no se vería.</summary>
-    public static readonly Brush Fondo = Congelado(0xEE, 0xF0, 0xF4);
+    /// <summary>El lienzo. Blanco: lo elevado se separa por su sombra, no por un escalón de color.</summary>
+    // BLANCO DESDE EL 2026-09-06, y es un cambio de doctrina pedido por el dueño: «prefiero que
+    // todo sea muy blanco, la diferenciación se hace a través de las sombras».
+    //
+    // Lo que decía antes esta regla —y se conserva escrito porque el argumento sigue siendo
+    // cierto— es que un lienzo #FFFFFF deja invisible a una tarjeta blanca encima, y solo queda la
+    // sombra flotando sin objeto. La decisión asume ese coste a cambio de una interfaz sin grises:
+    // lo elevado se lee por su SOMBRA y su filete, que es lo que ya hacía el trabajo pesado. Si en
+    // alguna pantalla una tarjeta deja de distinguirse, el arreglo es subirle la sombra un nivel,
+    // no devolver el gris a hurtadillas.
+    public static readonly Brush Fondo = Congelado(0xFF, 0xFF, 0xFF);
 
     /// <summary>Lo ELEVADO: tarjetas, botones, la pestaña activa. Blanco de verdad.</summary>
     public static readonly Brush Superficie = Congelado(0xFF, 0xFF, 0xFF);
@@ -238,18 +249,69 @@ public static class Estudio
     /// misma sombra y se queda escondida detrás. El contenido va delante, hermano suyo, y se pinta
     /// directo a la pantalla con todo su ClearType.
     /// </remarks>
+    /// <summary>
+    /// EL HUECO QUE UNA SOMBRA NECESITA PARA DIBUJARSE ENTERA.
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ HACE FALTA (2026-09-06, lo vio el dueño: «hay unas sombras que se ven cortadas… no
+    /// solo aquí, en varios lugares»). WPF no recorta a un hijo que se sale de su sitio, así que
+    /// dentro de una ventana la sombra asoma sin problema. Lo que SÍ corta es el borde de la
+    /// VENTANA: las de esta aplicación son <c>SizeToContent</c> sobre <c>AllowsTransparency</c>, o
+    /// sea que el HWND mide exactamente lo que mide el contenido — y el desenfoque, que vive fuera
+    /// de ese contenido, se queda al otro lado del cristal. Igual con un <c>Popup</c>, que es una
+    /// ventana con otro nombre.
+    ///
+    /// El síntoma engaña porque no parece un recorte: parece un borde duro, o una sombra más
+    /// «plana» de un lado. Es la misma familia que «una caja que miente» (aprendizaje nº4): el
+    /// dibujo dice una profundidad que no es.
+    ///
+    /// EL REPARTO NO ES SIMÉTRICO, y por la misma razón que la sombra existe. La luz de este
+    /// estudio viene de arriba (<see cref="Sombra"/> fija la dirección en 270), así que la mancha
+    /// cae hacia abajo desplazada <c>ShadowDepth</c>: por abajo hace falta el desenfoque MÁS esa
+    /// caída, y por los otros tres lados solo el desenfoque.
+    ///
+    /// Ya había un sitio que resolvía esto a mano y sabía por qué —el <c>Margin</c> de 28 de la
+    /// carita suelta, con su comentario: «deja aire alrededor para que la sombra (blur 24) no se
+    /// recorte»—. Esto es esa misma cuenta, dicha una vez para todos.
+    /// </remarks>
+    public static Thickness HolguraDe(DropShadowEffect? sombra)
+    {
+        if (sombra == null) return new Thickness(0);
+
+        // BlurRadius es el diámetro del desenfoque; se sale la mitad por cada lado. Se redondea
+        // hacia arriba: quedarse corto por medio píxel devuelve el recorte que esto viene a quitar.
+        double lados = Math.Ceiling(sombra.BlurRadius / 2);
+        double caida = Math.Ceiling(Math.Abs(sombra.ShadowDepth));
+        return new Thickness(lados, lados, lados, lados + caida);
+    }
+
     public static Grid Elevar(Border tarjeta, DropShadowEffect? sombra = null)
     {
+        var laSombra = sombra ?? Sombra2;
+
         // El margen se muda al contenedor: si se quedara en la tarjeta, la placa iría desplazada y
         // la sombra asomaría por un lado.
-        var caja = new Grid { Margin = tarjeta.Margin };
+        //
+        // Y SE LE SUMA LA HOLGURA DE LA SOMBRA, que es lo que faltaba: sin ella, lo elevado mide
+        // exactamente lo que mide la tarjeta, y una ventana o un popup que se ajustan al contenido
+        // dejan el desenfoque fuera del cristal. Se SUMA en vez de sustituir para no comerse el
+        // margen que cada pantalla ya pedía.
+        var holgura = HolguraDe(laSombra);
+        var caja = new Grid
+        {
+            Margin = new Thickness(
+                tarjeta.Margin.Left + holgura.Left,
+                tarjeta.Margin.Top + holgura.Top,
+                tarjeta.Margin.Right + holgura.Right,
+                tarjeta.Margin.Bottom + holgura.Bottom),
+        };
         tarjeta.Margin = new Thickness(0);
 
         caja.Children.Add(new Border
         {
             CornerRadius = tarjeta.CornerRadius,
             Background = tarjeta.Background,
-            Effect = sombra ?? Sombra2,
+            Effect = laSombra,
         });
         caja.Children.Add(tarjeta);
         return caja;
@@ -268,7 +330,17 @@ public static class Estudio
     /// encima, baja al pulsar— y una plantilla no admite un valor distinto por instancia de otra
     /// forma. Lo pone <see cref="ConRelieve"/>; a mano no se toca.
     /// </remarks>
-    public static ControlTemplate Pastilla(double radio)
+    /// <param name="estirado">
+    /// El contenido ocupa TODO el ancho del botón en vez de quedarse centrado.
+    ///
+    /// Existe desde el 2026-09-06 y por un fallo que se veía: las tres opciones del selector de
+    /// micrófono llevan una rejilla —columna fija para el icono, columna libre para el texto— para
+    /// que las tres etiquetas empiecen en la misma x. Con el contenido centrado, esa rejilla se
+    /// encogía a su tamaño natural y se centraba entera, así que cada fila arrancaba en un sitio
+    /// distinto según lo ancho que fuera su glifo: exactamente lo que la rejilla existía para
+    /// impedir. Por defecto sigue centrado, que es lo que quieren los botones de una sola palabra.
+    /// </param>
+    public static ControlTemplate Pastilla(double radio, bool estirado = false)
     {
         var plantilla = new ControlTemplate(typeof(ButtonBase));
 
@@ -283,7 +355,8 @@ public static class Estudio
         caja.AppendChild(fondo);
 
         var contenido = new FrameworkElementFactory(typeof(ContentPresenter));
-        contenido.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        contenido.SetValue(FrameworkElement.HorizontalAlignmentProperty,
+            estirado ? HorizontalAlignment.Stretch : HorizontalAlignment.Center);
         contenido.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
         caja.AppendChild(contenido);
 
