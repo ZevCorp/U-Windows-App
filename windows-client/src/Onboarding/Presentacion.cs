@@ -30,7 +30,7 @@ public static class Presentacion
     private static readonly (string Proceso, string Nombre, string Puedo)[] LoQueSeConducir =
     {
         ("saplogon", "SAP",
-            "abrir una historia clínica, navegar hasta triage y rellenarla entera dictándotela"),
+            "abrir una historia clínica, navegar hasta triage y llenar sus campos desde la consulta web"),
         ("chrome", "Chrome",
             "moverme por páginas web, rellenar formularios y traerte datos de una pestaña a otra"),
         ("msedge", "Edge",
