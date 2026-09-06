@@ -47,13 +47,14 @@ public static class ReglaDelHalo
     /// Lo opaco que queda: se ve que hay voz sin taparla.
     /// </summary>
     /// <remarks>
-    /// SUBIDO EL 2026-09-06 a petición del dueño —«que sea más claro para poder verlo»—: iba de
-    /// 0,12 a 0,38 y contra un escritorio claro no se distinguía de la sombra de la carita. Ahora va
-    /// de 0,26 a 0,68, que es donde se lee sin llegar a competir con la cara. Sigue siendo
-    /// translúcido: el halo dice que hay voz, no tapa a quien la pone.
+    /// SUBIDO DOS VECES el 2026-09-06, y las dos a petición del dueño mirando la pantalla: primero
+    /// de 0,12–0,38 a 0,26–0,68 («que sea más claro para poder verlo»), y esa subida siguió sin
+    /// bastar («todavía no es lo suficientemente claro»). Ahora va de 0,50 a 0,92 — «que se sienta
+    /// casi blanco», dicho así. Sigue siendo translúcido en su punto más bajo: el halo dice que hay
+    /// voz, no tapa a quien la pone; pero en el pico casi no queda escritorio detrás.
     /// </remarks>
     public static double Opacidad(double nivelVoz, int pasoDeLaBoca)
-        => 0.26 + Fuerza(nivelVoz, pasoDeLaBoca) * 0.42;
+        => 0.50 + Fuerza(nivelVoz, pasoDeLaBoca) * 0.42;
 
     /// <summary>
     /// De qué color: azul si te oye el collar, gris si te oye el micrófono del computador. No es
