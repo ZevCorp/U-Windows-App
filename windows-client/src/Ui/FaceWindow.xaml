@@ -223,6 +223,27 @@
                     </ui:FaceControl.Effect>
                 </ui:FaceControl>
             </Grid>
+
+            <!-- «ESCRÍBELE…»: la puerta de escribirle, que hasta hoy era la pastilla del chat.
+                 Asoma tras un reposo sobre la carita (ReglaDeLaLinea, promesa 165) y teclear con el
+                 ratón encima abre el globo con esa letra (ReglaDeEscritura, promesa 166).
+
+                 NO ES UN CARTEL de los que se fueron con la promesa 164, y la diferencia no es de
+                 grado: aquel decía lo que un botón hace y este ES la puerta —se pulsa, y escribir
+                 encima la abre sin pulsarla—. Por eso pide reposo en vez de aparecer al rozar: un
+                 cartel que se adelanta molesta, una puerta que se adelanta se abre sola.
+
+                 Es un Popup y no un hijo más del StackPanel a propósito: así aparecer y desaparecer
+                 no cambia el ancho de la ventana, y no dispara el reanclaje de OnSizeChanged sobre
+                 una carita que puede estar en pleno vuelo. -->
+            <Popup x:Name="GhostPista" PlacementTarget="{Binding ElementName=CollapsedFace}"
+                   Placement="Left" AllowsTransparency="True" StaysOpen="True">
+                <Border x:Name="GhostBorde" Background="#F20F131C" BorderBrush="#38FFFFFF"
+                        BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="10,0,10,0"
+                        Cursor="Hand" MouseLeftButtonUp="OnGhostClic">
+                    <TextBlock Text="Escríbele…" Foreground="#8CFFFFFF" FontSize="12"/>
+                </Border>
+            </Popup>
         </StackPanel>
 
         <!-- Estado NORMAL: menú extendido (arriba) + globo de conversación (izquierda) + barra (derecha).

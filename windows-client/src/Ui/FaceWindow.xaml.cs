@@ -1879,16 +1879,152 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     // --- El botón de voz que asoma al pasar por encima de la carita suelta ---
 
 
-    /// <summary>
-    /// Acercar el ratón a la carita suelta. Hasta el 2026-09-02 aquí asomaban tres pastillas
-    /// —hablar, escribir, dictar a SAP—; se retiraron (spec 008) porque hablarle es lo que más se
-    /// hace y no puede estar detrás de acertarle a una barrita de 4,5 px. Lo que hoy hace el hover
-    /// es asegurarse de que el halo tenga el aspecto que toca; los ojos y la línea de texto llegan
-    /// en las fases 2 y 3 de la spec.
-    /// </summary>
-    private void OnCollapsedHoverIn(object sender, System.Windows.Input.MouseEventArgs e) => PintarHalo();
+    // ── La línea «Escríbele…» (promesas 165 y 166, spec 011) ────────────────────────────────────
+    //
+    // Aquí asomaban tres pastillas —hablar, escribir, dictar a SAP— y se retiraron con la promesa
+    // 162. Al irse la del chat se fue con ella la ÚNICA forma de abrir el globo con el ratón desde
+    // la carita suelta, así que esto no es un adorno que sustituye a un botón: es la puerta que
+    // tapa ese hueco. Sin ella, la fase 1 dejaría la aplicación sin manera de escribirle.
 
-    private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e) { }
+    /// <summary>El reposo antes de que la línea asome. Lo decide <see cref="ReglaDeLaLinea"/>.</summary>
+    private readonly System.Windows.Threading.DispatcherTimer _lineaTimer =
+        new() { Interval = TimeSpan.FromMilliseconds(ReglaDeLaLinea.ReposoMs) };
+
+    /// <summary>
+    /// La gracia entre salir de la carita y que la línea se esconda.
+    /// </summary>
+    /// <remarks>
+    /// No es un adorno: la línea es un Popup, así que vive FUERA de los límites de CollapsedGroup y
+    /// llevar la mano de la carita hacia ella dispara un MouseLeave. Sin este respiro, la puerta se
+    /// cierra justo cuando vas a cruzarla — el mismo motivo por el que las pastillas vivían en un
+    /// panel junto a la carita en vez de sueltas.
+    /// </remarks>
+    private readonly System.Windows.Threading.DispatcherTimer _cerrarLineaTimer =
+        new() { Interval = TimeSpan.FromMilliseconds(280) };
+
+    /// <summary>El ratón lleva el reposo cumplido sobre la carita (o sobre la propia línea).</summary>
+    private bool _ratonSobreLaCarita;
+
+    /// <summary>Se está tirando de la carita. Mientras dure, la línea no asoma ni se queda.</summary>
+    private bool _arrastrandoLaCarita;
+
+    /// <summary>Conecta el reposo, la gracia y los avisos de arrastre. Se llama una vez.</summary>
+    private void WireLaLinea()
+    {
+        _lineaTimer.Tick += (_, __) =>
+        {
+            _lineaTimer.Stop();
+            if (!ReglaDeLaLinea.Asoma(ReglaDeLaLinea.ReposoMs, _arrastrandoLaCarita)) return;
+            _ratonSobreLaCarita = true;
+            GhostPista.IsOpen = true;
+        };
+
+        _cerrarLineaTimer.Tick += (_, __) =>
+        {
+            _cerrarLineaTimer.Stop();
+            // Si la mano volvió a la carita o entró en la propia línea, no era una salida.
+            if (CollapsedGroup.IsMouseOver || GhostBorde.IsMouseOver) return;
+            _ratonSobreLaCarita = false;
+            GhostPista.IsOpen = false;
+        };
+
+        // TIRAR DE LA CARITA CANCELA LA LÍNEA, y se cancela al APRETAR y no al empezar a arrastrar:
+        // cuando el arrastre se reconoce (13 px de umbral en FaceGestures) la línea ya llevaría un
+        // rato asomada. Apretar es lo primero que hacen por igual el clic, el mantener y el tirón, y
+        // ninguno de los tres es escribir.
+        CollapsedFace.PreviewMouseLeftButtonDown += (_, __) =>
+        {
+            _arrastrandoLaCarita = true;
+            _lineaTimer.Stop();
+            _ratonSobreLaCarita = false;
+            GhostPista.IsOpen = false;
+        };
+        CollapsedFace.PreviewMouseLeftButtonUp += (_, __) => _arrastrandoLaCarita = false;
+
+        // Ir de la carita a la línea y volver no la cierra: el cierre se agenda y se cancela.
+        GhostBorde.MouseEnter += (_, __) => _cerrarLineaTimer.Stop();
+        GhostBorde.MouseLeave += (_, __) => { _cerrarLineaTimer.Stop(); _cerrarLineaTimer.Start(); };
+    }
+
+    /// <summary>
+    /// Acercar el ratón a la carita suelta: el halo se pone al día y arranca el reposo de la línea.
+    /// </summary>
+    private void OnCollapsedHoverIn(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        PintarHalo();   // que aparezca ya con el aspecto que toca, no con el de la vez anterior
+        AnotarForegroundAjeno();
+        _cerrarLineaTimer.Stop();
+        _lineaTimer.Stop();
+        _lineaTimer.Start();
+    }
+
+    private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        _lineaTimer.Stop();
+        _cerrarLineaTimer.Stop();
+        _cerrarLineaTimer.Start();
+    }
+
+    /// <summary>Pulsar la línea abre el globo, que es lo que hacía la pastilla del chat.</summary>
+    private void OnGhostClic(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        PlayTick();
+        if (_talkOpen) HideTalk(); else AbrirElGloboParaEscribir();
+    }
+
+    /// <summary>
+    /// Anota de dónde viene el teclado ANTES de que la carita se lo quede, para que Esc lo devuelva
+    /// (<see cref="DevolverElFoco"/>), igual que hace el atajo global. Se anota al ENTRAR con el
+    /// ratón y no al abrir el globo: para entonces esta ventana ya podría ser el foreground, y
+    /// GetForegroundWindow diría que el teclado venía de nosotros mismos.
+    /// </summary>
+    private void AnotarForegroundAjeno()
+    {
+        var fg = GetForegroundWindow();
+        var propio = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (fg != IntPtr.Zero && fg != propio) _prevForeground = fg;
+    }
+
+    /// <summary>
+    /// Abre el globo para escribir, POR EL CAMINO DE MAIN y sin tocarlo.
+    /// </summary>
+    /// <remarks>
+    /// Es la misma llamada que hace el atajo global: <see cref="ShowTalk"/> con su motivo, que ya
+    /// sabe desplegar el muelle si hace falta (promesa 155) y pedir el foco tras el pase de layout.
+    /// Aquí no se reproduce nada de eso — el globo se ve y se abre EXACTAMENTE como se veía y se
+    /// abría antes de esta rama, que es lo que se pidió al portar esto.
+    /// </remarks>
+    private void AbrirElGloboParaEscribir() => ShowTalk(MotivoDelGlobo.LoPidioAlguien, focusInput: true);
+
+    /// <summary>
+    /// Corre DENTRO del gancho de teclado (<see cref="AtajoPorGolpes"/>), en el hilo de la UI, para
+    /// cada tecla normal. Devolver true es quedarse con ella: el gancho la traga, aquí se abre el
+    /// globo, y la tecla se le devuelve al sistema cuando la caja ya tiene el foco.
+    /// </summary>
+    private bool InterceptarTeclaSobreLaCarita(uint vk, uint scan, uint flags, bool ctrl, bool alt)
+    {
+        if (Input.IsKeyboardFocused) return false;     // ya se está escribiendo ahí: nada que robar
+        if (!ReglaDeEscritura.Abre(vk, _ratonSobreLaCarita, ctrl, alt)) return false;
+
+        LogBus.Log("carita", $"tecla 0x{vk:X2} con el ratón encima: abre el globo y se la devuelve");
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            AbrirElGloboParaEscribir();
+            // La tecla se devuelve DESPUÉS de que el foco haya llegado a la caja: ShowTalk lo pide a
+            // prioridad Input, y Background va detrás. Se reinyecta la MISMA tecla física, no un
+            // carácter calculado, para que Windows la traduzca con la distribución, el Shift y las
+            // teclas muertas de siempre. Y se devuelve aunque el foco no haya llegado: entonces cae
+            // donde estaba, que es exactamente lo que habría pasado sin este gancho.
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!Input.IsKeyboardFocused)
+                    LogBus.Log("carita", "la caja no llegó a tener el foco: la tecla se devuelve a donde estaba");
+                TeclaReinyectada.Pulsar(vk, scan, flags);
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }));
+        return true;
+    }
 
     /// <summary>
     /// El halo dice si la conversación está viva, y respira con lo que se está diciendo.
@@ -2944,8 +3080,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // Si no había conversación, el triple la abre: pedir el collar sin nada que oír
                 // dejaría el gesto sin efecto visible y parecería que no funcionó.
                 if (_vivo?.Viva != true) StartMicByFace();
-            }));
+            }),
+            // Y ESCRIBIR CON EL RATÓN SOBRE LA CARITA ABRE EL GLOBO (promesa 166). El gancho ya
+            // estaba puesto para los golpes de modificadores; se le añade quién decide sobre las
+            // teclas normales. Quien decide no es él: es ReglaDeEscritura.
+            interceptarTecla: InterceptarTeclaSobreLaCarita);
         Closed += (_, __) => { _golpes?.Dispose(); CerrarPanelDesarrollo(); };
+        WireLaLinea();
 
         // Zona segura: menú y barra cancelan el cierre al entrar y lo agendan al salir.
         MenuPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
@@ -3048,6 +3189,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // el árbol para dejarlo igual era trabajo tirado en mitad de una animación. Queda la
         // alineación, que es lo único que de verdad depende del lado.
         CollapsedGroup.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+
+        // Y LA LÍNEA SALE DEL LADO DE FUERA, que es lo que hacía el botón de voz antes de irse:
+        // pegada al borde izquierdo, la línea va a su derecha; pegada al derecho, a su izquierda.
+        // Del otro modo nacería contra el borde de la pantalla y no se leería entera.
+        GhostPista.Placement = left
+            ? System.Windows.Controls.Primitives.PlacementMode.Right
+            : System.Windows.Controls.Primitives.PlacementMode.Left;
     }
 
 
