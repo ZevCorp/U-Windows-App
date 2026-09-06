@@ -429,6 +429,7 @@ internal static class Contrato
         Prueba("157. elegir una fuente SUELTA las demás: con el computador o el teléfono elegidos, el collar se apaga en vez de quedarse conectado entregando audio por detrás — lo que la interfaz dice que te oye es lo que te oye", ElegirUnaFuenteSueltaLasDemas);
         Prueba("158. el verde dice quién ENTREGA, no quién está elegido: una fuente elegida y muda se ve distinta de una que está oyendo, porque la única prueba de que hay micrófono es que llegue audio", ElVerdeEsDeQuienEntrega);
         Prueba("160. al tirar de la carita guardada, aparece BAJO el cursor y no donde estaba escondida: un objeto que reaparece a diez centímetros de tu mano es un objeto que hay que volver a agarrar", LaCaritaApareceBajoElCursor);
+        Prueba("161. Ü no anuncia lo que va a hacer: sus instrucciones prohíben el futuro, mandan hablar en pasado y solo cuando hay algo que decir", UNoAnunciaLoQueVaAHacer);
         Prueba("159. la ventana se agarra por el borde que se VE y no por el de su ventana —que vive 24 px más afuera, en el hueco de la sombra—, y en una esquina manda la esquina: redimensionar en una dirección donde se esperaban dos se siente como que la ventana se resiste", LaVentanaSeAgarraPorDondeSeVe);
 
         Console.WriteLine();
@@ -2447,6 +2448,51 @@ internal static class Contrato
             "al llegar al techo se para: un botón olvidado no puede dejar un hilo esperando para siempre");
         Debe(Dice(alTecho).Length > 0 && Dice(alTecho).Contains("delante", StringComparison.OrdinalIgnoreCase),
             $"y al rendirse dice QUÉ faltó, no «no se pudo» (dijo: «{Dice(alTecho)}»)");
+    }
+
+    /// <summary>
+    /// LO QUE SE OÍA, y por qué es una promesa y no una preferencia de estilo. El prompt ORDENABA
+    /// narrar antes de cada llamada: «DI LO QUE VAS A HACER, Y LUEGO HAZLO. Antes de cada llamada,
+    /// una frase corta en voz —"voy a Descargas"— y a continuación la herramienta». Eso producía
+    /// dos averías a la vez, las dos vistas por el dueño el 2026-09-05:
+    ///
+    ///   · BALBUCEO. Una frase por herramienta. «Habla un 80 % y hace un 30 %; lo quiero al revés».
+    ///   · DESALINEAMIENTO. El futuro se oye SIEMPRE tarde: la herramienta tarda milisegundos y el
+    ///     audio segundos, así que «voy a abrirlo» suena cuando ya está abierto. En el log del
+    ///     2026-09-03, «ejecutando map_pointing_at» y «voy a mirarlo» llevan el MISMO segundo.
+    ///
+    /// Se juzga el texto de las instrucciones y no la conversación porque es lo único que se puede
+    /// juzgar sin pantalla y sin gastar audio: si la orden vuelve al prompt, el balbuceo vuelve.
+    /// </summary>
+    private static void UNoAnunciaLoQueVaAHacer()
+    {
+        var t = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var prop = t?.GetProperty("InstruccionesNormales",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        Debe(t != null && prop != null, "no encuentro «ConversacionEnVivo.InstruccionesNormales»");
+        if (prop == null) return;
+        string texto = (string)prop.GetValue(null)!;
+
+        Debe(!texto.Contains("DI LO QUE VAS A HACER", StringComparison.Ordinal),
+            "la orden de anunciar antes de cada llamada NO puede volver al prompt: era la causa "
+            + "directa del balbuceo y del «voy a…» que se oye después de haberlo hecho");
+        Debe(!texto.Contains("Ve contando lo que haces mientras lo haces", StringComparison.Ordinal),
+            "y tampoco su gemela de más arriba, que pedía lo mismo con otras palabras: se arregló "
+            + "una y la otra seguía ordenando narrar cada paso (aprendizaje nº7, la clase de error)");
+
+        Debe(texto.Contains("NO ANUNCIES LO QUE VAS A HACER", StringComparison.Ordinal),
+            "está dicha la regla, y en mayúsculas como el resto de las que se incumplían");
+        Debe(texto.Contains("HABLA EN PASADO", StringComparison.Ordinal),
+            "y con qué sustituirlo: en pasado y del resultado. Prohibir sin dar el reemplazo deja "
+            + "al modelo eligiendo, y elige narrar");
+        foreach (string relleno in new[] { "«voy a…»", "«vamos a…»" })
+            Debe(texto.Contains(relleno, StringComparison.Ordinal),
+                $"y se nombran las fórmulas concretas que se oían ({relleno}): una regla abstracta "
+                + "no se cumple, una lista de frases prohibidas sí");
+
+        Debe(texto.Contains("Habla, sin que te lo pidan, SOLO en estos casos", StringComparison.Ordinal),
+            "y se dice CUÁNDO sí toca hablar. Sin esa lista, «habla menos» se lee como «cállate», y "
+            + "un fallo sin contar es peor que un balbuceo");
     }
 
     private static void MientrasEnsenasNoTieneManos()
