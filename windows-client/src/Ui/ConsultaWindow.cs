@@ -646,7 +646,6 @@ public sealed class ConsultaWindow : Window
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Padding = new Thickness(2, 4, 2, 2),
-            ToolTip = "Escribe aquí para ponerle nombre a este collar",
         };
 
         // El nombre, editable en el sitio. Parece texto y se comporta como caja al pulsarlo.
@@ -703,7 +702,6 @@ public sealed class ConsultaWindow : Window
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Cursor = Cursors.Hand,
             Template = Estudio.Pastilla(Estudio.RadioChico),
-            ToolTip = "Desenlazar este collar: habrá que volver a emparejarlo",
         };
         // El rojo solo al acercarse: en reposo sería una advertencia permanente sobre algo que
         // funciona bien, y una interfaz que grita todo el rato deja de poder decir nada.
@@ -922,7 +920,6 @@ public sealed class ConsultaWindow : Window
             BorderThickness = new Thickness(0),
             Padding = new Thickness(10, 9, 10, 9),
             Margin = new Thickness(0, 6, 0, 8),
-            ToolTip = "El código de tu enlace. El botón copia la dirección completa.",
         };
         codigo.GotFocus += (_, __) => codigo.SelectAll();
         var enlace = new TextBox { Text = _codigo.Length > 0 ? Emparejamiento.Enlace(BaseDelEnlace, _codigo) : "" };
@@ -1105,10 +1102,8 @@ public sealed class ConsultaWindow : Window
 
     private void PintarMicrofono()
     {
-        var ahora = Environment.TickCount64;
         var (origen, entregando) = FuenteReal();
         bool enlaceEnPie = EnlaceEnPie(origen);
-        long ultimaDeEsta = _testigo.UltimaTrama(origen);
         bool grabando = _consulta.Estado == EstadoDeConsulta.Grabando;
 
         _iconoMicrofono.Text = origen switch
@@ -1129,9 +1124,6 @@ public sealed class ConsultaWindow : Window
             : grabando ? Estudio.Alerta
             : origen != Origen.MicrofonoDelPc && !enlaceEnPie ? Estudio.Espera
             : Estudio.TintaMedia;
-
-        _microfono.ToolTip = Omi.Selector.Nombre((int)origen)
-            + (grabando || entregando ? " · " + _vigia.Estado(enlaceEnPie, ultimaDeEsta, ahora) : "");
     }
 
     // ── arranque ─────────────────────────────────────────────────────────────
@@ -1194,13 +1186,12 @@ public sealed class ConsultaWindow : Window
         pila.Children.Add(ConstruirNombreEditable());
         pila.Children.Add(SeparadorMenu());
 
-        string motivoBloqueo = "Termina la consulta antes de cambiar de cuenta.";
         pila.Children.Add(ItemDeMenu("Cambiar de cuenta", puede,
-            () => _ = CambiarCuentaAsync(creando: false), motivoBloqueo));
+            () => _ = CambiarCuentaAsync(creando: false)));
         pila.Children.Add(ItemDeMenu("Agregar cuenta", puede,
-            () => _ = CambiarCuentaAsync(creando: true), motivoBloqueo));
+            () => _ = CambiarCuentaAsync(creando: true)));
         pila.Children.Add(SeparadorMenu());
-        pila.Children.Add(ItemDeMenu("Cerrar sesión", puede, CerrarSesion, motivoBloqueo));
+        pila.Children.Add(ItemDeMenu("Cerrar sesión", puede, CerrarSesion));
 
         tarjeta.Child = pila;
         // Margen extra para que la sombra del menú no se recorte contra el borde del Popup: un
@@ -1283,7 +1274,12 @@ public sealed class ConsultaWindow : Window
         return cabecera;
     }
 
-    private UIElement ItemDeMenu(string texto, bool activo, Action accion, string motivoInactivo)
+    /// <remarks>
+    /// Hasta el 2026-09-06 llevaba un cuarto argumento con el motivo de estar bloqueado, y ese
+    /// motivo solo se leia al pasar el raton. Al irse los carteles (promesa 164) se fue con ellos:
+    /// un parametro que nadie lee es codigo inerte, y aqui ya sabemos lo que cuesta dejarlo.
+    /// </remarks>
+    private UIElement ItemDeMenu(string texto, bool activo, Action accion)
     {
         var t = new TextBlock
         {
@@ -1298,7 +1294,6 @@ public sealed class ConsultaWindow : Window
             Background = Brushes.Transparent,
             Child = t,
             Cursor = activo ? Cursors.Hand : Cursors.Arrow,
-            ToolTip = activo ? null : motivoInactivo,
         };
         if (activo)
         {
@@ -1541,7 +1536,6 @@ public sealed class ConsultaWindow : Window
             Background = Estudio.AcentoSuave,
             BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand,
-            ToolTip = "Aprobar esta sección y escribirla en SAP",
             Template = Estudio.Pastilla(15),
             Content = new TextBlock
             {
@@ -1667,7 +1661,6 @@ public sealed class ConsultaWindow : Window
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand,
-            ToolTip = queHace,
             Template = Estudio.Pastilla(15),
         };
         // Los del marco no llevan sombra en reposo —serían dos objetos flotando junto al nombre—

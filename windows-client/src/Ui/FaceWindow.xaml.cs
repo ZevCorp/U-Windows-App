@@ -847,22 +847,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // La boca la mueve el audio EN VIVO, que no pasa por VoiceIO: sin esto el gesto
                 // quedaba dibujado y sin nadie que lo moviera (2026-08-05).
                 ActualizarBoca();
-                PintarBotonVoz();
-
-                // Al COLGAR vuelve a su reposo. Sin esto la pastilla se quedaba encendida para
-                // siempre: quien la enciende es la conversación, y quien la apagaba era apartar el
-                // ratón — que con el botón del collar no ocurre nunca.
-                if (!viva && !ZonaVoz.IsMouseOver && !CollapsedFace.IsMouseOver)
-                {
-                    CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: false);
-                    EsconderBotonVoz();
-                }
+                // Y el halo. Al colgar se apaga solo: lee _vivo.Viva y no depende de dónde esté el
+                // ratón —con el botón del collar no hay ratón de por medio—. Con las pastillas, quien
+                // lo apagaba era apartar el ratón, y por eso se quedaba encendido para siempre.
+                PintarHalo();
             });
-            // La pastilla repinta AL MOMENTO en que cambia el origen, y no sólo cuando Ü habla: el
+            // El halo repinta AL MOMENTO en que cambia el origen, y no sólo cuando Ü habla: el
             // temporizador de la boca vive únicamente mientras Ü está hablando, así que encender la
             // voz con el botón del collar se quedaba pintado en gris para siempre si Ü no llegaba a
             // decir palabra (2026-08-14, visto por el usuario con el audio ya entrando por el collar).
-            _vivo.FuenteCambio += () => Dispatcher.BeginInvoke(PintarBotonVoz);
+            _vivo.FuenteCambio += () => Dispatcher.BeginInvoke(PintarHalo);
 
             Closed += (_, __) => _vivo?.Dispose();
         }
@@ -991,9 +985,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // workflow_* del cerebro se ejecutan con el WorkflowPlayer (subconsciente).
         _workflowRunner = new WorkflowMcpRunner(_graphConfig, this);
 
-        // EL DICTADO CLÍNICO. Se arma aquí porque necesita la configuración de Graph —la clave con
-        // la que se pide la sesión de Soniox y se llama al emparejador— y la superficie de SAP.
-        // Nace apagado: hasta que no se pulsa el fonendoscopio no abre micrófono ni toca nada.
+        // EL RELLENADOR DE SAP. Se arma aquí porque necesita la configuración de Graph y la
+        // superficie de SAP. Hasta el 2026-09-02 lo alimentaba también un dictado clínico propio
+        // —un fonendoscopio al lado de la carita, con su propio micrófono— que no usaba nadie y se
+        // retiró con las pastillas (spec 008, promesa 112). El dictado en vivo sigue existiendo
+        // donde sí se usa: la consulta (ConsultaWindow, spec 004).
         _rellenador = new RellenadorSap(_graphConfig, _clinicalSap);
         // LO ENSEÑADO LLEGA A LA HORA DE ESCRIBIR (promesa 115). Se pregunta por la MISMA ubicación
         // que usa la enseñanza —la del locator— para que las dos puntas del canal usen la misma
@@ -1012,17 +1008,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // EL ✓ DE LA CONSULTA LLEGA POR AQUÍ (spec 008): la ventana de consulta nace antes que la
         // carita y no ve las manos; se le cuelga esta función y ella la llama al pulsar ✓.
         Clinical.PuenteASap.Enviar = EnviarEncargoAsync;
-        _dictadoClinico = new Clinical.Transcripcion.DictadoEnVivo(_graphConfig, _audioDictado);
-        _dictadoClinico.Frase += f => _rellenador.Oido(f);
-        // Lo provisional se pinta pero NO se actúa: son palabras que Soniox aún puede corregir.
-        _dictadoClinico.Parcial += t => Dispatcher.Invoke(() => SetStatus("🩺 " + Recorte(t, 90)));
-        _dictadoClinico.Fallo += m => Dispatcher.Invoke(() => SetStatus("Dictado: " + m));
-        _dictadoClinico.Cambio += viva => Dispatcher.Invoke(() =>
-        {
-            PintarDictado(viva);
-            if (viva) { _rellenador.Empezar(); SetStatus("🩺 Escuchando… dicta y los campos se van llenando."); }
-            else SetStatus("Dictado terminado.");
-        });
         _rellenador.Cuenta += m => Dispatcher.Invoke(() => SetStatus("🩺 " + m));
 
         // EL EJECUTOR DE EXPORTACIONES. Pregunta al backend si el médico pulsó «Exportar a HC» y,
@@ -1197,12 +1182,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _updater = new Updater(_config.UpdateFeedUrl);
         VersionText.Text = $"Versión {_updater.CurrentVersion}";
         // UpdateReady llega desde un hilo del pool, no del Dispatcher: tocar la UI directo reventaría.
-        // En la barra el botón es solo el icono ⬇; la versión concreta va en el tooltip.
-        _updater.UpdateReady += version => Dispatcher.Invoke(() =>
-        {
-            UpdateBtn.ToolTip = $"Versión {version} lista — clic para reiniciar (si no, se instala sola al cerrar Ü)";
-            ShowUpdate(true);
-        });
+        // QUÉ versión es ya no se dice al pasar el ratón (promesa 164): el ⬇ dice que hay algo nuevo
+        // y VersionText, dentro del panel, dice cuál — que es donde se lee sin tener que descubrirlo.
+        _updater.UpdateReady += _ => Dispatcher.Invoke(() => ShowUpdate(true));
         _updater.Start();
     }
 
@@ -1271,12 +1253,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         base.OnSourceInitialized(e);
         _hotkeys.Attach(this, InvocarPorAtajo, MicPorAtajo);
         Closed += (_, __) => _hotkeys.Dispose();
-        // Los tooltips dicen el atajo que quedó ACTIVO, no el que se pretendía: si el preferido
-        // estaba ocupado y anunciáramos ese, el usuario pulsaría algo que no hace nada.
-        foreach (string s in _hotkeys.Activos)
-        {
-            if (s.Contains("invocar")) MenuActivator.ToolTip = $"Más herramientas (hover abre · clic fija · Esc cierra) · {s.Split(' ')[0]} llama a Ü";
-        }
+        // El atajo que quedó ACTIVO —no el que se pretendía— lo dice HotkeyStatus, dentro del panel.
+        // Hasta el 2026-09-06 también asomaba al pasar el ratón sobre el activador del menú; eso se
+        // fue con los carteles (promesa 164), y el sitio que queda es el que se lee sin descubrirlo.
         if (_hotkeys.Resumen.Length > 0) HotkeyStatus.Text = _hotkeys.Resumen;
     }
 
@@ -1899,226 +1878,40 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     // --- El botón de voz que asoma al pasar por encima de la carita suelta ---
 
+
     /// <summary>
-    /// Aparece al acercar el ratón y se va al retirarlo.
-    ///
-    /// Hablarle es lo que más se hace y estaba escondido detrás de dos gestos que hay que saberse:
-    /// abrir la barra, o un doble clic sobre la carita. Un botón permanente al lado sobraría —la
-    /// carita vive encima del trabajo de alguien y cuanto menos ocupe, mejor—, así que se enseña
-    /// solo cuando la mano ya está ahí, que es justo cuando puede servir.
-    ///
-    /// Se desvanece, no se quita: quitarlo del árbol movería la carita de sitio, y una cosa que se
-    /// mueve cuando te acercas es una cosa que no se deja pulsar.
+    /// Acercar el ratón a la carita suelta. Hasta el 2026-09-02 aquí asomaban tres pastillas
+    /// —hablar, escribir, dictar a SAP—; se retiraron (spec 008) porque hablarle es lo que más se
+    /// hace y no puede estar detrás de acertarle a una barrita de 4,5 px. Lo que hoy hace el hover
+    /// es asegurarse de que el halo tenga el aspecto que toca; los ojos y la línea de texto llegan
+    /// en las fases 2 y 3 de la spec.
     /// </summary>
-    private void OnCollapsedHoverIn(object sender, System.Windows.Input.MouseEventArgs e)
-    {
-        PintarBotonVoz();   // que aparezca ya con el aspecto que toca, no con el de la vez anterior
-        VoiceDotGrupo.IsHitTestVisible = true;
-        VoiceDotGrupo.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(140))
-        {
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-        });
-    }
+    private void OnCollapsedHoverIn(object sender, System.Windows.Input.MouseEventArgs e) => PintarHalo();
 
-    // ── Las dos pastillas: de insinuación a botón ─────────────────────────────────────────────
+    private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e) { }
 
     /// <summary>
-    /// Una pastilla crece hasta ser un botón cuando la mano va hacia ella, y vuelve al soltarla.
+    /// El halo dice si la conversación está viva, y respira con lo que se está diciendo.
     /// </summary>
     /// <remarks>
-    /// Dos fases y no una: acercarse a la carita SUGIERE que hay algo —dos barritas mínimas—, y solo
-    /// acercarse a una de ellas la convierte en botón. Es lo que hace el Dock de macOS al ampliar el
-    /// icono bajo el cursor, y la forma es la del indicador de inicio de iOS: una barra redondeada
-    /// que no pide nada mientras no la mires.
+    /// Con el micrófono abierto, la carita suelta se veía EXACTAMENTE igual que apagada: la única
+    /// señal de que había una conversación en marcha estaba en la barra, que es justo lo que no se
+    /// ve cuando la carita está sola (2026-08-06). Hasta el 2026-09-02 la señal era una pastilla
+    /// invertida con un halo detrás; sin pastillas, el halo rodea a la carita misma.
     ///
-    /// El truco de que no haya dos dibujos: el radio de esquina se queda fijo y grande, así que la
-    /// forma la decide el TAMAÑO. A 4x16 se lee pastilla, a 26x26 círculo, y entre medias es una
-    /// transición y no un cambio de estado. Un umbral se nota; esto no.
+    /// Crece con el volumen de la voz: no es un adorno que late solo, es el mismo nivel que mueve la
+    /// boca, así que lo que se ve pulsar es lo que se está oyendo. Y DE QUÉ COLOR se está oyendo:
+    /// azul = por el collar; gris = por un micrófono del PC. Es la única forma de saber cuál de los
+    /// dos te está escuchando sin abrir el log, y cambia sola si hay relevo a media conversación.
     ///
-    /// Y el blanco del gesto mide 26x26 aunque la pastilla mida 4: acertarle a cuatro píxeles sería
-    /// puntería, no una interfaz.
+    /// Vive en el mismo Grid que la carita y detrás de ella: crece sin empujar nada, y no depende
+    /// de dónde esté el ratón —lo que está pasando ahora mismo no puede depender de eso—.
     /// </remarks>
-    private void CrecerPastilla(System.Windows.Shapes.Rectangle cuerpo,
-                                System.Windows.Media.SolidColorBrush fondo,
-                                UIElement icono, bool crece)
-    {
-        var suave = new CubicEase { EasingMode = crece ? EasingMode.EaseOut : EasingMode.EaseIn };
-        var dur = TimeSpan.FromMilliseconds(crece ? 160 : 200);
-
-        cuerpo.BeginAnimation(WidthProperty, new DoubleAnimation(crece ? 26 : AnchoPastilla, dur) { EasingFunction = suave });
-        cuerpo.BeginAnimation(HeightProperty, new DoubleAnimation(crece ? 26 : AltoPastilla, dur) { EasingFunction = suave });
-
-        // El radio viaja con el tamaño: barrita casi recta arriba, círculo abajo. Si se quedara
-        // fijo, o la barrita saldría ovalada o el botón saldría con esquinas de caja.
-        var radio = new DoubleAnimation(crece ? 13 : RadioPastilla, dur) { EasingFunction = suave };
-        cuerpo.BeginAnimation(System.Windows.Shapes.Rectangle.RadiusXProperty, radio);
-        cuerpo.BeginAnimation(System.Windows.Shapes.Rectangle.RadiusYProperty, radio);
-
-        // Y SE SEPARAN AL ABRIRSE. En reposo van casi pegadas —dos marcas de una misma cosa—; al
-        // convertirse en botones necesitan aire, porque ya no son una marca sino dos sitios donde
-        // pulsar, y dos botones pegados se pulsan mal. La separación viaja con la forma, así que no
-        // hay un instante en que se note el reajuste.
-        ZonaChat.BeginAnimation(MarginProperty, new ThicknessAnimation(
-            new Thickness(0, crece ? 7 : 1, 0, 0), dur) { EasingFunction = suave });
-        icono.BeginAnimation(OpacityProperty, new DoubleAnimation(crece ? 1 : 0,
-            TimeSpan.FromMilliseconds(crece ? 130 : 110)) { EasingFunction = suave });
-
-        // Y el color va con la forma: barrita clara sobre lo que haya detrás, botón oscuro con el
-        // icono en blanco. Animar el color y no cambiarlo de golpe es lo que evita el parpadeo.
-        fondo.BeginAnimation(System.Windows.Media.SolidColorBrush.ColorProperty, new ColorAnimation(
-            crece ? System.Windows.Media.Color.FromArgb(0xE6, 0x20, 0x20, 0x22) : ColorPastilla, dur));
-    }
-
-    // El reposo de la pastilla, en UN SITIO: lo pone el XAML al nacer y lo restaura la animación al
-    // encogerse, y si cada uno lleva su copia acaban discrepando — la pastilla nacería de un tamaño
-    // y volvería a otro después del primer hover, que es de esos fallos que solo se ven a la
-    // segunda vez (2026-08-07).
-    private const double AnchoPastilla = 4.5, AltoPastilla = 10, RadioPastilla = 2;
-
-    /// <summary>Gris apagado al 50 %: se ve que hay algo y no compite con la carita.</summary>
-    private static readonly System.Windows.Media.Color ColorPastilla =
-        System.Windows.Media.Color.FromArgb(0x80, 0xA8, 0xA8, 0xAE);
-
-    private void OnZonaVozEntra(object sender, System.Windows.Input.MouseEventArgs e)
-        => CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: true);
-
-    private void OnZonaVozSale(object sender, System.Windows.Input.MouseEventArgs e)
-        => CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: false);
-
-    private void OnZonaChatEntra(object sender, System.Windows.Input.MouseEventArgs e)
-        => CrecerPastilla(ChatCuerpo, ChatFondo, ChatIcono, crece: true);
-
-    private void OnZonaChatSale(object sender, System.Windows.Input.MouseEventArgs e)
-        => CrecerPastilla(ChatCuerpo, ChatFondo, ChatIcono, crece: false);
-
-    /// <summary>Pulsar la pastilla de voz es lo mismo que el doble clic en la cara: ni abre la barra
-    /// ni mueve nada, solo empieza (o cuelga) la conversación.</summary>
-    private void OnMicDesdePastilla(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        e.Handled = true;   // que el clic no llegue a la carita y le cuente como gesto
-        StartMicByFace();
-    }
-
-    /// <summary>Y la de abajo abre el globo para escribirle, que es la otra forma de hablarle.</summary>
-    private void OnChatDesdePastilla(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        e.Handled = true;
-        PlayTick();
-        if (_talkOpen) HideTalk(); else ShowTalk(MotivoDelGlobo.LoPidioAlguien, focusInput: true);
-    }
-
-    /// <summary>La pastilla en rojo mientras escucha: un micrófono abierto que no se ve es lo último
-    /// que quiere nadie, y aquí además está escribiendo en una historia clínica.</summary>
-    private void PintarDictado(bool escuchando)
-    {
-        DictadoFondo.Color = escuchando
-            ? System.Windows.Media.Color.FromRgb(0xE5, 0x3E, 0x3E)
-            : System.Windows.Media.Color.FromArgb(0x80, 0xA8, 0xA8, 0xAE);
-        ZonaDictado.ToolTip = escuchando
-            ? "Dictando… pulsa para parar"
-            : "Dictar y rellenar los campos de SAP";
-    }
-
     private static string Recorte(string t, int n) => t.Length <= n ? t : "…" + t[^n..];
 
-    private void OnZonaDictadoEntra(object sender, System.Windows.Input.MouseEventArgs e)
-        => CrecerPastilla(DictadoCuerpo, DictadoFondo, DictadoIcono, crece: true);
-
-    private void OnZonaDictadoSale(object sender, System.Windows.Input.MouseEventArgs e)
-        => CrecerPastilla(DictadoCuerpo, DictadoFondo, DictadoIcono, crece: false);
-
-    /// <summary>
-    /// EL FONENDOSCOPIO: dictar y que los campos se vayan llenando solos.
-    /// </summary>
-    /// <remarks>
-    /// NO ES UN MODO DEL MICRÓFONO, y por eso tiene botón propio. El micrófono abre una CONVERSACIÓN
-    /// con Ü —oye, piensa, contesta en voz alta, llama herramientas—. Esto no conversa: transcribe
-    /// con Soniox, organiza la nota, y escribe. Meterlo dentro del micrófono habría obligado a
-    /// decidir en cada frase si era una orden o un dato clínico, y equivocarse ahí significa o bien
-    /// contestarle a un médico que está dictando, o bien escribir en la historia lo que era una
-    /// orden para Ü.
-    ///
-    /// LA COMPUERTA ES LA PANTALLA, no un permiso: fuera del triage no hay campos que llenar, así
-    /// que encenderlo sería prometer un trabajo imposible. Se dice dónde hay que estar en vez de
-    /// quedarse mudo — un botón que no hace nada y no explica por qué se prueba tres veces.
-    /// </remarks>
-    private async void OnDictadoDesdePastilla(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        e.Handled = true;
-        PlayTick();
-        if (_dictadoClinico == null) { SetStatus("El dictado clínico no está disponible."); ShowTalk(MotivoDelGlobo.AlgoFallo); return; }
-
-        if (_dictadoClinico.Activo) { await _dictadoClinico.PararAsync(); return; }
-
-        // DOS MICRÓFONOS ABIERTOS ES PEOR QUE NINGUNO: se mezclarían dos flujos y, peor, lo dicho
-        // iría a la vez a la conversación y a la historia clínica. Se dice cuál hay que cerrar en
-        // vez de cerrarla por nuestra cuenta: el que está hablando es quien decide.
-        if (_vivo?.Viva == true)
-        {
-            SetStatus("Cuelga la conversación antes de dictar: no pueden oírte los dos a la vez.");
-            ShowTalk(MotivoDelGlobo.AlgoFallo);
-            return;
-        }
-
-        string donde = _locator?.DondeEstoy()?.Id ?? "";
-        if (!RellenadorSap.EsLaPantallaDeTriage(donde))
-        {
-            SetStatus("El dictado clínico solo funciona en la pantalla de triage de SAP.");
-            ShowTalk(MotivoDelGlobo.AlgoFallo);
-            return;
-        }
-
-        ShowTalk(MotivoDelGlobo.SoloEsProgreso);
-        await _dictadoClinico.ArrancarAsync();
-    }
-
-    private void OnCollapsedHoverOut(object sender, System.Windows.Input.MouseEventArgs e) => EsconderBotonVoz();
-
-    /// <summary>
-    /// El punto dice si la conversación está viva, y respira con lo que se está diciendo.
-    /// </summary>
-    /// <remarks>
-    /// Con el micrófono abierto, el botón se veía EXACTAMENTE igual que apagado: la única señal de
-    /// que había una conversación en marcha estaba en la barra, que es justo lo que no se ve cuando
-    /// la carita está sola (2026-08-06).
-    ///
-    /// La señal es de dos partes, y las dos son suaves a propósito. El punto se INVIERTE —claro con
-    /// el micrófono oscuro— que es un cambio que se reconoce de reojo sin gritar. Y un halo detrás
-    /// crece con el volumen de la voz: no es un adorno que late solo, es el mismo nivel que mueve la
-    /// boca, así que lo que se ve pulsar es lo que se está oyendo.
-    ///
-    /// El halo vive fuera del botón para poder crecer más que él sin empujar nada: dentro, cada
-    /// latido movería la carita de sitio.
-    /// </remarks>
-    private void PintarBotonVoz()
+    private void PintarHalo()
     {
         bool viva = _vivo?.Viva == true;
-
-        // Con la conversación abierta, la pastilla de voz no espera a que te acerques: se queda
-        // encendida. Lo que está pasando ahora mismo no puede depender de dónde tengas el ratón.
-        if (viva && !ZonaVoz.IsMouseOver)
-            CrecerPastilla(VozCuerpo, VozFondo, VozIcono, crece: true);
-
-        // Y EL GRUPO ENTERO TIENE QUE ESTAR VISIBLE, que es lo que faltaba: nace con Opacity=0 y sólo
-        // se encendía al acercar el ratón a la carita. La pastilla crecía dentro de un contenedor
-        // transparente, así que con la voz abierta por el botón del collar —sin ratón de por medio—
-        // no se veía absolutamente nada (2026-08-13, lo vio el usuario). Crecer no es aparecer.
-        if (viva)
-        {
-            VoiceDotGrupo.BeginAnimation(OpacityProperty, null);
-            VoiceDotGrupo.Opacity = 1;
-            VoiceDotGrupo.IsHitTestVisible = true;
-        }
-
-        // DE QUÉ COLOR SE ESTÁ OYENDO. Azul = por el collar; el gris de siempre = por un micrófono
-        // del PC. Es la única forma de saber cuál de los dos te está escuchando sin abrir el log, y
-        // cambia sola si hay relevo a media conversación.
-        VozFondo.Color = !viva
-            ? System.Windows.Media.Color.FromArgb(0x80, 0xA8, 0xA8, 0xAE)
-            : _vivo!.PorElCollar
-                ? System.Windows.Media.Color.FromRgb(0x3E, 0x9B, 0xFF)
-                : System.Windows.Media.Color.FromArgb(0xC0, 0xA8, 0xA8, 0xAE);
-
         if (!viva)
         {
             VoiceHalo.Opacity = 0;
@@ -2126,30 +1919,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             return;
         }
 
-        // Al hablar late con la voz; callada, un latido lento que solo dice «sigo aquí».
-        double nivel = _vivo!.NivelVoz;
-        double fuerza = nivel > 0.004
-            ? Math.Min(1, Math.Pow(nivel, 0.55) * 1.45)
-            : 0.18 + 0.10 * Math.Sin(_bocaPaso * 0.16);
-
-        VoiceHalo.Opacity = 0.10 + fuerza * 0.22;
-        double escala = 1.15 + fuerza * 0.55;
-        VoiceHaloEscala.ScaleX = VoiceHaloEscala.ScaleY = escala;
-    }
-
-    private void EsconderBotonVoz()
-    {
-        // Con la conversación abierta NO se esconde: mientras Ü escucha, esa pastilla es lo único
-        // que lo dice, y retirarla al apartar el ratón sería quitar la señal justo cuando importa.
-        if (_vivo?.Viva == true) return;
-
-        VoiceHalo.BeginAnimation(OpacityProperty, null);
-        VoiceHalo.Opacity = 0;
-        VoiceDotGrupo.IsHitTestVisible = false;
-        VoiceDotGrupo.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(180))
-        {
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
-        });
+        // La ventana no decide nada: pregunta. Cuánto crece y de qué color vive en ReglaDelHalo,
+        // donde el contrato puede barrer el rango entero de voz y comprobar que el halo cabe en el
+        // aire que la carita tiene (promesa 163).
+        VoiceHaloColor.Color = ReglaDelHalo.Color(_vivo!.PorElCollar);
+        VoiceHalo.Opacity = ReglaDelHalo.Opacidad(_vivo!.NivelVoz, _bocaPaso);
+        VoiceHaloEscala.ScaleX = VoiceHaloEscala.ScaleY = ReglaDelHalo.Escala(_vivo!.NivelVoz, _bocaPaso);
     }
 
     // --- Temas de la carita: se alternan manteniéndola oprimida (claro → oscuro → transparente) ---
@@ -2678,9 +2453,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         RefreshMood();   // grabar es un estado de la cara, no solo un color de botón
         PintarAura();    // y de la pantalla entera: el aura sigue a la misma bandera
         TeachBtn.Content = teaching ? "⏸" : "🎓";
-        TeachBtn.ToolTip = teaching
-            ? "Enseñando: clic para terminar y guardar lo aprendido"
-            : "Enseñar: Ü graba la pantalla y tu voz para aprender un workflow";
         TeachBtn.Background = new System.Windows.Media.SolidColorBrush(teaching
             ? System.Windows.Media.Color.FromArgb(0x88, 255, 59, 48)   // rojo, como StopBtn
             : System.Windows.Media.Color.FromArgb(0x1A, 255, 255, 255)); // el fondo normal de BarBtn
@@ -2751,10 +2523,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         RunWorkflowBtn.Content = _botonComprueba
             ? $"🧭 Comprobar «{Recorte(pendiente!.Nombre, 26)}»"
             : "▶ Ejecutar ahora";
-        RunWorkflowBtn.ToolTip = _botonComprueba
-            ? "Ü repite la tarea que le enseñaste, aprende de cada paso y la deja lista para usar. "
-              + "No graba nada: se detiene antes de cualquier puerta que no se pueda deshacer."
-            : null;
         if (_botonComprueba) RunWorkflowBtn.IsEnabled = true;
     }
 
@@ -3018,16 +2786,19 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     // --- Toggle: procesar (o no) el video con IA al enseñar ---
 
     /// <summary>
-    /// El estado de un toggle-icono se dice con el FONDO (acento = encendido) y el detalle con el
-    /// tooltip: el mismo patrón que TeachBtn. Un interruptor que se ve igual encendido que apagado
-    /// obliga a mirar la pantalla para saber si funcionó.
+    /// El estado de un toggle-icono se dice con el FONDO: acento = encendido. Un interruptor que se
+    /// ve igual encendido que apagado obliga a mirar la pantalla para saber si funcionó.
     /// </summary>
-    private static void PintarToggle(System.Windows.Controls.Button btn, bool on, string tip)
+    /// <remarks>
+    /// Hasta el 2026-09-06 el detalle iba en un cartel al pasar el ratón. Se fue con todos los demás
+    /// (promesa 164): lo que un botón hace se dice en la píldora de estado al pulsarlo, que es
+    /// cuando hace falta saberlo.
+    /// </remarks>
+    private static void PintarToggle(System.Windows.Controls.Button btn, bool on)
     {
         btn.Background = new System.Windows.Media.SolidColorBrush(on
             ? System.Windows.Media.Color.FromArgb(0x88, 0x3B, 0x82, 0xF6)   // azul, como UpdateBtn
             : System.Windows.Media.Color.FromArgb(0x1A, 255, 255, 255));    // el fondo normal de BarBtn
-        btn.ToolTip = tip;
     }
 
 
@@ -3246,12 +3017,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         MenuPanel.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
         BarRow.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
 
-        // Los tooltips salían siempre por la izquierda: pegados al borde izquierdo se saldrían de la
-        // pantalla. Es un ajuste por botón porque ToolTipService.Placement no se hereda.
-        foreach (var b in BarButtons())
-            ToolTipService.SetPlacement(b, left ? System.Windows.Controls.Primitives.PlacementMode.Right
-                                               : System.Windows.Controls.Primitives.PlacementMode.Left);
-
         // Y la píldora respira hacia el lado contrario a la barra.
         StatusChip.Margin = left ? new Thickness(8, 0, 0, 14) : new Thickness(0, 0, 8, 14);
         TalkPanel.Margin = left ? new Thickness(8, 0, 0, 0) : new Thickness(0, 0, 8, 0);
@@ -3278,28 +3043,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </remarks>
     private void ApplyCaritaSide(bool left)
     {
+        // YA NO HAY NADA QUE REORDENAR (spec 011). Esto sacaba y volvía a meter los hijos para poner
+        // las pastillas del lado de fuera; sin pastillas, la carita es el único hijo y reconstruir
+        // el árbol para dejarlo igual era trabajo tirado en mitad de una animación. Queda la
+        // alineación, que es lo único que de verdad depende del lado.
         CollapsedGroup.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-
-        bool caraPrimero = CollapsedGroup.Children.Count > 0 && CollapsedGroup.Children[0] == CollapsedFace;
-        if (caraPrimero != left)
-        {
-            CollapsedGroup.Children.Clear();
-            if (left) { CollapsedGroup.Children.Add(CollapsedFace); CollapsedGroup.Children.Add(VoiceDotGrupo); }
-            else { CollapsedGroup.Children.Add(VoiceDotGrupo); CollapsedGroup.Children.Add(CollapsedFace); }
-            VoiceDotGrupo.Margin = left ? new Thickness(10, 0, 0, 0) : new Thickness(0, 0, 10, 0);
-        }
     }
 
-    private IEnumerable<Button> BarButtons()
-    {
-        foreach (object child in ((StackPanel)BarPanel.Child).Children)
-        {
-            if (child is Button b) yield return b;
-            else if (child is StackPanel zona)
-                foreach (object nieto in zona.Children)
-                    if (nieto is Button nb) yield return nb;
-        }
-    }
 
     /// <summary>Recoloca el espejo de la carita según dónde quedó. Barato: sale pronto si no cambia.</summary>
     private void RefreshBarSide() => ApplyCaritaSide(EdgeSnap.EstáALaIzquierda(this));
@@ -3700,7 +3450,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         WorkflowCarousel.Visibility = _directListMode ? Visibility.Collapsed : Visibility.Visible;
         WorkflowListBox.Visibility = _directListMode ? Visibility.Visible : Visibility.Collapsed;
         WorkflowViewToggle.Content = _directListMode ? "▤" : "☰";
-        WorkflowViewToggle.ToolTip = _directListMode ? "Ver como carrusel" : "Ver como lista";
         if (_directListMode) SetDirectIndex(_directIndex); // deja la fila seleccionada a la vista
     }
 
@@ -3731,21 +3480,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
 
-    // ── Dictado clínico: hablar y que los campos se llenen ──────────────────────
+    // ── El rellenador de SAP: la exportación a HC escribe en los campos ─────────
     //
     // VA APARTE DEL PUENTE DE ABAJO, que es otra cosa: aquel trae valores YA GUARDADOS por el
-    // médico en el portal y los ofrece para aprobación; esto escucha en directo y escribe sin
-    // preguntar. Comparten la superficie de SAP y nada más.
-    private Clinical.Transcripcion.DictadoEnVivo? _dictadoClinico;
+    // médico en el portal y los ofrece para aprobación; esto escribe sin preguntar lo que el
+    // exportador trae. Comparten la superficie de SAP y nada más. El dictado clínico en directo
+    // que también escribía aquí —con su micrófono propio— se retiró el 2026-09-02 con su pastilla
+    // (spec 008, promesa 112).
     private readonly SapGuiSurface _clinicalSap = new();
     private RellenadorSap? _rellenador;
 
     /// <summary>Quien atiende los «Exportar a HC» que llegan de la web. Vive todo el rato.</summary>
     private EjecutorDeExportaciones? _exportador;
-
-    /// <summary>Su propio micrófono, y NO el de la conversación viva. Son dos sesiones de audio con
-    /// destinos distintos; compartir una obligaría a decidir en cada frase a quién iba dirigida.</summary>
-    private readonly Voice.LiveAudio _audioDictado = new();
 
     /// <summary>
     /// Ejecuta el workflow que apunta el slider, igual que "Ejecutar ahora" de la biblioteca: pide el
@@ -4033,18 +3779,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void MarcarRecuerdosALaVista(bool si)
     {
         _recuerdosALaVista = si;
-        PintarToggle(RecuerdosBtn, si, si
-            ? "Recuerdos a la vista — clic (o Escape) para apagar"
-            : "Ilumina de golpe todo lo que te han enseñado en esta pantalla, con el texto del recuerdo sobre cada elemento. Escape lo apaga.");
+        PintarToggle(RecuerdosBtn, si);
     }
 
     private void OnToggleInspector(object sender, RoutedEventArgs e)
     {
         _inspector ??= new UiInspector();
         bool on = _inspector.Toggle();
-        PintarToggle(InspectorBtn, on, on
-            ? "Inspector activo — clic para apagar"
-            : "Inspector de elementos: recuadros sobre la pantalla. Al hacer clic: amarillo si coincide con lo que el asistente tocaría, rojo (ambos) si no.");
+        PintarToggle(InspectorBtn, on);
         SetStatus(on ? "Inspector de elementos activo" : "Inspector apagado");
     }
 
@@ -4252,14 +3994,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_idALaVista)
         {
             _badge.Show();
-            PintarToggle(LocatorBtn, on: true, "ID visible — clic para ocultar");
+            PintarToggle(LocatorBtn, on: true);
             SetStatus("ID de superficie a la vista");
         }
         else
         {
             _badge.Hide();
-            PintarToggle(LocatorBtn, on: false,
-                "ID de superficie: muestra dónde estás parado como URL (uia://app.exe/ventana). Es el ID con el que se cargan los workflows.");
+            PintarToggle(LocatorBtn, on: false);
             SetStatus("ID oculto (se sigue midiendo)");
         }
     }
@@ -4529,7 +4270,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // Y que el resto de la cara acompañe: en vivo se alterna entre hablar y escuchar sin que
             // nadie más lo avise. RefreshMood no hace nada si el estado no cambió, así que llamarla
             // en cada cuadro sale gratis.
-            if (_vivo?.Viva == true) { RefreshMood(); PintarBotonVoz(); }
+            if (_vivo?.Viva == true) { RefreshMood(); PintarHalo(); }
         };
         _boca.Start();
     }

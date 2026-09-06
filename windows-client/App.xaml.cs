@@ -55,6 +55,11 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // LO PRIMERO, y el sitio no es negociable: apaga los textos que asomaban al pasar el ratón
+        // (promesa 164). La metadata de una propiedad se sella para un tipo en cuanto se lee sobre
+        // una instancia suya, así que esto tiene que correr antes de que exista la primera ventana.
+        Ui.SinCarteles.Aplicar();
         // Nunca dejar caer la carita por una excepción no capturada: es un overlay permanente.
         DispatcherUnhandledException += (_, ex) =>
         {

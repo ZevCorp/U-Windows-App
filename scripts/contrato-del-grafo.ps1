@@ -17,6 +17,13 @@
 $ErrorActionPreference = 'Stop'
 $repo     = Split-Path -Parent $PSScriptRoot
 $scratch  = Join-Path $env:TEMP "u-contrato"
+
+# DONDE ESTAN LAS FUENTES, para la promesa 164 (spec 011): es la unica que juzga el CODIGO y no el
+# binario, porque lo que puede volver a llenarse de carteles es el codigo. El contrato compila a un
+# directorio de usar y tirar, asi que desde alli no hay forma de encontrar el repo — y adivinarlo
+# subiendo carpetas se anclaria al nombre de la del repo, que es justo el error del patron n.11: el
+# candado del nucleo protegio NADA durante cinco horas por eso. Se pasa, no se deduce.
+$env:U_REPO = $repo
 $binApp   = Join-Path $scratch "bin-app"
 $binTest  = Join-Path $scratch "bin-contrato"
 

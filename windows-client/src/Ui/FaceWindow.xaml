@@ -8,25 +8,6 @@
         ResizeMode="NoResize" SizeToContent="WidthAndHeight">
 
     <Window.Resources>
-        <!-- Tooltip oscuro y rápido: en una barra de solo iconos, el tooltip ES la etiqueta. -->
-        <Style TargetType="ToolTip">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="HasDropShadow" Value="False"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToolTip">
-                        <Border Background="#F20F131C" BorderBrush="#38FFFFFF" BorderThickness="1"
-                                CornerRadius="10" Padding="9,6">
-                            <ContentPresenter/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Setter Property="Foreground" Value="#EEFFFFFF"/>
-            <Setter Property="FontSize" Value="11"/>
-        </Style>
-
         <!-- Botón plano que HONRA su Background en todos los estados. WPF, con el template por defecto,
              pinta un fondo claro del sistema cuando el botón está deshabilitado y deja el Foreground
              blanco → texto blanco sobre fondo blanco. Este template lo arregla: deshabilitado = fondo
@@ -35,8 +16,6 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="ToolTipService.InitialShowDelay" Value="300"/>
-            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -61,89 +40,6 @@
         <!-- Botón de la BARRA: cuadrado, redondeado, solo icono. El hover es una capa que se funde en
              ~120 ms (no un salto), y el foco de teclado se ve como un aro — la barra se puede operar
              sin ratón. -->
-        <!-- El botón de voz que asoma al lado de la carita suelta.
-             Pequeño y redondo a propósito: acompaña a la carita, no compite con ella. Nace un poco
-             encogido y crece al entrar, que es lo que hace que aparecer se lea como aparecer y no
-             como un parpadeo. El micrófono va dibujado y no con un emoji: a 26 px un emoji sale
-             borroso y con el color de otro sistema. -->
-        <Style x:Key="VoiceDot" TargetType="Button">
-            <Setter Property="Width" Value="26"/>
-            <Setter Property="Height" Value="26"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Background" Value="#E6202022"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="ToolTipService.InitialShowDelay" Value="400"/>
-            <Setter Property="ToolTipService.Placement" Value="Top"/>
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Grid>
-                            <Grid.RenderTransform>
-                                <ScaleTransform x:Name="sc" ScaleX="1" ScaleY="1"/>
-                            </Grid.RenderTransform>
-                            <Ellipse x:Name="bg" Fill="{TemplateBinding Background}"/>
-                            <Ellipse x:Name="ring" Stroke="#33FFFFFF" StrokeThickness="1"/>
-                            <Ellipse x:Name="hover" Fill="#1FFFFFFF" Opacity="0"/>
-                            <!-- Micrófono: cápsula + arco + pie. Trazo fino, como el resto de la cara.
-                                 El color sale del Foreground para que pueda invertirse al hablar. -->
-                            <Canvas Width="26" Height="26">
-                                <Border Canvas.Left="10.5" Canvas.Top="6" Width="5" Height="9"
-                                        CornerRadius="2.5" Background="{TemplateBinding Foreground}"/>
-                                <Path Stroke="{TemplateBinding Foreground}" StrokeThickness="1.3"
-                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                      Data="M 8.2,12.4 A 4.8,4.8 0 0 0 17.8,12.4"/>
-                                <Line X1="13" Y1="17.2" X2="13" Y2="19.6" Stroke="{TemplateBinding Foreground}"
-                                      StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                            </Canvas>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="hover"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="1" Duration="0:0:0.12"/>
-                                            <DoubleAnimation Storyboard.TargetName="sc"
-                                                             Storyboard.TargetProperty="ScaleX"
-                                                             To="1.12" Duration="0:0:0.14"/>
-                                            <DoubleAnimation Storyboard.TargetName="sc"
-                                                             Storyboard.TargetProperty="ScaleY"
-                                                             To="1.12" Duration="0:0:0.14"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.EnterActions>
-                                <Trigger.ExitActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="hover"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="0" Duration="0:0:0.16"/>
-                                            <DoubleAnimation Storyboard.TargetName="sc"
-                                                             Storyboard.TargetProperty="ScaleX"
-                                                             To="1" Duration="0:0:0.18"/>
-                                            <DoubleAnimation Storyboard.TargetName="sc"
-                                                             Storyboard.TargetProperty="ScaleY"
-                                                             To="1" Duration="0:0:0.18"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.ExitActions>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bg" Property="Fill" Value="#FF3A3A3E"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.45" Color="Black"/>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
         <Style x:Key="BarBtn" TargetType="Button">
             <Setter Property="Width" Value="38"/>
             <Setter Property="Height" Value="38"/>
@@ -152,9 +48,6 @@
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Background" Value="#1AFFFFFF"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="ToolTipService.InitialShowDelay" Value="300"/>
-            <Setter Property="ToolTipService.Placement" Value="Left"/>
-            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -213,8 +106,6 @@
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Padding" Value="10,0"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="ToolTipService.InitialShowDelay" Value="300"/>
-            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -297,117 +188,41 @@
     <Grid>
         <!-- Estado COLAPSADO: solo la carita, como una burbuja flotante. Clic → barra · doble clic →
              micrófono · mantener oprimido → cambia de tema · arrastrar y soltar → se lanza al borde.
-             El Margin de 28 deja aire alrededor para que la sombra (blur 24) no se recorte. -->
-        <!-- La carita suelta y, a su izquierda, el botón de voz que solo asoma al pasar por encima.
-             Van juntos en un panel para que el ratón pueda ir de una al otro sin que el botón se
-             desvanezca por el camino: si el hover se midiera solo sobre la carita, el botón
-             desaparecería justo cuando vas a pulsarlo. El sitio SIEMPRE está reservado (el botón
-             nace invisible, no ausente), así la carita no da un salto al aparecer. -->
+             El Margin de 28 deja aire alrededor para que la sombra (blur 24) no se recorte.
+
+             Hasta el 2026-09-02 aquí asomaban tres pastillas al acercar el ratón —hablar, escribir,
+             dictar a SAP—. Se retiraron (spec 008, promesa 112): hablarle es lo que más se hace y
+             no puede estar detrás de acertarle a una barrita de 4,5 px, la de escribir no hacía
+             nada en este estado, y el dictado a SAP no lo usaba nadie. La carita es el botón. -->
+        <!-- El halo va DETRÁS de la carita y en el mismo Grid: un Grid superpone a sus hijos, así
+             que crecer con la voz no empuja nada ni cambia el tamaño de la ventana. Hasta el
+             2026-09-02 vivía detrás de la pastilla del micrófono; sin pastillas, la señal de «te
+             estoy oyendo» es la carita misma. El color lo pone PintarHalo: azul por el collar,
+             gris por el micrófono del PC. -->
         <StackPanel x:Name="CollapsedGroup" Orientation="Horizontal" Visibility="Collapsed"
                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="28"
                     Background="Transparent"
                     MouseEnter="OnCollapsedHoverIn" MouseLeave="OnCollapsedHoverOut">
-
-            <!-- DOS PASTILLAS DIMINUTAS que se convierten en botones al acercarse.
-                 Es el gesto del Dock de macOS —los iconos crecen cuando te acercas— con la forma
-                 del indicador de inicio de iOS: una barrita redondeada que no pide nada. En reposo
-                 solo insinúan que hay algo; el icono aparece cuando la mano ya va hacia él.
-
-                 La zona sensible mide 26x26 aunque la pastilla mida 4x16: el blanco de un gesto no
-                 puede ser tan pequeño como su dibujo, o acertarle se convierte en puntería. -->
-            <StackPanel x:Name="VoiceDotGrupo" Orientation="Vertical" VerticalAlignment="Center"
-                        Margin="0,0,10,0" Opacity="0">
-
-                <!-- Voz -->
-                <Grid x:Name="ZonaVoz" Width="26" Height="26" Background="Transparent" Cursor="Hand"
-                      ToolTip="Hablar con Ü"
-                      MouseEnter="OnZonaVozEntra" MouseLeave="OnZonaVozSale"
-                      MouseLeftButtonUp="OnMicDesdePastilla">
-                    <Ellipse x:Name="VoiceHalo" Width="26" Height="26" Opacity="0"
-                             Fill="#FFFFFF" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
-                        <Ellipse.RenderTransform>
-                            <ScaleTransform x:Name="VoiceHaloEscala" ScaleX="1" ScaleY="1"/>
-                        </Ellipse.RenderTransform>
-                    </Ellipse>
-                    <!-- Rectangle y no Border: su radio de esquina es un número y por tanto se puede
-                         ANIMAR. Con Border el radio es una estructura y no se anima, así que había
-                         que dejarlo fijo y grande — y un radio grande sobre algo estrecho no es un
-                         rectángulo redondeado, es un óvalo (2026-08-07). Aquí el radio viaja con el
-                         tamaño: de 1,5 (barrita) a 13 (círculo). -->
-                    <Rectangle x:Name="VozCuerpo" Width="4.5" Height="10" RadiusX="2" RadiusY="2"
-                               IsHitTestVisible="False">
-                        <Rectangle.Fill>
-                            <SolidColorBrush x:Name="VozFondo" Color="#80A8A8AE"/>
-                        </Rectangle.Fill>
-                    </Rectangle>
-                    <Canvas x:Name="VozIcono" Width="26" Height="26" Opacity="0" IsHitTestVisible="False">
-                        <Border Canvas.Left="10.5" Canvas.Top="6" Width="5" Height="9"
-                                CornerRadius="2.5" Background="White"/>
-                        <Path Stroke="White" StrokeThickness="1.3" StrokeStartLineCap="Round"
-                              StrokeEndLineCap="Round" Data="M 8.2,12.4 A 4.8,4.8 0 0 0 17.8,12.4"/>
-                        <Line X1="13" Y1="17.2" X2="13" Y2="19.6" Stroke="White"
-                              StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                    </Canvas>
-                </Grid>
-
-                <!-- Conversación -->
-                <Grid x:Name="ZonaChat" Width="26" Height="26" Background="Transparent" Cursor="Hand"
-                      Margin="0,1,0,0" ToolTip="Escribirle a Ü"
-                      MouseEnter="OnZonaChatEntra" MouseLeave="OnZonaChatSale"
-                      MouseLeftButtonUp="OnChatDesdePastilla">
-                    <Rectangle x:Name="ChatCuerpo" Width="4.5" Height="10" RadiusX="2" RadiusY="2"
-                               IsHitTestVisible="False">
-                        <Rectangle.Fill>
-                            <SolidColorBrush x:Name="ChatFondo" Color="#80A8A8AE"/>
-                        </Rectangle.Fill>
-                    </Rectangle>
-                    <Canvas x:Name="ChatIcono" Width="26" Height="26" Opacity="0" IsHitTestVisible="False">
-                        <!-- Bocadillo: cuerpo redondeado y la puntita abajo a la izquierda. -->
-                        <Border Canvas.Left="6" Canvas.Top="7" Width="14" Height="10"
-                                CornerRadius="5" BorderBrush="White" BorderThickness="1.4"/>
-                        <Path Stroke="White" StrokeThickness="1.4" StrokeStartLineCap="Round"
-                              StrokeEndLineCap="Round" Data="M 9.5,16.6 L 8.6,19.6 L 12.2,17.2"/>
-                    </Canvas>
-                </Grid>
-
-                <!-- Dictado clínico. VA AQUÍ Y NO EN LA REJILLA DEL MENÚ porque se usa con las manos
-                     puestas en otra cosa: el médico está mirando SAP, no buscando un botón dentro de
-                     un panel. Las otras dos pastillas hablan CON Ü; ésta no habla con nadie —
-                     transcribe y rellena— y por eso merece su propio gesto en vez de un modo del
-                     micrófono.
-
-                     Solo hace algo en la pantalla de triage: fuera de ahí no hay campos que llenar y
-                     encenderlo sería prometer un trabajo que no se puede hacer. -->
-                <Grid x:Name="ZonaDictado" Width="26" Height="26" Background="Transparent" Cursor="Hand"
-                      Margin="0,1,0,0" ToolTip="Dictar y rellenar los campos de SAP"
-                      MouseEnter="OnZonaDictadoEntra" MouseLeave="OnZonaDictadoSale"
-                      MouseLeftButtonUp="OnDictadoDesdePastilla">
-                    <Rectangle x:Name="DictadoCuerpo" Width="4.5" Height="10" RadiusX="2" RadiusY="2"
-                               IsHitTestVisible="False">
-                        <Rectangle.Fill>
-                            <SolidColorBrush x:Name="DictadoFondo" Color="#80A8A8AE"/>
-                        </Rectangle.Fill>
-                    </Rectangle>
-                    <Canvas x:Name="DictadoIcono" Width="26" Height="26" Opacity="0" IsHitTestVisible="False">
-                        <!-- Fonendoscopio: el tubo en U que baja de las olivas, y la campana. -->
-                        <Path Stroke="White" StrokeThickness="1.3" StrokeStartLineCap="Round"
-                              StrokeEndLineCap="Round" Fill="Transparent"
-                              Data="M 8,5.5 L 8,10.5 A 4.2,4.2 0 0 0 16.4,10.5 L 16.4,5.5"/>
-                        <Path Stroke="White" StrokeThickness="1.3" StrokeStartLineCap="Round"
-                              StrokeEndLineCap="Round" Fill="Transparent"
-                              Data="M 12.2,14.7 L 12.2,16.4 A 3.1,3.1 0 0 0 18.4,16.4"/>
-                        <Ellipse Canvas.Left="16.2" Canvas.Top="15.4" Width="4.4" Height="4.4"
-                                 Stroke="White" StrokeThickness="1.3"/>
-                    </Canvas>
-                </Grid>
-            </StackPanel>
-
-            <ui:FaceControl x:Name="CollapsedFace" Width="72" Height="72" Cursor="Hand"
-                            ToolTip="Clic: hablar con Ü · mantener: cambiar tema · arrastrar y soltar: mover, o soltarla en el muelle para guardarla">
-                <ui:FaceControl.Effect>
-                    <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="Black"/>
-                </ui:FaceControl.Effect>
-            </ui:FaceControl>
+            <!-- EL HALO DE LA VOZ, alrededor de la carita entera. Hasta el 2026-09-02 vivia
+                 dentro de la pastilla del microfono, que media 26x26; al morir la pastilla, la
+                 senal de «te estoy oyendo» pasa a ser la carita misma. El tamano y el color los
+                 pone ReglaDelHalo. -->
+            <Grid>
+                <Ellipse x:Name="VoiceHalo" Width="72" Height="72" Opacity="0"
+                         IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.Fill>
+                        <SolidColorBrush x:Name="VoiceHaloColor" Color="#A8A8AE"/>
+                    </Ellipse.Fill>
+                    <Ellipse.RenderTransform>
+                        <ScaleTransform x:Name="VoiceHaloEscala" ScaleX="1" ScaleY="1"/>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                <ui:FaceControl x:Name="CollapsedFace" Width="72" Height="72" Cursor="Hand">
+                    <ui:FaceControl.Effect>
+                        <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="Black"/>
+                    </ui:FaceControl.Effect>
+                </ui:FaceControl>
+            </Grid>
         </StackPanel>
 
         <!-- Estado NORMAL: menú extendido (arriba) + globo de conversación (izquierda) + barra (derecha).
@@ -454,25 +269,25 @@
                             <!-- DEMO de punta a punta (2026-08-31): del Easy Access a los campos
                                  clínicos llenos, todo por batches del terreno. -->
                             <Button x:Name="DemoBtn" Content="🚀" Style="{StaticResource BarBtn}" Click="OnDemoPuntaAPunta"
-                                    Margin="0" ToolTip="DEMO: de Easy Access al triage del paciente, con campos clínicos llenos — todo en batch"
+                                    Margin="0"
                                     AutomationProperties.Name="Demo de punta a punta"/>
                             <!-- Enseñanza activa: graba pantalla+voz para que Ü aprenda a usar una
                                  app. En rojo mientras graba (SetTeachingUi). -->
                             <Button x:Name="TeachBtn" Content="🎓" Style="{StaticResource BarBtn}" Click="OnToggleTeach"
-                                    Margin="0" ToolTip="Enseñar: Ü graba la pantalla y tu voz para aprender un workflow"
+                                    Margin="0"
                                     AutomationProperties.Name="Enseñar"/>
                             <Button x:Name="WorkflowsBtn" Content="🧭" Style="{StaticResource BarBtn}" Click="OnOpenWorkflows"
-                                    Margin="0" ToolTip="Biblioteca de workflows: ejecutar contra Graph (SAP GUI / UIA) + autofill"
+                                    Margin="0"
                                     AutomationProperties.Name="Workflows"/>
                             <Button x:Name="VideosBtn" Content="🎞" Style="{StaticResource BarBtn}" Click="OnOpenVideos"
-                                    Margin="0" ToolTip="Las grabaciones de tus enseñanzas"
+                                    Margin="0"
                                     AutomationProperties.Name="Videos"/>
                             <!-- Buscar actualizaciones AHORA. El sondeo automático mira cada 30 min y
                                  no dice nada mientras tanto —correcto para no molestar—, pero deja sin
                                  respuesta a quien acaba de enterarse de que hay versión nueva. Sin
                                  esto, la única forma de forzarlo era cerrar y volver a abrir. -->
                             <Button x:Name="CheckUpdateBtn" Content="🔄" Style="{StaticResource BarBtn}" Click="OnCheckUpdate"
-                                    Margin="0" ToolTip="Buscar actualizaciones ahora"
+                                    Margin="0"
                                     AutomationProperties.Name="Buscar actualizaciones"/>
                         </UniformGrid>
 
@@ -482,17 +297,15 @@
                                        Style="{StaticResource SectionLabel}" VerticalAlignment="Center"/>
                             <Button x:Name="WorkflowViewToggle" DockPanel.Dock="Right" Content="☰" Width="26" Height="20"
                                     Click="OnToggleWorkflowView" Style="{StaticResource FlatBtn}" Background="#22FFFFFF"
-                                    Foreground="#CCFFFFFF" FontSize="11" ToolTip="Cambiar entre carrusel y lista"/>
+                                    Foreground="#CCFFFFFF" FontSize="11"/>
                             <Button x:Name="WorkflowDeleteBtn" DockPanel.Dock="Right" Content="🗑" Width="26" Height="20"
                                     Margin="0,0,6,0" Click="OnDeleteWorkflow" Style="{StaticResource FlatBtn}"
-                                    Background="#33FF3B30" Foreground="#EEFFFFFF" FontSize="11" IsEnabled="False"
-                                    ToolTip="Borrar el workflow que se muestra (no se puede deshacer)"/>
+                                    Background="#33FF3B30" Foreground="#EEFFFFFF" FontSize="11" IsEnabled="False"/>
                             <!-- Ponerle nombre (spec 007): el del cerebro llegaba como «Workflow sin
                                  descripción» tres de cuatro veces. Se abre solo al terminar de enseñar. -->
                             <Button x:Name="WorkflowRenameBtn" DockPanel.Dock="Right" Content="✏" Width="26" Height="20"
                                     Margin="0,0,6,0" Click="OnRenameWorkflow" Style="{StaticResource FlatBtn}"
-                                    Background="#22FFFFFF" Foreground="#EEFFFFFF" FontSize="11" IsEnabled="False"
-                                    ToolTip="Ponerle nombre al workflow que se muestra"/>
+                                    Background="#22FFFFFF" Foreground="#EEFFFFFF" FontSize="11" IsEnabled="False"/>
                         </DockPanel>
 
                         <!-- Vista CARRUSEL: flecha ◀, título centrado, flecha ▶ -->
@@ -521,13 +334,11 @@
                         <TextBox x:Name="WorkflowNameBox" Visibility="Collapsed" Height="28" Margin="0,6,0,0"
                                  VerticalContentAlignment="Center" Background="#22FFFFFF" Foreground="White"
                                  BorderThickness="0" Padding="8,0" FontSize="12"
-                                 KeyDown="OnWorkflowNameKey" LostFocus="OnWorkflowNameLostFocus"
-                                 ToolTip="Nombre del workflow · Enter guarda · Escape cancela"/>
+                                 KeyDown="OnWorkflowNameKey" LostFocus="OnWorkflowNameLostFocus"/>
 
                         <Button x:Name="RunWorkflowBtn" Content="▶ Ejecutar ahora" Height="34" Margin="0,8,0,0"
                                 Click="OnRunWorkflowDirect" Style="{StaticResource MenuBtn}" Background="#2FB457"
-                                HorizontalContentAlignment="Center" FontWeight="SemiBold" FontSize="12" IsEnabled="False"
-                                ToolTip="Corre el workflow seleccionado contra Graph (se alinea solo si la pantalla no coincide)"/>
+                                HorizontalContentAlignment="Center" FontWeight="SemiBold" FontSize="12" IsEnabled="False"/>
 
                         <Border Style="{StaticResource Sep}"/>
 
@@ -569,19 +380,15 @@
                                 <UniformGrid Columns="5" Margin="0,8,0,0">
                                     <Button x:Name="InspectorBtn" Content="🔍" Style="{StaticResource BarBtn}"
                                             Click="OnToggleInspector" Margin="0"
-                                            ToolTip="Inspector de elementos: recuadros sobre la pantalla. Al hacer clic: amarillo si coincide con lo que el asistente tocaría, rojo (ambos) si no."
                                             AutomationProperties.Name="Inspector de elementos"/>
                                     <Button x:Name="LocatorBtn" Content="📍" Style="{StaticResource BarBtn}"
                                             Click="OnToggleLocator" Margin="0"
-                                            ToolTip="ID de superficie: muestra dónde estás parado como URL (uia://app.exe/ventana). Es el ID con el que se cargan los workflows."
                                             AutomationProperties.Name="ID de superficie"/>
                                     <Button x:Name="RecuerdosBtn" Content="🧠" Style="{StaticResource BarBtn}"
                                             Click="OnVerRecuerdos" Margin="0"
-                                            ToolTip="Ilumina de golpe todo lo que te han enseñado en esta pantalla, con el texto del recuerdo sobre cada elemento. Escape lo apaga."
                                             AutomationProperties.Name="Ver recuerdos de aquí"/>
                                     <Button x:Name="LogsBtn" Content="📜" Style="{StaticResource BarBtn}"
                                             Click="OnOpenLogs" Margin="0"
-                                            ToolTip="Registro (para diagnosticar errores)"
                                             AutomationProperties.Name="Logs"/>
                                 </UniformGrid>
 
@@ -614,7 +421,7 @@
                         <DockPanel LastChildFill="True">
                             <Button x:Name="TalkCloseBtn" DockPanel.Dock="Right" Content="✕" Width="22" Height="22"
                                     Style="{StaticResource FlatBtn}" Background="#22FFFFFF" FontSize="10"
-                                    Margin="6,0,0,0" VerticalAlignment="Top" ToolTip="Cerrar (Esc)"
+                                    Margin="6,0,0,0" VerticalAlignment="Top"
                                     AutomationProperties.Name="Cerrar la conversación"/>
                             <TextBlock x:Name="Status" Text="Ü listo" Foreground="#EEFFFFFF" FontSize="12.5"
                                        TextWrapping="Wrap" VerticalAlignment="Center"/>
@@ -632,7 +439,7 @@
                              abre este globo y enfoca la caja). El micrófono vive en la barra. -->
                         <TextBox x:Name="Input" Height="30" Margin="0,10,0,0" VerticalContentAlignment="Center"
                                  Background="#22FFFFFF" Foreground="White" BorderThickness="0" Padding="8,0"
-                                 KeyDown="OnInputKey" ToolTip="Escríbele a Ü y pulsa Enter"/>
+                                 KeyDown="OnInputKey"/>
                     </StackPanel>
                 </Border>
 
@@ -677,14 +484,12 @@
                              dentro, y no hay nada si esta fuera. Ver CaritaGuardada. -->
                         <ui:FaceControl x:Name="Face" Width="66" Height="66" Cursor="Hand"
                                         Visibility="Collapsed"
-                                        HorizontalAlignment="Center" Margin="0,4,0,22"
-                                        ToolTip="Ü está guardada aquí · arrástrala hacia fuera para sacarla · clic: hablar"/>
+                                        HorizontalAlignment="Center" Margin="0,4,0,22"/>
 
                         <!-- LOS TRES. Live va separado y algo mas estrecho, como en el diseño: no
                              es del mismo grupo que los otros dos — Learn y Work son lo que Ü hace
                              POR TI en la pantalla; Live abre la consulta clinica, que es otra cosa. -->
                         <Button x:Name="LearnBtn" Content="Learn" Height="40" Click="OnToggleTeach"
-                                ToolTip="Enseñar: Ü graba la pantalla y tu voz para aprender una tarea"
                                 AutomationProperties.Name="Enseñar"/>
                         <!-- WORK NO HACE NADA TODAVÍA, y está dicho aquí y en su tooltip a
                              propósito. El dueño lo pidió sin acción el 2026-09-05 para decidir más
@@ -693,7 +498,6 @@
                              (2026-08-31): «un botón que no hace nada enseña a ignorar los
                              botones». Si esto sigue así dentro de unos días, se quita. -->
                         <Button x:Name="WorkBtn" Content="Work" Height="40" Margin="0,10,0,0"
-                                ToolTip="Todavía sin función: se decidirá qué hace"
                                 AutomationProperties.Name="Trabajar (sin función todavía)"/>
 
                     <StackPanel x:Name="ZonaSecundaria" Margin="0,18,0,0">
@@ -705,13 +509,11 @@
                                  y lista. Si el usuario la ignora, se aplica sola al cerrar (ApplyOnExit). -->
                             <Button x:Name="UpdateBtn" Content="⬇" Style="{StaticResource BarBtn}"
                                     Margin="0" Background="#553B82F6" Visibility="Collapsed" Click="OnApplyUpdate"
-                                    ToolTip="Nueva versión lista — clic para reiniciar (si no, se instala sola al cerrar Ü)"
                                     AutomationProperties.Name="Aplicar la actualización"/>
 
                             <!-- Solo visible mientras ejecuta algo: detener es detener, también la voz. -->
                             <Button x:Name="StopBtn" Content="⏹" Style="{StaticResource BarBtn}"
                                     Background="#55FF3B30" Visibility="Collapsed" Click="OnStop"
-                                    ToolTip="Detener lo que está haciendo"
                                     AutomationProperties.Name="Detener"/>
 
                             <!-- Descartar lo grabado y volver a empezar. Sigue inerte: el reinicio en
@@ -720,7 +522,6 @@
                                  propósito, no por olvido. -->
                             <Button x:Name="RestartTeachBtn" Content="🔄" Style="{StaticResource BarBtn}"
                                     Visibility="Collapsed" Click="OnRestartTeach"
-                                    ToolTip="Me equivoqué: descartar esta grabación y empezar de nuevo"
                                     AutomationProperties.Name="Rehacer la enseñanza"/>
 
                             <!-- COMPROBAR EL APRENDIZAJE, y es obligatorio antes de poder usar una
@@ -729,7 +530,6 @@
                                  él. Se detiene antes de cualquier puerta que no se pueda deshacer. -->
                             <Button x:Name="ComprobarBtn" Content="🧭" Style="{StaticResource BarBtn}"
                                     Click="OnComprobarAprendizaje"
-                                    ToolTip="Comprobar aprendizaje: Ü repite la tarea que le enseñaste y aprende de cada paso. Obligatorio antes de poder usarla."
                                     AutomationProperties.Name="Comprobar el aprendizaje"/>
 
                             <Border x:Name="SepContexto" Height="1" Margin="6,8,6,0"/>
@@ -740,7 +540,6 @@
                              girado significa «ciérralo». Ver UpdateChevron(). -->
                         <Button x:Name="MenuActivator" Height="26" Margin="0,4,0,0" Style="{StaticResource BarBtn}"
                                 Width="38" FontSize="11" Background="#00FFFFFF"
-                                ToolTip="Más herramientas (hover abre · clic fija · Esc cierra)"
                                 AutomationProperties.Name="Más herramientas">
                             <Path x:Name="ActivatorChevron" Data="M 0 5 L 6 0 L 12 5"
                                   Stroke="#CCFFFFFF" StrokeThickness="1.8" StrokeLineJoin="Round"
@@ -767,7 +566,6 @@
                              carita— y no con un emoji: un emoji lo pinta la fuente del sistema, trae
                              su propio color y su propio peso, y rompe la tira (2026-08-07). -->
                         <Button x:Name="CollarModoBtn" Style="{StaticResource BarBtn}" Click="OnCollar"
-                                ToolTip="Análisis clínico: grabar la consulta y elegir por dónde se te oye (computador, collar o teléfono)"
                                 AutomationProperties.Name="Análisis clínico">
                             <!-- Un collar: el cordón cayendo y la pieza colgando. -->
                             <Canvas Width="20" Height="20">
