@@ -31,8 +31,6 @@ public sealed class AtajoPorGolpes : IDisposable
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101;
     private const int WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
-    /// <summary>Bit de <c>KBDLLHOOKSTRUCT.flags</c>: la tecla la inyectó SendInput, no una mano.</summary>
-    private const uint LLKHF_INJECTED = 0x10;
 
     /// <summary>Cuánto puede tardar el segundo golpe. Más y se cuela un Ctrl+Shift de otra cosa.</summary>
     private static readonly TimeSpan Seguidos = TimeSpan.FromMilliseconds(600);
@@ -55,16 +53,6 @@ public sealed class AtajoPorGolpes : IDisposable
     private readonly Action _soloCtrl;
     private readonly Action _ctrlShift;
     private readonly Action? _tripleCtrl;
-    private readonly Interceptor? _interceptar;
-
-    /// <summary>
-    /// Quien puede quedarse con una tecla ANTES de que llegue a la app de debajo (spec 011:
-    /// escribir con el ratón sobre la carita abre el globo con esa letra). Recibe la tecla tal
-    /// como la ve el gancho —vk, scan, flags— y qué modificadores hay pulsados; si devuelve true,
-    /// la tecla se traga aquí y no sigue su camino. Corre en el hilo de la UI: el gancho de bajo
-    /// nivel llama en el hilo que lo instaló.
-    /// </summary>
-    public delegate bool Interceptor(uint vk, uint scan, uint flags, bool ctrl, bool alt);
     private int _golpesSolo;         // cuántos Ctrl limpios seguidos llevamos
     private Gancho? _fn;             // referencia viva: si se la lleva el recolector, Windows cae
     private IntPtr _h;
@@ -79,28 +67,16 @@ public sealed class AtajoPorGolpes : IDisposable
     /// (vk=0xA2), ni una vez la Fn (2026-08-06).</param>
     /// <param name="ctrlShift">Doble Ctrl+Shift.</param>
     /// <param name="tripleCtrl">Triple Ctrl. Opcional: sin él, el tercer golpe no hace nada.</param>
-    /// <param name="interceptarTecla">Quien decide si una tecla normal es para la carita. Opcional:
-    /// sin él, ninguna tecla se traga.</param>
-    public AtajoPorGolpes(Action soloCtrl, Action ctrlShift, Action? tripleCtrl = null,
-                          Interceptor? interceptarTecla = null)
+    public AtajoPorGolpes(Action soloCtrl, Action ctrlShift, Action? tripleCtrl = null)
     {
         _soloCtrl = soloCtrl;
         _ctrlShift = ctrlShift;
         _tripleCtrl = tripleCtrl;
-        _interceptar = interceptarTecla;
         _fn = Teclado;
         _h = SetWindowsHookEx(WH_KEYBOARD_LL, _fn, IntPtr.Zero, 0);
         LogBus.Log("atajo", _h != IntPtr.Zero
-            ? $"doble Ctrl (voz), doble Ctrl+Shift (panel){(tripleCtrl != null ? ", triple Ctrl (collar)" : "")}"
-              + $"{(interceptarTecla != null ? ", tecla sobre la carita (globo)" : "")}: activos"
+            ? $"doble Ctrl (voz), doble Ctrl+Shift (panel){(tripleCtrl != null ? ", triple Ctrl (collar)" : "")}: activos"
             : "doble Ctrl / Ctrl+Shift: NO se pudo enganchar el teclado");
-    }
-
-    /// <summary>Pregunta si la carita se queda con la tecla, sin que un fallo suyo tumbe el gancho.</summary>
-    private bool Interceptar(KBDLLHOOKSTRUCT k, bool ctrl, bool alt)
-    {
-        try { return _interceptar!(k.Vk, k.Scan, k.Flags, ctrl, alt); }
-        catch (Exception e) { LogBus.Log("atajo", $"interceptar la tecla 0x{k.Vk:X2} falló: {e.Message}"); return false; }
     }
 
     /// <summary>Dispara un gesto sin que un fallo suyo se lleve el gancho del teclado por delante.</summary>
@@ -122,14 +98,9 @@ public sealed class AtajoPorGolpes : IDisposable
     /// fuente que va en hora.
     /// </summary>
     private bool _ctrlAbajo, _shiftAbajo;
-    /// <summary>Alt y Win no forman acorde, pero sí dicen que una letra es un ATAJO y no una letra:
-    /// con cualquiera de los dos pulsados, la carita no se queda con la tecla.</summary>
-    private bool _altAbajo, _winAbajo;
 
     private static bool EsCtrl(uint vk) => vk is 0x11 or 0xA2 or 0xA3;
     private static bool EsShift(uint vk) => vk is 0x10 or 0xA0 or 0xA1;
-    private static bool EsAlt(uint vk) => vk is 0x12 or 0xA4 or 0xA5;
-    private static bool EsWin(uint vk) => vk is 0x5B or 0x5C;
 
     private IntPtr Teclado(int code, IntPtr wParam, IntPtr lParam)
     {
@@ -143,21 +114,6 @@ public sealed class AtajoPorGolpes : IDisposable
             {
                 if (EsCtrl(k.Vk)) _ctrlAbajo = true;
                 if (EsShift(k.Vk)) _shiftAbajo = true;
-                if (EsAlt(k.Vk)) _altAbajo = true;
-                if (EsWin(k.Vk)) _winAbajo = true;
-
-                // LA TECLA SOBRE LA CARITA (spec 011, promesa 166). Antes que nada: si la carita se
-                // la queda, el gancho la traga y no llega a la app de debajo. Solo teclas de verdad
-                // —ni modificadores, ni lo que el propio SendInput reinyecta (LLKHF_INJECTED), que
-                // si no se abriría un bucle—, y la decisión no vive aquí: vive en ReglaDeEscritura.
-                bool esOtroModificador = EsAlt(k.Vk) || EsWin(k.Vk);
-                if (!esModificador && !esOtroModificador && (k.Flags & LLKHF_INJECTED) == 0
-                    && _interceptar != null
-                    && Interceptar(k, ctrl: _ctrlAbajo || _winAbajo, alt: _altAbajo || msg == WM_SYSKEYDOWN))
-                {
-                    _acordeLimpio = false; _huboShift = false;   // como cualquier otra tecla
-                    return new IntPtr(1);
-                }
 
                 // Cualquier tecla que no sea modificador ensucia el acorde: ya es otro atajo.
                 if (!esModificador) { _acordeLimpio = false; _huboShift = false; }
@@ -166,11 +122,6 @@ public sealed class AtajoPorGolpes : IDisposable
                     _acordeLimpio = true;
                     if (_shiftAbajo) _huboShift = true;   // el acorde ya no es «Ctrl solo»
                 }
-            }
-            else if (msg is WM_KEYUP or WM_SYSKEYUP && (EsAlt(k.Vk) || EsWin(k.Vk)))
-            {
-                if (EsAlt(k.Vk)) _altAbajo = false;
-                if (EsWin(k.Vk)) _winAbajo = false;
             }
             else if (msg is WM_KEYUP or WM_SYSKEYUP && esModificador)
             {

@@ -1,6 +1,6 @@
 # Plan de implementación: la carita deja de explicarse — fuera las pastillas y los carteles
 
-Estado: **propuesto** · Nace de la prueba a mano de la rama `jose/la-carita-es-el-unico-boton` del
+Estado: **implementada** (162-164; 165 y 166 retiradas) · Nace de la prueba a mano de la rama `jose/la-carita-es-el-unico-boton` del
 2026-09-06 · Rama: `jose/fuera-las-pastillas-y-los-carteles`
 
 Esto **no es** un rebase de la rama 008. Es un rescate selectivo: de las cinco promesas de aquella
@@ -45,8 +45,8 @@ promesa que la juzga. Cada fase empieza con el contrato ROTO y termina con el co
 | 162 | fuera las tres pastillas: la carita no lleva colgando voz, chat ni dictado a SAP, y lo que otros usan de ese dictado sigue en pie | 1 |
 | 163 | el halo de la voz rodea a la carita, cabe entero en el aire que tiene, y dice por dónde te oyen | 2 |
 | 164 | ningún elemento de la interfaz muestra texto al pasar el ratón, ni uno que lo declare: se apaga en un solo sitio y para todo lo que se escriba después | 3 |
-| 165 | la línea «Escríbele…» pide reposo: rozar la carita o arrastrarla no la llama | 4 |
-| 166 | escribir con el ratón sobre la carita abre el globo con esa letra, y ni un atajo, tecla F, Esc, Enter, Tab o flecha se le roba a la app de debajo | 5 |
+| ~~165~~ | ~~la línea «Escríbele…» pide reposo~~ — **RETIRADA** por el dueño el 2026-09-06 (ver *Lo que NO entra*) | — |
+| ~~166~~ | ~~escribir con el ratón sobre la carita abre el globo con esa letra~~ — **RETIRADA** con la 165 | — |
 
 **La que cierra el asunto es la 164.** Mientras el apagado sea una lista de 44 tachones, las otras
 cuatro son cosmética: el cartel vuelve en cuanto alguien añada un botón.
@@ -141,3 +141,18 @@ despliega. Es el requisito explícito del dueño: lo que pasa al hablarle a la c
 La zona es `windows-client/` UI: **choque alto**. La rama 008 sigue abierta en el PR #51 sobre estos
 mismos archivos, y esta spec la deja obsoleta en tres de sus cinco promesas — al mergear esto, aquel
 PR se cierra o se reduce a lo que quede (el anillo). Se avisa en `#miracle-updates`.
+
+## Acta de retiro de las promesas 165 y 166 (2026-09-06)
+
+Llegaron a verde y las dos pasaron su sabotaje. Las retira el dueño después de verlas en pantalla:
+la burbuja «Escríbele…» no le convence, y la probó en dos formas —opaca y de cristal oscuro con
+tipografía de sistema— antes de decidir. **Los números no se reciclan.**
+
+Se retiran las dos juntas y no solo la línea, a propósito: la 166 es un gancho global de teclado
+que se traga letras, y sin la 165 no queda nada en pantalla que diga que puede pasar. Un gancho
+invisible que roba teclas sin afordancia es peor que no tener el gesto.
+
+**El hueco que deja está cubierto.** Al morir la pastilla del chat (162) se fue la única puerta al
+globo *con el ratón desde la carita suelta*, pero quedan dos que no dependen de ella: `Ctrl+Alt+U`,
+que abre el globo con el foco ya en la caja, y el muelle del borde derecho, que lo tiene a un cursor
+de distancia. Esto se comprobó leyendo `InvocarPorAtajo` y `Muelle`, no se supone.

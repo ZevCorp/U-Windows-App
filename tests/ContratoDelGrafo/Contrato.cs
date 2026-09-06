@@ -442,8 +442,17 @@ internal static class Contrato
         Prueba("162. fuera las tres pastillas: la carita no lleva colgando voz, chat ni dictado a SAP — y quitarles la puerta no mata lo que la consulta, la demo y la exportación a HC usan por dentro", FueraLasTresPastillas);
         Prueba("163. el halo de la voz rodea a la carita y cabe entero en el aire que tiene: un halo recortado contra el borde de su ventana no dibuja voz, dibuja un corte — y su color dice por dónde te oyen", ElHaloRodeaALaCarita);
         Prueba("164. ningún elemento de la interfaz muestra texto al pasar el ratón: no queda ni una declaración viva, y el apagado es de una sola pieza para que lo que se escriba mañana tampoco lo muestre", NadieMuestraTextoAlPasarElRaton);
-        Prueba("165. la línea «Escríbele…» pide reposo: rozar la carita de camino a otra cosa no la llama, y arrastrarla tampoco — ir a agarrar algo no es ir a escribirle", LaLineaPideReposo);
-        Prueba("166. escribir con el ratón sobre la carita abre el globo con esa letra, y ni un atajo, tecla F, Esc, Enter, Tab o flecha se le roba a la app de debajo", EscribirleEsEscribir);
+
+        // ── ACTA DE RETIRO: 165 y 166 (spec 011, 2026-09-06) ────────────────
+        //
+        // Aqui vivieron la linea «Escribele…» y el escribir con el raton sobre la carita. Llegaron
+        // a verde, se sabotearon las dos y las dos se pusieron rojas por su motivo. Las retira el
+        // dueno tras verlas en pantalla: la burbuja no le convence, y una puerta que no gusta es
+        // peor que no tener puerta cuando ya existen dos que si — Ctrl+Alt+U abre el globo con el
+        // foco puesto, y el muelle lo tiene a un cursor de distancia.
+        //
+        // Los numeros NO se reciclan: la spec 011 y los commits de esta rama los citan por numero,
+        // y reusarlos haria que un plan viejo hablara de otra cosa.
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -5807,56 +5816,7 @@ internal static class Contrato
             + "el apagado vive en UN sitio y alcanza a lo que aún no se ha escrito");
     }
 
-    /// <summary>Promesa 165.</summary>
-    private static void LaLineaPideReposo()
-    {
-        var t = Capacidad("U.WindowsClient.Ui.ReglaDeLaLinea");
-        if (t == null) { Pendiente("ReglaDeLaLinea", "165", "011"); return; }
 
-        var asoma = t.GetMethod("Asoma", BindingFlags.Public | BindingFlags.Static);
-        var reposoMs = t.GetField("ReposoMs")?.GetValue(null);
-        if (asoma == null || reposoMs == null) { Pendiente("ReglaDeLaLinea.Asoma/ReposoMs", "165", "011"); return; }
-        int ms = Convert.ToInt32(reposoMs);
-        bool Asoma(int quieto, bool arrastrando) =>
-            (bool)asoma.Invoke(null, new object[] { quieto, arrastrando })!;
-
-        // Medio segundo es el suelo, y no es gusto: por debajo, ir a agarrar la carita ya invoca el
-        // cartel — que es exactamente el motivo por el que esto existe.
-        Debe(ms >= 500, $"el reposo es un reposo y no un parpadeo: son {ms} ms");
-        Debe(!Asoma(0, false), "rozarla de camino a otra cosa no la llama");
-        Debe(!Asoma(ms - 1, false), "ni fallando un milisegundo para el reposo");
-        Debe(Asoma(ms, false), "cumplido el reposo, asoma");
-        Debe(!Asoma(ms * 10, true), "pero arrastrándola no asoma por mucho que se tarde: ir a moverla no es ir a escribirle");
-    }
-
-    /// <summary>Promesa 166.</summary>
-    private static void EscribirleEsEscribir()
-    {
-        var t = Capacidad("U.WindowsClient.Ui.ReglaDeEscritura");
-        var abre = t?.GetMethod("Abre", BindingFlags.Public | BindingFlags.Static);
-        if (abre == null) { Pendiente("ReglaDeEscritura.Abre", "166", "011"); return; }
-        bool Abre(uint vk, bool encima, bool ctrl, bool alt) =>
-            (bool)abre.Invoke(null, new object[] { vk, encima, ctrl, alt })!;
-
-        Debe(Abre(0x41, true, false, false), "una letra con el ratón encima abre el globo");
-        Debe(Abre(0x31, true, false, false), "y un dígito también");
-        Debe(!Abre(0x41, false, false, false), "sin el ratón encima, ninguna tecla es para Ü");
-        Debe(!Abre(0x41, true, true, false), "Ctrl+A sigue siendo de la app de debajo");
-        Debe(!Abre(0x41, true, false, true), "y Alt+A también");
-
-        // LO IMPORTANTE NO ES QUÉ ABRE, SINO QUÉ NO SE ROBA. El cursor puede estar apoyado en la
-        // carita mientras alguien trabaja en SAP: quitarle un F5, un Enter o un Esc a esa persona
-        // sería peor que no tener el gesto.
-        var jamas = new (uint Vk, string Nombre)[]
-        {
-            (0x70, "F1"), (0x74, "F5"), (0x7B, "F12"), (0x1B, "Esc"), (0x0D, "Enter"),
-            (0x09, "Tab"), (0x25, "flecha izquierda"), (0x26, "flecha arriba"),
-            (0x20, "espacio"), (0x08, "retroceso"), (0x2E, "suprimir"),
-        };
-        foreach (var (vk, nombre) in jamas)
-            Debe(!Abre(vk, true, false, false),
-                $"«{nombre}» nunca se le roba a la app de debajo, ni con el ratón sobre la carita");
-    }
 
     private static void Prueba(string nombre, Action cuerpo)
     {
