@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -406,6 +406,30 @@ internal static class Contrato
         // de la consulta y al ponerse a ENSEÑAR vuelve a hablarle al micrófono del portátil, porque
         // la elección era privada de esa ventana.
         Prueba("146. de dónde entra el audio se elige UNA vez y vale para toda la app: lo elegido en la consulta manda también al enseñar y al hablar con Ü, y pedir lo que ya está puesto no corta nada", UnSoloMicrofonoParaTodaLaApp);
+
+        // UN CLIC HABLA, Y EL PANEL VIVE A LA DERECHA (spec 010, 2026-09-05). El gesto más usado de
+        // la aplicación —hablarle— estaba detrás de un doble clic, y el clic simple abría un panel.
+        // Se cambian los dos: el clic abre el micrófono, y el panel se muda al borde derecho donde
+        // está siempre y se despliega al pasar el cursor.
+        Prueba("147. sin gesto de doble toque, el toque simple no espera a nadie: el micrófono abre en el acto, y la espera de 250 ms solo existe mientras haya un segundo toque que distinguir", ElToqueSimpleNoEsperaANadie);
+        Prueba("148. el muelle se despliega porque el cursor está encima y se pliega al irse — pero no mientras haya algo abierto que se perdería: una conversación en marcha o el cursor dentro de lo desplegado lo mantienen abierto", ElMuelleNoSeCierraSobreLoQueEstasHaciendo);
+        Prueba("149. soltar la carita encima del muelle la guarda, y soltarla en cualquier otro sitio no: la caja que decide es la del muelle desplegado, y se juzga con el punto donde se soltó", SoltarlaEnElMuelleLaGuarda);
+        Prueba("150. sacada del muelle, la carita vuelve al punto donde se soltó y nunca fuera de la pantalla: un escondite del que se sale a un sitio que no ves no es un escondite, es una pérdida", SacadaVuelveDondeLaSueltasYSeVe);
+
+        // LOS DISPOSITIVOS DEL SELECTOR (spec 010, segunda ronda, 2026-09-05). Al borrar el panel
+        // viejo del collar se quedaron sin puerta DOS cosas —olvidar un collar y ver su estado—, y
+        // el dueño pidió que vivieran donde de verdad se elige el micrófono. De paso, poder
+        // nombrarlos: «Collar Omi» no distingue un collar de otro.
+        Prueba("151. un dispositivo enlazado se puede nombrar, y el nombre sobrevive al reinicio: se guarda en disco por dispositivo, y poner vacío QUITA el nombre y devuelve el de fábrica", ElDispositivoSePuedeNombrar);
+        Prueba("152. la lista de enlazados dice lo que HAY: solo collares que llegaron a conectarse con este computador —el teléfono es un canal, no un aparato de esta máquina— y olvidar uno lo quita de la lista Y borra su nombre", OlvidarUnDispositivoNoDejaHuerfanos);
+        Prueba("153. el collar distingue querer de tener: elegirlo en el menú es una intención y no lo mete en la lista de enlazados; solo entra cuando contestó de verdad, y olvidarlo lo saca", QuererUnCollarNoEsTenerlo);
+        Prueba("154. lo elevado reserva el hueco que su sombra necesita: una sombra recortada contra el borde de su ventana no dibuja profundidad, dibuja un corte — y el hueco es mayor por abajo, que es hacia donde cae la luz de este estudio", LaSombraSeDibujaEntera);
+        Prueba("155. el globo es para conversar, no para informar: lo abre quien lo pide y una pregunta que hay que contestar, nunca el progreso; un fallo no lo abre pero sí saca el panel, porque un fallo que nadie ve es una app que no hace nada", ElGloboNoSeAbreSolo);
+        Prueba("156. un botón que abre una ventana también la cierra, y sabe distinguir minimizada de delante: con la ventana al frente la esconde, y en cualquier otro estado —minimizada, detrás, escondida— la trae en vez de no hacer nada", ElBotonDeUnaVentanaAlterna);
+        Prueba("157. elegir una fuente SUELTA las demás: con el computador o el teléfono elegidos, el collar se apaga en vez de quedarse conectado entregando audio por detrás — lo que la interfaz dice que te oye es lo que te oye", ElegirUnaFuenteSueltaLasDemas);
+        Prueba("158. el verde dice quién ENTREGA, no quién está elegido: una fuente elegida y muda se ve distinta de una que está oyendo, porque la única prueba de que hay micrófono es que llegue audio", ElVerdeEsDeQuienEntrega);
+        Prueba("160. al tirar de la carita guardada, aparece BAJO el cursor y no donde estaba escondida: un objeto que reaparece a diez centímetros de tu mano es un objeto que hay que volver a agarrar", LaCaritaApareceBajoElCursor);
+        Prueba("159. la ventana se agarra por el borde que se VE y no por el de su ventana —que vive 24 px más afuera, en el hueco de la sombra—, y en una esquina manda la esquina: redimensionar en una dirección donde se esperaban dos se siente como que la ventana se resiste", LaVentanaSeAgarraPorDondeSeVe);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -5133,6 +5157,458 @@ internal static class Contrato
         var sinPlan = new WorkflowPlayer(graph, cfg);
         sinPlan.RunAsync("wf_p", null, true, CancellationToken.None).GetAwaiter().GetResult();
         Debe(Planes() == 1, $"sin plan a la mano se pide UNA vez, como siempre ({Planes()} peticiones)");
+    }
+
+    // ── Un clic habla, y el panel vive a la derecha (spec 010) ───────────────
+
+    /// <summary>
+    /// Se juzga LA REGLA, separada del gesto, por el mismo camino que la 104 y el aura: quien de
+    /// verdad temporiza el toque —<c>FaceGestures</c>— pregunta a esta misma función, así lo juzgado
+    /// y lo que corre no pueden discrepar (aprendizaje nº16).
+    /// </summary>
+    private static void ElToqueSimpleNoEsperaANadie()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelToque");
+        var espera = t?.GetMethod("EsperaMs");
+        Debe(t != null && espera != null,
+            "todavía no existe «ReglaDelToque.EsperaMs» (fase 1 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || espera == null) return;
+
+        int Ms(bool hayDobleToque) => (int)espera.Invoke(null, new object[] { hayDobleToque })!;
+
+        Debe(Ms(false) == 0,
+            $"sin doble toque cableado no hay nada que distinguir, así que esperar es retardo puro: "
+            + $"un botón de encender que tarda {Ms(false)} ms se siente roto");
+        Debe(Ms(true) >= 200,
+            $"y donde el doble toque SÍ exista, la ventana para distinguirlo sigue siendo usable "
+            + $"(salió {Ms(true)} ms; por debajo de 200 el doble clic deja de poderse hacer)");
+        Debe(Ms(true) > Ms(false),
+            "esperar tiene que costar algo: si las dos respuestas fueran iguales, la regla no estaría "
+            + "decidiendo nada y daría lo mismo llamarla que no");
+
+        // Y QUE NO SE HAYA QUEDADO UNA COPIA. La constante vivía dentro de FaceGestures; si sigue
+        // ahí, el gesto puede estar usando la suya mientras esta regla dice otra cosa — que es
+        // exactamente la forma de fallo del aprendizaje nº16: dos caminos para el mismo hecho.
+        var gestos = Capacidad("U.WindowsClient.Ui.FaceGestures");
+        var copia = gestos?.GetField("TapWindowMs",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Debe(copia == null,
+            "«FaceGestures» conserva su propia constante TapWindowMs: la espera se decide en DOS "
+            + "sitios y acabarán discrepando");
+    }
+
+    private static void ElMuelleNoSeCierraSobreLoQueEstasHaciendo()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelMuelle");
+        var m = t?.GetMethod("Desplegado");
+        Debe(t != null && m != null,
+            "todavía no existe «ReglaDelMuelle.Desplegado» (fase 2 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || m == null) return;
+
+        bool Abierto(bool cursorEncima, bool conversacion, bool tecladoDentro)
+            => (bool)m.Invoke(null, new object[] { cursorEncima, conversacion, tecladoDentro })!;
+
+        Debe(Abierto(true, false, false),
+            "el cursor encima lo despliega: ese ES el gesto, no hay otro");
+        Debe(!Abierto(false, false, false),
+            "y al irse el cursor se pliega, o dejaría de ser una pestaña y sería una barra permanente "
+            + "encima del trabajo de alguien");
+        Debe(Abierto(false, true, false),
+            "pero con una conversación en marcha NO se pliega: lo que está pasando ahora mismo no "
+            + "puede depender de dónde tengas el ratón");
+        Debe(Abierto(false, false, true),
+            "ni mientras escribes dentro: al llevar la mano al teclado el cursor sale del muelle, y "
+            + "plegarse ahí se comería el texto a medias — que es el fallo que esta promesa existe "
+            + "para impedir");
+    }
+
+    private static void SoltarlaEnElMuelleLaGuarda()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelMuelle");
+        var m = t?.GetMethod("Guarda");
+        var margen = t?.GetField("MargenDeAgarre");
+        Debe(t != null && m != null && margen != null,
+            "todavía no existe «ReglaDelMuelle.Guarda» (fase 3 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || m == null || margen == null) return;
+
+        // Un muelle desplegado, angosto y alto, pegado al borde derecho de una pantalla de 1920.
+        var muelle = new System.Windows.Rect(1820, 300, 96, 420);
+        bool Guarda(double x, double y) => (bool)m.Invoke(null, new object[] { muelle, new System.Windows.Point(x, y) })!;
+        double tol = (double)margen.GetValue(null)!;
+
+        Debe(Guarda(1860, 500), "soltarla dentro del muelle la guarda");
+        Debe(tol >= 12,
+            $"el blanco del gesto no puede ser tan pequeño como el dibujo: con {tol} px de margen, "
+            + "acertarle a un muelle angosto es puntería, no una interfaz");
+        Debe(Guarda(1820 - tol / 2, 500),
+            "y soltarla justo al lado también: el margen de agarre existe para eso");
+        Debe(!Guarda(1820 - tol - 40, 500),
+            "pero soltarla LEJOS no la guarda, o el muelle se tragaría la carita cada vez que alguien "
+            + "la lanza contra el borde derecho — que es adonde se lanza sola");
+        Debe(!Guarda(200, 500),
+            "y desde luego no al otro lado de la pantalla");
+        Debe(!Guarda(1860, 900),
+            "el alto cuenta igual que el ancho: por debajo del muelle no hay muelle");
+    }
+
+    private static void SacadaVuelveDondeLaSueltasYSeVe()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelMuelle");
+        var m = t?.GetMethod("SitioAlSacar");
+        Debe(t != null && m != null,
+            "todavía no existe «ReglaDelMuelle.SitioAlSacar» (fase 3 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || m == null) return;
+
+        var area = new System.Windows.Rect(0, 0, 1920, 1040);        // pantalla menos la barra de tareas
+        var carita = new System.Windows.Size(128, 128);
+        System.Windows.Point Sitio(double x, double y)
+            => (System.Windows.Point)m.Invoke(null, new object[] { new System.Windows.Point(x, y), carita, area })!;
+
+        var suelta = Sitio(640, 400);
+        Debe(suelta.X == 640 && suelta.Y == 400,
+            $"sacada, vuelve al punto donde la soltaste y no a una esquina por defecto; salió {suelta}");
+
+        var abajoDerecha = Sitio(1900, 1030);
+        Debe(abajoDerecha.X <= area.Right - carita.Width && abajoDerecha.Y <= area.Bottom - carita.Height,
+            $"soltada contra la esquina, entra ENTERA en la pantalla: un escondite del que se sale a "
+            + $"un sitio que no ves no es un escondite, es una pérdida; salió {abajoDerecha}");
+        Debe(abajoDerecha.X > 0 && abajoDerecha.Y > 0,
+            "y se queda cerca de donde la soltaste, no se va al origen");
+
+        var fuera = Sitio(-300, -300);
+        Debe(fuera.X >= area.Left && fuera.Y >= area.Top,
+            $"y soltada fuera por arriba tampoco desaparece; salió {fuera}");
+    }
+
+    // ── Los dispositivos del selector de micrófono (spec 010, segunda ronda) ─
+
+    private static void ElDispositivoSePuedeNombrar()
+    {
+        var t = Capacidad("U.WindowsClient.Voice.NombresDeDispositivos");
+        var de = t?.GetMethod("De");
+        var poner = t?.GetMethod("Poner");
+        var fabrica = t?.GetMethod("DeFabrica");
+        Debe(t != null && de != null && poner != null && fabrica != null,
+            "todavía no existe «NombresDeDispositivos» (fase 4 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || de == null || poner == null || fabrica == null) return;
+
+        Debe(!string.IsNullOrWhiteSpace((string?)fabrica.Invoke(null, new object[] { "collar" })),
+            "un dispositivo sin nombre puesto tiene que poder presentarse igual: sin nombre de "
+            + "fábrica, la lista enseñaría un hueco donde debería haber un aparato");
+
+        var primero = Activator.CreateInstance(t)!;
+        poner.Invoke(primero, new object?[] { "collar", "El collar de urgencias" });
+        Debe((string?)de.Invoke(primero, new object[] { "collar" }) == "El collar de urgencias",
+            "puesto, se lee");
+
+        var otroArranque = Activator.CreateInstance(t)!;   // otra instancia = otro arranque de Ü
+        Debe((string?)de.Invoke(otroArranque, new object[] { "collar" }) == "El collar de urgencias",
+            "y sobrevive al reinicio: se guardó en disco por dispositivo. Un nombre que hay que "
+            + "volver a escribir cada mañana no es un nombre");
+        Debe(de.Invoke(otroArranque, new object[] { "telefono" }) == null,
+            "un dispositivo sin nombre puesto devuelve nada, para que mande el de fábrica");
+
+        poner.Invoke(otroArranque, new object?[] { "collar", "   " });
+        Debe(de.Invoke(otroArranque, new object[] { "collar" }) == null,
+            "poner vacío QUITA el nombre: vacío no es un nombre (patrón nº9), y se vuelve al de fábrica");
+        Debe(de.Invoke(Activator.CreateInstance(t)!, new object[] { "collar" }) == null,
+            "y el borrado también sobrevive al reinicio");
+    }
+
+    private static void OlvidarUnDispositivoNoDejaHuerfanos()
+    {
+        var tLista = Capacidad("U.WindowsClient.Voice.DispositivosEnlazados");
+        var listar = tLista?.GetMethod("Listar");
+        var tNombres = Capacidad("U.WindowsClient.Voice.NombresDeDispositivos");
+        var olvidar = tNombres?.GetMethod("Olvidar");
+        var de = tNombres?.GetMethod("De");
+        var poner = tNombres?.GetMethod("Poner");
+        Debe(listar != null && olvidar != null,
+            "todavía no existe «DispositivosEnlazados.Listar» / «NombresDeDispositivos.Olvidar» "
+            + "(fase 4 de la spec 010). La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (listar == null || olvidar == null || de == null || poner == null || tNombres == null) return;
+
+        // LA FIRMA SE COMPRUEBA ANTES DE LLAMAR. Con la comprobación detrás, un parámetro de más
+        // hacía estallar el Invoke y la promesa salía roja por una excepción en vez de por su
+        // motivo: el juez decía «culpable» donde tenía que decir que ni pudo ejecutarla. Es el
+        // aprendizaje nº17, cometido dentro del arnés que existe justo para eso (2026-09-06).
+        Debe(listar.GetParameters().Length == 1,
+            "la lista se hace SOLO con collares: el teléfono no se empareja con esta máquina —se le "
+            + "da un código y manda por la red— así que no hay nada suyo que olvidar aquí");
+        if (listar.GetParameters().Length != 1) return;
+
+        string[] Lista(bool collar) => (string[])listar.Invoke(null, new object[] { collar })!;
+
+        Debe(Lista(false).Length == 0,
+            "sin collar enlazado la sección no inventa aparatos: uno que no existe, ofrecido para "
+            + "olvidar, es peor que no ofrecer nada");
+        Debe(Lista(true).Length == 1 && Lista(true)[0] == "collar",
+            "con el collar enlazado, el collar");
+
+        // Y OLVIDAR TIENE QUE LLEVARSE EL NOMBRE. Si el nombre sobreviviera al olvido, el siguiente
+        // collar que alguien enlazara heredaría el nombre del anterior sin haberlo pedido — y ese
+        // es justo el aparato que el nombre existía para distinguir.
+        var nombres = Activator.CreateInstance(tNombres)!;
+        poner.Invoke(nombres, new object?[] { "collar", "El de urgencias" });
+        olvidar.Invoke(nombres, new object[] { "collar" });
+        Debe(de.Invoke(nombres, new object[] { "collar" }) == null,
+            "olvidado el dispositivo, su nombre se va con él");
+        Debe(de.Invoke(Activator.CreateInstance(tNombres)!, new object[] { "collar" }) == null,
+            "y no vuelve al reiniciar: el olvido también se guardó");
+    }
+
+    private static void QuererUnCollarNoEsTenerlo()
+    {
+        var t = Capacidad("U.WindowsClient.Voice.CollarPermanente");
+        var intencion = t?.GetProperty("Permanente");
+        var hecho = t?.GetProperty("Enlazado");
+        Debe(t != null && hecho != null,
+            "todavía no existe «CollarPermanente.Enlazado» (fase 5 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || hecho == null || intencion == null) return;
+
+        Debe(hecho.PropertyType == typeof(bool) && intencion.PropertyType == typeof(bool),
+            "las dos son hechos de sí/no; si alguna dejara de serlo, quien las lee estaría "
+            + "interpretando en vez de preguntando");
+        Debe(hecho.Name != intencion.Name,
+            "SON DOS PROPIEDADES, no una: «Permanente» dice «quiero que se conecte solo» y se pone "
+            + "en cuanto alguien elige el collar en el menú; «Enlazado» dice «hay uno». Con una "
+            + "sola, elegir bastaba para que apareciera un collar inexistente ofreciéndose a ser "
+            + "olvidado (2026-09-06)");
+        Debe(hecho.GetSetMethod() == null,
+            "y el hecho no lo escribe quien quiera: lo enciende el servicio cuando el collar "
+            + "contestó, que es el único momento en que consta");
+
+        // Sin archivo de collar —un equipo recién estrenado— no consta ninguno. Cada promesa corre
+        // en su propio U_DATA_DIR, así que esto se juzga en limpio.
+        Debe((bool)hecho.GetValue(null)! == false,
+            "en una máquina donde nunca se conectó un collar, no hay collar enlazado. Lo contrario "
+            + "sería la lista ofreciendo olvidar un aparato que nadie ha visto nunca");
+    }
+
+    private static void LaSombraSeDibujaEntera()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.Estudio");
+        var holgura = t?.GetMethod("HolguraDe");
+        var elevar = t?.GetMethod("Elevar");
+        Debe(t != null && holgura != null,
+            "todavía no existe «Estudio.HolguraDe» (fase 6 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || holgura == null || elevar == null) return;
+
+        System.Windows.Thickness Holgura(double desenfoque, double profundidad)
+        {
+            var s = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                BlurRadius = desenfoque,
+                ShadowDepth = profundidad,
+                Direction = 270,
+            };
+            return (System.Windows.Thickness)holgura.Invoke(null, new object[] { s })!;
+        }
+
+        var h = Holgura(48, 12);   // la sombra de una ventana sobre el escritorio
+        Debe(h.Left >= 24 && h.Right >= 24 && h.Top >= 24,
+            $"el desenfoque se sale por los cuatro lados y hay que reservarle sitio; con 48 de "
+            + $"desenfoque salió izquierda={h.Left}, derecha={h.Right}, arriba={h.Top}");
+        Debe(h.Bottom >= h.Top + 12,
+            $"y por ABAJO hace falta más, porque la sombra cae hacia abajo —la luz de este estudio "
+            + $"viene de arriba—: con 12 de profundidad, abajo={h.Bottom} contra arriba={h.Top}");
+
+        var chica = Holgura(14, 3);
+        Debe(chica.Left < h.Left && chica.Bottom < h.Bottom,
+            "una sombra pequeña reserva menos: si el hueco no dependiera de la sombra, o sobraría "
+            + "aire en los botones o faltaría en las ventanas");
+        Debe(Holgura(0, 0).Bottom == 0,
+            "y sin sombra no se reserva nada: un hueco que no protege nada es un hueco que descuadra");
+
+        // Y QUE ELEVAR LO APLIQUE DE VERDAD. Sin esto, la regla sería correcta y la interfaz seguiría
+        // cortando sombras: es el aprendizaje nº16 —lo juzgado y lo pintado por caminos distintos—
+        // y aquí se puede cerrar porque Elevar se puede llamar sin abrir una ventana.
+        var tarjeta = new System.Windows.Controls.Border();
+        var sombra = new System.Windows.Media.Effects.DropShadowEffect
+        {
+            BlurRadius = 48, ShadowDepth = 12, Direction = 270,
+        };
+        var caja = (System.Windows.FrameworkElement)elevar.Invoke(null, new object[] { tarjeta, sombra })!;
+        var esperada = Holgura(48, 12);
+        Debe(caja.Margin.Left >= esperada.Left && caja.Margin.Bottom >= esperada.Bottom,
+            $"«Elevar» tiene que RESERVAR ese hueco, no solo saber calcularlo; dejó "
+            + $"{caja.Margin} donde hacían falta {esperada}");
+    }
+
+    private static void ElGloboNoSeAbreSolo()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelGlobo");
+        var abre = t?.GetMethod("SeAbre");
+        var despliega = t?.GetMethod("DespliegaElMuelle");
+        var motivos = Capacidad("U.WindowsClient.Ui.MotivoDelGlobo");
+        Debe(t != null && abre != null && despliega != null && motivos != null,
+            "todavía no existe «ReglaDelGlobo» (fase 7 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (abre == null || despliega == null || motivos == null) return;
+
+        object M(string nombre) => Enum.Parse(motivos, nombre);
+        bool Abre(string m) => (bool)abre.Invoke(null, new[] { M(m) })!;
+        bool Saca(string m) => (bool)despliega.Invoke(null, new[] { M(m) })!;
+
+        Debe(Abre("LoPidioAlguien"), "si lo pide una persona, se abre: ese ES el gesto");
+        Debe(Abre("HayQueContestar"),
+            "y si Ü pregunta algo que hay que escribir, también: sin globo la pregunta no se puede "
+            + "contestar, y quedaría esperando una respuesta que nadie puede dar");
+        Debe(!Abre("SoloEsProgreso"),
+            "pero NARRAR no abre nada. Es el fallo que el dueño vio dos veces: veinte sitios "
+            + "distintos abrían el globo para contar lo que Ü iba haciendo, y contar no es conversar");
+        Debe(!Abre("AlgoFallo"),
+            "y un fallo tampoco lo abre: lo que hay que leer cabe en la píldora, y el globo trae "
+            + "consigo la caja de texto, que invita a contestarle a un error");
+
+        Debe(Saca("AlgoFallo"),
+            "AHORA BIEN, un fallo SÍ saca el panel: la píldora vive dentro, y un fallo que nadie ve "
+            + "es indistinguible de una aplicación que no hace nada");
+        Debe(!Saca("SoloEsProgreso"),
+            "y el progreso no saca nada: si cada paso de un workflow abriera el panel, trabajar con "
+            + "Ü delante sería imposible");
+
+        Debe(Enum.GetNames(motivos).Length == 4,
+            "cuatro motivos y no un booleano: «lo pidió alguien», «hay que contestar», «algo falló» "
+            + "y «solo es progreso» se tratan de tres formas distintas, y un sí/no no puede decirlo");
+    }
+
+    private static void ElBotonDeUnaVentanaAlterna()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDeLaVentana");
+        var m = t?.GetMethod("AlPulsarSuBoton");
+        Debe(t != null && m != null,
+            "todavía no existe «ReglaDeLaVentana» (fase 7 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (m == null) return;
+
+        string Pulsar(bool existe, bool alFrente)
+            => m.Invoke(null, new object[] { existe, alFrente })!.ToString()!;
+
+        Debe(Pulsar(false, false) == "Abrir", "sin ventana, el botón la abre");
+        Debe(Pulsar(true, true) == "Ocultar",
+            "con la ventana delante, el mismo botón la quita de en medio: uno que solo sabe abrir "
+            + "obliga a ir a buscar la equis");
+        Debe(Pulsar(true, false) == "TraerAlFrente",
+            "y MINIMIZADA o detrás se TRAE, no se ignora. Ese era el fallo: minimizada no es "
+            + "oculta para Windows, así que la ventana existía y pulsar no hacía absolutamente "
+            + "nada — el peor resultado posible, porque invita a pulsar otra vez");
+    }
+
+    private static void ElegirUnaFuenteSueltaLasDemas()
+    {
+        var t = Capacidad("U.WindowsClient.Voice.ReglaDeLaFuente");
+        var m = t?.GetMethod("AlElegir");
+        Debe(t != null && m != null,
+            "todavía no existe «ReglaDeLaFuente.AlElegir» (fase 8 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (m == null) return;
+
+        string Elegir(Origen o) => m.Invoke(null, new object[] { o })!.ToString()!;
+
+        Debe(Elegir(Origen.CollarPorBluetooth) == "Conectarlo",
+            "elegir el collar lo conecta: es el único caso en que se queda escuchando");
+        Debe(Elegir(Origen.MicrofonoDelPc) == "Soltarlo",
+            "ELEGIR EL COMPUTADOR SUELTA EL COLLAR. Antes solo se dejaba de LEER: seguía conectado "
+            + "y su audio seguía entrando, así que alguien que silenciaba el micrófono del portátil "
+            + "grababa igual por el collar sin saberlo (2026-09-06). En una consulta clínica eso no "
+            + "es un detalle de interfaz");
+        Debe(Elegir(Origen.CollarPorTelefono) == "Soltarlo",
+            "y elegir el teléfono también: un collar habla con UN aparato, así que si sigue "
+            + "enlazado a este PC se seguiría oyendo por él — lo decía ya el comentario del código "
+            + "que no lo hacía");
+    }
+
+    private static void ElVerdeEsDeQuienEntrega()
+    {
+        var t = Capacidad("U.WindowsClient.Voice.ReglaDeLaFuente");
+        var m = t?.GetMethod("SeVeActiva");
+        Debe(t != null && m != null,
+            "todavía no existe «ReglaDeLaFuente.SeVeActiva» (fase 8 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (m == null) return;
+
+        bool Verde(Origen fila, Origen real, bool entregando)
+            => (bool)m.Invoke(null, new object[] { fila, real, entregando })!;
+
+        Debe(Verde(Origen.CollarPorBluetooth, Origen.CollarPorBluetooth, true),
+            "la fuente que manda Y entrega se ve activa: para eso está el color");
+        Debe(!Verde(Origen.CollarPorBluetooth, Origen.CollarPorBluetooth, false),
+            "PERO MUDA NO. Es el verde falso del 2026-08-25: 56 minutos de «conectado» sin una sola "
+            + "trama, delante de una demo. La única prueba de que hay micrófono es que llegue audio");
+        Debe(!Verde(Origen.MicrofonoDelPc, Origen.CollarPorBluetooth, true),
+            "y una fila que no es la fuente real no se pinta activa aunque esté llegando audio por "
+            + "otra: el color de cada fila habla de ESA fila");
+    }
+
+    private static void LaVentanaSeAgarraPorDondeSeVe()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelBorde");
+        var m = t?.GetMethod("De");
+        Debe(t != null && m != null,
+            "todavía no existe «ReglaDelBorde.De» (fase 9 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (m == null) return;
+
+        // Una tarjeta metida 24 px dentro de una ventana de 470x660: exactamente lo que deja el
+        // hueco de la sombra (promesa 154).
+        var tarjeta = new System.Windows.Rect(24, 24, 422, 600);
+        const double agarre = 8;
+        string Zona(double x, double y)
+            => m.Invoke(null, new object[] { new System.Windows.Point(x, y), tarjeta, agarre })!.ToString()!;
+
+        Debe(Zona(235, 300) == "Ninguna",
+            "en mitad de la ventana no hay borde: si lo hubiera, no se podría pulsar nada");
+        Debe(Zona(24, 300) == "Izquierda" && Zona(446, 300) == "Derecha",
+            "los lados de la TARJETA son los tiradores");
+        Debe(Zona(235, 24) == "Arriba" && Zona(235, 624) == "Abajo", "y arriba y abajo igual");
+
+        Debe(Zona(24, 24) == "ArribaIzquierda" && Zona(446, 624) == "AbajoDerecha",
+            "EN UNA ESQUINA MANDA LA ESQUINA. Las dos condiciones se cumplen a la vez ahí, así que "
+            + "quien pregunte por los lados primero devuelve «izquierda» en un punto que se ve "
+            + "claramente como esquina");
+
+        Debe(Zona(12, 300) == "Ninguna",
+            "y el borde de la VENTANA no es un tirador: a 12 px del canto está la sombra, no el "
+            + "dibujo. Medir contra la ventana pondría el agarre en el aire transparente");
+        Debe(Zona(30, 300) == "Izquierda",
+            "el agarre perdona hacia dentro, que es de donde viene la mano");
+    }
+
+    private static void LaCaritaApareceBajoElCursor()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelMuelle");
+        var m = t?.GetMethod("SitioAlAparecer");
+        Debe(t != null && m != null,
+            "todavía no existe «ReglaDelMuelle.SitioAlAparecer» (fase 10 de la spec 010). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (m == null) return;
+
+        var area = new System.Windows.Rect(0, 0, 1920, 1040);
+        var carita = new System.Windows.Size(128, 128);
+        System.Windows.Point Aparece(double x, double y)
+            => (System.Windows.Point)m.Invoke(null,
+                new object[] { new System.Windows.Point(x, y), carita, area })!;
+
+        var p1 = Aparece(800, 500);
+        Debe(p1.X == 800 - 64 && p1.Y == 500 - 64,
+            $"aparece CENTRADA en el cursor: lo que crees estar agarrando es la cara, no el vértice "
+            + $"de una caja invisible; salió {p1}");
+
+        // El caso real: se saca del muelle, que vive pegado al borde derecho.
+        var enElBorde = Aparece(1530, 400);
+        Debe(enElBorde.X <= area.Right - carita.Width,
+            $"y sacándola pegada al borde derecho —que es de donde SIEMPRE se saca, porque el muelle "
+            + $"vive ahí— entra entera en la pantalla; salió {enElBorde}");
+        Debe(enElBorde.X > 1300,
+            "pero sin irse lejos: acotar no es reubicar");
     }
 
     private static void Prueba(string nombre, Action cuerpo)
