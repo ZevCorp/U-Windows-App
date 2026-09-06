@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
@@ -37,6 +37,18 @@ public sealed class FaceGestures
     /// </summary>
     public Action<double, double>? Moved { get; set; }
 
+    /// <summary>
+    /// Se soltó tras arrastrar, con el cursor en (x, y) en coordenadas de PANTALLA y en DIP.
+    /// Devolver <c>true</c> es quedarse el gesto: no se lanza a ningún borde.
+    /// </summary>
+    /// <remarks>
+    /// Sin esto no había forma de que soltar significara otra cosa: <see cref="SnapToSide"/> corre
+    /// SIEMPRE, y con razón —la carita vive pegada a un borde—, pero soltarla encima del muelle
+    /// tiene que guardarla y sacarla de él tiene que dejarla donde la sueltas. El gancho decide
+    /// antes que el borde, y quien no lo cablea se comporta exactamente como antes.
+    /// </remarks>
+    public Func<double, double, bool>? Soltada { get; set; }
+
     /// <summary>(13 px)² para pasar de «toque» a «arrastre». Eran 10 px, y un pulso normal los cruza
     /// sin querer: ibas a hacer clic y la carita salía disparada hacia un borde.</summary>
     private const double MoveThresholdSq = 169;
@@ -52,7 +64,8 @@ public sealed class FaceGestures
     /// </summary>
     private const int LongPressMs = 750;
 
-    private const int TapWindowMs = 250; // ventana para distinguir 1 vs 2 toques
+    // La ventana para distinguir 1 de 2 toques ya NO vive aquí: la decide ReglaDelToque, que es a
+    // quien pregunta el contrato. Tenerla en los dos sitios era pedir que discreparan (nº16).
 
     private readonly DispatcherTimer _longTimer;
     private readonly DispatcherTimer _tapTimer;
@@ -76,12 +89,24 @@ public sealed class FaceGestures
 
         _longTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(LongPressMs) };
         _longTimer.Tick += OnLongTimer;
-        _tapTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(TapWindowMs) };
+        // El intervalo se pone al soltar y no aquí: DoubleTap se cablea DESPUÉS del constructor (con
+        // un inicializador de objeto), así que en este punto todavía no se sabe si hay un segundo
+        // toque que distinguir.
+        _tapTimer = new DispatcherTimer();
         _tapTimer.Tick += OnTapTimer;
 
         _face.MouseLeftButtonDown += OnDown;
         _face.MouseMove += OnMove;
         _face.MouseLeftButtonUp += OnUp;
+
+        // AQUÍ HUBO UN PARCHE QUE RECUPERABA LA CAPTURA, y se borra en vez de ajustarse. Nació de un
+        // diagnóstico correcto a medias —«mostrar una ventana se lleva la activación»— pero la causa
+        // de verdad era otra: quien perdía la captura era la carita PEQUEÑA del muelle, porque al
+        // salir el cursor el muelle se plegaba y ese elemento desaparecía del árbol. Recuperar la
+        // captura de un elemento que ya no existe no podía funcionar, y de hecho no funcionó dos
+        // veces. Sacar la carita ya no pasa por aquí (ver FaceWindow.SacarYArrastrar), así que la
+        // maquinaria de compensación sobra — aprendizaje nº6: cuando la causa se entiende, se borra
+        // el parche, no se afina.
     }
 
     private void OnDown(object sender, MouseButtonEventArgs e)
@@ -168,6 +193,15 @@ public sealed class FaceGestures
 
         if (_moved)
         {
+            // PRIMERO, POR SI SOLTAR AQUÍ SIGNIFICA OTRA COSA. Soltarla encima del muelle la guarda
+            // y sacarla de él la deja donde la sueltas; las dos tienen que decidirse ANTES del borde,
+            // porque el borde ya no es una opción sino una asignación (spec 010).
+            if (Soltada != null)
+            {
+                GetCursorPos(out POINT fin);
+                if (Soltada(fin.X / _scaleX, fin.Y / _scaleY)) return;
+            }
+
             // SIEMPRE a un lado. Ü vive pegado a un borde, como la burbuja de Android: soltarlo en
             // mitad de la pantalla lo dejaba encima del trabajo del usuario, que es justo donde no
             // tiene que estar. La velocidad no decide SI se va al borde, decide a CUÁL y con qué
@@ -176,7 +210,17 @@ public sealed class FaceGestures
             return;
         }
 
-        // Fue un toque: distinguir 1 de 2 con una ventana breve (como el gesto de Android).
+        // Fue un toque. Si hay doble toque cableado, hay que distinguir 1 de 2 con una ventana breve
+        // (como el gesto de Android); si no lo hay, no hay nada que distinguir y el toque va YA —
+        // esperar sería retardo puro sobre el gesto más usado que tiene la aplicación.
+        int espera = ReglaDelToque.EsperaMs(DoubleTap != null);
+        if (espera == 0)
+        {
+            _tapCount = 0;
+            SingleTap?.Invoke();
+            return;
+        }
+
         _tapCount++;
         if (_tapCount >= 2)
         {
@@ -186,6 +230,7 @@ public sealed class FaceGestures
         }
         else
         {
+            _tapTimer.Interval = TimeSpan.FromMilliseconds(espera);
             _tapTimer.Start();
         }
     }

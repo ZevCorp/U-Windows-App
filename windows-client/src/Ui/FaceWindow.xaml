@@ -1,4 +1,4 @@
-<Window x:Class="U.WindowsClient.Ui.FaceWindow"
+﻿<Window x:Class="U.WindowsClient.Ui.FaceWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:U.WindowsClient.Ui"
@@ -160,7 +160,7 @@
                     <ControlTemplate TargetType="Button">
                         <Grid>
                             <Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="14"/>
-                            <Border x:Name="hover" Background="#22FFFFFF" CornerRadius="14" Opacity="0"/>
+                            <Border x:Name="hover" Background="#12000000" CornerRadius="14" Opacity="0"/>
                             <Border x:Name="focus" BorderBrush="#66FFFFFF" BorderThickness="1.5"
                                     CornerRadius="14" Opacity="0"/>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -403,7 +403,7 @@
             </StackPanel>
 
             <ui:FaceControl x:Name="CollapsedFace" Width="72" Height="72" Cursor="Hand"
-                            ToolTip="Clic: abrir la barra · doble clic: micrófono · mantener: cambiar tema · arrastrar y soltar: mover">
+                            ToolTip="Clic: hablar con Ü · mantener: cambiar tema · arrastrar y soltar: mover, o soltarla en el muelle para guardarla">
                 <ui:FaceControl.Effect>
                     <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="Black"/>
                 </ui:FaceControl.Effect>
@@ -651,12 +651,52 @@
                      Lo demás: el activador va sobre las acciones porque el menú nace justo encima, y
                      la carita va abajo porque ahí vive la burbuja cuando se colapsa — así no salta de
                      sitio al alternar entre los dos estados. -->
-                <Border x:Name="BarPanel" DockPanel.Dock="Right" CornerRadius="22" Background="#F20F131C"
-                        Padding="8,10" BorderBrush="#38FFFFFF" BorderThickness="1" VerticalAlignment="Bottom">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="48" ShadowDepth="12" Direction="270" Opacity="0.45" Color="#0B0F18"/>
-                    </Border.Effect>
+                <!-- EL PANEL. Estadio blanco sobre una PLACA que echa la sombra.
+                     La placa es un borde gemelo sin un solo hijo, y no es un capricho: un Effect es
+                     un shader, y WPF rasteriza a una textura intermedia todo el subarbol que cuelga
+                     del elemento que lo lleva. Dentro de esa textura el texto pierde ClearType y se
+                     ve lavado. Es la regla de Estudio.Elevar, dicha aqui en XAML porque el arbol lo
+                     declara el XAML.
+
+                     COLORES, RADIOS Y SOMBRAS NO ESTAN AQUI: los pone VestirElPanelConElEstudio()
+                     desde Estudio. Tenerlos en el XAML seria tener la paleta en dos sitios, que es
+                     exactamente como se desincronizan (aprendizaje n.16). -->
+                <Grid x:Name="BarShell" DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Border x:Name="BarPlaca"/>
+                    <!-- El relleno vertical es GRANDE porque el panel es un estadio: sus puntas son
+                         semicircunferencias de radio ancho/2, y cualquier cosa colocada ahi queda
+                         pellizcada por la curva. 30 px dejan las dos puntas vacias, que es como se
+                         ve en el diseno que dio el dueno. -->
+                    <Border x:Name="BarPanel" BorderThickness="1" Padding="12,30" Width="150">
                     <StackPanel>
+
+                        <!-- LA CARITA, ARRIBA, Y SOLO CUANDO ESTA GUARDADA AQUI (peticion del
+                             2026-09-05). Antes vivia permanente en la barra y se veian dos caras a
+                             la vez: una flotando y otra dentro del panel, sin que nada dijera cual
+                             era cual. Ahora esta silla es literal — hay cara si la carita esta
+                             dentro, y no hay nada si esta fuera. Ver CaritaGuardada. -->
+                        <ui:FaceControl x:Name="Face" Width="66" Height="66" Cursor="Hand"
+                                        Visibility="Collapsed"
+                                        HorizontalAlignment="Center" Margin="0,4,0,22"
+                                        ToolTip="Ü está guardada aquí · arrástrala hacia fuera para sacarla · clic: hablar"/>
+
+                        <!-- LOS TRES. Live va separado y algo mas estrecho, como en el diseño: no
+                             es del mismo grupo que los otros dos — Learn y Work son lo que Ü hace
+                             POR TI en la pantalla; Live abre la consulta clinica, que es otra cosa. -->
+                        <Button x:Name="LearnBtn" Content="Learn" Height="40" Click="OnToggleTeach"
+                                ToolTip="Enseñar: Ü graba la pantalla y tu voz para aprender una tarea"
+                                AutomationProperties.Name="Enseñar"/>
+                        <!-- WORK NO HACE NADA TODAVÍA, y está dicho aquí y en su tooltip a
+                             propósito. El dueño lo pidió sin acción el 2026-09-05 para decidir más
+                             adelante qué cuelga de él. Un botón mudo que aparenta funcionar es
+                             justo lo que mató a los tres modos que vivieron en esta barra
+                             (2026-08-31): «un botón que no hace nada enseña a ignorar los
+                             botones». Si esto sigue así dentro de unos días, se quita. -->
+                        <Button x:Name="WorkBtn" Content="Work" Height="40" Margin="0,10,0,0"
+                                ToolTip="Todavía sin función: se decidirá qué hace"
+                                AutomationProperties.Name="Trabajar (sin función todavía)"/>
+
+                    <StackPanel x:Name="ZonaSecundaria" Margin="0,18,0,0">
                         <!-- ZONA CONTEXTUAL: lo que solo existe a ratos. Va envuelta para que el
                              separador se colapse con ella (si no, queda una raya flotando sobre nada)
                              y para que su visibilidad se decida en UN sitio: UpdateContextZone(). -->
@@ -692,7 +732,7 @@
                                     ToolTip="Comprobar aprendizaje: Ü repite la tarea que le enseñaste y aprende de cada paso. Obligatorio antes de poder usarla."
                                     AutomationProperties.Name="Comprobar el aprendizaje"/>
 
-                            <Border Background="#1EFFFFFF" Height="1" Margin="6,8,6,0"/>
+                            <Border x:Name="SepContexto" Height="1" Margin="6,8,6,0"/>
                         </StackPanel>
 
                         <!-- ACTIVADOR del menú extendido: hover lo abre (hacia arriba, justo encima),
@@ -712,7 +752,7 @@
                             </Path>
                         </Button>
 
-                        <Border Background="#1EFFFFFF" Height="1" Margin="6,6,6,0"/>
+                        <Border x:Name="SepBarra" Height="1" Margin="6,6,6,0"/>
 
                         <!-- Los tres modos de Ü (autónomo, proactividad, aprendizaje) vivieron aquí
                              como placeholders sin cablear; murieron en la limpieza de la tira
@@ -727,8 +767,8 @@
                              carita— y no con un emoji: un emoji lo pinta la fuente del sistema, trae
                              su propio color y su propio peso, y rompe la tira (2026-08-07). -->
                         <Button x:Name="CollarModoBtn" Style="{StaticResource BarBtn}" Click="OnCollar"
-                                ToolTip="Collar Omi: enlazar y ver su estado"
-                                AutomationProperties.Name="Collar Omi">
+                                ToolTip="Análisis clínico: grabar la consulta y elegir por dónde se te oye (computador, collar o teléfono)"
+                                AutomationProperties.Name="Análisis clínico">
                             <!-- Un collar: el cordón cayendo y la pieza colgando. -->
                             <Canvas Width="20" Height="20">
                                 <Path Stroke="#E8FFFFFF" StrokeThickness="1.5" StrokeStartLineCap="Round"
@@ -739,15 +779,10 @@
                             </Canvas>
                         </Button>
 
-                        <!-- La carita (misma que Android), abajo del todo. Clic → colapsa a solo la
-                             carita · doble clic → micrófono · mantener oprimido → cambia de tema ·
-                             arrastrar → mover. Y además es el SEMÁFORO del sistema: su gesto y su
-                             color dicen qué está pasando (ver FaceMood). -->
-                        <ui:FaceControl x:Name="Face" Width="42" Height="42" Cursor="Hand"
-                                        HorizontalAlignment="Center" Margin="0,10,0,0"
-                                        ToolTip="Clic: solo la carita · doble clic: micrófono · mantener: cambiar tema · arrastrar: mover"/>
                     </StackPanel>
-                </Border>
+                    </StackPanel>
+                    </Border>
+                </Grid>
 
                 <!-- LA FRASE CORTA: acompaña a la carita para que el estado no dependa de aprenderse
                      los gestos. Va FUERA de la barra, a su izquierda, y por eso no rompe los 60 DIP de
