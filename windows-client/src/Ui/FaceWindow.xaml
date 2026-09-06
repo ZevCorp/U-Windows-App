@@ -232,6 +232,11 @@
                  Solo se le quitó una cosa de aquel original: el cartel que llevaba, que hoy no puede existir
                  (promesa 164). Lo que la línea hace se aprende pulsándola, no leyendo otro cartel.
 
+                 EL AIRE SE ENSANCHÓ el mismo día (12 → 22 px), y en las DOS direcciones aunque solo
+                 una se vea a la vez: GhostPista.Placement se invierte según el lado de la pantalla
+                 (ver ApplyCaritaSide), y un margen asimétrico solo daba aire en uno de los dos casos
+                 — pegada al lado sin margen, la línea habría nacido tocando la carita.
+
                  Es un Popup y no un hijo del StackPanel a propósito: así aparecer y desaparecer no
                  cambia el ancho de la ventana ni dispara el reanclaje de OnSizeChanged sobre una
                  carita que puede estar en pleno vuelo. -->
@@ -239,7 +244,7 @@
                    Placement="Left" AllowsTransparency="True" StaysOpen="True">
                 <Border x:Name="GhostBorde" Height="30" MinWidth="150" Cursor="IBeam"
                         CornerRadius="15" Background="#1AFFFFFF" BorderBrush="#2EFFFFFF"
-                        BorderThickness="1" Padding="12,0" Margin="0,0,12,0"
+                        BorderThickness="1" Padding="12,0" Margin="22,0,22,0"
                         MouseLeftButtonUp="OnGhostClic">
                     <TextBlock Text="Escríbele…" Foreground="#8CFFFFFF" FontSize="12"
                                VerticalAlignment="Center" IsHitTestVisible="False"/>
