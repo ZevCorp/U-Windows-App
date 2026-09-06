@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -88,7 +88,6 @@ public sealed class LoginWindow : Window
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand,
-            ToolTip = "Cerrar",
             Template = Estudio.Pastilla(15),
             Margin = new Thickness(0, -6, -6, 2),
         };

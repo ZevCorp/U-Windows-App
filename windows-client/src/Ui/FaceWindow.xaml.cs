@@ -1182,12 +1182,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _updater = new Updater(_config.UpdateFeedUrl);
         VersionText.Text = $"Versión {_updater.CurrentVersion}";
         // UpdateReady llega desde un hilo del pool, no del Dispatcher: tocar la UI directo reventaría.
-        // En la barra el botón es solo el icono ⬇; la versión concreta va en el tooltip.
-        _updater.UpdateReady += version => Dispatcher.Invoke(() =>
-        {
-            UpdateBtn.ToolTip = $"Versión {version} lista — clic para reiniciar (si no, se instala sola al cerrar Ü)";
-            ShowUpdate(true);
-        });
+        // QUÉ versión es ya no se dice al pasar el ratón (promesa 164): el ⬇ dice que hay algo nuevo
+        // y VersionText, dentro del panel, dice cuál — que es donde se lee sin tener que descubrirlo.
+        _updater.UpdateReady += _ => Dispatcher.Invoke(() => ShowUpdate(true));
         _updater.Start();
     }
 
@@ -1256,12 +1253,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         base.OnSourceInitialized(e);
         _hotkeys.Attach(this, InvocarPorAtajo, MicPorAtajo);
         Closed += (_, __) => _hotkeys.Dispose();
-        // Los tooltips dicen el atajo que quedó ACTIVO, no el que se pretendía: si el preferido
-        // estaba ocupado y anunciáramos ese, el usuario pulsaría algo que no hace nada.
-        foreach (string s in _hotkeys.Activos)
-        {
-            if (s.Contains("invocar")) MenuActivator.ToolTip = $"Más herramientas (hover abre · clic fija · Esc cierra) · {s.Split(' ')[0]} llama a Ü";
-        }
+        // El atajo que quedó ACTIVO —no el que se pretendía— lo dice HotkeyStatus, dentro del panel.
+        // Hasta el 2026-09-06 también asomaba al pasar el ratón sobre el activador del menú; eso se
+        // fue con los carteles (promesa 164), y el sitio que queda es el que se lee sin descubrirlo.
         if (_hotkeys.Resumen.Length > 0) HotkeyStatus.Text = _hotkeys.Resumen;
     }
 
@@ -2459,9 +2453,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         RefreshMood();   // grabar es un estado de la cara, no solo un color de botón
         PintarAura();    // y de la pantalla entera: el aura sigue a la misma bandera
         TeachBtn.Content = teaching ? "⏸" : "🎓";
-        TeachBtn.ToolTip = teaching
-            ? "Enseñando: clic para terminar y guardar lo aprendido"
-            : "Enseñar: Ü graba la pantalla y tu voz para aprender un workflow";
         TeachBtn.Background = new System.Windows.Media.SolidColorBrush(teaching
             ? System.Windows.Media.Color.FromArgb(0x88, 255, 59, 48)   // rojo, como StopBtn
             : System.Windows.Media.Color.FromArgb(0x1A, 255, 255, 255)); // el fondo normal de BarBtn
@@ -2532,10 +2523,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         RunWorkflowBtn.Content = _botonComprueba
             ? $"🧭 Comprobar «{Recorte(pendiente!.Nombre, 26)}»"
             : "▶ Ejecutar ahora";
-        RunWorkflowBtn.ToolTip = _botonComprueba
-            ? "Ü repite la tarea que le enseñaste, aprende de cada paso y la deja lista para usar. "
-              + "No graba nada: se detiene antes de cualquier puerta que no se pueda deshacer."
-            : null;
         if (_botonComprueba) RunWorkflowBtn.IsEnabled = true;
     }
 
@@ -2799,16 +2786,19 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     // --- Toggle: procesar (o no) el video con IA al enseñar ---
 
     /// <summary>
-    /// El estado de un toggle-icono se dice con el FONDO (acento = encendido) y el detalle con el
-    /// tooltip: el mismo patrón que TeachBtn. Un interruptor que se ve igual encendido que apagado
-    /// obliga a mirar la pantalla para saber si funcionó.
+    /// El estado de un toggle-icono se dice con el FONDO: acento = encendido. Un interruptor que se
+    /// ve igual encendido que apagado obliga a mirar la pantalla para saber si funcionó.
     /// </summary>
-    private static void PintarToggle(System.Windows.Controls.Button btn, bool on, string tip)
+    /// <remarks>
+    /// Hasta el 2026-09-06 el detalle iba en un cartel al pasar el ratón. Se fue con todos los demás
+    /// (promesa 164): lo que un botón hace se dice en la píldora de estado al pulsarlo, que es
+    /// cuando hace falta saberlo.
+    /// </remarks>
+    private static void PintarToggle(System.Windows.Controls.Button btn, bool on)
     {
         btn.Background = new System.Windows.Media.SolidColorBrush(on
             ? System.Windows.Media.Color.FromArgb(0x88, 0x3B, 0x82, 0xF6)   // azul, como UpdateBtn
             : System.Windows.Media.Color.FromArgb(0x1A, 255, 255, 255));    // el fondo normal de BarBtn
-        btn.ToolTip = tip;
     }
 
 
@@ -3027,12 +3017,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         MenuPanel.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
         BarRow.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
 
-        // Los tooltips salían siempre por la izquierda: pegados al borde izquierdo se saldrían de la
-        // pantalla. Es un ajuste por botón porque ToolTipService.Placement no se hereda.
-        foreach (var b in BarButtons())
-            ToolTipService.SetPlacement(b, left ? System.Windows.Controls.Primitives.PlacementMode.Right
-                                               : System.Windows.Controls.Primitives.PlacementMode.Left);
-
         // Y la píldora respira hacia el lado contrario a la barra.
         StatusChip.Margin = left ? new Thickness(8, 0, 0, 14) : new Thickness(0, 0, 8, 14);
         TalkPanel.Margin = left ? new Thickness(8, 0, 0, 0) : new Thickness(0, 0, 8, 0);
@@ -3066,16 +3050,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         CollapsedGroup.HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
     }
 
-    private IEnumerable<Button> BarButtons()
-    {
-        foreach (object child in ((StackPanel)BarPanel.Child).Children)
-        {
-            if (child is Button b) yield return b;
-            else if (child is StackPanel zona)
-                foreach (object nieto in zona.Children)
-                    if (nieto is Button nb) yield return nb;
-        }
-    }
 
     /// <summary>Recoloca el espejo de la carita según dónde quedó. Barato: sale pronto si no cambia.</summary>
     private void RefreshBarSide() => ApplyCaritaSide(EdgeSnap.EstáALaIzquierda(this));
@@ -3476,7 +3450,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         WorkflowCarousel.Visibility = _directListMode ? Visibility.Collapsed : Visibility.Visible;
         WorkflowListBox.Visibility = _directListMode ? Visibility.Visible : Visibility.Collapsed;
         WorkflowViewToggle.Content = _directListMode ? "▤" : "☰";
-        WorkflowViewToggle.ToolTip = _directListMode ? "Ver como carrusel" : "Ver como lista";
         if (_directListMode) SetDirectIndex(_directIndex); // deja la fila seleccionada a la vista
     }
 
@@ -3806,18 +3779,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void MarcarRecuerdosALaVista(bool si)
     {
         _recuerdosALaVista = si;
-        PintarToggle(RecuerdosBtn, si, si
-            ? "Recuerdos a la vista — clic (o Escape) para apagar"
-            : "Ilumina de golpe todo lo que te han enseñado en esta pantalla, con el texto del recuerdo sobre cada elemento. Escape lo apaga.");
+        PintarToggle(RecuerdosBtn, si);
     }
 
     private void OnToggleInspector(object sender, RoutedEventArgs e)
     {
         _inspector ??= new UiInspector();
         bool on = _inspector.Toggle();
-        PintarToggle(InspectorBtn, on, on
-            ? "Inspector activo — clic para apagar"
-            : "Inspector de elementos: recuadros sobre la pantalla. Al hacer clic: amarillo si coincide con lo que el asistente tocaría, rojo (ambos) si no.");
+        PintarToggle(InspectorBtn, on);
         SetStatus(on ? "Inspector de elementos activo" : "Inspector apagado");
     }
 
@@ -4025,14 +3994,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_idALaVista)
         {
             _badge.Show();
-            PintarToggle(LocatorBtn, on: true, "ID visible — clic para ocultar");
+            PintarToggle(LocatorBtn, on: true);
             SetStatus("ID de superficie a la vista");
         }
         else
         {
             _badge.Hide();
-            PintarToggle(LocatorBtn, on: false,
-                "ID de superficie: muestra dónde estás parado como URL (uia://app.exe/ventana). Es el ID con el que se cargan los workflows.");
+            PintarToggle(LocatorBtn, on: false);
             SetStatus("ID oculto (se sigue midiendo)");
         }
     }

@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -176,7 +176,6 @@ public sealed class CarruselDeApps : Window
             Padding = new Thickness(6),
             Background = Brushes.Transparent,
             Child = caja,
-            ToolTip = $"Que aprenda «{app.Nombre}»",
         };
         marco.MouseEnter += (_, __) => marco.Background =
             new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));

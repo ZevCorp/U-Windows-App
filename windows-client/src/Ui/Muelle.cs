@@ -107,7 +107,6 @@ public sealed class Muelle : Window
             Background = Brushes.Transparent,
             VerticalAlignment = VerticalAlignment.Center,
             Cursor = System.Windows.Input.Cursors.Hand,
-            ToolTip = "El panel de Ü",
         };
         blancoPestana.Children.Add(_dibujoPestana);
 
