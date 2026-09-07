@@ -1,3 +1,4 @@
+using System.IO;
 using U.Graph;
 using U.Graph.Surfaces;
 using U.WindowsClient.Backend;
@@ -38,6 +39,24 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
     private readonly List<Navigation.FraseDicha> _frases = new();
     private System.Diagnostics.Stopwatch? _reloj;
     private string _dondeEmpezo = "";
+
+    // ── LA LECCIÓN (spec 012): la cámara que mira al pasado, los clics del vigía y su carpeta ──
+    private CamaraDeCuadros? _camara;
+    private readonly List<ClicVisto> _clics = new();
+    private Action<int, int, long>? _oyenteDeClics;
+    private Action<int, int, string, string, string, string>? _oyenteDeIdentidad;
+
+    private long _tickAlArrancar, _relojAlArrancar;
+    private string _carpetaLeccion = "", _idLeccion = "";
+
+    /// <summary>La carpeta de la lección que dejó la última demo cerrada, o null si no se entregó.</summary>
+    public string? UltimaLeccion { get; private set; }
+
+    /// <summary>
+    /// A dónde lleva una puerta desde una pantalla, según el TERRENO: (pantalla, selector, etiqueta) → destino.
+    /// Lo pone la ventana, que es quien tiene el grafo. Es la única fuente de las llegadas (promesa 178).
+    /// </summary>
+    public Func<string, string, string, string>? LlegadaSegunElTerreno { get; set; }
 
     /// <summary>
     /// Lo que el humano va diciendo mientras enseña, con su hora. Lo alimenta quien oye (la voz);
@@ -180,6 +199,42 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
         _dondeEmpezo = "";
         try { _dondeEmpezo = surface.Identity().Url ?? ""; } catch { }
 
+        // LA CÁMARA ARRANCA CON EL RELOJ y guarda TODOS los cuadros (spec 012): el piloto podrá
+        // pedir la pantalla de cualquier segundo, aunque ahí no hubiera clic. Y el vigía, que ya ve
+        // cada pulsación humana, le presta la hora del gancho: es lo que convierte 26 clics en 26
+        // eventos en vez de en 1 paso.
+        _idLeccion = "leccion_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        _carpetaLeccion = LeccionEnDisco.NuevaCarpeta(_idLeccion);
+        lock (_clics) _clics.Clear();
+        _tickAlArrancar = Environment.TickCount64;
+        _relojAlArrancar = _reloj.ElapsedMilliseconds;
+        try
+        {
+            _camara = new CamaraDeCuadros(LeccionEnDisco.CarpetaDeCuadros(_carpetaLeccion), _reloj);
+            _camara.Arrancar();
+        }
+        catch (Exception ex) { LogBus.Log("camara", $"la cámara no arrancó: {ex.Message}. La lección saldrá sin cuadros y no se entregará."); }
+        var superficieDeLaDemo = surface;
+        _oyenteDeClics = (x, y, tick) =>
+        {
+            long hora = _relojAlArrancar + (tick - _tickAlArrancar);
+            AnotarClic(hora, x, y, superficieDeLaDemo);
+        };
+        Navigation.ClickWatcher.AlPulsar += _oyenteDeClics;
+        // LA IDENTIDAD LLEGA UN POCO DESPUÉS DEL GOLPE (el vigía resuelve fuera del gancho): se casa
+        // con el último clic anotado en ese mismo punto. Es la etiqueta con la que el terreno conoce
+        // la puerta, y lo único que map_take entiende (primera prueba real, 2026-09-07).
+        _oyenteDeIdentidad = (x, y, selector, etiqueta, tipo, proceso) =>
+        {
+            lock (_clics)
+            {
+                int i = _clics.FindLastIndex(c => c.X == x && c.Y == y);
+                if (i < 0) return;
+                _clics[i] = _clics[i] with { Selector = selector ?? "", Etiqueta = etiqueta ?? "", Tipo = tipo ?? "", DeU = proceso == "propio" };
+            }
+        };
+        Navigation.ClickWatcher.AlResolver += _oyenteDeIdentidad;
+
         _shotHandler = (_, paso) =>
         {
             int n = Interlocked.Increment(ref _shotCount);
@@ -230,6 +285,7 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
             ? $"la demo acabó en «{dondeTermino}»"
             : "✋ no pude leer dónde acabó la demo: la skill no tendrá destino y no se empaquetará");
         DetachShots();
+        SoltarLaCamaraYElVigia();
 
         // LOS PASOS SE ARMAN AQUÍ, ANTES DEL VIDEO, y ese orden es el cambio del 2026-09-03: al
         // video hay que preguntarle POR ESTOS PASOS (promesa 135), así que tienen que existir antes
@@ -240,11 +296,17 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
 
         string? summary = null;
         string interpretacion = "";
+        string mp4 = _teach?.RutaDelVideo ?? "";
         if (_teach != null)
         {
             try
             {
                 await _teach.StopAsync(); // finaliza el mp4 en disco → visible en 🎞 Videos, se procese o no
+
+                // LA LECCIÓN SE ESCRIBE AQUÍ, con el mp4 ya cerrado y ANTES de hablar con Gemini o
+                // con Graph: cualquiera de los dos puede fallar (429, 504) y la lección no depende
+                // de ninguno. Es lo que el piloto va a leer (spec 012).
+                GuardarLaLeccion(dondeTermino, mp4);
 
                 // EL VIDEO SIEMPRE SE PROCESA (decisión del dueño, 2026-09-03). Tenía un
                 // interruptor en el panel para esquivar los 504 de flujos largos, y un interruptor
@@ -464,6 +526,8 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
     private static extern IntPtr GetForegroundWindow();
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder clase, int max);
 
     /// <summary>
     /// Espera a que el primer plano sea una ventana AJENA a Ü, contándolo mientras espera.
@@ -487,16 +551,22 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
 
         for (int esperado = 0; ; esperado += PollMs)
         {
-            bool nuestro = true;
+            bool nuestro = true, escritorio = false;
             IntPtr fg = GetForegroundWindow();
             if (fg != IntPtr.Zero)
             {
                 uint pid = 0;
                 try { GetWindowThreadProcessId(fg, out pid); } catch { }
                 if (pid != 0 && pid != ownPid) nuestro = false;
+                // EL ESCRITORIO NO ES UNA APP QUE ENSEÑAR. La cuarta prueba real (2026-09-07 16:45)
+                // arrancó con el escritorio delante: el detector eligió UIA y la demo de SAP salió
+                // con 35 eventos por pulsación y llegadas «uia://» que ningún juez podía casar.
+                var clase = new System.Text.StringBuilder(64);
+                try { GetClassName(fg, clase, clase.Capacity); } catch { }
+                escritorio = ElArranqueDeLaDemo.EsEscritorio(clase.ToString());
             }
 
-            var paso = ElArranqueDeLaDemo.Juzgar(nuestro, esperado, ElArranqueDeLaDemo.TechoPorDefectoMs);
+            var paso = ElArranqueDeLaDemo.Juzgar(nuestro, escritorio, esperado, ElArranqueDeLaDemo.TechoPorDefectoMs);
             if (paso.Decir != ultimoDicho)
             {
                 ultimoDicho = paso.Decir;
@@ -520,6 +590,98 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
         }
     }
 
+    // ── La lección (spec 012) ─────────────────────────────────────────────────────────────
+
+    /// <summary>Un clic humano, en el reloj de la demo. A dónde llevó se lee un poco después.</summary>
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(System.Drawing.Point p);
+
+    private void AnotarClic(long horaMs, int x, int y, IUiSurface superficie)
+    {
+        // UN CLIC SOBRE Ü NO ES LA TAREA (parar la demo, abrir el panel). El vigía lo descarta ANTES de
+        // avisar cuando la ventana de delante cambió, así que aquí se mira directo qué ventana había
+        // bajo el punto. Segunda prueba real: el clic de parar entró como evento 5 sin llegada.
+        bool deU = false;
+        try { GetWindowThreadProcessId(WindowFromPoint(new System.Drawing.Point(x, y)), out uint pid); deU = pid == (uint)Environment.ProcessId; } catch { }
+        lock (_clics) _clics.Add(new ClicVisto(horaMs, x, y, "", DeU: deU));
+        if (deU) return;
+        // LA LLEGADA SE LEE CUANDO LA PANTALLA SE ASIENTA, no a plazo fijo (promesa 178). Con 1,2 s
+        // fijos la primera prueba real grabó «…/0100» donde la verdad era «…/0100/ssub…Triage», y al
+        // comprobar la app castigó al piloto por llegar a la pantalla correcta. Se lee cada 250 ms
+        // hasta que dos lecturas seguidas coinciden —y SAP no esté de viaje—, con techo de 5 s.
+        // LA PANTALLA EN EL INSTANTE DE PULSAR, y nada más (promesa 178). Es la llegada del clic
+        // ANTERIOR. Se lee en un hilo aparte porque esto corre dentro del gancho del ratón y SAP
+        // contesta por COM; pero se lee YA, antes de que el clic haga efecto. Sin bucle ni techo:
+        // tres techos distintos fallaron en tres pruebas reales el 2026-09-07.
+        _ = Task.Run(() =>
+        {
+            string pantalla = "";
+            try { pantalla = superficie.Identity().Url ?? ""; } catch { }
+            lock (_clics)
+            {
+                int i = _clics.FindIndex(c => c.HoraMs == horaMs && c.X == x && c.Y == y);
+                if (i >= 0) _clics[i] = _clics[i] with { PantallaAlPulsar = pantalla };
+            }
+        });
+    }
+
+    private void SoltarLaCamaraYElVigia()
+    {
+        if (_oyenteDeClics != null) { Navigation.ClickWatcher.AlPulsar -= _oyenteDeClics; _oyenteDeClics = null; }
+        if (_oyenteDeIdentidad != null) { Navigation.ClickWatcher.AlResolver -= _oyenteDeIdentidad; _oyenteDeIdentidad = null; }
+        try { _camara?.Parar(); } catch { }
+    }
+
+    /// <summary>De lo visto, oído y grabado a la lección en disco. Entera o nada (promesa 172).</summary>
+    private void GuardarLaLeccion(string dondeTermino, string mp4)
+    {
+        var camara = _camara;
+        _camara = null;
+        UltimaLeccion = null;
+        if (_reloj == null || _carpetaLeccion.Length == 0) return;
+        try
+        {
+            List<ClicVisto> clics; lock (_clics) clics = _clics.ToList();
+            // LA LLEGADA DE CADA CLIC ES LA PANTALLA DEL CLIC SIGUIENTE, y la del último, donde acabó
+            // la demo (promesa 178). Sin reloj.
+            clics = ArmarLaLeccion.Llegadas(clics, dondeTermino, LlegadaSegunElTerreno).ToList();
+            if (LlegadaSegunElTerreno == null) LogBus.Log("leccion", "sin terreno a mano: las llegadas quedan vacías salvo la del último clic");
+            List<(ObservedStep Paso, long HoraMs)> observados; lock (_observados) observados = _observados.ToList();
+            var pasos = observados.Select(o =>
+            {
+                string sel = (o.Paso.Selector ?? "").Trim();
+                string tecla = sel.StartsWith("key:", StringComparison.OrdinalIgnoreCase) ? sel[4..] : "";
+                string texto = o.Paso.ActionType is "input" or "select" ? (o.Paso.SelectedValue ?? o.Paso.Value ?? "").Trim() : "";
+                return new PasoVisto(o.HoraMs, tecla.Length > 0 ? "" : sel, (o.Paso.Label ?? "").Trim(),
+                    (o.Paso.ControlType ?? "").Trim(), texto, tecla, (o.Paso.Surface ?? "").Trim());
+            }).ToList();
+            var frases = LasFrases();
+            var tomados = camara?.Cuadros ?? Array.Empty<CuadroTomado>();
+            var cuadros = tomados.Select(c => c.ComoCuadro()).ToList();
+
+            var eventos = ArmarLaLeccion.Eventos(clics, pasos, frases, cuadros);
+            var entrega = LaEntregaDeLaLeccion.Juzgar(mp4.Length > 0 && File.Exists(mp4), cuadros.Count, eventos.Count);
+            int sobreU = clics.Count(c => c.DeU), conIdentidad = clics.Count(c => !c.DeU && c.Etiqueta.Length > 0);
+            LogBus.Log("leccion", $"{clics.Count} clic(s) del vigía ({sobreU} sobre Ü, fuera; {conIdentidad} con identidad) · {pasos.Count} paso(s) observados · {frases.Count} frase(s) · "
+                + $"{cuadros.Count} cuadro(s) → {eventos.Count} evento(s) · {entrega.Motivo}");
+            if (!entrega.Entregable) return;
+
+            var leccion = new Leccion(_idLeccion, _dondeEmpezo, dondeTermino, _reloj.ElapsedMilliseconds, mp4,
+                eventos, frases,
+                tomados.Select(c => new CuadroDeLaLeccion(c.HoraMs, c.Ruta, c.CursorX, c.CursorY, c.Ancho, c.Alto)).ToList(),
+                ArmarLaLeccion.Contexto(frases, eventos));
+            LeccionEnDisco.Guardar(leccion, _carpetaLeccion);
+            UltimaLeccion = _carpetaLeccion;
+            StatusChanged?.Invoke(this, $"Lección guardada: {eventos.Count} evento(s) y {cuadros.Count} cuadro(s). Pulsa «Comprobar» para que el piloto la lea.");
+        }
+        catch (Exception ex)
+        {
+            var porque = new System.Text.StringBuilder();
+            for (var x = ex; x != null; x = x.InnerException)
+                porque.Append(porque.Length > 0 ? " ← " : "").Append($"{x.GetType().Name}: {x.Message}");
+            LogBus.Log("leccion", $"la lección no se pudo guardar: {porque}");
+        }
+    }
+
     /// <summary>Suelta la cámara de pasos (idempotente).</summary>
     private void DetachShots()
     {
@@ -531,6 +693,7 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         DetachShots();
+        SoltarLaCamaraYElVigia();
         if (_teach != null) { await _teach.DisposeAsync(); _teach = null; }
         if (_recorder != null) { await _recorder.DisposeAsync(); _recorder = null; }
     }

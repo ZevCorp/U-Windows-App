@@ -1490,6 +1490,18 @@ public sealed class SurfaceMapTools
     /// </summary>
     public Action<string, string, string, string>? Presentar { get; set; }
 
+    // ── Lo que el piloto de la spec 012 necesita de la ventana ──────────────────────────
+    /// <summary>Decir algo con la voz de Ü. Devuelve qué pasó («dicho» o el motivo).</summary>
+    public Func<string, string>? Decir { get; set; }
+    /// <summary>Preguntarle a la persona y ESPERAR su respuesta hablada (con techo). Devuelve lo que dijo.</summary>
+    public Func<string, string>? Preguntar { get; set; }
+    /// <summary>El piloto declara que hizo el evento N de la lección; la app juzga y contesta.</summary>
+    public Func<int, string>? Llegue { get; set; }
+    /// <summary>Empaquetar la skill con lo verificado hasta ahora.</summary>
+    public Func<string, string, string>? GuardarSkill { get; set; }
+    /// <summary>Recorrer el plan del piloto: por cada paso, voz, recuerdo, el paso por el batch y el juez.</summary>
+    public Func<string, string>? Plan { get; set; }
+
     /// <summary>
     /// Quién decide si ya se puede pasar al siguiente recuerdo. Lo alimenta la voz —es la única que
     /// sabe si Ü habló— y lo consulta <see cref="Recuerdos"/>. Ver <see cref="Navigation.ElTurnoDeContar"/>.
@@ -1582,7 +1594,10 @@ public sealed class SurfaceMapTools
         or "map_pointed_trail" or "map_exclude" or "map_shot" or "map_scroll"
         or "map_esto_es" or "map_recuerdos" or "map_batch" or "map_ahead"
         or "map_skills" or "map_skill_run"
-        or "file_where" or "file_list" or "file_open" or "file_find";
+        or "file_where" or "file_list" or "file_open" or "file_find"
+        // LAS DEL PILOTO (spec 012): hablar con la voz de Ü, preguntarle a la persona, declarar
+        // una llegada para que la app la juzgue, y guardar la skill de lo verificado.
+        or "voz_decir" or "voz_preguntar" or "leccion_llegue" or "leccion_guardar_skill" or "leccion_plan";
 
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
@@ -1636,6 +1651,19 @@ public sealed class SurfaceMapTools
             "file_list" => SystemApi.Explorador.Describir(SystemApi.Explorador.Expandir(A("path")), A("filter")),
             "file_open" => AbrirCarpeta(A("path")),
             "file_find" => BuscarEnDisco(A("query"), A("path")),
+
+            // EL PILOTO HABLA Y PREGUNTA CON LA VOZ DE Ü, y declara llegadas que juzga la APP (spec
+            // 012, promesas 174 y 175). Son delegados porque quien tiene la voz y el juez es la
+            // ventana; aquí solo se despacha.
+            "voz_decir" => Decir == null ? "todavía no tengo voz con la que decirlo." : Decir(A("texto")),
+            "voz_preguntar" => Preguntar == null ? "todavía no tengo cómo preguntarle a la persona." : Preguntar(A("texto")),
+            "leccion_llegue" => Llegue == null ? "no hay ninguna comprobación en curso que juzgar."
+                : Llegue(int.TryParse(A("n"), out int nEvento) ? nEvento : -1),
+            "leccion_guardar_skill" => GuardarSkill == null ? "no hay ninguna comprobación en curso de la que sacar una skill."
+                : GuardarSkill(A("nombre"), A("descripcion")),
+            // EL PLAN (promesa 179): el piloto entrega lo que entendió en el idioma del ejecutor y la
+            // app lo recorre —voz, recuerdo, paso por el batch, juez— parando donde no pueda.
+            "leccion_plan" => Plan == null ? "no hay ninguna comprobación en curso que planear." : Plan(A("pasos")),
 
             _ => $"herramienta de mapa no soportada: {tool}",
         };

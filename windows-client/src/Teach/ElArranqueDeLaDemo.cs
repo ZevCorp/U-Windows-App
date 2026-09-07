@@ -56,6 +56,26 @@ public static class ElArranqueDeLaDemo
     /// <param name="primerPlanoEsNuestro">Si la ventana de delante es la de Ü.</param>
     /// <param name="esperadoMs">Cuánto se lleva esperando.</param>
     /// <param name="techoMs">Cuánto se espera como mucho.</param>
+    /// <summary>¿Esa clase de ventana es el escritorio de Windows o su barra? Nadie enseña el escritorio.</summary>
+    /// <remarks>«Progman» y «WorkerW» son el fondo del escritorio; «Shell_TrayWnd» la barra de tareas.
+    /// Con cualquiera de ellas delante, el detector de superficie elige UIA y una demo de SAP sale
+    /// inservible (cuarta prueba real, 2026-09-07).</remarks>
+    public static bool EsEscritorio(string claseDeVentana) => (claseDeVentana ?? "").Trim() is "Progman" or "WorkerW" or "Shell_TrayWnd";
+
+    /// <summary>Como <see cref="Juzgar(bool, int, int)"/>, pero el escritorio delante tampoco es «la app delante».</summary>
+    public static Paso Juzgar(bool primerPlanoEsNuestro, bool primerPlanoEsElEscritorio, int esperadoMs, int techoMs)
+    {
+        if (!primerPlanoEsNuestro && primerPlanoEsElEscritorio)
+        {
+            if (esperadoMs >= techoMs)
+                return new(false, false,
+                    "Delante solo estuvo el escritorio, así que no grabé nada. Abre la aplicación que "
+                    + "vas a enseñar, ponla delante y vuelve a pulsar 🎓.");
+            return new(false, true, "Veo el escritorio. Pon delante la aplicación que vas a enseñar; te espero.");
+        }
+        return Juzgar(primerPlanoEsNuestro, esperadoMs, techoMs);
+    }
+
     public static Paso Juzgar(bool primerPlanoEsNuestro, int esperadoMs, int techoMs)
     {
         if (!primerPlanoEsNuestro)

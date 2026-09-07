@@ -175,6 +175,30 @@ public sealed class ClickWatcher : IDisposable
             : "NO se pudo enganchar el ratón: las aristas quedarán sin acción (solo conectividad)");
     }
 
+    /// <summary>
+    /// CADA PULSACIÓN HUMANA, EN EL ACTO: (x, y, Environment.TickCount64 del gancho). Spec 012.
+    /// </summary>
+    /// <remarks>
+    /// Es lo que la lección necesita para que cada clic físico deje evento (promesa 170): el
+    /// grabador de SAP emite un paso por VIAJE, no por clic, y 26 clics de árbol dieron 1 paso. La
+    /// hora es la del gancho, no la de resolver: resolver tarda decenas de milisegundos y el cuadro
+    /// de antes se elige por hora (168). Quien escucha solo puede ANOTAR: esto se dispara dentro del
+    /// hook y un oyente lento retrasaría el ratón de toda la máquina.
+    /// </remarks>
+    public static event Action<int, int, long>? AlPulsar;
+
+    /// <summary>
+    /// LO QUE EL VIGÍA RESOLVIÓ de una pulsación: (x, y, selector, etiqueta, tipo, proceso). Spec 012.
+    /// </summary>
+    /// <remarks>
+    /// LA IDENTIDAD DE UN CLIC LA DA EL VIGÍA, y hasta la primera prueba real (2026-09-07) la lección
+    /// no la usaba: tomaba x,y del gancho y esperaba que SAP nombrara el clic. SAP nombra viajes. La
+    /// etiqueta que sale de aquí es la MISMA con la que el terreno conoce sus puertas, o sea, la que
+    /// <c>map_take</c> entiende. Un clic sobre la propia ventana de Ü se avisa con proceso «propio» y
+    /// sin identidad: no es terreno, y la lección tiene que poder descartarlo.
+    /// </remarks>
+    public static event Action<int, int, string, string, string, string>? AlResolver;
+
     /// <summary>¿Este golpe lo inyectó software? Promesa 101: lo sintético no se acuña como humano.</summary>
     /// <remarks>
     /// Los dos bits del hook de bajo nivel: LLMHF_INJECTED (0x1, inyectado por cualquier proceso)
@@ -214,6 +238,7 @@ public sealed class ClickWatcher : IDisposable
                 if (esSegundoClic) return CallNextHookEx(_hook, code, wParam, lParam);
 
                 int idx = ++_downs; // este down, numerado: el clic resuelto sabrá si fue el último
+                try { AlPulsar?.Invoke(x, y, Environment.TickCount64); } catch { }
                 IntPtr antes = GetForegroundWindow();
                 _ = Task.Run(() => Resolve(x, y, antes, idx)); // fuera del hook: el ratón no espera a UIA
             }
@@ -239,6 +264,7 @@ public sealed class ClickWatcher : IDisposable
                         $"{x},{y}", DateTime.UtcNow, downIndex, "saplogon", false);
                     _count++;
                 }
+                try { AlResolver?.Invoke(x, y, sap.Selector, sap.Etiqueta, sap.Tipo, "saplogon"); } catch { }
                 return;
             }
 
@@ -257,7 +283,11 @@ public sealed class ClickWatcher : IDisposable
             // al explorador, que no describe nada. Misma regla que ya rige para los nodos.
             try
             {
-                if (el.Current.ProcessId == Environment.ProcessId) return;   // lo nuestro no es terreno (ver Uia.Propio)
+                if (el.Current.ProcessId == Environment.ProcessId)
+                {
+                    try { AlResolver?.Invoke(x, y, "", "", "", "propio"); } catch { }
+                    return;   // lo nuestro no es terreno (ver Uia.Propio)
+                }
             }
             catch { }
 
@@ -317,6 +347,7 @@ public sealed class ClickWatcher : IDisposable
                     LogBus.Log("mapa", $"navegador del sistema: «{label}» ({type})");
                 _count++;
             }
+            try { AlResolver?.Invoke(x, y, utiles[0], label, type, proc); } catch { }
         }
         catch { /* un clic que no resuelve deja la arista sin acción; se aprenderá en otra pasada */ }
     }
