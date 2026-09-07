@@ -42,30 +42,30 @@ promesa que la juzga. Cada fase empieza con el contrato ROTO y termina con el co
 
 ## La especificación
 
-En continuación de la 170. Los números no se reciclan.
+En continuación de la 167. Los números no se reciclan.
 
 | # | Promesa | Fase que la pone verde |
 |---|---|---|
-| 171 | el envío a Graph lleva la consulta: `/api/v1/pipeline` sale con `consultation_id` igual al `export.id` reclamado, y en dictado sin exportación no lleva ninguno | 1 |
-| 172 | un valor con forma de marcador (`[PACIENTE_NOMBRE_1]`, `[DOCUMENTO_1_2]`, con o sin corchetes en mayúsculas) no se escribe en SAP: el campo queda sin llenar y el trabajo termina `needs_doctor` nombrando la etiqueta | 2 |
-| 173 | el log del rellenador dice etiqueta y longitud, nunca el valor: ninguna línea anotada al escribir un campo contiene lo que se escribió | 3 |
-| 174 | mientras hay una exportación reclamada, el puente consciente captura la ventana de SAP o nada, nunca la pantalla completa; la decisión es una función pura de (hay exportación reclamada, política configurada) | 4 |
+| 168 | el envío a Graph lleva la consulta: `/api/v1/pipeline` sale con `consultation_id` igual al `export.id` reclamado, y en dictado sin exportación no lleva ninguno | 1 |
+| 169 | un valor con forma de marcador (`[PACIENTE_NOMBRE_1]`, `[DOCUMENTO_1_2]`, con o sin corchetes en mayúsculas) no se escribe en SAP: el campo queda sin llenar y el trabajo termina `needs_doctor` nombrando la etiqueta | 2 |
+| 170 | el log del rellenador dice etiqueta y longitud, nunca el valor: ninguna línea anotada al escribir un campo contiene lo que se escribió | 3 |
+| 168 | mientras hay una exportación reclamada, el puente consciente captura la ventana de SAP o nada, nunca la pantalla completa; la decisión es una función pura de (hay exportación reclamada, política configurada) | 4 |
 
-La que cierra el asunto es la **172**: mientras no exista, «Graph ya lo descarta» es una promesa
+La que cierra el asunto es la **169**: mientras no exista, «Graph ya lo descarta» es una promesa
 de otro repo que este no verifica.
 
 ### Con qué se juzga cada una
 
 | # | Cómo se juzga, sin pantalla |
 |---|---|
-| 171 | cuerpo construido por `RellenadorSap` para un trabajo con `export.id = X` → `consultation_id == X`; para un dictado sin trabajo → sin la clave. Mapa a mano en la prueba, como las promesas 1-10 |
-| 172 | `Privacidad.EsPlaceholder` sobre un fixture de 20 cadenas: `[PACIENTE_NOMBRE_1]`, `[documento 2]`, `DOCUMENTO_1_2`, `**[PATIENT_NAME_1]**` → sí; `Juan Pérez`, `1023456789`, `el documento 1 dice`, `Documento_1` (mezcla de mayúsculas sin corchetes) → no. Y `Escribir` con un valor que es marcador → no llama a la superficie, deja la etiqueta en `unresolved_fields`, y el resultado del lote es `needs_doctor` |
-| 173 | un sumidero falso de `LogBus` captura las líneas de escribir tres campos con valores conocidos; ninguna línea contiene ninguno de los tres valores; todas contienen la etiqueta y una longitud |
-| 174 | `PoliticaDeCaptura.Decidir(hayExportacionReclamada: true, permitida: "pantalla")` → `ventana`; `(false, "pantalla")` → `pantalla`; `(true, "ninguna")` → `ninguna` |
+| 168 | cuerpo construido por `RellenadorSap` para un trabajo con `export.id = X` → `consultation_id == X`; para un dictado sin trabajo → sin la clave. Mapa a mano en la prueba, como las promesas 1-10 |
+| 169 | `Privacidad.EsPlaceholder` sobre un fixture de 20 cadenas: `[PACIENTE_NOMBRE_1]`, `[documento 2]`, `DOCUMENTO_1_2`, `**[PATIENT_NAME_1]**` → sí; `Juan Pérez`, `1023456789`, `el documento 1 dice`, `Documento_1` (mezcla de mayúsculas sin corchetes) → no. Y `Escribir` con un valor que es marcador → no llama a la superficie, deja la etiqueta en `unresolved_fields`, y el resultado del lote es `needs_doctor` |
+| 170 | un sumidero falso de `LogBus` captura las líneas de escribir tres campos con valores conocidos; ninguna línea contiene ninguno de los tres valores; todas contienen la etiqueta y una longitud |
+| 168 | `PoliticaDeCaptura.Decidir(hayExportacionReclamada: true, permitida: "pantalla")` → `ventana`; `(false, "pantalla")` → `pantalla`; `(true, "ninguna")` → `ninguna` |
 
 La gramática de los marcadores es la de Graph (`src/domain/privacy/tokens.js`): con corchetes,
 tolerante a mayúsculas, espacios, guiones y traducciones (`PATIENT_NAME`); sin corchetes, solo la
-forma exacta en mayúsculas con guion bajo. El fixture de la 172 se copia de ese archivo para que
+forma exacta en mayúsculas con guion bajo. El fixture de la 169 se copia de ese archivo para que
 los dos lados juzguen lo mismo.
 
 ## Las fases
@@ -73,10 +73,10 @@ los dos lados juzguen lo mismo.
 | Fase | Promesa | Qué toca | ¿Núcleo congelado? |
 |---|---|---|---|
 | 0 | las cuatro en rojo | `tests/ContratoDelGrafo/Contrato.cs` | no |
-| 1 | 171 | `Clinical/RellenadorSap.cs` (el cuerpo del pipeline recibe el id del trabajo desde `EjecutorDeExportaciones`) | no |
-| 2 | 172 | `Clinical/Privacidad.cs` (nuevo, puro: `EsPlaceholder`) · `RellenadorSap.Escribir` (la guarda antes de la superficie) · `EjecutorDeExportaciones` (`needs_doctor` con `unresolved_fields`) | no |
-| 3 | 173 | `RellenadorSap.cs:405, 409` y los otros cinco sitios contados arriba (**6 sitios**, contados con grep, no de memoria) | no |
-| 4 | 174 | `Agent/PoliticaDeCaptura.cs` (nuevo, puro) · `AgentLoop.ReadStateAsync` (elige `CaptureVentanaBase64Png` según la política) · `Config` (la política, por defecto `ventana` cuando hay exportación) | no |
+| 1 | 168 | `Clinical/RellenadorSap.cs` (el cuerpo del pipeline recibe el id del trabajo desde `EjecutorDeExportaciones`) | no |
+| 2 | 169 | `Clinical/Privacidad.cs` (nuevo, puro: `EsPlaceholder`) · `RellenadorSap.Escribir` (la guarda antes de la superficie) · `EjecutorDeExportaciones` (`needs_doctor` con `unresolved_fields`) | no |
+| 3 | 170 | `RellenadorSap.cs:405, 409` y los otros cinco sitios contados arriba (**6 sitios**, contados con grep, no de memoria) | no |
+| 4 | 168 | `Agent/PoliticaDeCaptura.cs` (nuevo, puro) · `AgentLoop.ReadStateAsync` (elige `CaptureVentanaBase64Png` según la política) · `Config` (la política, por defecto `ventana` cuando hay exportación) | no |
 
 Nivel 4, a mano y con log: una exportación real contra QAS con un `match` forzado a
 `[PACIENTE_NOMBRE_1]` (Provider Studio apuntado al proveedor falso de Graph, o un breakpoint) →
