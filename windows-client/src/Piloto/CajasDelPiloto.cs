@@ -1,7 +1,7 @@
 namespace U.WindowsClient.Piloto;
 
 /// <summary>
-/// LA CAJA DE HERRAMIENTAS DEL PILOTO. Promesa 174 (spec 012). Puro: nombres dentro, nombres fuera.
+/// LA CAJA DE HERRAMIENTAS DEL PILOTO. Promesa 174 (spec 013). Puro: nombres dentro, nombres fuera.
 /// </summary>
 /// <remarks>
 /// UNA SOLA CAJA, con manos desde el principio. La primera versión tenía dos —entender sin manos,

@@ -1,4 +1,4 @@
-// EL PILOTO (spec 012): UN agente Claude, UNA conversación, tres pasos.
+// EL PILOTO (spec 013): UN agente Claude, UNA conversación, tres pasos.
 //
 //   node piloto.mjs --leccion=C:\Users\...\U\lecciones\leccion_20260906_1030
 //
@@ -200,7 +200,7 @@ if (herramientasDeLaApp === null) {
 const faltan = (mensaje.Caja ?? []).map((n) => n.split("__").pop())
   .filter((n) => n !== "ver_momento" && n !== "ver_alrededor" && !herramientasDeLaApp.includes(n));
 if (faltan.length > 0)
-  di("aviso", `la app contesta pero le faltan herramientas que esta lección necesita: ${faltan.join(", ")} (¿U.exe es de una build anterior a la spec 012?)`);
+  di("aviso", `la app contesta pero le faltan herramientas que esta lección necesita: ${faltan.join(", ")} (¿U.exe es de una build anterior a la spec 013?)`);
 
 di("inicio", `lección «${leccion.Id}» · ${leccion.Eventos?.length ?? 0} evento(s) · ${leccion.Cuadros?.length ?? 0} cuadro(s) · modelo ${MODELO}`);
 const e1 = await conversar(leccionComoMensaje(), caja, prohibidas, null);

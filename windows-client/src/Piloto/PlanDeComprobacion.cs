@@ -12,7 +12,7 @@ namespace U.WindowsClient.Piloto;
 public sealed record PasoDelPlan(int N, string Exit, string Texto, string Tecla, string Recuerdo, string Decir);
 
 /// <summary>
-/// EL PLAN DE COMPROBACIÓN: lo que el piloto entiende, dicho en el idioma del ejecutor. Promesa 179 (spec 012).
+/// EL PLAN DE COMPROBACIÓN: lo que el piloto entiende, dicho en el idioma del ejecutor. Promesa 179 (spec 013).
 /// </summary>
 /// <remarks>
 /// POR QUÉ UN PLAN Y NO PASO A PASO. Las dos primeras pruebas reales (2026-09-07) costaron 333 s y

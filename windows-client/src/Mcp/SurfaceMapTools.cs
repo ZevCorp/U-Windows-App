@@ -1490,7 +1490,7 @@ public sealed class SurfaceMapTools
     /// </summary>
     public Action<string, string, string, string>? Presentar { get; set; }
 
-    // ── Lo que el piloto de la spec 012 necesita de la ventana ──────────────────────────
+    // ── Lo que el piloto de la spec 013 necesita de la ventana ──────────────────────────
     /// <summary>Decir algo con la voz de Ü. Devuelve qué pasó («dicho» o el motivo).</summary>
     public Func<string, string>? Decir { get; set; }
     /// <summary>Preguntarle a la persona y ESPERAR su respuesta hablada (con techo). Devuelve lo que dijo.</summary>
@@ -1595,7 +1595,7 @@ public sealed class SurfaceMapTools
         or "map_esto_es" or "map_recuerdos" or "map_batch" or "map_ahead"
         or "map_skills" or "map_skill_run"
         or "file_where" or "file_list" or "file_open" or "file_find"
-        // LAS DEL PILOTO (spec 012): hablar con la voz de Ü, preguntarle a la persona, declarar
+        // LAS DEL PILOTO (spec 013): hablar con la voz de Ü, preguntarle a la persona, declarar
         // una llegada para que la app la juzgue, y guardar la skill de lo verificado.
         or "voz_decir" or "voz_preguntar" or "leccion_llegue" or "leccion_guardar_skill" or "leccion_plan";
 

@@ -8,7 +8,7 @@ namespace U.WindowsClient.Piloto;
 public sealed record VeredictoDeEvento(int N, bool Aterrizo, string Esperada, string Real, string Motivo);
 
 /// <summary>
-/// EL JUEZ DE LA COMPROBACIÓN. Promesa 175 (spec 012). La app juzga cada llegada; el piloto solo declara.
+/// EL JUEZ DE LA COMPROBACIÓN. Promesa 175 (spec 013). La app juzga cada llegada; el piloto solo declara.
 /// </summary>
 /// <remarks>
 /// EL PILOTO DICE «LLEGUÉ AL EVENTO N» Y LA APP MIRA. Es la misma separación de la promesa 121:

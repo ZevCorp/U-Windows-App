@@ -460,7 +460,7 @@ internal static class Contrato
         // los numeros no se reciclan.
         Prueba("167. la línea «Escríbele…» se hace esperar: segundo y medio de ratón quieto sobre la carita, y arrastrarla no la llama por mucho que se tarde", LaLineaSeHaceEsperar);
 
-        // LA LECCIÓN QUE CLAUDE VE (spec 012, 2026-09-06). El pantallazo por paso se disparaba AL
+        // LA LECCIÓN QUE CLAUDE VE (spec 013, 2026-09-06). El pantallazo por paso se disparaba AL
         // OBSERVAR el paso —después del clic y de su efecto—, que es la carrera que el dueño lleva
         // años pagando: «que los screenshots se tomen cuando ya un elemento cambió por el clic».
         // La salida no es disparar más rápido: es no disparar, y elegir del pasado.
@@ -5337,7 +5337,7 @@ internal static class Contrato
             + "para impedir");
     }
 
-    // ── Spec 012, fases 2-5: la lección, el mensaje, las cajas, el juez y la skill ─────────
+    // ── Spec 013, fases 2-5: la lección, el mensaje, las cajas, el juez y la skill ─────────
 
     private static object Nuevo(Type t, params object?[] args) => Activator.CreateInstance(t, args)!;
     private static System.Collections.IList ListaDe(Type t) =>
@@ -5380,7 +5380,7 @@ internal static class Contrato
         var tt = TiposDeLaLeccion.Cargar();
         var armar = Capacidad("U.WindowsClient.Teach.ArmarLaLeccion")?.GetMethod("Eventos");
         Debe(tt != null && armar != null,
-            "todavía no existe «Teach.ArmarLaLeccion.Eventos» (fase 2 de la spec 012). "
+            "todavía no existe «Teach.ArmarLaLeccion.Eventos» (fase 2 de la spec 013). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tt == null || armar == null) return;
 
@@ -5424,7 +5424,7 @@ internal static class Contrato
         var tt = TiposDeLaLeccion.Cargar();
         var armar = Capacidad("U.WindowsClient.Teach.ArmarLaLeccion")?.GetMethod("Eventos");
         Debe(tt != null && armar != null,
-            "todavía no existe «Teach.ArmarLaLeccion.Eventos» (fase 2 de la spec 012). "
+            "todavía no existe «Teach.ArmarLaLeccion.Eventos» (fase 2 de la spec 013). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tt == null || armar == null) return;
 
@@ -5479,7 +5479,7 @@ internal static class Contrato
         var t = Capacidad("U.WindowsClient.Teach.LaEntregaDeLaLeccion");
         var m = t?.GetMethod("Juzgar", new[] { typeof(bool), typeof(int), typeof(int) });
         Debe(t != null && m != null,
-            "todavía no existe «Teach.LaEntregaDeLaLeccion.Juzgar» (fase 2 de la spec 012). "
+            "todavía no existe «Teach.LaEntregaDeLaLeccion.Juzgar» (fase 2 de la spec 013). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (t == null || m == null) return;
 
@@ -5511,7 +5511,7 @@ internal static class Contrato
         var lado = t?.GetField("LadoMaximoPx");
         var anchoCamara = Capacidad("U.WindowsClient.Teach.CamaraDeCuadros")?.GetField("AnchoMaximo");
         Debe(tt != null && m != null && lado != null && anchoCamara != null,
-            "todavía no existe «Teach.MensajeDeLaLeccion.Armar» (fase 3 de la spec 012). "
+            "todavía no existe «Teach.MensajeDeLaLeccion.Armar» (fase 3 de la spec 013). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tt == null || m == null || lado == null || anchoCamara == null) return;
 
@@ -5572,7 +5572,7 @@ internal static class Contrato
         var t = Capacidad("U.WindowsClient.Piloto.CajasDelPiloto");
         var caja = t?.GetMethod("Caja"); var prohibidas = t?.GetMethod("Prohibidas");
         Debe(t != null && caja != null && prohibidas != null,
-            "todavía no existe «Piloto.CajasDelPiloto.Caja/Prohibidas» (fase 3 de la spec 012). "
+            "todavía no existe «Piloto.CajasDelPiloto.Caja/Prohibidas» (fase 3 de la spec 013). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (t == null || caja == null || prohibidas == null) return;
 
@@ -5604,7 +5604,7 @@ internal static class Contrato
         var tt = TiposDeLaLeccion.Cargar();
         var t = Capacidad("U.WindowsClient.Piloto.RegistroDeLaComprobacion");
         Debe(tt != null && t != null && t.GetMethod("Llegue") != null && t.GetMethod("Final") != null && t.GetMethod("EventosQueNavegan") != null,
-            "todavía no existe «Piloto.RegistroDeLaComprobacion» (fase 4 de la spec 012). "
+            "todavía no existe «Piloto.RegistroDeLaComprobacion» (fase 4 de la spec 013). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tt == null || t == null) return;
 
@@ -5652,7 +5652,7 @@ internal static class Contrato
         var t = Capacidad("U.WindowsClient.Piloto.SkillDeLoVerificado");
         var m = t?.GetMethod("Empaquetar");
         Debe(tt != null && m != null,
-            "todavía no existe «Piloto.SkillDeLoVerificado.Empaquetar» (fase 5 de la spec 012). "
+            "todavía no existe «Piloto.SkillDeLoVerificado.Empaquetar» (fase 5 de la spec 013). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tt == null || m == null) return;
 
@@ -5709,7 +5709,7 @@ internal static class Contrato
         var tt = TiposDeLaLeccion.Cargar();
         var m = Capacidad("U.WindowsClient.Teach.ArmarLaLeccion")?.GetMethod("Llegadas");
         Debe(tt != null && m != null,
-            "todavía no existe «Teach.ArmarLaLeccion.Llegadas(clics, dondeTermino, terreno)» (spec 012, promesa 178). "
+            "todavía no existe «Teach.ArmarLaLeccion.Llegadas(clics, dondeTermino, terreno)» (spec 013, promesa 178). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tt == null || m == null) return;
 
@@ -5752,7 +5752,7 @@ internal static class Contrato
         var tPaso = Capacidad("U.WindowsClient.Piloto.PasoDelPlan");
         var leer = t?.GetMethod("Leer"); var relato = t?.GetMethod("Relato");
         Debe(t != null && tPaso != null && leer != null && relato != null,
-            "todavía no existe «Piloto.PlanDeComprobacion.Leer/Relato» (spec 012, promesa 179). "
+            "todavía no existe «Piloto.PlanDeComprobacion.Leer/Relato» (spec 013, promesa 179). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (t == null || tPaso == null || leer == null || relato == null) return;
 
@@ -5793,7 +5793,7 @@ internal static class Contrato
         var t = Capacidad("U.WindowsClient.Teach.CuadroDelMomento");
         var m = t?.GetMethod("Elegir");
         Debe(tt != null && m != null,
-            "todavía no existe «Teach.CuadroDelMomento.Elegir» (fase 3 de la spec 012). "
+            "todavía no existe «Teach.CuadroDelMomento.Elegir» (fase 3 de la spec 013). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tt == null || m == null) return;
 
@@ -5811,7 +5811,7 @@ internal static class Contrato
             "sin cuadros no hay nada que mirar: null, y quien pregunta lo dice");
     }
 
-    // ── Spec 012: la lección que Claude ve ──────────────────────────────────────────────────
+    // ── Spec 013: la lección que Claude ve ──────────────────────────────────────────────────
 
     /// <summary>Un cuadro de la cámara, construido por reflexión: (horaMs, ruta, huella).</summary>
     private static object Cuadro(Type t, long horaMs, ulong huella) =>
@@ -5824,7 +5824,7 @@ internal static class Contrato
         var m = t?.GetMethod("Elegir");
         var margen = t?.GetField("MargenMs");
         Debe(tCuadro != null && t != null && m != null && margen != null,
-            "todavía no existe «Teach.CuadroDeAntes.Elegir» (fase 1 de la spec 012). "
+            "todavía no existe «Teach.CuadroDeAntes.Elegir» (fase 1 de la spec 013). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tCuadro == null || t == null || m == null || margen == null) return;
 
@@ -5869,7 +5869,7 @@ internal static class Contrato
         var espera = t?.GetField("EsperaMinimaMs");
         var techo = t?.GetField("TechoMs");
         Debe(tCuadro != null && t != null && m != null && espera != null && techo != null,
-            "todavía no existe «Teach.CuadroDeDespues.Elegir» (fase 1 de la spec 012). "
+            "todavía no existe «Teach.CuadroDeDespues.Elegir» (fase 1 de la spec 013). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (tCuadro == null || t == null || m == null || espera == null || techo == null) return;
 

@@ -17,7 +17,7 @@ public sealed record CuadroTomado(long HoraMs, string Ruta, ulong Huella, int Cu
 
 /// <summary>
 /// LA CÁMARA QUE MIRA AL PASADO. Copia la pantalla cada <see cref="IntervaloMs"/> mientras se
-/// enseña y deja TODOS los cuadros en disco, con su hora del reloj de la demo. Spec 012.
+/// enseña y deja TODOS los cuadros en disco, con su hora del reloj de la demo. Spec 013.
 /// </summary>
 /// <remarks>
 /// POR QUÉ TODOS Y NO SOLO LOS DE LOS CLICS (pedido del dueño, 2026-09-06): «yo puedo solo señalar

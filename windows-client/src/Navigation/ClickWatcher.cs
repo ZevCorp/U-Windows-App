@@ -176,7 +176,7 @@ public sealed class ClickWatcher : IDisposable
     }
 
     /// <summary>
-    /// CADA PULSACIÓN HUMANA, EN EL ACTO: (x, y, Environment.TickCount64 del gancho). Spec 012.
+    /// CADA PULSACIÓN HUMANA, EN EL ACTO: (x, y, Environment.TickCount64 del gancho). Spec 013.
     /// </summary>
     /// <remarks>
     /// Es lo que la lección necesita para que cada clic físico deje evento (promesa 170): el
@@ -188,7 +188,7 @@ public sealed class ClickWatcher : IDisposable
     public static event Action<int, int, long>? AlPulsar;
 
     /// <summary>
-    /// LO QUE EL VIGÍA RESOLVIÓ de una pulsación: (x, y, selector, etiqueta, tipo, proceso). Spec 012.
+    /// LO QUE EL VIGÍA RESOLVIÓ de una pulsación: (x, y, selector, etiqueta, tipo, proceso). Spec 013.
     /// </summary>
     /// <remarks>
     /// LA IDENTIDAD DE UN CLIC LA DA EL VIGÍA, y hasta la primera prueba real (2026-09-07) la lección

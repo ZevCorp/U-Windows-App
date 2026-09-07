@@ -8,7 +8,7 @@ namespace U.WindowsClient.Teach;
 public sealed record Cuadro(long HoraMs, string Ruta, ulong Huella);
 
 /// <summary>
-/// QUÉ CUADRO ES EL DE ANTES DE UN CLIC. Promesa 168 (spec 012).
+/// QUÉ CUADRO ES EL DE ANTES DE UN CLIC. Promesa 168 (spec 013).
 /// </summary>
 /// <remarks>
 /// LA CARRERA QUE ESTO MATA, dicha por el dueño: «que los screenshots se tomen cuando ya un

@@ -4,7 +4,7 @@ using U.WindowsClient.Teach;
 namespace U.WindowsClient.Piloto;
 
 /// <summary>
-/// LA SKILL NACE DE LO VERIFICADO. Promesa 176 (spec 012). Puro.
+/// LA SKILL NACE DE LO VERIFICADO. Promesa 176 (spec 013). Puro.
 /// </summary>
 /// <remarks>
 /// SOLO ENTRA EL PASO QUE ATERRIZÓ. Lo que la demo mostró es una pista; lo que el piloto hizo y la

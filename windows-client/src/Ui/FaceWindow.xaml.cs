@@ -98,7 +98,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     /// <summary>La puerta MCP real (127.0.0.1:8790/mcp) por la que entra el Agent SDK.</summary>
     private Mcp.ServidorMcp? _servidorMcp;
-    /// <summary>Los nombres del catálogo MCP, para armar las dos cajas del piloto (spec 012).</summary>
+    /// <summary>Los nombres del catálogo MCP, para armar las dos cajas del piloto (spec 013).</summary>
     private List<string> _nombresMcp = new();
 
     // Selector de workflow directo en el panel Backend: lista cargada de Graph + un GraphClient propio
@@ -922,7 +922,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                         + "{\"peso\":\"68\",\"talla\":\"1,70\"}. Lo que no pases se queda vacío; "
                         + "lo que no tenga hueco se te dice."),
                 }))
-            // LAS DEL PILOTO (spec 012): la voz de Ü, la pregunta a la persona, la llegada que juzga
+            // LAS DEL PILOTO (spec 013): la voz de Ü, la pregunta a la persona, la llegada que juzga
             // la app y la skill de lo verificado. Viven en el catálogo MCP porque el piloto es un
             // cliente MCP más; la voz en vivo no las ve porque su catálogo se arma aparte.
             .Append(new Voz.Realtime.Utensilio("voz_decir",
@@ -2669,7 +2669,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // catálogo. No se elige «la más nueva» a ciegas: se elige la que le falta el repaso, que es
         // la única que no se puede usar.
         var (skill, archivo) = SkillPorComprobar();
-        // LA LECCIÓN MANDA (spec 012): si la demo dejó lección y el piloto está a mano, comprobar es
+        // LA LECCIÓN MANDA (spec 013): si la demo dejó lección y el piloto está a mano, comprobar es
         // del piloto —un solo cerebro que ve los cuadros, cuelga recuerdos y hace de uno en uno—.
         // La skill vieja sigue siendo el camino cuando no hay lección (demos anteriores a la spec).
         string? carpetaLeccion = _teachSession?.UltimaLeccion ?? Teach.LeccionEnDisco.Ultima();
@@ -2811,7 +2811,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
     /// <summary>
-    /// COMPROBAR CON EL PILOTO (spec 012): un agente Claude lee la lección, cuelga recuerdos, hace la
+    /// COMPROBAR CON EL PILOTO (spec 013): un agente Claude lee la lección, cuelga recuerdos, hace la
     /// tarea de uno en uno por MCP y la app juzga cada llegada. Corre dentro del try/finally de
     /// <see cref="OnComprobarAprendizaje"/>, que es quien abre y cierra la voz.
     /// </summary>

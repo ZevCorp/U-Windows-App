@@ -40,7 +40,7 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
     private System.Diagnostics.Stopwatch? _reloj;
     private string _dondeEmpezo = "";
 
-    // ── LA LECCIÓN (spec 012): la cámara que mira al pasado, los clics del vigía y su carpeta ──
+    // ── LA LECCIÓN (spec 013): la cámara que mira al pasado, los clics del vigía y su carpeta ──
     private CamaraDeCuadros? _camara;
     private readonly List<ClicVisto> _clics = new();
     private Action<int, int, long>? _oyenteDeClics;
@@ -199,7 +199,7 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
         _dondeEmpezo = "";
         try { _dondeEmpezo = surface.Identity().Url ?? ""; } catch { }
 
-        // LA CÁMARA ARRANCA CON EL RELOJ y guarda TODOS los cuadros (spec 012): el piloto podrá
+        // LA CÁMARA ARRANCA CON EL RELOJ y guarda TODOS los cuadros (spec 013): el piloto podrá
         // pedir la pantalla de cualquier segundo, aunque ahí no hubiera clic. Y el vigía, que ya ve
         // cada pulsación humana, le presta la hora del gancho: es lo que convierte 26 clics en 26
         // eventos en vez de en 1 paso.
@@ -305,7 +305,7 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
 
                 // LA LECCIÓN SE ESCRIBE AQUÍ, con el mp4 ya cerrado y ANTES de hablar con Gemini o
                 // con Graph: cualquiera de los dos puede fallar (429, 504) y la lección no depende
-                // de ninguno. Es lo que el piloto va a leer (spec 012).
+                // de ninguno. Es lo que el piloto va a leer (spec 013).
                 GuardarLaLeccion(dondeTermino, mp4);
 
                 // EL VIDEO SIEMPRE SE PROCESA (decisión del dueño, 2026-09-03). Tenía un
@@ -590,7 +590,7 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
         }
     }
 
-    // ── La lección (spec 012) ─────────────────────────────────────────────────────────────
+    // ── La lección (spec 013) ─────────────────────────────────────────────────────────────
 
     /// <summary>Un clic humano, en el reloj de la demo. A dónde llevó se lee un poco después.</summary>
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(System.Drawing.Point p);

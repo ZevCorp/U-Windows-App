@@ -27,13 +27,13 @@ public sealed record EventoDeLaLeccion(int N, long HoraMs, string Tipo, int X, i
     string Selector, string Etiqueta, string Texto, string Tecla, string Llegada,
     string CuadroAntes, string CuadroDespues, bool Asentado, IReadOnlyList<string> Dicho, bool PorTeclado);
 
-/// <summary>LA LECCIÓN: una demostración escrita como línea de tiempo con un solo reloj. Spec 012.</summary>
+/// <summary>LA LECCIÓN: una demostración escrita como línea de tiempo con un solo reloj. Spec 013.</summary>
 public sealed record Leccion(string Id, string Empezo, string Termino, long DuracionMs, string Mp4,
     IReadOnlyList<EventoDeLaLeccion> Eventos, IReadOnlyList<FraseDicha> Frases,
     IReadOnlyList<CuadroDeLaLeccion> Cuadros, string Contexto = "");
 
 /// <summary>
-/// DE LO VISTO A LOS EVENTOS. Promesas 170 y 171 (spec 012). Puro: solo horas y listas.
+/// DE LO VISTO A LOS EVENTOS. Promesas 170 y 171 (spec 013). Puro: solo horas y listas.
 /// </summary>
 /// <remarks>
 /// CADA CLIC FÍSICO ES UN EVENTO, tenga o no paso de SAP (170). El grabador de SAP emite un paso por
@@ -149,7 +149,7 @@ public static class ArmarLaLeccion
     }
 
     /// <summary>
-    /// A DÓNDE LLEVÓ CADA CLIC: lo que el TERRENO aprendió. Promesa 178 (spec 012).
+    /// A DÓNDE LLEVÓ CADA CLIC: lo que el TERRENO aprendió. Promesa 178 (spec 013).
     /// </summary>
     /// <remarks>
     /// UNA SOLA FUENTE, Y NO ES LA LECCIÓN. El terreno vivo (<c>MapaVivo</c>) aprende desde agosto
@@ -191,7 +191,7 @@ public static class ArmarLaLeccion
 }
 
 /// <summary>
-/// ¿SE ENTREGA ESTA LECCIÓN? Promesa 172 (spec 012). Entera o nada, y con el motivo.
+/// ¿SE ENTREGA ESTA LECCIÓN? Promesa 172 (spec 013). Entera o nada, y con el motivo.
 /// </summary>
 /// <remarks>
 /// UNA LECCIÓN A MEDIAS ES PEOR QUE NINGUNA: sin cuadros el piloto «vería» una demo que no puede ver
@@ -215,7 +215,7 @@ public static class LaEntregaDeLaLeccion
 }
 
 /// <summary>
-/// EL CUADRO DE UN MOMENTO CUALQUIERA. Promesa 177 (spec 012): el piloto puede pedir la pantalla de
+/// EL CUADRO DE UN MOMENTO CUALQUIERA. Promesa 177 (spec 013): el piloto puede pedir la pantalla de
 /// un segundo exacto de la demo, aunque ahí no hubiera clic.
 /// </summary>
 /// <remarks>

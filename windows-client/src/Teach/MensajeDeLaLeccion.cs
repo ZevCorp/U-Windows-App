@@ -4,7 +4,7 @@ namespace U.WindowsClient.Teach;
 public sealed record Bloque(string Tipo, string Texto = "", string Ruta = "");
 
 /// <summary>
-/// LA LECCIÓN, DICHA COMO UN TUTORIAL. Promesa 173 (spec 012). Puro: de la lección a bloques.
+/// LA LECCIÓN, DICHA COMO UN TUTORIAL. Promesa 173 (spec 013). Puro: de la lección a bloques.
 /// </summary>
 /// <remarks>
 /// EN ORDEN DE TIEMPO Y CON LA HORA DELANTE. Es la forma que la comunidad ya validó para que Claude

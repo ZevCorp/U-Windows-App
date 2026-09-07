@@ -6,7 +6,7 @@ namespace U.WindowsClient.Teach;
 
 /// <summary>
 /// DÓNDE VIVE UNA LECCIÓN: <c>%LOCALAPPDATA%\U\lecciones\&lt;id&gt;\</c> con <c>leccion.json</c>,
-/// <c>cuadros\</c> y el mensaje que se le arma al piloto. Spec 012, fase 2.
+/// <c>cuadros\</c> y el mensaje que se le arma al piloto. Spec 013, fase 2.
 /// </summary>
 /// <remarks>
 /// EN DISCO Y EN LOCAL a propósito: la lección es lo que el piloto lee y lo que el humano puede

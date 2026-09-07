@@ -1,7 +1,7 @@
 namespace U.WindowsClient.Teach;
 
 /// <summary>
-/// QUÉ CUADRO ES EL DE DESPUÉS DE UN CLIC. Promesa 169 (spec 012).
+/// QUÉ CUADRO ES EL DE DESPUÉS DE UN CLIC. Promesa 169 (spec 013).
 /// </summary>
 /// <remarks>
 /// EL DE DESPUÉS NO ES «EL SIGUIENTE»: es el primero en que la pantalla YA LLEGÓ. Entre el clic y la

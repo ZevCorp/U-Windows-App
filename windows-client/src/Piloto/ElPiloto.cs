@@ -8,7 +8,7 @@ namespace U.WindowsClient.Piloto;
 
 /// <summary>
 /// EL PILOTO: un agente Claude (Agent SDK, en Node) que lee la lección, dice qué entendió, cuelga
-/// recuerdos, hace la tarea de uno en uno por la puerta MCP de esta app y empaqueta la skill. Spec 012.
+/// recuerdos, hace la tarea de uno en uno por la puerta MCP de esta app y empaqueta la skill. Spec 013.
 /// </summary>
 /// <remarks>
 /// UN SOLO CEREBRO, UNA SOLA CONVERSACIÓN (decisión del dueño, 2026-09-06): el mismo agente que
