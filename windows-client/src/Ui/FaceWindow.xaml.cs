@@ -98,6 +98,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     /// <summary>La puerta MCP real (127.0.0.1:8790/mcp) por la que entra el Agent SDK.</summary>
     private Mcp.ServidorMcp? _servidorMcp;
+    /// <summary>Los nombres del catálogo MCP, para armar las dos cajas del piloto (spec 013).</summary>
+    private List<string> _nombresMcp = new();
 
     // Selector de workflow directo en el panel Backend: lista cargada de Graph + un GraphClient propio
     // para listar/ejecutar sin abrir la biblioteca. El slider indexa esta lista.
@@ -920,7 +922,44 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                         + "{\"peso\":\"68\",\"talla\":\"1,70\"}. Lo que no pases se queda vacío; "
                         + "lo que no tenga hueco se te dice."),
                 }))
+            // LAS DEL PILOTO (spec 013): la voz de Ü, la pregunta a la persona, la llegada que juzga
+            // la app y la skill de lo verificado. Viven en el catálogo MCP porque el piloto es un
+            // cliente MCP más; la voz en vivo no las ve porque su catálogo se arma aparte.
+            .Append(new Voz.Realtime.Utensilio("voz_decir",
+                "DI ESTO EN VOZ ALTA con la voz de Ü, a la persona que está delante. Corto: una o dos frases.",
+                new[] { new Voz.Realtime.Argumento("texto", "Lo que hay que decir, tal cual.") }))
+            .Append(new Voz.Realtime.Utensilio("voz_preguntar",
+                "PREGÚNTALE ALGO A LA PERSONA y ESPERA su respuesta hablada (hasta un minuto). Úsalo solo "
+                + "cuando la duda cambie lo que vas a hacer; lo que puedas resolver mirando, míralo.",
+                new[] { new Voz.Realtime.Argumento("texto", "La pregunta, corta y concreta.") }))
+            .Append(new Voz.Realtime.Utensilio("leccion_llegue",
+                "DECLARA QUE ACABAS DE HACER EL EVENTO N DE LA LECCIÓN. La app compara dónde estás ahora con "
+                + "dónde llegó la demo en ese evento y te contesta si aterrizaste. No es opcional: sin esto "
+                + "el paso no cuenta.",
+                new[] { new Voz.Realtime.Argumento("n", "El número del evento, tal como viene en la lección.") }))
+            .Append(new Voz.Realtime.Utensilio("leccion_plan",
+                "ENTREGA EL PLAN de la lección y la app lo RECORRE por ti: por cada paso dice tu «decir» en voz, "
+                + "cuelga tu «recuerdo» en el elemento estando en su pantalla, da el paso por el ejecutor de "
+                + "siempre y juzga la llegada contra la lección. Si un paso no se puede dar, PARA ahí y te "
+                + "devuelve dónde quedó: entonces sigues tú con las manos desde ese paso. Es la forma barata y "
+                + "rápida de comprobar; úsala primero.",
+                new[]
+                {
+                    new Voz.Realtime.Argumento("pasos",
+                        "Lista JSON, en orden: [{\"n\":1,\"exit\":\"comando\",\"text\":\"nwp1\",\"tecla\":\"enter\","
+                        + "\"recuerdo\":\"qué es y para qué sirve\",\"decir\":\"frase corta\"}, …]. «n» es el evento "
+                        + "de la lección que cumple; «exit» la PUERTA por su nombre; «text»/«tecla» si escribe."),
+                }))
+            .Append(new Voz.Realtime.Utensilio("leccion_guardar_skill",
+                "GUARDA LA SKILL con lo que se VERIFICÓ en esta comprobación: solo entran los pasos que "
+                + "aterrizaron. Llámala al final, una vez.",
+                new[]
+                {
+                    new Voz.Realtime.Argumento("nombre", "Nombre corto de la tarea, en español (p. ej. «Abrir triage de un paciente»)."),
+                    new Voz.Realtime.Argumento("descripcion", "Cuándo usar esta skill, en una frase."),
+                }))
             .ToList();
+        _nombresMcp = catalogoMcp.Select(u => u.Nombre).ToList();
         _servidorMcp = new ServidorMcp(new ProtocoloMcp(catalogoMcp, (tool, args) => mcp.Call(tool, args)));
         _servidorMcp.Start();
         Closed += (_, __) => _servidorMcp?.Dispose();
@@ -2457,6 +2496,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _teachSession = new WorkflowTeachSession(
             graph, _graphConfig, _teachUiaSurface, _teachSapSurface, _backend!, _videoLibrary, _config.UserId)
         {
+            // LA LLEGADA DE UN CLIC LA DA EL TERRENO (promesa 178): la misma arista que map_batch
+            // verifica. Por selector si el vigía lo trajo; si no, por el nombre de la puerta.
+            LlegadaSegunElTerreno = (desde, selector, etiqueta) =>
+            {
+                if (string.IsNullOrWhiteSpace(desde)) return "";
+                var salidas = _mapaVivo.Nucleo.DesdeAqui(desde);
+                var a = (selector.Length > 0 ? salidas.FirstOrDefault(v => v.Que.Selector.Equals(selector, StringComparison.Ordinal)) : null)
+                     ?? (etiqueta.Length > 0 ? salidas.FirstOrDefault(v => v.Que.Etiqueta.Equals(etiqueta, StringComparison.OrdinalIgnoreCase)) : null);
+                return a?.Destino ?? "";
+            },
         };
         _teachSession.StatusChanged += (_, msg) => Dispatcher.Invoke(() => SetStatus(msg));
         // LO QUE DICES MIENTRAS ENSEÑAS es lo que convierte un valor tecleado en un DATO con
@@ -2620,7 +2669,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // catálogo. No se elige «la más nueva» a ciegas: se elige la que le falta el repaso, que es
         // la única que no se puede usar.
         var (skill, archivo) = SkillPorComprobar();
-        if (skill == null)
+        // LA LECCIÓN MANDA (spec 013): si la demo dejó lección y el piloto está a mano, comprobar es
+        // del piloto —un solo cerebro que ve los cuadros, cuelga recuerdos y hace de uno en uno—.
+        // La skill vieja sigue siendo el camino cuando no hay lección (demos anteriores a la spec).
+        string? carpetaLeccion = _teachSession?.UltimaLeccion ?? Teach.LeccionEnDisco.Ultima();
+        bool porElPiloto = carpetaLeccion != null && Piloto.ElPiloto.Disponible();
+        if (carpetaLeccion != null && !porElPiloto)
+            LogBus.Log("comprobar", "hay lección pero no encuentro agente-piloto/piloto.mjs (U_PILOTO): voy por el camino viejo");
+        if (skill == null && !porElPiloto)
         {
             SetStatus("No hay ninguna tarea pendiente de comprobar. Enseña una con 🎓.");
             ShowTalk(MotivoDelGlobo.AlgoFallo);
@@ -2656,6 +2712,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         try
         {
+            if (porElPiloto)
+            {
+                await ComprobarConElPilotoAsync(carpetaLeccion!, reloj);
+                return;
+            }
+            if (skill == null) return;
             LogBus.Log("comprobar", $"«{skill.Nombre}»: {skill.Pasos.Count} paso(s) de contexto, "
                 + $"{skill.Huecos.Count} hueco(s), {skill.Sugerencias.Count} sugerencia(s) · "
                 + $"de «{skill.DondeEmpieza}» a «{Navigation.ElEncargoDeComprobar.Destino(skill)}»");
@@ -2722,7 +2784,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
         catch (OperationCanceledException)
         {
-            SetStatus($"Paraste la comprobación de «{skill.Nombre}»: sigue pendiente.");
+            SetStatus($"Paraste la comprobación de «{skill?.Nombre ?? "la lección"}»: sigue pendiente.");
             LogBus.Log("comprobar", "parada por el usuario: sigue pendiente");
         }
         catch (Exception ex)
@@ -2746,6 +2808,167 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             }
             PintarBotonDeAccion();
         }
+    }
+
+    /// <summary>
+    /// COMPROBAR CON EL PILOTO (spec 013): un agente Claude lee la lección, cuelga recuerdos, hace la
+    /// tarea de uno en uno por MCP y la app juzga cada llegada. Corre dentro del try/finally de
+    /// <see cref="OnComprobarAprendizaje"/>, que es quien abre y cierra la voz.
+    /// </summary>
+    private async Task ComprobarConElPilotoAsync(string carpetaLeccion, System.Diagnostics.Stopwatch reloj)
+    {
+        var leccion = Teach.LeccionEnDisco.Cargar(carpetaLeccion);
+        if (leccion == null || _mapaDeMano == null)
+        {
+            SetStatus("La lección no se pudo leer: no hay nada que comprobar.");
+            ShowTalk(MotivoDelGlobo.AlgoFallo);
+            return;
+        }
+        var registro = new Piloto.RegistroDeLaComprobacion(leccion);
+        string modelo = Environment.GetEnvironmentVariable("U_PILOTO_MODELO") is { Length: > 0 } m ? m : "claude-opus-5";
+        var mensaje = new Piloto.ElPiloto.Mensaje(
+            Teach.MensajeDeLaLeccion.Armar(leccion),
+            Piloto.CajasDelPiloto.Caja(_nombresMcp),
+            Piloto.CajasDelPiloto.Prohibidas(_nombresMcp),
+            modelo, $"http://127.0.0.1:{Mcp.ServidorMcp.Puerto}/mcp/");
+        string rutaMensaje = Piloto.ElPiloto.EscribirMensaje(carpetaLeccion, mensaje);
+        LogBus.Log("comprobar", $"lección «{leccion.Id}»: {leccion.Eventos.Count} evento(s), "
+            + $"{registro.Total} que navegan, {mensaje.Bloques.Count(b => b.Tipo == "image")} cuadro(s) en el mensaje · "
+            + $"modelo {modelo} · {rutaMensaje}");
+
+        // LO QUE EL PILOTO PUEDE PEDIRLE A LA VENTANA. Corren en el hilo del servidor MCP, nunca en
+        // el de la UI: la pregunta BLOQUEA hasta que la persona contesta, y eso en la UI congelaría
+        // la carita.
+        _mapaDeMano.Decir = texto =>
+        {
+            if (string.IsNullOrWhiteSpace(texto)) return "no había nada que decir.";
+            if (_vivo is { Viva: true })
+            {
+                try { _vivo.DiEstoAsync(texto).GetAwaiter().GetResult(); return "dicho."; }
+                catch (Exception ex) { return $"no pude decirlo por la voz ({ex.Message}); lo dejé escrito."; }
+            }
+            Dispatcher.Invoke(() => SetStatus(texto));
+            return "no hay voz abierta: quedó escrito en pantalla.";
+        };
+        _mapaDeMano.Preguntar = texto => PreguntarYEsperar(texto, TimeSpan.FromSeconds(60));
+        _mapaDeMano.Llegue = n =>
+        {
+            string aqui = _locator?.DondeEstoy()?.Id ?? "";
+            var v = registro.Llegue(n, aqui);
+            return v.Aterrizo
+                ? $"ATERRIZASTE: el evento {n} llegó a «{v.Esperada}». Sigue con el siguiente."
+                : $"NO ATERRIZÓ el evento {n}: {v.Motivo}";
+        };
+        _mapaDeMano.Plan = json => RecorrerElPlan(json, leccion, registro);
+        _mapaDeMano.GuardarSkill = (nombre, descripcion) =>
+        {
+            var s = Piloto.SkillDeLoVerificado.Empaquetar(leccion, registro.Veredictos, nombre, descripcion);
+            if (s == null) return "no hay pasos verificados con identidad: no se guarda ninguna skill.";
+            string f = s.Guardar(Navigation.SkillEnsenada.CarpetaPorDefecto);
+            return $"skill «{s.Nombre}» guardada con {s.Pasos.Count} paso(s) verificado(s)"
+                + (s.Comprobada ? ", COMPROBADA" : ", pendiente: no todos los eventos aterrizaron") + $" → {f}";
+        };
+
+        SetStatus("Comprobando con el piloto: leo la lección y la hago de uno en uno…");
+        _mapaDeMano.SenalarAlActuar = true;
+        _cts = new CancellationTokenSource();
+        ShowStop(true);
+        SetWorking(true);
+        Piloto.ElPiloto.Resultado r;
+        try
+        {
+            r = await Piloto.ElPiloto.CorrerAsync(carpetaLeccion, (tipo, texto) =>
+            {
+                if (tipo == "texto" && texto.Length > 0)
+                    Dispatcher.Invoke(() => SetStatus(texto.Length > 160 ? texto[..160] + "…" : texto));
+            }, _cts.Token);
+        }
+        finally
+        {
+            SetWorking(false); ShowStop(false);
+            _mapaDeMano.Decir = null; _mapaDeMano.Preguntar = null; _mapaDeMano.Llegue = null; _mapaDeMano.GuardarSkill = null; _mapaDeMano.Plan = null;
+        }
+
+        // EL VEREDICTO LO DA LA APP, con la misma compuerta de la promesa 131: el total es el plan.
+        var final = registro.Final();
+        LogBus.Log("comprobar", $"piloto terminó ({(r.Termino ? "bien" : $"salida {r.Salida}")}) en {reloj.ElapsedMilliseconds} ms · "
+            + $"{registro.Hechos}/{registro.Total} aterrizados · costo estimado ${r.CostoUsd:0.000} · "
+            + (final.Comprobada ? "COMPROBADA" : "SIGUE PENDIENTE") + $" · {final.Motivo}");
+        if (!r.Termino && r.Ultimo.Length > 0) LogBus.Log("comprobar", $"piloto: {r.Ultimo}");
+        SetStatus(final.Comprobada
+            ? $"Comprobada: {final.Motivo}"
+            : $"Sigue pendiente: {final.Motivo}" + (r.Termino ? "" : $" · el piloto no terminó bien ({r.Ultimo})"));
+    }
+
+    /// <summary>
+    /// RECORRER EL PLAN DEL PILOTO (promesa 179): por cada paso, la voz, el recuerdo donde vive el
+    /// elemento, el paso por el MISMO ejecutor de tanda, y el juez. Para donde no pueda.
+    /// </summary>
+    /// <remarks>
+    /// Corre en el hilo del servidor MCP mientras el piloto espera la respuesta; por eso hay un techo
+    /// de tiempo por herramienta en <c>ProtocoloMcp</c> (120 s) y aquí se para antes de agotarlo.
+    /// </remarks>
+    private string RecorrerElPlan(string json, Teach.Leccion leccion, Piloto.RegistroDeLaComprobacion registro)
+    {
+        var lectura = Piloto.PlanDeComprobacion.Leer(json);
+        if (lectura.Error.Length > 0) return lectura.Error;
+        if (_mapaDeMano?.RecorrerPorElNucleo == null) return "todavía no sé recorrer un plan.";
+        var pasos = lectura.Pasos;
+        LogBus.Log("comprobar", $"plan del piloto: {pasos.Count} paso(s) → "
+            + string.Join(" → ", pasos.Select(p => p.Texto.Length > 0 ? $"escribir «{p.Texto}» en «{p.Exit}»" : $"«{p.Exit}»")));
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        int hechos = 0;
+        for (int i = 0; i < pasos.Count; i++)
+        {
+            var p = pasos[i];
+            if (reloj.Elapsed > TimeSpan.FromSeconds(100))
+                return Piloto.PlanDeComprobacion.Relato(hechos, pasos.Count, i + 1,
+                    "se me acabó el tiempo de una sola llamada; el resto lo sigues tú o me vuelves a mandar el plan desde aquí.",
+                    _locator?.DondeEstoy()?.Id ?? "", registro.Hechos, registro.Total);
+
+            if (p.Decir.Length > 0 && _mapaDeMano.Decir != null) { try { _mapaDeMano.Decir(p.Decir); } catch { } }
+            if (p.Recuerdo.Length > 0 && p.Exit.Length > 0)
+            {
+                string r = _mapaDeMano.Call("map_esto_es", new Dictionary<string, string> { ["significado"] = p.Recuerdo, ["sobre"] = p.Exit });
+                LogBus.Log("comprobar", $"plan · recuerdo en «{p.Exit}»: {(r.Length > 120 ? r[..120] + "…" : r)}");
+            }
+            // LA LLEGADA VIAJA CON EL PASO: es la que el terreno aprendió en la demo, y el batch la
+            // verifica con su propia compuerta (promesas 103 y 122). Con eso el juez de aquí y el del
+            // batch son el mismo dato; si sobra uno, es el de aquí.
+            string llegadaDelEvento = p.N > 0 ? (leccion.Eventos.FirstOrDefault(e => e.N == p.N)?.Llegada ?? "") : "";
+            var res = _mapaDeMano.RecorrerPorElNucleo(new[] { new Navigation.RecorrerSegunElNucleo.Paso(p.Exit, p.Texto, llegadaDelEvento, p.Tecla) });
+            if (res.Hechos < 1)
+            {
+                LogBus.Log("comprobar", $"plan · PARÓ en el paso {i + 1} «{p.Exit}»: {res.Cuenta}");
+                return Piloto.PlanDeComprobacion.Relato(hechos, pasos.Count, i + 1, res.Cuenta,
+                    _locator?.DondeEstoy()?.Id ?? "", registro.Hechos, registro.Total);
+            }
+            hechos++;
+            if (p.N > 0) registro.Llegue(p.N, _locator?.DondeEstoy()?.Id ?? "");
+        }
+        LogBus.Log("comprobar", $"plan · hice los {pasos.Count} paso(s) en {reloj.ElapsedMilliseconds} ms · {registro.Hechos}/{registro.Total} aterrizados");
+        return Piloto.PlanDeComprobacion.Relato(hechos, pasos.Count, 0, "", _locator?.DondeEstoy()?.Id ?? "", registro.Hechos, registro.Total);
+    }
+
+    /// <summary>Pregunta con la voz de Ü y espera la siguiente frase de la persona, con techo.</summary>
+    private string PreguntarYEsperar(string pregunta, TimeSpan techo)
+    {
+        if (_vivo is not { Viva: true })
+        {
+            Dispatcher.Invoke(() => SetStatus($"Pregunta: {pregunta}"));
+            return "no hay voz abierta: la pregunta quedó escrita y nadie pudo contestarla. Decide con lo que ves.";
+        }
+        var respuesta = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Action<string> oyente = frase => { if (!string.IsNullOrWhiteSpace(frase)) respuesta.TrySetResult(frase.Trim()); };
+        _vivo.DijoElUsuario += oyente;
+        try
+        {
+            _vivo.DiEstoAsync(pregunta).GetAwaiter().GetResult();
+            if (respuesta.Task.Wait(techo)) return $"la persona dijo: «{respuesta.Task.Result}»";
+            return $"la persona no contestó en {techo.TotalSeconds:0} s. Decide con lo que ves y dilo.";
+        }
+        catch (Exception ex) { return $"no pude preguntar por la voz: {ex.Message}"; }
+        finally { _vivo.DijoElUsuario -= oyente; }
     }
 
     /// <summary>

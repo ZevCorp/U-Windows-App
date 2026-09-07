@@ -35,6 +35,9 @@ public sealed class TeachSession : IAsyncDisposable
 
     private ScreenRecorder? _recorder;
     private string? _recordingPath;
+
+    /// <summary>Dónde quedó (o va a quedar) el mp4 de esta grabación. La lección lo referencia (spec 013).</summary>
+    public string? RutaDelVideo => _recordingPath;
     private string? _recorderError;
 
     public event EventHandler<string>? StatusChanged;

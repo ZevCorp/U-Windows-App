@@ -460,6 +460,23 @@ internal static class Contrato
         // los numeros no se reciclan.
         Prueba("167. la línea «Escríbele…» se hace esperar: segundo y medio de ratón quieto sobre la carita, y arrastrarla no la llama por mucho que se tarde", LaLineaSeHaceEsperar);
 
+        // LA LECCIÓN QUE CLAUDE VE (spec 013, 2026-09-06). El pantallazo por paso se disparaba AL
+        // OBSERVAR el paso —después del clic y de su efecto—, que es la carrera que el dueño lleva
+        // años pagando: «que los screenshots se tomen cuando ya un elemento cambió por el clic».
+        // La salida no es disparar más rápido: es no disparar, y elegir del pasado.
+        Prueba("168. el cuadro de ANTES de un clic se elige del pasado: es el más nuevo con hora ≤ hora del clic menos el margen, y ningún cuadro tomado en o después del clic puede ser elegido; si no hay ninguno, no hay cuadro de antes (null), nunca uno de después disfrazado", ElCuadroDeAntesSeEligeDelPasado);
+        Prueba("169. el cuadro de DESPUÉS es el primero, pasado el clic más la espera mínima, en que la pantalla se asentó (dos cuadros seguidos iguales); si no se asienta antes del techo, se entrega el último y se dice asentado=false — nunca se calla", ElCuadroDeDespuesEsElPrimeroAsentado);
+        Prueba("170. cada clic físico de la demostración deja UN evento en la lección, con su hora, su punto y sus dos cuadros, aunque SAP no haya emitido paso: 26 clics son 26 eventos, no 1", CadaClicFisicoDejaUnEvento);
+        Prueba("171. lo que SAP observó (selector, texto tecleado, tecla) y lo que la persona dijo se cuelgan del evento por cercanía en el mismo reloj; una frase se cuelga de UN clic, el más cercano, y un paso de SAP sin clic cercano queda como evento propio con porTeclado=true", LoObservadoYLoDichoSeCuelganPorCercania);
+        Prueba("172. la lección se escribe en disco entera o no se escribe: leccion.json + cuadros/ + demo.mp4 + donde empezó y donde terminó; una lección sin cuadros o sin mp4 no se entrega, y el motivo queda escrito", LaLeccionSeEntregaEnteraONada);
+        Prueba("173. el mensaje que recibe el piloto se arma de la lección en orden de tiempo, con una etiqueta t=MM:SS · clic N en (x,y) · selector · «lo dicho» delante de cada cuadro; ningún cuadro pasa de 2000 px de lado, y si hay más cuadros que el presupuesto se quitan primero los de después repetidos y NUNCA el de antes de un clic con selector", ElMensajeDelPilotoEsUnTutorialEnOrden);
+        Prueba("174. el piloto tiene UNA caja con manos desde el principio —entender es ir, colgar el recuerdo donde vive el elemento y declarar la llegada— y lo único prohibido, por su nombre, es lo que va en tanda: map_batch y map_skill_run; las manos, los ojos, la voz y mirar cualquier momento de la demo están todos", ElPilotoTieneUnaCajaConManos);
+        Prueba("175. la comprobación es hacer de uno en uno lo que la lección enseña y que cada llegada la juzgue la app contra la llegada de la lección; el recuento es hechos/total con el total = eventos que navegan, y COMPROBADA solo si todos aterrizaron", LaAppJuzgaCadaLlegada);
+        Prueba("176. la skill se empaqueta de lo VERIFICADO: cada paso lleva la llegada real medida al comprobar, y un paso que no aterrizó no entra en la skill; lo que el modelo dijo entender se guarda aparte, como recuerdos, no como pasos", LaSkillNaceDeLoVerificado);
+        Prueba("177. el piloto puede pedir la pantalla de cualquier momento de la demo, aunque ahí no hubiera clic: se le da el cuadro más cercano a ese instante con dónde estaba el ratón, y sin cuadros se dice que no hay", CualquierMomentoDeLaDemoSePuedeMirar);
+        Prueba("178. a dónde llevó un clic lo dice el TERRENO —la misma arista que el batch verifica—, no la lección: si el terreno aprendió que esa puerta lleva a aquella pantalla, esa es la llegada; si no aprendió nada, queda vacía y se dice; solo el último clic tiene de respaldo donde acabó la demo; los clics sobre Ü no cuentan", LaLlegadaLaDiceElTerreno);
+        Prueba("179. comprobar es un PLAN que el piloto entrega en el idioma del ejecutor y la app recorre: por cada paso la voz, el recuerdo antes de tocar, el paso por el mismo ejecutor de tanda y el juez; si un paso no se puede dar la app para ahí y le devuelve al piloto dónde quedó y qué faltó, y solo entonces el piloto actúa con las manos", ComprobarEsUnPlanQueLaAppRecorre);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -2410,6 +2427,28 @@ internal static class Contrato
 
     private static void ElArranqueEsperaNoCuentaAtras()
     {
+        // EL ESCRITORIO DELANTE TAMPOCO ES «LA APP DELANTE» (cuarta prueba real, 2026-09-07 16:45):
+        // la demo arrancó con el escritorio en primer plano, el detector eligió UIA, y la lección de
+        // SAP salió con 35 eventos por pulsación y llegadas «uia://» que ningún juez podía casar.
+        {
+            var t4 = Capacidad("U.WindowsClient.Teach.ElArranqueDeLaDemo");
+            var esEscritorio = t4?.GetMethod("EsEscritorio");
+            var juzgar4 = t4?.GetMethod("Juzgar", new[] { typeof(bool), typeof(bool), typeof(int), typeof(int) });
+            Debe(esEscritorio != null && juzgar4 != null, "el arranque sabe qué es el escritorio y lo trata como «todavía no hay app delante»");
+            if (esEscritorio != null && juzgar4 != null)
+            {
+                Debe((bool)esEscritorio.Invoke(null, new object[] { "Progman" })! && (bool)esEscritorio.Invoke(null, new object[] { "WorkerW" })!
+                     && (bool)esEscritorio.Invoke(null, new object[] { "Shell_TrayWnd" })! && !(bool)esEscritorio.Invoke(null, new object[] { "SAP_FRONTEND_SESSION" })!,
+                    "Progman, WorkerW y la barra de tareas son el escritorio; una sesión de SAP no");
+                var p = juzgar4.Invoke(null, new object[] { false, true, 1000, 60000 })!;
+                Debe(!(bool)Prop(p, "Empezar")! && (bool)Prop(p, "Seguir")! && ((string)Prop(p, "Decir")!).Contains("escritorio"),
+                    "con el escritorio delante no se graba: se sigue esperando y se dice que se ve el escritorio");
+                var fin = juzgar4.Invoke(null, new object[] { false, true, 60000, 60000 })!;
+                Debe(!(bool)Prop(fin, "Empezar")! && !(bool)Prop(fin, "Seguir")!, "y al techo se deja de esperar, como con Ü delante");
+                var app = juzgar4.Invoke(null, new object[] { false, false, 1000, 60000 })!;
+                Debe((bool)Prop(app, "Empezar")!, "con una app de verdad delante, se empieza");
+            }
+        }
         // LO QUE PASÓ, 2026-09-03 a las 18:45 y otra vez a las 18:46, las dos veces igual:
         //
         //   18:46:20  voz-viva: micrófono abierto a 24000 Hz        ← 4 s tras pulsar 🎓
@@ -2427,7 +2466,7 @@ internal static class Contrato
         // para diagnosticar. La señal buena no es «pasaron N segundos»: es «el humano ya puso
         // delante la app». Eso se espera, no se cronometra.
         var t = Cap004("U.WindowsClient.Teach.ElArranqueDeLaDemo");
-        var juzgar = t?.GetMethod("Juzgar");
+        var juzgar = t?.GetMethod("Juzgar", new[] { typeof(bool), typeof(int), typeof(int) });
         Debe(t != null && juzgar != null,
             "todavía no existe «Teach.ElArranqueDeLaDemo.Juzgar» (fase 9 de la spec 009). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
@@ -5296,6 +5335,588 @@ internal static class Contrato
             "ni mientras escribes dentro: al llevar la mano al teclado el cursor sale del muelle, y "
             + "plegarse ahí se comería el texto a medias — que es el fallo que esta promesa existe "
             + "para impedir");
+    }
+
+    // ── Spec 013, fases 2-5: la lección, el mensaje, las cajas, el juez y la skill ─────────
+
+    private static object Nuevo(Type t, params object?[] args) => Activator.CreateInstance(t, args)!;
+    private static System.Collections.IList ListaDe(Type t) =>
+        (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(t))!;
+    private static object? Prop(object o, string nombre) => o.GetType().GetProperty(nombre)!.GetValue(o);
+
+    private static object Clic(Type t, long hora, int x, int y, string llegada = "", string sel = "", string etq = "", string tipo = "", bool deU = false, string pantalla = "")
+        => Nuevo(t, hora, x, y, llegada, sel, etq, tipo, deU, pantalla);
+
+    /// <summary>La lección de juguete: tipos por reflexión, 26 clics, 1 paso de SAP, frases.</summary>
+    private sealed class TiposDeLaLeccion
+    {
+        public Type Clic = null!, Paso = null!, Frase = null!, Cuadro = null!, CuadroLeccion = null!, Evento = null!, Leccion = null!, Veredicto = null!;
+        public static TiposDeLaLeccion? Cargar()
+        {
+            var t = new TiposDeLaLeccion
+            {
+                Clic = Capacidad("U.WindowsClient.Teach.ClicVisto")!,
+                Paso = Capacidad("U.WindowsClient.Teach.PasoVisto")!,
+                Frase = Capacidad("U.WindowsClient.Navigation.FraseDicha")!,
+                Cuadro = Capacidad("U.WindowsClient.Teach.Cuadro")!,
+                CuadroLeccion = Capacidad("U.WindowsClient.Teach.CuadroDeLaLeccion")!,
+                Evento = Capacidad("U.WindowsClient.Teach.EventoDeLaLeccion")!,
+                Leccion = Capacidad("U.WindowsClient.Teach.Leccion")!,
+                Veredicto = Capacidad("U.WindowsClient.Piloto.VeredictoDeEvento")!,
+            };
+            return new[] { t.Clic, t.Paso, t.Frase, t.Cuadro, t.CuadroLeccion, t.Evento, t.Leccion, t.Veredicto }.Any(x => x == null) ? null : t;
+        }
+        public object Evento_(int n, long hora, string tipo, int x, int y, string selector, string texto, string llegada, string antes, string despues, string[] dicho, bool porTeclado = false, string etiqueta = "")
+        {
+            var d = new List<string>(dicho);
+            return Nuevo(Evento, n, hora, tipo, x, y, selector, etiqueta, texto, "", llegada, antes, despues, true, (IReadOnlyList<string>)d, porTeclado);
+        }
+        public object Leccion_(string empezo, string termino, System.Collections.IList eventos, System.Collections.IList cuadros, System.Collections.IList? frases = null)
+            => Nuevo(Leccion, "leccion-de-prueba", empezo, termino, 60_000L, "demo.mp4", eventos, frases ?? ListaDe(Frase), cuadros, "");
+    }
+
+    private static void CadaClicFisicoDejaUnEvento()
+    {
+        var tt = TiposDeLaLeccion.Cargar();
+        var armar = Capacidad("U.WindowsClient.Teach.ArmarLaLeccion")?.GetMethod("Eventos");
+        Debe(tt != null && armar != null,
+            "todavía no existe «Teach.ArmarLaLeccion.Eventos» (fase 2 de la spec 013). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tt == null || armar == null) return;
+
+        // LO MEDIDO DOS VECES (spec 009): 26 clics en el árbol de SAP, 1 paso observado. Aquí los 26
+        // clics tienen que salir como 26 eventos, con el único paso colgado del clic que le queda cerca.
+        var clics = ListaDe(tt.Clic); var pasos = ListaDe(tt.Paso); var frases = ListaDe(tt.Frase); var cuadros = ListaDe(tt.Cuadro);
+        for (int i = 0; i < 26; i++) clics.Add(Clic(tt.Clic, 1000L + i * 1500, 80 + i, 240 + i * 20, "", "", i == 3 ? "Urgencias Adultos/Triage" : ""));
+        // Y dos clics sobre la propia ventana de Ü (parar la demo, abrir el panel): no son la tarea.
+        clics.Add(Clic(tt.Clic, 41_500, 1793, 440, "", "", "", "", deU: true));
+        clics.Add(Clic(tt.Clic, 41_900, 1800, 400, "", "", "", "", deU: true));
+        pasos.Add(Nuevo(tt.Paso, 1000L + 19 * 1500 + 2500, "/app/con[0]/ses[0]/wnd[0]/usr/cntl/shell", "Triage", "GuiTree", "", "", "sapgui://QAS/NWP1"));
+        // Cuadros cada 250 ms durante toda la demo, con huella que cambia tras cada clic.
+        for (long t = 0; t < 41_000; t += 250) cuadros.Add(Nuevo(tt.Cuadro, t, $"c{t}.jpg", (ulong)(t / 1500)));
+
+        var eventos = (System.Collections.IList)armar.Invoke(null, new object[] { clics, pasos, frases, cuadros })!;
+        Debe(eventos.Count == 26, $"26 clics → 26 eventos, no {eventos.Count}: lo que Ü hizo con las manos deja rastro aunque SAP no emitiera paso — y los dos clics sobre la ventana de Ü NO cuentan");
+        if (eventos.Count != 26) return;
+
+        int conSelector = 0, conAntes = 0, conDespues = 0;
+        foreach (var e in eventos)
+        {
+            if (((string)Prop(e, "Selector")!).Length > 0) conSelector++;
+            if (((string)Prop(e, "CuadroAntes")!).Length > 0) conAntes++;
+            if (((string)Prop(e, "CuadroDespues")!).Length > 0) conDespues++;
+        }
+        Debe(conSelector == 1, $"el único paso de SAP se cuelga de UN clic, no de {conSelector}");
+        Debe((string)Prop(eventos[20]!, "Selector")! == "/app/con[0]/ses[0]/wnd[0]/usr/cntl/shell",
+            "y se cuelga del último clic ANTERIOR (el 21, un segundo antes; el 20 queda a 2,5 s): el paso cuenta lo que pasó después de un clic");
+        Debe((string)Prop(eventos[3]!, "Etiqueta")! == "Urgencias Adultos/Triage",
+            "la identidad que el vigía resolvió al pulsar viaja en el evento: es la etiqueta con la que el terreno "
+            + "nombra la puerta, y lo único que map_take entiende (primera prueba real: 7 clics, 0 con identidad)");
+        Debe(conAntes == 26 && conDespues == 26, $"cada evento lleva sus dos cuadros (antes: {conAntes}, después: {conDespues})");
+        Debe((int)Prop(eventos[4]!, "X")! == 84 && (int)Prop(eventos[4]!, "Y")! == 320 && (long)Prop(eventos[4]!, "HoraMs")! == 7000,
+            "cada evento conserva su punto y su hora: es lo que permite dibujar el anillo donde se hizo clic");
+        Debe(eventos.Cast<object>().Select((e, i) => (int)Prop(e, "N")! == i + 1).All(x => x),
+            "los eventos van numerados 1..N en orden de tiempo: es como el piloto los va a declarar al comprobar");
+    }
+
+    private static void LoObservadoYLoDichoSeCuelganPorCercania()
+    {
+        var tt = TiposDeLaLeccion.Cargar();
+        var armar = Capacidad("U.WindowsClient.Teach.ArmarLaLeccion")?.GetMethod("Eventos");
+        Debe(tt != null && armar != null,
+            "todavía no existe «Teach.ArmarLaLeccion.Eventos» (fase 2 de la spec 013). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tt == null || armar == null) return;
+
+        var clics = ListaDe(tt.Clic); var pasos = ListaDe(tt.Paso); var frases = ListaDe(tt.Frase); var cuadros = ListaDe(tt.Cuadro);
+        clics.Add(Clic(tt.Clic, 2000L, 100, 100, "sapgui://A", "", "comando"));
+        clics.Add(Clic(tt.Clic, 9000L, 200, 200, "sapgui://B", "", "Pto.tbjo.clínico"));
+        // Lo MEDIDO en la primera prueba real: el input de SAP llega 3,07 s después del clic en el campo
+        // (teclear «nwp1» y Enter), y el Enter se observa en el mismo instante. Los dos son ese clic.
+        pasos.Add(Nuevo(tt.Paso, 5070L, "wnd[0]/tbar[0]/okcd", "", "GuiOkCodeField", "nwp1", "", "sapgui://S"));
+        pasos.Add(Nuevo(tt.Paso, 5070L, "", "", "", "", "enter", "sapgui://S"));
+        // Un Enter 30 s después de todo: nadie hizo clic cerca → por teclado, evento propio.
+        pasos.Add(Nuevo(tt.Paso, 40_000L, "", "", "", "", "enter", "sapgui://S"));
+        // Y lo que emite UIA al teclear: un paso por PULSACIÓN sobre el mismo campo, 50 s después de
+        // todo clic (cuarta prueba real: 35 eventos y 70 cuadros por esto). Son UNO, el último.
+        foreach (var (t, txt) in new[] { (100_000L, "n"), (100_020L, "nw"), (100_040L, "nwp"), (100_060L, "nwp1") }) // a 30 s de la frase suelta: fuera de la ventana del anclador
+            pasos.Add(Nuevo(tt.Paso, t, "uia:aid=1001", "1001", "Edit", txt, "", "uia://S"));
+        // Una frase a 300 ms del segundo clic, y otra lejos de todo.
+        frases.Add(Nuevo(tt.Frase, "y aquí entramos a triage", 9300L));
+        frases.Add(Nuevo(tt.Frase, "hola YouTube, hoy vamos a ver", 70_000L)); // a 30 s de todo: fuera de la ventana de 15 s del anclador (promesa 105)
+        for (long t = 0; t < 45_000; t += 250) cuadros.Add(Nuevo(tt.Cuadro, t, $"c{t}.jpg", (ulong)(t / 3000)));
+
+        var eventos = (System.Collections.IList)armar.Invoke(null, new object[] { clics, pasos, frases, cuadros })!;
+        Debe(eventos.Count == 4, $"dos clics, un Enter suelto y CUATRO pulsaciones plegadas en una son CUATRO eventos (salieron {eventos.Count})");
+        if (eventos.Count != 4) return;
+        Debe((string)Prop(eventos[3]!, "Texto")! == "nwp1" && (string)Prop(eventos[3]!, "Selector")! == "uia:aid=1001",
+            "las pulsaciones seguidas sobre el mismo campo son un solo evento con el texto completo");
+
+        var e1 = eventos[0]!; var e2 = eventos[1]!; var e3 = eventos[2]!;
+        Debe((string)Prop(e1, "Selector")! == "wnd[0]/tbar[0]/okcd" && (string)Prop(e1, "Texto")! == "nwp1" && (string)Prop(e1, "Tecla")! == "enter",
+            "el input de SAP observado 3 s después del clic se cuelga de ESE clic —el último anterior—, con su selector, lo tecleado Y el Enter plegado (como la 132)");
+        Debe((string)Prop(e1, "Etiqueta")! == "comando",
+            "y conserva la etiqueta del vigía: la puerta por su nombre, que es lo que las manos entienden");
+        Debe((string)Prop(e2, "Selector")! == "" && (string)Prop(e2, "Etiqueta")! == "Pto.tbjo.clínico",
+            "el segundo clic no se lleva el paso del primero aunque esté dentro de la ventana: un paso cuelga del clic ANTERIOR, nunca del posterior");
+        Debe((string)Prop(e1, "Llegada")! == "sapgui://A", "y la llegada es la que leyó el vigía tras el clic, no la superficie de antes");
+        Debe((bool)Prop(e3, "PorTeclado")! && (string)Prop(e3, "Tecla")! == "enter" && (string)Prop(e3, "Tipo")! == "teclado",
+            "un paso de SAP sin clic cerca es un evento propio, por teclado, con su tecla");
+        var dicho2 = (IReadOnlyList<string>)Prop(e2, "Dicho")!;
+        var dicho1 = (IReadOnlyList<string>)Prop(e1, "Dicho")!;
+        Debe(dicho2.Count == 1 && dicho2[0] == "y aquí entramos a triage",
+            "la frase dicha a 300 ms del segundo clic se cuelga del segundo clic");
+        Debe(!dicho1.Contains("y aquí entramos a triage"), "…y de UN solo clic: no se repite en el primero");
+        Debe(!dicho1.Contains("hola YouTube, hoy vamos a ver"),
+            "lo dicho lejos de cualquier evento (fuera de la ventana de 15 s del anclador) no se le cuelga a ninguno: va al contexto");
+        var contexto = Capacidad("U.WindowsClient.Teach.ArmarLaLeccion")!.GetMethod("Contexto")!;
+        string ctx = (string)contexto.Invoke(null, new object[] { frases, eventos })!;
+        Debe(ctx.Contains("hola YouTube"), $"y el contexto de la lección la conserva (salió «{ctx}»)");
+    }
+
+    private static void LaLeccionSeEntregaEnteraONada()
+    {
+        var t = Capacidad("U.WindowsClient.Teach.LaEntregaDeLaLeccion");
+        var m = t?.GetMethod("Juzgar", new[] { typeof(bool), typeof(int), typeof(int) });
+        Debe(t != null && m != null,
+            "todavía no existe «Teach.LaEntregaDeLaLeccion.Juzgar» (fase 2 de la spec 013). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || m == null) return;
+
+        (bool ok, string motivo) J(bool mp4, int cuadros, int eventos)
+        {
+            var r = m.Invoke(null, new object[] { mp4, cuadros, eventos })!;
+            return ((bool)Prop(r, "Entregable")!, (string)Prop(r, "Motivo")!);
+        }
+        var sinMp4 = J(false, 120, 8);
+        Debe(!sinMp4.ok && sinMp4.motivo.Contains("mp4"), $"sin mp4 no se entrega, y el motivo lo dice ({sinMp4.motivo})");
+        var sinCuadros = J(true, 0, 8);
+        Debe(!sinCuadros.ok && sinCuadros.motivo.Contains("cuadro"), $"sin cuadros no se entrega: el piloto describiría lo que imagina ({sinCuadros.motivo})");
+        var sinEventos = J(true, 120, 0);
+        Debe(!sinEventos.ok, "sin un solo clic ni paso no hay lección que entregar");
+        var entera = J(true, 120, 8);
+        Debe(entera.ok && entera.motivo.Contains("8") && entera.motivo.Contains("120"), $"entera, se entrega y se cuenta ({entera.motivo})");
+        Debe(!string.IsNullOrWhiteSpace(sinMp4.motivo) && !string.IsNullOrWhiteSpace(sinCuadros.motivo), "el motivo nunca va vacío: una compuerta muda se aprende a saltar");
+
+        var disco = Capacidad("U.WindowsClient.Teach.LeccionEnDisco");
+        Debe(disco?.GetMethod("Guardar") != null && disco?.GetMethod("Cargar") != null && disco?.GetMethod("Ultima") != null,
+            "y hay un solo sitio que escribe y lee la lección en disco (LeccionEnDisco.Guardar/Cargar/Ultima)");
+    }
+
+    private static void ElMensajeDelPilotoEsUnTutorialEnOrden()
+    {
+        var tt = TiposDeLaLeccion.Cargar();
+        var t = Capacidad("U.WindowsClient.Teach.MensajeDeLaLeccion");
+        var m = t?.GetMethod("Armar");
+        var lado = t?.GetField("LadoMaximoPx");
+        var anchoCamara = Capacidad("U.WindowsClient.Teach.CamaraDeCuadros")?.GetField("AnchoMaximo");
+        Debe(tt != null && m != null && lado != null && anchoCamara != null,
+            "todavía no existe «Teach.MensajeDeLaLeccion.Armar» (fase 3 de la spec 013). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tt == null || m == null || lado == null || anchoCamara == null) return;
+
+        Debe((int)lado.GetValue(null)! == 2000 && (int)anchoCamara.GetValue(null)! <= 2000,
+            "el tope es 2000 px de lado (con más de 20 imágenes la API rechaza la petición entera si una pasa) y la cámara ya graba por debajo");
+
+        var cuadros = ListaDe(tt.CuadroLeccion);
+        cuadros.Add(Nuevo(tt.CuadroLeccion, 800L, "a1.jpg", 10, 20, 1280, 720));
+        cuadros.Add(Nuevo(tt.CuadroLeccion, 1900L, "d1.jpg", 10, 20, 1280, 720));
+        cuadros.Add(Nuevo(tt.CuadroLeccion, 4800L, "a2.jpg", 30, 40, 1280, 720));
+        cuadros.Add(Nuevo(tt.CuadroLeccion, 5900L, "d2.jpg", 30, 40, 1280, 720));
+        cuadros.Add(Nuevo(tt.CuadroLeccion, 8800L, "a3.jpg", 50, 60, 4000, 2250)); // demasiado grande
+        cuadros.Add(Nuevo(tt.CuadroLeccion, 9900L, "d3.jpg", 50, 60, 1280, 720));
+        var eventos = ListaDe(tt.Evento);
+        eventos.Add(tt.Evento_(1, 1000, "clic", 10, 20, "wnd[0]/usr/cntl/shell", "", "sapgui://B", "a1.jpg", "d1.jpg", new[] { "aquí entramos" }));
+        eventos.Add(tt.Evento_(2, 5000, "clic", 30, 40, "", "", "sapgui://B", "a2.jpg", "d2.jpg", Array.Empty<string>()));
+        eventos.Add(tt.Evento_(3, 9000, "clic", 50, 60, "", "", "sapgui://C", "a3.jpg", "d3.jpg", Array.Empty<string>()));
+        var frases = ListaDe(tt.Frase); frases.Add(Nuevo(tt.Frase, "aquí entramos", 1200L));
+        var leccion = tt.Leccion_("sapgui://A", "sapgui://C", eventos, cuadros, frases);
+
+        var bloques = ((System.Collections.IEnumerable)m.Invoke(null, new object[] { leccion, 60 })!).Cast<object>().ToList();
+        string Tipo(object b) => (string)Prop(b, "Tipo")!; string Texto(object b) => (string)Prop(b, "Texto")!; string Ruta(object b) => (string)Prop(b, "Ruta")!;
+        Debe(bloques.Count > 0 && Tipo(bloques[0]) == "text" && Texto(bloques[0]).Contains("sapgui://A") && Texto(bloques[0]).Contains("sapgui://C"),
+            "el mensaje abre diciendo de dónde a dónde va la lección");
+        int i1 = bloques.FindIndex(b => Tipo(b) == "text" && Texto(b).StartsWith("t=00:01"));
+        Debe(i1 > 0, "cada evento lleva delante su etiqueta con la hora t=MM:SS");
+        if (i1 > 0)
+        {
+            string et = Texto(bloques[i1]);
+            Debe(et.Contains("clic 1 en (10,20)") && et.Contains("wnd[0]/usr/cntl/shell") && et.Contains("«aquí entramos»") && et.Contains("sapgui://B"),
+                $"…y la etiqueta dice el clic, el punto, el selector, lo dicho y la llegada ({et})");
+            Debe(i1 + 2 < bloques.Count && Tipo(bloques[i1 + 1]) == "image" && Ruta(bloques[i1 + 1]) == "a1.jpg"
+                 && Tipo(bloques[i1 + 2]) == "image" && Ruta(bloques[i1 + 2]) == "d1.jpg",
+                "detrás de la etiqueta van sus dos cuadros, antes y después, en ese orden");
+        }
+        var imagenes = bloques.Where(b => Tipo(b) == "image").Select(Ruta).ToList();
+        Debe(!imagenes.Contains("a3.jpg") && imagenes.Contains("d3.jpg"),
+            "un cuadro de 4000 px no viaja: la petición entera se rechazaría; el resto del evento sí viaja");
+        int iT = bloques.FindIndex(b => Tipo(b) == "text" && Texto(b).Contains("TRANSCRIPCIÓN"));
+        Debe(iT == bloques.Count - 1 && Texto(bloques[iT]).Contains("[00:01] aquí entramos"),
+            "la transcripción completa con hora cierra el mensaje");
+
+        // EL PRESUPUESTO: con sitio para 3 cuadros de 5, se van primero los de después que repiten
+        // pantalla (d2 llega a la misma «sapgui://B» que d1) y NUNCA el de antes con selector (a1).
+        var recortado = ((System.Collections.IEnumerable)m.Invoke(null, new object[] { leccion, 3 })!).Cast<object>().Where(b => Tipo(b) == "image").Select(Ruta).ToList();
+        Debe(recortado.Count <= 3, $"con presupuesto 3 viajan como mucho 3 cuadros (viajaron {recortado.Count})");
+        Debe(recortado.Contains("a1.jpg"), "el de antes del clic con selector NUNCA se recorta: es el que enseña qué se tocó");
+        Debe(!recortado.Contains("d2.jpg"), "y el primero en irse es el de después que repite una pantalla ya mostrada");
+    }
+
+    private static void ElPilotoTieneUnaCajaConManos()
+    {
+        // UNA SOLA CAJA, y no dos. La primera versión separaba «entender sin manos» de «hacer», por
+        // analogía con el aprendiz de la 138. En la primera corrida real (2026-09-06) el piloto abrió
+        // SAP mientras «entendía», y el dueño lo vio: «abrir SAP no fue acertado? yo creo que sí».
+        // Lo era, y por un hecho del código: un recuerdo se cuelga de (pantalla, selector), así que
+        // entender sin poder ir a la pantalla no puede colgar ni un recuerdo bien puesto.
+        var t = Capacidad("U.WindowsClient.Piloto.CajasDelPiloto");
+        var caja = t?.GetMethod("Caja"); var prohibidas = t?.GetMethod("Prohibidas");
+        Debe(t != null && caja != null && prohibidas != null,
+            "todavía no existe «Piloto.CajasDelPiloto.Caja/Prohibidas» (fase 3 de la spec 013). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || caja == null || prohibidas == null) return;
+
+        var todas = new[] { "map_where_am_i", "map_go_to", "map_take", "map_type", "map_unblock", "map_open_app", "map_what_i_see",
+            "map_pointing_at", "map_show", "map_shot", "map_scroll", "map_esto_es", "map_recuerdos", "map_batch", "map_ahead",
+            "map_skills", "map_skill_run", "file_open", "voz_decir", "voz_preguntar", "leccion_llegue", "leccion_guardar_skill" };
+        var C = ((IEnumerable<string>)caja.Invoke(null, new object[] { todas })!).ToList();
+        var P = ((IEnumerable<string>)prohibidas.Invoke(null, new object[] { todas })!).ToList();
+        bool Tiene(List<string> l, string n) => l.Any(x => x.EndsWith("__" + n));
+
+        foreach (var mano in new[] { "map_take", "map_type", "map_go_to", "map_scroll", "map_open_app", "map_unblock" })
+            Debe(Tiene(C, mano), $"las manos están desde el principio: «{mano}» — abrir SAP para llegar a donde vive el elemento ES entender");
+        foreach (var ojo in new[] { "map_esto_es", "map_recuerdos", "map_what_i_see", "map_where_am_i", "voz_decir", "voz_preguntar", "leccion_llegue", "leccion_guardar_skill" })
+            Debe(Tiene(C, ojo), $"y los ojos, la voz y el juez también: «{ojo}»");
+        Debe(Tiene(C, "ver_momento") && Tiene(C, "ver_alrededor"), "y mirar cualquier momento de la demo");
+        foreach (var tanda in new[] { "map_batch", "map_skill_run" })
+        {
+            Debe(!Tiene(C, tanda), $"lo que va en tanda no se ofrece: «{tanda}» — comprobar es de uno en uno con juez en medio");
+            // OFRECER MENOS NO ES PROHIBIR: el Agent SDK busca herramientas por su cuenta y lo que no
+            // está en la lista se encuentra igual (medido el 2026-09-06: llamó lo que no se le ofreció).
+            Debe(Tiene(P, tanda), $"…y además se PROHÍBE por su nombre: «{tanda}»");
+        }
+        Debe(P.Count == 2, $"y no se prohíbe nada más: {P.Count} prohibida(s), tenían que ser 2");
+        Debe(C.All(x => x.StartsWith("mcp__")) && P.All(x => x.StartsWith("mcp__")), "los nombres van como los ve el Agent SDK: mcp__<servidor>__<herramienta>");
+    }
+
+    private static void LaAppJuzgaCadaLlegada()
+    {
+        var tt = TiposDeLaLeccion.Cargar();
+        var t = Capacidad("U.WindowsClient.Piloto.RegistroDeLaComprobacion");
+        Debe(tt != null && t != null && t.GetMethod("Llegue") != null && t.GetMethod("Final") != null && t.GetMethod("EventosQueNavegan") != null,
+            "todavía no existe «Piloto.RegistroDeLaComprobacion» (fase 4 de la spec 013). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tt == null || t == null) return;
+
+        // Cuatro eventos: el 1 y el 3 navegan; el 2 se queda en la misma pantalla; el 4 no tiene llegada.
+        var eventos = ListaDe(tt.Evento);
+        eventos.Add(tt.Evento_(1, 1000, "clic", 1, 1, "s1", "", "sapgui://B", "", "", Array.Empty<string>()));
+        eventos.Add(tt.Evento_(2, 2000, "clic", 2, 2, "s2", "", "sapgui://B", "", "", Array.Empty<string>()));
+        eventos.Add(tt.Evento_(3, 3000, "clic", 3, 3, "s3", "", "sapgui://C", "", "", Array.Empty<string>()));
+        eventos.Add(tt.Evento_(4, 4000, "clic", 4, 4, "s4", "", "", "", "", Array.Empty<string>()));
+        var leccion = tt.Leccion_("sapgui://A", "sapgui://C", eventos, ListaDe(tt.CuadroLeccion));
+
+        var navegan = (System.Collections.IList)t.GetMethod("EventosQueNavegan")!.Invoke(null, new object[] { leccion })!;
+        Debe(navegan.Count == 2, $"el TOTAL es el plan: los eventos que navegan son 2 (salieron {navegan.Count}); el que se queda en la misma pantalla y el sin llegada no cuentan");
+
+        var registro = Nuevo(t, leccion);
+        object Llegue(int n, string donde) => t.GetMethod("Llegue")!.Invoke(registro, new object[] { n, donde })!;
+        object Final() => t.GetMethod("Final")!.Invoke(registro, null)!;
+
+        var v1 = Llegue(1, "sapgui://X");
+        Debe(!(bool)Prop(v1, "Aterrizo")! && ((string)Prop(v1, "Motivo")!).Contains("sapgui://B") && ((string)Prop(v1, "Motivo")!).Contains("sapgui://X"),
+            "declarar «llegué» en otra pantalla NO aterriza, y el motivo nombra las dos pantallas: el veredicto lo da la app, no el modelo");
+        var f0 = Final();
+        Debe(!(bool)Prop(f0, "Comprobada")!, "con un evento fallido la comprobación NO certifica");
+
+        Llegue(1, "sapgui://B");
+        Llegue(2, "sapgui://B"); // el 2 no navega: aterriza, pero no cuenta en el plan
+        int hechos = (int)t.GetProperty("Hechos")!.GetValue(registro)!;
+        Debe(hechos == 1, $"UN solo denominador: con el 1 y el 2 aterrizados, hechos = 1 porque el 2 no está en el plan (salió {hechos}; la primera prueba real dijo «5/2»)");
+        var f1 = Final();
+        Debe(!(bool)Prop(f1, "Comprobada")! && ((string)Prop(f1, "Motivo")!).Contains("1 de 2"),
+            $"1 de 2 aterrizados: sigue sin comprobar y lo dice con números ({Prop(f1, "Motivo")})");
+        var v3 = Llegue(3, "sapgui://C");
+        Debe((bool)Prop(v3, "Aterrizo")!, "el evento 3 aterriza cuando la pantalla de ahora ES la grabada");
+        var f2 = Final();
+        Debe((bool)Prop(f2, "Comprobada")!, $"con los 2 que navegan aterrizados, COMPROBADA ({Prop(f2, "Motivo")})");
+        var v4 = Llegue(4, "sapgui://C");
+        Debe(!(bool)Prop(v4, "Aterrizo")! && ((string)Prop(v4, "Motivo")!).Contains("no tiene llegada"),
+            "un evento sin llegada grabada no se puede juzgar, y se dice en vez de darlo por bueno");
+        Debe((bool)Prop(Final(), "Comprobada")!, "…y no resta: no estaba en el plan");
+    }
+
+    private static void LaSkillNaceDeLoVerificado()
+    {
+        var tt = TiposDeLaLeccion.Cargar();
+        var t = Capacidad("U.WindowsClient.Piloto.SkillDeLoVerificado");
+        var m = t?.GetMethod("Empaquetar");
+        Debe(tt != null && m != null,
+            "todavía no existe «Piloto.SkillDeLoVerificado.Empaquetar» (fase 5 de la spec 013). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tt == null || m == null) return;
+
+        var eventos = ListaDe(tt.Evento);
+        eventos.Add(tt.Evento_(1, 1000, "clic", 1, 1, "wnd[0]/tbar[0]/okcd", "nwp1", "sapgui://B", "", "", new[] { "escribimos nwp1" }));
+        eventos.Add(tt.Evento_(2, 2000, "clic", 2, 2, "wnd[0]/usr/cntl/shell", "", "sapgui://C", "", "", Array.Empty<string>()));
+        eventos.Add(tt.Evento_(3, 3000, "clic", 3, 3, "wnd[0]/usr/btn", "", "sapgui://D", "", "", Array.Empty<string>()));
+        // Y uno con PUERTA y sin selector, como los clics de árbol que resuelve el vigía por nombre.
+        eventos.Add(tt.Evento_(4, 4000, "clic", 4, 4, "", "", "sapgui://E", "", "", Array.Empty<string>(), etiqueta: "Urgencias Adultos/Triage"));
+        var leccion = tt.Leccion_("sapgui://A", "sapgui://E", eventos, ListaDe(tt.CuadroLeccion));
+
+        var veredictos = ListaDe(tt.Veredicto);
+        veredictos.Add(Nuevo(tt.Veredicto, 1, true, "sapgui://B", "sapgui://B", "aterrizó"));
+        veredictos.Add(Nuevo(tt.Veredicto, 2, true, "sapgui://C", "sapgui://C-real", "aterrizó")); // la real difiere de la grabada
+        veredictos.Add(Nuevo(tt.Veredicto, 3, false, "sapgui://D", "sapgui://C-real", "había que llegar a D"));
+        veredictos.Add(Nuevo(tt.Veredicto, 4, true, "sapgui://E", "sapgui://E", "aterrizó"));
+
+        var skill = m.Invoke(null, new object[] { leccion, veredictos, "Abrir triage", "cuando haya que abrir el triage" });
+        Debe(skill != null, "con pasos verificados hay skill");
+        if (skill == null) return;
+        var pasos = (System.Collections.IList)Prop(skill, "Pasos")!;
+        Debe(pasos.Count == 3, $"solo entran los pasos que ATERRIZARON: 3 de 4 (salieron {pasos.Count}); el que no aterrizó no entra ni marcado");
+        if (pasos.Count == 3)
+        {
+            Debe((string)Prop(pasos[2]!, "Exit")! == "Urgencias Adultos/Triage",
+                "la identidad de un paso es la PUERTA por su nombre cuando la hay: es lo que map_take y el batch entienden "
+                + "(segunda prueba real: un evento aterrizó con puerta y sin selector, y la skill no se guardó)");
+            Debe((string)Prop(pasos[0]!, "Exit")! == "wnd[0]/tbar[0]/okcd" && (string)Prop(pasos[0]!, "Texto")! == "nwp1" && (string)Prop(pasos[0]!, "Llegada")! == "sapgui://B",
+                "el paso lleva el selector, lo tecleado y la llegada");
+            Debe((string)Prop(pasos[1]!, "Llegada")! == "sapgui://C-real",
+                "y la llegada es la REAL medida al comprobar, no la grabada en la demo");
+        }
+        Debe(!(bool)Prop(skill, "Comprobada")!, "como no todos los que navegan aterrizaron, la skill queda SIN comprobar");
+        Debe((string)Prop(skill, "Nombre")! == "Abrir triage" && (string)Prop(skill, "DondeEmpieza")! == "sapgui://A",
+            "con el nombre que le puso el piloto y el punto de partida de la lección");
+
+        var ninguno = ListaDe(tt.Veredicto);
+        Debe(m.Invoke(null, new object[] { leccion, ninguno, "Abrir triage", "" }) == null,
+            "sin nada verificado no hay skill: null, no una skill vacía que parezca funcionar");
+        var todos = ListaDe(tt.Veredicto);
+        todos.Add(Nuevo(tt.Veredicto, 1, true, "sapgui://B", "sapgui://B", "")); todos.Add(Nuevo(tt.Veredicto, 2, true, "sapgui://C", "sapgui://C", "")); todos.Add(Nuevo(tt.Veredicto, 3, true, "sapgui://D", "sapgui://D", "")); todos.Add(Nuevo(tt.Veredicto, 4, true, "sapgui://E", "sapgui://E", ""));
+        var completa = m.Invoke(null, new object[] { leccion, todos, "Abrir triage", "" });
+        Debe(completa != null && (bool)Prop(completa, "Comprobada")! && (string)Prop(completa, "DondeTermina")! == "sapgui://E",
+            "con todos aterrizados, la skill sale COMPROBADA y termina donde terminó de verdad");
+    }
+
+    private static void LaLlegadaLaDiceElTerreno()
+    {
+        // TRES SOLUCIONES A LO MISMO había en el repo (2026-09-07): el terreno vivo aprende aristas
+        // desde agosto, el grabador de pasos sella la superficie del paso siguiente, y la lección
+        // calculaba la suya —con reloj, luego con «la pantalla del clic siguiente»— y la grabó mal
+        // dos veces mientras el terreno la aprendía bien en la misma demo. El dueño: «una solución
+        // sólida estándar en vez de múltiples soluciones a lo mismo». La estándar es el terreno.
+        var tt = TiposDeLaLeccion.Cargar();
+        var m = Capacidad("U.WindowsClient.Teach.ArmarLaLeccion")?.GetMethod("Llegadas");
+        Debe(tt != null && m != null,
+            "todavía no existe «Teach.ArmarLaLeccion.Llegadas(clics, dondeTermino, terreno)» (spec 013, promesa 178). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tt == null || m == null) return;
+
+        object ClicEn(long hora, string pantalla, string sel = "", string etq = "", bool deU = false) => Nuevo(tt.Clic, hora, 10, 10, "", sel, etq, "", deU, pantalla);
+        var clics = ListaDe(tt.Clic);
+        clics.Add(ClicEn(1000, "sapgui://S", "shell#node=F00002", "Favoritos/IS-H: Pto.tbjo.clínico")); // 1: primer toque del favorito, no navega
+        clics.Add(ClicEn(5000, "sapgui://S", "shell#node=F00002", "Favoritos/IS-H: Pto.tbjo.clínico")); // 2: el que navega a NWP1
+        clics.Add(ClicEn(20000, "sapgui://NWP1/0100", "", "Urgencias Adultos/Triage"));               // 3: sin selector, con puerta
+        clics.Add(ClicEn(25000, "uia://claude", deU: true));                                            // clic sobre Ü
+        clics.Add(ClicEn(30000, "sapgui://NWP1/0100/ssub:Triage", "", "fila 1"));                       // 4: el terreno no aprendió nada
+
+        // EL TERRENO DE JUGUETE: lo que MapaVivo habría aprendido en esa demo.
+        Func<string, string, string, string> terreno = (desde, sel, etq) =>
+            desde == "sapgui://S" && sel == "shell#node=F00002" ? "sapgui://NWP1/0100"
+            : desde == "sapgui://NWP1/0100" && etq == "Urgencias Adultos/Triage" ? "sapgui://NWP1/0100/ssub:Triage"
+            : "";
+        var salida = ((System.Collections.IEnumerable)m.Invoke(null, new object[] { clics, "sapgui://NWP1/0100/ssub:Triage/paciente", terreno })!).Cast<object>().ToList();
+        string L(int i) => (string)Prop(salida[i], "Llegada")!;
+
+        Debe(L(1) == "sapgui://NWP1/0100", $"la llegada del clic al favorito es la arista del terreno, por selector (salió «{L(1)}»)");
+        Debe(L(2) == "sapgui://NWP1/0100/ssub:Triage", $"y la del nodo Triage, por el nombre de la puerta cuando el vigía no trajo selector (salió «{L(2)}»)");
+        Debe(L(0) == "sapgui://NWP1/0100", "el primer toque del favorito recibe la MISMA arista: el terreno sabe a dónde lleva esa puerta, no cuántas veces se tocó");
+        Debe(L(3) == "", "el clic sobre Ü no recibe llegada");
+        Debe(L(4) == "sapgui://NWP1/0100/ssub:Triage/paciente", $"el último clic, del que el terreno no aprendió nada, tiene de respaldo donde acabó la demo: un hecho leído al parar (salió «{L(4)}»)");
+
+        clics.Add(ClicEn(40000, "sapgui://X", "", "otra"));
+        var conHueco = ((System.Collections.IEnumerable)m.Invoke(null, new object[] { clics, "sapgui://fin", terreno })!).Cast<object>().ToList();
+        Debe((string)Prop(conHueco[4], "Llegada")! == "", "un clic de en medio del que el terreno no aprendió nada queda VACÍO: no se le inventa la pantalla del clic siguiente ni ninguna otra");
+        var sinTerreno = ((System.Collections.IEnumerable)m.Invoke(null, new object?[] { clics, "sapgui://fin", null })!).Cast<object>().ToList();
+        Debe((string)Prop(sinTerreno[1], "Llegada")! == "" && (string)Prop(sinTerreno[5], "Llegada")! == "sapgui://fin",
+            "sin terreno a mano, todo queda vacío salvo el último: la lección no calcula llegadas por su cuenta");
+    }
+
+    private static void ComprobarEsUnPlanQueLaAppRecorre()
+    {
+        // POR QUÉ UN PLAN (2026-09-07): 333 s y $4,06, luego 114 s y $1,75, con el modelo dando cada
+        // paso. El batch hizo la misma ruta en 25 s. El valor del modelo está en interpretar; el «de
+        // uno en uno» se conserva DENTRO del recorrido de la app (voz, recuerdo, paso, juez).
+        var t = Capacidad("U.WindowsClient.Piloto.PlanDeComprobacion");
+        var tPaso = Capacidad("U.WindowsClient.Piloto.PasoDelPlan");
+        var leer = t?.GetMethod("Leer"); var relato = t?.GetMethod("Relato");
+        Debe(t != null && tPaso != null && leer != null && relato != null,
+            "todavía no existe «Piloto.PlanDeComprobacion.Leer/Relato» (spec 013, promesa 179). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || tPaso == null || leer == null || relato == null) return;
+
+        var ok = leer.Invoke(null, new object[] { "[{\"n\":1,\"exit\":\"comando\",\"text\":\"nwp1\",\"tecla\":\"enter\",\"recuerdo\":\"el campo de comandos\",\"decir\":\"voy a la transacción\"},{\"n\":3,\"exit\":\"Urgencias Adultos/Triage\"}]" })!;
+        Debe((string)Prop(ok, "Error")! == "", "un plan bien formado se lee sin error");
+        var pasos = (System.Collections.IList)Prop(ok, "Pasos")!;
+        Debe(pasos.Count == 2, $"y trae sus pasos ({pasos.Count})");
+        if (pasos.Count == 2)
+        {
+            var p1 = pasos[0]!;
+            Debe((int)Prop(p1, "N")! == 1 && (string)Prop(p1, "Exit")! == "comando" && (string)Prop(p1, "Texto")! == "nwp1"
+                 && (string)Prop(p1, "Tecla")! == "enter" && (string)Prop(p1, "Recuerdo")! == "el campo de comandos" && (string)Prop(p1, "Decir")! == "voy a la transacción",
+                "cada paso lleva el evento que cumple, la puerta, lo que teclea, el recuerdo y qué decir");
+            Debe((int)Prop(pasos[1]!, "N")! == 3 && (string)Prop(pasos[1]!, "Recuerdo")! == "" && (string)Prop(pasos[1]!, "Decir")! == "",
+                "el recuerdo y el decir son opcionales: un paso puede ser solo la puerta");
+        }
+        var mal = leer.Invoke(null, new object[] { "[{\"n\":2,\"recuerdo\":\"algo\"}]" })!;
+        Debe(((string)Prop(mal, "Error")!).Contains("paso 1"), "un paso sin puerta, texto ni tecla es un error que nombra el paso");
+        Debe(((string)Prop(leer.Invoke(null, new object[] { "{\"exit\":\"x\"}" })!, "Error")!).Length > 0, "un objeto suelto no es una lista de pasos");
+        Debe(((string)Prop(leer.Invoke(null, new object[] { "" })!, "Error")!).Contains("pasos"), "sin plan, se dice cómo se pide");
+
+        string R(int hechos, int total, int paradoEn, string porQue, string donde, int at, int nav)
+            => (string)relato.Invoke(null, new object[] { hechos, total, paradoEn, porQue, donde, at, nav })!;
+        string paro = R(2, 5, 3, "«Triage» lo conozco aquí pero AHORA no lo veo.", "sapgui://X/0100", 1, 3);
+        Debe(paro.Contains("HICE 2 DE 5") && paro.Contains("PARÉ en el paso 3") && paro.Contains("AHORA no lo veo") && paro.Contains("sapgui://X/0100"),
+            $"si paró, el relato dice cuántos hizo, en cuál paró, por qué y dónde quedó ({paro})");
+        Debe(paro.Contains("Sigue tú") && paro.Contains("leccion_llegue"),
+            "…y le pasa las manos al piloto desde ese paso, con el juez de siempre");
+        Debe(paro.Contains("1 de 3"), "y el juez habla con UN denominador: los eventos que navegan");
+        string fin = R(5, 5, 0, "", "sapgui://X/fin", 3, 3);
+        Debe(fin.Contains("HICE LOS 5 PASO(S)") && fin.Contains("3 de 3") && fin.Contains("leccion_guardar_skill"),
+            $"si acabó, el relato lo dice con la cuenta del juez y qué hacer después ({fin})");
+    }
+
+    private static void CualquierMomentoDeLaDemoSePuedeMirar()
+    {
+        var tt = TiposDeLaLeccion.Cargar();
+        var t = Capacidad("U.WindowsClient.Teach.CuadroDelMomento");
+        var m = t?.GetMethod("Elegir");
+        Debe(tt != null && m != null,
+            "todavía no existe «Teach.CuadroDelMomento.Elegir» (fase 3 de la spec 013). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tt == null || m == null) return;
+
+        var cuadros = ListaDe(tt.CuadroLeccion);
+        foreach (long h in new long[] { 0, 250, 500, 750, 1000, 33_500, 33_750 })
+            cuadros.Add(Nuevo(tt.CuadroLeccion, h, $"c{h}.jpg", (int)(h / 10), 7, 1280, 720));
+
+        object? E(long ms) => m.Invoke(null, new object[] { cuadros, ms });
+        Debe(E(33_600) != null && (long)Prop(E(33_600)!, "HoraMs")! == 33_500,
+            "pedir el segundo 33,6 da el cuadro más cercano (33,5), aunque ahí nadie hiciera clic");
+        Debe((int)Prop(E(33_600)!, "CursorX")! == 3350, "…y trae dónde estaba el ratón: eso es lo que se señalaba");
+        Debe(E(100_000) != null && (long)Prop(E(100_000)!, "HoraMs")! == 33_750,
+            "pedir más allá del final da el último cuadro, no un error");
+        Debe(m.Invoke(null, new object[] { ListaDe(tt.CuadroLeccion), 5_000L }) == null,
+            "sin cuadros no hay nada que mirar: null, y quien pregunta lo dice");
+    }
+
+    // ── Spec 013: la lección que Claude ve ──────────────────────────────────────────────────
+
+    /// <summary>Un cuadro de la cámara, construido por reflexión: (horaMs, ruta, huella).</summary>
+    private static object Cuadro(Type t, long horaMs, ulong huella) =>
+        Activator.CreateInstance(t, new object[] { horaMs, $"cuadro-{horaMs}.png", huella })!;
+
+    private static void ElCuadroDeAntesSeEligeDelPasado()
+    {
+        var tCuadro = Capacidad("U.WindowsClient.Teach.Cuadro");
+        var t = Capacidad("U.WindowsClient.Teach.CuadroDeAntes");
+        var m = t?.GetMethod("Elegir");
+        var margen = t?.GetField("MargenMs");
+        Debe(tCuadro != null && t != null && m != null && margen != null,
+            "todavía no existe «Teach.CuadroDeAntes.Elegir» (fase 1 de la spec 013). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tCuadro == null || t == null || m == null || margen == null) return;
+
+        int margenMs = (int)margen.GetValue(null)!;
+        Debe(margenMs > 0,
+            "el margen es positivo: un cuadro tomado en el MISMO milisegundo del clic no puede "
+            + "demostrar que empezó a copiarse antes de que el ratón bajara");
+
+        var lista = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(tCuadro))!;
+        foreach (var h in new long[] { 600, 850, 1010, 1300 }) lista.Add(Cuadro(tCuadro, h, (ulong)h));
+        object? Elige(object cuadros, long clic) => m.Invoke(null, new object[] { cuadros, clic, margenMs });
+        long Hora(object c) => (long)tCuadro.GetProperty("HoraMs")!.GetValue(c)!;
+
+        // El clic fue en 1000. El cuadro de 1010 ya puede llevar el efecto; el de 850 no.
+        var antes = Elige(lista, 1000);
+        Debe(antes != null && Hora(antes) == 850,
+            $"con cuadros en 600, 850, 1010 y 1300 y el clic en 1000, el de antes es el de 850 "
+            + $"(salió {(antes == null ? "null" : Hora(antes).ToString())})");
+
+        // Y si el margen se lo come, retrocede: nunca avanza.
+        var conMargenGrande = m.Invoke(null, new object[] { lista, 1000L, 200 });
+        Debe(conMargenGrande != null && Hora(conMargenGrande) == 600,
+            "con un margen de 200 ms el de 850 ya no vale y se retrocede al de 600: el margen "
+            + "solo puede llevar hacia atrás");
+
+        // NADA ANTES → NULL, no el más cercano de después. Un cuadro de después disfrazado de antes
+        // es exactamente la mentira que esto viene a cerrar.
+        var soloDespues = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(tCuadro))!;
+        foreach (var h in new long[] { 1000, 1010, 1300 }) soloDespues.Add(Cuadro(tCuadro, h, (ulong)h));
+        Debe(Elige(soloDespues, 1000) == null,
+            "si todos los cuadros son del clic o posteriores, no hay cuadro de antes: null, y no "
+            + "«el más cercano»");
+        Debe(Elige(Activator.CreateInstance(typeof(List<>).MakeGenericType(tCuadro))!, 1000) == null,
+            "y sin cuadros tampoco");
+    }
+
+    private static void ElCuadroDeDespuesEsElPrimeroAsentado()
+    {
+        var tCuadro = Capacidad("U.WindowsClient.Teach.Cuadro");
+        var t = Capacidad("U.WindowsClient.Teach.CuadroDeDespues");
+        var m = t?.GetMethod("Elegir");
+        var espera = t?.GetField("EsperaMinimaMs");
+        var techo = t?.GetField("TechoMs");
+        Debe(tCuadro != null && t != null && m != null && espera != null && techo != null,
+            "todavía no existe «Teach.CuadroDeDespues.Elegir» (fase 1 de la spec 013). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tCuadro == null || t == null || m == null || espera == null || techo == null) return;
+
+        int esperaMs = (int)espera.GetValue(null)!, techoMs = (int)techo.GetValue(null)!;
+        Debe(esperaMs > 0 && techoMs > esperaMs,
+            $"hay una espera mínima ({esperaMs}) y un techo por encima de ella ({techoMs}): sin "
+            + "espera se elegiría el cuadro en que SAP aún no contestó; sin techo, un reloj que no "
+            + "se asienta nunca dejaría al médico esperando para siempre");
+
+        long Hora(object c) => (long)tCuadro.GetProperty("HoraMs")!.GetValue(c)!;
+        object Lista(params (long h, ulong huella)[] cuadros)
+        {
+            var l = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(tCuadro))!;
+            foreach (var (h, huella) in cuadros) l.Add(Cuadro(tCuadro, h, huella));
+            return l;
+        }
+        (long hora, bool asentado)? Elige(object cuadros, long clic)
+        {
+            var r = m.Invoke(null, new object[] { cuadros, clic, 400, 2000 });
+            if (r == null) return null;
+            var tr = r.GetType();
+            var cuadro = tr.GetProperty("Cuadro")!.GetValue(r)!;
+            return (Hora(cuadro), (bool)tr.GetProperty("Asentado")!.GetValue(r)!);
+        }
+
+        // Clic en 1000. A los 1200 la pantalla vieja (A); 1450 en transición (B); en 1700 llegó la
+        // nueva (C) y en 1950 sigue igual (C): se asentó en 1700.
+        var r1 = Elige(Lista((1200, 1), (1450, 2), (1700, 3), (1950, 3), (2200, 3)), 1000);
+        Debe(r1 is { hora: 1700, asentado: true },
+            $"el de después es el de 1700, el primero que se repite pasado el clic más 400 ms "
+            + $"(salió {r1})");
+
+        // El de 1200 se repite con nadie y además cae antes de la espera mínima: no cuenta aunque
+        // fuera igual al siguiente.
+        var r2 = Elige(Lista((1200, 1), (1350, 1), (1700, 3), (1950, 3)), 1000);
+        Debe(r2 is { hora: 1700, asentado: true },
+            "dos cuadros iguales ANTES de la espera mínima no son «asentado»: la pantalla vieja "
+            + "también se repite consigo misma");
+
+        // NUNCA SE ASIENTA DENTRO DEL TECHO → el último dentro del techo, y se dice.
+        var r3 = Elige(Lista((1450, 2), (1700, 3), (1950, 4), (3100, 5), (3400, 5)), 1000);
+        Debe(r3 is { hora: 1950, asentado: false },
+            $"si no se asienta antes del techo (3000), se entrega el último de dentro (1950) con "
+            + $"asentado=false — y el par igual de 3100/3400 NO cuenta, está fuera del techo (salió {r3})");
+
+        Debe(Elige(Lista((1200, 1)), 1000) == null,
+            "sin ningún cuadro pasado el clic más la espera, no hay cuadro de después: null");
     }
 
     private static void SoltarlaEnElMuelleLaGuarda()
