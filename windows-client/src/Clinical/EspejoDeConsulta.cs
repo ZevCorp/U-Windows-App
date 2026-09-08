@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -97,6 +97,59 @@ public static class EspejoDeConsulta
             w.WriteEndArray();
 
             w.WriteNull("firma");
+            w.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    /// <summary>
+    /// LO QUE SE MANDA AL PORTAL CUANDO EL MÉDICO CORRIGE UNA NOTA YA GUARDADA. Promesa 193.
+    /// </summary>
+    /// <remarks>
+    /// SOLO VIAJA LO QUE CAMBIÓ: el id que identifica la fila, la nota, el resumen y el motivo que
+    /// sale de ella. Nada más.
+    ///
+    /// POR QUÉ NO SE REUTILIZA <see cref="Fila"/>. El upsert es `resolution=merge-duplicates`, o
+    /// sea un UPDATE cuando la fila ya está, y PostgREST escribe **solo las columnas del cuerpo**.
+    /// La fila del alta lleva `estado: "borrador"` y `firma: null`, así que usarla para corregir:
+    ///
+    ///   · Contra una consulta `aprobada` o `exportada` la para el trigger de la base
+    ///     (`CONSULTATION_IMMUTABLE`, migración 20260721000000) — pero el `PUT /note` de Graph ya
+    ///     habría pasado, y la MISMA consulta quedaría distinta según por dónde se mire, sin un
+    ///     error a la vista del médico. Aprendizaje nº10.
+    ///   · Contra una `revisada` no hay trigger que valga: la degradaría a borrador y se llevaría
+    ///     por delante el ciclo de revisión del portal, en silencio.
+    ///
+    /// Y TAMPOCO VAN `plantilla`, `fecha`, `especialidad` NI `tipo`, que el alta sí manda: aquí no
+    /// se conocen —una consulta abierta desde la lista se leyó del backend clínico, que no sabe de
+    /// esas columnas— y mandarlos a medias los sobrescribiría con lo que hubiera a mano. Una caja
+    /// que miente es peor que no tener caja (aprendizaje nº4).
+    ///
+    /// EL `transcript` TAMPOCO SE TOCA: es la evidencia de la que se derivó la nota, y corregir la
+    /// redacción no cambia lo que se dijo.
+    /// </remarks>
+    public static string FilaDeCorreccion(string encounterId, NotaClinica nota)
+    {
+        var buffer = new MemoryStream();
+        using (var w = new Utf8JsonWriter(buffer))
+        {
+            w.WriteStartObject();
+            w.WriteString("id", encounterId);
+            w.WriteString("resumen", nota.Resumen);
+            w.WriteString("motivo", Motivo(nota));
+
+            w.WriteStartArray("note");
+            foreach (var s in nota.Secciones)
+            {
+                w.WriteStartObject();
+                w.WriteString("id", s.Clave);
+                w.WriteString("titulo", s.Titulo);
+                w.WriteString("kind", "texto");
+                w.WriteString("texto", s.Contenido);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+
             w.WriteEndObject();
         }
         return Encoding.UTF8.GetString(buffer.ToArray());
