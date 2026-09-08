@@ -134,6 +134,27 @@ public sealed class SurfaceMapTools
     /// recuerdo» sin distinguirlos sería peor que no tener esto: el modelo no podría saber si algo
     /// es terreno conocido o una novedad.
     /// </summary>
+    /// <summary>
+    /// LAS PUERTAS DEL TERRENO QUE UIA NO NOMBRÓ. Promesa 183. Pura: dos listas, una respuesta.
+    /// </summary>
+    /// <remarks>
+    /// UIA ve el Pane opaco de SAP —botones y campos— pero NUNCA las filas de una rejilla ni las de
+    /// un árbol. El terreno sí las conoce (las lee por Scripting). Se añaden las que UIA no nombró
+    /// ya, por etiqueta, sin duplicar: el piloto tiene que ver «GIRALDO» para poder pedirlo por su
+    /// nombre, y map_take ya sabe seleccionarlo (2026-09-07, era la puerta invisible).
+    /// </remarks>
+    public static IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> FundirPuertas(
+        IEnumerable<string> loQueYaNombraUia,
+        IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> delTerreno)
+    {
+        var yaEstan = new HashSet<string>(loQueYaNombraUia ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var salida = new List<(string, string, string)>();
+        foreach (var p in delTerreno ?? Array.Empty<(string, string, string)>())
+            if (!string.IsNullOrWhiteSpace(p.Etiqueta) && yaEstan.Add(p.Etiqueta))
+                salida.Add(p);
+        return salida;
+    }
+
     private string LoQueVeo()
     {
         var loc = _where();
@@ -146,13 +167,33 @@ public sealed class SurfaceMapTools
                      && !e.ControlType.Equals("text", StringComparison.OrdinalIgnoreCase)
                      && !e.ControlType.Equals("image", StringComparison.OrdinalIgnoreCase))
             .ToList();
-        if (vivos.Count == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo";
+        // LAS PUERTAS DEL TERRENO, no solo lo que ve UIA (promesa 183). UIA ve el Pane opaco de SAP:
+        // botones y campos, pero NUNCA las filas de una rejilla ni las de un árbol. El piloto planeaba
+        // a ciegas sobre la lista de pacientes porque «GIRALDO» no salía aquí, aunque map_take SÍ sabía
+        // seleccionarlo. Se añaden las puertas vivas que el terreno conoce en esta pantalla, sin
+        // duplicar las que UIA ya nombró.
+        // Y LOS CAMPOS DEL DYNPRO por su etiqueta (promesa 188): UIA los lista por su nombre técnico
+        // («Y0000000-ZTXTTASIS»); la persona y el piloto los llaman «Presión Arterial».
+        var terreno = PuertasVivas?.Invoke(aqui) ?? Array.Empty<(string, string, string)>();
+        var candidatos = ConLaEtiquetaQueSeLee(terreno, CamposDeSapComoPuertas());
+        var delTerreno = FundirPuertas(vivos.Select(v => v.Label), candidatos);
+        // EL «NO VEO NADA» VA DESPUÉS DE MIRAR EN LOS TRES SITIOS (2026-09-08): con UIA en blanco
+        // —SAP recién delante, el lector aún sin leer— se contestaba «no veo ningún elemento» sin
+        // consultar el terreno ni el dynpro, que sí tenían 39 campos que contar.
+        if (vivos.Count == 0 && delTerreno.Count == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo";
 
+
+        int total = vivos.Count + delTerreno.Count;
         var sb = new System.Text.StringBuilder(
-            $"EN PANTALLA AHORA, en «{aqui}» ({vivos.Count} elemento(s)):" + "\n");
+            $"EN PANTALLA AHORA, en «{aqui}» ({total} elemento(s)):" + "\n");
+        // EL TOPE ERA 40 PUERTAS DE SAP y el triage tiene 39 campos más 21 botones (2026-09-08): los
+        // signos vitales quedaban fuera de la lista y el piloto no podía nombrarlos. Un formulario
+        // entero cabe en 160; lo que pase de ahí se dice.
         foreach (var el in vivos.Take(60))
             sb.AppendLine($"  «{el.Label}» ({el.ControlType})");
-        if (vivos.Count > 60) sb.AppendLine($"  …y {vivos.Count - 60} más");
+        foreach (var p in delTerreno.Take(160))
+            sb.AppendLine($"  «{p.Etiqueta}» ({p.Tipo})");
+        if (total > 220) sb.AppendLine($"  …y {total - 220} más");
         return sb.ToString();
     }
 
@@ -521,12 +562,13 @@ public sealed class SurfaceMapTools
         // imposible salvo con el cursor encima. El terreno SÍ los tiene, con su identidad
         // «sap:wnd[0]/usr/...», así que cuando Windows no encuentra lo que se nombra se le pregunta
         // al grafo por lo que hay VIVO aquí. Un empate no se adivina: lo dice ElCampoQueNombras.
-        else if (sobre.Length > 0 && PuertasVivas != null
-                 && Navigation.ElCampoQueNombras.Resolver(sobre, PuertasVivas(donde)) is { } enElTerreno)
+        else if (sobre.Length > 0
+                 && LoQueSeNombra(sobre, PuertasVivas?.Invoke(donde), CamposDeSap?.Invoke()) is { } nombrado)
         {
-            selector = enElTerreno.Selector;
-            nombre = enElTerreno.Etiqueta;
-            tipo = enElTerreno.Tipo;
+            // …o un campo del dynpro por su etiqueta (promesa 188): «Presión Arterial» ya se cuelga.
+            selector = nombrado.Selector;
+            nombre = nombrado.Etiqueta;
+            tipo = nombrado.Tipo;
         }
         else if (sobre.Length > 0)
         {
@@ -932,8 +974,18 @@ public sealed class SurfaceMapTools
                         // ruta, se renombra un automation id— y el elemento seguir ahí con su nombre.
                         ?? _lector.Elements.FirstOrDefault(
                             e => e.Label.Equals(etiqueta, StringComparison.OrdinalIgnoreCase));
-            if (visto == null) return false;
-
+            if (visto == null)
+            {
+                // UN CAMPO DE SAP NOMBRADO POR SU ETIQUETA (promesa 188): «Presión Arterial» no es un
+                // selector ni lo ve UIA, pero el dynpro lo conoce. Se resuelve a su selector sap: y se
+                // señala por la caja que SAP declara, que es la rama de arriba.
+                string donde = _where()?.Id ?? "";
+                if (donde.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)
+                    && LoQueSeNombra(etiqueta.Length > 0 ? etiqueta : selector, PuertasVivas?.Invoke(donde), CamposDeSap?.Invoke()) is { } enSap
+                    && U.Graph.Surfaces.SapSelector.Owns(enSap.Selector))
+                    return IluminarUno(enSap.Selector, etiqueta.Length > 0 ? etiqueta : enSap.Etiqueta);
+                return false;
+            }
             Ui.Senalador.Senalar(visto.Bounds, etiqueta);
             return true;
         }
@@ -1467,6 +1519,15 @@ public sealed class SurfaceMapTools
     public Func<IReadOnlyList<Navigation.RecorrerSegunElNucleo.Paso>,
         Navigation.RecorrerSegunElNucleo.Resultado>? RecorrerPorElNucleo { get; set; }
 
+    /// <summary>
+    /// DAR UN PASO CON SU COREOGRAFÍA (promesa 191): señalar, decir, escribir el recuerdo, mostrar la
+    /// tarjeta, actuar, cerrar. (qué señalar, el paso para el ejecutor, el recuerdo, qué decir). Es la
+    /// misma función que recorre el plan; las manos del piloto pasan por aquí para que la
+    /// experiencia sea una sola.
+    /// </summary>
+    public Func<string, Navigation.RecorrerSegunElNucleo.Paso, string, string,
+        Navigation.RecorrerSegunElNucleo.Resultado>? DarUnPasoConCoreografia { get; set; }
+
     /// <summary>El terreno por delante (puerta, niveles) → la cuenta. T3: la consulta de la profundidad.</summary>
     public Func<string, string, string>? TerrenoPorElNucleo { get; set; }
 
@@ -1562,6 +1623,84 @@ public sealed class SurfaceMapTools
     public Func<string, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>>? PuertasVivas { get; set; }
 
     /// <summary>
+    /// LOS CAMPOS DEL DYNPRO DE AHORA, leídos por SAP (etiqueta, selector, tipo). Vacío fuera de SAP.
+    /// Es lo que hace que un campo se pueda NOMBRAR para colgarle un recuerdo, señalarlo o verlo en la
+    /// lista, con el mismo criterio que para escribir en él (promesa 188).
+    /// </summary>
+    public Func<IReadOnlyList<DetectedField>>? CamposDeSap { get; set; }
+
+    /// <summary>
+    /// LO QUE LA PERSONA NOMBRA DENTRO DE SAP, resuelto en UN solo sitio (promesa 188): primero las
+    /// puertas del terreno —tienen historia y tipo—, después los campos del dynpro por su etiqueta o
+    /// su nombre técnico, con el mismo resolutor que usa la mano para escribir
+    /// (<see cref="SapGuiSurface.ElCampoQueSeLlama"/>). Con dos iguales, nadie. Sin nada, null.
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ (2026-09-08, novena prueba): el piloto pidió un recuerdo en los 14 campos del triage y
+    /// la app rechazó 11 con «no veo nada que se llame Presión Arterial»: colgar un recuerdo y señalar
+    /// buscaban entre lo de UIA y las puertas del terreno, y un campo del dynpro no está en ninguna de
+    /// las dos. Escribir SÍ lo encontraba. Dos criterios para nombrar la misma cosa son un bug
+    /// esperando su turno; este es el único desde hoy.
+    /// </remarks>
+    public static (string Selector, string Etiqueta, string Tipo)? LoQueSeNombra(string nombre,
+        IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>? delTerreno,
+        IReadOnlyList<DetectedField>? camposDeSap)
+    {
+        if (string.IsNullOrWhiteSpace(nombre)) return null;
+        if (delTerreno != null && delTerreno.Count > 0)
+        {
+            // Por su selector exacto también: el plan a veces trae el selector en vez del nombre.
+            foreach (var p in delTerreno)
+                if (p.Selector.Length > 0 && p.Selector.Equals(nombre.Trim(), StringComparison.Ordinal)) return p;
+            if (Navigation.ElCampoQueNombras.Resolver(nombre, delTerreno) is { } enElTerreno) return enElTerreno;
+        }
+        var campo = SapGuiSurface.ElCampoQueSeLlama(camposDeSap ?? Array.Empty<DetectedField>(), nombre);
+        return campo == null ? null : (campo.Selector, campo.Label, campo.ControlType);
+    }
+
+    /// <summary>
+    /// LAS PUERTAS DEL TERRENO CON LA ETIQUETA QUE SE LEE. El terreno conoce un campo del dynpro por su
+    /// nombre técnico («Y0000000-ZTXTTASIS»); el dynpro lo conoce por lo que la persona lee («Presión
+    /// Arterial»). Mismo selector, mismo campo: se queda la puerta del terreno —con su tipo y su
+    /// historia— y la etiqueta que se lee. Los campos que el terreno no conoce se añaden.
+    /// </summary>
+    /// <remarks>
+    /// MEDIDO (2026-09-08): con la fusión por selector «a secas», map_what_i_see listaba 24 campos del
+    /// triage por su nombre técnico y ninguno por su etiqueta, y el piloto planea con las etiquetas
+    /// que la lección trae. Nombrar y listar tienen que hablar el mismo idioma.
+    /// </remarks>
+    public static IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> ConLaEtiquetaQueSeLee(
+        IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>? delTerreno,
+        IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>? camposDeSap)
+    {
+        var terreno = delTerreno ?? Array.Empty<(string, string, string)>();
+        var campos = camposDeSap ?? Array.Empty<(string, string, string)>();
+        var etiquetaPorSelector = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in campos)
+            if (c.Etiqueta.Length > 0) etiquetaPorSelector[U.Graph.Surfaces.SapSelector.Normalize(c.Selector)] = c.Etiqueta;
+
+        var salida = new List<(string, string, string)>();
+        var vistos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in terreno)
+        {
+            string clave = U.Graph.Surfaces.SapSelector.Normalize(p.Selector);
+            vistos.Add(clave);
+            salida.Add(etiquetaPorSelector.TryGetValue(clave, out var leida) ? (p.Selector, leida, p.Tipo) : p);
+        }
+        foreach (var c in campos)
+            if (!vistos.Contains(U.Graph.Surfaces.SapSelector.Normalize(c.Selector))) salida.Add(c);
+        return salida;
+    }
+
+    /// <summary>Los campos del dynpro como puertas, para fundirlos con lo del terreno.</summary>
+    private IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> CamposDeSapComoPuertas()
+    {
+        IReadOnlyList<DetectedField> campos;
+        try { campos = CamposDeSap?.Invoke() ?? Array.Empty<DetectedField>(); } catch { return Array.Empty<(string, string, string)>(); }
+        return campos.Where(c => c.Label.Length > 0).Select(c => (c.Selector, c.Label, c.ControlType)).ToList();
+    }
+
+    /// <summary>
     /// DÓNDE ESTÁ TODO LO DE SAP en pantalla, de una sola lectura. Es la mitad SAP de
     /// <see cref="Navigation.GeometriaPorMundo"/> (promesa 119).
     /// </summary>
@@ -1624,8 +1763,8 @@ public sealed class SurfaceMapTools
         {
             "map_where_am_i" => WhereAmI(),
             "map_go_to" => GoTo(A("surface")),
-            "map_take" => Take(A("exit"), A("action"), A("at")),
-            "map_type" => Type(A("text"), A("target"), A("at")),
+            "map_take" => Take(A("exit"), A("action"), A("at"), A("decir"), A("recuerdo")),
+            "map_type" => Type(A("text"), A("target"), A("at"), A("decir"), A("recuerdo")),
             "map_unblock" => Unblock(A("at"), A("choose")),
             "map_open_app" => OpenApp(A("app")),
             "map_what_i_see" => LoQueVeo(),
@@ -2105,17 +2244,14 @@ public sealed class SurfaceMapTools
     /// </remarks>
     public bool SenalarAlActuar { get; set; }
 
-    private string Take(string salida, string accionPedida = "", string dondeCreoEstar = "")
+    private string Take(string salida, string accionPedida = "", string dondeCreoEstar = "", string decir = "", string recuerdo = "")
     {
         if (salida.Length == 0) return "falta `exit`: qué puerta tomar (su nombre tal como se ve, o su selector)";
         if (RecorrerPorElNucleo == null) return "todavía no sé pulsar: el núcleo no está conectado.";
-        // SE SEÑALA ANTES DE PULSAR, no después: después ya cambió la pantalla y el recuadro caería
-        // sobre lo que haya ahora. Si no se sabe dónde está, no se ilumina nada y se pulsa igual —
-        // señalar es para que el humano siga, no un requisito para actuar.
-        if (SenalarAlActuar) { try { SenalarElemento(salida, salida); } catch { } }
-        // TOMAR ES UN BATCH DE UN PASO (gran limpieza, 2026-08-30): la misma escalera de
-        // resolución, la misma compuerta de vida, la misma verificación por consecuencia y el
-        // mismo aprendizaje. Dos ejecutores de pasos serían dos opiniones del mismo hecho.
+        // LA MISMA COREOGRAFÍA QUE EL PLAN (promesa 191): al comprobar, o cuando el piloto trae algo que
+        // decir o un recuerdo, la mano señala, dice, cuelga y muestra, y solo después pulsa.
+        if (DarUnPasoConCoreografia != null && (SenalarAlActuar || decir.Length > 0 || recuerdo.Length > 0))
+            return DarUnPasoConCoreografia(salida, new Navigation.RecorrerSegunElNucleo.Paso(salida), recuerdo, decir).Cuenta;
         return RecorrerPorElNucleo(new[] { new Navigation.RecorrerSegunElNucleo.Paso(salida) }).Cuenta;
     }
 
@@ -2128,9 +2264,22 @@ public sealed class SurfaceMapTools
     /// distribución del teclado ni de que ninguna tecla se quede hundida— y solo si no lo admite
     /// se recurre a teclear, con Enter al final para confirmar la edición en línea.
     /// </summary>
-    private string Type(string texto, string target, string dondeCreoEstar = "")
+    private string Type(string texto, string target, string dondeCreoEstar = "", string decir = "", string recuerdo = "")
     {
         if (texto.Length == 0) return "falta `text`: qué hay que escribir";
+
+        // EN SAP SE ESCRIBE CON LA MANO DE SAP (2026-09-07). Esta herramienta escribía SIEMPRE por
+        // UIA, que dentro de SAP GUI ve un Pane opaco: «no se encontró el elemento» para cualquier
+        // campo del dynpro, y un Enter de regalo que en SAP es un viaje. Va por el mismo ejecutor
+        // que el plan (EscribirPorMundo → la mano de SAP), que entiende el selector de la lección,
+        // la etiqueta que la persona ve y el nombre técnico del campo (promesa 185).
+        if ((_where()?.Id ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase) && RecorrerPorElNucleo != null)
+        {
+            // Y con la coreografía del plan cuando toca (promesa 191): se señala el campo, se dice, y luego se escribe.
+            if (DarUnPasoConCoreografia != null && (SenalarAlActuar || decir.Length > 0 || recuerdo.Length > 0))
+                return DarUnPasoConCoreografia(target, new Navigation.RecorrerSegunElNucleo.Paso(target, texto), recuerdo, decir).Cuenta;
+            return RecorrerPorElNucleo(new[] { new Navigation.RecorrerSegunElNucleo.Paso(target, texto) }).Cuenta;
+        }
 
         string selector = target;
         if (selector.Length == 0)

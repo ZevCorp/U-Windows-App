@@ -284,6 +284,24 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
         LogBus.Log("workflow-teach", dondeTermino.Length > 0
             ? $"la demo acabó en «{dondeTermino}»"
             : "✋ no pude leer dónde acabó la demo: la skill no tendrá destino y no se empaquetará");
+
+        // EL CIERRE SIGUE EL ORDEN DE «ElCierreDeLaDemo.Orden» (promesa 187), y su primer paso es
+        // este: descargar lo que la superficie tenga observado y sin emitir. Tiene que ser AQUÍ, con
+        // el oyente todavía enganchado (DetachShots viene justo debajo) y mucho antes de
+        // GuardarLaLeccion, que escribe la lección en disco. Los demás pasos del orden —soltar,
+        // parar el video, armar la lección, parar al grabador— siguen más abajo, cada uno en su sitio.
+        //
+        // POR QUÉ (2026-09-07): con eventos COM, SAP publica lo tecleado solo cuando la pantalla
+        // VIAJA. Una demo que acaba dentro del formulario del triage no viaja, y todo lo escrito se
+        // quedaba sin publicar: 24 eventos y ni un texto. La primera versión de este arreglo puso la
+        // descarga en StopObserving, que corre treinta líneas DESPUÉS de escribir la lección —
+        // funcionaba y la lección salía vacía igual, que es la peor forma de fallar.
+        if (ElCierreDeLaDemo.Orden(_teach != null, _shotSurface != null).Contains(Cierre.DescargarLoPendiente))
+        {
+            try { _shotSurface!.DescargarLoPendiente(); }
+            catch (Exception e) { LogBus.Log("workflow-teach", $"no pude descargar lo pendiente: {e.Message}"); }
+        }
+
         DetachShots();
         SoltarLaCamaraYElVigia();
 
@@ -643,8 +661,6 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
             List<ClicVisto> clics; lock (_clics) clics = _clics.ToList();
             // LA LLEGADA DE CADA CLIC ES LA PANTALLA DEL CLIC SIGUIENTE, y la del último, donde acabó
             // la demo (promesa 178). Sin reloj.
-            clics = ArmarLaLeccion.Llegadas(clics, dondeTermino, LlegadaSegunElTerreno).ToList();
-            if (LlegadaSegunElTerreno == null) LogBus.Log("leccion", "sin terreno a mano: las llegadas quedan vacías salvo la del último clic");
             List<(ObservedStep Paso, long HoraMs)> observados; lock (_observados) observados = _observados.ToList();
             var pasos = observados.Select(o =>
             {
@@ -654,6 +670,11 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
                 return new PasoVisto(o.HoraMs, tecla.Length > 0 ? "" : sel, (o.Paso.Label ?? "").Trim(),
                     (o.Paso.ControlType ?? "").Trim(), texto, tecla, (o.Paso.Surface ?? "").Trim());
             }).ToList();
+            // PRIMERO LA IDENTIDAD QUE SAP VIO, DESPUÉS LAS LLEGADAS (promesa 178, 2026-09-08): al
+            // terreno se le pregunta con la puerta que SAP publicó, no con la que el vigía adivinó.
+            clics = ArmarLaLeccion.ConLaIdentidadDeSap(clics, pasos).ToList();
+            clics = ArmarLaLeccion.Llegadas(clics, dondeTermino, LlegadaSegunElTerreno).ToList();
+            if (LlegadaSegunElTerreno == null) LogBus.Log("leccion", "sin terreno a mano: las llegadas quedan vacías salvo la del último clic");
             var frases = LasFrases();
             var tomados = camara?.Cuadros ?? Array.Empty<CuadroTomado>();
             var cuadros = tomados.Select(c => c.ComoCuadro()).ToList();

@@ -53,6 +53,9 @@ public sealed class ProtocoloOpenAI : IProtocolo
         => new Dictionary<string, string> { ["Authorization"] = "Bearer " + clave };
 
     public IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Utensilio> utensilios, string pase)
+        => Apertura(instrucciones, utensilios, pase, soloCuandoSeLePide: false);
+
+    public IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Utensilio> utensilios, string pase, bool soloCuandoSeLePide)
     {
         // El pase se ignora porque aquí no existe. No se disimula: `SabeVolver` ya lo dice, y quien
         // llama decide qué contar cuando se cae.
@@ -80,7 +83,10 @@ public sealed class ProtocoloOpenAI : IProtocolo
                         // que mover si contesta antes de tiempo (bájala a `low`) o si se hace de
                         // rogar (súbela a `high`), y ponerla ya en un extremo sin haberlo medido
                         // sería repetir el error de calibrar a ciegas.
-                        turn_detection = new { type = "semantic_vad", eagerness = "auto" },
+                        // Y QUIÉN DECIDE QUE HAY QUE CONTESTAR: de normal, el propio detector. Con la
+                        // voz prestada (promesa 192) nadie: se sigue oyendo y transcribiendo —el piloto
+                        // lee lo que la persona contesta— pero solo se habla cuando la app pide turno.
+                        turn_detection = new { type = "semantic_vad", eagerness = "auto", create_response = !soloCuandoSeLePide },
 
                         // La transcripción de lo que dice el usuario NO viene sola: hay que pedirla.
                         // Sin esto la carita se queda muda por su lado y no hay forma de leer en
@@ -182,7 +188,11 @@ public sealed class ProtocoloOpenAI : IProtocolo
             : JsonSerializer.Serialize(new
             {
                 type = "response.create",
-                response = new { instructions = instrucciones },
+                // FUERA DE LA CONVERSACIÓN (2026-09-08): con el triage en el contexto, a «Di exactamente
+                // esto: Temperatura.» la voz contestó «Glasgow, entre 3 y 15», y antepuso «Vale, déjame
+                // pensar un momento…» a otra frase. Una respuesta sin conversación no tiene nada que la
+                // tiente: solo la frase. El audio llega y suena igual.
+                response = new { instructions = instrucciones, conversation = "none" },
             });
 
     public IReadOnlyList<Hecho> Leer(JsonElement m)

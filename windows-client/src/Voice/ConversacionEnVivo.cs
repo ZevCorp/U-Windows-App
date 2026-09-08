@@ -760,11 +760,15 @@ public sealed class ConversacionEnVivo : IDisposable
                      + "la selección sin perder lo anterior. «click» para forzar el clic simple."),
             ("at", "La superficie donde CREES estar, COPIADA TAL CUAL de map_where_am_i o de la última "
                  + "respuesta de una herramienta. NUNCA la escribas de memoria ni la deduzcas del "
-                 + "nombre de la app: si no coincide EXACTA, no se actúa.")),
+                 + "nombre de la app: si no coincide EXACTA, no se actúa."),
+            ("decir", "Una frase corta que Ü dice con su voz JUSTO ANTES de pulsar. Al comprobar una lección va siempre: la carita se pone al lado, lo dice, y entonces pulsa."),
+            ("recuerdo", "Qué es y para qué sirve lo que vas a pulsar, con tus palabras. Se cuelga del elemento y se muestra en tarjeta antes de tocarlo.")),
         Fn("map_type", "Escribe texto en el campo abierto; sirve para nombrar una carpeta recién creada.",
             ("text", "Lo que hay que escribir."),
-            ("target", "Selector del campo. Vacío = el que tenga el foco, y solo si es un campo de texto."),
-            ("at", "La superficie donde crees estar.")),
+            ("target", "El campo: en SAP, su etiqueta tal como se lee («Presión Arterial»), su nombre técnico o el selector de la lección. Vacío = el que tenga el foco, y solo si es un campo de texto."),
+            ("at", "La superficie donde crees estar."),
+            ("decir", "Una frase corta que Ü dice con su voz JUSTO ANTES de escribir. Al comprobar una lección va siempre."),
+            ("recuerdo", "Qué es ese campo y para qué sirve, con tus palabras. Se cuelga y se muestra en tarjeta antes de escribir.")),
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
             ("at", "La superficie a la que hay que volver después."),
             ("choose", "La opción a pulsar. Vacío = solo si hay una única salida posible.")),
@@ -1120,13 +1124,13 @@ public sealed class ConversacionEnVivo : IDisposable
     /// aprendiz sin cerrar el micrófono que acaba de abrir —cerrarlo y reabrirlo costaba cuatro
     /// segundos y un saludo, medido el 2026-09-03—, y al terminar lo devuelve tal como estaba.
     /// </remarks>
-    public async Task CambiarModoAsync(string instrucciones, IReadOnlyList<Utensilio> utensilios)
+    public async Task CambiarModoAsync(string instrucciones, IReadOnlyList<Utensilio> utensilios, bool soloCuandoSeLePide = false)
     {
         if (!Viva || _ws?.State != WebSocketState.Open) return;
-        foreach (string msg in _protocolo.Apertura(instrucciones, utensilios, _pase ?? ""))
+        foreach (string msg in _protocolo.Apertura(instrucciones, utensilios, _pase ?? "", soloCuandoSeLePide))
             await EnviarAsync(msg, _cts?.Token ?? CancellationToken.None);
         LogBus.Log("voz-viva", $"modo cambiado: {utensilios.Count} herramienta(s), "
-            + $"instrucciones de {instrucciones.Length} car.");
+            + $"instrucciones de {instrucciones.Length} car." + (soloCuandoSeLePide ? " · solo habla cuando se le pide" : ""));
     }
 
     public async Task EnviarTextoAsync(string texto)

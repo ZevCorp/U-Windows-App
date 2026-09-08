@@ -144,11 +144,47 @@ public sealed class ProtocoloMcp
 
         // Lo que la herramienta contestó vuelve TAL CUAL: nuestras herramientas hablan prosa con
         // el porqué dentro, y resumirla le quitaría al modelo justo la pista que necesita.
+        //
+        // SALVO SI ES UNA IMAGEN (promesa 181). `map_shot` devuelve «data:image/png;base64,…» y esto
+        // lo empaquetaba como TEXTO: al modelo le llegaba un chorro de base64 que no puede mirar, así
+        // que nunca miraba. El 2026-09-07 el dueño lo vio de golpe —«con otro screenshot de lo actual
+        // puedes determinar si está bien o mal e iterar rápidamente»— después de que yo seleccionara
+        // una fila de paciente CORRECTAMENTE y no tuviera forma de saberlo: la URL no cambia al
+        // seleccionar, así que el juez por pantalla es ciego a media SAP. Ver sí lo ve.
         return Resultado(id, new
         {
-            content = new object[] { new { type = "text", text = texto } },
+            content = ComoContenido(texto),
             isError = fallo,
         });
+    }
+
+    /// <summary>
+    /// Lo que contestó una herramienta, en bloques de contenido MCP: una imagen como imagen, y todo
+    /// lo demás como texto. Promesa 181.
+    /// </summary>
+    /// <remarks>
+    /// MCP tiene un bloque `image` con `data` (base64 pelado) y `mimeType`; el data URI es cosa del
+    /// navegador. Se parte por la coma: delante el tipo, detrás los datos. Si el data URI viene roto
+    /// —sin coma, sin base64— vuelve como texto: un bloque de imagen con datos que no son una imagen
+    /// rompe la petición ENTERA del modelo, y perder la respuesta es peor que verla en prosa.
+    /// </remarks>
+    public static object[] ComoContenido(string texto)
+    {
+        string t = texto ?? "";
+        if (t.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+        {
+            int coma = t.IndexOf(',');
+            if (coma > 0)
+            {
+                string cabecera = t[5..coma];                      // «image/png;base64»
+                string datos = t[(coma + 1)..];
+                int puntoYComa = cabecera.IndexOf(';');
+                string tipo = puntoYComa > 0 ? cabecera[..puntoYComa] : cabecera;
+                if (cabecera.Contains("base64", StringComparison.OrdinalIgnoreCase) && datos.Length > 0)
+                    return new object[] { new { type = "image", data = datos, mimeType = tipo } };
+            }
+        }
+        return new object[] { new { type = "text", text = t } };
     }
 
     /// <summary>Un utensilio del catálogo, dicho como MCP lo pide: name, description, inputSchema.</summary>

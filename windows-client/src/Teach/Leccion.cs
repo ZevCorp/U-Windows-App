@@ -94,6 +94,16 @@ public static class ArmarLaLeccion
         foreach (var p in plegados)
         {
             Borrador? dueño = null;
+
+            // POR IDENTIDAD ANTES QUE POR TIEMPO (promesa 184). Con eventos COM, SAP publica lo
+            // tecleado solo cuando la pantalla viaja; si la demo acaba sin viajar, todo se descarga
+            // al parar, con la hora de parar. Por cercanía iría al último clic —o a ninguno—, no al
+            // campo que cada tecleo abrió. El vigía nombra el clic en un campo con el MISMO selector
+            // que el grabador le pone al paso, y esa identidad es la que cuadra.
+            if (p.Selector.Length > 0)
+                dueño = eventos.LastOrDefault(e => e.Tipo == "clic" && e.Hora <= p.HoraMs && e.Selector == p.Selector);
+
+            if (dueño == null)
             for (int i = eventos.Count - 1; i >= 0; i--)
             {
                 var e = eventos[i];
@@ -115,8 +125,13 @@ public static class ArmarLaLeccion
             }
             if (p.Selector.Length > 0)
             {
+                // LA PUERTA QUE SAP VIO MANDA (promesa 171, 2026-09-08): el vigía nombró el clic en el
+                // botón «Triage» de la barra de la rejilla como la fila «GIRALDO» —el botón vive dentro
+                // del shell de la rejilla y la geometría dio la rejilla—; SAP publicó el botón. Si SAP
+                // trae OTRA puerta que la adivinada, el evento se queda con la de SAP entera.
+                bool otraPuerta = dueño.Selector.Length > 0 && dueño.Selector != p.Selector && (p.Etiqueta ?? "").Length > 0;
                 dueño.Selector = p.Selector; dueño.SelectorDePaso = true;
-                if (dueño.Etiqueta.Length == 0) dueño.Etiqueta = p.Etiqueta ?? "";
+                if (dueño.Etiqueta.Length == 0 || otraPuerta) dueño.Etiqueta = p.Etiqueta ?? "";
                 if ((p.Texto ?? "").Length > 0) dueño.Texto = p.Texto!;
             }
             if ((p.Tecla ?? "").Length > 0 && dueño.Tecla.Length == 0) dueño.Tecla = p.Tecla!;
@@ -179,10 +194,40 @@ public static class ArmarLaLeccion
             var c = deLaTarea[i];
             string l = "";
             try { l = (terreno?.Invoke(c.PantallaAlPulsar ?? "", c.Selector ?? "", c.Etiqueta ?? "") ?? "").Trim(); } catch { }
+            // SAP VISTO POR UIA NO ES UNA LLEGADA (promesa 178, 2026-09-08): si el clic se dio DENTRO
+            // de una sesión de SAP y el terreno dice que llevó a «uia://saplogon.exe/…», eso es la
+            // misma ventana identificada por el ojo equivocado mientras SAP no contestaba. Un evento
+            // con esa llegada cuenta como navegante y no puede aterrizar jamás.
+            if (Mundos.EsSap(c.PantallaAlPulsar ?? "") && Mundos.EsSapVistoPorUia(l)) l = "";
             if (l.Length == 0 && i == deLaTarea.Count - 1) l = (dondeTermino ?? "").Trim();
             llegada[c] = l;
         }
         return lista.Select(c => llegada.TryGetValue(c, out var l) ? c with { Llegada = l } : c).ToList();
+    }
+
+    /// <summary>
+    /// LOS CLICS CON LA IDENTIDAD QUE SAP VIO, para preguntarle al terreno por las llegadas con la
+    /// puerta correcta. Promesa 178, extendida el 2026-09-08.
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ: el terreno había aprendido que el botón «Triage» lleva al formulario (189), y la
+    /// lección salió con esa llegada vacía: las llegadas se buscaban con la identidad del vigía —la
+    /// fila «GIRALDO», adivinada por geometría— y solo después <see cref="Eventos"/> la sustituía
+    /// por la de SAP. Se reusa <see cref="Eventos"/> a propósito: es la ÚNICA regla de qué paso cuelga
+    /// de qué clic, y aquí solo se lee el resultado por la hora del clic.
+    /// </remarks>
+    public static IReadOnlyList<ClicVisto> ConLaIdentidadDeSap(IReadOnlyList<ClicVisto> clics, IReadOnlyList<PasoVisto> pasos)
+    {
+        clics ??= Array.Empty<ClicVisto>();
+        if (pasos == null || pasos.Count == 0) return clics.ToList();
+        var eventos = Eventos(clics, pasos, Array.Empty<FraseDicha>(), Array.Empty<Cuadro>());
+        var porHora = new Dictionary<long, EventoDeLaLeccion>();
+        foreach (var e in eventos) if (e.Tipo == "clic" && !porHora.ContainsKey(e.HoraMs)) porHora[e.HoraMs] = e;
+        return clics.Select(c =>
+            !c.DeU && porHora.TryGetValue(c.HoraMs, out var e) && e.Selector.Length > 0
+                && (e.Selector != (c.Selector ?? "") || e.Etiqueta != (c.Etiqueta ?? ""))
+                ? c with { Selector = e.Selector, Etiqueta = e.Etiqueta }
+                : c).ToList();
     }
 
     /// <summary>Lo dicho que no le quedó cerca a ningún evento: el contexto de la lección.</summary>
@@ -237,4 +282,17 @@ public static class CuadroDelMomento
         }
         return mejor;
     }
+}
+
+/// <summary>De qué mundo es una URL de pantalla, en UN sitio. Promesas 178 y 189.</summary>
+public static class Mundos
+{
+    public static bool EsSap(string url) => (url ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// La ventana de SAP GUI vista por UIA («uia://saplogon.exe/…»): el ojo equivocado sobre una
+    /// sesión, que aparece cuando SAP no contesta al scripting. No es un destino al que se llegue.
+    /// </summary>
+    public static bool EsSapVistoPorUia(string url) =>
+        (url ?? "").StartsWith("uia://saplogon.exe/", StringComparison.OrdinalIgnoreCase);
 }

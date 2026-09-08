@@ -38,8 +38,10 @@ public static class SkillDeLoVerificado
         }
         if (pasos.Count == 0) return null;
 
-        var todosLosQueNavegan = RegistroDeLaComprobacion.EventosQueNavegan(leccion);
-        bool completa = todosLosQueNavegan.All(e => ok.ContainsKey(e.N));
+        // COMPLETA sobre lo que CUENTA (promesa 175, enmendada el 2026-09-08): los que navegan y los
+        // campos tecleados. Una skill que solo rellena un formulario también puede quedar comprobada.
+        var todosLosQueCuentan = RegistroDeLaComprobacion.EventosQueCuentan(leccion);
+        bool completa = todosLosQueCuentan.All(e => ok.ContainsKey(e.N));
 
         var skill = SkillEnsenada.Empaquetar(nombre.Trim(), (descripcion ?? "").Trim(), leccion.Empezo, pasos, pasos[^1].Llegada);
         return skill == null ? null : skill with { Comprobada = completa };

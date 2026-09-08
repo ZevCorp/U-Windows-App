@@ -397,7 +397,7 @@ internal static class Contrato
         // del menú de SAP a la ficha de triage, aterrizaje verificado. El dueño pidió tres cosas y
         // las tres eran justas — y una era culpa de una frase que yo mismo puse en el encargo.
         Prueba("141. comprobar va elemento a elemento y no en tanda: el encargo no ofrece el batch, y por cada elemento pide decir en voz qué entendió, actuar, y colgar ahí el recuerdo", ComprobarVaElementoAElemento);
-        Prueba("142. durante la comprobación Ü habla con SU voz: se le puede pedir que diga algo, y eso viaja con la petición de respuesta", LaVozDeLaComprobacionEsLaDeU);
+        Prueba("142. durante la comprobación Ü habla con SU voz: se le puede pedir que diga algo, y eso viaja con la petición de respuesta; y se pide FUERA de la conversación, sin contexto que la tiente a parafrasear, añadir o proponer", LaVozDeLaComprobacionEsLaDeU);
         Prueba("143. el recuerdo que se cuelga es lo ENTENDIDO, no la transcripción: donde el modelo tiene un significado para ese elemento, gana al balbuceo de la demo", ElRecuerdoEsLoEntendidoNoLoBalbuceado);
         Prueba("144. la caja de un botón de barra de SAP la da UIA y su identidad la da SAP: se casa por el texto que SAP declara, y si no se encuentra no se dibuja nada", LaCajaDelBotonDeBarraLaDaUia);
         Prueba("145. la caja de un selector de SAP se resuelve en UN solo sitio: los dos caminos —la vista de recuerdos y el señalar de uno— dan la MISMA respuesta, y un elemento sin caja no se ilumina", LaCajaDeSapSeResuelveEnUnSitio);
@@ -467,15 +467,93 @@ internal static class Contrato
         Prueba("168. el cuadro de ANTES de un clic se elige del pasado: es el más nuevo con hora ≤ hora del clic menos el margen, y ningún cuadro tomado en o después del clic puede ser elegido; si no hay ninguno, no hay cuadro de antes (null), nunca uno de después disfrazado", ElCuadroDeAntesSeEligeDelPasado);
         Prueba("169. el cuadro de DESPUÉS es el primero, pasado el clic más la espera mínima, en que la pantalla se asentó (dos cuadros seguidos iguales); si no se asienta antes del techo, se entrega el último y se dice asentado=false — nunca se calla", ElCuadroDeDespuesEsElPrimeroAsentado);
         Prueba("170. cada clic físico de la demostración deja UN evento en la lección, con su hora, su punto y sus dos cuadros, aunque SAP no haya emitido paso: 26 clics son 26 eventos, no 1", CadaClicFisicoDejaUnEvento);
-        Prueba("171. lo que SAP observó (selector, texto tecleado, tecla) y lo que la persona dijo se cuelgan del evento por cercanía en el mismo reloj; una frase se cuelga de UN clic, el más cercano, y un paso de SAP sin clic cercano queda como evento propio con porTeclado=true", LoObservadoYLoDichoSeCuelganPorCercania);
+        Prueba("171. lo que SAP observó (selector, texto tecleado, tecla) y lo que la persona dijo se cuelgan del evento por cercanía en el mismo reloj; una frase se cuelga de UN clic, el más cercano, y un paso de SAP sin clic cercano queda como evento propio con porTeclado=true; y si SAP trae OTRA puerta que la que el vigía adivinó por geometría, manda la de SAP con su nombre", LoObservadoYLoDichoSeCuelganPorCercania);
         Prueba("172. la lección se escribe en disco entera o no se escribe: leccion.json + cuadros/ + demo.mp4 + donde empezó y donde terminó; una lección sin cuadros o sin mp4 no se entrega, y el motivo queda escrito", LaLeccionSeEntregaEnteraONada);
         Prueba("173. el mensaje que recibe el piloto se arma de la lección en orden de tiempo, con una etiqueta t=MM:SS · clic N en (x,y) · selector · «lo dicho» delante de cada cuadro; ningún cuadro pasa de 2000 px de lado, y si hay más cuadros que el presupuesto se quitan primero los de después repetidos y NUNCA el de antes de un clic con selector", ElMensajeDelPilotoEsUnTutorialEnOrden);
         Prueba("174. el piloto tiene UNA caja con manos desde el principio —entender es ir, colgar el recuerdo donde vive el elemento y declarar la llegada— y lo único prohibido, por su nombre, es lo que va en tanda: map_batch y map_skill_run; las manos, los ojos, la voz y mirar cualquier momento de la demo están todos", ElPilotoTieneUnaCajaConManos);
-        Prueba("175. la comprobación es hacer de uno en uno lo que la lección enseña y que cada llegada la juzgue la app contra la llegada de la lección; el recuento es hechos/total con el total = eventos que navegan, y COMPROBADA solo si todos aterrizaron", LaAppJuzgaCadaLlegada);
+        // ENMENDADA EL 2026-09-08 con el dueño: «habrá enseñanzas que no naveguen». Nació diciendo
+        // «el total = eventos que navegan», y con eso una demo que solo rellena el triage daba «0 de 0:
+        // sigue pendiente» habiendo hecho los 14 pasos. Ahora lo tecleado también cuenta, y se juzga
+        // LEYENDO el campo, no creyéndole al modelo.
+        Prueba("175. la comprobación es hacer de uno en uno lo que la lección enseña y que cada paso lo juzgue la app: un evento que navega aterriza si la pantalla de ahora es la grabada; un campo tecleado que no navega está hecho si el campo dice AHORA lo que la demo tecleó, leído de la pantalla y no declarado; el recuento es hechos/total con el total = los eventos que navegan más los campos tecleados, uno por campo con su último valor, y COMPROBADA solo si todos están: una lección que no navega pero teclea se comprueba entera, y un «llegué» sobre el clic que abrió un campo se juzga sobre el campo", LaAppJuzgaCadaLlegada);
         Prueba("176. la skill se empaqueta de lo VERIFICADO: cada paso lleva la llegada real medida al comprobar, y un paso que no aterrizó no entra en la skill; lo que el modelo dijo entender se guarda aparte, como recuerdos, no como pasos", LaSkillNaceDeLoVerificado);
         Prueba("177. el piloto puede pedir la pantalla de cualquier momento de la demo, aunque ahí no hubiera clic: se le da el cuadro más cercano a ese instante con dónde estaba el ratón, y sin cuadros se dice que no hay", CualquierMomentoDeLaDemoSePuedeMirar);
-        Prueba("178. a dónde llevó un clic lo dice el TERRENO —la misma arista que el batch verifica—, no la lección: si el terreno aprendió que esa puerta lleva a aquella pantalla, esa es la llegada; si no aprendió nada, queda vacía y se dice; solo el último clic tiene de respaldo donde acabó la demo; los clics sobre Ü no cuentan", LaLlegadaLaDiceElTerreno);
-        Prueba("179. comprobar es un PLAN que el piloto entrega en el idioma del ejecutor y la app recorre: por cada paso la voz, el recuerdo antes de tocar, el paso por el mismo ejecutor de tanda y el juez; si un paso no se puede dar la app para ahí y le devuelve al piloto dónde quedó y qué faltó, y solo entonces el piloto actúa con las manos", ComprobarEsUnPlanQueLaAppRecorre);
+        Prueba("178. a dónde llevó un clic lo dice el TERRENO —la misma arista que el batch verifica—, no la lección: si el terreno aprendió que esa puerta lleva a aquella pantalla, esa es la llegada; si no aprendió nada, queda vacía y se dice; solo el último clic tiene de respaldo donde acabó la demo; los clics sobre Ü no cuentan; y al terreno se le pregunta con la puerta que SAP vio, no con la que el vigía adivinó", LaLlegadaLaDiceElTerreno);
+        Prueba("179. comprobar es un PLAN que el piloto entrega en el idioma del ejecutor y la app recorre: por cada paso la voz, el recuerdo antes de tocar, el paso por el mismo ejecutor de tanda y el juez; si un paso no se puede dar la app para ahí y le devuelve al piloto dónde quedó y qué faltó, y solo entonces el piloto actúa con las manos; y el relato nombra lo que falta por juzgar, evento por evento, para que las manos vayan a eso y no a repetir lo hecho", ComprobarEsUnPlanQueLaAppRecorre);
+
+        // EL RECUERDO SE VE (spec 014, 2026-09-07). La quinta prueba de la 013 salió COMPROBADA y
+        // nadie vio nada: el recuerdo se colgaba y el paso se daba sin tarjeta ni carita al lado.
+        Prueba("180. al recorrer el plan, cada paso se VE antes de tocarse: la carita se pone al lado del elemento y el elemento se enciende, se dice y se escribe el recuerdo, la tarjeta con el recuerdo queda a la vista el tiempo que tarda leerla, y solo después se toca; al tocar, la tarjeta se cierra y la señal se suelta; si el elemento no está en pantalla no se muestra tarjeta sobre la nada y el paso va igual al ejecutor", ElRecuerdoSeVeAntesDeTocar);
+
+        // LOS OJOS DEL PILOTO (2026-09-07). Seleccioné la fila de un paciente CORRECTAMENTE y no tuve
+        // forma de saberlo: seleccionar NO cambia la pantalla, así que el juez por llegada es ciego a
+        // media SAP. El dueño lo vio de golpe: «con otro screenshot de lo actual puedes determinar si
+        // está bien o mal e iterar rápidamente». map_shot ya tomaba la foto; el protocolo la
+        // empaquetaba como TEXTO y al modelo le llegaba un chorro de base64 que no puede mirar.
+        Prueba("181. una herramienta que devuelve una imagen la entrega como IMAGEN y no como un texto de base64 que el modelo no puede mirar: el data URI se parte en su tipo y sus datos y viaja como bloque de imagen; lo que no es imagen, y un data URI roto, siguen viajando como texto", UnaImagenViajaComoImagen);
+
+        // LA FILA DEL PACIENTE (spec 014, 2026-09-07). La 6ª prueba se rompió en el clic que
+        // selecciona al paciente: el vigía solo nombra árboles, no rejillas, así que la fila quedó
+        // muda al enseñar; y map_what_i_see solo lista lo de UIA, así que «GIRALDO» era invisible al
+        // comprobar aunque map_take sabía seleccionarlo. Dos ajustes que reusan la lectura del grabador.
+        Prueba("182. la fila de una rejilla ALV bajo un clic se elige por su selección, o por el cursor, o —si solo hay una fila— por ser la única, aunque nada esté marcado todavía: un paciente premarcado ya no queda sin identidad", LaFilaDeAlvSeElige);
+        Prueba("183. map_what_i_see suma a lo que ve UIA las puertas que el terreno conoce y UIA no puede ver —las filas de una rejilla, las de un árbol— sin duplicar las que ya tienen nombre: la fila del paciente deja de ser una puerta invisible", ElTerrenoCompletaLoQueUiaNoVe);
+
+        // LO TECLEADO EN LA DEMO (2026-09-07, séptima prueba). La persona rellenó el triage entero y la
+        // lección no traía NI UN texto: SAP solo publica lo tecleado cuando la pantalla VIAJA (Change /
+        // StartRequest), y la demo acabó sin viajar. Al parar se descargan todos los campos a la vez,
+        // con la hora de parar: por cercanía irían al último clic —o a ninguno—, y no al campo que
+        // cada uno abrió. La identidad del selector, que ahora el vigía también nombra, es lo que cuadra.
+        Prueba("184. un paso tecleado que SAP publica tarde —al parar la demo, todos a la vez— se cuelga del clic que abrió ESE campo, por identidad de selector, aunque por tiempo le tocara otro clic; sin clic con esa identidad, rige la cercanía de siempre", LoTecleadoSeCuelgaDelCampoQueLoAbrio);
+        Prueba("185. un campo de SAP se encuentra por lo que la persona ve o por lo que la lección trae: su selector exacto, su etiqueta («Nombre del paciente») o el nombre técnico del campo sin el prefijo del tipo («Y0000000-ZTRNOMPAC» para txtY0000000-ZTRNOMPAC); con dos etiquetas iguales no se adivina: nadie", UnCampoDeSapSeEncuentraPorSuNombre);
+
+        // EL HIT-TEST QUE SÍ CONTESTA (2026-09-07, octava prueba). Escribí «el campo bajo el clic» con
+        // FindByPosition y la demo entera salió sin un solo clic nombrado: medido sobre el SAP real,
+        // FindByPosition devuelve NULL en los 8 puntos probados y la geometría acierta el campo en los
+        // 8, la caja de texto largo incluida. El repo YA lo tenía documentado y ya tenía el hit-test
+        // por geometría —lo usa el grabador para los botones del dynpro—: escribí una tercera vía en
+        // vez de reusar la que funciona. La promesa fija cuál manda y qué se hace cuando la primera calla.
+        Prueba("186. quién está bajo un punto dentro de SAP se pregunta primero a SAP y, cuando SAP calla —que es lo que hace este SAP siempre—, se decide por geometría: el elemento MÁS PEQUEÑO que contiene el punto, sin contar nodos ni cajas desconocidas; y del id que salga se sube por su ruta hasta el campo que la lección puede reencontrar, porque el punto puede caer en un hijo de la caja de texto y no en la caja", ElComponenteBajoElPuntoSeDecidePorGeometria);
+
+        // EL ORDEN AL CERRAR LA DEMO (2026-09-07, octava prueba). Con eventos COM, SAP solo publica lo
+        // tecleado cuando la pantalla viaja; una demo que acaba sin viajar deja los campos sin publicar.
+        // Puse la descarga en StopObserving, que corre en recorder.StopAsync… treinta líneas DESPUÉS de
+        // escribir la lección. La descarga funcionaba y la lección salía vacía igual.
+        Prueba("187. al cerrar la demo, lo que la persona tecleó y SAP no llegó a publicar se descarga LO PRIMERO, con el oyente todavía enganchado: descargar va antes de soltar la superficie, antes de parar el video y antes de armar la lección, y parar al grabador va el último; sin video no se para ningún video y sin superficie observada no hay nada que descargar ni que soltar, pero donde hay superficie, descargar precede a todo", LoTecleadoSeDescargaAntesDeArmarLaLeccion);
+
+        // LOS RECUERDOS QUE NO SE COLGARON (2026-09-08, novena prueba). El piloto pidió un recuerdo en
+        // los 14 campos del triage y la app rechazó 11: «no veo nada que se llame Presión Arterial en
+        // esta pantalla». Colgar un recuerdo buscaba el nombre entre lo de UIA y las puertas del
+        // terreno; un campo del dynpro no está en ninguna de las dos. Escribir SÍ lo encontraba
+        // (promesa 185). Dos criterios para nombrar la misma cosa es un bug esperando su turno.
+        Prueba("188. lo que la persona NOMBRA dentro de SAP —para colgarle un recuerdo, para señalarlo o para verlo en la lista de lo que hay— se resuelve en UN solo sitio y con el mismo criterio que para escribir: primero las puertas del terreno, después los campos del dynpro por su etiqueta o su nombre técnico; con dos iguales nadie, y lo que ningún sitio conoce no se inventa", LoQueSeNombraEnSapSeResuelveEnUnSitio);
+
+        // LA ARISTA QUE EL MAPA VIVO NO ALCANZA (2026-09-08, décima prueba, y ya en la 5ª y la 7ª). Al
+        // pulsar «Triage», SAP tarda más de lo que el mapa vivo espera (6 s) y encima se queda ciego
+        // mientras SAP no contesta; al volver, el salto queda «SIN atribuir». El grabador de SAP sí lo
+        // vio: publicó el paso a las 01:11:38 y anunció la pantalla nueva a las 01:11:41. Tres pruebas
+        // seguidas con la llegada de Triage vacía, y una lección que sin ella no se puede comprobar.
+        Prueba("189. lo que el grabador de SAP ve cruzar —un paso publicado y la pantalla nueva que SAP anuncia justo después— se le enseña al terreno como arista, con el mismo selector con el que el terreno conoce la puerta: el paso tiene que ser reciente, haber salido de la pantalla que cambió, y el destino ser una pantalla de SAP y no la misma; la llegada la sigue diciendo el terreno, que ahora también aprende de SAP", ElGrabadorDeSapEnsenaAlTerreno);
+
+        // LOS SELECTORES DE GLASGOW (2026-09-08, décima prueba, vista por el dueño). Un GuiComboBox no
+        // acepta Text: se le fija la CLAVE. La lección trae la clave («4»); el piloto, con las manos,
+        // intentó el texto («Espontánea»). Las dos tienen que valer, y una que no es ninguna, decirlo.
+        Prueba("190. en un desplegable de SAP se fija la CLAVE de la opción, y esa clave se encuentra por la clave misma o por el texto que la persona lee, sin distinguir mayúsculas, acentos ni espacios; con dos opciones iguales nadie, y un valor que no es ninguna opción se rechaza diciendo cuáles hay", EnUnDesplegableSeFijaLaClave);
+
+        // LA EXPERIENCIA ESTÁNDAR (2026-09-08, el dueño sobre la undécima prueba): «la carita se movía
+        // al lado de cada campo y narraba lo que iba haciendo, y justo después sucedía; en esta no».
+        // En la undécima el plan paró en el paso 3 —el piloto trajo el SELECTOR de la fila, no su
+        // nombre— y el resto lo hizo el piloto con las manos, que no tenían coreografía: ni carita, ni
+        // narración, ni tarjeta. La coreografía era del plan, no del paso.
+        Prueba("191. dar un paso es UNA coreografía, lo dé el plan o la mano del piloto —señalar, decir, escribir el recuerdo, mostrar la tarjeta, actuar, cerrar—, y map_take y map_type llevan «decir» y «recuerdo» para eso; y la identidad del paso se decide en un solo sitio: se señala y se nombra por la PUERTA aunque el piloto traiga el selector, y se escribe por el SELECTOR de la lección aunque el piloto traiga el nombre", DarUnPasoEsUnaCoreografia);
+
+        // DOS MANOS A LA VEZ (2026-09-08, duodécima prueba). Mientras la app recorría el plan, la
+        // conversación de voz en vivo —que solo tenía que PRESTAR la voz— llamaba map_take y map_type por
+        // su cuenta, con sus propias frases: «Cambio de foco para intentar escribir en el campo
+        // adecuado», «Escribo la presión arterial» con un 120/80 que no era el de la demo. Tenía el
+        // catálogo entero y respuestas automáticas: cada «di exactamente esto» era un turno más de un
+        // asistente con manos. El dueño: «la voz se desalineaba de lo que realmente se estaba haciendo».
+        Prueba("192. durante la comprobación la voz en vivo es una voz PRESTADA: no tiene ni una herramienta, sus instrucciones son decir exactamente lo que la app le pide y callar ante todo lo demás, y la sesión no crea respuestas por su cuenta —solo cuando la app se lo pide—; al terminar, vuelve a ser quien era", LaVozDeLaComprobacionEsPrestada);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -2782,6 +2860,12 @@ internal static class Contrato
         Debe(sinNada.Contains("response.create") && !sinNada.Contains("instructions"),
             "y sin texto es exactamente la de siempre: pedir turno no puede convertirse en dictarle "
             + "qué decir, que es lo que hace el resto de la conversación");
+        // FUERA DE LA CONVERSACIÓN (2026-09-08, decimotercera prueba): con el triage en el contexto, a
+        // «Di exactamente esto: Temperatura.» la voz contestó «Glasgow, entre 3 y 15», y a «Elijo al
+        // paciente» le antepuso «Vale, déjame pensar un momento sobre cómo ayudarte…». Sin contexto no
+        // hay nada que la tiente: solo la frase.
+        Debe(conTexto.Contains("\"conversation\":\"none\""), $"lo dictado se pide fuera de la conversación: conversation=none ({Recorta(conTexto, 200)})");
+        Debe(!sinNada.Contains("\"conversation\""), "y pedir turno de normal sigue dentro de la conversación, que es donde vive");
     }
 
     private static string Recorta(string s, int n) =>
@@ -5472,6 +5556,20 @@ internal static class Contrato
         var contexto = Capacidad("U.WindowsClient.Teach.ArmarLaLeccion")!.GetMethod("Contexto")!;
         string ctx = (string)contexto.Invoke(null, new object[] { frases, eventos })!;
         Debe(ctx.Contains("hola YouTube"), $"y el contexto de la lección la conserva (salió «{ctx}»)");
+
+        // LA PUERTA QUE SAP VIO MANDA (2026-09-08, undécima prueba). El vigía nombró el clic en el botón
+        // «Triage» de la barra de la lista como la fila «GIRALDO»: el botón vive dentro del shell de la
+        // rejilla y la geometría dio la rejilla. SAP publicó el paso correcto —botón de toolbar
+        // ZMEDTRIAGE, «Triage»— y el evento quedó con el selector de SAP y el NOMBRE del vigía: una
+        // puerta con dos identidades, y el plan se rompió al pedirla.
+        var clics2 = ListaDe(tt.Clic); var pasos2 = ListaDe(tt.Paso);
+        clics2.Add(Clic(tt.Clic, 1000L, 10, 10, "sapgui://L", "sap:grid#row=PATNNAME=GIRALDO", "GIRALDO"));
+        clics2.Add(Clic(tt.Clic, 5000L, 20, 20, "sapgui://T", "sap:grid#row=PATNNAME=GIRALDO", "GIRALDO")); // el vigía adivinó la fila
+        pasos2.Add(Nuevo(tt.Paso, 6000L, "sap:grid#tbbtn=ZMEDTRIAGE", "Triage", "button", "", "", "sapgui://L"));   // SAP vio el botón
+        var ev2 = (System.Collections.IList)armar.Invoke(null, new object[] { clics2, pasos2, ListaDe(tt.Frase), cuadros })!;
+        Debe(ev2.Count == 2 && (string)Prop(ev2[1]!, "Selector")! == "sap:grid#tbbtn=ZMEDTRIAGE" && (string)Prop(ev2[1]!, "Etiqueta")! == "Triage",
+            $"cuando SAP trae OTRA puerta que la adivinada, el evento se queda con la de SAP entera: selector Y nombre (salió «{Prop(ev2[1]!, "Etiqueta")}»)");
+        Debe((string)Prop(ev2[0]!, "Etiqueta")! == "GIRALDO", "y el clic anterior, sobre la fila, sigue siendo la fila");
     }
 
     private static void LaLeccionSeEntregaEnteraONada()
@@ -5644,6 +5742,69 @@ internal static class Contrato
         Debe(!(bool)Prop(v4, "Aterrizo")! && ((string)Prop(v4, "Motivo")!).Contains("no tiene llegada"),
             "un evento sin llegada grabada no se puede juzgar, y se dice en vez de darlo por bueno");
         Debe((bool)Prop(Final(), "Comprobada")!, "…y no resta: no estaba en el plan");
+
+        // ── LO TECLEADO CUENTA, y se juzga leyendo el campo (enmienda del 2026-09-08) ──
+        var cuentan = t.GetMethod("EventosQueCuentan");
+        var mismo = t.GetMethod("LoMismoTecleado");
+        Debe(cuentan != null && mismo != null,
+            "todavía no existen «RegistroDeLaComprobacion.EventosQueCuentan» y «LoMismoTecleado» (spec 014, enmienda de la 175). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (cuentan == null || mismo == null) return;
+
+        var ev2 = ListaDe(tt.Evento);
+        ev2.Add(tt.Evento_(1, 1000, "clic", 1, 1, "s1", "", "sapgui://B", "", "", Array.Empty<string>()));
+        ev2.Add(tt.Evento_(2, 2000, "clic", 2, 2, "s5", "", "", "", "", Array.Empty<string>(), etiqueta: "Peso"));      // el clic que abre el campo
+        ev2.Add(tt.Evento_(3, 3000, "clic", 3, 3, "s5", "80", "", "", "", Array.Empty<string>(), etiqueta: "Peso"));    // tecleó 80…
+        ev2.Add(tt.Evento_(4, 4000, "clic", 4, 4, "s6", "38", "", "", "", Array.Empty<string>(), etiqueta: "Temperatura"));
+        ev2.Add(tt.Evento_(5, 5000, "clic", 5, 5, "s5", "82", "", "", "", Array.Empty<string>(), etiqueta: "Peso"));    // …y lo corrigió a 82
+        var leccion2 = tt.Leccion_("sapgui://A", "sapgui://B", ev2, ListaDe(tt.CuadroLeccion));
+        var losQueCuentan = ((System.Collections.IEnumerable)cuentan.Invoke(null, new object[] { leccion2 })!).Cast<object>().Select(e => (int)Prop(e, "N")!).ToList();
+        Debe(losQueCuentan.SequenceEqual(new[] { 1, 4, 5 }),
+            $"cuentan el que navega y UN evento por campo tecleado, el último: 1, 4 y 5 (salieron {string.Join(",", losQueCuentan)}); el clic que solo abre el campo no cuenta, y el 80 corregido a 82 tampoco");
+
+        var valores = new Dictionary<string, string?> { ["s5"] = "82,000", ["s6"] = "37" };
+        var registro2 = Nuevo(t, leccion2, (Func<string, string?>)(sel => valores.TryGetValue(sel, out var v) ? v : null));
+        object Llegue2(int n, string donde) => t.GetMethod("Llegue")!.Invoke(registro2, new object[] { n, donde })!;
+        Debe((int)t.GetProperty("Total")!.GetValue(registro2)! == 3, "el total son 3: uno que navega y dos campos");
+
+        var vTemp = Llegue2(4, "sapgui://B");
+        Debe(!(bool)Prop(vTemp, "Aterrizo")! && ((string)Prop(vTemp, "Motivo")!).Contains("38") && ((string)Prop(vTemp, "Motivo")!).Contains("37"),
+            $"el campo dice 37 y la demo tecleó 38: NO está hecho, y el motivo nombra los dos valores ({Prop(vTemp, "Motivo")})");
+        var vPeso = Llegue2(5, "sapgui://B");
+        Debe((bool)Prop(vPeso, "Aterrizo")!,
+            $"el campo dice «82,000» y la demo tecleó «82»: está hecho, porque SAP formatea al viajar y 82 es 82 ({Prop(vPeso, "Motivo")})");
+        var vClic = Llegue2(2, "sapgui://B");
+        Debe((int)Prop(vClic, "N")! == 5 && (bool)Prop(vClic, "Aterrizo")!,
+            "un «llegué» sobre el clic que ABRIÓ el campo (evento 2) se juzga sobre el campo (evento 5), por identidad: el piloto no tiene por qué saber cuál de los dos numeros cuenta");
+        valores["s6"] = "38";
+        Llegue2(4, "sapgui://B");
+        Debe(!(bool)Prop(t.GetMethod("Final")!.Invoke(registro2, null)!, "Comprobada")!, "sin el que navega, todavía no");
+        Llegue2(1, "sapgui://B");
+        var final2 = t.GetMethod("Final")!.Invoke(registro2, null)!;
+        Debe((bool)Prop(final2, "Comprobada")! && ((string)Prop(final2, "Motivo")!).Contains("3"),
+            $"con el que navega aterrizado y los dos campos leídos con su valor, COMPROBADA 3 de 3 ({Prop(final2, "Motivo")})");
+        valores["s6"] = null;
+        var vSinLeer = Llegue2(4, "sapgui://B");
+        Debe(!(bool)Prop(vSinLeer, "Aterrizo")! && ((string)Prop(vSinLeer, "Motivo")!).Contains("leer"),
+            "si el campo no se puede leer, NO se da por hecho y se dice que no se pudo leer: declarar no es leer");
+
+        bool Mismo(string a, string b) => (bool)mismo.Invoke(null, new object[] { a, b })!;
+        Debe(Mismo("80", "80,000") && Mismo("1.70", "1,70") && Mismo("ALTA", " alta") && Mismo("", ""), "lo mismo tecleado: número es número aunque SAP lo formatee, y el texto no distingue mayúsculas ni espacios");
+        Debe(!Mismo("80", "81") && !Mismo("Normal", "Norma"), "…y lo que no es lo mismo, no lo es");
+
+        // Y EL JUEZ DICE QUÉ FALTA, por su nombre, para que las manos vayan a eso.
+        var pendientes = t.GetMethod("Pendientes");
+        Debe(pendientes != null, "todavía no existe «RegistroDeLaComprobacion.Pendientes» (spec 014, promesa 175 extendida)");
+        if (pendientes == null) return;
+        var registro3 = Nuevo(t, leccion2, (Func<string, string?>)(sel => valores.TryGetValue(sel, out var v) ? v : null));
+        var faltan = ((System.Collections.IEnumerable)pendientes.Invoke(registro3, null)!).Cast<object>().ToList();
+        Debe(faltan.Count == 3, $"sin juzgar nada, faltan los 3 que cuentan (salieron {faltan.Count})");
+        t.GetMethod("Llegue")!.Invoke(registro3, new object[] { 1, "sapgui://B" });
+        faltan = ((System.Collections.IEnumerable)pendientes.Invoke(registro3, null)!).Cast<object>().ToList();
+        int NDe(object f) => (int)f.GetType().GetField("Item1")!.GetValue(f)!;
+        string QueDe(object f) => (string)f.GetType().GetField("Item2")!.GetValue(f)!;
+        Debe(faltan.Count == 2 && faltan.All(f => NDe(f) != 1) && faltan.Any(f => QueDe(f) == "Temperatura"),
+            "aterrizado el 1, faltan los dos campos, con su nombre");
     }
 
     private static void LaSkillNaceDeLoVerificado()
@@ -5741,6 +5902,550 @@ internal static class Contrato
         var sinTerreno = ((System.Collections.IEnumerable)m.Invoke(null, new object?[] { clics, "sapgui://fin", null })!).Cast<object>().ToList();
         Debe((string)Prop(sinTerreno[1], "Llegada")! == "" && (string)Prop(sinTerreno[5], "Llegada")! == "sapgui://fin",
             "sin terreno a mano, todo queda vacío salvo el último: la lección no calcula llegadas por su cuenta");
+
+        // SAP VISTO POR UIA NO ES UNA LLEGADA (2026-09-08, décima prueba). Tras pulsar «Triage», SAP
+        // tardó y el mapa vivo se quedó ciego; al volver, identificó la ventana de SAP por su título
+        // —«uia://saplogon.exe/reg-triage-crear-…»— y le colgó esa «llegada» al último clic, que
+        // era Apertura Ocular. El evento contó como navegante y no podía aterrizar jamás: la app
+        // estaba en «sapgui://…/0001», que es la MISMA ventana vista por el ojo correcto.
+        var conOjoEquivocado = ListaDe(tt.Clic);
+        conOjoEquivocado.Add(ClicEn(1000, "sapgui://QAS/NWP1/0001", "sap:…/cmbY0000000-ZCMBAPOCU", "Apertura Ocular"));
+        conOjoEquivocado.Add(ClicEn(2000, "uia://explorer", "uia:aid=x", "SAP Logon"));
+        Func<string, string, string, string> terrenoCiego = (desde, sel, etq) =>
+            etq == "Apertura Ocular" ? "uia://saplogon.exe/reg-triage-crear-h-giraldo-status-cd"
+            : etq == "SAP Logon" ? "uia://saplogon.exe/sap-logon-770" : "";
+        var ciego = ((System.Collections.IEnumerable)m.Invoke(null, new object[] { conOjoEquivocado, "sapgui://fin", terrenoCiego })!).Cast<object>().ToList();
+        Debe((string)Prop(ciego[0], "Llegada")! == "",
+            "un clic dado DENTRO de SAP cuya «llegada» es SAP visto por UIA no tiene llegada: es la misma ventana con el ojo equivocado, y queda vacía");
+        Debe((string)Prop(ciego[1], "Llegada")! == "uia://saplogon.exe/sap-logon-770",
+            "pero un clic dado FUERA de SAP que acaba en una ventana de saplogon (el SAP Logon, que es UIA de verdad) sí llega ahí: la valla es solo para el ojo equivocado sobre la misma sesión");
+
+        // LA PUERTA CON LA QUE SE PREGUNTA (2026-09-08, decimotercera prueba). El terreno SÍ había
+        // aprendido que el botón «Triage» lleva al formulario (promesa 189), y la lección salió con esa
+        // llegada VACÍA: las llegadas se buscaban con la identidad del vigía —la fila «GIRALDO», que
+        // adivinó por geometría— antes de que SAP dijera que era el botón. Contaba entonces el último
+        // clic sin identidad, que nadie puede dar: «19 de 20» con todo hecho.
+        var conSap = Capacidad("U.WindowsClient.Teach.ArmarLaLeccion")?.GetMethod("ConLaIdentidadDeSap");
+        Debe(conSap != null, "todavía no existe «ArmarLaLeccion.ConLaIdentidadDeSap» (spec 014, promesa 178 extendida)");
+        if (conSap == null) return;
+        var adivinados = ListaDe(tt.Clic); var vistosPorSap = ListaDe(tt.Paso);
+        adivinados.Add(ClicEn(1000, "sapgui://lista", "sap:grid#row=PATNNAME=GIRALDO", "GIRALDO"));
+        adivinados.Add(ClicEn(5000, "sapgui://lista", "sap:grid#row=PATNNAME=GIRALDO", "GIRALDO"));  // el vigía adivinó la fila
+        vistosPorSap.Add(Nuevo(tt.Paso, 6000L, "sap:grid#tbbtn=ZMEDTRIAGE", "Triage", "button", "", "", "sapgui://lista"));
+        var conLaDeSapCrudo = conSap.Invoke(null, new object[] { adivinados, vistosPorSap })!;
+        var conLaDeSap = ((System.Collections.IEnumerable)conLaDeSapCrudo).Cast<object>().ToList();
+        Debe((string)Prop(conLaDeSap[1], "Etiqueta")! == "Triage" && (string)Prop(conLaDeSap[1], "Selector")! == "sap:grid#tbbtn=ZMEDTRIAGE",
+            "el clic que SAP vio como el botón «Triage» lleva esa identidad ANTES de buscar llegadas");
+        Debe((string)Prop(conLaDeSap[0], "Etiqueta")! == "GIRALDO", "y el clic sobre la fila sigue siendo la fila");
+        Func<string, string, string, string> terrenoQueSabe = (desde, sel, etq) => sel == "sap:grid#tbbtn=ZMEDTRIAGE" ? "sapgui://triage" : "";
+        var llegadas = ((System.Collections.IEnumerable)m.Invoke(null, new object[] { conLaDeSapCrudo, "sapgui://triage", terrenoQueSabe })!).Cast<object>().ToList();
+        Debe((string)Prop(llegadas[1], "Llegada")! == "sapgui://triage", "…y con esa identidad el terreno contesta: la llegada del botón deja de estar vacía");
+    }
+
+    private static void LaVozDeLaComprobacionEsPrestada()
+    {
+        var t = Cap004("U.WindowsClient.Piloto.VozPrestada");
+        var utensilios = t?.GetMethod("Utensilios");
+        var instrucciones = t?.GetProperty("Instrucciones") ?? (MemberInfo?)t?.GetField("Instrucciones");
+        Debe(t != null && utensilios != null && instrucciones != null,
+            "todavía no existe «Piloto.VozPrestada» (spec 014, promesa 192). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || utensilios == null || instrucciones == null) return;
+
+        var todas = (System.Collections.IEnumerable)Cap004("U.WindowsClient.Voice.ConversacionEnVivo")!
+            .GetMethod("Herramientas", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)!
+            .Invoke(null, null)!;
+        var sinNada = ((System.Collections.IEnumerable)utensilios.Invoke(null, new object[] { todas })!).Cast<object>().ToList();
+        Debe(sinNada.Count == 0, $"la voz prestada no tiene NI UNA herramienta: ni manos ni ojos, porque quien actúa y mira es el piloto (salieron {sinNada.Count})");
+
+        string texto = instrucciones is PropertyInfo pi ? (string)pi.GetValue(null)! : (string)((FieldInfo)instrucciones).GetValue(null)!;
+        Debe(texto.Contains("exactamente") && texto.Contains("calla", StringComparison.OrdinalIgnoreCase),
+            "sus instrucciones son decir exactamente lo que se le pide y callar ante todo lo demás");
+        Debe(!texto.Contains("propón", StringComparison.OrdinalIgnoreCase) || texto.Contains("no propongas", StringComparison.OrdinalIgnoreCase),
+            "y no proponer: sugerir es justo lo que se oyó y no tocaba");
+
+        // Y LA SESIÓN NO CREA RESPUESTAS POR SU CUENTA: la apertura lleva la perilla apagada.
+        var tp = typeof(Voz.Realtime.ProtocoloOpenAI);
+        var apertura = tp.GetMethods().FirstOrDefault(m => m.Name == "Apertura" && m.GetParameters().Length == 4);
+        Debe(apertura != null && apertura.GetParameters()[3].ParameterType == typeof(bool),
+            "«Apertura» todavía no acepta «soloCuandoSeLePide» (spec 014, promesa 192)");
+        if (apertura == null) return;
+        var proto = new Voz.Realtime.ProtocoloOpenAI();
+        var lista = ListaDe(typeof(Voz.Realtime.Utensilio));
+        string prestada = string.Join("\n", ((IEnumerable<string>)apertura.Invoke(proto, new object[] { "x", lista, "", true })!));
+        string normal = string.Join("\n", ((IEnumerable<string>)apertura.Invoke(proto, new object[] { "x", lista, "", false })!));
+        Debe(prestada.Contains("\"create_response\":false"), $"con la voz prestada, la sesión no crea respuestas sola: create_response=false en la apertura ({Recorta(prestada, 200)})");
+        Debe(!normal.Contains("\"create_response\":false"), "y de normal sí: la conversación de siempre contesta cuando le hablan");
+    }
+
+    private static void DarUnPasoEsUnaCoreografia()
+    {
+        var t = Capacidad("U.WindowsClient.Piloto.ElPasoQueSeDa");
+        var m = t?.GetMethod("Resolver");
+        var esSelector = t?.GetMethod("EsSelector");
+        Debe(t != null && m != null && esSelector != null,
+            "todavía no existe «Piloto.ElPasoQueSeDa.Resolver» (spec 014, promesa 191). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || m == null || esSelector == null) return;
+
+        (string Senalar, string Ejecutor) I(string exit, string etiqueta, string selector, string texto)
+        {
+            var r = m.Invoke(null, new object[] { exit, etiqueta, selector, texto })!;
+            return ((string)Prop(r, "ParaSenalar")!, (string)Prop(r, "ParaElEjecutor")!);
+        }
+        const string fila = "sap:wnd[0]/usr/…/shell#row=DATUM=08.09.2026|ZEIT=00:51|FALNR=2394353|PATNNAME=GIRALDO";
+        const string peso = "sap:wnd[0]/usr/…/txtY0000000-ZTXTPESO";
+        Debe(I("GIRALDO", "GIRALDO", fila, "") == ("GIRALDO", "GIRALDO"), "con el nombre de la puerta, se señala y se da por el nombre");
+        Debe(I(fila, "GIRALDO", fila, "") == ("GIRALDO", "GIRALDO"),
+            "si el piloto trae el SELECTOR de la fila y el evento tiene puerta, se señala y se da por la PUERTA: el selector de una fila cambia con la lista, el nombre no (undécima prueba: «no lo conozco»)");
+        Debe(I("Peso", "Peso", peso, "80") == ("Peso", peso), "un paso que teclea se señala por el nombre y se escribe por el SELECTOR de la lección");
+        Debe(I(peso, "Peso", peso, "80") == ("Peso", peso), "…aunque el piloto traiga el selector: se señala por el nombre igual");
+        Debe(I("", "Triage", "sap:…#tbbtn=ZMEDTRIAGE", "") == ("Triage", "Triage"), "sin exit del piloto, la puerta del evento");
+        Debe(I("Triage", "", "", "") == ("Triage", "Triage"), "sin evento, lo que el piloto trajo");
+        Debe(I(fila, "", "", "") == (fila, fila), "un selector sin evento que lo nombre se queda como selector: no se inventa un nombre");
+        Debe((bool)esSelector.Invoke(null, new object[] { "sap:wnd[0]/usr/x" })! && (bool)esSelector.Invoke(null, new object[] { "uia:name=X;ct=Button" })!
+             && !(bool)esSelector.Invoke(null, new object[] { "Presión Arterial" })!,
+            "un selector se reconoce por su prefijo de mundo: sap: o uia:; un nombre no lo lleva");
+
+        // Y la coreografía de la mano es la MISMA que la del plan: sin decir no se dice, sin recuerdo no hay tarjeta, y se actúa igual.
+        var core = Capacidad("U.WindowsClient.Piloto.ElRecuerdoQueSeVe")!.GetMethod("Coreografia")!;
+        var sinNada = ((System.Collections.IEnumerable)core.Invoke(null, new object[] { true, false, false })!).Cast<object>().Select(g => g.ToString()).ToList();
+        Debe(sinNada.SequenceEqual(new[] { "Senalar", "Actuar", "Soltar" }), $"una mano sin decir ni recuerdo: señalar, actuar y soltar, nada más (salió {string.Join(",", sinNada)})");
+        var conTodo = ((System.Collections.IEnumerable)core.Invoke(null, new object[] { true, true, true })!).Cast<object>().Select(g => g.ToString()).ToList();
+        Debe(conTodo.IndexOf("Decir") < conTodo.IndexOf("Actuar") && conTodo.IndexOf("Mostrar") < conTodo.IndexOf("Actuar"),
+            "y con decir y recuerdo, se dice y se muestra ANTES de actuar: «justo después de que lo narraba, sucedía»");
+    }
+
+    private static void ElGrabadorDeSapEnsenaAlTerreno()
+    {
+        var t = Capacidad("U.WindowsClient.Teach.ElCruceQueVioSap");
+        var tPaso = Capacidad("U.WindowsClient.Teach.PasoQueVioSap");
+        var tCambio = Capacidad("U.WindowsClient.Teach.CambioQueVioSap");
+        var m = t?.GetMethod("Emparejar");
+        Debe(t != null && tPaso != null && tCambio != null && m != null,
+            "todavía no existe «Teach.ElCruceQueVioSap.Emparejar» (spec 014, promesa 189). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || tPaso == null || tCambio == null || m == null) return;
+
+        object Paso(long hora, string superficie, string selector) => Nuevo(tPaso, hora, superficie, selector);
+        object Cambio(long hora, string desde, string hasta) => Nuevo(tCambio, hora, desde, hasta);
+        (string, string, string)? E(object? paso, object cambio)
+        {
+            var r = m.Invoke(null, new object?[] { paso, cambio });
+            if (r == null) return null;
+            return ((string)r.GetType().GetField("Item1")!.GetValue(r)!, (string)r.GetType().GetField("Item2")!.GetValue(r)!, (string)r.GetType().GetField("Item3")!.GetValue(r)!);
+        }
+        const string lista = "sapgui://QAS/NWP1/SAPLN_WP_FRAMEWORK/0100/ssub:vista:Urgencias", triage = "sapgui://QAS/NWP1/SAPLY000/0001";
+        const string boton = "sap:wnd[0]/usr/ssub/cntlISH_VIEW_007/shellcont/shell#tbbtn=ZMEDTRIAGE";
+
+        var visto = E(Paso(1000, lista, boton), Cambio(4000, lista, triage));
+        Debe(visto == (lista, boton, triage), $"el botón Triage, publicado 3 s antes de que SAP anunciara la pantalla nueva, es la arista lista → triage (salió {visto})");
+        Debe(E(Paso(1000, lista, boton), Cambio(30_000, lista, triage)) == null, "un paso de hace 29 s no explica este salto: la ventana es corta, como en el mapa vivo, porque una arista falsa es peor que ninguna");
+        Debe(E(Paso(1000, "sapgui://otra", boton), Cambio(4000, lista, triage)) == null, "un paso publicado desde OTRA pantalla no explica un salto que sale de esta");
+        Debe(E(Paso(1000, "", boton), Cambio(4000, lista, triage)) == (lista, boton, triage), "un paso sin pantalla anotada (SAP no contestó al publicarlo) se acepta: la pantalla de salida la pone el cambio");
+        Debe(E(null, Cambio(4000, lista, triage)) == null, "sin paso publicado no hay a quién atribuirle el salto");
+        Debe(E(Paso(1000, lista, boton), Cambio(4000, lista, lista)) == null, "quedarse en la misma pantalla no es cruzar");
+        Debe(E(Paso(1000, lista, boton), Cambio(4000, lista, "uia://saplogon.exe/reg-triage-crear")) == null, "y SAP visto por UIA no es un destino: es el ojo equivocado");
+        Debe(E(Paso(1000, lista, ""), Cambio(4000, lista, triage)) == null, "un paso sin selector no es una puerta que el terreno pueda conocer");
+        Debe(E(Paso(5000, lista, boton), Cambio(4000, lista, triage)) == null, "un paso publicado DESPUÉS del cambio no lo causó");
+    }
+
+    private static void EnUnDesplegableSeFijaLaClave()
+    {
+        var tSap = AppDominio().FirstOrDefault(x => x.FullName == "U.Graph.Surfaces.SapGuiSurface");
+        var tOpcion = AppDominio().FirstOrDefault(x => x.FullName == "U.Graph.FieldOption");
+        var m = tSap?.GetMethod("ClaveDeLaOpcion");
+        Debe(tSap != null && tOpcion != null && m != null,
+            "todavía no existe «SapGuiSurface.ClaveDeLaOpcion» (spec 014, promesa 190). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tSap == null || tOpcion == null || m == null) return;
+
+        var opciones = ListaDe(tOpcion);
+        void Opcion(string clave, string texto)
+        {
+            var o = Activator.CreateInstance(tOpcion)!;
+            tOpcion.GetProperty("Value")!.SetValue(o, clave);
+            tOpcion.GetProperty("Label")!.SetValue(o, texto);
+            tOpcion.GetProperty("Text")!.SetValue(o, texto);
+            opciones.Add(o);
+        }
+        Opcion("1", "Ninguna"); Opcion("2", "Al dolor"); Opcion("3", "A la voz"); Opcion("4", "Espontánea"); Opcion("9", "Ninguna");
+        string C(string v) => (string)m.Invoke(null, new object?[] { opciones, v })!;
+        Debe(C("4") == "4", "la clave misma, que es lo que trae la lección");
+        Debe(C("Espontánea") == "4", "el texto que la persona lee, que es lo que el piloto teclea con las manos");
+        Debe(C("espontanea ") == "4", "…sin acentos, mayúsculas ni espacios de más");
+        Debe(C("A la voz") == "3", "un texto con espacios dentro se encuentra igual");
+        Debe(C("Ninguna") == "", "dos opciones con el mismo texto no se adivinan: nadie");
+        Debe(C("Orientado") == "", "un valor que no es ninguna opción no se inventa");
+        Debe((string)m.Invoke(null, new object?[] { null, "4" })! == "", "sin opciones no hay clave, y no hay excepción");
+    }
+
+    private static void LoQueSeNombraEnSapSeResuelveEnUnSitio()
+    {
+        var t = Cap004("U.WindowsClient.Mcp.SurfaceMapTools");
+        var tCampo = AppDominio().FirstOrDefault(x => x.FullName == "U.Graph.DetectedField");
+        var m = t?.GetMethod("LoQueSeNombra");
+        Debe(t != null && tCampo != null && m != null,
+            "todavía no existe «SurfaceMapTools.LoQueSeNombra» (spec 014, promesa 188). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || tCampo == null || m == null) return;
+
+        var terreno = new List<(string, string, string)>
+        {
+            ("sap:…#tbbtn=ZMEDTRIAGE", "Triage", "GuiGridBoton"),
+            ("sap:wnd[0]/usr/txtY0000000-ZTXTPESO", "Peso", "GuiTextField"),   // el terreno ya lo conoce
+        };
+        var campos = ListaDe(tCampo);
+        void Campo(string selector, string etiqueta)
+        {
+            var c = Activator.CreateInstance(tCampo)!;
+            tCampo.GetProperty("Selector")!.SetValue(c, selector);
+            tCampo.GetProperty("Label")!.SetValue(c, etiqueta);
+            tCampo.GetProperty("ControlType")!.SetValue(c, "text");
+            campos.Add(c);
+        }
+        Campo("sap:wnd[0]/usr/txtY0000000-ZTXTTASIS", "Presión Arterial");
+        Campo("sap:wnd[0]/usr/txtY0000000-ZTXTPESO", "Peso");
+        Campo("sap:wnd[0]/usr/cntlCT__ZTXTMTVCN/shellcont/shell", "Motivo de Consulta");
+        Campo("sap:wnd[0]/usr/ctxtY0000000-ZFECHA1", "Fecha");
+        Campo("sap:wnd[0]/usr/ctxtY0000000-ZFECHA2", "Fecha");
+
+        object? Nombra(string que) => m.Invoke(null, new object[] { que, terreno, campos });
+        string Sel(object? o) => o == null ? "" : (string)o.GetType().GetField("Item1")!.GetValue(o)!;
+        string Tipo(object? o) => o == null ? "" : (string)o.GetType().GetField("Item3")!.GetValue(o)!;
+
+        Debe(Sel(Nombra("Triage")) == "sap:…#tbbtn=ZMEDTRIAGE", "una puerta del terreno se encuentra como siempre");
+        Debe(Sel(Nombra("Presión Arterial")) == "sap:wnd[0]/usr/txtY0000000-ZTXTTASIS",
+            "un campo del dynpro que el terreno no conoce se encuentra por su etiqueta: es lo que el piloto ve y lo que rechazaba «no veo nada que se llame»");
+        Debe(Sel(Nombra("Y0000000-ZTXTTASIS")) == "sap:wnd[0]/usr/txtY0000000-ZTXTTASIS", "y por su nombre técnico, con el mismo resolutor que para escribir");
+        Debe(Sel(Nombra("Motivo de Consulta")).EndsWith("shellcont/shell"), "la caja de texto largo también");
+        Debe(Tipo(Nombra("Peso")) == "GuiTextField", "cuando el terreno y el dynpro conocen el mismo campo, manda el terreno: lleva su tipo y su historia");
+        Debe(Nombra("Fecha") == null, "dos campos que se llaman igual: nadie");
+        Debe(Nombra("Glasgow total") == null, "lo que ningún sitio conoce no se inventa");
+        Debe(Sel(m.Invoke(null, new object?[] { "Presión Arterial", null, campos })) == "sap:wnd[0]/usr/txtY0000000-ZTXTTASIS"
+             && m.Invoke(null, new object?[] { "Presión Arterial", terreno, null }) == null,
+            "sin terreno se busca en los campos; sin campos, no hay campo: null y no una excepción");
+        Debe(Sel(Nombra("sap:…#tbbtn=ZMEDTRIAGE")) == "sap:…#tbbtn=ZMEDTRIAGE",
+            "y una puerta del terreno se encuentra también por su selector exacto: el plan a veces trae el selector en vez del nombre");
+
+        // Y EN LA LISTA, la etiqueta que se lee: el terreno conoce el campo por su nombre técnico y el
+        // dynpro por lo que la persona lee; mismo selector, mismo campo, y gana lo que se lee.
+        var conEtiqueta = t.GetMethod("ConLaEtiquetaQueSeLee");
+        Debe(conEtiqueta != null, "todavía no existe «SurfaceMapTools.ConLaEtiquetaQueSeLee» (spec 014, promesa 188)");
+        if (conEtiqueta == null) return;
+        var tecnico = new List<(string, string, string)>
+        {
+            ("sap:wnd[0]/usr/txtY0000000-ZTXTTASIS", "Y0000000-ZTXTTASIS", "GuiTextField"),
+            ("sap:…#tbbtn=ZMEDTRIAGE", "Triage", "GuiGridBoton"),
+        };
+        var leidos = new List<(string, string, string)>
+        {
+            ("sap:wnd[0]/usr/txtY0000000-ZTXTTASIS", "Presión Arterial", "text"),
+            ("sap:wnd[0]/usr/txtY0000000-ZTXTPESO", "Peso", "text"),
+        };
+        var lista = ((System.Collections.IEnumerable)conEtiqueta.Invoke(null, new object[] { tecnico, leidos })!).Cast<object>().ToList();
+        string E(object o) => (string)o.GetType().GetField("Item2")!.GetValue(o)!;
+        string T(object o) => (string)o.GetType().GetField("Item3")!.GetValue(o)!;
+        Debe(lista.Count == 3, $"dos del terreno y un campo que el terreno no conocía: 3 (salieron {lista.Count}), sin duplicar el que conocen los dos");
+        Debe(lista.Any(o => E(o) == "Presión Arterial" && T(o) == "GuiTextField"),
+            "el campo que los dos conocen sale con la etiqueta que se LEE y el tipo del terreno");
+        Debe(!lista.Any(o => E(o) == "Y0000000-ZTXTTASIS"), "…y su nombre técnico ya no se lista: nadie lo llama así");
+        Debe(lista.Any(o => E(o) == "Triage") && lista.Any(o => E(o) == "Peso"), "lo demás sigue: la puerta del terreno y el campo nuevo");
+    }
+
+    private static void ElComponenteBajoElPuntoSeDecidePorGeometria()
+    {
+        var tSap = AppDominio().FirstOrDefault(x => x.FullName == "U.Graph.Surfaces.SapGuiSurface");
+        var tVisual = AppDominio().FirstOrDefault(x => x.FullName == "U.Graph.Surfaces.SapVisualElement");
+        var tCampo = AppDominio().FirstOrDefault(x => x.FullName == "U.Graph.DetectedField");
+        var elMasPequeno = tSap?.GetMethod("ElMasPequenoQueContiene");
+        var elCampoDe = tSap?.GetMethod("ElCampoDeEsteId");
+        Debe(tSap != null && tVisual != null && tCampo != null && elMasPequeno != null && elCampoDe != null,
+            "todavía no existen «SapGuiSurface.ElMasPequenoQueContiene» y «ElCampoDeEsteId» (spec 014, promesa 186). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tSap == null || tVisual == null || tCampo == null || elMasPequeno == null || elCampoDe == null) return;
+
+        var vistos = ListaDe(tVisual);
+        void Visual(string id, int left, int top, int w, int h, bool caja = true, bool nodo = false)
+            => vistos.Add(Nuevo(tVisual, id, "GuiTextField", "", "", "", left, top, w, h, caja,
+                "input", "text", nodo, null, null, 0, null, false, false));
+
+        const string panel = "/app/con[0]/ses[0]/wnd[0]/usr/ssubSUB:SAPLY000:0002";
+        const string peso = panel + "/txtY0000000-ZTXTPESO";
+        const string caja = panel + "/cntlCT__ZTXTMTVCN/shellcont/shell";
+        Visual(panel, 0, 0, 800, 600);                 // el contenedor también contiene el punto
+        Visual(peso, 100, 100, 60, 20);
+        Visual(caja, 100, 300, 300, 80);
+        Visual("/app/con[0]/ses[0]/wnd[0]/usr/fila", 100, 100, 60, 20, nodo: true);      // un nodo no se elige
+        Visual("/app/con[0]/ses[0]/wnd[0]/usr/sinCaja", 100, 100, 60, 20, caja: false);  // sin caja tampoco
+
+        string Donde(int x, int y) => (string)elMasPequeno.Invoke(null, new object[] { vistos, x, y })!;
+        Debe(Donde(130, 110) == peso,
+            "el MÁS PEQUEÑO que contiene el punto, no el panel que lo contiene todo: un contenedor gana siempre por ser primero");
+        Debe(Donde(700, 550) == panel, "donde solo cabe el contenedor, el contenedor");
+        Debe(Donde(2000, 2000) == "", "fuera de todo no se devuelve nada: no se elige por descarte");
+        Debe(Donde(105, 305) == caja, "una caja de texto largo se elige igual que un campo normal");
+
+        var campos = ListaDe(tCampo);
+        object Campo(string selector, string etiqueta)
+        {
+            var c = Activator.CreateInstance(tCampo)!;
+            tCampo.GetProperty("Selector")!.SetValue(c, selector);
+            tCampo.GetProperty("Label")!.SetValue(c, etiqueta);
+            campos.Add(c);
+            return c;
+        }
+        var elPeso = Campo("sap:wnd[0]/usr/ssubSUB:SAPLY000:0002/txtY0000000-ZTXTPESO", "Peso");
+        var elMotivo = Campo("sap:wnd[0]/usr/ssubSUB:SAPLY000:0002/cntlCT__ZTXTMTVCN/shellcont/shell", "Motivo de Consulta");
+
+        object? De(string id) => elCampoDe.Invoke(null, new object[] { campos, id });
+        Debe(ReferenceEquals(De(peso), elPeso), "del id de un campo sale ese campo, con el prefijo absoluto quitado");
+        Debe(ReferenceEquals(De(caja), elMotivo), "y del id de la caja de texto largo, la caja");
+        Debe(ReferenceEquals(De(caja + "/hijo[2]"), elMotivo),
+            "un punto que cae en un HIJO de la caja sube por la ruta hasta la caja: FindByPosition no es lo único que devuelve un hijo");
+        Debe(De(panel) == null, "y el panel no es un campo: subir no puede acabar entregando el contenedor de todo");
+    }
+
+    private static void LoTecleadoSeDescargaAntesDeArmarLaLeccion()
+    {
+        var t = Capacidad("U.WindowsClient.Teach.ElCierreDeLaDemo");
+        var m = t?.GetMethod("Orden");
+        Debe(t != null && m != null,
+            "todavía no existe «Teach.ElCierreDeLaDemo.Orden» (spec 014, promesa 187). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || m == null) return;
+
+        List<string> Orden(bool hayVideo, bool haySuperficie)
+        {
+            var l = (System.Collections.IEnumerable)m.Invoke(null, new object[] { hayVideo, haySuperficie })!;
+            return l.Cast<object>().Select(x => x.ToString()!).ToList();
+        }
+
+        var todo = Orden(true, true);
+        Debe(todo.SequenceEqual(new[] { "DescargarLoPendiente", "SoltarLaSuperficie", "PararElVideo", "ArmarLaLeccion", "PararElGrabador" }),
+            $"con video y superficie, los cinco en ese orden (salió «{string.Join(" → ", todo)}»)");
+        if (todo.Count != 5) return;
+        Debe(todo.IndexOf("DescargarLoPendiente") < todo.IndexOf("SoltarLaSuperficie"),
+            "descargar va antes de SOLTAR la superficie: soltada, el oyente ya no está y lo descargado no llega a la lección");
+        Debe(todo.IndexOf("DescargarLoPendiente") < todo.IndexOf("ArmarLaLeccion"),
+            "y antes de ARMAR: al revés, la descarga funciona y la lección sale vacía igual — que es lo que pasó el 2026-09-07");
+        Debe(todo.IndexOf("ArmarLaLeccion") < todo.IndexOf("PararElGrabador"),
+            "y la lección se arma antes de parar al grabador, que es lo que ya hacía y no se rompe");
+
+        var sinVideo = Orden(false, true);
+        Debe(!sinVideo.Contains("PararElVideo") && sinVideo.IndexOf("DescargarLoPendiente") < sinVideo.IndexOf("ArmarLaLeccion"),
+            "sin video no se para ningún video, y descargar sigue precediendo a armar");
+        var sinSuperficie = Orden(true, false);
+        Debe(!sinSuperficie.Contains("DescargarLoPendiente") && !sinSuperficie.Contains("SoltarLaSuperficie")
+             && sinSuperficie.Contains("ArmarLaLeccion"),
+            "sin superficie observada no hay nada que descargar ni que soltar, pero la lección se arma igual");
+    }
+
+    private static void LoTecleadoSeCuelgaDelCampoQueLoAbrio()
+    {
+        var tt = TiposDeLaLeccion.Cargar();
+        var armar = Capacidad("U.WindowsClient.Teach.ArmarLaLeccion")?.GetMethod("Eventos");
+        Debe(tt != null && armar != null, "no existe «Teach.ArmarLaLeccion.Eventos» (spec 013)");
+        if (tt == null || armar == null) return;
+
+        const string nombre = "sap:wnd[0]/usr/txtY0000000-ZTRNOMPAC", peso = "sap:wnd[0]/usr/txtY0000000-ZTXTPESO";
+        var clics = ListaDe(tt.Clic); var pasos = ListaDe(tt.Paso); var frases = ListaDe(tt.Frase); var cuadros = ListaDe(tt.Cuadro);
+        clics.Add(Clic(tt.Clic, 2000L, 100, 100, "sapgui://F", nombre, "Nombre del paciente"));
+        clics.Add(Clic(tt.Clic, 4000L, 100, 140, "sapgui://F", peso, "Peso"));
+        clics.Add(Clic(tt.Clic, 9000L, 300, 300, "sapgui://F", "", "Triage"));
+        // Un tecleo DENTRO de la ventana de tiempo del clic de Peso, pero sobre el campo Nombre.
+        pasos.Add(Nuevo(tt.Paso, 5000L, nombre, "Nombre del paciente", "GuiTextField", "GIRALDO", "", "sapgui://F"));
+        // Y la descarga al parar: 30 s después de todo, los dos campos a la vez.
+        pasos.Add(Nuevo(tt.Paso, 30_000L, peso, "Peso", "GuiTextField", "70", "", "sapgui://F"));
+        pasos.Add(Nuevo(tt.Paso, 30_000L, "sap:wnd[0]/usr/txtY0000000-ZTXTTALLA", "Talla", "GuiTextField", "1.70", "", "sapgui://F"));
+        for (long t = 0; t < 32_000; t += 250) cuadros.Add(Nuevo(tt.Cuadro, t, $"c{t}.jpg", (ulong)(t / 3000)));
+
+        var eventos = (System.Collections.IList)armar.Invoke(null, new object[] { clics, pasos, frases, cuadros })!;
+        Debe(eventos.Count == 4, $"tres clics y un tecleo sin clic que lo abriera son CUATRO eventos (salieron {eventos.Count})");
+        if (eventos.Count != 4) return;
+        var e1 = eventos[0]!; var e2 = eventos[1]!; var e3 = eventos[2]!; var e4 = eventos[3]!;
+        Debe((string)Prop(e1, "Texto")! == "GIRALDO" && (string)Prop(e1, "Selector")! == nombre,
+            "el tecleo sobre Nombre se cuelga del clic en Nombre, aunque por tiempo le tocara el clic en Peso");
+        Debe((string)Prop(e2, "Texto")! == "70" && (string)Prop(e2, "Selector")! == peso,
+            "el Peso descargado al parar —26 s después del clic— se cuelga del clic que abrió ese campo");
+        Debe((string)Prop(e3, "Texto")! == "" && (string)Prop(e3, "Etiqueta")! == "Triage",
+            "y el último clic NO se lleva lo de los demás campos");
+        Debe((string)Prop(e4, "Tipo")! == "teclado" && (string)Prop(e4, "Texto")! == "1.70",
+            "un tecleo sin clic con su identidad y lejos de todos sigue siendo un evento propio, por teclado, con su texto");
+    }
+
+    private static void UnCampoDeSapSeEncuentraPorSuNombre()
+    {
+        var tSap = AppDominio().FirstOrDefault(x => x.FullName == "U.Graph.Surfaces.SapGuiSurface");
+        var tCampo = AppDominio().FirstOrDefault(x => x.FullName == "U.Graph.DetectedField");
+        var m = tSap?.GetMethod("ElCampoQueSeLlama");
+        Debe(tSap != null && tCampo != null && m != null,
+            "todavía no existe «SapGuiSurface.ElCampoQueSeLlama» (spec 014, promesa 185). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tSap == null || tCampo == null || m == null) return;
+
+        var lista = ListaDe(tCampo);
+        object Campo(string selector, string etiqueta)
+        {
+            var c = Activator.CreateInstance(tCampo)!;
+            tCampo.GetProperty("Selector")!.SetValue(c, selector);
+            tCampo.GetProperty("Label")!.SetValue(c, etiqueta);
+            tCampo.GetProperty("ControlType")!.SetValue(c, "text");
+            lista.Add(c);
+            return c;
+        }
+        var nombre = Campo("sap:wnd[0]/usr/txtY0000000-ZTRNOMPAC", "Nombre del paciente");
+        var peso = Campo("sap:wnd[0]/usr/txtY0000000-ZTXTPESO", "Peso");
+        var motivo = Campo("sap:wnd[0]/usr/cntlCT__ZTXTMTVCN/shellcont/shell", "Motivo de Consulta");
+        Campo("sap:wnd[0]/usr/ctxtY0000000-ZFECHA1", "Fecha");
+        Campo("sap:wnd[0]/usr/ctxtY0000000-ZFECHA2", "Fecha");
+
+        object? Busca(string que) => m.Invoke(null, new object[] { lista, que });
+        Debe(ReferenceEquals(Busca("sap:wnd[0]/usr/txtY0000000-ZTXTPESO"), peso), "por su selector exacto");
+        Debe(ReferenceEquals(Busca("Nombre del paciente"), nombre), "por su etiqueta, la que la persona ve");
+        Debe(ReferenceEquals(Busca("nombre del paciente "), nombre), "…sin que importen mayúsculas ni un espacio de más");
+        Debe(ReferenceEquals(Busca("Y0000000-ZTRNOMPAC"), nombre), "por el nombre técnico sin el prefijo del tipo: «txt» no es parte del nombre");
+        Debe(ReferenceEquals(Busca("Motivo de Consulta"), motivo), "una caja de texto largo —un shell— se encuentra igual, por su etiqueta");
+        Debe(Busca("Fecha") == null, "con dos campos que se llaman igual NO se adivina: nadie, y que lo diga");
+        Debe(Busca("Presión arterial") == null, "lo que no está, no está");
+    }
+
+    private static void LaFilaDeAlvSeElige()
+    {
+        var t = typeof(PulsarSegunElNucleo).Assembly; // núcleo; SapGuiSurface vive en windows-graph
+        var tSap = AppDominio().FirstOrDefault(x => x.FullName == "U.Graph.Surfaces.SapGuiSurface");
+        var m = tSap?.GetMethod("FilaAElegir", new[] { typeof(string), typeof(int), typeof(int) });
+        Debe(tSap != null && m != null,
+            "todavía no existe «SapGuiSurface.FilaAElegir» (spec 014, promesa 182). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tSap == null || m == null) return;
+
+        int F(string sel, int cur, int rows) => (int)m.Invoke(null, new object[] { sel, cur, rows })!;
+        Debe(F("2", 5, 10) == 2, "la SELECCIÓN manda sobre el cursor: al pulsar, SAP marca la fila del clic");
+        Debe(F("0,2", 5, 10) == 0, "de una selección múltiple, la primera fila");
+        Debe(F("", 5, 10) == 5, "sin selección, la fila del cursor");
+        Debe(F("", -1, 1) == 0, "con UNA sola fila y nada marcado, es esa: el paciente premarcado que rompió la 6ª prueba");
+        Debe(F("", -1, 8) == -1, "pero con varias filas y nada que las señale, NO se adivina: -1, y el clic no se nombra a lo loco");
+    }
+
+    private static void ElTerrenoCompletaLoQueUiaNoVe()
+    {
+        var t = Cap004("U.WindowsClient.Mcp.SurfaceMapTools");
+        var m = t?.GetMethod("FundirPuertas");
+        Debe(t != null && m != null,
+            "todavía no existe «SurfaceMapTools.FundirPuertas» (spec 014, promesa 183). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || m == null) return;
+
+        var uia = new[] { "Triage", "Buscar pacientes", "Atrás" };
+        var terreno = new List<(string, string, string)>
+        {
+            ("sap:…#row=PATNNAME=GIRALDO", "GIRALDO", "GuiGridFila"),
+            ("sap:…#tbbtn=ZMEDTRIAGE", "Triage", "GuiGridBoton"),   // UIA ya lo nombra: no se duplica
+            ("sap:…#node=vw00576", "Urgencias Adultos/Triage", "GuiTreeFila"),
+        };
+        var fundido = ((System.Collections.IEnumerable)m.Invoke(null, new object[] { uia, terreno })!).Cast<object>().ToList();
+        string Etq(object o) => (string)o.GetType().GetField("Item2")!.GetValue(o)!;
+        var etqs = fundido.Select(Etq).ToList();
+
+        Debe(etqs.Contains("GIRALDO"),
+            "la fila del paciente, que UIA no puede ver, entra: es lo que el piloto necesita para pedirla por su nombre");
+        Debe(etqs.Contains("Urgencias Adultos/Triage"), "y las filas de árbol también");
+        Debe(!etqs.Contains("Triage"),
+            "pero «Triage», que UIA ya nombró, NO se duplica: dos puertas con el mismo nombre confunden al que elige");
+        Debe(fundido.Count == 2, $"solo lo que UIA no vio: 2 (salió {fundido.Count})");
+
+        Debe(((System.Collections.IEnumerable)m.Invoke(null, new object?[] { uia, null })!).Cast<object>().Count() == 0,
+            "sin puertas del terreno, no se añade nada: no se inventa");
+    }
+
+    /// <summary>Los ensamblados cargados, para alcanzar tipos de windows-graph desde el arnés.</summary>
+    private static IEnumerable<Type> AppDominio()
+    {
+        foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            Type[] ts; try { ts = a.GetTypes(); } catch { continue; }
+            foreach (var x in ts) yield return x;
+        }
+    }
+
+    private static void UnaImagenViajaComoImagen()
+    {
+        var t = Cap004("U.WindowsClient.Mcp.ProtocoloMcp");
+        var m = t?.GetMethod("ComoContenido");
+        Debe(t != null && m != null,
+            "todavía no existe «Mcp.ProtocoloMcp.ComoContenido» (spec 014, promesa 181). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || m == null) return;
+
+        (string tipo, string datos, string mime, string texto) Bloque(string respuesta)
+        {
+            var arr = (object[])m.Invoke(null, new object[] { respuesta })!;
+            if (arr.Length != 1) { Debe(false, "un bloque por respuesta"); return ("", "", "", ""); }
+            var b = arr[0];
+            string P(string n) => b.GetType().GetProperty(n)?.GetValue(b) as string ?? "";
+            return (P("type"), P("data"), P("mimeType"), P("text"));
+        }
+
+        var foto = Bloque("data:image/png;base64,iVBORw0KGgo=");
+        Debe(foto.tipo == "image" && foto.datos == "iVBORw0KGgo=" && foto.mime == "image/png",
+            $"una foto viaja como bloque de imagen, con los datos SIN el prefijo del data URI y con su "
+            + $"mimeType (salió type={foto.tipo}, data={foto.datos}, mime={foto.mime})");
+        Debe(foto.texto.Length == 0,
+            "y NO como texto: un base64 en prosa es exactamente lo que el modelo no puede mirar, y por "
+            + "eso el piloto nunca miraba");
+
+        var jpeg = Bloque("data:image/jpeg;base64,/9j/4AAQ");
+        Debe(jpeg.tipo == "image" && jpeg.mime == "image/jpeg",
+            "el mimeType sale del propio data URI, no se supone png");
+
+        var prosa = Bloque("Estás en «sapgui://QAS/NWP1». Veo 3 salidas.");
+        Debe(prosa.tipo == "text" && prosa.texto.StartsWith("Estás en"),
+            "lo que no es una imagen sigue viajando como texto, tal cual, con su porqué dentro");
+
+        // UN DATA URI ROTO VUELVE COMO TEXTO. Un bloque de imagen con datos que no son una imagen
+        // rompe la petición ENTERA del modelo: perder la respuesta es peor que verla en prosa.
+        foreach (var roto in new[] { "data:image/png;base64,", "data:image/png", "data:image/png;utf8,<svg/>" })
+            Debe(Bloque(roto).tipo == "text",
+                $"un data URI roto («{roto}») vuelve como texto, no como una imagen vacía que tumbe la petición");
+    }
+
+    private static void ElRecuerdoSeVeAntesDeTocar()
+    {
+        var t = Capacidad("U.WindowsClient.Piloto.ElRecuerdoQueSeVe");
+        var coreo = t?.GetMethod("Coreografia"); var lectura = t?.GetMethod("TiempoDeLectura");
+        Debe(t != null && coreo != null && lectura != null,
+            "todavía no existe «Piloto.ElRecuerdoQueSeVe» (spec 014, promesa 180). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || coreo == null || lectura == null) return;
+
+        List<string> C(bool elemento, bool recuerdo, bool decir) =>
+            ((System.Collections.IEnumerable)coreo.Invoke(null, new object[] { elemento, recuerdo, decir })!).Cast<object>().Select(g => g.ToString()!).ToList();
+
+        var completa = C(true, true, true);
+        Debe(string.Join(">", completa) == "Senalar>Decir>Escribir>Mostrar>Esperar>Actuar>Cerrar>Soltar",
+            $"con elemento, recuerdo y frase: señalar, decir, escribir, mostrar, esperar, TOCAR, cerrar, soltar — en ese orden (salió {string.Join(">", completa)})");
+        Debe(completa.IndexOf("Mostrar") < completa.IndexOf("Actuar") && completa.IndexOf("Esperar") < completa.IndexOf("Actuar"),
+            "la tarjeta se ve y se deja leer ANTES de tocar: tocar antes enseñaría el recuerdo de una pantalla que ya no está");
+        Debe(completa.IndexOf("Cerrar") > completa.IndexOf("Actuar") && completa.IndexOf("Soltar") > completa.IndexOf("Actuar"),
+            "y se recoge DESPUÉS de tocar: la tarjeta se cierra y la señal se suelta");
+
+        var sinElemento = C(false, true, true);
+        Debe(!sinElemento.Contains("Senalar") && !sinElemento.Contains("Mostrar") && !sinElemento.Contains("Esperar") && !sinElemento.Contains("Soltar"),
+            $"sin elemento en pantalla no hay señal ni tarjeta sobre la nada (salió {string.Join(">", sinElemento)})");
+        Debe(sinElemento.Contains("Escribir") && sinElemento.Contains("Actuar"),
+            "…pero el recuerdo se escribe igual y el paso va igual al ejecutor, que lo juzgará por su cuenta");
+
+        var sinRecuerdo = C(true, false, false);
+        Debe(string.Join(">", sinRecuerdo) == "Senalar>Actuar>Soltar",
+            $"un paso sin recuerdo ni frase solo se señala, se toca y se suelta (salió {string.Join(">", sinRecuerdo)})");
+
+        int corto = (int)lectura.Invoke(null, new object[] { "un botón" })!;
+        int largo = (int)lectura.Invoke(null, new object[] { new string('x', 500) })!;
+        int medio = (int)lectura.Invoke(null, new object[] { new string('x', 60) })!;
+        Debe(corto >= 900, $"un recuerdo de tres palabras se deja ver al menos 900 ms: no parpadea ({corto})");
+        Debe(largo <= 4000, $"un párrafo no detiene la comprobación más de 4 s ({largo})");
+        Debe(medio > corto && medio < largo, $"y entre medias, más texto es más tiempo ({corto} < {medio} < {largo})");
     }
 
     private static void ComprobarEsUnPlanQueLaAppRecorre()
@@ -5766,6 +6471,11 @@ internal static class Contrato
             Debe((int)Prop(p1, "N")! == 1 && (string)Prop(p1, "Exit")! == "comando" && (string)Prop(p1, "Texto")! == "nwp1"
                  && (string)Prop(p1, "Tecla")! == "enter" && (string)Prop(p1, "Recuerdo")! == "el campo de comandos" && (string)Prop(p1, "Decir")! == "voy a la transacción",
                 "cada paso lleva el evento que cumple, la puerta, lo que teclea, el recuerdo y qué decir");
+            // «"n":"7"» (2026-09-08, décima prueba): el piloto mandó los números como texto, el lector los
+            // leyó como 0 y el juez no fue llamado en NINGÚN paso: 17 de 18 hechos y «2 de 16» de veredicto.
+            var comoTexto = (System.Collections.IList)Prop(leer.Invoke(null, new object[] { "[{\"n\":\"7\",\"exit\":\"Peso\",\"text\":\"80\"},{\"n\":\"x\",\"exit\":\"Talla\"}]" })!, "Pasos")!;
+            Debe(comoTexto.Count == 2 && (int)Prop(comoTexto[0]!, "N")! == 7 && (int)Prop(comoTexto[1]!, "N")! == 0,
+                "un «n» que viene como texto numérico vale como número; uno que no es un número queda en 0, sin romper el plan");
             Debe((int)Prop(pasos[1]!, "N")! == 3 && (string)Prop(pasos[1]!, "Recuerdo")! == "" && (string)Prop(pasos[1]!, "Decir")! == "",
                 "el recuerdo y el decir son opcionales: un paso puede ser solo la puerta");
         }
@@ -5775,7 +6485,9 @@ internal static class Contrato
         Debe(((string)Prop(leer.Invoke(null, new object[] { "" })!, "Error")!).Contains("pasos"), "sin plan, se dice cómo se pide");
 
         string R(int hechos, int total, int paradoEn, string porQue, string donde, int at, int nav)
-            => (string)relato.Invoke(null, new object[] { hechos, total, paradoEn, porQue, donde, at, nav })!;
+            => (string)relato.Invoke(null, relato.GetParameters().Length >= 8
+                ? new object[] { hechos, total, paradoEn, porQue, donde, at, nav, "" }
+                : new object[] { hechos, total, paradoEn, porQue, donde, at, nav })!;
         string paro = R(2, 5, 3, "«Triage» lo conozco aquí pero AHORA no lo veo.", "sapgui://X/0100", 1, 3);
         Debe(paro.Contains("HICE 2 DE 5") && paro.Contains("PARÉ en el paso 3") && paro.Contains("AHORA no lo veo") && paro.Contains("sapgui://X/0100"),
             $"si paró, el relato dice cuántos hizo, en cuál paró, por qué y dónde quedó ({paro})");
@@ -5785,6 +6497,15 @@ internal static class Contrato
         string fin = R(5, 5, 0, "", "sapgui://X/fin", 3, 3);
         Debe(fin.Contains("HICE LOS 5 PASO(S)") && fin.Contains("3 de 3") && fin.Contains("leccion_guardar_skill"),
             $"si acabó, el relato lo dice con la cuenta del juez y qué hacer después ({fin})");
+        // LO QUE FALTA, POR SU NOMBRE (2026-09-08, decimotercera prueba): «19 de 20» sin decir cuál, y el
+        // piloto repitió cinco pasos ya hechos buscando el que faltaba.
+        var relatoConFaltas = relato.GetParameters().Length >= 8 ? relato : null;
+        Debe(relatoConFaltas != null, "«Relato» todavía no acepta lo que falta por juzgar (spec 014, promesa 179 extendida)");
+        if (relatoConFaltas == null) return;
+        string conFaltas = (string)relato.Invoke(null, new object[] { 5, 5, 0, "", "sapgui://X/fin", 4, 5, "evento 41 «Triage»: había que llegar a «sapgui://T» y acabé en «sapgui://X/fin»" })!;
+        Debe(conFaltas.Contains("evento 41") && conFaltas.Contains("Triage") && conFaltas.Contains("FALTA", StringComparison.OrdinalIgnoreCase),
+            $"con algo pendiente, el relato lo nombra, evento por evento, y dice que es eso lo que hay que resolver ({Recorta(conFaltas, 240)})");
+        Debe(!fin.Contains("FALTA", StringComparison.OrdinalIgnoreCase), "y sin nada pendiente no se inventa una lista");
     }
 
     private static void CualquierMomentoDeLaDemoSePuedeMirar()

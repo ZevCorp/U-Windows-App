@@ -38,6 +38,12 @@ public sealed class SapGuiSurface : IUiSurface
     public event EventHandler<string>? Diagnostic;
 
     /// <summary>
+    /// SAP ANUNCIÓ UNA PANTALLA NUEVA mientras se observaba: (desde, hasta). Lo que el terreno necesita
+    /// para aprender la arista que el mapa vivo no alcanzó a atribuir (promesa 189).
+    /// </summary>
+    public event Action<string, string>? PantallaNueva;
+
+    /// <summary>
     /// Tipos de GuiComponent con los que un humano interactúa. El resto es decorado.
     ///
     /// <c>GuiOkCodeField</c> cuenta aquí para <see cref="ReadinessCount"/> y
@@ -520,6 +526,8 @@ public sealed class SapGuiSurface : IUiSurface
                 return false;
             }
 
+            if (tipo.Equals("GuiComboBox", StringComparison.OrdinalIgnoreCase))
+                return FijarOpcion(foco, texto ?? "", Str(foco.Name), out error);   // promesa 190
             foco.Text = texto ?? "";
             string leido = Str(foco.Text);
             if (!leido.Equals(texto ?? "", StringComparison.OrdinalIgnoreCase))
@@ -840,6 +848,258 @@ public sealed class SapGuiSurface : IUiSurface
             return (id, tipo, SubTypeOf(comp), LabelOf(comp));
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// LA FILA DE REJILLA BAJO UN PUNTO, o la seleccionada si la hay: su clave <c>#row=</c> y su
+    /// texto. Reusa <see cref="RowKeyAt"/>, la MISMA lectura que hace el grabador. Promesa 182.
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ HACÍA FALTA (2026-09-07): el vigía nombra un clic dentro de SAP mirando solo los
+    /// ÁRBOLES; un clic en una fila de una rejilla ALV —la lista de pacientes— caía en el vacío y la
+    /// lección lo grababa sin identidad. El grabador SÍ la lee, pero solo cuando la selección CAMBIA;
+    /// con un paciente ya premarcado no cambia nada y nadie lo nombra. Esto la lee por su punto,
+    /// pase lo que pase: <c>FindByPosition</c> da el shell, y si es una <c>GridView</c> se pide su
+    /// fila seleccionada (o la 0 si solo hay una) con la misma clave que el grabador y la mano.
+    ///
+    /// SE PREFIERE LA SELECCIONADA a la que caiga bajo el punto: al pulsar, SAP marca la fila, así
+    /// que la seleccionada ES la del clic, y leer por selección evita adivinar la fila por el pixel.
+    /// </remarks>
+    public (string Selector, string Etiqueta)? FilaDeGridEn(int screenX, int screenY)
+    {
+        dynamic? session;
+        try { session = Session(); } catch { return null; }
+        if (session == null) return null;
+
+        // El id sale del mismo sitio que el de los campos: SAP primero y, cuando calla —siempre, en
+        // este SAP—, la geometría (promesa 186). Antes era FindByPosition a secas, y por eso el clic
+        // en la fila del paciente seguía sin nombrarse aunque la promesa 182 estuviera verde.
+        string idBajoElPunto = QuienEstaEn(screenX, screenY);
+        if (idBajoElPunto.Length == 0) return null;
+        dynamic? comp;
+        try { comp = session.FindById(SapSelector.IdOf(SapSelector.ById(idBajoElPunto)), false); } catch { return null; }
+        if (comp == null) return null;
+
+        // Del componente bajo el punto se sube al shell GridView que lo contiene (una celda no es el grid).
+        dynamic? grid = null;
+        for (dynamic? n = comp; n != null; )
+        {
+            try
+            {
+                if (string.Equals(Str(n.Type), "GuiShell", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Str(n.SubType), "GridView", StringComparison.OrdinalIgnoreCase))
+                { grid = n; break; }
+            }
+            catch { }
+            try { n = n.Parent; } catch { n = null; }
+        }
+        if (grid == null) return null;
+
+        string gid; try { gid = Str(grid.Id); } catch { return null; }
+        if (gid.Length == 0) return null;
+
+        string sel = ""; try { sel = Str(grid.GetType().InvokeMember("SelectedRows", System.Reflection.BindingFlags.GetProperty, null, grid, null)).Trim(); } catch { }
+        int cur = -1; try { cur = (int)grid.CurrentCellRow; } catch { }
+        int total = 0; try { total = (int)grid.RowCount; } catch { }
+        int fila = FilaAElegir(sel, cur, total);
+        if (fila < 0) return null;
+
+        string key = RowKeyAt(grid, fila, out string label);
+        if (key.Length == 0) return null;
+        return (SapSelector.ByRow(gid, key), label.Length > 0 ? label : $"fila {fila}");
+    }
+
+    /// <summary>
+    /// EL CAMPO QUE SE LLAMA ASÍ, entre los campos leídos de la pantalla. Promesa 185. Se acepta lo
+    /// que la lección trae (el selector exacto), lo que la persona ve (la etiqueta: «Nombre del
+    /// paciente», «Motivo de Consulta») y el nombre técnico del dynpro sin el prefijo del tipo de
+    /// control («Y0000000-ZTRNOMPAC», que en el Id viaja como <c>txtY0000000-ZTRNOMPAC</c>).
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ (2026-09-07, séptima prueba): el piloto pidió «escribe en Y0000000-ZTRNOMPAC» y en
+    /// «Motivo de Consulta» —los nombres que él mismo ve en map_what_i_see— y las manos contestaron
+    /// «no se encontró el elemento», porque solo entendían un selector <c>sap:</c> completo. Dos
+    /// etiquetas iguales («Fecha» y «Fecha») no se adivinan: nadie, y el que llama lo dice.
+    /// </remarks>
+    public static DetectedField? ElCampoQueSeLlama(IReadOnlyList<DetectedField> campos, string nombre)
+    {
+        string que = Compacta(nombre);
+        if (que.Length == 0 || campos == null || campos.Count == 0) return null;
+
+        var porSelector = campos.FirstOrDefault(c => string.Equals(c.Selector, que, StringComparison.Ordinal));
+        if (porSelector != null) return porSelector;
+
+        var porEtiqueta = campos.Where(c => Iguales(c.Label, que)).ToList();
+        if (porEtiqueta.Count == 1) return porEtiqueta[0];
+        if (porEtiqueta.Count > 1) return null;
+
+        var porNombre = campos.Where(c => NombresTecnicos(c.Selector).Any(n => Iguales(n, que))).ToList();
+        return porNombre.Count == 1 ? porNombre[0] : null;
+    }
+
+    /// <summary>
+    /// QUIÉN ESTÁ BAJO UN PUNTO, POR GEOMETRÍA: el elemento interactivo más pequeño cuya caja en
+    /// pantalla contiene el punto. Promesa 186.
+    /// </summary>
+    /// <remarks>
+    /// EL MÁS PEQUEÑO Y NO EL PRIMERO, porque los contenedores también contienen el punto y
+    /// devolverían el panel entero en vez del campo. Sin caja conocida no se puede decidir —los nodos
+    /// de árbol entran ahí— y se descartan: se accionan por clave, no por píxel, y elegir uno de ellos
+    /// sería elegir por descarte.
+    ///
+    /// POR QUÉ ESTO Y NO <c>FindByPosition</c> (2026-09-07, medido sobre el SAP real de QAS): en los 8
+    /// puntos de la octava demo —campos del triage y la caja de texto largo— FindByPosition devolvió
+    /// NULL las 8 veces y esta geometría acertó el campo las 8. Ya estaba documentado para las filas de
+    /// árbol y para los botones del dynpro; ahora también para los campos.
+    /// </remarks>
+    public static string ElMasPequenoQueContiene(IReadOnlyList<SapVisualElement> vistos, int x, int y)
+    {
+        string mejor = "";
+        long menorArea = long.MaxValue;
+        foreach (SapVisualElement el in vistos ?? Array.Empty<SapVisualElement>())
+        {
+            if (!el.BoundsKnown || el.IsNode || el.Width <= 0 || el.Height <= 0) continue;
+            if (x < el.ScreenLeft || x >= el.ScreenLeft + el.Width) continue;
+            if (y < el.ScreenTop || y >= el.ScreenTop + el.Height) continue;
+            long area = (long)el.Width * el.Height;
+            if (area >= menorArea) continue;
+            menorArea = area;
+            mejor = el.Id;
+        }
+        return mejor;
+    }
+
+    /// <summary>
+    /// EL CAMPO AL QUE PERTENECE ESE ID: el campo leído cuyo selector es el del id, subiendo por la
+    /// ruta si hace falta. Promesa 186. null si ese id no cae dentro de ningún campo.
+    /// </summary>
+    /// <remarks>
+    /// SE SUBE porque el punto puede caer en un HIJO del campo: la caja de texto largo es un shell con
+    /// hijos propios («…/cntlCT__ZTXTMTVCN/shellcont/shell» y lo que cuelgue de él), y quedarse con el
+    /// hijo deja el clic sin identidad aunque el campo estuviera justo ahí.
+    /// </remarks>
+    public static DetectedField? ElCampoDeEsteId(IReadOnlyList<DetectedField> campos, string id)
+    {
+        if (campos == null || campos.Count == 0) return null;
+        for (string actual = (id ?? "").Trim(); actual.Length > 0; )
+        {
+            string sel = SapSelector.ById(actual);
+            var campo = campos.FirstOrDefault(c => string.Equals(c.Selector, sel, StringComparison.Ordinal));
+            if (campo != null) return campo;
+            int corte = actual.LastIndexOf('/');
+            if (corte <= 0) return null;
+            actual = actual.Substring(0, corte);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// LA CLAVE DE UNA OPCIÓN DE UN DESPLEGABLE, por la clave misma o por el texto que la persona lee.
+    /// Promesa 190. Vacío si no es ninguna, o si dos opciones se leen igual.
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ (2026-09-08, los selectores de Glasgow): un GuiComboBox no acepta Text, se le fija Key.
+    /// La lección trae la clave («4»); el piloto, con las manos, tecleó el texto («Espontánea»). Las
+    /// dos valen. Sin acentos, mayúsculas ni espacios de más, porque el texto se dicta y se lee.
+    /// </remarks>
+    public static string ClaveDeLaOpcion(IReadOnlyList<FieldOption>? opciones, string valor)
+    {
+        string que = Compacta(valor);
+        if (que.Length == 0 || opciones == null || opciones.Count == 0) return "";
+        var porClave = opciones.FirstOrDefault(o => string.Equals((o.Value ?? "").Trim(), que, StringComparison.OrdinalIgnoreCase));
+        if (porClave != null) return porClave.Value;
+        string busco = SinAcentos(que);
+        var porTexto = opciones.Where(o => SinAcentos(Compacta(o.Label ?? o.Text ?? "")).Equals(busco, StringComparison.OrdinalIgnoreCase)).ToList();
+        return porTexto.Count == 1 ? porTexto[0].Value : "";
+    }
+
+    private static string SinAcentos(string s)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (char c in (s ?? "").Normalize(System.Text.NormalizationForm.FormD))
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark) sb.Append(c);
+        return sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
+    }
+
+    /// <summary>Fija la opción de un desplegable por clave o por texto; dice cuáles hay si no es ninguna.</summary>
+    private static bool FijarOpcion(dynamic combo, string valor, string etiqueta, out string error)
+    {
+        error = "";
+        // La llamada lleva un argumento dynamic y devuelve dynamic: se fija el tipo, o el Select de abajo no compila.
+        List<FieldOption>? opciones = (List<FieldOption>?)OptionsOf(combo, "GuiComboBox");
+        string clave = ClaveDeLaOpcion(opciones, valor);
+        if (clave.Length == 0)
+        {
+            string hay = opciones == null ? "ninguna opción legible"
+                : string.Join(", ", opciones.Take(12).Select(o => $"«{o.Label}» ({o.Value})"));
+            error = $"«{valor}» no es ni la clave ni el texto de ninguna opción de «{etiqueta}»; hay: {hay}";
+            return false;
+        }
+        combo.Key = clave;
+        return true;
+    }
+
+    /// <summary>El selector del campo que se llama así en la pantalla de AHORA, o null.</summary>
+    public string? SelectorDelCampo(string nombre) => ElCampoQueSeLlama(SafeReadFields(), nombre)?.Selector;
+
+    private static bool Iguales(string a, string b) =>
+        string.Equals(Compacta(a), Compacta(b), StringComparison.OrdinalIgnoreCase);
+
+    private static string Compacta(string s) =>
+        System.Text.RegularExpressions.Regex.Replace((s ?? "").Trim(), @"\s+", " ");
+
+    // Los prefijos con que SAP GUI Scripting antepone el tipo al nombre del campo en su Id:
+    // txtNOMBRE (GuiTextField), ctxtNOMBRE (GuiCTextField), cmbNOMBRE (GuiComboBox), chk, rad, pwd,
+    // btn, y cntlNOMBRE para los contenedores de las cajas de texto largo.
+    private static readonly System.Text.RegularExpressions.Regex PrefijoDeTipo =
+        new(@"^(ctxt|txt|cmb|chk|rad|pwd|btn|lbl|tbl|cntl|ssub|sub|tabs|tabp|box)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static IEnumerable<string> NombresTecnicos(string selector)
+    {
+        string id = SapSelector.IdOf(selector ?? "");
+        if (id.Length == 0) id = selector ?? "";
+        foreach (string seg in id.Split('/'))
+        {
+            string s = seg.Trim();
+            int corchete = s.IndexOf('[');
+            if (corchete > 0) s = s.Substring(0, corchete);
+            if (s.Length == 0) continue;
+            string pelado = PrefijoDeTipo.Replace(s, "");
+            if (pelado.Length > 0 && pelado.Length < s.Length) yield return pelado;
+        }
+    }
+
+    /// <summary>
+    /// EL CAMPO DEL DYNPRO BAJO UN PUNTO: su selector, su etiqueta y su tipo, tal como los lee el
+    /// grabador (mismo <c>Describe</c>, mismo selector), o null si ahí no hay un campo.
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ (2026-09-07): el vigía nombraba un clic en SAP solo si caía en un árbol o en una
+    /// rejilla; los 19 clics sobre los campos del triage quedaron sin identidad, y sin identidad el
+    /// tecleo que SAP descarga al parar no tiene de qué clic colgarse (promesa 184). Se sube del
+    /// componente bajo el punto hasta el nodo cuyo Id es un campo leído, porque FindByPosition puede
+    /// dar un hijo de la caja de texto largo y no la caja.
+    /// </remarks>
+    public (string Selector, string Etiqueta, string Tipo)? CampoEn(int screenX, int screenY)
+    {
+        var campos = SafeReadFields();
+        if (campos.Count == 0) return null;
+        string id = QuienEstaEn(screenX, screenY);
+        if (id.Length == 0) return null;
+        var campo = ElCampoDeEsteId(campos, id);
+        return campo == null ? null : (campo.Selector, campo.Label, campo.ControlType);
+    }
+
+    /// <summary>
+    /// EL ID DEL COMPONENTE BAJO UN PUNTO: se le pregunta a SAP y, si calla, manda la geometría
+    /// (promesa 186). "" si ahí no hay nada. Es el único sitio donde se decide esto.
+    /// </summary>
+    private string QuienEstaEn(int screenX, int screenY)
+    {
+        string porSap = HitTest(screenX, screenY) ?? "";
+        if (porSap.Length > 0) return porSap;
+        try { return ElMasPequenoQueContiene(ReadVisibleElements(), screenX, screenY); }
+        catch { return ""; }
     }
 
     public string? HitTest(int screenX, int screenY)
@@ -1516,6 +1776,24 @@ public sealed class SapGuiSurface : IUiSurface
     private readonly Dictionary<string, string> _gridSel = new(StringComparer.Ordinal);
 
     /// <summary>La primera fila de un <c>SelectedRows</c> («0», «0,2», «1-3»), o -1 si no hay ninguna.</summary>
+    /// <summary>
+    /// QUÉ FILA es la del clic: la seleccionada si la hay, si no la del cursor, y si solo hay UNA
+    /// fila, esa —aunque nada esté marcado todavía—. Promesa 182. Pura: solo tres números.
+    /// </summary>
+    /// <remarks>
+    /// SE PREFIERE LA SELECCIÓN al cursor: al pulsar, SAP marca la fila, así que la seleccionada ES
+    /// la del clic. La regla del «una sola fila → la 0» es la que salva el caso que rompió la 6ª
+    /// prueba (2026-09-07): un único paciente premarcado, sin cambio de selección que detectar.
+    /// </remarks>
+    public static int FilaAElegir(string selectedRows, int currentCellRow, int rowCount)
+    {
+        int deSel = string.IsNullOrWhiteSpace(selectedRows) ? -1 : FirstRowOf(selectedRows);
+        if (deSel >= 0) return deSel;
+        if (currentCellRow >= 0) return currentCellRow;
+        if (rowCount == 1) return 0;
+        return -1;
+    }
+
     private static int FirstRowOf(string selectedRows)
     {
         foreach (char c in selectedRows ?? "")
@@ -2030,6 +2308,9 @@ public sealed class SapGuiSurface : IUiSurface
         switch (step.ActionType)
         {
             case "input":
+                // UN DESPLEGABLE NO ACEPTA TEXT (promesa 190): se le fija la clave, por clave o por texto.
+                if (type.Equals("GuiComboBox", StringComparison.OrdinalIgnoreCase))
+                    return FijarOpcion(node, step.Value ?? "", step.Label ?? "", out error);
                 node.Text = step.Value ?? "";
                 return true;
 
@@ -2756,26 +3037,8 @@ public sealed class SapGuiSurface : IUiSurface
     /// punto. El más pequeño y no el primero, porque los contenedores también contienen el punto y
     /// devolverían el panel entero en vez del botón.
     /// </summary>
-    private string ComponentAt(int screenX, int screenY)
-    {
-        string best = "";
-        long bestArea = long.MaxValue;
-
-        foreach (SapVisualElement el in ReadVisibleElements())
-        {
-            // Sin caja conocida no se puede decidir (los nodos de árbol entran aquí), y sin caja se
-            // acabaría eligiendo un elemento por descarte. Los nodos se accionan por clave, no por píxel.
-            if (!el.BoundsKnown || el.IsNode || el.Width <= 0 || el.Height <= 0) continue;
-            if (screenX < el.ScreenLeft || screenX >= el.ScreenLeft + el.Width) continue;
-            if (screenY < el.ScreenTop || screenY >= el.ScreenTop + el.Height) continue;
-
-            long area = (long)el.Width * el.Height;
-            if (area >= bestArea) continue;
-            bestArea = area;
-            best = el.Id;
-        }
-        return best;
-    }
+    private string ComponentAt(int screenX, int screenY) =>
+        ElMasPequenoQueContiene(ReadVisibleElements(), screenX, screenY);
 
     /// <summary>Los shells de la pantalla activa que tienen barra de botones propia (ALV/GridView).</summary>
     private static IEnumerable<dynamic> ToolbarShells(dynamic session)
@@ -3010,11 +3273,15 @@ public sealed class SapGuiSurface : IUiSurface
         string nowSurface = SafeNodeUrl();
         if (_snapshotSurface.Length > 0 && nowSurface.Length > 0 && nowSurface != _snapshotSurface)
         {
+            string desde = _snapshotSurface;
             _lastSnapshot = current.ToDictionary(f => f.Selector, f => f.CurrentValue);
             _snapshotSurface = nowSurface;
             Diagnostic?.Invoke(this,
                 $"pantalla nueva ({nowSurface}): línea base rehecha, {current.Count} campo(s) NO publicados "
                 + "(son la pantalla presentándose, no lo que hizo el operador)");
+            // Y SE ANUNCIA (promesa 189): es el hecho que el terreno necesita para aprender la arista
+            // cuando el mapa vivo no alcanzó a atribuirla.
+            try { PantallaNueva?.Invoke(desde, nowSurface); } catch { }
             PublishTreeSelections();
             return;
         }
@@ -3217,6 +3484,28 @@ public sealed class SapGuiSurface : IUiSurface
         try { return ReadFields(); } catch { return Array.Empty<DetectedField>(); }
     }
 
+    /// <summary>
+    /// PUBLICA AHORA LO QUE ESTÉ PENDIENTE: lo tecleado que SAP todavía no ha hecho viajar y la fila
+    /// de árbol seleccionada. Promesa 187.
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ HACE FALTA (2026-09-07, octava demo): con eventos COM, lo tecleado solo se publica
+    /// cuando la pantalla VIAJA (Change / StartRequest). Una demo que acaba dentro de un formulario
+    /// —el triage, justamente— no viaja, y todo lo que la persona escribió se queda sin publicar: la
+    /// lección salió con 24 eventos y ni un texto. Esto se llama antes de armar la lección, no al
+    /// cerrar el grabador, porque para entonces la lección ya está escrita en disco.
+    /// </remarks>
+    public void DescargarLoPendiente()
+    {
+        var bombeo = _pumpDispatcher;
+        try
+        {
+            if (bombeo != null) bombeo.Invoke(() => { PublishChangedFields(); PublishTreeSelections(); });
+            else { PublishChangedFields(); PublishTreeSelections(); }
+        }
+        catch (Exception e) { Diagnostic?.Invoke(this, $"no pude descargar lo pendiente: {e.Message}"); }
+    }
+
     public void StopObserving()
     {
         lock (_obsGate)
@@ -3234,6 +3523,10 @@ public sealed class SapGuiSurface : IUiSurface
                     // Descarga final: el último clic del operador puede haber caído DESPUÉS del último
                     // tick del reloj (típico: clic en la fila e inmediatamente "detener enseñanza").
                     // Sin esta lectura, el paso final del workflow se pierde en silencio.
+                    // Y LOS CAMPOS TAMBIÉN: lo tecleado que no llegó a viajar. La descarga de verdad
+                    // ocurre antes de armar la lección (DescargarLoPendiente, promesa 187); esta es la
+                    // red por si alguien para el grabador sin pasar por ahí.
+                    try { PublishChangedFields(); } catch { }
                     try { PublishTreeSelections(); } catch { }
                     // El hook se suelta EN SU PROPIO HILO: un WH_MOUSE_LL desenganchado desde otro hilo
                     // puede quedar colgado, y un hook huérfano ralentiza el ratón de toda la máquina.
