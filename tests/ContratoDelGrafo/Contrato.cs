@@ -460,6 +460,11 @@ internal static class Contrato
         // los numeros no se reciclan.
         Prueba("167. la línea «Escríbele…» se hace esperar: segundo y medio de ratón quieto sobre la carita, y arrastrarla no la llama por mucho que se tarde", LaLineaSeHaceEsperar);
 
+        // 184 Y NO 168: la 168-174 viven en jose/estetica-de-la-carita (spec 012) y la 175-183 estan
+        // reservadas por la spec 013 (el selector de microfono, todavia sin contrato). Los numeros no
+        // se reciclan ni se comparten: si al mergear alguien ya uso el 184, esta se corre.
+        Prueba("184. el botón del collar graba la consulta y no abre la voz de la carita: pulsarlo empieza a grabar —abriendo la consulta si no está— y pulsarlo grabando para", ElBotonDelCollarGraba);
+
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -5847,6 +5852,45 @@ internal static class Contrato
         Debe(!Asoma(550, false), "ni con el reposo que tenía antes: 550 ms se rechazó por rápido");
         Debe(Asoma(ms, false), "cumplido el reposo, asoma");
         Debe(!Asoma(ms * 10, true), "pero arrastrándola no asoma por mucho que se tarde: ir a moverla no es ir a escribirle");
+    }
+
+    /// <summary>Promesa 184 (spec 014).</summary>
+    /// <remarks>
+    /// EL BOTÓN DEL COLLAR ERA EL CLIC DE LA CARITA: llegaba a <c>StartMicByFace</c> y abría la
+    /// voz en vivo. El dueño lo pidió al revés el 2026-09-07 —«que se empiece a grabar el botón
+    /// grabar en vez de que la carita escuche»—: quien lleva el collar puesto está con un paciente
+    /// delante, y lo que quiere del botón es la consulta, no una conversación con Ü.
+    ///
+    /// Se juzga LA REGLA que la carita consulta, como la 147 juzga <c>ReglaDelToque</c>: el contrato
+    /// no puede pulsar un collar. Que la carita la consulte de verdad —y que la voz no se abra— es
+    /// nivel 4, con el log: «collar: botón → Grabar» seguido de la consulta grabando.
+    /// </remarks>
+    private static void ElBotonDelCollarGraba()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelBotonDelCollar");
+        if (t == null) { Pendiente("ReglaDelBotonDelCollar", "184", "014"); return; }
+        var alPulsar = t.GetMethod("AlPulsar", BindingFlags.Public | BindingFlags.Static);
+        if (alPulsar == null) { Pendiente("ReglaDelBotonDelCollar.AlPulsar", "184", "014"); return; }
+
+        string Hace(bool hayConsulta, bool grabando) =>
+            alPulsar.Invoke(null, new object[] { hayConsulta, grabando })!.ToString()!;
+
+        Debe(Hace(false, false) == "AbrirLaConsultaYGrabar",
+            $"sin consulta abierta, el botón la abre y graba (salió «{Hace(false, false)}»)");
+        Debe(Hace(true, false) == "Grabar",
+            $"con la consulta abierta y parada, el botón graba (salió «{Hace(true, false)}»)");
+        Debe(Hace(true, true) == "Parar",
+            $"grabando, el mismo botón para: es el botón «Grabar», no otro (salió «{Hace(true, true)}»)");
+
+        // Y NINGUNA de sus respuestas es abrir la voz: si la regla pudiera contestar «escuchar», la
+        // carita tendría un camino de vuelta al comportamiento viejo sin que el contrato lo viera.
+        var respuestas = Enum.GetNames(alPulsar.ReturnType);
+        Debe(!respuestas.Any(r => r.Contains("Voz", StringComparison.OrdinalIgnoreCase)
+                               || r.Contains("Escuch", StringComparison.OrdinalIgnoreCase)
+                               || r.Contains("Habla", StringComparison.OrdinalIgnoreCase)
+                               || r.Contains("Mic", StringComparison.OrdinalIgnoreCase)),
+            "el botón del collar no tiene forma de abrir la voz: ninguna de sus respuestas la nombra "
+            + $"(respuestas: {string.Join(", ", respuestas)})");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

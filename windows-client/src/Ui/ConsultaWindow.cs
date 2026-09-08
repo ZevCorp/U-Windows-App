@@ -1410,6 +1410,30 @@ public sealed class ConsultaWindow : Window
 
     // ── grabar / parar ───────────────────────────────────────────────────────
 
+    /// <summary>¿Se está grabando ahora mismo? Lo pregunta la carita para el botón del collar.</summary>
+    public bool Grabando => _consulta.Estado == EstadoDeConsulta.Grabando;
+
+    /// <summary>
+    /// EL BOTÓN DEL COLLAR ES EL BOTÓN «GRABAR» (promesa 184, spec 014): empieza si no graba, y para
+    /// si graba. Mismo camino que el clic, para que no haya dos formas de empezar una consulta.
+    /// </summary>
+    /// <remarks>
+    /// Si el botón de la pantalla está desactivado es que ya se está cambiando de estado: un segundo
+    /// pulsado a mitad de camino no puede encolar otro cambio, y se dice en el log.
+    /// </remarks>
+    public Task GrabarPorElCollarAsync()
+    {
+        if (!_grabar.IsEnabled)
+        {
+            LogBus.Log("collar", "el botón del collar llegó a mitad de un cambio de grabación: se ignora");
+            return Task.CompletedTask;
+        }
+        LogBus.Log("collar", _consulta.Estado == EstadoDeConsulta.Grabando
+            ? "el botón del collar para la grabación"
+            : "el botón del collar empieza a grabar");
+        return AlternarAsync();
+    }
+
     private async Task AlternarAsync()
     {
         _grabar.IsEnabled = false;

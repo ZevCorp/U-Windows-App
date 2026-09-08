@@ -2255,10 +2255,52 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void EngancharCollar()
     {
-        CollarPermanente.BotonPulsado += () => Dispatcher.BeginInvoke(() => StartMicByFace());
+        CollarPermanente.BotonPulsado += () => Dispatcher.BeginInvoke(AlPulsarElBotonDelCollar);
         CollarPermanente.Cambio += () => Dispatcher.BeginInvoke(PintarCollar);
         CollarPermanente.Restaurar();
         PintarCollar();
+    }
+
+    /// <summary>
+    /// EL BOTÓN DEL COLLAR GRABA LA CONSULTA (promesa 184, spec 014). Hasta el 2026-09-07 llegaba a
+    /// <see cref="StartMicByFace"/> y abría la voz en vivo; el dueño lo pidió al revés: quien lleva
+    /// el collar está con un paciente delante, y lo que quiere del botón es «Grabar».
+    /// </summary>
+    /// <remarks>
+    /// La decisión la toma <see cref="ReglaDelBotonDelCollar"/>, que el contrato juzga sin collar.
+    /// Aquí solo se ejecuta: abrir la consulta si no existe, y pedirle que alterne la grabación.
+    ///
+    /// NO SE TRAE AL FRENTE una consulta que ya existe: el botón es un mando a distancia, y quien lo
+    /// pulsa está mirando al paciente o a SAP. Si no existía, se abre delante como siempre.
+    /// </remarks>
+    private async void AlPulsarElBotonDelCollar()
+    {
+        try
+        {
+            var consulta = Application.Current.Windows.OfType<ConsultaWindow>().FirstOrDefault();
+            var accion = ReglaDelBotonDelCollar.AlPulsar(consulta != null, consulta?.Grabando == true);
+            LogBus.Log("collar", $"botón del collar → {accion}");
+            PlayTick();
+
+            if (accion == QueHaceElBotonDelCollar.AbrirLaConsultaYGrabar)
+            {
+                (Application.Current as App)?.AbrirLaConsulta();
+                consulta = Application.Current.Windows.OfType<ConsultaWindow>().FirstOrDefault();
+                if (consulta == null)
+                {
+                    // Sin ventana no hay a quién pedirle grabar: casi siempre es que el login quedó
+                    // abierto esperando. Se dice, y el siguiente pulsado lo vuelve a intentar.
+                    LogBus.Log("collar", "la consulta no llegó a abrirse (¿quedó pidiendo iniciar sesión?): el botón no graba hasta que exista");
+                    return;
+                }
+            }
+
+            await consulta.GrabarPorElCollarAsync();
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("collar", $"el botón del collar no pudo grabar · {e.GetType().Name}: {e.Message}");
+        }
     }
 
     /// <summary>
