@@ -130,4 +130,10 @@ public interface IUiSurface : IDisposable
 
     /// <summary>Deja de observar. Idempotente.</summary>
     void StopObserving();
+
+    /// <summary>
+    /// Publica AHORA lo que la superficie tenga observado y sin emitir. Idempotente. Promesa 187:
+    /// se llama antes de armar la lección, porque después ya está escrita.
+    /// </summary>
+    void DescargarLoPendiente();
 }

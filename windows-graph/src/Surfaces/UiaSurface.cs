@@ -1620,6 +1620,13 @@ public sealed class UiaSurface : IUiSurface
         }
     }
 
+    /// <summary>
+    /// Aquí no hay nada pendiente: UIA publica cada pulsación en el momento (por eso la lección pliega
+    /// las de un mismo campo). Existe porque la interfaz lo pide y porque SAP sí acumula (promesa 187).
+    /// El scroll, que sí se acumula, se vacía en StopObserving con su propio reloj.
+    /// </summary>
+    public void DescargarLoPendiente() { }
+
     public void StopObserving()
     {
         lock (_gate)

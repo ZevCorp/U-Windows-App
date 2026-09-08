@@ -48,7 +48,15 @@ public static class PlanDeComprobacion
             foreach (var p in doc.RootElement.EnumerateArray())
             {
                 string S(string k) => p.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? (v.GetString() ?? "").Trim() : "";
-                int n = p.TryGetProperty("n", out var nv) && nv.ValueKind == JsonValueKind.Number ? nv.GetInt32() : 0;
+                // «"n":"7"» TAMBIÉN VALE (promesa 179, 2026-09-08): el piloto mandó los números como
+                // texto, se leyeron como 0 y el juez no fue llamado en ningún paso: 17 de 18 hechos y
+                // «2 de 16» de veredicto.
+                int n = 0;
+                if (p.TryGetProperty("n", out var nv))
+                {
+                    if (nv.ValueKind == JsonValueKind.Number && nv.TryGetInt32(out int ni)) n = ni;
+                    else if (nv.ValueKind == JsonValueKind.String && int.TryParse((nv.GetString() ?? "").Trim(), out int ns)) n = ns;
+                }
                 string exit = S("exit"), texto = S("text"), tecla = S("tecla");
                 if (exit.Length == 0 && texto.Length == 0 && tecla.Length == 0)
                     return new(pasos, $"el paso {pasos.Count + 1} no trae ni `exit` ni `text` ni `tecla`: no sé qué hacer con él.");
@@ -71,14 +79,19 @@ public static class PlanDeComprobacion
     /// <param name="aterrizados">Cuántos eventos que navegan aterrizaron, según el juez.</param>
     /// <param name="deLosQueNavegan">Cuántos eventos navegan en la lección.</param>
     public static string Relato(int hechos, int total, int paradoEn, string porQue, string donde,
-        int aterrizados, int deLosQueNavegan)
+        int aterrizados, int deLosQueNavegan, string faltan = "")
     {
-        string juez = $"El juez dice: {aterrizados} de {deLosQueNavegan} evento(s) que navegan aterrizaron.";
+        string juez = $"El juez dice: {aterrizados} de {deLosQueNavegan} paso(s) que cuentan —los que navegan y los campos tecleados— están hechos.";
+        // LO QUE FALTA, POR SU NOMBRE (2026-09-08): «19 de 20» sin decir cuál mandó al piloto a repetir
+        // cinco pasos ya hechos. Con la lista, las manos van a eso y a nada más.
+        string pendiente = string.IsNullOrWhiteSpace(faltan) ? ""
+            : $" FALTA POR JUZGAR: {faltan.Trim()}. Ve a eso y a nada más; lo hecho no se repite.";
         if (paradoEn > 0)
             return $"HICE {hechos} DE {total} y PARÉ en el paso {paradoEn}: {porQue} Estás en «{donde}». "
                  + "Sigue tú desde ese paso, de uno en uno, con las manos: mira con map_what_i_see, actúa, "
-                 + $"y declara cada llegada con leccion_llegue(n). {juez}";
-        return $"HICE LOS {total} PASO(S) del plan. Estás en «{donde}». {juez} "
-             + "Si todos aterrizaron, guarda la skill con leccion_guardar_skill; si no, revisa los que fallaron con las manos.";
+                 + $"y declara cada llegada con leccion_llegue(n). {juez}{pendiente}";
+        return $"HICE LOS {total} PASO(S) del plan. Estás en «{donde}». {juez}{pendiente} "
+             + (pendiente.Length > 0 ? "Cuando eso esté, guarda la skill con leccion_guardar_skill."
+                                     : "Si todos aterrizaron, guarda la skill con leccion_guardar_skill; si no, revisa los que fallaron con las manos.");
     }
 }

@@ -344,9 +344,35 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     LogBus.Log("clic-sap", $"punto dentro del árbol pero sin fila ni selección ({porqueNo})");
                     return null;
                 }
-                LogBus.Log("clic-sap", "el punto no cae en ningún árbol visto: que lo intente UIA");
-                return null;
+                LogBus.Log("clic-sap", "el punto no cae en ningún árbol visto: pruebo la rejilla");
+                break;
             }
+
+            // LA REJILLA, cuando el árbol no fue (promesa 182): un clic en una fila de ALV —la lista
+            // de pacientes— lo nombra su fila, no un árbol. Reusa la lectura del grabador.
+            try
+            {
+                var deRejilla = sap.FilaDeGridEn(x, y);
+                if (deRejilla is { } fr)
+                {
+                    LogBus.Log("clic-sap", $"clic en una fila de rejilla → «{fr.Etiqueta}»");
+                    return (fr.Selector, fr.Etiqueta, "GuiGridFila");
+                }
+            }
+            catch (Exception e) { LogBus.Log("clic-sap", $"no pude leer la fila de rejilla: {e.Message}"); }
+            // EL CAMPO, cuando no fue ni árbol ni rejilla (2026-09-07): los clics sobre los campos del
+            // triage quedaban sin identidad, y el tecleo descargado al parar no tenía de qué colgarse.
+            try
+            {
+                var campo = sap.CampoEn(x, y);
+                if (campo is { } c)
+                {
+                    LogBus.Log("clic-sap", $"clic en un campo → «{c.Etiqueta}» ({c.Tipo})");
+                    return (c.Selector, c.Etiqueta, c.Tipo);
+                }
+            }
+            catch (Exception e) { LogBus.Log("clic-sap", $"no pude leer el campo bajo el punto: {e.Message}"); }
+            LogBus.Log("clic-sap", "ni árbol, ni rejilla, ni campo: que lo intente UIA");
             return null;
 
             (string, string, string)? Nombrar(
@@ -655,6 +681,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                         // trae— preguntar por el foco es tirar el dato bueno y quedarse con la
                         // suposición. El foco sigue siendo el respaldo, que es donde le toca.
                         string id = campo.Length > 0 ? campo : _ultimoSapPulsado;
+                        // POR SU NOMBRE (promesa 185, 2026-09-07): el piloto pide «Motivo de Consulta»
+                        // o «Y0000000-ZTRNOMPAC», que es lo que ve; un selector sap: entero solo lo
+                        // trae la lección. Lo que no sea selector se busca entre los campos de ahora.
+                        if (id.Length > 0 && !U.Graph.Surfaces.SapSelector.Owns(id))
+                        {
+                            string? porNombre = sap.SelectorDelCampo(id);
+                            if (porNombre != null) id = porNombre;
+                            else LogBus.Log("sentido-sap", $"ningún campo de esta pantalla se llama «{id}» (o hay más de uno): pruebo el foco");
+                        }
                         string porque = "";
                         bool ok = false;
                         if (id.Length > 0)
@@ -740,7 +775,34 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // LAS DOS MITADES SAP DEL DESPACHO (promesas 118 y 119): dónde está algo, y qué hay
                 // bajo un punto. La decisión de a quién preguntar vive en MundoQueToca; aquí solo se
                 // le pasa la mano de SAP, igual que con observar, pulsar y escribir.
+                // EL GRABADOR DE SAP ENSEÑA AL TERRENO (promesa 189): el último paso publicado y la
+                // pantalla nueva que SAP anuncia después son una arista, con el selector con el que el
+                // terreno conoce la puerta. Es lo que el mapa vivo no alcanza cuando SAP tarda.
+                Teach.PasoQueVioSap? ultimoPasoQueVioSap = null;
+                var relojDeSap = System.Diagnostics.Stopwatch.StartNew();
+                _teachSapSurface.StepObserved += (_, paso) =>
+                    ultimoPasoQueVioSap = new Teach.PasoQueVioSap(relojDeSap.ElapsedMilliseconds, paso.Surface ?? "", paso.Selector ?? "");
+                _teachSapSurface.PantallaNueva += (desde, hasta) =>
+                {
+                    var cruce = Teach.ElCruceQueVioSap.Emparejar(ultimoPasoQueVioSap, new Teach.CambioQueVioSap(relojDeSap.ElapsedMilliseconds, desde, hasta));
+                    if (cruce is not { } c) return;
+                    bool aprendida = _mapaVivo.Nucleo.Cruzar(c.Desde, c.Selector, c.Hasta);
+                    LogBus.Log("terreno", aprendida
+                        ? $"el grabador de SAP enseñó la arista: «{c.Selector[(c.Selector.LastIndexOf('/') + 1)..]}» lleva de …{c.Desde[(c.Desde.LastIndexOf('/') + 1)..]} a …{c.Hasta[(c.Hasta.LastIndexOf('/') + 1)..]}"
+                        : $"el grabador de SAP vio cruzar «{c.Selector}» desde {c.Desde}, pero el terreno no conoce esa puerta ahí: no se aprende");
+                };
+                // LAS MANOS DEL PILOTO DAN EL PASO CON LA MISMA COREOGRAFÍA QUE EL PLAN (promesa 191).
+                mcp.Map.DarUnPasoConCoreografia = DarUnPasoConCoreografia;
                 mcp.Map.CajasEnSap = LeerCajasDeSap;
+                // LOS CAMPOS DEL DYNPRO, para nombrarlos (promesa 188). Solo dentro de SAP: fuera, vacío.
+                mcp.Map.CamposDeSap = () =>
+                {
+                    var sap = _locator?.SuperficieSap;
+                    string donde = _locator?.DondeEstoy()?.Id ?? "";
+                    if (sap == null || !donde.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
+                        return Array.Empty<U.Graph.DetectedField>();
+                    try { return sap.ReadFields(); } catch { return Array.Empty<U.Graph.DetectedField>(); }
+                };
                 // SEÑALAR DENTRO DE SAP, con el hit-test que SÍ funciona. La nativa
                 // «FindByPosition» no resuelve nada en este SAP —medido el 2026-07-26 y escrito en
                 // windows-graph/CLAUDE.md: devuelve null en árboles Y en botones—, así que el punto
@@ -937,6 +999,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 + "dónde llegó la demo en ese evento y te contesta si aterrizaste. No es opcional: sin esto "
                 + "el paso no cuenta.",
                 new[] { new Voz.Realtime.Argumento("n", "El número del evento, tal como viene en la lección.") }))
+            // LOS OJOS (promesa 181): map_shot ya existía y devolvía la foto como texto, así que el
+            // modelo nunca la miraba. Ahora viaja como imagen; el catálogo lo dice para que se use.
+            .Append(new Voz.Realtime.Utensilio("map_shot",
+                "MIRA LA PANTALLA: te devuelve una FOTO de la ventana del usuario, que puedes ver. Úsala "
+                + "cuando lo que hiciste NO cambia de pantalla y por tanto nadie más puede confirmártelo: "
+                + "seleccionar una fila, marcar una casilla, escribir en un campo. Mira, comprueba si "
+                + "salió, y si no salió corrígelo. Es más barato equivocarse mirando que declararlo a ciegas.",
+                Array.Empty<Voz.Realtime.Argumento>()))
             .Append(new Voz.Realtime.Utensilio("leccion_plan",
                 "ENTREGA EL PLAN de la lección y la app lo RECORRE por ti: por cada paso dice tu «decir» en voz, "
                 + "cuelga tu «recuerdo» en el elemento estando en su pantalla, da el paso por el ejecutor de "
@@ -2824,7 +2894,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             ShowTalk(MotivoDelGlobo.AlgoFallo);
             return;
         }
-        var registro = new Piloto.RegistroDeLaComprobacion(leccion);
+        // EL JUEZ LEE LOS CAMPOS (promesa 175, enmendada): un campo tecleado está hecho si dice ahora lo
+        // que la demo tecleó. Se lee por SAP; un campo de UIA no se sabe leer aquí, y el juez lo dice.
+        var registro = new Piloto.RegistroDeLaComprobacion(leccion, sel =>
+            U.Graph.Surfaces.SapSelector.Owns(sel) ? _locator?.SuperficieSap?.ValorActual(sel) : null);
         string modelo = Environment.GetEnvironmentVariable("U_PILOTO_MODELO") is { Length: > 0 } m ? m : "claude-opus-5";
         var mensaje = new Piloto.ElPiloto.Mensaje(
             Teach.MensajeDeLaLeccion.Armar(leccion),
@@ -2869,6 +2942,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 + (s.Comprobada ? ", COMPROBADA" : ", pendiente: no todos los eventos aterrizaron") + $" → {f}";
         };
 
+        // LA VOZ PRESTADA (promesa 192): mientras el piloto comprueba, la conversación en vivo no
+        // tiene herramientas ni turno propio; solo dice lo que se le pide. Sin esto, en la duodécima
+        // prueba había dos manos a la vez y una voz que anunciaba pasos que no tocaban.
+        if (_vivo is { Viva: true })
+        {
+            try
+            {
+                await _vivo.CambiarModoAsync(Piloto.VozPrestada.Instrucciones,
+                    Piloto.VozPrestada.Utensilios(Voice.ConversacionEnVivo.Herramientas()), soloCuandoSeLePide: true);
+            }
+            catch (Exception ex) { LogBus.Log("comprobar", $"no pude prestar la voz: {ex.Message}"); }
+        }
         SetStatus("Comprobando con el piloto: leo la lección y la hago de uno en uno…");
         _mapaDeMano.SenalarAlActuar = true;
         _cts = new CancellationTokenSource();
@@ -2887,12 +2972,19 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             SetWorking(false); ShowStop(false);
             _mapaDeMano.Decir = null; _mapaDeMano.Preguntar = null; _mapaDeMano.Llegue = null; _mapaDeMano.GuardarSkill = null; _mapaDeMano.Plan = null;
+            _mapaDeMano.SenalarAlActuar = false;
+            // Y SE DEVUELVE LA VOZ (promesa 192): la conversación vuelve a ser quien era.
+            if (_vivo is { Viva: true })
+            {
+                try { await _vivo.CambiarModoAsync(Voice.ConversacionEnVivo.InstruccionesNormales, Voice.ConversacionEnVivo.Herramientas()); }
+                catch (Exception ex) { LogBus.Log("comprobar", $"no pude devolver la voz: {ex.Message}"); }
+            }
         }
 
         // EL VEREDICTO LO DA LA APP, con la misma compuerta de la promesa 131: el total es el plan.
         var final = registro.Final();
         LogBus.Log("comprobar", $"piloto terminó ({(r.Termino ? "bien" : $"salida {r.Salida}")}) en {reloj.ElapsedMilliseconds} ms · "
-            + $"{registro.Hechos}/{registro.Total} aterrizados · costo estimado ${r.CostoUsd:0.000} · "
+            + $"{registro.Hechos}/{registro.Total} hechos · costo estimado ${r.CostoUsd:0.000} · "
             + (final.Comprobada ? "COMPROBADA" : "SIGUE PENDIENTE") + $" · {final.Motivo}");
         if (!r.Termino && r.Ultimo.Length > 0) LogBus.Log("comprobar", $"piloto: {r.Ultimo}");
         SetStatus(final.Comprobada
@@ -2921,33 +3013,97 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         for (int i = 0; i < pasos.Count; i++)
         {
             var p = pasos[i];
-            if (reloj.Elapsed > TimeSpan.FromSeconds(100))
+            // LA GUARDA CRECE CON EL PLAN (2026-09-08): 18 pasos con su tarjeta de lectura pasan de
+            // 100 s, y el corte cayó justo en el paso 18. Ocho segundos por paso, y nunca menos de 100.
+            if (reloj.Elapsed > TimeSpan.FromSeconds(Math.Max(100, 8 * pasos.Count)))
                 return Piloto.PlanDeComprobacion.Relato(hechos, pasos.Count, i + 1,
                     "se me acabó el tiempo de una sola llamada; el resto lo sigues tú o me vuelves a mandar el plan desde aquí.",
-                    _locator?.DondeEstoy()?.Id ?? "", registro.Hechos, registro.Total);
+                    _locator?.DondeEstoy()?.Id ?? "", registro.Hechos, registro.Total, LoQueFalta(registro));
 
-            if (p.Decir.Length > 0 && _mapaDeMano.Decir != null) { try { _mapaDeMano.Decir(p.Decir); } catch { } }
-            if (p.Recuerdo.Length > 0 && p.Exit.Length > 0)
-            {
-                string r = _mapaDeMano.Call("map_esto_es", new Dictionary<string, string> { ["significado"] = p.Recuerdo, ["sobre"] = p.Exit });
-                LogBus.Log("comprobar", $"plan · recuerdo en «{p.Exit}»: {(r.Length > 120 ? r[..120] + "…" : r)}");
-            }
-            // LA LLEGADA VIAJA CON EL PASO: es la que el terreno aprendió en la demo, y el batch la
-            // verifica con su propia compuerta (promesas 103 y 122). Con eso el juez de aquí y el del
-            // batch son el mismo dato; si sobra uno, es el de aquí.
-            string llegadaDelEvento = p.N > 0 ? (leccion.Eventos.FirstOrDefault(e => e.N == p.N)?.Llegada ?? "") : "";
-            var res = _mapaDeMano.RecorrerPorElNucleo(new[] { new Navigation.RecorrerSegunElNucleo.Paso(p.Exit, p.Texto, llegadaDelEvento, p.Tecla) });
+            // LA IDENTIDAD DEL PASO SE DECIDE EN UN SITIO (promesa 191): se señala y se nombra por la
+            // puerta aunque el piloto traiga el selector; se escribe por el selector de la lección
+            // aunque traiga el nombre. La llegada viaja con el paso: es la que el terreno aprendió, y
+            // el batch la verifica con su propia compuerta (promesas 103 y 122).
+            var evento = p.N > 0 ? leccion.Eventos.FirstOrDefault(e => e.N == p.N) : null;
+            var id = Piloto.ElPasoQueSeDa.Resolver(p.Exit, evento?.Etiqueta ?? "", evento?.Selector ?? "", p.Texto);
+            var res = DarUnPasoConCoreografia(id.ParaSenalar,
+                new Navigation.RecorrerSegunElNucleo.Paso(id.ParaElEjecutor, p.Texto, evento?.Llegada ?? "", p.Tecla), p.Recuerdo, p.Decir);
             if (res.Hechos < 1)
             {
-                LogBus.Log("comprobar", $"plan · PARÓ en el paso {i + 1} «{p.Exit}»: {res.Cuenta}");
+                LogBus.Log("comprobar", $"plan · PARÓ en el paso {i + 1} «{id.ParaSenalar}»: {res.Cuenta}");
                 return Piloto.PlanDeComprobacion.Relato(hechos, pasos.Count, i + 1, res.Cuenta,
-                    _locator?.DondeEstoy()?.Id ?? "", registro.Hechos, registro.Total);
+                    _locator?.DondeEstoy()?.Id ?? "", registro.Hechos, registro.Total, LoQueFalta(registro));
             }
             hechos++;
             if (p.N > 0) registro.Llegue(p.N, _locator?.DondeEstoy()?.Id ?? "");
         }
-        LogBus.Log("comprobar", $"plan · hice los {pasos.Count} paso(s) en {reloj.ElapsedMilliseconds} ms · {registro.Hechos}/{registro.Total} aterrizados");
-        return Piloto.PlanDeComprobacion.Relato(hechos, pasos.Count, 0, "", _locator?.DondeEstoy()?.Id ?? "", registro.Hechos, registro.Total);
+        LogBus.Log("comprobar", $"plan · hice los {pasos.Count} paso(s) en {reloj.ElapsedMilliseconds} ms · {registro.Hechos}/{registro.Total} hechos");
+        return Piloto.PlanDeComprobacion.Relato(hechos, pasos.Count, 0, "", _locator?.DondeEstoy()?.Id ?? "", registro.Hechos, registro.Total, LoQueFalta(registro));
+    }
+
+    /// <summary>Lo que el juez todavía no da por hecho, dicho para el piloto: evento, nombre y motivo.</summary>
+    private static string LoQueFalta(Piloto.RegistroDeLaComprobacion registro) =>
+        string.Join("; ", registro.Pendientes().Select(p => $"evento {p.N} «{p.Que}» ({p.Motivo})"));
+
+    /// <summary>
+    /// DAR UN PASO CON SU COREOGRAFÍA. Promesas 180 y 191: la carita al lado, el elemento encendido,
+    /// se dice, el recuerdo escrito y a la vista, y SOLO DESPUÉS el toque; al tocar, la tarjeta se
+    /// cierra y la señal se suelta. El orden lo decide <see cref="Piloto.ElRecuerdoQueSeVe.Coreografia"/>.
+    /// </summary>
+    /// <remarks>
+    /// ES UNA SOLA FUNCIÓN A PROPÓSITO (2026-09-08): vivía dentro del recorrido del plan, y cuando el
+    /// plan paraba y el piloto seguía con las manos, la experiencia desaparecía: ni carita, ni voz, ni
+    /// tarjeta. El dueño lo vio en la undécima prueba: «quiero que esa sea la experiencia estándar que
+    /// siempre suceda». Ahora map_take y map_type pasan por aquí.
+    /// </remarks>
+    private Navigation.RecorrerSegunElNucleo.Resultado DarUnPasoConCoreografia(string senalar,
+        Navigation.RecorrerSegunElNucleo.Paso paso, string recuerdo, string decir)
+    {
+        var mano = _mapaDeMano!;
+        recuerdo ??= ""; decir ??= ""; senalar ??= "";
+        bool hayElemento = senalar.Length > 0 && mano.SenalarElemento(senalar, senalar);
+        var coreografia = Piloto.ElRecuerdoQueSeVe.Coreografia(hayElemento, recuerdo.Length > 0 && senalar.Length > 0, decir.Length > 0);
+        if (!hayElemento && senalar.Length > 0) LogBus.Log("comprobar", $"paso · «{senalar}» no está en pantalla para señalarlo: va al ejecutor sin tarjeta");
+        foreach (var gesto in coreografia)
+        {
+            switch (gesto)
+            {
+                case Piloto.ElRecuerdoQueSeVe.Gesto.Senalar: break; // ya hecho arriba: es lo que dice si hay elemento
+                case Piloto.ElRecuerdoQueSeVe.Gesto.Decir:
+                    if (mano.Decir != null) { try { mano.Decir(decir); } catch { } }
+                    break;
+                case Piloto.ElRecuerdoQueSeVe.Gesto.Escribir:
+                {
+                    string r = mano.Call("map_esto_es", new Dictionary<string, string> { ["significado"] = recuerdo, ["sobre"] = senalar });
+                    LogBus.Log("comprobar", $"paso · recuerdo en «{senalar}»: {(r.Length > 120 ? r[..120] + "…" : r)}");
+                    break;
+                }
+                case Piloto.ElRecuerdoQueSeVe.Gesto.Mostrar:
+                    if (Senalador.Actual is { } senalado)
+                        TarjetasDeRecuerdo.Mostrar(new[] { (senalado.Caja, senalar, senalar, recuerdo) });
+                    break;
+                case Piloto.ElRecuerdoQueSeVe.Gesto.Esperar:
+                    Thread.Sleep(Piloto.ElRecuerdoQueSeVe.TiempoDeLectura(recuerdo));
+                    break;
+                case Piloto.ElRecuerdoQueSeVe.Gesto.Cerrar: TarjetasDeRecuerdo.Cerrar(); break;
+                case Piloto.ElRecuerdoQueSeVe.Gesto.Soltar: Senalador.Soltar(); break;
+                case Piloto.ElRecuerdoQueSeVe.Gesto.Actuar: break; // el paso va abajo, con su veredicto
+            }
+            if (gesto == Piloto.ElRecuerdoQueSeVe.Gesto.Actuar) break;
+        }
+        var res = mano.RecorrerPorElNucleo!(new[] { paso });
+        if (res.Hechos < 1)
+        {
+            TarjetasDeRecuerdo.Cerrar(); Senalador.Soltar();
+            return res;
+        }
+        // Lo que va después de tocar: la tarjeta se cierra y la señal se suelta (180).
+        foreach (var gesto in coreografia.SkipWhile(g => g != Piloto.ElRecuerdoQueSeVe.Gesto.Actuar).Skip(1))
+        {
+            if (gesto == Piloto.ElRecuerdoQueSeVe.Gesto.Cerrar) TarjetasDeRecuerdo.Cerrar();
+            if (gesto == Piloto.ElRecuerdoQueSeVe.Gesto.Soltar) Senalador.Soltar();
+        }
+        return res;
     }
 
     /// <summary>Pregunta con la voz de Ü y espera la siguiente frase de la persona, con techo.</summary>

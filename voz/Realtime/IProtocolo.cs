@@ -61,6 +61,14 @@ public interface IProtocolo
     /// </summary>
     IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Utensilio> utensilios, string pase);
 
+    /// <summary>
+    /// La misma apertura, diciendo si la sesión puede crear respuestas por su cuenta. Con
+    /// <paramref name="soloCuandoSeLePide"/> el servidor sigue oyendo y transcribiendo, pero no
+    /// contesta hasta que la app pide un turno (promesa 192: la voz prestada).
+    /// </summary>
+    IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Utensilio> utensilios, string pase, bool soloCuandoSeLePide)
+        => Apertura(instrucciones, utensilios, pase);
+
     /// <summary>Un trozo de micrófono, PCM de 16 bits mono al <see cref="RitmoDeEntrada"/>.</summary>
     string Audio(byte[] pcm);
 
