@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Omi;
 using System.Text;
 using System.Threading;
@@ -463,7 +464,15 @@ internal static class Contrato
         // 184 Y NO 168: la 168-174 viven en jose/estetica-de-la-carita (spec 012) y la 175-183 estan
         // reservadas por la spec 013 (el selector de microfono, todavia sin contrato). Los numeros no
         // se reciclan ni se comparten: si al mergear alguien ya uso el 184, esta se corre.
-        Prueba("184. el botón del collar graba la consulta y no abre la voz de la carita: pulsarlo empieza a grabar —abriendo la consulta si no está— y pulsarlo grabando para", ElBotonDelCollarGraba);
+        //
+        // LA 184 SE RETIRA Y SU NUMERO SE QUEMA. Decia que pulsar grabando «para», y el dueno cambio
+        // el gesto el mismo dia: ahora pausa, y terminar son dos toques. Corregir su enunciado en vez
+        // de retirarla dejaria al commit 2b3c1a8 y al PR #61 citando por numero una promesa que ya no
+        // dice lo que decia. Los numeros no se reciclan (spec 011 hizo lo mismo con la 165 y la 166).
+        Prueba("185. el collar no distingue un toque de dos, así que los cuenta la app: dos toques dentro de la ventana son UN gesto de terminar, y separados son dos gestos distintos", DosToquesSonUnGesto);
+        Prueba("186. un toque pausa lo que se está grabando y otro lo reanuda; dos toques terminan — pero nunca terminan una grabación que empezó en ese mismo golpeteo, y el botón sigue sin poder abrir la voz de la carita", UnToquePausaYDosTerminan);
+        Prueba("187. pausar no pierde lo dicho: al reanudar se sigue el mismo verbatim, y lo de antes de la pausa sigue estando en la nota", PausarNoPierdeLoDicho);
+        Prueba("188. los tres momentos suenan distinto, y «estás en vivo» suena igual al empezar que al reanudar; un toque que no puede hacer nada también suena", CadaMomentoSuenaDistinto);
 
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -4189,7 +4198,8 @@ internal static class Contrato
             (Func<CancellationToken, Task<bool>>)(_ => { microfonoAbierto = true; return Task.FromResult(true); }),
             (Func<Task<string>>)(() => Task.FromResult("")),
             // El espejo va explícito aunque sea opcional: Activator no rellena los que faltan.
-            null)!;
+            // Desde la spec 014 van tambien pausar y reanudar el dictado, por la misma razon.
+            null, null, null)!;
 
         bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
             .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
@@ -4534,7 +4544,9 @@ internal static class Contrato
         var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
             (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(true)),
             (Func<Task<string>>)(() => Task.FromResult("El paciente refiere cefalea.")),
-            null)!;
+            // Y desde la spec 014, pausar y reanudar el dictado. Van explicitos por lo mismo
+            // que el espejo: opcionales para C#, obligatorios para Activator.
+            null, null, null)!;
 
         bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
             .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
@@ -4783,7 +4795,9 @@ internal static class Contrato
         var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
             (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(false)),
             (Func<Task<string>>)(() => Task.FromResult("")),
-            null)!;
+            // Y desde la spec 014, pausar y reanudar el dictado. Van explicitos por lo mismo
+            // que el espejo: opcionales para C#, obligatorios para Activator.
+            null, null, null)!;
 
         bool arranco = ((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
             .Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None })!)
@@ -4805,7 +4819,9 @@ internal static class Contrato
         var buena = Activator.CreateInstance(tConsulta, sesion, clinica,
             (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(true)),
             (Func<Task<string>>)(() => Task.FromResult("algo dicho")),
-            null)!;
+            // Y desde la spec 014, pausar y reanudar el dictado. Van explicitos por lo mismo
+            // que el espejo: opcionales para C#, obligatorios para Activator.
+            null, null, null)!;
         Debe(((Task<bool>)tConsulta.GetMethod("EmpezarAsync")!
                  .Invoke(buena, new object?[] { "plantilla-x", CancellationToken.None })!)
                  .GetAwaiter().GetResult()
@@ -4998,7 +5014,9 @@ internal static class Contrato
         var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
             (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(true)),
             (Func<Task<string>>)(() => Task.FromResult("algo dicho")),
-            null)!;
+            // Y desde la spec 014, pausar y reanudar el dictado. Van explicitos por lo mismo
+            // que el espejo: opcionales para C#, obligatorios para Activator.
+            null, null, null)!;
 
         Debe((bool)puede.GetValue(consulta)!,
             "sin haber empezado nada, cambiar de cuenta está permitido");
@@ -5854,45 +5872,247 @@ internal static class Contrato
         Debe(!Asoma(ms * 10, true), "pero arrastrándola no asoma por mucho que se tarde: ir a moverla no es ir a escribirle");
     }
 
-    /// <summary>Promesa 184 (spec 014).</summary>
+    /// <summary>Promesas 185 y 186 (spec 014).</summary>
     /// <remarks>
-    /// EL BOTÓN DEL COLLAR ERA EL CLIC DE LA CARITA: llegaba a <c>StartMicByFace</c> y abría la
-    /// voz en vivo. El dueño lo pidió al revés el 2026-09-07 —«que se empiece a grabar el botón
-    /// grabar en vez de que la carita escuche»—: quien lleva el collar puesto está con un paciente
-    /// delante, y lo que quiere del botón es la consulta, no una conversación con Ü.
+    /// LA 184 ERA ESTO MISMO CON EL GESTO VIEJO y se retiro: decia que pulsar grabando «para».
+    /// El dueno cambio el gesto el 2026-09-07 —un toque pausa, dos terminan— asi que lo que la 184
+    /// prometia ya no es cierto. Su numero queda quemado.
     ///
-    /// Se juzga LA REGLA que la carita consulta, como la 147 juzga <c>ReglaDelToque</c>: el contrato
-    /// no puede pulsar un collar. Que la carita la consulte de verdad —y que la voz no se abra— es
-    /// nivel 4, con el log: «collar: botón → Grabar» seguido de la consulta grabando.
+    /// SE JUZGA LA REGLA, no la carita: el contrato no puede pulsar un collar. Que la carita la
+    /// consulte de verdad es nivel 4, con el log.
     /// </remarks>
-    private static void ElBotonDelCollarGraba()
+    private static void DosToquesSonUnGesto()
     {
-        var t = Capacidad("U.WindowsClient.Ui.ReglaDelBotonDelCollar");
-        if (t == null) { Pendiente("ReglaDelBotonDelCollar", "184", "014"); return; }
-        var alPulsar = t.GetMethod("AlPulsar", BindingFlags.Public | BindingFlags.Static);
-        if (alPulsar == null) { Pendiente("ReglaDelBotonDelCollar.AlPulsar", "184", "014"); return; }
+        var (t, alPulsar) = ReglaDelCollar();
+        if (alPulsar == null) { Pendiente("ReglaDelBotonDelCollar.AlPulsar(5 argumentos)", "185", "014"); return; }
 
-        string Hace(bool hayConsulta, bool grabando) =>
-            alPulsar.Invoke(null, new object[] { hayConsulta, grabando })!.ToString()!;
+        var ventana = t!.GetField("VentanaDelDobleToqueMs")?.GetValue(null);
+        if (ventana == null) { Pendiente("ReglaDelBotonDelCollar.VentanaDelDobleToqueMs", "185", "014"); return; }
+        int w = Convert.ToInt32(ventana);
 
-        Debe(Hace(false, false) == "AbrirLaConsultaYGrabar",
-            $"sin consulta abierta, el botón la abre y graba (salió «{Hace(false, false)}»)");
-        Debe(Hace(true, false) == "Grabar",
-            $"con la consulta abierta y parada, el botón graba (salió «{Hace(true, false)}»)");
-        Debe(Hace(true, true) == "Parar",
-            $"grabando, el mismo botón para: es el botón «Grabar», no otro (salió «{Hace(true, true)}»)");
+        string Hace(long msDesdeElAnterior, long msGrabando, bool grabando = true, bool pausada = false) =>
+            alPulsar.Invoke(null, new object[] { true, grabando, pausada, msDesdeElAnterior, msGrabando })!.ToString()!;
 
-        // Y NINGUNA de sus respuestas es abrir la voz: si la regla pudiera contestar «escuchar», la
-        // carita tendría un camino de vuelta al comportamiento viejo sin que el contrato lo viera.
+        // UN BOTON QUE SE PULSA CON EL DEDO, no un raton: la ventana de la carita (250 ms, promesa
+        // 147) es corta para una pieza pequena que cuelga y que a veces se pulsa por encima de la
+        // ropa. Si alguien la baja de 300, esto lo dice.
+        Debe(w >= 300, $"la ventana del doble toque da tiempo a un dedo: son {w} ms");
+        Debe(w <= 700, $"pero no tanto como para que dos gestos seguidos se fundan en uno: son {w} ms");
+
+        // Grabacion vieja (10 s) para que la guarda del golpeteo no estorbe aqui.
+        Debe(Hace(w - 1, 10000) == "Terminar",
+            $"dos toques DENTRO de la ventana son un gesto de terminar (salio «{Hace(w - 1, 10000)}»)");
+        Debe(Hace(w + 1, 10000) == "Pausar",
+            $"y separados son dos gestos distintos: el segundo vuelve a ser un toque suelto (salio «{Hace(w + 1, 10000)}»)");
+        Debe(Hace(0, 10000) == "Terminar",
+            "dos toques pegados tambien son un gesto: el cero no es un caso aparte");
+    }
+
+    /// <summary>Promesa 186 (spec 014).</summary>
+    private static void UnToquePausaYDosTerminan()
+    {
+        var (t, alPulsar) = ReglaDelCollar();
+        if (alPulsar == null) { Pendiente("ReglaDelBotonDelCollar.AlPulsar(5 argumentos)", "186", "014"); return; }
+        var ventana = t!.GetField("VentanaDelDobleToqueMs")?.GetValue(null);
+        if (ventana == null) { Pendiente("ReglaDelBotonDelCollar.VentanaDelDobleToqueMs", "186", "014"); return; }
+        int w = Convert.ToInt32(ventana);
+
+        // msDesdeElToqueAnterior muy grande = toque suelto, que es el caso normal.
+        const long Suelto = 999999;
+        string Hace(bool hayConsulta, bool grabando, bool pausada, long msDesde = Suelto, long msGrabando = 10000) =>
+            alPulsar!.Invoke(null, new object[] { hayConsulta, grabando, pausada, msDesde, msGrabando })!.ToString()!;
+
+        Debe(Hace(false, false, false) == "AbrirLaConsultaYGrabar",
+            $"sin consulta abierta, el boton la abre y graba (salio «{Hace(false, false, false)}»)");
+        Debe(Hace(true, false, false) == "Grabar",
+            $"con la consulta abierta y parada, graba (salio «{Hace(true, false, false)}»)");
+        Debe(Hace(true, true, false) == "Pausar",
+            $"grabando, UN toque PAUSA — ya no para del todo (salio «{Hace(true, true, false)}»)");
+        Debe(Hace(true, false, true) == "Reanudar",
+            $"y en pausa, un toque reanuda (salio «{Hace(true, false, true)}»)");
+
+        // TERMINAR DESDE LA PAUSA vale: el medico pausa, lo piensa, y cierra. Exigir volver a grabar
+        // para poder terminar seria pedirle que reabra el microfono para cerrarlo.
+        Debe(Hace(true, false, true, msDesde: 10) == "Terminar",
+            "dos toques terminan tambien desde la pausa: no hay que volver a grabar para cerrar");
+
+        // LA GUARDA DEL GOLPETEO. Sin ella, dos toques desde parado abren la consulta y la cierran
+        // 300 ms despues: una nota de nada, y un encounter gastado. La grabacion tiene que ser MAS
+        // VIEJA que la ventana para que un doble toque pueda cerrarla.
+        Debe(Hace(true, true, false, msDesde: 10, msGrabando: 10) != "Terminar",
+            "un doble toque NO termina una grabacion que empezo en ese mismo golpeteo");
+        Debe(Hace(true, true, false, msDesde: 10, msGrabando: w * 3) == "Terminar",
+            "pero si termina una que ya venia de antes");
+
+        // Y NINGUNA respuesta abre la voz: si la hubiera, el comportamiento viejo tendria un camino
+        // de vuelta que el contrato no veria. Es lo unico que sobrevive entero de la 184.
         var respuestas = Enum.GetNames(alPulsar.ReturnType);
         Debe(!respuestas.Any(r => r.Contains("Voz", StringComparison.OrdinalIgnoreCase)
                                || r.Contains("Escuch", StringComparison.OrdinalIgnoreCase)
                                || r.Contains("Habla", StringComparison.OrdinalIgnoreCase)
                                || r.Contains("Mic", StringComparison.OrdinalIgnoreCase)),
-            "el botón del collar no tiene forma de abrir la voz: ninguna de sus respuestas la nombra "
-            + $"(respuestas: {string.Join(", ", respuestas)})");
+            $"el boton del collar sigue sin poder abrir la voz (respuestas: {string.Join(", ", respuestas)})");
     }
 
+    /// <summary>
+    /// Promesa 187 (spec 014). LA QUE CIERRA EL ASUNTO.
+    /// </summary>
+    /// <remarks>
+    /// EL FALLO QUE ESTA PROMESA EXISTE PARA IMPEDIR, medido el 2026-09-07 antes de escribir codigo:
+    /// <c>DictadoEnVivo.ArrancarAsync</c> empieza con <c>Dicho.Limpiar()</c>. Pausar de la forma
+    /// obvia —parar y volver a arrancar— BORRA todo lo dicho antes de la pausa, en silencio. El
+    /// medico pausa, reanuda, termina, y la nota sale con media consulta.
+    ///
+    /// No da error, no cambia la pantalla, y solo se descubre leyendo la nota de una consulta real
+    /// que ya no se puede repetir. Es «lo peor no es que falle: es que parezca que funciono».
+    ///
+    /// SE JUZGA SOBRE EL VERBATIM y no sobre las llamadas: lo que importa no es que se llame a tal
+    /// metodo, es que el TEXTO siga ahi. Una prueba que comprobara «no se llamo a Limpiar» pasaria
+    /// igual si el texto se perdiera por otro camino.
+    /// </remarks>
+    private static void PausarNoPierdeLoDicho()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.Transcripcion.DictadoEnVivo");
+        if (t == null) { Pendiente("DictadoEnVivo", "187", "014"); return; }
+
+        var pausar = t.GetMethod("PausarAsync", BindingFlags.Public | BindingFlags.Instance);
+        var reanudar = t.GetMethod("ReanudarAsync", BindingFlags.Public | BindingFlags.Instance);
+        var arrancar = t.GetMethod("ArrancarAsync", BindingFlags.Public | BindingFlags.Instance);
+        var pausado = t.GetProperty("Pausado", BindingFlags.Public | BindingFlags.Instance);
+        if (pausar == null || reanudar == null || arrancar == null || pausado == null)
+        {
+            Pendiente("DictadoEnVivo.PausarAsync/ReanudarAsync/Pausado", "187", "014");
+            return;
+        }
+
+        // SE LEE EL BINARIO, no la firma. La primera version de esta promesa comparaba nombres y
+        // MethodInfo, y era un criterio que NO PODIA FALLAR: `GetMethod("ReanudarAsync").Name`
+        // siempre vale "ReanudarAsync". Es el patron n7 —contencion no es alineacion— cometido
+        // dentro de la promesa escrita para impedir el fallo.
+        //
+        // Lo que de verdad hay que juzgar es a QUIEN LLAMA cada camino, y eso esta en el IL. Los
+        // metodos async compilan a una maquina de estados, asi que el cuerpo que importa es el
+        // MoveNext de su tipo generado, no el del metodo.
+        var llamaArrancar = Llamadas(arrancar);
+        var llamaReanudar = Llamadas(reanudar);
+
+        if (llamaArrancar.Count == 0 || llamaReanudar.Count == 0)
+        {
+            // No poder leer el IL no es «la promesa se cumple»: es no haberla podido juzgar, y
+            // decirlo es el aprendizaje n17 — un juez que no puede correr dice «no se», no
+            // «inocente».
+            Pendiente("el IL de ArrancarAsync/ReanudarAsync (no se pudo leer)", "187", "014");
+            return;
+        }
+
+        Debe(llamaArrancar.Contains("Limpiar"),
+            "arrancar SI limpia el verbatim: si dejara de hacerlo, dos consultas seguidas se "
+            + "mezclarian, y esta promesa dejaria de significar nada");
+
+        Debe(!llamaReanudar.Contains("Limpiar"),
+            "REANUDAR NO LIMPIA: lo dicho antes de la pausa tiene que seguir ahi, o la nota sale "
+            + "con media consulta y nadie se entera hasta leerla");
+
+        Debe(!llamaReanudar.Contains("ArrancarAsync"),
+            "y no lo hace por el camino de atras: reanudar no puede delegar en arrancar, que limpia");
+
+        // PAUSAR TAMPOCO PUEDE LIMPIAR, y es el otro extremo del mismo agujero.
+        Debe(!Llamadas(pausar).Contains("Limpiar"),
+            "pausar tampoco borra lo dicho: pausar es dejar de oir, no empezar de cero");
+
+        // Y EL ESTADO SE PUEDE LEER. Sin el, quien pulse el boton no puede saber si el siguiente
+        // toque reanuda o empieza algo nuevo — que es la diferencia entre seguir la consulta y
+        // abrir otra encima.
+        Debe(pausado.PropertyType == typeof(bool),
+            "«Pausado» se puede consultar: es lo que distingue una pausa de un dictado que nunca "
+            + "arranco, y las dos se atienden distinto");
+    }
+
+    /// <summary>
+    /// A quien llama un metodo, leido del IL. Para los async, el cuerpo real esta en el MoveNext de
+    /// su maquina de estados, no en el metodo que la arranca.
+    /// </summary>
+    private static HashSet<string> Llamadas(MethodInfo metodo)
+    {
+        var salida = new HashSet<string>(StringComparer.Ordinal);
+
+        var maquina = metodo.GetCustomAttribute<AsyncStateMachineAttribute>()?.StateMachineType;
+        var cuerpo = maquina?.GetMethod("MoveNext", BindingFlags.NonPublic | BindingFlags.Instance)
+                     ?? (MethodBase)metodo;
+
+        byte[]? il;
+        try { il = cuerpo.GetMethodBody()?.GetILAsByteArray(); }
+        catch { return salida; }
+        if (il == null) return salida;
+
+        var modulo = cuerpo.Module;
+        for (int i = 0; i + 4 < il.Length; i++)
+        {
+            // call (0x28) y callvirt (0x6F): opcode de un byte seguido del token de 4.
+            if (il[i] != 0x28 && il[i] != 0x6F) continue;
+            int token = BitConverter.ToInt32(il, i + 1);
+            try
+            {
+                var m = modulo.ResolveMethod(token,
+                    cuerpo.DeclaringType?.GetGenericArguments(), metodo.GetGenericArguments());
+                if (m != null) salida.Add(m.Name);
+            }
+            catch { /* un token que no resuelve no es una llamada que nos interese */ }
+        }
+        return salida;
+    }
+    /// <summary>Promesa 188 (spec 014).</summary>
+    /// <remarks>
+    /// EL COLLAR NO PUEDE VIBRAR, y no es una limitacion nuestra: medido el 2026-09-07 con una sonda
+    /// sobre este CV1 (12 servicios, ninguno haptico), confirmado en la lista de UUID de la propia
+    /// app de Omi (sin haptic/vibration/motor/LED), y rematado por la recompensa abierta de Omi
+    /// titulada «Simulate Haptics with Speaker». Lo que el dueno pidio no existe en este hardware.
+    ///
+    /// Queda el sonido. Y la regla que se juzga aqui dice QUE suena en cada momento, no por donde:
+    /// el dia que se descifre el protocolo del altavoz del collar, cambia el altavoz y no esto.
+    /// </remarks>
+    private static void CadaMomentoSuenaDistinto()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelSonidoDelCollar");
+        if (t == null) { Pendiente("ReglaDelSonidoDelCollar", "188", "014"); return; }
+        var para = t.GetMethod("Para", BindingFlags.Public | BindingFlags.Static);
+        if (para == null) { Pendiente("ReglaDelSonidoDelCollar.Para", "188", "014"); return; }
+
+        var momentos = para.GetParameters()[0].ParameterType;
+        object M(string nombre) => Enum.Parse(momentos, nombre);
+        string Suena(string momento) => para.Invoke(null, new[] { M(momento) })!.ToString()!;
+
+        foreach (var n in new[] { "Empieza", "Reanuda", "Pausa", "Termina", "NoSePudo" })
+            Debe(Enum.GetNames(momentos).Contains(n), $"el momento «{n}» tiene nombre propio");
+
+        // «ESTAS EN VIVO» SUENA IGUAL SIEMPRE. Es el hecho que mas importa a quien no mira la
+        // pantalla, y no puede depender de como llegaste a el: empezar y reanudar dejan el mismo
+        // estado, asi que suenan lo mismo.
+        Debe(Suena("Empieza") == Suena("Reanuda"),
+            $"empezar y reanudar dejan el mismo estado —en vivo— y suenan igual "
+            + $"(«{Suena("Empieza")}» vs «{Suena("Reanuda")}»)");
+
+        // Y LO DEMAS SE DISTINGUE. Dos momentos con el mismo sonido son un momento que no se puede
+        // reconocer sin mirar, que es justo lo que este feedback existe para evitar.
+        var distintos = new[] { Suena("Empieza"), Suena("Pausa"), Suena("Termina"), Suena("NoSePudo") };
+        Debe(distintos.Distinct().Count() == 4,
+            $"en vivo, pausa, terminar y «no se pudo» suenan los cuatro distinto ({string.Join(" · ", distintos)})");
+
+        // UN TOQUE QUE NO HACE NADA TIENE QUE SONAR. Sin esto, el medico que pulsa y no oye nada no
+        // sabe si pauso, si el collar se solto, o si el boton fallo — y esa duda es lo peor que le
+        // puede pasar a un boton que no se ve.
+        Debe(!string.IsNullOrWhiteSpace(Suena("NoSePudo")),
+            "un toque que no puede hacer nada suena, en vez de callarse");
+    }
+
+    /// <summary>El tipo y el metodo de la regla del boton, pedidos por nombre una sola vez.</summary>
+    private static (Type?, MethodInfo?) ReglaDelCollar()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelBotonDelCollar");
+        var m = t?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                 .FirstOrDefault(x => x.Name == "AlPulsar" && x.GetParameters().Length == 5);
+        return (t, m);
+    }
     private static void Prueba(string nombre, Action cuerpo)
     {
         // Cada promesa se juzga sobre un mapa recién nacido en su propio directorio.

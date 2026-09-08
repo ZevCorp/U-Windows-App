@@ -2261,14 +2261,20 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         PintarCollar();
     }
 
+    /// <summary>Cuándo llegó el toque anterior del collar. Es lo que convierte dos toques en uno.</summary>
+    private long _ultimoToqueDelCollarMs;
+
     /// <summary>
-    /// EL BOTÓN DEL COLLAR GRABA LA CONSULTA (promesa 184, spec 014). Hasta el 2026-09-07 llegaba a
-    /// <see cref="StartMicByFace"/> y abría la voz en vivo; el dueño lo pidió al revés: quien lleva
-    /// el collar está con un paciente delante, y lo que quiere del botón es «Grabar».
+    /// EL BOTÓN DEL COLLAR: UN TOQUE PAUSA, DOS TERMINAN. Promesas 185-188 (spec 014).
     /// </summary>
     /// <remarks>
-    /// La decisión la toma <see cref="ReglaDelBotonDelCollar"/>, que el contrato juzga sin collar.
-    /// Aquí solo se ejecuta: abrir la consulta si no existe, y pedirle que alterne la grabación.
+    /// Hasta el 2026-09-07 llegaba a <see cref="StartMicByFace"/> y abría la voz en vivo. El dueño
+    /// lo cambió dos veces ese día; el porqué no cambió: quien lleva el collar está con un paciente
+    /// delante, y lo que quiere del único botón que tiene es la consulta.
+    ///
+    /// EL COLLAR NO CUENTA LOS TOQUES —manda 0x01 y 0x05, nada más—, así que los cuenta esta línea:
+    /// el hueco desde el toque anterior es todo lo que <see cref="ReglaDelBotonDelCollar"/> necesita
+    /// para saber si esto es un gesto nuevo o el segundo golpe de uno que ya venía.
     ///
     /// NO SE TRAE AL FRENTE una consulta que ya existe: el botón es un mando a distancia, y quien lo
     /// pulsa está mirando al paciente o a SAP. Si no existía, se abre delante como siempre.
@@ -2277,10 +2283,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         try
         {
+            long ahora = Environment.TickCount64;
+            long desdeElAnterior = _ultimoToqueDelCollarMs == 0
+                ? long.MaxValue
+                : ahora - _ultimoToqueDelCollarMs;
+            _ultimoToqueDelCollarMs = ahora;
+
             var consulta = Application.Current.Windows.OfType<ConsultaWindow>().FirstOrDefault();
-            var accion = ReglaDelBotonDelCollar.AlPulsar(consulta != null, consulta?.Grabando == true);
-            LogBus.Log("collar", $"botón del collar → {accion}");
-            PlayTick();
+            var accion = ReglaDelBotonDelCollar.AlPulsar(
+                hayConsulta: consulta != null,
+                grabando: consulta?.Grabando == true,
+                pausada: consulta?.Pausada == true,
+                msDesdeElToqueAnterior: desdeElAnterior,
+                msGrabando: consulta?.MsDeSesion ?? 0);
+
+            LogBus.Log("collar", $"botón del collar → {accion} (a {(desdeElAnterior == long.MaxValue ? "—" : desdeElAnterior + " ms")} del anterior)");
 
             if (accion == QueHaceElBotonDelCollar.AbrirLaConsultaYGrabar)
             {
@@ -2288,19 +2305,45 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 consulta = Application.Current.Windows.OfType<ConsultaWindow>().FirstOrDefault();
                 if (consulta == null)
                 {
-                    // Sin ventana no hay a quién pedirle grabar: casi siempre es que el login quedó
-                    // abierto esperando. Se dice, y el siguiente pulsado lo vuelve a intentar.
-                    LogBus.Log("collar", "la consulta no llegó a abrirse (¿quedó pidiendo iniciar sesión?): el botón no graba hasta que exista");
+                    // Sin ventana no hay a quién pedirle nada: casi siempre es que el login quedó
+                    // abierto esperando. Suena el «no se pudo», que es justo para esto: un toque
+                    // mudo no se distingue de un toque que no llegó.
+                    LogBus.Log("collar", "la consulta no llegó a abrirse (¿quedó pidiendo iniciar sesión?)");
+                    SonarPorElCollar(MomentoDelCollar.NoSePudo);
                     return;
                 }
             }
 
-            await consulta.GrabarPorElCollarAsync();
+            var momento = await consulta.HacerPorElCollarAsync(accion);
+            SonarPorElCollar(momento);
         }
         catch (Exception e)
         {
-            LogBus.Log("collar", $"el botón del collar no pudo grabar · {e.GetType().Name}: {e.Message}");
+            LogBus.Log("collar", $"el botón del collar falló · {e.GetType().Name}: {e.Message}");
+            SonarPorElCollar(MomentoDelCollar.NoSePudo);
         }
+    }
+
+    /// <summary>
+    /// LE CONTESTA AL CUERPO, que es lo único que el médico tiene mientras mira al paciente.
+    /// </summary>
+    /// <remarks>
+    /// EL DUEÑO PIDIÓ VIBRACIÓN Y ESTE COLLAR NO PUEDE VIBRAR. Medido el 2026-09-07 con una sonda
+    /// sobre el propio aparato (12 servicios GATT, ninguno háptico), confirmado en la lista de UUID
+    /// de la app oficial de Omi —que tampoco tiene ninguna— y rematado por la recompensa abierta de
+    /// Omi «Simulate Haptics with Speaker». No es una limitación nuestra: el motor no existe.
+    ///
+    /// Así que suena el PC. El QUÉ suena en cada momento lo decide
+    /// <see cref="ReglaDelSonidoDelCollar"/>, a propósito separado del POR DÓNDE: el collar tiene
+    /// altavoz y ese es el sitio correcto para un aparato que se lleva puesto — el día que se
+    /// descifre su protocolo, cambia este método y no la regla.
+    /// </remarks>
+    private void SonarPorElCollar(MomentoDelCollar momento)
+    {
+        string sonido = ReglaDelSonidoDelCollar.Para(momento);
+        LogBus.Log("collar", $"suena «{sonido}» ({momento})");
+        try { TonoDelCollar.Sonar(sonido); }
+        catch (Exception e) { LogBus.Log("collar", $"no se pudo sonar: {e.GetType().Name}: {e.Message}"); }
     }
 
     /// <summary>

@@ -93,8 +93,41 @@ public sealed class DictadoEnVivo : IDisposable
     /// </remarks>
     public async Task<bool> ArrancarAsync(CancellationToken ct = default)
     {
-        if (Activo) return true;
+        // ARRANCAR LIMPIA; REANUDAR NO. Es la unica diferencia entre los dos caminos, y es la
+        // promesa 187 entera: si reanudar pasara por aqui, lo dicho antes de la pausa se perderia
+        // en silencio y la nota saldria con media consulta.
         Dicho.Limpiar();
+        return await ArrancarInternoAsync(ct);
+    }
+
+    /// <summary>
+    /// VUELVE A DICTAR SOBRE LO YA DICHO. Es <see cref="ArrancarAsync"/> sin el borrado.
+    /// </summary>
+    /// <remarks>
+    /// Promesa 187. NO es un alias de arrancar y no puede llegar a serlo: arrancar empieza por
+    /// <c>Dicho.Limpiar()</c>, y ese borrado es justo lo que una pausa no puede hacer.
+    ///
+    /// Se abre un socket NUEVO en vez de mantener vivo el de antes, y es a proposito: este modulo no
+    /// tiene latido (se comprobo el 2026-09-07: ni keepalive ni ping), asi que un socket en pausa se
+    /// muere solo a los pocos segundos de silencio. Cerrarlo al pausar no es solo mas barato en
+    /// minutos de transcripcion — es lo unico que aguanta una pausa de verdad, de las de salir de la
+    /// sala.
+    /// </remarks>
+    public async Task<bool> ReanudarAsync(CancellationToken ct = default)
+    {
+        if (Activo) return true;
+        bool arranco = await ArrancarInternoAsync(ct);
+        if (arranco)
+        {
+            Pausado = false;
+            LogBus.Log("dictado", $"dictado reanudado · se sigue sobre {Dicho.Largo} caracteres ya dichos");
+        }
+        return arranco;
+    }
+
+    private async Task<bool> ArrancarInternoAsync(CancellationToken ct = default)
+    {
+        if (Activo) return true;
 
         _vida = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
@@ -146,6 +179,7 @@ public sealed class DictadoEnVivo : IDisposable
         }
 
         Activo = true;
+        Pausado = false;
         _escucha = Task.Run(() => EscucharAsync(_vida.Token));
         _audio.Capturado += Mandar;
         _audio.AbrirMicrofono();
@@ -155,10 +189,53 @@ public sealed class DictadoEnVivo : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// EL DICTADO ESTA EN PAUSA: no escucha, pero la consulta sigue viva y lo dicho sigue entero.
+    /// </summary>
+    /// <remarks>
+    /// Distinto de <c>!Activo</c> a proposito: «no activo» tambien es un dictado que nunca arranco o
+    /// uno que ya termino, y las tres cosas se atienden distinto. Es el aprendizaje n2 — un estado
+    /// que no distingue sus causas manda la investigacion al sitio equivocado.
+    /// </remarks>
+    public bool Pausado { get; private set; }
+
+    /// <summary>
+    /// Deja de escuchar SIN cerrar la consulta y SIN tocar lo dicho.
+    /// </summary>
+    /// <remarks>
+    /// Promesa 187. Hace lo mismo que <see cref="PararAsync"/> —incluido el <c>finalize</c>, para no
+    /// perder la frase a medias— y se diferencia en lo unico que importa: al reanudar se sigue sobre
+    /// el mismo verbatim. Ver <see cref="ReanudarAsync"/>.
+    /// </remarks>
+    public async Task PausarAsync()
+    {
+        if (!Activo) return;
+        await CerrarElCanalAsync();
+        Pausado = true;
+        LogBus.Log("dictado", $"dictado en pausa · {Dicho.Largo} caracteres a salvo");
+        Cambio?.Invoke(false);
+    }
+
     /// <summary>Para de dictar y devuelve TODO lo dicho.</summary>
     public async Task<string> PararAsync()
     {
-        if (!Activo) return Dicho.Todo;
+        if (!Activo && !Pausado) return Dicho.Todo;
+
+        // TERMINAR DESDE LA PAUSA no tiene nada que cerrar: el canal ya se cerro al pausar, y lo
+        // dicho esta entero. Volver a despedirse de un socket muerto solo gastaria los 2,5 s de
+        // espera del finalize.
+        if (!Activo) { Pausado = false; LogBus.Log("dictado", $"dictado terminado desde la pausa · {Dicho.Largo} caracteres"); return Dicho.Todo; }
+
+        await CerrarElCanalAsync();
+        Pausado = false;
+        LogBus.Log("dictado", $"dictado terminado · {Dicho.Largo} caracteres");
+        Cambio?.Invoke(false);
+        return Dicho.Todo;
+    }
+
+    /// <summary>El cierre del canal, que pausar y parar comparten entero.</summary>
+    private async Task CerrarElCanalAsync()
+    {
         Activo = false;
         _audio.Capturado -= Mandar;
         _audio.CerrarMicrofono();
@@ -183,9 +260,6 @@ public sealed class DictadoEnVivo : IDisposable
         if (ultima.Length > 0) Frase?.Invoke(ultima);
 
         Limpiar();
-        LogBus.Log("dictado", $"dictado terminado · {Dicho.Largo} caracteres");
-        Cambio?.Invoke(false);
-        return Dicho.Todo;
     }
 
     // ── el camino del audio ──────────────────────────────────────────────────

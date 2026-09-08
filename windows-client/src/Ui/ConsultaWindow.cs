@@ -149,6 +149,8 @@ public sealed class ConsultaWindow : Window
         _consulta = new Consulta(sesion, _clinica,
             abrirMicrofono: _dictado.ArrancarAsync,
             pararYRecogerLoDicho: () => _dictado.PararAsync(),
+            pausarElDictado: () => _dictado.PausarAsync(),
+            reanudarElDictado: _dictado.ReanudarAsync,
             espejar: async (encounterId, nota, verbatim) =>
             {
                 string fila = EspejoDeConsulta.Fila(encounterId, nota, verbatim,
@@ -1413,25 +1415,82 @@ public sealed class ConsultaWindow : Window
     /// <summary>¿Se está grabando ahora mismo? Lo pregunta la carita para el botón del collar.</summary>
     public bool Grabando => _consulta.Estado == EstadoDeConsulta.Grabando;
 
+    /// <summary>¿Está en pausa? También es una consulta viva, y el collar necesita saberlo.</summary>
+    public bool Pausada => _consulta.Estado == EstadoDeConsulta.Pausada;
+
+    /// <summary>Cuánto lleva viva la sesión —grabando o en pausa—. Cero si no hay ninguna.</summary>
+    /// <remarks>
+    /// Lo pide la regla del botón para su guarda: un doble toque no puede cerrar una grabación que
+    /// empezó en ese mismo golpeteo (promesa 186).
+    /// </remarks>
+    public long MsDeSesion =>
+        _msEmpezoLaSesion == 0 ? 0 : Environment.TickCount64 - _msEmpezoLaSesion;
+
+    private long _msEmpezoLaSesion;
+
     /// <summary>
-    /// EL BOTÓN DEL COLLAR ES EL BOTÓN «GRABAR» (promesa 184, spec 014): empieza si no graba, y para
-    /// si graba. Mismo camino que el clic, para que no haya dos formas de empezar una consulta.
+    /// LO QUE EL COLLAR PIDE, EJECUTADO AQUÍ. Promesas 185-188 (spec 014).
     /// </summary>
     /// <remarks>
-    /// Si el botón de la pantalla está desactivado es que ya se está cambiando de estado: un segundo
-    /// pulsado a mitad de camino no puede encolar otro cambio, y se dice en el log.
+    /// La DECISIÓN de qué hacer es de <see cref="ReglaDelBotonDelCollar"/> y se toma en la carita,
+    /// que es quien recibe el evento del servicio. Aquí solo se ejecuta, porque es esta ventana la
+    /// que tiene la consulta.
+    ///
+    /// Devuelve el MOMENTO que de verdad ocurrió, no el que se pidió: si el botón de la pantalla
+    /// está a mitad de un cambio, o la consulta contesta que no, lo que suena tiene que ser «no se
+    /// pudo» y no la confirmación de algo que no pasó. Es la promesa 188 y el aprendizaje nº10 —
+    /// lo peor no es que falle, es que parezca que funcionó.
     /// </remarks>
-    public Task GrabarPorElCollarAsync()
+    public async Task<MomentoDelCollar> HacerPorElCollarAsync(QueHaceElBotonDelCollar que)
     {
         if (!_grabar.IsEnabled)
         {
-            LogBus.Log("collar", "el botón del collar llegó a mitad de un cambio de grabación: se ignora");
-            return Task.CompletedTask;
+            LogBus.Log("collar", "el botón llegó a mitad de un cambio de grabación: se ignora");
+            return MomentoDelCollar.NoSePudo;
         }
-        LogBus.Log("collar", _consulta.Estado == EstadoDeConsulta.Grabando
-            ? "el botón del collar para la grabación"
-            : "el botón del collar empieza a grabar");
-        return AlternarAsync();
+
+        switch (que)
+        {
+            case QueHaceElBotonDelCollar.Pausar:
+                if (!await _consulta.PausarAsync())
+                {
+                    LogBus.Log("collar", "no se pudo pausar: " + _consulta.Motivo);
+                    return MomentoDelCollar.NoSePudo;
+                }
+                PintarSegunEstado();   // dice «en pausa» y cambia el botón a «Terminar»
+                return MomentoDelCollar.Pausa;
+
+            case QueHaceElBotonDelCollar.Reanudar:
+                if (!await _consulta.ReanudarAsync())
+                {
+                    Estado(_consulta.Motivo);
+                    LogBus.Log("collar", "no se pudo reanudar: " + _consulta.Motivo);
+                    return MomentoDelCollar.NoSePudo;
+                }
+                Estado("Grabando otra vez, sobre lo que ya llevabas dicho.");
+                PintarSegunEstado();
+                return MomentoDelCollar.Reanuda;
+
+            case QueHaceElBotonDelCollar.Terminar:
+                if (!Grabando && !Pausada) return MomentoDelCollar.NoSePudo;
+                _msEmpezoLaSesion = 0;
+                await AlternarAsync();
+                return MomentoDelCollar.Termina;
+
+            default:   // Grabar y AbrirLaConsultaYGrabar: la ventana ya está, así que es lo mismo
+                if (Grabando) return MomentoDelCollar.NoSePudo;
+                _msEmpezoLaSesion = Environment.TickCount64;
+                await AlternarAsync();
+                if (!Grabando)
+                {
+                    // Arrancar puede fallar (sin plantilla, sin red): lo dice AlternarAsync en la
+                    // línea de estado, y aquí se traduce a que el collar NO confirme un falso «en
+                    // vivo». Ver el aprendizaje nº10.
+                    _msEmpezoLaSesion = 0;
+                    return MomentoDelCollar.NoSePudo;
+                }
+                return MomentoDelCollar.Empieza;
+        }
     }
 
     private async Task AlternarAsync()
@@ -1439,9 +1498,12 @@ public sealed class ConsultaWindow : Window
         _grabar.IsEnabled = false;
         try
         {
-            if (_consulta.Estado == EstadoDeConsulta.Grabando)
+            // TAMBIÉN DESDE LA PAUSA: el botón de la pantalla cierra lo que haya abierto, igual que
+            // el doble toque del collar (spec 014).
+            if (_consulta.Estado is EstadoDeConsulta.Grabando or EstadoDeConsulta.Pausada)
             {
                 Estado("Guardando y organizando la nota…");
+                _msEmpezoLaSesion = 0;
                 await _consulta.TerminarAsync();
                 return;
             }
@@ -1478,6 +1540,7 @@ public sealed class ConsultaWindow : Window
                 Estado("Abriendo la consulta…");
 
             if (!await _consulta.EmpezarAsync(_plantillaId)) Estado(_consulta.Motivo);
+            else if (_msEmpezoLaSesion == 0) _msEmpezoLaSesion = Environment.TickCount64;
         }
         finally { _grabar.IsEnabled = true; }
     }
@@ -1485,15 +1548,33 @@ public sealed class ConsultaWindow : Window
     private void PintarSegunEstado()
     {
         bool grabando = _consulta.Estado == EstadoDeConsulta.Grabando;
-        _etiquetaDeGrabar.Text = grabando ? "Parar" : "Grabar";
-        _puntoDeGrabar.Foreground = grabando ? Estudio.Alerta : Estudio.TintaTenue;
-        _puntoDeGrabar.Text = grabando ? "■" : "●";
+        bool pausada = _consulta.Estado == EstadoDeConsulta.Pausada;
 
-        if (grabando) { _empezoAGrabar = DateTimeOffset.Now; _cronometro.Start(); PintarCronometro(); }
+        // EL BOTÓN DICE LO QUE HACE. En pausa, pulsarlo TERMINA —porque desde la spec 014
+        // `AlternarAsync` cierra también desde la pausa—, así que si siguiera diciendo «Grabar»
+        // sería un botón que miente sobre lo único que hace, y encima en el sentido malo: quien
+        // quisiera seguir grabando cerraría la consulta.
+        _etiquetaDeGrabar.Text = grabando ? "Parar" : pausada ? "Terminar" : "Grabar";
+        _puntoDeGrabar.Foreground = grabando || pausada ? Estudio.Alerta : Estudio.TintaTenue;
+        _puntoDeGrabar.Text = grabando ? "■" : pausada ? "❚❚" : "●";
+
+        if (grabando)
+        {
+            // EL RELOJ NO SE REINICIA AL REANUDAR. Antes daba igual —a «Grabando» solo se llegaba
+            // desde cero— pero desde la spec 014 también se llega desde la pausa, y volver a poner
+            // 00:00 diría que la consulta acaba de empezar cuando lleva veinte minutos. Se ancla a
+            // la edad de la SESIÓN, que es lo que el cronómetro siempre quiso decir.
+            _empezoAGrabar = DateTimeOffset.Now.AddMilliseconds(-MsDeSesion);
+            _cronometro.Start();
+            PintarCronometro();
+        }
         else _cronometro.Stop();
 
         switch (_consulta.Estado)
         {
+            case EstadoDeConsulta.Pausada:
+                Estado("En pausa. Un toque en el collar sigue; dos, terminan.");
+                break;
             case EstadoDeConsulta.GenerandoNota: Estado("Organizando la nota…"); break;
             case EstadoDeConsulta.NotaLista: PintarNota(); break;
             case EstadoDeConsulta.Fallida: Estado(_consulta.Motivo); break;

@@ -12,6 +12,17 @@ public enum EstadoDeConsulta
     /// <summary>El encounter existe y el micrófono está abierto.</summary>
     Grabando,
 
+    /// <summary>
+    /// El encounter existe, el micrófono está cerrado, y lo dicho hasta aquí sigue entero.
+    /// </summary>
+    /// <remarks>
+    /// NO ES «SinEmpezar» NI «Transcrita», y confundirla con cualquiera de las dos pierde la
+    /// consulta: desde SinEmpezar se crearía un encounter nuevo —dos filas para un solo paciente— y
+    /// Transcrita ya mandó el texto al backend. Pausada es la única en la que se puede volver a
+    /// grabar sobre lo mismo (spec 014, promesa 187).
+    /// </remarks>
+    Pausada,
+
     /// <summary>Se paró de grabar; la transcripción viaja o viajó al backend.</summary>
     Transcrita,
 
@@ -60,6 +71,12 @@ public sealed class Consulta
     private readonly Func<CancellationToken, Task<bool>> _abrirMicrofono;
     private readonly Func<Task<string>> _pararYRecogerLoDicho;
 
+    /// <summary>Deja de escuchar sin cerrar nada y sin tocar lo dicho. Promesa 187.</summary>
+    private readonly Func<Task>? _pausarElDictado;
+
+    /// <summary>Vuelve a escuchar SOBRE lo ya dicho. No es arrancar: arrancar borra.</summary>
+    private readonly Func<CancellationToken, Task<bool>>? _reanudarElDictado;
+
     /// <summary>
     /// Escribe el espejo en `consultations` para que la consulta se VEA en el portal (promesa 93).
     /// Se inyecta como funcion para que esta clase no sepa de Supabase — y para que el contrato
@@ -70,13 +87,80 @@ public sealed class Consulta
     public Consulta(SesionMiracle sesion, ClinicaClient clinica,
         Func<CancellationToken, Task<bool>> abrirMicrofono,
         Func<Task<string>> pararYRecogerLoDicho,
-        Func<string, NotaClinica, string, Task<bool>>? espejar = null)
+        Func<string, NotaClinica, string, Task<bool>>? espejar = null,
+        Func<Task>? pausarElDictado = null,
+        Func<CancellationToken, Task<bool>>? reanudarElDictado = null)
     {
         _sesion = sesion;
         _clinica = clinica;
         _abrirMicrofono = abrirMicrofono;
         _pararYRecogerLoDicho = pararYRecogerLoDicho;
         _espejar = espejar;
+        _pausarElDictado = pausarElDictado;
+        _reanudarElDictado = reanudarElDictado;
+    }
+
+    /// <summary>
+    /// Deja de escuchar sin cerrar la consulta. Lo dicho hasta aquí se queda entero.
+    /// </summary>
+    /// <remarks>
+    /// Promesa 187 (spec 014). Lo pide el botón del collar con UN toque.
+    ///
+    /// SE PAUSA LO QUE ESTÁ GRABANDO Y NADA MÁS: pausar una consulta que ya terminó, o una que no
+    /// empezó, no es un error del usuario que haya que gritar — es un botón pulsado de más. Se
+    /// contesta que no, con el motivo nombrado, y quien llame decide si suena.
+    /// </remarks>
+    public async Task<bool> PausarAsync()
+    {
+        if (Estado != EstadoDeConsulta.Grabando)
+        {
+            Motivo = "no hay ninguna grabación en marcha que pausar";
+            return false;
+        }
+        if (_pausarElDictado == null)
+        {
+            Motivo = "esta consulta se construyó sin forma de pausar el dictado";
+            return false;
+        }
+
+        await _pausarElDictado();
+        Pasar(EstadoDeConsulta.Pausada);
+        LogBus.Log("consulta", "consulta EN PAUSA · el encounter sigue abierto y lo dicho, entero");
+        return true;
+    }
+
+    /// <summary>
+    /// Vuelve a grabar sobre la MISMA consulta, siguiendo lo ya dicho.
+    /// </summary>
+    /// <remarks>
+    /// Promesa 187. NO llama a <c>abrirMicrofono</c> —que es arrancar, y arrancar BORRA lo dicho—
+    /// sino a reanudar. Es toda la diferencia entre una nota completa y media nota.
+    /// </remarks>
+    public async Task<bool> ReanudarAsync(CancellationToken ct = default)
+    {
+        if (Estado != EstadoDeConsulta.Pausada)
+        {
+            Motivo = "esta consulta no está en pausa";
+            return false;
+        }
+        if (_reanudarElDictado == null)
+        {
+            Motivo = "esta consulta se construyó sin forma de reanudar el dictado";
+            return false;
+        }
+
+        if (!await _reanudarElDictado(ct))
+        {
+            // NO se cae a SinEmpezar: el encounter sigue vivo y lo dicho sigue ahí. Quedarse en
+            // pausa deja el único camino que conserva la consulta — volver a intentarlo.
+            Motivo = "no pude volver a abrir el dictado; la consulta sigue en pausa y lo dicho, a salvo";
+            LogBus.Log("consulta", "reanudar falló: se sigue en pausa, sin perder lo dicho");
+            return false;
+        }
+
+        Pasar(EstadoDeConsulta.Grabando);
+        LogBus.Log("consulta", "consulta REANUDADA sobre lo ya dicho");
+        return true;
     }
 
     /// <summary>Lo ultimo que se dijo en esta consulta. Es lo que viaja al espejo.</summary>
@@ -110,7 +194,13 @@ public sealed class Consulta
     /// hacer a media consulta: con el micrófono abierto, cerrar sesión dejaría un dictado huérfano
     /// —nadie lo para, nadie lo guarda— y el médico se quedaría sin saber que perdió lo grabado.
     /// </remarks>
-    public bool PuedeCambiarDeUsuario => Estado != EstadoDeConsulta.Grabando;
+    /// <remarks>
+    /// EN PAUSA TAMPOCO, y no es un detalle: la consulta sigue abierta a nombre de ese médico y con
+    /// su audio dentro. Cambiar de cuenta a mitad de una pausa dejaría lo dicho por uno colgando del
+    /// encounter del otro.
+    /// </remarks>
+    public bool PuedeCambiarDeUsuario =>
+        Estado is not (EstadoDeConsulta.Grabando or EstadoDeConsulta.Pausada);
 
     /// <summary>Cambió el estado. La interfaz se pinta con esto; nadie más decide con esto.</summary>
     public event Action<EstadoDeConsulta>? Cambio;
@@ -181,9 +271,12 @@ public sealed class Consulta
     /// </summary>
     public async Task TerminarAsync(CancellationToken ct = default)
     {
-        if (Estado != EstadoDeConsulta.Grabando)
+        // TERMINAR DESDE LA PAUSA VALE, y es la mitad del gesto de dos toques: el médico pausa, lo
+        // piensa, y cierra. Exigir volver a grabar para poder terminar sería pedirle que reabra el
+        // micrófono para cerrarlo.
+        if (Estado is not (EstadoDeConsulta.Grabando or EstadoDeConsulta.Pausada))
         {
-            Motivo = "no hay ninguna grabación en marcha";
+            Motivo = "no hay ninguna consulta abierta que terminar";
             return;
         }
 
