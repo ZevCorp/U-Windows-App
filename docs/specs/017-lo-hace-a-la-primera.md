@@ -1,6 +1,6 @@
 # Plan de implementación: lo que uno le pida, lo hace — y a la primera
 
-Estado: **propuesto** · Nace de una nota de voz del 2026-09-10 ([transcripción y rúbrica](fuentes/2026-09-10-lo-hace-a-la-primera.md)) y del diagnóstico de esa noche · Rama: `jero/lo-hace-a-la-primera`
+Estado: **implementado; nivel 4 pendiente** (2026-09-11: 202–206 verdes y saboteadas; la prueba en el PC real no pudo correr de noche) · Nace de una nota de voz del 2026-09-10 ([transcripción y rúbrica](fuentes/2026-09-10-lo-hace-a-la-primera.md)) y del diagnóstico de esa noche · Rama: `jero/lo-hace-a-la-primera`
 
 > **La petición, en la voz del audio:** *«que lo que uno le pida lo haga, y lo haga a la primera,
 > máximo dos intentos, máximo dos segundos, y no se sienta que falló, sino: lo hizo.»*
@@ -182,13 +182,68 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
 
 ## Hallazgos
 
-<!-- Durante la implementación. -->
+- **2026-09-10 (rojo, por las razones escritas).** 175 juzgadas, 5 rotas, exactamente 202–206, y las
+  170 anteriores intactas. Los motivos del rojo son los escritos, no un fallo del arnés: la 202 cae con
+  «hice los 1 paso(s)», la 203 con «Dime el selector» y `Paso.Cual` pendiente, la 204 y la 205 con sus
+  clases pendientes, y la 206 con los argumentos muertos y el «más de dos veces». Commit `5a81bcb`.
+- **2026-09-11 (tres promesas viejas rotas por el camino, arregladas sin tocar sus pruebas).** Al poner
+  las cinco en verde cayeron la 56, la 64 y la 103, y las tres tenían razón:
+  - **56 y 64** exigen que, ante homónimos, se den **los selectores**. La lista numerada nueva daba
+    etiqueta, tipo y destino, pero no el selector. Ahora cada entrada lo lleva, y el cerebro puede
+    usarlo directamente.
+  - **103** construye un `Paso` por reflexión con cuatro argumentos. Un quinto parámetro en el
+    constructor la rompía con `MissingMethodException`, porque reflexión no rellena opcionales.
+    `Cual` pasó a ser una propiedad `init`, fuera del constructor.
+  - La lección: añadir un parámetro a un record que el contrato construye por reflexión es cambiar su
+    firma pública, aunque tenga valor por defecto.
+- **La clase de error de los homónimos vivía en 2 sitios**, y los 2 están corregidos:
+  - el ejecutor, que contestaba «dime el selector»;
+  - `map_show`, que tras resolver un homónimo señalándolo sugería `map_take exit=«Etiqueta»` y volvía
+    a crear la ambigüedad. Con homónimos, ahora sugiere el selector.
+- **Lo que no se sabe leer no se adivina.** `map_go_to`, `map_open_app` y `file_open` devuelven solo
+  texto. El tope no los cuenta como fallo, y la medida del turno no los cuenta como acción que actuó.
+  Solo `map_take` y `map_type` traen su resultado estructurado (`SurfaceMapTools.UltimaMano`). Límite
+  dicho: un botón que hace su trabajo sin cambiar de pantalla, como «Guardar», cuenta como no
+  logrado, así que el tercero idéntico se frena.
+
+- **2026-09-11 (el sabotaje).** Cada promesa se rompió a propósito con un patrón de una sola línea. Se
+  comprobó por diff de bytes que el cambio se aplicaba, se exigió el veredicto del juez, se restauró y
+  se recompiló al final: **CONTRATO INTACTO**.
+
+  | Promesa | Sabotaje | Quedó |
+  |---|---|---|
+  | 202 | el cierre vuelve a tapar el último hecho | roja |
+  | 203 | se ignora `which` y se toma el primero | roja |
+  | 204 | el destino se compara como texto crudo, sin aplanar | roja, **y también la 205** |
+  | 205 | solo se cuenta lo que devolvió resultado | roja |
+  | 206 | `map_take` vuelve a ofrecer `at` | roja |
+
+  Que el sabotaje de la 204 tumbe también la 205 no es un efecto colateral: las dos preguntan «¿es el
+  mismo sitio?» por el mismo `TopeDeIntentos.Destino`. Un solo criterio, como pide el aprendizaje nº16.
+
+- **2026-09-10, 23:55 (el nivel 4 no pudo correr de noche, y por qué).** La base, con el binario de
+  `main`, abortó. El conductor pulsó Ctrl+Alt+M y la voz no se abrió, sin un solo error en el log. Una
+  sonda midió la causa: el escritorio de entrada era **«Screen-saver»**.
+  - El salvapantallas **OLED Care** del fabricante se activa por inactividad aunque la pantalla esté en
+    «apagar: nunca», y se traga toda la entrada inyectada: `keybd_event` falla en silencio y `SendKeys`
+    devuelve «Acceso denegado».
+  - **No se cerró a propósito**: protege el panel OLED de quemarse, y forzar la pantalla encendida toda
+    la noche habría sido arriesgar el hardware para una prueba.
+  - El conductor ahora comprueba el escritorio de entrada antes de empezar y antes de cada Enter. El
+    kit queda en `scripts/nivel4-voz/`, en un comando.
+- **La memoria del terreno vive en Neo4j** (`127.0.0.1:7474`), que no estaba corriendo: una instancia
+  aislada arranca «sin nada recordado», y copiar `%LOCALAPPDATA%\U` no copia el mapa. Base y rama
+  arrancan igual de vacías, así que la comparación es justa. Pero no es la experiencia de alguien con
+  Neo4j vivo, y hay que decirlo al leer los números.
+- **Un ajuste de alcance del nivel 4.** La batería por la puerta MCP (8790) no se escribió. La batería
+  por voz deja en el log la duración de cada acción (`mapa-mcp: ← (N ms)`), que es justo lo que aquella
+  iba a medir, y además juzga lo que la otra no ve: qué herramienta **elige** el cerebro.
 
 ## Cierre
 
-- [ ] Fase 0: la base con el binario de `main`, con su log
-- [ ] Promesas 202–206 verdes; las 192 anteriores intactas
-- [ ] Cada una rota a propósito, comprobada por diff, y recompilado después
-- [ ] Nivel 4 al final, en las mismas tareas, al lado de la base
+- [ ] Fase 0, la base con el binario de `main`: **no se pudo medir de noche** (salvapantallas OLED); el kit la corre junto a la rama
+- [x] Promesas 202–206 verdes; las 170 anteriores intactas (175 juzgadas, 0 rotas)
+- [x] Cada una rota a propósito, comprobada por diff, restaurada y recompilada después
+- [ ] Nivel 4, base y rama en las mismas tareas: **pendiente, con alguien delante** (`scripts/nivel4-voz/correr.ps1`)
 - [ ] El crítico de fidelidad al audio, con su veredicto pegado
 - [ ] Estado: **implementado** (AAAA-MM-DD)
