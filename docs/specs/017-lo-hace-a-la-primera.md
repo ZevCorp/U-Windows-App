@@ -143,8 +143,13 @@ Y los límites de forma que desde fuera no se ven:
   Cerrarlo es que quien resuelve el campo consulte al tope con el id que va a escribir; `FaceWindow` es
   la zona de choque de los tres y no se toca de noche sin avisar. Por eso el enunciado de la 204 se acotó:
   certificaba en verde, para «la acción», lo que la escritura no cumple.
-- **Entre herramientas, tampoco.** La clave de lo pulsado incluye la herramienta, y `map_go_to` pulsa sin
-  consultar a nadie: un botón que falló dos veces con `map_take` se puede pulsar yendo con `map_go_to`.
+- **El tope vigila dos de las seis acciones** (`map_take` y `map_type`). `map_go_to`, `map_open_app`,
+  `map_unblock` y `file_open` no tienen tope, por construcción —devuelven solo texto, y lo que no se sabe
+  leer no se adivina—: un botón que falló dos veces con `map_take` se puede pulsar yendo con `map_go_to`,
+  sin límite. Cuando la 204 dice «la tercera acción», son esas dos.
+- **Escribir en el foco cuenta como un solo destino.** Sin `target`, `map_type` escribe donde esté el foco,
+  y el tope lo guarda como «(el foco)»: dos escrituras fallidas en campos distintos frenan una tercera en
+  un campo que nunca falló (séptima pasada; sin medir en pantalla).
 - **Cada pulsación que no cambia la pantalla son dos clics** (el ensayo de doble clic): antes del freno, el
   usuario ve cuatro clics al mismo elemento. El tope cuenta pulsaciones; R17 cuenta lo que se ve.
 - **El cableado sigue sin juez, y se midió.** Romper la línea de `ConversacionEnVivo` que le pasa los
@@ -255,7 +260,7 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
   - el ejecutor, que contestaba «dime el selector»;
   - `map_show`, que tras resolver un homónimo señalándolo sugería `map_take exit=«Etiqueta»` y volvía
     a crear la ambigüedad. Con homónimos, ahora sugiere el selector.
-- **Lo que no se sabe leer no se adivina.** `map_go_to`, `map_open_app` y `file_open` devuelven solo
+- **Lo que no se sabe leer no se adivina.** `map_go_to`, `map_open_app`, `map_unblock` y `file_open` devuelven solo
   texto. El tope no los cuenta como fallo, y la medida del turno no los cuenta como acción que actuó.
   Solo `map_take` y `map_type` traen su resultado estructurado (`SurfaceMapTools.UltimaMano`). Límite
   dicho: un botón que hace su trabajo sin cambiar de pantalla, como «Guardar», cuenta como no
@@ -511,6 +516,25 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
   Tres de tres en rojo, cada una comprobada por diff de bytes y restaurada idéntica; recompilado al final:
   **CONTRATO INTACTO, 176 juzgadas**. En total, 28 sabotajes distintos del contrato en siete rondas, todos
   en rojo; y dos del cableado de la voz, que el contrato no ve: medidos INTACTOS y declarados.
+- **2026-09-11, 03:35 (el crítico, séptima pasada: 5/10).** Sobre `c259c35`, solo lo que entró después de
+  la sexta. El enunciado de la 204 quedó idéntico en los tres sitios y ya no certifica nada falso; el freno
+  recuerda la lista y su sabotaje lo tumba. Lo que quedaba por decir: la línea de «Riesgo» del PR (decía que
+  ningún enunciado cambió, y el de la 204 cambió), el título del PR sin acotar, que el tope vigila dos de
+  las seis acciones, que escribir en el foco cuenta como un solo destino, y que el rechazo al escribir no lo
+  juzgaba nadie —y encima mandaba «pulsa otra cosa»—. Corregido todo en el PR y aquí; el rechazo al escribir
+  manda ahora otro campo, con su prueba en rojo primero. No hubo octava pasada: lo que entró después de la
+  séptima es exactamente lo que ella pidió, y así se dice.
+
+- **2026-09-11 (el sabotaje, octava ronda).**
+
+  | Promesa | Sabotaje | Quedó |
+  |---|---|---|
+  | 204 | el rechazo promete «es el mismo botón» también al escribir | roja |
+  | 204 | al escribir, el rechazo vuelve a mandar pulsar | roja |
+  
+  Dos de dos en rojo, comprobadas por diff de bytes y restauradas idénticas; recompilado al final: **CONTRATO
+  INTACTO, 176 juzgadas**. En total, **30 sabotajes distintos del contrato en ocho rondas, todos en rojo**; y
+  dos del cableado de la voz, que el contrato no ve: medidos INTACTOS y declarados.
 
 ## Cierre
 
@@ -518,5 +542,5 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
 - [x] Promesas 202–207 verdes; las 170 anteriores intactas (176 juzgadas, 0 rotas)
 - [x] Cada una rota a propósito, comprobada por diff, restaurada y recompilada después
 - [ ] Nivel 4, base y rama en las mismas tareas: **pendiente, con alguien delante** (`scripts/nivel4-voz/correr.ps1`)
-- [x] El crítico de fidelidad al audio: seis pasadas completas (4, 5, 5, 5, 5 y 5 sobre 10) y una séptima, corta, sobre lo que entró después de la sexta. Lo que señalaron y se podía arreglar sin el PC y sin tocar `FaceWindow`, arreglado con la promesa en rojo primero; lo demás, declarado con su medida. Sus veredictos, en el PR
+- [x] El crítico de fidelidad al audio: seis pasadas completas (4, 5, 5, 5, 5 y 5 sobre 10) y una séptima, corta, sobre lo que entró después de la sexta. Lo que señalaron y se podía arreglar sin el PC y sin tocar `FaceWindow`, arreglado con la promesa en rojo primero; lo demás, declarado con su medida. Sus veredictos, los siete, en el PR. Lo que la séptima señaló se corrigió después sin otra pasada: el rechazo al escribir (con su prueba, en rojo primero), la línea de «Riesgo» y el título del PR, y los dos límites que faltaban
 - [ ] Estado: **implementado** (AAAA-MM-DD)
