@@ -93,7 +93,7 @@ Todas por reflexión, sin pantalla y sin modelo; nacen en rojo con `Pendiente(�
 |---|---|---|
 | 202 | `BatchCon` con mano falsa: con una ruta `a·s:1→b` la cuenta dice «ahora estás en «…b»»; sin ruta dice «no cambió»; y ya no aparece el «quedaste en» que tapaba el hecho (el prefijo «hice los» se queda: la demo lo lee) | reponer el cierre de `RecorrerSegunElNucleo.cs:183-185` |
 | 203 | un grafo con dos «Descargas» vivas (TreeItem → b, TabItem → c): sin cuál, nada tocado y la cuenta trae «1)», «TreeItem», «2)», «TabItem»; con cuál=2 queda en c con un solo toque; y el catálogo declara `which` en `map_take` | ignorar `Cual` y tomar el primero; quitar el tipo del mensaje |
-| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave |
+| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** —si esa salida dio lista; sin lista, `which` no abre clave y el rechazo no lo sugiere—. Y `Despues`, el sitio único de lo que pasa tras cada herramienta: una excepción es fallo, la lista no (y se recuerda), lo que no trae mano no se adivina | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave; abrir clave con `which` sin lista; que la excepción no cuente; olvidar la lista; sugerir `which` sin lista |
 | 205 | una clase pura con reloj inyectado: el resumen trae `llamadas=`, `distintas=`, `intentos_max=` y los ms; rechazadas y retiradas aparte; un `Resultado` sin `Llamada` en el turno no cuenta ni da un tiempo negativo; `desde_peticion=` se mide desde `Peticion()` | contar solo lo que devolvió resultado (el patrón nº10: el denominador es lo pedido); dejar que un resultado sin llamada cuente |
 | 206 | el catálogo y las instrucciones como texto: sin `at`/`action` en `map_take`, sin `at` en `map_type`, `map_unblock` conserva `at`; sin «pide map_where_am_i primero» ni «más de dos veces»; con `which` y `map_look` juntos; el `which` de `map_show` no manda al de `map_take`; `map_take` avisa de que «Guardar» no cambia de pantalla y está bien | reponer `at` en `map_take`; que el `which` de `map_show` vuelva a mandar a `map_take` |
 | 207 | `new SurfaceMapTools(() => null)` con un `RecorrerPorElNucleo` falso que devuelve cuatro resultados —la pantalla cambia, no cambia, no lo conoce, lista de homónimos—; `UltimaMano` leída por reflexión | que «logrado» vuelva a ser «terminó», sin mirar si cambió; que la lista vuelva a contar como intento |
@@ -104,10 +104,11 @@ guardia que se cree puesto (aprendizaje nº18)—; el cableado lo demuestra el n
 rechazo. **La 205 tampoco juzga su cableado**: que `ConversacionEnVivo` llame a `Llamada`, `Resultado`,
 `Peticion` y `Cerrar` donde toca solo lo dice la línea `voz-turno` de una corrida real. La 207 cierra
 el hueco que el crítico encontró entre las dos: el dato del que ambas dependen (`UltimaMano`) ya se
-juzga, y sabotearlo ya no deja el contrato intacto. La 206 juzga el texto, no la conducta del modelo;
+juzga, y sabotearlo ya no deja el contrato intacto. Y qué cuenta como intento fallido ya no se decide en
+`ConversacionEnVivo` sino en `TopeDeIntentos.Despues`, que la 204 juzga: sin juez queda solo que se llame. La 206 juzga el texto, no la conducta del modelo;
 la conducta la juzga el nivel 4.
 
-Y tres límites de forma que desde fuera no se ven:
+Y los límites de forma que desde fuera no se ven:
 
 - **Solo `uia:name=` se aplana a su nombre.** Un selector por `aid=` o un id de SAP (`wnd[0]/…`)
   cuenta como un destino distinto de su etiqueta, y el tope lo vería como otro sitio.
@@ -115,9 +116,12 @@ Y tres límites de forma que desde fuera no se ven:
   elegir; `map_show`, por posición en la pantalla, que es el orden para señalar de arriba abajo. Ya no
   se cruzan en el texto —el `which` de `map_show` avisa de que no es el de `map_take`—, pero siguen
   siendo dos órdenes.
-- **`which` abre una clave nueva.** El candidato 1 y el 2 son destinos distintos, que es lo que pide el
-  audio («pruebo este otro botón»). La contrapartida: `which=1` después de dos fallos sin `which` también
-  pasa. Solo tiene sentido tras una lista numerada, pero el tope no lo impide.
+- **`which` solo separa candidatos si hubo lista.** El 1 y el 2 de una lista numerada son destinos
+  distintos, que es lo que pide el audio («pruebo este otro botón»). Sin lista, `which` no abre una clave
+  nueva: el ejecutor lo ignora y es el mismo botón (crítico final; la 204, ampliada).
+- **Tres cuentas de «intento», con nombres parecidos.** `intentos_max` de la línea `voz-turno` cuenta
+  llamadas al mismo destino (tres «Siguiente» logrados dan 3); el tope cuenta solo fallos; el juez del
+  nivel 4, los intentos sin la lista. Miden cosas distintas: al leer un número, decir de cuál es.
 
 ## Las fases
 
@@ -153,12 +157,14 @@ en el mismo equipo, la misma pantalla y el mismo punto de partida:
 | T5 | «en Configuración entra en Sistema, vuelve atrás y entra en Bluetooth» | R13 | Bluetooth, habiendo pasado por Sistema |
 
 **Los umbrales, fijados antes de medir** (la rúbrica exige fijar el punto de partida):
-- **Intentos:** acciones hacia el mismo destino dentro de la petición. Lectura estricta, la del audio:
-  el «máximo dos intentos» es de **la petición**, no de cada acción suelta.
+- **Intentos:** acciones hacia el mismo destino dentro de la petición, **y a lo sumo un intento
+  fallido en toda la petición** (lo frenado cuenta): el segundo tiene que ser el bueno. Lectura
+  estricta, la del audio: el «máximo dos intentos» es de **la petición**, no de cada acción suelta.
 - **Tiempo por acción:** desde la línea de la llamada hasta su resultado. **≤ 2,0 s.**
 - **Tiempo por petición:** desde que se entrega la orden hasta el resultado que deja el estado final.
   Se reporta siempre, diciendo que incluye la latencia del modelo.
-- **Aprobado:** la tarea hecha, ≤2 intentos y cada acción ≤2,0 s. Si no, k/N con **el plan como
+- **Aprobado:** la tarea hecha, ≤2 intentos al mismo destino, ≤1 intento fallido en toda la petición
+  y cada acción ≤2,0 s. Si no, k/N con **el plan como
   denominador**, al lado de la base de la fase 0.
 - Lo que Ü **dice** se cruza con el log: callar un fallo no cuenta como no fallar.
 
@@ -313,6 +319,42 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
   | 206 | *(primera ronda, repetida)* `map_take` vuelve a ofrecer `at` | roja |
   
   Diez de diez en rojo, cada una comprobada por diff de bytes y restaurada idéntica; recompilado al final con todo restaurado: **CONTRATO INTACTO, 176 juzgadas**. El contrato de la voz, 32/32.
+- **2026-09-11, 01:10 (el crítico final, segunda pasada: 5/10).** Sobre `8f4952b`. Dio por hechos los
+  arreglos 2, 4, 5 y 6 de la primera pasada, el 1 con un agujero nuevo y el 3 a medias. Lo que encontró
+  y cómo quedó:
+  - **`which` esquivaba el tope, y el rechazo mandaba hacerlo.** El ejecutor solo lee `which` cuando hay
+    homónimos; con un único «Descargas», which=1, 2, 3… pulsaban el mismo botón y cada número era una
+    clave nueva, sin límite. Y la 204 lo certificaba en verde: un guardia que se cree puesto
+    (aprendizaje nº18). Ahora `which` solo separa si esa salida dio lista en el turno, y el rechazo solo
+    lo sugiere entonces, recordando la lista. La 204, ampliada y en rojo primero.
+  - **El cableado del tope no tenía juez**: cambiar `Anota(…, !fallo, …)` por `true` dejaba el contrato
+    intacto. La decisión pasó a `TopeDeIntentos.Despues`, que la 204 juzga.
+  - **Dos salidas de `map_type` por UIA seguían sin mano** («no hay campo con el foco», «NO escribo»).
+    Ahora la dejan, como intento fallido. Sin promesa: necesitan el foco de una pantalla real.
+  - **El juez del nivel 4 aprobaba por destino**, más laxo que esta spec. Ahora exige a lo sumo un
+    intento fallido en toda la petición, y enseña si miró antes de actuar.
+  - **Lo que queda, y se dice**: el nivel 4, que bloquea el merge porque el ejecutor es también el de
+    SAP; las tareas largas; los dos segundos; el tercer Copiar o Guardar al mismo destino, que se frena
+    porque «logrado» es «cambió» (la mano de tres estados); y las tres cuentas de «intento».
+  Su veredicto entero va en el PR.
+
+- **2026-09-11 (el sabotaje, tercera ronda).** Los mismos tres cuidados.
+
+  | Promesa | Sabotaje | Quedó |
+  |---|---|---|
+  | 204 | `which` sin lista vuelve a abrir una clave nueva | roja |
+  | 204 | una excepción deja de contar como intento fallido | roja |
+  | 204 | la lista de homónimos deja de recordarse | roja |
+  | 204 | el rechazo sin lista vuelve a sugerir `which` | roja |
+  | 204 | *(repetido)* el destino se compara como texto crudo, sin aplanar | roja, **y también la 205** |
+  | 204 | *(repetido)* el candidato elegido deja de ser parte del destino | roja |
+  | 207 | *(repetido)* «logrado» vuelve a ser «terminó» | roja |
+  | 207 | *(repetido)* la lista vuelve a contar como intento | roja |
+  | juez del nivel 4 | se quita «a lo sumo un fallido por petición» | la autoprueba falla (T3 pasa a aprobada) |
+  
+  Ocho de ocho en rojo sobre el código final, cada una comprobada por diff de bytes y restaurada idéntica;
+  recompilado al final: **CONTRATO INTACTO, 176 juzgadas**. Y el juez del nivel 4 tiene ahora su propia
+  autoprueba con logs sintéticos (10 de 10), que también se rompió a propósito y lo notó.
 
 ## Cierre
 
