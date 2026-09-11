@@ -36,7 +36,9 @@ RE_ARG = re.compile(r"(\w+)=(.*?)(?=\s+\w+=|$)")
 RE_LISTA = re.compile(r"hay \d+ puertas vivas para|pediste la \d+, pero")
 RE_RECHAZO = re.compile(r"tercera vez: «(.+?)» ya falló")
 FALLOS = ("no cambió", "no pude", "paré en el paso", "no lo conozco", "no lo veo", "no está viva",
-          "la herramienta falló", "no sé dónde", "no se ejecuta")
+          "la herramienta falló", "no sé dónde", "no se ejecuta",
+          # las dos salidas de map_type por UIA que el tope ya cuenta como fallo (critico, 2026-09-11)
+          "no hay ningún campo con el foco", "NO escribo")
 
 
 def aplanar(s: str) -> str:

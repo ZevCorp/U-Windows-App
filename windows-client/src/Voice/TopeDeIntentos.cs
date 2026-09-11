@@ -47,7 +47,7 @@ public sealed class TopeDeIntentos
     // Las salidas que en este turno contestaron con una LISTA de homónimos, y esa lista. Solo con
     // lista `which` separa candidatos: el ejecutor lo ignora cuando no hay homónimos, y sin esta
     // condición which=1, 2, 3… eran claves nuevas del MISMO botón, sin límite (crítico final, 2026-09-11).
-    private readonly Dictionary<string, string> _listas = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string Texto, IReadOnlyList<string> Candidatos)> _listas = new(StringComparer.Ordinal);
 
     /// <summary>
     /// null si la acción puede ir; si no, el motivo ya redactado para devolvérselo al cerebro: que van
@@ -92,12 +92,14 @@ public sealed class TopeDeIntentos
     /// </summary>
     /// <remarks>Hasta el 2026-09-11 esta decisión vivía en <c>ConversacionEnVivo</c>, y cambiarla por
     /// «siempre logrado» dejaba el contrato INTACTO: un guardia que se cree puesto (aprendizaje nº18).</remarks>
-    public void Despues(string herramienta, string destino, bool revento, bool? intento, bool? logro, string queSalio)
+    public void Despues(string herramienta, string destino, bool revento, bool? intento, bool? logro, string queSalio,
+                        IReadOnlyList<string>? candidatos = null)
     {
         if (!Vigiladas.Contains(herramienta)) return;
         if (!revento && intento == false)
         {
-            lock (_candado) _listas[herramienta + "|" + Destino(SinCual(destino))] = Recortar(queSalio);
+            lock (_candado)
+                _listas[herramienta + "|" + Destino(SinCual(destino))] = (Recortar(queSalio), candidatos ?? Array.Empty<string>());
             return;
         }
         if (revento || (intento == true && logro == false))
@@ -126,7 +128,13 @@ public sealed class TopeDeIntentos
         // distintos, y probar el otro es lo que el audio pide (crítico de la rama, 2026-09-11).
         string cual = "";
         int w = s.LastIndexOf("#which=", StringComparison.Ordinal);
-        if (w >= 0) { cual = s[(w + 7)..].Trim(); s = s[..w]; }
+        if (w >= 0)
+        {
+            // El número como lo lee el ejecutor (int.TryParse): «02» y «+2» son el 2, y lo que no es un
+            // número ≥ 1 no elige nada (crítico, tercera pasada, 2026-09-11).
+            cual = int.TryParse(s[(w + 7)..].Trim(), out int n) && n >= 1 ? n.ToString() : "";
+            s = s[..w];
+        }
         if (s.StartsWith("uia:", StringComparison.OrdinalIgnoreCase))
         {
             int i = s.IndexOf("name=", StringComparison.OrdinalIgnoreCase);
@@ -164,9 +172,15 @@ public sealed class TopeDeIntentos
     private (string Clave, string? Lista) ClaveYLista(string herramienta, string destino)
     {
         string sinCual = herramienta + "|" + Destino(SinCual(destino));
-        return _listas.TryGetValue(sinCual, out var lista)
-            ? (herramienta + "|" + Destino(destino), lista)
-            : (sinCual, null);
+        if (!_listas.TryGetValue(sinCual, out var lista)) return (sinCual, null);
+        // Con lista, el candidato es el número pedido o, si se pidió por su selector, el número de ese
+        // selector en la lista: el mismo botón no cambia de clave cambiando de forma de pedirlo (crítico,
+        // tercera pasada, 2026-09-11: el rechazo entregaba el selector y daba dos intentos más).
+        string d = (destino ?? "").Trim();
+        int k = -1;
+        for (int i = 0; i < lista.Candidatos.Count && k < 0; i++)
+            if (string.Equals(lista.Candidatos[i].Trim(), d, StringComparison.OrdinalIgnoreCase)) k = i;
+        return (k >= 0 ? $"{sinCual}#{k + 1}" : herramienta + "|" + Destino(destino), lista.Texto);
     }
 
     private static string SinCual(string destino)

@@ -1684,7 +1684,7 @@ public sealed class ConversacionEnVivo : IDisposable
                 // Qué cuenta como intento fallido lo decide TopeDeIntentos.Despues, donde lo juzga la 204:
                 // una excepción sí, la lista de homónimos no (y se recuerda, para que `which` separe), y lo
                 // que no trae mano no se adivina.
-                _tope.Despues(f.Nombre, destino, revento, mano?.Intento, mano?.Logro, resultado);
+                _tope.Despues(f.Nombre, destino, revento, mano?.Intento, mano?.Logro, resultado, mano?.Candidatos);
                 _cuenta.Resultado(f.Nombre, destino, !revento && mano is { Logro: true });
                 // El pulso lo apunta SurfaceMapTools.Call; contarlo aquí también sería contarlo dos veces.
                 Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, reloj.ElapsedMilliseconds), true);

@@ -2281,7 +2281,11 @@ public sealed class SurfaceMapTools
     /// y una llamada del servidor MCP que entrara a la vez desde otro hilo no le pisa el dato.
     /// Solo lo dan map_take y map_type; el resto de herramientas devuelven texto y aquí queda null.
     /// </remarks>
-    public readonly record struct Mano(bool Termino, bool Logro, bool Intento = true);
+    public readonly record struct Mano(bool Termino, bool Logro, bool Intento = true)
+    {
+        /// <summary>Si la tanda contestó con una lista de homónimos: sus selectores, en el orden de su número.</summary>
+        public IReadOnlyList<string>? Candidatos { get; init; }
+    }
 
     [ThreadStatic] private static Mano? _ultimaMano;
 
@@ -2291,7 +2295,7 @@ public sealed class SurfaceMapTools
     {
         // La lista numerada de homónimos NO es un intento: no se pulsó nada, y contarla como fallo
         // frenaba el «pruebo este otro botón» que pide el audio (crítico de la rama, 2026-09-11).
-        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio), Intento: !r.Ambiguo);
+        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio), Intento: !r.Ambiguo) { Candidatos = r.Candidatos };
         return r.Cuenta;
     }
 

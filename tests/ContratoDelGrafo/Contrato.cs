@@ -7311,6 +7311,17 @@ internal static class Contrato
         Debe(t2.Count == 1 && donde2() == "uia://x.exe/c",
             $"un paso que trae cuál (2) pulsa esa y solo esa: quedó en «{donde2()}» con {t2.Count} toque(s)");
 
+        // LOS CANDIDATOS VIAJAN COMO DATOS, no solo en la prosa (crítico, tercera pasada, 2026-09-11): el
+        // tope necesita saber que un selector de la lista ES ese candidato, y sacarlo de la cuenta sería
+        // concluir leyendo un mensaje (aprendizaje nº2).
+        var pCand = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Candidatos");
+        if (pCand == null) { Pendiente("RecorrerSegunElNucleo.Resultado.Candidatos", "203", "017"); return; }
+        var cands = pCand.GetValue(r1) as IReadOnlyList<string>;
+        int c0 = cands is { Count: 2 } ? r1.Cuenta.IndexOf("«" + cands[0] + "»", StringComparison.Ordinal) : -1;
+        int c1 = cands is { Count: 2 } ? r1.Cuenta.IndexOf("«" + cands[1] + "»", Math.Max(i2, 0), StringComparison.Ordinal) : -1;
+        Debe(c0 > i1 && c0 < i2 && c1 > i2,
+            $"y la lista viaja también como datos, en el MISMO orden que su número (llegó: {(cands == null ? "nada" : string.Join(" · ", cands))})");
+
         var args = ArgumentosDe("map_take");
         Debe(args != null && args.Contains("which"),
             "y el cerebro puede decir cuál: map_take declara `which`, como ya lo tenía map_show");
@@ -7363,10 +7374,13 @@ internal static class Contrato
         var destinoDe = t.GetMethod("DestinoDe");
         string Cand(string n) => (string)destinoDe!.Invoke(null, new object?[] { "map_take",
             new Dictionary<string, string> { ["exit"] = "Descargas", ["which"] = n } })!;
-        var despues = t.GetMethod("Despues");
-        if (despues == null) { Pendiente("Voice.TopeDeIntentos.Despues", "204", "017"); return; }
-        void D(string d, bool revento, bool? intento, bool? logro, string salio)
-            => despues.Invoke(tope, new object?[] { "map_take", d, revento, intento, logro, salio });
+        // Despues recibe también los candidatos de la lista. Se busca por aridad: reflexión no rellena
+        // opcionales, y un parámetro nuevo rompería la llamada (la lección de la 103).
+        var despues = t.GetMethods().FirstOrDefault(m => m.Name == "Despues" && m.GetParameters().Length == 7);
+        if (despues == null) { Pendiente("Voice.TopeDeIntentos.Despues(…, candidatos)", "204", "017"); return; }
+        void DC(string d, bool revento, bool? intento, bool? logro, string salio, IReadOnlyList<string>? candidatos)
+            => despues.Invoke(tope, new object?[] { "map_take", d, revento, intento, logro, salio, candidatos });
+        void D(string d, bool revento, bool? intento, bool? logro, string salio) => DC(d, revento, intento, logro, salio, null);
         const string Lista = "hay 2 puertas vivas para «Descargas»: 1) «Descargas» (TreeItem) · 2) «Descargas» (TabItem)";
 
         D("Descargas", false, false, false, Lista);
@@ -7403,6 +7417,22 @@ internal static class Contrato
         Debe(R("map_take", "Pegar") == null, "y pedir la lista tres veces no es insistir: no se pulsó nada");
         for (int i = 0; i < 3; i++) D("Siguiente", false, true, true, "ahora estás en…");
         Debe(R("map_take", "Siguiente") == null, "y lo logrado, tampoco");
+
+        // TRAS UNA LISTA, EL SELECTOR DE UN CANDIDATO ES ESE CANDIDATO (crítico, tercera pasada): el
+        // rechazo trae la lista con sus selectores, y pedir «uia:name=Descargas;ct=TabItem» después de dos
+        // fallos con which=2 abría una clave nueva para el MISMO botón: cuatro intentos, repitiendo un
+        // selector, que es justo lo del 2026-08-09. Y which=02 o +2 son el 2, como los lee el ejecutor.
+        nuevo.Invoke(tope, null);
+        var sel = new[] { "uia:name=Descargas;ct=TreeItem", "uia:name=Descargas;ct=TabItem" };
+        DC("Descargas", false, false, false, Lista, sel);
+        D(Cand("2"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        D(Cand("2"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        Debe(R("map_take", sel[1]) != null,
+            "tras la lista, el selector del candidato 2 ES el candidato 2: pedirlo por selector no le da dos intentos más");
+        Debe(R("map_take", Cand("02")) != null && R("map_take", Cand("+2")) != null,
+            "y which=02 o which=+2 son el 2, como los lee el ejecutor");
+        Debe(R("map_take", sel[0]) == null && R("map_take", Cand("1")) == null,
+            "pero el 1, por su selector o por su número, sigue siendo otro botón");
     }
 
     private static void CadaTurnoDejaSuMedida()
@@ -7581,6 +7611,17 @@ internal static class Contrato
         Debe(pregunta.HasValue && !pregunta.Value.Intento,
             "y la lista numerada de homónimos NO es un intento: no se pulsó nada, y contarla como fallo "
             + "frenaba el «pruebo este otro botón» que pide el audio");
+
+        // Y la mano lleva los candidatos de la lista: sin ellos el tope no sabe qué selector es cuál.
+        var pCandR = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Candidatos");
+        var pCandM = tMano!.GetProperty("Candidatos");
+        if (pCandR == null || pCandM == null) { Pendiente("SurfaceMapTools.Mano.Candidatos", "207", "017"); return; }
+        pCandR.SetValue(lista, new[] { "uia:a", "uia:b" });
+        Toma((RecorrerSegunElNucleo.Resultado)lista);
+        object? mCaja = mapa.UltimaMano;
+        var llevados = mCaja == null ? null : pCandM.GetValue(mCaja) as IReadOnlyList<string>;
+        Debe(llevados != null && llevados.SequenceEqual(new[] { "uia:a", "uia:b" }),
+            "y la mano lleva los candidatos de la lista, en su orden: el tope los necesita para saber qué selector es cuál");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

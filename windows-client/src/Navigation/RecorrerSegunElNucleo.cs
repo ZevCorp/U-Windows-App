@@ -53,7 +53,13 @@ public sealed class RecorrerSegunElNucleo
     /// prosa de <paramref name="Cuenta"/>: concluir leyendo un mensaje es el aprendizaje nº2.</remarks>
     // Ambiguo: la tanda se paró para PREGUNTAR cuál de varios homónimos, sin pulsar nada. No es un
     // intento fallido, y el tope de la voz no lo cuenta como tal (promesa 207, spec 017).
-    public readonly record struct Resultado(int Hechos, int Total, string Donde, bool Termino, string Cuenta, bool Cambio = false, bool Ambiguo = false);
+    public readonly record struct Resultado(int Hechos, int Total, string Donde, bool Termino, string Cuenta, bool Cambio = false, bool Ambiguo = false)
+    {
+        /// <summary>Con <see cref="Ambiguo"/>: los selectores de la lista, en el orden de su número. Viajan
+        /// como datos para que el tope sepa que pedir uno por su selector es pedir ese candidato, sin leer
+        /// la prosa de la cuenta (promesas 203 y 204; crítico, tercera pasada, 2026-09-11).</summary>
+        public IReadOnlyList<string>? Candidatos { get; init; }
+    }
 
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
@@ -174,7 +180,8 @@ public sealed class RecorrerSegunElNucleo
                             $"{k + 1}) «{h.Que.Etiqueta}» ({h.Que.Tipo}, «{h.Que.Selector}»)"
                             + (h.Destino.Length > 0 ? $" → lleva a «{h.Destino}»" : "")))
                         + ". Repite con which=N para pulsar esa; si con esto no sabes cuál, mira la "
-                        + "pantalla (map_look) antes de elegir.", conVivos: false) with { Ambiguo = true };
+                        + "pantalla (map_look) antes de elegir.", conVivos: false)
+                        with { Ambiguo = true, Candidatos = numeradas.Select(h => h.Que.Selector).ToList() };
             }
 
             if (elegido == null)

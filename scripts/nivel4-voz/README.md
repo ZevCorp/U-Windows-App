@@ -34,8 +34,9 @@ propia copia de los datos de Ü, y saca la tabla de las dos. Unos 25 minutos.
 | T5 | «en Configuración entra en Sistema, vuelve atrás y entra en Bluetooth» | Bluetooth, pasando por Sistema |
 
 Tres repeticiones de cada una: el fallo del audio es intermitente. **Aprobada** = estado final
-alcanzado, ≤2 intentos al mismo destino y cada acción ≤2,0 s. El denominador es el plan, no lo que se
-llegó a ejecutar. Con la rama, además, cada petición deja su línea `voz-turno:` y el tope deja la suya
+alcanzado, ≤2 intentos al mismo destino, **a lo sumo un intento fallido en toda la petición** (lo que
+el tope frena cuenta; la lista de homónimos no) y cada acción ≤2,0 s. T4 y T5 exigen además haber
+pasado por lo que prueban. El denominador es el plan, no lo que se llegó a ejecutar. Con la rama, además, cada petición deja su línea `voz-turno:` y el tope deja la suya
 cuando frena un tercer intento.
 
 **Fuera a propósito: «entra a Instagram y ve los mensajes».** Abriría los mensajes privados de quien
@@ -45,5 +46,7 @@ esté en el equipo, y la foto de la pantalla viaja a OpenAI. Se prueba a mano, c
 
 - `conducir.ps1` — la batería sobre un binario. Deja por tarea el trozo de log, el estado final y una captura.
 - `analizar.py` — la tabla y las secuencias de una corrida.
+- `autoprueba.py` — el juez juzgado: logs sintéticos, un caso por regla, sin pantalla ni modelo.
+  `python scripts\nivel4-voz\autoprueba.py`. Si una regla de `analizar.py` cambia, un caso cambia de veredicto.
 - `tareas.json` — las frases, en UTF-8 (el `.ps1` es ASCII puro: PowerShell 5.1 leería mal un acento).
 - `correr.ps1` — base y rama seguidas, y las dos tablas.
