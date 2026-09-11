@@ -570,6 +570,7 @@ internal static class Contrato
         Prueba("204. dos intentos y no tres: en un mismo turno del usuario, la tercera acción hacia un destino que ya falló dos veces no se ejecuta, y se dice qué salió en cada una; el destino es el mismo se pida por nombre o por selector", DosIntentosYNoTres);
         Prueba("205. cada turno del usuario deja una línea voz-turno con su medida: llamadas, herramientas distintas, el máximo de intentos a un mismo destino y los milisegundos hasta la primera acción y la última; lo rechazado y lo retirado también cuentan", CadaTurnoDejaSuMedida);
         Prueba("206. el catálogo le pide al cerebro lo que las manos usan: map_take y map_type no ofrecen argumentos que su cuerpo ignora, map_take trae which, y las instrucciones mandan mirar y elegir con which antes que preguntar; la regla escrita de intentos es la del código: dos", ElCatalogoPideLoQueLasManosUsan);
+        Prueba("207. la mano dice, sin prosa, si fue un intento y si lo logró: pulsar y que cambie la pantalla es logro, pulsar y que no cambie no lo es, pedir algo que no está es un intento fallido, y la lista de homónimos no es un intento", LaManoDiceSiLoLogro);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -7353,6 +7354,20 @@ internal static class Contrato
         }
         for (int i = 0; i < 3; i++) { A("map_look", "", false, "aquí tienes lo que hay"); A("map_where_am_i", "", false, "estás en…"); }
         Debe(R("map_look", "") == null && R("map_where_am_i", "") == null, "y mirar nunca cuenta: mirar no es insistir");
+
+        // EL OTRO BOTÓN SÍ SE PRUEBA (crítico de la rama, 2026-09-11). El audio pide «me di cuenta que
+        // por aquí no era… voy atrás, pruebo este otro botón». Sin el candidato en la clave, dos fallos
+        // al 1 de una lista numerada frenaban también al 2 —con un rechazo que encima decía «elige otro
+        // candidato con which»—.
+        nuevo.Invoke(tope, null);
+        var destinoDe = t.GetMethod("DestinoDe");
+        string Cand(string n) => (string)destinoDe!.Invoke(null, new object?[] { "map_take",
+            new Dictionary<string, string> { ["exit"] = "Descargas", ["which"] = n } })!;
+        A("map_take", Cand("1"), false, "pulsé «Descargas» y la pantalla no cambió");
+        A("map_take", Cand("1"), false, "pulsé «Descargas» y la pantalla no cambió");
+        Debe(R("map_take", Cand("1")) != null, "el mismo candidato, por tercera vez, se frena");
+        Debe(R("map_take", Cand("2")) == null,
+            "pero el OTRO candidato de la lista es otro destino: probarlo es lo que el audio pide, no insistir");
     }
 
     private static void CadaTurnoDejaSuMedida()
@@ -7386,6 +7401,28 @@ internal static class Contrato
             "y los milisegundos desde la primera llamada hasta la primera acción que actuó, y la última");
         Debe(t.GetMethod("Cerrar")!.Invoke(c, null) == null,
             "cerrar deja la cuenta a cero: el turno siguiente no hereda nada");
+        Debe(linea != null && linea.Contains("rechazadas=1") && linea.Contains("retiradas=1"),
+            "y lo frenado y lo retirado se dicen aparte, además de contar como llamadas");
+
+        // UN RESULTADO QUE CRUZA EL CIERRE NO DA TIEMPOS NEGATIVOS, y se mide desde que el usuario pidió
+        // (crítico de la rama, 2026-09-11). «Resultado» sin «Llamada» en el turno dejaba «primera»
+        // puesta, y salía negativa. Y los dos segundos del audio van desde que se pide, no desde la
+        // primera llamada del modelo.
+        var peticion = t.GetMethod("Peticion");
+        if (peticion == null) { Pendiente("Voice.CuentaDelTurno.Peticion", "205", "017"); return; }
+        var c2 = Activator.CreateInstance(t, new object[] { (Func<long>)(() => ahora) })!;
+        void M2(string metodo, params object[] a) => t.GetMethod(metodo)!.Invoke(c2, a);
+        ahora = 900; M2("Resultado", "map_take", "X", true);
+        ahora = 950; peticion.Invoke(c2, null);
+        ahora = 1000; M2("Llamada", "map_take", "Descargas");
+        ahora = 3000; M2("Resultado", "map_take", "Descargas", true);
+        ahora = 3100; M2("Llamada", "map_type", "Nombre");
+        ahora = 4000; M2("Resultado", "map_type", "Nombre", true);
+        string? l2 = (string?)t.GetMethod("Cerrar")!.Invoke(c2, null);
+        Debe(l2 != null && l2.Contains("primera=2000") && l2.Contains("ultima=3000") && !l2.Contains("=-"),
+            $"un resultado que llega sin llamada en el turno no cuenta, y nunca sale un tiempo negativo (dijo: «{l2}»)");
+        Debe(l2 != null && l2.Contains("desde_peticion=2050"),
+            "y se dice cuánto pasó desde que el usuario pidió hasta la primera acción que actuó: son los «dos segundos» del audio");
     }
 
     private static void ElCatalogoPideLoQueLasManosUsan()
@@ -7424,6 +7461,91 @@ internal static class Contrato
         }
         Debe(juntos, "y ante varios candidatos mandan MIRAR (map_look) y elegir con `which`, en el mismo "
             + "sitio y antes que preguntar al usuario: mirar tiene que poder desempatar");
+
+        // DOS NUMERACIONES NO SE MEZCLAN (crítico de la rama, 2026-09-11): map_show cuenta los homónimos
+        // por su posición en la pantalla y map_take por su selector. Decir que el which de uno vale para
+        // el otro es mentir con un número.
+        string whichShow = QueDelArgumento("map_show", "which") ?? "";
+        Debe(whichShow.Length > 0 && !whichShow.Contains("map_take"),
+            "el which de map_show no manda al de map_take: numeran en órdenes distintos");
+        Debe((DescripcionDe("map_take") ?? "").Contains("Guardar"),
+            "y map_take avisa de que un botón que hace su trabajo sin cambiar de pantalla —Guardar— está "
+            + "bien: «no cambió» no siempre es «por aquí no era»");
+    }
+
+    private static object? UtensilioDe(string herramienta)
+    {
+        var t = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var m = t?.GetMethod("Herramientas", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        if (m?.Invoke(null, null) is not System.Collections.IEnumerable todas) return null;
+        foreach (var u in todas)
+            if (u != null && (string?)u.GetType().GetProperty("Nombre")?.GetValue(u) == herramienta) return u;
+        return null;
+    }
+
+    private static string? DescripcionDe(string herramienta)
+    {
+        var u = UtensilioDe(herramienta);
+        return u?.GetType().GetProperty("Descripcion")?.GetValue(u) as string;
+    }
+
+    private static string? QueDelArgumento(string herramienta, string argumento)
+    {
+        var u = UtensilioDe(herramienta);
+        if (u?.GetType().GetProperty("Args")?.GetValue(u) is not System.Collections.IEnumerable args) return null;
+        foreach (var a in args)
+            if (a != null && (string?)a.GetType().GetProperty("Nombre")?.GetValue(a) == argumento)
+                return a.GetType().GetProperty("Que")?.GetValue(a) as string;
+        return null;
+    }
+
+    private static void LaManoDiceSiLoLogro()
+    {
+        // El tope de intentos (204) y la medida del turno (205) leen si una acción se logró de
+        // SurfaceMapTools.UltimaMano, no de la prosa. El crítico de la rama (2026-09-11) lo comprobó:
+        // sabotear ese dato dejaba el contrato INTACTO —un guardia que se cree puesto, aprendizaje
+        // nº18—, y la lista numerada de homónimos contaba como fallo aunque no se pulsara nada.
+        var tMano = typeof(SurfaceMapTools).GetNestedType("Mano");
+        var pLogro = tMano?.GetProperty("Logro");
+        var pIntento = tMano?.GetProperty("Intento");
+        var pAmbiguo = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Ambiguo");
+        if (pLogro == null || pIntento == null || pAmbiguo == null)
+        { Pendiente("SurfaceMapTools.Mano.Intento · RecorrerSegunElNucleo.Resultado.Ambiguo", "207", "017"); return; }
+
+        var mapa = new SurfaceMapTools(() => null);
+        var siguiente = default(RecorrerSegunElNucleo.Resultado);
+        mapa.RecorrerPorElNucleo = _ => siguiente;
+        (bool Logro, bool Intento)? Toma(RecorrerSegunElNucleo.Resultado r)
+        {
+            siguiente = r;
+            mapa.Call("map_take", new Dictionary<string, string> { ["exit"] = "Descargas" });
+            if (mapa.UltimaMano is not { } m) return null;
+            object caja = m;
+            return ((bool)pLogro.GetValue(caja)!, (bool)pIntento.GetValue(caja)!);
+        }
+        bool Es((bool Logro, bool Intento)? x, bool logro, bool intento)
+            => x.HasValue && x.Value.Logro == logro && x.Value.Intento == intento;
+
+        var navega = Toma(new RecorrerSegunElNucleo.Resultado(1, 1, "uia://x.exe/b", true,
+            "hice los 1 paso(s): pulsé «Descargas» y ahora estás en «uia://x.exe/b».", true));
+        Debe(Es(navega, logro: true, intento: true), $"pulsar y que cambie la pantalla es un logro (salió {navega})");
+
+        var quieta = Toma(new RecorrerSegunElNucleo.Resultado(1, 1, "uia://x.exe/a", true,
+            "hice los 1 paso(s): pulsé «Descargas» y la pantalla no cambió.", false));
+        Debe(Es(quieta, logro: false, intento: true),
+            $"pulsar y que no cambie nada es un intento que no se logró: es lo que el tope cuenta para no dejar insistir (salió {quieta})");
+
+        var perdida = Toma(new RecorrerSegunElNucleo.Resultado(0, 1, "uia://x.exe/a", false, "«Descargas» no lo conozco en «a»."));
+        Debe(Es(perdida, logro: false, intento: true),
+            "pedir algo que no está SÍ es un intento fallido: pedirlo otra vez igual es la insistencia que el tope frena");
+
+        object lista = new RecorrerSegunElNucleo.Resultado(0, 1, "uia://x.exe/a", false,
+            "hice 0 de 1 y paré en el paso 1: hay 2 puertas vivas para «Descargas»: 1) … 2) …");
+        pAmbiguo.SetValue(lista, true);
+        var pregunta = Toma((RecorrerSegunElNucleo.Resultado)lista);
+        Debe(pregunta.HasValue && !pregunta.Value.Intento,
+            "y la lista numerada de homónimos NO es un intento: no se pulsó nada, y contarla como fallo "
+            + "frenaba el «pruebo este otro botón» que pide el audio");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

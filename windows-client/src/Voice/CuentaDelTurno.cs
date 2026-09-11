@@ -28,7 +28,7 @@ public sealed class CuentaDelTurno
     private readonly Func<long> _relojMs;
     private readonly object _candado = new();
 
-    private long? _t0, _primera, _ultima;
+    private long? _t0, _primera, _ultima, _peticion;
     private int _llamadas, _rechazadas, _retiradas;
     private readonly HashSet<string> _distintas = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _intentos = new(StringComparer.Ordinal);
@@ -56,6 +56,7 @@ public sealed class CuentaDelTurno
         if (!actuo) return;
         lock (_candado)
         {
+            if (_t0 == null) return;   // un resultado de un turno anterior no cuenta en este, ni da tiempos negativos
             long t = _relojMs();
             _primera ??= t;
             _ultima = t;
@@ -72,6 +73,23 @@ public sealed class CuentaDelTurno
         lock (_candado) _retiradas++;
     }
 
+    /// <summary>El usuario acaba de pedir algo: desde aquí se miden los «dos segundos» del audio, que
+    /// incluyen lo que tarda el modelo en decidir — no solo lo que tardan las manos.</summary>
+    public void Peticion()
+    {
+        lock (_candado) _peticion = _relojMs();
+    }
+
+    /// <summary>A cero SIEMPRE, también cuando el turno no pidió nada: si no, lo que quedara del
+    /// anterior se colaba en el siguiente (crítico de la rama, 2026-09-11).</summary>
+    private void Reiniciar()
+    {
+        _t0 = _primera = _ultima = _peticion = null;
+        _llamadas = _rechazadas = _retiradas = 0;
+        _distintas.Clear();
+        _intentos.Clear();
+    }
+
     /// <summary>
     /// La línea del turno, y la cuenta vuelve a cero. null si en el turno no se pidió nada: un turno
     /// de pura conversación no deja una medida vacía que haya que descartar al leer.
@@ -80,7 +98,7 @@ public sealed class CuentaDelTurno
     {
         lock (_candado)
         {
-            if (_llamadas == 0) return null;
+            if (_llamadas == 0) { Reiniciar(); return null; }
             string intentos = _intentos.Count == 0
                 ? "intentos_max=0"
                 : _intentos.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal)
@@ -88,12 +106,10 @@ public sealed class CuentaDelTurno
             string Desde(long? t) => t is long v && _t0 is long a ? $"{v - a} ms" : "—";
             string linea = $"llamadas={_llamadas} distintas={_distintas.Count} {intentos} "
                          + $"primera={Desde(_primera)} ultima={Desde(_ultima)} "
+                         + $"desde_peticion={(_primera is long p && _peticion is long q ? (p - q) + " ms" : "—")} "
                          + $"rechazadas={_rechazadas} retiradas={_retiradas}";
 
-            _t0 = _primera = _ultima = null;
-            _llamadas = _rechazadas = _retiradas = 0;
-            _distintas.Clear();
-            _intentos.Clear();
+            Reiniciar();
             return linea;
         }
     }

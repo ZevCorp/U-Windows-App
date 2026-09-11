@@ -51,7 +51,9 @@ public sealed class RecorrerSegunElNucleo
     /// <remarks><paramref name="Cambio"/>: si el ÚLTIMO pulsar cambió la pantalla. Quien necesita saber
     /// si una acción se logró —el tope de intentos de la voz, promesa 204— lo lee de aquí y no de la
     /// prosa de <paramref name="Cuenta"/>: concluir leyendo un mensaje es el aprendizaje nº2.</remarks>
-    public readonly record struct Resultado(int Hechos, int Total, string Donde, bool Termino, string Cuenta, bool Cambio = false);
+    // Ambiguo: la tanda se paró para PREGUNTAR cuál de varios homónimos, sin pulsar nada. No es un
+    // intento fallido, y el tope de la voz no lo cuenta como tal (promesa 207, spec 017).
+    public readonly record struct Resultado(int Hechos, int Total, string Donde, bool Termino, string Cuenta, bool Cambio = false, bool Ambiguo = false);
 
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
@@ -172,7 +174,7 @@ public sealed class RecorrerSegunElNucleo
                             $"{k + 1}) «{h.Que.Etiqueta}» ({h.Que.Tipo}, «{h.Que.Selector}»)"
                             + (h.Destino.Length > 0 ? $" → lleva a «{h.Destino}»" : "")))
                         + ". Repite con which=N para pulsar esa; si con esto no sabes cuál, mira la "
-                        + "pantalla (map_look) antes de elegir.", conVivos: false);
+                        + "pantalla (map_look) antes de elegir.", conVivos: false) with { Ambiguo = true };
             }
 
             if (elegido == null)

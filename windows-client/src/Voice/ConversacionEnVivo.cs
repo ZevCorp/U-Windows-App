@@ -758,8 +758,9 @@ public sealed class ConversacionEnVivo : IDisposable
         Fn("map_take", "Pulsa CUALQUIER cosa que esté en la pantalla: entrar en una carpeta, «Nuevo», "
             + "«Cortar», «Pegar», una barra de búsqueda, una casilla… No hace falta que el mapa la "
             + "conozca: si no la tiene, la busca en la pantalla de ahora, la pulsa y la aprende. "
-            + "Contesta QUÉ PASÓ: «ahora estás en…» o «la pantalla no cambió». Si no cambió y "
-            + "esperabas que sí, por ahí no era: prueba otra cosa en vez de repetir.",
+            + "Contesta QUÉ PASÓ: «ahora estás en…» o «la pantalla no cambió». Si esperabas NAVEGAR y "
+            + "no cambió, por ahí no era: prueba otra cosa en vez de repetir. Un botón que hace su "
+            + "trabajo sin cambiar de pantalla —Guardar, Copiar, una casilla— está bien aunque no cambie.",
             ("exit", "Nombre de lo que hay que pulsar («Nuevo», «Buscar», «Pegar») o un selector «uia:name=X;ct=ListItem»."),
             ("which", "Solo cuando map_take te devolvió una lista numerada de varios con ese nombre: el "
                     + "número del que quieres, «1», «2»…, en el orden de ESA lista. Vacío lo normal."),
@@ -806,9 +807,10 @@ public sealed class ConversacionEnVivo : IDisposable
                    + "qué elementos forman esa zona lo decides TÚ pidiendo map_look y cruzándolo con "
                    + "map_what_i_see, y aquí traes ya la lista elegida."),
             ("which", "Cuando ese nombre coincide con VARIOS, cuál de ellos: «1», «2»… Sin esto se "
-                    + "señalan todos. Para ELEGIR tú no hace falta preguntar: mira (map_look) y pulsa "
-                    + "con map_take y su which. Señalar el 1 y decir «¿este?», el 2 y «¿o este?», es "
-                    + "para cuando mirando no se puede saber cuál quiere el usuario.")),
+                    + "señalan todos. OJO: este número cuenta por la POSICIÓN en la pantalla, de arriba "
+                    + "abajo, y no es el de la lista numerada que devuelve pulsar, que va en otro orden. "
+                    + "Señalar el 1 y decir «¿este?», el 2 y «¿o este?», es para cuando mirando no se "
+                    + "puede saber cuál quiere el usuario.")),
         Fn("map_recuerdos", "«¿QUÉ SABES DE ESTA PANTALLA?» / «¿qué te he enseñado aquí?» / «¿qué "
             + "recuerdas?». Te devuelve los recuerdos de aquí DE UNO EN UNO e ilumina en pantalla el "
             + "elemento de cada uno. EL ORDEN ES: la llamas → te da UNO → lo CUENTAS EN VOZ, entero "
@@ -1136,7 +1138,7 @@ public sealed class ConversacionEnVivo : IDisposable
     public async Task EnviarTextoAsync(string texto)
     {
         if (!Viva || _ws?.State != WebSocketState.Open || string.IsNullOrWhiteSpace(texto)) return;
-        EmpiezaUnTurnoDelUsuario();   // escribir también es pedir algo nuevo (spec 017)
+        EmpiezaUnTurnoDelUsuario("texto");   // escribir también es pedir algo nuevo (spec 017)
         Dice?.Invoke($"Tú: {texto}");
         await EnviarAsync(_protocolo.Texto(texto), _cts?.Token ?? CancellationToken.None);
     }
@@ -1340,10 +1342,12 @@ public sealed class ConversacionEnVivo : IDisposable
             // dice si era el usuario o un eco que se coló — eso lo dice el contexto de al lado
             // (si la compuerta estaba tragando, eco no pudo ser).
             case Hecho.HablaronEncima:
-                EmpiezaUnTurnoDelUsuario();
                 LogBus.Log("voz-viva", "el servidor oyó voz encima (speech_started): se calla la cola local"
                     + (_audio.Hablando ? " · Ü estaba sonando" : " · Ü ya no sonaba"));
                 _audio.Callar();
+                // DESPUÉS de callar, y no antes (crítico de la rama, 2026-09-11): cuando alguien habla
+                // encima, lo primero es callarse; contar el turno puede esperar un instante.
+                EmpiezaUnTurnoDelUsuario("speech_started");
                 break;
 
             case Hecho.Pide p:
@@ -1406,11 +1410,16 @@ public sealed class ConversacionEnVivo : IDisposable
 
     /// <summary>El usuario habló o escribió: lo de antes era otra petición. Deja la medida del turno
     /// que termina (una línea «voz-turno») y el tope vuelve a cero.</summary>
-    private void EmpiezaUnTurnoDelUsuario()
+    private void EmpiezaUnTurnoDelUsuario(string por)
     {
         string? medida = _cuenta.Cerrar();
         if (medida != null) LogBus.Log("voz-turno", medida);
         _tope.NuevoTurno();
+        _cuenta.Peticion();
+        // Se dice POR QUÉ empezó: con altavoz, el eco de Ü también dispara speech_started y vaciaría el
+        // tope a mitad de una petición. Si pasa, esta línea lo delata en el nivel 4; el arreglo de fondo
+        // espera a medirlo (spec 017, hallazgos).
+        LogBus.Log("voz-turno", $"turno nuevo (por {por}): el tope vuelve a cero");
     }
 
     private const string HerramientaMirar = "map_look";
@@ -1663,16 +1672,20 @@ public sealed class ConversacionEnVivo : IDisposable
             {
                 Accion?.Invoke(EnCurso(f.Nombre, f.Args), false);
                 var reloj = System.Diagnostics.Stopwatch.StartNew();
+                bool revento = false;
                 try { resultado = _mapa.Call(f.Nombre, f.Args); }
-                catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; }
+                catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; revento = true; }
                 reloj.Stop();
                 // CÓMO SALIÓ, leído de la mano y no de la prosa (aprendizaje nº2). Sin resultado
                 // estructurado —todo lo que no es map_take ni map_type— ni cuenta como fallo para el tope
                 // ni como acción que actuó para la medida: lo que no se sabe leer no se adivina.
                 var mano = _mapa.UltimaMano;
                 string destino = TopeDeIntentos.DestinoDe(f.Nombre, f.Args);
-                _tope.Anota(f.Nombre, destino, mano?.Logro ?? true, resultado);
-                _cuenta.Resultado(f.Nombre, destino, mano?.Logro ?? false);
+                // Una EXCEPCIÓN es un intento que no se logró —antes caía en «?? true» y contaba como
+                // logro—, y la lista numerada de homónimos NO es un intento (promesa 207).
+                bool fallo = revento || (mano is { } laMano && laMano.Intento && !laMano.Logro);
+                _tope.Anota(f.Nombre, destino, !fallo, resultado);
+                _cuenta.Resultado(f.Nombre, destino, !revento && mano is { Logro: true });
                 // El pulso lo apunta SurfaceMapTools.Call; contarlo aquí también sería contarlo dos veces.
                 Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, reloj.ElapsedMilliseconds), true);
 

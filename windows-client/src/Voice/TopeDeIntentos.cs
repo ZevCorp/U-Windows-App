@@ -88,6 +88,11 @@ public sealed class TopeDeIntentos
     public static string Destino(string nombreOSelector)
     {
         string s = (nombreOSelector ?? "").Trim();
+        // EL CANDIDATO ELEGIDO ES PARTE DEL DESTINO: el 1 y el 2 de una lista numerada son dos botones
+        // distintos, y probar el otro es lo que el audio pide (crítico de la rama, 2026-09-11).
+        string cual = "";
+        int w = s.LastIndexOf("#which=", StringComparison.Ordinal);
+        if (w >= 0) { cual = s[(w + 7)..].Trim(); s = s[..w]; }
         if (s.StartsWith("uia:", StringComparison.OrdinalIgnoreCase))
         {
             int i = s.IndexOf("name=", StringComparison.OrdinalIgnoreCase);
@@ -97,7 +102,7 @@ public sealed class TopeDeIntentos
                 s = f > 0 ? s[(i + 5)..f] : s[(i + 5)..];
             }
         }
-        return Nombres.Aplanar(s);
+        return Nombres.Aplanar(s) + (cual.Length > 0 ? "#" + cual : "");
     }
 
     /// <summary>De los argumentos de una llamada, el que dice A DÓNDE va. Vacío si no es una acción.</summary>
@@ -113,17 +118,26 @@ public sealed class TopeDeIntentos
             "file_open" => "path",
             _ => "",
         };
-        if (clave.Length == 0 || args == null || !args.TryGetValue(clave, out var v)) return "";
-        return string.IsNullOrWhiteSpace(v) ? "" : v.Trim();
+        if (clave.Length == 0 || args == null || !args.TryGetValue(clave, out var v) || string.IsNullOrWhiteSpace(v))
+            return "";
+        return args.TryGetValue("which", out var cual) && !string.IsNullOrWhiteSpace(cual)
+            ? $"{v.Trim()}#which={cual.Trim()}"
+            : v.Trim();
     }
 
     private static string Clave(string herramienta, string destino) => herramienta + "|" + Destino(destino);
 
-    private static string Legible(string destino) => string.IsNullOrWhiteSpace(destino) ? "(el foco)" : destino.Trim();
+    private static string Legible(string destino)
+    {
+        if (string.IsNullOrWhiteSpace(destino)) return "(el foco)";
+        string d = destino.Trim();
+        int w = d.LastIndexOf("#which=", StringComparison.Ordinal);
+        return w < 0 ? d : $"{d[..w]} (which={d[(w + 7)..]})";
+    }
 
     private static string Recortar(string s)
     {
         s = (s ?? "").Replace('\n', ' ').Trim();
-        return s.Length <= 140 ? s : s[..139] + "…";
+        return s.Length <= 280 ? s : s[..279] + "…";
     }
 }

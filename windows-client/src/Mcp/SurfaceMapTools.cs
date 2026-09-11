@@ -347,7 +347,11 @@ public sealed class SurfaceMapTools
         // CON HOMÓNIMOS SE DA SU SELECTOR, NO SU ETIQUETA (promesa 203, el segundo sitio de la clase).
         // Hasta el 2026-09-10 se sugería «map_take exit=«Etiqueta»», que vuelve a crear la ambigüedad que
         // se acababa de resolver señalando: con tres «Descargas» delante, la etiqueta nombra a las tres.
-        string paraPulsar = posicion.Length > 0 ? Uia.Reconocedor.SelectorDe(el) : el.Label;
+        // Solo si ese selector es ÚNICO: dos homónimos del mismo tipo comparten «uia:name=X;ct=Y», y
+        // sugerir ese selector diciendo «(2 de 3)» sería prometer uno concreto y pulsar cualquiera.
+        string selectorDe = Uia.Reconocedor.SelectorDe(el);
+        bool selectorUnico = candidatos.Count(c => Uia.Reconocedor.SelectorDe(c) == selectorDe) == 1;
+        string paraPulsar = posicion.Length > 0 && selectorUnico ? selectorDe : el.Label;
         return $"SÍ veo «{el.Label}»{posicion} ({el.ControlType}) y lo estoy señalando: recuadro encendido "
              + $"y la carita puesta a su lado. Lo puedo pulsar ahora mismo con "
              + $"map_take exit=«{paraPulsar}» — que lo vea basta.";
@@ -2277,7 +2281,7 @@ public sealed class SurfaceMapTools
     /// y una llamada del servidor MCP que entrara a la vez desde otro hilo no le pisa el dato.
     /// Solo lo dan map_take y map_type; el resto de herramientas devuelven texto y aquí queda null.
     /// </remarks>
-    public readonly record struct Mano(bool Termino, bool Logro);
+    public readonly record struct Mano(bool Termino, bool Logro, bool Intento = true);
 
     [ThreadStatic] private static Mano? _ultimaMano;
 
@@ -2285,7 +2289,9 @@ public sealed class SurfaceMapTools
 
     private static string Anotar(Navigation.RecorrerSegunElNucleo.Resultado r, bool escribe)
     {
-        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio));
+        // La lista numerada de homónimos NO es un intento: no se pulsó nada, y contarla como fallo
+        // frenaba el «pruebo este otro botón» que pide el audio (crítico de la rama, 2026-09-11).
+        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio), Intento: !r.Ambiguo);
         return r.Cuenta;
     }
 
@@ -2369,7 +2375,13 @@ public sealed class SurfaceMapTools
 
         var paso = new PlanStep { StepOrder = 1, ActionType = "input", Selector = selector, Value = texto };
         if (!_uia.Execute(paso, out string error))
+        {
+            _ultimaMano = new Mano(false, false);   // intentó escribir y no pudo: cuenta para el tope (207)
             return $"no pude escribir en «{selector}»: {error}";
+        }
+        // ESCRIBIR POR UIA TAMBIÉN DICE SI SE LOGRÓ. Hasta el 2026-09-11 solo lo decía la rama que va por
+        // el ejecutor (SAP): por UIA la mano quedaba vacía, y fuera de SAP el tope no frenaba nada.
+        _ultimaMano = new Mano(true, true);
 
         // Enter confirma: en una edición en línea (renombrar) el texto no se aplica hasta que se
         // acepta, y dejarlo a medias deja la interfaz en un estado del que nadie se acuerda luego.
