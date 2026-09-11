@@ -92,11 +92,11 @@ Todas por reflexión, sin pantalla y sin modelo; nacen en rojo con `Pendiente(�
 | # | Se juzga con | Sabotaje que la tiene que poner roja |
 |---|---|---|
 | 202 | `BatchCon` con mano falsa: con una ruta `a·s:1→b` la cuenta dice «ahora estás en «…b»»; sin ruta dice «no cambió»; y ya no aparece el «quedaste en» que tapaba el hecho (el prefijo «hice los» se queda: la demo lo lee) | reponer el cierre de `RecorrerSegunElNucleo.cs:183-185` |
-| 203 | un grafo con dos «Descargas» vivas (TreeItem → b, TabItem → c): sin cuál, nada tocado y la cuenta trae «1)», «TreeItem», «2)», «TabItem»; con cuál=2 queda en c con un solo toque; y el catálogo declara `which` en `map_take` | ignorar `Cual` y tomar el primero; quitar el tipo del mensaje |
-| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** —si esa salida dio lista; sin lista, `which` no abre clave y el rechazo no lo sugiere—. Y `Despues`, el sitio único de lo que pasa tras cada herramienta: una excepción es fallo, la lista no (y se recuerda), lo que no trae mano no se adivina | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave; abrir clave con `which` sin lista; que la excepción no cuente; olvidar la lista; sugerir `which` sin lista |
+| 203 | un grafo con dos «Descargas» vivas (TreeItem → b, TabItem → c): sin cuál, nada tocado y la cuenta trae «1)», «TreeItem», «2)», «TabItem»; con cuál=2 queda en c con un solo toque; el catálogo declara `which` en `map_take`; y los candidatos viajan también como datos (`Resultado.Candidatos`), en el orden de su número | ignorar `Cual` y tomar el primero; quitar el tipo del mensaje; no llevar los candidatos como datos; llevarlos en otro orden |
+| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** —si esa salida dio lista; sin lista, `which` no abre clave y el rechazo no lo sugiere—. Y `Despues`, el sitio único de lo que pasa tras cada herramienta: una excepción es fallo, la lista no (y se recuerda), lo que no trae mano no se adivina. Tras una lista, el selector de un candidato ES ese candidato, y `which=02` es el 2 | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave; abrir clave con `which` sin lista; que la excepción no cuente; olvidar la lista; sugerir `which` sin lista; que el selector de un candidato vuelva a ser otra clave; comparar `which` como texto |
 | 205 | una clase pura con reloj inyectado: el resumen trae `llamadas=`, `distintas=`, `intentos_max=` y los ms; rechazadas y retiradas aparte; un `Resultado` sin `Llamada` en el turno no cuenta ni da un tiempo negativo; `desde_peticion=` se mide desde `Peticion()` | contar solo lo que devolvió resultado (el patrón nº10: el denominador es lo pedido); dejar que un resultado sin llamada cuente |
 | 206 | el catálogo y las instrucciones como texto: sin `at`/`action` en `map_take`, sin `at` en `map_type`, `map_unblock` conserva `at`; sin «pide map_where_am_i primero» ni «más de dos veces»; con `which` y `map_look` juntos; el `which` de `map_show` no manda al de `map_take`; `map_take` avisa de que «Guardar» no cambia de pantalla y está bien | reponer `at` en `map_take`; que el `which` de `map_show` vuelva a mandar a `map_take` |
-| 207 | `new SurfaceMapTools(() => null)` con un `RecorrerPorElNucleo` falso que devuelve cuatro resultados —la pantalla cambia, no cambia, no lo conoce, lista de homónimos—; `UltimaMano` leída por reflexión | que «logrado» vuelva a ser «terminó», sin mirar si cambió; que la lista vuelva a contar como intento |
+| 207 | `new SurfaceMapTools(() => null)` con un `RecorrerPorElNucleo` falso que devuelve cuatro resultados —la pantalla cambia, no cambia, no lo conoce, lista de homónimos—; `UltimaMano` leída por reflexión; y la mano lleva los candidatos de la lista | que «logrado» vuelva a ser «terminó», sin mirar si cambió; que la lista vuelva a contar como intento; que la mano deje de llevar los candidatos |
 
 **Límites dichos, no escondidos.** La 203 no cubre dos homónimos **del mismo tipo**: se funden en un
 selector antes de llegar al ejecutor (`Grafo.cs:136`). La 204 juzga la regla, no su cableado —un
@@ -118,10 +118,18 @@ Y los límites de forma que desde fuera no se ven:
   siendo dos órdenes.
 - **`which` solo separa candidatos si hubo lista.** El 1 y el 2 de una lista numerada son destinos
   distintos, que es lo que pide el audio («pruebo este otro botón»). Sin lista, `which` no abre una clave
-  nueva: el ejecutor lo ignora y es el mismo botón (crítico final; la 204, ampliada).
+  nueva: el ejecutor lo ignora y es el mismo botón (crítico final; la 204, ampliada). Y tras una lista,
+  pedir un candidato por su selector es pedir ese candidato, y `which=02` es el 2 (tercera pasada).
 - **Tres cuentas de «intento», con nombres parecidos.** `intentos_max` de la línea `voz-turno` cuenta
   llamadas al mismo destino (tres «Siguiente» logrados dan 3); el tope cuenta solo fallos; el juez del
   nivel 4, los intentos sin la lista. Miden cosas distintas: al leer un número, decir de cuál es.
+- **El eco vacía el tope.** Con altavoz, la voz de Ü también dispara `speech_started`, que abre un turno
+  nuevo y pone el tope a cero a mitad de una petición. La línea `voz-turno: turno nuevo (por
+  speech_started)` lo delata en el nivel 4; el arreglo de fondo va con R18.
+- **El cableado sigue sin juez, y se midió.** Romper la línea de `ConversacionEnVivo` que le pasa los
+  candidatos al tope deja el contrato INTACTO (sabotaje «cableado» de la cuarta ronda). Lo mismo borrar
+  la llamada a `Despues` o a `NuevoTurno`. Lo que se juzga es lo que esas llamadas deciden, no que se
+  hagan: eso lo dicen las líneas del log en el nivel 4.
 
 ## Las fases
 
@@ -355,6 +363,44 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
   Ocho de ocho en rojo sobre el código final, cada una comprobada por diff de bytes y restaurada idéntica;
   recompilado al final: **CONTRATO INTACTO, 176 juzgadas**. Y el juez del nivel 4 tiene ahora su propia
   autoprueba con logs sintéticos (10 de 10), que también se rompió a propósito y lo notó.
+- **2026-09-11, 02:00 (el crítico, tercera pasada: 5/10).** Sobre `7692795`. Confirmó con una sonda sobre
+  el `U.dll` compilado que `which` sin lista ya no esquiva el tope, y que el juez aprueba por petición. Y
+  encontró:
+  - **Tras una lista, el mismo botón admitía cuatro intentos.** El rechazo trae la lista con el selector
+    de cada candidato; pedir ese selector tras dos fallos con `which=2` abría una clave nueva, y el
+    ejecutor pulsaba el mismo botón. Contradecía el enunciado de la 204. Ahora los candidatos viajan como
+    datos del ejecutor a la mano y al tope (`Resultado.Candidatos` → `Mano.Candidatos` → `Despues`), y
+    el selector de un candidato es ese candidato. La 203, la 204 y la 207, ampliadas y en rojo primero.
+  - **`which=02` o `+2` abrían otra clave**: ahora el número se lee como lo lee el ejecutor.
+  - **El juez no reconocía las dos salidas nuevas de `map_type`**: ahora sí.
+  - **La autoprueba del juez no estaba en el repo**, aunque el PR decía que existía. Ahora vive en
+    `scripts/nivel4-voz/autoprueba.py`, con un caso por regla (10/10), y se rompió a propósito dos veces.
+  - **Los límites no decían que el eco vacía el tope.** Ahora sí (arriba).
+  Su veredicto entero va en el PR.
+
+- **2026-09-11 (el sabotaje, cuarta ronda).** Los mismos tres cuidados, y un sabotaje del cableado que se
+  sabía sin juez, corrido para medir el límite en vez de suponerlo.
+
+  | Promesa | Sabotaje | Quedó |
+  |---|---|---|
+  | 203 | la lista deja de viajar como datos | roja |
+  | 203 | los candidatos viajan en otro orden que su número | roja |
+  | 204 | tras la lista, el selector de un candidato vuelve a ser otra clave | roja |
+  | 204 | `which` vuelve a compararse como texto (02 no es 2) | roja |
+  | 204 | *(repetido)* `which` sin lista vuelve a abrir una clave nueva | roja |
+  | 204 | *(repetido)* una excepción deja de contar como intento fallido | roja |
+  | 204 | *(repetido)* la lista de homónimos deja de recordarse | roja |
+  | 204 | *(repetido)* el rechazo sin lista vuelve a sugerir `which` | roja |
+  | 204 | *(repetido)* el destino se compara como texto crudo, sin aplanar | roja, **y también la 205** |
+  | 207 | *(repetido)* «logrado» vuelve a ser «terminó» | roja |
+  | 207 | *(repetido)* la lista vuelve a contar como intento | roja |
+  | 207 | la mano deja de llevar los candidatos | roja |
+  | — | **cableado**: la voz no le pasa los candidatos al tope | **INTACTO, como se esperaba**: el límite declarado, medido |
+  | juez del nivel 4 | deja de reconocer «no hay campo con el foco» y «NO escribo» | la autoprueba falla (T1 r2 pasa a aprobada) |
+  
+  Doce de doce en rojo sobre el código final, cada una comprobada por diff de bytes y restaurada idéntica;
+  recompilado al final: **CONTRATO INTACTO, 176 juzgadas**. En total, 19 sabotajes distintos del contrato
+  en cuatro rondas, todos en rojo; y uno del cableado, que el contrato no ve y así se dice.
 
 ## Cierre
 
