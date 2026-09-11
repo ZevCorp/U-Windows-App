@@ -435,6 +435,8 @@ public sealed class ConversacionEnVivo : IDisposable
         try { _ws?.Dispose(); } catch { }
         _ws = null;
         Cambio?.Invoke(false);
+        string? ultimaMedida = _cuenta.Cerrar();   // el último turno también deja su línea (spec 017)
+        if (ultimaMedida != null) LogBus.Log("voz-turno", ultimaMedida);
         LogBus.Log("voz-viva", "sesión cerrada");
     }
 
@@ -665,14 +667,16 @@ public sealed class ConversacionEnVivo : IDisposable
         - Empieza por map_where_am_i si no sabes dónde estás: te dice dónde estás y qué salidas
           conoce el mapa desde ahí.
         - map_go_to lleva a una pantalla conocida.
-        - map_take pulsa una salida o ejecuta una acción; map_type escribe. Si te piden DOBLE CLIC
-          —o si hay que ABRIR algo que con un clic solo se selecciona: un icono del escritorio, un
-          archivo, una entrada de SAP Logon— es map_take con action=«doubleclick». No lo intentes
-          con action=«click» diciendo que es un doble clic: son cosas distintas y la de arriba
-          existe.
-        - `at` NO SE ESCRIBE DE MEMORIA. Es una cadena exacta y opaca, no un nombre que se pueda
-          deducir de la app: se COPIA tal cual de map_where_am_i o de la última respuesta de una
-          herramienta. Si nunca la has visto en esta conversación, pide map_where_am_i primero.
+        - map_take pulsa una salida o ejecuta una acción; map_type escribe. El DOBLE CLIC no lo pides
+          tú: si un clic sobre algo de una lista no lo abre, el sistema ensaya el doble clic solo y lo
+          aprende para la próxima.
+        - VARIOS CON EL MISMO NOMBRE. Si map_take te contesta con una lista numerada —«1) «Descargas»
+          (TreeItem) → lleva a…; 2) «Descargas» (TabItem)…»—, NO le preguntes al usuario cuál: elige tú
+          y repite map_take con which=N. El tipo y a dónde lleva cada uno vienen en la lista; si con eso
+          no se sabe, MIRA primero (map_look) y elige con which. Pregunta solo si mirando sigue sin
+          poder saberse.
+        - `at` solo lo lleva map_unblock, y NO SE ESCRIBE DE MEMORIA: es una cadena exacta y opaca que
+          se COPIA tal cual de map_where_am_i o de la última respuesta de una herramienta.
         - Cuando la herramienta rechace por el ancla, la respuesta TRAE DENTRO la ubicación real y
           te dice «vuelve a pedírmelo con at=…». COPIA ESA, entera y sin retocar, y repite la misma
           llamada. Pasó de verdad: se rechazó tres veces seguidas porque en cada intento se inventó
@@ -728,10 +732,11 @@ public sealed class ConversacionEnVivo : IDisposable
         Si una herramienta responde que no actuó, dilo en voz alta y explica por qué. No lo maquilles
         ni sigas como si hubiera funcionado.
 
-        Y no repitas la misma llamada con los mismos argumentos más de dos veces: si falló dos veces
-        va a fallar la tercera. Prueba otra vía o cuéntale al usuario qué está pasando y qué
-        necesitas de él. Insistir en silencio es lo peor que puedes hacer con las manos puestas en
-        el ordenador de alguien.
+        DOS INTENTOS, NO TRES. Si una acción hacia el mismo sitio no funcionó dos veces, la tercera no
+        se ejecuta: el sistema la frena y te dice qué salió en cada una. Pedirla por otro nombre o por
+        su selector es pedir lo mismo. Cambia de vía —mira (map_look) y elige otro candidato con
+        which— o cuéntale al usuario qué está pasando y qué necesitas de él. Insistir en silencio es
+        lo peor que puedes hacer con las manos puestas en el ordenador de alguien.
         """;
 
     /// <summary>
@@ -752,21 +757,17 @@ public sealed class ConversacionEnVivo : IDisposable
             ("surface", "La pantalla de destino: una que map_where_am_i haya nombrado, o «web://dominio» para una web.")),
         Fn("map_take", "Pulsa CUALQUIER cosa que esté en la pantalla: entrar en una carpeta, «Nuevo», "
             + "«Cortar», «Pegar», una barra de búsqueda, una casilla… No hace falta que el mapa la "
-            + "conozca: si no la tiene, la busca en la pantalla de ahora, la pulsa y la aprende.",
+            + "conozca: si no la tiene, la busca en la pantalla de ahora, la pulsa y la aprende. "
+            + "Contesta QUÉ PASÓ: «ahora estás en…» o «la pantalla no cambió». Si no cambió y "
+            + "esperabas que sí, por ahí no era: prueba otra cosa en vez de repetir.",
             ("exit", "Nombre de lo que hay que pulsar («Nuevo», «Buscar», «Pegar») o un selector «uia:name=X;ct=ListItem»."),
-            ("action", "Vacío para lo normal. «doubleclick» cuando te pidan DOBLE CLIC o cuando haga "
-                     + "falta ABRIR algo que con un clic solo se selecciona: un icono del escritorio, "
-                     + "un archivo de una lista, una entrada de SAP Logon. «addselect» para añadir a "
-                     + "la selección sin perder lo anterior. «click» para forzar el clic simple."),
-            ("at", "La superficie donde CREES estar, COPIADA TAL CUAL de map_where_am_i o de la última "
-                 + "respuesta de una herramienta. NUNCA la escribas de memoria ni la deduzcas del "
-                 + "nombre de la app: si no coincide EXACTA, no se actúa."),
+            ("which", "Solo cuando map_take te devolvió una lista numerada de varios con ese nombre: el "
+                    + "número del que quieres, «1», «2»…, en el orden de ESA lista. Vacío lo normal."),
             ("decir", "Una frase corta que Ü dice con su voz JUSTO ANTES de pulsar. Al comprobar una lección va siempre: la carita se pone al lado, lo dice, y entonces pulsa."),
             ("recuerdo", "Qué es y para qué sirve lo que vas a pulsar, con tus palabras. Se cuelga del elemento y se muestra en tarjeta antes de tocarlo.")),
         Fn("map_type", "Escribe texto en el campo abierto; sirve para nombrar una carpeta recién creada.",
             ("text", "Lo que hay que escribir."),
             ("target", "El campo: en SAP, su etiqueta tal como se lee («Presión Arterial»), su nombre técnico o el selector de la lección. Vacío = el que tenga el foco, y solo si es un campo de texto."),
-            ("at", "La superficie donde crees estar."),
             ("decir", "Una frase corta que Ü dice con su voz JUSTO ANTES de escribir. Al comprobar una lección va siempre."),
             ("recuerdo", "Qué es ese campo y para qué sirve, con tus palabras. Se cuelga y se muestra en tarjeta antes de escribir.")),
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
@@ -805,10 +806,9 @@ public sealed class ConversacionEnVivo : IDisposable
                    + "qué elementos forman esa zona lo decides TÚ pidiendo map_look y cruzándolo con "
                    + "map_what_i_see, y aquí traes ya la lista elegida."),
             ("which", "Cuando ese nombre coincide con VARIOS, cuál de ellos: «1», «2»… Sin esto se "
-                    + "señalan todos. ÚSALO PARA PREGUNTAR: si tienes que elegir entre dos «Code», "
-                    + "señala el 1 y di «¿este?», señala el 2 y di «¿o este?». Enseñar cuál es cada "
-                    + "uno es más rápido y más claro que leerle dos selectores en voz alta, y hace "
-                    + "que se vea que estás mirando su pantalla de verdad.")),
+                    + "señalan todos. Para ELEGIR tú no hace falta preguntar: mira (map_look) y pulsa "
+                    + "con map_take y su which. Señalar el 1 y decir «¿este?», el 2 y «¿o este?», es "
+                    + "para cuando mirando no se puede saber cuál quiere el usuario.")),
         Fn("map_recuerdos", "«¿QUÉ SABES DE ESTA PANTALLA?» / «¿qué te he enseñado aquí?» / «¿qué "
             + "recuerdas?». Te devuelve los recuerdos de aquí DE UNO EN UNO e ilumina en pantalla el "
             + "elemento de cada uno. EL ORDEN ES: la llamas → te da UNO → lo CUENTAS EN VOZ, entero "
@@ -1136,6 +1136,7 @@ public sealed class ConversacionEnVivo : IDisposable
     public async Task EnviarTextoAsync(string texto)
     {
         if (!Viva || _ws?.State != WebSocketState.Open || string.IsNullOrWhiteSpace(texto)) return;
+        EmpiezaUnTurnoDelUsuario();   // escribir también es pedir algo nuevo (spec 017)
         Dice?.Invoke($"Tú: {texto}");
         await EnviarAsync(_protocolo.Texto(texto), _cts?.Token ?? CancellationToken.None);
     }
@@ -1339,6 +1340,7 @@ public sealed class ConversacionEnVivo : IDisposable
             // dice si era el usuario o un eco que se coló — eso lo dice el contexto de al lado
             // (si la compuerta estaba tragando, eco no pudo ser).
             case Hecho.HablaronEncima:
+                EmpiezaUnTurnoDelUsuario();
                 LogBus.Log("voz-viva", "el servidor oyó voz encima (speech_started): se calla la cola local"
                     + (_audio.Hablando ? " · Ü estaba sonando" : " · Ü ya no sonaba"));
                 _audio.Callar();
@@ -1346,6 +1348,7 @@ public sealed class ConversacionEnVivo : IDisposable
 
             case Hecho.Pide p:
                 LogBus.Log("voz-viva", "llamada recibida: " + string.Join(", ", p.Cuales.Select(x => x.Nombre)));
+                foreach (var x in p.Cuales) _cuenta.Llamada(x.Nombre, TopeDeIntentos.DestinoDe(x.Nombre, x.Args));
                 _ = Task.Run(() => EjecutarAsync(p.Cuales, ct), ct);
                 break;
 
@@ -1396,6 +1399,20 @@ public sealed class ConversacionEnVivo : IDisposable
     /// «MIRA LA PANTALLA», a pedido del modelo. No es una herramienta del mapa —no accionA nada, no
     /// pasa por <see cref="SurfaceMapTools"/>— así que se resuelve aquí, igual que el autocontrol.
     /// </summary>
+    // LO HACE A LA PRIMERA (spec 017): el tope de intentos (promesa 204) y la medida de cada turno
+    // del usuario (promesa 205). Los dos se reinician cuando el usuario vuelve a hablar o escribe.
+    private readonly TopeDeIntentos _tope = new();
+    private readonly CuentaDelTurno _cuenta = new(() => Environment.TickCount64);
+
+    /// <summary>El usuario habló o escribió: lo de antes era otra petición. Deja la medida del turno
+    /// que termina (una línea «voz-turno») y el tope vuelve a cero.</summary>
+    private void EmpiezaUnTurnoDelUsuario()
+    {
+        string? medida = _cuenta.Cerrar();
+        if (medida != null) LogBus.Log("voz-turno", medida);
+        _tope.NuevoTurno();
+    }
+
     private const string HerramientaMirar = "map_look";
 
     /// <summary>Crear un recuerdo. Se vigila desde fuera porque el modelo se la saltaba.</summary>
@@ -1600,6 +1617,7 @@ public sealed class ConversacionEnVivo : IDisposable
             if (anulada)
             {
                 LogBus.Log("voz-viva", $"«{f.Nombre}» se cancela: el modelo la retiró (habló el usuario)");
+                _cuenta.Retirada(f.Nombre);
                 continue;   // y NO se responde: contestar a algo retirado es lo que lo hacía repetirla
             }
 
@@ -1633,6 +1651,14 @@ public sealed class ConversacionEnVivo : IDisposable
             }
             else if (!SurfaceMapTools.IsMapTool(f.Nombre))
                 resultado = $"«{f.Nombre}» no es una herramienta del mapa";
+            else if (_tope.Rechazo(f.Nombre, TopeDeIntentos.DestinoDe(f.Nombre, f.Args)) is string frenada)
+            {
+                // DOS INTENTOS Y NO TRES (promesa 204): la tercera hacia un sitio que ya falló dos veces no
+                // se ejecuta, y se le contesta al cerebro qué salió en cada una para que cambie de vía.
+                LogBus.Log("voz-viva", $"tope: «{f.Nombre}» no se ejecuta — {frenada}");
+                _cuenta.Rechazada(f.Nombre, TopeDeIntentos.DestinoDe(f.Nombre, f.Args));
+                resultado = frenada;
+            }
             else
             {
                 Accion?.Invoke(EnCurso(f.Nombre, f.Args), false);
@@ -1640,6 +1666,13 @@ public sealed class ConversacionEnVivo : IDisposable
                 try { resultado = _mapa.Call(f.Nombre, f.Args); }
                 catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; }
                 reloj.Stop();
+                // CÓMO SALIÓ, leído de la mano y no de la prosa (aprendizaje nº2). Sin resultado
+                // estructurado —todo lo que no es map_take ni map_type— ni cuenta como fallo para el tope
+                // ni como acción que actuó para la medida: lo que no se sabe leer no se adivina.
+                var mano = _mapa.UltimaMano;
+                string destino = TopeDeIntentos.DestinoDe(f.Nombre, f.Args);
+                _tope.Anota(f.Nombre, destino, mano?.Logro ?? true, resultado);
+                _cuenta.Resultado(f.Nombre, destino, mano?.Logro ?? false);
                 // El pulso lo apunta SurfaceMapTools.Call; contarlo aquí también sería contarlo dos veces.
                 Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, reloj.ElapsedMilliseconds), true);
 

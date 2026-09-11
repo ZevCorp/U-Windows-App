@@ -344,9 +344,13 @@ public sealed class SurfaceMapTools
         string posicion = comoSeLlama.Contains(" (") && comoSeLlama.EndsWith(")")
             ? " " + comoSeLlama[comoSeLlama.IndexOf(" (", StringComparison.Ordinal)..].Trim()
             : "";
+        // CON HOMÓNIMOS SE DA SU SELECTOR, NO SU ETIQUETA (promesa 203, el segundo sitio de la clase).
+        // Hasta el 2026-09-10 se sugería «map_take exit=«Etiqueta»», que vuelve a crear la ambigüedad que
+        // se acababa de resolver señalando: con tres «Descargas» delante, la etiqueta nombra a las tres.
+        string paraPulsar = posicion.Length > 0 ? Uia.Reconocedor.SelectorDe(el) : el.Label;
         return $"SÍ veo «{el.Label}»{posicion} ({el.ControlType}) y lo estoy señalando: recuadro encendido "
              + $"y la carita puesta a su lado. Lo puedo pulsar ahora mismo con "
-             + $"map_take exit=«{el.Label}» — que lo vea basta.";
+             + $"map_take exit=«{paraPulsar}» — que lo vea basta.";
     }
 
 
@@ -1741,6 +1745,7 @@ public sealed class SurfaceMapTools
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
         string A(string k) => args.TryGetValue(k, out var v) ? v.Trim() : "";
+        _ultimaMano = null;   // cada llamada dice SU resultado, no el de la anterior (spec 017)
 
         // Se registra CADA llamada y su respuesta. Sin esto, «el mapa no aportó nada» y «el modelo
         // ni lo intentó» se ven exactamente igual en el log — y esa ambigüedad me llevó a un
@@ -1763,8 +1768,8 @@ public sealed class SurfaceMapTools
         {
             "map_where_am_i" => WhereAmI(),
             "map_go_to" => GoTo(A("surface")),
-            "map_take" => Take(A("exit"), A("action"), A("at"), A("decir"), A("recuerdo")),
-            "map_type" => Type(A("text"), A("target"), A("at"), A("decir"), A("recuerdo")),
+            "map_take" => Take(A("exit"), A("which"), A("decir"), A("recuerdo")),
+            "map_type" => Type(A("text"), A("target"), A("decir"), A("recuerdo")),
             "map_unblock" => Unblock(A("at"), A("choose")),
             "map_open_app" => OpenApp(A("app")),
             "map_what_i_see" => LoQueVeo(),
@@ -2244,15 +2249,44 @@ public sealed class SurfaceMapTools
     /// </remarks>
     public bool SenalarAlActuar { get; set; }
 
-    private string Take(string salida, string accionPedida = "", string dondeCreoEstar = "", string decir = "", string recuerdo = "")
+    private string Take(string salida, string cual = "", string decir = "", string recuerdo = "")
     {
         if (salida.Length == 0) return "falta `exit`: qué puerta tomar (su nombre tal como se ve, o su selector)";
         if (RecorrerPorElNucleo == null) return "todavía no sé pulsar: el núcleo no está conectado.";
+        // CUÁL DE VARIOS (promesa 203): si el batch contestó con una lista numerada, `which` elige en ESE
+        // orden. Hasta el 2026-09-10 map_take no tenía forma de decir cuál, y un homónimo acababa en
+        // «dime el selector». Los antiguos `action` y `at` no llegaban aquí desde e3c3ad8: el gesto lo
+        // aprende la arista (spec 003), y ofrecerlos era la ilusión de controlarlo (promesa 206).
+        int.TryParse(cual, out int n);
+        var paso = new Navigation.RecorrerSegunElNucleo.Paso(salida) { Cual = n };
         // LA MISMA COREOGRAFÍA QUE EL PLAN (promesa 191): al comprobar, o cuando el piloto trae algo que
         // decir o un recuerdo, la mano señala, dice, cuelga y muestra, y solo después pulsa.
-        if (DarUnPasoConCoreografia != null && (SenalarAlActuar || decir.Length > 0 || recuerdo.Length > 0))
-            return DarUnPasoConCoreografia(salida, new Navigation.RecorrerSegunElNucleo.Paso(salida), recuerdo, decir).Cuenta;
-        return RecorrerPorElNucleo(new[] { new Navigation.RecorrerSegunElNucleo.Paso(salida) }).Cuenta;
+        var r = DarUnPasoConCoreografia != null && (SenalarAlActuar || decir.Length > 0 || recuerdo.Length > 0)
+            ? DarUnPasoConCoreografia(salida, paso, recuerdo, decir)
+            : RecorrerPorElNucleo(new[] { paso });
+        return Anotar(r, escribe: false);
+    }
+
+    /// <summary>
+    /// Cómo salió la última acción de la mano, ESTRUCTURADO: si la tanda terminó y si se logró. Pulsar
+    /// se logró si la pantalla cambió; escribir, si se escribió. Lo lee el tope de intentos de la voz
+    /// (promesa 204) en vez de interpretar la prosa de la respuesta (aprendizaje nº2).
+    /// </summary>
+    /// <remarks>
+    /// Por HILO y no por instancia: la voz lo lee justo después de su propia llamada, en el mismo hilo,
+    /// y una llamada del servidor MCP que entrara a la vez desde otro hilo no le pisa el dato.
+    /// Solo lo dan map_take y map_type; el resto de herramientas devuelven texto y aquí queda null.
+    /// </remarks>
+    public readonly record struct Mano(bool Termino, bool Logro);
+
+    [ThreadStatic] private static Mano? _ultimaMano;
+
+    public Mano? UltimaMano => _ultimaMano;
+
+    private static string Anotar(Navigation.RecorrerSegunElNucleo.Resultado r, bool escribe)
+    {
+        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio));
+        return r.Cuenta;
     }
 
     /// <summary>
@@ -2264,7 +2298,7 @@ public sealed class SurfaceMapTools
     /// distribución del teclado ni de que ninguna tecla se quede hundida— y solo si no lo admite
     /// se recurre a teclear, con Enter al final para confirmar la edición en línea.
     /// </summary>
-    private string Type(string texto, string target, string dondeCreoEstar = "", string decir = "", string recuerdo = "")
+    private string Type(string texto, string target, string decir = "", string recuerdo = "")
     {
         if (texto.Length == 0) return "falta `text`: qué hay que escribir";
 
@@ -2277,8 +2311,8 @@ public sealed class SurfaceMapTools
         {
             // Y con la coreografía del plan cuando toca (promesa 191): se señala el campo, se dice, y luego se escribe.
             if (DarUnPasoConCoreografia != null && (SenalarAlActuar || decir.Length > 0 || recuerdo.Length > 0))
-                return DarUnPasoConCoreografia(target, new Navigation.RecorrerSegunElNucleo.Paso(target, texto), recuerdo, decir).Cuenta;
-            return RecorrerPorElNucleo(new[] { new Navigation.RecorrerSegunElNucleo.Paso(target, texto) }).Cuenta;
+                return Anotar(DarUnPasoConCoreografia(target, new Navigation.RecorrerSegunElNucleo.Paso(target, texto), recuerdo, decir), escribe: true);
+            return Anotar(RecorrerPorElNucleo(new[] { new Navigation.RecorrerSegunElNucleo.Paso(target, texto) }), escribe: true);
         }
 
         string selector = target;
