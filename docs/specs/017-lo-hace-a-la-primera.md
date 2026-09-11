@@ -90,7 +90,7 @@ Todas por reflexión, sin pantalla y sin modelo; nacen en rojo con `Pendiente(�
 
 | # | Se juzga con | Sabotaje que la tiene que poner roja |
 |---|---|---|
-| 202 | `BatchCon` con mano falsa: con una ruta `a·s:1→b` la cuenta dice «ahora estás en «…b»»; sin ruta dice «no cambió»; y en ninguna aparece «hice los 1» | reponer el cierre de `RecorrerSegunElNucleo.cs:183-185` |
+| 202 | `BatchCon` con mano falsa: con una ruta `a·s:1→b` la cuenta dice «ahora estás en «…b»»; sin ruta dice «no cambió»; y ya no aparece el «quedaste en» que tapaba el hecho (el prefijo «hice los» se queda: la demo lo lee) | reponer el cierre de `RecorrerSegunElNucleo.cs:183-185` |
 | 203 | un grafo con dos «Descargas» vivas (TreeItem → b, TabItem → c): sin cuál, nada tocado y la cuenta trae «1)», «TreeItem», «2)», «TabItem»; con cuál=2 queda en c con un solo toque; y el catálogo declara `which` en `map_take` | ignorar `Cual` y tomar el primero; quitar el tipo del mensaje |
 | 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta | `Admite` → siempre sí; comparar el texto crudo sin aplanar (aprendizaje nº16) |
 | 205 | una clase pura con reloj inyectado: el resumen trae `llamadas=`, `distintas=`, `intentos_max=` y los ms | contar solo lo que devolvió resultado (el patrón nº10: el denominador es lo pedido) |
@@ -239,6 +239,15 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
   por voz deja en el log la duración de cada acción (`mapa-mcp: ← (N ms)`), que es justo lo que aquella
   iba a medir, y además juzga lo que la otra no ve: qué herramienta **elige** el cerebro.
 
+- **2026-09-11 (una regresión que ningún contrato veía).** Buscando quién leía los textos que cambia esta rama
+  apareció la demo de punta a punta: `FaceWindow.xaml.cs` decide en **tres sitios** si una tanda de `map_batch`
+  terminó leyendo si su cuenta **empieza por «hice los»** —el aprendizaje nº2, vivo en otro archivo—. Con el primer
+  cierre de la 202, una tanda de un paso que terminaba bien empezaba por «pulsé…», y la demo la habría dado por
+  fallida sin que ninguna promesa se enterara. Se arregló sin tocar `FaceWindow`, que es zona de choque: el prefijo
+  «hice los» se queda siempre y detrás va el último hecho. La 202 dejó de exigir que no apareciera «hice los» y
+  exige que ya no aparezca el «quedaste en» que tapaba el hecho; su sabotaje, repetido, sigue en rojo. Para quien
+  toque la demo: esos tres `StartsWith` deberían leer el `Termino` estructurado, no la prosa.
+ 
 ## Cierre
 
 - [ ] Fase 0, la base con el binario de `main`: **no se pudo medir de noche** (salvapantallas OLED); el kit la corre junto a la rama

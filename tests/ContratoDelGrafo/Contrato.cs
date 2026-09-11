@@ -7276,8 +7276,8 @@ internal static class Contrato
         Debe(t2.Count == 1 && r2.Termino && r2.Cuenta.Contains("no cambió"),
             $"y la que pulsa sin que nada cambie lo dice con esas palabras, aunque la tanda termine "
             + $"(dijo: «{r2.Cuenta}»): sin esto no hay «me di cuenta de que por aquí no era»");
-        Debe(!r1.Cuenta.Contains("hice los") && !r2.Cuenta.Contains("hice los"),
-            "y «hice los 1 paso(s)» ya no tapa el último hecho: con un solo paso, el paso ES el relato");
+        Debe(!r1.Cuenta.Contains("quedaste en") && !r2.Cuenta.Contains("quedaste en"),
+            "y «hice los 1 paso(s): quedaste en…» ya no tapa el último hecho: detrás de «hice los» va lo que pasó");
 
         var (b3, _, _) = BatchCon(MundoDeTres(), "uia://x.exe/a", RutasDeTres);
         var r3 = b3.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Uno"), new RecorrerSegunElNucleo.Paso("Dos") });

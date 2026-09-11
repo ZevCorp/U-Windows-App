@@ -215,9 +215,12 @@ public sealed class RecorrerSegunElNucleo
         // pantalla no cambió». Sin eso el cerebro no puede darse cuenta de que «por aquí no era» —lo
         // que la nota de voz de esa noche pedía con esas palabras— y paga otra mirada para averiguarlo.
         string fin = _donde() ?? "";
+        // EL PREFIJO «hice los» SE QUEDA, y no por estilo: la demo de punta a punta (FaceWindow, tres
+        // sitios) decide si una tanda terminó leyendo si la cuenta EMPIEZA por «hice los» —el aprendizaje
+        // nº2 vivo en otro archivo, anotado en la spec 017—. Lo que cambia es lo que va detrás: el último hecho.
         if (ultimoPulso is { } u)
             return new(pasos.Count, pasos.Count, fin, true,
-                pasos.Count == 1 ? u.Cuenta : $"hice los {pasos.Count} paso(s); el último: {u.Cuenta}",
+                $"hice los {pasos.Count} paso(s): {u.Cuenta}",
                 u.CambioLaPantalla);
         return new(pasos.Count, pasos.Count, fin, true,
             $"hice los {pasos.Count} paso(s): quedaste en «{fin}».");
