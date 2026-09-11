@@ -1,6 +1,6 @@
 # Plan de implementación: lo que uno le pida, lo hace — y a la primera
 
-Estado: **implementado; nivel 4 pendiente** (2026-09-11: 202–206 verdes y saboteadas; la prueba en el PC real no pudo correr de noche) · Nace de una nota de voz del 2026-09-10 ([transcripción y rúbrica](fuentes/2026-09-10-lo-hace-a-la-primera.md)) y del diagnóstico de esa noche · Rama: `jero/lo-hace-a-la-primera`
+Estado: **implementado; nivel 4 pendiente** (2026-09-11: 202–207 verdes y saboteadas, con los arreglos del crítico de la rama; la prueba en el PC real no pudo correr de noche) · **Las tareas largas (R8–R11) no están en esta rama** · Nace de una nota de voz del 2026-09-10 ([transcripción y rúbrica](fuentes/2026-09-10-lo-hace-a-la-primera.md)) y del diagnóstico de esa noche · Rama: `jero/lo-hace-a-la-primera`
 
 > **La petición, en la voz del audio:** *«que lo que uno le pida lo haga, y lo haga a la primera,
 > máximo dos intentos, máximo dos segundos, y no se sienta que falló, sino: lo hizo.»*
@@ -83,6 +83,7 @@ reciclan; los huecos están permitidos.
 | 204 | dos intentos y no tres: en un mismo turno del usuario, la tercera acción hacia un destino que ya falló dos veces no se ejecuta, y se dice qué salió en cada una; el destino es el mismo se pida por nombre o por selector | 4 |
 | 205 | cada turno del usuario deja una línea voz-turno con su medida: llamadas, herramientas distintas, el máximo de intentos a un mismo destino y los milisegundos hasta la primera acción y la última; lo rechazado y lo retirado también cuentan | 1 |
 | 206 | el catálogo le pide al cerebro lo que las manos usan: map_take y map_type no ofrecen argumentos que su cuerpo ignora, map_take trae which, y las instrucciones mandan mirar y elegir con which antes que preguntar; la regla escrita de intentos es la del código: dos | 5 |
+| 207 | la mano dice, sin prosa, si fue un intento y si lo logró: pulsar y que cambie la pantalla es logro, pulsar y que no cambie no lo es, pedir algo que no está es un intento fallido, y la lista de homónimos no es un intento | 4 |
 
 ### Con qué se juzga cada una
 
@@ -92,14 +93,31 @@ Todas por reflexión, sin pantalla y sin modelo; nacen en rojo con `Pendiente(�
 |---|---|---|
 | 202 | `BatchCon` con mano falsa: con una ruta `a·s:1→b` la cuenta dice «ahora estás en «…b»»; sin ruta dice «no cambió»; y ya no aparece el «quedaste en» que tapaba el hecho (el prefijo «hice los» se queda: la demo lo lee) | reponer el cierre de `RecorrerSegunElNucleo.cs:183-185` |
 | 203 | un grafo con dos «Descargas» vivas (TreeItem → b, TabItem → c): sin cuál, nada tocado y la cuenta trae «1)», «TreeItem», «2)», «TabItem»; con cuál=2 queda en c con un solo toque; y el catálogo declara `which` en `map_take` | ignorar `Cual` y tomar el primero; quitar el tipo del mensaje |
-| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta | `Admite` → siempre sí; comparar el texto crudo sin aplanar (aprendizaje nº16) |
-| 205 | una clase pura con reloj inyectado: el resumen trae `llamadas=`, `distintas=`, `intentos_max=` y los ms | contar solo lo que devolvió resultado (el patrón nº10: el denominador es lo pedido) |
-| 206 | el catálogo y las instrucciones como texto: sin `at`/`action` en `map_take`, sin `at` en `map_type`, `map_unblock` conserva `at`; sin «pide map_where_am_i primero» ni «más de dos veces»; con `which` y `map_look` juntos | reponer `at` en `map_take`; reponer la línea del `at` |
+| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave |
+| 205 | una clase pura con reloj inyectado: el resumen trae `llamadas=`, `distintas=`, `intentos_max=` y los ms; rechazadas y retiradas aparte; un `Resultado` sin `Llamada` en el turno no cuenta ni da un tiempo negativo; `desde_peticion=` se mide desde `Peticion()` | contar solo lo que devolvió resultado (el patrón nº10: el denominador es lo pedido); dejar que un resultado sin llamada cuente |
+| 206 | el catálogo y las instrucciones como texto: sin `at`/`action` en `map_take`, sin `at` en `map_type`, `map_unblock` conserva `at`; sin «pide map_where_am_i primero» ni «más de dos veces»; con `which` y `map_look` juntos; el `which` de `map_show` no manda al de `map_take`; `map_take` avisa de que «Guardar» no cambia de pantalla y está bien | reponer `at` en `map_take`; que el `which` de `map_show` vuelva a mandar a `map_take` |
+| 207 | `new SurfaceMapTools(() => null)` con un `RecorrerPorElNucleo` falso que devuelve cuatro resultados —la pantalla cambia, no cambia, no lo conoce, lista de homónimos—; `UltimaMano` leída por reflexión | que «logrado» vuelva a ser «terminó», sin mirar si cambió; que la lista vuelva a contar como intento |
 
 **Límites dichos, no escondidos.** La 203 no cubre dos homónimos **del mismo tipo**: se funden en un
 selector antes de llegar al ejecutor (`Grafo.cs:136`). La 204 juzga la regla, no su cableado —un
 guardia que se cree puesto (aprendizaje nº18)—; el cableado lo demuestra el nivel 4 con la línea del
-rechazo. La 206 juzga el texto, no la conducta del modelo; la conducta la juzga el nivel 4.
+rechazo. **La 205 tampoco juzga su cableado**: que `ConversacionEnVivo` llame a `Llamada`, `Resultado`,
+`Peticion` y `Cerrar` donde toca solo lo dice la línea `voz-turno` de una corrida real. La 207 cierra
+el hueco que el crítico encontró entre las dos: el dato del que ambas dependen (`UltimaMano`) ya se
+juzga, y sabotearlo ya no deja el contrato intacto. La 206 juzga el texto, no la conducta del modelo;
+la conducta la juzga el nivel 4.
+
+Y tres límites de forma que desde fuera no se ven:
+
+- **Solo `uia:name=` se aplana a su nombre.** Un selector por `aid=` o un id de SAP (`wnd[0]/…`)
+  cuenta como un destino distinto de su etiqueta, y el tope lo vería como otro sitio.
+- **Hay dos numeraciones de homónimos.** `map_take` numera por selector, que es un orden estable para
+  elegir; `map_show`, por posición en la pantalla, que es el orden para señalar de arriba abajo. Ya no
+  se cruzan en el texto —el `which` de `map_show` avisa de que no es el de `map_take`—, pero siguen
+  siendo dos órdenes.
+- **`which` abre una clave nueva.** El candidato 1 y el 2 son destinos distintos, que es lo que pide el
+  audio («pruebo este otro botón»). La contrapartida: `which=1` después de dos fallos sin `which` también
+  pasa. Solo tiene sentido tras una lista numerada, pero el tope no lo impide.
 
 ## Las fases
 
@@ -154,26 +172,28 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
 | R2 | 203, 206; «herramientas distintas» en la línea de 205 | lo que el modelo elige de verdad solo lo dice el nivel 4 |
 | R3 | 203, 206; T4 | no cubre homónimos del mismo tipo |
 | R4 | 204 de forma indirecta; nivel 4 | en el audio era un ejemplo, no una regla de modalidad |
-| R5, R6, R7 | T2, T1, T3/T5 | ninguna lógica con «Instagram» ni «Documentos» cableada: el diff se revisa con `grep` |
+| R5 | **sin medir** | T2 salió del kit: abrir mensajes privados manda la foto de la pantalla a OpenAI, y eso se decide con el usuario delante |
+| R6, R7 | T1, T3/T5 | ninguna lógica con «Instagram» ni «Documentos» cableada: el diff se revisa con `grep` |
 | **R8, R9, R10** | **no en esta rama** | ver «Lo que NO entra» |
-| R11 | 202, en parte | cada acción dice si tuvo efecto; la tarea larga no se corre |
+| R11 | 202, en parte | cada acción dice si tuvo efecto; **la tarea larga no está en esta rama** |
 | R12, R15 | 204, 205; nivel 4 | |
 | R13 | 202 (saber que no era por ahí); T5 | la voz no tiene un «atrás» genérico |
-| R16 | nivel 4 | ninguna promesa mide tiempo |
+| R16 | **fuera, declarado** | ninguna promesa mide tiempo, y esta rama no toca las esperas (patrón nº14). Hay un suelo por construcción: un pulsar que no cambia la pantalla espera `EsperarACambiar` hasta 1,8 s antes de decirlo, así que un intento que no navega no baja de ~1,8 s, y dos no caben en 2 s. Bajarlo es otra spec, medida antes |
 | R17 | nivel 4, cruzado con el log | |
 | R18 | no | pista secundaria, diagnosticada aparte |
-| R19 | no se toca `voz/Realtime` ni la interrupción | |
+| R19 | **tocado, sin medir** | no se toca `voz/Realtime`, pero sí el manejador de `speech_started` en `ConversacionEnVivo`: callar va primero y después se cierra la medida del turno. Que interrumpir siga funcionando como en `main` solo lo dice el nivel 4 |
 
 ## Lo que NO entra
 
-- **Pasar las tareas largas al Agent SDK (R8–R10).** Es lo que el audio pone como el paso siguiente
-  —*«ese creo que es el primer paso que tenemos que lograr, que lo que uno le pida lo haga»*— y no se
-  construye esta noche por cuatro razones medidas: no existe ningún enrutado corto/largo; qué cuenta
-  como «largo» es una decisión de producto; la credencial de esta máquina no está medida (la memoria del
-  proyecto registra que la de equipo estaba bloqueada); y cada corrida del piloto cuesta entre 1,37 y
-  4,06 USD en Opus (spec 013). Lo que ya existe para ello: `piloto/piloto.mjs`, que aquí no arranca (le
-  faltan `node_modules` y apunta a otra máquina). Construir un enrutado que no se puede probar sería
-  justo lo que este repo llama «parece que funcionó».
+- **Las tareas largas por el Agent SDK (R8–R11) no están en esta rama**, y es lo primero que hay que
+  decir de ella. El audio las pide —«crea una campaña en Meta» va al Agent SDK, que planea y ejecuta por
+  tandas— y aquí no hay nada de eso. Se eligió lo que el propio audio pone primero —*«ese creo que es
+  el primer paso que tenemos que lograr, que lo que uno le pida lo haga»*— porque lo corto se puede
+  juzgar esta noche y lo largo no: `piloto/piloto.mjs` no arranca en esta máquina (le faltan
+  `node_modules` y apunta a otra), y el SDK funciona por Console pagando por uso —0,55 USD una llamada
+  mínima, entre 1,37 y 4,06 USD una corrida del piloto en Opus (spec 013)—. Un enrutado que no se puede
+  correr de punta a punta sería justo lo que este repo llama «parece que funcionó». Es la spec
+  siguiente, no un «quizá».
 - **La voz que se corta sola (R18).** Diagnosticada aparte la misma noche: no hay causa ganadora sin
   los logs del equipo de quien grabó la nota. Si se abre, es otra spec y otra rama.
 - **Homónimos del mismo tipo**, **el ejecutor que no resuelve un selector que él mismo ofreció**, y
@@ -248,10 +268,56 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
   exige que ya no aparezca el «quedaste en» que tapaba el hecho; su sabotaje, repetido, sigue en rojo. Para quien
   toque la demo: esos tres `StartsWith` deberían leer el `Termino` estructurado, no la prosa.
  
+- **2026-09-11 (el crítico de la rama, primera pasada: 4/10).** Un agente que no escribió el código
+  juzgó la rama contra el audio y la rúbrica. Lo que encontró y cómo quedó:
+  - **El tope frenaba el «pruebo este otro botón».** Dos fallos al candidato 1 de una lista numerada
+    frenaban también al 2 —con un rechazo que encima decía «elige otro candidato con which»—. El
+    candidato elegido es ahora parte del destino (204, ampliada).
+  - **La lista de homónimos contaba como intento fallido**, aunque no se pulsara nada. El resultado la
+    marca (`Ambiguo`) y la mano dice si fue un intento (`Intento`): promesa **207**, nueva.
+  - **Sabotear `UltimaMano` dejaba el contrato intacto**: 204 y 205 dependían de un dato que nadie
+    juzgaba (aprendizaje nº18). La 207 lo juzga.
+  - **`map_type` por UIA no dejaba mano**: fuera de SAP el tope no frenaba ninguna escritura. Ahora la
+    deja; ninguna promesa lo juzga, porque escribir por UIA necesita pantalla.
+  - **Una excepción contaba como logro** (`?? true`). Ahora es un intento que no se logró.
+  - **La medida del turno podía dar tiempos negativos** (un resultado que cruzaba el cierre) y no se
+    reiniciaba en un turno sin llamadas. Y medía desde la primera llamada del modelo, no desde que se
+    pidió: ahora dice también `desde_peticion=` (205, ampliada).
+  - **Con `speech_started` se contaba el turno antes de callarse.** Ahora callar va primero, y la línea
+    dice por qué empezó el turno (voz o texto): con altavoz, el eco también dispara `speech_started`.
+  - **El `which` de `map_show` mandaba a pulsar con el de `map_take`**, que numera en otro orden; y
+    `map_show` sugería un selector aunque lo compartieran varios. Las dos cosas, arregladas (206).
+  - **`map_take` decía «si no cambió, por ahí no era»**, y un Guardar que hace su trabajo no cambia de
+    pantalla. La descripción lo distingue ahora (206).
+  - **El juez del nivel 4 favorecía a la rama**: `analizar.py` solo contaba las llamadas que llegaban a
+    ejecutarse, así que un tercer intento suspendía en `main` y aprobaba aquí. Ahora cuenta lo frenado
+    (commit `8a98fa7`).
+  - **Esta spec decía cosas que no eran ciertas**: que R16 lo cubría el nivel 4 (hay un suelo de
+    ~1,8 s por intento que no navega), que R19 no se tocaba (se tocó `speech_started`), y dos razones
+    de R8 que eran excusas. Corregidas arriba.
+
+- **2026-09-11 (el sabotaje, segunda ronda).** Los mismos tres cuidados que en la primera; y las
+  cuatro de la primera que no cambiaron de patrón se repitieron sobre el código nuevo.
+
+  | Promesa | Sabotaje | Quedó |
+  |---|---|---|
+  | 204 | el destino se compara como texto crudo, sin aplanar | roja, **y también la 205** |
+  | 204 | el candidato elegido deja de ser parte del destino | roja |
+  | 205 | un resultado sin llamada en el turno vuelve a contar | roja |
+  | 206 | el `which` de `map_show` vuelve a mandar al de `map_take` | roja |
+  | 207 | «logrado» vuelve a ser «terminó», sin mirar si la pantalla cambió | roja |
+  | 207 | la lista de homónimos vuelve a contar como intento | roja |
+  | 202 | *(primera ronda, repetida)* el cierre vuelve a tapar el último hecho | roja |
+  | 203 | *(primera ronda, repetida)* se ignora `which` y se toma el primero | roja |
+  | 205 | *(primera ronda, repetida)* solo se cuenta lo que devolvió resultado | roja |
+  | 206 | *(primera ronda, repetida)* `map_take` vuelve a ofrecer `at` | roja |
+  
+  Diez de diez en rojo, cada una comprobada por diff de bytes y restaurada idéntica; recompilado al final con todo restaurado: **CONTRATO INTACTO, 176 juzgadas**. El contrato de la voz, 32/32.
+
 ## Cierre
 
 - [ ] Fase 0, la base con el binario de `main`: **no se pudo medir de noche** (salvapantallas OLED); el kit la corre junto a la rama
-- [x] Promesas 202–206 verdes; las 170 anteriores intactas (175 juzgadas, 0 rotas)
+- [x] Promesas 202–207 verdes; las 170 anteriores intactas (176 juzgadas, 0 rotas)
 - [x] Cada una rota a propósito, comprobada por diff, restaurada y recompilada después
 - [ ] Nivel 4, base y rama en las mismas tareas: **pendiente, con alguien delante** (`scripts/nivel4-voz/correr.ps1`)
 - [ ] El crítico de fidelidad al audio, con su veredicto pegado
