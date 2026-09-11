@@ -49,6 +49,10 @@ public sealed class TopeDeIntentos
     // condición which=1, 2, 3… eran claves nuevas del MISMO botón, sin límite (crítico final, 2026-09-11).
     private readonly Dictionary<string, (string Texto, IReadOnlyList<string> Candidatos)> _listas = new(StringComparer.Ordinal);
 
+    // Los fallos por el BOTÓN QUE SE PULSÓ, además de por lo pedido. Es lo que consulta el ejecutor antes
+    // de pulsar (AntesDePulsar): se pida como se pida, el mismo botón es el mismo botón (quinta pasada).
+    private readonly Dictionary<string, List<string>> _pulsados = new(StringComparer.Ordinal);
+
     /// <summary>
     /// null si la acción puede ir; si no, el motivo ya redactado para devolvérselo al cerebro: que van
     /// dos, qué salió en cada una, y qué hacer en vez de insistir.
@@ -94,6 +98,12 @@ public sealed class TopeDeIntentos
     /// «siempre logrado» dejaba el contrato INTACTO: un guardia que se cree puesto (aprendizaje nº18).</remarks>
     public void Despues(string herramienta, string destino, bool revento, bool? intento, bool? logro, string queSalio,
                         IReadOnlyList<string>? candidatos = null)
+        => Despues(herramienta, destino, revento, intento, logro, queSalio, candidatos, null);
+
+    /// <param name="pulsado">El selector que el ejecutor pulsó de verdad: sus fallos cuentan para ese
+    /// botón, se pida como se pida la próxima vez (<see cref="AntesDePulsar"/>).</param>
+    public void Despues(string herramienta, string destino, bool revento, bool? intento, bool? logro, string queSalio,
+                        IReadOnlyList<string>? candidatos, string? pulsado)
     {
         if (!Vigiladas.Contains(herramienta)) return;
         if (!revento && intento == false)
@@ -103,7 +113,32 @@ public sealed class TopeDeIntentos
             return;
         }
         if (revento || (intento == true && logro == false))
+        {
             Anota(herramienta, destino, false, queSalio);
+            if (!string.IsNullOrWhiteSpace(pulsado))
+                lock (_candado)
+                {
+                    string clave = herramienta + "|" + pulsado;
+                    if (!_pulsados.TryGetValue(clave, out var salio)) _pulsados[clave] = salio = new List<string>();
+                    salio.Add(Recortar(queSalio));
+                }
+        }
+    }
+
+    /// <summary>
+    /// La consulta del ejecutor justo antes de pulsar, con el selector que VA a pulsar: null si puede; si
+    /// ese mismo botón ya falló dos veces en el turno —pedido como fuera—, el motivo (promesa 204).
+    /// </summary>
+    public string? AntesDePulsar(string herramienta, string selector)
+    {
+        if (!Vigiladas.Contains(herramienta) || string.IsNullOrWhiteSpace(selector)) return null;
+        lock (_candado)
+        {
+            if (!_pulsados.TryGetValue(herramienta + "|" + selector, out var salio) || salio.Count < Maximo) return null;
+            return $"no lo intento una tercera vez: «{selector}» ya falló dos veces en este turno —1) {salio[0]} · "
+                 + $"2) {salio[1]}—, aunque se pidiera de otra forma: es el mismo botón. Cambia de vía: mira la "
+                 + "pantalla (map_look) y pulsa otra cosa, o dile al usuario qué está pasando.";
+        }
     }
 
     /// <summary>El usuario habló o escribió: lo de antes era otra petición.</summary>
@@ -113,6 +148,7 @@ public sealed class TopeDeIntentos
         {
             _fallidos.Clear();
             _listas.Clear();
+            _pulsados.Clear();
         }
     }
 

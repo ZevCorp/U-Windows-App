@@ -7466,6 +7466,62 @@ internal static class Contrato
                 $"con los selectores reales del ejecutor («{candsR[1]}»), pedir el 2 por su selector —con o sin which— es el 2");
             Debe(R("map_take", candsR[0]) == null, "y el 1, por su selector real, sigue siendo otro botón");
         }
+
+        // EL TOPE MIRA LO QUE SE VA A PULSAR (crítico, quinta pasada, 2026-09-11). Cinco pasadas
+        // encontraron cinco formas de la misma diferencia —el tope juzgaba lo PEDIDO y el ejecutor decide
+        // por sus reglas—: el mismo id antes y después de una lista (4 toques), y cualquier trozo de la
+        // etiqueta, que el ejecutor casa por contención (18 toques a un botón con 9 variantes). La clase se
+        // cierra donde se decide: el ejecutor le pregunta al tope con el selector que VA a pulsar.
+        var antesDe = t.GetMethod("AntesDePulsar");
+        var pAntes = typeof(RecorrerSegunElNucleo.Paso).GetProperty("AntesDePulsar");
+        var pPulsado = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Pulsado");
+        var despues8 = t.GetMethods().FirstOrDefault(m => m.Name == "Despues" && m.GetParameters().Length == 8);
+        if (antesDe == null || pAntes == null || pPulsado == null || despues8 == null)
+        { Pendiente("TopeDeIntentos.AntesDePulsar · Paso.AntesDePulsar · Resultado.Pulsado", "204", "017"); return; }
+        var pCual = typeof(RecorrerSegunElNucleo.Paso).GetProperty("Cual")!;
+        var pAmb = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Ambiguo")!;
+        var pCands = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Candidatos")!;
+        // Lo que hacen la voz y la mano en cada llamada, sin pantalla: el tope ante lo pedido, el
+        // ejecutor con la consulta dentro del paso, y lo que salió de vuelta al tope.
+        // Cuenta PULSACIONES —llamadas que tocaron algo—, no toques: una pulsación que no cambia la
+        // pantalla da dos toques (el ensayo de doble clic), y la primera versión de esta prueba los confundió.
+        int pulsadas = 0;
+        string Llamada(RecorrerSegunElNucleo b, List<string> toques, string exit, int cual)
+        {
+            string pedido = cual > 0 ? $"{exit}#which={cual}" : exit;
+            if (R("map_take", pedido) is string antesDeLlamar) return antesDeLlamar;
+            var pasoT = new RecorrerSegunElNucleo.Paso(exit);
+            if (cual > 0) pCual.SetValue(pasoT, cual);
+            pAntes.SetValue(pasoT, (Func<string, string?>)(sl => (string?)antesDe.Invoke(tope, new object[] { "map_take", sl })));
+            int toquesAntes = toques.Count;
+            var res = b.Recorre(new[] { pasoT });
+            if (toques.Count > toquesAntes) pulsadas++;
+            despues8.Invoke(tope, new object?[] { "map_take", pedido, false, !(bool)pAmb.GetValue(res)!,
+                res.Termino && res.Cambio, res.Cuenta, pCands.GetValue(res), pPulsado.GetValue(res) });
+            return res.Cuenta;
+        }
+
+        // El mismo id antes y después de una lista: dos toques, no cuatro.
+        nuevo.Invoke(tope, null);
+        var (bId, _, tId) = BatchCon(DosDescargas(), "uia://x.exe/a", new Dictionary<string, string>());
+        pulsadas = 0;
+        Llamada(bId, tId, "s:1", 0);
+        Llamada(bId, tId, "s:1", 0);
+        Llamada(bId, tId, "Descargas", 0);
+        string terceraVez = Llamada(bId, tId, "s:1", 0);
+        Debe(pulsadas == 2 && terceraVez.Contains("tercera"),
+            $"el mismo botón, pedido por su id antes y después de una lista, se pulsa dos veces y no más (se pulsó {pulsadas} veces; dijo: «{terceraVez}»)");
+
+        // Cualquier trozo de la etiqueta es el mismo botón: dos toques, no dos por variante.
+        nuevo.Invoke(tope, null);
+        var gUno = new Nucleo.Grafo();
+        gUno.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:9", "Descargas recientes", "ListItem") });
+        var (bUno, _, tUno) = BatchCon(gUno, "uia://x.exe/a", new Dictionary<string, string>());
+        pulsadas = 0;
+        foreach (var variante in new[] { "Descargas recientes", "Descargas", "descargas rec", "Descarga", "recientes" })
+            Llamada(bUno, tUno, variante, 0);
+        Debe(pulsadas == 2,
+            $"cinco formas de nombrar el mismo botón son el mismo botón: se pulsa dos veces y no más (se pulsó {pulsadas} veces)");
     }
 
     private static void CadaTurnoDejaSuMedida()
@@ -7655,6 +7711,30 @@ internal static class Contrato
         var llevados = mCaja == null ? null : pCandM.GetValue(mCaja) as IReadOnlyList<string>;
         Debe(llevados != null && llevados.SequenceEqual(new[] { "uia:a", "uia:b" }),
             "y la mano lleva los candidatos de la lista, en su orden: el tope los necesita para saber qué selector es cuál");
+
+        // Y la mano lleva lo que se pulsó de verdad, y la consulta al tope viaja dentro del paso hasta el
+        // ejecutor (promesa 204; quinta pasada del crítico).
+        var pPulsR = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Pulsado");
+        var pPulsM = tMano!.GetProperty("Pulsado");
+        var pHilo = typeof(SurfaceMapTools).GetProperty("AntesDePulsarEnEsteHilo");
+        var pAntesP = typeof(RecorrerSegunElNucleo.Paso).GetProperty("AntesDePulsar");
+        if (pPulsR == null || pPulsM == null || pHilo == null || pAntesP == null)
+        { Pendiente("SurfaceMapTools.Mano.Pulsado · SurfaceMapTools.AntesDePulsarEnEsteHilo", "207", "017"); return; }
+        object pulsada = new RecorrerSegunElNucleo.Resultado(1, 1, "uia://x.exe/a", true,
+            "hice los 1 paso(s): pulsé «Descargas» y la pantalla no cambió.", false);
+        pPulsR.SetValue(pulsada, "s:1");
+        Toma((RecorrerSegunElNucleo.Resultado)pulsada);
+        object? mP = mapa.UltimaMano;
+        Debe(mP != null && (string?)pPulsM.GetValue(mP) == "s:1", "la mano dice qué selector se pulsó de verdad");
+
+        Func<string, string?> consulta = _ => null;
+        RecorrerSegunElNucleo.Paso? visto = null;
+        mapa.RecorrerPorElNucleo = pasos => { visto = pasos[0]; return siguiente; };
+        pHilo.SetValue(mapa, consulta);
+        mapa.Call("map_take", new Dictionary<string, string> { ["exit"] = "Descargas" });
+        pHilo.SetValue(mapa, null);
+        Debe(visto != null && ReferenceEquals(pAntesP.GetValue(visto), consulta),
+            "y la consulta al tope que la voz pone en su hilo viaja dentro del paso hasta el ejecutor");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

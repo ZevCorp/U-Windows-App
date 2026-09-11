@@ -1673,8 +1673,22 @@ public sealed class ConversacionEnVivo : IDisposable
                 Accion?.Invoke(EnCurso(f.Nombre, f.Args), false);
                 var reloj = System.Diagnostics.Stopwatch.StartNew();
                 bool revento = false;
+                // EL EJECUTOR LE PREGUNTA AL TOPE con el botón que va a pulsar (promesa 204): la consulta se
+                // pone en ESTE hilo solo mientras dura la llamada, y viaja dentro del paso hasta el ejecutor.
+                string herramientaDelTope = f.Nombre, pedidoAlTope = TopeDeIntentos.DestinoDe(f.Nombre, f.Args);
+                _mapa.AntesDePulsarEnEsteHilo = sel =>
+                {
+                    string? freno = _tope.AntesDePulsar(herramientaDelTope, sel);
+                    if (freno != null)
+                    {
+                        LogBus.Log("voz-viva", $"tope: «{herramientaDelTope}» no pulsa «{sel}» — {freno}");
+                        _cuenta.Rechazada(herramientaDelTope, pedidoAlTope);
+                    }
+                    return freno;
+                };
                 try { resultado = _mapa.Call(f.Nombre, f.Args); }
                 catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; revento = true; }
+                finally { _mapa.AntesDePulsarEnEsteHilo = null; }
                 reloj.Stop();
                 // CÓMO SALIÓ, leído de la mano y no de la prosa (aprendizaje nº2). Sin resultado
                 // estructurado —todo lo que no es map_take ni map_type— ni cuenta como fallo para el tope
@@ -1684,7 +1698,7 @@ public sealed class ConversacionEnVivo : IDisposable
                 // Qué cuenta como intento fallido lo decide TopeDeIntentos.Despues, donde lo juzga la 204:
                 // una excepción sí, la lista de homónimos no (y se recuerda, para que `which` separe), y lo
                 // que no trae mano no se adivina.
-                _tope.Despues(f.Nombre, destino, revento, mano?.Intento, mano?.Logro, resultado, mano?.Candidatos);
+                _tope.Despues(f.Nombre, destino, revento, mano?.Intento, mano?.Logro, resultado, mano?.Candidatos, mano?.Pulsado);
                 _cuenta.Resultado(f.Nombre, destino, !revento && mano is { Logro: true });
                 // El pulso lo apunta SurfaceMapTools.Call; contarlo aquí también sería contarlo dos veces.
                 Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, reloj.ElapsedMilliseconds), true);

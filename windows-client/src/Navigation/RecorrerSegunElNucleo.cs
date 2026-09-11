@@ -45,6 +45,11 @@ public sealed class RecorrerSegunElNucleo
         // FUERA DEL CONSTRUCTOR a propósito: la promesa 103 construye pasos por reflexión con cuatro
         // argumentos, y reflexión no rellena opcionales. Un quinto parámetro la rompía (2026-09-11).
         public int Cual { get; init; }
+
+        /// <summary>La consulta al tope de intentos de quien llama, con el selector que se VA a pulsar:
+        /// null si puede; si no, el motivo, y el paso no se pulsa (promesa 204). La trae el paso porque
+        /// solo aquí se sabe qué botón es, se haya pedido como se haya pedido.</summary>
+        public Func<string, string?>? AntesDePulsar { get; init; }
     }
 
     /// <summary>Qué pasó: cuántos se hicieron, de cuántos, dónde quedamos, y el relato honesto.</summary>
@@ -59,6 +64,10 @@ public sealed class RecorrerSegunElNucleo
         /// como datos para que el tope sepa que pedir uno por su selector es pedir ese candidato, sin leer
         /// la prosa de la cuenta (promesas 203 y 204; crítico, tercera pasada, 2026-09-11).</summary>
         public IReadOnlyList<string>? Candidatos { get; init; }
+
+        /// <summary>El selector que se pulsó de verdad en la tanda, si se pulsó algo: el tope cuenta los
+        /// fallos por el botón tocado, no por cómo se pidió (promesa 204).</summary>
+        public string? Pulsado { get; init; }
     }
 
     private readonly Nucleo.Grafo _grafo;
@@ -105,6 +114,13 @@ public sealed class RecorrerSegunElNucleo
     public Func<string, bool>? AccionableAunSinVerse { get; init; }
 
     public Resultado Recorre(IReadOnlyList<Paso> pasos)
+    {
+        string? pulsado = null;
+        var r = RecorreDentro(pasos, s => pulsado = s);
+        return pulsado == null ? r : r with { Pulsado = pulsado };
+    }
+
+    private Resultado RecorreDentro(IReadOnlyList<Paso> pasos, Action<string> alPulsar)
     {
         if (pasos.Count == 0)
             return new(0, 0, _donde() ?? "", true, "no me diste ningún paso.");
@@ -191,6 +207,14 @@ public sealed class RecorrerSegunElNucleo
 
             // PULSAR pasa por el mismo camino de siempre: verificar por consecuencia (promesas 44 y
             // 45) y cruzar el tramo (46). El batch no inventa una segunda manera de tocar.
+            // EL TOPE MIRA LO QUE SE VA A PULSAR, no lo que se pidió (promesa 204; crítico, quinta pasada,
+            // 2026-09-11). Cinco pasadas encontraron cinco formas de la misma diferencia —el mismo id antes y
+            // después de una lista, cualquier trozo de la etiqueta que LoNombra casa por contención (18
+            // toques a un botón con 9 variantes)—, y cada una se cerraba copiando al tope una regla más de
+            // este ejecutor. La clase se cierra donde se decide: aquí ya se sabe qué botón es.
+            if (paso.AntesDePulsar?.Invoke(elegido.Que.Selector) is string frenado)
+                return Parcial(i, pasos.Count, frenado, conVivos: false);
+            alPulsar(elegido.Que.Selector);
             var r = _pulsar.Pulsa(elegido.Que.Selector, elegido.Que.Etiqueta);
             if (!r.SePudo)
                 return Parcial(i, pasos.Count, r.Cuenta, conVivos: true);

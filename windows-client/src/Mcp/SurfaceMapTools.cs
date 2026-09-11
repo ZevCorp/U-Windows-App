@@ -2262,7 +2262,7 @@ public sealed class SurfaceMapTools
         // «dime el selector». Los antiguos `action` y `at` no llegaban aquí desde e3c3ad8: el gesto lo
         // aprende la arista (spec 003), y ofrecerlos era la ilusión de controlarlo (promesa 206).
         int.TryParse(cual, out int n);
-        var paso = new Navigation.RecorrerSegunElNucleo.Paso(salida) { Cual = n };
+        var paso = new Navigation.RecorrerSegunElNucleo.Paso(salida) { Cual = n, AntesDePulsar = _antesDePulsar };
         // LA MISMA COREOGRAFÍA QUE EL PLAN (promesa 191): al comprobar, o cuando el piloto trae algo que
         // decir o un recuerdo, la mano señala, dice, cuelga y muestra, y solo después pulsa.
         var r = DarUnPasoConCoreografia != null && (SenalarAlActuar || decir.Length > 0 || recuerdo.Length > 0)
@@ -2285,9 +2285,23 @@ public sealed class SurfaceMapTools
     {
         /// <summary>Si la tanda contestó con una lista de homónimos: sus selectores, en el orden de su número.</summary>
         public IReadOnlyList<string>? Candidatos { get; init; }
+
+        /// <summary>El selector que el ejecutor pulsó de verdad, si pulsó algo.</summary>
+        public string? Pulsado { get; init; }
     }
 
     [ThreadStatic] private static Mano? _ultimaMano;
+
+    // LA CONSULTA AL TOPE ANTES DE PULSAR (promesa 204). La pone la voz en SU hilo justo antes de llamar
+    // y la quita al volver; viaja dentro del paso hasta el ejecutor, que la hace con el selector que va
+    // a pulsar. Por hilo, como la mano: una llamada del servidor MCP desde otro hilo no la hereda.
+    [ThreadStatic] private static Func<string, string?>? _antesDePulsar;
+
+    public Func<string, string?>? AntesDePulsarEnEsteHilo
+    {
+        get => _antesDePulsar;
+        set => _antesDePulsar = value;
+    }
 
     public Mano? UltimaMano => _ultimaMano;
 
@@ -2295,7 +2309,7 @@ public sealed class SurfaceMapTools
     {
         // La lista numerada de homónimos NO es un intento: no se pulsó nada, y contarla como fallo
         // frenaba el «pruebo este otro botón» que pide el audio (crítico de la rama, 2026-09-11).
-        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio), Intento: !r.Ambiguo) { Candidatos = r.Candidatos };
+        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio), Intento: !r.Ambiguo) { Candidatos = r.Candidatos, Pulsado = r.Pulsado };
         return r.Cuenta;
     }
 
