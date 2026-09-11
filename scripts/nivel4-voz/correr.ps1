@@ -41,7 +41,7 @@ foreach ($par in @(@("base", $Base), @("rama", $Rama))) {
   Write-Host "== $($par[0]): $($par[1])" -ForegroundColor Cyan
   & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aqui "conducir.ps1") -Exe $par[1] -Datos $datos -Salida (Join-Path $sal $par[0]) -Tareas (Join-Path $aqui "tareas.json") -Repeticiones $Repeticiones -Cuales $Cuales
   if ($LASTEXITCODE -ne 0) { Write-Host "La corrida '$($par[0])' no termino (codigo $LASTEXITCODE): mira $sal\$($par[0])\conductor.log" -ForegroundColor Red; exit $LASTEXITCODE }
-  & python (Join-Path $aqui "analizar.py") (Join-Path $sal $par[0]) $par[0] | Out-File (Join-Path $sal ($par[0] + ".md")) -Encoding utf8
+  & python (Join-Path $aqui "analizar.py") (Join-Path $sal $par[0]) $par[0] --plan ($Repeticiones * $Cuales.Split(",").Count) | Out-File (Join-Path $sal ($par[0] + ".md")) -Encoding utf8
 }
 Write-Host ""
 Get-Content (Join-Path $sal "base.md"), (Join-Path $sal "rama.md") -Encoding UTF8

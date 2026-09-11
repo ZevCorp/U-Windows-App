@@ -1,13 +1,19 @@
-"""Analiza una corrida de nivel4.ps1: una fila por tarea y repeticion, y el agregado.
+"""Analiza una corrida de conducir.ps1: una fila por tarea y repeticion, y el agregado.
 
-Uso: python analizar_nivel4.py <carpeta_de_salida> [<etiqueta>]
+Uso: python analizar.py <carpeta_de_salida> [<etiqueta>] [--plan N]
 
 Lee <carpeta>/T#-r#.log (el trozo de log de U desde que se pulso Enter) y resumen.jsonl.
 Umbrales de la spec 017, fijados antes de medir:
-  - intentos: acciones al mismo destino dentro de la peticion, maximo 2 (lectura estricta del audio)
+  - intentos: acciones al mismo destino dentro de la peticion, maximo 2 (lectura estricta del audio);
+    lo que el tope de la rama FRENA cuenta como intento, y la lista numerada de homonimos NO
   - tiempo por accion: del "->" a su "<-", maximo 2000 ms
   - aprobado: estado final alcanzado, <=2 intentos y todas las acciones <=2000 ms
-El denominador es el plan (tareas x repeticiones), no lo que se llego a ejecutar (patron n.10).
+El denominador es el plan (--plan, que correr.ps1 calcula como tareas x repeticiones), no lo que se
+llego a ejecutar (patron n.10). Sin --plan se avisa de que el denominador es lo ejecutado.
+
+POR QUE CUENTA LOS RECHAZOS (critico de la noche del 2026-09-11): lo que el tope frena no deja linea
+"mapa-mcp: ->". Contando solo esas, un tercer intento suspendia en main y "aprobaba" en la rama con
+el mismo comportamiento del modelo: el juez favorecia a quien lo habia escrito.
 """
 import json
 import re
@@ -25,6 +31,10 @@ RE_LINEA = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] ([\w-]+): (.*)$")
 RE_IDA = re.compile(r"^(?:→|->) (\S+)\s*(.*)$")
 RE_VUELTA = re.compile(r"^(?:←|<-)\s*\(?\s*(\d+)\s*ms\)?\s*(.*)$")
 RE_ARG = re.compile(r"(\w+)=(.*?)(?=\s+\w+=|$)")
+RE_LISTA = re.compile(r"hay \d+ puertas vivas para|pediste la \d+, pero")
+RE_RECHAZO = re.compile(r"tercera vez: «(.+?)» ya falló")
+FALLOS = ("no cambió", "no pude", "paré en el paso", "no lo conozco", "no lo veo", "no está viva",
+          "la herramienta falló", "no sé dónde", "no se ejecuta")
 
 
 def aplanar(s: str) -> str:
@@ -38,14 +48,26 @@ def aplanar(s: str) -> str:
     return " ".join(s.split())
 
 
-def analizar_trozo(texto: str):
+def clave(nombre: str, cual: str = "") -> str:
+    """El destino como lo compara el tope: aplanado, y con el candidato si se eligio uno."""
+    m = re.match(r"^(.*?)\s*(?:#which=|\(which=)(\d+)\)?$", nombre or "")
+    if m:
+        nombre, cual = m.group(1), m.group(2)
+    return aplanar(nombre) + (f"#{cual}" if cual else "")
+
+
+def seg(h, m, s):
+    return int(h) * 3600 + int(m) * 60 + int(s)
+
+
+def analizar_trozo(texto: str, t0_seg):
     llamadas, acciones, dijo, rechazos, turnos = [], [], [], [], []
     pendiente = None
     for linea in texto.splitlines():
         m = RE_LINEA.match(linea.strip())
         if not m:
             continue
-        seg = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+        s = seg(m.group(1), m.group(2), m.group(3))
         tag, msg = m.group(4), m.group(5)
         if tag == "mapa-mcp":
             ida, vuelta = RE_IDA.match(msg), RE_VUELTA.match(msg)
@@ -53,13 +75,17 @@ def analizar_trozo(texto: str):
                 tool = ida.group(1)
                 args = dict(RE_ARG.findall(ida.group(2)))
                 llamadas.append(tool)
-                pendiente = {"tool": tool, "destino": aplanar(args.get(ARG_DESTINO.get(tool, ""), "")),
-                             "seg": seg, "ms": None, "resultado": ""}
+                pendiente = {"tool": tool, "destino": clave(args.get(ARG_DESTINO.get(tool, ""), ""), args.get("which", "")),
+                             "seg": s, "fin": None, "ms": None, "resultado": "", "lista": False, "fallida": False}
                 if tool in ACCIONES:
                     acciones.append(pendiente)
             elif vuelta and pendiente is not None:
                 pendiente["ms"] = int(vuelta.group(1))
-                pendiente["resultado"] = vuelta.group(2)[:160]
+                pendiente["fin"] = s
+                r = vuelta.group(2)
+                pendiente["resultado"] = r[:200]
+                pendiente["lista"] = bool(RE_LISTA.search(r))
+                pendiente["fallida"] = (not pendiente["lista"]) and any(f in r for f in FALLOS)
                 pendiente = None
         elif tag == "voz-viva":
             if msg.startswith("ejecutando «map_look»"):
@@ -67,28 +93,58 @@ def analizar_trozo(texto: str):
             elif re.match(r"^\S{1,2} dijo:", msg):
                 dijo.append(msg.split("dijo:", 1)[1].strip())
             elif msg.startswith("tope:"):
-                rechazos.append(msg)
+                r = RE_RECHAZO.search(msg)
+                rechazos.append({"destino": clave(r.group(1)) if r else "?", "texto": msg})
         elif tag == "voz-turno":
             turnos.append(msg)
+
+    intentos = [a for a in acciones if not a["lista"]]
     por_destino = {}
-    for a in acciones:
+    for a in intentos:
         por_destino[(a["tool"], a["destino"])] = por_destino.get((a["tool"], a["destino"]), 0) + 1
-    intentos_max = max(por_destino.values(), default=0)
-    lentas = [a for a in acciones if a["ms"] is not None and a["ms"] > 2000]
-    sin_vuelta = [a for a in acciones if a["ms"] is None]
-    pos_look = [i + 1 for i, t in enumerate(llamadas) if t == "map_look"]
+    for r in rechazos:
+        k = next((k for k in por_destino if k[1] == r["destino"]), ("map_take", r["destino"]))
+        por_destino[k] = por_destino.get(k, 0) + 1
+    fines = [a["fin"] for a in intentos if a["fin"] is not None]
+    peticion = (max(fines) - t0_seg) if (fines and t0_seg is not None) else None
     return {
-        "llamadas": len(llamadas), "distintas": len(set(llamadas)), "acciones": len(acciones),
-        "intentos_max": intentos_max, "lentas": len(lentas), "sin_vuelta": len(sin_vuelta),
-        "ms_acciones": [a["ms"] for a in acciones if a["ms"] is not None],
-        "pos_look": pos_look, "dijo": dijo, "rechazos": rechazos, "turnos": turnos,
-        "secuencia": [f'{a["tool"]}({a["destino"] or "·"}) {a["ms"] if a["ms"] is not None else "?"}ms' for a in acciones],
+        "llamadas": len(llamadas) + len(rechazos), "distintas": len(set(llamadas)),
+        "primera": llamadas[0] if llamadas else "—",
+        "acciones": len(intentos), "listas": sum(a["lista"] for a in acciones),
+        "fallidas": sum(a["fallida"] for a in intentos), "rechazos": len(rechazos),
+        "intentos_max": max(por_destino.values(), default=0),
+        "lentas": sum(1 for a in intentos if a["ms"] is not None and a["ms"] > 2000),
+        "sin_vuelta": sum(1 for a in intentos if a["ms"] is None),
+        "ms_acciones": [a["ms"] for a in intentos if a["ms"] is not None],
+        "peticion_s": peticion,
+        "destinos": [a["destino"] for a in intentos if a["tool"] == "map_take"],
+        "pos_look": [i + 1 for i, t in enumerate(llamadas) if t == "map_look"],
+        "dijo": dijo, "rechazos_txt": [r["texto"] for r in rechazos], "turnos": turnos,
+        "secuencia": [f'{a["tool"]}({a["destino"] or "·"}){" [lista]" if a["lista"] else ""} '
+                      f'{a["ms"] if a["ms"] is not None else "?"}ms{" ✗" if a["fallida"] else ""}' for a in acciones],
     }
 
 
+def ejercita(tarea, a):
+    """¿La corrida pasó por lo que la tarea existe para probar? Si no, no mide su requisito."""
+    d = a["destinos"]
+    if tarea == "T4":
+        return any(x.startswith("descargas") for x in d)
+    if tarea == "T5":
+        i = next((k for k, x in enumerate(d) if x.startswith("sistema")), None)
+        return i is not None and any(x.startswith("bluetooth") for x in d[i + 1:])
+    return True
+
+
 def main():
-    carpeta = Path(sys.argv[1])
-    etiqueta = sys.argv[2] if len(sys.argv) > 2 else carpeta.name
+    args = [x for x in sys.argv[1:]]
+    plan = None
+    if "--plan" in args:
+        k = args.index("--plan")
+        plan = int(args[k + 1])
+        del args[k:k + 2]
+    carpeta = Path(args[0])
+    etiqueta = args[1] if len(args) > 1 else carpeta.name
     resumen = {}
     rj = carpeta / "resumen.jsonl"
     if rj.exists():
@@ -102,38 +158,50 @@ def main():
         if not m:
             continue
         tarea, rep = m.group(1), int(m.group(2))
-        a = analizar_trozo(f.read_text(encoding="utf-8", errors="replace"))
         r = resumen.get((tarea, rep), {})
+        t0 = None
+        if r.get("t0"):
+            h, mi, s = r["t0"].split(".")[0].split(":")
+            t0 = seg(h, mi, s)
+        a = analizar_trozo(f.read_text(encoding="utf-8", errors="replace"), t0)
         a.update(tarea=tarea, rep=rep, estado_final=bool(r.get("estado_final")), tope=bool(r.get("tope")))
-        a["aprobado"] = a["estado_final"] and a["intentos_max"] <= 2 and a["lentas"] == 0 and a["sin_vuelta"] == 0
+        a["ejercita"] = ejercita(tarea, a)
+        a["aprobado"] = (a["estado_final"] and a["ejercita"] and a["intentos_max"] <= 2
+                         and a["lentas"] == 0 and a["sin_vuelta"] == 0)
         filas.append(a)
 
-    planeadas = len({(t, r) for (t, r) in resumen}) or len(filas)
+    denominador = plan if plan is not None else len(filas)
     print(f"## Nivel 4 · {etiqueta}\n")
-    print("| Tarea | Rep | Estado final | Llamadas | Distintas | Acciones | Intentos máx. | Acciones > 2 s | map_look en | Aprobada |")
-    print("|---|---|---|---|---|---|---|---|---|---|")
+    if plan is None:
+        print("> **Aviso:** sin `--plan`, el denominador es lo ejecutado y no el plan.\n")
+    print("| Tarea | Rep | Estado final | Ejercita | 1.ª herr. | Llamadas | Distintas | Acciones | Fallidas | Frenadas | Intentos máx. | > 2 s | Petición | Aprobada |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for a in filas:
-        print(f'| {a["tarea"]} | {a["rep"]} | {"sí" if a["estado_final"] else "no"} | {a["llamadas"]} | {a["distintas"]} | '
-              f'{a["acciones"]} | {a["intentos_max"]} | {a["lentas"]} | {",".join(map(str, a["pos_look"])) or "—"} | '
-              f'{"**sí**" if a["aprobado"] else "no"} |')
+        pet = f'≈{a["peticion_s"]} s' if a["peticion_s"] is not None else "—"
+        print(f'| {a["tarea"]} | {a["rep"]} | {"sí" if a["estado_final"] else "no"} | {"sí" if a["ejercita"] else "**no**"} | '
+              f'{a["primera"]} | {a["llamadas"]} | {a["distintas"]} | {a["acciones"]} | {a["fallidas"]} | {a["rechazos"]} | '
+              f'{a["intentos_max"]} | {a["lentas"]} | {pet} | {"**sí**" if a["aprobado"] else "no"} |')
     ms = [x for a in filas for x in a["ms_acciones"]]
-    aprob = sum(a["aprobado"] for a in filas)
-    print(f"\n**Aprobadas: {aprob} de {planeadas}** (el plan como denominador).")
+    print(f"\n**Aprobadas: {sum(a['aprobado'] for a in filas)} de {denominador}** (el plan como denominador).")
+    print("«Ejercita = no» es que la corrida no pasó por lo que la tarea prueba (T4: pulsar «Descargas»; "
+          "T5: pasar por Sistema); aunque el estado final sea el bueno, no cuenta como aprobada.")
+    print("«Petición» va desde el Enter hasta el último resultado de una acción, con resolución de ±1 s: "
+          "incluye la latencia del modelo.")
     if ms:
-        print(f"Acciones medidas: {len(ms)} · mediana {median(ms):.0f} ms · ≤ 2 s: {sum(x <= 2000 for x in ms)}/{len(ms)} · máx. {max(ms)} ms")
+        print(f"\nAcciones medidas: {len(ms)} · mediana {median(ms):.0f} ms · ≤ 2 s: {sum(x <= 2000 for x in ms)}/{len(ms)} · máx. {max(ms)} ms")
     if filas:
-        print(f"Llamadas por petición: mediana {median(a['llamadas'] for a in filas)} · máx. {max(a['llamadas'] for a in filas)}")
-        print(f"Estado final alcanzado: {sum(a['estado_final'] for a in filas)}/{planeadas}")
-        print(f"Tareas que agotaron el tope de observación sin que U hablara: {sum(a['tope'] for a in filas)}")
+        print(f"Estado final alcanzado: {sum(a['estado_final'] for a in filas)}/{denominador} · "
+              f"frenadas por el tope: {sum(a['rechazos'] for a in filas)} · listas de homónimos: {sum(a['listas'] for a in filas)}")
+        print(f"Tareas que agotaron la observación sin que U hablara: {sum(a['tope'] for a in filas)}")
     print("\n### Secuencias\n")
     for a in filas:
         print(f'- **{a["tarea"]} r{a["rep"]}**: {" → ".join(a["secuencia"]) or "(ninguna acción)"}')
         for d in a["dijo"][-2:]:
             print(f"  - Ü dijo: «{d[:180]}»")
-        for x in a["rechazos"]:
-            print(f"  - {x[:180]}")
+        for x in a["rechazos_txt"]:
+            print(f"  - {x[:200]}")
         for x in a["turnos"]:
-            print(f"  - voz-turno: {x[:180]}")
+            print(f"  - voz-turno: {x[:200]}")
     (carpeta / "analisis.json").write_text(json.dumps(filas, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
