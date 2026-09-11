@@ -167,20 +167,29 @@ public sealed class TopeDeIntentos
             : v.Trim();
     }
 
-    /// <summary>La clave con el candidato solo si esa salida dio lista en este turno; si no, sin él.
-    /// Se llama con el candado puesto.</summary>
+    /// <summary>La clave: el candidato, si se sabe cuál es —por su selector en cualquier lista del turno,
+    /// o por su número en la lista de su nombre—; si no, el destino sin él. Con el candado puesto.</summary>
     private (string Clave, string? Lista) ClaveYLista(string herramienta, string destino)
     {
+        // 1. EL SELECTOR EXACTO DE UN CANDIDATO ES ESE CANDIDATO, venga con `which` o sin él, y se busca
+        //    en TODAS las listas del turno. Son las reglas del ejecutor —EsperarloVivo: «el selector
+        //    exacto manda», y entonces `which` no se lee—, y un selector que no es `uia:name=` (los de
+        //    SAP) no se aplana a la etiqueta de su lista. Hasta el 2026-09-11 el tope comparaba lo
+        //    PEDIDO y el ejecutor decidía por sus reglas: la cuarta pasada del crítico contó con una
+        //    sonda 6 toques al mismo botón con «selector#which=N», y 4 con selectores de SAP (nº16).
+        string pedido = SinCual(destino).Trim();
+        foreach (var (claveLista, lista) in _listas)
+        {
+            if (!claveLista.StartsWith(herramienta + "|", StringComparison.Ordinal)) continue;
+            for (int i = 0; i < lista.Candidatos.Count; i++)
+                if (string.Equals(lista.Candidatos[i], pedido, StringComparison.Ordinal))
+                    return ($"{claveLista}#{i + 1}", lista.Texto);
+        }
+        // 2. POR NOMBRE: con lista de ese nombre, `which` elige el candidato; sin ella, no abre clave.
         string sinCual = herramienta + "|" + Destino(SinCual(destino));
-        if (!_listas.TryGetValue(sinCual, out var lista)) return (sinCual, null);
-        // Con lista, el candidato es el número pedido o, si se pidió por su selector, el número de ese
-        // selector en la lista: el mismo botón no cambia de clave cambiando de forma de pedirlo (crítico,
-        // tercera pasada, 2026-09-11: el rechazo entregaba el selector y daba dos intentos más).
-        string d = (destino ?? "").Trim();
-        int k = -1;
-        for (int i = 0; i < lista.Candidatos.Count && k < 0; i++)
-            if (string.Equals(lista.Candidatos[i].Trim(), d, StringComparison.OrdinalIgnoreCase)) k = i;
-        return (k >= 0 ? $"{sinCual}#{k + 1}" : herramienta + "|" + Destino(destino), lista.Texto);
+        return _listas.TryGetValue(sinCual, out var suya)
+            ? (herramienta + "|" + Destino(destino), suya.Texto)
+            : (sinCual, null);
     }
 
     private static string SinCual(string destino)

@@ -7433,6 +7433,39 @@ internal static class Contrato
             "y which=02 o which=+2 son el 2, como los lee el ejecutor");
         Debe(R("map_take", sel[0]) == null && R("map_take", Cand("1")) == null,
             "pero el 1, por su selector o por su número, sigue siendo otro botón");
+
+        // CON `which` O CON LOS SELECTORES REALES, EL MISMO BOTÓN (crítico, cuarta pasada, 2026-09-11).
+        // El ejecutor pulsa el selector exacto e ignora `which` (EsperarloVivo: «el selector exacto
+        // manda»), y un selector que no es `uia:name=` no se aplana a su etiqueta. «selector#which=N» daba
+        // dos intentos más por cada N, y con selectores como los de la tanda (s:1, s:2) o los de SAP la
+        // lista no se encontraba nunca: la sonda sobre el U.dll contó 6 y 4 toques al mismo botón.
+        string Sel(string sl, string n) => (string)destinoDe!.Invoke(null, new object?[] { "map_take",
+            new Dictionary<string, string> { ["exit"] = sl, ["which"] = n } })!;
+        nuevo.Invoke(tope, null);
+        DC("Descargas", false, false, false, Lista, sel);
+        D(sel[1], false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        D(sel[1], false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        Debe(R("map_take", Sel(sel[1], "5")) != null && R("map_take", Sel(sel[1], "7")) != null,
+            "el selector exacto de un candidato, con cualquier which, es ese candidato: el ejecutor pulsa el selector e ignora which");
+        Debe(R("map_take", Sel(sel[0], "2")) == null,
+            "y el selector del 1 con which=2 es el 1 —el que se pulsa—: los fallos del 2 no lo frenan");
+
+        // Y CON LOS CANDIDATOS REALES DEL EJECUTOR, no con los de este test: la tanda de la 203. Si el
+        // contrato no cruza las dos piezas, elige el caso que pasa (crítico, cuarta pasada).
+        nuevo.Invoke(tope, null);
+        var (bR, _, _) = BatchCon(DosDescargas(), "uia://x.exe/a", RutasDeDescargas);
+        var rR = bR.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Descargas") });
+        var candsR = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Candidatos")?.GetValue(rR) as IReadOnlyList<string>;
+        Debe(candsR is { Count: 2 }, "la tanda de la 203 devuelve sus dos candidatos como datos");
+        if (candsR is { Count: 2 })
+        {
+            DC("Descargas", false, false, false, rR.Cuenta, candsR);
+            D(Cand("2"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+            D(Cand("2"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+            Debe(R("map_take", candsR[1]) != null && R("map_take", Sel(candsR[1], "9")) != null,
+                $"con los selectores reales del ejecutor («{candsR[1]}»), pedir el 2 por su selector —con o sin which— es el 2");
+            Debe(R("map_take", candsR[0]) == null, "y el 1, por su selector real, sigue siendo otro botón");
+        }
     }
 
     private static void CadaTurnoDejaSuMedida()
