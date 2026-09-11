@@ -7353,6 +7353,8 @@ internal static class Contrato
             + "Por nombre, por selector o en minúsculas es el MISMO destino (aprendizaje nº16)");
         Debe(tercero != null && tercero.Contains("no cambió") && tercero.Contains("no lo encontré"),
             "y dice qué salió en cada uno: es lo que el cerebro necesita para cambiar de vía en vez de insistir");
+        Debe(tercero != null && tercero.Contains("mismo botón"),
+            "y al pulsar dice que pedirlo de otra forma es el mismo botón: el ejecutor lo cumple (séptima pasada)");
         Debe(R("map_take", "Documentos") == null, "otro destino no hereda el castigo");
 
         nuevo.Invoke(tope, null);
@@ -7532,8 +7534,11 @@ internal static class Contrato
         nuevo.Invoke(tope, null);
         despues8.Invoke(tope, new object?[] { "map_type", "Nombre", false, true, false, "no pude escribir en «Nombre»", null, null });
         despues8.Invoke(tope, new object?[] { "map_type", "uia:name=Nombre;ct=Edit", false, true, false, "no pude escribir en «Nombre»", null, null });
-        Debe(R("map_type", "nombre") != null,
+        string? alEscribir = R("map_type", "nombre");
+        Debe(alEscribir != null,
             "escribir por tercera vez en un campo que ya falló dos veces, por su nombre o por su selector UIA, tampoco se ejecuta");
+        Debe(alEscribir != null && !alEscribir.Contains("mismo botón") && alEscribir.Contains("otro campo"),
+            $"y al escribir el rechazo no promete «es el mismo botón» —ahí no se cumple— ni manda pulsar: manda otro campo (séptima pasada; dijo: «{alEscribir}»)");
     }
 
     private static void CadaTurnoDejaSuMedida()

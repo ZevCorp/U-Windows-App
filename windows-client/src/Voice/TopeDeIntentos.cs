@@ -74,7 +74,9 @@ public sealed class TopeDeIntentos
                  + (lista != null
                      ? $"De la lista, prueba OTRO candidato con which —el 1 y el 2 son botones distintos—: {lista} "
                        + "O dile al usuario qué está pasando."
-                     : "Cambia de vía: mira la pantalla (map_look) y pulsa otra cosa, o dile al usuario qué está pasando.");
+                     : herramienta == "map_type"
+                         ? "Cambia de vía: mira la pantalla (map_look) y escribe en otro campo, o dile al usuario qué está pasando."
+                         : "Cambia de vía: mira la pantalla (map_look) y pulsa otra cosa, o dile al usuario qué está pasando.");
         }
     }
 
