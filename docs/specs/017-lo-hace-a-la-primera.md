@@ -80,7 +80,7 @@ reciclan; los huecos están permitidos.
 |---|---|---|
 | 202 | pulsar dice lo que pasó: una tanda que termina bien distingue «ahora estás en Y» de «la pantalla no cambió», y «hice los N paso(s)» ya no tapa el último hecho | 2 |
 | 203 | con varias puertas vivas para un mismo nombre no se pide un selector a ciegas: se numeran 1..N en orden estable con su tipo y, si se sabe, a dónde llevan; y un paso que trae cuál pulsa esa y solo esa | 3 |
-| 204 | dos intentos y no tres: en un mismo turno del usuario, la tercera acción hacia un destino que ya falló dos veces no se ejecuta, y se dice qué salió en cada una; el destino es el mismo se pida por nombre o por selector | 4 |
+| 204 | dos intentos y no tres: en un mismo turno del usuario, la tercera acción hacia un destino que ya falló dos veces no se ejecuta, y se dice qué salió en cada una; al pulsar con map_take, el mismo botón es el mismo destino se pida como se pida; al escribir, el campo cuenta tal como se pidió | 4 |
 | 205 | cada turno del usuario deja una línea voz-turno con su medida: llamadas, herramientas distintas, el máximo de intentos a un mismo destino y los milisegundos hasta la primera acción y la última; lo rechazado y lo retirado también cuentan | 1 |
 | 206 | el catálogo le pide al cerebro lo que las manos usan: map_take y map_type no ofrecen argumentos que su cuerpo ignora, map_take trae which, y las instrucciones mandan mirar y elegir con which antes que preguntar; la regla escrita de intentos es la del código: dos | 5 |
 | 207 | la mano dice, sin prosa, si fue un intento y si lo logró: pulsar y que cambie la pantalla es logro, pulsar y que no cambie no lo es, pedir algo que no está es un intento fallido, y la lista de homónimos no es un intento | 4 |
@@ -93,7 +93,7 @@ Todas por reflexión, sin pantalla y sin modelo; nacen en rojo con `Pendiente(�
 |---|---|---|
 | 202 | `BatchCon` con mano falsa: con una ruta `a·s:1→b` la cuenta dice «ahora estás en «…b»»; sin ruta dice «no cambió»; y ya no aparece el «quedaste en» que tapaba el hecho (el prefijo «hice los» se queda: la demo lo lee) | reponer el cierre de `RecorrerSegunElNucleo.cs:183-185` |
 | 203 | un grafo con dos «Descargas» vivas (TreeItem → b, TabItem → c): sin cuál, nada tocado y la cuenta trae «1)», «TreeItem», «2)», «TabItem»; con cuál=2 queda en c con un solo toque; el catálogo declara `which` en `map_take`; y los candidatos viajan también como datos (`Resultado.Candidatos`), en el orden de su número | ignorar `Cual` y tomar el primero; quitar el tipo del mensaje; no llevar los candidatos como datos; llevarlos en otro orden |
-| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** —si esa salida dio lista; sin lista, `which` no abre clave y el rechazo no lo sugiere—. Y `Despues`, el sitio único de lo que pasa tras cada herramienta: una excepción es fallo, la lista no (y se recuerda), lo que no trae mano no se adivina. Tras una lista, el selector de un candidato ES ese candidato, y `which=02` es el 2; con cualquier `which`, y con los selectores REALES de la tanda de la 203 (s:1, s:2, como los de SAP) cruzada con el tope. Y la llamada entera de la voz contra el ejecutor real: el mismo id antes y después de una lista, y cinco formas de nombrar un botón, se pulsan dos veces y no más | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave; abrir clave con `which` sin lista; que la excepción no cuente; olvidar la lista; sugerir `which` sin lista; que el selector de un candidato vuelva a ser otra clave; comparar `which` como texto; buscar el selector solo en la lista de su nombre; no quitar `which` antes de buscarlo; que el ejecutor deje de consultar al tope; que el tope deje de contar por el botón pulsado; que el resultado deje de decir qué se pulsó |
+| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** —si esa salida dio lista; sin lista, `which` no abre clave y el rechazo no lo sugiere—. Y `Despues`, el sitio único de lo que pasa tras cada herramienta: una excepción es fallo, la lista no (y se recuerda), lo que no trae mano no se adivina. Tras una lista, el selector de un candidato ES ese candidato, y `which=02` es el 2; con cualquier `which`, y con los selectores REALES de la tanda de la 203 (s:1, s:2, como los de SAP) cruzada con el tope. Y la llamada entera de la voz contra el ejecutor real: el mismo id antes y después de una lista, y cinco formas de nombrar un botón, se pulsan dos veces y no más; el freno del ejecutor recuerda la lista; y escribir por tercera vez en un campo, por su nombre o su selector UIA, tampoco se ejecuta | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave; abrir clave con `which` sin lista; que la excepción no cuente; olvidar la lista; sugerir `which` sin lista; que el selector de un candidato vuelva a ser otra clave; comparar `which` como texto; buscar el selector solo en la lista de su nombre; no quitar `which` antes de buscarlo; que el ejecutor deje de consultar al tope; que el tope deje de contar por el botón pulsado; que el resultado deje de decir qué se pulsó; que el freno olvide la lista; que el tope deje de vigilar la escritura |
 | 205 | una clase pura con reloj inyectado: el resumen trae `llamadas=`, `distintas=`, `intentos_max=` y los ms; rechazadas y retiradas aparte; un `Resultado` sin `Llamada` en el turno no cuenta ni da un tiempo negativo; `desde_peticion=` se mide desde `Peticion()` | contar solo lo que devolvió resultado (el patrón nº10: el denominador es lo pedido); dejar que un resultado sin llamada cuente |
 | 206 | el catálogo y las instrucciones como texto: sin `at`/`action` en `map_take`, sin `at` en `map_type`, `map_unblock` conserva `at`; sin «pide map_where_am_i primero» ni «más de dos veces»; con `which` y `map_look` juntos; el `which` de `map_show` no manda al de `map_take`; `map_take` avisa de que «Guardar» no cambia de pantalla y está bien | reponer `at` en `map_take`; que el `which` de `map_show` vuelva a mandar a `map_take` |
 | 207 | `new SurfaceMapTools(() => null)` con un `RecorrerPorElNucleo` falso que devuelve cuatro resultados —la pantalla cambia, no cambia, no lo conoce, lista de homónimos—; `UltimaMano` leída por reflexión; la mano lleva los candidatos de la lista y lo que se pulsó, y la consulta al tope viaja dentro del paso | que «logrado» vuelva a ser «terminó», sin mirar si cambió; que la lista vuelva a contar como intento; que la mano deje de llevar los candidatos; que deje de llevar lo pulsado; que el paso deje de llevar la consulta |
@@ -111,7 +111,8 @@ la conducta la juzga el nivel 4.
 Y los límites de forma que desde fuera no se ven:
 
 - **Solo `uia:name=` se aplana a su nombre.** Un selector por `aid=` o un id de SAP (`wnd[0]/…`)
-  cuenta como un destino distinto de su etiqueta, y el tope lo vería como otro sitio.
+  cuenta como un destino *pedido* distinto de su etiqueta. Al pulsar ya no importa —el ejecutor consulta
+  con lo que va a pulsar—; al escribir, sí (ver abajo).
 - **Hay dos numeraciones de homónimos.** `map_take` numera por selector, que es un orden estable para
   elegir; `map_show`, por posición en la pantalla, que es el orden para señalar de arriba abajo. Ya no
   se cruzan en el texto —el `which` de `map_show` avisa de que no es el de `map_take`—, pero siguen
@@ -134,8 +135,18 @@ Y los límites de forma que desde fuera no se ven:
   cada una se cerraba copiando al tope una regla más. La quinta pasada tenía razón en que no era otra
   spec: ahora el ejecutor le pregunta al tope con el selector que VA a pulsar, y el tope cuenta los fallos
   también por el botón pulsado. Lo pedido sigue sirviendo para frenar antes de gastar la espera; lo pulsado
-  cierra la clase. Sin juez queda una línea: que la voz ponga la consulta en su hilo (sabotaje
+  cierra la clase **para pulsar con `map_take`**. Sin juez queda una línea: que la voz ponga la consulta en su hilo (sabotaje
   «cableado» de la sexta ronda: INTACTO, medido).
+- **Escribir sigue contando por lo pedido.** `map_type` no pasa por esa consulta: el campo lo resuelve
+  `EscribirPorMundo`, en `FaceWindow`, y según la promesa 185 «Pasaporte», «RNPA1-PASSNR» y su id de SAP
+  son el mismo campo. La sexta pasada midió 6 escrituras al mismo campo pedido por esos tres nombres.
+  Cerrarlo es que quien resuelve el campo consulte al tope con el id que va a escribir; `FaceWindow` es
+  la zona de choque de los tres y no se toca de noche sin avisar. Por eso el enunciado de la 204 se acotó:
+  certificaba en verde, para «la acción», lo que la escritura no cumple.
+- **Entre herramientas, tampoco.** La clave de lo pulsado incluye la herramienta, y `map_go_to` pulsa sin
+  consultar a nadie: un botón que falló dos veces con `map_take` se puede pulsar yendo con `map_go_to`.
+- **Cada pulsación que no cambia la pantalla son dos clics** (el ensayo de doble clic): antes del freno, el
+  usuario ve cuatro clics al mismo elemento. El tope cuenta pulsaciones; R17 cuenta lo que se ve.
 - **El cableado sigue sin juez, y se midió.** Romper la línea de `ConversacionEnVivo` que le pasa los
   candidatos al tope deja el contrato INTACTO (sabotaje «cableado» de la cuarta ronda). Lo mismo borrar
   la llamada a `Despues` o a `NuevoTurno`. Lo que se juzga es lo que esas llamadas deciden, no que se
@@ -477,6 +488,29 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
   recompilado al final: **CONTRATO INTACTO, 176 juzgadas**. En total, 26 sabotajes distintos del contrato
   en seis rondas, todos en rojo; y dos del cableado de la voz, que el contrato no ve: medidos INTACTOS y
   declarados.
+- **2026-09-11, 03:00 (el crítico, sexta pasada: 5/10).** Sobre `70b176a`. Comprobó el arreglo de fondo por
+  cuatro caminos sobre el `U.dll` compilado —el mismo id antes y después de una lista, nueve formas de
+  nombrar un botón, con coreografía, y con el ejecutor en otro hilo— y en los cuatro salen 2 pulsaciones:
+  por primera vez el «máximo dos intentos» se cumple en el código para pulsar. Y encontró dónde la rama
+  seguía diciendo más de lo que hace: **escribir** (6 escrituras a un campo de SAP pedido por tres
+  nombres, con la 204 certificándolo en verde), **entre herramientas** (`map_go_to` pulsa sin consultar),
+  que el freno del ejecutor **no recordaba la lista**, y los **dos clics** por pulsación que no cambia la
+  pantalla. Lo que se hizo: el enunciado de la 204 se acotó a lo que el código cumple; el freno recuerda la
+  lista; el rechazo solo promete «es el mismo botón» al pulsar; escribir por el mismo nombre tiene su
+  guarda; y lo demás se declara arriba, con su medida. `FaceWindow`, que es donde se cerraría la escritura,
+  no se tocó: es la zona de choque de los tres.
+
+- **2026-09-11 (el sabotaje, séptima ronda).**
+
+  | Promesa | Sabotaje | Quedó |
+  |---|---|---|
+  | 204 | el freno del ejecutor olvida la lista | roja |
+  | 204 | el tope deja de vigilar la escritura | roja |
+  | 204 | *(repetido)* el ejecutor deja de consultar al tope con lo que va a pulsar | roja |
+  
+  Tres de tres en rojo, cada una comprobada por diff de bytes y restaurada idéntica; recompilado al final:
+  **CONTRATO INTACTO, 176 juzgadas**. En total, 28 sabotajes distintos del contrato en siete rondas, todos
+  en rojo; y dos del cableado de la voz, que el contrato no ve: medidos INTACTOS y declarados.
 
 ## Cierre
 
@@ -484,5 +518,5 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
 - [x] Promesas 202–207 verdes; las 170 anteriores intactas (176 juzgadas, 0 rotas)
 - [x] Cada una rota a propósito, comprobada por diff, restaurada y recompilada después
 - [ ] Nivel 4, base y rama en las mismas tareas: **pendiente, con alguien delante** (`scripts/nivel4-voz/correr.ps1`)
-- [ ] El crítico de fidelidad al audio, con su veredicto pegado
+- [x] El crítico de fidelidad al audio: seis pasadas completas (4, 5, 5, 5, 5 y 5 sobre 10) y una séptima, corta, sobre lo que entró después de la sexta. Lo que señalaron y se podía arreglar sin el PC y sin tocar `FaceWindow`, arreglado con la promesa en rojo primero; lo demás, declarado con su medida. Sus veredictos, en el PR
 - [ ] Estado: **implementado** (AAAA-MM-DD)
