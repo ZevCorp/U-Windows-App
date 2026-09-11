@@ -93,7 +93,7 @@ Todas por reflexión, sin pantalla y sin modelo; nacen en rojo con `Pendiente(�
 |---|---|---|
 | 202 | `BatchCon` con mano falsa: con una ruta `a·s:1→b` la cuenta dice «ahora estás en «…b»»; sin ruta dice «no cambió»; y ya no aparece el «quedaste en» que tapaba el hecho (el prefijo «hice los» se queda: la demo lo lee) | reponer el cierre de `RecorrerSegunElNucleo.cs:183-185` |
 | 203 | un grafo con dos «Descargas» vivas (TreeItem → b, TabItem → c): sin cuál, nada tocado y la cuenta trae «1)», «TreeItem», «2)», «TabItem»; con cuál=2 queda en c con un solo toque; el catálogo declara `which` en `map_take`; y los candidatos viajan también como datos (`Resultado.Candidatos`), en el orden de su número | ignorar `Cual` y tomar el primero; quitar el tipo del mensaje; no llevar los candidatos como datos; llevarlos en otro orden |
-| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** —si esa salida dio lista; sin lista, `which` no abre clave y el rechazo no lo sugiere—. Y `Despues`, el sitio único de lo que pasa tras cada herramienta: una excepción es fallo, la lista no (y se recuerda), lo que no trae mano no se adivina. Tras una lista, el selector de un candidato ES ese candidato, y `which=02` es el 2 | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave; abrir clave con `which` sin lista; que la excepción no cuente; olvidar la lista; sugerir `which` sin lista; que el selector de un candidato vuelva a ser otra clave; comparar `which` como texto |
+| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** —si esa salida dio lista; sin lista, `which` no abre clave y el rechazo no lo sugiere—. Y `Despues`, el sitio único de lo que pasa tras cada herramienta: una excepción es fallo, la lista no (y se recuerda), lo que no trae mano no se adivina. Tras una lista, el selector de un candidato ES ese candidato, y `which=02` es el 2; con cualquier `which`, y con los selectores REALES de la tanda de la 203 (s:1, s:2, como los de SAP) cruzada con el tope | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave; abrir clave con `which` sin lista; que la excepción no cuente; olvidar la lista; sugerir `which` sin lista; que el selector de un candidato vuelva a ser otra clave; comparar `which` como texto; buscar el selector solo en la lista de su nombre; no quitar `which` antes de buscarlo |
 | 205 | una clase pura con reloj inyectado: el resumen trae `llamadas=`, `distintas=`, `intentos_max=` y los ms; rechazadas y retiradas aparte; un `Resultado` sin `Llamada` en el turno no cuenta ni da un tiempo negativo; `desde_peticion=` se mide desde `Peticion()` | contar solo lo que devolvió resultado (el patrón nº10: el denominador es lo pedido); dejar que un resultado sin llamada cuente |
 | 206 | el catálogo y las instrucciones como texto: sin `at`/`action` en `map_take`, sin `at` en `map_type`, `map_unblock` conserva `at`; sin «pide map_where_am_i primero» ni «más de dos veces»; con `which` y `map_look` juntos; el `which` de `map_show` no manda al de `map_take`; `map_take` avisa de que «Guardar» no cambia de pantalla y está bien | reponer `at` en `map_take`; que el `which` de `map_show` vuelva a mandar a `map_take` |
 | 207 | `new SurfaceMapTools(() => null)` con un `RecorrerPorElNucleo` falso que devuelve cuatro resultados —la pantalla cambia, no cambia, no lo conoce, lista de homónimos—; `UltimaMano` leída por reflexión; y la mano lleva los candidatos de la lista | que «logrado» vuelva a ser «terminó», sin mirar si cambió; que la lista vuelva a contar como intento; que la mano deje de llevar los candidatos |
@@ -119,13 +119,20 @@ Y los límites de forma que desde fuera no se ven:
 - **`which` solo separa candidatos si hubo lista.** El 1 y el 2 de una lista numerada son destinos
   distintos, que es lo que pide el audio («pruebo este otro botón»). Sin lista, `which` no abre una clave
   nueva: el ejecutor lo ignora y es el mismo botón (crítico final; la 204, ampliada). Y tras una lista,
-  pedir un candidato por su selector es pedir ese candidato, y `which=02` es el 2 (tercera pasada).
+  pedir un candidato por su selector es pedir ese candidato, y `which=02` es el 2 (tercera pasada). Con
+  cualquier `which` y con cualquier selector de cualquier lista del turno —también los de SAP—: el tope
+  aplica las reglas del ejecutor, que pulsa el selector exacto e ignora `which` (cuarta pasada).
 - **Tres cuentas de «intento», con nombres parecidos.** `intentos_max` de la línea `voz-turno` cuenta
   llamadas al mismo destino (tres «Siguiente» logrados dan 3); el tope cuenta solo fallos; el juez del
   nivel 4, los intentos sin la lista. Miden cosas distintas: al leer un número, decir de cuál es.
 - **El eco vacía el tope.** Con altavoz, la voz de Ü también dispara `speech_started`, que abre un turno
   nuevo y pone el tope a cero a mitad de una petición. La línea `voz-turno: turno nuevo (por
   speech_started)` lo delata en el nivel 4; el arreglo de fondo va con R18.
+- **Una etiqueta difusa sigue siendo otra clave.** El ejecutor casa por aproximación («Descarga» con
+  «Descargas»); el tope compara el nombre aplanado. Cuatro pasadas del crítico encontraron cuatro formas
+  de la misma diferencia —el tope juzga lo PEDIDO y el ejecutor decide por sus reglas—, y cada una se
+  cerró copiando una regla más. El arreglo de fondo es el contrario: que el ejecutor consulte el tope con
+  lo que VA a pulsar. Es otra spec, y la primera que habría que abrir si el nivel 4 enseña insistencias.
 - **El cableado sigue sin juez, y se midió.** Romper la línea de `ConversacionEnVivo` que le pasa los
   candidatos al tope deja el contrato INTACTO (sabotaje «cableado» de la cuarta ronda). Lo mismo borrar
   la llamada a `Despues` o a `NuevoTurno`. Lo que se juzga es lo que esas llamadas deciden, no que se
@@ -401,6 +408,37 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
   Doce de doce en rojo sobre el código final, cada una comprobada por diff de bytes y restaurada idéntica;
   recompilado al final: **CONTRATO INTACTO, 176 juzgadas**. En total, 19 sabotajes distintos del contrato
   en cuatro rondas, todos en rojo; y uno del cableado, que el contrato no ve y así se dice.
+- **2026-09-11, 02:40 (el crítico, cuarta pasada: 5/10).** Sobre `0fb58b2`. Dio por hechos `which=02`, los
+  dos fallos de `map_type` en el juez, la autoprueba en el repo y el eco declarado. Y con una sonda sobre
+  el `U.dll` compilado, con el ejecutor real y el mismo cableado que la voz, encontró:
+  - **Tras una lista, «selector + which=N» esquivaba el tope sin límite**: el ejecutor pulsa el selector
+    exacto e ignora `which`, y el tope lo guardaba como `descargas#N`. Seis toques al mismo botón; y los
+    fallos se anotaban en la clave de otro candidato, que quedaba frenado sin haberlo tocado.
+  - **Con selectores de SAP, la lista no se encontraba nunca**: no se aplanan a la etiqueta. Cuatro toques.
+  - **La 204 elegía el caso que pasa**: nunca cruzaba la tanda real de la 203 con el tope.
+  Arreglado aplicando las reglas del ejecutor: el selector exacto de un candidato de cualquier lista del
+  turno es ese candidato, con o sin `which`; y la 204 cruza ahora los candidatos reales de la tanda de la
+  203 con el tope. En rojo primero, por las tres razones. Lo que queda de la misma clase —la etiqueta
+  difusa— se declara arriba, con su arreglo de fondo.
+
+- **2026-09-11 (el sabotaje, quinta ronda).**
+
+  | Promesa | Sabotaje | Quedó |
+  |---|---|---|
+  | 204 | el selector se busca solo en la lista de su nombre (los de SAP no la encuentran) | roja |
+  | 204 | `which` deja de quitarse antes de buscar el selector | roja |
+  | 204 | el selector de un candidato deja de reconocerse | roja |
+  | 204 | *(repetido)* `which` sin lista vuelve a abrir una clave nueva | roja |
+  | 204 | *(repetido)* `which` vuelve a compararse como texto | roja |
+  | 204 | *(repetido)* la lista de homónimos deja de recordarse | roja |
+  | 204 | *(repetido)* el destino se compara como texto crudo, sin aplanar | roja, **y también la 205** |
+  | 203 | *(repetido)* la lista deja de viajar como datos | roja, **y ahora también la 204** |
+  
+  Ocho de ocho en rojo, cada una comprobada por diff de bytes y restaurada idéntica; recompilado al final:
+  **CONTRATO INTACTO, 176 juzgadas**. Que romper la 203 tumbe ahora también la 204 es lo que la cuarta
+  pasada echaba en falta: el contrato cruza por fin la tanda real del ejecutor con el tope. En total, 21
+  sabotajes distintos del contrato en cinco rondas, todos en rojo, y uno del cableado, medido INTACTO y
+  declarado.
 
 ## Cierre
 
