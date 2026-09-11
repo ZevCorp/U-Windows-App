@@ -567,7 +567,7 @@ internal static class Contrato
         Console.WriteLine();
         Prueba("202. pulsar dice lo que pasó: una tanda que termina bien distingue «ahora estás en Y» de «la pantalla no cambió», y «hice los N paso(s)» ya no tapa el último hecho", PulsarDiceLoQuePaso);
         Prueba("203. con varias puertas vivas para un mismo nombre no se pide un selector a ciegas: se numeran 1..N en orden estable con su tipo y, si se sabe, a dónde llevan; y un paso que trae cuál pulsa esa y solo esa", LosHomonimosSeNumeran);
-        Prueba("204. dos intentos y no tres: en un mismo turno del usuario, la tercera acción hacia un destino que ya falló dos veces no se ejecuta, y se dice qué salió en cada una; el destino es el mismo se pida por nombre o por selector", DosIntentosYNoTres);
+        Prueba("204. dos intentos y no tres: en un mismo turno del usuario, la tercera acción hacia un destino que ya falló dos veces no se ejecuta, y se dice qué salió en cada una; al pulsar con map_take, el mismo botón es el mismo destino se pida como se pida; al escribir, el campo cuenta tal como se pidió", DosIntentosYNoTres);
         Prueba("205. cada turno del usuario deja una línea voz-turno con su medida: llamadas, herramientas distintas, el máximo de intentos a un mismo destino y los milisegundos hasta la primera acción y la última; lo rechazado y lo retirado también cuentan", CadaTurnoDejaSuMedida);
         Prueba("206. el catálogo le pide al cerebro lo que las manos usan: map_take y map_type no ofrecen argumentos que su cuerpo ignora, map_take trae which, y las instrucciones mandan mirar y elegir con which antes que preguntar; la regla escrita de intentos es la del código: dos", ElCatalogoPideLoQueLasManosUsan);
         Prueba("207. la mano dice, sin prosa, si fue un intento y si lo logró: pulsar y que cambie la pantalla es logro, pulsar y que no cambie no lo es, pedir algo que no está es un intento fallido, y la lista de homónimos no es un intento", LaManoDiceSiLoLogro);
@@ -7511,6 +7511,8 @@ internal static class Contrato
         string terceraVez = Llamada(bId, tId, "s:1", 0);
         Debe(pulsadas == 2 && terceraVez.Contains("tercera"),
             $"el mismo botón, pedido por su id antes y después de una lista, se pulsa dos veces y no más (se pulsó {pulsadas} veces; dijo: «{terceraVez}»)");
+        Debe(terceraVez.Contains("which") && terceraVez.Contains("«s:2»"),
+            $"y el freno del ejecutor recuerda la lista, para probar el OTRO candidato en vez de rendirse (sexta pasada; dijo: «{terceraVez}»)");
 
         // Cualquier trozo de la etiqueta es el mismo botón: dos toques, no dos por variante.
         nuevo.Invoke(tope, null);
@@ -7522,6 +7524,16 @@ internal static class Contrato
             Llamada(bUno, tUno, variante, 0);
         Debe(pulsadas == 2,
             $"cinco formas de nombrar el mismo botón son el mismo botón: se pulsa dos veces y no más (se pulsó {pulsadas} veces)");
+
+        // ESCRIBIR también tiene su tope, por el campo TAL COMO SE PIDIÓ (sexta pasada del crítico): el mismo
+        // nombre, en minúsculas o por su selector UIA, es el mismo campo. Es una guarda de lo que ya hacía el
+        // código, no una promesa nueva. Lo que NO cubre —tres nombres de un campo de SAP, que resuelve
+        // EscribirPorMundo en FaceWindow— está declarado en la spec, y por eso el enunciado se acotó.
+        nuevo.Invoke(tope, null);
+        despues8.Invoke(tope, new object?[] { "map_type", "Nombre", false, true, false, "no pude escribir en «Nombre»", null, null });
+        despues8.Invoke(tope, new object?[] { "map_type", "uia:name=Nombre;ct=Edit", false, true, false, "no pude escribir en «Nombre»", null, null });
+        Debe(R("map_type", "nombre") != null,
+            "escribir por tercera vez en un campo que ya falló dos veces, por su nombre o por su selector UIA, tampoco se ejecuta");
     }
 
     private static void CadaTurnoDejaSuMedida()

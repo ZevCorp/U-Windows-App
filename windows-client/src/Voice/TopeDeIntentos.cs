@@ -67,8 +67,10 @@ public sealed class TopeDeIntentos
                 return null;
             // `which` solo se sugiere si hubo lista: sin ella sería mandar al modelo a esquivar el tope.
             return $"no lo intento una tercera vez: «{Legible(lista != null ? destino : SinCual(destino))}» ya "
-                 + $"falló dos veces en este turno — 1) {salio[0]} · 2) {salio[1]}. Por otro nombre o por su "
-                 + "selector es el mismo sitio. "
+                 + $"falló dos veces en este turno — 1) {salio[0]} · 2) {salio[1]}. "
+                 // «Es el mismo botón» solo se promete donde se cumple: al pulsar, el ejecutor consulta con lo
+                 // que va a pulsar; al escribir, el campo cuenta tal como se pidió (sexta pasada del crítico).
+                 + (herramienta == "map_take" ? "Pedirlo por otro nombre o por su selector es el mismo botón. " : "")
                  + (lista != null
                      ? $"De la lista, prueba OTRO candidato con which —el 1 y el 2 son botones distintos—: {lista} "
                        + "O dile al usuario qué está pasando."
@@ -135,9 +137,21 @@ public sealed class TopeDeIntentos
         lock (_candado)
         {
             if (!_pulsados.TryGetValue(herramienta + "|" + selector, out var salio) || salio.Count < Maximo) return null;
+            // Si ese botón era de una lista del turno, se recuerda la lista: el «pruebo este otro botón» del
+            // audio necesita saber cuál es el otro (sexta pasada del crítico, 2026-09-11).
+            string? lista = null;
+            foreach (var (claveLista, l) in _listas)
+            {
+                if (!claveLista.StartsWith(herramienta + "|", StringComparison.Ordinal)) continue;
+                for (int i = 0; i < l.Candidatos.Count && lista == null; i++)
+                    if (string.Equals(l.Candidatos[i], selector, StringComparison.Ordinal)) lista = l.Texto;
+            }
             return $"no lo intento una tercera vez: «{selector}» ya falló dos veces en este turno —1) {salio[0]} · "
-                 + $"2) {salio[1]}—, aunque se pidiera de otra forma: es el mismo botón. Cambia de vía: mira la "
-                 + "pantalla (map_look) y pulsa otra cosa, o dile al usuario qué está pasando.";
+                 + $"2) {salio[1]}—, aunque se pidiera de otra forma: es el mismo botón. "
+                 + (lista != null
+                     ? $"De la lista, prueba OTRO candidato con which —el 1 y el 2 son botones distintos—: {lista} "
+                       + "O dile al usuario qué está pasando."
+                     : "Cambia de vía: mira la pantalla (map_look) y pulsa otra cosa, o dile al usuario qué está pasando.");
         }
     }
 
