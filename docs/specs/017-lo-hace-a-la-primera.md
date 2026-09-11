@@ -93,10 +93,10 @@ Todas por reflexión, sin pantalla y sin modelo; nacen en rojo con `Pendiente(�
 |---|---|---|
 | 202 | `BatchCon` con mano falsa: con una ruta `a·s:1→b` la cuenta dice «ahora estás en «…b»»; sin ruta dice «no cambió»; y ya no aparece el «quedaste en» que tapaba el hecho (el prefijo «hice los» se queda: la demo lo lee) | reponer el cierre de `RecorrerSegunElNucleo.cs:183-185` |
 | 203 | un grafo con dos «Descargas» vivas (TreeItem → b, TabItem → c): sin cuál, nada tocado y la cuenta trae «1)», «TreeItem», «2)», «TabItem»; con cuál=2 queda en c con un solo toque; el catálogo declara `which` en `map_take`; y los candidatos viajan también como datos (`Resultado.Candidatos`), en el orden de su número | ignorar `Cual` y tomar el primero; quitar el tipo del mensaje; no llevar los candidatos como datos; llevarlos en otro orden |
-| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** —si esa salida dio lista; sin lista, `which` no abre clave y el rechazo no lo sugiere—. Y `Despues`, el sitio único de lo que pasa tras cada herramienta: una excepción es fallo, la lista no (y se recuerda), lo que no trae mano no se adivina. Tras una lista, el selector de un candidato ES ese candidato, y `which=02` es el 2; con cualquier `which`, y con los selectores REALES de la tanda de la 203 (s:1, s:2, como los de SAP) cruzada con el tope | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave; abrir clave con `which` sin lista; que la excepción no cuente; olvidar la lista; sugerir `which` sin lista; que el selector de un candidato vuelva a ser otra clave; comparar `which` como texto; buscar el selector solo en la lista de su nombre; no quitar `which` antes de buscarlo |
+| 204 | una clase pura con la secuencia: dos `take` fallidos a «Descargas» —uno por nombre, otro por selector— y el tercero se rechaza con «dos»; otro destino pasa; un turno nuevo reinicia; tres logrados pasan; mirar nunca cuenta. Y, por `DestinoDe` con `which`: dos fallos al candidato 1 frenan el 1, **no el 2** —si esa salida dio lista; sin lista, `which` no abre clave y el rechazo no lo sugiere—. Y `Despues`, el sitio único de lo que pasa tras cada herramienta: una excepción es fallo, la lista no (y se recuerda), lo que no trae mano no se adivina. Tras una lista, el selector de un candidato ES ese candidato, y `which=02` es el 2; con cualquier `which`, y con los selectores REALES de la tanda de la 203 (s:1, s:2, como los de SAP) cruzada con el tope. Y la llamada entera de la voz contra el ejecutor real: el mismo id antes y después de una lista, y cinco formas de nombrar un botón, se pulsan dos veces y no más | comparar el texto crudo sin aplanar (aprendizaje nº16); quitar el candidato de la clave; abrir clave con `which` sin lista; que la excepción no cuente; olvidar la lista; sugerir `which` sin lista; que el selector de un candidato vuelva a ser otra clave; comparar `which` como texto; buscar el selector solo en la lista de su nombre; no quitar `which` antes de buscarlo; que el ejecutor deje de consultar al tope; que el tope deje de contar por el botón pulsado; que el resultado deje de decir qué se pulsó |
 | 205 | una clase pura con reloj inyectado: el resumen trae `llamadas=`, `distintas=`, `intentos_max=` y los ms; rechazadas y retiradas aparte; un `Resultado` sin `Llamada` en el turno no cuenta ni da un tiempo negativo; `desde_peticion=` se mide desde `Peticion()` | contar solo lo que devolvió resultado (el patrón nº10: el denominador es lo pedido); dejar que un resultado sin llamada cuente |
 | 206 | el catálogo y las instrucciones como texto: sin `at`/`action` en `map_take`, sin `at` en `map_type`, `map_unblock` conserva `at`; sin «pide map_where_am_i primero» ni «más de dos veces»; con `which` y `map_look` juntos; el `which` de `map_show` no manda al de `map_take`; `map_take` avisa de que «Guardar» no cambia de pantalla y está bien | reponer `at` en `map_take`; que el `which` de `map_show` vuelva a mandar a `map_take` |
-| 207 | `new SurfaceMapTools(() => null)` con un `RecorrerPorElNucleo` falso que devuelve cuatro resultados —la pantalla cambia, no cambia, no lo conoce, lista de homónimos—; `UltimaMano` leída por reflexión; y la mano lleva los candidatos de la lista | que «logrado» vuelva a ser «terminó», sin mirar si cambió; que la lista vuelva a contar como intento; que la mano deje de llevar los candidatos |
+| 207 | `new SurfaceMapTools(() => null)` con un `RecorrerPorElNucleo` falso que devuelve cuatro resultados —la pantalla cambia, no cambia, no lo conoce, lista de homónimos—; `UltimaMano` leída por reflexión; la mano lleva los candidatos de la lista y lo que se pulsó, y la consulta al tope viaja dentro del paso | que «logrado» vuelva a ser «terminó», sin mirar si cambió; que la lista vuelva a contar como intento; que la mano deje de llevar los candidatos; que deje de llevar lo pulsado; que el paso deje de llevar la consulta |
 
 **Límites dichos, no escondidos.** La 203 no cubre dos homónimos **del mismo tipo**: se funden en un
 selector antes de llegar al ejecutor (`Grafo.cs:136`). La 204 juzga la regla, no su cableado —un
@@ -128,11 +128,14 @@ Y los límites de forma que desde fuera no se ven:
 - **El eco vacía el tope.** Con altavoz, la voz de Ü también dispara `speech_started`, que abre un turno
   nuevo y pone el tope a cero a mitad de una petición. La línea `voz-turno: turno nuevo (por
   speech_started)` lo delata en el nivel 4; el arreglo de fondo va con R18.
-- **Una etiqueta difusa sigue siendo otra clave.** El ejecutor casa por aproximación («Descarga» con
-  «Descargas»); el tope compara el nombre aplanado. Cuatro pasadas del crítico encontraron cuatro formas
-  de la misma diferencia —el tope juzga lo PEDIDO y el ejecutor decide por sus reglas—, y cada una se
-  cerró copiando una regla más. El arreglo de fondo es el contrario: que el ejecutor consulte el tope con
-  lo que VA a pulsar. Es otra spec, y la primera que habría que abrir si el nivel 4 enseña insistencias.
+- **El tope mira lo que se va a pulsar.** Cinco pasadas del crítico encontraron cinco formas de la misma
+  diferencia —el tope juzgaba lo PEDIDO y el ejecutor decide por sus reglas: `which`, selectores, ids de
+  SAP, trozos de la etiqueta que `LoNombra` casa por contención (18 toques a un botón con 9 variantes)—, y
+  cada una se cerraba copiando al tope una regla más. La quinta pasada tenía razón en que no era otra
+  spec: ahora el ejecutor le pregunta al tope con el selector que VA a pulsar, y el tope cuenta los fallos
+  también por el botón pulsado. Lo pedido sigue sirviendo para frenar antes de gastar la espera; lo pulsado
+  cierra la clase. Sin juez queda una línea: que la voz ponga la consulta en su hilo (sabotaje
+  «cableado» de la sexta ronda: INTACTO, medido).
 - **El cableado sigue sin juez, y se midió.** Romper la línea de `ConversacionEnVivo` que le pasa los
   candidatos al tope deja el contrato INTACTO (sabotaje «cableado» de la cuarta ronda). Lo mismo borrar
   la llamada a `Despues` o a `NuevoTurno`. Lo que se juzga es lo que esas llamadas deciden, no que se
@@ -439,6 +442,41 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
   pasada echaba en falta: el contrato cruza por fin la tanda real del ejecutor con el tope. En total, 21
   sabotajes distintos del contrato en cinco rondas, todos en rojo, y uno del cableado, medido INTACTO y
   declarado.
+- **2026-09-11, 03:20 (el crítico, quinta pasada: 5/10).** Sobre `4a03a9f`. Repitió la sonda sobre el
+  `U.dll` compilado y dio por cerrados los tres rodeos de la cuarta (2 toques donde antes había 6 y 4). Y
+  midió que la clase seguía abierta por dos sitios: **el mismo id de SAP antes y después de una lista**
+  (4 toques: sin lista la clave era el selector aplanado, con lista `lista#k`) y **cualquier trozo de la
+  etiqueta** (9 variantes de «Descargas», 18 toques a un único botón). Dijo también que el límite estaba
+  mal medido —el ejemplo de una sola variante lo hacía parecer estrecho— y que el arreglo de fondo no era
+  otra spec sino la reparación de la propia 204, sin PC. Tenía razón en las tres cosas: el ejecutor le
+  pregunta ahora al tope con el selector que va a pulsar. La 204 simula la llamada entera de la voz contra
+  el ejecutor real y exige dos toques en los dos casos; la 207, que la mano lleve lo pulsado y que la
+  consulta viaje dentro del paso. En rojo primero, por las dos promesas.
+  - **Un error de la prueba, dicho.** Con el arreglo puesto, la primera versión de la 204 ampliada seguía
+    en rojo con «se pulsó 4 veces», y el propio ejecutor contestaba ya «no lo intento una tercera vez»:
+    la prueba contaba TOQUES, y una pulsación que no cambia la pantalla da dos (el ensayo de doble clic).
+    Se corrigió para contar PULSACIONES —llamadas que tocaron algo— sin cambiar el enunciado, y su
+    sabotaje de abajo (el ejecutor deja de consultar al tope) la vuelve a poner roja.
+
+- **2026-09-11 (el sabotaje, sexta ronda).**
+
+  | Promesa | Sabotaje | Quedó |
+  |---|---|---|
+  | 204 | el ejecutor deja de consultar al tope con lo que va a pulsar | roja |
+  | 204 | el tope deja de contar los fallos por el botón pulsado | roja |
+  | 204 | el resultado deja de decir qué se pulsó | roja |
+  | 207 | la mano deja de llevar lo que se pulsó | roja |
+  | 207 | el paso deja de llevar la consulta al tope | roja |
+  | — | **cableado**: la voz no pone la consulta en su hilo | **INTACTO, como se esperaba**: el límite declarado, medido |
+  | 204 | *(repetido)* el destino se compara como texto crudo, sin aplanar | roja, **y también la 205** |
+  | 204 | *(repetido)* `which` deja de quitarse antes de buscar el selector | roja |
+  | 204 | *(repetido)* la lista de homónimos deja de recordarse | roja |
+  | 207 | *(repetido)* «logrado» vuelve a ser «terminó» | roja |
+  
+  Nueve de nueve en rojo sobre el código final, cada una comprobada por diff de bytes y restaurada idéntica;
+  recompilado al final: **CONTRATO INTACTO, 176 juzgadas**. En total, 26 sabotajes distintos del contrato
+  en seis rondas, todos en rojo; y dos del cableado de la voz, que el contrato no ve: medidos INTACTOS y
+  declarados.
 
 ## Cierre
 
