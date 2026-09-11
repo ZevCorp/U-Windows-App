@@ -7363,11 +7363,46 @@ internal static class Contrato
         var destinoDe = t.GetMethod("DestinoDe");
         string Cand(string n) => (string)destinoDe!.Invoke(null, new object?[] { "map_take",
             new Dictionary<string, string> { ["exit"] = "Descargas", ["which"] = n } })!;
-        A("map_take", Cand("1"), false, "pulsé «Descargas» y la pantalla no cambió");
-        A("map_take", Cand("1"), false, "pulsé «Descargas» y la pantalla no cambió");
-        Debe(R("map_take", Cand("1")) != null, "el mismo candidato, por tercera vez, se frena");
+        var despues = t.GetMethod("Despues");
+        if (despues == null) { Pendiente("Voice.TopeDeIntentos.Despues", "204", "017"); return; }
+        void D(string d, bool revento, bool? intento, bool? logro, string salio)
+            => despues.Invoke(tope, new object?[] { "map_take", d, revento, intento, logro, salio });
+        const string Lista = "hay 2 puertas vivas para «Descargas»: 1) «Descargas» (TreeItem) · 2) «Descargas» (TabItem)";
+
+        D("Descargas", false, false, false, Lista);
+        D(Cand("1"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        D(Cand("1"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        string? alUno = R("map_take", Cand("1"));
+        Debe(alUno != null, "el mismo candidato, por tercera vez, se frena");
+        Debe(alUno != null && alUno.Contains("which") && alUno.Contains("TabItem"),
+            $"y el rechazo recuerda la lista, para elegir otro de verdad y no a ciegas (dijo: «{alUno}»)");
         Debe(R("map_take", Cand("2")) == null,
             "pero el OTRO candidato de la lista es otro destino: probarlo es lo que el audio pide, no insistir");
+
+        // SIN LISTA, `which` NO ABRE UNA CLAVE NUEVA (crítico final, 2026-09-11). El ejecutor solo lee
+        // `which` cuando hay homónimos: con un único «Descargas», which=1, 2, 3… pulsan el MISMO botón, y
+        // cada número era una clave nueva con dos intentos más —la espiral de «20 segundos con 20
+        // herramientas» del audio—. Y el rechazo, encima, sugería hacerlo.
+        nuevo.Invoke(tope, null);
+        D("Descargas", false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        D("Descargas", false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        string? sinLista = R("map_take", Cand("1"));
+        Debe(sinLista != null, "sin una lista de homónimos, «Descargas» con which=1 es el mismo botón: se frena");
+        Debe(sinLista != null && !sinLista.Contains("which"),
+            $"y el rechazo no sugiere `which` cuando no hubo lista: sería mandar al modelo a esquivar el tope (dijo: «{sinLista}»)");
+
+        // LO QUE LA VOZ HACE DESPUÉS DE CADA HERRAMIENTA, en un solo sitio juzgable (crítico final): antes
+        // vivía en ConversacionEnVivo, y cambiarlo por «siempre logrado» dejaba el contrato INTACTO.
+        nuevo.Invoke(tope, null);
+        D("Nuevo", true, null, null, "la herramienta falló: …");
+        D("Nuevo", true, null, null, "la herramienta falló: …");
+        Debe(R("map_take", "Nuevo") != null, "una excepción es un intento que no se logró");
+        for (int i = 0; i < 3; i++) D("Buscar", false, null, null, "todavía no sé pulsar: el núcleo no está conectado.");
+        Debe(R("map_take", "Buscar") == null, "lo que no trae mano no cuenta como fallo: no se adivina");
+        for (int i = 0; i < 3; i++) D("Pegar", false, false, false, "hay 2 puertas vivas para «Pegar»: …");
+        Debe(R("map_take", "Pegar") == null, "y pedir la lista tres veces no es insistir: no se pulsó nada");
+        for (int i = 0; i < 3; i++) D("Siguiente", false, true, true, "ahora estás en…");
+        Debe(R("map_take", "Siguiente") == null, "y lo logrado, tampoco");
     }
 
     private static void CadaTurnoDejaSuMedida()

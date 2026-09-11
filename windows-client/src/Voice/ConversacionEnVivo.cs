@@ -1681,10 +1681,10 @@ public sealed class ConversacionEnVivo : IDisposable
                 // ni como acción que actuó para la medida: lo que no se sabe leer no se adivina.
                 var mano = _mapa.UltimaMano;
                 string destino = TopeDeIntentos.DestinoDe(f.Nombre, f.Args);
-                // Una EXCEPCIÓN es un intento que no se logró —antes caía en «?? true» y contaba como
-                // logro—, y la lista numerada de homónimos NO es un intento (promesa 207).
-                bool fallo = revento || (mano is { } laMano && laMano.Intento && !laMano.Logro);
-                _tope.Anota(f.Nombre, destino, !fallo, resultado);
+                // Qué cuenta como intento fallido lo decide TopeDeIntentos.Despues, donde lo juzga la 204:
+                // una excepción sí, la lista de homónimos no (y se recuerda, para que `which` separe), y lo
+                // que no trae mano no se adivina.
+                _tope.Despues(f.Nombre, destino, revento, mano?.Intento, mano?.Logro, resultado);
                 _cuenta.Resultado(f.Nombre, destino, !revento && mano is { Logro: true });
                 // El pulso lo apunta SurfaceMapTools.Call; contarlo aquí también sería contarlo dos veces.
                 Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, reloj.ElapsedMilliseconds), true);

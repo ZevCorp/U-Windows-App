@@ -44,6 +44,11 @@ public sealed class TopeDeIntentos
     private readonly object _candado = new();
     private readonly Dictionary<string, List<string>> _fallidos = new(StringComparer.Ordinal);
 
+    // Las salidas que en este turno contestaron con una LISTA de homónimos, y esa lista. Solo con
+    // lista `which` separa candidatos: el ejecutor lo ignora cuando no hay homónimos, y sin esta
+    // condición which=1, 2, 3… eran claves nuevas del MISMO botón, sin límite (crítico final, 2026-09-11).
+    private readonly Dictionary<string, string> _listas = new(StringComparer.Ordinal);
+
     /// <summary>
     /// null si la acción puede ir; si no, el motivo ya redactado para devolvérselo al cerebro: que van
     /// dos, qué salió en cada una, y qué hacer en vez de insistir.
@@ -53,12 +58,17 @@ public sealed class TopeDeIntentos
         if (!Vigiladas.Contains(herramienta)) return null;
         lock (_candado)
         {
-            if (!_fallidos.TryGetValue(Clave(herramienta, destino), out var salio) || salio.Count < Maximo)
+            var (clave, lista) = ClaveYLista(herramienta, destino);
+            if (!_fallidos.TryGetValue(clave, out var salio) || salio.Count < Maximo)
                 return null;
-            return $"no lo intento una tercera vez: «{Legible(destino)}» ya falló dos veces en este turno "
-                 + $"— 1) {salio[0]} · 2) {salio[1]}. Por otro nombre o por su selector es el mismo sitio. "
-                 + "Cambia de vía: mira la pantalla (map_look) y elige otro candidato con which, o dile al "
-                 + "usuario qué está pasando.";
+            // `which` solo se sugiere si hubo lista: sin ella sería mandar al modelo a esquivar el tope.
+            return $"no lo intento una tercera vez: «{Legible(lista != null ? destino : SinCual(destino))}» ya "
+                 + $"falló dos veces en este turno — 1) {salio[0]} · 2) {salio[1]}. Por otro nombre o por su "
+                 + "selector es el mismo sitio. "
+                 + (lista != null
+                     ? $"De la lista, prueba OTRO candidato con which —el 1 y el 2 son botones distintos—: {lista} "
+                       + "O dile al usuario qué está pasando."
+                     : "Cambia de vía: mira la pantalla (map_look) y pulsa otra cosa, o dile al usuario qué está pasando.");
         }
     }
 
@@ -68,16 +78,40 @@ public sealed class TopeDeIntentos
         if (logrado || !Vigiladas.Contains(herramienta)) return;
         lock (_candado)
         {
-            string clave = Clave(herramienta, destino);
+            string clave = ClaveYLista(herramienta, destino).Clave;
             if (!_fallidos.TryGetValue(clave, out var salio)) _fallidos[clave] = salio = new List<string>();
             salio.Add(Recortar(queSalio));
         }
     }
 
+    /// <summary>
+    /// Lo que la voz hace DESPUÉS de cada herramienta, en un solo sitio que el contrato juzga (promesa
+    /// 204). Una excepción es un intento que no se logró; la lista de homónimos no es un intento, pero
+    /// se recuerda, porque es lo que hace que `which` separe candidatos; lo que no trae mano
+    /// (<paramref name="intento"/> null) no se adivina.
+    /// </summary>
+    /// <remarks>Hasta el 2026-09-11 esta decisión vivía en <c>ConversacionEnVivo</c>, y cambiarla por
+    /// «siempre logrado» dejaba el contrato INTACTO: un guardia que se cree puesto (aprendizaje nº18).</remarks>
+    public void Despues(string herramienta, string destino, bool revento, bool? intento, bool? logro, string queSalio)
+    {
+        if (!Vigiladas.Contains(herramienta)) return;
+        if (!revento && intento == false)
+        {
+            lock (_candado) _listas[herramienta + "|" + Destino(SinCual(destino))] = Recortar(queSalio);
+            return;
+        }
+        if (revento || (intento == true && logro == false))
+            Anota(herramienta, destino, false, queSalio);
+    }
+
     /// <summary>El usuario habló o escribió: lo de antes era otra petición.</summary>
     public void NuevoTurno()
     {
-        lock (_candado) _fallidos.Clear();
+        lock (_candado)
+        {
+            _fallidos.Clear();
+            _listas.Clear();
+        }
     }
 
     /// <summary>
@@ -125,7 +159,22 @@ public sealed class TopeDeIntentos
             : v.Trim();
     }
 
-    private static string Clave(string herramienta, string destino) => herramienta + "|" + Destino(destino);
+    /// <summary>La clave con el candidato solo si esa salida dio lista en este turno; si no, sin él.
+    /// Se llama con el candado puesto.</summary>
+    private (string Clave, string? Lista) ClaveYLista(string herramienta, string destino)
+    {
+        string sinCual = herramienta + "|" + Destino(SinCual(destino));
+        return _listas.TryGetValue(sinCual, out var lista)
+            ? (herramienta + "|" + Destino(destino), lista)
+            : (sinCual, null);
+    }
+
+    private static string SinCual(string destino)
+    {
+        string d = destino ?? "";
+        int w = d.LastIndexOf("#which=", StringComparison.Ordinal);
+        return w < 0 ? d : d[..w];
+    }
 
     private static string Legible(string destino)
     {

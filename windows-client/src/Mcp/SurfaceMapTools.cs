@@ -2358,7 +2358,13 @@ public sealed class SurfaceMapTools
                          : "";
             }
             catch { }
-            if (selector.Length == 0) return "no hay ningún campo con el foco; pasa `target` con su selector";
+            // Intentó escribir y no había dónde: también es un intento que no se logró, y un «no hay
+            // campo» repetido tiene que frenarse como cualquier otro (crítico final, 2026-09-11).
+            if (selector.Length == 0)
+            {
+                _ultimaMano = new Mano(false, false);
+                return "no hay ningún campo con el foco; pasa `target` con su selector";
+            }
 
             // Si ACEPTA texto o no lo dice el control, no su nombre de tipo: el buscador de YouTube
             // es un ComboBox y se rechazaba por no llamarse «Edit», aunque es justo donde se escribe
@@ -2367,6 +2373,7 @@ public sealed class SurfaceMapTools
             if (foco == null || !U.Graph.Surfaces.UiaSurface.AceptaTexto(foco))
             {
                 LogBus.Log("mapa-mcp", $"NO SE ESCRIBE: el foco lo tiene «{selector}», que es {tipoFoco}, no un campo de texto");
+                _ultimaMano = new Mano(false, false);
                 return $"NO escribo: no hay ningún campo de texto abierto. El foco lo tiene «{selector}» "
                      + $"({tipoFoco}), y escribir ahí no es escribir — es renombrar lo que esté seleccionado. "
                      + "Si querías renombrar, abre antes la edición (Cambiar nombre / F2) o pasa `target`.";

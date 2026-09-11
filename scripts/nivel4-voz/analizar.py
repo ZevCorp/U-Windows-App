@@ -7,7 +7,9 @@ Umbrales de la spec 017, fijados antes de medir:
   - intentos: acciones al mismo destino dentro de la peticion, maximo 2 (lectura estricta del audio);
     lo que el tope de la rama FRENA cuenta como intento, y la lista numerada de homonimos NO
   - tiempo por accion: del "->" a su "<-", maximo 2000 ms
-  - aprobado: estado final alcanzado, <=2 intentos y todas las acciones <=2000 ms
+  - aprobado: estado final alcanzado, <=2 intentos al mismo destino, <=1 intento fallido en toda la
+    peticion (lo frenado cuenta: el segundo tiene que ser el bueno) y todas las acciones <=2000 ms
+  - "miro antes": si hubo un map_look antes de la primera accion (R3: mirar para desempatar)
 El denominador es el plan (--plan, que correr.ps1 calcula como tareas x repeticiones), no lo que se
 llego a ejecutar (patron n.10). Sin --plan se avisa de que el denominador es lo ejecutado.
 
@@ -119,6 +121,7 @@ def analizar_trozo(texto: str, t0_seg):
         "peticion_s": peticion,
         "destinos": [a["destino"] for a in intentos if a["tool"] == "map_take"],
         "pos_look": [i + 1 for i, t in enumerate(llamadas) if t == "map_look"],
+        "miro_antes": "map_look" in llamadas[:next((i for i, t in enumerate(llamadas) if t in ACCIONES), len(llamadas))],
         "dijo": dijo, "rechazos_txt": [r["texto"] for r in rechazos], "turnos": turnos,
         "secuencia": [f'{a["tool"]}({a["destino"] or "·"}){" [lista]" if a["lista"] else ""} '
                       f'{a["ms"] if a["ms"] is not None else "?"}ms{" ✗" if a["fallida"] else ""}' for a in acciones],
@@ -166,7 +169,11 @@ def main():
         a = analizar_trozo(f.read_text(encoding="utf-8", errors="replace"), t0)
         a.update(tarea=tarea, rep=rep, estado_final=bool(r.get("estado_final")), tope=bool(r.get("tope")))
         a["ejercita"] = ejercita(tarea, a)
+        # «A la primera, máximo dos intentos» es de LA PETICIÓN (spec 017): a lo sumo UN intento fallido
+        # en toda ella, y lo frenado cuenta. Aprobar por destino dejaba pasar un fallo en A, otro en B y
+        # otro en C antes de acertar en D (crítico final, 2026-09-11).
         a["aprobado"] = (a["estado_final"] and a["ejercita"] and a["intentos_max"] <= 2
+                         and a["fallidas"] + a["rechazos"] <= 1
                          and a["lentas"] == 0 and a["sin_vuelta"] == 0)
         filas.append(a)
 
@@ -174,12 +181,12 @@ def main():
     print(f"## Nivel 4 · {etiqueta}\n")
     if plan is None:
         print("> **Aviso:** sin `--plan`, el denominador es lo ejecutado y no el plan.\n")
-    print("| Tarea | Rep | Estado final | Ejercita | 1.ª herr. | Llamadas | Distintas | Acciones | Fallidas | Frenadas | Intentos máx. | > 2 s | Petición | Aprobada |")
-    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    print("| Tarea | Rep | Estado final | Ejercita | 1.ª herr. | Miró antes | Llamadas | Distintas | Acciones | Fallidas | Frenadas | Intentos máx. | > 2 s | Petición | Aprobada |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for a in filas:
         pet = f'≈{a["peticion_s"]} s' if a["peticion_s"] is not None else "—"
         print(f'| {a["tarea"]} | {a["rep"]} | {"sí" if a["estado_final"] else "no"} | {"sí" if a["ejercita"] else "**no**"} | '
-              f'{a["primera"]} | {a["llamadas"]} | {a["distintas"]} | {a["acciones"]} | {a["fallidas"]} | {a["rechazos"]} | '
+              f'{a["primera"]} | {"sí" if a["miro_antes"] else "no"} | {a["llamadas"]} | {a["distintas"]} | {a["acciones"]} | {a["fallidas"]} | {a["rechazos"]} | '
               f'{a["intentos_max"]} | {a["lentas"]} | {pet} | {"**sí**" if a["aprobado"] else "no"} |')
     ms = [x for a in filas for x in a["ms_acciones"]]
     print(f"\n**Aprobadas: {sum(a['aprobado'] for a in filas)} de {denominador}** (el plan como denominador).")
