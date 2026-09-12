@@ -142,7 +142,8 @@ Decidido antes de esta spec; lo que una sonda contradiga, manda la sonda y se an
 **Numeración.** El máximo de `main` es la **32** en el contrato de la voz y la **207** en el del grafo.
 Las ramas abiertas de Jose usan números del contrato de la voz por encima de la 32; para no pisarlas,
 esta spec deja el hueco **33–39** y empieza en la **40**. En el grafo sigue en la **208**. Los números
-no se reciclan; los huecos están permitidos.
+no se reciclan; los huecos están permitidos. Los arreglos de las revisiones del 2026-09-12 se repartieron
+los números **44–49** (voz) y **211–219** (grafo); la **217** es la del log.
 
 **D tiene promesa: la 43.** Ninguna promesa fijaba el modelo de transcripción antiguo
 (`gpt-4o-mini-transcribe` aparecía en 0 sitios de los dos contratos), y por eso el borrador la dejaba sin
@@ -159,6 +160,7 @@ misma frase manda los mismos 9 `.delta`, no se puede medir sin red: lo midió la
 | 208 | grafo | escribir con la voz abierta pide respuesta: el texto va seguido de pedir turno, con cualquier protocolo. | 2 |
 | 209 | grafo | con una voz que no marca los turnos, la conversación los marca: el primer trozo de lo que dice el usuario abre un turno y un silencio lo cierra. | 3 |
 | 210 | grafo | la voz por defecto es GPT-Live y U_VOZ=realtime vuelve a GPT Realtime. | 4 |
+| 217 | grafo | con GPT-Live el log no se inunda: ni los deltas del delegado ni el audio dejan una línea «←», y lo demás que no se traduce la sigue dejando. | 6 |
 
 **La que cierra el asunto** es la **210**: sin ella todo lo demás existe y la voz sigue siendo la de
 antes. **La que cierra el agujero del nivel 4** es la **208**: sin ella ningún nivel 4 escrito mide la voz.
@@ -176,7 +178,8 @@ traductor tal como los mandó el servidor real en las sondas.
 | 42 | `Audio(pcm)` es `session.input_audio.append` con el base64 exacto; `Texto` es `response.item.create` con un message `user` e `input_text`; `Fotograma` igual con `input_image` y `data:image/jpeg;base64,`; `Resultados` con dos llamadas da dos `function_call_output` con su `call_id` y su `output`, y **ninguno** pide respuesta; `PedirRespuesta()` es `response.create`; `PedirRespuesta("X")` es `session.commentary.append` con `content` X y `delegation_id` nulo, y no un `response.create`; `CambioDeModo(otras, [otra herramienta], false)` no contiene `session.start`, es un `session.update` y lleva las instrucciones y la herramienta nuevas en la delegación | `CambioDeModo` devuelve la apertura (otro `session.start`); `Resultados` pide respuesta dentro; dictar vuelve a ser `response.create`; el texto sale como `session.instructions.append` (medido: no provoca respuesta) |
 | 208 | `ConversacionEnVivo.MensajesDeTexto` por nombre. Con `ProtocoloOpenAI`: dos mensajes, **en ese orden**, `conversation.item.create` con el texto y `response.create`. Con `ProtocoloGptLive`: `response.item.create` con el texto y `response.create`. Con un protocolo falso del propio contrato cuyo `PedirRespuesta` es vacío: un solo mensaje, ninguno vacío | `MensajesDeTexto` deja de añadir la petición de turno; la petición va antes que el texto; se cuela el mensaje vacío |
 | 209 | `TurnosSinMarca` por nombre, con reloj inyectado y la secuencia como hechos con su hora: el primer trozo de lo que dice el usuario abre turno y el segundo no; a 1000 ms del último trozo no toca cerrar y a 1500 sí, **una vez**; lo que dice Ü también mantiene el turno abierto y también se cierra por silencio; el audio que llega continuo **no** cuenta como actividad; sin nada oído no se cierra nunca; un silencio configurado de 500 ms se respeta. Y la 40 ya juzga que `ProtocoloGptLive` no marca los turnos y `ProtocoloOpenAI` sí. **Y su uso**, añadido al implementar: `Procesar`, la puerta por la que entra lo del socket, recibe en una `ConversacionEnVivo` con `ProtocoloGptLive` un `session.input_transcript.delta` y dos mensajes sin hechos. A 800 ms no emite `Cerro`; a 1600 ms lo emite una vez, con la línea `voz-turno` «por voz» y `DijoElUsuario` con la frase. Con un protocolo que marca sus turnos no hay marcador ni cierre | se cierra sin haber oído nada; cada trozo abre turno; el audio cuenta como actividad; `Procesar` deja de consultar el marcador; la conversación no lo crea; el primer trozo no llama a `EmpiezaUnTurnoDelUsuario`; tocar cerrar no reacciona |
-| 210 | `ConversacionEnVivo.ProtocoloPorDefecto` por nombre, con una variable falsa que anota qué nombre se le pregunta: sin `U_VOZ`, con `U_VOZ` vacío o en blanco, y con `gpt-live`, sale `ProtocoloGptLive`; con `realtime`, `ProtocoloOpenAI`; y el nombre preguntado es `U_VOZ`. ` Realtime `, con mayúscula y espacios, también vuelve a Realtime, y un valor desconocido (`gemini`) abre GPT-Live. **El constructor se puede llamar sin pantalla**, porque `LiveAudio` nace sin dispositivo, así que también se juzga: sin protocolo y sin `U_VOZ` abre `ProtocoloGptLive`, y con `U_VOZ=realtime` abre `ProtocoloOpenAI` | el defecto vuelve a ser `ProtocoloOpenAI`; la variable se lee con otro nombre; no se normaliza; el constructor no usa el defecto |
+| 210 | `ConversacionEnVivo.ProtocoloPorDefecto` por nombre, con una variable falsa que anota qué nombre se le pregunta. **Se juzga lo que abre, no el nombre del tipo** (acotado el 2026-09-12, tras la revisión): sin `U_VOZ`, con `U_VOZ` vacío o en blanco, con `gpt-live` y con un valor desconocido (`gemini`), sale `ProtocoloGptLive` con `Modelo` `gpt-live-1`, `Delegado` `gpt-5.6-luna` (por reflexión) y `Direccion()` `wss://api.openai.com/v1/live/sessions`; con `realtime` y con ` Realtime `, `ProtocoloOpenAI` con `Modelo` `gpt-realtime-2.1-mini` y `Direccion()` `wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini`; y el nombre preguntado es `U_VOZ`. **El constructor se puede llamar sin pantalla**, porque `LiveAudio` nace sin dispositivo, así que también se juzga, escuchando `LogBus.Anotado`: sin protocolo y sin `U_VOZ` abre lo mismo que GPT-Live de arriba y no deja ninguna línea `voz-viva` sobre `U_VOZ`; con `U_VOZ=realtime` abre lo de Realtime y tampoco la deja; con `U_VOZ=gemini` abre GPT-Live y deja **una** línea `voz-viva` que nombra «gemini» | el defecto vuelve a ser `ProtocoloOpenAI`; la variable se lee con otro nombre; no se normaliza; el constructor no usa el defecto; **el defecto abre un modelo que no existe (`gpt-live-1-mini`, G2)**; **otro delegado**; **Realtime con otro modelo**; **el aviso del valor desconocido invierte su condición (G3)**; **el aviso sale siempre** |
+| 217 | Por la puerta del socket: `Procesar` de una `ConversacionEnVivo` con `ProtocoloGptLive`, escuchando `LogBus.Anotado`. Un `response.event` con `response.output_text.delta`, otro con `response.function_call_arguments.delta` y un `session.output_audio.delta` vacío no dejan ninguna línea `voz-viva` que empiece por «← »; un `response.completed` del delegado, un `response.function_call_arguments.done`, un `session.delegation.created` y un `session.usage.updated` dejan una cada uno. Y la regla, pura, `ConversacionEnVivo.SeVuelcaCrudo(JsonElement)` por nombre: los tres primeros no se vuelcan y los cuatro siguientes sí; un `response.event` sin evento dentro sí; y un `.delta` que no viene dentro de `response.event` (el `response.function_call_arguments.delta` de Realtime) sigue volcándose, como en `main` | `Procesar` deja de consultar la regla; los deltas del delegado se vuelcan; el audio vacío se vuelca; se callan todos los `response.event`; se calla todo lo que acabe en `.delta` |
 
 ### Límites dichos, no escondidos
 
@@ -195,7 +198,16 @@ traductor tal como los mandó el servidor real en las sondas.
   `LaVozDeLaComprobacionEsLaDeU`), no el protocolo que abre la voz. Es un guardia que se cree puesto
   (aprendizaje nº18), y se dice aquí para que nadie lea su verde como «la voz prestada funciona».
 - **Un valor desconocido** (`U_VOZ=gemini`) abre la voz por defecto, GPT-Live, y el constructor deja una
-  línea `voz-viva` que lo dice. Se decidió al implementar y lo juzga la 210.
+  línea `voz-viva` que lo dice. Se decidió al implementar. Hasta el 2026-09-12 esta frase decía que lo
+  juzgaba la 210 y **no era verdad**: la 210 solo miraba qué tipo salía, y con la condición del aviso
+  invertida seguía verde (G3 de la revisión). Desde entonces la 210 escucha el log y exige esa línea.
+- **Con qué modelo abre la app de verdad** tampoco lo juzgaba nadie hasta el 2026-09-12: la 40 juzga una
+  instancia que construye el propio contrato, y la 210 miraba el nombre del tipo. Con un modelo
+  inexistente en `ProtocoloPorDefecto` los dos contratos quedaban en verde (G2). Ahora la 210 exige
+  modelo, delegado y dirección de lo que devuelve `ProtocoloPorDefecto` y de lo que abre el constructor.
+- **La línea `sesión abierta con «…»` de `ArrancarAsync` sigue sin juez**: se escribe con el socket ya
+  abierto. Dice el modelo de la voz, no el del delegado; lo que abre de verdad lo juzga la 210 un paso
+  antes, sobre el mismo `_protocolo`.
 
 ## Las fases
 
@@ -209,6 +221,7 @@ empujar: el rojo de cada fase se comprueba en local y se anota en su commit.
 | **2–4** | 208, 209, 210 | `Voice/ConversacionEnVivo.cs` (`MensajesDeTexto`, `ProtocoloPorDefecto`, constructor, recepción, `CambiarModoAsync`), nuevo `Voice/TurnosSinMarca.cs` | **hecha** en un solo paso, porque las tres tocan la misma clase: rojo en `b64972b`, verde en el commit siguiente, **CONTRATO INTACTO** con 0 pendientes |
 | **5** | 43 | `ProtocoloOpenAI`: `gpt-transcribe` (D) | **hecha** con la fase 1. Con `U_VOZ=realtime`, que una sesión abra sin `error` es del nivel 4 |
 | **E** | — (el juez) | `scripts/nivel4-voz/analizar.py` y `autoprueba.py` | **hecha** en esta rama: rojo, verde y sabotaje (ver Hallazgos) |
+| **6** | 210 (acotada), 217 | `tests/ContratoDelGrafo/Contrato.cs`; `Voice/ConversacionEnVivo.cs` (`SeVuelcaCrudo` y su uso en `Procesar`) | **hecha** en `jero/voz-gpt-live-seleccion`, tras la revisión: la 210 nueva roja con G2 y G3 aplicados, la 217 roja antes de su código, las dos verdes después y saboteadas (ver «Sabotajes») |
 
 **Sitios con la clase de error, contados con `grep`:**
 
@@ -278,10 +291,20 @@ Dicho antes de que alguien lo descubra en una demo. Cada uno con lo que se midi�
    - 150 ms después de terminar la anterior abre otra delegación entera, que en la sonda volvió a llamar `map_look`.
    - La 208 manda un `response.create` detrás de cada texto escrito, así que escribir mientras Ü trabaja
      cuesta un turno completo más. Sin medir con la app.
-10. **El log de «mensajes sin hechos» crece con GPT-Live.**
-    - `Procesar` escribe `← …` por cada mensaje que no traduce. Con GPT-Live eso incluye cada `response.event` del delegado.
-    - Entre esos eventos hay deltas de texto y de argumentos, que llegan uno por ficha.
-    - Es anterior a esta spec y no se tocó. Sin medir cuántas líneas deja una sesión real.
+10. **El log de «mensajes sin hechos» crecía con GPT-Live. Arreglado, con la 217.**
+    - `Procesar` escribe `← …` por cada mensaje que no traduce. Con GPT-Live eso incluía cada `response.event` del delegado.
+    - **Medido el 2026-09-12** (sonda de solo lectura, un turno delegado: mirar la pantalla y contestar en
+      cinco frases): 379 mensajes, **98 sin hechos** y, de ellos, **78 deltas** del delegado, uno por ficha
+      (50 `response.output_text.delta` y 28 `response.function_call_arguments.delta`). Cada uno era una
+      línea de hasta 400 caracteres; con cinco turnos así, el anillo de 500 líneas del panel se lleva las
+      `voz-turno`, los topes y las `llamada recibida`.
+    - **Ahora** `Procesar` pregunta a `SeVuelcaCrudo`: no se vuelcan los `response.event` cuyo evento
+      interior acaba en `.delta` ni los `session.output_audio.delta` (que solo llegan sin hechos cuando
+      vienen vacíos). Quedan **20 de 98** en ese turno: `response.created/in_progress/completed`,
+      `output_item.*`, `content_part.*`, `*.done`, `session.started`, `session.delegation.created` y
+      `session.usage.updated`. Con `U_VOZ=realtime` no cambia nada: sus deltas no vienen en `response.event`.
+    - Lo que queda sin hacer y la revisión proponía: callar también los mensajes de uso y volcar los tipos
+      desconocidos una vez por tipo. No entra: la regla que se pidió es solo la de los deltas.
 
 ## La vuelta atrás: `U_VOZ=realtime`
 
@@ -407,6 +430,18 @@ alguien delante (OLED Care). Lo que tiene que decir, además de la tabla:
   - **`U_VOZ` significa otra cosa en `mac-client`**: allí fuerza una voz de macOS en el camino de texto
     (`mac-client/Sources/U/Voz.swift:52`). Los nombres coinciden y los clientes son distintos, así que no
     choca en el código. Pero una misma variable con dos sentidos confunde a quien lea los dos.
+- **2026-09-12 (qué voz abre y el log — `jero/voz-gpt-live-seleccion`, tras las revisiones).**
+  - **La 210 certificaba menos de lo que decía.** Miraba el nombre del tipo. Dos sabotajes de la revisión
+    «contrato» la dejaban verde:
+    - **G2**: `ProtocoloPorDefecto` abre `gpt-live-1-mini`, un modelo que no existe. Repetido en esta rama
+      con la 210 vieja: ✔ 210, **CONTRATO INTACTO, exit 0**.
+    - **G3**: el aviso de un `U_VOZ` desconocido, con la condición invertida.
+  - **Arreglo del juez, no del código.** El código ya abría lo correcto; faltaba quien lo mirara. La 210
+    exige ahora modelo, delegado y dirección, y la línea del valor desconocido. El enunciado no cambia: «es
+    GPT-Live» pasa a querer decir lo que abre. Con G2 y G3 aplicados, la 210 nueva sale roja (ver «Sabotajes»).
+  - **La 217 nace de la revisión «regresiones»** (baja). La sonda de solo lectura de hoy midió un turno
+    delegado: 98 líneas «←», 78 de ellas deltas (degradación 10). Se juzga sin socket: por `Procesar` y por
+    la regla pura `SeVuelcaCrudo`.
 
 ## Sabotajes
 
@@ -445,6 +480,38 @@ El guion vive fuera del repo: `sabotea.ps1` y `sabotajes.json`, en el scratchpad
 abierto, así que ningún contrato llega a ellos. El de la voz tampoco: juzga `ProtocoloGptLive.CambioDeModo`,
 no quién lo llama. Que ese cableado está bien lo tiene que decir el nivel 4 (ver «Límites»).
 
+**Qué voz abre y el log (2026-09-12, `jero/voz-gpt-live-seleccion`), `scripts\contrato-del-grafo.ps1`.**
+Con el mismo guion (diff `1 1`, SHA-256 cambiado, veredicto exigido, restaurado con el SHA idéntico).
+
+Primero el hueco y el rojo de la 210 nueva, sobre el código sin tocar:
+
+| Id | Rotura | Con la 210 vieja | Con la 210 nueva |
+|---|---|---|---|
+| G2 | `ProtocoloPorDefecto` abre `new ProtocoloGptLive("gpt-live-1-mini")` | **✔ 210 · CONTRATO INTACTO, exit 0** | ✘ 210 en 7 comprobaciones («abre … modelo gpt-live-1-mini …»). ROTO |
+| G3 | el aviso de `U_VOZ` desconocido, con la condición invertida (`protocolo != null`) | **✔ 210 · INTACTO, exit 0** (medido por la revisión) | ✘ 210 («con U_VOZ=gemini el constructor deja UNA línea voz-viva que nombra «gemini»… (dejó 0: )»). ROTO |
+
+Y la 217, antes de su código: ✘ en las tres comprobaciones de los deltas por `Procesar` («dejó 1») y
+`PENDIENTE: «Voice.ConversacionEnVivo.SeVuelcaCrudo»`. ROTO, exit 4.
+
+Después, sobre `5737413` (el arreglo commiteado), 10 sabotajes:
+
+| Id | Rotura | Veredicto |
+|---|---|---|
+| G2 | el defecto abre `gpt-live-1-mini` | ✘ 210, 7 comprobaciones (sin variable, vacía, en blanco, `gpt-live`, `gemini` y el constructor dos veces). ROTO, exit 7 |
+| S210e | el defecto abre GPT-Live con otro delegado (`gpt-5.6-terra`) | ✘ 210, las mismas 7 («… delegado gpt-5.6-terra …»). ROTO, exit 7 |
+| S210f | `U_VOZ=realtime` abre Realtime con otro modelo (`gpt-realtime-mini`) | ✘ 210, 3 comprobaciones (`realtime`, ` Realtime ` y el constructor). ROTO, exit 3 |
+| G3 | el aviso del valor desconocido invierte su condición | ✘ 210 («… nombra «gemini» … (dejó 0: )»). ROTO, exit 1 |
+| S210g | el aviso sale siempre que no se pasa protocolo (`\|\|` en vez de `&&`) | ✘ 210 («sin U_VOZ no deja ninguna línea voz-viva sobre U_VOZ… (dejó 1…)» y lo mismo con `realtime`). ROTO, exit 2 |
+| S217a | **cableado**: `Procesar` deja de consultar `SeVuelcaCrudo` | ✘ 217 por la puerta del socket: los dos deltas y el audio vacío («dejó 1»). ROTO, exit 3 |
+| S217b | los deltas del delegado se vuelcan (`.deltas` en vez de `.delta`) | ✘ 217: los dos deltas, por `Procesar` y por la regla pura. ROTO, exit 4 |
+| S217c | el audio vacío se vuelca | ✘ 217: el audio vacío, por `Procesar` y por la regla. ROTO, exit 2 |
+| S217d | se callan todos los `response.event`, no solo los deltas | ✘ 217: `response.completed` y `function_call_arguments.done` dejan de dejar su línea («dejó 0»), por `Procesar` y por la regla. ROTO, exit 4 |
+| S217e | se calla todo lo que acabe en `.delta`, venga o no dentro de `response.event` | ✘ 217 («y un .delta que no viene dentro de response.event sigue como estaba…»). ROTO, exit 1 |
+
+En todos, las promesas que no se rompían siguieron verdes (✔ 217 con los de la 210, ✔ 210 con los de la
+217), así que el rojo es de la rotura y no del arnés. **S217e solo lo ve la regla pura**: por `Procesar`
+se juzga una conversación con GPT-Live, y un `.delta` de Realtime no pasa por ahí.
+
 **Traductor (fase 1, `jero/voz-gpt-live-protocolo`), `scripts\contrato-de-la-voz.ps1`**, los seis
 aplicados por diff y restaurados:
 
@@ -468,5 +535,6 @@ denominador (ver Hallazgos).
 - [x] Promesas 208–210 escritas en `tests/ContratoDelGrafo/Contrato.cs`, en rojo (`b64972b`), y después verdes (**CONTRATO INTACTO**, 0 pendientes)
 - [x] Cada una rota a propósito, comprobada por diff de bytes, restaurada y recompilada (ver «Sabotajes»; el cableado de 208 y del cambio de modo, medido sin juez)
 - [x] La sonda del `session.update` de la delegación, pegada en Hallazgos
+- [x] Fase 6 (tras las revisiones): la 210 juzga lo que abre (modelo, delegado, dirección y el aviso del valor desconocido), roja con G2 y G3 aplicados; la 217 del log, roja antes de su código; las dos verdes y saboteadas (**CONTRATO INTACTO**, **VOZ ÍNTEGRA**, 0 pendientes)
 - [ ] Nivel 4 con GPT-Live y con `U_VOZ=realtime`, con el juez arreglado, con horas y el modelo de cada corrida
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)
