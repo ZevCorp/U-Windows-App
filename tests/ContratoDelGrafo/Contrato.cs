@@ -7806,12 +7806,12 @@ internal static class Contrato
         // conversación deja sustituir su salida y el «hay socket», y se juzga lo que sale de verdad: lo
         // escrito (EnviarTextoAsync, que usan «Escríbele…» y el saludo) y la nota al modelo.
         var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
-        var salida = tc?.GetField("_salida", BindingFlags.NonPublic | BindingFlags.Instance);
-        var abierta = tc?.GetField("_salidaAbierta", BindingFlags.NonPublic | BindingFlags.Instance);
+        var salida = tc?.GetField("_puerta", BindingFlags.NonPublic | BindingFlags.Instance);
+        var abierta = tc?.GetField("_puertaAbierta", BindingFlags.NonPublic | BindingFlags.Instance);
         var escribir = tc?.GetMethod("EnviarTextoAsync", BindingFlags.Public | BindingFlags.Instance);
         var nota = tc?.GetMethod("EnviarTextoAlModeloAsync", BindingFlags.NonPublic | BindingFlags.Instance);
         if (tc == null || salida == null || abierta == null || escribir == null || nota == null)
-        { Pendiente("ConversacionEnVivo._salida y _salidaAbierta (lo que la conversación manda al escribir)", "208", "018"); return; }
+        { Pendiente("ConversacionEnVivo._puerta y _puertaAbierta (lo que la conversación manda al escribir)", "208", "018"); return; }
 
         List<string> Manda(Voz.Realtime.IProtocolo p, MethodInfo metodo, bool conLaVozAbierta)
         {
@@ -7858,14 +7858,14 @@ internal static class Contrato
     private static void VariasLlamadasUnSoloTurno()
     {
         var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
-        var salida = tc?.GetField("_salida", BindingFlags.NonPublic | BindingFlags.Instance);
-        var abierta = tc?.GetField("_salidaAbierta", BindingFlags.NonPublic | BindingFlags.Instance);
+        var salida = tc?.GetField("_puerta", BindingFlags.NonPublic | BindingFlags.Instance);
+        var abierta = tc?.GetField("_puertaAbierta", BindingFlags.NonPublic | BindingFlags.Instance);
         var procesar = tc?.GetMethod("Procesar", BindingFlags.NonPublic | BindingFlags.Instance);
         var nucleo = tc?.GetMethod("EjecutarNucleoAsync", BindingFlags.NonPublic | BindingFlags.Instance);
         var sesion = tc?.GetField("_sesionId", BindingFlags.NonPublic | BindingFlags.Instance);
         var autocontrol = tc?.GetProperty("Autocontrol", BindingFlags.Public | BindingFlags.Instance);
         if (tc == null || salida == null || abierta == null || procesar == null || nucleo == null || sesion == null || autocontrol == null)
-        { Pendiente("ConversacionEnVivo._salida y _salidaAbierta (lo que la conversación manda tras las herramientas)", "214", "018"); return; }
+        { Pendiente("ConversacionEnVivo._puerta y _puertaAbierta (lo que la conversación manda tras las herramientas)", "214", "018"); return; }
         var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
         if (tLive == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "214", "018"); return; }
         var live = (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,

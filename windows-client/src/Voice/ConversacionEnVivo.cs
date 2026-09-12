@@ -1216,7 +1216,7 @@ public sealed class ConversacionEnVivo : IDisposable
 
     public async Task EnviarTextoAsync(string texto)
     {
-        if (!Viva || _ws?.State != WebSocketState.Open || string.IsNullOrWhiteSpace(texto)) return;
+        if (!SalidaAbierta || string.IsNullOrWhiteSpace(texto)) return;
         EmpiezaUnTurnoDelUsuario("texto");   // escribir también es pedir algo nuevo (spec 017)
         Dice?.Invoke($"Tú: {texto}");
         var ct = _cts?.Token ?? CancellationToken.None;
@@ -1240,10 +1240,31 @@ public sealed class ConversacionEnVivo : IDisposable
         catch (Exception e) { LogBus.Log("voz-viva", $"no pude mandar la foto: {e.Message}"); }
     }
 
+    // ── La salida (spec 018, promesa 208) ───────────────────────────────────
+
+    /// <summary>
+    /// POR DÓNDE SALE LO QUE SE MANDA, y si hay por dónde. Nulas en la app, que es el socket; el contrato las
+    /// cambia por una lista y un «sí» para juzgar lo que la conversación manda de verdad.
+    /// </summary>
+    /// <remarks>
+    /// Sin esto la 208 solo podía juzgar MensajesDeTexto, y devolver EnviarTextoAsync a mandar solo el texto —la
+    /// línea de main, la que dejó a Ü muda ante lo escrito en el nivel 4 del 2026-09-11— daba CONTRATO INTACTO
+    /// (W208, medido el 2026-09-12): el método sale si no hay socket, y el contrato no lo tiene. Se sustituye
+    /// solo la puerta; qué se manda y cuándo lo sigue decidiendo esta clase. (No se llama «_salida»: ese nombre
+    /// ya es el contador de fichas de salida.)
+    /// </remarks>
+    private Func<string, CancellationToken, Task>? _puerta = null;
+    private Func<bool>? _puertaAbierta = null;
+
+    /// <summary>Hay voz viva con el socket abierto: si no, lo escrito no tiene por dónde salir.</summary>
+    private bool SalidaAbierta => _puertaAbierta?.Invoke() ?? (Viva && _ws?.State == WebSocketState.Open);
+
     /// <summary>Un único escritor por socket: WebSocket no admite envíos solapados.</summary>
     private async Task EnviarAsync(string json, CancellationToken ct)
     {
-        if (_ws == null || json.Length == 0) return;
+        if (json.Length == 0) return;
+        if (_puerta != null) { await _puerta(json, ct); return; }
+        if (_ws == null) return;
         await _envio.WaitAsync(ct);
         try { await _ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct); }
         finally { _envio.Release(); }
@@ -1683,7 +1704,7 @@ public sealed class ConversacionEnVivo : IDisposable
     /// </summary>
     private async Task EnviarTextoAlModeloAsync(string texto)
     {
-        if (!Viva || _ws?.State != WebSocketState.Open) return;
+        if (!SalidaAbierta) return;
         var ct = _cts?.Token ?? CancellationToken.None;
         foreach (string msg in MensajesDeTexto(_protocolo, texto))   // el mismo camino que lo escrito (208)
             await EnviarAsync(msg, ct);
