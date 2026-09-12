@@ -555,6 +555,22 @@ internal static class Contrato
         // asistente con manos. El dueño: «la voz se desalineaba de lo que realmente se estaba haciendo».
         Prueba("192. durante la comprobación la voz en vivo es una voz PRESTADA: no tiene ni una herramienta, sus instrucciones son decir exactamente lo que la app le pide y callar ante todo lo demás, y la sesión no crea respuestas por su cuenta —solo cuando la app se lo pide—; al terminar, vuelve a ser quien era", LaVozDeLaComprobacionEsPrestada);
 
+        // ── Lo hace a la primera (spec 017) ──────────────────────────────────
+        //
+        // Una nota de voz del 2026-09-10 fijó el foco: «que lo que uno le pida lo haga, y lo haga a
+        // la primera, máximo dos intentos, máximo dos segundos». Medido esa noche: ante homónimos el
+        // ejecutor pedía «el selector» sin número ni destino, no había tope de intentos en el código,
+        // un éxito no decía si la pantalla había cambiado, y el catálogo pedía argumentos muertos.
+        //
+        // Empiezan en la 202 y no en la 193 a propósito: dos ramas abiertas de Jose ya usan números
+        // por encima de la 192 y tendrán que renumerar sobre main (docs/specs/017, «Numeración»).
+        Console.WriteLine();
+        Prueba("202. pulsar dice lo que pasó: una tanda que termina bien distingue «ahora estás en Y» de «la pantalla no cambió», y «hice los N paso(s)» ya no tapa el último hecho", PulsarDiceLoQuePaso);
+        Prueba("203. con varias puertas vivas para un mismo nombre no se pide un selector a ciegas: se numeran 1..N en orden estable con su tipo y, si se sabe, a dónde llevan; y un paso que trae cuál pulsa esa y solo esa", LosHomonimosSeNumeran);
+        Prueba("204. dos intentos y no tres: en un mismo turno del usuario, la tercera acción hacia un destino que ya falló dos veces no se ejecuta, y se dice qué salió en cada una; al pulsar con map_take, el mismo botón es el mismo destino se pida como se pida; al escribir, el campo cuenta tal como se pidió", DosIntentosYNoTres);
+        Prueba("205. cada turno del usuario deja una línea voz-turno con su medida: llamadas, herramientas distintas, el máximo de intentos a un mismo destino y los milisegundos hasta la primera acción y la última; lo rechazado y lo retirado también cuentan", CadaTurnoDejaSuMedida);
+        Prueba("206. el catálogo le pide al cerebro lo que las manos usan: map_take y map_type no ofrecen argumentos que su cuerpo ignora, map_take trae which, y las instrucciones mandan mirar y elegir con which antes que preguntar; la regla escrita de intentos es la del código: dos", ElCatalogoPideLoQueLasManosUsan);
+        Prueba("207. la mano dice, sin prosa, si fue un intento y si lo logró: pulsar y que cambie la pantalla es logro, pulsar y que no cambie no lo es, pedir algo que no está es un intento fallido, y la lista de homónimos no es un intento", LaManoDiceSiLoLogro);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -7189,6 +7205,553 @@ internal static class Contrato
         Debe(!Asoma(550, false), "ni con el reposo que tenía antes: 550 ms se rechazó por rápido");
         Debe(Asoma(ms, false), "cumplido el reposo, asoma");
         Debe(!Asoma(ms * 10, true), "pero arrastrándola no asoma por mucho que se tarde: ir a moverla no es ir a escribirle");
+    }
+
+    // ── Lo hace a la primera (spec 017) ──────────────────────────────────────
+
+    /// <summary>
+    /// Dos «Descargas» vivas en «a»: un TreeItem que lleva a «b» y un TabItem que lleva a «c», las
+    /// dos ya cruzadas, así que el grafo sabe a dónde lleva cada una. Es el caso medido el
+    /// 2026-08-09 (u-20260809.log, 09:37:31): tres «Descargas» de tipos distintos y un «dime el
+    /// selector» sin número ni destino.
+    /// </summary>
+    private static Nucleo.Grafo DosDescargas()
+    {
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x.exe/b", new[] { new Nucleo.Elemento("s:b", "Bee", "Button") });
+        g.Observar("uia://x.exe/c", new[] { new Nucleo.Elemento("s:c", "Cee", "Button") });
+        g.Observar("uia://x.exe/a", new[]
+        {
+            new Nucleo.Elemento("s:1", "Descargas", "TreeItem"),
+            new Nucleo.Elemento("s:2", "Descargas", "TabItem"),
+        });
+        g.Cruzar("uia://x.exe/a", "s:1", "uia://x.exe/b", "");
+        g.Cruzar("uia://x.exe/a", "s:2", "uia://x.exe/c", "");
+        return g;
+    }
+
+    private static readonly Dictionary<string, string> RutasDeDescargas = new()
+    {
+        ["uia://x.exe/a|s:1"] = "uia://x.exe/b",
+        ["uia://x.exe/a|s:2"] = "uia://x.exe/c",
+    };
+
+    /// <summary>
+    /// Los nombres de los argumentos que el catálogo de la voz declara para una herramienta, o null
+    /// si no aparece. El catálogo lo arma <c>ConversacionEnVivo.Herramientas()</c> con los
+    /// <c>Utensilio</c>/<c>Argumento</c> de Voz.Realtime; se lee por reflexión, como el resto.
+    /// </summary>
+    private static HashSet<string>? ArgumentosDe(string herramienta)
+    {
+        var t = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var m = t?.GetMethod("Herramientas", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        if (m?.Invoke(null, null) is not System.Collections.IEnumerable todas) return null;
+        foreach (var u in todas)
+        {
+            if (u == null) continue;
+            var tu = u.GetType();
+            if ((string?)tu.GetProperty("Nombre")?.GetValue(u) != herramienta) continue;
+            var set = new HashSet<string>(StringComparer.Ordinal);
+            if (tu.GetProperty("Args")?.GetValue(u) is System.Collections.IEnumerable args)
+                foreach (var a in args)
+                    if (a?.GetType().GetProperty("Nombre")?.GetValue(a) is string n) set.Add(n);
+            return set;
+        }
+        return null;
+    }
+
+    private static void PulsarDiceLoQuePaso()
+    {
+        // Hoy «Recorre» cierra con «hice los N paso(s): quedaste en…» y se traga el «pulsé X y la
+        // pantalla no cambió» que «Pulsa» ya sabía decir (RecorrerSegunElNucleo.cs:183-185 frente a
+        // PulsarSegunElNucleo.cs:101-103). Sin ese dato el cerebro no puede darse cuenta de que
+        // «por aquí no era» —lo que el audio pide literalmente— y paga otra mirada para averiguarlo.
+        var (b1, _, t1) = BatchCon(MundoDeTres(), "uia://x.exe/a",
+            new Dictionary<string, string> { ["uia://x.exe/a|s:1"] = "uia://x.exe/b" });
+        var r1 = b1.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Uno") });
+        Debe(t1.Count == 1 && r1.Termino && r1.Cuenta.Contains("ahora estás en «uia://x.exe/b»"),
+            $"una tanda de un clic que navega dice A DÓNDE llevó (dijo: «{r1.Cuenta}»)");
+
+        var (b2, _, t2) = BatchCon(MundoDeTres(), "uia://x.exe/a", new Dictionary<string, string>());
+        var r2 = b2.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Uno") });
+        Debe(t2.Count == 1 && r2.Termino && r2.Cuenta.Contains("no cambió"),
+            $"y la que pulsa sin que nada cambie lo dice con esas palabras, aunque la tanda termine "
+            + $"(dijo: «{r2.Cuenta}»): sin esto no hay «me di cuenta de que por aquí no era»");
+        Debe(!r1.Cuenta.Contains("quedaste en") && !r2.Cuenta.Contains("quedaste en"),
+            "y «hice los 1 paso(s): quedaste en…» ya no tapa el último hecho: detrás de «hice los» va lo que pasó");
+
+        var (b3, _, _) = BatchCon(MundoDeTres(), "uia://x.exe/a", RutasDeTres);
+        var r3 = b3.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Uno"), new RecorrerSegunElNucleo.Paso("Dos") });
+        Debe(r3.Termino && r3.Cuenta.Contains("ahora estás en «uia://x.exe/c»"),
+            $"en una tanda de varios, el último hecho también se dice (dijo: «{r3.Cuenta}»)");
+    }
+
+    private static void LosHomonimosSeNumeran()
+    {
+        // El 2026-08-09 (09:37:31) «map_take exit=Descargas» casó con tres salidas vivas y la
+        // respuesta fue «hay 3 puertas vivas… Dime el selector y sigo»: sin número, sin tipo, sin
+        // destino. La voz pidió el mismo selector tres veces, 6-7 s cada una, y no llegó.
+        var (b1, _, t1) = BatchCon(DosDescargas(), "uia://x.exe/a", RutasDeDescargas);
+        var r1 = b1.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Descargas") });
+        Debe(t1.Count == 0 && !r1.Termino,
+            $"con dos «Descargas» vivas no se adivina: no se pulsa ninguna (se pulsaron {t1.Count})");
+        int i1 = r1.Cuenta.IndexOf("1)", StringComparison.Ordinal);
+        int i2 = r1.Cuenta.IndexOf("2)", StringComparison.Ordinal);
+        Debe(i1 >= 0 && i2 > i1 && r1.Cuenta.Contains("TreeItem") && r1.Cuenta.Contains("TabItem"),
+            $"se numeran 1..N con su tipo, en vez de pedir un selector a ciegas (dijo: «{r1.Cuenta}»)");
+        Debe(r1.Cuenta.Contains("uia://x.exe/b") && r1.Cuenta.Contains("uia://x.exe/c"),
+            "y, si el grafo lo sabe, a dónde lleva cada una: es lo que el cerebro necesita para elegir");
+
+        var cual = typeof(RecorrerSegunElNucleo.Paso).GetProperty("Cual");
+        if (cual == null) { Pendiente("RecorrerSegunElNucleo.Paso.Cual", "203", "017"); return; }
+        var (b2, donde2, t2) = BatchCon(DosDescargas(), "uia://x.exe/a", RutasDeDescargas);
+        var paso = new RecorrerSegunElNucleo.Paso("Descargas");
+        cual.SetValue(paso, 2);
+        b2.Recorre(new[] { paso });
+        Debe(t2.Count == 1 && donde2() == "uia://x.exe/c",
+            $"un paso que trae cuál (2) pulsa esa y solo esa: quedó en «{donde2()}» con {t2.Count} toque(s)");
+
+        // LOS CANDIDATOS VIAJAN COMO DATOS, no solo en la prosa (crítico, tercera pasada, 2026-09-11): el
+        // tope necesita saber que un selector de la lista ES ese candidato, y sacarlo de la cuenta sería
+        // concluir leyendo un mensaje (aprendizaje nº2).
+        var pCand = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Candidatos");
+        if (pCand == null) { Pendiente("RecorrerSegunElNucleo.Resultado.Candidatos", "203", "017"); return; }
+        var cands = pCand.GetValue(r1) as IReadOnlyList<string>;
+        int c0 = cands is { Count: 2 } ? r1.Cuenta.IndexOf("«" + cands[0] + "»", StringComparison.Ordinal) : -1;
+        int c1 = cands is { Count: 2 } ? r1.Cuenta.IndexOf("«" + cands[1] + "»", Math.Max(i2, 0), StringComparison.Ordinal) : -1;
+        Debe(c0 > i1 && c0 < i2 && c1 > i2,
+            $"y la lista viaja también como datos, en el MISMO orden que su número (llegó: {(cands == null ? "nada" : string.Join(" · ", cands))})");
+
+        var args = ArgumentosDe("map_take");
+        Debe(args != null && args.Contains("which"),
+            "y el cerebro puede decir cuál: map_take declara `which`, como ya lo tenía map_show");
+    }
+
+    private static void DosIntentosYNoTres()
+    {
+        // No había tope en el código: EjecutarNucleoAsync ejecuta todo lo que se pide, y la regla
+        // escrita toleraba tres llamadas («más de dos veces»). El 2026-08-09 fueron tres idénticas a
+        // «Descargas», 6-7 s cada una. El audio: «máximo dos intentos».
+        var t = Cap004("U.WindowsClient.Voice.TopeDeIntentos");
+        var rechazo = t?.GetMethod("Rechazo");
+        var anota = t?.GetMethod("Anota");
+        var nuevo = t?.GetMethod("NuevoTurno");
+        if (t == null || rechazo == null || anota == null || nuevo == null)
+        { Pendiente("Voice.TopeDeIntentos", "204", "017"); return; }
+
+        var tope = Activator.CreateInstance(t)!;
+        string? R(string h, string d) => (string?)rechazo.Invoke(tope, new object[] { h, d });
+        void A(string h, string d, bool logrado, string salio) => anota.Invoke(tope, new object[] { h, d, logrado, salio });
+
+        Debe(R("map_take", "Descargas") == null, "el primer intento pasa");
+        A("map_take", "Descargas", false, "pulsé «Descargas» y la pantalla no cambió");
+        Debe(R("map_take", "uia:name=Descargas;ct=TabItem") == null, "el segundo también, aunque venga por selector");
+        A("map_take", "uia:name=Descargas;ct=TabItem", false, "no lo encontré vivo");
+        string? tercero = R("map_take", "descargas");
+        Debe(tercero != null && tercero.Contains("dos"),
+            $"el TERCERO a un destino que ya falló dos veces no se ejecuta, y se dice que van dos (dijo: «{tercero}»). "
+            + "Por nombre, por selector o en minúsculas es el MISMO destino (aprendizaje nº16)");
+        Debe(tercero != null && tercero.Contains("no cambió") && tercero.Contains("no lo encontré"),
+            "y dice qué salió en cada uno: es lo que el cerebro necesita para cambiar de vía en vez de insistir");
+        Debe(tercero != null && tercero.Contains("mismo botón"),
+            "y al pulsar dice que pedirlo de otra forma es el mismo botón: el ejecutor lo cumple (séptima pasada)");
+        Debe(R("map_take", "Documentos") == null, "otro destino no hereda el castigo");
+
+        nuevo.Invoke(tope, null);
+        Debe(R("map_take", "Descargas") == null, "un turno nuevo del usuario empieza de cero");
+
+        for (int i = 0; i < 3; i++)
+        {
+            Debe(R("map_take", "Siguiente") == null, $"lo logrado no cuenta como intento fallido (vez {i + 1})");
+            A("map_take", "Siguiente", true, "ahora estás en…");
+        }
+        for (int i = 0; i < 3; i++) { A("map_look", "", false, "aquí tienes lo que hay"); A("map_where_am_i", "", false, "estás en…"); }
+        Debe(R("map_look", "") == null && R("map_where_am_i", "") == null, "y mirar nunca cuenta: mirar no es insistir");
+
+        // EL OTRO BOTÓN SÍ SE PRUEBA (crítico de la rama, 2026-09-11). El audio pide «me di cuenta que
+        // por aquí no era… voy atrás, pruebo este otro botón». Sin el candidato en la clave, dos fallos
+        // al 1 de una lista numerada frenaban también al 2 —con un rechazo que encima decía «elige otro
+        // candidato con which»—.
+        nuevo.Invoke(tope, null);
+        var destinoDe = t.GetMethod("DestinoDe");
+        string Cand(string n) => (string)destinoDe!.Invoke(null, new object?[] { "map_take",
+            new Dictionary<string, string> { ["exit"] = "Descargas", ["which"] = n } })!;
+        // Despues recibe también los candidatos de la lista. Se busca por aridad: reflexión no rellena
+        // opcionales, y un parámetro nuevo rompería la llamada (la lección de la 103).
+        var despues = t.GetMethods().FirstOrDefault(m => m.Name == "Despues" && m.GetParameters().Length == 7);
+        if (despues == null) { Pendiente("Voice.TopeDeIntentos.Despues(…, candidatos)", "204", "017"); return; }
+        void DC(string d, bool revento, bool? intento, bool? logro, string salio, IReadOnlyList<string>? candidatos)
+            => despues.Invoke(tope, new object?[] { "map_take", d, revento, intento, logro, salio, candidatos });
+        void D(string d, bool revento, bool? intento, bool? logro, string salio) => DC(d, revento, intento, logro, salio, null);
+        const string Lista = "hay 2 puertas vivas para «Descargas»: 1) «Descargas» (TreeItem) · 2) «Descargas» (TabItem)";
+
+        D("Descargas", false, false, false, Lista);
+        D(Cand("1"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        D(Cand("1"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        string? alUno = R("map_take", Cand("1"));
+        Debe(alUno != null, "el mismo candidato, por tercera vez, se frena");
+        Debe(alUno != null && alUno.Contains("which") && alUno.Contains("TabItem"),
+            $"y el rechazo recuerda la lista, para elegir otro de verdad y no a ciegas (dijo: «{alUno}»)");
+        Debe(R("map_take", Cand("2")) == null,
+            "pero el OTRO candidato de la lista es otro destino: probarlo es lo que el audio pide, no insistir");
+
+        // SIN LISTA, `which` NO ABRE UNA CLAVE NUEVA (crítico final, 2026-09-11). El ejecutor solo lee
+        // `which` cuando hay homónimos: con un único «Descargas», which=1, 2, 3… pulsan el MISMO botón, y
+        // cada número era una clave nueva con dos intentos más —la espiral de «20 segundos con 20
+        // herramientas» del audio—. Y el rechazo, encima, sugería hacerlo.
+        nuevo.Invoke(tope, null);
+        D("Descargas", false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        D("Descargas", false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        string? sinLista = R("map_take", Cand("1"));
+        Debe(sinLista != null, "sin una lista de homónimos, «Descargas» con which=1 es el mismo botón: se frena");
+        Debe(sinLista != null && !sinLista.Contains("which"),
+            $"y el rechazo no sugiere `which` cuando no hubo lista: sería mandar al modelo a esquivar el tope (dijo: «{sinLista}»)");
+
+        // LO QUE LA VOZ HACE DESPUÉS DE CADA HERRAMIENTA, en un solo sitio juzgable (crítico final): antes
+        // vivía en ConversacionEnVivo, y cambiarlo por «siempre logrado» dejaba el contrato INTACTO.
+        nuevo.Invoke(tope, null);
+        D("Nuevo", true, null, null, "la herramienta falló: …");
+        D("Nuevo", true, null, null, "la herramienta falló: …");
+        Debe(R("map_take", "Nuevo") != null, "una excepción es un intento que no se logró");
+        for (int i = 0; i < 3; i++) D("Buscar", false, null, null, "todavía no sé pulsar: el núcleo no está conectado.");
+        Debe(R("map_take", "Buscar") == null, "lo que no trae mano no cuenta como fallo: no se adivina");
+        for (int i = 0; i < 3; i++) D("Pegar", false, false, false, "hay 2 puertas vivas para «Pegar»: …");
+        Debe(R("map_take", "Pegar") == null, "y pedir la lista tres veces no es insistir: no se pulsó nada");
+        for (int i = 0; i < 3; i++) D("Siguiente", false, true, true, "ahora estás en…");
+        Debe(R("map_take", "Siguiente") == null, "y lo logrado, tampoco");
+
+        // TRAS UNA LISTA, EL SELECTOR DE UN CANDIDATO ES ESE CANDIDATO (crítico, tercera pasada): el
+        // rechazo trae la lista con sus selectores, y pedir «uia:name=Descargas;ct=TabItem» después de dos
+        // fallos con which=2 abría una clave nueva para el MISMO botón: cuatro intentos, repitiendo un
+        // selector, que es justo lo del 2026-08-09. Y which=02 o +2 son el 2, como los lee el ejecutor.
+        nuevo.Invoke(tope, null);
+        var sel = new[] { "uia:name=Descargas;ct=TreeItem", "uia:name=Descargas;ct=TabItem" };
+        DC("Descargas", false, false, false, Lista, sel);
+        D(Cand("2"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        D(Cand("2"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        Debe(R("map_take", sel[1]) != null,
+            "tras la lista, el selector del candidato 2 ES el candidato 2: pedirlo por selector no le da dos intentos más");
+        Debe(R("map_take", Cand("02")) != null && R("map_take", Cand("+2")) != null,
+            "y which=02 o which=+2 son el 2, como los lee el ejecutor");
+        Debe(R("map_take", sel[0]) == null && R("map_take", Cand("1")) == null,
+            "pero el 1, por su selector o por su número, sigue siendo otro botón");
+
+        // CON `which` O CON LOS SELECTORES REALES, EL MISMO BOTÓN (crítico, cuarta pasada, 2026-09-11).
+        // El ejecutor pulsa el selector exacto e ignora `which` (EsperarloVivo: «el selector exacto
+        // manda»), y un selector que no es `uia:name=` no se aplana a su etiqueta. «selector#which=N» daba
+        // dos intentos más por cada N, y con selectores como los de la tanda (s:1, s:2) o los de SAP la
+        // lista no se encontraba nunca: la sonda sobre el U.dll contó 6 y 4 toques al mismo botón.
+        string Sel(string sl, string n) => (string)destinoDe!.Invoke(null, new object?[] { "map_take",
+            new Dictionary<string, string> { ["exit"] = sl, ["which"] = n } })!;
+        nuevo.Invoke(tope, null);
+        DC("Descargas", false, false, false, Lista, sel);
+        D(sel[1], false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        D(sel[1], false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+        Debe(R("map_take", Sel(sel[1], "5")) != null && R("map_take", Sel(sel[1], "7")) != null,
+            "el selector exacto de un candidato, con cualquier which, es ese candidato: el ejecutor pulsa el selector e ignora which");
+        Debe(R("map_take", Sel(sel[0], "2")) == null,
+            "y el selector del 1 con which=2 es el 1 —el que se pulsa—: los fallos del 2 no lo frenan");
+
+        // Y CON LOS CANDIDATOS REALES DEL EJECUTOR, no con los de este test: la tanda de la 203. Si el
+        // contrato no cruza las dos piezas, elige el caso que pasa (crítico, cuarta pasada).
+        nuevo.Invoke(tope, null);
+        var (bR, _, _) = BatchCon(DosDescargas(), "uia://x.exe/a", RutasDeDescargas);
+        var rR = bR.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Descargas") });
+        var candsR = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Candidatos")?.GetValue(rR) as IReadOnlyList<string>;
+        Debe(candsR is { Count: 2 }, "la tanda de la 203 devuelve sus dos candidatos como datos");
+        if (candsR is { Count: 2 })
+        {
+            DC("Descargas", false, false, false, rR.Cuenta, candsR);
+            D(Cand("2"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+            D(Cand("2"), false, true, false, "pulsé «Descargas» y la pantalla no cambió");
+            Debe(R("map_take", candsR[1]) != null && R("map_take", Sel(candsR[1], "9")) != null,
+                $"con los selectores reales del ejecutor («{candsR[1]}»), pedir el 2 por su selector —con o sin which— es el 2");
+            Debe(R("map_take", candsR[0]) == null, "y el 1, por su selector real, sigue siendo otro botón");
+        }
+
+        // EL TOPE MIRA LO QUE SE VA A PULSAR (crítico, quinta pasada, 2026-09-11). Cinco pasadas
+        // encontraron cinco formas de la misma diferencia —el tope juzgaba lo PEDIDO y el ejecutor decide
+        // por sus reglas—: el mismo id antes y después de una lista (4 toques), y cualquier trozo de la
+        // etiqueta, que el ejecutor casa por contención (18 toques a un botón con 9 variantes). La clase se
+        // cierra donde se decide: el ejecutor le pregunta al tope con el selector que VA a pulsar.
+        var antesDe = t.GetMethod("AntesDePulsar");
+        var pAntes = typeof(RecorrerSegunElNucleo.Paso).GetProperty("AntesDePulsar");
+        var pPulsado = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Pulsado");
+        var despues8 = t.GetMethods().FirstOrDefault(m => m.Name == "Despues" && m.GetParameters().Length == 8);
+        if (antesDe == null || pAntes == null || pPulsado == null || despues8 == null)
+        { Pendiente("TopeDeIntentos.AntesDePulsar · Paso.AntesDePulsar · Resultado.Pulsado", "204", "017"); return; }
+        var pCual = typeof(RecorrerSegunElNucleo.Paso).GetProperty("Cual")!;
+        var pAmb = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Ambiguo")!;
+        var pCands = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Candidatos")!;
+        // Lo que hacen la voz y la mano en cada llamada, sin pantalla: el tope ante lo pedido, el
+        // ejecutor con la consulta dentro del paso, y lo que salió de vuelta al tope.
+        // Cuenta PULSACIONES —llamadas que tocaron algo—, no toques: una pulsación que no cambia la
+        // pantalla da dos toques (el ensayo de doble clic), y la primera versión de esta prueba los confundió.
+        int pulsadas = 0;
+        string Llamada(RecorrerSegunElNucleo b, List<string> toques, string exit, int cual)
+        {
+            string pedido = cual > 0 ? $"{exit}#which={cual}" : exit;
+            if (R("map_take", pedido) is string antesDeLlamar) return antesDeLlamar;
+            var pasoT = new RecorrerSegunElNucleo.Paso(exit);
+            if (cual > 0) pCual.SetValue(pasoT, cual);
+            pAntes.SetValue(pasoT, (Func<string, string?>)(sl => (string?)antesDe.Invoke(tope, new object[] { "map_take", sl })));
+            int toquesAntes = toques.Count;
+            var res = b.Recorre(new[] { pasoT });
+            if (toques.Count > toquesAntes) pulsadas++;
+            despues8.Invoke(tope, new object?[] { "map_take", pedido, false, !(bool)pAmb.GetValue(res)!,
+                res.Termino && res.Cambio, res.Cuenta, pCands.GetValue(res), pPulsado.GetValue(res) });
+            return res.Cuenta;
+        }
+
+        // El mismo id antes y después de una lista: dos toques, no cuatro.
+        nuevo.Invoke(tope, null);
+        var (bId, _, tId) = BatchCon(DosDescargas(), "uia://x.exe/a", new Dictionary<string, string>());
+        pulsadas = 0;
+        Llamada(bId, tId, "s:1", 0);
+        Llamada(bId, tId, "s:1", 0);
+        Llamada(bId, tId, "Descargas", 0);
+        string terceraVez = Llamada(bId, tId, "s:1", 0);
+        Debe(pulsadas == 2 && terceraVez.Contains("tercera"),
+            $"el mismo botón, pedido por su id antes y después de una lista, se pulsa dos veces y no más (se pulsó {pulsadas} veces; dijo: «{terceraVez}»)");
+        Debe(terceraVez.Contains("which") && terceraVez.Contains("«s:2»"),
+            $"y el freno del ejecutor recuerda la lista, para probar el OTRO candidato en vez de rendirse (sexta pasada; dijo: «{terceraVez}»)");
+
+        // Cualquier trozo de la etiqueta es el mismo botón: dos toques, no dos por variante.
+        nuevo.Invoke(tope, null);
+        var gUno = new Nucleo.Grafo();
+        gUno.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:9", "Descargas recientes", "ListItem") });
+        var (bUno, _, tUno) = BatchCon(gUno, "uia://x.exe/a", new Dictionary<string, string>());
+        pulsadas = 0;
+        foreach (var variante in new[] { "Descargas recientes", "Descargas", "descargas rec", "Descarga", "recientes" })
+            Llamada(bUno, tUno, variante, 0);
+        Debe(pulsadas == 2,
+            $"cinco formas de nombrar el mismo botón son el mismo botón: se pulsa dos veces y no más (se pulsó {pulsadas} veces)");
+
+        // ESCRIBIR también tiene su tope, por el campo TAL COMO SE PIDIÓ (sexta pasada del crítico): el mismo
+        // nombre, en minúsculas o por su selector UIA, es el mismo campo. Es una guarda de lo que ya hacía el
+        // código, no una promesa nueva. Lo que NO cubre —tres nombres de un campo de SAP, que resuelve
+        // EscribirPorMundo en FaceWindow— está declarado en la spec, y por eso el enunciado se acotó.
+        nuevo.Invoke(tope, null);
+        despues8.Invoke(tope, new object?[] { "map_type", "Nombre", false, true, false, "no pude escribir en «Nombre»", null, null });
+        despues8.Invoke(tope, new object?[] { "map_type", "uia:name=Nombre;ct=Edit", false, true, false, "no pude escribir en «Nombre»", null, null });
+        string? alEscribir = R("map_type", "nombre");
+        Debe(alEscribir != null,
+            "escribir por tercera vez en un campo que ya falló dos veces, por su nombre o por su selector UIA, tampoco se ejecuta");
+        Debe(alEscribir != null && !alEscribir.Contains("mismo botón") && alEscribir.Contains("otro campo"),
+            $"y al escribir el rechazo no promete «es el mismo botón» —ahí no se cumple— ni manda pulsar: manda otro campo (séptima pasada; dijo: «{alEscribir}»)");
+    }
+
+    private static void CadaTurnoDejaSuMedida()
+    {
+        // No existía la unidad «petición»: «usuario dijo» se escribe al cerrar el turno y «mapa-mcp:
+        // →» no dice quién llamó. Sin una línea por turno no se puede decir si algo se hizo a la
+        // primera: solo adivinarlo sumando líneas sueltas.
+        var t = Cap004("U.WindowsClient.Voice.CuentaDelTurno");
+        if (t == null) { Pendiente("Voice.CuentaDelTurno", "205", "017"); return; }
+
+        long ahora = 1000;
+        var c = Activator.CreateInstance(t, new object[] { (Func<long>)(() => ahora) })!;
+        void M(string metodo, params object[] a) => t.GetMethod(metodo)!.Invoke(c, a);
+
+        M("Llamada", "map_where_am_i", "");
+        ahora = 1200; M("Resultado", "map_where_am_i", "", false);
+        ahora = 1300; M("Llamada", "map_take", "Descargas");
+        ahora = 2900; M("Resultado", "map_take", "Descargas", false);
+        ahora = 3000; M("Llamada", "map_take", "uia:name=Descargas;ct=TabItem");
+        ahora = 4000; M("Resultado", "map_take", "uia:name=Descargas;ct=TabItem", true);
+        ahora = 4100; M("Llamada", "map_take", "Descargas"); M("Rechazada", "map_take", "Descargas");
+        ahora = 4200; M("Llamada", "map_type", "Nombre"); M("Retirada", "map_type");
+
+        string? linea = (string?)t.GetMethod("Cerrar")!.Invoke(c, null);
+        Debe(linea != null && linea.Contains("llamadas=5"),
+            $"cuenta TODO lo pedido, también lo rechazado y lo retirado: el denominador es lo pedido (dijo: «{linea}»)");
+        Debe(linea != null && linea.Contains("distintas=3"), "cuántas herramientas distintas usó");
+        Debe(linea != null && linea.Contains("intentos_max=3") && linea.Contains("descargas"),
+            "el máximo de intentos a un mismo destino, y cuál: por nombre y por selector es el mismo");
+        Debe(linea != null && linea.Contains("primera=3000") && linea.Contains("ultima=3000"),
+            "y los milisegundos desde la primera llamada hasta la primera acción que actuó, y la última");
+        Debe(t.GetMethod("Cerrar")!.Invoke(c, null) == null,
+            "cerrar deja la cuenta a cero: el turno siguiente no hereda nada");
+        Debe(linea != null && linea.Contains("rechazadas=1") && linea.Contains("retiradas=1"),
+            "y lo frenado y lo retirado se dicen aparte, además de contar como llamadas");
+
+        // UN RESULTADO QUE CRUZA EL CIERRE NO DA TIEMPOS NEGATIVOS, y se mide desde que el usuario pidió
+        // (crítico de la rama, 2026-09-11). «Resultado» sin «Llamada» en el turno dejaba «primera»
+        // puesta, y salía negativa. Y los dos segundos del audio van desde que se pide, no desde la
+        // primera llamada del modelo.
+        var peticion = t.GetMethod("Peticion");
+        if (peticion == null) { Pendiente("Voice.CuentaDelTurno.Peticion", "205", "017"); return; }
+        var c2 = Activator.CreateInstance(t, new object[] { (Func<long>)(() => ahora) })!;
+        void M2(string metodo, params object[] a) => t.GetMethod(metodo)!.Invoke(c2, a);
+        ahora = 900; M2("Resultado", "map_take", "X", true);
+        ahora = 950; peticion.Invoke(c2, null);
+        ahora = 1000; M2("Llamada", "map_take", "Descargas");
+        ahora = 3000; M2("Resultado", "map_take", "Descargas", true);
+        ahora = 3100; M2("Llamada", "map_type", "Nombre");
+        ahora = 4000; M2("Resultado", "map_type", "Nombre", true);
+        string? l2 = (string?)t.GetMethod("Cerrar")!.Invoke(c2, null);
+        Debe(l2 != null && l2.Contains("primera=2000") && l2.Contains("ultima=3000") && !l2.Contains("=-"),
+            $"un resultado que llega sin llamada en el turno no cuenta, y nunca sale un tiempo negativo (dijo: «{l2}»)");
+        Debe(l2 != null && l2.Contains("desde_peticion=2050"),
+            "y se dice cuánto pasó desde que el usuario pidió hasta la primera acción que actuó: son los «dos segundos» del audio");
+    }
+
+    private static void ElCatalogoPideLoQueLasManosUsan()
+    {
+        // `at` y `action` de map_take, y `at` de map_type, no se usan en su cuerpo desde que
+        // e3c3ad8 borró ComprobarUbicacion (SurfaceMapTools.cs, Take/Type); aun así el catálogo los
+        // ofrecía y las instrucciones mandaban pedir map_where_am_i para rellenarlos.
+        var take = ArgumentosDe("map_take");
+        var type = ArgumentosDe("map_type");
+        var unblock = ArgumentosDe("map_unblock");
+        Debe(take != null && type != null && unblock != null, "encuentro el catálogo de la voz");
+        if (take == null || type == null || unblock == null) return;
+
+        Debe(!take.Contains("at") && !take.Contains("action"),
+            "map_take no ofrece `at` ni `action`: su cuerpo los ignora, y ofrecerlos es la ilusión de controlar el gesto");
+        Debe(!type.Contains("at"), "map_type tampoco ofrece `at`");
+        Debe(unblock.Contains("at"), "map_unblock SÍ conserva `at`: ahí se usa, y no se borra lo vivo con lo muerto");
+        Debe(take.Contains("which"), "y map_take trae `which` para elegir entre homónimos");
+
+        var p = Cap004("U.WindowsClient.Voice.ConversacionEnVivo")?.GetProperty("InstruccionesNormales",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        string texto = (string?)p?.GetValue(null) ?? "";
+        Debe(texto.Length > 0, "encuentro las instrucciones de la voz");
+        Debe(!texto.Contains("pide map_where_am_i primero", StringComparison.OrdinalIgnoreCase),
+            "las instrucciones no mandan pedir map_where_am_i para rellenar un argumento que ya no existe");
+        Debe(!texto.Contains("action=«doubleclick»", StringComparison.Ordinal),
+            "ni ofrecen un gesto que las manos no leen");
+        Debe(!texto.Contains("más de dos veces", StringComparison.OrdinalIgnoreCase),
+            "la regla escrita de intentos no tolera tres: es la del código, dos");
+        bool juntos = false;
+        for (int i = texto.IndexOf("which", StringComparison.Ordinal); i >= 0 && !juntos;
+             i = texto.IndexOf("which", i + 1, StringComparison.Ordinal))
+        {
+            int j = texto.IndexOf("map_look", Math.Max(0, i - 700), StringComparison.Ordinal);
+            juntos = j >= 0 && Math.Abs(j - i) <= 700;
+        }
+        Debe(juntos, "y ante varios candidatos mandan MIRAR (map_look) y elegir con `which`, en el mismo "
+            + "sitio y antes que preguntar al usuario: mirar tiene que poder desempatar");
+
+        // DOS NUMERACIONES NO SE MEZCLAN (crítico de la rama, 2026-09-11): map_show cuenta los homónimos
+        // por su posición en la pantalla y map_take por su selector. Decir que el which de uno vale para
+        // el otro es mentir con un número.
+        string whichShow = QueDelArgumento("map_show", "which") ?? "";
+        Debe(whichShow.Length > 0 && !whichShow.Contains("map_take"),
+            "el which de map_show no manda al de map_take: numeran en órdenes distintos");
+        Debe((DescripcionDe("map_take") ?? "").Contains("Guardar"),
+            "y map_take avisa de que un botón que hace su trabajo sin cambiar de pantalla —Guardar— está "
+            + "bien: «no cambió» no siempre es «por aquí no era»");
+    }
+
+    private static object? UtensilioDe(string herramienta)
+    {
+        var t = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var m = t?.GetMethod("Herramientas", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        if (m?.Invoke(null, null) is not System.Collections.IEnumerable todas) return null;
+        foreach (var u in todas)
+            if (u != null && (string?)u.GetType().GetProperty("Nombre")?.GetValue(u) == herramienta) return u;
+        return null;
+    }
+
+    private static string? DescripcionDe(string herramienta)
+    {
+        var u = UtensilioDe(herramienta);
+        return u?.GetType().GetProperty("Descripcion")?.GetValue(u) as string;
+    }
+
+    private static string? QueDelArgumento(string herramienta, string argumento)
+    {
+        var u = UtensilioDe(herramienta);
+        if (u?.GetType().GetProperty("Args")?.GetValue(u) is not System.Collections.IEnumerable args) return null;
+        foreach (var a in args)
+            if (a != null && (string?)a.GetType().GetProperty("Nombre")?.GetValue(a) == argumento)
+                return a.GetType().GetProperty("Que")?.GetValue(a) as string;
+        return null;
+    }
+
+    private static void LaManoDiceSiLoLogro()
+    {
+        // El tope de intentos (204) y la medida del turno (205) leen si una acción se logró de
+        // SurfaceMapTools.UltimaMano, no de la prosa. El crítico de la rama (2026-09-11) lo comprobó:
+        // sabotear ese dato dejaba el contrato INTACTO —un guardia que se cree puesto, aprendizaje
+        // nº18—, y la lista numerada de homónimos contaba como fallo aunque no se pulsara nada.
+        var tMano = typeof(SurfaceMapTools).GetNestedType("Mano");
+        var pLogro = tMano?.GetProperty("Logro");
+        var pIntento = tMano?.GetProperty("Intento");
+        var pAmbiguo = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Ambiguo");
+        if (pLogro == null || pIntento == null || pAmbiguo == null)
+        { Pendiente("SurfaceMapTools.Mano.Intento · RecorrerSegunElNucleo.Resultado.Ambiguo", "207", "017"); return; }
+
+        var mapa = new SurfaceMapTools(() => null);
+        var siguiente = default(RecorrerSegunElNucleo.Resultado);
+        mapa.RecorrerPorElNucleo = _ => siguiente;
+        (bool Logro, bool Intento)? Toma(RecorrerSegunElNucleo.Resultado r)
+        {
+            siguiente = r;
+            mapa.Call("map_take", new Dictionary<string, string> { ["exit"] = "Descargas" });
+            if (mapa.UltimaMano is not { } m) return null;
+            object caja = m;
+            return ((bool)pLogro.GetValue(caja)!, (bool)pIntento.GetValue(caja)!);
+        }
+        bool Es((bool Logro, bool Intento)? x, bool logro, bool intento)
+            => x.HasValue && x.Value.Logro == logro && x.Value.Intento == intento;
+
+        var navega = Toma(new RecorrerSegunElNucleo.Resultado(1, 1, "uia://x.exe/b", true,
+            "hice los 1 paso(s): pulsé «Descargas» y ahora estás en «uia://x.exe/b».", true));
+        Debe(Es(navega, logro: true, intento: true), $"pulsar y que cambie la pantalla es un logro (salió {navega})");
+
+        var quieta = Toma(new RecorrerSegunElNucleo.Resultado(1, 1, "uia://x.exe/a", true,
+            "hice los 1 paso(s): pulsé «Descargas» y la pantalla no cambió.", false));
+        Debe(Es(quieta, logro: false, intento: true),
+            $"pulsar y que no cambie nada es un intento que no se logró: es lo que el tope cuenta para no dejar insistir (salió {quieta})");
+
+        var perdida = Toma(new RecorrerSegunElNucleo.Resultado(0, 1, "uia://x.exe/a", false, "«Descargas» no lo conozco en «a»."));
+        Debe(Es(perdida, logro: false, intento: true),
+            "pedir algo que no está SÍ es un intento fallido: pedirlo otra vez igual es la insistencia que el tope frena");
+
+        object lista = new RecorrerSegunElNucleo.Resultado(0, 1, "uia://x.exe/a", false,
+            "hice 0 de 1 y paré en el paso 1: hay 2 puertas vivas para «Descargas»: 1) … 2) …");
+        pAmbiguo.SetValue(lista, true);
+        var pregunta = Toma((RecorrerSegunElNucleo.Resultado)lista);
+        Debe(pregunta.HasValue && !pregunta.Value.Intento,
+            "y la lista numerada de homónimos NO es un intento: no se pulsó nada, y contarla como fallo "
+            + "frenaba el «pruebo este otro botón» que pide el audio");
+
+        // Y la mano lleva los candidatos de la lista: sin ellos el tope no sabe qué selector es cuál.
+        var pCandR = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Candidatos");
+        var pCandM = tMano!.GetProperty("Candidatos");
+        if (pCandR == null || pCandM == null) { Pendiente("SurfaceMapTools.Mano.Candidatos", "207", "017"); return; }
+        pCandR.SetValue(lista, new[] { "uia:a", "uia:b" });
+        Toma((RecorrerSegunElNucleo.Resultado)lista);
+        object? mCaja = mapa.UltimaMano;
+        var llevados = mCaja == null ? null : pCandM.GetValue(mCaja) as IReadOnlyList<string>;
+        Debe(llevados != null && llevados.SequenceEqual(new[] { "uia:a", "uia:b" }),
+            "y la mano lleva los candidatos de la lista, en su orden: el tope los necesita para saber qué selector es cuál");
+
+        // Y la mano lleva lo que se pulsó de verdad, y la consulta al tope viaja dentro del paso hasta el
+        // ejecutor (promesa 204; quinta pasada del crítico).
+        var pPulsR = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("Pulsado");
+        var pPulsM = tMano!.GetProperty("Pulsado");
+        var pHilo = typeof(SurfaceMapTools).GetProperty("AntesDePulsarEnEsteHilo");
+        var pAntesP = typeof(RecorrerSegunElNucleo.Paso).GetProperty("AntesDePulsar");
+        if (pPulsR == null || pPulsM == null || pHilo == null || pAntesP == null)
+        { Pendiente("SurfaceMapTools.Mano.Pulsado · SurfaceMapTools.AntesDePulsarEnEsteHilo", "207", "017"); return; }
+        object pulsada = new RecorrerSegunElNucleo.Resultado(1, 1, "uia://x.exe/a", true,
+            "hice los 1 paso(s): pulsé «Descargas» y la pantalla no cambió.", false);
+        pPulsR.SetValue(pulsada, "s:1");
+        Toma((RecorrerSegunElNucleo.Resultado)pulsada);
+        object? mP = mapa.UltimaMano;
+        Debe(mP != null && (string?)pPulsM.GetValue(mP) == "s:1", "la mano dice qué selector se pulsó de verdad");
+
+        Func<string, string?> consulta = _ => null;
+        RecorrerSegunElNucleo.Paso? visto = null;
+        mapa.RecorrerPorElNucleo = pasos => { visto = pasos[0]; return siguiente; };
+        pHilo.SetValue(mapa, consulta);
+        mapa.Call("map_take", new Dictionary<string, string> { ["exit"] = "Descargas" });
+        pHilo.SetValue(mapa, null);
+        Debe(visto != null && ReferenceEquals(pAntesP.GetValue(visto), consulta),
+            "y la consulta al tope que la voz pone en su hilo viaja dentro del paso hasta el ejecutor");
     }
 
     private static void Prueba(string nombre, Action cuerpo)

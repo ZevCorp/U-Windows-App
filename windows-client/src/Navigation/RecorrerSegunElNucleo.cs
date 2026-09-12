@@ -30,7 +30,9 @@ public sealed class RecorrerSegunElNucleo
     /// <summary>Un paso: pulsar <paramref name="Exit"/> (etiqueta o selector), o escribir
     /// <paramref name="Texto"/> si viene con texto. <paramref name="Llegada"/> es opcional y viene
     /// de una skill enseñada: A DÓNDE llegó ese paso en la demostración — y si viene, SE EXIGE.
-    /// <paramref name="Tecla"/> es la que se pulsa DESPUÉS de escribir (o sola, si no hay nada más).</summary>
+    /// <paramref name="Tecla"/> es la que se pulsa DESPUÉS de escribir (o sola, si no hay nada más).
+    /// <see cref="Cual"/> (1..N) elige entre varias puertas vivas con el mismo nombre, en el
+    /// orden en que el propio batch las numeró (promesa 203); 0 = no se sabe, y entonces no se adivina.</summary>
     /// <remarks>
     /// LA TECLA NO ES UNA PUERTA, y esto costó una corrida entera. El grabador emite el Enter como
     /// un paso con selector «key:enter», y el batch resuelve los pasos contra el terreno: no hay
@@ -38,10 +40,35 @@ public sealed class RecorrerSegunElNucleo
     /// paso — «hice 0 de 4 y paré en el paso 1: key:enter no lo conozco» (2026-09-03 12:14:08).
     /// Pulsar una tecla es una ACCIÓN sobre lo que ya está, no un elemento que haya que encontrar.
     /// </remarks>
-    public sealed record Paso(string Exit, string Texto = "", string Llegada = "", string Tecla = "");
+    public sealed record Paso(string Exit, string Texto = "", string Llegada = "", string Tecla = "")
+    {
+        // FUERA DEL CONSTRUCTOR a propósito: la promesa 103 construye pasos por reflexión con cuatro
+        // argumentos, y reflexión no rellena opcionales. Un quinto parámetro la rompía (2026-09-11).
+        public int Cual { get; init; }
+
+        /// <summary>La consulta al tope de intentos de quien llama, con el selector que se VA a pulsar:
+        /// null si puede; si no, el motivo, y el paso no se pulsa (promesa 204). La trae el paso porque
+        /// solo aquí se sabe qué botón es, se haya pedido como se haya pedido.</summary>
+        public Func<string, string?>? AntesDePulsar { get; init; }
+    }
 
     /// <summary>Qué pasó: cuántos se hicieron, de cuántos, dónde quedamos, y el relato honesto.</summary>
-    public readonly record struct Resultado(int Hechos, int Total, string Donde, bool Termino, string Cuenta);
+    /// <remarks><paramref name="Cambio"/>: si el ÚLTIMO pulsar cambió la pantalla. Quien necesita saber
+    /// si una acción se logró —el tope de intentos de la voz, promesa 204— lo lee de aquí y no de la
+    /// prosa de <paramref name="Cuenta"/>: concluir leyendo un mensaje es el aprendizaje nº2.</remarks>
+    // Ambiguo: la tanda se paró para PREGUNTAR cuál de varios homónimos, sin pulsar nada. No es un
+    // intento fallido, y el tope de la voz no lo cuenta como tal (promesa 207, spec 017).
+    public readonly record struct Resultado(int Hechos, int Total, string Donde, bool Termino, string Cuenta, bool Cambio = false, bool Ambiguo = false)
+    {
+        /// <summary>Con <see cref="Ambiguo"/>: los selectores de la lista, en el orden de su número. Viajan
+        /// como datos para que el tope sepa que pedir uno por su selector es pedir ese candidato, sin leer
+        /// la prosa de la cuenta (promesas 203 y 204; crítico, tercera pasada, 2026-09-11).</summary>
+        public IReadOnlyList<string>? Candidatos { get; init; }
+
+        /// <summary>El selector que se pulsó de verdad en la tanda, si se pulsó algo: el tope cuenta los
+        /// fallos por el botón tocado, no por cómo se pidió (promesa 204).</summary>
+        public string? Pulsado { get; init; }
+    }
 
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
@@ -88,9 +115,17 @@ public sealed class RecorrerSegunElNucleo
 
     public Resultado Recorre(IReadOnlyList<Paso> pasos)
     {
+        string? pulsado = null;
+        var r = RecorreDentro(pasos, s => pulsado = s);
+        return pulsado == null ? r : r with { Pulsado = pulsado };
+    }
+
+    private Resultado RecorreDentro(IReadOnlyList<Paso> pasos, Action<string> alPulsar)
+    {
         if (pasos.Count == 0)
             return new(0, 0, _donde() ?? "", true, "no me diste ningún paso.");
 
+        PulsarSegunElNucleo.Resultado? ultimoPulso = null;   // el último hecho, para no taparlo (202)
         for (int i = 0; i < pasos.Count; i++)
         {
             // EL FRENO SE PREGUNTA ANTES DE CADA PASO, no al arrancar la tanda: una de veinte pasos
@@ -99,6 +134,7 @@ public sealed class RecorrerSegunElNucleo
                 return Parcial(i, pasos.Count, "paraste tú con Escape; no sigo.", conVivos: false);
 
             var paso = pasos[i];
+            ultimoPulso = null;
 
             if (paso.Texto.Length > 0)
             {
@@ -139,12 +175,30 @@ public sealed class RecorrerSegunElNucleo
                 return Parcial(i, pasos.Count, "no sé dónde estoy, y sin eso no pulso nada.", conVivos: false);
 
             // VARIAS PUERTAS RECLAMAN LO PEDIDO: no se adivina — la misma regla que abrir (promesa
-            // 40). Se dan los selectores para que quien pidió elija con conocimiento.
+            // 40). Pero se NUMERAN, con su tipo y a dónde lleva cada una, y un paso que trae cuál
+            // pulsa esa (promesa 203). Hasta el 2026-09-10 aquí se contestaba «dime el selector», sin
+            // número, sin tipo y sin destino: el 2026-08-09 la voz pidió el mismo selector tres veces,
+            // 6-7 s cada una, y no llegó (u-20260809.log, 09:37:31). El sistema veía la ambigüedad y
+            // se la devolvía al cerebro sin nada con qué resolverla.
             if (homonimos.Count > 1)
-                return Parcial(i, pasos.Count,
-                    $"hay {homonimos.Count} puertas vivas para «{paso.Exit}»: "
-                    + string.Join(", ", homonimos.Select(h => $"«{h}»"))
-                    + ". Dime el selector y sigo.", conVivos: false);
+            {
+                // UN SOLO ORDEN, el de los selectores, para numerar y para elegir: dos órdenes harían
+                // que «el 2» de la lista no fuera el 2 que se pulsa.
+                var numeradas = homonimos.OrderBy(h => h.Que.Selector, StringComparer.Ordinal).ToList();
+                if (paso.Cual >= 1 && paso.Cual <= numeradas.Count)
+                    elegido = numeradas[paso.Cual - 1];
+                else
+                    return Parcial(i, pasos.Count,
+                        (paso.Cual > numeradas.Count
+                            ? $"pediste la {paso.Cual}, pero para «{paso.Exit}» hay {numeradas.Count} puertas vivas: "
+                            : $"hay {numeradas.Count} puertas vivas para «{paso.Exit}»: ")
+                        + string.Join("; ", numeradas.Select((h, k) =>
+                            $"{k + 1}) «{h.Que.Etiqueta}» ({h.Que.Tipo}, «{h.Que.Selector}»)"
+                            + (h.Destino.Length > 0 ? $" → lleva a «{h.Destino}»" : "")))
+                        + ". Repite con which=N para pulsar esa; si con esto no sabes cuál, mira la "
+                        + "pantalla (map_look) antes de elegir.", conVivos: false)
+                        with { Ambiguo = true, Candidatos = numeradas.Select(h => h.Que.Selector).ToList() };
+            }
 
             if (elegido == null)
                 return Parcial(i, pasos.Count,
@@ -153,9 +207,18 @@ public sealed class RecorrerSegunElNucleo
 
             // PULSAR pasa por el mismo camino de siempre: verificar por consecuencia (promesas 44 y
             // 45) y cruzar el tramo (46). El batch no inventa una segunda manera de tocar.
+            // EL TOPE MIRA LO QUE SE VA A PULSAR, no lo que se pidió (promesa 204; crítico, quinta pasada,
+            // 2026-09-11). Cinco pasadas encontraron cinco formas de la misma diferencia —el mismo id antes y
+            // después de una lista, cualquier trozo de la etiqueta que LoNombra casa por contención (18
+            // toques a un botón con 9 variantes)—, y cada una se cerraba copiando al tope una regla más de
+            // este ejecutor. La clase se cierra donde se decide: aquí ya se sabe qué botón es.
+            if (paso.AntesDePulsar?.Invoke(elegido.Que.Selector) is string frenado)
+                return Parcial(i, pasos.Count, frenado, conVivos: false);
+            alPulsar(elegido.Que.Selector);
             var r = _pulsar.Pulsa(elegido.Que.Selector, elegido.Que.Etiqueta);
             if (!r.SePudo)
                 return Parcial(i, pasos.Count, r.Cuenta, conVivos: true);
+            ultimoPulso = r;
 
             // LA LLEGADA SE EXIGE CUANDO SE CONOCE (promesa 103, spec 005). Un paso de skill
             // enseñada trae a dónde llegó en la demostración; aterrizar en otro sitio y seguir
@@ -180,7 +243,18 @@ public sealed class RecorrerSegunElNucleo
             // del paso SIGUIENTE — que mira el terreno, no la intención.
         }
 
+        // EL ÚLTIMO HECHO NO SE TAPA (promesa 202). Hasta el 2026-09-10 esto cerraba SIEMPRE con «hice
+        // los N paso(s): quedaste en…» y se tragaba lo que Pulsa ya sabía decir: «pulsé X y la
+        // pantalla no cambió». Sin eso el cerebro no puede darse cuenta de que «por aquí no era» —lo
+        // que la nota de voz de esa noche pedía con esas palabras— y paga otra mirada para averiguarlo.
         string fin = _donde() ?? "";
+        // EL PREFIJO «hice los» SE QUEDA, y no por estilo: la demo de punta a punta (FaceWindow, tres
+        // sitios) decide si una tanda terminó leyendo si la cuenta EMPIEZA por «hice los» —el aprendizaje
+        // nº2 vivo en otro archivo, anotado en la spec 017—. Lo que cambia es lo que va detrás: el último hecho.
+        if (ultimoPulso is { } u)
+            return new(pasos.Count, pasos.Count, fin, true,
+                $"hice los {pasos.Count} paso(s): {u.Cuenta}",
+                u.CambioLaPantalla);
         return new(pasos.Count, pasos.Count, fin, true,
             $"hice los {pasos.Count} paso(s): quedaste en «{fin}».");
     }
@@ -282,10 +356,10 @@ public sealed class RecorrerSegunElNucleo
     /// que distingue «lo conozco pero no lo veo», «sé llegar por X pero X no está viva» y «no lo
     /// conozco», porque al modelo le sirven distinto (promesa 15 del núcleo, hablando por el batch).
     /// </summary>
-    private (Nucleo.Alcanzable? Elegido, IReadOnlyList<string> Homonimos, string? Motivo, string Aqui)
+    private (Nucleo.Alcanzable? Elegido, IReadOnlyList<Nucleo.Alcanzable> Homonimos, string? Motivo, string Aqui)
         EsperarloVivo(string exit)
     {
-        var nada = Array.Empty<string>();
+        var nada = Array.Empty<Nucleo.Alcanzable>();
         for (int ido = 0; ; ido += 120)
         {
             string aqui = _donde() ?? "";
@@ -312,7 +386,7 @@ public sealed class RecorrerSegunElNucleo
 
                     if (candidatas.Count == 1) return (candidatas[0], nada, null, aqui);
                     if (candidatas.Count > 1)
-                        return (null, candidatas.Select(v => v.Que.Selector).ToList(), null, aqui);
+                        return (null, candidatas, null, aqui);
 
                     // 3. DESTINO: la arista aprendida contesta por la puerta.
                     var conDestino = vivas.Where(a => a.Destino.Length > 0).ToList();
@@ -324,7 +398,7 @@ public sealed class RecorrerSegunElNucleo
 
                     if (destinos.Count == 1) return (destinos[0], nada, null, aqui);
                     if (destinos.Count > 1)
-                        return (null, destinos.Select(v => v.Que.Selector).ToList(), null, aqui);
+                        return (null, destinos, null, aqui);
                 }
 
                 if (ido >= EsperaMaximaMs)

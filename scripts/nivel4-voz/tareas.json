@@ -1,0 +1,6 @@
+{
+  "T1": { "texto": "abre el explorador de archivos y ve a Documentos", "antes": "" },
+  "T3": { "texto": "abre Configuración y ve a Bluetooth", "antes": "" },
+  "T4": { "texto": "en el explorador, pulsa Descargas en el panel de la izquierda", "antes": "explorador" },
+  "T5": { "texto": "en Configuración entra en Sistema, vuelve atrás y entra en Bluetooth", "antes": "configuracion" }
+}
