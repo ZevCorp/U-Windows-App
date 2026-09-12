@@ -46,7 +46,7 @@ public sealed class ConversacionEnVivo : IDisposable
         _protocolo = protocolo ?? ProtocoloPorDefecto(Environment.GetEnvironmentVariable);
         _audio = new LiveAudio(_protocolo.RitmoDeEntrada);
         _compuerta = new CompuertaDeEco(GraciaEcoMs, _protocolo.RitmoDeEntrada);
-        _turnosSinMarca = NuevoMarcadorDeTurnos();
+        EmpezarLosTurnosDeLaSesion();
 
         // UN VALOR QUE NO SE CONOCE SE DICE, no se obedece a medias: abre la voz por defecto y el log lo
         // cuenta, porque «setx U_VOZ gemini» sin efecto visible parecería haber funcionado.
@@ -96,17 +96,33 @@ public sealed class ConversacionEnVivo : IDisposable
     /// <summary>Null si el servidor ya marca los turnos: entonces los pone él, y aquí no se inventa otro cierre.</summary>
     private TurnosSinMarca? _turnosSinMarca;
 
+    /// <summary>
+    /// El reloj con que se marcan los turnos. Un campo, y no Environment.TickCount64 escrito en la construcción,
+    /// para que la 209 cambie SOLO el reloj y juzgue todo lo demás tal como lo construye la app: hasta el
+    /// 2026-09-12 cambiaba el marcador entero, y construirlo con otro silencio o reutilizarlo entre sesiones
+    /// dejaba el contrato INTACTO (revisa:contrato, G1 y G4).
+    /// </summary>
+    private Func<long> _relojDeLosTurnos = () => Environment.TickCount64;
+
     private TurnosSinMarca? NuevoMarcadorDeTurnos()
-        => _protocolo.MarcaLosTurnos ? null : new TurnosSinMarca(() => Environment.TickCount64);
+        => _protocolo.MarcaLosTurnos ? null : new TurnosSinMarca(() => _relojDeLosTurnos());
 
     /// <summary>
-    /// Con una voz sin marcas de turno, las pone la conversación: el primer trozo de lo que dice el usuario
+    /// Cada sesión empieza con un marcador nuevo: lo dicho —o una llamada sin devolver— en la anterior no cierra
+    /// ni sujeta un turno de esta. Un solo sitio para el constructor y para ArrancarAsync.
+    /// </summary>
+    private void EmpezarLosTurnosDeLaSesion() => _turnosSinMarca = NuevoMarcadorDeTurnos();
+
+    /// <summary>
+    /// Con una voz sin marcas de turno, las pone la conversación: el primer trozo de una petición del usuario
     /// abre un turno (sin callar la cola: no hay aviso de que hablara encima) y un silencio lo cierra.
     /// </summary>
     /// <remarks>
     /// En el hilo de recepción y tras reaccionar a los hechos del mensaje. El audio de GPT-Live llega
     /// continuo, también en silencio, así que esto se evalúa muchas veces por segundo sin temporizador ni
-    /// carreras con otro hilo. Se evalúa también con mensajes que no traen hechos.
+    /// carreras con otro hilo. Se evalúa también con mensajes que no traen hechos. El marcador oye todos los
+    /// hechos —también el audio, por su pico, y los Pide—; la devolución de las llamadas la hace EjecutarAsync
+    /// al terminar (promesa 211).
     /// </remarks>
     private void MarcarLosTurnosQueElServidorNoMarca(IReadOnlyList<Hecho> hechos, CancellationToken ct)
     {
@@ -379,7 +395,7 @@ public sealed class ConversacionEnVivo : IDisposable
             // conversación anterior —volver con él nos devolvería a una charla que ya terminó.
             lock (_candadoCancel) _canceladas.Clear();
             _pase = ""; _cayoSolo = false; _reintentos = 0;
-            _turnosSinMarca = NuevoMarcadorDeTurnos();   // lo dicho en la sesión anterior no cierra un turno de esta
+            EmpezarLosTurnosDeLaSesion();   // lo dicho en la sesión anterior no cierra un turno de esta
 
             _entrada = _salida = _total = 0;
             _turnos = 0;
@@ -1478,6 +1494,10 @@ public sealed class ConversacionEnVivo : IDisposable
     {
         try { await EjecutarNucleoAsync(llamadas, ct); }
         catch (Exception e) { LogBus.Log("voz-viva", $"la ejecución de una llamada reventó: {e.Message}"); }
+        // EL TRABAJO TERMINÓ, salga como salga (promesa 211): contestada, retirada o reventada. Mientras no se
+        // devuelve, el marcador de turnos no cierra; sin esta línea, con GPT-Live el turno no se cerraría nunca
+        // tras la primera herramienta. En finally para que ni una excepción la deje en curso.
+        finally { _turnosSinMarca?.Devuelta(llamadas); }
     }
 
     /// <summary>
