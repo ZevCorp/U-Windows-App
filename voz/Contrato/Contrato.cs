@@ -152,6 +152,12 @@ internal static class Contrato
         // a un modelo con fecha de apagado.
         Prueba("43. GPT Realtime pide la transcripción de lo que dice el usuario a gpt-transcribe, no a gpt-4o-mini-transcribe, que se apaga el 2027-02-26", LaTranscripcionNoVaAlQueSeApaga);
 
+        // LO QUE LA MIGRACIÓN DEJÓ EN EL DELEGADO Y NO EN LA VOZ (revisiones del 2026-09-12). Con GPT-Live
+        // habla uno y actúa otro: las reglas de Ü van al delegado, pero quien suena es la voz, con su
+        // persona corta. Y lo que el servidor cuenta de la sesión llega en segundos, no en fichas.
+        Prueba("46. la voz de GPT-Live no anuncia lo que va a hacer: la persona con la que abre la sesión prohíbe el futuro y el relleno de espera, y manda hablar en pasado y del resultado, como la 161 se lo manda al delegado", LaVozNoAnuncia);
+        Prueba("48. GPT-Live traduce lo que dura la sesión: session.usage.updated es un Hecho.Duracion con los segundos que trae, que son el acumulado de la sesión y no un incremento; un uso sin segundos no inventa duración", GptLiveCuentaLaDuracion);
+
         Console.WriteLine();
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
@@ -1366,6 +1372,69 @@ internal static class Contrato
         var m = Mensaje(p.Apertura("x", new List<Utensilio>(), "").First());
         string modelo = Campo(m, "session", "audio", "input", "transcription", "model");
         Debe(modelo == "gpt-transcribe", $"la transcripción se pide a gpt-transcribe (pide «{modelo}»)");
+    }
+
+    /// <remarks>
+    /// EL FALLO QUE ESTO IMPIDE: la 161 del grafo quitó el «voy a…» de Ü, y con GPT-Live esa regla viaja
+    /// al DELEGADO, que no habla. La voz abre con su persona corta y en la sonda del 2026-09-12 dijo
+    /// «Vale. Dame un momento para revisarlo.» y «Dime a qué transacción quieres ir y la abro.»: en
+    /// futuro, antes de que el delegado hubiera hecho nada. Se juzga el session.start que sale, no la
+    /// constante: una persona bien escrita que no llegara a la sesión no cumpliría nada.
+    /// </remarks>
+    private static void LaVozNoAnuncia()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+
+        var inicio = p.Apertura("INSTRUCCIONES DEL DELEGADO", new List<Utensilio>(), "").ToList();
+        Debe(inicio.Count == 1, $"la apertura es un mensaje (salieron {inicio.Count})");
+        if (inicio.Count == 0) return;
+        string voz = Campo(Mensaje(inicio[0]), "session", "instructions");
+
+        Debe(voz.Contains("NO ANUNCIES LO QUE VAS A HACER", StringComparison.Ordinal),
+            "la persona de la voz dice la regla, con las mismas palabras que la 161 le exige al delegado");
+        Debe(voz.Contains("HABLA EN PASADO", StringComparison.Ordinal),
+            "y dice con qué sustituirlo: en pasado y del resultado. Prohibir sin dar el reemplazo deja a la voz eligiendo, y elige anunciar");
+        foreach (string relleno in new[] { "«voy a…»", "«vamos a…»", "«dame un momento»" })
+            Debe(voz.Contains(relleno, StringComparison.Ordinal),
+                $"y nombra las fórmulas que se oyen ({relleno}): «Dame un momento para revisarlo» es literal de la sonda");
+        Debe(!voz.Contains("INSTRUCCIONES DEL DELEGADO", StringComparison.Ordinal),
+            "y la regla va en la persona de la VOZ, no copiando las del delegado: la voz sigue sin las instrucciones de operar");
+    }
+
+    /// <remarks>
+    /// EL FALLO QUE ESTO IMPIDE: con GPT-Live por defecto, el panel de costos no recibía nada. El
+    /// servidor no manda fichas: manda session.usage.updated con usage.seconds cada ~15 s, y nadie lo
+    /// traducía — ReportarConsumo veía cero y salía sin una línea. Medido en las sondas del 2026-09-12
+    /// (sonda-huecos r1G y r2c): 12.0 a los 15 s y 25.0 a los 30 s de la misma sesión. Es el ACUMULADO; quien
+    /// lo sume como un incremento cuenta 37 s donde hubo 25.
+    /// </remarks>
+    private static void GptLiveCuentaLaDuracion()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+        var tipo = typeof(Hecho).GetNestedType("Duracion");
+        var segundos = tipo?.GetProperty("Segundos");
+        if (tipo == null || segundos == null) { Pendiente("Voz.Realtime.Hecho.Duracion (Segundos)", "1"); return; }
+
+        List<double> Leidos(string json) => p.Leer(Mensaje(json))
+            .Where(h => tipo.IsInstanceOfType(h)).Select(h => Convert.ToDouble(segundos.GetValue(h))).ToList();
+
+        var a15 = Leidos("""{"type":"session.usage.updated","usage":{"seconds":12.0},"context_window":{"usage_ratio":0.0102343750},"event_id":"event_ENOzZAVHSZZ5pO7sNDsal"}""");
+        Debe(a15.Count == 1 && a15[0] == 12.0,
+            $"session.usage.updated es UN Hecho.Duracion con los segundos que trae (salieron {a15.Count}: {string.Join(", ", a15)})");
+        var a30 = Leidos("""{"type":"session.usage.updated","usage":{"seconds":25.0},"context_window":{"usage_ratio":0.0153984375},"event_id":"event_ENOzotrjrxl5LZz8nedUQ"}""");
+        Debe(a30.Count == 1 && a30[0] == 25.0,
+            $"y el siguiente de la misma sesión trae 25, no los 13 de diferencia: es el acumulado y se entrega tal cual (salió {string.Join(", ", a30)})");
+        var entero = Leidos("""{"type":"session.usage.updated","usage":{"seconds":7}}""");
+        Debe(entero.Count == 1 && entero[0] == 7.0, "un número sin decimales también son segundos");
+
+        Debe(Leidos("""{"type":"session.usage.updated","context_window":{"usage_ratio":0.01}}""").Count == 0
+             && Leidos("""{"type":"session.usage.updated","usage":{"seconds":"12"}}""").Count == 0
+             && Leidos("""{"type":"session.usage.updated","usage":{}}""").Count == 0,
+            "un uso sin segundos numéricos no inventa duración: vacío no es cero");
+        Debe(Leidos("""{"type":"session.output_transcript.delta","delta":"Hola"}""").Count == 0,
+            "y la duración solo sale del mensaje de uso");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
