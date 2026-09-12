@@ -54,6 +54,16 @@ public abstract record Hecho
     public sealed record Consumo(int Entrada, int Salida, int Total) : Hecho;
 
     /// <summary>
+    /// Lo que va durando la conversación, en segundos: el ACUMULADO de la sesión, no un incremento.
+    /// </summary>
+    /// <remarks>
+    /// Es lo que cuenta GPT-Live en vez de fichas (<c>session.usage.updated</c>). Medido el 2026-09-12
+    /// en la misma sesión: 12.0 a los 15 s y 25.0 a los 30 s. Quien lo sume como <see cref="Consumo"/>
+    /// cuenta 37 s donde hubo 25; se guarda el último. Promesa 48 de la voz.
+    /// </remarks>
+    public sealed record Duracion(double Segundos) : Hecho;
+
+    /// <summary>
     /// El servidor dice que algo va mal. Se cuenta como hecho y no se traga: una sesión abierta, el
     /// micrófono en rojo y ninguna pista de por qué no contesta es el peor diagnóstico posible.
     /// </summary>

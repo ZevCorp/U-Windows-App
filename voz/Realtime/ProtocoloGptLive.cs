@@ -42,11 +42,18 @@ public sealed class ProtocoloGptLive : IProtocolo
     /// herramientas, y si llevara las instrucciones de operar prometería lo que no puede hacer ella y
     /// contestaría de memoria en vez de delegar.
     /// </summary>
+    /// <remarks>
+    /// Y LA REGLA DE LA 161, que no viaja sola: las instrucciones de Ü van al delegado, pero quien suena es
+    /// la voz. Sin ella, en la sonda del 2026-09-12 dijo «Vale. Dame un momento para revisarlo.» antes de
+    /// que el delegado hiciera nada. Promesa 46 de la voz.
+    /// </remarks>
     public const string InstruccionesDeLaVoz =
         "Eres Ü, el asistente que ayuda a operar las aplicaciones de este ordenador, sobre todo SAP. "
         + "Hablas en español, con frases cortas y naturales. Tú no ves la pantalla ni la tocas: todo lo que "
         + "sea mirar, buscar, pulsar, escribir u operar la pantalla lo delegas siempre, y después cuentas lo "
-        + "que salió. Nunca inventes lo que hay en pantalla.";
+        + "que salió. Nunca inventes lo que hay en pantalla."
+        + " NO ANUNCIES LO QUE VAS A HACER: nada de «voy a…», «vamos a…», «déjame…», «dame un momento», «un momento», «ahora lo miro». Mientras se hace el trabajo, calla."
+        + " CUANDO HABLES, HABLA EN PASADO Y DEL RESULTADO: «estás en SAP Easy Access», «no había ningún informe». Nunca en futuro.";
 
     public string Quien => "OpenAI GPT-Live";
     public string Modelo { get; }
@@ -215,6 +222,17 @@ public sealed class ProtocoloGptLive : IProtocolo
                 hechos.Add(new Hecho.Falla(m.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.Object
                     ? Cadena(e, "message") is { Length: > 0 } msg ? msg : e.GetRawText()
                     : "error sin detalle"));
+                break;
+
+            // LO QUE DURA, no lo que cuesta en fichas: GPT-Live no manda fichas. Llega cada ~15 s con el
+            // ACUMULADO (12.0 y luego 25.0, medido el 2026-09-12). Sin traducirlo, el panel de costos no
+            // recibía nada de estas sesiones. Solo un número: un «seconds» vacío o en texto no es cero.
+            // session.closed también trae usage, pero llega después de que la conversación reportó al
+            // cerrar, y la 41 lo congela como UNA falla: no se traduce allí (promesa 48).
+            case "session.usage.updated":
+                if (m.TryGetProperty("usage", out var uso) && uso.ValueKind == JsonValueKind.Object
+                    && uso.TryGetProperty("seconds", out var seg) && seg.ValueKind == JsonValueKind.Number)
+                    hechos.Add(new Hecho.Duracion(seg.GetDouble()));
                 break;
 
             // EL SERVIDOR CERRÓ: se cuenta con su motivo (close_requested, expiración…). Callarlo deja una
