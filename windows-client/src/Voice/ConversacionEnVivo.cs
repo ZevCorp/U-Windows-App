@@ -43,9 +43,78 @@ public sealed class ConversacionEnVivo : IDisposable
     public ConversacionEnVivo(SurfaceMapTools mapa, IProtocolo? protocolo = null)
     {
         _mapa = mapa;
-        _protocolo = protocolo ?? new ProtocoloOpenAI();
+        _protocolo = protocolo ?? ProtocoloPorDefecto(Environment.GetEnvironmentVariable);
         _audio = new LiveAudio(_protocolo.RitmoDeEntrada);
         _compuerta = new CompuertaDeEco(GraciaEcoMs, _protocolo.RitmoDeEntrada);
+        _turnosSinMarca = NuevoMarcadorDeTurnos();
+
+        // UN VALOR QUE NO SE CONOCE SE DICE, no se obedece a medias: abre la voz por defecto y el log lo
+        // cuenta, porque «setx U_VOZ gemini» sin efecto visible parecería haber funcionado.
+        string pedida = VozPedida(Environment.GetEnvironmentVariable);
+        if (protocolo == null && pedida is not ("" or VozGptLive or VozRealtime))
+            LogBus.Log("voz-viva", $"{VariableDeLaVoz}=«{pedida}» no es una voz que conozca ({VozGptLive}, "
+                + $"{VozRealtime}): abro la de por defecto, {_protocolo.Quien}");
+    }
+
+    // ── Qué voz abre (spec 018, promesa 210) ────────────────────────────────
+
+    private const string VariableDeLaVoz = "U_VOZ";
+    private const string VozGptLive = "gpt-live";
+    private const string VozRealtime = "realtime";
+
+    /// <summary>
+    /// LA VOZ POR DEFECTO ES GPT-LIVE, y <c>U_VOZ=realtime</c> vuelve a GPT Realtime sin recompilar.
+    /// </summary>
+    /// <remarks>
+    /// Aquí y no en FaceWindow, que construye la conversación sin decir protocolo: el defecto ES la
+    /// migración. Se le pasa cómo leer la variable para juzgarlo sin tocar el entorno del proceso. Un
+    /// valor desconocido abre la de por defecto (lo avisa el constructor); en blanco cuenta como sin
+    /// valor (patrón nº9), y mayúsculas y espacios no cambian de voz: lo teclea una persona en setx.
+    /// </remarks>
+    public static IProtocolo ProtocoloPorDefecto(Func<string, string?> variable)
+        => VozPedida(variable) == VozRealtime ? new ProtocoloOpenAI() : new ProtocoloGptLive();
+
+    /// <summary>La variable normalizada en UN solo sitio (aprendizaje nº16): quien decide y quien avisa leen lo mismo.</summary>
+    private static string VozPedida(Func<string, string?> variable)
+        => (variable(VariableDeLaVoz) ?? "").Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// LO ESCRITO PIDE RESPUESTA (promesa 208): el texto y después pedir turno, sin mensajes vacíos.
+    /// </summary>
+    /// <remarks>
+    /// Sin el response.create detrás el modelo no contesta — cero eventos, medido el 2026-09-12 en Realtime y
+    /// en GPT-Live —, y Ü solo respondía a lo escrito si el micrófono oía algo a la vez. Es lo que invalidó el
+    /// nivel 4 del 2026-09-11. Un protocolo que contesta solo devuelve PedirRespuesta vacío, y un mensaje
+    /// vacío por el socket no es pedir nada.
+    /// </remarks>
+    public static IReadOnlyList<string> MensajesDeTexto(IProtocolo protocolo, string texto)
+        => new[] { protocolo.Texto(texto), protocolo.PedirRespuesta() }
+            .Where(m => !string.IsNullOrEmpty(m)).ToArray();
+
+    // ── Los turnos que el servidor no marca (spec 018, promesa 209) ─────────
+
+    /// <summary>Null si el servidor ya marca los turnos: entonces los pone él, y aquí no se inventa otro cierre.</summary>
+    private TurnosSinMarca? _turnosSinMarca;
+
+    private TurnosSinMarca? NuevoMarcadorDeTurnos()
+        => _protocolo.MarcaLosTurnos ? null : new TurnosSinMarca(() => Environment.TickCount64);
+
+    /// <summary>
+    /// Con una voz sin marcas de turno, las pone la conversación: el primer trozo de lo que dice el usuario
+    /// abre un turno (sin callar la cola: no hay aviso de que hablara encima) y un silencio lo cierra.
+    /// </summary>
+    /// <remarks>
+    /// En el hilo de recepción y tras reaccionar a los hechos del mensaje. El audio de GPT-Live llega
+    /// continuo, también en silencio, así que esto se evalúa muchas veces por segundo sin temporizador ni
+    /// carreras con otro hilo. Se evalúa también con mensajes que no traen hechos.
+    /// </remarks>
+    private void MarcarLosTurnosQueElServidorNoMarca(IReadOnlyList<Hecho> hechos, CancellationToken ct)
+    {
+        var turnos = _turnosSinMarca;
+        if (turnos == null) return;
+        foreach (var hecho in hechos)
+            if (turnos.Oye(hecho)) EmpiezaUnTurnoDelUsuario("voz");
+        if (turnos.TocaCerrar()) Reaccionar(new Hecho.CierraElTurno(), ct);
     }
 
     // ── La compuerta de eco (spec 002, 2026-08-30) ──────────────────────────
@@ -310,6 +379,7 @@ public sealed class ConversacionEnVivo : IDisposable
             // conversación anterior —volver con él nos devolvería a una charla que ya terminó.
             lock (_candadoCancel) _canceladas.Clear();
             _pase = ""; _cayoSolo = false; _reintentos = 0;
+            _turnosSinMarca = NuevoMarcadorDeTurnos();   // lo dicho en la sesión anterior no cierra un turno de esta
 
             _entrada = _salida = _total = 0;
             _turnos = 0;
@@ -1121,18 +1191,27 @@ public sealed class ConversacionEnVivo : IDisposable
     /// Cambia quién es Ü a mitad de sesión: otras instrucciones y otro catálogo. Promesa 138.
     /// </summary>
     /// <remarks>
-    /// Es el MISMO mensaje de apertura, reenviado: el servidor lo acepta cuantas veces haga falta y
-    /// sustituye instrucciones y herramientas sin cortar el audio. Así 🎓 convierte al asistente en
-    /// aprendiz sin cerrar el micrófono que acaba de abrir —cerrarlo y reabrirlo costaba cuatro
-    /// segundos y un saludo, medido el 2026-09-03—, y al terminar lo devuelve tal como estaba.
+    /// Sin cortar el audio: así 🎓 convierte al asistente en aprendiz sin cerrar el micrófono que acaba de
+    /// abrir —cerrarlo y reabrirlo costaba cuatro segundos y un saludo, medido el 2026-09-03—, y al
+    /// terminar lo devuelve tal como estaba. CÓMO se cambia lo dice el protocolo: en Realtime es la misma
+    /// apertura reenviada; en GPT-Live la apertura es session.start, que a mitad de sesión es un error
+    /// (medido el 2026-09-12), y lo que se manda es un session.update de la delegación — la voz no cambia
+    /// de persona, solo el delegado (spec 018).
     /// </remarks>
     public async Task CambiarModoAsync(string instrucciones, IReadOnlyList<Utensilio> utensilios, bool soloCuandoSeLePide = false)
     {
         if (!Viva || _ws?.State != WebSocketState.Open) return;
-        foreach (string msg in _protocolo.Apertura(instrucciones, utensilios, _pase ?? "", soloCuandoSeLePide))
+        // SIN FINGIR: la voz prestada (promesa 192) pide que no conteste por su cuenta, y una voz que no sabe
+        // esperar turno seguirá contestando a lo que oiga. Se dice en el log en vez de anotar «solo habla
+        // cuando se le pide», que con GPT-Live sería mentira.
+        bool esperara = soloCuandoSeLePide && _protocolo.SabeEsperarTurno;
+        if (soloCuandoSeLePide && !esperara)
+            LogBus.Log("voz-viva", $"{_protocolo.Quien} no sabe esperar turno: se pidió que solo hable cuando se "
+                + $"le pida y esta voz seguirá contestando sola a lo que oiga ({VariableDeLaVoz}={VozRealtime} sí sabe)");
+        foreach (string msg in _protocolo.CambioDeModo(instrucciones, utensilios, soloCuandoSeLePide))
             await EnviarAsync(msg, _cts?.Token ?? CancellationToken.None);
         LogBus.Log("voz-viva", $"modo cambiado: {utensilios.Count} herramienta(s), "
-            + $"instrucciones de {instrucciones.Length} car." + (soloCuandoSeLePide ? " · solo habla cuando se le pide" : ""));
+            + $"instrucciones de {instrucciones.Length} car." + (esperara ? " · solo habla cuando se le pide" : ""));
     }
 
     public async Task EnviarTextoAsync(string texto)
@@ -1140,7 +1219,9 @@ public sealed class ConversacionEnVivo : IDisposable
         if (!Viva || _ws?.State != WebSocketState.Open || string.IsNullOrWhiteSpace(texto)) return;
         EmpiezaUnTurnoDelUsuario("texto");   // escribir también es pedir algo nuevo (spec 017)
         Dice?.Invoke($"Tú: {texto}");
-        await EnviarAsync(_protocolo.Texto(texto), _cts?.Token ?? CancellationToken.None);
+        var ct = _cts?.Token ?? CancellationToken.None;
+        foreach (string msg in MensajesDeTexto(_protocolo, texto))   // promesa 208: lo escrito pide respuesta
+            await EnviarAsync(msg, ct);
     }
 
     /// <summary>
@@ -1277,10 +1358,10 @@ public sealed class ConversacionEnVivo : IDisposable
         {
             string plano = System.Text.RegularExpressions.Regex.Replace(json, @"\s+", " ");
             LogBus.Log("voz-viva", "← " + (plano.Length > 400 ? plano[..400] + "…" : plano));
-            return;
         }
 
         foreach (var hecho in hechos) Reaccionar(hecho, ct);
+        MarcarLosTurnosQueElServidorNoMarca(hechos, ct);
     }
 
     private void Reaccionar(Hecho hecho, CancellationToken ct)
@@ -1604,9 +1685,8 @@ public sealed class ConversacionEnVivo : IDisposable
     {
         if (!Viva || _ws?.State != WebSocketState.Open) return;
         var ct = _cts?.Token ?? CancellationToken.None;
-        await EnviarAsync(_protocolo.Texto(texto), ct);
-        string pide = _protocolo.PedirRespuesta();
-        if (pide.Length > 0) await EnviarAsync(pide, ct);
+        foreach (string msg in MensajesDeTexto(_protocolo, texto))   // el mismo camino que lo escrito (208)
+            await EnviarAsync(msg, ct);
     }
 
     private async Task EjecutarNucleoAsync(IReadOnlyList<Llamada> llamadas, CancellationToken ct)
