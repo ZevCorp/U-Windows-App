@@ -1391,7 +1391,7 @@ public sealed class ConversacionEnVivo : IDisposable
             return;
         }
 
-        if (hechos.Count == 0)
+        if (hechos.Count == 0 && SeVuelcaCrudo(doc.RootElement))
         {
             string plano = System.Text.RegularExpressions.Regex.Replace(json, @"\s+", " ");
             LogBus.Log("voz-viva", "← " + (plano.Length > 400 ? plano[..400] + "…" : plano));
@@ -1400,6 +1400,33 @@ public sealed class ConversacionEnVivo : IDisposable
         foreach (var hecho in hechos) Reaccionar(hecho, ct);
         MarcarLosTurnosQueElServidorNoMarca(hechos, ct);
     }
+
+    /// <summary>
+    /// SI UN MENSAJE QUE NO TRAJO HECHOS SE VUELCA CRUDO AL LOG (promesa 217): todos menos los deltas del
+    /// delegado y el audio.
+    /// </summary>
+    /// <remarks>
+    /// Medido el 2026-09-12 contra /v1/live/sessions (un turno delegado: mirar la pantalla y contestar en
+    /// cinco frases): 379 mensajes, 98 sin hechos, y 78 de esos 98 eran deltas dentro de response.event —50
+    /// de texto y 28 de argumentos, uno por ficha—, cada uno una línea de hasta 400 caracteres. Con cinco
+    /// turnos así el anillo de 500 líneas del panel perdía las voz-turno, los topes y las «llamada
+    /// recibida». Quedan 20. El audio de GPT-Live llega sin parar y solo cae aquí cuando viene vacío.
+    /// Lo demás se sigue volcando a propósito: un evento que no se traduce es justo lo que hay que ver.
+    /// Un .delta de fuera del sobre (los de Realtime) no se toca: allí el volumen es el de main.
+    /// </remarks>
+    public static bool SeVuelcaCrudo(JsonElement mensaje)
+    {
+        string tipo = Tipo(mensaje);
+        if (tipo == "session.output_audio.delta") return false;
+        if (tipo != "response.event" || !mensaje.TryGetProperty("event", out var ev)) return true;
+        return !Tipo(ev).EndsWith(".delta", StringComparison.Ordinal);
+    }
+
+    /// <summary>El «type» si es texto; vacío si falta o no es un objeto (patrón nº9: lo de la red se normaliza).</summary>
+    private static string Tipo(JsonElement o)
+        => o.ValueKind == JsonValueKind.Object && o.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
+            ? t.GetString() ?? ""
+            : "";
 
     private void Reaccionar(Hecho hecho, CancellationToken ct)
     {

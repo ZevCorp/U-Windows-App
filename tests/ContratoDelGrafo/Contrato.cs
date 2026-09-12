@@ -584,6 +584,7 @@ internal static class Contrato
         Prueba("211. sin marcas de turno, el turno no se cierra con trabajo en marcha: ni con una llamada a herramienta sin devolver ni mientras suena la voz de Ü, y el silencio se cuenta desde la devolución o desde lo último que sonó; el audio en silencio no cuenta", SinMarcasElTurnoEsperaAlTrabajo);
         Prueba("212. sin marcas de turno, una pausa del usuario sin que Ü le haya contestado sigue siendo la misma petición: lo que dice después no abre turno ni reinicia el tope; lo que dice después de que Ü le conteste, sí", UnaPausaSinRespuestaEsLaMismaPeticion);
         Prueba("214. con GPT-Live, varias llamadas pedidas a la vez se contestan todas antes de pedir turno, y el turno se pide una sola vez; con GPT Realtime una tanda sigue pidiendo turno detrás de sus resultados", VariasLlamadasUnSoloTurno);
+        Prueba("217. con GPT-Live el log no se inunda: ni los deltas del delegado ni el audio dejan una línea «←», y lo demás que no se traduce la sigue dejando", ElLogNoSeInundaConLosDeltas);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -8152,43 +8153,172 @@ internal static class Contrato
         var m = tc?.GetMethod("ProtocoloPorDefecto", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
         if (tc == null || m == null) { Pendiente("Voice.ConversacionEnVivo.ProtocoloPorDefecto", "210", "018"); return; }
 
+        // LO QUE ABRE, NO CÓMO SE LLAMA (2026-09-12). Mirar solo el nombre del tipo dejaba verde abrir con
+        // un modelo que no existe: con «new ProtocoloGptLive("gpt-live-1-mini")» en ProtocoloPorDefecto
+        // salieron ✔ 210 y CONTRATO INTACTO, exit 0 (sabotaje G2 de la revisión, repetido en esta rama), y
+        // en U.exe cada session.start pediría ese modelo y la voz no abriría. La 40 no lo ve: juzga una
+        // instancia que construye ella. Se juzga lo que manda la apertura: modelo, delegado y dirección.
+        const string gptLive = "ProtocoloGptLive · modelo gpt-live-1 · delegado gpt-5.6-luna · wss://api.openai.com/v1/live/sessions";
+        const string realtime = "ProtocoloOpenAI · modelo gpt-realtime-2.1-mini · wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini";
+        static string Abre(object? p)
+        {
+            if (p is not Voz.Realtime.IProtocolo proto) return p == null ? "(nada)" : $"(no es un protocolo: {p.GetType().Name})";
+            // El delegado solo existe en GPT-Live, y se pide por nombre: si desaparece, la cadena ya no cuadra.
+            string delegado = proto.GetType().GetProperty("Delegado")?.GetValue(proto) is string d ? $" · delegado {d}" : "";
+            return $"{proto.GetType().Name} · modelo {proto.Modelo}{delegado} · {proto.Direccion().AbsoluteUri}";
+        }
+
         var preguntadas = new List<string>();
         string Sale(string? valor)
         {
             Func<string, string?> variable = n => { preguntadas.Add(n); return valor; };
-            return m.Invoke(null, new object[] { variable })?.GetType().Name ?? "(nada)";
+            return Abre(m.Invoke(null, new object[] { variable }));
         }
         foreach (var (valor, como) in new (string?, string)[]
                  { (null, "sin U_VOZ"), ("", "con U_VOZ vacío"), ("   ", "con U_VOZ en blanco"), ("gpt-live", "con U_VOZ=gpt-live") })
         {
             string s = Sale(valor);
-            Debe(s == "ProtocoloGptLive", $"{como} la voz es GPT-Live (salió {s})");
+            Debe(s == gptLive, $"{como} la voz es GPT-Live y abre {gptLive} (abre {s})");
         }
         string rt = Sale("realtime");
-        Debe(rt == "ProtocoloOpenAI", $"con U_VOZ=realtime vuelve GPT Realtime (salió {rt})");
+        Debe(rt == realtime, $"con U_VOZ=realtime vuelve GPT Realtime y abre {realtime} (abre {rt})");
         string rtEscrito = Sale(" Realtime ");
-        Debe(rtEscrito == "ProtocoloOpenAI", $"y escrito a mano, con mayúscula o espacios, también: lo teclea una persona en setx (salió {rtEscrito})");
+        Debe(rtEscrito == realtime, $"y escrito a mano, con mayúscula o espacios, también: lo teclea una persona en setx (abre {rtEscrito})");
         string raro = Sale("gemini");
-        Debe(raro == "ProtocoloGptLive", $"un valor que no se conoce no elige otra voz por su cuenta: abre la de por defecto (salió {raro})");
+        Debe(raro == gptLive, $"un valor que no se conoce no elige otra voz por su cuenta: abre la de por defecto (abre {raro})");
         Debe(preguntadas.Count > 0 && preguntadas.All(n => n == "U_VOZ"),
             $"y la variable que se pregunta es U_VOZ (se preguntó: {string.Join(", ", preguntadas.Distinct())})");
 
         // EL CONSTRUCTOR SIN PROTOCOLO, que es como lo llama FaceWindow. Construirlo no abre ni micrófono
         // ni altavoz (LiveAudio se crea sin dispositivo), así que se juzga aquí y no se deja dicho.
+        //
+        // Y LA LÍNEA QUE AVISA DE UN VALOR DESCONOCIDO. La spec decía que la juzgaba la 210 y no la miraba
+        // nadie: con la condición del aviso invertida salieron ✔ 210 y CONTRATO INTACTO, exit 0 (sabotaje G3
+        // de la revisión). Sin esa línea, «setx U_VOZ gemini» no deja rastro y parece haber funcionado.
         var campo = tc.GetField("_protocolo", BindingFlags.NonPublic | BindingFlags.Instance);
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        if (anotado == null) { Pendiente("Diagnostics.LogBus.Anotado", "210", "018"); return; }
+        var avisos = new List<string>();
+        Action<string, string> oyeLog = (tag, msg) => { if (tag == "voz-viva" && msg.Contains("U_VOZ")) lock (avisos) avisos.Add(msg); };
         string? antes = Environment.GetEnvironmentVariable("U_VOZ");
+        anotado.AddEventHandler(null, oyeLog);
         try
         {
-            foreach (var (valor, esperado) in new (string?, string)[] { (null, "ProtocoloGptLive"), ("realtime", "ProtocoloOpenAI") })
+            foreach (var (valor, esperado) in new (string?, string)[] { (null, gptLive), ("realtime", realtime), ("gemini", gptLive) })
             {
+                lock (avisos) avisos.Clear();
                 Environment.SetEnvironmentVariable("U_VOZ", valor);
+                string como = valor == null ? "sin U_VOZ" : "con U_VOZ=" + valor;
                 using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), null })!;
-                string abre = campo?.GetValue(conv)?.GetType().Name ?? "(no encuentro _protocolo)";
-                Debe(abre == esperado,
-                    $"construida sin protocolo, {(valor == null ? "sin U_VOZ" : "con U_VOZ=" + valor)} la conversación abre {esperado} (abrió {abre})");
+                string abre = campo == null ? "(no encuentro _protocolo)" : Abre(campo.GetValue(conv));
+                Debe(abre == esperado, $"construida sin protocolo, {como} la conversación abre {esperado} (abre {abre})");
+                string[] dichos; lock (avisos) dichos = avisos.ToArray();
+                if (valor == "gemini")
+                    Debe(dichos.Length == 1 && dichos[0].Contains("«gemini»"),
+                        $"{como} el constructor deja UNA línea voz-viva que nombra «gemini»: la variable se ignoró y el log lo dice (dejó {dichos.Length}: {string.Join(" | ", dichos)})");
+                else
+                    Debe(dichos.Length == 0,
+                        $"{como} no deja ninguna línea voz-viva sobre U_VOZ: no hay nada que avisar (dejó {dichos.Length}: {string.Join(" | ", dichos)})");
             }
         }
-        finally { Environment.SetEnvironmentVariable("U_VOZ", antes); }
+        finally
+        {
+            anotado.RemoveEventHandler(null, oyeLog);
+            Environment.SetEnvironmentVariable("U_VOZ", antes);
+        }
+    }
+
+    /// <remarks>
+    /// EL LOG ES LA FUENTE DE VERDAD, y un log inundado no la dice. Medido el 2026-09-12 contra
+    /// /v1/live/sessions (sonda de solo lectura, un turno delegado: mirar la pantalla y contestar en cinco
+    /// frases): 379 mensajes, 98 sin hechos —cada uno una línea «← …» de hasta 400 caracteres— y 78 de esos
+    /// 98 eran deltas del delegado, uno por ficha: 50 response.output_text.delta y 28
+    /// response.function_call_arguments.delta. Con cinco turnos así el anillo de 500 líneas del panel pierde
+    /// las voz-turno, los topes y las «llamada recibida». Lo demás se sigue volcando: un evento que no se
+    /// traduce es justo lo que hay que poder ver.
+    ///
+    /// Se juzga por la puerta del socket (Procesar, que es donde se escribe la línea) y la regla, pura.
+    /// </remarks>
+    private static void ElLogNoSeInundaConLosDeltas()
+    {
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var procesar = tc?.GetMethod("Procesar", BindingFlags.NonPublic | BindingFlags.Instance);
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tc == null || procesar == null || anotado == null || tLive == null)
+        { Pendiente("ConversacionEnVivo.Procesar, LogBus.Anotado y Voz.Realtime.ProtocoloGptLive", "217", "018"); return; }
+
+        // Con la forma que mandó el servidor en las sondas, recortados a lo que se mira.
+        const string textoDelta = "{\"type\":\"response.event\",\"delegation_id\":\"item_1\",\"event\":{\"type\":\"response.output_text.delta\",\"delta\":\"Veo\",\"sequence_number\":12}}";
+        const string argumentosDelta = "{\"type\":\"response.event\",\"delegation_id\":\"item_1\",\"event\":{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"que\",\"sequence_number\":40}}";
+        const string audioVacio = "{\"type\":\"session.output_audio.delta\",\"delta\":\"\"}";
+        const string completado = "{\"type\":\"response.event\",\"delegation_id\":\"item_1\",\"event\":{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\"}}}";
+        const string argumentosHechos = "{\"type\":\"response.event\",\"delegation_id\":\"item_1\",\"event\":{\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{}\",\"item_id\":\"fc_1\"}}";
+        const string delegacion = "{\"type\":\"session.delegation.created\",\"delegation\":{\"id\":\"item_1\",\"type\":\"delegation\",\"target\":\"responses\"}}";
+        const string uso = "{\"type\":\"session.usage.updated\",\"usage\":{\"seconds\":13.0}}";
+        const string sobreVacio = "{\"type\":\"response.event\"}";
+        const string deltaDeRealtime = "{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\"}";
+
+        var callan = new (string Json, string Como)[]
+        {
+            (textoDelta, "un response.output_text.delta del delegado"),
+            (argumentosDelta, "un response.function_call_arguments.delta del delegado"),
+            (audioVacio, "un session.output_audio.delta vacío"),
+        };
+        var hablan = new (string Json, string Como)[]
+        {
+            (completado, "un response.completed del delegado"),
+            (argumentosHechos, "un response.function_call_arguments.done"),
+            (delegacion, "un session.delegation.created"),
+            (uso, "un session.usage.updated"),
+        };
+
+        // ── POR LA PUERTA DEL SOCKET ──────────────────────────────────────────
+        // Ninguno de estos mensajes trae hechos, así que no suena nada: construir la conversación no abre
+        // el altavoz. El marcador de turnos no oyó a nadie, así que tampoco cierra nada.
+        var live = (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+        int volcadas = 0;
+        Action<string, string> oyeLog = (tag, msg) => { if (tag == "voz-viva" && msg.StartsWith("← ")) Interlocked.Increment(ref volcadas); };
+        anotado.AddEventHandler(null, oyeLog);
+        try
+        {
+            using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), live })!;
+            int Deja(string json)
+            {
+                Interlocked.Exchange(ref volcadas, 0);
+                procesar.Invoke(conv, new object[] { json, CancellationToken.None });
+                return Interlocked.Exchange(ref volcadas, 0);
+            }
+            foreach (var (json, como) in callan)
+            {
+                int n = Deja(json);
+                Debe(n == 0, $"por la puerta del socket, {como} no deja ninguna línea «←» (dejó {n})");
+            }
+            foreach (var (json, como) in hablan)
+            {
+                int n = Deja(json);
+                Debe(n == 1, $"por la puerta del socket, {como} sigue dejando su línea «←», una (dejó {n})");
+            }
+        }
+        finally { anotado.RemoveEventHandler(null, oyeLog); }
+
+        // ── LA REGLA, PURA ───────────────────────────────────────────────────
+        var vuelca = tc.GetMethod("SeVuelcaCrudo", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+        if (vuelca == null) { Pendiente("Voice.ConversacionEnVivo.SeVuelcaCrudo", "217", "018"); return; }
+        bool Vuelca(string json)
+        {
+            using var d = JsonDocument.Parse(json);
+            return (bool)vuelca.Invoke(null, new object[] { d.RootElement })!;
+        }
+        foreach (var (json, como) in callan)
+            Debe(!Vuelca(json), $"{como} no se vuelca crudo al log");
+        foreach (var (json, como) in hablan)
+            Debe(Vuelca(json), $"{como} sí se vuelca");
+        Debe(Vuelca(sobreVacio), "un response.event sin evento dentro sí se vuelca: lo raro es lo que hay que ver");
+        Debe(Vuelca(deltaDeRealtime),
+            "y un .delta que no viene dentro de response.event sigue como estaba: la regla es de los deltas del delegado, no de todo lo que acabe en .delta");
     }
 
     /// <summary>Un trozo de 100 ms de PCM a 24 kHz con UNA muestra de ese pico y el resto a cero.</summary>
