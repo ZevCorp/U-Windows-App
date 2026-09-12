@@ -136,6 +136,22 @@ internal static class Contrato
         // no las distinga acaba certificando el respaldo como si fuera lo elegido.
         Prueba("32. el verde prueba que llega audio POR ESA FUENTE: anotar tramas de una no puede hacer que otra parezca viva", CadaFuenteResponde);
 
+        // LA VOZ ES GPT-LIVE (spec 018, 2026-09-12). Del 33 al 39 quedan libres a propósito: son de
+        // ramas abiertas de Jose, y los números no se reciclan. GPT-Live no es «otro modelo en el
+        // mismo socket»: gpt-live-1 en /v1/realtime contesta «not supported in realtime mode». Tiene
+        // su propia puerta (/v1/live/sessions), su propio saludo (session.start), y la voz NO acepta
+        // herramientas — las lleva un modelo delegado. Todo lo que sigue se midió contra el servidor
+        // con la clave de esta máquina, y los mensajes van copiados de lo que contestó, no de la doc.
+        // La 41 carga con la lección más cara: el servidor no manda NINGUNA marca de turno, y un
+        // traductor que se las inventara le daría a la conversación un reloj que no existe.
+        Prueba("40. GPT-Live abre por su propio endpoint con session.start: modelo gpt-live-1, voz marin, PCM 24 kHz, y las herramientas de Ü van en la delegación con su modelo delegado, no en la voz", GptLiveAbrePorSuPropiaPuerta);
+        Prueba("41. GPT-Live traduce lo que manda el servidor: audio, lo que dice Ü, lo que dice el usuario, una llamada delegada con sus argumentos y un error; y no inventa marcas de turno que el servidor no manda", GptLiveTraduceLoQueManda);
+        Prueba("42. GPT-Live manda lo de Ü con sus eventos: micrófono, texto y foto como mensajes de usuario, resultados como function_call_output, pedir turno como response.create, dictar como commentary; y cambiar de modo a mitad de sesión es un session.update de la delegación, no otro session.start", GptLiveMandaConSusEventos);
+
+        // Y GPT REALTIME, que se queda como respaldo (U_VOZ=realtime), deja de pedir la transcripción
+        // a un modelo con fecha de apagado.
+        Prueba("43. GPT Realtime pide la transcripción de lo que dice el usuario a gpt-transcribe, no a gpt-4o-mini-transcribe, que se apaga el 2027-02-26", LaTranscripcionNoVaAlQueSeApaga);
+
         Console.WriteLine();
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
@@ -1068,6 +1084,288 @@ internal static class Contrato
         Anotar(1, 7000L);
         Debe(Ultima(0) == 5000L && Ultima(1) == 7000L,
             "dos fuentes entregando llevan dos relojes distintos, no uno compartido");
+    }
+
+    // ── La voz es GPT-Live (spec 018, 2026-09-12) ───────────────────────────
+
+    /// <summary>
+    /// GPT-Live pedido POR NOMBRE, con reflexión: la clase no existe cuando se escriben estas
+    /// promesas, y así el contrato compila en rojo. Los argumentos que no se den toman el valor por
+    /// defecto del constructor — que es justo lo que usa la app, y por eso también se juzga.
+    /// </summary>
+    private static IProtocolo? GptLive(params object?[] args)
+    {
+        var c = Realtime.GetType("Voz.Realtime.ProtocoloGptLive")?.GetConstructors().FirstOrDefault();
+        if (c == null) return null;
+        var valores = c.GetParameters()
+            .Select((p, i) => i < args.Length ? args[i] : p.HasDefaultValue ? p.DefaultValue : null).ToArray();
+        return c.Invoke(valores) as IProtocolo;
+    }
+
+    /// <summary>Un miembro de <see cref="IProtocolo"/> que todavía puede no existir. Por la interfaz,
+    /// no por la clase: así se juzga también el valor por defecto que hereda quien no lo declara.</summary>
+    private static object? DeLaInterfaz(string propiedad, IProtocolo p)
+        => typeof(IProtocolo).GetProperty(propiedad)?.GetValue(p);
+
+    private static List<string>? CambioDeModo(IProtocolo p, string instrucciones, IReadOnlyList<Utensilio> utensilios, bool soloCuandoSeLePide)
+        => (typeof(IProtocolo).GetMethod("CambioDeModo")?.Invoke(p, new object[] { instrucciones, utensilios, soloCuandoSeLePide })
+            as IEnumerable<string>)?.ToList();
+
+    private static JsonElement? Nodo(JsonElement e, params string[] camino)
+    {
+        foreach (string paso in camino)
+        {
+            if (e.ValueKind != JsonValueKind.Object || !e.TryGetProperty(paso, out var siguiente)) return null;
+            e = siguiente;
+        }
+        return e;
+    }
+
+    /// <summary>El campo como texto; vacío si no está. Un número sale con su forma cruda («24000»).</summary>
+    private static string Campo(JsonElement e, params string[] camino)
+        => Nodo(e, camino) is { } x ? x.ValueKind == JsonValueKind.String ? x.GetString() ?? "" : x.GetRawText() : "";
+
+    /// <remarks>
+    /// EL FALLO QUE ESTO IMPIDE: abrir GPT-Live como si fuera Realtime con otro nombre. Se probó el
+    /// 2026-09-11: gpt-live-1 en /v1/realtime da «not supported in realtime mode», y las herramientas
+    /// en la sesión de la voz no se aceptan — las llama un modelo DELEGADO (gpt-5.6-luna) que va en
+    /// session.delegation.responses. Si las instrucciones completas de Ü se quedaran en la voz, el que
+    /// opera la pantalla no sabría qué es un recuerdo ni cómo se pulsa un botón de SAP.
+    /// </remarks>
+    private static void GptLiveAbrePorSuPropiaPuerta()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+
+        Debe(p.Modelo == "gpt-live-1", $"el modelo es gpt-live-1, clavado y no un alias (dice «{p.Modelo}»)");
+        Debe(p.Direccion().AbsoluteUri == "wss://api.openai.com/v1/live/sessions",
+            $"abre por /v1/live/sessions y sin ?model=, que es su puerta (abre «{p.Direccion()}»)");
+        Debe(p.Cabeceras("clave-de-prueba").TryGetValue("Authorization", out var aut) && aut == "Bearer clave-de-prueba",
+            "la clave va en la cabecera Authorization, no en la URL: una URL acaba en los logs");
+        Debe(p.RitmoDeEntrada == 24000 && p.RitmoDeSalida == 24000,
+            $"PCM a 24 kHz en los dos sentidos (entrada {p.RitmoDeEntrada}, salida {p.RitmoDeSalida})");
+
+        const string completas = "ERES Ü Y ESTAS SON TUS INSTRUCCIONES COMPLETAS";
+        var utensilios = new List<Utensilio> { new("map_look", "Mira la pantalla", new List<Argumento> { new("que", "qué mirar") }) };
+        var apertura = p.Apertura(completas, utensilios, "").ToList();
+        Debe(apertura.Count == 1, $"la apertura es UN mensaje (salieron {apertura.Count})");
+        if (apertura.Count == 0) return;
+
+        var m = Mensaje(apertura[0]);
+        Debe(Campo(m, "type") == "session.start",
+            $"y ese mensaje es session.start, no el session.update de Realtime (es «{Campo(m, "type")}»)");
+        Debe(Campo(m, "session", "model") == "gpt-live-1", "la sesión pide gpt-live-1");
+        Debe(Campo(m, "session", "audio", "format", "type") == "audio/pcm" && Campo(m, "session", "audio", "format", "rate") == "24000",
+            "el audio se declara audio/pcm a 24000");
+        Debe(Campo(m, "session", "audio", "output", "voice") == "marin", "con la voz marin, la misma de siempre");
+        Debe(Nodo(m, "session", "tools") == null,
+            "la VOZ no lleva herramientas: el servidor no las acepta ahí, y ponerlas es perderlas");
+        Debe(Campo(m, "session", "delegation", "type") == "responses", "hay delegación, de tipo responses");
+        Debe(Campo(m, "session", "delegation", "responses", "model") == "gpt-5.6-luna",
+            $"con gpt-5.6-luna por defecto como delegado (pide «{Campo(m, "session", "delegation", "responses", "model")}»)");
+
+        var tools = Nodo(m, "session", "delegation", "responses", "tools");
+        Debe(tools is { ValueKind: JsonValueKind.Array } t && t.GetArrayLength() == 1
+             && Campo(t[0], "type") == "function" && Campo(t[0], "name") == "map_look"
+             && Campo(t[0], "parameters", "type") == "object"
+             && Campo(t[0], "parameters", "properties", "que", "type") == "string",
+            "las herramientas de Ü van en la delegación, como function con sus argumentos de texto");
+        Debe(Campo(m, "session", "delegation", "responses", "tool_choice") == "auto", "y el delegado elige cuándo usarlas");
+        Debe(Campo(m, "session", "delegation", "responses", "instructions").Contains(completas),
+            "las instrucciones completas de Ü van al delegado, que es quien mira y opera");
+        string deLaVoz = Campo(m, "session", "instructions");
+        Debe(deLaVoz.Trim().Length > 0 && !deLaVoz.Contains(completas),
+            "y la voz lleva las suyas, cortas: quién es y que delega todo lo que sea mirar u operar");
+
+        var terra = GptLive("gpt-live-1", "gpt-5.6-terra");
+        string conTerra = terra == null ? "" : Campo(Mensaje(terra.Apertura(completas, utensilios, "").First()), "session", "delegation", "responses", "model");
+        Debe(conTerra == "gpt-5.6-terra", $"el delegado se elige al construir, no va escrito dentro (con terra pidió «{conTerra}»)");
+    }
+
+    /// <remarks>
+    /// Los mensajes son los que mandó el servidor el 2026-09-12. Tres trampas, las tres silenciosas:
+    ///
+    ///  · LA LLAMADA LLEGA DOS VECES, envuelta en response.event: primero
+    ///    response.function_call_arguments.done y después response.output_item.done con el item
+    ///    completo. Traducir las dos es ejecutar cada herramienta dos veces.
+    ///  · response.completed ES DEL DELEGADO, no de la voz: la voz sigue hablando segundos después.
+    ///    Tomarlo por cierre de turno cortaría la frase de Ü por la mitad.
+    ///  · NO HAY speech_started. Hablarle encima no produce ningún evento; un traductor que lo
+    ///    fingiera callaría a Ü por cualquier cosa.
+    /// </remarks>
+    private static void GptLiveTraduceLoQueManda()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+
+        byte[] pcm = { 1, 2, 3, 4, 250, 251, 0, 255 };
+        string b64 = Convert.ToBase64String(pcm);
+        var suena = p.Leer(Mensaje($$"""{"type":"session.output_audio.delta","delta":"{{b64}}"}"""));
+        Debe(suena.Count == 1 && suena[0] is Hecho.Suena s && s.Pcm.SequenceEqual(pcm),
+            "un trozo de session.output_audio.delta es UN Hecho.Suena con el PCM exacto");
+        Debe(p.Leer(Mensaje("""{"type":"session.output_audio.delta","delta":""}""")).Count == 0,
+            "y un delta vacío no produce sonido de la nada");
+
+        var dice = p.Leer(Mensaje("""{"type":"session.output_transcript.delta","delta":" Veo la pantalla principal"}"""));
+        Debe(dice.Count == 1 && dice[0] is Hecho.DiceU { Trozo: " Veo la pantalla principal" },
+            "session.output_transcript.delta es lo que dice Ü, con su trozo intacto");
+        var oye = p.Leer(Mensaje("""{"type":"session.input_transcript.delta","delta":"mira la pantalla"}"""));
+        Debe(oye.Count == 1 && oye[0] is Hecho.DiceElUsuario { Trozo: "mira la pantalla" },
+            "session.input_transcript.delta es lo que dice el usuario");
+
+        var llamada = p.Leer(Mensaje("""
+            {"event_id":"event_ENOyB5NxpE0Gh7AUuGbMK","type":"response.event","delegation_id":"item_ENOyA2AApz1ePY8UFCDIw","event":{"type":"response.output_item.done","item":{"id":"fc_0b0f65fd1c15980c006aa5bb1b98e487d1a21fef4659aabd29","type":"function_call","status":"completed","arguments":"{\"que\":\"Mira toda la pantalla y describe claramente qué aparece\"}","call_id":"call_I4zD28ktm3U3JVOTbkgCO34C","name":"map_look"},"output_index":0,"sequence_number":27}}
+            """));
+        var pide = llamada.OfType<Hecho.Pide>().SelectMany(x => x.Cuales).ToList();
+        Debe(pide.Count == 1 && pide[0].Id == "call_I4zD28ktm3U3JVOTbkgCO34C" && pide[0].Nombre == "map_look",
+            $"la llamada delegada llega como UN Hecho.Pide con su call_id y su nombre (salieron {pide.Count})");
+        Debe(pide.Count == 1 && pide[0].Args.TryGetValue("que", out var que) && que == "Mira toda la pantalla y describe claramente qué aparece",
+            "con los argumentos LEÍDOS del texto JSON que traen, no un diccionario vacío");
+
+        var argumentos = p.Leer(Mensaje("""
+            {"event_id":"event_ENOyBSBbqW2BEA5p7TSif","type":"response.event","delegation_id":"item_ENOyA2AApz1ePY8UFCDIw","event":{"type":"response.function_call_arguments.done","arguments":"{\"que\":\"Mira toda la pantalla y describe claramente qué aparece\"}","item_id":"fc_0b0f65fd1c15980c006aa5bb1b98e487d1a21fef4659aabd29","output_index":0,"sequence_number":26}}
+            """));
+        Debe(!argumentos.Any(h => h is Hecho.Pide),
+            "los argumentos terminados NO son otra llamada: el servidor manda las dos, y traducir las dos ejecuta la herramienta dos veces");
+        var mensajeDelDelegado = p.Leer(Mensaje("""
+            {"type":"response.event","event":{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","status":"completed","content":[]}}}
+            """));
+        Debe(!mensajeDelDelegado.Any(h => h is Hecho.Pide), "y un item terminado que no es function_call no pide nada");
+
+        var error = p.Leer(Mensaje("""
+            {"type":"error","event_id":"event_ENOy9VsLzg0PIpUAbkOqn","error":{"type":"invalid_request_error","code":"unknown_parameter","message":"Unknown parameter: 'session.instructions'.","param":"session.instructions","client_event_id":"sonda_voz"}}
+            """));
+        Debe(error.Count == 1 && error[0] is Hecho.Falla f && f.Que.Contains("Unknown parameter: 'session.instructions'."),
+            "un error es un Hecho.Falla con el mensaje del servidor, no un silencio");
+        var cerrada = p.Leer(Mensaje("""{"event_id":"event_ENOyNXoVEuKQV2BXwf0YH","type":"session.closed","reason":"close_requested","usage":{"seconds":13.0},"client_event_id":"sonda_fin"}"""));
+        Debe(cerrada.Count == 1 && cerrada[0] is Hecho.Falla fc && fc.Que.Contains("close_requested"),
+            "y una sesión cerrada por el servidor se cuenta como falla, con su motivo");
+
+        // Todo lo que se leyó arriba, más lo que el servidor manda sin que toque a nadie.
+        string[] sinMarca =
+        {
+            """{"type":"session.started","session":{"id":"live_u2_ENOy6GhblDeLrMlDOGSX1","model":"gpt-live-1","status":"active","input":[]}}""",
+            """{"type":"session.delegation.created","offset_ms":2600,"delegation":{"id":"item_ENOyA2AApz1ePY8UFCDIw","type":"delegation","response_id":"resp_0b0f65fd","target":"responses"},"client_event_id":"sonda_pide"}""",
+            """{"type":"response.event","delegation_id":"item_ENOyA2AApz1ePY8UFCDIw","event":{"type":"response.completed"}}""",
+            """{"type":"session.usage.updated","usage":{"seconds":12.0},"context_window":{"usage_ratio":0.01003125}}""",
+        };
+        var todos = sinMarca.SelectMany(x => p.Leer(Mensaje(x)))
+            .Concat(suena).Concat(dice).Concat(oye).Concat(llamada).Concat(argumentos).Concat(error).Concat(cerrada).ToList();
+        Debe(!todos.Any(h => h is Hecho.CierraElTurno or Hecho.HablaronEncima),
+            "ningún mensaje de GPT-Live se traduce en cierre de turno ni en «hablaron encima»: el servidor no los manda, "
+            + "y response.completed es del delegado — la voz sigue hablando después");
+
+        var marca = DeLaInterfaz("MarcaLosTurnos", p);
+        if (marca == null) { Pendiente("IProtocolo.MarcaLosTurnos", "1"); return; }
+        Debe(marca is false, "y lo DECLARA: MarcaLosTurnos es falso, para que la conversación los marque ella");
+        Debe(DeLaInterfaz("MarcaLosTurnos", new ProtocoloOpenAI()) is true,
+            "mientras GPT Realtime, que sí manda speech_started y response.done, sigue diciendo que los marca");
+    }
+
+    /// <remarks>
+    /// Tres cosas medidas el 2026-09-12 que esta promesa congela:
+    ///
+    ///  · UN TEXTO SIN response.create DETRÁS NO SE CONTESTA; con él, delega, llama la herramienta y
+    ///    habla. Por eso Texto no pide turno —eso es PedirRespuesta, aparte, como en Realtime—.
+    ///  · DICTAR es session.commentary.append: dijo la frase literal. Un response.create con
+    ///    instrucciones, que es lo que usa Realtime, aquí no existe.
+    ///  · LA SESIÓN ES INMUTABLE SALVO LA DELEGACIÓN: session.update con session.instructions contesta
+    ///    «Unknown parameter: 'session.instructions'», y con session.delegation contesta session.updated
+    ///    — y el delegado llamó a la herramienta NUEVA (map_where_am_i, con su argumento nuevo). Otro
+    ///    session.start a mitad de sesión no es cambiar de modo: es otra sesión.
+    /// </remarks>
+    private static void GptLiveMandaConSusEventos()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+
+        byte[] pcm = { 9, 8, 7, 6, 5, 4 };
+        var audio = Mensaje(p.Audio(pcm));
+        Debe(Campo(audio, "type") == "session.input_audio.append" && Campo(audio, "audio") == Convert.ToBase64String(pcm),
+            $"el micrófono va como session.input_audio.append con el PCM en base64 exacto (va «{Campo(audio, "type")}»)");
+
+        var texto = Mensaje(p.Texto("abre la admisión"));
+        var contenido = Nodo(texto, "item", "content");
+        Debe(Campo(texto, "type") == "response.item.create" && Campo(texto, "item", "type") == "message" && Campo(texto, "item", "role") == "user"
+             && contenido is { ValueKind: JsonValueKind.Array } ct && ct.GetArrayLength() == 1
+             && Campo(ct[0], "type") == "input_text" && Campo(ct[0], "text") == "abre la admisión",
+            "el texto escrito es un response.item.create: mensaje del usuario con un input_text");
+
+        Debe(p.Mira, "GPT-Live mira: el delegado vio el color y el texto de una foto (medido el 2026-09-12)");
+        byte[] jpeg = { 0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3 };
+        var foto = Mensaje(p.Fotograma(jpeg));
+        var enFoto = Nodo(foto, "item", "content");
+        Debe(Campo(foto, "type") == "response.item.create" && Campo(foto, "item", "role") == "user"
+             && enFoto is { ValueKind: JsonValueKind.Array } cf
+             && cf.EnumerateArray().Any(x => Campo(x, "type") == "input_image"
+                 && Campo(x, "image_url") == "data:image/jpeg;base64," + Convert.ToBase64String(jpeg)),
+            "la foto es un mensaje del usuario con un input_image en data URL JPEG");
+
+        var hechas = new List<(string Id, string Nombre, string Resultado)>
+            { ("call_1", "map_look", "SAP Easy Access"), ("call_2", "map_where_am_i", "NWP1") };
+        var resultados = p.Resultados(hechas).ToList();
+        var leidos = resultados.Select(Mensaje).ToList();
+        Debe(leidos.Count == 2
+             && leidos.All(r => Campo(r, "type") == "response.item.create" && Campo(r, "item", "type") == "function_call_output")
+             && Campo(leidos[0], "item", "call_id") == "call_1" && Campo(leidos[0], "item", "output") == "SAP Easy Access"
+             && Campo(leidos[1], "item", "call_id") == "call_2" && Campo(leidos[1], "item", "output") == "NWP1",
+            $"cada resultado es su propio function_call_output con su call_id (salieron {leidos.Count})");
+        Debe(!resultados.Any(r => r.Contains("\"response.create\"")),
+            "y devolver resultados no pide turno por su cuenta: eso es un paso aparte");
+
+        var turno = Mensaje(p.PedirRespuesta());
+        Debe(Campo(turno, "type") == "response.create", $"pedir turno es response.create (es «{Campo(turno, "type")}»)");
+        const string frase = "Di exactamente esto, sin añadir nada ni comentarlo: voy por el peso";
+        var dictado = Mensaje(p.PedirRespuesta(frase));
+        Debe(Campo(dictado, "type") == "session.commentary.append"
+             && Nodo(dictado, "delegation_id") is { ValueKind: JsonValueKind.Null }
+             && Campo(dictado, "content") == frase,
+            $"dictar es session.commentary.append con delegation_id nulo y la frase entera (es «{Campo(dictado, "type")}»)");
+
+        var nuevas = new List<Utensilio> { new("map_where_am_i", "Dice en qué pantalla está", new List<Argumento> { new("detalle", "cuánto detalle") }) };
+        const string otroModo = "AHORA SOLO DICES LO QUE SE TE PIDE";
+        var cambio = CambioDeModo(p, otroModo, nuevas, false);
+        var sabe = DeLaInterfaz("SabeEsperarTurno", p);
+        if (cambio == null || sabe == null) { Pendiente("IProtocolo.CambioDeModo / IProtocolo.SabeEsperarTurno", "1"); return; }
+
+        var cambios = cambio.Select(Mensaje).ToList();
+        Debe(cambios.Count == 1 && Campo(cambios[0], "type") == "session.update",
+            $"cambiar de modo es UN session.update, nunca otro session.start (salió: {string.Join(", ", cambios.Select(x => Campo(x, "type")))})");
+        if (cambios.Count == 0) return;
+        var upd = cambios[0];
+        var toolsNuevas = Nodo(upd, "session", "delegation", "responses", "tools");
+        Debe(Campo(upd, "session", "delegation", "type") == "responses"
+             && Campo(upd, "session", "delegation", "responses", "instructions").Contains(otroModo)
+             && toolsNuevas is { ValueKind: JsonValueKind.Array } tn && tn.GetArrayLength() == 1
+             && Campo(tn[0], "name") == "map_where_am_i" && Campo(tn[0], "parameters", "properties", "detalle", "type") == "string"
+             && Campo(upd, "session", "delegation", "responses", "model") == "gpt-5.6-luna",
+            "el session.update lleva la delegación entera: su modelo, las instrucciones nuevas y las herramientas nuevas");
+        Debe(Nodo(upd, "session", "instructions") == null && Nodo(upd, "session", "model") == null && Nodo(upd, "session", "audio") == null,
+            "y no toca nada fuera de la delegación: session.instructions a mitad de sesión el servidor lo rechaza");
+
+        Debe(sabe is false,
+            "GPT-Live no sabe esperar turno (no hay create_response ni turn_detection: «no hables por tu cuenta» no se respetó), y lo declara");
+        var realtime = new ProtocoloOpenAI();
+        Debe(DeLaInterfaz("SabeEsperarTurno", realtime) is true, "GPT Realtime sí sabe, y lo sigue diciendo");
+        string prestada = string.Join("\n", CambioDeModo(realtime, "x", nuevas, true) ?? new List<string>());
+        Debe(prestada.Contains("\"session.update\"") && prestada.Contains("\"create_response\":false"),
+            "y en GPT Realtime cambiar de modo sigue siendo su apertura: la de la voz prestada lleva create_response=false");
+    }
+
+    /// <remarks>
+    /// gpt-4o-mini-transcribe está deprecado y se apaga el 2027-02-26: ese día la carita dejaría de
+    /// escribir lo que oye sin que nada diera error. Medido el 2026-09-12 con la misma frase hablada
+    /// contra gpt-realtime-2.1-mini: gpt-transcribe se acepta (session.updated sin error) y manda la
+    /// transcripción POR TROZOS igual que el antiguo —9 deltas y la misma frase, «Mira la pantalla y
+    /// dime qué ves.»—, que es lo único que lee el traductor. Aceptarse no bastaba: un transcriptor que
+    /// solo mandara .completed dejaría la transcripción del usuario muda igual.
+    /// </remarks>
+    private static void LaTranscripcionNoVaAlQueSeApaga()
+    {
+        IProtocolo p = new ProtocoloOpenAI();
+        var m = Mensaje(p.Apertura("x", new List<Utensilio>(), "").First());
+        string modelo = Campo(m, "session", "audio", "input", "transcription", "model");
+        Debe(modelo == "gpt-transcribe", $"la transcripción se pide a gpt-transcribe (pide «{modelo}»)");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

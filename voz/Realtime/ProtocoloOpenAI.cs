@@ -92,7 +92,13 @@ public sealed class ProtocoloOpenAI : IProtocolo
                         // Sin esto la carita se queda muda por su lado y no hay forma de leer en
                         // pantalla lo que el servidor creyó oír, que es la primera pista cuando algo
                         // no se entiende.
-                        transcription = new { model = "gpt-4o-mini-transcribe" },
+                        //
+                        // gpt-transcribe, NO gpt-4o-mini-transcribe: el antiguo está deprecado y se
+                        // apaga el 2027-02-26, y ese día la carita dejaría de escribir lo que oye sin
+                        // un solo error. Medido el 2026-09-12 con la misma frase hablada: se acepta y
+                        // manda la transcripción por TROZOS igual —9 deltas, la misma frase—, que es lo
+                        // único que se lee abajo. Aceptarse no bastaba (promesa 43 de la voz).
+                        transcription = new { model = "gpt-transcribe" },
 
                         // CAMPO LEJANO: el micrófono del portátil oye la sala entera —incluidos los
                         // altavoces— y no una boca pegada. `far_field` es el preprocesado que el
@@ -107,23 +113,31 @@ public sealed class ProtocoloOpenAI : IProtocolo
                         voice = Voz,
                     },
                 },
-                tools = utensilios.Select(u => new
-                {
-                    type = "function",
-                    name = u.Nombre,
-                    description = u.Descripcion,
-                    parameters = new
-                    {
-                        type = "object",
-                        properties = u.Args.ToDictionary(
-                            a => a.Nombre, a => (object)new { type = "string", description = a.Que }),
-                        required = Array.Empty<string>(),
-                    },
-                }).ToArray(),
+                tools = ComoFunciones(utensilios),
                 tool_choice = "auto",
             },
         });
     }
+
+    /// <summary>
+    /// Las herramientas vestidas de <c>function</c>, con todos los argumentos de texto. En UN solo sitio
+    /// porque GPT-Live las declara igual —dentro de su delegación— y dos copias de la misma forma
+    /// divergen en silencio: el día que una cambiara, el delegado recibiría otra herramienta que la voz
+    /// de respaldo, y ninguno de los dos daría error.
+    /// </summary>
+    internal static object[] ComoFunciones(IReadOnlyList<Utensilio> utensilios) => utensilios.Select(u => (object)new
+    {
+        type = "function",
+        name = u.Nombre,
+        description = u.Descripcion,
+        parameters = new
+        {
+            type = "object",
+            properties = u.Args.ToDictionary(
+                a => a.Nombre, a => (object)new { type = "string", description = a.Que }),
+            required = Array.Empty<string>(),
+        },
+    }).ToArray();
 
     public string Audio(byte[] pcm) => JsonSerializer.Serialize(new
     {
@@ -264,7 +278,12 @@ public sealed class ProtocoloOpenAI : IProtocolo
         return hechos;
     }
 
-    private static Llamada LaLlamada(JsonElement m)
+    /// <summary>
+    /// Una llamada leída de cualquier cosa con <c>call_id</c>, <c>name</c> y <c>arguments</c>: el evento
+    /// de Realtime y el item function_call que GPT-Live manda envuelto tienen esos tres campos. Se
+    /// comparte para que los argumentos se lean con la misma vara venga de quien venga.
+    /// </summary>
+    internal static Llamada LaLlamada(JsonElement m)
     {
         string id = m.TryGetProperty("call_id", out var c) ? c.GetString() ?? "" : "";
         string nombre = m.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
