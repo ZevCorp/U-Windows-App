@@ -581,6 +581,7 @@ internal static class Contrato
         Prueba("208. escribir con la voz abierta pide respuesta: el texto va seguido de pedir turno, con cualquier protocolo", EscribirPideRespuesta);
         Prueba("209. con una voz que no marca los turnos, la conversación los marca: el primer trozo de lo que dice el usuario abre un turno y un silencio lo cierra", SinMarcasLaConversacionMarcaLosTurnos);
         Prueba("210. la voz por defecto es GPT-Live y U_VOZ=realtime vuelve a GPT Realtime", LaVozPorDefectoEsGptLive);
+        Prueba("214. con GPT-Live, varias llamadas pedidas a la vez se contestan todas antes de pedir turno, y el turno se pide una sola vez; con GPT Realtime una tanda sigue pidiendo turno detrás de sus resultados", VariasLlamadasUnSoloTurno);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -7798,6 +7799,173 @@ internal static class Contrato
         var solo = Mensajes(new ProtocoloDeMentira(pideRespuesta: false, marcaLosTurnos: true), "hola");
         Debe(solo.Count == 1 && solo[0].Length > 0,
             $"con un protocolo que contesta solo (PedirRespuesta vacío) va un único mensaje y ninguno vacío (salieron {solo.Count})");
+
+        // ── Y LA CONVERSACIÓN LO MANDA DE VERDAD (W208, 2026-09-12) ──────────
+        // Juzgar solo MensajesDeTexto dejaba verde la vuelta a main: EnviarTextoAsync mandando solo el texto
+        // dio CONTRATO INTACTO (medido), porque el método sale si no hay socket y aquí no lo hay. La
+        // conversación deja sustituir su salida y el «hay socket», y se juzga lo que sale de verdad: lo
+        // escrito (EnviarTextoAsync, que usan «Escríbele…» y el saludo) y la nota al modelo.
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var salida = tc?.GetField("_salida", BindingFlags.NonPublic | BindingFlags.Instance);
+        var abierta = tc?.GetField("_salidaAbierta", BindingFlags.NonPublic | BindingFlags.Instance);
+        var escribir = tc?.GetMethod("EnviarTextoAsync", BindingFlags.Public | BindingFlags.Instance);
+        var nota = tc?.GetMethod("EnviarTextoAlModeloAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (tc == null || salida == null || abierta == null || escribir == null || nota == null)
+        { Pendiente("ConversacionEnVivo._salida y _salidaAbierta (lo que la conversación manda al escribir)", "208", "018"); return; }
+
+        List<string> Manda(Voz.Realtime.IProtocolo p, MethodInfo metodo, bool conLaVozAbierta)
+        {
+            using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), p })!;
+            var mandados = new List<string>();
+            salida.SetValue(conv, (Func<string, CancellationToken, Task>)((json, _) =>
+            {
+                lock (mandados) mandados.Add(json);
+                return Task.CompletedTask;
+            }));
+            if (conLaVozAbierta) abierta.SetValue(conv, (Func<bool>)(() => true));
+            ((Task)metodo.Invoke(conv, new object[] { "abre el bloc de notas" })!).GetAwaiter().GetResult();
+            lock (mandados) return mandados.ToList();
+        }
+
+        foreach (var (quien, p, tipoDelTexto) in new (string, Voz.Realtime.IProtocolo, string)[]
+                 {
+                     ("con GPT Realtime", new Voz.Realtime.ProtocoloOpenAI(), "conversation.item.create"),
+                     ("con GPT-Live", live, "response.item.create"),
+                 })
+            foreach (var (como, metodo) in new (string, MethodInfo)[]
+                     { ("lo escrito (EnviarTextoAsync)", escribir), ("la nota al modelo (EnviarTextoAlModeloAsync)", nota) })
+            {
+                var l = Manda(p, metodo, conLaVozAbierta: true);
+                Debe(l.Count == 2 && TipoDelMensaje(l[0]) == tipoDelTexto && l[0].Contains("abre el bloc de notas")
+                     && TipoDelMensaje(l[1]) == "response.create",
+                    $"{quien}, {como} sale de la conversación con el texto y DESPUÉS response.create (salió: {Tipos(l)})");
+            }
+
+        var cerrada = Manda(new Voz.Realtime.ProtocoloOpenAI(), escribir, conLaVozAbierta: false);
+        Debe(cerrada.Count == 0,
+            $"y con la voz cerrada no sale nada: sustituir la salida no abre la puerta por su cuenta (salieron {cerrada.Count})");
+    }
+
+    /// <remarks>
+    /// VARIAS LLAMADAS A LA VEZ, Y UN PEDIR TURNO POR CADA UNA. GPT-Live entrega cada function_call del
+    /// delegado en su propio response.event, y la conversación contestaba cada Hecho.Pide por separado con su
+    /// propio response.create. El primero llegaba sin la salida de la otra llamada y el servidor contestaba
+    /// function_call_outputs_required (medido con sonda-paralelo.ps1 el 2026-09-12): el log decía un fallo
+    /// donde no lo había (aprendizaje nº2). La mano de la prueba es el autocontrol, que se puede retener sin
+    /// pantalla: así las dos llamadas están pedidas antes de que termine ninguna, que es lo que pasa cuando
+    /// una herramienta tarda más de lo que tarda en llegar la siguiente.
+    /// </remarks>
+    private static void VariasLlamadasUnSoloTurno()
+    {
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var salida = tc?.GetField("_salida", BindingFlags.NonPublic | BindingFlags.Instance);
+        var abierta = tc?.GetField("_salidaAbierta", BindingFlags.NonPublic | BindingFlags.Instance);
+        var procesar = tc?.GetMethod("Procesar", BindingFlags.NonPublic | BindingFlags.Instance);
+        var nucleo = tc?.GetMethod("EjecutarNucleoAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+        var sesion = tc?.GetField("_sesionId", BindingFlags.NonPublic | BindingFlags.Instance);
+        var autocontrol = tc?.GetProperty("Autocontrol", BindingFlags.Public | BindingFlags.Instance);
+        if (tc == null || salida == null || abierta == null || procesar == null || nucleo == null || sesion == null || autocontrol == null)
+        { Pendiente("ConversacionEnVivo._salida y _salidaAbierta (lo que la conversación manda tras las herramientas)", "214", "018"); return; }
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tLive == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "214", "018"); return; }
+        var live = (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+
+        // Tal como la manda el servidor: una llamada por response.event (sonda-paralelo.ps1).
+        string LlegaLaLlamada(string id, string nombre)
+            => "{\"type\":\"response.event\",\"event\":{\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\","
+               + "\"call_id\":\"" + id + "\",\"name\":\"" + nombre + "\",\"arguments\":\"{}\"}}}";
+        string? ItemDe(string json, string campo)
+        {
+            try
+            {
+                using var d = JsonDocument.Parse(json);
+                return d.RootElement.TryGetProperty("item", out var it) && it.ValueKind == JsonValueKind.Object
+                       && it.TryGetProperty(campo, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            }
+            catch (JsonException) { return null; }
+        }
+        bool EsSalida(string json) => ItemDe(json, "type") == "function_call_output";
+        bool EsTurno(string json) => TipoDelMensaje(json) == "response.create";
+        string Tipos(List<string> l) => string.Join(" · ", l.Select(m => EsSalida(m) ? "salida " + ItemDe(m, "call_id") : TipoDelMensaje(m)));
+
+        List<string> Conversa(Voz.Realtime.IProtocolo p, Action<object> guion, int salidasEsperadas)
+        {
+            using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), p })!;
+            var mandados = new List<string>();
+            salida.SetValue(conv, (Func<string, CancellationToken, Task>)((json, _) =>
+            {
+                lock (mandados) mandados.Add(json);
+                return Task.CompletedTask;
+            }));
+            abierta.SetValue(conv, (Func<bool>)(() => true));
+            guion(conv);
+            // Las llamadas corren en otro hilo: se espera a que salgan sus resultados y un pedir turno, y un
+            // poco más, por si detrás sale otro de más.
+            var reloj = System.Diagnostics.Stopwatch.StartNew();
+            while (reloj.ElapsedMilliseconds < 5000)
+            {
+                lock (mandados)
+                    if (mandados.Count(EsSalida) >= salidasEsperadas && mandados.Any(EsTurno)) break;
+                Thread.Sleep(20);
+            }
+            Thread.Sleep(300);
+            lock (mandados) return mandados.ToList();
+        }
+        Func<string, string> Contesta = n => n + ": hecho";
+
+        using var suelta = new ManualResetEventSlim(false);
+        var dos = Conversa(live, conv =>
+        {
+            autocontrol.SetValue(conv, (Func<string, string>)(n => { suelta.Wait(5000); return n + ": hecho"; }));
+            procesar.Invoke(conv, new object[] { LlegaLaLlamada("call_A", "self_mute"), CancellationToken.None });
+            procesar.Invoke(conv, new object[] { LlegaLaLlamada("call_B", "self_hide"), CancellationToken.None });
+            suelta.Set();
+        }, salidasEsperadas: 2);
+        var ids = dos.Where(EsSalida).Select(m => ItemDe(m, "call_id")).ToList();
+        Debe(ids.Count == 2 && ids.Contains("call_A") && ids.Contains("call_B"),
+            $"con GPT-Live, dos llamadas pedidas a la vez se contestan las dos, cada una con su function_call_output (salió: {Tipos(dos)})");
+        Debe(dos.Count(EsTurno) == 1,
+            $"y el turno se pide UNA vez, no una por llamada: el primero salía sin la otra salida y el servidor lo rechazaba (salió: {Tipos(dos)})");
+        Debe(dos.FindIndex(m => EsTurno(m)) > dos.FindLastIndex(m => EsSalida(m)),
+            $"y se pide detrás de la última salida, cuando ya no falta ninguna (salió: {Tipos(dos)})");
+
+        var una = Conversa(live, conv =>
+        {
+            autocontrol.SetValue(conv, Contesta);
+            procesar.Invoke(conv, new object[] { LlegaLaLlamada("call_C", "self_mute"), CancellationToken.None });
+        }, salidasEsperadas: 1);
+        Debe(una.Count(EsSalida) == 1 && una.Count(EsTurno) == 1 && una.Count > 0 && EsTurno(una[^1]),
+            $"una llamada sola sigue pidiendo turno detrás de su resultado (salió: {Tipos(una)})");
+
+        var tras = Conversa(live, conv =>
+        {
+            autocontrol.SetValue(conv, Contesta);
+            // Pedida justo cuando se cerraba la voz: el token ya estaba cancelado y la llamada nunca llegó a correr.
+            using (var cancelado = new CancellationTokenSource())
+            {
+                cancelado.Cancel();
+                procesar.Invoke(conv, new object[] { LlegaLaLlamada("call_vieja", "self_mute"), cancelado.Token });
+            }
+            sesion.SetValue(conv, "la sesión siguiente");
+            procesar.Invoke(conv, new object[] { LlegaLaLlamada("call_D", "self_hide"), CancellationToken.None });
+        }, salidasEsperadas: 1);
+        Debe(tras.Count(EsSalida) == 1 && ItemDe(tras.First(EsSalida), "call_id") == "call_D" && tras.Count(EsTurno) == 1,
+            $"una llamada de una sesión anterior que nunca llegó a correr no retiene el turno de la sesión siguiente (salió: {Tipos(tras)})");
+
+        var rt = Conversa(new Voz.Realtime.ProtocoloOpenAI(), conv =>
+        {
+            autocontrol.SetValue(conv, Contesta);
+            var tanda = new List<Voz.Realtime.Llamada>
+            {
+                new("call_E", "self_mute", new Dictionary<string, string>()),
+                new("call_F", "self_hide", new Dictionary<string, string>()),
+            };
+            ((Task)nucleo.Invoke(conv, new object[] { tanda, CancellationToken.None })!).GetAwaiter().GetResult();
+        }, salidasEsperadas: 2);
+        Debe(rt.Count(EsSalida) == 2 && rt.Count(EsTurno) == 1 && rt.Count > 0 && EsTurno(rt[^1]),
+            $"con GPT Realtime una tanda de dos sigue como estaba: sus dos resultados y detrás un response.create (salió: {Tipos(rt)})");
     }
 
     private static string TipoDelMensaje(string json)
