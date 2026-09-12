@@ -316,6 +316,22 @@ public sealed class ConversacionEnVivo : IDisposable
     private bool _cayoSolo;
     private int _reintentos;
 
+    /// <summary>
+    /// SI EL SERVIDOR YA CONFIRMÓ ESTA CONEXIÓN (<see cref="Hecho.Abierta"/>). Con un protocolo que no la
+    /// confirma vale verdadero desde que se manda la apertura, como siempre.
+    /// </summary>
+    /// <remarks>
+    /// Y LO QUE DIJO EL SERVIDOR ANTES DE CONFIRMARLA: si después el socket muere, no abrió —y se dice por
+    /// qué—, no se cortó. Sin esto, el 2026-09-12 con la cuenta sin crédito la conversación real reconectó 4
+    /// veces con el mismo session.start y dijo 4 «Sigo, pero olvidé…», con la causa solo en el log (sonda
+    /// sobre la ConversacionEnVivo de d38f564 contra el servidor).
+    /// </remarks>
+    private bool _confirmada;
+    private string _fallaAntesDeAbrir = "";
+
+    /// <summary>Lo que se dirá cuando el servidor confirme: «Te escucho.» al arrancar, «Sigo…» al volver.</summary>
+    private string _alConfirmar = "";
+
     private readonly StringBuilder _fraseU = new();
     private readonly StringBuilder _fraseUsuario = new();
 
@@ -389,7 +405,7 @@ public sealed class ConversacionEnVivo : IDisposable
             Viva = true;
             Cambio?.Invoke(true);
             LogBus.Log("voz-viva", $"sesión abierta con «{_protocolo.Modelo}» ({_protocolo.Quien})");
-            Dice?.Invoke("Te escucho.");
+            EmpiezaUnaConexion("Te escucho.");   // con GPT-Live, cuando el servidor lo confirme (49)
 
             _audio.Capturado += MandarTrozo;
             _audio.AbrirMicrofono();
@@ -1282,7 +1298,10 @@ public sealed class ConversacionEnVivo : IDisposable
         }
         finally
         {
-            if (_cayoSolo && Viva && !ct.IsCancellationRequested) await ReconectarAsync();
+            // NO ABRIÓ, Y ESO NO ES UN CORTE: el servidor contestó un error en vez de confirmar la sesión y
+            // después cerró. Reenviar la misma apertura fallaría igual, así que no se reintenta: se dice la causa.
+            if (Viva && !ct.IsCancellationRequested && !_confirmada && _fallaAntesDeAbrir.Length > 0) await NoAbrioAsync();
+            else if (_cayoSolo && Viva && !ct.IsCancellationRequested) await ReconectarAsync();
             else if (Viva) await TerminarAsync();
         }
     }
@@ -1321,12 +1340,17 @@ public sealed class ConversacionEnVivo : IDisposable
                 await EnviarAsync(msg, _cts.Token);
 
             if (_protocolo.SabeVolver && _pase.Length > 0)
+            {
                 LogBus.Log("voz-viva", $"reconectada y reanudada donde iba (intento {_reintentos})");
+                EmpiezaUnaConexion("");
+            }
             else
             {
                 LogBus.Log("voz-viva", $"reconectada SIN continuidad: la conversación empieza de "
                     + $"cero (intento {_reintentos})");
-                Dice?.Invoke("Se cortó un instante. Sigo, pero olvidé lo último que hablábamos.");
+                // «SIGO» CUANDO EL SERVIDOR CONFIRMA, no al reconectar el socket: el 2026-09-12 se dijo cuatro
+                // veces sobre una sesión que no iba a abrir.
+                EmpiezaUnaConexion("Se cortó un instante. Sigo, pero olvidé lo último que hablábamos.");
             }
 
             _ = Task.Run(() => RecibirAsync(_cts.Token), _cts.Token);
@@ -1338,6 +1362,32 @@ public sealed class ConversacionEnVivo : IDisposable
             _cayoSolo = true;
             await ReconectarAsync();
         }
+    }
+
+    /// <summary>
+    /// Una conexión nueva, recién mandada su apertura. Si el protocolo confirma la apertura, empieza sin
+    /// confirmar y lo que había que decir espera a <see cref="Hecho.Abierta"/>; si no, se dice ya, como siempre.
+    /// Se llama ANTES de lanzar la recepción: nada de esa conexión se lee con el estado de la anterior.
+    /// </summary>
+    private void EmpiezaUnaConexion(string alConfirmar)
+    {
+        _confirmada = !_protocolo.ConfirmaQueAbrio;
+        _fallaAntesDeAbrir = "";
+        _alConfirmar = _confirmada ? "" : alConfirmar;
+        if (_confirmada && alConfirmar.Length > 0) Dice?.Invoke(alConfirmar);
+    }
+
+    /// <summary>
+    /// El servidor dijo por qué no abría y cerró. Se dice UNA vez, con su causa, y se cierra la voz: la causa
+    /// (sin crédito, unas instrucciones demasiado largas) no se arregla reintentando.
+    /// </summary>
+    private async Task NoAbrioAsync()
+    {
+        string causa = _fallaAntesDeAbrir;
+        LogBus.Log("voz-viva", $"la sesión no llegó a abrir: el servidor contestó «{causa}» en vez de confirmarla, "
+            + "y cerró. No se reintenta: la misma apertura fallaría igual");
+        await TerminarAsync();
+        Dice?.Invoke($"No pude abrir la voz en vivo. El servidor dice: {causa}");
     }
 
     /// <summary>Traduce lo que llegó a hechos, y reacciona a cada uno. La traducción vive en <see
@@ -1462,6 +1512,16 @@ public sealed class ConversacionEnVivo : IDisposable
 
             case Hecho.Falla f:
                 LogBus.Log("voz-viva", $"el servidor dice: {f.Que}");
+                // ANTES DE CONFIRMAR LA SESIÓN, un error no es de la conversación: es por qué no abre. Se guarda
+                // el primero; si el socket muere sin confirmar, eso es lo que se dice (RecibirAsync).
+                if (!_confirmada && _fallaAntesDeAbrir.Length == 0) _fallaAntesDeAbrir = f.Que;
+                break;
+
+            // LA SESIÓN ABRIÓ DE VERDAD (promesa 49): lo que se iba a decir al arrancar o al volver, se dice ahora.
+            case Hecho.Abierta:
+                _confirmada = true;
+                LogBus.Log("voz-viva", "el servidor confirmó la sesión");
+                if (_alConfirmar.Length > 0) { Dice?.Invoke(_alConfirmar); _alConfirmar = ""; }
                 break;
         }
     }

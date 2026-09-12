@@ -38,8 +38,10 @@ public interface IProtocolo
     /// Si sabe interpretar una imagen dentro de la conversación. NO implica que la reciba sola y
     /// seguida: aquí no se manda vídeo en directo — se manda una foto suelta cuando el usuario
     /// señala algo, o cuando el propio modelo pide mirar (herramienta <c>map_look</c>). Si esto es
-    /// falso, ni se ofrece esa herramienta ni se manda la foto de señalar: prometerlas y que no
-    /// sirvan de nada es peor que no tenerlas.
+    /// falso no se manda ninguna foto: <c>map_look</c> se sigue ofreciendo, pero contesta que no puede y
+    /// ofrece <c>map_what_i_see</c>, y la foto de un recuerdo nuevo se queda en disco. Mandar una que el
+    /// servidor rechaza es peor que no mandarla: el modelo contesta como si la hubiera visto mal.
+    /// (Corregido el 2026-09-12: decía que la herramienta no se ofrecía, y ConversacionEnVivo sí la ofrece.)
     /// </summary>
     bool Mira { get; }
 
@@ -89,6 +91,19 @@ public interface IProtocolo
     /// instrucciones no se respetó (medido el 2026-09-12: la voz contestó sola).
     /// </summary>
     bool SabeEsperarTurno => true;
+
+    /// <summary>
+    /// Si el servidor CONFIRMA que la sesión abrió (<see cref="Hecho.Abierta"/>). Si la confirma, hasta
+    /// entonces no está abierta: un <see cref="Hecho.Falla"/> antes de la confirmación es que no abrió, y
+    /// reenviar la misma apertura fallaría igual.
+    /// </summary>
+    /// <remarks>
+    /// Nació el 2026-09-12 con GPT-Live: sin crédito, session.start contestó credit_balance_exhausted sin
+    /// session.started y el socket murió a los ~2 s; la conversación lo tomaba por un corte, reenviaba el
+    /// mismo session.start cuatro veces y decía «Sigo» cada vez, con la causa solo en el log. Por defecto
+    /// falso: GPT Realtime no se midió así, y con él un error se sigue leyendo como hasta ahora.
+    /// </remarks>
+    bool ConfirmaQueAbrio => false;
 
     /// <summary>
     /// Lo que se manda para cambiar instrucciones y herramientas A MITAD de sesión.

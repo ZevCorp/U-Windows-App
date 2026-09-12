@@ -58,6 +58,12 @@ public abstract record Hecho
     /// micrófono en rojo y ninguna pista de por qué no contesta es el peor diagnóstico posible.
     /// </summary>
     public sealed record Falla(string Que) : Hecho;
+
+    /// <summary>
+    /// El servidor CONFIRMA que la sesión abrió. Solo lo mandan los protocolos que lo declaran (<see
+    /// cref="IProtocolo.ConfirmaQueAbrio"/>), y para ellos lo que llega antes es que no abrió, no un corte.
+    /// </summary>
+    public sealed record Abierta : Hecho;
 }
 
 /// <summary>Algo que el modelo pide ejecutar.</summary>
