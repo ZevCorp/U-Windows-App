@@ -42,6 +42,13 @@ LOGS = {
         "[01:01:05] mapa-mcp: -> map_take exit=Bluetooth",
         "[01:01:06] mapa-mcp: <- (800 ms) hice los 1 paso(s): pulsé «Bluetooth» y ahora estás en «uia://settings/bluetooth».",
     ],
+    # T3 r2: el agujero del 2026-09-11. La sesión de voz se cerró y el texto lo atendió el agente que
+    # pulsa por coordenadas: estado final bueno y CERO acciones de voz → NO aprobada (no midió la voz)
+    "T3-r2.log": [
+        "[01:01:31] voz-viva: el servidor dice: sesión cerrada",
+        "[01:01:33] agent: tap (455,584)",
+        "[01:01:35] agent: tap (212,301)",
+    ],
     # T4: mira, pide, recibe la lista (no es intento), elige el 2 → aprobada, miró antes, ejercita
     "T4-r1.log": [
         "[01:02:01] voz-viva: ejecutando «map_look»",
@@ -63,6 +70,7 @@ RESUMEN = [
     {"tarea": "T1", "rep": 1, "estado_final": True, "tope": False, "t0": "01:00:00.100"},
     {"tarea": "T1", "rep": 2, "estado_final": True, "tope": False, "t0": "01:00:30.100"},
     {"tarea": "T3", "rep": 1, "estado_final": True, "tope": False, "t0": "01:01:00.100"},
+    {"tarea": "T3", "rep": 2, "estado_final": True, "tope": False, "t0": "01:01:30.100"},
     {"tarea": "T4", "rep": 1, "estado_final": True, "tope": False, "t0": "01:02:00.100"},
     {"tarea": "T5", "rep": 1, "estado_final": False, "tope": False, "t0": "01:03:00.100"},
 ]
@@ -88,6 +96,9 @@ def main():
          f[("T1", 2)]["aprobado"] is False and f[("T1", 2)]["fallidas"] == 2),
         ("T3 NO aprobada: dos fallidas en la petición, aunque por destino serían 1+1",
          f[("T3", 1)]["aprobado"] is False and f[("T3", 1)]["fallidas"] == 2 and f[("T3", 1)]["intentos_max"] == 1),
+        ("T3 r2 NO aprobada: estado final bueno con cero acciones de voz (lo resolvió otro camino)",
+         f[("T3", 2)]["aprobado"] is False and f[("T3", 2)]["acciones"] == 0 and f[("T3", 2)]["estado_final"] is True),
+        ("la tabla dice cuántas llegaron al estado final sin la voz", "sin una sola acción de voz: 1" in texto),
         ("T4 aprobada: la lista no es intento, eligió el 2",
          f[("T4", 1)]["aprobado"] is True and f[("T4", 1)]["listas"] == 1 and f[("T4", 1)]["fallidas"] == 0),
         ("T4 miró antes de actuar; T1 no", f[("T4", 1)]["miro_antes"] is True and f[("T1", 1)]["miro_antes"] is False),
