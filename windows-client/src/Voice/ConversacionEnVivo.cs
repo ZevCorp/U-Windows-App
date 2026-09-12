@@ -1455,6 +1455,7 @@ public sealed class ConversacionEnVivo : IDisposable
             case Hecho.Pide p:
                 LogBus.Log("voz-viva", "llamada recibida: " + string.Join(", ", p.Cuales.Select(x => x.Nombre)));
                 foreach (var x in p.Cuales) _cuenta.Llamada(x.Nombre, TopeDeIntentos.DestinoDe(x.Nombre, x.Args));
+                AnotarSinContestar(p.Cuales);   // antes de lanzarla: la siguiente de la tanda ya la cuenta (214)
                 _ = Task.Run(() => EjecutarAsync(p.Cuales, ct), ct);
                 break;
 
@@ -1499,6 +1500,57 @@ public sealed class ConversacionEnVivo : IDisposable
     {
         try { await EjecutarNucleoAsync(llamadas, ct); }
         catch (Exception e) { LogBus.Log("voz-viva", $"la ejecución de una llamada reventó: {e.Message}"); }
+        // Aunque reventara a medias: una llamada que ya no se va a contestar no retiene el turno de las demás (214).
+        finally { DarPorContestadas(llamadas); }
+    }
+
+    // ── Las llamadas que llegan de una en una (spec 018, promesa 214) ───────
+
+    /// <summary>
+    /// Las llamadas pedidas que aún no tienen su resultado devuelto, con la sesión en la que se pidieron. Solo
+    /// se anotan con un protocolo que no marca los turnos.
+    /// </summary>
+    /// <remarks>
+    /// GPT-LIVE ENTREGA CADA LLAMADA EN SU PROPIO MENSAJE, y cada Hecho.Pide se contestaba con su propio
+    /// response.create: con dos a la vez, el primero salía sin la salida de la otra y el servidor contestaba
+    /// function_call_outputs_required. Medido con sonda-paralelo.ps1 el 2026-09-12: dos llamadas a 52 ms una de
+    /// otra y 1 error; contestando como aquí (copia de la sonda), 77 ms, 0 errores y un único response.create.
+    /// Realtime entrega la tanda entera en un response.done: con él no se anota nada y todo sigue como estaba.
+    ///
+    /// Se pregunta MarcaLosTurnos porque hoy las dos cosas van juntas: GPT-Live es el único protocolo que ni
+    /// marca los turnos ni entrega las llamadas en tanda. Si alguno las separa, esto pide su propio miembro en
+    /// IProtocolo.
+    ///
+    /// La sesión va anotada porque una llamada pedida justo al cerrar la voz no llega a correr (su Task.Run nace
+    /// cancelado), y sin eso retendría para siempre el turno de la sesión siguiente.
+    ///
+    /// Queda una carrera, dicha y no cerrada: si una herramienta termina antes de que llegue la llamada
+    /// siguiente de la misma tanda (52–77 ms después, medido), el turno se pide con una sola salida y el
+    /// servidor contesta como antes. Cerrarla del todo pide mirar response.completed, que el traductor no da.
+    /// </remarks>
+    private readonly Dictionary<string, string> _sinContestar = new();
+    private readonly object _candadoSinContestar = new();
+
+    /// <summary>Se anota ANTES de lanzar la llamada, en el hilo de recepción: la siguiente de la tanda ya la cuenta
+    /// aunque esta termine enseguida.</summary>
+    private void AnotarSinContestar(IReadOnlyList<Llamada> llamadas)
+    {
+        if (_protocolo.MarcaLosTurnos) return;
+        lock (_candadoSinContestar)
+            foreach (var x in llamadas)
+                if (x.Id.Length > 0) _sinContestar[x.Id] = _sesionId;
+    }
+
+    /// <summary>Da estas llamadas por contestadas, olvida las de otra sesión y devuelve las que faltan.</summary>
+    private IReadOnlyList<string> DarPorContestadas(IReadOnlyList<Llamada> llamadas)
+    {
+        lock (_candadoSinContestar)
+        {
+            foreach (var x in llamadas) _sinContestar.Remove(x.Id);
+            foreach (var vieja in _sinContestar.Where(kv => kv.Value != _sesionId).Select(kv => kv.Key).ToList())
+                _sinContestar.Remove(vieja);
+            return _sinContestar.Keys.ToList();
+        }
     }
 
     /// <summary>
@@ -1838,8 +1890,17 @@ public sealed class ConversacionEnVivo : IDisposable
                 await EnviarAsync(msg, ct);
             foreach (byte[] jpeg in fotos)
                 await MandarFotoAsync(jpeg, ct);
-            string pide = _protocolo.PedirRespuesta();
-            if (pide.Length > 0) await EnviarAsync(pide, ct);
+            // UN TURNO POR TANDA, NO POR LLAMADA (promesa 214): con GPT-Live cada llamada llega sola, y pedir turno
+            // mientras falta la salida de otra es lo que el servidor rechaza. Lo retenido deja rastro (patrón nº10).
+            var faltan = DarPorContestadas(llamadas);
+            if (faltan.Count > 0)
+                LogBus.Log("voz-viva", $"resultado devuelto; el turno se pide cuando se contesten las {faltan.Count} "
+                    + $"llamada(s) que faltan ({string.Join(", ", faltan)})");
+            else
+            {
+                string pide = _protocolo.PedirRespuesta();
+                if (pide.Length > 0) await EnviarAsync(pide, ct);
+            }
         }
         catch (Exception e) { LogBus.Log("voz-viva", $"no pude devolver el resultado: {e.Message}"); }
     }
