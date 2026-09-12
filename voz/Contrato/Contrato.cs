@@ -1151,7 +1151,8 @@ internal static class Contrato
         Debe(p.RitmoDeEntrada == 24000 && p.RitmoDeSalida == 24000,
             $"PCM a 24 kHz en los dos sentidos (entrada {p.RitmoDeEntrada}, salida {p.RitmoDeSalida})");
 
-        const string completas = "ERES Ü Y ESTAS SON TUS INSTRUCCIONES COMPLETAS";
+        const string primeraLinea = "ERES Ü Y ESTAS SON TUS INSTRUCCIONES COMPLETAS";
+        string completas = InstruccionesComoLasDeU(primeraLinea);
         var utensilios = new List<Utensilio> { new("map_look", "Mira la pantalla", new List<Argumento> { new("que", "qué mirar") }) };
         var apertura = p.Apertura(completas, utensilios, "").ToList();
         Debe(apertura.Count == 1, $"la apertura es UN mensaje (salieron {apertura.Count})");
@@ -1177,10 +1178,11 @@ internal static class Contrato
              && Campo(t[0], "parameters", "properties", "que", "type") == "string",
             "las herramientas de Ü van en la delegación, como function con sus argumentos de texto");
         Debe(Campo(m, "session", "delegation", "responses", "tool_choice") == "auto", "y el delegado elige cuándo usarlas");
-        Debe(Campo(m, "session", "delegation", "responses", "instructions").Contains(completas),
-            "las instrucciones completas de Ü van al delegado, que es quien mira y opera");
+        string alDelegado = Campo(m, "session", "delegation", "responses", "instructions");
+        Debe(MismosBytes(alDelegado, completas),
+            $"las instrucciones completas de Ü van al delegado, que es quien mira y opera, ÍNTEGRAS: iguales byte a byte ({completas.Length} caracteres; llegan {alDelegado.Length})");
         string deLaVoz = Campo(m, "session", "instructions");
-        Debe(deLaVoz.Trim().Length > 0 && !deLaVoz.Contains(completas),
+        Debe(deLaVoz.Trim().Length > 0 && !deLaVoz.Contains(primeraLinea),
             "y la voz lleva las suyas, cortas: quién es y que delega todo lo que sea mirar u operar");
 
         var terra = GptLive("gpt-live-1", "gpt-5.6-terra");
@@ -1188,12 +1190,33 @@ internal static class Contrato
         Debe(conTerra == "gpt-5.6-terra", $"el delegado se elige al construir, no va escrito dentro (con terra pidió «{conTerra}»)");
     }
 
+    /// <summary>
+    /// UNAS INSTRUCCIONES DEL TAMAÑO DE LAS DE Ü, no un marcador. Las de Ü miden 20.694 caracteres
+    /// (21.497 bytes UTF-8, medido el 2026-09-12 por la sonda de huecos), y comprobarlas con Contains de
+    /// una frase de 46 dejaba en verde recortarlas: el sabotaje V2 de la revisión —cortar a 4.000, una
+    /// defensa verosímil ante el tope de 16.384 fichas— salió VOZ ÍNTEGRA. Estas miden más que las de Ü,
+    /// llevan lo que JSON escapa (tildes, Ü, comillas, barra invertida, tabulador, saltos de línea) y
+    /// terminan en la regla que se pierde primero si alguien las corta.
+    /// </summary>
+    private static string InstruccionesComoLasDeU(string primeraLinea)
+    {
+        var sb = new System.Text.StringBuilder(primeraLinea).Append('\n');
+        for (int i = 1; sb.Length < 24_000; i++)
+            sb.Append($"Regla {i:D4}: «no anuncies», pulsa \"NV44\" en SAP\\GUI, ñandú y Ü;\ttermina.\n");
+        return sb.Append("ÚLTIMA REGLA: la que se pierde si alguien las recorta.").ToString();
+    }
+
+    /// <summary>Iguales byte a byte en UTF-8: lo que llega al servidor, no una parte que se le parezca.</summary>
+    private static bool MismosBytes(string llegan, string mandadas)
+        => System.Text.Encoding.UTF8.GetBytes(llegan).SequenceEqual(System.Text.Encoding.UTF8.GetBytes(mandadas));
+
     /// <remarks>
     /// Los mensajes son los que mandó el servidor el 2026-09-12. Tres trampas, las tres silenciosas:
     ///
-    ///  · LA LLAMADA LLEGA DOS VECES, envuelta en response.event: primero
-    ///    response.function_call_arguments.done y después response.output_item.done con el item
-    ///    completo. Traducir las dos es ejecutar cada herramienta dos veces.
+    ///  · LA LLAMADA LLEGA TRES VECES, envuelta en response.event: response.output_item.added con el
+    ///    item EN CURSO (call_id y name, arguments vacío), response.function_call_arguments.done y
+    ///    response.output_item.done con el item completo. El borrador decía «dos veces»; la revisión del
+    ///    2026-09-12 capturó la tercera. Traducir más de una es ejecutar la herramienta dos o tres veces.
     ///  · response.completed ES DEL DELEGADO, no de la voz: la voz sigue hablando segundos después.
     ///    Tomarlo por cierre de turno cortaría la frase de Ü por la mitad.
     ///  · NO HAY speech_started. Hablarle encima no produce ningún evento; un traductor que lo
@@ -1233,6 +1256,27 @@ internal static class Contrato
             """));
         Debe(!argumentos.Any(h => h is Hecho.Pide),
             "los argumentos terminados NO son otra llamada: el servidor manda las dos, y traducir las dos ejecuta la herramienta dos veces");
+
+        // Y LLEGA UNA TERCERA VEZ, la primera en el tiempo: response.output_item.added, con el item
+        // function_call EN CURSO —call_id y name ya puestos, arguments vacío—. Las tres copias de UNA
+        // llamada, capturadas juntas el 2026-09-12 (rev-sonda-added.ps1): added a 1551 ms,
+        // arguments.done a 1788 y output_item.done a 1822. Leer «response.output_item.*» sin distinguir
+        // added de done ejecutaría map_look dos veces —la primera sin argumentos— y una sola llamada
+        // gastaría el tope de 2 intentos de la 204. Se juzga el TOTAL de las tres, no cada una suelta.
+        string[] tresCopias =
+        {
+            """{"event_id":"event_ENQCU7SRZjenI4jZV3IPk","type":"response.event","delegation_id":"item_ENQCUyla2TB9mFPFUmDHi","event":{"type":"response.output_item.added","item":{"id":"fc_0135f681d41dbe77006aa5cd96d41c87d183fffa8e5ea4ae5b","type":"function_call","status":"in_progress","arguments":"","call_id":"call_ydaLTWADFkH6AtEXUxsfdltF","name":"map_look"},"output_index":0,"sequence_number":2}}""",
+            """{"event_id":"event_ENQCVuB7VByR5RTl3N7bO","type":"response.event","delegation_id":"item_ENQCUyla2TB9mFPFUmDHi","event":{"type":"response.function_call_arguments.done","arguments":"{\"que\":\"Mira la pantalla completa y describe brevemente qué aparece, especialmente cualquier texto, botón o elemento relevante para la solicitud del usuario.\"}","item_id":"fc_0135f681d41dbe77006aa5cd96d41c87d183fffa8e5ea4ae5b","output_index":0,"sequence_number":33}}""",
+            """{"event_id":"event_ENQCVNq9s9tBGNWcT02bm","type":"response.event","delegation_id":"item_ENQCUyla2TB9mFPFUmDHi","event":{"type":"response.output_item.done","item":{"id":"fc_0135f681d41dbe77006aa5cd96d41c87d183fffa8e5ea4ae5b","type":"function_call","status":"completed","arguments":"{\"que\":\"Mira la pantalla completa y describe brevemente qué aparece, especialmente cualquier texto, botón o elemento relevante para la solicitud del usuario.\"}","call_id":"call_ydaLTWADFkH6AtEXUxsfdltF","name":"map_look"},"output_index":0,"sequence_number":34}}""",
+        };
+        Debe(!p.Leer(Mensaje(tresCopias[0])).Any(h => h is Hecho.Pide),
+            "output_item.added NO es la llamada: llega en curso y con arguments vacío, y ejecutarla es mirar sin saber qué");
+        var enLasTres = tresCopias.SelectMany(x => p.Leer(Mensaje(x))).OfType<Hecho.Pide>().SelectMany(x => x.Cuales).ToList();
+        Debe(enLasTres.Count == 1 && enLasTres[0].Id == "call_ydaLTWADFkH6AtEXUxsfdltF" && enLasTres[0].Nombre == "map_look"
+             && enLasTres[0].Args.TryGetValue("que", out var queDeLasTres)
+             && queDeLasTres == "Mira la pantalla completa y describe brevemente qué aparece, especialmente cualquier texto, botón o elemento relevante para la solicitud del usuario.",
+            $"las TRES copias que manda el servidor de una misma llamada —added, arguments.done y output_item.done— son UNA llamada en total, con sus argumentos (salieron {enLasTres.Count}: "
+            + string.Join(" · ", enLasTres.Select(x => $"{x.Nombre}[{x.Args.Count} arg]")) + ")");
         var mensajeDelDelegado = p.Leer(Mensaje("""
             {"type":"response.event","event":{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","status":"completed","content":[]}}}
             """));
@@ -1329,7 +1373,7 @@ internal static class Contrato
             $"dictar es session.commentary.append con delegation_id nulo y la frase entera (es «{Campo(dictado, "type")}»)");
 
         var nuevas = new List<Utensilio> { new("map_where_am_i", "Dice en qué pantalla está", new List<Argumento> { new("detalle", "cuánto detalle") }) };
-        const string otroModo = "AHORA SOLO DICES LO QUE SE TE PIDE";
+        string otroModo = InstruccionesComoLasDeU("AHORA SOLO DICES LO QUE SE TE PIDE");
         var cambio = CambioDeModo(p, otroModo, nuevas, false);
         var sabe = DeLaInterfaz("SabeEsperarTurno", p);
         if (cambio == null || sabe == null) { Pendiente("IProtocolo.CambioDeModo / IProtocolo.SabeEsperarTurno", "1"); return; }
@@ -1341,11 +1385,13 @@ internal static class Contrato
         var upd = cambios[0];
         var toolsNuevas = Nodo(upd, "session", "delegation", "responses", "tools");
         Debe(Campo(upd, "session", "delegation", "type") == "responses"
-             && Campo(upd, "session", "delegation", "responses", "instructions").Contains(otroModo)
              && toolsNuevas is { ValueKind: JsonValueKind.Array } tn && tn.GetArrayLength() == 1
              && Campo(tn[0], "name") == "map_where_am_i" && Campo(tn[0], "parameters", "properties", "detalle", "type") == "string"
              && Campo(upd, "session", "delegation", "responses", "model") == "gpt-5.6-luna",
-            "el session.update lleva la delegación entera: su modelo, las instrucciones nuevas y las herramientas nuevas");
+            "el session.update lleva la delegación entera: su modelo y las herramientas nuevas");
+        string nuevasAlDelegado = Campo(upd, "session", "delegation", "responses", "instructions");
+        Debe(MismosBytes(nuevasAlDelegado, otroModo),
+            $"y las instrucciones nuevas ÍNTEGRAS, iguales byte a byte ({otroModo.Length} caracteres; llegan {nuevasAlDelegado.Length})");
         Debe(Nodo(upd, "session", "instructions") == null && Nodo(upd, "session", "model") == null && Nodo(upd, "session", "audio") == null,
             "y no toca nada fuera de la delegación: session.instructions a mitad de sesión el servidor lo rechaza");
 
