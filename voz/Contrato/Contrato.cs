@@ -156,6 +156,7 @@ internal static class Contrato
         // habla uno y actúa otro: las reglas de Ü van al delegado, pero quien suena es la voz, con su
         // persona corta. Y lo que el servidor cuenta de la sesión llega en segundos, no en fichas.
         Prueba("46. la voz de GPT-Live no anuncia lo que va a hacer: la persona con la que abre la sesión prohíbe el futuro y el relleno de espera, y manda hablar en pasado y del resultado, como la 161 se lo manda al delegado", LaVozNoAnuncia);
+        Prueba("47. con GPT-Live, cambiar de modo también cambia a quien habla: detrás del session.update de la delegación va un session.instructions.append a la voz con las reglas del modo nuevo, y al volver al modo con el que abrió, con su persona de siempre y no con las instrucciones de operar", CambiarDeModoCambiaLaVoz);
         Prueba("48. GPT-Live traduce lo que dura la sesión: session.usage.updated es un Hecho.Duracion con los segundos que trae, que son el acumulado de la sesión y no un incremento; un uso sin segundos no inventa duración", GptLiveCuentaLaDuracion);
 
         Console.WriteLine();
@@ -1334,11 +1335,15 @@ internal static class Contrato
         var sabe = DeLaInterfaz("SabeEsperarTurno", p);
         if (cambio == null || sabe == null) { Pendiente("IProtocolo.CambioDeModo / IProtocolo.SabeEsperarTurno", "1"); return; }
 
+        // UN session.update y ningún session.start; ya no «un único mensaje»: desde la 47, detrás va el
+        // session.instructions.append que cambia también a quien habla (medido el 2026-09-12). Lo que esta
+        // promesa congela de la delegación no cambia.
         var cambios = cambio.Select(Mensaje).ToList();
-        Debe(cambios.Count == 1 && Campo(cambios[0], "type") == "session.update",
+        var actualizaciones = cambios.Where(x => Campo(x, "type") == "session.update").ToList();
+        Debe(actualizaciones.Count == 1 && !cambios.Any(x => Campo(x, "type") == "session.start"),
             $"cambiar de modo es UN session.update, nunca otro session.start (salió: {string.Join(", ", cambios.Select(x => Campo(x, "type")))})");
-        if (cambios.Count == 0) return;
-        var upd = cambios[0];
+        if (actualizaciones.Count == 0) return;
+        var upd = actualizaciones[0];
         var toolsNuevas = Nodo(upd, "session", "delegation", "responses", "tools");
         Debe(Campo(upd, "session", "delegation", "type") == "responses"
              && Campo(upd, "session", "delegation", "responses", "instructions").Contains(otroModo)
@@ -1400,6 +1405,70 @@ internal static class Contrato
                 $"y nombra las fórmulas que se oyen ({relleno}): «Dame un momento para revisarlo» es literal de la sonda");
         Debe(!voz.Contains("INSTRUCCIONES DEL DELEGADO", StringComparison.Ordinal),
             "y la regla va en la persona de la VOZ, no copiando las del delegado: la voz sigue sin las instrucciones de operar");
+    }
+
+    /// <remarks>
+    /// EL FALLO QUE ESTO IMPIDE: 🎓 (promesa 138) y la voz prestada (192) solo cambiaban al DELEGADO. Medido
+    /// el 2026-09-12 contra el servidor, con la narración hablada «Ahora escribo NWP1 en el campo de
+    /// transacción y pulso Enter» después de poner el modo aprendiz:
+    ///
+    ///  · solo el session.update (lo que hacía la rama): 3 de 3 la voz afirmó lo que nadie hizo —
+    ///    «Listo, ejecuté VP1 en el campo de transacción», «Ya quedó lanzada», «Estás en la pantalla
+    ///    inicial de ese programa»—.
+    ///  · update + session.instructions.append con las reglas del aprendiz: 3 de 3 asintió con una
+    ///    palabra («Ajá», «Uhum», «Entiendo») y no afirmó nada.
+    ///  · y al volver con un append de su persona: 2 de 2 delegó map_look y dijo «Estabas en SAP Easy Access».
+    ///
+    /// Al volver NO se le pasan las instrucciones de operar: la voz no las lleva (40), y el servidor
+    /// rechaza un append de más de 500 fichas («Context append text must not exceed 500 tokens.», medido
+    /// con 2.400 caracteres; las de Ü son 20.694).
+    /// </remarks>
+    private static void CambiarDeModoCambiaLaVoz()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+
+        const string completas = "ERES Ü Y ESTAS SON TUS INSTRUCCIONES COMPLETAS DE OPERAR";
+        const string aprendiz = """
+            Eres Ü, y ahora mismo te están ENSEÑANDO.
+              · Habla muy poco. Mientras te explican, asiente con algo corto: «ajá», «uhum», «entiendo».
+              · No hagas nada, no lo intentes, no digas que lo vas a hacer.
+            """;
+        var utensilios = new List<Utensilio> { new("map_look", "Mira la pantalla", new List<Argumento>()) };
+        string deLaVoz = Campo(Mensaje(p.Apertura(completas, utensilios, "").First()), "session", "instructions");
+
+        List<JsonElement>? Cambio(string instrucciones) => CambioDeModo(p, instrucciones, utensilios, false)?.Select(Mensaje).ToList();
+        string Tipos(List<JsonElement> m) => string.Join(" · ", m.Select(x => Campo(x, "type")));
+
+        var aAprendiz = Cambio(aprendiz);
+        if (aAprendiz == null) { Pendiente("IProtocolo.CambioDeModo", "1"); return; }
+        int iUpd = aAprendiz.FindIndex(x => Campo(x, "type") == "session.update");
+        var anadidos = aAprendiz.Where(x => Campo(x, "type") == "session.instructions.append").ToList();
+        Debe(iUpd >= 0 && anadidos.Count == 1 && aAprendiz.FindIndex(x => Campo(x, "type") == "session.instructions.append") > iUpd,
+            $"cambiar de modo es el session.update de la delegación y DESPUÉS un session.instructions.append a la voz (salió: {Tipos(aAprendiz)})");
+        if (anadidos.Count == 0) return;
+        string alAprendiz = Campo(anadidos[0], "content");
+        Debe(alAprendiz.Contains(aprendiz, StringComparison.Ordinal),
+            "el append lleva las reglas del modo nuevo ENTERAS: la voz asiente con una palabra porque las recibe, no un resumen");
+        Debe(Nodo(anadidos[0], "delegation_id") is { ValueKind: JsonValueKind.Null },
+            "con delegation_id nulo, que es la forma que el servidor aceptó (session.instructions.appended)");
+
+        var aNormal = Cambio(completas)!;
+        var vuelta = aNormal.Where(x => Campo(x, "type") == "session.instructions.append").ToList();
+        Debe(vuelta.Count == 1, $"volver al modo con el que abrió también le habla a la voz (salió: {Tipos(aNormal)})");
+        if (vuelta.Count == 0) return;
+        string alVolver = Campo(vuelta[0], "content");
+        Debe(deLaVoz.Length > 0 && alVolver.Contains(deLaVoz, StringComparison.Ordinal),
+            "y le devuelve su persona de siempre, la misma con la que abrió la sesión");
+        Debe(!alVolver.Contains(completas, StringComparison.Ordinal),
+            "y NO las instrucciones de operar: la voz no las lleva, y en un append no caben (tope de 500 fichas)");
+        var delegado = aNormal.FirstOrDefault(x => Campo(x, "type") == "session.update");
+        Debe(Campo(delegado, "session", "delegation", "responses", "instructions") == completas,
+            "mientras el delegado sí recupera las suyas enteras");
+
+        string realtime = string.Join("\n", CambioDeModo(new ProtocoloOpenAI(), aprendiz, utensilios, false) ?? new List<string>());
+        Debe(!realtime.Contains("session.instructions.append"),
+            "y GPT Realtime no lo necesita: su cambio de modo es la apertura reenviada, que ya cambia la voz");
     }
 
     /// <remarks>
