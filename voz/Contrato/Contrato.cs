@@ -152,6 +152,12 @@ internal static class Contrato
         // a un modelo con fecha de apagado.
         Prueba("43. GPT Realtime pide la transcripción de lo que dice el usuario a gpt-transcribe, no a gpt-4o-mini-transcribe, que se apaga el 2027-02-26", LaTranscripcionNoVaAlQueSeApaga);
 
+        // EL SILENCIO DE GPT-LIVE NO SUENA (2026-09-12, revisión de regresiones). El servidor manda
+        // audio también cuando la voz calla, y ese silencio entraba a la cola del altavoz: todo lo que
+        // decide con «Ü está sonando» —la compuerta de eco, el turno de contar recuerdos, la boca—
+        // leía ruido. El umbral se eligió midiendo, y la medida dice que es CERO: ver la promesa.
+        Prueba("44. GPT-Live no hace sonar su silencio: un delta de audio con todas las muestras a cero no es Hecho.Suena, y uno con voz —también la pausa de pico 1 entre dos frases— sí, con el PCM exacto", GptLiveNoHaceSonarSuSilencio);
+
         Console.WriteLine();
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
@@ -1366,6 +1372,54 @@ internal static class Contrato
         var m = Mensaje(p.Apertura("x", new List<Utensilio>(), "").First());
         string modelo = Campo(m, "session", "audio", "input", "transcription", "model");
         Debe(modelo == "gpt-transcribe", $"la transcripción se pide a gpt-transcribe (pide «{modelo}»)");
+    }
+
+    /// <remarks>
+    /// EL SILENCIO SONABA. Medido el 2026-09-12 contra /v1/live/sessions (sonda-silencio-pico.ps1, tres
+    /// sesiones): el servidor manda un delta de 100 ms (4800 B) cada ~100–130 ms aunque la voz calle, y
+    /// ese silencio son CEROS EXACTOS — 43 de 47, 168 de 172 y 60 de 64 deltas; los cuatro que no, en
+    /// las tres, son la cola que se apaga al abrir la sesión (picos 45, 8, 3 y 2). Traducido a
+    /// Hecho.Suena entraba a la cola del altavoz, y LiveAudio.Hablando parpadeaba sin que nadie hablara.
+    ///
+    /// EL UMBRAL ES CERO, y también es medida, no gusto: DENTRO de una frase de Ü las pausas entre
+    /// oraciones bajan a pico 1 (0, 14 y 11 deltas por frase: hasta 1,4 s de pausa) y una vez a cero
+    /// exacto (1 delta de 256). Un umbral de 64 —el que sugería el pico 45 del silencio— se comía 11, 27
+    /// y 21 deltas de pausa, y Ü diría «Uno.Dos.Tres.» de corrido. Con cero se pierde a lo sumo ese
+    /// delta suelto: 100 ms de una pausa.
+    /// </remarks>
+    private static void GptLiveNoHaceSonarSuSilencio()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+
+        static JsonElement Delta(byte[] pcm)
+            => Mensaje($$"""{"type":"session.output_audio.delta","delta":"{{Convert.ToBase64String(pcm)}}"}""");
+
+        var silencio = new byte[4800];
+        var callado = p.Leer(Delta(silencio));
+        Debe(!callado.Any(h => h is Hecho.Suena),
+            $"un delta de 100 ms con todas las muestras a cero, como manda el servidor cuando la voz calla, no es Hecho.Suena (salieron {callado.Count(h => h is Hecho.Suena)})");
+
+        // La pausa entre dos oraciones, como la midió la sonda: todo cero salvo alguna muestra a ±1.
+        var pausa = new byte[4800];
+        pausa[2400] = 0x01;                       // muestra 1200 = +1
+        pausa[3600] = 0xFF; pausa[3601] = 0xFF;   // muestra 1800 = −1
+        var enPausa = p.Leer(Delta(pausa));
+        Debe(enPausa.Count == 1 && enPausa[0] is Hecho.Suena sp && sp.Pcm.SequenceEqual(pausa),
+            "la pausa de pico 1 entre dos frases SÍ suena, con su PCM exacto: quitarla acorta lo que dice Ü");
+
+        var soloAlto = new byte[4800];
+        soloAlto[1001] = 0x01;                    // muestra 500 = 256: cero en el byte bajo
+        var alto = p.Leer(Delta(soloAlto));
+        Debe(alto.Count == 1 && alto[0] is Hecho.Suena sa && sa.Pcm.SequenceEqual(soloAlto),
+            "y una muestra que solo tiene el byte ALTO distinto de cero también es sonido: el umbral mira muestras, no bytes sueltos");
+
+        var voz = new byte[4800];
+        for (int i = 0; i < voz.Length / 2; i++)
+            BitConverter.TryWriteBytes(voz.AsSpan(2 * i), (short)(7000 * Math.Sin(2 * Math.PI * 220 * i / 24000.0)));
+        var hablando = p.Leer(Delta(voz));
+        Debe(hablando.Count == 1 && hablando[0] is Hecho.Suena sv && sv.Pcm.SequenceEqual(voz),
+            "y un delta con voz (pico 7000, como las frases medidas) es UN Hecho.Suena con el PCM exacto");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
