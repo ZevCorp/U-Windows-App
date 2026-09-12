@@ -1,6 +1,6 @@
 # Plan de implementación: lo que uno le pida, lo hace — y a la primera
 
-Estado: **implementado; nivel 4 pendiente** (2026-09-11: 202–207 verdes y saboteadas, con los arreglos del crítico de la rama; la prueba en el PC real no pudo correr de noche) · **Las tareas largas (R8–R11) no están en esta rama** · Nace de una nota de voz del 2026-09-10 ([transcripción y rúbrica](fuentes/2026-09-10-lo-hace-a-la-primera.md)) y del diagnóstico de esa noche · Rama: `jero/lo-hace-a-la-primera`
+Estado: **implementado (2026-09-12); nivel 4 intentado, no válido** (2026-09-11: 202–207 verdes y saboteadas, con los arreglos del crítico de la rama; la prueba en el PC real corrió a las 07:24 y no midió la spec, ver Hallazgos) · **mergeado por orden del dueño** · **Las tareas largas (R8–R11) no están en esta rama** · Nace de una nota de voz del 2026-09-10 ([transcripción y rúbrica](fuentes/2026-09-10-lo-hace-a-la-primera.md)) y del diagnóstico de esa noche · Rama: `jero/lo-hace-a-la-primera`
 
 > **La petición, en la voz del audio:** *«que lo que uno le pida lo haga, y lo haga a la primera,
 > máximo dos intentos, máximo dos segundos, y no se sienta que falló, sino: lo hizo.»*
@@ -536,11 +536,30 @@ La rúbrica (19 requisitos, R1–R17 foco, R18–R19 secundarios) está en la fu
   INTACTO, 176 juzgadas**. En total, **30 sabotajes distintos del contrato en ocho rondas, todos en rojo**; y
   dos del cableado de la voz, que el contrato no ve: medidos INTACTOS y declarados.
 
+- **2026-09-11, 07:24–07:52 (el nivel 4 corrió, y no midió la spec).** Con alguien delante y el
+  escritorio en «Default», la batería entera: `main` y la rama (`2801ef2`, recompilada), 4 tareas × 3.
+  Salió `main` 0/12 y la rama 4/12, y **ninguno de los dos números vale**:
+  - **El texto escrito no le pide respuesta al modelo.** `EnviarTextoAsync` manda
+    `conversation.item.create` y nada más; el modelo solo contesta cuando el micrófono oye algo. Una
+    sonda contra el servidor real lo confirmó: con `response.create` detrás llama la herramienta y
+    habla; sin él, cero eventos. Por eso `main` no contestó ni una vez —la sala estaba callada— y es
+    así también en `main`, no una regresión de esta rama.
+  - **La rama contestó a ráfagas y luego se fue por otro camino.** A las 07:42:19 el micrófono oyó algo
+    y la voz respondió a lo pendiente; a las 07:43:08 la sesión de voz se cerró, y desde ahí el texto lo
+    atendió el agente que pulsa por coordenadas (`agent: tap (455,584)`). Las «aprobadas» salen de ese
+    camino, no del código de esta spec.
+  - **El juez tiene un agujero**: aprueba una tarea con estado final bueno y cero acciones de voz.
+  - **El único dato de la voz**: sus 6 acciones medidas, todas ≤ 2 s (mediana 806 ms, máximo 810 ms).
+  Se repite con el texto arreglado, en la rama siguiente (la de la voz nueva).
+
+- **2026-09-12 (el merge).** El dueño ordenó llevarlo a `main` sin un nivel 4 válido. Queda escrito aquí
+  y en el PR: la compuerta lo exigía, y la decisión fue suya.
+
 ## Cierre
 
-- [ ] Fase 0, la base con el binario de `main`: **no se pudo medir de noche** (salvapantallas OLED); el kit la corre junto a la rama
+- [x] Fase 0, la base con el binario de `main`: corrida el 2026-09-11 a las 07:24 — **0/12, no válida** (el texto escrito no pide respuesta; ver Hallazgos)
 - [x] Promesas 202–207 verdes; las 170 anteriores intactas (176 juzgadas, 0 rotas)
 - [x] Cada una rota a propósito, comprobada por diff, restaurada y recompilada después
-- [ ] Nivel 4, base y rama en las mismas tareas: **pendiente, con alguien delante** (`scripts/nivel4-voz/correr.ps1`)
+- [ ] Nivel 4, base y rama en las mismas tareas: **intentado el 2026-09-11, no válido** (ver Hallazgos); se repite con el texto arreglado
 - [x] El crítico de fidelidad al audio: seis pasadas completas (4, 5, 5, 5, 5 y 5 sobre 10) y una séptima, corta, sobre lo que entró después de la sexta. Lo que señalaron y se podía arreglar sin el PC y sin tocar `FaceWindow`, arreglado con la promesa en rojo primero; lo demás, declarado con su medida. Sus veredictos, los siete, en el PR. Lo que la séptima señaló se corrigió después sin otra pasada: el rechazo al escribir (con su prueba, en rojo primero), la línea de «Riesgo» y el título del PR, y los dos límites que faltaban
-- [ ] Estado: **implementado** (AAAA-MM-DD)
+- [x] Estado: **implementado** (2026-09-12), mergeado por orden del dueño sin un nivel 4 válido
