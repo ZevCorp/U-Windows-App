@@ -159,6 +159,8 @@ misma frase manda los mismos 9 `.delta`, no se puede medir sin red: lo midió la
 | 208 | grafo | escribir con la voz abierta pide respuesta: el texto va seguido de pedir turno, con cualquier protocolo. | 2 |
 | 209 | grafo | con una voz que no marca los turnos, la conversación los marca: el primer trozo de lo que dice el usuario abre un turno y un silencio lo cierra. | 3 |
 | 210 | grafo | la voz por defecto es GPT-Live y U_VOZ=realtime vuelve a GPT Realtime. | 4 |
+| 211 | grafo | sin marcas de turno, el turno no se cierra con trabajo en marcha: ni con una llamada a herramienta sin devolver ni mientras suena la voz de Ü, y el silencio se cuenta desde la devolución o desde lo último que sonó; el audio en silencio no cuenta. | 6 |
+| 212 | grafo | sin marcas de turno, una pausa del usuario sin que Ü le haya contestado sigue siendo la misma petición: lo que dice después no abre turno ni reinicia el tope; lo que dice después de que Ü le conteste, sí. | 6 |
 
 **La que cierra el asunto** es la **210**: sin ella todo lo demás existe y la voz sigue siendo la de
 antes. **La que cierra el agujero del nivel 4** es la **208**: sin ella ningún nivel 4 escrito mide la voz.
@@ -175,7 +177,9 @@ traductor tal como los mandó el servidor real en las sondas.
 | 41 | `Leer` con mensajes capturados: `session.output_audio.delta` da un `Suena` con el PCM exacto y un delta vacío no da nada; `session.output_transcript.delta` da `DiceU`; `session.input_transcript.delta` da `DiceElUsuario`; `response.event` con `response.output_item.done` de tipo `function_call` da **un** `Pide` con `call_id`, `name` y los argumentos parseados del texto JSON; ese mismo sobre con un item `message` no da nada, y `response.function_call_arguments.done` **tampoco** (la llamada es una); `error` da `Falla` con su `message`; `session.closed` da `Falla` con su `reason`. Y ninguno de los mensajes capturados —`session.started`, `session.delegation.created`, `response.completed`, `session.usage.updated`…— da `CierraElTurno` ni `HablaronEncima` | leer también `function_call_arguments.done` (dos `Pide` por una llamada: se ejecutaría dos veces); `response.completed` vuelve a ser `CierraElTurno`; los argumentos se pasan sin parsear |
 | 42 | `Audio(pcm)` es `session.input_audio.append` con el base64 exacto; `Texto` es `response.item.create` con un message `user` e `input_text`; `Fotograma` igual con `input_image` y `data:image/jpeg;base64,`; `Resultados` con dos llamadas da dos `function_call_output` con su `call_id` y su `output`, y **ninguno** pide respuesta; `PedirRespuesta()` es `response.create`; `PedirRespuesta("X")` es `session.commentary.append` con `content` X y `delegation_id` nulo, y no un `response.create`; `CambioDeModo(otras, [otra herramienta], false)` no contiene `session.start`, es un `session.update` y lleva las instrucciones y la herramienta nuevas en la delegación | `CambioDeModo` devuelve la apertura (otro `session.start`); `Resultados` pide respuesta dentro; dictar vuelve a ser `response.create`; el texto sale como `session.instructions.append` (medido: no provoca respuesta) |
 | 208 | `ConversacionEnVivo.MensajesDeTexto` por nombre. Con `ProtocoloOpenAI`: dos mensajes, **en ese orden**, `conversation.item.create` con el texto y `response.create`. Con `ProtocoloGptLive`: `response.item.create` con el texto y `response.create`. Con un protocolo falso del propio contrato cuyo `PedirRespuesta` es vacío: un solo mensaje, ninguno vacío | `MensajesDeTexto` deja de añadir la petición de turno; la petición va antes que el texto; se cuela el mensaje vacío |
-| 209 | `TurnosSinMarca` por nombre, con reloj inyectado y la secuencia como hechos con su hora: el primer trozo de lo que dice el usuario abre turno y el segundo no; a 1000 ms del último trozo no toca cerrar y a 1500 sí, **una vez**; lo que dice Ü también mantiene el turno abierto y también se cierra por silencio; el audio que llega continuo **no** cuenta como actividad; sin nada oído no se cierra nunca; un silencio configurado de 500 ms se respeta. Y la 40 ya juzga que `ProtocoloGptLive` no marca los turnos y `ProtocoloOpenAI` sí. **Y su uso**, añadido al implementar: `Procesar`, la puerta por la que entra lo del socket, recibe en una `ConversacionEnVivo` con `ProtocoloGptLive` un `session.input_transcript.delta` y dos mensajes sin hechos. A 800 ms no emite `Cerro`; a 1600 ms lo emite una vez, con la línea `voz-turno` «por voz» y `DijoElUsuario` con la frase. Con un protocolo que marca sus turnos no hay marcador ni cierre | se cierra sin haber oído nada; cada trozo abre turno; el audio cuenta como actividad; `Procesar` deja de consultar el marcador; la conversación no lo crea; el primer trozo no llama a `EmpiezaUnTurnoDelUsuario`; tocar cerrar no reacciona |
+| 209 | `TurnosSinMarca` por nombre, con reloj inyectado y la secuencia como hechos con su hora: el primer trozo de lo que dice el usuario abre turno y el segundo no; con el silencio por defecto (**2000 ms**, medido: ver Hallazgos), a 1000 ms del último trozo no toca cerrar y a 2000 sí, **una vez**; lo que dice Ü también mantiene el turno abierto y también se cierra por silencio; el audio que llega continuo **no** cuenta como actividad; sin nada oído no se cierra nunca; un silencio configurado de 500 ms se respeta. Y la 40 ya juzga que `ProtocoloGptLive` no marca los turnos y `ProtocoloOpenAI` sí. **Y su uso, tal como lo construye la app** (acotado el 2026-09-12): `Procesar`, la puerta por la que entra lo del socket, recibe en una `ConversacionEnVivo` con `ProtocoloGptLive` un `session.input_transcript.delta` y mensajes sin hechos. **Se cambia solo `_relojDeLosTurnos`, nunca el marcador.** El reloj que trae la app tiene el origen de `Environment.TickCount64` y avanza con él. A 1700 ms no emite `Cerro`; a 2100 ms lo emite una vez, con la línea `voz-turno` «por voz» y `DijoElUsuario` con la frase. `EmpezarLosTurnosDeLaSesion` deja un marcador **nuevo**, y lo dicho antes no cierra después. Con un protocolo que marca sus turnos, y con `ProtocoloOpenAI`, no hay marcador ni cierre | se cierra sin haber oído nada; cada trozo abre turno; el audio cuenta como actividad; `Procesar` deja de consultar el marcador; la conversación no lo crea; el primer trozo no llama a `EmpiezaUnTurnoDelUsuario`; tocar cerrar no reacciona; **la app construye con 60 000 ms (G1) o con 1500 (G1b); el reloj de la app está parado (G2); el marcador no usa el reloj de la conversación (G3); otra sesión reutiliza el marcador (G4); hay marcador también con voces que marcan (G6)** |
+| 211 | `TurnosSinMarca` por nombre con silencio de 1500 y reloj inyectado. Una llamada pedida queda en curso (`LlamadasEnCurso`) y sujeta el turno 6000 ms. Tras `Devuelta`, a 1000 ms no cierra y a 1500 sí, una vez. Con dos llamadas y una devuelta sigue sin cerrar. Una devuelta **antes** de oírse no queda en curso. Un trozo de audio con pico 1152 (la palabra más floja medida) sujeta el turno aunque la transcripción terminara 3000 ms antes; uno con pico 45 (el silencio medido) no lo retrasa; sonido sin nada dicho no abre nada que cerrar. **Y su cableado**: en una `ConversacionEnVivo` con GPT-Live, un `self_mute` que el contrato sujeta dentro de `Autocontrol` no deja cerrar a los 3000 ms. Al soltarlo, la conversación se lo devuelve al marcador, y cierra a 2100 ms de la devolución, no a 1500 | el marcador no registra la llamada (T1); tocar cerrar la ignora (T2); devolver no cuenta como actividad (T3); la voz que suena no sujeta (T4); el umbral a 0 (T5); una devuelta antes de oírse se queda en curso (T6); **`EjecutarAsync` no devuelve (T7)** |
+| 212 | `TurnosSinMarca` por nombre, silencio 1500. Lo que el usuario dice tras una pausa que cerró el turno, sin que Ü hablara después, **no** abre turno; tras contestar Ü y cerrar, sí. La respuesta de Ü cuenta aunque llegue antes del cierre. Si el usuario siguió hablando después de lo que dijo Ü, tras el cierre sigue siendo su petición. Lo primero que dice el usuario abre turno aunque Ü saludara antes. **Y en la conversación**: la pausa cierra el turno y deja una sola línea «turno nuevo (por voz)»; lo que dice tras la respuesta de Ü deja la segunda | cualquier cierre termina la petición (T8); lo que dice Ü no cuenta como contestar (T9); que el usuario siga hablando no borra el «contestó» (T10); el primer trozo no abre turno en la conversación (S209f) |
 | 210 | `ConversacionEnVivo.ProtocoloPorDefecto` por nombre, con una variable falsa que anota qué nombre se le pregunta: sin `U_VOZ`, con `U_VOZ` vacío o en blanco, y con `gpt-live`, sale `ProtocoloGptLive`; con `realtime`, `ProtocoloOpenAI`; y el nombre preguntado es `U_VOZ`. ` Realtime `, con mayúscula y espacios, también vuelve a Realtime, y un valor desconocido (`gemini`) abre GPT-Live. **El constructor se puede llamar sin pantalla**, porque `LiveAudio` nace sin dispositivo, así que también se juzga: sin protocolo y sin `U_VOZ` abre `ProtocoloGptLive`, y con `U_VOZ=realtime` abre `ProtocoloOpenAI` | el defecto vuelve a ser `ProtocoloOpenAI`; la variable se lee con otro nombre; no se normaliza; el constructor no usa el defecto |
 
 ### Límites dichos, no escondidos
@@ -184,6 +188,13 @@ traductor tal como los mandó el servidor real en las sondas.
   manda `ProtocoloGptLive.CambioDeModo`, así que la 42 no hubo que ajustarla.
 - **La 209 juzga su cableado; la 208, no.**
   - La 209 entra por `Procesar`, que no necesita socket, y cada sabotaje de su cableado la pone roja.
+  - **Desde la fase 6 juzga también cómo construye la app el marcador**: cambia solo `_relojDeLosTurnos`,
+    nunca el marcador. Construirlo con otro silencio (G1, G1b), con un reloj parado (G2) o sin el reloj de la
+    conversación (G3), y reutilizarlo entre sesiones (G4), la ponen roja. Antes, G1 y G4 la dejaban INTACTA.
+  - La 211 juzga su cableado del mismo modo: una herramienta que el contrato sujeta dentro de `Autocontrol`
+    no deja cerrar, y sin la devolución en `EjecutarAsync` (T7) sale roja.
+  - **Sin juez, medido (W5):** que `ArrancarAsync` llame a `EmpezarLosTurnosDeLaSesion`. Necesita clave y
+    socket. Romperlo deja el contrato INTACTO; lo tiene que decir el nivel 4.
   - `EnviarTextoAsync` y `CambiarModoAsync` salen sin mandar nada si no hay un socket abierto, y el contrato
     no llega a ellos. Romper la llamada a `MensajesDeTexto` dentro de `EnviarTextoAsync`, o volver a mandar
     la apertura al cambiar de modo, **deja el contrato INTACTO** (medido; ver la tabla de sabotajes).
@@ -209,6 +220,7 @@ empujar: el rojo de cada fase se comprueba en local y se anota en su commit.
 | **2–4** | 208, 209, 210 | `Voice/ConversacionEnVivo.cs` (`MensajesDeTexto`, `ProtocoloPorDefecto`, constructor, recepción, `CambiarModoAsync`), nuevo `Voice/TurnosSinMarca.cs` | **hecha** en un solo paso, porque las tres tocan la misma clase: rojo en `b64972b`, verde en el commit siguiente, **CONTRATO INTACTO** con 0 pendientes |
 | **5** | 43 | `ProtocoloOpenAI`: `gpt-transcribe` (D) | **hecha** con la fase 1. Con `U_VOZ=realtime`, que una sesión abra sin `error` es del nivel 4 |
 | **E** | — (el juez) | `scripts/nivel4-voz/analizar.py` y `autoprueba.py` | **hecha** en esta rama: rojo, verde y sabotaje (ver Hallazgos) |
+| **6** | 211, 212 (y la 209 acotada) | `Voice/TurnosSinMarca.cs`, y de `Voice/ConversacionEnVivo.cs` lo que usa el marcador (`_relojDeLosTurnos`, `EmpezarLosTurnosDeLaSesion`, la devolución en `EjecutarAsync`); la sonda de los turnos | **hecha** en `jero/voz-gpt-live-turnos`: rojo en `1497dc1` (CONTRATO ROTO, 11), verde en `79fcea2` (**CONTRATO INTACTO**, VOZ ÍNTEGRA), saboteada (ver «Sabotajes») |
 
 **Sitios con la clase de error, contados con `grep`:**
 
@@ -234,14 +246,25 @@ Dicho antes de que alguien lo descubra en una demo. Cada uno con lo que se midi�
    - **Qué hace el código**: `CambiarModoAsync` lo deja escrito en el log y no finge.
    - **Mitigación, sin promesa**: comprobar con `U_VOZ=realtime`.
 2. **Las marcas de turno las pone un silencio, no el servidor.**
-   - El servidor sigue decidiendo cuándo contestar. El silencio de 1,5 s decide solo cuándo la app da el
-     turno por cerrado: `TurnoCerrado`, `Cerro`, «Ü dijo», la frase entregada a quien aprende
-     (`DijoElUsuario`, promesa 105) y la respuesta que espera el piloto (`PreguntarYEsperar`).
-   - Una pausa de más de 1,5 s a media frase la parte en dos: el piloto se quedaría con la primera mitad
-     como respuesta. Es la avería que `semantic_vad` evitaba en Realtime («cortar a media frase o no
-     contestar nunca»), trasladada a la contabilidad de la app. **Sin medir con voz real.**
+   - El servidor sigue decidiendo cuándo contestar. El silencio decide solo cuándo la app da el turno por
+     cerrado: `TurnoCerrado`, `Cerro`, «Ü dijo», la frase entregada a quien aprende (`DijoElUsuario`,
+     promesa 105) y la respuesta que espera el piloto (`PreguntarYEsperar`).
+   - **Desde el 2026-09-12 son 2000 ms y el turno no se cierra con trabajo en marcha** (211): ni con una
+     llamada sin devolver ni mientras suena la voz. Medido con la sonda de los turnos (ver Hallazgos):
+     con 1500 ms, aun con esas guardas, el turno se cerraba entre devolver una herramienta y hablar Ü
+     (1658-1707 ms, 4 de 4).
+   - **Lo que todavía parte**: una pausa del usuario de ~1,9 s deja un hueco de transcripción de 1868-2119 ms
+     (1 de 2 por encima de 2000), y entonces el piloto o quien aprende recibe la primera mitad como frase.
+     Es la avería que `semantic_vad` evitaba en Realtime, trasladada a la contabilidad de la app. Las pausas
+     de ~1 s (1065-1138 ms) no parten. **Con voz sintetizada, no con una persona.**
+   - **Una pausa ya no reinicia el tope** (212): lo que el usuario dice tras un cierre, sin que Ü le haya
+     contestado, sigue siendo la misma petición.
    - El turno del usuario empieza con el primer trozo de **transcripción**, que llega después de que
-     empezó a hablar. El tope de la 204 se reinicia más tarde que con `speech_started`.
+     empezó a hablar (1,0-1,2 s después del inicio de la voz en la sonda). El tope de la 204 se reinicia
+     más tarde que con `speech_started`.
+   - Una petición que llega **encima** de la respuesta de Ü, antes del cierre, no abre turno: no hay forma
+     de separarla de la frase del usuario que sigue tras un «Claro», porque las transcripciones se
+     entrelazan. El tope no se reinicia en ese caso. Sin medir cuánto pasa con personas.
 3. **No hay aviso de interrupción.**
    - Hablarle encima no produce evento, así que la conversación no calla la cola local por eso.
    - `Hecho.Retira` tampoco llega nunca: una llamada del delegado no se retira si se le habla encima.
@@ -404,9 +427,67 @@ alguien delante (OLED Care). Lo que tiene que decir, además de la tabla:
     cambia el pedido encima de Ü sin 1,5 s de silencio en medio, el tope (204) y la medida (205) **no se
     reinician**. La otra regla («o tras hablar Ü») partiría una frase dicha encima de la voz en varios
     turnos, porque las transcripciones se entrelazan. Queda así hasta medirlo en el nivel 4.
+    **Acotado el mismo día por la 212** (ver «los turnos, arreglados»): tras un cierre, lo que dice el
+    usuario abre turno solo si Ü le había contestado. Lo de encima de Ü sin cierre sigue igual.
   - **`U_VOZ` significa otra cosa en `mac-client`**: allí fuerza una voz de macOS en el camino de texto
     (`mac-client/Sources/U/Voz.swift:52`). Los nombres coinciden y los clientes son distintos, así que no
     choca en el código. Pero una misma variable con dos sentidos confunde a quien lea los dos.
+- **2026-09-12 (los turnos, arreglados — `jero/voz-gpt-live-turnos`, promesas 211 y 212, 209 acotada).**
+  - **Qué fallaba** (revisa:regresiones): el cierre sintético saltaba con 1,5 s sin transcripción de nadie.
+    Partía frases del usuario, cerraba a mitad de una herramienta y reiniciaba el tope de la 204 dentro de
+    la misma petición. También partía lo que llega a la 105 y adelantaba «Ü dijo», la señal con la que
+    `conducir.ps1` empieza a contar su quietud. Y la 209 no juzgaba cómo construye la app su marcador
+    (revisa:contrato, G1 y G4 verdes).
+  - **La sonda de los turnos** (`scratchpad/turnos/sonda-turnos.ps1`, fuera del repo). Tres corridas
+    contra `/v1/live/sessions` con el delegado `gpt-5.6-luna`, dos herramientas (`map_open_app` y
+    `map_look`) y una frase hablada con pausas (voz Helena, 24 kHz). Las herramientas contestan a los 2500 ms
+    (r1, r3) o a los 300 ms (r2). Cada corrida guarda la línea de tiempo —transcripción de los dos, audio con
+    voz por su pico, llamadas y devoluciones— y **reproduce la regla de cierre sobre esa línea real** con
+    cuatro silencios.
+  - **Lo que midió:**
+    - **El audio llega a ritmo real, también mientras habla:** un delta de 100 ms cada ~100 ms, así que
+      lo que llega es lo que suena. El silencio pica en 45. La voz, en 1152-10 944 en el núcleo de cada
+      palabra, y sus colas bajan a 184-508 (207 deltas, `silencio-pico-1`).
+    - **La transcripción de Ü va por delante de su voz:** la última palabra llega 650-750 ms antes de que calle.
+    - **Entre devolver una herramienta y lo siguiente que dice Ü: 1658, 1690, 1705 y 1707 ms** (4 de 4). Entre
+      devolver y la llamada siguiente del delegado: 902-1380 ms.
+    - **Pausas del usuario.** Con ~0,9-1,1 s de voz callada, el hueco de transcripción es de 1065-1138 ms.
+      Con ~1,9 s, de 1868 y 2119 ms. La transcripción del usuario empieza 1,0-1,2 s después de su voz.
+  - **La regla reproducida** (cierres en r1 / r2 / r3; en cada corrida solo el último es el bueno):
+
+    | Regla | r1 | r2 | r3 | A mitad de tarea |
+    |---|---|---|---|---|
+    | la de la rama antes de esto: 1500 ms, solo lo dicho | 2 antes del final | 1 | 1 | 4 |
+    | con las guardas (llamada en curso, voz que suena) y 1500 ms | 3 | 2 | 2 | 4 |
+    | con las guardas y **2000 ms** | 1 | 1 | 1 | **0** |
+    | con las guardas y 2500 o 3000 ms | 1 | 1 | 1 | 0 |
+
+  - **Decisiones:**
+    - **2000 ms, no 2500.** Es el menor que deja cero cierres a mitad de tarea en las tres corridas. El
+      margen son 293 ms sobre cuatro muestras de una tarde, y lo confirma o lo corrige el nivel 4. Cada 500 ms
+      más retrasan `Cerro`, «Ü dijo» y `DijoElUsuario`, y no la voz, que contesta sola. Con 2500 se cubriría
+      también la pausa de 1,9 s (2119 ms), pero ya no reinicia el tope (212).
+    - **La voz se juzga por su pico, umbral 1000**, 22 veces el ruido medido y por debajo de toda palabra.
+      Solo alarga una actividad que ya había: sonido sin nada dicho no abre un turno.
+    - **Una llamada en curso se sigue por referencia, no por `call_id`** (que puede venir vacío). Una
+      devuelta antes de oírse se recuerda, porque el hilo que ejecuta puede ganarle al que recibe. La
+      devolución va en el `finally` de `EjecutarAsync`: sale igual contestada, retirada, frenada por el tope
+      o reventada.
+    - **Una petición nueva la decide si Ü contestó, no si hubo cierre.** Tras un cierre, lo que dice el
+      usuario abre turno solo si Ü habló después de lo último suyo. No sirve «desde el último cierre»: con
+      GPT-Live lo que contesta Ü cae **dentro** del mismo turno sintético, que solo se cierra cuando callan
+      los dos (3 de 3 en la sonda).
+    - **La 209 cambia solo el reloj.** `_relojDeLosTurnos` es un campo, y `EmpezarLosTurnosDeLaSesion`
+      recrea el marcador en el constructor y en `ArrancarAsync`.
+  - **Sitios contados:**
+    - `new TurnosSinMarca(`: 1, en `NuevoMarcadorDeTurnos`, que se llama desde 2 sitios.
+    - Una llamada se ejecuta por una sola entrada: `Reaccionar` → `EjecutarAsync` → `EjecutarNucleoAsync`.
+  - **Sin medir:**
+    - Nada de esto se ha visto con `U.exe` y una persona.
+    - Una herramienta que no vuelve nunca deja el turno abierto para siempre. No hay tope, a propósito:
+      el delegado también la estaría esperando, y cerrar el turno no arregla eso.
+    - Tras un Escape (`Interrumpir`) la voz se calla en la cola, pero los deltas con voz que siguen
+      llegando todavía sujetan el turno hasta 2 s.
 
 ## Sabotajes
 
@@ -460,6 +541,43 @@ aplicados por diff y restaurados:
 **Juez del nivel 4 (E)**: se quitó ` and a["acciones"] > 0` y la autoprueba falló en T3 r2 y en el
 denominador (ver Hallazgos).
 
+**Los turnos (fase 6, `jero/voz-gpt-live-turnos`, 2026-09-12), `scripts\contrato-del-grafo.ps1` sobre
+`79fcea2`.** El guion es `scratchpad/turnos/sabotea-turnos.ps1`, fuera del repo, y hace lo mismo para cada
+rotura:
+- comprueba que el patrón aparece **exactamente una vez**;
+- la aplica sobre los bytes y exige `git diff --numstat` = `1 1` y un SHA-256 distinto;
+- juzga y guarda las líneas de veredicto;
+- restaura los bytes originales y exige **el mismo SHA-256 y un diff vacío**.
+
+SHA de partida: `TurnosSinMarca.cs` 6812A4A7, `ConversacionEnVivo.cs` B2A0E400.
+
+| Id | Rotura | Veredicto |
+|---|---|---|
+| T1 | el marcador no registra la llamada en curso | ✘ 211 («una llamada que pide el delegado queda en curso (en curso: 0)», y en la conversación «cerró 1» con la llamada ejecutándose). ROTO, exit 7 |
+| T2 | tocar cerrar ignora las llamadas en curso | ✘ 211 («con una llamada a herramienta sin devolver no se cierra…», «…3000 ms sin decir nada el turno no se cierra (cerró 1)»). ROTO, exit 4 |
+| T3 | devolver no cuenta como actividad | ✘ 211 («a 1000 ms de devolverla no se cierra…»). ROTO, exit 3 |
+| T4 | la voz que suena no sujeta el turno (umbral inalcanzable) | ✘ 211 («mientras suena la voz de Ü no se cierra…»). ROTO, exit 2 |
+| T5 | el audio en silencio cuenta como voz (umbral a 0) | ✘ 211 («el audio en silencio que manda el servidor (pico 45, medido) no retrasa el cierre», y cuatro más). ROTO, exit 5 |
+| T6 | una llamada devuelta antes de oírse se queda en curso | ✘ 211 («…no queda en curso (en curso: 1)», «…en vez de quedarse abierto para siempre»). ROTO, exit 2 |
+| T7 | **cableado**: `EjecutarAsync` no le devuelve la llamada al marcador | ✘ 211 («al terminar de ejecutarla, la conversación se la devuelve al marcador…», «cerró 0 y luego 0»). ROTO, exit 2 |
+| T8 | cualquier cierre termina la petición (la regla de antes) | ✘ 212 («tras una pausa que cerró el turno…», y en la conversación «líneas 3»). ROTO, exit 4 |
+| T9 | lo que dice Ü no cuenta como contestar | ✘ 212 («cuando Ü ya le contestó…», «líneas 1») y ✘ 209 («tras un cierre, lo siguiente que dice el usuario abre otro turno»). ROTO, exit 4 |
+| T10 | que el usuario siga hablando no borra el «contestó» de Ü | ✘ 212 («si el usuario siguió hablando después de lo que dijo Ü…»). ROTO, exit 1 |
+| **G1** | **construcción**: la app construye el marcador con 60 000 ms (el sabotaje de revisa:contrato que antes quedaba INTACTO) | ✘ 209 («con el silencio con que la construye la app: a 1700 ms no cierra y a 2100 ms cierra una vez…», «entregó 0»), ✘ 211 y ✘ 212 en la conversación. ROTO, exit 5 |
+| G1b | el silencio por defecto vuelve a 1500 ms | ✘ 209 (seis en la regla y «…a 1700 ms no cierra…» en la conversación) y ✘ 211 («cerró 1» a 1500 ms de devolver). ROTO, exit 8 |
+| G2 | **construcción**: el reloj de la app está parado (`() => 0`) | ✘ 209 («y lo construye con el reloj del sistema…»). ROTO, exit 1 |
+| G3 | **construcción**: el marcador no usa el reloj de la conversación (`Environment.TickCount64` directo) | ✘ 209, ✘ 211 y ✘ 212 (en la conversación no cierra: «cerró 0», «líneas 1»). ROTO, exit 5 |
+| **G4** | **construcción**: otra sesión reutiliza el marcador (`??=`, el otro sabotaje que antes quedaba INTACTO) | ✘ 209 («al empezar otra sesión el marcador es otro… (cerró 1)»). ROTO, exit 1 |
+| G6 | hay marcador también con voces que marcan sus turnos | ✘ 209 («con una voz que marca sus turnos…» y «y con GPT Realtime… tampoco»). ROTO, exit 2 |
+| S209f | **cableado**: el primer trozo no abre turno en la conversación (repetido tras el cambio) | ✘ 209 («…línea voz-turno «por voz»») y ✘ 212 («líneas 0»). ROTO, exit 3 |
+| **W5** | **cableado sin juez**: `ArrancarAsync` deja de llamar a `EmpezarLosTurnosDeLaSesion` | **CONTRATO INTACTO, exit 0** |
+
+Los 18 sabotajes se aplicaron con diff 1/1 y cambio de SHA, y se restauraron con el SHA idéntico y el diff vacío.
+**W5 es el límite, medido:** `ArrancarAsync` necesita clave y socket, y el contrato no llega a él. La 209 juzga
+`EmpezarLosTurnosDeLaSesion`, que es donde vivía el `??=` de G4, pero no que `ArrancarAsync` lo llame. Si se
+rompe, el síntoma en `U.exe` es un «Ü dijo» o un `Cerro` fantasma al abrir la voz menos de 2 s después de
+cerrarla con el usuario hablando.
+
 ## Cierre
 
 - [x] Fase 0: medido contra el servidor real (2026-09-11/12), y el `session.update` de la delegación después
@@ -467,6 +585,8 @@ denominador (ver Hallazgos).
 - [x] Promesas 40–43 escritas en `voz/Contrato/Contrato.cs`, en rojo (`18071b8`), y después verdes (**VOZ ÍNTEGRA**, 0 pendientes)
 - [x] Promesas 208–210 escritas en `tests/ContratoDelGrafo/Contrato.cs`, en rojo (`b64972b`), y después verdes (**CONTRATO INTACTO**, 0 pendientes)
 - [x] Cada una rota a propósito, comprobada por diff de bytes, restaurada y recompilada (ver «Sabotajes»; el cableado de 208 y del cambio de modo, medido sin juez)
+- [x] Fase 6 (`jero/voz-gpt-live-turnos`): 211 y 212 escritas en rojo (`1497dc1`) y verdes (`79fcea2`); la 209 juzga el marcador que construye la app; el silencio de cierre, medido con la sonda de los turnos (2000 ms); todas saboteadas (ver «Sabotajes»)
+- [ ] Nivel 4 de los turnos con `U.exe` y una persona: una línea «Ü dijo» por petición y ninguna a mitad de una herramienta, y una pausa a media frase sin segunda línea «turno nuevo (por voz)»
 - [x] La sonda del `session.update` de la delegación, pegada en Hallazgos
 - [ ] Nivel 4 con GPT-Live y con `U_VOZ=realtime`, con el juez arreglado, con horas y el modelo de cada corrida
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)
