@@ -7,8 +7,9 @@ Umbrales de la spec 017, fijados antes de medir:
   - intentos: acciones al mismo destino dentro de la peticion, maximo 2 (lectura estricta del audio);
     lo que el tope de la rama FRENA cuenta como intento, y la lista numerada de homonimos NO
   - tiempo por accion: del "->" a su "<-", maximo 2000 ms
-  - aprobado: estado final alcanzado, <=2 intentos al mismo destino, <=1 intento fallido en toda la
-    peticion (lo frenado cuenta: el segundo tiene que ser el bueno) y todas las acciones <=2000 ms
+  - aprobado: estado final alcanzado, AL MENOS UNA accion de voz, <=2 intentos al mismo destino, <=1
+    intento fallido en toda la peticion (lo frenado cuenta: el segundo tiene que ser el bueno) y todas
+    las acciones <=2000 ms
   - "miro antes": si hubo un map_look antes de la primera accion (R3: mirar para desempatar)
 El denominador es el plan (--plan, que correr.ps1 calcula como tareas x repeticiones), no lo que se
 llego a ejecutar (patron n.10). Sin --plan se avisa de que el denominador es lo ejecutado.
@@ -174,7 +175,12 @@ def main():
         # «A la primera, máximo dos intentos» es de LA PETICIÓN (spec 017): a lo sumo UN intento fallido
         # en toda ella, y lo frenado cuenta. Aprobar por destino dejaba pasar un fallo en A, otro en B y
         # otro en C antes de acertar en D (crítico final, 2026-09-11).
-        a["aprobado"] = (a["estado_final"] and a["ejercita"] and a["intentos_max"] <= 2
+        # SIN UNA SOLA ACCIÓN DE VOZ NO SE APRUEBA, aunque el estado final sea el bueno. El 2026-09-11 la
+        # sesión de voz se cerró a las 07:43:08 y el texto lo atendió el agente que pulsa por coordenadas
+        # (`agent: tap (455,584)`): las 4 «aprobadas» de la rama salieron de ese camino, con cero llamadas
+        # de voz, y el juez las contó. Sin acciones, todos los demás criterios pasan en vacío (0 fallidas,
+        # 0 lentas): el juez certificaba lo que no había medido.
+        a["aprobado"] = (a["estado_final"] and a["ejercita"] and a["acciones"] > 0 and a["intentos_max"] <= 2
                          and a["fallidas"] + a["rechazos"] <= 1
                          and a["lentas"] == 0 and a["sin_vuelta"] == 0)
         filas.append(a)
@@ -194,6 +200,8 @@ def main():
     print(f"\n**Aprobadas: {sum(a['aprobado'] for a in filas)} de {denominador}** (el plan como denominador).")
     print("«Ejercita = no» es que la corrida no pasó por lo que la tarea prueba (T4: pulsar «Descargas»; "
           "T5: pasar por Sistema); aunque el estado final sea el bueno, no cuenta como aprobada.")
+    print("«Acciones = 0» con el estado final bueno es que lo resolvió otro camino (el agente por coordenadas, "
+          "o la persona): no mide la voz y no cuenta como aprobada.")
     print("«Petición» va desde el Enter hasta el último resultado de una acción, con resolución de ±1 s: "
           "incluye la latencia del modelo.")
     if ms:
@@ -201,6 +209,8 @@ def main():
     if filas:
         print(f"Estado final alcanzado: {sum(a['estado_final'] for a in filas)}/{denominador} · "
               f"frenadas por el tope: {sum(a['rechazos'] for a in filas)} · listas de homónimos: {sum(a['listas'] for a in filas)}")
+        print(f"Llegaron al estado final sin una sola acción de voz: "
+              f"{sum(1 for a in filas if a['estado_final'] and a['acciones'] == 0)}")
         print(f"Tareas que agotaron la observación sin que U hablara: {sum(a['tope'] for a in filas)}")
     print("\n### Secuencias\n")
     for a in filas:

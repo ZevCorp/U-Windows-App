@@ -34,7 +34,8 @@ propia copia de los datos de Ü, y saca la tabla de las dos. Unos 25 minutos.
 | T5 | «en Configuración entra en Sistema, vuelve atrás y entra en Bluetooth» | Bluetooth, pasando por Sistema |
 
 Tres repeticiones de cada una: el fallo del audio es intermitente. **Aprobada** = estado final
-alcanzado, ≤2 intentos al mismo destino, **a lo sumo un intento fallido en toda la petición** (lo que
+alcanzado **con al menos una acción de voz** (el 2026-09-11 el juez aprobó tareas que resolvió el
+agente por coordenadas con la sesión de voz ya cerrada: cero acciones y todo lo demás en vacío), ≤2 intentos al mismo destino, **a lo sumo un intento fallido en toda la petición** (lo que
 el tope frena cuenta; la lista de homónimos no) y cada acción ≤2,0 s. T4 y T5 exigen además haber
 pasado por lo que prueban. El denominador es el plan, no lo que se llegó a ejecutar. Con la rama, además, cada petición deja su línea `voz-turno:` y el tope deja la suya
 cuando frena un tercer intento.
