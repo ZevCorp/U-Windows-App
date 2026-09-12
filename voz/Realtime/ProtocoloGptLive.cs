@@ -183,11 +183,18 @@ public sealed class ProtocoloGptLive : IProtocolo
 
         switch (Cadena(m, "type"))
         {
-            // CONTINUO, también en silencio: el servidor manda audio aunque la voz calle. Un delta
-            // vacío no es sonido.
+            // CONTINUO, también en silencio: el servidor manda un delta de 100 ms (4800 B) cada ~100–130 ms
+            // aunque la voz calle, y ese silencio son CEROS EXACTOS (medido el 2026-09-12 en tres sesiones:
+            // 43/47, 168/172 y 60/64 deltas; los otros cuatro, la cola que se apaga al abrir, picos 45·8·3·2).
+            // Hecho.Suena lo encolaba en el altavoz y LiveAudio.Hablando parpadeaba sin que nadie hablara —
+            // la mitad del tiempo, medido—, y con él los 6 sitios de ConversacionEnVivo que deciden con
+            // Hablando o NivelSalida: la compuerta de eco no se reabría, map_recuerdos cual=2 se rechazaba
+            // al azar, SeguirContandoSiQuedan salía antes, Interrumpir, el log de la retirada y la boca.
+            // Ni un delta vacío ni uno de silencio son sonido. Sin estado: se decide delta a delta.
             case "session.output_audio.delta":
-                if (Cadena(m, "delta") is { Length: > 0 } b64)
-                    hechos.Add(new Hecho.Suena(Convert.FromBase64String(b64)));
+                if (Cadena(m, "delta") is { Length: > 0 } b64 && Convert.FromBase64String(b64) is var pcm
+                    && !EsSilencio(pcm))
+                    hechos.Add(new Hecho.Suena(pcm));
                 break;
 
             case "session.output_transcript.delta":
@@ -201,10 +208,12 @@ public sealed class ProtocoloGptLive : IProtocolo
                 break;
 
             // LO QUE HACE EL DELEGADO llega envuelto: response.event con un evento de la Responses API
-            // dentro. De todos, solo UNO es una llamada: el item de tipo function_call terminado. La
-            // misma llamada llega antes como response.function_call_arguments.done, y atender los dos
-            // ejecutaría cada herramienta dos veces. response.completed tampoco se atiende: es el fin
-            // del trabajo del delegado, no del turno — la voz sigue hablando después.
+            // dentro. De todos, solo UNO es una llamada: el item de tipo function_call TERMINADO. La misma
+            // llamada llega TRES veces (capturado el 2026-09-12: output_item.added en curso, con call_id y
+            // arguments vacío, a 1551 ms; function_call_arguments.done a 1788; output_item.done a 1822), y
+            // atender más de una ejecutaría la herramienta dos o tres veces, la primera sin argumentos. Por
+            // eso se compara el tipo entero y no un prefijo. response.completed tampoco se atiende: es el
+            // fin del trabajo del delegado, no del turno — la voz sigue hablando después.
             case "response.event":
                 if (m.TryGetProperty("event", out var ev) && Cadena(ev, "type") == "response.output_item.done"
                     && ev.TryGetProperty("item", out var item) && Cadena(item, "type") == "function_call")
@@ -226,6 +235,25 @@ public sealed class ProtocoloGptLive : IProtocolo
         }
 
         return hechos;
+    }
+
+    /// <summary>
+    /// EL PICO DEL SILENCIO ES CERO, medido y no elegido a ojo (2026-09-12, sonda-silencio-pico.ps1, tres
+    /// sesiones): el silencio del servidor son ceros exactos, y DENTRO de una frase de Ü las pausas entre
+    /// oraciones bajan a pico 1 (0, 14 y 11 deltas por frase: hasta 1,4 s de pausa). Un umbral de 64 —el
+    /// que sugería el pico 45 de la cola al abrir— se comía 11, 27 y 21 deltas de pausa, y Ü diría
+    /// «Uno.Dos.Tres.» de corrido. Con cero se pierde a lo sumo el único delta de pausa a cero exacto que
+    /// se midió: 1 de 256, 100 ms.
+    /// </summary>
+    private const int PicoDelSilencio = 0;
+
+    /// <summary>Todas las muestras PCM16 con |valor| ≤ <see cref="PicoDelSilencio"/>. Mira MUESTRAS, no
+    /// bytes sueltos: 256 tiene el byte bajo a cero y es sonido.</summary>
+    private static bool EsSilencio(byte[] pcm)
+    {
+        for (int i = 0; i + 1 < pcm.Length; i += 2)
+            if (Math.Abs((int)BitConverter.ToInt16(pcm, i)) > PicoDelSilencio) return false;
+        return pcm.Length % 2 == 0 || pcm[^1] == 0;
     }
 
     /// <summary>El campo si es texto; vacío si falta o es de otra forma. Lo que viene de la red se
