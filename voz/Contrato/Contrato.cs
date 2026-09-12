@@ -152,6 +152,11 @@ internal static class Contrato
         // a un modelo con fecha de apagado.
         Prueba("43. GPT Realtime pide la transcripción de lo que dice el usuario a gpt-transcribe, no a gpt-4o-mini-transcribe, que se apaga el 2027-02-26", LaTranscripcionNoVaAlQueSeApaga);
 
+        // LO QUE EL SERVIDOR DE GPT-LIVE NO ACEPTA (revisión de fidelidad, 2026-09-12). Tres cosas que el
+        // traductor mandaba o callaba y el servidor rechaza sin cerrar nada: la voz sigue hablando y el delegado
+        // deja de hacer. Del 44 al 48 son de los arregladores que corren a la vez: los números no se pisan.
+        Prueba("49. GPT-Live no manda lo que su servidor rechaza: no se declara capaz de mirar, porque una captura de pantalla no cabe y una segunda foto pequeña tampoco; un resultado de más de 32.768 bytes sale como un function_call_output de 32.768 bytes o menos, con su call_id, sin partir un carácter y diciendo cuánto se recortó; y declara que confirma la apertura: session.started es un Hecho.Abierta, y ni un error ni ningún otro mensaje lo es", GptLiveNoMandaLoQueSeRechaza);
+
         Console.WriteLine();
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
@@ -1291,7 +1296,7 @@ internal static class Contrato
              && Campo(ct[0], "type") == "input_text" && Campo(ct[0], "text") == "abre la admisión",
             "el texto escrito es un response.item.create: mensaje del usuario con un input_text");
 
-        Debe(p.Mira, "GPT-Live mira: el delegado vio el color y el texto de una foto (medido el 2026-09-12)");
+        // Si GPT-Live mira o no lo juzga la 49: la FORMA de la foto sí se leyó, pero una de tamaño real no cabe.
         byte[] jpeg = { 0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3 };
         var foto = Mensaje(p.Fotograma(jpeg));
         var enFoto = Nodo(foto, "item", "content");
@@ -1366,6 +1371,109 @@ internal static class Contrato
         var m = Mensaje(p.Apertura("x", new List<Utensilio>(), "").First());
         string modelo = Campo(m, "session", "audio", "input", "transcription", "model");
         Debe(modelo == "gpt-transcribe", $"la transcripción se pide a gpt-transcribe (pide «{modelo}»)");
+    }
+
+    /// <remarks>
+    /// MEDIDO el 2026-09-12 contra /v1/live/sessions con los bytes exactos de la rama (catálogo real, 23
+    /// herramientas, un session.start de 43.507 B que el servidor aceptó). Tres rechazos, ninguno cierra nada:
+    ///
+    ///  · UNA FOTO DE PANTALLA NO CABE. Un Fotograma de 117.962 B (JPEG 1024×576 a calidad 60; la captura real
+    ///    de esta máquina pesa 67–69 KB, 90–92 KB en base64) contestó response_input_buffer_full «Backend
+    ///    response input history is limited to 128 items and 32768 UTF-8 bytes per session», y el delegado
+    ///    dijo «No puedo distinguir el texto del recuadro blanco con suficiente claridad», como si la hubiera
+    ///    visto borrosa. Una de 520 px (32.146 B) se leyó; de tres de 400 px (20.208 B) en la misma sesión,
+    ///    la 1ª se leyó y la 2ª y la 3ª dieron el mismo error. Achicar la foto no basta.
+    ///  · UN RESULTADO DE 40 KB TAMPOCO (un mensaje de 41.084 B): el mismo error y, en el mismo milisegundo,
+    ///    function_call_outputs_required — la llamada queda pendiente y cada response.create de la sesión
+    ///    falla. Ocho resultados de 17.741 B pasaron en una misma sesión: los de texto no se acumulan.
+    ///  · UN ERROR ANTES DE session.started ES DE NO HABER ABIERTO: credit_balance_exhausted llegó sin
+    ///    session.started y a los ~2,0 s el socket quedó Aborted (medido dos veces, la última a 604 ms y
+    ///    2.598 ms); «Instructions must not exceed 16384 tokens» hizo lo mismo en la sonda de huecos. Sin
+    ///    saber qué es abrir, la conversación lo tomaba por un corte y reenviaba el mismo session.start.
+    /// </remarks>
+    private static void GptLiveNoMandaLoQueSeRechaza()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+
+        Debe(!p.Mira,
+            "GPT-Live no se declara capaz de mirar: una captura de pantalla da response_input_buffer_full, y una segunda foto pequeña también");
+
+        const int tope = 32_768;
+        int Bytes(string s) => System.Text.Encoding.UTF8.GetByteCount(s);
+        const string marca = "…[recortado: ";
+
+        // UN RESULTADO DE 40 KB, como el que el servidor rechazó.
+        string grande = "Estas en SAP Easy Access (saplogon.exe). Salidas conocidas desde aqui: NWP1 Gestion de pacientes. "
+            .PadRight(40 * 1024, '.');
+        var deGrande = p.Resultados(new List<(string Id, string Nombre, string Resultado)> { ("call_grande", "map_where_am_i", grande) }).ToList();
+        Debe(deGrande.Count == 1, $"un resultado grande sigue siendo UN mensaje (salieron {deGrande.Count})");
+        if (deGrande.Count == 1)
+        {
+            int enviados = Bytes(deGrande[0]);
+            Debe(enviados <= tope, $"un resultado de 40 KB sale en un mensaje de {tope} bytes o menos (salió de {enviados})");
+            Debe(enviados > tope - 16, $"y aprovecha el tope: no recorta de más (salió de {enviados})");
+            var m = Mensaje(deGrande[0]);
+            Debe(Campo(m, "type") == "response.item.create" && Campo(m, "item", "type") == "function_call_output"
+                 && Campo(m, "item", "call_id") == "call_grande",
+                "como function_call_output con su call_id: la llamada no queda pendiente");
+            string salida = Campo(m, "item", "output");
+            int corte = salida.LastIndexOf(marca, StringComparison.Ordinal);
+            string guardado = corte > 0 ? salida[..corte] : "";
+            Debe(corte > 0 && grande.StartsWith(guardado, StringComparison.Ordinal)
+                 && salida.EndsWith($"{marca}{Bytes(guardado)} de {Bytes(grande)} bytes]", StringComparison.Ordinal),
+                $"con el principio del resultado y diciendo cuánto se mandó de cuánto (termina en «{(salida.Length > 60 ? salida[^60..] : salida)}»)");
+        }
+
+        // SIN PARTIR UN CARÁCTER: con emojis, cada uno son dos char, y un corte impar deja medio.
+        string emojis = string.Concat(Enumerable.Repeat("😀", 6000));
+        var deEmojis = p.Resultados(new List<(string Id, string Nombre, string Resultado)> { ("call_emoji", "map_what_i_see", emojis) }).ToList();
+        if (deEmojis.Count == 1)
+        {
+            int enviados = Bytes(deEmojis[0]);
+            string salida = Campo(Mensaje(deEmojis[0]), "item", "output");
+            int corte = salida.LastIndexOf(marca, StringComparison.Ordinal);
+            string guardado = corte > 0 ? salida[..corte] : "";
+            Debe(enviados <= tope && corte > 0 && guardado.Length > 0 && guardado.Length % 2 == 0
+                 && emojis.StartsWith(guardado, StringComparison.Ordinal),
+                $"sin partir un carácter: lo que se manda son emojis enteros (mensaje de {enviados} B, {guardado.Length} char guardados)");
+        }
+        else Debe(false, $"un resultado con emojis sigue siendo UN mensaje (salieron {deEmojis.Count})");
+
+        // Y LO QUE CABE VA ENTERO: 17 KB con acentos y comillas, del tamaño de los que el servidor aceptó ocho veces.
+        string mediano = string.Concat(Enumerable.Repeat("Estás en «SAP Easy Access»; puertas: NWP1 Gestión de pacientes, NV2000 Admisión. ", 150));
+        var deMediano = p.Resultados(new List<(string Id, string Nombre, string Resultado)> { ("call_mediano", "map_where_am_i", mediano) }).ToList();
+        Debe(deMediano.Count == 1 && Bytes(deMediano[0]) <= tope && Campo(Mensaje(deMediano[0]), "item", "output") == mediano,
+            $"y un resultado que cabe va entero, sin marca de recorte ({(deMediano.Count == 1 ? Bytes(deMediano[0]) : 0)} B)");
+
+        // LA APERTURA LA CONFIRMA EL SERVIDOR, no el socket.
+        var confirma = DeLaInterfaz("ConfirmaQueAbrio", p);
+        var tAbierta = typeof(Hecho).GetNestedType("Abierta");
+        if (confirma == null || tAbierta == null) { Pendiente("IProtocolo.ConfirmaQueAbrio / Hecho.Abierta", "018·49"); return; }
+        Debe(confirma is true, "GPT-Live declara que confirma la apertura: hasta session.started la sesión no está abierta");
+        Debe(DeLaInterfaz("ConfirmaQueAbrio", new ProtocoloOpenAI()) is false,
+            "y GPT Realtime, que no se juzgó así, no lo declara: con él un error se sigue leyendo como hasta ahora");
+
+        var abre = p.Leer(Mensaje("""{"type":"session.started","session":{"id":"live_u2_ENOy6GhblDeLrMlDOGSX1","model":"gpt-live-1","status":"active","input":[]}}"""));
+        Debe(abre.Count == 1 && abre[0].GetType() == tAbierta, $"session.started es UN Hecho.Abierta (salieron {abre.Count})");
+
+        var sinCredito = p.Leer(Mensaje("""
+            {"type":"error","event_id":"event_7f0763e4-314d-4930-9bfa-eb831d673918","error":{"type":"invalid_request_error","code":"credit_balance_exhausted","message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."}}
+            """));
+        Debe(sinCredito.Count == 1 && sinCredito[0] is Hecho.Falla fc && fc.Que.Contains("You have no credits remaining"),
+            "el error que llega en vez de session.started sigue siendo UN Hecho.Falla con su mensaje, no una apertura");
+
+        string[] otros =
+        {
+            """{"event_id":"event_ENQAm4enOKNwSSblCsgzt","type":"session.updated","session":{"id":"live_u2_ENQAkzfUN8f6pBngGHwcm","expires_at":1789258059,"model":"gpt-live-1","status":"active"}}""",
+            """{"type":"session.delegation.created","offset_ms":0,"delegation":{"id":"item_ENQ9ycRoNI3i5l8qMNGhG","type":"delegation","response_id":"resp_061ec1834255794e006aa5ccfa32f487d186a28557e1e4cecd","target":"responses"},"event_id":"event_ENQ9ypk910OIS296dUTWS"}""",
+            """{"type":"error","event_id":"event_ENQ9zsNQ1Zl59krrM4MFC","error":{"type":"invalid_request_error","code":"response_input_buffer_full","message":"Backend response input history is limited to 128 items and 32768 UTF-8 bytes per session.","param":"item"}}""",
+            """{"type":"response.event","delegation_id":"item_ENOyA2AApz1ePY8UFCDIw","event":{"type":"response.completed"}}""",
+            """{"type":"session.usage.updated","usage":{"seconds":12.0},"context_window":{"usage_ratio":0.01003125}}""",
+            """{"event_id":"event_ENOyNXoVEuKQV2BXwf0YH","type":"session.closed","reason":"close_requested","usage":{"seconds":13.0},"client_event_id":"sonda_fin"}""",
+        };
+        Debe(!otros.SelectMany(x => p.Leer(Mensaje(x))).Concat(sinCredito).Any(h => h.GetType() == tAbierta),
+            "y ningún otro mensaje es una apertura: ni session.updated, ni una delegación, ni un error, ni el cierre");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
