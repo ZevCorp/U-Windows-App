@@ -86,10 +86,32 @@ public sealed class ProtocoloGptLive : IProtocolo
     public IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Utensilio> utensilios, string pase)
         => Apertura(instrucciones, utensilios, pase, soloCuandoSeLePide: false);
 
+    /// <summary>
+    /// Las instrucciones con las que se ABRIÓ la sesión: volver a ellas es volver a la persona de
+    /// siempre, y eso a la voz se le dice con su persona, no con las instrucciones de operar (promesa 47).
+    /// </summary>
+    private string _instruccionesDeApertura = "";
+
+    /// <summary>
+    /// Lo que va delante de las reglas que se le añaden a la voz. SON LOS TEXTOS MEDIDOS, letra por letra,
+    /// el 2026-09-12: con estos dos, 3 de 3 asintió en modo aprendiz y 2 de 2 volvió a delegar al volver.
+    /// Cambiarlos es volver a medir.
+    /// </summary>
+    /// <remarks>
+    /// Y EL TOPE ESTÁ CERCA: un append de más de 500 fichas se rechaza («Context append text must not exceed
+    /// 500 tokens.»; la sesión sigue viva). El del aprendiz, con este prefijo, se aceptó con 1.756
+    /// caracteres; el mismo texto repetido hasta 1.900 se rechazó. Le quedan menos de 150 caracteres a
+    /// ModoAprendiz antes de que la voz deje de cambiar de persona, con solo una línea «el servidor dice» en
+    /// el log. Un prefijo más corto daba margen y no se midió: el servidor se quedó sin crédito.
+    /// </remarks>
+    internal const string AlCambiarDeModo = "CAMBIO DE MODO. Desde ahora mandan estas reglas sobre cuándo y cómo hablas, por encima de las anteriores:\n";
+    internal const string AlVolver = "VUELVES A TU MODO DE SIEMPRE. Lo anterior sobre el modo especial ya no manda; desde ahora mandan estas reglas:\n";
+
     public IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Utensilio> utensilios, string pase, bool soloCuandoSeLePide)
     {
         // El pase y el «solo cuando se le pide» se ignoran porque aquí no existen. No se disimula:
         // SabeVolver y SabeEsperarTurno ya lo dicen, y quien llama decide qué contar.
+        _instruccionesDeApertura = instrucciones ?? "";
         yield return JsonSerializer.Serialize(new
         {
             type = "session.start",
@@ -108,15 +130,32 @@ public sealed class ProtocoloGptLive : IProtocolo
     }
 
     /// <summary>
-    /// UN session.update CON LA DELEGACIÓN ENTERA, y nada más. Lo único que el servidor deja cambiar a
-    /// mitad de sesión; mandar otro session.start no cambiaría de modo, abriría otra conversación.
+    /// UN session.update CON LA DELEGACIÓN ENTERA, y detrás UN session.instructions.append A LA VOZ. La
+    /// delegación es lo único que el servidor deja reemplazar a mitad de sesión; mandar otro session.start
+    /// no cambiaría de modo, abriría otra conversación.
     /// </summary>
+    /// <remarks>
+    /// SIN EL APPEND, CAMBIABA EL QUE ACTÚA Y NO EL QUE HABLA. Medido el 2026-09-12 poniendo el modo aprendiz
+    /// y narrando «Ahora escribo NWP1 en el campo de transacción y pulso Enter»: con solo el update, 3 de 3
+    /// la voz afirmó lo que nadie hizo («Listo, ejecuté VP1 en el campo de transacción»); con el append de
+    /// las reglas del aprendiz, 3 de 3 asintió con una palabra. Al volver al modo con el que abrió se le da
+    /// su persona, no las instrucciones de operar: no las lleva (promesa 40) y no caben — un append de más
+    /// de 500 fichas se rechaza. Promesa 47.
+    /// </remarks>
     public IEnumerable<string> CambioDeModo(string instrucciones, IReadOnlyList<Utensilio> utensilios, bool soloCuandoSeLePide)
     {
         yield return JsonSerializer.Serialize(new
         {
             type = "session.update",
             session = new { delegation = Delegacion(instrucciones, utensilios) },
+        });
+
+        bool vuelve = _instruccionesDeApertura.Length > 0 && instrucciones == _instruccionesDeApertura;
+        yield return JsonSerializer.Serialize(new
+        {
+            type = "session.instructions.append",
+            delegation_id = (string?)null,
+            content = vuelve ? AlVolver + InstruccionesDeLaVoz : AlCambiarDeModo + instrucciones,
         });
     }
 
