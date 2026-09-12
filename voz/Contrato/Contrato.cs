@@ -158,6 +158,13 @@ internal static class Contrato
         // leía ruido. El umbral se eligió midiendo, y la medida dice que es CERO: ver la promesa.
         Prueba("44. GPT-Live no hace sonar su silencio: un delta de audio con todas las muestras a cero no es Hecho.Suena, y uno con voz —también la pausa de pico 1 entre dos frases— sí, con el PCM exacto", GptLiveNoHaceSonarSuSilencio);
 
+        // LO QUE LA MIGRACIÓN DEJÓ EN EL DELEGADO Y NO EN LA VOZ (revisiones del 2026-09-12). Con GPT-Live
+        // habla uno y actúa otro: las reglas de Ü van al delegado, pero quien suena es la voz, con su
+        // persona corta. Y lo que el servidor cuenta de la sesión llega en segundos, no en fichas.
+        Prueba("46. la voz de GPT-Live no anuncia lo que va a hacer: la persona con la que abre la sesión prohíbe el futuro y el relleno de espera, y manda hablar en pasado y del resultado, como la 161 se lo manda al delegado", LaVozNoAnuncia);
+        Prueba("47. con GPT-Live, cambiar de modo también cambia a quien habla: detrás del session.update de la delegación va un session.instructions.append a la voz con las reglas del modo nuevo, y al volver al modo con el que abrió, con su persona de siempre y no con las instrucciones de operar", CambiarDeModoCambiaLaVoz);
+        Prueba("48. GPT-Live traduce lo que dura la sesión: session.usage.updated es un Hecho.Duracion con los segundos que trae, que son el acumulado de la sesión y no un incremento; un uso sin segundos no inventa duración", GptLiveCuentaLaDuracion);
+
         Console.WriteLine();
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
@@ -1378,11 +1385,15 @@ internal static class Contrato
         var sabe = DeLaInterfaz("SabeEsperarTurno", p);
         if (cambio == null || sabe == null) { Pendiente("IProtocolo.CambioDeModo / IProtocolo.SabeEsperarTurno", "1"); return; }
 
+        // UN session.update y ningún session.start; ya no «un único mensaje»: desde la 47, detrás va el
+        // session.instructions.append que cambia también a quien habla (medido el 2026-09-12). Lo que esta
+        // promesa congela de la delegación no cambia.
         var cambios = cambio.Select(Mensaje).ToList();
-        Debe(cambios.Count == 1 && Campo(cambios[0], "type") == "session.update",
+        var actualizaciones = cambios.Where(x => Campo(x, "type") == "session.update").ToList();
+        Debe(actualizaciones.Count == 1 && !cambios.Any(x => Campo(x, "type") == "session.start"),
             $"cambiar de modo es UN session.update, nunca otro session.start (salió: {string.Join(", ", cambios.Select(x => Campo(x, "type")))})");
-        if (cambios.Count == 0) return;
-        var upd = cambios[0];
+        if (actualizaciones.Count == 0) return;
+        var upd = actualizaciones[0];
         var toolsNuevas = Nodo(upd, "session", "delegation", "responses", "tools");
         Debe(Campo(upd, "session", "delegation", "type") == "responses"
              && toolsNuevas is { ValueKind: JsonValueKind.Array } tn && tn.GetArrayLength() == 1
@@ -1466,6 +1477,133 @@ internal static class Contrato
         var hablando = p.Leer(Delta(voz));
         Debe(hablando.Count == 1 && hablando[0] is Hecho.Suena sv && sv.Pcm.SequenceEqual(voz),
             "y un delta con voz (pico 7000, como las frases medidas) es UN Hecho.Suena con el PCM exacto");
+    }
+
+    /// <remarks>
+    /// EL FALLO QUE ESTO IMPIDE: la 161 del grafo quitó el «voy a…» de Ü, y con GPT-Live esa regla viaja
+    /// al DELEGADO, que no habla. La voz abre con su persona corta y en la sonda del 2026-09-12 dijo
+    /// «Vale. Dame un momento para revisarlo.» y «Dime a qué transacción quieres ir y la abro.»: en
+    /// futuro, antes de que el delegado hubiera hecho nada. Se juzga el session.start que sale, no la
+    /// constante: una persona bien escrita que no llegara a la sesión no cumpliría nada.
+    /// </remarks>
+    private static void LaVozNoAnuncia()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+
+        var inicio = p.Apertura("INSTRUCCIONES DEL DELEGADO", new List<Utensilio>(), "").ToList();
+        Debe(inicio.Count == 1, $"la apertura es un mensaje (salieron {inicio.Count})");
+        if (inicio.Count == 0) return;
+        string voz = Campo(Mensaje(inicio[0]), "session", "instructions");
+
+        Debe(voz.Contains("NO ANUNCIES LO QUE VAS A HACER", StringComparison.Ordinal),
+            "la persona de la voz dice la regla, con las mismas palabras que la 161 le exige al delegado");
+        Debe(voz.Contains("HABLA EN PASADO", StringComparison.Ordinal),
+            "y dice con qué sustituirlo: en pasado y del resultado. Prohibir sin dar el reemplazo deja a la voz eligiendo, y elige anunciar");
+        foreach (string relleno in new[] { "«voy a…»", "«vamos a…»", "«dame un momento»" })
+            Debe(voz.Contains(relleno, StringComparison.Ordinal),
+                $"y nombra las fórmulas que se oyen ({relleno}): «Dame un momento para revisarlo» es literal de la sonda");
+        Debe(!voz.Contains("INSTRUCCIONES DEL DELEGADO", StringComparison.Ordinal),
+            "y la regla va en la persona de la VOZ, no copiando las del delegado: la voz sigue sin las instrucciones de operar");
+    }
+
+    /// <remarks>
+    /// EL FALLO QUE ESTO IMPIDE: 🎓 (promesa 138) y la voz prestada (192) solo cambiaban al DELEGADO. Medido
+    /// el 2026-09-12 contra el servidor, con la narración hablada «Ahora escribo NWP1 en el campo de
+    /// transacción y pulso Enter» después de poner el modo aprendiz:
+    ///
+    ///  · solo el session.update (lo que hacía la rama): 3 de 3 la voz afirmó lo que nadie hizo —
+    ///    «Listo, ejecuté VP1 en el campo de transacción», «Ya quedó lanzada», «Estás en la pantalla
+    ///    inicial de ese programa»—.
+    ///  · update + session.instructions.append con las reglas del aprendiz: 3 de 3 asintió con una
+    ///    palabra («Ajá», «Uhum», «Entiendo») y no afirmó nada.
+    ///  · y al volver con un append de su persona: 2 de 2 delegó map_look y dijo «Estabas en SAP Easy Access».
+    ///
+    /// Al volver NO se le pasan las instrucciones de operar: la voz no las lleva (40), y el servidor
+    /// rechaza un append de más de 500 fichas («Context append text must not exceed 500 tokens.», medido
+    /// con 2.400 caracteres; las de Ü son 20.694).
+    /// </remarks>
+    private static void CambiarDeModoCambiaLaVoz()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+
+        const string completas = "ERES Ü Y ESTAS SON TUS INSTRUCCIONES COMPLETAS DE OPERAR";
+        const string aprendiz = """
+            Eres Ü, y ahora mismo te están ENSEÑANDO.
+              · Habla muy poco. Mientras te explican, asiente con algo corto: «ajá», «uhum», «entiendo».
+              · No hagas nada, no lo intentes, no digas que lo vas a hacer.
+            """;
+        var utensilios = new List<Utensilio> { new("map_look", "Mira la pantalla", new List<Argumento>()) };
+        string deLaVoz = Campo(Mensaje(p.Apertura(completas, utensilios, "").First()), "session", "instructions");
+
+        List<JsonElement>? Cambio(string instrucciones) => CambioDeModo(p, instrucciones, utensilios, false)?.Select(Mensaje).ToList();
+        string Tipos(List<JsonElement> m) => string.Join(" · ", m.Select(x => Campo(x, "type")));
+
+        var aAprendiz = Cambio(aprendiz);
+        if (aAprendiz == null) { Pendiente("IProtocolo.CambioDeModo", "1"); return; }
+        int iUpd = aAprendiz.FindIndex(x => Campo(x, "type") == "session.update");
+        var anadidos = aAprendiz.Where(x => Campo(x, "type") == "session.instructions.append").ToList();
+        Debe(iUpd >= 0 && anadidos.Count == 1 && aAprendiz.FindIndex(x => Campo(x, "type") == "session.instructions.append") > iUpd,
+            $"cambiar de modo es el session.update de la delegación y DESPUÉS un session.instructions.append a la voz (salió: {Tipos(aAprendiz)})");
+        if (anadidos.Count == 0) return;
+        string alAprendiz = Campo(anadidos[0], "content");
+        Debe(alAprendiz.Contains(aprendiz, StringComparison.Ordinal),
+            "el append lleva las reglas del modo nuevo ENTERAS: la voz asiente con una palabra porque las recibe, no un resumen");
+        Debe(Nodo(anadidos[0], "delegation_id") is { ValueKind: JsonValueKind.Null },
+            "con delegation_id nulo, que es la forma que el servidor aceptó (session.instructions.appended)");
+
+        var aNormal = Cambio(completas)!;
+        var vuelta = aNormal.Where(x => Campo(x, "type") == "session.instructions.append").ToList();
+        Debe(vuelta.Count == 1, $"volver al modo con el que abrió también le habla a la voz (salió: {Tipos(aNormal)})");
+        if (vuelta.Count == 0) return;
+        string alVolver = Campo(vuelta[0], "content");
+        Debe(deLaVoz.Length > 0 && alVolver.Contains(deLaVoz, StringComparison.Ordinal),
+            "y le devuelve su persona de siempre, la misma con la que abrió la sesión");
+        Debe(!alVolver.Contains(completas, StringComparison.Ordinal),
+            "y NO las instrucciones de operar: la voz no las lleva, y en un append no caben (tope de 500 fichas)");
+        var delegado = aNormal.FirstOrDefault(x => Campo(x, "type") == "session.update");
+        Debe(Campo(delegado, "session", "delegation", "responses", "instructions") == completas,
+            "mientras el delegado sí recupera las suyas enteras");
+
+        string realtime = string.Join("\n", CambioDeModo(new ProtocoloOpenAI(), aprendiz, utensilios, false) ?? new List<string>());
+        Debe(!realtime.Contains("session.instructions.append"),
+            "y GPT Realtime no lo necesita: su cambio de modo es la apertura reenviada, que ya cambia la voz");
+    }
+
+    /// <remarks>
+    /// EL FALLO QUE ESTO IMPIDE: con GPT-Live por defecto, el panel de costos no recibía nada. El
+    /// servidor no manda fichas: manda session.usage.updated con usage.seconds cada ~15 s, y nadie lo
+    /// traducía — ReportarConsumo veía cero y salía sin una línea. Medido en las sondas del 2026-09-12
+    /// (sonda-huecos r1G y r2c): 12.0 a los 15 s y 25.0 a los 30 s de la misma sesión. Es el ACUMULADO; quien
+    /// lo sume como un incremento cuenta 37 s donde hubo 25.
+    /// </remarks>
+    private static void GptLiveCuentaLaDuracion()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+        var tipo = typeof(Hecho).GetNestedType("Duracion");
+        var segundos = tipo?.GetProperty("Segundos");
+        if (tipo == null || segundos == null) { Pendiente("Voz.Realtime.Hecho.Duracion (Segundos)", "1"); return; }
+
+        List<double> Leidos(string json) => p.Leer(Mensaje(json))
+            .Where(h => tipo.IsInstanceOfType(h)).Select(h => Convert.ToDouble(segundos.GetValue(h))).ToList();
+
+        var a15 = Leidos("""{"type":"session.usage.updated","usage":{"seconds":12.0},"context_window":{"usage_ratio":0.0102343750},"event_id":"event_ENOzZAVHSZZ5pO7sNDsal"}""");
+        Debe(a15.Count == 1 && a15[0] == 12.0,
+            $"session.usage.updated es UN Hecho.Duracion con los segundos que trae (salieron {a15.Count}: {string.Join(", ", a15)})");
+        var a30 = Leidos("""{"type":"session.usage.updated","usage":{"seconds":25.0},"context_window":{"usage_ratio":0.0153984375},"event_id":"event_ENOzotrjrxl5LZz8nedUQ"}""");
+        Debe(a30.Count == 1 && a30[0] == 25.0,
+            $"y el siguiente de la misma sesión trae 25, no los 13 de diferencia: es el acumulado y se entrega tal cual (salió {string.Join(", ", a30)})");
+        var entero = Leidos("""{"type":"session.usage.updated","usage":{"seconds":7}}""");
+        Debe(entero.Count == 1 && entero[0] == 7.0, "un número sin decimales también son segundos");
+
+        Debe(Leidos("""{"type":"session.usage.updated","context_window":{"usage_ratio":0.01}}""").Count == 0
+             && Leidos("""{"type":"session.usage.updated","usage":{"seconds":"12"}}""").Count == 0
+             && Leidos("""{"type":"session.usage.updated","usage":{}}""").Count == 0,
+            "un uso sin segundos numéricos no inventa duración: vacío no es cero");
+        Debe(Leidos("""{"type":"session.output_transcript.delta","delta":"Hola"}""").Count == 0,
+            "y la duración solo sale del mensaje de uso");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────
