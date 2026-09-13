@@ -97,6 +97,7 @@ Comprueba "Realtime sin credito (23:40): 'la conexion se cayo 5 veces' ya es cer
 Comprueba "la forma vieja: 'sesion abierta con' sin confirmacion (Realtime no confirma) es abierta" { (EstadoDeLaVoz (Juntar $reabiertaAlFinal)) -eq "abierta" }
 Comprueba "manda la ULTIMA linea: cerrada y despues reabierta (el Ctrl+Alt+M de 23:39:40) es abierta" { (EstadoDeLaVoz (Juntar ($gptLiveSinCredito + $reabiertaAlFinal))) -eq "abierta" }
 Comprueba "lo que alguien DICE no cambia el estado: 'usuario dijo: sesion cerrada' deja la voz abierta" { (EstadoDeLaVoz (Juntar $normal)) -eq "abierta" }
+Comprueba "abierta y despues 'sesion cerrada' a secas (el cierre de TerminarAsync) es cerrada" { (EstadoDeLaVoz (Juntar ($normal + @('[10:00:20] voz-viva: micr~ofono cerrado', '[10:00:20] voz-viva: sesi~on cerrada')))) -eq "cerrada" }
 Comprueba "un session.closed del servidor ('el servidor dice: sesion cerrada: ...') no es aun el cierre de la app" {
   (EstadoDeLaVoz (Juntar ($reabiertaAlFinal + @('[23:39:50] voz-viva: el servidor dice: sesi~on cerrada: idle_timeout')))) -eq "abierta" }
 Comprueba "la forma nueva: 'socket conectado' sin confirmar es abriendo, no abierta" {
@@ -173,28 +174,28 @@ if ($Conductor) {
   # A: la voz se cierra sola durante la bateria (como a las 07:43:08 del 2026-09-11). Al terminar NO se pulsa
   # Ctrl+Alt+M: la reabriria justo antes de matar U. Se cierra a los 21 s del falso, cuando el conductor ya
   # comprobo (a los ~18 s) que abrio, y la bateria de 6 repeticiones en ensayo acaba hacia los ~28 s.
-  $a = Correr "A-se-cierra-sola" ($abre + @(@(21, 'voz-viva: micr~ofono cerrado'), @(21, 'voz-viva: sesi~on cerrada'))) "T1" 6
-  Comprueba "A: termina bien (codigo 0)" { $a.codigo -eq 0 }
-  Comprueba "A: con la voz ya cerrada, al final NO se pulsa Ctrl+Alt+M (V7)" { $a.diario -match 'NO se pulsa Ctrl\+Alt\+M, que la reabriria' }
-  Comprueba "A: no se pulsa Ctrl+Alt+M ni una sola vez (tampoco al empezar: la voz ya estaba abierta)" { (Veces $a.diario '\(ensayo\) Ctrl\+Alt\+M sin pulsar') -eq 0 }
+  $ra = Correr "A-se-cierra-sola" ($abre + @(@(21, 'voz-viva: micr~ofono cerrado'), @(21, 'voz-viva: sesi~on cerrada'))) "T1" 6
+  Comprueba "A: termina bien (codigo 0)" { $ra.codigo -eq 0 }
+  Comprueba "A: con la voz ya cerrada, al final NO se pulsa Ctrl+Alt+M (V7)" { $ra.diario -match 'NO se pulsa Ctrl\+Alt\+M, que la reabriria' }
+  Comprueba "A: no se pulsa Ctrl+Alt+M ni una sola vez (tampoco al empezar: la voz ya estaba abierta)" { (Veces $ra.diario '\(ensayo\) Ctrl\+Alt\+M sin pulsar') -eq 0 }
 
   # B: la voz sigue abierta al terminar: se cierra con el atajo, una vez, para que U deje la linea de lo que duro (218).
-  $b = Correr "B-sigue-abierta" $abre "T1" 1
-  Comprueba "B: termina bien (codigo 0)" { $b.codigo -eq 0 }
-  Comprueba "B: con la voz abierta, al final SI se cierra con Ctrl+Alt+M" { $b.diario -match 'cierro la voz con Ctrl\+Alt\+M' }
-  Comprueba "B: el atajo se pulsa exactamente una vez" { (Veces $b.diario '\(ensayo\) Ctrl\+Alt\+M sin pulsar') -eq 1 }
+  $rb = Correr "B-sigue-abierta" $abre "T1" 1
+  Comprueba "B: termina bien (codigo 0)" { $rb.codigo -eq 0 }
+  Comprueba "B: con la voz abierta, al final SI se cierra con Ctrl+Alt+M" { $rb.diario -match 'cierro la voz con Ctrl\+Alt\+M' }
+  Comprueba "B: el atajo se pulsa exactamente una vez" { (Veces $rb.diario '\(ensayo\) Ctrl\+Alt\+M sin pulsar') -eq 1 }
 
   # C: sin credito, las lineas literales de las 23:36. Se para al arrancar con su propio codigo, sin bateria.
-  $c = Correr "C-sin-credito" @(
+  $rc = Correr "C-sin-credito" @(
     @(1, 'voz-viva: sesi~on abierta con <<gpt-live-1>> (OpenAI GPT-Live)'),
     @(1, 'voz-viva: micr~ofono abierto a 24000 Hz'),
     @(1, 'voz-viva: el servidor dice: You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.'),
     @(3, 'voz-viva: se cort~o la escucha: The remote party closed the WebSocket connection without completing the close handshake.'),
     @(3, 'voz-viva: la sesi~on no lleg~o a abrir: el servidor contest~o <<You have no credits remaining.>> en vez de confirmarla, y cerr~o. No se reintenta: la misma apertura fallar~ia igual'),
     @(3, 'voz-viva: sesi~on cerrada')) "T1,T4" 3
-  Comprueba "C: sin credito sale con el codigo 5, no con el 3 de 'la voz no abrio'" { $c.codigo -eq 5 }
-  Comprueba "C: el diario dice que la cuenta no tiene credito" { $c.diario -match 'la cuenta no tiene credito' }
-  Comprueba "C: no gasta la bateria: ninguna tarea empieza" { ($c.diario -notmatch 'fin de la bateria') -and ($c.diario -notmatch 'T1 r1:') }
+  Comprueba "C: sin credito sale con el codigo 5, no con el 3 de 'la voz no abrio'" { $rc.codigo -eq 5 }
+  Comprueba "C: el diario dice que la cuenta no tiene credito" { $rc.diario -match 'la cuenta no tiene credito' }
+  Comprueba "C: no gasta la bateria: ninguna tarea empieza" { ($rc.diario -notmatch 'fin de la bateria') -and ($rc.diario -notmatch 'T1 r1:') }
 }
 
 if ($Escritorio) {
