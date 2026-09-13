@@ -1,6 +1,6 @@
 # Plan de implementación: la voz es GPT-Live, y lo que se escribe se contesta
 
-Estado: **en construcción**. A 2026-09-12: medido contra el servidor; el juez del nivel 4 arreglado y saboteado; las promesas 40–43, 208–210 y 214 **en verde y saboteadas**, y la 208 juzga por fin su cableado. **Falta el nivel 4**: nada de esto se ha oído con micrófono ni con `U.exe` · Nace de dos peticiones del dueño (2026-09-11 y 2026-09-12) y de las sondas contra el servidor de esas dos noches · Rama: `jero/voz-gpt-live`, que integra `jero/voz-gpt-live-protocolo` (el traductor, 40–43) y `jero/voz-gpt-live-juez` (esta spec y el juez del nivel 4)
+Estado: **en construcción**. A 2026-09-12: medido contra el servidor; el juez del nivel 4 arreglado y saboteado; las promesas 40–44 y 46–49 (voz) y 208–212, 214, 217 y 218 (grafo) **en verde y saboteadas**, integradas en una sola rama. **Falta el nivel 4**: nada de esto se ha oído con micrófono ni con `U.exe` · Nace de dos peticiones del dueño (2026-09-11 y 2026-09-12) y de las sondas contra el servidor de esas dos noches · Rama: `jero/voz-gpt-live`, que integra `jero/voz-gpt-live-protocolo` (el traductor, 40–43), `jero/voz-gpt-live-juez` (esta spec y el juez del nivel 4) y las seis ramas hijas de las revisiones: `-silencio` (44), `-persona` (46–48), `-turnos` (211, 212), `-texto` (214), `-seleccion` (217) y `-fidelidad` (49); la 218 nació al integrarlas
 
 > **La petición, en la voz del dueño.** El 2026-09-11: *«cambia a GPT voice el último que salió…
 > investiga»*. El 2026-09-12: *«ajusta todo y empuja a main»*, *«migra rápido»*.
@@ -26,8 +26,10 @@ error; todas se manifiestan como «Ü no contesta» o «Ü contesta, pero la app
    «Ü dijo»), la medida del turno de la promesa 205 y el callar cuando le hablan encima.
 5. **No hay modo silencio.** No hay `turn_detection` ni `create_response:false`: la voz contesta sola
    siempre. La voz prestada de la promesa 192 no se puede hacer con GPT-Live.
-6. **La sesión es inmutable salvo la delegación.** Cambiar de modo a mitad de sesión (promesas 138 y
-   192) ya no es reenviar la apertura.
+6. **La sesión casi no se puede cambiar.** Cambiar de modo a mitad de sesión (promesas 138 y 192) ya
+   no es reenviar la apertura: la delegación se cambia con `session.update`, y a la voz solo le llega un
+   `session.instructions.append`, con un tope de 500 fichas (la 47). Esta línea decía «inmutable salvo
+   la delegación» hasta que la rama de la persona midió que el append sí cambia cómo habla.
 7. **El consumo se mide en segundos**, no en fichas.
 
 Y un fallo que **ya estaba en `main`** con Realtime, y que esta spec arregla de paso porque invalidó
@@ -66,6 +68,12 @@ sondas son PowerShell de un solo uso (`sonda-live.ps1`, `sonda-live-eventos.ps1`
 | `session.update` de la delegación a mitad de sesión | `{"type":"session.update","session":{"delegation":{"type":"responses","responses":{model, instructions, tools, tool_choice}}}}` → `session.updated` a ~150 ms, y en la frase siguiente el delegado llama la herramienta nueva. Las herramientas se **reemplazan**; dentro de `responses` cada campo se fusiona. Funciona con una herramienta pendiente. Un segundo `session.start` da `error` y la sesión sigue igual | sonda de la fase 1 y sonda de huecos, 09-12 |
 | Un resultado de herramienta grande | un `function_call_output` de 40 KB (mensaje de 41.084 B) da `response_input_buffer_full` («…limited to 128 items and 32768 UTF-8 bytes per session») y, en el mismo milisegundo, `function_call_outputs_required`: la llamada queda pendiente y cada `response.create` posterior falla. Ocho de 17.741 B pasan en una misma sesión. Uno de 32.768 B exactos: **sin medir** | revisión de fidelidad, `fid\run-grande-40.txt` y `run-rondas.txt`, 09-12 |
 | Un error antes de `session.started` | `credit_balance_exhausted` llega en lugar de `session.started`, sin `client_event_id`, y a los ~2,0 s el socket queda `Aborted` (medido dos veces; la última, a 604 ms y 2.598 ms). «Instructions must not exceed 16384 tokens» hace lo mismo | `fid\run-args.txt`, sonda del arreglo y sonda de huecos, 09-12 |
+| El silencio de la voz | **ceros exactos**: 43 de 47, 168 de 172 y 60 de 64 deltas de 4800 B en tres sesiones; los que no, la cola de la apertura (picos 45, 8, 3, 2). Dentro de una frase las pausas bajan a pico 1 (0, 14 y 11 deltas por frase) y una vez a cero exacto (1 delta de 256) | `sonda-silencio-pico.ps1`, 09-12 |
+| La llamada delegada | llega **tres** veces: `response.output_item.added` (en curso, con `call_id` y `arguments` vacío) a 1551 ms, `function_call_arguments.done` a 1788 y `output_item.done` a 1822 | `rev-sonda-added.ps1`, 09-12 |
+| La voz, con la persona corta de antes | anuncia: «Ok, entendido. \| Voy a revisarlo. \| Está abierta la pantalla principal…» y «Vale, déjame mirar qué aparece…», 2 de 2. Con la regla de la 161 en la persona, **0 de 4**, y queda una palabra de relleno («Claro.», «OK.») ~2,4 s tras el pedido | `persona\sonda-persona.ps1`, 09-12 |
+| `session.instructions.append` a la voz | **sí cambia cómo habla**. Solo con el `session.update` del aprendiz, la voz afirmó acciones que nadie hizo (3 de 3: «Listo, ejecuté VP1…»); con el append del modo detrás, asintió sin afirmar nada (3 de 3); al volver con su persona, llamó a `map_look` (2 de 2). Tope: «Context append text must not exceed 500 tokens»: 1.756 caracteres aceptados, 1.900 rechazados, y la sesión sigue viva | ídem |
+| Tras un append largo | en 3 de 5 sesiones llegó, hacia los 2 s, una transcripción del **usuario** que nadie dijo («vibrant», «entiendes?», «a cartoon facea young girl»); en 7 sesiones sin append, ninguna | ídem |
+| `session.usage.updated` | es el **acumulado** de la sesión, no un incremento: 12.0 a los 15 s y 25.0 a los 30 s de la misma sesión | sonda de huecos (r1G, r2c), 09-12 |
 
 **Lo que dicen las latencias.** GPT-Live llama la herramienta más tarde (dos cerebros: la voz entiende,
 el delegado decide) y empieza a hablar antes (la voz no espera al delegado). La suma para «lo hizo»
@@ -104,8 +112,10 @@ Decidido antes de esta spec; lo que una sonda contradiga, manda la sonda y se an
     frases cortas, delega todo lo que sea mirar u operar la pantalla); el delegado lleva las
     instrucciones completas de Ü, las herramientas (tipo `function`, parámetros `string`, como en
     `ProtocoloOpenAI`) y `tool_choice: auto`.
+  - La persona de la voz lleva la regla de la 161: no anuncia, habla en pasado y del resultado (la 46).
   - `CambioDeModo` → `session.update` de la delegación (instrucciones y herramientas nuevas del
-    delegado), **nunca** otro `session.start`. La forma exacta la confirma una sonda (fase 1).
+    delegado), **nunca** otro `session.start`. La forma exacta la confirma una sonda (fase 1). **Y detrás**
+    un `session.instructions.append` a la voz: las reglas del modo nuevo, o su persona al volver (la 47).
   - `Audio` → `session.input_audio.append`. `Texto` → `response.item.create` message user `input_text`.
     `Fotograma` → `response.item.create` message user `input_image`. `Resultados` → un
     `response.item.create` `function_call_output` por llamada, **sin pedir respuesta**.
@@ -116,9 +126,12 @@ Decidido antes de esta spec; lo que una sonda contradiga, manda la sonda y se an
     `response.output_item.done` de tipo `function_call` → `Pide` con la llamada y sus argumentos
     parseados como en `ProtocoloOpenAI.LaLlamada`; `error` → `Falla(message)`; `session.closed` →
     `Falla("sesión cerrada: <reason>")`. **No emite `CierraElTurno` ni `HablaronEncima`**: no hay
-    marca fiable, y las sintetiza la conversación.
+    marca fiable, y las sintetiza la conversación. Añadido por las revisiones: un delta con todas las
+    muestras a cero no es `Suena` (la 44); `session.usage.updated` → `Duracion(segundos)` (la 48);
+    `session.started` → `Abierta` (la 49).
 - **C · `windows-client/src/Voice`**:
-  1. `TurnosSinMarca`, clase pura con reloj inyectado y silencio configurable (1500 ms por defecto):
+  1. `TurnosSinMarca`, clase pura con reloj inyectado y silencio configurable (nació con 1500 ms por
+     defecto; son 2000 desde la 211, medidos):
      dice cuándo **empieza** un turno del usuario (el primer trozo de `DiceElUsuario` tras un cierre) y
      cuándo **toca cerrar** (hubo `DiceU` o `DiceElUsuario` y lleva ≥ silencio sin ninguno nuevo).
      `ConversacionEnVivo` la usa **solo si `!_protocolo.MarcaLosTurnos`**, en el hilo de recepción,
@@ -134,6 +147,10 @@ Decidido antes de esta spec; lo que una sonda contradiga, manda la sonda y se an
      `ProtocoloGptLive`; `realtime` → `ProtocoloOpenAI`. El constructor lo usa con
      `Environment.GetEnvironmentVariable` cuando no le pasan protocolo; el log de apertura ya dice el
      modelo.
+  5. **Lo que dura la voz** (la 218, al integrar): `Reaccionar` guarda el último `Hecho.Duracion` de la
+     conexión, `EmpiezaUnaConexion` aparta lo de la anterior, y `ReportarConsumo` deja una línea
+     `voz-viva` con los segundos y reporta aunque no haya fichas, con `ConsumoVivo.SegundosDelServidor`
+     (al final y con defecto).
 - **D · `ProtocoloOpenAI`**: `audio.input.transcription.model` pasa de `gpt-4o-mini-transcribe` a
   `gpt-transcribe` (aceptado, medido).
 - **E · `scripts/nivel4-voz/analizar.py`**: una tarea no se aprueba con cero acciones de voz. **Hecho en
@@ -148,7 +165,10 @@ no se reciclan; los huecos están permitidos. Los arreglos de las revisiones del
 por ramas hijas los números **44–49** (voz) y **211–219** (grafo): `jero/voz-gpt-live-silencio` usa la **44**,
 `jero/voz-gpt-live-persona` la **46**, la **47** y la **48**, `jero/voz-gpt-live-fidelidad` la **49**,
 `jero/voz-gpt-live-turnos` la **211** y la **212**, `jero/voz-gpt-live-texto` la **214** y
-`jero/voz-gpt-live-seleccion` la **217**, la del log. La **45** quedó sin usar; ningún número chocó al integrar.
+`jero/voz-gpt-live-seleccion` la **217**, la del log. El integrador añadió la **218**, lo que dura la voz, para
+el pendiente que la 48 dejaba en la conversación. Quedaron sin usar la **45**, la **213**, la **215** y la **216**.
+Ningún número chocó al integrar; **chocó un significado**: la 217 usaba `session.usage.updated` como ejemplo de lo
+que no se traduce, y la 48 lo traduce (ver Hallazgos).
 
 **D tiene promesa: la 43.** Ninguna promesa fijaba el modelo de transcripción antiguo
 (`gpt-4o-mini-transcribe` aparecía en 0 sitios de los dos contratos), y por eso el borrador la dejaba sin
@@ -162,6 +182,10 @@ misma frase manda los mismos 9 `.delta`, no se puede medir sin red: lo midió la
 | 41 | voz | GPT-Live traduce lo que manda el servidor: audio, lo que dice Ü, lo que dice el usuario, una llamada delegada con sus argumentos y un error; y no inventa marcas de turno que el servidor no manda. | 1 |
 | 42 | voz | GPT-Live manda lo de Ü con sus eventos: micrófono, texto y foto como mensajes de usuario, resultados como function_call_output, pedir turno como response.create, dictar como commentary; y cambiar de modo a mitad de sesión es un session.update de la delegación, no otro session.start. | 1 |
 | 43 | voz | GPT Realtime pide la transcripción de lo que dice el usuario a gpt-transcribe, no a gpt-4o-mini-transcribe, que se apaga el 2027-02-26. | 5 |
+| 44 | voz | GPT-Live no hace sonar su silencio: un delta de audio con todas las muestras a cero no es Hecho.Suena, y uno con voz —también la pausa de pico 1 entre dos frases— sí, con el PCM exacto. | silencio |
+| 46 | voz | la voz de GPT-Live no anuncia lo que va a hacer: la persona con la que abre la sesión prohíbe el futuro y el relleno de espera, y manda hablar en pasado y del resultado, como la 161 se lo manda al delegado. | persona |
+| 47 | voz | con GPT-Live, cambiar de modo también cambia a quien habla: detrás del session.update de la delegación va un session.instructions.append a la voz con las reglas del modo nuevo, y al volver al modo con el que abrió, con su persona de siempre y no con las instrucciones de operar. | persona |
+| 48 | voz | GPT-Live traduce lo que dura la sesión: session.usage.updated es un Hecho.Duracion con los segundos que trae, que son el acumulado de la sesión y no un incremento; un uso sin segundos no inventa duración. | persona |
 | 49 | voz | GPT-Live no manda lo que su servidor rechaza: no se declara capaz de mirar, porque una captura de pantalla no cabe y una segunda foto pequeña tampoco; un resultado de más de 32.768 bytes sale como un function_call_output de 32.768 bytes o menos, con su call_id, sin partir un carácter y diciendo cuánto se recortó; y declara que confirma la apertura: session.started es un Hecho.Abierta, y ni un error ni ningún otro mensaje lo es. | fidelidad |
 | 208 | grafo | escribir con la voz abierta pide respuesta: el texto va seguido de pedir turno, con cualquier protocolo. | 2 |
 | 209 | grafo | con una voz que no marca los turnos, la conversación los marca: el primer trozo de lo que dice el usuario abre un turno y un silencio lo cierra. | 3 |
@@ -170,6 +194,7 @@ misma frase manda los mismos 9 `.delta`, no se puede medir sin red: lo midió la
 | 212 | grafo | sin marcas de turno, una pausa del usuario sin que Ü le haya contestado sigue siendo la misma petición: lo que dice después no abre turno ni reinicia el tope; lo que dice después de que Ü le conteste, sí. | 6 |
 | 214 | grafo | con GPT-Live, varias llamadas pedidas a la vez se contestan todas antes de pedir turno, y el turno se pide una sola vez; con GPT Realtime una tanda sigue pidiendo turno detrás de sus resultados. | 6 |
 | 217 | grafo | con GPT-Live el log no se inunda: ni los deltas del delegado ni el audio dejan una línea «←», y lo demás que no se traduce la sigue dejando. | 6 |
+| 218 | grafo | con GPT-Live lo que dura la voz llega al cierre: los segundos que cuenta el servidor —el último acumulado de cada conexión, sumado entre conexiones— se reportan aunque no haya fichas, y el cierre deja una línea voz-viva con esos segundos; con fichas y sin segundos, el reporte sigue como estaba. | integración |
 
 **La que cierra el asunto** es la **210**: sin ella todo lo demás existe y la voz sigue siendo la de
 antes. **La que cierra el agujero del nivel 4** es la **208**: sin ella ningún nivel 4 escrito mide la voz.
@@ -182,9 +207,13 @@ traductor tal como los mandó el servidor real en las sondas.
 
 | # | Se juzga con | Sabotaje que la tiene que poner roja |
 |---|---|---|
-| 40 | `ProtocoloGptLive` por nombre en el ensamblado de `Voz.Realtime`. `Direccion()` es `wss://api.openai.com/v1/live/sessions` sin consulta; `Cabeceras` lleva `Authorization: Bearer`; 24000/24000; `SabeVolver`, `MarcaLosTurnos` y `SabeEsperarTurno` no (`Mira` lo juzga la 49). `Apertura("instrucciones de Ü", [map_look con un argumento], "")` da **un** mensaje: `session.start`, `session.model` `gpt-live-1`, `audio.format` `audio/pcm` a 24000, `audio.output.voice` `marin`; **sin `tools` en la sesión**; `delegation.type` `responses`, `delegation.responses.model` `gpt-5.6-luna`, sus `tools` con `map_look` y el argumento como `string`, `tool_choice` `auto`; las instrucciones completas van en el delegado y las de la voz son otras y más cortas. Y `ProtocoloOpenAI` sigue marcando los turnos y sabiendo esperar (los valores por defecto) | las herramientas viajan en la sesión y no en la delegación; la dirección vuelve a `/v1/realtime?model=`; el ritmo pasa a 16000; las instrucciones completas van a la voz |
-| 41 | `Leer` con mensajes capturados: `session.output_audio.delta` da un `Suena` con el PCM exacto y un delta vacío no da nada; `session.output_transcript.delta` da `DiceU`; `session.input_transcript.delta` da `DiceElUsuario`; `response.event` con `response.output_item.done` de tipo `function_call` da **un** `Pide` con `call_id`, `name` y los argumentos parseados del texto JSON; ese mismo sobre con un item `message` no da nada, y `response.function_call_arguments.done` **tampoco** (la llamada es una); `error` da `Falla` con su `message`; `session.closed` da `Falla` con su `reason`. Y ninguno de los mensajes capturados —`session.started`, `session.delegation.created`, `response.completed`, `session.usage.updated`…— da `CierraElTurno` ni `HablaronEncima` | leer también `function_call_arguments.done` (dos `Pide` por una llamada: se ejecutaría dos veces); `response.completed` vuelve a ser `CierraElTurno`; los argumentos se pasan sin parsear |
-| 42 | `Audio(pcm)` es `session.input_audio.append` con el base64 exacto; `Texto` es `response.item.create` con un message `user` e `input_text`; `Fotograma` igual con `input_image` y `data:image/jpeg;base64,`; `Resultados` con dos llamadas da dos `function_call_output` con su `call_id` y su `output`, y **ninguno** pide respuesta; `PedirRespuesta()` es `response.create`; `PedirRespuesta("X")` es `session.commentary.append` con `content` X y `delegation_id` nulo, y no un `response.create`; `CambioDeModo(otras, [otra herramienta], false)` no contiene `session.start`, es un `session.update` y lleva las instrucciones y la herramienta nuevas en la delegación | `CambioDeModo` devuelve la apertura (otro `session.start`); `Resultados` pide respuesta dentro; dictar vuelve a ser `response.create`; el texto sale como `session.instructions.append` (medido: no provoca respuesta) |
+| 40 | `ProtocoloGptLive` por nombre en el ensamblado de `Voz.Realtime`. `Direccion()` es `wss://api.openai.com/v1/live/sessions` sin consulta; `Cabeceras` lleva `Authorization: Bearer`; 24000/24000; `SabeVolver`, `MarcaLosTurnos` y `SabeEsperarTurno` no (`Mira` lo juzga la 49). `Apertura("instrucciones de Ü", [map_look con un argumento], "")` da **un** mensaje: `session.start`, `session.model` `gpt-live-1`, `audio.format` `audio/pcm` a 24000, `audio.output.voice` `marin`; **sin `tools` en la sesión**; `delegation.type` `responses`, `delegation.responses.model` `gpt-5.6-luna`, sus `tools` con `map_look` y el argumento como `string`, `tool_choice` `auto`; las instrucciones completas van en el delegado, **iguales byte a byte** (un texto de 24.077 caracteres con tildes, Ü, comillas, barra invertida, tabulador y saltos de línea), y las de la voz son otras y más cortas. Y `ProtocoloOpenAI` sigue marcando los turnos y sabiendo esperar (los valores por defecto) | las herramientas viajan en la sesión y no en la delegación; la dirección vuelve a `/v1/realtime?model=`; el ritmo pasa a 16000; las instrucciones completas van a la voz; **las del delegado se recortan a 4.000 caracteres (V2)** |
+| 41 | `Leer` con mensajes capturados: `session.output_audio.delta` da un `Suena` con el PCM exacto y un delta vacío no da nada; `session.output_transcript.delta` da `DiceU`; `session.input_transcript.delta` da `DiceElUsuario`; `response.event` con `response.output_item.done` de tipo `function_call` da **un** `Pide` con `call_id`, `name` y los argumentos parseados del texto JSON; ese mismo sobre con un item `message` no da nada, y ni `response.function_call_arguments.done` ni el `response.output_item.added` en curso dan otra: las **tres** copias literales juntas son **una** llamada; `error` da `Falla` con su `message`; `session.closed` da `Falla` con su `reason`. Y ninguno de los mensajes capturados —`session.started`, `session.delegation.created`, `response.completed`, `session.usage.updated`…— da `CierraElTurno` ni `HablaronEncima` | leer también `function_call_arguments.done` (dos `Pide` por una llamada: se ejecutaría dos veces); **leer cualquier `output_item.*` (V1)**; `response.completed` vuelve a ser `CierraElTurno`; los argumentos se pasan sin parsear |
+| 42 | `Audio(pcm)` es `session.input_audio.append` con el base64 exacto; `Texto` es `response.item.create` con un message `user` e `input_text`; `Fotograma` igual con `input_image` y `data:image/jpeg;base64,`; `Resultados` con dos llamadas da dos `function_call_output` con su `call_id` y su `output`, y **ninguno** pide respuesta; `PedirRespuesta()` es `response.create`; `PedirRespuesta("X")` es `session.commentary.append` con `content` X y `delegation_id` nulo, y no un `response.create`; `CambioDeModo(otras, [otra herramienta], false)` no contiene `session.start` y lleva **un** `session.update` con las instrucciones —íntegras, byte a byte— y la herramienta nuevas en la delegación. Hasta la 47 exigía un único mensaje; el append que va detrás lo juzga la 47 | `CambioDeModo` devuelve la apertura (otro `session.start`); `Resultados` pide respuesta dentro; dictar vuelve a ser `response.create`; el texto sale como `session.instructions.append` (medido: no provoca respuesta) |
+| 44 | `Leer` con deltas de 100 ms (4800 B): con todas las muestras a cero no sale ningún `Suena`; con voz (pico 7000, como las frases medidas) sale **un** `Suena` con el PCM exacto; la pausa de pico 1 entre dos frases **sí** suena, con su PCM; y una muestra que solo tiene el byte alto distinto de cero también es sonido | quitar la comprobación (S44a); un umbral elegido a ojo, 64 (S44b); mirar bytes y no muestras (S44c) |
+| 46 | La persona del `session.start` que sale de `Apertura`, no la constante: dice la regla con las mismas palabras que la 161 le exige al delegado, da el reemplazo —en pasado y del resultado— y nombra las fórmulas que se oyeron («voy a…», «vamos a…», «dame un momento») | la regla se borra de la persona (S46a); la apertura manda otra persona (S46b) |
+| 47 | `CambioDeModo` después de una `Apertura`: **un** `session.update` de la delegación y **detrás** un `session.instructions.append` a la voz con `AlCambiarDeModo` y las reglas del modo; con las mismas instrucciones con que abrió la sesión, con `AlVolver` y la persona de la voz, nunca con las instrucciones de operar. `ProtocoloOpenAI` no manda append | el append lleva siempre las reglas del modo (S47a); nunca se reconoce la vuelta (S47b); otro tipo de evento (S47c); la apertura no se recuerda (S47d); `CambioDeModo` manda `session.start` (S42a, roja también la 42) |
+| 48 | `Leer`: `session.usage.updated` con 12.0 y después con 25.0 da un `Duracion` con 12 y otro con 25 —el acumulado, no los 13 de diferencia—; un número sin decimales también son segundos; un uso sin segundos numéricos (vacío o texto) no da nada; y ningún otro mensaje da duración | el evento se busca con otro nombre (S48a); se leen segundos que no son número (S48b) |
 | 49 | `Mira` es falso. `Resultados` con un resultado de 40 KB da **un** mensaje de 32.768 B o menos y de más de 32.752 (no recorta de más), `function_call_output` con su `call_id`, con el principio del resultado y la cola `…[recortado: N de M bytes]` con N y M verdaderos; con 6.000 emojis, lo guardado son emojis enteros; uno que cabe (150 frases con acentos y comillas) va entero. `ConfirmaQueAbrio` es verdadero en GPT-Live y falso por defecto en `ProtocoloOpenAI`; el `session.started` capturado es **un** `Hecho.Abierta`; el `credit_balance_exhausted` capturado es un `Falla` y no una apertura; `session.updated`, `session.delegation.created`, `response_input_buffer_full`, `response.completed`, `session.usage.updated` y `session.closed` no dan `Abierta` | `Mira` vuelve a sí; `Resultados` manda el resultado entero; el recorte parte un emoji; la cola dice que se mandó todo; la apertura se lee en `session.updated`; GPT-Live deja de declarar que confirma |
 | 208 | `ConversacionEnVivo.MensajesDeTexto` por nombre. Con `ProtocoloOpenAI`: dos mensajes, **en ese orden**, `conversation.item.create` con el texto y `response.create`. Con `ProtocoloGptLive`: `response.item.create` con el texto y `response.create`. Con un protocolo falso del propio contrato cuyo `PedirRespuesta` es vacío: un solo mensaje, ninguno vacío. **Y su cableado**, añadido tras W208: la conversación deja sustituir su puerta de salida (`_puerta`) y el «hay socket» (`_puertaAbierta`). Con los dos protocolos, lo escrito (`EnviarTextoAsync`) y la nota al modelo (`EnviarTextoAlModeloAsync`) sacan por esa puerta el texto y detrás `response.create`; con la voz cerrada no sale nada | `MensajesDeTexto` deja de añadir la petición de turno; la petición va antes que el texto; se cuela el mensaje vacío; `EnviarTextoAsync` o la nota al modelo vuelven a mandar solo el texto; `EnviarAsync` se salta la puerta; lo escrito sale con la voz cerrada |
 | 209 | `TurnosSinMarca` por nombre, con reloj inyectado y la secuencia como hechos con su hora: el primer trozo de lo que dice el usuario abre turno y el segundo no; con el silencio por defecto (**2000 ms**, medido: ver Hallazgos), a 1000 ms del último trozo no toca cerrar y a 2000 sí, **una vez**; lo que dice Ü también mantiene el turno abierto y también se cierra por silencio; el audio que llega continuo **no** cuenta como actividad; sin nada oído no se cierra nunca; un silencio configurado de 500 ms se respeta. Y la 40 ya juzga que `ProtocoloGptLive` no marca los turnos y `ProtocoloOpenAI` sí. **Y su uso, tal como lo construye la app** (acotado el 2026-09-12): `Procesar`, la puerta por la que entra lo del socket, recibe en una `ConversacionEnVivo` con `ProtocoloGptLive` un `session.input_transcript.delta` y mensajes sin hechos. **Se cambia solo `_relojDeLosTurnos`, nunca el marcador.** El reloj que trae la app tiene el origen de `Environment.TickCount64` y avanza con él. A 1700 ms no emite `Cerro`; a 2100 ms lo emite una vez, con la línea `voz-turno` «por voz» y `DijoElUsuario` con la frase. `EmpezarLosTurnosDeLaSesion` deja un marcador **nuevo**, y lo dicho antes no cierra después. Con un protocolo que marca sus turnos, y con `ProtocoloOpenAI`, no hay marcador ni cierre | se cierra sin haber oído nada; cada trozo abre turno; el audio cuenta como actividad; `Procesar` deja de consultar el marcador; la conversación no lo crea; el primer trozo no llama a `EmpiezaUnTurnoDelUsuario`; tocar cerrar no reacciona; **la app construye con 60 000 ms (G1) o con 1500 (G1b); el reloj de la app está parado (G2); el marcador no usa el reloj de la conversación (G3); otra sesión reutiliza el marcador (G4); hay marcador también con voces que marcan (G6)** |
@@ -192,7 +221,8 @@ traductor tal como los mandó el servidor real en las sondas.
 | 211 | `TurnosSinMarca` por nombre con silencio de 1500 y reloj inyectado. Una llamada pedida queda en curso (`LlamadasEnCurso`) y sujeta el turno 6000 ms. Tras `Devuelta`, a 1000 ms no cierra y a 1500 sí, una vez. Con dos llamadas y una devuelta sigue sin cerrar. Una devuelta **antes** de oírse no queda en curso. Un trozo de audio con pico 1152 (la palabra más floja medida) sujeta el turno aunque la transcripción terminara 3000 ms antes; uno con pico 45 (el silencio medido) no lo retrasa; sonido sin nada dicho no abre nada que cerrar. **Y su cableado**: en una `ConversacionEnVivo` con GPT-Live, un `self_mute` que el contrato sujeta dentro de `Autocontrol` no deja cerrar a los 3000 ms. Al soltarlo, la conversación se lo devuelve al marcador, y cierra a 2100 ms de la devolución, no a 1500 | el marcador no registra la llamada (T1); tocar cerrar la ignora (T2); devolver no cuenta como actividad (T3); la voz que suena no sujeta (T4); el umbral a 0 (T5); una devuelta antes de oírse se queda en curso (T6); **`EjecutarAsync` no devuelve (T7)** |
 | 212 | `TurnosSinMarca` por nombre, silencio 1500. Lo que el usuario dice tras una pausa que cerró el turno, sin que Ü hablara después, **no** abre turno; tras contestar Ü y cerrar, sí. La respuesta de Ü cuenta aunque llegue antes del cierre. Si el usuario siguió hablando después de lo que dijo Ü, tras el cierre sigue siendo su petición. Lo primero que dice el usuario abre turno aunque Ü saludara antes. **Y en la conversación**: la pausa cierra el turno y deja una sola línea «turno nuevo (por voz)»; lo que dice tras la respuesta de Ü deja la segunda | cualquier cierre termina la petición (T8); lo que dice Ü no cuenta como contestar (T9); que el usuario siga hablando no borra el «contestó» (T10); el primer trozo no abre turno en la conversación (S209f) |
 | 214 | `Procesar` de una `ConversacionEnVivo` con `ProtocoloGptLive`, la puerta sustituida y la mano de autocontrol retenida, recibe dos `response.event` con un `function_call` cada uno, como los manda el servidor: salen las dos `function_call_output` y **un** `response.create`, detrás de la última. Una llamada sola sigue pidiendo turno. Una llamada pedida con el token ya cancelado (nunca corre) y, tras cambiar `_sesionId`, otra de la sesión siguiente: sale su salida y un `response.create`. Con `ProtocoloOpenAI`, `EjecutarNucleoAsync` con una tanda de dos: dos salidas y detrás un `response.create` | no se anotan las llamadas al pedirlas; no se olvidan las de otra sesión; se retiene el turno aunque no falte ninguna |
-| 217 | Por la puerta del socket: `Procesar` de una `ConversacionEnVivo` con `ProtocoloGptLive`, escuchando `LogBus.Anotado`. Un `response.event` con `response.output_text.delta`, otro con `response.function_call_arguments.delta` y un `session.output_audio.delta` vacío no dejan ninguna línea `voz-viva` que empiece por «← »; un `response.completed` del delegado, un `response.function_call_arguments.done`, un `session.delegation.created` y un `session.usage.updated` dejan una cada uno. Y la regla, pura, `ConversacionEnVivo.SeVuelcaCrudo(JsonElement)` por nombre: los tres primeros no se vuelcan y los cuatro siguientes sí; un `response.event` sin evento dentro sí; y un `.delta` que no viene dentro de `response.event` (el `response.function_call_arguments.delta` de Realtime) sigue volcándose, como en `main` | `Procesar` deja de consultar la regla; los deltas del delegado se vuelcan; el audio vacío se vuelca; se callan todos los `response.event`; se calla todo lo que acabe en `.delta` |
+| 217 | Por la puerta del socket: `Procesar` de una `ConversacionEnVivo` con `ProtocoloGptLive`, escuchando `LogBus.Anotado`. Un `response.event` con `response.output_text.delta`, otro con `response.function_call_arguments.delta` y un `session.output_audio.delta` vacío no dejan ninguna línea `voz-viva` que empiece por «← »; un `response.completed` del delegado, un `response.function_call_arguments.done`, un `session.delegation.created` y un `session.instructions.appended` dejan una cada uno (**acotado al integrar**: el ejemplo era `session.usage.updated`, y la 48 lo traduce ahora). Y la regla, pura, `ConversacionEnVivo.SeVuelcaCrudo(JsonElement)` por nombre: los tres primeros no se vuelcan y los cuatro siguientes sí; un `response.event` sin evento dentro sí; y un `.delta` que no viene dentro de `response.event` (el `response.function_call_arguments.delta` de Realtime) sigue volcándose, como en `main` | `Procesar` deja de consultar la regla; los deltas del delegado se vuelcan; el audio vacío se vuelca; se callan todos los `response.event`; se calla todo lo que acabe en `.delta`; se callan todos los `session.*` (S217f, al integrar) |
+| 218 | Una `ConversacionEnVivo` con `ProtocoloGptLive`, sin socket: por `Procesar` llegan `session.usage.updated` con 12.0 y 25.0, `EmpiezaUnaConexion` abre otra conexión, llega 7.0, y se cierra de verdad con `TerminarAsync` (con `Viva` puesta a mano; sin micrófono ni altavoz abiertos no toca ningún dispositivo). Se reporta **una** vez, con 0 fichas y `SegundosDelServidor` 32, y queda **una** línea `voz-viva` con «32 s»; cerrar otra vez no reporta ni escribe nada. Sin `ReportaConsumo`, la línea sale igual (40 s). Con `ProtocoloOpenAI` y un `Hecho.Consumo` de 150 fichas: un reporte con 150, sin segundos y sin línea. Sin fichas ni segundos, nada | sumar los segundos como fichas (S218a); no apartar los de la conexión anterior (S218b); la guarda de antes (S218c); sin línea (S218d); no poner la cuenta a cero al reportar (S218e); el reporte sin segundos (S218f); `Reaccionar` sin atender la duración (S218g); **sin juez**: `ArrancarAsync` no pone los segundos a cero (W218) |
 
 ### Límites dichos, no escondidos
 
@@ -239,6 +269,25 @@ traductor tal como los mandó el servidor real en las sondas.
 - **La línea `sesión abierta con «…»` de `ArrancarAsync` sigue sin juez**: se escribe con el socket ya
   abierto. Dice el modelo de la voz, no el del delegado; lo que abre de verdad lo juzga la 210 un paso
   antes, sobre el mismo `_protocolo`.
+- **La 218 juzga el cierre, no la apertura.** Que `ArrancarAsync` ponga los segundos a cero necesita clave y
+  socket (W218, medido sin juez). Los segundos son «al menos»: el servidor manda el uso cada ~15 s y el último
+  tramo solo llega en `session.closed`, que la 41 fija como `Falla`. **El panel de costos sigue sin ver los
+  segundos**: `FaceWindow` (zona de choque) no los manda; quedan en la línea `voz-viva` y en
+  `ConsumoVivo.SegundosDelServidor`.
+- **La 47 juzga el traductor; que `CambiarModoAsync` mande sus mensajes, no** (WModo, sin juez). Cada cambio de
+  modo manda ahora dos mensajes, y el append puede traer una transcripción fantasma del usuario (3 de 5, medido):
+  llegaría como `Hecho.DiceElUsuario` —«Tú: vibrant» en la carita, un turno abierto en `TurnosSinMarca` y, en 🎓,
+  un trozo en `DijoElUsuario` que la 105 anclaría—. **Sin decidir ni juzgar**: una salida sería ignorar lo que
+  transcriba el usuario entre el append y su `session.instructions.appended`.
+- **El append del aprendiz va al límite, y sin promesa.** `ModoAprendiz.Instrucciones` con `AlCambiarDeModo`
+  mide 1.779 caracteres contados con CRLF; la sonda mandó 1.756 y se aceptó, y 1.900 se rechazó. El tope es de
+  500 fichas, no de caracteres. Una edición de un centenar de caracteres puede hacer que el servidor lo rechace,
+  y entonces la voz vuelve a inventar acciones en 🎓 con una sola línea «el servidor dice: Context append text
+  must not exceed 500 tokens.». La de `VozPrestada` con el prefijo mide 817. Dónde cae el tope exacto no se pudo
+  medir (la cuenta está sin crédito), y una promesa con un número inventado sería un umbral a ojo.
+- **Los dos umbrales de silencio no se contradicen.** `ProtocoloGptLive.Leer` quita solo los deltas de ceros
+  exactos (la 44), y `TurnosSinMarca` no alarga el turno con audio de pico 1000 o menos (la 211): la pausa de
+  pico 1 suena, pero no sujeta el turno. El tic «sin hechos» del contrato del grafo es ahora ese silencio.
 
 ## Las fases
 
@@ -255,6 +304,10 @@ empujar: el rojo de cada fase se comprueba en local y se anota en su commit.
 | **E** | — (el juez) | `scripts/nivel4-voz/analizar.py` y `autoprueba.py` | **hecha** en esta rama: rojo, verde y sabotaje (ver Hallazgos) |
 | **6** | 211, 212 (y la 209 acotada) | `Voice/TurnosSinMarca.cs`, y de `Voice/ConversacionEnVivo.cs` lo que usa el marcador (`_relojDeLosTurnos`, `EmpezarLosTurnosDeLaSesion`, la devolución en `EjecutarAsync`); la sonda de los turnos | **hecha** en `jero/voz-gpt-live-turnos`: rojo en `1497dc1` (CONTRATO ROTO, 11), verde en `79fcea2` (**CONTRATO INTACTO**, VOZ ÍNTEGRA), saboteada (ver «Sabotajes») |
 | **6** | 210 (acotada), 217 | `tests/ContratoDelGrafo/Contrato.cs`; `Voice/ConversacionEnVivo.cs` (`SeVuelcaCrudo` y su uso en `Procesar`) | **hecha** en `jero/voz-gpt-live-seleccion`, tras la revisión: la 210 nueva roja con G2 y G3 aplicados, la 217 roja antes de su código, las dos verdes después y saboteadas (ver «Sabotajes») |
+| **6** | 44 (y la 40, 41 y 42 más exigentes) | `voz/Realtime/ProtocoloGptLive.cs` (`EsSilencio` en `Leer`), `voz/Contrato/Contrato.cs` | **hecha** en `jero/voz-gpt-live-silencio`: rojo en `29e98e1`, verde en `e5bfa1a`, las tres copias y las instrucciones íntegras en `9abcab8`; saboteada (ver «Sabotajes») |
+| **6** | 46, 47, 48 (y la 42 retocada) | `voz/Realtime/ProtocoloGptLive.cs` (la persona, `CambioDeModo` con append, `session.usage.updated`), `voz/Realtime/Hecho.cs` (`Duracion`) | **hecha** en `jero/voz-gpt-live-persona`: rojo en `3b45051` (46, 48) y `29aba86` (47), verde en `902617d` y `77c605f`; saboteada (ver «Sabotajes») |
+| **6** | 49 | `voz/Realtime/ProtocoloGptLive.cs`, `IProtocolo.cs` (`ConfirmaQueAbrio`), `Hecho.cs` (`Abierta`), `Voice/ConversacionEnVivo.cs` | **hecha** en `jero/voz-gpt-live-fidelidad`: rojo en `21e9ecf`, verde en `da7a6c1`; saboteada (ver «Sabotajes») |
+| **I** | 218 (y la 217 acotada) | `Voice/ConversacionEnVivo.cs` (`Hecho.Duracion` en `Reaccionar`, `EmpiezaUnaConexion`, `ReportarConsumo`, `ConsumoVivo.SegundosDelServidor`), `tests/ContratoDelGrafo/Contrato.cs` | **hecha** al integrar las seis ramas: rojo en `f3aa948` (CONTRATO ROTO, 5), verde en `6e2ea15` (**CONTRATO INTACTO**, **VOZ ÍNTEGRA**); saboteada (ver «Sabotajes») |
 
 **Sitios con la clase de error, contados con `grep`:**
 
@@ -311,19 +364,28 @@ Dicho antes de que alguien lo descubra en una demo. Cada uno con lo que se midi�
      vieja no se cancela y termina lo suyo. Sin guardia en esta spec: la guardia necesita su propia
      promesa (reinyectar lo transcrito si la voz confirma y no llega `session.delegation.created`).
 4. **El consumo se cuenta en segundos, no en fichas.**
-   - `ReportarConsumo` suma fichas y no reporta si el total es cero. Con GPT-Live, `session.usage.updated`
-     no se traduce, así que **el panel de costos no recibirá nada de estas sesiones**.
-   - No se inventa una conversión de segundos a fichas. Traducirlo es otra spec.
+   - Hasta el 2026-09-12, `ReportarConsumo` sumaba fichas y no reportaba si el total era cero, y
+     `session.usage.updated` no se traducía: **las sesiones de GPT-Live no dejaban nada**, ni reporte ni línea.
+   - **Desde la 48 y la 218** lo que dura la voz llega al cierre: una línea `voz-viva` («la voz duró al menos
+     N s según el servidor…») y un reporte con 0 fichas y `SegundosDelServidor`.
+   - **El panel de costos sigue sin ver los segundos**: `FaceWindow` no los manda, y es zona de choque. No se
+     inventa una conversión de segundos a fichas. Traducirlo a coste es otra spec.
 5. **Dos cerebros, y su latencia.**
    - La voz entiende y el delegado decide y actúa. Llama la herramienta 0,2–0,6 s más tarde que
      Realtime en la frase medida, y la voz empieza antes, con lo que puede hablar antes de que la acción
      exista.
    - Las instrucciones de Ü —las que juzgan la 161 («Ü no anuncia lo que va a hacer») y la 206— van al
      **delegado**. Quien habla es la voz, con su persona corta.
-   - Si la persona no lleva también «no anuncies; habla en pasado», la voz puede anunciar. **Sin medir.**
-6. **Cambiar de modo solo cambia al delegado.** Con 🎓 (promesa 138) el delegado se queda sin
-   herramientas y con las instrucciones del aprendiz. **La voz no cambia de persona**, y seguirá
-   contestando cuando la oiga. Sin medir.
+   - Si la persona no lleva también «no anuncies; habla en pasado», la voz anuncia. **Medido y arreglado con
+     la 46**: con la persona de antes, 2 de 2 («Voy a revisarlo.»); con la regla, 0 de 4, y queda una palabra
+     de relleno al empezar («Claro.», «OK.»). Una variante que prohíbe también el relleno (3 de 3 sin anuncio)
+     lo cambia por un sonido transcrito como «[sigh]», «[hum]» o «[inhale]», y no se adoptó.
+6. **Cambiar de modo cambia también a quien habla, pero con un append (la 47).** Este punto decía «solo
+   cambia al delegado, sin medir». La rama de la persona lo midió: con solo el `session.update`, en 🎓 la
+   voz afirmaba acciones que nadie hizo (3 de 3); con el `session.instructions.append` del modo detrás,
+   asiente (3 de 3). Lo que queda: el append tiene un tope de 500 fichas y el del aprendiz va al límite, y
+   puede traer una transcripción fantasma del usuario (ver «Límites»). **La voz prestada con append, sin
+   medir**: un append «MODO SILENCIO» anterior no se respetó.
 7. **Dictar ya no es «fuera de la conversación».** La 142 exige `conversation: none` porque el
    2026-09-08, con el triage en contexto, la voz parafraseó lo dictado. Con GPT-Live, lo dictado es un
    `commentary` dentro de la sesión. Dijo «X» literal en una sesión vacía; **con contexto, sin medir**.
@@ -350,7 +412,7 @@ Dicho antes de que alguien lo descubra en una demo. Cada uno con lo que se midi�
       interior acaba en `.delta` ni los `session.output_audio.delta` (que solo llegan sin hechos cuando
       vienen vacíos). Quedan **20 de 98** en ese turno: `response.created/in_progress/completed`,
       `output_item.*`, `content_part.*`, `*.done`, `session.started`, `session.delegation.created` y
-      `session.usage.updated`. Con `U_VOZ=realtime` no cambia nada: sus deltas no vienen en `response.event`.
+      `session.usage.updated` (medido antes de la 48: desde ella el uso se traduce y ya no se vuelca). Con `U_VOZ=realtime` no cambia nada: sus deltas no vienen en `response.event`.
     - Lo que queda sin hacer y la revisión proponía: callar también los mensajes de uso y volcar los tipos
       desconocidos una vez por tipo. No entra: la regla que se pidió es solo la de los deltas.
 11. **Un resultado de más de 32.768 bytes llega recortado al delegado (la 49)**, con la cola
@@ -358,6 +420,13 @@ Dicho antes de que alguien lo descubra en una demo. Cada uno con lo que se midi�
     queda fuera no lo ve; cuánto ocupa `map_what_i_see` (hasta 220 líneas) con etiquetas reales, sin medir.
 12. **«Te escucho.» y «Sigo» esperan a `session.started`** (0,8–1,2 s después de mandar `session.start` en las
     sondas de la revisión). Si la sesión no abre, se dice la causa una vez y la voz se cierra, sin reintentar.
+13. **El silencio ya no suena (la 44), y lo que cuesta.** El servidor manda audio también cuando la voz calla, y
+    ese silencio entraba a la cola del altavoz: `LiveAudio.Hablando` parpadeaba en silencio, la compuerta de eco
+    no se reabría con `U_SIN_ECO=0`, `map_recuerdos cual=2` se rechazaba al azar y la boca no se cerraba. Ahora
+    un delta de ceros exactos no suena. Lo que cuesta: dentro de una frase se puede perder a lo sumo un delta de
+    pausa a cero exacto (1 de 256, 100 ms), y la cola de la apertura (4 deltas, ~400 ms) y la de cada frase sí
+    suenan, así que `Hablando` queda en verdadero ~0,4–0,6 s de más junto a la voz real. **Sin nivel 4**: ni la
+    compuerta, ni los recuerdos, ni la boca se han visto en `U.exe`.
 
 ## La vuelta atrás: `U_VOZ=realtime`
 
@@ -395,7 +464,8 @@ alguien delante (OLED Care). Lo que tiene que decir, además de la tabla:
   tenga el lado Mac, en su rama.
 - **La voz prestada con GPT-Live**: no hay forma, medido. Si hace falta con GPT-Live por defecto, la
   salida es cerrar la voz o volver a Realtime durante la comprobación: otra spec.
-- **Traducir `session.usage.updated` a coste.**
+- **Convertir los segundos de GPT-Live en coste, y mandarlos al panel.** Llegan al cierre (218), pero
+  `FaceWindow` no los manda: lo abre quien tenga esa zona, en su rama.
 - **Callar al hablarle encima con GPT-Live** más allá de Escape.
 - **`FaceWindow.xaml.cs`**: zona de choque de los tres. La 208 arregla sus dos llamadas desde
   `ConversacionEnVivo`.
@@ -422,8 +492,11 @@ alguien delante (OLED Care). Lo que tiene que decir, además de la tabla:
   de la clase: `EnviarTextoAsync` lo llaman también `FaceWindow.xaml.cs:2532` (el saludo) y
   `:2300` (lo escrito). Con Realtime, el saludo solo tenía respuesta si el micrófono oía algo. La 208
   arregla los dos desde `ConversacionEnVivo`.
-- **2026-09-12 (la 43 no hace falta).** Ninguna promesa fija `gpt-4o-mini-transcribe` (0 apariciones en
-  los dos contratos); aparece en 2 sitios de producción, uno de ellos del lado Mac.
+- **2026-09-12 (la 43, que el borrador creía innecesaria).** Ninguna promesa fijaba `gpt-4o-mini-transcribe`
+  (0 apariciones en los dos contratos; 2 sitios de producción, uno del lado Mac), y por eso el borrador la
+  dejaba sin usar. **Sí hace falta**: la escribió el traductor, en rojo y saboteada, y congela `gpt-transcribe`
+  antes del apagado del 2027-02-26 (ver «La especificación»). Esta entrada decía «no hace falta» y contradecía
+  la tabla; lo señaló la revisión «contrato».
 - **2026-09-12 (dos promesas verdes que no dicen lo que parece).** La 192 y la 142 juzgan
   `ProtocoloOpenAI` por su nombre. Con GPT-Live por defecto siguen verdes y no se cumplen (ver «Límites»).
 - **2026-09-12 (lo que el piloto espera oír depende del cierre sintetizado).** `PreguntarYEsperar`
@@ -436,20 +509,26 @@ alguien delante (OLED Care). Lo que tiene que decir, además de la tabla:
     - `session.start` devolvió `session.started` y `session.update` devolvió `session.updated`.
     - Texto más `response.create` llevó al delegado a llamar `map_where_am_i`.
     - El dictado terminó con la frase literal.
-  - **La sesión es inmutable salvo la delegación.** `session.update` con `session.instructions` da
+  - **`session.update` solo cambia la delegación** (esta línea decía «la sesión es inmutable salvo la
+    delegación»; la rama de la persona midió que `session.instructions.append` sí llega a la voz y cambia
+    cómo habla, la 47). `session.update` con `session.instructions` da
     `unknown_parameter`. Un tipo de evento desconocido devuelve la lista de los que existen: `session.start`,
     `session.update`, `session.input_audio.append/mute/unmute`, `session.instructions/thinking/commentary.append`,
     `response.item.create`, `response.create` y `session.close`.
-  - **La llamada delegada llega dos veces** dentro de `response.event`.
-    - Primero llega `response.function_call_arguments.done`, sin `call_id` ni `name`.
-    - Después llega `response.output_item.done` con el item completo.
-    - Solo se traduce la segunda. La 41 lo congela: con las dos, cada herramienta se ejecutaría dos veces.
+  - **La llamada delegada llega tres veces** dentro de `response.event` (decía «dos»; la tercera la capturó la
+    revisión «contrato» con `rev-sonda-added.ps1`).
+    - Primero llega `response.output_item.added`, en curso, con `call_id` y `name` y `arguments` vacío (1551 ms).
+    - Después, `response.function_call_arguments.done`, sin `call_id` ni `name` (1788 ms).
+    - Por último, `response.output_item.done` con el item completo (1822 ms).
+    - Solo se traduce la última. La 41 lo congela con las tres copias literales: leer también cualquiera de las
+      otras ejecutaría la herramienta dos veces, la primera sin argumentos, y gastaría el tope de la 204 (V1).
   - **Cerrar normal deja una línea de fallo.** `session.closed` llega también cuando cerramos nosotros
     (`close_requested`). Como es un `Falla`, el log dice «el servidor dice: sesión cerrada: close_requested».
     Solo se registra; no rompe nada.
   - **El hueco de la 161 con GPT-Live.** La regla de no anunciar vive en las instrucciones de Ü, que ahora
     van al delegado. La voz tiene su persona corta, y en la sonda dijo «Dame un momento para revisarlo».
-    Arreglarlo necesita su propia promesa sobre `ProtocoloGptLive.InstruccionesDeLaVoz`.
+    Arreglarlo necesita su propia promesa sobre `ProtocoloGptLive.InstruccionesDeLaVoz`. **Arreglado con la
+    46** (ver «la voz habla por su cuenta», abajo).
 - **2026-09-12 (sonda de huecos, 20 corridas contra `/v1/live/sessions`, sin tocar el repo).**
   - **`session.update` de la delegación.**
     - Las herramientas se reemplazan, no se suman.
@@ -610,6 +689,51 @@ alguien delante (OLED Care). Lo que tiene que decir, además de la tabla:
   - **La 217 nace de la revisión «regresiones»** (baja). La sonda de solo lectura de hoy midió un turno
     delegado: 98 líneas «←», 78 de ellas deltas (degradación 10). Se juzga sin socket: por `Procesar` y por
     la regla pura `SeVuelcaCrudo`.
+- **2026-09-12 (el silencio de GPT-Live sonaba — `jero/voz-gpt-live-silencio`, la 44; la 40, 41 y 42 más exigentes).**
+  - **Qué fallaba** (revisa:regresiones, alta): cada delta de silencio entraba a la cola del altavoz y
+    `LiveAudio.Hablando` parpadeaba la mitad del tiempo sin que nadie hablara (degradación 13).
+  - **La medida corrigió el arreglo que se proponía.** Tres sesiones con `sonda-silencio-pico.ps1`: el silencio
+    son **ceros exactos**, y dentro de una frase las pausas bajan a pico 1 (ver «Diagnóstico»). El umbral de
+    «ruido bajo» que sugería el pico 45, 64, se habría comido 11, 27 y 21 deltas de pausa. **Por eso el umbral es
+    cero**, y se miran muestras PCM16, no bytes.
+  - **Sitios contados:** 2 emiten `Hecho.Suena` y solo GPT-Live manda silencio. El arreglo en `Leer` cubre los 6
+    consumidores de `Hablando` y `NivelSalida`: la compuerta de eco, `SigueSonando`/`ElTurnoDeContar`,
+    `SeguirContandoSiQuedan`, `Interrumpir`, el log de la retirada y la boca.
+  - **Dos juicios que la revisión dejó verdes, ahora rojos:** la 41 con las tres copias de la llamada (V1), y la
+    40 y la 42 con las instrucciones íntegras byte a byte, en textos de 24.077 y 24.065 caracteres con lo que JSON
+    escapa (V2). Ni el código ni los enunciados cambiaron: el código ya cumplía.
+  - **Sin medir:** voz espontánea, otras voces que `marin`, y nada en `U.exe`.
+- **2026-09-12 (la voz habla por su cuenta — `jero/voz-gpt-live-persona`, la 46, la 47 y la 48; la 42 retocada).**
+  - **Anunciaba en futuro** (media): 2 de 2 con la persona de antes; 0 de 4 con la regla de la 161 en
+    `InstruccionesDeLaVoz` (degradación 5).
+  - **🎓 y la comprobación no cambiaban a quien habla, y era peor de lo descrito**: con solo el `session.update`,
+    la voz afirmó acciones que nadie hizo (3 de 3). Con el `session.instructions.append` detrás, asintió (3 de 3),
+    y al volver con su persona llamó a `map_look` (2 de 2). Por eso `CambioDeModo` manda los dos, y la 42 ya no
+    exige un único mensaje: exige un `session.update` y ningún `session.start`, con el enunciado intacto.
+  - **Hechos medidos nuevos:** el tope del append (500 fichas: 1.756 caracteres aceptados; de 1.900 a 30.020,
+    rechazados, sin cerrar la sesión) y la transcripción fantasma del usuario tras un append largo (3 de 5; 0 de 7
+    sin append).
+  - **`session.usage.updated` es el acumulado** de la sesión: la 48 lo traduce a `Hecho.Duracion`, y la 218 lo
+    lleva al cierre. `session.closed` no se tocó: la 41 lo fija como una `Falla`.
+  - **Clase de error contada:** 1 de 2 protocolos no cambiaba la voz al cambiar de modo (`ProtocoloOpenAI`
+    reenvía la apertura, y la 47 juzga que no manda append); 1 traductor sin la regla de la 161 en lo que habla.
+  - **Sin medir**, porque la cuenta se quedó sin crédito (`credit_balance_exhausted`): un prefijo más corto, la voz
+    prestada con append, muchos appends seguidos hacia el tope de 16.384 fichas y la voz con las instrucciones
+    reales y un micrófono.
+- **2026-09-12 (la integración de las seis ramas hijas — la 218, y la 217 acotada).**
+  - **Cinco merges con conflicto de texto**, todos de registros contiguos (`voz/Contrato/Contrato.cs`,
+    `tests/ContratoDelGrafo/Contrato.cs` y esta spec), más uno de código en `EjecutarAsync`, donde los `finally`
+    de la 211 y de la 214 quedaron juntos. Ningún número chocó.
+  - **Un choque de significado, que git no marcó.** Con todo compilado y la voz ÍNTEGRA, el grafo salió **ROTO**
+    en la 217: «un session.usage.updated sigue dejando su línea «←», una (dejó 0)». La 217 lo usaba como ejemplo
+    de lo que no se traduce, y la 48 lo traduce. El enunciado sigue siendo verdad; el ejemplo pasa a
+    `session.instructions.appended`. El tic «sin hechos» de la 209, la 211 y la 212 era el mismo mensaje y ahora
+    es el silencio de ceros, que desde la 44 tampoco trae hechos.
+  - **El pendiente de la 48 en la conversación, la 218.** `Hecho.Duracion` llegaba a `Reaccionar` y no lo atendía
+    ningún case. Se guarda el último de cada conexión y se suma entre conexiones, porque una conexión nueva es
+    otra sesión del servidor. Contado: 1 traductor emite la duración, 1 sitio la consume, 1 construye
+    `ConsumoVivo`, 1 lo manda al panel (`FaceWindow`, sin tocar), y las 2 aperturas pasan por `EmpiezaUnaConexion`.
+  - **La 219 no se escribió** (que el append de 🎓 quepa): ver «Límites».
 
 ## Sabotajes
 
@@ -783,6 +907,63 @@ restaurar, en los 10. El guion es `sabotea-fidelidad.ps1`, en el scratchpad.
 - Ninguna sonda las ve todas sola, y por eso van las dos.
 - Las sondas no están en el repo ni corren en el portero.
 
+**El silencio (2026-09-12, `jero/voz-gpt-live-silencio`), `scripts\contrato-de-la-voz.ps1`.** Guion
+`sabotea-silencio.ps1`, en el scratchpad: cambia una línea sobre los bytes (Latin-1 1:1, sin tocar BOM ni
+CRLF), en `voz/Realtime/ProtocoloGptLive.cs` con SHA de partida `DB0410CA`. Los cinco con numstat `1 1` y SHA
+cambiado antes de juzgar, restaurados con el SHA idéntico; al final, **VOZ ÍNTEGRA** y **CONTRATO INTACTO**
+recompilados. Log: `sabotajes-silencio.log`.
+
+| Id | Rotura | Veredicto |
+|---|---|---|
+| S44a | se quita la comprobación (`&& !EsSilencio(pcm))` → `&& true)`) | ✘ 44 («un delta de 100 ms con todas las muestras a cero … no es Hecho.Suena (salieron 1)»). VOZ ROTA, exit 1 |
+| S44b | un umbral elegido a ojo (`PicoDelSilencio = 0` → `= 64`) | ✘ 44 («la pausa de pico 1 entre dos frases SÍ suena, con su PCM exacto»). VOZ ROTA, exit 1 |
+| S44c | se miran bytes y no muestras | ✘ 44 («una muestra que solo tiene el byte ALTO distinto de cero también es sonido»). VOZ ROTA, exit 1 |
+| **V1** | la llamada se lee en cualquier `response.output_item.*` (el de la revisión, que daba **VOZ ÍNTEGRA**) | ✘ 41 («output_item.added NO es la llamada», «las TRES copias … son UNA llamada en total (salieron 2…)»). VOZ ROTA, exit 2 |
+| **V2** | las instrucciones del delegado se recortan a 4.000 caracteres (el de la revisión, que daba **VOZ ÍNTEGRA**) | ✘ 40 («ÍNTEGRAS: iguales byte a byte (24077 caracteres; llegan 4000)») y ✘ 42 (24065; 4000). VOZ ROTA, exit 2 |
+
+**La persona, el cambio de modo y la duración (2026-09-12, `jero/voz-gpt-live-persona`),
+`scripts\contrato-de-la-voz.ps1`**, sobre `77c605f`, en `voz/Realtime/ProtocoloGptLive.cs` con SHA de partida
+`3704DD0D`. Los nueve con numstat `1 1` y SHA cambiado, restaurados con `3704DD0D`; al final, los dos contratos
+en verde. Una primera tanda sobre `902617d` (S46a, S46b, S48a y S48b) **no vale como evidencia literal**: el
+guion llevaba ✘ literal, PowerShell 5.1 lo leyó como ANSI y el filtro perdió líneas de veredicto; se repitió con
+los símbolos por código.
+
+| Id | Rotura | Veredicto |
+|---|---|---|
+| S47a | el append lleva siempre las reglas del modo, también al volver | ✘ 47 («y le devuelve su persona de siempre…», «y NO las instrucciones de operar…»). VOZ ROTA, exit 2 |
+| S47b | nunca se reconoce la vuelta (`_instruccionesDeApertura.Length < 0`) | ✘ 47 (las mismas dos). VOZ ROTA, exit 2 |
+| S47c | el append sale como `session.thinking.append` | ✘ 47 («…DESPUÉS un session.instructions.append a la voz (salió: …»). VOZ ROTA, exit 1 |
+| S47d | **cableado**: no se recuerda con qué instrucciones abrió (`_instruccionesDeApertura = ""`) | ✘ 47 (las dos de la vuelta). VOZ ROTA, exit 2 |
+| S42a | `CambioDeModo` vuelve a mandar `session.start` (comprueba que la 42 retocada sigue juzgando) | ✘ 42 («…nunca otro session.start (salió: session.start, session.instructions.append)») y ✘ 47. VOZ ROTA, exit 3 |
+| S46a | la regla se borra de la persona | ✘ 46 (la regla y las tres fórmulas). VOZ ROTA, exit 4 |
+| S46b | la apertura manda otra persona (juzga el mensaje, no la constante) | ✘ 46 (cinco comprobaciones) y ✘ 47 («…su persona de siempre…»). VOZ ROTA, exit 6 |
+| S48a | el evento se busca como `session.usage` | ✘ 48 («…es UN Hecho.Duracion con los segundos que trae (salieron 0: )» y dos más). VOZ ROTA, exit 3 |
+| S48b | se leen segundos que no son número | ✘ 48 (`InvalidOperationException`: «The requested operation requires an element of type 'Number'…»). VOZ ROTA, exit 1 |
+
+**La integración (2026-09-12, `jero/voz-gpt-live`), `scripts\contrato-del-grafo.ps1`**, sobre `6e2ea15`, en
+`windows-client/src/Voice/ConversacionEnVivo.cs` con SHA de partida `2E21BC9B`. Guion `integra\sabotea-integra.ps1` y
+`sabotajes-integra.json`, en el scratchpad: bytes en Latin-1 1:1, patrón exactamente una vez, numstat `1 1` y SHA
+cambiado antes de juzgar, veredicto exigido, restaurado con `2E21BC9B` y diff vacío, en los nueve. Al final,
+recompilado: **CONTRATO INTACTO** (184 ✔, 0 ✘, 0 ⧗) y **VOZ ÍNTEGRA** (41 ✔, 0 ✘, 0 ⧗). Log:
+`integra\sabotajes-integra.log`.
+
+| Id | Rotura | Veredicto |
+|---|---|---|
+| S218a | los segundos de una conexión se suman como las fichas | ✘ 218 («…32 s (dejó 1: la voz duró al menos 44 s según el servidor…)», «y el reporte lleva esos 32 s del servidor (lleva 44)»). ROTO, exit 2 |
+| S218b | **cableado**: una conexión nueva no aparta los segundos de la anterior | ✘ 218 («…la voz duró al menos 7 s…», «(lleva 7)»). ROTO, exit 2 |
+| S218c | la guarda de antes: sin fichas no se reporta | ✘ 218 («…se reporta al cerrar la voz, una vez (se reportó 0)», «…(reportes 0, líneas 0)»). ROTO, exit 2 |
+| S218d | el cierre no deja la línea de los segundos | ✘ 218 («(dejó 0: )», con backend y sin él). ROTO, exit 2 |
+| S218e | reportar no pone los segundos a cero | ✘ 218 («cerrar otra vez no reporta ni escribe los mismos segundos (reportes 2, líneas 1)»). ROTO, exit 1 |
+| S218f | el reporte no lleva los segundos del servidor | ✘ 218 («y el reporte lleva esos 32 s del servidor (lleva 0)»). ROTO, exit 1 |
+| S218g | `Reaccionar` no atiende la duración | ✘ 218 en cuatro comprobaciones («se reportó 0», «dejó 0: », «reportes 0, líneas 0», sin backend «dejó 0: »). ROTO, exit 4 |
+| **W218** | **cableado sin juez**: `ArrancarAsync` no pone los segundos a cero | **CONTRATO INTACTO, exit 0** |
+| S217f | la 217 acotada: se callan todos los `session.*` sin hechos, no solo el audio | ✘ 217 («un session.delegation.created sigue dejando su línea «←», una (dejó 0)», lo mismo con `session.instructions.appended`, y los dos por la regla pura). ROTO, exit 4 |
+
+**W218 es el límite, medido**: `ArrancarAsync` necesita clave y socket. Hoy no se nota, porque `ReportarConsumo`
+también pone la cuenta a cero en cada cierre y cada salida de la voz pasa por `TerminarAsync`. Sin las dos, una
+sesión nueva sumaría los segundos de la anterior. **S217f** demuestra que el ejemplo nuevo de la 217 sigue
+juzgando lo que el viejo juzgaba.
+
 ## Cierre
 
 - [x] Fase 0: medido contra el servidor real (2026-09-11/12), y el `session.update` de la delegación después
@@ -796,6 +977,12 @@ restaurar, en los 10. El guion es `sabotea-fidelidad.ps1`, en el scratchpad.
 - [x] La sonda del `session.update` de la delegación, pegada en Hallazgos
 - [x] Fase 6 (tras las revisiones): la 210 juzga lo que abre (modelo, delegado, dirección y el aviso del valor desconocido), roja con G2 y G3 aplicados; la 217 del log, roja antes de su código; las dos verdes y saboteadas (**CONTRATO INTACTO**, **VOZ ÍNTEGRA**, 0 pendientes)
 - [x] Promesa 49 (revisión de fidelidad) en rojo (`21e9ecf`), en verde (`da7a6c1`) y saboteada: 6 roturas del traductor, rojas; 4 del cableado de la conversación, sin juez de contrato y rojas en `sonda-conv`
+- [x] Promesa 44 (silencio) en rojo (`29e98e1`), en verde (`e5bfa1a`) y saboteada; la 40, 41 y 42 exigen las tres copias de la llamada y las instrucciones íntegras (`9abcab8`), y V1 y V2 salen rojos
+- [x] Promesas 46, 47 y 48 (persona) en rojo (`3b45051`, `29aba86`), en verde (`902617d`, `77c605f`) y saboteadas
+- [x] Las seis ramas hijas integradas: la 217 acotada, y la 218 en rojo (`f3aa948`), en verde (`6e2ea15`) y saboteada; **CONTRATO INTACTO** y **VOZ ÍNTEGRA**, 0 pendientes
+- [ ] 🎓 con la voz abierta en `U.exe`: «modo cambiado» sin error de append y la voz asintiendo en vez de «ejecuté…»; y decidir qué hacer con la transcripción fantasma
+- [ ] El silencio en `U.exe`: `Hablando` en falso en silencio, la compuerta de eco con `U_SIN_ECO=0`, `map_recuerdos cual=2` y la boca que se cierra
+- [ ] Una sesión de GPT-Live en `U.exe` que deja «la voz duró al menos N s según el servidor», y los segundos llevados al panel desde `FaceWindow` (otra rama)
 - [ ] Las fotos y el resultado de 40 KB, vueltos a medir contra el servidor cuando la cuenta tenga crédito, y el camino feliz de «Te escucho.» con `session.started` de verdad
 - [ ] Nivel 4 con GPT-Live y con `U_VOZ=realtime`, con el juez arreglado, con horas y el modelo de cada corrida
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)
