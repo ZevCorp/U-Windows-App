@@ -1,6 +1,6 @@
 # Plan de implementación: la voz es GPT-Live, y lo que se escribe se contesta
 
-Estado: **en construcción**. A 2026-09-12: medido contra el servidor; el juez del nivel 4 arreglado y saboteado; las promesas 40–44 y 46–49 (voz) y 208–212, 214, 217 y 218 (grafo) **en verde y saboteadas**, integradas en una sola rama. **Falta el nivel 4**: nada de esto se ha oído con micrófono ni con `U.exe` · Nace de dos peticiones del dueño (2026-09-11 y 2026-09-12) y de las sondas contra el servidor de esas dos noches · Rama: `jero/voz-gpt-live`, que integra `jero/voz-gpt-live-protocolo` (el traductor, 40–43), `jero/voz-gpt-live-juez` (esta spec y el juez del nivel 4) y las seis ramas hijas de las revisiones: `-silencio` (44), `-persona` (46–48), `-turnos` (211, 212), `-texto` (214), `-seleccion` (217) y `-fidelidad` (49); la 218 nació al integrarlas
+Estado: **en construcción**. A 2026-09-13: medido contra el servidor; el juez del nivel 4 arreglado y saboteado; las promesas 40–44 y 46–49 (voz) y 208–212, 214, 217 y 218 (grafo) **en verde y saboteadas**, integradas en una sola rama. Los verificadores del cierre encontraron dos verdes falsos, en la 209 y en la 218, y se arreglaron en `2d0b779`. **Falta el nivel 4**. Se intentó el 2026-09-12 a las 23:36 (GPT-Live) y a las 23:40 (`U_VOZ=realtime`) y no midió nada, porque la cuenta de OpenAI no tiene crédito (ver «El nivel 4»). A las 23:5x la sonda seguía contestando `credit_balance_exhausted`. Nada de esto se ha oído con micrófono ni en `U.exe` · Nace de dos peticiones del dueño (2026-09-11 y 2026-09-12) y de las sondas contra el servidor de esas dos noches · Rama: `jero/voz-gpt-live`, que integra `jero/voz-gpt-live-protocolo` (el traductor, 40–43), `jero/voz-gpt-live-juez` (esta spec y el juez del nivel 4) y las seis ramas hijas de las revisiones: `-silencio` (44), `-persona` (46–48), `-turnos` (211, 212), `-texto` (214), `-seleccion` (217) y `-fidelidad` (49); la 218 nació al integrarlas
 
 > **La petición, en la voz del dueño.** El 2026-09-11: *«cambia a GPT voice el último que salió…
 > investiga»*. El 2026-09-12: *«ajusta todo y empuja a main»*, *«migra rápido»*.
@@ -166,7 +166,9 @@ por ramas hijas los números **44–49** (voz) y **211–219** (grafo): `jero/vo
 `jero/voz-gpt-live-persona` la **46**, la **47** y la **48**, `jero/voz-gpt-live-fidelidad` la **49**,
 `jero/voz-gpt-live-turnos` la **211** y la **212**, `jero/voz-gpt-live-texto` la **214** y
 `jero/voz-gpt-live-seleccion` la **217**, la del log. El integrador añadió la **218**, lo que dura la voz, para
-el pendiente que la 48 dejaba en la conversación. Quedaron sin usar la **45**, la **213**, la **215** y la **216**.
+el pendiente que la 48 dejaba en la conversación. Quedaron sin usar la **45**, la **213**, la **215**, la **216** y la
+**219**, que se pensó para el tope del append y no se escribió (ver «Límites»). El cierre del 2026-09-13 no añadió
+números: arregló dos jueces (la 209 y la 218) sin cambiar sus enunciados.
 Ningún número chocó al integrar; **chocó un significado**: la 217 usaba `session.usage.updated` como ejemplo de lo
 que no se traduce, y la 48 lo traduce (ver Hallazgos).
 
@@ -207,7 +209,7 @@ traductor tal como los mandó el servidor real en las sondas.
 
 | # | Se juzga con | Sabotaje que la tiene que poner roja |
 |---|---|---|
-| 40 | `ProtocoloGptLive` por nombre en el ensamblado de `Voz.Realtime`. `Direccion()` es `wss://api.openai.com/v1/live/sessions` sin consulta; `Cabeceras` lleva `Authorization: Bearer`; 24000/24000; `SabeVolver`, `MarcaLosTurnos` y `SabeEsperarTurno` no (`Mira` lo juzga la 49). `Apertura("instrucciones de Ü", [map_look con un argumento], "")` da **un** mensaje: `session.start`, `session.model` `gpt-live-1`, `audio.format` `audio/pcm` a 24000, `audio.output.voice` `marin`; **sin `tools` en la sesión**; `delegation.type` `responses`, `delegation.responses.model` `gpt-5.6-luna`, sus `tools` con `map_look` y el argumento como `string`, `tool_choice` `auto`; las instrucciones completas van en el delegado, **iguales byte a byte** (un texto de 24.077 caracteres con tildes, Ü, comillas, barra invertida, tabulador y saltos de línea), y las de la voz son otras y más cortas. Y `ProtocoloOpenAI` sigue marcando los turnos y sabiendo esperar (los valores por defecto) | las herramientas viajan en la sesión y no en la delegación; la dirección vuelve a `/v1/realtime?model=`; el ritmo pasa a 16000; las instrucciones completas van a la voz; **las del delegado se recortan a 4.000 caracteres (V2)** |
+| 40 | `ProtocoloGptLive` por nombre en el ensamblado de `Voz.Realtime`. `Direccion()` es `wss://api.openai.com/v1/live/sessions` sin consulta; `Cabeceras` lleva `Authorization: Bearer`; 24000/24000 (`Mira` lo juzga la 49; `MarcaLosTurnos`, la 41; `SabeEsperarTurno`, la 42). **`SabeVolver` no lo juzga nadie**: hasta el 2026-09-13 esta fila decía que sí, y V3 de la revisión (`SabeVolver => true`) dejaba **VOZ ÍNTEGRA**. Hoy no cambia nada, porque GPT-Live nunca emite `PaseParaVolver` y `ReconectarAsync` exige un pase. `Apertura("instrucciones de Ü", [map_look con un argumento], "")` da **un** mensaje: `session.start`, `session.model` `gpt-live-1`, `audio.format` `audio/pcm` a 24000, `audio.output.voice` `marin`; **sin `tools` en la sesión**; `delegation.type` `responses`, `delegation.responses.model` `gpt-5.6-luna`, sus `tools` con `map_look` y el argumento como `string`, `tool_choice` `auto`; las instrucciones completas van en el delegado, **iguales byte a byte** (un texto de 24.077 caracteres con tildes, Ü, comillas, barra invertida, tabulador y saltos de línea), y las de la voz son otras y más cortas. Y `ProtocoloOpenAI` sigue marcando los turnos y sabiendo esperar (los valores por defecto) | las herramientas viajan en la sesión y no en la delegación; la dirección vuelve a `/v1/realtime?model=`; el ritmo pasa a 16000; las instrucciones completas van a la voz; **las del delegado se recortan a 4.000 caracteres (V2)** |
 | 41 | `Leer` con mensajes capturados: `session.output_audio.delta` da un `Suena` con el PCM exacto y un delta vacío no da nada; `session.output_transcript.delta` da `DiceU`; `session.input_transcript.delta` da `DiceElUsuario`; `response.event` con `response.output_item.done` de tipo `function_call` da **un** `Pide` con `call_id`, `name` y los argumentos parseados del texto JSON; ese mismo sobre con un item `message` no da nada, y ni `response.function_call_arguments.done` ni el `response.output_item.added` en curso dan otra: las **tres** copias literales juntas son **una** llamada; `error` da `Falla` con su `message`; `session.closed` da `Falla` con su `reason`. Y ninguno de los mensajes capturados —`session.started`, `session.delegation.created`, `response.completed`, `session.usage.updated`…— da `CierraElTurno` ni `HablaronEncima` | leer también `function_call_arguments.done` (dos `Pide` por una llamada: se ejecutaría dos veces); **leer cualquier `output_item.*` (V1)**; `response.completed` vuelve a ser `CierraElTurno`; los argumentos se pasan sin parsear |
 | 42 | `Audio(pcm)` es `session.input_audio.append` con el base64 exacto; `Texto` es `response.item.create` con un message `user` e `input_text`; `Fotograma` igual con `input_image` y `data:image/jpeg;base64,`; `Resultados` con dos llamadas da dos `function_call_output` con su `call_id` y su `output`, y **ninguno** pide respuesta; `PedirRespuesta()` es `response.create`; `PedirRespuesta("X")` es `session.commentary.append` con `content` X y `delegation_id` nulo, y no un `response.create`; `CambioDeModo(otras, [otra herramienta], false)` no contiene `session.start` y lleva **un** `session.update` con las instrucciones —íntegras, byte a byte— y la herramienta nuevas en la delegación. Hasta la 47 exigía un único mensaje; el append que va detrás lo juzga la 47 | `CambioDeModo` devuelve la apertura (otro `session.start`); `Resultados` pide respuesta dentro; dictar vuelve a ser `response.create`; el texto sale como `session.instructions.append` (medido: no provoca respuesta) |
 | 44 | `Leer` con deltas de 100 ms (4800 B): con todas las muestras a cero no sale ningún `Suena`; con voz (pico 7000, como las frases medidas) sale **un** `Suena` con el PCM exacto; la pausa de pico 1 entre dos frases **sí** suena, con su PCM; y una muestra que solo tiene el byte alto distinto de cero también es sonido | quitar la comprobación (S44a); un umbral elegido a ojo, 64 (S44b); mirar bytes y no muestras (S44c) |
@@ -216,13 +218,13 @@ traductor tal como los mandó el servidor real en las sondas.
 | 48 | `Leer`: `session.usage.updated` con 12.0 y después con 25.0 da un `Duracion` con 12 y otro con 25 —el acumulado, no los 13 de diferencia—; un número sin decimales también son segundos; un uso sin segundos numéricos (vacío o texto) no da nada; y ningún otro mensaje da duración | el evento se busca con otro nombre (S48a); se leen segundos que no son número (S48b) |
 | 49 | `Mira` es falso. `Resultados` con un resultado de 40 KB da **un** mensaje de 32.768 B o menos y de más de 32.752 (no recorta de más), `function_call_output` con su `call_id`, con el principio del resultado y la cola `…[recortado: N de M bytes]` con N y M verdaderos; con 6.000 emojis, lo guardado son emojis enteros; uno que cabe (150 frases con acentos y comillas) va entero. `ConfirmaQueAbrio` es verdadero en GPT-Live y falso por defecto en `ProtocoloOpenAI`; el `session.started` capturado es **un** `Hecho.Abierta`; el `credit_balance_exhausted` capturado es un `Falla` y no una apertura; `session.updated`, `session.delegation.created`, `response_input_buffer_full`, `response.completed`, `session.usage.updated` y `session.closed` no dan `Abierta` | `Mira` vuelve a sí; `Resultados` manda el resultado entero; el recorte parte un emoji; la cola dice que se mandó todo; la apertura se lee en `session.updated`; GPT-Live deja de declarar que confirma |
 | 208 | `ConversacionEnVivo.MensajesDeTexto` por nombre. Con `ProtocoloOpenAI`: dos mensajes, **en ese orden**, `conversation.item.create` con el texto y `response.create`. Con `ProtocoloGptLive`: `response.item.create` con el texto y `response.create`. Con un protocolo falso del propio contrato cuyo `PedirRespuesta` es vacío: un solo mensaje, ninguno vacío. **Y su cableado**, añadido tras W208: la conversación deja sustituir su puerta de salida (`_puerta`) y el «hay socket» (`_puertaAbierta`). Con los dos protocolos, lo escrito (`EnviarTextoAsync`) y la nota al modelo (`EnviarTextoAlModeloAsync`) sacan por esa puerta el texto y detrás `response.create`; con la voz cerrada no sale nada | `MensajesDeTexto` deja de añadir la petición de turno; la petición va antes que el texto; se cuela el mensaje vacío; `EnviarTextoAsync` o la nota al modelo vuelven a mandar solo el texto; `EnviarAsync` se salta la puerta; lo escrito sale con la voz cerrada |
-| 209 | `TurnosSinMarca` por nombre, con reloj inyectado y la secuencia como hechos con su hora: el primer trozo de lo que dice el usuario abre turno y el segundo no; con el silencio por defecto (**2000 ms**, medido: ver Hallazgos), a 1000 ms del último trozo no toca cerrar y a 2000 sí, **una vez**; lo que dice Ü también mantiene el turno abierto y también se cierra por silencio; el audio que llega continuo **no** cuenta como actividad; sin nada oído no se cierra nunca; un silencio configurado de 500 ms se respeta. Y la 40 ya juzga que `ProtocoloGptLive` no marca los turnos y `ProtocoloOpenAI` sí. **Y su uso, tal como lo construye la app** (acotado el 2026-09-12): `Procesar`, la puerta por la que entra lo del socket, recibe en una `ConversacionEnVivo` con `ProtocoloGptLive` un `session.input_transcript.delta` y mensajes sin hechos. **Se cambia solo `_relojDeLosTurnos`, nunca el marcador.** El reloj que trae la app tiene el origen de `Environment.TickCount64` y avanza con él. A 1700 ms no emite `Cerro`; a 2100 ms lo emite una vez, con la línea `voz-turno` «por voz» y `DijoElUsuario` con la frase. `EmpezarLosTurnosDeLaSesion` deja un marcador **nuevo**, y lo dicho antes no cierra después. Con un protocolo que marca sus turnos, y con `ProtocoloOpenAI`, no hay marcador ni cierre | se cierra sin haber oído nada; cada trozo abre turno; el audio cuenta como actividad; `Procesar` deja de consultar el marcador; la conversación no lo crea; el primer trozo no llama a `EmpiezaUnTurnoDelUsuario`; tocar cerrar no reacciona; **la app construye con 60 000 ms (G1) o con 1500 (G1b); el reloj de la app está parado (G2); el marcador no usa el reloj de la conversación (G3); otra sesión reutiliza el marcador (G4); hay marcador también con voces que marcan (G6)** |
+| 209 | `TurnosSinMarca` por nombre, con reloj inyectado y la secuencia como hechos con su hora: el primer trozo de lo que dice el usuario abre turno y el segundo no; con el silencio por defecto (**2000 ms**, medido: ver Hallazgos), a 1000 ms del último trozo no toca cerrar y a 2000 sí, **una vez**; lo que dice Ü también mantiene el turno abierto y también se cierra por silencio; el audio que llega continuo **no** cuenta como actividad; sin nada oído no se cierra nunca; un silencio configurado de 500 ms se respeta. Y la 40 ya juzga que `ProtocoloGptLive` no marca los turnos y `ProtocoloOpenAI` sí. **Y su uso, tal como lo construye la app** (acotado el 2026-09-12): `Procesar`, la puerta por la que entra lo del socket, recibe en una `ConversacionEnVivo` con `ProtocoloGptLive` un `session.input_transcript.delta` y mensajes **sin hechos**: el silencio de ceros. Hasta el 2026-09-13 ese «tic» era un `session.usage.updated`, que desde la 48 trae un `Hecho.Duracion`, así que la 209 dejó de pasar por el camino sin hechos y SG209i la dejaba verde. **Se cambia solo `_relojDeLosTurnos`, nunca el marcador.** El reloj que trae la app tiene el origen de `Environment.TickCount64` y avanza con él. A 1700 ms no emite `Cerro`; a 2100 ms lo emite una vez, con la línea `voz-turno` «por voz» y `DijoElUsuario` con la frase. `EmpezarLosTurnosDeLaSesion` deja un marcador **nuevo**, y lo dicho antes no cierra después. Con un protocolo que marca sus turnos, y con `ProtocoloOpenAI`, no hay marcador ni cierre | se cierra sin haber oído nada; cada trozo abre turno; el audio cuenta como actividad; `Procesar` deja de consultar el marcador; la conversación no lo crea; el primer trozo no llama a `EmpiezaUnTurnoDelUsuario`; tocar cerrar no reacciona; **la app construye con 60 000 ms (G1) o con 1500 (G1b); el reloj de la app está parado (G2); el marcador no usa el reloj de la conversación (G3); otra sesión reutiliza el marcador (G4); hay marcador también con voces que marcan (G6)**; **el marcador solo se consulta con mensajes que traen hechos (SG209i, verde con la 209 de antes)** |
 | 210 | `ConversacionEnVivo.ProtocoloPorDefecto` por nombre, con una variable falsa que anota qué nombre se le pregunta. **Se juzga lo que abre, no el nombre del tipo** (acotado el 2026-09-12, tras la revisión): sin `U_VOZ`, con `U_VOZ` vacío o en blanco, con `gpt-live` y con un valor desconocido (`gemini`), sale `ProtocoloGptLive` con `Modelo` `gpt-live-1`, `Delegado` `gpt-5.6-luna` (por reflexión) y `Direccion()` `wss://api.openai.com/v1/live/sessions`; con `realtime` y con ` Realtime `, `ProtocoloOpenAI` con `Modelo` `gpt-realtime-2.1-mini` y `Direccion()` `wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini`; y el nombre preguntado es `U_VOZ`. **El constructor se puede llamar sin pantalla**, porque `LiveAudio` nace sin dispositivo, así que también se juzga, escuchando `LogBus.Anotado`: sin protocolo y sin `U_VOZ` abre lo mismo que GPT-Live de arriba y no deja ninguna línea `voz-viva` sobre `U_VOZ`; con `U_VOZ=realtime` abre lo de Realtime y tampoco la deja; con `U_VOZ=gemini` abre GPT-Live y deja **una** línea `voz-viva` que nombra «gemini» | el defecto vuelve a ser `ProtocoloOpenAI`; la variable se lee con otro nombre; no se normaliza; el constructor no usa el defecto; **el defecto abre un modelo que no existe (`gpt-live-1-mini`, G2)**; **otro delegado**; **Realtime con otro modelo**; **el aviso del valor desconocido invierte su condición (G3)**; **el aviso sale siempre** |
 | 211 | `TurnosSinMarca` por nombre con silencio de 1500 y reloj inyectado. Una llamada pedida queda en curso (`LlamadasEnCurso`) y sujeta el turno 6000 ms. Tras `Devuelta`, a 1000 ms no cierra y a 1500 sí, una vez. Con dos llamadas y una devuelta sigue sin cerrar. Una devuelta **antes** de oírse no queda en curso. Un trozo de audio con pico 1152 (la palabra más floja medida) sujeta el turno aunque la transcripción terminara 3000 ms antes; uno con pico 45 (el silencio medido) no lo retrasa; sonido sin nada dicho no abre nada que cerrar. **Y su cableado**: en una `ConversacionEnVivo` con GPT-Live, un `self_mute` que el contrato sujeta dentro de `Autocontrol` no deja cerrar a los 3000 ms. Al soltarlo, la conversación se lo devuelve al marcador, y cierra a 2100 ms de la devolución, no a 1500 | el marcador no registra la llamada (T1); tocar cerrar la ignora (T2); devolver no cuenta como actividad (T3); la voz que suena no sujeta (T4); el umbral a 0 (T5); una devuelta antes de oírse se queda en curso (T6); **`EjecutarAsync` no devuelve (T7)** |
 | 212 | `TurnosSinMarca` por nombre, silencio 1500. Lo que el usuario dice tras una pausa que cerró el turno, sin que Ü hablara después, **no** abre turno; tras contestar Ü y cerrar, sí. La respuesta de Ü cuenta aunque llegue antes del cierre. Si el usuario siguió hablando después de lo que dijo Ü, tras el cierre sigue siendo su petición. Lo primero que dice el usuario abre turno aunque Ü saludara antes. **Y en la conversación**: la pausa cierra el turno y deja una sola línea «turno nuevo (por voz)»; lo que dice tras la respuesta de Ü deja la segunda | cualquier cierre termina la petición (T8); lo que dice Ü no cuenta como contestar (T9); que el usuario siga hablando no borra el «contestó» (T10); el primer trozo no abre turno en la conversación (S209f) |
 | 214 | `Procesar` de una `ConversacionEnVivo` con `ProtocoloGptLive`, la puerta sustituida y la mano de autocontrol retenida, recibe dos `response.event` con un `function_call` cada uno, como los manda el servidor: salen las dos `function_call_output` y **un** `response.create`, detrás de la última. Una llamada sola sigue pidiendo turno. Una llamada pedida con el token ya cancelado (nunca corre) y, tras cambiar `_sesionId`, otra de la sesión siguiente: sale su salida y un `response.create`. Con `ProtocoloOpenAI`, `EjecutarNucleoAsync` con una tanda de dos: dos salidas y detrás un `response.create` | no se anotan las llamadas al pedirlas; no se olvidan las de otra sesión; se retiene el turno aunque no falte ninguna |
 | 217 | Por la puerta del socket: `Procesar` de una `ConversacionEnVivo` con `ProtocoloGptLive`, escuchando `LogBus.Anotado`. Un `response.event` con `response.output_text.delta`, otro con `response.function_call_arguments.delta` y un `session.output_audio.delta` vacío no dejan ninguna línea `voz-viva` que empiece por «← »; un `response.completed` del delegado, un `response.function_call_arguments.done`, un `session.delegation.created` y un `session.instructions.appended` dejan una cada uno (**acotado al integrar**: el ejemplo era `session.usage.updated`, y la 48 lo traduce ahora). Y la regla, pura, `ConversacionEnVivo.SeVuelcaCrudo(JsonElement)` por nombre: los tres primeros no se vuelcan y los cuatro siguientes sí; un `response.event` sin evento dentro sí; y un `.delta` que no viene dentro de `response.event` (el `response.function_call_arguments.delta` de Realtime) sigue volcándose, como en `main` | `Procesar` deja de consultar la regla; los deltas del delegado se vuelcan; el audio vacío se vuelca; se callan todos los `response.event`; se calla todo lo que acabe en `.delta`; se callan todos los `session.*` (S217f, al integrar) |
-| 218 | Una `ConversacionEnVivo` con `ProtocoloGptLive`, sin socket: por `Procesar` llegan `session.usage.updated` con 12.0 y 25.0, `EmpiezaUnaConexion` abre otra conexión, llega 7.0, y se cierra de verdad con `TerminarAsync` (con `Viva` puesta a mano; sin micrófono ni altavoz abiertos no toca ningún dispositivo). Se reporta **una** vez, con 0 fichas y `SegundosDelServidor` 32, y queda **una** línea `voz-viva` con «32 s»; cerrar otra vez no reporta ni escribe nada. Sin `ReportaConsumo`, la línea sale igual (40 s). Con `ProtocoloOpenAI` y un `Hecho.Consumo` de 150 fichas: un reporte con 150, sin segundos y sin línea. Sin fichas ni segundos, nada | sumar los segundos como fichas (S218a); no apartar los de la conexión anterior (S218b); la guarda de antes (S218c); sin línea (S218d); no poner la cuenta a cero al reportar (S218e); el reporte sin segundos (S218f); `Reaccionar` sin atender la duración (S218g); **sin juez**: `ArrancarAsync` no pone los segundos a cero (W218) |
+| 218 | Una `ConversacionEnVivo` con `ProtocoloGptLive`, sin socket: por `Procesar` llegan `session.usage.updated` con 12.0 y 25.0, `EmpiezaUnaConexion` abre otra conexión, llega 3.0, abre una tercera, llega 4.0, y se cierra de verdad con `TerminarAsync`. **Tres conexiones desde el 2026-09-13**: con una sola reconexión, «sumar lo de las anteriores» y «quedarse con la anterior» dan lo mismo (0 + 25 = 25), y X218b quedaba verde. La conversación se cierra (con `Viva` puesta a mano; sin micrófono ni altavoz abiertos no toca ningún dispositivo). Se reporta **una** vez, con 0 fichas y `SegundosDelServidor` 32, y queda **una** línea `voz-viva` con «32 s»; cerrar otra vez no reporta ni escribe nada. Sin `ReportaConsumo`, la línea sale igual (40 s). Con `ProtocoloOpenAI` y un `Hecho.Consumo` de 150 fichas: un reporte con 150, sin segundos y sin línea. Sin fichas ni segundos, nada | sumar los segundos como fichas (S218a); no apartar los de la conexión anterior (S218b); la guarda de antes (S218c); sin línea (S218d); no poner la cuenta a cero al reportar (S218e); el reporte sin segundos (S218f); `Reaccionar` sin atender la duración (S218g); **una conexión nueva sobrescribe lo de las anteriores (X218b, SG218i: verde con la 218 de dos conexiones)**; **sin juez**: `ArrancarAsync` no pone los segundos a cero (W218), y `ReconectarAsync` sin continuidad no pasa por `EmpiezaUnaConexion` (W218b) |
 
 ### Límites dichos, no escondidos
 
@@ -270,7 +272,11 @@ traductor tal como los mandó el servidor real en las sondas.
   abierto. Dice el modelo de la voz, no el del delegado; lo que abre de verdad lo juzga la 210 un paso
   antes, sobre el mismo `_protocolo`.
 - **La 218 juzga el cierre, no la apertura.** Que `ArrancarAsync` ponga los segundos a cero necesita clave y
-  socket (W218, medido sin juez). Los segundos son «al menos»: el servidor manda el uso cada ~15 s y el último
+  socket (W218, medido sin juez). **Tampoco juzga la reconexión.** La 218 llama a `EmpiezaUnaConexion` por
+  reflexión, y nunca comprueba que `ReconectarAsync` pase por ahí. Si la rama sin continuidad, que es la que usa
+  GPT-Live, cambia esa llamada por un `Dice`, el contrato queda **INTACTO, exit 0** (W218b, medido por el
+  verificador del cierre el 2026-09-12 y repetido sobre `2d0b779`). En `U.exe` se perderían los segundos de la
+  conexión cortada, y el «Sigo» ya no esperaría a `session.started` (49). Necesita clave y socket, como W218 y W5. Los segundos son «al menos»: el servidor manda el uso cada ~15 s y el último
   tramo solo llega en `session.closed`, que la 41 fija como `Falla`. **El panel de costos sigue sin ver los
   segundos**: `FaceWindow` (zona de choque) no los manda; quedan en la línea `voz-viva` y en
   `ConsumoVivo.SegundosDelServidor`.
@@ -444,6 +450,21 @@ dictado fuera de la conversación (142) y las marcas de turno del servidor vuelv
 El log de apertura dice con qué modelo abrió: `sesión abierta con «…» (…)`. **Quitar la variable
 devuelve GPT-Live.**
 
+**Lo que la vuelta atrás no es** (revisa:regresiones, R8; y el intento de nivel 4 del 2026-09-12):
+
+- **No es `main`.** Un nivel 4 con `U_VOZ=realtime` mide «Realtime con la 208 y `gpt-transcribe`». No se compara con
+  la corrida de `main` del 2026-09-11 sin decirlo: allí lo escrito no pedía turno.
+- **Con la voz prestada** (192, `create_response:false`), lo que se escriba en la carita durante una comprobación
+  abre ahora una respuesta de la voz. En `main` no abría ninguna.
+- **Un error que no se arregla reintentando se reintenta igual.** Sin crédito, la corrida del 2026-09-12 a las 23:40
+  dejó cuatro `reconectada SIN continuidad … (intento 1..4)`, cada una con su cierre `1013
+  «insufficient_quota.credit_balance_exhausted»`, y después `la conexión se cayó 5 veces seguidas: se deja`.
+  `ProtocoloOpenAI` no declara `ConfirmaQueAbrio` y cae en la reconexión de antes. GPT-Live, con la 49, dice la causa
+  una vez y no reintenta. Es la misma clase de error tratada de dos formas. **Sin arreglar**: la forma del error de
+  Realtime no se ha medido.
+- **El binario sí elige bien**, medido en ese intento: por defecto, `sesión abierta con «gpt-live-1» (OpenAI GPT-Live)`;
+  con `U_VOZ=realtime`, `sesión abierta con «gpt-realtime-2.1-mini» (OpenAI)`.
+
 ## El nivel 4
 
 El kit de la spec 017 (`scripts/nivel4-voz/`), repetido **dos veces con el mismo binario**: con GPT-Live
@@ -456,6 +477,53 @@ alguien delante (OLED Care). Lo que tiene que decir, además de la tabla:
   el cableado de la 209.
 - **Con qué modelo abrió cada corrida**, copiado del log.
 - **Que no aprobó lo que resolvió otro camino**: con el juez arreglado (E), `Acciones = 0` no aprueba.
+
+### El intento del 2026-09-12 (23:36–23:43): no mide la rama
+
+**La cuenta de OpenAI no tiene crédito.** GPT-Live, Realtime y el cerebro del agente contestaron «You have no
+credits remaining». No hubo ninguna llamada a herramienta, ninguna frase de Ü ni ningún turno. **Las dos tablas
+(0 de 2) no son un veredicto sobre la rama.** A las 23:5x, una sonda mínima (`session.start` y nada más) seguía
+contestando `credit_balance_exhausted` a 426 ms.
+
+- **Cómo se hizo.** `9324d97` compilada en Release a `%LOCALAPPDATA%\Temp\claude\U-voz-gpt-live`, con 0 errores.
+  `conducir.ps1 -Repeticiones 1 -Cuales T1,T4`, con una copia nueva de los datos por corrida, dos veces con el mismo
+  binario: `U_VOZ` vacío (usuario, máquina y proceso) y `U_VOZ=realtime` solo en el proceso. Antes de empezar:
+  escritorio de entrada «Default» y 0 `U.exe` abiertos. `analizar.py --plan 2` sobre cada salida. Los guiones
+  (`n4-corrida.ps1`, `n4-escritorio.ps1`) y las salidas (`nivel4-gptlive-20260912-233638\`,
+  `nivel4-realtime-20260912-234004\`) quedan fuera del repo.
+- **GPT-Live por defecto**, `U.exe` pid 17176, literal del log de U:
+  ```
+  [23:36:53] voz-viva: sesión abierta con «gpt-live-1» (OpenAI GPT-Live)
+  [23:36:53] voz-viva: micrófono abierto a 24000 Hz
+  [23:36:53] voz-viva: el servidor dice: You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.
+  [23:36:55] voz-viva: se cortó la escucha: The remote party closed the WebSocket connection without completing the close handshake.
+  [23:36:55] voz-viva: la sesión no llegó a abrir: el servidor contestó «You have no credits remaining. ...» en vez de confirmarla, y cerró. No se reintenta: la misma apertura fallaría igual
+  [23:36:55] voz-viva: sesión cerrada
+  [23:37:15] agent: ✗ el cerebro no respondió: cerebro: OpenAI HTTP 429: { "error": { "message": "You have no credits remaining. ...", "type": "insufficient_quota",
+  [23:39:40] voz-viva: sesión abierta con «gpt-live-1» (OpenAI GPT-Live)      <- la reabrió el Ctrl+Alt+M final del conductor
+  ```
+- **`U_VOZ=realtime`**, pid 21304:
+  ```
+  [23:40:19] voz-viva: sesión abierta con «gpt-realtime-2.1-mini» (OpenAI)
+  [23:40:19] voz-viva: el servidor cerró la conexión: 1013 «insufficient_quota.credit_balance_exhausted»
+  [23:40:20] voz-viva: reconectada SIN continuidad: la conversación empieza de cero (intento 1)
+  ... (intentos 2, 3 y 4, cada uno con su 1013)
+  [23:40:24] voz-viva: la conexión se cayó 5 veces seguidas: se deja
+  [23:43:06] voz-viva: sesión abierta con «gpt-realtime-2.1-mini» (OpenAI)     <- reabierta por el Ctrl+Alt+M final
+  ```
+- **Tabla, igual en las dos corridas:** T1 sin estado final y con 0 llamadas; T4 con estado final, `Ejercita = no` y 0
+  llamadas. **Aprobadas: 0 de 2**. En las dos: `llamada recibida`, `Ü dijo` y `voz-turno`, **ninguna**.
+- **Lo único que sí quedó medido:** con qué modelo abre el binario en cada caso. Lo elige bien `ProtocoloPorDefecto`.
+- **Lo que enseñó sobre el propio nivel 4** (V5, V7 y V8 de «Las revisiones»):
+  - `sesión abierta con «…»` sale en el mismo segundo que el error de cuota, y el conductor la toma por «voz abierta».
+  - El Ctrl+Alt+M final reabre una voz que ya estaba cerrada.
+  - T4 ya estaba en su estado final antes de empezar: había 3 ventanas del explorador abiertas.
+  - Ruido del entorno, no de la rama: Neo4j no escucha en 127.0.0.1:7474, el collar Omi da `COMException 0x800710DF`
+    cada 6 s, y sale `atajo: Activate() no trajo la ventana al frente`.
+- **Sigue sin medir, y lo tiene que decir la corrida con crédito:** la 208 (`llamada recibida` tras lo escrito),
+  la 209, la 211 y la 212 por voz (`Ü dijo`, `voz-turno`), 🎓 (WModo), la 218 (`la voz duró al menos N s`) y el
+  cableado de la 49 con `session.started` de verdad. Para repetir: `n4-corrida.ps1 -Sal <nueva> -Etiqueta gptlive`,
+  y lo mismo con `-Etiqueta realtime -Voz realtime`, con alguien delante (OLED Care).
 
 ## Lo que NO entra
 
@@ -470,6 +538,63 @@ alguien delante (OLED Care). Lo que tiene que decir, además de la tabla:
 - **`FaceWindow.xaml.cs`**: zona de choque de los tres. La 208 arregla sus dos llamadas desde
   `ConversacionEnVivo`.
 - **Las tareas largas (R8–R11 de la spec 017)**: siguen fuera.
+
+## Las revisiones, hallazgo por hallazgo
+
+Tres revisiones sobre `d38f564`: «contrato», «regresiones» y «fidelidad» al servidor. Después, los
+verificadores del cierre, sobre `9324d97`, y este cierre, sobre `2d0b779`. Cada hallazgo, con lo que se
+comprobó y dónde quedó. «Real» quiere decir que se reprodujo o se midió, no que alguien lo dijera. El detalle de
+cada uno está en «Hallazgos» y en «Sabotajes».
+
+**revisa:contrato** (siete sabotajes verdes con el comportamiento roto):
+
+| # | Sev. | Hallazgo | ¿Real? | Qué se hizo | Juez hoy | Dónde |
+|---|---|---|---|---|---|---|
+| C1 | alta | La 208 solo juzgaba `MensajesDeTexto`, y W208 la dejaba verde | real | la conversación deja sustituir su puerta (`_puerta`, `_puertaAbierta`); la 208 juzga lo escrito y la nota al modelo | 208, enunciado intacto; W208 roja | `-texto` |
+| C2 | media | La 41 juzgaba dos de las **tres** copias de la llamada; V1 verde | real, medido: `added` a 1551 ms, `arguments.done` a 1788, `output_item.done` a 1822 | la 41 lleva las tres copias literales | 41; V1 (S41a del cierre) roja | `-silencio` |
+| C3 | media | La 209 sustituía el marcador; G1 y G4 verdes | real | `_relojDeLosTurnos` y `EmpezarLosTurnosDeLaSesion`; la 209 cambia solo el reloj | 209; G1 y G4 rojas | `-turnos` |
+| C4 | media | La 210 miraba el nombre del tipo; G2 (un modelo que no existe) verde | real, repetido en la rama | la 210 exige modelo, delegado y dirección de lo que abre | 210; G2 roja en 7 comprobaciones | `-seleccion` |
+| C5 | baja | Las instrucciones se juzgaban con `Contains`; V2 (recortarlas a 4.000) verde | real | igualdad byte a byte con textos de 24.077 y 24.065 caracteres | 40 y 42; V2 (S40a del cierre) roja | `-silencio` |
+| C6 | baja | La spec decía que la 210 juzgaba la línea del `U_VOZ` desconocido; G3 verde | real | la 210 escucha `LogBus.Anotado` y exige la línea | 210; G3 roja | `-seleccion` |
+| C7 | baja | La fila de la 40 decía juzgar `SabeVolver` | real (V3 verde) | **se corrige la spec, no el contrato**: ningún enunciado lo promete y hoy no cambia nada | **ninguno**, dicho en la fila de la 40 | cierre |
+| C8 | baja | La tabla de sabotajes no era lo ejecutado | real | la columna «Sabotaje que la tiene que poner roja» es el **plan**; lo ejecutado va en «Sabotajes», por rama, con su veredicto, incluidos los 8 planeados que corrió la revisión | — | cierre |
+| C9 | baja | La spec se contradecía sobre la 43 | real | se reescribió el hallazgo «no hace falta» | 43 | integración |
+
+**revisa:regresiones:**
+
+| # | Sev. | Hallazgo | ¿Real? | Qué se hizo | Juez hoy | Dónde |
+|---|---|---|---|---|---|---|
+| R1 | alta | El silencio de GPT-Live entraba a la cola del altavoz y `Hablando` parpadeaba | real; la medida cambió el arreglo (ceros exactos y pausas de pico 1) | un delta con todas las muestras a cero no es `Suena` | 44; S44a–c rojas | `-silencio` |
+| R2 | media | La boca no se cerraba | real | el mismo arreglo que R1 | 44; **sin nivel 4** | `-silencio` |
+| R3 | media | 🎓 y la comprobación no cambiaban a quien habla | real, y peor: la voz afirmó acciones que nadie hizo (3 de 3) | `CambioDeModo` manda detrás un `session.instructions.append` | 47; `CambiarModoAsync` **sin juez** (WModo) | `-persona` |
+| R4 | media | Las sesiones de GPT-Live no llegaban al consumo | real; los segundos son el acumulado | `Hecho.Duracion` (48) y la conversación los lleva al cierre (218) | 48 y 218; el panel **sigue sin verlos** (`FaceWindow`) | `-persona`, integración y `2d0b779` |
+| R5 | media | El turno sintético se cerraba a mitad de frase y de tarea | real: 4 cierres a mitad de tarea en 3 corridas | guardas (llamada en curso, voz que suena), petición abierta hasta que Ü conteste, 2000 ms | 209, 211 y 212 | `-turnos` |
+| R6 | baja | Varias llamadas a la vez dejaban un `function_call_outputs_required` | real: 52 ms entre llamadas, 1 error | un solo `response.create` cuando están todas contestadas | 214 | `-texto` |
+| R7 | baja | El log se inundaba con los deltas del delegado | real: 98 líneas «←», 78 de ellas deltas | `SeVuelcaCrudo` | 217 | `-seleccion` |
+| R8 | baja | `U_VOZ=realtime` no es `main` | real | dicho en «La vuelta atrás» | — | declarado |
+
+**Revisión de fidelidad al servidor:**
+
+| # | Sev. | Hallazgo | ¿Real? | Qué se hizo | Juez hoy | Dónde |
+|---|---|---|---|---|---|---|
+| F1 | alta | `map_look` no llegaba a enseñar la pantalla | real, con la evidencia de la revisión; **no se volvió a medir** (sin crédito) | `Mira => false` | 49 | `-fidelidad` |
+| F2 | media | Un resultado de más de 32.768 B dejaba la llamada pendiente para siempre | real, con la misma evidencia; no se volvió a medir | se recorta el mensaje a 32.768 B o menos, sin partir un carácter | 49 | `-fidelidad` |
+| F3 | baja | Un error antes de `session.started` se tomaba por un corte («Sigo» ×4) | real, vuelto a medir contra el servidor sin crédito | `ConfirmaQueAbrio` y `Hecho.Abierta`; la conversación dice la causa una vez y no reintenta | 49 en el traductor; en la conversación **sin juez** (W49a–d, medido con `sonda-conv`) | `-fidelidad` |
+
+**Verificadores del cierre** (2026-09-12, 23:3x, sobre `9324d97`) **y este cierre** (2026-09-13, sobre `2d0b779`):
+
+| # | Hallazgo | ¿Real? | Qué se hizo | Juez hoy |
+|---|---|---|---|---|
+| V1 | La 218 reconectaba una vez, y X218b (`=` en vez de `+=` en `EmpiezaUnaConexion`) daba ✔ 218, CONTRATO INTACTO | real: con dos cortes, 25 + 3 + 4 s se reportaban como 7 | la 218 juzga tres conexiones (`2d0b779`) | 218; SG218i roja |
+| V2 | El tic de la 209 era un `session.usage.updated`, que desde la 48 trae hechos; SG209i daba ✔ 209, con solo la 211 y la 212 en rojo | real, medido antes del arreglo | la 209 usa el silencio de ceros (`2d0b779`) | 209; SG209i roja en la 209, la 211 y la 212 |
+| V3 | Que `ReconectarAsync` sin continuidad pase por `EmpiezaUnaConexion` no tiene juez (W218b) | real | dicho en «Límites»; necesita socket | **ninguno** |
+| V4 | El nivel 4 no midió la rama: la cuenta de OpenAI no tiene crédito | real y ajeno a la rama; a las 23:5x, la sonda seguía con `credit_balance_exhausted` | nada que arreglar en el repo: repetir con crédito | — |
+| V5 | `sesión abierta con «…»` se escribe al abrir el socket, antes de que el servidor confirme, y `conducir.ps1` la toma por «voz abierta» | real (patrón nº2) | **sin arreglar**: moverla cambia lo que espera el conductor (`sesi.n abierta`) y ninguno de los dos tiene juez. Con GPT-Live la corrige la línea siguiente («la sesión no llegó a abrir…») | ninguno |
+| V6 | Con `U_VOZ=realtime`, un error de cuota se reintenta 4 veces; con GPT-Live, no | real | dicho en «La vuelta atrás»: con Realtime es lo de antes (`ConfirmaQueAbrio` falso) | — |
+| V7 | `conducir.ps1` cierra con Ctrl+Alt+M aunque la voz ya esté cerrada, y la reabre | real (23:39:40 y 23:43:06) | **sin arreglar**: sin crédito no se puede comprobar el arreglo; dicho en «El nivel 4» | ninguno |
+| V8 | T4 ya estaba en su estado final antes de empezar | real, del escritorio | el juez lo trató bien («Ejercita = no»); antes de repetir, cerrar los exploradores abiertos | juez E |
+| V9 | S48b sale roja por una excepción y no por un `Debe` | real: sin esa comprobación, un `seconds` que no fuera número lanzaría en `Leer`, dentro del bucle de recepción | nada: la comprobación está, y es lo que evita eso | 48 |
+| V10 | S207 solo tumba la 207, porque la 204 calcula el logro ella misma | real | dicho aquí: el logro de la mano lo juzga solo la 207, y la juzga | 207 (spec 017) |
 
 ## Hallazgos
 
@@ -733,6 +858,7 @@ alguien delante (OLED Care). Lo que tiene que decir, además de la tabla:
     ningún case. Se guarda el último de cada conexión y se suma entre conexiones, porque una conexión nueva es
     otra sesión del servidor. Contado: 1 traductor emite la duración, 1 sitio la consume, 1 construye
     `ConsumoVivo`, 1 lo manda al panel (`FaceWindow`, sin tocar), y las 2 aperturas pasan por `EmpiezaUnaConexion`.
+    Esa última cuenta es de lectura: que `ReconectarAsync` pase por ahí **no lo juzga nadie** (W218b, ver «Límites»).
   - **La 219 no se escribió** (que el append de 🎓 quepa): ver «Límites».
 
 ## Sabotajes
