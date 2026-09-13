@@ -586,6 +586,11 @@ internal static class Contrato
         Prueba("214. con GPT-Live, varias llamadas pedidas a la vez se contestan todas antes de pedir turno, y el turno se pide una sola vez; con GPT Realtime una tanda sigue pidiendo turno detrás de sus resultados", VariasLlamadasUnSoloTurno);
         Prueba("217. con GPT-Live el log no se inunda: ni los deltas del delegado ni el audio dejan una línea «←», y lo demás que no se traduce la sigue dejando", ElLogNoSeInundaConLosDeltas);
         Prueba("218. con GPT-Live lo que dura la voz llega al cierre: los segundos que cuenta el servidor —el último acumulado de cada conexión, sumado entre conexiones— se reportan aunque no haya fichas, y el cierre deja una línea voz-viva con esos segundos; con fichas y sin segundos, el reporte sigue como estaba", LaDuracionDeGptLiveLlegaAlCierre);
+        // LA MISMA CLASE DE ERROR, UN SOLO TRATAMIENTO (2026-09-13). Sin crédito, Realtime reconectó cuatro veces y GPT-Live
+        // no reintentó. Lo que no se arregla reintentando —cuenta, clave, modelo— se reconoce por su código medido (223) y
+        // la conversación lo usa con los dos protocolos (224).
+        Prueba("223. lo que no se arregla reintentando se reconoce por su código y dice su causa: sin crédito (insufficient_quota, credit_balance_exhausted), una clave que no vale (invalid_api_key, o el apretón de manos rechazado con 401) y un modelo que no existe (invalid_model, model_not_found), también dentro de la descripción de un cierre; cada causa se distingue de las otras, y cualquier otro código, un número de cierre, la prosa del mensaje o nada se pueden reintentar", LoQueNoSeArreglaReintentandoSeReconoce);
+        Prueba("224. con los dos protocolos, lo que no se arregla reintentando no reconecta: venga en un error, en el cierre del socket o en el apretón de manos de la reconexión, la conversación dice una vez por qué y cierra la voz; un corte sin esa causa sigue reconectando, y una conexión nueva no hereda la causa de la anterior", LoQueNoSeArreglaNoReconecta);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -8473,6 +8478,184 @@ internal static class Contrato
                 Debe(n == 0 && dichas.Length == 0,
                     $"una sesión sin fichas ni segundos no reporta nada ni deja línea: no hubo nada que contar (reportes {n}, líneas {dichas.Length})");
             }
+        }
+        finally { anotado.RemoveEventHandler(null, oyeLog); }
+    }
+
+    /// <remarks>
+    /// LA MISMA CLASE DE ERROR, DOS TRATAMIENTOS (nivel 4 del 2026-09-12, cuenta sin crédito). Con U_VOZ=realtime el
+    /// servidor cerró con 1013 «insufficient_quota.credit_balance_exhausted» y la conversación reconectó cuatro veces
+    /// («reconectada SIN continuidad … intento 1..4», «se cayó 5 veces seguidas: se deja»); GPT-Live, con la 49, dijo la
+    /// causa una vez. Reconectar con la misma clave, el mismo modelo y la misma cuenta falla igual.
+    ///
+    /// LOS CÓDIGOS SON LOS MEDIDOS, no los de la documentación. El 2026-09-13, con .NET 8 y el mismo ClientWebSocket
+    /// de la app (sonda-fatal, fuera del repo): una clave falsa por /v1/live/sessions se rechaza en el apretón de
+    /// manos con HTTP 401 (WebSocketException NotAWebSocket); por /v1/realtime el apretón pasa, llega el error
+    /// invalid_api_key y el cierre 3000 «invalid_request_error.invalid_api_key». Un modelo que no existe: invalid_model
+    /// en GPT-Live, model_not_found y cierre 4004 en Realtime. La descripción del cierre es «type.code» del error.
+    ///
+    /// SE RECONOCE POR EL CÓDIGO Y NO POR LA PROSA: el message está en inglés, cambia de redacción y lleva cifras
+    /// (la del 401 viene dentro de una frase de .NET). Y el número del cierre no es la causa: 1013 es «vuelve a
+    /// intentarlo» en el RFC 6455, y el servidor lo usó para decir que no hay crédito.
+    /// </remarks>
+    private static void LoQueNoSeArreglaReintentandoSeReconoce()
+    {
+        var t = Cap004("U.WindowsClient.Voice.NoSeArreglaReintentando");
+        var m = t?.GetMethod("PorQue", BindingFlags.Public | BindingFlags.Static, new[] { typeof(string) });
+        if (m == null) { Pendiente("Voice.NoSeArreglaReintentando.PorQue", "223", "018"); return; }
+        string PorQue(string codigo) => (string)(m.Invoke(null, new object[] { codigo }) ?? "");
+
+        var causas = new (string Palabra, string[] Codigos)[]
+        {
+            ("crédito", new[] { "credit_balance_exhausted", "insufficient_quota", "insufficient_quota.credit_balance_exhausted" }),
+            ("clave", new[] { "invalid_api_key", "invalid_request_error.invalid_api_key", "401" }),
+            ("modelo", new[] { "invalid_model", "model_not_found", "invalid_request_error.model_not_found" }),
+        };
+        foreach (var (palabra, codigos) in causas)
+        {
+            var dichas = codigos.Select(PorQue).ToArray();
+            for (int i = 0; i < codigos.Length; i++)
+                Debe(dichas[i].Contains(palabra) && causas.Where(o => o.Palabra != palabra).All(o => !dichas[i].Contains(o.Palabra)),
+                    $"«{codigos[i]}» no se arregla reintentando, y lo que dice nombra «{palabra}» y ninguna de las otras dos causas (dijo «{dichas[i]}»)");
+            Debe(dichas.Distinct().Count() == 1,
+                $"los códigos de una misma causa la dicen igual: es una causa, no tres ({string.Join(" | ", dichas)})");
+        }
+
+        string[] reintentables =
+        {
+            "", "   ",
+            // Errores medidos que no son de clave, cuenta ni modelo: la sesión sigue viva o un corte los arregla.
+            "response_input_buffer_full", "function_call_outputs_required", "unknown_parameter",
+            "invalid_request_error", "invalid_request_error.unknown_parameter",
+            // Motivos de cierre que no son una causa: el del servidor y el nuestro.
+            "close_requested", "fin",
+            // El número del cierre no es la causa.
+            "1013", "3000", "4004",
+            // Y la prosa no es un código, aunque hable de lo mismo.
+            "You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.",
+            "Model \"gpt-live-inexistente-9\" is not supported in realtime mode.",
+            "The server returned status code '401' when status code '101' was expected.",
+        };
+        foreach (string codigo in reintentables)
+        {
+            string dicha = PorQue(codigo);
+            Debe(dicha.Length == 0, $"«{codigo}» se puede reintentar: no dice causa (dijo «{dicha}»)");
+        }
+    }
+
+    /// <remarks>
+    /// EL CABLEADO DE LA 223, con los dos protocolos y sin socket. Hasta el 2026-09-13 lo que hacía la conversación al
+    /// quedarse sin escucha vivía en el finally de RecibirAsync y en el catch de ReconectarAsync, que se llamaba a sí
+    /// mismo con cualquier excepción: ningún contrato llegaba ahí. Ahora las tres puertas por las que llega la causa
+    /// —un error (Procesar), el cierre del socket (CerroElServidor) y un apretón de manos rechazado (NoConecto)— la
+    /// anotan, y UN solo sitio decide si se reconecta (SeAcaboLaEscuchaAsync). La reconexión se sustituye como la
+    /// puerta de salida de la 208: el contrato no abre sockets ni lleva la clave.
+    ///
+    /// Cada fuente se juzga SOLA además de junta: con Realtime el error y el cierre traen el mismo código, y juzgarlos
+    /// solo juntos dejaría verde que una de las dos puertas no anotara nada.
+    /// </remarks>
+    private static void LoQueNoSeArreglaNoReconecta()
+    {
+        const BindingFlags Privado = BindingFlags.NonPublic | BindingFlags.Instance;
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var procesar = tc?.GetMethod("Procesar", Privado);
+        var conexion = tc?.GetMethod("EmpiezaUnaConexion", Privado);
+        var viva = tc?.GetProperty("Viva");
+        var dice = tc?.GetEvent("Dice");
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tc == null || procesar == null || conexion == null || viva == null || dice == null || anotado == null || tLive == null)
+        { Pendiente("ConversacionEnVivo (Procesar, EmpiezaUnaConexion, Viva, Dice), LogBus.Anotado y Voz.Realtime.ProtocoloGptLive", "224", "018"); return; }
+        var cerro = tc.GetMethod("CerroElServidor", Privado, new[] { typeof(int), typeof(string) });
+        var corto = tc.GetMethod("SeCortoLaEscucha", Privado, new[] { typeof(Exception) });
+        var noConecto = tc.GetMethod("NoConecto", Privado, new[] { typeof(Exception), typeof(int) });
+        var seAcabo = tc.GetMethod("SeAcaboLaEscuchaAsync", Privado, new[] { typeof(CancellationToken) });
+        var reconectar = tc.GetField("_reconectar", Privado);
+        if (cerro == null || corto == null || noConecto == null || seAcabo == null || reconectar == null)
+        { Pendiente("ConversacionEnVivo: CerroElServidor(int, string), SeCortoLaEscucha(Exception), NoConecto(Exception, int), SeAcaboLaEscuchaAsync y la puerta _reconectar", "224", "018"); return; }
+
+        // Copiados de lo que contestó el servidor (2026-09-12 y 2026-09-13).
+        const string rtClave = """{"type":"error","event_id":"event_ENgrrx8v946dIyk6vQTOj","error":{"type":"invalid_request_error","code":"invalid_api_key","message":"Incorrect API key provided: sk-proj-**************************************************0000. You can find your API key at https://platform.openai.com/account/api-keys.","param":null,"event_id":null}}""";
+        const string rtModelo = """{"type":"error","event_id":"event_ENgs3fIvSRtnqIx8JCGfh","error":{"type":"invalid_request_error","code":"model_not_found","message":"The model `gpt-realtime-inexistente-9` does not exist or you do not have access to it.","param":null,"event_id":null}}""";
+        const string liveAbrio = """{"type":"session.started","session":{"id":"live_u2_ENOy6GhblDeLrMlDOGSX1","model":"gpt-live-1","status":"active","input":[]}}""";
+        const string liveCredito = """{"type":"error","event_id":"event_7f0763e4-314d-4930-9bfa-eb831d673918","error":{"type":"invalid_request_error","code":"credit_balance_exhausted","message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."}}""";
+        const string liveModelo = """{"type":"error","event_id":"event_d7252ece-60b5-4b34-88a4-30b46a4124f4","error":{"type":"invalid_request_error","code":"invalid_model","message":"Model \"gpt-live-inexistente-9\" is not supported in realtime mode."}}""";
+        const string liveBuffer = """{"type":"error","event_id":"event_ENQ9zsNQ1Zl59krrM4MFC","error":{"type":"invalid_request_error","code":"response_input_buffer_full","message":"Backend response input history is limited to 128 items and 32768 UTF-8 bytes per session.","param":"item"}}""";
+
+        Voz.Realtime.IProtocolo GptLive() => (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+        void Llega(object conv, string json) => procesar.Invoke(conv, new object[] { json, CancellationToken.None });
+        void Cierra(object conv, int estado, string descripcion) => cerro.Invoke(conv, new object[] { estado, descripcion });
+        void SeCorta(object conv) => corto.Invoke(conv, new object[] { new System.Net.WebSockets.WebSocketException(
+            System.Net.WebSockets.WebSocketError.ConnectionClosedPrematurely, "The remote party closed the WebSocket connection without completing the close handshake.") });
+        void NoConecta(object conv, int estadoHttp) => noConecto.Invoke(conv, new object[] { new System.Net.WebSockets.WebSocketException(
+            System.Net.WebSockets.WebSocketError.NotAWebSocket, $"The server returned status code '{estadoHttp}' when status code '101' was expected."), estadoHttp });
+
+        var lineas = new List<string>();
+        Action<string, string> oyeLog = (tag, msg) => { if (tag == "voz-viva" && msg.StartsWith("no se reintenta", StringComparison.Ordinal)) lock (lineas) lineas.Add(msg); };
+        anotado.AddEventHandler(null, oyeLog);
+        try
+        {
+            (int Reconexiones, string[] Dichos, string[] Lineas, bool Viva) Corre(Voz.Realtime.IProtocolo p, Action<object> queLlega)
+            {
+                lock (lineas) lineas.Clear();
+                using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), p })!;
+                int reconexiones = 0;
+                var dichos = new List<string>();
+                reconectar.SetValue(conv, (Func<Task>)(() => { Interlocked.Increment(ref reconexiones); return Task.CompletedTask; }));
+                dice.AddEventHandler(conv, (Action<string>)(s => { lock (dichos) dichos.Add(s); }));
+                viva.SetValue(conv, true);
+                conexion.Invoke(conv, new object[] { "" });   // una conexión recién mandada su apertura, como la deja ArrancarAsync
+                queLlega(conv);
+                ((Task)seAcabo.Invoke(conv, new object[] { CancellationToken.None })!).Wait(5000);
+                bool sigueViva = (bool)viva.GetValue(conv)!;
+                string[] l; lock (lineas) l = lineas.ToArray();
+                string[] d; lock (dichos) d = dichos.ToArray();
+                return (reconexiones, d, l, sigueViva);
+            }
+            void NoReintenta(string como, (int Reconexiones, string[] Dichos, string[] Lineas, bool Viva) r, string causa)
+            {
+                Debe(r.Reconexiones == 0, $"{como}: no reconecta (reconectó {r.Reconexiones})");
+                Debe(!r.Viva, $"{como}: cierra la voz en vez de quedarse abierta y muda");
+                Debe(r.Dichos.Length == 1 && r.Dichos[0].Contains(causa),
+                    $"{como}: dice por qué UNA vez, nombrando «{causa}» (dijo {r.Dichos.Length}: {string.Join(" | ", r.Dichos)})");
+                Debe(r.Lineas.Length == 1 && r.Lineas[0].Contains(causa),
+                    $"{como}: y deja UNA línea voz-viva «no se reintenta» con esa causa (dejó {r.Lineas.Length}: {string.Join(" | ", r.Lineas)})");
+            }
+            void Reintenta(string como, (int Reconexiones, string[] Dichos, string[] Lineas, bool Viva) r)
+                => Debe(r.Reconexiones == 1 && r.Viva && r.Dichos.Length == 0 && r.Lineas.Length == 0,
+                    $"{como}: sigue reconectando, una vez y sin decir ninguna causa (reconectó {r.Reconexiones}, viva {r.Viva}, dijo {r.Dichos.Length}: {string.Join(" | ", r.Dichos)}, líneas {r.Lineas.Length})");
+
+            // ── GPT REALTIME ────────────────────────────────────────────────────
+            var realtime = new Voz.Realtime.ProtocoloOpenAI();
+            NoReintenta("con GPT Realtime, una clave falsa (error invalid_api_key y cierre 3000)",
+                Corre(realtime, c => { Llega(c, rtClave); Cierra(c, 3000, "invalid_request_error.invalid_api_key"); }), "clave");
+            NoReintenta("con GPT Realtime, el cierre 1013 «insufficient_quota.credit_balance_exhausted» solo, como el del nivel 4 del 2026-09-12",
+                Corre(realtime, c => Cierra(c, 1013, "insufficient_quota.credit_balance_exhausted")), "crédito");
+            NoReintenta("con GPT Realtime, un modelo que no existe (error model_not_found y cierre 4004)",
+                Corre(realtime, c => { Llega(c, rtModelo); Cierra(c, 4004, "invalid_request_error.model_not_found"); }), "modelo");
+            NoReintenta("con GPT Realtime, el error invalid_api_key solo, y la escucha cortada sin cierre",
+                Corre(realtime, c => { Llega(c, rtClave); SeCorta(c); }), "clave");
+            Reintenta("con GPT Realtime, un cierre sin descripción",
+                Corre(realtime, c => Cierra(c, 1001, "")));
+
+            // ── GPT-LIVE ───────────────────────────────────────────────────────
+            NoReintenta("con GPT-Live, credit_balance_exhausted con la sesión ya confirmada, y el socket muerto",
+                Corre(GptLive(), c => { Llega(c, liveAbrio); Llega(c, liveCredito); SeCorta(c); }), "crédito");
+            NoReintenta("con GPT-Live, la reconexión rechazada en el apretón de manos con HTTP 401 (clave falsa, medido)",
+                Corre(GptLive(), c => { Llega(c, liveAbrio); SeCorta(c); NoConecta(c, 401); }), "clave");
+            Reintenta("con GPT-Live, un error que no es de clave, cuenta ni modelo (response_input_buffer_full) y el socket muerto",
+                Corre(GptLive(), c => { Llega(c, liveAbrio); Llega(c, liveBuffer); SeCorta(c); }));
+            Reintenta("con GPT-Live, una reconexión que no conecta sin respuesta HTTP (la red)",
+                Corre(GptLive(), c => { Llega(c, liveAbrio); SeCorta(c); NoConecta(c, 0); }));
+            Reintenta("con GPT-Live, una conexión nueva no hereda la causa de la anterior",
+                Corre(GptLive(), c => { Llega(c, liveAbrio); Llega(c, liveCredito); conexion.Invoke(c, new object[] { "" }); Llega(c, liveAbrio); SeCorta(c); }));
+
+            // Y LO QUE LA 49 YA HACÍA, AHORA CON JUEZ: un error antes de session.started es que no abrió (W49c, hasta hoy sin juez).
+            var noAbrio = Corre(GptLive(), c => { Llega(c, liveModelo); SeCorta(c); });
+            Debe(noAbrio.Reconexiones == 0 && !noAbrio.Viva && noAbrio.Dichos.Length == 1 && noAbrio.Dichos[0].Contains("is not supported in realtime mode"),
+                $"con GPT-Live, invalid_model antes de session.started: no abrió, no reconecta y lo dice una vez con lo que dijo el servidor (reconectó {noAbrio.Reconexiones}, viva {noAbrio.Viva}, dijo {noAbrio.Dichos.Length}: {string.Join(" | ", noAbrio.Dichos)})");
         }
         finally { anotado.RemoveEventHandler(null, oyeLog); }
     }
