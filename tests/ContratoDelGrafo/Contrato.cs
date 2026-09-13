@@ -586,6 +586,11 @@ internal static class Contrato
         Prueba("214. con GPT-Live, varias llamadas pedidas a la vez se contestan todas antes de pedir turno, y el turno se pide una sola vez; con GPT Realtime una tanda sigue pidiendo turno detrás de sus resultados", VariasLlamadasUnSoloTurno);
         Prueba("217. con GPT-Live el log no se inunda: ni los deltas del delegado ni el audio dejan una línea «←», y lo demás que no se traduce la sigue dejando", ElLogNoSeInundaConLosDeltas);
         Prueba("218. con GPT-Live lo que dura la voz llega al cierre: los segundos que cuenta el servidor —el último acumulado de cada conexión, sumado entre conexiones— se reportan aunque no haya fichas, y el cierre deja una línea voz-viva con esos segundos; con fichas y sin segundos, el reporte sigue como estaba", LaDuracionDeGptLiveLlegaAlCierre);
+
+        // «SESIÓN ABIERTA» SE ESCRIBÍA AL CONECTAR EL SOCKET (2026-09-13, nivel 4 del 12): con la cuenta sin crédito
+        // salió en el mismo segundo que el error, y el conductor del nivel 4 la tomó por voz abierta. Del 220 al 222 son
+        // de la rama de la apertura; el 219 quedó sin usar en la spec 018 y no se recicla.
+        Prueba("220. la voz dice que la sesión abrió cuando el servidor lo confirma, no cuando conecta el socket: al conectar deja una línea que dice que espera la confirmación, y la de «sesión abierta con» sale una sola vez, al confirmarla, con «Te escucho.» detrás, con GPT-Live y con GPT Realtime; un error antes de confirmar no la escribe, y con un protocolo que no confirma la línea dice que nadie la confirmó", LaVozDiceQueAbrioCuandoElServidorLoConfirma);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -8754,6 +8759,124 @@ internal static class Contrato
                     $"en la conversación, la pausa cierra el turno pero no parte la petición: una sola línea «turno nuevo (por voz)» y el tope no vuelve a cero (cierres {cerroPausa}, líneas {trasPausa})");
                 Debe(trasRespuesta == 2,
                     $"y lo que dice después de que Ü le conteste sí abre turno y reinicia el tope (líneas {trasRespuesta})");
+            }
+        }
+        finally { anotado.RemoveEventHandler(null, oyeLog); }
+    }
+
+    /// <remarks>
+    /// «SESIÓN ABIERTA» SE ESCRIBÍA AL CONECTAR EL SOCKET, ANTES DE QUE EL SERVIDOR DIJERA NADA (nivel 4 del 2026-09-12). Con
+    /// la cuenta sin crédito salió en el mismo segundo que «el servidor dice: You have no credits remaining», y el
+    /// conductor del nivel 4 (scripts\nivel4-voz\conducir.ps1) la tomó por «voz abierta». Es el patrón nº2: una línea
+    /// que afirma «abrió» cuando solo sabe «conectó». Desde la 49 (GPT-Live) y la 50 (GPT Realtime) de la voz, el
+    /// traductor dice cuándo confirma el servidor; esto juzga que la conversación lo espera para decirlo.
+    ///
+    /// Se juzga sin socket: por EmpiezaUnaConexion, por donde pasan ArrancarAsync y ReconectarAsync después de conectar
+    /// y mandar la apertura, y por Procesar, la puerta del socket, con la puerta de salida sustituida. Que ArrancarAsync
+    /// no vuelva a escribir la línea por su cuenta necesita clave y socket, y no se juzga aquí (W220).
+    /// </remarks>
+    private static void LaVozDiceQueAbrioCuandoElServidorLoConfirma()
+    {
+        const BindingFlags Privado = BindingFlags.NonPublic | BindingFlags.Instance;
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var procesar = tc?.GetMethod("Procesar", Privado);
+        var conexion = tc?.GetMethod("EmpiezaUnaConexion", Privado);
+        var salida = tc?.GetField("_puerta", Privado);
+        var abierta = tc?.GetField("_puertaAbierta", Privado);
+        var dice = tc?.GetEvent("Dice");
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tc == null || procesar == null || conexion == null || salida == null || abierta == null || dice == null
+            || anotado == null || tLive == null)
+        { Pendiente("ConversacionEnVivo (Procesar, EmpiezaUnaConexion, _puerta, _puertaAbierta, Dice) y Voz.Realtime.ProtocoloGptLive", "220", "018"); return; }
+        var live = (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+
+        // Tal como los mandó el servidor: la confirmación de cada uno, medida con sonda-apertura.ps1 el 2026-09-13 (las
+        // instrucciones por defecto de Realtime, recortadas), y el error sin crédito del 2026-09-12, el de la 49 de la voz.
+        const string SesionStarted = """{"event_id":"event_ENgqCrigFUMtyYlkgZPm6","type":"session.started","session":{"id":"live_u2_ENgqAxk3F96xLroZHUQ5A","expires_at":1789322132,"model":"gpt-live-1","instructions":"Eres una sonda. Responde en una frase.","audio":{"output":{"voice":"marin"},"format":{"type":"audio/pcm","rate":24000}},"delegation":{"type":"responses","responses":{"model":"gpt-5.6-luna","instructions":"Sonda.","tools":[],"tool_choice":"auto"}},"status":"active","input":[]}}""";
+        const string SesionCreated = """{"type":"session.created","event_id":"event_ENgpu4Ic9UMb8h9QL7IeW","session":{"type":"realtime","object":"realtime.session","id":"sess_ENgpurpMSkQ6r492KYlaU","model":"gpt-realtime-2.1-mini","output_modalities":["audio"],"instructions":"Your knowledge cutoff is 2023-10. [...]","tools":[],"tool_choice":"auto","max_output_tokens":"inf","tracing":null,"truncation":"auto","prompt":null,"expires_at":1789318514,"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"transcription":null,"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"prefix_padding_ms":300,"silence_duration_ms":500,"idle_timeout_ms":null,"create_response":true,"interrupt_response":true}},"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"marin","speed":1.0}},"include":null}}""";
+        const string SinCredito = """{"type":"error","event_id":"event_7f0763e4-314d-4930-9bfa-eb831d673918","error":{"type":"invalid_request_error","code":"credit_balance_exhausted","message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."}}""";
+
+        var lineas = new List<string>();
+        Action<string, string> oyeLog = (tag, msg) =>
+        {
+            if (tag == "voz-viva" && (msg.Contains("sesión abierta") || msg.Contains("socket conectado"))) lock (lineas) lineas.Add(msg);
+        };
+        string[] Lineas() { lock (lineas) { var l = lineas.ToArray(); lineas.Clear(); return l; } }
+        static string Juntas(IEnumerable<string> l) => l.Any() ? string.Join(" | ", l) : "nada";
+
+        // Una conversación sin socket: lo que manda sale a una lista, lo que dice a otra.
+        (IDisposable Conv, List<string> Mandados, List<string> Dichas) Nueva(Voz.Realtime.IProtocolo p)
+        {
+            var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), p })!;
+            var mandados = new List<string>();
+            var dichas = new List<string>();
+            salida.SetValue(conv, (Func<string, CancellationToken, Task>)((json, _) => { lock (mandados) mandados.Add(json); return Task.CompletedTask; }));
+            abierta.SetValue(conv, (Func<bool>)(() => true));
+            dice.AddEventHandler(conv, (Action<string>)(s => { lock (dichas) dichas.Add(s); }));
+            return (conv, mandados, dichas);
+        }
+        void Conecta(object conv) => conexion.Invoke(conv, new object[] { "Te escucho." });
+        void Llega(object conv, string json) => procesar.Invoke(conv, new object[] { json, CancellationToken.None });
+
+        anotado.AddEventHandler(null, oyeLog);
+        try
+        {
+            var confirman = new (Voz.Realtime.IProtocolo P, string Nombre, string Confirmacion)[]
+            {
+                (live, "GPT-Live", SesionStarted),
+                (new Voz.Realtime.ProtocoloOpenAI(), "GPT Realtime", SesionCreated),
+            };
+            foreach (var (p, nombre, confirmacion) in confirman)
+            {
+                string quien = $"«{p.Modelo}» ({p.Quien})";
+
+                // ── EL SERVIDOR CONFIRMA ─────────────────────────────────────────
+                var (conv, mandados, dichas) = Nueva(p);
+                using (conv)
+                {
+                    Lineas();
+                    Conecta(conv);
+                    string[] alConectar = Lineas();
+                    Debe(alConectar.Length == 1 && alConectar[0] == $"socket conectado, esperando confirmación de {quien}",
+                        $"con {nombre}, al conectar el socket la voz deja UNA línea que describe el paso, «socket conectado, esperando confirmación de {quien}», y no dice todavía que la sesión abrió (dejó: {Juntas(alConectar)})");
+                    Debe(dichas.Count == 0, $"y «Te escucho.» espera a la confirmación (dijo: {Juntas(dichas)})");
+
+                    Llega(conv, confirmacion);
+                    string[] alConfirmar = Lineas();
+                    Debe(alConfirmar.Length == 1 && alConfirmar[0] == $"sesión abierta con {quien}: el servidor la confirmó",
+                        $"con {nombre}, al llegar la confirmación del servidor sale UNA línea «sesión abierta con {quien}: el servidor la confirmó» (dejó: {Juntas(alConfirmar)})");
+                    Debe(dichas.Count == 1 && dichas[0] == "Te escucho.", $"y entonces dice «Te escucho.», una vez (dijo: {Juntas(dichas)})");
+                    Debe(mandados.Count == 0, $"y confirmar no manda nada al servidor (mandó: {Juntas(mandados)})");
+                }
+
+                // ── EL SERVIDOR CONTESTA UN ERROR EN VEZ DE CONFIRMAR ────────────
+                var (conv2, _, dichas2) = Nueva(p);
+                using (conv2)
+                {
+                    Lineas();
+                    Conecta(conv2);
+                    Lineas();
+                    Llega(conv2, SinCredito);
+                    string[] trasElError = Lineas();
+                    Debe(trasElError.Length == 0 && dichas2.Count == 0,
+                        $"con {nombre}, un error antes de confirmar no escribe «sesión abierta con» ni dice «Te escucho.» (dejó: {Juntas(trasElError)}; dijo: {Juntas(dichas2)})");
+                }
+            }
+
+            // ── UN PROTOCOLO QUE NO CONFIRMA ─────────────────────────────────────
+            var (conv3, _, dichas3) = Nueva(new ProtocoloDeMentira(pideRespuesta: true, marcaLosTurnos: true));
+            using (conv3)
+            {
+                Lineas();
+                Conecta(conv3);
+                string[] sinConfirmar = Lineas();
+                Debe(sinConfirmar.Length == 1 && sinConfirmar[0] == "sesión abierta con «ninguno» (de mentira), sin confirmación: este protocolo no la manda",
+                    $"con un protocolo que no confirma, la línea de apertura sale al conectar y dice que nadie la confirmó (dejó: {Juntas(sinConfirmar)})");
+                Debe(dichas3.Count == 1 && dichas3[0] == "Te escucho.",
+                    $"y con él «Te escucho.» se dice al conectar, como siempre: no hay confirmación que esperar (dijo: {Juntas(dichas3)})");
             }
         }
         finally { anotado.RemoveEventHandler(null, oyeLog); }
