@@ -8025,6 +8025,12 @@ internal static class Contrato
         Debe(!Cierra(turnos), "a 1000 ms del último trozo no toca cerrar");
         ahora = 102_000;
         Debe(!Cierra(turnos), "a 2000 ms del PRIMER trozo tampoco: el silencio se cuenta desde el último");
+        // NI UN MILISEGUNDO ANTES (revisión contrato r2, 2026-09-13). Con solo 1000 y 2000, cualquier silencio por
+        // defecto entre 1701 y 2000 pasaba: con 1705, CONTRATO INTACTO (medido). Y justo ahí caen dos de los cuatro
+        // huecos que fijaron los 2000 —1705 y 1707 ms entre devolver una herramienta y lo siguiente que dice Ü—: con
+        // 1705 el turno se volvería a cerrar a mitad de la tarea, que es la regresión que los 2000 arreglaron.
+        ahora = 102_299;
+        Debe(!Cierra(turnos), "a 1999 ms del último trozo todavía no toca cerrar: el silencio por defecto son los 2000 ms medidos, no algo menos");
         ahora = 102_300; bool cierra = Cierra(turnos);
         ahora = 102_400; bool otraVez = Cierra(turnos);
         Debe(cierra && !otraVez, "a 2000 ms del último trozo toca cerrar, y una sola vez");
@@ -8074,7 +8080,7 @@ internal static class Contrato
         if (tLive == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "209", "018"); return; }
         string tic = TicSinHechos;
 
-        (bool TieneMarcador, bool RelojDelSistema, int CerroAntes, int CerroDespues, List<string> Dijo, bool AbrioPorVoz) Conversa(
+        (bool TieneMarcador, bool RelojDelSistema, int CerroAntes, int CerroA2000, int CerroDespues, List<string> Dijo, bool AbrioPorVoz) Conversa(
             Voz.Realtime.IProtocolo protocolo, string trozo)
         {
             using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), protocolo })!;
@@ -8097,12 +8103,17 @@ internal static class Contrato
                 bool delSistema = deLaApp != null && Math.Abs(a - sistema) < 250 && b - a >= 30;
                 campoReloj.SetValue(conv, reloj);
                 void Llega(string json) => procesar.Invoke(conv, new object[] { json, CancellationToken.None });
+                // A 1999 ms, y no solo a 1700 (revisión contrato r2, 2026-09-13): construir el marcador con 1705 ms
+                // pasaba por aquí igual que con 2000. Y a 2000 exactos, no solo a 2100: con 2050 también pasaba.
                 ahora = 300_000; Llega(trozo);
                 ahora = 301_000; Llega(tic);
                 ahora = 301_700; Llega(tic);
+                ahora = 301_999; Llega(tic);
                 int antes = cerro;
+                ahora = 302_000; Llega(tic);
+                int a2000 = cerro;
                 ahora = 302_100; Llega(tic);
-                return (tiene, delSistema, antes, cerro, dijo, abrioPorVoz);
+                return (tiene, delSistema, antes, a2000, cerro, dijo, abrioPorVoz);
             }
             finally { anotado.RemoveEventHandler(null, oyeLog); }
         }
@@ -8114,8 +8125,8 @@ internal static class Contrato
         Debe(conLive.TieneMarcador, "con GPT-Live la conversación lleva su marcador de turnos");
         Debe(conLive.RelojDelSistema, "y lo construye con el reloj del sistema: el mismo origen que Environment.TickCount64, y avanza con él");
         Debe(conLive.AbrioPorVoz, "y el primer trozo de lo que dice el usuario abre un turno en la conversación (línea voz-turno «por voz»)");
-        Debe(conLive.CerroAntes == 0 && conLive.CerroDespues == 1,
-            $"con el silencio con que la construye la app: a 1700 ms no cierra y a 2100 ms cierra una vez, sin que el servidor mande nada (cerró {conLive.CerroAntes} y luego {conLive.CerroDespues})");
+        Debe(conLive.CerroAntes == 0 && conLive.CerroA2000 == 1 && conLive.CerroDespues == 1,
+            $"con el silencio con que la construye la app, los 2000 ms medidos: a 1999 ms no cierra, a 2000 ms cierra, y una sola vez, sin que el servidor mande nada (cerró {conLive.CerroAntes}, {conLive.CerroA2000} y luego {conLive.CerroDespues})");
         Debe(conLive.Dijo.Count == 1 && conLive.Dijo[0] == "abre el bloc de notas",
             $"y al cerrar entrega lo que dijo el usuario, que es lo que leen quien aprende y el piloto (entregó {conLive.Dijo.Count})");
 
@@ -8664,6 +8675,38 @@ internal static class Contrato
                     $"y el turno se cierra con el silencio de la app contado desde la devolución: a 1500 ms no, a 2100 ms sí (cerró {a1500} y luego {a2100})");
             }
             finally { suelta.Set(); }
+        }
+
+        // ── Y LA CONVERSACIÓN LE PASA LA VOZ QUE SUENA ───────────────────────
+        // Revisión contrato r2 (2026-09-13): la voz que suena solo se juzgaba sobre un marcador suelto. Con la
+        // conversación saltándose los Hecho.Suena al llamar a Oye, CONTRATO INTACTO (medido), y la guarda quedaba
+        // muerta sin que nada lo dijera. No es teórico: en una respuesta larga de GPT-Live la voz siguió llegando
+        // 3089 y 2667 ms sin transcripción nueva entre dos frases (sonda del adelanto, contra el servidor, ese día),
+        // y sin la guarda el turno se cerraba ahí, con Ü a media respuesta: «Ü dijo», Cerro y DijoElUsuario antes
+        // de tiempo.
+        var cv = GptLiveConReloj(reloj, "211");
+        if (cv == null) return;
+        var (convVoz, llegaVoz, cierresVoz, tcVoz) = cv.Value;
+        using (convVoz)
+        {
+            // Sin tocar el altavoz: Reaccionar tira el audio mientras dura la ventana de una interrupción a la orden,
+            // y el marcador lo oye igual, porque la conversación se lo da DESPUÉS de reaccionar.
+            var silencioHasta = tcVoz.GetField("_silencioHastaMs", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (silencioHasta == null) { Pendiente("ConversacionEnVivo._silencioHastaMs (el altavoz callado en el contrato)", "211", "018"); return; }
+            silencioHasta.SetValue(convVoz, long.MaxValue);
+            string ConVoz() => JsonSerializer.Serialize(new { type = "session.output_audio.delta", delta = Convert.ToBase64String(voz) });
+
+            Volatile.Write(ref ahora, 700_000); llegaVoz(DiceLaVozDeU("Estás en SAP Easy Access."));
+            for (long ms = 700_100; ms <= 703_000; ms += 100) { Volatile.Write(ref ahora, ms); llegaVoz(ConVoz()); }
+            int mientrasSuena = cierresVoz();
+            Volatile.Write(ref ahora, 704_500); llegaVoz(TicSinHechos);
+            int trasCallar1500 = cierresVoz();
+            Volatile.Write(ref ahora, 705_100); llegaVoz(TicSinHechos);
+            int trasCallar2100 = cierresVoz();
+            Debe(mientrasSuena == 0,
+                $"en la conversación, mientras llega la voz de Ü (pico 1152) no se cierra el turno, aunque su transcripción terminó hace 3000 ms (cerró {mientrasSuena})");
+            Debe(trasCallar1500 == 0 && trasCallar2100 == 1,
+                $"y el silencio de la app se cuenta desde lo último que sonó: a 1500 ms no cierra, a 2100 ms sí (cerró {trasCallar1500} y luego {trasCallar2100})");
         }
     }
 
