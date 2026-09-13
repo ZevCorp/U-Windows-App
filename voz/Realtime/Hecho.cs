@@ -72,6 +72,8 @@ public abstract record Hecho
     /// <summary>
     /// El servidor CONFIRMA que la sesión abrió. Solo lo mandan los protocolos que lo declaran (<see
     /// cref="IProtocolo.ConfirmaQueAbrio"/>), y para ellos lo que llega antes es que no abrió, no un corte.
+    /// GPT-Live lo manda con session.started (promesa 49) y GPT Realtime con session.created (promesa 50); y solo
+    /// entonces la conversación escribe «sesión abierta con «…»» (promesa 220 del grafo).
     /// </summary>
     public sealed record Abierta : Hecho;
 }
