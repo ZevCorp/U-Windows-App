@@ -585,6 +585,7 @@ internal static class Contrato
         Prueba("212. sin marcas de turno, una pausa del usuario sin que Ü le haya contestado sigue siendo la misma petición: lo que dice después no abre turno ni reinicia el tope; lo que dice después de que Ü le conteste, sí", UnaPausaSinRespuestaEsLaMismaPeticion);
         Prueba("214. con GPT-Live, varias llamadas pedidas a la vez se contestan todas antes de pedir turno, y el turno se pide una sola vez; con GPT Realtime una tanda sigue pidiendo turno detrás de sus resultados", VariasLlamadasUnSoloTurno);
         Prueba("217. con GPT-Live el log no se inunda: ni los deltas del delegado ni el audio dejan una línea «←», y lo demás que no se traduce la sigue dejando", ElLogNoSeInundaConLosDeltas);
+        Prueba("218. con GPT-Live lo que dura la voz llega al cierre: los segundos que cuenta el servidor —el último acumulado de cada conexión, sumado entre conexiones— se reportan aunque no haya fichas, y el cierre deja una línea voz-viva con esos segundos; con fichas y sin segundos, el reporte sigue como estaba", LaDuracionDeGptLiveLlegaAlCierre);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -8255,7 +8256,11 @@ internal static class Contrato
         const string completado = "{\"type\":\"response.event\",\"delegation_id\":\"item_1\",\"event\":{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\"}}}";
         const string argumentosHechos = "{\"type\":\"response.event\",\"delegation_id\":\"item_1\",\"event\":{\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{}\",\"item_id\":\"fc_1\"}}";
         const string delegacion = "{\"type\":\"session.delegation.created\",\"delegation\":{\"id\":\"item_1\",\"type\":\"delegation\",\"target\":\"responses\"}}";
-        const string uso = "{\"type\":\"session.usage.updated\",\"usage\":{\"seconds\":13.0}}";
+        // ACOTADO AL INTEGRAR (2026-09-12): el ejemplo de «lo que no se traduce» era un session.usage.updated, y la 48 de
+        // la voz lo traduce ahora a Hecho.Duracion (su duración va al cierre, la 218). Con él la 217 salía roja
+        // («dejó 0») sin que el log hubiera cambiado: el ejemplo había dejado de ser lo que decía ser. El de ahora es un
+        // evento medido que ningún traductor atiende.
+        const string instruccionesAnotadas = "{\"type\":\"session.instructions.appended\",\"event_id\":\"event_1\"}";
         const string sobreVacio = "{\"type\":\"response.event\"}";
         const string deltaDeRealtime = "{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\"}";
 
@@ -8270,7 +8275,7 @@ internal static class Contrato
             (completado, "un response.completed del delegado"),
             (argumentosHechos, "un response.function_call_arguments.done"),
             (delegacion, "un session.delegation.created"),
-            (uso, "un session.usage.updated"),
+            (instruccionesAnotadas, "un session.instructions.appended"),
         };
 
         // ── POR LA PUERTA DEL SOCKET ──────────────────────────────────────────
@@ -8321,6 +8326,156 @@ internal static class Contrato
             "y un .delta que no viene dentro de response.event sigue como estaba: la regla es de los deltas del delegado, no de todo lo que acabe en .delta");
     }
 
+    /// <remarks>
+    /// EL PANEL DE COSTOS NO SE ENTERABA DE GPT-LIVE, Y NADA LO DECÍA (revisa:regresiones, 2026-09-12). GPT-Live no
+    /// cuenta fichas: cuenta segundos, en session.usage.updated, que la 48 de la voz traduce a Hecho.Duracion. La
+    /// conversación no lo atendía, y ReportarConsumo salía en la guarda «_total &lt;= 0» sin reportar y sin dejar
+    /// línea: con GPT-Live como voz por defecto, el consumo de voz desaparecía del panel en silencio.
+    ///
+    /// LOS SEGUNDOS SON EL ACUMULADO DE LA SESIÓN (12.0 a los 15 s y 25.0 a los 30 s de la misma sesión, medido):
+    /// sumarlos como fichas daría 37 donde hubo 25. Pero una conexión nueva es otra sesión del servidor, que cuenta
+    /// desde cero, y entre conexiones sí se suman. El panel cuenta fichas y FaceWindow no le pasa los segundos (zona de
+    /// choque, no se toca): la línea del cierre es lo que los deja escritos.
+    ///
+    /// Se juzga por la puerta del socket (Procesar), por el cambio de conexión (EmpiezaUnaConexion) y por el cierre de
+    /// verdad (TerminarAsync, con Viva puesta a mano: sin micrófono, collar ni altavoz abiertos, cerrar no toca ningún
+    /// dispositivo). Que ArrancarAsync ponga la cuenta a cero necesita clave y socket, y no se juzga aquí.
+    /// </remarks>
+    private static void LaDuracionDeGptLiveLlegaAlCierre()
+    {
+        const BindingFlags Privado = BindingFlags.NonPublic | BindingFlags.Instance;
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var procesar = tc?.GetMethod("Procesar", Privado);
+        var reaccionar = tc?.GetMethod("Reaccionar", Privado);
+        var conexion = tc?.GetMethod("EmpiezaUnaConexion", Privado);
+        var terminar = tc?.GetMethod("TerminarAsync");
+        var viva = tc?.GetProperty("Viva");
+        var reporta = tc?.GetProperty("ReportaConsumo");
+        var tConsumo = tc?.GetNestedType("ConsumoVivo");
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tc == null || procesar == null || reaccionar == null || conexion == null || terminar == null || viva == null
+            || reporta == null || tConsumo == null || anotado == null || tLive == null)
+        { Pendiente("ConversacionEnVivo (Procesar, Reaccionar, EmpiezaUnaConexion, TerminarAsync, ReportaConsumo) y Voz.Realtime.ProtocoloGptLive", "218", "018"); return; }
+        var segundosDelServidor = tConsumo.GetProperty("SegundosDelServidor");
+        if (segundosDelServidor == null) Pendiente("Voice.ConversacionEnVivo.ConsumoVivo.SegundosDelServidor", "218", "018");
+
+        static string Uso(double s)
+            => "{\"type\":\"session.usage.updated\",\"usage\":{\"seconds\":" + s.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "}}";
+        Voz.Realtime.IProtocolo GptLive() => (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+        IDisposable Conversacion(Voz.Realtime.IProtocolo p)
+            => (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), p })!;
+        Reportes Escuchar(object conv)
+        {
+            var r = new Reportes();
+            reporta.SetValue(conv, Delegate.CreateDelegate(reporta.PropertyType, r,
+                typeof(Reportes).GetMethod(nameof(Reportes.Recibe))!.MakeGenericMethod(tConsumo)));
+            return r;
+        }
+        void Llega(object conv, string json) => procesar.Invoke(conv, new object[] { json, CancellationToken.None });
+        void Cerrar(object conv) { viva.SetValue(conv, true); ((Task)terminar.Invoke(conv, null)!).Wait(5000); }
+        // El reporte sale en un Task.Run a propósito (no retrasa el cierre): se espera a que llegue, y un poco más para ver que no llega otro.
+        static int Espera(Reportes r, int cuantos)
+        {
+            long fin = Environment.TickCount64 + 3000;
+            while (r.Cuantos < cuantos && Environment.TickCount64 < fin) Thread.Sleep(20);
+            Thread.Sleep(200);
+            return r.Cuantos;
+        }
+        object? Campo(object parte, string nombre) => tConsumo.GetProperty(nombre)?.GetValue(parte);
+
+        var lineas = new List<string>();
+        Action<string, string> oyeLog = (tag, msg) => { if (tag == "voz-viva" && msg.Contains("según el servidor")) lock (lineas) lineas.Add(msg); };
+        string[] Lineas() { lock (lineas) { var l = lineas.ToArray(); lineas.Clear(); return l; } }
+        anotado.AddEventHandler(null, oyeLog);
+        try
+        {
+            // ── UNA SESIÓN DE GPT-LIVE QUE SE CORTÓ Y VOLVIÓ ─────────────────────
+            using (var conv = Conversacion(GptLive()))
+            {
+                var r = Escuchar(conv);
+                Lineas();
+                Llega(conv, Uso(12.0));
+                Llega(conv, Uso(25.0));
+                conexion.Invoke(conv, new object[] { "" });   // la conexión nueva es otra sesión del servidor: vuelve a contar desde cero
+                Llega(conv, Uso(7.0));
+                Cerrar(conv);
+                int n = Espera(r, 1);
+                string[] dichas = Lineas();
+                Debe(n == 1, $"una sesión de GPT-Live sin fichas y con segundos se reporta al cerrar la voz, una vez (se reportó {n})");
+                Debe(dichas.Length == 1 && dichas[0].Contains(" 32 s "),
+                    $"y el cierre deja UNA línea voz-viva con los segundos del servidor: 25 de la primera conexión —el último acumulado, no 12 + 25— y 7 de la segunda, 32 s (dejó {dichas.Length}: {string.Join(" | ", dichas)})");
+                if (n >= 1)
+                {
+                    var parte = r.Primera!;
+                    Debe(Convert.ToInt64(Campo(parte, "Total")) == 0, $"y el reporte no se inventa fichas: GPT-Live no las cuenta (lleva {Campo(parte, "Total")})");
+                    if (segundosDelServidor != null)
+                    {
+                        double s = Convert.ToDouble(segundosDelServidor.GetValue(parte));
+                        Debe(Math.Abs(s - 32.0) < 1e-9, $"y el reporte lleva esos 32 s del servidor (lleva {s})");
+                    }
+                }
+
+                Cerrar(conv);
+                int otra = Espera(r, 2);
+                string[] otraVez = Lineas();
+                Debe(otra == 1 && otraVez.Length == 0,
+                    $"y reportar pone la cuenta a cero: cerrar otra vez no reporta ni escribe los mismos segundos (reportes {otra}, líneas {otraVez.Length})");
+            }
+
+            // ── SIN NADIE A QUIEN REPORTAR, LA LÍNEA SALE IGUAL ─────────────────
+            using (var conv = Conversacion(GptLive()))
+            {
+                Lineas();
+                Llega(conv, Uso(40.0));
+                Cerrar(conv);
+                string[] dichas = Lineas();
+                Debe(dichas.Length == 1 && dichas[0].Contains(" 40 s "),
+                    $"sin nadie a quien reportar (sin backend), el cierre deja igual su línea con los 40 s: el log es la fuente de verdad (dejó {dichas.Length}: {string.Join(" | ", dichas)})");
+            }
+
+            // ── GPT REALTIME: FICHAS Y NINGÚN SEGUNDO, COMO ANTES ────────────────
+            using (var conv = Conversacion(new Voz.Realtime.ProtocoloOpenAI()))
+            {
+                var r = Escuchar(conv);
+                Lineas();
+                reaccionar.Invoke(conv, new object[] { new Voz.Realtime.Hecho.Consumo(100, 50, 150), CancellationToken.None });
+                Cerrar(conv);
+                int n = Espera(r, 1);
+                string[] dichas = Lineas();
+                Debe(n == 1 && Convert.ToInt64(Campo(r.Primera!, "Total")) == 150,
+                    $"con GPT Realtime, una sesión con fichas se sigue reportando con sus fichas (reportes {n})");
+                Debe(dichas.Length == 0, $"y sin segundos del servidor no deja línea de segundos (dejó {dichas.Length}: {string.Join(" | ", dichas)})");
+                if (n >= 1 && segundosDelServidor != null)
+                    Debe(Convert.ToDouble(segundosDelServidor.GetValue(r.Primera!)) == 0, "y su reporte no lleva segundos del servidor");
+            }
+
+            // ── NADA QUE CONTAR ──────────────────────────────────────────────────
+            using (var conv = Conversacion(GptLive()))
+            {
+                var r = Escuchar(conv);
+                Lineas();
+                Cerrar(conv);
+                int n = Espera(r, 1);
+                string[] dichas = Lineas();
+                Debe(n == 0 && dichas.Length == 0,
+                    $"una sesión sin fichas ni segundos no reporta nada ni deja línea: no hubo nada que contar (reportes {n}, líneas {dichas.Length})");
+            }
+        }
+        finally { anotado.RemoveEventHandler(null, oyeLog); }
+    }
+
+    /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
+    private sealed class Reportes
+    {
+        private readonly List<object> _partes = new();
+        public Task Recibe<T>(T parte) { lock (_partes) _partes.Add(parte!); return Task.CompletedTask; }
+        public int Cuantos { get { lock (_partes) return _partes.Count; } }
+        public object? Primera { get { lock (_partes) return _partes.FirstOrDefault(); } }
+    }
+
     /// <summary>Un trozo de 100 ms de PCM a 24 kHz con UNA muestra de ese pico y el resto a cero.</summary>
     private static byte[] PcmConPico(short pico)
     {
@@ -8351,7 +8506,10 @@ internal static class Contrato
         return (conv, json => procesar.Invoke(conv, new object[] { json, CancellationToken.None }), () => Volatile.Read(ref cierres[0]), tc);
     }
 
-    private const string TicSinHechos = "{\"type\":\"session.usage.updated\",\"usage\":{\"seconds\":1}}";
+    // UN TIC QUE DE VERDAD NO TRAE HECHOS. Era un session.usage.updated, y al integrar las ramas del 2026-09-12 dejó de
+    // serlo: la 48 de la voz lo traduce a Hecho.Duracion. Lo que el servidor manda sin parar entre palabras es su
+    // silencio —100 ms de ceros exactos (4800 B, 6400 «A» en base64)—, que desde la 44 tampoco es Hecho.Suena.
+    private static readonly string TicSinHechos = "{\"type\":\"session.output_audio.delta\",\"delta\":\"" + new string('A', 6400) + "\"}";
     private static string OyeDelUsuario(string s) => JsonSerializer.Serialize(new { type = "session.input_transcript.delta", delta = s });
     private static string DiceLaVozDeU(string s) => JsonSerializer.Serialize(new { type = "session.output_transcript.delta", delta = s });
 
