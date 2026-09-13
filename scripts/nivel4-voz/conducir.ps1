@@ -89,14 +89,38 @@ $log = LogActual
 if (-not $log) { D "ABORTADO: no aparece el log en $logs"; try { $p.Kill() } catch {}; exit 2 }
 $ruta = $log.FullName
 D "log: $ruta"
-if ((LeerDesde $ruta 0) -notmatch "sesi.n abierta") {
-  D "abro la voz con Ctrl+Alt+M"
+# LA VOZ SE DA POR ABIERTA CUANDO EL SERVIDOR LO CONFIRMA, NO CUANDO U CONECTA EL SOCKET (2026-09-13). Hasta
+# entonces esto esperaba "sesion abierta" a secas, y esa linea salia al conectar: en el nivel 4 del 2026-09-12,
+# con la cuenta sin credito, salio en el mismo segundo que "el servidor dice: You have no credits remaining", y
+# el conductor siguio como si hubiera voz (patron n.2). Desde la promesa 220 del grafo U escribe "socket
+# conectado, esperando confirmacion de ..." al conectar y "sesion abierta con ...: el servidor la confirmo"
+# solo al confirmar. La linea VIEJA (main, y todo binario anterior a la 220) se sigue aceptando para poder
+# medir main, pero solo tras 3 s sin un error ni un corte detras. Y mientras la voz se esta abriendo no se
+# pulsa Ctrl+Alt+M: alterna, y la cerraria. El estado lo lee apertura.ps1, juzgado por autoprueba-apertura.ps1.
+. (Join-Path $PSScriptRoot "apertura.ps1")
+$estado = EstadoDeLaVoz (LeerDesde $ruta 0)
+$desde = 0
+if ($estado -eq "nada" -or $estado -eq "cerrada") {
+  D "abro la voz con Ctrl+Alt+M (estado de la voz en el log: $estado)"
+  $desde = Tam $ruta
   [W]::CtrlAlt(0x4D)
-  $ok = $false
-  for ($i = 0; $i -lt 50; $i++) { Start-Sleep -Milliseconds 500; if ((LeerDesde $ruta 0) -match "sesi.n abierta") { $ok = $true; break } }
-  if (-not $ok) { D "ABORTADO: la voz no abrio en 25 s (escritorio de entrada: '$([W]::Escritorio())')"; try { $p.Kill() } catch {}; exit 3 }
-} else { D "la voz ya estaba abierta: NO se pulsa Ctrl+Alt+M (alterna, la cerraria)" }
-D "voz abierta"
+} else { D "la voz ya se esta abriendo o esta abierta ($estado): NO se pulsa Ctrl+Alt+M (alterna, la cerraria)" }
+$ok = $false; $sinConfirmarDesde = $null
+for ($i = 0; $i -lt 50; $i++) {
+  $estado = EstadoDeLaVoz (LeerDesde $ruta $desde)
+  if ($estado -eq "confirmada") { $ok = $true; D "voz abierta: el servidor confirmo la sesion"; break }
+  if ($estado -eq "fallando" -or $estado -eq "cerrada") { break }
+  if ($estado -eq "sin-confirmar") {
+    if ($null -eq $sinConfirmarDesde) { $sinConfirmarDesde = Get-Date }
+    elseif (((Get-Date) - $sinConfirmarDesde).TotalSeconds -ge 3) { $ok = $true; D "voz abierta SIN confirmacion del servidor: linea de apertura vieja (binario anterior a la 220) y 3 s sin error ni corte detras"; break }
+  } else { $sinConfirmarDesde = $null }
+  Start-Sleep -Milliseconds 500
+}
+if (-not $ok) {
+  if ($estado -eq "fallando" -or $estado -eq "cerrada") { $porque = "el log dice '$estado': un error, un corte o un cierre antes de que el servidor confirmara la sesion" }
+  else { $porque = "a los 25 s el log sigue en '$estado', sin confirmacion del servidor" }
+  D "ABORTADO: la voz no abrio: $porque (escritorio de entrada: '$([W]::Escritorio())')"; try { $p.Kill() } catch {}; exit 3
+}
 Start-Sleep -Seconds 6
 
 $shell = New-Object -ComObject Shell.Application
