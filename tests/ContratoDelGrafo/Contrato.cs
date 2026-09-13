@@ -8652,10 +8652,16 @@ internal static class Contrato
             Reintenta("con GPT-Live, una conexión nueva no hereda la causa de la anterior",
                 Corre(GptLive(), c => { Llega(c, liveAbrio); Llega(c, liveCredito); conexion.Invoke(c, new object[] { "" }); Llega(c, liveAbrio); SeCorta(c); }));
 
-            // Y LO QUE LA 49 YA HACÍA, AHORA CON JUEZ: un error antes de session.started es que no abrió (W49c, hasta hoy sin juez).
-            var noAbrio = Corre(GptLive(), c => { Llega(c, liveModelo); SeCorta(c); });
-            Debe(noAbrio.Reconexiones == 0 && !noAbrio.Viva && noAbrio.Dichos.Length == 1 && noAbrio.Dichos[0].Contains("is not supported in realtime mode"),
-                $"con GPT-Live, invalid_model antes de session.started: no abrió, no reconecta y lo dice una vez con lo que dijo el servidor (reconectó {noAbrio.Reconexiones}, viva {noAbrio.Viva}, dijo {noAbrio.Dichos.Length}: {string.Join(" | ", noAbrio.Dichos)})");
+            // Y LO QUE LA 49 YA HACÍA, AHORA CON JUEZ: un error antes de session.started es que no abrió (W49c, hasta hoy sin
+            // juez). Con un error que NO es de cuenta, clave ni modelo —unknown_parameter, medido contra un session.start mal
+            // formado—, porque con invalid_model la rama de la causa también lo pararía y romper la de la 49 quedaría verde.
+            const string liveParametro = """{"type":"error","event_id":"event_ENOy9VsLzg0PIpUAbkOqn","error":{"type":"invalid_request_error","code":"unknown_parameter","message":"Unknown parameter: 'session.instructions'.","param":"session.instructions","client_event_id":"sonda_voz"}}""";
+            var noAbrio = Corre(GptLive(), c => { Llega(c, liveParametro); SeCorta(c); });
+            Debe(noAbrio.Reconexiones == 0 && !noAbrio.Viva && noAbrio.Dichos.Length == 1 && noAbrio.Dichos[0].Contains("Unknown parameter: 'session.instructions'."),
+                $"con GPT-Live, un error antes de session.started que no es de cuenta, clave ni modelo: no abrió, no reconecta y lo dice una vez con lo que dijo el servidor (reconectó {noAbrio.Reconexiones}, viva {noAbrio.Viva}, dijo {noAbrio.Dichos.Length}: {string.Join(" | ", noAbrio.Dichos)})");
+            var noAbrioModelo = Corre(GptLive(), c => { Llega(c, liveModelo); SeCorta(c); });
+            Debe(noAbrioModelo.Reconexiones == 0 && !noAbrioModelo.Viva && noAbrioModelo.Dichos.Length == 1 && noAbrioModelo.Dichos[0].Contains("is not supported in realtime mode"),
+                $"con GPT-Live, invalid_model antes de session.started: tampoco reconecta, y lo dice una vez con lo que dijo el servidor (reconectó {noAbrioModelo.Reconexiones}, viva {noAbrioModelo.Viva}, dijo {noAbrioModelo.Dichos.Length}: {string.Join(" | ", noAbrioModelo.Dichos)})");
         }
         finally { anotado.RemoveEventHandler(null, oyeLog); }
     }
