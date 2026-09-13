@@ -415,6 +415,7 @@ public sealed class ConversacionEnVivo : IDisposable
 
             _entrada = _salida = _total = 0;
             _turnos = 0;
+            _segundosDeLaConexion = _segundosDeConexionesAnteriores = 0;
             _sesionId = Guid.NewGuid().ToString("n");
             _inicioSesion = DateTime.UtcNow;
 
@@ -479,8 +480,14 @@ public sealed class ConversacionEnVivo : IDisposable
         return false;
     }
 
+    /// <param name="SegundosDelServidor">
+    /// Lo que duró la voz según el servidor, cuando la cuenta en segundos y no en fichas (GPT-Live, promesa 218): el
+    /// último acumulado de cada conexión, sumado entre conexiones. Cero con GPT Realtime. Va al final y con defecto
+    /// para que quien ya lee el registro (FaceWindow) no tenga que cambiar.
+    /// </param>
     public sealed record ConsumoVivo(
-        string Modelo, long Entrada, long Salida, long Total, int Turnos, long DuracionMs, string Sesion);
+        string Modelo, long Entrada, long Salida, long Total, int Turnos, long DuracionMs, string Sesion,
+        double SegundosDelServidor = 0);
 
     /// <summary>
     /// A dónde se reporta. Lo cablea la carita con el cliente de Graph; si nadie
@@ -491,6 +498,11 @@ public sealed class ConversacionEnVivo : IDisposable
     private long _entrada, _salida, _total;
     private int _turnos;
 
+    // LOS SEGUNDOS DE GPT-LIVE (promesa 218). De la conexión en curso se guarda el ÚLTIMO acumulado, no la suma: 12.0 a
+    // los 15 s y 25.0 a los 30 s de la misma sesión, medido el 2026-09-12. Aparte, lo que contaron las conexiones
+    // anteriores: al reconectar se abre otra sesión del servidor, que vuelve a contar desde cero.
+    private double _segundosDeLaConexion, _segundosDeConexionesAnteriores;
+
     /// <summary>
     /// Manda el consumo acumulado y lo pone a cero. Nunca lanza y nunca espera:
     /// que el panel de costos se entere no puede retrasar el cierre de la voz ni,
@@ -499,11 +511,23 @@ public sealed class ConversacionEnVivo : IDisposable
     private void ReportarConsumo()
     {
         var reporta = ReportaConsumo;
-        if (_total <= 0 || reporta is null) { _entrada = _salida = _total = 0; _turnos = 0; return; }
+        double segundos = _segundosDeConexionesAnteriores + _segundosDeLaConexion;
+        _segundosDeConexionesAnteriores = _segundosDeLaConexion = 0;
+
+        // EL PANEL DE COSTOS CUENTA FICHAS, Y GPT-LIVE NO LAS DA (promesa 218). Hasta el 2026-09-12 una sesión de GPT-Live
+        // salía por la guarda de abajo sin reportar y sin dejar una línea (revisa:regresiones): con GPT-Live como voz por
+        // defecto, el consumo de voz desaparecía en silencio. FaceWindow no le pasa estos segundos al panel, así que el
+        // log es donde quedan. «Al menos»: el servidor manda el uso cada ~15 s, y el último tramo solo viene en
+        // session.closed, que la 41 de la voz fija como Falla.
+        if (segundos > 0)
+            LogBus.Log("voz-viva", $"la voz duró al menos {segundos.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} s "
+                + $"según el servidor ({_protocolo.Quien}, el último uso de cada conexión); el panel de costos cuenta fichas y no recibe estos segundos");
+
+        if ((_total <= 0 && segundos <= 0) || reporta is null) { _entrada = _salida = _total = 0; _turnos = 0; return; }
 
         var parte = new ConsumoVivo(
             _protocolo.Modelo, _entrada, _salida, _total, _turnos,
-            (long)(DateTime.UtcNow - _inicioSesion).TotalMilliseconds, _sesionId);
+            (long)(DateTime.UtcNow - _inicioSesion).TotalMilliseconds, _sesionId, segundos);
         _entrada = _salida = _total = 0;
         _turnos = 0;
 
@@ -1408,6 +1432,10 @@ public sealed class ConversacionEnVivo : IDisposable
     /// </summary>
     private void EmpiezaUnaConexion(string alConfirmar)
     {
+        // UNA CONEXIÓN NUEVA ES OTRA SESIÓN DEL SERVIDOR, que vuelve a contar sus segundos desde cero: lo de la anterior
+        // se aparta para sumarlo al cerrar (promesa 218). Solo GPT-Live cuenta segundos, y no sabe volver a la misma sesión.
+        _segundosDeConexionesAnteriores += _segundosDeLaConexion;
+        _segundosDeLaConexion = 0;
         _confirmada = !_protocolo.ConfirmaQueAbrio;
         _fallaAntesDeAbrir = "";
         _alConfirmar = _confirmada ? "" : alConfirmar;
@@ -1573,6 +1601,12 @@ public sealed class ConversacionEnVivo : IDisposable
             // conversación entera y no solo su último turno.
             case Hecho.Consumo c:
                 _entrada += c.Entrada; _salida += c.Salida; _total += c.Total; _turnos++;
+                break;
+
+            // GPT-LIVE CUENTA SEGUNDOS ACUMULADOS, no incrementos (promesa 48 de la voz): se guarda el último de la
+            // conexión. Sumarlos como las fichas de arriba contaría 37 s donde hubo 25 (promesa 218).
+            case Hecho.Duracion d:
+                _segundosDeLaConexion = Math.Max(_segundosDeLaConexion, d.Segundos);
                 break;
 
             case Hecho.Falla f:
