@@ -28,7 +28,9 @@ namespace U.WindowsClient.Voice;
 /// frase hablada y herramientas de 300 y 2500 ms, y la regla reproducida sobre la línea de tiempo real):
 /// - entre devolver una herramienta y lo siguiente que dice Ü pasan 1658-1707 ms, 4 de 4. Con 1500 y las
 ///   guardas el turno se seguía cerrando a mitad de la tarea (4 cierres de más en 3 corridas); con 2000,
-///   ninguno. El margen son 293 ms sobre cuatro muestras de una tarde: lo confirma o lo corrige el nivel 4;
+///   ninguno. El margen eran 293 ms sobre cuatro muestras de una tarde, y NO AGUANTÓ: el 2026-09-13 la misma
+///   sonda midió seis huecos más, 1566-1733 ms y uno de 2009, que con 2000 cerró el turno 9 ms antes de que Ü
+///   hablara (1 de 10 en total). El valor se juzga al milisegundo en la 209; cambiarlo es cambiar la 209;
 /// - una pausa del usuario de ~1 s deja un hueco de transcripción de 1065-1138 ms y no parte nada;
 /// - una de ~1,9 s deja 1868-2119 ms (1 de 2 por encima): ESA todavía parte la frase que recibe DijoElUsuario.
 ///   El tope ya no, por la 212;
