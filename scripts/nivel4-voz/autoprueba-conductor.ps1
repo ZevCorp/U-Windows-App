@@ -196,6 +196,27 @@ if ($Conductor) {
   Comprueba "C: sin credito sale con el codigo 5, no con el 3 de 'la voz no abrio'" { $rc.codigo -eq 5 }
   Comprueba "C: el diario dice que la cuenta no tiene credito" { $rc.diario -match 'la cuenta no tiene credito' }
   Comprueba "C: no gasta la bateria: ninguna tarea empieza" { ($rc.diario -notmatch 'fin de la bateria') -and ($rc.diario -notmatch 'T1 r1:') }
+
+  # E: V5. La voz dice "sesion abierta con" y el servidor la rechaza por otra causa que el credito ("Instructions
+  # must not exceed 16384 tokens", medido el 2026-09-12: llega en lugar de session.started y cierra). El cierre
+  # llega a los 13 s del falso, despues de que el conductor la viera abierta (~12 s) y antes de volver a mirar
+  # (~18 s): tiene que parar con el 3 y sin bateria. Escrito DESPUES del codigo (2026-09-13); su rojo es S7.
+  $re = Correr "E-parecia-abierta" @(
+    @(1, 'voz-viva: sesi~on abierta con <<gpt-live-1>> (OpenAI GPT-Live)'),
+    @(1, 'voz-viva: el servidor dice: Instructions must not exceed 16384 tokens'),
+    @(13, 'voz-viva: la sesi~on no lleg~o a abrir: el servidor contest~o <<Instructions must not exceed 16384 tokens>> en vez de confirmarla, y cerr~o. No se reintenta: la misma apertura fallar~ia igual'),
+    @(13, 'voz-viva: sesi~on cerrada')) "T1" 3
+  Comprueba "E: la voz que parecia abierta y a los 6 s esta cerrada para con el codigo 3" { $re.codigo -eq 3 }
+  Comprueba "E: lo dice, y no corre la bateria" { ($re.diario -match 'parecia abierta') -and ($re.diario -notmatch 'fin de la bateria') }
+
+  # F: la forma de la apertura confirmada. Al arrancar el log dice "socket conectado" sin confirmar: pulsar
+  # Ctrl+Alt+M la cerraria. Se espera, y el atajo solo se pulsa una vez, al final. Escrito DESPUES del codigo; su rojo es S8.
+  $rf = Correr "F-abriendo-al-arrancar" @(
+    @(1, 'voz-viva: socket conectado con <<gpt-live-1>> (OpenAI GPT-Live): falta que el servidor confirme la sesi~on'),
+    @(14, 'voz-viva: sesi~on abierta con <<gpt-live-1>> (OpenAI GPT-Live)')) "T1" 1
+  Comprueba "F: termina bien (codigo 0)" { $rf.codigo -eq 0 }
+  Comprueba "F: con la voz abriendose, al arrancar espera la confirmacion sin pulsar" { $rf.diario -match 'se espera a que el servidor confirme' }
+  Comprueba "F: el atajo se pulsa una sola vez, la del final" { (Veces $rf.diario '\(ensayo\) Ctrl\+Alt\+M sin pulsar') -eq 1 }
 }
 
 if ($Escritorio) {
