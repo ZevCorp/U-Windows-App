@@ -1,6 +1,6 @@
 # Plan de implementación: la voz es GPT-Live, y lo que se escribe se contesta
 
-Estado: **en construcción**. A 2026-09-13: medido contra el servidor; el juez del nivel 4 arreglado y saboteado; las promesas 40–44 y 46–49 (voz) y 208–212, 214, 217 y 218 (grafo) **en verde y saboteadas**, integradas en una sola rama. Los verificadores del cierre encontraron dos verdes falsos, en la 209 y en la 218, y se arreglaron en `2d0b779`. **Falta el nivel 4**. Se intentó el 2026-09-12 a las 23:36 (GPT-Live) y a las 23:40 (`U_VOZ=realtime`) y no midió nada, porque la cuenta de OpenAI no tiene crédito (ver «El nivel 4»). A las 23:5x la sonda seguía contestando `credit_balance_exhausted`. Nada de esto se ha oído con micrófono ni en `U.exe` · Nace de dos peticiones del dueño (2026-09-11 y 2026-09-12) y de las sondas contra el servidor de esas dos noches · Rama: `jero/voz-gpt-live`, que integra `jero/voz-gpt-live-protocolo` (el traductor, 40–43), `jero/voz-gpt-live-juez` (esta spec y el juez del nivel 4) y las seis ramas hijas de las revisiones: `-silencio` (44), `-persona` (46–48), `-turnos` (211, 212), `-texto` (214), `-seleccion` (217) y `-fidelidad` (49); la 218 nació al integrarlas
+Estado: **en construcción**. A 2026-09-13: medido contra el servidor; el juez del nivel 4 arreglado y saboteado; las promesas 40–44 y 46–49 (voz) y 208–212, 214, 217 y 218 (grafo) **en verde y saboteadas**, integradas en una sola rama. En `jero/voz-gpt-live-r2-fatal`, la 53 (voz) y la 223 y la 224 (grafo), también en verde y saboteadas: lo que no se arregla reconectando (cuenta, clave, modelo) deja de reconectarse con los dos protocolos, medido contra el servidor con crédito. Los verificadores del cierre encontraron dos verdes falsos, en la 209 y en la 218, y se arreglaron en `2d0b779`. **Falta el nivel 4**. Se intentó el 2026-09-12 a las 23:36 (GPT-Live) y a las 23:40 (`U_VOZ=realtime`) y no midió nada, porque la cuenta de OpenAI no tiene crédito (ver «El nivel 4»). A las 23:5x la sonda seguía contestando `credit_balance_exhausted`. Nada de esto se ha oído con micrófono ni en `U.exe` · Nace de dos peticiones del dueño (2026-09-11 y 2026-09-12) y de las sondas contra el servidor de esas dos noches · Rama: `jero/voz-gpt-live`, que integra `jero/voz-gpt-live-protocolo` (el traductor, 40–43), `jero/voz-gpt-live-juez` (esta spec y el juez del nivel 4) y las seis ramas hijas de las revisiones: `-silencio` (44), `-persona` (46–48), `-turnos` (211, 212), `-texto` (214), `-seleccion` (217) y `-fidelidad` (49); la 218 nació al integrarlas
 
 > **La petición, en la voz del dueño.** El 2026-09-11: *«cambia a GPT voice el último que salió…
 > investiga»*. El 2026-09-12: *«ajusta todo y empuja a main»*, *«migra rápido»*.
@@ -74,6 +74,10 @@ sondas son PowerShell de un solo uso (`sonda-live.ps1`, `sonda-live-eventos.ps1`
 | `session.instructions.append` a la voz | **sí cambia cómo habla**. Solo con el `session.update` del aprendiz, la voz afirmó acciones que nadie hizo (3 de 3: «Listo, ejecuté VP1…»); con el append del modo detrás, asintió sin afirmar nada (3 de 3); al volver con su persona, llamó a `map_look` (2 de 2). Tope: «Context append text must not exceed 500 tokens»: 1.756 caracteres aceptados, 1.900 rechazados, y la sesión sigue viva | ídem |
 | Tras un append largo | en 3 de 5 sesiones llegó, hacia los 2 s, una transcripción del **usuario** que nadie dijo («vibrant», «entiendes?», «a cartoon facea young girl»); en 7 sesiones sin append, ninguna | ídem |
 | `session.usage.updated` | es el **acumulado** de la sesión, no un incremento: 12.0 a los 15 s y 25.0 a los 30 s de la misma sesión | sonda de huecos (r1G, r2c), 09-12 |
+| Una clave falsa | **GPT-Live** la rechaza en el apretón de manos: HTTP 401, `WebSocketException` `NotAWebSocket` («The server returned status code '401' when status code '101' was expected.»), cabecera `x-openai-ide-error-code: invalid_api_key`; no hay socket ni mensaje. **GPT Realtime** acepta el apretón (101), manda `error` con `code` `invalid_api_key` y cierra con **3000** «invalid_request_error.invalid_api_key» | `sonda-fatal` (.NET 8, el `ClientWebSocket` de la app), 09-13 |
+| Un modelo que no existe | **GPT-Live**: `error` `invalid_model` («Model "gpt-live-inexistente-9" is not supported in realtime mode.») a 262 ms, y el socket `Aborted` a los ~2 s, sin cierre. **GPT Realtime**, en la dirección: `error` `model_not_found` y cierre **4004** «invalid_request_error.model_not_found». En el `session.update` con la dirección buena, el servidor lo ignora y abre con el de la dirección. Un **delegado** que no existe abre igual (`session.started`, 6 s sin error): sin medir qué pasa al delegar | ídem |
+| La descripción de un cierre de Realtime | es `«type.code»` del error que lo precede: `invalid_request_error.invalid_api_key`, `invalid_request_error.model_not_found`, y el `insufficient_quota.credit_balance_exhausted` del nivel 4 del 09-12. El número no es la causa: **1013** es «vuelve a intentarlo» en el RFC 6455 | ídem, y el log del nivel 4 del 09-12 |
+| El estado HTTP de un apretón rechazado | `ClientWebSocket.HttpStatusCode` vale **401** con `CollectHttpResponseDetails = true` y **0** sin la opción, con la misma excepción | `sonda-fatal`, 09-13 |
 
 **Lo que dicen las latencias.** GPT-Live llama la herramienta más tarde (dos cerebros: la voz entiende,
 el delegado decide) y empieza a hablar antes (la voz no espera al delegado). La suma para «lo hizo»
@@ -168,7 +172,9 @@ por ramas hijas los números **44–49** (voz) y **211–219** (grafo): `jero/vo
 `jero/voz-gpt-live-seleccion` la **217**, la del log. El integrador añadió la **218**, lo que dura la voz, para
 el pendiente que la 48 dejaba en la conversación. Quedaron sin usar la **45**, la **213**, la **215**, la **216** y la
 **219**, que se pensó para el tope del append y no se escribió (ver «Límites»). El cierre del 2026-09-13 no añadió
-números: arregló dos jueces (la 209 y la 218) sin cambiar sus enunciados.
+números: arregló dos jueces (la 209 y la 218) sin cambiar sus enunciados. El arreglador «fatal» del 2026-09-13
+(`jero/voz-gpt-live-r2-fatal`) usa los que le dio el integrador: la **53** de la voz y la **223** y la **224** del
+grafo.
 Ningún número chocó al integrar; **chocó un significado**: la 217 usaba `session.usage.updated` como ejemplo de lo
 que no se traduce, y la 48 lo traduce (ver Hallazgos).
 
@@ -197,6 +203,9 @@ misma frase manda los mismos 9 `.delta`, no se puede medir sin red: lo midió la
 | 214 | grafo | con GPT-Live, varias llamadas pedidas a la vez se contestan todas antes de pedir turno, y el turno se pide una sola vez; con GPT Realtime una tanda sigue pidiendo turno detrás de sus resultados. | 6 |
 | 217 | grafo | con GPT-Live el log no se inunda: ni los deltas del delegado ni el audio dejan una línea «←», y lo demás que no se traduce la sigue dejando. | 6 |
 | 218 | grafo | con GPT-Live lo que dura la voz llega al cierre: los segundos que cuenta el servidor —el último acumulado de cada conexión, sumado entre conexiones— se reportan aunque no haya fichas, y el cierre deja una línea voz-viva con esos segundos; con fichas y sin segundos, el reporte sigue como estaba. | integración |
+| 53 | voz | los traductores de OpenAI dicen el código de un error: un error es un Hecho.Falla con su message y con su code tal como llega —credit_balance_exhausted e invalid_model por GPT-Live, invalid_api_key y model_not_found por GPT Realtime—, y sin code no se inventa uno. | fatal |
+| 223 | grafo | lo que no se arregla reintentando se reconoce por su código y dice su causa: sin crédito (insufficient_quota, credit_balance_exhausted), una clave que no vale (invalid_api_key, o el apretón de manos rechazado con 401) y un modelo que no existe (invalid_model, model_not_found), también dentro de la descripción de un cierre; cada causa se distingue de las otras, y cualquier otro código, un número de cierre, la prosa del mensaje o nada se pueden reintentar. | fatal |
+| 224 | grafo | con los dos protocolos, lo que no se arregla reintentando no reconecta: venga en un error, en el cierre del socket o en el apretón de manos de la reconexión, la conversación dice una vez por qué y cierra la voz; un corte sin esa causa sigue reconectando, y una conexión nueva no hereda la causa de la anterior. | fatal |
 
 **La que cierra el asunto** es la **210**: sin ella todo lo demás existe y la voz sigue siendo la de
 antes. **La que cierra el agujero del nivel 4** es la **208**: sin ella ningún nivel 4 escrito mide la voz.
@@ -225,6 +234,9 @@ traductor tal como los mandó el servidor real en las sondas.
 | 214 | `Procesar` de una `ConversacionEnVivo` con `ProtocoloGptLive`, la puerta sustituida y la mano de autocontrol retenida, recibe dos `response.event` con un `function_call` cada uno, como los manda el servidor: salen las dos `function_call_output` y **un** `response.create`, detrás de la última. Una llamada sola sigue pidiendo turno. Una llamada pedida con el token ya cancelado (nunca corre) y, tras cambiar `_sesionId`, otra de la sesión siguiente: sale su salida y un `response.create`. Con `ProtocoloOpenAI`, `EjecutarNucleoAsync` con una tanda de dos: dos salidas y detrás un `response.create` | no se anotan las llamadas al pedirlas; no se olvidan las de otra sesión; se retiene el turno aunque no falte ninguna |
 | 217 | Por la puerta del socket: `Procesar` de una `ConversacionEnVivo` con `ProtocoloGptLive`, escuchando `LogBus.Anotado`. Un `response.event` con `response.output_text.delta`, otro con `response.function_call_arguments.delta` y un `session.output_audio.delta` vacío no dejan ninguna línea `voz-viva` que empiece por «← »; un `response.completed` del delegado, un `response.function_call_arguments.done`, un `session.delegation.created` y un `session.instructions.appended` dejan una cada uno (**acotado al integrar**: el ejemplo era `session.usage.updated`, y la 48 lo traduce ahora). Y la regla, pura, `ConversacionEnVivo.SeVuelcaCrudo(JsonElement)` por nombre: los tres primeros no se vuelcan y los cuatro siguientes sí; un `response.event` sin evento dentro sí; y un `.delta` que no viene dentro de `response.event` (el `response.function_call_arguments.delta` de Realtime) sigue volcándose, como en `main` | `Procesar` deja de consultar la regla; los deltas del delegado se vuelcan; el audio vacío se vuelca; se callan todos los `response.event`; se calla todo lo que acabe en `.delta`; se callan todos los `session.*` (S217f, al integrar) |
 | 218 | Una `ConversacionEnVivo` con `ProtocoloGptLive`, sin socket: por `Procesar` llegan `session.usage.updated` con 12.0 y 25.0, `EmpiezaUnaConexion` abre otra conexión, llega 3.0, abre una tercera, llega 4.0, y se cierra de verdad con `TerminarAsync`. **Tres conexiones desde el 2026-09-13**: con una sola reconexión, «sumar lo de las anteriores» y «quedarse con la anterior» dan lo mismo (0 + 25 = 25), y X218b quedaba verde. La conversación se cierra (con `Viva` puesta a mano; sin micrófono ni altavoz abiertos no toca ningún dispositivo). Se reporta **una** vez, con 0 fichas y `SegundosDelServidor` 32, y queda **una** línea `voz-viva` con «32 s»; cerrar otra vez no reporta ni escribe nada. Sin `ReportaConsumo`, la línea sale igual (40 s). Con `ProtocoloOpenAI` y un `Hecho.Consumo` de 150 fichas: un reporte con 150, sin segundos y sin línea. Sin fichas ni segundos, nada | sumar los segundos como fichas (S218a); no apartar los de la conexión anterior (S218b); la guarda de antes (S218c); sin línea (S218d); no poner la cuenta a cero al reportar (S218e); el reporte sin segundos (S218f); `Reaccionar` sin atender la duración (S218g); **una conexión nueva sobrescribe lo de las anteriores (X218b, SG218i: verde con la 218 de dos conexiones)**; **sin juez**: `ArrancarAsync` no pone los segundos a cero (W218), y `ReconectarAsync` sin continuidad no pasa por `EmpiezaUnaConexion` (W218b) |
+| 53 | `Leer` de los dos traductores con los errores literales: GPT-Live `credit_balance_exhausted` (2026-09-12) e `invalid_model` (2026-09-13); GPT Realtime `invalid_api_key` y `model_not_found` (2026-09-13). Cada uno es **un** `Hecho.Falla` con su message y con `Codigo` igual a su `code`. Un error sin `code` (con `type` `invalid_request_error`) da `Codigo` vacío con los dos, y `session.closed` es una Falla sin código. `Codigo` se pide por reflexión | Realtime no pasa el código (S53a); GPT-Live no lo pasa (S53b); sin `code` se usa el `type` (S53c) |
+| 223 | `NoSeArreglaReintentando.PorQue` por nombre. Los códigos y las descripciones de cierre medidos de cada causa —`credit_balance_exhausted`, `insufficient_quota`, `insufficient_quota.credit_balance_exhausted`; `invalid_api_key`, `invalid_request_error.invalid_api_key`, `401`; `invalid_model`, `model_not_found`, `invalid_request_error.model_not_found`— dan una frase que nombra «crédito», «clave» o «modelo» y ninguna de las otras dos, la misma dentro de cada causa. Dan vacío: nada, espacios, `response_input_buffer_full`, `function_call_outputs_required`, `unknown_parameter`, `invalid_request_error` (el type de todos), `invalid_request_error.unknown_parameter`, `close_requested`, `fin`, los números de cierre `1013`, `3000` y `4004`, y la prosa de tres mensajes: el de crédito, el de `invalid_model` y la frase de .NET del 401 | quitar un código (S223a); no reconocer el 401 (S223b); partir también por comillas, y la frase de .NET pasa a ser «clave» (S223c); no partir la descripción del cierre (S223d); dos causas con la misma frase (S223e); cualquier código es fatal (S223f) |
+| 224 | Una `ConversacionEnVivo` sin socket, con la reconexión sustituida (`_reconectar`, una cuenta), `Viva` puesta a mano, y `Dice` y `LogBus.Anotado` escuchados. Tras `EmpiezaUnaConexion` llega lo del caso por `Procesar`, `CerroElServidor(int, string)`, `SeCortoLaEscucha(Exception)` o `NoConecto(Exception, int)`, y después `SeAcaboLaEscuchaAsync`. **Con Realtime**: el `invalid_api_key` con su cierre 3000, el cierre 1013 solo, `model_not_found` con su 4004, y el `invalid_api_key` solo con la escucha cortada, dan 0 reconexiones, la voz cerrada, **un** `Dice` y **una** línea «no se reintenta» con la causa; un cierre sin descripción da 1 reconexión y nada dicho. **Con GPT-Live**: `credit_balance_exhausted` tras `session.started`, y la reconexión rechazada con 401, dan lo mismo que arriba; `response_input_buffer_full` con el socket muerto, una reconexión sin respuesta HTTP (0) y una conexión nueva tras una causa dan 1 reconexión. **Y lo de la 49**: `unknown_parameter` e `invalid_model` antes de `session.started` dan 0 reconexiones y un `Dice` con lo que dijo el servidor | `Reaccionar` no anota la causa (S224a); `CerroElServidor` no la anota (S224b); `NoConecto` no la anota (S224c); la decisión la ignora (S224d); no se dice (S224e); una conexión nueva la hereda (S224f); un corte sin causa deja de reconectar (S224g); la rama de la 49 se ignora (S224h, la W49c de antes); **sin juez de contrato, medidos con `sonda-conv-fatal`**: el catch de `ReconectarAsync` vuelve a llamarse a sí mismo (W224); la reconexión no pide el estado HTTP (W224b); `ArrancarAsync` no lo pasa (W224c); el finally no pasa por la decisión (W224d); el cierre del socket no pasa por `CerroElServidor` (W224e) |
 
 ### Límites dichos, no escondidos
 
@@ -250,12 +262,28 @@ traductor tal como los mandó el servidor real en las sondas.
   - El log del nivel 4 lo sigue teniendo que decir: `llamada recibida` tras un texto escrito sin que el
     micrófono oiga nada, y tras 🎓 `modo cambiado` sin un `error` de `session.start`. El juez del nivel 4
     ya no aprueba sin acciones de voz (E), así que un cableado roto sale como suspenso.
-- **La 49 juzga el traductor; lo que la conversación hace con él, no.**
-  - Que un error antes de confirmar, seguido de la muerte del socket, no reconecte y diga la causa, y que
-    «Te escucho.» y «Sigo» esperen a `session.started`, vive en `ConversacionEnVivo` (`RecibirAsync`,
-    `EmpiezaUnaConexion`, `Reaccionar`). Ningún contrato lo juzga: a este arreglo no se le dio número del grafo.
+- **La 49 juzga el traductor; lo que la conversación hace con él, solo en parte.**
+  - Que un error antes de confirmar, seguido de la muerte del socket, no reconecte y diga la causa **lo juzga
+    desde el 2026-09-13 la 224** (su caso `unknown_parameter` antes de `session.started`; S224h, la W49c de antes,
+    sale roja). Que «Te escucho.» y «Sigo» esperen a `session.started` sigue sin número del grafo.
   - Lo mide `sonda-conv`, fuera del repo: la `ConversacionEnVivo` real contra el servidor sin crédito, y por
     `Procesar`, sin red, el camino feliz. Sus sabotajes (W49a–d) están en «Sabotajes».
+- **La 224 juzga dónde se decide; que los catch lleguen ahí, no.** Juzga las tres puertas por las que llega la
+  causa y el único sitio que decide (`SeAcaboLaEscuchaAsync`), con la reconexión sustituida. Lo que necesita un
+  socket queda sin juez de contrato y lo mide `sonda-conv-fatal` contra el servidor (W224–W224e en «Sabotajes»):
+  - que el catch de `ReconectarAsync` pase por la decisión y no se llame a sí mismo;
+  - que la app pida el estado HTTP (`CollectHttpResponseDetails`) al abrir y al reconectar, y que se lo pase a
+    `NoConecto`;
+  - que el finally de `RecibirAsync` pase por la decisión, y que su cierre pase por `CerroElServidor`.
+  - **El cierre 1013 sin crédito solo lo juzga el contrato**, con el literal del nivel 4 del 2026-09-12: desde el
+    2026-09-13 la cuenta tiene crédito y no se puede reproducir. Por eso W224e (el cierre no pasa por
+    `CerroElServidor`) no lo ve la sonda: en los dos casos de Realtime medibles el error llega antes que el cierre
+    y trae el mismo código.
+- **Lo que no se reintenta en `ArrancarAsync` no cambia**: un 401 no es `EsDeRed` y ya no se reintentaba. Cambia
+  lo que se dice: la causa («la clave (OPENAI_API_KEY) no vale») en vez de solo la frase de .NET.
+- **Un error antes de `session.started` con GPT-Live se dice con lo que dijo el servidor, sin la causa en
+  palabras** (`NoAbrioAsync`, de la 49): con `invalid_model`, «No pude abrir la voz en vivo. El servidor dice:
+  Model … is not supported in realtime mode.». No reconecta; decirlo con «modelo» queda sin hacer.
 - **La 192 y la 142 siguen verdes, y con GPT-Live por defecto no se cumplen.** Las dos juzgan
   `ProtocoloOpenAI` por su nombre (`Contrato.cs`, `LaVozDeLaComprobacionEsPrestada` y
   `LaVozDeLaComprobacionEsLaDeU`), no el protocolo que abre la voz. Es un guardia que se cree puesto
@@ -314,6 +342,7 @@ empujar: el rojo de cada fase se comprueba en local y se anota en su commit.
 | **6** | 46, 47, 48 (y la 42 retocada) | `voz/Realtime/ProtocoloGptLive.cs` (la persona, `CambioDeModo` con append, `session.usage.updated`), `voz/Realtime/Hecho.cs` (`Duracion`) | **hecha** en `jero/voz-gpt-live-persona`: rojo en `3b45051` (46, 48) y `29aba86` (47), verde en `902617d` y `77c605f`; saboteada (ver «Sabotajes») |
 | **6** | 49 | `voz/Realtime/ProtocoloGptLive.cs`, `IProtocolo.cs` (`ConfirmaQueAbrio`), `Hecho.cs` (`Abierta`), `Voice/ConversacionEnVivo.cs` | **hecha** en `jero/voz-gpt-live-fidelidad`: rojo en `21e9ecf`, verde en `da7a6c1`; saboteada (ver «Sabotajes») |
 | **I** | 218 (y la 217 acotada) | `Voice/ConversacionEnVivo.cs` (`Hecho.Duracion` en `Reaccionar`, `EmpiezaUnaConexion`, `ReportarConsumo`, `ConsumoVivo.SegundosDelServidor`), `tests/ContratoDelGrafo/Contrato.cs` | **hecha** al integrar las seis ramas: rojo en `f3aa948` (CONTRATO ROTO, 5), verde en `6e2ea15` (**CONTRATO INTACTO**, **VOZ ÍNTEGRA**); saboteada (ver «Sabotajes») |
+| **fatal** | 53, 223, 224 | `voz/Realtime/Hecho.cs` (`Falla.Codigo`), `ProtocoloOpenAI.cs` (`CodigoDelError`), `ProtocoloGptLive.cs`; nuevo `Voice/NoSeArreglaReintentando.cs`; `Voice/ConversacionEnVivo.cs` (`SeAcaboLaEscuchaAsync`, `CerroElServidor`, `SeCortoLaEscucha`, `NoConecto`, `_reconectar`, `CollectHttpResponseDetails`); las dos sondas `sonda-fatal` y `sonda-conv-fatal` | **hecha** en `jero/voz-gpt-live-r2-fatal`: rojo en `8c17147` (VOZ ROTA 1, CONTRATO ROTO 2, las tres PENDIENTE), verde en `3208b6d` (**VOZ ÍNTEGRA** 42 ✔, **CONTRATO INTACTO** 186 ✔, 0 pendientes; `sonda-conv-fatal` 6 de 6); saboteada (ver «Sabotajes») |
 
 **Sitios con la clase de error, contados con `grep`:**
 
@@ -456,12 +485,20 @@ devuelve GPT-Live.**
   la corrida de `main` del 2026-09-11 sin decirlo: allí lo escrito no pedía turno.
 - **Con la voz prestada** (192, `create_response:false`), lo que se escriba en la carita durante una comprobación
   abre ahora una respuesta de la voz. En `main` no abría ninguna.
-- **Un error que no se arregla reintentando se reintenta igual.** Sin crédito, la corrida del 2026-09-12 a las 23:40
-  dejó cuatro `reconectada SIN continuidad … (intento 1..4)`, cada una con su cierre `1013
-  «insufficient_quota.credit_balance_exhausted»`, y después `la conexión se cayó 5 veces seguidas: se deja`.
-  `ProtocoloOpenAI` no declara `ConfirmaQueAbrio` y cae en la reconexión de antes. GPT-Live, con la 49, dice la causa
-  una vez y no reintenta. Es la misma clase de error tratada de dos formas. **Sin arreglar**: la forma del error de
-  Realtime no se ha medido.
+- **Un error que no se arregla reintentando se reintentaba igual. Arreglado el 2026-09-13 con la 53, la 223 y la
+  224.** Sin crédito, la corrida del 2026-09-12 a las 23:40 dejó cuatro `reconectada SIN continuidad … (intento
+  1..4)`, cada una con su cierre `1013 «insufficient_quota.credit_balance_exhausted»`, y después `la conexión se cayó
+  5 veces seguidas: se deja`. `ProtocoloOpenAI` no declara `ConfirmaQueAbrio` y caía en la reconexión de antes;
+  GPT-Live, con la 49, decía la causa una vez. Era la misma clase de error tratada de dos formas.
+  - **Ahora**, con los dos protocolos, la cuenta sin crédito, una clave que no vale y un modelo que no existe se
+    reconocen por su código (223) —venga en un error, en la descripción del cierre o en un 401 del apretón de
+    manos— y la conversación no reconecta: lo dice una vez y cierra la voz (224).
+  - **La forma del error de Realtime ya está medida** para la clave y el modelo (ver «Diagnóstico»). La del crédito
+    agotado no se puede repetir: la cuenta tiene crédito desde el 2026-09-13, y el cierre 1013 se juzga con el
+    literal del log.
+  - **Medido contra el servidor con la `ConversacionEnVivo` compilada** (`sonda-conv-fatal`, 6 de 6): con
+    `U_VOZ=realtime` y una clave falsa, `el servidor cerró la conexión: 3000 «invalid_request_error.invalid_api_key»`
+    y detrás `no se reintenta: la clave (OPENAI_API_KEY) no vale (…)`, sin ninguna `reconectada`.
 - **El binario sí elige bien**, medido en ese intento: por defecto, `sesión abierta con «gpt-live-1» (OpenAI GPT-Live)`;
   con `U_VOZ=realtime`, `sesión abierta con «gpt-realtime-2.1-mini» (OpenAI)`.
 
@@ -1090,6 +1127,53 @@ también pone la cuenta a cero en cada cierre y cada salida de la voz pasa por `
 sesión nueva sumaría los segundos de la anterior. **S217f** demuestra que el ejemplo nuevo de la 217 sigue
 juzgando lo que el viejo juzgaba.
 
+**Lo que no se arregla reconectando (2026-09-13, `jero/voz-gpt-live-r2-fatal`), sobre `3208b6d`.** Guion
+`fatal\sabotea-fatal.ps1` y `fatal\sabotajes-fatal.json`, en el scratchpad. Mismo método que arriba:
+- bytes en Latin-1 1:1, patrón exactamente una vez, `git diff --numstat` = `1 1` y SHA-256 cambiado antes de juzgar;
+- veredicto exigido, y restaurado con el SHA de partida y el diff vacío;
+- el juez corre con su propio `TEMP`, porque otros worktrees compilan a la vez;
+- las W corren además `sonda-conv-fatal` contra el servidor, sobre el `U.dll` que acaba de compilar el juez.
+
+SHA de partida: `ProtocoloOpenAI.cs` `B55EA73A`, `ProtocoloGptLive.cs` `C8D4CB48`, `NoSeArreglaReintentando.cs` `A790192B`,
+`ConversacionEnVivo.cs` `19257010`.
+
+| Id | Rotura | Veredicto |
+|---|---|---|
+| S53a | GPT Realtime no pasa el código (`CodigoDelError(m)` → `""`) | ✘ 53 («…con el código «invalid_api_key» (salió: … código «»)», y lo mismo con `model_not_found`). VOZ ROTA, exit 2 |
+| S53b | GPT-Live no lo pasa | ✘ 53 (`credit_balance_exhausted` e `invalid_model`, «código «»»). VOZ ROTA, exit 2 |
+| S53c | sin `code` se usa el `type` | ✘ 53 con los dos protocolos («no se inventa con el type (salió: código «invalid_request_error»)»). VOZ ROTA, exit 2 |
+| S223a | se quita `credit_balance_exhausted` | ✘ 223 («…nombra «crédito»… (dijo «»)») y ✘ 224 (GPT-Live con la sesión confirmada: «reconectó 1», «dijo 0»). ROTO, exit 6 |
+| S223b | no se reconoce el 401 (`"4O1"`) | ✘ 223 y ✘ 224 (la reconexión rechazada con 401: «reconectó 1», «dijo 0»). ROTO, exit 6 |
+| S223c | se parte también por comillas | ✘ 223 (««The server returned status code '401'…» se puede reintentar: no dice causa (dijo «la clave (OPENAI_API_KEY) no vale»)»). ROTO, exit 1 |
+| S223d | no se parte la descripción del cierre | ✘ 223 (las tres «type.code», «dijo «»») y ✘ 224. ROTO, exit 10 |
+| S223e | dos causas con la misma frase: el modelo dice la de la clave | ✘ 223 (««invalid_model» … nombra «modelo» … (dijo «la clave (OPENAI_API_KEY) no vale»)», y lo mismo con `model_not_found` y su cierre) y ✘ 224 («dice por qué UNA vez, nombrando «modelo» (dijo 1: No sigo con la voz en vivo: la clave…»). ROTO, exit 4 |
+| S223f | cualquier código no vacío es fatal | ✘ 223 (««response_input_buffer_full» se puede reintentar: no dice causa (dijo «la cuenta no tiene crédito»)», y lo mismo con `function_call_outputs_required`, `unknown_parameter`, `invalid_request_error`, `close_requested`…) y ✘ 224. ROTO, exit 15 |
+| S224a | **cableado**: `Reaccionar` no anota la causa del error | ✘ 224, y la 223 verde: el rojo es del cableado («con GPT Realtime, el error invalid_api_key solo, y la escucha cortada sin cierre: no reconecta (reconectó 1)», «dijo 0», y lo mismo con `credit_balance_exhausted` en GPT-Live). Los casos de Realtime con error y cierre siguen verdes: el cierre trae el mismo código, y por eso se juzga cada fuente sola. ROTO, exit 8 |
+| S224b | **cableado**: `CerroElServidor` no anota la causa del cierre | ✘ 224, solo en el caso que aísla esa puerta: «con GPT Realtime, el cierre 1013 «insufficient_quota.credit_balance_exhausted» solo, como el del nivel 4 del 2026-09-12: no reconecta (reconectó 1)», «dijo 0: », «dejó 0: ». ROTO, exit 4 |
+| S224c | **cableado**: `NoConecto` no anota la causa del apretón de manos | ✘ 224, solo en su caso: «con GPT-Live, la reconexión rechazada en el apretón de manos con HTTP 401 (clave falsa, medido): no reconecta (reconectó 1)», «dijo 0: ». ROTO, exit 4 |
+| S224d | **cableado**: el único sitio que decide ignora la causa (`> 0` → `< 0`) | ✘ 224 en todos los casos que no deben reconectar, empezando por «con GPT Realtime, una clave falsa (error invalid_api_key y cierre 3000): no reconecta (reconectó 1)» y el cierre 1013 solo. ROTO, exit 24 |
+| S224e | la causa no se dice: va solo al log | ✘ 224, solo en «dice por qué UNA vez» de los seis casos con causa («… nombrando «clave» (dijo 0: )», «… «crédito» (dijo 0: )», «… «modelo» (dijo 0: )»). Sigue sin reconectar: se juzga también que se diga. ROTO, exit 6 |
+| S224f | una conexión nueva hereda la causa de la anterior (`EmpiezaUnaConexion` solo limpia lo dicho) | ✘ 224, solo en su caso: «con GPT-Live, una conexión nueva no hereda la causa de la anterior: sigue reconectando… (reconectó 0, viva False, dijo 1: No sigo con la voz en vivo: la cuenta no tiene crédito («»)., líneas 1)». El «»  vacío enseña por qué se limpian las dos. ROTO, exit 1 |
+| S224g | un corte sin causa deja de reconectar (`TerminarAsync` en vez de reconectar) | ✘ 224 en los cuatro casos del otro lado: «con GPT Realtime, un cierre sin descripción: sigue reconectando… (reconectó 0, viva False…)», `response_input_buffer_full`, la red sin respuesta HTTP y la conexión nueva tras una causa. Parar todo no pasa por arreglo. ROTO, exit 4 |
+| S224h | **cableado de la 49**: la rama de «no abrió» se ignora (la W49c de antes, que dejaba el contrato INTACTO) | ✘ 224, solo en su caso: «con GPT-Live, un error antes de session.started que no es de cuenta, clave ni modelo: no abrió, no reconecta… (reconectó 1, viva True, dijo 0: )». El caso de `invalid_model` sigue verde, porque la rama de la causa también lo para: por eso el caso es `unknown_parameter`. ROTO, exit 1 |
+| **W224** | **sin juez de contrato**: el catch de `ReconectarAsync` vuelve a llamarse a sí mismo | **CONTRATO INTACTO, exit 0** · `sonda-conv-fatal` `live-corte-y-401`: **MAL** («no pude reconectar»=4, línea «no se reintenta»=0, dicho con «clave»=0). Literal: cuatro `no pude reconectar: The server returned status code '401'…` entre 19,3 y 27,3 s, `la conexión se cayó 5 veces seguidas: se deja` y, a la persona, «Se me cortó la conexión y no consigo volver. Vuelve a darle al micrófono.»: culpa a la conexión de lo que era la clave |
+| **W224b** | **sin juez de contrato**: la reconexión no pide el estado HTTP (`CollectHttpResponseDetails = false`) | **CONTRATO INTACTO, exit 0** · `sonda-conv-fatal` `live-corte-y-401`: **MAL** («no pude reconectar»=1, línea «no se reintenta»=0, dicho con «clave»=0, **viva=True**). Literal: confirmada a 1,8 s, la escucha cortada a 4,5 s, `no pude reconectar: The server returned status code '401'…` a 7,8 s y, a 15,8 s, al cerrar la ventana, `Viva=True` y nada dicho. Con el estado en 0 no hay causa, así que se vuelve a reconectar como si fuera la red, en silencio. Sale una sola línea en la ventana porque un 401 por `/v1/live/sessions` puede tardar hasta 8,8 s (medido) |
+| **W224c** | **sin juez de contrato**: `ArrancarAsync` no le pasa el estado HTTP a `NoConecto` (`NoConecto(e, 0)`) | **CONTRATO INTACTO, exit 0** · `sonda-conv-fatal` `live-clave-falsa`: **MAL** (reintentos=0, dicho con «clave»=0, viva=False). Literal, a 2,3 s: «No pude abrir la voz en vivo: The server returned status code '401' when status code '101' was expected.» No reintenta y cierra, pero lo que oye la persona es la frase de .NET, sin la causa: es exactamente lo que se decía antes de este arreglo |
+| **W224d** | **sin juez de contrato**: el finally de `RecibirAsync` no pasa por la decisión (`if (Viva) await TerminarAsync();`) | **CONTRATO INTACTO, exit 0** · `sonda-conv-fatal`: **MAL en los dos lados**. `rt-clave-falsa`: `el servidor cerró la conexión: 3000 «invalid_request_error.invalid_api_key»` y la voz se cierra **en silencio**, sin línea «no se reintenta» ni nada dicho. `live-corte-control`: un corte sin causa **deja de reconectar** («reconectada SIN continuidad»=0, una sola confirmación, viva=False) |
+| **W224e** | **sin juez, ni de contrato ni de sonda**: el cierre del socket no pasa por `CerroElServidor` (`_cayoSolo = true;`) | **CONTRATO INTACTO, exit 0** · `sonda-conv-fatal` `rt-clave-falsa`: **BIEN** (no se reintenta, dicho con «clave», viva=False). Con Realtime el error llega antes que el cierre y trae el mismo código, así que saltarse la puerta del cierre no cambia nada que hoy se pueda medir |
+
+Los 22 sabotajes se aplicaron con numstat `1 1` y el SHA cambiado, y se restauraron con el SHA idéntico y el diff vacío.
+Al final se recompiló: **VOZ ÍNTEGRA** (42 ✔, 0 ✘, 0 ⧗) y **CONTRATO INTACTO** (186 ✔, 0 ✘, 0 ⧗). Logs:
+`fatal\sabotajes-fatal.log` y `fatal\sab-logs\`, en el scratchpad.
+
+**Las cinco W son el límite, medido.** Ningún contrato llega a los catch de `ArrancarAsync` y `ReconectarAsync` ni al
+finally de `RecibirAsync`: necesitan un socket.
+- **Cuatro las ve `sonda-conv-fatal`** contra el servidor: W224, W224b, W224c y W224d.
+- **W224e no la ve nadie hoy.** Solo se notaría con un cierre 1013 sin error delante, el del crédito agotado del nivel 4
+  del 2026-09-12, y con la cuenta con crédito no se puede reproducir. La 224 juzga la puerta (`CerroElServidor`
+  invocada directamente), pero no que `RecibirAsync` la llame.
+- **Las sondas no están en el repo ni corren en el portero**, como `sonda-conv` de la 49.
+
 ## Cierre
 
 - [x] Fase 0: medido contra el servidor real (2026-09-11/12), y el `session.update` de la delegación después
@@ -1106,6 +1190,7 @@ juzgando lo que el viejo juzgaba.
 - [x] Promesa 44 (silencio) en rojo (`29e98e1`), en verde (`e5bfa1a`) y saboteada; la 40, 41 y 42 exigen las tres copias de la llamada y las instrucciones íntegras (`9abcab8`), y V1 y V2 salen rojos
 - [x] Promesas 46, 47 y 48 (persona) en rojo (`3b45051`, `29aba86`), en verde (`902617d`, `77c605f`) y saboteadas
 - [x] Las seis ramas hijas integradas: la 217 acotada, y la 218 en rojo (`f3aa948`), en verde (`6e2ea15`) y saboteada; **CONTRATO INTACTO** y **VOZ ÍNTEGRA**, 0 pendientes
+- [x] Arreglador «fatal» (`jero/voz-gpt-live-r2-fatal`): la clave falsa y el modelo inexistente medidos contra el servidor con los dos protocolos; la 53, la 223 y la 224 en rojo (`8c17147`), en verde (`3208b6d`) y saboteadas; `sonda-conv-fatal` 6 de 6 con la conversación compilada. El crédito agotado no se pudo repetir (la cuenta ya tiene crédito)
 - [ ] 🎓 con la voz abierta en `U.exe`: «modo cambiado» sin error de append y la voz asintiendo en vez de «ejecuté…»; y decidir qué hacer con la transcripción fantasma
 - [ ] El silencio en `U.exe`: `Hablando` en falso en silencio, la compuerta de eco con `U_SIN_ECO=0`, `map_recuerdos cual=2` y la boca que se cierra
 - [ ] Una sesión de GPT-Live en `U.exe` que deja «la voz duró al menos N s según el servidor», y los segundos llevados al panel desde `FaceWindow` (otra rama)
