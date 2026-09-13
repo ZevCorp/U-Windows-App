@@ -92,6 +92,12 @@ Write-Host "== Lo puro: el estado de la voz y el credito, leidos del log"
 Comprueba "sin nada en el log, no se sabe: estado vacio" { (EstadoDeLaVoz "") -eq "" }
 Comprueba "la cuenta de Miracle no es la voz: 'cuenta: ... sesion abierta' no abre nada (la regex de antes, 'sesi.n abierta', la tomaba por voz abierta)" {
   (EstadoDeLaVoz (Juntar @('[09:00:00] cuenta: cuenta creada y sesi~on abierta ~. u-1'))) -eq "" }
+# Anadido tras el sabotaje S5 (2026-09-13): el caso de arriba no juzgaba la etiqueta, porque "cuenta creada y
+# sesion abierta" no EMPIEZA por una frase de estado. Este si: SesionMiracle.cs:264 escribe tal cual
+# LogBus.Log("cuenta", "sesion cerrada"), y sin mirar la etiqueta el conductor creeria cerrada una voz abierta
+# y al arrancar pulsaria Ctrl+Alt+M, que la cerraria.
+Comprueba "cerrar la sesion de la cuenta ('cuenta: sesion cerrada', SesionMiracle.cs:264) no cierra la voz" {
+  (EstadoDeLaVoz (Juntar ($reabiertaAlFinal + @('[23:39:45] cuenta: sesi~on cerrada')))) -eq "abierta" }
 Comprueba "GPT-Live sin credito (23:36): la voz queda CERRADA, aunque dijo 'sesion abierta con'" { (EstadoDeLaVoz (Juntar $gptLiveSinCredito)) -eq "cerrada" }
 Comprueba "Realtime sin credito (23:40): 'la conexion se cayo 5 veces' ya es cerrada, sin esperar a 'sesion cerrada'" { (EstadoDeLaVoz (Juntar $realtimeSinCredito)) -eq "cerrada" }
 Comprueba "la forma vieja: 'sesion abierta con' sin confirmacion (Realtime no confirma) es abierta" { (EstadoDeLaVoz (Juntar $reabiertaAlFinal)) -eq "abierta" }
