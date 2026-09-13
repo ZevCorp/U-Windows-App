@@ -8055,8 +8055,11 @@ internal static class Contrato
         // reloj de los turnos, nunca el marcador. Hasta el 2026-09-12 se cambiaba el marcador entero por uno
         // del contrato, y eso dejaba sin juez con qué silencio y con qué reloj lo construye la app: la
         // revisión lo midió con dos sabotajes que dejaban el contrato INTACTO (G1, construir con 60 000 ms,
-        // y G4, reutilizar el marcador de la sesión anterior). El «tic» es un mensaje que no trae hechos
-        // (session.usage.updated): no suena, así que no abre el altavoz.
+        // y G4, reutilizar el marcador de la sesión anterior). El «tic» es un mensaje que NO TRAE HECHOS y no
+        // suena, así que no abre el altavoz: el silencio de ceros (TicSinHechos). Hasta el 2026-09-12 era un
+        // session.usage.updated, y desde la 48 de la voz ese mensaje trae un Hecho.Duracion: la 209 dejó de pasar
+        // por el camino «sin hechos» sin que nada se pusiera rojo. Medido con SG209i (consultar el marcador solo
+        // cuando el mensaje trae hechos): ✔ 209, y solo la 211 y la 212 en rojo.
         var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
         var procesar = tc?.GetMethod("Procesar", BindingFlags.NonPublic | BindingFlags.Instance);
         var campo = tc?.GetField("_turnosSinMarca", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -8069,7 +8072,7 @@ internal static class Contrato
         { Pendiente("ConversacionEnVivo._relojDeLosTurnos y EmpezarLosTurnosDeLaSesion (el marcador tal como lo construye la app)", "209", "018"); return; }
         var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
         if (tLive == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "209", "018"); return; }
-        const string tic = "{\"type\":\"session.usage.updated\",\"usage\":{\"seconds\":1}}";
+        string tic = TicSinHechos;
 
         (bool TieneMarcador, bool RelojDelSistema, int CerroAntes, int CerroDespues, List<string> Dijo, bool AbrioPorVoz) Conversa(
             Voz.Realtime.IProtocolo protocolo, string trozo)
@@ -8339,7 +8342,9 @@ internal static class Contrato
     ///
     /// Se juzga por la puerta del socket (Procesar), por el cambio de conexión (EmpiezaUnaConexion) y por el cierre de
     /// verdad (TerminarAsync, con Viva puesta a mano: sin micrófono, collar ni altavoz abiertos, cerrar no toca ningún
-    /// dispositivo). Que ArrancarAsync ponga la cuenta a cero necesita clave y socket, y no se juzga aquí.
+    /// dispositivo). Que ArrancarAsync ponga la cuenta a cero necesita clave y socket, y no se juzga aquí (W218); tampoco
+    /// que ReconectarAsync, al volver sin continuidad, pase por EmpiezaUnaConexion: aquí se invoca por reflexión, y
+    /// cambiar esa llamada por un Dice deja el contrato INTACTO (W218b, medido el 2026-09-12).
     /// </remarks>
     private static void LaDuracionDeGptLiveLlegaAlCierre()
     {
@@ -8400,13 +8405,18 @@ internal static class Contrato
                 Llega(conv, Uso(12.0));
                 Llega(conv, Uso(25.0));
                 conexion.Invoke(conv, new object[] { "" });   // la conexión nueva es otra sesión del servidor: vuelve a contar desde cero
-                Llega(conv, Uso(7.0));
+                Llega(conv, Uso(3.0));
+                // TRES CONEXIONES, NO DOS: con una sola reconexión, «sumar lo de las anteriores» y «quedarse con la anterior»
+                // dan lo mismo (0 + 25 = 25). El 2026-09-12 EmpiezaUnaConexion con «=» en vez de «+=» (X218b) dejó ✔ 218 y
+                // CONTRATO INTACTO; con dos cortes, 25 + 3 + 4 s se reportaban como 7.
+                conexion.Invoke(conv, new object[] { "" });
+                Llega(conv, Uso(4.0));
                 Cerrar(conv);
                 int n = Espera(r, 1);
                 string[] dichas = Lineas();
                 Debe(n == 1, $"una sesión de GPT-Live sin fichas y con segundos se reporta al cerrar la voz, una vez (se reportó {n})");
                 Debe(dichas.Length == 1 && dichas[0].Contains(" 32 s "),
-                    $"y el cierre deja UNA línea voz-viva con los segundos del servidor: 25 de la primera conexión —el último acumulado, no 12 + 25— y 7 de la segunda, 32 s (dejó {dichas.Length}: {string.Join(" | ", dichas)})");
+                    $"y el cierre deja UNA línea voz-viva con los segundos del servidor: 25 de la primera conexión —el último acumulado, no 12 + 25—, 3 de la segunda y 4 de la tercera, 32 s (dejó {dichas.Length}: {string.Join(" | ", dichas)})");
                 if (n >= 1)
                 {
                     var parte = r.Primera!;
