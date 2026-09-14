@@ -1552,9 +1552,27 @@ internal static class Contrato
         Debe(iUpd >= 0 && anadidos.Count == 1 && aAprendiz.FindIndex(x => Campo(x, "type") == "session.instructions.append") > iUpd,
             $"cambiar de modo es el session.update de la delegación y DESPUÉS un session.instructions.append a la voz (salió: {Tipos(aAprendiz)})");
         if (anadidos.Count == 0) return;
+
+        // LOS PREFIJOS SON LOS TEXTOS MEDIDOS, y se comparan letra por letra (revisión contrato r2, 2026-09-13). Hasta
+        // aquí se miraba Contains, y dos sabotajes de una línea dejaban VOZ ÍNTEGRA (medido): el append del aprendiz
+        // sin «CAMBIO DE MODO…», y la vuelta con el prefijo de cambiar de modo en vez de «VUELVES…». La sonda de ese
+        // día no vio que el prefijo fuera lo que hace asentir: sin él también asintió, 3 de 3, y con el prefijo
+        // equivocado también volvió a delegar, 2 de 2. Se congelan igual, por dos razones medidas: son los textos con
+        // los que se midió todo lo demás (Cambiarlos es volver a medir, dice ProtocoloGptLive), y el append del
+        // aprendiz va al tope de 500 fichas — un prefijo más largo lo haría rechazar, y con solo el session.update la
+        // voz afirmó acciones que nadie hizo, 3 de 3 (2026-09-12).
+        const string alCambiarDeModoMedido = "CAMBIO DE MODO. Desde ahora mandan estas reglas sobre cuándo y cómo hablas, por encima de las anteriores:\n";
+        const string alVolverMedido = "VUELVES A TU MODO DE SIEMPRE. Lo anterior sobre el modo especial ya no manda; desde ahora mandan estas reglas:\n";
+        static string Diferencia(string esperado, string llega)
+        {
+            int i = 0;
+            while (i < esperado.Length && i < llega.Length && esperado[i] == llega[i]) i++;
+            return $"esperados {esperado.Length} caracteres, llegan {llega.Length}; la primera diferencia en el {i}: «{llega.Substring(i, Math.Min(40, llega.Length - i))}»";
+        }
+
         string alAprendiz = Campo(anadidos[0], "content");
-        Debe(alAprendiz.Contains(aprendiz, StringComparison.Ordinal),
-            "el append lleva las reglas del modo nuevo ENTERAS: la voz asiente con una palabra porque las recibe, no un resumen");
+        Debe(alAprendiz == alCambiarDeModoMedido + aprendiz,
+            $"el append es el prefijo medido («CAMBIO DE MODO…») y detrás las reglas del modo nuevo ENTERAS, letra por letra: la voz asiente con una palabra porque las recibe, no un resumen ({Diferencia(alCambiarDeModoMedido + aprendiz, alAprendiz)})");
         Debe(Nodo(anadidos[0], "delegation_id") is { ValueKind: JsonValueKind.Null },
             "con delegation_id nulo, que es la forma que el servidor aceptó (session.instructions.appended)");
 
@@ -1563,8 +1581,8 @@ internal static class Contrato
         Debe(vuelta.Count == 1, $"volver al modo con el que abrió también le habla a la voz (salió: {Tipos(aNormal)})");
         if (vuelta.Count == 0) return;
         string alVolver = Campo(vuelta[0], "content");
-        Debe(deLaVoz.Length > 0 && alVolver.Contains(deLaVoz, StringComparison.Ordinal),
-            "y le devuelve su persona de siempre, la misma con la que abrió la sesión");
+        Debe(deLaVoz.Length > 0 && alVolver == alVolverMedido + deLaVoz,
+            $"y le devuelve su persona de siempre, la misma con la que abrió la sesión, detrás del prefijo medido de la vuelta («VUELVES A TU MODO DE SIEMPRE…»), letra por letra ({Diferencia(alVolverMedido + deLaVoz, alVolver)})");
         Debe(!alVolver.Contains(completas, StringComparison.Ordinal),
             "y NO las instrucciones de operar: la voz no las lleva, y en un append no caben (tope de 500 fichas)");
         var delegado = aNormal.FirstOrDefault(x => Campo(x, "type") == "session.update");

@@ -114,9 +114,13 @@ public sealed class ProtocoloGptLive : IProtocolo
     /// <summary>
     /// Lo que va delante de las reglas que se le añaden a la voz. SON LOS TEXTOS MEDIDOS, letra por letra,
     /// el 2026-09-12: con estos dos, 3 de 3 asintió en modo aprendiz y 2 de 2 volvió a delegar al volver.
-    /// Cambiarlos es volver a medir.
+    /// Cambiarlos es volver a medir, y la 47 los compara letra por letra desde el 2026-09-13.
     /// </summary>
     /// <remarks>
+    /// LO QUE CAMBIA LA VOZ SON LAS REGLAS, NO EL PREFIJO (2026-09-13, con la persona de hoy): sin
+    /// AlCambiarDeModo también asintió 3 de 3, y con AlCambiarDeModo en lugar de AlVolver también volvió a
+    /// delegar 2 de 2. Se quedan porque todo lo demás se midió con ellos, y porque ocupan parte del tope de abajo.
+    ///
     /// Y EL TOPE ESTÁ CERCA: un append de más de 500 fichas se rechaza («Context append text must not exceed
     /// 500 tokens.»; la sesión sigue viva). El del aprendiz, con este prefijo, se aceptó con 1.756
     /// caracteres; el mismo texto repetido hasta 1.900 se rechazó. Le quedan menos de 150 caracteres a
