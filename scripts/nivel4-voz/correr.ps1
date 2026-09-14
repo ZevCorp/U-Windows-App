@@ -40,6 +40,9 @@ foreach ($par in @(@("base", $Base), @("rama", $Rama))) {
   Copy-Item $pristinos $datos -Recurse
   Write-Host "== $($par[0]): $($par[1])" -ForegroundColor Cyan
   & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aqui "conducir.ps1") -Exe $par[1] -Datos $datos -Salida (Join-Path $sal $par[0]) -Tareas (Join-Path $aqui "tareas.json") -Repeticiones $Repeticiones -Cuales $Cuales
+  # Codigo 5: la cuenta de OpenAI no tiene credito (conducir.ps1 lo lee en el log de U y para). No se corre la
+  # otra pasada: fallaria igual, y dos tablas de "0 de N" no son un veredicto sobre nada (2026-09-12).
+  if ($LASTEXITCODE -eq 5) { Write-Host "La corrida '$($par[0])' se paro: la cuenta de OpenAI no tiene credito. No es un resultado de la rama. Mira $sal\$($par[0])\conductor.log" -ForegroundColor Red; exit 5 }
   if ($LASTEXITCODE -ne 0) { Write-Host "La corrida '$($par[0])' no termino (codigo $LASTEXITCODE): mira $sal\$($par[0])\conductor.log" -ForegroundColor Red; exit $LASTEXITCODE }
   & python (Join-Path $aqui "analizar.py") (Join-Path $sal $par[0]) $par[0] --plan ($Repeticiones * $Cuales.Split(",").Count) | Out-File (Join-Path $sal ($par[0] + ".md")) -Encoding utf8
 }
