@@ -44,6 +44,19 @@ public sealed class ProtocoloOpenAI : IProtocolo
     public bool Mira => true;
     public bool SabeVolver => false;
 
+    /// <summary>
+    /// SÍ: session.created, lo primero que manda el servidor al conectar, sin que se le mande nada. Medido el 2026-09-13
+    /// (sonda-apertura.ps1): llega a los 283 ms de conectar, antes que session.updated; y con una apertura que el servidor
+    /// rechaza llega igual, con el error 28 ms detrás y el socket abierto. Promesa 50.
+    /// </summary>
+    /// <remarks>
+    /// Confirma la sesión del servidor, NO la configuración: el error de un session.update llega después de confirmar y
+    /// se sigue leyendo como un error de la conversación. Hasta este día no confirmaba nada, y «sesión abierta» salía al
+    /// conectar el socket: en el nivel 4 del 2026-09-12, sin crédito, salió en el mismo segundo que el cierre 1013. Qué
+    /// manda el servidor sin crédito antes de cerrar no se pudo medir: la cuenta ya lo tiene.
+    /// </remarks>
+    public bool ConfirmaQueAbrio => true;
+
     public ProtocoloOpenAI(string modelo = "gpt-realtime-2.1-mini") => Modelo = modelo;
 
     public Uri Direccion() => new($"wss://api.openai.com/v1/realtime?model={Uri.EscapeDataString(Modelo)}");
@@ -266,6 +279,12 @@ public sealed class ProtocoloOpenAI : IProtocolo
                         if (ids.Count > 0) hechos.Add(new Hecho.Retira(ids));
                     }
                 }
+                break;
+
+            // LA SESIÓN ABRIÓ, dicho por el servidor y no por el socket (promesa 50): es lo primero que manda al conectar.
+            // session.updated NO: contesta a la apertura, y un error de la apertura llega después de session.created.
+            case "session.created":
+                hechos.Add(new Hecho.Abierta());
                 break;
 
             case "error":

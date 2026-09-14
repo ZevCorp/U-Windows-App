@@ -100,8 +100,9 @@ public interface IProtocolo
     /// <remarks>
     /// Nació el 2026-09-12 con GPT-Live: sin crédito, session.start contestó credit_balance_exhausted sin
     /// session.started y el socket murió a los ~2 s; la conversación lo tomaba por un corte, reenviaba el
-    /// mismo session.start cuatro veces y decía «Sigo» cada vez, con la causa solo en el log. Por defecto
-    /// falso: GPT Realtime no se midió así, y con él un error se sigue leyendo como hasta ahora.
+    /// mismo session.start cuatro veces y decía «Sigo» cada vez, con la causa solo en el log. GPT Realtime lo
+    /// declara desde el 2026-09-13, con session.created (promesa 50). Por defecto falso: un protocolo que no se
+    /// ha medido así no confirma nada, y la conversación dice en su línea de apertura que nadie la confirmó.
     /// </remarks>
     bool ConfirmaQueAbrio => false;
 

@@ -175,6 +175,10 @@ internal static class Contrato
         // tratamientos. Decidirlo le toca a la conversación (223 y 224 del grafo); aquí, que el traductor no se
         // guarde el código, que es lo único estable: el message está en inglés y cambia de redacción.
         Prueba("53. los traductores de OpenAI dicen el código de un error: un error es un Hecho.Falla con su message y con su code tal como llega —credit_balance_exhausted e invalid_model por GPT-Live, invalid_api_key y model_not_found por GPT Realtime—, y sin code no se inventa uno", LosErroresDicenSuCodigo);
+        // «SESIÓN ABIERTA» NO ES «SOCKET CONECTADO» (2026-09-13, nivel 4 del 12). La línea salía al conectar, y con la
+        // cuenta sin crédito salió en el mismo segundo que el error: el conductor la tomó por voz abierta. GPT-Live ya
+        // confirmaba (la 49); GPT Realtime, el respaldo, no. Del 50 al 52 son de la rama de la apertura.
+        Prueba("50. GPT Realtime confirma la apertura con lo primero que manda su servidor al conectar: declara que confirma, session.created es un Hecho.Abierta, y ni un error, ni session.updated, ni ningún otro mensaje lo es", GptRealtimeConfirmaLaApertura);
 
         Console.WriteLine();
         if (_pendientes > 0)
@@ -1713,8 +1717,10 @@ internal static class Contrato
         var tAbierta = typeof(Hecho).GetNestedType("Abierta");
         if (confirma == null || tAbierta == null) { Pendiente("IProtocolo.ConfirmaQueAbrio / Hecho.Abierta", "018·49"); return; }
         Debe(confirma is true, "GPT-Live declara que confirma la apertura: hasta session.started la sesión no está abierta");
-        Debe(DeLaInterfaz("ConfirmaQueAbrio", new ProtocoloOpenAI()) is false,
-            "y GPT Realtime, que no se juzgó así, no lo declara: con él un error se sigue leyendo como hasta ahora");
+        // ACOTADO EL 2026-09-13 (la 50): aquí se juzgaba con ProtocoloOpenAI, que desde entonces confirma con
+        // session.created. Lo que la 49 necesita es el valor por defecto, y se juzga con un protocolo que no lo declara.
+        Debe(DeLaInterfaz("ConfirmaQueAbrio", new ProtocoloQueNoLoDeclara()) is false,
+            "y por defecto un protocolo no confirma: el que no lo declara sigue leyendo un error como hasta ahora");
 
         var abre = p.Leer(Mensaje("""{"type":"session.started","session":{"id":"live_u2_ENOy6GhblDeLrMlDOGSX1","model":"gpt-live-1","status":"active","input":[]}}"""));
         Debe(abre.Count == 1 && abre[0].GetType() == tAbierta, $"session.started es UN Hecho.Abierta (salieron {abre.Count})");
@@ -1792,6 +1798,73 @@ internal static class Contrato
         var cerrada = live.Leer(Mensaje("""{"event_id":"event_ENOyNXoVEuKQV2BXwf0YH","type":"session.closed","reason":"close_requested","usage":{"seconds":13.0},"client_event_id":"sonda_fin"}"""));
         Debe(cerrada.Count == 1 && cerrada[0] is Hecho.Falla fc && (codigo.GetValue(fc) as string) == "",
             "y la sesión que el servidor cierra sigue siendo una Falla sin código: su motivo no es un code");
+    }
+
+    /// <remarks>
+    /// EL FALLO QUE ESTO IMPIDE (nivel 4 del 2026-09-12): «sesión abierta con «…»» se escribía al conectar el socket, y con
+    /// la cuenta sin crédito salió en el mismo segundo que el error del servidor; el conductor del nivel 4 la tomó por «voz
+    /// abierta» (patrón nº2). GPT-Live ya confirmaba con session.started (la 49); GPT Realtime no confirmaba nada, así que
+    /// con U_VOZ=realtime «abrió» seguía queriendo decir «conectó».
+    ///
+    /// LO QUE CONFIRMA ES LO PRIMERO QUE MANDA SU SERVIDOR, medido el 2026-09-13 con sonda-apertura.ps1 (fuera del repo):
+    /// session.created llega a los 283 ms de conectar sin que se le haya mandado nada, antes que session.updated; y con una
+    /// apertura que el servidor rechaza, session.created llega igual y el error 28 ms después, con el socket abierto.
+    /// Confirma la sesión del servidor, no la configuración: un error de la apertura llega DESPUÉS de confirmar. Qué manda
+    /// sin crédito no se pudo medir: la cuenta ya lo tiene.
+    /// </remarks>
+    private static void GptRealtimeConfirmaLaApertura()
+    {
+        var p = new ProtocoloOpenAI();
+        var confirma = DeLaInterfaz("ConfirmaQueAbrio", p);
+        var tAbierta = typeof(Hecho).GetNestedType("Abierta");
+        if (confirma == null || tAbierta == null) { Pendiente("IProtocolo.ConfirmaQueAbrio / Hecho.Abierta", "018·50"); return; }
+        Debe(confirma is true, "GPT Realtime declara que confirma la apertura: hasta que su servidor lo dice, la sesión no está abierta");
+
+        // Tal como lo mandó el servidor (sonda-apertura.ps1, 2026-09-13), con sus instrucciones por defecto recortadas.
+        var creada = p.Leer(Mensaje("""
+            {"type":"session.created","event_id":"event_ENgpu4Ic9UMb8h9QL7IeW","session":{"type":"realtime","object":"realtime.session","id":"sess_ENgpurpMSkQ6r492KYlaU","model":"gpt-realtime-2.1-mini","output_modalities":["audio"],"instructions":"Your knowledge cutoff is 2023-10. [...]","tools":[],"tool_choice":"auto","max_output_tokens":"inf","tracing":null,"truncation":"auto","prompt":null,"expires_at":1789318514,"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"transcription":null,"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"prefix_padding_ms":300,"silence_duration_ms":500,"idle_timeout_ms":null,"create_response":true,"interrupt_response":true}},"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"marin","speed":1.0}},"include":null}}
+            """));
+        Debe(creada.Count == 1 && creada[0].GetType() == tAbierta,
+            $"session.created, lo primero que manda el servidor al conectar y sin que se le mande nada, es UN Hecho.Abierta (salieron {creada.Count}: {string.Join(", ", creada.Select(h => h.GetType().Name))})");
+
+        var rechazo = p.Leer(Mensaje("""
+            {"type":"error","event_id":"event_ENgqP5DlgRXuSNbefrFfN","error":{"type":"invalid_request_error","code":"invalid_value","message":"Invalid value: 'voz_que_no_existe'. Supported values are: 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', and 'cedar'.","param":"session.audio.output.voice","event_id":null}}
+            """));
+        Debe(rechazo.Count == 1 && rechazo[0] is Hecho.Falla fr && fr.Que.Contains("voz_que_no_existe"),
+            "el error con que el servidor rechaza una apertura sigue siendo UN Hecho.Falla con su mensaje, no una apertura");
+
+        string[] otros =
+        {
+            """{"type":"session.updated","event_id":"event_ENgpxMj2OGfg0YuIvOV6b","session":{"type":"realtime","object":"realtime.session","id":"sess_ENgpurpMSkQ6r492KYlaU","model":"gpt-realtime-2.1-mini","output_modalities":["audio"],"instructions":"Eres una sonda. Responde en una frase.","tools":[],"tool_choice":"auto","max_output_tokens":"inf","tracing":null,"truncation":"auto","prompt":null,"expires_at":1789318514,"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"transcription":{"model":"gpt-transcribe","language":null,"languages":null,"prompt":null},"noise_reduction":null,"turn_detection":{"type":"semantic_vad","eagerness":"auto","create_response":true,"interrupt_response":true}},"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"marin","speed":1.0}},"include":null}}""",
+            """{"event_id":"event_ENgqCrigFUMtyYlkgZPm6","type":"session.started","session":{"id":"live_u2_ENgqAxk3F96xLroZHUQ5A","expires_at":1789322132,"model":"gpt-live-1","status":"active","input":[]}}""",
+        };
+        int abiertas = otros.SelectMany(x => p.Leer(Mensaje(x))).Concat(rechazo).Count(h => h.GetType() == tAbierta);
+        Debe(abiertas == 0,
+            $"y ningún otro mensaje es una apertura: ni el error, ni session.updated, que llega tras mandar la apertura, ni el session.started de GPT-Live, que no es su evento (salieron {abiertas})");
+    }
+
+    /// <summary>
+    /// Un protocolo que no declara nada de lo que tiene valor por defecto: para juzgar esos valores sin atarlos a lo que
+    /// decida un proveedor. Nació el 2026-09-13, cuando GPT Realtime pasó a confirmar la apertura (la 50) y la 49 se
+    /// quedó sin nadie que juzgara el «por defecto no confirma».
+    /// </summary>
+    private sealed class ProtocoloQueNoLoDeclara : IProtocolo
+    {
+        public string Quien => "sin declarar";
+        public string Modelo => "ninguno";
+        public int RitmoDeEntrada => 24000;
+        public int RitmoDeSalida => 24000;
+        public bool Mira => false;
+        public bool SabeVolver => false;
+        public Uri Direccion() => new("wss://localhost/nada");
+        public IReadOnlyDictionary<string, string> Cabeceras(string clave) => new Dictionary<string, string>();
+        public IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Utensilio> utensilios, string pase) => Array.Empty<string>();
+        public string Audio(byte[] pcm) => "";
+        public string Fotograma(byte[] jpeg) => "";
+        public string Texto(string texto) => "";
+        public IEnumerable<string> Resultados(IReadOnlyList<(string Id, string Nombre, string Resultado)> hechas) => Array.Empty<string>();
+        public string PedirRespuesta(string instrucciones = "") => "";
+        public IReadOnlyList<Hecho> Leer(JsonElement mensaje) => Array.Empty<Hecho>();
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

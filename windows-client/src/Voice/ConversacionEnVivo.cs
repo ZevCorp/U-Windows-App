@@ -438,8 +438,8 @@ public sealed class ConversacionEnVivo : IDisposable
 
             Viva = true;
             Cambio?.Invoke(true);
-            LogBus.Log("voz-viva", $"sesión abierta con «{_protocolo.Modelo}» ({_protocolo.Quien})");
-            EmpiezaUnaConexion("Te escucho.");   // con GPT-Live, cuando el servidor lo confirme (49)
+            // «SESIÓN ABIERTA» YA NO SE ESCRIBE AQUÍ: aquí solo se sabe que el socket conectó (promesa 220).
+            EmpiezaUnaConexion("Te escucho.");   // cuando el servidor lo confirme (49 con GPT-Live, 50 con GPT Realtime)
 
             _audio.Capturado += MandarTrozo;
             _audio.AbrirMicrofono();
@@ -1530,8 +1530,19 @@ public sealed class ConversacionEnVivo : IDisposable
         _fallaAntesDeAbrir = "";
         _porQueNoSeReintenta = _loQueDijoAlNoPoder = "";   // la causa era de la conexión anterior (224)
         _alConfirmar = _confirmada ? "" : alConfirmar;
+        // CONECTAR NO ES ABRIR (promesa 220). Hasta el 2026-09-13 «sesión abierta con «…»» se escribía en ArrancarAsync al
+        // conectar el socket, y en el nivel 4 del 12, sin crédito, salió en el mismo segundo que el error: el conductor la
+        // tomó por voz abierta (patrón nº2). Con un protocolo que confirma, aquí solo se sabe que el socket conectó, y la
+        // línea lo dice así; «sesión abierta» la escribe Reaccionar al llegar Hecho.Abierta. Uno que no confirma la
+        // escribe aquí, diciendo que nadie la confirmó: lo que no se midió no se afirma.
+        LogBus.Log("voz-viva", _confirmada
+            ? $"sesión abierta con {QuienAbre}, sin confirmación: este protocolo no la manda"
+            : $"socket conectado, esperando confirmación de {QuienAbre}");
         if (_confirmada && alConfirmar.Length > 0) Dice?.Invoke(alConfirmar);
     }
+
+    /// <summary>Con qué abre, tal como lo dicen las líneas de apertura: el modelo de la voz y el proveedor.</summary>
+    private string QuienAbre => $"«{_protocolo.Modelo}» ({_protocolo.Quien})";
 
     /// <summary>
     /// El servidor dijo por qué no abría y cerró. Se dice UNA vez, con su causa, y se cierra la voz: la causa
@@ -1713,7 +1724,7 @@ public sealed class ConversacionEnVivo : IDisposable
             // LA SESIÓN ABRIÓ DE VERDAD (promesa 49): lo que se iba a decir al arrancar o al volver, se dice ahora.
             case Hecho.Abierta:
                 _confirmada = true;
-                LogBus.Log("voz-viva", "el servidor confirmó la sesión");
+                LogBus.Log("voz-viva", $"sesión abierta con {QuienAbre}: el servidor la confirmó");   // la única que lo afirma (220)
                 if (_alConfirmar.Length > 0) { Dice?.Invoke(_alConfirmar); _alConfirmar = ""; }
                 break;
         }

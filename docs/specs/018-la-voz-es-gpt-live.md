@@ -2,6 +2,7 @@
 
 Estado: **en construcción**. A 2026-09-13: medido contra el servidor; el juez del nivel 4 arreglado y saboteado; las promesas 40–44 y 46–49 (voz) y 208–212, 214, 217 y 218 (grafo) **en verde y saboteadas**, integradas en una sola rama. Los verificadores del cierre encontraron dos verdes falsos, en la 209 y en la 218, y se arreglaron en `2d0b779`. La revisión «contrato r2» (2026-09-13, con crédito) encontró tres jueces más que no juzgaban lo que decía su fila —el silencio exacto de la 209, la voz que suena en la conversación de la 211 y los prefijos de la 47—, los apretó sin cambiar enunciados ni números, y midió contra el servidor que **los 2000 ms quedan al borde** (un hueco de 2009 ms, ver «Hallazgos»). **Falta el nivel 4**. Se intentó el 2026-09-12 a las 23:36 (GPT-Live) y a las 23:40 (`U_VOZ=realtime`) y no midió nada, porque la cuenta de OpenAI no tiene crédito (ver «El nivel 4»). A las 23:5x la sonda seguía contestando `credit_balance_exhausted`. Nada de esto se ha oído con micrófono ni en `U.exe` · Nace de dos peticiones del dueño (2026-09-11 y 2026-09-12) y de las sondas contra el servidor de esas dos noches · Rama: `jero/voz-gpt-live`, que integra `jero/voz-gpt-live-protocolo` (el traductor, 40–43), `jero/voz-gpt-live-juez` (esta spec y el juez del nivel 4) y las seis ramas hijas de las revisiones: `-silencio` (44), `-persona` (46–48), `-turnos` (211, 212), `-texto` (214), `-seleccion` (217) y `-fidelidad` (49); la 218 nació al integrarlas
 Estado: **en construcción**. A 2026-09-13: medido contra el servidor; el juez del nivel 4 arreglado y saboteado; las promesas 40–44 y 46–49 (voz) y 208–212, 214, 217 y 218 (grafo) **en verde y saboteadas**, integradas en una sola rama. En `jero/voz-gpt-live-r2-fatal`, la 53 (voz) y la 223 y la 224 (grafo), también en verde y saboteadas: lo que no se arregla reconectando (cuenta, clave, modelo) deja de reconectarse con los dos protocolos, medido contra el servidor con crédito. Los verificadores del cierre encontraron dos verdes falsos, en la 209 y en la 218, y se arreglaron en `2d0b779`. **Falta el nivel 4**. Se intentó el 2026-09-12 a las 23:36 (GPT-Live) y a las 23:40 (`U_VOZ=realtime`) y no midió nada, porque la cuenta de OpenAI no tiene crédito (ver «El nivel 4»). A las 23:5x la sonda seguía contestando `credit_balance_exhausted`. Nada de esto se ha oído con micrófono ni en `U.exe` · Nace de dos peticiones del dueño (2026-09-11 y 2026-09-12) y de las sondas contra el servidor de esas dos noches · Rama: `jero/voz-gpt-live`, que integra `jero/voz-gpt-live-protocolo` (el traductor, 40–43), `jero/voz-gpt-live-juez` (esta spec y el juez del nivel 4) y las seis ramas hijas de las revisiones: `-silencio` (44), `-persona` (46–48), `-turnos` (211, 212), `-texto` (214), `-seleccion` (217) y `-fidelidad` (49); la 218 nació al integrarlas
+Estado: **en construcción**. A 2026-09-13: medido contra el servidor; el juez del nivel 4 arreglado y saboteado; las promesas 40–44 y 46–49 (voz) y 208–212, 214, 217 y 218 (grafo) **en verde y saboteadas**, integradas en una sola rama. Los verificadores del cierre encontraron dos verdes falsos, en la 209 y en la 218, y se arreglaron en `2d0b779`. **Falta el nivel 4**. Se intentó el 2026-09-12 a las 23:36 (GPT-Live) y a las 23:40 (`U_VOZ=realtime`) y no midió nada, porque la cuenta de OpenAI no tiene crédito (ver «El nivel 4»). A las 23:5x la sonda seguía contestando `credit_balance_exhausted`. Nada de esto se ha oído con micrófono ni en `U.exe`. **El 2026-09-13, ya con crédito**, la rama `jero/voz-gpt-live-r2-apertura` añade la 50 (voz) y la 220 (grafo): «sesión abierta» solo sale cuando el servidor la confirma, también con GPT Realtime, y el conductor del nivel 4 espera esa línea (ver «La apertura, con crédito» en Hallazgos) · Nace de dos peticiones del dueño (2026-09-11 y 2026-09-12) y de las sondas contra el servidor de esas dos noches · Rama: `jero/voz-gpt-live`, que integra `jero/voz-gpt-live-protocolo` (el traductor, 40–43), `jero/voz-gpt-live-juez` (esta spec y el juez del nivel 4) y las seis ramas hijas de las revisiones: `-silencio` (44), `-persona` (46–48), `-turnos` (211, 212), `-texto` (214), `-seleccion` (217) y `-fidelidad` (49); la 218 nació al integrarlas
 
 > **La petición, en la voz del dueño.** El 2026-09-11: *«cambia a GPT voice el último que salió…
 > investiga»*. El 2026-09-12: *«ajusta todo y empuja a main»*, *«migra rápido»*.
@@ -79,6 +80,7 @@ sondas son PowerShell de un solo uso (`sonda-live.ps1`, `sonda-live-eventos.ps1`
 | Un modelo que no existe | **GPT-Live**: `error` `invalid_model` («Model "gpt-live-inexistente-9" is not supported in realtime mode.») a 262 ms, y el socket `Aborted` a los ~2 s, sin cierre. **GPT Realtime**, en la dirección: `error` `model_not_found` y cierre **4004** «invalid_request_error.model_not_found». En el `session.update` con la dirección buena, el servidor lo ignora y abre con el de la dirección. Un **delegado** que no existe abre igual (`session.started`, 6 s sin error): sin medir qué pasa al delegar | ídem |
 | La descripción de un cierre de Realtime | es `«type.code»` del error que lo precede: `invalid_request_error.invalid_api_key`, `invalid_request_error.model_not_found`, y el `insufficient_quota.credit_balance_exhausted` del nivel 4 del 09-12. El número no es la causa: **1013** es «vuelve a intentarlo» en el RFC 6455 | ídem, y el log del nivel 4 del 09-12 |
 | El estado HTTP de un apretón rechazado | `ClientWebSocket.HttpStatusCode` vale **401** con `CollectHttpResponseDetails = true` y **0** sin la opción, con la misma excepción | `sonda-fatal`, 09-13 |
+| Qué manda cada servidor al conectar | **GPT Realtime**: `session.created` a los 283 ms de conectar, sin que se le mande nada, y es lo primero que llega; con un `session.update` que rechaza, `session.created` llega igual y el `error` 28 ms detrás, con el socket abierto. **GPT-Live**: nada hasta `session.start`; `session.started` a 631 ms de mandarlo. Qué manda Realtime sin crédito antes de cerrar: **sin medir** (la cuenta ya tiene) | `sonda-apertura.ps1`, 09-13 |
 
 **Lo que dicen las latencias.** GPT-Live llama la herramienta más tarde (dos cerebros: la voz entiende,
 el delegado decide) y empieza a hablar antes (la voz no espera al delegado). La suma para «lo hizo»
@@ -179,6 +181,9 @@ reservados (grafo 240 en adelante, voz 70 en adelante).
 números: arregló dos jueces (la 209 y la 218) sin cambiar sus enunciados. El arreglador «fatal» del 2026-09-13
 (`jero/voz-gpt-live-r2-fatal`) usa los que le dio el integrador: la **53** de la voz y la **223** y la **224** del
 grafo.
+números: arregló dos jueces (la 209 y la 218) sin cambiar sus enunciados.
+La rama de la apertura (2026-09-13) recibió la **50–52** (voz) y la **220–222** (grafo): usa la **50** y la **220**; la 51, la 52,
+la 221 y la 222 quedan sin usar, y la 49 se acota sin cambiar su enunciado (ver su fila).
 Ningún número chocó al integrar; **chocó un significado**: la 217 usaba `session.usage.updated` como ejemplo de lo
 que no se traduce, y la 48 lo traduce (ver Hallazgos).
 
@@ -199,6 +204,7 @@ misma frase manda los mismos 9 `.delta`, no se puede medir sin red: lo midió la
 | 47 | voz | con GPT-Live, cambiar de modo también cambia a quien habla: detrás del session.update de la delegación va un session.instructions.append a la voz con las reglas del modo nuevo, y al volver al modo con el que abrió, con su persona de siempre y no con las instrucciones de operar. | persona |
 | 48 | voz | GPT-Live traduce lo que dura la sesión: session.usage.updated es un Hecho.Duracion con los segundos que trae, que son el acumulado de la sesión y no un incremento; un uso sin segundos no inventa duración. | persona |
 | 49 | voz | GPT-Live no manda lo que su servidor rechaza: no se declara capaz de mirar, porque una captura de pantalla no cabe y una segunda foto pequeña tampoco; un resultado de más de 32.768 bytes sale como un function_call_output de 32.768 bytes o menos, con su call_id, sin partir un carácter y diciendo cuánto se recortó; y declara que confirma la apertura: session.started es un Hecho.Abierta, y ni un error ni ningún otro mensaje lo es. | fidelidad |
+| 50 | voz | GPT Realtime confirma la apertura con lo primero que manda su servidor al conectar: declara que confirma, session.created es un Hecho.Abierta, y ni un error, ni session.updated, ni ningún otro mensaje lo es. | apertura |
 | 208 | grafo | escribir con la voz abierta pide respuesta: el texto va seguido de pedir turno, con cualquier protocolo. | 2 |
 | 209 | grafo | con una voz que no marca los turnos, la conversación los marca: el primer trozo de lo que dice el usuario abre un turno y un silencio lo cierra. | 3 |
 | 210 | grafo | la voz por defecto es GPT-Live y U_VOZ=realtime vuelve a GPT Realtime. | 4 |
@@ -210,6 +216,7 @@ misma frase manda los mismos 9 `.delta`, no se puede medir sin red: lo midió la
 | 53 | voz | los traductores de OpenAI dicen el código de un error: un error es un Hecho.Falla con su message y con su code tal como llega —credit_balance_exhausted e invalid_model por GPT-Live, invalid_api_key y model_not_found por GPT Realtime—, y sin code no se inventa uno. | fatal |
 | 223 | grafo | lo que no se arregla reintentando se reconoce por su código y dice su causa: sin crédito (insufficient_quota, credit_balance_exhausted), una clave que no vale (invalid_api_key, o el apretón de manos rechazado con 401) y un modelo que no existe (invalid_model, model_not_found), también dentro de la descripción de un cierre; cada causa se distingue de las otras, y cualquier otro código, un número de cierre, la prosa del mensaje o nada se pueden reintentar. | fatal |
 | 224 | grafo | con los dos protocolos, lo que no se arregla reintentando no reconecta: venga en un error, en el cierre del socket o en el apretón de manos de la reconexión, la conversación dice una vez por qué y cierra la voz; un corte sin esa causa sigue reconectando, y una conexión nueva no hereda la causa de la anterior. | fatal |
+| 220 | grafo | la voz dice que la sesión abrió cuando el servidor lo confirma, no cuando conecta el socket: al conectar deja una línea que dice que espera la confirmación, y la de «sesión abierta con» sale una sola vez, al confirmarla, con «Te escucho.» detrás, con GPT-Live y con GPT Realtime; un error antes de confirmar no la escribe, y con un protocolo que no confirma la línea dice que nadie la confirmó. | apertura |
 
 **La que cierra el asunto** es la **210**: sin ella todo lo demás existe y la voz sigue siendo la de
 antes. **La que cierra el agujero del nivel 4** es la **208**: sin ella ningún nivel 4 escrito mide la voz.
@@ -229,7 +236,8 @@ traductor tal como los mandó el servidor real en las sondas.
 | 46 | La persona del `session.start` que sale de `Apertura`, no la constante: dice la regla con las mismas palabras que la 161 le exige al delegado, da el reemplazo —en pasado y del resultado— y nombra las fórmulas que se oyeron («voy a…», «vamos a…», «dame un momento») | la regla se borra de la persona (S46a); la apertura manda otra persona (S46b) |
 | 47 | `CambioDeModo` después de una `Apertura`: **un** `session.update` de la delegación y **detrás** un `session.instructions.append` a la voz **igual, letra por letra, al prefijo medido** («CAMBIO DE MODO. Desde ahora mandan estas reglas…», copiado en el contrato) **seguido de** las reglas del modo; con las mismas instrucciones con que abrió la sesión, **igual al prefijo medido de la vuelta** («VUELVES A TU MODO DE SIEMPRE…») **seguido de** la persona de la voz, nunca con las instrucciones de operar. `ProtocoloOpenAI` no manda append. Hasta la revisión r2 (2026-09-13) esta fila decía «con `AlCambiarDeModo`» y «con `AlVolver`», y el contrato solo miraba `Contains` de las reglas y de la persona: los prefijos no los juzgaba nadie | el append lleva siempre las reglas del modo (S47a); nunca se reconoce la vuelta (S47b); otro tipo de evento (S47c); la apertura no se recuerda (S47d); `CambioDeModo` manda `session.start` (S42a, roja también la 42); **el append del aprendiz sin su prefijo (R3a) y la vuelta con el prefijo de cambiar de modo (R3b), los dos VOZ ÍNTEGRA con la 47 de antes**; una palabra del prefijo (S47e) o un signo del de la vuelta (S47f) |
 | 48 | `Leer`: `session.usage.updated` con 12.0 y después con 25.0 da un `Duracion` con 12 y otro con 25 —el acumulado, no los 13 de diferencia—; un número sin decimales también son segundos; un uso sin segundos numéricos (vacío o texto) no da nada; y ningún otro mensaje da duración | el evento se busca con otro nombre (S48a); se leen segundos que no son número (S48b) |
-| 49 | `Mira` es falso. `Resultados` con un resultado de 40 KB da **un** mensaje de 32.768 B o menos y de más de 32.752 (no recorta de más), `function_call_output` con su `call_id`, con el principio del resultado y la cola `…[recortado: N de M bytes]` con N y M verdaderos; con 6.000 emojis, lo guardado son emojis enteros; uno que cabe (150 frases con acentos y comillas) va entero. `ConfirmaQueAbrio` es verdadero en GPT-Live y falso por defecto en `ProtocoloOpenAI`; el `session.started` capturado es **un** `Hecho.Abierta`; el `credit_balance_exhausted` capturado es un `Falla` y no una apertura; `session.updated`, `session.delegation.created`, `response_input_buffer_full`, `response.completed`, `session.usage.updated` y `session.closed` no dan `Abierta` | `Mira` vuelve a sí; `Resultados` manda el resultado entero; el recorte parte un emoji; la cola dice que se mandó todo; la apertura se lee en `session.updated`; GPT-Live deja de declarar que confirma |
+| 49 | `Mira` es falso. `Resultados` con un resultado de 40 KB da **un** mensaje de 32.768 B o menos y de más de 32.752 (no recorta de más), `function_call_output` con su `call_id`, con el principio del resultado y la cola `…[recortado: N de M bytes]` con N y M verdaderos; con 6.000 emojis, lo guardado son emojis enteros; uno que cabe (150 frases con acentos y comillas) va entero. `ConfirmaQueAbrio` es verdadero en GPT-Live y falso por defecto: desde el 2026-09-13 lo dice un protocolo del contrato que no lo declara, porque `ProtocoloOpenAI`, con el que se juzgaba, confirma desde la 50 (**acotada, sin cambiar el enunciado**); el `session.started` capturado es **un** `Hecho.Abierta`; el `credit_balance_exhausted` capturado es un `Falla` y no una apertura; `session.updated`, `session.delegation.created`, `response_input_buffer_full`, `response.completed`, `session.usage.updated` y `session.closed` no dan `Abierta` | `Mira` vuelve a sí; `Resultados` manda el resultado entero; el recorte parte un emoji; la cola dice que se mandó todo; la apertura se lee en `session.updated`; GPT-Live deja de declarar que confirma |
+| 50 | `ProtocoloOpenAI`: `ConfirmaQueAbrio` es verdadero; el `session.created` capturado el 2026-09-13 (con las instrucciones por defecto recortadas) es **un** `Hecho.Abierta`; el `error` con que el servidor rechazó una voz inexistente es **un** `Falla` con su mensaje; ni ese error, ni el `session.updated` capturado, ni el `session.started` de GPT-Live dan `Abierta` | deja de declarar que confirma (S50a, roja también la 220); la apertura se lee en `session.updated` (S50b); `session.created` da dos aperturas (S50c) |
 | 208 | `ConversacionEnVivo.MensajesDeTexto` por nombre. Con `ProtocoloOpenAI`: dos mensajes, **en ese orden**, `conversation.item.create` con el texto y `response.create`. Con `ProtocoloGptLive`: `response.item.create` con el texto y `response.create`. Con un protocolo falso del propio contrato cuyo `PedirRespuesta` es vacío: un solo mensaje, ninguno vacío. **Y su cableado**, añadido tras W208: la conversación deja sustituir su puerta de salida (`_puerta`) y el «hay socket» (`_puertaAbierta`). Con los dos protocolos, lo escrito (`EnviarTextoAsync`) y la nota al modelo (`EnviarTextoAlModeloAsync`) sacan por esa puerta el texto y detrás `response.create`; con la voz cerrada no sale nada | `MensajesDeTexto` deja de añadir la petición de turno; la petición va antes que el texto; se cuela el mensaje vacío; `EnviarTextoAsync` o la nota al modelo vuelven a mandar solo el texto; `EnviarAsync` se salta la puerta; lo escrito sale con la voz cerrada |
 | 209 | `TurnosSinMarca` por nombre, con reloj inyectado y la secuencia como hechos con su hora: el primer trozo de lo que dice el usuario abre turno y el segundo no; con el silencio por defecto (**2000 ms**, medido: ver Hallazgos), a 1000 ms y a **1999 ms** del último trozo no toca cerrar y a 2000 sí, **una vez** (el 1999 desde la revisión r2: sin él pasaba cualquier valor entre 1701 y 2000); lo que dice Ü también mantiene el turno abierto y también se cierra por silencio; el audio que llega continuo **no** cuenta como actividad; sin nada oído no se cierra nunca; un silencio configurado de 500 ms se respeta. Y la 40 ya juzga que `ProtocoloGptLive` no marca los turnos y `ProtocoloOpenAI` sí. **Y su uso, tal como lo construye la app** (acotado el 2026-09-12): `Procesar`, la puerta por la que entra lo del socket, recibe en una `ConversacionEnVivo` con `ProtocoloGptLive` un `session.input_transcript.delta` y mensajes **sin hechos**: el silencio de ceros. Hasta el 2026-09-13 ese «tic» era un `session.usage.updated`, que desde la 48 trae un `Hecho.Duracion`, así que la 209 dejó de pasar por el camino sin hechos y SG209i la dejaba verde. **Se cambia solo `_relojDeLosTurnos`, nunca el marcador.** El reloj que trae la app tiene el origen de `Environment.TickCount64` y avanza con él. A 1700 y a **1999 ms** no emite `Cerro`; a **2000 ms** lo emite una vez, y a 2100 no otra (desde la revisión r2: con 1700 y 2100, la app podía construir el marcador con 1705 o con 2050 y seguía verde), con la línea `voz-turno` «por voz» y `DijoElUsuario` con la frase. `EmpezarLosTurnosDeLaSesion` deja un marcador **nuevo**, y lo dicho antes no cierra después. Con un protocolo que marca sus turnos, y con `ProtocoloOpenAI`, no hay marcador ni cierre | se cierra sin haber oído nada; cada trozo abre turno; el audio cuenta como actividad; `Procesar` deja de consultar el marcador; la conversación no lo crea; el primer trozo no llama a `EmpiezaUnTurnoDelUsuario`; tocar cerrar no reacciona; **la app construye con 60 000 ms (G1) o con 1500 (G1b); el reloj de la app está parado (G2); el marcador no usa el reloj de la conversación (G3); otra sesión reutiliza el marcador (G4); hay marcador también con voces que marcan (G6)**; **el marcador solo se consulta con mensajes que traen hechos (SG209i, verde con la 209 de antes)**; **el silencio por defecto baja a 1705 (R1, medido verde con la 209 de antes de la revisión r2), o la app construye el marcador con 1705 o con 2050 (S209j, S209k: con 1700 y 2100 los dos pasaban por aritmética; no se corrieron contra la 209 de antes)** |
 | 210 | `ConversacionEnVivo.ProtocoloPorDefecto` por nombre, con una variable falsa que anota qué nombre se le pregunta. **Se juzga lo que abre, no el nombre del tipo** (acotado el 2026-09-12, tras la revisión): sin `U_VOZ`, con `U_VOZ` vacío o en blanco, con `gpt-live` y con un valor desconocido (`gemini`), sale `ProtocoloGptLive` con `Modelo` `gpt-live-1`, `Delegado` `gpt-5.6-luna` (por reflexión) y `Direccion()` `wss://api.openai.com/v1/live/sessions`; con `realtime` y con ` Realtime `, `ProtocoloOpenAI` con `Modelo` `gpt-realtime-2.1-mini` y `Direccion()` `wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini`; y el nombre preguntado es `U_VOZ`. **El constructor se puede llamar sin pantalla**, porque `LiveAudio` nace sin dispositivo, así que también se juzga, escuchando `LogBus.Anotado`: sin protocolo y sin `U_VOZ` abre lo mismo que GPT-Live de arriba y no deja ninguna línea `voz-viva` sobre `U_VOZ`; con `U_VOZ=realtime` abre lo de Realtime y tampoco la deja; con `U_VOZ=gemini` abre GPT-Live y deja **una** línea `voz-viva` que nombra «gemini» | el defecto vuelve a ser `ProtocoloOpenAI`; la variable se lee con otro nombre; no se normaliza; el constructor no usa el defecto; **el defecto abre un modelo que no existe (`gpt-live-1-mini`, G2)**; **otro delegado**; **Realtime con otro modelo**; **el aviso del valor desconocido invierte su condición (G3)**; **el aviso sale siempre** |
@@ -241,6 +249,7 @@ traductor tal como los mandó el servidor real en las sondas.
 | 53 | `Leer` de los dos traductores con los errores literales: GPT-Live `credit_balance_exhausted` (2026-09-12) e `invalid_model` (2026-09-13); GPT Realtime `invalid_api_key` y `model_not_found` (2026-09-13). Cada uno es **un** `Hecho.Falla` con su message y con `Codigo` igual a su `code`. Un error sin `code` (con `type` `invalid_request_error`) da `Codigo` vacío con los dos, y `session.closed` es una Falla sin código. `Codigo` se pide por reflexión | Realtime no pasa el código (S53a); GPT-Live no lo pasa (S53b); sin `code` se usa el `type` (S53c) |
 | 223 | `NoSeArreglaReintentando.PorQue` por nombre. Los códigos y las descripciones de cierre medidos de cada causa —`credit_balance_exhausted`, `insufficient_quota`, `insufficient_quota.credit_balance_exhausted`; `invalid_api_key`, `invalid_request_error.invalid_api_key`, `401`; `invalid_model`, `model_not_found`, `invalid_request_error.model_not_found`— dan una frase que nombra «crédito», «clave» o «modelo» y ninguna de las otras dos, la misma dentro de cada causa. Dan vacío: nada, espacios, `response_input_buffer_full`, `function_call_outputs_required`, `unknown_parameter`, `invalid_request_error` (el type de todos), `invalid_request_error.unknown_parameter`, `close_requested`, `fin`, los números de cierre `1013`, `3000` y `4004`, y la prosa de tres mensajes: el de crédito, el de `invalid_model` y la frase de .NET del 401 | quitar un código (S223a); no reconocer el 401 (S223b); partir también por comillas, y la frase de .NET pasa a ser «clave» (S223c); no partir la descripción del cierre (S223d); dos causas con la misma frase (S223e); cualquier código es fatal (S223f) |
 | 224 | Una `ConversacionEnVivo` sin socket, con la reconexión sustituida (`_reconectar`, una cuenta), `Viva` puesta a mano, y `Dice` y `LogBus.Anotado` escuchados. Tras `EmpiezaUnaConexion` llega lo del caso por `Procesar`, `CerroElServidor(int, string)`, `SeCortoLaEscucha(Exception)` o `NoConecto(Exception, int)`, y después `SeAcaboLaEscuchaAsync`. **Con Realtime**: el `invalid_api_key` con su cierre 3000, el cierre 1013 solo, `model_not_found` con su 4004, y el `invalid_api_key` solo con la escucha cortada, dan 0 reconexiones, la voz cerrada, **un** `Dice` y **una** línea «no se reintenta» con la causa; un cierre sin descripción da 1 reconexión y nada dicho. **Con GPT-Live**: `credit_balance_exhausted` tras `session.started`, y la reconexión rechazada con 401, dan lo mismo que arriba; `response_input_buffer_full` con el socket muerto, una reconexión sin respuesta HTTP (0) y una conexión nueva tras una causa dan 1 reconexión. **Y lo de la 49**: `unknown_parameter` e `invalid_model` antes de `session.started` dan 0 reconexiones y un `Dice` con lo que dijo el servidor | `Reaccionar` no anota la causa (S224a); `CerroElServidor` no la anota (S224b); `NoConecto` no la anota (S224c); la decisión la ignora (S224d); no se dice (S224e); una conexión nueva la hereda (S224f); un corte sin causa deja de reconectar (S224g); la rama de la 49 se ignora (S224h, la W49c de antes); **sin juez de contrato, medidos con `sonda-conv-fatal`**: el catch de `ReconectarAsync` vuelve a llamarse a sí mismo (W224); la reconexión no pide el estado HTTP (W224b); `ArrancarAsync` no lo pasa (W224c); el finally no pasa por la decisión (W224d); el cierre del socket no pasa por `CerroElServidor` (W224e) |
+| 220 | Una `ConversacionEnVivo` sin socket, con la puerta de salida sustituida, escuchando `LogBus.Anotado` y `Dice`. Con `ProtocoloGptLive` y con `ProtocoloOpenAI`: `EmpiezaUnaConexion("Te escucho.")` deja **una** línea, `socket conectado, esperando confirmación de «modelo» (quién)`, ninguna «sesión abierta» y no dice nada; por `Procesar` llega la confirmación capturada (`session.started`, `session.created`) y sale **una** línea `sesión abierta con «modelo» (quién): el servidor la confirmó`, «Te escucho.» una vez y nada por la puerta. En otra conversación llega el error sin crédito capturado antes de confirmar: ni línea ni «Te escucho.». Con el protocolo de mentira del contrato, que no confirma: al conectar, **una** línea `sesión abierta con «ninguno» (de mentira), sin confirmación: este protocolo no la manda`, y «Te escucho.» enseguida | al conectar vuelve a decir «sesión abierta» (S220a); la confirmación vuelve a «el servidor confirmó la sesión» (S220b); la línea sin confirmación no lo dice (S220c); la condición al revés (S220d); la conexión se da por confirmada al mandar la apertura (W49b, sin juez hasta la 220); al confirmar no se dice lo que esperaba (W49d, ídem); **sin juez**: `ArrancarAsync` vuelve a escribir la línea vieja (W220) |
 
 ### Límites dichos, no escondidos
 
@@ -270,6 +279,13 @@ traductor tal como los mandó el servidor real en las sondas.
   - Que un error antes de confirmar, seguido de la muerte del socket, no reconecte y diga la causa **lo juzga
     desde el 2026-09-13 la 224** (su caso `unknown_parameter` antes de `session.started`; S224h, la W49c de antes,
     sale roja). Que «Te escucho.» y «Sigo» esperen a `session.started` sigue sin número del grafo.
+- **La 49 juzga el traductor; lo que la conversación hace con él, no.**
+  - Que un error antes de confirmar, seguido de la muerte del socket, no reconecte y diga la causa, y que
+    «Te escucho.» y «Sigo» esperen a `session.started`, vive en `ConversacionEnVivo` (`RecibirAsync`,
+    `EmpiezaUnaConexion`, `Reaccionar`). Ningún contrato lo juzgaba: a este arreglo no se le dio número del grafo.
+    **Desde la 220 (2026-09-13)** se juzga la mitad de «cuando abre»: que «Te escucho.» espere a la confirmación
+    y se diga al llegar (W49b y W49d salen rojos). La de «cuando no abre» —no reconectar y decir la causa— sigue
+    sin juez (W49a, W49c).
   - Lo mide `sonda-conv`, fuera del repo: la `ConversacionEnVivo` real contra el servidor sin crédito, y por
     `Procesar`, sin red, el camino feliz. Sus sabotajes (W49a–d) están en «Sabotajes».
 - **La 224 juzga dónde se decide; que los catch lleguen ahí, no.** Juzga las tres puertas por las que llega la
@@ -300,9 +316,11 @@ traductor tal como los mandó el servidor real en las sondas.
   instancia que construye el propio contrato, y la 210 miraba el nombre del tipo. Con un modelo
   inexistente en `ProtocoloPorDefecto` los dos contratos quedaban en verde (G2). Ahora la 210 exige
   modelo, delegado y dirección de lo que devuelve `ProtocoloPorDefecto` y de lo que abre el constructor.
-- **La línea `sesión abierta con «…»` de `ArrancarAsync` sigue sin juez**: se escribe con el socket ya
-  abierto. Dice el modelo de la voz, no el del delegado; lo que abre de verdad lo juzga la 210 un paso
-  antes, sobre el mismo `_protocolo`.
+- **La línea `sesión abierta con «…»` la juzga la 220 desde el 2026-09-13**, y ya no sale en `ArrancarAsync`: sale en
+  `Reaccionar`, cuando el servidor confirma. Hasta ese día se escribía con el socket recién conectado y sin juez. Dice el
+  modelo de la voz, no el del delegado; lo que abre de verdad lo juzga la 210 un paso antes, sobre el mismo `_protocolo`.
+  **Lo que sigue sin juez es que `ArrancarAsync` no la vuelva a escribir por su cuenta** (W220, CONTRATO INTACTO): lo
+  mide `sonda-conv2` contra el servidor (ver Hallazgos).
 - **La 218 juzga el cierre, no la apertura.** Que `ArrancarAsync` ponga los segundos a cero necesita clave y
   socket (W218, medido sin juez). **Tampoco juzga la reconexión.** La 218 llama a `EmpiezaUnaConexion` por
   reflexión, y nunca comprueba que `ReconectarAsync` pase por ahí. Si la rama sin continuidad, que es la que usa
@@ -360,6 +378,7 @@ empujar: el rojo de cada fase se comprueba en local y se anota en su commit.
 | **6** | 49 | `voz/Realtime/ProtocoloGptLive.cs`, `IProtocolo.cs` (`ConfirmaQueAbrio`), `Hecho.cs` (`Abierta`), `Voice/ConversacionEnVivo.cs` | **hecha** en `jero/voz-gpt-live-fidelidad`: rojo en `21e9ecf`, verde en `da7a6c1`; saboteada (ver «Sabotajes») |
 | **I** | 218 (y la 217 acotada) | `Voice/ConversacionEnVivo.cs` (`Hecho.Duracion` en `Reaccionar`, `EmpiezaUnaConexion`, `ReportarConsumo`, `ConsumoVivo.SegundosDelServidor`), `tests/ContratoDelGrafo/Contrato.cs` | **hecha** al integrar las seis ramas: rojo en `f3aa948` (CONTRATO ROTO, 5), verde en `6e2ea15` (**CONTRATO INTACTO**, **VOZ ÍNTEGRA**); saboteada (ver «Sabotajes») |
 | **fatal** | 53, 223, 224 | `voz/Realtime/Hecho.cs` (`Falla.Codigo`), `ProtocoloOpenAI.cs` (`CodigoDelError`), `ProtocoloGptLive.cs`; nuevo `Voice/NoSeArreglaReintentando.cs`; `Voice/ConversacionEnVivo.cs` (`SeAcaboLaEscuchaAsync`, `CerroElServidor`, `SeCortoLaEscucha`, `NoConecto`, `_reconectar`, `CollectHttpResponseDetails`); las dos sondas `sonda-fatal` y `sonda-conv-fatal` | **hecha** en `jero/voz-gpt-live-r2-fatal`: rojo en `8c17147` (VOZ ROTA 1, CONTRATO ROTO 2, las tres PENDIENTE), verde en `3208b6d` (**VOZ ÍNTEGRA** 42 ✔, **CONTRATO INTACTO** 186 ✔, 0 pendientes; `sonda-conv-fatal` 6 de 6); saboteada (ver «Sabotajes») |
+| **R2** | 50, 220 (y la 49 acotada) | `voz/Realtime/ProtocoloOpenAI.cs` (`ConfirmaQueAbrio`, `session.created`), `Voice/ConversacionEnVivo.cs` (`ArrancarAsync`, `EmpiezaUnaConexion`, `Reaccionar`), `scripts/nivel4-voz/conducir.ps1` con `apertura.ps1` y `autoprueba-apertura.ps1` | **hecha** en `jero/voz-gpt-live-r2-apertura`: rojo en `031583a` (VOZ ROTA, 2; CONTRATO ROTO, 7), verde en `7d56bdd` (**VOZ ÍNTEGRA**, **CONTRATO INTACTO**); la autoprueba del conductor, roja en `1fc8aa5` y verde en `05b0827`; saboteada (ver «Sabotajes») |
 
 **Sitios con la clase de error, contados con `grep`:**
 
@@ -493,7 +512,7 @@ $env:U_VOZ = 'realtime'      # solo para lo que se arranque desde esta consola
 Con ella la voz es la de `main` de hoy (`gpt-realtime-2.1-mini`), con dos diferencias que son arreglos:
 lo escrito pide respuesta (208) y la transcripción es `gpt-transcribe` (D). La voz prestada (192), el
 dictado fuera de la conversación (142) y las marcas de turno del servidor vuelven a ser las de siempre.
-El log de apertura dice con qué modelo abrió: `sesión abierta con «…» (…)`. **Quitar la variable
+El log de apertura dice con qué modelo abrió: `sesión abierta con «…» (…): el servidor la confirmó` (la cola, desde la 220). **Quitar la variable
 devuelve GPT-Live.**
 
 **Lo que la vuelta atrás no es** (revisa:regresiones, R8; y el intento de nivel 4 del 2026-09-12):
@@ -516,8 +535,17 @@ devuelve GPT-Live.**
   - **Medido contra el servidor con la `ConversacionEnVivo` compilada** (`sonda-conv-fatal`, 6 de 6): con
     `U_VOZ=realtime` y una clave falsa, `el servidor cerró la conexión: 3000 «invalid_request_error.invalid_api_key»`
     y detrás `no se reintenta: la clave (OPENAI_API_KEY) no vale (…)`, sin ninguna `reconectada`.
+- **Un error que no se arregla reintentando se reintenta igual.** Sin crédito, la corrida del 2026-09-12 a las 23:40
+  dejó cuatro `reconectada SIN continuidad … (intento 1..4)`, cada una con su cierre `1013
+  «insufficient_quota.credit_balance_exhausted»`, y después `la conexión se cayó 5 veces seguidas: se deja`.
+  Entonces `ProtocoloOpenAI` no declaraba `ConfirmaQueAbrio` y caía en la reconexión de antes; GPT-Live, con la 49, dice la
+  causa una vez y no reintenta. **Desde la 50 (2026-09-13) Realtime lo declara**, con `session.created`: un `error` antes de
+  él, seguido de la muerte del socket, dice la causa y no reintenta. **Pero ese cierre sin crédito no trae un `error`**: es un
+  1013 con la causa en el motivo del cierre, así que con Realtime sigue reconectando. Qué manda su servidor sin crédito antes
+  de cerrar —si llega `session.created`— **no se ha medido**: la cuenta ya tiene crédito.
 - **El binario sí elige bien**, medido en ese intento: por defecto, `sesión abierta con «gpt-live-1» (OpenAI GPT-Live)`;
-  con `U_VOZ=realtime`, `sesión abierta con «gpt-realtime-2.1-mini» (OpenAI)`.
+  con `U_VOZ=realtime`, `sesión abierta con «gpt-realtime-2.1-mini» (OpenAI)`. Desde la 220 esas líneas salen al confirmar y
+  terminan en «: el servidor la confirmó»; al conectar sale `socket conectado, esperando confirmación de «…» (…)`.
 
 ## El nivel 4
 
@@ -570,6 +598,8 @@ contestando `credit_balance_exhausted` a 426 ms.
 - **Lo único que sí quedó medido:** con qué modelo abre el binario en cada caso. Lo elige bien `ProtocoloPorDefecto`.
 - **Lo que enseñó sobre el propio nivel 4** (V5, V7 y V8 de «Las revisiones»):
   - `sesión abierta con «…»` sale en el mismo segundo que el error de cuota, y el conductor la toma por «voz abierta».
+    **Arreglado el 2026-09-13**: la 50 y la 220 hacen que la línea espere a la confirmación del servidor, y `conducir.ps1`
+    espera la confirmada con `apertura.ps1` (ver «La apertura, con crédito» en Hallazgos).
   - El Ctrl+Alt+M final reabre una voz que ya estaba cerrada.
   - T4 ya estaba en su estado final antes de empezar: había 3 ventanas del explorador abiertas.
   - Ruido del entorno, no de la rama: Neo4j no escucha en 127.0.0.1:7474, el collar Omi da `COMException 0x800710DF`
@@ -963,6 +993,60 @@ es la del cierre (la 209 y la 218 arregladas sin número). Los números 240+ del
   - **Los comentarios, al día**: `TurnosSinMarca` decía que el margen de 293 ms lo confirmaría el nivel 4 (hoy dice que
     no aguantó, con el 2009), y `ProtocoloGptLive.AlCambiarDeModo` dice ahora que el prefijo no fue lo que cambió la voz.
 
+### La apertura, con crédito (2026-09-13, `jero/voz-gpt-live-r2-apertura`)
+
+**El hallazgo** (V5 del nivel 4 del 12): `sesión abierta con «…»` se escribía en `ArrancarAsync` al conectar el
+socket, antes de que el servidor dijera nada. Sin crédito salió en el mismo segundo que el error, y `conducir.ps1`,
+que esperaba `sesi.n abierta`, la tomó por voz abierta. Es el patrón nº2: la línea afirmaba «abrió» cuando solo sabía
+«conectó».
+
+**Lo medido antes de escribir la promesa** (`sonda-apertura.ps1`, fuera del repo, que no manda nada durante unos
+segundos tras conectar), el 2026-09-13 a las 10:55:
+- **GPT Realtime** manda `session.created` a los 283 ms de conectar, sin que se le mande nada, y es lo primero que
+  llega. Tras mandarle `session.update`, `session.updated` a 250 ms.
+- Con un `session.update` que rechaza (voz `voz_que_no_existe`), `session.created` llega igual y el `error` 28 ms
+  después; el socket sigue abierto. **Confirma la sesión del servidor, no la configuración**: el error de la apertura
+  llega después de confirmar, y se sigue leyendo como un error de la conversación.
+- **GPT-Live** no manda nada hasta `session.start`; `session.started` llega a 631 ms de mandarlo.
+
+**Lo que cambió:**
+- `ProtocoloOpenAI` declara `ConfirmaQueAbrio` y lee `session.created` como `Hecho.Abierta` (la 50). La 49, que
+  juzgaba el «por defecto no confirma» con `ProtocoloOpenAI`, lo juzga ahora con un protocolo del contrato que no lo
+  declara, sin cambiar su enunciado.
+- `ConversacionEnVivo.EmpiezaUnaConexion`, por donde pasan el arranque y las reconexiones, escribe `socket conectado,
+  esperando confirmación de «…» (…)`. `Reaccionar`, con `Hecho.Abierta`, escribe `sesión abierta con «…» (…): el
+  servidor la confirmó`, en lugar de «el servidor confirmó la sesión». Un protocolo que no confirma escribe al conectar
+  `sesión abierta con «…» (…), sin confirmación: este protocolo no la manda` (la 220).
+- **Sitios, contados con `grep`**: la línea que afirmaba la apertura estaba en **1** sitio (`ArrancarAsync`), y la de la
+  confirmación en **1** (`Reaccionar`). `ReconectarAsync` no escribía ninguna, y ahora deja las dos. Implementan
+  `IProtocolo` **2** protocolos reales, y los 2 confirman; el tercero es el de mentira del contrato del grafo.
+- **Con `U_VOZ=realtime` cambia algo más que el log**: «Te escucho.» y «Sigo» esperan a `session.created`, que llega
+  ~0,2 s después de conectar. Y un `error` antes de él, seguido de la muerte del socket, dice la causa y no reconecta.
+  El cierre sin crédito de Realtime (un 1013, sin `error`) sigue reconectando (ver «La vuelta atrás»).
+- `scripts/nivel4-voz/conducir.ps1` lee el estado de la voz con `apertura.ps1`:
+  - pulsa Ctrl+Alt+M solo con la voz sin tocar o cerrada, porque alterna y con la voz abriéndose la cerraría;
+  - da la voz por abierta con la línea confirmada;
+  - acepta la línea vieja de `main` solo tras 3 s sin un error ni un corte detrás, para poder medir `main`;
+  - si no abre, dice por qué con el estado del log, en vez de «no abrio en 25 s» para todo.
+  `autoprueba-apertura.ps1` juzga `apertura.ps1` con 14 trozos de log: los del nivel 4 del 12 y los que deja la rama.
+
+**Contra el servidor de verdad** (`sonda-conv2`, fuera del repo). Carga la `ConversacionEnVivo` compilada de `7d56bdd`,
+llama a `ArrancarAsync` con el micrófono abierto y la cierra a los 6 s. 2026-09-13, a las 11:12:
+
+```
+gptlive   [1170 ms] socket conectado, esperando confirmación de «gpt-live-1» (OpenAI GPT-Live)
+          [1979 ms] sesión abierta con «gpt-live-1» (OpenAI GPT-Live): el servidor la confirmó
+          [1979 ms] DICE «Te escucho.»                     → BIEN: confirmó 809 ms después de conectar
+realtime  [1241 ms] socket conectado, esperando confirmación de «gpt-realtime-2.1-mini» (OpenAI)
+          [1431 ms] sesión abierta con «gpt-realtime-2.1-mini» (OpenAI): el servidor la confirmó
+          [1431 ms] DICE «Te escucho.»                     → BIEN: confirmó 190 ms después de conectar
+```
+
+En cada corrida, una sola línea «sesión abierta con», ninguna sin confirmar y ningún error del servidor. **No es
+`U.exe` ni el nivel 4**: es la clase de la app, cargada por reflexión. Una cosa más, sin medir: con el micrófono
+abierto en la sala y sin ningún append, GPT-Live transcribió a los 6 s una frase del usuario («-2, Arry. ¿Sabes qué?
+Cuidado»). Puede ser la sala o la transcripción fantasma de «Límites»; con una corrida no se distingue.
+
 ## Sabotajes
 
 Cada uno es un cambio de una línea hecho sobre el árbol ya commiteado.
@@ -1270,6 +1354,40 @@ finally de `RecibirAsync`: necesitan un socket.
   del 2026-09-12, y con la cuenta con crédito no se puede reproducir. La 224 juzga la puerta (`CerroElServidor`
   invocada directamente), pero no que `RecibirAsync` la llame.
 - **Las sondas no están en el repo ni corren en el portero**, como `sonda-conv` de la 49.
+**La apertura (2026-09-13, `jero/voz-gpt-live-r2-apertura`)**, sobre `05b0827`. Guion `sabotea-apertura.ps1` y
+`sabotajes-apertura.json`, en el scratchpad (`apertura\`); log `sabotajes.log`. En los 14 sabotajes:
+- se comprobó que el patrón aparece exactamente una vez;
+- se cambiaron los bytes (Latin-1 1:1, sin tocar BOM ni CRLF), con numstat `1 1` y el SHA-256 cambiado antes de juzgar;
+- se exigió la línea de veredicto del juez;
+- se restauraron los bytes, con el SHA de partida y el diff vacío.
+
+SHA de partida: `ProtocoloOpenAI.cs` `84B6371C`, `ConversacionEnVivo.cs` `E5FA033A`, `apertura.ps1` `B4AA4AA6` y
+`conducir.ps1` `1A18A8E7`. Al final, recompilado sobre el árbol limpio: **VOZ ÍNTEGRA**, **CONTRATO INTACTO** y
+**APERTURA INTACTA** (ver «Cierre»).
+
+| S50a | GPT Realtime deja de declarar que confirma | ✘ 50 («GPT Realtime declara que confirma la apertura…»). VOZ ROTA, exit 1 · y ✘ 220 con GPT Realtime («…«socket conectado, esperando…»», «y «Te escucho.» espera a la confirmación (dijo: Te escucho.)», «…un error antes de confirmar no escribe…»). CONTRATO ROTO, exit 3 |
+| S50b | la apertura se lee en `session.updated` | ✘ 50 («session.created … es UN Hecho.Abierta», «y ningún otro mensaje es una apertura…»). VOZ ROTA, exit 2 |
+| S50c | `session.created` da dos aperturas | ✘ 50 («…es UN Hecho.Abierta»). VOZ ROTA, exit 1 |
+| S220a | al conectar vuelve a decir «sesión abierta» | ✘ 220 con GPT-Live y con GPT Realtime («…deja UNA línea que describe el paso, «socket conectado, esperando…»»). ROTO, exit 2 |
+| S220b | la confirmación vuelve a «el servidor confirmó la sesión» | ✘ 220 con los dos («…al llegar la confirmación del servidor sale UNA línea «sesión abierta con…»»). ROTO, exit 2 |
+| S220c | la línea de un protocolo que no confirma no lo dice | ✘ 220 («con un protocolo que no confirma, la línea de apertura … dice que nadie la confirmó»). ROTO, exit 1 |
+| S220d | la condición de la línea al conectar, invertida | ✘ 220 con los dos y con el que no confirma. ROTO, exit 3 |
+| **W49b** | la conexión se da por confirmada al mandar la apertura (**CONTRATO INTACTO** en la revisión de fidelidad) | ✘ 220 con los dos: la línea al conectar, «y «Te escucho.» espera a la confirmación (dijo: Te escucho.)» y el error antes de confirmar. ROTO, exit 6 |
+| **W49d** | al confirmar no se dice lo que esperaba (**CONTRATO INTACTO** en la revisión de fidelidad) | ✘ 220 con los dos («y entonces dice «Te escucho.», una vez (dijo: nada)»). ROTO, exit 2 |
+| **W220** | **sin juez**: `ArrancarAsync` vuelve a escribir `sesión abierta con «…» (…)` al conectar | **✔ 220 · CONTRATO INTACTO, exit 0** · `sonda-conv2` contra el servidor, con ese binario: **MAL** con GPT-Live y con GPT Realtime (2 líneas «sesión abierta con», 1 sin confirmar, escrita 2 ms antes que la del socket) |
+| SA1 | `apertura.ps1`: la línea vieja se toma por confirmada | APERTURA ROTA, 5 de 14 (entre ellas «9324d97 sin credito…: se esperaba 'fallando'» y «Realtime sin credito…»), exit 5 |
+| SA2 | `apertura.ps1`: «socket conectado» no cuenta como voz abriéndose | APERTURA ROTA, 3 de 14 («…sin confirmar todavia: se esperaba 'esperando' y salio 'nada'»), exit 3 |
+| SA3 | `apertura.ps1`: un error antes de confirmar no se tiene en cuenta | APERTURA ROTA, 3 de 14 («…un error antes de confirmar es que no abre: se esperaba 'fallando' y salio 'esperando'»), exit 3 |
+| **WC** | **sin juez**: `conducir.ps1` da la voz por abierta con cualquier estado que no sea «nada» | **APERTURA INTACTA, 14 de 14, exit 0** |
+
+**Los dos verdes son el límite, medido.**
+- **W220**: `ArrancarAsync` necesita clave y socket, y el contrato no llega a él; la 220 juzga lo que pasa por
+  `EmpiezaUnaConexion` y por `Procesar`. La sonda sí lo ve.
+- **WC**: `conducir.ps1` no tiene juez, y lo que decide se juzga en `apertura.ps1`. Lo que queda en `conducir.ps1` es
+  qué hace con cada estado, y eso lo tiene que decir un nivel 4.
+
+**W49b y W49d dejaron de ser límite**: la revisión de fidelidad los dejó en CONTRATO INTACTO, y la 220 los pone rojos.
+W49a y W49c siguen sin juez.
 
 ## Cierre
 
@@ -1290,6 +1408,7 @@ finally de `RecibirAsync`: necesitan un socket.
 - [x] Revisión «contrato r2» (2026-09-13): la 209 juzga los 2000 ms al milisegundo, la 211 juzga que la conversación le da al marcador la voz que suena y la 47 compara los prefijos letra por letra; los cuatro sabotajes de los hallazgos, verdes con los jueces de antes y rojos con los nuevos, y cinco más, rojos (ver «Sabotajes»); medido contra el servidor con crédito
 - [ ] Decidir con el dueño el silencio de cierre: 2000 ms quedaron al borde (un hueco de 2009 ms el 2026-09-13), y subirlo retrasa `Cerro`, «Ü dijo» y `DijoElUsuario`; se cambia en la 209
 - [x] Arreglador «fatal» (`jero/voz-gpt-live-r2-fatal`): la clave falsa y el modelo inexistente medidos contra el servidor con los dos protocolos; la 53, la 223 y la 224 en rojo (`8c17147`), en verde (`3208b6d`) y saboteadas; `sonda-conv-fatal` 6 de 6 con la conversación compilada. El crédito agotado no se pudo repetir (la cuenta ya tiene crédito)
+- [x] La apertura (`jero/voz-gpt-live-r2-apertura`): la 50 y la 220 en rojo (`031583a`), en verde (`7d56bdd`) y saboteadas; el conductor del nivel 4 espera la confirmación (`05b0827`), con su autoprueba en rojo (`1fc8aa5`) y saboteada; medido contra el servidor con crédito (`sonda-apertura.ps1`, `sonda-conv2`), no en `U.exe`
 - [ ] 🎓 con la voz abierta en `U.exe`: «modo cambiado» sin error de append y la voz asintiendo en vez de «ejecuté…»; y decidir qué hacer con la transcripción fantasma
 - [ ] El silencio en `U.exe`: `Hablando` en falso en silencio, la compuerta de eco con `U_SIN_ECO=0`, `map_recuerdos cual=2` y la boca que se cierra
 - [ ] Una sesión de GPT-Live en `U.exe` que deja «la voz duró al menos N s según el servidor», y los segundos llevados al panel desde `FaceWindow` (otra rama)
