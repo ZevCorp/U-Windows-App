@@ -346,7 +346,8 @@ public sealed class ProtocoloGptLive : IProtocolo
             case "error":
                 hechos.Add(new Hecho.Falla(m.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.Object
                     ? Cadena(e, "message") is { Length: > 0 } msg ? msg : e.GetRawText()
-                    : "error sin detalle"));
+                    : "error sin detalle",
+                    ProtocoloOpenAI.CodigoDelError(m)));   // credit_balance_exhausted, invalid_model: la 53
                 break;
 
             // LO QUE DURA, no lo que cuesta en fichas: GPT-Live no manda fichas. Llega cada ~15 s con el

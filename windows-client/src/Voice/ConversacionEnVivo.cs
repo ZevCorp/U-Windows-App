@@ -333,6 +333,20 @@ public sealed class ConversacionEnVivo : IDisposable
     private int _reintentos;
 
     /// <summary>
+    /// POR QUÉ ESTA CONEXIÓN NO SE ARREGLA RECONECTANDO, si el servidor lo dijo, y lo que dijo (spec 018, promesa 224).
+    /// Vacíos mientras pueda ser un corte. Lo anota la primera de las tres puertas por las que llega —un error
+    /// (Reaccionar), el cierre del socket (CerroElServidor), un apretón de manos rechazado (NoConecto)— y lo lee UN solo
+    /// sitio: SeAcaboLaEscuchaAsync.
+    /// </summary>
+    private string _porQueNoSeReintenta = "", _loQueDijoAlNoPoder = "";
+
+    /// <summary>
+    /// POR DÓNDE SE RECONECTA. Nula en la app, que es ReconectarAsync. El contrato la cambia por una cuenta, como la
+    /// puerta de salida de la 208, para juzgar si se reconecta sin abrir un socket ni llevar la clave (224).
+    /// </summary>
+    private Func<Task>? _reconectar = null;
+
+    /// <summary>
     /// SI EL SERVIDOR YA CONFIRMÓ ESTA CONEXIÓN (<see cref="Hecho.Abierta"/>). Con un protocolo que no la
     /// confirma vale verdadero desde que se manda la apertura, como siempre.
     /// </summary>
@@ -402,6 +416,9 @@ public sealed class ConversacionEnVivo : IDisposable
         {
             _cts = new CancellationTokenSource();
             _ws = new ClientWebSocket();
+            // SIN ESTO, UN APRETÓN DE MANOS RECHAZADO NO DICE CON QUÉ: HttpStatusCode vale 0. Medido el 2026-09-13 con
+            // una clave falsa por /v1/live/sessions: 401 con la opción, 0 sin ella, y la misma WebSocketException.
+            _ws.Options.CollectHttpResponseDetails = true;
             foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
             await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
             foreach (string msg in _protocolo.Apertura(Instrucciones, Herramientas(), ""))
@@ -444,12 +461,13 @@ public sealed class ConversacionEnVivo : IDisposable
         catch (Exception e)
         {
             LogBus.Log("voz-viva", $"no se pudo abrir la sesión: {e.Message}");
+            string porque = NoConecto(e, (int)(_ws?.HttpStatusCode ?? 0));   // antes de TerminarAsync, que suelta el socket
             await TerminarAsync();
 
             // UN CORTE DE RED DE UNOS SEGUNDOS NO DEBERÍA COSTARLE UN GESTO AL USUARIO. Solo se
             // reintenta lo que puede arreglarse solo: una clave inválida o un permiso denegado van a
             // fallar igual las tres veces, y reintentarlos solo retrasa el momento de enterarse.
-            if (EsDeRed(e) && intento < 2)
+            if (porque.Length == 0 && EsDeRed(e) && intento < 2)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1 + intento));
                 LogBus.Log("voz-viva", $"reintentando abrir la voz ({intento + 2}/3)…");
@@ -457,7 +475,12 @@ public sealed class ConversacionEnVivo : IDisposable
                 return;
             }
 
-            Dice?.Invoke(EsDeRed(e)
+            // CON LA CAUSA, NO CON LA FRASE DE .NET: con una clave falsa, GPT-Live rechaza el apretón de manos y lo único
+            // que había que decir era «The server returned status code '401' when status code '101' was expected.»
+            // (medido el 2026-09-13), que no dice qué hacer.
+            Dice?.Invoke(porque.Length > 0
+                ? $"No pude abrir la voz en vivo: {porque} ({e.Message})."
+                : EsDeRed(e)
                 ? "No pude abrir la voz: no hay conexión con el servidor. Lo intenté 3 veces — "
                 + "revisa tu internet y vuelve a pulsar el micrófono."
                 : $"No pude abrir la voz en vivo: {e.Message}");
@@ -1337,9 +1360,7 @@ public sealed class ConversacionEnVivo : IDisposable
                 var r = await _ws.ReceiveAsync(buf, ct);
                 if (r.MessageType == WebSocketMessageType.Close)
                 {
-                    LogBus.Log("voz-viva", $"el servidor cerró la conexión: {r.CloseStatus} "
-                        + $"«{r.CloseStatusDescription}»");
-                    _cayoSolo = true;
+                    CerroElServidor((int?)r.CloseStatus ?? 0, r.CloseStatusDescription ?? "");
                     break;
                 }
                 acumulado.Write(buf, 0, r.Count);
@@ -1352,19 +1373,84 @@ public sealed class ConversacionEnVivo : IDisposable
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception e)
-        {
-            LogBus.Log("voz-viva", $"se cortó la escucha: {e.Message}");
-            _cayoSolo = true;
-        }
-        finally
-        {
-            // NO ABRIÓ, Y ESO NO ES UN CORTE: el servidor contestó un error en vez de confirmar la sesión y
-            // después cerró. Reenviar la misma apertura fallaría igual, así que no se reintenta: se dice la causa.
-            if (Viva && !ct.IsCancellationRequested && !_confirmada && _fallaAntesDeAbrir.Length > 0) await NoAbrioAsync();
-            else if (_cayoSolo && Viva && !ct.IsCancellationRequested) await ReconectarAsync();
-            else if (Viva) await TerminarAsync();
-        }
+        catch (Exception e) { SeCortoLaEscucha(e); }
+        finally { await SeAcaboLaEscuchaAsync(ct); }
+    }
+
+    /// <summary>
+    /// SE ACABÓ LA ESCUCHA, O NO SE PUDO VOLVER A ELLA: EL ÚNICO SITIO QUE DECIDE SI SE RECONECTA (spec 018, promesa 224).
+    /// </summary>
+    /// <remarks>
+    /// Hasta el 2026-09-13 lo decidían dos: este finally, y el catch de ReconectarAsync, que se llamaba a sí mismo con
+    /// cualquier excepción. Ningún contrato llegaba a ninguno de los dos, y los dos reconectaban también lo que no se
+    /// arregla reconectando: con la cuenta sin crédito, GPT Realtime reconectó cuatro veces (nivel 4 del 2026-09-12).
+    /// </remarks>
+    private async Task SeAcaboLaEscuchaAsync(CancellationToken ct)
+    {
+        bool sigue = Viva && !ct.IsCancellationRequested;
+        // NO ABRIÓ, Y ESO NO ES UN CORTE: el servidor contestó un error en vez de confirmar la sesión y
+        // después cerró. Reenviar la misma apertura fallaría igual, así que no se reintenta: se dice la causa.
+        if (sigue && !_confirmada && _fallaAntesDeAbrir.Length > 0) await NoAbrioAsync();
+        // NI ESTO: la cuenta, la clave o el modelo. Con la conexión ya confirmada, o con un protocolo que no confirma.
+        else if (sigue && _porQueNoSeReintenta.Length > 0) await NoSeReintentaAsync();
+        else if (sigue && _cayoSolo) await (_reconectar?.Invoke() ?? ReconectarAsync());
+        else if (Viva) await TerminarAsync();
+    }
+
+    /// <summary>
+    /// El servidor cerró el socket: es un corte y, si la descripción del cierre dice algo que no se arregla reconectando,
+    /// también por qué. GPT Realtime la manda como «type.code»: 1013 «insufficient_quota.credit_balance_exhausted»
+    /// (2026-09-12), 3000 «invalid_request_error.invalid_api_key» y 4004 «invalid_request_error.model_not_found»
+    /// (2026-09-13). El número no se mira: 1013 es «vuelve a intentarlo» en el RFC 6455.
+    /// </summary>
+    private void CerroElServidor(int estado, string descripcion)
+    {
+        LogBus.Log("voz-viva", $"el servidor cerró la conexión: {estado} «{descripcion}»");
+        _cayoSolo = true;
+        AnotarSiNoSeArregla(NoSeArreglaReintentando.PorQue(descripcion), descripcion);
+    }
+
+    /// <summary>La escucha se cortó sin un cierre: el socket murió. GPT-Live lo aborta a los ~2 s de un error (medido).</summary>
+    private void SeCortoLaEscucha(Exception e)
+    {
+        LogBus.Log("voz-viva", $"se cortó la escucha: {e.Message}");
+        _cayoSolo = true;
+    }
+
+    /// <summary>
+    /// El apretón de manos no pasó. Con 401 la clave no vale y reconectar con la misma fallaría igual: GPT-Live rechaza
+    /// así una clave falsa, medido el 2026-09-13. Devuelve la causa, vacía si puede ser la red: sin respuesta HTTP el
+    /// estado es 0.
+    /// </summary>
+    private string NoConecto(Exception e, int estadoHttp)
+    {
+        string porque = NoSeArreglaReintentando.PorQue(estadoHttp.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AnotarSiNoSeArregla(porque, e.Message);
+        return porque;
+    }
+
+    /// <summary>Se queda la PRIMERA causa: con Realtime el error y el cierre dicen lo mismo, y el error llega antes y con su mensaje.</summary>
+    private void AnotarSiNoSeArregla(string porque, string loQueDijo)
+    {
+        if (porque.Length == 0 || _porQueNoSeReintenta.Length > 0) return;
+        _porQueNoSeReintenta = porque;
+        _loQueDijoAlNoPoder = loQueDijo;
+    }
+
+    /// <summary>
+    /// Lo que no se arregla reconectando se dice UNA vez, con su causa, y se cierra la voz. Lo que cuesta no hacerlo: con
+    /// la cuenta sin crédito, cuatro reconexiones con su cierre 1013 y un «se cayó 5 veces seguidas» que culpaba a la red.
+    /// </summary>
+    private async Task NoSeReintentaAsync()
+    {
+        // «LO QUE SE DIJO», NO «EL SERVIDOR DICE»: un 401 en el apretón de manos no trae palabras del servidor, trae la
+        // frase de .NET («The server returned status code '401'…»), y atribuírsela al servidor mentía sobre de dónde
+        // venía (medido con sonda-conv-fatal el 2026-09-13, patrón nº8).
+        string porque = _porQueNoSeReintenta, dicho = _loQueDijoAlNoPoder;
+        LogBus.Log("voz-viva", $"no se reintenta: {porque} («{dicho}»). Reconectar con la misma cuenta, "
+            + "la misma clave y el mismo modelo fallaría igual");
+        await TerminarAsync();
+        Dice?.Invoke($"No sigo con la voz en vivo: {porque} («{dicho}»).");
     }
 
     /// <summary>
@@ -1395,6 +1481,7 @@ public sealed class ConversacionEnVivo : IDisposable
 
             try { _ws?.Dispose(); } catch { }
             _ws = new ClientWebSocket();
+            _ws.Options.CollectHttpResponseDetails = true;   // sin esto un 401 llega como estado 0 (ver ArrancarAsync)
             foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
             await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
             foreach (string msg in _protocolo.Apertura(Instrucciones, Herramientas(), _pase))
@@ -1420,8 +1507,11 @@ public sealed class ConversacionEnVivo : IDisposable
         catch (Exception e)
         {
             LogBus.Log("voz-viva", $"no pude reconectar: {e.Message}");
+            NoConecto(e, (int)(_ws?.HttpStatusCode ?? 0));
             _cayoSolo = true;
-            await ReconectarAsync();
+            // POR EL SITIO QUE DECIDE (promesa 224), y no llamándose a sí mismo: hasta el 2026-09-13 cualquier excepción
+            // volvía a reconectar, también un 401 con la misma clave, y lo único que lo paraba era el tope de cuatro.
+            await SeAcaboLaEscuchaAsync(_cts.Token);
         }
     }
 
@@ -1438,6 +1528,7 @@ public sealed class ConversacionEnVivo : IDisposable
         _segundosDeLaConexion = 0;
         _confirmada = !_protocolo.ConfirmaQueAbrio;
         _fallaAntesDeAbrir = "";
+        _porQueNoSeReintenta = _loQueDijoAlNoPoder = "";   // la causa era de la conexión anterior (224)
         _alConfirmar = _confirmada ? "" : alConfirmar;
         if (_confirmada && alConfirmar.Length > 0) Dice?.Invoke(alConfirmar);
     }
@@ -1614,6 +1705,9 @@ public sealed class ConversacionEnVivo : IDisposable
                 // ANTES DE CONFIRMAR LA SESIÓN, un error no es de la conversación: es por qué no abre. Se guarda
                 // el primero; si el socket muere sin confirmar, eso es lo que se dice (RecibirAsync).
                 if (!_confirmada && _fallaAntesDeAbrir.Length == 0) _fallaAntesDeAbrir = f.Que;
+                // Y CONFIRMADA O NO, LO QUE NO SE ARREGLA RECONECTANDO SE ANOTA POR SU CÓDIGO (promesa 224): con Realtime,
+                // que no confirma, un invalid_api_key llega así y detrás el cierre 3000 (medido el 2026-09-13).
+                AnotarSiNoSeArregla(NoSeArreglaReintentando.PorQue(f.Codigo), f.Que);
                 break;
 
             // LA SESIÓN ABRIÓ DE VERDAD (promesa 49): lo que se iba a decir al arrancar o al volver, se dice ahora.

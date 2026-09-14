@@ -271,12 +271,28 @@ public sealed class ProtocoloOpenAI : IProtocolo
             case "error":
                 hechos.Add(new Hecho.Falla(m.TryGetProperty("error", out var e)
                     ? e.TryGetProperty("message", out var msg) ? msg.GetString() ?? e.GetRawText() : e.GetRawText()
-                    : "error sin detalle"));
+                    : "error sin detalle",
+                    CodigoDelError(m)));
                 break;
         }
 
         return hechos;
     }
+
+    /// <summary>
+    /// EL CÓDIGO DE UN ERROR, TAL COMO LO MANDA EL SERVIDOR; vacío si no trae (promesa 53 de la voz). En un solo sitio
+    /// porque GPT-Live manda sus errores con la misma forma, y dos lecturas del mismo campo divergen en silencio.
+    /// </summary>
+    /// <remarks>
+    /// El type NO sirve de respaldo: los cuatro errores medidos el 2026-09-13 (invalid_api_key, model_not_found,
+    /// invalid_model, credit_balance_exhausted) traen type invalid_request_error, y también lo trae
+    /// response_input_buffer_full, que no impide seguir. Usarlo inventaría una causa donde el servidor no dio ninguna.
+    /// </remarks>
+    internal static string CodigoDelError(JsonElement m)
+        => m.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.Object
+           && e.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.String
+            ? c.GetString() ?? ""
+            : "";
 
     /// <summary>
     /// Una llamada leída de cualquier cosa con <c>call_id</c>, <c>name</c> y <c>arguments</c>: el evento

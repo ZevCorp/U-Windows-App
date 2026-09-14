@@ -170,6 +170,12 @@ internal static class Contrato
         // deja de hacer. Del 44 al 48 son de los arregladores que corren a la vez: los números no se pisan.
         Prueba("49. GPT-Live no manda lo que su servidor rechaza: no se declara capaz de mirar, porque una captura de pantalla no cabe y una segunda foto pequeña tampoco; un resultado de más de 32.768 bytes sale como un function_call_output de 32.768 bytes o menos, con su call_id, sin partir un carácter y diciendo cuánto se recortó; y declara que confirma la apertura: session.started es un Hecho.Abierta, y ni un error ni ningún otro mensaje lo es", GptLiveNoMandaLoQueSeRechaza);
 
+        // LO QUE NO SE ARREGLA REINTENTANDO SE RECONOCE POR SU CÓDIGO, NO POR SU PROSA (2026-09-13, spec 018). Sin
+        // crédito, GPT Realtime reconectó cuatro veces y GPT-Live no reintentó: la misma clase de error con dos
+        // tratamientos. Decidirlo le toca a la conversación (223 y 224 del grafo); aquí, que el traductor no se
+        // guarde el código, que es lo único estable: el message está en inglés y cambia de redacción.
+        Prueba("53. los traductores de OpenAI dicen el código de un error: un error es un Hecho.Falla con su message y con su code tal como llega —credit_balance_exhausted e invalid_model por GPT-Live, invalid_api_key y model_not_found por GPT Realtime—, y sin code no se inventa uno", LosErroresDicenSuCodigo);
+
         Console.WriteLine();
         if (_pendientes > 0)
             Console.WriteLine($"({_pendientes} de ellas PENDIENTES: la capacidad todavía no existe. "
@@ -1730,6 +1736,62 @@ internal static class Contrato
         };
         Debe(!otros.SelectMany(x => p.Leer(Mensaje(x))).Concat(sinCredito).Any(h => h.GetType() == tAbierta),
             "y ningún otro mensaje es una apertura: ni session.updated, ni una delegación, ni un error, ni el cierre");
+    }
+
+    /// <remarks>
+    /// MEDIDO el 2026-09-13 contra el servidor, con .NET 8 y el mismo ClientWebSocket de la app (sonda-fatal, fuera del
+    /// repo). Los cuatro mensajes van copiados de lo que contestó; la clave falsa sale enmascarada por el propio servidor:
+    ///
+    ///  · GPT-Live sin crédito (2026-09-12): error credit_balance_exhausted en vez de session.started.
+    ///  · GPT-Live con un modelo que no existe: error invalid_model a 262 ms, y el socket Aborted a los ~2 s.
+    ///  · GPT Realtime con una clave falsa: el apretón de manos PASA (101), llega error invalid_api_key y el servidor
+    ///    cierra con 3000 «invalid_request_error.invalid_api_key».
+    ///  · GPT Realtime con un modelo que no existe en la dirección: error model_not_found y cierre 4004
+    ///    «invalid_request_error.model_not_found».
+    ///
+    /// EL CÓDIGO Y NO EL TYPE: los cuatro traen type invalid_request_error, que es de todos los errores —también de
+    /// response_input_buffer_full, que no es fatal—. Un traductor que lo usara como código cuando falta el code
+    /// inventaría una causa.
+    /// </remarks>
+    private static void LosErroresDicenSuCodigo()
+    {
+        var live = GptLive();
+        if (live == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
+        var codigo = typeof(Hecho.Falla).GetProperty("Codigo");
+        if (codigo == null) { Pendiente("Hecho.Falla.Codigo", "018·53"); return; }
+        var realtime = new ProtocoloOpenAI();
+
+        var casos = new (IProtocolo P, string Quien, string Json, string Code, string Mensaje)[]
+        {
+            (live, "GPT-Live", """{"type":"error","event_id":"event_7f0763e4-314d-4930-9bfa-eb831d673918","error":{"type":"invalid_request_error","code":"credit_balance_exhausted","message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."}}""",
+                "credit_balance_exhausted", "You have no credits remaining"),
+            (live, "GPT-Live", """{"type":"error","event_id":"event_d7252ece-60b5-4b34-88a4-30b46a4124f4","error":{"type":"invalid_request_error","code":"invalid_model","message":"Model \"gpt-live-inexistente-9\" is not supported in realtime mode."}}""",
+                "invalid_model", "is not supported in realtime mode"),
+            (realtime, "GPT Realtime", """{"type":"error","event_id":"event_ENgrrx8v946dIyk6vQTOj","error":{"type":"invalid_request_error","code":"invalid_api_key","message":"Incorrect API key provided: sk-proj-**************************************************0000. You can find your API key at https://platform.openai.com/account/api-keys.","param":null,"event_id":null}}""",
+                "invalid_api_key", "Incorrect API key provided"),
+            (realtime, "GPT Realtime", """{"type":"error","event_id":"event_ENgs3fIvSRtnqIx8JCGfh","error":{"type":"invalid_request_error","code":"model_not_found","message":"The model `gpt-realtime-inexistente-9` does not exist or you do not have access to it.","param":null,"event_id":null}}""",
+                "model_not_found", "does not exist or you do not have access to it"),
+        };
+        foreach (var (p, quien, json, code, mensaje) in casos)
+        {
+            var h = p.Leer(Mensaje(json));
+            string salio = string.Join(" · ", h.Select(x => x is Hecho.Falla f ? $"Falla(«{f.Que}», código «{codigo.GetValue(f)}»)" : x.GetType().Name));
+            Debe(h.Count == 1 && h[0] is Hecho.Falla falla && falla.Que.Contains(mensaje) && (codigo.GetValue(falla) as string) == code,
+                $"con {quien}, el error {code} es UN Hecho.Falla con su message y con el código «{code}» (salió: {salio})");
+        }
+
+        // SIN CODE NO HAY CÓDIGO: ni el type, que comparten todos, ni el message.
+        const string sinCode = """{"type":"error","event_id":"event_sin_code","error":{"type":"invalid_request_error","message":"Algo que el servidor no clasificó."}}""";
+        foreach (var (p, quien) in new (IProtocolo, string)[] { (live, "GPT-Live"), (realtime, "GPT Realtime") })
+        {
+            var h = p.Leer(Mensaje(sinCode));
+            Debe(h.Count == 1 && h[0] is Hecho.Falla f && f.Que.Contains("Algo que el servidor no clasificó.") && (codigo.GetValue(f) as string) == "",
+                $"con {quien}, un error sin code es un Hecho.Falla con su message y el código vacío: no se inventa con el type (salió: "
+                + string.Join(" · ", h.Select(x => x is Hecho.Falla ff ? $"código «{codigo.GetValue(ff)}»" : x.GetType().Name)) + ")");
+        }
+        var cerrada = live.Leer(Mensaje("""{"event_id":"event_ENOyNXoVEuKQV2BXwf0YH","type":"session.closed","reason":"close_requested","usage":{"seconds":13.0},"client_event_id":"sonda_fin"}"""));
+        Debe(cerrada.Count == 1 && cerrada[0] is Hecho.Falla fc && (codigo.GetValue(fc) as string) == "",
+            "y la sesión que el servidor cierra sigue siendo una Falla sin código: su motivo no es un code");
     }
 
     // ── El arnés ─────────────────────────────────────────────────────────────

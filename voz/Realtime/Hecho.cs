@@ -67,7 +67,12 @@ public abstract record Hecho
     /// El servidor dice que algo va mal. Se cuenta como hecho y no se traga: una sesión abierta, el
     /// micrófono en rojo y ninguna pista de por qué no contesta es el peor diagnóstico posible.
     /// </summary>
-    public sealed record Falla(string Que) : Hecho;
+    /// <param name="Codigo">
+    /// El code del error tal como lo manda el servidor (credit_balance_exhausted, invalid_api_key, model_not_found…);
+    /// vacío si no trae. Es lo que la conversación mira para no reconectar lo que no se arregla reconectando, y no el
+    /// mensaje, que está en inglés y cambia de redacción (promesa 53, medido el 2026-09-13).
+    /// </param>
+    public sealed record Falla(string Que, string Codigo = "") : Hecho;
 
     /// <summary>
     /// El servidor CONFIRMA que la sesión abrió. Solo lo mandan los protocolos que lo declaran (<see
