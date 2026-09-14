@@ -1388,11 +1388,14 @@ public sealed class ConversacionEnVivo : IDisposable
     private async Task SeAcaboLaEscuchaAsync(CancellationToken ct)
     {
         bool sigue = Viva && !ct.IsCancellationRequested;
+        // LA CUENTA, LA CLAVE O EL MODELO, PRIMERO, y confirmada o no. Iba detrás de «no abrió» cuando GPT Realtime no
+        // confirmaba; al pasar a confirmar con session.created (la 50), un invalid_api_key —que llega sin session.created,
+        // medido el 2026-09-13— entraba por «no abrió» y se decía sin nombrar la clave: la 224 se puso roja al juntar las
+        // dos ramas. La causa por código es la más precisa de las dos, y también dice lo que dijo el servidor.
+        if (sigue && _porQueNoSeReintenta.Length > 0) await NoSeReintentaAsync();
         // NO ABRIÓ, Y ESO NO ES UN CORTE: el servidor contestó un error en vez de confirmar la sesión y
         // después cerró. Reenviar la misma apertura fallaría igual, así que no se reintenta: se dice la causa.
-        if (sigue && !_confirmada && _fallaAntesDeAbrir.Length > 0) await NoAbrioAsync();
-        // NI ESTO: la cuenta, la clave o el modelo. Con la conexión ya confirmada, o con un protocolo que no confirma.
-        else if (sigue && _porQueNoSeReintenta.Length > 0) await NoSeReintentaAsync();
+        else if (sigue && !_confirmada && _fallaAntesDeAbrir.Length > 0) await NoAbrioAsync();
         else if (sigue && _cayoSolo) await (_reconectar?.Invoke() ?? ReconectarAsync());
         else if (Viva) await TerminarAsync();
     }
