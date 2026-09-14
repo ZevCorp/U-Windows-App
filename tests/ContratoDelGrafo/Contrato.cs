@@ -324,8 +324,10 @@ internal static class Contrato
         // médico no aprobó, inventar un motivo de consulta, y escribir fuera del triage.
         Console.WriteLine();
         Prueba("112. solo viaja lo marcado: una sección sin ✓ no entra en el envío a SAP", SoloViajaLoMarcado);
-        Prueba("113. el motivo de consulta y la conducta salen de las secciones por su título; sin una sección que lo diga, quedan vacíos y no se inventan", MotivoYConductaSalenPorTitulo);
-        Prueba("114. fuera de la pantalla del triage no se escribe nada: el envío dice dónde está y para", FueraDelTriageNoSeEscribe);
+        // 113 y 114 RETIRADAS el 2026-09-10 con el dueño (spec 015): sostenían el camino FIJO del ✓
+        // (motivo/conducta por título de sección; «fuera del triage no se escribe»), que era una fase
+        // de prueba. Lo que protegían lo hace ahora la skill enseñada: cada paso exige su llegada y
+        // un paso que no aterriza para el resto (195, 197). Los números no se reciclan.
 
         // Medido el 2026-09-02 (18:10): de 9 campos del triage se llenaron 3. Las dos causas NO eran
         // que al modelo le falte capacidad, sino que le faltaba saber de la PANTALLA: la casilla
@@ -554,6 +556,20 @@ internal static class Contrato
         // catálogo entero y respuestas automáticas: cada «di exactamente esto» era un turno más de un
         // asistente con manos. El dueño: «la voz se desalineaba de lo que realmente se estaba haciendo».
         Prueba("192. durante la comprobación la voz en vivo es una voz PRESTADA: no tiene ni una herramienta, sus instrucciones son decir exactamente lo que la app le pide y callar ante todo lo demás, y la sesión no crea respuestas por su cuenta —solo cuando la app se lo pide—; al terminar, vuelve a ser quien era", LaVozDeLaComprobacionEsPrestada);
+        Prueba("193. el catálogo anuncia, con cada skill, los DATOS que necesita —el nombre de cada hueco—, y map_skills los dice: quien elige sabe qué pedirle a la nota", ElCatalogoDiceQueDatosNecesita);
+        Prueba("194. un encargo de la nota va al piloto como mensaje: lo que la nota marcada dice y el catálogo con sus datos; su caja tiene las skills, el catálogo, llegar hasta ellas y la voz, y NO tiene manos sueltas ni preguntas: ni map_take, ni map_type, ni map_batch, ni voz_preguntar", ElEncargoVaAlPilotoConElCatalogo);
+        Prueba("195. al pulsar ✓ la nota no recorre un camino fijo: el encargo lo resuelve el piloto eligiendo una skill enseñada; el camino fijo del triage ya no existe, el piloto arranca en modo encargo, y las promesas 113 y 114 se retiran con el dueño", ElCheckNoRecorreUnCaminoFijo);
+        Prueba("196. todo campo tecleado en una lección verificada es un HUECO con el nombre del campo —el valor de la demo es ejemplo, nunca se escribe—, salvo el campo de comandos, que es parte de la tarea; y al correr la skill el hueco sin dato queda en blanco y la cuenta lo nombra: no se pregunta, no se inventa", TodoCampoTecleadoEsUnHueco);
+        Prueba("197. los pasos de una skill se dan de uno en uno con la coreografía del plan —la carita al lado, la frase, y solo entonces el toque— y si un paso no se puede dar, para ahí y la cuenta dice cuál, sobre el total del plan", LaSkillSeDaConLaCoreografia);
+        Prueba("198. un aprendizaje sabe de qué lección salió: el id viaja con él al guardarlo, lo empaquete la demostración o la comprobación, y sin lección conocida se queda vacío en vez de inventarse una", UnAprendizajeSabeDeQueLeccionSalio);
+        Prueba("199. lo que hace un aprendizaje se lee en castellano: cada paso se dice por la puerta que toca o por el dato que escribe, y jamás por un selector ni por una dirección de pantalla", LoQueHaceSeLeeEnCastellano);
+        Prueba("200. las capturas de un aprendizaje salen de la lección de la que nació, emparejadas por identidad: cada paso enseña el cuadro de cuando se hizo, y un paso sin cuadro propio no enseña el de otro", LasCapturasSalenDeSuLeccion);
+        Prueba("201. un aprendizaje se puede renombrar y borrar: renombrar conserva todo lo demás y no deja dos archivos, y borrar lo quita del catálogo", UnAprendizajeSeRenombraYSeBorra);
+        Prueba("225. «Mostrar» decide solo: lo comprobado se corre con la coreografía y sin datos de nadie, lo no comprobado se comprueba, y sin manos a las que pedírselo se dice en vez de ofrecerlo", MostrarDecideSolo);
+        Prueba("226. una pantalla de SAP cogida a medio cambiar es la misma pantalla: una llegada bajo SESSION_MANAGER cuyo programa no es el de Easy Access casa con esa pantalla bajo su transacción real, y el batch y el juez lo deciden por la MISMA función", LaPantallaAMedioCambiarEsLaMisma);
+        Prueba("227. un evento que nadie puede dar —sin selector ni etiqueta— no cuenta para comprobar; donde acabó la demo lo exige el último paso de la skill, que es donde termina", ElEventoQueNadiePuedeDarNoCuenta);
+        Prueba("228. una lección deja UN aprendizaje: al guardar el verificado se retira el que la demo dejó de la misma lección, y uno sin lección conocida no retira nada", UnaLeccionDejaUnAprendizaje);
+        Prueba("229. la llegada viaja solo con los pasos que navegan: un paso verificado que escribe no exige llegada, porque el valor leído del campo no es una pantalla", LaLlegadaSoloConLosQueNavegan);
 
         // ── Lo hace a la primera (spec 017) ──────────────────────────────────
         //
@@ -1961,60 +1977,6 @@ internal static class Contrato
         var vacio = de.Invoke(null, new object[] { nota, Array.Empty<string>() })!;
         Debe(t.GetProperty("EstaVacio")!.GetValue(vacio) is true,
             "sin nada marcado el encargo está vacío: no hay envío que hacer, y se sabe antes de tocar SAP");
-    }
-
-    private static void MotivoYConductaSalenPorTitulo()
-    {
-        // Los dos editores de texto libre del triage no los ve el rellenador (son shells
-        // GuiTextedit; la demo del 31 los escribía aparte con frases fijas). Se reparten por el
-        // título de la sección, y sin sección que lo diga quedan vacíos: un motivo de consulta
-        // inventado es peor que uno en blanco.
-        var t = Capacidad("U.WindowsClient.Clinical.EditoresDelTriage");
-        var repartir = t?.GetMethod("Repartir");
-        Debe(t != null && repartir != null, "todavía no existe «Clinical.EditoresDelTriage.Repartir» (fase 2 de la spec 008). "
-            + "La promesa está escrita y en rojo, que es donde tiene que estar");
-        if (t == null || repartir == null) return;
-
-        string De(object reparto, string prop) => (string)reparto.GetType().GetProperty(prop)!.GetValue(reparto)!;
-
-        var tres = repartir.Invoke(null, new object[] { NotaDeTres().Secciones })!;
-        Debe(De(tres, "Motivo") == "dolor torácico opresivo de dos horas",
-            "«Motivo de consulta» va al editor de motivo, tal cual se dijo");
-        Debe(De(tres, "Conducta") == "reposo y control en 48 horas",
-            "y «Plan y recomendaciones» va a Conducta");
-
-        var soloHallazgos = repartir.Invoke(null, new object[]
-        {
-            new[] { new U.WindowsClient.Clinical.SeccionDeNota("hallazgos", "Hallazgos", "peso 70 kg") },
-        })!;
-        Debe(De(soloHallazgos, "Motivo").Length == 0 && De(soloHallazgos, "Conducta").Length == 0,
-            "sin una sección que lo diga, los dos quedan vacíos: no se pega la nota entera en «Motivo» por llenar algo");
-    }
-
-    private static void FueraDelTriageNoSeEscribe()
-    {
-        // El guardián existía (RellenadorSap.EsLaPantallaDeTriage, lo usa el exportador desde el
-        // 2026-08-25) y nadie lo prometía: un ✓ que llegara a otra pantalla escribiría datos
-        // clínicos en el formulario que fuera. Se pregunta a SAP, no al foco.
-        var t = Capacidad("U.WindowsClient.Clinical.EnvioAlTriage");
-        var puede = t?.GetMethod("PuedeEscribir");
-        Debe(t != null && puede != null, "todavía no existe «Clinical.EnvioAlTriage.PuedeEscribir» (fase 3 de la spec 008). "
-            + "La promesa está escrita y en rojo, que es donde tiene que estar");
-        if (t == null || puede == null) return;
-
-        (bool Puede, string Motivo) V(string donde)
-        {
-            var v = puede.Invoke(null, new object[] { donde })!;
-            return ((bool)v.GetType().GetProperty("Puede")!.GetValue(v)!,
-                    (string)v.GetType().GetProperty("Motivo")!.GetValue(v)!);
-        }
-
-        Debe(V("sapgui://QAS/NWP1/SAPLY000/0100").Puede, "con el triage delante se escribe");
-        var puesto = V("sapgui://QAS/NWP1/SAPLN_WP_FRAMEWORK/0100");
-        Debe(!puesto.Puede && puesto.Motivo.Contains("SAPLN_WP_FRAMEWORK"),
-            "en el puesto de trabajo NO se escribe, y el motivo nombra la pantalla en la que está");
-        Debe(!V("uia://explorer.exe/descargas").Puede, "fuera de SAP tampoco");
-        Debe(!V("").Puede, "y sin saber qué muestra SAP, menos: no se escribe a ciegas");
     }
 
     private static void LoEnsenadoViajaConSuCampo()
@@ -6070,6 +6032,472 @@ internal static class Contrato
         string normal = string.Join("\n", ((IEnumerable<string>)apertura.Invoke(proto, new object[] { "x", lista, "", false })!));
         Debe(prestada.Contains("\"create_response\":false"), $"con la voz prestada, la sesión no crea respuestas sola: create_response=false en la apertura ({Recorta(prestada, 200)})");
         Debe(!normal.Contains("\"create_response\":false"), "y de normal sí: la conversación de siempre contesta cuando le hablan");
+    }
+
+    // ── Spec 015: el ✓ de la nota corre una skill enseñada, elegida por el piloto ──────────────
+
+    private static void ElCatalogoDiceQueDatosNecesita()
+    {
+        // Sin esto, quien elige sabe QUÉ hace la skill pero no QUÉ pedirle a la nota: elegiría a
+        // ciegas y map_skill_run llegaría sin datos. Los huecos SON lo que la skill necesita.
+        var tSkill = Cap004("U.WindowsClient.Navigation.SkillEnsenada");
+        var tAnuncio = Cap004("U.WindowsClient.Navigation.SkillAnunciada");
+        var huecos = tAnuncio?.GetProperty("Huecos");
+        var anuncio = Cap004("U.WindowsClient.Mcp.SurfaceMapTools")?.GetMethod("AnuncioDeLasSkills");
+        Debe(huecos != null && anuncio != null,
+            "todavía no existen «SkillAnunciada.Huecos» ni «SurfaceMapTools.AnuncioDeLasSkills» (spec 015, promesa 193). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tSkill == null || huecos == null || anuncio == null) return;
+        string carpeta = Path.Combine(_raiz, "skills-" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(carpeta);
+        var skill = SkillDePrueba(
+            ("sap:wnd[0]/tbar[0]/okcd", "nwp1", "sapgui://B", ""),
+            ("Peso", "70", "", "Peso"),
+            ("Talla", "170", "", "Talla"));
+        if (skill == null) { Debe(false, "la skill de prueba se pudo empaquetar"); return; }
+        skill = tSkill.GetMethod("ConLaComprobacionHecha")!.Invoke(skill, null)!;
+        tSkill.GetMethod("Guardar")!.Invoke(skill, new object[] { carpeta });
+        var cat = (System.Collections.IList)tSkill.GetMethod("Catalogo")!.Invoke(null, new object[] { carpeta })!;
+        Debe(cat.Count == 1, $"guardada una, el catálogo anuncia una (dijo {cat.Count})");
+        if (cat.Count != 1) return;
+        var datos = ((System.Collections.IEnumerable)huecos.GetValue(cat[0]!)!).Cast<object>().Select(o => o.ToString() ?? "").ToList();
+        Debe(datos.Count == 2 && datos.Contains("Peso") && datos.Contains("Talla"),
+            $"el anuncio lleva los DATOS que la skill necesita, por su nombre: Peso y Talla, y nada más (salieron: {string.Join(", ", datos)})");
+        string texto = (string)anuncio.Invoke(null, new object[] { cat })!;
+        Debe(texto.Contains("llenar-el-triage") && texto.Contains("Peso") && texto.Contains("Talla"),
+            $"y map_skills los dice en su texto, junto a la skill ({Recorta(texto, 200)})");
+    }
+
+    private static void ElEncargoVaAlPilotoConElCatalogo()
+    {
+        // El piloto elige por su criterio (decisión del dueño, 2026-09-10): para eso necesita la
+        // nota tal cual y el catálogo con los datos de cada skill. Y NO tiene manos sueltas: el
+        // puente consciente improvisa desde julio, y un encargo clínico no es sitio para improvisar.
+        var tMsg = Capacidad("U.WindowsClient.Piloto.MensajeDelEncargo");
+        var armar = tMsg?.GetMethod("Armar");
+        var tCajas = Capacidad("U.WindowsClient.Piloto.CajasDelPiloto");
+        var caja = tCajas?.GetMethod("CajaDelEncargo");
+        var prohibidas = tCajas?.GetMethod("ProhibidasEnElEncargo");
+        var tAnuncio = Cap004("U.WindowsClient.Navigation.SkillAnunciada");
+        var pHuecos = tAnuncio?.GetProperty("Huecos");
+        Debe(armar != null && caja != null && prohibidas != null && pHuecos != null,
+            "todavía no existen «Piloto.MensajeDelEncargo.Armar» ni «CajasDelPiloto.CajaDelEncargo/ProhibidasEnElEncargo» (spec 015, promesa 194). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (armar == null || caja == null || prohibidas == null || tAnuncio == null || pHuecos == null) return;
+        var encargo = U.WindowsClient.Clinical.Encargo.De(NotaDeTres(), new[] { "hallazgos" });
+        var catalogo = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(tAnuncio))!;
+        var lista = Activator.CreateInstance(tAnuncio, "Registrar triage", "cuando haya que pasar el triage a SAP", "x.json", true)!;
+        pHuecos.SetValue(lista, new List<string> { "Peso", "Talla" });
+        var pendiente = Activator.CreateInstance(tAnuncio, "Radicar factura", "cuando haya que radicar", "y.json", false)!;
+        catalogo.Add(lista); catalogo.Add(pendiente);
+        var bloques = ((System.Collections.IEnumerable)armar.Invoke(null, new object[] { encargo, catalogo })!).Cast<object>().ToList();
+        string texto = string.Join("\n", bloques.Select(b => (string)Prop(b, "Texto")!));
+        Debe(texto.Contains("peso 70 kg, talla 170 cm"), $"el mensaje lleva lo que la nota marcada dice, tal cual ({Recorta(texto, 160)})");
+        Debe(texto.Contains("Registrar triage") && texto.Contains("Peso") && texto.Contains("Talla"),
+            "y el catálogo con los datos que cada skill necesita");
+        Debe(!texto.Contains("Radicar factura"), "una skill sin comprobar no se ofrece: no se puede correr (127) y ofrecerla es tentar a elegirla");
+        var todas = new[] { "map_skills", "map_skill_run", "map_take", "map_type", "map_batch", "map_go_to", "map_open_app", "map_where_am_i", "map_what_i_see", "map_shot", "voz_decir", "voz_preguntar", "leccion_plan", "leccion_llegue", "map_esto_es" };
+        var c = ((System.Collections.IEnumerable)caja.Invoke(null, new object[] { todas })!).Cast<string>().ToList();
+        var p = ((System.Collections.IEnumerable)prohibidas.Invoke(null, new object[] { todas })!).Cast<string>().ToList();
+        Debe(c.Contains("mcp__u__map_skill_run") && c.Contains("mcp__u__map_skills") && c.Contains("mcp__u__map_go_to") && c.Contains("mcp__u__voz_decir"),
+            $"la caja del encargo tiene las skills, el catálogo, llegar hasta ellas y la voz ({string.Join(" ", c)})");
+        Debe(!c.Contains("mcp__u__map_take") && !c.Contains("mcp__u__map_type") && !c.Contains("mcp__u__map_batch")
+             && !c.Contains("mcp__u__voz_preguntar") && !c.Contains("mcp__u__leccion_plan") && !c.Any(x => x.Contains("ver_momento")),
+            "y NO tiene manos sueltas, ni preguntas, ni nada de la lección");
+        Debe(p.Contains("mcp__u__map_take") && p.Contains("mcp__u__map_batch") && p.Contains("mcp__u__voz_preguntar") && p.Contains("mcp__u__leccion_plan"),
+            "lo que no está en la caja está PROHIBIDO por su nombre: el Agent SDK busca herramientas por su cuenta (promesa 174)");
+    }
+
+    private static void ElCheckNoRecorreUnCaminoFijo()
+    {
+        // El camino fijo de la spec 008 (NWP1 → vista → primera fila → Triage → rellenador →
+        // editores) era una fase de prueba, y el dueño lo retiró el 2026-09-10: «lo que importa es
+        // la ejecución de skills y sus acciones». Con él se van 113 y 114; los números no se reciclan.
+        Debe(Capacidad("U.WindowsClient.Clinical.EnvioAlTriage") == null && Capacidad("U.WindowsClient.Clinical.EditoresDelTriage") == null,
+            "el camino fijo del triage ya no existe: ni «EnvioAlTriage» ni «EditoresDelTriage» (spec 015, promesa 195)");
+        Debe(Capacidad("U.WindowsClient.Clinical.PuenteASap") != null && Capacidad("U.WindowsClient.Clinical.Encargo") != null,
+            "y el ✓ sigue siendo la aprobación del médico sección por sección: Encargo y PuenteASap se quedan (112)");
+        var args = Capacidad("U.WindowsClient.Piloto.ElPiloto")?.GetMethod("Argumentos");
+        Debe(args != null, "todavía no existe «ElPiloto.Argumentos» (spec 015, promesa 195): el piloto no sabe arrancar en modo encargo. "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (args == null) return;
+        var enc = ((System.Collections.IEnumerable)args.Invoke(null, new object[] { "piloto.mjs", @"C:\x\encargo_1", "encargo" })!).Cast<string>().ToList();
+        Debe(enc.Contains(@"--encargo=C:\x\encargo_1") && !enc.Any(a => a.StartsWith("--leccion=")),
+            $"en modo encargo el piloto arranca con --encargo=<carpeta>, sin lección ({string.Join(" ", enc)})");
+        var lec = ((System.Collections.IEnumerable)args.Invoke(null, new object[] { "piloto.mjs", @"C:\x\leccion_1", "leccion" })!).Cast<string>().ToList();
+        Debe(lec.Contains(@"--leccion=C:\x\leccion_1"), "y comprobar sigue arrancando con --leccion");
+    }
+
+    private static void TodoCampoTecleadoEsUnHueco()
+    {
+        // LO MEDIDO EN LA DECIMOTERCERA LECCIÓN (2026-09-08): 17 campos tecleados, los 17 con la
+        // ETIQUETA del campo; lo que se decía mientras era ruido («Temperatura de 38 y mide 1.70»
+        // sobre «Conducta»). La regla vieja —hueco solo donde se narró— dejaba 14 valores del
+        // paciente de prueba como pasos fijos. Y «nwp1» sigue siendo tarea: sin él no arranca.
+        var tt = TiposDeLaLeccion.Cargar();
+        var m = Capacidad("U.WindowsClient.Piloto.SkillDeLoVerificado")?.GetMethod("Empaquetar");
+        var tInst = Cap004("U.WindowsClient.Navigation.InstanciarSkill");
+        var sinDato = tInst?.GetMethod("SinDato");
+        Debe(tt != null && m != null && sinDato != null,
+            "todavía no existe «InstanciarSkill.SinDato» (spec 015, promesa 196). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tt == null || m == null || tInst == null || sinDato == null) return;
+        var eventos = ListaDe(tt.Evento);
+        eventos.Add(tt.Evento_(1, 1000, "clic", 1, 1, "sap:wnd[0]/tbar[0]/okcd", "nwp1", "sapgui://B", "", "", new[] { "escribimos nwp1" }));
+        eventos.Add(tt.Evento_(2, 2000, "clic", 2, 2, "sap:wnd[0]/usr/txtPESO", "52", "sapgui://B", "", "", new[] { "Temperatura de 38 y mide 1.70" }, etiqueta: "Peso"));
+        eventos.Add(tt.Evento_(3, 3000, "clic", 3, 3, "sap:wnd[0]/usr/txtTALLA", "1.7", "sapgui://B", "", "", Array.Empty<string>(), etiqueta: "Talla"));
+        var leccion = tt.Leccion_("sapgui://A", "sapgui://B", eventos, ListaDe(tt.CuadroLeccion));
+        var veredictos = ListaDe(tt.Veredicto);
+        for (int n = 1; n <= 3; n++) veredictos.Add(Nuevo(tt.Veredicto, n, true, "sapgui://B", "sapgui://B", "aterrizó"));
+        var skill = m.Invoke(null, new object[] { leccion, veredictos, "Triage", "" });
+        Debe(skill != null, "con pasos verificados hay skill");
+        if (skill == null) return;
+        var huecos = ((System.Collections.IEnumerable)Prop(skill, "Huecos")!).Cast<object>().ToList();
+        var nombres = huecos.Select(h => (string)Prop(h, "Significado")!).ToList();
+        Debe(nombres.Count == 2 && nombres.Contains("Peso") && nombres.Contains("Talla"),
+            $"los dos campos del formulario son huecos con el NOMBRE del campo (salieron: {string.Join(", ", nombres)}): "
+            + "lo que se decía mientras es ruido de la demo, no el nombre del dato");
+        Debe(huecos.All(h => !((string)Prop(h, "Campo")!).Contains("okcd")),
+            "y el campo de comandos NO es un hueco: «nwp1» es parte de la tarea, y sin él la skill no arranca (2026-09-03)");
+        var soloPeso = new Dictionary<string, string> { ["Peso"] = "80" };
+        var pasos = (System.Collections.IList)tInst.GetMethod("Pasos")!.Invoke(null, new object?[] { skill, soloPeso })!;
+        var textos = pasos.Cast<RecorrerSegunElNucleo.Paso>().Select(p => p.Texto).ToList();
+        Debe(textos.Contains("nwp1") && textos.Contains("80") && !textos.Contains("52") && !textos.Contains("1.7"),
+            $"con solo el peso: nwp1 se escribe, el peso es el de HOY (80, no el 52 de la demo) y la talla NO se escribe "
+            + $"—ni se pregunta, ni se inventa— (textos: {string.Join("|", textos)})");
+        var faltan = ((System.Collections.IEnumerable)sinDato.Invoke(null, new object[] { skill, soloPeso })!).Cast<string>().ToList();
+        Debe(faltan.Count == 1 && faltan[0] == "Talla",
+            $"y lo que quedó en blanco se dice por su nombre: Talla (salió: {string.Join(", ", faltan)})");
+    }
+
+    private static void LaSkillSeDaConLaCoreografia()
+    {
+        // La experiencia estándar (191): la carita al lado del campo, la frase, y solo entonces el
+        // toque. Una skill que corre en un batch ciego es la otra experiencia, y el dueño pidió UNA.
+        var m = Cap004("U.WindowsClient.Mcp.SurfaceMapTools")?.GetMethod("RecorrerSkill");
+        Debe(m != null, "todavía no existe «SurfaceMapTools.RecorrerSkill» (spec 015, promesa 197). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (m == null) return;
+        var pasos = new List<RecorrerSegunElNucleo.Paso> { new("Favoritos/IS-H"), new("Peso", "80"), new("Talla", "170") };
+        var dados = new List<string>();
+        Func<RecorrerSegunElNucleo.Paso, RecorrerSegunElNucleo.Resultado> todosSalen =
+            p => { dados.Add(p.Exit); return new(1, 1, "sapgui://X", true, "hice"); };
+        var r = (RecorrerSegunElNucleo.Resultado)m.Invoke(null, new object[] { pasos, todosSalen })!;
+        Debe(dados.Count == 3 && dados[1] == "Peso",
+            $"cada paso se da DE UNO EN UNO por la coreografía (señalar, decir, tocar), no en un batch ciego ({string.Join(" → ", dados)})");
+        Debe(r.Hechos == 3 && r.Total == 3 && r.Termino, $"y la cuenta es la del plan entero: 3 de 3 ({r.Cuenta})");
+        dados.Clear();
+        Func<RecorrerSegunElNucleo.Paso, RecorrerSegunElNucleo.Resultado> elSegundoNo =
+            p => { dados.Add(p.Exit); return p.Exit == "Peso" ? new(0, 1, "sapgui://X", false, "no veo «Peso» en pantalla") : new(1, 1, "sapgui://X", true, "hice"); };
+        r = (RecorrerSegunElNucleo.Resultado)m.Invoke(null, new object[] { pasos, elSegundoNo })!;
+        Debe(dados.Count == 2 && r.Hechos == 1 && r.Total == 3 && !r.Termino,
+            $"si un paso no se puede dar, PARA ahí: 1 de 3, el tercero ni se intenta, y el total es el plan, no lo ejecutado (patrón nº10) ({r.Hechos}/{r.Total}, dados {dados.Count})");
+        Debe(r.Cuenta.Contains("Peso") && r.Cuenta.Contains("no veo") && r.Cuenta.Contains("2"),
+            $"y la cuenta dice en qué paso y por qué ({r.Cuenta})");
+    }
+
+    // ── Spec 016: el panel de los aprendizajes ────────────────────────────────────────────────
+
+    private static void UnAprendizajeSabeDeQueLeccionSalio()
+    {
+        // SIN ESTE VÍNCULO NO HAY CAPTURAS. Los cuadros viven en la lección —735 en la del
+        // 2026-09-08— y la skill que salió de ella no guardaba ni su id: el panel podría enseñar el
+        // paso a paso en palabras, pero no la pantalla de cada paso.
+        var tt = TiposDeLaLeccion.Cargar();
+        var tSkill = Cap004("U.WindowsClient.Navigation.SkillEnsenada");
+        var deLaLeccion = tSkill?.GetProperty("DeLaLeccion");
+        var m = Capacidad("U.WindowsClient.Piloto.SkillDeLoVerificado")?.GetMethod("Empaquetar");
+        Debe(tt != null && deLaLeccion != null && m != null,
+            "todavía no existe «SkillEnsenada.DeLaLeccion» (spec 016, promesa 198). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tt == null || deLaLeccion == null || m == null) return;
+
+        var eventos = ListaDe(tt.Evento);
+        eventos.Add(tt.Evento_(1, 1000, "clic", 1, 1, "sap:wnd[0]/usr/txtPESO", "52", "", "", "", Array.Empty<string>(), etiqueta: "Peso"));
+        var leccion = tt.Leccion_("sapgui://A", "sapgui://B", eventos, ListaDe(tt.CuadroLeccion));
+        var veredictos = ListaDe(tt.Veredicto);
+        veredictos.Add(Nuevo(tt.Veredicto, 1, true, "sapgui://B", "sapgui://B", "aterrizó"));
+        var skill = m.Invoke(null, new object[] { leccion, veredictos, "Triage", "" });
+        Debe(skill != null, "con pasos verificados hay skill");
+        if (skill == null) return;
+        Debe((string)deLaLeccion.GetValue(skill)! == "leccion-de-prueba",
+            $"la skill que sale de comprobar recuerda su lección por id (dijo «{deLaLeccion.GetValue(skill)}»)");
+
+        var suelta = SkillDePrueba(("Peso", "52", "", "Peso"));
+        Debe(suelta != null && (string)deLaLeccion.GetValue(suelta)! == "",
+            "y una empaquetada sin lección delante se queda VACÍA: una lección inventada mandaría el "
+            + "panel a buscar cuadros de otra demo, y una caja que miente es peor que no tener caja");
+    }
+
+    private static void LoQueHaceSeLeeEnCastellano()
+    {
+        // EL MÉDICO NO LEE SELECTORES. Esta es la regla que decide si el panel se entiende: un paso
+        // es hoy una puerta y un valor, y «sap:wnd[0]/usr/txtY0000000-ZTXTPESO» delante de alguien
+        // que va a firmar una historia clínica no explica nada, solo asusta.
+        var t = Cap004("U.WindowsClient.Navigation.LoQueHaceLaSkill");
+        var m = t?.GetMethod("EnCastellano");
+        Debe(m != null, "todavía no existe «Navigation.LoQueHaceLaSkill.EnCastellano» (spec 016, promesa 199). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (m == null) return;
+        var skill = SkillDePrueba(
+            ("Favoritos/IS-H: Pto.tbjo.clínico", "", "sapgui://B", ""),
+            ("Peso", "52", "", "Peso"),
+            ("sap:wnd[0]/usr/txtY0000000-ZTXTOBS", "algo", "", ""),
+            ("key:enter", "", "sapgui://C", ""));
+        if (skill == null) { Debe(false, "la skill de prueba se pudo empaquetar"); return; }
+        var lineas = ((System.Collections.IEnumerable)m.Invoke(null, new object[] { skill })!).Cast<string>().ToList();
+        Debe(lineas.Count == 4, $"una línea por paso: 4 (salieron {lineas.Count})");
+        if (lineas.Count != 4) return;
+        Debe(lineas[0].Contains("Favoritos/IS-H: Pto.tbjo.clínico"),
+            $"una puerta con nombre se dice tal cual, que para eso la persona la lee igual en pantalla ({lineas[0]})");
+        Debe(lineas[1].Contains("Peso") && lineas[1].StartsWith("Escribe", StringComparison.OrdinalIgnoreCase),
+            $"un paso que escribe se dice por el NOMBRE DEL DATO, no por el valor de la demo ({lineas[1]})");
+        Debe(!lineas[1].Contains("52"),
+            "y nunca por el valor: el «52» era el peso del paciente de prueba (promesa 123)");
+        Debe(lineas.All(l => !l.Contains("sap:") && !l.Contains("wnd[0]") && !l.Contains("sapgui://")),
+            $"NINGUNA línea enseña un selector ni una dirección de pantalla ({string.Join(" | ", lineas)})");
+        Debe(lineas[3].Contains("Intro", StringComparison.OrdinalIgnoreCase)
+             || lineas[3].Contains("Enter", StringComparison.OrdinalIgnoreCase),
+            $"y una tecla se dice por su tecla ({lineas[3]})");
+    }
+
+    private static void LasCapturasSalenDeSuLeccion()
+    {
+        // UNA CAJA QUE MIENTE ES PEOR QUE NO TENER CAJA (aprendizaje nº8). Emparejar por posición
+        // sería lo cómodo y bastaría con que un paso no entrara en la skill —los que no aterrizan no
+        // entran, promesa 176— para que todas las capturas se corrieran un sitio y cada paso enseñara
+        // la pantalla del siguiente, sin que nadie lo notara.
+        var tt = TiposDeLaLeccion.Cargar();
+        var t = Cap004("U.WindowsClient.Navigation.CapturasDeLaSkill");
+        var m = t?.GetMethod("De");
+        var emp = Capacidad("U.WindowsClient.Piloto.SkillDeLoVerificado")?.GetMethod("Empaquetar");
+        Debe(tt != null && m != null && emp != null,
+            "todavía no existe «Navigation.CapturasDeLaSkill.De» (spec 016, promesa 200). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tt == null || m == null || emp == null) return;
+
+        var eventos = ListaDe(tt.Evento);
+        eventos.Add(tt.Evento_(1, 1000, "clic", 1, 1, "sap:wnd[0]#node=vw1", "", "sapgui://B", @"C:\l\cuadros\c1.jpg", @"C:\l\cuadros\d1.jpg", Array.Empty<string>(), etiqueta: "Urgencias Adultos/Triage"));
+        // ESTE NO ATERRIZA, así que NO entra en la skill (promesa 176) y CORRE LAS POSICIONES. Sin
+        // él, los pasos y los eventos irían en el mismo orden y emparejar por orden daría el mismo
+        // resultado que emparejar por identidad: la promesa no podría fallar por su propio modo de
+        // fallo, que es la definición de una prueba que no prueba nada.
+        eventos.Add(tt.Evento_(2, 2000, "clic", 2, 2, "sap:wnd[0]/usr/btnOTRO", "", "sapgui://C", @"C:\l\cuadros\cX.jpg", "", Array.Empty<string>(), etiqueta: "Otro botón"));
+        eventos.Add(tt.Evento_(3, 3000, "clic", 3, 3, "sap:wnd[0]/usr/txtPESO", "52", "", @"C:\l\cuadros\c2.jpg", "", Array.Empty<string>(), etiqueta: "Peso"));
+        eventos.Add(tt.Evento_(4, 4000, "clic", 4, 4, "sap:wnd[0]/usr/txtTALLA", "1.7", "", "", "", Array.Empty<string>(), etiqueta: "Talla"));
+        var leccion = tt.Leccion_("sapgui://A", "sapgui://B", eventos, ListaDe(tt.CuadroLeccion));
+        var veredictos = ListaDe(tt.Veredicto);
+        veredictos.Add(Nuevo(tt.Veredicto, 1, true, "sapgui://B", "sapgui://B", "aterrizó"));
+        veredictos.Add(Nuevo(tt.Veredicto, 2, false, "sapgui://C", "sapgui://B", "no llegué"));
+        veredictos.Add(Nuevo(tt.Veredicto, 3, true, "sapgui://B", "sapgui://B", "aterrizó"));
+        veredictos.Add(Nuevo(tt.Veredicto, 4, true, "sapgui://B", "sapgui://B", "aterrizó"));
+        var skill = emp.Invoke(null, new object[] { leccion, veredictos, "Triage", "" })!;
+
+        var capturas = ((System.Collections.IEnumerable)m.Invoke(null, new object[] { skill, leccion })!).Cast<object>().ToList();
+        Debe(capturas.Count == 3, $"una por paso: 3 (salieron {capturas.Count})");
+        if (capturas.Count != 3) return;
+        Debe(((string)Prop(capturas[0], "Cuadro")!).EndsWith("c1.jpg"),
+            $"cada paso enseña el cuadro DE CUANDO SE HIZO, el de antes de tocar ({Prop(capturas[0], "Cuadro")})");
+        Debe(((string)Prop(capturas[1], "Cuadro")!).EndsWith("c2.jpg"),
+            "y el segundo el suyo, emparejado por identidad y no por posición");
+        Debe(capturas.All(c => !((string)Prop(c, "Cuadro")!).Contains("cX")),
+            "y NINGUNO enseña el cuadro del paso que no aterrizó: ese no está en la skill, y su cuadro "
+            + "tampoco puede estar en la tira");
+        Debe(((string)Prop(capturas[2], "Cuadro")!).Length == 0,
+            $"un paso sin cuadro propio NO enseña el de otro: se queda sin captura ({Prop(capturas[2], "Cuadro")})");
+        Debe(((string)Prop(capturas[1], "Que")!).Length > 0,
+            "y cada captura viene con lo que pasa en ella: una tira de imágenes sin pie es papel pintado");
+    }
+
+    private static void UnAprendizajeSeRenombraYSeBorra()
+    {
+        // ONCE DE DIECINUEVE se llaman «The user begins by clicking on the "Triage" tree item…»:
+        // nombres que puso el resumidor del video cuando nadie le puso uno. Un panel bonito sobre esa
+        // lista sigue siendo ilegible, y sin poder limpiarla el panel nace sucio.
+        var tSkill = Cap004("U.WindowsClient.Navigation.SkillEnsenada");
+        var renombrar = tSkill?.GetMethod("Renombrar");
+        var borrar = tSkill?.GetMethod("Borrar");
+        Debe(renombrar != null && borrar != null,
+            "todavía no existen «SkillEnsenada.Renombrar» ni «SkillEnsenada.Borrar» (spec 016, promesa 201). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tSkill == null || renombrar == null || borrar == null) return;
+        string carpeta = Path.Combine(_raiz, "skills-" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(carpeta);
+        var skill = SkillDePrueba(("Peso", "52", "sapgui://B", "Peso"));
+        if (skill == null) { Debe(false, "la skill de prueba se pudo empaquetar"); return; }
+        string archivo = (string)tSkill.GetMethod("Guardar")!.Invoke(skill, new object[] { carpeta })!;
+
+        string nuevo = (string)renombrar.Invoke(null, new object[] { archivo, "Triage de urgencias" })!;
+        var cat = (System.Collections.IList)tSkill.GetMethod("Catalogo")!.Invoke(null, new object[] { carpeta })!;
+        Debe(cat.Count == 1, $"tras renombrar hay UNO, no dos: el archivo se llama como la skill, así que el viejo hay que quitarlo (salieron {cat.Count})");
+        if (cat.Count != 1) return;
+        Debe((string)Prop(cat[0]!, "Nombre")! == "Triage de urgencias", "con el nombre nuevo");
+        var recargada = tSkill.GetMethod("Cargar")!.Invoke(null, new object[] { nuevo })!;
+        var huecos = ((System.Collections.IEnumerable)Prop(recargada, "Huecos")!).Cast<object>().ToList();
+        Debe(huecos.Count == 1 && (string)Prop(recargada, "DondeEmpieza")! == "sapgui://QAS/NWP1",
+            "y todo lo demás intacto: renombrar es ponerle otro nombre, no volver a aprender");
+
+        borrar.Invoke(null, new object[] { nuevo });
+        cat = (System.Collections.IList)tSkill.GetMethod("Catalogo")!.Invoke(null, new object[] { carpeta })!;
+        Debe(cat.Count == 0, $"y borrar lo saca del catálogo (quedaron {cat.Count})");
+    }
+
+    private static void MostrarDecideSolo()
+    {
+        // UN SOLO BOTÓN, DOS CAMINOS. «Mostrar» sobre algo ya repasado es correrlo; sobre algo sin
+        // repasar es repasarlo, que es lo que la promesa 127 exige antes de dejar ejecutar nada. Si
+        // los dos se confundieran, el panel ejecutaría en SAP una tarea que nadie ha visto andar.
+        var t = Cap004("U.WindowsClient.Navigation.LoQuePasaAlMostrar");
+        var m = t?.GetMethod("Decidir");
+        var puente = Capacidad("U.WindowsClient.Clinical.PuenteDeAprendizajes");
+        Debe(m != null && puente?.GetProperty("Mostrar") != null,
+            "todavía no existen «Navigation.LoQuePasaAlMostrar.Decidir» ni «Clinical.PuenteDeAprendizajes» (spec 016, promesa 225). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || m == null || puente == null) return;
+        var tSkill = Cap004("U.WindowsClient.Navigation.SkillEnsenada")!;
+        var sinRepasar = SkillDePrueba(("Peso", "52", "sapgui://B", "Peso"))!;
+        var repasada = tSkill.GetMethod("ConLaComprobacionHecha")!.Invoke(sinRepasar, null)!;
+
+        string Que(object skill, bool manos) => (string)Prop(m.Invoke(null, new object[] { skill, manos })!, "Que")!;
+        string Motivo(object skill, bool manos) => (string)Prop(m.Invoke(null, new object[] { skill, manos })!, "Motivo")!;
+
+        Debe(Que(repasada, true) == "correr",
+            $"lo comprobado se CORRE, con la coreografía y sin datos de nadie (dijo «{Que(repasada, true)}»)");
+        Debe(Que(sinRepasar, true) == "comprobar",
+            $"lo no comprobado se COMPRUEBA: ejecutar sin repasar es la apuesta que la promesa 127 prohíbe (dijo «{Que(sinRepasar, true)}»)");
+        Debe(Que(repasada, false) == "no" && Motivo(repasada, false).Length > 0,
+            $"y sin manos a las que pedírselo se DICE, con su motivo, en vez de ofrecer un botón que no hace nada ({Motivo(repasada, false)})");
+        Debe(puente.GetProperty("Disponible") != null,
+            "y la ventana de consulta puede preguntar si hay manos antes de pintar el botón");
+    }
+
+    // ── Spec 017: la prueba limpia, de la enseñanza al ✓ sin tropezar ────────────────────────
+
+    private static void LaPantallaAMedioCambiarEsLaMisma()
+    {
+        // MEDIDO EL 2026-09-11: la demo grabó que Favoritos lleva a «SESSION_MANAGER/SAPLN_WP_FRAMEWORK/0100»
+        // y el piloto llegó a «NWP1/SAPLN_WP_FRAMEWORK/0100». SAP cambia el programa un instante
+        // antes que el código de transacción, y el terreno cogió la pantalla a medio cambiar. Eso
+        // dejó una comprobación de 12 minutos en «17 de 19».
+        var t = Cap004("U.WindowsClient.Navigation.Superficies");
+        var misma = t?.GetMethod("MismaPantalla");
+        Debe(misma != null, "todavía no existe «Navigation.Superficies.MismaPantalla» (spec 019, promesa 226). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (misma == null) return;
+        bool M(string a, string b) => (bool)misma.Invoke(null, new object[] { a, b })!;
+        const string transitoria = "sapgui://QAS/SESSION_MANAGER/SAPLN_WP_FRAMEWORK/0100";
+        const string real = "sapgui://QAS/NWP1/SAPLN_WP_FRAMEWORK/0100";
+        Debe(M(transitoria, real) && M(real, transitoria), "la pantalla cogida a medio cambiar casa con la misma bajo su transacción real, en los dos sentidos");
+        Debe(!M("sapgui://QAS/SESSION_MANAGER/SAPLSMTR_NAVIGATION/0100", real), "pero Easy Access de verdad NO es NWP1: el programa manda");
+        Debe(!M(transitoria, "sapgui://QAS/NWP1/SAPLY000/0001"), "y otro programa es otra pantalla");
+        Debe(M(real, real) && !M(real, "sapgui://QAS/NV2000/SAPLN_WP_FRAMEWORK/0100"), "igual es igual, y dos transacciones reales distintas siguen siendo distintas");
+        Debe(M(real + "/vista:Triage", transitoria + "/vista:Triage") && !M(real + "/vista:Triage", transitoria + "/vista:Otra"), "la vista que va detrás también tiene que casar");
+
+        // Y EL JUEZ LO DECIDE POR ESA FUNCIÓN: el rescate (121) y el batch (103) comparaban con Equals.
+        var aterrizo = Cap004("U.WindowsClient.Navigation.ElRescate")?.GetMethod("Aterrizo");
+        Debe(aterrizo != null, "existe ElRescate.Aterrizo");
+        if (aterrizo == null) return;
+        var a = aterrizo.Invoke(null, new object[] { transitoria, real })!;
+        Debe((bool)Prop(a, "Llego")!, "el juez de la comprobación da por aterrizado llegar a la pantalla real cuando la demo la grabó a medio cambiar");
+    }
+
+    private static void ElEventoQueNadiePuedeDarNoCuenta()
+    {
+        // EL «19 DE 20» POR EL OTRO LADO: la spec 014 lo tapó dándole al botón «Triage» su llegada,
+        // pero el último clic de la demo, sin selector ni etiqueta, sigue llevando «donde acabó» como
+        // llegada y contando como navegante. Nadie puede dar un paso sobre nada, así que ninguna
+        // lección que acabe en un clic anónimo podía quedar COMPROBADA.
+        var tt = TiposDeLaLeccion.Cargar();
+        var t = Capacidad("U.WindowsClient.Piloto.RegistroDeLaComprobacion");
+        var cuentan = t?.GetMethod("EventosQueCuentan");
+        var emp = Capacidad("U.WindowsClient.Piloto.SkillDeLoVerificado")?.GetMethod("Empaquetar");
+        Debe(tt != null && cuentan != null && emp != null, "existen los tipos de la lección, el juez y el empaquetador");
+        if (tt == null || cuentan == null || emp == null) return;
+        var eventos = ListaDe(tt.Evento);
+        eventos.Add(tt.Evento_(1, 1000, "clic", 1, 1, "sap:wnd[0]#node=F1", "", "sapgui://B", "", "", Array.Empty<string>(), etiqueta: "Favoritos/IS-H"));
+        eventos.Add(tt.Evento_(2, 2000, "clic", 2, 2, "sap:wnd[0]/usr/txtPESO", "75", "", "", "", Array.Empty<string>(), etiqueta: "Peso"));
+        eventos.Add(tt.Evento_(3, 3000, "clic", 3, 3, "", "", "sapgui://FIN", "", "", Array.Empty<string>()));   // el último clic, anónimo
+        var leccion = tt.Leccion_("sapgui://A", "sapgui://FIN", eventos, ListaDe(tt.CuadroLeccion));
+        var lista = ((System.Collections.IEnumerable)cuentan.Invoke(null, new object[] { leccion })!).Cast<object>().ToList();
+        Debe(lista.Count == 2 && lista.All(e => (int)Prop(e, "N")! != 3),
+            $"cuentan los dos que se pueden dar y NO el clic anónimo (contaron {lista.Count}: {string.Join(",", lista.Select(e => Prop(e, "N")))}). "
+            + "Contarlo es exigir un paso que nadie puede dar, y con él ninguna lección quedaba comprobada (spec 019, promesa 227)");
+        var veredictos = ListaDe(tt.Veredicto);
+        veredictos.Add(Nuevo(tt.Veredicto, 1, true, "sapgui://B", "sapgui://B", "aterrizó"));
+        veredictos.Add(Nuevo(tt.Veredicto, 2, true, "75", "75", "hecho"));
+        var skill = emp.Invoke(null, new object[] { leccion, veredictos, "Triage", "" });
+        Debe(skill != null, "con los dos que cuentan aterrizados hay skill");
+        if (skill == null) return;
+        Debe((bool)Prop(skill, "Comprobada")!, "y queda COMPROBADA: los que cuentan están todos");
+        Debe((string)Prop(skill, "DondeTermina")! == "sapgui://FIN",
+            $"y donde acabó la demo lo exige el último paso de la skill —DondeTermina es «{Prop(skill, "DondeTermina")}»—, así que no se pierde nada por no contar el clic anónimo");
+    }
+
+    private static void UnaLeccionDejaUnAprendizaje()
+    {
+        // MEDIDO EL 2026-09-11: el dueño enseñó UNA tarea y vio DOS. La demo guarda una al cerrar y
+        // el piloto guarda otra al comprobar, con otro nombre. Misma lección, dos archivos.
+        var tSkill = Cap004("U.WindowsClient.Navigation.SkillEnsenada");
+        var unico = tSkill?.GetMethod("GuardarComoElUnicoDeSuLeccion");
+        var deLaLeccion = tSkill?.GetProperty("DeLaLeccion");
+        Debe(unico != null && deLaLeccion != null, "todavía no existe «SkillEnsenada.GuardarComoElUnicoDeSuLeccion» (spec 019, promesa 228). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tSkill == null || unico == null || deLaLeccion == null) return;
+        string carpeta = Path.Combine(_raiz, "skills-" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(carpeta);
+        // SkillDePrueba nombra todas igual; el nombre y la lección se ponen por reflexión (init).
+        object Con(object skill, string nombre, string leccion)
+        {
+            tSkill.GetProperty("Nombre")!.SetValue(skill, nombre);
+            deLaLeccion.SetValue(skill, leccion);
+            return skill;
+        }
+        var guardar = tSkill.GetMethod("Guardar")!;
+        var catalogo = tSkill.GetMethod("Catalogo")!;
+        List<string> Nombres() => ((System.Collections.IList)catalogo.Invoke(null, new object[] { carpeta })!)
+            .Cast<object>().Select(c => (string)Prop(c, "Nombre")!).OrderBy(x => x).ToList();
+
+        guardar.Invoke(Con(SkillDePrueba(("Peso", "52", "sapgui://B", "Peso"))!, "de la demo", "leccion_1"), new object[] { carpeta });
+        guardar.Invoke(Con(SkillDePrueba(("Talla", "170", "sapgui://B", "Talla"))!, "de otra leccion", "leccion_2"), new object[] { carpeta });
+        Debe(Nombres().Count == 2, "dos lecciones, dos aprendizajes");
+
+        // El piloto guarda la verificada de la lección 1 con OTRO nombre.
+        var verificada = Con(SkillDePrueba(("Peso", "52", "sapgui://B", "Peso"))!, "Registrar triage", "leccion_1");
+        verificada = tSkill.GetMethod("ConLaComprobacionHecha")!.Invoke(verificada, null)!;
+        unico.Invoke(verificada, new object[] { carpeta });
+        var nombres = Nombres();
+        Debe(nombres.Count == 2, $"sigue habiendo dos: la de la lección 1 fue REEMPLAZADA, no sumada (hay {nombres.Count}: {string.Join(", ", nombres)})");
+        Debe(nombres.Contains("Registrar triage") && !nombres.Contains("de la demo"),
+            $"la que queda de la lección 1 es la verificada, con el nombre del piloto, y la de la demo ya no está ({string.Join(", ", nombres)})");
+        Debe(nombres.Contains("de otra leccion"), "y la de la otra lección no se tocó");
+
+        unico.Invoke(Con(SkillDePrueba(("Sat. O2", "98", "sapgui://B", "Sat. O2"))!, "sin leccion", ""), new object[] { carpeta });
+        Debe(Nombres().Count == 3, "una sin lección conocida no retira a nadie: no se adivina de quién es hermana");
+    }
+
+    private static void LaLlegadaSoloConLosQueNavegan()
+    {
+        // EL FALLO LATENTE: la skill verificada guardaba como Llegada de cada campo tecleado el VALOR
+        // leído («75», «normal»), y el batch (LlegoDondeTocaba) exige esa llegada al escribir. El ✓
+        // habría parado en el primer campo aunque la skill estuviera comprobada.
+        var tt = TiposDeLaLeccion.Cargar();
+        var emp = Capacidad("U.WindowsClient.Piloto.SkillDeLoVerificado")?.GetMethod("Empaquetar");
+        Debe(tt != null && emp != null, "existen los tipos de la lección y el empaquetador");
+        if (tt == null || emp == null) return;
+        var eventos = ListaDe(tt.Evento);
+        eventos.Add(tt.Evento_(1, 1000, "clic", 1, 1, "sap:wnd[0]#node=F1", "", "sapgui://B", "", "", Array.Empty<string>(), etiqueta: "Favoritos/IS-H"));
+        eventos.Add(tt.Evento_(2, 2000, "clic", 2, 2, "sap:wnd[0]/usr/txtPESO", "75", "", "", "", Array.Empty<string>(), etiqueta: "Peso"));
+        var leccion = tt.Leccion_("sapgui://A", "sapgui://B", eventos, ListaDe(tt.CuadroLeccion));
+        var veredictos = ListaDe(tt.Veredicto);
+        veredictos.Add(Nuevo(tt.Veredicto, 1, true, "sapgui://B", "sapgui://B-real", "aterrizó"));
+        veredictos.Add(Nuevo(tt.Veredicto, 2, true, "75", "75", "«Peso» dice «75»"));
+        var skill = emp.Invoke(null, new object[] { leccion, veredictos, "Triage", "" });
+        Debe(skill != null, "hay skill"); if (skill == null) return;
+        var pasos = (System.Collections.IList)Prop(skill, "Pasos")!;
+        Debe(pasos.Count == 2, "dos pasos"); if (pasos.Count != 2) return;
+        Debe((string)Prop(pasos[0]!, "Llegada")! == "sapgui://B-real", "el paso que navega lleva su llegada REAL, como siempre (176)");
+        Debe((string)Prop(pasos[1]!, "Llegada")! == "",
+            $"y el paso que escribe NO lleva llegada (llevaba «{Prop(pasos[1]!, "Llegada")}»): «75» no es una pantalla, y exigirla pararía el batch en el primer campo (spec 019, promesa 229)");
     }
 
     private static void DarUnPasoEsUnaCoreografia()

@@ -123,6 +123,20 @@ public static class InstanciarSkill
         return sobran;
     }
 
+    /// <summary>
+    /// Los huecos que quedan EN BLANCO en esta corrida, por su nombre (promesa 196). No se pregunta
+    /// ni se inventa —decisión del dueño, 2026-09-10—, pero se dice: un campo vacío sin rastro se
+    /// parece demasiado a un envío completo.
+    /// </summary>
+    public static List<string> SinDato(SkillEnsenada skill, IReadOnlyDictionary<string, string> datos)
+    {
+        var faltan = new List<string>();
+        foreach (var h in skill?.Huecos ?? Array.Empty<Hueco>())
+            if (h.Significado.Length > 0 && ValorPara(h, datos).Length == 0 && !faltan.Contains(h.Significado))
+                faltan.Add(h.Significado);
+        return faltan;
+    }
+
     private static Dictionary<string, Hueco> HuecosPorCampo(SkillEnsenada skill)
     {
         var porCampo = new Dictionary<string, Hueco>(StringComparer.OrdinalIgnoreCase);
@@ -158,7 +172,12 @@ public static class InstanciarSkill
     /// prefijo <c>sap:</c> y el lector del formulario los devuelve sin él. Comparar sin normalizar
     /// daría falso SIEMPRE y en silencio (aprendizaje nº16).
     /// </summary>
-    private static string Identidad(string selector)
+    /// <remarks>
+    /// PÚBLICA DESDE LA SPEC 016: el panel de aprendizajes empareja pasos con huecos y con eventos
+    /// de la lección, y son las mismas dos formas de escribir la misma identidad. Una segunda copia
+    /// de esta regla es exactamente la avería del aprendizaje nº16.
+    /// </remarks>
+    public static string Identidad(string selector)
     {
         string s = (selector ?? "").Trim();
         if (s.StartsWith("sap:", StringComparison.OrdinalIgnoreCase)) s = s[4..];

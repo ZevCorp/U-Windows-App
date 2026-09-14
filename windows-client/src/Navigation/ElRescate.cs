@@ -89,7 +89,9 @@ public static class ElRescate
             return new(false, "no había objetivo con el que comparar: sin él, llegar no se puede afirmar.");
         if (aqui.Length == 0)
             return new(false, $"no sé dónde acabé, así que no puedo decir que llegué a «{meta}».");
-        if (aqui.Equals(meta, StringComparison.OrdinalIgnoreCase))
+        // POR LA MISMA REGLA QUE EL BATCH (promesa 226): una pantalla cogida a medio cambiar es la
+        // misma pantalla. Comparar con Equals dejó una comprobación en «17 de 19» el 2026-09-11.
+        if (Superficies.MismaPantalla(meta, aqui))
             return new(true, "");
 
         return new(false, $"había que llegar a «{meta}» y acabé en «{aqui}».");

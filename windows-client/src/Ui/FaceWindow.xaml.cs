@@ -1070,9 +1070,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     new Voz.Realtime.Argumento("nombre",
                         "Cuál de las tareas enseñadas. Pídelas con map_skills."),
                     new Voz.Realtime.Argumento("datos",
-                        "JSON con los datos de esta corrida, por su significado: "
-                        + "{\"peso\":\"68\",\"talla\":\"1,70\"}. Lo que no pases se queda vacío; "
-                        + "lo que no tenga hueco se te dice."),
+                        "JSON con los datos de esta corrida, con los NOMBRES que map_skills lista en "
+                        + "«necesita»: {\"Peso\":\"68\",\"Talla\":\"170\"}. Lo que no pases queda en "
+                        + "blanco y se te dice; lo que no tenga hueco también."),
                 }))
             // LAS DEL PILOTO (spec 013): la voz de Ü, la pregunta a la persona, la llegada que juzga
             // la app y la skill de lo verificado. Viven en el catálogo MCP porque el piloto es un
@@ -1207,6 +1207,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // EL ✓ DE LA CONSULTA LLEGA POR AQUÍ (spec 008): la ventana de consulta nace antes que la
         // carita y no ve las manos; se le cuelga esta función y ella la llama al pulsar ✓.
         Clinical.PuenteASap.Enviar = EnviarEncargoAsync;
+        // Y EL DE LOS APRENDIZAJES (promesa 225): el panel de la consulta pide «muéstrame esto» y
+        // las manos están aquí. Sin colgarlo, el botón «Mostrar» sale gris y dice por qué.
+        Clinical.PuenteDeAprendizajes.Mostrar = MostrarAprendizajeAsync;
         _rellenador.Cuenta += m => Dispatcher.Invoke(() => SetStatus("🩺 " + m));
 
         // EL EJECUTOR DE EXPORTACIONES. Pregunta al backend si el médico pulsó «Exportar a HC» y,
@@ -2826,6 +2829,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private bool _comprobando;
 
     /// <summary>
+    /// La lección que el panel de aprendizajes quiere repasar. Promesa 225.
+    /// </summary>
+    /// <remarks>
+    /// SIN ESTO, «Mostrar» sobre una tarea sin repasar repasaría OTRA: el botón de la carita elige
+    /// la última lección grabada, que es lo correcto cuando lo pulsa quien acaba de enseñar, y lo
+    /// equivocado cuando alguien señala una tarea concreta de una lista de diecinueve.
+    /// </remarks>
+    private string? _leccionParaComprobar;
+
+    /// <summary>
     /// EL BOTÓN GRANDE DICE LO QUE VA A PASAR. Con una tarea recién enseñada, lo siguiente no es
     /// ejecutarla —no se puede, comprobar es obligatorio— sino comprobarla; así que el botón lo
     /// dice y lo hace.
@@ -2849,11 +2862,19 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>¿El botón grande comprueba en vez de ejecutar? Lo decide PintarBotonDeAccion.</summary>
     private bool _botonComprueba;
 
-    private async void OnComprobarAprendizaje(object sender, RoutedEventArgs e)
+    private async void OnComprobarAprendizaje(object sender, RoutedEventArgs e) => await ComprobarAsync(null);
+
+    /// <summary>
+    /// COMPRUEBA, Y DEVUELVE EL VEREDICTO. Lo mismo que hacía el botón, partido para que el panel de
+    /// aprendizajes pueda ESPERARLO (spec 019): el 2026-09-11 «Mostrar» lanzó la comprobación, dijo
+    /// «la estoy repasando» y volvió en cero segundos; el veredicto salió doce minutos después en la
+    /// carita, y el dueño concluyó que «así no funciona la comprobación».
+    /// </summary>
+    private async Task<string> ComprobarAsync(IProgress<string>? progreso)
     {
-        if (_comprobando) { SetStatus("Ya estoy comprobando una tarea."); return; }
-        if (_teaching) { SetStatus("Termina de enseñar primero: pulsa 🎓 para cerrar la grabación."); return; }
-        if (_loop == null || _mapaDeMano == null) { SetStatus("El piloto no está listo todavía."); ShowTalk(MotivoDelGlobo.AlgoFallo); return; }
+        if (_comprobando) { SetStatus("Ya estoy comprobando una tarea."); return "ya estoy comprobando una tarea; espera a que termine."; }
+        if (_teaching) { SetStatus("Termina de enseñar primero: pulsa 🎓 para cerrar la grabación."); return "termina de enseñar primero."; }
+        if (_loop == null || _mapaDeMano == null) { SetStatus("El piloto no está listo todavía."); ShowTalk(MotivoDelGlobo.AlgoFallo); return "el piloto no está listo todavía."; }
 
         // CUÁL SE COMPRUEBA: la última enseñada si sigue en memoria; si no, la primera pendiente del
         // catálogo. No se elige «la más nueva» a ciegas: se elige la que le falta el repaso, que es
@@ -2862,7 +2883,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // LA LECCIÓN MANDA (spec 013): si la demo dejó lección y el piloto está a mano, comprobar es
         // del piloto —un solo cerebro que ve los cuadros, cuelga recuerdos y hace de uno en uno—.
         // La skill vieja sigue siendo el camino cuando no hay lección (demos anteriores a la spec).
-        string? carpetaLeccion = _teachSession?.UltimaLeccion ?? Teach.LeccionEnDisco.Ultima();
+        string? carpetaLeccion = _leccionParaComprobar ?? _teachSession?.UltimaLeccion ?? Teach.LeccionEnDisco.Ultima();
+        _leccionParaComprobar = null;   // vale para ESTA pulsación; la siguiente vuelve a decidir sola
         bool porElPiloto = carpetaLeccion != null && Piloto.ElPiloto.Disponible();
         if (carpetaLeccion != null && !porElPiloto)
             LogBus.Log("comprobar", "hay lección pero no encuentro agente-piloto/piloto.mjs (U_PILOTO): voy por el camino viejo");
@@ -2870,7 +2892,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             SetStatus("No hay ninguna tarea pendiente de comprobar. Enseña una con 🎓.");
             ShowTalk(MotivoDelGlobo.AlgoFallo);
-            return;
+            return "no hay ninguna tarea pendiente de comprobar.";
         }
 
         // COMPROBAR ES UN ENCARGO, NO UN GUION (promesa 139). Hasta el 2026-09-03 esto instanciaba
@@ -2903,11 +2925,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         try
         {
             if (porElPiloto)
-            {
-                await ComprobarConElPilotoAsync(carpetaLeccion!, reloj);
-                return;
-            }
-            if (skill == null) return;
+                return await ComprobarConElPilotoAsync(carpetaLeccion!, reloj, progreso);
+            if (skill == null) return "no hay skill que comprobar.";
             LogBus.Log("comprobar", $"«{skill.Nombre}»: {skill.Pasos.Count} paso(s) de contexto, "
                 + $"{skill.Huecos.Count} hueco(s), {skill.Sugerencias.Count} sugerencia(s) · "
                 + $"de «{skill.DondeEmpieza}» a «{Navigation.ElEncargoDeComprobar.Destino(skill)}»");
@@ -2963,19 +2982,22 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
             string cuentaRecuerdos = Navigation.RecuerdosDeUnaSkill.Cuenta(
                 skill.Description, deLoDicho, colgados - deLoDicho);
-            SetStatus(aterrizaje.Llego
+            string cuentaFinal = aterrizaje.Llego
                 ? $"«{skill.Nombre}» comprobada: llegué a donde acabó la demo · {cuentaRecuerdos} Ya se puede usar."
                 : $"«{skill.Nombre}» SIGUE PENDIENTE: {aterrizaje.Motivo} · {cuentaRecuerdos} "
-                    + "Enséñamela otra vez o vuelve a comprobar desde la pantalla de partida.");
+                    + "Enséñamela otra vez o vuelve a comprobar desde la pantalla de partida.";
+            SetStatus(cuentaFinal);
             LogBus.Log("comprobar", $"«{skill.Nombre}» "
                 + (aterrizaje.Llego ? "COMPROBADA" : "SIGUE PENDIENTE")
                 + $" en {reloj.ElapsedMilliseconds} ms · {colgados} recuerdo(s) colgado(s) de "
                 + $"{recuerdos.Count} antes de arrancar · {archivo}");
+            return cuentaFinal;
         }
         catch (OperationCanceledException)
         {
             SetStatus($"Paraste la comprobación de «{skill?.Nombre ?? "la lección"}»: sigue pendiente.");
             LogBus.Log("comprobar", "parada por el usuario: sigue pendiente");
+            return "paraste la comprobación: sigue pendiente.";
         }
         catch (Exception ex)
         {
@@ -2984,6 +3006,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 porque.Append(porque.Length > 0 ? " ← " : "").Append($"{x.GetType().Name}: {x.Message}");
             SetStatus($"La comprobación se detuvo: {ex.Message}");
             LogBus.Log("comprobar", $"reventó: {porque}");
+            return $"la comprobación se detuvo: {ex.Message}";
         }
         finally
         {
@@ -3005,20 +3028,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// tarea de uno en uno por MCP y la app juzga cada llegada. Corre dentro del try/finally de
     /// <see cref="OnComprobarAprendizaje"/>, que es quien abre y cierra la voz.
     /// </summary>
-    private async Task ComprobarConElPilotoAsync(string carpetaLeccion, System.Diagnostics.Stopwatch reloj)
+    private async Task<string> ComprobarConElPilotoAsync(string carpetaLeccion, System.Diagnostics.Stopwatch reloj,
+        IProgress<string>? progreso = null)
     {
         var leccion = Teach.LeccionEnDisco.Cargar(carpetaLeccion);
         if (leccion == null || _mapaDeMano == null)
         {
             SetStatus("La lección no se pudo leer: no hay nada que comprobar.");
             ShowTalk(MotivoDelGlobo.AlgoFallo);
-            return;
+            return "la lección no se pudo leer: no hay nada que comprobar.";
         }
         // EL JUEZ LEE LOS CAMPOS (promesa 175, enmendada): un campo tecleado está hecho si dice ahora lo
         // que la demo tecleó. Se lee por SAP; un campo de UIA no se sabe leer aquí, y el juez lo dice.
         var registro = new Piloto.RegistroDeLaComprobacion(leccion, sel =>
             U.Graph.Surfaces.SapSelector.Owns(sel) ? _locator?.SuperficieSap?.ValorActual(sel) : null);
-        string modelo = Environment.GetEnvironmentVariable("U_PILOTO_MODELO") is { Length: > 0 } m ? m : "claude-opus-5";
+        string modelo = ModeloDelPiloto();
         var mensaje = new Piloto.ElPiloto.Mensaje(
             Teach.MensajeDeLaLeccion.Armar(leccion),
             Piloto.CajasDelPiloto.Caja(_nombresMcp),
@@ -3032,17 +3056,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // LO QUE EL PILOTO PUEDE PEDIRLE A LA VENTANA. Corren en el hilo del servidor MCP, nunca en
         // el de la UI: la pregunta BLOQUEA hasta que la persona contesta, y eso en la UI congelaría
         // la carita.
-        _mapaDeMano.Decir = texto =>
-        {
-            if (string.IsNullOrWhiteSpace(texto)) return "no había nada que decir.";
-            if (_vivo is { Viva: true })
-            {
-                try { _vivo.DiEstoAsync(texto).GetAwaiter().GetResult(); return "dicho."; }
-                catch (Exception ex) { return $"no pude decirlo por la voz ({ex.Message}); lo dejé escrito."; }
-            }
-            Dispatcher.Invoke(() => SetStatus(texto));
-            return "no hay voz abierta: quedó escrito en pantalla.";
-        };
+        _mapaDeMano.Decir = DecirPorLaVozPrestada;
         _mapaDeMano.Preguntar = texto => PreguntarYEsperar(texto, TimeSpan.FromSeconds(60));
         _mapaDeMano.Llegue = n =>
         {
@@ -3057,23 +3071,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             var s = Piloto.SkillDeLoVerificado.Empaquetar(leccion, registro.Veredictos, nombre, descripcion);
             if (s == null) return "no hay pasos verificados con identidad: no se guarda ninguna skill.";
-            string f = s.Guardar(Navigation.SkillEnsenada.CarpetaPorDefecto);
+            string f = s.GuardarComoElUnicoDeSuLeccion(Navigation.SkillEnsenada.CarpetaPorDefecto);   // promesa 228
             return $"skill «{s.Nombre}» guardada con {s.Pasos.Count} paso(s) verificado(s)"
                 + (s.Comprobada ? ", COMPROBADA" : ", pendiente: no todos los eventos aterrizaron") + $" → {f}";
         };
 
         // LA VOZ PRESTADA (promesa 192): mientras el piloto comprueba, la conversación en vivo no
-        // tiene herramientas ni turno propio; solo dice lo que se le pide. Sin esto, en la duodécima
-        // prueba había dos manos a la vez y una voz que anunciaba pasos que no tocaban.
-        if (_vivo is { Viva: true })
-        {
-            try
-            {
-                await _vivo.CambiarModoAsync(Piloto.VozPrestada.Instrucciones,
-                    Piloto.VozPrestada.Utensilios(Voice.ConversacionEnVivo.Herramientas()), soloCuandoSeLePide: true);
-            }
-            catch (Exception ex) { LogBus.Log("comprobar", $"no pude prestar la voz: {ex.Message}"); }
-        }
+        // tiene herramientas ni turno propio; solo dice lo que se le pide.
+        await PrestarLaVozAlPilotoAsync("comprobar");
         SetStatus("Comprobando con el piloto: leo la lección y la hago de uno en uno…");
         _mapaDeMano.SenalarAlActuar = true;
         _cts = new CancellationTokenSource();
@@ -3085,7 +3090,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             r = await Piloto.ElPiloto.CorrerAsync(carpetaLeccion, (tipo, texto) =>
             {
                 if (tipo == "texto" && texto.Length > 0)
-                    Dispatcher.Invoke(() => SetStatus(texto.Length > 160 ? texto[..160] + "…" : texto));
+                {
+                    string corto = texto.Length > 160 ? texto[..160] + "…" : texto;
+                    Dispatcher.Invoke(() => SetStatus(corto));
+                    progreso?.Report(corto);
+                }
             }, _cts.Token);
         }
         finally
@@ -3093,12 +3102,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             SetWorking(false); ShowStop(false);
             _mapaDeMano.Decir = null; _mapaDeMano.Preguntar = null; _mapaDeMano.Llegue = null; _mapaDeMano.GuardarSkill = null; _mapaDeMano.Plan = null;
             _mapaDeMano.SenalarAlActuar = false;
-            // Y SE DEVUELVE LA VOZ (promesa 192): la conversación vuelve a ser quien era.
-            if (_vivo is { Viva: true })
-            {
-                try { await _vivo.CambiarModoAsync(Voice.ConversacionEnVivo.InstruccionesNormales, Voice.ConversacionEnVivo.Herramientas()); }
-                catch (Exception ex) { LogBus.Log("comprobar", $"no pude devolver la voz: {ex.Message}"); }
-            }
+            await DevolverLaVozAsync("comprobar");   // promesa 192: la conversación vuelve a ser quien era
         }
 
         // EL VEREDICTO LO DA LA APP, con la misma compuerta de la promesa 131: el total es el plan.
@@ -3107,9 +3111,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             + $"{registro.Hechos}/{registro.Total} hechos · costo estimado ${r.CostoUsd:0.000} · "
             + (final.Comprobada ? "COMPROBADA" : "SIGUE PENDIENTE") + $" · {final.Motivo}");
         if (!r.Termino && r.Ultimo.Length > 0) LogBus.Log("comprobar", $"piloto: {r.Ultimo}");
-        SetStatus(final.Comprobada
+        string veredicto = final.Comprobada
             ? $"Comprobada: {final.Motivo}"
-            : $"Sigue pendiente: {final.Motivo}" + (r.Termino ? "" : $" · el piloto no terminó bien ({r.Ultimo})"));
+            : $"Sigue pendiente: {final.Motivo}" + (r.Termino ? "" : $" · el piloto no terminó bien ({r.Ultimo})");
+        SetStatus(veredicto);
+        return veredicto;
     }
 
     /// <summary>
@@ -5244,11 +5250,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         return _cajasSap;
     }
 
-    // ── LA NOTA LLEGA AL TRIAGE CON UN ✓ (spec 008) ──────────────────────────
+    // ── LA NOTA LLEGA A SAP CON UN ✓, POR UNA SKILL ENSEÑADA (spec 015) ────────────────────
     //
-    // El mismo camino de la demo del 31 para LLEGAR —los batches del terreno, por la puerta MCP—
-    // y el rellenador de siempre para ESCRIBIR, alimentado por la nota aprobada en vez de por
-    // valores de prueba. Nada de coordenadas, nada de voz, nada que grabe.
+    // El camino fijo de la spec 008 (NWP1 → vista → primera fila → Triage → rellenador → editores)
+    // era una fase de prueba y el dueño lo retiró el 2026-09-10 («lo que importa es la ejecución de
+    // skills y sus acciones»). Ahora el encargo va al PILOTO, que elige la skill del catálogo por su
+    // criterio, arma los datos con lo que la nota trae y la corre por map_skill_run: sin manos
+    // sueltas, sin preguntas. Lo que la nota no trae queda en blanco y se dice. Jamás pulsa Grabar:
+    // la skill para antes (126).
 
     // ── LA VENTANA DE TRABAJO DE Ü (spec 020) ────────────────────────────────────────────────
     //
@@ -5347,105 +5356,53 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     private bool _enviandoEncargo;
 
-    /// <summary>
-    /// Del Easy Access al triage del paciente por batches. Devuelve "" si llegó, o el motivo por el
-    /// que no — dicho para que el médico sepa qué hacer (entrar a SAP, abrir la vista).
-    /// </summary>
-    private async Task<string> LlegarAlTriageAsync(IProgress<string> progreso)
-    {
-        progreso.Report("SAP al frente…");
-        await DemoTool("map_open_app", new { app = "saplogon" });
-        await Task.Delay(800);
-
-        var t = await DemoTerreno();
-        string aqui = t.GetProperty("id").GetString() ?? "";
-        if (aqui.Contains("SAPLY000", StringComparison.OrdinalIgnoreCase)) return "";   // ya en el formulario
-
-        if (aqui.Contains("SAPMSYST", StringComparison.OrdinalIgnoreCase))
-            return "SAP está en la pantalla de entrada: entra con tu usuario y vuelve a pulsar ✓.";
-
-        // Batch 1: hasta la vista de Triage. Primero la secuencia que el dueño enseñó (comando →
-        // nwp1 → Continuar, validada el 2026-08-26); si el terreno para a medias, la puerta de
-        // Favoritos que usó la demo del 31.
-        if (!aqui.Contains("vista:Urgencias Adultos Triage", StringComparison.OrdinalIgnoreCase))
-        {
-            progreso.Report("Batch 1: NWP1 y Urgencias Adultos / Triage…");
-            // «Continuar» tiene DOS puertas vivas en el Easy Access (btn[0] y btn[84], medido el
-            // 2026-09-02 17:34): se pide por selector, que es lo que el batch contestó que necesita.
-            string cuenta = await DemoTool("map_batch", new { pasos = DemoPasos(
-                new { exit = "comando" }, new { text = "nwp1" }, new { exit = "sap:wnd[0]/tbar[0]/btn[0]" },
-                new { exit = "Urgencias Adultos/Triage" }) });
-            if (!cuenta.StartsWith("hice los", StringComparison.OrdinalIgnoreCase))
-            {
-                LogBus.Log("envio", $"batch 1 por comando paró: {cuenta} · se intenta por Favoritos");
-                // La fila se llama así en el terreno vivo (sin el «NWP1 - » que traía la demo del 31).
-                cuenta = await DemoTool("map_batch", new { pasos = DemoPasos(
-                    new { exit = "Favoritos/IS-H: Pto.tbjo.clínico" },
-                    new { exit = "Urgencias Adultos/Triage" }) });
-                if (!cuenta.StartsWith("hice los", StringComparison.OrdinalIgnoreCase))
-                    return $"no llegué a la vista de Triage: {cuenta}";
-            }
-        }
-
-        // Batch 2: la fila del paciente y el botón Triage, por identidad viva. La selección caduca
-        // (el censo se refresca solo), así que van JUNTOS en el mismo batch.
-        t = await DemoEsperarPuerta("GuiGridFila");
-        string? fila = DemoPuerta(t, "GuiGridFila");
-        string? boton = DemoPuerta(t, "GuiGridBoton", "Triage");
-        if (fila == null || boton == null)
-            return "el censo no muestra ningún paciente, o no veo el botón Triage: abre la vista de Urgencias Adultos / Triage y vuelve a pulsar ✓.";
-        string quien = "";
-        foreach (var p in t.GetProperty("puertas").EnumerateArray())
-            if ((p.GetProperty("selector").GetString() ?? "") == fila) { quien = p.GetProperty("etiqueta").GetString() ?? ""; break; }
-        progreso.Report($"Batch 2: el paciente {Recorte(quien, 40)} y su triage…");
-        string cuenta2 = await DemoTool("map_batch", new { pasos = DemoPasos(new { exit = fila }, new { exit = boton }) });
-        if (!cuenta2.StartsWith("hice los", StringComparison.OrdinalIgnoreCase))
-            return $"no pude abrir el triage del paciente: {cuenta2}";
-
-        await DemoEsperarPuerta("GuiTextField");   // el formulario tarda en entregar sus campos
-        return "";
-    }
-
-    /// <summary>
-    /// EL ENCARGO DE LA CONSULTA: llegar, comprobar que es el triage, escribir los campos con la
-    /// nota (relectura por campo, hasta cuatro pasadas), y los dos editores de texto libre. Devuelve
-    /// la cuenta honesta. Jamás pulsa Grabar.
-    /// </summary>
     private async Task<string> EnviarEncargoAsync(Clinical.Encargo encargo, IProgress<string> progreso, CancellationToken ct)
     {
         if (encargo.EstaVacio) return "no hay nada marcado para enviar.";
-        if (_rellenador == null) return "las manos de SAP no están listas todavía.";
+        if (_mapaDeMano == null) return "las manos no están listas todavía.";
         if (_enviandoEncargo) return "ya hay un envío en marcha; espera a que termine.";
+        if (!Piloto.ElPiloto.Disponible()) return "no encuentro el piloto (agente-piloto/piloto.mjs): sin él no hay quien elija la tarea.";
         _enviandoEncargo = true;
         var reloj = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            LogBus.Log("envio", $"encargo: {encargo.Secciones.Count} sección(es) · {encargo.Texto.Length} caracteres");
-            string noLlegue = await LlegarAlTriageAsync(progreso);
-            if (noLlegue.Length > 0) { LogBus.Log("envio", $"no se llegó: {noLlegue}"); return noLlegue; }
-
-            // LA COMPUERTA pregunta a SAP, no al foco (promesa 114).
-            var veredicto = Clinical.EnvioAlTriage.PuedeEscribir(_rellenador.DondeEstaSap());
-            if (!veredicto.Puede) { LogBus.Log("envio", veredicto.Motivo); return veredicto.Motivo; }
-
-            progreso.Report("Escribiendo los campos del triage…");
-            var (escritos, sinLlenar) = await _rellenador.RellenarConNotaAsync(encargo.Texto, ct);
-
-            // Los dos editores que el rellenador no ve (promesa 113).
-            var reparto = Clinical.EditoresDelTriage.Repartir(encargo.Secciones);
-            var editores = new List<string>();
-            if (reparto.Motivo.Length > 0 && EscribirEditor("MTVCN", reparto.Motivo)) editores.Add("Motivo de consulta");
-            if (reparto.Conducta.Length > 0 && EscribirEditor("TXTOBS", reparto.Conducta)) editores.Add("Conducta");
-
-            int total = escritos.Count + editores.Count;
-            string cuenta = total == 0
-                ? "llegué al triage pero no pude escribir ningún campo con esta sección."
-                : $"✓ {total} campo(s) en SAP: "
-                  + string.Join(", ", escritos.Select(e => e.Campo.Label).Concat(editores))
-                  + (sinLlenar.Count > 0 ? $" · sin llenar: {string.Join(", ", sinLlenar.Take(6))}" : "")
-                  + " · revisa y graba tú.";
-            LogBus.Log("envio", $"{cuenta} ({reloj.ElapsedMilliseconds} ms)");
-            return cuenta;
+            var catalogo = Navigation.SkillEnsenada.Catalogo(_mapaDeMano.CarpetaDeSkills);
+            string modelo = ModeloDelPiloto();
+            var mensaje = new Piloto.ElPiloto.Mensaje(
+                Piloto.MensajeDelEncargo.Armar(encargo, catalogo),
+                Piloto.CajasDelPiloto.CajaDelEncargo(_nombresMcp),
+                Piloto.CajasDelPiloto.ProhibidasEnElEncargo(_nombresMcp),
+                modelo, $"http://127.0.0.1:{Mcp.ServidorMcp.Puerto}/mcp/");
+            string carpeta = Piloto.MensajeDelEncargo.NuevaCarpeta();
+            string rutaMensaje = Piloto.ElPiloto.EscribirMensaje(carpeta, mensaje);
+            LogBus.Log("envio", $"encargo: {encargo.Secciones.Count} sección(es) · {encargo.Texto.Length} caracteres · "
+                + $"{catalogo.Count(c => c.Comprobada)} skill(s) comprobada(s) de {catalogo.Count} · modelo {modelo} · {rutaMensaje}");
+            progreso.Report("El piloto elige la tarea enseñada…");
+            await PrestarLaVozAlPilotoAsync("envio");
+            _mapaDeMano.SenalarAlActuar = true;
+            _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            ShowStop(true);
+            SetWorking(true);
+            Piloto.ElPiloto.Resultado r;
+            try
+            {
+                r = await Piloto.ElPiloto.CorrerAsync(carpeta, (tipo, texto) =>
+                {
+                    if (tipo == "texto" && texto.Length > 0) progreso.Report(texto.Length > 160 ? texto[..160] + "…" : texto);
+                }, _cts.Token, modo: "encargo");
+            }
+            finally
+            {
+                SetWorking(false); ShowStop(false);
+                _mapaDeMano.Decir = null;
+                _mapaDeMano.SenalarAlActuar = false;
+                await DevolverLaVozAsync("envio");
+            }
+            LogBus.Log("envio", $"piloto terminó ({(r.Termino ? "bien" : $"salida {r.Salida}")}) en {reloj.ElapsedMilliseconds} ms · "
+                + $"costo estimado ${r.CostoUsd:0.000} · {r.Ultimo}");
+            return r.Termino
+                ? (r.Ultimo.Length > 0 ? r.Ultimo : "el piloto terminó sin contar nada.")
+                : $"el piloto no terminó bien: {r.Ultimo}";
         }
         catch (Exception ex)
         {
@@ -5455,21 +5412,129 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         finally { _enviandoEncargo = false; }
     }
 
-    /// <summary>Escribe uno de los editores de texto libre del triage (shell GuiTextedit), por su id.</summary>
-    private bool EscribirEditor(string idContiene, string texto)
+    /// <summary>
+    /// MUESTRA UN APRENDIZAJE. Promesa 225 (spec 016): lo que el panel de la consulta pide al
+    /// pulsar «Mostrar».
+    /// </summary>
+    /// <remarks>
+    /// DOS CAMINOS Y UN SOLO BOTÓN, y cuál toca lo decide <see cref="Navigation.LoQuePasaAlMostrar"/>,
+    /// que es una regla que el contrato juzga. Lo ya repasado se CORRE: sus pasos, con la coreografía
+    /// de siempre y SIN DATOS DE NADIE, así que los huecos quedan vacíos y no se escribe el valor del
+    /// paciente de prueba (promesa 123). Lo no repasado se COMPRUEBA, que es lo que la promesa 127
+    /// exige antes de dejar ejecutar nada — y se comprueba SU lección, no la última grabada.
+    /// </remarks>
+    private async Task<string> MostrarAprendizajeAsync(string archivo, IProgress<string> progreso, CancellationToken ct)
     {
-        foreach (var v in _clinicalSap.ReadVisibleElements())
+        var skill = Navigation.SkillEnsenada.Cargar(archivo);
+        var decision = Navigation.LoQuePasaAlMostrar.Decidir(skill, _mapaDeMano?.RecorrerPorElNucleo != null);
+        if (decision.Que == "no") return decision.Motivo;
+
+        if (decision.Que == "comprobar")
         {
-            if (!v.SubType.Equals("TextEdit", StringComparison.OrdinalIgnoreCase)) continue;
-            if (!v.Id.Contains(idContiene, StringComparison.OrdinalIgnoreCase)) continue;
-            var paso = new U.Graph.PlanStep { StepOrder = 1, ActionType = "input", Selector = "sap:" + v.Id, Label = v.Label, Value = texto };
-            bool ok = _clinicalSap.Execute(paso, out string error);
-            LogBus.Log("envio", ok ? $"editor {idContiene} escrito ({texto.Length} car.)" : $"editor {idContiene} no aceptó texto: {error}");
-            return ok;
+            string carpeta = CarpetaDeLaLeccionDe(skill!);
+            if (carpeta.Length == 0)
+                return "esta tarea la aprendí antes de que guardara las lecciones, así que no tengo la "
+                     + "demostración para repasarla. Vuelve a enseñármela con 🎓 y queda lista.";
+            LogBus.Log("aprendizajes", $"«{skill!.Nombre}» sin repasar: se comprueba su lección {carpeta}");
+            _leccionParaComprobar = carpeta;
+            progreso.Report("No la he repasado todavía: la repaso una vez contigo mirando. Tarda unos minutos.");
+            // Y SE ESPERA (spec 019): el panel recibe el veredicto, no un «mira la pantalla».
+            return await ComprobarAsync(progreso);
         }
-        LogBus.Log("envio", $"no veo el editor {idContiene} en pantalla");
-        return false;
+
+        if (_mapaDeMano?.RecorrerPorElNucleo == null) return "todavía no sé recorrer en batch.";
+        // SIN DATOS: mostrar es enseñar el camino, no rellenar la historia de nadie.
+        var pasos = Navigation.InstanciarSkill.Pasos(skill!, new Dictionary<string, string>());
+        if (pasos.Count == 0)
+            return $"«{skill!.Nombre}» es toda datos: sin ninguno que darle no queda ningún paso que enseñar.";
+        // Lo que se dice en cada paso es la MISMA frase que el panel enseña, para que oír y leer
+        // cuenten lo mismo.
+        var frases = Navigation.LoQueHaceLaSkill.EnCastellano(skill!);
+        var porPuerta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < skill!.Pasos.Count && i < frases.Count; i++)
+            if (skill.Pasos[i].Exit.Length > 0) porPuerta[skill.Pasos[i].Exit] = frases[i];
+
+        LogBus.Log("aprendizajes", $"mostrando «{skill.Nombre}»: {pasos.Count} paso(s) de {skill.Pasos.Count}");
+        await PrestarLaVozAlPilotoAsync("aprendizajes");
+        _mapaDeMano.SenalarAlActuar = true;
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        ShowStop(true);
+        SetWorking(true);
+        try
+        {
+            // EN OTRO HILO: la coreografía espera a que se lea cada tarjeta, y esto lo llama la
+            // ventana de la consulta desde SU hilo de interfaz — hacerlo aquí la congelaría.
+            var res = await Task.Run(() => Mcp.SurfaceMapTools.RecorrerSkill(pasos, paso =>
+                DarUnPasoConCoreografia(paso.Exit, paso, "",
+                    porPuerta.TryGetValue(paso.Exit, out var f) ? f : "")), _cts.Token);
+            LogBus.Log("aprendizajes", "← " + res.Cuenta);
+            return res.Cuenta;
+        }
+        catch (Exception ex)
+        {
+            LogBus.Log("aprendizajes", $"mostrar reventó: {ex.GetType().Name}: {ex.Message}");
+            return $"se detuvo: {ex.Message}";
+        }
+        finally
+        {
+            SetWorking(false); ShowStop(false);
+            _mapaDeMano.SenalarAlActuar = false;
+            _mapaDeMano.Decir = null;
+            await DevolverLaVozAsync("aprendizajes");
+        }
     }
+
+    /// <summary>La carpeta de la lección de la que salió, o vacío si no la sabe o ya no está.</summary>
+    private static string CarpetaDeLaLeccionDe(Navigation.SkillEnsenada skill)
+    {
+        if (skill == null || string.IsNullOrWhiteSpace(skill.DeLaLeccion)) return "";
+        string carpeta = System.IO.Path.Combine(Teach.LeccionEnDisco.CarpetaRaiz, skill.DeLaLeccion.Trim());
+        return System.IO.File.Exists(System.IO.Path.Combine(carpeta, "leccion.json")) ? carpeta : "";
+    }
+
+    private static string ModeloDelPiloto() =>
+        Environment.GetEnvironmentVariable("U_PILOTO_MODELO") is { Length: > 0 } m ? m : "claude-opus-5";
+
+    // ── LA VOZ PRESTADA AL PILOTO (promesa 192), en UN sitio para comprobar y para el encargo ──
+
+    /// <summary>
+    /// Mientras el piloto trabaja, la conversación en vivo no tiene herramientas ni turno propio:
+    /// solo dice lo que la app le pide. Sin esto, en la duodécima prueba había dos manos a la vez y
+    /// una voz que anunciaba pasos que no tocaban.
+    /// </summary>
+    private async Task PrestarLaVozAlPilotoAsync(string etiqueta)
+    {
+        _mapaDeMano!.Decir = DecirPorLaVozPrestada;
+        if (_vivo is not { Viva: true }) return;
+        try
+        {
+            await _vivo.CambiarModoAsync(Piloto.VozPrestada.Instrucciones,
+                Piloto.VozPrestada.Utensilios(Voice.ConversacionEnVivo.Herramientas()), soloCuandoSeLePide: true);
+        }
+        catch (Exception ex) { LogBus.Log(etiqueta, $"no pude prestar la voz: {ex.Message}"); }
+    }
+
+    /// <summary>Y se devuelve: la conversación vuelve a ser quien era.</summary>
+    private async Task DevolverLaVozAsync(string etiqueta)
+    {
+        if (_vivo is not { Viva: true }) return;
+        try { await _vivo.CambiarModoAsync(Voice.ConversacionEnVivo.InstruccionesNormales, Voice.ConversacionEnVivo.Herramientas()); }
+        catch (Exception ex) { LogBus.Log(etiqueta, $"no pude devolver la voz: {ex.Message}"); }
+    }
+
+    /// <summary>Lo que el piloto (o la coreografía) pide decir. Corre en el hilo del servidor MCP.</summary>
+    private string DecirPorLaVozPrestada(string texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto)) return "no había nada que decir.";
+        if (_vivo is { Viva: true })
+        {
+            try { _vivo.DiEstoAsync(texto).GetAwaiter().GetResult(); return "dicho."; }
+            catch (Exception ex) { return $"no pude decirlo por la voz ({ex.Message}); lo dejé escrito."; }
+        }
+        Dispatcher.Invoke(() => SetStatus(texto));
+        return "no hay voz abierta: quedó escrito en pantalla.";
+    }
+
 
     /// <summary>El valor de demo para un campo de texto, por su identidad. Null = no se toca.</summary>
     private static string? DemoValor(string clave)

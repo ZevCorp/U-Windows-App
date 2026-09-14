@@ -226,8 +226,7 @@ public sealed class RecorrerSegunElNucleo
             // salto-adelante, otra vez. Contar el paso como hecho tampoco: «terminé» deja de ser
             // opinión justo aquí. Sin llegada declarada, nada cambia: «Guardar» sigue siendo un
             // paso legítimo que no va a ninguna parte.
-            if (paso.Llegada.Length > 0
-                && !paso.Llegada.Equals(r.Hasta, StringComparison.OrdinalIgnoreCase))
+            if (paso.Llegada.Length > 0 && !Superficies.MismaPantalla(paso.Llegada, r.Hasta))   // promesa 203
                 return Parcial(i, pasos.Count,
                     $"pulsé «{paso.Exit}» y quedé en «{r.Hasta}», pero la demostración llegaba a "
                     + $"«{paso.Llegada}»: eso NO es haberlo hecho, y no sigo sobre una pantalla que "
@@ -293,7 +292,10 @@ public sealed class RecorrerSegunElNucleo
         do
         {
             donde = _donde() ?? "";
-            if (paso.Llegada.Equals(donde, StringComparison.OrdinalIgnoreCase)) return true;
+            // La pantalla cogida a medio cambiar es la misma pantalla (promesa 226): comparar con
+            // Equals dejó una comprobación entera en «17 de 19» el 2026-09-11. La espera la lleva
+            // el Compas (promesa 245), no un Sleep de esta función.
+            if (Superficies.MismaPantalla(paso.Llegada, donde)) return true;
         }
         while (compasLlegada.Respira(120));
 

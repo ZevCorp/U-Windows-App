@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using U.WindowsClient.Diagnostics;
 
 namespace U.WindowsClient.Navigation;
 
@@ -22,7 +23,14 @@ public sealed record PasoEnsenado(string Exit, string Texto = "", string Llegada
 public sealed record Hueco(string Campo, string Significado, string Accion = "texto", string Ejemplo = "");
 
 /// <summary>Lo que un catálogo anuncia de una skill: lo justo para pedirla sin abrirla.</summary>
-public sealed record SkillAnunciada(string Nombre, string Description, string Archivo, bool Comprobada = false);
+public sealed record SkillAnunciada(string Nombre, string Description, string Archivo, bool Comprobada = false)
+{
+    /// <summary>
+    /// LOS DATOS QUE NECESITA, por su nombre (promesa 193, spec 015): el significado de cada hueco.
+    /// Sin esto, quien elige la skill para un encargo sabe qué hace pero no qué pedirle a la nota.
+    /// </summary>
+    public IReadOnlyList<string> Huecos { get; init; } = Array.Empty<string>();
+}
 
 /// <summary>
 /// UNA SKILL ENSEÑADA: el artefacto que sale de una demostración humana. Promesas 102 y 106.
@@ -62,6 +70,25 @@ public sealed record SkillEnsenada(
     /// ¿Alguien repasó esta skill recorriéndola? Promesa 127 (decisión del dueño, 2026-09-03).
     /// </summary>
     public bool Comprobada { get; init; }
+
+    /// <summary>
+    /// DE QUÉ LECCIÓN SALIÓ, por su id. Promesa 198 (spec 016).
+    /// </summary>
+    /// <remarks>
+    /// SIN ESTO NO HAY CAPTURAS QUE ENSEÑAR. Los cuadros de la demostración viven en la lección
+    /// —735 en la del 2026-09-08— y hasta hoy la skill que nacía de ella no guardaba ni su id: el
+    /// panel de aprendizajes podía contar el paso a paso en palabras, pero no enseñar la pantalla
+    /// de cada paso.
+    ///
+    /// VACÍO SI NO SE SABE, y no se adivina por fecha: emparejar una skill con la lección que tenga
+    /// la hora más parecida enseñaría los cuadros de otra demostración con cara de ser los suyos, y
+    /// una caja que miente es peor que no tener caja (aprendizaje nº8). Las 19 skills anteriores a
+    /// esta promesa se quedan sin capturas, y el panel lo dice.
+    ///
+    /// VA COMO PROPIEDAD `init`, por lo mismo que <see cref="Huecos"/>: las promesas 102 y 106
+    /// construyen esta skill por REFLEXIÓN con cuatro argumentos, y un parámetro más las rompería.
+    /// </remarks>
+    public string DeLaLeccion { get; init; } = "";
 
     /// <summary>
     /// Lo que el modelo propuso que significa un elemento. Se cuelga al COMPROBAR, no antes.
@@ -235,6 +262,77 @@ public sealed record SkillEnsenada(
         return archivo;
     }
 
+    /// <summary>
+    /// GUARDA ESTA SKILL Y RETIRA LAS OTRAS DE SU MISMA LECCIÓN. Promesa 228 (spec 019).
+    /// </summary>
+    /// <remarks>
+    /// UNA LECCIÓN, UN APRENDIZAJE. Medido el 2026-09-11: el dueño enseñó UNA tarea y vio DOS en el
+    /// panel. La demo guarda una al cerrar (con el nombre que el modelo le puso al video) y el
+    /// piloto guarda otra al comprobar (con el nombre que él eligió). Misma lección, dos archivos, y
+    /// el catálogo las anuncia como dos tareas. La verificada REEMPLAZA a la de la demo: es la misma
+    /// enseñanza, ya repasada.
+    ///
+    /// SIN LECCIÓN CONOCIDA NO SE RETIRA A NADIE: no se adivina de quién es hermana una skill.
+    /// </remarks>
+    public string GuardarComoElUnicoDeSuLeccion(string carpeta)
+    {
+        if (!string.IsNullOrWhiteSpace(DeLaLeccion) && Directory.Exists(carpeta))
+            foreach (var f in Directory.EnumerateFiles(carpeta, "*.skill.json").ToList())
+            {
+                var otra = Cargar(f);
+                if (otra != null && otra.DeLaLeccion.Trim().Equals(DeLaLeccion.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    LogBus.Log("skill", $"«{otra.Nombre}» era de la misma lección que «{Nombre}»: se retira");
+                    Borrar(f);
+                }
+            }
+        return Guardar(carpeta);
+    }
+
+    /// <summary>
+    /// LE PONE OTRO NOMBRE, y devuelve dónde quedó. Promesa 201 (spec 016).
+    /// </summary>
+    /// <remarks>
+    /// HAY QUE QUITAR EL VIEJO: el nombre del archivo se DERIVA del nombre de la skill (ver
+    /// <see cref="Guardar"/>), así que guardar con otro nombre crea un archivo nuevo y deja el
+    /// anterior en la carpeta. El catálogo enumera archivos, de modo que sin borrarlo la misma
+    /// tarea aparecería dos veces, una con cada nombre.
+    ///
+    /// POR QUÉ HACE FALTA: once de las diecinueve skills en disco el 2026-09-11 se llamaban «The
+    /// user begins by clicking on the "Triage" tree item within the SAP GUI navigat…», el resumen
+    /// que puso el modelo del video cuando nadie le puso nombre. Un panel bonito sobre esa lista
+    /// sigue siendo ilegible.
+    /// </remarks>
+    public static string Renombrar(string archivo, string nuevoNombre)
+    {
+        var s = Cargar(archivo);
+        if (s == null || string.IsNullOrWhiteSpace(nuevoNombre)) return archivo;
+        string carpeta = Path.GetDirectoryName(archivo) ?? CarpetaPorDefecto;
+        string nuevo = (s with { Nombre = nuevoNombre.Trim() }).Guardar(carpeta);
+        if (!string.Equals(nuevo, archivo, StringComparison.OrdinalIgnoreCase)) Borrar(archivo);
+        return nuevo;
+    }
+
+    /// <summary>La quita del disco, y por tanto del catálogo. Promesa 201.</summary>
+    /// <remarks>
+    /// EL MOTIVO SE DICE: un borrado que falla en silencio deja al panel enseñando algo que el
+    /// usuario cree haber quitado, y la próxima vez que lo intente volverá a no pasar nada.
+    /// </remarks>
+    public static bool Borrar(string archivo)
+    {
+        try
+        {
+            if (!File.Exists(archivo)) return false;
+            File.Delete(archivo);
+            return true;
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("skill", $"no pude borrar «{archivo}»: {e.GetType().Name}: {e.Message}");
+            return false;
+        }
+    }
+
     /// <summary>Carga una skill desde su archivo, o null si no se deja leer (y el porqué al log lo
     /// pone quien llama, que sabe para qué la quería).</summary>
     public static SkillEnsenada? Cargar(string archivo)
@@ -256,7 +354,10 @@ public sealed record SkillEnsenada(
             var s = Cargar(f);
             // Un archivo que no se deja leer NO entra al catálogo: anunciar una skill que luego no
             // se puede cargar es mandar al cerebro a una puerta pintada.
-            if (s != null) lista.Add(new(s.Nombre, s.Description, f, s.Comprobada));
+            if (s != null) lista.Add(new(s.Nombre, s.Description, f, s.Comprobada)
+            {
+                Huecos = (s.Huecos ?? Array.Empty<Hueco>()).Select(h => h.Significado).Where(x => x.Length > 0).Distinct().ToList(),
+            });
         }
         return lista;
     }
