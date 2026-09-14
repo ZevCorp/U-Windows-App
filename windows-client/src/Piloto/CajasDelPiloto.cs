@@ -49,4 +49,33 @@ public static class CajasDelPiloto
             .Where(n => EnTanda.Contains(n))
             .Select(n => $"mcp__{ServidorDeLaApp}__{n}")
             .Distinct().ToList();
+
+    /// <summary>
+    /// LA CAJA DEL ENCARGO (promesa 194, spec 015): las skills y su catálogo, llegar hasta donde
+    /// empiezan (rutas del terreno y traer la app al frente), mirar, y la voz para contar.
+    /// </summary>
+    /// <remarks>
+    /// AL REVÉS QUE LA DE COMPROBAR: allí lo prohibido es la tanda y todo lo demás son manos; aquí
+    /// lo permitido es la tanda —map_skill_run— y lo prohibido es todo lo demás. Sin manos sueltas
+    /// porque el puente consciente improvisa desde julio (pulsó «Buscar pacientes» en vez de «Crear
+    /// Triage»), y un encargo clínico no es sitio para improvisar: las acciones son las de la skill.
+    /// Sin voz_preguntar porque el dueño no quiere preguntas: lo que la nota no trae queda en blanco.
+    /// Sin la lección porque no hay lección: no hay momento que mirar.
+    /// </remarks>
+    public static readonly IReadOnlySet<string> DelEncargo = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "map_skills", "map_skill_run", "map_go_to", "map_open_app", "map_where_am_i", "map_what_i_see", "map_shot", "voz_decir",
+    };
+
+    public static IReadOnlyList<string> CajaDelEncargo(IEnumerable<string> todasLasDeLaApp) =>
+        (todasLasDeLaApp ?? Array.Empty<string>())
+            .Where(n => DelEncargo.Contains(n))
+            .Select(n => $"mcp__{ServidorDeLaApp}__{n}")
+            .Distinct().ToList();
+
+    public static IReadOnlyList<string> ProhibidasEnElEncargo(IEnumerable<string> todasLasDeLaApp) =>
+        (todasLasDeLaApp ?? Array.Empty<string>())
+            .Where(n => !DelEncargo.Contains(n))
+            .Select(n => $"mcp__{ServidorDeLaApp}__{n}")
+            .Distinct().ToList();
 }

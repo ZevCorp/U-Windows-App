@@ -46,6 +46,12 @@ public sealed class RegistroDeLaComprobacion
         string anterior = leccion.Empezo ?? "";
         foreach (var e in leccion.Eventos)
         {
+            // UN EVENTO QUE NADIE PUEDE DAR NO CUENTA (promesa 227, 2026-09-11): el último clic de
+            // la demo, sin selector ni etiqueta, llevaba «donde acabó» como llegada y contaba como
+            // navegante; ningún piloto puede tocar «nada», así que ninguna lección que acabara en un
+            // clic anónimo podía quedar comprobada. Donde acabó la demo lo exige el último paso de
+            // la skill (promesa 140), así que no se pierde nada.
+            if ((e.Selector ?? "").Length == 0 && (e.Etiqueta ?? "").Length == 0) continue;
             string llegada = (e.Llegada ?? "").Trim();
             if (llegada.Length > 0 && !llegada.Equals(anterior, StringComparison.OrdinalIgnoreCase))
             {

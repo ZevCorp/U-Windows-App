@@ -1,10 +1,13 @@
-﻿using System.Net.Http;
+﻿using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using System.Windows.Automation;
 using Omi;
 using U.Graph;
 using U.WindowsClient.Clinical;
@@ -67,6 +70,13 @@ public sealed class ConsultaWindow : Window
     private readonly Button _tabNota;
     private readonly ScrollViewer _superficie;
     private readonly StackPanel _listaConsultas;
+    /// <summary>El panel de aprendizajes: la lista, la ficha y las capturas, una vista a la vez.</summary>
+    private readonly StackPanel _panelAprendizajes = new();
+    private readonly Button _aprendizajes;
+    private bool _enAprendizajes;
+    /// <summary>Los «sin repasar» empiezan plegados: son 11 de 19 y con nombres que puso el modelo.</summary>
+    private bool _pendientesALaVista;
+    private bool _mostrando;
     private readonly StackPanel _panelNota;
     private readonly TextBlock _vivo;
     private readonly StackPanel _nota;
@@ -317,6 +327,14 @@ public sealed class ConsultaWindow : Window
         izquierdaDeLaCabecera.Children.Add(_quienBoton);
         izquierdaDeLaCabecera.Children.Add(_microfono);
 
+        // EL CEREBRO, Y NO UN TERCER SEGMENTO EN EL CARRIL (spec 016). El carril contesta «qué
+        // estoy mirando DE ESTE PACIENTE» —sus consultas, su nota—; los aprendizajes no son del
+        // paciente, son del asistente. Meterlos ahí es un error de categoría, y se nota como ruido
+        // aunque cada pieza esté bien dibujada.
+        _aprendizajes = BotonDeIcono(CerebroDibujado(), "Aprendizajes");
+        _aprendizajes.Click += (_, __) => { if (_enAprendizajes) Mostrar(nota: _enNota); else AbrirAprendizajes(); };
+        izquierdaDeLaCabecera.Children.Add(_aprendizajes);
+
         cabecera.Children.Add(botonera);
         cabecera.Children.Add(izquierdaDeLaCabecera);
         Grid.SetRow(cabecera, 0);
@@ -380,8 +398,10 @@ public sealed class ConsultaWindow : Window
         _panelNota.Children.Add(_nota);
 
         var contenido = new StackPanel();
+        _panelAprendizajes.Visibility = Visibility.Collapsed;
         contenido.Children.Add(_panelNota);
         contenido.Children.Add(_listaConsultas);
+        contenido.Children.Add(_panelAprendizajes);
         _superficie = new ScrollViewer
         {
             Content = contenido,
@@ -1348,11 +1368,430 @@ public sealed class ConsultaWindow : Window
     private void Mostrar(bool nota)
     {
         _enNota = nota;
+        _enAprendizajes = false;
+        _panelAprendizajes.Visibility = Visibility.Collapsed;
         _panelNota.Visibility = nota ? Visibility.Visible : Visibility.Collapsed;
         _listaConsultas.Visibility = nota ? Visibility.Collapsed : Visibility.Visible;
         PintarPestanas();
+        PintarElCerebro();
         _superficie.ScrollToHome();
     }
+
+    // ── APRENDIZAJES (spec 016) ───────────────────────────────────────────────────────────
+    //
+    // Lo que entra aquí y lo que no está escrito en la spec, y el criterio es uno: entra lo que
+    // hace falta para CONFIAR en algo que va a escribir en una historia clínica. Por eso no hay
+    // contadores de pasos, ni selectores, ni insignia verde en lo que ya está listo —lo normal no
+    // se decora—, ni los workflows del grafo, que son otra cosa y son justo lo que hace ilegible
+    // el panel viejo de la carita.
+
+    private void AbrirAprendizajes()
+    {
+        _enAprendizajes = true;
+        _panelNota.Visibility = Visibility.Collapsed;
+        _listaConsultas.Visibility = Visibility.Collapsed;
+        _panelAprendizajes.Visibility = Visibility.Visible;
+        PintarPestanas();
+        PintarElCerebro();
+        PintarLaLista();
+        _superficie.ScrollToHome();
+    }
+
+    private void PintarElCerebro()
+    {
+        _aprendizajes.Background = _enAprendizajes ? Estudio.AcentoSuave : Brushes.Transparent;
+        if (_aprendizajes.Content is FrameworkElement dibujo)
+            dibujo.SetValue(System.Windows.Shapes.Shape.StrokeProperty, _enAprendizajes ? Estudio.Acento : Estudio.TintaMedia);
+    }
+
+    private void PintarLaLista()
+    {
+        _panelAprendizajes.Children.Clear();
+        var catalogo = Navigation.SkillEnsenada.Catalogo(Navigation.SkillEnsenada.CarpetaPorDefecto);
+        var listos = catalogo.Where(c => c.Comprobada).ToList();
+        var pendientes = catalogo.Where(c => !c.Comprobada).ToList();
+
+        _panelAprendizajes.Children.Add(TituloDeVista("Aprendizajes",
+            listos.Count == 0 ? "" : listos.Count == 1 ? "1 listo" : $"{listos.Count} listos"));
+
+        if (catalogo.Count == 0)
+        {
+            _panelAprendizajes.Children.Add(TarjetaVacia("Todavía no me has enseñado nada.",
+                "Pon delante la aplicación que quieras enseñarme, pulsa 🎓 en la carita y hazlo una "
+                + "vez hablando. Al terminar aparece aquí."));
+            return;
+        }
+        foreach (var c in listos) _panelAprendizajes.Children.Add(FilaDeAprendizaje(c));
+        if (listos.Count == 0)
+            _panelAprendizajes.Children.Add(TarjetaVacia("Nada repasado todavía.",
+                "Abre uno de los de abajo y pulsa «Mostrar»: lo hago una vez contigo mirando, y a "
+                + "partir de ahí puedo usarlo solo."));
+        if (pendientes.Count == 0) return;
+
+        var plegado = new Button
+        {
+            Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand, Margin = new Thickness(2, 8, 2, 0), Padding = new Thickness(12, 13, 12, 13),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Template = Estudio.Pastilla(14, estirado: true),
+        };
+        var lineaPlegado = new DockPanel();
+        lineaPlegado.Children.Add(new TextBlock
+        {
+            Text = _pendientesALaVista ? "▾" : "›",
+            Foreground = Estudio.TintaTenue, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+        });
+        DockPanel.SetDock(lineaPlegado.Children[0], Dock.Right);
+        lineaPlegado.Children.Add(new TextBlock
+        {
+            Text = $"Sin repasar · {pendientes.Count}",
+            Foreground = Estudio.TintaMedia, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center,
+        });
+        plegado.Content = lineaPlegado;
+        plegado.Click += (_, __) => { _pendientesALaVista = !_pendientesALaVista; PintarLaLista(); };
+        _panelAprendizajes.Children.Add(new Border
+        {
+            BorderBrush = Estudio.Borde, BorderThickness = new Thickness(0, 1, 0, 0),
+            Margin = new Thickness(4, 10, 4, 0), Child = plegado,
+        });
+        if (!_pendientesALaVista) return;
+        foreach (var c in pendientes) _panelAprendizajes.Children.Add(FilaDeAprendizaje(c));
+    }
+
+    /// <summary>Una fila: el nombre y una línea. Nada más — si no se entiende en una línea, el
+    /// problema es el nombre, no la ficha.</summary>
+    private UIElement FilaDeAprendizaje(Navigation.SkillAnunciada c)
+    {
+        var texto = new StackPanel();
+        texto.Children.Add(new TextBlock
+        {
+            Text = c.Nombre, Foreground = Estudio.Tinta, FontSize = 14, FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 5),
+        });
+        texto.Children.Add(new TextBlock
+        {
+            Text = UnaLinea(c.Description), Foreground = Estudio.TintaMedia, FontSize = 12.5,
+            LineHeight = 19, TextWrapping = TextWrapping.Wrap, MaxHeight = 40,
+        });
+        var fila = new DockPanel();
+        fila.Children.Add(new TextBlock
+        {
+            Text = "›", Foreground = Estudio.TintaTenue, FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0),
+        });
+        DockPanel.SetDock(fila.Children[0], Dock.Right);
+        fila.Children.Add(texto);
+
+        var boton = new Button
+        {
+            Background = Brushes.Transparent, BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
+            Padding = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Template = Estudio.Pastilla(18, estirado: true), Content = fila,
+        };
+        boton.Click += (_, __) => PintarFicha(c);
+
+        var tarjeta = Estudio.Tarjeta(18);
+        tarjeta.Padding = new Thickness(16, 15, 16, 16);
+        tarjeta.Margin = new Thickness(2, 0, 2, 10);
+        tarjeta.Child = boton;
+        return Estudio.Elevar(tarjeta);
+    }
+
+    /// <summary>La ficha: una sola acción, y debajo qué hace y qué datos necesita.</summary>
+    private void PintarFicha(Navigation.SkillAnunciada anunciada)
+    {
+        var skill = Navigation.SkillEnsenada.Cargar(anunciada.Archivo);
+        _panelAprendizajes.Children.Clear();
+        _panelAprendizajes.Children.Add(Volver("Aprendizajes", PintarLaLista));
+        if (skill == null)
+        {
+            _panelAprendizajes.Children.Add(TarjetaVacia("No puedo abrir este aprendizaje.",
+                $"El archivo está en disco pero no se deja leer: {Path.GetFileName(anunciada.Archivo)}"));
+            return;
+        }
+
+        _panelAprendizajes.Children.Add(new TextBlock
+        {
+            Text = skill.Nombre, Foreground = Estudio.Tinta, FontSize = 19, FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap, LineHeight = 24, Margin = new Thickness(2, 0, 2, 8),
+        });
+        if (skill.Description.Length > 0)
+            _panelAprendizajes.Children.Add(new TextBlock
+            {
+                Text = skill.Description, Foreground = Estudio.TintaMedia, FontSize = 13, LineHeight = 21,
+                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 2, 18),
+            });
+
+        // LA ÚNICA ACCIÓN. Qué hace al pulsarla lo decide una regla que el contrato juzga
+        // (promesa 225): lo repasado se corre, lo no repasado se repasa, y sin manos se dice.
+        var decision = Navigation.LoQuePasaAlMostrar.Decidir(skill, PuenteDeAprendizajes.Disponible);
+        var mostrar = new Button
+        {
+            Content = new TextBlock { Text = "Mostrar", FontSize = 14.5, FontWeight = FontWeights.SemiBold },
+            Height = 46, Margin = new Thickness(2, 0, 2, 0), Cursor = Cursors.Hand,
+            Background = decision.Que == "no" ? Estudio.SuperficieSuave : Estudio.Acento,
+            Foreground = decision.Que == "no" ? Estudio.TintaTenue : Brushes.White,
+            BorderThickness = new Thickness(0), IsEnabled = decision.Que != "no",
+            Template = Estudio.Pastilla(23, estirado: true),
+        };
+        mostrar.Click += async (_, __) => await MostrarAprendizajeAsync(anunciada, mostrar);
+        _panelAprendizajes.Children.Add(mostrar);
+        _panelAprendizajes.Children.Add(new TextBlock
+        {
+            Text = decision.Motivo.Length > 0
+                ? decision.Motivo
+                : "Lo hago en SAP mientras miras, narrando cada paso. No grabo nada: me detengo antes.",
+            Foreground = Estudio.TintaTenue, FontSize = 11.5, LineHeight = 17, TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(10, 9, 10, 20),
+        });
+
+        // QUÉ HACE, en castellano y sin un solo selector (promesa 199).
+        var frases = Navigation.LoQueHaceLaSkill.EnCastellano(skill);
+        if (frases.Count > 0)
+        {
+            _panelAprendizajes.Children.Add(Rotulo("Qué hace"));
+            var pila = new StackPanel { Margin = new Thickness(2, 0, 2, 0) };
+            void PintarPasos(int cuantos)
+            {
+                pila.Children.Clear();
+                for (int i = 0; i < Math.Min(cuantos, frases.Count); i++) pila.Children.Add(LineaDePaso(i + 1, frases[i]));
+                if (cuantos >= frases.Count) return;
+                var mas = Enlace($"Ver los {frases.Count} pasos ›");
+                mas.Click += (_, __) => PintarPasos(frases.Count);
+                pila.Children.Add(mas);
+            }
+            PintarPasos(6);
+            _panelAprendizajes.Children.Add(pila);
+        }
+
+        // QUÉ DATOS NECESITA: es lo que decide si la nota clínica puede usarlo.
+        var datos = skill.Huecos.Select(h => h.Significado.Trim()).Where(x => x.Length > 0).Distinct().ToList();
+        if (datos.Count > 0)
+        {
+            _panelAprendizajes.Children.Add(Rotulo("Datos que necesita"));
+            var fichas = new WrapPanel { Margin = new Thickness(2, 0, 2, 20) };
+            foreach (string d in datos) fichas.Children.Add(Ficha(d));
+            _panelAprendizajes.Children.Add(fichas);
+        }
+
+        // LAS CAPTURAS, BAJO UN TOQUE. Nunca de entrada: son la excepción, no la portada.
+        string carpeta = CarpetaDeSuLeccion(skill);
+        if (carpeta.Length > 0)
+        {
+            var ver = FilaDeAccion("Ver capturas del paso a paso");
+            ver.Click += (_, __) => PintarCapturas(anunciada, skill, carpeta);
+            _panelAprendizajes.Children.Add(ver);
+        }
+        else
+            _panelAprendizajes.Children.Add(new TextBlock
+            {
+                Text = "De esta tarea no guardé capturas: la aprendí antes de que supiera conservarlas.",
+                Foreground = Estudio.TintaTenue, FontSize = 11.5, LineHeight = 17, TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(2, 4, 2, 0),
+            });
+
+        // Renombrar y borrar existen, pero no compiten: al fondo y en gris.
+        var quietos = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Margin = new Thickness(2, 22, 2, 4),
+        };
+        var renombrar = Enlace("Renombrar", Estudio.TintaTenue);
+        renombrar.Click += (_, __) => PedirNombre(anunciada);
+        var borrar = Enlace("Eliminar", Estudio.Alerta);
+        borrar.Margin = new Thickness(18, 0, 0, 0);
+        borrar.Click += (_, __) => ConfirmarBorrado(anunciada);
+        quietos.Children.Add(renombrar);
+        quietos.Children.Add(borrar);
+        _panelAprendizajes.Children.Add(quietos);
+        _superficie.ScrollToHome();
+    }
+
+    private void PintarCapturas(Navigation.SkillAnunciada anunciada, Navigation.SkillEnsenada skill, string carpeta)
+    {
+        _panelAprendizajes.Children.Clear();
+        _panelAprendizajes.Children.Add(Volver(Recorte(skill.Nombre, 26), () => PintarFicha(anunciada)));
+        _panelAprendizajes.Children.Add(new TextBlock
+        {
+            Text = "Paso a paso", Foreground = Estudio.Tinta, FontSize = 17, FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(2, 0, 2, 6),
+        });
+        _panelAprendizajes.Children.Add(new TextBlock
+        {
+            Text = "Lo que se vio en la pantalla cuando me lo enseñaste, en orden.",
+            Foreground = Estudio.TintaMedia, FontSize = 13, LineHeight = 20, TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(2, 0, 2, 16),
+        });
+
+        var leccion = Teach.LeccionEnDisco.Cargar(carpeta);
+        var capturas = Navigation.CapturasDeLaSkill.De(skill, leccion!)
+            .Where(c => c.Cuadro.Length > 0 && File.Exists(c.Cuadro)).ToList();
+        if (capturas.Count == 0)
+        {
+            _panelAprendizajes.Children.Add(TarjetaVacia("No encuentro las capturas.",
+                "La lección de la que salió esta tarea ya no tiene sus cuadros en disco."));
+            return;
+        }
+        foreach (var c in capturas) _panelAprendizajes.Children.Add(UnaCaptura(c));
+        _superficie.ScrollToHome();
+    }
+
+    private UIElement UnaCaptura(Navigation.Captura c)
+    {
+        var pila = new StackPanel();
+        var imagen = new Image
+        {
+            Source = CuadroDeDisco(c.Cuadro), Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        var recorte = new Border
+        {
+            CornerRadius = new CornerRadius(12), BorderBrush = Estudio.Borde,
+            BorderThickness = new Thickness(1), ClipToBounds = true, Child = imagen,
+            Margin = new Thickness(0, 0, 0, 9),
+        };
+        pila.Children.Add(recorte);
+        pila.Children.Add(new TextBlock
+        {
+            Text = $"{c.Paso} · {c.Que}", Foreground = Estudio.Tinta, FontSize = 12, LineHeight = 18,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        var t = Estudio.Tarjeta(18);
+        t.Padding = new Thickness(14, 14, 14, 15);
+        t.Margin = new Thickness(2, 0, 2, 12);
+        t.Child = pila;
+        return Estudio.Elevar(t);
+    }
+
+    /// <summary>
+    /// El cuadro, leído entero y soltado. Sin <c>OnLoad</c> WPF deja el archivo abierto mientras la
+    /// imagen viva, y la carpeta de una lección no se podría borrar nunca.
+    /// </summary>
+    private static ImageSource? CuadroDeDisco(string ruta)
+    {
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.UriSource = new Uri(ruta);
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.DecodePixelWidth = 760;   // el ancho útil de la ventana, con holgura para pantallas densas
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("aprendizajes", $"no pude abrir el cuadro «{ruta}»: {e.GetType().Name}: {e.Message}");
+            return null;
+        }
+    }
+
+    private async Task MostrarAprendizajeAsync(Navigation.SkillAnunciada anunciada, Button boton)
+    {
+        if (_mostrando) return;
+        if (!PuenteDeAprendizajes.Disponible) { Estado("La carita todavía no está lista."); return; }
+        _mostrando = true;
+        string antes = ((TextBlock)boton.Content).Text;
+        ((TextBlock)boton.Content).Text = "Mostrando…";
+        boton.IsEnabled = false;
+        try
+        {
+            LogBus.Log("aprendizajes", $"mostrar «{anunciada.Nombre}» · {anunciada.Archivo}");
+            string cuenta = await PuenteDeAprendizajes.Mostrar!(anunciada.Archivo,
+                new Progress<string>(Estado), CancellationToken.None);
+            Estado(cuenta);
+            LogBus.Log("aprendizajes", $"← {cuenta}");
+        }
+        catch (Exception e)
+        {
+            Estado($"Se detuvo: {e.Message}");
+            LogBus.Log("aprendizajes", $"mostrar reventó: {e.GetType().Name}: {e.Message}");
+        }
+        finally
+        {
+            _mostrando = false;
+            ((TextBlock)boton.Content).Text = antes;
+            boton.IsEnabled = true;
+            PintarLaLista();
+        }
+    }
+
+    private void PedirNombre(Navigation.SkillAnunciada anunciada)
+    {
+        _panelAprendizajes.Children.Clear();
+        _panelAprendizajes.Children.Add(Volver("Aprendizajes", PintarLaLista));
+        _panelAprendizajes.Children.Add(Rotulo("Cómo se llama"));
+        var caja = new TextBox
+        {
+            Text = anunciada.Nombre, FontSize = 14, Height = 42, Margin = new Thickness(2, 0, 2, 14),
+            VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(12, 0, 12, 0),
+            Background = Estudio.SuperficieSuave, BorderThickness = new Thickness(0),
+            Foreground = Estudio.Tinta,
+        };
+        _panelAprendizajes.Children.Add(caja);
+        var guardar = BotonPrincipal("Guardar");
+        guardar.Click += (_, __) =>
+        {
+            string nuevo = caja.Text.Trim();
+            if (nuevo.Length == 0) { Estado("Un nombre vacío no sirve para encontrarlo después."); return; }
+            string archivo = Navigation.SkillEnsenada.Renombrar(anunciada.Archivo, nuevo);
+            LogBus.Log("aprendizajes", $"renombrado «{anunciada.Nombre}» → «{nuevo}» · {archivo}");
+            PintarLaLista();
+        };
+        _panelAprendizajes.Children.Add(guardar);
+        caja.Focus();
+        caja.SelectAll();
+    }
+
+    private void ConfirmarBorrado(Navigation.SkillAnunciada anunciada)
+    {
+        _panelAprendizajes.Children.Clear();
+        _panelAprendizajes.Children.Add(Volver("Aprendizajes", PintarLaLista));
+        _panelAprendizajes.Children.Add(new TextBlock
+        {
+            Text = $"¿Elimino «{anunciada.Nombre}»?", Foreground = Estudio.Tinta, FontSize = 17,
+            FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(2, 0, 2, 8),
+        });
+        _panelAprendizajes.Children.Add(new TextBlock
+        {
+            Text = "Se borra de este computador y no se puede deshacer. Volver a enseñármelo son dos minutos.",
+            Foreground = Estudio.TintaMedia, FontSize = 13, LineHeight = 20, TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(2, 0, 2, 18),
+        });
+        var si = BotonPrincipal("Eliminar", Estudio.Alerta);
+        si.Click += (_, __) =>
+        {
+            bool ok = Navigation.SkillEnsenada.Borrar(anunciada.Archivo);
+            LogBus.Log("aprendizajes", ok ? $"eliminado «{anunciada.Nombre}»" : $"no pude eliminar «{anunciada.Nombre}»");
+            Estado(ok ? $"Eliminado «{Recorte(anunciada.Nombre, 30)}»." : "No pude eliminarlo; mira el registro.");
+            PintarLaLista();
+        };
+        _panelAprendizajes.Children.Add(si);
+        var no = Enlace("Dejarlo como está");
+        no.HorizontalAlignment = HorizontalAlignment.Center;
+        no.Margin = new Thickness(0, 14, 0, 0);
+        no.Click += (_, __) => PintarFicha(anunciada);
+        _panelAprendizajes.Children.Add(no);
+    }
+
+    /// <summary>La carpeta de la lección de la que salió, o vacío si no la sabe o ya no está.</summary>
+    private static string CarpetaDeSuLeccion(Navigation.SkillEnsenada skill)
+    {
+        if (string.IsNullOrWhiteSpace(skill.DeLaLeccion)) return "";
+        string carpeta = Path.Combine(Teach.LeccionEnDisco.CarpetaRaiz, skill.DeLaLeccion.Trim());
+        return File.Exists(Path.Combine(carpeta, "leccion.json")) ? carpeta : "";
+    }
+
+    private static string UnaLinea(string texto)
+    {
+        string t = (texto ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+        while (t.Contains("  ")) t = t.Replace("  ", " ");
+        return t.Length == 0 ? "Sin descripción." : t;
+    }
+
+    private static string Recorte(string t, int n) =>
+        (t ?? "").Length <= n ? (t ?? "") : (t ?? "")[..n].TrimEnd() + "…";
 
     /// <summary>
     /// La activa se eleva: blanca y con sombra. La otra se queda hundida en el carril, sin fondo ni
@@ -1367,8 +1806,12 @@ public sealed class ConsultaWindow : Window
             b.FontWeight = activa ? FontWeights.SemiBold : FontWeights.Normal;
             b.Effect = activa ? Estudio.Sombra1 : null;
         }
-        Pintar(_tabNota, _enNota);
-        Pintar(_tabConsultas, !_enNota);
+        // EN APRENDIZAJES NO MANDA NINGUNA DE LAS DOS. Medido en la máquina el 2026-09-11: con
+        // el panel abierto, el carril seguía pintando «Nota» como activa, así que la interfaz
+        // decía que estabas en un sitio distinto del que estabas. Un carril que miente es peor
+        // que un carril apagado.
+        Pintar(_tabNota, !_enAprendizajes && _enNota);
+        Pintar(_tabConsultas, !_enAprendizajes && !_enNota);
     }
 
     private async Task CargarConsultasAsync()
@@ -1641,6 +2084,160 @@ public sealed class ConsultaWindow : Window
     // ── piezas ───────────────────────────────────────────────────────────────
 
     private void Estado(string texto) => _estado.Text = texto;
+
+    /// <summary>El título de una vista: el nombre y, si hay algo que contar, una coletilla tenue.</summary>
+    private static UIElement TituloDeVista(string texto, string coletilla)
+    {
+        var fila = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Margin = new Thickness(2, 2, 2, 16),
+        };
+        fila.Children.Add(new TextBlock
+        {
+            Text = texto, Foreground = Estudio.Tinta, FontSize = 21, FontWeight = FontWeights.SemiBold,
+        });
+        if (coletilla.Length > 0)
+            fila.Children.Add(new TextBlock
+            {
+                Text = coletilla, Foreground = Estudio.TintaTenue, FontSize = 13,
+                VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(9, 0, 0, 2),
+            });
+        return fila;
+    }
+
+    private static Button Volver(string aDonde, Action alPulsar)
+    {
+        var b = Enlace($"‹ {aDonde}");
+        b.Margin = new Thickness(2, 2, 2, 14);
+        b.Click += (_, __) => alPulsar();
+        return b;
+    }
+
+    private static TextBlock Rotulo(string texto)
+    {
+        var r = Estudio.Rotulo(texto);
+        r.Margin = new Thickness(2, 0, 2, 8);
+        return r;
+    }
+
+    private static UIElement LineaDePaso(int n, string frase)
+    {
+        var fila = new DockPanel { Margin = new Thickness(0, 7, 0, 7) };
+        var numero = new TextBlock
+        {
+            Text = n.ToString(), Foreground = Estudio.TintaTenue, FontSize = 11, MinWidth = 17,
+            Margin = new Thickness(0, 1, 0, 0),
+        };
+        DockPanel.SetDock(numero, Dock.Left);
+        fila.Children.Add(numero);
+        fila.Children.Add(new TextBlock
+        {
+            Text = frase, Foreground = Estudio.Tinta, FontSize = 12.5, LineHeight = 18,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        return new Border
+        {
+            BorderBrush = Estudio.Borde, BorderThickness = new Thickness(0, 0, 0, 1), Child = fila,
+        };
+    }
+
+    private static UIElement Ficha(string texto) => new Border
+    {
+        CornerRadius = new CornerRadius(9), Background = Estudio.SuperficieSuave,
+        Padding = new Thickness(9, 4, 9, 5), Margin = new Thickness(0, 0, 6, 6),
+        Child = new TextBlock { Text = texto, Foreground = Estudio.TintaMedia, FontSize = 11.5 },
+    };
+
+    private static Button FilaDeAccion(string texto)
+    {
+        var fila = new DockPanel();
+        var chevron = new TextBlock
+        {
+            Text = "›", Foreground = Estudio.TintaTenue, FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        DockPanel.SetDock(chevron, Dock.Right);
+        fila.Children.Add(chevron);
+        fila.Children.Add(new TextBlock
+        {
+            Text = texto, Foreground = Estudio.Tinta, FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        var b = new Button
+        {
+            Content = fila, Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand, Padding = new Thickness(2, 14, 2, 14),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Template = Estudio.Pastilla(12, estirado: true), Margin = new Thickness(2, 0, 2, 0),
+        };
+        return b;
+    }
+
+    private static Button BotonPrincipal(string texto, Brush? fondo = null) => new()
+    {
+        Content = new TextBlock { Text = texto, FontSize = 14.5, FontWeight = FontWeights.SemiBold },
+        Height = 46, Margin = new Thickness(2, 0, 2, 0), Cursor = Cursors.Hand,
+        Background = fondo ?? Estudio.Acento, Foreground = Brushes.White,
+        BorderThickness = new Thickness(0), Template = Estudio.Pastilla(23, estirado: true),
+    };
+
+    private static Button Enlace(string texto, Brush? tinta = null) => new()
+    {
+        Content = new TextBlock { Text = texto, FontSize = 12.5 },
+        Foreground = tinta ?? Estudio.Acento, Background = Brushes.Transparent,
+        BorderThickness = new Thickness(0), Cursor = Cursors.Hand, Padding = new Thickness(0, 6, 0, 6),
+        HorizontalAlignment = HorizontalAlignment.Left, Template = Estudio.Pastilla(10),
+    };
+
+    private static UIElement TarjetaVacia(string titulo, string cuerpo)
+    {
+        var pila = new StackPanel();
+        pila.Children.Add(new TextBlock
+        {
+            Text = titulo, Foreground = Estudio.Tinta, FontSize = 14, FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6),
+        });
+        pila.Children.Add(new TextBlock
+        {
+            Text = cuerpo, Foreground = Estudio.TintaMedia, FontSize = 12.5, LineHeight = 19,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        var t = Estudio.Tarjeta(20);
+        t.Padding = new Thickness(20, 22, 20, 22);
+        t.Margin = new Thickness(2, 8, 2, 0);
+        t.Child = pila;
+        return Estudio.Elevar(t);
+    }
+
+    /// <summary>
+    /// El cerebro, dibujado y no un glifo del sistema: «Segoe MDL2 Assets» no tiene ninguno que
+    /// signifique esto, y un glifo que no existe se pinta como un cuadrado vacío.
+    /// </summary>
+    private static System.Windows.Shapes.Shape CerebroDibujado() => new System.Windows.Shapes.Path
+    {
+        Data = Geometry.Parse(
+            "M9.5 3.5 A3 3 0 0 0 6.6 6 A2.8 2.8 0 0 0 4.8 10.6 A3 3 0 0 0 6 15.6 "
+            + "A3 3 0 0 0 9.5 19.9 A2.5 2.5 0 0 0 12 17.7 L12 5.9 A2.5 2.5 0 0 0 9.5 3.5 Z "
+            + "M14.5 3.5 A3 3 0 0 1 17.4 6 A2.8 2.8 0 0 1 19.2 10.6 A3 3 0 0 1 18 15.6 "
+            + "A3 3 0 0 1 14.5 19.9 A2.5 2.5 0 0 1 12 17.7"),
+        Stroke = Estudio.TintaMedia, StrokeThickness = 1.5, Fill = null,
+        StrokeLineJoin = PenLineJoin.Round, Stretch = Stretch.Uniform, Width = 17, Height = 17,
+    };
+
+    /// <summary>Como <see cref="BotonDeMarco"/>, pero con un dibujo dentro en vez de un glifo.</summary>
+    private static Button BotonDeIcono(System.Windows.Shapes.Shape dibujo, string queHace)
+    {
+        var b = new Button
+        {
+            Content = dibujo, Width = 30, Height = 30, Margin = new Thickness(2, 0, 0, 0),
+            Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand, Template = Estudio.Pastilla(15),
+        };
+        AutomationProperties.SetName(b, queHace);
+        b.MouseEnter += (_, __) => { if (b.Background == Brushes.Transparent) b.Background = Estudio.SuperficieSuave; };
+        b.MouseLeave += (_, __) => { if (b.Background == Estudio.SuperficieSuave) b.Background = Brushes.Transparent; };
+        return b;
+    }
 
     private static Button BotonDeMarco(string glifo, string queHace)
     {

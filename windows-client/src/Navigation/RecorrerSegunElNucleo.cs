@@ -226,8 +226,7 @@ public sealed class RecorrerSegunElNucleo
             // salto-adelante, otra vez. Contar el paso como hecho tampoco: «terminé» deja de ser
             // opinión justo aquí. Sin llegada declarada, nada cambia: «Guardar» sigue siendo un
             // paso legítimo que no va a ninguna parte.
-            if (paso.Llegada.Length > 0
-                && !paso.Llegada.Equals(r.Hasta, StringComparison.OrdinalIgnoreCase))
+            if (paso.Llegada.Length > 0 && !Superficies.MismaPantalla(paso.Llegada, r.Hasta))   // promesa 203
                 return Parcial(i, pasos.Count,
                     $"pulsé «{paso.Exit}» y quedé en «{r.Hasta}», pero la demostración llegaba a "
                     + $"«{paso.Llegada}»: eso NO es haberlo hecho, y no sigo sobre una pantalla que "
@@ -291,7 +290,7 @@ public sealed class RecorrerSegunElNucleo
         for (int ido = 0; ido <= EsperaMaximaMs; ido += 120)
         {
             donde = _donde() ?? "";
-            if (paso.Llegada.Equals(donde, StringComparison.OrdinalIgnoreCase)) return true;
+            if (Superficies.MismaPantalla(paso.Llegada, donde)) return true;   // promesa 203
             System.Threading.Thread.Sleep(120);
         }
 

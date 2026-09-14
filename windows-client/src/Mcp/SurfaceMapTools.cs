@@ -805,32 +805,44 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
-    /// «map_skills»: qué tareas me han enseñado, y cuáles están listas para usar. Promesas 106 y 127.
+    /// «map_skills»: qué tareas me han enseñado, cuáles están listas para usar, y QUÉ DATOS necesita
+    /// cada una. Promesas 106, 127 y 193.
     /// </summary>
     /// <remarks>
     /// EL CATÁLOGO DICE SI ESTÁ COMPROBADA, y eso no es un adorno: comprobar es obligatorio
     /// (decisión del dueño, 2026-09-03), así que anunciar una skill sin decir que está pendiente
     /// sería ofrecerle al cerebro algo que después le van a negar. Se anuncia el estado, no solo
     /// el nombre.
+    ///
+    /// Y DICE QUÉ DATOS NECESITA (promesa 193, 2026-09-10): el piloto elige la skill para un
+    /// encargo de la nota por su propio criterio; sin los huecos sabría qué hace pero no qué
+    /// pedirle a la nota, y map_skill_run llegaría sin datos.
     /// </remarks>
-    private string Skills()
+    private string Skills() => AnuncioDeLasSkills(Navigation.SkillEnsenada.Catalogo(CarpetaDeSkills));
+
+    /// <summary>De dónde se leen las skills: la carpeta del usuario, salvo que una prueba ponga la suya.</summary>
+    public string CarpetaDeSkills { get; set; } = Navigation.SkillEnsenada.CarpetaPorDefecto;
+
+    /// <summary>El texto del catálogo, puro: una línea por skill con su estado y sus datos.</summary>
+    public static string AnuncioDeLasSkills(IReadOnlyList<Navigation.SkillAnunciada> catalogo)
     {
-        var catalogo = Navigation.SkillEnsenada.Catalogo(Navigation.SkillEnsenada.CarpetaPorDefecto);
+        catalogo ??= Array.Empty<Navigation.SkillAnunciada>();
         if (catalogo.Count == 0)
             return "no me han enseñado ninguna tarea todavía: pulsa Enseñar, hazla una vez hablando, "
                  + "y después «Comprobar aprendizaje».";
-
         var lineas = catalogo.Select(c =>
             $"· «{c.Nombre}»{(c.Description.Length > 0 ? " — " + c.Description : "")}"
-            + (c.Comprobada ? " · lista" : " · PENDIENTE de comprobar, no se puede ejecutar"));
+            + (c.Comprobada ? " · lista" : " · PENDIENTE de comprobar, no se puede ejecutar")
+            + (c.Huecos.Count > 0 ? $" · necesita: {string.Join(", ", c.Huecos)}" : " · no necesita datos"));
         var salida = new List<string> { $"tareas que me has enseñado ({catalogo.Count}):" };
         salida.AddRange(lineas);
-        salida.Add("Para correr una: map_skill_run con su nombre.");
+        salida.Add("Para correr una: map_skill_run con su nombre y `datos` = {\"<dato>\":\"<valor>\"} usando los nombres "
+                 + "de «necesita» tal cual. Lo que no pases queda en blanco y se te dice.");
         return string.Join(Environment.NewLine, salida);
     }
 
     /// <summary>
-    /// «map_skill_run»: reproducir una tarea enseñada. Promesas 122, 123, 126 y 127.
+    /// «map_skill_run»: reproducir una tarea enseñada. Promesas 122, 123, 126, 127, 196 y 197.
     /// </summary>
     /// <remarks>
     /// NO HAY SEGUNDO EJECUTOR: la skill se TRADUCE a pasos del batch y los corre el mismo
@@ -840,27 +852,29 @@ public sealed class SurfaceMapTools
     ///
     /// LA COMPUERTA DE LA COMPROBACIÓN VA PRIMERO, antes de tocar nada: una skill sin repasar no se
     /// ejecuta, y el «no» dice qué falta.
+    ///
+    /// Y CON LA COREOGRAFÍA DEL PLAN cuando la app señala al actuar (promesa 197, 2026-09-10): cada
+    /// paso de uno en uno por <see cref="DarUnPasoConCoreografia"/> —la carita al lado del campo,
+    /// el nombre del dato dicho en voz, y solo entonces el toque—. El dueño pidió UNA experiencia;
+    /// un batch ciego era la otra. Sin la app señalando (la voz en vivo pidiendo una skill), sigue
+    /// siendo el batch de siempre.
     /// </remarks>
     private string CorrerSkill(string nombre, string datosJson)
     {
         if (nombre.Length == 0)
             return "falta `nombre`: cuál de las tareas enseñadas hay que hacer. Pídelas con map_skills.";
         if (RecorrerPorElNucleo == null) return "todavía no sé recorrer en batch.";
-
-        var catalogo = Navigation.SkillEnsenada.Catalogo(Navigation.SkillEnsenada.CarpetaPorDefecto);
+        var catalogo = Navigation.SkillEnsenada.Catalogo(CarpetaDeSkills);
         var anunciada = catalogo.FirstOrDefault(c => Navigation.Nombres.Aplanar(c.Nombre) == Navigation.Nombres.Aplanar(nombre))
                      ?? catalogo.FirstOrDefault(c => Navigation.Nombres.Aplanar(c.Nombre)
                             .Contains(Navigation.Nombres.Aplanar(nombre), StringComparison.Ordinal));
         if (anunciada == null)
             return $"no tengo ninguna tarea que se llame «{nombre}». Las que sí: "
                  + (catalogo.Count > 0 ? string.Join(", ", catalogo.Select(c => $"«{c.Nombre}»")) : "ninguna todavía.");
-
         var skill = Navigation.SkillEnsenada.Cargar(anunciada.Archivo);
         if (skill == null) return $"«{anunciada.Nombre}» está en disco pero no se deja leer: {anunciada.Archivo}";
-
         var veredicto = skill.PuedeCorrer();
         if (!veredicto.Puede) return veredicto.Motivo;
-
         var datos = LeerDatos(datosJson);
         var pasos = Navigation.InstanciarSkill.Pasos(skill, datos);
         if (pasos.Count == 0)
@@ -868,18 +882,56 @@ public sealed class SurfaceMapTools
                  + (skill.Huecos.Count > 0
                     ? $"necesita {string.Join(", ", skill.Huecos.Select(h => $"«{h.Significado}»"))}."
                     : "la skill está vacía.");
-
         var sobrantes = Navigation.InstanciarSkill.Sobrantes(skill, datos);
+        // LO QUE QUEDA EN BLANCO SE DICE (promesa 196): no se pregunta ni se inventa, pero un campo
+        // vacío sin rastro parecería un envío completo, y eso es lo peor que puede pasar.
+        var enBlanco = Navigation.InstanciarSkill.SinDato(skill, datos);
         LogBus.Log("skill", $"corriendo «{skill.Nombre}»: {pasos.Count} paso(s) de {skill.Pasos.Count} "
-            + $"· {datos.Count} dato(s)" + (sobrantes.Count > 0 ? $" · sin hueco: {string.Join(", ", sobrantes)}" : ""));
-
-        string cuenta = RecorrerPorElNucleo(pasos).Cuenta;
+            + $"· {datos.Count} dato(s)"
+            + (enBlanco.Count > 0 ? $" · en blanco: {string.Join(", ", enBlanco)}" : "")
+            + (sobrantes.Count > 0 ? $" · sin hueco: {string.Join(", ", sobrantes)}" : "")
+            + (DarUnPasoConCoreografia != null && SenalarAlActuar ? " · con coreografía" : " · en batch"));
+        var nombreDelDato = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var h in skill.Huecos) if (h.Campo.Length > 0) nombreDelDato[h.Campo] = h.Significado;
+        var res = DarUnPasoConCoreografia != null && SenalarAlActuar
+            ? RecorrerSkill(pasos, p => DarUnPasoConCoreografia(p.Exit, p, "",
+                p.Texto.Length > 0 && nombreDelDato.TryGetValue(p.Exit, out var dato) ? dato : ""))
+            : RecorrerPorElNucleo(pasos);
+        string cuenta = res.Cuenta;
         LogBus.Log("skill", "← " + cuenta);
         return $"«{skill.Nombre}»: {cuenta}"
+             + (enBlanco.Count > 0 ? $" Quedaron EN BLANCO por falta de dato: {string.Join(", ", enBlanco)}." : "")
              + (sobrantes.Count > 0
                 ? $" No supe dónde va: {string.Join(", ", sobrantes)} — enséñamelo y lo recuerdo."
                 : "");
     }
+
+    /// <summary>
+    /// UNA SKILL DE UNO EN UNO (promesa 197): cada paso por la coreografía; el primero que no se da
+    /// para el resto, y el total es el plan, nunca lo ejecutado (patrón nº10).
+    /// </summary>
+    public static Navigation.RecorrerSegunElNucleo.Resultado RecorrerSkill(
+        IReadOnlyList<Navigation.RecorrerSegunElNucleo.Paso> pasos,
+        Func<Navigation.RecorrerSegunElNucleo.Paso, Navigation.RecorrerSegunElNucleo.Resultado> darUnPaso)
+    {
+        pasos ??= Array.Empty<Navigation.RecorrerSegunElNucleo.Paso>();
+        int hechos = 0; string donde = "";
+        for (int i = 0; i < pasos.Count; i++)
+        {
+            var r = darUnPaso(pasos[i]);
+            if (r.Donde.Length > 0) donde = r.Donde;
+            if (r.Hechos < 1)
+            {
+                string que = pasos[i].Exit.Length > 0 ? pasos[i].Exit : pasos[i].Tecla.Length > 0 ? "tecla " + pasos[i].Tecla : $"paso {i + 1}";
+                return new(hechos, pasos.Count, donde, false,
+                    $"hice {hechos} de {pasos.Count} y paré en el paso {i + 1} «{que}»: {r.Cuenta}");
+            }
+            hechos++;
+        }
+        return new(hechos, pasos.Count, donde, true,
+            $"hice los {pasos.Count} paso(s)" + (donde.Length > 0 ? $": quedaste en «{donde}»" : ""));
+    }
+
 
     /// <summary>Los datos de esta corrida: `{"peso":"68"}`. Vacío si no vienen o no se entienden.</summary>
     private static Dictionary<string, string> LeerDatos(string json)
