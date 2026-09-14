@@ -571,6 +571,31 @@ internal static class Contrato
         Prueba("205. cada turno del usuario deja una línea voz-turno con su medida: llamadas, herramientas distintas, el máximo de intentos a un mismo destino y los milisegundos hasta la primera acción y la última; lo rechazado y lo retirado también cuentan", CadaTurnoDejaSuMedida);
         Prueba("206. el catálogo le pide al cerebro lo que las manos usan: map_take y map_type no ofrecen argumentos que su cuerpo ignora, map_take trae which, y las instrucciones mandan mirar y elegir con which antes que preguntar; la regla escrita de intentos es la del código: dos", ElCatalogoPideLoQueLasManosUsan);
         Prueba("207. la mano dice, sin prosa, si fue un intento y si lo logró: pulsar y que cambie la pantalla es logro, pulsar y que no cambie no lo es, pedir algo que no está es un intento fallido, y la lista de homónimos no es un intento", LaManoDiceSiLoLogro);
+
+        // ── LA VOZ ES GPT-LIVE (spec 018, 2026-09-12) ─────────────────────────
+        // GPT-Live abre por otra puerta, no manda marcas de turno y no sabe esperar a que se le pida:
+        // lo que depende de eso es de la CONVERSACIÓN, que vive de este lado (el traductor lo juzga el
+        // contrato de la voz, 40-43). Y un agujero que ya estaba en main con Realtime: lo escrito no
+        // pedía respuesta, y la noche del 2026-09-11 el nivel 4 lo midió como una voz muda.
+        Console.WriteLine();
+        Prueba("208. escribir con la voz abierta pide respuesta: el texto va seguido de pedir turno, con cualquier protocolo", EscribirPideRespuesta);
+        Prueba("209. con una voz que no marca los turnos, la conversación los marca: el primer trozo de lo que dice el usuario abre un turno y un silencio lo cierra", SinMarcasLaConversacionMarcaLosTurnos);
+        Prueba("210. la voz por defecto es GPT-Live y U_VOZ=realtime vuelve a GPT Realtime", LaVozPorDefectoEsGptLive);
+        Prueba("211. sin marcas de turno, el turno no se cierra con trabajo en marcha: ni con una llamada a herramienta sin devolver ni mientras suena la voz de Ü, y el silencio se cuenta desde la devolución o desde lo último que sonó; el audio en silencio no cuenta", SinMarcasElTurnoEsperaAlTrabajo);
+        Prueba("212. sin marcas de turno, una pausa del usuario sin que Ü le haya contestado sigue siendo la misma petición: lo que dice después no abre turno ni reinicia el tope; lo que dice después de que Ü le conteste, sí", UnaPausaSinRespuestaEsLaMismaPeticion);
+        Prueba("214. con GPT-Live, varias llamadas pedidas a la vez se contestan todas antes de pedir turno, y el turno se pide una sola vez; con GPT Realtime una tanda sigue pidiendo turno detrás de sus resultados", VariasLlamadasUnSoloTurno);
+        Prueba("217. con GPT-Live el log no se inunda: ni los deltas del delegado ni el audio dejan una línea «←», y lo demás que no se traduce la sigue dejando", ElLogNoSeInundaConLosDeltas);
+        Prueba("218. con GPT-Live lo que dura la voz llega al cierre: los segundos que cuenta el servidor —el último acumulado de cada conexión, sumado entre conexiones— se reportan aunque no haya fichas, y el cierre deja una línea voz-viva con esos segundos; con fichas y sin segundos, el reporte sigue como estaba", LaDuracionDeGptLiveLlegaAlCierre);
+        // LA MISMA CLASE DE ERROR, UN SOLO TRATAMIENTO (2026-09-13). Sin crédito, Realtime reconectó cuatro veces y GPT-Live
+        // no reintentó. Lo que no se arregla reintentando —cuenta, clave, modelo— se reconoce por su código medido (223) y
+        // la conversación lo usa con los dos protocolos (224).
+        Prueba("223. lo que no se arregla reintentando se reconoce por su código y dice su causa: sin crédito (insufficient_quota, credit_balance_exhausted), una clave que no vale (invalid_api_key, o el apretón de manos rechazado con 401) y un modelo que no existe (invalid_model, model_not_found), también dentro de la descripción de un cierre; cada causa se distingue de las otras, y cualquier otro código, un número de cierre, la prosa del mensaje o nada se pueden reintentar", LoQueNoSeArreglaReintentandoSeReconoce);
+        Prueba("224. con los dos protocolos, lo que no se arregla reintentando no reconecta: venga en un error, en el cierre del socket o en el apretón de manos de la reconexión, la conversación dice una vez por qué y cierra la voz; un corte sin esa causa sigue reconectando, y una conexión nueva no hereda la causa de la anterior", LoQueNoSeArreglaNoReconecta);
+
+        // «SESIÓN ABIERTA» SE ESCRIBÍA AL CONECTAR EL SOCKET (2026-09-13, nivel 4 del 12): con la cuenta sin crédito
+        // salió en el mismo segundo que el error, y el conductor del nivel 4 la tomó por voz abierta. Del 220 al 222 son
+        // de la rama de la apertura; el 219 quedó sin usar en la spec 018 y no se recicla.
+        Prueba("220. la voz dice que la sesión abrió cuando el servidor lo confirma, no cuando conecta el socket: al conectar deja una línea que dice que espera la confirmación, y la de «sesión abierta con» sale una sola vez, al confirmarla, con «Te escucho.» detrás, con GPT-Live y con GPT Realtime; un error antes de confirmar no la escribe, y con un protocolo que no confirma la línea dice que nadie la confirmó", LaVozDiceQueAbrioCuandoElServidorLoConfirma);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -7752,6 +7777,1378 @@ internal static class Contrato
         pHilo.SetValue(mapa, null);
         Debe(visto != null && ReferenceEquals(pAntesP.GetValue(visto), consulta),
             "y la consulta al tope que la voz pone en su hilo viaja dentro del paso hasta el ejecutor");
+    }
+
+    /// <remarks>
+    /// LO ESCRITO NO PEDÍA RESPUESTA, y el micrófono lo tapaba. <c>EnviarTextoAsync</c> mandaba el texto y
+    /// nada más; sin un response.create detrás el modelo no contesta — cero eventos, medido contra el
+    /// servidor el 2026-09-12 —, así que Ü solo respondía a lo escrito si el micrófono oía algo a la vez.
+    /// Invalidó el nivel 4 del 2026-09-11, y el saludo de la presentación tenía el mismo agujero.
+    /// </remarks>
+    private static void EscribirPideRespuesta()
+    {
+        var m = Cap004("U.WindowsClient.Voice.ConversacionEnVivo")
+            ?.GetMethod("MensajesDeTexto", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+        if (m == null) { Pendiente("Voice.ConversacionEnVivo.MensajesDeTexto", "208", "018"); return; }
+        List<string> Mensajes(Voz.Realtime.IProtocolo p, string texto)
+            => ((System.Collections.IEnumerable?)m.Invoke(null, new object[] { p, texto }) ?? Array.Empty<string>())
+                .Cast<object?>().Select(o => o as string ?? "").ToList();
+        string Tipos(List<string> l) => string.Join(" · ", l.Select(TipoDelMensaje));
+
+        var rt = Mensajes(new Voz.Realtime.ProtocoloOpenAI(), "abre el bloc de notas");
+        Debe(rt.Count == 2 && TipoDelMensaje(rt[0]) == "conversation.item.create" && rt[0].Contains("abre el bloc de notas")
+             && TipoDelMensaje(rt[1]) == "response.create",
+            $"con GPT Realtime van el texto y DESPUÉS response.create, en ese orden (salió: {Tipos(rt)})");
+
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tLive == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "208", "018"); return; }
+        var live = (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+        var gl = Mensajes(live, "abre el bloc de notas");
+        Debe(gl.Count == 2 && TipoDelMensaje(gl[0]) == "response.item.create" && gl[0].Contains("abre el bloc de notas")
+             && TipoDelMensaje(gl[1]) == "response.create",
+            $"con GPT-Live van el mensaje del usuario y DESPUÉS response.create, en ese orden (salió: {Tipos(gl)})");
+
+        var solo = Mensajes(new ProtocoloDeMentira(pideRespuesta: false, marcaLosTurnos: true), "hola");
+        Debe(solo.Count == 1 && solo[0].Length > 0,
+            $"con un protocolo que contesta solo (PedirRespuesta vacío) va un único mensaje y ninguno vacío (salieron {solo.Count})");
+
+        // ── Y LA CONVERSACIÓN LO MANDA DE VERDAD (W208, 2026-09-12) ──────────
+        // Juzgar solo MensajesDeTexto dejaba verde la vuelta a main: EnviarTextoAsync mandando solo el texto
+        // dio CONTRATO INTACTO (medido), porque el método sale si no hay socket y aquí no lo hay. La
+        // conversación deja sustituir su salida y el «hay socket», y se juzga lo que sale de verdad: lo
+        // escrito (EnviarTextoAsync, que usan «Escríbele…» y el saludo) y la nota al modelo.
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var salida = tc?.GetField("_puerta", BindingFlags.NonPublic | BindingFlags.Instance);
+        var abierta = tc?.GetField("_puertaAbierta", BindingFlags.NonPublic | BindingFlags.Instance);
+        var escribir = tc?.GetMethod("EnviarTextoAsync", BindingFlags.Public | BindingFlags.Instance);
+        var nota = tc?.GetMethod("EnviarTextoAlModeloAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (tc == null || salida == null || abierta == null || escribir == null || nota == null)
+        { Pendiente("ConversacionEnVivo._puerta y _puertaAbierta (lo que la conversación manda al escribir)", "208", "018"); return; }
+
+        List<string> Manda(Voz.Realtime.IProtocolo p, MethodInfo metodo, bool conLaVozAbierta)
+        {
+            using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), p })!;
+            var mandados = new List<string>();
+            salida.SetValue(conv, (Func<string, CancellationToken, Task>)((json, _) =>
+            {
+                lock (mandados) mandados.Add(json);
+                return Task.CompletedTask;
+            }));
+            if (conLaVozAbierta) abierta.SetValue(conv, (Func<bool>)(() => true));
+            ((Task)metodo.Invoke(conv, new object[] { "abre el bloc de notas" })!).GetAwaiter().GetResult();
+            lock (mandados) return mandados.ToList();
+        }
+
+        foreach (var (quien, p, tipoDelTexto) in new (string, Voz.Realtime.IProtocolo, string)[]
+                 {
+                     ("con GPT Realtime", new Voz.Realtime.ProtocoloOpenAI(), "conversation.item.create"),
+                     ("con GPT-Live", live, "response.item.create"),
+                 })
+            foreach (var (como, metodo) in new (string, MethodInfo)[]
+                     { ("lo escrito (EnviarTextoAsync)", escribir), ("la nota al modelo (EnviarTextoAlModeloAsync)", nota) })
+            {
+                var l = Manda(p, metodo, conLaVozAbierta: true);
+                Debe(l.Count == 2 && TipoDelMensaje(l[0]) == tipoDelTexto && l[0].Contains("abre el bloc de notas")
+                     && TipoDelMensaje(l[1]) == "response.create",
+                    $"{quien}, {como} sale de la conversación con el texto y DESPUÉS response.create (salió: {Tipos(l)})");
+            }
+
+        var cerrada = Manda(new Voz.Realtime.ProtocoloOpenAI(), escribir, conLaVozAbierta: false);
+        Debe(cerrada.Count == 0,
+            $"y con la voz cerrada no sale nada: sustituir la salida no abre la puerta por su cuenta (salieron {cerrada.Count})");
+    }
+
+    /// <remarks>
+    /// VARIAS LLAMADAS A LA VEZ, Y UN PEDIR TURNO POR CADA UNA. GPT-Live entrega cada function_call del
+    /// delegado en su propio response.event, y la conversación contestaba cada Hecho.Pide por separado con su
+    /// propio response.create. El primero llegaba sin la salida de la otra llamada y el servidor contestaba
+    /// function_call_outputs_required (medido con sonda-paralelo.ps1 el 2026-09-12): el log decía un fallo
+    /// donde no lo había (aprendizaje nº2). La mano de la prueba es el autocontrol, que se puede retener sin
+    /// pantalla: así las dos llamadas están pedidas antes de que termine ninguna, que es lo que pasa cuando
+    /// una herramienta tarda más de lo que tarda en llegar la siguiente.
+    /// </remarks>
+    private static void VariasLlamadasUnSoloTurno()
+    {
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var salida = tc?.GetField("_puerta", BindingFlags.NonPublic | BindingFlags.Instance);
+        var abierta = tc?.GetField("_puertaAbierta", BindingFlags.NonPublic | BindingFlags.Instance);
+        var procesar = tc?.GetMethod("Procesar", BindingFlags.NonPublic | BindingFlags.Instance);
+        var nucleo = tc?.GetMethod("EjecutarNucleoAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+        var sesion = tc?.GetField("_sesionId", BindingFlags.NonPublic | BindingFlags.Instance);
+        var autocontrol = tc?.GetProperty("Autocontrol", BindingFlags.Public | BindingFlags.Instance);
+        if (tc == null || salida == null || abierta == null || procesar == null || nucleo == null || sesion == null || autocontrol == null)
+        { Pendiente("ConversacionEnVivo._puerta y _puertaAbierta (lo que la conversación manda tras las herramientas)", "214", "018"); return; }
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tLive == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "214", "018"); return; }
+        var live = (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+
+        // Tal como la manda el servidor: una llamada por response.event (sonda-paralelo.ps1).
+        string LlegaLaLlamada(string id, string nombre)
+            => "{\"type\":\"response.event\",\"event\":{\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\","
+               + "\"call_id\":\"" + id + "\",\"name\":\"" + nombre + "\",\"arguments\":\"{}\"}}}";
+        string? ItemDe(string json, string campo)
+        {
+            try
+            {
+                using var d = JsonDocument.Parse(json);
+                return d.RootElement.TryGetProperty("item", out var it) && it.ValueKind == JsonValueKind.Object
+                       && it.TryGetProperty(campo, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            }
+            catch (JsonException) { return null; }
+        }
+        bool EsSalida(string json) => ItemDe(json, "type") == "function_call_output";
+        bool EsTurno(string json) => TipoDelMensaje(json) == "response.create";
+        string Tipos(List<string> l) => string.Join(" · ", l.Select(m => EsSalida(m) ? "salida " + ItemDe(m, "call_id") : TipoDelMensaje(m)));
+
+        List<string> Conversa(Voz.Realtime.IProtocolo p, Action<object> guion, int salidasEsperadas)
+        {
+            using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), p })!;
+            var mandados = new List<string>();
+            salida.SetValue(conv, (Func<string, CancellationToken, Task>)((json, _) =>
+            {
+                lock (mandados) mandados.Add(json);
+                return Task.CompletedTask;
+            }));
+            abierta.SetValue(conv, (Func<bool>)(() => true));
+            guion(conv);
+            // Las llamadas corren en otro hilo: se espera a que salgan sus resultados y un pedir turno, y un
+            // poco más, por si detrás sale otro de más.
+            var reloj = System.Diagnostics.Stopwatch.StartNew();
+            while (reloj.ElapsedMilliseconds < 5000)
+            {
+                lock (mandados)
+                    if (mandados.Count(EsSalida) >= salidasEsperadas && mandados.Any(EsTurno)) break;
+                Thread.Sleep(20);
+            }
+            Thread.Sleep(300);
+            lock (mandados) return mandados.ToList();
+        }
+        Func<string, string> Contesta = n => n + ": hecho";
+
+        using var suelta = new ManualResetEventSlim(false);
+        var dos = Conversa(live, conv =>
+        {
+            autocontrol.SetValue(conv, (Func<string, string>)(n => { suelta.Wait(5000); return n + ": hecho"; }));
+            procesar.Invoke(conv, new object[] { LlegaLaLlamada("call_A", "self_mute"), CancellationToken.None });
+            procesar.Invoke(conv, new object[] { LlegaLaLlamada("call_B", "self_hide"), CancellationToken.None });
+            suelta.Set();
+        }, salidasEsperadas: 2);
+        var ids = dos.Where(EsSalida).Select(m => ItemDe(m, "call_id")).ToList();
+        Debe(ids.Count == 2 && ids.Contains("call_A") && ids.Contains("call_B"),
+            $"con GPT-Live, dos llamadas pedidas a la vez se contestan las dos, cada una con su function_call_output (salió: {Tipos(dos)})");
+        Debe(dos.Count(EsTurno) == 1,
+            $"y el turno se pide UNA vez, no una por llamada: el primero salía sin la otra salida y el servidor lo rechazaba (salió: {Tipos(dos)})");
+        Debe(dos.FindIndex(m => EsTurno(m)) > dos.FindLastIndex(m => EsSalida(m)),
+            $"y se pide detrás de la última salida, cuando ya no falta ninguna (salió: {Tipos(dos)})");
+
+        var una = Conversa(live, conv =>
+        {
+            autocontrol.SetValue(conv, Contesta);
+            procesar.Invoke(conv, new object[] { LlegaLaLlamada("call_C", "self_mute"), CancellationToken.None });
+        }, salidasEsperadas: 1);
+        Debe(una.Count(EsSalida) == 1 && una.Count(EsTurno) == 1 && una.Count > 0 && EsTurno(una[^1]),
+            $"una llamada sola sigue pidiendo turno detrás de su resultado (salió: {Tipos(una)})");
+
+        var tras = Conversa(live, conv =>
+        {
+            autocontrol.SetValue(conv, Contesta);
+            // Pedida justo cuando se cerraba la voz: el token ya estaba cancelado y la llamada nunca llegó a correr.
+            using (var cancelado = new CancellationTokenSource())
+            {
+                cancelado.Cancel();
+                procesar.Invoke(conv, new object[] { LlegaLaLlamada("call_vieja", "self_mute"), cancelado.Token });
+            }
+            sesion.SetValue(conv, "la sesión siguiente");
+            procesar.Invoke(conv, new object[] { LlegaLaLlamada("call_D", "self_hide"), CancellationToken.None });
+        }, salidasEsperadas: 1);
+        Debe(tras.Count(EsSalida) == 1 && ItemDe(tras.First(EsSalida), "call_id") == "call_D" && tras.Count(EsTurno) == 1,
+            $"una llamada de una sesión anterior que nunca llegó a correr no retiene el turno de la sesión siguiente (salió: {Tipos(tras)})");
+
+        var rt = Conversa(new Voz.Realtime.ProtocoloOpenAI(), conv =>
+        {
+            autocontrol.SetValue(conv, Contesta);
+            var tanda = new List<Voz.Realtime.Llamada>
+            {
+                new("call_E", "self_mute", new Dictionary<string, string>()),
+                new("call_F", "self_hide", new Dictionary<string, string>()),
+            };
+            ((Task)nucleo.Invoke(conv, new object[] { tanda, CancellationToken.None })!).GetAwaiter().GetResult();
+        }, salidasEsperadas: 2);
+        Debe(rt.Count(EsSalida) == 2 && rt.Count(EsTurno) == 1 && rt.Count > 0 && EsTurno(rt[^1]),
+            $"con GPT Realtime una tanda de dos sigue como estaba: sus dos resultados y detrás un response.create (salió: {Tipos(rt)})");
+    }
+
+    private static string TipoDelMensaje(string json)
+    {
+        if (json.Length == 0) return "(vacío)";
+        try
+        {
+            using var d = JsonDocument.Parse(json);
+            return d.RootElement.TryGetProperty("type", out var v) ? v.GetString() ?? "" : "(sin type)";
+        }
+        catch (JsonException) { return "(no es JSON)"; }
+    }
+
+    /// <remarks>
+    /// SIN MARCAS NO SE CIERRA NADA, y nada da error. GPT-Live no manda speech_started ni response.done
+    /// (medido el 2026-09-12): sin cierre, TurnoCerrado, Cerro, la línea «Ü dijo» y la frase que recibe
+    /// quien aprende (promesa 105) o el piloto no llegan nunca. La regla se juzga con reloj de mentira, y
+    /// después su USO dentro de la conversación: una regla sin cablear es un guardia que se cree puesto
+    /// (aprendizaje nº18).
+    /// </remarks>
+    private static void SinMarcasLaConversacionMarcaLosTurnos()
+    {
+        var t = Cap004("U.WindowsClient.Voice.TurnosSinMarca");
+        var oye = t?.GetMethod("Oye");
+        var toca = t?.GetMethod("TocaCerrar");
+        if (t == null || oye == null || toca == null) { Pendiente("Voice.TurnosSinMarca (Oye, TocaCerrar)", "209", "018"); return; }
+
+        long ahora = 0;
+        Func<long> reloj = () => ahora;
+        object Nuevo(object silencio) => Activator.CreateInstance(t,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { reloj, silencio }, null)!;
+        var pcm = new byte[480];
+        bool Oye(object turnos, Voz.Realtime.Hecho h) => (bool)oye.Invoke(turnos, new object[] { h })!;
+        // El audio llega SIN PARAR, también en silencio (medido): se le da un trozo antes de cada pregunta.
+        bool Cierra(object turnos) { Oye(turnos, new Voz.Realtime.Hecho.Suena(pcm)); return (bool)toca.Invoke(turnos, null)!; }
+        Voz.Realtime.Hecho Usuario(string s) => new Voz.Realtime.Hecho.DiceElUsuario(s);
+        Voz.Realtime.Hecho DeU(string s) => new Voz.Realtime.Hecho.DiceU(s);
+
+        var turnos = Nuevo(Type.Missing);
+        ahora = 0;
+        Debe(!Cierra(turnos), "recién nacido no hay nada que cerrar");
+        ahora = 60_000;
+        Debe(!Cierra(turnos), "sin nada oído no se cierra nunca, aunque llegue audio un minuto entero: el audio continuo no es actividad");
+
+        ahora = 100_000; bool abre = Oye(turnos, Usuario("abre el"));
+        ahora = 100_300; bool abreOtra = Oye(turnos, Usuario(" bloc de notas"));
+        Debe(abre && !abreOtra, "el primer trozo de lo que dice el usuario abre un turno, y el segundo de la misma frase no");
+        // EL SILENCIO POR DEFECTO SON 2000 ms, MEDIDOS (2026-09-12, sonda de los turnos contra GPT-Live, 3
+        // corridas): entre devolver el resultado de una herramienta y lo siguiente que dice Ü pasan 1658-1707 ms
+        // (4 de 4). Con 1500 el turno se cerraba a mitad de la tarea; ver la 211 y la spec 018.
+        ahora = 101_300;
+        Debe(!Cierra(turnos), "a 1000 ms del último trozo no toca cerrar");
+        ahora = 102_000;
+        Debe(!Cierra(turnos), "a 2000 ms del PRIMER trozo tampoco: el silencio se cuenta desde el último");
+        // NI UN MILISEGUNDO ANTES (revisión contrato r2, 2026-09-13). Con solo 1000 y 2000, cualquier silencio por
+        // defecto entre 1701 y 2000 pasaba: con 1705, CONTRATO INTACTO (medido). Y justo ahí caen dos de los cuatro
+        // huecos que fijaron los 2000 —1705 y 1707 ms entre devolver una herramienta y lo siguiente que dice Ü—: con
+        // 1705 el turno se volvería a cerrar a mitad de la tarea, que es la regresión que los 2000 arreglaron.
+        ahora = 102_299;
+        Debe(!Cierra(turnos), "a 1999 ms del último trozo todavía no toca cerrar: el silencio por defecto son los 2000 ms medidos, no algo menos");
+        ahora = 102_300; bool cierra = Cierra(turnos);
+        ahora = 102_400; bool otraVez = Cierra(turnos);
+        Debe(cierra && !otraVez, "a 2000 ms del último trozo toca cerrar, y una sola vez");
+
+        ahora = 102_500;
+        Debe(!Oye(turnos, DeU("Listo, ")), "lo que dice Ü no abre un turno del usuario");
+        ahora = 104_000;
+        Debe(!Cierra(turnos), "lo que dice Ü también cuenta como actividad");
+        ahora = 104_500;
+        Debe(Cierra(turnos), "y también se cierra por silencio: sin eso la línea «Ü dijo» no se escribe nunca");
+
+        ahora = 110_000;
+        Debe(Oye(turnos, Usuario("mira la pantalla")), "tras un cierre, lo siguiente que dice el usuario abre otro turno");
+        ahora = 111_000; Oye(turnos, DeU("Veo SAP."));
+        ahora = 112_500;
+        Debe(!Cierra(turnos), "mientras Ü sigue hablando el turno no se cierra, aunque el usuario lleve 2500 ms callado");
+        ahora = 113_000;
+        Debe(Cierra(turnos), "y se cierra a 2000 ms de lo último que dijo cualquiera de los dos");
+
+        var corto = Nuevo(500);
+        ahora = 200_000; Oye(corto, Usuario("sí"));
+        ahora = 200_400; bool a400 = Cierra(corto);
+        ahora = 200_500; bool a500 = Cierra(corto);
+        Debe(!a400 && a500, "un silencio configurado de 500 ms se respeta");
+
+        // ── Y LA CONVERSACIÓN LA USA, TAL COMO LA CONSTRUYE ──────────────────
+        // Por la misma puerta que el socket: Procesar recibe el JSON tal como llega. Se cambia SOLO el
+        // reloj de los turnos, nunca el marcador. Hasta el 2026-09-12 se cambiaba el marcador entero por uno
+        // del contrato, y eso dejaba sin juez con qué silencio y con qué reloj lo construye la app: la
+        // revisión lo midió con dos sabotajes que dejaban el contrato INTACTO (G1, construir con 60 000 ms,
+        // y G4, reutilizar el marcador de la sesión anterior). El «tic» es un mensaje que NO TRAE HECHOS y no
+        // suena, así que no abre el altavoz: el silencio de ceros (TicSinHechos). Hasta el 2026-09-12 era un
+        // session.usage.updated, y desde la 48 de la voz ese mensaje trae un Hecho.Duracion: la 209 dejó de pasar
+        // por el camino «sin hechos» sin que nada se pusiera rojo. Medido con SG209i (consultar el marcador solo
+        // cuando el mensaje trae hechos): ✔ 209, y solo la 211 y la 212 en rojo.
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var procesar = tc?.GetMethod("Procesar", BindingFlags.NonPublic | BindingFlags.Instance);
+        var campo = tc?.GetField("_turnosSinMarca", BindingFlags.NonPublic | BindingFlags.Instance);
+        var campoReloj = tc?.GetField("_relojDeLosTurnos", BindingFlags.NonPublic | BindingFlags.Instance);
+        var deSesionNueva = tc?.GetMethod("EmpezarLosTurnosDeLaSesion", BindingFlags.NonPublic | BindingFlags.Instance);
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        if (tc == null || procesar == null || campo == null || anotado == null)
+        { Pendiente("ConversacionEnVivo._turnosSinMarca y su uso en Procesar", "209", "018"); return; }
+        if (campoReloj == null || deSesionNueva == null)
+        { Pendiente("ConversacionEnVivo._relojDeLosTurnos y EmpezarLosTurnosDeLaSesion (el marcador tal como lo construye la app)", "209", "018"); return; }
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tLive == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "209", "018"); return; }
+        string tic = TicSinHechos;
+
+        (bool TieneMarcador, bool RelojDelSistema, int CerroAntes, int CerroA2000, int CerroDespues, List<string> Dijo, bool AbrioPorVoz) Conversa(
+            Voz.Realtime.IProtocolo protocolo, string trozo)
+        {
+            using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), protocolo })!;
+            int cerro = 0;
+            var dijo = new List<string>();
+            bool abrioPorVoz = false;
+            tc.GetEvent("Cerro")!.AddEventHandler(conv, (Action)(() => cerro++));
+            tc.GetEvent("DijoElUsuario")!.AddEventHandler(conv, (Action<string>)(s => dijo.Add(s)));
+            Action<string, string> oyeLog = (tag, msg) => { if (tag == "voz-turno" && msg.Contains("por voz")) abrioPorVoz = true; };
+            anotado.AddEventHandler(null, oyeLog);
+            try
+            {
+                bool tiene = campo.GetValue(conv) != null;
+                // EL RELOJ DE LA APP ES EL DEL SISTEMA: el mismo origen que Environment.TickCount64, y avanza
+                // con él. Con un reloj parado (() => 0) los turnos no se cerrarían nunca, sin error.
+                var deLaApp = campoReloj.GetValue(conv) as Func<long>;
+                long a = deLaApp?.Invoke() ?? long.MinValue, sistema = Environment.TickCount64;
+                Thread.Sleep(60);
+                long b = deLaApp?.Invoke() ?? long.MinValue;
+                bool delSistema = deLaApp != null && Math.Abs(a - sistema) < 250 && b - a >= 30;
+                campoReloj.SetValue(conv, reloj);
+                void Llega(string json) => procesar.Invoke(conv, new object[] { json, CancellationToken.None });
+                // A 1999 ms, y no solo a 1700 (revisión contrato r2, 2026-09-13): construir el marcador con 1705 ms
+                // pasaba por aquí igual que con 2000. Y a 2000 exactos, no solo a 2100: con 2050 también pasaba.
+                ahora = 300_000; Llega(trozo);
+                ahora = 301_000; Llega(tic);
+                ahora = 301_700; Llega(tic);
+                ahora = 301_999; Llega(tic);
+                int antes = cerro;
+                ahora = 302_000; Llega(tic);
+                int a2000 = cerro;
+                ahora = 302_100; Llega(tic);
+                return (tiene, delSistema, antes, a2000, cerro, dijo, abrioPorVoz);
+            }
+            finally { anotado.RemoveEventHandler(null, oyeLog); }
+        }
+
+        var live = (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+        var conLive = Conversa(live, "{\"type\":\"session.input_transcript.delta\",\"delta\":\"abre el bloc de notas\"}");
+        Debe(conLive.TieneMarcador, "con GPT-Live la conversación lleva su marcador de turnos");
+        Debe(conLive.RelojDelSistema, "y lo construye con el reloj del sistema: el mismo origen que Environment.TickCount64, y avanza con él");
+        Debe(conLive.AbrioPorVoz, "y el primer trozo de lo que dice el usuario abre un turno en la conversación (línea voz-turno «por voz»)");
+        Debe(conLive.CerroAntes == 0 && conLive.CerroA2000 == 1 && conLive.CerroDespues == 1,
+            $"con el silencio con que la construye la app, los 2000 ms medidos: a 1999 ms no cierra, a 2000 ms cierra, y una sola vez, sin que el servidor mande nada (cerró {conLive.CerroAntes}, {conLive.CerroA2000} y luego {conLive.CerroDespues})");
+        Debe(conLive.Dijo.Count == 1 && conLive.Dijo[0] == "abre el bloc de notas",
+            $"y al cerrar entrega lo que dijo el usuario, que es lo que leen quien aprende y el piloto (entregó {conLive.Dijo.Count})");
+
+        // CADA SESIÓN EMPIEZA SIN LO DICHO EN LA ANTERIOR: el marcador se recrea, no se reutiliza. Si se
+        // reutilizara, cerrar la voz a menos de 2 s de que hablara el usuario dejaría un cierre fantasma
+        // (Cerro y TurnoCerrado) en la primera respuesta de la sesión siguiente.
+        using (var otra = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), live })!)
+        {
+            int cerro = 0;
+            tc.GetEvent("Cerro")!.AddEventHandler(otra, (Action)(() => cerro++));
+            campoReloj.SetValue(otra, reloj);
+            ahora = 500_000; procesar.Invoke(otra, new object[] { "{\"type\":\"session.input_transcript.delta\",\"delta\":\"de la sesión anterior\"}", CancellationToken.None });
+            object? marcadorViejo = campo.GetValue(otra);
+            deSesionNueva.Invoke(otra, null);
+            object? marcadorNuevo = campo.GetValue(otra);
+            ahora = 503_000; procesar.Invoke(otra, new object[] { tic, CancellationToken.None });
+            Debe(marcadorNuevo != null && !ReferenceEquals(marcadorViejo, marcadorNuevo) && cerro == 0,
+                $"al empezar otra sesión el marcador es otro: lo dicho en la anterior no cierra un turno de esta (cerró {cerro})");
+        }
+
+        var conMarca = Conversa(new ProtocoloDeMentira(pideRespuesta: true, marcaLosTurnos: true),
+            "{\"type\":\"trozo\",\"delta\":\"abre el bloc de notas\"}");
+        Debe(!conMarca.TieneMarcador && conMarca.CerroDespues == 0,
+            "con una voz que marca sus turnos la conversación no inventa otro cierre: los pone el servidor");
+        var conRealtime = Conversa(new Voz.Realtime.ProtocoloOpenAI(),
+            "{\"type\":\"conversation.item.input_audio_transcription.delta\",\"delta\":\"abre el bloc de notas\"}");
+        Debe(!conRealtime.TieneMarcador && conRealtime.CerroDespues == 0,
+            "y con GPT Realtime, que marca los suyos, tampoco: ni marcador ni cierre inventado");
+    }
+
+    /// <remarks>
+    /// EL DEFECTO ES LO QUE DECIDE LA MIGRACIÓN. Sin esto existen el protocolo, los turnos y lo escrito, y
+    /// la voz que abre la app sigue siendo la de antes — FaceWindow construye la conversación sin decir
+    /// protocolo. Y la vuelta atrás tiene que ser una variable, sin recompilar.
+    /// </remarks>
+    private static void LaVozPorDefectoEsGptLive()
+    {
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var m = tc?.GetMethod("ProtocoloPorDefecto", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+        if (tc == null || m == null) { Pendiente("Voice.ConversacionEnVivo.ProtocoloPorDefecto", "210", "018"); return; }
+
+        // LO QUE ABRE, NO CÓMO SE LLAMA (2026-09-12). Mirar solo el nombre del tipo dejaba verde abrir con
+        // un modelo que no existe: con «new ProtocoloGptLive("gpt-live-1-mini")» en ProtocoloPorDefecto
+        // salieron ✔ 210 y CONTRATO INTACTO, exit 0 (sabotaje G2 de la revisión, repetido en esta rama), y
+        // en U.exe cada session.start pediría ese modelo y la voz no abriría. La 40 no lo ve: juzga una
+        // instancia que construye ella. Se juzga lo que manda la apertura: modelo, delegado y dirección.
+        const string gptLive = "ProtocoloGptLive · modelo gpt-live-1 · delegado gpt-5.6-luna · wss://api.openai.com/v1/live/sessions";
+        const string realtime = "ProtocoloOpenAI · modelo gpt-realtime-2.1-mini · wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini";
+        static string Abre(object? p)
+        {
+            if (p is not Voz.Realtime.IProtocolo proto) return p == null ? "(nada)" : $"(no es un protocolo: {p.GetType().Name})";
+            // El delegado solo existe en GPT-Live, y se pide por nombre: si desaparece, la cadena ya no cuadra.
+            string delegado = proto.GetType().GetProperty("Delegado")?.GetValue(proto) is string d ? $" · delegado {d}" : "";
+            return $"{proto.GetType().Name} · modelo {proto.Modelo}{delegado} · {proto.Direccion().AbsoluteUri}";
+        }
+
+        var preguntadas = new List<string>();
+        string Sale(string? valor)
+        {
+            Func<string, string?> variable = n => { preguntadas.Add(n); return valor; };
+            return Abre(m.Invoke(null, new object[] { variable }));
+        }
+        foreach (var (valor, como) in new (string?, string)[]
+                 { (null, "sin U_VOZ"), ("", "con U_VOZ vacío"), ("   ", "con U_VOZ en blanco"), ("gpt-live", "con U_VOZ=gpt-live") })
+        {
+            string s = Sale(valor);
+            Debe(s == gptLive, $"{como} la voz es GPT-Live y abre {gptLive} (abre {s})");
+        }
+        string rt = Sale("realtime");
+        Debe(rt == realtime, $"con U_VOZ=realtime vuelve GPT Realtime y abre {realtime} (abre {rt})");
+        string rtEscrito = Sale(" Realtime ");
+        Debe(rtEscrito == realtime, $"y escrito a mano, con mayúscula o espacios, también: lo teclea una persona en setx (abre {rtEscrito})");
+        string raro = Sale("gemini");
+        Debe(raro == gptLive, $"un valor que no se conoce no elige otra voz por su cuenta: abre la de por defecto (abre {raro})");
+        Debe(preguntadas.Count > 0 && preguntadas.All(n => n == "U_VOZ"),
+            $"y la variable que se pregunta es U_VOZ (se preguntó: {string.Join(", ", preguntadas.Distinct())})");
+
+        // EL CONSTRUCTOR SIN PROTOCOLO, que es como lo llama FaceWindow. Construirlo no abre ni micrófono
+        // ni altavoz (LiveAudio se crea sin dispositivo), así que se juzga aquí y no se deja dicho.
+        //
+        // Y LA LÍNEA QUE AVISA DE UN VALOR DESCONOCIDO. La spec decía que la juzgaba la 210 y no la miraba
+        // nadie: con la condición del aviso invertida salieron ✔ 210 y CONTRATO INTACTO, exit 0 (sabotaje G3
+        // de la revisión). Sin esa línea, «setx U_VOZ gemini» no deja rastro y parece haber funcionado.
+        var campo = tc.GetField("_protocolo", BindingFlags.NonPublic | BindingFlags.Instance);
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        if (anotado == null) { Pendiente("Diagnostics.LogBus.Anotado", "210", "018"); return; }
+        var avisos = new List<string>();
+        Action<string, string> oyeLog = (tag, msg) => { if (tag == "voz-viva" && msg.Contains("U_VOZ")) lock (avisos) avisos.Add(msg); };
+        string? antes = Environment.GetEnvironmentVariable("U_VOZ");
+        anotado.AddEventHandler(null, oyeLog);
+        try
+        {
+            foreach (var (valor, esperado) in new (string?, string)[] { (null, gptLive), ("realtime", realtime), ("gemini", gptLive) })
+            {
+                lock (avisos) avisos.Clear();
+                Environment.SetEnvironmentVariable("U_VOZ", valor);
+                string como = valor == null ? "sin U_VOZ" : "con U_VOZ=" + valor;
+                using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), null })!;
+                string abre = campo == null ? "(no encuentro _protocolo)" : Abre(campo.GetValue(conv));
+                Debe(abre == esperado, $"construida sin protocolo, {como} la conversación abre {esperado} (abre {abre})");
+                string[] dichos; lock (avisos) dichos = avisos.ToArray();
+                if (valor == "gemini")
+                    Debe(dichos.Length == 1 && dichos[0].Contains("«gemini»"),
+                        $"{como} el constructor deja UNA línea voz-viva que nombra «gemini»: la variable se ignoró y el log lo dice (dejó {dichos.Length}: {string.Join(" | ", dichos)})");
+                else
+                    Debe(dichos.Length == 0,
+                        $"{como} no deja ninguna línea voz-viva sobre U_VOZ: no hay nada que avisar (dejó {dichos.Length}: {string.Join(" | ", dichos)})");
+            }
+        }
+        finally
+        {
+            anotado.RemoveEventHandler(null, oyeLog);
+            Environment.SetEnvironmentVariable("U_VOZ", antes);
+        }
+    }
+
+    /// <remarks>
+    /// EL LOG ES LA FUENTE DE VERDAD, y un log inundado no la dice. Medido el 2026-09-12 contra
+    /// /v1/live/sessions (sonda de solo lectura, un turno delegado: mirar la pantalla y contestar en cinco
+    /// frases): 379 mensajes, 98 sin hechos —cada uno una línea «← …» de hasta 400 caracteres— y 78 de esos
+    /// 98 eran deltas del delegado, uno por ficha: 50 response.output_text.delta y 28
+    /// response.function_call_arguments.delta. Con cinco turnos así el anillo de 500 líneas del panel pierde
+    /// las voz-turno, los topes y las «llamada recibida». Lo demás se sigue volcando: un evento que no se
+    /// traduce es justo lo que hay que poder ver.
+    ///
+    /// Se juzga por la puerta del socket (Procesar, que es donde se escribe la línea) y la regla, pura.
+    /// </remarks>
+    private static void ElLogNoSeInundaConLosDeltas()
+    {
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var procesar = tc?.GetMethod("Procesar", BindingFlags.NonPublic | BindingFlags.Instance);
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tc == null || procesar == null || anotado == null || tLive == null)
+        { Pendiente("ConversacionEnVivo.Procesar, LogBus.Anotado y Voz.Realtime.ProtocoloGptLive", "217", "018"); return; }
+
+        // Con la forma que mandó el servidor en las sondas, recortados a lo que se mira.
+        const string textoDelta = "{\"type\":\"response.event\",\"delegation_id\":\"item_1\",\"event\":{\"type\":\"response.output_text.delta\",\"delta\":\"Veo\",\"sequence_number\":12}}";
+        const string argumentosDelta = "{\"type\":\"response.event\",\"delegation_id\":\"item_1\",\"event\":{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"que\",\"sequence_number\":40}}";
+        const string audioVacio = "{\"type\":\"session.output_audio.delta\",\"delta\":\"\"}";
+        const string completado = "{\"type\":\"response.event\",\"delegation_id\":\"item_1\",\"event\":{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\"}}}";
+        const string argumentosHechos = "{\"type\":\"response.event\",\"delegation_id\":\"item_1\",\"event\":{\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{}\",\"item_id\":\"fc_1\"}}";
+        const string delegacion = "{\"type\":\"session.delegation.created\",\"delegation\":{\"id\":\"item_1\",\"type\":\"delegation\",\"target\":\"responses\"}}";
+        // ACOTADO AL INTEGRAR (2026-09-12): el ejemplo de «lo que no se traduce» era un session.usage.updated, y la 48 de
+        // la voz lo traduce ahora a Hecho.Duracion (su duración va al cierre, la 218). Con él la 217 salía roja
+        // («dejó 0») sin que el log hubiera cambiado: el ejemplo había dejado de ser lo que decía ser. El de ahora es un
+        // evento medido que ningún traductor atiende.
+        const string instruccionesAnotadas = "{\"type\":\"session.instructions.appended\",\"event_id\":\"event_1\"}";
+        const string sobreVacio = "{\"type\":\"response.event\"}";
+        const string deltaDeRealtime = "{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\"}";
+
+        var callan = new (string Json, string Como)[]
+        {
+            (textoDelta, "un response.output_text.delta del delegado"),
+            (argumentosDelta, "un response.function_call_arguments.delta del delegado"),
+            (audioVacio, "un session.output_audio.delta vacío"),
+        };
+        var hablan = new (string Json, string Como)[]
+        {
+            (completado, "un response.completed del delegado"),
+            (argumentosHechos, "un response.function_call_arguments.done"),
+            (delegacion, "un session.delegation.created"),
+            (instruccionesAnotadas, "un session.instructions.appended"),
+        };
+
+        // ── POR LA PUERTA DEL SOCKET ──────────────────────────────────────────
+        // Ninguno de estos mensajes trae hechos, así que no suena nada: construir la conversación no abre
+        // el altavoz. El marcador de turnos no oyó a nadie, así que tampoco cierra nada.
+        var live = (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+        int volcadas = 0;
+        Action<string, string> oyeLog = (tag, msg) => { if (tag == "voz-viva" && msg.StartsWith("← ")) Interlocked.Increment(ref volcadas); };
+        anotado.AddEventHandler(null, oyeLog);
+        try
+        {
+            using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), live })!;
+            int Deja(string json)
+            {
+                Interlocked.Exchange(ref volcadas, 0);
+                procesar.Invoke(conv, new object[] { json, CancellationToken.None });
+                return Interlocked.Exchange(ref volcadas, 0);
+            }
+            foreach (var (json, como) in callan)
+            {
+                int n = Deja(json);
+                Debe(n == 0, $"por la puerta del socket, {como} no deja ninguna línea «←» (dejó {n})");
+            }
+            foreach (var (json, como) in hablan)
+            {
+                int n = Deja(json);
+                Debe(n == 1, $"por la puerta del socket, {como} sigue dejando su línea «←», una (dejó {n})");
+            }
+        }
+        finally { anotado.RemoveEventHandler(null, oyeLog); }
+
+        // ── LA REGLA, PURA ───────────────────────────────────────────────────
+        var vuelca = tc.GetMethod("SeVuelcaCrudo", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+        if (vuelca == null) { Pendiente("Voice.ConversacionEnVivo.SeVuelcaCrudo", "217", "018"); return; }
+        bool Vuelca(string json)
+        {
+            using var d = JsonDocument.Parse(json);
+            return (bool)vuelca.Invoke(null, new object[] { d.RootElement })!;
+        }
+        foreach (var (json, como) in callan)
+            Debe(!Vuelca(json), $"{como} no se vuelca crudo al log");
+        foreach (var (json, como) in hablan)
+            Debe(Vuelca(json), $"{como} sí se vuelca");
+        Debe(Vuelca(sobreVacio), "un response.event sin evento dentro sí se vuelca: lo raro es lo que hay que ver");
+        Debe(Vuelca(deltaDeRealtime),
+            "y un .delta que no viene dentro de response.event sigue como estaba: la regla es de los deltas del delegado, no de todo lo que acabe en .delta");
+    }
+
+    /// <remarks>
+    /// EL PANEL DE COSTOS NO SE ENTERABA DE GPT-LIVE, Y NADA LO DECÍA (revisa:regresiones, 2026-09-12). GPT-Live no
+    /// cuenta fichas: cuenta segundos, en session.usage.updated, que la 48 de la voz traduce a Hecho.Duracion. La
+    /// conversación no lo atendía, y ReportarConsumo salía en la guarda «_total &lt;= 0» sin reportar y sin dejar
+    /// línea: con GPT-Live como voz por defecto, el consumo de voz desaparecía del panel en silencio.
+    ///
+    /// LOS SEGUNDOS SON EL ACUMULADO DE LA SESIÓN (12.0 a los 15 s y 25.0 a los 30 s de la misma sesión, medido):
+    /// sumarlos como fichas daría 37 donde hubo 25. Pero una conexión nueva es otra sesión del servidor, que cuenta
+    /// desde cero, y entre conexiones sí se suman. El panel cuenta fichas y FaceWindow no le pasa los segundos (zona de
+    /// choque, no se toca): la línea del cierre es lo que los deja escritos.
+    ///
+    /// Se juzga por la puerta del socket (Procesar), por el cambio de conexión (EmpiezaUnaConexion) y por el cierre de
+    /// verdad (TerminarAsync, con Viva puesta a mano: sin micrófono, collar ni altavoz abiertos, cerrar no toca ningún
+    /// dispositivo). Que ArrancarAsync ponga la cuenta a cero necesita clave y socket, y no se juzga aquí (W218); tampoco
+    /// que ReconectarAsync, al volver sin continuidad, pase por EmpiezaUnaConexion: aquí se invoca por reflexión, y
+    /// cambiar esa llamada por un Dice deja el contrato INTACTO (W218b, medido el 2026-09-12).
+    /// </remarks>
+    private static void LaDuracionDeGptLiveLlegaAlCierre()
+    {
+        const BindingFlags Privado = BindingFlags.NonPublic | BindingFlags.Instance;
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var procesar = tc?.GetMethod("Procesar", Privado);
+        var reaccionar = tc?.GetMethod("Reaccionar", Privado);
+        var conexion = tc?.GetMethod("EmpiezaUnaConexion", Privado);
+        var terminar = tc?.GetMethod("TerminarAsync");
+        var viva = tc?.GetProperty("Viva");
+        var reporta = tc?.GetProperty("ReportaConsumo");
+        var tConsumo = tc?.GetNestedType("ConsumoVivo");
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tc == null || procesar == null || reaccionar == null || conexion == null || terminar == null || viva == null
+            || reporta == null || tConsumo == null || anotado == null || tLive == null)
+        { Pendiente("ConversacionEnVivo (Procesar, Reaccionar, EmpiezaUnaConexion, TerminarAsync, ReportaConsumo) y Voz.Realtime.ProtocoloGptLive", "218", "018"); return; }
+        var segundosDelServidor = tConsumo.GetProperty("SegundosDelServidor");
+        if (segundosDelServidor == null) Pendiente("Voice.ConversacionEnVivo.ConsumoVivo.SegundosDelServidor", "218", "018");
+
+        static string Uso(double s)
+            => "{\"type\":\"session.usage.updated\",\"usage\":{\"seconds\":" + s.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "}}";
+        Voz.Realtime.IProtocolo GptLive() => (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+        IDisposable Conversacion(Voz.Realtime.IProtocolo p)
+            => (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), p })!;
+        Reportes Escuchar(object conv)
+        {
+            var r = new Reportes();
+            reporta.SetValue(conv, Delegate.CreateDelegate(reporta.PropertyType, r,
+                typeof(Reportes).GetMethod(nameof(Reportes.Recibe))!.MakeGenericMethod(tConsumo)));
+            return r;
+        }
+        void Llega(object conv, string json) => procesar.Invoke(conv, new object[] { json, CancellationToken.None });
+        void Cerrar(object conv) { viva.SetValue(conv, true); ((Task)terminar.Invoke(conv, null)!).Wait(5000); }
+        // El reporte sale en un Task.Run a propósito (no retrasa el cierre): se espera a que llegue, y un poco más para ver que no llega otro.
+        static int Espera(Reportes r, int cuantos)
+        {
+            long fin = Environment.TickCount64 + 3000;
+            while (r.Cuantos < cuantos && Environment.TickCount64 < fin) Thread.Sleep(20);
+            Thread.Sleep(200);
+            return r.Cuantos;
+        }
+        object? Campo(object parte, string nombre) => tConsumo.GetProperty(nombre)?.GetValue(parte);
+
+        var lineas = new List<string>();
+        Action<string, string> oyeLog = (tag, msg) => { if (tag == "voz-viva" && msg.Contains("según el servidor")) lock (lineas) lineas.Add(msg); };
+        string[] Lineas() { lock (lineas) { var l = lineas.ToArray(); lineas.Clear(); return l; } }
+        anotado.AddEventHandler(null, oyeLog);
+        try
+        {
+            // ── UNA SESIÓN DE GPT-LIVE QUE SE CORTÓ Y VOLVIÓ ─────────────────────
+            using (var conv = Conversacion(GptLive()))
+            {
+                var r = Escuchar(conv);
+                Lineas();
+                Llega(conv, Uso(12.0));
+                Llega(conv, Uso(25.0));
+                conexion.Invoke(conv, new object[] { "" });   // la conexión nueva es otra sesión del servidor: vuelve a contar desde cero
+                Llega(conv, Uso(3.0));
+                // TRES CONEXIONES, NO DOS: con una sola reconexión, «sumar lo de las anteriores» y «quedarse con la anterior»
+                // dan lo mismo (0 + 25 = 25). El 2026-09-12 EmpiezaUnaConexion con «=» en vez de «+=» (X218b) dejó ✔ 218 y
+                // CONTRATO INTACTO; con dos cortes, 25 + 3 + 4 s se reportaban como 7.
+                conexion.Invoke(conv, new object[] { "" });
+                Llega(conv, Uso(4.0));
+                Cerrar(conv);
+                int n = Espera(r, 1);
+                string[] dichas = Lineas();
+                Debe(n == 1, $"una sesión de GPT-Live sin fichas y con segundos se reporta al cerrar la voz, una vez (se reportó {n})");
+                Debe(dichas.Length == 1 && dichas[0].Contains(" 32 s "),
+                    $"y el cierre deja UNA línea voz-viva con los segundos del servidor: 25 de la primera conexión —el último acumulado, no 12 + 25—, 3 de la segunda y 4 de la tercera, 32 s (dejó {dichas.Length}: {string.Join(" | ", dichas)})");
+                if (n >= 1)
+                {
+                    var parte = r.Primera!;
+                    Debe(Convert.ToInt64(Campo(parte, "Total")) == 0, $"y el reporte no se inventa fichas: GPT-Live no las cuenta (lleva {Campo(parte, "Total")})");
+                    if (segundosDelServidor != null)
+                    {
+                        double s = Convert.ToDouble(segundosDelServidor.GetValue(parte));
+                        Debe(Math.Abs(s - 32.0) < 1e-9, $"y el reporte lleva esos 32 s del servidor (lleva {s})");
+                    }
+                }
+
+                Cerrar(conv);
+                int otra = Espera(r, 2);
+                string[] otraVez = Lineas();
+                Debe(otra == 1 && otraVez.Length == 0,
+                    $"y reportar pone la cuenta a cero: cerrar otra vez no reporta ni escribe los mismos segundos (reportes {otra}, líneas {otraVez.Length})");
+            }
+
+            // ── SIN NADIE A QUIEN REPORTAR, LA LÍNEA SALE IGUAL ─────────────────
+            using (var conv = Conversacion(GptLive()))
+            {
+                Lineas();
+                Llega(conv, Uso(40.0));
+                Cerrar(conv);
+                string[] dichas = Lineas();
+                Debe(dichas.Length == 1 && dichas[0].Contains(" 40 s "),
+                    $"sin nadie a quien reportar (sin backend), el cierre deja igual su línea con los 40 s: el log es la fuente de verdad (dejó {dichas.Length}: {string.Join(" | ", dichas)})");
+            }
+
+            // ── GPT REALTIME: FICHAS Y NINGÚN SEGUNDO, COMO ANTES ────────────────
+            using (var conv = Conversacion(new Voz.Realtime.ProtocoloOpenAI()))
+            {
+                var r = Escuchar(conv);
+                Lineas();
+                reaccionar.Invoke(conv, new object[] { new Voz.Realtime.Hecho.Consumo(100, 50, 150), CancellationToken.None });
+                Cerrar(conv);
+                int n = Espera(r, 1);
+                string[] dichas = Lineas();
+                Debe(n == 1 && Convert.ToInt64(Campo(r.Primera!, "Total")) == 150,
+                    $"con GPT Realtime, una sesión con fichas se sigue reportando con sus fichas (reportes {n})");
+                Debe(dichas.Length == 0, $"y sin segundos del servidor no deja línea de segundos (dejó {dichas.Length}: {string.Join(" | ", dichas)})");
+                if (n >= 1 && segundosDelServidor != null)
+                    Debe(Convert.ToDouble(segundosDelServidor.GetValue(r.Primera!)) == 0, "y su reporte no lleva segundos del servidor");
+            }
+
+            // ── NADA QUE CONTAR ──────────────────────────────────────────────────
+            using (var conv = Conversacion(GptLive()))
+            {
+                var r = Escuchar(conv);
+                Lineas();
+                Cerrar(conv);
+                int n = Espera(r, 1);
+                string[] dichas = Lineas();
+                Debe(n == 0 && dichas.Length == 0,
+                    $"una sesión sin fichas ni segundos no reporta nada ni deja línea: no hubo nada que contar (reportes {n}, líneas {dichas.Length})");
+            }
+        }
+        finally { anotado.RemoveEventHandler(null, oyeLog); }
+    }
+
+    /// <remarks>
+    /// LA MISMA CLASE DE ERROR, DOS TRATAMIENTOS (nivel 4 del 2026-09-12, cuenta sin crédito). Con U_VOZ=realtime el
+    /// servidor cerró con 1013 «insufficient_quota.credit_balance_exhausted» y la conversación reconectó cuatro veces
+    /// («reconectada SIN continuidad … intento 1..4», «se cayó 5 veces seguidas: se deja»); GPT-Live, con la 49, dijo la
+    /// causa una vez. Reconectar con la misma clave, el mismo modelo y la misma cuenta falla igual.
+    ///
+    /// LOS CÓDIGOS SON LOS MEDIDOS, no los de la documentación. El 2026-09-13, con .NET 8 y el mismo ClientWebSocket
+    /// de la app (sonda-fatal, fuera del repo): una clave falsa por /v1/live/sessions se rechaza en el apretón de
+    /// manos con HTTP 401 (WebSocketException NotAWebSocket); por /v1/realtime el apretón pasa, llega el error
+    /// invalid_api_key y el cierre 3000 «invalid_request_error.invalid_api_key». Un modelo que no existe: invalid_model
+    /// en GPT-Live, model_not_found y cierre 4004 en Realtime. La descripción del cierre es «type.code» del error.
+    ///
+    /// SE RECONOCE POR EL CÓDIGO Y NO POR LA PROSA: el message está en inglés, cambia de redacción y lleva cifras
+    /// (la del 401 viene dentro de una frase de .NET). Y el número del cierre no es la causa: 1013 es «vuelve a
+    /// intentarlo» en el RFC 6455, y el servidor lo usó para decir que no hay crédito.
+    /// </remarks>
+    private static void LoQueNoSeArreglaReintentandoSeReconoce()
+    {
+        var t = Cap004("U.WindowsClient.Voice.NoSeArreglaReintentando");
+        var m = t?.GetMethod("PorQue", BindingFlags.Public | BindingFlags.Static, new[] { typeof(string) });
+        if (m == null) { Pendiente("Voice.NoSeArreglaReintentando.PorQue", "223", "018"); return; }
+        string PorQue(string codigo) => (string)(m.Invoke(null, new object[] { codigo }) ?? "");
+
+        var causas = new (string Palabra, string[] Codigos)[]
+        {
+            ("crédito", new[] { "credit_balance_exhausted", "insufficient_quota", "insufficient_quota.credit_balance_exhausted" }),
+            ("clave", new[] { "invalid_api_key", "invalid_request_error.invalid_api_key", "401" }),
+            ("modelo", new[] { "invalid_model", "model_not_found", "invalid_request_error.model_not_found" }),
+        };
+        foreach (var (palabra, codigos) in causas)
+        {
+            var dichas = codigos.Select(PorQue).ToArray();
+            for (int i = 0; i < codigos.Length; i++)
+                Debe(dichas[i].Contains(palabra) && causas.Where(o => o.Palabra != palabra).All(o => !dichas[i].Contains(o.Palabra)),
+                    $"«{codigos[i]}» no se arregla reintentando, y lo que dice nombra «{palabra}» y ninguna de las otras dos causas (dijo «{dichas[i]}»)");
+            Debe(dichas.Distinct().Count() == 1,
+                $"los códigos de una misma causa la dicen igual: es una causa, no tres ({string.Join(" | ", dichas)})");
+        }
+
+        string[] reintentables =
+        {
+            "", "   ",
+            // Errores medidos que no son de clave, cuenta ni modelo: la sesión sigue viva o un corte los arregla.
+            "response_input_buffer_full", "function_call_outputs_required", "unknown_parameter",
+            "invalid_request_error", "invalid_request_error.unknown_parameter",
+            // Motivos de cierre que no son una causa: el del servidor y el nuestro.
+            "close_requested", "fin",
+            // El número del cierre no es la causa.
+            "1013", "3000", "4004",
+            // Y la prosa no es un código, aunque hable de lo mismo.
+            "You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.",
+            "Model \"gpt-live-inexistente-9\" is not supported in realtime mode.",
+            "The server returned status code '401' when status code '101' was expected.",
+        };
+        foreach (string codigo in reintentables)
+        {
+            string dicha = PorQue(codigo);
+            Debe(dicha.Length == 0, $"«{codigo}» se puede reintentar: no dice causa (dijo «{dicha}»)");
+        }
+    }
+
+    /// <remarks>
+    /// EL CABLEADO DE LA 223, con los dos protocolos y sin socket. Hasta el 2026-09-13 lo que hacía la conversación al
+    /// quedarse sin escucha vivía en el finally de RecibirAsync y en el catch de ReconectarAsync, que se llamaba a sí
+    /// mismo con cualquier excepción: ningún contrato llegaba ahí. Ahora las tres puertas por las que llega la causa
+    /// —un error (Procesar), el cierre del socket (CerroElServidor) y un apretón de manos rechazado (NoConecto)— la
+    /// anotan, y UN solo sitio decide si se reconecta (SeAcaboLaEscuchaAsync). La reconexión se sustituye como la
+    /// puerta de salida de la 208: el contrato no abre sockets ni lleva la clave.
+    ///
+    /// Cada fuente se juzga SOLA además de junta: con Realtime el error y el cierre traen el mismo código, y juzgarlos
+    /// solo juntos dejaría verde que una de las dos puertas no anotara nada.
+    /// </remarks>
+    private static void LoQueNoSeArreglaNoReconecta()
+    {
+        const BindingFlags Privado = BindingFlags.NonPublic | BindingFlags.Instance;
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var procesar = tc?.GetMethod("Procesar", Privado);
+        var conexion = tc?.GetMethod("EmpiezaUnaConexion", Privado);
+        var viva = tc?.GetProperty("Viva");
+        var dice = tc?.GetEvent("Dice");
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tc == null || procesar == null || conexion == null || viva == null || dice == null || anotado == null || tLive == null)
+        { Pendiente("ConversacionEnVivo (Procesar, EmpiezaUnaConexion, Viva, Dice), LogBus.Anotado y Voz.Realtime.ProtocoloGptLive", "224", "018"); return; }
+        var cerro = tc.GetMethod("CerroElServidor", Privado, new[] { typeof(int), typeof(string) });
+        var corto = tc.GetMethod("SeCortoLaEscucha", Privado, new[] { typeof(Exception) });
+        var noConecto = tc.GetMethod("NoConecto", Privado, new[] { typeof(Exception), typeof(int) });
+        var seAcabo = tc.GetMethod("SeAcaboLaEscuchaAsync", Privado, new[] { typeof(CancellationToken) });
+        var reconectar = tc.GetField("_reconectar", Privado);
+        if (cerro == null || corto == null || noConecto == null || seAcabo == null || reconectar == null)
+        { Pendiente("ConversacionEnVivo: CerroElServidor(int, string), SeCortoLaEscucha(Exception), NoConecto(Exception, int), SeAcaboLaEscuchaAsync y la puerta _reconectar", "224", "018"); return; }
+
+        // Copiados de lo que contestó el servidor (2026-09-12 y 2026-09-13).
+        const string rtClave = """{"type":"error","event_id":"event_ENgrrx8v946dIyk6vQTOj","error":{"type":"invalid_request_error","code":"invalid_api_key","message":"Incorrect API key provided: sk-proj-**************************************************0000. You can find your API key at https://platform.openai.com/account/api-keys.","param":null,"event_id":null}}""";
+        const string rtModelo = """{"type":"error","event_id":"event_ENgs3fIvSRtnqIx8JCGfh","error":{"type":"invalid_request_error","code":"model_not_found","message":"The model `gpt-realtime-inexistente-9` does not exist or you do not have access to it.","param":null,"event_id":null}}""";
+        const string liveAbrio = """{"type":"session.started","session":{"id":"live_u2_ENOy6GhblDeLrMlDOGSX1","model":"gpt-live-1","status":"active","input":[]}}""";
+        const string liveCredito = """{"type":"error","event_id":"event_7f0763e4-314d-4930-9bfa-eb831d673918","error":{"type":"invalid_request_error","code":"credit_balance_exhausted","message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."}}""";
+        const string liveModelo = """{"type":"error","event_id":"event_d7252ece-60b5-4b34-88a4-30b46a4124f4","error":{"type":"invalid_request_error","code":"invalid_model","message":"Model \"gpt-live-inexistente-9\" is not supported in realtime mode."}}""";
+        const string liveBuffer = """{"type":"error","event_id":"event_ENQ9zsNQ1Zl59krrM4MFC","error":{"type":"invalid_request_error","code":"response_input_buffer_full","message":"Backend response input history is limited to 128 items and 32768 UTF-8 bytes per session.","param":"item"}}""";
+
+        Voz.Realtime.IProtocolo GptLive() => (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+        void Llega(object conv, string json) => procesar.Invoke(conv, new object[] { json, CancellationToken.None });
+        void Cierra(object conv, int estado, string descripcion) => cerro.Invoke(conv, new object[] { estado, descripcion });
+        void SeCorta(object conv) => corto.Invoke(conv, new object[] { new System.Net.WebSockets.WebSocketException(
+            System.Net.WebSockets.WebSocketError.ConnectionClosedPrematurely, "The remote party closed the WebSocket connection without completing the close handshake.") });
+        void NoConecta(object conv, int estadoHttp) => noConecto.Invoke(conv, new object[] { new System.Net.WebSockets.WebSocketException(
+            System.Net.WebSockets.WebSocketError.NotAWebSocket, $"The server returned status code '{estadoHttp}' when status code '101' was expected."), estadoHttp });
+
+        var lineas = new List<string>();
+        Action<string, string> oyeLog = (tag, msg) => { if (tag == "voz-viva" && msg.StartsWith("no se reintenta", StringComparison.Ordinal)) lock (lineas) lineas.Add(msg); };
+        anotado.AddEventHandler(null, oyeLog);
+        try
+        {
+            (int Reconexiones, string[] Dichos, string[] Lineas, bool Viva) Corre(Voz.Realtime.IProtocolo p, Action<object> queLlega)
+            {
+                lock (lineas) lineas.Clear();
+                using var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), p })!;
+                int reconexiones = 0;
+                var dichos = new List<string>();
+                reconectar.SetValue(conv, (Func<Task>)(() => { Interlocked.Increment(ref reconexiones); return Task.CompletedTask; }));
+                dice.AddEventHandler(conv, (Action<string>)(s => { lock (dichos) dichos.Add(s); }));
+                viva.SetValue(conv, true);
+                conexion.Invoke(conv, new object[] { "" });   // una conexión recién mandada su apertura, como la deja ArrancarAsync
+                queLlega(conv);
+                ((Task)seAcabo.Invoke(conv, new object[] { CancellationToken.None })!).Wait(5000);
+                bool sigueViva = (bool)viva.GetValue(conv)!;
+                string[] l; lock (lineas) l = lineas.ToArray();
+                string[] d; lock (dichos) d = dichos.ToArray();
+                return (reconexiones, d, l, sigueViva);
+            }
+            void NoReintenta(string como, (int Reconexiones, string[] Dichos, string[] Lineas, bool Viva) r, string causa)
+            {
+                Debe(r.Reconexiones == 0, $"{como}: no reconecta (reconectó {r.Reconexiones})");
+                Debe(!r.Viva, $"{como}: cierra la voz en vez de quedarse abierta y muda");
+                Debe(r.Dichos.Length == 1 && r.Dichos[0].Contains(causa),
+                    $"{como}: dice por qué UNA vez, nombrando «{causa}» (dijo {r.Dichos.Length}: {string.Join(" | ", r.Dichos)})");
+                Debe(r.Lineas.Length == 1 && r.Lineas[0].Contains(causa),
+                    $"{como}: y deja UNA línea voz-viva «no se reintenta» con esa causa (dejó {r.Lineas.Length}: {string.Join(" | ", r.Lineas)})");
+            }
+            void Reintenta(string como, (int Reconexiones, string[] Dichos, string[] Lineas, bool Viva) r)
+                => Debe(r.Reconexiones == 1 && r.Viva && r.Dichos.Length == 0 && r.Lineas.Length == 0,
+                    $"{como}: sigue reconectando, una vez y sin decir ninguna causa (reconectó {r.Reconexiones}, viva {r.Viva}, dijo {r.Dichos.Length}: {string.Join(" | ", r.Dichos)}, líneas {r.Lineas.Length})");
+
+            // ── GPT REALTIME ────────────────────────────────────────────────────
+            var realtime = new Voz.Realtime.ProtocoloOpenAI();
+            NoReintenta("con GPT Realtime, una clave falsa (error invalid_api_key y cierre 3000)",
+                Corre(realtime, c => { Llega(c, rtClave); Cierra(c, 3000, "invalid_request_error.invalid_api_key"); }), "clave");
+            NoReintenta("con GPT Realtime, el cierre 1013 «insufficient_quota.credit_balance_exhausted» solo, como el del nivel 4 del 2026-09-12",
+                Corre(realtime, c => Cierra(c, 1013, "insufficient_quota.credit_balance_exhausted")), "crédito");
+            NoReintenta("con GPT Realtime, un modelo que no existe (error model_not_found y cierre 4004)",
+                Corre(realtime, c => { Llega(c, rtModelo); Cierra(c, 4004, "invalid_request_error.model_not_found"); }), "modelo");
+            NoReintenta("con GPT Realtime, el error invalid_api_key solo, y la escucha cortada sin cierre",
+                Corre(realtime, c => { Llega(c, rtClave); SeCorta(c); }), "clave");
+            Reintenta("con GPT Realtime, un cierre sin descripción",
+                Corre(realtime, c => Cierra(c, 1001, "")));
+
+            // ── GPT-LIVE ───────────────────────────────────────────────────────
+            NoReintenta("con GPT-Live, credit_balance_exhausted con la sesión ya confirmada, y el socket muerto",
+                Corre(GptLive(), c => { Llega(c, liveAbrio); Llega(c, liveCredito); SeCorta(c); }), "crédito");
+            NoReintenta("con GPT-Live, la reconexión rechazada en el apretón de manos con HTTP 401 (clave falsa, medido)",
+                Corre(GptLive(), c => { Llega(c, liveAbrio); SeCorta(c); NoConecta(c, 401); }), "clave");
+            Reintenta("con GPT-Live, un error que no es de clave, cuenta ni modelo (response_input_buffer_full) y el socket muerto",
+                Corre(GptLive(), c => { Llega(c, liveAbrio); Llega(c, liveBuffer); SeCorta(c); }));
+            Reintenta("con GPT-Live, una reconexión que no conecta sin respuesta HTTP (la red)",
+                Corre(GptLive(), c => { Llega(c, liveAbrio); SeCorta(c); NoConecta(c, 0); }));
+            Reintenta("con GPT-Live, una conexión nueva no hereda la causa de la anterior",
+                Corre(GptLive(), c => { Llega(c, liveAbrio); Llega(c, liveCredito); conexion.Invoke(c, new object[] { "" }); Llega(c, liveAbrio); SeCorta(c); }));
+
+            // Y LO QUE LA 49 YA HACÍA, AHORA CON JUEZ: un error antes de session.started es que no abrió (W49c, hasta hoy sin
+            // juez). Con un error que NO es de cuenta, clave ni modelo —unknown_parameter, medido contra un session.start mal
+            // formado—, porque con invalid_model la rama de la causa también lo pararía y romper la de la 49 quedaría verde.
+            const string liveParametro = """{"type":"error","event_id":"event_ENOy9VsLzg0PIpUAbkOqn","error":{"type":"invalid_request_error","code":"unknown_parameter","message":"Unknown parameter: 'session.instructions'.","param":"session.instructions","client_event_id":"sonda_voz"}}""";
+            var noAbrio = Corre(GptLive(), c => { Llega(c, liveParametro); SeCorta(c); });
+            Debe(noAbrio.Reconexiones == 0 && !noAbrio.Viva && noAbrio.Dichos.Length == 1 && noAbrio.Dichos[0].Contains("Unknown parameter: 'session.instructions'."),
+                $"con GPT-Live, un error antes de session.started que no es de cuenta, clave ni modelo: no abrió, no reconecta y lo dice una vez con lo que dijo el servidor (reconectó {noAbrio.Reconexiones}, viva {noAbrio.Viva}, dijo {noAbrio.Dichos.Length}: {string.Join(" | ", noAbrio.Dichos)})");
+            var noAbrioModelo = Corre(GptLive(), c => { Llega(c, liveModelo); SeCorta(c); });
+            Debe(noAbrioModelo.Reconexiones == 0 && !noAbrioModelo.Viva && noAbrioModelo.Dichos.Length == 1 && noAbrioModelo.Dichos[0].Contains("is not supported in realtime mode"),
+                $"con GPT-Live, invalid_model antes de session.started: tampoco reconecta, y lo dice una vez con lo que dijo el servidor (reconectó {noAbrioModelo.Reconexiones}, viva {noAbrioModelo.Viva}, dijo {noAbrioModelo.Dichos.Length}: {string.Join(" | ", noAbrioModelo.Dichos)})");
+        }
+        finally { anotado.RemoveEventHandler(null, oyeLog); }
+    }
+
+    /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
+    private sealed class Reportes
+    {
+        private readonly List<object> _partes = new();
+        public Task Recibe<T>(T parte) { lock (_partes) _partes.Add(parte!); return Task.CompletedTask; }
+        public int Cuantos { get { lock (_partes) return _partes.Count; } }
+        public object? Primera { get { lock (_partes) return _partes.FirstOrDefault(); } }
+    }
+
+    /// <summary>Un trozo de 100 ms de PCM a 24 kHz con UNA muestra de ese pico y el resto a cero.</summary>
+    private static byte[] PcmConPico(short pico)
+    {
+        var b = new byte[4800];
+        BitConverter.GetBytes(pico).CopyTo(b, 2400);
+        return b;
+    }
+
+    /// <summary>
+    /// Una ConversacionEnVivo con GPT-Live, sin socket, con SOLO el reloj de sus turnos cambiado por el del
+    /// contrato. Null, y la promesa Pendiente, si falta algo que se pide por nombre.
+    /// </summary>
+    private static (IDisposable Conv, Action<string> Llega, Func<int> Cierres, Type Tipo)? GptLiveConReloj(Func<long> reloj, string promesa)
+    {
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var procesar = tc?.GetMethod("Procesar", BindingFlags.NonPublic | BindingFlags.Instance);
+        var campoReloj = tc?.GetField("_relojDeLosTurnos", BindingFlags.NonPublic | BindingFlags.Instance);
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tc == null || procesar == null || campoReloj == null || tLive == null)
+        { Pendiente("ConversacionEnVivo._relojDeLosTurnos (el reloj de los turnos) con ProtocoloGptLive", promesa, "018"); return null; }
+        var live = Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+        var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), live })!;
+        campoReloj.SetValue(conv, reloj);
+        var cierres = new int[1];
+        tc.GetEvent("Cerro")!.AddEventHandler(conv, (Action)(() => Interlocked.Increment(ref cierres[0])));
+        return (conv, json => procesar.Invoke(conv, new object[] { json, CancellationToken.None }), () => Volatile.Read(ref cierres[0]), tc);
+    }
+
+    // UN TIC QUE DE VERDAD NO TRAE HECHOS. Era un session.usage.updated, y al integrar las ramas del 2026-09-12 dejó de
+    // serlo: la 48 de la voz lo traduce a Hecho.Duracion. Lo que el servidor manda sin parar entre palabras es su
+    // silencio —100 ms de ceros exactos (4800 B, 6400 «A» en base64)—, que desde la 44 tampoco es Hecho.Suena.
+    private static readonly string TicSinHechos = "{\"type\":\"session.output_audio.delta\",\"delta\":\"" + new string('A', 6400) + "\"}";
+    private static string OyeDelUsuario(string s) => JsonSerializer.Serialize(new { type = "session.input_transcript.delta", delta = s });
+    private static string DiceLaVozDeU(string s) => JsonSerializer.Serialize(new { type = "session.output_transcript.delta", delta = s });
+
+    /// <remarks>
+    /// EL TURNO SE CERRABA A MITAD DE LA TAREA (revisa:regresiones, 2026-09-12). La regla de la 209 cerraba
+    /// con 1,5 s sin transcripción de nadie, y con GPT-Live eso pasa mientras corre una herramienta: la voz
+    /// dice «Claro», el delegado llama, y si la herramienta tarda el turno se cierra — «Ü dijo: Claro»,
+    /// SeguirContandoSiQuedan antes de tiempo, y conducir.ps1 contando su quietud desde el anuncio. La sonda
+    /// de los turnos lo midió sobre la línea de tiempo real: sin guardas, 4 cierres a mitad de tarea en 3
+    /// corridas; con las guardas y 1500 ms, todavía 4 (entre devolver y hablar pasan 1658-1707 ms); con las
+    /// guardas y 2000 ms, ninguno. La voz se juzga por su PICO: el servidor manda audio sin parar también en
+    /// silencio (pico 45, medido) y la palabra más floja medida pica en 1152.
+    /// </remarks>
+    private static void SinMarcasElTurnoEsperaAlTrabajo()
+    {
+        var t = Cap004("U.WindowsClient.Voice.TurnosSinMarca");
+        var oye = t?.GetMethod("Oye");
+        var toca = t?.GetMethod("TocaCerrar");
+        var devuelta = t?.GetMethod("Devuelta");
+        var enCurso = t?.GetProperty("LlamadasEnCurso");
+        if (t == null || oye == null || toca == null || devuelta == null || enCurso == null)
+        { Pendiente("Voice.TurnosSinMarca (Devuelta, LlamadasEnCurso)", "211", "018"); return; }
+
+        long ahora = 0;
+        Func<long> reloj = () => Volatile.Read(ref ahora);
+        object Nuevo() => Activator.CreateInstance(t,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new object[] { reloj, 1500 }, null)!;
+        var ruido = PcmConPico(45);
+        var voz = PcmConPico(1152);
+        bool Oye(object m, Voz.Realtime.Hecho h) => (bool)oye.Invoke(m, new object[] { h })!;
+        bool Cierra(object m) { Oye(m, new Voz.Realtime.Hecho.Suena(ruido)); return (bool)toca.Invoke(m, null)!; }
+        void Devuelve(object m, params Voz.Realtime.Llamada[] ls) => devuelta.Invoke(m, new object[] { (IReadOnlyList<Voz.Realtime.Llamada>)ls });
+        int EnCurso(object m) => (int)enCurso.GetValue(m)!;
+        Voz.Realtime.Llamada Llamada(string id, string nombre) => new(id, nombre, new Dictionary<string, string>());
+        Voz.Realtime.Hecho Usuario(string s) => new Voz.Realtime.Hecho.DiceElUsuario(s);
+        Voz.Realtime.Hecho DeU(string s) => new Voz.Realtime.Hecho.DiceU(s);
+
+        // UNA LLAMADA EN CURSO SUJETA EL TURNO, y el silencio empieza al devolverla.
+        var m = Nuevo();
+        ahora = 0; Oye(m, Usuario("abre la configuración"));
+        var abrir = Llamada("call_abrir", "map_open_app");
+        ahora = 1_200; Oye(m, new Voz.Realtime.Hecho.Pide(new[] { abrir }));
+        Debe(EnCurso(m) == 1, $"una llamada que pide el delegado queda en curso (en curso: {EnCurso(m)})");
+        ahora = 6_000;
+        Debe(!Cierra(m), "con una llamada a herramienta sin devolver no se cierra, aunque lleven 6000 ms sin decir nada");
+        Devuelve(m, abrir);
+        Debe(EnCurso(m) == 0, $"al devolverla deja de estar en curso (en curso: {EnCurso(m)})");
+        ahora = 7_000;
+        Debe(!Cierra(m), "a 1000 ms de devolverla no se cierra: el silencio se cuenta desde la devolución, que es cuando el delegado sigue");
+        ahora = 7_500; bool alSilencio = Cierra(m);
+        ahora = 7_600; bool otraVez = Cierra(m);
+        Debe(alSilencio && !otraVez, "a 1500 ms de devolverla se cierra, y una sola vez");
+
+        // DOS A LA VEZ: hasta devolver la última.
+        var m2 = Nuevo();
+        ahora = 10_000; Oye(m2, Usuario("mira y abre la configuración"));
+        var mirar = Llamada("call_mirar", "map_look");
+        var abrir2 = Llamada("call_abrir2", "map_open_app");
+        ahora = 10_500; Oye(m2, new Voz.Realtime.Hecho.Pide(new[] { mirar, abrir2 }));
+        ahora = 11_000; Devuelve(m2, mirar);
+        ahora = 14_000;
+        Debe(!Cierra(m2), "con dos llamadas pedidas y una sola devuelta sigue sin cerrarse");
+        Devuelve(m2, abrir2);
+        ahora = 15_600;
+        Debe(Cierra(m2), "y con las dos devueltas se cierra tras el silencio");
+
+        // EL HILO QUE EJECUTA PUEDE GANARLE AL QUE RECIBE: devuelta antes de oírse no se queda en curso.
+        var m3 = Nuevo();
+        ahora = 20_000; Oye(m3, Usuario("silénciate"));
+        var callar = Llamada("call_callar", "self_mute");
+        ahora = 20_300; Devuelve(m3, callar); Oye(m3, new Voz.Realtime.Hecho.Pide(new[] { callar }));
+        Debe(EnCurso(m3) == 0, $"una llamada devuelta antes de que el marcador la oiga no queda en curso (en curso: {EnCurso(m3)})");
+        ahora = 21_900;
+        Debe(Cierra(m3), "y el turno se cierra tras el silencio, en vez de quedarse abierto para siempre");
+
+        // LA VOZ QUE SUENA SUJETA EL TURNO: la transcripción llega por delante del audio (medido: 650-750 ms).
+        var m4 = Nuevo();
+        ahora = 30_000; Oye(m4, DeU("Estás en SAP Easy Access."));
+        for (long ms = 30_100; ms <= 33_000; ms += 100) { ahora = ms; Oye(m4, new Voz.Realtime.Hecho.Suena(voz)); }
+        Debe(!(bool)toca.Invoke(m4, null)!, "mientras suena la voz de Ü no se cierra, aunque su transcripción terminó hace 3000 ms");
+        ahora = 34_000;
+        Debe(!Cierra(m4), "a 1000 ms de lo último que sonó con voz no se cierra");
+        ahora = 34_500;
+        Debe(Cierra(m4), "a 1500 ms sí: el silencio se cuenta desde que calla la voz");
+
+        // EL AUDIO EN SILENCIO NO ES VOZ: si contara, con GPT-Live no se cerraría nunca.
+        var m5 = Nuevo();
+        ahora = 40_000; Oye(m5, DeU("Listo."));
+        for (long ms = 40_100; ms <= 41_500; ms += 100) { ahora = ms; Oye(m5, new Voz.Realtime.Hecho.Suena(ruido)); }
+        Debe(Cierra(m5), "el audio en silencio que manda el servidor (pico 45, medido) no retrasa el cierre");
+
+        // Y SONIDO SIN NADA DICHO NO ES UN TURNO: un cierre sin frase dispararía Cerro sobre nada.
+        var m6 = Nuevo();
+        for (long ms = 50_000; ms <= 51_000; ms += 100) { ahora = ms; Oye(m6, new Voz.Realtime.Hecho.Suena(voz)); }
+        ahora = 54_000;
+        Debe(!Cierra(m6), "sonido con voz pero sin nada dicho desde el último cierre no abre nada que cerrar");
+
+        // ── Y LA CONVERSACIÓN SE LA DEVUELVE ─────────────────────────────────
+        // Una herramienta de autocontrol que el contrato sujeta: mientras no la suelte, está en curso de verdad
+        // en el hilo que ejecuta. Sin la devolución cableada el turno no se cerraría nunca; sin el registro, se
+        // cerraría a mitad.
+        var c = GptLiveConReloj(reloj, "211");
+        if (c == null) return;
+        var (conv, llega, cierres, tc) = c.Value;
+        using (conv)
+        using (var entro = new ManualResetEventSlim(false))
+        using (var suelta = new ManualResetEventSlim(false))
+        {
+            var autocontrol = tc.GetProperty("Autocontrol");
+            var campo = tc.GetField("_turnosSinMarca", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (autocontrol == null || campo == null) { Pendiente("ConversacionEnVivo.Autocontrol y _turnosSinMarca", "211", "018"); return; }
+            autocontrol.SetValue(conv, (Func<string, string>)(_ => { entro.Set(); suelta.Wait(TimeSpan.FromSeconds(10)); return "callado"; }));
+            try
+            {
+                Volatile.Write(ref ahora, 400_000); llega(OyeDelUsuario("silénciate"));
+                Volatile.Write(ref ahora, 400_300);
+                llega(JsonSerializer.Serialize(new
+                {
+                    type = "response.event",
+                    @event = new { type = "response.output_item.done", item = new { type = "function_call", call_id = "call_calla", name = "self_mute", arguments = "{}" } },
+                }));
+                bool seEjecuta = entro.Wait(TimeSpan.FromSeconds(5));
+                Volatile.Write(ref ahora, 403_000); llega(TicSinHechos);
+                int conLaLlamada = cierres();
+                suelta.Set();
+                var marcador = campo.GetValue(conv);
+                bool yaDevuelta = false;
+                for (int i = 0; i < 100 && !yaDevuelta; i++)
+                {
+                    yaDevuelta = marcador != null && (int)enCurso.GetValue(marcador)! == 0;
+                    if (!yaDevuelta) Thread.Sleep(50);
+                }
+                Volatile.Write(ref ahora, 404_500); llega(TicSinHechos);
+                int a1500 = cierres();
+                Volatile.Write(ref ahora, 405_100); llega(TicSinHechos);
+                int a2100 = cierres();
+                Debe(seEjecuta, "en la conversación, la herramienta pedida llega a ejecutarse (sin esto lo demás no dice nada)");
+                Debe(conLaLlamada == 0, $"y con la llamada ejecutándose y 3000 ms sin decir nada el turno no se cierra (cerró {conLaLlamada})");
+                Debe(yaDevuelta, "al terminar de ejecutarla, la conversación se la devuelve al marcador: deja de estar en curso");
+                Debe(a1500 == 0 && a2100 == 1,
+                    $"y el turno se cierra con el silencio de la app contado desde la devolución: a 1500 ms no, a 2100 ms sí (cerró {a1500} y luego {a2100})");
+            }
+            finally { suelta.Set(); }
+        }
+
+        // ── Y LA CONVERSACIÓN LE PASA LA VOZ QUE SUENA ───────────────────────
+        // Revisión contrato r2 (2026-09-13): la voz que suena solo se juzgaba sobre un marcador suelto. Con la
+        // conversación saltándose los Hecho.Suena al llamar a Oye, CONTRATO INTACTO (medido), y la guarda quedaba
+        // muerta sin que nada lo dijera. No es teórico: en una respuesta larga de GPT-Live la voz siguió llegando
+        // 3089 y 2667 ms sin transcripción nueva entre dos frases (sonda del adelanto, contra el servidor, ese día),
+        // y sin la guarda el turno se cerraba ahí, con Ü a media respuesta: «Ü dijo», Cerro y DijoElUsuario antes
+        // de tiempo.
+        var cv = GptLiveConReloj(reloj, "211");
+        if (cv == null) return;
+        var (convVoz, llegaVoz, cierresVoz, tcVoz) = cv.Value;
+        using (convVoz)
+        {
+            // Sin tocar el altavoz: Reaccionar tira el audio mientras dura la ventana de una interrupción a la orden,
+            // y el marcador lo oye igual, porque la conversación se lo da DESPUÉS de reaccionar.
+            var silencioHasta = tcVoz.GetField("_silencioHastaMs", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (silencioHasta == null) { Pendiente("ConversacionEnVivo._silencioHastaMs (el altavoz callado en el contrato)", "211", "018"); return; }
+            silencioHasta.SetValue(convVoz, long.MaxValue);
+            string ConVoz() => JsonSerializer.Serialize(new { type = "session.output_audio.delta", delta = Convert.ToBase64String(voz) });
+
+            Volatile.Write(ref ahora, 700_000); llegaVoz(DiceLaVozDeU("Estás en SAP Easy Access."));
+            for (long ms = 700_100; ms <= 703_000; ms += 100) { Volatile.Write(ref ahora, ms); llegaVoz(ConVoz()); }
+            int mientrasSuena = cierresVoz();
+            Volatile.Write(ref ahora, 704_500); llegaVoz(TicSinHechos);
+            int trasCallar1500 = cierresVoz();
+            Volatile.Write(ref ahora, 705_100); llegaVoz(TicSinHechos);
+            int trasCallar2100 = cierresVoz();
+            Debe(mientrasSuena == 0,
+                $"en la conversación, mientras llega la voz de Ü (pico 1152) no se cierra el turno, aunque su transcripción terminó hace 3000 ms (cerró {mientrasSuena})");
+            Debe(trasCallar1500 == 0 && trasCallar2100 == 1,
+                $"y el silencio de la app se cuenta desde lo último que sonó: a 1500 ms no cierra, a 2100 ms sí (cerró {trasCallar1500} y luego {trasCallar2100})");
+        }
+    }
+
+    /// <remarks>
+    /// UNA PAUSA REINICIABA EL TOPE DENTRO DE LA MISMA PETICIÓN (revisa:regresiones, 2026-09-12): «abre la
+    /// configuración… [pausa] …y entra en Bluetooth» abría dos turnos del usuario, y el tope de la 204 volvía a
+    /// cero a mitad. La regla nueva mira si Ü CONTESTÓ: lo que el usuario dice tras una pausa, sin que Ü haya
+    /// hablado después de lo último suyo, es la misma petición. No es «desde el último cierre»: con GPT-Live lo
+    /// que contesta Ü cae dentro del mismo turno sintético, porque el cierre solo llega cuando callan los dos
+    /// (medido en la sonda de los turnos: «Listo, estás en Bluetooth» y el cierre, en el mismo turno, 3 de 3).
+    /// </remarks>
+    private static void UnaPausaSinRespuestaEsLaMismaPeticion()
+    {
+        var t = Cap004("U.WindowsClient.Voice.TurnosSinMarca");
+        var oye = t?.GetMethod("Oye");
+        var toca = t?.GetMethod("TocaCerrar");
+        if (t == null || oye == null || toca == null) { Pendiente("Voice.TurnosSinMarca (Oye, TocaCerrar)", "212", "018"); return; }
+
+        long ahora = 0;
+        Func<long> reloj = () => Volatile.Read(ref ahora);
+        object Nuevo() => Activator.CreateInstance(t,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new object[] { reloj, 1500 }, null)!;
+        bool Oye(object m, Voz.Realtime.Hecho h) => (bool)oye.Invoke(m, new object[] { h })!;
+        bool Cierra(object m) => (bool)toca.Invoke(m, null)!;
+        Voz.Realtime.Hecho Usuario(string s) => new Voz.Realtime.Hecho.DiceElUsuario(s);
+        Voz.Realtime.Hecho DeU(string s) => new Voz.Realtime.Hecho.DiceU(s);
+
+        var m = Nuevo();
+        ahora = 0; bool abre = Oye(m, Usuario("abre la configuración"));
+        ahora = 1_600; bool cerroLaPausa = Cierra(m);
+        ahora = 1_800; bool sigue = Oye(m, Usuario(" y entra en Bluetooth"));
+        Debe(abre && cerroLaPausa && !sigue,
+            "tras una pausa que cerró el turno, lo que sigue diciendo el usuario sin que Ü haya contestado no abre otro: es la misma petición");
+        ahora = 3_400; Cierra(m);
+        ahora = 3_500; Oye(m, DeU("Listo, abierta."));
+        ahora = 5_100; Cierra(m);
+        ahora = 6_000;
+        Debe(Oye(m, Usuario("ahora el sonido")), "cuando Ü ya le contestó, lo siguiente que dice el usuario es otra petición y abre turno");
+
+        var m2 = Nuevo();
+        ahora = 10_000; Oye(m2, Usuario("mira la pantalla"));
+        ahora = 10_400; Oye(m2, DeU("Claro."));
+        ahora = 12_000; Oye(m2, DeU(" Veo SAP."));
+        ahora = 13_600; Cierra(m2);
+        ahora = 14_000;
+        Debe(Oye(m2, Usuario("abre NWP1")), "la respuesta de Ü cuenta aunque llegue antes del cierre, dentro del mismo turno");
+
+        var m3 = Nuevo();
+        ahora = 20_000; Oye(m3, Usuario("abre el"));
+        ahora = 20_300; Oye(m3, DeU("Claro"));
+        ahora = 20_700; bool encima = Oye(m3, Usuario(" bloc de notas"));
+        ahora = 22_300; bool cerro3 = Cierra(m3);
+        ahora = 23_000; bool porFavor = Oye(m3, Usuario(" por favor"));
+        Debe(!encima && cerro3 && !porFavor,
+            "si el usuario siguió hablando después de lo que dijo Ü, lo que dice tras el cierre sigue siendo su petición: Ü no le contestó a eso");
+
+        var m4 = Nuevo();
+        ahora = 30_000; Oye(m4, DeU("Hola, te escucho."));
+        ahora = 31_600; Cierra(m4);
+        ahora = 32_000;
+        Debe(Oye(m4, Usuario("abre el bloc de notas")), "lo primero que dice el usuario abre turno aunque Ü hablara antes: el saludo no contesta a nada");
+
+        // ── Y EN LA CONVERSACIÓN NO VUELVE A CERO EL TOPE ────────────────────
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        if (anotado == null) { Pendiente("Diagnostics.LogBus.Anotado", "212", "018"); return; }
+        var c = GptLiveConReloj(reloj, "212");
+        if (c == null) return;
+        var (conv, llega, cierres, _) = c.Value;
+        int turnosNuevos = 0;
+        Action<string, string> oyeLog = (tag, msg) => { if (tag == "voz-turno" && msg.StartsWith("turno nuevo (por voz)")) Interlocked.Increment(ref turnosNuevos); };
+        anotado.AddEventHandler(null, oyeLog);
+        try
+        {
+            using (conv)
+            {
+                ahora = 600_000; llega(OyeDelUsuario("abre la configuración"));
+                ahora = 602_100; llega(TicSinHechos);
+                int cerroPausa = cierres();
+                ahora = 602_300; llega(OyeDelUsuario(" y entra en Bluetooth"));
+                int trasPausa = turnosNuevos;
+                ahora = 604_400; llega(TicSinHechos);
+                ahora = 604_500; llega(DiceLaVozDeU("Listo."));
+                ahora = 606_600; llega(TicSinHechos);
+                ahora = 607_000; llega(OyeDelUsuario("ahora el sonido"));
+                int trasRespuesta = turnosNuevos;
+                Debe(cerroPausa == 1 && trasPausa == 1,
+                    $"en la conversación, la pausa cierra el turno pero no parte la petición: una sola línea «turno nuevo (por voz)» y el tope no vuelve a cero (cierres {cerroPausa}, líneas {trasPausa})");
+                Debe(trasRespuesta == 2,
+                    $"y lo que dice después de que Ü le conteste sí abre turno y reinicia el tope (líneas {trasRespuesta})");
+            }
+        }
+        finally { anotado.RemoveEventHandler(null, oyeLog); }
+    }
+
+    /// <remarks>
+    /// «SESIÓN ABIERTA» SE ESCRIBÍA AL CONECTAR EL SOCKET, ANTES DE QUE EL SERVIDOR DIJERA NADA (nivel 4 del 2026-09-12). Con
+    /// la cuenta sin crédito salió en el mismo segundo que «el servidor dice: You have no credits remaining», y el
+    /// conductor del nivel 4 (scripts\nivel4-voz\conducir.ps1) la tomó por «voz abierta». Es el patrón nº2: una línea
+    /// que afirma «abrió» cuando solo sabe «conectó». Desde la 49 (GPT-Live) y la 50 (GPT Realtime) de la voz, el
+    /// traductor dice cuándo confirma el servidor; esto juzga que la conversación lo espera para decirlo.
+    ///
+    /// Se juzga sin socket: por EmpiezaUnaConexion, por donde pasan ArrancarAsync y ReconectarAsync después de conectar
+    /// y mandar la apertura, y por Procesar, la puerta del socket, con la puerta de salida sustituida. Que ArrancarAsync
+    /// no vuelva a escribir la línea por su cuenta necesita clave y socket, y no se juzga aquí (W220).
+    /// </remarks>
+    private static void LaVozDiceQueAbrioCuandoElServidorLoConfirma()
+    {
+        const BindingFlags Privado = BindingFlags.NonPublic | BindingFlags.Instance;
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var procesar = tc?.GetMethod("Procesar", Privado);
+        var conexion = tc?.GetMethod("EmpiezaUnaConexion", Privado);
+        var salida = tc?.GetField("_puerta", Privado);
+        var abierta = tc?.GetField("_puertaAbierta", Privado);
+        var dice = tc?.GetEvent("Dice");
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        var tLive = typeof(Voz.Realtime.IProtocolo).Assembly.GetType("Voz.Realtime.ProtocoloGptLive");
+        if (tc == null || procesar == null || conexion == null || salida == null || abierta == null || dice == null
+            || anotado == null || tLive == null)
+        { Pendiente("ConversacionEnVivo (Procesar, EmpiezaUnaConexion, _puerta, _puertaAbierta, Dice) y Voz.Realtime.ProtocoloGptLive", "220", "018"); return; }
+        var live = (Voz.Realtime.IProtocolo)Activator.CreateInstance(tLive,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance | BindingFlags.OptionalParamBinding,
+            null, new[] { Type.Missing, Type.Missing }, null)!;
+
+        // Tal como los mandó el servidor: la confirmación de cada uno, medida con sonda-apertura.ps1 el 2026-09-13 (las
+        // instrucciones por defecto de Realtime, recortadas), y el error sin crédito del 2026-09-12, el de la 49 de la voz.
+        const string SesionStarted = """{"event_id":"event_ENgqCrigFUMtyYlkgZPm6","type":"session.started","session":{"id":"live_u2_ENgqAxk3F96xLroZHUQ5A","expires_at":1789322132,"model":"gpt-live-1","instructions":"Eres una sonda. Responde en una frase.","audio":{"output":{"voice":"marin"},"format":{"type":"audio/pcm","rate":24000}},"delegation":{"type":"responses","responses":{"model":"gpt-5.6-luna","instructions":"Sonda.","tools":[],"tool_choice":"auto"}},"status":"active","input":[]}}""";
+        const string SesionCreated = """{"type":"session.created","event_id":"event_ENgpu4Ic9UMb8h9QL7IeW","session":{"type":"realtime","object":"realtime.session","id":"sess_ENgpurpMSkQ6r492KYlaU","model":"gpt-realtime-2.1-mini","output_modalities":["audio"],"instructions":"Your knowledge cutoff is 2023-10. [...]","tools":[],"tool_choice":"auto","max_output_tokens":"inf","tracing":null,"truncation":"auto","prompt":null,"expires_at":1789318514,"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"transcription":null,"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"prefix_padding_ms":300,"silence_duration_ms":500,"idle_timeout_ms":null,"create_response":true,"interrupt_response":true}},"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"marin","speed":1.0}},"include":null}}""";
+        const string SinCredito = """{"type":"error","event_id":"event_7f0763e4-314d-4930-9bfa-eb831d673918","error":{"type":"invalid_request_error","code":"credit_balance_exhausted","message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."}}""";
+
+        var lineas = new List<string>();
+        Action<string, string> oyeLog = (tag, msg) =>
+        {
+            if (tag == "voz-viva" && (msg.Contains("sesión abierta") || msg.Contains("socket conectado"))) lock (lineas) lineas.Add(msg);
+        };
+        string[] Lineas() { lock (lineas) { var l = lineas.ToArray(); lineas.Clear(); return l; } }
+        static string Juntas(IEnumerable<string> l) => l.Any() ? string.Join(" | ", l) : "nada";
+
+        // Una conversación sin socket: lo que manda sale a una lista, lo que dice a otra.
+        (IDisposable Conv, List<string> Mandados, List<string> Dichas) Nueva(Voz.Realtime.IProtocolo p)
+        {
+            var conv = (IDisposable)Activator.CreateInstance(tc, new object?[] { new SurfaceMapTools(() => null), p })!;
+            var mandados = new List<string>();
+            var dichas = new List<string>();
+            salida.SetValue(conv, (Func<string, CancellationToken, Task>)((json, _) => { lock (mandados) mandados.Add(json); return Task.CompletedTask; }));
+            abierta.SetValue(conv, (Func<bool>)(() => true));
+            dice.AddEventHandler(conv, (Action<string>)(s => { lock (dichas) dichas.Add(s); }));
+            return (conv, mandados, dichas);
+        }
+        void Conecta(object conv) => conexion.Invoke(conv, new object[] { "Te escucho." });
+        void Llega(object conv, string json) => procesar.Invoke(conv, new object[] { json, CancellationToken.None });
+
+        anotado.AddEventHandler(null, oyeLog);
+        try
+        {
+            var confirman = new (Voz.Realtime.IProtocolo P, string Nombre, string Confirmacion)[]
+            {
+                (live, "GPT-Live", SesionStarted),
+                (new Voz.Realtime.ProtocoloOpenAI(), "GPT Realtime", SesionCreated),
+            };
+            foreach (var (p, nombre, confirmacion) in confirman)
+            {
+                string quien = $"«{p.Modelo}» ({p.Quien})";
+
+                // ── EL SERVIDOR CONFIRMA ─────────────────────────────────────────
+                var (conv, mandados, dichas) = Nueva(p);
+                using (conv)
+                {
+                    Lineas();
+                    Conecta(conv);
+                    string[] alConectar = Lineas();
+                    Debe(alConectar.Length == 1 && alConectar[0] == $"socket conectado, esperando confirmación de {quien}",
+                        $"con {nombre}, al conectar el socket la voz deja UNA línea que describe el paso, «socket conectado, esperando confirmación de {quien}», y no dice todavía que la sesión abrió (dejó: {Juntas(alConectar)})");
+                    Debe(dichas.Count == 0, $"y «Te escucho.» espera a la confirmación (dijo: {Juntas(dichas)})");
+
+                    Llega(conv, confirmacion);
+                    string[] alConfirmar = Lineas();
+                    Debe(alConfirmar.Length == 1 && alConfirmar[0] == $"sesión abierta con {quien}: el servidor la confirmó",
+                        $"con {nombre}, al llegar la confirmación del servidor sale UNA línea «sesión abierta con {quien}: el servidor la confirmó» (dejó: {Juntas(alConfirmar)})");
+                    Debe(dichas.Count == 1 && dichas[0] == "Te escucho.", $"y entonces dice «Te escucho.», una vez (dijo: {Juntas(dichas)})");
+                    Debe(mandados.Count == 0, $"y confirmar no manda nada al servidor (mandó: {Juntas(mandados)})");
+                }
+
+                // ── EL SERVIDOR CONTESTA UN ERROR EN VEZ DE CONFIRMAR ────────────
+                var (conv2, _, dichas2) = Nueva(p);
+                using (conv2)
+                {
+                    Lineas();
+                    Conecta(conv2);
+                    Lineas();
+                    Llega(conv2, SinCredito);
+                    string[] trasElError = Lineas();
+                    Debe(trasElError.Length == 0 && dichas2.Count == 0,
+                        $"con {nombre}, un error antes de confirmar no escribe «sesión abierta con» ni dice «Te escucho.» (dejó: {Juntas(trasElError)}; dijo: {Juntas(dichas2)})");
+                }
+            }
+
+            // ── UN PROTOCOLO QUE NO CONFIRMA ─────────────────────────────────────
+            var (conv3, _, dichas3) = Nueva(new ProtocoloDeMentira(pideRespuesta: true, marcaLosTurnos: true));
+            using (conv3)
+            {
+                Lineas();
+                Conecta(conv3);
+                string[] sinConfirmar = Lineas();
+                Debe(sinConfirmar.Length == 1 && sinConfirmar[0] == "sesión abierta con «ninguno» (de mentira), sin confirmación: este protocolo no la manda",
+                    $"con un protocolo que no confirma, la línea de apertura sale al conectar y dice que nadie la confirmó (dejó: {Juntas(sinConfirmar)})");
+                Debe(dichas3.Count == 1 && dichas3[0] == "Te escucho.",
+                    $"y con él «Te escucho.» se dice al conectar, como siempre: no hay confirmación que esperar (dijo: {Juntas(dichas3)})");
+            }
+        }
+        finally { anotado.RemoveEventHandler(null, oyeLog); }
+    }
+
+    /// <summary>
+    /// Un protocolo de mentira para juzgar a la conversación sin servidor: dice si pide respuesta y si
+    /// marca los turnos, y traduce un único mensaje («trozo») a lo que dice el usuario.
+    /// </summary>
+    private sealed class ProtocoloDeMentira : Voz.Realtime.IProtocolo
+    {
+        private readonly bool _pideRespuesta;
+
+        public ProtocoloDeMentira(bool pideRespuesta, bool marcaLosTurnos)
+        {
+            _pideRespuesta = pideRespuesta;
+            MarcaLosTurnos = marcaLosTurnos;
+        }
+
+        public string Quien => "de mentira";
+        public string Modelo => "ninguno";
+        public int RitmoDeEntrada => 24000;
+        public int RitmoDeSalida => 24000;
+        public bool Mira => false;
+        public bool SabeVolver => false;
+        public bool MarcaLosTurnos { get; }
+        public Uri Direccion() => new("wss://localhost/nada");
+        public IReadOnlyDictionary<string, string> Cabeceras(string clave) => new Dictionary<string, string>();
+        public IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Voz.Realtime.Utensilio> utensilios, string pase)
+            => Array.Empty<string>();
+        public string Audio(byte[] pcm) => "";
+        public string Fotograma(byte[] jpeg) => "";
+        public string Texto(string texto) => JsonSerializer.Serialize(new { type = "texto", texto });
+        public IEnumerable<string> Resultados(IReadOnlyList<(string Id, string Nombre, string Resultado)> hechas)
+            => Array.Empty<string>();
+        public string PedirRespuesta(string instrucciones = "") => _pideRespuesta ? JsonSerializer.Serialize(new { type = "turno" }) : "";
+        public IReadOnlyList<Voz.Realtime.Hecho> Leer(JsonElement m)
+            => m.TryGetProperty("type", out var t) && t.GetString() == "trozo"
+                ? new Voz.Realtime.Hecho[] { new Voz.Realtime.Hecho.DiceElUsuario(m.GetProperty("delta").GetString() ?? "") }
+                : Array.Empty<Voz.Realtime.Hecho>();
     }
 
     private static void Prueba(string nombre, Action cuerpo)

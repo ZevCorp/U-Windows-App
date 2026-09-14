@@ -38,8 +38,10 @@ public interface IProtocolo
     /// Si sabe interpretar una imagen dentro de la conversación. NO implica que la reciba sola y
     /// seguida: aquí no se manda vídeo en directo — se manda una foto suelta cuando el usuario
     /// señala algo, o cuando el propio modelo pide mirar (herramienta <c>map_look</c>). Si esto es
-    /// falso, ni se ofrece esa herramienta ni se manda la foto de señalar: prometerlas y que no
-    /// sirvan de nada es peor que no tenerlas.
+    /// falso no se manda ninguna foto: <c>map_look</c> se sigue ofreciendo, pero contesta que no puede y
+    /// ofrece <c>map_what_i_see</c>, y la foto de un recuerdo nuevo se queda en disco. Mandar una que el
+    /// servidor rechaza es peor que no mandarla: el modelo contesta como si la hubiera visto mal.
+    /// (Corregido el 2026-09-12: decía que la herramienta no se ofrecía, y ConversacionEnVivo sí la ofrece.)
     /// </summary>
     bool Mira { get; }
 
@@ -68,6 +70,53 @@ public interface IProtocolo
     /// </summary>
     IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Utensilio> utensilios, string pase, bool soloCuandoSeLePide)
         => Apertura(instrucciones, utensilios, pase);
+
+    /// <summary>
+    /// Si el servidor avisa de que el usuario empezó a hablar y de que un turno acabó (<see
+    /// cref="Hecho.HablaronEncima"/> y <see cref="Hecho.CierraElTurno"/>). Si no, quien conversa los
+    /// tiene que marcar por su cuenta.
+    /// </summary>
+    /// <remarks>
+    /// Nació el 2026-09-12 con GPT-Live, que no manda NINGUNA: ni speech_started ni response.done, y su
+    /// response.completed es del modelo delegado — la voz sigue hablando segundos después. Un traductor
+    /// que las fingiera le daría a la conversación un reloj que no existe; uno que calla sin decirlo la
+    /// deja con la línea de lo dicho abierta para siempre. Por defecto verdadero: es lo que hace Realtime.
+    /// </remarks>
+    bool MarcaLosTurnos => true;
+
+    /// <summary>
+    /// Si sabe oír sin contestar hasta que se le pide turno (promesa 192, la voz prestada). Si es falso,
+    /// <c>soloCuandoSeLePide</c> no tiene efecto, y quien lo pide tiene que decirlo en vez de fingirlo:
+    /// GPT-Live no tiene turn_detection ni create_response, y «no hables por tu cuenta» en las
+    /// instrucciones no se respetó (medido el 2026-09-12: la voz contestó sola).
+    /// </summary>
+    bool SabeEsperarTurno => true;
+
+    /// <summary>
+    /// Si el servidor CONFIRMA que la sesión abrió (<see cref="Hecho.Abierta"/>). Si la confirma, hasta
+    /// entonces no está abierta: un <see cref="Hecho.Falla"/> antes de la confirmación es que no abrió, y
+    /// reenviar la misma apertura fallaría igual.
+    /// </summary>
+    /// <remarks>
+    /// Nació el 2026-09-12 con GPT-Live: sin crédito, session.start contestó credit_balance_exhausted sin
+    /// session.started y el socket murió a los ~2 s; la conversación lo tomaba por un corte, reenviaba el
+    /// mismo session.start cuatro veces y decía «Sigo» cada vez, con la causa solo en el log. GPT Realtime lo
+    /// declara desde el 2026-09-13, con session.created (promesa 50). Por defecto falso: un protocolo que no se
+    /// ha medido así no confirma nada, y la conversación dice en su línea de apertura que nadie la confirmó.
+    /// </remarks>
+    bool ConfirmaQueAbrio => false;
+
+    /// <summary>
+    /// Lo que se manda para cambiar instrucciones y herramientas A MITAD de sesión.
+    /// </summary>
+    /// <remarks>
+    /// Por defecto, la misma apertura sin pase: en Realtime la apertura es un session.update y repetirla
+    /// es exactamente cambiar de modo. No vale para todos — en GPT-Live la apertura es session.start, que
+    /// a mitad de sesión no cambia nada: es otra sesión. Quien tenga una sesión que no se reabre dice
+    /// aquí cómo se cambia.
+    /// </remarks>
+    IEnumerable<string> CambioDeModo(string instrucciones, IReadOnlyList<Utensilio> utensilios, bool soloCuandoSeLePide)
+        => Apertura(instrucciones, utensilios, "", soloCuandoSeLePide);
 
     /// <summary>Un trozo de micrófono, PCM de 16 bits mono al <see cref="RitmoDeEntrada"/>.</summary>
     string Audio(byte[] pcm);

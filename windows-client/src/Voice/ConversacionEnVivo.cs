@@ -43,9 +43,94 @@ public sealed class ConversacionEnVivo : IDisposable
     public ConversacionEnVivo(SurfaceMapTools mapa, IProtocolo? protocolo = null)
     {
         _mapa = mapa;
-        _protocolo = protocolo ?? new ProtocoloOpenAI();
+        _protocolo = protocolo ?? ProtocoloPorDefecto(Environment.GetEnvironmentVariable);
         _audio = new LiveAudio(_protocolo.RitmoDeEntrada);
         _compuerta = new CompuertaDeEco(GraciaEcoMs, _protocolo.RitmoDeEntrada);
+        EmpezarLosTurnosDeLaSesion();
+
+        // UN VALOR QUE NO SE CONOCE SE DICE, no se obedece a medias: abre la voz por defecto y el log lo
+        // cuenta, porque «setx U_VOZ gemini» sin efecto visible parecería haber funcionado.
+        string pedida = VozPedida(Environment.GetEnvironmentVariable);
+        if (protocolo == null && pedida is not ("" or VozGptLive or VozRealtime))
+            LogBus.Log("voz-viva", $"{VariableDeLaVoz}=«{pedida}» no es una voz que conozca ({VozGptLive}, "
+                + $"{VozRealtime}): abro la de por defecto, {_protocolo.Quien}");
+    }
+
+    // ── Qué voz abre (spec 018, promesa 210) ────────────────────────────────
+
+    private const string VariableDeLaVoz = "U_VOZ";
+    private const string VozGptLive = "gpt-live";
+    private const string VozRealtime = "realtime";
+
+    /// <summary>
+    /// LA VOZ POR DEFECTO ES GPT-LIVE, y <c>U_VOZ=realtime</c> vuelve a GPT Realtime sin recompilar.
+    /// </summary>
+    /// <remarks>
+    /// Aquí y no en FaceWindow, que construye la conversación sin decir protocolo: el defecto ES la
+    /// migración. Se le pasa cómo leer la variable para juzgarlo sin tocar el entorno del proceso. Un
+    /// valor desconocido abre la de por defecto (lo avisa el constructor); en blanco cuenta como sin
+    /// valor (patrón nº9), y mayúsculas y espacios no cambian de voz: lo teclea una persona en setx.
+    /// </remarks>
+    public static IProtocolo ProtocoloPorDefecto(Func<string, string?> variable)
+        => VozPedida(variable) == VozRealtime ? new ProtocoloOpenAI() : new ProtocoloGptLive();
+
+    /// <summary>La variable normalizada en UN solo sitio (aprendizaje nº16): quien decide y quien avisa leen lo mismo.</summary>
+    private static string VozPedida(Func<string, string?> variable)
+        => (variable(VariableDeLaVoz) ?? "").Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// LO ESCRITO PIDE RESPUESTA (promesa 208): el texto y después pedir turno, sin mensajes vacíos.
+    /// </summary>
+    /// <remarks>
+    /// Sin el response.create detrás el modelo no contesta — cero eventos, medido el 2026-09-12 en Realtime y
+    /// en GPT-Live —, y Ü solo respondía a lo escrito si el micrófono oía algo a la vez. Es lo que invalidó el
+    /// nivel 4 del 2026-09-11. Un protocolo que contesta solo devuelve PedirRespuesta vacío, y un mensaje
+    /// vacío por el socket no es pedir nada.
+    /// </remarks>
+    public static IReadOnlyList<string> MensajesDeTexto(IProtocolo protocolo, string texto)
+        => new[] { protocolo.Texto(texto), protocolo.PedirRespuesta() }
+            .Where(m => !string.IsNullOrEmpty(m)).ToArray();
+
+    // ── Los turnos que el servidor no marca (spec 018, promesa 209) ─────────
+
+    /// <summary>Null si el servidor ya marca los turnos: entonces los pone él, y aquí no se inventa otro cierre.</summary>
+    private TurnosSinMarca? _turnosSinMarca;
+
+    /// <summary>
+    /// El reloj con que se marcan los turnos. Un campo, y no Environment.TickCount64 escrito en la construcción,
+    /// para que la 209 cambie SOLO el reloj y juzgue todo lo demás tal como lo construye la app: hasta el
+    /// 2026-09-12 cambiaba el marcador entero, y construirlo con otro silencio o reutilizarlo entre sesiones
+    /// dejaba el contrato INTACTO (revisa:contrato, G1 y G4).
+    /// </summary>
+    private Func<long> _relojDeLosTurnos = () => Environment.TickCount64;
+
+    private TurnosSinMarca? NuevoMarcadorDeTurnos()
+        => _protocolo.MarcaLosTurnos ? null : new TurnosSinMarca(() => _relojDeLosTurnos());
+
+    /// <summary>
+    /// Cada sesión empieza con un marcador nuevo: lo dicho —o una llamada sin devolver— en la anterior no cierra
+    /// ni sujeta un turno de esta. Un solo sitio para el constructor y para ArrancarAsync.
+    /// </summary>
+    private void EmpezarLosTurnosDeLaSesion() => _turnosSinMarca = NuevoMarcadorDeTurnos();
+
+    /// <summary>
+    /// Con una voz sin marcas de turno, las pone la conversación: el primer trozo de una petición del usuario
+    /// abre un turno (sin callar la cola: no hay aviso de que hablara encima) y un silencio lo cierra.
+    /// </summary>
+    /// <remarks>
+    /// En el hilo de recepción y tras reaccionar a los hechos del mensaje. El audio de GPT-Live llega
+    /// continuo, también en silencio, así que esto se evalúa muchas veces por segundo sin temporizador ni
+    /// carreras con otro hilo. Se evalúa también con mensajes que no traen hechos. El marcador oye todos los
+    /// hechos —también el audio, por su pico, y los Pide—; la devolución de las llamadas la hace EjecutarAsync
+    /// al terminar (promesa 211).
+    /// </remarks>
+    private void MarcarLosTurnosQueElServidorNoMarca(IReadOnlyList<Hecho> hechos, CancellationToken ct)
+    {
+        var turnos = _turnosSinMarca;
+        if (turnos == null) return;
+        foreach (var hecho in hechos)
+            if (turnos.Oye(hecho)) EmpiezaUnTurnoDelUsuario("voz");
+        if (turnos.TocaCerrar()) Reaccionar(new Hecho.CierraElTurno(), ct);
     }
 
     // ── La compuerta de eco (spec 002, 2026-08-30) ──────────────────────────
@@ -247,6 +332,36 @@ public sealed class ConversacionEnVivo : IDisposable
     private bool _cayoSolo;
     private int _reintentos;
 
+    /// <summary>
+    /// POR QUÉ ESTA CONEXIÓN NO SE ARREGLA RECONECTANDO, si el servidor lo dijo, y lo que dijo (spec 018, promesa 224).
+    /// Vacíos mientras pueda ser un corte. Lo anota la primera de las tres puertas por las que llega —un error
+    /// (Reaccionar), el cierre del socket (CerroElServidor), un apretón de manos rechazado (NoConecto)— y lo lee UN solo
+    /// sitio: SeAcaboLaEscuchaAsync.
+    /// </summary>
+    private string _porQueNoSeReintenta = "", _loQueDijoAlNoPoder = "";
+
+    /// <summary>
+    /// POR DÓNDE SE RECONECTA. Nula en la app, que es ReconectarAsync. El contrato la cambia por una cuenta, como la
+    /// puerta de salida de la 208, para juzgar si se reconecta sin abrir un socket ni llevar la clave (224).
+    /// </summary>
+    private Func<Task>? _reconectar = null;
+
+    /// <summary>
+    /// SI EL SERVIDOR YA CONFIRMÓ ESTA CONEXIÓN (<see cref="Hecho.Abierta"/>). Con un protocolo que no la
+    /// confirma vale verdadero desde que se manda la apertura, como siempre.
+    /// </summary>
+    /// <remarks>
+    /// Y LO QUE DIJO EL SERVIDOR ANTES DE CONFIRMARLA: si después el socket muere, no abrió —y se dice por
+    /// qué—, no se cortó. Sin esto, el 2026-09-12 con la cuenta sin crédito la conversación real reconectó 4
+    /// veces con el mismo session.start y dijo 4 «Sigo, pero olvidé…», con la causa solo en el log (sonda
+    /// sobre la ConversacionEnVivo de d38f564 contra el servidor).
+    /// </remarks>
+    private bool _confirmada;
+    private string _fallaAntesDeAbrir = "";
+
+    /// <summary>Lo que se dirá cuando el servidor confirme: «Te escucho.» al arrancar, «Sigo…» al volver.</summary>
+    private string _alConfirmar = "";
+
     private readonly StringBuilder _fraseU = new();
     private readonly StringBuilder _fraseUsuario = new();
 
@@ -301,6 +416,9 @@ public sealed class ConversacionEnVivo : IDisposable
         {
             _cts = new CancellationTokenSource();
             _ws = new ClientWebSocket();
+            // SIN ESTO, UN APRETÓN DE MANOS RECHAZADO NO DICE CON QUÉ: HttpStatusCode vale 0. Medido el 2026-09-13 con
+            // una clave falsa por /v1/live/sessions: 401 con la opción, 0 sin ella, y la misma WebSocketException.
+            _ws.Options.CollectHttpResponseDetails = true;
             foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
             await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
             foreach (string msg in _protocolo.Apertura(Instrucciones, Herramientas(), ""))
@@ -310,16 +428,18 @@ public sealed class ConversacionEnVivo : IDisposable
             // conversación anterior —volver con él nos devolvería a una charla que ya terminó.
             lock (_candadoCancel) _canceladas.Clear();
             _pase = ""; _cayoSolo = false; _reintentos = 0;
+            EmpezarLosTurnosDeLaSesion();   // lo dicho en la sesión anterior no cierra un turno de esta
 
             _entrada = _salida = _total = 0;
             _turnos = 0;
+            _segundosDeLaConexion = _segundosDeConexionesAnteriores = 0;
             _sesionId = Guid.NewGuid().ToString("n");
             _inicioSesion = DateTime.UtcNow;
 
             Viva = true;
             Cambio?.Invoke(true);
-            LogBus.Log("voz-viva", $"sesión abierta con «{_protocolo.Modelo}» ({_protocolo.Quien})");
-            Dice?.Invoke("Te escucho.");
+            // «SESIÓN ABIERTA» YA NO SE ESCRIBE AQUÍ: aquí solo se sabe que el socket conectó (promesa 220).
+            EmpiezaUnaConexion("Te escucho.");   // cuando el servidor lo confirme (49 con GPT-Live, 50 con GPT Realtime)
 
             _audio.Capturado += MandarTrozo;
             _audio.AbrirMicrofono();
@@ -341,12 +461,13 @@ public sealed class ConversacionEnVivo : IDisposable
         catch (Exception e)
         {
             LogBus.Log("voz-viva", $"no se pudo abrir la sesión: {e.Message}");
+            string porque = NoConecto(e, (int)(_ws?.HttpStatusCode ?? 0));   // antes de TerminarAsync, que suelta el socket
             await TerminarAsync();
 
             // UN CORTE DE RED DE UNOS SEGUNDOS NO DEBERÍA COSTARLE UN GESTO AL USUARIO. Solo se
             // reintenta lo que puede arreglarse solo: una clave inválida o un permiso denegado van a
             // fallar igual las tres veces, y reintentarlos solo retrasa el momento de enterarse.
-            if (EsDeRed(e) && intento < 2)
+            if (porque.Length == 0 && EsDeRed(e) && intento < 2)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1 + intento));
                 LogBus.Log("voz-viva", $"reintentando abrir la voz ({intento + 2}/3)…");
@@ -354,7 +475,12 @@ public sealed class ConversacionEnVivo : IDisposable
                 return;
             }
 
-            Dice?.Invoke(EsDeRed(e)
+            // CON LA CAUSA, NO CON LA FRASE DE .NET: con una clave falsa, GPT-Live rechaza el apretón de manos y lo único
+            // que había que decir era «The server returned status code '401' when status code '101' was expected.»
+            // (medido el 2026-09-13), que no dice qué hacer.
+            Dice?.Invoke(porque.Length > 0
+                ? $"No pude abrir la voz en vivo: {porque} ({e.Message})."
+                : EsDeRed(e)
                 ? "No pude abrir la voz: no hay conexión con el servidor. Lo intenté 3 veces — "
                 + "revisa tu internet y vuelve a pulsar el micrófono."
                 : $"No pude abrir la voz en vivo: {e.Message}");
@@ -377,8 +503,14 @@ public sealed class ConversacionEnVivo : IDisposable
         return false;
     }
 
+    /// <param name="SegundosDelServidor">
+    /// Lo que duró la voz según el servidor, cuando la cuenta en segundos y no en fichas (GPT-Live, promesa 218): el
+    /// último acumulado de cada conexión, sumado entre conexiones. Cero con GPT Realtime. Va al final y con defecto
+    /// para que quien ya lee el registro (FaceWindow) no tenga que cambiar.
+    /// </param>
     public sealed record ConsumoVivo(
-        string Modelo, long Entrada, long Salida, long Total, int Turnos, long DuracionMs, string Sesion);
+        string Modelo, long Entrada, long Salida, long Total, int Turnos, long DuracionMs, string Sesion,
+        double SegundosDelServidor = 0);
 
     /// <summary>
     /// A dónde se reporta. Lo cablea la carita con el cliente de Graph; si nadie
@@ -389,6 +521,11 @@ public sealed class ConversacionEnVivo : IDisposable
     private long _entrada, _salida, _total;
     private int _turnos;
 
+    // LOS SEGUNDOS DE GPT-LIVE (promesa 218). De la conexión en curso se guarda el ÚLTIMO acumulado, no la suma: 12.0 a
+    // los 15 s y 25.0 a los 30 s de la misma sesión, medido el 2026-09-12. Aparte, lo que contaron las conexiones
+    // anteriores: al reconectar se abre otra sesión del servidor, que vuelve a contar desde cero.
+    private double _segundosDeLaConexion, _segundosDeConexionesAnteriores;
+
     /// <summary>
     /// Manda el consumo acumulado y lo pone a cero. Nunca lanza y nunca espera:
     /// que el panel de costos se entere no puede retrasar el cierre de la voz ni,
@@ -397,11 +534,23 @@ public sealed class ConversacionEnVivo : IDisposable
     private void ReportarConsumo()
     {
         var reporta = ReportaConsumo;
-        if (_total <= 0 || reporta is null) { _entrada = _salida = _total = 0; _turnos = 0; return; }
+        double segundos = _segundosDeConexionesAnteriores + _segundosDeLaConexion;
+        _segundosDeConexionesAnteriores = _segundosDeLaConexion = 0;
+
+        // EL PANEL DE COSTOS CUENTA FICHAS, Y GPT-LIVE NO LAS DA (promesa 218). Hasta el 2026-09-12 una sesión de GPT-Live
+        // salía por la guarda de abajo sin reportar y sin dejar una línea (revisa:regresiones): con GPT-Live como voz por
+        // defecto, el consumo de voz desaparecía en silencio. FaceWindow no le pasa estos segundos al panel, así que el
+        // log es donde quedan. «Al menos»: el servidor manda el uso cada ~15 s, y el último tramo solo viene en
+        // session.closed, que la 41 de la voz fija como Falla.
+        if (segundos > 0)
+            LogBus.Log("voz-viva", $"la voz duró al menos {segundos.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} s "
+                + $"según el servidor ({_protocolo.Quien}, el último uso de cada conexión); el panel de costos cuenta fichas y no recibe estos segundos");
+
+        if ((_total <= 0 && segundos <= 0) || reporta is null) { _entrada = _salida = _total = 0; _turnos = 0; return; }
 
         var parte = new ConsumoVivo(
             _protocolo.Modelo, _entrada, _salida, _total, _turnos,
-            (long)(DateTime.UtcNow - _inicioSesion).TotalMilliseconds, _sesionId);
+            (long)(DateTime.UtcNow - _inicioSesion).TotalMilliseconds, _sesionId, segundos);
         _entrada = _salida = _total = 0;
         _turnos = 0;
 
@@ -1121,26 +1270,37 @@ public sealed class ConversacionEnVivo : IDisposable
     /// Cambia quién es Ü a mitad de sesión: otras instrucciones y otro catálogo. Promesa 138.
     /// </summary>
     /// <remarks>
-    /// Es el MISMO mensaje de apertura, reenviado: el servidor lo acepta cuantas veces haga falta y
-    /// sustituye instrucciones y herramientas sin cortar el audio. Así 🎓 convierte al asistente en
-    /// aprendiz sin cerrar el micrófono que acaba de abrir —cerrarlo y reabrirlo costaba cuatro
-    /// segundos y un saludo, medido el 2026-09-03—, y al terminar lo devuelve tal como estaba.
+    /// Sin cortar el audio: así 🎓 convierte al asistente en aprendiz sin cerrar el micrófono que acaba de
+    /// abrir —cerrarlo y reabrirlo costaba cuatro segundos y un saludo, medido el 2026-09-03—, y al
+    /// terminar lo devuelve tal como estaba. CÓMO se cambia lo dice el protocolo: en Realtime es la misma
+    /// apertura reenviada; en GPT-Live la apertura es session.start, que a mitad de sesión es un error
+    /// (medido el 2026-09-12), y lo que se manda es un session.update de la delegación — la voz no cambia
+    /// de persona, solo el delegado (spec 018).
     /// </remarks>
     public async Task CambiarModoAsync(string instrucciones, IReadOnlyList<Utensilio> utensilios, bool soloCuandoSeLePide = false)
     {
         if (!Viva || _ws?.State != WebSocketState.Open) return;
-        foreach (string msg in _protocolo.Apertura(instrucciones, utensilios, _pase ?? "", soloCuandoSeLePide))
+        // SIN FINGIR: la voz prestada (promesa 192) pide que no conteste por su cuenta, y una voz que no sabe
+        // esperar turno seguirá contestando a lo que oiga. Se dice en el log en vez de anotar «solo habla
+        // cuando se le pide», que con GPT-Live sería mentira.
+        bool esperara = soloCuandoSeLePide && _protocolo.SabeEsperarTurno;
+        if (soloCuandoSeLePide && !esperara)
+            LogBus.Log("voz-viva", $"{_protocolo.Quien} no sabe esperar turno: se pidió que solo hable cuando se "
+                + $"le pida y esta voz seguirá contestando sola a lo que oiga ({VariableDeLaVoz}={VozRealtime} sí sabe)");
+        foreach (string msg in _protocolo.CambioDeModo(instrucciones, utensilios, soloCuandoSeLePide))
             await EnviarAsync(msg, _cts?.Token ?? CancellationToken.None);
         LogBus.Log("voz-viva", $"modo cambiado: {utensilios.Count} herramienta(s), "
-            + $"instrucciones de {instrucciones.Length} car." + (soloCuandoSeLePide ? " · solo habla cuando se le pide" : ""));
+            + $"instrucciones de {instrucciones.Length} car." + (esperara ? " · solo habla cuando se le pide" : ""));
     }
 
     public async Task EnviarTextoAsync(string texto)
     {
-        if (!Viva || _ws?.State != WebSocketState.Open || string.IsNullOrWhiteSpace(texto)) return;
+        if (!SalidaAbierta || string.IsNullOrWhiteSpace(texto)) return;
         EmpiezaUnTurnoDelUsuario("texto");   // escribir también es pedir algo nuevo (spec 017)
         Dice?.Invoke($"Tú: {texto}");
-        await EnviarAsync(_protocolo.Texto(texto), _cts?.Token ?? CancellationToken.None);
+        var ct = _cts?.Token ?? CancellationToken.None;
+        foreach (string msg in MensajesDeTexto(_protocolo, texto))   // promesa 208: lo escrito pide respuesta
+            await EnviarAsync(msg, ct);
     }
 
     /// <summary>
@@ -1159,10 +1319,31 @@ public sealed class ConversacionEnVivo : IDisposable
         catch (Exception e) { LogBus.Log("voz-viva", $"no pude mandar la foto: {e.Message}"); }
     }
 
+    // ── La salida (spec 018, promesa 208) ───────────────────────────────────
+
+    /// <summary>
+    /// POR DÓNDE SALE LO QUE SE MANDA, y si hay por dónde. Nulas en la app, que es el socket; el contrato las
+    /// cambia por una lista y un «sí» para juzgar lo que la conversación manda de verdad.
+    /// </summary>
+    /// <remarks>
+    /// Sin esto la 208 solo podía juzgar MensajesDeTexto, y devolver EnviarTextoAsync a mandar solo el texto —la
+    /// línea de main, la que dejó a Ü muda ante lo escrito en el nivel 4 del 2026-09-11— daba CONTRATO INTACTO
+    /// (W208, medido el 2026-09-12): el método sale si no hay socket, y el contrato no lo tiene. Se sustituye
+    /// solo la puerta; qué se manda y cuándo lo sigue decidiendo esta clase. (No se llama «_salida»: ese nombre
+    /// ya es el contador de fichas de salida.)
+    /// </remarks>
+    private Func<string, CancellationToken, Task>? _puerta = null;
+    private Func<bool>? _puertaAbierta = null;
+
+    /// <summary>Hay voz viva con el socket abierto: si no, lo escrito no tiene por dónde salir.</summary>
+    private bool SalidaAbierta => _puertaAbierta?.Invoke() ?? (Viva && _ws?.State == WebSocketState.Open);
+
     /// <summary>Un único escritor por socket: WebSocket no admite envíos solapados.</summary>
     private async Task EnviarAsync(string json, CancellationToken ct)
     {
-        if (_ws == null || json.Length == 0) return;
+        if (json.Length == 0) return;
+        if (_puerta != null) { await _puerta(json, ct); return; }
+        if (_ws == null) return;
         await _envio.WaitAsync(ct);
         try { await _ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct); }
         finally { _envio.Release(); }
@@ -1179,9 +1360,7 @@ public sealed class ConversacionEnVivo : IDisposable
                 var r = await _ws.ReceiveAsync(buf, ct);
                 if (r.MessageType == WebSocketMessageType.Close)
                 {
-                    LogBus.Log("voz-viva", $"el servidor cerró la conexión: {r.CloseStatus} "
-                        + $"«{r.CloseStatusDescription}»");
-                    _cayoSolo = true;
+                    CerroElServidor((int?)r.CloseStatus ?? 0, r.CloseStatusDescription ?? "");
                     break;
                 }
                 acumulado.Write(buf, 0, r.Count);
@@ -1194,16 +1373,87 @@ public sealed class ConversacionEnVivo : IDisposable
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception e)
-        {
-            LogBus.Log("voz-viva", $"se cortó la escucha: {e.Message}");
-            _cayoSolo = true;
-        }
-        finally
-        {
-            if (_cayoSolo && Viva && !ct.IsCancellationRequested) await ReconectarAsync();
-            else if (Viva) await TerminarAsync();
-        }
+        catch (Exception e) { SeCortoLaEscucha(e); }
+        finally { await SeAcaboLaEscuchaAsync(ct); }
+    }
+
+    /// <summary>
+    /// SE ACABÓ LA ESCUCHA, O NO SE PUDO VOLVER A ELLA: EL ÚNICO SITIO QUE DECIDE SI SE RECONECTA (spec 018, promesa 224).
+    /// </summary>
+    /// <remarks>
+    /// Hasta el 2026-09-13 lo decidían dos: este finally, y el catch de ReconectarAsync, que se llamaba a sí mismo con
+    /// cualquier excepción. Ningún contrato llegaba a ninguno de los dos, y los dos reconectaban también lo que no se
+    /// arregla reconectando: con la cuenta sin crédito, GPT Realtime reconectó cuatro veces (nivel 4 del 2026-09-12).
+    /// </remarks>
+    private async Task SeAcaboLaEscuchaAsync(CancellationToken ct)
+    {
+        bool sigue = Viva && !ct.IsCancellationRequested;
+        // LA CUENTA, LA CLAVE O EL MODELO, PRIMERO, y confirmada o no. Iba detrás de «no abrió» cuando GPT Realtime no
+        // confirmaba; al pasar a confirmar con session.created (la 50), un invalid_api_key —que llega sin session.created,
+        // medido el 2026-09-13— entraba por «no abrió» y se decía sin nombrar la clave: la 224 se puso roja al juntar las
+        // dos ramas. La causa por código es la más precisa de las dos, y también dice lo que dijo el servidor.
+        if (sigue && _porQueNoSeReintenta.Length > 0) await NoSeReintentaAsync();
+        // NO ABRIÓ, Y ESO NO ES UN CORTE: el servidor contestó un error en vez de confirmar la sesión y
+        // después cerró. Reenviar la misma apertura fallaría igual, así que no se reintenta: se dice la causa.
+        else if (sigue && !_confirmada && _fallaAntesDeAbrir.Length > 0) await NoAbrioAsync();
+        else if (sigue && _cayoSolo) await (_reconectar?.Invoke() ?? ReconectarAsync());
+        else if (Viva) await TerminarAsync();
+    }
+
+    /// <summary>
+    /// El servidor cerró el socket: es un corte y, si la descripción del cierre dice algo que no se arregla reconectando,
+    /// también por qué. GPT Realtime la manda como «type.code»: 1013 «insufficient_quota.credit_balance_exhausted»
+    /// (2026-09-12), 3000 «invalid_request_error.invalid_api_key» y 4004 «invalid_request_error.model_not_found»
+    /// (2026-09-13). El número no se mira: 1013 es «vuelve a intentarlo» en el RFC 6455.
+    /// </summary>
+    private void CerroElServidor(int estado, string descripcion)
+    {
+        LogBus.Log("voz-viva", $"el servidor cerró la conexión: {estado} «{descripcion}»");
+        _cayoSolo = true;
+        AnotarSiNoSeArregla(NoSeArreglaReintentando.PorQue(descripcion), descripcion);
+    }
+
+    /// <summary>La escucha se cortó sin un cierre: el socket murió. GPT-Live lo aborta a los ~2 s de un error (medido).</summary>
+    private void SeCortoLaEscucha(Exception e)
+    {
+        LogBus.Log("voz-viva", $"se cortó la escucha: {e.Message}");
+        _cayoSolo = true;
+    }
+
+    /// <summary>
+    /// El apretón de manos no pasó. Con 401 la clave no vale y reconectar con la misma fallaría igual: GPT-Live rechaza
+    /// así una clave falsa, medido el 2026-09-13. Devuelve la causa, vacía si puede ser la red: sin respuesta HTTP el
+    /// estado es 0.
+    /// </summary>
+    private string NoConecto(Exception e, int estadoHttp)
+    {
+        string porque = NoSeArreglaReintentando.PorQue(estadoHttp.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AnotarSiNoSeArregla(porque, e.Message);
+        return porque;
+    }
+
+    /// <summary>Se queda la PRIMERA causa: con Realtime el error y el cierre dicen lo mismo, y el error llega antes y con su mensaje.</summary>
+    private void AnotarSiNoSeArregla(string porque, string loQueDijo)
+    {
+        if (porque.Length == 0 || _porQueNoSeReintenta.Length > 0) return;
+        _porQueNoSeReintenta = porque;
+        _loQueDijoAlNoPoder = loQueDijo;
+    }
+
+    /// <summary>
+    /// Lo que no se arregla reconectando se dice UNA vez, con su causa, y se cierra la voz. Lo que cuesta no hacerlo: con
+    /// la cuenta sin crédito, cuatro reconexiones con su cierre 1013 y un «se cayó 5 veces seguidas» que culpaba a la red.
+    /// </summary>
+    private async Task NoSeReintentaAsync()
+    {
+        // «LO QUE SE DIJO», NO «EL SERVIDOR DICE»: un 401 en el apretón de manos no trae palabras del servidor, trae la
+        // frase de .NET («The server returned status code '401'…»), y atribuírsela al servidor mentía sobre de dónde
+        // venía (medido con sonda-conv-fatal el 2026-09-13, patrón nº8).
+        string porque = _porQueNoSeReintenta, dicho = _loQueDijoAlNoPoder;
+        LogBus.Log("voz-viva", $"no se reintenta: {porque} («{dicho}»). Reconectar con la misma cuenta, "
+            + "la misma clave y el mismo modelo fallaría igual");
+        await TerminarAsync();
+        Dice?.Invoke($"No sigo con la voz en vivo: {porque} («{dicho}»).");
     }
 
     /// <summary>
@@ -1234,18 +1484,24 @@ public sealed class ConversacionEnVivo : IDisposable
 
             try { _ws?.Dispose(); } catch { }
             _ws = new ClientWebSocket();
+            _ws.Options.CollectHttpResponseDetails = true;   // sin esto un 401 llega como estado 0 (ver ArrancarAsync)
             foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
             await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
             foreach (string msg in _protocolo.Apertura(Instrucciones, Herramientas(), _pase))
                 await EnviarAsync(msg, _cts.Token);
 
             if (_protocolo.SabeVolver && _pase.Length > 0)
+            {
                 LogBus.Log("voz-viva", $"reconectada y reanudada donde iba (intento {_reintentos})");
+                EmpiezaUnaConexion("");
+            }
             else
             {
                 LogBus.Log("voz-viva", $"reconectada SIN continuidad: la conversación empieza de "
                     + $"cero (intento {_reintentos})");
-                Dice?.Invoke("Se cortó un instante. Sigo, pero olvidé lo último que hablábamos.");
+                // «SIGO» CUANDO EL SERVIDOR CONFIRMA, no al reconectar el socket: el 2026-09-12 se dijo cuatro
+                // veces sobre una sesión que no iba a abrir.
+                EmpiezaUnaConexion("Se cortó un instante. Sigo, pero olvidé lo último que hablábamos.");
             }
 
             _ = Task.Run(() => RecibirAsync(_cts.Token), _cts.Token);
@@ -1254,9 +1510,54 @@ public sealed class ConversacionEnVivo : IDisposable
         catch (Exception e)
         {
             LogBus.Log("voz-viva", $"no pude reconectar: {e.Message}");
+            NoConecto(e, (int)(_ws?.HttpStatusCode ?? 0));
             _cayoSolo = true;
-            await ReconectarAsync();
+            // POR EL SITIO QUE DECIDE (promesa 224), y no llamándose a sí mismo: hasta el 2026-09-13 cualquier excepción
+            // volvía a reconectar, también un 401 con la misma clave, y lo único que lo paraba era el tope de cuatro.
+            await SeAcaboLaEscuchaAsync(_cts.Token);
         }
+    }
+
+    /// <summary>
+    /// Una conexión nueva, recién mandada su apertura. Si el protocolo confirma la apertura, empieza sin
+    /// confirmar y lo que había que decir espera a <see cref="Hecho.Abierta"/>; si no, se dice ya, como siempre.
+    /// Se llama ANTES de lanzar la recepción: nada de esa conexión se lee con el estado de la anterior.
+    /// </summary>
+    private void EmpiezaUnaConexion(string alConfirmar)
+    {
+        // UNA CONEXIÓN NUEVA ES OTRA SESIÓN DEL SERVIDOR, que vuelve a contar sus segundos desde cero: lo de la anterior
+        // se aparta para sumarlo al cerrar (promesa 218). Solo GPT-Live cuenta segundos, y no sabe volver a la misma sesión.
+        _segundosDeConexionesAnteriores += _segundosDeLaConexion;
+        _segundosDeLaConexion = 0;
+        _confirmada = !_protocolo.ConfirmaQueAbrio;
+        _fallaAntesDeAbrir = "";
+        _porQueNoSeReintenta = _loQueDijoAlNoPoder = "";   // la causa era de la conexión anterior (224)
+        _alConfirmar = _confirmada ? "" : alConfirmar;
+        // CONECTAR NO ES ABRIR (promesa 220). Hasta el 2026-09-13 «sesión abierta con «…»» se escribía en ArrancarAsync al
+        // conectar el socket, y en el nivel 4 del 12, sin crédito, salió en el mismo segundo que el error: el conductor la
+        // tomó por voz abierta (patrón nº2). Con un protocolo que confirma, aquí solo se sabe que el socket conectó, y la
+        // línea lo dice así; «sesión abierta» la escribe Reaccionar al llegar Hecho.Abierta. Uno que no confirma la
+        // escribe aquí, diciendo que nadie la confirmó: lo que no se midió no se afirma.
+        LogBus.Log("voz-viva", _confirmada
+            ? $"sesión abierta con {QuienAbre}, sin confirmación: este protocolo no la manda"
+            : $"socket conectado, esperando confirmación de {QuienAbre}");
+        if (_confirmada && alConfirmar.Length > 0) Dice?.Invoke(alConfirmar);
+    }
+
+    /// <summary>Con qué abre, tal como lo dicen las líneas de apertura: el modelo de la voz y el proveedor.</summary>
+    private string QuienAbre => $"«{_protocolo.Modelo}» ({_protocolo.Quien})";
+
+    /// <summary>
+    /// El servidor dijo por qué no abría y cerró. Se dice UNA vez, con su causa, y se cierra la voz: la causa
+    /// (sin crédito, unas instrucciones demasiado largas) no se arregla reintentando.
+    /// </summary>
+    private async Task NoAbrioAsync()
+    {
+        string causa = _fallaAntesDeAbrir;
+        LogBus.Log("voz-viva", $"la sesión no llegó a abrir: el servidor contestó «{causa}» en vez de confirmarla, "
+            + "y cerró. No se reintenta: la misma apertura fallaría igual");
+        await TerminarAsync();
+        Dice?.Invoke($"No pude abrir la voz en vivo. El servidor dice: {causa}");
     }
 
     /// <summary>Traduce lo que llegó a hechos, y reacciona a cada uno. La traducción vive en <see
@@ -1273,15 +1574,42 @@ public sealed class ConversacionEnVivo : IDisposable
             return;
         }
 
-        if (hechos.Count == 0)
+        if (hechos.Count == 0 && SeVuelcaCrudo(doc.RootElement))
         {
             string plano = System.Text.RegularExpressions.Regex.Replace(json, @"\s+", " ");
             LogBus.Log("voz-viva", "← " + (plano.Length > 400 ? plano[..400] + "…" : plano));
-            return;
         }
 
         foreach (var hecho in hechos) Reaccionar(hecho, ct);
+        MarcarLosTurnosQueElServidorNoMarca(hechos, ct);
     }
+
+    /// <summary>
+    /// SI UN MENSAJE QUE NO TRAJO HECHOS SE VUELCA CRUDO AL LOG (promesa 217): todos menos los deltas del
+    /// delegado y el audio.
+    /// </summary>
+    /// <remarks>
+    /// Medido el 2026-09-12 contra /v1/live/sessions (un turno delegado: mirar la pantalla y contestar en
+    /// cinco frases): 379 mensajes, 98 sin hechos, y 78 de esos 98 eran deltas dentro de response.event —50
+    /// de texto y 28 de argumentos, uno por ficha—, cada uno una línea de hasta 400 caracteres. Con cinco
+    /// turnos así el anillo de 500 líneas del panel perdía las voz-turno, los topes y las «llamada
+    /// recibida». Quedan 20. El audio de GPT-Live llega sin parar y solo cae aquí cuando viene vacío.
+    /// Lo demás se sigue volcando a propósito: un evento que no se traduce es justo lo que hay que ver.
+    /// Un .delta de fuera del sobre (los de Realtime) no se toca: allí el volumen es el de main.
+    /// </remarks>
+    public static bool SeVuelcaCrudo(JsonElement mensaje)
+    {
+        string tipo = Tipo(mensaje);
+        if (tipo == "session.output_audio.delta") return false;
+        if (tipo != "response.event" || !mensaje.TryGetProperty("event", out var ev)) return true;
+        return !Tipo(ev).EndsWith(".delta", StringComparison.Ordinal);
+    }
+
+    /// <summary>El «type» si es texto; vacío si falta o no es un objeto (patrón nº9: lo de la red se normaliza).</summary>
+    private static string Tipo(JsonElement o)
+        => o.ValueKind == JsonValueKind.Object && o.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
+            ? t.GetString() ?? ""
+            : "";
 
     private void Reaccionar(Hecho hecho, CancellationToken ct)
     {
@@ -1353,6 +1681,7 @@ public sealed class ConversacionEnVivo : IDisposable
             case Hecho.Pide p:
                 LogBus.Log("voz-viva", "llamada recibida: " + string.Join(", ", p.Cuales.Select(x => x.Nombre)));
                 foreach (var x in p.Cuales) _cuenta.Llamada(x.Nombre, TopeDeIntentos.DestinoDe(x.Nombre, x.Args));
+                AnotarSinContestar(p.Cuales);   // antes de lanzarla: la siguiente de la tanda ya la cuenta (214)
                 _ = Task.Run(() => EjecutarAsync(p.Cuales, ct), ct);
                 break;
 
@@ -1379,8 +1708,27 @@ public sealed class ConversacionEnVivo : IDisposable
                 _entrada += c.Entrada; _salida += c.Salida; _total += c.Total; _turnos++;
                 break;
 
+            // GPT-LIVE CUENTA SEGUNDOS ACUMULADOS, no incrementos (promesa 48 de la voz): se guarda el último de la
+            // conexión. Sumarlos como las fichas de arriba contaría 37 s donde hubo 25 (promesa 218).
+            case Hecho.Duracion d:
+                _segundosDeLaConexion = Math.Max(_segundosDeLaConexion, d.Segundos);
+                break;
+
             case Hecho.Falla f:
                 LogBus.Log("voz-viva", $"el servidor dice: {f.Que}");
+                // ANTES DE CONFIRMAR LA SESIÓN, un error no es de la conversación: es por qué no abre. Se guarda
+                // el primero; si el socket muere sin confirmar, eso es lo que se dice (RecibirAsync).
+                if (!_confirmada && _fallaAntesDeAbrir.Length == 0) _fallaAntesDeAbrir = f.Que;
+                // Y CONFIRMADA O NO, LO QUE NO SE ARREGLA RECONECTANDO SE ANOTA POR SU CÓDIGO (promesa 224): con Realtime,
+                // que no confirma, un invalid_api_key llega así y detrás el cierre 3000 (medido el 2026-09-13).
+                AnotarSiNoSeArregla(NoSeArreglaReintentando.PorQue(f.Codigo), f.Que);
+                break;
+
+            // LA SESIÓN ABRIÓ DE VERDAD (promesa 49): lo que se iba a decir al arrancar o al volver, se dice ahora.
+            case Hecho.Abierta:
+                _confirmada = true;
+                LogBus.Log("voz-viva", $"sesión abierta con {QuienAbre}: el servidor la confirmó");   // la única que lo afirma (220)
+                if (_alConfirmar.Length > 0) { Dice?.Invoke(_alConfirmar); _alConfirmar = ""; }
                 break;
         }
     }
@@ -1397,6 +1745,64 @@ public sealed class ConversacionEnVivo : IDisposable
     {
         try { await EjecutarNucleoAsync(llamadas, ct); }
         catch (Exception e) { LogBus.Log("voz-viva", $"la ejecución de una llamada reventó: {e.Message}"); }
+        // EL TRABAJO TERMINÓ, salga como salga (promesa 211): contestada, retirada o reventada. Mientras no se
+        // devuelve, el marcador de turnos no cierra; sin esta línea, con GPT-Live el turno no se cerraría nunca
+        // tras la primera herramienta. En finally para que ni una excepción la deje en curso.
+        // Aunque reventara a medias: una llamada que ya no se va a contestar no retiene el turno de las demás (214).
+        finally
+        {
+            _turnosSinMarca?.Devuelta(llamadas);
+            DarPorContestadas(llamadas);
+        }
+    }
+
+    // ── Las llamadas que llegan de una en una (spec 018, promesa 214) ───────
+
+    /// <summary>
+    /// Las llamadas pedidas que aún no tienen su resultado devuelto, con la sesión en la que se pidieron. Solo
+    /// se anotan con un protocolo que no marca los turnos.
+    /// </summary>
+    /// <remarks>
+    /// GPT-LIVE ENTREGA CADA LLAMADA EN SU PROPIO MENSAJE, y cada Hecho.Pide se contestaba con su propio
+    /// response.create: con dos a la vez, el primero salía sin la salida de la otra y el servidor contestaba
+    /// function_call_outputs_required. Medido con sonda-paralelo.ps1 el 2026-09-12: dos llamadas a 52 ms una de
+    /// otra y 1 error; contestando como aquí (copia de la sonda), 77 ms, 0 errores y un único response.create.
+    /// Realtime entrega la tanda entera en un response.done: con él no se anota nada y todo sigue como estaba.
+    ///
+    /// Se pregunta MarcaLosTurnos porque hoy las dos cosas van juntas: GPT-Live es el único protocolo que ni
+    /// marca los turnos ni entrega las llamadas en tanda. Si alguno las separa, esto pide su propio miembro en
+    /// IProtocolo.
+    ///
+    /// La sesión va anotada porque una llamada pedida justo al cerrar la voz no llega a correr (su Task.Run nace
+    /// cancelado), y sin eso retendría para siempre el turno de la sesión siguiente.
+    ///
+    /// Queda una carrera, dicha y no cerrada: si una herramienta termina antes de que llegue la llamada
+    /// siguiente de la misma tanda (52–77 ms después, medido), el turno se pide con una sola salida y el
+    /// servidor contesta como antes. Cerrarla del todo pide mirar response.completed, que el traductor no da.
+    /// </remarks>
+    private readonly Dictionary<string, string> _sinContestar = new();
+    private readonly object _candadoSinContestar = new();
+
+    /// <summary>Se anota ANTES de lanzar la llamada, en el hilo de recepción: la siguiente de la tanda ya la cuenta
+    /// aunque esta termine enseguida.</summary>
+    private void AnotarSinContestar(IReadOnlyList<Llamada> llamadas)
+    {
+        if (_protocolo.MarcaLosTurnos) return;
+        lock (_candadoSinContestar)
+            foreach (var x in llamadas)
+                if (x.Id.Length > 0) _sinContestar[x.Id] = _sesionId;
+    }
+
+    /// <summary>Da estas llamadas por contestadas, olvida las de otra sesión y devuelve las que faltan.</summary>
+    private IReadOnlyList<string> DarPorContestadas(IReadOnlyList<Llamada> llamadas)
+    {
+        lock (_candadoSinContestar)
+        {
+            foreach (var x in llamadas) _sinContestar.Remove(x.Id);
+            foreach (var vieja in _sinContestar.Where(kv => kv.Value != _sesionId).Select(kv => kv.Key).ToList())
+                _sinContestar.Remove(vieja);
+            return _sinContestar.Keys.ToList();
+        }
     }
 
     /// <summary>
@@ -1602,11 +2008,10 @@ public sealed class ConversacionEnVivo : IDisposable
     /// </summary>
     private async Task EnviarTextoAlModeloAsync(string texto)
     {
-        if (!Viva || _ws?.State != WebSocketState.Open) return;
+        if (!SalidaAbierta) return;
         var ct = _cts?.Token ?? CancellationToken.None;
-        await EnviarAsync(_protocolo.Texto(texto), ct);
-        string pide = _protocolo.PedirRespuesta();
-        if (pide.Length > 0) await EnviarAsync(pide, ct);
+        foreach (string msg in MensajesDeTexto(_protocolo, texto))   // el mismo camino que lo escrito (208)
+            await EnviarAsync(msg, ct);
     }
 
     private async Task EjecutarNucleoAsync(IReadOnlyList<Llamada> llamadas, CancellationToken ct)
@@ -1737,8 +2142,17 @@ public sealed class ConversacionEnVivo : IDisposable
                 await EnviarAsync(msg, ct);
             foreach (byte[] jpeg in fotos)
                 await MandarFotoAsync(jpeg, ct);
-            string pide = _protocolo.PedirRespuesta();
-            if (pide.Length > 0) await EnviarAsync(pide, ct);
+            // UN TURNO POR TANDA, NO POR LLAMADA (promesa 214): con GPT-Live cada llamada llega sola, y pedir turno
+            // mientras falta la salida de otra es lo que el servidor rechaza. Lo retenido deja rastro (patrón nº10).
+            var faltan = DarPorContestadas(llamadas);
+            if (faltan.Count > 0)
+                LogBus.Log("voz-viva", $"resultado devuelto; el turno se pide cuando se contesten las {faltan.Count} "
+                    + $"llamada(s) que faltan ({string.Join(", ", faltan)})");
+            else
+            {
+                string pide = _protocolo.PedirRespuesta();
+                if (pide.Length > 0) await EnviarAsync(pide, ct);
+            }
         }
         catch (Exception e) { LogBus.Log("voz-viva", $"no pude devolver el resultado: {e.Message}"); }
     }

@@ -54,10 +54,33 @@ public abstract record Hecho
     public sealed record Consumo(int Entrada, int Salida, int Total) : Hecho;
 
     /// <summary>
+    /// Lo que va durando la conversación, en segundos: el ACUMULADO de la sesión, no un incremento.
+    /// </summary>
+    /// <remarks>
+    /// Es lo que cuenta GPT-Live en vez de fichas (<c>session.usage.updated</c>). Medido el 2026-09-12
+    /// en la misma sesión: 12.0 a los 15 s y 25.0 a los 30 s. Quien lo sume como <see cref="Consumo"/>
+    /// cuenta 37 s donde hubo 25; se guarda el último. Promesa 48 de la voz.
+    /// </remarks>
+    public sealed record Duracion(double Segundos) : Hecho;
+
+    /// <summary>
     /// El servidor dice que algo va mal. Se cuenta como hecho y no se traga: una sesión abierta, el
     /// micrófono en rojo y ninguna pista de por qué no contesta es el peor diagnóstico posible.
     /// </summary>
-    public sealed record Falla(string Que) : Hecho;
+    /// <param name="Codigo">
+    /// El code del error tal como lo manda el servidor (credit_balance_exhausted, invalid_api_key, model_not_found…);
+    /// vacío si no trae. Es lo que la conversación mira para no reconectar lo que no se arregla reconectando, y no el
+    /// mensaje, que está en inglés y cambia de redacción (promesa 53, medido el 2026-09-13).
+    /// </param>
+    public sealed record Falla(string Que, string Codigo = "") : Hecho;
+
+    /// <summary>
+    /// El servidor CONFIRMA que la sesión abrió. Solo lo mandan los protocolos que lo declaran (<see
+    /// cref="IProtocolo.ConfirmaQueAbrio"/>), y para ellos lo que llega antes es que no abrió, no un corte.
+    /// GPT-Live lo manda con session.started (promesa 49) y GPT Realtime con session.created (promesa 50); y solo
+    /// entonces la conversación escribe «sesión abierta con «…»» (promesa 220 del grafo).
+    /// </summary>
+    public sealed record Abierta : Hecho;
 }
 
 /// <summary>Algo que el modelo pide ejecutar.</summary>

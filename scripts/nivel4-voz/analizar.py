@@ -7,9 +7,12 @@ Umbrales de la spec 017, fijados antes de medir:
   - intentos: acciones al mismo destino dentro de la peticion, maximo 2 (lectura estricta del audio);
     lo que el tope de la rama FRENA cuenta como intento, y la lista numerada de homonimos NO
   - tiempo por accion: del "->" a su "<-", maximo 2000 ms
-  - aprobado: estado final alcanzado, <=2 intentos al mismo destino, <=1 intento fallido en toda la
-    peticion (lo frenado cuenta: el segundo tiene que ser el bueno) y todas las acciones <=2000 ms
+  - aprobado: estado final alcanzado, AL MENOS UNA accion de voz, <=2 intentos al mismo destino, <=1
+    intento fallido en toda la peticion (lo frenado cuenta: el segundo tiene que ser el bueno) y todas
+    las acciones <=2000 ms
   - "miro antes": si hubo un map_look antes de la primera accion (R3: mirar para desempatar)
+  - medible: una corrida marcada "ya_cumplido" en resumen.jsonl (el estado final ya se cumplia antes de
+    pulsar Enter y el conductor no pudo deshacerlo) no se aprueba nunca (V8 de la spec 018, 2026-09-13)
 El denominador es el plan (--plan, que correr.ps1 calcula como tareas x repeticiones), no lo que se
 llego a ejecutar (patron n.10). Sin --plan se avisa de que el denominador es lo ejecutado.
 
@@ -169,12 +172,23 @@ def main():
             h, mi, s = r["t0"].split(".")[0].split(":")
             t0 = seg(h, mi, s)
         a = analizar_trozo(f.read_text(encoding="utf-8", errors="replace"), t0)
-        a.update(tarea=tarea, rep=rep, estado_final=bool(r.get("estado_final")), tope=bool(r.get("tope")))
+        a.update(tarea=tarea, rep=rep, estado_final=bool(r.get("estado_final")), tope=bool(r.get("tope")),
+                 ya_cumplido=bool(r.get("ya_cumplido")))
         a["ejercita"] = ejercita(tarea, a)
+        # UNA CORRIDA QUE EMPEZÓ CON EL ESTADO FINAL YA CUMPLIDO NO MIDE NADA. El 2026-09-12 había tres
+        # exploradores abiertos antes de T4 (V8 de la spec 018) y «Limpiar» solo cierra los nuevos: el estado
+        # final bueno no lo trajo nadie. El conductor intenta llevarlo a una partida neutra y, si no puede, lo
+        # marca «ya_cumplido». Un resumen sin ese campo es de antes de existir, y cuenta como medible.
+        a["medible"] = not a["ya_cumplido"]
         # «A la primera, máximo dos intentos» es de LA PETICIÓN (spec 017): a lo sumo UN intento fallido
         # en toda ella, y lo frenado cuenta. Aprobar por destino dejaba pasar un fallo en A, otro en B y
         # otro en C antes de acertar en D (crítico final, 2026-09-11).
-        a["aprobado"] = (a["estado_final"] and a["ejercita"] and a["intentos_max"] <= 2
+        # SIN UNA SOLA ACCIÓN DE VOZ NO SE APRUEBA, aunque el estado final sea el bueno. El 2026-09-11 la
+        # sesión de voz se cerró a las 07:43:08 y el texto lo atendió el agente que pulsa por coordenadas
+        # (`agent: tap (455,584)`): las 4 «aprobadas» de la rama salieron de ese camino, con cero llamadas
+        # de voz, y el juez las contó. Sin acciones, todos los demás criterios pasan en vacío (0 fallidas,
+        # 0 lentas): el juez certificaba lo que no había medido.
+        a["aprobado"] = (a["medible"] and a["estado_final"] and a["ejercita"] and a["acciones"] > 0 and a["intentos_max"] <= 2
                          and a["fallidas"] + a["rechazos"] <= 1
                          and a["lentas"] == 0 and a["sin_vuelta"] == 0)
         filas.append(a)
@@ -183,24 +197,33 @@ def main():
     print(f"## Nivel 4 · {etiqueta}\n")
     if plan is None:
         print("> **Aviso:** sin `--plan`, el denominador es lo ejecutado y no el plan.\n")
-    print("| Tarea | Rep | Estado final | Ejercita | 1.ª herr. | Miró antes | Llamadas | Distintas | Acciones | Fallidas | Frenadas | Intentos máx. | > 2 s | Petición | Aprobada |")
-    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    print("| Tarea | Rep | Medible | Estado final | Ejercita | 1.ª herr. | Miró antes | Llamadas | Distintas | Acciones | Fallidas | Frenadas | Intentos máx. | > 2 s | Petición | Aprobada |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for a in filas:
         pet = f'≈{a["peticion_s"]} s' if a["peticion_s"] is not None else "—"
-        print(f'| {a["tarea"]} | {a["rep"]} | {"sí" if a["estado_final"] else "no"} | {"sí" if a["ejercita"] else "**no**"} | '
+        print(f'| {a["tarea"]} | {a["rep"]} | {"sí" if a["medible"] else "**no** (ya cumplido)"} | '
+              f'{"sí" if a["estado_final"] else "no"} | {"sí" if a["ejercita"] else "**no**"} | '
               f'{a["primera"]} | {"sí" if a["miro_antes"] else "no"} | {a["llamadas"]} | {a["distintas"]} | {a["acciones"]} | {a["fallidas"]} | {a["rechazos"]} | '
               f'{a["intentos_max"]} | {a["lentas"]} | {pet} | {"**sí**" if a["aprobado"] else "no"} |')
     ms = [x for a in filas for x in a["ms_acciones"]]
     print(f"\n**Aprobadas: {sum(a['aprobado'] for a in filas)} de {denominador}** (el plan como denominador).")
     print("«Ejercita = no» es que la corrida no pasó por lo que la tarea prueba (T4: pulsar «Descargas»; "
           "T5: pasar por Sistema); aunque el estado final sea el bueno, no cuenta como aprobada.")
+    print("«Acciones = 0» con el estado final bueno es que lo resolvió otro camino (el agente por coordenadas, "
+          "o la persona): no mide la voz y no cuenta como aprobada.")
     print("«Petición» va desde el Enter hasta el último resultado de una acción, con resolución de ±1 s: "
           "incluye la latencia del modelo.")
+    print("«Medible = no» es que el estado final ya se cumplía antes de pulsar Enter y el conductor no pudo llevar "
+          "la app a un estado de partida neutro: no cuenta como aprobada, y sigue contando en el denominador.")
     if ms:
         print(f"\nAcciones medidas: {len(ms)} · mediana {median(ms):.0f} ms · ≤ 2 s: {sum(x <= 2000 for x in ms)}/{len(ms)} · máx. {max(ms)} ms")
     if filas:
-        print(f"Estado final alcanzado: {sum(a['estado_final'] for a in filas)}/{denominador} · "
+        print(f"Estado final alcanzado (solo las medibles): {sum(a['estado_final'] and a['medible'] for a in filas)}/{denominador} · "
               f"frenadas por el tope: {sum(a['rechazos'] for a in filas)} · listas de homónimos: {sum(a['listas'] for a in filas)}")
+        print(f"Corridas no medibles (el estado final ya se cumplía antes de empezar): "
+              f"{sum(1 for a in filas if not a['medible'])}")
+        print(f"Llegaron al estado final sin una sola acción de voz: "
+              f"{sum(1 for a in filas if a['medible'] and a['estado_final'] and a['acciones'] == 0)}")
         print(f"Tareas que agotaron la observación sin que U hablara: {sum(a['tope'] for a in filas)}")
     print("\n### Secuencias\n")
     for a in filas:

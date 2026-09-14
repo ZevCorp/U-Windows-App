@@ -6,6 +6,9 @@ Cada regla del juez tiene un caso que la ejercita y un veredicto esperado. Se es
 el critico de la rama (2026-09-11) viera que el juez favorecia a quien lo habia escrito: un juez sin
 prueba es otra afirmacion sin comprobar. Se rompio a proposito quitando «a lo sumo un fallido por
 peticion», y esta autoprueba lo noto (T3 paso a aprobada).
+
+T4 r2 (2026-09-13): una corrida que empezo con el estado final ya cumplido (V8 de la spec 018: tres
+exploradores abiertos antes de T4) no es medible, y el juez no la aprueba aunque todo lo demas pase.
 """
 import json
 import pathlib
@@ -42,6 +45,13 @@ LOGS = {
         "[01:01:05] mapa-mcp: -> map_take exit=Bluetooth",
         "[01:01:06] mapa-mcp: <- (800 ms) hice los 1 paso(s): pulsé «Bluetooth» y ahora estás en «uia://settings/bluetooth».",
     ],
+    # T3 r2: el agujero del 2026-09-11. La sesión de voz se cerró y el texto lo atendió el agente que
+    # pulsa por coordenadas: estado final bueno y CERO acciones de voz → NO aprobada (no midió la voz)
+    "T3-r2.log": [
+        "[01:01:31] voz-viva: el servidor dice: sesión cerrada",
+        "[01:01:33] agent: tap (455,584)",
+        "[01:01:35] agent: tap (212,301)",
+    ],
     # T4: mira, pide, recibe la lista (no es intento), elige el 2 → aprobada, miró antes, ejercita
     "T4-r1.log": [
         "[01:02:01] voz-viva: ejecutando «map_look»",
@@ -49,6 +59,13 @@ LOGS = {
         "[01:02:03] mapa-mcp: <- (400 ms) hice 0 de 1 y paré en el paso 1: hay 2 puertas vivas para «Descargas»: 1) … 2) …",
         "[01:02:04] mapa-mcp: -> map_take exit=Descargas which=2",
         "[01:02:05] mapa-mcp: <- (900 ms) hice los 1 paso(s): pulsé «Descargas» y ahora estás en «uia://explorer.exe/descargas».",
+    ],
+    # T4 r2: V8 del 2026-09-12. Había exploradores en Descargas ANTES de pulsar Enter y el conductor no pudo
+    # llevarlos a otro sitio (resumen: ya_cumplido). Una acción limpia y el estado final bueno, pero ese estado
+    # no lo trajo la voz: la corrida no mide nada → no medible, y NO aprobada
+    "T4-r2.log": [
+        "[01:02:31] mapa-mcp: -> map_take exit=Descargas",
+        "[01:02:32] mapa-mcp: <- (600 ms) hice los 1 paso(s): pulsé «Descargas» y ahora estás en «uia://explorer.exe/descargas».",
     ],
     # T5: dos fallos y un frenado al mismo sitio; nunca pasa por Sistema; estado final no alcanzado
     "T5-r1.log": [
@@ -63,7 +80,10 @@ RESUMEN = [
     {"tarea": "T1", "rep": 1, "estado_final": True, "tope": False, "t0": "01:00:00.100"},
     {"tarea": "T1", "rep": 2, "estado_final": True, "tope": False, "t0": "01:00:30.100"},
     {"tarea": "T3", "rep": 1, "estado_final": True, "tope": False, "t0": "01:01:00.100"},
+    {"tarea": "T3", "rep": 2, "estado_final": True, "tope": False, "t0": "01:01:30.100"},
     {"tarea": "T4", "rep": 1, "estado_final": True, "tope": False, "t0": "01:02:00.100"},
+    {"tarea": "T4", "rep": 2, "estado_final": True, "tope": False, "t0": "01:02:30.100",
+     "estado_inicial": True, "ya_cumplido": True},
     {"tarea": "T5", "rep": 1, "estado_final": False, "tope": False, "t0": "01:03:00.100"},
 ]
 
@@ -88,10 +108,18 @@ def main():
          f[("T1", 2)]["aprobado"] is False and f[("T1", 2)]["fallidas"] == 2),
         ("T3 NO aprobada: dos fallidas en la petición, aunque por destino serían 1+1",
          f[("T3", 1)]["aprobado"] is False and f[("T3", 1)]["fallidas"] == 2 and f[("T3", 1)]["intentos_max"] == 1),
+        ("T3 r2 NO aprobada: estado final bueno con cero acciones de voz (lo resolvió otro camino)",
+         f[("T3", 2)]["aprobado"] is False and f[("T3", 2)]["acciones"] == 0 and f[("T3", 2)]["estado_final"] is True),
+        ("la tabla dice cuántas llegaron al estado final sin la voz", "sin una sola acción de voz: 1" in texto),
         ("T4 aprobada: la lista no es intento, eligió el 2",
          f[("T4", 1)]["aprobado"] is True and f[("T4", 1)]["listas"] == 1 and f[("T4", 1)]["fallidas"] == 0),
         ("T4 miró antes de actuar; T1 no", f[("T4", 1)]["miro_antes"] is True and f[("T1", 1)]["miro_antes"] is False),
         ("T4 ejercita: pasó por «descargas»", f[("T4", 1)]["ejercita"] is True),
+        ("T4 r2 NO aprobada: el estado final ya se cumplía antes de empezar (ya_cumplido), no mide nada",
+         f[("T4", 2)]["aprobado"] is False and f[("T4", 2)].get("medible") is False),
+        ("sin «ya_cumplido» en el resumen, la corrida es medible", f[("T4", 1)].get("medible") is True),
+        ("la tabla dice cuántas no se pudieron medir",
+         "no medibles (el estado final ya se cumplía antes de empezar): 1" in texto),
         ("T5: el frenado cuenta como tercer intento al mismo sitio",
          f[("T5", 1)]["intentos_max"] == 3 and f[("T5", 1)]["rechazos"] == 1),
         ("T5 no ejercita: no pasó por Sistema", f[("T5", 1)]["ejercita"] is False and f[("T5", 1)]["aprobado"] is False),

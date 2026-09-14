@@ -44,6 +44,19 @@ public sealed class ProtocoloOpenAI : IProtocolo
     public bool Mira => true;
     public bool SabeVolver => false;
 
+    /// <summary>
+    /// SÍ: session.created, lo primero que manda el servidor al conectar, sin que se le mande nada. Medido el 2026-09-13
+    /// (sonda-apertura.ps1): llega a los 283 ms de conectar, antes que session.updated; y con una apertura que el servidor
+    /// rechaza llega igual, con el error 28 ms detrás y el socket abierto. Promesa 50.
+    /// </summary>
+    /// <remarks>
+    /// Confirma la sesión del servidor, NO la configuración: el error de un session.update llega después de confirmar y
+    /// se sigue leyendo como un error de la conversación. Hasta este día no confirmaba nada, y «sesión abierta» salía al
+    /// conectar el socket: en el nivel 4 del 2026-09-12, sin crédito, salió en el mismo segundo que el cierre 1013. Qué
+    /// manda el servidor sin crédito antes de cerrar no se pudo medir: la cuenta ya lo tiene.
+    /// </remarks>
+    public bool ConfirmaQueAbrio => true;
+
     public ProtocoloOpenAI(string modelo = "gpt-realtime-2.1-mini") => Modelo = modelo;
 
     public Uri Direccion() => new($"wss://api.openai.com/v1/realtime?model={Uri.EscapeDataString(Modelo)}");
@@ -92,7 +105,13 @@ public sealed class ProtocoloOpenAI : IProtocolo
                         // Sin esto la carita se queda muda por su lado y no hay forma de leer en
                         // pantalla lo que el servidor creyó oír, que es la primera pista cuando algo
                         // no se entiende.
-                        transcription = new { model = "gpt-4o-mini-transcribe" },
+                        //
+                        // gpt-transcribe, NO gpt-4o-mini-transcribe: el antiguo está deprecado y se
+                        // apaga el 2027-02-26, y ese día la carita dejaría de escribir lo que oye sin
+                        // un solo error. Medido el 2026-09-12 con la misma frase hablada: se acepta y
+                        // manda la transcripción por TROZOS igual —9 deltas, la misma frase—, que es lo
+                        // único que se lee abajo. Aceptarse no bastaba (promesa 43 de la voz).
+                        transcription = new { model = "gpt-transcribe" },
 
                         // CAMPO LEJANO: el micrófono del portátil oye la sala entera —incluidos los
                         // altavoces— y no una boca pegada. `far_field` es el preprocesado que el
@@ -107,23 +126,31 @@ public sealed class ProtocoloOpenAI : IProtocolo
                         voice = Voz,
                     },
                 },
-                tools = utensilios.Select(u => new
-                {
-                    type = "function",
-                    name = u.Nombre,
-                    description = u.Descripcion,
-                    parameters = new
-                    {
-                        type = "object",
-                        properties = u.Args.ToDictionary(
-                            a => a.Nombre, a => (object)new { type = "string", description = a.Que }),
-                        required = Array.Empty<string>(),
-                    },
-                }).ToArray(),
+                tools = ComoFunciones(utensilios),
                 tool_choice = "auto",
             },
         });
     }
+
+    /// <summary>
+    /// Las herramientas vestidas de <c>function</c>, con todos los argumentos de texto. En UN solo sitio
+    /// porque GPT-Live las declara igual —dentro de su delegación— y dos copias de la misma forma
+    /// divergen en silencio: el día que una cambiara, el delegado recibiría otra herramienta que la voz
+    /// de respaldo, y ninguno de los dos daría error.
+    /// </summary>
+    internal static object[] ComoFunciones(IReadOnlyList<Utensilio> utensilios) => utensilios.Select(u => (object)new
+    {
+        type = "function",
+        name = u.Nombre,
+        description = u.Descripcion,
+        parameters = new
+        {
+            type = "object",
+            properties = u.Args.ToDictionary(
+                a => a.Nombre, a => (object)new { type = "string", description = a.Que }),
+            required = Array.Empty<string>(),
+        },
+    }).ToArray();
 
     public string Audio(byte[] pcm) => JsonSerializer.Serialize(new
     {
@@ -254,17 +281,44 @@ public sealed class ProtocoloOpenAI : IProtocolo
                 }
                 break;
 
+            // LA SESIÓN ABRIÓ, dicho por el servidor y no por el socket (promesa 50): es lo primero que manda al conectar.
+            // session.updated NO: contesta a la apertura, y un error de la apertura llega después de session.created.
+            case "session.created":
+                hechos.Add(new Hecho.Abierta());
+                break;
+
             case "error":
                 hechos.Add(new Hecho.Falla(m.TryGetProperty("error", out var e)
                     ? e.TryGetProperty("message", out var msg) ? msg.GetString() ?? e.GetRawText() : e.GetRawText()
-                    : "error sin detalle"));
+                    : "error sin detalle",
+                    CodigoDelError(m)));
                 break;
         }
 
         return hechos;
     }
 
-    private static Llamada LaLlamada(JsonElement m)
+    /// <summary>
+    /// EL CÓDIGO DE UN ERROR, TAL COMO LO MANDA EL SERVIDOR; vacío si no trae (promesa 53 de la voz). En un solo sitio
+    /// porque GPT-Live manda sus errores con la misma forma, y dos lecturas del mismo campo divergen en silencio.
+    /// </summary>
+    /// <remarks>
+    /// El type NO sirve de respaldo: los cuatro errores medidos el 2026-09-13 (invalid_api_key, model_not_found,
+    /// invalid_model, credit_balance_exhausted) traen type invalid_request_error, y también lo trae
+    /// response_input_buffer_full, que no impide seguir. Usarlo inventaría una causa donde el servidor no dio ninguna.
+    /// </remarks>
+    internal static string CodigoDelError(JsonElement m)
+        => m.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.Object
+           && e.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.String
+            ? c.GetString() ?? ""
+            : "";
+
+    /// <summary>
+    /// Una llamada leída de cualquier cosa con <c>call_id</c>, <c>name</c> y <c>arguments</c>: el evento
+    /// de Realtime y el item function_call que GPT-Live manda envuelto tienen esos tres campos. Se
+    /// comparte para que los argumentos se lean con la misma vara venga de quien venga.
+    /// </summary>
+    internal static Llamada LaLlamada(JsonElement m)
     {
         string id = m.TryGetProperty("call_id", out var c) ? c.GetString() ?? "" : "";
         string nombre = m.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
