@@ -35,14 +35,20 @@ public sealed class AbrirSegunElNucleo
     private readonly Func<string, string> _dominioQueSuena;
     private readonly Func<IReadOnlyList<AppDelSistema>> _instaladas;
     private readonly Func<string, bool> _lanzar;
+    private readonly Func<IReadOnlyList<(IntPtr Hwnd, string Proceso, string Titulo)>> _ventanasAbiertas;
+    private readonly Func<IntPtr, bool> _traerVentana;
 
     /// <param name="dominioQueSuena">Si lo pedido suena a un sitio web que ya está abierto, su
     /// dominio; si no, vacío. Lo contesta la memoria de pestañas, que es quien sabe de eso.</param>
+    /// <param name="ventanasAbiertas">Las ventanas abiertas de verdad, con su proceso y su título (promesa 232).</param>
+    /// <param name="traerVentana">Traer UNA ventana concreta al frente, por su handle.</param>
     public AbrirSegunElNucleo(Func<string> donde,
         Func<ComoMePongoDelante.Plan, bool> traerAlFrente,
         Func<string, string> dominioQueSuena,
         Func<IReadOnlyList<AppDelSistema>>? instaladas = null,
-        Func<string, bool>? lanzar = null)
+        Func<string, bool>? lanzar = null,
+        Func<IReadOnlyList<(IntPtr Hwnd, string Proceso, string Titulo)>>? ventanasAbiertas = null,
+        Func<IntPtr, bool>? traerVentana = null)
     {
         _donde = donde;
         _traerAlFrente = traerAlFrente;
@@ -50,6 +56,25 @@ public sealed class AbrirSegunElNucleo
         // Sin catálogo se comporta como antes: una capacidad de menos, no una app rota.
         _instaladas = instaladas ?? (() => Array.Empty<AppDelSistema>());
         _lanzar = lanzar ?? (_ => false);
+        _ventanasAbiertas = ventanasAbiertas ?? (() => Array.Empty<(IntPtr, string, string)>());
+        _traerVentana = traerVentana ?? (_ => false);
+    }
+
+    /// <summary>
+    /// LAS VENTANAS ABIERTAS DE LO QUE SE PIDE (promesa 232): por el proceso o por el título, porque
+    /// ninguno de los dos basta solo. «paint» corre como mspaint.exe, y «microsoft store» corre como
+    /// ApplicationFrameHost.exe con el título «Microsoft Store». Comparar solo el nombre del proceso
+    /// con lo pedido es la familia de fallos del aprendizaje nº16.
+    /// </summary>
+    public static IReadOnlyList<(IntPtr Hwnd, string Proceso, string Titulo)> LasDe(string pedido,
+        IEnumerable<(IntPtr Hwnd, string Proceso, string Titulo)> ventanas)
+    {
+        string q = Nombres.Aplanar(pedido ?? "");
+        if (q.Length == 0) return Array.Empty<(IntPtr, string, string)>();
+        return ventanas.Where(v =>
+                Nombres.Aplanar(SinExe(v.Proceso ?? "")).Contains(q, StringComparison.Ordinal)
+                || Nombres.Aplanar(v.Titulo ?? "").Contains(q, StringComparison.Ordinal))
+            .ToList();
     }
 
     /// <summary>
@@ -106,10 +131,33 @@ public sealed class AbrirSegunElNucleo
     }
 
 
-    public string Abrir(string pedido)
+    public string Abrir(string pedido) => Abrir(pedido, "");
+
+    /// <param name="instancia">Vacío o «existente»: si ya hay ventanas de la app, se trae una; «nueva»: se abre otra aunque haya (promesa 232).</param>
+    public string Abrir(string pedido, string instancia)
     {
         string que = (pedido ?? "").Trim();
         if (que.Length == 0) return "falta decir QUÉ abrir.";
+        bool nueva = (instancia ?? "").Trim().Equals("nueva", StringComparison.OrdinalIgnoreCase);
+        // LO QUE YA HAY, ANTES DE LANZAR NADA (promesa 232). «abre Paint» con un Paint abierto lanzó
+        // OTRO el 2026-09-14, porque el nombre exacto de una app instalada se lanzaba sin mirar. El
+        // modelo decide con esta información; la herramienta no decide por él.
+        var abiertas = LasDe(que, _ventanasAbiertas());
+        if (abiertas.Count > 0 && !nueva)
+        {
+            var elegida = abiertas[0];
+            string antesDeTraer = _donde() ?? "";
+            bool puesta = _traerVentana(elegida.Hwnd);
+            string ahora = puesta ? EsperarACambiar(antesDeTraer, 2000) : antesDeTraer;
+            string lista = string.Join(", ", abiertas.Select(v => $"«{v.Titulo}»"));
+            return $"«{que}» ya estaba abierta: {abiertas.Count} ventana(s) ({lista}). "
+                 + (puesta ? $"Te puse delante «{elegida.Titulo}»." : $"No pude traer «{elegida.Titulo}» al frente.")
+                 + (ahora.Length > 0 ? $" Estás en «{ahora}»." : "")
+                 + " Si quieres otra copia, pide instancia=nueva.";
+        }
+        string colaNueva = nueva && abiertas.Count > 0
+            ? $" Ahora hay {abiertas.Count + 1} ventanas de «{que}»."
+            : "";
 
         // LA APP INSTALADA GANA A LA PESTAÑA ABIERTA. Se preguntaba primero por la pestaña, así que
         // cualquier app cuyo nombre se pareciera a una web abierta era INALCANZABLE: pedir «copilot»
@@ -126,9 +174,9 @@ public sealed class AbrirSegunElNucleo
         if (instalada.Count == 1 && _lanzar(instalada[0].ComoSeLanza))
         {
             string llegue = EsperarACambiar(_donde() ?? "");
-            return llegue.Length > 0
+            return (llegue.Length > 0
                 ? $"«{instalada[0].Nombre}» está delante. Estás en «{llegue}»."
-                : $"abrí «{instalada[0].Nombre}», pero todavía no sé identificar la pantalla.";
+                : $"abrí «{instalada[0].Nombre}», pero todavía no sé identificar la pantalla.") + colaNueva;
         }
 
         var plan = ComoMePongoDelante.De(ComoSeLlamaEsoDeVerdad(que));
@@ -151,9 +199,9 @@ public sealed class AbrirSegunElNucleo
             if (candidatas.Count == 1 && _lanzar(candidatas[0].ComoSeLanza))
             {
                 string tras = EsperarACambiar(antes);
-                return tras.Length > 0
+                return (tras.Length > 0
                     ? $"«{candidatas[0].Nombre}» está delante. Estás en «{tras}»."
-                    : $"abrí «{candidatas[0].Nombre}», pero todavía no sé identificar la pantalla.";
+                    : $"abrí «{candidatas[0].Nombre}», pero todavía no sé identificar la pantalla.") + colaNueva;
             }
             if (candidatas.Count > 1)
                 return $"«{que}» puede ser {candidatas.Count} cosas: "

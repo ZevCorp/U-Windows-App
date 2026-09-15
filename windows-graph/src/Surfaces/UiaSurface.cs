@@ -26,6 +26,18 @@ public sealed class UiaSurface : IUiSurface
     [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
     private const uint GW_HWNDNEXT = 2;
 
+    // EL CLIC POR MENSAJE Y EL TECLADO (spec 021, promesas 235 y 237): PostMessage no mueve el cursor de la
+    // persona; SendInput con KEYEVENTF_UNICODE teclea lo que sea, incluidos acentos, sin mapa de teclado.
+    [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool ScreenToClient(IntPtr hWnd, ref POINT p);
+    [DllImport("user32.dll")] private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+    [StructLayout(LayoutKind.Sequential)] private struct INPUT { public uint type; public InputUnion U; }
+    [StructLayout(LayoutKind.Explicit)] private struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
+    [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT { public int dx; public int dy; public uint mouseData; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
+    [StructLayout(LayoutKind.Sequential)] private struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
+    private const uint INPUT_KEYBOARD = 1, KEYEVENTF_KEYUP_I = 0x0002, KEYEVENTF_UNICODE = 0x0004;
+    private const uint MSG_MOUSEMOVE = 0x0200, MSG_LBUTTONDOWN = 0x0201, MSG_LBUTTONUP = 0x0202;
+
     /// <summary>El origin canónico del ESCRITORIO de Windows. Es una superficie de primera clase, distinta
     /// del Explorador de archivos (ambos son explorer.exe): así el navegador la alcanza con "mostrar
     /// escritorio" (Win+D) y nunca abre una ventana del Explorador por error. Ver DesktopStrategy.</summary>
@@ -70,6 +82,11 @@ public sealed class UiaSurface : IUiSurface
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     private const int SW_RESTORE = 9;
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr hWnd);
+    [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+    private const int DWMWA_CLOAKED = 14;
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004, MOUSEEVENTF_WHEEL = 0x0800;
     // El boton derecho entra el 2026-08-26: hasta entonces el repo entero no sabia abrir un menu
     // contextual (cero coincidencias de rightclick en windows-client y windows-graph).
@@ -110,6 +127,31 @@ public sealed class UiaSurface : IUiSurface
     public static event Action<int, int>? CursorMoved;
 
     /// <summary>
+    /// DÓNDE ACABA DE CAER UN CLIC de la mano: la caja del elemento en píxeles físicos (x, y, ancho,
+    /// alto), como los da UIA. La carita lo escucha para ir a plantarse al lado (promesa 240).
+    /// </summary>
+    /// <remarks>
+    /// Hace falta aparte de <see cref="CursorMoved"/>, que solo emite cuando el ratón se mueve DE
+    /// VERDAD: desde la spec 020 la mayoría de los clics van por patrón o por mensaje y no mueven el
+    /// cursor, así que por ahí no se enteraba nadie. Cuatro doubles y no un Rect para no meter WPF en
+    /// la superficie pública del mapeador.
+    /// </remarks>
+    public static event Action<double, double, double, double>? Pulso;
+
+    /// <summary>Cuenta dónde cayó el clic, si es que alguien escucha y el elemento tiene caja.</summary>
+    private static void AvisarDelPulso(AutomationElement el)
+    {
+        if (Pulso == null) return;
+        try
+        {
+            var r = el.Current.BoundingRectangle;
+            if (r.IsEmpty || double.IsInfinity(r.Width) || r.Width < 1 || r.Height < 1) return;
+            Pulso.Invoke(r.X, r.Y, r.Width, r.Height);
+        }
+        catch { }
+    }
+
+    /// <summary>
     /// Mueve el cursor con curva de aceleración (ease-in cúbica: arranque lento → aceleración fuerte) en
     /// vez de teletransportarlo. Duración según la distancia, acotada para que se sienta fluidamente rápido.
     /// </summary>
@@ -147,7 +189,14 @@ public sealed class UiaSurface : IUiSurface
     /// donde antes no veíamos por qué un paso decía ✓ sin pasar nada en pantalla.
     /// </summary>
     public Action<string>? Log { get; set; }
-    private void L(string msg) { try { Log?.Invoke(msg); } catch { } }
+
+    /// <summary>
+    /// EL REGISTRO PARA TODAS LAS SUPERFICIES QUE NADIE ENCHUFÓ (promesa 231). Las manos crean un
+    /// UiaSurface por clic y ninguno tenía Log: la única línea que decía en qué ventana se buscó el
+    /// elemento y por qué no se pulsó no se escribió nunca (2026-09-14). La app lo conecta una vez.
+    /// </summary>
+    public static Action<string>? LogGlobal { get; set; }
+    private void L(string msg) { try { (Log ?? LogGlobal)?.Invoke(msg); } catch { } }
 
     public event EventHandler<ObservedStep>? StepObserved;
 
@@ -214,13 +263,192 @@ public sealed class UiaSurface : IUiSurface
     /// </summary>
     private static IntPtr RealForegroundWindow()
     {
-        IntPtr hwnd = GetForegroundWindow();
-        for (int i = 0; i < 50 && hwnd != IntPtr.Zero; i++)
+        // UNA SOLA REGLA (promesa 230), la misma que usa el localizador del cliente. Si no hay
+        // ninguna ajena, la original: mejor algo que Unknown, y ese caso ya no describe nada cerrado.
+        IntPtr elegida = LaVentanaDeDelante(GetForegroundWindow());
+        return elegida != IntPtr.Zero ? elegida : GetForegroundWindow();
+    }
+
+    /// <summary>La regla de la ventana de delante con los medios de esta capa (promesa 230).</summary>
+    public static IntPtr LaVentanaDeDelante(IntPtr foco) =>
+        VentanaDeDelante.Elegir(foco, SeVe, HasTitle, IsOwnWindow, h => GetWindow(h, GW_HWNDNEXT));
+
+    /// <summary>
+    /// ¿Se ve de verdad? Visible para Win32 Y no encubierta por el gestor de ventanas: una app de la
+    /// Tienda que se acaba de cerrar deja un marco de ApplicationFrameHost «visible» pero cloaked, y
+    /// una ventana de otro escritorio virtual también. Contarlas como ventana de delante es describir
+    /// algo que nadie ve.
+    /// </summary>
+    public static bool SeVe(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || !IsWindowVisible(hwnd)) return false;
+        try { return DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out int cloaked, sizeof(int)) != 0 || cloaked == 0; }
+        catch { return true; }
+    }
+
+    /// <summary>¿La ventana sigue existiendo y a la vista? Lo que la ventana de trabajo de Ü pregunta antes de operar (promesa 233).</summary>
+    public static bool VentanaExiste(IntPtr hwnd) => hwnd != IntPtr.Zero && IsWindow(hwnd) && SeVe(hwnd);
+
+    /// <summary>¿Esa ventana es la que tiene el foco del sistema ahora mismo?</summary>
+    public static bool EstaDelante(IntPtr hwnd) => hwnd != IntPtr.Zero && GetForegroundWindow() == hwnd;
+
+    /// <summary>¿Esa ventana es una consola? Ahí no hay campos: se teclea (promesa 235).</summary>
+    public static bool EsTerminal(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return false;
+        var sb = new System.Text.StringBuilder(256);
+        string clase = GetClassName(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
+        return ComoSeEscribe.EsTerminal(ProcessName(hwnd), clase);
+    }
+
+    /// <summary>El selector con el que la mano vuelve a encontrar ese elemento.</summary>
+    public static string SelectorDe(AutomationElement el)
+    {
+        string aid = Safe(() => el.Current.AutomationId), nombre = Safe(() => el.Current.Name);
+        string ct = Safe(() => ControlTypeName(el.Current.ControlType));
+        if (aid.Length > 0 && !aid.All(char.IsDigit)) return $"uia:aid={aid};ct={ct}";
+        return $"uia:name={nombre};ct={ct}";
+    }
+
+    private static readonly Condition CondicionDeCampo = new OrCondition(
+        new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit),
+        new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ComboBox),
+        new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Document));
+
+    /// <summary>
+    /// UN CAMPO DE TEXTO POR SU NOMBRE, dentro de UNA ventana (promesa 235). Primero el nombre exacto o el
+    /// AutomationId; si no, el que lo contenga. Solo lo que acepta texto: una fila jamás (renombrar).
+    /// </summary>
+    public AutomationElement? CampoDeTexto(IntPtr ventana, string nombre)
+    {
+        var raiz = Root(ventana);
+        string n = (nombre ?? "").Trim();
+        if (raiz == null || n.Length == 0) return null;
+        AutomationElement? parecido = null;
+        try
         {
-            if (IsWindowVisible(hwnd) && !IsOwnWindow(hwnd) && HasTitle(hwnd)) return hwnd;
-            hwnd = GetWindow(hwnd, GW_HWNDNEXT);
+            foreach (AutomationElement el in raiz.FindAll(TreeScope.Descendants, CondicionDeCampo))
+            {
+                if (!AceptaTexto(el)) continue;
+                string nom = Safe(() => el.Current.Name), aid = Safe(() => el.Current.AutomationId);
+                if (string.Equals(nom, n, StringComparison.OrdinalIgnoreCase) || string.Equals(aid, n, StringComparison.OrdinalIgnoreCase))
+                {
+                    L($"    ✓ campo «{n}» en la ventana de trabajo ('{TituloDe(ventana)}'): {SelectorDe(el)}");
+                    return el;
+                }
+                if (parecido == null && nom.Length > 0 && nom.Contains(n, StringComparison.OrdinalIgnoreCase)) parecido = el;
+            }
         }
-        return GetForegroundWindow(); // si no hallamos otra, la original: mejor algo que Unknown
+        catch (Exception e) { L($"    buscar el campo «{n}» falló: {e.Message}"); }
+        if (parecido != null) L($"    ≈ campo «{n}» por parecido en '{TituloDe(ventana)}': {SelectorDe(parecido)}");
+        else L($"    ✗ no hay ningún campo de texto «{n}» en '{TituloDe(ventana)}'");
+        return parecido;
+    }
+
+    /// <summary>Los campos de texto A LA VISTA de una ventana, con nombre: para elegir uno cuando no dijeron cuál.</summary>
+    public IReadOnlyList<(string Nombre, string Selector)> CamposDeTexto(IntPtr ventana, int tope = 12)
+    {
+        var lista = new List<(string, string)>();
+        var raiz = Root(ventana);
+        if (raiz == null) return lista;
+        try
+        {
+            foreach (AutomationElement el in raiz.FindAll(TreeScope.Descendants, CondicionDeCampo))
+            {
+                if (lista.Count >= tope) break;
+                if (!AceptaTexto(el) || Safe(() => el.Current.IsOffscreen) == "True") continue;
+                string nom = Safe(() => el.Current.Name);
+                if (nom.Length == 0) continue;
+                lista.Add((nom, SelectorDe(el)));
+            }
+        }
+        catch (Exception e) { L($"    listar campos falló: {e.Message}"); }
+        return lista;
+    }
+
+    /// <summary>
+    /// TECLEAR EN UNA VENTANA (promesa 235): para consolas, que no tienen campo. Se trae al frente con el
+    /// enganche de siempre, se mandan los caracteres por SendInput unicode, Enter si se pide, y se
+    /// devuelven a la persona el foco y el cursor, como el clic físico (234). Si Windows no deja traerla
+    /// al frente NO se teclea: el texto iría a la ventana de la persona.
+    /// </summary>
+    public bool TeclearEnLaVentana(IntPtr ventana, string texto, bool enter, out string error)
+    {
+        error = "";
+        if (!VentanaExiste(ventana)) { error = "la ventana en la que iba a teclear ya no existe"; L("    ✗ " + error); return false; }
+        IntPtr focoAntes = GetForegroundWindow();
+        GetCursorPos(out POINT cursorAntes);
+        if (ventana != focoAntes && !TraerAlFrente(ventana))
+        {
+            error = $"Windows no dejó traer al frente «{TituloDe(ventana)}» para teclear, y a ciegas el texto iría a otra ventana";
+            L("    ✗ " + error);
+            return false;
+        }
+        Thread.Sleep(80);
+        foreach (char c in texto ?? "")
+        {
+            if (c == '\r') continue;
+            if (c == '\n') { Tecla(0x0D); continue; }
+            Unicode(c, false); Unicode(c, true);
+            Thread.Sleep(3);
+        }
+        if (enter) Tecla(0x0D);
+        Thread.Sleep(60);
+        bool devuelto = true;
+        if (ComoSePulsa.HayQueDevolver(ComoSePulsa.Gesto.Fisico, focoAntes, GetForegroundWindow()))
+        {
+            devuelto = TraerAlFrente(focoAntes);
+            SetCursorPos(cursorAntes.X, cursorAntes.Y);
+        }
+        L($"    → tecleado en «{TituloDe(ventana)}»: {(texto ?? "").Length} carácter(es){(enter ? " + Enter" : "")}"
+          + (devuelto ? ", foco devuelto a la persona" : "; ⚠ Windows no dejó devolver el foco"));
+        return true;
+    }
+
+    private static void Unicode(char c, bool up)
+    {
+        var inp = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wScan = c, dwFlags = KEYEVENTF_UNICODE | (up ? KEYEVENTF_KEYUP_I : 0) } } };
+        SendInput(1, new[] { inp }, Marshal.SizeOf<INPUT>());
+    }
+
+    private static void Tecla(byte vk)
+    {
+        keybd_event(vk, 0, 0, IntPtr.Zero);
+        keybd_event(vk, 0, KEYEVENTF_KEYUP_I, IntPtr.Zero);
+    }
+
+    /// <summary>El título de una ventana, o vacío.</summary>
+    public static string TituloDe(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return "";
+        var sb = new System.Text.StringBuilder(256);
+        return GetWindowText(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
+    }
+
+    /// <summary>
+    /// LAS VENTANAS ABIERTAS DE VERDAD (promesa 232): de nivel superior, visibles, con título y que no
+    /// sean de Ü, con su proceso. Es lo que abrir mira antes de lanzar nada.
+    /// </summary>
+    public static IReadOnlyList<(IntPtr Hwnd, string Proceso, string Titulo)> VentanasAbiertas()
+    {
+        var lista = new List<(IntPtr, string, string)>();
+        try
+        {
+            EnumWindows((h, _) =>
+            {
+                try
+                {
+                    if (!SeVe(h) || IsOwnWindow(h)) return true;
+                    string titulo = TituloDe(h);
+                    if (titulo.Length == 0) return true;
+                    lista.Add((h, ProcessName(h), titulo));
+                }
+                catch { }
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch { }
+        return lista;
     }
 
     private static bool HasTitle(IntPtr hwnd)
@@ -709,6 +937,24 @@ public sealed class UiaSurface : IUiSurface
     /// buscar un elemento que sí estaba.</summary>
     public const string ParasteTu = "paraste tú con Escape; no sigo hasta que arranques otra cosa";
 
+    /// <summary>
+    /// La ventana en la que se resuelve y se pulsa cuando quien llama ya sabe cuál es: la ventana de
+    /// trabajo de Ü (promesas 233 y 234). Cero = como siempre, la de delante.
+    /// </summary>
+    private IntPtr _ventanaObjetivo;
+
+    /// <summary>
+    /// EJECUTAR EN UNA VENTANA CONCRETA, exista o no otra encima (promesa 234). El elemento se busca
+    /// solo ahí, y pulsar va por el patrón cuando el elemento lo admite: sin foco, sin ratón, sin
+    /// traer nada al frente. Es lo que deja a la persona seguir trabajando mientras Ü hace lo suyo.
+    /// </summary>
+    public bool Execute(PlanStep step, IntPtr ventanaObjetivo, out string error)
+    {
+        _ventanaObjetivo = ventanaObjetivo;
+        try { return Execute(step, out error); }
+        finally { _ventanaObjetivo = IntPtr.Zero; }
+    }
+
     public bool Execute(PlanStep step, out string error)
     {
         error = "";
@@ -774,7 +1020,8 @@ public sealed class UiaSurface : IUiSurface
 
             L($"  ✗ NO resuelto tras {attempts} intento(s) · {(flexible ? "flexible → se salta (ok)" : "falla")}");
             if (flexible) { error = ""; return true; }
-            error = $"no se encontró el elemento «{step.Label}» ({step.Selector})";
+            error = $"no encontré el elemento «{step.Label}» ({step.Selector})"
+                  + (_ventanaObjetivo != IntPtr.Zero ? $" en la ventana «{TituloDe(_ventanaObjetivo)}»" : "");
             return false;
         }
 
@@ -865,7 +1112,7 @@ public sealed class UiaSurface : IUiSurface
             {
                 "input" => SetValue(el, step.Value ?? "", out error),
                 "select" => Select(el, step.SelectedValue ?? step.Value ?? "", out error),
-                "click" => RealClick(el, out error),
+                "click" => _ventanaObjetivo != IntPtr.Zero ? PulsarEnLaVentana(el, out error) : RealClick(el, out error),
                 // AÑADIR a la selección sin perder lo ya seleccionado. Se hace con el patrón de
                 // UIA y no manteniendo Ctrl pulsado: un modificador es estado global del teclado
                 // —si algo falla entre medias se queda hundido y todo lo posterior sale mal—,
@@ -883,6 +1130,9 @@ public sealed class UiaSurface : IUiSurface
                 _ => Fail($"actionType no soportado en UIA: {step.ActionType}", out error),
             };
             L($"  resultado acción: ok={ok}{(ok ? "" : $" · motivo='{error}'")}");
+            // LA CARITA VA A DONDE SE PULSÓ (promesa 240). Un solo sitio para los tres clics: aquí pasan
+            // el simple, el doble y el derecho, vengan del plan o de la mano suelta.
+            if (ok && ComoViajaLaCarita.EsClic(step.ActionType ?? "")) AvisarDelPulso(el);
             if (!ok && flexible) { L("  flexible → se salta pese al fallo (ok)"); error = ""; return true; }
             return ok;
         }
@@ -1014,6 +1264,17 @@ public sealed class UiaSurface : IUiSurface
         Condition? condition = byPath ? null : UiaSelector.ConditionFor(parts);
         if (!byPath && condition == null) return null;
 
+        // 0) LA VENTANA DE TRABAJO, si quien llama la dio (promesa 233): se busca ahí y en ninguna
+        // otra. Buscar «Elipse» en la ventana con el foco cuando el foco era la Vista de tareas es lo
+        // que dejó a Paint sin pulsar (2026-09-14).
+        if (_ventanaObjetivo != IntPtr.Zero)
+        {
+            var enLaDeTrabajo = FindIn(Root(_ventanaObjetivo), byPath, raw, condition);
+            L(enLaDeTrabajo != null
+                ? $"    ✓ '{selector}' en la ventana de trabajo ('{TituloDe(_ventanaObjetivo)}')"
+                : $"    ✗ '{selector}' no está en la ventana de trabajo ('{TituloDe(_ventanaObjetivo)}'); no se busca en otra");
+            return enLaDeTrabajo;
+        }
         // 1) Ventana en primer plano (si no es la propia Ü).
         IntPtr fg = GetForegroundWindow();
         if (fg != IntPtr.Zero && !IsOwnWindow(fg))
@@ -1105,7 +1366,7 @@ public sealed class UiaSurface : IUiSurface
         return node;
     }
 
-    private static bool SetValue(AutomationElement el, string value, out string error)
+    private bool SetValue(AutomationElement el, string value, out string error)
     {
         error = "";
         if (el.TryGetCurrentPattern(ValuePattern.Pattern, out var p) && p is ValuePattern v)
@@ -1115,7 +1376,12 @@ public sealed class UiaSurface : IUiSurface
             // Dejar el FOCO de teclado en el campo recién escrito. SetValue no enfoca, así que sin esto un
             // Enter posterior (keybd_event) iría a otra ventana y no submitearía —era el bug de SAP: se
             // escribía la transacción pero el Enter no navegaba—. Best-effort: si el control no enfoca, ni modo.
-            try { el.SetFocus(); } catch { }
+            // SALVO cuando se escribe en una ventana de trabajo que está DETRÁS (promesa 235): SetFocus la
+            // traería al frente y le quitaría el foco a la persona; el Enter, si hace falta, va por
+            // TeclearEnLaVentana, que lo devuelve.
+            bool detras = _ventanaObjetivo != IntPtr.Zero && GetForegroundWindow() != _ventanaObjetivo;
+            if (detras) L("    → escrito por patrón Value en la ventana de trabajo, sin tocar el foco de la persona");
+            else { try { el.SetFocus(); } catch { } }
             return true;
         }
         error = "el campo no soporta ValuePattern (no se puede escribir por UIA)";
@@ -1404,6 +1670,91 @@ public sealed class UiaSurface : IUiSurface
             return r.Left > w.Left + ancho / 3.0;
         }
         catch { return true; }
+    }
+
+    /// <summary>
+    /// PULSAR EN LA VENTANA DE TRABAJO (promesa 234): por el patrón si el elemento lo admite, y si
+    /// no, el clic físico como excepción, trayendo la ventana al frente DE VERDAD y devolviendo
+    /// después el foco y el cursor a la persona. La decisión vive en <see cref="ComoSePulsa"/>.
+    /// </summary>
+    private bool PulsarEnLaVentana(AutomationElement el, out string error)
+    {
+        error = "";
+        bool invoke = Tiene(el, InvokePattern.Pattern), toggle = Tiene(el, TogglePattern.Pattern),
+             seleccion = Tiene(el, SelectionItemPattern.Pattern), lista = EsContenidoDeLista(el);
+        // EL PUNTO PULSABLE lo dice UIA (GetClickablePoint), y decide si hay peldaño de mensaje (237).
+        double px = 0, py = 0; bool punto = false;
+        try { TraerALaVista(el); var pp = el.GetClickablePoint(); px = pp.X; py = pp.Y; punto = true; } catch { punto = false; }
+        var gesto = ComoSePulsa.Decidir(invoke, toggle, seleccion, lista, punto);
+        L($"    cómo se pulsa «{Safe(() => el.Current.Name)}»: {gesto} (invoke={invoke} toggle={toggle} seleccion={seleccion} lista={lista} punto={punto})");
+        if (gesto == ComoSePulsa.Gesto.Mensaje)
+        {
+            if (ClicPorMensaje(el, px, py, out error)) return true;
+            L($"    mensaje no entregado ({error}) → ratón real");
+            error = "";
+        }
+        if (gesto == ComoSePulsa.Gesto.Patron)
+        {
+            try
+            {
+                if (invoke) { ((InvokePattern)el.GetCurrentPattern(InvokePattern.Pattern)).Invoke(); L("    → Invoke por patrón: sin foco, sin ratón"); }
+                else { ((TogglePattern)el.GetCurrentPattern(TogglePattern.Pattern)).Toggle(); L("    → Toggle por patrón: sin foco, sin ratón"); }
+                return true;
+            }
+            catch (Exception e)
+            {
+                error = $"el patrón de «{Safe(() => el.Current.Name)}» falló: {e.Message}";
+                L("    ✗ " + error);
+                return false;
+            }
+        }
+        // EL FÍSICO, COMO EXCEPCIÓN: con la ventana delante de verdad (el SetForegroundWindow a secas
+        // de RealClick lo ignora Windows desde otro proceso), y devolviendo lo que era de la persona.
+        IntPtr focoAntes = GetForegroundWindow();
+        GetCursorPos(out POINT cursorAntes);
+        IntPtr win = TopLevelWindow(el);
+        if (win != IntPtr.Zero && win != focoAntes && !TraerAlFrente(win))
+            L($"    ⚠ no pude traer al frente '{TituloDe(win)}': el clic físico puede caer en otra ventana");
+        bool ok = RealClick(el, out error);
+        if (ComoSePulsa.HayQueDevolver(ComoSePulsa.Gesto.Fisico, focoAntes, GetForegroundWindow()))
+        {
+            Thread.Sleep(60);   // que el control procese el clic antes de quitarle el foco
+            bool devuelto = TraerAlFrente(focoAntes);
+            SetCursorPos(cursorAntes.X, cursorAntes.Y);
+            L(devuelto ? "    → devuelto el foco y el cursor a la persona" : "    ⚠ Windows no dejó devolver el foco; el cursor sí");
+        }
+        return ok;
+    }
+
+    private static bool Tiene(AutomationElement el, AutomationPattern patron)
+    {
+        try { return el.TryGetCurrentPattern(patron, out _); } catch { return false; }
+    }
+
+    /// <summary>
+    /// EL CLIC POR MENSAJE (promesa 237): WM_LBUTTONDOWN y WM_LBUTTONUP enviados a la ventana que contiene el
+    /// elemento, en su punto pulsable pasado a coordenadas de cliente. No mueve el cursor de la persona ni
+    /// necesita el foco. No hay confirmación: la ventana puede ignorarlo, y entonces el ejecutor lo verá
+    /// en la consecuencia, como con cualquier paso.
+    /// </summary>
+    private bool ClicPorMensaje(AutomationElement el, double x, double y, out string error)
+    {
+        error = "";
+        IntPtr hwnd = ContenedorDe(el);
+        if (hwnd == IntPtr.Zero) hwnd = TopLevelWindow(el);
+        if (hwnd == IntPtr.Zero) { error = "el elemento no vive en ninguna ventana Win32"; return false; }
+        var p = new POINT { X = (int)Math.Round(x), Y = (int)Math.Round(y) };
+        if (!ScreenToClient(hwnd, ref p)) { error = "no pude pasar el punto a coordenadas de la ventana"; return false; }
+        IntPtr lParam = (IntPtr)((p.Y << 16) | (p.X & 0xFFFF));
+        var sb = new System.Text.StringBuilder(128);
+        string clase = GetClassName(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "?";
+        bool ok = PostMessage(hwnd, MSG_MOUSEMOVE, IntPtr.Zero, lParam)
+               && PostMessage(hwnd, MSG_LBUTTONDOWN, (IntPtr)1, lParam)
+               && PostMessage(hwnd, MSG_LBUTTONUP, IntPtr.Zero, lParam);
+        if (!ok) { error = $"PostMessage a '{clase}' falló"; return false; }
+        L($"    → clic por mensaje a '{clase}' en ({p.X},{p.Y}) de cliente: sin cursor, sin foco");
+        Thread.Sleep(80);
+        return true;
     }
 
     private bool RealClick(AutomationElement el, out string error, bool permitirSelect = true)

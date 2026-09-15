@@ -1352,12 +1352,13 @@ public sealed class SurfaceMapTools
     private static bool EsNavegador(string proc) => Uia.PestanasAbiertas.EsNavegador(proc);
 
 
-    private string OpenApp(string app)
+    private string OpenApp(string app, string instancia)
     {
         if (app.Length == 0) return "falta `app`: qué abrir (por ejemplo «explorer» o «notepad»)";
         // ABRIR LO DECIDE EL MAPEADOR y lo ejecuta el núcleo (AbrirSegunElNucleo): programa,
-        // pestaña del navegador o SAP — sin adivinar jamás qué lanzar.
-        return AbrirPorElNucleo != null ? AbrirPorElNucleo(app) : "todavía no sé abrir: el núcleo no está conectado.";
+        // pestaña del navegador o SAP — sin adivinar jamás qué lanzar. Y con conciencia de lo que
+        // ya hay abierto (promesa 232): «instancia» lo decide el modelo.
+        return AbrirPorElNucleo != null ? AbrirPorElNucleo(app, instancia) : "todavía no sé abrir: el núcleo no está conectado.";
     }
 
     /// <summary>
@@ -1495,6 +1496,21 @@ public sealed class SurfaceMapTools
     public Func<string>? Situarse { get; set; }
 
     /// <summary>
+    /// LA VENTANA EN LA QUE Ü TRABAJA (spec 020, promesa 233), para juzgar las interrupciones ahí y
+    /// no en la que la persona mira. Sin cableado, o cero, se mira la de delante como siempre.
+    /// </summary>
+    public Func<IntPtr>? VentanaDeTrabajo { get; set; }
+
+    /// <summary>
+    /// QUIÉN LEE EL DIÁLOGO que se cruzó, con sus botones (promesa 236). Inyectable para juzgarlo sin
+    /// pantalla; sin cableado, lo lee <see cref="Interrupcion.LeerDialogo"/> en la ventana de trabajo.
+    /// </summary>
+    public Func<Navigation.Desbloqueo.Dialogo?>? LeerDialogo { get; set; }
+
+    private Navigation.Desbloqueo.Dialogo? DialogoDelante()
+        => LeerDialogo != null ? LeerDialogo() : Interrupcion.LeerDialogo(VentanaDeTrabajo?.Invoke() ?? IntPtr.Zero);
+
+    /// <summary>
     /// SEÑALAR, contestado por el núcleo. Recibe lo que UIA ya resolvió bajo el cursor y devuelve la
     /// frase. Ver <see cref="Navigation.LoQueSenalas"/>.
     /// </summary>
@@ -1505,7 +1521,7 @@ public sealed class SurfaceMapTools
     /// mapeador; traer al frente de verdad sigue siendo Win32 y se queda aquí.
     /// Ver <see cref="Navigation.AbrirSegunElNucleo"/>.
     /// </summary>
-    public Func<string, string>? AbrirPorElNucleo { get; set; }
+    public Func<string, string, string>? AbrirPorElNucleo { get; set; }
 
     /// <summary>
     /// PULSAR, contestado por el núcleo: se toca, se comprueba qué pasó y el grafo lo aprende.
@@ -1774,8 +1790,8 @@ public sealed class SurfaceMapTools
             "map_go_to" => GoTo(A("surface")),
             "map_take" => Take(A("exit"), A("which"), A("decir"), A("recuerdo")),
             "map_type" => Type(A("text"), A("target"), A("decir"), A("recuerdo")),
-            "map_unblock" => Unblock(A("at"), A("choose")),
-            "map_open_app" => OpenApp(A("app")),
+            "map_unblock" => Desbloquear(A("at"), A("choose")),
+            "map_open_app" => OpenApp(A("app"), A("instancia")),
             "map_what_i_see" => LoQueVeo(),
             "map_pointing_at" => LoQueSenala(),
             "map_pointed_trail" => LoQueMeAcabasDeMostrar(A("seconds")),
@@ -1965,11 +1981,15 @@ public sealed class SurfaceMapTools
     /// </summary>
     /// <param name="reanudarEn">A dónde volver una vez resuelto, para continuar la tarea.</param>
     /// <param name="eleccion">Opción impuesta por la capa consciente cuando la política no decide.</param>
-    private string Unblock(string reanudarEn, string eleccion)
+    public string Desbloquear(string reanudarEn, string eleccion)
     {
-        var (titulo, textos, opciones) = LeerInterrupcion();
-        if (opciones.Count == 0)
+        // EL DIÁLOGO CON SUS BOTONES (promesa 236): lo que se pulsa es el botón que se leyó, no un nombre.
+        var dialogo = DialogoDelante();
+        if (dialogo == null || dialogo.Opciones.Count == 0)
             return "no hay nada que desbloquear: no veo ningún diálogo delante.";
+        string titulo = dialogo.Titulo;
+        var textos = dialogo.Textos.ToList();
+        var opciones = dialogo.Opciones.ToList();
 
         string elegida = eleccion.Length > 0
             ? opciones.FirstOrDefault(o => o.Equals(eleccion, StringComparison.OrdinalIgnoreCase)) ?? ""
@@ -1999,20 +2019,19 @@ public sealed class SurfaceMapTools
                  + "usuario con un tercero. Tiene que pulsarlo él. Puedo cerrar el diálogo si quieres "
                  + "seguir sin eso.";
 
-        var paso = new PlanStep
-        {
-            StepOrder = 1, ActionType = "click",
-            Selector = $"uia:name={elegida};ct=Button", Label = elegida,
-        };
-        if (!_uia.Execute(paso, out string error))
-            return $"no pude pulsar «{elegida}» para salir del atasco: {error}";
+        // SE PULSA EL BOTÓN DEL DIÁLOGO, y ninguno otro. Hasta el 2026-09-14 se construía
+        // «uia:name=Cerrar;ct=Button» y se resolvía en toda la ventana: el primer «Cerrar» de Chrome es
+        // el de la barra de título, y se cerró el navegador dos veces creyendo cerrar una barra.
+        if (!dialogo.Pulsar(elegida))
+            return $"no pude pulsar «{elegida}» del diálogo «{titulo}»: su botón no admite ningún patrón, y no pulso por nombre en la ventana";
 
         // ¿Se fue de verdad? Un desbloqueo que no desbloquea es peor que no intentarlo.
         bool libre = false;
         for (int i = 0; i < 20; i++)
         {
             System.Threading.Thread.Sleep(120);
-            if (LeerInterrupcion().Opciones.Count == 0) { libre = true; break; }
+            var sigue = DialogoDelante();
+            if (sigue == null || sigue.Opciones.Count == 0) { libre = true; break; }
         }
         LogBus.Log("mapa-mcp", $"DESBLOQUEO: «{titulo}» → pulsado «{elegida}» · {(libre ? "resuelto" : "sigue ahí")}");
         if (!libre)
@@ -2020,7 +2039,10 @@ public sealed class SurfaceMapTools
 
         // Reanudar por el mapa, que es de lo que se trata: salir del atasco no sirve de nada si la
         // tarea no puede continuar desde donde estaba.
-        string vuelta = reanudarEn.Length > 0 ? GoTo(reanudarEn) : "";
+        // …salvo que `at` sea el título del diálogo: eso no es un sitio, y el modelo lo manda así a veces
+        // («at=Barra de información», 19:42:29). Reanudar hacia ahí solo hace ruido.
+        bool reanudar = reanudarEn.Length > 0 && !string.Equals(reanudarEn.Trim(), titulo.Trim(), StringComparison.OrdinalIgnoreCase);
+        string vuelta = reanudar ? GoTo(reanudarEn) : "";
         return $"DESBLOQUEADO. Era «{titulo}» ({string.Join(" ", textos.Take(1))}); pulsé «{elegida}»."
              + (vuelta.Length > 0 ? $"\n  Reanudación: {vuelta}" : "")
              + "\n  INCIDENTE registrado — si este diálogo se repite, es una regla que falta.";
@@ -2159,7 +2181,7 @@ public sealed class SurfaceMapTools
     /// </summary>
     private string DescribirInterrupcion()
     {
-        string d = Interrupcion.Describir();
+        string d = Interrupcion.Describir(VentanaDeTrabajo?.Invoke() ?? IntPtr.Zero);
         if (d.Length > 0) LogBus.Log("mapa-mcp", "INTERRUPCIÓN detectada");
         return d;
     }
@@ -2173,7 +2195,7 @@ public sealed class SurfaceMapTools
     /// 18 botones, no se confunde (comprobado el 2026-08-03).
     /// </summary>
     private (string Titulo, List<string> Textos, List<string> Opciones) LeerInterrupcion()
-        => Interrupcion.Leer();
+        => Interrupcion.Leer(VentanaDeTrabajo?.Invoke() ?? IntPtr.Zero);
 
     private (string Titulo, List<string> Textos, List<string> Opciones) LeerInterrupcionVieja()
     {
@@ -2339,7 +2361,49 @@ public sealed class SurfaceMapTools
             return Anotar(RecorrerPorElNucleo(new[] { new Navigation.RecorrerSegunElNucleo.Paso(target, texto) }), escribe: true);
         }
 
+        // ESCRIBIR VA A LA VENTANA DE TRABAJO (promesa 235), como pulsar. Un `target` por nombre se resuelve
+        // a un campo de esa ventana; una terminal se teclea; sin `target` y con la ventana de trabajo
+        // detrás, se busca el único campo a la vista. Lo de siempre —el campo con el foco— queda para
+        // cuando la ventana de trabajo es la de delante o no hay ninguna.
+        IntPtr ventana = VentanaDeTrabajo?.Invoke() ?? IntPtr.Zero;
+        bool trabajoDetras = ventana != IntPtr.Zero && !UiaSurface.EstaDelante(ventana);
+        bool terminal = ventana != IntPtr.Zero && UiaSurface.EsTerminal(ventana);
+        string tituloVentana = ventana != IntPtr.Zero ? UiaSurface.TituloDe(ventana) : "";
         string selector = target;
+        if (target.Length > 0 && !target.StartsWith("uia:", StringComparison.OrdinalIgnoreCase) && ventana != IntPtr.Zero)
+        {
+            var campo = _uia.CampoDeTexto(ventana, target);
+            if (campo != null) selector = UiaSurface.SelectorDe(campo);
+            else if (terminal) selector = "";   // en una consola «el campo» es la consola: se teclea
+            else
+            {
+                _ultimaMano = new Mano(false, false);
+                return ComoSeEscribe.NoEncontre(target, tituloVentana);
+            }
+        }
+        if (selector.Length == 0 && terminal)
+        {
+            if (!_uia.TeclearEnLaVentana(ventana, texto, enter: true, out string errTeclado))
+            {
+                _ultimaMano = new Mano(false, false);
+                return $"no pude teclear en «{tituloVentana}»: {errTeclado}";
+            }
+            _ultimaMano = new Mano(true, true);
+            LogBus.Log("mapa-mcp", $"✓ tecleado «{texto}» en la terminal «{tituloVentana}»");
+            return $"tecleé «{texto}» en la terminal «{tituloVentana}» y confirmé con Enter";
+        }
+        if (selector.Length == 0 && trabajoDetras)
+        {
+            var campos = _uia.CamposDeTexto(ventana);
+            if (campos.Count == 1) selector = campos[0].Selector;
+            else
+            {
+                _ultimaMano = new Mano(false, false);
+                return campos.Count == 0
+                    ? $"NO escribo: en «{tituloVentana}» no veo ningún campo de texto, y la persona tiene el foco en otra ventana. Pasa `target` con el nombre del campo."
+                    : $"en «{tituloVentana}» hay {campos.Count} campos de texto: {string.Join(", ", campos.Select(c => $"«{c.Nombre}»"))}. Dime cuál con `target`.";
+            }
+        }
         if (selector.Length == 0)
         {
             // Se ESPERA a que aparezca un campo editable. Una edición en línea —el nombre de una
@@ -2398,11 +2462,12 @@ public sealed class SurfaceMapTools
             }
         }
 
-        var paso = new PlanStep { StepOrder = 1, ActionType = "input", Selector = selector, Value = texto };
-        if (!_uia.Execute(paso, out string error))
+        var paso = new PlanStep { StepOrder = 1, ActionType = "input", Selector = selector, Value = texto, Label = target.Length > 0 ? target : selector };
+        bool escrito = ventana != IntPtr.Zero ? _uia.Execute(paso, ventana, out string error) : _uia.Execute(paso, out error);
+        if (!escrito)
         {
             _ultimaMano = new Mano(false, false);   // intentó escribir y no pudo: cuenta para el tope (207)
-            return $"no pude escribir en «{selector}»: {error}";
+            return $"no pude escribir en «{paso.Label}»: {error}";
         }
         // ESCRIBIR POR UIA TAMBIÉN DICE SI SE LOGRÓ. Hasta el 2026-09-11 solo lo decía la rama que va por
         // el ejecutor (SAP): por UIA la mano quedaba vacía, y fuera de SAP el tope no frenaba nada.
@@ -2411,8 +2476,18 @@ public sealed class SurfaceMapTools
         // Enter confirma: en una edición en línea (renombrar) el texto no se aplica hasta que se
         // acepta, y dejarlo a medias deja la interfaz en un estado del que nadie se acuerda luego.
         string antes = _where()?.Id ?? "";
-        keybd_event(0x0D, 0, 0, IntPtr.Zero);
-        keybd_event(0x0D, 0, 2, IntPtr.Zero);
+        if (trabajoDetras)
+        {
+            // El Enter va a la ventana con el foco, que es la de la persona: se manda a la de trabajo con el
+            // enganche que la trae un instante y devuelve el foco (235).
+            if (!_uia.TeclearEnLaVentana(ventana, "", enter: true, out string errEnter))
+                LogBus.Log("mapa-mcp", $"escrito «{texto}» pero sin Enter: {errEnter}");
+        }
+        else
+        {
+            keybd_event(0x0D, 0, 0, IntPtr.Zero);
+            keybd_event(0x0D, 0, 2, IntPtr.Zero);
+        }
         EsperarPantallaLista(900);
 
         // EL ENTER PUEDE HABERNOS METIDO DENTRO. Al renombrar una carpeta recién creada queda
