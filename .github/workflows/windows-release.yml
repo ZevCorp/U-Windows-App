@@ -165,9 +165,30 @@ jobs:
         if: ${{ inputs.dry_run == true }}
         run: Write-Host "Dry run OK — version ${{ inputs.version }}, request ${{ inputs.request_id }}"
 
+      # LA COPIA DE DEPURACION NO PUEDE TUMBAR UNA PUBLICACION QUE SALIO BIEN (2026-09-15).
+      #
+      # Las versiones 1.2.2 y 1.2.3 se publicaron ENTERAS —paquete, indice y la comprobacion de
+      # coherencia del paso anterior, todo en verde— y las dos marcaron el run en ROJO por este
+      # paso, con «error connecting to results-receiver.actions.githubusercontent.com». Quien mira
+      # la pestana Actions, o quien lee la conclusion del run desde Provider Studio para decir si la
+      # distribucion salio, ve «fallo» sobre una release que esta perfecta. Un aviso que grita sin
+      # motivo dos veces seguidas deja de significar algo, y se aprende a ignorarlo — que es
+      # exactamente lo que no queremos el dia que falle de verdad la publicacion.
+      #
+      # DOS CAMBIOS, Y EL PRIMERO ES EL QUE ATACA LA CAUSA. Se subian los paquetes enteros —nupkg +
+      # Setup + portable, unos 250 MB por run— que YA estan en la release y es de donde se bajan de
+      # verdad; ahora viaja solo el indice, que es lo unico que sirve para depurar QUE anuncio este
+      # run. Y ademas el paso deja de poder tumbar el job.
+      #
+      # Perder los paquetes de aqui no pierde nada: este paso solo corre si «Publicar la release»
+      # salio bien, asi que nunca fue un respaldo de una publicacion fallida — cuando esa falla, el
+      # job se para antes de llegar aqui.
       - uses: actions/upload-artifact@v4
         if: ${{ inputs.dry_run != true }}
+        continue-on-error: true
         with:
           name: windows-release-${{ inputs.version }}
-          path: out/releases/**
+          path: |
+            out/releases/releases.win.json
+            out/releases/RELEASES
           if-no-files-found: error
