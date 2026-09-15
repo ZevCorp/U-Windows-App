@@ -917,11 +917,11 @@ public sealed class ConversacionEnVivo : IDisposable
             ("recuerdo", "Qué es y para qué sirve lo que vas a pulsar, con tus palabras. Se cuelga del elemento y se muestra en tarjeta antes de tocarlo.")),
         Fn("map_type", "Escribe texto en el campo abierto; sirve para nombrar una carpeta recién creada.",
             ("text", "Lo que hay que escribir."),
-            ("target", "El campo: en SAP, su etiqueta tal como se lee («Presión Arterial»), su nombre técnico o el selector de la lección. Vacío = el que tenga el foco, y solo si es un campo de texto."),
+            ("target", "El campo por su nombre tal como se lee («Preguntar a Google», «Términos de búsqueda») o su selector; en SAP, su etiqueta, su nombre técnico o el selector de la lección. Vacío = el campo con el foco, si es de texto. En una terminal (PowerShell, cmd, Git Bash) déjalo vacío: se teclea en ella y se confirma con Enter."),
             ("decir", "Una frase corta que Ü dice con su voz JUSTO ANTES de escribir. Al comprobar una lección va siempre."),
             ("recuerdo", "Qué es ese campo y para qué sirve, con tus palabras. Se cuelga y se muestra en tarjeta antes de escribir.")),
         Fn("map_unblock", "Resuelve un diálogo que está bloqueando el paso y reanuda la tarea.",
-            ("at", "La superficie a la que hay que volver después."),
+            ("at", "A dónde volver DESPUÉS, como superficie (uia://… o web://…), o vacío para quedarse donde está. NO es el nombre del diálogo."),
             ("choose", "La opción a pulsar. Vacío = solo si hay una única salida posible.")),
         Fn("map_pointing_at", "PRIORITARIA cuando el usuario señala UN SOLO elemento. Devuelve la "
             + "PUERTA que hay bajo el cursor EN ESTE INSTANTE —con su nombre real— y la ilumina; "
@@ -1006,8 +1006,11 @@ public sealed class ConversacionEnVivo : IDisposable
             + "qué pantalla quedas. Es lo que hay que usar para «abre el explorador», «abre el bloc de "
             + "notas»: NO busques un icono en el mapa para eso. Para una PÁGINA WEB —GitHub, Gmail, "
             + "Canva— NO uses esto: usa map_go_to con surface=«web://github.com». Pedir una web por aquí "
-            + "hace que se busque un programa que no existe.",
-            ("app", "El proceso, por ejemplo «explorer», «notepad», «chrome».")),
+            + "hace que se busque un programa que no existe. SI YA HAY VENTANAS de esa app, no se abre "
+            + "otra: se te dice cuáles hay y se trae una al frente; tú decides si te sirve esa o pides "
+            + "una copia nueva con instancia=«nueva».",
+            ("app", "El proceso, por ejemplo «explorer», «notepad», «chrome»."),
+            ("instancia", "Vacío o «existente» para usar la que ya está abierta (lo normal); «nueva» para abrir otra copia aunque haya una.")),
 
         // EL EXPLORADOR DE ARCHIVOS SE PREGUNTA AL DISCO. En cualquier otra app, lo que hay es lo
         // que se ve; aquí no. UIA solo ve lo que cabe en pantalla —una carpeta de 300 archivos son

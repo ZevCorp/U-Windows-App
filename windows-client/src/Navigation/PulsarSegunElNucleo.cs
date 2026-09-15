@@ -36,7 +36,15 @@ public sealed class PulsarSegunElNucleo
 {
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
-    private readonly Func<string, string, string, bool> _pulsar;
+    /// <summary>La mano: selector, etiqueta y gesto → null si pudo; si no, POR QUÉ (promesa 231; vacío = no lo dijo).</summary>
+    private readonly Func<string, string, string, string?> _mano;
+
+    /// <summary>
+    /// Lo que le pasó a la ventana de trabajo mientras se pulsaba (promesa 233): «la ventana en la
+    /// que trabajaba (…) ya no existe». Con aviso, no se aprende ningún tramo: Ü no cruzó una puerta,
+    /// la ventana se cerró.
+    /// </summary>
+    public Func<string>? AvisoDeLaVentana { get; set; }
 
     /// <param name="pulsar">Selector y etiqueta → ¿se pudo tocar? Lo hace quien sabe de UIA.</param>
     /// <remarks>La mano vieja no sabe de gestos: se adapta ignorándolos. Sigue siendo válida para
@@ -47,11 +55,22 @@ public sealed class PulsarSegunElNucleo
     /// <param name="pulsar">Selector, etiqueta y GESTO («» = clic simple, «doubleclick», …) →
     /// ¿se pudo tocar? La mano ejecuta el gesto que se le pide; decidirlo es de esta clase.</param>
     public PulsarSegunElNucleo(Nucleo.Grafo grafo, Func<string> donde, Func<string, string, string, bool> pulsar)
+        : this(grafo, donde, (sel, et, gesto) => pulsar(sel, et, gesto) ? null : "", true) { }
+
+    private PulsarSegunElNucleo(Nucleo.Grafo grafo, Func<string> donde, Func<string, string, string, string?> mano, bool _)
     {
         _grafo = grafo;
         _donde = donde;
-        _pulsar = pulsar;
+        _mano = mano;
     }
+
+    /// <summary>
+    /// CON UNA MANO QUE DICE POR QUÉ (promesa 231): null si pudo; si no, la causa. «no pude pulsar «X».»
+    /// cubría tres situaciones —no encontré el elemento en esa ventana, no admite ningún patrón, el
+    /// patrón falló— y mandaba la investigación al sitio equivocado (aprendizaje nº2).
+    /// </summary>
+    public static PulsarSegunElNucleo ConMotivo(Nucleo.Grafo grafo, Func<string> donde, Func<string, string, string, string?> mano)
+        => new(grafo, donde, mano, true);
 
     /// <summary>Qué pasó al pulsar. <paramref name="Aprendido"/> = el grafo se quedó con el tramo.</summary>
     public readonly record struct Resultado(
@@ -73,11 +92,17 @@ public sealed class PulsarSegunElNucleo
         // la pantalla real (2026-08-26: tres clics físicos por visita, cada visita).
         string gesto = _grafo.GestoDe(desde, selector);
 
-        if (!_pulsar(selector, etiqueta, gesto))
+        string? motivo = _mano(selector, etiqueta, gesto);
+        if (motivo != null)
             return new(false, false, desde, desde, false,
-                $"no pude pulsar «{etiqueta}».");
-
+                motivo.Length > 0 ? $"no pude pulsar «{etiqueta}»: {motivo}" : $"no pude pulsar «{etiqueta}».");
         string hasta = EsperarACambiar(desde);
+        // LA VENTANA DE TRABAJO SE CERRÓ (promesa 233): «dónde» volvió al foco de la persona, y eso
+        // no es haber ido allí. Se cuenta tal cual y no se aprende ninguna arista.
+        string aviso = AvisoDeLaVentana?.Invoke() ?? "";
+        if (aviso.Length > 0)
+            return new(true, hasta != desde, desde, hasta, false,
+                $"pulsé «{etiqueta}» y {aviso}. Ahora estás en «{hasta}».");
         string gestoUsado = gesto;
 
         // EL ENSAYO, y solo cuando toca: nada cambió, el gesto de esta arista aún no se conoce, y
@@ -85,7 +110,7 @@ public sealed class PulsarSegunElNucleo
         // su trabajo sin cambiar de pantalla» es lo normal de un «Guardar», y un segundo clic sería
         // repetir la acción, no averiguar nada.
         if ((hasta.Length == 0 || hasta == desde) && gesto.Length == 0 && EsContenido(desde, selector)
-            && _pulsar(selector, etiqueta, "doubleclick"))
+            && _mano(selector, etiqueta, "doubleclick") == null)
         {
             string tras = EsperarACambiar(desde);
             if (tras.Length > 0 && tras != desde)

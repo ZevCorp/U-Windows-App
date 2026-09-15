@@ -123,6 +123,48 @@ public static class SafeToClick
     }
 
     /// <summary>
+    /// LO QUE NO SE DESHACE. Es la lista de responder diálogos, y es DISTINTA de <see cref="Prohibido"/>
+    /// a propósito (promesa 239, spec 022).
+    /// </summary>
+    /// <remarks>
+    /// Las dos listas contestan preguntas distintas y compartirlas costó caro. <see cref="Auto"/>
+    /// pregunta «¿puede el explorador pulsar esto MIENTRAS MAPEA, sin nadie mirando?», y por eso su
+    /// lista es larguísima y rechaza hasta «Opciones»: al mapear, todo lo que no sea navegar sobra.
+    /// Esta pregunta es otra: «¿esto hace daño AUNQUE me lo pidan?». Con la lista del explorador, el
+    /// 2026-09-14 Ü no pudo responder «No guardar» al Bloc de notas —«contiene «guardar»»— y dejó el
+    /// documento colgado; el dueño: «que pueda guardar o decidir no guardar cosas libremente».
+    ///
+    /// GUARDAR NO ESTÁ AQUÍ porque guardar es lo que la persona pidió, y no guardar es una decisión
+    /// suya igual de legítima. Se quedan las cuatro familias que no se deshacen: destruir, apagar o
+    /// cerrar la sesión, sacar los datos de la máquina, y comprometer a la persona con un tercero.
+    /// </remarks>
+    private static readonly string[] Destructivo =
+    {
+        // destruir
+        "eliminar", "borrar", "delete", "vaciar", "empty", "desinstalar", "uninstall",
+        "formatear", "format", "destruir", "sobrescribir", "overwrite",
+        // energía y sesión: se lleva por delante lo que la persona tenía abierto
+        "apagar", "shut down", "reiniciar", "restart", "cerrar sesion", "sign out", "log out",
+        // sacar los datos fuera
+        "compartir", "share", "enviar", "send", "publicar", "publish", "subir", "upload",
+        // comprometer a la persona
+        "aceptar", "accept", "confirmar", "confirm", "permitir", "allow", "instalar", "install",
+        "comprar", "buy", "pagar", "pay", "suscribir", "subscribe",
+    };
+
+    /// <summary>
+    /// Palabras que INVIERTEN el verbo que viene detrás. «No eliminar» no elimina: es justo la opción
+    /// que salva el archivo, y hasta el 2026-09-14 estaba vetada por contener el verbo.
+    /// </summary>
+    /// <remarks>
+    /// Se miran las DOS palabras anteriores y no solo una, porque <see cref="Normalizar"/> convierte el
+    /// apóstrofo en espacio: «Don't delete» llega como «don t delete», y mirando una sola palabra atrás
+    /// se vería «t» y no la negación.
+    /// </remarks>
+    private static readonly string[] Negaciones =
+        { "no", "not", "don", "dont", "never", "nunca", "jamas", "sin" };
+
+    /// <summary>
     /// ¿La etiqueta nombra algo DESTRUCTIVO? Solo mira el verbo, no el tipo de control.
     ///
     /// Hace falta aparte de <see cref="Auto"/> porque aquel responde otra pregunta —«¿puede el
@@ -135,13 +177,38 @@ public static class SafeToClick
     {
         motivo = "";
         string norm = Normalizar(label ?? "");
-        foreach (string v in Prohibido)
+        foreach (string v in Destructivo)
         {
-            if (ContienePalabra(norm, Normalizar(v)))
+            if (MencionaSinNegar(norm, Normalizar(v)))
             {
                 motivo = $"«{label}» contiene «{v}»";
                 return true;
             }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// ¿Aparece el verbo como palabra Y sin que lo nieguen justo antes? (promesa 239). Aparte de
+    /// <see cref="ContienePalabra"/>, que sigue sirviendo al explorador autónomo tal cual: allí la
+    /// pregunta es si la etiqueta MENCIONA algo que opera, y «No eliminar» tampoco es navegación.
+    /// </summary>
+    private static bool MencionaSinNegar(string texto, string palabra)
+    {
+        string[] busca = palabra.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[] hay = texto.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (busca.Length == 0) return false;
+        for (int i = 0; i + busca.Length <= hay.Length; i++)
+        {
+            bool casa = true;
+            for (int j = 0; j < busca.Length; j++)
+                if (!hay[i + j].Equals(busca[j], StringComparison.Ordinal)) { casa = false; break; }
+            if (!casa) continue;
+
+            bool negado = false;
+            for (int k = Math.Max(0, i - 2); k < i; k++)
+                if (Array.IndexOf(Negaciones, hay[k]) >= 0) negado = true;
+            if (!negado) return true;   // hay una mención SIN negar: esa manda
         }
         return false;
     }

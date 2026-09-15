@@ -591,6 +591,25 @@ internal static class Contrato
         // la conversación lo usa con los dos protocolos (224).
         Prueba("223. lo que no se arregla reintentando se reconoce por su código y dice su causa: sin crédito (insufficient_quota, credit_balance_exhausted), una clave que no vale (invalid_api_key, o el apretón de manos rechazado con 401) y un modelo que no existe (invalid_model, model_not_found), también dentro de la descripción de un cierre; cada causa se distingue de las otras, y cualquier otro código, un número de cierre, la prosa del mensaje o nada se pueden reintentar", LoQueNoSeArreglaReintentandoSeReconoce);
         Prueba("224. con los dos protocolos, lo que no se arregla reintentando no reconecta: venga en un error, en el cierre del socket o en el apretón de manos de la reconexión, la conversación dice una vez por qué y cierra la voz; un corte sin esa causa sigue reconectando, y una conexión nueva no hereda la causa de la anterior", LoQueNoSeArreglaNoReconecta);
+        Prueba("230. la ventana de delante se elige con UNA regla, la misma para el localizador y para el lector de elementos: bajando por el orden Z desde la que tiene el foco, la primera visible y con título que no sea de Ü; si delante está Ü, la ubicación se calcula ahora con esa regla y no se devuelve la última recordada", LaVentanaDeDelanteSeEligeConUnaRegla);
+        Prueba("231. la mano dice por qué no pudo: el registro de la superficie llega al log, y «no pude pulsar» trae la causa —no encontré el elemento en esa ventana, no admite ningún patrón, el patrón falló—, en vez de una sola frase para las tres", LaManoDicePorQueNoPudo);
+        Prueba("232. abrir una app mira primero qué ventanas suyas existen y lo dice: con una o varias abiertas trae una al frente y las nombra, y solo lanza otra si se pide una instancia nueva; sin ninguna abierta, lanza como siempre", AbrirMiraQueVentanasHay);
+        Prueba("233. Ü tiene una ventana de trabajo distinta del foco de la persona: lo que ejecuta se resuelve respecto a ella; si no hay, es el foco de la persona; y si la que tenía ya no existe, lo dice y vuelve al foco de la persona en vez de describir una pantalla cerrada", LaVentanaDeTrabajoDeU);
+        Prueba("234. pulsar en la ventana de trabajo va por el patrón de accesibilidad cuando el elemento lo admite, sin traer nada al frente y sin mover el ratón; el clic físico es la excepción para lo que no admite patrón o no navega con él, y cuando se usa se devuelven el foco y el cursor a la persona", ElClicSinRatonVaPorElPatron);
+
+        // SPEC 021: LA MANO ESCRIBE Y DESBLOQUEA DONDE SE LE PIDIÓ (2026-09-14, 19:38 a 20:02). Escribir con
+        // `target` por nombre fallaba con «no encontré el elemento «»», una terminal nunca se podía escribir, y
+        // map_unblock cerró Chrome dos veces pulsando el primer «Cerrar» de la ventana en vez del de la barra.
+        Prueba("235. escribir va a la ventana de trabajo: un `target` por nombre se resuelve a un campo de texto de esa ventana y se escribe por patrón, sin foco ni ratón; en una terminal, donde no hay campo, se teclea trayéndola al frente y devolviendo el foco y el cursor; y el error nombra el campo y la ventana en vez de decir «no encontré el elemento «»»", EscribirVaALaVentanaDeTrabajo);
+        Prueba("236. desbloquear pulsa el botón que leyó dentro del diálogo, no un nombre buscado en toda la ventana: el detector entrega el diálogo con sus botones enganchados, `map_unblock` pulsa esa opción y ninguna otra, la política de opciones seguras y los vetos siguen iguales, y un `at` que es el título del diálogo no dispara ninguna reanudación", DesbloquearPulsaElBotonQueLeyo);
+        Prueba("237. la escalera del clic sin cursor tiene tres peldaños en este orden: el patrón (Invoke o Toggle), el clic por mensaje a la ventana del elemento en su punto pulsable, y el ratón real; el contenido de listas y lo que no tiene punto pulsable van directo al ratón real, y el patrón sigue ganando a todo cuando existe", LaEscaleraDelClicSinCursor);
+        Prueba("238. cerrar la ventana de trabajo cuando el modelo lo decide sigue siendo un clic normal: «Cerrar» no es un verbo destructivo, se pulsa por patrón sin cursor, y la cuenta dice que la ventana ya no existe en vez de inventar a dónde se fue (regresión del 2026-09-14 19:40:43)", CerrarLaVentanaSigueSiendoUnClicNormal);
+
+        // SPEC 022: GUARDAR ES UNA DECISIÓN, Y LA CARITA VA A DONDE SE PULSA (2026-09-14, 20:26). El veto de
+        // responder diálogos usaba la lista del explorador autónomo y bloqueaba «No guardar»; y desde que los
+        // clics van sin ratón, la carita ya no acompaña a la mano a ninguna parte.
+        Prueba("239. responder un diálogo deja guardar y deja NO guardar: el veto de lo destructivo tiene su propia lista —lo que no se deshace— y no la del explorador autónomo; «Guardar», «No guardar» y «Aplicar» se pulsan cuando el modelo lo pide, mientras «Eliminar», «Formatear», «Reiniciar», «Enviar» y «Aceptar» siguen vetados; una etiqueta que niega el verbo pegado a él no es ese verbo; y el explorador autónomo no se relaja", GuardarYNoGuardarSePuedenPulsar);
+        Prueba("240. la carita va a donde Ü acaba de pulsar: los tres clics de la mano avisan con la caja del elemento y escribir o elegir no, el viaje solo vale la pena a partir de un salto real, y su curva es fluida y rápida —empieza acelerando, no se devuelve, no rebota, hace más de medio camino en el primer tercio del tiempo y cruzar la pantalla entera no pasa de 450 ms—", LaCaritaVaADondeSePulsa);
 
         // «SESIÓN ABIERTA» SE ESCRIBÍA AL CONECTAR EL SOCKET (2026-09-13, nivel 4 del 12): con la cuenta sin crédito
         // salió en el mismo segundo que el error, y el conductor del nivel 4 la tomó por voz abierta. Del 220 al 222 son
@@ -8680,6 +8699,427 @@ internal static class Contrato
                 $"con GPT-Live, invalid_model antes de session.started: tampoco reconecta, y lo dice una vez con lo que dijo el servidor (reconectó {noAbrioModelo.Reconexiones}, viva {noAbrioModelo.Viva}, dijo {noAbrioModelo.Dichos.Length}: {string.Join(" | ", noAbrioModelo.Dichos)})");
         }
         finally { anotado.RemoveEventHandler(null, oyeLog); }
+    }
+
+    // ── Spec 020: Ü trabaja en su ventana, y la persona sigue en la suya ─────────────────────
+
+    private static Type? Grafico(string nombre) => typeof(U.Graph.Surfaces.UiaSurface).Assembly.GetType(nombre);
+
+    private static void LaVentanaDeDelanteSeEligeConUnaRegla()
+    {
+        // DOS REGLAS PARA LA MISMA PREGUNTA (2026-09-14): el localizador tomaba la ventana con foco y,
+        // si era la carita, devolvía la última recordada sin recalcular; el lector bajaba por el
+        // orden Z. Tras cerrar la Tienda, Ü dijo «estás en microsoft-store» durante seis segundos con
+        // la lista de elementos de OTRA ventana.
+        var m = Grafico("U.Graph.Surfaces.VentanaDeDelante")?.GetMethod("Elegir");
+        Debe(m != null, "todavía no existe «Surfaces.VentanaDeDelante.Elegir» (spec 020, promesa 230). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (m == null) return;
+        // El orden Z: 1 (la carita) → 2 (visible, sin título) → 3 (con título, invisible) → 4 (la buena) → nada.
+        Func<IntPtr, bool> visible = h => h != (IntPtr)3;
+        Func<IntPtr, bool> conTitulo = h => h != (IntPtr)2;
+        Func<IntPtr, bool> propia = h => h == (IntPtr)1;
+        var cadena = new Dictionary<IntPtr, IntPtr> { [(IntPtr)1] = (IntPtr)2, [(IntPtr)2] = (IntPtr)3, [(IntPtr)3] = (IntPtr)4 };
+        Func<IntPtr, IntPtr> siguiente = h => cadena.TryGetValue(h, out var n) ? n : IntPtr.Zero;
+        IntPtr Elegir(IntPtr foco, Func<IntPtr, IntPtr> sig) => (IntPtr)m.Invoke(null, new object[] { foco, visible, conTitulo, propia, sig, 50 })!;
+        Debe(Elegir((IntPtr)1, siguiente) == (IntPtr)4,
+            "con la carita delante, la ventana de delante es la primera visible, con título y ajena bajando por el orden Z: la 4, calculada AHORA");
+        Debe(Elegir((IntPtr)4, siguiente) == (IntPtr)4, "si la que tiene el foco ya vale, es esa");
+        Debe(Elegir((IntPtr)2, siguiente) == (IntPtr)4, "una ventana sin título no cuenta: no identifica ninguna pantalla");
+        Debe(Elegir((IntPtr)1, _ => IntPtr.Zero) == IntPtr.Zero,
+            "y si no hay ninguna ajena se dice que no hay: ni la de Ü ni la última recordada, que es lo que describía una Tienda ya cerrada");
+    }
+
+    private static void LaManoDicePorQueNoPudo()
+    {
+        // «no pude pulsar «Elipse».» cubría tres causas (patrón nº2): no encontré el elemento en esa
+        // ventana, no admite ningún patrón, el patrón falló. Y el registro detallado de UiaSurface
+        // (L) no llegaba a ningún log: la única línea que decía en qué ventana buscó nunca se escribió.
+        var conMotivo = Capacidad("U.WindowsClient.Navigation.PulsarSegunElNucleo")?.GetMethod("ConMotivo");
+        var logGlobal = Grafico("U.Graph.Surfaces.UiaSurface")?.GetProperty("LogGlobal");
+        Debe(conMotivo != null && logGlobal != null,
+            "todavía no existen «PulsarSegunElNucleo.ConMotivo» ni «UiaSurface.LogGlobal» (spec 020, promesa 231). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (conMotivo == null || logGlobal == null) return;
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://mspaint.exe/sin-titulo", new[] { new Nucleo.Elemento("uia:name=Cerrar", "Cerrar", "Button") });
+        Func<string> donde = () => "uia://mspaint.exe/sin-titulo";
+        Func<string, string, string, string?> manoQueNoPudo = (sel, et, gesto) => "no encontré «Cerrar» en la ventana «Vista de tareas»";
+        var pulsar = (PulsarSegunElNucleo)conMotivo.Invoke(null, new object[] { g, donde, manoQueNoPudo })!;
+        var r = pulsar.Pulsa("uia:name=Cerrar", "Cerrar");
+        Debe(!r.SePudo && r.Cuenta.Contains("no encontré «Cerrar» en la ventana «Vista de tareas»"),
+            $"la cuenta trae la CAUSA que dio la mano, no solo «no pude» ({r.Cuenta})");
+        Func<string, string, string, string?> manoQuePudo = (sel, et, gesto) => null;
+        var pulsar2 = ((PulsarSegunElNucleo)conMotivo.Invoke(null, new object[] { g, donde, manoQuePudo })!);
+        Debe(pulsar2.Pulsa("uia:name=Cerrar", "Cerrar").SePudo, "y sin motivo (null) es que pudo");
+        // EL REGISTRO DE LA SUPERFICIE LLEGA: la app lo conecta al log como «mano».
+        var lineas = new List<string>();
+        logGlobal.SetValue(null, (Action<string>)(l => lineas.Add(l)));
+        try
+        {
+            var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
+            bool ok = superficie.Execute(new U.Graph.PlanStep
+            {
+                StepOrder = 1, ActionType = "click", Selector = "uia:name=__no_existe_en_ninguna_parte__;ct=Button", Label = "__nada__",
+            }, out string error);
+            Debe(!ok && error.Contains("__nada__"), $"un elemento que no está se dice por su nombre ({error})");
+            Debe(lineas.Count > 0, "y lo que la superficie fue decidiendo llegó al registro global, que es el que la app conecta al log");
+        }
+        finally { logGlobal.SetValue(null, null); }
+    }
+
+    private static void AbrirMiraQueVentanasHay()
+    {
+        // «abre Paint» con un Paint abierto lanzó OTRO (2026-09-14, 16:53:48): cuando el nombre coincide
+        // exacto con una app instalada se lanzaba antes de preguntar si ya estaba. Y el dueño no quiere
+        // ni «siempre la existente» ni «siempre nueva»: quiere que el modelo lo decida sabiendo qué hay.
+        var t = Capacidad("U.WindowsClient.Navigation.AbrirSegunElNucleo");
+        var lasDe = t?.GetMethod("LasDe");
+        var abrir2 = t?.GetMethods().FirstOrDefault(m => m.Name == "Abrir" && m.GetParameters().Length == 2);
+        var ctor = t?.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 7);
+        Debe(lasDe != null && abrir2 != null && ctor != null,
+            "todavía no existen «AbrirSegunElNucleo.LasDe», «Abrir(pedido, instancia)» ni el constructor con las ventanas abiertas (spec 020, promesa 232). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || lasDe == null || abrir2 == null || ctor == null) return;
+        var todas = new List<(IntPtr Hwnd, string Proceso, string Titulo)>
+        {
+            ((IntPtr)11, "mspaint.exe", "Sin título - Paint"),
+            ((IntPtr)12, "ApplicationFrameHost.exe", "Microsoft Store"),
+            ((IntPtr)13, "chrome.exe", "Meet"),
+        };
+        IntPtr H(object o) => (IntPtr)o.GetType().GetField("Item1")!.GetValue(o)!;
+        var dePaint = ((System.Collections.IEnumerable)lasDe.Invoke(null, new object[] { "paint", todas })!).Cast<object>().ToList();
+        Debe(dePaint.Count == 1 && H(dePaint[0]) == (IntPtr)11,
+            "«paint» encuentra la ventana de mspaint.exe: el proceso no se llama como la app, y la comparación lo sabe");
+        var deTienda = ((System.Collections.IEnumerable)lasDe.Invoke(null, new object[] { "microsoft store", todas })!).Cast<object>().ToList();
+        Debe(deTienda.Count == 1 && H(deTienda[0]) == (IntPtr)12,
+            "y «microsoft store» la encuentra por el TÍTULO, porque su proceso es ApplicationFrameHost");
+        Debe(((System.Collections.IEnumerable)lasDe.Invoke(null, new object[] { "notepad", todas })!).Cast<object>().Count() == 0,
+            "y lo que no está abierto no se inventa");
+
+        var instaladas = new AbrirSegunElNucleo.AppDelSistema[] { new("Paint", "Microsoft.Paint_8wekyb3d8bbwe!App") };
+        (string Cuenta, List<string> Lanzados, List<IntPtr> Traidas) Abrir(string pedido, string instancia, List<(IntPtr Hwnd, string Proceso, string Titulo)> abiertas)
+        {
+            var lanzados = new List<string>(); var traidas = new List<IntPtr>();
+            string donde = "uia://chrome.exe/meet";
+            var abrir = ctor.Invoke(new object[]
+            {
+                (Func<string>)(() => donde),
+                (Func<Mapeador.ComoMePongoDelante.Plan, bool>)(p => { lanzados.Add(p.Que); donde = "uia://mspaint.exe/sin-titulo"; return true; }),
+                (Func<string, string>)(_ => ""),
+                (Func<IReadOnlyList<AbrirSegunElNucleo.AppDelSistema>>)(() => instaladas),
+                (Func<string, bool>)(cmd => { lanzados.Add(cmd); donde = "uia://mspaint.exe/sin-titulo"; return true; }),
+                (Func<IReadOnlyList<(IntPtr Hwnd, string Proceso, string Titulo)>>)(() => abiertas),
+                (Func<IntPtr, bool>)(h => { traidas.Add(h); donde = "uia://mspaint.exe/sin-titulo"; return true; }),
+            });
+            return ((string)abrir2.Invoke(abrir, new object[] { pedido, instancia })!, lanzados, traidas);
+        }
+        var unaAbierta = Abrir("paint", "", todas);
+        Debe(unaAbierta.Lanzados.Count == 0 && unaAbierta.Traidas.SequenceEqual(new[] { (IntPtr)11 }),
+            $"con un Paint abierto, «abre Paint» NO lanza otro: trae ese (lanzó {unaAbierta.Lanzados.Count}, trajo {unaAbierta.Traidas.Count})");
+        Debe(unaAbierta.Cuenta.Contains("Sin título - Paint") && unaAbierta.Cuenta.Contains("nueva", StringComparison.OrdinalIgnoreCase),
+            $"y lo dice: nombra la ventana que había y cómo pedir otra ({unaAbierta.Cuenta})");
+        var nueva = Abrir("paint", "nueva", todas);
+        Debe(nueva.Lanzados.Count == 1 && nueva.Traidas.Count == 0,
+            $"pedida una instancia NUEVA, se lanza aunque haya una abierta: el modelo decide, no la herramienta (lanzó {nueva.Lanzados.Count})");
+        Debe(nueva.Cuenta.Contains("2"), $"y la cuenta dice cuántas hay ahora ({nueva.Cuenta})");
+        var ninguna = Abrir("paint", "", new List<(IntPtr, string, string)>());
+        Debe(ninguna.Lanzados.Count == 1, "sin ninguna abierta se lanza como siempre");
+        var dos = todas.Concat(new[] { ((IntPtr)14, "mspaint.exe", "dibujo.png - Paint") }).ToList();
+        var conDos = Abrir("paint", "", dos);
+        Debe(conDos.Lanzados.Count == 0 && conDos.Cuenta.Contains("Sin título - Paint") && conDos.Cuenta.Contains("dibujo.png - Paint"),
+            $"con dos abiertas se nombran las dos, para que el modelo sepa entre cuáles elige ({conDos.Cuenta})");
+    }
+
+    private static void LaVentanaDeTrabajoDeU()
+    {
+        // UNA SOLA IDEA DE «DÓNDE ESTOY» PARA DOS COSAS INCOMPATIBLES: aprender de la persona (su foco)
+        // y ejecutar (la ventana que Ü opera). En cuanto la persona sigue trabajando, la segunda deja de
+        // ser la primera: «no pude pulsar «Elipse». Estás en «uia://explorer.exe/vista-de-tareas»».
+        var t = Capacidad("U.WindowsClient.Navigation.VentanaDeTrabajo");
+        var resolver = t?.GetMethod("Resolver");
+        var fijar = t?.GetMethod("Fijar");
+        var aviso = Capacidad("U.WindowsClient.Navigation.PulsarSegunElNucleo")?.GetProperty("AvisoDeLaVentana");
+        Debe(t != null && resolver != null && fijar != null && aviso != null,
+            "todavía no existen «Navigation.VentanaDeTrabajo» ni «PulsarSegunElNucleo.AvisoDeLaVentana» (spec 020, promesa 233). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || resolver == null || fijar == null || aviso == null) return;
+        var trabajo = Activator.CreateInstance(t)!;
+        string foco = "uia://chrome.exe/meet";
+        var existentes = new HashSet<IntPtr> { (IntPtr)7 };
+        Func<IntPtr, bool> existe = h => existentes.Contains(h);
+        Func<string> focoDeLaPersona = () => foco;
+        object Donde() => resolver.Invoke(trabajo, new object[] { existe, focoDeLaPersona })!;
+        string Id(object d) => (string)Prop(d, "Id")!;
+        string Aviso(object d) => (string)Prop(d, "Aviso")!;
+        var sin = Donde();
+        Debe(Id(sin) == foco && Aviso(sin).Length == 0, "sin ventana de trabajo, Ü ejecuta sobre el foco de la persona: es exactamente lo de hoy");
+        fijar.Invoke(trabajo, new object[] { (IntPtr)7, "uia://mspaint.exe/sin-titulo" });
+        var con = Donde();
+        Debe(Id(con) == "uia://mspaint.exe/sin-titulo" && Aviso(con).Length == 0,
+            "con ventana de trabajo, «dónde» es ESA ventana aunque la persona tenga el foco en otra: es lo que le deja seguir trabajando");
+        existentes.Clear();
+        var ida = Donde();
+        Debe(Id(ida) == foco && Aviso(ida).Contains("ya no existe") && Aviso(ida).Contains("mspaint"),
+            $"si la ventana de trabajo desapareció, se dice por su nombre y se vuelve al foco de la persona: no se describe una pantalla cerrada ({Aviso(ida)})");
+        Debe(Aviso(Donde()).Length == 0, "y el aviso se da UNA vez: la siguiente pregunta ya es limpia");
+        // Y EL EJECUTOR LO CUENTA, sin inventar un tramo.
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://mspaint.exe/sin-titulo", new[] { new Nucleo.Elemento("uia:name=Cerrar", "Cerrar", "Button") });
+        string donde = "uia://mspaint.exe/sin-titulo";
+        var pulsar = new PulsarSegunElNucleo(g, () => donde, (sel, et) => { donde = "uia://chrome.exe/meet"; return true; }) { EsperaMaximaMs = 240 };
+        aviso.SetValue(pulsar, (Func<string>)(() => "la ventana en la que trabajaba («uia://mspaint.exe/sin-titulo») ya no existe"));
+        var r = pulsar.Pulsa("uia:name=Cerrar", "Cerrar");
+        Debe(r.SePudo && r.Cuenta.Contains("ya no existe"),
+            $"cuando pulsar cierra la ventana de trabajo, la cuenta lo dice, y no «ahora estás en Meet» como si Ü hubiera ido allí ({r.Cuenta})");
+        Debe(!r.Aprendido && g.DesdeAqui("uia://mspaint.exe/sin-titulo").All(a => a.Destino != "uia://chrome.exe/meet"),
+            "y no se aprende una arista de Paint a Meet: Ü no cruzó ninguna puerta, la ventana se cerró");
+    }
+
+    private static void ElClicSinRatonVaPorElPatron()
+    {
+        // EL CLIC FÍSICO ERA EL CAMINO NORMAL y el patrón el respaldo. Al revés: el patrón no necesita
+        // foco ni ratón, y es lo que deja a la persona seguir trabajando (y lo único que cruza a otro
+        // escritorio virtual). El físico queda para lo que no lo admite, y devuelve lo que era de la persona.
+        var t = Grafico("U.Graph.Surfaces.ComoSePulsa");
+        var decidir = t?.GetMethods().FirstOrDefault(m => m.Name == "Decidir" && m.GetParameters().Length == 4);
+        var tGesto = Grafico("U.Graph.Surfaces.ComoSePulsa+Gesto");
+        var devolver = t?.GetMethod("HayQueDevolver");
+        var ejecutarEn = Grafico("U.Graph.Surfaces.UiaSurface")?.GetMethods()
+            .FirstOrDefault(m => m.Name == "Execute" && m.GetParameters().Length == 3 && m.GetParameters()[1].ParameterType == typeof(IntPtr));
+        Debe(decidir != null && tGesto != null && devolver != null && ejecutarEn != null,
+            "todavía no existen «Surfaces.ComoSePulsa.Decidir/HayQueDevolver» ni «UiaSurface.Execute(paso, ventanaObjetivo, …)» (spec 020, promesa 234). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (decidir == null || tGesto == null || devolver == null) return;
+        string G(bool invoke, bool toggle, bool seleccion, bool contenidoDeLista) =>
+            decidir.Invoke(null, new object[] { invoke, toggle, seleccion, contenidoDeLista })!.ToString()!;
+        Debe(G(true, false, false, false) == "Patron", "un botón con Invoke se pulsa por patrón: sin foco y sin ratón, la persona no se entera");
+        Debe(G(false, true, false, false) == "Patron", "una casilla con Toggle, igual");
+        Debe(G(false, false, true, false) == "Fisico",
+            "lo que solo admite selección va por el clic físico: Select() marca sin navegar (el panel del explorador, 2026-08-08)");
+        Debe(G(false, false, false, false) == "Fisico", "y lo que no admite ningún patrón, también: es la única forma de tocarlo");
+        Debe(G(true, false, true, true) == "Fisico",
+            "un elemento de lista con Invoke por herencia va por el físico: invocar un ListItem devuelve true sin abrir nada (2026-08-02)");
+        bool D(string gesto, IntPtr antes, IntPtr despues) => (bool)devolver.Invoke(null, new object[] { Enum.Parse(tGesto, gesto), antes, despues })!;
+        Debe(D("Fisico", (IntPtr)5, (IntPtr)9), "tras un clic físico que cambió el foco, hay que devolvérselo a la persona");
+        Debe(!D("Fisico", (IntPtr)5, (IntPtr)5), "si el foco no cambió no se toca nada");
+        Debe(!D("Patron", (IntPtr)5, (IntPtr)9), "y por patrón nunca: no se tocó ni el foco ni el ratón");
+        Debe(!D("Fisico", IntPtr.Zero, (IntPtr)9), "sin foco previo conocido no se devuelve nada a ciegas");
+    }
+
+    private static void EscribirVaALaVentanaDeTrabajo()
+    {
+        // «no pude escribir en «Git Bash»: no encontré el elemento «» (Git Bash)» (20:01:57) y «NO escribo: no hay
+        // ningún campo de texto abierto. El foco lo tiene «…;ct=TabItem»» (20:00:58): el nombre se mandaba como
+        // selector, y una terminal no tiene campo que aceptar. Escribir tiene que decidir como pulsar: en la
+        // ventana de trabajo, por patrón cuando hay campo, por teclado cuando es una terminal.
+        var t = Grafico("U.Graph.Surfaces.ComoSeEscribe");
+        var decidir = t?.GetMethod("Decidir");
+        var esTerminal = t?.GetMethod("EsTerminal");
+        var noEncontre = t?.GetMethod("NoEncontre");
+        var teclear = Grafico("U.Graph.Surfaces.UiaSurface")?.GetMethod("TeclearEnLaVentana");
+        var campo = Grafico("U.Graph.Surfaces.UiaSurface")?.GetMethod("CampoDeTexto");
+        Debe(decidir != null && esTerminal != null && noEncontre != null && teclear != null && campo != null,
+            "todavía no existen «Surfaces.ComoSeEscribe.Decidir/EsTerminal/NoEncontre» ni «UiaSurface.TeclearEnLaVentana/CampoDeTexto» (spec 021, promesa 235). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (decidir == null || esTerminal == null || noEncontre == null) return;
+        bool T(string proceso, string clase) => (bool)esTerminal.Invoke(null, new object[] { proceso, clase })!;
+        Debe(T("WindowsTerminal.exe", "CASCADIA_HOSTING_WINDOW_CLASS"), "Windows Terminal es una terminal, con o sin .exe");
+        Debe(T("mintty", "mintty"), "Git Bash (mintty) es una terminal");
+        Debe(T("conhost.exe", "ConsoleWindowClass") && T("cmd", "") && T("powershell", "") && T("pwsh.exe", ""),
+            "conhost, cmd, PowerShell y pwsh son terminales, por proceso o por clase de ventana");
+        Debe(!T("chrome.exe", "Chrome_WidgetWin_1") && !T("mspaint.exe", ""), "Chrome y Paint no lo son: ahí se escribe en campos");
+        string D(bool hayCampo, bool terminal) => decidir.Invoke(null, new object[] { hayCampo, terminal })!.ToString()!;
+        Debe(D(true, false) == "Valor", "con un campo de texto en la ventana de trabajo se escribe por patrón Value: sin foco ni ratón");
+        Debe(D(true, true) == "Valor", "y si por lo que sea una terminal expone un campo, también: el patrón gana");
+        Debe(D(false, true) == "Teclado", "en una terminal sin campo se teclea: es lo único que una consola escucha");
+        Debe(D(false, false) == "SinCampo", "sin campo y sin terminal no se escribe a ciegas: escribir sobre lo seleccionado es renombrar (2026-08-03)");
+        string m = (string)noEncontre.Invoke(null, new object[] { "Git Bash", "MINGW64:/c/Users/felip" })!;
+        Debe(m.Contains("«Git Bash»") && m.Contains("MINGW64") && !m.Contains("«»"),
+            $"el error nombra el campo pedido y la ventana donde se buscó, no «no encontré el elemento «»» ({m})");
+    }
+
+    private static void DesbloquearPulsaElBotonQueLeyo()
+    {
+        // 19:42:29 y 19:43:46: la barra «Continúa por donde lo dejaste» de Chrome se leyó como diálogo con opción
+        // «Cerrar»; map_unblock construyó uia:name=Cerrar;ct=Button y lo resolvió en TODA la ventana, donde el
+        // primer «Cerrar» es el de la barra de título. Cerró Chrome dos veces y dijo «DESBLOQUEADO · resuelto».
+        var tDialogo = Capacidad("U.WindowsClient.Navigation.Desbloqueo+Dialogo");
+        var tTools = Capacidad("U.WindowsClient.Mcp.SurfaceMapTools");
+        var desbloquear = tTools?.GetMethod("Desbloquear");
+        var lector = tTools?.GetProperty("LeerDialogo");
+        var leerDialogo = Capacidad("U.WindowsClient.Navigation.Interrupcion")?.GetMethod("LeerDialogo");
+        Debe(tDialogo != null && desbloquear != null && lector != null && leerDialogo != null,
+            "todavía no existen «Navigation.Desbloqueo.Dialogo», «Interrupcion.LeerDialogo» ni «SurfaceMapTools.Desbloquear/LeerDialogo» (spec 021, promesa 236). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tDialogo == null || tTools == null || desbloquear == null || lector == null) return;
+
+        var ctor = tTools.GetConstructors().First();
+        var pWhere = ctor.GetParameters()[0].ParameterType;
+        var tLoc = pWhere.GetGenericArguments()[0];
+        var where = System.Linq.Expressions.Expression.Lambda(pWhere, System.Linq.Expressions.Expression.Constant(null, tLoc)).Compile();
+        var tools = ctor.Invoke(new object[] { where });
+
+        var pulsados = new List<string>();
+        bool abierto = true;
+        Func<string, bool> pulsar = o => { pulsados.Add(o); abierto = false; return true; };
+        object Dialogo(params string[] opciones) => Activator.CreateInstance(tDialogo, "Barra de información",
+            (IReadOnlyList<string>)new[] { "Continúa por donde lo dejaste: Chrome puede restaurar tus pestañas cada vez que lo reinicies." },
+            (IReadOnlyList<string>)opciones, pulsar)!;
+        void Inyectar(Func<object?> fuente)
+        {
+            var fType = typeof(Func<>).MakeGenericType(tDialogo);
+            var body = System.Linq.Expressions.Expression.Convert(
+                System.Linq.Expressions.Expression.Invoke(System.Linq.Expressions.Expression.Constant(fuente)), tDialogo);
+            lector.SetValue(tools, System.Linq.Expressions.Expression.Lambda(fType, body).Compile());
+        }
+        string Desbloquea(string at, string choose) => (string)desbloquear.Invoke(tools, new object[] { at, choose })!;
+
+        var barra = Dialogo("Cerrar");
+        Inyectar(() => abierto ? barra : null);
+        string cuenta = Desbloquea("Barra de información", "Cerrar");
+        Debe(pulsados.SequenceEqual(new[] { "Cerrar" }),
+            $"la opción se pulsa sobre el botón que el detector leyó dentro del diálogo, y ninguna otra ({string.Join(",", pulsados)})");
+        Debe(cuenta.Contains("DESBLOQUEADO") && cuenta.Contains("Cerrar"), $"y se cuenta como desbloqueo ({cuenta})");
+        Debe(!cuenta.Contains("no sé ponerme delante") && !cuenta.Contains("no hay ningún camino"),
+            $"un `at` que es el título del diálogo no es un sitio al que volver: no se intenta ninguna reanudación ({cuenta})");
+
+        pulsados.Clear(); abierto = true;
+        var confirmacion = Dialogo("Eliminar", "Cancelar");
+        Inyectar(() => abierto ? confirmacion : null);
+        string veto = Desbloquea("", "Eliminar");
+        Debe(pulsados.Count == 0 && veto.Contains("NO pulso"), $"el veto de lo destructivo sigue igual: «Eliminar» no se pulsa ni pidiéndolo ({veto})");
+        Desbloquea("", "");
+        Debe(pulsados.SequenceEqual(new[] { "Cancelar" }), $"y sin elección la política elige la opción que no compromete nada ({string.Join(",", pulsados)})");
+
+        pulsados.Clear(); abierto = true;
+        var decision = Dialogo("Guardar", "Reemplazar");
+        Inyectar(() => abierto ? decision : null);
+        string atascado = Desbloquea("", "");
+        Debe(pulsados.Count == 0 && atascado.Contains("ATASCADO"), $"una decisión de verdad no se adivina: se describe y decide la capa consciente ({atascado})");
+    }
+
+    private static void LaEscaleraDelClicSinCursor()
+    {
+        // 8 de 11 clics de la corrida fueron por Invoke; los 3 físicos fueron un campo web sin patrón y una pestaña
+        // con solo selección. Entre el patrón y el ratón real cabe un peldaño que no mueve el cursor: el clic por
+        // mensaje a la ventana del elemento. El ratón real queda para lo que se midió que solo él navega.
+        var t = Grafico("U.Graph.Surfaces.ComoSePulsa");
+        var decidir = t?.GetMethods().FirstOrDefault(m => m.Name == "Decidir" && m.GetParameters().Length == 5);
+        var tGesto = Grafico("U.Graph.Surfaces.ComoSePulsa+Gesto");
+        Debe(decidir != null && tGesto != null && Enum.GetNames(tGesto).Contains("Mensaje"),
+            "todavía no existe «ComoSePulsa.Decidir» con el punto pulsable ni el gesto «Mensaje» (spec 021, promesa 237). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (decidir == null) return;
+        string G(bool invoke, bool toggle, bool seleccion, bool lista, bool punto) =>
+            decidir.Invoke(null, new object[] { invoke, toggle, seleccion, lista, punto })!.ToString()!;
+        Debe(G(true, false, false, false, true) == "Patron", "con Invoke, el patrón: gana a todo");
+        Debe(G(false, true, false, false, true) == "Patron", "con Toggle, igual");
+        Debe(G(false, false, false, false, true) == "Mensaje", "sin patrón pero con punto pulsable, el clic por mensaje: no mueve el cursor ni necesita el foco");
+        Debe(G(false, false, true, false, true) == "Mensaje", "una pestaña que solo admite selección también va por mensaje antes que por el ratón");
+        Debe(G(false, false, false, false, false) == "Fisico", "sin punto pulsable no hay a dónde mandar el mensaje: el ratón real, que trae la ventana y lo busca");
+        Debe(G(true, false, true, true, true) == "Fisico", "el contenido de una lista va directo al ratón real: ahí ni el patrón ni el mensaje abren (2026-08-02, 2026-08-08)");
+        var viejo = t!.GetMethods().FirstOrDefault(m => m.Name == "Decidir" && m.GetParameters().Length == 4);
+        Debe(viejo != null && viejo.Invoke(null, new object[] { false, false, false, false })!.ToString() == "Fisico",
+            "la decisión de la promesa 234, sin punto pulsable, sigue diciendo lo mismo");
+    }
+
+    private static void CerrarLaVentanaSigueSiendoUnClicNormal()
+    {
+        // 19:40:43: el modelo decidió cerrar el navegador («Cierra la ventana del navegador»), la mano lo resolvió
+        // en la ventana de trabajo, lo pulsó por Invoke y contó «la ventana en la que trabajaba ya no existe».
+        // Eso estuvo bien, y arreglar el desbloqueo no puede convertir «Cerrar» en un verbo prohibido.
+        Debe(!SafeToClick.EsDestructivo("Cerrar", out string motivo) && !SafeToClick.EsDestructivo("Cerrar Microsoft Store", out _),
+            $"«Cerrar» no es un verbo destructivo: cerrar una ventana es una decisión del modelo, no un daño ({motivo})");
+        var decidir = Grafico("U.Graph.Surfaces.ComoSePulsa")?.GetMethods().FirstOrDefault(m => m.Name == "Decidir" && m.GetParameters().Length == 4);
+        Debe(decidir != null && decidir.Invoke(null, new object[] { true, false, false, false })!.ToString() == "Patron",
+            "el botón de cerrar de una ventana expone Invoke y se pulsa por patrón: sin cursor");
+        var g = new Nucleo.Grafo();
+        g.Observar("web://instagram.com", new[] { new Nucleo.Elemento("uia:name=Cerrar;ct=Button", "Cerrar", "Button") });
+        string donde = "web://instagram.com";
+        var pulsar = new PulsarSegunElNucleo(g, () => donde, (sel, et) => { donde = "uia://claude.exe/claude"; return true; }) { EsperaMaximaMs = 240 };
+        var aviso = Capacidad("U.WindowsClient.Navigation.PulsarSegunElNucleo")?.GetProperty("AvisoDeLaVentana");
+        aviso?.SetValue(pulsar, (Func<string>)(() => "la ventana en la que trabajaba («web://instagram.com») ya no existe"));
+        var r = pulsar.Pulsa("uia:name=Cerrar;ct=Button", "Cerrar");
+        Debe(r.SePudo && r.Cuenta.Contains("pulsé «Cerrar»") && r.Cuenta.Contains("ya no existe") && !r.Aprendido,
+            $"la cuenta dice que la ventana ya no existe y no aprende un tramo hasta Claude: Ü no fue a ninguna parte ({r.Cuenta})");
+    }
+
+    private static void GuardarYNoGuardarSePuedenPulsar()
+    {
+        // 20:26:37: «NO pulso «No guardar»: «No guardar» contiene «guardar»». El veto de responder diálogos
+        // recorría la lista del EXPLORADOR AUTÓNOMO, que contesta otra pregunta —qué se puede tocar mientras
+        // se mapea, sin nadie mirando— y por eso incluye «guardar» junto a «formatear». Dos preguntas, dos
+        // listas. Y la negación invierte el verbo: «No eliminar» es justo la opción que salva el archivo.
+        Debe(!SafeToClick.EsDestructivo("Guardar", out string m1), $"guardar no destruye nada: es lo que la persona pidió ({m1})");
+        Debe(!SafeToClick.EsDestructivo("No guardar", out string m2), $"y decidir no guardar es una decisión legítima, no un daño ({m2})");
+        Debe(!SafeToClick.EsDestructivo("Save", out _) && !SafeToClick.EsDestructivo("Don't save", out _),
+            "en inglés igual: la UI de Windows mezcla los dos idiomas");
+        Debe(!SafeToClick.EsDestructivo("Guardar como...", out _) && !SafeToClick.EsDestructivo("Aplicar", out _),
+            "guardar en otro sitio y aplicar lo escrito son la misma familia");
+        Debe(SafeToClick.EsDestructivo("Eliminar", out _) && SafeToClick.EsDestructivo("Delete", out _)
+             && SafeToClick.EsDestructivo("Vaciar papelera", out _) && SafeToClick.EsDestructivo("Formatear", out _)
+             && SafeToClick.EsDestructivo("Desinstalar", out _),
+            "lo que destruye datos sigue vetado aunque lo pida el modelo: un fallo aquí no es un mapa peor, es un archivo perdido");
+        Debe(SafeToClick.EsDestructivo("Reiniciar ahora", out _) && SafeToClick.EsDestructivo("Cerrar sesión", out _),
+            "apagar, reiniciar o cerrar la sesión se lleva por delante lo que la persona tenía abierto");
+        Debe(SafeToClick.EsDestructivo("Enviar", out _) && SafeToClick.EsDestructivo("Publicar", out _),
+            "sacar los datos de la máquina no se deshace");
+        Debe(SafeToClick.EsDestructivo("Aceptar", out _) && SafeToClick.EsDestructivo("Permitir", out _)
+             && SafeToClick.EsDestructivo("Instalar", out _) && SafeToClick.EsDestructivo("Pagar", out _),
+            "consentir, permitir, instalar o pagar compromete a la persona, y eso lo pulsa ella");
+        Debe(!SafeToClick.EsDestructivo("No eliminar", out string m3),
+            $"una etiqueta que NIEGA el verbo no es ese verbo: «No eliminar» es la que salva el archivo ({m3})");
+        Debe(!SafeToClick.EsDestructivo("Don't delete", out _) && !SafeToClick.EsDestructivo("No permitir", out _),
+            "y declinar un permiso tampoco compromete nada");
+        Debe(SafeToClick.EsDestructivo("Eliminar y no volver a preguntar", out _),
+            "pero un «no» que no va pegado al verbo no lo salva: ahí el verbo manda");
+        // Y EL EXPLORADOR AUTÓNOMO NO SE RELAJA: es la otra pregunta, y su lista sigue entera.
+        Debe(!SafeToClick.Auto("Guardar", "hyperlink", out _) && !SafeToClick.Auto("Opciones", "listitem", out _),
+            "mapear solo es navegar: el explorador autónomo sigue sin pulsar «Guardar» ni «Opciones»");
+        Debe(SafeToClick.Auto("Documentos", "treeitem", out _), "y lo que era navegable lo sigue siendo");
+    }
+
+    private static void LaCaritaVaADondeSePulsa()
+    {
+        // DESDE LA SPEC 020 LA MAYORÍA DE LOS CLICS VAN SIN RATÓN, y la carita solo sabía seguir al cursor
+        // cuando el cursor se movía de verdad: dejó de acompañar a la mano justo cuando la mano mejoró. El
+        // dueño lo pidió con su curva: «fluido rápidamente, no brusco, con una aceleración suave pero rápida».
+        var t = Grafico("U.Graph.Surfaces.ComoViajaLaCarita");
+        var esClic = t?.GetMethod("EsClic");
+        var mereceViaje = t?.GetMethod("MereceViaje");
+        var cuanto = t?.GetMethod("Cuanto");
+        var curva = t?.GetMethod("Curva");
+        var pulso = Grafico("U.Graph.Surfaces.UiaSurface")?.GetEvent("Pulso");
+        Debe(esClic != null && mereceViaje != null && cuanto != null && curva != null && pulso != null,
+            "todavía no existen «Surfaces.ComoViajaLaCarita.EsClic/MereceViaje/Cuanto/Curva» ni el aviso «UiaSurface.Pulso» (spec 022, promesa 240). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (esClic == null || mereceViaje == null || cuanto == null || curva == null) return;
+        bool Clic(string a) => (bool)esClic.Invoke(null, new object[] { a })!;
+        Debe(Clic("click") && Clic("doubleclick") && Clic("rightclick"),
+            "los tres clics de la mano avisan de dónde cayeron: para eso se mueve la carita, para que se vea quién pulsa");
+        Debe(!Clic("input") && !Clic("select") && !Clic("scroll") && !Clic(""),
+            "escribir, elegir en una lista o desplazar no es pulsar: la carita no sale corriendo por eso");
+        bool Merece(double d) => (bool)mereceViaje.Invoke(null, new object[] { d })!;
+        Debe(!Merece(12) && Merece(200), "un salto de 12 px es un parpadeo, no un viaje; 200 px sí se ve");
+        double C(double x) => (double)curva.Invoke(null, new object[] { x })!;
+        Debe(Math.Abs(C(0)) < 1e-6 && Math.Abs(C(1) - 1) < 1e-6, "el viaje empieza donde estaba y termina exactamente donde se pulsó");
+        bool sube = true, rebota = false; double previo = double.MinValue;
+        for (int i = 0; i <= 200; i++)
+        {
+            double v = C(i / 200.0);
+            if (v < previo - 1e-9) sube = false;
+            if (v > 1 + 1e-9) rebota = true;
+            previo = v;
+        }
+        Debe(sube, "fluida: no se devuelve a mitad de camino");
+        Debe(!rebota, "y no rebota: un rebote está bien una vez, pero en CADA clic se lee como gelatina");
+        Debe(C(0.02) < 0.02, "empieza acelerando y no de un tirón: en el primer 2% del tiempo no ha hecho ni el 2% del camino");
+        Debe(C(1.0 / 3) > 0.5, "pero es rápida: al primer tercio del tiempo ya lleva más de medio camino");
+        var corto = (TimeSpan)cuanto.Invoke(null, new object[] { 30.0 })!;
+        var largo = (TimeSpan)cuanto.Invoke(null, new object[] { 3000.0 })!;
+        Debe(corto.TotalMilliseconds >= 120 && corto <= largo, $"un salto corto dura poco pero se ve ({corto.TotalMilliseconds:0} ms)");
+        Debe(largo.TotalMilliseconds <= 450, $"y cruzar la pantalla entera no pasa de 450 ms: rápido es parte de lo pedido ({largo.TotalMilliseconds:0} ms)");
     }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>

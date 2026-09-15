@@ -39,6 +39,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private Navigation.MapaVivo? _mapaVivo;
     /// <summary>Lo último que la mano SAP pulsó: el destino del lápiz cuando el foco calla.</summary>
     private string _ultimoSapPulsado = "";
+    /// <summary>La ventana en la que Ü trabaja, distinta del foco de la persona (spec 020, promesa 233).</summary>
+    private readonly Navigation.VentanaDeTrabajo _trabajo = new();
+    /// <summary>Por qué la última mano no pudo, para que el ejecutor lo cuente (promesa 231).</summary>
+    private string _ultimoMotivoDeLaMano = "";
     /// <summary>
     /// Los árboles de la última observación SAP, con su caja de pantalla y sus filas visibles
     /// (clave, texto y rectángulo local). El nombrado del clic humano vive de esto: geometría
@@ -511,20 +515,28 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // mismo UiaSurface que ya usa todo lo demás — no hay un segundo camino de accionar.
             // CADA MUNDO POR SU MANO (promesa 69): el selector decide. Un `sap:…` va por la
             // Scripting API — la única que ve dentro de la sesión—; lo demás, por UIA como siempre.
+            // LO QUE LA MANO DECIDE SE VE (promesa 231): cada UiaSurface que crean las manos escribe
+            // aquí en qué ventana buscó, qué patrón usó y por qué no pudo.
+            U.Graph.Surfaces.UiaSurface.LogGlobal = m => LogBus.Log("mano", m);
             var manoPorMundo = new Navigation.ManoPorMundo(
                 uia: (selector, etiqueta) =>
                 {
                     try
                     {
+                        // EN LA VENTANA DE TRABAJO (promesas 233 y 234): se busca ahí y se pulsa por
+                        // patrón si se puede, sin foco ni ratón. La persona sigue en lo suyo.
                         var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
-                        return superficie.Execute(new U.Graph.PlanStep
+                        bool ok = superficie.Execute(new U.Graph.PlanStep
                         {
                             StepOrder = 1, ActionType = "click", Selector = selector, Label = etiqueta,
-                        }, out _);
+                        }, VentanaObjetivo(), out string error);
+                        _ultimoMotivoDeLaMano = ok ? "" : error;
+                        return ok;
                     }
                     catch (Exception e)
                     {
                         LogBus.Log("nucleo-http", $"no pude pulsar «{etiqueta}»: {e.Message}");
+                        _ultimoMotivoDeLaMano = e.Message;
                         return false;
                     }
                 },
@@ -544,6 +556,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                             StepOrder = 1, ActionType = "click", Selector = selector, Label = etiqueta,
                         }, out string error);
                         if (!ok) LogBus.Log("nucleo-http", $"SAP no pudo pulsar «{etiqueta}»: {error}");
+                        _ultimoMotivoDeLaMano = ok ? "" : error;
                         return ok;
                     }
                     catch (Exception e)
@@ -559,8 +572,20 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // porque el mapa vivo nace después; hasta entonces la herramienta contesta como
             // siempre. Es la primera de las cinco capacidades que la voz usa de verdad
             // (2026-08-22, medido sobre 26 días de log).
-            var aqui = new Navigation.AquiSegunElNucleo(_mapaVivo.Nucleo, () => _locator?.DondeEstoy()?.Id ?? "");
-            if (mcp.Map != null) mcp.Map.Situarse = aqui.Ahora;
+            var aqui = new Navigation.AquiSegunElNucleo(_mapaVivo.Nucleo, DondeTrabajo);
+            if (mcp.Map != null) mcp.Map.VentanaDeTrabajo = VentanaObjetivo;
+            if (mcp.Map != null) mcp.Map.Situarse = () =>
+            {
+                // SITUARSE ES SITUAR A Ü (promesa 233), y decir si la persona está en otra parte o si
+                // la ventana de trabajo acaba de desaparecer: el modelo decide con eso.
+                var d = _trabajo.Resolver(U.Graph.Surfaces.UiaSurface.VentanaExiste, FocoDeLaPersona);
+                ObservarLaVentanaDeTrabajo();
+                string foco = FocoDeLaPersona();
+                string nota = d.Aviso.Length > 0 ? $"Ojo: {d.Aviso}. "
+                    : _trabajo.Hay && foco.Length > 0 && foco != d.Id ? $"Trabajo en «{d.Id}»; la persona está mirando «{foco}». "
+                    : "";
+                return nota + aqui.Ahora();
+            };
 
             // SEÑALAR, igual: la lectura de la pantalla se queda en SurfaceMapTools —es UIA— y lo
             // que se CONTESTA sobre lo señalado lo compone el núcleo. Es la capacidad más usada de
@@ -574,7 +599,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // que se muda es lo que se hacía mal: relanzar lo que ya estaba delante, dar por hecho
             // que lanzar es llegar, y fallar sin decir dónde te deja.
             var abrir = new Navigation.AbrirSegunElNucleo(
-                () => _locator?.DondeEstoy()?.Id ?? "",
+                FocoDeLaPersona,   // abrir y traer al frente cambian lo que la persona ve: se mide ahí
                 plan => Uia.AppAligner.PonerDelante(plan.Via switch
                 {
                     Mapeador.ComoMePongoDelante.Via.PestanaDelNavegador => "web://" + plan.Que,
@@ -583,8 +608,49 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 }),
                 Uia.PestanasAbiertas.DominioQueSuena,
                 SystemApi.AppsDelSistema.Todas,
-                SystemApi.AppsDelSistema.Lanzar);
-            if (mcp.Map != null) mcp.Map.AbrirPorElNucleo = abrir.Abrir;
+                SystemApi.AppsDelSistema.Lanzar,
+                // LO QUE YA HAY ABIERTO (promesa 232), y traer UNA ventana concreta: la que se trae
+                // pasa a ser la ventana de trabajo, se haya podido subir al frente o no.
+                U.Graph.Surfaces.UiaSurface.VentanasAbiertas,
+                h =>
+                {
+                    bool ok = Uia.AppAligner.TraerAlFrente(h);
+                    var loc = _locator?.Identificar(h);
+                    if (loc != null) { _trabajo.Fijar(h, loc.Id); LogBus.Log("trabajo", $"la ventana de trabajo es ahora «{loc.Id}» (traída)"); }
+                    return ok;
+                });
+            if (mcp.Map != null) mcp.Map.AbrirPorElNucleo = (app, instancia) =>
+            {
+                string antes = FocoDeLaPersona();
+                IntPtr trabajoAntes = _trabajo.Hwnd;
+                var previas = new HashSet<IntPtr>(U.Graph.Surfaces.UiaSurface.VentanasAbiertas().Select(v => v.Hwnd));
+                string cuenta = abrir.Abrir(app, instancia);
+                SeguirElFoco(antes);   // lo recién lanzado es lo que Ü va a operar
+                // LANZAR VUELVE ANTES DE QUE EXISTA LA VENTANA (Paint tardó 15 s, Git Bash 7 s el 2026-09-14), y
+                // entonces Ü se quedaba sin ventana de trabajo y escribía en la de la persona. Se espera la
+                // ventana nueva de ESA app (hasta 8 s) y se fija; si no llega, se dice.
+                if (_trabajo.Hwnd == trabajoAntes)
+                {
+                    for (int i = 0; i < 40; i++)
+                    {
+                        System.Threading.Thread.Sleep(200);
+                        var nueva = Navigation.AbrirSegunElNucleo.LasDe(app, U.Graph.Surfaces.UiaSurface.VentanasAbiertas())
+                            .FirstOrDefault(v => !previas.Contains(v.Hwnd));
+                        if (nueva.Hwnd == IntPtr.Zero) continue;
+                        Uia.AppAligner.TraerAlFrente(nueva.Hwnd);
+                        var loc = _locator?.Identificar(nueva.Hwnd);
+                        if (loc != null)
+                        {
+                            _trabajo.Fijar(nueva.Hwnd, loc.Id);
+                            LogBus.Log("trabajo", $"la ventana de trabajo es ahora «{loc.Id}» (lanzada, apareció a los {(i + 1) * 200} ms)");
+                            cuenta += $" Su ventana ya está: «{nueva.Titulo}». Estás en «{loc.Id}».";
+                        }
+                        break;
+                    }
+                    if (_trabajo.Hwnd == trabajoAntes) LogBus.Log("trabajo", $"«{app}» no mostró ninguna ventana nueva en 8 s");
+                }
+                return cuenta;
+            };
 
             // LA VENTANITA DEL NÚCLEO, para que el visor pueda pedirle que nos lleve a un sitio sin
             // que nadie toque el núcleo ni el explorador viejo.
@@ -617,11 +683,17 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // alcanzar —web y SAP—: el camino del explorador por voz es rápido y funciona, y se
             // queda entero donde está. `PasoDelNucleo` es la MISMA pieza que usan el visor y la
             // ventanita HTTP, así que las tres puertas contestan lo mismo (2026-08-16).
-            mcp.Map.PorElNucleo = destino => new Navigation.PasoDelNucleo(
-                _mapaVivo!.Nucleo,
-                () => _locator?.DondeEstoy()?.Id ?? "",
-                (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
-                superficie => Uia.AppAligner.PonerDelante(superficie)).Hasta(destino);
+            mcp.Map.PorElNucleo = destino =>
+            {
+                string antes = FocoDeLaPersona();
+                string cuenta = new Navigation.PasoDelNucleo(
+                    _mapaVivo!.Nucleo,
+                    DondeTrabajo,
+                    (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
+                    superficie => Uia.AppAligner.PonerDelante(superficie)).Hasta(destino);
+                SeguirElFoco(antes);
+                return cuenta;
+            };
 
             // PULSAR, sobre el núcleo. Es la versión mínima de ir —ir no es más que preguntar el
             // siguiente paso y pulsarlo, en bucle— así que va antes y lo demás se apoya en esto.
@@ -632,40 +704,49 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // en SAP el gesto se ignora a propósito, porque Execute ya resuelve la acción real por
             // el selector (doubleClickNode en filas, press en botones) y mandarle nuestro «doble»
             // sería una segunda opinión sobre lo mismo.
-            var pulsar = new Navigation.PulsarSegunElNucleo(
+            var pulsar = Navigation.PulsarSegunElNucleo.ConMotivo(
                 _mapaVivo.Nucleo,
-                () => _locator?.DondeEstoy()?.Id ?? "",
+                DondeTrabajo,
                 (sel, etq, gesto) =>
                 {
+                    _ultimoMotivoDeLaMano = "";
                     if (gesto.Length == 0 || U.Graph.Surfaces.SapSelector.Owns(sel))
-                        return _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false;
+                        return (_mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false) ? null : _ultimoMotivoDeLaMano;
                     try
                     {
                         var superficie = new U.Graph.Surfaces.UiaSurface { SoloEnFoco = true };
                         return superficie.Execute(new U.Graph.PlanStep
                         {
                             StepOrder = 1, ActionType = gesto, Selector = sel, Label = etq,
-                        }, out _);
+                        }, VentanaObjetivo(), out string error) ? null : error;
                     }
                     catch (Exception e)
                     {
                         LogBus.Log("nucleo-http", $"no pude pulsar «{etq}» con gesto «{gesto}»: {e.Message}");
-                        return false;
+                        return e.Message;
                     }
                 });
-            if (mcp.Map != null) mcp.Map.PulsarPorElNucleo = (sel, etq) => pulsar.Pulsa(sel, etq).Cuenta;
+            pulsar.AvisoDeLaVentana = _trabajo.TomarAviso;
+            if (mcp.Map != null) mcp.Map.PulsarPorElNucleo = (sel, etq) =>
+            {
+                string antes = FocoDeLaPersona();
+                ObservarLaVentanaDeTrabajo();
+                var r = pulsar.Pulsa(sel, etq);
+                SeguirElFoco(antes);
+                return r.Cuenta;
+            };
 
             // RECORRER EN BATCH: N pasos por llamada con la compuerta de vida antes de cada uno.
             // Usa EL MISMO pulsar de arriba —mismas manos, misma verificación por consecuencia,
             // mismo aprendizaje de aristas— y el freno de siempre: Escape corta la tanda donde va.
             var recorrer = new Navigation.RecorrerSegunElNucleo(
                 _mapaVivo.Nucleo,
-                () => _locator?.DondeEstoy()?.Id ?? "",
+                DondeTrabajo,
                 pulsar,
                 // EL LÁPIZ TAMBIÉN DESPACHA POR MUNDO (promesa 71): en SAP el texto va al
                 // campo con el foco por la Scripting API; fuera, map_type como siempre.
                 escribir: new Navigation.EscribirPorMundo(
-                    donde: () => _locator?.DondeEstoy()?.Id ?? "",
+                    donde: DondeTrabajo,
                     uia: (campo, texto) => (mcp.Map?.Call("map_type",
                             new Dictionary<string, string> { ["text"] = texto }) ?? "no")
                         .StartsWith("escrib", StringComparison.OrdinalIgnoreCase),
@@ -747,8 +828,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             var rastroDeBatches = new Navigation.RastroDeBatches();
             if (mcp.Map != null) mcp.Map.RecorrerPorElNucleo = pasos =>
             {
+                string antes = FocoDeLaPersona();
+                ObservarLaVentanaDeTrabajo();
                 var r = recorrer.Recorre(pasos);
                 rastroDeBatches.Agrega(r.Cuenta);
+                SeguirElFoco(antes);
                 return r;
             };
 
@@ -1150,6 +1234,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // "quién" está haciendo los clics. Evento estático de UiaSurface; se suelta al cerrar.
         UiaSurface.CursorMoved += OnAutomationCursorMoved;
         Closed += (_, __) => UiaSurface.CursorMoved -= OnAutomationCursorMoved;
+        UiaSurface.Pulso += OnManoPulso;
+        Closed += (_, __) => UiaSurface.Pulso -= OnManoPulso;
 
         // La voz ya dice cuándo está escuchando y cuándo hablando (antes no lo decía nadie y la UI lo
         // simulaba escribiendo «Escuchando…» y cruzando los dedos). Llega desde el hilo del motor de
@@ -1569,6 +1655,25 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         var dur = TimeSpan.FromMilliseconds(Math.Clamp(260 + dist * 0.45, 260, 720));
         Vuelo.Mover(this, left, top, dur,
                     new MuelleEase { InitialSlope = 0 }, new MuelleEase { InitialSlope = 0 });
+    }
+
+    /// <summary>
+    /// EL VIAJE AL CLIC (promesa 240): como <see cref="MoverConMuelle"/> pero con la curva y los
+    /// tiempos de <see cref="ComoViajaLaCarita"/> —más corta, y sin el rebote del lanzamiento—.
+    ///
+    /// No se reutiliza el muelle de lanzar porque esto pasa en CADA clic: 720 ms con rebote está bien
+    /// para un gesto de la persona, y encadenado veinte veces en un plan se lee como gelatina.
+    /// </summary>
+    private void ViajarAlClic(double left, double top)
+    {
+        double dx = left - Left, dy = top - Top;
+        double dist = Math.Sqrt(dx * dx + dy * dy);
+        if (!ComoViajaLaCarita.MereceViaje(dist)) { MoveTo(left, top); return; }
+        var dur = ComoViajaLaCarita.Cuanto(dist);
+        // Se anota porque es lo único que hace medible el viaje sin mirar la pantalla: en el log se lee
+        // de dónde salió, a dónde fue y cuánto tardó.
+        LogBus.Log("ui-anim", $"viaje al clic: ({Left:0},{Top:0}) → ({left:0},{top:0}) · {dist:0} px en {dur.TotalMilliseconds:0} ms");
+        Vuelo.Mover(this, left, top, dur, new CurvaDelClic(), new CurvaDelClic());
     }
 
     // --- Recordar dónde dejó el usuario la barra ---
@@ -4280,8 +4385,21 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// <summary>Cuando se señalan varias, el aviso de «una» llega detrás y no debe pisar el recorrido.</summary>
     private bool _recorridoReciénLanzado;
 
-    private void IrJuntoA(Rect fisico)
+    /// <summary>
+    /// LA MANO ACABA DE PULSAR AHÍ: la carita va a verlo (promesa 240). La caja llega en píxeles
+    /// físicos, que es como la da UIA y como la espera <see cref="IrJuntoA"/>.
+    /// </summary>
+    private void OnManoPulso(double x, double y, double ancho, double alto)
+        => Dispatcher.BeginInvoke(new Action(() => IrJuntoA(new Rect(x, y, ancho, alto), alClic: true)));
+
+    /// <param name="alClic">
+    /// Viene de un clic de la mano y no de señalar: viaja con la curva rápida, y solo si está
+    /// colapsada. Con el panel abierto la carita es una barra con contenido, y arrastrarla por la
+    /// pantalla en cada clic taparía justo lo que la persona está leyendo.
+    /// </param>
+    private void IrJuntoA(Rect fisico, bool alClic = false)
     {
+        if (alClic && !_collapsed) return;
         if (JuntoA(fisico) is not { } sitio) return;
 
         // SEÑALAR VARIAS EMITE LAS DOS SEÑALES. Senalador avisa de «estas seis» y acto seguido de
@@ -4290,6 +4408,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // recorrido no se había implementado (2026-08-07). Los ojos sí miran; lo que se ignora es
         // el movimiento, que ya lo lleva la ruta.
         if (_recorridoReciénLanzado) _recorridoReciénLanzado = false;
+        else if (alClic) ViajarAlClic(sitio.X, sitio.Y);
         else MoverConMuelle(sitio.X, sitio.Y);
 
         // Y los ojos hacia él: si la carita quedó a su derecha, mira a la izquierda.
@@ -5111,6 +5230,86 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     // El mismo camino de la demo del 31 para LLEGAR —los batches del terreno, por la puerta MCP—
     // y el rellenador de siempre para ESCRIBIR, alimentado por la nota aprobada en vez de por
     // valores de prueba. Nada de coordenadas, nada de voz, nada que grabe.
+
+    // ── LA VENTANA DE TRABAJO DE Ü (spec 020) ────────────────────────────────────────────────
+    //
+    // Dos ideas de «dónde estoy», con nombre. El FOCO DE LA PERSONA es la ventana que ella mira, y
+    // es lo que alimenta el grafo desde el lado humano (el vigía, Observar): no cambia. La VENTANA DE
+    // TRABAJO es la que Ü opera: lo que Ü ejecuta —buscar el elemento, pulsarlo, comprobar la
+    // consecuencia, situarse— se resuelve respecto a ella. Sin ninguna fijada, es el foco de la
+    // persona, y todo se comporta como antes.
+
+    private string FocoDeLaPersona() => _locator?.DondeEstoy()?.Id ?? "";
+
+    private string DondeTrabajo()
+    {
+        RefrescarLaVentanaDeTrabajo();
+        return _trabajo.Resolver(U.Graph.Surfaces.UiaSurface.VentanaExiste, FocoDeLaPersona).Id;
+    }
+
+    /// <summary>
+    /// LA VENTANA DE TRABAJO CAMBIA DE PANTALLA POR DENTRO (spec 020, hallazgo del 2026-09-14 20:26): una
+    /// pestaña nueva en Chrome es la misma ventana con otra ubicación, y si la persona tiene el foco en
+    /// otra parte nadie la volvía a identificar: Ü seguía «en instagram.com» con la pestaña nueva delante.
+    /// Se vuelve a identificar por su hwnd cada vez que se pregunta dónde trabaja.
+    /// </summary>
+    private void RefrescarLaVentanaDeTrabajo()
+    {
+        if (!_trabajo.Hay || !U.Graph.Surfaces.UiaSurface.VentanaExiste(_trabajo.Hwnd)) return;
+        try
+        {
+            var loc = _locator?.Identificar(_trabajo.Hwnd);
+            if (loc != null && loc.Id.Length > 0 && loc.Id != _trabajo.Id)
+            {
+                LogBus.Log("trabajo", $"la ventana de trabajo cambió por dentro: «{_trabajo.Id}» → «{loc.Id}»");
+                _trabajo.Fijar(_trabajo.Hwnd, loc.Id);
+            }
+        }
+        catch (Exception e) { LogBus.Log("trabajo", $"no pude volver a identificar la ventana de trabajo: {e.Message}"); }
+    }
+
+    /// <summary>La ventana en la que la mano busca y pulsa: la de trabajo, o la que la persona mira.</summary>
+    private IntPtr VentanaObjetivo()
+    {
+        if (_trabajo.Hay && U.Graph.Surfaces.UiaSurface.VentanaExiste(_trabajo.Hwnd)) return _trabajo.Hwnd;
+        return _locator?.DondeEstoy()?.Hwnd ?? IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// LO QUE HAY VIVO EN LA VENTANA DE TRABAJO, mirado ahora. El mapa vivo solo observa el foco de
+    /// la persona; si Ü trabaja en otra ventana, la compuerta decidiría con lo último que se vio de
+    /// ella. Se lee esa ventana con el mismo lector y la misma criba, y se le cuenta al núcleo.
+    /// </summary>
+    private void ObservarLaVentanaDeTrabajo()
+    {
+        if (_mapaVivo == null || !_trabajo.Hay) return;
+        if (_trabajo.Id.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)) return;   // SAP se lee por su API, con o sin foco
+        if (_trabajo.Id == FocoDeLaPersona()) return;   // el latido ya la observa
+        if (!U.Graph.Surfaces.UiaSurface.VentanaExiste(_trabajo.Hwnd)) return;
+        try
+        {
+            var lector = new Uia.UiaReader();
+            lector.Read(_trabajo.Hwnd);
+            var crudos = lector.Elements
+                .Select(e => (Selector: Uia.Reconocedor.SelectorDe(e), Etiqueta: e.Label, Tipo: e.ControlType))
+                .ToList();
+            _mapaVivo.ObservarVentana(_trabajo.Id, crudos);
+            LogBus.Log("trabajo", $"observé la ventana de trabajo «{_trabajo.Id}» aparte del foco: {crudos.Count} elemento(s)");
+        }
+        catch (Exception e) { LogBus.Log("trabajo", $"no pude observar la ventana de trabajo: {e.Message}"); }
+    }
+
+    /// <summary>
+    /// Si la acción de Ü cambió la ventana de delante, esa es ahora la de trabajo: el sistema activó
+    /// lo que Ü abrió o a donde fue. Si la persona sigue en la suya, la de trabajo no se mueve.
+    /// </summary>
+    private void SeguirElFoco(string antes)
+    {
+        var loc = _locator?.DondeEstoy();
+        if (loc == null || loc.Hwnd == IntPtr.Zero || loc.Id == antes || Propio.EsVentana(loc.Hwnd)) return;
+        _trabajo.Fijar(loc.Hwnd, loc.Id);
+        LogBus.Log("trabajo", $"la ventana de trabajo es ahora «{loc.Id}»");
+    }
 
     private bool _enviandoEncargo;
 
