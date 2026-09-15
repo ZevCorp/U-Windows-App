@@ -501,7 +501,7 @@
                          semicircunferencias de radio ancho/2, y cualquier cosa colocada ahi queda
                          pellizcada por la curva. 30 px dejan las dos puntas vacias, que es como se
                          ve en el diseno que dio el dueno. -->
-                    <Border x:Name="BarPanel" BorderThickness="1" Padding="12,30" Width="150">
+                    <Border x:Name="BarPanel" BorderThickness="1" Padding="12,26" Width="150">
                     <StackPanel>
 
                         <!-- LA CARITA, ARRIBA, Y SOLO CUANDO ESTA GUARDADA AQUI (peticion del
@@ -511,12 +511,12 @@
                              dentro, y no hay nada si esta fuera. Ver CaritaGuardada. -->
                         <ui:FaceControl x:Name="Face" Width="66" Height="66" Cursor="Hand"
                                         Visibility="Collapsed"
-                                        HorizontalAlignment="Center" Margin="0,4,0,22"/>
+                                        HorizontalAlignment="Center" Margin="0,4,0,16"/>
 
                         <!-- LOS TRES. Live va separado y algo mas estrecho, como en el diseño: no
                              es del mismo grupo que los otros dos — Learn y Work son lo que Ü hace
                              POR TI en la pantalla; Live abre la consulta clinica, que es otra cosa. -->
-                        <Button x:Name="LearnBtn" Content="Learn" Height="40" Click="OnToggleTeach"
+                        <Button x:Name="LearnBtn" Content="Learn" Height="38" Click="OnToggleTeach"
                                 AutomationProperties.Name="Enseñar"/>
                         <!-- WORK NO HACE NADA TODAVÍA, y está dicho aquí y en su tooltip a
                              propósito. El dueño lo pidió sin acción el 2026-09-05 para decidir más
@@ -524,10 +524,10 @@
                              justo lo que mató a los tres modos que vivieron en esta barra
                              (2026-08-31): «un botón que no hace nada enseña a ignorar los
                              botones». Si esto sigue así dentro de unos días, se quita. -->
-                        <Button x:Name="WorkBtn" Content="Work" Height="40" Margin="0,10,0,0"
+                        <Button x:Name="WorkBtn" Content="Work" Height="38" Margin="0,8,0,0"
                                 AutomationProperties.Name="Trabajar (sin función todavía)"/>
 
-                    <StackPanel x:Name="ZonaSecundaria" Margin="0,18,0,0">
+                    <StackPanel x:Name="ZonaSecundaria" Margin="0,12,0,0">
                         <!-- ZONA CONTEXTUAL: lo que solo existe a ratos. Va envuelta para que el
                              separador se colapse con ella (si no, queda una raya flotando sobre nada)
                              y para que su visibilidad se decida en UN sitio: UpdateContextZone(). -->

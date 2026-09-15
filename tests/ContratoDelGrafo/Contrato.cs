@@ -615,6 +615,14 @@ internal static class Contrato
         // salió en el mismo segundo que el error, y el conductor del nivel 4 la tomó por voz abierta. Del 220 al 222 son
         // de la rama de la apertura; el 219 quedó sin usar en la spec 018 y no se recicla.
         Prueba("220. la voz dice que la sesión abrió cuando el servidor lo confirma, no cuando conecta el socket: al conectar deja una línea que dice que espera la confirmación, y la de «sesión abierta con» sale una sola vez, al confirmarla, con «Te escucho.» detrás, con GPT-Live y con GPT Realtime; un error antes de confirmar no la escribe, y con un protocolo que no confirma la línea dice que nadie la confirmó", LaVozDiceQueAbrioCuandoElServidorLoConfirma);
+
+        // EL NOTCH SE APOYA EN LA BARRA DE TAREAS Y EN SU HUECO LIBRE (2026-09-14). El panel de
+        // acciones vivía clavado en `wa.Left + 12`, que es la esquina correcta en un Windows 10
+        // —iconos a la izquierda— y la equivocada en un Windows 11 de fábrica, donde los iconos van
+        // al centro y esa esquina es justo la ocupada. La promesa juzga el INTERCAMBIO, que es lo
+        // único que aquí no es dibujo: si los iconos ocupan el centro, el notch se va a la esquina,
+        // y si ocupan la esquina, el notch se va al centro.
+        Prueba("241. el notch se apoya en la barra de tareas y ocupa la mitad que ella deja libre: con los iconos al centro (el Windows 11 de fábrica) se va a la esquina, y con los iconos a la izquierda se va al centro — y nunca sale del cristal", ElNotchSeApoyaDondeLaBarraDejaSitio);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -623,6 +631,91 @@ internal static class Contrato
     }
 
     // ── Las promesas ─────────────────────────────────────────────────────────
+
+    private static void ElNotchSeApoyaDondeLaBarraDejaSitio()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDeLaBandeja");
+        var sitio = t?.GetMethod("Sitio");
+        var lado = t?.GetMethod("Lado");
+        var aire = t?.GetField("Aire");
+        Debe(t != null && sitio != null && lado != null && aire != null,
+            "todavía no existe «ReglaDeLaBandeja». La promesa está escrita y en rojo, que es donde "
+            + "tiene que estar");
+        if (t == null || sitio == null || lado == null || aire == null) return;
+
+        var tLado = Capacidad("U.WindowsClient.Ui.LadoDeLaBandeja")!;
+        var tIconos = Capacidad("U.WindowsClient.Ui.IconosDeLaBandeja")!;
+        object L(string n) => Enum.Parse(tLado, n);
+        object I(string n) => Enum.Parse(tIconos, n);
+
+        System.Windows.Rect Sitio(System.Windows.Rect libre, string ladoN, string iconosN,
+                                  double ancho, double alto)
+            => (System.Windows.Rect)sitio.Invoke(null, new object[]
+               { libre, L(ladoN), I(iconosN), new System.Windows.Size(ancho, alto) })!;
+
+        // Una pantalla de 1920×1080 con la barra de tareas abajo, de 48 px. El notch mide 360×90.
+        var pantalla = new System.Windows.Rect(0, 0, 1920, 1080);
+        var libre = new System.Windows.Rect(0, 0, 1920, 1032);
+        double hueco = (double)aire.GetValue(null)!;
+
+        // 1. POR DÓNDE ESTÁ LA BARRA, deducido del trozo que se reserva.
+        Debe(lado.Invoke(null, new object[] { pantalla, libre })!.ToString() == "Abajo",
+            "una barra que se come los 48 px de abajo está ABAJO: si esto se leyera mal, el notch "
+            + "se apoyaría en el borde equivocado de la pantalla");
+        Debe(lado.Invoke(null, new object[]
+            { pantalla, new System.Windows.Rect(0, 48, 1920, 1032) })!.ToString() == "Arriba",
+            "y una que se come los de arriba está arriba");
+        Debe(lado.Invoke(null, new object[] { pantalla, pantalla })!.ToString() == "Abajo",
+            "con la barra oculta automáticamente no se reserva nada y el área de trabajo ES la "
+            + "pantalla: se contesta «abajo», que es donde está casi toda barra y donde el notch "
+            + "queda bien igual — no se puede contestar «no sé» a una pregunta que hay que responder "
+            + "para pintar algo");
+
+        // 2. EL INTERCAMBIO, que es la promesa entera.
+        var alCentro = Sitio(libre, "Abajo", "AlCentro", 360, 90);
+        var aLaIzquierda = Sitio(libre, "Abajo", "ALaIzquierda", 360, 90);
+
+        Debe(alCentro.Left < 40,
+            $"con los iconos AL CENTRO —el Windows 11 de fábrica— el notch se va a la esquina "
+            + $"izquierda, y se fue a x={alCentro.Left}. Es el caso que rompió lo de antes: una "
+            + "posición fija en la esquina acertaba en el 10 y plantaba el panel encima del racimo "
+            + "de iconos en el 11");
+        Debe(Math.Abs(aLaIzquierda.Left - (1920 - 360) / 2) < 1,
+            $"y con los iconos A LA IZQUIERDA se va al centro, que es la mitad que queda libre; se "
+            + $"fue a x={aLaIzquierda.Left}");
+        Debe(Math.Abs(alCentro.Left - aLaIzquierda.Left) > 400,
+            "las dos posiciones tienen que ser DISTINTAS de verdad: una regla que contestara casi lo "
+            + "mismo en los dos casos pasaría esta promesa sin hacer nada");
+
+        // 3. SE APOYA EN LA BARRA, no flota a media pantalla ni la toca.
+        Debe(Math.Abs(alCentro.Bottom - (libre.Bottom - hueco)) < 0.5,
+            $"el notch se apoya en la barra de tareas con {hueco} px de junta, y su base quedó en "
+            + $"y={alCentro.Bottom} con el área libre acabando en {libre.Bottom}");
+        Debe(hueco > 0,
+            "y NO pegado del todo: sin junta, el notch y la barra se leen como una sola pieza rota "
+            + "—dos negros tocándose sin costura— en vez de como algo que flota encima");
+        var colgando = Sitio(new System.Windows.Rect(0, 48, 1920, 1032), "Arriba", "AlCentro", 360, 90);
+        Debe(Math.Abs(colgando.Top - (48 + hueco)) < 0.5,
+            $"con la barra ARRIBA cuelga de ella en vez de irse al suelo, y se quedó en y={colgando.Top}");
+
+        // 4. NUNCA FUERA DEL CRISTAL. Un notch ancho en una pantalla estrecha no puede acabar con
+        //    media caja fuera: es el caso de un portátil pequeño con una frase larga dentro.
+        var estrecha = new System.Windows.Rect(0, 0, 500, 700);
+        var apretado = Sitio(estrecha, "Abajo", "AlCentro", 460, 120);
+        Debe(apretado.Left >= estrecha.Left - 0.5 && apretado.Right <= estrecha.Right + 0.5,
+            $"el notch se quedó en x={apretado.Left}..{apretado.Right} sobre una pantalla de "
+            + $"{estrecha.Width}: lo que no se ve no informa de nada");
+        Debe(apretado.Top >= estrecha.Top - 0.5 && apretado.Bottom <= estrecha.Bottom + 0.5,
+            "y lo mismo por arriba y por abajo");
+
+        // 5. CON LA BARRA EN VERTICAL no hay esquina libre que valga —los iconos bajan por el costado
+        //    entero— y el sitio honesto es el centro de abajo.
+        var conBarraLateral = new System.Windows.Rect(72, 0, 1848, 1080);
+        var lateral = Sitio(conBarraLateral, "Izquierda", "AlCentro", 360, 90);
+        Debe(Math.Abs(lateral.Left - (72 + (1848 - 360) / 2)) < 1,
+            $"con la barra de tareas en vertical el notch se centra en lo que queda de pantalla, y "
+            + $"se fue a x={lateral.Left}: irse a «la esquina» ahí es irse encima de la propia barra");
+    }
 
 
 

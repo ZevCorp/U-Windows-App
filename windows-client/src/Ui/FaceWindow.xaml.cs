@@ -243,8 +243,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             EncimaDe(caja);
         });
         Senalador.Suelta += () => Dispatcher.BeginInvoke(() => { try { CollapsedFace?.DejarDeMirar(); } catch { } });
+        // LA PASTILLA DEL ID NACE APAGADA (2026-09-14, pedido por el dueño preparando la versión
+        // instalable). El localizador SIGUE MIDIENDO desde el primer segundo —de él viven el terreno,
+        // el vigilante de clics y media navegación—, lo que ya no hace es enseñarse: «uia://…» es
+        // vocabulario de quien depura esto, y a quien solo va a usar la aplicación le aparecía una
+        // etiqueta en la esquina de su pantalla sin haber pedido nada. Se enciende con 📍 en el panel
+        // (doble Ctrl+Shift), que es donde vive el resto del instrumental.
         _badge = new LocatorBadge();
-        _badge.Show();
         _locator = new SurfaceLocator();
         // El vigilante de clics: sin él las aristas del terreno solo dicen que dos pantallas
         // conectan; con él dicen CÓMO pasar de una a otra, que es lo que permite navegar sin
@@ -1804,14 +1809,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // las puntas ovaladas sin que nadie entendiera por qué.
         var estadio = new CornerRadius(BarPanel.Width / 2);
         BarPanel.CornerRadius = estadio;
-        BarPanel.Background = Estudio.Superficie;
-        BarPanel.BorderBrush = Estudio.Borde;
+        // NO el blanco puro ni el filete de la casa: la barra flota sobre el escritorio de otro y
+        // ahí los dos desaparecen. Ver Estudio.SuperficieDeLaBarra, donde está el porqué entero.
+        BarPanel.Background = Estudio.SuperficieDeLaBarra;
+        BarPanel.BorderBrush = Estudio.BordeDeLaBarra;
 
         // La placa: gemela, sin un solo hijo, y es la única que lleva el Effect. Ver el comentario
         // del XAML y Estudio.Elevar — con la sombra puesta en el panel, cada letra de dentro caería
         // en la textura del shader y saldría lavada.
         BarPlaca.CornerRadius = estadio;
-        BarPlaca.Background = Estudio.Superficie;
+        // La placa va del MISMO color que el panel: es su gemela y lo que se ve de ella es la sombra,
+        // pero un color distinto asomaría por el filo en cuanto el redondeo no encajara al píxel.
+        BarPlaca.Background = Estudio.SuperficieDeLaBarra;
         BarPlaca.Effect = Estudio.Sombra3;
 
         // Y EL HUECO PARA QUE ESA SOMBRA QUEPA. El muelle es SizeToContent sobre una ventana
@@ -1852,8 +1861,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // «sin contorno, el ícono directo al fondo blanco»). Una pastilla gris permanente alrededor
         // de un icono que no está pasando nada es ruido: sobre una superficie blanca el icono ya se
         // lee solo. El realce aparece al acercar la mano, que es cuando dice algo.
+        // Y LAS CUATRO HERRAMIENTAS DEL MENÚ (🔍 📍 🧠 📜) con ellos, que se habían quedado fuera:
+        // sobre el blanco del estudio, el #1AFFFFFF que les pone BarBtn no es una pastilla tenue, es
+        // nada — y desde que 📍 nace APAGADO, un interruptor cuyo estado de reposo no se ve es un
+        // interruptor que no se encuentra.
         foreach (var b in new System.Windows.Controls.Primitives.ButtonBase[]
-                 { RestartTeachBtn, ComprobarBtn, MenuActivator, CollarModoBtn })
+                 { RestartTeachBtn, ComprobarBtn, MenuActivator, CollarModoBtn,
+                   InspectorBtn, LocatorBtn, RecuerdosBtn, LogsBtn })
         {
             b.Foreground = Estudio.Tinta;
             b.Background = System.Windows.Media.Brushes.Transparent;
@@ -3361,9 +3375,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </remarks>
     private static void PintarToggle(System.Windows.Controls.Button btn, bool on)
     {
-        btn.Background = new System.Windows.Media.SolidColorBrush(on
-            ? System.Windows.Media.Color.FromArgb(0x88, 0x3B, 0x82, 0xF6)   // azul, como UpdateBtn
-            : System.Windows.Media.Color.FromArgb(0x1A, 255, 255, 255));    // el fondo normal de BarBtn
+        // DEL ESTUDIO Y NO A MANO: el azul al 53 % y el blanco al 10 % nacieron sobre el panel NEGRO
+        // de antes. Sobre el blanco de ahora, el encendido grita y el apagado no existe — que es
+        // justo lo contrario de lo que este método promete (2026-09-14).
+        btn.Background = on ? Estudio.AcentoSuave : System.Windows.Media.Brushes.Transparent;
+        btn.Foreground = on ? Estudio.Acento : Estudio.Tinta;
     }
 
 
@@ -4591,8 +4607,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
     }
 
-    /// <summary>Si el badge del ID se está mostrando. El localizador corre igual, se vea o no.</summary>
-    private bool _idALaVista = true;
+    /// <summary>Si el badge del ID se está mostrando. El localizador corre igual, se vea o no —y por
+    /// eso esto puede nacer en false sin que se pierda nada: lo que arranca apagado es el CARTEL, no
+    /// la medición.</summary>
+    private bool _idALaVista = false;
 
     /// <summary>
     /// Arranca el modo consciente. <paramref name="requireOrigin"/> ata el objetivo a una aplicación:

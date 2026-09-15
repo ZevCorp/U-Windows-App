@@ -234,8 +234,19 @@ desde el 2026-08-13, cuando el TFM subió para poder hablar por BLE con el colla
 **No usar `dotnet run`** para sesiones largas: el
 wrapper sale con 255 cuando se cierra la ventana y confunde el diagnóstico.
 
-Si el build falla con `MSB3027 / U.exe está bloqueado`, hay una instancia corriendo:
-`Get-Process -Name U | Stop-Process`.
+Si el build falla con `MSB3027 / U.exe está bloqueado`, hay una instancia corriendo. **Ciérrala por
+RUTA, nunca por nombre**: todas las instancias se llaman `U`, y entre ellas está la app INSTALADA
+(`%LOCALAPPDATA%\U\app`) que el usuario tiene abierta trabajando.
+
+```powershell
+# Solo la que bloquea TU build. Cambia la ruta por la tuya si compilas a otro sitio.
+Get-Process U | Where-Object { $_.Path -like "*\windows-client\bin\*" } | Stop-Process
+```
+
+`Get-Process -Name U | Stop-Process` —lo que decía aquí hasta el 2026-09-05— se lleva por delante
+**todas**, incluida la del usuario. Pasó dos veces en un día, en sesiones distintas, y las dos veces
+el agente creyó estar cerrando «una instancia bloqueada» suya. Si de verdad hay que cerrar varias,
+mira antes de qué ruta es cada una: `Get-Process U | Select-Object Id, Path`.
 
 ## EL LOG ES LA FUENTE DE VERDAD
 

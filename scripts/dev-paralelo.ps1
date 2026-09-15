@@ -40,10 +40,20 @@ param(
 #   · bin\x64\Release del repo → la app ESTABLE (commit 3080777), viva desde el 2026-07-27.
 #   · C:\U-dev\bin             → la app de desarrollo BUENA, la que ya hace la cadena completa.
 # Las dos tienen copia congelada y verificada en Desktop\U-ROLLBACK-2026-07-28.
+#   · %LOCALAPPDATA%\U\app    → la app INSTALADA, la que el usuario usa a diario. Faltaba, y el
+#     2026-09-05 este script la cerró DOS VECES mientras la estaba usando. No es un destino de
+#     compilación, y por eso nadie la puso: pero justamente por eso hay que protegerla.
 $Protegidas = @(
   (Join-Path (Split-Path -Parent $PSScriptRoot) "windows-client\bin"),
-  "C:\U-dev\bin"
+  "C:\U-dev\bin",
+  (Join-Path $env:LOCALAPPDATA "U\app")
 )
+
+# Y de dónde SÍ se puede cerrar: los directorios de build de desarrollo. La regla estaba al revés
+# —«cierro todo lo que no esté en la lista»— y una lista blanca falla ABIERTO: cualquier ruta en la
+# que nadie pensó se cierra sola, que es exactamente lo que le pasó a la app instalada. Así falla
+# CERRADO: lo que no reconozco como build de desarrollo se avisa y se deja en paz.
+$RaicesDeDesarrollo = @("C:\U-dev", $Salida)
 
 $ErrorActionPreference = 'Stop'
 $appRepo  = Split-Path -Parent $PSScriptRoot
@@ -88,6 +98,18 @@ foreach ($p in (Get-Process U -ErrorAction SilentlyContinue)) {
   }
   if ($protegido) { Write-Host ("PROTEGIDA, no se toca: PID {0}" -f $p.Id) -ForegroundColor Green; continue }
   if (-not $p.Path) { continue }
+
+  # ¿Es un build de desarrollo? Solo entonces se cierra. Lo que no lo sea puede ser la app de
+  # alguien trabajando, y cerrarla le cuesta lo que tuviera a medias.
+  $esDeDesarrollo = $false
+  foreach ($r in $RaicesDeDesarrollo) {
+    if ($p.Path.StartsWith([System.IO.Path]::GetFullPath($r), [StringComparison]::OrdinalIgnoreCase)) { $esDeDesarrollo = $true }
+  }
+  if (-not $esDeDesarrollo) {
+    Write-Warning ("NO la cierro: PID {0} desde {1} no es un build de desarrollo. Si pinta una capa encima, cierrala tu." -f $p.Id, $p.Path)
+    continue
+  }
+
   $propia = $p.Path.StartsWith($salidaAbs, [StringComparison]::OrdinalIgnoreCase)
   if ($propia) { Write-Host ("Cerrando app de desarrollo anterior (PID {0})..." -f $p.Id) -ForegroundColor DarkGray }
   else { Write-Host ("Cerrando OTRA instancia de desarrollo (PID {0}) desde {1}: pintaria una segunda capa encima." -f $p.Id, $p.Path) -ForegroundColor Yellow }
