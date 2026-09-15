@@ -44,6 +44,24 @@ public sealed class Muelle : Window
     private const double AnchoPestana = 14, AltoPestana = 64, AnchoDibujo = 5;
 
     /// <summary>
+    /// Lo que el muelle se aparta del borde derecho.
+    /// </summary>
+    /// <remarks>
+    /// Era CERO —la ventana empezaba exactamente donde acababa la pantalla— y se ve (2026-09-14, lo
+    /// pidió el dueño: «la quiero un poco más separada del borde»). Una pieza pegada al canto del
+    /// cristal se lee como un trozo de interfaz CORTADO, no como algo que flota: no hay sombra por
+    /// ese lado, porque no hay sitio donde caiga, así que la mitad de lo que dice «esto está encima»
+    /// se pierde.
+    ///
+    /// DIEZ Y NO MÁS, y el número lo pone el gesto, no el gusto: la pestaña sigue siendo lo que se
+    /// busca con el ratón al ir al borde derecho, y <see cref="ReglaDelMuelle.MargenDeAgarre"/>
+    /// perdona 24 px alrededor. Con 10 de hueco, lanzar el cursor contra el borde de la pantalla
+    /// sigue cayendo dentro del margen que ya existía — lo que se separa es el DIBUJO, no el blanco
+    /// del gesto.
+    /// </remarks>
+    private const double SeparacionDelBorde = 10;
+
+    /// <summary>
     /// Lo que se espera antes de volver a plegar tras salir el cursor.
     ///
     /// No es un adorno: el camino del ratón entre la pestaña y un botón del panel pasa por encima
@@ -142,6 +160,11 @@ public sealed class Muelle : Window
 
         SizeChanged += (_, __) => Recolocar();
         Loaded += (_, __) => { _centro = CentroPorDefecto(); Recolocar(); };
+
+        // Y QUE NO SE QUEDE DEBAJO. Topmost es una posición en una lista, no una promesa: cualquier
+        // otra aplicación que pida lo mismo nos adelanta y no volvemos a subir solos. Ver
+        // SiempreDelante — es el bug que el dueño describió como «a veces queda detrás de las apps».
+        this.Vigilar();
     }
 
     private static double CentroPorDefecto()
@@ -157,7 +180,7 @@ public sealed class Muelle : Window
     private void Recolocar()
     {
         var wa = SystemParameters.WorkArea;
-        Left = wa.Right - ActualWidth;
+        Left = wa.Right - ActualWidth - SeparacionDelBorde;
         Top = Math.Clamp(_centro - ActualHeight / 2, wa.Top, Math.Max(wa.Top, wa.Bottom - ActualHeight));
     }
 
