@@ -47,6 +47,33 @@ public static class ComoSeEscribe
     public static Via Decidir(bool hayCampo, bool esTerminal)
         => hayCampo ? Via.Valor : esTerminal ? Via.Teclado : Via.SinCampo;
 
+    /// <summary>
+    /// ¿EL CAMPO SE QUEDÓ DE VERDAD CON LO QUE SE LE ESCRIBIÓ? Promesa 243 (spec 024).
+    /// </summary>
+    /// <remarks>
+    /// EL EDITOR DE UN SITIO MODERNO ACEPTA LA ORDEN Y NO GUARDA NADA. Medido con una sonda sobre el
+    /// campo real de Instagram el 2026-09-15: <c>ValuePattern.SetValue</c> no lanza, no devuelve error y
+    /// el valor sigue siendo el de antes; teclear con el teclado sí entra. La razón es que ese campo es
+    /// un contenteditable gobernado por JavaScript, y escribir su valor por accesibilidad no dispara los
+    /// eventos de entrada que ese JavaScript escucha, así que el framework nunca se entera. Ese día la
+    /// herramienta contestó dos veces «escribí «¡Ey, TGM! …» y confirmé con Enter» con la caja vacía, y
+    /// la voz llegó a decir «ya quedó enviado» de un mensaje que no existía.
+    ///
+    /// LO QUE NO SE PUEDE LEER NO SE JUZGA. Hay controles que no devuelven su valor, y sobre ellos no hay
+    /// forma de saber si cuajó: ahí se deja pasar, que es exactamente lo de siempre. Esta comprobación
+    /// actúa sobre una PRUEBA de que el texto no entró, nunca sobre una sospecha — al revés, un campo
+    /// perfectamente escrito acabaría tecleándose encima por no poder leerse.
+    /// </remarks>
+    /// <param name="pedido">Lo que se mandó escribir.</param>
+    /// <param name="leido">Lo que el campo dice tener ahora, o null si no se pudo leer.</param>
+    public static bool Cuajo(string pedido, string? leido)
+    {
+        string quiero = (pedido ?? "").Trim();
+        if (quiero.Length == 0) return true;   // escribir vacío no se puede desmentir
+        if (leido == null) return true;        // ilegible: no se juzga
+        return leido.Trim().Contains(quiero, StringComparison.Ordinal);
+    }
+
     /// <summary>El error nombra lo pedido y dónde se buscó: «no encontré el elemento «»» no decía ninguna de las dos.</summary>
     public static string NoEncontre(string campo, string ventana)
         => $"no encontré ningún campo de texto «{campo}» en la ventana «{ventana}»";

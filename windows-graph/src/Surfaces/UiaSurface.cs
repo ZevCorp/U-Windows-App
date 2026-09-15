@@ -1382,10 +1382,84 @@ public sealed class UiaSurface : IUiSurface
             bool detras = _ventanaObjetivo != IntPtr.Zero && GetForegroundWindow() != _ventanaObjetivo;
             if (detras) L("    → escrito por patrón Value en la ventana de trabajo, sin tocar el foco de la persona");
             else { try { el.SetFocus(); } catch { } }
-            return true;
+
+            // ¿SE QUEDÓ CON ÉL? (promesa 243). El editor de un sitio moderno acepta la orden y no guarda
+            // nada, y hasta el 2026-09-15 eso se contestaba como «escribí». Si hay prueba de que el texto
+            // no entró, se teclea de verdad; si el campo no se deja leer, se deja pasar como siempre.
+            if (ComoSeEscribe.Cuajo(value, LoQueDiceElCampo(el))) return true;
+            L($"    el campo aceptó el patrón pero NO se quedó con el texto → se teclea");
+            return TeclearEnElCampo(el, value, out error);
         }
         error = "el campo no soporta ValuePattern (no se puede escribir por UIA)";
         return false;
+    }
+
+    /// <summary>Lo que el campo dice tener, o null si no hay forma de leerlo (y entonces no se juzga).</summary>
+    private static string? LoQueDiceElCampo(AutomationElement el)
+    {
+        try
+        {
+            if (el.TryGetCurrentPattern(ValuePattern.Pattern, out var p) && p is ValuePattern v)
+                return v.Current.Value ?? "";
+        }
+        catch { }
+        try
+        {
+            if (el.TryGetCurrentPattern(TextPattern.Pattern, out var p) && p is TextPattern t)
+                return t.DocumentRange.GetText(4096) ?? "";
+        }
+        catch { }
+        return null;
+    }
+
+    /// <summary>
+    /// ESCRIBIR TECLEANDO, cuando el patrón no cuaja (promesa 243). Se le da el foco al campo y se mandan
+    /// los caracteres: es lo que dispara los eventos de entrada que el JavaScript del sitio escucha.
+    /// </summary>
+    /// <remarks>
+    /// Cuesta el foco un instante, como el clic físico de la 234, y por eso se devuelve al terminar lo que
+    /// era de la persona. Y se vuelve a comprobar: si tampoco cuajó tecleando, se dice — contestar
+    /// «escribí» sobre un campo vacío es lo que hizo que la voz anunciara un mensaje que no existía.
+    /// </remarks>
+    public bool TeclearEnElCampo(AutomationElement el, string texto, out string error)
+    {
+        error = "";
+        IntPtr focoAntes = GetForegroundWindow();
+        GetCursorPos(out POINT cursorAntes);
+        try
+        {
+            IntPtr win = TopLevelWindow(el);
+            if (win != IntPtr.Zero && win != GetForegroundWindow()) TraerAlFrente(win);
+            el.SetFocus();
+        }
+        catch (Exception e)
+        {
+            error = $"no pude poner el cursor dentro del campo para teclear: {e.Message}";
+            L("    ✗ " + error);
+            return false;
+        }
+        Thread.Sleep(120);
+        foreach (char c in texto ?? "")
+        {
+            if (c == '\r') continue;
+            if (c == '\n') { Tecla(0x0D); continue; }
+            Unicode(c, false); Unicode(c, true);
+            Thread.Sleep(4);
+        }
+        Thread.Sleep(150);
+
+        string? ahora = LoQueDiceElCampo(el);
+        bool ok = ComoSeEscribe.Cuajo(texto ?? "", ahora);
+        L(ok ? $"    → tecleado en el campo: {(texto ?? "").Length} carácter(es), y el campo lo tiene"
+             : $"    ✗ ni tecleando entró el texto (el campo dice «{(ahora ?? "").Trim()}»)");
+        if (!ok) error = "el campo no se quedó con el texto ni escribiéndolo ni tecleándolo";
+
+        if (ComoSePulsa.HayQueDevolver(ComoSePulsa.Gesto.Fisico, focoAntes, GetForegroundWindow()))
+        {
+            TraerAlFrente(focoAntes);
+            SetCursorPos(cursorAntes.X, cursorAntes.Y);
+        }
+        return ok;
     }
 
     private static bool Select(AutomationElement el, string value, out string error)
