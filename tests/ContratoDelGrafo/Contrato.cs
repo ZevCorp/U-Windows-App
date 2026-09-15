@@ -623,6 +623,11 @@ internal static class Contrato
         // único que aquí no es dibujo: si los iconos ocupan el centro, el notch se va a la esquina,
         // y si ocupan la esquina, el notch se va al centro.
         Prueba("241. el notch se apoya en la barra de tareas y ocupa la mitad que ella deja libre: con los iconos al centro (el Windows 11 de fábrica) se va a la esquina, y con los iconos a la izquierda se va al centro — y nunca sale del cristal", ElNotchSeApoyaDondeLaBarraDejaSitio);
+
+        // EL NOTCH ES BLANCO Y NEGRO (spec 023, 2026-09-15). Heredaba la paleta de la barra grande —azul en
+        // curso, verde hecho, rojo fallo— y son cuatro tonos en una pieza de dos centímetros que vive encima
+        // de todo. El dueño, antes de mandársela a un usuario: «mucho negro y blanco, sin más colores».
+        Prueba("242. el notch es blanco y negro: todo color que pinta tiene sus tres canales iguales, el estado se distingue por forma y por luz —el fallo es un aro y no un punto rojo, lo omitido baja de luz, lo que está en curso late— y la paleta de la barra grande, que sí tiene color, no entra aquí", ElNotchEsBlancoYNegro);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -9213,6 +9218,53 @@ internal static class Contrato
         var largo = (TimeSpan)cuanto.Invoke(null, new object[] { 3000.0 })!;
         Debe(corto.TotalMilliseconds >= 120 && corto <= largo, $"un salto corto dura poco pero se ve ({corto.TotalMilliseconds:0} ms)");
         Debe(largo.TotalMilliseconds <= 450, $"y cruzar la pantalla entera no pasa de 450 ms: rápido es parte de lo pedido ({largo.TotalMilliseconds:0} ms)");
+    }
+
+    private static void ElNotchEsBlancoYNegro()
+    {
+        // QUITAR EL COLOR SE DESHACE SOLO: el que anada un estado dentro de tres semanas vera que los
+        // estados se distinguen por tono y seguira el patron. Por eso la regla se juzga, no se comenta.
+        var t = Capacidad("U.WindowsClient.Ui.PaletaDelNotch");
+        var estados = Capacidad("U.WindowsClient.Ui.EstadoDelNotch");
+        var delPunto = t?.GetMethod("DelPunto");
+        var esAro = t?.GetMethod("EsAro");
+        var late = t?.GetMethod("Late");
+        Debe(t != null && estados != null && delPunto != null && esAro != null && late != null,
+            "todavia no existen «Ui.PaletaDelNotch» ni «Ui.EstadoDelNotch» (spec 023, promesa 242). "
+            + "La promesa esta escrita y en rojo, que es donde tiene que estar");
+        if (t == null || estados == null || delPunto == null || esAro == null || late == null) return;
+
+        var pintados = t.GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(uint))
+            .Select(f => (f.Name, Valor: (uint)f.GetRawConstantValue()!))
+            .ToList();
+        Debe(pintados.Count >= 6, $"la paleta del notch nombra lo que pinta, y son varias cosas ({pintados.Count})");
+        foreach (var (nombre, v) in pintados)
+        {
+            byte r = (byte)(v >> 16), g = (byte)(v >> 8), b = (byte)v;
+            Debe(r == g && g == b,
+                $"«{nombre}» tiene tono ({r:X2}{g:X2}{b:X2}): en el notch, rojo, verde y azul valen lo mismo o es un color");
+        }
+
+        object E(string n) => Enum.Parse(estados, n);
+        uint Punto(string n) => (uint)delPunto.Invoke(null, new[] { E(n) })!;
+        bool Aro(string n) => (bool)esAro.Invoke(null, new[] { E(n) })!;
+        bool Latir(string n) => (bool)late.Invoke(null, new[] { E(n) })!;
+
+        Debe(Aro("Fallo") && !Aro("Hecho") && !Aro("EnCurso") && !Aro("Omitido"),
+            "el fallo se dice con la FORMA —un aro hueco— y no con el rojo: sin eso, quitar el color se lleva por delante la informacion");
+        Debe(Latir("EnCurso") && !Latir("Hecho") && !Latir("Fallo") && !Latir("Omitido"),
+            "lo que esta en curso late, y lo que termino se queda quieto: es la otra mitad de lo que decia el tono");
+        Debe(Punto("Omitido") != Punto("Hecho"),
+            "lo omitido baja de luz respecto a lo hecho: dos grises distintos siguen siendo dos estados distintos");
+        Debe((byte)(Punto("Hecho") >> 24) > (byte)(Punto("Omitido") >> 24),
+            "y baja, no sube: lo que no se hizo pesa menos en la vista que lo que si");
+
+        // Y LA PALETA DE LA BARRA GRANDE SIGUE TENIENDO COLOR: son dos sitios distintos y solo uno se limpio.
+        var barra = Capacidad("U.WindowsClient.Ui.UiPalette");
+        var vivo = barra?.GetField("Vivo", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+        Debe(vivo != null && Prop(vivo, "R")!.ToString() != Prop(vivo, "G")!.ToString(),
+            "la barra grande conserva su verde: el dueno pidio limpiar el notch, no el resto");
     }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>

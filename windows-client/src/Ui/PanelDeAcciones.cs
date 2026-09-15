@@ -106,7 +106,16 @@ public sealed class PanelDeAcciones : Window
         return s;
     }
 
-    public enum Estado { EnCurso, Hecho, Fallo, Omitido }
+    /// <summary>Un pincel congelado desde un ARGB de <see cref="PaletaDelNotch"/>.</summary>
+    private static SolidColorBrush Pincel(uint argb)
+    {
+        var b = new SolidColorBrush(ColorDe(argb));
+        b.Freeze();
+        return b;
+    }
+
+    private static Color ColorDe(uint argb) => Color.FromArgb(
+        (byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
 
     private readonly StackPanel _filas = new();
 
@@ -145,14 +154,14 @@ public sealed class PanelDeAcciones : Window
 
         _notch = new Border
         {
-            // Negro con una gota de azul, no negro plano: el negro absoluto sobre un escritorio
-            // claro se lee como un agujero. Y casi opaco, para que lo de debajo se intuya sin que
-            // el texto tenga que competir contra ello.
-            Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x0A, 0x0C, 0x12)),
-            // EL FILETE ES UN HILO DE LUZ, no un contorno. A 0x24 de alfa no se ve como una línea:
-            // se ve como el canto de algo iluminado desde arriba, que es lo que despega la pieza del
-            // fondo sin dibujarle un marco de ventana alrededor.
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF)),
+            // NEGRO DE VERDAD (spec 023). Era negro con una gota de azul para que sobre un escritorio
+            // claro no se leyera como un agujero; lo que lo despega del fondo es el filete de luz de
+            // abajo, no esa gota, así que el negro puro se sostiene igual y es lo que se pidió.
+            Background = Pincel(PaletaDelNotch.Fondo),
+            // EL FILETE ES UN HILO DE LUZ, no un contorno. A ese alfa no se ve como una línea: se ve
+            // como el canto de algo iluminado desde arriba, que es lo que despega la pieza del fondo
+            // sin dibujarle un marco de ventana alrededor.
+            BorderBrush = Pincel(PaletaDelNotch.Filete),
             BorderThickness = new Thickness(1),
             Padding = new Thickness(16, 11, 18, 11),
             Child = _filas,
@@ -197,7 +206,7 @@ public sealed class PanelDeAcciones : Window
     }
 
     /// <summary>
-    /// Empieza una acción: se pinta YA, en azul de trabajo, antes de que se sepa cómo va a acabar.
+    /// Empieza una acción: se pinta YA, latiendo, antes de que se sepa cómo va a acabar.
     /// Ese instante es el que da la sensación de tiempo real; esperar al resultado para contar algo
     /// es justo lo que hacía que pareciera colgada.
     /// </summary>
@@ -205,14 +214,14 @@ public sealed class PanelDeAcciones : Window
     {
         // Si la anterior nunca se resolvió, no se borra: se marca omitida. Una acción sin desenlace
         // que desaparece en silencio es la que hace que el recuento mienta.
-        if (_enCurso != null) Resolver(Estado.Omitido, "sin respuesta");
+        if (_enCurso != null) Resolver(EstadoDelNotch.Omitido, "sin respuesta");
 
-        _enCurso = Fila.DePunto(UiPalette.Trabajando, texto, latiendo: true);
+        _enCurso = Fila.DePunto(EstadoDelNotch.EnCurso, texto);
         Anadir(_enCurso);
     }
 
     /// <summary>Cierra la que estaba en curso con su desenlace.</summary>
-    public void Termina(string texto, bool ok) => Resolver(ok ? Estado.Hecho : Estado.Fallo, texto);
+    public void Termina(string texto, bool ok) => Resolver(ok ? EstadoDelNotch.Hecho : EstadoDelNotch.Fallo, texto);
 
     /// <summary>La frase que se está diciendo ahora mismo: la tuya y la de Ü, cada una en su fila.</summary>
     private Fila? _loQueDigo, _loQueDiceU;
@@ -240,7 +249,7 @@ public sealed class PanelDeAcciones : Window
 
         if (fila == null)
         {
-            fila = Fila.DeVoz(esDeU ? "Ü" : "Tú", esDeU ? UiPalette.Vivo : UiPalette.Trabajando, texto);
+            fila = Fila.DeVoz(esDeU ? "Ü" : "Tú", esDeU ? PaletaDelNotch.Suya : PaletaDelNotch.Tuya, texto);
             if (esDeU) _loQueDiceU = fila; else _loQueDigo = fila;
             Anadir(fila);
             return;
@@ -257,22 +266,14 @@ public sealed class PanelDeAcciones : Window
         _loQueDiceU = null;
     }
 
-    private void Resolver(Estado estado, string texto)
+    private void Resolver(EstadoDelNotch estado, string texto)
     {
         if (_enCurso == null) { Empieza(texto); }
         var fila = _enCurso;
         if (fila == null) return;
         _enCurso = null;
 
-        var color = estado switch
-        {
-            Estado.Hecho => UiPalette.Vivo,
-            Estado.Fallo => UiPalette.Fallo,
-            Estado.Omitido => UiPalette.Inactivo,
-            _ => UiPalette.Trabajando,
-        };
-
-        fila.Resolver(color, texto, apagada: estado == Estado.Omitido);
+        fila.Resolver(estado, texto);
         Toca();
     }
 
@@ -415,7 +416,7 @@ public sealed class PanelDeAcciones : Window
             Texto = new TextBlock
             {
                 Text = texto,
-                Foreground = new SolidColorBrush(Color.FromArgb(0xF0, 0xEA, 0xF2, 0xFF)),
+                Foreground = Pincel(PaletaDelNotch.Tinta),
                 FontFamily = Letra,
                 FontSize = 12.5,
                 MaxWidth = AnchoDelTexto,
@@ -434,25 +435,24 @@ public sealed class PanelDeAcciones : Window
             };
         }
 
-        /// <summary>Una acción de la maquinaria: un punto de color y lo que está haciendo.</summary>
-        public static Fila DePunto(Color color, string texto, bool latiendo)
+        /// <summary>Una acción de la maquinaria: su marca y lo que está haciendo.</summary>
+        public static Fila DePunto(EstadoDelNotch estado, string texto)
         {
             var punto = new Ellipse
             {
                 Width = 7,
                 Height = 7,
-                Fill = new SolidColorBrush(color),
                 VerticalAlignment = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                // El halo del color del propio punto: a 7 px un color plano no se lee, y con el
+                // El halo, blanco y del propio punto: a 7 px una marca plana no se lee, y con el
                 // resplandor el estado se ve de reojo sin tener que enfocar la vista.
                 Effect = new DropShadowEffect
                 {
-                    BlurRadius = 10, ShadowDepth = 0, Opacity = 0.9, Color = color,
+                    BlurRadius = 10, ShadowDepth = 0, Opacity = 0.55, Color = Colors.White,
                 },
             };
             var fila = new Fila(punto, texto, punto);
-            if (latiendo) fila.Latir();
+            fila.Marcar(estado);
             return fila;
         }
 
@@ -463,10 +463,10 @@ public sealed class PanelDeAcciones : Window
         /// la maquinaria eran la misma lista. «Tú» y «Ü» separan las dos voces por lectura, que es
         /// como se separan en un chat.
         /// </remarks>
-        public static Fila DeVoz(string quien, Color color, string texto) => new(new TextBlock
+        public static Fila DeVoz(string quien, uint tinta, string texto) => new(new TextBlock
         {
             Text = quien,
-            Foreground = new SolidColorBrush(color),
+            Foreground = Pincel(tinta),
             FontFamily = Letra,
             FontSize = 10.5,
             FontWeight = FontWeights.SemiBold,
@@ -488,6 +488,34 @@ public sealed class PanelDeAcciones : Window
         public void Atenuar(double opacidad) => Caja.BeginAnimation(UIElement.OpacityProperty,
             new DoubleAnimation(opacidad, TimeSpan.FromMilliseconds(160)));
 
+        /// <summary>
+        /// LA MARCA DE UN ESTADO, sin tono (promesa 242): un punto lleno, o un ARO hueco cuando falló.
+        /// Lo que antes decía el rojo lo dice ahora la forma, y lo que decía el verde, la luz.
+        /// </summary>
+        private void Marcar(EstadoDelNotch estado)
+        {
+            if (_punto == null) return;
+            _punto.BeginAnimation(UIElement.OpacityProperty, null);
+            var tinta = Pincel(PaletaDelNotch.DelPunto(estado));
+            if (PaletaDelNotch.EsAro(estado))
+            {
+                _punto.Fill = Brushes.Transparent;
+                _punto.Stroke = tinta;
+                _punto.StrokeThickness = 1.6;
+            }
+            else
+            {
+                _punto.Fill = tinta;
+                _punto.Stroke = null;
+            }
+            // El halo acompaña a lo que está vivo; lo resuelto se queda quieto y sin resplandor, que
+            // es la mitad de la diferencia entre «sigo» y «ya está».
+            if (_punto.Effect is DropShadowEffect halo)
+                halo.Opacity = PaletaDelNotch.Late(estado) ? 0.55 : 0.25;
+            _punto.Opacity = estado == EstadoDelNotch.Omitido ? 0.6 : 1;
+            if (PaletaDelNotch.Late(estado)) Latir();
+        }
+
         /// <summary>Mientras la acción está en curso, el punto respira. Es lo que dice «sigo aquí».</summary>
         private void Latir() => _punto?.BeginAnimation(UIElement.OpacityProperty,
             new DoubleAnimation(1, 0.35, TimeSpan.FromMilliseconds(900))
@@ -497,19 +525,12 @@ public sealed class PanelDeAcciones : Window
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
             });
 
-        /// <summary>La acción terminó: el punto deja de latir, se tiñe del desenlace y el texto cambia.</summary>
-        public void Resolver(Color color, string texto, bool apagada)
+        /// <summary>La acción terminó: la marca deja de latir, toma la forma del desenlace y el texto cambia.</summary>
+        public void Resolver(EstadoDelNotch estado, string texto)
         {
-            if (_punto != null)
-            {
-                _punto.BeginAnimation(UIElement.OpacityProperty, null);
-                _punto.Opacity = apagada ? 0.5 : 1;
-                _punto.Fill = new SolidColorBrush(color);
-                if (_punto.Effect is DropShadowEffect halo) halo.Color = color;
-            }
+            Marcar(estado);
             Texto.Text = texto;
-            Texto.Foreground = new SolidColorBrush(
-                Color.FromArgb(apagada ? (byte)0x80 : (byte)0xF0, 0xEA, 0xF2, 0xFF));
+            Texto.Foreground = Pincel(PaletaDelNotch.DeLaTinta(estado));
         }
     }
 }
