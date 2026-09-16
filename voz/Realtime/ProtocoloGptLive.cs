@@ -77,7 +77,11 @@ public sealed class ProtocoloGptLive : IProtocolo
     /// manda. Volver a sí exige medir antes una forma de mandar fotos que quepa SIEMPRE, no la primera vez.
     /// Promesa 49.
     /// </remarks>
-    public bool Mira => false;
+    /// <summary>
+    /// SÍ MIRA, desde la spec 027. Lo que no cabe es la imagen metida dentro del mensaje; por
+    /// referencia entra, y está medido contra el servidor real.
+    /// </summary>
+    public bool Mira => true;
     public bool SabeVolver => false;
 
     /// <summary>
@@ -205,6 +209,26 @@ public sealed class ProtocoloGptLive : IProtocolo
         type = "input_image",
         image_url = "data:image/jpeg;base64," + Convert.ToBase64String(jpeg),
     });
+
+    /// <summary>
+    /// LA FOTO POR REFERENCIA (promesa 54, spec 027): entra el identificador, no la imagen.
+    /// </summary>
+    /// <remarks>
+    /// Aquí estaba la ceguera. El buzón admite «128 items and 32768 UTF-8 bytes» para la sesión entera
+    /// y una captura pesa 118.000 codificada, así que la forma de arriba no cabía NUNCA: ni la primera.
+    /// El campo se llama image_url y acepta una referencia, y eso cambia el problema entero — medido
+    /// contra el servidor el 2026-09-16, con tres imágenes seguidas en la misma sesión descritas
+    /// correctamente («un cachorro negro sobre un suelo de madera», «un pug envuelto en una manta»,
+    /// «un paisaje montañoso con un río») y una cuarta por file_id.
+    ///
+    /// Se usa el identificador de la API de archivos y no una URL pública porque así la captura va SOLO
+    /// a OpenAI, que es donde ya iba, sin publicarla en ninguna dirección abierta de internet.
+    /// </remarks>
+    public string FotogramaPorReferencia(string idDelArchivo) => string.IsNullOrWhiteSpace(idDelArchivo)
+        ? ""
+        : MensajeDelUsuario(new { type = "input_image", file_id = idDelArchivo });
+
+    public bool VePorReferencia => true;
 
     /// <summary>
     /// Una frase escrita. NO pide turno: sin un response.create detrás el servidor la acepta y no

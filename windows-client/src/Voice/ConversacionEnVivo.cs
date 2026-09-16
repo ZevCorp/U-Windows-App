@@ -1321,6 +1321,30 @@ public sealed class ConversacionEnVivo : IDisposable
         if (!Viva || _ws?.State != WebSocketState.Open || jpeg.Length == 0) return;
         try
         {
+            // POR REFERENCIA CUANDO EL PROTOCOLO SABE (promesas 54 y 250, spec 027): la foto se sube
+            // aparte y en la sesión entra solo su identificador. Incrustada no cabía NINGUNA —118.000
+            // bytes en un buzón de 32.768— y por eso Ü era ciega. La copia se borra en cuanto se miró:
+            // lo que se queda es la foto local, no la de OpenAI.
+            if (_protocolo.VePorReferencia)
+            {
+                var mirada = MiradaSubida.Real(Clave, m => LogBus.Log("voz-viva", m));
+                try
+                {
+                    string id = await mirada.SubirAsync(jpeg);
+                    if (id.Length == 0)
+                    {
+                        LogBus.Log("voz-viva", "no pude subir la foto; no mando nada antes que mandar algo roto");
+                        return;
+                    }
+                    string porRef = _protocolo.FotogramaPorReferencia(id);
+                    if (porRef.Length > 0) await EnviarAsync(porRef, ct);
+                    // Se le da un momento al servidor para descargarla antes de retirarla.
+                    await Task.Delay(TimeSpan.FromSeconds(8), ct);
+                }
+                finally { await mirada.SoltarAsync(); }
+                return;
+            }
+
             string msg = _protocolo.Fotograma(jpeg);
             if (msg.Length > 0) await EnviarAsync(msg, ct);
         }
