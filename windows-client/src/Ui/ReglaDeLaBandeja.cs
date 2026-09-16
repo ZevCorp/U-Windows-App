@@ -5,9 +5,6 @@ namespace U.WindowsClient.Ui;
 /// <summary>Por qué lado de la pantalla está la barra de tareas.</summary>
 public enum LadoDeLaBandeja { Abajo, Arriba, Izquierda, Derecha }
 
-/// <summary>Dónde amontona Windows los iconos de la barra de tareas.</summary>
-public enum IconosDeLaBandeja { ALaIzquierda, AlCentro }
-
 /// <summary>
 /// DÓNDE SE PONE EL NOTCH PARA QUE NO TAPE A NADIE.
 /// </summary>
@@ -38,9 +35,6 @@ public static class ReglaDeLaBandeja
     /// es, algo que flota justo encima. Es el mismo margen que Apple deja bajo la isla dinámica.
     /// </summary>
     public const double Aire = 8;
-
-    /// <summary>Lo que se separa de la esquina cuando le toca ir a la esquina.</summary>
-    public const double MargenDeEsquina = 12;
 
     /// <summary>
     /// Por dónde está la barra de tareas, deducido del trozo de pantalla que se reserva para ella.
@@ -86,23 +80,24 @@ public static class ReglaDeLaBandeja
     /// no puede acabar con media caja fuera del cristal.
     /// </remarks>
     /// <param name="libre">El área de trabajo: la pantalla menos lo que se reserva la barra.</param>
-    /// <param name="lado">Por dónde está la barra de tareas.</param>
-    /// <param name="iconos">Dónde amontona Windows los iconos.</param>
     /// <param name="notch">Lo que mide el panel ahora mismo.</param>
-    public static Rect Sitio(Rect libre, LadoDeLaBandeja lado, IconosDeLaBandeja iconos, Size notch)
+    /// <remarks>
+    /// ARRIBA Y AL CENTRO (promesa 251, spec 028). Hasta el 2026-09-16 la pieza se apoyaba en la barra
+    /// de tareas y buscaba la mitad que los iconos dejaban libre —la promesa 241, que se retiró con su
+    /// motivo escrito—. El dueño la subió al centro de arriba, y ahí no hay iconos que esquivar: por eso
+    /// se fue con ella el sensor de alineación, en vez de quedarse sin uso.
+    ///
+    /// Se sigue midiendo contra el ÁREA LIBRE y no contra la pantalla, y eso no es un detalle: con la
+    /// barra de tareas puesta arriba, el área libre ya la excluye y la pieza queda justo debajo en vez
+    /// de encima de ella.
+    /// </remarks>
+    public static Rect ArribaAlCentro(Rect libre, Size notch)
     {
-        bool horizontal = lado is LadoDeLaBandeja.Abajo or LadoDeLaBandeja.Arriba;
+        double x = libre.Left + (libre.Width - notch.Width) / 2;
+        double y = libre.Top + Aire;
 
-        double x = horizontal && iconos == IconosDeLaBandeja.AlCentro
-            ? libre.Left + MargenDeEsquina                          // los iconos ocupan el centro
-            : libre.Left + (libre.Width - notch.Width) / 2;         // los iconos ocupan la esquina
-
-        double y = lado == LadoDeLaBandeja.Arriba
-            ? libre.Top + Aire                                      // cuelga de la barra
-            : libre.Bottom - notch.Height - Aire;                   // se apoya en ella
-
-        // Dentro del cristal, siempre. Math.Max por delante de Math.Min para que un notch más grande
-        // que el hueco se quede pegado al borde de arriba/izquierda en vez de salirse por los dos.
+        // Dentro del cristal, siempre. Math.Max por delante de Math.Min para que una pieza más grande
+        // que el hueco se quede pegada al borde de arriba/izquierda en vez de salirse por los dos.
         x = Math.Max(libre.Left, Math.Min(x, libre.Right - notch.Width));
         y = Math.Max(libre.Top, Math.Min(y, libre.Bottom - notch.Height));
         return new Rect(x, y, notch.Width, notch.Height);

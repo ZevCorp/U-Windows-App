@@ -1,5 +1,4 @@
 using System.Windows;
-using Microsoft.Win32;
 
 namespace U.WindowsClient.Ui;
 
@@ -22,53 +21,20 @@ public static class LaBarraDeTareas
 {
     private static readonly TimeSpan Caducidad = TimeSpan.FromSeconds(4);
     private static DateTime _visto = DateTime.MinValue;
-    private static (Rect Libre, LadoDeLaBandeja Lado, IconosDeLaBandeja Iconos) _ultimo;
+    private static (Rect Libre, LadoDeLaBandeja Lado) _ultimo;
 
-    /// <summary>El área libre, por dónde está la barra y dónde tiene los iconos.</summary>
-    public static (Rect Libre, LadoDeLaBandeja Lado, IconosDeLaBandeja Iconos) Mirar()
+    /// <summary>
+    /// El área libre y por dónde está la barra. Ya NO dice dónde amontona los iconos: con el notch
+    /// arriba al centro (spec 028) no hay iconos que esquivar, y la promesa 241 que lo pedía se retiró.
+    /// </summary>
+    public static (Rect Libre, LadoDeLaBandeja Lado) Mirar()
     {
         if (DateTime.UtcNow - _visto < Caducidad) return _ultimo;
 
         var libre = SystemParameters.WorkArea;
         var pantalla = new Rect(0, 0, SystemParameters.PrimaryScreenWidth, SystemParameters.PrimaryScreenHeight);
-        _ultimo = (libre, ReglaDeLaBandeja.Lado(pantalla, libre), DondeEstanLosIconos());
+        _ultimo = (libre, ReglaDeLaBandeja.Lado(pantalla, libre));
         _visto = DateTime.UtcNow;
         return _ultimo;
-    }
-
-    /// <summary>La primera build de Windows 11. Debajo de ella, el sistema es un 10.</summary>
-    private const int PrimeraDelOnce = 22000;
-
-    /// <summary>
-    /// Iconos al centro o a la izquierda, según el ajuste «Alineación de la barra de tareas».
-    /// </summary>
-    /// <remarks>
-    /// <c>TaskbarAl</c> lo escribe Windows 11 al TOCAR el ajuste: 0 = izquierda, 1 = centro. Mientras
-    /// nadie lo haya tocado, EL VALOR NO EXISTE — y ahí está la trampa, porque «no existe» significa
-    /// cosas opuestas según el sistema: en un 11 de fábrica significa CENTRO, y en un 10 significa
-    /// izquierda, que es el único sitio donde el 10 los pone.
-    ///
-    /// Se comprobó en la máquina del dueño (2026-09-14): Windows 11, iconos centrados a la vista, y
-    /// <c>TaskbarAl</c> vacío. Dar por hecho «izquierda» cuando falta el valor habría mandado el
-    /// notch al centro en la configuración MÁS común que existe — justo encima del racimo de iconos
-    /// que esto se escribió para esquivar. Un fallo que solo aparece en la instalación de fábrica es
-    /// el que se lleva por delante a todos los usuarios nuevos y a ninguno de los que probamos.
-    ///
-    /// Si la lectura revienta, se contesta lo que diga la versión: peor que acertar, mejor que
-    /// inventar — y el coste de errar es que el notch se ponga en el otro hueco, que se sigue viendo.
-    /// </remarks>
-    private static IconosDeLaBandeja DondeEstanLosIconos()
-    {
-        var porDefecto = Environment.OSVersion.Version.Build >= PrimeraDelOnce
-            ? IconosDeLaBandeja.AlCentro        // Windows 11 de fábrica
-            : IconosDeLaBandeja.ALaIzquierda;   // Windows 10, que no tiene otra
-        try
-        {
-            using var k = Registry.CurrentUser.OpenSubKey(
-                @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced");
-            if (k?.GetValue("TaskbarAl") is not int al) return porDefecto;
-            return al == 1 ? IconosDeLaBandeja.AlCentro : IconosDeLaBandeja.ALaIzquierda;
-        }
-        catch { return porDefecto; }
     }
 }

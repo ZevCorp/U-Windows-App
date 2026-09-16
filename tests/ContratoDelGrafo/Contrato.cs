@@ -622,7 +622,9 @@ internal static class Contrato
         // al centro y esa esquina es justo la ocupada. La promesa juzga el INTERCAMBIO, que es lo
         // único que aquí no es dibujo: si los iconos ocupan el centro, el notch se va a la esquina,
         // y si ocupan la esquina, el notch se va al centro.
-        Prueba("241. el notch se apoya en la barra de tareas y ocupa la mitad que ella deja libre: con los iconos al centro (el Windows 11 de fábrica) se va a la esquina, y con los iconos a la izquierda se va al centro — y nunca sale del cristal", ElNotchSeApoyaDondeLaBarraDejaSitio);
+        // LA 241 SE RETIRÓ el 2026-09-16 (spec 028): prometía que el notch se apoya en la barra de tareas y
+        // ocupa la mitad que los iconos dejan libre. Estaba cumplida y bien medida, pero el dueño subió la
+        // pieza ARRIBA AL CENTRO y ahí no hay iconos que esquivar. Su número no se recicla; la nueva es la 250.
 
         // EL NOTCH ES BLANCO Y NEGRO (spec 023, 2026-09-15). Heredaba la paleta de la barra grande —azul en
         // curso, verde hecho, rojo fallo— y son cuatro tonos en una pieza de dos centímetros que vive encima
@@ -651,11 +653,17 @@ internal static class Contrato
         // EL NOTCH RESPIRABA (2026-09-16). La ventana se medía por su contenido: una frase larga la
         // ensanchaba, una línea nueva la estiraba y una que caducaba la encogía. Con diez líneas medía 252
         // de alto. Una pieza que cambia de tamaño encima del trabajo de alguien se lee como un sobresalto.
-        Prueba("249. el notch mide siempre lo mismo: su alto no depende de cuántas líneas tenga —ni cero, ni una, ni diez— ni su ancho de lo largas que sean; enseña tres líneas, cada una ocupa lo mismo, y la pieza entera cabe en 80 de alto", ElNotchMideSiempreLoMismo);
+        Prueba("249. el notch mide siempre lo mismo: su alto no depende de lo que tenga dentro —ni vacío, ni con una línea, ni con diez— ni su ancho de lo largas que sean las frases, y la pieza entera cabe en 80 de alto", ElNotchMideSiempreLoMismo);
 
         // MIRAR NO PUEDE DEJAR RASTRO EN OPENAI (spec 027, 2026-09-16, pedido del dueño en mayúsculas: «QUE NO
         // DUREN MUCHO TIEMPO EN OPENAI»). La foto se sube para que Luna la vea y se borra en cuanto termina.
         Prueba("250. mirar deja la copia en OpenAI el tiempo justo: se sube, se mira y se borra, y el borrado ocurre también cuando la mirada falla; soltar dos veces no borra dos veces, y sin nada subido no se borra nada", MirarNoDejaRastroEnOpenAI);
+
+        // EL NOTCH ESTABA EN UNA ESQUINA (spec 028, 2026-09-16). El dueño lo quiere arriba al centro, con la
+        // macro tarea de título y debajo lo que pasa —el paso de Ü, o su propia voz mientras habla—.
+        Prueba("251. el notch vive arriba y al centro del área libre: se centra en el hueco que deja el sistema, cuelga a una distancia fija del borde de arriba, y nunca se sale del cristal aunque no quepa", ElNotchViveArribaAlCentro);
+        Prueba("252. el notch dice dos cosas y siempre las mismas dos: arriba LA TAREA —lo último que pidió la persona, que se queda hasta que pida otra— y abajo LO QUE PASA AHORA, que es el paso de Ü, su desenlace, o lo que la persona está diciendo mientras lo dice", ElNotchDiceLaTareaYLoQuePasa);
+        Prueba("253. cada estado tiene su icono y todos salen del mismo juego: la misma caja, el mismo grosor de trazo y la forma dibujada como vector; no hay dos estados con el mismo dibujo, y ninguno es una letra ni un emoji", CadaEstadoTieneSuIcono);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -665,106 +673,6 @@ internal static class Contrato
 
     // ── Las promesas ─────────────────────────────────────────────────────────
 
-    private static void ElNotchSeApoyaDondeLaBarraDejaSitio()
-    {
-        var t = Capacidad("U.WindowsClient.Ui.ReglaDeLaBandeja");
-        var sitio = t?.GetMethod("Sitio");
-        var lado = t?.GetMethod("Lado");
-        var aire = t?.GetField("Aire");
-        Debe(t != null && sitio != null && lado != null && aire != null,
-            "todavía no existe «ReglaDeLaBandeja». La promesa está escrita y en rojo, que es donde "
-            + "tiene que estar");
-        if (t == null || sitio == null || lado == null || aire == null) return;
-
-        var tLado = Capacidad("U.WindowsClient.Ui.LadoDeLaBandeja")!;
-        var tIconos = Capacidad("U.WindowsClient.Ui.IconosDeLaBandeja")!;
-        object L(string n) => Enum.Parse(tLado, n);
-        object I(string n) => Enum.Parse(tIconos, n);
-
-        System.Windows.Rect Sitio(System.Windows.Rect libre, string ladoN, string iconosN,
-                                  double ancho, double alto)
-            => (System.Windows.Rect)sitio.Invoke(null, new object[]
-               { libre, L(ladoN), I(iconosN), new System.Windows.Size(ancho, alto) })!;
-
-        // Una pantalla de 1920×1080 con la barra de tareas abajo, de 48 px. El notch mide 360×90.
-        var pantalla = new System.Windows.Rect(0, 0, 1920, 1080);
-        var libre = new System.Windows.Rect(0, 0, 1920, 1032);
-        double hueco = (double)aire.GetValue(null)!;
-
-        // 1. POR DÓNDE ESTÁ LA BARRA, deducido del trozo que se reserva.
-        Debe(lado.Invoke(null, new object[] { pantalla, libre })!.ToString() == "Abajo",
-            "una barra que se come los 48 px de abajo está ABAJO: si esto se leyera mal, el notch "
-            + "se apoyaría en el borde equivocado de la pantalla");
-        Debe(lado.Invoke(null, new object[]
-            { pantalla, new System.Windows.Rect(0, 48, 1920, 1032) })!.ToString() == "Arriba",
-            "y una que se come los de arriba está arriba");
-        Debe(lado.Invoke(null, new object[] { pantalla, pantalla })!.ToString() == "Abajo",
-            "con la barra oculta automáticamente no se reserva nada y el área de trabajo ES la "
-            + "pantalla: se contesta «abajo», que es donde está casi toda barra y donde el notch "
-            + "queda bien igual — no se puede contestar «no sé» a una pregunta que hay que responder "
-            + "para pintar algo");
-
-        // 2. EL INTERCAMBIO, que es la promesa entera.
-        var alCentro = Sitio(libre, "Abajo", "AlCentro", 360, 90);
-        var aLaIzquierda = Sitio(libre, "Abajo", "ALaIzquierda", 360, 90);
-
-        Debe(alCentro.Left < 40,
-            $"con los iconos AL CENTRO —el Windows 11 de fábrica— el notch se va a la esquina "
-            + $"izquierda, y se fue a x={alCentro.Left}. Es el caso que rompió lo de antes: una "
-            + "posición fija en la esquina acertaba en el 10 y plantaba el panel encima del racimo "
-            + "de iconos en el 11");
-        Debe(Math.Abs(aLaIzquierda.Left - (1920 - 360) / 2) < 1,
-            $"y con los iconos A LA IZQUIERDA se va al centro, que es la mitad que queda libre; se "
-            + $"fue a x={aLaIzquierda.Left}");
-        Debe(Math.Abs(alCentro.Left - aLaIzquierda.Left) > 400,
-            "las dos posiciones tienen que ser DISTINTAS de verdad: una regla que contestara casi lo "
-            + "mismo en los dos casos pasaría esta promesa sin hacer nada");
-
-        // 3. SE APOYA EN LA BARRA, no flota a media pantalla ni la toca.
-        Debe(Math.Abs(alCentro.Bottom - (libre.Bottom - hueco)) < 0.5,
-            $"el notch se apoya en la barra de tareas con {hueco} px de junta, y su base quedó en "
-            + $"y={alCentro.Bottom} con el área libre acabando en {libre.Bottom}");
-        Debe(hueco > 0,
-            "y NO pegado del todo: sin junta, el notch y la barra se leen como una sola pieza rota "
-            + "—dos negros tocándose sin costura— en vez de como algo que flota encima");
-        var colgando = Sitio(new System.Windows.Rect(0, 48, 1920, 1032), "Arriba", "AlCentro", 360, 90);
-        Debe(Math.Abs(colgando.Top - (48 + hueco)) < 0.5,
-            $"con la barra ARRIBA cuelga de ella en vez de irse al suelo, y se quedó en y={colgando.Top}");
-
-        // 4. NUNCA FUERA DEL CRISTAL. Un notch ancho en una pantalla estrecha no puede acabar con
-        //    media caja fuera: es el caso de un portátil pequeño con una frase larga dentro.
-        var estrecha = new System.Windows.Rect(0, 0, 500, 700);
-        var apretado = Sitio(estrecha, "Abajo", "AlCentro", 460, 120);
-        Debe(apretado.Left >= estrecha.Left - 0.5 && apretado.Right <= estrecha.Right + 0.5,
-            $"el notch se quedó en x={apretado.Left}..{apretado.Right} sobre una pantalla de "
-            + $"{estrecha.Width}: lo que no se ve no informa de nada");
-        Debe(apretado.Top >= estrecha.Top - 0.5 && apretado.Bottom <= estrecha.Bottom + 0.5,
-            "y lo mismo por arriba y por abajo");
-
-        // 5. CON LA BARRA EN VERTICAL no hay esquina libre que valga —los iconos bajan por el costado
-        //    entero— y el sitio honesto es el centro de abajo.
-        var conBarraLateral = new System.Windows.Rect(72, 0, 1848, 1080);
-        var lateral = Sitio(conBarraLateral, "Izquierda", "AlCentro", 360, 90);
-        Debe(Math.Abs(lateral.Left - (72 + (1848 - 360) / 2)) < 1,
-            $"con la barra de tareas en vertical el notch se centra en lo que queda de pantalla, y "
-            + $"se fue a x={lateral.Left}: irse a «la esquina» ahí es irse encima de la propia barra");
-    }
-
-
-
-    /// <remarks>
-    /// EL HUECO QUE DEJABA A SAP FUERA DEL TERRENO (T1 del plan terreno-profundo, 2026-08-25):
-    /// `MapaVivo` observaba SIEMPRE con el lector UIA, y dentro de una ventana SAP el sistema
-    /// operativo ve un Pane opaco — el grafo aprendía 12 elementos del marco y ninguno de la
-    /// sesión. SAP tiene su propia puerta (la Scripting API) y su propio vocabulario de identidad
-    /// (`sap:wnd[0]/…`), ya construidos y probados en este repo. Lo que faltaba era el DESPACHO:
-    /// que el sentido mire por la puerta del mundo en el que está.
-    ///
-    /// La traducción al núcleo también se juzga aquí, porque es donde se decide qué es PUERTA:
-    /// lo interactivo entra con su Id envuelto como selector `sap:`; el decorado (GuiLabel) no
-    /// entra — un rótulo no se pulsa—; y el campo de comandos (GuiOkCodeField) entra CON NOMBRE
-    /// aunque SAP no le ponga etiqueta, porque es la puerta a cualquier transacción.
-    /// </remarks>
     private static void CadaMundoSeObservaPorSuPuerta()
     {
         // El despacho: la ubicación decide el sentido. Con fakes, que es como se juzga sin pantalla.
@@ -9488,26 +9396,146 @@ internal static class Contrato
 
     private static void ElNotchMideSiempreLoMismo()
     {
+        // LA PIEZA RESPIRABA: la ventana se medía por su contenido, así que una frase larga la ensanchaba y
+        // una línea nueva la estiraba. Con diez líneas llegaba a 252 de alto. «Que el tamaño no cambie y no
+        // tenga un tamaño muy grande en un momento y pequeño en otro» (el dueño, 2026-09-16).
+        //
+        // Se escribió con tres líneas (spec 027) y se ajustó a dos líneas y un icono (spec 028) cuando el
+        // dueño cambió el diseño: lo que se promete —que el tamaño no dependa del contenido— es lo mismo.
         var t = Capacidad("U.WindowsClient.Ui.MedidaDelNotch");
-        var alto = t?.GetMethod("Alto");
+        var alto = t?.GetMethod("AltoDe");
         Debe(t != null && alto != null,
             "todavía no existe «Ui.MedidaDelNotch» (spec 027, promesa 249). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
         if (t == null || alto == null) return;
-        double A(int filas) => (double)alto.Invoke(null, new object[] { filas })!;
+        double A(int lineas) => (double)alto.Invoke(null, new object[] { lineas })!;
         double C(string campo) => (double)t.GetField(campo, BindingFlags.Public | BindingFlags.Static)!.GetRawConstantValue()!;
 
         Debe(A(0) == A(1) && A(1) == A(3) && A(3) == A(10),
-            $"el alto NO depende de cuántas líneas haya ({A(0)}, {A(1)}, {A(3)}, {A(10)}): es lo que hace que la "
+            $"el alto NO depende de lo que tenga dentro ({A(0)}, {A(1)}, {A(3)}, {A(10)}): es lo que hace que la "
             + "pieza no cambie de tamaño mientras trabajas, y era la queja del dueño");
-        Debe(A(3) <= 80, $"y es compacto de verdad: {A(3)} de alto, cuando con diez líneas llegaba a 252");
-        Debe(C("AltoDeFila") <= 20, $"cada línea ocupa poco ({C("AltoDeFila")}) y siempre lo mismo: el ritmo vertical es constante");
-        Debe(C("FilasALaVista") == 3,
-            "tres líneas: las justas para leer una secuencia —lo que pediste, lo que pasa, lo que salió—; diez era un registro");
+        Debe(A(1) <= 80, $"y es compacto de verdad: {A(1)} de alto, cuando con diez líneas llegaba a 252");
         Debe(C("Ancho") > 0 && C("Ancho") <= 360,
-            $"y el ancho es fijo ({C("Ancho")}): hoy lo decidía la frase más larga, que es la misma respiración por el otro eje");
-        Debe(Math.Abs(A(3) - (C("FilasALaVista") * C("AltoDeFila") + 2 * C("AireVertical"))) < 0.01,
-            "el alto sale de sus partes y no de un número suelto: tres franjas iguales más el aire de la placa");
+            $"y el ancho es fijo ({C("Ancho")}): antes lo decidía la frase más larga, que es la misma respiración por el otro eje");
+        Debe(C("LetraDeLaTarea") > C("LetraDelPaso"),
+            "la tarea pesa más que el paso: dos pesos distintos son lo que hace que la pieza se lea de un vistazo");
+        Debe(C("CajaDelIcono") < A(1) / 2,
+            $"y el icono cabe holgado en el alto ({C("CajaDelIcono")} sobre {A(1)}): un icono que roza los bordes se lee apretado");
+    }
+
+    private static void ElNotchViveArribaAlCentro()
+    {
+        // El dueño lo subió arriba al centro el 2026-09-16. La 241 —apoyado en la barra, en la mitad que
+        // dejan los iconos— se retiró por eso, con su número sin reciclar.
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDeLaBandeja");
+        var arriba = t?.GetMethod("ArribaAlCentro");
+        Debe(t != null && arriba != null,
+            "todavía no existe «ReglaDeLaBandeja.ArribaAlCentro» (spec 028, promesa 251). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (arriba == null) return;
+        System.Windows.Rect Sitio(System.Windows.Rect libre, System.Windows.Size notch)
+            => (System.Windows.Rect)arriba.Invoke(null, new object[] { libre, notch })!;
+
+        var pantalla = new System.Windows.Rect(0, 0, 1536, 816);   // el área libre con la barra abajo
+        var pieza = new System.Windows.Size(340, 62);
+        var sitio = Sitio(pantalla, pieza);
+        Debe(Math.Abs(sitio.Left - (1536 - 340) / 2) < 0.01,
+            $"centrado en el hueco libre ({sitio.Left}), que es lo que se pidió");
+        Debe(sitio.Top > 0 && sitio.Top < 40, $"colgando del borde de arriba, a una distancia corta y fija ({sitio.Top})");
+
+        // Con la barra ARRIBA, el área libre ya la excluye y la pieza cuelga por debajo de ella.
+        var conBarraArriba = new System.Windows.Rect(0, 48, 1536, 768);
+        Debe(Sitio(conBarraArriba, pieza).Top >= 48,
+            "si la barra de tareas está arriba, la pieza queda por debajo: el área libre ya la excluye");
+
+        // Y nunca se sale del cristal, ni siquiera si no cabe.
+        var estrecha = new System.Windows.Rect(0, 0, 200, 300);
+        var apretado = Sitio(estrecha, pieza);
+        Debe(apretado.Left >= estrecha.Left && apretado.Top >= estrecha.Top,
+            $"una pieza más ancha que el hueco se queda pegada al borde y no se sale ({apretado})");
+    }
+
+    private static void ElNotchDiceLaTareaYLoQuePasa()
+    {
+        // «Si le pedí crear un anuncio, que ahí esté crear un anuncio hasta que se complete o hasta que
+        // cambie la tarea. Y donde dice paso en ejecución, lo que el modelo va haciendo, y mi texto cuando
+        // yo hable» (el dueño, 2026-09-16). La tarea es, literalmente, lo que se pidió: no hay que
+        // preguntárselo al modelo, basta con quedarse con lo último que dijo la persona.
+        var t = Capacidad("U.WindowsClient.Ui.LoQueDiceElNotch");
+        Debe(t != null, "todavía no existe «Ui.LoQueDiceElNotch» (spec 028, promesa 252). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null) return;
+        var d = Activator.CreateInstance(t)!;
+        string Tarea() => (string)t.GetProperty("Tarea")!.GetValue(d)!;
+        string Paso() => (string)t.GetProperty("Paso")!.GetValue(d)!;
+        string Estado() => t.GetProperty("Estado")!.GetValue(d)!.ToString()!;
+        void PersonaDice(string x) => t.GetMethod("PersonaDice")!.Invoke(d, new object[] { x });
+        void CierraTurno() => t.GetMethod("CierraTurno")!.Invoke(d, null);
+        void UDice(string x) => t.GetMethod("UDice")!.Invoke(d, new object[] { x });
+        void Empieza(string x) => t.GetMethod("Empieza")!.Invoke(d, new object[] { x });
+        void Termina(string x, bool ok) => t.GetMethod("Termina")!.Invoke(d, new object[] { x, ok });
+
+        Debe(Tarea().Length > 0 && Paso().Length == 0,
+            "recién abierto hay un título y no hay paso: la pieza no nace vacía ni a medias");
+
+        PersonaDice("créame un anuncio para Instagram");
+        Debe(Paso() == "créame un anuncio para Instagram",
+            "mientras la persona habla, su frase va ABAJO y en vivo: es lo que está pasando ahora");
+        Debe(Tarea() != "créame un anuncio para Instagram",
+            "y todavía no es la tarea: lo será cuando termine de decirla");
+
+        CierraTurno();
+        Debe(Tarea() == "créame un anuncio para Instagram",
+            "al cerrar el turno, lo dicho SUBE a ser la tarea. La tarea es literalmente lo que se pidió");
+
+        Empieza("abriendo Chrome");
+        Debe(Paso() == "abriendo Chrome" && Estado() == "EnCurso", "lo que Ü hace va abajo, y el icono dice que está en ello");
+        Debe(Tarea() == "créame un anuncio para Instagram", "y la tarea NO se mueve: se queda hasta que se pida otra");
+
+        Termina("abrí Chrome", ok: true);
+        Debe(Paso() == "abrí Chrome" && Estado() == "Hecho", "el desenlace también va abajo");
+        Termina("no pude pulsar «Publicar»", ok: false);
+        Debe(Estado() == "Fallo", "y si salió mal, el icono lo dice");
+
+        UDice("ya está publicado");
+        Debe(Paso() == "ya está publicado" && Estado() == "Voz", "lo que dice Ü también es lo que pasa ahora");
+        Debe(Tarea() == "créame un anuncio para Instagram", "y sigue sin mover la tarea");
+
+        PersonaDice("ahora mándalo por correo"); CierraTurno();
+        Debe(Tarea() == "ahora mándalo por correo", "otra petición, otra tarea: eso es «hasta que cambie la tarea»");
+
+        string antes = Tarea();
+        PersonaDice("   "); CierraTurno();
+        Debe(Tarea() == antes, "una frase en blanco no cambia la tarea: la transcripción a veces entrega vacío");
+    }
+
+    private static void CadaEstadoTieneSuIcono()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.IconosDelNotch");
+        var de = t?.GetMethod("De");
+        var estados = Capacidad("U.WindowsClient.Ui.EstadoDelNotch");
+        Debe(t != null && de != null && estados != null,
+            "todavía no existe «Ui.IconosDelNotch» (spec 028, promesa 253). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || de == null || estados == null) return;
+
+        var dibujos = new List<string>();
+        foreach (string nombre in Enum.GetNames(estados))
+        {
+            string trazo = (string)de.Invoke(null, new[] { Enum.Parse(estados, nombre) })!;
+            Debe(trazo.Length > 0, $"«{nombre}» tiene icono: un estado sin dibujo deja un hueco en la pieza");
+            Debe(trazo.TrimStart().StartsWith("M", StringComparison.OrdinalIgnoreCase),
+                $"«{nombre}» es un trazo de vector y no una letra ni un emoji ({trazo[..Math.Min(12, trazo.Length)]}…): "
+                + "un emoji trae su propio color y su propia métrica, y se lee como un adorno pegado encima");
+            dibujos.Add(trazo);
+        }
+        Debe(dibujos.Distinct().Count() == dibujos.Count,
+            "no hay dos estados con el mismo dibujo: un icono que se repite es un estado que no se distingue");
+
+        double caja = (double)t.GetField("Caja", BindingFlags.Public | BindingFlags.Static)!.GetRawConstantValue()!;
+        double grosor = (double)t.GetField("Grosor", BindingFlags.Public | BindingFlags.Static)!.GetRawConstantValue()!;
+        Debe(caja == 24, $"todos se dibujan en la misma caja de 24 ({caja}): es lo que hace que pesen igual");
+        Debe(grosor >= 1.2 && grosor <= 2.0, $"y con un solo grosor de trazo monolínea ({grosor})");
     }
 
     private static void MirarNoDejaRastroEnOpenAI()
