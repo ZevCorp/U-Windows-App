@@ -11,6 +11,8 @@ public enum EstadoDelNotch
     Fallo,
     /// <summary>Se quedó sin desenlace: empezó otra encima.</summary>
     Omitido,
+    /// <summary>Alguien está hablando: la persona o Ü (spec 028). No es un paso, es una frase.</summary>
+    Voz,
 }
 
 /// <summary>
@@ -53,6 +55,12 @@ public static class PaletaDelNotch
 
     /// <summary>El texto de una línea que se quedó sin desenlace.</summary>
     public const uint TintaApagada = 0x80FFFFFF;
+
+    /// <summary>
+    /// La segunda línea: lo que pasa ahora. Más tenue que la tarea, para que las dos se lean como una
+    /// jerarquía y no como dos frases sueltas, pero lejos del apagado de lo que ya no cuenta.
+    /// </summary>
+    public const uint TintaSecundaria = 0xC0FFFFFF;
 
     /// <summary>La marca «Ü» cuando habla ella.</summary>
     public const uint Suya = 0xF0FFFFFF;
