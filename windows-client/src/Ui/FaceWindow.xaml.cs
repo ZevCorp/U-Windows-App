@@ -583,8 +583,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             {
                 // SITUARSE ES SITUAR A Ü (promesa 233), y decir si la persona está en otra parte o si
                 // la ventana de trabajo acaba de desaparecer: el modelo decide con eso.
+                // Contestar dónde estás NO acciona nada, así que no paga la lectura de la ventana entera
+                // que necesita la compuerta antes de pulsar (promesa 246, spec 025).
                 var d = _trabajo.Resolver(U.Graph.Surfaces.UiaSurface.VentanaExiste, FocoDeLaPersona);
-                ObservarLaVentanaDeTrabajo();
                 string foco = FocoDeLaPersona();
                 string nota = d.Aviso.Length > 0 ? $"Ojo: {d.Aviso}. "
                     : _trabajo.Hay && foco.Length > 0 && foco != d.Id ? $"Trabajo en «{d.Id}»; la persona está mirando «{foco}». "
@@ -5259,11 +5260,18 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     private string FocoDeLaPersona() => _locator?.DondeEstoy()?.Id ?? "";
 
-    private string DondeTrabajo()
+    /// <summary>
+    /// LO QUE SE ACABA DE MIRAR NO SE VUELVE A MIRAR (promesa 246). Identificar la ventana de trabajo
+    /// en vivo cuesta lo que cueste esa ventana, y esto se pregunta varias veces por segundo: contestar
+    /// «dónde estás» llegó a costar 2.771 ms, más que leer la pantalla entera (2026-09-15).
+    /// </summary>
+    private readonly Navigation.MemoriaCorta<string> _dondeTrabajo = new(400);
+
+    private string DondeTrabajo() => _dondeTrabajo.Pide(() =>
     {
         RefrescarLaVentanaDeTrabajo();
         return _trabajo.Resolver(U.Graph.Surfaces.UiaSurface.VentanaExiste, FocoDeLaPersona).Id;
-    }
+    });
 
     /// <summary>
     /// LA VENTANA DE TRABAJO CAMBIA DE PANTALLA POR DENTRO (spec 020, hallazgo del 2026-09-14 20:26): una
@@ -5298,9 +5306,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// la persona; si Ü trabaja en otra ventana, la compuerta decidiría con lo último que se vio de
     /// ella. Se lee esa ventana con el mismo lector y la misma criba, y se le cuenta al núcleo.
     /// </summary>
+    /// <summary>Cuándo se observó por última vez, para no releer la misma ventana dos veces seguidas.</summary>
+    private long _ultimaObservacion;
+
     private void ObservarLaVentanaDeTrabajo()
     {
         if (_mapaVivo == null || !_trabajo.Hay) return;
+        // MIRAR ES PARA ACTUAR (promesa 246): leer la ventana entera alimenta la compuerta de vida, y eso
+        // hace falta antes de pulsar o recorrer. Repetirlo dentro del mismo gesto solo cuesta tiempo.
+        if (Environment.TickCount64 - _ultimaObservacion < 800) return;
+        _ultimaObservacion = Environment.TickCount64;
         if (_trabajo.Id.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)) return;   // SAP se lee por su API, con o sin foco
         if (_trabajo.Id == FocoDeLaPersona()) return;   // el latido ya la observa
         if (!U.Graph.Surfaces.UiaSurface.VentanaExiste(_trabajo.Hwnd)) return;
@@ -5323,6 +5338,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void SeguirElFoco(string antes)
     {
+        _dondeTrabajo.Olvida();   // acabamos de accionar: lo recordado ya no vale (promesa 246)
         var loc = _locator?.DondeEstoy();
         if (loc == null || loc.Hwnd == IntPtr.Zero || loc.Id == antes || Propio.EsVentana(loc.Hwnd)) return;
         _trabajo.Fijar(loc.Hwnd, loc.Id);

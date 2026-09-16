@@ -634,6 +634,12 @@ internal static class Contrato
         // veces seguidas). Y la voz llegó a decir «ya quedó enviado». Aceptado no es ejecutado, otra vez.
         Prueba("243. escribir se comprueba en el campo: tras escribir por patrón se relee, y si el campo se quedó como estaba —el editor de Instagram, que acepta la orden y no guarda nada— se teclea de verdad y se vuelve a comprobar; lo que no se puede leer no se juzga, y si no cuajó por ninguna vía se dice, en vez de contestar «escribí»", EscribirSeCompruebaEnElCampo);
         Prueba("244. Ü decide en vez de preguntar: sus instrucciones mandan elegir la opción más razonable cuando falta un dato y decir cuál se eligió, dejan preguntar solo cuando elegir mal no se puede deshacer, y prohíben trocear una tarea larga en preguntas", UDecideEnVezDePreguntar);
+
+        // LAS ESPERAS SE CONTABAN EN MILISEGUNDOS FICTICIOS (2026-09-15). Los bucles sumaban 120 por vuelta
+        // y además pagaban el sondeo: con un «dónde estoy» de 2,8 s, una espera de «1,8 s» duraba más de
+        // treinta. Medido: un map_take de 28,8 s para decir «lo conozco aquí pero AHORA no lo veo».
+        Prueba("245. las esperas se acotan con el RELOJ y no contando vueltas: con un sondeo lento, una espera de N milisegundos termina en N y no en N por el número de vueltas — ni al pulsar, ni al comprobar la llegada, ni en la compuerta que espera a que un elemento esté vivo", LasEsperasSeMidenConElReloj);
+        Prueba("246. lo que se acaba de mirar no se vuelve a mirar: una memoria corta con su caducidad devuelve lo recordado sin volver a la fuente mientras no caduque, vuelve a preguntar cuando caduca, y se puede olvidar a mano cuando algo cambió", LoQueSeAcabaDeMirarNoSeVuelveAMirar);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -9326,6 +9332,74 @@ internal static class Contrato
             "y la puerta de al lado se cierra: mientras el texto invite a preguntar por el dato, el modelo va a preferir preguntar");
         Debe(texto.Contains("NO PIDAS PERMISO", StringComparison.Ordinal),
             "lo que ya funcionaba se queda: la regla nueva no sustituye a la vieja, la completa");
+    }
+
+    private static void LasEsperasSeMidenConElReloj()
+    {
+        // EL COMPÁS es la pieza que los cuatro bucles comparten: sabe cuánto llevas esperando DE VERDAD.
+        // Antes cada bucle sumaba 120 por vuelta y además pagaba el sondeo, así que el presupuesto era
+        // ficticio y se inflaba con lo que costara mirar la pantalla.
+        var t = Capacidad("U.WindowsClient.Navigation.Compas");
+        Debe(t != null, "todavía no existe «Navigation.Compas» (spec 025, promesa 245). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null) return;
+
+        long reloj = 0;
+        var compas = Activator.CreateInstance(t, 1200, (Func<long>)(() => reloj))!;
+        var seAcabo = t.GetProperty("SeAcabo")!;
+        var transcurrido = t.GetProperty("Transcurrido")!;
+        bool Acabo() => (bool)seAcabo.GetValue(compas)!;
+        long Llevo() => (long)transcurrido.GetValue(compas)!;
+
+        Debe(!Acabo() && Llevo() == 0, "recién empezado no se ha acabado nada");
+        reloj = 400;  Debe(!Acabo() && Llevo() == 400, "lleva lo que dice el reloj, no las vueltas que haya dado");
+        reloj = 1199; Debe(!Acabo(), "un milisegundo antes del tope, todavía se espera");
+        reloj = 1200; Debe(Acabo(), "y al llegar al tope se acabó: tres sondeos caros agotan un presupuesto de 1200, no diez");
+
+        // Y AHORA LA CLASE DE VERDAD, cronometrada: un «dónde estoy» de 400 ms como el de la máquina del
+        // dueño, donde este bucle tardaba treinta segundos en contestar.
+        const int LENTO = 400, TOPE = 1200;
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://app/a", new[] { new Nucleo.Elemento("uia:name=Ir", "Ir", "Button") });
+        string donde = "uia://app/a";
+        var pulsar = new PulsarSegunElNucleo(g,
+            () => { Thread.Sleep(LENTO); return donde; },   // el sondeo caro
+            (sel, et) => true)                              // pulsa bien, pero la pantalla no cambia
+            { EsperaMaximaMs = TOPE };
+        var cronometro = System.Diagnostics.Stopwatch.StartNew();
+        var r = pulsar.Pulsa("uia:name=Ir", "Ir");
+        long tardo = cronometro.ElapsedMilliseconds;
+        Debe(r.SePudo, "el clic se da igual: esto mide el tiempo, no el resultado");
+        Debe(tardo < TOPE + 3 * LENTO,
+            $"esperar {TOPE} ms con un sondeo de {LENTO} ms no puede tardar {tardo} ms: con el presupuesto "
+            + "ficticio eran diez vueltas de 400, y así es como un «1,8 s» acababa siendo medio minuto");
+    }
+
+    private static void LoQueSeAcabaDeMirarNoSeVuelveAMirar()
+    {
+        // Contestar «dónde estás» costaba 2.771 ms —más que leer la pantalla entera, 823— porque cada
+        // pregunta volvía a identificar la ventana de trabajo en vivo. Lo que se acaba de mirar se recuerda
+        // un instante, como ya hace LaBarraDeTareas con su caducidad.
+        var t = Capacidad("U.WindowsClient.Navigation.MemoriaCorta`1");
+        Debe(t != null, "todavía no existe «Navigation.MemoriaCorta» (spec 025, promesa 246). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null) return;
+        var cerrado = t.MakeGenericType(typeof(string));
+        long ahora = 0;
+        int llamadas = 0;
+        var mem = Activator.CreateInstance(cerrado, 500, (Func<long>)(() => ahora))!;
+        var pide = cerrado.GetMethod("Pide")!;
+        var olvida = cerrado.GetMethod("Olvida")!;
+        string Pide() => (string)pide.Invoke(mem, new object[] { (Func<string>)(() => { llamadas++; return $"valor{llamadas}"; }) })!;
+
+        Debe(Pide() == "valor1" && llamadas == 1, "la primera vez se va a la fuente");
+        ahora = 200; Pide(); ahora = 400; Pide();
+        Debe(llamadas == 1, $"dentro de la caducidad se contesta de memoria y NO se vuelve a mirar ({llamadas} lecturas)");
+        ahora = 501;
+        Debe(Pide() == "valor2" && llamadas == 2, "pasada la caducidad se vuelve a preguntar: es memoria corta, no un congelado");
+        olvida.Invoke(mem, null);
+        Debe(Pide() == "valor3" && llamadas == 3,
+            "y se puede olvidar a mano: cuando una acción acaba de cambiar la pantalla, lo recordado ya no vale");
     }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
