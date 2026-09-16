@@ -90,7 +90,10 @@ public static class InstanciarSkill
         if (salida.Count > 0 && !string.IsNullOrWhiteSpace(skill.DondeTermina))
             salida[^1] = salida[^1] with { Llegada = skill.DondeTermina.Trim() };
 
-        return salida;
+        // Y CADA PASO DICE QUE ES DE UNA TAREA (promesa 256): el ejecutor no deja que un paso así pulse
+        // una fila de una lista. Las skills en disco de antes de la spec 030 traen la fila del paciente
+        // de la demo como un paso más; esto es lo que las para ahí en vez de elegir por parecido.
+        return salida.Select(p => p with { DeUnaTarea = true }).ToList();
     }
 
     /// <summary>

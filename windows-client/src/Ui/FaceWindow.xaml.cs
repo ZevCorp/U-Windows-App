@@ -696,10 +696,17 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     _mapaVivo!.Nucleo,
                     DondeTrabajo,
                     (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
-                    superficie => Uia.AppAligner.PonerDelante(superficie)).Hasta(destino);
+                    superficie => Uia.AppAligner.PonerDelante(superficie))
+                {
+                    // UNA RUTA NO PASA POR UNA FILA (promesa 256): ir-a no elige paciente aunque la arista
+                    // aprendida salga de una. Lo que es una fila lo sabe SAP, no el núcleo.
+                    EsUnRegistro = EsUnaFilaDeUnaLista,
+                }.Hasta(destino);
                 SeguirElFoco(antes);
                 return cuenta;
             };
+            // LA PANTALLA DONDE ACTÚA EL BATCH, para que una skill decida si puede empezar ahí (promesa 255).
+            mcp.Map.DondeTrabaja = DondeTrabajo;
 
             // PULSAR, sobre el núcleo. Es la versión mínima de ir —ir no es más que preguntar el
             // siguiente paso y pulsarlo, en bucle— así que va antes y lo demás se apoya en esto.
@@ -828,6 +835,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 AccionableAunSinVerse = sel => sel.StartsWith("sap:", StringComparison.OrdinalIgnoreCase)
                     && (sel.Contains("#node=", StringComparison.Ordinal)
                         || sel.Contains("#row=", StringComparison.Ordinal)),
+                // Y UNA FILA DE UNA LISTA ES UN REGISTRO (promesa 256): un paso de skill no la pulsa jamás.
+                EsUnRegistro = EsUnaFilaDeUnaLista,
             };
             // EL RASTRO (promesa 76): cada relato de batch queda en el anillo que sirve el 8792
             // para la pestaña «Terreno» del visor.
@@ -933,6 +942,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 (sel, texto) => accionar("input", sel, texto),
                 (sel, opcion) => accionar("select", sel, opcion));
             _servidorNucleo.Rastro = rastroDeBatches;
+            _servidorNucleo.EsUnRegistro = EsUnaFilaDeUnaLista;   // el «ir» del visor tampoco elige paciente (256)
             _servidorNucleo.Arrancar();
 
             // El consumo de la voz en vivo se reporta a Graph al cerrar la sesión.
@@ -3070,10 +3080,24 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _mapaDeMano.GuardarSkill = (nombre, descripcion) =>
         {
             var s = Piloto.SkillDeLoVerificado.Empaquetar(leccion, registro.Veredictos, nombre, descripcion);
-            if (s == null) return "no hay pasos verificados con identidad: no se guarda ninguna skill.";
+            if (s == null)
+            {
+                // TRES CAUSAS, TRES FRASES (aprendizaje nº2): la demo elige una fila y no abre nada
+                // después; abre el registro pero nada de lo de después aterrizó; o no aterrizó nada
+                // con identidad. La primera frase no puede tapar a las otras dos.
+                var abre = Piloto.SkillDeLoVerificado.ElRegistroQueAbreLaPersona(leccion, registro.Veredictos);
+                return abre is { Pantalla.Length: 0 } ? abre.Motivo
+                     : abre != null ? "la tarea empieza con el registro de la persona abierto, y después de abrirlo no "
+                                      + "aterrizó ningún paso con identidad: no se guarda ninguna skill."
+                     : "no hay pasos verificados con identidad: no se guarda ninguna skill.";
+            }
             string f = s.GuardarComoElUnicoDeSuLeccion(Navigation.SkillEnsenada.CarpetaPorDefecto);   // promesa 228
             return $"skill «{s.Nombre}» guardada con {s.Pasos.Count} paso(s) verificado(s)"
-                + (s.Comprobada ? ", COMPROBADA" : ", pendiente: no todos los eventos aterrizaron") + $" → {f}";
+                + (s.Comprobada ? ", COMPROBADA" : ", pendiente: no todos los eventos aterrizaron")
+                + (s.EntradaDeLaPersona.Length > 0
+                    ? $", empieza con el registro de la persona abierto{(s.SeAbreCon.Length > 0 ? $" (se abre con «{s.SeAbreCon}»)" : "")}: la fila no es un paso"
+                    : "")
+                + $" → {f}";
         };
 
         // LA VOZ PRESTADA (promesa 192): mientras el piloto comprueba, la conversación en vivo no
@@ -5270,6 +5294,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private string FocoDeLaPersona() => _locator?.DondeEstoy()?.Id ?? "";
 
     /// <summary>
+    /// ¿Este selector es una FILA DE UNA LISTA —un registro, alguien—? Promesa 256 (spec 030). Es el
+    /// delegado que reciben el batch y los dos ir-a: ellos no saben de SAP, y la marca de una fila vive
+    /// en un solo sitio (<see cref="U.Graph.Surfaces.SapSelector.RowMark"/>), no copiada en cada uno.
+    /// </summary>
+    private static bool EsUnaFilaDeUnaLista(string selector) =>
+        U.Graph.Surfaces.SapSelector.RowKeyOf(selector ?? "") != null;
+
+    /// <summary>
     /// LO QUE SE ACABA DE MIRAR NO SE VUELVE A MIRAR (promesa 246). Identificar la ventana de trabajo
     /// en vivo cuesta lo que cueste esa ventana, y esto se pregunta varias veces por segundo: contestar
     /// «dónde estás» llegó a costar 2.771 ms, más que leer la pantalla entera (2026-09-15).
@@ -5443,6 +5475,16 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
 
         if (_mapaDeMano?.RecorrerPorElNucleo == null) return "todavía no sé recorrer en batch.";
+        // SOLO DESDE EL REGISTRO ABIERTO (promesa 255): la MISMA regla que map_skill_run, sobre la pantalla
+        // donde actúa el batch. Fuera de SU hilo de interfaz: saber dónde trabaja Ü puede costar lo que
+        // cueste leer esa ventana.
+        string aqui = await Task.Run(() => DondeTrabajo());
+        var desdeAqui = skill!.PuedeEmpezarEn(aqui);
+        if (!desdeAqui.Puede)
+        {
+            LogBus.Log("aprendizajes", $"«{skill.Nombre}» no se muestra: empieza en «{skill.EntradaDeLaPersona}» y SAP está en «{aqui}»");
+            return desdeAqui.Motivo;
+        }
         // SIN DATOS: mostrar es enseñar el camino, no rellenar la historia de nadie.
         var pasos = Navigation.InstanciarSkill.Pasos(skill!, new Dictionary<string, string>());
         if (pasos.Count == 0)

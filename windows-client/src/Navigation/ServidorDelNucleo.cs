@@ -58,6 +58,16 @@ public sealed class ServidorDelNucleo : IDisposable
     /// <summary>El rastro de los batches (promesa 76), puesto por quien los corre. Nulo = sin pestaña.</summary>
     public RastroDeBatches? Rastro { get; set; }
 
+    /// <summary>
+    /// Qué es una fila de una lista, para que el «ir» del visor tampoco elija paciente (promesa 256). Va al
+    /// mismo <see cref="PasoDelNucleo"/> que usa la voz: una pregunta, un sitio.
+    /// </summary>
+    public Func<string, bool>? EsUnRegistro
+    {
+        get => _paso.EsUnRegistro;
+        set => _paso.EsUnRegistro = value;
+    }
+
 public bool Arrancar()
     {
         try

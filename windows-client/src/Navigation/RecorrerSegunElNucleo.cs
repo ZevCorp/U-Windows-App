@@ -50,6 +50,16 @@ public sealed class RecorrerSegunElNucleo
         /// null si puede; si no, el motivo, y el paso no se pulsa (promesa 204). La trae el paso porque
         /// solo aquí se sabe qué botón es, se haya pedido como se haya pedido.</summary>
         public Func<string, string?>? AntesDePulsar { get; init; }
+
+        /// <summary>
+        /// El paso sale de una TAREA ENSEÑADA (<see cref="InstanciarSkill.Pasos"/>), no de alguien que lo
+        /// nombra ahora. Un paso así no pulsa jamás una fila de una lista (promesa 256, spec 030).
+        /// </summary>
+        /// <remarks>
+        /// VIAJA EN EL PASO porque el batch es uno para todos —map_take, map_batch, map_type, la skill— y
+        /// solo el paso sabe de quién viene. Fuera del constructor, por la misma razón que <see cref="Cual"/>.
+        /// </remarks>
+        public bool DeUnaTarea { get; init; }
     }
 
     /// <summary>Qué pasó: cuántos se hicieron, de cuántos, dónde quedamos, y el relato honesto.</summary>
@@ -113,6 +123,20 @@ public sealed class RecorrerSegunElNucleo
     /// </summary>
     public Func<string, bool>? AccionableAunSinVerse { get; init; }
 
+    /// <summary>
+    /// Qué selectores son un REGISTRO —una fila de una lista, alguien—. Promesa 256 (spec 030). El batch
+    /// no sabe de mundos: lo dice quien cablea, como <see cref="AccionableAunSinVerse"/>.
+    /// </summary>
+    /// <remarks>
+    /// UN REGISTRO NO ES UNA PUERTA QUE SE TOME SOLA. Leído en el código el 2026-09-16: un paso de skill
+    /// grabado sobre la fila del paciente de la demo se resolvía aquí por PARECIDO —la etiqueta viva de
+    /// la fila, «fecha · hora · episodio · nombre», contiene el apellido— y con un homónimo en la lista
+    /// se seleccionaba a otra persona; el paso siguiente, «Triage», abría su historia. Un paso de una
+    /// tarea (<see cref="Paso.DeUnaTarea"/>) que cae en un registro PARA, lo resuelva el peldaño que lo
+    /// resuelva. Pedirlo por su nombre —map_take, la persona— sigue valiendo.
+    /// </remarks>
+    public Func<string, bool>? EsUnRegistro { get; init; }
+
     public Resultado Recorre(IReadOnlyList<Paso> pasos)
     {
         string? pulsado = null;
@@ -173,6 +197,16 @@ public sealed class RecorrerSegunElNucleo
 
             if (aqui.Length == 0)
                 return Parcial(i, pasos.Count, "no sé dónde estoy, y sin eso no pulso nada.", conVivos: false);
+
+            // UNA TAREA NO ELIGE DE QUIÉN ES LA HISTORIA (promesa 256): si lo que resolvió —por selector, por
+            // nombre, por parecido o por destino, uno o varios— es una fila de una lista, un paso de una
+            // tarea para aquí. Antes de numerar homónimos: una lista numerada de filas sería pedir que
+            // alguien elija paciente, y enseñar sus nombres. Sin vivos en la cuenta, por lo mismo.
+            if (paso.DeUnaTarea && EsUnRegistro != null
+                && ((elegido != null && EsUnRegistro(elegido.Que.Selector)) || homonimos.Any(h => EsUnRegistro(h.Que.Selector))))
+                return Parcial(i, pasos.Count,
+                    "ese paso de la tarea cae sobre una fila de una lista, y la fila —de quién es la historia— la "
+                    + "elige la persona, no la tarea: abre tú el registro y vuelve a pedírmelo.", conVivos: false);
 
             // VARIAS PUERTAS RECLAMAN LO PEDIDO: no se adivina — la misma regla que abrir (promesa
             // 40). Pero se NUMERAN, con su tipo y a dónde lleva cada una, y un paso que trae cuál

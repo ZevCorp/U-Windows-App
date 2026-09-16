@@ -38,7 +38,9 @@ public static class MensajeDelEncargo
         }
         var lineas = listas.Select(c =>
             $"· «{c.Nombre}»{(c.Description.Length > 0 ? " — " + c.Description : "")}"
-            + (c.Huecos.Count > 0 ? $"\n    datos que necesita: {string.Join(", ", c.Huecos)}" : "\n    no necesita datos"));
+            + (c.Huecos.Count > 0 ? $"\n    datos que necesita: {string.Join(", ", c.Huecos)}" : "\n    no necesita datos")
+            // EMPIEZA CON EL REGISTRO ABIERTO (promesa 254): la misma frase que map_skills.
+            + (c.EmpiezaEnElRegistro ? "\n   " + Mcp.SurfaceMapTools.EmpiezaEnElRegistro(c) : ""));
         bloques.Add(new Bloque("text",
             $"TAREAS que me enseñaron y están comprobadas ({listas.Count}). Elige UNA por tu criterio —qué hace y qué "
             + "datos pide, contra lo que la nota trae— y córrela con map_skill_run(nombre, datos), donde `datos` usa "

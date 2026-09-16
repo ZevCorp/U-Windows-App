@@ -24,6 +24,15 @@ public static class SkillDeLoVerificado
         if (leccion == null || string.IsNullOrWhiteSpace(nombre)) return null;
         var ok = (veredictos ?? Array.Empty<VeredictoDeEvento>()).Where(v => v.Aterrizo).ToDictionary(v => v.N, v => v);
 
+        // LA SKILL NO ELIGE AL PACIENTE (promesa 254, spec 030). Si la demo eligió una fila de una
+        // lista, la skill empieza DESPUÉS del paso que abrió ese registro: ni la fila, ni ese paso, ni
+        // nada anterior entra. Con la fila dentro, el batch la reencontraba por parecido y un homónimo
+        // recibía la nota; sin ella pero con «Triage», el botón abría lo que SAP tuviera marcado. Y
+        // si nada navega tras la fila, no hay desde dónde empezar sin elegir: no hay skill.
+        var registro = ElRegistroQueAbreLaPersona(leccion, veredictos);
+        if (registro is { Pantalla.Length: 0 }) return null;
+        int corte = registro?.Corte ?? 0;
+
         // LA LLEGADA VIAJA SOLO CON LOS QUE NAVEGAN (promesa 229, 2026-09-11): para un campo
         // tecleado, lo «real» del veredicto es el VALOR leído («75», «normal»), no una pantalla, y
         // el batch exige la llegada al escribir: el ✓ habría parado en el primer campo.
@@ -31,6 +40,7 @@ public static class SkillDeLoVerificado
         var pasos = new List<PasoEnsenado>();
         foreach (var e in leccion.Eventos)
         {
+            if (e.N <= corte) continue;
             if (!ok.TryGetValue(e.N, out var v)) continue;
             // LA IDENTIDAD ES LA PUERTA POR SU NOMBRE: es lo que map_take y el batch entienden. El selector
             // crudo es el respaldo. Segunda prueba real (2026-09-07): un evento aterrizó con puerta y sin
@@ -54,7 +64,58 @@ public static class SkillDeLoVerificado
         var skill = SkillEnsenada.Empaquetar(nombre.Trim(), (descripcion ?? "").Trim(), leccion.Empezo, pasos, dondeTermina);
         // Y RECUERDA DE QUÉ LECCIÓN SALIÓ (promesa 198): es lo que le permite al panel enseñar
         // la pantalla de cada paso, que vive en los cuadros de esa demostración y en ningún otro sitio.
-        return skill == null ? null : skill with { Comprobada = completa, DeLaLeccion = leccion.Id ?? "" };
+        // Y DICE DÓNDE EMPIEZA (254): la pantalla del registro abierto y la puerta que lo abrió, que es
+        // lo que la cuenta le pedirá abrir a la persona si SAP no está ahí (255).
+        return skill == null ? null : skill with
+        {
+            Comprobada = completa,
+            DeLaLeccion = leccion.Id ?? "",
+            EntradaDeLaPersona = registro?.Pantalla ?? "",
+            SeAbreCon = registro?.SeAbreCon ?? "",
+        };
+    }
+
+    /// <summary>El registro que abre la persona, cuando la lección eligió una fila de una lista.</summary>
+    /// <param name="Corte">El evento que abrió el registro: la skill empieza con lo que va DESPUÉS.</param>
+    /// <param name="Pantalla">A dónde llevó abrirlo. Vacía si nada navegó tras la fila.</param>
+    /// <param name="SeAbreCon">La puerta que lo abrió, por su nombre («Triage»); vacío si no lo tenía.</param>
+    /// <param name="Motivo">Vacío si hay pantalla; si no, por qué no hay desde dónde empezar.</param>
+    public sealed record ElRegistro(int Corte, string Pantalla, string SeAbreCon, string Motivo);
+
+    /// <summary>
+    /// ¿ELIGIÓ LA DEMO DE QUIÉN ES LA HISTORIA? Promesa 254 (spec 030). Puro. Null si la lección no
+    /// eligió ninguna fila de una lista.
+    /// </summary>
+    /// <remarks>
+    /// UNA FILA SE RECONOCE POR SU SELECTOR (<c>#row=</c>, <see cref="U.Graph.Surfaces.SapSelector.RowMark"/>),
+    /// no por su etiqueta: la etiqueta es el nombre de la persona. Las filas de ÁRBOL (<c>#node=</c>) no
+    /// cuentan: son ramas y vistas, navegación, no registros.
+    ///
+    /// SI ELIGIÓ VARIAS, MANDA LA ÚLTIMA: ninguna fila puede quedar entre los pasos, y un paso de skill
+    /// que cayera en otra la pararía igual (256).
+    ///
+    /// EL REGISTRO LO ABRE EL PRIMER PASO QUE NAVEGA TRAS LA FILA —en el triage, el botón «Triage», que
+    /// actúa sobre la fila seleccionada—, y su llegada es donde empieza la skill: la REAL si aterrizó al
+    /// comprobar, que es la que se acaba de ver funcionar (176), y si no, la grabada.
+    /// </remarks>
+    public static ElRegistro? ElRegistroQueAbreLaPersona(Leccion leccion, IReadOnlyList<VeredictoDeEvento>? veredictos)
+    {
+        if (leccion?.Eventos == null) return null;
+        var filas = leccion.Eventos.Where(e => U.Graph.Surfaces.SapSelector.RowKeyOf(e.Selector ?? "") != null).ToList();
+        if (filas.Count == 0) return null;
+        int ultimaFila = filas.Max(e => e.N);
+
+        var abre = RegistroDeLaComprobacion.EventosQueNavegan(leccion).FirstOrDefault(e => e.N > ultimaFila);
+        if (abre == null)
+            return new ElRegistro(int.MaxValue, "", "",
+                "la demostración elige una fila de una lista y después no abre nada: no hay desde dónde empezar "
+                + "sin elegir al paciente, así que no guardo esta tarea. Enséñala abriendo el registro y trabajando en él.");
+
+        var real = (veredictos ?? Array.Empty<VeredictoDeEvento>()).FirstOrDefault(v => v.N == abre.N && v.Aterrizo);
+        string pantalla = real != null && !string.IsNullOrWhiteSpace(real.Real) ? real.Real.Trim() : (abre.Llegada ?? "").Trim();
+        string puerta = (abre.Etiqueta ?? "").Trim();
+        if (LoQueHaceLaSkill.EsSelector(puerta)) puerta = "";   // un selector no se le dice a nadie (199)
+        return new ElRegistro(abre.N, pantalla, puerta, "");
     }
 
     /// <summary>

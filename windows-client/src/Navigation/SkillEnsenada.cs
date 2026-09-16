@@ -30,6 +30,16 @@ public sealed record SkillAnunciada(string Nombre, string Description, string Ar
     /// Sin esto, quien elige la skill para un encargo sabe qué hace pero no qué pedirle a la nota.
     /// </summary>
     public IReadOnlyList<string> Huecos { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Si la tarea empieza con el registro de la persona YA abierto (promesa 254, spec 030), y con
+    /// qué puerta lo abrió la demo. Quien elige la skill lo lee para no navegar hasta él: llegar al
+    /// registro es elegir paciente, y eso es de la persona.
+    /// </summary>
+    public bool EmpiezaEnElRegistro { get; init; }
+
+    /// <summary>La puerta con la que la demo abrió el registro («Triage»), o vacío.</summary>
+    public string SeAbreCon { get; init; } = "";
 }
 
 /// <summary>
@@ -113,6 +123,56 @@ public sealed record SkillEnsenada(
     /// moverse. Esto es lo que se observa al parar la grabación, y es lo que el último paso exige.
     /// </remarks>
     public string DondeTermina { get; init; } = "";
+
+    /// <summary>
+    /// LA PANTALLA DEL REGISTRO QUE ABRE LA PERSONA, si la tarea empieza ahí. Promesa 254 (spec 030).
+    /// Vacía si la lección no eligió ninguna fila: entonces la skill empieza donde empezó la demo.
+    /// </summary>
+    /// <remarks>
+    /// EL HOMÓNIMO (leído en el código, 2026-09-16). La skill comprobada guardaba la fila del paciente
+    /// de la demo como un paso más, por su etiqueta, y el batch la reencontraba por PARECIDO: la
+    /// etiqueta viva de una fila —«fecha · hora · episodio · nombre»— CONTIENE el apellido. Con otra
+    /// persona del mismo apellido en la lista, «Triage» abría SU historia y la nota se escribía ahí,
+    /// con la cuenta diciendo que salió bien. Decidido con el dueño: el médico tiene abierto el triage
+    /// de SU paciente, la skill empieza ahí y nunca elige paciente.
+    ///
+    /// NO ES <see cref="DondeEmpieza"/>, y no se reutiliza: esa es dónde empezó la DEMO, y la leen
+    /// quien encarga la comprobación y quien cuenta los recuerdos, que necesitan la demo entera. Y va
+    /// como propiedad `init` por lo mismo que <see cref="Huecos"/>: las promesas 102 y 106 construyen
+    /// esta skill por reflexión con cuatro argumentos.
+    /// </remarks>
+    public string EntradaDeLaPersona { get; init; } = "";
+
+    /// <summary>
+    /// Con qué puerta abrió la demo ese registro («Triage»). Es lo que la cuenta le dice a la persona
+    /// que abra, sin nombrar a nadie y sin un selector. Vacío si la puerta no tenía nombre legible.
+    /// </summary>
+    public string SeAbreCon { get; init; } = "";
+
+    /// <summary>
+    /// ¿Se puede empezar esta skill en <paramref name="aqui"/>? Promesa 255 (spec 030). Pura, y la
+    /// ÚNICA regla: la usan los dos sitios que corren skills —map_skill_run y «Mostrar»—.
+    /// </summary>
+    /// <remarks>
+    /// UNA SKILL QUE EMPIEZA CON EL REGISTRO ABIERTO SOLO CORRE DESDE AHÍ. Si SAP no está en esa
+    /// pantalla no se da ni un paso, ni se navega hasta ella: el camino hasta un registro pasa por
+    /// elegir a la persona, y eso no es de Ü. La comparación es la de toda la casa,
+    /// <see cref="Superficies.MismaPantalla"/> (226), así que el registro cogido a medio cambiar vale.
+    ///
+    /// Y EL «NO» DICE QUÉ ABRIR, como el de <see cref="PuedeCorrer"/>: una compuerta muda se aprende
+    /// a saltar.
+    /// </remarks>
+    public Veredicto PuedeEmpezarEn(string aqui)
+    {
+        string entrada = (EntradaDeLaPersona ?? "").Trim();
+        if (entrada.Length == 0) return new(true, "");
+        if (Superficies.MismaPantalla(entrada, aqui ?? "")) return new(true, "");
+        string conQue = string.IsNullOrWhiteSpace(SeAbreCon) ? "" : $" —en la demostración se abrió con «{SeAbreCon.Trim()}»—";
+        string donde = string.IsNullOrWhiteSpace(aqui) ? "no sé en qué pantalla está SAP" : $"SAP está en «{aqui.Trim()}»";
+        return new(false,
+            $"«{Nombre}» empieza con el registro de tu paciente ya abierto, y {donde}: no he dado ningún paso. "
+            + $"Abre tú el registro{conQue} y vuelve a pedírmelo; al paciente no lo elijo yo.");
+    }
 
     /// <summary>La misma skill, con la comprobación hecha. No cambia nada más.</summary>
     public SkillEnsenada ConLaComprobacionHecha() => this with { Comprobada = true };
@@ -357,6 +417,8 @@ public sealed record SkillEnsenada(
             if (s != null) lista.Add(new(s.Nombre, s.Description, f, s.Comprobada)
             {
                 Huecos = (s.Huecos ?? Array.Empty<Hueco>()).Select(h => h.Significado).Where(x => x.Length > 0).Distinct().ToList(),
+                EmpiezaEnElRegistro = !string.IsNullOrWhiteSpace(s.EntradaDeLaPersona),
+                SeAbreCon = (s.SeAbreCon ?? "").Trim(),
             });
         }
         return lista;

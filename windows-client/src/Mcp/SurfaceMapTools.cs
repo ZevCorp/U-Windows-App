@@ -833,13 +833,26 @@ public sealed class SurfaceMapTools
         var lineas = catalogo.Select(c =>
             $"· «{c.Nombre}»{(c.Description.Length > 0 ? " — " + c.Description : "")}"
             + (c.Comprobada ? " · lista" : " · PENDIENTE de comprobar, no se puede ejecutar")
-            + (c.Huecos.Count > 0 ? $" · necesita: {string.Join(", ", c.Huecos)}" : " · no necesita datos"));
+            + (c.Huecos.Count > 0 ? $" · necesita: {string.Join(", ", c.Huecos)}" : " · no necesita datos")
+            + EmpiezaEnElRegistro(c));
         var salida = new List<string> { $"tareas que me has enseñado ({catalogo.Count}):" };
         salida.AddRange(lineas);
         salida.Add("Para correr una: map_skill_run con su nombre y `datos` = {\"<dato>\":\"<valor>\"} usando los nombres "
                  + "de «necesita» tal cual. Lo que no pases queda en blanco y se te dice.");
         return string.Join(Environment.NewLine, salida);
     }
+
+    /// <summary>
+    /// Lo que se anuncia de una tarea que empieza con el registro de la persona abierto (promesa 254):
+    /// quien elige no tiene que navegar hasta él, porque llegar al registro es elegir paciente. Lo usan
+    /// map_skills y el mensaje del encargo, para que los dos digan lo mismo.
+    /// </summary>
+    public static string EmpiezaEnElRegistro(Navigation.SkillAnunciada c) =>
+        c is { EmpiezaEnElRegistro: true }
+            ? " · empieza con el registro de la persona YA abierto"
+              + (c.SeAbreCon.Length > 0 ? $" (se abre con «{c.SeAbreCon}»)" : "")
+              + ": no navegues hasta él; al paciente lo elige la persona, y si no está abierto la tarea no da ningún paso y dice qué abrir"
+            : "";
 
     /// <summary>
     /// «map_skill_run»: reproducir una tarea enseñada. Promesas 122, 123, 126, 127, 196 y 197.
@@ -875,6 +888,16 @@ public sealed class SurfaceMapTools
         if (skill == null) return $"«{anunciada.Nombre}» está en disco pero no se deja leer: {anunciada.Archivo}";
         var veredicto = skill.PuedeCorrer();
         if (!veredicto.Puede) return veredicto.Motivo;
+        // SOLO DESDE EL REGISTRO ABIERTO (promesa 255, spec 030), antes de traducir un solo paso: si la
+        // tarea empieza con el registro de la persona y SAP no está ahí, no se da ninguno ni se navega
+        // hasta él. Se mira la pantalla donde ACTÚA el batch, no la que mira la persona.
+        string aqui = DondeTrabaja?.Invoke() ?? _where()?.Id ?? "";
+        var desdeAqui = skill.PuedeEmpezarEn(aqui);
+        if (!desdeAqui.Puede)
+        {
+            LogBus.Log("skill", $"«{skill.Nombre}» no corre: empieza en «{skill.EntradaDeLaPersona}» y SAP está en «{aqui}»");
+            return desdeAqui.Motivo;
+        }
         var datos = LeerDatos(datosJson);
         var pasos = Navigation.InstanciarSkill.Pasos(skill, datos);
         if (pasos.Count == 0)
@@ -1546,6 +1569,17 @@ public sealed class SurfaceMapTools
     /// vale null se contesta como siempre. Ver <see cref="Navigation.AquiSegunElNucleo"/>.
     /// </summary>
     public Func<string>? Situarse { get; set; }
+
+    /// <summary>
+    /// LA PANTALLA DONDE ACTÚA EL BATCH (la ventana de trabajo, spec 020), para decidir si una skill puede
+    /// empezar ahí (promesa 255). Sin cableado, la del localizador.
+    /// </summary>
+    /// <remarks>
+    /// NO LA DEL FOCO DE LA PERSONA: al pulsar ✓ la persona mira la ventana de la consulta, y juzgar con
+    /// otra pantalla que la que el batch va a tocar sería la clase «dos ideas de dónde estoy» que la spec
+    /// 020 vino a separar.
+    /// </remarks>
+    public Func<string>? DondeTrabaja { get; set; }
 
     /// <summary>
     /// LA VENTANA EN LA QUE Ü TRABAJA (spec 020, promesa 233), para juzgar las interrupciones ahí y

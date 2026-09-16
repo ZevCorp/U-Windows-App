@@ -1540,7 +1540,13 @@ public sealed class ConsultaWindow : Window
         {
             Text = decision.Motivo.Length > 0
                 ? decision.Motivo
-                : "Lo hago en SAP mientras miras, narrando cada paso. No grabo nada: me detengo antes.",
+                // EMPIEZA CON EL REGISTRO ABIERTO (spec 030): decirlo ANTES de pulsar ahorra el «no he dado
+                // ningún paso» de después. Al paciente lo elige la persona (255).
+                : !string.IsNullOrWhiteSpace(skill.EntradaDeLaPersona)
+                    ? "Abre antes el registro de tu paciente"
+                      + (!string.IsNullOrWhiteSpace(skill.SeAbreCon) ? $" («{skill.SeAbreCon.Trim()}»)" : "")
+                      + ": empiezo ahí, narrando cada paso. No grabo nada: me detengo antes."
+                    : "Lo hago en SAP mientras miras, narrando cada paso. No grabo nada: me detengo antes.",
             Foreground = Estudio.TintaTenue, FontSize = 11.5, LineHeight = 17, TextAlignment = TextAlignment.Center,
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(10, 9, 10, 20),
         });

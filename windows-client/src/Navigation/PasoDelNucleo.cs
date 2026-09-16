@@ -49,6 +49,19 @@ public sealed class PasoDelNucleo
     public readonly record struct Resultado(bool Ok, bool Llegado, string Paso, string Selector,
                                             string Porque, bool YaEstaba = false);
 
+    /// <summary>
+    /// Qué selectores son un REGISTRO —una fila de una lista, alguien—. Promesa 256 (spec 030). Lo dice
+    /// quien sabe de SAP; el núcleo no sabe qué es una fila, y no tiene por qué.
+    /// </summary>
+    /// <remarks>
+    /// UNA RUTA NO ELIGE PACIENTE. El grafo aprende aristas ejecutando, y el grabador de SAP puede atribuir
+    /// a la fila seleccionada el cambio de pantalla que dio el botón de al lado (promesa 189): queda una
+    /// arista «lista –fila→ formulario». <see cref="Nucleo.Grafo.ComoLlego"/> no distingue esa puerta de
+    /// cualquier otra, así que ir al formulario pulsaba LA FILA APRENDIDA, que era la del paciente de la
+    /// demo. Si el siguiente paso es un registro, se para y se dice.
+    /// </remarks>
+    public Func<string, bool>? EsUnRegistro { get; set; }
+
     /// <summary>Un paso hacia el destino.</summary>
     public Resultado Hacia(string destino)
     {
@@ -143,6 +156,12 @@ public sealed class PasoDelNucleo
         }
 
         var paso = camino.Paso;
+        // UN REGISTRO NO ES UNA PUERTA DE PASO (promesa 256): ni aunque la ruta aprendida pase por él. Sin
+        // nombrar la fila: su etiqueta es el nombre de alguien.
+        if (EsUnRegistro?.Invoke(paso.Que.Selector) == true)
+            return new(false, false, "", "",
+                "el camino que conozco pasa por una fila de una lista, y la fila —de quién es la historia— la "
+                + "elige la persona, no una ruta: ábrela tú y sigo desde ahí");
         if (!_pulsar(paso.Que.Selector, paso.Que.Etiqueta))
             return new(false, false, paso.Que.Etiqueta, paso.Que.Selector,
                 $"el mapeador no consiguió pulsar «{paso.Que.Etiqueta}»");
