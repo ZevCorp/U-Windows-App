@@ -292,7 +292,10 @@ public sealed class RecorrerSegunElNucleo
         do
         {
             donde = _donde() ?? "";
-            if (Superficies.MismaPantalla(paso.Llegada, donde)) return true;   // promesa 203
+            // La pantalla cogida a medio cambiar es la misma pantalla (promesa 226): comparar con
+            // Equals dejó una comprobación entera en «17 de 19» el 2026-09-11. La espera la lleva
+            // el Compas (promesa 245), no un Sleep de esta función.
+            if (Superficies.MismaPantalla(paso.Llegada, donde)) return true;
         }
         while (compasLlegada.Respira(120));
 
