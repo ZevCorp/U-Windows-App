@@ -556,6 +556,22 @@ public sealed class MapaVivo : IDisposable
     /// de la MISMA pantalla, que no es Text, se llama igual. Un texto suelto —un dato, un rótulo
     /// sin dueño— se queda, porque ése sí es algo que hay en la pantalla.
     /// </summary>
+    /// <summary>
+    /// OBSERVAR UNA VENTANA QUE NO ES LA DE DELANTE (spec 020, promesa 233): la ventana de trabajo de
+    /// Ü mientras la persona mira otra. El latido solo observa el foco de la persona, así que sin
+    /// esto la compuerta decía «lo conozco aquí pero AHORA no lo veo» de un botón que estaba a la
+    /// vista en la ventana de trabajo (la Tienda, 2026-09-14). Misma criba y mismo Observar que el
+    /// latido: una sola regla de qué es una puerta.
+    /// </summary>
+    public void ObservarVentana(string ubicacion, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> crudos)
+    {
+        if (string.IsNullOrWhiteSpace(ubicacion) || crudos == null) return;
+        var visibles = SinEtiquetasDeControles(crudos)
+            .Select(v => new Nucleo.Elemento(v.Selector, v.Etiqueta, v.Tipo))
+            .ToList();
+        _grafo.Observar(ubicacion, visibles);
+    }
+
     private static List<(string Selector, string Etiqueta, string Tipo)> SinEtiquetasDeControles(
         IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> crudos)
     {

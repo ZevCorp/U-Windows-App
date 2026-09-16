@@ -71,6 +71,34 @@ public static class Estudio
     public static readonly Brush Borde = Congelado(0xE3, 0xE7, 0xEE);
 
     /// <summary>
+    /// El suelo de la BARRA de Ü: blanco con una gota de azul frío, no blanco puro.
+    /// </summary>
+    /// <remarks>
+    /// ES LA EXCEPCIÓN QUE EL DUEÑO PIDIÓ, y conviene que esté escrita porque contradice de frente
+    /// la doctrina de arriba («prefiero que todo sea muy blanco, la diferenciación se hace a través
+    /// de las sombras»). Lo que cambió no es el gusto: es DÓNDE vive esta superficie. Una ventana
+    /// de la aplicación flota sobre su propio lienzo, que controlamos; la barra flota sobre el
+    /// escritorio de otro —un Word, un Excel, un navegador con fondo blanco— y ahí el blanco puro
+    /// no se despega de nada. La sombra sola no llega cuando lo de debajo es del mismo color.
+    ///
+    /// «LIGERAMENTE más notorio» (2026-09-14), y el adverbio manda: el salto es de tres puntos de
+    /// luminosidad. Lo que hace el trabajo de verdad es <see cref="BordeDeLaBarra"/>; esto solo
+    /// impide que la pieza se funda con un fondo blanco.
+    /// </remarks>
+    public static readonly Brush SuperficieDeLaBarra = Congelado(0xF7, 0xF9, 0xFD);
+
+    /// <summary>
+    /// El filete de la barra: el de <see cref="Borde"/> subido hasta que se vea sobre cualquier cosa.
+    /// </summary>
+    /// <remarks>
+    /// El #E3E7EE de la casa está calibrado para separar dos superficies NUESTRAS, las dos claras y
+    /// las dos conocidas. Sobre lo que hay detrás de una capa flotante —que puede ser blanco, gris o
+    /// una foto— ese filete desaparece y la barra se queda sin contorno: es lo que el dueño está
+    /// viendo cuando dice que no se nota. Este gris azulado sigue siendo un hilo y no un marco.
+    /// </remarks>
+    public static readonly Brush BordeDeLaBarra = Congelado(0xC6, 0xD0, 0xE2);
+
+    /// <summary>
     /// El azul de Miracle sobre superficie clara. Oscurecido para dar 4,6:1 con texto blanco encima.
     /// </summary>
     /// <remarks>

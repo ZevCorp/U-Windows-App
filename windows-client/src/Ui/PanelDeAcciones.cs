@@ -3,31 +3,34 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 
 namespace U.WindowsClient.Ui;
 
 /// <summary>
-/// LA LISTA DE LO QUE VA PASANDO. Una columna flotante abajo a la izquierda donde cada acción
-/// aparece EN CUANTO empieza y se resuelve donde estaba cuando termina.
+/// EL NOTCH: arriba al centro, una pieza de dos líneas que dice EN QUÉ ESTÁ Ü.
 ///
-/// Por qué hacía falta algo nuevo, habiendo tanto pintado ya: lo que existía o se sobrescribía o no
-/// se veía. La burbuja de la carita usa <c>Narrate</c>, que REEMPLAZA, así que solo se ve el último
-/// paso y los anteriores desaparecen; el chip dice «Trabajando…» sin decir en qué; el log lo tiene
-/// todo pero hay que abrirlo y leerlo. Con una tarea de un solo paso da igual, pero en cuanto son
-/// cuatro —«ve a descargas», «no, mejor documentos», «busca el informe»— la persona quiere ver la
-/// secuencia, no el último fotograma.
-///
-/// TRES ESTADOS, NO DOS. Una acción que no se llegó a ejecutar tiene que dejar rastro: contar solo
-/// los éxitos y los fallos fue exactamente lo que hizo que una corrida que se saltó 19 pasos
-/// informara «29 de 30» (aprendizaje nº10 del CLAUDE.md). Aquí se pintan en curso, hecho, falló y
-/// omitido, cada uno con su color de <see cref="UiPalette"/>.
-///
-/// EL TIEMPO SE ENSEÑA. Ya se medía y se tiraba a una línea de log. Puesto al lado de cada acción es
-/// lo que convierte «se quedó pensando» en «esto tardó 2 400 ms y esto otro 40».
-///
-/// Es click-through y sin foco, como el resto de capas: se mira, no se toca.
+/// Arriba, la tarea: lo último que pidió la persona, que se queda hasta que pida otra cosa. Abajo,
+/// lo que está pasando ahora mismo: el paso que Ü da, su desenlace, o lo que la persona está
+/// diciendo mientras lo dice. Y a la izquierda, un icono que dice de qué tipo es esa segunda línea.
 /// </summary>
+/// <remarks>
+/// POR QUÉ DEJÓ DE SER UNA LISTA (spec 028, 2026-09-16). Nació como tres líneas del mismo peso y
+/// servía para ver una secuencia; el dueño pidió otra cosa: «que en el título esté la MACRO TAREA, y
+/// donde dice paso en ejecución, lo que el modelo va haciendo». Una lista contesta «qué ha pasado»;
+/// dos líneas con dos pesos distintos contestan «en qué estás», que es lo que se mira de reojo
+/// mientras trabajas.
+///
+/// Qué va en cada línea lo decide <see cref="LoQueDiceElNotch"/>, que es pura y está bajo contrato
+/// (promesa 252). Aquí solo se pinta.
+///
+/// MIDE SIEMPRE LO MISMO (promesa 249): el alto y el ancho son fijos, así que ni una frase larga la
+/// ensancha ni una línea nueva la estira. Una pieza que cambia de tamaño encima del trabajo de
+/// alguien se lee como un sobresalto.
+/// </remarks>
 public sealed class PanelDeAcciones : Window
 {
     private const int GWL_EXSTYLE = -20;
@@ -35,30 +38,68 @@ public sealed class PanelDeAcciones : Window
     [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
-    /// <summary>Cuántas líneas se conservan a la vista. Suficiente para ver la secuencia de una
-    /// conversación sin convertirse en un log: para eso ya está el log. Sube de 7 a 10 desde que
-    /// aquí también va lo dicho: si la conversación y la maquinaria se reparten las mismas filas,
-    /// dos herramientas seguidas te borran la pregunta que las provocó.</summary>
-    private const int Memoria = 10;
-
     /// <summary>
-    /// Cuánto aguanta en pantalla sin nada nuevo.
-    ///
-    /// Eran 20 s cuando esto solo enseñaba maquinaria —cuando deja de pasar algo, sobra—. Ahora
-    /// también lleva la conversación, y una pausa de veinte segundos pensando qué pedir no es que
-    /// sobre: es parte de hablar. Se sube a 90, que sigue siendo «se va solo» y no «hay que
-    /// cerrarlo».
+    /// Cuánto aguanta en pantalla sin nada nuevo. Noventa segundos: sigue siendo «se va solo» y no
+    /// «hay que cerrarlo», y una pausa pensando qué pedir es parte de hablar.
     /// </summary>
     private static readonly TimeSpan Caducidad = TimeSpan.FromSeconds(90);
 
-    public enum Estado { EnCurso, Hecho, Fallo, Omitido }
+    /// <summary>El radio de las puntas. Sobre 62 de alto es una esquina continua, no una pastilla.</summary>
+    private const double Radio = 20;
 
-    private readonly StackPanel _filas = new();
+    /// <summary>La letra del notch: la de Windows 11, con la de siempre detrás por si no está.</summary>
+    private static readonly FontFamily Letra = new("Segoe UI Variable Text, Segoe UI");
+
+    /// <summary>
+    /// La sombra del notch: NEGRA, y no la azulada del estudio.
+    ///
+    /// La escala del estudio está calibrada para lo elevado SOBRE BLANCO, donde un gris azulado da
+    /// profundidad y el negro puro ensucia. Aquí el suelo es el escritorio de otra persona —puede ser
+    /// un SAP azul claro, un Word blanco o una foto— y lo que separa la pieza no es un tono, es
+    /// oscuridad. Corta (24 y 4) y no larga: una sombra larga bajo una pieza pequeña la hace flotar
+    /// como un cartel; una corta la apoya.
+    /// </summary>
+    private static readonly DropShadowEffect Sombra = Elevacion();
+
+    private static DropShadowEffect Elevacion()
+    {
+        var s = new DropShadowEffect
+        {
+            BlurRadius = 24,
+            ShadowDepth = 4,
+            Direction = 270,
+            Opacity = 0.45,
+            Color = Colors.Black,
+            RenderingBias = RenderingBias.Quality,
+        };
+        s.Freeze();
+        return s;
+    }
+
+    /// <summary>Un pincel congelado desde un ARGB de <see cref="PaletaDelNotch"/>.</summary>
+    private static SolidColorBrush Pincel(uint argb)
+    {
+        var b = new SolidColorBrush(ColorDe(argb));
+        b.Freeze();
+        return b;
+    }
+
+    private static Color ColorDe(uint argb) => Color.FromArgb(
+        (byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
+
+    /// <summary>Qué toca decir en cada línea. La decisión vive aparte y bajo contrato (promesa 252).</summary>
+    private readonly LoQueDiceElNotch _dice = new();
+
+    private readonly Path _icono;
+    private readonly RotateTransform _giro = new();
+    private readonly TextBlock _tarea;
+    private readonly TextBlock _paso;
+    private readonly Border _placa;      // la gemela sin hijos: la única que lleva el Effect
+    private readonly Border _notch;      // la pieza que se ve, con el contenido dentro
+    private readonly ScaleTransform _entrada = new(1, 1);
     private readonly DispatcherTimer _caducar;
     private DateTime _ultimoCambio = DateTime.UtcNow;
-
-    /// <summary>La fila que está en curso, para resolverla en su sitio en vez de añadir otra.</summary>
-    private Border? _enCurso;
+    private EstadoDelNotch _pintado = EstadoDelNotch.Voz;
 
     public PanelDeAcciones()
     {
@@ -74,23 +115,125 @@ public sealed class PanelDeAcciones : Window
         ShowActivated = false;
         Title = "Ü Acciones";
 
-        Content = new Border
+        // LA SOMBRA VA EN UNA PLACA GEMELA SIN HIJOS, no en la pieza que lleva el texto. Un Effect es
+        // un shader: WPF rasteriza a una textura intermedia todo el subárbol que cuelgue de él, y ahí
+        // dentro cada letra pierde el ClearType y sale lavada.
+        _placa = new Border
         {
-            CornerRadius = new CornerRadius(12),
-            Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x10, 0x10, 0x14)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x2A, 0xFF, 0xFF, 0xFF)),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 8, 12, 8),
-            Child = _filas,
+            Background = Brushes.Black,
+            Effect = Sombra,
+            CornerRadius = new CornerRadius(Radio),
+            Width = MedidaDelNotch.Ancho,
+            Height = MedidaDelNotch.Alto,
         };
 
-        SizeChanged += (_, __) => Reposition();
+        _icono = new Path
+        {
+            Stroke = Pincel(PaletaDelNotch.Tinta),
+            StrokeThickness = IconosDelNotch.Grosor,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round,
+            Fill = null,
+            Width = IconosDelNotch.Caja,
+            Height = IconosDelNotch.Caja,
+            RenderTransformOrigin = new Point(0.5, 0.5),
+            RenderTransform = _giro,
+        };
+
+        // El icono se dibuja en su caja de 24 y se escala entera: así todos pesan igual pase lo que
+        // pase con el tamaño de la pieza.
+        var cajaDelIcono = new Viewbox
+        {
+            Width = MedidaDelNotch.CajaDelIcono,
+            Height = MedidaDelNotch.CajaDelIcono,
+            Stretch = Stretch.Uniform,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = _icono,
+        };
+
+        _tarea = new TextBlock
+        {
+            Foreground = Pincel(PaletaDelNotch.Tinta),
+            FontFamily = Letra,
+            FontSize = MedidaDelNotch.LetraDeLaTarea,
+            FontWeight = FontWeights.SemiBold,
+            MaxWidth = MedidaDelNotch.AnchoDelTexto,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Text = _dice.Tarea,
+        };
+
+        _paso = new TextBlock
+        {
+            Foreground = Pincel(PaletaDelNotch.TintaSecundaria),
+            FontFamily = Letra,
+            FontSize = MedidaDelNotch.LetraDelPaso,
+            MaxWidth = MedidaDelNotch.AnchoDelTexto,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(0, 1, 0, 0),
+        };
+
+        var dosLineas = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        dosLineas.Children.Add(_tarea);
+        dosLineas.Children.Add(_paso);
+
+        var rejilla = new Grid();
+        rejilla.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(MedidaDelNotch.CajaDelIcono) });
+        rejilla.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(MedidaDelNotch.AireDelIcono) });
+        rejilla.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(cajaDelIcono, 0);
+        Grid.SetColumn(dosLineas, 2);
+        rejilla.Children.Add(cajaDelIcono);
+        rejilla.Children.Add(dosLineas);
+
+        _notch = new Border
+        {
+            // NEGRO DE VERDAD (spec 023): lo que lo despega del escritorio es el filete de luz de
+            // abajo, no una gota de azul.
+            Background = Pincel(PaletaDelNotch.Fondo),
+            // EL FILETE ES UN HILO DE LUZ, no un contorno: a ese alfa se ve como el canto de algo
+            // iluminado desde arriba, que es lo que despega la pieza sin dibujarle un marco.
+            BorderBrush = Pincel(PaletaDelNotch.Filete),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(Radio),
+            Padding = new Thickness(MedidaDelNotch.AireIzquierda, MedidaDelNotch.AireVertical,
+                                    MedidaDelNotch.AireDerecha, MedidaDelNotch.AireVertical),
+            // MIDE SIEMPRE LO MISMO (promesa 249).
+            Width = MedidaDelNotch.Ancho,
+            Height = MedidaDelNotch.Alto,
+            Child = rejilla,
+        };
+
+        var caja = new Grid
+        {
+            // El hueco para que el desenfoque quepa dentro del cristal: la ventana es SizeToContent
+            // sobre AllowsTransparency, así que mide lo que mide el contenido y sin reservar sitio la
+            // sombra sale cortada contra el borde.
+            Margin = Estudio.HolguraDe(Sombra),
+            RenderTransformOrigin = new Point(0.5, 0),
+            RenderTransform = _entrada,
+        };
+        caja.Children.Add(_placa);
+        caja.Children.Add(_notch);
+        Content = caja;
+
+        // El texto, nítido: AllowsTransparency apaga el ClearType por defecto y sin volver a pedirlo
+        // las letras salen blandas. Se puede porque el notch de dentro es opaco.
+        this.Nitida();
+
+        SizeChanged += (_, __) => Recolocar();
+
+        // Topmost no basta: es una posición en una lista y cualquier otra capa que pida lo mismo nos
+        // adelanta. Ver SiempreDelante.
+        this.Vigilar();
 
         _caducar = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _caducar.Tick += (_, __) =>
         {
-            if (_enCurso == null && DateTime.UtcNow - _ultimoCambio > Caducidad) Limpiar();
+            if (_dice.Estado != EstadoDelNotch.EnCurso && DateTime.UtcNow - _ultimoCambio > Caducidad) Limpiar();
         };
+
+        Pintar();
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -101,147 +244,111 @@ public sealed class PanelDeAcciones : Window
             GetWindowLong(h, GWL_EXSTYLE) | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW);
     }
 
-    /// <summary>
-    /// Empieza una acción: se pinta YA, en azul de trabajo, antes de que se sepa cómo va a acabar.
-    /// Ese instante es el que da la sensación de tiempo real; esperar al resultado para contar algo
-    /// es justo lo que hacía que pareciera colgada.
-    /// </summary>
+    /// <summary>Empieza un paso: se pinta YA, antes de saber cómo acaba. Ese instante es el tiempo real.</summary>
     public void Empieza(string texto)
     {
-        // Si la anterior nunca se resolvió, no se borra: se marca omitida. Una acción sin desenlace
-        // que desaparece en silencio es la que hace que el recuento mienta.
-        if (_enCurso != null) Resolver(Estado.Omitido, "sin respuesta");
-
-        _enCurso = Fila(UiPalette.Trabajando, "•", texto);
-        Anadir(_enCurso);
+        _dice.Empieza(texto);
+        Pintar();
     }
 
-    /// <summary>Cierra la que estaba en curso con su desenlace.</summary>
-    public void Termina(string texto, bool ok) => Resolver(ok ? Estado.Hecho : Estado.Fallo, texto);
-
-    /// <summary>La frase que se está diciendo ahora mismo: la tuya y la de Ü, cada una en su fila.</summary>
-    private Border? _loQueDigo, _loQueDiceU;
+    /// <summary>Cierra el paso con su desenlace.</summary>
+    public void Termina(string texto, bool ok)
+    {
+        _dice.Termina(texto, ok);
+        Pintar();
+    }
 
     /// <summary>
-    /// LO QUE SE OYE Y LO QUE SE CONTESTA, EN EL MISMO SITIO QUE LO QUE SE HACE.
+    /// Lo que se está diciendo ahora mismo, de quien sea. Lo de la persona además queda en boca para
+    /// subir a ser la tarea cuando cierre el turno (promesa 252).
     /// </summary>
-    /// <remarks>
-    /// La conversación se veía en la burbuja y la maquinaria aquí, así que para saber si te entendió
-    /// había que mirar a dos sitios a la vez — y la burbuja REEMPLAZA, así que lo que dijiste hace
-    /// dos frases ya no estaba. Cuando algo no funciona, la primera pregunta es «¿me oyó bien?», y
-    /// no había forma de contestarla mirando (2026-08-16, lo pidió el usuario).
-    ///
-    /// Se ACTUALIZA LA FILA en vez de añadir una por trozo: la transcripción llega palabra a palabra
-    /// y una fila por trozo convierte una frase en una columna de palabras sueltas. Lo que se busca
-    /// es verla escribirse, que es lo que dice que te está oyendo AHORA.
-    /// </remarks>
     public void Habla(string texto, bool esDeU)
     {
-        var fila = esDeU ? _loQueDiceU : _loQueDigo;
-
-        // Si su fila ya se fue por arriba —solo caben unas pocas— se empieza otra: actualizar una
-        // fila que ya no está en pantalla es escribir donde nadie mira.
-        if (fila != null && !_filas.Children.Contains(fila)) fila = null;
-
-        if (fila == null)
-        {
-            fila = Fila(esDeU ? UiPalette.Vivo : UiPalette.Trabajando, esDeU ? "Ü" : "🗣", texto);
-            if (esDeU) _loQueDiceU = fila; else _loQueDigo = fila;
-            Anadir(fila);
-            return;
-        }
-
-        if (fila.Child is StackPanel sp && sp.Children.Count == 2 && sp.Children[1] is TextBlock cuerpo)
-            cuerpo.Text = texto;
-        Toca();
+        if (esDeU) _dice.UDice(texto); else _dice.PersonaDice(texto);
+        Pintar();
     }
 
-    /// <summary>Se acabó el turno: lo dicho queda fijo y la siguiente frase empieza fila nueva.</summary>
+    /// <summary>Se acabó el turno: lo que pidió la persona pasa a ser la tarea de arriba.</summary>
     public void CierraTurno()
     {
-        _loQueDigo = null;
-        _loQueDiceU = null;
+        _dice.CierraTurno();
+        Pintar();
     }
 
-    private void Resolver(Estado estado, string texto)
+    /// <summary>Lo que hay que enseñar, enseñado. Un solo sitio que toca los píxeles.</summary>
+    private void Pintar()
     {
-        if (_enCurso == null) { Empieza(texto); }
-        var fila = _enCurso;
-        if (fila == null) return;
-        _enCurso = null;
+        if (_tarea.Text != _dice.Tarea) _tarea.Text = _dice.Tarea;
+        _paso.Text = _dice.Paso;
+        _paso.Visibility = _dice.Paso.Length > 0 ? Visibility.Visible : Visibility.Hidden;
 
-        var (color, marca) = estado switch
+        if (_pintado != _dice.Estado)
         {
-            Estado.Hecho => (UiPalette.Vivo, "✓"),
-            Estado.Fallo => (UiPalette.Fallo, "✋"),
-            Estado.Omitido => (UiPalette.Inactivo, "·"),
-            _ => (UiPalette.Trabajando, "•"),
-        };
-
-        if (fila.Child is StackPanel sp && sp.Children.Count == 2
-            && sp.Children[0] is TextBlock punto && sp.Children[1] is TextBlock cuerpo)
-        {
-            punto.Text = marca;
-            punto.Foreground = new SolidColorBrush(color);
-            cuerpo.Text = texto;
-            cuerpo.Foreground = new SolidColorBrush(
-                Color.FromArgb(estado == Estado.Omitido ? (byte)0x77 : (byte)0xDD, 0xFF, 0xFF, 0xFF));
+            _pintado = _dice.Estado;
+            _icono.Data = Geometry.Parse(IconosDelNotch.De(_dice.Estado));
+            _giro.BeginAnimation(RotateTransform.AngleProperty, null);
+            _giro.Angle = 0;
+            if (IconosDelNotch.Gira(_dice.Estado))
+                _giro.BeginAnimation(RotateTransform.AngleProperty,
+                    new DoubleAnimation(0, 360, TimeSpan.FromMilliseconds(1100))
+                    { RepeatBehavior = RepeatBehavior.Forever });
         }
+
+        if (!IsVisible) Aparecer();
+        _caducar.Start();
         Toca();
     }
 
-    private static Border Fila(Color color, string marca, string texto)
+    private void Aparecer()
     {
-        var sp = new StackPanel { Orientation = Orientation.Horizontal };
-        sp.Children.Add(new TextBlock
-        {
-            Text = marca,
-            Foreground = new SolidColorBrush(color),
-            FontSize = 12,
-            Width = 16,
-            FontFamily = new FontFamily("Segoe UI"),
-        });
-        sp.Children.Add(new TextBlock
-        {
-            Text = texto,
-            Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)),
-            FontSize = 12,
-            FontFamily = new FontFamily("Segoe UI"),
-            MaxWidth = 420,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        });
-        return new Border { Padding = new Thickness(0, 2, 0, 2), Child = sp };
+        Show();
+        // Baja un pelo al entrar, porque vive arriba: lo que aparece en el borde de arriba se lee
+        // mejor cayendo que creciendo desde el centro.
+        var suave = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var dur = TimeSpan.FromMilliseconds(220);
+        _entrada.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.96, 1, dur) { EasingFunction = suave });
+        _entrada.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.96, 1, dur) { EasingFunction = suave });
+        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
     }
 
-    private void Anadir(Border fila)
+    public void Limpiar()
     {
-        _filas.Children.Add(fila);
-        while (_filas.Children.Count > Memoria) _filas.Children.RemoveAt(0);
-        Toca();
-        if (!IsVisible) Show();
-        if (!_caducar.IsEnabled) _caducar.Start();
+        _caducar.Stop();
+
+        var irse = new DoubleAnimation(0, TimeSpan.FromMilliseconds(180))
+        { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+        irse.Completed += (_, __) =>
+        {
+            BeginAnimation(OpacityProperty, null);
+            Opacity = 1;
+            _dice.Olvida();
+            _tarea.Text = _dice.Tarea;
+            _paso.Text = "";
+            Hide();
+        };
+        BeginAnimation(OpacityProperty, irse);
     }
 
     private void Toca()
     {
         _ultimoCambio = DateTime.UtcNow;
-        Reposition();
+        Recolocar();
     }
 
-    public void Limpiar()
+    /// <summary>
+    /// ARRIBA Y AL CENTRO (promesa 251).
+    ///
+    /// SE COLOCA LA PIEZA QUE SE VE, NO LA VENTANA. Es la lección de la promesa 159, y aquí se pagó
+    /// igual: la ventana lleva dentro el hueco que la sombra necesita, así que pedir la junta contra
+    /// el borde de la VENTANA dejaba el notch flotando a media distancia. A la regla se le pregunta
+    /// por el rectángulo visible y después se descuenta el hueco.
+    /// </summary>
+    private void Recolocar()
     {
-        _filas.Children.Clear();
-        _enCurso = null;
-        _caducar.Stop();
-        Hide();
-    }
-
-    private void Reposition()
-    {
-        var wa = SystemParameters.WorkArea;
-        // Abajo a la izquierda: la pastilla de superficie vive arriba a la derecha y el mapa justo
-        // debajo, y la carita se aparca a la derecha. Esta esquina es la que queda libre.
-        Left = wa.Left + 12;
-        Top = wa.Bottom - ActualHeight - 12;
+        var holgura = Estudio.HolguraDe(Sombra);
+        var (libre, _) = LaBarraDeTareas.Mirar();
+        var sitio = ReglaDeLaBandeja.ArribaAlCentro(libre, new Size(_notch.ActualWidth, _notch.ActualHeight));
+        Left = sitio.Left - holgura.Left;
+        Top = sitio.Top - holgura.Top;
     }
 }

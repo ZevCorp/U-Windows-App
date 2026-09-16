@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace U.WindowsClient.Navigation;
 
 /// <summary>
@@ -36,7 +38,15 @@ public sealed class PulsarSegunElNucleo
 {
     private readonly Nucleo.Grafo _grafo;
     private readonly Func<string> _donde;
-    private readonly Func<string, string, string, bool> _pulsar;
+    /// <summary>La mano: selector, etiqueta y gesto → null si pudo; si no, POR QUÉ (promesa 231; vacío = no lo dijo).</summary>
+    private readonly Func<string, string, string, string?> _mano;
+
+    /// <summary>
+    /// Lo que le pasó a la ventana de trabajo mientras se pulsaba (promesa 233): «la ventana en la
+    /// que trabajaba (…) ya no existe». Con aviso, no se aprende ningún tramo: Ü no cruzó una puerta,
+    /// la ventana se cerró.
+    /// </summary>
+    public Func<string>? AvisoDeLaVentana { get; set; }
 
     /// <param name="pulsar">Selector y etiqueta → ¿se pudo tocar? Lo hace quien sabe de UIA.</param>
     /// <remarks>La mano vieja no sabe de gestos: se adapta ignorándolos. Sigue siendo válida para
@@ -47,11 +57,22 @@ public sealed class PulsarSegunElNucleo
     /// <param name="pulsar">Selector, etiqueta y GESTO («» = clic simple, «doubleclick», …) →
     /// ¿se pudo tocar? La mano ejecuta el gesto que se le pide; decidirlo es de esta clase.</param>
     public PulsarSegunElNucleo(Nucleo.Grafo grafo, Func<string> donde, Func<string, string, string, bool> pulsar)
+        : this(grafo, donde, (sel, et, gesto) => pulsar(sel, et, gesto) ? null : "", true) { }
+
+    private PulsarSegunElNucleo(Nucleo.Grafo grafo, Func<string> donde, Func<string, string, string, string?> mano, bool _)
     {
         _grafo = grafo;
         _donde = donde;
-        _pulsar = pulsar;
+        _mano = mano;
     }
+
+    /// <summary>
+    /// CON UNA MANO QUE DICE POR QUÉ (promesa 231): null si pudo; si no, la causa. «no pude pulsar «X».»
+    /// cubría tres situaciones —no encontré el elemento en esa ventana, no admite ningún patrón, el
+    /// patrón falló— y mandaba la investigación al sitio equivocado (aprendizaje nº2).
+    /// </summary>
+    public static PulsarSegunElNucleo ConMotivo(Nucleo.Grafo grafo, Func<string> donde, Func<string, string, string, string?> mano)
+        => new(grafo, donde, mano, true);
 
     /// <summary>Qué pasó al pulsar. <paramref name="Aprendido"/> = el grafo se quedó con el tramo.</summary>
     public readonly record struct Resultado(
@@ -64,20 +85,30 @@ public sealed class PulsarSegunElNucleo
     /// </summary>
     public int EsperaMaximaMs { get; init; } = 1800;
 
+    /// <summary>Para que el reintento de la 248 no se llame a sí mismo.</summary>
+    private bool _yaRepeti;
+
     public Resultado Pulsa(string selector, string etiqueta)
     {
         string desde = _donde() ?? "";
+        int vivosAntes = Vivos(desde);   // gratis: sale del núcleo (promesa 248)
 
         // EL GESTO APRENDIDO VA DIRECTO (promesa 82). Si esta arista ya se cruzó, la arista sabe
         // cómo: repetir el ensayo es pagar el mismo riesgo dos veces — y el clic de más cae sobre
         // la pantalla real (2026-08-26: tres clics físicos por visita, cada visita).
         string gesto = _grafo.GestoDe(desde, selector);
 
-        if (!_pulsar(selector, etiqueta, gesto))
+        string? motivo = _mano(selector, etiqueta, gesto);
+        if (motivo != null)
             return new(false, false, desde, desde, false,
-                $"no pude pulsar «{etiqueta}».");
-
+                motivo.Length > 0 ? $"no pude pulsar «{etiqueta}»: {motivo}" : $"no pude pulsar «{etiqueta}».");
         string hasta = EsperarACambiar(desde);
+        // LA VENTANA DE TRABAJO SE CERRÓ (promesa 233): «dónde» volvió al foco de la persona, y eso
+        // no es haber ido allí. Se cuenta tal cual y no se aprende ninguna arista.
+        string aviso = AvisoDeLaVentana?.Invoke() ?? "";
+        if (aviso.Length > 0)
+            return new(true, hasta != desde, desde, hasta, false,
+                $"pulsé «{etiqueta}» y {aviso}. Ahora estás en «{hasta}».");
         string gestoUsado = gesto;
 
         // EL ENSAYO, y solo cuando toca: nada cambió, el gesto de esta arista aún no se conoce, y
@@ -85,7 +116,7 @@ public sealed class PulsarSegunElNucleo
         // su trabajo sin cambiar de pantalla» es lo normal de un «Guardar», y un segundo clic sería
         // repetir la acción, no averiguar nada.
         if ((hasta.Length == 0 || hasta == desde) && gesto.Length == 0 && EsContenido(desde, selector)
-            && _pulsar(selector, etiqueta, "doubleclick"))
+            && _mano(selector, etiqueta, "doubleclick") == null)
         {
             string tras = EsperarACambiar(desde);
             if (tras.Length > 0 && tras != desde)
@@ -98,6 +129,26 @@ public sealed class PulsarSegunElNucleo
         // NO MOVERSE NO SIEMPRE ES UN FALLO. Un botón de acción —«Guardar», «Copiar»— hace su
         // trabajo sin cambiar de pantalla, y llamar a eso un fracaso sería reportar mal algo que
         // salió bien. Lo que NO se hace es aprender un tramo: no lo hubo.
+        // UN CLIC PERDIDO SE REPITE AQUÍ, NO EN EL MODELO (promesa 248). Solo cuando el terreno ya sabía
+        // que esta puerta lleva a algún sitio: un botón que aplica algo sin cambiar de pantalla —«Guardar»—
+        // no tiene destino aprendido y por eso nunca entra aquí, que es lo que promete la 83.
+        if ((hasta.Length == 0 || hasta == desde) && !_yaRepeti
+            && U.Graph.Surfaces.ComoSePulsa.HayQueRepetir(false, vivosAntes, Vivos(desde),
+                   SafeToClick.EsDestructivo(etiqueta, out _), SabeQueLleva(desde, selector), yaSeRepitio: false))
+        {
+            _yaRepeti = true;
+            try
+            {
+                Diagnostics.LogBus.Log("mano", $"«{etiqueta}» no movió nada y el terreno sabe que lleva a algún sitio: lo repito una vez");
+                if (_mano(selector, etiqueta, gesto) == null)
+                {
+                    string tras = EsperarACambiar(desde);
+                    if (tras.Length > 0 && tras != desde) { hasta = tras; gestoUsado = gesto; }
+                }
+            }
+            finally { _yaRepeti = false; }
+        }
+
         if (hasta.Length == 0 || hasta == desde)
             return new(true, false, desde, desde, false,
                 $"pulsé «{etiqueta}» y la pantalla no cambió.");
@@ -132,14 +183,32 @@ public sealed class PulsarSegunElNucleo
         return false;
     }
 
+    /// <summary>Cuántas cosas vivas hay aquí, según el núcleo. Gratis: no toca la pantalla (promesa 248).</summary>
+    private int Vivos(string donde)
+    {
+        try { return _grafo.DesdeAqui(donde).Count(a => a.Vivo); }
+        catch { return -1; }
+    }
+
+    /// <summary>¿El terreno ya vio que esta puerta lleva a algún sitio? (promesa 248).</summary>
+    private bool SabeQueLleva(string donde, string selector)
+    {
+        try { return _grafo.DesdeAqui(donde).Any(a => a.Que.Selector == selector && a.Destino.Length > 0); }
+        catch { return false; }
+    }
+
     private string EsperarACambiar(string desde)
     {
-        for (int ido = 0; ido < EsperaMaximaMs; ido += 120)
+        // EL RELOJ MANDA (promesa 245): antes esto sumaba 120 por vuelta y además pagaba _donde(), que
+        // en la máquina del dueño costaba 2,8 s. Una espera de «1,8 s» duraba más de treinta.
+        var compas = new Compas(EsperaMaximaMs);
+        string ahora = "";
+        do
         {
-            string ahora = _donde() ?? "";
+            ahora = _donde() ?? "";
             if (ahora.Length > 0 && ahora != desde) return ahora;
-            System.Threading.Thread.Sleep(120);
         }
-        return _donde() ?? "";
+        while (compas.Respira(120));
+        return ahora.Length > 0 ? ahora : (_donde() ?? "");
     }
 }

@@ -28,7 +28,11 @@ namespace U.WindowsClient.Uia;
 /// </summary>
 public sealed class SurfaceLocator : IDisposable
 {
-    public sealed record SurfaceLocation(string Id, string Origin, string Path);
+    public sealed record SurfaceLocation(string Id, string Origin, string Path)
+    {
+        /// <summary>La ventana de la que salió esta ubicación, para poder fijarla como ventana de trabajo (promesa 233).</summary>
+        public IntPtr Hwnd { get; init; }
+    }
 
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
@@ -38,6 +42,8 @@ public sealed class SurfaceLocator : IDisposable
     private const uint GA_ROOT = 2;
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+    [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+    private const uint GW_HWNDNEXT = 2;
 
     /// <summary>Qué cuenta como navegador lo dice <see cref="PestanasAbiertas.EsNavegador"/>, para toda la app.</summary>
     private static bool EsNavegador(string proc) => PestanasAbiertas.EsNavegador(proc);
@@ -161,13 +167,43 @@ public sealed class SurfaceLocator : IDisposable
             if (raiz != IntPtr.Zero) hwnd = raiz;
 
             string proc = ProcessName(hwnd);
-            if (Propio.EsProceso(proc)) return Current;
+            if (Propio.EsProceso(proc))
+            {
+                // CON LA CARITA DELANTE, LA REGLA DE LA VENTANA DE DELANTE (promesa 230), calculada
+                // AHORA. Devolver Current aquí es lo que describió una Tienda ya cerrada durante seis
+                // segundos (2026-09-14): la persona le hablaba a la carita y la ubicación se congelaba.
+                hwnd = LaVentanaDeDelante(hwnd);
+                if (hwnd == IntPtr.Zero) return Current;
+                proc = ProcessName(hwnd);
+            }
 
             var sb = new StringBuilder(512);
             GetWindowText(hwnd, sb, sb.Capacity);
-            return Compute(hwnd, proc, sb.ToString());
+            return ConVentana(Compute(hwnd, proc, sb.ToString()), hwnd);
         }
         catch { return Current; }
+    }
+
+    /// <summary>La regla única (promesa 230) con los medios de esta capa: «propia» por PID, «se ve» por Win32 y DWM.</summary>
+    private static IntPtr LaVentanaDeDelante(IntPtr foco) => U.Graph.Surfaces.VentanaDeDelante.Elegir(foco,
+        U.Graph.Surfaces.UiaSurface.SeVe,
+        h => U.Graph.Surfaces.UiaSurface.TituloDe(h).Length > 0,
+        Propio.EsVentana,
+        h => GetWindow(h, GW_HWNDNEXT));
+
+    private static SurfaceLocation? ConVentana(SurfaceLocation? loc, IntPtr hwnd) => loc == null ? null : loc with { Hwnd = hwnd };
+
+    /// <summary>La ubicación de UNA ventana concreta, pedida por su handle: es lo que se fija como ventana de trabajo (promesa 233).</summary>
+    public SurfaceLocation? Identificar(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return null;
+        try
+        {
+            var sb = new StringBuilder(512);
+            GetWindowText(hwnd, sb, sb.Capacity);
+            return ConVentana(Compute(hwnd, ProcessName(hwnd), sb.ToString()), hwnd);
+        }
+        catch { return null; }
     }
 
     private void Probe()
@@ -189,9 +225,15 @@ public sealed class SurfaceLocator : IDisposable
         AppAligner.VentanaDelUsuario();
 
         string proc = ProcessName(hwnd);
-        // Nuestras propias ventanas (la carita, el badge, el inspector) no son "una superficie":
-        // conservan el ID de la app real que el usuario estaba usando.
-        if (Propio.EsProceso(proc)) return;
+        // Nuestras propias ventanas (la carita, el badge, el inspector) no son "una superficie".
+        // Antes se conservaba el ID de la app que el usuario estaba usando; desde la promesa 230 se
+        // calcula cuál es la ventana de delante por la regla única, para que Current no se congele.
+        if (Propio.EsProceso(proc))
+        {
+            hwnd = LaVentanaDeDelante(hwnd);
+            if (hwnd == IntPtr.Zero) return;
+            proc = ProcessName(hwnd);
+        }
 
         var sb = new StringBuilder(512);
         GetWindowText(hwnd, sb, sb.Capacity);
@@ -211,7 +253,7 @@ public sealed class SurfaceLocator : IDisposable
         {
             try
             {
-                var loc = Compute(hwnd, proc, title);
+                var loc = ConVentana(Compute(hwnd, proc, title), hwnd);
                 _dispatcher.BeginInvoke(new Action(() =>
                 {
                     _computing = false;

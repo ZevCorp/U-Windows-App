@@ -168,13 +168,18 @@ internal static class Contrato
         // LO QUE EL SERVIDOR DE GPT-LIVE NO ACEPTA (revisión de fidelidad, 2026-09-12). Tres cosas que el
         // traductor mandaba o callaba y el servidor rechaza sin cerrar nada: la voz sigue hablando y el delegado
         // deja de hacer. Del 44 al 48 son de los arregladores que corren a la vez: los números no se pisan.
-        Prueba("49. GPT-Live no manda lo que su servidor rechaza: no se declara capaz de mirar, porque una captura de pantalla no cabe y una segunda foto pequeña tampoco; un resultado de más de 32.768 bytes sale como un function_call_output de 32.768 bytes o menos, con su call_id, sin partir un carácter y diciendo cuánto se recortó; y declara que confirma la apertura: session.started es un Hecho.Abierta, y ni un error ni ningún otro mensaje lo es", GptLiveNoMandaLoQueSeRechaza);
+        Prueba("49. GPT-Live no manda lo que su servidor rechaza: un resultado de más de 32.768 bytes sale como un function_call_output de 32.768 bytes o menos, con su call_id, sin partir un carácter y diciendo cuánto se recortó; y declara que confirma la apertura: session.started es un Hecho.Abierta, y ni un error ni ningún otro mensaje lo es", GptLiveNoMandaLoQueSeRechaza);
 
         // LO QUE NO SE ARREGLA REINTENTANDO SE RECONOCE POR SU CÓDIGO, NO POR SU PROSA (2026-09-13, spec 018). Sin
         // crédito, GPT Realtime reconectó cuatro veces y GPT-Live no reintentó: la misma clase de error con dos
         // tratamientos. Decidirlo le toca a la conversación (223 y 224 del grafo); aquí, que el traductor no se
         // guarde el código, que es lo único estable: el message está en inglés y cambia de redacción.
         Prueba("53. los traductores de OpenAI dicen el código de un error: un error es un Hecho.Falla con su message y con su code tal como llega —credit_balance_exhausted e invalid_model por GPT-Live, invalid_api_key y model_not_found por GPT Realtime—, y sin code no se inventa uno", LosErroresDicenSuCodigo);
+
+        // LUNA ESTABA CIEGA POR CULPA NUESTRA (spec 027, 2026-09-16): metíamos la imagen dentro del mensaje,
+        // 118.000 bytes en un buzón de 32.768. El campo se llama image_url y acepta una referencia; medido
+        // contra el servidor, describe bien tres imágenes seguidas sin vaciar nada.
+        Prueba("54. GPT-Live SÍ mira, y su foto viaja por REFERENCIA: un input_image con el identificador del archivo y sin un solo byte de imagen dentro, que pesa menos de 300 bytes frente a los 118.000 de la forma incrustada; la forma incrustada sigue existiendo para Realtime, que es lo que su servidor acepta", GptLiveMiraPorReferencia);
         // «SESIÓN ABIERTA» NO ES «SOCKET CONECTADO» (2026-09-13, nivel 4 del 12). La línea salía al conectar, y con la
         // cuenta sin crédito salió en el mismo segundo que el error: el conductor la tomó por voz abierta. GPT-Live ya
         // confirmaba (la 49); GPT Realtime, el respaldo, no. Del 50 al 52 son de la rama de la apertura.
@@ -1611,6 +1616,35 @@ internal static class Contrato
     /// (sonda-huecos r1G y r2c): 12.0 a los 15 s y 25.0 a los 30 s de la misma sesión. Es el ACUMULADO; quien
     /// lo sume como un incremento cuenta 37 s donde hubo 25.
     /// </remarks>
+    private static void GptLiveMiraPorReferencia()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "54"); return; }
+
+        Debe(p.Mira, "GPT-Live se declara capaz de mirar: por referencia la imagen cabe, y está medido contra el servidor");
+
+        // Por la INTERFAZ y no por la clase: así se juzga también lo que hereda quien no lo declara.
+        var porRef = typeof(IProtocolo).GetMethod("FotogramaPorReferencia")?.Invoke(p, new object[] { "file-abc123" });
+        Debe(porRef is string s1 && s1.Length > 0,
+            "todavía no existe «FotogramaPorReferencia» en el protocolo (spec 027, promesa 54). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (porRef is not string json || json.Length == 0) return;
+
+        var m = Mensaje(json);
+        var contenido = Nodo(m, "item", "content");
+        Debe(Campo(m, "type") == "response.item.create" && Campo(m, "item", "role") == "user"
+             && contenido is { ValueKind: JsonValueKind.Array } c
+             && c.EnumerateArray().Any(x => Campo(x, "type") == "input_image" && Campo(x, "file_id") == "file-abc123"),
+            "la foto es un mensaje del usuario con un input_image que lleva el IDENTIFICADOR del archivo");
+        Debe(!json.Contains("base64", StringComparison.OrdinalIgnoreCase) && !json.Contains("data:image", StringComparison.Ordinal),
+            "y NI UN BYTE de imagen dentro: meterla es lo que la hacía no caber");
+        Debe(System.Text.Encoding.UTF8.GetByteCount(json) < 300,
+            $"el mensaje entero pesa menos de 300 bytes ({System.Text.Encoding.UTF8.GetByteCount(json)}), contra los 118.000 de la forma incrustada");
+
+        // La forma INCRUSTADA sigue existiendo y la juzga la 42: ahí es donde se comprueba que Realtime
+        // manda la imagen dentro del mensaje, que es lo que su servidor acepta.
+    }
+
     private static void GptLiveCuentaLaDuracion()
     {
         var p = GptLive();
@@ -1662,8 +1696,9 @@ internal static class Contrato
         var p = GptLive();
         if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "1"); return; }
 
-        Debe(!p.Mira,
-            "GPT-Live no se declara capaz de mirar: una captura de pantalla da response_input_buffer_full, y una segunda foto pequeña también");
+        // LA CLÁUSULA DE «NO MIRA» SE FUE A LA 54 (spec 027, 2026-09-16). La medida que la respaldaba era
+        // correcta —una captura incrustada no cabe en el buzón de la sesión— y su conclusión era demasiado
+        // ancha: por REFERENCIA sí cabe, y se comprobó contra el servidor real. Aprendizaje nº6.
 
         const int tope = 32_768;
         int Bytes(string s) => System.Text.Encoding.UTF8.GetByteCount(s);

@@ -53,7 +53,13 @@ public sealed class UiaReader
     /// Captura el estado actual. <paramref name="withScreenshot"/> lo llena aparte el
     /// <c>Screenshotter</c>; aquí solo el texto del árbol de UI.
     /// </summary>
-    public ScreenState Read()
+    public ScreenState Read() => Read(AppAligner.VentanaDelUsuario());
+
+    /// <summary>
+    /// Leer UNA ventana concreta, esté delante o no (spec 020, promesa 233): es lo que permite que la
+    /// compuerta sepa qué hay vivo en la ventana de trabajo de Ü mientras la persona mira otra.
+    /// </summary>
+    public ScreenState Read(IntPtr hwnd)
     {
         var state = new ScreenState
         {
@@ -61,10 +67,8 @@ public sealed class UiaReader
             Height = GetSystemMetrics(SM_CYSCREEN),
         };
 
-        // La ventana DEL USUARIO, no la de delante sin más: si delante estamos nosotros —y lo
-        // estamos siempre que alguien acaba de pulsar la carita para hablarnos— leer el primer
-        // plano es leerse a uno mismo. Quien pregunta se refiere a lo que hay debajo.
-        IntPtr hwnd = AppAligner.VentanaDelUsuario();
+        // Sin ventana, la ventana DEL USUARIO (Read()): no la de delante sin más, porque si delante
+        // estamos nosotros leer el primer plano es leerse a uno mismo.
         if (hwnd == IntPtr.Zero)
         {
             state.Screen = "escritorio";
