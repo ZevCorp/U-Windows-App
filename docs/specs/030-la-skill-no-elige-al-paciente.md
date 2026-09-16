@@ -1,6 +1,6 @@
 # Plan de implementación: la skill no elige al paciente
 
-Estado: **propuesto** · Nace del diagnóstico del 2026-09-16 · Rama: `jero/el-check-elige-la-skill`
+Estado: **implementada** (254–256 verdes; contrato INTACTO, 225 promesas; voz ÍNTEGRA; sabotaje comprobado: cinco roturas, cada una en rojo solo en su promesa, huella restaurada; nivel 4 pendiente) · Nace del diagnóstico del 2026-09-16 · Rama: `jero/el-check-elige-la-skill`
 
 > Lo decidido con el dueño el 2026-09-16, al leer por qué el ✓ podía escribir en otra historia: **el
 > médico tiene abierto el triage de SU paciente; la skill empieza ahí y nunca elige paciente.**
@@ -159,11 +159,76 @@ obedezca la frase nueva del catálogo.
 4. Una skill vieja (de antes de esta spec) con la fila dentro: al correrla, para en la fila diciendo
    que la fila la elige la persona.
 
+## Primera tanda: lo que se midió al implementar (2026-09-16)
+
+**Rojo primero.** Con las tres promesas escritas y sin código, el contrato dijo `CONTRATO ROTO: 3
+promesa(s) incumplida(s)`: exactamente 254, 255 y 256, las tres `⧗ PENDIENTE` por lo que pedían por
+reflexión, y las 222 anteriores verdes. Con el código: `CONTRATO INTACTO`, 225 promesas, y
+`VOZ ÍNTEGRA`. Los avisos del compilador, los mismos que antes (64, ninguno nuevo).
+
+**El sabotaje.** Una línea por rotura, aplicada en bytes con un script que se niega si el ancla no
+aparece exactamente una vez; comprobada con `diff` contra la copia sana (una línea, los CRLF intactos)
+ANTES de leer el contrato; compilada sin silenciar; y sanada desde la copia con SHA1 idéntico y la
+huella de `git diff HEAD` de vuelta a la de antes. Tras cada una, recompilado: INTACTO.
+
+| Promesa | Línea rota | ¿Rojo? | Aserciones |
+|---|---|---|---|
+| 254 | `SkillDeLoVerificado.Empaquetar`: `int corte = registro?.Corte ?? 0;` → `int corte = 0;` | sí, solo la 254 | 4 |
+| 255 | `SkillEnsenada.PuedeEmpezarEn`, primera línea → `return new(true, "");` | sí, solo la 255 | 7 |
+| 256 (batch) | `RecorrerSegunElNucleo`: `if (paso.DeUnaTarea && EsUnRegistro != null` → `if (false && …` | sí, solo la 256; (b) siguió verde | 5 |
+| 256 (ir-a) | `PasoDelNucleo.Hacia`: `if (EsUnRegistro?.Invoke(…) == true)` → `if (false && …)` | sí, solo la 256; (a) siguió verde | 2 |
+| 256 (la bandera) | `InstanciarSkill.Pasos`: `DeUnaTarea = true` → `false` | sí, solo la 256 | 6 |
+
+El veredicto cuenta aserciones, no promesas: en las cinco, la única línea `✘ NNN.` fue la saboteada.
+
+**Lo que el sabotaje enseñó, sobre el mapa a mano** (no es SAP; es el fallo reproducido en el contrato):
+
+- Con el corte a 0, el panel decía «Abre la transacción «nwp1» | Abre Urgencias Adultos/Triage |
+  Pulsa «DEMO» | …»: la ficha nombraba al paciente de la demo delante del médico.
+- Con el batch sin su comprobación, la skill «DEMO → Triage» contestó «hice los 2 paso(s): pulsé
+  «Triage» y ahora estás en «…SAPLY000/0001»»: el triage del HOMÓNIMO abierto, con cuenta de éxito. Y
+  con dos filas parecidas, la cuenta enumeraba las dos con fecha, episodio y nombre y pedía «repite
+  con which=N»: le pasaba al piloto la elección del paciente.
+- Con ir-a sin su comprobación: «llegué a «0001» en 1 paso(s): 01.01.2026 · 0000002 · OTRO DEMO».
+
+**Sitios contados con grep (patrón nº5).** Corren skills: 2 (`InstanciarSkill.Pasos` en
+`SurfaceMapTools.CorrerSkill` y en `FaceWindow.MostrarAprendizajeAsync`), y los 2 llaman a
+`PuedeEmpezarEn`. Construyen `PasoDelNucleo`: 2 (el ir-a de la voz y del piloto en `FaceWindow`, y el
+«ir» del visor en `ServidorDelNucleo`), y los 2 reciben `EsUnRegistro`. Construyen el batch: 1, con
+`EsUnRegistro`. Empaquetan skills: 2; se corta en el que corre (`SkillDeLoVerificado`) y no en la
+provisional de la demo, por lo dicho en «Lo que NO entra». La marca de fila vive en un solo sitio,
+`SapSelector.RowKeyOf`: la usan el empaquetador y el delegado `FaceWindow.EsUnaFilaDeUnaLista`.
+
 ## Hallazgos
+
+- **Lo que cambió respecto al diseño, y por qué.**
+  - El juicio de la 254 añade lo que ve quien elige: que el panel no nombre la fila y que el catálogo
+    (`map_skills` y el mensaje del encargo) diga que la tarea empieza con el registro abierto. El
+    enunciado no cambia: «ahí dice que empieza» incluye decírselo a quien elige, y sin eso el piloto
+    seguiría intentando llegar con `map_go_to`.
+  - Además de `EntradaDeLaPersona`, la skill guarda `SeAbreCon` («Triage»): es lo que hace que «la
+    cuenta dice qué abrir» (255) se pueda juzgar por máquina sin nombrar a nadie ni enseñar un selector.
+  - (iv) no deja una skill con la entrada vacía: no guarda ninguna. Una skill sin entrada «corre como
+    siempre» (255), así que guardarla escribiría sobre lo que SAP tenga marcado. El motivo lo da
+    `ElRegistroQueAbreLaPersona`, y `GuardarSkill` lo dice distinguiendo sus tres causas (aprendizaje nº2).
+  - Si la demo eligió varias filas, manda la última: ninguna puede quedar entre los pasos.
+  - Un paso de tarea que cae en VARIAS filas tampoco numera homónimos: la comprobación va antes de la
+    lista, que habría sido pedir al piloto que eligiera paciente y enseñarle los nombres.
+  - La puerta de la 255 mira la pantalla donde actúa el batch (`SurfaceMapTools.DondeTrabaja` →
+    `FaceWindow.DondeTrabajo`), no el foco de la persona: al pulsar ✓ la persona mira la consulta.
+  - Hay un tercer sitio en la 256 que el diseño no nombraba: la bandera que `InstanciarSkill` pone en
+    cada paso. Tiene su propio sabotaje.
+- **`Comprobada` sigue contando la lección entera**, también lo de antes del corte: repasar es repasar
+  lo que la persona hizo. Conservador a propósito; si estorba, se habla.
+- **Deducido del código, sin medir y fuera de esta spec:** la tecla que el grabador pliega en un evento
+  de la lección (`EventoDeLaLeccion.Tecla`, el Enter tras «nwp1») no viaja a la skill verificada:
+  `SkillDeLoVerificado` construye `PasoEnsenado(exit, texto, llegada, dicho)` sin ella. Una skill sin
+  filas que empiece tecleando la transacción escribiría «nwp1» sin Enter y pararía por llegada. En la
+  tarea del triage con paciente no muerde, porque ese paso queda antes del corte.
 
 ## Cierre
 
-- [ ] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO)
-- [ ] `.\scripts\contrato-de-la-voz.ps1` íntegro
+- [x] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO)
+- [x] `.\scripts\contrato-de-la-voz.ps1` íntegro
 - [ ] Probado en SAP real (nivel 4), con horas
-- [ ] Estado de este documento: **implementado**
+- [x] Estado de este documento: **implementada** (2026-09-16), nivel 4 pendiente
