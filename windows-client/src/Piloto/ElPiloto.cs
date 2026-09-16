@@ -54,14 +54,21 @@ public static class ElPiloto
     }
 
     /// <summary>Lanza el piloto sobre una lección y espera a que termine. Cada línea que cuenta pasa por <paramref name="avance"/>.</summary>
-    public static async Task<Resultado> CorrerAsync(string carpetaLeccion, Action<string, string> avance, CancellationToken ct)
+    /// <summary>
+    /// Con qué arranca node (promesa 195): el script y la carpeta en su modo. «--leccion=» para
+    /// comprobar una lección; «--encargo=» para un encargo de la nota, que no tiene lección que leer.
+    /// </summary>
+    public static IReadOnlyList<string> Argumentos(string script, string carpeta, string modo = "leccion") =>
+        new[] { script, $"--{(string.IsNullOrWhiteSpace(modo) ? "leccion" : modo.Trim())}={carpeta}" };
+
+    public static async Task<Resultado> CorrerAsync(string carpetaLeccion, Action<string, string> avance, CancellationToken ct,
+        string modo = "leccion")
     {
         string? script = RutaDelScript();
         if (script == null) return new(false, -1, "", "no encuentro agente-piloto/piloto.mjs (pon U_PILOTO o corre desde el repo)", 0);
 
         var psi = new ProcessStartInfo("node")
         {
-            ArgumentList = { script, $"--leccion={carpetaLeccion}" },
             WorkingDirectory = Path.GetDirectoryName(script)!,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -70,7 +77,8 @@ public static class ElPiloto
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
-        LogBus.Log("piloto", $"lanzando: node {script} --leccion={carpetaLeccion}");
+        foreach (var a in Argumentos(script, carpetaLeccion, modo)) psi.ArgumentList.Add(a);
+        LogBus.Log("piloto", $"lanzando: node {string.Join(" ", psi.ArgumentList)}");
         using var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
         string sesion = "", ultimo = ""; double costo = 0;
         var fin = new TaskCompletionSource<int>();

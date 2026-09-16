@@ -424,6 +424,11 @@ public sealed class WorkflowTeachSession : IAsyncDisposable
             demo.Pasos.AddRange(pasos);
             var recienHecha = Navigation.SkillEnsenada.Empaquetar(
                 nombre, descripcion, _dondeEmpezo, pasos, dondeTermino);
+            // DE QUÉ LECCIÓN SALIÓ (promesa 198): esta demostración está guardando sus cuadros en
+            // `_carpetaLeccion` mientras esto corre, y ese id es el único hilo que los vuelve a
+            // encontrar después.
+            if (recienHecha != null && _idLeccion.Length > 0)
+                recienHecha = recienHecha with { DeLaLeccion = _idLeccion };
 
             // EL CRITERIO DEL MODELO, APLICADO (promesa 134). La regla del narrado ya dejó sus
             // huecos dentro de `recienHecha`; esto los corrige donde el modelo opinó y los deja
