@@ -680,6 +680,15 @@ internal static class Contrato
         Prueba("251. el notch vive arriba y al centro del área libre: se centra en el hueco que deja el sistema, cuelga a una distancia fija del borde de arriba, y nunca se sale del cristal aunque no quepa", ElNotchViveArribaAlCentro);
         Prueba("252. el notch dice dos cosas y siempre las mismas dos: arriba LA TAREA —lo último que pidió la persona, que se queda hasta que pida otra— y abajo LO QUE PASA AHORA, que es el paso de Ü, su desenlace, o lo que la persona está diciendo mientras lo dice", ElNotchDiceLaTareaYLoQuePasa);
         Prueba("253. cada estado tiene su icono y todos salen del mismo juego: la misma caja, el mismo grosor de trazo y la forma dibujada como vector; no hay dos estados con el mismo dibujo, y ninguno es una letra ni un emoji", CadaEstadoTieneSuIcono);
+
+        // LA SKILL NO ELIGE AL PACIENTE (spec 030, 2026-09-16). Leído en el código: la skill comprobada
+        // guardaba la fila del paciente de la demo como un paso por su etiqueta, y el batch la reencontraba
+        // por PARECIDO; con un homónimo en la lista, «Triage» abría la historia de otra persona y la nota se
+        // escribía ahí. Decidido con el dueño: el médico tiene abierto el triage de SU paciente, la skill
+        // empieza ahí y nunca elige paciente.
+        Prueba("254. una tarea enseñada no elige de quién es la historia: si la lección eligió una fila de una lista, la skill empieza DESPUÉS del primer paso que navega tras esa elección —ahí dice que empieza— y ni la fila, ni ese paso, ni nada anterior queda entre sus pasos; aterrice la fila o no, da igual, y una lección sin filas sale como siempre", UnaTareaNoEligeDeQuienEsLaHistoria);
+        Prueba("255. una skill que empieza con el registro abierto solo corre desde ahí: si SAP no está en esa pantalla no se da ni un paso —ni navegar hasta ella— y la cuenta dice qué abrir; en ella corre entera, también cogida a medio cambiar; y una skill que no empieza en un registro corre como siempre", SoloCorreDesdeElRegistroAbierto);
+        Prueba("256. un registro no es una puerta que se tome sola: ni un paso de una skill ni una ruta de ir-a pulsan jamás una fila de una lista —aunque se llame igual, aunque la ruta aprendida pase por ella—; paran diciendo que la fila la elige la persona. Pulsarla cuando la persona la nombra sigue valiendo", UnRegistroNoSeTomaSolo);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -6498,6 +6507,294 @@ internal static class Contrato
         Debe((string)Prop(pasos[0]!, "Llegada")! == "sapgui://B-real", "el paso que navega lleva su llegada REAL, como siempre (176)");
         Debe((string)Prop(pasos[1]!, "Llegada")! == "",
             $"y el paso que escribe NO lleva llegada (llevaba «{Prop(pasos[1]!, "Llegada")}»): «75» no es una pantalla, y exigirla pararía el batch en el primer campo (spec 019, promesa 229)");
+    }
+
+    // ── Spec 030: la skill no elige al paciente ──────────────────────────────────────────────
+    //
+    // Las pantallas de juguete: N es el puesto de trabajo, L la lista de pacientes (una vista de N),
+    // F el formulario del triage abierto para UNA persona. Ningún dato de paciente real: «DEMO» y
+    // «OTRO DEMO» con episodios inventados.
+    private const string N030 = "sapgui://QAS/NWP1/SAPLN_WP_FRAMEWORK/0100";
+    private const string L030 = "sapgui://QAS/NWP1/SAPLN_WP_FRAMEWORK/0100/vista:Lista";
+    private const string F030 = "sapgui://QAS/NWP1/SAPLY000/0001";
+    private const string FilaDemo030 = "sap:wnd[0]/usr/cntlLISTA/shellcont/shell#row=EPISODIO=0000001|NOMBRE=DEMO";
+    private const string FilaOtra030 = "sap:wnd[0]/usr/cntlLISTA/shellcont/shell#row=EPISODIO=0000002|NOMBRE=OTRO DEMO";
+    private const string Triage030 = "sap:wnd[0]/usr/cntlLISTA/shellcont/shell#tbbtn=ZMEDTRIAGE";
+    private const string Rama030 = "sap:wnd[0]/shellcont/shell#node=vw1";
+
+    private static void UnaTareaNoEligeDeQuienEsLaHistoria()
+    {
+        // EL HOMÓNIMO. La skill comprobada guardaba la fila del paciente de la demo como un paso con la
+        // etiqueta de la fila, y el batch la reencontraba por parecido: la etiqueta viva «fecha · hora ·
+        // episodio · nombre» CONTIENE el apellido. Con otra persona del mismo apellido, «Triage» abría SU
+        // historia. Y si la fila no aterrizaba, no entraba, y «Triage» actuaba sobre lo que hubiera marcado.
+        var tt = TiposDeLaLeccion.Cargar();
+        var tVer = Capacidad("U.WindowsClient.Piloto.SkillDeLoVerificado");
+        var emp = tVer?.GetMethod("Empaquetar");
+        Debe(tt != null && emp != null, "existen los tipos de la lección y el empaquetador");
+        if (tt == null || emp == null) return;
+        var registro = tVer!.GetMethod("ElRegistroQueAbreLaPersona");
+        var tSkill = Cap004("U.WindowsClient.Navigation.SkillEnsenada")!;
+        var pEntrada = tSkill.GetProperty("EntradaDeLaPersona");
+        var pSeAbre = tSkill.GetProperty("SeAbreCon");
+        var pAnuncio = Cap004("U.WindowsClient.Navigation.SkillAnunciada")?.GetProperty("EmpiezaEnElRegistro");
+        if (registro == null || pEntrada == null || pSeAbre == null || pAnuncio == null)
+        {
+            Pendiente("SkillDeLoVerificado.ElRegistroQueAbreLaPersona · SkillEnsenada.EntradaDeLaPersona · SkillEnsenada.SeAbreCon · SkillAnunciada.EmpiezaEnElRegistro", "254", "030");
+            return;
+        }
+
+        // okcd «nwp1» (llega a N) → la rama del árbol (llega a L) → la fila «DEMO», sin llegada → «Triage»
+        // (llega a F) → «Peso» 52 → «Talla» 1.7. La de la promesa 196, con la fila que la 196 no tenía.
+        object Leccion(bool conFila, bool navegaDespues)
+        {
+            var ev = ListaDe(tt.Evento);
+            ev.Add(tt.Evento_(1, 1000, "clic", 1, 1, "sap:wnd[0]/tbar[0]/okcd", "nwp1", N030, "", "", Array.Empty<string>()));
+            ev.Add(tt.Evento_(2, 2000, "clic", 2, 2, Rama030, "", L030, "", "", Array.Empty<string>(), etiqueta: "Urgencias Adultos/Triage"));
+            if (conFila) ev.Add(tt.Evento_(3, 3000, "clic", 3, 3, FilaDemo030, "", "", "", "", Array.Empty<string>(), etiqueta: "DEMO"));
+            if (navegaDespues) ev.Add(tt.Evento_(4, 4000, "clic", 4, 4, Triage030, "", F030, "", "", Array.Empty<string>(), etiqueta: "Triage"));
+            ev.Add(tt.Evento_(5, 5000, "clic", 5, 5, "sap:wnd[0]/usr/txtPESO", "52", "", "", "", Array.Empty<string>(), etiqueta: "Peso"));
+            ev.Add(tt.Evento_(6, 6000, "clic", 6, 6, "sap:wnd[0]/usr/txtTALLA", "1.7", "", "", "", Array.Empty<string>(), etiqueta: "Talla"));
+            return tt.Leccion_("sapgui://QAS/SESSION_MANAGER/SAPLSMTR_NAVIGATION/0100", F030, ev, ListaDe(tt.CuadroLeccion));
+        }
+        System.Collections.IList Veredictos(bool conLaFila)
+        {
+            var v = ListaDe(tt.Veredicto);
+            v.Add(Nuevo(tt.Veredicto, 1, true, N030, N030, "aterrizó"));
+            v.Add(Nuevo(tt.Veredicto, 2, true, L030, L030, "aterrizó"));
+            if (conLaFila) v.Add(Nuevo(tt.Veredicto, 3, true, "", "", "aterrizó"));
+            v.Add(Nuevo(tt.Veredicto, 4, true, F030, F030, "aterrizó"));
+            v.Add(Nuevo(tt.Veredicto, 5, true, "52", "52", "«Peso» dice «52»"));
+            v.Add(Nuevo(tt.Veredicto, 6, true, "1.7", "1.7", "«Talla» dice «1.7»"));
+            return v;
+        }
+        List<object> Pasos(object skill) => ((System.Collections.IEnumerable)Prop(skill, "Pasos")!).Cast<object>().ToList();
+        List<string> Exits(object skill) => Pasos(skill).Select(p => (string)Prop(p, "Exit")!).ToList();
+        bool NadaQueEligePaciente(object skill) =>
+            Exits(skill).All(x => !x.Contains("DEMO") && !x.Contains("#row=") && !x.Contains("ZMEDTRIAGE")
+                                  && !x.Contains("okcd") && !x.Contains("Urgencias") && x != "Triage")
+            && Pasos(skill).All(p => !((string)Prop(p, "Texto")!).Contains("nwp1"));
+
+        // (i) todo aterrizó, la fila también.
+        var todo = emp.Invoke(null, new object[] { Leccion(true, true), Veredictos(true), "Triage", "" });
+        Debe(todo != null, "con la fila y todo aterrizado hay skill");
+        if (todo == null) return;
+        Debe(NadaQueEligePaciente(todo),
+            $"ni la fila, ni el paso que abre el registro, ni nada anterior quedan entre los pasos: con ellos dentro, la skill "
+            + $"elige paciente por parecido y escribe en la historia del homónimo (pasos: {string.Join(" → ", Exits(todo))})");
+        Debe(Exits(todo).Count == 2 && Exits(todo)[0] == "Peso",
+            $"la skill empieza en «Peso», lo primero que se hace con el registro ya abierto (pasos: {string.Join(" → ", Exits(todo))})");
+        Debe((string)pEntrada.GetValue(todo)! == F030,
+            $"y dice dónde empieza: en la pantalla a la que llevó abrir el registro (dice «{pEntrada.GetValue(todo)}»)");
+        Debe((string)pSeAbre.GetValue(todo)! == "Triage",
+            $"y con qué se abre, para poder decírselo a la persona sin nombrar a nadie (dice «{pSeAbre.GetValue(todo)}»)");
+
+        // (ii) la fila sin veredicto: hoy no entraba, y «Triage» se quedaba actuando sobre lo que hubiera marcado.
+        var sinVeredicto = emp.Invoke(null, new object[] { Leccion(true, true), Veredictos(false), "Triage", "" });
+        Debe(sinVeredicto != null && NadaQueEligePaciente(sinVeredicto) && Exits(sinVeredicto).Count == 2
+             && (string)pEntrada.GetValue(sinVeredicto)! == F030,
+            "aterrice la fila o no, da igual: sin su veredicto la fila no entraba, pero «Triage» sí, y actuaba sobre lo que SAP tuviera marcado"
+            + (sinVeredicto == null ? " (no salió skill)" : $" (pasos: {string.Join(" → ", Exits(sinVeredicto))})"));
+
+        // (iii) una lección sin filas sale como siempre.
+        var sinFilas = emp.Invoke(null, new object[] { Leccion(false, true), Veredictos(false), "Triage", "" });
+        var e3 = sinFilas == null ? new List<string>() : Exits(sinFilas);
+        Debe(sinFilas != null && e3.Count == 5 && e3.Contains("Urgencias Adultos/Triage") && e3.Contains("Triage")
+             && (string)pEntrada.GetValue(sinFilas)! == "",
+            $"una lección sin filas sale como siempre: todos sus pasos y sin entrada (pasos: {string.Join(" → ", e3)})");
+        Debe(registro.Invoke(null, new object?[] { Leccion(false, true), Veredictos(false) }) == null,
+            "y sin fila elegida no hay registro que abra la persona");
+
+        // (iv) una fila sin ningún paso que navegue después: no hay desde dónde empezar sin elegir al paciente.
+        var r4 = registro.Invoke(null, new object?[] { Leccion(true, false), Veredictos(true) });
+        string motivo4 = r4 == null ? "" : (string)Prop(r4, "Motivo")!;
+        Debe(r4 != null && (string)Prop(r4, "Pantalla")! == "" && motivo4.Length > 0 && !motivo4.Contains("DEMO"),
+            $"una fila sin paso que navegue después: la entrada queda vacía y el motivo lo dice, sin nombrar a nadie («{motivo4}»)");
+        Debe(emp.Invoke(null, new object[] { Leccion(true, false), Veredictos(true), "Triage", "" }) == null,
+            "y no se guarda skill: empezar antes de la fila es elegir paciente, y empezar después es escribir sobre lo que SAP tenga marcado");
+
+        // Y LO QUE VE QUIEN ELIGE: el panel no nombra la fila; el catálogo dice que empieza con el registro abierto.
+        var frases = ((System.Collections.IEnumerable)Cap004("U.WindowsClient.Navigation.LoQueHaceLaSkill")!
+            .GetMethod("EnCastellano")!.Invoke(null, new[] { todo })!).Cast<string>().ToList();
+        Debe(frases.Count > 0 && frases.All(f => !f.Contains("DEMO")), $"el panel no nombra la fila de la demo ({string.Join(" | ", frases)})");
+        string carpeta = Path.Combine(_raiz, "skills-" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(carpeta);
+        tSkill.GetMethod("Guardar")!.Invoke(todo, new object[] { carpeta });
+        var catalogo = SkillEnsenada.Catalogo(carpeta);
+        Debe(catalogo.Count == 1 && (bool)pAnuncio.GetValue(catalogo[0])!,
+            "el catálogo sabe que la tarea empieza con el registro abierto");
+        string anuncio = SurfaceMapTools.AnuncioDeLasSkills(catalogo);
+        Debe(anuncio.Contains("registro", StringComparison.OrdinalIgnoreCase) && anuncio.Contains("«Triage»") && !anuncio.Contains("DEMO"),
+            $"y map_skills lo dice, con lo que lo abre, para que quien elige no navegue hasta él ({Recorta(anuncio, 260)})");
+        var encargo = U.WindowsClient.Clinical.Encargo.De(NotaDeTres(), new[] { "hallazgos" });
+        string mensaje = string.Join("\n", U.WindowsClient.Piloto.MensajeDelEncargo.Armar(encargo, catalogo).Select(b => b.Texto));
+        Debe(mensaje.Contains("registro", StringComparison.OrdinalIgnoreCase) && mensaje.Contains("«Triage»"),
+            $"y el mensaje del encargo al piloto también ({Recorta(mensaje, 260)})");
+    }
+
+    private static void SoloCorreDesdeElRegistroAbierto()
+    {
+        // LA OTRA MITAD: una skill que empieza en el registro no puede empezar en la lista. Hasta hoy los dos
+        // sitios que corren skills —map_skill_run y «Mostrar»— arrancaban del primer paso sin mirar dónde
+        // estaba SAP, y el piloto llegaba con map_go_to, que puede cruzar una fila aprendida.
+        var tSkill = typeof(SkillEnsenada);
+        var pEntrada = tSkill.GetProperty("EntradaDeLaPersona");
+        var pSeAbre = tSkill.GetProperty("SeAbreCon");
+        var puede = tSkill.GetMethod("PuedeEmpezarEn");
+        if (pEntrada == null || pSeAbre == null || puede == null)
+        {
+            Pendiente("SkillEnsenada.PuedeEmpezarEn · SkillEnsenada.EntradaDeLaPersona · SkillEnsenada.SeAbreCon", "255", "030");
+            return;
+        }
+        const string FaMedio = "sapgui://QAS/SESSION_MANAGER/SAPLY000/0001";
+
+        // LA FUNCIÓN PURA que comparten los dos sitios.
+        var suelta = SkillDePrueba(("Peso", "52", "", "Peso"))!;
+        pEntrada.SetValue(suelta, F030);
+        bool Puede(object skill, string aqui) => (bool)Prop(puede.Invoke(skill, new object[] { aqui })!, "Puede")!;
+        Debe(!Puede(suelta, L030) && Puede(suelta, F030) && Puede(suelta, FaMedio) && !Puede(suelta, ""),
+            "la decisión es una función pura: en la lista no, en el registro sí, cogido a medio cambiar también (226), y sin saber dónde, no");
+        var sinEntrada = SkillDePrueba(("Talla", "170", "", "Talla"))!;
+        Debe(Puede(sinEntrada, L030) && Puede(sinEntrada, ""), "y una skill que no empieza en un registro puede empezar donde sea, como siempre");
+
+        // Y POR LA PUERTA DE VERDAD: map_skill_run, con un localizador falso y un recorrido que cuenta.
+        string carpeta = Path.Combine(_raiz, "skills-" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(carpeta);
+        void Guardar(string nombre, string entrada, (string, string, string, string) paso)
+        {
+            var s = SkillDePrueba(paso)!;
+            s = tSkill.GetMethod("ConLaComprobacionHecha")!.Invoke(s, null)!;
+            tSkill.GetProperty("Nombre")!.SetValue(s, nombre);
+            pEntrada.SetValue(s, entrada);
+            pSeAbre.SetValue(s, entrada.Length > 0 ? "Triage" : "");
+            tSkill.GetMethod("Guardar")!.Invoke(s, new object[] { carpeta });
+        }
+        Guardar("triage desde el registro", F030, ("Peso", "52", "", "Peso"));
+        Guardar("talla suelta", "", ("Talla", "170", "", "Talla"));
+
+        string aqui = L030;
+        var recorridos = new List<IReadOnlyList<RecorrerSegunElNucleo.Paso>>();
+        int idas = 0;
+        var mapa = new SurfaceMapTools(() => new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation(aqui, "saplogon.exe", ""))
+        {
+            CarpetaDeSkills = carpeta,
+            RecorrerPorElNucleo = pasos => { recorridos.Add(pasos); return new(pasos.Count, pasos.Count, aqui, true, $"hice los {pasos.Count} paso(s)"); },
+            PorElNucleo = _ => { idas++; return "llegué"; },
+        };
+        string Correr(string nombre) => mapa.Call("map_skill_run", new Dictionary<string, string>
+        { ["nombre"] = nombre, ["datos"] = "{\"Peso\":\"80\",\"Talla\":\"171\"}" });
+
+        string enLaLista = Correr("triage desde el registro");
+        Debe(recorridos.Count == 0 && idas == 0,
+            $"con SAP en la lista, no se da NI UN paso ni se navega hasta el registro: llegar a él es elegir paciente "
+            + $"(recorridos {recorridos.Count}, idas {idas}; dijo «{Recorta(enLaLista, 200)}»)");
+        Debe(enLaLista.Contains("registro", StringComparison.OrdinalIgnoreCase) && enLaLista.Contains("«Triage»"),
+            $"y la cuenta dice qué abrir: el registro de la persona, con lo que lo abrió la demo ({Recorta(enLaLista, 200)})");
+
+        aqui = F030;
+        string enElRegistro = Correr("triage desde el registro");
+        Debe(recorridos.Count == 1 && recorridos[0].Any(p => p.Texto == "80"),
+            $"con el registro abierto corre, entera y con el dato de hoy ({Recorta(enElRegistro, 160)})");
+
+        aqui = FaMedio;
+        Correr("triage desde el registro");
+        Debe(recorridos.Count == 2, "y con la pantalla del registro cogida a medio cambiar también: es la misma pantalla (226)");
+
+        aqui = "";
+        Correr("triage desde el registro");
+        Debe(recorridos.Count == 2, "sin saber dónde está SAP no se da ni un paso: no hay forma de saber que el registro esté abierto");
+
+        aqui = L030;
+        Correr("talla suelta");
+        Debe(recorridos.Count == 3 && idas == 0, "y una skill que no empieza en un registro corre como siempre, esté donde esté");
+    }
+
+    private static void UnRegistroNoSeTomaSolo()
+    {
+        // LAS SKILLS QUE YA ESTÁN EN DISCO nacieron con la fila dentro, y la 254 no las toca. Mientras un
+        // paso de skill o una ruta de ir-a puedan pulsar una fila, basta una skill vieja —o una arista
+        // aprendida desde una fila— para abrir la historia de otra persona.
+        var pDeUnaTarea = typeof(RecorrerSegunElNucleo.Paso).GetProperty("DeUnaTarea");
+        var pBatch = typeof(RecorrerSegunElNucleo).GetProperty("EsUnRegistro");
+        var pIr = typeof(PasoDelNucleo).GetProperty("EsUnRegistro");
+        if (pDeUnaTarea == null || pBatch == null || pIr == null)
+        {
+            Pendiente("RecorrerSegunElNucleo.Paso.DeUnaTarea · RecorrerSegunElNucleo.EsUnRegistro · PasoDelNucleo.EsUnRegistro", "256", "030");
+            return;
+        }
+        // EL DELEGADO lo pone quien sabe de SAP; ni el batch ni el núcleo saben qué es una fila.
+        Func<string, bool> esUnRegistro = sel => sel.Contains("#row=", StringComparison.Ordinal);
+
+        // (a) EL BATCH: en la lista, viva, la fila de OTRA persona cuya etiqueta contiene «DEMO».
+        var g = new Nucleo.Grafo();
+        g.Observar(L030, new[]
+        {
+            new Nucleo.Elemento(FilaOtra030, "01.01.2026 · 0000002 · OTRO DEMO", "GuiGridFila"),
+            new Nucleo.Elemento(Triage030, "Triage", "GuiGridBoton"),
+        });
+        var (batch, _, tocados) = BatchCon(g, L030, new Dictionary<string, string> { [L030 + "|" + Triage030] = F030 });
+        pBatch.SetValue(batch, esUnRegistro);
+
+        var vieja = (SkillEnsenada)SkillDePrueba(("DEMO", "", "", ""), ("Triage", "", F030, ""))!;
+        var pasos = InstanciarSkill.Pasos(vieja, new Dictionary<string, string>());
+        Debe(pasos.Count == 2 && pasos.All(p => (bool)pDeUnaTarea.GetValue(p)!),
+            "los pasos que salen de una skill dicen que son de una tarea: es lo que el ejecutor mira");
+        var r = batch.Recorre(pasos);
+        Debe(tocados.Count == 0 && r.Hechos == 0 && !r.Termino,
+            $"un paso de skill que se llama como la fila de la demo NO pulsa la fila viva que la contiene —la de otra persona— "
+            + $"ni sigue a «Triage» (pulsados {tocados.Count}; {r.Hechos} de {r.Total})");
+        Debe(r.Cuenta.Contains("persona") && !r.Cuenta.Contains("OTRO") && !r.Cuenta.Contains("0000002"),
+            $"y para diciendo que la fila la elige la persona, sin nombrar a nadie ({r.Cuenta})");
+
+        var porSelector = new RecorrerSegunElNucleo.Paso(FilaOtra030);
+        pDeUnaTarea.SetValue(porSelector, true);
+        batch.Recorre(new[] { porSelector });
+        Debe(tocados.Count == 0, "aunque el paso de la tarea traiga el selector exacto de la fila: una fila no se toma sola");
+
+        var mapa = new SurfaceMapTools(() => null) { RecorrerPorElNucleo = p => batch.Recorre(p) };
+        mapa.Call("map_take", new Dictionary<string, string> { ["exit"] = "DEMO" });
+        Debe(tocados.Count == 1,
+            $"pero cuando la persona la nombra, map_take la pulsa por el mismo batch: elegir el registro es suyo (pulsados {tocados.Count})");
+
+        // Con DOS filas que contienen «DEMO», un paso de tarea tampoco ofrece la lista numerada: eso sería
+        // pedirle al piloto que elija paciente, y enseñarle los nombres.
+        var g2 = new Nucleo.Grafo();
+        g2.Observar(L030, new[]
+        {
+            new Nucleo.Elemento(FilaOtra030, "01.01.2026 · 0000002 · OTRO DEMO", "GuiGridFila"),
+            new Nucleo.Elemento(FilaDemo030, "02.01.2026 · 0000001 · DEMO SEGUNDO", "GuiGridFila"),
+        });
+        var (batch2, _, tocados2) = BatchCon(g2, L030, new Dictionary<string, string>());
+        pBatch.SetValue(batch2, esUnRegistro);
+        var r2 = batch2.Recorre(InstanciarSkill.Pasos(vieja, new Dictionary<string, string>()));
+        Debe(tocados2.Count == 0 && !r2.Ambiguo && r2.Cuenta.Contains("persona") && !r2.Cuenta.Contains("OTRO") && !r2.Cuenta.Contains("SEGUNDO"),
+            $"con dos filas parecidas, un paso de tarea no las numera para que alguien elija: para, y no nombra a nadie ({r2.Cuenta})");
+
+        // (b) IR-A: la arista aprendida L –fila→ F existe (el grabador la pudo atribuir a la fila).
+        var g3 = new Nucleo.Grafo();
+        g3.Observar(N030, new[] { new Nucleo.Elemento(Rama030, "Urgencias Adultos/Triage", "GuiTreeNode") });
+        g3.Cruzar(N030, Rama030, L030);
+        g3.Observar(L030, new[] { new Nucleo.Elemento(FilaOtra030, "01.01.2026 · 0000002 · OTRO DEMO", "GuiGridFila") });
+        g3.Cruzar(L030, FilaOtra030, F030);
+        string donde = L030;
+        var pulsados = new List<string>();
+        var ir = new PasoDelNucleo(g3, () => donde, (sel, _) =>
+        {
+            pulsados.Add(sel);
+            if (sel == FilaOtra030) donde = F030;
+            if (sel == Rama030) donde = L030;
+            return true;
+        }, _ => true);
+        pIr.SetValue(ir, esUnRegistro);
+        string cuenta = ir.Hasta(F030);
+        Debe(pulsados.All(s => !s.Contains("#row=")),
+            $"ir-a no pulsa una fila aunque la ruta aprendida pase por ella (pulsados: {pulsados.Count}; dijo «{cuenta}»)");
+        Debe(cuenta.Contains("persona") && !cuenta.Contains("OTRO"), $"y para diciendo que la fila la elige la persona («{cuenta}»)");
+
+        donde = N030; pulsados.Clear();
+        string sinFilas = ir.Hasta(L030);
+        Debe(pulsados.Count == 1 && pulsados[0] == Rama030 && donde == L030,
+            $"una ruta sin filas sigue llegando: el filtro es para registros, no para todo lo que se pulsa («{sinFilas}»)");
     }
 
     private static void DarUnPasoEsUnaCoreografia()
