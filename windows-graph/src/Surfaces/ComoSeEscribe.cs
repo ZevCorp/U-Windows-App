@@ -68,11 +68,75 @@ public static class ComoSeEscribe
     /// <param name="leido">Lo que el campo dice tener ahora, o null si no se pudo leer.</param>
     public static bool Cuajo(string pedido, string? leido)
     {
-        string quiero = (pedido ?? "").Trim();
+        string quiero = Aplanado(pedido);
         if (quiero.Length == 0) return true;   // escribir vacío no se puede desmentir
         if (leido == null) return true;        // ilegible: no se juzga
-        return leido.Trim().Contains(quiero, StringComparison.Ordinal);
+        return Aplanado(leido).Contains(Muestra(quiero), StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// EL TEXTO, NO SU FORMATO (promesa 247). Un editor normaliza saltos y espacios al guardar, y exigir
+    /// el texto literal leía eso como «no escribió nada»: el 2026-09-16 el Bloc de notas DECÍA tener el
+    /// informe —se lee en el log— y la comprobación dio fallo porque los saltos no coincidían.
+    /// </summary>
+    private static string Aplanado(string? t)
+    {
+        if (string.IsNullOrEmpty(t)) return "";
+        var sb = new System.Text.StringBuilder(t.Length);
+        bool espacio = false;
+        foreach (char c in t)
+        {
+            if (char.IsWhiteSpace(c)) { espacio = sb.Length > 0; continue; }
+            if (espacio) { sb.Append(' '); espacio = false; }
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// De un texto largo basta reconocer su comienzo: un editor puede recortar, envolver o paginar el
+    /// resto, y comparar el informe entero es pedirle que no toque una coma.
+    /// </summary>
+    private static string Muestra(string aplanado)
+        => aplanado.Length <= 60 ? aplanado : aplanado[..60];
+
+    /// <summary>Lo que se sabe después de escribir. Tres respuestas, no dos (promesa 247, spec 026).</summary>
+    public enum Veredicto
+    {
+        /// <summary>El campo enseña el texto.</summary>
+        Cuajo,
+        /// <summary>El campo enseña otra cosa: el texto fue a parar a otro sitio.</summary>
+        NoCuajo,
+        /// <summary>El campo no cuenta lo que tiene, así que no hay forma de saberlo.</summary>
+        MudoNoSeSabe,
+    }
+
+    /// <summary>
+    /// QUÉ SE SABE DESPUÉS DE ESCRIBIR. Promesa 247 (spec 026).
+    /// </summary>
+    /// <remarks>
+    /// UN CAMPO MUDO NO ES UN CAMPO QUE FALLÓ, y confundirlos costó un informe escrito CUATRO VECES el
+    /// 2026-09-16. Google Docs dibuja el documento en un lienzo y no expone su contenido por
+    /// accesibilidad: tras teclear responde «». La comprobación de la spec 024 leyó ese vacío como «no
+    /// entró», contestó «no pude escribir», y el modelo —haciendo lo correcto con lo que se le dijo—
+    /// reescribió el informe entero. Cuatro veces, dos minutos, y el documento repetido.
+    ///
+    /// Dar por falso lo que no se pudo comprobar es el mismo vicio que dar por cierto lo que no se
+    /// comprobó, solo que al revés y más caro: el daño de la duda es un aviso; el de la duplicación es
+    /// el trabajo del usuario estropeado.
+    /// </remarks>
+    public static Veredicto TrasEscribir(string pedido, string? antes, string? despues)
+    {
+        if (Aplanado(pedido).Length == 0) return Veredicto.Cuajo;
+        if (despues == null) return Veredicto.MudoNoSeSabe;
+        if (Cuajo(pedido, despues)) return Veredicto.Cuajo;
+        // El campo no dice nada: ni lo de antes ni lo pedido. No se puede saber, y no se inventa.
+        if (Aplanado(despues).Length == 0) return Veredicto.MudoNoSeSabe;
+        return Veredicto.NoCuajo;
+    }
+
+    /// <summary>¿Se da por escrito? Solo el «no cuajó» es un fallo (promesa 247).</summary>
+    public static bool SeDaPorEscrito(Veredicto v) => v != Veredicto.NoCuajo;
 
     /// <summary>El error nombra lo pedido y dónde se buscó: «no encontré el elemento «»» no decía ninguna de las dos.</summary>
     public static string NoEncontre(string campo, string ventana)

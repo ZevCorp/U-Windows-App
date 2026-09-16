@@ -56,6 +56,32 @@ public static class ComoSePulsa
         return Gesto.Fisico;   // sin patrón y sin punto: el ratón real, que trae la ventana y lo busca
     }
 
+    /// <summary>
+    /// ¿SE REPITE UN CLIC QUE NO MOVIÓ NADA? Promesa 248 (spec 026).
+    /// </summary>
+    /// <remarks>
+    /// EL GESTO ERA BUENO Y EL ELEMENTO TAMBIÉN; lo que falló fue el momento. El 2026-09-16 Ü resolvió
+    /// «Compose» de Gmail —la carita se puso a su lado, así que el elemento era el correcto—, lo pulsó por
+    /// patrón, la llamada devolvió éxito y la redacción no se abrió. Probando después sobre ese mismo
+    /// botón con Gmail ya asentado, el mismo Invoke la abre a la primera: nueve segundos antes se había
+    /// activado la pestaña, y Gmail es pesado. Lo caro no es que un clic se pierda, es enterarse: hoy
+    /// cuesta una vuelta al modelo, entre cinco y diez segundos. Repetirlo aquí cuesta uno.
+    ///
+    /// LA PROMESA 83 TIENE RAZÓN EN LO SUYO Y NO SE TOCA: «Guardar» hace su trabajo SIN cambiar de
+    /// pantalla, y repetirlo es guardar dos veces —Configuración llegó a ANULAR con el segundo clic
+    /// (2026-08-03)—. Desde fuera, un «Guardar» que funcionó y un «Compose» que se perdió son idénticos:
+    /// misma pantalla, mismos elementos vivos, mismo todo.
+    ///
+    /// LA SEÑAL QUE SÍ LOS SEPARA LA TIENE EL TERRENO. Una puerta que ya se vio llevar a algún sitio
+    /// tiene destino aprendido en el grafo; un botón que aplica algo no lo tiene ni lo tendrá, porque
+    /// nunca cruzó a ninguna parte. Así que solo se repite lo que SABEMOS que navega, y de paso esto
+    /// mejora con el uso, que es de lo que va el producto entero.
+    /// </remarks>
+    /// <param name="sabeQueLleva">El terreno ya aprendió que esta puerta lleva a algún sitio.</param>
+    public static bool HayQueRepetir(bool cambioLaPantalla, int vivosAntes, int vivosDespues,
+        bool esDestructivo, bool sabeQueLleva, bool yaSeRepitio)
+        => !cambioLaPantalla && vivosAntes == vivosDespues && !esDestructivo && sabeQueLleva && !yaSeRepitio;
+
     /// <summary>¿Hay que devolverle el foco a la persona después de pulsar?</summary>
     public static bool HayQueDevolver(Gesto gesto, IntPtr focoAntes, IntPtr focoDespues)
         => gesto == Gesto.Fisico && focoAntes != IntPtr.Zero && focoAntes != focoDespues;

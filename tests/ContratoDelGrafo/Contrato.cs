@@ -640,6 +640,13 @@ internal static class Contrato
         // treinta. Medido: un map_take de 28,8 s para decir «lo conozco aquí pero AHORA no lo veo».
         Prueba("245. las esperas se acotan con el RELOJ y no contando vueltas: con un sondeo lento, una espera de N milisegundos termina en N y no en N por el número de vueltas — ni al pulsar, ni al comprobar la llegada, ni en la compuerta que espera a que un elemento esté vivo", LasEsperasSeMidenConElReloj);
         Prueba("246. lo que se acaba de mirar no se vuelve a mirar: una memoria corta con su caducidad devuelve lo recordado sin volver a la fuente mientras no caduque, vuelve a preguntar cuando caduca, y se puede olvidar a mano cuando algo cambió", LoQueSeAcabaDeMirarNoSeVuelveAMirar);
+
+        // UN INFORME ENTERO SE ESCRIBIÓ CUATRO VECES (2026-09-16). La comprobación de la 243 daba falso
+        // negativo con un campo que no cuenta lo que tiene (Google Docs) y con un texto largo cuyos saltos
+        // el editor normaliza (el Bloc de notas): el veredicto era «no pude escribir», el modelo lo tomaba
+        // al pie de la letra y reescribía. Dar por falso lo que no se pudo comprobar sale caro.
+        Prueba("247. tras escribir hay tres respuestas y no dos: cuajó, no cuajó, o no se sabe porque el campo no cuenta lo que tiene; un campo mudo se da por escrito en vez de por fallido —que es lo que hizo que un informe se escribiera cuatro veces— y la comparación mira el texto normalizado y no su formato", TrasEscribirHayTresRespuestas);
+        Prueba("248. un clic que no movió NADA se repite una vez, y solo cuando el terreno ya sabía que esa puerta lleva a algún sitio: un botón que hace su trabajo sin cambiar de pantalla —«Guardar»— no tiene destino aprendido y por eso jamás recibe un segundo clic, que es justo lo que promete la 83; tampoco se repite lo que no se puede deshacer, ni se repite dos veces", ElClicQueNoMovioNadaSeRepiteUnaVez);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -9400,6 +9407,74 @@ internal static class Contrato
         olvida.Invoke(mem, null);
         Debe(Pide() == "valor3" && llamadas == 3,
             "y se puede olvidar a mano: cuando una acción acaba de cambiar la pantalla, lo recordado ya no vale");
+    }
+
+    private static void TrasEscribirHayTresRespuestas()
+    {
+        var t = Grafico("U.Graph.Surfaces.ComoSeEscribe");
+        var tras = t?.GetMethod("TrasEscribir");
+        var seDa = t?.GetMethod("SeDaPorEscrito");
+        Debe(tras != null && seDa != null,
+            "todavía no existen «ComoSeEscribe.TrasEscribir» ni «SeDaPorEscrito» (spec 026, promesa 247). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tras == null || seDa == null) return;
+        string V(string pedido, string? antes, string? despues)
+            => tras.Invoke(null, new object?[] { pedido, antes, despues })!.ToString()!;
+        bool Escrito(string veredicto)
+            => (bool)seDa.Invoke(null, new[] { Enum.Parse(tras.ReturnType, veredicto) })!;
+
+        Debe(V("hola", "", "hola") == "Cuajo", "si el campo enseña el texto, cuajó");
+        Debe(V("hola", "", "adiós") == "NoCuajo", "si enseña otra cosa, no cuajó: fue a parar a otro sitio");
+        Debe(V("hola", "", "") == "MudoNoSeSabe",
+            "UN CAMPO QUE NO CUENTA LO QUE TIENE NO ES UN FALLO: Google Docs dibuja el texto en un lienzo y "
+            + "responde vacío. Leerlo como «no entró» es lo que hizo que un informe se escribiera cuatro veces");
+        Debe(V("hola", "\n", "\n") == "MudoNoSeSabe", "y el vacío de un editor web es un salto de línea: tampoco cuenta nada");
+        Debe(V("hola", null, null) == "MudoNoSeSabe", "lo ilegible tampoco se juzga");
+        Debe(V("", "lo que sea", "lo que sea") == "Cuajo", "escribir vacío no se puede desmentir");
+
+        // EL TEXTO, NO SU FORMATO: el editor normaliza los saltos y eso no es no haber escrito.
+        string largo = "TÍTULO DEL INFORME\n\nResumen ejecutivo\n\nEste documento sintetiza la investigación.";
+        string comoLoGuarda = "TÍTULO DEL INFORME Resumen ejecutivo Este documento sintetiza la investigación.";
+        Debe(V(largo, "", comoLoGuarda) == "Cuajo",
+            "con los saltos normalizados por el editor, el texto SÍ está: exigirlo literal es lo que dio el falso fallo del Bloc de notas");
+        Debe(V(largo, "", "TÍTULO DEL INFORME Resumen ejecutivo Este documento sintetiza") == "Cuajo",
+            "y con un texto largo basta reconocer su comienzo: un editor puede recortar, envolver o paginar el resto");
+
+        Debe(Escrito("Cuajo") && Escrito("MudoNoSeSabe") && !Escrito("NoCuajo"),
+            "solo el «no cuajó» se cuenta como fallo: reescribir un informe entero es peor daño que no poder confirmarlo");
+    }
+
+    private static void ElClicQueNoMovioNadaSeRepiteUnaVez()
+    {
+        // GMAIL: Ü resolvió «Compose» bien —la carita se puso a su lado—, lo pulsó por patrón, la llamada
+        // devolvió éxito y la redacción no se abrió. Probado después sobre el mismo botón con Gmail
+        // asentado, ese mismo Invoke la abre a la primera. El gesto era bueno; el momento, no. Enterarse
+        // cuesta una vuelta al modelo (5-10 s); repetirlo aquí cuesta uno.
+        //
+        // Y LA 83 TIENE RAZÓN EN LO SUYO: «Guardar» hace su trabajo SIN cambiar de pantalla, así que desde
+        // fuera un «Guardar» que funcionó y un «Compose» que se perdió son idénticos. La señal que sí los
+        // separa la tiene el terreno: una puerta que YA se vio llevar a algún sitio tiene destino aprendido;
+        // un botón que aplica algo no lo tiene ni lo tendrá. Solo se repite lo que sabemos que navega.
+        var t = Grafico("U.Graph.Surfaces.ComoSePulsa");
+        var repetir = t?.GetMethod("HayQueRepetir");
+        Debe(repetir != null, "todavía no existe «ComoSePulsa.HayQueRepetir» (spec 026, promesa 248). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (repetir == null) return;
+        bool R(bool cambioPantalla, int vivosAntes, int vivosDespues, bool destructivo, bool sabeQueLleva, bool yaRepetido)
+            => (bool)repetir.Invoke(null, new object[] { cambioPantalla, vivosAntes, vivosDespues, destructivo, sabeQueLleva, yaRepetido })!;
+
+        Debe(R(false, 40, 40, false, true, false),
+            "una puerta que el terreno ya vio llevar a algún sitio y que no movió nada: el clic se perdió, se repite");
+        Debe(!R(false, 40, 40, false, false, false),
+            "PERO «GUARDAR» NO: un botón que hace su trabajo sin cambiar de pantalla no tiene destino aprendido, y "
+            + "repetirlo sería guardar dos veces. Es lo que promete la 83 desde el 2026-08-03, y sigue en pie");
+        Debe(!R(true, 40, 40, false, true, false), "si la pantalla cambió, el clic hizo su trabajo");
+        Debe(!R(false, 40, 47, false, true, false),
+            "si cambió lo que hay vivo, algo se abrió —un menú, un panel— y repetirlo lo desharía");
+        Debe(!R(false, 40, 33, false, true, false), "y si desapareció algo, también hizo efecto");
+        Debe(!R(false, 40, 40, true, true, false),
+            "lo que no se puede deshacer no se repite NUNCA, aunque sepamos a dónde lleva");
+        Debe(!R(false, 40, 40, false, true, true), "y se repite UNA vez: a la segunda se cuenta lo que pasó");
     }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
