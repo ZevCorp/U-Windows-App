@@ -628,6 +628,12 @@ internal static class Contrato
         // curso, verde hecho, rojo fallo— y son cuatro tonos en una pieza de dos centímetros que vive encima
         // de todo. El dueño, antes de mandársela a un usuario: «mucho negro y blanco, sin más colores».
         Prueba("242. el notch es blanco y negro: todo color que pinta tiene sus tres canales iguales, el estado se distingue por forma y por luz —el fallo es un aro y no un punto rojo, lo omitido baja de luz, lo que está en curso late— y la paleta de la barra grande, que sí tiene color, no entra aquí", ElNotchEsBlancoYNegro);
+
+        // ESCRIBIR SE COMPROBABA SOLO: el campo de Instagram acepta ValuePattern, no guarda nada, y la
+        // herramienta contestaba «escribí X y confirmé con Enter» con la caja vacía (2026-09-15, 18:48, dos
+        // veces seguidas). Y la voz llegó a decir «ya quedó enviado». Aceptado no es ejecutado, otra vez.
+        Prueba("243. escribir se comprueba en el campo: tras escribir por patrón se relee, y si el campo se quedó como estaba —el editor de Instagram, que acepta la orden y no guarda nada— se teclea de verdad y se vuelve a comprobar; lo que no se puede leer no se juzga, y si no cuajó por ninguna vía se dice, en vez de contestar «escribí»", EscribirSeCompruebaEnElCampo);
+        Prueba("244. Ü decide en vez de preguntar: sus instrucciones mandan elegir la opción más razonable cuando falta un dato y decir cuál se eligió, dejan preguntar solo cuando elegir mal no se puede deshacer, y prohíben trocear una tarea larga en preguntas", UDecideEnVezDePreguntar);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -9265,6 +9271,61 @@ internal static class Contrato
         var vivo = barra?.GetField("Vivo", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
         Debe(vivo != null && Prop(vivo, "R")!.ToString() != Prop(vivo, "G")!.ToString(),
             "la barra grande conserva su verde: el dueno pidio limpiar el notch, no el resto");
+    }
+
+    private static void EscribirSeCompruebaEnElCampo()
+    {
+        // MEDIDO CON UNA SONDA SOBRE EL CAMPO REAL (2026-09-15): SetValue no lanza, no falla y el valor
+        // sigue vacío; teclear con el teclado sí entra. El editor de un sitio moderno es un contenteditable
+        // gobernado por JavaScript, y escribir su valor por accesibilidad no dispara los eventos que ese
+        // JavaScript escucha. UIA acepta la orden y devuelve éxito: nadie miente, nadie comprueba.
+        var t = Grafico("U.Graph.Surfaces.ComoSeEscribe");
+        var cuajo = t?.GetMethod("Cuajo");
+        var teclearEnElCampo = Grafico("U.Graph.Surfaces.UiaSurface")?.GetMethod("TeclearEnElCampo");
+        Debe(cuajo != null && teclearEnElCampo != null,
+            "todavía no existen «ComoSeEscribe.Cuajo» ni «UiaSurface.TeclearEnElCampo» (spec 024, promesa 243). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (cuajo == null) return;
+        bool C(string pedido, string? leido) => (bool)cuajo.Invoke(null, new object?[] { pedido, leido })!;
+
+        Debe(!C("hola", ""), "un campo que se queda VACÍO después de escribirle no se quedó con nada: es el caso de Instagram");
+        Debe(!C("hola", "\n"), "y el «vacío» de un editor web es un salto de línea, que es literalmente lo que devolvió la sonda");
+        Debe(!C("hola", "   "), "espacios tampoco son el texto");
+        Debe(C("hola", "hola"), "si el campo dice lo que se le escribió, cuajó");
+        Debe(C("hola", "hola\n"), "con el salto de línea que añade el editor, también");
+        Debe(C("hola", " hola "), "y con los espacios de más del propio control");
+        Debe(!C("hola", "adiós"), "si dice otra cosa, no cuajó: eso es haber escrito en otro sitio");
+        Debe(C("hola", null),
+            "LO QUE NO SE PUEDE LEER NO SE JUZGA: hay controles que no devuelven su valor, y ahí se deja pasar como hasta hoy. "
+            + "El arreglo actúa sobre una prueba de que el texto no entró, nunca sobre una sospecha");
+        Debe(C("", "lo que sea"), "escribir vacío no se puede desmentir");
+    }
+
+    private static void UDecideEnVezDePreguntar()
+    {
+        // «SIEMPRE QUE LE PIDO UNA TAREA COMPLEJA ME EMPIEZA A PREGUNTAR COSAS» (el dueño, 2026-09-15). Las
+        // instrucciones ya prohibían pedir permiso, pero dejaban abierta la puerta de al lado —preguntar por
+        // el dato que falta— sin decir cuándo un dato se deduce. En una tarea larga cualquier paso tiene un
+        // dato opinable, así que la excepción se comía la regla.
+        var t = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var prop = t?.GetProperty("InstruccionesNormales",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        Debe(t != null && prop != null, "no encuentro «ConversacionEnVivo.InstruccionesNormales»");
+        if (prop == null) return;
+        string texto = (string)prop.GetValue(null)!;
+
+        Debe(texto.Contains("ELIGE TÚ", StringComparison.Ordinal),
+            "está dicha la regla nueva, y en mayúsculas como las demás que se incumplían");
+        Debe(texto.Contains("no se puede deshacer", StringComparison.Ordinal),
+            "y cuál es la ÚNICA frontera para preguntar: que elegir mal no tenga vuelta atrás");
+        Debe(texto.Contains("dilo al terminar", StringComparison.Ordinal) || texto.Contains("dices cuál elegiste", StringComparison.Ordinal),
+            "elegir sin contarlo es adivinar a escondidas: la regla obliga a decir qué se eligió, después de hacerlo");
+        Debe(texto.Contains("no la trocees en preguntas", StringComparison.Ordinal),
+            "y una tarea larga se hace entera: trocearla en preguntas es la forma en que el interrogatorio volvía");
+        Debe(!texto.Contains("pregunta por el DATO que te falta, y solo", StringComparison.Ordinal),
+            "y la puerta de al lado se cierra: mientras el texto invite a preguntar por el dato, el modelo va a preferir preguntar");
+        Debe(texto.Contains("NO PIDAS PERMISO", StringComparison.Ordinal),
+            "lo que ya funcionaba se queda: la regla nueva no sustituye a la vieja, la completa");
     }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
