@@ -159,12 +159,16 @@ public sealed class PulsarSegunElNucleo
 
     private string EsperarACambiar(string desde)
     {
-        for (int ido = 0; ido < EsperaMaximaMs; ido += 120)
+        // EL RELOJ MANDA (promesa 245): antes esto sumaba 120 por vuelta y además pagaba _donde(), que
+        // en la máquina del dueño costaba 2,8 s. Una espera de «1,8 s» duraba más de treinta.
+        var compas = new Compas(EsperaMaximaMs);
+        string ahora = "";
+        do
         {
-            string ahora = _donde() ?? "";
+            ahora = _donde() ?? "";
             if (ahora.Length > 0 && ahora != desde) return ahora;
-            System.Threading.Thread.Sleep(120);
         }
-        return _donde() ?? "";
+        while (compas.Respira(120));
+        return ahora.Length > 0 ? ahora : (_donde() ?? "");
     }
 }

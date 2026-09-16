@@ -249,7 +249,9 @@ public sealed class AbrirSegunElNucleo
     /// </summary>
     private string EsperarACambiar(string antes, int topeMs = 5000)
     {
-        for (int ido = 0; ido < topeMs; ido += 120)
+        // EL RELOJ MANDA (promesa 245): con un sondeo caro, contar vueltas multiplicaba la espera.
+        var compasAbrir = new Compas(topeMs);
+        for (int ido = 0; ido < topeMs; ido = (int)compasAbrir.Transcurrido)
         {
             string ahora = _donde() ?? "";
             if (ahora.Length > 0 && ahora != antes) return ahora;

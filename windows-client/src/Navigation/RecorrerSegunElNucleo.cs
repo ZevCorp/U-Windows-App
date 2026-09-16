@@ -288,12 +288,14 @@ public sealed class RecorrerSegunElNucleo
         // La pantalla nueva tarda en pintarse y en ser leída: declarar el desvío sin esperar sería
         // juzgar la de antes, que es el mismo desfase que la compuerta evita antes de pulsar.
         string donde = "";
-        for (int ido = 0; ido <= EsperaMaximaMs; ido += 120)
+        // EL RELOJ MANDA (promesa 245): el presupuesto se agota con el tiempo, no con las vueltas.
+        var compasLlegada = new Compas(EsperaMaximaMs);
+        do
         {
             donde = _donde() ?? "";
             if (paso.Llegada.Equals(donde, StringComparison.OrdinalIgnoreCase)) return true;
-            System.Threading.Thread.Sleep(120);
         }
+        while (compasLlegada.Respira(120));
 
         string que = paso.Texto.Length > 0 ? $"escribí «{paso.Texto}»" : $"pulsé «{paso.Tecla}»";
         desvio = $"{que} y quedé en «{donde}», pero la demostración llegaba a «{paso.Llegada}»: eso "
@@ -360,7 +362,10 @@ public sealed class RecorrerSegunElNucleo
         EsperarloVivo(string exit)
     {
         var nada = Array.Empty<Nucleo.Alcanzable>();
-        for (int ido = 0; ; ido += 120)
+        // EL RELOJ MANDA (promesa 245). Esta es la compuerta que costó 28,8 s en la máquina del dueño:
+        // cada vuelta lee la pantalla, y el presupuesto se contaba como si leerla fuera gratis.
+        var compasVida = new Compas(EsperaMaximaMs);
+        for (int ido = 0; ; ido = (int)compasVida.Transcurrido)
         {
             string aqui = _donde() ?? "";
             if (aqui.Length > 0)
@@ -442,7 +447,7 @@ public sealed class RecorrerSegunElNucleo
             else if (ido >= EsperaMaximaMs)
                 return (null, nada, null, "");
 
-            System.Threading.Thread.Sleep(120);
+            compasVida.Respira(120);
         }
     }
 
