@@ -1372,6 +1372,7 @@ public sealed class UiaSurface : IUiSurface
         if (el.TryGetCurrentPattern(ValuePattern.Pattern, out var p) && p is ValuePattern v)
         {
             if (v.Current.IsReadOnly) { error = "el campo es de solo lectura"; return false; }
+            string? antes = LoQueDiceElCampo(el);   // para saber si el campo cuenta algo (promesa 247)
             v.SetValue(value);
             // Dejar el FOCO de teclado en el campo recién escrito. SetValue no enfoca, así que sin esto un
             // Enter posterior (keybd_event) iría a otra ventana y no submitearía —era el bug de SAP: se
@@ -1386,8 +1387,9 @@ public sealed class UiaSurface : IUiSurface
             // ¿SE QUEDÓ CON ÉL? (promesa 243). El editor de un sitio moderno acepta la orden y no guarda
             // nada, y hasta el 2026-09-15 eso se contestaba como «escribí». Si hay prueba de que el texto
             // no entró, se teclea de verdad; si el campo no se deja leer, se deja pasar como siempre.
-            if (ComoSeEscribe.Cuajo(value, LoQueDiceElCampo(el))) return true;
-            L($"    el campo aceptó el patrón pero NO se quedó con el texto → se teclea");
+            var veredicto = ComoSeEscribe.TrasEscribir(value, antes, LoQueDiceElCampo(el));
+            if (veredicto == ComoSeEscribe.Veredicto.Cuajo) return true;
+            L($"    el campo no enseña el texto ({veredicto}) → se teclea");
             return TeclearEnElCampo(el, value, out error);
         }
         error = "el campo no soporta ValuePattern (no se puede escribir por UIA)";
@@ -1424,6 +1426,7 @@ public sealed class UiaSurface : IUiSurface
     public bool TeclearEnElCampo(AutomationElement el, string texto, out string error)
     {
         error = "";
+        string? antesDeTeclear = LoQueDiceElCampo(el);
         IntPtr focoAntes = GetForegroundWindow();
         GetCursorPos(out POINT cursorAntes);
         try
@@ -1449,9 +1452,16 @@ public sealed class UiaSurface : IUiSurface
         Thread.Sleep(150);
 
         string? ahora = LoQueDiceElCampo(el);
-        bool ok = ComoSeEscribe.Cuajo(texto ?? "", ahora);
-        L(ok ? $"    → tecleado en el campo: {(texto ?? "").Length} carácter(es), y el campo lo tiene"
-             : $"    ✗ ni tecleando entró el texto (el campo dice «{(ahora ?? "").Trim()}»)");
+        var veredicto = ComoSeEscribe.TrasEscribir(texto ?? "", antesDeTeclear, ahora);
+        bool ok = ComoSeEscribe.SeDaPorEscrito(veredicto);
+        // UN CAMPO MUDO SE DA POR ESCRITO (promesa 247): decir «no pude» sobre un campo que no cuenta lo
+        // que tiene es lo que hizo que un informe se escribiera cuatro veces (2026-09-16).
+        L(veredicto switch
+        {
+            ComoSeEscribe.Veredicto.Cuajo => $"    → tecleado en el campo: {(texto ?? "").Length} carácter(es), y el campo lo tiene",
+            ComoSeEscribe.Veredicto.MudoNoSeSabe => $"    → tecleado en el campo: {(texto ?? "").Length} carácter(es); el campo no cuenta lo que tiene, así que no se puede comprobar y NO se reescribe",
+            _ => $"    ✗ ni tecleando entró el texto (el campo dice «{(ahora ?? "").Trim()}»)",
+        });
         if (!ok) error = "el campo no se quedó con el texto ni escribiéndolo ni tecleándolo";
 
         if (ComoSePulsa.HayQueDevolver(ComoSePulsa.Gesto.Fisico, focoAntes, GetForegroundWindow()))
