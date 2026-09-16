@@ -58,11 +58,18 @@ public sealed class PanelDeAcciones : Window
     [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
-    /// <summary>Cuántas líneas se conservan a la vista. Suficiente para ver la secuencia de una
-    /// conversación sin convertirse en un log: para eso ya está el log. Sube de 7 a 10 desde que
-    /// aquí también va lo dicho: si la conversación y la maquinaria se reparten las mismas filas,
-    /// dos herramientas seguidas te borran la pregunta que las provocó.</summary>
-    private const int Memoria = 10;
+    /// <summary>
+    /// Cuántas líneas se conservan a la vista. TRES, y el hueco reservado aunque no haya ninguna: eso
+    /// es lo que hace que la pieza no cambie de tamaño nunca (promesa 249, spec 027).
+    /// </summary>
+    /// <remarks>
+    /// Fueron 7 y luego 10, cuando la idea era no perder la pregunta que provocó una tanda de
+    /// herramientas. Pero con diez la pieza llegaba a 252 de alto y se estiraba y encogía con cada
+    /// línea: «un tamaño muy grande en un momento y pequeño en otro» (el dueño, 2026-09-16). Tres son
+    /// las justas para leer una secuencia —lo que pediste, lo que está pasando, lo que salió—, y el
+    /// registro completo ya vive en el log.
+    /// </remarks>
+    private static readonly int Memoria = (int)MedidaDelNotch.FilasALaVista;
 
     /// <summary>
     /// Cuánto aguanta en pantalla sin nada nuevo.
@@ -77,8 +84,8 @@ public sealed class PanelDeAcciones : Window
     /// <summary>El radio máximo del notch. Con una sola fila manda la mitad del alto: una píldora.</summary>
     private const double RadioMaximo = 20;
 
-    /// <summary>Lo más ancho que puede ponerse el texto de una fila antes de cortarse con puntos.</summary>
-    private const double AnchoDelTexto = 420;
+    /// <summary>Lo que le queda al texto antes de cortarse con puntos. Sale del ancho FIJO de la pieza.</summary>
+    private static readonly double AnchoDelTexto = MedidaDelNotch.AnchoDelTexto;
 
     /// <summary>
     /// La sombra del notch: NEGRA, y no la azulada de <see cref="Estudio.Sombra3"/>.
@@ -95,8 +102,10 @@ public sealed class PanelDeAcciones : Window
     {
         var s = new DropShadowEffect
         {
-            BlurRadius = 36,
-            ShadowDepth = 8,
+            // Más corta que la de una ventana (promesa 249): una sombra larga bajo una pieza de 68 de
+            // alto la hace flotar como un cartel; una corta la apoya sobre el escritorio.
+            BlurRadius = 24,
+            ShadowDepth = 4,
             Direction = 270,
             Opacity = 0.45,
             Color = Colors.Black,
@@ -117,7 +126,9 @@ public sealed class PanelDeAcciones : Window
     private static Color ColorDe(uint argb) => Color.FromArgb(
         (byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
 
-    private readonly StackPanel _filas = new();
+    /// <summary>Las líneas, apoyadas abajo: con menos de tres, el hueco reservado queda arriba y la
+    /// última siempre está a la misma altura (promesa 249).</summary>
+    private readonly StackPanel _filas = new() { VerticalAlignment = VerticalAlignment.Bottom };
 
     /// <summary>Las filas vivas, en el mismo orden que sus cajas dentro de <see cref="_filas"/>.
     /// Se lleva aparte porque quien decide la opacidad por edad necesita hablar con la FILA, no con
@@ -163,7 +174,12 @@ public sealed class PanelDeAcciones : Window
             // sin dibujarle un marco de ventana alrededor.
             BorderBrush = Pincel(PaletaDelNotch.Filete),
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(16, 11, 18, 11),
+            Padding = new Thickness(MedidaDelNotch.AireIzquierda, MedidaDelNotch.AireVertical,
+                                    MedidaDelNotch.AireDerecha, MedidaDelNotch.AireVertical),
+            // MIDE SIEMPRE LO MISMO (promesa 249): el alto sale de tres franjas iguales y el ancho es
+            // fijo, así que ni una frase larga ensancha la pieza ni una línea nueva la estira.
+            Width = MedidaDelNotch.Ancho,
+            Height = MedidaDelNotch.Alto((int)MedidaDelNotch.FilasALaVista),
             Child = _filas,
         };
 
@@ -300,9 +316,11 @@ public sealed class PanelDeAcciones : Window
         // entrada tiene una animación viva sobre su opacidad, y en WPF un valor local puesto a mano
         // NO se ve mientras esa animación corra. Asignando, las filas se quedaban todas a 1 y este
         // método no hacía nada visible — la clase de fallo que no da error y solo se nota mirando.
+        // TRES PELDAÑOS y no diez de 0,13 (promesa 249): con tres líneas, la diferencia entre la
+        // primera y la última tiene que leerse de un vistazo.
         for (int i = 0; i < _lista.Count; i++)
             if (i < _lista.Count - 1)   // la última entra sola, con su propia animación
-                _lista[i].Atenuar(Math.Max(0.42, 1.0 - (_lista.Count - 1 - i) * 0.13));
+                _lista[i].Atenuar(MedidaDelNotch.Luz(_lista.Count - 1 - i));
     }
 
     private void Toca()
@@ -407,7 +425,7 @@ public sealed class PanelDeAcciones : Window
             // Columna fija para la marca: así todos los textos arrancan en la misma x, se llame la
             // marca «Ü», «Tú» o sea un punto de 7 px. Sin ella, cada fila empezaba donde acabara su
             // glifo y la columna de texto quedaba dentada.
-            rejilla.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+            rejilla.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(MedidaDelNotch.ColumnaDeLaMarca) });
             rejilla.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             Grid.SetColumn(marca, 0);
@@ -418,7 +436,7 @@ public sealed class PanelDeAcciones : Window
                 Text = texto,
                 Foreground = Pincel(PaletaDelNotch.Tinta),
                 FontFamily = Letra,
-                FontSize = 12.5,
+                FontSize = 11.5,
                 MaxWidth = AnchoDelTexto,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -428,7 +446,9 @@ public sealed class PanelDeAcciones : Window
 
             Caja = new Border
             {
-                Padding = new Thickness(0, 3, 0, 3),
+                // FRANJA DE ALTO CONSTANTE (promesa 249): el ritmo vertical no puede depender de lo que
+                // diga la línea, o la pieza vuelve a medir distinto según su contenido.
+                Height = MedidaDelNotch.AltoDeFila,
                 Child = rejilla,
                 Opacity = 0,                 // la pone Entrar; nacer visible se salta la animación
                 RenderTransform = _sube,
@@ -440,15 +460,15 @@ public sealed class PanelDeAcciones : Window
         {
             var punto = new Ellipse
             {
-                Width = 7,
-                Height = 7,
+                Width = MedidaDelNotch.Punto,
+                Height = MedidaDelNotch.Punto,
                 VerticalAlignment = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 // El halo, blanco y del propio punto: a 7 px una marca plana no se lee, y con el
                 // resplandor el estado se ve de reojo sin tener que enfocar la vista.
                 Effect = new DropShadowEffect
                 {
-                    BlurRadius = 10, ShadowDepth = 0, Opacity = 0.55, Color = Colors.White,
+                    BlurRadius = 8, ShadowDepth = 0, Opacity = 0.55, Color = Colors.White,
                 },
             };
             var fila = new Fila(punto, texto, punto);
@@ -468,7 +488,7 @@ public sealed class PanelDeAcciones : Window
             Text = quien,
             Foreground = Pincel(tinta),
             FontFamily = Letra,
-            FontSize = 10.5,
+            FontSize = 10,
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -478,7 +498,7 @@ public sealed class PanelDeAcciones : Window
         public void Entrar()
         {
             _sube.BeginAnimation(TranslateTransform.YProperty,
-                new DoubleAnimation(8, 0, TimeSpan.FromMilliseconds(200))
+                new DoubleAnimation(MedidaDelNotch.AltoDeFila / 3, 0, TimeSpan.FromMilliseconds(160))
                 { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
             Caja.BeginAnimation(UIElement.OpacityProperty,
                 new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)));
@@ -518,7 +538,9 @@ public sealed class PanelDeAcciones : Window
 
         /// <summary>Mientras la acción está en curso, el punto respira. Es lo que dice «sigo aquí».</summary>
         private void Latir() => _punto?.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(1, 0.35, TimeSpan.FromMilliseconds(900))
+            // El suelo del latido no baja de la luz de su propio texto: un punto más apagado que la
+            // frase que acompaña se lee como apagado, no como vivo (promesa 249).
+            new DoubleAnimation(1, 0.55, TimeSpan.FromMilliseconds(900))
             {
                 AutoReverse = true,
                 RepeatBehavior = RepeatBehavior.Forever,

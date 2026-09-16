@@ -647,6 +647,11 @@ internal static class Contrato
         // al pie de la letra y reescribía. Dar por falso lo que no se pudo comprobar sale caro.
         Prueba("247. tras escribir hay tres respuestas y no dos: cuajó, no cuajó, o no se sabe porque el campo no cuenta lo que tiene; un campo mudo se da por escrito en vez de por fallido —que es lo que hizo que un informe se escribiera cuatro veces— y la comparación mira el texto normalizado y no su formato", TrasEscribirHayTresRespuestas);
         Prueba("248. un clic que no movió NADA se repite una vez, y solo cuando el terreno ya sabía que esa puerta lleva a algún sitio: un botón que hace su trabajo sin cambiar de pantalla —«Guardar»— no tiene destino aprendido y por eso jamás recibe un segundo clic, que es justo lo que promete la 83; tampoco se repite lo que no se puede deshacer, ni se repite dos veces", ElClicQueNoMovioNadaSeRepiteUnaVez);
+
+        // EL NOTCH RESPIRABA (2026-09-16). La ventana se medía por su contenido: una frase larga la
+        // ensanchaba, una línea nueva la estiraba y una que caducaba la encogía. Con diez líneas medía 252
+        // de alto. Una pieza que cambia de tamaño encima del trabajo de alguien se lee como un sobresalto.
+        Prueba("249. el notch mide siempre lo mismo: su alto no depende de cuántas líneas tenga —ni cero, ni una, ni diez— ni su ancho de lo largas que sean; enseña tres líneas, cada una ocupa lo mismo, y la pieza entera cabe en 80 de alto", ElNotchMideSiempreLoMismo);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -9475,6 +9480,30 @@ internal static class Contrato
         Debe(!R(false, 40, 40, true, true, false),
             "lo que no se puede deshacer no se repite NUNCA, aunque sepamos a dónde lleva");
         Debe(!R(false, 40, 40, false, true, true), "y se repite UNA vez: a la segunda se cuenta lo que pasó");
+    }
+
+    private static void ElNotchMideSiempreLoMismo()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.MedidaDelNotch");
+        var alto = t?.GetMethod("Alto");
+        Debe(t != null && alto != null,
+            "todavía no existe «Ui.MedidaDelNotch» (spec 027, promesa 249). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || alto == null) return;
+        double A(int filas) => (double)alto.Invoke(null, new object[] { filas })!;
+        double C(string campo) => (double)t.GetField(campo, BindingFlags.Public | BindingFlags.Static)!.GetRawConstantValue()!;
+
+        Debe(A(0) == A(1) && A(1) == A(3) && A(3) == A(10),
+            $"el alto NO depende de cuántas líneas haya ({A(0)}, {A(1)}, {A(3)}, {A(10)}): es lo que hace que la "
+            + "pieza no cambie de tamaño mientras trabajas, y era la queja del dueño");
+        Debe(A(3) <= 80, $"y es compacto de verdad: {A(3)} de alto, cuando con diez líneas llegaba a 252");
+        Debe(C("AltoDeFila") <= 20, $"cada línea ocupa poco ({C("AltoDeFila")}) y siempre lo mismo: el ritmo vertical es constante");
+        Debe(C("FilasALaVista") == 3,
+            "tres líneas: las justas para leer una secuencia —lo que pediste, lo que pasa, lo que salió—; diez era un registro");
+        Debe(C("Ancho") > 0 && C("Ancho") <= 360,
+            $"y el ancho es fijo ({C("Ancho")}): hoy lo decidía la frase más larga, que es la misma respiración por el otro eje");
+        Debe(Math.Abs(A(3) - (C("FilasALaVista") * C("AltoDeFila") + 2 * C("AireVertical"))) < 0.01,
+            "el alto sale de sus partes y no de un número suelto: tres franjas iguales más el aire de la placa");
     }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
