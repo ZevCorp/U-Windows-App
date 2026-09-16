@@ -124,6 +124,21 @@ public interface IProtocolo
     /// <summary>Una foto suelta, fuera del flujo normal de audio. Vacío si <see cref="Mira"/> es falso.</summary>
     string Fotograma(byte[] jpeg);
 
+    /// <summary>
+    /// LA MISMA FOTO, PERO POR REFERENCIA: solo su identificador, sin un byte de imagen dentro.
+    /// Vacío si este protocolo no sabe mirar así, y entonces se manda con <see cref="Fotograma"/>.
+    /// </summary>
+    /// <remarks>
+    /// GPT-Live tiene un buzón de 32.768 bytes para la sesión ENTERA y una captura pesa 118.000 ya
+    /// codificada: metida dentro no cabe ninguna, y de ahí venía que Ü fuera ciega. Medido contra el
+    /// servidor real el 2026-09-16: por referencia entra, describe bien tres imágenes seguidas sin
+    /// vaciar nada, y en el buzón ocupan unos treinta bytes cada una (spec 027, promesa 54).
+    /// </remarks>
+    string FotogramaPorReferencia(string idDelArchivo) => "";
+
+    /// <summary>¿La foto viaja por referencia? Si no, va dentro del mensaje.</summary>
+    bool VePorReferencia => false;
+
     /// <summary>Una frase escrita, sin colgar la conversación.</summary>
     string Texto(string texto);
 

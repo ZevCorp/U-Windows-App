@@ -652,6 +652,10 @@ internal static class Contrato
         // ensanchaba, una línea nueva la estiraba y una que caducaba la encogía. Con diez líneas medía 252
         // de alto. Una pieza que cambia de tamaño encima del trabajo de alguien se lee como un sobresalto.
         Prueba("249. el notch mide siempre lo mismo: su alto no depende de cuántas líneas tenga —ni cero, ni una, ni diez— ni su ancho de lo largas que sean; enseña tres líneas, cada una ocupa lo mismo, y la pieza entera cabe en 80 de alto", ElNotchMideSiempreLoMismo);
+
+        // MIRAR NO PUEDE DEJAR RASTRO EN OPENAI (spec 027, 2026-09-16, pedido del dueño en mayúsculas: «QUE NO
+        // DUREN MUCHO TIEMPO EN OPENAI»). La foto se sube para que Luna la vea y se borra en cuanto termina.
+        Prueba("250. mirar deja la copia en OpenAI el tiempo justo: se sube, se mira y se borra, y el borrado ocurre también cuando la mirada falla; soltar dos veces no borra dos veces, y sin nada subido no se borra nada", MirarNoDejaRastroEnOpenAI);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -9504,6 +9508,43 @@ internal static class Contrato
             $"y el ancho es fijo ({C("Ancho")}): hoy lo decidía la frase más larga, que es la misma respiración por el otro eje");
         Debe(Math.Abs(A(3) - (C("FilasALaVista") * C("AltoDeFila") + 2 * C("AireVertical"))) < 0.01,
             "el alto sale de sus partes y no de un número suelto: tres franjas iguales más el aire de la placa");
+    }
+
+    private static void MirarNoDejaRastroEnOpenAI()
+    {
+        var t = Capacidad("U.WindowsClient.Voice.MiradaSubida");
+        Debe(t != null, "todavía no existe «Voice.MiradaSubida» (spec 027, promesa 250). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null) return;
+
+        var subidas = new List<int>();
+        var borradas = new List<string>();
+        Func<byte[], Task<string>> subir = b => { subidas.Add(b.Length); return Task.FromResult($"file-{subidas.Count}"); };
+        Func<string, Task> borrar = id => { borradas.Add(id); return Task.CompletedTask; };
+        var mirada = Activator.CreateInstance(t, subir, borrar)!;
+        var mSubir = t.GetMethod("SubirAsync")!;
+        var mSoltar = t.GetMethod("SoltarAsync")!;
+        string Sube(byte[] b) => ((Task<string>)mSubir.Invoke(mirada, new object[] { b })!).GetAwaiter().GetResult();
+        void Suelta() => ((Task)mSoltar.Invoke(mirada, null)!).GetAwaiter().GetResult();
+
+        Suelta();
+        Debe(borradas.Count == 0, "sin nada subido no se borra nada: no se inventa una llamada");
+
+        string id = Sube(new byte[] { 1, 2, 3, 4 });
+        Debe(id == "file-1" && subidas.Count == 1, $"subir devuelve el identificador con el que se mira ({id})");
+        Debe(borradas.Count == 0, "y mientras se mira, la copia sigue ahí: borrarla antes sería mirar a nada");
+
+        Suelta();
+        Debe(borradas.SequenceEqual(new[] { "file-1" }), "al soltar se borra esa copia, y esa es toda su vida en OpenAI");
+        Suelta();
+        Debe(borradas.Count == 1, "soltar dos veces no borra dos veces: la segunda no tiene nada que borrar");
+
+        // Y SI LA MIRADA FALLA, la copia se borra igual: un fallo no puede dejar basura en la cuenta.
+        string id2 = Sube(new byte[] { 9 });
+        Debe(id2 == "file-2", "una mirada nueva sube su propia copia");
+        Suelta();
+        Debe(borradas.SequenceEqual(new[] { "file-1", "file-2" }),
+            "el borrado no depende de que la mirada saliera bien: se suelta pase lo que pase");
     }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
