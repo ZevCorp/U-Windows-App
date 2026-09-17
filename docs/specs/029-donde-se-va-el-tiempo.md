@@ -1,6 +1,7 @@
 # Dónde se va el tiempo — la ejecución medida como un solo sistema
 
-Estado: **análisis + fase 1 en curso** · 2026-09-17 · Rama: `jose/llegar-es-llegar`
+Estado: **fase 1 en main (#79); fase 2 en curso** · 2026-09-17 · Ramas: `jose/llegar-es-llegar`,
+`jose/los-actos-cuentan-lo-que-dejan`
 
 > El dueño: «quiero que cambiemos el enfoque de medición… cuáles son los pilares que, si los mejoramos,
 > mejoran muchísimo… y qué es ruido en medio que se puede simplificar o eliminar, cuidando lo que ya
@@ -172,6 +173,22 @@ Con qué se juzga, sin pantalla: la comparación de llegada con los ocho casos r
 `PasoDelNucleo` con un `donde` que cae en la variante normalizada, cronometrado; y `AbrirSegunElNucleo`
 declarando si lanzó, con la espera a la ventana nueva extraída a una función con reloj y un
 enumerador lento (260). Sobre la máquina: `map_go_to` y `map_open_app` por MCP, antes y después.
+
+## 6c. La especificación de la fase 2 (corte 3)
+
+| # | Promesa | Contrato |
+|---|---|---|
+| 263 | un acto cuenta lo que dejó delante: pulsar, escribir, ir, abrir, desplazar y desbloquear devuelven, detrás de lo que pasó, el mismo inventario que daría `map_what_i_see` —la pantalla y lo accionable—, también cuando no pudieron; una llamada que ni llegó a actuar no lo añade, un saber no lo repite, y el catálogo le dice al modelo que después de un acto no vuelva a preguntar qué hay | grafo |
+
+Por qué también cuando no pudieron: la promesa 38 ya dice que «si no se pudo, se dice QUÉ hay ahora»; el
+inventario es exactamente eso. Y por qué en el despacho y no en cada herramienta: había seis sitios y
+la clase de error —contestar sin contar qué quedó delante— se arregla una vez donde pasan todos.
+
+Con qué se juzga, sin pantalla: la regla de qué lleva inventario y qué no (pura); `SurfaceMapTools.Call`
+con el núcleo y el inventario falsos, viendo que ir y abrir lo pegan, que un saber no, y que una llamada
+sin argumento no; y el catálogo y las instrucciones, leídos por reflexión. Sobre la máquina: `map_go_to`
+y `map_type` por MCP trayendo lo que hay delante, y una tarea por voz contando cuántos «¿y ahora qué
+hay?» siguen a un acto —antes, el 50%—.
 
 ## 7. Cómo se sigue midiendo
 

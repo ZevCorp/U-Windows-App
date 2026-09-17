@@ -664,6 +664,11 @@ public sealed class ConversacionEnVivo : IDisposable
             un error pintado en rojo, si algo se parece a otra cosa— pide map_look. Te manda una foto
             de lo que hay AHORA. No la pidas para saber nombres o tipos: para eso está map_what_i_see,
             que es más barato y no depende de que acertaras dónde mirar.
+          · CADA ACTO TE CUENTA LO QUE DEJÓ DELANTE. Pulsar, escribir, ir, abrir, desplazar y desbloquear
+            devuelven al final «EN PANTALLA AHORA, en «…»» con la pantalla y lo accionable, también cuando
+            no pudieron. NO llames a map_what_i_see ni a map_where_am_i justo después de un acto para saber
+            dónde quedaste o qué hay: ya lo tienes en la respuesta; léelo y da el siguiente paso. Medido:
+            la mitad de los actos iban seguidos de esa pregunta, y cada una es una vuelta entera.
 
         UNA FOTO NUNCA DECIDE DÓNDE ESTÁS — eso lo dice map_where_am_i, y solo eso. Una foto te
         puede engañar: un chat, un editor de código y una app de escritorio pueden PARECERSE a un
@@ -967,7 +972,9 @@ public sealed class ConversacionEnVivo : IDisposable
             ("direction", "«abajo», «arriba», «inicio» (del todo arriba) o «final» (del todo abajo).")),
         Fn("map_what_i_see", "El INVENTARIO de lo que hay en pantalla ahora: el nombre exacto y el TIPO "
             + "de control de cada elemento (TreeItem, Button, ListItem, Edit…), más lo que el mapa sabe "
-            + "de él. Pídelo SIEMPRE antes de iluminar un grupo que te han descrito con palabras («los "
+            + "de él. DESPUÉS DE PULSAR, ESCRIBIR, IR, ABRIR O DESPLAZAR NO HACE FALTA: la respuesta de esos "
+            + "actos ya trae este mismo inventario al final, léelo ahí y sigue. Pídelo cuando NO acabes de "
+            + "actuar, y SIEMPRE antes de iluminar un grupo que te han descrito con palabras («los "
             + "de esa barra», «solo las carpetas»): map_look te dice a qué se refieren, y esta lista "
             + "te da los nombres exactos y el tipo con los que elegir el subconjunto sin equivocarte."),
         Fn("map_show", "¿VES este elemento? Lo busca en la pantalla de AHORA y, si está, lo SEÑALA: "

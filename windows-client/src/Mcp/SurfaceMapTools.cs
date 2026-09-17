@@ -1549,6 +1549,13 @@ public sealed class SurfaceMapTools
     public Func<string, string>? PorElNucleo { get; set; }
 
     /// <summary>
+    /// DE DÓNDE SALE LO QUE HAY DELANTE cuando un acto lo cuenta (promesa 263). Nulo en la app, que es leer la
+    /// pantalla como hace map_what_i_see; el contrato lo cambia por un inventario fijo para juzgar el despacho
+    /// sin tocar UIA.
+    /// </summary>
+    public Func<string>? InventarioParaLosActos { get; set; }
+
+    /// <summary>
     /// SITUARSE, contestado por el núcleo. Lo enchufa la ventana cuando el mapa vivo existe; si
     /// vale null se contesta como siempre. Ver <see cref="Navigation.AquiSegunElNucleo"/>.
     /// </summary>
@@ -1902,6 +1909,16 @@ public sealed class SurfaceMapTools
         //
         // El prefijo agrupa sin mezclar: lo que cuesta atender una orden no es lo que el mapeador
         // hace por su cuenta, y confundirlos es la misma trampa que comparar Gmail con el explorador.
+        // UN ACTO CUENTA LO QUE DEJÓ DELANTE (promesa 263, spec 029). Aquí, en el despacho, y no en cada
+        // herramienta: había seis sitios y la clase de error se arregla una vez donde pasan todos. Lo que
+        // compra: la mitad de los actos iban seguidos de un «¿y ahora qué hay?» que ya no hace falta. Va
+        // ANTES de parar el reloj, para que el coste de leer la pantalla cuente como parte del acto.
+        if (ComoSeContesta.LlevaInventario(tool, r))
+        {
+            try { r = ComoSeContesta.Pegar(r, InventarioParaLosActos?.Invoke() ?? LoQueVeo()); }
+            catch (Exception e) { LogBus.Log("mapa-mcp", $"no pude añadir lo que hay delante: {e.Message}"); }
+        }
+
         reloj.Stop();
         // DÓNDE QUEDAMOS, para la próxima. Lo que el modelo sabe de la pantalla es lo que esta
         // llamada le acaba de contar; comparar contra esto es comparar contra su último vistazo.
