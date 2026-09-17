@@ -656,7 +656,7 @@ internal static class Contrato
         // LAS ESPERAS SE CONTABAN EN MILISEGUNDOS FICTICIOS (2026-09-15). Los bucles sumaban 120 por vuelta
         // y además pagaban el sondeo: con un «dónde estoy» de 2,8 s, una espera de «1,8 s» duraba más de
         // treinta. Medido: un map_take de 28,8 s para decir «lo conozco aquí pero AHORA no lo veo».
-        Prueba("245. las esperas se acotan con el RELOJ y no contando vueltas: con un sondeo lento, una espera de N milisegundos termina en N y no en N por el número de vueltas — ni al pulsar, ni al comprobar la llegada, ni en la compuerta que espera a que un elemento esté vivo", LasEsperasSeMidenConElReloj);
+        Prueba("245. las esperas se acotan con el RELOJ y no contando vueltas: con un sondeo lento, una espera de N milisegundos termina en N y no en N por el número de vueltas — ni al pulsar, ni al comprobar la llegada, ni en la compuerta que espera a que un elemento esté vivo, ni al IR a un sitio —ponerse delante, abrir una web directo o comprobar que el paso movió—", LasEsperasSeMidenConElReloj);
         Prueba("246. lo que se acaba de mirar no se vuelve a mirar: una memoria corta con su caducidad devuelve lo recordado sin volver a la fuente mientras no caduque, vuelve a preguntar cuando caduca, y se puede olvidar a mano cuando algo cambió", LoQueSeAcabaDeMirarNoSeVuelveAMirar);
 
         // UN INFORME ENTERO SE ESCRIBIÓ CUATRO VECES (2026-09-16). La comprobación de la 243 daba falso
@@ -9766,6 +9766,26 @@ internal static class Contrato
         Debe(tardo < TOPE + 3 * LENTO,
             $"esperar {TOPE} ms con un sondeo de {LENTO} ms no puede tardar {tardo} ms: con el presupuesto "
             + "ficticio eran diez vueltas de 400, y así es como un «1,8 s» acababa siendo medio minuto");
+
+        // EL QUINTO SITIO (2026-09-17). Esta spec arregló cuatro bucles de cinco: PasoDelNucleo —el camino de
+        // map_go_to— seguía contando vueltas y pagando un localizador crudo en cada una. Medido en las corridas
+        // del dueño: 15.542 ms para decir «no hay camino». Se cronometra aquí el bucle de «ponerse delante»:
+        // ponerDelante contesta que sí, pero la ubicación nunca cambia, así que se agota el presupuesto entero.
+        var tp = Capacidad("U.WindowsClient.Navigation.PasoDelNucleo");
+        var pEspera = tp?.GetProperty("EsperaDelanteMs");
+        if (tp == null || pEspera == null) { Pendiente("PasoDelNucleo.EsperaDelanteMs (el reloj al ir a un sitio)", "245", "025"); return; }
+        var paso = Activator.CreateInstance(tp, g,
+            (Func<string>)(() => { Thread.Sleep(LENTO); return "uia://otra/app"; }),   // el sondeo caro, y nunca llega
+            (Func<string, string, bool>)((_, _) => true),
+            (Func<string, bool>)(_ => true))!;                                        // «ponerme delante»: sí, dice
+        pEspera.SetValue(paso, TOPE);
+        var hacia = tp.GetMethod("Hacia")!;
+        cronometro.Restart();
+        hacia.Invoke(paso, new object[] { "uia://app/a" });
+        long tardoIr = cronometro.ElapsedMilliseconds;
+        Debe(tardoIr < TOPE + 3 * LENTO,
+            $"IR a un sitio con un sondeo de {LENTO} ms y {TOPE} ms de presupuesto no puede tardar {tardoIr} ms: "
+            + "eran treinta vueltas de 100 + 400, y así es como «3 s» acababan siendo quince");
     }
 
     private static void LoQueSeAcabaDeMirarNoSeVuelveAMirar()

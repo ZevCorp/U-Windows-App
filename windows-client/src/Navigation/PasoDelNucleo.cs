@@ -27,6 +27,18 @@ public sealed class PasoDelNucleo
     private readonly Func<string, string, bool> _pulsar;
     private readonly Func<string, bool> _ponerDelante;
 
+    /// <summary>
+    /// LOS PRESUPUESTOS, EN MILISEGUNDOS DE RELOJ (promesa 245, ampliada el 2026-09-17). Hasta hoy eran vueltas
+    /// —treinta, ochenta, doce— y cada vuelta pagaba además un localizador crudo, así que «tres segundos»
+    /// duraban quince: 15.542 ms medidos para contestar «no hay ningún camino aprendido». Esta spec arregló
+    /// cuatro bucles de cinco; éste era el quinto (aprendizaje nº11: contar los sitios antes de arreglar).
+    /// </summary>
+    public int EsperaDelanteMs { get; init; } = 3000;
+    /// <summary>Hasta 8 s: aquí puede estar cargando una página entera, no sólo cambiando el foco.</summary>
+    public int EsperaWebMs { get; init; } = 8000;
+    /// <summary>Lo que se le da a un paso para que se note que movió.</summary>
+    public int EsperaMovioMs { get; init; } = 1800;
+
     public PasoDelNucleo(Nucleo.Grafo grafo, Func<string> donde,
         Func<string, string, bool> pulsar, Func<string, bool> ponerDelante)
     {
@@ -80,7 +92,8 @@ public sealed class PasoDelNucleo
             // COMPROBADO POR CONSECUENCIA: ponerse delante es una petición, no una llegada. Se
             // sondea y se sale EN CUANTO llega, en vez de esperar un plazo fijo — un plazo fijo se
             // equivoca en las dos direcciones a la vez.
-            for (int i = 0; i < 30; i++)
+            var compasDelante = new Compas(EsperaDelanteMs);
+            do
             {
                 aqui = _donde();
                 if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase))
@@ -96,8 +109,8 @@ public sealed class PasoDelNucleo
                 // y aun así engañoso.
                 if (Mapeador.ComoMePongoDelante.EstarEnElSitioBasta(destino, aqui))
                     return new(true, true, "", "", $"estás en «{Corto(aqui)}», que es parte de ese sitio");
-                Thread.Sleep(100);
             }
+            while (compasDelante.Respira(100));
         }
 
         if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase)
@@ -125,14 +138,15 @@ public sealed class PasoDelNucleo
             {
                 // Hasta 8 s: aquí puede estar cargando una página entera, no solo cambiando el
                 // foco, y navegar bien para luego contestar «no hay camino» sería la mentira cara.
-                for (int i = 0; i < 80; i++)
+                var compasWeb = new Compas(EsperaWebMs);
+                do
                 {
                     aqui = _donde();
                     if (aqui.Equals(destino, StringComparison.OrdinalIgnoreCase)
                         || Mapeador.ComoMePongoDelante.EstarEnElSitioBasta(destino, aqui))
                         return new(true, true, "", "", "fui directo: una web se abre por su dirección");
-                    Thread.Sleep(100);
                 }
+                while (compasWeb.Respira(100));
             }
 
             return new(false, false, "", "", camino.ConocidoEnMemoria
@@ -152,11 +166,9 @@ public sealed class PasoDelNucleo
         // mismo clic se calculara y se pulsara doce veces seguidas sin avanzar (2026-08-12).
         // Repetir algo que acaba de no funcionar no es insistir, es no estar mirando.
         string despues = aqui;
-        for (int i = 0; i < 12 && despues.Equals(aqui, StringComparison.OrdinalIgnoreCase); i++)
-        {
-            Thread.Sleep(150);
+        var compasMovio = new Compas(EsperaMovioMs);
+        while (despues.Equals(aqui, StringComparison.OrdinalIgnoreCase) && compasMovio.Respira(150))
             despues = _donde();
-        }
 
         if (despues.Equals(aqui, StringComparison.OrdinalIgnoreCase))
             return new(false, false, paso.Que.Etiqueta, paso.Que.Selector,

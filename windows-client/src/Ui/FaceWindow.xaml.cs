@@ -932,9 +932,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     _mapaVivo.Nucleo.Recordar(donde, new[] { new Nucleo.Elemento(sel, etq, tipo) });
             }
 
+            // EL QUINTO SITIO (spec 025, 2026-09-17): el servidor del núcleo —y con él PasoDelNucleo, el camino de
+            // map_go_to— recibía el localizador CRUDO, que busca la barra de direcciones en todo el árbol UIA en
+            // cada llamada. Sus bucles lo llamaban hasta ochenta veces seguidas. Se recuerda 400 ms, como ya hace
+            // DondeTrabajo: dentro de ese instante preguntar otra vez no toca la pantalla.
+            var dondeParaElNucleo = new Navigation.MemoriaCorta<string>(400);
             _servidorNucleo = new Navigation.ServidorDelNucleo(
                 _mapaVivo.Nucleo,
-                () => _locator?.DondeEstoy()?.Id ?? "",
+                () => dondeParaElNucleo.Pide(() => _locator?.DondeEstoy()?.Id ?? ""),
                 (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
                 superficie => Uia.AppAligner.PonerDelante(superficie),
                 (sel, texto) => accionar("input", sel, texto),
