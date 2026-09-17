@@ -723,6 +723,12 @@ internal static class Contrato
         // cuando esa ventana no va a aparecer. Es el sexto bucle con presupuesto ficticio, y con el disparador al revés.
         Prueba("262. abrir no espera a lo que no lanzó: la espera a que aparezca una ventana nueva sólo ocurre cuando de verdad se lanzó algo, y se mide con el reloj y no contando vueltas; traer al frente una app que ya estaba abierta contesta en cuanto está delante", AbrirNoEsperaALoQueNoLanzo);
 
+        // UN ACTO CUENTA LO QUE DEJÓ DELANTE (spec 029, corte 3, 2026-09-17). Tres días, 214 actos: el 50% iban
+        // seguidos inmediatamente de un map_what_i_see o un map_where_am_i —106 vueltas del modelo— porque escribir,
+        // ir y abrir contestaban «escribí X» o «te puse delante» sin decir qué quedó delante. Con nuestro código
+        // en el 20% del reloj, cada vuelta que sobra son 3 s que no se pueden acelerar de otra forma.
+        Prueba("263. un acto cuenta lo que dejó delante: pulsar, escribir, ir, abrir, desplazar y desbloquear devuelven, detrás de lo que pasó, el mismo inventario que daría map_what_i_see —la pantalla y lo accionable—, también cuando no pudieron; una llamada que ni llegó a actuar no lo añade, un saber no lo repite, y el catálogo le dice al modelo que después de un acto no vuelva a preguntar qué hay", UnActoCuentaLoQueDejoDelante);
+
         Prueba("258. el modelo puede pedir lo que vio antes: pedir la mirada de una ubicación devuelve su foto con su ficha —cuándo fue y qué estaba pasando—, y si de esa no hay, dice QUÉ ubicaciones sí recuerda en vez de contestar que no hay nada", ElModeloPuedePedirLoQueVioAntes);
 
         // EL NOTCH NO DECÍA QUE LO HABÍAN PARADO (spec 028, ampliada 2026-09-17). El dueño, tras probarlo en vivo:
@@ -10462,6 +10468,67 @@ internal static class Contrato
         var nueva2 = mEspera.Invoke(null, new object[] { "chrome", previas, aparece, 8000 })!;
         var hwnd2 = (IntPtr)nueva2.GetType().GetField("Item1")!.GetValue(nueva2)!;
         Debe(hwnd2 == (IntPtr)9 && crono.ElapsedMilliseconds < 2000, $"al aparecer la ventana se devuelve en el acto ({crono.ElapsedMilliseconds} ms), no al final del plazo");
+    }
+
+
+    private static void UnActoCuentaLoQueDejoDelante()
+    {
+        var t = Capacidad("U.WindowsClient.Mcp.ComoSeContesta");
+        var mLleva = t?.GetMethod("LlevaInventario", BindingFlags.Public | BindingFlags.Static);
+        var mPegar = t?.GetMethod("Pegar", BindingFlags.Public | BindingFlags.Static);
+        var pSeam = typeof(SurfaceMapTools).GetProperty("InventarioParaLosActos");
+        if (t == null || mLleva == null || mPegar == null || pSeam == null)
+        { Pendiente("Mcp.ComoSeContesta (LlevaInventario, Pegar) y SurfaceMapTools.InventarioParaLosActos", "263", "029"); return; }
+        bool Lleva(string tool, string r) => (bool)mLleva.Invoke(null, new object[] { tool, r })!;
+        string Pega(string r, string inv) => (string)mPegar.Invoke(null, new object[] { r, inv })!;
+
+        // LA REGLA, pura.
+        Debe(Lleva("map_go_to", "te puse delante de «github.com»"), "ir es un acto: lleva lo que hay delante");
+        Debe(Lleva("map_type", "no pude escribir: el campo no está"), "y también cuando no pudo: la 38 ya pedía decir QUÉ hay ahora");
+        Debe(Lleva("map_take", "pulsé «x» y ahora estás en «y»") && Lleva("map_open_app", "«chrome» ya estaba abierta") && Lleva("map_scroll", "desplazado") && Lleva("map_unblock", "DESBLOQUEADO"),
+            "pulsar, abrir, desplazar y desbloquear son actos");
+        Debe(!Lleva("map_where_am_i", "Estás en «x»") && !Lleva("map_what_i_see", "EN PANTALLA AHORA") && !Lleva("map_look", "aquí tienes"),
+            "un saber no lo repite: ya es lo que contesta");
+        Debe(!Lleva("map_go_to", "falta `surface`: a dónde hay que ir"), "una llamada que ni llegó a actuar no lo añade");
+        Debe(!Lleva("map_go_to", "todavía no sé navegar: el núcleo no está conectado."), "ni una sin núcleo");
+        string inv = "EN PANTALLA AHORA, en «web://github.com» (2 elemento(s)):\n  «Buscar» (Edit)\n  «Nuevo» (Button)\n";
+        Debe(!Lleva("map_take", "pulsé «x».\n\n" + inv), "y si ya lo lleva, no se pega dos veces");
+        string pegado = Pega("te puse delante de «github.com»", inv);
+        Debe(pegado.StartsWith("te puse delante de «github.com»", StringComparison.Ordinal) && pegado.Contains("\n\nEN PANTALLA AHORA, en «web://github.com»", StringComparison.Ordinal),
+            $"lo que pasó va PRIMERO y el inventario detrás, separado («{(pegado.Length > 80 ? pegado[..80] : pegado)}»)");
+        Debe(Pega("te puse delante", "no sé en qué pantalla estoy") == "te puse delante", "sin inventario de verdad no se pega ruido");
+
+        // EL DESPACHO, con el núcleo y el inventario falsos: ir y abrir lo pegan, un saber no, y sin argumento no.
+        var mapa = new SurfaceMapTools(() => null);
+        mapa.PorElNucleo = destino => $"te puse delante de «{destino}»";
+        mapa.AbrirPorElNucleo = (app, _) => $"«{app}» está delante.";
+        int pedidos = 0;
+        pSeam.SetValue(mapa, (Func<string>)(() => { pedidos++; return inv; }));
+
+        string r1 = mapa.Call("map_go_to", new Dictionary<string, string> { ["surface"] = "web://github.com" });
+        Debe(r1.StartsWith("te puse delante de «web://github.com»", StringComparison.Ordinal) && r1.Contains("«Nuevo» (Button)", StringComparison.Ordinal),
+            $"ir contesta lo que pasó Y lo que hay delante (dijo: «{(r1.Length > 90 ? r1[..90] : r1)}»)");
+        string r2 = mapa.Call("map_open_app", new Dictionary<string, string> { ["app"] = "chrome" });
+        Debe(r2.Contains("«Nuevo» (Button)", StringComparison.Ordinal), "abrir también");
+        string r3 = mapa.Call("map_go_to", new Dictionary<string, string>());
+        Debe(!r3.Contains("«Nuevo» (Button)", StringComparison.Ordinal), $"sin argumento no se actuó, y no se pega nada (dijo: «{r3}»)");
+        string r4 = mapa.Call("map_where_am_i", new Dictionary<string, string>());
+        Debe(!r4.Contains("«Nuevo» (Button)", StringComparison.Ordinal), "y un saber no lo repite");
+        Debe(pedidos == 2, $"el inventario se leyó una vez por acto, y sólo por acto ({pedidos})");
+
+        // Y SE LE DICE AL MODELO, que es lo que de verdad quita las vueltas.
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var herramientas = tc?.GetMethod("Herramientas", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null) as System.Collections.IEnumerable;
+        string desc = "";
+        if (herramientas != null)
+            foreach (var u in herramientas)
+                if ((string?)u?.GetType().GetProperty("Nombre")?.GetValue(u) == "map_what_i_see")
+                    desc = (string?)u!.GetType().GetProperty("Descripcion")?.GetValue(u) ?? "";
+        Debe(desc.Contains("DESPUÉS DE", StringComparison.Ordinal) && desc.Contains("no hace falta", StringComparison.OrdinalIgnoreCase),
+            $"el catálogo de map_what_i_see dice que después de un acto no hace falta pedirla («{(desc.Length > 100 ? desc[..100] : desc)}»)");
+        string instrucciones = (string?)tc?.GetField("Instrucciones", BindingFlags.NonPublic | BindingFlags.Static)?.GetRawConstantValue() ?? "";
+        Debe(instrucciones.Contains("CADA ACTO TE CUENTA LO QUE DEJÓ DELANTE", StringComparison.Ordinal),
+            "y las instrucciones lo dicen con todas las letras");
     }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
