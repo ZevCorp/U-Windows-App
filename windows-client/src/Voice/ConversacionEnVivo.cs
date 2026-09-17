@@ -1744,14 +1744,18 @@ public sealed class ConversacionEnVivo : IDisposable
             case Hecho.DiceElUsuario d:
                 _fraseUsuario.Append(d.Trozo);
                 Dice?.Invoke($"Tú: {_fraseUsuario}");
-                Transcribe?.Invoke($"Tú: {_fraseUsuario}", false);
+                // AL NOTCH LE BASTA CON `esDeU`: la etiqueta «Tú: » era una segunda forma de decir
+                // lo mismo que ya dice ese booleano, y era la que el dueño veía en el paso de abajo
+                // (2026-09-17). `Dice` sí la sigue llevando: el globo la necesita para saber si esta
+                // frase sigue el turno anterior, y la recorta antes de enseñarla (FaceWindow.AppendChat).
+                Transcribe?.Invoke(_fraseUsuario.ToString(), false);
                 VigilarLaLeccion(_fraseUsuario.ToString());
                 break;
 
             case Hecho.DiceU d:
                 _fraseU.Append(d.Trozo);
                 Dice?.Invoke($"Ü: {_fraseU}");
-                Transcribe?.Invoke($"Ü: {_fraseU}", true);
+                Transcribe?.Invoke(_fraseU.ToString(), true);
                 // HABLAR ES LO QUE DESBLOQUEA EL SIGUIENTE RECUERDO. Se apunta aquí, sobre la voz
                 // de verdad, y no al cerrar el turno: el turno se cierra también en respuestas que
                 // son solo una llamada a herramienta, sin una palabra — que es justo el caso que

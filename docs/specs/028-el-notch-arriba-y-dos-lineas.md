@@ -1,6 +1,6 @@
 # Plan de implementación: el notch se sube arriba y dice dos cosas
 
-Estado: **propuesto** · 2026-09-16 · Rama: `jose/el-notch-arriba`
+Estado: **implementado** (fase 1, PR #73) · **fase 2 en curso** · 2026-09-16 · Rama: `jose/el-notch-arriba`
 
 > El dueño, con una imagen del diseño: «quiero que el notch esté arriba al centro. Donde dice "tarea
 > en ejecución" quiero que esté la MACRO TAREA: si le pedí crear un anuncio, que ahí esté "crear un
@@ -63,14 +63,19 @@ métrica, y se lee como un adorno pegado encima.
 | 251 | el notch vive arriba y al centro del área libre: se centra en el hueco que deja el sistema, cuelga a una distancia fija del borde de arriba, y nunca se sale del cristal aunque no quepa | 1 |
 | 252 | el notch dice dos cosas y siempre las mismas dos: arriba LA TAREA —lo último que pidió la persona, que se queda hasta que pida otra— y abajo LO QUE PASA AHORA, que es el paso de Ü, su desenlace, o lo que la persona está diciendo mientras lo dice | 1 |
 | 253 | cada estado tiene su icono y todos salen del mismo juego: la misma caja, el mismo grosor de trazo y la forma dibujada como vector; no hay dos estados con el mismo dibujo, y ninguno es una letra ni un emoji | 1 |
+| 259 | el notch dice que lo pararon a mano: el paso pasa a decirlo, el icono es el de lo que se queda sin desenlace y no el del fallo ni el del éxito, y la tarea no se mueve | 2 |
+| 260 | acercar el cursor al borde de arriba, centrado donde vive el notch, cae dentro de la franja que lo asoma; lejos de esa franja no cae dentro, así que el gesto no dispara con cualquier paso del ratón por arriba | 2 |
 
 ### Con qué se juzga
 
 Sin pantalla: la regla del sitio con un área libre y una pieza más grande que ella (251); la máquina
-de estados de las dos líneas, frase a frase, incluida la que sube a tarea al cerrar el turno (252); y
-el juego de iconos, que devuelve un dibujo distinto por estado y ninguno es texto (253).
+de estados de las dos líneas, frase a frase, incluida la que sube a tarea al cerrar el turno (252 y
+259); el juego de iconos, que devuelve un dibujo distinto por estado y ninguno es texto (253); y la
+geometría de la franja del borde de arriba, con puntos dentro y fuera (260).
 
-Sobre la máquina: abrirlo y verlo arriba al centro, con la tarea arriba y el paso abajo.
+Sobre la máquina: abrirlo y verlo arriba al centro, con la tarea arriba y el paso abajo; pararlo con
+⏹ a media tarea y ver que el paso pasa a decirlo con el aro y la raya; y acercar el cursor al borde
+de arriba, en el centro, con el notch escondido, y verlo caer.
 
 ### Límites dichos, no escondidos
 
@@ -78,13 +83,27 @@ Sobre la máquina: abrirlo y verlo arriba al centro, con la tarea arriba y el pa
   ni se reescribe, porque adivinar el título es peor que citarlo.
 - «Hasta que se complete» no se detecta: la tarea se queda hasta que llegue otra. Saber que una tarea
   terminó es cosa del modelo, y hoy no lo dice.
+- El gesto de asomar (260) es una franja pegada al borde, no todo el medio de arriba de la pantalla:
+  ancha para que sea fácil de encontrar, y baja para que subir el cursor a cerrar una ventana no lo
+  dispare por accidente.
 
 ## Las fases
 
 ### Fase 1 — sitio, contenido e iconos (251, 252, 253)
 
 `ReglaDeLaBandeja.ArribaAlCentro`, `Ui.LoQueDiceElNotch`, `Ui.IconosDelNotch`, y `PanelDeAcciones`
-dibujando icono, tarea y paso.
+dibujando icono, tarea y paso. **Implementada, PR #73.**
+
+### Fase 2 — se detiene con memoria y asoma con el cursor (259, 260)
+
+Ampliación pedida por el dueño el 2026-09-17, tras probar la fase 1 en vivo: quitar las etiquetas
+«Tú:»/«Ü:» del globo de conversación (no lleva promesa: es un cambio de texto en pantalla, no de lo
+que el sistema promete), hacer que parar la conversación a mano quede dicho en el notch en vez de
+desaparecer sin más (`LoQueDiceElNotch.Detenido`, sobre el estado `Omitido` que la fase 1 ya dejó
+escrito y sin usar), y añadir el gesto de acercar el cursor al borde de arriba para asomarlo sin que
+haga falta que Ü esté diciendo nada (`ReglaDeLaBandeja.Asoma`). También se pidieron transiciones más
+vistosas al aparecer y desaparecer, y un parpadeo suave cuando el texto cambia de verdad — eso vive
+en `PanelDeAcciones` y no lleva promesa propia: es cómo se dibuja, no qué se promete.
 
 ## Lo que NO entra
 

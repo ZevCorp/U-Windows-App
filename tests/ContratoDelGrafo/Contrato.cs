@@ -697,6 +697,7 @@ internal static class Contrato
         // él: «siete días o dos gigas, y pásalas a JPEG». La pantalla de ayer no se puede volver a capturar.
         Prueba("255. el álbum de miradas vive en local con su ficha —cuándo, en qué ubicación y qué estaba pasando—, se guarda en JPEG, se puede pedir la última foto de una ubicación, y se poda por edad y por tamaño: siete días o dos gigas, lo más viejo primero", ElAlbumDeMiradasRecuerdaYPoda);
 
+
         // VER COMO PARA COMPUTER USE (spec 027, fase 4, 2026-09-17, elegido por el dueño). La reducción a 1024 px
         // venía de cuando la imagen tenía que caber INCRUSTADA en un buzón de 32.768 bytes; por referencia ya no
         // tiene que caber, así que era maquinaria de compensación de una limitación que se fue (aprendizaje nº6).
@@ -710,6 +711,16 @@ internal static class Contrato
         // se llamó. Se construyó la memoria sin la forma de consultarla.
         Prueba("257. se guarda una mirada por CAMBIO de ubicación y no por reloj: seguir en el mismo sitio no guarda otra, cambiar sí, y volver a un sitio del que ya hay una foto fresca tampoco la repite", UnaMiradaPorCambioDeUbicacion);
         Prueba("258. el modelo puede pedir lo que vio antes: pedir la mirada de una ubicación devuelve su foto con su ficha —cuándo fue y qué estaba pasando—, y si de esa no hay, dice QUÉ ubicaciones sí recuerda en vez de contestar que no hay nada", ElModeloPuedePedirLoQueVioAntes);
+
+        // EL NOTCH NO DECÍA QUE LO HABÍAN PARADO (spec 028, ampliada 2026-09-17). El dueño, tras probarlo en vivo:
+        // «una vez yo detuve la conversación… que se guarde en notch». El estado y el icono de «se quedó sin
+        // desenlace» llevaban ahí desde la spec 028 y nadie los disparaba — código escrito para este caso exacto.
+        Prueba("259. el notch dice que lo pararon a mano: el paso pasa a decirlo, el icono es el de lo que se queda sin desenlace y no el del fallo ni el del éxito, y la tarea no se mueve", ElNotchDiceQueLoPararon);
+
+        // EL BORDE DE ARRIBA APRENDE UN GESTO (spec 028, ampliada 2026-09-17): «si yo paso el mouse muy cerca de la
+        // zona del notch… que aparezca el notch con su transición», sin importar si Ü está hablando o no. Pura y sin
+        // pantalla, como el resto de <see cref="ReglaDeLaBandeja"/>: el contrato juzga geometría, no un hook de ratón.
+        Prueba("260. acercar el cursor al borde de arriba, centrado donde vive el notch, cae dentro de la franja que lo asoma; lejos de esa franja —al lado, o más abajo— no cae dentro, así que el gesto no dispara con cualquier paso del ratón por arriba", AcercarseAlBordeAsomaElNotch);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -9965,6 +9976,63 @@ internal static class Contrato
         string antes = Tarea();
         PersonaDice("   "); CierraTurno();
         Debe(Tarea() == antes, "una frase en blanco no cambia la tarea: la transcripción a veces entrega vacío");
+    }
+
+    private static void ElNotchDiceQueLoPararon()
+    {
+        // «una vez yo detuve la conversación (que Ü deja de hablar porque lo silencié) que se guarde en
+        // notch» (el dueño, 2026-09-17, probándolo en vivo). Ni se hizo ni falló: se quedó sin desenlace,
+        // que es justo lo que ya significaba EstadoDelNotch.Omitido sin que nadie lo disparara todavía.
+        var t = Capacidad("U.WindowsClient.Ui.LoQueDiceElNotch");
+        var detenido = t?.GetMethod("Detenido");
+        Debe(t != null && detenido != null, "todavía no existe «Ui.LoQueDiceElNotch.Detenido» (spec 028, promesa 259). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || detenido == null) return;
+        var d = Activator.CreateInstance(t)!;
+        string Tarea() => (string)t.GetProperty("Tarea")!.GetValue(d)!;
+        string Paso() => (string)t.GetProperty("Paso")!.GetValue(d)!;
+        string Estado() => t.GetProperty("Estado")!.GetValue(d)!.ToString()!;
+        void PersonaDice(string x) => t.GetMethod("PersonaDice")!.Invoke(d, new object[] { x });
+        void CierraTurno() => t.GetMethod("CierraTurno")!.Invoke(d, null);
+        void Empieza(string x) => t.GetMethod("Empieza")!.Invoke(d, new object[] { x });
+
+        PersonaDice("créame un anuncio para Instagram"); CierraTurno();
+        Empieza("abriendo Chrome");
+        detenido.Invoke(d, new object[] { "detenido a mano" });
+        Debe(Paso() == "detenido a mano", "el paso pasa a decir que lo pararon");
+        Debe(Estado() == "Omitido", "el icono es el de lo que se queda sin desenlace: ni el visto, ni el aro con admiración");
+        Debe(Tarea() == "créame un anuncio para Instagram", "y la tarea no se mueve: pararlo no es cambiar de qué se habla");
+
+        detenido.Invoke(d, new object[] { "" });
+        Debe(Paso() == "detenido", "un texto en blanco no deja el paso vacío: siempre queda algo que leer");
+    }
+
+    private static void AcercarseAlBordeAsomaElNotch()
+    {
+        // «si yo paso el mouse muy cerca de la zona del notch, muy cerca al borde superior de la pantalla
+        // en el centro… que aparezca el notch con su transición» (el dueño, 2026-09-17). Pura y sin
+        // pantalla: el contrato juzga la geometría de la franja, no un hook de ratón sobre un escritorio.
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDeLaBandeja");
+        var asoma = t?.GetMethod("Asoma");
+        Debe(t != null && asoma != null, "todavía no existe «ReglaDeLaBandeja.Asoma» (spec 028, promesa 260). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (asoma == null) return;
+        bool Asoma(System.Windows.Rect libre, System.Windows.Size notch, System.Windows.Point cursor)
+            => (bool)asoma.Invoke(null, new object[] { libre, notch, cursor })!;
+
+        var libre = new System.Windows.Rect(0, 0, 1536, 816);
+        var pieza = new System.Windows.Size(340, 62);
+
+        Debe(Asoma(libre, pieza, new System.Windows.Point(768, 0)),
+            "pegado al borde de arriba y centrado: cae dentro de la franja");
+        Debe(Asoma(libre, pieza, new System.Windows.Point(768, 3)),
+            "unos pocos píxeles hacia abajo, todavía en el borde: sigue dentro");
+        Debe(!Asoma(libre, pieza, new System.Windows.Point(768, 60)),
+            "a la altura del propio notch pero sin haber pasado por el borde: fuera de la franja");
+        Debe(!Asoma(libre, pieza, new System.Windows.Point(10, 0)),
+            "en el borde de arriba pero lejos del centro —la esquina—: fuera de la franja");
+        Debe(!Asoma(libre, pieza, new System.Windows.Point(768, 400)),
+            "a media pantalla, aunque esté centrado: fuera de la franja, o cualquier paso del cursor la dispararía");
     }
 
     private static void CadaEstadoTieneSuIcono()

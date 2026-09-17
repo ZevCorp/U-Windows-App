@@ -102,4 +102,36 @@ public static class ReglaDeLaBandeja
         y = Math.Max(libre.Top, Math.Min(y, libre.Bottom - notch.Height));
         return new Rect(x, y, notch.Width, notch.Height);
     }
+
+    /// <summary>Cuánto más ancha que la pieza es la franja que la asoma, a cada lado.</summary>
+    /// <remarks>
+    /// ACERTARLE A 340 DE ANCHO DESDE EL BORDE MISMO DE LA PANTALLA no perdona nada —es el sitio
+    /// donde el cursor menos control fino tiene, porque un movimiento de más lo saca del cristal—,
+    /// así que la franja sensible es más generosa que la pieza que trae.
+    /// </remarks>
+    public const double MargenDeAsomo = 140;
+
+    /// <summary>Cuánto de alto tiene la franja, pegada al borde de arriba.</summary>
+    /// <remarks>
+    /// POCOS PÍXELES A PROPÓSITO: una franja de medio alto de pantalla asomaría el notch cada vez
+    /// que alguien sube el cursor a cerrar una ventana. El gesto es tocar el BORDE, no visitar la
+    /// mitad de arriba de la pantalla.
+    /// </remarks>
+    public const double AltoDeAsomo = 6;
+
+    /// <summary>
+    /// LA FRANJA QUE ASOMA EL NOTCH aunque no tenga nada nuevo que decir (pedido del dueño,
+    /// 2026-09-17: «sin importar si Ü está hablando o no»). Es el mismo gesto que el Dock de macOS
+    /// escondido: el borde entero es la manija, centrada donde vive la pieza y un poco más ancha.
+    /// </summary>
+    public static Rect ZonaDeAsomo(Rect libre, Size notch)
+    {
+        double ancho = Math.Min(notch.Width + MargenDeAsomo * 2, libre.Width);
+        double x = Math.Max(libre.Left, libre.Left + (libre.Width - ancho) / 2);
+        double alto = Math.Min(AltoDeAsomo, libre.Height);
+        return new Rect(x, libre.Top, ancho, alto);
+    }
+
+    /// <summary>¿El cursor está en la franja que asoma el notch?</summary>
+    public static bool Asoma(Rect libre, Size notch, Point cursor) => ZonaDeAsomo(libre, notch).Contains(cursor);
 }

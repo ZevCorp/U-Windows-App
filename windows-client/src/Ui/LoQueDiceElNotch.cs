@@ -82,6 +82,19 @@ public sealed class LoQueDiceElNotch
         Estado = ok ? EstadoDelNotch.Hecho : EstadoDelNotch.Fallo;
     }
 
+    /// <summary>
+    /// La persona lo paró a mano. Promesa 259 (spec 028, ampliada 2026-09-17). Ni se hizo ni falló:
+    /// se quedó sin desenlace, que es justo lo que ya significaba <see cref="EstadoDelNotch.Omitido"/>
+    /// y que hasta ahora nadie disparaba —el estado y su icono llevaban ahí desde la spec 028,
+    /// escritos para este caso y sin ninguna llamada que los usara—.
+    /// </summary>
+    public void Detenido(string texto)
+    {
+        string t = (texto ?? "").Trim();
+        Paso = t.Length > 0 ? t : "detenido";
+        Estado = EstadoDelNotch.Omitido;
+    }
+
     /// <summary>Se acabó todo: vuelve a como estaba al abrirse.</summary>
     public void Olvida()
     {
