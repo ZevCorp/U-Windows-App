@@ -150,6 +150,21 @@ public sealed class ConsultaWindow : Window
     private string _plantillaNombre = "";
     private bool _enNota = true;
 
+    /// <summary>
+    /// CON LO QUE ABRE: las dimensiones del pantallazo del dueño (2026-09-17). Promesa 271 (spec 031).
+    /// </summary>
+    /// <remarks>
+    /// HASTA EL 2026-09-17 ABRÍA A 470×660, una tarjeta vertical: servía para grabar una consulta y
+    /// nada más. El dueño pidió que abriera como en su pantallazo, donde la ventana es el centro de
+    /// operaciones con la carita sentada en medio: la tarjeta visible mide 1180×765 px al 125 %, o
+    /// sea 944×612 puntos, y la ventana entera suma el hueco de la sombra (22+22 de ancho, 18+26 de
+    /// alto; es el margen de <c>Estudio.Elevar</c> que juzga la promesa 154). El mínimo no sube:
+    /// sigue pudiendo estirarse hasta lo pequeño de antes.
+    /// </remarks>
+    public static Size TamanoInicial => new(988, 656);
+
+    public static Size TamanoMinimo => new(400, 540);
+
     public ConsultaWindow(SesionMiracle sesion, GraphConfig graphConfig)
     {
         _sesion = sesion;
@@ -168,10 +183,10 @@ public sealed class ConsultaWindow : Window
 
         // ── el marco ─────────────────────────────────────────────────────────
         Title = "Miracle";
-        Width = 470;
-        Height = 660;
-        MinWidth = 400;
-        MinHeight = 540;
+        Width = TamanoInicial.Width;
+        Height = TamanoInicial.Height;
+        MinWidth = TamanoMinimo.Width;
+        MinHeight = TamanoMinimo.Height;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.CanResize;
         AllowsTransparency = true;
