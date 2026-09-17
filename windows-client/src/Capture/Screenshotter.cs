@@ -44,6 +44,34 @@ public static class Screenshotter
         catch { return null; }
     }
 
+    /// <summary>
+    /// La misma ventana, en JPEG. Las fotos de los recuerdos eran PNG y pesaban 252 KB de media —294 fotos,
+    /// 72 MB, medido el 2026-09-16—; en JPEG pesan la mitad larga y para mirar se ven igual.
+    /// </summary>
+    public static byte[]? CaptureVentanaJpeg(IntPtr hwnd, long calidad = 80L)
+    {
+        if (hwnd == IntPtr.Zero) return null;
+        if (!GetWindowRect(hwnd, out RECT r)) return null;
+        int w = r.Right - r.Left, h = r.Bottom - r.Top;
+        if (w < 40 || h < 40) return null;
+        try
+        {
+            // 24bpp y no 32: el JPEG no tiene canal alfa, y guardarlo desde ARGB pinta los bordes en negro.
+            using var bmp = new Bitmap(w, h, PixelFormat.Format24bppRgb);
+            using (var g = Graphics.FromImage(bmp))
+                g.CopyFromScreen(r.Left, r.Top, 0, 0, new Size(w, h), CopyPixelOperation.SourceCopy);
+
+            var codec = ImageCodecInfo.GetImageEncoders().FirstOrDefault(c => c.MimeType == "image/jpeg");
+            if (codec == null) return null;
+            using var parametros = new EncoderParameters(1);
+            parametros.Param[0] = new EncoderParameter(Encoder.Quality, calidad);
+            using var ms = new MemoryStream();
+            bmp.Save(ms, codec, parametros);
+            return ms.ToArray();
+        }
+        catch { return null; }
+    }
+
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
 

@@ -506,7 +506,7 @@ public sealed class SurfaceMapTools
         try
         {
             return Navigation.FotosDeLosRecuerdos.Guardar(nombre,
-                Capture.Screenshotter.CaptureVentanaBase64Png(AppAligner.VentanaDelUsuario()) ?? "");
+                Capture.Screenshotter.CaptureVentanaJpeg(AppAligner.VentanaDelUsuario()));
         }
         catch (Exception e) { LogBus.Log("recuerdo", $"no pude guardar la foto: {e.Message}"); return ""; }
     }
@@ -1521,6 +1521,13 @@ public sealed class SurfaceMapTools
     {
         _where = where;
     }
+
+    /// <summary>
+    /// Dónde estamos, sin leer la pantalla: solo la identidad. Es lo que necesita la ficha de una mirada
+    /// para saber DÓNDE se tomó (promesa 255), y cuesta lo que cueste situarse —que desde la spec 025 se
+    /// recuerda 400 ms—, no lo que cuesta enumerar todo lo que hay delante.
+    /// </summary>
+    public string DondeEstoyAhora { get { try { return _where()?.Id ?? ""; } catch { return ""; } } }
 
     /// <summary>
     /// EL NÚCLEO NUEVO, para las superficies que este mapa no sabe alcanzar. Si nadie lo conecta,
