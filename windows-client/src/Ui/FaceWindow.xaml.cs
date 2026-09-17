@@ -2006,6 +2006,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // Si el anfitrión se cierra con la carita dentro, la carita vuelve a flotar: un escondite que
         // desaparece con lo escondido dentro no es un escondite. El muelle no se cierra solo.
         if (anfitrion is not Muelle) anfitrion.Ventana.Closed += ElAnfitrionSeFue;
+        // Sentada en la consulta, el botón de llevar tiene quien lleve (promesa 274).
+        if (anfitrion is ConsultaWindow consulta) consulta.Llevar = (destino, nuevo) => _ = ViajarAsync(destino, nuevo);
         Hide();
     }
 
@@ -2030,6 +2032,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             a.Guardando = false;
             if (a is not Muelle) a.Ventana.Closed -= ElAnfitrionSeFue;
+            if (a is ConsultaWindow consulta) consulta.Llevar = null;
         }
         // Y AL SACARLA, LA SILLA QUEDA VACÍA (petición del dueño, 2026-09-05). Dejarla puesta
         // enseñaba dos caras a la vez —una flotando y otra dentro del panel— sin que nada dijera

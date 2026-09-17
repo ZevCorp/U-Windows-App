@@ -49,6 +49,77 @@ public partial class FaceWindow
         TraerLasVentanasDelCentro();
     }
 
+    // ── El viaje (promesa 274) ───────────────────────────────────────────────
+
+    private bool _viajando;
+
+    /// <summary>
+    /// Lleva el centro de operaciones —y con él a la carita sentada en la consulta— a otro escritorio.
+    /// Al llegar, su escritorio pasa a ser ese y la carita se suelta de la silla y se posa con su
+    /// animación. Si no se llega, se deshace y la carita sigue sentada donde estaba.
+    /// </summary>
+    private async Task ViajarAsync(Guid destino, bool nuevo)
+    {
+        if (_viajando) { LogBus.Log("viaje", "ya hay un viaje en marcha: este se ignora"); return; }
+        if (_suEscritorio == Guid.Empty) LeerSuEscritorio("antes de viajar");
+        var origen = _suEscritorio;
+        if (origen == Guid.Empty) { LogBus.Log("viaje", "no sé dónde estoy: no viajo a ciegas"); return; }
+
+        _viajando = true;
+        try
+        {
+            var ventanas = VentanasDelCentro();
+            var r = await ViajeDeEscritorio.IrAsync(origen, destino, nuevo, ventanas,
+                (h, d) => Dispatcher.Invoke(() => EscritorioVirtual.Mover(h, d)));
+            if (!r.Llego)
+            {
+                SetStatus("no llegué al otro escritorio; me quedo aquí");
+                LogBus.Log("viaje", $"viaje fallido tras {r.Ms} ms: {r.Camino}");
+                return;
+            }
+            LeerSuEscritorio($"al llegar, en {r.Ms} ms, {(r.Fijada ? "con la ventana delante todo el viaje" : "sin fijar: la ventana faltó un instante")}");
+            SoltarseAlLlegar();
+        }
+        finally { _viajando = false; }
+    }
+
+    /// <summary>Las ventanas propias que viajan: todas las que tienen handle, esté la carita a la vista o sentada.</summary>
+    private IntPtr[] VentanasDelCentro()
+    {
+        var lista = new List<IntPtr>();
+        foreach (Window w in Application.Current.Windows)
+        {
+            var h = new WindowInteropHelper(w).Handle;
+            if (h != IntPtr.Zero) lista.Add(h);
+        }
+        return lista.ToArray();
+    }
+
+    /// <summary>
+    /// LA ANIMACIÓN DE SOLTARSE: la carita aparece donde estaba sentada y se va a su borde con el
+    /// mismo muelle con el que se lanza. Desde ese instante trabaja en este escritorio.
+    /// </summary>
+    private void SoltarseAlLlegar()
+    {
+        if (!_silla.Ocupada) return;
+        // Dónde está la silla ahora, en puntos: ahí aparece, para que se vea salir de la consulta.
+        Point asiento;
+        try
+        {
+            var px = Face.PointToScreen(new Point(0, 0));
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(Face);
+            asiento = new Point(px.X / dpi.DpiScaleX, px.Y / dpi.DpiScaleY);
+        }
+        catch (InvalidOperationException) { asiento = new Point(Left, Top); }   // la silla no está en pantalla
+
+        LevantarLaCarita();
+        MoveTo(asiento.X, asiento.Y);
+        ShowActivated = false;
+        Show();
+        LogBus.Log("viaje", $"la carita se suelta en «{EscritorioVirtual.Nombre(_suEscritorio)}» desde ({asiento.X:0},{asiento.Y:0}) y se posa en su borde");
+        EdgeSnap.Aplicar(this, 0, 0, OnWindowMoved);
+    }
+
     /// <summary>
     /// Todas las ventanas propias al escritorio del asistente. Devuelve cuántas hubo que traer.
     /// </summary>
