@@ -28,10 +28,15 @@ public static class FotosDeLosRecuerdos
     public static string Carpeta { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "U", "recuerdos", "fotos");
 
-    /// <summary>Guarda un PNG en base64 y devuelve su ruta, o vacío si no se pudo.</summary>
-    public static string Guardar(string nombre, string pngBase64)
+    /// <summary>Guarda la foto en JPEG y devuelve su ruta, o vacío si no se pudo.</summary>
+    /// <remarks>
+    /// JPEG DESDE EL 2026-09-16, y no por gusto: había 294 fotos en PNG ocupando 72 MB —252 KB de media— y
+    /// para mirar una pantalla el PNG no aporta nada. Las que ya estaban se quedan como están: su ruta vive
+    /// dentro del grafo, y reescribirla es otro trabajo; van cayendo solas seguún envejecen.
+    /// </remarks>
+    public static string Guardar(string nombre, byte[]? jpeg)
     {
-        if (pngBase64.Length == 0) return "";
+        if (jpeg == null || jpeg.Length == 0) return "";
         try
         {
             string limpio = new string(nombre.Where(c => char.IsLetterOrDigit(c) || c == ' ').ToArray())
@@ -40,8 +45,8 @@ public static class FotosDeLosRecuerdos
             if (limpio.Length == 0) limpio = "sin-nombre";
 
             Directory.CreateDirectory(Carpeta);
-            string ruta = Path.Combine(Carpeta, $"{DateTime.Now:yyyyMMdd-HHmmss}-{limpio}.png");
-            File.WriteAllBytes(ruta, Convert.FromBase64String(pngBase64));
+            string ruta = Path.Combine(Carpeta, $"{DateTime.Now:yyyyMMdd-HHmmss}-{limpio}.jpg");
+            File.WriteAllBytes(ruta, jpeg);
             return ruta;
         }
         catch (Exception e)

@@ -5,12 +5,21 @@ using System.Text.Json;
 namespace U.WindowsClient.Voice;
 
 /// <summary>
-/// UNA MIRADA: la foto se sube, se mira, y se borra. Promesa 250 (spec 027).
+/// LAS MIRADAS DE UNA CONVERSACIÓN: se suben, se miran, y se retiran todas al cerrarla. Promesa 250 (spec 027).
 /// </summary>
 /// <remarks>
-/// LA COPIA EN OPENAI DURA LO QUE DURA LA MIRADA, y es una condición del dueño dicha en mayúsculas:
-/// «QUE NO DUREN MUCHO TIEMPO EN OPENAI» (2026-09-16). Lo que se queda es la foto LOCAL, en el álbum
-/// de Ü; lo que viaja es una copia efímera que existe solo para que Luna pueda verla.
+/// LA COPIA DURA LO QUE DURA LA CONVERSACIÓN QUE PUEDE LEERLA, y eso sigue cumpliendo la condición del
+/// dueño dicha en mayúsculas: «QUE NO DUREN MUCHO TIEMPO EN OPENAI» (2026-09-16) — duran una llamada,
+/// no días. Lo que se queda es la foto LOCAL, en el álbum de Ü; lo que viaja es una copia efímera.
+///
+/// NO SE BORRA AL RATO, Y ESTO SE APRENDIÓ ROMPIÉNDOLO. La primera versión solía una espera de ocho
+/// segundos y borraba. Medido en la app el 2026-09-16: subida a las 20:26:55, borrada a las 20:27:03, y el
+/// servidor contestando «Files [file-XPZ…] were not found» a las 20:27:04, 20:27:10 y 20:27:28. Con ningún
+/// temporizador habría funcionado: la REFERENCIA se queda en el historial de la sesión, así que cualquier
+/// respuesta posterior vuelve a pedir el archivo. Mientras la sesión viva, la copia tiene que estar.
+///
+/// Y POR ESO SE GUARDAN TODAS: mirar dos veces deja dos referencias vivas en el historial, y quedarse solo
+/// con la última dejaba la primera colgada para siempre en la cuenta —basura— o borrada en falso.
 ///
 /// POR QUÉ SUBIR Y NO INCRUSTAR: el buzón de la sesión admite 32.768 bytes para la conversación
 /// entera y una captura pesa 118.000 codificada, así que dentro del mensaje no cabía ninguna — de ahí
@@ -24,7 +33,7 @@ public sealed class MiradaSubida
 {
     private readonly Func<byte[], Task<string>> _subir;
     private readonly Func<string, Task> _borrar;
-    private string _id = "";
+    private readonly List<string> _subidas = new();
 
     /// <param name="subir">Deja la foto en OpenAI y devuelve su identificador.</param>
     /// <param name="borrar">Borra esa copia.</param>
@@ -42,17 +51,21 @@ public sealed class MiradaSubida
     public async Task<string> SubirAsync(byte[] jpeg)
     {
         if (jpeg == null || jpeg.Length == 0) return "";
-        _id = await _subir(jpeg);
-        return _id;
+        string id = await _subir(jpeg);
+        // La anterior NO se toca: su referencia sigue viva en el historial de la sesión.
+        if (id.Length > 0) lock (_subidas) _subidas.Add(id);
+        return id;
     }
 
-    /// <summary>Borra la copia subida. Sin nada subido no hace nada; dos veces tampoco.</summary>
+    /// <summary>
+    /// Retira TODAS las copias de esta conversación. Se llama al cerrarla, que es cuando ya nadie puede
+    /// leerlas. Sin nada subido no hace nada; dos veces tampoco.
+    /// </summary>
     public async Task SoltarAsync()
     {
-        string id = _id;
-        if (id.Length == 0) return;
-        _id = "";
-        await _borrar(id);
+        string[] pendientes;
+        lock (_subidas) { pendientes = _subidas.ToArray(); _subidas.Clear(); }
+        foreach (string id in pendientes) await _borrar(id);
     }
 
     private static readonly HttpClient Red = new() { Timeout = TimeSpan.FromSeconds(30) };

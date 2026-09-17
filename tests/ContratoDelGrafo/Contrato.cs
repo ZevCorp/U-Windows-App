@@ -672,14 +672,30 @@ internal static class Contrato
         Prueba("249. el notch mide siempre lo mismo: su alto no depende de lo que tenga dentro —ni vacío, ni con una línea, ni con diez— ni su ancho de lo largas que sean las frases, y la pieza entera cabe en 80 de alto", ElNotchMideSiempreLoMismo);
 
         // MIRAR NO PUEDE DEJAR RASTRO EN OPENAI (spec 027, 2026-09-16, pedido del dueño en mayúsculas: «QUE NO
-        // DUREN MUCHO TIEMPO EN OPENAI»). La foto se sube para que Luna la vea y se borra en cuanto termina.
-        Prueba("250. mirar deja la copia en OpenAI el tiempo justo: se sube, se mira y se borra, y el borrado ocurre también cuando la mirada falla; soltar dos veces no borra dos veces, y sin nada subido no se borra nada", MirarNoDejaRastroEnOpenAI);
+        // DUREN MUCHO TIEMPO EN OPENAI»). La foto se sube para que Luna la vea y se retira al cerrar la sesión.
+        //
+        // «Y NO MENOS» NO ESTABA, Y POR ESO ESTA PROMESA ESTUVO VERDE MIENTRAS EL PRODUCTO ERA CIEGO (misma tarde).
+        // Decía «se sube, se mira y se borra», que lo cumple igual un borrado DESPUÉS de mirar que uno ANTES — y el
+        // código borraba antes: 20:26:55 subida, 20:27:03 borrada, 20:27:04 «Files [...] were not found». Un
+        // enunciado que no distingue sus casos es el aprendizaje nº2, incumplido al escribirlo.
+        Prueba("250. mirar deja la copia en OpenAI el tiempo justo Y NO MENOS: mientras la conversación que puede leerla siga viva la copia NO se borra, al cerrarla se retiran todas las que subió, soltar dos veces no borra dos veces, y sin nada subido no se borra nada", MirarNoDejaRastroEnOpenAI);
 
         // EL NOTCH ESTABA EN UNA ESQUINA (spec 028, 2026-09-16). El dueño lo quiere arriba al centro, con la
         // macro tarea de título y debajo lo que pasa —el paso de Ü, o su propia voz mientras habla—.
         Prueba("251. el notch vive arriba y al centro del área libre: se centra en el hueco que deja el sistema, cuelga a una distancia fija del borde de arriba, y nunca se sale del cristal aunque no quepa", ElNotchViveArribaAlCentro);
         Prueba("252. el notch dice dos cosas y siempre las mismas dos: arriba LA TAREA —lo último que pidió la persona, que se queda hasta que pida otra— y abajo LO QUE PASA AHORA, que es el paso de Ü, su desenlace, o lo que la persona está diciendo mientras lo dice", ElNotchDiceLaTareaYLoQuePasa);
         Prueba("253. cada estado tiene su icono y todos salen del mismo juego: la misma caja, el mismo grosor de trazo y la forma dibujada como vector; no hay dos estados con el mismo dibujo, y ninguno es una letra ni un emoji", CadaEstadoTieneSuIcono);
+
+        // LA FOTO SE BORRABA ANTES DE QUE LUNA LA LEYERA (spec 027, fase 2, 2026-09-16). MandarFotoAsync mandaba la
+        // referencia, DORMÍA OCHO SEGUNDOS y soltaba; sólo después se devolvía el resultado y se pedía el turno, así
+        // que el modelo iba a descargar un archivo que ya no estaba. No era una carrera que a veces se pierde: por
+        // ese camino se perdía siempre, y la referencia muerta envenenaba el resto de la conversación.
+        Prueba("254. mandar la foto cede el turno de inmediato y con la copia en pie: no se duerme esperando a que el servidor la descargue, y cuando el turno vuelve al modelo no se ha borrado nada — borrar antes de que lea deja la sesión apuntando a un archivo que ya no existe", MandarLaFotoNoLaBorraAntesDeVerse);
+
+        // LO QUE SE MIRÓ SE QUEDA EN CASA (spec 027, fase 3). Pedido del dueño: «que queden alojadas en local, en una
+        // memoria del asistente, para que pueda recordar en cualquier momento acciones pasadas», y el tope que eligió
+        // él: «siete días o dos gigas, y pásalas a JPEG». La pantalla de ayer no se puede volver a capturar.
+        Prueba("255. el álbum de miradas vive en local con su ficha —cuándo, en qué ubicación y qué estaba pasando—, se guarda en JPEG, se puede pedir la última foto de una ubicación, y se poda por edad y por tamaño: siete días o dos gigas, lo más viejo primero", ElAlbumDeMiradasRecuerdaYPoda);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -9990,17 +10006,146 @@ internal static class Contrato
         Debe(id == "file-1" && subidas.Count == 1, $"subir devuelve el identificador con el que se mira ({id})");
         Debe(borradas.Count == 0, "y mientras se mira, la copia sigue ahí: borrarla antes sería mirar a nada");
 
-        Suelta();
-        Debe(borradas.SequenceEqual(new[] { "file-1" }), "al soltar se borra esa copia, y esa es toda su vida en OpenAI");
-        Suelta();
-        Debe(borradas.Count == 1, "soltar dos veces no borra dos veces: la segunda no tiene nada que borrar");
-
-        // Y SI LA MIRADA FALLA, la copia se borra igual: un fallo no puede dejar basura en la cuenta.
+        // MIRAR DOS VECES NO PUEDE BORRAR LA PRIMERA. La referencia de la primera SIGUE en el historial de la
+        // sesión, así que el modelo la relee en cada respuesta posterior: borrarla deja esa conversación
+        // apuntando a un archivo que no existe, y el servidor contesta «Files [...] were not found» sin parar.
         string id2 = Sube(new byte[] { 9 });
         Debe(id2 == "file-2", "una mirada nueva sube su propia copia");
+        Debe(borradas.Count == 0,
+            $"y la anterior SIGUE en pie: subir la segunda no borra la primera (borradas: {borradas.Count})");
+
         Suelta();
         Debe(borradas.SequenceEqual(new[] { "file-1", "file-2" }),
+            $"al cerrar se retiran TODAS las que subió esta conversación, y ninguna antes (borradas: {string.Join(", ", borradas)})");
+        Suelta();
+        Debe(borradas.Count == 2, "soltar dos veces no borra dos veces: la segunda no tiene nada que borrar");
+
+        // Y SI LA MIRADA FALLA, la copia se borra igual: un fallo no puede dejar basura en la cuenta.
+        string id3 = Sube(new byte[] { 7 });
+        Debe(id3 == "file-3", "después de cerrar, una mirada nueva empieza su propia cuenta");
+        Suelta();
+        Debe(borradas.SequenceEqual(new[] { "file-1", "file-2", "file-3" }),
             "el borrado no depende de que la mirada saliera bien: se suelta pase lo que pase");
+    }
+
+
+    private static void MandarLaFotoNoLaBorraAntesDeVerse()
+    {
+        var g = GptLiveConReloj(() => 0, "254");
+        if (g == null) return;
+        var (conv, _, _, tc) = g.Value;
+        using (conv)
+        {
+            var fPuerta   = tc.GetField("_puerta", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fAbierta  = tc.GetField("_puertaAbierta", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fSube     = tc.GetField("_subeLaMirada", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fBorra    = tc.GetField("_borraLaMirada", BindingFlags.NonPublic | BindingFlags.Instance);
+            var mFoto     = tc.GetMethod("MandarFotoAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+            var mTerminar = tc.GetMethod("TerminarAsync");
+            if (fPuerta == null || fAbierta == null || fSube == null || fBorra == null || mFoto == null || mTerminar == null)
+            { Pendiente("ConversacionEnVivo._subeLaMirada/_borraLaMirada (por dónde sube la mirada)", "254", "027"); return; }
+
+            var mandados = new List<string>();
+            var borradas = new List<string>();
+            int subidas = 0;
+            fPuerta.SetValue(conv, (Func<string, CancellationToken, Task>)((j, _) => { lock (mandados) mandados.Add(j); return Task.CompletedTask; }));
+            fAbierta.SetValue(conv, (Func<bool>)(() => true));
+            fSube.SetValue(conv, (Func<byte[], Task<string>>)(_ => Task.FromResult($"file-{Interlocked.Increment(ref subidas)}")));
+            fBorra.SetValue(conv, (Func<string, Task>)(id => { lock (borradas) borradas.Add(id); return Task.CompletedTask; }));
+
+            var reloj = System.Diagnostics.Stopwatch.StartNew();
+            ((Task)mFoto.Invoke(conv, new object[] { new byte[] { 1, 2, 3, 4 }, CancellationToken.None })!).GetAwaiter().GetResult();
+            reloj.Stop();
+
+            // NO SE DUERME. La espera fija de ocho segundos retrasaba el turno del modelo por el mismo tiempo que
+            // tardaba en matar la foto: el peor de los dos mundos, lento Y ciego.
+            Debe(reloj.ElapsedMilliseconds < 1500,
+                $"mandar la foto devuelve el turno enseguida y no duerme esperando al servidor ({reloj.ElapsedMilliseconds} ms)");
+            Debe(mandados.Count == 1 && mandados[0].Contains("file-1", StringComparison.Ordinal),
+                $"se mandó la referencia de la foto ({mandados.Count} mensaje(s))");
+            Debe(borradas.Count == 0,
+                $"y al ceder el turno la copia SIGUE en OpenAI: si se borra aquí, el modelo lee un archivo que ya no existe (borradas: {string.Join(", ", borradas)})");
+
+            ((Task)mTerminar.Invoke(conv, null)!).GetAwaiter().GetResult();
+            Debe(borradas.SequenceEqual(new[] { "file-1" }),
+                $"y al cerrar la conversación sí se retira, que es cuando ya nadie puede leerla (borradas: {string.Join(", ", borradas)})");
+        }
+    }
+
+    private static void ElAlbumDeMiradasRecuerdaYPoda()
+    {
+        var t = Capacidad("U.WindowsClient.Navigation.AlbumDeMiradas");
+        Debe(t != null, "todavía no existe «Navigation.AlbumDeMiradas» (spec 027, promesa 255). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null) return;
+
+        string carpeta = Path.Combine(Path.GetTempPath(), "u-album-" + Guid.NewGuid().ToString("N")[..8]);
+        long ahora = 0;
+        const long Dia = 86_400_000L;
+        // Un JPEG de verdad empieza por FF D8 FF y acaba por FF D9. Relleno en medio para darle tamaño.
+        byte[] Jpeg(int bytes) { var b = new byte[Math.Max(5, bytes)]; b[0] = 0xFF; b[1] = 0xD8; b[2] = 0xFF; b[^2] = 0xFF; b[^1] = 0xD9; return b; }
+
+        object Album(long topeBytes, long topeMs) => Activator.CreateInstance(
+            t, new object[] { carpeta, (Func<long>)(() => Volatile.Read(ref ahora)), topeBytes, topeMs })!;
+        var mGuardar = t.GetMethod("Guardar");
+        var mUltima  = t.GetMethod("UltimaDe");
+        var mPodar   = t.GetMethod("Podar");
+        if (mGuardar == null || mUltima == null || mPodar == null)
+        { Pendiente("AlbumDeMiradas.Guardar / UltimaDe / Podar", "255", "027"); return; }
+        var a = Album(2L * 1024 * 1024 * 1024, 7 * Dia);
+
+        object? Guarda(object al, byte[] j, string donde, string que) => mGuardar.Invoke(al, new object[] { j, donde, que });
+        object? Ultima(object al, string donde) => mUltima.Invoke(al, new object[] { donde });
+        int Poda(object al) => (int)mPodar.Invoke(al, null)!;
+        string Campo(object f, string n) => (f.GetType().GetProperty(n)?.GetValue(f) ?? "").ToString()!;
+        long Numero(object f, string n) => Convert.ToInt64(f.GetType().GetProperty(n)?.GetValue(f) ?? 0L);
+
+        try
+        {
+            ahora = 1_000;
+            var f1 = Guarda(a, Jpeg(1000), "web://instagram.com", "abriendo los mensajes");
+            Debe(f1 != null, "guardar una mirada devuelve su ficha");
+            if (f1 == null) return;
+            Debe(Campo(f1, "Ubicacion") == "web://instagram.com", $"la ficha dice DÓNDE se tomó ({Campo(f1, "Ubicacion")})");
+            Debe(Campo(f1, "QuePasaba") == "abriendo los mensajes", $"y QUÉ estaba pasando ({Campo(f1, "QuePasaba")})");
+            Debe(Numero(f1, "Cuando") == 1_000, $"y CUÁNDO, por el reloj que se le dio ({Numero(f1, "Cuando")})");
+            string archivo = Campo(f1, "Archivo");
+            Debe(File.Exists(archivo), $"y la foto está en el disco ({archivo})");
+            Debe(archivo.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase),
+                $"guardada en JPEG, que pesa la mitad que el PNG ({Path.GetExtension(archivo)})");
+
+            // UN PNG NO ENTRA. Si el álbum acepta cualquier cosa, «se guarda en JPEG» es una intención y no un hecho.
+            var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2 };
+            Debe(Guarda(a, png, "web://instagram.com", "no debería entrar") == null,
+                "lo que no es JPEG no entra: el álbum no se llena de formatos que nadie prometió");
+
+            ahora = 2_000;
+            Guarda(a, Jpeg(1000), "web://instagram.com", "escribiendo el mensaje");
+            ahora = 3_000;
+            Guarda(a, Jpeg(1000), "uia://EXCEL.exe/inicio", "el libro en blanco");
+
+            var ultima = Ultima(a, "web://instagram.com");
+            Debe(ultima != null && Campo(ultima, "QuePasaba") == "escribiendo el mensaje",
+                "se puede pedir la última foto de UNA ubicación, y es la más reciente de ese sitio, no la de otro");
+            Debe(Ultima(a, "web://no-estuve-nunca") == null, "de un sitio donde no se miró no se inventa una foto");
+
+            // POR EDAD: siete días. Lo de hace ocho ya no está.
+            ahora = 3_000 + 8 * Dia;
+            int porEdad = Poda(a);
+            Debe(porEdad == 3, $"a los ocho días se van las tres de entonces ({porEdad})");
+            Debe(Ultima(a, "web://instagram.com") == null, "y pedirlas ya no devuelve nada: se fueron de verdad");
+
+            // POR TAMAÑO: con un tope de 2500 bytes y tres fotos de 1000, sobra la más vieja.
+            var b = Album(2500, 7 * Dia);
+            ahora += 1_000; Guarda(b, Jpeg(1000), "web://a", "la más vieja");
+            ahora += 1_000; Guarda(b, Jpeg(1000), "web://b", "la de en medio");
+            ahora += 1_000; Guarda(b, Jpeg(1000), "web://c", "la más nueva");
+            int porTamano = Poda(b);
+            Debe(porTamano == 1, $"pasado el tope de tamaño se va UNA, la justa para volver a caber ({porTamano})");
+            Debe(Ultima(b, "web://a") == null, "y la que se va es la MÁS VIEJA, no la que toque");
+            Debe(Ultima(b, "web://c") != null, "la más nueva se queda: podar no es vaciar");
+        }
+        finally { try { Directory.Delete(carpeta, true); } catch { } }
     }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>

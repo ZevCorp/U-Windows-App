@@ -563,6 +563,16 @@ public sealed class ConversacionEnVivo : IDisposable
 
     public async Task TerminarAsync()
     {
+        // LAS MIRADAS SE RETIRAN AQUÍ, y antes del portillo de abajo: cerrar dos veces no puede dejar
+        // copias en la cuenta de nadie, y soltar dos veces no borra dos veces (promesa 250).
+        if (_mirada != null)
+        {
+            var mirada = _mirada;
+            _mirada = null;
+            try { await mirada.SoltarAsync(); }
+            catch (Exception e) { LogBus.Log("voz-viva", $"no pude retirar las miradas: {e.Message}"); }
+        }
+
         if (_oyendoElCambioDeMicrofono != null)
         {
             ElMicrofonoDeLaApp.Cambio -= _oyendoElCambioDeMicrofono;
@@ -1316,32 +1326,46 @@ public sealed class ConversacionEnVivo : IDisposable
     /// señalar, o cuando el modelo pide mirar— nunca un temporizador: aquí ver es un gesto, no un
     /// caño que hay que seguir alimentando.
     /// </summary>
+    /// <summary>
+    /// LO QUE SE MIRA SE QUEDA EN CASA (promesa 255). La copia de OpenAI se retira al cerrar la sesión; ésta
+    /// no, y es la que deja recordar después: la pantalla de hace dos horas no se puede volver a capturar.
+    /// </summary>
+    private void GuardarEnElAlbum(byte[] jpeg)
+    {
+        try
+        {
+            string donde = _mapa.DondeEstoyAhora;
+            string quePasaba = Actions.Freno.Tarea.Length > 0 ? Actions.Freno.Tarea : "miró la pantalla";
+            var ficha = Navigation.AlbumDeMiradas.Suyo.Guardar(jpeg, donde, quePasaba);
+            if (ficha != null) LogBus.Log("album", $"mirada guardada en «{donde}»: {System.IO.Path.GetFileName(ficha.Archivo)} ({jpeg.Length} bytes)");
+        }
+        catch (Exception e) { LogBus.Log("album", $"no pude guardar la mirada en casa: {e.Message}"); }
+    }
+
     private async Task MandarFotoAsync(byte[] jpeg, CancellationToken ct)
     {
-        if (!Viva || _ws?.State != WebSocketState.Open || jpeg.Length == 0) return;
+        if (!SalidaAbierta || jpeg.Length == 0) return;
         try
         {
             // POR REFERENCIA CUANDO EL PROTOCOLO SABE (promesas 54 y 250, spec 027): la foto se sube
             // aparte y en la sesión entra solo su identificador. Incrustada no cabía NINGUNA —118.000
-            // bytes en un buzón de 32.768— y por eso Ü era ciega. La copia se borra en cuanto se miró:
-            // lo que se queda es la foto local, no la de OpenAI.
+            // bytes en un buzón de 32.768— y por eso Ü era ciega.
+            //
+            // NI SE DUERME NI SE SUELTA AQUÍ (promesa 254). Aquí había un Task.Delay de ocho segundos y un
+            // borrado detrás, y eso hacía dos daños a la vez: retrasaba el turno del modelo justo lo que
+            // tardaba en matar la foto. El 2026-09-16 se midió en la app —subida 20:26:55, borrada
+            // 20:27:03, «were not found» 20:27:04—: por este camino se perdía SIEMPRE. La copia se retira
+            // al cerrar la conversación, que es cuando ya nadie puede leerla.
             if (_protocolo.VePorReferencia)
             {
-                var mirada = MiradaSubida.Real(Clave, m => LogBus.Log("voz-viva", m));
-                try
+                string id = await Mirada.SubirAsync(jpeg);
+                if (id.Length == 0)
                 {
-                    string id = await mirada.SubirAsync(jpeg);
-                    if (id.Length == 0)
-                    {
-                        LogBus.Log("voz-viva", "no pude subir la foto; no mando nada antes que mandar algo roto");
-                        return;
-                    }
-                    string porRef = _protocolo.FotogramaPorReferencia(id);
-                    if (porRef.Length > 0) await EnviarAsync(porRef, ct);
-                    // Se le da un momento al servidor para descargarla antes de retirarla.
-                    await Task.Delay(TimeSpan.FromSeconds(8), ct);
+                    LogBus.Log("voz-viva", "no pude subir la foto; no mando nada antes que mandar algo roto");
+                    return;
                 }
-                finally { await mirada.SoltarAsync(); }
+                string porRef = _protocolo.FotogramaPorReferencia(id);
+                if (porRef.Length > 0) await EnviarAsync(porRef, ct);
                 return;
             }
 
@@ -1366,6 +1390,25 @@ public sealed class ConversacionEnVivo : IDisposable
     /// </remarks>
     private Func<string, CancellationToken, Task>? _puerta = null;
     private Func<bool>? _puertaAbierta = null;
+
+    /// <summary>
+    /// POR DÓNDE SUBE Y SE BORRA LA MIRADA. Nulas en la app, que es la API de archivos de OpenAI; el
+    /// contrato las cambia por dos listas para juzgar CUÁNDO se borra (promesa 254).
+    /// </summary>
+    /// <remarks>
+    /// Sin este asidero la 254 no se puede escribir, y sin la 254 el fallo vuelve: el código borraba la
+    /// foto ocho segundos después de mandarla y el modelo la leía más tarde, así que Luna nunca vio nada.
+    /// Es la misma leccción que dejó _puerta escrita arriba: lo que el contrato no puede tocar, no lo juzga.
+    /// </remarks>
+    private Func<byte[], Task<string>>? _subeLaMirada = null;
+    private Func<string, Task>? _borraLaMirada = null;
+
+    /// <summary>Las miradas de ESTA conversación. Una sola, y viven hasta que se cierra (promesa 250).</summary>
+    private MiradaSubida? _mirada;
+
+    private MiradaSubida Mirada => _mirada ??= (_subeLaMirada != null && _borraLaMirada != null
+        ? new MiradaSubida(_subeLaMirada, _borraLaMirada)
+        : MiradaSubida.Real(Clave, m => LogBus.Log("voz-viva", m)));
 
     /// <summary>Hay voz viva con el socket abierto: si no, lo escrito no tiene por dónde salir.</summary>
     private bool SalidaAbierta => _puertaAbierta?.Invoke() ?? (Viva && _ws?.State == WebSocketState.Open);
@@ -2080,7 +2123,12 @@ public sealed class ConversacionEnVivo : IDisposable
                 {
                     byte[]? jpeg = CapturaDePantalla.Capturar();
                     if (jpeg == null) resultado = "no pude capturar la pantalla ahora mismo.";
-                    else { fotos.Add(jpeg); resultado = "aquí tienes lo que hay en pantalla ahora mismo."; }
+                    else
+                    {
+                        fotos.Add(jpeg);
+                        GuardarEnElAlbum(jpeg);
+                        resultado = "aquí tienes lo que hay en pantalla ahora mismo.";
+                    }
                 }
                 relojMirar.Stop();
                 Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, relojMirar.ElapsedMilliseconds), true);
