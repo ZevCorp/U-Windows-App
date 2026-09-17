@@ -190,6 +190,79 @@ sin argumento no; y el catálogo y las instrucciones, leídos por reflexión. So
 y `map_type` por MCP trayendo lo que hay delante, y una tarea por voz contando cuántos «¿y ahora qué
 hay?» siguen a un acto —antes, el 50%—.
 
+## 8. Después del corte 3: la corrida del 17 de septiembre a las 13:17, medida
+
+La misma tarea de siempre del dueño —investigar en Google, leer, dictar a Docs y al Bloc de notas—,
+42 llamadas en ocho minutos, con los cortes 1, 2 y 3 dentro (1.3.3).
+
+**El corte 3 valió.** Saberes que el modelo pide justo después de un acto, sin que el usuario hablara en
+medio: **1 de 20 actos (5%)**, contra 2 de 7 (29%) en la corrida anterior y el 50% de los tres días. Y el
+hueco del modelo tras un acto no creció por leer una respuesta más larga: 3,0 s de mediana.
+
+**Dónde se va el reloj ahora** (unos 430 s de tarea):
+
+| | | |
+|---|---|---|
+| Nuestras herramientas | 67 s | 15% |
+| Huecos en los que sólo el modelo pensaba | 121 s | 28% |
+| Huecos en los que **el usuario hablaba** (enseñando: 14 `map_esto_es`; dictando) | 241 s | 56% |
+
+El 56% es la persona hablando. No es ruido y no se corta: es la tarea. Lo que queda por cortar es el
+15% de herramienta y, dentro del 28% del modelo, las vueltas que sobran.
+
+**Los 67 s de herramienta, uno a uno:**
+
+| Qué | s | Qué era de verdad |
+|---|---|---|
+| `map_type` (5) | 28,1 | **15,6 s fueron 2.212 caracteres tecleados uno a uno en Google Docs** (7,1 ms/carácter): el campo es mudo y se teclea. En el Bloc de notas, 3.017 caracteres por `SetValue` costaron 2,5 s |
+| `map_go_to` (9) | 20,5 | **13,2 s fueron un solo «no hay camino»**: la pestaña de Docs se activó en Chrome, pero la persona tenía el Bloc de notas delante y **la llegada se juzgó sobre la ventana de delante, no sobre la de trabajo**. `trabajo:` dice «la ventana de trabajo es ahora docs.google.com» un segundo después de haber declarado el fracaso |
+| `map_esto_es` (14) | 7,8 | enseñanza del usuario; proporcional |
+| `map_scroll` (4) | 4,3 | ~1 s cada uno: el precio del corte 3 (cada acto lee la pantalla) |
+| el resto | 6 | — |
+
+**Un error mío del corte 1, visto en esta corrida.** A las 13:23:29 se pidió `google.com`, la heurística de
+pestañas activó «Google Sheets» por el título, y la regla de llegada nueva aceptó `docs.google.com` como
+subdominio de `google.com`: **«te puse delante de google.com» estando en Sheets**. Una caja que miente. Lo
+salvó el corte 3: el inventario decía «EN PANTALLA AHORA, en docs.google.com/spreadsheets…» y el modelo
+volvió a pedir `www.google.com` diez segundos después. La tolerancia a subdominios se retira: `www.` sí,
+otro subdominio no —`docs.`, `mail.`, `drive.` son sitios distintos—. El caso `apply.ycombinator.com`
+(uno en tres días) vuelve a «no hay camino» y se acepta.
+
+**Los cortes 4 y 5, revisados con datos:**
+
+- **Corte 4 (la pestaña por dominio, no por título): sí aporta, y por más de lo que se pensó.** En esta
+  corrida la heurística de título falló tres veces: «Instagram» tomada por `docs.google.com`, «Nueva
+  pestaña» por `instagram.com` —dos o tres segundos cada una en activar, comprobar y volver— y «Google
+  Sheets» por `google.com`, que además produjo la mentira de arriba. Pero el mecanismo caro detrás de
+  los 13 s no es la pestaña: es **juzgar la llegada sobre la ventana equivocada**. El corte 4 se reformula:
+  (a) `PasoDelNucleo` juzga la llegada sobre la **ventana de trabajo** (`DondeTrabajo`, la misma que usan
+  pulsar y recorrer), no sobre la de delante —es la spec 020 aplicada a ir—; (b) la pestaña se elige por
+  su URL y no por su título; (c) la regla de llegada pierde los subdominios.
+- **Corte 5 (el catálogo de apps sin rescanear): no aporta, y se descarta.** Medido en tres días: las
+  aperturas de apps ya abiertas cuestan 668 ms de mediana (era el bucle de 8 s, ya cortado), y las que
+  lanzan de verdad cuestan lo que tarda la app en arrancar —VS Code 2,3 s, SAP Logon 2,5 s— con el
+  catálogo contestando en el mismo segundo. No hay nada que cortar ahí.
+
+**Una palanca nueva, con su número: pegar en vez de teclear.** En un campo mudo se teclea carácter a
+carácter a 7 ms cada uno; 2.212 caracteres son 15,6 s, el 23% de toda la herramienta de esta corrida.
+Pegar desde el portapapeles es un gesto. Con sus límites dichos: hay que guardar y devolver el
+portapapeles de la persona, y hay campos que no aceptan pegar —ahí se teclea, como hoy—.
+
+**El orden que queda, por lo que compra dividido por lo que arriesga:**
+
+| # | Corte | Compra | Riesgo |
+|---|---|---|---|
+| 1' | Retirar los subdominios de la regla de llegada | deja de mentir «te puse delante» | bajo: quitar una línea y sumar un caso a la 261 |
+| 4a | La llegada se juzga sobre la ventana de trabajo | los 13 s de esta corrida y los ≥ 6 casos de «ventana equivocada» de tres días | bajo-medio: cambia qué `donde` recibe el servidor del núcleo, y es el que ya usan pulsar y recorrer |
+| 6 | Pegar en vez de teclear en campos mudos, para textos largos | 15,6 s de 67 en esta corrida | medio: portapapeles ajeno; se guarda y se devuelve |
+| 4b | La pestaña por URL, no por título | 2–3 s por fallo, tres por corrida | bajo |
+| ~~5~~ | ~~el catálogo de apps~~ | nada medible | — |
+
+**Y un síntoma anotado para el observador único:** en una apertura de Chrome el localizador escribió la
+misma línea —«sin barra de direcciones: mobiliario del navegador»— **sesenta veces en ocho segundos**:
+siete preguntas por segundo de distintos sondeadores a la misma ventana. No cuesta tiempo al usuario
+hoy; es la prueba de que hay más lectores que capacidad de leer.
+
 ## 7. Cómo se sigue midiendo
 
 El reparto de este documento sale de dos guiones sobre el log —el de tiempos por herramienta y el
