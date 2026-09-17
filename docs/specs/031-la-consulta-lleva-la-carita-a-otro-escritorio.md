@@ -1,6 +1,6 @@
 # Plan de implementación: la consulta lleva a la carita a otro escritorio
 
-Estado: **propuesto** · Nace del diagnóstico del 2026-09-17 · Rama: `jose/un-asistente-por-escritorio`
+Estado: **implementado** el 2026-09-17 (270 a 274 en verde, contrato intacto) · Nace del diagnóstico del 2026-09-17 · Rama: `jose/un-asistente-por-escritorio`
 
 > El dueño: «quiero poder tener múltiples asistentes de mi Ü en múltiples escritorios virtuales de
 > Windows. Dejar un asistente en cada escritorio, cada uno con su entorno aparte, que hagan
@@ -239,16 +239,52 @@ las que ya sirvieron en la 020.
 ## Hallazgos
 
 1. **Riesgo de choque en `ConsultaWindow.cs`** (2026-09-17): la rama `origin/jose/la-nota-se-elige-y-se-corrige`,
-   sin mergear, le mete +858 líneas. La fase 3 y la 4 se hacen en un archivo parcial nuevo
-   (`ConsultaWindow.Anfitrion.cs`) y tocan del original solo el tamaño y el hueco de la fila 2, para
-   que el merge sea de líneas y no de intenciones. Antes de abrir la fase 3, mirar si esa rama ya
-   entró.
+   sin mergear, le mete +858 líneas. La fase 3 y la 4 se hicieron en un archivo parcial nuevo
+   (`ConsultaWindow.Anfitrion.cs`) y tocan del original **tres líneas**: el `partial`, el tamaño con
+   nombre y el hueco de la fila 2.
 2. **Dos sillas mienten** (medido ya en 2026-09-05 para el muelle): la razón de que la silla sea una
    sola y se mude, y no una copia en la consulta.
+3. **Fijar la ventana no responde en la 26200** (fase 0, medido en la corrida a mano): el servicio
+   `IVirtualDesktopPinnedApps` del shell contesta `E_NOTIMPL` (`0x80004001`) a `QueryService`. El
+   viaje tomó el camino público las dos veces y el log lo dijo: «sin fijar: la ventana faltó un
+   instante». El instante es el del deslizamiento (~300 ms); la consulta ya está en el destino
+   cuando el destino entra. Si el dueño quiere la ventana delante durante el deslizamiento, el
+   siguiente intento es `IVirtualDesktopManagerInternal` de esta compilación, y esa decisión se toma
+   aparte.
+4. **Una ventana escondida no viaja** (14:50, primera corrida): `MoveWindowToDesktop` contestó `S_OK`
+   para las tres ventanas, pero la carita —oculta mientras está sentada— apareció en OTRO escritorio
+   al enseñarla: el sistema no asigna escritorio a lo que no se ve. Arreglo: ya a la vista, se mueve
+   otra vez y se comprueba dónde quedó (segunda corrida, 14:56: las tres en «Anuncios»).
+5. **El arnés deja un juez vivo**: `contrato-del-grafo.exe` sigue corriendo tras dar el veredicto
+   (un gancho o un hilo lo mantiene) y la compilación siguiente falla con `MSB3027` al copiar las
+   DLL, o el juez arranca sin ellas y dice «CONTRATO ROTO: 16» por `FileNotFoundException`. No es un
+   rojo: es el juez sin poder correr (aprendizaje nº17). Antes de compilar, cerrar por RUTA los
+   procesos bajo `%TEMP%\u-contrato`. Va a `scripts/contrato-del-grafo.ps1` como mejora aparte.
+6. **Un `mouse_event` sintético sobre el botón no disparó el clic** en una corrida (14:48:58) y
+   por UI Automation sí. No se sabe si es el botón o el simulador de ratón de la sonda (proceso sin
+   conciencia de DPI): queda para que el dueño lo pulse con el ratón de verdad.
+
+### La corrida a mano (nivel 4), del log de `C:\U-escritorio`, 2026-09-17
+
+| Hora | Qué | Resultado |
+|---|---|---|
+| 14:48:16 | arranca con `--consulta` | «vivo en "Escritorio 1" (al arrancar)»; la consulta abre a 988×656 (la caja de la tarjeta: 944×612) |
+| 14:48:38 | soltar la carita en el centro de la consulta | «la carita queda sentada en el centro» · «se guarda en "consulta": soltada en (768,420)»; la flotante desaparece y el botón aparece debajo |
+| 14:49:31 | pulsar «Llevar a otro escritorio» | «se ofrecen 5 destino(s): Anuncios · Whatsapp · SEO · Escritorio 5 · Uno nuevo» (el actual no está; los sin nombre, por su número) |
+| 14:50:05 | elegir «SEO» | plan `fijar → mover → cambiar:+3 → esperar → soltar-fijacion`; fijar no responde (`0x80004001`); 3 ventanas movidas en 19 ms; 3 atajos en 502 ms; «llegué a "SEO" en 530 ms (lo dice el registro)»; «vivo en "SEO"» |
+| 14:50:06 | la llegada | la carita sale de la consulta y se posa en su borde; **hallazgo 4**: apareció en otro escritorio |
+| 14:55:35 | arranca de nuevo, con el arreglo, en «SEO» | «vivo en "SEO" (al arrancar)» |
+| 14:56:15 | soltarla en la consulta | sentada; los destinos ahora son «Escritorio 1 · Anuncios · Whatsapp · Escritorio 5 · Uno nuevo» |
+| 14:56:18 | elegir «Anuncios» | `cambiar:-2`, 2 atajos en 304 ms, «llegué a "Anuncios" en 563 ms»; «la carita se suelta en "Anuncios" … (ya a la vista: mover → 0x00000000, está en "Anuncios")» |
+| 14:56:23 | medido desde fuera con la API | las tres ventanas en «Anuncios», `enActual=1`, `cloaked=0`; el registro dice «Anuncios» |
+
+Dos escritorios con nombre y dos direcciones: de «Escritorio 1» a «SEO» (tres a la derecha) y de
+«SEO» a «Anuncios» (dos a la izquierda). No se probó «Uno nuevo» en la máquina: crearía un
+escritorio en la sesión del dueño; la regla que lo planea está juzgada por la 274.
 
 ## Cierre
 
-- [ ] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO)
-- [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
-- [ ] Probado en ≥2 pantallas, con nombre: …
-- [ ] Estado de este documento: **implementado** (AAAA-MM-DD)
+- [x] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO, 265 promesas)
+- [x] `.\scriptserificar.ps1` pasa, con evidencia en `out\evidencia.md`
+- [x] Probado en ≥2 pantallas, con nombre: los escritorios «SEO» y «Anuncios», en las dos direcciones (ver la corrida)
+- [x] Estado de este documento: **implementado** (2026-09-17)
