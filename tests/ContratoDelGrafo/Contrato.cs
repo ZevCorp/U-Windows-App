@@ -740,6 +740,17 @@ internal static class Contrato
         // zona del notch… que aparezca el notch con su transición», sin importar si Ü está hablando o no. Pura y sin
         // pantalla, como el resto de <see cref="ReglaDeLaBandeja"/>: el contrato juzga geometría, no un hook de ratón.
         Prueba("260. acercar el cursor al borde de arriba, centrado donde vive el notch, cae dentro de la franja que lo asoma; lejos de esa franja —al lado, o más abajo— no cae dentro, así que el gesto no dispara con cualquier paso del ratón por arriba", AcercarseAlBordeAsomaElNotch);
+        // UN ASISTENTE POR ESCRITORIO (spec 031, 2026-09-17). El dueño: «quiero dejar un asistente en cada
+        // escritorio virtual; incrustar la carita en el centro de la consulta, con las dimensiones del pantallazo;
+        // y un botón debajo para llevarla a otro escritorio, con la aplicación quedándose enfrente mío». Todo lo
+        // que se juzga aquí es puro: la regla del escritorio, la del anfitrión, la del viaje. La API del sistema
+        // (mover ventana propia = S_OK en 5 ms; ajena = E_ACCESSDENIED; otro escritorio = cloaked 2) se midió el
+        // mismo día con scripts/sonda-escritorios*.ps1 y no se vuelve a medir aquí.
+        Prueba("270. cada asistente sabe cuál es su escritorio: el escritorio virtual donde vive su carita, leído del sistema al arrancar y al terminar cada viaje; y las ventanas de su centro de operaciones —carita, muelle, notch, consulta— viven en ese mismo escritorio, nunca repartidas: la que se queda en otro, se trae", CadaAsistenteSabeSuEscritorio);
+        Prueba("271. la consulta abre con las dimensiones del pantallazo, 988×656 puntos con el hueco de la sombra —la tarjeta 944×612—, centrada; y se sigue estirando desde sus bordes como hoy", LaConsultaAbreConElTamanoDelPantallazo);
+        Prueba("272. la carita se guarda en la consulta igual que en el muelle: soltarla dentro la sienta en el centro, la flotante desaparece, y hay UNA silla ocupada a la vez —muelle o consulta, nunca las dos—; el anfitrión lo decide la caja donde se soltó, con el mismo margen de agarre, y tirar de ella la saca bajo el cursor como hoy", LaCaritaSeGuardaEnLaConsultaComoEnElMuelle);
+        Prueba("273. debajo de la carita sentada en la consulta hay un botón para llevarla a otro escritorio, que ofrece los escritorios por su nombre —«Escritorio N» los que no lo tienen— menos el actual, y «Uno nuevo»; sin carita sentada el botón no está", ElBotonOfreceLosEscritoriosPorSuNombre);
+        Prueba("274. llevar a otro escritorio deja al asistente trabajando allí: las ventanas del centro de operaciones acaban en el destino, el destino queda a la vista, su escritorio pasa a ser ese, y la carita se suelta de la consulta y se posa con su animación; durante el viaje la consulta se queda delante si el sistema deja fijarla, y si no, el log dice que faltó un instante; llegar lo dice el sistema, no el botón, y si no se llega en el plazo se dice, las ventanas vuelven y nada queda a medias", ElViajeLlegaCuandoElSistemaLoDice);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -11023,6 +11034,169 @@ internal static class Contrato
             Console.WriteLine($"     en {e.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}");
         }
         Console.WriteLine($"{(_fallos == antes ? "✔" : "✘")} {nombre}");
+    }
+
+    // ── Un asistente por escritorio (spec 031) ───────────────────────────────
+
+    /// <summary>Los tipos de la 031 que viven en windows-graph (la API de escritorios y su regla pura).</summary>
+    private static Type? Escritorios(string nombre) => typeof(U.Graph.Surfaces.UiaSurface).Assembly.GetType(nombre);
+
+    private static void CadaAsistenteSabeSuEscritorio()
+    {
+        var api = Escritorios("U.Graph.Surfaces.EscritorioVirtual");
+        var t = Escritorios("U.Graph.Surfaces.ReglaDelEscritorio");
+        var descolocadas = t?.GetMethod("Descolocadas");
+        var orden = t?.GetMethod("Orden");
+        if (api == null || t == null || descolocadas == null || orden == null)
+        {
+            Pendiente("EscritorioVirtual + ReglaDelEscritorio.Descolocadas/Orden", "270", "031");
+            return;
+        }
+
+        // Cinco escritorios en el registro, en el orden de la vista de tareas: 16 bytes por GUID, pegados.
+        var ids = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        var blob = ids.SelectMany(g => g.ToByteArray()).ToArray();
+        var leidos = (Guid[])orden.Invoke(null, new object[] { blob })!;
+        Debe(leidos.SequenceEqual(ids), "el orden de los escritorios es el del registro, GUID a GUID, sin reordenar");
+        Debe(((Guid[])orden.Invoke(null, new object[] { blob.Take(40).ToArray() })!).Length == 2,
+            "un blob con bytes de sobra da los GUID enteros que caben y ninguno a medias");
+
+        // El asistente vive en el tercero. Cuatro ventanas del centro de operaciones: dos allí, una en el
+        // primero (un LogWindow abierto antes del viaje) y una sin escritorio (la API contesta vacío para
+        // ventanas que no son de nadie, como Program Manager).
+        var mio = ids[2];
+        var ventanas = new[] { (IntPtr)11, (IntPtr)22, (IntPtr)33, (IntPtr)44 };
+        var donde = new[] { mio, ids[0], mio, Guid.Empty };
+        var traer = (IntPtr[])descolocadas.Invoke(null, new object[] { ventanas, donde, mio })!;
+        Debe(traer.Length == 1 && traer[0] == (IntPtr)22,
+            $"la que se quedó en otro escritorio es la única que hay que traer; salió [{string.Join(",", traer)}]");
+        Debe(!traer.Contains((IntPtr)44),
+            "una ventana sin escritorio no está «en otro»: no se toca, porque mover lo que el sistema no ubica es adivinar");
+        var nada = (IntPtr[])descolocadas.Invoke(null, new object[] { ventanas, new[] { mio, mio, mio, mio }, mio })!;
+        Debe(nada.Length == 0, "con todas en su sitio no hay nada que traer");
+    }
+
+    private static void LaConsultaAbreConElTamanoDelPantallazo()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ConsultaWindow");
+        var inicial = t?.GetProperty("TamanoInicial", BindingFlags.Public | BindingFlags.Static);
+        var minimo = t?.GetProperty("TamanoMinimo", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || inicial == null || minimo == null)
+        {
+            Pendiente("ConsultaWindow.TamanoInicial/TamanoMinimo", "271", "031");
+            return;
+        }
+        var s = (System.Windows.Size)inicial.GetValue(null)!;
+        var m = (System.Windows.Size)minimo.GetValue(null)!;
+        // El pantallazo del dueño, 2026-09-17: la tarjeta visible mide 1180×765 px al 125 % = 944×612 puntos, más
+        // el hueco de la sombra (22+22 de ancho, 18+26 de alto, promesa 154).
+        Debe(s.Width == 988, $"la ventana abre con 988 de ancho (944 de tarjeta + la sombra); abre con {s.Width}");
+        Debe(s.Height == 656, $"y 656 de alto (612 de tarjeta + la sombra); abre con {s.Height}");
+        Debe(m.Width <= 400 && m.Height <= 540,
+            $"y el mínimo no sube: sigue pudiendo estirarse hasta lo pequeño de hoy (400×540); el mínimo es {m.Width}×{m.Height}");
+        Debe(s.Width >= m.Width && s.Height >= m.Height, "el tamaño inicial cabe dentro del mínimo, o la ventana nacería ya estirada");
+    }
+
+    private static void LaCaritaSeGuardaEnLaConsultaComoEnElMuelle()
+    {
+        var regla = Capacidad("U.WindowsClient.Ui.ReglaDelAnfitrion");
+        var elegir = regla?.GetMethod("Elegir");
+        var silla = Capacidad("U.WindowsClient.Ui.SillaDeLaCarita");
+        var muelle = Capacidad("U.WindowsClient.Ui.ReglaDelMuelle");
+        var margen = muelle?.GetField("MargenDeAgarre");
+        if (regla == null || elegir == null || silla == null || margen == null)
+        {
+            Pendiente("ReglaDelAnfitrion.Elegir + SillaDeLaCarita", "272", "031");
+            return;
+        }
+        double tol = (double)margen.GetValue(null)!;
+
+        // Dos anfitriones en orden Z: el muelle delante (topmost, pegado al borde derecho) y la consulta detrás,
+        // grande y al centro. Se solapan un poco a la derecha.
+        var cajaMuelle = new System.Windows.Rect(1820, 300, 96, 420);
+        var cajaConsulta = new System.Windows.Rect(466, 192, 988, 656);
+        var cajas = new[] { cajaMuelle, cajaConsulta };
+        int Elige(double x, double y) => (int)elegir.Invoke(null, new object[] { cajas, new System.Windows.Point(x, y) })!;
+
+        Debe(Elige(960, 520) == 1, "soltarla en el centro de la consulta la sienta en la consulta");
+        Debe(Elige(1860, 500) == 0, "soltarla en el muelle la guarda en el muelle, como hoy");
+        Debe(Elige(1830, 500) == 0,
+            "donde el muelle tapa a la consulta manda el muelle: el primero en orden Z se queda con el gesto");
+        Debe(Elige(466 - tol / 2, 520) == 1, "y el margen de agarre es el mismo que el del muelle: soltarla justo al lado también cuenta");
+        Debe(Elige(466 - tol - 40, 520) == -1, "lejos de los dos no se guarda en ninguno");
+        Debe(Elige(200, 1000) == -1, "y en el vacío tampoco");
+
+        // La silla es UNA. Sentarla en un anfitrión y luego en otro la mueve; nunca hay dos ocupadas.
+        var s = Activator.CreateInstance(silla)!;
+        var sentar = silla.GetMethod("Sentar")!;
+        var levantar = silla.GetMethod("Levantar")!;
+        var donde = silla.GetProperty("Donde")!;
+        var ocupada = silla.GetProperty("Ocupada")!;
+        Debe(!(bool)ocupada.GetValue(s)!, "al nacer, la silla está vacía y la carita flota");
+        sentar.Invoke(s, new object[] { "muelle" });
+        Debe((bool)ocupada.GetValue(s)! && (string?)donde.GetValue(s) == "muelle", "sentada en el muelle, la silla dice «muelle»");
+        sentar.Invoke(s, new object[] { "consulta" });
+        Debe((string?)donde.GetValue(s) == "consulta",
+            "sentarla en la consulta la saca del muelle: hay UNA silla ocupada, nunca dos caras a la vez");
+        levantar.Invoke(s, null);
+        Debe(!(bool)ocupada.GetValue(s)! && donde.GetValue(s) == null, "tirar de ella la levanta, y la silla vuelve a estar vacía");
+    }
+
+    private static void ElBotonOfreceLosEscritoriosPorSuNombre()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelViaje");
+        var destinos = t?.GetMethod("Destinos");
+        var hayBoton = t?.GetMethod("HayBoton");
+        if (t == null || destinos == null || hayBoton == null)
+        {
+            Pendiente("ReglaDelViaje.Destinos/HayBoton", "273", "031");
+            return;
+        }
+        // Los cinco de esta máquina el 2026-09-17: tres con nombre y dos sin él, en el orden del registro.
+        var ids = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        var nombres = new[] { "", "Anuncios", "Whatsapp", "SEO", "" };
+        var lista = (string[])destinos.Invoke(null, new object[] { ids, nombres, ids[0] })!;
+        Debe(lista.SequenceEqual(new[] { "Anuncios", "Whatsapp", "SEO", "Escritorio 5", "Uno nuevo" }),
+            $"desde el primero: los otros cuatro por su nombre y en su orden, el sin nombre por su número, y «Uno nuevo» al final; salió [{string.Join(" · ", lista)}]");
+        var desdeSeo = (string[])destinos.Invoke(null, new object[] { ids, nombres, ids[3] })!;
+        Debe(!desdeSeo.Contains("SEO") && desdeSeo[0] == "Escritorio 1",
+            $"el actual no se ofrece, y el primero sin nombre se llama «Escritorio 1»; salió [{string.Join(" · ", desdeSeo)}]");
+
+        Debe((bool)hayBoton.Invoke(null, new object[] { true, "consulta" })!, "con la carita sentada en la consulta, el botón está");
+        Debe(!(bool)hayBoton.Invoke(null, new object[] { false, "consulta" })!, "sin carita sentada, el botón no está");
+        Debe(!(bool)hayBoton.Invoke(null, new object[] { true, "muelle" })!, "y sentada en el muelle tampoco: el botón es de la consulta");
+    }
+
+    private static void ElViajeLlegaCuandoElSistemaLoDice()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.ReglaDelViaje");
+        var plan = t?.GetMethod("Plan");
+        var llegue = t?.GetMethod("Llegue");
+        var deshacer = t?.GetMethod("Deshacer");
+        if (t == null || plan == null || llegue == null || deshacer == null)
+        {
+            Pendiente("ReglaDelViaje.Plan/Llegue/Deshacer", "274", "031");
+            return;
+        }
+        var ids = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        string[] Plan(Guid origen, Guid destino, bool nuevo) => (string[])plan.Invoke(null, new object[] { origen, destino, ids, nuevo })!;
+
+        var ida = Plan(ids[1], ids[3], false);
+        Debe(ida.SequenceEqual(new[] { "fijar", "mover", "cambiar:+2", "esperar", "soltar-fijacion" }),
+            $"del segundo al cuarto: fijar, mover las ventanas, dos pasos a la derecha, esperar al sistema, y soltar la fijación; salió [{string.Join(" · ", ida)}]");
+        var vuelta = Plan(ids[3], ids[0], false);
+        Debe(vuelta.Contains("cambiar:-3"), $"y del cuarto al primero son tres a la izquierda; salió [{string.Join(" · ", vuelta)}]");
+        var nuevo = Plan(ids[4], Guid.Empty, true);
+        Debe(nuevo.SequenceEqual(new[] { "fijar", "crear", "leer-nuevo", "mover", "esperar", "soltar-fijacion" }),
+            $"a uno nuevo: primero se crea y se lee su GUID del registro, y solo entonces se mueven las ventanas; salió [{string.Join(" · ", nuevo)}]");
+
+        Debe((bool)llegue.Invoke(null, new object[] { ids[3], ids[3] })!, "llegar es que el registro diga que el actual ES el destino");
+        Debe(!(bool)llegue.Invoke(null, new object[] { ids[1], ids[3] })!,
+            "y mientras diga otro, no se ha llegado, por mucho que ya se pulsara el atajo");
+
+        var atras = (string[])deshacer.Invoke(null, new object[] { ids[1], ids[3], ids })!;
+        Debe(atras.SequenceEqual(new[] { "mover", "cambiar:-2", "esperar" }),
+            $"si no se llega, se deshace: las ventanas vuelven al origen y se vuelve a él, sin fijar nada; salió [{string.Join(" · ", atras)}]");
     }
 
     private static void Debe(bool condicion, string promesa)
