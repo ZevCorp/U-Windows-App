@@ -10213,6 +10213,11 @@ internal static class Contrato
             "la primera ubicación de la sesión se guarda: sin foto previa no hay nada que enseñar");
         Debe(!Toca("web://instagram.com", "web://instagram.com", 1_000, 5_000, Fresco),
             "seguir en el mismo sitio NO guarda otra: una captura por tick compite con el lector de pantalla");
+        // Y SIGUE SIN GUARDAR aunque la foto que hay sea VIEJA: es no haberse movido lo que lo impide, no la
+        // frescura. Sin esta línea las dos cláusulas se tapan una a otra y quitar cualquiera deja el contrato
+        // verde — se descubrió saboteando, que es exactamente para lo que sirve el paso 5 del ciclo.
+        Debe(!Toca("web://instagram.com", "web://instagram.com", 1_000, 200_000, Fresco),
+            "y no guarda ni con la foto vieja: quedarse quieto no es llegar a ningún sitio");
         Debe(Toca("web://instagram.com", "web://google.com", 0, 6_000, Fresco),
             "cambiar de sitio sí guarda: es el cambio lo que deja algo nuevo que recordar");
         Debe(!Toca("web://google.com", "web://instagram.com", 1_000, 20_000, Fresco),
