@@ -696,6 +696,20 @@ internal static class Contrato
         // memoria del asistente, para que pueda recordar en cualquier momento acciones pasadas», y el tope que eligió
         // él: «siete días o dos gigas, y pásalas a JPEG». La pantalla de ayer no se puede volver a capturar.
         Prueba("255. el álbum de miradas vive en local con su ficha —cuándo, en qué ubicación y qué estaba pasando—, se guarda en JPEG, se puede pedir la última foto de una ubicación, y se poda por edad y por tamaño: siete días o dos gigas, lo más viejo primero", ElAlbumDeMiradasRecuerdaYPoda);
+
+        // VER COMO PARA COMPUTER USE (spec 027, fase 4, 2026-09-17, elegido por el dueño). La reducción a 1024 px
+        // venía de cuando la imagen tenía que caber INCRUSTADA en un buzón de 32.768 bytes; por referencia ya no
+        // tiene que caber, así que era maquinaria de compensación de una limitación que se fue (aprendizaje nº6).
+        // Lo que la sustituye no es otro tope a ojo: es el presupuesto que el servidor cobra —2.500 parches de
+        // 32 px y 2.048 de lado— y la documentación de OpenAI, que pide el detalle fino justo para computer use.
+        Prueba("256. la foto que viaja va a la RESOLUCIÓN DE LA PANTALLA, como pide una tarea de computer use: una pantalla de 1080p se manda entera y sin reducir, una más grande se reduce sólo hasta caber en el presupuesto del servidor conservando la proporción, y una más pequeña nunca se agranda", MirarVaAResolucionDePantalla);
+
+        // EL ÁLBUM NO TENÍA PUERTA (spec 027, fase 5, 2026-09-17). El dueño le pidió a Ü que recordara una
+        // investigación sobre aves y la foto de aquel momento, y contestó que no tenía ninguna — y era verdad:
+        // «UltimaDe» existía y no la llamaba nadie, y sólo se guardaba al llamar map_look, que en esa tarea no
+        // se llamó. Se construyó la memoria sin la forma de consultarla.
+        Prueba("257. se guarda una mirada por CAMBIO de ubicación y no por reloj: seguir en el mismo sitio no guarda otra, cambiar sí, y volver a un sitio del que ya hay una foto fresca tampoco la repite", UnaMiradaPorCambioDeUbicacion);
+        Prueba("258. el modelo puede pedir lo que vio antes: pedir la mirada de una ubicación devuelve su foto con su ficha —cuándo fue y qué estaba pasando—, y si de esa no hay, dice QUÉ ubicaciones sí recuerda en vez de contestar que no hay nada", ElModeloPuedePedirLoQueVioAntes);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -10147,6 +10161,117 @@ internal static class Contrato
         }
         finally { try { Directory.Delete(carpeta, true); } catch { } }
     }
+
+
+    private static void MirarVaAResolucionDePantalla()
+    {
+        var t = Capacidad("U.WindowsClient.Voice.CapturaDePantalla");
+        var m = t?.GetMethod("Medida", BindingFlags.Public | BindingFlags.Static);
+        if (m == null) { Pendiente("CapturaDePantalla.Medida (el presupuesto de la foto que viaja)", "256", "027"); return; }
+
+        (int W, int H) Mide(int w, int h)
+        {
+            var r = m.Invoke(null, new object[] { w, h })!;
+            var tt = r.GetType();
+            return ((int)tt.GetField("Item1")!.GetValue(r)!, (int)tt.GetField("Item2")!.GetValue(r)!);
+        }
+        static int Parches(int w, int h) => (int)(Math.Ceiling(w / 32.0) * Math.Ceiling(h / 32.0));
+        const int Presupuesto = 2500;
+
+        // LA PANTALLA ENTERA, que es el punto: reducirla era compensar un buzón que ya no existe.
+        var (w1, h1) = Mide(1920, 1080);
+        Debe(w1 == 1920 && h1 == 1080,
+            $"una pantalla de 1080p se manda ENTERA, sin reducir ({w1}x{h1}); cabe en el presupuesto "
+            + $"({Parches(1920, 1080)} de {Presupuesto} parches, ~{Math.Ceiling(Parches(1920, 1080) * 1.2)} tokens)");
+
+        // UNA 4K NO CABE, y entonces sí se reduce — hasta caber, no por gusto, y sin deformarse.
+        var (w2, h2) = Mide(3840, 2160);
+        Debe(Parches(w2, h2) <= Presupuesto,
+            $"una 4K se reduce hasta caber en el presupuesto: {w2}x{h2} son {Parches(w2, h2)} parches");
+        Debe(w2 < 3840 && Math.Abs((double)w2 / h2 - 3840.0 / 2160.0) < 0.01,
+            $"y se reduce conservando la proporción ({w2}x{h2}), que es lo que la deja legible");
+
+        // VERTICAL TAMBIÉN: un monitor girado es el caso que se olvida.
+        var (w3, h3) = Mide(1080, 1920);
+        Debe(Parches(w3, h3) <= Presupuesto, $"una pantalla vertical tampoco se cuela: {w3}x{h3} son {Parches(w3, h3)} parches");
+
+        // Y NUNCA SE AGRANDA: inventar píxeles no añade nada que ver y sí lo que cobrar.
+        var (w4, h4) = Mide(640, 360);
+        Debe(w4 == 640 && h4 == 360, $"una pantalla más pequeña que el presupuesto se manda tal cual ({w4}x{h4})");
+    }
+
+    private static void UnaMiradaPorCambioDeUbicacion()
+    {
+        var t = Capacidad("U.WindowsClient.Navigation.CuandoSeMira");
+        var m = t?.GetMethod("HayQueGuardar", BindingFlags.Public | BindingFlags.Static);
+        if (m == null) { Pendiente("Navigation.CuandoSeMira.HayQueGuardar", "257", "027"); return; }
+        bool Toca(string antes, string ahora, long ultimaDeEsa, long reloj, long frescuraMs)
+            => (bool)m.Invoke(null, new object[] { antes, ahora, ultimaDeEsa, reloj, frescuraMs })!;
+
+        const long Fresco = 60_000;
+        Debe(Toca("", "web://instagram.com", 0, 1_000, Fresco),
+            "la primera ubicación de la sesión se guarda: sin foto previa no hay nada que enseñar");
+        Debe(!Toca("web://instagram.com", "web://instagram.com", 1_000, 5_000, Fresco),
+            "seguir en el mismo sitio NO guarda otra: una captura por tick compite con el lector de pantalla");
+        // Y SIGUE SIN GUARDAR aunque la foto que hay sea VIEJA: es no haberse movido lo que lo impide, no la
+        // frescura. Sin esta línea las dos cláusulas se tapan una a otra y quitar cualquiera deja el contrato
+        // verde — se descubrió saboteando, que es exactamente para lo que sirve el paso 5 del ciclo.
+        Debe(!Toca("web://instagram.com", "web://instagram.com", 1_000, 200_000, Fresco),
+            "y no guarda ni con la foto vieja: quedarse quieto no es llegar a ningún sitio");
+        Debe(Toca("web://instagram.com", "web://google.com", 0, 6_000, Fresco),
+            "cambiar de sitio sí guarda: es el cambio lo que deja algo nuevo que recordar");
+        Debe(!Toca("web://google.com", "web://instagram.com", 1_000, 20_000, Fresco),
+            "y volver a un sitio del que ya hay una foto FRESCA no la repite");
+        Debe(Toca("web://google.com", "web://instagram.com", 1_000, 200_000, Fresco),
+            "pero si la que hay es vieja, sí: la pantalla de hace tres minutos ya no es la misma");
+        Debe(!Toca("web://google.com", "", 0, 300_000, Fresco),
+            "y sin saber dónde estamos no se guarda: una foto sin ubicación no se puede pedir después");
+    }
+
+    private static void ElModeloPuedePedirLoQueVioAntes()
+    {
+        var t = Capacidad("U.WindowsClient.Navigation.AlbumDeMiradas");
+        var m = t?.GetMethod("LoQueRecuerdo");
+        if (t == null || m == null) { Pendiente("AlbumDeMiradas.LoQueRecuerdo (la puerta del álbum)", "258", "027"); return; }
+
+        string carpeta = Path.Combine(Path.GetTempPath(), "u-puerta-" + Guid.NewGuid().ToString("N")[..8]);
+        long ahora = 0;
+        static byte[] Jpeg() { var b = new byte[600]; b[0] = 0xFF; b[1] = 0xD8; b[2] = 0xFF; b[^2] = 0xFF; b[^1] = 0xD9; return b; }
+        var a = Activator.CreateInstance(t, new object[] {
+            carpeta, (Func<long>)(() => Volatile.Read(ref ahora)), 2L * 1024 * 1024 * 1024, 7 * 86_400_000L })!;
+        var mGuardar = t.GetMethod("Guardar")!;
+
+        try
+        {
+            ahora = 1_000; mGuardar.Invoke(a, new object[] { Jpeg(), "web://google.com", "buscando aves raras de Antioquia" });
+            ahora = 2_000; mGuardar.Invoke(a, new object[] { Jpeg(), "uia://EXCEL.exe/inicio", "el libro en blanco" });
+
+            var r = m.Invoke(a, new object[] { "web://google.com" })!;
+            var tr = r.GetType();
+            object? ficha = tr.GetProperty("Ficha")?.GetValue(r);
+            string cuenta = (tr.GetProperty("Cuenta")?.GetValue(r) ?? "").ToString()!;
+            Debe(ficha != null, "pedir la mirada de una ubicación devuelve su foto");
+            if (ficha != null)
+            {
+                string que = (ficha.GetType().GetProperty("QuePasaba")?.GetValue(ficha) ?? "").ToString()!;
+                Debe(que == "buscando aves raras de Antioquia", $"y con su ficha: qué estaba pasando ({que})");
+            }
+            Debe(cuenta.Contains("aves", StringComparison.OrdinalIgnoreCase),
+                $"y lo cuenta en castellano, con lo que pasaba, no en bruto («{Corto120(cuenta)}»)");
+
+            // DE UN SITIO QUE NO TIENE, NO SE CALLA: se dice QUÉ sí recuerda. Contestar «no hay nada» sobre
+            // una memoria que sí tiene fotos es lo que hizo creer al dueño que el álbum no existía.
+            var r2 = m.Invoke(a, new object[] { "web://no-estuve-nunca" })!;
+            object? ficha2 = r2.GetType().GetProperty("Ficha")?.GetValue(r2);
+            string cuenta2 = (r2.GetType().GetProperty("Cuenta")?.GetValue(r2) ?? "").ToString()!;
+            Debe(ficha2 == null, "de un sitio donde no se miró no se inventa una foto");
+            Debe(cuenta2.Contains("google", StringComparison.OrdinalIgnoreCase) && cuenta2.Contains("EXCEL", StringComparison.OrdinalIgnoreCase),
+                $"pero se dice QUÉ ubicaciones sí recuerda, para que el modelo pueda pedir otra («{Corto120(cuenta2)}»)");
+        }
+        finally { try { Directory.Delete(carpeta, true); } catch { } }
+    }
+
+    private static string Corto120(string t) => t.Length <= 120 ? t : t[..120];
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
     private sealed class Reportes

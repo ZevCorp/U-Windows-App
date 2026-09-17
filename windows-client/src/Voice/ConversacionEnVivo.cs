@@ -953,6 +953,15 @@ public sealed class ConversacionEnVivo : IDisposable
             + "cuando de verdad necesites VER y no solo saber qué hay. NO SIRVE PARA SABER EN QUÉ APP "
             + "O SITIO ESTÁS: una foto se PARECE a cosas —un chat cualquiera parece un navegador— pero "
             + "no sabe qué proceso ni qué URL hay detrás. Eso, siempre, es map_where_am_i."),
+        Fn("map_look_back", "MIRA LO QUE HABÍA ANTES en un sitio por el que ya pasasteis: te llega la "
+            + "FOTO guardada de esa ubicación, con cuándo fue y qué estabais haciendo. Es tu MEMORIA "
+            + "VISUAL, y es lo único que no se puede conseguir de otra forma: la pantalla de hace media "
+            + "hora ya no existe y map_look sólo ve la de AHORA. Úsala cuando te pregunten por algo que "
+            + "hicisteis antes —«¿te acuerdas de lo que buscamos?», «vuelve a mirar aquella pantalla»— "
+            + "en vez de contestar que no te acuerdas. Si de ese sitio no hay foto, te digo de cuáles sí "
+            + "las hay para que pidas otra.",
+            ("place", "El sitio del que quieres la foto, como lo dirías: «google», «instagram», "
+                    + "«web://docs.google.com», «Excel». Vacío = te cuento todo lo que recuerdo.")),
         Fn("map_scroll", "DESPLAZA la pantalla y te dice en qué punto quedaste. Es lo que hay que usar "
             + "para «baja», «sube», «vete al final de la página»: no busques un botón para eso.",
             ("direction", "«abajo», «arriba», «inicio» (del todo arriba) o «final» (del todo abajo).")),
@@ -1117,6 +1126,7 @@ public sealed class ConversacionEnVivo : IDisposable
             "map_what_i_see" => "mirando la pantalla…",
             "map_show" or "map_pointing_at" => "señalando…",
             "map_look" => "mirando la pantalla…",
+            "map_look_back" => "recordando lo que había…",
             "self_mute" => "callándome…",
             "self_hide" => "ocultándome…",
             "self_close" => "cerrándome…",
@@ -1326,6 +1336,40 @@ public sealed class ConversacionEnVivo : IDisposable
     /// señalar, o cuando el modelo pide mirar— nunca un temporizador: aquí ver es un gesto, no un
     /// caño que hay que seguir alimentando.
     /// </summary>
+    /// <summary>
+    /// LA MEMORIA VISUAL, contestada. Promesa 258 (spec 027).
+    /// </summary>
+    /// <remarks>
+    /// LA FOTO VIEJA VIAJA POR EL MISMO CAÑO QUE LA DE AHORA: se añade a la lista de fotos de la tanda, y
+    /// sale por MandarFotoAsync como cualquier otra —subida, por referencia, y retirada al cerrar—. Tener
+    /// dos caminos para mandar una imagen sería tener dos sitios donde se puede romper.
+    ///
+    /// Y SI NO LA HAY, SE DICE QUÉ SÍ HAY. Contestar «no tengo nada» sobre una memoria con fotos dentro es
+    /// lo que hizo creer al dueño que el álbum no existía (2026-09-17).
+    /// </remarks>
+    private async Task<string> RecordarLoVistoAsync(IReadOnlyDictionary<string, string> args, List<byte[]> fotos, CancellationToken ct)
+    {
+        try
+        {
+            args.TryGetValue("place", out string? donde);
+            var r = Navigation.AlbumDeMiradas.Suyo.LoQueRecuerdo(donde ?? "");
+            if (r.Ficha == null) return r.Cuenta;
+
+            if (!_protocolo.Mira)
+                return r.Cuenta + " (pero con esta voz no puedo enseñártela; te la describo si quieres.)";
+
+            byte[] jpeg = await System.IO.File.ReadAllBytesAsync(r.Ficha.Archivo, ct);
+            fotos.Add(jpeg);
+            LogBus.Log("album", $"recordando «{r.Ficha.Ubicacion}»: {System.IO.Path.GetFileName(r.Ficha.Archivo)} ({jpeg.Length} bytes)");
+            return r.Cuenta;
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("album", $"no pude recordar lo visto: {e.Message}");
+            return "tengo la foto anotada pero no la pude abrir; puede que ya se haya podado.";
+        }
+    }
+
     /// <summary>
     /// LO QUE SE MIRA SE QUEDA EN CASA (promesa 255). La copia de OpenAI se retira al cerrar la sesión; ésta
     /// no, y es la que deja recordar después: la pantalla de hace dos horas no se puede volver a capturar.
@@ -1905,6 +1949,9 @@ public sealed class ConversacionEnVivo : IDisposable
 
     private const string HerramientaMirar = "map_look";
 
+    /// <summary>Mirar lo que HABÍA. La puerta del álbum de miradas (promesa 258).</summary>
+    private const string HerramientaRecordarLoVisto = "map_look_back";
+
     /// <summary>Crear un recuerdo. Se vigila desde fuera porque el modelo se la saltaba.</summary>
     private const string HerramientaRecordar = "map_esto_es";
 
@@ -2112,7 +2159,15 @@ public sealed class ConversacionEnVivo : IDisposable
 
             LogBus.Log("voz-viva", $"ejecutando «{f.Nombre}»…");
             string resultado;
-            if (f.Nombre == HerramientaMirar)
+            if (f.Nombre == HerramientaRecordarLoVisto)
+            {
+                Accion?.Invoke(EnCurso(f.Nombre, f.Args), false);
+                var relojMemoria = System.Diagnostics.Stopwatch.StartNew();
+                resultado = await RecordarLoVistoAsync(f.Args, fotos, ct);
+                relojMemoria.Stop();
+                Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, relojMemoria.ElapsedMilliseconds), true);
+            }
+            else if (f.Nombre == HerramientaMirar)
             {
                 Accion?.Invoke(EnCurso(f.Nombre, f.Args), false);
                 var relojMirar = System.Diagnostics.Stopwatch.StartNew();

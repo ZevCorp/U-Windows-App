@@ -85,6 +85,10 @@ segundos de bloqueo, que hacían que mirar costara ocho segundos de nada.
 | 250 | mirar deja la copia en OpenAI el tiempo justo Y NO MENOS: mientras la conversación que puede leerla siga viva la copia NO se borra, al cerrarla se retiran todas las que subió, soltar dos veces no borra dos veces, y sin nada subido no se borra nada | grafo | 1, corregida en 2 |
 | 254 | mandar la foto cede el turno de inmediato y con la copia en pie: no se duerme esperando a que el servidor la descargue, y cuando el turno vuelve al modelo no se ha borrado nada — borrar antes de que lea deja la sesión apuntando a un archivo que ya no existe | grafo | 2 |
 | 255 | el álbum de miradas vive en local con su ficha —cuándo, en qué ubicación y qué estaba pasando—, se guarda en JPEG, se puede pedir la última foto de una ubicación, y se poda por edad y por tamaño: siete días o dos gigas, lo más viejo primero | grafo | 3 |
+| 256 | la foto que viaja va a la RESOLUCIÓN DE LA PANTALLA, como pide una tarea de computer use: una pantalla de 1080p se manda entera y sin reducir, una más grande se reduce sólo hasta caber en el presupuesto del servidor conservando la proporción, y una más pequeña nunca se agranda | grafo | 4 |
+| 55 | la foto por referencia viaja DECLARADA para computer use: el mensaje lleva el nivel de detalle que impide que el servidor la reduzca al otro lado, y sigue sin llevar un solo byte de imagen dentro | voz | 4 |
+| 257 | se guarda una mirada por CAMBIO de ubicación y no por reloj: seguir en el mismo sitio no guarda otra, cambiar sí, y volver a un sitio del que ya hay una foto fresca tampoco la repite | grafo | 5 |
+| 258 | el modelo puede pedir lo que vio antes: pedir la mirada de una ubicación devuelve su foto con su ficha —cuándo fue y qué estaba pasando—, y si de esa no hay, dice QUÉ ubicaciones sí recuerda en vez de contestar que no hay nada | grafo | 5 |
 
 ### La promesa 49 se corrige, y aquí queda escrito por qué
 
@@ -113,13 +117,11 @@ servidor acepta la referencia, no que nuestro código se la deje leer.
 
 - La captura sale de la máquina hacia OpenAI, igual que hoy sale el audio. Lo que cambia es que ahora
   llega en vez de no llegar.
-- **Y no llega entera, todavía.** `CapturaDePantalla` reduce a 1024 px de ancho y comprime a calidad
-  60 —eso es lo que hace que pese 50 KB—, y esa reducción existía porque la imagen tenía que caber
-  INCRUSTADA en un buzón de 32.768 bytes. Por referencia ya no tiene que caber, así que la reducción
-  es maquinaria de compensación de una limitación que se fue: el aprendizaje nº6, pendiente de
-  aplicar. El dueño lo pidió explícitamente —«no quiero que Luna tenga que ver imágenes comprimidas
-  de baja calidad»—, y va en su propia fase para no meter un tercer cambio de comportamiento en una
-  rama que ya lleva dos.
+- ~~Y no llega entera, todavía.~~ **Resuelto en la fase 4**: llega a la resolución de la pantalla, y
+  la reducción a 1024 px —que era maquinaria de compensación de un buzón de 32.768 bytes que ya no
+  existe, el aprendizaje nº6— se fue. Lo que queda en su sitio es un presupuesto con su número.
+- **Mirar cuesta 2.448 tokens por foto** en una pantalla de 1080p, contra los 692 de antes. Es una
+  decisión del dueño tomada con el número delante, no un descuido.
 - Las 294 fotos de recuerdos que ya estaban en PNG se quedan en PNG: su ruta vive dentro del grafo y
   reescribirla es otro trabajo. Las nuevas salen en JPEG, y las viejas van cayendo al envejecer.
 - El borrado depende de que la API conteste; si falla, queda anotado en el log y el archivo caduca
@@ -157,6 +159,52 @@ implementación —error cometido en esta misma sesión—:
 | `EsJpeg` acepta cualquier cosa | 255, «lo que no es JPEG no entra» |
 | La poda por tamaño empieza por la más nueva | 255, «la que se va es la MÁS VIEJA» |
 
+## Lo que la fase 3 dejó a medias, y lo dijo el dueño probándolo (2026-09-17)
+
+Le pidió a Ü que recordara una investigación sobre aves que habían hecho un rato antes y que mirara la
+foto de aquel momento. Contestó que no tenía ninguna. **Y era verdad**, por dos huecos:
+
+1. **El modelo no tiene cómo pedirle nada al álbum.** `UltimaDe` existe y no la llama nadie: un `grep`
+   de `AlbumDeMiradas` en todo el cliente da UN uso, y es para guardar. Se construyó la memoria y no se
+   le puso la puerta —código muerto del lado de la consulta, que es justo lo que este repo no deja
+   pasar—.
+2. **Sólo se guarda cuando el modelo llama `map_look`**, y en la investigación llamó a `map_type`,
+   `map_take` y `map_esto_es`; el único `map_look` cayó sobre una notificación de Windows. El álbum
+   tenía tres fotos y ninguna era de lo que él preguntaba.
+
+El dueño lo había pedido completo desde el principio —«tomar screenshot a todas las ubicaciones y que
+el modelo pueda llamar al screenshot de la ubicación que quiera»— y la fase 3 entregó la mitad.
+
+## Cuánto cuesta mirar, y por qué se manda a resolución de pantalla
+
+OpenAI no publica una resolución recomendada: publica una fórmula. Para la familia gpt-5.x —que es
+Luna, `gpt-5.6-luna`— el cobro va **por parches de 32×32 píxeles**, no por tiles de 512:
+
+```
+tokens = ceil( ceil(ancho/32) × ceil(alto/32) × 1,2 )
+```
+
+No hay escalones: el coste es proporcional al área. Y lo único que la documentación dice sobre cuándo
+hace falta el detalle de verdad es esto: *«para tareas que requieren detalle visual fino o coordenadas
+precisas, como OCR, detección de objetos pequeños o computer use»*.
+
+**El dueño elige tratarlo como computer use**, y eso decide las dos cosas: la captura se manda **a la
+resolución de la pantalla**, sin reducir, y el mensaje **declara ese detalle** para que el servidor
+tampoco la reduzca al otro lado. Lo que cuesta, con su número:
+
+| Captura | Parches | Tokens por mirada |
+|---|---|---|
+| 1024×576 (lo que se mandaba, reducido) | 32 × 18 = 576 | 692 |
+| **1920×1080 (la pantalla entera)** | 60 × 34 = 2040 | **2448** |
+| 3840×2160, reducida al presupuesto | 64 × 36 = 2304 | 2765 |
+
+Cuesta 3,5 veces más que antes y se dice sin adornos: es el precio de ver bien, y lo eligió el dueño
+sabiendo el número. El presupuesto del servidor para detalle alto son **2.500 parches** y 2.048 píxeles
+de lado, así que una pantalla de 1080p entra entera y una 4K se reduce **hasta caber**, no por gusto.
+
+Y con esto se cierra el límite que quedaba escrito más abajo: la reducción a 1024 era maquinaria de
+compensación de un buzón de 32.768 bytes que ya no existe. Ahora no hay reducción; hay un presupuesto.
+
 ## Las fases
 
 ### Fase 1 — que vea (54, 250)
@@ -173,6 +221,16 @@ y suelta al terminar.
 ### Fase 3 — la memoria local (255)
 
 `Navigation.AlbumDeMiradas` con su ficha y su poda, y las fotos de los recuerdos pasando a JPEG.
+
+### Fase 4 — ver como para computer use (256, y la 55 de la voz)
+
+`CapturaDePantalla.Medida` con el presupuesto del servidor en vez de un tope a ojo, y el `detail` en
+el mensaje de `ProtocoloGptLive`.
+
+### Fase 5 — que la memoria se pueda pedir (257, 258)
+
+`Navigation.CuandoSeMira` (una por cambio de ubicación), `AlbumDeMiradas.LoQueRecuerdo`, y la
+herramienta `map_look_back` en el catálogo, que es la puerta que le faltaba al álbum.
 
 ## Lo que NO entra
 

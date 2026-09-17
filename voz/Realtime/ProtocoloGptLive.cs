@@ -224,9 +224,16 @@ public sealed class ProtocoloGptLive : IProtocolo
     /// Se usa el identificador de la API de archivos y no una URL pública porque así la captura va SOLO
     /// a OpenAI, que es donde ya iba, sin publicarla en ninguna dirección abierta de internet.
     /// </remarks>
+    /// <remarks>
+    /// EL DETALLE VA DECLARADO (promesa 55, spec 027). Mandar la foto a resolución de pantalla no sirve de
+    /// nada si el mensaje no dice con qué detalle hay que mirarla: por defecto el servidor decide, y con
+    /// «low» la reduce a 512 al otro lado —el trabajo de subirla entera, tirado—. «high» es el nivel que
+    /// la documentación de OpenAI pide para OCR, objetos pequeños y computer use, y su presupuesto de
+    /// 2.500 parches deja pasar una pantalla de 1080p SIN tocarla, que es justo lo que se quiere.
+    /// </remarks>
     public string FotogramaPorReferencia(string idDelArchivo) => string.IsNullOrWhiteSpace(idDelArchivo)
         ? ""
-        : MensajeDelUsuario(new { type = "input_image", file_id = idDelArchivo });
+        : MensajeDelUsuario(new { type = "input_image", file_id = idDelArchivo, detail = "high" });
 
     public bool VePorReferencia => true;
 
