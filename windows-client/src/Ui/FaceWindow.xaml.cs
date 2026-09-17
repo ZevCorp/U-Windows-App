@@ -175,6 +175,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // al borde derecho — nacería centrado y daría un salto a su sitio.
             _muelle?.Show();
             RefreshRestingChevron();   // ya se puede medir el hueco: el chevron dice hacia dónde abrirá
+            LeerSuEscritorio("al arrancar");   // promesa 270: su escritorio es el de su carita, leído del sistema
         }), System.Windows.Threading.DispatcherPriority.Loaded);
 
         UpdateBackendStatus();
