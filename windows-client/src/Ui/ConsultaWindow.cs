@@ -54,7 +54,7 @@ namespace U.WindowsClient.Ui;
 /// <see cref="DictadoEnVivo"/> (88, 89), <see cref="EspejoDeConsulta"/> (93) y
 /// <see cref="PlantillaAbierta"/> (94).
 /// </remarks>
-public sealed class ConsultaWindow : Window
+public sealed partial class ConsultaWindow : Window
 {
     private readonly SesionMiracle _sesion;
     private readonly ClinicaClient _clinica;
@@ -411,6 +411,7 @@ public sealed class ConsultaWindow : Window
         _panelNota.Children.Add(_vivo);
         _panelNota.Children.Add(Estudio.Elevar(_vacioNota));
         _panelNota.Children.Add(_nota);
+        _panelNota.Children.Add(HuecoDeLaCarita());   // promesa 272: aquí se sienta la carita
 
         var contenido = new StackPanel();
         _panelAprendizajes.Visibility = Visibility.Collapsed;

@@ -1497,7 +1497,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void MicPorAtajo()
     {
         _prevForeground = GetForegroundWindow();
-        SacandoLaCaritaDelMuelle();
+        SacandoLaCaritaDelAnfitrion();
         Show();
         Activate();
         OnMic(this, new RoutedEventArgs());
@@ -1943,7 +1943,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // quedaba abierto toda la conversación — y desde que hablar ya no abre el chat, eso sería
         // exactamente el estorbo que el dueño pidió quitar (2026-09-05). Lo que no se puede cerrar
         // por debajo es lo que estás LEYENDO o ESCRIBIENDO; hablar no ocupa la pantalla.
-        _muelle = new Muelle(RootPanel, () => _talkOpen);
+        _muelle = new Muelle(RootPanel, () => _talkOpen) { Hueco = SillaDelMuelle };
         _muelle.Cambio += AlCambiarElMuelle;
         Closed += (_, __) => { try { _muelle?.Close(); } catch { } };
     }
@@ -1964,21 +1964,82 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     // en medio sin perderla. El muelle ya está siempre ahí y ya tiene su sitio; guardarla dentro
     // hace que el escondite tenga una PUERTA VISIBLE, en vez de ser un estado que hay que recordar.
 
-    private bool _caritaGuardada;
+    // LA SILLA ES UNA Y SE MUDA (promesa 272, spec 031). Hasta el 2026-09-17 el único escondite era
+    // el muelle y este archivo hablaba con él por su nombre. Ahora hay ANFITRIONES —el muelle y la
+    // consulta— y el FaceControl «Face» pasa del hueco de uno al del otro; SillaDeLaCarita dice en
+    // cuál está, y es un solo valor: nunca dos sentadas a la vez.
+    private readonly SillaDeLaCarita _silla = new();
+    private AnfitrionDeLaCarita? _anfitrion;
 
-    /// <summary>Soltar la carita encima del muelle la guarda. Devuelve si se quedó el gesto.</summary>
-    private bool GuardarSiCaeEnElMuelle(double x, double y)
+    /// <summary>Los anfitriones donde se puede sentar, en orden Z: el muelle (topmost) primero.</summary>
+    private List<AnfitrionDeLaCarita> Anfitriones()
     {
-        if (_muelle == null || _caritaGuardada) return false;
-        if (!ReglaDelMuelle.Guarda(_muelle.Caja, new Point(x, y))) return false;
+        var lista = new List<AnfitrionDeLaCarita>();
+        if (_muelle != null) lista.Add(_muelle);
+        foreach (var w in Application.Current.Windows.OfType<ConsultaWindow>())
+            if (w.IsVisible && w.WindowState != WindowState.Minimized) lista.Add(w);
+        return lista;
+    }
 
-        _caritaGuardada = true;
-        _muelle.Guardando = true;
-        Face.Visibility = Visibility.Visible;   // ahora sí hay alguien sentado en esa silla
-        Hide();
+    /// <summary>Soltar la carita encima de un anfitrión la sienta ahí. Devuelve si se quedó el gesto.</summary>
+    private bool GuardarSiCaeEnUnAnfitrion(double x, double y)
+    {
+        if (_silla.Ocupada) return false;
+        var anfitriones = Anfitriones();
+        int cual = ReglaDelAnfitrion.Elegir(anfitriones.Select(a => a.Caja).ToArray(), new Point(x, y));
+        if (cual < 0) return false;
+
+        SentarEn(anfitriones[cual]);
         PlayTick();
-        LogBus.Log("muelle", $"la carita se guarda: soltada en ({x:0},{y:0}), muelle en {_muelle.Caja}");
+        LogBus.Log("muelle", $"la carita se guarda en «{anfitriones[cual].Nombre}»: soltada en ({x:0},{y:0}), caja {anfitriones[cual].Caja}");
         return true;
+    }
+
+    private void SentarEn(AnfitrionDeLaCarita anfitrion)
+    {
+        if (Face.Parent is Decorator viejo) viejo.Child = null;
+        anfitrion.Hueco.Child = Face;
+        _silla.Sentar(anfitrion.Nombre);
+        _anfitrion = anfitrion;
+        anfitrion.Guardando = true;
+        Face.Visibility = Visibility.Visible;   // ahora sí hay alguien sentado en esa silla
+        // Si el anfitrión se cierra con la carita dentro, la carita vuelve a flotar: un escondite que
+        // desaparece con lo escondido dentro no es un escondite. El muelle no se cierra solo.
+        if (anfitrion is not Muelle) anfitrion.Ventana.Closed += ElAnfitrionSeFue;
+        Hide();
+    }
+
+    private void ElAnfitrionSeFue(object? sender, EventArgs e)
+    {
+        if (!_silla.Ocupada || sender is not Window w || !ReferenceEquals(w, _anfitrion?.Ventana)) return;
+        LogBus.Log("muelle", $"«{_anfitrion!.Nombre}» se cerró con la carita dentro: vuelve a flotar");
+        LevantarLaCarita();
+        ShowActivated = false;
+        Show();
+        PosarLaCarita(Left, Top);
+    }
+
+    /// <summary>La carita deja la silla: el hueco queda vacío y la silla vuelve al muelle para la próxima.</summary>
+    private void LevantarLaCarita()
+    {
+        if (!_silla.Ocupada) return;
+        var a = _anfitrion;
+        _silla.Levantar();
+        _anfitrion = null;
+        if (a != null)
+        {
+            a.Guardando = false;
+            if (a is not Muelle) a.Ventana.Closed -= ElAnfitrionSeFue;
+        }
+        // Y AL SACARLA, LA SILLA QUEDA VACÍA (petición del dueño, 2026-09-05). Dejarla puesta
+        // enseñaba dos caras a la vez —una flotando y otra dentro del panel— sin que nada dijera
+        // cuál era cuál: la del panel decía «Ü está guardada aquí» mintiendo.
+        Face.Visibility = Visibility.Collapsed;
+        if (Face.Parent is Decorator d && !ReferenceEquals(d, SillaDelMuelle))
+        {
+            d.Child = null;
+            SillaDelMuelle.Child = Face;
+        }
     }
 
     /// <summary>
@@ -2002,7 +2063,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </remarks>
     private void SacarYArrastrar()
     {
-        SacandoLaCaritaDelMuelle();
+        SacandoLaCaritaDelAnfitrion();
         try { DragMove(); }
         catch (Exception e)
         {
@@ -2020,22 +2081,17 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
     /// <summary>
-    /// La carita guardada vuelve a existir, centrada donde está el cursor.
+    /// La carita sentada vuelve a existir, centrada donde está el cursor.
     /// </summary>
     /// <remarks>
     /// APARECE AL TIRAR Y NO AL SOLTAR. Si esperara al final, estarías arrastrando algo invisible y
     /// no habría forma de ver dónde va a caer hasta que ya cayó — que es el mismo vicio que «una caja
     /// que miente es peor que no tener caja» (aprendizaje nº4), con el dibujo ausente en vez de mal.
     /// </remarks>
-    private void SacandoLaCaritaDelMuelle()
+    private void SacandoLaCaritaDelAnfitrion()
     {
-        if (!_caritaGuardada) return;
-        _caritaGuardada = false;
-        if (_muelle != null) _muelle.Guardando = false;
-        // Y AL SACARLA, LA SILLA QUEDA VACÍA (petición del dueño, 2026-09-05). Dejarla puesta
-        // enseñaba dos caras a la vez —una flotando y otra dentro del panel— sin que nada dijera
-        // cuál era cuál: la del panel decía «Ü está guardada aquí» mintiendo.
-        Face.Visibility = Visibility.Collapsed;
+        if (!_silla.Ocupada) return;
+        LevantarLaCarita();
 
         // APARECE BAJO EL CURSOR. Escondida, su ventana conservaba el sitio donde se guardó —encima
         // del muelle—, así que al enseñarla salía ahí y el arrastre continuaba desde ese punto: se
@@ -2048,8 +2104,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             new Size(ActualWidth, ActualHeight), SystemParameters.WorkArea);
         MoveTo(sitio.X, sitio.Y);
 
-        // Y SIN ROBARLE LA ACTIVACIÓN AL MUELLE, que es la otra mitad del fallo: quien tiene el
-        // ratón capturado es la carita PEQUEÑA, que vive en la ventana del muelle. Mostrar esta
+        // Y SIN ROBARLE LA ACTIVACIÓN AL ANFITRIÓN, que es la otra mitad del fallo: quien tiene el
+        // ratón capturado es la carita PEQUEÑA, que vive en la ventana del anfitrión. Mostrar esta
         // ventana con activación se la quita, Windows suelta la captura y el arrastre muere en el
         // acto. Se queda en false para siempre: una carita flotante no debe robar el foco a nadie,
         // y los atajos que sí quieren traerla al frente llaman a Activate(), que no depende de esto.
@@ -2329,7 +2385,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // SOLTARLA ENCIMA DEL MUELLE LA GUARDA (promesa 149). Se pregunta antes que el borde
             // porque el borde no es una opción: si no, la carita saldría disparada al lado derecho
             // —que es justo donde está el muelle— y nunca llegaría a guardarse.
-            Soltada = GuardarSiCaeEnElMuelle,
+            Soltada = GuardarSiCaeEnUnAnfitrion,
             // Un solo callback alimenta las dos cosas que dependen de dónde quedó: recordar el sitio
             // y espejar la carita al lado que toque. Llega con el DESTINO, así que el espejo se
             // aplica al empezar el vuelo y no al terminarlo — viaja ya con su forma final en vez de
@@ -2372,7 +2428,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             _prevForeground = GetForegroundWindow();   // para poder devolver el teclado con Esc
             // Si estaba GUARDADA en el muelle, sale de ahí: pedir que vuelva y que vuelva sin que el
             // muelle deje de decir que la tiene dentro sería dejar la señal mintiendo.
-            SacandoLaCaritaDelMuelle();
+            SacandoLaCaritaDelAnfitrion();
             Show();
             _muelle?.Show();
             Activate();

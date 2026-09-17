@@ -509,9 +509,13 @@
                              la vez: una flotando y otra dentro del panel, sin que nada dijera cual
                              era cual. Ahora esta silla es literal — hay cara si la carita esta
                              dentro, y no hay nada si esta fuera. Ver CaritaGuardada. -->
-                        <ui:FaceControl x:Name="Face" Width="66" Height="66" Cursor="Hand"
-                                        Visibility="Collapsed"
-                                        HorizontalAlignment="Center" Margin="0,4,0,16"/>
+                        <!-- LA SILLA SE MUDA (promesa 272): este Decorator es el hueco del muelle; la
+                             consulta tiene el suyo, y el FaceControl pasa de uno a otro. -->
+                        <Decorator x:Name="SillaDelMuelle">
+                            <ui:FaceControl x:Name="Face" Width="66" Height="66" Cursor="Hand"
+                                            Visibility="Collapsed"
+                                            HorizontalAlignment="Center" Margin="0,4,0,16"/>
+                        </Decorator>
 
                         <!-- LOS TRES. Live va separado y algo mas estrecho, como en el diseño: no
                              es del mismo grupo que los otros dos — Learn y Work son lo que Ü hace
