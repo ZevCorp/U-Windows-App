@@ -642,25 +642,24 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // LANZAR VUELVE ANTES DE QUE EXISTA LA VENTANA (Paint tardó 15 s, Git Bash 7 s el 2026-09-14), y
                 // entonces Ü se quedaba sin ventana de trabajo y escribía en la de la persona. Se espera la
                 // ventana nueva de ESA app (hasta 8 s) y se fija; si no llega, se dice.
-                if (_trabajo.Hwnd == trabajoAntes)
+                // SÓLO SI SE LANZÓ ALGO (promesa 262): traer al frente una app que ya estaba abierta no produce ninguna
+                // ventana nueva, y esperarla igual costaba los 8 s enteros —la mediana de map_open_app era 10,7 s—.
+                if (abrir.Lanzo && _trabajo.Hwnd == trabajoAntes)
                 {
-                    for (int i = 0; i < 40; i++)
+                    var crono = System.Diagnostics.Stopwatch.StartNew();
+                    var nueva = Navigation.AbrirSegunElNucleo.EsperarVentanaNueva(app, previas, U.Graph.Surfaces.UiaSurface.VentanasAbiertas, 8000);
+                    if (nueva.Hwnd != IntPtr.Zero)
                     {
-                        System.Threading.Thread.Sleep(200);
-                        var nueva = Navigation.AbrirSegunElNucleo.LasDe(app, U.Graph.Surfaces.UiaSurface.VentanasAbiertas())
-                            .FirstOrDefault(v => !previas.Contains(v.Hwnd));
-                        if (nueva.Hwnd == IntPtr.Zero) continue;
                         Uia.AppAligner.TraerAlFrente(nueva.Hwnd);
                         var loc = _locator?.Identificar(nueva.Hwnd);
                         if (loc != null)
                         {
                             _trabajo.Fijar(nueva.Hwnd, loc.Id);
-                            LogBus.Log("trabajo", $"la ventana de trabajo es ahora «{loc.Id}» (lanzada, apareció a los {(i + 1) * 200} ms)");
+                            LogBus.Log("trabajo", $"la ventana de trabajo es ahora «{loc.Id}» (lanzada, apareció a los {crono.ElapsedMilliseconds} ms)");
                             cuenta += $" Su ventana ya está: «{nueva.Titulo}». Estás en «{loc.Id}».";
                         }
-                        break;
                     }
-                    if (_trabajo.Hwnd == trabajoAntes) LogBus.Log("trabajo", $"«{app}» no mostró ninguna ventana nueva en 8 s");
+                    else LogBus.Log("trabajo", $"«{app}» no mostró ninguna ventana nueva en 8 s");
                 }
                 return cuenta;
             };

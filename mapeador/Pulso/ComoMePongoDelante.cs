@@ -85,18 +85,46 @@ public static class ComoMePongoDelante
     /// Y quien lo diga tiene que decir DÓNDE está de verdad: «ya estabas en github.com» a secas
     /// sería cierto y aun así engañoso.
     /// </remarks>
+    /// <remarks>
+    /// LO QUE EL NAVEGADOR NORMALIZA NO ES OTRA PÁGINA (spec 029, 2026-09-17). En tres días de corridas hubo 21
+    /// «no hay ningún camino aprendido» a 15 s cada uno, y en al menos ocho Ü YA ESTABA donde se le pidió: pidió
+    /// www.google.com y estaba en google.com; pidió …/document/u/0/ y estaba en …/document/u/0; pidió …/search?q=…
+    /// y el localizador no guarda la query; pidió ycombinator.com y el navegador lo mandó a apply.ycombinator.com.
+    /// La versión anterior exigía igualdad exacta con cualquier ruta, y declaraba fracaso tras agotar el plazo
+    /// estando allí. Lo que la 24 defendía SIGUE EN PIE: pedir una página no se cumple con otra página del sitio.
+    /// La regla nueva: mismo sitio (sin «www.», y un subdominio cuenta si se pidió el sitio a secas) y la ruta
+    /// pedida como comienzo, por tramos, de la ruta real —sin barra final ni query—.
+    /// </remarks>
     public static bool EstarEnElSitioBasta(string destino, string donde)
     {
-        string d = (destino ?? "").Trim().TrimEnd('/');
-        string a = (donde ?? "").Trim();
-        if (!d.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) return false;
-        if (!a.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) return false;
+        var d = Trocear(destino);
+        var a = Trocear(donde);
+        if (d == null || a == null) return false;
 
-        string sitio = d[6..];
-        if (sitio.Length == 0 || sitio.Contains('/')) return false;   // pide una página, no el sitio
+        bool mismoSitio = d.Value.Host.Equals(a.Value.Host, StringComparison.OrdinalIgnoreCase);
+        if (d.Value.Ruta.Length == 0)
+        {
+            // Se pidió el SITIO: vale cualquiera de sus páginas, y también un subdominio suyo (apply.ycombinator.com).
+            return mismoSitio || a.Value.Host.EndsWith("." + d.Value.Host, StringComparison.OrdinalIgnoreCase);
+        }
+        // Se pidió una PÁGINA: mismo sitio, y la ruta pedida es el comienzo de la real, tramo a tramo.
+        if (!mismoSitio) return false;
+        return a.Value.Ruta.Equals(d.Value.Ruta, StringComparison.OrdinalIgnoreCase)
+            || a.Value.Ruta.StartsWith(d.Value.Ruta + "/", StringComparison.OrdinalIgnoreCase);
+    }
 
-        string suyo = a[6..].Split('/')[0];
-        return suyo.Equals(sitio, StringComparison.OrdinalIgnoreCase);
+    /// <summary>«web://www.Sitio.com/ruta/?q=x» → (sitio.com, ruta). Null si no es una web.</summary>
+    private static (string Host, string Ruta)? Trocear(string id)
+    {
+        string t = (id ?? "").Trim();
+        if (!t.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) return null;
+        t = t[6..];
+        int q = t.IndexOf('?'); if (q >= 0) t = t[..q];           // la query el localizador no la guarda
+        int barra = t.IndexOf('/');
+        string host = (barra >= 0 ? t[..barra] : t).ToLowerInvariant();
+        string ruta = barra >= 0 ? t[(barra + 1)..].Trim('/') : "";
+        if (host.StartsWith("www.", StringComparison.Ordinal)) host = host[4..];
+        return host.Length == 0 ? null : (host, ruta);
     }
 
     /// <summary>

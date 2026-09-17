@@ -710,6 +710,19 @@ internal static class Contrato
         // «UltimaDe» existía y no la llamaba nadie, y sólo se guardaba al llamar map_look, que en esa tarea no
         // se llamó. Se construyó la memoria sin la forma de consultarla.
         Prueba("257. se guarda una mirada por CAMBIO de ubicación y no por reloj: seguir en el mismo sitio no guarda otra, cambiar sí, y volver a un sitio del que ya hay una foto fresca tampoco la repite", UnaMiradaPorCambioDeUbicacion);
+        // LLEGAR ES LLEGAR (spec 029, corte 1, 2026-09-17). De 79 map_go_to en tres días, 21 acabaron en «no hay
+        // ningún camino» tras agotar el plazo: 315 s. En al menos ocho, Ü YA ESTABA donde se le pidió: pidió
+        // www.google.com y estaba en google.com; pidió …/document/u/0/ y estaba en …/document/u/0; pidió …/search?q=…
+        // y el localizador no guarda la query; pidió ycombinator.com y el navegador lo mandó a apply.ycombinator.com.
+        // La comparación exigía igualdad exacta con cualquier ruta, y el navegador normaliza rutas.
+        Prueba("261. llegar es llegar: pedir una página web se da por cumplido cuando la ruta pedida es el comienzo de la ruta real —sin www., sin barra final, sin la query que el navegador descarta, y en un subdominio del mismo sitio—; pedir una página y estar sólo en el sitio sigue sin bastar, y el camino a un sitio termina en el instante en que se llega, no al agotar el plazo", LlegarEsLlegar);
+
+        // ABRIR NO ESPERA A LO QUE NO LANZÓ (spec 029, corte 2). map_open_app tardaba 10,7 s de mediana —103 s el 15,
+        // 55 s el 17— porque tras abrir esperaba 8 s a que apareciera una ventana NUEVA, cuarenta vueltas de 200 ms
+        // más una enumeración cada una, también cuando la app ya estaba abierta y sólo se trajo al frente: justo
+        // cuando esa ventana no va a aparecer. Es el sexto bucle con presupuesto ficticio, y con el disparador al revés.
+        Prueba("262. abrir no espera a lo que no lanzó: la espera a que aparezca una ventana nueva sólo ocurre cuando de verdad se lanzó algo, y se mide con el reloj y no contando vueltas; traer al frente una app que ya estaba abierta contesta en cuanto está delante", AbrirNoEsperaALoQueNoLanzo);
+
         Prueba("258. el modelo puede pedir lo que vio antes: pedir la mirada de una ubicación devuelve su foto con su ficha —cuándo fue y qué estaba pasando—, y si de esa no hay, dice QUÉ ubicaciones sí recuerda en vez de contestar que no hay nada", ElModeloPuedePedirLoQueVioAntes);
 
         // EL NOTCH NO DECÍA QUE LO HABÍAN PARADO (spec 028, ampliada 2026-09-17). El dueño, tras probarlo en vivo:
@@ -10360,6 +10373,96 @@ internal static class Contrato
     }
 
     private static string Corto120(string t) => t.Length <= 120 ? t : t[..120];
+
+
+    private static void LlegarEsLlegar()
+    {
+        // LA REGLA, con los casos reales de los logs del 15 al 17 de septiembre.
+        bool Basta(string pedido, string donde) => Mapeador.ComoMePongoDelante.EstarEnElSitioBasta(pedido, donde);
+        Debe(Basta("web://www.google.com", "web://google.com"), "«www.» no es otro sitio");
+        Debe(Basta("web://google.com", "web://www.google.com"), "ni al revés");
+        Debe(Basta("web://docs.google.com/document/u/0/", "web://docs.google.com/document/u/0"), "la barra final no cambia la página pedida");
+        Debe(Basta("web://google.com/search?q=DeepSeek", "web://google.com/search"), "la query que el localizador descarta no impide reconocer la página");
+        Debe(Basta("web://ycombinator.com", "web://apply.ycombinator.com/apps/4ebb"), "un subdominio del mismo sitio es el mismo sitio, cuando se pidió el sitio");
+        Debe(Basta("web://artificialanalysis.ai/models/releases", "web://artificialanalysis.ai/models/releases/gpt-5-6-sol"), "la ruta pedida como comienzo de la real es haber llegado");
+        Debe(Basta("web://instagram.com", "web://instagram.com/direct/t/1100"), "y pedir el sitio se cumple con cualquiera de sus páginas, como ya prometia la 24 del mapeador");
+        // LO QUE SIGUE SIN BASTAR, y es lo que la 24 del mapeador defiende: pedir una PÁGINA no se cumple con el sitio.
+        Debe(!Basta("web://github.com/notifications", "web://github.com"), "pedir una página y estar en la portada NO es haber llegado");
+        Debe(!Basta("web://google.com/search", "web://google.com/maps"), "ni estar en otra página del mismo sitio");
+        Debe(!Basta("web://github.com", "web://gitlab.com/algo"), "otro sitio no cuenta aunque se parezca");
+        Debe(!Basta("web://ycombinator.com", "web://notycombinator.com"), "y «termina igual» no es «es subdominio»: hace falta el punto");
+
+        // Y EL CAMINO TERMINA AL LLEGAR: PasoDelNucleo con un donde que cae en la variante normalizada. Antes agotaba
+        // el presupuesto de la web entero (8 s de reloj, 15 s con vueltas) para decir «no hay camino» estando allí.
+        var tp = Capacidad("U.WindowsClient.Navigation.PasoDelNucleo");
+        var pWeb = tp?.GetProperty("EsperaWebMs");
+        if (tp == null || pWeb == null) { Pendiente("PasoDelNucleo.EsperaWebMs", "261", "029"); return; }
+        var g = new Nucleo.Grafo();
+        g.Observar("web://docs.google.com/spreadsheets/d/1", new[] { new Nucleo.Elemento("uia:name=x", "x", "Button") });
+        string donde = "web://docs.google.com/spreadsheets/d/1";
+        var paso = Activator.CreateInstance(tp, g,
+            (Func<string>)(() => donde),
+            (Func<string, string, bool>)((_, _) => true),
+            (Func<string, bool>)(dest => { donde = "web://docs.google.com/document/u/0"; return true; }))!;   // el navegador quita la barra
+        pWeb.SetValue(paso, 8000);
+        var hacia = tp.GetMethod("Hacia")!;
+        var cronometro = System.Diagnostics.Stopwatch.StartNew();
+        var r = hacia.Invoke(paso, new object[] { "web://docs.google.com/document/u/0/" })!;
+        cronometro.Stop();
+        bool llegado = (bool)r.GetType().GetProperty("Llegado")!.GetValue(r)!;
+        string porque = (string)r.GetType().GetProperty("Porque")!.GetValue(r)!;
+        Debe(llegado, $"con el navegador normalizando la ruta, ir a la página es LLEGAR (dijo: «{porque}»)");
+        Debe(cronometro.ElapsedMilliseconds < 1500,
+            $"y termina al llegar, no al agotar los 8 s del plazo ({cronometro.ElapsedMilliseconds} ms)");
+    }
+
+    private static void AbrirNoEsperaALoQueNoLanzo()
+    {
+        var t = typeof(AbrirSegunElNucleo);
+        var pLanzo = t.GetProperty("Lanzo");
+        var mEspera = t.GetMethod("EsperarVentanaNueva", BindingFlags.Public | BindingFlags.Static);
+        if (pLanzo == null || mEspera == null) { Pendiente("AbrirSegunElNucleo.Lanzo / EsperarVentanaNueva", "262", "029"); return; }
+
+        // TRAER AL FRENTE NO ES LANZAR. Chrome ya estaba abierto: se trae y se contesta; Lanzo queda en falso.
+        var ventanas = new List<(IntPtr Hwnd, string Proceso, string Titulo)> { ((IntPtr)7, "chrome.exe", "Google - Google Chrome") };
+        var abrir = new AbrirSegunElNucleo(() => "web://google.com", _ => true, _ => "", () => Array.Empty<AbrirSegunElNucleo.AppDelSistema>(),
+            _ => throw new InvalidOperationException("no había que lanzar nada"), () => ventanas, _ => true);
+        string r = abrir.Abrir("chrome", "existente");
+        Debe(r.Contains("ya estaba abierta", StringComparison.Ordinal), $"una app abierta se trae, no se lanza (dijo: «{r}»)");
+        Debe(!(bool)pLanzo.GetValue(abrir)!, "y queda dicho que NO se lanzó nada: no hay ventana nueva que esperar");
+
+        // LANZAR SÍ LANZA, y lo dice.
+        var lanzadas = new List<string>();
+        var abrir2 = new AbrirSegunElNucleo(() => "uia://explorer.exe/x", _ => false, _ => "",
+            () => new[] { new AbrirSegunElNucleo.AppDelSistema("Paint", "mspaint") },
+            id => { lanzadas.Add(id); return true; });
+        abrir2.Abrir("paint");
+        Debe(lanzadas.Count == 1 && (bool)pLanzo.GetValue(abrir2)!, "cuando se lanza de verdad, Lanzo lo dice: ahí sí hay una ventana que esperar");
+
+        // Y LA ESPERA A LA VENTANA NUEVA VA CON RELOJ: un enumerador de 400 ms y un tope de 1200 no puede tardar
+        // cuarenta vueltas. Es la misma prueba que la 245, sobre el sexto bucle.
+        const int LENTO = 400, TOPE = 1200;
+        var previas = new HashSet<IntPtr> { (IntPtr)7 };
+        Func<IReadOnlyList<(IntPtr Hwnd, string Proceso, string Titulo)>> lento = () => { Thread.Sleep(LENTO); return ventanas; };
+        var crono = System.Diagnostics.Stopwatch.StartNew();
+        var nueva = mEspera.Invoke(null, new object[] { "chrome", previas, lento, TOPE })!;
+        long tardo = crono.ElapsedMilliseconds;
+        var hwnd = (IntPtr)nueva.GetType().GetField("Item1")!.GetValue(nueva)!;
+        Debe(hwnd == IntPtr.Zero, "sin ventana nueva no se inventa una");
+        Debe(tardo < TOPE + 3 * LENTO, $"y esperar {TOPE} ms con un enumerador de {LENTO} ms no puede tardar {tardo} ms");
+
+        // Y CUANDO APARECE, SE SALE EN EL ACTO.
+        int vueltas = 0;
+        Func<IReadOnlyList<(IntPtr Hwnd, string Proceso, string Titulo)>> aparece = () =>
+        {
+            vueltas++;
+            return vueltas < 2 ? ventanas : new List<(IntPtr, string, string)>(ventanas) { ((IntPtr)9, "chrome.exe", "Nueva - Google Chrome") };
+        };
+        crono.Restart();
+        var nueva2 = mEspera.Invoke(null, new object[] { "chrome", previas, aparece, 8000 })!;
+        var hwnd2 = (IntPtr)nueva2.GetType().GetField("Item1")!.GetValue(nueva2)!;
+        Debe(hwnd2 == (IntPtr)9 && crono.ElapsedMilliseconds < 2000, $"al aparecer la ventana se devuelve en el acto ({crono.ElapsedMilliseconds} ms), no al final del plazo");
+    }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
     private sealed class Reportes
