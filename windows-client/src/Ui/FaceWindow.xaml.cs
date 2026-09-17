@@ -5461,13 +5461,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 : (_locator?.DondeEstoy()?.Hwnd ?? IntPtr.Zero);
             if (hwnd == IntPtr.Zero) return false;
             var lector = new Uia.UiaReader();
+            var crono = System.Diagnostics.Stopwatch.StartNew();
             lector.Read(hwnd);
             var crudos = lector.Elements
                 .Select(e => (Selector: Uia.Reconocedor.SelectorDe(e), Etiqueta: e.Label, Tipo: e.ControlType))
                 .ToList();
             _mapaVivo.ObservarVentana(aqui, crudos);
             _ultimaObservacion = Environment.TickCount64;
-            LogBus.Log("trabajo", $"miré otra vez «{aqui}» antes de rendirme: {crudos.Count} elemento(s)");
+            LogBus.Log("trabajo", $"miré otra vez «{aqui}» antes de rendirme: {crudos.Count} elemento(s) en {crono.ElapsedMilliseconds} ms");
             return crudos.Count > 0;
         }
         catch (Exception e) { LogBus.Log("trabajo", $"no pude mirar otra vez: {e.Message}"); return false; }

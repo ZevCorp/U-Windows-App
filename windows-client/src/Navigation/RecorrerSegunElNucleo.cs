@@ -380,7 +380,7 @@ public sealed class RecorrerSegunElNucleo
         // EL RELOJ MANDA (promesa 245). Esta es la compuerta que costó 28,8 s en la máquina del dueño:
         // cada vuelta lee la pantalla, y el presupuesto se contaba como si leerla fuera gratis.
         var compasVida = new Compas(EsperaMaximaMs);
-        long ultimaMirada = -1;
+        int miradas = 0;
         for (int ido = 0; ; ido = (int)compasVida.Transcurrido)
         {
             string aqui = _donde() ?? "";
@@ -422,17 +422,24 @@ public sealed class RecorrerSegunElNucleo
                         return (null, destinos, null, aqui);
                 }
 
-                // MIRAR OTRA VEZ ANTES DE ESPERAR Y ANTES DE RENDIRSE (promesa 264): la primera vez en el acto, y
-                // después como mucho cada 600 ms mientras dure el presupuesto. Si al mirar aparece, la vuelta
-                // siguiente lo encuentra vivo sin haber dormido nada.
-                if (MiraOtraVez != null && (ultimaMirada < 0 || compasVida.Transcurrido - ultimaMirada >= 600))
+                // MIRAR OTRA VEZ, Y NO ES UN BUCLE (promesa 264): una vez al empezar, en el acto, y una vez más
+                // antes de rendirse. Ni una más, y no por prudencia: la primera versión miraba «como mucho cada
+                // 600 ms», y sobre Wikipedia recién cargada cada mirada costaba 0,8-2,2 s —más que el freno—, así
+                // que el «continue» saltaba el reloj de abajo y la compuerta miró 76 veces en 90 s sin rendirse
+                // (2026-09-17, nivel 4 de la spec 030). Si al mirar aparece, la vuelta siguiente lo encuentra vivo.
+                if (MiraOtraVez != null && miradas == 0)
                 {
-                    ultimaMirada = compasVida.Transcurrido;
+                    miradas = 1;
                     if (MiraOtraVez(aqui)) continue;
                 }
 
                 if (ido >= EsperaMaximaMs)
                 {
+                    if (MiraOtraVez != null && miradas == 1)
+                    {
+                        miradas = 2;
+                        if (MiraOtraVez(aqui)) continue;
+                    }
                     // LA FILA DESPLAZADA SE INTENTA (promesa 80): conocida y accionable por
                     // identidad —lo dice el delegado, no el batch—, se pulsa aunque no se vea;
                     // la consecuencia juzga. El atasco real: tras un relogin el árbol de NWP1

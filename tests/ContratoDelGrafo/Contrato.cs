@@ -10597,6 +10597,28 @@ internal static class Contrato
         var r2 = b2.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Viejo") });
         Debe(t2.Count == 0 && r2.Hechos == 0 && m2 >= 1 && (r2.Cuenta.Contains("no lo veo") || r2.Cuenta.Contains("ahora no")),
             $"lo que no aparece ni mirando no se pulsa, y se dice (miró {m2} vez/veces; dijo «{r2.Cuenta}»)");
+
+        // Y MIRAR NO ES UN BUCLE. Medido el 2026-09-17 sobre Wikipedia recién cargada: cada mirada costaba
+        // 0,8-2,2 s, más que el freno de 600 ms, así que la compuerta miró 76 veces en 90 s sin rendirse
+        // nunca —el «continue» saltaba el reloj del presupuesto—. Una mirada que cuesta más que el
+        // presupuesto entero no puede repetirse: como mucho dos, al empezar y antes de rendirse.
+        var g3 = Mundo();
+        var (b3, _, t3) = BatchCon(g3, "uia://x.exe/a", RutasDeTres);
+        int m3 = 0;
+        pMira.SetValue(b3, (Func<string, bool>)(_ =>
+        {
+            m3++;
+            if (m3 > 4) return false;                       // red de seguridad: que el juez no se cuelgue
+            Thread.Sleep(b3.EsperaMaximaMs + 400);           // una mirada lenta: más que el presupuesto
+            return true;                                     // «vi algo» — pero la puerta sigue sin estar
+        }));
+        var crono3 = System.Diagnostics.Stopwatch.StartNew();
+        var r3 = b3.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Viejo") });
+        crono3.Stop();
+        Debe(t3.Count == 0 && r3.Hechos == 0 && m3 <= 2,
+            $"una mirada lenta no se repite sin fin: como mucho dos miradas, al empezar y antes de rendirse (miró {m3}; pulsó {t3.Count}; dijo «{r3.Cuenta}»)");
+        Debe(crono3.ElapsedMilliseconds < b3.EsperaMaximaMs * 3 + 1200,
+            $"y se rinde dentro del presupuesto más esas dos miradas ({crono3.ElapsedMilliseconds} ms)");
     }
 
     private static void LaEscaleraTerminaEnElClicFisico()

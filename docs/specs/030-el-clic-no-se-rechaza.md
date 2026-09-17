@@ -96,3 +96,21 @@ Sobre la máquina: el botón de Instagram que la compuerta rechazaba, pulsado; y
 ventana de trabajo sin el freno de 800 ms. `ComoSePulsa.Escalera` y `PulsarEnLaVentana` recorriéndola.
 `ElRecuerdoQueSeVe.Coreografia` con `enComprobacion`, y `DarUnPasoConCoreografia` pasándole si hay una
 comprobación en curso. `Terminado` con «hice 0 de».
+
+## Lo que se encontró al implementar (2026-09-17)
+
+- **Dos jueces viejos pedían la coreografía por reflexión sin firma.** La 180 y la 191 hacían
+  `GetMethod("Coreografia")`; con la sobrecarga de cuatro argumentos eso es `AmbiguousMatchException`
+  y las dos se ponían rojas sin que su promesa hubiera cambiado. Ahora piden la de tres por firma. Es
+  el juez, no el núcleo: la coreografía dentro de una comprobación sigue siendo la misma.
+- **«En el acto» se mide contra el reloj de después del clic.** En el batch, tras pulsar se espera a
+  que cambie la pantalla hasta agotar el presupuesto (240 ms en el juez), y en un grafo de mentira no
+  cambia nunca: una compuerta que mira en el acto tarda un presupuesto; una que se rindió primero
+  tarda dos. La 264 pide menos de uno y medio.
+- **Un patrón que lanza deja escrito que bajó al ratón.** `PulsarEnLaVentana` anota «patrón … falló
+  (…) → ratón real» y la escalera entera, para que el log distinga «no se pudo» de «bajó un peldaño».
+- **El contrato no se puede correr en el `%TEMP%` compartido cuando hay otra sesión corriéndolo**: el
+  juez muere a mitad —tras la 163 una vez, tras la 231 la siguiente— y el guion dice «NO SE PUDO
+  JUZGAR» sin excepción ni evento. Se corre con `TEMP` propio.
+
+**Estado:** fase 1 implementada el 2026-09-17; contrato 236/236. Nivel 4 en la sección de evidencia.

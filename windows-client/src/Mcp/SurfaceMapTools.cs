@@ -1027,7 +1027,11 @@ public sealed class SurfaceMapTools
                 return true;
             }
 
+            var cronoLectura = System.Diagnostics.Stopwatch.StartNew();
             _lector.Read();
+            // CUÁNTO CUESTA SEÑALAR (spec 030, nivel 4): esta lectura va ANTES de la compuerta y del clic, y en una
+            // página recién cargada de Chrome puede ser lo que la persona vive como «demora entre pulsando y el clic».
+            LogBus.Log("mano", $"señalar «{etiqueta}»: leí la ventana en {cronoLectura.ElapsedMilliseconds} ms ({_lector.Elements.Count} elemento(s))");
             var visto = _lector.Elements.FirstOrDefault(
                             e => Uia.Reconocedor.SelectorDe(e).Equals(selector, StringComparison.OrdinalIgnoreCase))
                         // Por etiqueta como último recurso: un selector puede envejecer —cambia una
