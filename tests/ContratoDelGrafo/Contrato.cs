@@ -729,6 +729,17 @@ internal static class Contrato
         // en el 20% del reloj, cada vuelta que sobra son 3 s que no se pueden acelerar de otra forma.
         Prueba("263. un acto cuenta lo que dejó delante: pulsar, escribir, ir, abrir, desplazar y desbloquear devuelven, detrás de lo que pasó, el mismo inventario que daría map_what_i_see —la pantalla y lo accionable—, también cuando no pudieron; una llamada que ni llegó a actuar no lo añade, un saber no lo repite, y el catálogo le dice al modelo que después de un acto no vuelva a preguntar qué hay", UnActoCuentaLoQueDejoDelante);
 
+        // EL CLIC NO SE RECHAZA A SÍ MISMO (spec 030, 2026-09-17). La mitad de los clics que fallaban —37 de 74 en tres
+        // días— los rechazaba nuestra propia compuerta: juzga si la puerta está viva contra la memoria del mapa vivo,
+        // que va 1–2 s por detrás de la pantalla. Medido: map_pointing_at dijo «puedo pulsarlo ahora» y 26 s después
+        // la compuerta esperó 4 s y contestó «no lo conozco» sobre el mismo botón. Dos jueces, dos criterios (nº16).
+        Prueba("264. vivo se juzga mirando AHORA: si el mapa no tiene una puerta como viva, antes de rendirse la compuerta vuelve a mirar la ventana; si al mirar aparece, se pulsa en el acto; si no aparece ni mirando, se dice que no se ve, como hasta hoy", LaCompuertaMiraOtraVezAntesDeRendirse);
+        Prueba("265. un patrón que lanza no es un clic que falló: la escalera de pulsar termina siempre en el clic físico —tras el patrón, tras el mensaje— y sólo el físico decide que no se pudo", LaEscaleraTerminaEnElClicFisico);
+        // LAS DOS TANDAS QUE SIENTE EL DUEÑO: la coreografía de la 014 —tarjeta y pausa de lectura de hasta 4 s— aplicada
+        // a clics normales, porque el modelo pone decir/recuerdo en el 89% de ellos. Fuera de una comprobación sobra.
+        Prueba("266. fuera de una comprobación, pulsar es señalar y tocar en un solo gesto: sin tarjeta ni pausa de lectura, y el recuerdo que el modelo mande se escribe DESPUÉS de tocar; dentro de una comprobación la coreografía de la 180 sigue entera", FueraDeUnaComprobacionPulsarEsUnSoloGesto);
+        Prueba("267. un paso que hizo 0 de N se ve como fallo, no con ✓: el notch y el registro lo pintan como lo que fue", CeroDeUnoSeVeComoFallo);
+
         Prueba("258. el modelo puede pedir lo que vio antes: pedir la mirada de una ubicación devuelve su foto con su ficha —cuándo fue y qué estaba pasando—, y si de esa no hay, dice QUÉ ubicaciones sí recuerda en vez de contestar que no hay nada", ElModeloPuedePedirLoQueVioAntes);
 
         // EL NOTCH NO DECÍA QUE LO HABÍAN PARADO (spec 028, ampliada 2026-09-17). El dueño, tras probarlo en vivo:
@@ -6601,7 +6612,7 @@ internal static class Contrato
             "un selector se reconoce por su prefijo de mundo: sap: o uia:; un nombre no lo lleva");
 
         // Y la coreografía de la mano es la MISMA que la del plan: sin decir no se dice, sin recuerdo no hay tarjeta, y se actúa igual.
-        var core = Capacidad("U.WindowsClient.Piloto.ElRecuerdoQueSeVe")!.GetMethod("Coreografia")!;
+        var core = Capacidad("U.WindowsClient.Piloto.ElRecuerdoQueSeVe")!.GetMethod("Coreografia", new[] { typeof(bool), typeof(bool), typeof(bool) })!;
         var sinNada = ((System.Collections.IEnumerable)core.Invoke(null, new object[] { true, false, false })!).Cast<object>().Select(g => g.ToString()).ToList();
         Debe(sinNada.SequenceEqual(new[] { "Senalar", "Actuar", "Soltar" }), $"una mano sin decir ni recuerdo: señalar, actuar y soltar, nada más (salió {string.Join(",", sinNada)})");
         var conTodo = ((System.Collections.IEnumerable)core.Invoke(null, new object[] { true, true, true })!).Cast<object>().Select(g => g.ToString()).ToList();
@@ -7006,7 +7017,7 @@ internal static class Contrato
     private static void ElRecuerdoSeVeAntesDeTocar()
     {
         var t = Capacidad("U.WindowsClient.Piloto.ElRecuerdoQueSeVe");
-        var coreo = t?.GetMethod("Coreografia"); var lectura = t?.GetMethod("TiempoDeLectura");
+        var coreo = t?.GetMethod("Coreografia", new[] { typeof(bool), typeof(bool), typeof(bool) }); var lectura = t?.GetMethod("TiempoDeLectura");
         Debe(t != null && coreo != null && lectura != null,
             "todavía no existe «Piloto.ElRecuerdoQueSeVe» (spec 014, promesa 180). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
@@ -10540,6 +10551,104 @@ internal static class Contrato
         string instrucciones = (string?)tc?.GetField("Instrucciones", BindingFlags.NonPublic | BindingFlags.Static)?.GetRawConstantValue() ?? "";
         Debe(instrucciones.Contains("CADA ACTO TE CUENTA LO QUE DEJÓ DELANTE", StringComparison.Ordinal),
             "y las instrucciones lo dicen con todas las letras");
+    }
+
+
+    private static void LaCompuertaMiraOtraVezAntesDeRendirse()
+    {
+        var pMira = typeof(RecorrerSegunElNucleo).GetProperty("MiraOtraVez");
+        if (pMira == null) { Pendiente("RecorrerSegunElNucleo.MiraOtraVez (la compuerta mira otra vez)", "264", "030"); return; }
+
+        // «Viejo» está RECORDADO en la pantalla pero la última observación del mapa no lo trae: hoy la 56 dice «no lo veo».
+        Nucleo.Grafo Mundo()
+        {
+            var g = MundoDeTres();
+            g.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:1", "Uno", "Button"), new Nucleo.Elemento("s:v", "Viejo", "Button") });
+            g.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:1", "Uno", "Button") });
+            return g;
+        }
+
+        // AL MIRAR OTRA VEZ, APARECE: se pulsa en el acto.
+        var g1 = Mundo();
+        var (b1, _, t1) = BatchCon(g1, "uia://x.exe/a", RutasDeTres);
+        int miradas = 0;
+        pMira.SetValue(b1, (Func<string, bool>)(aqui =>
+        {
+            miradas++;
+            g1.Observar(aqui, new[] { new Nucleo.Elemento("s:1", "Uno", "Button"), new Nucleo.Elemento("s:v", "Viejo", "Button") });
+            return true;
+        }));
+        var crono = System.Diagnostics.Stopwatch.StartNew();
+        var r1 = b1.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Viejo") });
+        crono.Stop();
+        Debe(t1.Count == 1 && t1[0] == "Viejo" && r1.Hechos == 1,
+            $"lo que la pantalla enseña al mirar otra vez se pulsa (se pulsaron {t1.Count}: {string.Join(",", t1)}; dijo «{r1.Cuenta}»)");
+        Debe(miradas >= 1, "y se miró otra vez de verdad, no se adivinó");
+        // Lo que tarda es el reloj de DESPUÉS del clic (esperar a que cambie la pantalla, que aquí no cambia):
+        // UN presupuesto. Si la compuerta hubiera agotado el suyo antes de mirar, serían dos.
+        Debe(crono.ElapsedMilliseconds < b1.EsperaMaximaMs + 200,
+            $"y en el acto: la compuerta no agota su presupuesto antes de mirar ({crono.ElapsedMilliseconds} ms; el presupuesto es {b1.EsperaMaximaMs})");
+
+        // Y SI NI MIRANDO APARECE, sigue sin pulsarse y se dice: la 56 en pie.
+        var g2 = Mundo();
+        var (b2, _, t2) = BatchCon(g2, "uia://x.exe/a", RutasDeTres);
+        int m2 = 0;
+        pMira.SetValue(b2, (Func<string, bool>)(_ => { m2++; return false; }));
+        var r2 = b2.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Viejo") });
+        Debe(t2.Count == 0 && r2.Hechos == 0 && m2 >= 1 && (r2.Cuenta.Contains("no lo veo") || r2.Cuenta.Contains("ahora no")),
+            $"lo que no aparece ni mirando no se pulsa, y se dice (miró {m2} vez/veces; dijo «{r2.Cuenta}»)");
+    }
+
+    private static void LaEscaleraTerminaEnElClicFisico()
+    {
+        var t = typeof(U.Graph.Surfaces.ComoSePulsa);
+        var m = t.GetMethod("Escalera", BindingFlags.Public | BindingFlags.Static);
+        if (m == null) { Pendiente("ComoSePulsa.Escalera (la escalera de pulsar como lista)", "265", "030"); return; }
+        string E(U.Graph.Surfaces.ComoSePulsa.Gesto g) =>
+            string.Join(">", ((System.Collections.IEnumerable)m.Invoke(null, new object[] { g })!).Cast<object>().Select(x => x.ToString()));
+        Debe(E(U.Graph.Surfaces.ComoSePulsa.Gesto.Patron) == "Patron>Fisico",
+            $"tras el patrón viene el clic físico, no el fallo (salió {E(U.Graph.Surfaces.ComoSePulsa.Gesto.Patron)})");
+        Debe(E(U.Graph.Surfaces.ComoSePulsa.Gesto.Mensaje) == "Mensaje>Fisico",
+            $"tras el mensaje también (salió {E(U.Graph.Surfaces.ComoSePulsa.Gesto.Mensaje)})");
+        Debe(E(U.Graph.Surfaces.ComoSePulsa.Gesto.Fisico) == "Fisico",
+            "y el físico es el último peldaño: el único que puede decir que no se pudo");
+    }
+
+    private static void FueraDeUnaComprobacionPulsarEsUnSoloGesto()
+    {
+        var t = Capacidad("U.WindowsClient.Piloto.ElRecuerdoQueSeVe");
+        var m = t?.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(x => x.Name == "Coreografia" && x.GetParameters().Length == 4);
+        if (m == null) { Pendiente("ElRecuerdoQueSeVe.Coreografia(elemento, recuerdo, decir, enComprobacion)", "266", "030"); return; }
+        string C(bool e, bool r, bool d, bool comp) =>
+            string.Join(">", ((System.Collections.IEnumerable)m.Invoke(null, new object[] { e, r, d, comp })!).Cast<object>().Select(g => g.ToString()));
+
+        string fuera = C(true, true, true, false);
+        Debe(fuera == "Senalar>Decir>Actuar>Escribir>Soltar",
+            $"fuera de una comprobación: señalar, decir, TOCAR, y el recuerdo después —sin tarjeta ni pausa— (salió {fuera})");
+        Debe(!fuera.Contains("Mostrar") && !fuera.Contains("Esperar"),
+            "ni tarjeta ni pausa de lectura: la persona no está leyendo una lección, está esperando el clic");
+        Debe(fuera.IndexOf("Escribir", StringComparison.Ordinal) > fuera.IndexOf("Actuar", StringComparison.Ordinal),
+            "y escribir el recuerdo va DESPUÉS de tocar: no se paga antes de lo que la persona pidió");
+        Debe(C(true, false, false, false) == "Senalar>Actuar>Soltar", "sin recuerdo ni frase: señalar, tocar, soltar");
+        Debe(C(false, true, true, false) == "Decir>Actuar>Escribir", "sin elemento en pantalla no hay señal: decir, tocar, escribir");
+
+        string dentro = C(true, true, true, true);
+        Debe(dentro == "Senalar>Decir>Escribir>Mostrar>Esperar>Actuar>Cerrar>Soltar",
+            $"dentro de una comprobación la coreografía de la 180 sigue entera (salió {dentro})");
+    }
+
+    private static void CeroDeUnoSeVeComoFallo()
+    {
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var m = tc?.GetMethod("Terminado", BindingFlags.NonPublic | BindingFlags.Static);
+        if (m == null) { Pendiente("ConversacionEnVivo.Terminado", "267", "018"); return; }
+        string T(string r) => (string)m.Invoke(null, new object[] { "map_take", new Dictionary<string, string>(), r, 10L })!;
+        string cero = T("hice 0 de 1 y paré en el paso 1: «Abre el perfil Miracle» no lo conozco en «web://instagram.com».");
+        Debe(cero.StartsWith("✋", StringComparison.Ordinal), $"«hice 0 de 1» es un fallo y se pinta como fallo (salió «{cero[..Math.Min(20, cero.Length)]}»)");
+        string uno = T("hice los 1 paso(s): pulsé «Mensajes» y ahora estás en «web://instagram.com/direct/inbox».");
+        Debe(uno.StartsWith("✓", StringComparison.Ordinal), $"y «hice los 1 paso(s)» sigue siendo un logro (salió «{uno[..Math.Min(20, uno.Length)]}»)");
+        string parcial = T("hice 1 de 3 y paré en el paso 2: no pude pulsar «X».");
+        Debe(parcial.StartsWith("✋", StringComparison.Ordinal), "una tanda que paró a medias tampoco es un ✓");
     }
 
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>

@@ -835,6 +835,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 AccionableAunSinVerse = sel => sel.StartsWith("sap:", StringComparison.OrdinalIgnoreCase)
                     && (sel.Contains("#node=", StringComparison.Ordinal)
                         || sel.Contains("#row=", StringComparison.Ordinal)),
+                // LA COMPUERTA MIRA OTRA VEZ ANTES DE RENDIRSE (promesa 264): la ventana de trabajo, ahora, sin el
+                // freno de 800 ms de la observación de fondo.
+                MiraOtraVez = MirarOtraVezLaVentana,
             };
             // EL RASTRO (promesa 76): cada relato de batch queda en el anillo que sirve el 8792
             // para la pestaña «Terreno» del visor.
@@ -3263,7 +3266,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         var mano = _mapaDeMano!;
         recuerdo ??= ""; decir ??= ""; senalar ??= "";
         bool hayElemento = senalar.Length > 0 && mano.SenalarElemento(senalar, senalar);
-        var coreografia = Piloto.ElRecuerdoQueSeVe.Coreografia(hayElemento, recuerdo.Length > 0 && senalar.Length > 0, decir.Length > 0);
+        // FUERA DE UNA COMPROBACIÓN NO HAY TARJETA NI PAUSA (promesa 266): la coreografía de la 180 es para cuando la
+        // persona está viendo una lección; en un clic normal quería ver la carita al lado y el clic, en un solo gesto.
+        bool enComprobacion = mano.Llegue != null;
+        var coreografia = Piloto.ElRecuerdoQueSeVe.Coreografia(hayElemento, recuerdo.Length > 0 && senalar.Length > 0, decir.Length > 0, enComprobacion);
         if (!hayElemento && senalar.Length > 0) LogBus.Log("comprobar", $"paso · «{senalar}» no está en pantalla para señalarlo: va al ejecutor sin tarjeta");
         foreach (var gesto in coreografia)
         {
@@ -3303,6 +3309,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             if (gesto == Piloto.ElRecuerdoQueSeVe.Gesto.Cerrar) TarjetasDeRecuerdo.Cerrar();
             if (gesto == Piloto.ElRecuerdoQueSeVe.Gesto.Soltar) Senalador.Soltar();
+            // EL RECUERDO SE ESCRIBE DESPUÉS DE TOCAR fuera de una comprobación (promesa 266): lo que el modelo quiso
+            // recordar se guarda igual, pero no se paga antes de lo que la persona pidió.
+            if (gesto == Piloto.ElRecuerdoQueSeVe.Gesto.Escribir)
+            {
+                string r = mano.Call("map_esto_es", new Dictionary<string, string> { ["significado"] = recuerdo, ["sobre"] = senalar });
+                LogBus.Log("comprobar", $"paso · recuerdo tras tocar en «{senalar}»: {(r.Length > 120 ? r[..120] + "…" : r)}");
+            }
         }
         return res;
     }
@@ -5431,6 +5444,34 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     /// <summary>Cuándo se observó por última vez, para no releer la misma ventana dos veces seguidas.</summary>
     private long _ultimaObservacion;
+
+    /// <summary>
+    /// MIRAR OTRA VEZ, AHORA, la ventana en la que se va a pulsar. Promesa 264 (spec 030). Es la misma lectura que
+    /// hace la observación de fondo, sin su freno: se paga sólo cuando el mapa no tenía la puerta como viva, que es
+    /// justo cuando hoy se pagaban 4 s de espera y un «no lo conozco».
+    /// </summary>
+    private bool MirarOtraVezLaVentana(string aqui)
+    {
+        if (_mapaVivo == null || string.IsNullOrWhiteSpace(aqui)) return false;
+        if (aqui.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)) return false;   // SAP se lee por su API
+        try
+        {
+            IntPtr hwnd = _trabajo.Hay && U.Graph.Surfaces.UiaSurface.VentanaExiste(_trabajo.Hwnd)
+                ? _trabajo.Hwnd
+                : (_locator?.DondeEstoy()?.Hwnd ?? IntPtr.Zero);
+            if (hwnd == IntPtr.Zero) return false;
+            var lector = new Uia.UiaReader();
+            lector.Read(hwnd);
+            var crudos = lector.Elements
+                .Select(e => (Selector: Uia.Reconocedor.SelectorDe(e), Etiqueta: e.Label, Tipo: e.ControlType))
+                .ToList();
+            _mapaVivo.ObservarVentana(aqui, crudos);
+            _ultimaObservacion = Environment.TickCount64;
+            LogBus.Log("trabajo", $"miré otra vez «{aqui}» antes de rendirme: {crudos.Count} elemento(s)");
+            return crudos.Count > 0;
+        }
+        catch (Exception e) { LogBus.Log("trabajo", $"no pude mirar otra vez: {e.Message}"); return false; }
+    }
 
     private void ObservarLaVentanaDeTrabajo()
     {
