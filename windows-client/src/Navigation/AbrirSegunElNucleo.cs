@@ -133,9 +133,39 @@ public sealed class AbrirSegunElNucleo
 
     public string Abrir(string pedido) => Abrir(pedido, "");
 
+    /// <summary>
+    /// SI LA ÚLTIMA APERTURA LANZÓ ALGO. Promesa 262 (spec 029).
+    /// </summary>
+    /// <remarks>
+    /// TRAER AL FRENTE NO ES LANZAR, y confundirlos costaba 8 s por apertura: la carita esperaba una ventana NUEVA
+    /// tras cada map_open_app, también cuando la app ya estaba abierta y sólo se trajo al frente —que es justo
+    /// cuando esa ventana no va a aparecer—. Medido: 10,7 s de mediana, 103 s el 15 y 55 s el 17 de septiembre.
+    /// Sólo tiene sentido esperar cuando se lanzó de verdad, y esto es lo que lo dice.
+    /// </remarks>
+    public bool Lanzo { get; private set; }
+
+    /// <summary>
+    /// ESPERA A LA VENTANA NUEVA DE ESA APP, con reloj. Devuelve la ventana en cuanto aparece, o vacío al agotar
+    /// el plazo. Es el sexto bucle de la spec 025: antes eran cuarenta vueltas de 200 ms más una enumeración cada
+    /// una —presupuesto ficticio—, y vive aquí y no en la carita para que el contrato lo pueda cronometrar.
+    /// </summary>
+    public static (IntPtr Hwnd, string Proceso, string Titulo) EsperarVentanaNueva(string app, HashSet<IntPtr> previas,
+        Func<IReadOnlyList<(IntPtr Hwnd, string Proceso, string Titulo)>> ventanas, int topeMs)
+    {
+        var compas = new Compas(topeMs);
+        do
+        {
+            var nueva = LasDe(app, ventanas()).FirstOrDefault(v => !previas.Contains(v.Hwnd));
+            if (nueva.Hwnd != IntPtr.Zero) return nueva;
+        }
+        while (compas.Respira(200));
+        return default;
+    }
+
     /// <param name="instancia">Vacío o «existente»: si ya hay ventanas de la app, se trae una; «nueva»: se abre otra aunque haya (promesa 232).</param>
     public string Abrir(string pedido, string instancia)
     {
+        Lanzo = false;
         string que = (pedido ?? "").Trim();
         if (que.Length == 0) return "falta decir QUÉ abrir.";
         bool nueva = (instancia ?? "").Trim().Equals("nueva", StringComparison.OrdinalIgnoreCase);
@@ -173,6 +203,7 @@ public sealed class AbrirSegunElNucleo
             .Where(a => Nombres.Aplanar(a.Nombre) == Nombres.Aplanar(que)).ToList();
         if (instalada.Count == 1 && _lanzar(instalada[0].ComoSeLanza))
         {
+            Lanzo = true;
             string llegue = EsperarACambiar(_donde() ?? "");
             return (llegue.Length > 0
                 ? $"«{instalada[0].Nombre}» está delante. Estás en «{llegue}»."
@@ -198,6 +229,7 @@ public sealed class AbrirSegunElNucleo
             var candidatas = Emparejar(que, _instaladas());
             if (candidatas.Count == 1 && _lanzar(candidatas[0].ComoSeLanza))
             {
+                Lanzo = true;
                 string tras = EsperarACambiar(antes);
                 return (tras.Length > 0
                     ? $"«{candidatas[0].Nombre}» está delante. Estás en «{tras}»."

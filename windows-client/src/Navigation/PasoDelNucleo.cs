@@ -67,7 +67,7 @@ public sealed class PasoDelNucleo
         if (string.IsNullOrWhiteSpace(destino)) return new(false, false, "", "", "falta el destino");
 
         string aqui = _donde();
-        bool yaEstaba = aqui.Equals(destino, StringComparison.OrdinalIgnoreCase);
+        bool yaEstaba = Llegue(destino, aqui);
 
         // PRIMERO, DELANTE. Para pulsar algo hay que tenerlo delante: no hay forma de navegar una
         // aplicación sin enfocarla, y fingir lo contrario sería pulsar a ciegas.
@@ -175,8 +175,7 @@ public sealed class PasoDelNucleo
                 $"pulsé «{paso.Que.Etiqueta}» y no nos movió. El grafo cree que ese tramo lleva a otro "
                 + "sitio, y no es cierto: hay que volver a recorrerlo para corregirlo");
 
-        return new(true, despues.Equals(destino, StringComparison.OrdinalIgnoreCase),
-                   paso.Que.Etiqueta, paso.Que.Selector, "");
+        return new(true, Llegue(destino, despues), paso.Que.Etiqueta, paso.Que.Selector, "");
     }
 
     /// <summary>
@@ -211,6 +210,15 @@ public sealed class PasoDelNucleo
         return $"di {maxPasos} pasos y no llegué a «{Corto(destino)}»: o hay un bucle, o el grafo "
              + "aprendió mal alguno de esos tramos";
     }
+
+    /// <summary>
+    /// LLEGAR ES LLEGAR (promesa 261): la misma regla en todos los sitios donde se juzga la llegada. Tenía dos
+    /// —igualdad exacta aquí y en «nos movió», la tolerante sólo en los bucles— y eso es el aprendizaje nº16:
+    /// dos comparaciones de distinta forma para la misma pregunta dan «no» en silencio.
+    /// </summary>
+    private static bool Llegue(string destino, string aqui)
+        => aqui.Equals(destino, StringComparison.OrdinalIgnoreCase)
+        || Mapeador.ComoMePongoDelante.EstarEnElSitioBasta(destino, aqui);
 
     private static string Corto(string id)
     {

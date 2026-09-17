@@ -566,6 +566,20 @@ internal static class Contrato
             "pedir una PÁGINA y estar en el sitio NO es haber llegado");
         Debe(!ComoMePongoDelante.EstarEnElSitioBasta("web://github.com", "web://gitlab.com/algo"),
             "otro sitio no cuenta, aunque se parezca");
+
+        // LO QUE EL NAVEGADOR NORMALIZA NO ES OTRA PÁGINA (spec 029, 2026-09-17). Medido en tres días de corridas:
+        // ocho «no hay camino» en los que Ü ya estaba donde se le pidió, y la comparación exacta lo negó.
+        Debe(ComoMePongoDelante.EstarEnElSitioBasta("web://www.google.com", "web://google.com"), "«www.» no es otro sitio");
+        Debe(ComoMePongoDelante.EstarEnElSitioBasta("web://docs.google.com/document/u/0/", "web://docs.google.com/document/u/0"),
+            "la barra final no cambia la página pedida");
+        Debe(ComoMePongoDelante.EstarEnElSitioBasta("web://google.com/search?q=x", "web://google.com/search"),
+            "la query que el localizador descarta no impide reconocer la página");
+        Debe(ComoMePongoDelante.EstarEnElSitioBasta("web://ycombinator.com", "web://apply.ycombinator.com/apps/1"),
+            "un subdominio del mismo sitio es el mismo sitio, cuando se pidió el sitio");
+        Debe(ComoMePongoDelante.EstarEnElSitioBasta("web://a.ai/models/releases", "web://a.ai/models/releases/gpt"),
+            "la ruta pedida como comienzo de la real es haber llegado");
+        Debe(!ComoMePongoDelante.EstarEnElSitioBasta("web://google.com/search", "web://google.com/maps"),
+            "pero otra página del mismo sitio sigue sin ser la pedida");
         Debe(!ComoMePongoDelante.EstarEnElSitioBasta("uia://explorer.exe/documentos", "uia://explorer.exe/videos"),
             "esto es de la web: dos carpetas distintas siguen siendo dos sitios distintos");
     }
