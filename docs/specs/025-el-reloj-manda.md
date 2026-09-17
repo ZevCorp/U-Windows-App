@@ -1,6 +1,7 @@
 # Plan de implementación: las esperas se miden con el reloj
 
-Estado: **propuesto** · 2026-09-15 · Rama: `jose/el-reloj-manda`
+Estado: **implementada, y corregida el 2026-09-17** · 2026-09-15 · Ramas: `jose/el-reloj-manda`,
+`jose/ir-tambien-mide-con-el-reloj`
 
 > El dueño: «el asistente se está demorando mucho en ejecutar… veo que intenta tres cosas para
 > completar una tarea que tiene enfrente, como hacer un clic». Y después: «si el modelo ya lo pidió,
@@ -90,12 +91,42 @@ Sobre la máquina: `map_where_am_i` cronometrado antes y después. Hoy: 2.771 ms
 - La memoria corta puede devolver algo que acaba de cambiar, durante su caducidad. Por eso es corta, y
   por eso se puede olvidar a mano en cuanto una acción cambia la pantalla.
 
+## El quinto sitio, que no se contó (2026-09-17)
+
+El dueño sintió que la mejora del reloj «se había perdido» tras un merge. No se perdió: los cuatro
+bucles siguen con `Compas` en main. Lo que pasó es que **había un quinto sitio con la misma clase de
+error, y esta spec arregló cuatro de cinco** —el aprendizaje nº11 del repo, en contra de quien lo cita—.
+
+`PasoDelNucleo.cs`, el camino de `map_go_to`, tiene tres esperas con presupuesto ficticio, de agosto,
+anteriores a esta spec:
+
+| Bucle | Decía esperar | Pagaba por vuelta |
+|---|---|---|
+| ponerse delante | 30 × 100 ms = «3 s» | 100 ms + localizar |
+| abrir una web directo | 80 × 100 ms = «8 s» | 100 ms + localizar |
+| ¿nos movió el paso? | 12 × 150 ms = «1,8 s» | 150 ms + localizar |
+
+Y «localizar» ahí era el localizador **crudo** —`_locator.DondeEstoy()`, que vuelve a buscar la barra de
+direcciones en todo el árbol UIA en cada llamada—, no el que esta spec dejó recordando 400 ms.
+Medido el 2026-09-17 sobre las corridas del dueño: **15.183, 14.582 y 15.542 ms** para contestar
+«no hay ningún camino aprendido», y 4.217–5.518 ms para sí ponerlo delante. Los dos números salen
+del mismo bucle. `map_go_to` está en todas las pruebas: es un pilar, no un incidente.
+
+La promesa 245 se amplía para nombrar el sitio que le faltaba —«ni al ir a un sitio»— y su prueba
+cronometra también `PasoDelNucleo` con el mismo sondeo caro de 400 ms.
+
 ## Las fases
 
 ### Fase 1 — el reloj y la memoria corta (245, 246)
 
 Los cuatro bucles de `PulsarSegunElNucleo`, `RecorrerSegunElNucleo` y `AbrirSegunElNucleo`;
 `Navigation.MemoriaCorta`; y el cableado de la carita para no releer la ventana al preguntar.
+
+### Fase 2 — el quinto sitio (245, ampliada)
+
+Los tres bucles de `PasoDelNucleo` pasan a `Compas`, y su localizador se recuerda 400 ms como los
+demás. Lo que no se toca: el `Sleep(600)` fijo entre pasos de `Hasta`, que no es un presupuesto
+ficticio —no paga sondeo por vuelta— sino un respiro para que la pantalla se asiente.
 
 ## Lo que NO entra
 
