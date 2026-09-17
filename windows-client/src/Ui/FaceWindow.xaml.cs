@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
 using U.Graph;
@@ -183,6 +184,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         GraphHealth.Changed += OnGraphHealthChanged;
         Closed += (_, __) => GraphHealth.Changed -= OnGraphHealthChanged;
         SetMuted(_config.Muted); // si lo silenciaron en una sesión anterior, sigue mudo
+
+        // NACE AL ARRANCAR Y NO A LA PRIMERA PALABRA: el gesto de asomarlo acercando el cursor al
+        // borde de arriba (promesa 260) tiene que funcionar «sin importar si Ü está hablando o no»
+        // (pedido del dueño, 2026-09-17), también antes de que diga nada. Antes nacía perezoso, en
+        // el primer Habla()/Empieza(), y hasta ese momento el gesto no tenía a quién asomar.
+        _acciones ??= new PanelDeAcciones();
 
         Closed += (_, __) =>
         {
@@ -2528,6 +2535,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _voice.Silence();
         SetStatus("Detenido");
         ShowStop(false);
+        // SE QUEDA DICHO EN EL NOTCH (promesa 259, pedido del dueño 2026-09-17: «una vez yo detuve la
+        // conversación… que se guarde en notch»). Solo si ya existía: pulsar ⏹ sin que hubiera nada
+        // en marcha no tiene por qué traer el notch a la fuerza.
+        _acciones?.Detenido("detenido a mano");
     }
 
     private void SetMuted(bool muted)
@@ -4670,6 +4681,17 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
     /// <summary>
+    /// El globo, línea a línea: quién la dijo y qué dijo. Vive aparte de lo pintado —antes se releía
+    /// de <c>Bubble.Text</c>, que es la trampa de que la pantalla sea también el estado (patrón
+    /// nº8: una caja que miente es peor que no tener caja, y aquí la caja era el propio texto)—.
+    /// De aquí sale tanto el reemplazo en vivo de una frase a medio decir como el peso de cada
+    /// línea: la etiqueta «Ü: »/«Tú: » hacía dos trabajos —decir quién habla, y decirle al código si
+    /// esta frase sigue el turno anterior—, y quitarla de la pantalla (pedido del dueño, 2026-09-17)
+    /// se habría llevado los dos si no queda guardada aquí.
+    /// </summary>
+    private readonly List<(string Quien, string Texto)> _globo = new();
+
+    /// <summary>
     /// Añade una línea al globo sin borrar lo anterior.
     ///
     /// <see cref="Narrate"/> REEMPLAZA, que es lo correcto para un estado («voy por el paso 3»), y
@@ -4680,22 +4702,50 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void AppendChat(string linea)
     {
         if (string.IsNullOrWhiteSpace(linea)) return;
-        var lineas = (Bubble.Text ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
 
         // Una frase que se está diciendo REEMPLAZA a su versión anterior en vez de añadirse: llega a
         // trozos y añadirlos dejaba una columna de palabras sueltas. Se compara por quién habla, y
         // solo mientras el turno sigue abierto: al cerrarse, `_turnoAbierto` cae y la siguiente
         // frase del mismo interlocutor empieza línea nueva, que es lo que hace legible el historial.
-        string quien = linea.Length > 3 ? linea[..3] : "";
-        if (_turnoAbierto && (quien == "Ü: " || quien == "Tú:") && lineas.Count > 0
-            && lineas[^1].StartsWith(quien, StringComparison.Ordinal))
-            lineas[^1] = linea;
+        //
+        // QUIÉN LO DICE VIENE EN EL PROPIO TEXTO (lo deciden `EnviarTextoAsync` y `Reaccionar` en
+        // ConversacionEnVivo), pero ya no se guarda ni se enseña tal cual: se lee aquí y se recorta.
+        string quien = linea.StartsWith("Ü: ", StringComparison.Ordinal) ? "Ü"
+            : linea.StartsWith("Tú: ", StringComparison.Ordinal) ? "Tú"
+            : "";
+        string texto = quien switch { "Ü" => linea[3..], "Tú" => linea[4..], _ => linea };
+
+        if (_turnoAbierto && quien.Length > 0 && _globo.Count > 0 && _globo[^1].Quien == quien)
+            _globo[^1] = (quien, texto);
         else
-            lineas.Add(linea);
+            _globo.Add((quien, texto));
         _turnoAbierto = true;
-        if (lineas.Count > 40) lineas.RemoveRange(0, lineas.Count - 40);
-        Bubble.Text = string.Join("\n", lineas);
+        if (_globo.Count > 40) _globo.RemoveRange(0, _globo.Count - 40);
+        PintarGlobo();
         ShowTalk(MotivoDelGlobo.SoloEsProgreso);
+    }
+
+    /// <summary>
+    /// Pinta el globo entero a partir de <see cref="_globo"/>: un <see cref="Run"/> por línea, y lo
+    /// que dice Ü un poco más grueso que lo que dice la persona (pedido del dueño, 2026-09-17: sin
+    /// la etiqueta delante, el peso de la letra es lo único que sigue separando a los dos). Cada
+    /// repintado entra con un parpadeo breve —de 0,2 a 1 de opacidad en 160 ms— para que el texto no
+    /// cambie de golpe: el mismo lenguaje que ya usa el notch al aparecer.
+    /// </summary>
+    private void PintarGlobo()
+    {
+        Bubble.BeginAnimation(OpacityProperty, null);
+        Bubble.Inlines.Clear();
+        for (int i = 0; i < _globo.Count; i++)
+        {
+            var (quien, texto) = _globo[i];
+            Bubble.Inlines.Add(new Run(texto)
+            { FontWeight = quien == "Ü" ? FontWeights.SemiBold : FontWeights.Normal });
+            if (i < _globo.Count - 1) Bubble.Inlines.Add(new LineBreak());
+        }
+        Bubble.Opacity = 0.2;
+        Bubble.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(160))
+        { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
     }
 
     // --- IUserChannel ---
