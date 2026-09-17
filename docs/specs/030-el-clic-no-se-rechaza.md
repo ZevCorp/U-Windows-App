@@ -113,4 +113,23 @@ comprobación en curso. `Terminado` con «hice 0 de».
   juez muere a mitad —tras la 163 una vez, tras la 231 la siguiente— y el guion dice «NO SE PUDO
   JUZGAR» sin excepción ni evento. Se corre con `TEMP` propio.
 
-**Estado:** fase 1 implementada el 2026-09-17; contrato 236/236. Nivel 4 en la sección de evidencia.
+- **Mirar otra vez no puede ser un bucle, y el contrato no lo cazó: lo cazó el nivel 4.** La primera
+  versión miraba «como mucho cada 600 ms mientras dure el presupuesto». Sobre Wikipedia recién cargada cada
+  mirada costó entre 0,8 y 2,2 s —más que el freno—, así que el `continue` saltaba el reloj y la compuerta
+  miró 76 veces en 90 s sin rendirse. El juez no lo vio porque su gancho contesta al instante. La 264 lleva
+  ahora un gancho lento que nunca trae la puerta, y exige como mucho dos miradas: al empezar y antes de
+  rendirse. Rojo con el código viejo (miró 5, y sólo paró por la red del propio juez), verde con el nuevo.
+
+## Nivel 4 (2026-09-17, por MCP sobre la app de desarrollo, tres páginas)
+
+| Página | Qué pasó | Del pedido al clic | Total |
+|---|---|---|---|
+| GitHub, «Pull requests» (2.ª puerta) | vivo en el mapa: sin mirar otra vez; escalera «Fisico»; el ListItem no navegó y la mano reintentó con doble clic | ~1 s | 6,5 s |
+| Hacker News, «past» recién llegado | el mapa no la tenía viva; **miró otra vez (1,5 s, 167 elementos) y la pulsó**; escalera «Patron → Fisico» | ~2 s | 4,4 s |
+| Wikipedia, «Random article» (menú plegado, no está en UIA) | miró dos veces (1,1 s y 1,0 s) y se rindió con «no lo conozco» y lo vivo | — | 6,3 s |
+
+Lo que queda después del clic son el reloj de «cambió la pantalla» (1,8 s) y el inventario del acto: eso no
+es de esta spec. Y lo que la persona vive como «demora entre pulsando y el clic» tiene ahora nombre en el
+log: `miré otra vez … en N ms` y `señalar «…»: leí la ventana en N ms`.
+
+**Estado:** fase 1 implementada el 2026-09-17; contrato 236/236, 0 pendientes.
