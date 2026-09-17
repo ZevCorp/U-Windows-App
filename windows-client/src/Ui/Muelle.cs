@@ -38,8 +38,16 @@ namespace U.WindowsClient.Ui;
 /// entera, abrir el menú desplazaría la pestaña y el cursor se quedaría fuera de lo que acababa de
 /// tocar — que es la forma clásica de que un menú por hover parpadee.
 /// </remarks>
-public sealed class Muelle : Window
+public sealed class Muelle : Window, AnfitrionDeLaCarita
 {
+    // ── Como anfitrión de la carita (promesa 272) ────────────────────────────
+    public string Nombre => "muelle";
+
+    /// <summary>El hueco de la silla dentro del panel. Lo pone FaceWindow, que es quien tiene el XAML.</summary>
+    public Decorator Hueco { get; set; } = new();
+
+    public Window Ventana => this;
+
     /// <summary>Blanco del gesto de la pestaña. El dibujo son <see cref="AnchoDibujo"/>.</summary>
     private const double AnchoPestana = 14, AltoPestana = 64, AnchoDibujo = 5;
 
