@@ -183,6 +183,12 @@ internal static class Contrato
         // «SESIÓN ABIERTA» NO ES «SOCKET CONECTADO» (2026-09-13, nivel 4 del 12). La línea salía al conectar, y con la
         // cuenta sin crédito salió en el mismo segundo que el error: el conductor la tomó por voz abierta. GPT-Live ya
         // confirmaba (la 49); GPT Realtime, el respaldo, no. Del 50 al 52 son de la rama de la apertura.
+        // VER COMO PARA COMPUTER USE (spec 027, fase 4, 2026-09-17, elegido por el dueño). Mandar la foto entera
+        // no basta si el mensaje no dice qué detalle hace falta: el servidor la reduce al otro lado y el trabajo
+        // de subirla a resolución de pantalla se tira. La documentación de OpenAI pide el detalle fino justo
+        // para OCR, objetos pequeños y computer use.
+        Prueba("55. la foto por referencia viaja DECLARADA para computer use: el mensaje lleva el nivel de detalle que impide que el servidor la reduzca al otro lado, y sigue sin llevar un solo byte de imagen dentro", LaFotoViajaDeclaradaParaVerBien);
+
         Prueba("50. GPT Realtime confirma la apertura con lo primero que manda su servidor al conectar: declara que confirma, session.created es un Hecho.Abierta, y ni un error, ni session.updated, ni ningún otro mensaje lo es", GptRealtimeConfirmaLaApertura);
 
         Console.WriteLine();
@@ -196,6 +202,21 @@ internal static class Contrato
     }
 
     // ── Las promesas ─────────────────────────────────────────────────────────
+
+    private static void LaFotoViajaDeclaradaParaVerBien()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "55"); return; }
+
+        string msg = p.FotogramaPorReferencia("file-abc123");
+        Debe(msg.Contains("\"detail\"", StringComparison.Ordinal),
+            $"el mensaje declara el detalle con el que quiere que se mire: «{(msg.Length <= 200 ? msg : msg[..200])}»");
+        Debe(!msg.Contains("\"detail\":\"low\"", StringComparison.Ordinal),
+            "y no es el detalle bajo, que es el que reduce la foto a 512 y tira el trabajo de mandarla entera");
+        Debe(msg.Contains("file-abc123", StringComparison.Ordinal) && msg.Length < 300,
+            $"y sigue viajando por referencia, sin un byte de imagen dentro ({msg.Length} bytes)");
+    }
+
 
     /// <remarks>
     /// EL FALLO QUE ESTO IMPIDE: suponer el códec. El CV1 declara 21 (Opus FS320, tramas de 20 ms) y

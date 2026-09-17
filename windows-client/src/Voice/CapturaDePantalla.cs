@@ -19,9 +19,56 @@ namespace U.WindowsClient.Voice;
 /// </summary>
 public static class CapturaDePantalla
 {
-    /// <summary>Ancho al que se reduce. 1024 basta para leer botones y no dispara el coste.</summary>
-    private const int AnchoMaximo = 1024;
-    private const long Calidad = 60L;
+    /// <summary>
+    /// EL PRESUPUESTO DEL SERVIDOR, que es lo que decide el tamaño —no un tope puesto a ojo—.
+    /// </summary>
+    /// <remarks>
+    /// AQUÍ HABÍA UN TOPE DE 1024 PX y venía de otra época: cuando la imagen viajaba INCRUSTADA en el
+    /// mensaje y tenía que caber en un buzón de 32.768 bytes. Desde que viaja por referencia (spec 027,
+    /// fase 1) no tiene que caber en nada de eso, así que reducir era maquinaria de compensación de una
+    /// limitación que ya no existe —aprendizaje nº6—.
+    ///
+    /// LO QUE MANDA AHORA es lo que OpenAI cobra. Para la familia gpt-5.x el cobro va por PARCHES de
+    /// 32×32 píxeles: tokens = ceil(ceil(w/32) · ceil(h/32) · 1,2). El detalle alto admite 2.500 parches y
+    /// 2.048 píxeles de lado. Una pantalla de 1080p son 60×34 = 2.040 parches —entra ENTERA— y cuesta
+    /// 2.448 tokens por mirada; una 4K no entra y se reduce hasta caber, no por gusto.
+    ///
+    /// SE TRATA COMO COMPUTER USE, elegido por el dueño el 2026-09-17, y es lo que la documentación de
+    /// OpenAI pide justo para eso: detalle fino para OCR, objetos pequeños y computer use.
+    /// </remarks>
+    public const int ParchesMaximos = 2500;
+
+    /// <summary>El lado máximo que admite el detalle alto.</summary>
+    public const int LadoMaximo = 2048;
+
+    /// <summary>Calidad JPEG. Sube de 60 a 85 por lo mismo: la foto es para leer la pantalla, no para pesar poco.</summary>
+    private const long Calidad = 85L;
+
+    /// <summary>Cuántos parches de 32 px cuesta una imagen de ese tamaño.</summary>
+    public static int Parches(int ancho, int alto) => (int)(Math.Ceiling(ancho / 32.0) * Math.Ceiling(alto / 32.0));
+
+    /// <summary>
+    /// A qué tamaño viaja una pantalla de ese tamaño. Pura, para que el contrato la pueda juzgar sin
+    /// pantalla (promesa 256).
+    /// </summary>
+    public static (int Ancho, int Alto) Medida(int ancho, int alto)
+    {
+        if (ancho <= 0 || alto <= 0) return (Math.Max(1, ancho), Math.Max(1, alto));
+
+        // NUNCA SE AGRANDA: inventar píxeles no añade nada que ver y sí lo que cobrar.
+        double escala = Math.Min(1.0, Math.Min((double)LadoMaximo / ancho, (double)LadoMaximo / alto));
+        int w = Math.Max(1, (int)Math.Round(ancho * escala));
+        int h = Math.Max(1, (int)Math.Round(alto * escala));
+
+        // Y SOLO HASTA CABER, de a poco, para no pasarse de largo y tirar detalle que sí cabía.
+        while (Parches(w, h) > ParchesMaximos && escala > 0.05)
+        {
+            escala *= 0.97;
+            w = Math.Max(1, (int)Math.Round(ancho * escala));
+            h = Math.Max(1, (int)Math.Round(alto * escala));
+        }
+        return (w, h);
+    }
 
     /// <summary>Un fotograma de AHORA MISMO, comprimido a JPEG. Null si algo impidió capturarlo.</summary>
     public static byte[]? Capturar()
@@ -38,9 +85,8 @@ public static class CapturaDePantalla
             DibujarCursor(g);
         }
 
-        double escala = Math.Min(1.0, (double)AnchoMaximo / completa.Width);
-        int w = Math.Max(1, (int)(completa.Width * escala));
-        int h = Math.Max(1, (int)(completa.Height * escala));
+        var (w, h) = Medida(completa.Width, completa.Height);
+        if (w == completa.Width && h == completa.Height) return AJpeg(completa);
 
         using var reducida = new Bitmap(w, h, PixelFormat.Format24bppRgb);
         using (var g2 = Graphics.FromImage(reducida))
@@ -49,13 +95,17 @@ public static class CapturaDePantalla
             g2.DrawImage(completa, 0, 0, w, h);
         }
 
+        return AJpeg(reducida);
+    }
+
+    private static byte[]? AJpeg(Bitmap bmp)
+    {
         var codec = ImageCodecInfo.GetImageEncoders().FirstOrDefault(c => c.MimeType == "image/jpeg");
         if (codec == null) return null;
         using var parametros = new EncoderParameters(1);
         parametros.Param[0] = new EncoderParameter(Encoder.Quality, Calidad);
-
         using var ms = new MemoryStream();
-        reducida.Save(ms, codec, parametros);
+        bmp.Save(ms, codec, parametros);
         return ms.ToArray();
     }
 

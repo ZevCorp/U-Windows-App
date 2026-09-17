@@ -118,6 +118,63 @@ public sealed class AlbumDeMiradas
                           .FirstOrDefault();
     }
 
+    /// <summary>Lo que se le contesta a quien pide una mirada: la foto si la hay, y siempre el relato.</summary>
+    public sealed record Recuerdo(Ficha? Ficha, string Cuenta);
+
+    /// <summary>
+    /// LA PUERTA DEL ÁLBUM. Promesa 258 (spec 027).
+    /// </summary>
+    /// <remarks>
+    /// SIN ESTO LA MEMORIA NO EXISTÍA PARA QUIEN TENÍA QUE USARLA. El 2026-09-17 el dueño le pidió a Ü que
+    /// recordara una investigación y la foto de aquel momento, y contestó que no tenía ninguna: `UltimaDe`
+    /// estaba escrita y no la llamaba nadie. Construir la memoria y no darle forma de consultarla es
+    /// exactamente el «código inerte» que este repo persigue, sólo que del lado que no se ve.
+    ///
+    /// Y DE UN SITIO QUE NO TIENE NO SE CALLA: se dice QUÉ sí recuerda. Contestar «no hay nada» sobre una
+    /// memoria que sí tiene fotos es lo que hizo creer que el álbum no existía.
+    /// </remarks>
+    public Recuerdo LoQueRecuerdo(string ubicacion)
+    {
+        string pido = (ubicacion ?? "").Trim();
+        var f = UltimaDe(pido) ?? PorParecido(pido);
+        if (f != null)
+        {
+            string hace = Hace(_ahora() - f.Cuando);
+            return new Recuerdo(f, $"Esto es lo que había en «{f.Ubicacion}» {hace}"
+                + (f.QuePasaba.Length > 0 ? $", mientras: {f.QuePasaba}." : "."));
+        }
+
+        var tengo = Todas;
+        if (tengo.Count == 0)
+            return new Recuerdo(null, "Todavía no tengo ninguna foto guardada: no he pasado por ningún sitio "
+                + "desde que arranqué, o las que había ya caducaron.");
+
+        string lista = string.Join("; ", tengo.Take(12).Select(x =>
+            $"«{x.Ubicacion}» ({Hace(_ahora() - x.Cuando)}{(x.QuePasaba.Length > 0 ? ", " + x.QuePasaba : "")})"));
+        return new Recuerdo(null, $"No tengo ninguna foto de «{pido}». Sí recuerdo: {lista}. "
+            + "Pídeme una de ésas por su nombre.");
+    }
+
+    /// <summary>Si piden «google» y lo que hay es «web://google.com», es lo mismo. El modelo habla como una persona.</summary>
+    private Ficha? PorParecido(string pido)
+    {
+        if (pido.Length < 3) return null;
+        lock (_candado)
+            return _fichas.Where(f => f.Ubicacion.Contains(pido, StringComparison.OrdinalIgnoreCase)
+                                   || pido.Contains(f.Ubicacion, StringComparison.OrdinalIgnoreCase))
+                          .OrderByDescending(f => f.Cuando)
+                          .FirstOrDefault();
+    }
+
+    private static string Hace(long ms)
+    {
+        if (ms < 60_000) return "hace un momento";
+        long min = ms / 60_000;
+        if (min < 60) return $"hace {min} minuto(s)";
+        long horas = min / 60;
+        return horas < 24 ? $"hace {horas} hora(s)" : $"hace {horas / 24} día(s)";
+    }
+
     /// <summary>Lo que el álbum recuerda ahora mismo, de lo más nuevo a lo más viejo.</summary>
     public IReadOnlyList<Ficha> Todas { get { lock (_candado) return _fichas.OrderByDescending(f => f.Cuando).ToList(); } }
 

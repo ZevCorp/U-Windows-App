@@ -260,6 +260,10 @@ public sealed class MapaVivo : IDisposable
             if (aqui.Length == 0) return;
             if (aqui.Equals(_anterior, StringComparison.OrdinalIgnoreCase)) return;
 
+            // UNA MIRADA POR CAMBIO DE SITIO (promesa 257). Aquí es donde consta que cambiamos, y es el
+            // único punto del programa que lo sabe sin volver a preguntarle a la pantalla.
+            GuardarLaMiradaDeEsteSitio(_anterior, aqui);
+
             var clic = Clics?.Last;
             var cuando = DateTime.UtcNow;
 
@@ -472,6 +476,46 @@ public sealed class MapaVivo : IDisposable
 
     /// <summary>Para decir «estoy ciego» UNA vez y no cuatro veces por segundo mientras dure.</summary>
     private bool _yaDijeQueEstoyCiego;
+
+    /// <summary>
+    /// GUARDA LO QUE HAY AL LLEGAR A UN SITIO NUEVO. Promesa 257 (spec 027).
+    /// </summary>
+    /// <remarks>
+    /// EN OTRO HILO Y CON UN RESPIRO, y las dos cosas por un motivo:
+    ///
+    ///   · EN OTRO HILO porque capturar y comprimir una pantalla de 1080p cuesta decenas de milisegundos
+    ///     y este bucle sondea la ubicación cada 250 ms. Bloquearlo aquí sería el aprendizaje nº14 otra
+    ///     vez: encarecer la vuelta antes de arreglar nada.
+    ///   · CON UN RESPIRO porque la pantalla del sitio nuevo tarda en pintarse. Capturar en el instante
+    ///     exacto del cambio guarda el cuadro a medio pintar, que es una foto que engaña al mirarla
+    ///     después —y una caja que miente es peor que no tener caja (aprendizaje nº4)—.
+    /// </remarks>
+    private static void GuardarLaMiradaDeEsteSitio(string antes, string ahora)
+    {
+        try
+        {
+            var album = AlbumDeMiradas.Suyo;
+            long reloj = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            long ultima = album.UltimaDe(ahora)?.Cuando ?? 0;
+            if (!CuandoSeMira.HayQueGuardar(antes, ahora, ultima, reloj, CuandoSeMira.FrescuraMs)) return;
+
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    await System.Threading.Tasks.Task.Delay(500);
+                    var jpeg = Voice.CapturaDePantalla.Capturar();
+                    if (jpeg == null) return;
+                    string que = Actions.Freno.Tarea.Length > 0 ? Actions.Freno.Tarea : "pasando por aquí";
+                    var ficha = album.Guardar(jpeg, ahora, que);
+                    if (ficha != null)
+                        LogBus.Log("album", $"mirada de «{ahora}» guardada al llegar ({jpeg.Length} bytes) · mientras: {que}");
+                }
+                catch (Exception e) { LogBus.Log("album", $"no pude guardar la mirada al llegar: {e.Message}"); }
+            });
+        }
+        catch (Exception e) { LogBus.Log("album", $"no pude decidir si guardar la mirada: {e.Message}"); }
+    }
 
     /// <summary>
     /// LA MITAD CARA, a su ritmo: qué hay en la pantalla de delante. Cuesta unos 400 ms de lectura
