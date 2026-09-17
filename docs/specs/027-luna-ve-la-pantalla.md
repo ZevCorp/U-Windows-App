@@ -112,10 +112,50 @@ servidor acepta la referencia, no que nuestro código se la deje leer.
 ### Límites dichos, no escondidos
 
 - La captura sale de la máquina hacia OpenAI, igual que hoy sale el audio. Lo que cambia es que ahora
-  llega entera en vez de no llegar.
+  llega en vez de no llegar.
+- **Y no llega entera, todavía.** `CapturaDePantalla` reduce a 1024 px de ancho y comprime a calidad
+  60 —eso es lo que hace que pese 50 KB—, y esa reducción existía porque la imagen tenía que caber
+  INCRUSTADA en un buzón de 32.768 bytes. Por referencia ya no tiene que caber, así que la reducción
+  es maquinaria de compensación de una limitación que se fue: el aprendizaje nº6, pendiente de
+  aplicar. El dueño lo pidió explícitamente —«no quiero que Luna tenga que ver imágenes comprimidas
+  de baja calidad»—, y va en su propia fase para no meter un tercer cambio de comportamiento en una
+  rama que ya lleva dos.
+- Las 294 fotos de recuerdos que ya estaban en PNG se quedan en PNG: su ruta vive dentro del grafo y
+  reescribirla es otro trabajo. Las nuevas salen en JPEG, y las viejas van cayendo al envejecer.
 - El borrado depende de que la API conteste; si falla, queda anotado en el log y el archivo caduca
   igualmente por la política de la cuenta.
 - Esto no acelera nada: quita una ceguera.
+
+
+### La evidencia de nivel 4 de la fase 2, por el camino de la app (2026-09-17)
+
+Una sonda que construye la clase de verdad —`ConversacionEnVivo`— contra el servidor de verdad, abre
+sesión y le pide mirar como se lo pide el modelo. Lo que contestó Luna:
+
+> «Estabas en una aplicación oscura de conversaciones, con una barra lateral de proyectos. Tenías un
+> chat en el centro y estaba desplegado un menú contextual sobre un texto seleccionado. Ahí aparecían
+> opciones para pegar, hacer clic con el botón derecho y otras acciones similares.»
+
+Era exactamente lo que había en pantalla. Y el log, que es lo que la vez pasada delataba el fallo:
+
+```
+00:14:12  album: mirada guardada en «uia://claude.exe/claude»: 1789622052065-…jpg (50258 bytes)
+00:14:13  voz-viva: mirada subida: 50258 bytes → file-JRXKBxyYWTmtgp1SAE7poL
+00:14:46  voz-viva: mirada borrada de OpenAI: file-JRXKBxyYWTmtgp1SAE7poL
+```
+
+Treinta y tres segundos, no ocho: se retiró **al cerrar la sesión**. Y «Files [...] were not found»
+aparece **cero** veces, contra las tres de la corrida del día anterior.
+
+El sabotaje, con el código ya commiteado para que revertirlo no se lleve por delante la
+implementación —error cometido en esta misma sesión—:
+
+| Qué se rompe | Qué se pone rojo |
+|---|---|
+| `SubirAsync` vuelve a quedarse solo con la última | 250, con «borradas: file-2» |
+| Vuelven el `Task.Delay(8 s)` y el `SoltarAsync` | 254, con «8010 ms» y «la copia SIGUE en OpenAI» |
+| `EsJpeg` acepta cualquier cosa | 255, «lo que no es JPEG no entra» |
+| La poda por tamaño empieza por la más nueva | 255, «la que se va es la MÁS VIEJA» |
 
 ## Las fases
 
