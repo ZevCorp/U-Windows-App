@@ -116,7 +116,16 @@ public partial class FaceWindow
         MoveTo(asiento.X, asiento.Y);
         ShowActivated = false;
         Show();
-        LogBus.Log("viaje", $"la carita se suelta en «{EscritorioVirtual.Nombre(_suEscritorio)}» desde ({asiento.X:0},{asiento.Y:0}) y se posa en su borde");
+        // ESCONDIDA NO VIAJA (medido el 2026-09-17, primera corrida a mano): la carita iba oculta durante
+        // el viaje, «mover» contestó S_OK para las tres ventanas, y al enseñarla apareció en OTRO
+        // escritorio —el sistema no asigna escritorio a una ventana que no se ve—. Ya a la vista, se
+        // mueve otra vez y se comprueba dónde quedó, en vez de fiarse del S_OK de antes.
+        var hwnd = new WindowInteropHelper(this).Handle;
+        int hr = EscritorioVirtual.Mover(hwnd, _suEscritorio);
+        var donde = EscritorioVirtual.EscritorioDe(hwnd);
+        LogBus.Log("viaje", $"la carita se suelta en «{EscritorioVirtual.Nombre(_suEscritorio)}» desde ({asiento.X:0},{asiento.Y:0}) y se posa en su borde "
+                          + $"(ya a la vista: mover → 0x{hr:X8}, está en «{EscritorioVirtual.Nombre(donde)}»)");
+        if (donde != _suEscritorio) LogBus.Log("viaje", "✋ la carita no quedó en su escritorio: el sistema la puso en otro");
         EdgeSnap.Aplicar(this, 0, 0, OnWindowMoved);
     }
 
