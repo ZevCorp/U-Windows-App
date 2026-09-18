@@ -1,6 +1,6 @@
 # Esperar es suscribirse: un solo lector de pantalla, y el paso que no espera lo que ya pasó
 
-Estado: **propuesta, sin código** · 2026-09-18 · Rama de docs: `docs/spec-038-esperar-es-suscribirse`
+Estado: **primer corte implementado (promesa 296); 297-300 propuestas** · 2026-09-18 · Rama: `jose/la-puerta-que-lleva-aqui`
 
 > Fase 4 de `docs/plan-clics-en-tiempo-real.md`: la que abarata cada clic. Sale del reloj por fase que
 > el tramo (spec 037, PR #87) deja en el log desde `d3238f8`, medido sobre el Explorador y
@@ -50,6 +50,59 @@ desaparece con el segundo.
 | **298** | **Esperar no lee**: esperar a que cambie la pantalla es esperar a que suba la versión del observador o se agote el presupuesto, y despierta en el instante del cambio, no en el siguiente sondeo del que espera. Mientras alguien espera, el observador acelera a ~120 ms; en reposo, 800. |
 | **299** | **La compuerta de antes de actuar sigue mirando ahora** (spec 020): el observador no la sustituye ahí, porque ahí se juega la corrección; y SAP, que no admite la compuerta barata de hwnd+título, sigue por su camino con `Busy`. |
 | **300** | **La detección no tarda más que la cadencia acelerada**: un cambio de pantalla se ve en menos de 250 ms desde que ocurre, medido con el reloj y no contando vueltas. |
+
+## El primer corte, hecho y medido: la promesa 296 (2026-09-18, 08:35)
+
+**La 296 quedó más estrecha y más segura que la propuesta de arriba**, porque el log dijo otra cosa que la
+hipótesis. El paso de 6.157 ms no era «una espera larga»: eran **tres gestos con tres esperas** —clic, el
+ENSAYO con doble clic FÍSICO, y la repetición de la 248— sobre una puerta que, desde «Disco local», el
+paso anterior acababa de aprender que lleva a la pantalla donde ya estábamos. La regla (`LlevaAqui`, pura):
+**la misma puerta, vista desde otra pantalla, lleva aquí → desde aquí no navega: un clic y una espera, sin
+ensayo ni repetición.** Va después de la primera espera: si la pantalla sí cambia (un «Siguiente» que vive
+en todas las páginas), manda lo que pasó.
+
+No es «su destino es donde estoy»: el grafo guarda el destino por pantalla y rechaza las aristas a sí
+mismas, así que esa frase no se cumple nunca.
+
+| Paso que no cambia · «pulsar» | antes | ahora |
+|---|---|---|
+| total | **6.157 ms**, 3 gestos (uno, doble clic físico) | **2.094 – 3.772 ms**, 1 gesto |
+| la mano | — | 239-282 ms |
+| esperar el cambio | 3 × 1.800 | 1 × 1.801 (17-18 sondeos de «dónde»: ya es barato, ~100 ms cada uno) |
+| consultar al terreno | — | <20 ms |
+
+Paso que sí cambia: 524 ms, con **0 ms de espera** (el cambio se ve en el primer sondeo). Sabotaje: sin la
+regla, `[clic · doubleclick · clic]`, tres esperas y «no cambió» a secas; solo cae la 296. Las 82, 83 y 248
+siguen verdes. Y el detector de bucle del tramo (292) disparó en vivo: «pulsé la misma puerta tres veces».
+
+**Nivel 4: DOS pantallas — el Explorador y Wikipedia en Chrome.** En el Explorador, dos corridas y cuatro
+disparos de la regla en el log (`…lleva justo a donde ya estamos: ni lo ensayo ni lo repito`). La segunda
+pantalla llegó después (2026-09-18, 09:28, con la rama rebasada sobre la 297): desde
+«Discusión:Guatapé» se pulsa «Artículo», navega y el terreno aprende a dónde lleva; ya en el artículo se
+pulsa «Artículo» otra vez:
+
+```
+[09:28:12] mano: ⏱ pulsar «Artículo»: la mano 366 ms · esperar el cambio 188 ms (2 sondeo(s) de «dónde») · cambió
+[09:28:20] mano: ⏱ pulsar «Artículo»: la mano 554 ms · esperar el cambio 1808 ms (13 sondeo(s) de «dónde») · no cambió
+[09:28:20] mano: «Artículo» no movió nada y el terreno sabe que lleva justo a donde ya estamos: ni lo ensayo ni lo repito
+```
+
+Un gesto y una espera; `map_decidir` entero, 3.060 ms. Los dos primeros intentos de segunda pantalla habían
+fallado por motivos que no son de la 296: en Configuración el lector solo ve el marco
+(`ApplicationFrameHost`, 4 puertas); en la portada de Wikipedia el enlace que hacía falta no estaba entre
+las puertas ofrecidas. La lógica está además juzgada sin pantalla, con sus tres casos.
+
+## Lo que el nivel 4 enseñó, y cambia el orden de lo que sigue
+
+1. **Leer una página web cuesta ~5 s** (Wikipedia, `map_decidir` sin accionar: 5.240 y 4.901 ms — lectura
+   pura). En el Explorador, 1,3-1,8 s. **Leer es ya el coste dominante de un paso**, por encima de la
+   espera de 1,8 s. La 297/298 (un solo lector, esperar no lee) deja de ser limpieza: es la palanca.
+2. **Jev no puede elegir lo que no se le enseña.** Wikipedia tenía 141 puertas y se ofrecieron 89; el
+   Explorador tenía 404 y se ofrecieron 61. Las dos veces la puerta buena («Actualidad», «Windows») quedó
+   fuera. Medido en la fase 1: a Jev le da igual recibir 20 o 160 (345 · 322 · 350 ms). **El tope de
+   `map_what_i_see` (60 de UIA + 160 del terreno) es para el modelo de voz, no para Jev**: el decisor
+   debería ver todas, o las primeras N por relevancia. Es una promesa aparte, barata y de alto valor.
+3. La espera única de 1,8 s cuando nada cambia sigue ahí: es la 298.
 
 ## Por qué en este orden, y qué compra cada una
 

@@ -789,6 +789,9 @@ internal static class Contrato
         Prueba("295. la voz se entera sin preguntar: al parar, la cuenta entra a la sesión de voz como un mensaje, una sola vez por tramo; sin sesión de voz, la cuenta queda para map_tramo_estado", LaVozSeEnteraSinPreguntar);
         Prueba("290. el interruptor en vivo: encender deja map_decidir en el catálogo y un decisor en el mapa; apagar deja el catálogo byte a byte como sin decisor y el mapa sin decisor; las dos cosas re-mandan el catálogo a la voz; pedir encender sin clave ni modo válido se queda apagado y dice por qué; y el estado se lee en una línea", ElInterruptorEnVivo);
 
+        // ── Spec 038: esperar es suscribirse (primer corte) ─────────────────────────────────────
+        Prueba("296. una puerta que ya se vio llevar a donde estamos no se ensaya ni se repite: desde aquí no navega, así que bastan un clic y una espera —ni doble clic de ensayo, ni la repetición de la 248—; la cuenta dice que ya estás donde lleva; si la pantalla SÍ cambia se cuenta como siempre; y una puerta que lleva a otro sitio sigue repitiéndose una vez", UnaPuertaQueLlevaAquiNoSeEnsayaNiSeRepite);
+
         // ── Spec 038: leer es una llamada ───────────────────────────────────────────────────────
         Prueba("297. leer la pantalla es recorrer lo que UNA petición trajo: el recorrido recibe el árbol ya traído y no navega; recoge lo mismo que antes —accionable, visible, con etiqueta (nombre, o id, o ayuda) y con geometría, en orden de lectura, con los mismos topes: 40 niveles, y pasados los 400 elementos no se entra en más ramas—; si la petición con caché falla se lee nodo a nodo como antes; y el lector dice cuál de los dos caminos usó y por qué", LeerEsRecorrerLoQueUnaPeticionTrajo);
         Console.WriteLine();
@@ -12302,6 +12305,76 @@ internal static class Contrato
         Debe((string)conRespaldo.Invoke(null, a2)! == "lento", "si falla, se lee nodo a nodo como antes");
         Debe(((string)a2[2]!).Contains("nodo a nodo", StringComparison.OrdinalIgnoreCase) && ((string)a2[2]!).Contains("InvalidOperationException"),
             $"y se dice que fue nodo a nodo y por qué («{a2[2]}»)");
+    }
+
+    // ── Spec 038, primer corte ───────────────────────────────────────────────────────────────────
+
+    private static void UnaPuertaQueLlevaAquiNoSeEnsayaNiSeRepite()
+    {
+        // MEDIDO EL 2026-09-18 A LAS 05:51, con el reloj por fase del tramo: estando YA en Descargas, pulsar
+        // el TreeItem «Descargas» costó 6.157 ms en «pulsar». El log, gesto a gesto: clic (:24), 1,8 s; el
+        // ENSAYO con doble clic FÍSICO (:26), 1,8 s; «no movió nada y el terreno sabe que lleva a algún sitio:
+        // lo repito una vez» (:28), 1,8 s. Tres pulsaciones y tres esperas por un cambio imposible: esa misma
+        // puerta, desde «Disco local», se acababa de aprender que lleva justo a donde ya estábamos.
+        var t = Capacidad("U.WindowsClient.Navigation.PulsarSegunElNucleo");
+        var llevaAqui = t?.GetMethod("LlevaAqui", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || llevaAqui == null)
+        {
+            Pendiente("Navigation.PulsarSegunElNucleo.LlevaAqui", "296", "038");
+            return;
+        }
+
+        var arbol = new Nucleo.Elemento("uia:name=Descargas;ct=TreeItem", "Descargas", "TreeItem");
+        var siguiente = new Nucleo.Elemento("uia:name=Siguiente;ct=Button", "Siguiente", "Button");
+        var redactar = new Nucleo.Elemento("uia:name=Compose;ct=Button", "Compose", "Button");
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x/raiz", new[] { arbol });
+        g.Observar("uia://x/descargas", new[] { arbol });
+        g.Observar("uia://x/otra", new[] { arbol });
+        g.Cruzar("uia://x/raiz", arbol.Selector, "uia://x/descargas");
+        // El saber viejo que disparaba la 248 en la corrida real: desde Descargas, esa puerta alguna vez llevó a otro sitio.
+        g.Cruzar("uia://x/descargas", arbol.Selector, "uia://x/otra");
+
+        bool L(string selector, string desde) => (bool)llevaAqui.Invoke(null, new object[] { g, selector, desde })!;
+        Debe(L(arbol.Selector, "uia://x/descargas"), "la regla pura: esa puerta, desde otro sitio, lleva justo a donde estamos");
+        Debe(!L(arbol.Selector, "uia://x/raiz"), "desde «raíz» no: ninguna arista suya lleva a «raíz»");
+        Debe(!L(siguiente.Selector, "uia://x/descargas"), "y de una puerta de la que no se sabe nada, tampoco");
+        Debe(!L("", "uia://x/descargas") && !L(arbol.Selector, ""), "vacío no es saber (patrón nº9)");
+
+        // EL COMPORTAMIENTO: un gesto y una espera, no tres y tres.
+        var gestos = new List<string>();
+        var pulsar = new PulsarSegunElNucleo(g, () => "uia://x/descargas",
+            (sel, et, gesto) => { gestos.Add(gesto.Length == 0 ? "clic" : gesto); return true; }) { EsperaMaximaMs = 200 };
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        var r = pulsar.Pulsa(arbol.Selector, "Descargas");
+        reloj.Stop();
+        Debe(gestos.Count == 1 && gestos[0] == "clic",
+            $"un solo gesto: ni el doble clic de ensayo ni la repetición de la 248 (hizo [{string.Join(" · ", gestos)}])");
+        Debe(reloj.ElapsedMilliseconds < 450, $"y una sola espera, no tres ({reloj.ElapsedMilliseconds} ms con un presupuesto de 200)");
+        Debe(r.SePudo && !r.CambioLaPantalla && r.Cuenta.Contains("ya estás", StringComparison.OrdinalIgnoreCase),
+            $"la cuenta dice que ya estás donde lleva, en vez de un «no cambió» a secas («{r.Cuenta}»)");
+
+        // LA 248 SIGUE EN PIE para lo suyo: una puerta que lleva a OTRO sitio y no movió nada, se repite una vez.
+        g.Observar("uia://x/correo", new[] { redactar });
+        g.Observar("uia://x/redaccion", new[] { redactar });
+        g.Cruzar("uia://x/correo", redactar.Selector, "uia://x/redaccion");
+        var gestos2 = new List<string>();
+        var pulsar2 = new PulsarSegunElNucleo(g, () => "uia://x/correo",
+            (sel, et, gesto) => { gestos2.Add(gesto.Length == 0 ? "clic" : gesto); return true; }) { EsperaMaximaMs = 120 };
+        pulsar2.Pulsa(redactar.Selector, "Compose");
+        Debe(gestos2.Count == 2, $"el «Compose» que se perdió se sigue repitiendo una vez ({gestos2.Count} gesto(s)): la 248 no se toca");
+
+        // Y SI LA PANTALLA SÍ CAMBIA, SE CUENTA COMO SIEMPRE. Un «Siguiente» vive en todas las páginas: desde la 1
+        // lleva a la 2, y en la 2 la regla diría «lleva aquí» — pero lo que manda es lo que pasa, no lo que se sabía.
+        g.Observar("uia://x/p1", new[] { siguiente });
+        g.Observar("uia://x/p2", new[] { siguiente });
+        g.Observar("uia://x/p3", new[] { siguiente });
+        g.Cruzar("uia://x/p1", siguiente.Selector, "uia://x/p2");
+        string pagina = "uia://x/p2";
+        var pulsar3 = new PulsarSegunElNucleo(g, () => pagina, (sel, et, gesto) => { pagina = "uia://x/p3"; return true; }) { EsperaMaximaMs = 240 };
+        var r3 = pulsar3.Pulsa(siguiente.Selector, "Siguiente");
+        Debe(r3.CambioLaPantalla && r3.Hasta == "uia://x/p3",
+            $"el «Siguiente» que sí navega se cuenta como navegación aunque el terreno dijera «lleva aquí» (quedó en «{r3.Hasta}»)");
     }
 
     private static void Debe(bool condicion, string promesa)
