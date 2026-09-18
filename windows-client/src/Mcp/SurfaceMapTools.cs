@@ -253,7 +253,11 @@ public sealed class SurfaceMapTools
         }
         if (Decisor == null) return Sin("todavía no sé decidir: el decisor está apagado.", "el decisor está apagado");
 
+        // EL RELOJ DE CADA FASE, para el log del tramo: leer la pantalla, decidir, y pulsar (con la espera del
+        // cambio dentro). Es la medida que la fase 4 del plan necesita para saber qué recortar.
+        var relojLeer = System.Diagnostics.Stopwatch.StartNew();
         var (aqui, puertas, total) = PuertasDeAhora();
+        relojLeer.Stop();
         if (aqui.Length == 0) return Sin("no sé en qué pantalla estoy, así que no hay nada entre lo que decidir.", "no sé en qué pantalla estoy");
         if (total == 0) return Sin($"en «{aqui}» no veo ningún elemento accionable ahora mismo: nada entre lo que decidir.", "no veo ningún elemento accionable");
         // PUERTAS ÚNICAS Y NUMERADAS (promesa 287): «2) Detalles (RadioButton)». Con etiquetas a secas, en
@@ -312,8 +316,11 @@ public sealed class SurfaceMapTools
                 return Sin($"no se acciona: el decisor contestó «{id}», que no es ninguna de las {ids.Count} puertas ofrecidas. Decide Luna.",
                     $"contestó «{id}», que no se ofreció", d.Confianza);
             string numero = id.Substring(0, id.IndexOf(')'));
+            var relojPulsar = System.Diagnostics.Stopwatch.StartNew();
             string cuenta = Take(puerta.Selector, "", decir, recuerdo);
+            relojPulsar.Stop();
             var mano = _ultimaMano;
+            string tiempos = $"leer {relojLeer.ElapsedMilliseconds} ms · decidir {reloj.ElapsedMilliseconds} ms · pulsar {relojPulsar.ElapsedMilliseconds} ms";
             string medida = k == 0
                 ? $"con confianza {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}"
                 : $"con probabilidad {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}";
@@ -333,7 +340,7 @@ public sealed class SurfaceMapTools
                 relato.Append($"elegida «{puerta.Etiqueta}» ({numero}) {medida}: {cuenta}");
             bool termino = mano?.Termino == true;
             bool cambio = mano?.Logro == true;
-            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Etiqueta, numero, prob, relato.ToString(), d.Porque, false);
+            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Etiqueta, numero, prob, relato.ToString(), d.Porque, false, tiempos);
         }
         return Sin(relato.ToString(), "no quedó ninguna candidata", d.Confianza);
     }

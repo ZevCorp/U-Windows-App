@@ -37,7 +37,8 @@ public sealed class ElTramo
 
     /// <summary>Lo que pasó en un paso del tramo. Lo produce el mapa; el tramo solo lo lee.</summary>
     public readonly record struct Paso(
-        bool Actuo, bool Termino, bool Cambio, string Selector, string Etiqueta, string Numero, double Confianza, string Cuenta, string Porque, bool Cumplido);
+        bool Actuo, bool Termino, bool Cambio, string Selector, string Etiqueta, string Numero, double Confianza, string Cuenta, string Porque, bool Cumplido,
+        string Tiempos = "");
 
     /// <summary>Las manos del tramo, todas inyectables.</summary>
     public sealed record Manos(
@@ -202,7 +203,9 @@ public sealed class ElTramo
         string linea = hecho
             ? $"paso {k}: «{p.Etiqueta}» ({p.Numero}) conf {conf} · {(p.Termino ? (p.Cambio ? "cambió" : "no cambió") : "no pudo")}"
             : $"paso {k}: sin acción · {p.Porque}";
-        _manos.Log(linea);
+        // LOS TIEMPOS POR FASE VAN AL LOG Y NO AL NOTCH: son para medir la fase 4 del plan (esperar es
+        // suscribirse), y en el notch serían ruido.
+        _manos.Log(p.Tiempos.Length > 0 ? linea + " · " + p.Tiempos : linea);
         try { _manos.Progreso(linea); } catch { }
         lock (_candado) _pasos.Append(hecho ? $"«{p.Etiqueta}» ({p.Numero}) {(p.Termino ? "✓" : "✗")}, " : $"sin acción en el {k}, ");
     }
