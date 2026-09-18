@@ -794,6 +794,7 @@ internal static class Contrato
 
         // ── Spec 038: leer es una llamada ───────────────────────────────────────────────────────
         Prueba("297. leer la pantalla es recorrer lo que UNA petición trajo: el recorrido recibe el árbol ya traído y no navega; recoge lo mismo que antes —accionable, visible, con etiqueta (nombre, o id, o ayuda) y con geometría, en orden de lectura, con los mismos topes: 40 niveles, y pasados los 400 elementos no se entra en más ramas—; si la petición con caché falla se lee nodo a nodo como antes; y el lector dice cuál de los dos caminos usó y por qué", LeerEsRecorrerLoQueUnaPeticionTrajo);
+        Prueba("298. lo que la petición principal ya trajo no se vuelve a pedir ni se cuenta dos veces: una ventana hija cuya raíz ya venía en el árbol no se pide —ni una llamada— y sus elementos no salen repetidos; una hija que NO venía se pide una vez y sus elementos se añaden detrás, como antes; y el tope de elementos se gasta en elementos distintos, no en copias", LoQueYaVinoNoSeVuelveAPedir);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12375,6 +12376,76 @@ internal static class Contrato
         var r3 = pulsar3.Pulsa(siguiente.Selector, "Siguiente");
         Debe(r3.CambioLaPantalla && r3.Hasta == "uia://x/p3",
             $"el «Siguiente» que sí navega se cuenta como navegación aunque el terreno dijera «lleva aquí» (quedó en «{r3.Hasta}»)");
+    }
+
+    private static void LoQueYaVinoNoSeVuelveAPedir()
+    {
+        // MEDIDO EL 2026-09-18 CON UNA SONDA DE SOLO LECTURA sobre el Explorador («Descargas», 133 nodos en la
+        // petición principal): las SEIS ventanas hijas que el lector pedía aparte —DirectUIHWND ×2, SysTreeView32,
+        // SHELLDLL_DefView, DesktopChildSiteBridge, InputSiteWindowClass— traían 279 nodos y los 279 YA VENÍAN en la
+        // principal, por RuntimeId. Costaban 1,0-1,8 s de 2,8-4,1, y dejaban cada elemento dos o tres veces en la
+        // lista: de ahí que `C:\` diera 411 «elementos» y el tope de 400 se comiera carpetas de verdad. La limitación
+        // que las justificaba («FromHandle(principal) + descenso da 1 solo nodo», 2026-07-31) era del TreeWalker; con
+        // la petición con caché ya no es cierta. Se conserva el camino para la hija que NO venga: otro Windows puede
+        // comportarse distinto, y eso se decide mirando, no suponiendo.
+        var t = Capacidad("U.WindowsClient.Uia.UiaReader");
+        var todo = t?.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(x => x.Name == "RecogeConHijas" && x.IsGenericMethodDefinition);
+        if (t == null || todo == null)
+        {
+            Pendiente("Uia.UiaReader.RecogeConHijas<T>", "298", "038");
+            return;
+        }
+
+        // RecogeConHijas<T>(principal, hijas: (identidad de su raíz, cómo pedirla), hijos, leer, identidad, topeElementos, topeProfundidad)
+        var m = todo.MakeGenericMethod(typeof(NodoFalso));
+        Func<NodoFalso, IEnumerable<NodoFalso>> hijos = n => n.Hijos;
+        Func<NodoFalso, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer =
+            n => (n.Nombre, n.Id, n.Ayuda, n.Tipo, n.Accionable, n.Fuera, n.Caja, "");
+        Func<NodoFalso, string> identidad = n => "rt:" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(n);
+
+        List<string> Etiquetas(NodoFalso principal, List<(string, Func<NodoFalso>)> hijas, int tope = 400)
+        {
+            var r = (System.Collections.IEnumerable)m.Invoke(null, new object[] { principal, hijas, hijos, leer, identidad, tope, 40 })!;
+            var salida = new List<string>();
+            foreach (var x in r) salida.Add((string)x!.GetType().GetField("Item2")!.GetValue(x)!);
+            return salida;
+        }
+
+        // La ventana: una barra con «Atrás», y una lista de archivos que es ADEMÁS una ventana hija con su propio HWND.
+        var lista = new NodoFalso { Nombre = "lista de archivos", Accionable = false };
+        lista.Hijos.Add(new NodoFalso { Nombre = "informe.pdf", Tipo = "ListItem" });
+        lista.Hijos.Add(new NodoFalso { Nombre = "fotos", Tipo = "ListItem" });
+        var ventana = new NodoFalso { Nombre = "ventana", Accionable = false };
+        ventana.Hijos.Add(new NodoFalso { Nombre = "Atrás" });
+        ventana.Hijos.Add(lista);
+
+        // 1. LA HIJA YA VENÍA: no se pide, y nada sale repetido.
+        int pedidas = 0;
+        var e1 = Etiquetas(ventana, new() { (identidad(lista), () => { pedidas++; return lista; }) });
+        Debe(pedidas == 0, $"una ventana hija cuya raíz ya venía en la petición principal no se pide: se pidió {pedidas} vez/veces");
+        Debe(e1.SequenceEqual(new[] { "Atrás", "informe.pdf", "fotos" }), $"y sus elementos no salen repetidos; salió [{string.Join(" · ", e1)}]");
+
+        // 2. LA HIJA NO VENÍA (el árbol de la principal no la alcanza): se pide UNA vez y lo suyo va detrás, como antes.
+        var aparte = new NodoFalso { Nombre = "panel aparte", Accionable = false };
+        aparte.Hijos.Add(new NodoFalso { Nombre = "Vista previa" });
+        pedidas = 0;
+        var e2 = Etiquetas(ventana, new() { (identidad(lista), () => { pedidas += 100; return lista; }), (identidad(aparte), () => { pedidas++; return aparte; }) });
+        Debe(pedidas == 1, $"una hija que NO venía se pide una vez, y la que sí venía ninguna (contador: {pedidas})");
+        Debe(e2.SequenceEqual(new[] { "Atrás", "informe.pdf", "fotos", "Vista previa" }), $"y sus elementos se añaden detrás; salió [{string.Join(" · ", e2)}]");
+
+        // 3. UNA HIJA QUE FALLA AL PEDIRSE no tumba la lectura: lo demás se entrega.
+        var e3 = Etiquetas(ventana, new() { ("rt:rota", () => throw new InvalidOperationException("el elemento ya no existe")), (identidad(aparte), () => aparte) });
+        Debe(e3.SequenceEqual(new[] { "Atrás", "informe.pdf", "fotos", "Vista previa" }), $"una hija que lanza al pedirse no tumba lo demás; salió [{string.Join(" · ", e3)}]");
+
+        // 4. EL TOPE SE GASTA EN ELEMENTOS DISTINTOS. 300 archivos en una lista que además es ventana hija: antes
+        // entraban 300 + 300 copias y el tope cortaba a la siguiente; ahora entran los 300 y cabe lo que venga detrás.
+        var grande = new NodoFalso { Nombre = "lista grande", Accionable = false };
+        for (int i = 0; i < 300; i++) grande.Hijos.Add(new NodoFalso { Nombre = "f" + i, Tipo = "ListItem" });
+        var v2 = new NodoFalso { Nombre = "ventana", Accionable = false };
+        v2.Hijos.Add(grande);
+        var e4 = Etiquetas(v2, new() { (identidad(grande), () => grande), (identidad(aparte), () => aparte) });
+        Debe(e4.Count == 301 && e4.Distinct().Count() == 301 && e4.Last() == "Vista previa",
+            $"300 archivos y un botón son 301 elementos distintos, no 600 copias que llenan el tope: salieron {e4.Count} ({e4.Distinct().Count()} distintos), el último «{e4.LastOrDefault()}»");
     }
 
     private static void Debe(bool condicion, string promesa)
