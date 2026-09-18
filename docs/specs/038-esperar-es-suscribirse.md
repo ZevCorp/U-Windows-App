@@ -225,3 +225,85 @@ rendimiento no cambia lo que se ve; si el tope hay que moverlo, es otra promesa.
 - Configuración se lee por su marco (`ApplicationFrameHost`, 4 elementos) y no por su contenido
   (`SystemSettings`, 57): es anterior a este corte y no se toca aquí, pero deja a Jev sin puertas en
   esa app. Anotado.
+
+## El segundo corte del lector: lo que ya vino no se vuelve a pedir (promesa 298, 2026-09-18)
+
+> El número 298 era, en la tabla de arriba, «esperar no lee». Tampoco llegó a escribirse en
+> `Contrato.cs`, y lo tomó este corte por la misma razón que la 297: se midió primero. El observador
+> único queda en **299-300**, a renumerar cuando se abra su rama.
+
+### Qué se midió antes de escribir código
+
+Con la 297 y la 296 ya en `main`, el reloj por fase del tramo decía: paso que cambia de pantalla
+≈3 s, de los que **leer eran 1,1-2,2 s en el Explorador** aun con caché. Una sonda de solo lectura
+partió esa lectura en sus piezas (ventana «Descargas», dos vueltas):
+
+| Pieza | ms | Nodos | Ya venían en la principal (por `RuntimeId`) |
+|---|---|---|---|
+| petición principal | 746 · 841 | 133 | — |
+| hija `DirectUIHWND` | 437 · 608 | 76 | **76** |
+| hija `SysTreeView32` | 144 · 177 | 23 | **23** |
+| hija `SHELLDLL_DefView` | 142 · 331 | 44 | **44** |
+| hija `DirectUIHWND` | 126 · 369 | 43 | **43** |
+| hija `DesktopChildSiteBridge` | 94 · 178 | 47 | **47** |
+| hija `InputSiteWindowClass` | 74 · 114 | 46 | **46** |
+| menús (`FindAll`) | 1.021 · 1.498 | 1 menú | — |
+| **total** | **2.795 · 4.121** | | |
+
+Tres hechos:
+
+1. **Las seis ventanas hijas traían 279 nodos y los 279 ya venían.** Costaban 1,0-1,8 s y dejaban cada
+   elemento dos o tres veces en la lista — de ahí que `C:\` diera 411 «elementos» y el tope de 400 se
+   comiera carpetas de verdad (lo que cazó el nivel 4 de la 297 era el síntoma; esto es la causa).
+2. **El `FindAll` de los menús volvía a pedir el árbol entero** antes de buscar —error mío de la 297—:
+   ~1 s para encontrar cero. Sobre la raíz ya traída son ~150 ms.
+3. **Con el menú «Nuevo» abierto, sus 13 opciones también venían en la principal.**
+
+La limitación que justificaba las hijas («`FromHandle(principal)` + descenso da 1 solo nodo»,
+2026-07-31) era del `TreeWalker`, no de UI Automation (patrón nº6). **No se borra el camino, se
+condiciona**: la hija cuya raíz no venga se sigue pidiendo, y el `FindAll` de menús se conserva sobre
+la raíz ya traída — el 2026-08-02 los menús invisibles costaron caro, y otro Windows puede
+comportarse distinto. Eso se decide mirando, no suponiendo.
+
+### La promesa
+
+**298.** Lo que la petición principal ya trajo no se vuelve a pedir ni se cuenta dos veces: una
+ventana hija cuya raíz ya venía en el árbol no se pide —ni una llamada— y sus elementos no salen
+repetidos; una hija que NO venía se pide una vez y sus elementos se añaden detrás, como antes; y el
+tope de elementos se gasta en elementos distintos, no en copias.
+
+### Nivel 4: cuatro ventanas por la sonda, tres pantallas por la app
+
+**Los dos caminos sobre la MISMA ventana** (identidad = etiqueta + tipo + posición). Esta vez **deben**
+diferir, y solo en las copias:
+
+| Ventana | Nodo a nodo | Con caché | Distintos (los dos) | Faltan · sobran | Mismo orden |
+|---|---|---|---|---|---|
+| Explorador, Descargas | 3.073-3.174 ms · 259 | 1.138-1.187 ms · 131 | 80 = 80 | 0 · 0 | sí |
+| Explorador, `C:\` | 3.701-3.778 ms · 411 | 1.097-1.142 ms · 255 | 143 = 143 | 0 · 0 | sí |
+| Wikipedia «Guatapé» en Chrome | 3.680-3.843 ms · 172 | 584-594 ms · 172 | 172 = 172 | 0 · 0 | sí |
+| Configuración (`SystemSettings`) | 876-877 ms · 57 | 249-270 ms · 57 | 57 = 57 | 0 · 0 | sí |
+| Descargas **con el menú «Nuevo» abierto** | 1.137-1.400 ms · 283 | 463-468 ms · 155 | 104 = 104 | 0 · 0 | sí |
+
+**Por la app real** (`map_what_i_see` por MCP, tres vueltas):
+
+| Pantalla | `main` de esta mañana | Con la 297 | Con la 298 |
+|---|---|---|---|
+| Explorador, `C:\` | 3.239 · 3.458 · 3.256 ms (406 el.) | 2.064 · 1.918 · 1.586 ms (406 el.) | 1.341 · 1.882 · 1.950 ms (**250 el.**, mismas 61 puertas) |
+| Wikipedia «Medellín» | 26.587 · 25.608 · 37.694 ms | 5.040 · 5.208 · 6.184 ms | **1.965 · 2.902 · 1.948 ms** |
+| Configuración (el marco) | 82 · 100 · 95 ms | 78 · 97 · 96 ms | 123 · 122 · 74 ms |
+
+Ninguna lectura cayó al respaldo.
+
+**Sin adornos:**
+
+- En la web la lectura larga pasó de ~30 s a ~2 s en un día. En el Explorador el lector va en 1,1 s
+  pero `map_what_i_see` sigue en 1,3-1,9 s: lo que queda **ya no es del lector**, y es lo siguiente que
+  hay que abrir con el reloj (el terreno, el álbum, la compuerta).
+- El camino de respaldo (nodo a nodo) **sigue duplicando**: no se tocó, porque es el de antes y solo
+  corre si el proveedor rechaza la caché — que en cuatro ventanas no pasó ni una vez.
+- Dentro de la propia petición principal quedan etiquetas repetidas en la misma posición (131
+  elementos, 80 distintos en Descargas). Son del árbol de la app, los dos caminos las dan igual, y no
+  se tocan aquí.
+- La clase de error (leer UIA sin `CacheRequest`): de los 17 sitios siguen quedando 15; este corte no
+  arregla ninguno nuevo, afina los 2 de la 297.
