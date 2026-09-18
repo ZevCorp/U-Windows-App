@@ -80,3 +80,50 @@ verdad es otro sigue sin casar.
 - **Leer una página pesada vuelve a costar 2 s** (la guía de Fortinet, 86 elementos útiles): la 299 se
   rindió ahí a los 4,3 s y no a los 0,6. Probar a no pedir lo que está fuera de pantalla.
 - **Cero tramos**: Luna encadena `map_decidir` de uno en uno. Prompt y catálogo: spec 039.
+
+## Lo que pasó al implementarlas
+
+Promesas escritas y vistas en rojo antes que el código (`a9abcc3`: las dos `PENDIENTE`, 266 verdes).
+Verdes con `bb4e8dc`: contrato intacto, 268; la 226 (misma pantalla) sigue en pie.
+
+**El arnés también falló, y se dice:** la 331 pedía `UiaSelector` con `Capacidad()`, que solo mira el
+ensamblado del cliente, y el tipo vive en el de `windows-graph`. Con el código ya escrito seguía
+diciendo «pendiente» (aprendizaje nº17: un juez que no puede correr dice «culpable»). Se corrigió a
+`typeof`. El rojo inicial era legítimo —los métodos no existían—, pero habría sido rojo para siempre.
+
+**Sabotaje, comprobado que se aplicó** (el `diff` mostró las dos líneas): quitando la condición del
+Explorador y el recorte del nombre caen **exactamente** la 330 (cuatro comprobaciones: Google, la barra,
+el Bloc de notas, SAP) y la 331 (dos). Revertido tras commitear.
+
+### Nivel 4: dos pantallas (Google y DuckDuckGo, en Chrome), la misma caja de pruebas antes y después
+
+| Qué se pidió | `main` (e13b5be) | rama (bb4e8dc) |
+|---|---|---|
+| `map_type` de una URL en la barra de direcciones + Enter | 6.683 ms, con «el Enter abrió…; se vuelve a…» y 5 intentos de «Atrás» | **3.115 ms**, sin intento de volver |
+| `map_take` «Barra de direcciones y de búsqueda», en Google | 2.043 ms · **no encontré el elemento** | 3.665 ms · **pulsada** |
+| `map_take` «Barra de direcciones y de búsqueda», en DuckDuckGo | 2.120 ms · **no encontré el elemento** | 3.740 ms · **pulsada** |
+| `map_type` sin destino, con el foco en la barra | 3.707 ms · «escribí… y confirmé con Enter» | 2.516 ms · «…**y ahora estás en «web://google.com/search»**» |
+
+```
+[13:52:23] mapa-mcp: el Enter abrió «web://google.com/search»; se vuelve a «web://www.google.com/search»   ← antes
+[13:52:24] mapa-mcp:   ✗ NO resuelto tras 5 intento(s) · falla
+[13:54:00] mano:     ≈ «Barra de direcciones y de búsqueda» no casó exacto y sí recortando los bordes: el nombre real es 'Barra de direcciones y de búsqueda '   ← después
+```
+
+Tras recompilar, ninguna línea «el Enter abrió…» en toda la corrida.
+
+**Lo que el nivel 4 NO cubrió, y se dice:** el caso que sí se deshace —renombrar una carpeta en el
+Explorador— lo juzga el contrato, pero no se ejercitó a mano: habría dejado una carpeta creada en el
+disco del dueño. El código de ese camino no se tocó, solo su condición de entrada.
+
+**Sin adornos:**
+- Pulsar la barra cuesta 3,7 s porque no cambia de pantalla y se espera 1,8 s a un cambio que no va a
+  llegar. Es la espera de `EsperarACambiar`, uno de los tres sitios de la clase de error anotada en la
+  spec 040, y sigue sin tocar.
+- Escribir + Enter sigue en 2,5-3,3 s: teclear, 900 ms de `EsperarPantallaLista` y la lectura de después.
+- **La raíz del «www» sigue ahí**: hay dos productores de la identidad de una web, uno conserva el
+  `www.` y otro lo quita. `MismaPantalla` ya no se deja engañar, pero el terreno puede estar guardando
+  la misma página bajo dos nombres. Se normaliza en un solo sitio en otro corte.
+- Otro de la misma familia, visto en la corrida y sin tocar: `map_go_to web://google.com` dijo «te puse
+  delante de google.com» y la pantalla era **Google Scholar** — casó la pestaña por «google.com» dentro
+  de `scholar.google.com`.
