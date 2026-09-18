@@ -58,3 +58,32 @@ web, no espera nada; y si el tope se agota se entrega lo último que se vio, dic
 |---|---|---|---|
 | 0 | la promesa, en rojo | 335 | `tests/ContratoDelGrafo/Contrato.cs` |
 | 1 | la regla (pura) y su uso en el despacho, donde pasan todos los actos | 335; la 263 intacta | `Mcp/ComoSeContesta.cs`, `Mcp/SurfaceMapTools.cs` (solo `Call`) |
+
+## APARCADA el 2026-09-18 — no entró a `main`, y por qué
+
+Tres versiones en una tarde, y las tres las tumbó el nivel 4, no el contrato:
+
+1. **Esperar tras toda navegación.** Funcionaba (Wikipedia «Medellín»: de entregar 102 elementos a 314;
+   Google: 121 → 163) y costaba **+1 a +2,6 s por `map_go_to`** (0,8-1,7 s → 1,9-3,4 s). El modelo solo
+   había vuelto a mirar tras una de cada cinco navegaciones, perdiendo ~2 s: más caro que el problema.
+2. **Esperar solo si lo visto es un esqueleto (≤ 60 elementos).** Seguía lento: para saber si el acto
+   había navegado se preguntaba «¿dónde estoy?» dos veces por acto, y con el navegador ocupado cada
+   consulta costaba hasta 1 s. **Todo acto —también el clic que no navega— pasó de 1,6 s a 4,5 s.**
+3. **El «dónde» sale de la cabecera del inventario ya leído.** Coste cero, medido: `map_go_to` 0,25-1,7 s,
+   el clic que navega 1,0 s, la barra 1,2 s, igual que antes del corte.
+
+Y aun así **no entra**, porque la versión 3 no se pudo ver disparar ni una vez, y al buscar por qué
+apareció el fallo del criterio: **todas** las páginas entregaban ~115 elementos al instante, fuera cual
+fuera el sitio. No era contenido: era el cromo de Chrome con una veintena de pestañas abiertas (cada
+pestaña es un `TabItem`). Por la mañana, con pocas pestañas, el esqueleto medía 24-38. **El umbral de 60
+depende de cuántas pestañas tenga abiertas la persona**: con muchas, la regla no dispara nunca y nadie se
+entera. Es el aprendizaje nº18 —un guardia que se cree puesto es peor que ninguno—, y no se mergea algo así.
+
+**Lo que haría falta para retomarla:** que «esqueleto» se mida sobre los elementos de la PÁGINA (lo que
+cuelga del documento web), no sobre la ventana entera. El lector ya distingue el `Document` de Chrome;
+falta que el inventario lo cuente aparte. Y medir el beneficio de verdad: cuántas vueltas a mirar ahorra
+en una sesión real, no en un guion.
+
+**Lo que sí queda de esta rama, por si se retoma:** `ComoSeContesta.DondeDice` (la ubicación, gratis, de
+la cabecera del inventario) y el ajuste del accesorio de la promesa 263 (80 elementos y no 2), que solo
+hace falta si la 335 entra. La promesa 335 y su número quedan reservados en esta rama.
