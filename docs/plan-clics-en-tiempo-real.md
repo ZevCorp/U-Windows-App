@@ -93,13 +93,32 @@ o se atasca. Eso es lo que convierte 20 llamadas/s de cupo en clics.
 - **El tramo** es `map_batch` con el cerebro de Jev: `RecorrerSegunElNucleo` ya recorre N pasos con
   compuerta por paso, freno y relato (`SurfaceMapTools.Batch`); la diferencia es que **los pasos no
   vienen listados por Luna: los elige Jev en cada pantalla**, y el tramo sabe parar solo.
-- **El rumbo en tiempo real** no pasa por el modelo: la transcripción de lo que dices llega al
-  cliente en menos de un segundo (`ConversacionEnVivo.Transcribe`); «para / detente / espera» ahí
-  → el mismo `Freno` que hoy dispara Escape (promesas 21-28), y el tramo se detiene en el paso en
-  curso. Luna se entera después y te lo dice; no hace falta que decida ella para frenar.
+- **El rumbo en tiempo real lo pide la voz, no la transcripción.** Corrección del dueño
+  (2026-09-18): la transcripción puede oír un «para» de fondo, y Live1 entiende el contexto y sabe
+  cuándo NO parar; la voz ya es tiempo real, que frene ella. Así que el alto es **una herramienta
+  que la voz llama** —`map_alto`— y que **salta la cola**: no espera a que el tramo termine, pone
+  el mismo `Freno` que hoy dispara Escape (promesas 21-28) y el tramo se detiene en el paso en
+  curso. Lo que esto exige, y se mide el primer día (fase 1): que la voz pueda emitir una llamada
+  mientras la del tramo sigue pendiente. Si el protocolo no lo permite, el tramo pasa a correr
+  **desprendido**: `map_tramo` contesta al instante «en marcha» y devuelve el turno, el tramo
+  avanza por detrás contando cada paso, y la voz siempre tiene el turno libre para `map_alto`, para
+  hablar contigo y para pedir el siguiente tramo. Es mi opción preferida aunque el protocolo lo
+  permita: una voz que nunca está bloqueada es la experiencia Astra.
 
 **Lo que NO cambia:** `map_take`, `map_type`, `map_go_to`, el mapa, las skills, la enseñanza. Con
 `U_DECISOR` ausente, nada de esto existe y la app es la de hoy.
+
+**Y se enciende en vivo, no solo por variable.** Pedido del dueño: un botón en el panel de la
+carita —junto a `Learn`/`Work`, `FaceWindow.xaml:523`— que conmuta TypeSafe sin reiniciar. Por
+dentro es lo que ya hace `Learn`/`Work`: cambiar `ConDecisor` y el `Decisor` del mapa, y volver a
+mandar catálogo e instrucciones a la sesión con `CambiarModoAsync`. La variable fija el estado
+inicial; el botón manda después. Y el botón dice en qué estado está: un verde sin haberlo medido
+es peor que no tener botón.
+
+**Lo que se gana en el arnés sirve a los dos ejecutores.** Observación del dueño, y es correcta:
+las fases 0 y 4 acortan el clic de `map_take` igual que el del tramo — sin tarjeta ni pausa, sin
+leer la pantalla dos veces, esperando el cambio suscrito. Con TypeSafe apagado, Luna ejecutando
+también corre más. Por eso los números se miden en los dos caminos.
 
 ## 3. Qué necesitamos, por fases
 
@@ -126,7 +145,7 @@ pantallas. Orden por lo que compra dividido por lo que arriesga.
 - **Fijar el modelo** a `jev-1.13.0` (el alias se mueve y los umbrales se calibran contra una
   versión) y medir la latencia de Jev con 20, 60 y 160 puertas: el `state` domina el coste.
 
-### Fase 2 — Puertas únicas para Jev, y la segunda mejor gratis (1 día)
+### Fase 2 — Puertas únicas para Jev, la segunda mejor gratis, y el botón (1-2 días)
 
 Lo que perdió 2 de 3 pasos en tu corrida.
 
@@ -139,6 +158,9 @@ Lo que perdió 2 de 3 pasos en tu corrida.
   cumplido en esta pantalla?» · `noul` «¿accionar esta puerta es irreversible o peligroso?». Las
   tres vuelven juntas en ~300 ms.
 - Solo etiquetas y tipos en el `state`, nunca valores de campos (el terreno es un hospital).
+- **El botón Live** en el panel: enciende y apaga TypeSafe en vivo, re-manda el catálogo a la voz
+  con `CambiarModoAsync`, y muestra el estado real. Promesa: «apagar por el botón deja el catálogo
+  byte a byte como sin decisor, y encender lo trae, sin reiniciar».
 
 ### Fase 3 — El tramo: muchos clics de una llamada (2-3 días)
 
@@ -180,11 +202,12 @@ cuánto queda por ganar cuando las fases 2 y 3 ya están.
 
 ### Fase 5 — El rumbo por la voz, en tiempo real (1-2 días)
 
-- **Frenar sin esperar al modelo**: «para», «detente», «espera», «no» en la transcripción → `Freno`.
-  Mismo mecanismo que Escape; el tramo para en el paso en curso y devuelve dónde quedó.
-- **Cambiar el rumbo**: lo que dices después llega a Luna como turno nuevo; Luna pide otro tramo
-  con el objetivo nuevo. Si la fase 1 demostró que Luna oye durante la llamada, además puede
-  cancelar el tramo en curso (`map_alto`) por su cuenta.
+- **`map_alto`, llamado por la voz y fuera de cola**: Live1 decide cuándo parar —entiende el
+  contexto; la transcripción no—, la llamada no espera a que el tramo termine, pone el `Freno` y el
+  tramo para en el paso en curso y devuelve dónde quedó. Nunca por transcripción ni por energía.
+- **Cambiar el rumbo**: lo que dices después llega a Luna como turno nuevo; Luna para el tramo si
+  hace falta y pide otro con el objetivo nuevo. Con el tramo desprendido (fase 3), la voz nunca
+  está bloqueada para esto.
 - **El notch** cuenta el paso que va (ya lo hace por `Accion`), para que veas el rumbo sin que Luna
   hable.
 
@@ -219,13 +242,15 @@ corridas es material, cada número sale de N corridas, no de una.
 | Jev no planifica, no habla, no llama herramientas | Su API solo acepta preguntas cerradas; medido contra la documentación |
 | Una llamada por paso, tres preguntas | Mismas respuestas que tres llamadas, 10× más rápido (cookbook de TypeSafe) |
 | Puertas numeradas y únicas, nunca etiquetas | 2 de 3 pasos perdidos por homónimos en la corrida real |
-| Frenar por transcripción, no por energía ni por el modelo | En esta máquina el barge-in por energía es ciego (medido); el modelo tarda 2-5 s |
+| El alto lo pide la voz por herramienta, fuera de cola; nunca por transcripción ni por energía | Un «para» de fondo no debe frenar, y Live1 sí entiende el contexto (dueño, 2026-09-18); la energía es ciega en esta máquina (medido) |
+| TypeSafe se enciende por variable Y por un botón en vivo | Pedido del dueño; el botón muestra el estado real |
 | Lo irreversible sigue vetado dentro de un tramo | Es un hospital; el tramo hereda los vetos de `map_take`, no los relaja |
 | `U_DECISOR` ausente = la app de hoy | Nada de esto se enciende solo |
 
 ## 6. Lo que no se sabe todavía
 
-- Si Luna oye durante una llamada larga (fase 1). Cambia cómo se cancela un tramo, no si se puede.
+- Si la voz puede emitir `map_alto` mientras la llamada del tramo está pendiente (fase 1). Si no,
+  el tramo corre desprendido y devuelve el turno al instante; mi preferencia es esa en los dos casos.
 - Cuánto tarda Jev con 160 puertas: el `state` domina el coste y SAP llega a 39 campos + 21 botones.
 - Si Jev elige *bien* sobre SAP. Tres decisiones en openai.com (0,97 · 0,90 · 0,79 de confianza,
   las tres correctas) son tres, no una medida. Hace falta el hospital delante.
