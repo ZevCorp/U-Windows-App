@@ -149,51 +149,65 @@ public sealed class UiaReader
         req.Add(AutomationElement.HelpTextProperty);
         req.Add(AutomationElement.BoundingRectangleProperty);
         req.Add(AutomationElement.ItemTypeProperty);
+        req.Add(AutomationElement.RuntimeIdProperty);   // la identidad: para saber si una ventana hija o un menú YA vino (298)
         req.TreeScope = TreeScope.Element | TreeScope.Descendants;
         req.TreeFilter = Automation.ControlViewCondition;
         req.AutomationElementMode = AutomationElementMode.Full;
         return req;
     }
 
-    /// <summary>La ventana, sus ventanas hijas con contenido y sus menús, cada una en UNA petición. Lanza si el proveedor no la acepta.</summary>
+    /// <summary>
+    /// La ventana en UNA petición; y después, solo lo que esa petición NO trajo. Lanza si el proveedor no la acepta.
+    /// </summary>
+    /// <remarks>
+    /// MEDIDO EL 2026-09-18 CON UNA SONDA DE SOLO LECTURA, sobre «Descargas» en el Explorador (133 nodos en la
+    /// principal). Las seis ventanas hijas que aquí se pedían aparte traían 279 nodos y LOS 279 YA VENÍAN, por
+    /// RuntimeId: costaban 1,0-1,8 s de un total de 2,8-4,1 y dejaban cada elemento dos o tres veces en la lista
+    /// —por eso la raíz del disco daba 411 «elementos» y el tope se comía carpetas de verdad—. Con el menú «Nuevo»
+    /// abierto, sus 13 opciones también venían ya. Y el FindAll de los menús volvía a pedir el árbol entero antes
+    /// de buscar: ~1 s para encontrar cero; sobre la raíz ya traída son ~150 ms.
+    ///
+    /// La limitación que justificaba las hijas («FromHandle(principal) + descenso da 1 solo nodo», 2026-07-31) era
+    /// del TreeWalker, no de UI Automation. NO SE BORRA EL CAMINO, SE CONDICIONA: la hija cuya raíz no venga se
+    /// sigue pidiendo, porque otro Windows puede comportarse distinto y eso se decide mirando, no suponiendo.
+    /// </remarks>
     private List<UiElement> LeeConCache(IntPtr hwnd)
     {
         var req = PeticionDeLectura();
-        var acc = new List<UiElement>();
+        AutomationElement raiz;
+        using (req.Activate()) raiz = AutomationElement.FromHandle(hwnd);
 
-        void Desde(IntPtr h)
-        {
-            if (acc.Count > 400) return;   // lleno: no se paga una petición para no recoger nada
-            AutomationElement raiz;
-            using (req.Activate()) raiz = AutomationElement.FromHandle(h);
-            foreach (var (nodo, etiqueta, tipo, caja, itemType) in Recoge(raiz, HijosCacheados, LeeCacheado, 400 - acc.Count, 40))
-                acc.Add(new UiElement(etiqueta, tipo, caja, nodo, itemType));
-        }
-
-        Desde(hwnd);
-
-        // LAS VENTANAS HIJAS con contenido (la lista de archivos del explorador, la barra WinUI): su árbol no cuelga
-        // del de la principal, así que cada una es su propia petición. Si una falla, no tumba la lectura entera.
-        var hijas = new List<IntPtr>();
+        var hijas = new List<(string, Func<AutomationElement>)>();
         EnumChildWindows(hwnd, (h, _) =>
         {
             var sb = new System.Text.StringBuilder(128);
             GetClassName(h, sb, sb.Capacity);
-            if (ChildContentClasses.Contains(sb.ToString())) hijas.Add(h);
+            if (!ChildContentClasses.Contains(sb.ToString())) return true;
+            // La identidad de la raíz de la hija, SIN su subárbol: un viaje corto. Si no se deja leer, identidad
+            // vacía, que no casa con nada: se pide como antes.
+            string id = "";
+            try { id = string.Join(".", AutomationElement.FromHandle(h).GetRuntimeId() ?? Array.Empty<int>()); } catch { }
+            hijas.Add((id, () => { using (req.Activate()) return AutomationElement.FromHandle(h); }));
             return true;
         }, IntPtr.Zero);
-        foreach (var h in hijas) { try { Desde(h); } catch { } }
 
-        // LOS MENÚS ABIERTOS, con FindAll como siempre (el recorrido no cruza su frontera), pero con las propiedades
-        // ya dentro: leerlas deja de ser un viaje por menú.
+        var vistos = new HashSet<string>(StringComparer.Ordinal);
+        var acc = new List<UiElement>();
+        foreach (var (nodo, etiqueta, tipo, caja, itemType) in RecogeConHijasNucleo(raiz, hijas, HijosCacheados, LeeCacheado, IdentidadDe, 400, 40, vistos))
+            acc.Add(new UiElement(etiqueta, tipo, caja, nodo, itemType));
+
+        // LOS MENÚS ABIERTOS. El FindAll se conserva —el 2026-08-02 los menús eran invisibles y costó caro—, pero
+        // sobre la raíz YA TRAÍDA, y el que ya vino en el árbol no se añade otra vez.
         try
         {
             AutomationElementCollection menus;
             using (req.Activate())
-                menus = AutomationElement.FromHandle(hwnd).FindAll(TreeScope.Descendants,
+                menus = raiz.FindAll(TreeScope.Descendants,
                     new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.MenuItem));
             foreach (AutomationElement el in menus)
             {
+                string id = IdentidadDe(el);
+                if (id.Length > 0 && vistos.Contains(id)) continue;
                 var l = LeeCacheado(el);
                 if (l.Item6) continue;
                 string etiqueta = EtiquetaDe(l.Item1, l.Item2, l.Item3);
@@ -206,6 +220,13 @@ public sealed class UiaReader
         catch { }
 
         return acc;
+    }
+
+    /// <summary>La identidad de un nodo, de lo que la petición trajo: su RuntimeId. Vacía si no vino.</summary>
+    private static string IdentidadDe(AutomationElement n)
+    {
+        try { return n.GetCachedPropertyValue(AutomationElement.RuntimeIdProperty) is int[] id ? string.Join(".", id) : ""; }
+        catch { return ""; }
     }
 
     private static IEnumerable<AutomationElement> HijosCacheados(AutomationElement n)
@@ -258,7 +279,19 @@ public sealed class UiaReader
         int topeElementos = 400,
         int topeProfundidad = 40)
     {
+        return RecogeNucleo(raiz, hijos, leer, topeElementos, topeProfundidad, null);
+    }
+
+    private static List<(T Nodo, string Etiqueta, string Tipo, System.Windows.Rect Caja, string ItemType)> RecogeNucleo<T>(
+        T raiz,
+        Func<T, IEnumerable<T>> hijos,
+        Func<T, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer,
+        int topeElementos,
+        int topeProfundidad,
+        Action<T>? alVisitar)
+    {
         var acc = new List<(T, string, string, System.Windows.Rect, string)>();
+        alVisitar?.Invoke(raiz);
         Baja(raiz, 0);
         return acc;
 
@@ -267,6 +300,7 @@ public sealed class UiaReader
             if (profundidad > topeProfundidad || acc.Count > topeElementos) return;
             foreach (var hijo in hijos(nodo))
             {
+                alVisitar?.Invoke(hijo);
                 var (nombre, id, ayuda, tipo, accionable, fuera, caja, itemType) = leer(hijo);
                 if (!fuera && accionable)
                 {
@@ -279,6 +313,45 @@ public sealed class UiaReader
                 Baja(hijo, profundidad + 1);
             }
         }
+    }
+
+    /// <summary>
+    /// LA VENTANA Y SUS VENTANAS HIJAS, SIN PEDIR NI CONTAR DOS VECES LO MISMO (promesa 298). Se recoge la principal
+    /// anotando la identidad de todo lo que se visita; de cada hija se mira si su raíz YA se visitó: si sí, ni se
+    /// pide; si no, se pide una vez y lo suyo va detrás, como antes. Una hija que lanza al pedirse no tumba lo demás.
+    /// </summary>
+    /// <param name="hijas">Por cada ventana hija: la identidad de su raíz, y cómo pedirla (que es lo que cuesta).</param>
+    public static List<(T Nodo, string Etiqueta, string Tipo, System.Windows.Rect Caja, string ItemType)> RecogeConHijas<T>(
+        T principal,
+        IEnumerable<(string, Func<T>)> hijas,
+        Func<T, IEnumerable<T>> hijos,
+        Func<T, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer,
+        Func<T, string> identidad,
+        int topeElementos = 400,
+        int topeProfundidad = 40) =>
+        RecogeConHijasNucleo(principal, hijas, hijos, leer, identidad, topeElementos, topeProfundidad, new HashSet<string>(StringComparer.Ordinal));
+
+    private static List<(T Nodo, string Etiqueta, string Tipo, System.Windows.Rect Caja, string ItemType)> RecogeConHijasNucleo<T>(
+        T principal,
+        IEnumerable<(string, Func<T>)> hijas,
+        Func<T, IEnumerable<T>> hijos,
+        Func<T, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer,
+        Func<T, string> identidad,
+        int topeElementos,
+        int topeProfundidad,
+        HashSet<string> vistos)
+    {
+        void Anota(T n) { string id = identidad(n); if (!string.IsNullOrEmpty(id)) vistos.Add(id); }
+
+        var acc = RecogeNucleo(principal, hijos, leer, topeElementos, topeProfundidad, Anota);
+        foreach (var (idDeLaRaiz, pedir) in hijas)
+        {
+            if (acc.Count > topeElementos) break;                                             // lleno: no se paga una petición para no recoger nada
+            if (!string.IsNullOrEmpty(idDeLaRaiz) && vistos.Contains(idDeLaRaiz)) continue;   // ya vino: ni se pide
+            try { acc.AddRange(RecogeNucleo(pedir(), hijos, leer, topeElementos - acc.Count, topeProfundidad, Anota)); }
+            catch { /* una hija que ya no existe no tumba la lectura de la ventana */ }
+        }
+        return acc;
     }
 
     /// <summary>
