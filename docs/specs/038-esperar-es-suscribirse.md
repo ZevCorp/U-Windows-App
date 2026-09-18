@@ -87,3 +87,88 @@ de ~30 s a **~8 s**.
    un décimo del riesgo, y se mide con el reloj por fase que ya existe.
 2. Volver a medir. Si el paso que cambia ya está en <1 s, el observador único (297-300) compra
    sobre todo el `SATURADO` y la limpieza; si sigue en 1,5-3 s, compra tiempo. Decidir con eso.
+
+## El corte que se adelantó: leer es una llamada (promesa 297, 2026-09-18)
+
+> **Los números se corren.** La 297 de la tabla de arriba —«una sola lectura por tick»— no llegó a
+> escribirse en `Contrato.cs`; el número lo tomó este corte, que se midió primero y costaba menos. El
+> observador único pasa a ser **298-300**, y se renumera cuando se abra su rama. De la 301 en adelante
+> son de la spec 039.
+
+### Qué se midió antes de escribir código
+
+El reloj por fase decía que «leer» costaba ~1 s por paso en el Explorador y 3,4-5 s en una página
+web. Una sonda de solo lectura (aprendizaje nº13) comparó el recorrido de hoy con una sola petición
+con caché, sobre las mismas ventanas:
+
+| Ventana | Nodo a nodo | Una petición con caché |
+|---|---|---|
+| Wikipedia en Chrome (680 nodos, 161 accionables) | 3.400 ms | 270 ms |
+| Configuración | 800 ms | 155 ms |
+| Explorador | 1.050 ms | 420 ms |
+| Bloc de notas | 400 ms | 144 ms |
+
+La causa: `UiaReader.Collect` navega con `TreeWalker` y lee `.Current`, y en UI Automation cada una
+de esas es un viaje entre procesos — unos ocho por nodo, accionable o no.
+
+### La promesa
+
+**297.** Leer la pantalla es recorrer lo que UNA petición trajo: el recorrido recibe el árbol ya
+traído y no navega; recoge lo mismo que antes —accionable, visible, con etiqueta (nombre, o id, o
+ayuda) y con geometría, en orden de lectura, con los mismos topes: 40 niveles, y pasados los 400
+elementos no se entra en más ramas—; si la petición con caché falla se lee nodo a nodo como antes; y
+el lector dice cuál de los dos caminos usó y por qué.
+
+### Cuántos sitios tienen la clase de error (patrón nº5)
+
+Leer UIA propiedad a propiedad, sin `CacheRequest`: **17 sitios en 5 archivos**. Este corte arregla
+**2**, los de `UiaReader` (el árbol con sus ventanas hijas, y los menús). Quedan:
+
+| Archivo | Sitios | |
+|---|---|---|
+| `windows-graph/src/Surfaces/UiaSurface.cs` | 11 | el siguiente corte: es lo que usa el player |
+| `windows-client/src/Mcp/SurfaceMapTools.cs` | 2 | compartido con la spec 039; se coordina |
+| `windows-client/src/Uia/Desplazamiento.cs` | 1 | |
+| `windows-client/src/Ui/RastroDelCursor.cs` | 1 | |
+
+### Nivel 4: tres pantallas, y lo que el contrato no cazó
+
+**Los dos caminos sobre la MISMA ventana en el mismo momento**, etiqueta por etiqueta (sonda que llama
+por reflexión a `LeeNodoANodo` y a `LeeConCache` del build de la rama):
+
+| Ventana | Nodo a nodo | Con caché | Solo en uno de los dos | Mismo orden |
+|---|---|---|---|---|
+| Wikipedia «Medellín» en Chrome | 27.731-41.808 ms · 288 | 3.647-8.869 ms · 288 | 0 | sí |
+| Explorador, `C:\` | 2.811-4.712 ms · 411 | 1.558-3.616 ms · 411 | 0 | sí |
+| Explorador, Descargas | 3.999-6.157 ms · 325 | 2.258-6.218 ms · 325 | 0 | sí |
+| Configuración (`SystemSettings`) | 860-1.339 ms · 57 | 422-656 ms · 57 | 0 | sí |
+
+**Por la app real** (`map_what_i_see` por MCP, build de `main` contra build de la rama, tres vueltas):
+
+| Pantalla | Antes | Después |
+|---|---|---|
+| Explorador, `C:\` (406 elementos) | 3.239 · 3.458 · 3.256 ms | 2.064 · 1.918 · 1.586 ms |
+| Wikipedia «Medellín» (275-279 elementos) | 26.587 · 25.608 · 37.694 ms | 5.040 · 5.208 · 6.184 ms |
+| Configuración (el marco: 4 elementos) | 82 · 100 · 95 ms | 78 · 97 · 96 ms |
+
+Ninguna lectura cayó al respaldo: el log no tiene líneas `[lector]`.
+
+**Lo que cazó el nivel 4 y no el contrato.** La primera versión «arreglaba» de paso una fuga del
+tope: el de siempre solo lo miraba al entrar en cada nivel, y cortar en 400 exactos parecía más
+correcto. Sobre `C:\` el camino viejo daba 411 y el nuevo 400: las once que faltaban eran **carpetas
+de verdad**, las últimas de la lista. Se restauró la semántica exacta y la promesa pasó a decirla
+(una rama empezada se termina; pasados los 400 no se entra en la siguiente). Un corte de
+rendimiento no cambia lo que se ve; si el tope hay que moverlo, es otra promesa.
+
+**Lo que se dice sin adornos:**
+
+- La ganancia es **grande en la web (5-7×) y moderada en el Explorador (~1,7×)**. Las medidas de la
+  sonda inicial (12×) eran de una página más corta y de una sola petición; la app hace una por
+  ventana hija más la de los menús.
+- Los tiempos bailan con la carga de la máquina: en una vuelta de Descargas los dos caminos empataron
+  en 6,2 s. Por eso van los rangos y no un número.
+- A `map_what_i_see` en una página larga le siguen quedando ~5 s, y ya no son del lector (3,6 s de
+  esos sí; el resto es de lo que viene después). Es lo siguiente que hay que abrir con el reloj.
+- Configuración se lee por su marco (`ApplicationFrameHost`, 4 elementos) y no por su contenido
+  (`SystemSettings`, 57): es anterior a este corte y no se toca aquí, pero deja a Jev sin puertas en
+  esa app. Anotado.
