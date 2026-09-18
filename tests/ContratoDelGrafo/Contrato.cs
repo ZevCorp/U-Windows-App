@@ -788,6 +788,9 @@ internal static class Contrato
         Prueba("294. el tramo cuenta cada paso —al notch y al log, con la puerta, el número y la confianza— y la cuenta final lleva lo que hay delante; map_tramo_estado la devuelve en cualquier momento", ElTramoCuentaCadaPasoYLoQueDejoDelante);
         Prueba("295. la voz se entera sin preguntar: al parar, la cuenta entra a la sesión de voz como un mensaje, una sola vez por tramo; sin sesión de voz, la cuenta queda para map_tramo_estado", LaVozSeEnteraSinPreguntar);
         Prueba("290. el interruptor en vivo: encender deja map_decidir en el catálogo y un decisor en el mapa; apagar deja el catálogo byte a byte como sin decisor y el mapa sin decisor; las dos cosas re-mandan el catálogo a la voz; pedir encender sin clave ni modo válido se queda apagado y dice por qué; y el estado se lee en una línea", ElInterruptorEnVivo);
+
+        // ── Spec 038: leer es una llamada ───────────────────────────────────────────────────────
+        Prueba("297. leer la pantalla es recorrer lo que UNA petición trajo: el recorrido recibe el árbol ya traído y no navega; recoge lo mismo que antes —accionable, visible, con etiqueta (nombre, o id, o ayuda) y con geometría, en orden de lectura, con los mismos topes: 40 niveles, y pasados los 400 elementos no se entra en más ramas—; si la petición con caché falla se lee nodo a nodo como antes; y el lector dice cuál de los dos caminos usó y por qué", LeerEsRecorrerLoQueUnaPeticionTrajo);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12204,6 +12207,101 @@ internal static class Contrato
         string r3 = m3.mapa.Call("map_decidir", new Dictionary<string, string>());
         Debe(r3.StartsWith("falta `objetivo`", StringComparison.Ordinal) && m3.leidas() == 0 && m3.visto() == null,
             $"sin `objetivo` dice qué falta, y ni mira ni pulsa (dijo: «{r3}»)");
+    }
+
+    // ── Spec 038: leer es una llamada ────────────────────────────────────────────────────────────
+
+    /// <summary>Un nodo de mentira: lo que una petición con caché habría traído, con sus hijos ya dentro.</summary>
+    private sealed class NodoFalso
+    {
+        public string Nombre = "", Id = "", Ayuda = "", Tipo = "Button";
+        public bool Accionable = true, Fuera;
+        public System.Windows.Rect Caja = new(10, 10, 80, 24);
+        public List<NodoFalso> Hijos = new();
+    }
+
+    private static void LeerEsRecorrerLoQueUnaPeticionTrajo()
+    {
+        // MEDIDO EL 2026-09-18 CON UNA SONDA DE SOLO LECTURA, sobre las mismas ventanas y con el mismo resultado
+        // (mismos nodos, mismos accionables): Wikipedia en Chrome, 680 nodos → 3.400 ms nodo a nodo contra 270 ms con
+        // una petición con caché (12,5×); Configuración 800 → 155; el Explorador 1.050 → 420. UiaReader.Collect
+        // navegaba con TreeWalker y leía .Current: ~8 viajes entre procesos POR NODO, accionable o no.
+        var t = Capacidad("U.WindowsClient.Uia.UiaReader");
+        var recoge = t?.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(x => x.Name == "Recoge" && x.IsGenericMethodDefinition);
+        var respaldo = t?.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(x => x.Name == "LeeConRespaldo" && x.IsGenericMethodDefinition);
+        if (t == null || recoge == null || respaldo == null)
+        {
+            Pendiente("Uia.UiaReader.Recoge<T> + LeeConRespaldo<T>", "297", "038");
+            return;
+        }
+
+        // Recoge<T>(raiz, hijos, leer, topeElementos, topeProfundidad) → lista de (T Nodo, string Etiqueta, …).
+        // «leer» devuelve tipos básicos —(Nombre, Id, Ayuda, Tipo, Accionable, Fuera, Caja, ItemType)— para que el
+        // recorrido se pueda juzgar sin UI Automation delante.
+        var recogeDeFalsos = recoge.MakeGenericMethod(typeof(NodoFalso));
+        int lecturas = 0, bajadas = 0;
+        Func<NodoFalso, IEnumerable<NodoFalso>> hijos = n => { bajadas++; return n.Hijos; };
+        Func<NodoFalso, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer =
+            n => { lecturas++; return (n.Nombre, n.Id, n.Ayuda, n.Tipo, n.Accionable, n.Fuera, n.Caja, ""); };
+
+        List<string> Etiquetas(NodoFalso raiz, int tope = 400, int prof = 40)
+        {
+            var r = (System.Collections.IEnumerable)recogeDeFalsos.Invoke(null, new object[] { raiz, hijos, leer, tope, prof })!;
+            var salida = new List<string>();
+            foreach (var x in r) salida.Add((string)x!.GetType().GetField("Item2")!.GetValue(x)!);
+            return salida;
+        }
+
+        // 1. LO MISMO QUE ANTES: accionable, visible, con etiqueta y con geometría; en orden de lectura; y se baja también por lo que no se recoge.
+        var raiz = new NodoFalso { Nombre = "ventana", Accionable = false };
+        var panel = new NodoFalso { Nombre = "panel", Accionable = false };
+        panel.Hijos.Add(new NodoFalso { Nombre = "Dentro del panel" });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "Nuevo" });
+        raiz.Hijos.Add(panel);
+        raiz.Hijos.Add(new NodoFalso { Nombre = "Oculto", Fuera = true });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "Decorado", Accionable = false });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "", Id = "", Ayuda = "" });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "Sin caja", Caja = System.Windows.Rect.Empty });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "Aplastado", Caja = new System.Windows.Rect(0, 0, 0.5, 20) });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "", Id = "btnGuardar" });
+        raiz.Hijos.Add(new NodoFalso { Nombre = " ", Id = "", Ayuda = "Ayuda del botón" });
+        lecturas = 0; bajadas = 0;
+        var e = Etiquetas(raiz);
+        Debe(e.SequenceEqual(new[] { "Nuevo", "Dentro del panel", "btnGuardar", "Ayuda del botón" }),
+            $"se recoge lo accionable, visible, con etiqueta (nombre → id → ayuda) y con geometría, en orden de lectura, bajando también por lo que no se recoge; salió [{string.Join(" · ", e)}]");
+
+        // 2. EL RECORRIDO NO NAVEGA: solo llama a «hijos» y a «leer» sobre lo que le dieron, una vez por nodo.
+        int nodos = 1 + raiz.Hijos.Count + panel.Hijos.Count;
+        Debe(lecturas == nodos - 1 && bajadas == nodos,
+            $"cada nodo se lee una vez y se baja una vez: {lecturas} lecturas y {bajadas} bajadas para {nodos} nodos (la raíz no se lee: es la ventana)");
+
+        // 3. LOS TOPES, LOS MISMOS QUE ANTES: 40 niveles; y el de elementos se mira AL ENTRAR en cada rama, no dentro.
+        // Medido el 2026-09-18 sobre `C:\`: el camino de siempre daba 411 y un corte estricto en 400 perdía once
+        // carpetas de verdad. Un corte de rendimiento no cambia lo que se ve.
+        var cadena = new NodoFalso { Accionable = false }; var cola = cadena;
+        for (int i = 1; i <= 45; i++) { var h = new NodoFalso { Nombre = "n" + i }; cola.Hijos.Add(h); cola = h; }
+        var hondos = Etiquetas(cadena);
+        Debe(hondos.Contains("n40") && !hondos.Contains("n43"), $"más allá de 40 niveles no se baja (llegó hasta «{hondos.LastOrDefault()}»)");
+        var ancha = new NodoFalso { Accionable = false };
+        foreach (var letra in new[] { "a", "b", "c" })
+        {
+            var rama = new NodoFalso { Nombre = "rama " + letra, Accionable = false };
+            for (int i = 0; i < 300; i++) rama.Hijos.Add(new NodoFalso { Nombre = letra + i });
+            ancha.Hijos.Add(rama);
+        }
+        var anchas = Etiquetas(ancha);
+        Debe(anchas.Count == 600 && anchas.Contains("b299") && !anchas.Contains("c0"),
+            $"una rama empezada se termina, y pasados los 400 no se entra en la siguiente: de tres ramas de 300 salen 600 ({anchas.Count}); ni se corta una lista a la mitad ni una página de miles infla el inventario");
+
+        // 4. EL RESPALDO, Y QUE SE DIGA. Un respaldo silencioso se confunde con el camino rápido (aprendizaje nº18).
+        var conRespaldo = respaldo.MakeGenericMethod(typeof(string));
+        object?[] a1 = { (Func<string>)(() => "rápido"), (Func<string>)(() => "lento"), null };
+        Debe((string)conRespaldo.Invoke(null, a1)! == "rápido" && ((string)a1[2]!).Contains("caché", StringComparison.OrdinalIgnoreCase),
+            $"si la petición con caché funciona, se usa y se dice («{a1[2]}»)");
+        object?[] a2 = { (Func<string>)(() => throw new InvalidOperationException("el proveedor no admite caché")), (Func<string>)(() => "lento"), null };
+        Debe((string)conRespaldo.Invoke(null, a2)! == "lento", "si falla, se lee nodo a nodo como antes");
+        Debe(((string)a2[2]!).Contains("nodo a nodo", StringComparison.OrdinalIgnoreCase) && ((string)a2[2]!).Contains("InvalidOperationException"),
+            $"y se dice que fue nodo a nodo y por qué («{a2[2]}»)");
     }
 
     private static void Debe(bool condicion, string promesa)
