@@ -437,18 +437,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // map_decidir ni aparece en el catálogo de Luna. Encendido, Luna pide el objetivo y el
             // decisor elige entre las puertas de ahora; ante cualquier duda o fallo, ElDecisor cae a
             // Luna (280). La clave sale del entorno y va a la cabecera: aquí no se lee ni se registra.
+            // Y SE PUEDE CAMBIAR EN VIVO (spec 036, promesa 290): el botón «Jev» del panel enciende y apaga
+            // por el mismo interruptor; la variable solo fija el estado inicial.
             {
                 var cfgDecisor = Decision.ConfiguracionDelDecisor.DelSistema();
                 LogBus.Log("decisor", cfgDecisor.Porque);
-                if (cfgDecisor.Quien != "luna")
-                {
-                    var transporte = Decision.ClienteTypeSafe.TransporteSegun(
-                            cfgDecisor, Environment.GetEnvironmentVariable, m => LogBus.Log("decisor", m))
-                        ?? (_ => throw new InvalidOperationException("no hay transporte con el que hablarle a TypeSafe"));
-                    mcp.Map.Decisor = (pantalla, objetivo, puertas) =>
-                        Decision.ElDecisor.Elegir(cfgDecisor.Quien, pantalla, objetivo, puertas, cfgDecisor.Confianza, transporte);
-                    Voice.ConversacionEnVivo.ConDecisor = true;
-                }
+                _interruptorDelDecisor = new Decision.InterruptorDelDecisor(mcp.Map, ReenviarCatalogoALaVozAsync, m => LogBus.Log("decisor", m));
+                if (cfgDecisor.Quien != "luna") _interruptorDelDecisor.Encender(Environment.GetEnvironmentVariable);
+                PintarBotonJev();
             }
 
             // CORREGIR UN RECUERDO DESDE SU TARJETA entra por la misma puerta que enseñarlo de viva
@@ -2758,6 +2754,50 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
     // --- Enseñanza activa (grabar pantalla+voz) ---
+
+    /// <summary>El interruptor del decisor (spec 036). Nulo hasta que exista el mapa.</summary>
+    private Decision.InterruptorDelDecisor? _interruptorDelDecisor;
+
+    /// <summary>
+    /// Instrucciones y catálogo, otra vez a la sesión: lo mismo que hace Learn/Work al cambiar de modo. Sin
+    /// sesión de voz no hay nada que re-mandar; la próxima apertura ya lee el catálogo nuevo.
+    /// </summary>
+    private Task ReenviarCatalogoALaVozAsync() =>
+        _vivo != null
+            ? _vivo.CambiarModoAsync(Voice.ConversacionEnVivo.InstruccionesNormales, Voice.ConversacionEnVivo.Herramientas())
+            : Task.CompletedTask;
+
+    /// <summary>
+    /// EL BOTÓN «JEV»: enciende y apaga el decisor sin reiniciar. Encender pide Jev; sin clave se queda apagado
+    /// y el botón dice por qué (promesa 290). Si el entorno dice «luna» o no dice nada, el botón significa
+    /// «enciende Jev»: es lo que una persona espera de pulsarlo.
+    /// </summary>
+    private void OnToggleJev(object sender, RoutedEventArgs e)
+    {
+        if (_interruptorDelDecisor == null) return;
+        if (_interruptorDelDecisor.Encendido) _interruptorDelDecisor.Apagar();
+        else _interruptorDelDecisor.Encender(n =>
+        {
+            string? v = Environment.GetEnvironmentVariable(n);
+            if (n == Decision.ConfiguracionDelDecisor.Interruptor && (string.IsNullOrWhiteSpace(v) || v.Trim().Equals("luna", StringComparison.OrdinalIgnoreCase)))
+                return "jev";
+            return v;
+        });
+        PintarBotonJev();
+    }
+
+    /// <summary>
+    /// El botón dice en qué estado está de verdad, y el porqué va a la línea de estado: NADA al pasar el
+    /// ratón (promesa 164). Un verde sin medir es peor que no tener botón.
+    /// </summary>
+    private void PintarBotonJev()
+    {
+        if (JevBtn == null) return;
+        bool on = _interruptorDelDecisor?.Encendido == true;
+        JevBtn.Content = on ? "Jev · on" : "Jev · off";
+        JevBtn.Opacity = on ? 1.0 : 0.7;
+        if (_interruptorDelDecisor != null) SetStatus("Jev " + _interruptorDelDecisor.Estado);
+    }
 
     private async void OnToggleTeach(object sender, RoutedEventArgs e)
     {

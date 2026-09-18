@@ -40,6 +40,12 @@ public static class PeticionASystemOne
     /// <summary>El id con el que se pregunta por la puerta, y bajo el que vuelve la respuesta.</summary>
     public const string IdDeLaPuerta = "puerta";
 
+    /// <summary>¿El objetivo ya está cumplido en esta pantalla? Una noul en la misma llamada (promesa 289).</summary>
+    public const string IdCumplido = "cumplido";
+
+    /// <summary>¿Accionar la elegida es irreversible o peligroso? Otra noul en la misma llamada (promesa 289).</summary>
+    public const string IdPeligro = "peligro";
+
     /// <summary>
     /// El cuerpo de una pregunta de tipo <c>choice</c>.
     /// </summary>
@@ -81,6 +87,29 @@ public static class PeticionASystemOne
 
             w.WriteEndObject();  // criteria
             w.WriteEndObject();  // la pregunta
+
+            // UNA LLAMADA, TRES PREGUNTAS (promesa 289). Medido el 2026-09-18: las tres vuelven juntas en
+            // ~330 ms con 20, 60 o 160 puertas; tres llamadas serían tres viajes por el mismo estado.
+            w.WriteStartObject(IdCumplido);
+            w.WriteString("type", "noul");
+            w.WriteString("instructions",
+                "¿El objetivo descrito en el estado YA está cumplido en esta pantalla, sin accionar nada más?");
+            w.WriteStartObject("criteria");
+            w.WriteString("true", "Lo que se quería conseguir ya se ve conseguido en esta pantalla");
+            w.WriteString("false", "Todavía falta accionar algo para conseguirlo");
+            w.WriteEndObject();
+            w.WriteEndObject();
+
+            w.WriteStartObject(IdPeligro);
+            w.WriteString("type", "noul");
+            w.WriteString("instructions",
+                "¿Accionar la puerta elegida sería irreversible o peligroso: guardar, enviar, eliminar, confirmar, pagar, cerrar sin guardar?");
+            w.WriteStartObject("criteria");
+            w.WriteString("true", "Deja un efecto que no se puede deshacer o que afecta a otros");
+            w.WriteString("false", "Navegar, abrir, seleccionar o mirar: se puede volver atrás");
+            w.WriteEndObject();
+            w.WriteEndObject();
+
             w.WriteEndObject();  // questions
             w.WriteEndObject();  // raíz
         }

@@ -30,6 +30,19 @@ public sealed class DecisionDeUnPaso
     /// </summary>
     public string Porque { get; }
 
+    /// <summary>
+    /// TODAS LAS OPCIONES CON SU PROBABILIDAD, de mayor a menor, la elegida incluida (promesa 288). Jev las
+    /// devuelve en la misma respuesta: la segunda mejor viene gratis, y tirarla obliga a otra llamada cuando
+    /// la primera no está viva.
+    /// </summary>
+    public IReadOnlyList<(string Puerta, double Probabilidad)> Alternativas { get; init; } = Array.Empty<(string, double)>();
+
+    /// <summary>Cuánto dice Jev que el objetivo YA está cumplido en esta pantalla (0-1). 0 si no se preguntó.</summary>
+    public double Cumplido { get; init; }
+
+    /// <summary>Cuánto dice Jev que accionar la elegida es irreversible o peligroso (0-1). 0 si no se preguntó.</summary>
+    public double Peligro { get; init; }
+
     private DecisionDeUnPaso(bool actuar, string puerta, double confianza, string porque)
     {
         Actuar = actuar;
@@ -43,6 +56,9 @@ public sealed class DecisionDeUnPaso
 
     internal static DecisionDeUnPaso No(string porque, double confianza = 0) =>
         new DecisionDeUnPaso(false, "", confianza, porque);
+
+    internal DecisionDeUnPaso Con(IReadOnlyList<(string, double)> alternativas, double cumplido, double peligro) =>
+        new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque) { Alternativas = alternativas, Cumplido = cumplido, Peligro = peligro };
 }
 
 /// <summary>
@@ -66,6 +82,15 @@ public sealed class DecisionDeUnPaso
 /// </remarks>
 public static class ElDecisor
 {
+    /// <summary>Desde cuánto «ya está cumplido» no se acciona. El mismo listón que la confianza (spec 036).</summary>
+    public const double CumplidoMinimo = 0.70;
+
+    /// <summary>Desde cuánto «es irreversible» no se acciona: ante lo irreversible se pide MENOS evidencia para parar.</summary>
+    public const double PeligroMaximo = 0.50;
+
+    /// <summary>La segunda mejor se intenta si su probabilidad llega aquí. Exigirle el umbral de confianza sería no probarla nunca.</summary>
+    public const double SegundaMejorMinima = 0.25;
+
     /// <summary>
     /// Elige qué puerta accionar, o dice que no.
     /// </summary>
@@ -133,6 +158,8 @@ public static class ElDecisor
 
         string elegida;
         double confianza;
+        var alternativas = new List<(string Puerta, double Probabilidad)>();
+        double cumplido = 0, peligro = 0;
         try
         {
             using var doc = JsonDocument.Parse(respuesta);
@@ -148,6 +175,14 @@ public static class ElDecisor
             confianza = a.TryGetProperty("confidence", out var cf) && cf.ValueKind == JsonValueKind.Number
                 ? cf.GetDouble()
                 : 0;
+            // LAS PROBABILIDADES DE TODAS, ordenadas: la segunda mejor viene en la misma respuesta (288).
+            if (a.TryGetProperty("probabilities", out var probs) && probs.ValueKind == JsonValueKind.Object)
+                foreach (var pr in probs.EnumerateObject())
+                    if (pr.Value.ValueKind == JsonValueKind.Number) alternativas.Add((pr.Name, pr.Value.GetDouble()));
+            alternativas.Sort((x, y) => y.Probabilidad.CompareTo(x.Probabilidad));
+            // LAS DOS NOULS, si vinieron (289). Un transporte viejo que no las trae sigue valiendo: 0 y 0.
+            cumplido = Noul(answers, PeticionASystemOne.IdCumplido);
+            peligro = Noul(answers, PeticionASystemOne.IdPeligro);
         }
         catch (Exception e)
         {
@@ -172,17 +207,36 @@ public static class ElDecisor
         if (!ofrecida)
             return DecisionDeUnPaso.No(
                 $"Jev contestó «{elegida}», que no está entre las {puertas.Count} puertas de esta pantalla: "
-              + "no se acciona. Decide Luna.", confianza);
+              + "no se acciona. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
+
+        // YA ESTÁ: si Jev dice que el objetivo ya se cumplió en esta pantalla, accionar es pasarse (289).
+        if (cumplido >= CumplidoMinimo)
+            return DecisionDeUnPaso.No(
+                $"Jev dice que el objetivo ya está cumplido en esta pantalla ({cumplido.ToString("0.00", CultureInfo.InvariantCulture)}): "
+              + "no se acciona nada más. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
+
+        // LO IRREVERSIBLE NO SE ACCIONA POR UN DECISOR: se para con menos evidencia de la que se pide para actuar.
+        if (peligro >= PeligroMaximo)
+            return DecisionDeUnPaso.No(
+                $"Jev dice que accionar «{elegida}» sería irreversible o peligroso ({peligro.ToString("0.00", CultureInfo.InvariantCulture)}): "
+              + "no se acciona. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
 
         if (confianza < umbral)
             return DecisionDeUnPaso.No(
                 $"Jev eligió «{elegida}» con confianza {confianza.ToString("0.00", CultureInfo.InvariantCulture)}, "
               + $"por debajo del mínimo exigido ({umbral.ToString("0.00", CultureInfo.InvariantCulture)}): "
-              + "no se acciona a medias. Decide Luna.", confianza);
+              + "no se acciona a medias. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
 
         return DecisionDeUnPaso.Si(elegida, confianza,
-            $"Jev eligió «{elegida}» con confianza {confianza.ToString("0.00", CultureInfo.InvariantCulture)}.");
+            $"Jev eligió «{elegida}» con confianza {confianza.ToString("0.00", CultureInfo.InvariantCulture)}.")
+            .Con(alternativas, cumplido, peligro);
     }
+
+    /// <summary>El valor de una noul de la respuesta, o 0 si no vino o no es número.</summary>
+    private static double Noul(JsonElement answers, string id) =>
+        answers.TryGetProperty(id, out var n) && n.ValueKind == JsonValueKind.Object
+        && n.TryGetProperty("noul", out var v) && v.ValueKind == JsonValueKind.Number
+            ? v.GetDouble() : 0;
 
     /// <summary>
     /// La regla fija: la puerta cuya etiqueta comparte más palabras con el objetivo; a igualdad, la
@@ -217,7 +271,9 @@ public static class ElDecisor
         {
             if (string.IsNullOrWhiteSpace(p)) continue;
             int puntos = 0, total = 0;
-            foreach (var w in p.Split(_separadores, StringSplitOptions.RemoveEmptyEntries))
+            // Desde la 287 las puertas llegan como «2) Detalles (RadioButton)»: se puntúa la ETIQUETA, no el
+            // número ni el tipo, que no son palabras de ningún objetivo.
+            foreach (var w in EtiquetaDe(p).Split(_separadores, StringSplitOptions.RemoveEmptyEntries))
             {
                 if (w.Length <= 2) continue;
                 total++;
@@ -239,6 +295,13 @@ public static class ElDecisor
             return DecisionDeUnPaso.No(porque + $" Por debajo del mínimo exigido ({umbral.ToString("0.00", CultureInfo.InvariantCulture)}): no se acciona. Decide Luna.", mejorConfianza);
 
         return DecisionDeUnPaso.Si(mejor, mejorConfianza, porque);
+    }
+
+    /// <summary>De «2) Detalles (RadioButton)» a «Detalles». Una etiqueta a secas se devuelve tal cual.</summary>
+    private static string EtiquetaDe(string id)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(id, @"^\d+\)\s*(.*?)\s*(\([^()]*\))?\s*$");
+        return m.Success ? m.Groups[1].Value : id;
     }
 
     private static readonly char[] _separadores = { ' ', '\t', '\n', '\r', '.', ',', ':', ';', '(', ')', '«', '»', '/', '-', '_' };

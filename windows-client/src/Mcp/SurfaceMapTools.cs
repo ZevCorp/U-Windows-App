@@ -162,11 +162,11 @@ public sealed class SurfaceMapTools
     /// en silencio, y el decisor acabaría eligiendo entre puertas que la voz no lista, o al revés.
     /// </summary>
     /// <returns>Dónde, las puertas que se cuentan (con su tope) y cuántas hay en total.</returns>
-    private (string Aqui, IReadOnlyList<(string Etiqueta, string Tipo)> Puertas, int Total) PuertasDeAhora()
+    private (string Aqui, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> Puertas, int Total) PuertasDeAhora()
     {
         var loc = _where();
         string aqui = loc?.Id ?? "";
-        if (aqui.Length == 0) return ("", Array.Empty<(string, string)>(), 0);
+        if (aqui.Length == 0) return ("", Array.Empty<(string, string, string)>(), 0);
         if (Puertas != null) { var inyectadas = Puertas(aqui); return (aqui, inyectadas, inyectadas.Count); }
 
         _lector.Read();
@@ -188,8 +188,10 @@ public sealed class SurfaceMapTools
         // EL TOPE ERA 40 PUERTAS DE SAP y el triage tiene 39 campos más 21 botones (2026-09-08): los
         // signos vitales quedaban fuera de la lista y el piloto no podía nombrarlos. Un formulario
         // entero cabe en 160; lo que pase de ahí se dice.
-        var lista = vivos.Take(60).Select(v => (Etiqueta: v.Label, Tipo: v.ControlType))
-            .Concat(delTerreno.Take(160).Select(p => (Etiqueta: p.Etiqueta, Tipo: p.Tipo)))
+        // CON SU SELECTOR (promesa 287): es lo que la mano resuelve antes que el nombre, y lo que hace que
+        // dos «Detalles» no choquen. El selector no viaja a Jev: Jev decide por lo que una persona lee.
+        var lista = vivos.Take(60).Select(v => (Selector: Uia.Reconocedor.SelectorDe(v), Etiqueta: v.Label, Tipo: v.ControlType))
+            .Concat(delTerreno.Take(160).Select(p => (Selector: p.Selector, Etiqueta: p.Etiqueta, Tipo: p.Tipo)))
             .ToList();
         return (aqui, lista, vivos.Count + delTerreno.Count);
     }
@@ -205,7 +207,7 @@ public sealed class SurfaceMapTools
 
         var sb = new System.Text.StringBuilder(
             $"EN PANTALLA AHORA, en «{aqui}» ({total} elemento(s)):" + "\n");
-        foreach (var (etiqueta, tipo) in puertas)
+        foreach (var (_, etiqueta, tipo) in puertas)
             sb.AppendLine($"  «{etiqueta}» ({tipo})");
         if (total > 220) sb.AppendLine($"  …y {total - 220} más");
         return sb.ToString();
@@ -238,7 +240,18 @@ public sealed class SurfaceMapTools
         var (aqui, puertas, total) = PuertasDeAhora();
         if (aqui.Length == 0) return "no sé en qué pantalla estoy, así que no hay nada entre lo que decidir.";
         if (total == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo: nada entre lo que decidir.";
-        var etiquetas = puertas.Select(p => p.Etiqueta).ToList();
+        // PUERTAS ÚNICAS Y NUMERADAS (promesa 287): «2) Detalles (RadioButton)». Con etiquetas a secas, en
+        // openai.com Jev eligió bien tres veces y las tres se perdieron en «hay 2 puertas vivas para…»
+        // (2026-09-18, 03:33-03:34): la etiqueta no es única; el id sí, y detrás lleva su selector.
+        var ids = new List<string>(puertas.Count);
+        var selectorDe = new Dictionary<string, (string Selector, string Etiqueta)>(StringComparer.Ordinal);
+        for (int i = 0; i < puertas.Count; i++)
+        {
+            string id = $"{i + 1}) {puertas[i].Etiqueta} ({puertas[i].Tipo})";
+            ids.Add(id);
+            selectorDe[id] = (puertas[i].Selector, puertas[i].Etiqueta);
+        }
+        var etiquetas = ids;
 
         var reloj = System.Diagnostics.Stopwatch.StartNew();
         Decision.DecisionDeUnPaso d;
@@ -268,8 +281,47 @@ public sealed class SurfaceMapTools
             return $"no se acciona: {d.Porque}";
         }
 
-        string cuenta = Take(d.Puerta, "", decir, recuerdo);
-        return $"elegida «{d.Puerta}» con confianza {d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}: {cuenta}";
+        // LA ELEGIDA, Y COMO MUCHO LA SEGUNDA MEJOR (promesa 288): si la primera no está viva al ir a pulsarla,
+        // se prueba la siguiente por probabilidad si llega al mínimo. Sin otra llamada a Jev: las
+        // probabilidades ya vinieron. La tercera no se prueba: sería adivinar.
+        var candidatos = new List<(string Id, double Prob)> { (d.Puerta, d.Confianza) };
+        var segunda = d.Alternativas
+            .Where(a => a.Puerta != d.Puerta && a.Probabilidad >= Decision.ElDecisor.SegundaMejorMinima && selectorDe.ContainsKey(a.Puerta))
+            .OrderByDescending(a => a.Probabilidad)
+            .FirstOrDefault();
+        if (segunda.Puerta != null) candidatos.Add((segunda.Puerta, segunda.Probabilidad));
+
+        var relato = new System.Text.StringBuilder();
+        for (int k = 0; k < candidatos.Count; k++)
+        {
+            var (id, prob) = candidatos[k];
+            if (!selectorDe.TryGetValue(id, out var puerta))
+            {
+                _ultimaMano = new Mano(false, false, Intento: false);
+                return $"no se acciona: el decisor contestó «{id}», que no es ninguna de las {ids.Count} puertas ofrecidas. Decide Luna.";
+            }
+            string numero = id.Substring(0, id.IndexOf(')'));
+            string cuenta = Take(puerta.Selector, "", decir, recuerdo);
+            string medida = k == 0
+                ? $"con confianza {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}"
+                : $"con probabilidad {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}";
+
+            // «NO ESTÁ» ES LO ÚNICO QUE DISPARA LA SEGUNDA: la mano no terminó, lo intentó, y no fue una lista de
+            // homónimos (eso es otra clase de respuesta: falta elegir cuál de las iguales, no otra puerta).
+            bool noEstaba = _ultimaMano is { Termino: false, Intento: true } m && (m.Candidatos == null || m.Candidatos.Count == 0)
+                         && !cuenta.Contains("puertas vivas para", StringComparison.Ordinal);
+            if (noEstaba && k + 1 < candidatos.Count)
+            {
+                relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}; probé la segunda: ");
+                continue;
+            }
+            if (noEstaba)
+                relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}");
+            else
+                relato.Append($"elegida «{puerta.Etiqueta}» ({numero}) {medida}: {cuenta}");
+            return relato.ToString();
+        }
+        return relato.ToString();
     }
 
     /// <summary>
@@ -1639,7 +1691,7 @@ public sealed class SurfaceMapTools
     /// siempre. El contrato lo cambia por una lista fija para juzgar que map_decidir y map_what_i_see
     /// ven lo mismo, sin tocar la pantalla.
     /// </summary>
-    public Func<string, IReadOnlyList<(string Etiqueta, string Tipo)>>? Puertas { get; set; }
+    public Func<string, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>>? Puertas { get; set; }
 
     /// <summary>
     /// QUIÉN ELIGE LA PUERTA cuando el cerebro pide <c>map_decidir</c> (spec 035): pantalla, objetivo y

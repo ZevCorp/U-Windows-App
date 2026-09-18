@@ -776,6 +776,12 @@ internal static class Contrato
         Prueba("284. map_decidir existe solo con el decisor encendido: apagado no está en el catálogo, las instrucciones no lo nombran, y llamarlo contesta que decide Luna sin leer la pantalla ni pulsar; encendido está en el catálogo con `objetivo`, y las instrucciones mandan pedirlo con el objetivo en vez de elegir la puerta", MapDecidirSoloExisteConElDecisor);
         Prueba("285. map_decidir ofrece al decisor exactamente las puertas que map_what_i_see lista, en su orden, y acciona la elegida por el mismo camino que map_take: la mano recibe ese paso, la cuenta dice qué se eligió y con qué confianza, y el acto cuenta lo que dejó delante", MapDecidirEligeEntreLoQueSeVeYPulsaComoMapTake);
         Prueba("286. cuando el decisor no actúa —duda, puerta fuera de lista, TypeSafe caído, o el propio decisor lanza— map_decidir no pulsa nada, dice por qué con las palabras del decisor, la mano no cuenta un intento, y el control vuelve con el inventario delante; sin `objetivo` dice qué falta", SiElDecisorNoActuaNadaSePulsa);
+
+        // ── Spec 036: las puertas son únicas ────────────────────────────────────────────────────
+        Prueba("287. Jev elige entre puertas únicas y numeradas —«3) Investigación (Hyperlink)»— y lo elegido se acciona por su SELECTOR, nunca por su etiqueta: dos puertas con el mismo nombre no chocan, la mano recibe el selector de la elegida, y la cuenta la nombra por su etiqueta y su número", JevEligePorNumeroYSePulsaPorSelector);
+        Prueba("288. la segunda mejor sin otra llamada: si la elegida no está viva al ir a pulsarla se prueba la siguiente por probabilidad si supera el mínimo, como mucho una vez más; a Jev se le preguntó UNA sola vez; la cuenta dice qué se probó y por qué; y un homónimo o un fallo que no sea «no está» no dispara la segunda", LaSegundaMejorSinOtraLlamada);
+        Prueba("289. una llamada, tres preguntas: el cuerpo lleva puerta (choice), cumplido (noul) y peligro (noul); con cumplido alto no se acciona y se dice que el objetivo ya está; con peligro alto no se acciona y se dice por qué; y una respuesta sin esas dos sigue valiendo", UnaLlamadaTresPreguntas);
+        Prueba("290. el interruptor en vivo: encender deja map_decidir en el catálogo y un decisor en el mapa; apagar deja el catálogo byte a byte como sin decisor y el mapa sin decisor; las dos cosas re-mandan el catálogo a la voz; pedir encender sin clave ni modo válido se queda apagado y dice por qué; y el estado se lee en una línea", ElInterruptorEnVivo);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -11613,18 +11619,22 @@ internal static class Contrato
     // ── Spec 035, fase 4: map_decidir ────────────────────────────────────────────────────────────
 
     /// <summary>Un mapa sin pantalla: ubicación fija, puertas inyectadas, mano falsa que anota qué paso recibió.</summary>
+    // DESDE LA 287 LAS PUERTAS LLEVAN SELECTOR: la mano pulsa por él. Se fabrica uno por etiqueta y tipo.
     private static (SurfaceMapTools mapa, Func<RecorrerSegunElNucleo.Paso?> visto, Func<int> leidas)? MapaParaDecidir(
         PropertyInfo pPuertas, params (string Etiqueta, string Tipo)[] puertas)
     {
         var mapa = new SurfaceMapTools(() => new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation("uia://sap/NWP1", "sap", ""));
         int leidas = 0;
-        pPuertas.SetValue(mapa, (Func<string, IReadOnlyList<(string, string)>>)(_ => { leidas++; return puertas; }));
+        var conSelector = puertas.Select(p => ($"uia:name={p.Etiqueta};ct={p.Tipo}", p.Etiqueta, p.Tipo)).ToArray();
+        pPuertas.SetValue(mapa, (Func<string, IReadOnlyList<(string, string, string)>>)(_ => { leidas++; return conSelector; }));
         RecorrerSegunElNucleo.Paso? visto = null;
         mapa.RecorrerPorElNucleo = pasos =>
         {
             visto = pasos[0];
+            // La mano real cuenta por ETIQUETA, no por selector (RecorrerSegunElNucleo: elegido.Que.Etiqueta).
+            string etiqueta = conSelector.FirstOrDefault(x => x.Item1 == pasos[0].Exit).Item2 ?? pasos[0].Exit;
             return new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true,
-                $"hice los 1 paso(s): pulsé «{pasos[0].Exit}» y ahora estás en «uia://sap/NV2000».", true);
+                $"hice los 1 paso(s): pulsé «{etiqueta}» y ahora estás en «uia://sap/NV2000».", true);
         };
         return (mapa, () => visto, () => leidas);
     }
@@ -11706,7 +11716,7 @@ internal static class Contrato
         pDecisor.SetValue(m.mapa, Decide((p, o, puertas) =>
         {
             pantalla = p; ofrecidas = puertas;
-            return Decision("Si", "Crear Triage Administrativo", 0.93, "Jev eligió «Crear Triage Administrativo» con confianza 0.93.");
+            return Decision("Si", "2) Crear Triage Administrativo (Button)", 0.93, "Jev eligió «2) Crear Triage Administrativo (Button)» con confianza 0.93.");
         }));
 
         string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "crear el triage" });
@@ -11717,7 +11727,8 @@ internal static class Contrato
         // LAS MISMAS PUERTAS QUE map_what_i_see, y en su orden. Se comprueba contra la propia herramienta,
         // no contra lo que se inyectó: si alguien pone un segundo camino para listar puertas, esto lo caza.
         string veo = m.mapa.Call("map_what_i_see", new Dictionary<string, string>());
-        Debe(ofrecidas != null && ofrecidas.SequenceEqual(new[] { "Buscar", "Crear Triage Administrativo", "Salir" }),
+        // Desde la 287 se ofrecen numeradas y con su tipo: mismo orden de lectura, y únicas.
+        Debe(ofrecidas != null && ofrecidas.SequenceEqual(new[] { "1) Buscar (Edit)", "2) Crear Triage Administrativo (Button)", "3) Salir (Button)" }),
             $"el decisor recibe las puertas que hay ahora, en orden de lectura; recibió [{string.Join(" · ", ofrecidas ?? Array.Empty<string>())}]");
         Debe(veo.IndexOf("«Buscar»", StringComparison.Ordinal) < veo.IndexOf("«Crear Triage Administrativo»", StringComparison.Ordinal)
           && veo.IndexOf("«Crear Triage Administrativo»", StringComparison.Ordinal) < veo.IndexOf("«Salir»", StringComparison.Ordinal),
@@ -11726,14 +11737,218 @@ internal static class Contrato
 
         // POR EL MISMO CAMINO QUE map_take: la mano recibe el paso, no otra cosa.
         var paso = m.visto();
-        Debe(paso != null && paso.Exit == "Crear Triage Administrativo",
-            $"la mano recibe exactamente ese paso (recibió «{paso?.Exit}»)");
+        Debe(paso != null && paso.Exit == "uia:name=Crear Triage Administrativo;ct=Button",
+            $"la mano recibe exactamente ese paso, por su selector (recibió «{paso?.Exit}»)");
         Debe(r.Contains("Crear Triage Administrativo", StringComparison.Ordinal) && r.Contains("0.93", StringComparison.Ordinal)
           && r.Contains("ahora estás en «uia://sap/NV2000»", StringComparison.Ordinal),
             $"la cuenta dice qué se eligió, con qué confianza, y qué pasó al pulsar (dijo: «{(r.Length > 120 ? r[..120] : r)}»)");
         Debe(r.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), "y el acto cuenta lo que dejó delante, como cualquier acto (263)");
         Debe(manoDeDecidir != null && (bool)PropDe(manoDeDecidir, "Logro")! && (bool)PropDe(manoDeDecidir, "Intento")!,
             "y la mano lo cuenta como intento logrado, igual que map_take");
+    }
+
+    // ── Spec 036: las puertas son únicas ─────────────────────────────────────────────────────────
+
+    /// <summary>Una decisión con alternativas ordenadas, y opcionalmente cumplido/peligro, por reflexión sobre sus init.</summary>
+    private static U.WindowsClient.Decision.DecisionDeUnPaso DecisionCon(
+        U.WindowsClient.Decision.DecisionDeUnPaso d, (string Puerta, double Probabilidad)[]? alternativas = null, double? cumplido = null, double? peligro = null)
+    {
+        var t = d.GetType();
+        if (alternativas != null) t.GetProperty("Alternativas")?.SetValue(d, alternativas.ToList());
+        if (cumplido != null) t.GetProperty("Cumplido")?.SetValue(d, cumplido.Value);
+        if (peligro != null) t.GetProperty("Peligro")?.SetValue(d, peligro.Value);
+        return d;
+    }
+
+    /// <summary>¿La propiedad Puertas ya trae selector? Func&lt;string, IReadOnlyList&lt;(string,string,string)&gt;&gt;.</summary>
+    private static bool PuertasConSelector(PropertyInfo? pPuertas)
+    {
+        var lista = pPuertas?.PropertyType.GetGenericArguments().LastOrDefault();
+        var tupla = lista?.GetGenericArguments().FirstOrDefault();
+        return tupla != null && tupla.IsGenericType && tupla.GetGenericArguments().Length == 3;
+    }
+
+    private static void JevEligePorNumeroYSePulsaPorSelector()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        if (pDecisor == null || pPuertas == null || !PuertasConSelector(pPuertas))
+        {
+            Pendiente("SurfaceMapTools.Puertas con selector (Selector, Etiqueta, Tipo)", "287", "036");
+            return;
+        }
+
+        // EL CASO REAL DEL EXPLORADOR: dos «Detalles», un Button y un RadioButton. Con etiquetas, la mano
+        // contestaba «hay 2 puertas vivas» y el paso se perdía (03:33:18, 03:33:47, 03:34:28 del 2026-09-18).
+        var m = MapaParaDecidir(pPuertas, ("Detalles", "Button"), ("Detalles", "RadioButton"), ("Iconos grandes", "RadioButton"))!.Value;
+        IReadOnlyList<string>? ofrecidas = null;
+        pDecisor.SetValue(m.mapa, Decide((_, _, puertas) =>
+        {
+            ofrecidas = puertas;
+            return Decision("Si", "2) Detalles (RadioButton)", 0.9, "Jev eligió «2) Detalles (RadioButton)» con confianza 0.90.");
+        }));
+        string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "ver en detalle" });
+
+        Debe(ofrecidas != null && ofrecidas.SequenceEqual(new[] { "1) Detalles (Button)", "2) Detalles (RadioButton)", "3) Iconos grandes (RadioButton)" }),
+            $"las puertas se ofrecen numeradas y con su tipo, únicas aunque la etiqueta se repita; se ofrecieron [{string.Join(" · ", ofrecidas ?? Array.Empty<string>())}]");
+        Debe(ofrecidas != null && ofrecidas.Distinct().Count() == ofrecidas.Count, "y no hay dos ids iguales");
+        var paso = m.visto();
+        Debe(paso != null && paso.Exit == "uia:name=Detalles;ct=RadioButton",
+            $"la mano recibe el SELECTOR de la elegida, no su etiqueta (recibió «{paso?.Exit}»)");
+        Debe(r.Contains("«Detalles»", StringComparison.Ordinal) && r.Contains("2)", StringComparison.Ordinal) && !r.Contains("uia:name=", StringComparison.Ordinal),
+            $"y la cuenta la nombra por su etiqueta y su número, sin enseñar el selector (dijo: «{(r.Length > 120 ? r[..120] : r)}»)");
+    }
+
+    private static void LaSegundaMejorSinOtraLlamada()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var pAlt = typeof(U.WindowsClient.Decision.DecisionDeUnPaso).GetProperty("Alternativas");
+        if (pDecisor == null || pPuertas == null || pAlt == null || !PuertasConSelector(pPuertas))
+        {
+            Pendiente("DecisionDeUnPaso.Alternativas + la segunda mejor en map_decidir", "288", "036");
+            return;
+        }
+
+        // A no está viva; B sí. Jev dio A 0,60 · B 0,35 · C 0,05.
+        (SurfaceMapTools mapa, Func<RecorrerSegunElNucleo.Paso?> visto, Func<int> leidas) Mapa(
+            Func<RecorrerSegunElNucleo.Paso, RecorrerSegunElNucleo.Resultado> mano, out Func<int> llamadas, out Func<List<string>> pulsados)
+        {
+            var m = MapaParaDecidir(pPuertas, ("A", "Button"), ("B", "Button"), ("C", "Button"))!.Value;
+            int n = 0; var pulsos = new List<string>();
+            m.mapa.RecorrerPorElNucleo = pasos => { pulsos.Add(pasos[0].Exit); return mano(pasos[0]); };
+            pDecisor.SetValue(m.mapa, Decide((_, _, _) =>
+            {
+                n++;
+                return DecisionCon(Decision("Si", "1) A (Button)", 0.6, "Jev eligió «1) A (Button)» con confianza 0.60."),
+                    new[] { ("1) A (Button)", 0.60), ("2) B (Button)", 0.35), ("3) C (Button)", 0.05) });
+            }));
+            llamadas = () => n; pulsados = () => pulsos;
+            return m;
+        }
+        RecorrerSegunElNucleo.Resultado NoEsta(string exit) => new(0, 1, "uia://sap/NWP1", false, $"hice 0 de 1 y paré en el paso 1: no lo veo en «uia://sap/NWP1»: «{exit}»");
+        RecorrerSegunElNucleo.Resultado Pulsado(string exit) => new(1, 1, "uia://sap/NV2000", true, $"hice los 1 paso(s): pulsé «{exit}» y ahora estás en «uia://sap/NV2000».", true);
+
+        var m1 = Mapa(p => p.Exit.Contains("name=A;") ? NoEsta(p.Exit) : Pulsado(p.Exit), out var llamadas1, out var pulsados1);
+        string r1 = m1.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" });
+        Debe(pulsados1().Count == 2 && pulsados1()[0].Contains("name=A;") && pulsados1()[1].Contains("name=B;"),
+            $"A no estaba: se probó B, la segunda por probabilidad, y nada más (se pulsó [{string.Join(" · ", pulsados1())}])");
+        Debe(llamadas1() == 1, $"a Jev se le preguntó UNA sola vez; se le preguntó {llamadas1()}");
+        Debe(r1.Contains("B", StringComparison.Ordinal) && r1.Contains("no estaba", StringComparison.OrdinalIgnoreCase) && r1.Contains("ahora estás en", StringComparison.Ordinal),
+            $"y la cuenta dice que A no estaba y que se probó B (dijo: «{(r1.Length > 140 ? r1[..140] : r1)}»)");
+
+        // Ni A ni B: C está por debajo del mínimo y no se intenta; el control vuelve.
+        var m2 = Mapa(p => NoEsta(p.Exit), out var llamadas2, out var pulsados2);
+        string r2 = m2.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" });
+        Debe(pulsados2().Count == 2 && !pulsados2().Any(p => p.Contains("name=C;")), $"C (0,05) no se intenta: la tercera es adivinar (se pulsó [{string.Join(" · ", pulsados2())}])");
+        Debe(llamadas2() == 1 && r2.Contains("no estaba", StringComparison.OrdinalIgnoreCase), "y se dice que ninguna estaba, sin volver a preguntar");
+
+        // HOMÓNIMOS NO SON «NO ESTÁ»: la lista numerada de la mano es otra clase de respuesta, y probar la segunda
+        // sería pulsar otra puerta cuando lo que falta es elegir cuál de las iguales.
+        var m3 = Mapa(p => new RecorrerSegunElNucleo.Resultado(0, 1, "uia://sap/NWP1", false, "hice 0 de 1 y paré en el paso 1: hay 2 puertas vivas para «A»: 1) …; 2) …") { Ambiguo = true, Candidatos = new[] { "s1", "s2" } }, out var llamadas3, out var pulsados3);
+        m3.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" });
+        Debe(pulsados3().Count == 1, $"con homónimos no se prueba la segunda (se pulsó [{string.Join(" · ", pulsados3())}])");
+    }
+
+    private static void UnaLlamadaTresPreguntas()
+    {
+        var tP = Capacidad("U.WindowsClient.Decision.PeticionASystemOne");
+        var cuerpo = tP?.GetMethod("CuerpoDeEleccion");
+        var tD = typeof(U.WindowsClient.Decision.DecisionDeUnPaso);
+        var pCumplido = tD.GetProperty("Cumplido"); var pPeligro = tD.GetProperty("Peligro");
+        var elegir = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("Elegir");
+        if (cuerpo == null || pCumplido == null || pPeligro == null || elegir == null)
+        {
+            Pendiente("DecisionDeUnPaso.Cumplido/Peligro + las dos nouls en el cuerpo", "289", "036");
+            return;
+        }
+
+        string json = (string)cuerpo.Invoke(null, new object[] { "jev-latest", "en SAP/NWP1", "puerta", "¿qué puerta?", new[] { "1) Nuevo (Button)" } })!;
+        using (var doc = System.Text.Json.JsonDocument.Parse(json))
+        {
+            var q = doc.RootElement.GetProperty("questions");
+            Debe(q.TryGetProperty("puerta", out var pu) && pu.GetProperty("type").GetString() == "choice", "el cuerpo lleva la puerta como choice");
+            Debe(q.TryGetProperty("cumplido", out var cu) && cu.GetProperty("type").GetString() == "noul", "y «cumplido» como noul: ¿el objetivo ya está cumplido en esta pantalla?");
+            Debe(q.TryGetProperty("peligro", out var pe) && pe.GetProperty("type").GetString() == "noul", "y «peligro» como noul: ¿accionar la elegida es irreversible?");
+        }
+
+        string Respuesta(string elegida, double conf, double? cumplido, double? peligro)
+        {
+            var ic = System.Globalization.CultureInfo.InvariantCulture;
+            string nouls = "";
+            if (cumplido != null) nouls += ",\"cumplido\":{\"type\":\"noul\",\"noul\":" + cumplido.Value.ToString(ic) + "}";
+            if (peligro != null) nouls += ",\"peligro\":{\"type\":\"noul\",\"noul\":" + peligro.Value.ToString(ic) + "}";
+            return "{\"model\":\"jev-1.13.0\",\"answers\":{\"puerta\":{\"type\":\"choice\",\"choice\":\"" + elegida + "\",\"probabilities\":{\"" + elegida + "\":"
+                 + conf.ToString(ic) + "},\"confidence\":" + conf.ToString(ic) + "}" + nouls + "},\"usage\":{}}";
+        }
+        var puertas = new[] { "1) Nuevo (Button)", "2) Grabar (Button)" };
+        object D(string json2) => elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "crear", puertas, 0.7, (Func<string, string>)(_ => json2) })!;
+
+        var ya = D(Respuesta("1) Nuevo (Button)", 0.95, 0.9, 0.1));
+        Debe(!(bool)PropDe(ya, "Actuar")! && ((string)PropDe(ya, "Porque")!).Contains("cumplido", StringComparison.OrdinalIgnoreCase),
+            $"con cumplido 0,9 no se acciona y se dice que el objetivo ya está (dijo: «{PropDe(ya, "Porque")}»)");
+        Debe(Math.Abs((double)PropDe(ya, "Cumplido")! - 0.9) < 0.001, "y se conserva cuánto de cumplido dijo");
+
+        var peligroso = D(Respuesta("2) Grabar (Button)", 0.95, 0.1, 0.8));
+        Debe(!(bool)PropDe(peligroso, "Actuar")! && ((string)PropDe(peligroso, "Porque")!).Contains("irreversible", StringComparison.OrdinalIgnoreCase),
+            $"con peligro 0,8 no se acciona y se dice por qué (dijo: «{PropDe(peligroso, "Porque")}»)");
+
+        var normal = D(Respuesta("1) Nuevo (Button)", 0.95, 0.1, 0.1));
+        Debe((bool)PropDe(normal, "Actuar")!, "con las dos bajas se acciona");
+        var viejo = D(Respuesta("1) Nuevo (Button)", 0.95, null, null));
+        Debe((bool)PropDe(viejo, "Actuar")!, "y una respuesta sin las dos nouls sigue valiendo: un transporte viejo no rompe el paso");
+    }
+
+    private static void ElInterruptorEnVivo()
+    {
+        var t = Capacidad("U.WindowsClient.Decision.InterruptorDelDecisor");
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var pCon = tc?.GetProperty("ConDecisor", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        if (t == null || pCon == null || pDecisor == null)
+        {
+            Pendiente("Decision.InterruptorDelDecisor", "290", "036");
+            return;
+        }
+
+        string Catalogo() => string.Join("|", ((System.Collections.IEnumerable)tc!.GetMethod("Herramientas", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)!.Invoke(null, null)!)
+            .Cast<object>().Select(u => (string)u.GetType().GetProperty("Nombre")!.GetValue(u)!));
+
+        bool antes = (bool)pCon.GetValue(null)!;
+        try
+        {
+            var mapa = new SurfaceMapTools(() => null);
+            int reenviados = 0;
+            // ctor(SurfaceMapTools mapa, Func<Task> reenviarCatalogo, Action<string> log)
+            var interruptor = Activator.CreateInstance(t, mapa,
+                (Func<System.Threading.Tasks.Task>)(() => { reenviados++; return System.Threading.Tasks.Task.CompletedTask; }),
+                (Action<string>)(_ => { }))!;
+            var encender = t.GetMethod("Encender")!; var apagar = t.GetMethod("Apagar")!;
+            var estado = t.GetProperty("Estado")!; var encendido = t.GetProperty("Encendido")!;
+            Func<string, string?> Entorno(string? decisor, string? clave) => n => n switch { "U_DECISOR" => decisor, "TYPESAFE_API_KEY" => clave, _ => null };
+
+            pCon.SetValue(null, false);
+            string sinDecisor = Catalogo();
+
+            bool ok = (bool)encender.Invoke(interruptor, new object[] { Entorno("simulado", null) })!;
+            Debe(ok && (bool)encendido.GetValue(interruptor)! && (bool)pCon.GetValue(null)! && pDecisor.GetValue(mapa) != null,
+                "encender deja map_decidir en el catálogo y un decisor en el mapa");
+            Debe(ArgumentosDe("map_decidir") != null, "y el catálogo lo trae");
+            Debe(reenviados == 1, $"y se re-manda el catálogo a la voz ({reenviados})");
+
+            apagar.Invoke(interruptor, null);
+            Debe(!(bool)encendido.GetValue(interruptor)! && !(bool)pCon.GetValue(null)! && pDecisor.GetValue(mapa) == null,
+                "apagar deja el mapa sin decisor");
+            Debe(Catalogo() == sinDecisor, "y el catálogo byte a byte como sin decisor");
+            Debe(reenviados == 2, "y también re-manda el catálogo");
+
+            bool noPudo = (bool)encender.Invoke(interruptor, new object[] { Entorno("jev", null) })!;
+            string est = (string)estado.GetValue(interruptor)!;
+            Debe(!noPudo && !(bool)encendido.GetValue(interruptor)! && est.Contains("TYPESAFE_API_KEY"),
+                $"pedir Jev sin clave se queda apagado y el estado dice por qué («{est}»)");
+            Debe(est.Length > 0 && !est.Contains('\n'), "y el estado es una línea");
+        }
+        finally { pCon.SetValue(null, antes); }
     }
 
     private static void SiElDecisorNoActuaNadaSePulsa()
