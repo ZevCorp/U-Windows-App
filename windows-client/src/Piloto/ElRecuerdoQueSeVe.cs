@@ -48,6 +48,27 @@ public static class ElRecuerdoQueSeVe
     /// (unas 40 palabras por 4 s a ritmo de lectura); techo de 4 s para que un párrafo largo no
     /// detenga la comprobación entera.</remarks>
     public const int SueloMs = 900, TechoMs = 4000, PorCaracterMs = 25;
+    /// <summary>
+    /// LA COREOGRAFÍA SEGÚN DÓNDE SE ESTÁ. Promesa 266 (spec 030). Dentro de una comprobación, la de la 180 entera; fuera,
+    /// señalar y tocar en un solo gesto —sin tarjeta ni pausa de lectura— y el recuerdo se escribe DESPUÉS de tocar.
+    /// </summary>
+    /// <remarks>
+    /// LAS DOS TANDAS QUE SENTÍA EL DUEÑO (2026-09-17): el modelo ponía decir/recuerdo en el 89% de los clics normales, y
+    /// cada uno pagaba la coreografía de lección entera —escribir el recuerdo, tarjeta, pausa de 0,9 a 4 s— antes de
+    /// tocar. La tarjeta no la vio nunca; la pausa sí. Él quería «la carita al lado y el clic al instante».
+    /// </remarks>
+    public static IReadOnlyList<Gesto> Coreografia(bool hayElemento, bool hayRecuerdo, bool hayDecir, bool enComprobacion)
+    {
+        if (enComprobacion) return Coreografia(hayElemento, hayRecuerdo, hayDecir);
+        var g = new List<Gesto>();
+        if (hayElemento) g.Add(Gesto.Senalar);
+        if (hayDecir) g.Add(Gesto.Decir);
+        g.Add(Gesto.Actuar);
+        if (hayRecuerdo) g.Add(Gesto.Escribir);
+        if (hayElemento) g.Add(Gesto.Soltar);
+        return g;
+    }
+
     public static int TiempoDeLectura(string recuerdo)
         => Math.Clamp(SueloMs + PorCaracterMs * (recuerdo ?? "").Trim().Length, SueloMs, TechoMs);
 }

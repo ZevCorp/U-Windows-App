@@ -1770,6 +1770,7 @@ public sealed class UiaSurface : IUiSurface
         double px = 0, py = 0; bool punto = false;
         try { TraerALaVista(el); var pp = el.GetClickablePoint(); px = pp.X; py = pp.Y; punto = true; } catch { punto = false; }
         var gesto = ComoSePulsa.Decidir(invoke, toggle, seleccion, lista, punto);
+        L($"    escalera: {string.Join(" → ", ComoSePulsa.Escalera(gesto))}");
         L($"    cómo se pulsa «{Safe(() => el.Current.Name)}»: {gesto} (invoke={invoke} toggle={toggle} seleccion={seleccion} lista={lista} punto={punto})");
         if (gesto == ComoSePulsa.Gesto.Mensaje)
         {
@@ -1787,9 +1788,10 @@ public sealed class UiaSurface : IUiSurface
             }
             catch (Exception e)
             {
-                error = $"el patrón de «{Safe(() => el.Current.Name)}» falló: {e.Message}";
-                L("    ✗ " + error);
-                return false;
+                // LA ESCALERA SIGUE (promesa 265): un patrón que lanza no es un clic que falló. Se baja al ratón real,
+                // como ya hacía el mensaje cuando no se entregaba; sólo el físico decide que no se pudo.
+                L($"    patrón de «{Safe(() => el.Current.Name)}» falló ({e.Message}) → ratón real");
+                error = "";
             }
         }
         // EL FÍSICO, COMO EXCEPCIÓN: con la ventana delante de verdad (el SetForegroundWindow a secas

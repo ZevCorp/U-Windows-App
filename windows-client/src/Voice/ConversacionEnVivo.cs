@@ -1155,7 +1155,11 @@ public sealed class ConversacionEnVivo : IDisposable
                 || resultado.StartsWith("Nada ", StringComparison.OrdinalIgnoreCase)
                 || resultado.Contains("no existe", StringComparison.OrdinalIgnoreCase)
                 || resultado.Contains("falló", StringComparison.OrdinalIgnoreCase)
-                || resultado.Contains("no se pudo", StringComparison.OrdinalIgnoreCase);
+                || resultado.Contains("no se pudo", StringComparison.OrdinalIgnoreCase)
+                // UNA TANDA QUE PARÓ A MEDIAS ES UN FALLO (promesa 267): «hice 0 de 1 y paré en el paso 1» salía con ✓
+                // en el notch, y el dueño lo veía como lo que era. El icono no puede mentir.
+                || resultado.StartsWith("hice 0 de", StringComparison.OrdinalIgnoreCase)
+                || resultado.Contains(" y paré en el paso ", StringComparison.Ordinal);
 
         string primera = resultado.Split('\n')[0].Trim();
         if (primera.Length > 70) primera = primera[..70] + "…";

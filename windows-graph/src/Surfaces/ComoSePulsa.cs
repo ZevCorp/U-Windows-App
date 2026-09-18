@@ -82,6 +82,21 @@ public static class ComoSePulsa
         bool esDestructivo, bool sabeQueLleva, bool yaSeRepitio)
         => !cambioLaPantalla && vivosAntes == vivosDespues && !esDestructivo && sabeQueLleva && !yaSeRepitio;
 
+    /// <summary>
+    /// LA ESCALERA DE PULSAR, como lista: lo elegido primero, y el clic físico siempre al final. Promesa 265 (spec 030).
+    /// </summary>
+    /// <remarks>
+    /// UN PATRÓN QUE LANZA NO ES UN CLIC QUE FALLÓ. El 2026-09-17 «Volver» tenía Invoke, Invoke lanzó «Error no
+    /// reconocido», y se devolvió fallo sin bajar al ratón: el modelo buscó otra vía y el dueño vio «lo intenta de
+    /// dos formas». El mensaje ya caía al físico cuando no se entregaba; el patrón no. Ahora los dos.
+    /// </remarks>
+    public static IReadOnlyList<Gesto> Escalera(Gesto elegido) => elegido switch
+    {
+        Gesto.Patron => new[] { Gesto.Patron, Gesto.Fisico },
+        Gesto.Mensaje => new[] { Gesto.Mensaje, Gesto.Fisico },
+        _ => new[] { Gesto.Fisico },
+    };
+
     /// <summary>¿Hay que devolverle el foco a la persona después de pulsar?</summary>
     public static bool HayQueDevolver(Gesto gesto, IntPtr focoAntes, IntPtr focoDespues)
         => gesto == Gesto.Fisico && focoAntes != IntPtr.Zero && focoAntes != focoDespues;
