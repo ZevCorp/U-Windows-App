@@ -781,6 +781,12 @@ internal static class Contrato
         Prueba("287. Jev elige entre puertas únicas y numeradas —«3) Investigación (Hyperlink)»— y lo elegido se acciona por su SELECTOR, nunca por su etiqueta: dos puertas con el mismo nombre no chocan, la mano recibe el selector de la elegida, y la cuenta la nombra por su etiqueta y su número", JevEligePorNumeroYSePulsaPorSelector);
         Prueba("288. la segunda mejor sin otra llamada: si la elegida no está viva al ir a pulsarla se prueba la siguiente por probabilidad si supera el mínimo, como mucho una vez más; a Jev se le preguntó UNA sola vez; la cuenta dice qué se probó y por qué; y un homónimo o un fallo que no sea «no está» no dispara la segunda", LaSegundaMejorSinOtraLlamada);
         Prueba("289. una llamada, tres preguntas: el cuerpo lleva puerta (choice), cumplido (noul) y peligro (noul); con cumplido alto no se acciona y se dice que el objetivo ya está; con peligro alto no se acciona y se dice por qué; y una respuesta sin esas dos sigue valiendo", UnaLlamadaTresPreguntas);
+        // ── Spec 037: el tramo ──────────────────────────────────────────────────────────────────
+        Prueba("291. map_tramo(objetivo, tope) contesta al instante «en marcha» y devuelve el turno: el bucle corre por detrás; pedir otro mientras uno corre no arranca un segundo y dice cuál corre; sin `objetivo` dice qué falta; y con el decisor apagado no existe, como map_decidir", MapTramoContestaAlInstanteYCorrePorDetras);
+        Prueba("292. el tramo para solo y su cuenta dice por cuál: el decisor dice que el objetivo ya está cumplido; se agota el tope; el decisor no se atreve; la mano no pudo; se pidió el freno; o se repitió la misma puerta tres veces; y cada paso cuenta, hecho o no", ElTramoParaSoloYDicePorQue);
+        Prueba("293. map_alto para el tramo en el paso en curso, sin esperar al siguiente: pone el mismo freno que Escape y contesta dónde quedó; sin tramo en marcha lo dice", MapAltoParaElTramoDondeVa);
+        Prueba("294. el tramo cuenta cada paso —al notch y al log, con la puerta, el número y la confianza— y la cuenta final lleva lo que hay delante; map_tramo_estado la devuelve en cualquier momento", ElTramoCuentaCadaPasoYLoQueDejoDelante);
+        Prueba("295. la voz se entera sin preguntar: al parar, la cuenta entra a la sesión de voz como un mensaje, una sola vez por tramo; sin sesión de voz, la cuenta queda para map_tramo_estado", LaVozSeEnteraSinPreguntar);
         Prueba("290. el interruptor en vivo: encender deja map_decidir en el catálogo y un decisor en el mapa; apagar deja el catálogo byte a byte como sin decisor y el mapa sin decisor; las dos cosas re-mandan el catálogo a la voz; pedir encender sin clave ni modo válido se queda apagado y dice por qué; y el estado se lee en una línea", ElInterruptorEnVivo);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
@@ -11897,6 +11903,214 @@ internal static class Contrato
         Debe((bool)PropDe(normal, "Actuar")!, "con las dos bajas se acciona");
         var viejo = D(Respuesta("1) Nuevo (Button)", 0.95, null, null));
         Debe((bool)PropDe(viejo, "Actuar")!, "y una respuesta sin las dos nouls sigue valiendo: un transporte viejo no rompe el paso");
+    }
+
+    // ── Spec 037: el tramo ───────────────────────────────────────────────────────────────────────
+    //
+    // EL TRAMO ES UN BUCLE QUE CORRE POR DETRÁS. Se juzga con delegados falsos sobre el mapa: el decisor, la
+    // mano (RecorrerPorElNucleo), las puertas, el freno (HayQueParar), el progreso y el aviso a la voz. El
+    // test espera al bucle con EsperarTramo, que existe para esto: un juez que duerme «por si acaso» es un
+    // juez que miente cuando la máquina va lenta.
+
+    private sealed class TramoDePrueba
+    {
+        public SurfaceMapTools Mapa = null!;
+        public List<string> Pulsados = new();
+        public List<string> Progreso = new();
+        public List<string> Avisos = new();
+        public int Decisiones;
+    }
+
+    /// <summary>Un mapa listo para tramos: puertas A/B/C con selector, mano falsa, decisor falso, sin freno real.</summary>
+    private static TramoDePrueba? MapaParaTramo(
+        Func<int, U.WindowsClient.Decision.DecisionDeUnPaso> decide,
+        Func<string, RecorrerSegunElNucleo.Resultado>? mano = null,
+        Func<bool>? hayQueParar = null,
+        int retrasoDelDecisorMs = 0)
+    {
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pParar = typeof(SurfaceMapTools).GetProperty("HayQueParar");
+        var pProgreso = typeof(SurfaceMapTools).GetProperty("Progreso");
+        var pAvisar = typeof(SurfaceMapTools).GetProperty("AvisarALaVoz");
+        var pFreno = typeof(SurfaceMapTools).GetProperty("PedirFreno");
+        if (pPuertas == null || pDecisor == null || pParar == null || pProgreso == null || pAvisar == null || pFreno == null) return null;
+
+        var t = new TramoDePrueba();
+        var m = MapaParaDecidir(pPuertas, ("A", "Button"), ("B", "Button"), ("C", "Button"))!.Value;
+        t.Mapa = m.mapa;
+        t.Mapa.RecorrerPorElNucleo = pasos =>
+        {
+            t.Pulsados.Add(pasos[0].Exit);
+            return mano != null ? mano(pasos[0].Exit)
+                : new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true, $"hice los 1 paso(s): pulsé «{pasos[0].Exit}» y ahora estás en «uia://sap/NV2000».", true);
+        };
+        pDecisor.SetValue(t.Mapa, Decide((_, _, _) =>
+        {
+            if (retrasoDelDecisorMs > 0) System.Threading.Thread.Sleep(retrasoDelDecisorMs);
+            return decide(++t.Decisiones);
+        }));
+        pParar.SetValue(t.Mapa, hayQueParar ?? (() => false));
+        pProgreso.SetValue(t.Mapa, (Action<string>)(l => { lock (t.Progreso) t.Progreso.Add(l); }));
+        pAvisar.SetValue(t.Mapa, (Action<string>)(l => { lock (t.Avisos) t.Avisos.Add(l); }));
+        pFreno.SetValue(t.Mapa, (Action<string>)(_ => { }));
+        t.Mapa.InventarioParaLosActos = () => "EN PANTALLA AHORA, en «uia://sap/NV2000» (3 elemento(s)):\n  «A» (Button)\n  «B» (Button)\n  «C» (Button)\n";
+        return t;
+    }
+
+    private static bool EsperarTramo(SurfaceMapTools mapa, int ms)
+    {
+        var m = typeof(SurfaceMapTools).GetMethod("EsperarTramo");
+        return m != null && (bool)m.Invoke(mapa, new object[] { ms })!;
+    }
+
+    private static Dictionary<string, string> Args(params (string k, string v)[] kv) => kv.ToDictionary(x => x.k, x => x.v);
+
+    private static void MapTramoContestaAlInstanteYCorrePorDetras()
+    {
+        var t = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "Jev eligió «1) A (Button)» con confianza 0.90."), retrasoDelDecisorMs: 400);
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var pCon = tc?.GetProperty("ConDecisor", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        if (t == null || pCon == null || !SurfaceMapTools.IsMapTool("map_tramo"))
+        {
+            Pendiente("SurfaceMapTools.map_tramo + HayQueParar/Progreso/AvisarALaVoz/PedirFreno + EsperarTramo", "291", "037");
+            return;
+        }
+
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        string r = t.Mapa.Call("map_tramo", Args(("objetivo", "llegar a B"), ("tope", "2")));
+        reloj.Stop();
+        Debe(reloj.ElapsedMilliseconds < 150 && r.Contains("en marcha", StringComparison.OrdinalIgnoreCase),
+            $"map_tramo contesta al instante «en marcha» aunque el decisor tarde 400 ms por paso (tardó {reloj.ElapsedMilliseconds} ms; dijo «{(r.Length > 100 ? r[..100] : r)}»)");
+        string r2 = t.Mapa.Call("map_tramo", Args(("objetivo", "otra cosa")));
+        Debe(r2.Contains("ya hay un tramo", StringComparison.OrdinalIgnoreCase) && r2.Contains("llegar a B", StringComparison.Ordinal),
+            $"pedir otro mientras corre no arranca un segundo y dice cuál corre (dijo «{(r2.Length > 100 ? r2[..100] : r2)}»)");
+        Debe(EsperarTramo(t.Mapa, 5000), "y el bucle termina solo");
+        Debe(t.Pulsados.Count == 2, $"corrió por detrás hasta su tope de 2 (pulsó {t.Pulsados.Count})");
+
+        string r3 = t.Mapa.Call("map_tramo", new Dictionary<string, string>());
+        Debe(r3.StartsWith("falta `objetivo`", StringComparison.Ordinal), $"sin objetivo dice qué falta (dijo «{r3}»)");
+
+        // APAGADO: ni en el catálogo ni en el mapa.
+        bool antes = (bool)pCon.GetValue(null)!;
+        try
+        {
+            pCon.SetValue(null, false);
+            Debe(ArgumentosDe("map_tramo") == null && ArgumentosDe("map_alto") == null, "con el decisor apagado, map_tramo y map_alto no están en el catálogo");
+            pCon.SetValue(null, true);
+            Debe(ArgumentosDe("map_tramo")?.Contains("objetivo") == true && ArgumentosDe("map_alto") != null, "encendido, están: map_tramo con objetivo, y map_alto");
+        }
+        finally { pCon.SetValue(null, antes); }
+        var sinDecisor = new SurfaceMapTools(() => null);
+        Debe(sinDecisor.Call("map_tramo", Args(("objetivo", "x"))).StartsWith("todavía no sé", StringComparison.Ordinal), "y sin decisor en el mapa contesta que todavía no sabe");
+    }
+
+    private static void ElTramoParaSoloYDicePorQue()
+    {
+        if (MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x")) == null || !SurfaceMapTools.IsMapTool("map_tramo_estado"))
+        { Pendiente("SurfaceMapTools.map_tramo/map_tramo_estado", "292", "037"); return; }
+
+        string Corre(TramoDePrueba t, int tope = 15)
+        {
+            t.Mapa.Call("map_tramo", Args(("objetivo", "el objetivo"), ("tope", tope.ToString())));
+            EsperarTramo(t.Mapa, 8000);
+            return t.Mapa.Call("map_tramo_estado", new Dictionary<string, string>());
+        }
+        var ids = new[] { "1) A (Button)", "2) B (Button)", "3) C (Button)" };
+
+        // 1. El objetivo ya está cumplido: el decisor lo dice y no se pulsa nada.
+        var cumplido = MapaParaTramo(_ => Decision("No", "Jev dice que el objetivo ya está cumplido en esta pantalla (0.90): no se acciona nada más. Decide Luna.", 0.9))!;
+        string c1 = Corre(cumplido);
+        Debe(cumplido.Pulsados.Count == 0 && c1.Contains("cumplido", StringComparison.OrdinalIgnoreCase), $"cumplido: 0 pulsos y la cuenta lo dice («{Recorte(c1)}»)");
+
+        // 2. El tope: el decisor siempre tiene una puerta distinta; se para en el tope.
+        var tope = MapaParaTramo(n => Decision("Si", ids[(n - 1) % 3], 0.9, "x"))!;
+        string c2 = Corre(tope, 3);
+        Debe(tope.Pulsados.Count == 3 && c2.Contains("tope", StringComparison.OrdinalIgnoreCase), $"tope 3: 3 pulsos y la cuenta lo dice («{Recorte(c2)}»)");
+
+        // 3. No se atreve: confianza baja.
+        var duda = MapaParaTramo(_ => Decision("No", "Jev eligió «1) A (Button)» con confianza 0.40, por debajo del mínimo exigido (0.70): no se acciona a medias. Decide Luna.", 0.4))!;
+        string c3 = Corre(duda);
+        Debe(duda.Pulsados.Count == 0 && c3.Contains("no se acciona", StringComparison.OrdinalIgnoreCase), $"duda: 0 pulsos y la cuenta trae el porqué del decisor («{Recorte(c3)}»)");
+
+        // 4. La mano no pudo (y sin alternativas no hay segunda).
+        var noPudo = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x"),
+            mano: exit => new RecorrerSegunElNucleo.Resultado(0, 1, "uia://sap/NWP1", false, $"hice 0 de 1 y paré en el paso 1: no lo veo en «uia://sap/NWP1»: «{exit}»"))!;
+        string c4 = Corre(noPudo);
+        Debe(noPudo.Pulsados.Count == 1 && c4.Contains("no lo veo", StringComparison.OrdinalIgnoreCase), $"mano no pudo: 1 intento y la cuenta trae lo que dijo la mano («{Recorte(c4)}»)");
+
+        // 5. El freno: se pide tras el primer paso.
+        int pasos = 0;
+        var freno = MapaParaTramo(n => Decision("Si", ids[(n - 1) % 3], 0.9, "x"), hayQueParar: () => pasos++ >= 1)!;
+        string c5 = Corre(freno);
+        Debe(freno.Pulsados.Count == 1 && c5.Contains("paraste", StringComparison.OrdinalIgnoreCase), $"freno: para en el paso en curso y lo dice («{Recorte(c5)}»)");
+
+        // 6. El bucle: la misma puerta tres veces y la pantalla no cambia.
+        var bucle = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x"),
+            mano: exit => new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NWP1", true, $"hice los 1 paso(s): pulsé «{exit}» y la pantalla no cambió.", false))!;
+        string c6 = Corre(bucle);
+        Debe(bucle.Pulsados.Count == 3 && c6.Contains("tres veces", StringComparison.OrdinalIgnoreCase), $"bucle: se para en la tercera repetición y lo dice («{Recorte(c6)}»)");
+        Debe(c6.Contains("3 paso", StringComparison.Ordinal) || c6.Contains("hice 3", StringComparison.Ordinal), "y cada paso cuenta, hecho o no");
+    }
+
+    private static string Recorte(string s) => s.Length > 110 ? s[..110].Replace("\n", " ") : s.Replace("\n", " ");
+
+    private static void MapAltoParaElTramoDondeVa()
+    {
+        var t = MapaParaTramo(n => Decision("Si", new[] { "1) A (Button)", "2) B (Button)", "3) C (Button)" }[(n - 1) % 3], 0.9, "x"), retrasoDelDecisorMs: 300);
+        if (t == null || !SurfaceMapTools.IsMapTool("map_alto")) { Pendiente("SurfaceMapTools.map_alto", "293", "037"); return; }
+
+        string nada = t.Mapa.Call("map_alto", new Dictionary<string, string>());
+        Debe(nada.Contains("no hay ningún tramo", StringComparison.OrdinalIgnoreCase), $"sin tramo en marcha lo dice («{Recorte(nada)}»)");
+
+        t.Mapa.Call("map_tramo", Args(("objetivo", "ir lejos"), ("tope", "10")));
+        System.Threading.Thread.Sleep(450);
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        string alto = t.Mapa.Call("map_alto", new Dictionary<string, string>());
+        reloj.Stop();
+        Debe(reloj.ElapsedMilliseconds < 200, $"map_alto contesta sin esperar al paso siguiente ({reloj.ElapsedMilliseconds} ms)");
+        Debe(EsperarTramo(t.Mapa, 5000), "y el tramo termina");
+        Debe(t.Pulsados.Count <= 2, $"paró en el paso en curso: pulsó {t.Pulsados.Count} de 10");
+        Debe(alto.Contains("paso", StringComparison.OrdinalIgnoreCase) && (alto.Contains("quedó", StringComparison.OrdinalIgnoreCase) || alto.Contains("paré", StringComparison.OrdinalIgnoreCase) || alto.Contains("paro", StringComparison.OrdinalIgnoreCase)),
+            $"y contesta dónde quedó («{Recorte(alto)}»)");
+        string estado = t.Mapa.Call("map_tramo_estado", new Dictionary<string, string>());
+        Debe(estado.Contains("paraste", StringComparison.OrdinalIgnoreCase) || estado.Contains("alto", StringComparison.OrdinalIgnoreCase), $"y la cuenta del tramo dice que lo pararon («{Recorte(estado)}»)");
+    }
+
+    private static void ElTramoCuentaCadaPasoYLoQueDejoDelante()
+    {
+        var t = MapaParaTramo(n => Decision("Si", new[] { "1) A (Button)", "2) B (Button)", "3) C (Button)" }[(n - 1) % 3], 0.85, "x"));
+        if (t == null) { Pendiente("SurfaceMapTools.Progreso + map_tramo_estado", "294", "037"); return; }
+
+        t.Mapa.Call("map_tramo", Args(("objetivo", "recorrer"), ("tope", "2")));
+        EsperarTramo(t.Mapa, 5000);
+        var pasos = t.Progreso.Where(l => l.Contains("«A»") || l.Contains("«B»")).ToList();
+        Debe(pasos.Count >= 2, $"el progreso cuenta cada paso ({t.Progreso.Count} línea(s): {string.Join(" | ", t.Progreso.Take(4))})");
+        Debe(pasos.All(l => l.Contains("1)") || l.Contains("2)")) && pasos.All(l => l.Contains("0.85", StringComparison.Ordinal)),
+            "y cada línea lleva el número de la puerta y la confianza");
+        string estado = t.Mapa.Call("map_tramo_estado", new Dictionary<string, string>());
+        Debe(estado.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), "y la cuenta final lleva lo que hay delante");
+        Debe(estado.Contains("2", StringComparison.Ordinal) && estado.Contains("tope", StringComparison.OrdinalIgnoreCase), $"y dice cuántos pasos y por qué paró («{Recorte(estado)}»)");
+    }
+
+    private static void LaVozSeEnteraSinPreguntar()
+    {
+        var t = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x"));
+        if (t == null) { Pendiente("SurfaceMapTools.AvisarALaVoz", "295", "037"); return; }
+
+        t.Mapa.Call("map_tramo", Args(("objetivo", "una cosa"), ("tope", "1")));
+        EsperarTramo(t.Mapa, 5000);
+        System.Threading.Thread.Sleep(100);
+        Debe(t.Avisos.Count == 1, $"al parar, la cuenta llega a la voz exactamente una vez ({t.Avisos.Count})");
+        Debe(t.Avisos.Count == 1 && t.Avisos[0].Contains("tope", StringComparison.OrdinalIgnoreCase) && t.Avisos[0].Contains("«A»", StringComparison.Ordinal),
+            $"y es la cuenta entera, con lo que se pulsó y por qué paró («{(t.Avisos.Count > 0 ? Recorte(t.Avisos[0]) : "")}»)");
+
+        // Sin voz: no se lanza nada y la cuenta queda para map_tramo_estado.
+        var sinVoz = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x"))!;
+        typeof(SurfaceMapTools).GetProperty("AvisarALaVoz")!.SetValue(sinVoz.Mapa, null);
+        sinVoz.Mapa.Call("map_tramo", Args(("objetivo", "otra"), ("tope", "1")));
+        EsperarTramo(sinVoz.Mapa, 5000);
+        Debe(sinVoz.Mapa.Call("map_tramo_estado", new Dictionary<string, string>()).Contains("«A»", StringComparison.Ordinal), "sin voz, la cuenta queda para map_tramo_estado");
     }
 
     private static void ElInterruptorEnVivo()
