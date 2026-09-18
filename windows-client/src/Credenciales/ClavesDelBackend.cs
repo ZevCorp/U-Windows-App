@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace U.WindowsClient.Credenciales;
 
 /// <summary>
-/// LAS CLAVES DE PAGO NO VIAJAN DENTRO DEL .EXE: SE LE PIDEN A GRAPH. Promesa 300 (spec 041).
+/// LAS CLAVES DE PAGO NO VIAJAN DENTRO DEL .EXE: SE LE PIDEN A GRAPH. Promesa 300 (spec 045).
 /// </summary>
 /// <remarks>
 /// QUÉ PROBLEMA RESUELVE, PORQUE NO ERA EL QUE PARECÍA. Un <c>Setup.exe</c> distribuido llevaba
@@ -32,7 +32,7 @@ namespace U.WindowsClient.Credenciales;
 ///
 /// LO QUE ESTO NO ES: la clave acaba en la memoria del cliente. Es mejor que dentro del instalador
 /// —no se reparte, y se puede rotar y revocar— pero lo óptimo es una credencial efímera por sesión,
-/// como ya hace <c>DictadoEnVivo</c> con Soniox. Está escrito en la spec 041 como el corte siguiente.
+/// como ya hace <c>DictadoEnVivo</c> con Soniox. Está escrito en la spec 045 como el corte siguiente.
 /// </remarks>
 public sealed class ClavesDelBackend
 {

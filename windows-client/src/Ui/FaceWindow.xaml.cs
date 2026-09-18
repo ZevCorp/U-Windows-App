@@ -440,7 +440,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // Y SE PUEDE CAMBIAR EN VIVO (spec 036, promesa 290): el botón «Jev» del panel enciende y apaga
             // por el mismo interruptor; la variable solo fija el estado inicial.
             {
-                // LAS CLAVES DE PAGO NO VIAJAN DENTRO DEL .EXE (promesa 300, spec 041): la copia
+                // LAS CLAVES DE PAGO NO VIAJAN DENTRO DEL .EXE (promesa 300, spec 045): la copia
                 // distribuida se las pide a Graph con la credencial que el instalador ya embebe. Se
                 // pide SIN esperar: bloquear el arranque en una llamada de red seria pagar el peor
                 // caso de la red en cada abrir. Los dos que las usan las piden mas tarde —la voz al
@@ -744,7 +744,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     _mapaVivo!.Nucleo,
                     DondeTrabajo,
                     (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
-                    superficie => Uia.AppAligner.PonerDelante(superficie)).Hasta(destino);
+                    superficie => Uia.AppAligner.PonerDelante(superficie))
+                {
+                    // La ventana que quedó delante ES ya la de trabajo: si no, «dónde» sigue mirando la anterior (332).
+                    AlPonerseDelante = () => SeguirElFoco(antes),
+                }.Hasta(destino);
                 SeguirElFoco(antes);
                 return cuenta;
             };

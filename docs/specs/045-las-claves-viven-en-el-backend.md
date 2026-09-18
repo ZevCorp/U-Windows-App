@@ -1,6 +1,6 @@
 # Las claves viven en el backend: una copia distribuida no lleva secretos dentro
 
-> Spec 041, del 2026-09-18. La 040 y la promesa 299 se las llevó otra rama el mismo día; los números no se reciclan. Nace de una petición concreta del dueño —«generar el instalador para pasárselo
+> Spec 045, del 2026-09-18 (nació como 041; la 041 que entró primero a `main` es «el Enter no se deshace», y se renumeró al ponerla al día). La 040 y la promesa 299 se las llevó otra rama el mismo día; los números no se reciclan. Nace de una petición concreta del dueño —«generar el instalador para pasárselo
 > a un usuario, y que lo pueda utilizar 100%»— y de lo que se encontró al ir a hacerlo.
 
 ## El hecho que la provoca

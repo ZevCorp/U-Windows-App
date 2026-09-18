@@ -85,6 +85,19 @@ public sealed class PulsarSegunElNucleo
     /// </summary>
     public int EsperaMaximaMs { get; init; } = 1800;
 
+    /// <summary>
+    /// LO QUE SE ESPERA TRAS PULSAR UN CAMPO DE TEXTO. Promesa 334 (spec 043): poco, porque un campo no navega.
+    /// </summary>
+    /// <remarks>
+    /// MEDIDO EL 2026-09-18 sobre las 50 pulsaciones con reloj de tres pruebas del dueño: 16 no cambiaron de
+    /// pantalla, y 7 de esas eran campos de texto (4 ComboBox, 3 Edit). LOS CAMPOS CAMBIARON DE PANTALLA 0 VECES DE 7.
+    /// Cada una costó 3,3-3,9 s: 1,8 s esperando un cambio que un campo no produce, y 0,3-0,5 s preguntándole al
+    /// terreno si esa «puerta» lleva a algún sitio. Un campo no es una puerta.
+    ///
+    /// NO ES CERO: si en este rato la pantalla cambia, manda lo que pasó y se cuenta como cualquier navegación.
+    /// </remarks>
+    public int EsperaDeCampoMs { get; init; } = 300;
+
     /// <summary>Para que el reintento de la 248 no se llame a sí mismo.</summary>
     private bool _yaRepeti;
 
@@ -144,8 +157,9 @@ public sealed class PulsarSegunElNucleo
         if (motivo != null)
             return new(false, false, desde, desde, false,
                 motivo.Length > 0 ? $"no pude pulsar «{etiqueta}»: {motivo}" : $"no pude pulsar «{etiqueta}».");
+        bool esCampo = EsCampoDeTexto(desde, selector);
         var relojEspera = System.Diagnostics.Stopwatch.StartNew();
-        string hasta = EsperarACambiar(desde);
+        string hasta = EsperarACambiar(desde, esCampo ? EsperaDeCampoMs : EsperaMaximaMs);
         relojEspera.Stop();
         Diagnostics.LogBus.Log("mano", $"⏱ pulsar «{etiqueta}»: la mano {relojMano.ElapsedMilliseconds} ms · esperar el cambio {relojEspera.ElapsedMilliseconds} ms ({_sondeos} sondeo(s) de «dónde») · {(hasta.Length > 0 && hasta != desde ? "cambió" : "no cambió")}");
         // LA VENTANA DE TRABAJO SE CERRÓ (promesa 233): «dónde» volvió al foco de la persona, y eso
@@ -155,6 +169,12 @@ public sealed class PulsarSegunElNucleo
             return new(true, hasta != desde, desde, hasta, false,
                 $"pulsé «{etiqueta}» y {aviso}. Ahora estás en «{hasta}».");
         string gestoUsado = gesto;
+
+        // UN CAMPO DE TEXTO NO NAVEGA (promesa 334): ni se consulta el terreno ni se repite el clic —las dos son para
+        // puertas—, y se dice lo que es para que lo siguiente sea escribir.
+        if (esCampo && (hasta.Length == 0 || hasta == desde))
+            return new(true, false, desde, desde, false,
+                $"pulsé «{etiqueta}»: es un campo de texto y ya tiene el foco (la pantalla no cambió, que es lo normal). Para escribir en él, map_type.");
 
         // UNA PUERTA QUE LLEVA AQUÍ NO SE ENSAYA NI SE REPITE (promesa 296). Va DESPUÉS de la primera espera a
         // propósito: si la pantalla SÍ cambió —un «Siguiente» que vive en todas las páginas— manda lo que pasó,
@@ -243,6 +263,23 @@ public sealed class PulsarSegunElNucleo
         return false;
     }
 
+    /// <summary>
+    /// ¿Lo tocado es un campo de texto? Lo dice el terreno, y si el terreno aún no conoce el elemento —la primera
+    /// vez que se ve una pantalla—, el selector, que siempre lleva el tipo (`;ct=Edit`).
+    /// </summary>
+    private bool EsCampoDeTexto(string ubicacion, string selector)
+    {
+        try
+        {
+            foreach (var a in _grafo.DesdeAqui(ubicacion))
+                if (a.Que.Selector == selector)
+                    return a.Que.Tipo is "Edit" or "ComboBox";
+        }
+        catch { }
+        return selector.EndsWith(";ct=Edit", StringComparison.OrdinalIgnoreCase)
+            || selector.EndsWith(";ct=ComboBox", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Cuántas cosas vivas hay aquí, según el núcleo. Gratis: no toca la pantalla (promesa 248).</summary>
     private int Vivos(string donde)
     {
@@ -257,11 +294,13 @@ public sealed class PulsarSegunElNucleo
         catch { return false; }
     }
 
-    private string EsperarACambiar(string desde)
+    private string EsperarACambiar(string desde) => EsperarACambiar(desde, EsperaMaximaMs);
+
+    private string EsperarACambiar(string desde, int presupuestoMs)
     {
         // EL RELOJ MANDA (promesa 245): antes esto sumaba 120 por vuelta y además pagaba _donde(), que
         // en la máquina del dueño costaba 2,8 s. Una espera de «1,8 s» duraba más de treinta.
-        var compas = new Compas(EsperaMaximaMs);
+        var compas = new Compas(presupuestoMs);
         string ahora = "";
         _sondeos = 0;
         do

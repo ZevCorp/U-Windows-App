@@ -799,6 +799,17 @@ internal static class Contrato
         // ── Spec 040: la pantalla asentada no se espera ─────────────────────────────────────────
         Prueba("299. una pantalla asentada no se espera: si la puerta pedida no está y dos miradas seguidas ven lo mismo —la misma ubicación y las mismas puertas vivas—, la compuerta se rinde en el acto y no al agotar el presupuesto, diciendo lo mismo que decía; si entre las dos miradas la pantalla cambió, está cargando: se espera el presupuesto entero y la puerta que aparece se pulsa; sin poder mirar, nada cambia; y en los dos casos la compuerta deja dicho cuánto esperó y por qué dejó de esperar", UnaPantallaAsentadaNoSeEspera);
         Prueba("300. una copia distribuida NO lleva dentro las claves de la voz ni de Jev: la del entorno manda si está, y si no se le piden a Graph con la credencial que ya va embebida, UNA sola vez aunque se resuelvan varias; lo traído vive solo en memoria; una clave que el backend no da deja su función apagada diciendo cuál falta; y NINGUNA clave aparece jamás en el log ni en la línea de estado", LasClavesVivenEnElBackend);
+
+        // ── Spec 041: el Enter no se deshace, y un espacio no esconde una puerta (bloque 330-339) ─
+        Prueba("330. escribir y confirmar con Enter solo se deshace donde escribir es renombrar —el Explorador de archivos—: en la web y en cualquier otra superficie, que el Enter cambie de pantalla es lo que se pidió; no se pulsa «Atrás», no se espera la vuelta, y la respuesta dice a dónde se llegó; y dos formas de la misma pantalla —con www y sin él— no cuentan como un cambio", ElEnterSoloSeDeshaceDondeEscribirEsRenombrar);
+        Prueba("331. un espacio no esconde una puerta: un selector por nombre encuentra el elemento aunque su nombre real traiga espacios al principio o al final que la etiqueta guardada no tiene; primero se busca el nombre exacto, como siempre, y solo si no aparece se compara recortando; un nombre que de verdad es otro sigue sin casar", UnEspacioNoEscondeUnaPuerta);
+
+        // ── Spec 042: ir a una web no espera mirando otra ventana ───────────────────────────────
+        Prueba("332. ponerse delante de otra ventana la vuelve la de trabajo antes de comprobar la llegada: ir a una web que ya está abierta en otra ventana del navegador se da por llegado en cuanto esa ventana está delante, no al agotar los presupuestos mirando la ventana anterior; y ponerse delante se pide UNA vez por paso —si ya se pidió y no se llegó, no se vuelve a pedir ni se abre un segundo plazo—", PonerseDelanteVuelveLaVentanaLaDeTrabajo);
+        Prueba("333. pedir un subdominio no se cumple estando en el dominio padre: con scholar.google.com pedido, una pestaña en google.com no es «ya estaba abierto»; pedir el sitio a secas sí se cumple en un subdominio suyo, como hasta hoy; y www. no cuenta en ninguno de los dos lados", PedirUnSubdominioNoSeCumpleEnElPadre);
+
+        // ── Spec 043: un campo de texto no navega ───────────────────────────────────────────────
+        Prueba("334. un campo de texto no navega: al pulsar un Edit o un ComboBox no se espera el presupuesto de un cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el terreno ni se repite el clic, y la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta como cualquier navegación; y lo que no es un campo espera como siempre", UnCampoDeTextoNoNavega);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12550,7 +12561,7 @@ internal static class Contrato
             $"y cuando la espera SIRVE —la puerta apareció esperando— también lo dice, con cuánto esperó: [{string.Join(" ¦ ", d3)}]");
     }
 
-    // ── Spec 041: las claves viven en el backend ─────────────────────────────────────────────────
+    // ── Spec 045: las claves viven en el backend ─────────────────────────────────────────────────
 
     private static void LasClavesVivenEnElBackend()
     {
@@ -12563,14 +12574,14 @@ internal static class Contrato
         // nuevo. Se piden al backend, que es donde ya viven como variables de entorno, con la MISMA
         // credencial que el instalador ya lleva —así no viaja ni un secreto nuevo dentro del binario—.
         var t = Capacidad("U.WindowsClient.Credenciales.ClavesDelBackend");
-        if (t == null) { Pendiente("Credenciales.ClavesDelBackend", "300", "041"); return; }
+        if (t == null) { Pendiente("Credenciales.ClavesDelBackend", "300", "045"); return; }
         var ctor = t.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 3);
         var traer = t.GetMethod("TraerAsync");
         var resolver = t.GetMethod("Resolver");
         var estado = t.GetProperty("Estado");
         if (ctor == null || traer == null || resolver == null || estado == null)
         {
-            Pendiente("ClavesDelBackend(entorno, pedir, log) + TraerAsync + Resolver + Estado", "300", "041");
+            Pendiente("ClavesDelBackend(entorno, pedir, log) + TraerAsync + Resolver + Estado", "300", "045");
             return;
         }
 
@@ -12600,7 +12611,7 @@ internal static class Contrato
         // 1b. Y CON TODAS PUESTAS, EL ARRANQUE TAMPOCO PIDE. Un viaje por arranque para no usar nada, y
         //     dos claves de pago en memoria sin que nadie las vaya a usar.
         var siFalta = t.GetMethod("TraerSiFaltaAlgunaAsync");
-        if (siFalta == null) { Pendiente("ClavesDelBackend.TraerSiFaltaAlgunaAsync", "300", "041"); return; }
+        if (siFalta == null) { Pendiente("ClavesDelBackend.TraerSiFaltaAlgunaAsync", "300", "045"); return; }
         int TraerSiFalta(object c) => (int)((Task<int>)siFalta.Invoke(c, new object[] { System.Threading.CancellationToken.None })!).GetAwaiter().GetResult();
         peticiones = 0;
         var todasPuestas = Crear(_ => "la-del-entorno", () => { peticiones++; return Task.FromResult(cuerpo); }, new List<string>());
@@ -12648,6 +12659,223 @@ internal static class Contrato
         Traer(caido);
         Debe(intentos == 1, $"y no se reintenta en bucle: {intentos} intento(s) tras dos llamadas");
         Debe(string.Join(" ", log5).Contains("503"), $"el log dice el motivo real, no «no se pudo» («{string.Join(" ", log5)}»)");
+    }
+
+    // ── Spec 041 ─────────────────────────────────────────────────────────────────────────────────
+
+    private static void ElEnterSoloSeDeshaceDondeEscribirEsRenombrar()
+    {
+        // MEDIDO EL 2026-09-18 en el log de la prueba del dueño: 11 veces `map_type` escribió, dio Enter, vio que la
+        // pantalla cambió y trató de DESHACERLO pulsando «Atrás» —10 en Google, 1 en el Bloc de notas—. La
+        // protección nació para renombrar una carpeta en el Explorador (2026-08-03) y se aplicaba a todo. El botón
+        // no se encontró ninguna vez (es el del Explorador), así que costó 3-4 s por búsqueda y nada más; en un
+        // navegador cuyo «volver» se llamara igual, cada búsqueda se habría deshecho sola diciendo «escribí y confirmé».
+        var t = typeof(U.WindowsClient.Mcp.SurfaceMapTools);
+        var seDeshace = t.GetMethod("ElEnterSeDeshace", BindingFlags.Public | BindingFlags.Static);
+        var relato = t.GetMethod("RelatoDeEscribir", BindingFlags.Public | BindingFlags.Static);
+        if (seDeshace == null || relato == null)
+        {
+            Pendiente("SurfaceMapTools.ElEnterSeDeshace + RelatoDeEscribir", "330", "041");
+            return;
+        }
+        bool Deshace(string antes, string ahora) => (bool)seDeshace.Invoke(null, new object[] { antes, ahora })!;
+        string Relato(string texto, string antes, string ahora) => (string)relato.Invoke(null, new object[] { texto, antes, ahora })!;
+
+        // DONDE NACIÓ: renombrar en el Explorador y que el Enter te meta dentro de la carpeta. Eso sí se deshace.
+        Debe(Deshace("uia://explorer.exe/documentos", "uia://explorer.exe/carpeta-nueva"),
+            "en el Explorador, si el Enter que confirma un nombre abre la carpeta, se vuelve: es el caso para el que nació");
+
+        // EN LA WEB, NAVEGAR ES LO QUE SE PIDIÓ.
+        Debe(!Deshace("web://google.com", "web://google.com/search"),
+            "buscar en Google y que el Enter lleve a los resultados no se deshace");
+        Debe(!Deshace("web://docs.google.com/document/d/abc/edit", "web://google.com/search"),
+            "escribir una dirección en la barra y que el Enter navegue no se deshace");
+        Debe(!Deshace("uia://Notepad.exe/sin-título-bloc-de-notas", "uia://Notepad.exe/sorpresa-encontrada-bloc-de-notas"),
+            "fuera del Explorador tampoco: en el Bloc de notas, que escribir le cambie el título a la pestaña no es haberse ido a ningún sitio");
+        Debe(!Deshace("sapgui://PRD/NWP1", "sapgui://PRD/NV2000"),
+            "ni en SAP, donde el Enter ES el botón de continuar");
+
+        // DOS FORMAS DE LA MISMA PANTALLA NO SON UN CAMBIO (aprendizaje nº16). La de hoy: con www y sin él.
+        Debe(!Deshace("web://www.google.com/search", "web://google.com/search"),
+            "«www.google.com/search» y «google.com/search» son la misma pantalla: no hay nada que deshacer");
+        Debe(!Deshace("uia://explorer.exe/documentos", "uia://explorer.exe/documentos") && !Deshace("", "uia://explorer.exe/x") && !Deshace("uia://explorer.exe/x", ""),
+            "sin cambio, o sin saber dónde se estaba o dónde se está, no se deshace nada");
+
+        // Y SE DICE A DÓNDE SE LLEGÓ: el modelo gastaba otra llamada en averiguarlo.
+        string r1 = Relato("fortify", "web://google.com", "web://google.com/search");
+        Debe(r1.Contains("escribí «fortify»") && r1.Contains("Enter") && r1.Contains("web://google.com/search"),
+            $"cuando el Enter cambió de pantalla, la respuesta dice dónde se está ahora: «{r1}»");
+        string r2 = Relato("hola", "web://x.com/a", "web://x.com/a");
+        Debe(r2.Contains("escribí «hola»") && !r2.Contains("ahora estás"),
+            $"y cuando no cambió, no inventa una llegada: «{r2}»");
+        string r3 = Relato("hola", "web://www.google.com/search", "web://google.com/search");
+        Debe(!r3.Contains("ahora estás"), $"la misma pantalla con otra forma tampoco es una llegada: «{r3}»");
+    }
+
+    private static void UnEspacioNoEscondeUnaPuerta()
+    {
+        // MEDIDO EL 2026-09-18: Chrome nombra su barra 'Barra de direcciones y de búsqueda ' —con un espacio al
+        // final—. El lector recorta las etiquetas, el selector guardado no lleva el espacio, y el resolvedor buscaba
+        // el nombre EXACTO: 9 `map_take` fallidos en dos pruebas, con cinco reintentos internos cada uno.
+        // typeof y no Capacidad(): UiaSelector vive en el ensamblado de windows-graph, y Capacidad() solo mira el del
+        // cliente. Pedirlo por nombre ahí da null SIEMPRE, y la promesa diría «pendiente» con el código ya escrito.
+        Type? t = typeof(U.Graph.Surfaces.UiaSelector);
+        var mismo = t?.GetMethod("MismoNombre", BindingFlags.Public | BindingFlags.Static);
+        var sinNombre = t?.GetMethod("CondicionSinNombre", BindingFlags.Public | BindingFlags.Static);
+        var parse = t?.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || mismo == null || sinNombre == null || parse == null)
+        {
+            Pendiente("UiaSelector.MismoNombre + CondicionSinNombre", "331", "041");
+            return;
+        }
+        bool Mismo(string guardado, string real) => (bool)mismo.Invoke(null, new object?[] { guardado, real })!;
+
+        Debe(Mismo("Barra de direcciones y de búsqueda", "Barra de direcciones y de búsqueda "),
+            "el espacio al final del nombre real no impide casar con la etiqueta guardada, que va recortada");
+        Debe(Mismo("Buscar", "  Buscar") && Mismo("Buscar", "Buscar\u00A0") && Mismo("Buscar", "\tBuscar \r\n"),
+            "ni al principio, ni el espacio duro de la web, ni tabuladores o saltos de línea");
+        Debe(Mismo("Buscar", "Buscar"), "el nombre exacto casa, claro");
+        Debe(!Mismo("Buscar", "Buscar en Google") && !Mismo("Buscar", "buscar") && !Mismo("Archivo nuevo", "Archivonuevo"),
+            "un nombre que de verdad es otro NO casa: ni un prefijo, ni otra capitalización, ni los espacios de dentro");
+        Debe(!Mismo("", "   ") && !Mismo("Buscar", "") && !Mismo("   ", "Buscar"),
+            "y vacío no casa con nada, ni con vacío (patrón nº9): un selector sin nombre no encuentra «lo que no tiene nombre»");
+
+        // EL RESPALDO BUSCA POR LO DEMÁS DEL SELECTOR —el tipo, el id— Y COMPARA EL NOMBRE A MANO. Sin nada más que el
+        // nombre no hay respaldo: sería recorrer la ventana entera comparando, y eso no es un respaldo, es otro lector.
+        object Partes(string selector) => parse.Invoke(null, new object[] { selector })!;
+        Debe(sinNombre.Invoke(null, new[] { Partes("uia:name=Barra de direcciones y de búsqueda;ct=Edit") }) is System.Windows.Automation.Condition,
+            "con nombre y tipo, el respaldo busca por tipo");
+        Debe(sinNombre.Invoke(null, new[] { Partes("uia:name=Solo un nombre") }) == null,
+            "con solo el nombre no hay por dónde buscar sin él: no hay respaldo, y se dice que no está como hasta hoy");
+        Debe(sinNombre.Invoke(null, new[] { Partes("uia:aid=btnOk;ct=Button") }) == null,
+            "y un selector sin nombre no necesita este respaldo: no se inventa una segunda búsqueda");
+    }
+
+    // ── Spec 042 ─────────────────────────────────────────────────────────────────────────────────
+
+    private static void PonerseDelanteVuelveLaVentanaLaDeTrabajo()
+    {
+        // MEDIDO EL 2026-09-18, cuatro veces en un día: `map_go_to` hacia una web que estaba abierta en OTRA ventana de
+        // Chrome tardó 11,4-11,7 s en decir «no hay ningún camino aprendido»… y en la misma respuesta, «EN PANTALLA
+        // AHORA, en docs.google.com». Traía la ventana al frente y sondeaba «¿dónde estoy?» 3 s + 8 s, pero ese
+        // «dónde» era el de la ventana de trabajo ANTERIOR, que solo se cambiaba al terminar el recorrido entero.
+        var pHook = typeof(PasoDelNucleo).GetProperty("AlPonerseDelante");
+        if (pHook == null) { Pendiente("PasoDelNucleo.AlPonerseDelante", "332", "042"); return; }
+
+        const int Delante = 500, Web = 1200;
+        (PasoDelNucleo Paso, Func<int> Pedidos, Action<string> Mover) Monta(string empieza, bool adopta, string? alPedirSeVa = null)
+        {
+            string trabajo = empieza, delante = empieza;
+            int pedidos = 0;
+            var paso = new PasoDelNucleo(new Nucleo.Grafo(), () => trabajo, (_, _) => false,
+                destino => { pedidos++; delante = alPedirSeVa ?? delante; return true; })
+            { EsperaDelanteMs = Delante, EsperaWebMs = Web };
+            // La adopción: lo que está DELANTE pasa a ser la ventana de trabajo. Sin ella, «dónde» no se entera.
+            if (adopta) pHook.SetValue(paso, (Action)(() => trabajo = delante));
+            return (paso, () => pedidos, _ => { });
+        }
+
+        // 1. ESTABA ABIERTO EN OTRA VENTANA: se trae, se adopta, y se llega en el acto.
+        var (p1, n1, _) = Monta("web://github.com", adopta: true, alPedirSeVa: "web://docs.google.com/document/d/abc/edit");
+        var c1 = System.Diagnostics.Stopwatch.StartNew();
+        var r1 = p1.Hacia("web://docs.google.com");
+        c1.Stop();
+        Debe(r1.Ok && r1.Llegado, $"ir a una web abierta en otra ventana LLEGA: la ventana traída al frente es ahora la de trabajo (dijo «{r1.Porque}»)");
+        Debe(c1.ElapsedMilliseconds < Delante, $"y en el acto, no al agotar los presupuestos mirando la ventana anterior: {c1.ElapsedMilliseconds} ms (los plazos eran {Delante} + {Web})");
+        Debe(n1() == 1, $"pidiéndolo una sola vez (se pidió {n1()})");
+
+        // 2. SIN ADOPTAR —el mundo de antes— se ve el fallo que se medía: por eso la promesa exige el aviso.
+        //    Y CON ADOPCIÓN PERO SIN LLEGAR: ponerse delante se pide UNA vez y se espera UN plazo, no dos.
+        var (p2, n2, _) = Monta("web://github.com", adopta: true, alPedirSeVa: "web://otra-cosa.com");
+        var c2 = System.Diagnostics.Stopwatch.StartNew();
+        var r2 = p2.Hacia("web://docs.google.com");
+        c2.Stop();
+        Debe(!r2.Ok && !r2.Llegado, "si de verdad no se llegó, se dice que no");
+        Debe(n2() == 1, $"ponerse delante se pide UNA vez por paso: pedirlo otra vez por la misma razón no cambia nada (se pidió {n2()})");
+        Debe(c2.ElapsedMilliseconds < Delante + Web - 150, $"y se espera UN plazo —el de una web cargando—, no los dos seguidos: {c2.ElapsedMilliseconds} ms con plazos de {Delante} y {Web}");
+        Debe(c2.ElapsedMilliseconds >= Web - 150, $"sin recortar el de la web, que es una página entera cargando: {c2.ElapsedMilliseconds} ms de {Web}");
+
+        // 3. LA 66 SIGUE EN PIE: mismo sitio, otra página, sin camino aprendido → se va directo por la dirección.
+        var (p3, n3, _) = Monta("web://es.wikipedia.org/wiki/Portal:Ajedrez", adopta: true, alPedirSeVa: "web://es.wikipedia.org/wiki/Ajedrez");
+        var r3 = p3.Hacia("web://es.wikipedia.org/wiki/Ajedrez");
+        Debe(r3.Ok && r3.Llegado && n3() == 1, $"dentro del mismo sitio se sigue yendo directo por la dirección, una vez (ok={r3.Ok} llegado={r3.Llegado} pedidos={n3()}; «{r3.Porque}»)");
+    }
+
+    private static void PedirUnSubdominioNoSeCumpleEnElPadre()
+    {
+        // MEDIDO EL 2026-09-18: `map_go_to web://scholar.google.com` con una pestaña de google.com/search delante →
+        // «scholar.google.com ya estaba activo en una ventana → al frente», no se navegó a ninguna parte, y 11,6 s
+        // después «no hay ningún camino aprendido». La regla era simétrica: «scholar.google.com» termina en «.google.com».
+        var t = Capacidad("U.WindowsClient.Uia.PestanasAbiertas");
+        var mismo = t?.GetMethod("MismoSitio", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || mismo == null) { Pendiente("Uia.PestanasAbiertas.MismoSitio (pública y con dirección)", "333", "042"); return; }
+        bool Mismo(string hostReal, string pedido) => (bool)mismo.Invoke(null, new object[] { hostReal, pedido })!;
+
+        Debe(!Mismo("google.com", "scholar.google.com"), "pedí scholar.google.com y la pestaña está en google.com: NO es «ya estaba abierto»");
+        Debe(!Mismo("www.google.com", "scholar.google.com"), "ni con el www delante");
+        Debe(Mismo("scholar.google.com", "google.com") && Mismo("api.github.com", "github.com"),
+            "al revés sí, como hasta hoy: pedir el sitio a secas se cumple en un subdominio suyo");
+        Debe(Mismo("www.google.com", "google.com") && Mismo("google.com", "www.google.com") && Mismo("www.scholar.google.com", "scholar.google.com"),
+            "y «www.» no cuenta en ninguno de los dos lados: era la dirección inversa la que, de rebote, cubría este caso");
+        Debe(Mismo("github.com", "GitHub.com/") && !Mismo("notgithub.com", "github.com") && !Mismo("", "github.com") && !Mismo("github.com", ""),
+            "lo demás, como siempre: mayúsculas y barra final dan igual, un sufijo sin punto no es un subdominio, y vacío no casa con nada");
+    }
+
+    // ── Spec 043 ─────────────────────────────────────────────────────────────────────────────────
+
+    private static void UnCampoDeTextoNoNavega()
+    {
+        // MEDIDO EL 2026-09-18 en el log de tres pruebas del dueño: 50 pulsaciones, 16 sin cambio de pantalla, y de
+        // esas 7 eran campos de texto (4 ComboBox, 3 Edit). Los campos cambiaron de pantalla 0 VECES DE 7. Cada una
+        // costó 3,3-3,9 s: 1,8 s esperando un cambio que un campo no produce, más la consulta al terreno.
+        var pCampo = typeof(PulsarSegunElNucleo).GetProperty("EsperaDeCampoMs");
+        if (pCampo == null) { Pendiente("PulsarSegunElNucleo.EsperaDeCampoMs (un campo no navega)", "334", "043"); return; }
+
+        const string A = "web://google.com", B = "web://google.com/search";
+        const int Presupuesto = 1200;
+        Nucleo.Grafo Mundo()
+        {
+            var g = new Nucleo.Grafo();
+            g.Observar(A, new[]
+            {
+                new Nucleo.Elemento("uia:name=Search;ct=ComboBox", "Search", "ComboBox"),
+                new Nucleo.Elemento("uia:name=Rename;ct=Edit", "Rename", "Edit"),
+                new Nucleo.Elemento("uia:name=Guardar;ct=Button", "Guardar", "Button"),
+            });
+            return g;
+        }
+        (PulsarSegunElNucleo.Resultado R, long Ms, int Toques) Pulsa(Nucleo.Grafo g, string selector, string etiqueta, string? alTocarSeVa = null)
+        {
+            string donde = A; int toques = 0;
+            var pulsar = new PulsarSegunElNucleo(g, () => donde, (sel, et) => { toques++; if (alTocarSeVa != null) donde = alTocarSeVa; return true; })
+            { EsperaMaximaMs = Presupuesto };
+            pCampo.SetValue(pulsar, 150);
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            var r = pulsar.Pulsa(selector, etiqueta);
+            return (r, crono.ElapsedMilliseconds, toques);
+        }
+
+        // 1. UN CAMPO: se toca una vez, no se espera el presupuesto, y se dice lo que es.
+        foreach (var (sel, et) in new[] { ("uia:name=Search;ct=ComboBox", "Search"), ("uia:name=Rename;ct=Edit", "Rename") })
+        {
+            var (r, ms, toques) = Pulsa(Mundo(), sel, et);
+            Debe(r.SePudo && !r.CambioLaPantalla && toques == 1, $"«{et}» se toca UNA vez y no se cuenta como navegación (toques={toques}; «{r.Cuenta}»)");
+            Debe(ms < Presupuesto / 2, $"y no se espera el presupuesto de un cambio de pantalla que un campo no produce: «{et}» tardó {ms} ms de {Presupuesto}");
+            Debe(r.Cuenta.Contains("campo") && r.Cuenta.Contains("foco"), $"la respuesta dice que es un campo y que tiene el foco, para que lo siguiente sea escribir: «{r.Cuenta}»");
+        }
+
+        // 2. EL TIPO LO DICE EL SELECTOR SI EL TERRENO AÚN NO CONOCE EL ELEMENTO (la primera vez que se ve una pantalla).
+        var (r2, ms2, _) = Pulsa(new Nucleo.Grafo(), "uia:aid=ti6dpd;ct=ComboBox", "Buscar");
+        Debe(r2.SePudo && ms2 < Presupuesto / 2, $"un campo que el terreno todavía no conoce se reconoce por su selector ({ms2} ms; «{r2.Cuenta}»)");
+
+        // 3. SI AUN ASÍ LA PANTALLA CAMBIÓ, manda lo que pasó: es una navegación como cualquier otra.
+        var (r3, _, _) = Pulsa(Mundo(), "uia:name=Search;ct=ComboBox", "Search", alTocarSeVa: B);
+        Debe(r3.SePudo && r3.CambioLaPantalla && r3.Hasta == B, $"un campo que sí navega se cuenta como navegación (quedó en «{r3.Hasta}»; «{r3.Cuenta}»)");
+
+        // 4. LO QUE NO ES UN CAMPO ESPERA COMO SIEMPRE: un «Guardar» puede tardar en cambiar la pantalla.
+        var (r4, ms4, _) = Pulsa(Mundo(), "uia:name=Guardar;ct=Button", "Guardar");
+        Debe(r4.SePudo && ms4 >= Presupuesto - 100, $"un botón sigue esperando el presupuesto entero: {ms4} ms de {Presupuesto}");
+        Debe(!r4.Cuenta.Contains("campo"), $"y no se le llama campo a lo que no lo es: «{r4.Cuenta}»");
     }
 
     private static void Debe(bool condicion, string promesa)
