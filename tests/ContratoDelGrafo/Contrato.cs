@@ -12562,8 +12562,8 @@ internal static class Contrato
         // reparte claves de pago las reparte a quien lo reciba, y rotarlas obligaría a sacar instalador
         // nuevo. Se piden al backend, que es donde ya viven como variables de entorno, con la MISMA
         // credencial que el instalador ya lleva —así no viaja ni un secreto nuevo dentro del binario—.
-        var t = Capacidad("U.WindowsClient.Config.ClavesDelBackend");
-        if (t == null) { Pendiente("Config.ClavesDelBackend", "300", "041"); return; }
+        var t = Capacidad("U.WindowsClient.Credenciales.ClavesDelBackend");
+        if (t == null) { Pendiente("Credenciales.ClavesDelBackend", "300", "041"); return; }
         var ctor = t.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 3);
         var traer = t.GetMethod("TraerAsync");
         var resolver = t.GetMethod("Resolver");
