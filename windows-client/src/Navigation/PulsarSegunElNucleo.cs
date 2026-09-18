@@ -88,6 +88,41 @@ public sealed class PulsarSegunElNucleo
     /// <summary>Para que el reintento de la 248 no se llame a sí mismo.</summary>
     private bool _yaRepeti;
 
+    /// <summary>
+    /// ¿ESTA PUERTA, DESDE ALGÚN OTRO SITIO, LLEVA JUSTO A DONDE ESTAMOS? Promesa 296 (spec 038).
+    /// </summary>
+    /// <remarks>
+    /// SI LLEVA AQUÍ, DESDE AQUÍ NO NAVEGA. Medido el 2026-09-18 a las 05:51 con el reloj por fase del tramo:
+    /// estando YA en Descargas, pulsar el TreeItem «Descargas» costó 6.157 ms. El log, gesto a gesto: clic y
+    /// 1,8 s; el ENSAYO con doble clic FÍSICO y 1,8 s; la repetición de la 248 —«el terreno sabe que lleva a
+    /// algún sitio»— y 1,8 s. Tres pulsaciones, una de ellas un doble clic real sobre la pantalla de la
+    /// persona, esperando un cambio imposible: el paso anterior acababa de aprender que esa puerta, desde
+    /// «Disco local», lleva a la pantalla donde ya estábamos.
+    ///
+    /// NO ES «SU DESTINO ES DONDE ESTOY»: el grafo guarda el destino por pantalla y rechaza las aristas a sí
+    /// mismas, así que esa frase no se cumple nunca. Lo que el terreno sí sabe es lo de arriba: la MISMA
+    /// puerta, vista desde OTRA pantalla, lleva aquí.
+    ///
+    /// SOLO SE CONSULTA CUANDO YA NO CAMBIÓ NADA, fuera del camino rápido: recorre las pantallas conocidas, y
+    /// eso no se paga en cada clic.
+    /// </remarks>
+    public static bool LlevaAqui(Nucleo.Grafo grafo, string selector, string desde)
+    {
+        if (grafo == null || string.IsNullOrWhiteSpace(selector) || string.IsNullOrWhiteSpace(desde)) return false;
+        try
+        {
+            foreach (string u in grafo.Ubicaciones())
+            {
+                if (Superficies.MismaPantalla(u, desde)) continue;
+                foreach (var a in grafo.DesdeAqui(u))
+                    if (a.Que.Selector == selector && a.Destino.Length > 0 && Superficies.MismaPantalla(a.Destino, desde))
+                        return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
     public Resultado Pulsa(string selector, string etiqueta)
     {
         string desde = _donde() ?? "";
@@ -110,6 +145,16 @@ public sealed class PulsarSegunElNucleo
             return new(true, hasta != desde, desde, hasta, false,
                 $"pulsé «{etiqueta}» y {aviso}. Ahora estás en «{hasta}».");
         string gestoUsado = gesto;
+
+        // UNA PUERTA QUE LLEVA AQUÍ NO SE ENSAYA NI SE REPITE (promesa 296). Va DESPUÉS de la primera espera a
+        // propósito: si la pantalla SÍ cambió —un «Siguiente» que vive en todas las páginas— manda lo que pasó,
+        // no lo que se sabía, y se cuenta como cualquier navegación.
+        if ((hasta.Length == 0 || hasta == desde) && LlevaAqui(_grafo, selector, desde))
+        {
+            Diagnostics.LogBus.Log("mano", $"«{etiqueta}» no movió nada y el terreno sabe que lleva justo a donde ya estamos: ni lo ensayo ni lo repito");
+            return new(true, false, desde, desde, false,
+                $"pulsé «{etiqueta}» y la pantalla no cambió: ya estás en «{desde}», que es a donde lleva.");
+        }
 
         // EL ENSAYO, y solo cuando toca: nada cambió, el gesto de esta arista aún no se conoce, y
         // lo tocado es CONTENIDO (promesa 83). Sobre un botón el doble no se ensaya jamás — «hacer
