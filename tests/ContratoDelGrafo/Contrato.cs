@@ -802,6 +802,10 @@ internal static class Contrato
         // ── Spec 041: el Enter no se deshace, y un espacio no esconde una puerta (bloque 330-339) ─
         Prueba("330. escribir y confirmar con Enter solo se deshace donde escribir es renombrar —el Explorador de archivos—: en la web y en cualquier otra superficie, que el Enter cambie de pantalla es lo que se pidió; no se pulsa «Atrás», no se espera la vuelta, y la respuesta dice a dónde se llegó; y dos formas de la misma pantalla —con www y sin él— no cuentan como un cambio", ElEnterSoloSeDeshaceDondeEscribirEsRenombrar);
         Prueba("331. un espacio no esconde una puerta: un selector por nombre encuentra el elemento aunque su nombre real traiga espacios al principio o al final que la etiqueta guardada no tiene; primero se busca el nombre exacto, como siempre, y solo si no aparece se compara recortando; un nombre que de verdad es otro sigue sin casar", UnEspacioNoEscondeUnaPuerta);
+
+        // ── Spec 042: ir a una web no espera mirando otra ventana ───────────────────────────────
+        Prueba("332. ponerse delante de otra ventana la vuelve la de trabajo antes de comprobar la llegada: ir a una web que ya está abierta en otra ventana del navegador se da por llegado en cuanto esa ventana está delante, no al agotar los presupuestos mirando la ventana anterior; y ponerse delante se pide UNA vez por paso —si ya se pidió y no se llegó, no se vuelve a pedir ni se abre un segundo plazo—", PonerseDelanteVuelveLaVentanaLaDeTrabajo);
+        Prueba("333. pedir un subdominio no se cumple estando en el dominio padre: con scholar.google.com pedido, una pestaña en google.com no es «ya estaba abierto»; pedir el sitio a secas sí se cumple en un subdominio suyo, como hasta hoy; y www. no cuenta en ninguno de los dos lados", PedirUnSubdominioNoSeCumpleEnElPadre);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12641,6 +12645,76 @@ internal static class Contrato
             "con solo el nombre no hay por dónde buscar sin él: no hay respaldo, y se dice que no está como hasta hoy");
         Debe(sinNombre.Invoke(null, new[] { Partes("uia:aid=btnOk;ct=Button") }) == null,
             "y un selector sin nombre no necesita este respaldo: no se inventa una segunda búsqueda");
+    }
+
+    // ── Spec 042 ─────────────────────────────────────────────────────────────────────────────────
+
+    private static void PonerseDelanteVuelveLaVentanaLaDeTrabajo()
+    {
+        // MEDIDO EL 2026-09-18, cuatro veces en un día: `map_go_to` hacia una web que estaba abierta en OTRA ventana de
+        // Chrome tardó 11,4-11,7 s en decir «no hay ningún camino aprendido»… y en la misma respuesta, «EN PANTALLA
+        // AHORA, en docs.google.com». Traía la ventana al frente y sondeaba «¿dónde estoy?» 3 s + 8 s, pero ese
+        // «dónde» era el de la ventana de trabajo ANTERIOR, que solo se cambiaba al terminar el recorrido entero.
+        var pHook = typeof(PasoDelNucleo).GetProperty("AlPonerseDelante");
+        if (pHook == null) { Pendiente("PasoDelNucleo.AlPonerseDelante", "332", "042"); return; }
+
+        const int Delante = 500, Web = 1200;
+        (PasoDelNucleo Paso, Func<int> Pedidos, Action<string> Mover) Monta(string empieza, bool adopta, string? alPedirSeVa = null)
+        {
+            string trabajo = empieza, delante = empieza;
+            int pedidos = 0;
+            var paso = new PasoDelNucleo(new Nucleo.Grafo(), () => trabajo, (_, _) => false,
+                destino => { pedidos++; delante = alPedirSeVa ?? delante; return true; })
+            { EsperaDelanteMs = Delante, EsperaWebMs = Web };
+            // La adopción: lo que está DELANTE pasa a ser la ventana de trabajo. Sin ella, «dónde» no se entera.
+            if (adopta) pHook.SetValue(paso, (Action)(() => trabajo = delante));
+            return (paso, () => pedidos, _ => { });
+        }
+
+        // 1. ESTABA ABIERTO EN OTRA VENTANA: se trae, se adopta, y se llega en el acto.
+        var (p1, n1, _) = Monta("web://github.com", adopta: true, alPedirSeVa: "web://docs.google.com/document/d/abc/edit");
+        var c1 = System.Diagnostics.Stopwatch.StartNew();
+        var r1 = p1.Hacia("web://docs.google.com");
+        c1.Stop();
+        Debe(r1.Ok && r1.Llegado, $"ir a una web abierta en otra ventana LLEGA: la ventana traída al frente es ahora la de trabajo (dijo «{r1.Porque}»)");
+        Debe(c1.ElapsedMilliseconds < Delante, $"y en el acto, no al agotar los presupuestos mirando la ventana anterior: {c1.ElapsedMilliseconds} ms (los plazos eran {Delante} + {Web})");
+        Debe(n1() == 1, $"pidiéndolo una sola vez (se pidió {n1()})");
+
+        // 2. SIN ADOPTAR —el mundo de antes— se ve el fallo que se medía: por eso la promesa exige el aviso.
+        //    Y CON ADOPCIÓN PERO SIN LLEGAR: ponerse delante se pide UNA vez y se espera UN plazo, no dos.
+        var (p2, n2, _) = Monta("web://github.com", adopta: true, alPedirSeVa: "web://otra-cosa.com");
+        var c2 = System.Diagnostics.Stopwatch.StartNew();
+        var r2 = p2.Hacia("web://docs.google.com");
+        c2.Stop();
+        Debe(!r2.Ok && !r2.Llegado, "si de verdad no se llegó, se dice que no");
+        Debe(n2() == 1, $"ponerse delante se pide UNA vez por paso: pedirlo otra vez por la misma razón no cambia nada (se pidió {n2()})");
+        Debe(c2.ElapsedMilliseconds < Delante + Web - 150, $"y se espera UN plazo —el de una web cargando—, no los dos seguidos: {c2.ElapsedMilliseconds} ms con plazos de {Delante} y {Web}");
+        Debe(c2.ElapsedMilliseconds >= Web - 150, $"sin recortar el de la web, que es una página entera cargando: {c2.ElapsedMilliseconds} ms de {Web}");
+
+        // 3. LA 66 SIGUE EN PIE: mismo sitio, otra página, sin camino aprendido → se va directo por la dirección.
+        var (p3, n3, _) = Monta("web://es.wikipedia.org/wiki/Portal:Ajedrez", adopta: true, alPedirSeVa: "web://es.wikipedia.org/wiki/Ajedrez");
+        var r3 = p3.Hacia("web://es.wikipedia.org/wiki/Ajedrez");
+        Debe(r3.Ok && r3.Llegado && n3() == 1, $"dentro del mismo sitio se sigue yendo directo por la dirección, una vez (ok={r3.Ok} llegado={r3.Llegado} pedidos={n3()}; «{r3.Porque}»)");
+    }
+
+    private static void PedirUnSubdominioNoSeCumpleEnElPadre()
+    {
+        // MEDIDO EL 2026-09-18: `map_go_to web://scholar.google.com` con una pestaña de google.com/search delante →
+        // «scholar.google.com ya estaba activo en una ventana → al frente», no se navegó a ninguna parte, y 11,6 s
+        // después «no hay ningún camino aprendido». La regla era simétrica: «scholar.google.com» termina en «.google.com».
+        var t = Capacidad("U.WindowsClient.Uia.PestanasAbiertas");
+        var mismo = t?.GetMethod("MismoSitio", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || mismo == null) { Pendiente("Uia.PestanasAbiertas.MismoSitio (pública y con dirección)", "333", "042"); return; }
+        bool Mismo(string hostReal, string pedido) => (bool)mismo.Invoke(null, new object[] { hostReal, pedido })!;
+
+        Debe(!Mismo("google.com", "scholar.google.com"), "pedí scholar.google.com y la pestaña está en google.com: NO es «ya estaba abierto»");
+        Debe(!Mismo("www.google.com", "scholar.google.com"), "ni con el www delante");
+        Debe(Mismo("scholar.google.com", "google.com") && Mismo("api.github.com", "github.com"),
+            "al revés sí, como hasta hoy: pedir el sitio a secas se cumple en un subdominio suyo");
+        Debe(Mismo("www.google.com", "google.com") && Mismo("google.com", "www.google.com") && Mismo("www.scholar.google.com", "scholar.google.com"),
+            "y «www.» no cuenta en ninguno de los dos lados: era la dirección inversa la que, de rebote, cubría este caso");
+        Debe(Mismo("github.com", "GitHub.com/") && !Mismo("notgithub.com", "github.com") && !Mismo("", "github.com") && !Mismo("github.com", ""),
+            "lo demás, como siempre: mayúsculas y barra final dan igual, un sufijo sin punto no es un subdominio, y vacío no casa con nada");
     }
 
     private static void Debe(bool condicion, string promesa)

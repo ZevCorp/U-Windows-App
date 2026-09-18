@@ -735,7 +735,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     _mapaVivo!.Nucleo,
                     DondeTrabajo,
                     (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
-                    superficie => Uia.AppAligner.PonerDelante(superficie)).Hasta(destino);
+                    superficie => Uia.AppAligner.PonerDelante(superficie))
+                {
+                    // La ventana que quedó delante ES ya la de trabajo: si no, «dónde» sigue mirando la anterior (332).
+                    AlPonerseDelante = () => SeguirElFoco(antes),
+                }.Hasta(destino);
                 SeguirElFoco(antes);
                 return cuenta;
             };
