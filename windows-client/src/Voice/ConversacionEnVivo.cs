@@ -388,12 +388,11 @@ public sealed class ConversacionEnVivo : IDisposable
     /// diciendo que faltaba, porque el proceso que lo lanzó arrancó antes del cambio. El registro es
     /// el último recurso, no el primero: si el proceso ya la trae, ni hace falta tocarlo.
     /// </summary>
-    private static string Clave()
-    {
-        string v = (Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "").Trim();
-        if (v.Length > 0) return v;
-        return (Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User) ?? "").Trim();
-    }
+    private static string Clave() =>
+        // EL ENTORNO PRIMERO, EL BACKEND DESPUÉS (promesa 300). Una copia distribuida no lleva esta
+        // clave dentro del .exe: se la pide a Graph con la credencial que el instalador ya embebe.
+        // En la máquina de quien desarrolla no cambia nada, porque su variable sigue mandando.
+        Credenciales.ClavesDelBackend.DeLaApp(Credenciales.ClavesDelBackend.Voz);
 
     /// <param name="intento">
     /// Cuántas veces se ha probado ya (0 la primera). Solo lo usa el reintento de más abajo: sirve

@@ -798,6 +798,7 @@ internal static class Contrato
 
         // ── Spec 040: la pantalla asentada no se espera ─────────────────────────────────────────
         Prueba("299. una pantalla asentada no se espera: si la puerta pedida no está y dos miradas seguidas ven lo mismo —la misma ubicación y las mismas puertas vivas—, la compuerta se rinde en el acto y no al agotar el presupuesto, diciendo lo mismo que decía; si entre las dos miradas la pantalla cambió, está cargando: se espera el presupuesto entero y la puerta que aparece se pulsa; sin poder mirar, nada cambia; y en los dos casos la compuerta deja dicho cuánto esperó y por qué dejó de esperar", UnaPantallaAsentadaNoSeEspera);
+        Prueba("300. una copia distribuida NO lleva dentro las claves de la voz ni de Jev: la del entorno manda si está, y si no se le piden a Graph con la credencial que ya va embebida, UNA sola vez aunque se resuelvan varias; lo traído vive solo en memoria; una clave que el backend no da deja su función apagada diciendo cuál falta; y NINGUNA clave aparece jamás en el log ni en la línea de estado", LasClavesVivenEnElBackend);
 
         // ── Spec 041: el Enter no se deshace, y un espacio no esconde una puerta (bloque 330-339) ─
         Prueba("330. escribir y confirmar con Enter solo se deshace donde escribir es renombrar —el Explorador de archivos—: en la web y en cualquier otra superficie, que el Enter cambie de pantalla es lo que se pidió; no se pulsa «Atrás», no se espera la vuelta, y la respuesta dice a dónde se llegó; y dos formas de la misma pantalla —con www y sin él— no cuentan como un cambio", ElEnterSoloSeDeshaceDondeEscribirEsRenombrar);
@@ -12558,6 +12559,106 @@ internal static class Contrato
             $"al rendirse por pantalla asentada lo dice, con la puerta y los milisegundos: [{string.Join(" ¦ ", d1)}]");
         Debe(d3.Any(x => x.Contains("Viejo") && x.Contains("apareció") && x.Contains(" ms")),
             $"y cuando la espera SIRVE —la puerta apareció esperando— también lo dice, con cuánto esperó: [{string.Join(" ¦ ", d3)}]");
+    }
+
+    // ── Spec 045: las claves viven en el backend ─────────────────────────────────────────────────
+
+    private static void LasClavesVivenEnElBackend()
+    {
+        // POR QUÉ ESTA PROMESA EXISTE (2026-09-18). El instalador que se distribuye lleva embebidas la
+        // credencial de Graph y el token de actualizaciones, y NADA MÁS: la clave de la voz sale hoy de
+        // OPENAI_API_KEY en el equipo de quien desarrolla, y la de Jev de TYPESAFE_API_KEY. Una copia
+        // instalada en otra máquina se queda, por tanto, SIN VOZ Y SIN JEV, que es justo lo que se creía
+        // que el instalador ya resolvía. Embeberlas era la salida rápida y se descartó: un .exe que
+        // reparte claves de pago las reparte a quien lo reciba, y rotarlas obligaría a sacar instalador
+        // nuevo. Se piden al backend, que es donde ya viven como variables de entorno, con la MISMA
+        // credencial que el instalador ya lleva —así no viaja ni un secreto nuevo dentro del binario—.
+        var t = Capacidad("U.WindowsClient.Credenciales.ClavesDelBackend");
+        if (t == null) { Pendiente("Credenciales.ClavesDelBackend", "300", "045"); return; }
+        var ctor = t.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 3);
+        var traer = t.GetMethod("TraerAsync");
+        var resolver = t.GetMethod("Resolver");
+        var estado = t.GetProperty("Estado");
+        if (ctor == null || traer == null || resolver == null || estado == null)
+        {
+            Pendiente("ClavesDelBackend(entorno, pedir, log) + TraerAsync + Resolver + Estado", "300", "045");
+            return;
+        }
+
+        const string SecretoVoz = "sk-secreto-de-la-voz-que-no-debe-salir";
+        const string SecretoJev = "ts-secreto-de-jev-que-no-debe-salir";
+        string cuerpo = "{\"openai\":\"" + SecretoVoz + "\",\"typesafe\":\"" + SecretoJev + "\"}";
+
+        object Crear(Func<string, string?> entorno, Func<Task<string>> pedir, List<string> log)
+        {
+            Func<System.Threading.CancellationToken, Task<string>> pedirCt = _ => pedir();
+            return ctor.Invoke(new object[] { entorno, pedirCt, (Action<string>)(l => log.Add(l)) });
+        }
+        int Traer(object c) => (int)((Task<int>)traer.Invoke(c, new object[] { System.Threading.CancellationToken.None })!).GetAwaiter().GetResult();
+        string Resolver(object c, string nombre) => (string)resolver.Invoke(c, new object[] { nombre })!;
+        string Estado(object c) => (string)estado.GetValue(c)!;
+
+        // 1. LA DEL ENTORNO MANDA, Y ENTONCES NO SE PIDE NADA. La máquina de quien desarrolla sigue
+        //    funcionando exactamente igual que hoy, y no se paga un viaje para no usarlo.
+        int peticiones = 0;
+        var log1 = new List<string>();
+        var conEntorno = Crear(n => n == "OPENAI_API_KEY" ? "la-del-entorno" : null,
+                               () => { peticiones++; return Task.FromResult(cuerpo); }, log1);
+        Debe(Resolver(conEntorno, "OPENAI_API_KEY") == "la-del-entorno",
+            $"la clave del entorno manda sobre la del backend (salió «{Resolver(conEntorno, "OPENAI_API_KEY")}»)");
+        Debe(peticiones == 0, $"y con ella puesta no se le pide NADA al backend: se pidió {peticiones} vez/veces");
+
+        // 1b. Y CON TODAS PUESTAS, EL ARRANQUE TAMPOCO PIDE. Un viaje por arranque para no usar nada, y
+        //     dos claves de pago en memoria sin que nadie las vaya a usar.
+        var siFalta = t.GetMethod("TraerSiFaltaAlgunaAsync");
+        if (siFalta == null) { Pendiente("ClavesDelBackend.TraerSiFaltaAlgunaAsync", "300", "045"); return; }
+        int TraerSiFalta(object c) => (int)((Task<int>)siFalta.Invoke(c, new object[] { System.Threading.CancellationToken.None })!).GetAwaiter().GetResult();
+        peticiones = 0;
+        var todasPuestas = Crear(_ => "la-del-entorno", () => { peticiones++; return Task.FromResult(cuerpo); }, new List<string>());
+        Debe(TraerSiFalta(todasPuestas) == 0 && peticiones == 0,
+            $"con TODAS en el entorno, el arranque no pide nada: se pidió {peticiones} vez/veces");
+        peticiones = 0;
+        var faltaUna = Crear(n => n == "OPENAI_API_KEY" ? "la-del-entorno" : null, () => { peticiones++; return Task.FromResult(cuerpo); }, new List<string>());
+        Debe(TraerSiFalta(faltaUna) > 0 && peticiones == 1,
+            $"y si falta UNA, se piden: {peticiones} vez/veces");
+
+        // 2. SIN ENTORNO, SE PIDE UNA SOLA VEZ aunque se resuelvan varias claves y se llame varias veces.
+        peticiones = 0;
+        var log2 = new List<string>();
+        var sinEntorno = Crear(_ => null, () => { peticiones++; return Task.FromResult(cuerpo); }, log2);
+        int traidas = Traer(sinEntorno);
+        Traer(sinEntorno);
+        Debe(peticiones == 1, $"las claves se piden UNA sola vez, no una por clave ni una por llamada: se pidió {peticiones} vez/veces");
+        Debe(traidas == 2, $"y se dice cuántas llegaron ({traidas} de 2)");
+        Debe(Resolver(sinEntorno, "OPENAI_API_KEY") == SecretoVoz && Resolver(sinEntorno, "TYPESAFE_API_KEY") == SecretoJev,
+            "sin nada en el entorno, la voz y Jev usan lo que dio el backend");
+
+        // 3. NINGUNA CLAVE EN EL LOG NI EN EL ESTADO. Es la razón de ser de todo esto: un secreto que
+        //    acaba en %LOCALAPPDATA%\U\logs es un secreto repartido, y el log se pega en los PR.
+        string todoElLog = string.Join(" | ", log1.Concat(log2)) + " | " + Estado(conEntorno) + " | " + Estado(sinEntorno);
+        Debe(!todoElLog.Contains(SecretoVoz) && !todoElLog.Contains(SecretoJev) && !todoElLog.Contains("la-del-entorno"),
+            $"ninguna clave aparece en el log ni en el estado; salió «{todoElLog}»");
+        Debe(Estado(sinEntorno).Contains("2"), $"pero el estado sí dice CUÁNTAS hay, que es lo que sirve para diagnosticar («{Estado(sinEntorno)}»)");
+
+        // 4. LO QUE EL BACKEND NO DA DEJA SU FUNCIÓN APAGADA, Y SE DICE CUÁL FALTA. Un «no hay voz» sin
+        //    nombre manda la investigación al sitio equivocado (aprendizaje nº2).
+        var log4 = new List<string>();
+        var soloVoz = Crear(_ => null, () => Task.FromResult("{\"openai\":\"" + SecretoVoz + "\"}"), log4);
+        Debe(Traer(soloVoz) == 1, "un backend que solo da una clave trae una");
+        Debe(Resolver(soloVoz, "TYPESAFE_API_KEY").Length == 0, "la que no vino se queda vacía, no se inventa");
+        Debe(Estado(soloVoz).Contains("TYPESAFE_API_KEY"),
+            $"y el estado NOMBRA la que falta, en vez de decir «no se pudo» («{Estado(soloVoz)}»)");
+
+        // 5. UN BACKEND CAÍDO NO TUMBA LA APP NI SE REINTENTA EN BUCLE. Sin voz se puede trabajar; con
+        //    la app muerta, no. Y un bucle de reintentos contra un backend caído es el bucle del que ya
+        //    se salió una vez (pendiente nº3 de CLAUDE.md).
+        int intentos = 0;
+        var log5 = new List<string>();
+        var caido = Crear(_ => null, () => { intentos++; throw new InvalidOperationException("HTTP 503"); }, log5);
+        Debe(Traer(caido) == 0, "con el backend caído no se trae ninguna clave, y no se lanza hacia fuera");
+        Traer(caido);
+        Debe(intentos == 1, $"y no se reintenta en bucle: {intentos} intento(s) tras dos llamadas");
+        Debe(string.Join(" ", log5).Contains("503"), $"el log dice el motivo real, no «no se pudo» («{string.Join(" ", log5)}»)");
     }
 
     // ── Spec 041 ─────────────────────────────────────────────────────────────────────────────────

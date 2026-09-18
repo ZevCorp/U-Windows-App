@@ -440,6 +440,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // Y SE PUEDE CAMBIAR EN VIVO (spec 036, promesa 290): el botón «Jev» del panel enciende y apaga
             // por el mismo interruptor; la variable solo fija el estado inicial.
             {
+                // LAS CLAVES DE PAGO NO VIAJAN DENTRO DEL .EXE (promesa 300, spec 045): la copia
+                // distribuida se las pide a Graph con la credencial que el instalador ya embebe. Se
+                // pide SIN esperar: bloquear el arranque en una llamada de red seria pagar el peor
+                // caso de la red en cada abrir. Los dos que las usan las piden mas tarde —la voz al
+                // abrir sesion, Jev al pulsar el boton— y para entonces ya estan.
+                Credenciales.ClavesDelBackend.Viva = Credenciales.ClavesDelBackend.DeGraph(
+                    _graphConfig.BaseUrl, _graphConfig.ApiKey, m => LogBus.Log("claves", m));
+                _ = Credenciales.ClavesDelBackend.Viva.TraerSiFaltaAlgunaAsync();
+
                 var cfgDecisor = Decision.ConfiguracionDelDecisor.DelSistema();
                 LogBus.Log("decisor", cfgDecisor.Porque);
                 _interruptorDelDecisor = new Decision.InterruptorDelDecisor(mcp.Map, ReenviarCatalogoALaVozAsync, m => LogBus.Log("decisor", m));
@@ -461,7 +470,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     if (vivo == null) { LogBus.Log("tramo", "sin sesión de voz: la cuenta queda para map_tramo_estado"); return; }
                     _ = vivo.EnviarTextoAsync("[el tramo terminó] " + cuenta);
                 };
-                if (cfgDecisor.Quien != "luna") _interruptorDelDecisor.Encender(Environment.GetEnvironmentVariable);
+                if (cfgDecisor.Quien != "luna") _interruptorDelDecisor.Encender(Credenciales.ClavesDelBackend.DeLaApp);
                 PintarBotonJev();
             }
 
@@ -2801,7 +2810,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (_interruptorDelDecisor.Encendido) _interruptorDelDecisor.Apagar();
         else _interruptorDelDecisor.Encender(n =>
         {
-            string? v = Environment.GetEnvironmentVariable(n);
+            // POR EL RESOLUTOR Y NO POR EL ENTORNO PELADO (promesa 300): en una copia distribuida la
+            // clave de TypeSafe la dio Graph, y leyendo solo el entorno el boton diria que falta.
+            string? v = Credenciales.ClavesDelBackend.DeLaApp(n);
             if (n == Decision.ConfiguracionDelDecisor.Interruptor && (string.IsNullOrWhiteSpace(v) || v.Trim().Equals("luna", StringComparison.OrdinalIgnoreCase)))
                 return "jev";
             return v;
