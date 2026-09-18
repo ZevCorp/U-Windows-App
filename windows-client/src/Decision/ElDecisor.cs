@@ -149,9 +149,15 @@ public static class ElDecisor
                 ? cf.GetDouble()
                 : 0;
         }
-        catch (JsonException e)
+        catch (Exception e)
         {
-            return DecisionDeUnPaso.No($"la respuesta de TypeSafe no es JSON válido ({e.Message}). Decide Luna.");
+            // NO SOLO JsonException, y se descubrió revisando: si «answers» llegara como texto en vez
+            // de objeto, TryGetProperty lanza InvalidOperationException — que un catch de JsonException
+            // dejaría escapar, tumbando el paso en vez de devolvérselo a Luna. Se atrapa ancho, pero
+            // NO mudo (patrón nº3): el tipo y el mensaje van en el porqué, que es lo que distingue
+            // «vino algo raro» de «no vino nada».
+            return DecisionDeUnPaso.No(
+                $"no se pudo leer la respuesta de TypeSafe ({e.GetType().Name}: {e.Message}). Decide Luna.");
         }
 
         // LA COMPROBACIÓN QUE CIERRA EL PENDIENTE Nº2. Un choice solo puede devolver una de las

@@ -11504,6 +11504,11 @@ internal static class Contrato
             (_ => throw new System.Net.Http.HttpRequestException("no hay red"), "se cae la red"),
             (_ => "{ esto no es json", "contesta algo que no es JSON"),
             (_ => "{\"model\":\"jev-1.13.0\",\"answers\":{},\"usage\":{}}", "contesta sin la respuesta que se pidió"),
+            // «answers» con la forma equivocada: TryGetProperty sobre algo que no es objeto lanza
+            // InvalidOperationException, que NO es JsonException. Un catch estrecho la dejaría
+            // escapar y tumbaría el paso en vez de devolvérselo a Luna.
+            (_ => "{\"model\":\"jev-1.13.0\",\"answers\":\"hola\",\"usage\":{}}", "contesta con «answers» que no es un objeto"),
+            (_ => "{\"model\":\"jev-1.13.0\",\"answers\":{\"puerta\":{\"type\":\"choice\",\"choice\":7}},\"usage\":{}}", "contesta una puerta que no es texto"),
         })
         {
             object d;

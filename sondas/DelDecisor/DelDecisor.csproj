@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- LA SONDA DEL DECISOR (spec 035). Enseña el interruptor Luna/Jev funcionando, y es el único
+       sitio desde el que se puede llamar a TypeSafe DE VERDAD con una clave.
+
+       POR QUÉ UNA CONSOLA Y NO UN .ps1, que era lo primero que se intentó: esta máquina solo tiene
+       Windows PowerShell 5.1, que corre sobre .NET Framework y NO PUEDE cargar un ensamblado
+       net8.0-windows. El script fallaba con FileNotFoundException al hacer LoadFrom, medido el
+       2026-09-17. Un proyecto de consola comparte el mismo runtime que la app y la carga sin
+       trucos, igual que hace el contrato.
+
+       Referencia los BINARIOS y no el proyecto, por el mismo motivo que el contrato: juzga lo que
+       de verdad se ejecuta, y no pelea con las DLL bloqueadas de la app estable. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <AssemblyName>sonda-del-decisor</AssemblyName>
+    <UBin Condition="'$(UBin)' == ''">C:\U-dev2\bin</UBin>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="U"><HintPath>$(UBin)\U.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
