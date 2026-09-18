@@ -870,6 +870,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // LA COMPUERTA MIRA OTRA VEZ ANTES DE RENDIRSE (promesa 264): la ventana de trabajo, ahora, sin el
                 // freno de 800 ms de la observación de fondo.
                 MiraOtraVez = MirarOtraVezLaVentana,
+                Diario = linea => LogBus.Log("compuerta", linea),
             };
             // EL RASTRO (promesa 76): cada relato de batch queda en el anillo que sirve el 8792
             // para la pestaña «Terreno» del visor.

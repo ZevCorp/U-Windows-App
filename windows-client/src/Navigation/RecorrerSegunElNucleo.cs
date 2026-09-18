@@ -126,6 +126,28 @@ public sealed class RecorrerSegunElNucleo
     /// </remarks>
     public Func<string, bool>? MiraOtraVez { get; set; }
 
+    /// <summary>
+    /// A LOS CUÁNTOS MILISEGUNDOS SE MIRA POR SEGUNDA VEZ para saber si la pantalla está asentada. Promesa 299
+    /// (spec 040): si esa mirada ve lo mismo que la primera, esperar no puede traer la puerta y la compuerta se rinde.
+    /// </summary>
+    /// <remarks>
+    /// MEDIDO EL 2026-09-18 en dos sesiones de voz del dueño: 7 `map_take` pidieron una puerta que no estaba —el
+    /// modelo inventa nombres: «Dan Kost», «Enter»— y cada «no» costó 4,2-4,6 s, más del triple que pulsar (1,2 s).
+    /// El log: dos miradas de 34 y 39 ms que veían LO MISMO, 45 y 45 elementos, con cuatro segundos de espera pura
+    /// en medio. La espera existe para la pantalla que está CARGANDO, y una pantalla que carga cambia entre miradas.
+    ///
+    /// 400 ms y no menos: es del orden de lo que tarda en verse un cambio tras un clic (mediana 405-510 ms ese
+    /// mismo día). Más corto, y una página que aún no empezó a pintarse pasaría por asentada.
+    /// </remarks>
+    public int EsperaDeAsentarMs { get; init; } = 400;
+
+    /// <summary>
+    /// DÓNDE DEJA DICHO LA COMPUERTA cuánto esperó y por qué dejó de esperar. El 2026-09-18 no se pudo medir si la
+    /// espera había servido alguna vez: no dejaba línea, y «tardó mucho» no distinguía «esperó a la puerta» de «el
+    /// clic era lento». Nulo = callada, como antes.
+    /// </summary>
+    public Action<string>? Diario { get; set; }
+
     public Resultado Recorre(IReadOnlyList<Paso> pasos)
     {
         string? pulsado = null;
@@ -380,8 +402,30 @@ public sealed class RecorrerSegunElNucleo
         // EL RELOJ MANDA (promesa 245). Esta es la compuerta que costó 28,8 s en la máquina del dueño:
         // cada vuelta lee la pantalla, y el presupuesto se contaba como si leerla fuera gratis.
         var compasVida = new Compas(EsperaMaximaMs);
-        int miradas = 0;
-        for (int ido = 0; ; ido = (int)compasVida.Transcurrido)
+        int miradas = 0, vueltas = 0;
+
+        // LA PANTALLA ASENTADA NO SE ESPERA (promesa 299). La huella es lo que una mirada deja en el grafo: dónde
+        // estamos y qué puertas están vivas. Dos miradas con la misma huella = nada se está pintando.
+        string? huellaDeLaPrimera = null;
+        bool asentada = false, seMovio = false;
+        long msDeLaUltimaMirada = 0;
+        string Huella(string donde) => donde + "\n" + string.Join("|",
+            _grafo.DesdeAqui(donde).Where(a => a.Vivo).Select(a => a.Que.Selector).OrderBy(x => x, StringComparer.Ordinal));
+        bool Mira(string donde)
+        {
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            bool vio = MiraOtraVez!(donde);
+            msDeLaUltimaMirada = crono.ElapsedMilliseconds;
+            return vio;
+        }
+        // La espera que SIRVIÓ también se dice: es el dato que faltaba para saber cuánta espera hace falta.
+        (Nucleo.Alcanzable?, IReadOnlyList<Nucleo.Alcanzable>, string?, string) Hallado(Nucleo.Alcanzable a, string donde, int ido)
+        {
+            if (vueltas > 0) Diario?.Invoke($"«{exit}» no estaba al pedirla y apareció tras {ido} ms ({miradas} mirada(s))");
+            return (a, nada, null, donde);
+        }
+
+        for (int ido = 0; ; ido = (int)compasVida.Transcurrido, vueltas++)
         {
             string aqui = _donde() ?? "";
             if (aqui.Length > 0)
@@ -391,7 +435,7 @@ public sealed class RecorrerSegunElNucleo
                 // 1. El selector exacto manda.
                 var porSelector = todos.FirstOrDefault(
                     a => a.Que.Selector.Equals(exit, StringComparison.Ordinal));
-                if (porSelector is { Vivo: true }) return (porSelector, nada, null, aqui);
+                if (porSelector is { Vivo: true }) return Hallado(porSelector, aqui, ido);
 
                 if (porSelector == null)
                 {
@@ -405,7 +449,7 @@ public sealed class RecorrerSegunElNucleo
                     var candidatas = exactas.Count > 0 ? exactas
                         : vivas.Where(a => ParecePuerta(a.Que.Etiqueta) && LoNombra(a.Que.Etiqueta, exit)).ToList();
 
-                    if (candidatas.Count == 1) return (candidatas[0], nada, null, aqui);
+                    if (candidatas.Count == 1) return Hallado(candidatas[0], aqui, ido);
                     if (candidatas.Count > 1)
                         return (null, candidatas, null, aqui);
 
@@ -417,7 +461,7 @@ public sealed class RecorrerSegunElNucleo
                         : conDestino.Where(a => Nombres.Aplanar(Cola(a.Destino))
                             .Contains(Nombres.Aplanar(exit), StringComparison.Ordinal)).ToList();
 
-                    if (destinos.Count == 1) return (destinos[0], nada, null, aqui);
+                    if (destinos.Count == 1) return Hallado(destinos[0], aqui, ido);
                     if (destinos.Count > 1)
                         return (null, destinos, null, aqui);
                 }
@@ -430,16 +474,40 @@ public sealed class RecorrerSegunElNucleo
                 if (MiraOtraVez != null && miradas == 0)
                 {
                     miradas = 1;
-                    if (MiraOtraVez(aqui)) continue;
+                    // Sin haber podido mirar no hay huella, y sin huella no se sabe si está asentada: no se adivina.
+                    if (Mira(aqui)) { huellaDeLaPrimera = Huella(aqui); continue; }
                 }
 
-                if (ido >= EsperaMaximaMs)
+                // ¿ASENTADA? La segunda mirada se adelanta: si ve lo mismo que la primera, esperar no trae nada.
+                // Si ve otra cosa, la pantalla se está pintando y la espera de siempre es justo para eso.
+                if (huellaDeLaPrimera != null && miradas == 1 && !asentada && ido >= EsperaDeAsentarMs && ido < EsperaMaximaMs)
+                {
+                    miradas = 2;
+                    if (Mira(aqui))
+                    {
+                        if (Huella(_donde() ?? "") == huellaDeLaPrimera) asentada = true; else seMovio = true;
+                        continue;   // una vuelta más: la mirada pudo traer la puerta, y eso se comprueba arriba
+                    }
+                }
+
+                if (asentada || ido >= EsperaMaximaMs)
                 {
                     if (MiraOtraVez != null && miradas == 1)
                     {
                         miradas = 2;
-                        if (MiraOtraVez(aqui)) continue;
+                        if (Mira(aqui)) continue;
                     }
+                    // LA PANTALLA SE MOVÍA: una mirada más antes de rendirse, que es la de la 264. Solo si mirar es
+                    // barato: una mirada que cuesta más que el freno no se repite (76 miradas en 90 s, 2026-09-17).
+                    if (MiraOtraVez != null && miradas == 2 && seMovio && msDeLaUltimaMirada < 300)
+                    {
+                        miradas = 3;
+                        if (Mira(aqui)) continue;
+                    }
+
+                    Diario?.Invoke(asentada
+                        ? $"«{exit}» no está y la pantalla está asentada (dos miradas vieron las mismas puertas vivas): me rindo a los {ido} ms, sin agotar los {EsperaMaximaMs}"
+                        : $"«{exit}» no apareció en {ido} ms ({(seMovio ? "la pantalla se movió entre miradas: se esperó entero" : miradas == 0 ? "sin poder mirar" : "sin saber si estaba asentada")}; {miradas} mirada(s))");
                     // LA FILA DESPLAZADA SE INTENTA (promesa 80): conocida y accionable por
                     // identidad —lo dice el delegado, no el batch—, se pulsa aunque no se vea;
                     // la consecuencia juzga. El atasco real: tras un relogin el árbol de NWP1

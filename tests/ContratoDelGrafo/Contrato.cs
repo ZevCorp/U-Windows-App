@@ -795,6 +795,9 @@ internal static class Contrato
         // ── Spec 038: leer es una llamada ───────────────────────────────────────────────────────
         Prueba("297. leer la pantalla es recorrer lo que UNA petición trajo: el recorrido recibe el árbol ya traído y no navega; recoge lo mismo que antes —accionable, visible, con etiqueta (nombre, o id, o ayuda) y con geometría, en orden de lectura, con los mismos topes: 40 niveles, y pasados los 400 elementos no se entra en más ramas—; si la petición con caché falla se lee nodo a nodo como antes; y el lector dice cuál de los dos caminos usó y por qué", LeerEsRecorrerLoQueUnaPeticionTrajo);
         Prueba("298. lo que la petición principal ya trajo no se vuelve a pedir ni se cuenta dos veces: una ventana hija cuya raíz ya venía en el árbol no se pide —ni una llamada— y sus elementos no salen repetidos; una hija que NO venía se pide una vez y sus elementos se añaden detrás, como antes; y el tope de elementos se gasta en elementos distintos, no en copias", LoQueYaVinoNoSeVuelveAPedir);
+
+        // ── Spec 040: la pantalla asentada no se espera ─────────────────────────────────────────
+        Prueba("299. una pantalla asentada no se espera: si la puerta pedida no está y dos miradas seguidas ven lo mismo —la misma ubicación y las mismas puertas vivas—, la compuerta se rinde en el acto y no al agotar el presupuesto, diciendo lo mismo que decía; si entre las dos miradas la pantalla cambió, está cargando: se espera el presupuesto entero y la puerta que aparece se pulsa; sin poder mirar, nada cambia; y en los dos casos la compuerta deja dicho cuánto esperó y por qué dejó de esperar", UnaPantallaAsentadaNoSeEspera);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12446,6 +12449,104 @@ internal static class Contrato
         var e4 = Etiquetas(v2, new() { (identidad(grande), () => grande), (identidad(aparte), () => aparte) });
         Debe(e4.Count == 301 && e4.Distinct().Count() == 301 && e4.Last() == "Vista previa",
             $"300 archivos y un botón son 301 elementos distintos, no 600 copias que llenan el tope: salieron {e4.Count} ({e4.Distinct().Count()} distintos), el último «{e4.LastOrDefault()}»");
+    }
+
+    // ── Spec 040: la pantalla asentada no se espera ──────────────────────────────────────────────
+
+    private static void UnaPantallaAsentadaNoSeEspera()
+    {
+        // MEDIDO EL 2026-09-18 en dos sesiones de voz reales del dueño: 7 `map_take` pidieron una puerta que no
+        // estaba —«Dan Kost», «TypeSafe AI», «Enter»— y cada «no» costó 4,2-4,6 s, más del triple que pulsar
+        // (1,2 s). El log: dos miradas de 34 y 39 ms que ven LO MISMO (45 y 45 elementos) con cuatro segundos de
+        // espera pura en medio. La pantalla estaba quieta y la puerta no estaba: esperar no podía traerla.
+        var pAsentar = typeof(RecorrerSegunElNucleo).GetProperty("EsperaDeAsentarMs");
+        var pDiario = typeof(RecorrerSegunElNucleo).GetProperty("Diario");
+        var pMira = typeof(RecorrerSegunElNucleo).GetProperty("MiraOtraVez");
+        if (pAsentar == null || pDiario == null || pMira == null)
+        {
+            Pendiente("RecorrerSegunElNucleo.EsperaDeAsentarMs + Diario", "299", "040");
+            return;
+        }
+
+        const string A = "uia://x.exe/a";
+        const int Presupuesto = 1200, Asentar = 100;
+        var uno = new Nucleo.Elemento("s:1", "Uno", "Button");
+        var otro = new Nucleo.Elemento("s:o", "Otro", "Button");
+        var viejo = new Nucleo.Elemento("s:v", "Viejo", "Button");
+
+        // «Viejo» está RECORDADO aquí y la última observación no lo trae (el mundo de la 264).
+        Nucleo.Grafo Mundo()
+        {
+            var g = new Nucleo.Grafo();
+            g.Observar(A, new[] { uno, viejo });
+            g.Observar(A, new[] { uno });
+            return g;
+        }
+
+        (RecorrerSegunElNucleo Lote, List<string> Tocados, List<string> Diario) Lote(Nucleo.Grafo g, Func<int, Nucleo.Elemento[]?> loQueVeLaMirada)
+        {
+            var tocados = new List<string>();
+            var diario = new List<string>();
+            var pulsar = new PulsarSegunElNucleo(g, () => A, (sel, et) => { tocados.Add(et); return true; }) { EsperaMaximaMs = 120 };
+            var lote = new RecorrerSegunElNucleo(g, () => A, pulsar, hayQueParar: () => false) { EsperaMaximaMs = Presupuesto };
+            pAsentar.SetValue(lote, Asentar);
+            pDiario.SetValue(lote, (Action<string>)(l => diario.Add(l)));
+            int n = 0;
+            pMira.SetValue(lote, (Func<string, bool>)(aqui =>
+            {
+                var ve = loQueVeLaMirada(++n);
+                if (ve == null) return false;          // no se pudo mirar
+                g.Observar(aqui, ve);
+                return true;
+            }));
+            return (lote, tocados, diario);
+        }
+
+        (RecorrerSegunElNucleo.Resultado R, long Ms) Pide(RecorrerSegunElNucleo lote, string puerta)
+        {
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            var r = lote.Recorre(new[] { new RecorrerSegunElNucleo.Paso(puerta) });
+            return (r, crono.ElapsedMilliseconds);
+        }
+
+        // 1. ASENTADA, y la puerta es INVENTADA: dos miradas ven lo mismo → se rinde ya, diciendo lo de siempre.
+        var (l1, t1, d1) = Lote(Mundo(), _ => new[] { uno });
+        var (r1, ms1) = Pide(l1, "Dan Kost");
+        Debe(t1.Count == 0 && r1.Hechos == 0 && r1.Cuenta.Contains("no lo conozco"),
+            $"una puerta inventada no se pulsa y se dice «no lo conozco», como hasta hoy (pulsó {t1.Count}; dijo «{r1.Cuenta}»)");
+        Debe(ms1 < Presupuesto / 2,
+            $"y con la pantalla asentada —dos miradas que ven lo mismo— se rinde en el acto, no al agotar el presupuesto: tardó {ms1} ms con un presupuesto de {Presupuesto}");
+
+        // 2. ASENTADA, y la puerta es CONOCIDA pero no está (los resultados de OTRA búsqueda en la misma dirección).
+        var (l2, t2, _) = Lote(Mundo(), _ => new[] { uno });
+        var (r2, ms2) = Pide(l2, "Viejo");
+        Debe(t2.Count == 0 && r2.Hechos == 0 && r2.Cuenta.Contains("AHORA no lo veo") && ms2 < Presupuesto / 2,
+            $"lo mismo con lo que el terreno recuerda y ahora no está: no se pulsa, se dice «AHORA no lo veo», y en el acto ({ms2} ms; pulsó {t2.Count}; dijo «{r2.Cuenta}»)");
+
+        // 3. CARGANDO: entre la primera mirada y la segunda la pantalla CAMBIÓ → se espera, y lo que aparece se pulsa.
+        var (l3, t3, d3) = Lote(Mundo(), n => n == 1 ? new[] { uno } : n == 2 ? new[] { uno, otro } : new[] { uno, otro, viejo });
+        var (r3, ms3) = Pide(l3, "Viejo");
+        Debe(t3.Count == 1 && t3[0] == "Viejo" && r3.Hechos == 1,
+            $"si la pantalla cambió entre las dos miradas está cargando: se sigue esperando y la puerta que aparece se pulsa (pulsó {t3.Count}: {string.Join(",", t3)}; dijo «{r3.Cuenta}»)");
+
+        // 4. CARGANDO y no aparece: se agota el presupuesto ENTERO, como hoy. La regla no recorta la espera que sirve.
+        var (l4, t4, _) = Lote(Mundo(), n => n == 1 ? new[] { uno } : new[] { uno, otro });
+        var (r4, ms4) = Pide(l4, "Viejo");
+        Debe(t4.Count == 0 && r4.Hechos == 0 && ms4 >= Presupuesto - 50,
+            $"una pantalla que se movió se espera el presupuesto entero antes de decir que no: tardó {ms4} ms de {Presupuesto} (pulsó {t4.Count})");
+
+        // 5. SIN PODER MIRAR, NADA CAMBIA: sin miradas no se sabe si está asentada, y no se adivina.
+        var (l5, t5, _) = Lote(Mundo(), _ => null);
+        var (r5, ms5) = Pide(l5, "Viejo");
+        Debe(t5.Count == 0 && r5.Hechos == 0 && ms5 >= Presupuesto - 50,
+            $"si no se pudo mirar no se sabe si la pantalla está asentada: se espera como siempre ({ms5} ms de {Presupuesto})");
+
+        // 6. Y QUEDA DICHO. El 2026-09-18 no se pudo medir si esta espera había servido alguna vez, porque la
+        // compuerta no dejaba línea: «tardó mucho» no distinguía «esperó a la puerta» de «el clic era lento».
+        Debe(d1.Any(x => x.Contains("Dan Kost") && x.Contains("asentada") && x.Contains(" ms")),
+            $"al rendirse por pantalla asentada lo dice, con la puerta y los milisegundos: [{string.Join(" ¦ ", d1)}]");
+        Debe(d3.Any(x => x.Contains("Viejo") && x.Contains("apareció") && x.Contains(" ms")),
+            $"y cuando la espera SIRVE —la puerta apareció esperando— también lo dice, con cuánto esperó: [{string.Join(" ¦ ", d3)}]");
     }
 
     private static void Debe(bool condicion, string promesa)
