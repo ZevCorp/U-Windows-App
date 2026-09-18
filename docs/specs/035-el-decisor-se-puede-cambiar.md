@@ -109,6 +109,48 @@ va; quién pulsa qué lo decide Jev sobre la lista real. Y cuando Jev no se atre
 trae el porqué **y el inventario**, para que Luna elija ella como hasta hoy — el control vuelve,
 no se pierde.
 
+## Nivel 4: la corrida a mano, medida (2026-09-18)
+
+Sobre este PC, con `U_DECISOR=simulado`, una instancia aislada (`C:\U-decisor\bin`, datos en
+`C:\U-decisor`) y las llamadas por MCP (`127.0.0.1:8790/mcp`). **Dos pantallas, no una.** El
+guion vive en el scratchpad de la sesión; el diario, en `C:\U-decisor\nivel4.txt`.
+
+```
+01:57:16.455 MCP listo; U mia: PID 70244 C:\U-decisor\bin\U.exe
+01:57:16.474 tools/list: 29 herramientas; map_decidir SI esta
+01:57:20.765 → map_where_am_i   (163 ms)
+             Estás en «uia://explorer.exe/disco-local-c». Veo 78 salida(s) que puedo usar ahora
+01:57:24.829 → map_decidir objetivo=abrir la carpeta Descargas  (2142 ms)
+             elegida «Descargas» con confianza 1.00: hice los 1 paso(s): pulsé «Descargas» y ahora
+             estás en «uia://explorer.exe/descargas». Queda aprendido.
+             EN PANTALLA AHORA, en «uia://explorer.exe/descargas» (314 elemento(s)): …
+01:57:28.060 → map_open_app app=Configuración  (115 ms)
+01:57:32.312 → map_where_am_i   (59 ms)
+             Estás en «uia://ApplicationFrameHost.exe/configuración». Veo 4 salida(s)
+01:57:32.596 → map_decidir objetivo=abrir Bluetooth y dispositivos  (55 ms)
+             no se acciona: decisión simulada (sin red, sin TypeSafe): ninguna de las 4 puertas
+             comparte una palabra con el objetivo, así que no se acciona. Decide Luna.
+             EN PANTALLA AHORA, en «uia://ApplicationFrameHost.exe/configuración» (4 elemento(s)): …
+01:57:34.878 → map_decidir   (5 ms)
+             falta `objetivo`: qué se quiere conseguir en esta pantalla, para que el decisor elija la puerta
+--- el log de la app, C:\U-decisor\local\U\logs\u-20260918.log ---
+[01:57:10] decisor: U_DECISOR=simulado: se decide con la regla fija, sin llamar a TypeSafe.
+[01:57:23] decisor: «uia://explorer.exe/disco-local-c» · 61 puerta(s) · 2 ms → ACCIONA «Descargas» conf=1.00 · …
+[01:57:32] decisor: «uia://ApplicationFrameHost.exe/configuración» · 4 puerta(s) · 0 ms → no acciona conf=0.00 · …
+```
+
+**Lo que el nivel 4 cazó y el contrato no** (intento 2, 01:52): con «abrir la carpeta Windows» —cero
+palabras en común con las 61 puertas listadas— el simulado accionó «Detalles», la primera, con
+confianza 1,00. Salió la promesa 281 ampliada y el arreglo (`87ea407`). El intento 1 (22:02) no
+midió nada: el guion perdía el argumento (`$args` es variable automática de PowerShell).
+
+**Lo que el nivel 4 deja a la vista y NO es de esta spec:** `map_what_i_see` lista 60 puertas de UIA
+y 160 del terreno, y en el Explorador con 404 elementos «Windows» quedó entre las 184 de fuera. El
+decisor solo puede elegir lo que esa lista trae, **a propósito** (promesa 285: una sola lista). Si
+Jev tiene que ver la carpeta 61, es el tope de `map_what_i_see` el que se discute, no el decisor.
+
+Nivel 4 con Jev de verdad: **no hecho**. Exige `TYPESAFE_API_KEY` y el hospital delante.
+
 ## Lo que queda fuera, dicho a propósito
 
 - **La medida sobre SAP real con clave de verdad.** La fase 4 cablea y se prueba en seco y sobre
