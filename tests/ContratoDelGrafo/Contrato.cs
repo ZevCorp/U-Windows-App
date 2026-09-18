@@ -762,6 +762,20 @@ internal static class Contrato
         Prueba("272. la carita se guarda en la consulta igual que en el muelle: soltarla dentro la sienta en el centro, la flotante desaparece, y hay UNA silla ocupada a la vez —muelle o consulta, nunca las dos—; el anfitrión lo decide la caja donde se soltó, con el mismo margen de agarre, y tirar de ella la saca bajo el cursor como hoy", LaCaritaSeGuardaEnLaConsultaComoEnElMuelle);
         Prueba("273. debajo de la carita sentada en la consulta hay un botón para llevarla a otro escritorio, que ofrece los escritorios por su nombre —«Escritorio N» los que no lo tienen— menos el actual, y «Uno nuevo»; sin carita sentada el botón no está", ElBotonOfreceLosEscritoriosPorSuNombre);
         Prueba("274. llevar a otro escritorio deja al asistente trabajando allí: las ventanas del centro de operaciones acaban en el destino, el destino queda a la vista, su escritorio pasa a ser ese, y la carita se suelta de la consulta y se posa con su animación; durante el viaje la consulta se queda delante si el sistema deja fijarla, y si no, el log dice que faltó un instante; llegar lo dice el sistema, no el botón, y si no se llega en el plazo se dice, las ventanas vuelven y nada queda a medias", ElViajeLlegaCuandoElSistemaLoDice);
+
+        // ── Spec 035: el decisor se puede cambiar ────────────────────────────────────────────────
+        Prueba("275. el decisor por defecto es Luna: sin configuración se decide como hoy, y a TypeSafe no se le llama NUNCA — el transporte no se toca ni una vez", PorDefectoDecideLuna);
+        Prueba("276. el interruptor cambia quién decide sin recompilar, y un valor que no se entiende cae en Luna diciéndolo: nunca se queda a medias entre los dos", ElInterruptorCambiaQuienDecide);
+        Prueba("277. la clave no vive en el código: sale de TYPESAFE_API_KEY, y sin ella el decisor de Jev NO se activa —se queda en Luna y dice que falta la clave— en vez de llamar sin credencial; y la clave no viaja nunca dentro del cuerpo", LaClaveNoViveEnElCodigo);
+        Prueba("278. Jev solo puede elegir entre las puertas que se le dieron: una respuesta con una puerta que no está en el inventario se rechaza y no se ejecuta, y se dice cuál vino", JevSoloEligeEntreLasPuertasDadas);
+        Prueba("279. por debajo del umbral de confianza no se actúa: la decisión se declara insegura y el control vuelve a Luna, en vez de tomar la puerta más probable de un empate", SinConfianzaNoSeActua);
+        Prueba("280. TypeSafe caído, lento o con error no detiene el trabajo: al fallar el transporte se cae a Luna, se dice por qué, y la excepción no sale de la pieza", SiTypeSafeFallaSeCaeALuna);
+        Prueba("281. el modo simulado no toca la red: decide con una regla fija y repetible, para que las pruebas no dependan de que TypeSafe conteste; y con cero palabras en común entre el objetivo y cualquier puerta NO actúa —una regla de andamiaje no puede accionar la primera puerta con confianza 1,00—, y su confianza es cuánto de la puerta explica el objetivo, no un 1,00 fijo", ElModoSimuladoNoTocaLaRed);
+        Prueba("282. la petición cumple el contrato HTTP de TypeSafe campo por campo: model, state, y questions con type «choice», instructions y criteria con TODAS las opciones ofrecidas", LaPeticionCumpleElContratoDeTypeSafe);
+        Prueba("283. 429 y 529 se reintentan con espera creciente; 401 y 422 no se reintentan, porque reintentar una clave mala o un cuerpo inválido solo gasta un cupo que TypeSafe dice que se mueve sin aviso", LosReintentosDistinguenLoQueMejoraDeLoQueNo);
+        Prueba("284. map_decidir existe solo con el decisor encendido: apagado no está en el catálogo, las instrucciones no lo nombran, y llamarlo contesta que decide Luna sin leer la pantalla ni pulsar; encendido está en el catálogo con `objetivo`, y las instrucciones mandan pedirlo con el objetivo en vez de elegir la puerta", MapDecidirSoloExisteConElDecisor);
+        Prueba("285. map_decidir ofrece al decisor exactamente las puertas que map_what_i_see lista, en su orden, y acciona la elegida por el mismo camino que map_take: la mano recibe ese paso, la cuenta dice qué se eligió y con qué confianza, y el acto cuenta lo que dejó delante", MapDecidirEligeEntreLoQueSeVeYPulsaComoMapTake);
+        Prueba("286. cuando el decisor no actúa —duda, puerta fuera de lista, TypeSafe caído, o el propio decisor lanza— map_decidir no pulsa nada, dice por qué con las palabras del decisor, la mano no cuenta un intento, y el control vuelve con el inventario delante; sin `objetivo` dice qué falta", SiElDecisorNoActuaNadaSePulsa);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -11328,6 +11342,439 @@ internal static class Contrato
         var atras = (string[])deshacer.Invoke(null, new object[] { ids[1], ids[3], ids })!;
         Debe(atras.SequenceEqual(new[] { "mover", "cambiar:-2", "esperar" }),
             $"si no se llega, se deshace: las ventanas vuelven al origen y se vuelve a él, sin fijar nada; salió [{string.Join(" · ", atras)}]");
+    }
+
+    // ── Spec 035: el decisor se puede cambiar ────────────────────────────────────────────────────
+    //
+    // NINGUNA DE ESTAS PRUEBAS TOCA LA RED, y no es una comodidad: el contrato corre en CI sin
+    // escritorio y sin credenciales, y una prueba que llamara a api.typesafe.ai fallaría por no
+    // tener clave y diría «CONTRATO ROTO» — un fallo del arnés disfrazado de núcleo roto, que es lo
+    // peor que puede decir un juez (aprendizaje nº17). Por eso el transporte se inyecta.
+
+    /// <summary>Lo que el decisor ofrece por reflexión, o null si esta versión no lo trae.</summary>
+    private static (Type? cfg, Type? peticion, Type? politica, Type? decisor) PiezasDelDecisor() => (
+        Capacidad("U.WindowsClient.Decision.ConfiguracionDelDecisor"),
+        Capacidad("U.WindowsClient.Decision.PeticionASystemOne"),
+        Capacidad("U.WindowsClient.Decision.PoliticaDeReintento"),
+        Capacidad("U.WindowsClient.Decision.ElDecisor"));
+
+    private static object? PropDe(object o, string nombre) => o.GetType().GetProperty(nombre)?.GetValue(o);
+
+    /// <summary>Una respuesta de TypeSafe como la documenta su API, para dársela al transporte falso.</summary>
+    private static string RespuestaChoice(string id, string elegida, double confianza, params string[] opciones)
+    {
+        var probs = string.Join(",", opciones.Select(o =>
+            $"\"{o}\":{(o == elegida ? confianza : (1 - confianza) / Math.Max(1, opciones.Length - 1)).ToString(System.Globalization.CultureInfo.InvariantCulture)}"));
+        return "{\"model\":\"jev-1.13.0\",\"answers\":{\"" + id + "\":{\"type\":\"choice\",\"choice\":\"" + elegida
+             + "\",\"probabilities\":{" + probs + "},\"confidence\":"
+             + confianza.ToString(System.Globalization.CultureInfo.InvariantCulture)
+             + "}},\"usage\":{\"input_tokens\":312,\"output_tokens\":0}}";
+    }
+
+    private static void PorDefectoDecideLuna()
+    {
+        var (cfg, _, _, decisor) = PiezasDelDecisor();
+        var leer = cfg?.GetMethod("Leer");
+        var elegir = decisor?.GetMethod("Elegir");
+        if (cfg == null || decisor == null || leer == null || elegir == null)
+        {
+            Pendiente("Decision.ConfiguracionDelDecisor.Leer + Decision.ElDecisor.Elegir", "275", "035");
+            return;
+        }
+
+        // Un entorno vacío: ni interruptor, ni clave. Es la máquina del hospital tal cual está hoy.
+        var vacio = (Func<string, string?>)(_ => null);
+        var c = leer.Invoke(null, new object[] { vacio })!;
+        Debe((string)PropDe(c, "Quien")! == "luna", $"sin configuración decide Luna; salió «{PropDe(c, "Quien")}»");
+
+        // Y LO QUE DE VERDAD IMPORTA: que no se llame. Un decisor que pregunta a TypeSafe y luego
+        // descarta la respuesta ya gastó cupo, latencia y datos de pantalla del hospital.
+        int llamadas = 0;
+        var transporte = (Func<string, string>)(_ => { llamadas++; return RespuestaChoice("puerta", "Nuevo", 0.99, "Nuevo"); });
+        var d = elegir.Invoke(null, new object[] { "luna", "SAP/NWP1", "crear triage", new[] { "Nuevo", "Buscar" }, 0.7, transporte })!;
+        Debe(llamadas == 0, $"con Luna al mando no se llama a TypeSafe ni una vez; se llamó {llamadas}");
+        Debe(!(bool)PropDe(d, "Actuar")!, "y el decisor no se pronuncia: la puerta la sigue eligiendo Luna");
+    }
+
+    private static void ElInterruptorCambiaQuienDecide()
+    {
+        var (cfg, _, _, _) = PiezasDelDecisor();
+        var leer = cfg?.GetMethod("Leer");
+        if (cfg == null || leer == null) { Pendiente("Decision.ConfiguracionDelDecisor.Leer", "276", "035"); return; }
+
+        Func<string, string?> Entorno(string? decisor, string? clave) => n => n switch
+        {
+            "U_DECISOR" => decisor,
+            "TYPESAFE_API_KEY" => clave,
+            _ => null,
+        };
+        string Quien(string? d, string? k) => (string)PropDe(leer.Invoke(null, new object[] { Entorno(d, k) })!, "Quien")!;
+
+        Debe(Quien("jev", "sk-de-mentira") == "jev", "con U_DECISOR=jev y clave, decide Jev");
+        Debe(Quien("JEV", "sk-de-mentira") == "jev", "y da igual cómo se escriba: el interruptor no distingue mayúsculas");
+        Debe(Quien("luna", "sk-de-mentira") == "luna", "con U_DECISOR=luna decide Luna aunque haya clave");
+        Debe(Quien("simulado", null) == "simulado", "el modo simulado se pide por el mismo interruptor y no necesita clave");
+
+        // UN VALOR QUE NO SE ENTIENDE NO PUEDE DEJARLO A MEDIAS. Caer en Luna es la única salida que
+        // no cambia el comportamiento de una máquina donde alguien escribió mal la variable.
+        var raro = leer.Invoke(null, new object[] { Entorno("jeff", "sk-de-mentira") })!;
+        Debe((string)PropDe(raro, "Quien")! == "luna", "un valor que no se entiende cae en Luna");
+        Debe(((string)PropDe(raro, "Porque")!).Contains("jeff"),
+            $"y se dice qué se escribió, para que se pueda corregir; salió «{PropDe(raro, "Porque")}»");
+    }
+
+    private static void LaClaveNoViveEnElCodigo()
+    {
+        var (cfg, peticion, _, _) = PiezasDelDecisor();
+        var leer = cfg?.GetMethod("Leer");
+        var cuerpo = peticion?.GetMethod("CuerpoDeEleccion");
+        var variable = peticion?.GetField("VariableDeLaClave")?.GetValue(null) as string;
+        if (cfg == null || peticion == null || leer == null || cuerpo == null || variable == null)
+        {
+            Pendiente("Decision.PeticionASystemOne.CuerpoDeEleccion + VariableDeLaClave", "277", "035");
+            return;
+        }
+
+        Debe(variable == "TYPESAFE_API_KEY", $"la clave se pide por TYPESAFE_API_KEY; se pide por «{variable}»");
+
+        // PEDIR JEV SIN CLAVE NO PUEDE ACABAR EN UNA LLAMADA SIN CREDENCIAL: eso sería un 401 por
+        // cada paso, gastando el cupo de peticiones por minuto para no decidir nada.
+        var sinClave = (Func<string, string?>)(n => n == "U_DECISOR" ? "jev" : null);
+        var c = leer.Invoke(null, new object[] { sinClave })!;
+        Debe((string)PropDe(c, "Quien")! == "luna", "se pide Jev pero no hay clave: se queda en Luna, no se llama sin credencial");
+        Debe(((string)PropDe(c, "Porque")!).Contains("TYPESAFE_API_KEY"),
+            $"y se dice que lo que falta es la clave, con su nombre; salió «{PropDe(c, "Porque")}»");
+
+        // Y LA CLAVE NO VIAJA EN EL CUERPO. Va en la cabecera Authorization y en ningún otro sitio:
+        // el cuerpo se registra en el log cuando algo falla, y un secreto en el log ya se filtró.
+        var json = (string)cuerpo.Invoke(null, new object[] { "jev-latest", "en SAP/NWP1", "puerta", "¿qué puerta?", new[] { "Nuevo" } })!;
+        Debe(!json.Contains("TYPESAFE_API_KEY") && !json.Contains("Bearer") && !json.Contains("api_key"),
+            "el cuerpo de la petición no lleva la clave ni su nombre: eso va en la cabecera");
+    }
+
+    private static void JevSoloEligeEntreLasPuertasDadas()
+    {
+        var (_, _, _, decisor) = PiezasDelDecisor();
+        var elegir = decisor?.GetMethod("Elegir");
+        if (decisor == null || elegir == null) { Pendiente("Decision.ElDecisor.Elegir", "278", "035"); return; }
+
+        var puertas = new[] { "Crear Triage Administrativo", "Buscar pacientes" };
+
+        // ESTE ES EL PENDIENTE Nº2 DE CLAUDE.md, convertido en promesa: el puente consciente pulsó
+        // «Buscar pacientes» en vez de «Crear Triage Administrativo». Una puerta que no está en el
+        // inventario no se toma NUNCA, venga de donde venga.
+        var inventada = (Func<string, string>)(_ => RespuestaChoice("puerta", "Grabar", 0.99, "Grabar"));
+        var d = elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "crear triage", puertas, 0.7, inventada })!;
+        Debe(!(bool)PropDe(d, "Actuar")!, "una puerta que no se ofreció no se ejecuta, por segura que venga");
+        Debe(((string)PropDe(d, "Porque")!).Contains("Grabar"),
+            $"y se dice cuál vino, que es lo que distingue «contestó otra cosa» de «no contestó»; salió «{PropDe(d, "Porque")}»");
+
+        var buena = (Func<string, string>)(_ => RespuestaChoice("puerta", "Crear Triage Administrativo", 0.93, puertas));
+        var ok = elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "crear triage", puertas, 0.7, buena })!;
+        Debe((bool)PropDe(ok, "Actuar")!, "una puerta del inventario, con confianza de sobra, sí se toma");
+        Debe((string)PropDe(ok, "Puerta")! == "Crear Triage Administrativo", "y es exactamente la que Jev eligió");
+    }
+
+    private static void SinConfianzaNoSeActua()
+    {
+        var (_, _, _, decisor) = PiezasDelDecisor();
+        var elegir = decisor?.GetMethod("Elegir");
+        if (decisor == null || elegir == null) { Pendiente("Decision.ElDecisor.Elegir", "279", "035"); return; }
+
+        var puertas = new[] { "Crear Triage Administrativo", "Crear Triage Asistencial" };
+        // Dos puertas casi iguales: Jev elige una, pero su confianza dice que es un volado. Actuar
+        // aquí es el aprendizaje nº17 al revés — un juez que no puede juzgar diciendo «culpable».
+        var dudosa = (Func<string, string>)(_ => RespuestaChoice("puerta", "Crear Triage Administrativo", 0.51, puertas));
+        var d = elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "crear triage", puertas, 0.7, dudosa })!;
+        Debe(!(bool)PropDe(d, "Actuar")!, "por debajo del umbral no se actúa, aunque haya una opción más probable que la otra");
+        Debe(Math.Abs((double)PropDe(d, "Confianza")! - 0.51) < 0.001, "y se conserva la confianza que dio, para poder ajustar el umbral con datos");
+
+        var justa = (Func<string, string>)(_ => RespuestaChoice("puerta", "Crear Triage Administrativo", 0.70, puertas));
+        Debe((bool)PropDe(elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "x", puertas, 0.7, justa })!, "Actuar")!,
+            "justo en el umbral se actúa: el umbral es un mínimo exigido, no un listón que haya que superar");
+    }
+
+    private static void SiTypeSafeFallaSeCaeALuna()
+    {
+        var (_, _, _, decisor) = PiezasDelDecisor();
+        var elegir = decisor?.GetMethod("Elegir");
+        if (decisor == null || elegir == null) { Pendiente("Decision.ElDecisor.Elegir", "280", "035"); return; }
+
+        var puertas = new[] { "Nuevo", "Buscar" };
+        foreach (var (falla, como) in new (Func<string, string>, string)[]
+        {
+            (_ => throw new TimeoutException("se acabó el plazo"), "se agota el plazo"),
+            (_ => throw new System.Net.Http.HttpRequestException("no hay red"), "se cae la red"),
+            (_ => "{ esto no es json", "contesta algo que no es JSON"),
+            (_ => "{\"model\":\"jev-1.13.0\",\"answers\":{},\"usage\":{}}", "contesta sin la respuesta que se pidió"),
+            // «answers» con la forma equivocada: TryGetProperty sobre algo que no es objeto lanza
+            // InvalidOperationException, que NO es JsonException. Un catch estrecho la dejaría
+            // escapar y tumbaría el paso en vez de devolvérselo a Luna.
+            (_ => "{\"model\":\"jev-1.13.0\",\"answers\":\"hola\",\"usage\":{}}", "contesta con «answers» que no es un objeto"),
+            (_ => "{\"model\":\"jev-1.13.0\",\"answers\":{\"puerta\":{\"type\":\"choice\",\"choice\":7}},\"usage\":{}}", "contesta una puerta que no es texto"),
+        })
+        {
+            object d;
+            try { d = elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "x", puertas, 0.7, falla })!; }
+            catch (Exception e) { Debe(false, $"cuando {como}, la excepción sale de la pieza y tumba el paso: {e.InnerException?.GetType().Name ?? e.GetType().Name}"); continue; }
+            Debe(!(bool)PropDe(d, "Actuar")!, $"cuando {como}, no se actúa");
+            Debe(((string)PropDe(d, "Porque")!).Length > 0, $"cuando {como}, se dice por qué se devolvió el control");
+        }
+    }
+
+    private static void ElModoSimuladoNoTocaLaRed()
+    {
+        var (_, _, _, decisor) = PiezasDelDecisor();
+        var elegir = decisor?.GetMethod("Elegir");
+        if (decisor == null || elegir == null) { Pendiente("Decision.ElDecisor.Elegir", "281", "035"); return; }
+
+        int llamadas = 0;
+        var transporte = (Func<string, string>)(_ => { llamadas++; return RespuestaChoice("puerta", "Nuevo", 0.99, "Nuevo"); });
+        var puertas = new[] { "Nuevo", "Buscar" };
+        var a = elegir.Invoke(null, new object[] { "simulado", "SAP/NWP1", "crear", puertas, 0.7, transporte })!;
+        var b = elegir.Invoke(null, new object[] { "simulado", "SAP/NWP1", "crear", puertas, 0.7, transporte })!;
+
+        Debe(llamadas == 0, $"el modo simulado no llama a TypeSafe; se llamó {llamadas} vez(ces)");
+        Debe((string)PropDe(a, "Puerta")! == (string)PropDe(b, "Puerta")!,
+            "y decide igual dos veces seguidas: una prueba que depende del azar no prueba nada");
+        Debe(((string)PropDe(a, "Porque")!).Contains("simulad"),
+            $"y se dice que fue simulado, para que un verde no se confunda con haber hablado con TypeSafe; salió «{PropDe(a, "Porque")}»");
+
+        // CERO PALABRAS EN COMÚN NO ES UNA ELECCIÓN. Medido en el nivel 4 del 2026-09-18 sobre el
+        // Explorador: «abrir la carpeta Windows» no casaba con ninguna de las 61 puertas listadas y el
+        // simulado accionó igual «Detalles», la primera, con confianza 1,00 — el juez optimista que la
+        // spec prohíbe, y el contrato lo dejó pasar porque solo pedía repetibilidad.
+        Debe(!(bool)PropDe(a, "Actuar")!,
+            $"con «crear» y las puertas Nuevo/Buscar no hay palabra en común: NO se actúa (salió Actuar={PropDe(a, "Actuar")}, Puerta=«{PropDe(a, "Puerta")}»)");
+        var casa = elegir.Invoke(null, new object[] { "simulado", "SAP/NWP1", "crear el triage administrativo", new[] { "Buscar pacientes", "Crear Triage Administrativo" }, 0.7, transporte })!;
+        Debe((bool)PropDe(casa, "Actuar")! && (string)PropDe(casa, "Puerta")! == "Crear Triage Administrativo",
+            "y con palabras en común elige la puerta que más comparte");
+        Debe(Math.Abs((double)PropDe(casa, "Confianza")! - 1.0) < 0.001,
+            $"con la puerta explicada entera por el objetivo la confianza es 1,00; salió {PropDe(casa, "Confianza")}");
+        var aMedias = elegir.Invoke(null, new object[] { "simulado", "SAP/NWP1", "crear", new[] { "Crear Triage Administrativo" }, 0.7, transporte })!;
+        Debe(!(bool)PropDe(aMedias, "Actuar")! && (double)PropDe(aMedias, "Confianza")! < 0.7,
+            $"y con una sola palabra de tres la confianza baja (1/3) y no llega al umbral: no se actúa; salió {PropDe(aMedias, "Confianza")}");
+        Debe(llamadas == 0, "y en ningún caso se llamó a TypeSafe");
+    }
+
+    private static void LaPeticionCumpleElContratoDeTypeSafe()
+    {
+        var (_, peticion, _, _) = PiezasDelDecisor();
+        var cuerpo = peticion?.GetMethod("CuerpoDeEleccion");
+        var url = peticion?.GetField("Url")?.GetValue(null) as string;
+        if (peticion == null || cuerpo == null || url == null)
+        {
+            Pendiente("Decision.PeticionASystemOne.CuerpoDeEleccion + Url", "282", "035");
+            return;
+        }
+
+        Debe(url == "https://api.typesafe.ai/v1/systemone", $"el endpoint es el que documenta TypeSafe; está puesto «{url}»");
+
+        var opciones = new[] { "Crear Triage Administrativo", "Buscar pacientes", "Salir" };
+        var json = (string)cuerpo.Invoke(null, new object[] { "jev-latest", "estoy en SAP/NWP1", "puerta", "¿qué puerta lleva a crear el triage?", opciones })!;
+
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var raiz = doc.RootElement;
+        Debe(raiz.GetProperty("model").GetString() == "jev-latest", "el cuerpo nombra el modelo");
+        Debe(raiz.GetProperty("state").GetString() == "estoy en SAP/NWP1", "el cuerpo lleva el estado a juzgar");
+        var p = raiz.GetProperty("questions").GetProperty("puerta");
+        Debe(p.GetProperty("type").GetString() == "choice", "la pregunta es de tipo choice: elegir de una lista cerrada, no generar texto");
+        Debe(p.GetProperty("instructions").GetString()!.Length > 0, "la pregunta lleva sus instrucciones");
+        var criteria = p.GetProperty("criteria");
+        foreach (var o in opciones)
+            Debe(criteria.TryGetProperty(o, out _), $"«{o}» está entre las opciones ofrecidas: lo que no se ofrece, Jev no puede elegirlo");
+        Debe(criteria.EnumerateObject().Count() == opciones.Length, "y no hay más opciones que las puertas que hay en pantalla");
+    }
+
+    private static void LosReintentosDistinguenLoQueMejoraDeLoQueNo()
+    {
+        var (_, _, politica, _) = PiezasDelDecisor();
+        var seReintenta = politica?.GetMethod("SeReintenta");
+        var espera = politica?.GetMethod("EsperaMs");
+        if (politica == null || seReintenta == null || espera == null)
+        {
+            Pendiente("Decision.PoliticaDeReintento.SeReintenta/EsperaMs", "283", "035");
+            return;
+        }
+
+        bool R(int c) => (bool)seReintenta.Invoke(null, new object[] { c })!;
+        Debe(R(429), "429 (pasado de cupo) se reintenta: TypeSafe pide esperar, no rendirse");
+        Debe(R(529), "529 (sobrecargado) se reintenta");
+        Debe(!R(401), "401 no se reintenta: una clave mala no mejora insistiendo, y cada intento gasta cupo");
+        Debe(!R(422), "422 no se reintenta: un cuerpo inválido sale igual de inválido la segunda vez");
+        Debe(!R(200), "un 200 no se reintenta");
+
+        int e0 = (int)espera.Invoke(null, new object[] { 0 })!;
+        int e1 = (int)espera.Invoke(null, new object[] { 1 })!;
+        int e2 = (int)espera.Invoke(null, new object[] { 2 })!;
+        Debe(e0 > 0 && e1 > e0 && e2 > e1, $"la espera crece entre intentos; salió {e0} · {e1} · {e2}");
+    }
+
+    // ── Spec 035, fase 4: map_decidir ────────────────────────────────────────────────────────────
+
+    /// <summary>Un mapa sin pantalla: ubicación fija, puertas inyectadas, mano falsa que anota qué paso recibió.</summary>
+    private static (SurfaceMapTools mapa, Func<RecorrerSegunElNucleo.Paso?> visto, Func<int> leidas)? MapaParaDecidir(
+        PropertyInfo pPuertas, params (string Etiqueta, string Tipo)[] puertas)
+    {
+        var mapa = new SurfaceMapTools(() => new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation("uia://sap/NWP1", "sap", ""));
+        int leidas = 0;
+        pPuertas.SetValue(mapa, (Func<string, IReadOnlyList<(string, string)>>)(_ => { leidas++; return puertas; }));
+        RecorrerSegunElNucleo.Paso? visto = null;
+        mapa.RecorrerPorElNucleo = pasos =>
+        {
+            visto = pasos[0];
+            return new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true,
+                $"hice los 1 paso(s): pulsé «{pasos[0].Exit}» y ahora estás en «uia://sap/NV2000».", true);
+        };
+        return (mapa, () => visto, () => leidas);
+    }
+
+    /// <summary>Fabrica una decisión con las factorías del decisor, por reflexión: son internas y existen desde la fase 3.</summary>
+    private static U.WindowsClient.Decision.DecisionDeUnPaso Decision(string factoria, params object[] args)
+    {
+        var t = typeof(U.WindowsClient.Decision.DecisionDeUnPaso);
+        var m = t.GetMethod(factoria, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)!;
+        return (U.WindowsClient.Decision.DecisionDeUnPaso)m.Invoke(null, args)!;
+    }
+
+    /// <summary>La forma del decisor de SurfaceMapTools: pantalla, objetivo, puertas → decisión. Es parte de la promesa.</summary>
+    private static Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso> Decide(
+        Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso> d) => d;
+
+    private static void MapDecidirSoloExisteConElDecisor()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var pCon = tc?.GetProperty("ConDecisor", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        var pInstr = tc?.GetProperty("InstruccionesNormales", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        if (pDecisor == null || pPuertas == null || pCon == null || pInstr == null)
+        {
+            Pendiente("SurfaceMapTools.Decisor/Puertas + ConversacionEnVivo.ConDecisor", "284", "035");
+            return;
+        }
+
+        bool antes = (bool)pCon.GetValue(null)!;
+        try
+        {
+            // APAGADO: el catálogo de Luna queda byte a byte como hoy. Eso es lo que hace que U_DECISOR
+            // ausente no cambie NADA en la máquina del hospital.
+            pCon.SetValue(null, false);
+            Debe(ArgumentosDe("map_decidir") == null, "apagado, map_decidir no está en el catálogo");
+            Debe(!((string)pInstr.GetValue(null)!).Contains("map_decidir", StringComparison.Ordinal),
+                "ni las instrucciones lo nombran: no se le pide a Luna una herramienta que no tiene");
+
+            var m = MapaParaDecidir(pPuertas, ("Nuevo", "Button"))!.Value;
+            string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "crear" });
+            Debe(r.StartsWith("todavía no sé decidir", StringComparison.Ordinal) && r.Contains("Luna", StringComparison.Ordinal),
+                $"y si alguien lo pide igual, contesta que decide Luna (dijo: «{r}»)");
+            Debe(m.leidas() == 0 && m.visto() == null, "sin leer la pantalla ni pulsar nada");
+            Debe(m.mapa.UltimaMano == null, "y no cuenta como mano: no hubo intento");
+            Debe(SurfaceMapTools.IsMapTool("map_decidir"), "aunque el despacho SÍ la conoce: es el catálogo el que la esconde, no el mapa");
+
+            // ENCENDIDO: está, pide el objetivo, y las instrucciones cambian quién elige.
+            pCon.SetValue(null, true);
+            var args = ArgumentosDe("map_decidir");
+            Debe(args != null && args.Contains("objetivo"), "encendido, map_decidir está en el catálogo y pide `objetivo`");
+            string desc = DescripcionDe("map_decidir") ?? "";
+            Debe(desc.Contains("map_take", StringComparison.Ordinal) && desc.Contains("objetivo", StringComparison.OrdinalIgnoreCase),
+                $"y su descripción dice que sustituye a elegir la puerta con map_take («{(desc.Length > 90 ? desc[..90] : desc)}»)");
+            string instr = (string)pInstr.GetValue(null)!;
+            Debe(instr.Contains("map_decidir", StringComparison.Ordinal),
+                "y las instrucciones mandan pedirlo con el objetivo en vez de elegir la puerta");
+            Debe(!instr.Contains("más de dos veces", StringComparison.OrdinalIgnoreCase),
+                "sin tocar la regla de intentos de la 206");
+        }
+        finally { pCon.SetValue(null, antes); }
+    }
+
+    private static void MapDecidirEligeEntreLoQueSeVeYPulsaComoMapTake()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var tDecision = Capacidad("U.WindowsClient.Decision.DecisionDeUnPaso");
+        if (pDecisor == null || pPuertas == null || tDecision == null)
+        {
+            Pendiente("SurfaceMapTools.Decisor/Puertas", "285", "035");
+            return;
+        }
+
+        var m = MapaParaDecidir(pPuertas, ("Buscar", "Edit"), ("Crear Triage Administrativo", "Button"), ("Salir", "Button"))!.Value;
+        string? pantalla = null;
+        IReadOnlyList<string>? ofrecidas = null;
+        // Se asigna con el tipo EXACTO que pide la propiedad: si la firma cambia, esto deja de compilar, y eso es parte de la promesa.
+        pDecisor.SetValue(m.mapa, Decide((p, o, puertas) =>
+        {
+            pantalla = p; ofrecidas = puertas;
+            return Decision("Si", "Crear Triage Administrativo", 0.93, "Jev eligió «Crear Triage Administrativo» con confianza 0.93.");
+        }));
+
+        string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "crear el triage" });
+        // LA MANO SE LEE AQUÍ, antes de cualquier otra llamada: cada Call dice SU resultado y resetea el
+        // anterior (spec 017). Leerla después de map_what_i_see daba null — y no era el código.
+        object? manoDeDecidir = m.mapa.UltimaMano;
+
+        // LAS MISMAS PUERTAS QUE map_what_i_see, y en su orden. Se comprueba contra la propia herramienta,
+        // no contra lo que se inyectó: si alguien pone un segundo camino para listar puertas, esto lo caza.
+        string veo = m.mapa.Call("map_what_i_see", new Dictionary<string, string>());
+        Debe(ofrecidas != null && ofrecidas.SequenceEqual(new[] { "Buscar", "Crear Triage Administrativo", "Salir" }),
+            $"el decisor recibe las puertas que hay ahora, en orden de lectura; recibió [{string.Join(" · ", ofrecidas ?? Array.Empty<string>())}]");
+        Debe(veo.IndexOf("«Buscar»", StringComparison.Ordinal) < veo.IndexOf("«Crear Triage Administrativo»", StringComparison.Ordinal)
+          && veo.IndexOf("«Crear Triage Administrativo»", StringComparison.Ordinal) < veo.IndexOf("«Salir»", StringComparison.Ordinal),
+            "y son las que map_what_i_see lista, en ese mismo orden");
+        Debe(pantalla == "uia://sap/NWP1", $"y sabe en qué pantalla está («{pantalla}»)");
+
+        // POR EL MISMO CAMINO QUE map_take: la mano recibe el paso, no otra cosa.
+        var paso = m.visto();
+        Debe(paso != null && paso.Exit == "Crear Triage Administrativo",
+            $"la mano recibe exactamente ese paso (recibió «{paso?.Exit}»)");
+        Debe(r.Contains("Crear Triage Administrativo", StringComparison.Ordinal) && r.Contains("0.93", StringComparison.Ordinal)
+          && r.Contains("ahora estás en «uia://sap/NV2000»", StringComparison.Ordinal),
+            $"la cuenta dice qué se eligió, con qué confianza, y qué pasó al pulsar (dijo: «{(r.Length > 120 ? r[..120] : r)}»)");
+        Debe(r.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), "y el acto cuenta lo que dejó delante, como cualquier acto (263)");
+        Debe(manoDeDecidir != null && (bool)PropDe(manoDeDecidir, "Logro")! && (bool)PropDe(manoDeDecidir, "Intento")!,
+            "y la mano lo cuenta como intento logrado, igual que map_take");
+    }
+
+    private static void SiElDecisorNoActuaNadaSePulsa()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var tDecision = Capacidad("U.WindowsClient.Decision.DecisionDeUnPaso");
+        if (pDecisor == null || pPuertas == null || tDecision == null)
+        {
+            Pendiente("SurfaceMapTools.Decisor/Puertas", "286", "035");
+            return;
+        }
+
+        // DUDA, O PUERTA FUERA DE LISTA: es la palabra del decisor la que llega, no un resumen.
+        var m = MapaParaDecidir(pPuertas, ("Buscar", "Edit"), ("Crear Triage Administrativo", "Button"))!.Value;
+        pDecisor.SetValue(m.mapa, Decide((_, _, _) => Decision("No", "Jev contestó «Grabar», que no está entre las 2 puertas de esta pantalla: no se acciona. Decide Luna.", 0.99)));
+        string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "crear el triage" });
+        Debe(m.visto() == null, "no se pulsa nada");
+        Debe(r.StartsWith("no se acciona", StringComparison.Ordinal) && r.Contains("Grabar", StringComparison.Ordinal),
+            $"y se dice por qué con las palabras del decisor (dijo: «{(r.Length > 100 ? r[..100] : r)}»)");
+        Debe(r.Contains("EN PANTALLA AHORA", StringComparison.Ordinal) && r.Contains("«Buscar»", StringComparison.Ordinal),
+            "y el control vuelve con el inventario delante, para que Luna elija ella");
+        Debe(m.mapa.UltimaMano is { } mano && !(bool)PropDe(mano, "Intento")!,
+            "y la mano no lo cuenta como intento: no se pulsó nada, y contarlo frenaría el «pruebo otro» del tope de la 204");
+
+        // EL PROPIO DECISOR LANZA: tampoco tumba el paso. ElDecisor promete no lanzar (280), pero esto es
+        // la costura, y lo que promete otro se comprueba.
+        var m2 = MapaParaDecidir(pPuertas, ("Buscar", "Edit"))!.Value;
+        pDecisor.SetValue(m2.mapa, Decide((_, _, _) => throw new InvalidOperationException("se rompió el decisor")));
+        string r2;
+        try { r2 = m2.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" }); }
+        catch (Exception e) { Debe(false, $"si el decisor lanza, la excepción sale del despacho: {e.GetType().Name}"); return; }
+        Debe(m2.visto() == null && r2.StartsWith("no se acciona", StringComparison.Ordinal) && r2.Contains("InvalidOperationException", StringComparison.Ordinal),
+            $"si el decisor lanza no se pulsa nada y se dice qué lanzó (dijo: «{(r2.Length > 100 ? r2[..100] : r2)}»)");
+
+        // SIN OBJETIVO no hay decisión posible, y se dice qué falta — sin leer la pantalla.
+        var m3 = MapaParaDecidir(pPuertas, ("Buscar", "Edit"))!.Value;
+        pDecisor.SetValue(m3.mapa, Decide((_, _, _) => Decision("Si", "Buscar", 1.0, "x")));
+        string r3 = m3.mapa.Call("map_decidir", new Dictionary<string, string>());
+        Debe(r3.StartsWith("falta `objetivo`", StringComparison.Ordinal) && m3.leidas() == 0 && m3.visto() == null,
+            $"sin `objetivo` dice qué falta, y ni mira ni pulsa (dijo: «{r3}»)");
     }
 
     private static void Debe(bool condicion, string promesa)

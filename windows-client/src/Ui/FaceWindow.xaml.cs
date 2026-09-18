@@ -433,6 +433,24 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // pantalla, y quien lo sabe es este mismo objeto — no una copia con su propio lector.
             _mapaDeMano = mcp.Map;
 
+            // QUIÉN ELIGE LA PUERTA (spec 035, promesas 284-286). Con U_DECISOR ausente no cambia NADA:
+            // map_decidir ni aparece en el catálogo de Luna. Encendido, Luna pide el objetivo y el
+            // decisor elige entre las puertas de ahora; ante cualquier duda o fallo, ElDecisor cae a
+            // Luna (280). La clave sale del entorno y va a la cabecera: aquí no se lee ni se registra.
+            {
+                var cfgDecisor = Decision.ConfiguracionDelDecisor.DelSistema();
+                LogBus.Log("decisor", cfgDecisor.Porque);
+                if (cfgDecisor.Quien != "luna")
+                {
+                    var transporte = Decision.ClienteTypeSafe.TransporteSegun(
+                            cfgDecisor, Environment.GetEnvironmentVariable, m => LogBus.Log("decisor", m))
+                        ?? (_ => throw new InvalidOperationException("no hay transporte con el que hablarle a TypeSafe"));
+                    mcp.Map.Decisor = (pantalla, objetivo, puertas) =>
+                        Decision.ElDecisor.Elegir(cfgDecisor.Quien, pantalla, objetivo, puertas, cfgDecisor.Confianza, transporte);
+                    Voice.ConversacionEnVivo.ConDecisor = true;
+                }
+            }
+
             // CORREGIR UN RECUERDO DESDE SU TARJETA entra por la misma puerta que enseñarlo de viva
             // voz, con sus mismas reglas. Y el narrador se entera de que hay alguien escribiendo,
             // para no pasar al siguiente y borrárselo a media frase.
