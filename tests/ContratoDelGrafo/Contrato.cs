@@ -806,6 +806,9 @@ internal static class Contrato
         // ── Spec 042: ir a una web no espera mirando otra ventana ───────────────────────────────
         Prueba("332. ponerse delante de otra ventana la vuelve la de trabajo antes de comprobar la llegada: ir a una web que ya está abierta en otra ventana del navegador se da por llegado en cuanto esa ventana está delante, no al agotar los presupuestos mirando la ventana anterior; y ponerse delante se pide UNA vez por paso —si ya se pidió y no se llegó, no se vuelve a pedir ni se abre un segundo plazo—", PonerseDelanteVuelveLaVentanaLaDeTrabajo);
         Prueba("333. pedir un subdominio no se cumple estando en el dominio padre: con scholar.google.com pedido, una pestaña en google.com no es «ya estaba abierto»; pedir el sitio a secas sí se cumple en un subdominio suyo, como hasta hoy; y www. no cuenta en ninguno de los dos lados", PedirUnSubdominioNoSeCumpleEnElPadre);
+
+        // ── Spec 043: un campo de texto no navega ───────────────────────────────────────────────
+        Prueba("334. un campo de texto no navega: al pulsar un Edit o un ComboBox no se espera el presupuesto de un cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el terreno ni se repite el clic, y la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta como cualquier navegación; y lo que no es un campo espera como siempre", UnCampoDeTextoNoNavega);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12715,6 +12718,63 @@ internal static class Contrato
             "y «www.» no cuenta en ninguno de los dos lados: era la dirección inversa la que, de rebote, cubría este caso");
         Debe(Mismo("github.com", "GitHub.com/") && !Mismo("notgithub.com", "github.com") && !Mismo("", "github.com") && !Mismo("github.com", ""),
             "lo demás, como siempre: mayúsculas y barra final dan igual, un sufijo sin punto no es un subdominio, y vacío no casa con nada");
+    }
+
+    // ── Spec 043 ─────────────────────────────────────────────────────────────────────────────────
+
+    private static void UnCampoDeTextoNoNavega()
+    {
+        // MEDIDO EL 2026-09-18 en el log de tres pruebas del dueño: 50 pulsaciones, 16 sin cambio de pantalla, y de
+        // esas 7 eran campos de texto (4 ComboBox, 3 Edit). Los campos cambiaron de pantalla 0 VECES DE 7. Cada una
+        // costó 3,3-3,9 s: 1,8 s esperando un cambio que un campo no produce, más la consulta al terreno.
+        var pCampo = typeof(PulsarSegunElNucleo).GetProperty("EsperaDeCampoMs");
+        if (pCampo == null) { Pendiente("PulsarSegunElNucleo.EsperaDeCampoMs (un campo no navega)", "334", "043"); return; }
+
+        const string A = "web://google.com", B = "web://google.com/search";
+        const int Presupuesto = 1200;
+        Nucleo.Grafo Mundo()
+        {
+            var g = new Nucleo.Grafo();
+            g.Observar(A, new[]
+            {
+                new Nucleo.Elemento("uia:name=Search;ct=ComboBox", "Search", "ComboBox"),
+                new Nucleo.Elemento("uia:name=Rename;ct=Edit", "Rename", "Edit"),
+                new Nucleo.Elemento("uia:name=Guardar;ct=Button", "Guardar", "Button"),
+            });
+            return g;
+        }
+        (PulsarSegunElNucleo.Resultado R, long Ms, int Toques) Pulsa(Nucleo.Grafo g, string selector, string etiqueta, string? alTocarSeVa = null)
+        {
+            string donde = A; int toques = 0;
+            var pulsar = new PulsarSegunElNucleo(g, () => donde, (sel, et) => { toques++; if (alTocarSeVa != null) donde = alTocarSeVa; return true; })
+            { EsperaMaximaMs = Presupuesto };
+            pCampo.SetValue(pulsar, 150);
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            var r = pulsar.Pulsa(selector, etiqueta);
+            return (r, crono.ElapsedMilliseconds, toques);
+        }
+
+        // 1. UN CAMPO: se toca una vez, no se espera el presupuesto, y se dice lo que es.
+        foreach (var (sel, et) in new[] { ("uia:name=Search;ct=ComboBox", "Search"), ("uia:name=Rename;ct=Edit", "Rename") })
+        {
+            var (r, ms, toques) = Pulsa(Mundo(), sel, et);
+            Debe(r.SePudo && !r.CambioLaPantalla && toques == 1, $"«{et}» se toca UNA vez y no se cuenta como navegación (toques={toques}; «{r.Cuenta}»)");
+            Debe(ms < Presupuesto / 2, $"y no se espera el presupuesto de un cambio de pantalla que un campo no produce: «{et}» tardó {ms} ms de {Presupuesto}");
+            Debe(r.Cuenta.Contains("campo") && r.Cuenta.Contains("foco"), $"la respuesta dice que es un campo y que tiene el foco, para que lo siguiente sea escribir: «{r.Cuenta}»");
+        }
+
+        // 2. EL TIPO LO DICE EL SELECTOR SI EL TERRENO AÚN NO CONOCE EL ELEMENTO (la primera vez que se ve una pantalla).
+        var (r2, ms2, _) = Pulsa(new Nucleo.Grafo(), "uia:aid=ti6dpd;ct=ComboBox", "Buscar");
+        Debe(r2.SePudo && ms2 < Presupuesto / 2, $"un campo que el terreno todavía no conoce se reconoce por su selector ({ms2} ms; «{r2.Cuenta}»)");
+
+        // 3. SI AUN ASÍ LA PANTALLA CAMBIÓ, manda lo que pasó: es una navegación como cualquier otra.
+        var (r3, _, _) = Pulsa(Mundo(), "uia:name=Search;ct=ComboBox", "Search", alTocarSeVa: B);
+        Debe(r3.SePudo && r3.CambioLaPantalla && r3.Hasta == B, $"un campo que sí navega se cuenta como navegación (quedó en «{r3.Hasta}»; «{r3.Cuenta}»)");
+
+        // 4. LO QUE NO ES UN CAMPO ESPERA COMO SIEMPRE: un «Guardar» puede tardar en cambiar la pantalla.
+        var (r4, ms4, _) = Pulsa(Mundo(), "uia:name=Guardar;ct=Button", "Guardar");
+        Debe(r4.SePudo && ms4 >= Presupuesto - 100, $"un botón sigue esperando el presupuesto entero: {ms4} ms de {Presupuesto}");
+        Debe(!r4.Cuenta.Contains("campo"), $"y no se le llama campo a lo que no lo es: «{r4.Cuenta}»");
     }
 
     private static void Debe(bool condicion, string promesa)
