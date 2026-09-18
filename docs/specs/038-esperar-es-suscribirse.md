@@ -75,11 +75,22 @@ Paso que sí cambia: 524 ms, con **0 ms de espera** (el cambio se ve en el prime
 regla, `[clic · doubleclick · clic]`, tres esperas y «no cambió» a secas; solo cae la 296. Las 82, 83 y 248
 siguen verdes. Y el detector de bucle del tramo (292) disparó en vivo: «pulsé la misma puerta tres veces».
 
-**Nivel 4: UNA pantalla, y se dice como dato incompleto.** Explorador, dos corridas, cuatro disparos de
-la regla en el log (`…lleva justo a donde ya estamos: ni lo ensayo ni lo repito`). Los dos intentos de
-segunda pantalla fallaron por motivos que no son de la 296: en Configuración el lector solo vio el marco
-(`ApplicationFrameHost`, 4 puertas); en Wikipedia el enlace que hacía falta no estaba entre las puertas
-ofrecidas. La lógica sí está juzgada sin pantalla, con sus tres casos.
+**Nivel 4: DOS pantallas — el Explorador y Wikipedia en Chrome.** En el Explorador, dos corridas y cuatro
+disparos de la regla en el log (`…lleva justo a donde ya estamos: ni lo ensayo ni lo repito`). La segunda
+pantalla llegó después (2026-09-18, 09:28, con la rama rebasada sobre la 297): desde
+«Discusión:Guatapé» se pulsa «Artículo», navega y el terreno aprende a dónde lleva; ya en el artículo se
+pulsa «Artículo» otra vez:
+
+```
+[09:28:12] mano: ⏱ pulsar «Artículo»: la mano 366 ms · esperar el cambio 188 ms (2 sondeo(s) de «dónde») · cambió
+[09:28:20] mano: ⏱ pulsar «Artículo»: la mano 554 ms · esperar el cambio 1808 ms (13 sondeo(s) de «dónde») · no cambió
+[09:28:20] mano: «Artículo» no movió nada y el terreno sabe que lleva justo a donde ya estamos: ni lo ensayo ni lo repito
+```
+
+Un gesto y una espera; `map_decidir` entero, 3.060 ms. Los dos primeros intentos de segunda pantalla habían
+fallado por motivos que no son de la 296: en Configuración el lector solo ve el marco
+(`ApplicationFrameHost`, 4 puertas); en la portada de Wikipedia el enlace que hacía falta no estaba entre
+las puertas ofrecidas. La lógica está además juzgada sin pantalla, con sus tres casos.
 
 ## Lo que el nivel 4 enseñó, y cambia el orden de lo que sigue
 
