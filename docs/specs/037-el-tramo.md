@@ -1,6 +1,6 @@
 # El tramo: muchos clics de una llamada, desprendido, y la voz siempre libre
 
-Estado: **implementada, contrato intacto (291-295)** · 2026-09-18 · Rama: `jose/el-tramo` (apilada sobre `jose/las-puertas-son-unicas`, PR de la spec 036)
+Estado: **implementada, contrato intacto (291-295), nivel 4 en dos pantallas con map_alto a mitad** · 2026-09-18 · Rama: `jose/el-tramo` (apilada sobre `jose/las-puertas-son-unicas`, PR de la spec 036)
 
 > Fase 3 de `docs/plan-clics-en-tiempo-real.md`. El dueño (2026-09-18): «que la carita flotante pueda
 > moverse al lado de cada botón que cliquea y clicar muchos muy rápidamente», y que el alto lo pida
@@ -67,6 +67,43 @@ la primera carpeta»), otro en Configuración, y `map_alto` por MCP a mitad de u
 | Lo irreversible sigue vetado; `peligro` de Jev para el tramo | Es un hospital; el tramo hereda los vetos de `map_take` y además escucha a Jev |
 | El tope por defecto es 15 pasos | Diez clics es el escenario del plan; 15 deja margen sin que un tramo perdido dure un minuto |
 | La cuenta llega a la voz como mensaje, no como resultado de herramienta | La llamada de `map_tramo` ya se contestó; el único canal que queda abierto es un mensaje nuevo |
+
+## Nivel 4, medido (2026-09-18, 05:42-05:43)
+
+Instancia aislada `C:\U-tramo\bin` con `U_DECISOR=simulado`, llamadas por MCP. Dos pantallas.
+
+```
+05:42:51  tools/list: 32 herramientas; map_tramo · map_alto · map_tramo_estado
+05:42:56  → map_tramo tope=4 objetivo=abrir la carpeta Descargas  (7 ms)
+          tramo en marcha: «abrir la carpeta Descargas», hasta 4 paso(s)…       ← contesta al instante (291)
+05:42:56  → map_tramo_estado: tramo en marcha, paso 1 de hasta 4.
+05:43:08  → map_tramo_estado: tramo en marcha, paso 3 de hasta 4, última puerta «Descargas».
+   log    paso 1: «Descargas» (7) conf 1.00 · cambió      (llegó a explorer.exe/descargas)
+          paso 2: «Descargas» (7) conf 1.00 · no cambió
+          paso 3: «Descargas» (7) conf 1.00 · cambió
+          paso 4: sin acción · ninguna de las 54 puertas comparte una palabra con el objetivo
+          ← hice 3 paso(s) de hasta 4; paré: el decisor no se atrevió: …          (292)
+05:43:12  → map_tramo tope=6 objetivo=abrir Bluetooth y dispositivos y luego los dispositivos  (2 ms)
+05:43:14  → map_alto  (24 ms)
+          paré el tramo «…» en el paso 1: quedó en «uia://SystemSettings.exe/configuración#bluetooth-y-dispositivos».   (293)
+   log    freno: alto pedido (lo pidió la voz (map_alto)); paro «tramo: abrir Bluetooth…»
+          ← hice 1 paso(s) de hasta 6; paré: paraste: lo pidió la voz (map_alto)
+05:43:18  → map_tramo_estado: … pasos: «Bluetooth y dispositivos» (9) ✓ · EN PANTALLA AHORA … (54 elemento(s))   (294)
+05:43:18  → map_alto: no hay ningún tramo en marcha que parar.
+```
+
+**Lo que enseña el simulado, y no es un fallo del tramo:** sin la pregunta `cumplido` —que solo
+contesta Jev—, la regla fija volvió a elegir «Descargas» ya estando dentro (el TreeItem sigue en
+pantalla y casa con el objetivo). El tramo paró por «no se atrevió» al cambiar de pantalla, no por
+«cumplido». Con Jev de verdad, `cumplido` ≥ 0,70 lo habría parado tras el paso 1. Es la razón de
+que las tres preguntas viajen juntas (289).
+
+**Lo que mide el reloj:** ~4 s por paso. Es el clic de hoy (leer antes, esperar el cambio, foto,
+inventario), no el tramo: la fase 4 del plan es la que lo abarata.
+
+**El aviso a la voz (295)** no se pudo ver en vivo: no había sesión de voz; el log lo dice y la
+cuenta quedó en `map_tramo_estado`. Con la voz abierta entra por `EnviarTextoAsync`, el mismo
+camino que un mensaje escrito.
 
 ## Lo que queda fuera
 
