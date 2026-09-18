@@ -236,10 +236,30 @@ public sealed class SurfaceMapTools
         if (Decisor == null)
             return "todavía no sé decidir: el decisor está apagado (U_DECISOR ausente o en «luna»), así que decide Luna. "
                  + "Elige tú la puerta con map_take.";
+        return UnPasoDecidido(objetivo, decir, recuerdo).Cuenta;
+    }
 
+    /// <summary>
+    /// UN PASO DECIDIDO: leer las puertas, que el decisor elija, y pulsar por selector —con la segunda mejor si la
+    /// primera no está—. Es el cuerpo de map_decidir, y el paso que repite el tramo (spec 037). Devuelve qué pasó
+    /// como datos, y la cuenta con las mismas palabras de siempre.
+    /// </summary>
+    private Navigation.ElTramo.Paso UnPasoDecidido(string objetivo, string decir, string recuerdo)
+    {
+        Navigation.ElTramo.Paso Sin(string cuenta, string porque, double conf = 0, bool cumplido = false)
+        {
+            _ultimaMano = new Mano(false, false, Intento: false);
+            return new Navigation.ElTramo.Paso(false, false, false, "", "", "", conf, cuenta, porque, cumplido);
+        }
+        if (Decisor == null) return Sin("todavía no sé decidir: el decisor está apagado.", "el decisor está apagado");
+
+        // EL RELOJ DE CADA FASE, para el log del tramo: leer la pantalla, decidir, y pulsar (con la espera del
+        // cambio dentro). Es la medida que la fase 4 del plan necesita para saber qué recortar.
+        var relojLeer = System.Diagnostics.Stopwatch.StartNew();
         var (aqui, puertas, total) = PuertasDeAhora();
-        if (aqui.Length == 0) return "no sé en qué pantalla estoy, así que no hay nada entre lo que decidir.";
-        if (total == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo: nada entre lo que decidir.";
+        relojLeer.Stop();
+        if (aqui.Length == 0) return Sin("no sé en qué pantalla estoy, así que no hay nada entre lo que decidir.", "no sé en qué pantalla estoy");
+        if (total == 0) return Sin($"en «{aqui}» no veo ningún elemento accionable ahora mismo: nada entre lo que decidir.", "no veo ningún elemento accionable");
         // PUERTAS ÚNICAS Y NUMERADAS (promesa 287): «2) Detalles (RadioButton)». Con etiquetas a secas, en
         // openai.com Jev eligió bien tres veces y las tres se perdieron en «hay 2 puertas vivas para…»
         // (2026-09-18, 03:33-03:34): la etiqueta no es única; el id sí, y detrás lleva su selector.
@@ -264,8 +284,7 @@ public sealed class SurfaceMapTools
             for (var x = e; x != null; x = x.InnerException)
                 causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
             LogBus.Log("decisor", $"✘ en «{aqui}» el decisor lanzó: {causa}");
-            _ultimaMano = new Mano(false, false, Intento: false);
-            return $"no se acciona: el decisor falló ({causa}). Decide Luna.";
+            return Sin($"no se acciona: el decisor falló ({causa}). Decide Luna.", $"el decisor falló ({causa})");
         }
         reloj.Stop();
 
@@ -276,10 +295,8 @@ public sealed class SurfaceMapTools
             + $" conf={d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} · {d.Porque}");
 
         if (!d.Actuar)
-        {
-            _ultimaMano = new Mano(false, false, Intento: false);
-            return $"no se acciona: {d.Porque}";
-        }
+            return Sin($"no se acciona: {d.Porque}", d.Porque, d.Confianza,
+                cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo || d.Porque.Contains("cumplido", StringComparison.OrdinalIgnoreCase));
 
         // LA ELEGIDA, Y COMO MUCHO LA SEGUNDA MEJOR (promesa 288): si la primera no está viva al ir a pulsarla,
         // se prueba la siguiente por probabilidad si llega al mínimo. Sin otra llamada a Jev: las
@@ -296,12 +313,14 @@ public sealed class SurfaceMapTools
         {
             var (id, prob) = candidatos[k];
             if (!selectorDe.TryGetValue(id, out var puerta))
-            {
-                _ultimaMano = new Mano(false, false, Intento: false);
-                return $"no se acciona: el decisor contestó «{id}», que no es ninguna de las {ids.Count} puertas ofrecidas. Decide Luna.";
-            }
+                return Sin($"no se acciona: el decisor contestó «{id}», que no es ninguna de las {ids.Count} puertas ofrecidas. Decide Luna.",
+                    $"contestó «{id}», que no se ofreció", d.Confianza);
             string numero = id.Substring(0, id.IndexOf(')'));
+            var relojPulsar = System.Diagnostics.Stopwatch.StartNew();
             string cuenta = Take(puerta.Selector, "", decir, recuerdo);
+            relojPulsar.Stop();
+            var mano = _ultimaMano;
+            string tiempos = $"leer {relojLeer.ElapsedMilliseconds} ms · decidir {reloj.ElapsedMilliseconds} ms · pulsar {relojPulsar.ElapsedMilliseconds} ms";
             string medida = k == 0
                 ? $"con confianza {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}"
                 : $"con probabilidad {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}";
@@ -319,9 +338,11 @@ public sealed class SurfaceMapTools
                 relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}");
             else
                 relato.Append($"elegida «{puerta.Etiqueta}» ({numero}) {medida}: {cuenta}");
-            return relato.ToString();
+            bool termino = mano?.Termino == true;
+            bool cambio = mano?.Logro == true;
+            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Etiqueta, numero, prob, relato.ToString(), d.Porque, false, tiempos);
         }
-        return relato.ToString();
+        return Sin(relato.ToString(), "no quedó ninguna candidata", d.Confianza);
     }
 
     /// <summary>
@@ -1700,6 +1721,67 @@ public sealed class SurfaceMapTools
     /// </summary>
     public Func<string, string, IReadOnlyList<string>, Decision.DecisionDeUnPaso>? Decisor { get; set; }
 
+    // ── El tramo (spec 037) ───────────────────────────────────────────────────────────────────────
+
+    /// <summary>¿Hay que parar? Por defecto, el freno de Escape. El contrato lo cambia por el suyo.</summary>
+    public Func<bool>? HayQueParar { get; set; }
+
+    /// <summary>Cada paso del tramo, en una línea: para el notch. Nulo = solo al log.</summary>
+    public Action<string>? Progreso { get; set; }
+
+    /// <summary>La cuenta del tramo al parar, como mensaje a la sesión de voz (295). Nulo = sin voz.</summary>
+    public Action<string>? AvisarALaVoz { get; set; }
+
+    /// <summary>Pedir el freno de verdad (map_alto). Por defecto, el de Escape; el contrato lo cambia por un no-op.</summary>
+    public Action<string>? PedirFreno { get; set; }
+
+    /// <summary>Marcar que empieza y termina una tarea para el freno (Freno.Empezar/Termine). Nulos = nada.</summary>
+    public Action<string>? AlEmpezarTramo { get; set; }
+    public Action? AlTerminarTramo { get; set; }
+
+    private Navigation.ElTramo? _tramo;
+
+    /// <summary>Para los jueces: espera a que el tramo en marcha termine.</summary>
+    public bool EsperarTramo(int ms) => _tramo?.Esperar(ms) ?? true;
+
+    private Navigation.ElTramo ElTramo() => _tramo ??= new Navigation.ElTramo(new Navigation.ElTramo.Manos(
+        Donde: () => { try { return _where()?.Id ?? ""; } catch { return ""; } },
+        Paso: objetivo => UnPasoDecidido(objetivo, "", ""),
+        HayQueParar: () => HayQueParar?.Invoke() ?? Actions.Freno.Pidieron,
+        Progreso: l => Progreso?.Invoke(l),
+        Inventario: () => InventarioParaLosActos?.Invoke() ?? LoQueVeo(),
+        AvisarALaVoz: AvisarALaVoz == null ? null : (Action<string>)(c => AvisarALaVoz?.Invoke(c)),
+        Log: l => LogBus.Log("tramo", l),
+        AlEmpezar: t => AlEmpezarTramo?.Invoke(t),
+        AlTerminar: () => AlTerminarTramo?.Invoke()));
+
+    /// <summary>«map_tramo»: contesta al instante y el bucle corre por detrás (291).</summary>
+    private string Tramo(string objetivo, string tope, string decir)
+    {
+        if (objetivo.Length == 0) return "falta `objetivo`: qué se quiere conseguir, para que el tramo sepa hacia dónde ir";
+        if (Decisor == null)
+            return "todavía no sé recorrer un tramo: el decisor está apagado (U_DECISOR ausente o en «luna», o el botón Jev apagado). "
+                 + "Avanza tú paso a paso con map_take.";
+        int.TryParse(tope, out int n);
+        string r = ElTramo().Arrancar(objetivo, n);
+        LogBus.Log("tramo", $"→ {r}");
+        return r;
+    }
+
+    /// <summary>«map_alto»: para el tramo en el paso en curso, y pone el mismo freno que Escape (293).</summary>
+    private string Alto()
+    {
+        var t = _tramo;
+        if (t == null || !t.EnMarcha) return "no hay ningún tramo en marcha que parar.";
+        string r = t.Parar("lo pidió la voz (map_alto)");
+        try { PedirFreno?.Invoke("lo pidió la voz (map_alto)"); } catch (Exception e) { LogBus.Log("tramo", $"no pude pedir el freno: {e.Message}"); }
+        LogBus.Log("tramo", $"ALTO: {r}");
+        return r;
+    }
+
+    /// <summary>«map_tramo_estado»: la cuenta, en marcha o terminada (294).</summary>
+    private string EstadoDelTramo() => _tramo?.Estado ?? "no hay ningún tramo en marcha ni terminado.";
+
     /// <summary>
     /// SITUARSE, contestado por el núcleo. Lo enchufa la ventana cuando el mapa vivo existe; si
     /// vale null se contesta como siempre. Ver <see cref="Navigation.AquiSegunElNucleo"/>.
@@ -1964,6 +2046,7 @@ public sealed class SurfaceMapTools
 
     public static bool IsMapTool(string tool) => tool is
         "map_where_am_i" or "map_go_to" or "map_take" or "map_type" or "map_unblock" or "map_decidir"
+        or "map_tramo" or "map_alto" or "map_tramo_estado"
         or "map_open_app" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude" or "map_shot" or "map_scroll"
         or "map_esto_es" or "map_recuerdos" or "map_batch" or "map_ahead"
@@ -2001,6 +2084,9 @@ public sealed class SurfaceMapTools
             "map_go_to" => GoTo(A("surface")),
             "map_take" => Take(A("exit"), A("which"), A("decir"), A("recuerdo")),
             "map_decidir" => Decidir(A("objetivo"), A("decir"), A("recuerdo")),
+            "map_tramo" => Tramo(A("objetivo"), A("tope"), A("decir")),
+            "map_alto" => Alto(),
+            "map_tramo_estado" => EstadoDelTramo(),
             "map_type" => Type(A("text"), A("target"), A("decir"), A("recuerdo")),
             "map_unblock" => Desbloquear(A("at"), A("choose")),
             "map_open_app" => OpenApp(A("app"), A("instancia")),
