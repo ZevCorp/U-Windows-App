@@ -790,7 +790,7 @@ internal static class Contrato
         Prueba("290. el interruptor en vivo: encender deja map_decidir en el catálogo y un decisor en el mapa; apagar deja el catálogo byte a byte como sin decisor y el mapa sin decisor; las dos cosas re-mandan el catálogo a la voz; pedir encender sin clave ni modo válido se queda apagado y dice por qué; y el estado se lee en una línea", ElInterruptorEnVivo);
 
         // ── Spec 038: leer es una llamada ───────────────────────────────────────────────────────
-        Prueba("297. leer la pantalla es recorrer lo que UNA petición trajo: el recorrido recibe el árbol ya traído y no navega; recoge lo mismo que antes —accionable, visible, con etiqueta (nombre, o id, o ayuda) y con geometría, en orden de lectura, hasta 400 elementos y 40 niveles—; si la petición con caché falla se lee nodo a nodo como antes; y el lector dice cuál de los dos caminos usó y por qué", LeerEsRecorrerLoQueUnaPeticionTrajo);
+        Prueba("297. leer la pantalla es recorrer lo que UNA petición trajo: el recorrido recibe el árbol ya traído y no navega; recoge lo mismo que antes —accionable, visible, con etiqueta (nombre, o id, o ayuda) y con geometría, en orden de lectura, con los mismos topes: 40 niveles, y pasados los 400 elementos no se entra en más ramas—; si la petición con caché falla se lee nodo a nodo como antes; y el lector dice cuál de los dos caminos usó y por qué", LeerEsRecorrerLoQueUnaPeticionTrajo);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12275,15 +12275,23 @@ internal static class Contrato
         Debe(lecturas == nodos - 1 && bajadas == nodos,
             $"cada nodo se lee una vez y se baja una vez: {lecturas} lecturas y {bajadas} bajadas para {nodos} nodos (la raíz no se lee: es la ventana)");
 
-        // 3. LOS TOPES: 40 niveles y 400 elementos, como antes.
+        // 3. LOS TOPES, LOS MISMOS QUE ANTES: 40 niveles; y el de elementos se mira AL ENTRAR en cada rama, no dentro.
+        // Medido el 2026-09-18 sobre `C:\`: el camino de siempre daba 411 y un corte estricto en 400 perdía once
+        // carpetas de verdad. Un corte de rendimiento no cambia lo que se ve.
         var cadena = new NodoFalso { Accionable = false }; var cola = cadena;
         for (int i = 1; i <= 45; i++) { var h = new NodoFalso { Nombre = "n" + i }; cola.Hijos.Add(h); cola = h; }
         var hondos = Etiquetas(cadena);
         Debe(hondos.Contains("n40") && !hondos.Contains("n43"), $"más allá de 40 niveles no se baja (llegó hasta «{hondos.LastOrDefault()}»)");
         var ancha = new NodoFalso { Accionable = false };
-        for (int i = 0; i < 600; i++) ancha.Hijos.Add(new NodoFalso { Nombre = "e" + i });
-        int n600 = Etiquetas(ancha).Count;
-        Debe(n600 >= 400 && n600 <= 402, $"y se para en 400 elementos ({n600}): una página de miles no infla el inventario");
+        foreach (var letra in new[] { "a", "b", "c" })
+        {
+            var rama = new NodoFalso { Nombre = "rama " + letra, Accionable = false };
+            for (int i = 0; i < 300; i++) rama.Hijos.Add(new NodoFalso { Nombre = letra + i });
+            ancha.Hijos.Add(rama);
+        }
+        var anchas = Etiquetas(ancha);
+        Debe(anchas.Count == 600 && anchas.Contains("b299") && !anchas.Contains("c0"),
+            $"una rama empezada se termina, y pasados los 400 no se entra en la siguiente: de tres ramas de 300 salen 600 ({anchas.Count}); ni se corta una lista a la mitad ni una página de miles infla el inventario");
 
         // 4. EL RESPALDO, Y QUE SE DIGA. Un respaldo silencioso se confunde con el camino rápido (aprendizaje nº18).
         var conRespaldo = respaldo.MakeGenericMethod(typeof(string));

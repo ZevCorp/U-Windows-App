@@ -163,7 +163,7 @@ public sealed class UiaReader
 
         void Desde(IntPtr h)
         {
-            if (acc.Count >= 400) return;   // lleno: no se paga una petición para no recoger nada
+            if (acc.Count > 400) return;   // lleno: no se paga una petición para no recoger nada
             AutomationElement raiz;
             using (req.Activate()) raiz = AutomationElement.FromHandle(h);
             foreach (var (nodo, etiqueta, tipo, caja, itemType) in Recoge(raiz, HijosCacheados, LeeCacheado, 400 - acc.Count, 40))
@@ -242,8 +242,13 @@ public sealed class UiaReader
     /// </summary>
     /// <remarks>
     /// RECOGE LO MISMO QUE <see cref="Collect"/>: accionable, visible, con etiqueta y con geometría, en orden de lectura,
-    /// bajando también por lo que no se recoge, hasta 40 niveles. El tope de elementos se mira también DENTRO del
-    /// bucle: el de antes solo se miraba al entrar en cada nivel, y 600 hermanos bajo un mismo padre entraban los 600.
+    /// bajando también por lo que no se recoge, hasta 40 niveles.
+    ///
+    /// EL TOPE DE ELEMENTOS SE MIRA AL ENTRAR EN CADA NIVEL, NO DENTRO DEL BUCLE, Y ES A PROPÓSITO. Parece una fuga
+    /// —y la primera versión de este corte la «arregló» cortando en 400 exactos—, pero medido sobre `C:\` el
+    /// 2026-09-18 el camino de siempre daba 411 elementos y el corte estricto 400: las once que faltaban eran
+    /// carpetas de verdad, las últimas de la lista. Un corte de rendimiento no cambia lo que se ve; si el tope hay
+    /// que moverlo, es otra promesa.
     /// </remarks>
     /// <param name="leer">(Nombre, AutomationId, Ayuda, Tipo, Accionable, FueraDePantalla, Caja, ItemType).</param>
     public static List<(T Nodo, string Etiqueta, string Tipo, System.Windows.Rect Caja, string ItemType)> Recoge<T>(
@@ -259,10 +264,9 @@ public sealed class UiaReader
 
         void Baja(T nodo, int profundidad)
         {
-            if (profundidad > topeProfundidad || acc.Count >= topeElementos) return;
+            if (profundidad > topeProfundidad || acc.Count > topeElementos) return;
             foreach (var hijo in hijos(nodo))
             {
-                if (acc.Count >= topeElementos) return;
                 var (nombre, id, ayuda, tipo, accionable, fuera, caja, itemType) = leer(hijo);
                 if (!fuera && accionable)
                 {
