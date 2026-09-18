@@ -127,6 +127,22 @@ public static class ComoSeContesta
         return ultimo.TrimEnd() + "\n(la página seguía cambiando al contarla: puede faltar algo; vuelve a mirar si lo que buscas no está.)";
     }
 
+    /// <summary>
+    /// DÓNDE DICE EL INVENTARIO QUE ESTAMOS: lo que va entre « » en su cabecera. Vacío si no es un inventario.
+    /// </summary>
+    /// <remarks>
+    /// SALE GRATIS DE LO YA LEÍDO. La primera versión de la 335 preguntaba «¿dónde estoy?» dos veces por acto para
+    /// saber si se había navegado, y el nivel 4 lo midió: cada consulta costaba hasta 1 s con el navegador ocupado, y
+    /// TODO acto —también el clic que no navega— pasó a tardar ~2,5 s más (1,6 → 4,5 s). El inventario ya lo dice.
+    /// </remarks>
+    public static string DondeDice(string inventario)
+    {
+        string c = Cabecera(inventario);
+        if (!c.StartsWith(MarcaDelInventario, StringComparison.Ordinal)) return "";
+        int abre = c.IndexOf('«'), cierra = c.LastIndexOf('»');
+        return abre >= 0 && cierra > abre ? c[(abre + 1)..cierra].Trim() : "";
+    }
+
     /// <summary>La primera línea del inventario: «EN PANTALLA AHORA, en «dónde» (N elemento(s)):».</summary>
     public static string Cabecera(string inventario)
     {

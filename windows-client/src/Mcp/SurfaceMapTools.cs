@@ -2056,6 +2056,9 @@ public sealed class SurfaceMapTools
         // una llegada para que la app la juzgue, y guardar la skill de lo verificado.
         or "voz_decir" or "voz_preguntar" or "leccion_llegue" or "leccion_guardar_skill" or "leccion_plan";
 
+    /// <summary>La ubicación que llevaba el último inventario entregado al modelo. Para la 335, sin preguntar a nadie.</summary>
+    private string _dondeDijoElUltimoInventario = "";
+
     public string Call(string tool, IReadOnlyDictionary<string, string> args)
     {
         string A(string k) => args.TryGetValue(k, out var v) ? v.Trim() : "";
@@ -2078,9 +2081,9 @@ public sealed class SurfaceMapTools
             && !tool.Equals("map_exclude", StringComparison.OrdinalIgnoreCase))
             Ui.Senalador.Soltar();
 
-        // DÓNDE SE ESTABA, solo para los actos: hace falta para saber si dejaron una página cargando (promesa 335).
-        string antesDelActo = "";
-        if (ComoSeContesta.EsActo(tool)) { try { antesDelActo = _where()?.Id ?? ""; } catch { } }
+        // DÓNDE SE ESTABA: lo que dijo el último inventario que se contó. Gratis —no se pregunta a nadie— y es justo
+        // lo que el modelo cree, que es contra lo que importa comparar (promesa 335).
+        string antesDelActo = _dondeDijoElUltimoInventario;
 
         string r = tool switch
         {
@@ -2159,7 +2162,7 @@ public sealed class SurfaceMapTools
                 // lo que se vio es solo el cromo del navegador, se vuelve a mirar hasta que dos miradas coincidan.
                 // 250 ms de pausa y 2 s de tope: lo medido fue que la página estaba entre 1 y 2 s después del acto.
                 // Una página que ya trae contenido NO espera: esperar siempre costaba +1 a +2,6 s por navegación.
-                string ahoraEstoy = ""; try { ahoraEstoy = _where()?.Id ?? ""; } catch { }
+                string ahoraEstoy = ComoSeContesta.DondeDice(inventario);
                 if (ComoSeContesta.EsEsqueleto(inventario) && ComoSeContesta.HayQueAsentar(tool, antesDelActo, ahoraEstoy))
                 {
                     var relojAsentar = System.Diagnostics.Stopwatch.StartNew();
@@ -2175,6 +2178,10 @@ public sealed class SurfaceMapTools
             }
             catch (Exception e) { LogBus.Log("mapa-mcp", $"no pude añadir lo que hay delante: {e.Message}"); }
         }
+
+        string dondeDice = ComoSeContesta.DondeDice(r.Contains(ComoSeContesta.MarcaDelInventario, StringComparison.Ordinal)
+            ? r[r.IndexOf(ComoSeContesta.MarcaDelInventario, StringComparison.Ordinal)..] : "");
+        if (dondeDice.Length > 0) _dondeDijoElUltimoInventario = dondeDice;
 
         reloj.Stop();
         // DÓNDE QUEDAMOS, para la próxima. Lo que el modelo sabe de la pantalla es lo que esta

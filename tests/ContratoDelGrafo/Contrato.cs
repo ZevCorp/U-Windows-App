@@ -10563,7 +10563,10 @@ internal static class Contrato
             "un saber no lo repite: ya es lo que contesta");
         Debe(!Lleva("map_go_to", "falta `surface`: a dónde hay que ir"), "una llamada que ni llegó a actuar no lo añade");
         Debe(!Lleva("map_go_to", "todavía no sé navegar: el núcleo no está conectado."), "ni una sin núcleo");
-        string inv = "EN PANTALLA AHORA, en «web://github.com» (2 elemento(s)):\n  «Buscar» (Edit)\n  «Nuevo» (Button)\n";
+        // 80 Y NO 2 (2026-09-18, promesa 335): un inventario de 2 elementos en una web tras navegar es un ESQUELETO, y
+        // la 335 lo vuelve a mirar a propósito. Esta promesa vigila que no se lea de más sin motivo; el caso del
+        // esqueleto se juzga en la 335, en este mismo despacho. El enunciado de la 263 no cambia.
+        string inv = "EN PANTALLA AHORA, en «web://github.com» (80 elemento(s)):\n  «Buscar» (Edit)\n  «Nuevo» (Button)\n";
         Debe(!Lleva("map_take", "pulsé «x».\n\n" + inv), "y si ya lo lleva, no se pega dos veces");
         string pegado = Pega("te puse delante de «github.com»", inv);
         Debe(pegado.StartsWith("te puse delante de «github.com»", StringComparison.Ordinal) && pegado.Contains("\n\nEN PANTALLA AHORA, en «web://github.com»", StringComparison.Ordinal),
@@ -12822,6 +12825,36 @@ internal static class Contrato
         Debe(!Esq(CabDe(61)) && !Esq(CabDe(105)) && !Esq(CabDe(314)), "una página que ya trae su contenido no lo es: se entrega en el acto");
         Debe(!Esq("") && !Esq("no veo ningún elemento accionable ahora mismo") && !Esq("EN PANTALLA AHORA, en «web://g.com» (muchos elemento(s)):"),
             "y sin una cabecera que diga cuántos hay no se adivina: no se espera");
+
+        // Y EL «DÓNDE» SALE DEL INVENTARIO, no de preguntar otra vez. La primera versión consultaba la ubicación dos veces
+        // por acto y el nivel 4 midió el precio: ~2,5 s más en TODO acto, también en el clic que no navega (1,6 → 4,5 s).
+        var dondeDice = t!.GetMethod("DondeDice", BindingFlags.Public | BindingFlags.Static);
+        Debe(dondeDice != null, "la ubicación se lee de la cabecera del inventario ya leído (ComoSeContesta.DondeDice)");
+        if (dondeDice != null)
+        {
+            string Donde(string inv) => (string)dondeDice.Invoke(null, new object[] { inv })!;
+            Debe(Donde(CabDe(27)) == "web://g.com/search" && Donde("EN PANTALLA AHORA, en «uia://explorer.exe/c» (5 elemento(s)):") == "uia://explorer.exe/c",
+                $"dice dónde estamos tal como lo lleva la cabecera («{Donde(CabDe(27))}»)");
+            Debe(Donde("") == "" && Donde("no veo ningún elemento accionable ahora mismo") == "", "y sin inventario no dice nada: no se inventa una ubicación");
+        }
+
+        // EN EL DESPACHO, que es donde pasan todos los actos: un esqueleto tras navegar se mira otra vez; una página que
+        // ya trae su contenido se entrega con una sola lectura.
+        var pSeam = typeof(SurfaceMapTools).GetProperty("InventarioParaLosActos");
+        if (pSeam != null)
+        {
+            int Lecturas(string primero, string despues)
+            {
+                var mapa = new SurfaceMapTools(() => null);
+                mapa.PorElNucleo = destino => $"te puse delante de «{destino}»";
+                int n = 0;
+                pSeam.SetValue(mapa, (Func<string>)(() => ++n == 1 ? primero : despues));
+                mapa.Call("map_go_to", new Dictionary<string, string> { ["surface"] = "web://g.com/search" });
+                return n;
+            }
+            Debe(Lecturas(CabDe(27), CabDe(118)) >= 2, "en el despacho, un map_go_to que deja un esqueleto vuelve a mirar");
+            Debe(Lecturas(CabDe(118), CabDe(118)) == 1, "y uno que ya trae la página la entrega con UNA lectura: esperar siempre costaba +1 a +2,6 s por navegación");
+        }
 
         // CÓMO: mirar hasta que dos miradas seguidas coincidan, con tope de RELOJ (promesa 245), sin dormir de verdad.
         string Cab(string donde, int n) => $"EN PANTALLA AHORA, en «{donde}» ({n} elemento(s)):\n  «x» (Button)";
