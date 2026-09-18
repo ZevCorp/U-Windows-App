@@ -921,7 +921,7 @@ public sealed class ConversacionEnVivo : IDisposable
         var todas = Catalogo();
         // CON EL DECISOR APAGADO EL CATÁLOGO QUEDA BYTE A BYTE COMO HOY (promesa 284): no se le ofrece a
         // Luna una herramienta que contestaría «todavía no sé decidir».
-        return ConDecisor ? todas.Append(MapDecidir).ToList() : todas;
+        return ConDecisor ? todas.Append(MapDecidir).Append(MapTramo).Append(MapAlto).Append(MapTramoEstado).ToList() : todas;
     }
 
     /// <summary>
@@ -942,6 +942,25 @@ public sealed class ConversacionEnVivo : IDisposable
         ("decir", "Una frase corta que Ü dice con su voz JUSTO ANTES de pulsar."),
         ("recuerdo", "Qué es y para qué sirve lo que se va a pulsar, con tus palabras, si lo sabes."));
 
+    /// <summary>EL TRAMO (spec 037): muchos clics de una llamada, y la llamada vuelve al instante.</summary>
+    private static readonly Utensilio MapTramo = Fn("map_tramo",
+        "AVANZA VARIOS PASOS HACIA UN OBJETIVO SIN QUE TENGAS QUE ELEGIR CADA PUERTA: el decisor elige y pulsa, "
+        + "paso a paso, hasta que el objetivo está cumplido, se agota el tope, duda, algo es irreversible, o "
+        + "se le pide parar. CONTESTA AL INSTANTE «en marcha» y sigue por detrás: tú sigues hablando con la "
+        + "persona. Cuando pare te llega un mensaje con la cuenta; map_tramo_estado dice por dónde va; "
+        + "map_alto lo para. Úsalo para «abre X y entra en Y», «llega hasta Z»: varias puertas seguidas.",
+        ("objetivo", "Qué se quiere conseguir, con tus palabras («abrir Descargas y entrar en la carpeta Facturas»)."),
+        ("tope", "Cuántos pasos como mucho. Vacío = 15."),
+        ("decir", "Una frase corta que Ü dice al arrancar."));
+
+    private static readonly Utensilio MapAlto = Fn("map_alto",
+        "PARA EL TRAMO EN MARCHA en el paso en curso. Úsalo cuando la persona diga que pare, que espere, o "
+        + "que cambie de idea: es el mismo freno que Escape. Contesta dónde quedó.");
+
+    private static readonly Utensilio MapTramoEstado = Fn("map_tramo_estado",
+        "POR DÓNDE VA EL TRAMO, o qué hizo el último: pasos dados, dónde está, por qué paró, y lo que hay "
+        + "delante. Úsalo si la persona pregunta cómo va, o antes de pedir otro tramo.");
+
     /// <summary>El párrafo que se añade a las instrucciones solo con el decisor encendido.</summary>
     private const string ParrafoDelDecisor = """
 
@@ -953,6 +972,11 @@ public sealed class ConversacionEnVivo : IDisposable
         «no se acciona», no se atrevió: te dice por qué y te deja el inventario delante — entonces sí
         eliges tú con map_take, como siempre. map_type, map_go_to y map_open_app siguen siendo tuyos. Tú
         sigues hablando con la persona y sabiendo a dónde vas; lo único que cambia es quién decide qué botón.
+
+        Y PARA VARIOS PASOS SEGUIDOS, map_tramo con el objetivo: contesta «en marcha» al instante y el
+        decisor va pulsando por detrás mientras tú sigues hablando; cuando pare te llega un mensaje con la
+        cuenta (qué pulsó, dónde quedó, por qué paró, qué hay delante) — no preguntes por él antes de
+        tiempo. Si la persona dice que pare o cambia de idea, map_alto. Si pregunta cómo va, map_tramo_estado.
         """;
 
     private static Utensilio[] Catalogo() => new[]

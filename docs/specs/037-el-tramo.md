@@ -1,6 +1,6 @@
 # El tramo: muchos clics de una llamada, desprendido, y la voz siempre libre
 
-Estado: **propuesta, contrato en rojo** · 2026-09-18 · Rama: `jose/el-tramo` (apilada sobre `jose/las-puertas-son-unicas`, PR de la spec 036)
+Estado: **implementada, contrato intacto (291-295)** · 2026-09-18 · Rama: `jose/el-tramo` (apilada sobre `jose/las-puertas-son-unicas`, PR de la spec 036)
 
 > Fase 3 de `docs/plan-clics-en-tiempo-real.md`. El dueño (2026-09-18): «que la carita flotante pueda
 > moverse al lado de cada botón que cliquea y clicar muchos muy rápidamente», y que el alto lo pida

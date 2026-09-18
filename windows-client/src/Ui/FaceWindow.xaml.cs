@@ -443,6 +443,24 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 var cfgDecisor = Decision.ConfiguracionDelDecisor.DelSistema();
                 LogBus.Log("decisor", cfgDecisor.Porque);
                 _interruptorDelDecisor = new Decision.InterruptorDelDecisor(mcp.Map, ReenviarCatalogoALaVozAsync, m => LogBus.Log("decisor", m));
+                // EL TRAMO (spec 037): el freno es el de Escape, cada paso va al notch, y la cuenta final entra a la
+                // sesión de voz como un mensaje —la llamada de map_tramo ya se contestó al instante—.
+                mcp.Map.HayQueParar = () => Actions.Freno.Pidieron;
+                mcp.Map.PedirFreno = porque => Actions.Freno.Pide(porque);
+                mcp.Map.AlEmpezarTramo = tarea => Actions.Freno.Empezar(tarea);
+                mcp.Map.AlTerminarTramo = () => Actions.Freno.Termine();
+                mcp.Map.Progreso = linea => Dispatcher.BeginInvoke(() =>
+                {
+                    _acciones ??= new PanelDeAcciones();
+                    if (linea.StartsWith("tramo:", StringComparison.Ordinal)) _acciones.Termina(linea, !linea.Contains("no pud"));
+                    else { _acciones.Empieza(linea); SetStatus(linea); }
+                });
+                mcp.Map.AvisarALaVoz = cuenta =>
+                {
+                    var vivo = _vivo;
+                    if (vivo == null) { LogBus.Log("tramo", "sin sesión de voz: la cuenta queda para map_tramo_estado"); return; }
+                    _ = vivo.EnviarTextoAsync("[el tramo terminó] " + cuenta);
+                };
                 if (cfgDecisor.Quien != "luna") _interruptorDelDecisor.Encender(Environment.GetEnvironmentVariable);
                 PintarBotonJev();
             }

@@ -127,6 +127,25 @@ pantalla. El catálogo de Luna queda byte a byte como hoy.
 - **La segunda mejor sin otra llamada**: si la elegida no está viva al pulsar, se prueba la siguiente
   por probabilidad si llega a 0,25, como mucho una vez más. Un homónimo no dispara la segunda.
 
+### El tramo: muchos clics de una llamada (spec 037)
+
+Con el decisor encendido, Luna tiene tres herramientas más:
+
+- **`map_tramo(objetivo, tope)`** contesta **al instante** «en marcha» y el bucle corre por detrás:
+  en cada paso el decisor elige entre las puertas de ahora y pulsa por selector (con la segunda mejor
+  si la primera no está), hasta que **para solo**: el objetivo ya está cumplido, se agota el tope
+  (15 por defecto), el decisor no se atreve (duda o peligro), la mano no pudo, se pide el freno, o
+  **la misma puerta tres veces sin que cambie la pantalla** (el detector de bucle). Cada paso va al
+  notch y al log (`tramo:`). Al parar, la cuenta —qué pulsó, dónde está, por qué paró, qué hay
+  delante— **entra a la sesión de voz como un mensaje**, así Luna se entera sin preguntar.
+- **`map_alto`** para el tramo en el paso en curso y pone el mismo freno que Escape. Lo pide **la
+  voz**, no la transcripción: Live1 entiende el contexto y un «para» de fondo no debe frenar.
+- **`map_tramo_estado`** dice por dónde va, o qué hizo el último.
+
+Por qué desprendido: con una llamada a herramienta pendiente, GPT-Live no responde
+(`function_call_outputs_required`, medido el 2026-09-12). Un tramo como llamada larga dejaría a la
+voz muda: ni hablar contigo ni frenar.
+
 ### El botón «Jev» del panel
 
 Junto a `Learn`/`Work`: **`Jev · off` / `Jev · on`**. Enciende y apaga el decisor sin reiniciar —cambia
