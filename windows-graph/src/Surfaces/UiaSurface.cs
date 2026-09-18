@@ -1269,7 +1269,7 @@ public sealed class UiaSurface : IUiSurface
         // que dejó a Paint sin pulsar (2026-09-14).
         if (_ventanaObjetivo != IntPtr.Zero)
         {
-            var enLaDeTrabajo = FindIn(Root(_ventanaObjetivo), byPath, raw, condition);
+            var enLaDeTrabajo = FindIn(Root(_ventanaObjetivo), byPath, raw, condition, parts);
             L(enLaDeTrabajo != null
                 ? $"    ✓ '{selector}' en la ventana de trabajo ('{TituloDe(_ventanaObjetivo)}')"
                 : $"    ✗ '{selector}' no está en la ventana de trabajo ('{TituloDe(_ventanaObjetivo)}'); no se busca en otra");
@@ -1279,7 +1279,7 @@ public sealed class UiaSurface : IUiSurface
         IntPtr fg = GetForegroundWindow();
         if (fg != IntPtr.Zero && !IsOwnWindow(fg))
         {
-            var hit = FindIn(Root(fg), byPath, raw, condition);
+            var hit = FindIn(Root(fg), byPath, raw, condition, parts);
             if (hit != null) { L($"    ✓ '{selector}' en la ventana en foco ('{WindowLabel(hit)}')"); return hit; }
         }
 
@@ -1307,13 +1307,53 @@ public sealed class UiaSurface : IUiSurface
         return null;
     }
 
-    private static AutomationElement? FindIn(AutomationElement? root, bool byPath, string? raw, Condition? condition)
+    private static AutomationElement? FindIn(AutomationElement? root, bool byPath, string? raw, Condition? condition,
+        Dictionary<string, string>? parts = null)
     {
         if (root == null) return null;
         if (byPath) return ByPath(root, raw!);
         if (condition == null) return null;
-        try { return MejorCandidato(root.FindAll(TreeScope.Descendants, condition)); }
+        try
+        {
+            var exacto = MejorCandidato(root.FindAll(TreeScope.Descendants, condition));
+            if (exacto != null || parts == null) return exacto;
+            return PorNombreRecortado(root, parts);
+        }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// UN ESPACIO NO ESCONDE UNA PUERTA (promesa 331). Solo cuando el nombre exacto no apareció: se busca por lo demás
+    /// del selector y se compara el nombre recortado. El nombre viaja en la MISMA petición (caché), para que el
+    /// respaldo no cueste un viaje entre procesos por candidato (la clase de error de la promesa 297).
+    /// </summary>
+    private static AutomationElement? PorNombreRecortado(AutomationElement root, Dictionary<string, string> parts)
+    {
+        var sinNombre = UiaSelector.CondicionSinNombre(parts);
+        if (sinNombre == null || !parts.TryGetValue("name", out string? guardado)) return null;
+
+        var peticion = new CacheRequest { AutomationElementMode = AutomationElementMode.Full };
+        peticion.Add(AutomationElement.NameProperty);
+        AutomationElementCollection candidatos;
+        using (peticion.Activate()) candidatos = root.FindAll(TreeScope.Descendants, sinNombre);
+
+        AutomationElement? primero = null, visible = null;
+        foreach (AutomationElement el in candidatos)
+        {
+            string real;
+            try { real = el.Cached.Name ?? ""; } catch { continue; }
+            if (!UiaSelector.MismoNombre(guardado, real)) continue;
+            primero ??= el;
+            try
+            {
+                var c = el.Current;
+                if (!c.IsOffscreen && !c.BoundingRectangle.IsEmpty) { visible = el; break; }
+            }
+            catch { }
+        }
+        var hallado = visible ?? primero;
+        if (hallado != null) LogGlobal?.Invoke($"    ≈ «{guardado}» no casó exacto y sí recortando los bordes: el nombre real es '{Safe(() => hallado.Current.Name)}'");
+        return hallado;
     }
 
     /// <summary>

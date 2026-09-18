@@ -2803,8 +2803,7 @@ public sealed class SurfaceMapTools
         // estar en la carpeta padre y el ancla rechazaba los pasos siguientes uno tras otro
         // (2026-08-03). Escribir un nombre no debería cambiar de sitio; si cambió, se deshace.
         string ahora = _where()?.Id ?? "";
-        if (antes.Length > 0 && ahora.Length > 0
-            && !string.Equals(antes, ahora, StringComparison.OrdinalIgnoreCase))
+        if (ElEnterSeDeshace(antes, ahora))
         {
             LogBus.Log("mapa-mcp", $"el Enter abrió «{ahora}»; se vuelve a «{antes}»");
             var atras = new PlanStep
@@ -2814,10 +2813,41 @@ public sealed class SurfaceMapTools
             };
             _uia.Execute(atras, out _);
             Llego(antes, 2000);
+            ahora = antes;   // se volvió: no se cuenta como una llegada
         }
 
         LogBus.Log("mapa-mcp", $"✓ escrito «{texto}» en {selector}");
-        return $"escribí «{texto}» y confirmé con Enter";
+        return RelatoDeEscribir(texto, antes, ahora);
+    }
+
+    /// <summary>
+    /// ¿HAY QUE DESHACER LO QUE HIZO EL ENTER? Solo donde escribir es RENOMBRAR: el Explorador de archivos.
+    /// Promesa 330 (spec 041). Puro.
+    /// </summary>
+    /// <remarks>
+    /// La protección nació el 2026-08-03 para un caso real: al renombrar una carpeta recién creada, el Enter que
+    /// confirma el nombre también la ABRE, y la tarea seguía creyéndose en la carpeta padre. Pero se aplicaba a toda
+    /// superficie, y en la web que el Enter navegue es exactamente lo que se pidió.
+    ///
+    /// MEDIDO EL 2026-09-18 en una sesión de voz del dueño: 11 veces, las 11 donde no tocaba —10 en Google, 1 en el
+    /// Bloc de notas, donde escribir le cambió el título a la pestaña—. El botón «Atrás» que se busca es el del
+    /// Explorador (`backButton`), así que no se encontró ninguna vez: cinco intentos de resolverlo más 2 s esperando
+    /// una vuelta que no iba a llegar, 3-4 s por búsqueda, 53 de los 94 s de herramientas de la sesión. Y lo peor no
+    /// pasó de milagro: con un navegador cuyo «volver» se llamara igual, cada búsqueda se habría deshecho sola
+    /// mientras la respuesta decía «escribí y confirmé con Enter».
+    /// </remarks>
+    public static bool ElEnterSeDeshace(string antes, string ahora) =>
+        !string.IsNullOrWhiteSpace(antes) && !string.IsNullOrWhiteSpace(ahora)
+        && antes.Trim().StartsWith("uia://explorer.exe/", StringComparison.OrdinalIgnoreCase)
+        && !Navigation.Superficies.MismaPantalla(antes, ahora);
+
+    /// <summary>Lo que se le cuenta al modelo tras escribir: y si el Enter llevó a otra pantalla, A CUÁL — que si no, gasta otra llamada en averiguarlo.</summary>
+    public static string RelatoDeEscribir(string texto, string antes, string ahora)
+    {
+        string relato = $"escribí «{texto}» y confirmé con Enter";
+        bool llego = !string.IsNullOrWhiteSpace(antes) && !string.IsNullOrWhiteSpace(ahora)
+            && !Navigation.Superficies.MismaPantalla(antes, ahora);
+        return llego ? relato + $", y ahora estás en «{ahora.Trim()}»" : relato;
     }
 
     /// <summary>

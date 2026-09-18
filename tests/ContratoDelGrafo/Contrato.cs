@@ -12609,7 +12609,9 @@ internal static class Contrato
         // MEDIDO EL 2026-09-18: Chrome nombra su barra 'Barra de direcciones y de búsqueda ' —con un espacio al
         // final—. El lector recorta las etiquetas, el selector guardado no lleva el espacio, y el resolvedor buscaba
         // el nombre EXACTO: 9 `map_take` fallidos en dos pruebas, con cinco reintentos internos cada uno.
-        var t = Capacidad("U.Graph.Surfaces.UiaSelector");
+        // typeof y no Capacidad(): UiaSelector vive en el ensamblado de windows-graph, y Capacidad() solo mira el del
+        // cliente. Pedirlo por nombre ahí da null SIEMPRE, y la promesa diría «pendiente» con el código ya escrito.
+        Type? t = typeof(U.Graph.Surfaces.UiaSelector);
         var mismo = t?.GetMethod("MismoNombre", BindingFlags.Public | BindingFlags.Static);
         var sinNombre = t?.GetMethod("CondicionSinNombre", BindingFlags.Public | BindingFlags.Static);
         var parse = t?.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static);
