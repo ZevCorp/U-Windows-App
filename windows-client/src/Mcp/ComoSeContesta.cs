@@ -79,6 +79,30 @@ public static class ComoSeContesta
         return !Navigation.Superficies.MismaPantalla(a, d);
     }
 
+    /// <summary>Hasta cuántos elementos se considera que lo visto es el cromo del navegador sin la página.</summary>
+    public const int ElementosDeUnEsqueleto = 60;
+
+    /// <summary>
+    /// ¿LO QUE SE VIO AL TERMINAR ES UN ESQUELETO? Solo entonces merece la pena esperar a que la página se asiente.
+    /// </summary>
+    /// <remarks>
+    /// LA PRIMERA VERSIÓN ESPERABA TRAS TODA NAVEGACIÓN, y el nivel 4 la midió el mismo día: `map_go_to` pasó de
+    /// 0,8-1,7 s a 1,9-3,4 s —entre +1 y +2,6 s por navegación—, cuando el modelo solo había vuelto a mirar tras una de
+    /// cada cinco, perdiendo ~2 s. Esperar siempre salía más caro que el problema que arreglaba.
+    ///
+    /// LOS DATOS DAN EL CORTE: en los ocho casos del día en que el inventario se quedó corto, el primer vistazo traía
+    /// 24, 26, 27, 32, 33, 33, 38 y 57 elementos —las pestañas, la barra y los botones del navegador—. Las páginas que
+    /// ya venían con contenido traían de 105 a 196, y esas se entregan en el acto aunque sigan creciendo: el modelo
+    /// tarda ~2 s en contestar, y para entonces lo que eligió de esa lista sigue estando.
+    /// </remarks>
+    public static bool EsEsqueleto(string inventario)
+    {
+        string c = Cabecera(inventario);
+        int abre = c.LastIndexOf(" (", StringComparison.Ordinal), cierra = c.IndexOf(" elemento", StringComparison.Ordinal);
+        if (!c.StartsWith(MarcaDelInventario, StringComparison.Ordinal) || abre < 0 || cierra <= abre) return false;
+        return int.TryParse(c[(abre + 2)..cierra], out int n) && n <= ElementosDeUnEsqueleto;
+    }
+
     /// <summary>
     /// MIRAR HASTA QUE DOS MIRADAS SEGUIDAS COINCIDAN, con tope de RELOJ (promesa 245). Se compara la cabecera del
     /// inventario —dónde y cuántos elementos—, no el texto entero: una página con un contador no se asentaría nunca.

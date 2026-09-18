@@ -2155,11 +2155,12 @@ public sealed class SurfaceMapTools
             {
                 Func<string> mirar = () => InventarioParaLosActos?.Invoke() ?? LoQueVeo();
                 string inventario = mirar();
-                // TRAS NAVEGAR SE CUENTA LA PÁGINA, NO SU ESQUELETO (promesa 335): si el acto dejó una web cargando,
-                // se vuelve a mirar hasta que dos miradas coincidan. 250 ms de pausa y 2 s de tope: lo medido fue
-                // que la página estaba completa entre 1 y 2 s después del acto.
+                // TRAS NAVEGAR SE CUENTA LA PÁGINA, NO SU ESQUELETO (promesa 335): si el acto dejó una web cargando Y
+                // lo que se vio es solo el cromo del navegador, se vuelve a mirar hasta que dos miradas coincidan.
+                // 250 ms de pausa y 2 s de tope: lo medido fue que la página estaba entre 1 y 2 s después del acto.
+                // Una página que ya trae contenido NO espera: esperar siempre costaba +1 a +2,6 s por navegación.
                 string ahoraEstoy = ""; try { ahoraEstoy = _where()?.Id ?? ""; } catch { }
-                if (ComoSeContesta.HayQueAsentar(tool, antesDelActo, ahoraEstoy))
+                if (ComoSeContesta.EsEsqueleto(inventario) && ComoSeContesta.HayQueAsentar(tool, antesDelActo, ahoraEstoy))
                 {
                     var relojAsentar = System.Diagnostics.Stopwatch.StartNew();
                     string primera = ComoSeContesta.Cabecera(inventario);
@@ -2167,8 +2168,8 @@ public sealed class SurfaceMapTools
                         ms => System.Threading.Thread.Sleep(ms), () => relojAsentar.ElapsedMilliseconds);
                     string ultima = ComoSeContesta.Cabecera(inventario);
                     LogBus.Log("mapa-mcp", primera == ultima
-                        ? $"la página ya estaba asentada al terminar {tool} ({relojAsentar.ElapsedMilliseconds} ms en comprobarlo)"
-                        : $"la página seguía cargando al terminar {tool}: «{primera}» → «{ultima}» ({relojAsentar.ElapsedMilliseconds} ms esperando a que se asentara)");
+                        ? $"al terminar {tool} solo se veía el esqueleto y no creció: «{primera}» ({relojAsentar.ElapsedMilliseconds} ms en comprobarlo)"
+                        : $"al terminar {tool} solo se veía el esqueleto de la página: «{primera}» → «{ultima}» ({relojAsentar.ElapsedMilliseconds} ms esperando a que se asentara)");
                 }
                 r = ComoSeContesta.Pegar(r, inventario);
             }

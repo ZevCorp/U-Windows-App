@@ -811,7 +811,7 @@ internal static class Contrato
         Prueba("334. un campo de texto no navega: al pulsar un Edit o un ComboBox no se espera el presupuesto de un cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el terreno ni se repite el clic, y la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta como cualquier navegación; y lo que no es un campo espera como siempre", UnCampoDeTextoNoNavega);
 
         // ── Spec 044: lo que se cuenta tras navegar es la página, no su esqueleto ────────────────
-        Prueba("335. tras navegar a una web, lo que se cuenta que hay delante es la página ASENTADA: se vuelve a mirar hasta que dos miradas seguidas ven la misma pantalla con los mismos elementos, con un tope de reloj; si ya estaba asentada cuesta una sola mirada de más; un acto que no navegó, o que no acabó en una web, no espera nada; y si el tope se agota se entrega lo último que se vio, diciendo que seguía cambiando", TrasNavegarSeCuentaLaPaginaAsentada);
+        Prueba("335. tras navegar a una web, si lo que se vio al terminar es un ESQUELETO —sesenta elementos o menos: el cromo del navegador sin la página— se vuelve a mirar hasta que dos miradas seguidas ven la misma pantalla con los mismos elementos, con un tope de reloj, y se cuenta esa; una página que ya trae su contenido se entrega en el acto, sin esperar; un acto que no navegó, o que no acabó en una web, tampoco espera; y si el tope se agota se entrega lo último que se vio, diciendo que seguía cambiando", TrasNavegarSeCuentaLaPaginaAsentada);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12791,9 +12791,10 @@ internal static class Contrato
         var t = Capacidad("U.WindowsClient.Mcp.ComoSeContesta");
         var hayQue = t?.GetMethod("HayQueAsentar", BindingFlags.Public | BindingFlags.Static);
         var asentado = t?.GetMethod("InventarioAsentado", BindingFlags.Public | BindingFlags.Static);
-        if (t == null || hayQue == null || asentado == null)
+        var esqueleto = t?.GetMethod("EsEsqueleto", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || hayQue == null || asentado == null || esqueleto == null)
         {
-            Pendiente("Mcp.ComoSeContesta.HayQueAsentar + InventarioAsentado", "335", "044");
+            Pendiente("Mcp.ComoSeContesta.HayQueAsentar + EsEsqueleto + InventarioAsentado", "335", "044");
             return;
         }
         bool Hay(string herramienta, string antes, string ahora) => (bool)hayQue.Invoke(null, new object[] { herramienta, antes, ahora })!;
@@ -12810,6 +12811,17 @@ internal static class Contrato
             "ni fuera de la web: el Explorador y SAP tienen sus propias esperas, y sin saber dónde se está no se adivina");
         Debe(!Hay("map_what_i_see", "web://a.com", "web://b.com") && !Hay("map_scroll", "web://a.com", "web://a.com"),
             "y lo que no es un acto de navegar no entra");
+
+        // Y SOLO SI LO VISTO ES UN ESQUELETO. La primera versión esperaba tras TODA navegación, y el nivel 4 la midió:
+        // +1 a +2,6 s por `map_go_to` (0,8-1,7 s → 1,9-3,4 s), cuando el modelo solo había vuelto a mirar tras una de
+        // cada cinco. Más caro que el problema. Los ocho casos malos del día traían 24-57 elementos; las páginas que
+        // ya venían con contenido, 105-196.
+        bool Esq(string inventario) => (bool)esqueleto.Invoke(null, new object[] { inventario })!;
+        string CabDe(int n) => $"EN PANTALLA AHORA, en «web://g.com/search» ({n} elemento(s)):\n  «x» (Button)";
+        Debe(Esq(CabDe(24)) && Esq(CabDe(38)) && Esq(CabDe(57)) && Esq(CabDe(60)), "veintitantos, treinta y tantos, cincuenta y siete: el cromo del navegador sin la página es un esqueleto");
+        Debe(!Esq(CabDe(61)) && !Esq(CabDe(105)) && !Esq(CabDe(314)), "una página que ya trae su contenido no lo es: se entrega en el acto");
+        Debe(!Esq("") && !Esq("no veo ningún elemento accionable ahora mismo") && !Esq("EN PANTALLA AHORA, en «web://g.com» (muchos elemento(s)):"),
+            "y sin una cabecera que diga cuántos hay no se adivina: no se espera");
 
         // CÓMO: mirar hasta que dos miradas seguidas coincidan, con tope de RELOJ (promesa 245), sin dormir de verdad.
         string Cab(string donde, int n) => $"EN PANTALLA AHORA, en «{donde}» ({n} elemento(s)):\n  «x» (Button)";
