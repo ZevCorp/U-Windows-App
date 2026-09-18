@@ -69,3 +69,44 @@ subdominio suyo, como hasta hoy; y `www.` no cuenta en ninguno de los dos lados.
 - `map_go_to web://google.com` con Scholar abierto dice «te puse delante de google.com» estando en
   Scholar. Es la dirección que la regla SÍ admite (un subdominio cuenta si se pidió el sitio a secas,
   spec 029) y la respuesta dice dónde se está de verdad; no se toca sin hablarlo.
+
+## Lo que pasó al implementarlas
+
+Promesas escritas y vistas en rojo antes que el código (`8967bef`: las dos `PENDIENTE`, 268 verdes).
+Verdes con `e75c0b2`: contrato intacto, 270; la 66 (una web es direccionable) y la 261 (llegar es
+llegar) siguen en pie.
+
+**Sabotaje, comprobado que se aplicó** (8 líneas en el `diff`): quitando el aviso y la regla de «una
+vez», y devolviendo la simetría a `MismoSitio`, caen **exactamente** la 332 y la 333 — y la 332 reproduce
+lo medido en la app: «2405 ms (los plazos eran 500 + 1200)», «se pidió 2». Revertido tras commitear.
+
+**Sitios** (patrón nº5): `PasoDelNucleo` se construye en 2; el de `ServidorDelNucleo` pregunta por la
+ventana de delante, no por la de trabajo, y no tenía el problema (1 de 2). `MismoSitio` tiene 3
+llamadas, las tres con (host real, dominio pedido): las tres quedan bien con la regla con dirección.
+
+### Nivel 4: dos situaciones reales, la misma caja de pruebas antes y después
+
+Se recrearon las dos de la prueba del dueño: una web abierta en **otra ventana** de Chrome que la de
+trabajo (Wikipedia en una, Hacker News en otra), y pedir Scholar con Google delante.
+
+| `map_go_to` | `main` (6f0f6e1) | rama (e75c0b2) |
+|---|---|---|
+| `web://es.wikipedia.org`, abierta en otra ventana | **11.635 ms** · «no hay ningún camino aprendido» (y ya estaba allí) | **1.195 ms** · «te puse delante de es.wikipedia.org» |
+| `web://google.com`, abierta en otra ventana | **12.346 ms** · «no hay ningún camino aprendido» (y ya estaba allí) | **1.381 ms** · «te puse delante de google.com» |
+| `web://scholar.google.com`, con `google.com` delante | **11.326 ms** · «no hay ningún camino aprendido», seguía en `google.com/search` | **2.522 ms** · abierto de verdad: «estás en web://scholar.google.com» |
+
+```
+antes   [14:14:53] pestañas: «scholar.google.com» ya estaba activo en una ventana → al frente
+        [14:15:04] nucleo-paso: hacia «scholar.google.com»: NO — no hay ningún camino aprendido de «search» hasta ahí
+después [14:16:59] pestañas: «scholar.google.com» no está abierto en ninguna de las 6 ventana(s) de navegador
+        [14:16:59] pestañas: «scholar.google.com» no estaba abierto: abriendo https://scholar.google.com en chrome.exe
+        [14:16:59] trabajo: la ventana de trabajo es ahora «web://scholar.google.com»
+        [14:16:59] nucleo-paso: hacia «scholar.google.com»: LLEGADO
+```
+
+Las cuatro ventanas de Chrome que abrió la prueba se cerraron al terminar (solo las de una única
+pestaña con esos títulos).
+
+**Sin adornos:** el «no» legítimo —una web que de verdad no carga— sigue costando hasta 8 s, que es el
+plazo de una página entera; antes eran 11. No se ejercitó a mano (haría falta una dirección que no
+responda) y lo juzga el contrato. Y un sitio de SAP o del Explorador no cambia: su plazo sigue en 3 s.
