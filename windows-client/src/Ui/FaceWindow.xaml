@@ -530,6 +530,11 @@
                              botones». Si esto sigue así dentro de unos días, se quita. -->
                         <Button x:Name="WorkBtn" Content="Work" Height="38" Margin="0,8,0,0"
                                 AutomationProperties.Name="Trabajar (sin función todavía)"/>
+                        <!-- JEV (spec 036, promesa 290): enciende y apaga el decisor de TypeSafe sin
+                             reiniciar. Dice su estado real en el texto y el motivo en el tooltip. Se
+                             llama Jev y no «Live» porque Live ya significa la consulta clinica. -->
+                        <Button x:Name="JevBtn" Content="Jev · off" Height="38" Margin="0,8,0,0" Click="OnToggleJev"
+                                AutomationProperties.Name="Jev: encender o apagar el decisor de TypeSafe"/>
 
                     <StackPanel x:Name="ZonaSecundaria" Margin="0,12,0,0">
                         <!-- ZONA CONTEXTUAL: lo que solo existe a ratos. Va envuelta para que el

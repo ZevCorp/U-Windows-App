@@ -115,6 +115,26 @@ pantalla. El catálogo de Luna queda byte a byte como hoy.
 
 `map_take`, `map_type` y el resto **no cambian**.
 
+### Puertas únicas, tres preguntas, y la segunda mejor (spec 036)
+
+- Jev ve las puertas **numeradas y con su tipo** —`2) Detalles (RadioButton)`— y lo elegido se
+  acciona **por su selector**: dos puertas con el mismo nombre no chocan. Antes se le daba la
+  etiqueta y en openai.com se perdieron 2 de 3 pasos en «hay 2 puertas vivas para…».
+- **Una llamada, tres preguntas**: qué puerta (`choice`), ¿el objetivo ya está cumplido en esta
+  pantalla? (`noul cumplido`) y ¿accionar la elegida es irreversible? (`noul peligro`). Medido: las
+  tres vuelven juntas en ~330 ms con 20, 60 o 160 puertas. Con `cumplido` ≥ 0,70 no se acciona y se
+  dice que ya está; con `peligro` ≥ 0,50 no se acciona y se dice por qué.
+- **La segunda mejor sin otra llamada**: si la elegida no está viva al pulsar, se prueba la siguiente
+  por probabilidad si llega a 0,25, como mucho una vez más. Un homónimo no dispara la segunda.
+
+### El botón «Jev» del panel
+
+Junto a `Learn`/`Work`: **`Jev · off` / `Jev · on`**. Enciende y apaga el decisor sin reiniciar —cambia
+el decisor del mapa, el catálogo de la voz, y lo re-manda a la sesión, como hacen Learn/Work—. El
+porqué de su estado sale en la línea de estado del panel —nada al pasar el ratón, promesa 164—; pedir Jev sin `TYPESAFE_API_KEY` se queda apagado y dice por qué. La
+variable `U_DECISOR` fija el estado inicial; el botón manda después. Se llama Jev y no «Live» porque
+Live ya significa la consulta clínica en ese panel.
+
 ## Lo que todavía no se sabe
 
 Si Jev elige *mejor* que Luna sobre SAP. La fase 4 está cableada y probada en seco y con

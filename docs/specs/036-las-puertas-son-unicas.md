@@ -1,6 +1,6 @@
 # Las puertas son únicas: Jev elige por número, pulsa por selector, y se enciende con un botón
 
-Estado: **propuesta, contrato en rojo** · 2026-09-18 · Rama: `jose/las-puertas-son-unicas`
+Estado: **implementada, contrato intacto (287-290)** · 2026-09-18 · Rama: `jose/las-puertas-son-unicas`
 
 > Fase 2 de `docs/plan-clics-en-tiempo-real.md`. Sale de dos medidas de la fase 1
 > (`docs/anatomia-del-clic-2026-09-18.md`): en la corrida del dueño con Jev, **2 de 3 decisiones
@@ -29,7 +29,7 @@ en la misma respuesta. Hoy se tira.
 | **287** | Jev elige entre puertas **únicas y numeradas** —«3) Investigación (Hyperlink)»— y lo elegido se acciona **por su selector**, nunca por su etiqueta: dos puertas con el mismo nombre no chocan, la mano recibe el selector de la elegida, y la cuenta la nombra por su etiqueta y su número. |
 | **288** | La **segunda mejor sin otra llamada**: si la elegida no está viva al ir a pulsarla, se prueba la siguiente por probabilidad si supera el mínimo, como mucho una vez más; a Jev se le preguntó **una sola vez**; y la cuenta dice qué se probó y por qué. Un homónimo o un fallo de la mano que no sea «no está» no dispara la segunda. |
 | **289** | **Una llamada, tres preguntas**: el cuerpo lleva `puerta` (choice), `cumplido` (noul: ¿el objetivo ya está cumplido en esta pantalla?) y `peligro` (noul: ¿accionar la elegida es irreversible?); con `cumplido` alto no se acciona y se dice que el objetivo ya está; con `peligro` alto no se acciona y se dice por qué; y una respuesta sin esas dos (un transporte viejo) sigue valiendo. |
-| **290** | **El interruptor en vivo**: encender el decisor deja `map_decidir` en el catálogo y un decisor en el mapa; apagarlo deja el catálogo **byte a byte** como sin decisor y el mapa sin decisor; las dos cosas re-mandan el catálogo a la voz; pedir encender sin clave ni modo válido se queda apagado y dice por qué; y el estado se puede leer en una línea. |
+| **290** | **El interruptor en vivo**: encender el decisor deja `map_decidir` en el catálogo y un decisor en el mapa; apagarlo deja el catálogo **byte a byte** como sin decisor y el mapa sin decisor; las dos cosas re-mandan el catálogo a la voz; pedir encender sin clave ni modo válido se queda apagado y dice por qué; y el estado se lee en una línea —en el botón y en la línea de estado, nunca al pasar el ratón (164)—. |
 
 ## Cómo se juzga, sin pantalla
 

@@ -11631,8 +11631,10 @@ internal static class Contrato
         mapa.RecorrerPorElNucleo = pasos =>
         {
             visto = pasos[0];
+            // La mano real cuenta por ETIQUETA, no por selector (RecorrerSegunElNucleo: elegido.Que.Etiqueta).
+            string etiqueta = conSelector.FirstOrDefault(x => x.Item1 == pasos[0].Exit).Item2 ?? pasos[0].Exit;
             return new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true,
-                $"hice los 1 paso(s): pulsé «{pasos[0].Exit}» y ahora estás en «uia://sap/NV2000».", true);
+                $"hice los 1 paso(s): pulsé «{etiqueta}» y ahora estás en «uia://sap/NV2000».", true);
         };
         return (mapa, () => visto, () => leidas);
     }
