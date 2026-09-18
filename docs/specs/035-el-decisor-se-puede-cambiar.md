@@ -75,7 +75,7 @@ Entre esas dos está el hueco donde hoy decide Luna. Ahí entra el decisor.
 | **278** | Jev solo puede elegir entre las puertas que se le dieron: una respuesta con una puerta que no está en el inventario **se rechaza y no se ejecuta**. |
 | **279** | Por debajo del umbral de confianza no se actúa: la decisión se declara insegura y el control vuelve a Luna. |
 | **280** | TypeSafe caído, lento o con error no detiene el trabajo: al agotarse el plazo o fallar, se cae a Luna y el trabajo sigue. |
-| **281** | El modo simulado no toca la red: decide con una regla fija y sirve para las pruebas. |
+| **281** | El modo simulado no toca la red: decide con una regla fija y sirve para las pruebas; con **cero palabras en común no actúa**, y su confianza es cuánto de la puerta explica el objetivo, no un 1,00 fijo. *(Ampliada el 2026-09-18 tras el nivel 4: accionaba la primera puerta con 1,00 sin ninguna coincidencia.)* |
 | **282** | La petición que se arma cumple el contrato HTTP de TypeSafe, campo por campo. |
 | **283** | `429` y `529` se reintentan con espera creciente; `401` y `422` **no se reintentan**, porque reintentar una clave mala es gastar cupo. |
 | **284** | `map_decidir` existe solo con el decisor encendido: apagado no está en el catálogo, las instrucciones no lo nombran, y llamarlo contesta que decide Luna sin leer la pantalla ni pulsar; encendido está en el catálogo con `objetivo`, y las instrucciones mandan pedirlo con el objetivo en vez de elegir la puerta. |

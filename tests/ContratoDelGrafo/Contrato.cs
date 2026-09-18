@@ -770,7 +770,7 @@ internal static class Contrato
         Prueba("278. Jev solo puede elegir entre las puertas que se le dieron: una respuesta con una puerta que no está en el inventario se rechaza y no se ejecuta, y se dice cuál vino", JevSoloEligeEntreLasPuertasDadas);
         Prueba("279. por debajo del umbral de confianza no se actúa: la decisión se declara insegura y el control vuelve a Luna, en vez de tomar la puerta más probable de un empate", SinConfianzaNoSeActua);
         Prueba("280. TypeSafe caído, lento o con error no detiene el trabajo: al fallar el transporte se cae a Luna, se dice por qué, y la excepción no sale de la pieza", SiTypeSafeFallaSeCaeALuna);
-        Prueba("281. el modo simulado no toca la red: decide con una regla fija y repetible, para que las pruebas no dependan de que TypeSafe conteste", ElModoSimuladoNoTocaLaRed);
+        Prueba("281. el modo simulado no toca la red: decide con una regla fija y repetible, para que las pruebas no dependan de que TypeSafe conteste; y con cero palabras en común entre el objetivo y cualquier puerta NO actúa —una regla de andamiaje no puede accionar la primera puerta con confianza 1,00—, y su confianza es cuánto de la puerta explica el objetivo, no un 1,00 fijo", ElModoSimuladoNoTocaLaRed);
         Prueba("282. la petición cumple el contrato HTTP de TypeSafe campo por campo: model, state, y questions con type «choice», instructions y criteria con TODAS las opciones ofrecidas", LaPeticionCumpleElContratoDeTypeSafe);
         Prueba("283. 429 y 529 se reintentan con espera creciente; 401 y 422 no se reintentan, porque reintentar una clave mala o un cuerpo inválido solo gasta un cupo que TypeSafe dice que se mueve sin aviso", LosReintentosDistinguenLoQueMejoraDeLoQueNo);
         Prueba("284. map_decidir existe solo con el decisor encendido: apagado no está en el catálogo, las instrucciones no lo nombran, y llamarlo contesta que decide Luna sin leer la pantalla ni pulsar; encendido está en el catálogo con `objetivo`, y las instrucciones mandan pedirlo con el objetivo en vez de elegir la puerta", MapDecidirSoloExisteConElDecisor);
@@ -11539,6 +11539,22 @@ internal static class Contrato
             "y decide igual dos veces seguidas: una prueba que depende del azar no prueba nada");
         Debe(((string)PropDe(a, "Porque")!).Contains("simulad"),
             $"y se dice que fue simulado, para que un verde no se confunda con haber hablado con TypeSafe; salió «{PropDe(a, "Porque")}»");
+
+        // CERO PALABRAS EN COMÚN NO ES UNA ELECCIÓN. Medido en el nivel 4 del 2026-09-18 sobre el
+        // Explorador: «abrir la carpeta Windows» no casaba con ninguna de las 61 puertas listadas y el
+        // simulado accionó igual «Detalles», la primera, con confianza 1,00 — el juez optimista que la
+        // spec prohíbe, y el contrato lo dejó pasar porque solo pedía repetibilidad.
+        Debe(!(bool)PropDe(a, "Actuar")!,
+            $"con «crear» y las puertas Nuevo/Buscar no hay palabra en común: NO se actúa (salió Actuar={PropDe(a, "Actuar")}, Puerta=«{PropDe(a, "Puerta")}»)");
+        var casa = elegir.Invoke(null, new object[] { "simulado", "SAP/NWP1", "crear el triage administrativo", new[] { "Buscar pacientes", "Crear Triage Administrativo" }, 0.7, transporte })!;
+        Debe((bool)PropDe(casa, "Actuar")! && (string)PropDe(casa, "Puerta")! == "Crear Triage Administrativo",
+            "y con palabras en común elige la puerta que más comparte");
+        Debe(Math.Abs((double)PropDe(casa, "Confianza")! - 1.0) < 0.001,
+            $"con la puerta explicada entera por el objetivo la confianza es 1,00; salió {PropDe(casa, "Confianza")}");
+        var aMedias = elegir.Invoke(null, new object[] { "simulado", "SAP/NWP1", "crear", new[] { "Crear Triage Administrativo" }, 0.7, transporte })!;
+        Debe(!(bool)PropDe(aMedias, "Actuar")! && (double)PropDe(aMedias, "Confianza")! < 0.7,
+            $"y con una sola palabra de tres la confianza baja (1/3) y no llega al umbral: no se actúa; salió {PropDe(aMedias, "Confianza")}");
+        Debe(llamadas == 0, "y en ningún caso se llamó a TypeSafe");
     }
 
     private static void LaPeticionCumpleElContratoDeTypeSafe()

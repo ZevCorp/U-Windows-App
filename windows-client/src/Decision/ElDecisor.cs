@@ -92,7 +92,7 @@ public static class ElDecisor
                 return ConJev(pantalla, objetivo, puertas, umbral, transporte);
 
             case "simulado":
-                return Simulado(objetivo, puertas);
+                return Simulado(objetivo, puertas, umbral);
 
             default:
                 // NI SE LLAMA NI SE MIRA. Un decisor que preguntara y luego descartara la respuesta
@@ -186,39 +186,59 @@ public static class ElDecisor
 
     /// <summary>
     /// La regla fija: la puerta cuya etiqueta comparte más palabras con el objetivo; a igualdad, la
-    /// primera en el orden de lectura de la pantalla.
+    /// primera en el orden de lectura de la pantalla. Su confianza es cuánto de la puerta explica el
+    /// objetivo (palabras compartidas / palabras de la puerta), y pasa por el mismo umbral que Jev.
     /// </summary>
     /// <remarks>
     /// REPETIBLE A PROPÓSITO, sin azar y sin reloj. Una prueba que dependiera del azar no probaría
     /// nada, y este modo existe justamente para poder ejercitar toda la cadena —inventario, elección,
     /// validación, compuerta— en una máquina sin clave y sin red.
     ///
+    /// CERO COINCIDENCIAS NO ES UNA ELECCIÓN. Medido en el nivel 4 del 2026-09-18 sobre el Explorador:
+    /// «abrir la carpeta Windows» no casaba con ninguna de las 61 puertas listadas y esta regla
+    /// accionó igual «Detalles» —la primera— con confianza 1,00. Era el juez optimista que la spec
+    /// prohíbe, en el doble que existe para probar que no lo hay. Ahora con cero palabras en común
+    /// no se actúa, y la confianza deja de ser un 1,00 fijo.
+    ///
     /// NO PRETENDE IMITAR A JEV. Es un doble de andamiaje: sirve para ver pasar los datos, no para
     /// estimar qué haría el modelo. Un verde en simulado no dice nada sobre la calidad de Jev, y por
     /// eso lo dice en su propio <c>Porque</c>.
     /// </remarks>
-    private static DecisionDeUnPaso Simulado(string objetivo, IReadOnlyList<string> puertas)
+    private static DecisionDeUnPaso Simulado(string objetivo, IReadOnlyList<string> puertas, double umbral)
     {
         var palabras = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var w in (objetivo ?? "").Split(_separadores, StringSplitOptions.RemoveEmptyEntries))
             if (w.Length > 2) palabras.Add(w);
 
         string mejor = "";
-        int mejorPuntos = -1;
+        int mejorPuntos = 0;
+        double mejorConfianza = 0;
         foreach (var p in puertas)
         {
             if (string.IsNullOrWhiteSpace(p)) continue;
-            int puntos = 0;
+            int puntos = 0, total = 0;
             foreach (var w in p.Split(_separadores, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (w.Length <= 2) continue;
+                total++;
                 if (palabras.Contains(w)) puntos++;
-            if (puntos > mejorPuntos) { mejorPuntos = puntos; mejor = p; }
+            }
+            // Más palabras compartidas gana; a igual número, la puerta mejor explicada; a igual todo, la primera.
+            double confianza = total == 0 ? 0 : (double)puntos / total;
+            if (puntos > mejorPuntos || (puntos == mejorPuntos && puntos > 0 && confianza > mejorConfianza))
+            { mejorPuntos = puntos; mejorConfianza = confianza; mejor = p; }
         }
 
-        if (mejor.Length == 0)
-            return DecisionDeUnPaso.No("decisión simulada: ninguna puerta tiene etiqueta utilizable.");
+        if (mejorPuntos == 0)
+            return DecisionDeUnPaso.No(
+                $"decisión simulada (sin red, sin TypeSafe): ninguna de las {puertas.Count} puertas comparte una palabra con el objetivo, así que no se acciona. Decide Luna.");
 
-        return DecisionDeUnPaso.Si(mejor, 1.0,
-            $"decisión simulada (sin red, sin TypeSafe): «{mejor}» por coincidencia de {mejorPuntos} palabra(s) con el objetivo.");
+        string porque = $"decisión simulada (sin red, sin TypeSafe): «{mejor}» comparte {mejorPuntos} palabra(s) con el objetivo, "
+                      + $"confianza {mejorConfianza.ToString("0.00", CultureInfo.InvariantCulture)}.";
+        if (mejorConfianza < umbral)
+            return DecisionDeUnPaso.No(porque + $" Por debajo del mínimo exigido ({umbral.ToString("0.00", CultureInfo.InvariantCulture)}): no se acciona. Decide Luna.", mejorConfianza);
+
+        return DecisionDeUnPaso.Si(mejor, mejorConfianza, porque);
     }
 
     private static readonly char[] _separadores = { ' ', '\t', '\n', '\r', '.', ',', ':', ';', '(', ')', '«', '»', '/', '-', '_' };
