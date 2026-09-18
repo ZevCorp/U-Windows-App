@@ -809,6 +809,9 @@ internal static class Contrato
 
         // ── Spec 043: un campo de texto no navega ───────────────────────────────────────────────
         Prueba("334. un campo de texto no navega: al pulsar un Edit o un ComboBox no se espera el presupuesto de un cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el terreno ni se repite el clic, y la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta como cualquier navegación; y lo que no es un campo espera como siempre", UnCampoDeTextoNoNavega);
+
+        // ── Spec 044: lo que se cuenta tras navegar es la página, no su esqueleto ────────────────
+        Prueba("335. tras navegar a una web, lo que se cuenta que hay delante es la página ASENTADA: se vuelve a mirar hasta que dos miradas seguidas ven la misma pantalla con los mismos elementos, con un tope de reloj; si ya estaba asentada cuesta una sola mirada de más; un acto que no navegó, o que no acabó en una web, no espera nada; y si el tope se agota se entrega lo último que se vio, diciendo que seguía cambiando", TrasNavegarSeCuentaLaPaginaAsentada);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12775,6 +12778,70 @@ internal static class Contrato
         var (r4, ms4, _) = Pulsa(Mundo(), "uia:name=Guardar;ct=Button", "Guardar");
         Debe(r4.SePudo && ms4 >= Presupuesto - 100, $"un botón sigue esperando el presupuesto entero: {ms4} ms de {Presupuesto}");
         Debe(!r4.Cuenta.Contains("campo"), $"y no se le llama campo a lo que no lo es: «{r4.Cuenta}»");
+    }
+
+    // ── Spec 044 ─────────────────────────────────────────────────────────────────────────────────
+
+    private static void TrasNavegarSeCuentaLaPaginaAsentada()
+    {
+        // MEDIDO EL 2026-09-18 en tres pruebas del dueño: de los 9 actos tras los que el modelo volvió a pedir
+        // `map_what_i_see` en menos de 6 s, en 8 el inventario del acto se había quedado corto —24→64, 26→49, 33→84,
+        // 32→95, 27→59 elementos—: era poco más que el cromo del navegador, sin la página. Cada vuelta a mirar son
+        // ~2 s de ida y vuelta al modelo; y tres veces, en vez de mirar, pulsó «Volver a cargar» creyéndola rota.
+        var t = Capacidad("U.WindowsClient.Mcp.ComoSeContesta");
+        var hayQue = t?.GetMethod("HayQueAsentar", BindingFlags.Public | BindingFlags.Static);
+        var asentado = t?.GetMethod("InventarioAsentado", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || hayQue == null || asentado == null)
+        {
+            Pendiente("Mcp.ComoSeContesta.HayQueAsentar + InventarioAsentado", "335", "044");
+            return;
+        }
+        bool Hay(string herramienta, string antes, string ahora) => (bool)hayQue.Invoke(null, new object[] { herramienta, antes, ahora })!;
+
+        // CUÁNDO: solo cuando se navegó, y solo a una web.
+        Debe(Hay("map_go_to", "web://github.com", "web://google.com/search"), "ir a una web espera a que se asiente");
+        Debe(Hay("map_take", "web://google.com/search", "web://arxiv.org/abs/1706.03762") && Hay("map_decidir", "web://a.com", "web://b.com") && Hay("map_type", "web://google.com", "web://google.com/search"),
+            "y también pulsar, decidir o escribir cuando eso llevó a otra página");
+        Debe(Hay("map_go_to", "web://google.com/search", "web://google.com/search"),
+            "ir a una búsqueda nueva deja la misma dirección y OTRA página: map_go_to espera siempre que acabe en una web");
+        Debe(!Hay("map_take", "web://google.com/search", "web://google.com/search") && !Hay("map_type", "web://x.com/a", "web://x.com/a"),
+            "un clic o un texto que NO cambió de página no espera nada: ahí no hay nada cargando");
+        Debe(!Hay("map_take", "uia://explorer.exe/c", "uia://explorer.exe/descargas") && !Hay("map_go_to", "sapgui://PRD/A", "sapgui://PRD/B") && !Hay("map_go_to", "web://a.com", ""),
+            "ni fuera de la web: el Explorador y SAP tienen sus propias esperas, y sin saber dónde se está no se adivina");
+        Debe(!Hay("map_what_i_see", "web://a.com", "web://b.com") && !Hay("map_scroll", "web://a.com", "web://a.com"),
+            "y lo que no es un acto de navegar no entra");
+
+        // CÓMO: mirar hasta que dos miradas seguidas coincidan, con tope de RELOJ (promesa 245), sin dormir de verdad.
+        string Cab(string donde, int n) => $"EN PANTALLA AHORA, en «{donde}» ({n} elemento(s)):\n  «x» (Button)";
+        (string Inv, int Miradas, long Dormido) Corre(string[] secuencia, int pausa, int tope)
+        {
+            int i = 1; long reloj = 0, dormido = 0;   // la [0] es la mirada que el acto ya hizo
+            Func<string> mirar = () => { reloj += 100; return secuencia[Math.Min(i++, secuencia.Length - 1)]; };   // cada mirada cuesta 100 ms
+            Action<int> dormir = ms => { reloj += ms; dormido += ms; };
+            Func<long> ahora = () => reloj;
+            var r = (string)asentado.Invoke(null, new object[] { secuencia[0], mirar, pausa, tope, dormir, ahora })!;
+            return (r, i - 1, dormido);
+        }
+
+        // Cargando: 27 → 45 → 59 → 59. Se entrega la de 59, que es la página.
+        var (inv1, m1, _) = Corre(new[] { Cab("web://g.com/search", 27), Cab("web://g.com/search", 45), Cab("web://g.com/search", 59), Cab("web://g.com/search", 59) }, 250, 2000);
+        Debe(inv1.Contains("(59 elemento(s))"), $"se entrega la página asentada, no el esqueleto de 27: «{inv1.Split('\n')[0]}»");
+        Debe(m1 == 3, $"mirando solo lo que hace falta: tres miradas más sobre la primera ({m1})");
+
+        // Ya asentada: UNA mirada de más y se acabó.
+        var (inv2, m2, d2) = Corre(new[] { Cab("web://g.com", 80), Cab("web://g.com", 80) }, 250, 2000);
+        Debe(inv2.Contains("(80 elemento(s))") && m2 == 1 && d2 == 250, $"una página ya asentada cuesta una sola mirada de más y una pausa ({m2} mirada(s), {d2} ms dormidos)");
+
+        // Redirige: la pantalla misma cambia entre miradas (docs.google.com → …/document/u/0). Manda la última.
+        var (inv3, _, _) = Corre(new[] { Cab("web://docs.google.com", 24), Cab("web://docs.google.com/document/u/0", 64), Cab("web://docs.google.com/document/u/0", 64) }, 250, 2000);
+        Debe(inv3.Contains("document/u/0") && inv3.Contains("(64 elemento(s))"), $"si además redirige, se cuenta donde se acabó: «{inv3.Split('\n')[0]}»");
+
+        // No para nunca de cambiar (un vídeo, un contador): TOPE DE RELOJ, y se dice.
+        var infinita = Enumerable.Range(1, 60).Select(k => Cab("web://tele.com", 100 + k)).ToArray();
+        var (inv4, m4, _) = Corre(infinita, 250, 1200);
+        Debe(m4 <= 4, $"una página que no deja de cambiar no retiene al modelo: con 1.200 ms de tope y miradas de 100 ms más pausas de 250, son tres o cuatro miradas, no sesenta ({m4})");
+        Debe(inv4.Contains("seguía cambiando"), $"y se dice que seguía cambiando, para que el modelo sepa que el listado puede estar incompleto: «{inv4.Split('\n').Last()}»");
+        Debe(!inv1.Contains("seguía cambiando") && !inv2.Contains("seguía cambiando"), "lo que sí se asentó no lleva ese aviso");
     }
 
     private static void Debe(bool condicion, string promesa)
