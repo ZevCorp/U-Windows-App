@@ -76,3 +76,45 @@ como cualquier navegación; y lo que no es un campo espera como siempre.
   gasta otra llamada en mirar. Siguiente corte.
 - **Chrome no vino al frente** al arrancar la prueba («no pude abrir ni encontrar google.com», dos
   veces, con la persona en los ajustes rápidos de Windows): ~8 s hasta que el modelo abrió otra ventana.
+
+## Lo que pasó al implementarla
+
+Promesa escrita y vista en rojo antes que el código (`734975d`: `PENDIENTE`, 270 verdes y solo ella).
+Verde con `17560d0`: contrato intacto, 271; la 44, 82, 83, 245, 248 y 296 siguen en pie.
+
+**Sabotaje, comprobado que se aplicó** (el `diff` mostró la línea): con `esCampo = false` solo cae la
+334 — «Search tardó 1215 ms de 1200», «pulsé «Search» y la pantalla no cambió.». Revertido tras commitear.
+
+**Sitios** (patrón nº5): `EsperarACambiar` se llama en 3 —el clic, el ensayo del doble y la repetición
+de la 248—. Solo el primero puede ser sobre un campo: el ensayo es para contenido de lista y la
+repetición para puertas con destino, y un campo sale antes de llegar a ninguno de los dos.
+
+### Nivel 4: dos pantallas (Google y DuckDuckGo, en Chrome)
+
+| `map_take` | `main`, medido hoy | rama (17560d0) |
+|---|---|---|
+| «Search» (ComboBox), Google | 3.300 · 3.379 ms (prueba del dueño, 14:39 y 14:47) | **1.492 ms** |
+| «Barra de direcciones y de búsqueda» (Edit), Google | 3.665 ms (nivel 4 de la spec 041, 13:54) | **1.907 ms** |
+| «Barra de direcciones y de búsqueda» (Edit), DuckDuckGo | 3.740 ms (ídem) | **1.978 ms** |
+| «About» (Button), DuckDuckGo — no es un campo | — | 4.512 ms: **espera 1.822 ms, como siempre** |
+| «Discusión» (Hyperlink), Wikipedia — navega | — | 2.395 ms: cambió a los 388 ms, «Queda aprendido» |
+
+```
+[15:02:58] mano: ⏱ pulsar «Search»: la mano 485 ms · esperar el cambio 310 ms (2 sondeo(s) de «dónde») · no cambió
+[15:03:00] mano: ⏱ pulsar «Barra de direcciones y de búsqueda»: la mano 665 ms · esperar el cambio 304 ms (2 sondeo(s)) · no cambió
+[15:03:31] mano: ⏱ pulsar «About»: la mano 491 ms · esperar el cambio 1822 ms (9 sondeo(s) de «dónde») · no cambió
+[15:04:08] mano: ⏱ pulsar «Discusión»: la mano 498 ms · esperar el cambio 388 ms (1 sondeo(s) de «dónde») · cambió
+```
+
+La respuesta nueva: «pulsé «Search»: es un campo de texto y ya tiene el foco (la pantalla no cambió,
+que es lo normal). Para escribir en él, map_type.»
+
+**Sin adornos, sobre la línea base:** la corrida «antes» de este nivel 4 **no valió** —Windows tenía
+abierto el panel de ajustes rápidos, Chrome no pudo venir al frente y los cinco pasos fallaron—, así
+que la columna de `main` son las medidas válidas del mismo día con el mismo código, no una corrida
+gemela. Se dice porque una comparación con una línea base prestada es más débil que una medida al lado.
+
+**Hallazgo de esa corrida fallida, sin tocar:** con el panel de ajustes rápidos de Windows abierto
+(`uia://ShellHost.exe/configuración-rápida`), Ü no consigue traer Chrome al frente: `map_go_to` contesta
+«no pude abrir ni encontrar google.com» en 1,4-4,5 s y todo lo demás falla detrás. Le pasó al dueño al
+empezar su tercera prueba (~8 s perdidos) y a esta corrida entera.
