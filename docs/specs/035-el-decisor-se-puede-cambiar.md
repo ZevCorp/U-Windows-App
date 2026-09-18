@@ -1,6 +1,6 @@
 # El decisor se puede cambiar: Jev elige, Luna habla
 
-Estado: **fase 1 y 2 implementadas** · 2026-09-17 · Rama: `jose/el-decisor-se-puede-cambiar`
+Estado: **implementada, fases 1-4, con nivel 4 en dos pantallas** · 2026-09-18 · Rama: `jose/el-decisor-se-puede-cambiar`
 
 > El dueño, 2026-09-17: «lo vamos a implementar utilizando Jev en reemplazo del modelo Luna […] el
 > modelo razonador y ejecutor es Luna. Entonces lo que queremos hacer es que el modelo que ejecute y
