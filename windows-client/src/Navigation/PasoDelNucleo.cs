@@ -39,6 +39,20 @@ public sealed class PasoDelNucleo
     /// <summary>Lo que se le da a un paso para que se note que movió.</summary>
     public int EsperaMovioMs { get; init; } = 1800;
 
+    /// <summary>
+    /// SE AVISA EN CUANTO ALGO SE PUSO DELANTE, antes de preguntar «¿dónde estoy?». Promesa 332 (spec 042). Quien
+    /// cablea adopta ahí la ventana que quedó al frente como ventana de trabajo. Nulo = como antes.
+    /// </summary>
+    /// <remarks>
+    /// MEDIDO EL 2026-09-18, cuatro veces en un día: ir a una web que estaba abierta en OTRA ventana del navegador
+    /// tardó 11,4-11,7 s en contestar «no hay ningún camino aprendido» — y en la misma respuesta, «EN PANTALLA AHORA,
+    /// en docs.google.com». La ventana se traía al frente a los 3 s y luego se sondeaba «dónde» 3 s + 8 s, pero ese
+    /// «dónde» es el de la ventana de TRABAJO, que seguía siendo la anterior: solo se cambiaba al terminar el
+    /// recorrido entero. Llegó, y estuvo ocho segundos esperando verse llegar. El modelo de voz aprendió de eso a no
+    /// usar `map_go_to` y a escribir direcciones en la barra, que costaba 6-10 s cada una.
+    /// </remarks>
+    public Action? AlPonerseDelante { get; set; }
+
     public PasoDelNucleo(Nucleo.Grafo grafo, Func<string> donde,
         Func<string, string, bool> pulsar, Func<string, bool> ponerDelante)
     {
@@ -82,8 +96,11 @@ public sealed class PasoDelNucleo
         // dónde estés. Llegar rápido al sitio equivocado es peor que llegar despacio al correcto,
         // porque el que preguntó se cree que llegó. Aquí se camina, y quien quiera saltar tiene
         // `file_open`, que va por disco y ya es rápido (2026-08-16).
+        bool esWeb = destino.StartsWith("web://", StringComparison.OrdinalIgnoreCase);
+        bool yaPediDelante = false;
         if (!Nucleo.Grafo.AppDe(aqui).Equals(Nucleo.Grafo.AppDe(destino), StringComparison.OrdinalIgnoreCase))
         {
+            yaPediDelante = true;
             if (!_ponerDelante(destino))
                 return new(false, false, "", "", destino.StartsWith("web://", StringComparison.OrdinalIgnoreCase)
                     ? $"no pude abrir ni encontrar «{Nucleo.Grafo.AppDe(destino)}» en el navegador"
@@ -92,7 +109,12 @@ public sealed class PasoDelNucleo
             // COMPROBADO POR CONSECUENCIA: ponerse delante es una petición, no una llegada. Se
             // sondea y se sale EN CUANTO llega, en vez de esperar un plazo fijo — un plazo fijo se
             // equivoca en las dos direcciones a la vez.
-            var compasDelante = new Compas(EsperaDelanteMs);
+            //
+            // UN PLAZO, NO DOS (promesa 332). Hacia una web se esperaban 3 s aquí y, sin haber llegado, abajo se
+            // volvía a pedir lo mismo y se esperaban otros 8: once segundos para un «no», y navegar dos veces a la
+            // misma dirección. Si el destino es una web, el plazo es ya el de una página cargando.
+            try { AlPonerseDelante?.Invoke(); } catch { }
+            var compasDelante = new Compas(esWeb ? EsperaWebMs : EsperaDelanteMs);
             do
             {
                 aqui = _donde();
@@ -134,8 +156,9 @@ public sealed class PasoDelNucleo
             // Solo web: dentro del explorador NO se ataja (2026-08-16, medido — la misma hoja
             // significa sitios distintos según dónde estés), y en SAP las transacciones tienen su
             // propio camino.
-            if (destino.StartsWith("web://", StringComparison.OrdinalIgnoreCase) && _ponerDelante(destino))
+            if (esWeb && !yaPediDelante && _ponerDelante(destino))
             {
+                try { AlPonerseDelante?.Invoke(); } catch { }
                 // Hasta 8 s: aquí puede estar cargando una página entera, no solo cambiando el
                 // foco, y navegar bien para luego contestar «no hay camino» sería la mentira cara.
                 var compasWeb = new Compas(EsperaWebMs);
