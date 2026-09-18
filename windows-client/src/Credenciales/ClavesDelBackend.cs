@@ -128,6 +128,32 @@ public sealed class ClavesDelBackend
     }
 
     /// <summary>
+    /// Pide las claves SOLO si al entorno le falta alguna. Devuelve cuántas trajo (0 si no hizo falta).
+    /// </summary>
+    /// <remarks>
+    /// En la máquina de quien desarrolla las dos variables están puestas, y ahí este viaje no compra
+    /// nada: ni una llamada por arranque, ni dos claves de pago viviendo en memoria sin que nadie las
+    /// vaya a usar. En una copia distribuida no hay ninguna, y se piden.
+    /// </remarks>
+    public Task<int> TraerSiFaltaAlgunaAsync(CancellationToken ct = default)
+    {
+        bool falta = false;
+        foreach (var (variable, _) in Pedidas)
+        {
+            string? v = null;
+            try { v = _entorno(variable); } catch { }
+            if (string.IsNullOrWhiteSpace(v)) { falta = true; break; }
+        }
+        if (!falta)
+        {
+            lock (_candado) _yaSePidio = true;   // que un TraerAsync posterior tampoco vaya
+            Estado = "no hizo falta pedir nada: el entorno ya las tiene todas";
+            return Task.FromResult(0);
+        }
+        return TraerAsync(ct);
+    }
+
+    /// <summary>
     /// La clave que toca usar: la del entorno si está, y si no la que dio el backend. Cadena vacía si
     /// no hay ninguna — nunca null, para que quien la use no tenga que distinguir dos formas de nada.
     /// </summary>

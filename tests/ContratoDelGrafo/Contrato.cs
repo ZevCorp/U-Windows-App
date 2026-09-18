@@ -12597,6 +12597,20 @@ internal static class Contrato
             $"la clave del entorno manda sobre la del backend (salió «{Resolver(conEntorno, "OPENAI_API_KEY")}»)");
         Debe(peticiones == 0, $"y con ella puesta no se le pide NADA al backend: se pidió {peticiones} vez/veces");
 
+        // 1b. Y CON TODAS PUESTAS, EL ARRANQUE TAMPOCO PIDE. Un viaje por arranque para no usar nada, y
+        //     dos claves de pago en memoria sin que nadie las vaya a usar.
+        var siFalta = t.GetMethod("TraerSiFaltaAlgunaAsync");
+        if (siFalta == null) { Pendiente("ClavesDelBackend.TraerSiFaltaAlgunaAsync", "300", "041"); return; }
+        int TraerSiFalta(object c) => (int)((Task<int>)siFalta.Invoke(c, new object[] { System.Threading.CancellationToken.None })!).GetAwaiter().GetResult();
+        peticiones = 0;
+        var todasPuestas = Crear(_ => "la-del-entorno", () => { peticiones++; return Task.FromResult(cuerpo); }, new List<string>());
+        Debe(TraerSiFalta(todasPuestas) == 0 && peticiones == 0,
+            $"con TODAS en el entorno, el arranque no pide nada: se pidió {peticiones} vez/veces");
+        peticiones = 0;
+        var faltaUna = Crear(n => n == "OPENAI_API_KEY" ? "la-del-entorno" : null, () => { peticiones++; return Task.FromResult(cuerpo); }, new List<string>());
+        Debe(TraerSiFalta(faltaUna) > 0 && peticiones == 1,
+            $"y si falta UNA, se piden: {peticiones} vez/veces");
+
         // 2. SIN ENTORNO, SE PIDE UNA SOLA VEZ aunque se resuelvan varias claves y se llame varias veces.
         peticiones = 0;
         var log2 = new List<string>();

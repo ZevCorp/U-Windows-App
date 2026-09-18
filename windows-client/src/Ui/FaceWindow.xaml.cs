@@ -447,7 +447,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // abrir sesion, Jev al pulsar el boton— y para entonces ya estan.
                 Credenciales.ClavesDelBackend.Viva = Credenciales.ClavesDelBackend.DeGraph(
                     _graphConfig.BaseUrl, _graphConfig.ApiKey, m => LogBus.Log("claves", m));
-                _ = Credenciales.ClavesDelBackend.Viva.TraerAsync();
+                _ = Credenciales.ClavesDelBackend.Viva.TraerSiFaltaAlgunaAsync();
 
                 var cfgDecisor = Decision.ConfiguracionDelDecisor.DelSistema();
                 LogBus.Log("decisor", cfgDecisor.Porque);
