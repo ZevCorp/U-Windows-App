@@ -118,8 +118,14 @@ public sealed class ConfiguracionDelDecisor
     }
 
     /// <summary>Lee el entorno de verdad. El atajo para producción.</summary>
+    /// <remarks>
+    /// LA CLAVE DE TYPESAFE PUEDE VENIR DEL BACKEND (promesa 300): una copia distribuida no la lleva
+    /// dentro del .exe. <c>DeLaApp</c> mira primero el entorno —así la máquina de quien desarrolla se
+    /// comporta igual que siempre— y solo después lo que Graph haya dado. Para las demás variables
+    /// (<c>U_DECISOR</c> y sus ajustes) no hay nada en el backend y devuelve el entorno tal cual.
+    /// </remarks>
     public static ConfiguracionDelDecisor DelSistema() =>
-        Leer(n => Environment.GetEnvironmentVariable(n));
+        Leer(Credenciales.ClavesDelBackend.DeLaApp);
 
     private static string? Texto(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
 

@@ -145,6 +145,66 @@ public sealed class ClavesDelBackend
         lock (_candado) return _traidas.TryGetValue(variable, out var v) ? v : "";
     }
 
+    // ── La instancia de la app ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// La de la app viva. Null en el contrato y en cualquier prueba, y ahí <see cref="DeLaApp"/> se
+    /// queda con el entorno — que es exactamente como se comportaba todo antes de esta promesa.
+    /// </summary>
+    public static ClavesDelBackend? Viva { get; set; }
+
+    /// <summary>
+    /// La clave que toca usar en la app. Estático porque quien la pide —la voz— también lo es.
+    /// </summary>
+    public static string DeLaApp(string variable)
+    {
+        var viva = Viva;
+        if (viva != null) return viva.Resolver(variable);
+        return DelEntornoDeSiempre(variable) ?? "";
+    }
+
+    /// <summary>
+    /// El proceso primero y el registro de usuario después.
+    /// </summary>
+    /// <remarks>
+    /// `setx` escribe el registro pero NO el bloque de entorno de un proceso ya vivo, y un hijo hereda
+    /// el de su padre en el instante en que nace. Pasó de verdad al configurar la clave de la voz
+    /// (2026-08-24): el registro ya la tenía y Ü seguía diciendo que faltaba. El registro es el último
+    /// recurso, no el primero.
+    /// </remarks>
+    public static string? DelEntornoDeSiempre(string variable)
+    {
+        string? v = Environment.GetEnvironmentVariable(variable);
+        if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
+        try { v = Environment.GetEnvironmentVariable(variable, EnvironmentVariableTarget.User); } catch { v = null; }
+        return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+    }
+
+    /// <summary>
+    /// La de la app de verdad: entorno de siempre, y lo que falte se le pide a Graph con la credencial
+    /// que el instalador ya lleva embebida.
+    /// </summary>
+    public static ClavesDelBackend DeGraph(string baseUrl, string? apiKey, Action<string> log)
+    {
+        var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        return new ClavesDelBackend(
+            DelEntornoDeSiempre,
+            async ct =>
+            {
+                using var req = new System.Net.Http.HttpRequestMessage(
+                    System.Net.Http.HttpMethod.Get, $"{(baseUrl ?? "").TrimEnd('/')}/api/v1/agent/claves");
+                req.Headers.Add("X-API-Key", apiKey ?? "");
+                using var res = await http.SendAsync(req, ct).ConfigureAwait(false);
+                string cuerpo = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                if (!res.IsSuccessStatusCode)
+                    // NUNCA el cuerpo entero: en un 200 trae las claves, y un mensaje de error que las
+                    // arrastrara acabaría en el log igual que ellas.
+                    throw new InvalidOperationException($"HTTP {(int)res.StatusCode} pidiendo las claves a Graph");
+                return cuerpo;
+            },
+            log);
+    }
+
     /// <summary>Cuántas y cuáles faltan. Sin valores: el log se pega en los PR.</summary>
     private void Contar()
     {
