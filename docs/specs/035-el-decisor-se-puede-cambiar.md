@@ -78,6 +78,9 @@ Entre esas dos está el hueco donde hoy decide Luna. Ahí entra el decisor.
 | **281** | El modo simulado no toca la red: decide con una regla fija y sirve para las pruebas. |
 | **282** | La petición que se arma cumple el contrato HTTP de TypeSafe, campo por campo. |
 | **283** | `429` y `529` se reintentan con espera creciente; `401` y `422` **no se reintentan**, porque reintentar una clave mala es gastar cupo. |
+| **284** | `map_decidir` existe solo con el decisor encendido: apagado no está en el catálogo, las instrucciones no lo nombran, y llamarlo contesta que decide Luna sin leer la pantalla ni pulsar; encendido está en el catálogo con `objetivo`, y las instrucciones mandan pedirlo con el objetivo en vez de elegir la puerta. |
+| **285** | `map_decidir` ofrece al decisor **exactamente las puertas que `map_what_i_see` lista, en su orden**, y acciona la elegida **por el mismo camino que `map_take`**: la mano recibe ese paso, la cuenta dice qué se eligió y con qué confianza, y el acto cuenta lo que dejó delante. |
+| **286** | Cuando el decisor no actúa —duda, puerta fuera de lista, TypeSafe caído, o el propio decisor lanza— `map_decidir` no pulsa nada, dice por qué con las palabras del decisor, la mano no cuenta un intento, y el control vuelve con el inventario delante; sin `objetivo` dice qué falta. |
 
 ## Las fases
 
@@ -86,14 +89,32 @@ Entre esas dos está el hueco donde hoy decide Luna. Ahí entra el decisor.
 | 1 | La configuración y el interruptor: `ConfiguracionDelDecisor`, leída del entorno | 275, 276, 277 |
 | 2 | El cliente de TypeSafe y las preguntas tipadas, con su modo simulado | 281, 282, 283 |
 | 3 | La decisión de un paso: elegir puerta, validarla contra el inventario, compuerta de confianza, caída segura | 278, 279, 280 |
-| 4 | *(fuera de esta rama)* Cablearlo en `SurfaceMapTools` y medirlo sobre SAP real | — |
+| 4 | `map_decidir` en `SurfaceMapTools` y en el catálogo de la voz, detrás del mismo interruptor; el cableado en `FaceWindow` | 284, 285, 286 |
+
+### La fase 4: cómo entra sin romper nada
+
+**Una herramienta nueva, no un cambio a las de siempre.** `map_take`, `map_type` y el resto siguen
+idénticos. `map_decidir(objetivo)` es aditiva: arma el inventario **con la misma función** que
+`map_what_i_see` —una sola lista, sin dos catálogos del mismo terreno que se desincronicen en
+silencio—, le da las etiquetas al decisor, y si decide, acciona **llamando a `Take`**, el mismo
+cuerpo de `map_take`: misma coreografía, mismos vetos, mismo juez, misma `Mano`.
+
+**Con el decisor apagado la herramienta no existe.** No está en el catálogo, las instrucciones de
+Luna no la nombran, y si un cliente la pide igual, contesta «todavía no sé decidir» sin leer la
+pantalla. Así, `U_DECISOR` ausente deja el catálogo de Luna **byte a byte como hoy**.
+
+**Con el decisor encendido, Luna pide `map_decidir` con el objetivo** en vez de elegir la puerta
+con `map_take`. Eso es «Jev decide, Luna habla»: Luna sigue oyendo, hablando y sabiendo a dónde
+va; quién pulsa qué lo decide Jev sobre la lista real. Y cuando Jev no se atreve, la respuesta
+trae el porqué **y el inventario**, para que Luna elija ella como hasta hoy — el control vuelve,
+no se pierde.
 
 ## Lo que queda fuera, dicho a propósito
 
-- **La fase 4 no entra aquí.** Cablear el decisor dentro del bucle vivo de `SurfaceMapTools` toca el
-  camino que usa el hospital, y el nivel 4 de la compuerta pide dos pantallas reales con SAP
-  delante. Esta rama deja la pieza construida, probada y apagada; encenderla es su propia rama, con
-  su propia corrida a mano.
+- **La medida sobre SAP real con clave de verdad.** La fase 4 cablea y se prueba en seco y sobre
+  este PC con `U_DECISOR=simulado` (dos pantallas, no una); si Jev elige *mejor* que Luna sobre
+  SAP no se sabe hasta medirlo con clave y con el hospital delante. Cualquier número antes de eso
+  sería inventado.
 - **No se llama a la API de verdad en ninguna prueba.** El contrato no tiene red y no debe tenerla:
   el transporte se inyecta, y las pruebas le dan uno de mentira.
 

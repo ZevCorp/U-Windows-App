@@ -92,14 +92,34 @@ Se manda: el nombre de la pantalla, el objetivo, y **las etiquetas de las puerta
 No se manda: **el contenido de ningún campo**. El terreno es SAP de un hospital — las etiquetas son
 cromo de la aplicación («Presión Arterial»), lo que un campo contiene es un dato de un paciente.
 
-## Lo que todavía NO está encendido
+## Cómo entra en el bucle vivo: `map_decidir`
 
-El decisor está construido, probado y **desconectado del bucle vivo**: hoy nadie lo llama desde
-`SurfaceMapTools`. Cablearlo es la fase 4 de la spec y va en su propia rama, porque toca el camino
-que usa el hospital y el nivel 4 de la compuerta pide dos pantallas reales con SAP delante.
+Con el decisor encendido aparece **una herramienta nueva** en el catálogo de Luna, `map_decidir`,
+que pide un `objetivo` («crear el triage administrativo del paciente») en vez de una puerta:
 
-Y lo que **no se sabe todavía**: si Jev elige mejor que Luna sobre SAP. Eso no se sabe hasta medirlo
-con clave real sobre pantallas reales. Cualquier número antes de eso sería inventado.
+1. Arma el inventario de la pantalla **con la misma función** que `map_what_i_see` — una sola
+   lista, no dos catálogos del mismo terreno que se desincronicen en silencio.
+2. Le da al decisor la pantalla, el objetivo y las etiquetas de las puertas.
+3. Si el decisor actúa, **acciona llamando al cuerpo de `map_take`**: misma coreografía (decir,
+   colgar el recuerdo, señalar), mismos vetos, mismo juez de llegada, misma `Mano` para el tope de
+   intentos. La cuenta empieza por qué se eligió y con qué confianza.
+4. Si no actúa, no pulsa nada, dice por qué con las palabras del decisor, **y devuelve el
+   inventario**: el control vuelve a Luna con lo que hay delante, y ella elige como hasta hoy.
+
+Las instrucciones de Luna cambian en un párrafo, solo cuando está encendido: pedir `map_decidir`
+con el objetivo en vez de elegir la puerta con `map_take`. Eso es «Jev decide, Luna habla».
+
+**Con el decisor apagado, `map_decidir` no existe**: no está en el catálogo, las instrucciones no
+lo nombran, y si un cliente MCP lo pide igual contesta «todavía no sé decidir» sin leer la
+pantalla. El catálogo de Luna queda byte a byte como hoy.
+
+`map_take`, `map_type` y el resto **no cambian**.
+
+## Lo que todavía no se sabe
+
+Si Jev elige *mejor* que Luna sobre SAP. La fase 4 está cableada y probada en seco y con
+`U_DECISOR=simulado` sobre este PC; medirlo de verdad exige clave real y el hospital delante.
+Cualquier número antes de eso sería inventado.
 
 ## El contrato HTTP, para quien lo tenga que tocar
 

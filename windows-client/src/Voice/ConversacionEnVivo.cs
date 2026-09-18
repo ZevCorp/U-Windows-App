@@ -421,7 +421,7 @@ public sealed class ConversacionEnVivo : IDisposable
             _ws.Options.CollectHttpResponseDetails = true;
             foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
             await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
-            foreach (string msg in _protocolo.Apertura(Instrucciones, Herramientas(), ""))
+            foreach (string msg in _protocolo.Apertura(InstruccionesNormales, Herramientas(), ""))
                 await EnviarAsync(msg, _cts.Token);
 
             // Sesión nueva, cuentas nuevas: ni llamadas retiradas de antes, ni el pase de la
@@ -916,7 +916,46 @@ public sealed class ConversacionEnVivo : IDisposable
     // mapa despacha) para que una pregunta se responda en un solo sitio — dos catálogos del mismo
     // terreno se desincronizan en silencio. La unificación completa (que la voz y el MCP compartan
     // también map_batch) es la F4 del plan de batch.
-    internal static IReadOnlyList<Utensilio> Herramientas() => new[]
+    internal static IReadOnlyList<Utensilio> Herramientas()
+    {
+        var todas = Catalogo();
+        // CON EL DECISOR APAGADO EL CATÁLOGO QUEDA BYTE A BYTE COMO HOY (promesa 284): no se le ofrece a
+        // Luna una herramienta que contestaría «todavía no sé decidir».
+        return ConDecisor ? todas.Append(MapDecidir).ToList() : todas;
+    }
+
+    /// <summary>
+    /// QUIÉN ELIGE LA PUERTA (spec 035). Falso = Luna, como siempre. Lo pone la ventana al arrancar
+    /// según <see cref="Decision.ConfiguracionDelDecisor"/>; el contrato lo cambia para juzgar los dos catálogos.
+    /// </summary>
+    internal static bool ConDecisor { get; set; }
+
+    /// <summary>La herramienta que solo existe con el decisor encendido. Sustituye a ELEGIR con map_take, no a map_take.</summary>
+    private static readonly Utensilio MapDecidir = Fn("map_decidir",
+        "ELIGE Y PULSA LA PUERTA POR TI, con el decisor. Úsala EN VEZ DE elegir tú la puerta con "
+        + "map_take cuando tengas que pulsar algo para avanzar: le das el objetivo, él mira las puertas "
+        + "que hay AHORA, elige una, la pulsa y te cuenta qué pasó, igual que map_take («ahora estás "
+        + "en…» o «la pantalla no cambió»). Si contesta «no se acciona», no se atrevió: te dice por qué "
+        + "y te deja el inventario delante — entonces elige tú con map_take.",
+        ("objetivo", "Qué quieres conseguir en esta pantalla, con tus palabras («crear el triage "
+                   + "administrativo del paciente», «abrir la carpeta Descargas»)."),
+        ("decir", "Una frase corta que Ü dice con su voz JUSTO ANTES de pulsar."),
+        ("recuerdo", "Qué es y para qué sirve lo que se va a pulsar, con tus palabras, si lo sabes."));
+
+    /// <summary>El párrafo que se añade a las instrucciones solo con el decisor encendido.</summary>
+    private const string ParrafoDelDecisor = """
+
+
+        QUIÉN ELIGE LA PUERTA, HOY: un decisor aparte (Jev, de TypeSafe). Cuando tengas que PULSAR algo
+        para avanzar en una tarea, NO elijas tú la puerta con map_take: pide map_decidir con el `objetivo`
+        —qué quieres conseguir en esta pantalla, con tus palabras—. Él mira las puertas que hay AHORA,
+        elige una y la pulsa por ti; te cuenta cuál eligió, con qué confianza, y qué pasó. Si contesta
+        «no se acciona», no se atrevió: te dice por qué y te deja el inventario delante — entonces sí
+        eliges tú con map_take, como siempre. map_type, map_go_to y map_open_app siguen siendo tuyos. Tú
+        sigues hablando con la persona y sabiendo a dónde vas; lo único que cambia es quién decide qué botón.
+        """;
+
+    private static Utensilio[] Catalogo() => new[]
     {
         Fn("map_where_am_i", "Dice en qué pantalla estás ahora mismo y qué salidas conoce el mapa desde ahí. "
             + "Si hay un diálogo delante, lo describe en vez de fingir que es un lugar."),
@@ -1303,7 +1342,9 @@ public sealed class ConversacionEnVivo : IDisposable
     }
 
     /// <summary>Las instrucciones de siempre, para poder VOLVER a ellas tras un modo especial.</summary>
-    internal static string InstruccionesNormales => Instrucciones;
+    // Con el decisor encendido, un párrafo más (promesa 284). La constante `Instrucciones` no se toca:
+    // la 263 la lee tal cual, y el párrafo solo tiene sentido cuando map_decidir existe.
+    internal static string InstruccionesNormales => ConDecisor ? Instrucciones + ParrafoDelDecisor : Instrucciones;
 
     /// <summary>
     /// Cambia quién es Ü a mitad de sesión: otras instrucciones y otro catálogo. Promesa 138.
@@ -1617,7 +1658,7 @@ public sealed class ConversacionEnVivo : IDisposable
             _ws.Options.CollectHttpResponseDetails = true;   // sin esto un 401 llega como estado 0 (ver ArrancarAsync)
             foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
             await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
-            foreach (string msg in _protocolo.Apertura(Instrucciones, Herramientas(), _pase))
+            foreach (string msg in _protocolo.Apertura(InstruccionesNormales, Herramientas(), _pase))
                 await EnviarAsync(msg, _cts.Token);
 
             if (_protocolo.SabeVolver && _pase.Length > 0)

@@ -773,6 +773,9 @@ internal static class Contrato
         Prueba("281. el modo simulado no toca la red: decide con una regla fija y repetible, para que las pruebas no dependan de que TypeSafe conteste", ElModoSimuladoNoTocaLaRed);
         Prueba("282. la petición cumple el contrato HTTP de TypeSafe campo por campo: model, state, y questions con type «choice», instructions y criteria con TODAS las opciones ofrecidas", LaPeticionCumpleElContratoDeTypeSafe);
         Prueba("283. 429 y 529 se reintentan con espera creciente; 401 y 422 no se reintentan, porque reintentar una clave mala o un cuerpo inválido solo gasta un cupo que TypeSafe dice que se mueve sin aviso", LosReintentosDistinguenLoQueMejoraDeLoQueNo);
+        Prueba("284. map_decidir existe solo con el decisor encendido: apagado no está en el catálogo, las instrucciones no lo nombran, y llamarlo contesta que decide Luna sin leer la pantalla ni pulsar; encendido está en el catálogo con `objetivo`, y las instrucciones mandan pedirlo con el objetivo en vez de elegir la puerta", MapDecidirSoloExisteConElDecisor);
+        Prueba("285. map_decidir ofrece al decisor exactamente las puertas que map_what_i_see lista, en su orden, y acciona la elegida por el mismo camino que map_take: la mano recibe ese paso, la cuenta dice qué se eligió y con qué confianza, y el acto cuenta lo que dejó delante", MapDecidirEligeEntreLoQueSeVeYPulsaComoMapTake);
+        Prueba("286. cuando el decisor no actúa —duda, puerta fuera de lista, TypeSafe caído, o el propio decisor lanza— map_decidir no pulsa nada, dice por qué con las palabras del decisor, la mano no cuenta un intento, y el control vuelve con el inventario delante; sin `objetivo` dice qué falta", SiElDecisorNoActuaNadaSePulsa);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -11589,6 +11592,173 @@ internal static class Contrato
         int e1 = (int)espera.Invoke(null, new object[] { 1 })!;
         int e2 = (int)espera.Invoke(null, new object[] { 2 })!;
         Debe(e0 > 0 && e1 > e0 && e2 > e1, $"la espera crece entre intentos; salió {e0} · {e1} · {e2}");
+    }
+
+    // ── Spec 035, fase 4: map_decidir ────────────────────────────────────────────────────────────
+
+    /// <summary>Un mapa sin pantalla: ubicación fija, puertas inyectadas, mano falsa que anota qué paso recibió.</summary>
+    private static (SurfaceMapTools mapa, Func<RecorrerSegunElNucleo.Paso?> visto, Func<int> leidas)? MapaParaDecidir(
+        PropertyInfo pPuertas, params (string Etiqueta, string Tipo)[] puertas)
+    {
+        var mapa = new SurfaceMapTools(() => new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation("uia://sap/NWP1", "sap", ""));
+        int leidas = 0;
+        pPuertas.SetValue(mapa, (Func<string, IReadOnlyList<(string, string)>>)(_ => { leidas++; return puertas; }));
+        RecorrerSegunElNucleo.Paso? visto = null;
+        mapa.RecorrerPorElNucleo = pasos =>
+        {
+            visto = pasos[0];
+            return new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true,
+                $"hice los 1 paso(s): pulsé «{pasos[0].Exit}» y ahora estás en «uia://sap/NV2000».", true);
+        };
+        return (mapa, () => visto, () => leidas);
+    }
+
+    /// <summary>Fabrica una decisión con las factorías del decisor, por reflexión: son internas y existen desde la fase 3.</summary>
+    private static U.WindowsClient.Decision.DecisionDeUnPaso Decision(string factoria, params object[] args)
+    {
+        var t = typeof(U.WindowsClient.Decision.DecisionDeUnPaso);
+        var m = t.GetMethod(factoria, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)!;
+        return (U.WindowsClient.Decision.DecisionDeUnPaso)m.Invoke(null, args)!;
+    }
+
+    /// <summary>La forma del decisor de SurfaceMapTools: pantalla, objetivo, puertas → decisión. Es parte de la promesa.</summary>
+    private static Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso> Decide(
+        Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso> d) => d;
+
+    private static void MapDecidirSoloExisteConElDecisor()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var pCon = tc?.GetProperty("ConDecisor", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        var pInstr = tc?.GetProperty("InstruccionesNormales", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        if (pDecisor == null || pPuertas == null || pCon == null || pInstr == null)
+        {
+            Pendiente("SurfaceMapTools.Decisor/Puertas + ConversacionEnVivo.ConDecisor", "284", "035");
+            return;
+        }
+
+        bool antes = (bool)pCon.GetValue(null)!;
+        try
+        {
+            // APAGADO: el catálogo de Luna queda byte a byte como hoy. Eso es lo que hace que U_DECISOR
+            // ausente no cambie NADA en la máquina del hospital.
+            pCon.SetValue(null, false);
+            Debe(ArgumentosDe("map_decidir") == null, "apagado, map_decidir no está en el catálogo");
+            Debe(!((string)pInstr.GetValue(null)!).Contains("map_decidir", StringComparison.Ordinal),
+                "ni las instrucciones lo nombran: no se le pide a Luna una herramienta que no tiene");
+
+            var m = MapaParaDecidir(pPuertas, ("Nuevo", "Button"))!.Value;
+            string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "crear" });
+            Debe(r.StartsWith("todavía no sé decidir", StringComparison.Ordinal) && r.Contains("Luna", StringComparison.Ordinal),
+                $"y si alguien lo pide igual, contesta que decide Luna (dijo: «{r}»)");
+            Debe(m.leidas() == 0 && m.visto() == null, "sin leer la pantalla ni pulsar nada");
+            Debe(m.mapa.UltimaMano == null, "y no cuenta como mano: no hubo intento");
+            Debe(SurfaceMapTools.IsMapTool("map_decidir"), "aunque el despacho SÍ la conoce: es el catálogo el que la esconde, no el mapa");
+
+            // ENCENDIDO: está, pide el objetivo, y las instrucciones cambian quién elige.
+            pCon.SetValue(null, true);
+            var args = ArgumentosDe("map_decidir");
+            Debe(args != null && args.Contains("objetivo"), "encendido, map_decidir está en el catálogo y pide `objetivo`");
+            string desc = DescripcionDe("map_decidir") ?? "";
+            Debe(desc.Contains("map_take", StringComparison.Ordinal) && desc.Contains("objetivo", StringComparison.OrdinalIgnoreCase),
+                $"y su descripción dice que sustituye a elegir la puerta con map_take («{(desc.Length > 90 ? desc[..90] : desc)}»)");
+            string instr = (string)pInstr.GetValue(null)!;
+            Debe(instr.Contains("map_decidir", StringComparison.Ordinal),
+                "y las instrucciones mandan pedirlo con el objetivo en vez de elegir la puerta");
+            Debe(!instr.Contains("más de dos veces", StringComparison.OrdinalIgnoreCase),
+                "sin tocar la regla de intentos de la 206");
+        }
+        finally { pCon.SetValue(null, antes); }
+    }
+
+    private static void MapDecidirEligeEntreLoQueSeVeYPulsaComoMapTake()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var tDecision = Capacidad("U.WindowsClient.Decision.DecisionDeUnPaso");
+        if (pDecisor == null || pPuertas == null || tDecision == null)
+        {
+            Pendiente("SurfaceMapTools.Decisor/Puertas", "285", "035");
+            return;
+        }
+
+        var m = MapaParaDecidir(pPuertas, ("Buscar", "Edit"), ("Crear Triage Administrativo", "Button"), ("Salir", "Button"))!.Value;
+        string? pantalla = null;
+        IReadOnlyList<string>? ofrecidas = null;
+        // Se asigna con el tipo EXACTO que pide la propiedad: si la firma cambia, esto deja de compilar, y eso es parte de la promesa.
+        pDecisor.SetValue(m.mapa, Decide((p, o, puertas) =>
+        {
+            pantalla = p; ofrecidas = puertas;
+            return Decision("Si", "Crear Triage Administrativo", 0.93, "Jev eligió «Crear Triage Administrativo» con confianza 0.93.");
+        }));
+
+        string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "crear el triage" });
+        // LA MANO SE LEE AQUÍ, antes de cualquier otra llamada: cada Call dice SU resultado y resetea el
+        // anterior (spec 017). Leerla después de map_what_i_see daba null — y no era el código.
+        object? manoDeDecidir = m.mapa.UltimaMano;
+
+        // LAS MISMAS PUERTAS QUE map_what_i_see, y en su orden. Se comprueba contra la propia herramienta,
+        // no contra lo que se inyectó: si alguien pone un segundo camino para listar puertas, esto lo caza.
+        string veo = m.mapa.Call("map_what_i_see", new Dictionary<string, string>());
+        Debe(ofrecidas != null && ofrecidas.SequenceEqual(new[] { "Buscar", "Crear Triage Administrativo", "Salir" }),
+            $"el decisor recibe las puertas que hay ahora, en orden de lectura; recibió [{string.Join(" · ", ofrecidas ?? Array.Empty<string>())}]");
+        Debe(veo.IndexOf("«Buscar»", StringComparison.Ordinal) < veo.IndexOf("«Crear Triage Administrativo»", StringComparison.Ordinal)
+          && veo.IndexOf("«Crear Triage Administrativo»", StringComparison.Ordinal) < veo.IndexOf("«Salir»", StringComparison.Ordinal),
+            "y son las que map_what_i_see lista, en ese mismo orden");
+        Debe(pantalla == "uia://sap/NWP1", $"y sabe en qué pantalla está («{pantalla}»)");
+
+        // POR EL MISMO CAMINO QUE map_take: la mano recibe el paso, no otra cosa.
+        var paso = m.visto();
+        Debe(paso != null && paso.Exit == "Crear Triage Administrativo",
+            $"la mano recibe exactamente ese paso (recibió «{paso?.Exit}»)");
+        Debe(r.Contains("Crear Triage Administrativo", StringComparison.Ordinal) && r.Contains("0.93", StringComparison.Ordinal)
+          && r.Contains("ahora estás en «uia://sap/NV2000»", StringComparison.Ordinal),
+            $"la cuenta dice qué se eligió, con qué confianza, y qué pasó al pulsar (dijo: «{(r.Length > 120 ? r[..120] : r)}»)");
+        Debe(r.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), "y el acto cuenta lo que dejó delante, como cualquier acto (263)");
+        Debe(manoDeDecidir != null && (bool)PropDe(manoDeDecidir, "Logro")! && (bool)PropDe(manoDeDecidir, "Intento")!,
+            "y la mano lo cuenta como intento logrado, igual que map_take");
+    }
+
+    private static void SiElDecisorNoActuaNadaSePulsa()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var tDecision = Capacidad("U.WindowsClient.Decision.DecisionDeUnPaso");
+        if (pDecisor == null || pPuertas == null || tDecision == null)
+        {
+            Pendiente("SurfaceMapTools.Decisor/Puertas", "286", "035");
+            return;
+        }
+
+        // DUDA, O PUERTA FUERA DE LISTA: es la palabra del decisor la que llega, no un resumen.
+        var m = MapaParaDecidir(pPuertas, ("Buscar", "Edit"), ("Crear Triage Administrativo", "Button"))!.Value;
+        pDecisor.SetValue(m.mapa, Decide((_, _, _) => Decision("No", "Jev contestó «Grabar», que no está entre las 2 puertas de esta pantalla: no se acciona. Decide Luna.", 0.99)));
+        string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "crear el triage" });
+        Debe(m.visto() == null, "no se pulsa nada");
+        Debe(r.StartsWith("no se acciona", StringComparison.Ordinal) && r.Contains("Grabar", StringComparison.Ordinal),
+            $"y se dice por qué con las palabras del decisor (dijo: «{(r.Length > 100 ? r[..100] : r)}»)");
+        Debe(r.Contains("EN PANTALLA AHORA", StringComparison.Ordinal) && r.Contains("«Buscar»", StringComparison.Ordinal),
+            "y el control vuelve con el inventario delante, para que Luna elija ella");
+        Debe(m.mapa.UltimaMano is { } mano && !(bool)PropDe(mano, "Intento")!,
+            "y la mano no lo cuenta como intento: no se pulsó nada, y contarlo frenaría el «pruebo otro» del tope de la 204");
+
+        // EL PROPIO DECISOR LANZA: tampoco tumba el paso. ElDecisor promete no lanzar (280), pero esto es
+        // la costura, y lo que promete otro se comprueba.
+        var m2 = MapaParaDecidir(pPuertas, ("Buscar", "Edit"))!.Value;
+        pDecisor.SetValue(m2.mapa, Decide((_, _, _) => throw new InvalidOperationException("se rompió el decisor")));
+        string r2;
+        try { r2 = m2.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" }); }
+        catch (Exception e) { Debe(false, $"si el decisor lanza, la excepción sale del despacho: {e.GetType().Name}"); return; }
+        Debe(m2.visto() == null && r2.StartsWith("no se acciona", StringComparison.Ordinal) && r2.Contains("InvalidOperationException", StringComparison.Ordinal),
+            $"si el decisor lanza no se pulsa nada y se dice qué lanzó (dijo: «{(r2.Length > 100 ? r2[..100] : r2)}»)");
+
+        // SIN OBJETIVO no hay decisión posible, y se dice qué falta — sin leer la pantalla.
+        var m3 = MapaParaDecidir(pPuertas, ("Buscar", "Edit"))!.Value;
+        pDecisor.SetValue(m3.mapa, Decide((_, _, _) => Decision("Si", "Buscar", 1.0, "x")));
+        string r3 = m3.mapa.Call("map_decidir", new Dictionary<string, string>());
+        Debe(r3.StartsWith("falta `objetivo`", StringComparison.Ordinal) && m3.leidas() == 0 && m3.visto() == null,
+            $"sin `objetivo` dice qué falta, y ni mira ni pulsa (dijo: «{r3}»)");
     }
 
     private static void Debe(bool condicion, string promesa)

@@ -155,11 +155,19 @@ public sealed class SurfaceMapTools
         return salida;
     }
 
-    private string LoQueVeo()
+    /// <summary>
+    /// LAS PUERTAS DE AHORA, en orden de lectura: lo que ve UIA, las puertas vivas del terreno y los
+    /// campos del dynpro, fundidos sin duplicar. UNA SOLA LISTA para <c>map_what_i_see</c> y para
+    /// <c>map_decidir</c> (promesa 285): dos caminos para enumerar el mismo terreno se desincronizan
+    /// en silencio, y el decisor acabaría eligiendo entre puertas que la voz no lista, o al revés.
+    /// </summary>
+    /// <returns>Dónde, las puertas que se cuentan (con su tope) y cuántas hay en total.</returns>
+    private (string Aqui, IReadOnlyList<(string Etiqueta, string Tipo)> Puertas, int Total) PuertasDeAhora()
     {
         var loc = _where();
         string aqui = loc?.Id ?? "";
-        if (aqui.Length == 0) return "no sé en qué pantalla estoy";
+        if (aqui.Length == 0) return ("", Array.Empty<(string, string)>(), 0);
+        if (Puertas != null) { var inyectadas = Puertas(aqui); return (aqui, inyectadas, inyectadas.Count); }
 
         _lector.Read();
         var vivos = _lector.Elements
@@ -177,24 +185,91 @@ public sealed class SurfaceMapTools
         var terreno = PuertasVivas?.Invoke(aqui) ?? Array.Empty<(string, string, string)>();
         var candidatos = ConLaEtiquetaQueSeLee(terreno, CamposDeSapComoPuertas());
         var delTerreno = FundirPuertas(vivos.Select(v => v.Label), candidatos);
-        // EL «NO VEO NADA» VA DESPUÉS DE MIRAR EN LOS TRES SITIOS (2026-09-08): con UIA en blanco
-        // —SAP recién delante, el lector aún sin leer— se contestaba «no veo ningún elemento» sin
-        // consultar el terreno ni el dynpro, que sí tenían 39 campos que contar.
-        if (vivos.Count == 0 && delTerreno.Count == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo";
-
-
-        int total = vivos.Count + delTerreno.Count;
-        var sb = new System.Text.StringBuilder(
-            $"EN PANTALLA AHORA, en «{aqui}» ({total} elemento(s)):" + "\n");
         // EL TOPE ERA 40 PUERTAS DE SAP y el triage tiene 39 campos más 21 botones (2026-09-08): los
         // signos vitales quedaban fuera de la lista y el piloto no podía nombrarlos. Un formulario
         // entero cabe en 160; lo que pase de ahí se dice.
-        foreach (var el in vivos.Take(60))
-            sb.AppendLine($"  «{el.Label}» ({el.ControlType})");
-        foreach (var p in delTerreno.Take(160))
-            sb.AppendLine($"  «{p.Etiqueta}» ({p.Tipo})");
+        var lista = vivos.Take(60).Select(v => (Etiqueta: v.Label, Tipo: v.ControlType))
+            .Concat(delTerreno.Take(160).Select(p => (Etiqueta: p.Etiqueta, Tipo: p.Tipo)))
+            .ToList();
+        return (aqui, lista, vivos.Count + delTerreno.Count);
+    }
+
+    private string LoQueVeo()
+    {
+        var (aqui, puertas, total) = PuertasDeAhora();
+        if (aqui.Length == 0) return "no sé en qué pantalla estoy";
+        // EL «NO VEO NADA» VA DESPUÉS DE MIRAR EN LOS TRES SITIOS (2026-09-08): con UIA en blanco
+        // —SAP recién delante, el lector aún sin leer— se contestaba «no veo ningún elemento» sin
+        // consultar el terreno ni el dynpro, que sí tenían 39 campos que contar.
+        if (total == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo";
+
+        var sb = new System.Text.StringBuilder(
+            $"EN PANTALLA AHORA, en «{aqui}» ({total} elemento(s)):" + "\n");
+        foreach (var (etiqueta, tipo) in puertas)
+            sb.AppendLine($"  «{etiqueta}» ({tipo})");
         if (total > 220) sb.AppendLine($"  …y {total - 220} más");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// EL DECISOR ELIGE LA PUERTA Y LA PULSA POR EL MISMO CAMINO QUE map_take. Promesas 284-286 (spec 035).
+    /// </summary>
+    /// <remarks>
+    /// ES UNA HERRAMIENTA APARTE Y NO UN CAMBIO A map_take, a propósito: con el decisor apagado
+    /// —<see cref="Decisor"/> nulo— esto contesta «todavía no sé decidir» sin leer la pantalla, y el
+    /// catálogo de la voz ni la ofrece. Así el camino que usa el hospital hoy queda byte a byte igual.
+    ///
+    /// LAS PUERTAS SALEN DE <see cref="PuertasDeAhora"/>, la misma función que map_what_i_see, y la
+    /// elegida entra por <see cref="Take"/>: misma coreografía, mismos vetos, mismo juez de llegada,
+    /// misma <see cref="Mano"/> para el tope de intentos. Esta pieza no pulsa nada por su cuenta.
+    ///
+    /// CUANDO EL DECISOR NO ACTÚA, EL CONTROL VUELVE CON EL INVENTARIO. La respuesta empieza por
+    /// «no se acciona» y el despacho le pega lo que hay delante (263), para que Luna elija ella como
+    /// hasta hoy. Y la mano NO cuenta un intento: no se pulsó nada, y contarlo frenaría el «pruebo
+    /// otro» del tope de la 204 —el mismo argumento que la lista de homónimos (207).
+    /// </remarks>
+    private string Decidir(string objetivo, string decir, string recuerdo)
+    {
+        if (objetivo.Length == 0) return "falta `objetivo`: qué se quiere conseguir en esta pantalla, para que el decisor elija la puerta";
+        if (Decisor == null)
+            return "todavía no sé decidir: el decisor está apagado (U_DECISOR ausente o en «luna»), así que decide Luna. "
+                 + "Elige tú la puerta con map_take.";
+
+        var (aqui, puertas, total) = PuertasDeAhora();
+        if (aqui.Length == 0) return "no sé en qué pantalla estoy, así que no hay nada entre lo que decidir.";
+        if (total == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo: nada entre lo que decidir.";
+        var etiquetas = puertas.Select(p => p.Etiqueta).ToList();
+
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        Decision.DecisionDeUnPaso d;
+        try { d = Decisor(aqui, objetivo, etiquetas); }
+        catch (Exception e)
+        {
+            // LA CADENA ENTERA (patrón nº3). ElDecisor promete no lanzar (280); esto es la costura, y lo
+            // que promete otro se comprueba: un decisor inyectado distinto sí podría.
+            string causa = "";
+            for (var x = e; x != null; x = x.InnerException)
+                causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
+            LogBus.Log("decisor", $"✘ en «{aqui}» el decisor lanzó: {causa}");
+            _ultimaMano = new Mano(false, false, Intento: false);
+            return $"no se acciona: el decisor falló ({causa}). Decide Luna.";
+        }
+        reloj.Stop();
+
+        // SE REGISTRA CADA DECISIÓN CON SU CONFIANZA, también las descartadas: el umbral se ajusta con
+        // datos del terreno, y los datos son estas líneas.
+        LogBus.Log("decisor", $"«{aqui}» · {etiquetas.Count} puerta(s) · {reloj.ElapsedMilliseconds} ms → "
+            + (d.Actuar ? $"ACCIONA «{d.Puerta}»" : "no acciona")
+            + $" conf={d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} · {d.Porque}");
+
+        if (!d.Actuar)
+        {
+            _ultimaMano = new Mano(false, false, Intento: false);
+            return $"no se acciona: {d.Porque}";
+        }
+
+        string cuenta = Take(d.Puerta, "", decir, recuerdo);
+        return $"elegida «{d.Puerta}» con confianza {d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}: {cuenta}";
     }
 
     /// <summary>
@@ -1560,6 +1635,20 @@ public sealed class SurfaceMapTools
     public Func<string>? InventarioParaLosActos { get; set; }
 
     /// <summary>
+    /// DE DÓNDE SALEN LAS PUERTAS DE AHORA (promesa 285). Nulo en la app: UIA + terreno + dynpro, como
+    /// siempre. El contrato lo cambia por una lista fija para juzgar que map_decidir y map_what_i_see
+    /// ven lo mismo, sin tocar la pantalla.
+    /// </summary>
+    public Func<string, IReadOnlyList<(string Etiqueta, string Tipo)>>? Puertas { get; set; }
+
+    /// <summary>
+    /// QUIÉN ELIGE LA PUERTA cuando el cerebro pide <c>map_decidir</c> (spec 035): pantalla, objetivo y
+    /// las etiquetas de las puertas de ahora → una decisión. NULO = decide Luna, y la herramienta no
+    /// existe para ella. Lo enchufa la ventana según <see cref="Decision.ConfiguracionDelDecisor"/>.
+    /// </summary>
+    public Func<string, string, IReadOnlyList<string>, Decision.DecisionDeUnPaso>? Decisor { get; set; }
+
+    /// <summary>
     /// SITUARSE, contestado por el núcleo. Lo enchufa la ventana cuando el mapa vivo existe; si
     /// vale null se contesta como siempre. Ver <see cref="Navigation.AquiSegunElNucleo"/>.
     /// </summary>
@@ -1822,7 +1911,7 @@ public sealed class SurfaceMapTools
     }
 
     public static bool IsMapTool(string tool) => tool is
-        "map_where_am_i" or "map_go_to" or "map_take" or "map_type" or "map_unblock"
+        "map_where_am_i" or "map_go_to" or "map_take" or "map_type" or "map_unblock" or "map_decidir"
         or "map_open_app" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude" or "map_shot" or "map_scroll"
         or "map_esto_es" or "map_recuerdos" or "map_batch" or "map_ahead"
@@ -1859,6 +1948,7 @@ public sealed class SurfaceMapTools
             "map_where_am_i" => WhereAmI(),
             "map_go_to" => GoTo(A("surface")),
             "map_take" => Take(A("exit"), A("which"), A("decir"), A("recuerdo")),
+            "map_decidir" => Decidir(A("objetivo"), A("decir"), A("recuerdo")),
             "map_type" => Type(A("text"), A("target"), A("decir"), A("recuerdo")),
             "map_unblock" => Desbloquear(A("at"), A("choose")),
             "map_open_app" => OpenApp(A("app"), A("instancia")),

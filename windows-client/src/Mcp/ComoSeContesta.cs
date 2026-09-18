@@ -19,7 +19,9 @@ namespace U.WindowsClient.Mcp;
 public static class ComoSeContesta
 {
     /// <summary>Lo que hace avanzar una tarea. Lo demás son saberes o aprender.</summary>
-    public static readonly string[] Actos = { "map_take", "map_type", "map_go_to", "map_open_app", "map_scroll", "map_unblock" };
+    // map_decidir es un acto aunque el decisor no se atreva: entonces el inventario es justo lo que Luna
+    // necesita para elegir ella (promesa 286).
+    public static readonly string[] Actos = { "map_take", "map_type", "map_go_to", "map_open_app", "map_scroll", "map_unblock", "map_decidir" };
 
     /// <summary>La primera línea con la que empieza el inventario de map_what_i_see. Es la marca de «ya lo lleva».</summary>
     public const string MarcaDelInventario = "EN PANTALLA AHORA";
