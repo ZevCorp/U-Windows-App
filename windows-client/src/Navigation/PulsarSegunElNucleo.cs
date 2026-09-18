@@ -88,6 +88,9 @@ public sealed class PulsarSegunElNucleo
     /// <summary>Para que el reintento de la 248 no se llame a sí mismo.</summary>
     private bool _yaRepeti;
 
+    /// <summary>Cuántas veces se preguntó «dónde» en la última espera: para el reloj del log.</summary>
+    private int _sondeos;
+
     /// <summary>
     /// ¿ESTA PUERTA, DESDE ALGÚN OTRO SITIO, LLEVA JUSTO A DONDE ESTAMOS? Promesa 296 (spec 038).
     /// </summary>
@@ -133,11 +136,18 @@ public sealed class PulsarSegunElNucleo
         // la pantalla real (2026-08-26: tres clics físicos por visita, cada visita).
         string gesto = _grafo.GestoDe(desde, selector);
 
+        // EL RELOJ DE «PULSAR», POR PARTES (spec 038): la mano, la espera del cambio y la consulta al terreno. El
+        // reloj por fase del tramo dice cuánto cuesta «pulsar»; esto dice en qué se va.
+        var relojMano = System.Diagnostics.Stopwatch.StartNew();
         string? motivo = _mano(selector, etiqueta, gesto);
+        relojMano.Stop();
         if (motivo != null)
             return new(false, false, desde, desde, false,
                 motivo.Length > 0 ? $"no pude pulsar «{etiqueta}»: {motivo}" : $"no pude pulsar «{etiqueta}».");
+        var relojEspera = System.Diagnostics.Stopwatch.StartNew();
         string hasta = EsperarACambiar(desde);
+        relojEspera.Stop();
+        Diagnostics.LogBus.Log("mano", $"⏱ pulsar «{etiqueta}»: la mano {relojMano.ElapsedMilliseconds} ms · esperar el cambio {relojEspera.ElapsedMilliseconds} ms ({_sondeos} sondeo(s) de «dónde») · {(hasta.Length > 0 && hasta != desde ? "cambió" : "no cambió")}");
         // LA VENTANA DE TRABAJO SE CERRÓ (promesa 233): «dónde» volvió al foco de la persona, y eso
         // no es haber ido allí. Se cuenta tal cual y no se aprende ninguna arista.
         string aviso = AvisoDeLaVentana?.Invoke() ?? "";
@@ -149,7 +159,12 @@ public sealed class PulsarSegunElNucleo
         // UNA PUERTA QUE LLEVA AQUÍ NO SE ENSAYA NI SE REPITE (promesa 296). Va DESPUÉS de la primera espera a
         // propósito: si la pantalla SÍ cambió —un «Siguiente» que vive en todas las páginas— manda lo que pasó,
         // no lo que se sabía, y se cuenta como cualquier navegación.
-        if ((hasta.Length == 0 || hasta == desde) && LlevaAqui(_grafo, selector, desde))
+        var relojTerreno = System.Diagnostics.Stopwatch.StartNew();
+        bool llevaAqui = (hasta.Length == 0 || hasta == desde) && LlevaAqui(_grafo, selector, desde);
+        relojTerreno.Stop();
+        if (relojTerreno.ElapsedMilliseconds > 20)
+            Diagnostics.LogBus.Log("mano", $"⏱ consultar al terreno si «{etiqueta}» lleva aquí: {relojTerreno.ElapsedMilliseconds} ms");
+        if (llevaAqui)
         {
             Diagnostics.LogBus.Log("mano", $"«{etiqueta}» no movió nada y el terreno sabe que lleva justo a donde ya estamos: ni lo ensayo ni lo repito");
             return new(true, false, desde, desde, false,
@@ -248,8 +263,10 @@ public sealed class PulsarSegunElNucleo
         // en la máquina del dueño costaba 2,8 s. Una espera de «1,8 s» duraba más de treinta.
         var compas = new Compas(EsperaMaximaMs);
         string ahora = "";
+        _sondeos = 0;
         do
         {
+            _sondeos++;
             ahora = _donde() ?? "";
             if (ahora.Length > 0 && ahora != desde) return ahora;
         }
