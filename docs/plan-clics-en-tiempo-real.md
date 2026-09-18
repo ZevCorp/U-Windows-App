@@ -120,6 +120,21 @@ las fases 0 y 4 acortan el clic de `map_take` igual que el del tramo — sin tar
 leer la pantalla dos veces, esperando el cambio suscrito. Con TypeSafe apagado, Luna ejecutando
 también corre más. Por eso los números se miden en los dos caminos.
 
+## 2b. Dónde va esto (2026-09-18, 06:00)
+
+| Fase | Estado | Dónde |
+|---|---|---|
+| 0 | **hecha**: #83 y #84 en `main` | — |
+| 1 | **hecha**: guion + medición; PR #85 | `docs/anatomia-del-clic-2026-09-18.md` |
+| 2 | **hecha**: puertas únicas, tres preguntas, segunda mejor, botón Jev; PR #86 | spec 036 |
+| 3 | **hecha**: `map_tramo` desprendido, `map_alto`, `map_tramo_estado`, la cuenta a la voz; PR #87 (apilado sobre #86) | spec 037 |
+| 4 | **medida y especificada, sin código**: el reloj por fase dice que el paso que no cambia cuesta 6 s en «pulsar» y que leer cuesta ~1 s | spec 038 |
+| 5 | hecha en parte dentro de la 3: `map_alto` lo pide la voz, fuera de cola porque el tramo corre desprendido | spec 037 |
+
+Lo medido hasta aquí, con Jev real en `map_decidir` (03:33): 582 · 186 · 245 ms por decisión; con
+20/60/160 puertas: ~330 ms. Con el tramo en simulado (05:51): `map_tramo` contesta en 7-51 ms,
+`map_alto` en 24-246 ms, y un paso cuesta 1,5 s si la pantalla cambia y 7,5 s si no.
+
 ## 3. Qué necesitamos, por fases
 
 Cada fase es una spec con promesas en rojo antes del código, sabotaje comprobado y nivel 4 en dos
