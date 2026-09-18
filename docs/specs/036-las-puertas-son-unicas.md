@@ -1,6 +1,6 @@
 # Las puertas son únicas: Jev elige por número, pulsa por selector, y se enciende con un botón
 
-Estado: **implementada, contrato intacto (287-290)** · 2026-09-18 · Rama: `jose/las-puertas-son-unicas`
+Estado: **implementada, contrato intacto (287-290), nivel 4 en dos pantallas; el botón pendiente de pulsar a mano** · 2026-09-18 · Rama: `jose/las-puertas-son-unicas`
 
 > Fase 2 de `docs/plan-clics-en-tiempo-real.md`. Sale de dos medidas de la fase 1
 > (`docs/anatomia-del-clic-2026-09-18.md`): en la corrida del dueño con Jev, **2 de 3 decisiones
@@ -64,6 +64,36 @@ la 287— y Configuración; el botón se pulsa por UI Automation y se comprueba 
 | La segunda mejor solo si su probabilidad ≥ 0,25, y como mucho una vez | Las probabilidades suman 1: exigirle el umbral de confianza (0,70) a la segunda es no probarla nunca; probar la tercera es adivinar |
 | `cumplido` ≥ 0,70 no acciona; `peligro` ≥ 0,50 no acciona | El mismo umbral que la confianza para «ya llegué»; y ante lo irreversible se pide menos evidencia para parar, no más |
 | El id que ve Jev es «N) etiqueta (tipo)», y el selector no viaja | Jev decide por lo que una persona lee; el selector es cromo técnico que solo sirve a la mano — y no gasta tokens |
+
+## Nivel 4, medido (2026-09-18, 05:24-05:30)
+
+Instancia aislada `C:\U-puertas\bin` con `U_DECISOR=simulado`, llamadas por MCP. **Dos pantallas.**
+
+```
+05:27:54  tools/list: 29 herramientas; map_decidir SI
+05:28:05  → map_decidir objetivo=ver los archivos en detalles  (4767 ms)
+          elegida «Detalles» (1) con confianza 1.00: hice los 1 paso(s): pulsé «Detalles» y la pantalla no cambió.
+          HOMONIMOS? no · PULSO POR SELECTOR? si          ← el caso real de la 287
+05:28:10  → map_decidir objetivo=abrir la carpeta Descargas  (3490 ms)
+          elegida «Descargas» (7) con confianza 1.00: … ahora estás en «uia://explorer.exe/descargas». Queda aprendido.
+05:28:16  Estás en «uia://SystemSettings.exe/configuración#bluetooth-y-dispositivos»
+05:28:21  → map_decidir objetivo=abrir Bluetooth y dispositivos  (5727 ms)
+          elegida «Bluetooth y dispositivos» (9) con confianza 1.00: … pulsé «Bluetooth y dispositivos»
+--- log de la app ---
+[05:27:48] decisor: interruptor → encendido: simulado (jev-latest), umbral 0.70.
+[05:25:06] decisor: «uia://explorer.exe/disco-local-c» · 61 puerta(s) · 6 ms → ACCIONA «1) Detalles (RadioButton)» conf=1.00
+[05:25:19] decisor: «uia://SystemSettings.exe/configuración#inicio» · 55 puerta(s) · 0 ms → ACCIONA «9) Bluetooth y dispositivos (ListItem)» conf=1.00
+```
+
+En la corrida anterior (05:25) Configuración se abrió por `map_open_app` y «9) Bluetooth y dispositivos»
+**navegó** a `#bluetooth-y-dispositivos`; en esta ya estaba allí y «la pantalla no cambió», que es lo
+correcto. Las tres decisiones se accionaron **por selector, sin lista de homónimos**.
+
+**Lo que NO se pudo probar en vivo: el botón.** La ventana del muelle no aparece entre las ventanas
+que UI Automation expone del proceso (solo la carita y el notch), así que el botón no se encontró ni
+desplegando el muelle con el cursor. El interruptor está probado por el contrato (290, con el estático
+real de la voz) y su cableado al arrancar se ve en el log (`interruptor → encendido`); **pulsarlo a mano
+queda pendiente** y se dice como pendiente, no como hecho.
 
 ## Lo que queda fuera
 
