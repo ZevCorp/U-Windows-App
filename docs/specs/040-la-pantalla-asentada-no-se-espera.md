@@ -82,3 +82,51 @@ cambia; y en los dos casos la compuerta deja dicho cuánto esperó y por qué de
 - **El recuerdo que no se guarda** porque `map_esto_es` corre cuando la pantalla ya cambió (la mitad
   de las veces). Otro bug, con su promesa.
 - El umbral del tramo (0,62 frente a 0,70): se mide con más casos antes de moverlo.
+
+## Lo que pasó al implementarla
+
+Promesa escrita y vista en rojo antes que el código (`8c4686e`: `PENDIENTE`, 265 verdes y solo ella).
+Verde con `7124ff0`: contrato intacto, 266; la 56, la 80, la 245 y la 264 siguen en pie — la 264 exige
+que mirar no sea un bucle, y la regla cabe dentro: con la pantalla quieta son dos miradas, como antes.
+
+**Sabotaje, comprobado que se aplicó** (el `diff` mostró la línea): sin la comparación de huellas, solo
+cae la 299 — «tardó 1203 ms con un presupuesto de 1200», y el diario dice «la pantalla se movió entre
+miradas: se esperó entero». Revertido tras commitear.
+
+### Nivel 4: dos pantallas, el mismo build de caja de pruebas antes y después
+
+El «no» de una puerta que no está, pedido por MCP a la app real:
+
+| Pantalla | Puerta pedida | `main` (12d125a) | rama (7124ff0) |
+|---|---|---|---|
+| Explorador, `C:\` | «Dan Kost» | 4.506 ms | **1.130 ms** |
+| Explorador, `C:\` | «Carpeta Que No Existe» | 4.802 ms | **992 ms** |
+| Chrome, una página de ajustes | «Dan Kost» / «Discusión» | 4.209 ms | **620 ms** |
+| Chrome, una página de ajustes | «TypeSafe AI (+2) - Related results» | 4.149 ms | **587 ms** |
+| Chrome, una página de ajustes | «Enter» | 5.485 ms | **636 ms** |
+| Explorador, `C:\` | «Descargas» (existe) | — | 1.367 ms, **pulsó** y llegó a Descargas |
+
+```
+[13:20:01] compuerta: «Dan Kost» no está y la pantalla está asentada (dos miradas vieron las mismas puertas vivas): me rindo a los 516 ms, sin agotar los 4000
+[13:20:02] compuerta: «Enter» no está y la pantalla está asentada (dos miradas vieron las mismas puertas vivas): me rindo a los 532 ms, sin agotar los 4000
+[13:20:07] compuerta: «Dan Kost» no está y la pantalla está asentada (dos miradas vieron las mismas puertas vivas): me rindo a los 781 ms, sin agotar los 4000
+```
+
+**Lo que el nivel 4 NO cubrió, y se dice:** la rama de «está cargando» —la pantalla cambia entre las dos
+miradas, se espera entero y la puerta que aparece se pulsa— la juzga el contrato (casos 3 y 4) pero no
+se ejercitó sobre una página real cargando: el dueño estaba trabajando en Chrome y no se condujo su
+navegador. La línea nueva del log (`«X» no estaba al pedirla y apareció tras N ms`) es la que lo dirá
+con el uso: si en una semana no aparece nunca, la espera de 4 s sobra entera; si aparece, dice cuánta
+hace falta.
+
+**Cuántos sitios tienen la clase de error** (esperar el presupuesto entero sin mirar si la pantalla se
+mueve): 3 — esta compuerta, `EsperarACambiar` de `PulsarSegunElNucleo` y la llegada del batch. Este
+corte arregla 1. Los otros dos esperan un **cambio**, no una puerta, y ahí «no se mueve» es justo lo
+que todavía no se sabe: no se les puede aplicar la misma regla sin medir.
+
+### Otro hallazgo de esta corrida, sin tocar
+
+`map_go_to` hacia una web, con el navegador en una pestaña de resultados, tardó **11.743 ms** en
+contestar «no hay ningún camino aprendido de «search» hasta ahí» (y ya había pasado en la prueba del
+dueño: 11.409 ms desde la terminal). Una web es direccionable (promesa 66): no debería necesitar camino
+aprendido, ni tardar once segundos en decir que no. Es el siguiente candidato.
