@@ -798,6 +798,10 @@ internal static class Contrato
 
         // ── Spec 040: la pantalla asentada no se espera ─────────────────────────────────────────
         Prueba("299. una pantalla asentada no se espera: si la puerta pedida no está y dos miradas seguidas ven lo mismo —la misma ubicación y las mismas puertas vivas—, la compuerta se rinde en el acto y no al agotar el presupuesto, diciendo lo mismo que decía; si entre las dos miradas la pantalla cambió, está cargando: se espera el presupuesto entero y la puerta que aparece se pulsa; sin poder mirar, nada cambia; y en los dos casos la compuerta deja dicho cuánto esperó y por qué dejó de esperar", UnaPantallaAsentadaNoSeEspera);
+
+        // ── Spec 041: el Enter no se deshace, y un espacio no esconde una puerta (bloque 330-339) ─
+        Prueba("330. escribir y confirmar con Enter solo se deshace donde escribir es renombrar —el Explorador de archivos—: en la web y en cualquier otra superficie, que el Enter cambie de pantalla es lo que se pidió; no se pulsa «Atrás», no se espera la vuelta, y la respuesta dice a dónde se llegó; y dos formas de la misma pantalla —con www y sin él— no cuentan como un cambio", ElEnterSoloSeDeshaceDondeEscribirEsRenombrar);
+        Prueba("331. un espacio no esconde una puerta: un selector por nombre encuentra el elemento aunque su nombre real traiga espacios al principio o al final que la etiqueta guardada no tiene; primero se busca el nombre exacto, como siempre, y solo si no aparece se compara recortando; un nombre que de verdad es otro sigue sin casar", UnEspacioNoEscondeUnaPuerta);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12547,6 +12551,96 @@ internal static class Contrato
             $"al rendirse por pantalla asentada lo dice, con la puerta y los milisegundos: [{string.Join(" ¦ ", d1)}]");
         Debe(d3.Any(x => x.Contains("Viejo") && x.Contains("apareció") && x.Contains(" ms")),
             $"y cuando la espera SIRVE —la puerta apareció esperando— también lo dice, con cuánto esperó: [{string.Join(" ¦ ", d3)}]");
+    }
+
+    // ── Spec 041 ─────────────────────────────────────────────────────────────────────────────────
+
+    private static void ElEnterSoloSeDeshaceDondeEscribirEsRenombrar()
+    {
+        // MEDIDO EL 2026-09-18 en el log de la prueba del dueño: 11 veces `map_type` escribió, dio Enter, vio que la
+        // pantalla cambió y trató de DESHACERLO pulsando «Atrás» —10 en Google, 1 en el Bloc de notas—. La
+        // protección nació para renombrar una carpeta en el Explorador (2026-08-03) y se aplicaba a todo. El botón
+        // no se encontró ninguna vez (es el del Explorador), así que costó 3-4 s por búsqueda y nada más; en un
+        // navegador cuyo «volver» se llamara igual, cada búsqueda se habría deshecho sola diciendo «escribí y confirmé».
+        var t = typeof(U.WindowsClient.Mcp.SurfaceMapTools);
+        var seDeshace = t.GetMethod("ElEnterSeDeshace", BindingFlags.Public | BindingFlags.Static);
+        var relato = t.GetMethod("RelatoDeEscribir", BindingFlags.Public | BindingFlags.Static);
+        if (seDeshace == null || relato == null)
+        {
+            Pendiente("SurfaceMapTools.ElEnterSeDeshace + RelatoDeEscribir", "330", "041");
+            return;
+        }
+        bool Deshace(string antes, string ahora) => (bool)seDeshace.Invoke(null, new object[] { antes, ahora })!;
+        string Relato(string texto, string antes, string ahora) => (string)relato.Invoke(null, new object[] { texto, antes, ahora })!;
+
+        // DONDE NACIÓ: renombrar en el Explorador y que el Enter te meta dentro de la carpeta. Eso sí se deshace.
+        Debe(Deshace("uia://explorer.exe/documentos", "uia://explorer.exe/carpeta-nueva"),
+            "en el Explorador, si el Enter que confirma un nombre abre la carpeta, se vuelve: es el caso para el que nació");
+
+        // EN LA WEB, NAVEGAR ES LO QUE SE PIDIÓ.
+        Debe(!Deshace("web://google.com", "web://google.com/search"),
+            "buscar en Google y que el Enter lleve a los resultados no se deshace");
+        Debe(!Deshace("web://docs.google.com/document/d/abc/edit", "web://google.com/search"),
+            "escribir una dirección en la barra y que el Enter navegue no se deshace");
+        Debe(!Deshace("uia://Notepad.exe/sin-título-bloc-de-notas", "uia://Notepad.exe/sorpresa-encontrada-bloc-de-notas"),
+            "fuera del Explorador tampoco: en el Bloc de notas, que escribir le cambie el título a la pestaña no es haberse ido a ningún sitio");
+        Debe(!Deshace("sapgui://PRD/NWP1", "sapgui://PRD/NV2000"),
+            "ni en SAP, donde el Enter ES el botón de continuar");
+
+        // DOS FORMAS DE LA MISMA PANTALLA NO SON UN CAMBIO (aprendizaje nº16). La de hoy: con www y sin él.
+        Debe(!Deshace("web://www.google.com/search", "web://google.com/search"),
+            "«www.google.com/search» y «google.com/search» son la misma pantalla: no hay nada que deshacer");
+        Debe(!Deshace("uia://explorer.exe/documentos", "uia://explorer.exe/documentos") && !Deshace("", "uia://explorer.exe/x") && !Deshace("uia://explorer.exe/x", ""),
+            "sin cambio, o sin saber dónde se estaba o dónde se está, no se deshace nada");
+
+        // Y SE DICE A DÓNDE SE LLEGÓ: el modelo gastaba otra llamada en averiguarlo.
+        string r1 = Relato("fortify", "web://google.com", "web://google.com/search");
+        Debe(r1.Contains("escribí «fortify»") && r1.Contains("Enter") && r1.Contains("web://google.com/search"),
+            $"cuando el Enter cambió de pantalla, la respuesta dice dónde se está ahora: «{r1}»");
+        string r2 = Relato("hola", "web://x.com/a", "web://x.com/a");
+        Debe(r2.Contains("escribí «hola»") && !r2.Contains("ahora estás"),
+            $"y cuando no cambió, no inventa una llegada: «{r2}»");
+        string r3 = Relato("hola", "web://www.google.com/search", "web://google.com/search");
+        Debe(!r3.Contains("ahora estás"), $"la misma pantalla con otra forma tampoco es una llegada: «{r3}»");
+    }
+
+    private static void UnEspacioNoEscondeUnaPuerta()
+    {
+        // MEDIDO EL 2026-09-18: Chrome nombra su barra 'Barra de direcciones y de búsqueda ' —con un espacio al
+        // final—. El lector recorta las etiquetas, el selector guardado no lleva el espacio, y el resolvedor buscaba
+        // el nombre EXACTO: 9 `map_take` fallidos en dos pruebas, con cinco reintentos internos cada uno.
+        // typeof y no Capacidad(): UiaSelector vive en el ensamblado de windows-graph, y Capacidad() solo mira el del
+        // cliente. Pedirlo por nombre ahí da null SIEMPRE, y la promesa diría «pendiente» con el código ya escrito.
+        Type? t = typeof(U.Graph.Surfaces.UiaSelector);
+        var mismo = t?.GetMethod("MismoNombre", BindingFlags.Public | BindingFlags.Static);
+        var sinNombre = t?.GetMethod("CondicionSinNombre", BindingFlags.Public | BindingFlags.Static);
+        var parse = t?.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || mismo == null || sinNombre == null || parse == null)
+        {
+            Pendiente("UiaSelector.MismoNombre + CondicionSinNombre", "331", "041");
+            return;
+        }
+        bool Mismo(string guardado, string real) => (bool)mismo.Invoke(null, new object?[] { guardado, real })!;
+
+        Debe(Mismo("Barra de direcciones y de búsqueda", "Barra de direcciones y de búsqueda "),
+            "el espacio al final del nombre real no impide casar con la etiqueta guardada, que va recortada");
+        Debe(Mismo("Buscar", "  Buscar") && Mismo("Buscar", "Buscar\u00A0") && Mismo("Buscar", "\tBuscar \r\n"),
+            "ni al principio, ni el espacio duro de la web, ni tabuladores o saltos de línea");
+        Debe(Mismo("Buscar", "Buscar"), "el nombre exacto casa, claro");
+        Debe(!Mismo("Buscar", "Buscar en Google") && !Mismo("Buscar", "buscar") && !Mismo("Archivo nuevo", "Archivonuevo"),
+            "un nombre que de verdad es otro NO casa: ni un prefijo, ni otra capitalización, ni los espacios de dentro");
+        Debe(!Mismo("", "   ") && !Mismo("Buscar", "") && !Mismo("   ", "Buscar"),
+            "y vacío no casa con nada, ni con vacío (patrón nº9): un selector sin nombre no encuentra «lo que no tiene nombre»");
+
+        // EL RESPALDO BUSCA POR LO DEMÁS DEL SELECTOR —el tipo, el id— Y COMPARA EL NOMBRE A MANO. Sin nada más que el
+        // nombre no hay respaldo: sería recorrer la ventana entera comparando, y eso no es un respaldo, es otro lector.
+        object Partes(string selector) => parse.Invoke(null, new object[] { selector })!;
+        Debe(sinNombre.Invoke(null, new[] { Partes("uia:name=Barra de direcciones y de búsqueda;ct=Edit") }) is System.Windows.Automation.Condition,
+            "con nombre y tipo, el respaldo busca por tipo");
+        Debe(sinNombre.Invoke(null, new[] { Partes("uia:name=Solo un nombre") }) == null,
+            "con solo el nombre no hay por dónde buscar sin él: no hay respaldo, y se dice que no está como hasta hoy");
+        Debe(sinNombre.Invoke(null, new[] { Partes("uia:aid=btnOk;ct=Button") }) == null,
+            "y un selector sin nombre no necesita este respaldo: no se inventa una segunda búsqueda");
     }
 
     private static void Debe(bool condicion, string promesa)
