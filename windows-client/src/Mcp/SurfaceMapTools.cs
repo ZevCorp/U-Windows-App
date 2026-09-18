@@ -2078,6 +2078,10 @@ public sealed class SurfaceMapTools
             && !tool.Equals("map_exclude", StringComparison.OrdinalIgnoreCase))
             Ui.Senalador.Soltar();
 
+        // DÓNDE SE ESTABA, solo para los actos: hace falta para saber si dejaron una página cargando (promesa 335).
+        string antesDelActo = "";
+        if (ComoSeContesta.EsActo(tool)) { try { antesDelActo = _where()?.Id ?? ""; } catch { } }
+
         string r = tool switch
         {
             "map_where_am_i" => WhereAmI(),
@@ -2147,7 +2151,27 @@ public sealed class SurfaceMapTools
         // ANTES de parar el reloj, para que el coste de leer la pantalla cuente como parte del acto.
         if (ComoSeContesta.LlevaInventario(tool, r))
         {
-            try { r = ComoSeContesta.Pegar(r, InventarioParaLosActos?.Invoke() ?? LoQueVeo()); }
+            try
+            {
+                Func<string> mirar = () => InventarioParaLosActos?.Invoke() ?? LoQueVeo();
+                string inventario = mirar();
+                // TRAS NAVEGAR SE CUENTA LA PÁGINA, NO SU ESQUELETO (promesa 335): si el acto dejó una web cargando,
+                // se vuelve a mirar hasta que dos miradas coincidan. 250 ms de pausa y 2 s de tope: lo medido fue
+                // que la página estaba completa entre 1 y 2 s después del acto.
+                string ahoraEstoy = ""; try { ahoraEstoy = _where()?.Id ?? ""; } catch { }
+                if (ComoSeContesta.HayQueAsentar(tool, antesDelActo, ahoraEstoy))
+                {
+                    var relojAsentar = System.Diagnostics.Stopwatch.StartNew();
+                    string primera = ComoSeContesta.Cabecera(inventario);
+                    inventario = ComoSeContesta.InventarioAsentado(inventario, mirar, 250, 2000,
+                        ms => System.Threading.Thread.Sleep(ms), () => relojAsentar.ElapsedMilliseconds);
+                    string ultima = ComoSeContesta.Cabecera(inventario);
+                    LogBus.Log("mapa-mcp", primera == ultima
+                        ? $"la página ya estaba asentada al terminar {tool} ({relojAsentar.ElapsedMilliseconds} ms en comprobarlo)"
+                        : $"la página seguía cargando al terminar {tool}: «{primera}» → «{ultima}» ({relojAsentar.ElapsedMilliseconds} ms esperando a que se asentara)");
+                }
+                r = ComoSeContesta.Pegar(r, inventario);
+            }
             catch (Exception e) { LogBus.Log("mapa-mcp", $"no pude añadir lo que hay delante: {e.Message}"); }
         }
 

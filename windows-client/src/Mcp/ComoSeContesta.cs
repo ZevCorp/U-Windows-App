@@ -50,4 +50,64 @@ public static class ComoSeContesta
         if (!inv.StartsWith(MarcaDelInventario, StringComparison.Ordinal)) return resultado;
         return (resultado ?? "").TrimEnd() + "\n\n" + inv;
     }
+
+    // ── Tras navegar se cuenta la página, no su esqueleto (promesa 335, spec 044) ────────────────
+
+    /// <summary>Los actos que pueden dejar una página cargando. `map_scroll` y `map_unblock` no navegan.</summary>
+    private static readonly string[] ActosQueNavegan = { "map_go_to", "map_take", "map_decidir", "map_type", "map_open_app" };
+
+    /// <summary>
+    /// ¿HAY QUE ESPERAR A QUE LA PÁGINA SE ASIENTE antes de contar lo que hay? Solo si se navegó, y solo a una web.
+    /// </summary>
+    /// <remarks>
+    /// MEDIDO EL 2026-09-18 en tres pruebas del dueño: de los 9 actos tras los que el modelo volvió a pedir
+    /// `map_what_i_see` en menos de 6 s, en 8 el inventario del acto se había quedado corto —24→64, 26→49, 33→84,
+    /// 32→95, 27→59 elementos—. Veintitantos elementos es el cromo del navegador sin la página. El modelo decidía con
+    /// eso: volvía a mirar (~2 s de ida y vuelta), nombraba una puerta que aún no estaba, o creía la página rota y
+    /// pulsaba «Volver a cargar» (tres veces, 3-5 s cada una).
+    ///
+    /// `map_go_to` ESPERA AUNQUE LA DIRECCIÓN NO CAMBIE: una búsqueda nueva es la misma «google.com/search» y otra
+    /// página entera. Los demás, solo si la ubicación cambió: un clic que no navegó no dejó nada cargando, y pagar
+    /// una mirada de más en cada uno sería cobrarle a todos lo que solo deben las navegaciones.
+    /// </remarks>
+    public static bool HayQueAsentar(string herramienta, string antes, string ahora)
+    {
+        string h = (herramienta ?? "").Trim(), a = (antes ?? "").Trim(), d = (ahora ?? "").Trim();
+        if (!ActosQueNavegan.Any(x => x.Equals(h, StringComparison.OrdinalIgnoreCase))) return false;
+        if (!d.StartsWith("web://", StringComparison.OrdinalIgnoreCase)) return false;
+        if (h.Equals("map_go_to", StringComparison.OrdinalIgnoreCase)) return true;
+        return !Navigation.Superficies.MismaPantalla(a, d);
+    }
+
+    /// <summary>
+    /// MIRAR HASTA QUE DOS MIRADAS SEGUIDAS COINCIDAN, con tope de RELOJ (promesa 245). Se compara la cabecera del
+    /// inventario —dónde y cuántos elementos—, no el texto entero: una página con un contador no se asentaría nunca.
+    /// Si el tope se agota se entrega lo último y SE DICE, para que el modelo sepa que puede faltar algo.
+    /// </summary>
+    /// <param name="primero">El inventario que el acto ya leyó al terminar.</param>
+    /// <param name="dormir">Inyectable, como <paramref name="ahoraMs"/>: el contrato lo juzga sin dormir de verdad.</param>
+    public static string InventarioAsentado(string primero, Func<string> mirar, int pausaMs, int topeMs,
+        Action<int> dormir, Func<long> ahoraMs)
+    {
+        string ultimo = primero ?? "";
+        long t0 = ahoraMs();
+        while (ahoraMs() - t0 + pausaMs < topeMs)
+        {
+            dormir(pausaMs);
+            string otra = mirar() ?? "";
+            if (otra.Length == 0) return ultimo;               // no se pudo mirar: lo que había
+            bool igual = Cabecera(otra) == Cabecera(ultimo);
+            ultimo = otra;
+            if (igual) return ultimo;
+        }
+        return ultimo.TrimEnd() + "\n(la página seguía cambiando al contarla: puede faltar algo; vuelve a mirar si lo que buscas no está.)";
+    }
+
+    /// <summary>La primera línea del inventario: «EN PANTALLA AHORA, en «dónde» (N elemento(s)):».</summary>
+    public static string Cabecera(string inventario)
+    {
+        string i = inventario ?? "";
+        int salto = i.IndexOf('\n');
+        return (salto >= 0 ? i[..salto] : i).Trim();
+    }
 }
