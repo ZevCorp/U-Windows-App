@@ -12,6 +12,7 @@ export interface TurnInput {
   state: ScreenState;
   results: string[];
   apiKey: string;
+  timeContext: string;
 }
 
 export interface TurnOutput {

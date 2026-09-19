@@ -80,7 +80,7 @@ const asArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 /** Ejecuta un turno del cerebro. Devuelve la sesión actualizada + el BrainTurn a mandar al cliente. */
 export async function runBrainTurn(inp: TurnInput): Promise<TurnOutput> {
   const s: SessionState = JSON.parse(JSON.stringify(inp.session)); // copia mutable
-  const { tools, mcpNames, memory, apps, state, results, apiKey } = inp;
+  const { tools, mcpNames, memory, apps, state, results, apiKey, timeContext } = inp;
 
   const stateBlock = `Pantalla actual: ${state.screen}\nDónde estás (árbol de UI de Windows):\n${state.uiContext}`;
   const input: unknown[] = [];
@@ -92,9 +92,9 @@ export async function runBrainTurn(inp: TurnInput): Promise<TurnOutput> {
   };
 
   if (!s.previousId) {
-    userMessage(goalPrompt({ goal: s.goal, tools, memory, stateBlock }));
+    userMessage(goalPrompt({ goal: s.goal, tools, memory, stateBlock, timeContext }));
   } else if (s.pending.length === 0) {
-    userMessage((s.continuationMessage || s.informText || 'Continúa.') + `\n${stateBlock}`);
+    userMessage((s.continuationMessage || s.informText || 'Continúa.') + `\n${stateBlock}\n${timeContext}`);
     s.continuationMessage = '';
     s.informText = '';
   } else {
@@ -118,6 +118,7 @@ export async function runBrainTurn(inp: TurnInput): Promise<TurnOutput> {
         input.push(functionOutput(call.id, results[i] ?? 'ok'));
       }
     });
+    input.push({ type: 'message', role: 'user', content: [{ type: 'input_text', text: `${timeContext}\nContinúa.` }] });
     s.informText = '';
   }
 

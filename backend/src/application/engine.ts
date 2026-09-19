@@ -19,6 +19,7 @@ export interface TurnRequest {
   session: SessionState;
   state: ScreenState;
   results: string[];
+  timeContext: string;
 }
 
 export interface TurnResult {
@@ -55,6 +56,7 @@ export async function resolveTurn(
     state: req.state,
     results: req.results,
     apiKey: activeKey(),
+    timeContext: req.timeContext,
   });
 
   return { session, turn };

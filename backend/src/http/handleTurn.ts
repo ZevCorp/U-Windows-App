@@ -7,6 +7,7 @@ import { ScreenState } from '../domain/actions';
 import { resolveTurn } from '../application/engine';
 import { deps } from '../container';
 import { applyExplicitMemoryCommand } from '../memory/commands';
+import { buildTimeContext, timePrompt } from '../time/context';
 
 export interface TurnBody {
   session?: string;
@@ -15,6 +16,9 @@ export interface TurnBody {
   state?: ScreenState;
   results?: string[];
   inform?: string;
+  timezone?: string;
+  locale?: string;
+  clientNowUtc?: string;
 }
 
 export interface HttpResult {
@@ -33,12 +37,15 @@ export async function handleTurn(body: TurnBody, authHeader?: string): Promise<H
   }
 
   const userId = body.userId?.trim() || 'anon';
+  const time = buildTimeContext({ timezone: body.timezone, locale: body.locale, clientNowUtc: body.clientNowUtc });
 
   // Una orden explícita de memoria debe ser fiable aunque el proveedor del LLM esté caído. Se
   // ejecuta antes de abrir sesión/modelo y devuelve el mismo contrato BrainTurn que el cliente ya
   // entiende. Las inferencias conversacionales siguen pasando por el cerebro y no escriben solas.
   if (!body.session && typeof body.goal === 'string') {
-    const memoryCommand = await applyExplicitMemoryCommand(deps().memory, userId, body.goal);
+    const memoryCommand = await applyExplicitMemoryCommand(deps().memory, userId, body.goal, {
+      timezone: time.timezone, locale: time.locale, now: new Date(time.nowUtc), clientNowUtc: body.clientNowUtc,
+    });
     if (memoryCommand) {
       const session = freshSession(config.provider, body.goal.trim(), activeModel(), config.effort);
       const response = memoryCommand.response;
@@ -47,7 +54,9 @@ export async function handleTurn(body: TurnBody, authHeader?: string): Promise<H
         json: {
           session: encodeSession(session), actions: [], question: null, done: true, text: response,
           needsScreenshot: false, narration: '', speech: response, intents: [],
-          memory: memoryCommand.kind, memoryId: memoryCommand.kind === 'remember' ? memoryCommand.item.id : memoryCommand.reminder.id,
+          memory: memoryCommand.kind,
+          memoryId: memoryCommand.kind === 'remember' ? memoryCommand.item.id : memoryCommand.kind === 'remind' ? memoryCommand.reminder.id : undefined,
+          timeContext: time,
         },
       };
     }
@@ -75,7 +84,7 @@ export async function handleTurn(body: TurnBody, authHeader?: string): Promise<H
 
   try {
     const { session: next, turn } = await resolveTurn(
-      { userId, session, state: body.state, results: body.results ?? [] },
+      { userId, session, state: body.state, results: body.results ?? [], timeContext: timePrompt(time) },
       deps(),
     );
     return { status: 200, json: { session: encodeSession(next), ...turn } };

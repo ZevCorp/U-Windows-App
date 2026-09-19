@@ -25,11 +25,11 @@ Referencias: [Zep: Temporal Knowledge Graph Architecture](https://arxiv.org/abs/
 
 ## Anclaje temporal: el reloj también es memoria de trabajo
 
-La versión actual **todavía no resuelve bien el tiempo para un asistente general**. Usa `Date.now()`
-y `Date` del proceso para comparar vencimientos; el parser entiende algunos casos (`hoy`, `mañana`,
-`en N minutos/horas`), pero no recibe de forma explícita la zona horaria del usuario, no inyecta un
-reloj verificable en cada prompt y el endpoint API asume UTC cuando no se le pasa una zona. Eso es
-suficiente para una prueba local sencilla, no para prometer «¿qué día es hoy?» con precisión mundial.
+La capa temporal ya recibe la zona IANA del computador (`America/Bogota`, `America/New_York`, etc.)
+en cada turno. El backend es la autoridad del instante, construye un `TimeContext` y lo inyecta en
+el prompt; el parser convierte primero la fecha de pared en la zona del usuario y solo después la
+guarda como UTC. Colombia queda en `-05:00` todo el año, mientras que las zonas con horario de
+verano conservan sus transiciones y offsets reales.
 
 La siguiente pieza de la arquitectura debe ser un `TimeContext` firmado y presente en cada turno:
 
@@ -50,11 +50,10 @@ del reloj para detectar una máquina desfasada. En el prompt se incluirá una l�
 adivinarla. Las fechas persistidas siempre conservarán `dueAtUtc`, `timezone`, la frase original y
 la resolución que se tomó.
 
-El resolver temporal debe usar una biblioteca con reglas IANA/DST (Temporal con polyfill o equivalente)
-y producir un resultado tipado: `exact`, `relative`, `recurring` o `ambiguous`. «Mañana a las 9» se
-resuelve en la zona del usuario; «el próximo lunes» conserva el lunes de la semana correcta; una hora
-ambigua por cambio de horario pregunta antes de programar. Nunca se debe convertir primero a UTC y
-después intentar reconstruir el día local.
+El resolver temporal usa las reglas IANA de `Intl`/ICU de Node y produce una resolución concreta o
+una pregunta. «Mañana a las 9», «en dos horas», «pasado mañana», días de la semana, mediodía y
+medianoche se resuelven en la zona del usuario; una hora inexistente o repetida por DST pide
+aclaración antes de guardar. Nunca se convierte primero a UTC para reconstruir el día local.
 
 Antes de activar recordatorios para usuarios reales hay que probar medianoche, fin de mes, año nuevo,
 semanas que cruzan domingo/lunes, DST, zonas con media hora, reloj local incorrecto, reinicio del
@@ -199,8 +198,8 @@ Fases siguientes:
    esto».
 5. Ejecutar los escenarios de crash, zona horaria, cambios de preferencia y multi-dispositivo antes
    de activar recurrencias para usuarios reales.
-6. Añadir `TimeContext` al contrato de turno, al prompt y a la cola de recordatorios; resolver frases
-   relativas con IANA/DST y pedir confirmación cuando sean ambiguas.
+6. ✅ Añadir `TimeContext` al contrato de turno, al prompt y a la cola de recordatorios; resolver
+   frases relativas con IANA/DST y pedir confirmación cuando sean ambiguas.
 7. Separar el WebSocket de la conversación: `threadId`, log idempotente de turnos, snapshot de
    continuidad y paquete de reanudación al abrir la voz.
 8. Cambiar el cliente para que apagar/prender sea `captureState`, y reservar la creación de un hilo

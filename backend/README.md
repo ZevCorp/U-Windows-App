@@ -100,5 +100,7 @@ curl -X POST localhost:3000/api/agent/turn -H 'Content-Type: application/json' -
   temporales, borrado lógico y órdenes explícitas `recuerda`/`acuérdame`.
 - ✅ Cola de compromisos con lease, reintentos y endpoints `/api/reminders/*`; Vercel la despierta cada
   minuto mediante `vercel.json`.
+- ✅ Contexto temporal por turno: el cliente envía la zona IANA del computador, el backend inyecta el
+  reloj verificado y los recordatorios resuelven fechas locales con reglas IANA/DST.
 - ⏳ Adaptador durable multi-instancia (Supabase/Postgres + pgvector o Neo4j/Graphiti): la interfaz ya
   está aislada en `memory/store.ts`. Ver [`docs/memoria-tiempo-real.md`](../docs/memoria-tiempo-real.md).
