@@ -43,7 +43,8 @@ export async function resolveTurn(
 ): Promise<TurnResult> {
   const apps = req.state.apps ?? [];
   const tools = await assembleTools(req.userId, apps, deps.learning);
-  const memory = await deps.memory.forPrompt(req.userId);
+  // Recuperación dirigida por el objetivo: el prompt no recibe una lista infinita de notas.
+  const memory = await deps.memory.forPrompt(req.userId, req.session.goal);
 
   const { session, turn } = await runProviderTurn({
     session: req.session,

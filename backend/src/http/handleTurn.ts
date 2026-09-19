@@ -6,6 +6,7 @@ import { decodeSession, encodeSession, freshSession } from '../domain/session';
 import { ScreenState } from '../domain/actions';
 import { resolveTurn } from '../application/engine';
 import { deps } from '../container';
+import { applyExplicitMemoryCommand } from '../memory/commands';
 
 export interface TurnBody {
   session?: string;
@@ -27,17 +28,36 @@ export async function handleTurn(body: TurnBody, authHeader?: string): Promise<H
     if (auth !== config.clientToken) return { status: 401, json: { error: 'no autorizado' } };
   }
 
-  try {
-    assertConfigured();
-  } catch (e) {
-    return { status: 500, json: { error: (e as Error).message } };
-  }
-
   if (!body.state || typeof body.state.screen !== 'string') {
     return { status: 400, json: { error: 'falta `state` (screen, uiContext, width, height)' } };
   }
 
   const userId = body.userId?.trim() || 'anon';
+
+  // Una orden explícita de memoria debe ser fiable aunque el proveedor del LLM esté caído. Se
+  // ejecuta antes de abrir sesión/modelo y devuelve el mismo contrato BrainTurn que el cliente ya
+  // entiende. Las inferencias conversacionales siguen pasando por el cerebro y no escriben solas.
+  if (!body.session && typeof body.goal === 'string') {
+    const memoryCommand = await applyExplicitMemoryCommand(deps().memory, userId, body.goal);
+    if (memoryCommand) {
+      const session = freshSession(config.provider, body.goal.trim(), activeModel(), config.effort);
+      const response = memoryCommand.response;
+      return {
+        status: 200,
+        json: {
+          session: encodeSession(session), actions: [], question: null, done: true, text: response,
+          needsScreenshot: false, narration: '', speech: response, intents: [],
+          memory: memoryCommand.kind, memoryId: memoryCommand.kind === 'remember' ? memoryCommand.item.id : memoryCommand.reminder.id,
+        },
+      };
+    }
+  }
+
+  try {
+    assertConfigured();
+  } catch (e) {
+    return { status: 500, json: { error: (e as Error).message } };
+  }
 
   let session;
   try {
