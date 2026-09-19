@@ -18,6 +18,10 @@ on:
         description: "Id de correlación que usa Graph para encontrar este run"
         required: true
         type: string
+      user_message:
+        description: "Mensaje humano que Ü narrará a los usuarios sobre esta versión"
+        required: true
+        type: string
       dry_run:
         description: "Solo probar el pipeline (sin publish/pack/upload reales)"
         required: false
@@ -43,6 +47,24 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validar y preparar el mensaje de la release
+        shell: pwsh
+        env:
+          RELEASE_MESSAGE: ${{ inputs.user_message }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_MESSAGE)) {
+            throw 'user_message es obligatorio: escribe el mensaje humano que Ü narrará a los usuarios.'
+          }
+          $metadata = [ordered]@{
+            schema = 1
+            version = '${{ inputs.version }}'
+            message = $env:RELEASE_MESSAGE.Trim()
+            locale = 'es-CO'
+            publishedAt = [DateTime]::UtcNow.ToString('o')
+          }
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $metadata | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 out/release-message.json
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -160,6 +182,7 @@ jobs:
             throw "la release anuncia $esperado pero ese archivo no esta subido"
           }
           Write-Host "release coherente: $esperado esta publicado"
+          gh release upload v${{ inputs.version }} out/release-message.json --clobber
 
       - name: Smoke test (dry run)
         if: ${{ inputs.dry_run == true }}

@@ -1087,6 +1087,9 @@ public sealed class ConversacionEnVivo : IDisposable
         Fn("self_close", "Te cierras del todo: termina el proceso. Después de esto no hay vuelta sin "
             + "volver a abrirte a mano — no es ocultarte, es apagarte. Solo cuando lo pida sin "
             + "ambigüedad: «ciérrate», «apágate», «sal de mi computador»."),
+        Fn("self_update", "ACTUALIZA Ü cuando el usuario diga «actualízate», «ponte al día» o «instala la nueva versión». "
+            + "La ventana busca la release, muestra un halo morado y narra el mensaje humano que dejó el desarrollador. "
+            + "No inventes funciones: cuenta exactamente lo que Ü te diga que trae la actualización."),
 
         Fn("scan_computer", "Miras qué aplicaciones hay instaladas y cuáles están abiertas, y te "
             + "devuelve cuáles de ellas sabes conducir. Sirve para contarle a esta persona qué "
@@ -1098,7 +1101,7 @@ public sealed class ConversacionEnVivo : IDisposable
     /// <summary>Los nombres «self_mute», «self_hide», «self_close», para distinguirlos de las
     /// herramientas del mapa en el despacho — esas van a <see cref="_mapa"/>, estas a <see cref="Autocontrol"/>.</summary>
     private static readonly HashSet<string> HerramientasDeAutocontrol =
-        new(StringComparer.Ordinal) { "self_mute", "self_hide", "self_close", "scan_computer" };
+        new(StringComparer.Ordinal) { "self_mute", "self_hide", "self_close", "self_update", "scan_computer" };
 
     /// <summary>
     /// Quien atiende «self_mute»/«self_hide»/«self_close». Se inyecta desde la ventana, porque
