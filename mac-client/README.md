@@ -17,11 +17,10 @@ Desde la raíz del repositorio:
 ./mac-client/abrir.sh
 ```
 
-Si todavía no existe `.artifacts/U.app`, el script compila una versión de desarrollo y luego la abre.
-También puedes abrir directamente:
+El lanzador abre siempre la copia instalada en `~/Applications/U.app`; si todavía no existe, ejecuta la instalación automáticamente. También puedes abrir directamente:
 
 ```bash
-open -n "$PWD/mac-client/.artifacts/U.app"
+open "$HOME/Applications/U.app"
 ```
 
 Para probar el flujo como lo usará una persona instalada, compila y copia el bundle a `~/Applications`:
