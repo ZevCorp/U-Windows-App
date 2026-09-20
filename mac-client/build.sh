@@ -34,13 +34,18 @@ make_bundle() {
 <key>NSMicrophoneUsageDescription</key><string>Ü usa el micrófono para escuchar lo que le pides. Puedes silenciarlo en cualquier momento.</string>
 <key>NSSpeechRecognitionUsageDescription</key><string>Ü convierte tu voz en texto para entender tus peticiones cuando utilizas el dictado nativo.</string>
 <key>NSAppleEventsUsageDescription</key><string>Ü puede abrir y utilizar aplicaciones cuando se lo pides.</string>
+<key>NSScreenCaptureUsageDescription</key><string>Ü necesita ver la pantalla para comprobar el resultado de las acciones que realiza.</string>
 </dict></plist>
 PLIST
   /usr/bin/plutil -lint "$bundle/Contents/Info.plist"
   if [[ -n "${CODE_SIGN_IDENTITY:-}" ]]; then
     /usr/bin/codesign --force --options runtime --timestamp --entitlements entitlements.plist --sign "$CODE_SIGN_IDENTITY" "$bundle"
   else
-    /usr/bin/codesign --force --sign - "$bundle"
+    # Keep the designated requirement tied to the bundle identifier. The default
+    # ad-hoc requirement is the executable cdhash, which changes on every build
+    # and makes TCC treat the rebuilt app as a new application.
+    requirement="designated => identifier \"$identifier\""
+    /usr/bin/codesign --force --entitlements entitlements.plist --requirements "=$requirement" --sign - "$bundle"
   fi
   /usr/bin/codesign --verify --deep --strict "$bundle"
 }

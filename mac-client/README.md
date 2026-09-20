@@ -24,8 +24,15 @@ También puedes abrir directamente:
 open -n "$PWD/mac-client/.artifacts/U.app"
 ```
 
-Usa siempre la app dentro de `mac-client/.artifacts`. En este Mac hay una copia vieja en
-`~/Desktop/U/U-Mac/U.app`; esa copia no pertenece a esta rama y su permiso aparece como otra entrada.
+Para probar el flujo como lo usará una persona instalada, compila y copia el bundle a `~/Applications`:
+
+```bash
+./mac-client/instalar.sh
+```
+
+Después abre `~/Applications/U.app`. No alternes entre el ejecutable suelto, `.artifacts/U.app` y
+otra copia en `~/Desktop/U/U-Mac/U.app`: macOS registra TCC por la identidad y el bundle concreto.
+La app muestra su bundle ID y ruta en Configuración para que la entrada autorizada siempre sea verificable.
 
 ## Permisos
 
@@ -33,10 +40,10 @@ En la pestaña **Configuración**:
 
 1. Pulsa **Permitir** junto a **Accesibilidad**. Se abre directamente el panel de macOS.
 2. En la lista activa **Ü para Mac** (puede aparecer como `U` porque macOS cachea el nombre del ejecutable).
-3. Cierra y vuelve a abrir la app con `./mac-client/abrir.sh`.
-4. Activa **Grabación de pantalla** si quieres que vea capturas.
-5. Activa **Micrófono y voz** si quieres conversación por voz.
-6. Pulsa **Actualizar permisos**. Deben verse los tres círculos verdes.
+3. Activa **Grabación de pantalla** si quieres que vea capturas.
+4. Activa **Micrófono y voz** si quieres conversación por voz.
+5. Regresa a Ü: los estados se vuelven a comprobar automáticamente durante 30 segundos.
+6. Si macOS no refleja un permiso hasta el siguiente arranque, pulsa **Reiniciar Ü para aplicar**.
 
 El permiso de Accesibilidad es el que permite usar otras aplicaciones. Sin él, Ü solo puede mostrar la carita y hablar por texto.
 
@@ -64,6 +71,12 @@ La app se puede ejecutar con diagnóstico:
 
 ```bash
 open -n .artifacts/U.app --args --diagnose
+```
+
+El diagnóstico también muestra la ruta y el bundle ID que macOS está autorizando:
+
+```bash
+open -n "$HOME/Applications/U.app" --args --diagnose
 ```
 
 ## Detener y volver a abrir

@@ -24,7 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         if CommandLine.arguments.contains("--diagnose") {
-            let result: [String: Any] = ["accessibility": AccessibilityReader.trusted, "screenCapture": ScreenCapture.allowed,
+            let permissions = model.permissions.snapshot
+            let result: [String: Any] = ["accessibility": permissions.accessibility.isGranted, "screenCapture": permissions.screenCapture.isGranted,
+                                       "microphone": permissions.microphone.isGranted, "speech": permissions.speech.isGranted,
+                                       "bundleIdentifier": Bundle.main.bundleIdentifier ?? "", "bundlePath": Bundle.main.bundleURL.path,
                                        "graphConfigured": Credentials.read("GRAPH_API_KEY") != nil, "architecture": "native-swift", "version": "0.1.0"]
             if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) { print(String(decoding: data, as: UTF8.self)) }
             NSApp.terminate(nil); return
@@ -64,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             Task { @MainActor in self?.model.lastExternalApp = app }
         }
         if let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid() { model.lastExternalApp = app }
-        if !model.hasCredential || !AccessibilityReader.trusted { model.selectedTab = 1; show() }
+        if !model.hasCredential || !model.permissions.snapshot.canControlComputer { model.selectedTab = 1; show() }
     }
     @objc func show() {
         if let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid() { model.lastExternalApp = app }

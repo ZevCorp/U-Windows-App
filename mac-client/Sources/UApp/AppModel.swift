@@ -24,14 +24,17 @@ final class AppModel: ObservableObject {
     @Published var credential = ""
     @Published var hasCredential = Credentials.read("GRAPH_API_KEY") != nil
     @Published var configurationMessage = ""
+    @Published var permissionSnapshot = PermissionCenter.readSnapshot()
     @Published var permissionsVersion = 0
     @Published var selectedTab = 0
+    let permissions = PermissionCenter()
     let desktop = Desktop()
     let speech = Speech()
     var showWindow: (() -> Void)?
     var hideWindow: (() -> Void)?
     var lastExternalApp: NSRunningApplication?
     private var work: Task<Void, Never>?
+    private var permissionObservation: AnyCancellable?
     private var answer: CheckedContinuation<String, Error>?
     private var questionID = UUID()
     private var runID = UUID()
@@ -41,6 +44,10 @@ final class AppModel: ObservableObject {
         let id = UUID().uuidString; UserDefaults.standard.set(id, forKey: "userID"); return id
     }()
     init() {
+        permissionObservation = permissions.$snapshot.sink { [weak self] snapshot in
+            self?.permissionSnapshot = snapshot
+            self?.permissionsVersion += 1
+        }
         speech.onPartial = { [weak self] text in self?.partial = text }
         speech.onText = { [weak self] text in self?.heard(text) }
         speech.onState = { [weak self] listening, speaking in
@@ -77,7 +84,7 @@ final class AppModel: ObservableObject {
             return try await self.liveTool(name, args: args)
         }
     }
-    func refreshPermissions() { permissionsVersion += 1 }
+    func refreshPermissions() { permissions.refreshAndPoll() }
     func saveConfiguration() {
         do {
             _ = try GraphClient(baseURL: graphURL, apiKey: "validation")
@@ -106,6 +113,13 @@ final class AppModel: ObservableObject {
             return
         }
         guard !busy else { status = "Detén la tarea antes de cambiar el modo de voz."; return }
+        if !nativeDictation && permissions.snapshot.microphone != .granted {
+            selectedTab = 1
+            showWindow?()
+            permissions.request(.microphone)
+            fail("Activa Micrófono y Reconocimiento de voz en Configuración para usar la voz en vivo.")
+            return
+        }
         microphone = true; awakeUntil = Date().addingTimeInterval(45)
         if nativeDictation { Task { await speech.start() }; return }
         guard hasCredential else { microphone = false; selectedTab = 1; showWindow?(); fail("Conecta Graph para usar la voz en vivo."); return }
@@ -192,7 +206,7 @@ final class AppModel: ObservableObject {
         guard hasCredential else {
             selectedTab = 1; showWindow?(); fail("Conecta tu cuenta de Graph para comenzar."); return
         }
-        guard AccessibilityReader.trusted else {
+        guard permissions.snapshot.canControlComputer else {
             selectedTab = 1; showWindow?(); fail("Falta el permiso de Accesibilidad."); return
         }
         hideWindow?()

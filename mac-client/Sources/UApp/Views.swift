@@ -123,27 +123,30 @@ struct MainView: View {
                 Text("La voz en vivo permite conversar e interrumpir. El dictado nativo envía cada petición a Graph; tras 45 segundos, vuelve a llamarme «oye U».").font(.caption).foregroundStyle(.secondary)
                 Divider()
                 Text("Permisos del Mac").font(.headline)
-                permission("Accesibilidad", detail: "Leer controles y usar teclado y ratón.", granted: AccessibilityReader.trusted) { AccessibilityReader.requestPermission() }
-                permission("Grabación de pantalla", detail: "Ver imágenes cuando una aplicación no expone sus controles.", granted: ScreenCapture.allowed) { ScreenCapture.requestPermission() }
-                permission("Micrófono y voz", detail: "Entender lo que le pides. El indicador verde muestra cuándo escucha.", granted: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized && SFSpeechRecognizer.authorizationStatus() == .authorized) {
-                    Task { _ = await Speech.authorize(); model.refreshPermissions() }
+                permission("Accesibilidad", detail: "Leer controles y usar teclado y ratón.", state: model.permissionSnapshot.accessibility) { model.permissions.request(.accessibility) }
+                permission("Grabación de pantalla", detail: "Ver imágenes cuando una aplicación no expone sus controles.", state: model.permissionSnapshot.screenCapture) { model.permissions.request(.screenCapture) }
+                permission("Micrófono y voz", detail: "Entender lo que le pides. El indicador verde muestra cuándo escucha.", state: model.permissionSnapshot.voice) { model.permissions.request(.microphone) }
+                HStack(spacing: 10) {
+                    Button("Revisar permisos") { model.refreshPermissions() }
+                    Button("Reiniciar Ü para aplicar") { model.permissions.relaunchApp() }
                 }
-                Button("Actualizar permisos") { model.refreshPermissions() }
                 Divider()
                 Text("Control y privacidad").font(.headline)
                 Text("La voz en vivo transmite el micrófono al proveedor mientras está conectada y termina a los 15 minutos. Graph recibe el texto de la pantalla durante una tarea. Las imágenes se envían solo cuando las solicita. Los campos protegidos se ocultan del árbol de accesibilidad. La conversación se mantiene en memoria y se borra al salir.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Después de activar un permiso, pulsa «Actualizar permisos». Si macOS no cambia el estado, cierra esta ventana y vuelve a abrir la app desde el lanzador de esta carpeta; no uses la copia de ~/Desktop/U.")
+                Text("Autoriza siempre la entrada «Ü para Mac» que aparece desde esta app. Al volver de Ajustes, el estado se revisa automáticamente. Grabación de pantalla y algunos cambios de TCC pueden exigir reiniciar Ü; el botón anterior relanza exactamente este bundle instalado.")
                     .font(.caption).foregroundStyle(.secondary)
+                Text("Bundle: \(Bundle.main.bundleIdentifier ?? "desconocido")\nRuta: \(Bundle.main.bundleURL.path)")
+                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
             }.padding(20)
         }.id(model.permissionsVersion)
     }
-    func permission(_ title: String, detail: String, granted: Bool, action: @escaping () -> Void) -> some View {
+    func permission(_ title: String, detail: String, state: PermissionState, action: @escaping () -> Void) -> some View {
         HStack(alignment: .top) {
-            Image(systemName: granted ? "checkmark.circle.fill" : "circle").foregroundStyle(granted ? .green : .secondary).padding(.top, 2)
+            Image(systemName: state.isGranted ? "checkmark.circle.fill" : "circle").foregroundStyle(state.isGranted ? .green : .secondary).padding(.top, 2)
             VStack(alignment: .leading, spacing: 3) { Text(title); Text(detail).font(.caption).foregroundStyle(.secondary) }
             Spacer()
-            if !granted { Button("Permitir", action: action) }
+            if !state.isGranted { Button(state == .denied ? "Abrir Ajustes" : "Permitir", action: action) }
         }
     }
 }
