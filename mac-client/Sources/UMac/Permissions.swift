@@ -61,6 +61,9 @@ public struct PermissionSnapshot: Equatable, Sendable {
 /// so the UI never depends on a manually invalidated SwiftUI view.
 @MainActor
 public final class PermissionCenter: ObservableObject {
+    public static let bundleIdentifier = "com.zevcorp.u"
+    private static let previousBundleIdentifier = "com.zevcorp.u.mac.native"
+    private static let migrationKey = "permissions.tcc-migration-v3"
     @Published public private(set) var snapshot: PermissionSnapshot
 
     private var activationObserver: NSObjectProtocol?
@@ -68,6 +71,7 @@ public final class PermissionCenter: ObservableObject {
     private var pollingTask: Task<Void, Never>?
 
     public init() {
+        Self.migrateStaleRecordsIfNeeded()
         snapshot = Self.readSnapshot()
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
@@ -151,6 +155,31 @@ public final class PermissionCenter: ObservableObject {
         task.arguments = ["-n", bundleURL.path]
         try? task.run()
         NSApp.terminate(nil)
+    }
+
+    /// Removes the records created by the two pre-installed U bundles once.
+    /// The old app used a cdhash-based ad-hoc identity, so its green toggle did
+    /// not authorize the canonical bundle launched from Applications.
+    public static func migrateStaleRecordsIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+        let services = ["Accessibility", "ScreenCapture"]
+        let bundleIDs = [bundleIdentifier, previousBundleIdentifier]
+        for service in services {
+            for bundleID in bundleIDs { _ = reset(service: service, bundleID: bundleID) }
+        }
+        UserDefaults.standard.set(true, forKey: migrationKey)
+    }
+
+    @discardableResult
+    private static func reset(service: String, bundleID: String) -> Bool {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        task.arguments = ["reset", service, bundleID]
+        do {
+            try task.run()
+            task.waitUntilExit()
+            return task.terminationStatus == 0
+        } catch { return false }
     }
 
     public static func readSnapshot() -> PermissionSnapshot {

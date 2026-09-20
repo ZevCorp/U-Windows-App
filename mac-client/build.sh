@@ -49,7 +49,7 @@ PLIST
   fi
   /usr/bin/codesign --verify --deep --strict "$bundle"
 }
-make_bundle U com.zevcorp.u.mac.native 'Ü para Mac'
+make_bundle U com.zevcorp.u 'Ü para Mac'
 make_bundle UFixture com.zevcorp.u.mac.fixture 'Ü Prueba local'
 /usr/bin/ditto -c -k --keepParent "$output_dir/U.app" "$output_dir/U-Mac.zip"
 echo "App lista: $output_dir/U.app"

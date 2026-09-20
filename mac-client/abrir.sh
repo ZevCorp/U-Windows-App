@@ -7,5 +7,5 @@ if [[ ! -x "$APP/Contents/MacOS/U" ]]; then
   "$ROOT/build.sh" debug
 fi
 # open is intentional: macOS TCC permissions belong to the app bundle, not a loose executable.
-open -n "$APP"
+open "$APP"
 echo "Ü para Mac abierta desde: $APP"

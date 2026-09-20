@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var observation: NSObjectProtocol?
     var highlight: NSPanel?
     func applicationDidFinishLaunching(_ notification: Notification) {
+        terminateOlderCopies()
         if let index = CommandLine.arguments.firstIndex(of: "--smoke-test"), CommandLine.arguments.count > index + 1 {
             Task { await SmokeTest.run(output: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }
             return
@@ -68,6 +69,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         if let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid() { model.lastExternalApp = app }
         if !model.hasCredential || !model.permissions.snapshot.canControlComputer { model.selectedTab = 1; show() }
+    }
+    private func terminateOlderCopies() {
+        for app in NSWorkspace.shared.runningApplications {
+            guard app.processIdentifier != getpid(),
+                  app.executableURL?.lastPathComponent == "U",
+                  app.bundleIdentifier == PermissionCenter.bundleIdentifier || app.bundleIdentifier == "com.zevcorp.u.mac.native"
+            else { continue }
+            // There must be one process even when `open -n` was used by an old launcher.
+            // Prefer a graceful close, then force the stale copy if it ignores the request.
+            app.terminate()
+            if !app.isTerminated { app.forceTerminate() }
+        }
     }
     @objc func show() {
         if let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid() { model.lastExternalApp = app }

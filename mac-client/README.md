@@ -33,6 +33,7 @@ Para probar el flujo como lo usará una persona instalada, compila y copia el bu
 Después abre `~/Applications/U.app`. No alternes entre el ejecutable suelto, `.artifacts/U.app` y
 otra copia en `~/Desktop/U/U-Mac/U.app`: macOS registra TCC por la identidad y el bundle concreto.
 La app muestra su bundle ID y ruta en Configuración para que la entrada autorizada siempre sea verificable.
+La primera apertura de esta versión limpia una sola vez los registros de las copias antiguas y cierra sus procesos.
 
 ## Permisos
 
@@ -78,6 +79,8 @@ El diagnóstico también muestra la ruta y el bundle ID que macOS está autoriza
 ```bash
 open -n "$HOME/Applications/U.app" --args --diagnose
 ```
+
+El diagnóstico debe ejecutarse con Ü cerrada para que `--args` llegue a una instancia nueva.
 
 ## Detener y volver a abrir
 
