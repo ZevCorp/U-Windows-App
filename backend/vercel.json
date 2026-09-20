@@ -1,11 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "api/**/*.ts": {
-      "maxDuration": 60
-    },
-    "api/teach/process-video.ts": {
-      "maxDuration": 300
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/**/*.ts",
+      "use": "@vercel/node@3.2.0"
     }
-  }
+  ]
 }

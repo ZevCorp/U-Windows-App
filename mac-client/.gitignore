@@ -1,0 +1,8 @@
+.build/
+.artifacts/
+*.app/
+*.dmg
+*.zip
+.swiftpm/
+.build-arm/
+.build-intel/

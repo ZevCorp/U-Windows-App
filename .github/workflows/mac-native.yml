@@ -1,0 +1,34 @@
+name: Native Mac
+on:
+  push:
+    branches: ['codex/mac-from-scratch']
+    paths: ['mac-client/**', '.github/workflows/mac-native.yml']
+  pull_request:
+    paths: ['mac-client/**', '.github/workflows/mac-native.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Contracts and packaged app
+        run: mac-client/build.sh release
+      - name: Cross-compile Apple Silicon and Intel
+        working-directory: mac-client
+        run: |
+          swift build -c release --product U --triple arm64-apple-macosx14.0 --scratch-path .build-arm
+          swift build -c release --product U --triple x86_64-apple-macosx14.0 --scratch-path .build-intel
+          arm_bin=$(swift build -c release --triple arm64-apple-macosx14.0 --scratch-path .build-arm --show-bin-path)
+          intel_bin=$(swift build -c release --triple x86_64-apple-macosx14.0 --scratch-path .build-intel --show-bin-path)
+          lipo -create "$arm_bin/U" "$intel_bin/U" -output .artifacts/U.app/Contents/MacOS/U
+          codesign --force --sign - .artifacts/U.app
+          codesign --verify --deep --strict .artifacts/U.app
+          ditto -c -k --keepParent .artifacts/U.app .artifacts/U-Mac.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: U-Mac-universal-development
+          path: mac-client/.artifacts/U-Mac.zip
+          retention-days: 14
