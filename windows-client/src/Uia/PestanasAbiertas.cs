@@ -440,13 +440,25 @@ public static class PestanasAbiertas
     /// ¿Son el mismo sitio? «github.com» y «www.github.com» lo son; «api.github.com» también cuenta
     /// como estar en GitHub, que es lo que pregunta quien pulsa el nivel.
     /// </summary>
-    private static bool MismoSitio(string host, string dominio)
+    /// <remarks>
+    /// TIENE DIRECCIÓN (promesa 333, spec 042): el host REAL puede ser un subdominio del PEDIDO, no al revés. Era
+    /// simétrica, y el 2026-09-18 pedir «scholar.google.com» con una pestaña en «google.com» contestó «ya estaba
+    /// activo en una ventana»: no se navegó a ninguna parte y se esperaron 11,6 s a una llegada imposible —
+    /// «scholar.google.com» termina en «.google.com»—. La dirección inversa cubría, de rebote, el caso de pedir
+    /// «www.sitio.com» estando en «sitio.com»: por eso el «www.» se quita de los DOS lados antes de comparar.
+    /// </remarks>
+    public static bool MismoSitio(string host, string dominio)
     {
-        string a = host.TrimStart().TrimEnd('/');
-        string b = dominio.TrimStart().TrimEnd('/');
+        string a = SinWww(host), b = SinWww(dominio);
+        if (a.Length == 0 || b.Length == 0) return false;
         return a.Equals(b, StringComparison.OrdinalIgnoreCase)
-            || a.EndsWith("." + b, StringComparison.OrdinalIgnoreCase)
-            || b.EndsWith("." + a, StringComparison.OrdinalIgnoreCase);
+            || a.EndsWith("." + b, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string SinWww(string? v)
+    {
+        string t = (v ?? "").Trim().TrimEnd('/');
+        return t.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? t[4..] : t;
     }
 
     /// <summary>Las ventanas de navegador visibles y CON título: las de app y los popups no tienen pestañas.</summary>

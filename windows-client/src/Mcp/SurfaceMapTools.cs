@@ -155,11 +155,19 @@ public sealed class SurfaceMapTools
         return salida;
     }
 
-    private string LoQueVeo()
+    /// <summary>
+    /// LAS PUERTAS DE AHORA, en orden de lectura: lo que ve UIA, las puertas vivas del terreno y los
+    /// campos del dynpro, fundidos sin duplicar. UNA SOLA LISTA para <c>map_what_i_see</c> y para
+    /// <c>map_decidir</c> (promesa 285): dos caminos para enumerar el mismo terreno se desincronizan
+    /// en silencio, y el decisor acabaría eligiendo entre puertas que la voz no lista, o al revés.
+    /// </summary>
+    /// <returns>Dónde, las puertas que se cuentan (con su tope) y cuántas hay en total.</returns>
+    private (string Aqui, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> Puertas, int Total) PuertasDeAhora()
     {
         var loc = _where();
         string aqui = loc?.Id ?? "";
-        if (aqui.Length == 0) return "no sé en qué pantalla estoy";
+        if (aqui.Length == 0) return ("", Array.Empty<(string, string, string)>(), 0);
+        if (Puertas != null) { var inyectadas = Puertas(aqui); return (aqui, inyectadas, inyectadas.Count); }
 
         _lector.Read();
         var vivos = _lector.Elements
@@ -177,24 +185,164 @@ public sealed class SurfaceMapTools
         var terreno = PuertasVivas?.Invoke(aqui) ?? Array.Empty<(string, string, string)>();
         var candidatos = ConLaEtiquetaQueSeLee(terreno, CamposDeSapComoPuertas());
         var delTerreno = FundirPuertas(vivos.Select(v => v.Label), candidatos);
-        // EL «NO VEO NADA» VA DESPUÉS DE MIRAR EN LOS TRES SITIOS (2026-09-08): con UIA en blanco
-        // —SAP recién delante, el lector aún sin leer— se contestaba «no veo ningún elemento» sin
-        // consultar el terreno ni el dynpro, que sí tenían 39 campos que contar.
-        if (vivos.Count == 0 && delTerreno.Count == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo";
-
-
-        int total = vivos.Count + delTerreno.Count;
-        var sb = new System.Text.StringBuilder(
-            $"EN PANTALLA AHORA, en «{aqui}» ({total} elemento(s)):" + "\n");
         // EL TOPE ERA 40 PUERTAS DE SAP y el triage tiene 39 campos más 21 botones (2026-09-08): los
         // signos vitales quedaban fuera de la lista y el piloto no podía nombrarlos. Un formulario
         // entero cabe en 160; lo que pase de ahí se dice.
-        foreach (var el in vivos.Take(60))
-            sb.AppendLine($"  «{el.Label}» ({el.ControlType})");
-        foreach (var p in delTerreno.Take(160))
-            sb.AppendLine($"  «{p.Etiqueta}» ({p.Tipo})");
+        // CON SU SELECTOR (promesa 287): es lo que la mano resuelve antes que el nombre, y lo que hace que
+        // dos «Detalles» no choquen. El selector no viaja a Jev: Jev decide por lo que una persona lee.
+        var lista = vivos.Take(60).Select(v => (Selector: Uia.Reconocedor.SelectorDe(v), Etiqueta: v.Label, Tipo: v.ControlType))
+            .Concat(delTerreno.Take(160).Select(p => (Selector: p.Selector, Etiqueta: p.Etiqueta, Tipo: p.Tipo)))
+            .ToList();
+        return (aqui, lista, vivos.Count + delTerreno.Count);
+    }
+
+    private string LoQueVeo()
+    {
+        var (aqui, puertas, total) = PuertasDeAhora();
+        if (aqui.Length == 0) return "no sé en qué pantalla estoy";
+        // EL «NO VEO NADA» VA DESPUÉS DE MIRAR EN LOS TRES SITIOS (2026-09-08): con UIA en blanco
+        // —SAP recién delante, el lector aún sin leer— se contestaba «no veo ningún elemento» sin
+        // consultar el terreno ni el dynpro, que sí tenían 39 campos que contar.
+        if (total == 0) return $"en «{aqui}» no veo ningún elemento accionable ahora mismo";
+
+        var sb = new System.Text.StringBuilder(
+            $"EN PANTALLA AHORA, en «{aqui}» ({total} elemento(s)):" + "\n");
+        foreach (var (_, etiqueta, tipo) in puertas)
+            sb.AppendLine($"  «{etiqueta}» ({tipo})");
         if (total > 220) sb.AppendLine($"  …y {total - 220} más");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// EL DECISOR ELIGE LA PUERTA Y LA PULSA POR EL MISMO CAMINO QUE map_take. Promesas 284-286 (spec 035).
+    /// </summary>
+    /// <remarks>
+    /// ES UNA HERRAMIENTA APARTE Y NO UN CAMBIO A map_take, a propósito: con el decisor apagado
+    /// —<see cref="Decisor"/> nulo— esto contesta «todavía no sé decidir» sin leer la pantalla, y el
+    /// catálogo de la voz ni la ofrece. Así el camino que usa el hospital hoy queda byte a byte igual.
+    ///
+    /// LAS PUERTAS SALEN DE <see cref="PuertasDeAhora"/>, la misma función que map_what_i_see, y la
+    /// elegida entra por <see cref="Take"/>: misma coreografía, mismos vetos, mismo juez de llegada,
+    /// misma <see cref="Mano"/> para el tope de intentos. Esta pieza no pulsa nada por su cuenta.
+    ///
+    /// CUANDO EL DECISOR NO ACTÚA, EL CONTROL VUELVE CON EL INVENTARIO. La respuesta empieza por
+    /// «no se acciona» y el despacho le pega lo que hay delante (263), para que Luna elija ella como
+    /// hasta hoy. Y la mano NO cuenta un intento: no se pulsó nada, y contarlo frenaría el «pruebo
+    /// otro» del tope de la 204 —el mismo argumento que la lista de homónimos (207).
+    /// </remarks>
+    private string Decidir(string objetivo, string decir, string recuerdo)
+    {
+        if (objetivo.Length == 0) return "falta `objetivo`: qué se quiere conseguir en esta pantalla, para que el decisor elija la puerta";
+        if (Decisor == null)
+            return "todavía no sé decidir: el decisor está apagado (U_DECISOR ausente o en «luna»), así que decide Luna. "
+                 + "Elige tú la puerta con map_take.";
+        return UnPasoDecidido(objetivo, decir, recuerdo).Cuenta;
+    }
+
+    /// <summary>
+    /// UN PASO DECIDIDO: leer las puertas, que el decisor elija, y pulsar por selector —con la segunda mejor si la
+    /// primera no está—. Es el cuerpo de map_decidir, y el paso que repite el tramo (spec 037). Devuelve qué pasó
+    /// como datos, y la cuenta con las mismas palabras de siempre.
+    /// </summary>
+    private Navigation.ElTramo.Paso UnPasoDecidido(string objetivo, string decir, string recuerdo)
+    {
+        Navigation.ElTramo.Paso Sin(string cuenta, string porque, double conf = 0, bool cumplido = false)
+        {
+            _ultimaMano = new Mano(false, false, Intento: false);
+            return new Navigation.ElTramo.Paso(false, false, false, "", "", "", conf, cuenta, porque, cumplido);
+        }
+        if (Decisor == null) return Sin("todavía no sé decidir: el decisor está apagado.", "el decisor está apagado");
+
+        // EL RELOJ DE CADA FASE, para el log del tramo: leer la pantalla, decidir, y pulsar (con la espera del
+        // cambio dentro). Es la medida que la fase 4 del plan necesita para saber qué recortar.
+        var relojLeer = System.Diagnostics.Stopwatch.StartNew();
+        var (aqui, puertas, total) = PuertasDeAhora();
+        relojLeer.Stop();
+        if (aqui.Length == 0) return Sin("no sé en qué pantalla estoy, así que no hay nada entre lo que decidir.", "no sé en qué pantalla estoy");
+        if (total == 0) return Sin($"en «{aqui}» no veo ningún elemento accionable ahora mismo: nada entre lo que decidir.", "no veo ningún elemento accionable");
+        // PUERTAS ÚNICAS Y NUMERADAS (promesa 287): «2) Detalles (RadioButton)». Con etiquetas a secas, en
+        // openai.com Jev eligió bien tres veces y las tres se perdieron en «hay 2 puertas vivas para…»
+        // (2026-09-18, 03:33-03:34): la etiqueta no es única; el id sí, y detrás lleva su selector.
+        var ids = new List<string>(puertas.Count);
+        var selectorDe = new Dictionary<string, (string Selector, string Etiqueta)>(StringComparer.Ordinal);
+        for (int i = 0; i < puertas.Count; i++)
+        {
+            string id = $"{i + 1}) {puertas[i].Etiqueta} ({puertas[i].Tipo})";
+            ids.Add(id);
+            selectorDe[id] = (puertas[i].Selector, puertas[i].Etiqueta);
+        }
+        var etiquetas = ids;
+
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        Decision.DecisionDeUnPaso d;
+        try { d = Decisor(aqui, objetivo, etiquetas); }
+        catch (Exception e)
+        {
+            // LA CADENA ENTERA (patrón nº3). ElDecisor promete no lanzar (280); esto es la costura, y lo
+            // que promete otro se comprueba: un decisor inyectado distinto sí podría.
+            string causa = "";
+            for (var x = e; x != null; x = x.InnerException)
+                causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
+            LogBus.Log("decisor", $"✘ en «{aqui}» el decisor lanzó: {causa}");
+            return Sin($"no se acciona: el decisor falló ({causa}). Decide Luna.", $"el decisor falló ({causa})");
+        }
+        reloj.Stop();
+
+        // SE REGISTRA CADA DECISIÓN CON SU CONFIANZA, también las descartadas: el umbral se ajusta con
+        // datos del terreno, y los datos son estas líneas.
+        LogBus.Log("decisor", $"«{aqui}» · {etiquetas.Count} puerta(s) · {reloj.ElapsedMilliseconds} ms → "
+            + (d.Actuar ? $"ACCIONA «{d.Puerta}»" : "no acciona")
+            + $" conf={d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} · {d.Porque}");
+
+        if (!d.Actuar)
+            return Sin($"no se acciona: {d.Porque}", d.Porque, d.Confianza,
+                cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo || d.Porque.Contains("cumplido", StringComparison.OrdinalIgnoreCase));
+
+        // LA ELEGIDA, Y COMO MUCHO LA SEGUNDA MEJOR (promesa 288): si la primera no está viva al ir a pulsarla,
+        // se prueba la siguiente por probabilidad si llega al mínimo. Sin otra llamada a Jev: las
+        // probabilidades ya vinieron. La tercera no se prueba: sería adivinar.
+        var candidatos = new List<(string Id, double Prob)> { (d.Puerta, d.Confianza) };
+        var segunda = d.Alternativas
+            .Where(a => a.Puerta != d.Puerta && a.Probabilidad >= Decision.ElDecisor.SegundaMejorMinima && selectorDe.ContainsKey(a.Puerta))
+            .OrderByDescending(a => a.Probabilidad)
+            .FirstOrDefault();
+        if (segunda.Puerta != null) candidatos.Add((segunda.Puerta, segunda.Probabilidad));
+
+        var relato = new System.Text.StringBuilder();
+        for (int k = 0; k < candidatos.Count; k++)
+        {
+            var (id, prob) = candidatos[k];
+            if (!selectorDe.TryGetValue(id, out var puerta))
+                return Sin($"no se acciona: el decisor contestó «{id}», que no es ninguna de las {ids.Count} puertas ofrecidas. Decide Luna.",
+                    $"contestó «{id}», que no se ofreció", d.Confianza);
+            string numero = id.Substring(0, id.IndexOf(')'));
+            var relojPulsar = System.Diagnostics.Stopwatch.StartNew();
+            string cuenta = Take(puerta.Selector, "", decir, recuerdo);
+            relojPulsar.Stop();
+            var mano = _ultimaMano;
+            string tiempos = $"leer {relojLeer.ElapsedMilliseconds} ms · decidir {reloj.ElapsedMilliseconds} ms · pulsar {relojPulsar.ElapsedMilliseconds} ms";
+            string medida = k == 0
+                ? $"con confianza {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}"
+                : $"con probabilidad {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}";
+
+            // «NO ESTÁ» ES LO ÚNICO QUE DISPARA LA SEGUNDA: la mano no terminó, lo intentó, y no fue una lista de
+            // homónimos (eso es otra clase de respuesta: falta elegir cuál de las iguales, no otra puerta).
+            bool noEstaba = _ultimaMano is { Termino: false, Intento: true } m && (m.Candidatos == null || m.Candidatos.Count == 0)
+                         && !cuenta.Contains("puertas vivas para", StringComparison.Ordinal);
+            if (noEstaba && k + 1 < candidatos.Count)
+            {
+                relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}; probé la segunda: ");
+                continue;
+            }
+            if (noEstaba)
+                relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}");
+            else
+                relato.Append($"elegida «{puerta.Etiqueta}» ({numero}) {medida}: {cuenta}");
+            bool termino = mano?.Termino == true;
+            bool cambio = mano?.Logro == true;
+            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Etiqueta, numero, prob, relato.ToString(), d.Porque, false, tiempos);
+        }
+        return Sin(relato.ToString(), "no quedó ninguna candidata", d.Confianza);
     }
 
     /// <summary>
@@ -1027,7 +1175,11 @@ public sealed class SurfaceMapTools
                 return true;
             }
 
+            var cronoLectura = System.Diagnostics.Stopwatch.StartNew();
             _lector.Read();
+            // CUÁNTO CUESTA SEÑALAR (spec 030, nivel 4): esta lectura va ANTES de la compuerta y del clic, y en una
+            // página recién cargada de Chrome puede ser lo que la persona vive como «demora entre pulsando y el clic».
+            LogBus.Log("mano", $"señalar «{etiqueta}»: leí la ventana en {cronoLectura.ElapsedMilliseconds} ms ({_lector.Elements.Count} elemento(s))");
             var visto = _lector.Elements.FirstOrDefault(
                             e => Uia.Reconocedor.SelectorDe(e).Equals(selector, StringComparison.OrdinalIgnoreCase))
                         // Por etiqueta como último recurso: un selector puede envejecer —cambia una
@@ -1556,6 +1708,81 @@ public sealed class SurfaceMapTools
     public Func<string>? InventarioParaLosActos { get; set; }
 
     /// <summary>
+    /// DE DÓNDE SALEN LAS PUERTAS DE AHORA (promesa 285). Nulo en la app: UIA + terreno + dynpro, como
+    /// siempre. El contrato lo cambia por una lista fija para juzgar que map_decidir y map_what_i_see
+    /// ven lo mismo, sin tocar la pantalla.
+    /// </summary>
+    public Func<string, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>>? Puertas { get; set; }
+
+    /// <summary>
+    /// QUIÉN ELIGE LA PUERTA cuando el cerebro pide <c>map_decidir</c> (spec 035): pantalla, objetivo y
+    /// las etiquetas de las puertas de ahora → una decisión. NULO = decide Luna, y la herramienta no
+    /// existe para ella. Lo enchufa la ventana según <see cref="Decision.ConfiguracionDelDecisor"/>.
+    /// </summary>
+    public Func<string, string, IReadOnlyList<string>, Decision.DecisionDeUnPaso>? Decisor { get; set; }
+
+    // ── El tramo (spec 037) ───────────────────────────────────────────────────────────────────────
+
+    /// <summary>¿Hay que parar? Por defecto, el freno de Escape. El contrato lo cambia por el suyo.</summary>
+    public Func<bool>? HayQueParar { get; set; }
+
+    /// <summary>Cada paso del tramo, en una línea: para el notch. Nulo = solo al log.</summary>
+    public Action<string>? Progreso { get; set; }
+
+    /// <summary>La cuenta del tramo al parar, como mensaje a la sesión de voz (295). Nulo = sin voz.</summary>
+    public Action<string>? AvisarALaVoz { get; set; }
+
+    /// <summary>Pedir el freno de verdad (map_alto). Por defecto, el de Escape; el contrato lo cambia por un no-op.</summary>
+    public Action<string>? PedirFreno { get; set; }
+
+    /// <summary>Marcar que empieza y termina una tarea para el freno (Freno.Empezar/Termine). Nulos = nada.</summary>
+    public Action<string>? AlEmpezarTramo { get; set; }
+    public Action? AlTerminarTramo { get; set; }
+
+    private Navigation.ElTramo? _tramo;
+
+    /// <summary>Para los jueces: espera a que el tramo en marcha termine.</summary>
+    public bool EsperarTramo(int ms) => _tramo?.Esperar(ms) ?? true;
+
+    private Navigation.ElTramo ElTramo() => _tramo ??= new Navigation.ElTramo(new Navigation.ElTramo.Manos(
+        Donde: () => { try { return _where()?.Id ?? ""; } catch { return ""; } },
+        Paso: objetivo => UnPasoDecidido(objetivo, "", ""),
+        HayQueParar: () => HayQueParar?.Invoke() ?? Actions.Freno.Pidieron,
+        Progreso: l => Progreso?.Invoke(l),
+        Inventario: () => InventarioParaLosActos?.Invoke() ?? LoQueVeo(),
+        AvisarALaVoz: AvisarALaVoz == null ? null : (Action<string>)(c => AvisarALaVoz?.Invoke(c)),
+        Log: l => LogBus.Log("tramo", l),
+        AlEmpezar: t => AlEmpezarTramo?.Invoke(t),
+        AlTerminar: () => AlTerminarTramo?.Invoke()));
+
+    /// <summary>«map_tramo»: contesta al instante y el bucle corre por detrás (291).</summary>
+    private string Tramo(string objetivo, string tope, string decir)
+    {
+        if (objetivo.Length == 0) return "falta `objetivo`: qué se quiere conseguir, para que el tramo sepa hacia dónde ir";
+        if (Decisor == null)
+            return "todavía no sé recorrer un tramo: el decisor está apagado (U_DECISOR ausente o en «luna», o el botón Jev apagado). "
+                 + "Avanza tú paso a paso con map_take.";
+        int.TryParse(tope, out int n);
+        string r = ElTramo().Arrancar(objetivo, n);
+        LogBus.Log("tramo", $"→ {r}");
+        return r;
+    }
+
+    /// <summary>«map_alto»: para el tramo en el paso en curso, y pone el mismo freno que Escape (293).</summary>
+    private string Alto()
+    {
+        var t = _tramo;
+        if (t == null || !t.EnMarcha) return "no hay ningún tramo en marcha que parar.";
+        string r = t.Parar("lo pidió la voz (map_alto)");
+        try { PedirFreno?.Invoke("lo pidió la voz (map_alto)"); } catch (Exception e) { LogBus.Log("tramo", $"no pude pedir el freno: {e.Message}"); }
+        LogBus.Log("tramo", $"ALTO: {r}");
+        return r;
+    }
+
+    /// <summary>«map_tramo_estado»: la cuenta, en marcha o terminada (294).</summary>
+    private string EstadoDelTramo() => _tramo?.Estado ?? "no hay ningún tramo en marcha ni terminado.";
+
+    /// <summary>
     /// SITUARSE, contestado por el núcleo. Lo enchufa la ventana cuando el mapa vivo existe; si
     /// vale null se contesta como siempre. Ver <see cref="Navigation.AquiSegunElNucleo"/>.
     /// </summary>
@@ -1818,7 +2045,8 @@ public sealed class SurfaceMapTools
     }
 
     public static bool IsMapTool(string tool) => tool is
-        "map_where_am_i" or "map_go_to" or "map_take" or "map_type" or "map_unblock"
+        "map_where_am_i" or "map_go_to" or "map_take" or "map_type" or "map_unblock" or "map_decidir"
+        or "map_tramo" or "map_alto" or "map_tramo_estado"
         or "map_open_app" or "map_what_i_see" or "map_pointing_at" or "map_show"
         or "map_pointed_trail" or "map_exclude" or "map_shot" or "map_scroll"
         or "map_esto_es" or "map_recuerdos" or "map_batch" or "map_ahead"
@@ -1855,6 +2083,10 @@ public sealed class SurfaceMapTools
             "map_where_am_i" => WhereAmI(),
             "map_go_to" => GoTo(A("surface")),
             "map_take" => Take(A("exit"), A("which"), A("decir"), A("recuerdo")),
+            "map_decidir" => Decidir(A("objetivo"), A("decir"), A("recuerdo")),
+            "map_tramo" => Tramo(A("objetivo"), A("tope"), A("decir")),
+            "map_alto" => Alto(),
+            "map_tramo_estado" => EstadoDelTramo(),
             "map_type" => Type(A("text"), A("target"), A("decir"), A("recuerdo")),
             "map_unblock" => Desbloquear(A("at"), A("choose")),
             "map_open_app" => OpenApp(A("app"), A("instancia")),
@@ -2571,8 +2803,7 @@ public sealed class SurfaceMapTools
         // estar en la carpeta padre y el ancla rechazaba los pasos siguientes uno tras otro
         // (2026-08-03). Escribir un nombre no debería cambiar de sitio; si cambió, se deshace.
         string ahora = _where()?.Id ?? "";
-        if (antes.Length > 0 && ahora.Length > 0
-            && !string.Equals(antes, ahora, StringComparison.OrdinalIgnoreCase))
+        if (ElEnterSeDeshace(antes, ahora))
         {
             LogBus.Log("mapa-mcp", $"el Enter abrió «{ahora}»; se vuelve a «{antes}»");
             var atras = new PlanStep
@@ -2582,10 +2813,41 @@ public sealed class SurfaceMapTools
             };
             _uia.Execute(atras, out _);
             Llego(antes, 2000);
+            ahora = antes;   // se volvió: no se cuenta como una llegada
         }
 
         LogBus.Log("mapa-mcp", $"✓ escrito «{texto}» en {selector}");
-        return $"escribí «{texto}» y confirmé con Enter";
+        return RelatoDeEscribir(texto, antes, ahora);
+    }
+
+    /// <summary>
+    /// ¿HAY QUE DESHACER LO QUE HIZO EL ENTER? Solo donde escribir es RENOMBRAR: el Explorador de archivos.
+    /// Promesa 330 (spec 041). Puro.
+    /// </summary>
+    /// <remarks>
+    /// La protección nació el 2026-08-03 para un caso real: al renombrar una carpeta recién creada, el Enter que
+    /// confirma el nombre también la ABRE, y la tarea seguía creyéndose en la carpeta padre. Pero se aplicaba a toda
+    /// superficie, y en la web que el Enter navegue es exactamente lo que se pidió.
+    ///
+    /// MEDIDO EL 2026-09-18 en una sesión de voz del dueño: 11 veces, las 11 donde no tocaba —10 en Google, 1 en el
+    /// Bloc de notas, donde escribir le cambió el título a la pestaña—. El botón «Atrás» que se busca es el del
+    /// Explorador (`backButton`), así que no se encontró ninguna vez: cinco intentos de resolverlo más 2 s esperando
+    /// una vuelta que no iba a llegar, 3-4 s por búsqueda, 53 de los 94 s de herramientas de la sesión. Y lo peor no
+    /// pasó de milagro: con un navegador cuyo «volver» se llamara igual, cada búsqueda se habría deshecho sola
+    /// mientras la respuesta decía «escribí y confirmé con Enter».
+    /// </remarks>
+    public static bool ElEnterSeDeshace(string antes, string ahora) =>
+        !string.IsNullOrWhiteSpace(antes) && !string.IsNullOrWhiteSpace(ahora)
+        && antes.Trim().StartsWith("uia://explorer.exe/", StringComparison.OrdinalIgnoreCase)
+        && !Navigation.Superficies.MismaPantalla(antes, ahora);
+
+    /// <summary>Lo que se le cuenta al modelo tras escribir: y si el Enter llevó a otra pantalla, A CUÁL — que si no, gasta otra llamada en averiguarlo.</summary>
+    public static string RelatoDeEscribir(string texto, string antes, string ahora)
+    {
+        string relato = $"escribí «{texto}» y confirmé con Enter";
+        bool llego = !string.IsNullOrWhiteSpace(antes) && !string.IsNullOrWhiteSpace(ahora)
+            && !Navigation.Superficies.MismaPantalla(antes, ahora);
+        return llego ? relato + $", y ahora estás en «{ahora.Trim()}»" : relato;
     }
 
     /// <summary>

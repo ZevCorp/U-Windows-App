@@ -29,10 +29,24 @@ public static class Superficies
         string x = (a ?? "").Trim(), y = (b ?? "").Trim();
         if (x.Length == 0 || y.Length == 0) return false;
         if (x.Equals(y, StringComparison.OrdinalIgnoreCase)) return true;
+        // CON «www» Y SIN ÉL ES LA MISMA PANTALLA. Medido el 2026-09-18: tras escribir una dirección, `map_type`
+        // veía «web://www.google.com/search» antes y «web://google.com/search» después —dos productores de la
+        // identidad de una web, uno conserva el «www.» y otro lo quita (aprendizaje nº16)— y lo tomaba por un cambio
+        // de pantalla que había que deshacer. Siete veces en una sesión.
+        if (SinWww(x) is { } wx && SinWww(y) is { } wy && wx.Equals(wy, StringComparison.OrdinalIgnoreCase)) return true;
         return Partes(x) is { } px && Partes(y) is { } py
             && px.Sistema.Equals(py.Sistema, StringComparison.OrdinalIgnoreCase)
             && px.Resto.Equals(py.Resto, StringComparison.OrdinalIgnoreCase)
             && (EsTransitoria(px) || EsTransitoria(py));
+    }
+
+    /// <summary>«web://www.sitio.com/ruta» → «web://sitio.com/ruta»; null si no es una web.</summary>
+    private static string? SinWww(string id)
+    {
+        const string prefijo = "web://";
+        if (!id.StartsWith(prefijo, StringComparison.OrdinalIgnoreCase)) return null;
+        string resto = id[prefijo.Length..];
+        return prefijo + (resto.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? resto[4..] : resto);
     }
 
     private const string TransaccionDeEasyAccess = "SESSION_MANAGER";

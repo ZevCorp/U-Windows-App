@@ -729,6 +729,17 @@ internal static class Contrato
         // en el 20% del reloj, cada vuelta que sobra son 3 s que no se pueden acelerar de otra forma.
         Prueba("263. un acto cuenta lo que dejó delante: pulsar, escribir, ir, abrir, desplazar y desbloquear devuelven, detrás de lo que pasó, el mismo inventario que daría map_what_i_see —la pantalla y lo accionable—, también cuando no pudieron; una llamada que ni llegó a actuar no lo añade, un saber no lo repite, y el catálogo le dice al modelo que después de un acto no vuelva a preguntar qué hay", UnActoCuentaLoQueDejoDelante);
 
+        // EL CLIC NO SE RECHAZA A SÍ MISMO (spec 030, 2026-09-17). La mitad de los clics que fallaban —37 de 74 en tres
+        // días— los rechazaba nuestra propia compuerta: juzga si la puerta está viva contra la memoria del mapa vivo,
+        // que va 1–2 s por detrás de la pantalla. Medido: map_pointing_at dijo «puedo pulsarlo ahora» y 26 s después
+        // la compuerta esperó 4 s y contestó «no lo conozco» sobre el mismo botón. Dos jueces, dos criterios (nº16).
+        Prueba("264. vivo se juzga mirando AHORA: si el mapa no tiene una puerta como viva, antes de rendirse la compuerta vuelve a mirar la ventana; si al mirar aparece, se pulsa en el acto; si no aparece ni mirando, se dice que no se ve, como hasta hoy", LaCompuertaMiraOtraVezAntesDeRendirse);
+        Prueba("265. un patrón que lanza no es un clic que falló: la escalera de pulsar termina siempre en el clic físico —tras el patrón, tras el mensaje— y sólo el físico decide que no se pudo", LaEscaleraTerminaEnElClicFisico);
+        // LAS DOS TANDAS QUE SIENTE EL DUEÑO: la coreografía de la 014 —tarjeta y pausa de lectura de hasta 4 s— aplicada
+        // a clics normales, porque el modelo pone decir/recuerdo en el 89% de ellos. Fuera de una comprobación sobra.
+        Prueba("266. fuera de una comprobación, pulsar es señalar y tocar en un solo gesto: sin tarjeta ni pausa de lectura, y el recuerdo que el modelo mande se escribe DESPUÉS de tocar; dentro de una comprobación la coreografía de la 180 sigue entera", FueraDeUnaComprobacionPulsarEsUnSoloGesto);
+        Prueba("267. un paso que hizo 0 de N se ve como fallo, no con ✓: el notch y el registro lo pintan como lo que fue", CeroDeUnoSeVeComoFallo);
+
         Prueba("258. el modelo puede pedir lo que vio antes: pedir la mirada de una ubicación devuelve su foto con su ficha —cuándo fue y qué estaba pasando—, y si de esa no hay, dice QUÉ ubicaciones sí recuerda en vez de contestar que no hay nada", ElModeloPuedePedirLoQueVioAntes);
 
         // EL NOTCH NO DECÍA QUE LO HABÍAN PARADO (spec 028, ampliada 2026-09-17). El dueño, tras probarlo en vivo:
@@ -751,6 +762,54 @@ internal static class Contrato
         Prueba("272. la carita se guarda en la consulta igual que en el muelle: soltarla dentro la sienta en el centro, la flotante desaparece, y hay UNA silla ocupada a la vez —muelle o consulta, nunca las dos—; el anfitrión lo decide la caja donde se soltó, con el mismo margen de agarre, y tirar de ella la saca bajo el cursor como hoy", LaCaritaSeGuardaEnLaConsultaComoEnElMuelle);
         Prueba("273. debajo de la carita sentada en la consulta hay un botón para llevarla a otro escritorio, que ofrece los escritorios por su nombre —«Escritorio N» los que no lo tienen— menos el actual, y «Uno nuevo»; sin carita sentada el botón no está", ElBotonOfreceLosEscritoriosPorSuNombre);
         Prueba("274. llevar a otro escritorio deja al asistente trabajando allí: las ventanas del centro de operaciones acaban en el destino, el destino queda a la vista, su escritorio pasa a ser ese, y la carita se suelta de la consulta y se posa con su animación; durante el viaje la consulta se queda delante si el sistema deja fijarla, y si no, el log dice que faltó un instante; llegar lo dice el sistema, no el botón, y si no se llega en el plazo se dice, las ventanas vuelven y nada queda a medias", ElViajeLlegaCuandoElSistemaLoDice);
+
+        // ── Spec 035: el decisor se puede cambiar ────────────────────────────────────────────────
+        Prueba("275. el decisor por defecto es Luna: sin configuración se decide como hoy, y a TypeSafe no se le llama NUNCA — el transporte no se toca ni una vez", PorDefectoDecideLuna);
+        Prueba("276. el interruptor cambia quién decide sin recompilar, y un valor que no se entiende cae en Luna diciéndolo: nunca se queda a medias entre los dos", ElInterruptorCambiaQuienDecide);
+        Prueba("277. la clave no vive en el código: sale de TYPESAFE_API_KEY, y sin ella el decisor de Jev NO se activa —se queda en Luna y dice que falta la clave— en vez de llamar sin credencial; y la clave no viaja nunca dentro del cuerpo", LaClaveNoViveEnElCodigo);
+        Prueba("278. Jev solo puede elegir entre las puertas que se le dieron: una respuesta con una puerta que no está en el inventario se rechaza y no se ejecuta, y se dice cuál vino", JevSoloEligeEntreLasPuertasDadas);
+        Prueba("279. por debajo del umbral de confianza no se actúa: la decisión se declara insegura y el control vuelve a Luna, en vez de tomar la puerta más probable de un empate", SinConfianzaNoSeActua);
+        Prueba("280. TypeSafe caído, lento o con error no detiene el trabajo: al fallar el transporte se cae a Luna, se dice por qué, y la excepción no sale de la pieza", SiTypeSafeFallaSeCaeALuna);
+        Prueba("281. el modo simulado no toca la red: decide con una regla fija y repetible, para que las pruebas no dependan de que TypeSafe conteste; y con cero palabras en común entre el objetivo y cualquier puerta NO actúa —una regla de andamiaje no puede accionar la primera puerta con confianza 1,00—, y su confianza es cuánto de la puerta explica el objetivo, no un 1,00 fijo", ElModoSimuladoNoTocaLaRed);
+        Prueba("282. la petición cumple el contrato HTTP de TypeSafe campo por campo: model, state, y questions con type «choice», instructions y criteria con TODAS las opciones ofrecidas", LaPeticionCumpleElContratoDeTypeSafe);
+        Prueba("283. 429 y 529 se reintentan con espera creciente; 401 y 422 no se reintentan, porque reintentar una clave mala o un cuerpo inválido solo gasta un cupo que TypeSafe dice que se mueve sin aviso", LosReintentosDistinguenLoQueMejoraDeLoQueNo);
+        Prueba("284. map_decidir existe solo con el decisor encendido: apagado no está en el catálogo, las instrucciones no lo nombran, y llamarlo contesta que decide Luna sin leer la pantalla ni pulsar; encendido está en el catálogo con `objetivo`, y las instrucciones mandan pedirlo con el objetivo en vez de elegir la puerta", MapDecidirSoloExisteConElDecisor);
+        Prueba("285. map_decidir ofrece al decisor exactamente las puertas que map_what_i_see lista, en su orden, y acciona la elegida por el mismo camino que map_take: la mano recibe ese paso, la cuenta dice qué se eligió y con qué confianza, y el acto cuenta lo que dejó delante", MapDecidirEligeEntreLoQueSeVeYPulsaComoMapTake);
+        Prueba("286. cuando el decisor no actúa —duda, puerta fuera de lista, TypeSafe caído, o el propio decisor lanza— map_decidir no pulsa nada, dice por qué con las palabras del decisor, la mano no cuenta un intento, y el control vuelve con el inventario delante; sin `objetivo` dice qué falta", SiElDecisorNoActuaNadaSePulsa);
+
+        // ── Spec 036: las puertas son únicas ────────────────────────────────────────────────────
+        Prueba("287. Jev elige entre puertas únicas y numeradas —«3) Investigación (Hyperlink)»— y lo elegido se acciona por su SELECTOR, nunca por su etiqueta: dos puertas con el mismo nombre no chocan, la mano recibe el selector de la elegida, y la cuenta la nombra por su etiqueta y su número", JevEligePorNumeroYSePulsaPorSelector);
+        Prueba("288. la segunda mejor sin otra llamada: si la elegida no está viva al ir a pulsarla se prueba la siguiente por probabilidad si supera el mínimo, como mucho una vez más; a Jev se le preguntó UNA sola vez; la cuenta dice qué se probó y por qué; y un homónimo o un fallo que no sea «no está» no dispara la segunda", LaSegundaMejorSinOtraLlamada);
+        Prueba("289. una llamada, tres preguntas: el cuerpo lleva puerta (choice), cumplido (noul) y peligro (noul); con cumplido alto no se acciona y se dice que el objetivo ya está; con peligro alto no se acciona y se dice por qué; y una respuesta sin esas dos sigue valiendo", UnaLlamadaTresPreguntas);
+        // ── Spec 037: el tramo ──────────────────────────────────────────────────────────────────
+        Prueba("291. map_tramo(objetivo, tope) contesta al instante «en marcha» y devuelve el turno: el bucle corre por detrás; pedir otro mientras uno corre no arranca un segundo y dice cuál corre; sin `objetivo` dice qué falta; y con el decisor apagado no existe, como map_decidir", MapTramoContestaAlInstanteYCorrePorDetras);
+        Prueba("292. el tramo para solo y su cuenta dice por cuál: el decisor dice que el objetivo ya está cumplido; se agota el tope; el decisor no se atreve; la mano no pudo; se pidió el freno; o se repitió la misma puerta tres veces; y cada paso cuenta, hecho o no", ElTramoParaSoloYDicePorQue);
+        Prueba("293. map_alto para el tramo en el paso en curso, sin esperar al siguiente: pone el mismo freno que Escape y contesta dónde quedó; sin tramo en marcha lo dice", MapAltoParaElTramoDondeVa);
+        Prueba("294. el tramo cuenta cada paso —al notch y al log, con la puerta, el número y la confianza— y la cuenta final lleva lo que hay delante; map_tramo_estado la devuelve en cualquier momento", ElTramoCuentaCadaPasoYLoQueDejoDelante);
+        Prueba("295. la voz se entera sin preguntar: al parar, la cuenta entra a la sesión de voz como un mensaje, una sola vez por tramo; sin sesión de voz, la cuenta queda para map_tramo_estado", LaVozSeEnteraSinPreguntar);
+        Prueba("290. el interruptor en vivo: encender deja map_decidir en el catálogo y un decisor en el mapa; apagar deja el catálogo byte a byte como sin decisor y el mapa sin decisor; las dos cosas re-mandan el catálogo a la voz; pedir encender sin clave ni modo válido se queda apagado y dice por qué; y el estado se lee en una línea", ElInterruptorEnVivo);
+
+        // ── Spec 038: esperar es suscribirse (primer corte) ─────────────────────────────────────
+        Prueba("296. una puerta que ya se vio llevar a donde estamos no se ensaya ni se repite: desde aquí no navega, así que bastan un clic y una espera —ni doble clic de ensayo, ni la repetición de la 248—; la cuenta dice que ya estás donde lleva; si la pantalla SÍ cambia se cuenta como siempre; y una puerta que lleva a otro sitio sigue repitiéndose una vez", UnaPuertaQueLlevaAquiNoSeEnsayaNiSeRepite);
+
+        // ── Spec 038: leer es una llamada ───────────────────────────────────────────────────────
+        Prueba("297. leer la pantalla es recorrer lo que UNA petición trajo: el recorrido recibe el árbol ya traído y no navega; recoge lo mismo que antes —accionable, visible, con etiqueta (nombre, o id, o ayuda) y con geometría, en orden de lectura, con los mismos topes: 40 niveles, y pasados los 400 elementos no se entra en más ramas—; si la petición con caché falla se lee nodo a nodo como antes; y el lector dice cuál de los dos caminos usó y por qué", LeerEsRecorrerLoQueUnaPeticionTrajo);
+        Prueba("298. lo que la petición principal ya trajo no se vuelve a pedir ni se cuenta dos veces: una ventana hija cuya raíz ya venía en el árbol no se pide —ni una llamada— y sus elementos no salen repetidos; una hija que NO venía se pide una vez y sus elementos se añaden detrás, como antes; y el tope de elementos se gasta en elementos distintos, no en copias", LoQueYaVinoNoSeVuelveAPedir);
+
+        // ── Spec 040: la pantalla asentada no se espera ─────────────────────────────────────────
+        Prueba("299. una pantalla asentada no se espera: si la puerta pedida no está y dos miradas seguidas ven lo mismo —la misma ubicación y las mismas puertas vivas—, la compuerta se rinde en el acto y no al agotar el presupuesto, diciendo lo mismo que decía; si entre las dos miradas la pantalla cambió, está cargando: se espera el presupuesto entero y la puerta que aparece se pulsa; sin poder mirar, nada cambia; y en los dos casos la compuerta deja dicho cuánto esperó y por qué dejó de esperar", UnaPantallaAsentadaNoSeEspera);
+        Prueba("300. una copia distribuida NO lleva dentro las claves de la voz ni de Jev: la del entorno manda si está, y si no se le piden a Graph con la credencial que ya va embebida, UNA sola vez aunque se resuelvan varias; lo traído vive solo en memoria; una clave que el backend no da deja su función apagada diciendo cuál falta; y NINGUNA clave aparece jamás en el log ni en la línea de estado", LasClavesVivenEnElBackend);
+
+        // ── Spec 041: el Enter no se deshace, y un espacio no esconde una puerta (bloque 330-339) ─
+        Prueba("330. escribir y confirmar con Enter solo se deshace donde escribir es renombrar —el Explorador de archivos—: en la web y en cualquier otra superficie, que el Enter cambie de pantalla es lo que se pidió; no se pulsa «Atrás», no se espera la vuelta, y la respuesta dice a dónde se llegó; y dos formas de la misma pantalla —con www y sin él— no cuentan como un cambio", ElEnterSoloSeDeshaceDondeEscribirEsRenombrar);
+        Prueba("331. un espacio no esconde una puerta: un selector por nombre encuentra el elemento aunque su nombre real traiga espacios al principio o al final que la etiqueta guardada no tiene; primero se busca el nombre exacto, como siempre, y solo si no aparece se compara recortando; un nombre que de verdad es otro sigue sin casar", UnEspacioNoEscondeUnaPuerta);
+
+        // ── Spec 042: ir a una web no espera mirando otra ventana ───────────────────────────────
+        Prueba("332. ponerse delante de otra ventana la vuelve la de trabajo antes de comprobar la llegada: ir a una web que ya está abierta en otra ventana del navegador se da por llegado en cuanto esa ventana está delante, no al agotar los presupuestos mirando la ventana anterior; y ponerse delante se pide UNA vez por paso —si ya se pidió y no se llegó, no se vuelve a pedir ni se abre un segundo plazo—", PonerseDelanteVuelveLaVentanaLaDeTrabajo);
+        Prueba("333. pedir un subdominio no se cumple estando en el dominio padre: con scholar.google.com pedido, una pestaña en google.com no es «ya estaba abierto»; pedir el sitio a secas sí se cumple en un subdominio suyo, como hasta hoy; y www. no cuenta en ninguno de los dos lados", PedirUnSubdominioNoSeCumpleEnElPadre);
+
+        // ── Spec 043: un campo de texto no navega ───────────────────────────────────────────────
+        Prueba("334. un campo de texto no navega: al pulsar un Edit o un ComboBox no se espera el presupuesto de un cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el terreno ni se repite el clic, y la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta como cualquier navegación; y lo que no es un campo espera como siempre", UnCampoDeTextoNoNavega);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -6601,7 +6660,7 @@ internal static class Contrato
             "un selector se reconoce por su prefijo de mundo: sap: o uia:; un nombre no lo lleva");
 
         // Y la coreografía de la mano es la MISMA que la del plan: sin decir no se dice, sin recuerdo no hay tarjeta, y se actúa igual.
-        var core = Capacidad("U.WindowsClient.Piloto.ElRecuerdoQueSeVe")!.GetMethod("Coreografia")!;
+        var core = Capacidad("U.WindowsClient.Piloto.ElRecuerdoQueSeVe")!.GetMethod("Coreografia", new[] { typeof(bool), typeof(bool), typeof(bool) })!;
         var sinNada = ((System.Collections.IEnumerable)core.Invoke(null, new object[] { true, false, false })!).Cast<object>().Select(g => g.ToString()).ToList();
         Debe(sinNada.SequenceEqual(new[] { "Senalar", "Actuar", "Soltar" }), $"una mano sin decir ni recuerdo: señalar, actuar y soltar, nada más (salió {string.Join(",", sinNada)})");
         var conTodo = ((System.Collections.IEnumerable)core.Invoke(null, new object[] { true, true, true })!).Cast<object>().Select(g => g.ToString()).ToList();
@@ -7006,7 +7065,7 @@ internal static class Contrato
     private static void ElRecuerdoSeVeAntesDeTocar()
     {
         var t = Capacidad("U.WindowsClient.Piloto.ElRecuerdoQueSeVe");
-        var coreo = t?.GetMethod("Coreografia"); var lectura = t?.GetMethod("TiempoDeLectura");
+        var coreo = t?.GetMethod("Coreografia", new[] { typeof(bool), typeof(bool), typeof(bool) }); var lectura = t?.GetMethod("TiempoDeLectura");
         Debe(t != null && coreo != null && lectura != null,
             "todavía no existe «Piloto.ElRecuerdoQueSeVe» (spec 014, promesa 180). "
             + "La promesa está escrita y en rojo, que es donde tiene que estar");
@@ -10542,6 +10601,126 @@ internal static class Contrato
             "y las instrucciones lo dicen con todas las letras");
     }
 
+
+    private static void LaCompuertaMiraOtraVezAntesDeRendirse()
+    {
+        var pMira = typeof(RecorrerSegunElNucleo).GetProperty("MiraOtraVez");
+        if (pMira == null) { Pendiente("RecorrerSegunElNucleo.MiraOtraVez (la compuerta mira otra vez)", "264", "030"); return; }
+
+        // «Viejo» está RECORDADO en la pantalla pero la última observación del mapa no lo trae: hoy la 56 dice «no lo veo».
+        Nucleo.Grafo Mundo()
+        {
+            var g = MundoDeTres();
+            g.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:1", "Uno", "Button"), new Nucleo.Elemento("s:v", "Viejo", "Button") });
+            g.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:1", "Uno", "Button") });
+            return g;
+        }
+
+        // AL MIRAR OTRA VEZ, APARECE: se pulsa en el acto.
+        var g1 = Mundo();
+        var (b1, _, t1) = BatchCon(g1, "uia://x.exe/a", RutasDeTres);
+        int miradas = 0;
+        pMira.SetValue(b1, (Func<string, bool>)(aqui =>
+        {
+            miradas++;
+            g1.Observar(aqui, new[] { new Nucleo.Elemento("s:1", "Uno", "Button"), new Nucleo.Elemento("s:v", "Viejo", "Button") });
+            return true;
+        }));
+        var crono = System.Diagnostics.Stopwatch.StartNew();
+        var r1 = b1.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Viejo") });
+        crono.Stop();
+        Debe(t1.Count == 1 && t1[0] == "Viejo" && r1.Hechos == 1,
+            $"lo que la pantalla enseña al mirar otra vez se pulsa (se pulsaron {t1.Count}: {string.Join(",", t1)}; dijo «{r1.Cuenta}»)");
+        Debe(miradas >= 1, "y se miró otra vez de verdad, no se adivinó");
+        // Lo que tarda es el reloj de DESPUÉS del clic (esperar a que cambie la pantalla, que aquí no cambia):
+        // UN presupuesto. Si la compuerta hubiera agotado el suyo antes de mirar, serían dos.
+        Debe(crono.ElapsedMilliseconds < b1.EsperaMaximaMs + 200,
+            $"y en el acto: la compuerta no agota su presupuesto antes de mirar ({crono.ElapsedMilliseconds} ms; el presupuesto es {b1.EsperaMaximaMs})");
+
+        // Y SI NI MIRANDO APARECE, sigue sin pulsarse y se dice: la 56 en pie.
+        var g2 = Mundo();
+        var (b2, _, t2) = BatchCon(g2, "uia://x.exe/a", RutasDeTres);
+        int m2 = 0;
+        pMira.SetValue(b2, (Func<string, bool>)(_ => { m2++; return false; }));
+        var r2 = b2.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Viejo") });
+        Debe(t2.Count == 0 && r2.Hechos == 0 && m2 >= 1 && (r2.Cuenta.Contains("no lo veo") || r2.Cuenta.Contains("ahora no")),
+            $"lo que no aparece ni mirando no se pulsa, y se dice (miró {m2} vez/veces; dijo «{r2.Cuenta}»)");
+
+        // Y MIRAR NO ES UN BUCLE. Medido el 2026-09-17 sobre Wikipedia recién cargada: cada mirada costaba
+        // 0,8-2,2 s, más que el freno de 600 ms, así que la compuerta miró 76 veces en 90 s sin rendirse
+        // nunca —el «continue» saltaba el reloj del presupuesto—. Una mirada que cuesta más que el
+        // presupuesto entero no puede repetirse: como mucho dos, al empezar y antes de rendirse.
+        var g3 = Mundo();
+        var (b3, _, t3) = BatchCon(g3, "uia://x.exe/a", RutasDeTres);
+        int m3 = 0;
+        pMira.SetValue(b3, (Func<string, bool>)(_ =>
+        {
+            m3++;
+            if (m3 > 4) return false;                       // red de seguridad: que el juez no se cuelgue
+            Thread.Sleep(b3.EsperaMaximaMs + 400);           // una mirada lenta: más que el presupuesto
+            return true;                                     // «vi algo» — pero la puerta sigue sin estar
+        }));
+        var crono3 = System.Diagnostics.Stopwatch.StartNew();
+        var r3 = b3.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Viejo") });
+        crono3.Stop();
+        Debe(t3.Count == 0 && r3.Hechos == 0 && m3 <= 2,
+            $"una mirada lenta no se repite sin fin: como mucho dos miradas, al empezar y antes de rendirse (miró {m3}; pulsó {t3.Count}; dijo «{r3.Cuenta}»)");
+        Debe(crono3.ElapsedMilliseconds < b3.EsperaMaximaMs * 3 + 1200,
+            $"y se rinde dentro del presupuesto más esas dos miradas ({crono3.ElapsedMilliseconds} ms)");
+    }
+
+    private static void LaEscaleraTerminaEnElClicFisico()
+    {
+        var t = typeof(U.Graph.Surfaces.ComoSePulsa);
+        var m = t.GetMethod("Escalera", BindingFlags.Public | BindingFlags.Static);
+        if (m == null) { Pendiente("ComoSePulsa.Escalera (la escalera de pulsar como lista)", "265", "030"); return; }
+        string E(U.Graph.Surfaces.ComoSePulsa.Gesto g) =>
+            string.Join(">", ((System.Collections.IEnumerable)m.Invoke(null, new object[] { g })!).Cast<object>().Select(x => x.ToString()));
+        Debe(E(U.Graph.Surfaces.ComoSePulsa.Gesto.Patron) == "Patron>Fisico",
+            $"tras el patrón viene el clic físico, no el fallo (salió {E(U.Graph.Surfaces.ComoSePulsa.Gesto.Patron)})");
+        Debe(E(U.Graph.Surfaces.ComoSePulsa.Gesto.Mensaje) == "Mensaje>Fisico",
+            $"tras el mensaje también (salió {E(U.Graph.Surfaces.ComoSePulsa.Gesto.Mensaje)})");
+        Debe(E(U.Graph.Surfaces.ComoSePulsa.Gesto.Fisico) == "Fisico",
+            "y el físico es el último peldaño: el único que puede decir que no se pudo");
+    }
+
+    private static void FueraDeUnaComprobacionPulsarEsUnSoloGesto()
+    {
+        var t = Capacidad("U.WindowsClient.Piloto.ElRecuerdoQueSeVe");
+        var m = t?.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(x => x.Name == "Coreografia" && x.GetParameters().Length == 4);
+        if (m == null) { Pendiente("ElRecuerdoQueSeVe.Coreografia(elemento, recuerdo, decir, enComprobacion)", "266", "030"); return; }
+        string C(bool e, bool r, bool d, bool comp) =>
+            string.Join(">", ((System.Collections.IEnumerable)m.Invoke(null, new object[] { e, r, d, comp })!).Cast<object>().Select(g => g.ToString()));
+
+        string fuera = C(true, true, true, false);
+        Debe(fuera == "Senalar>Decir>Actuar>Escribir>Soltar",
+            $"fuera de una comprobación: señalar, decir, TOCAR, y el recuerdo después —sin tarjeta ni pausa— (salió {fuera})");
+        Debe(!fuera.Contains("Mostrar") && !fuera.Contains("Esperar"),
+            "ni tarjeta ni pausa de lectura: la persona no está leyendo una lección, está esperando el clic");
+        Debe(fuera.IndexOf("Escribir", StringComparison.Ordinal) > fuera.IndexOf("Actuar", StringComparison.Ordinal),
+            "y escribir el recuerdo va DESPUÉS de tocar: no se paga antes de lo que la persona pidió");
+        Debe(C(true, false, false, false) == "Senalar>Actuar>Soltar", "sin recuerdo ni frase: señalar, tocar, soltar");
+        Debe(C(false, true, true, false) == "Decir>Actuar>Escribir", "sin elemento en pantalla no hay señal: decir, tocar, escribir");
+
+        string dentro = C(true, true, true, true);
+        Debe(dentro == "Senalar>Decir>Escribir>Mostrar>Esperar>Actuar>Cerrar>Soltar",
+            $"dentro de una comprobación la coreografía de la 180 sigue entera (salió {dentro})");
+    }
+
+    private static void CeroDeUnoSeVeComoFallo()
+    {
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var m = tc?.GetMethod("Terminado", BindingFlags.NonPublic | BindingFlags.Static);
+        if (m == null) { Pendiente("ConversacionEnVivo.Terminado", "267", "018"); return; }
+        string T(string r) => (string)m.Invoke(null, new object[] { "map_take", new Dictionary<string, string>(), r, 10L })!;
+        string cero = T("hice 0 de 1 y paré en el paso 1: «Abre el perfil Miracle» no lo conozco en «web://instagram.com».");
+        Debe(cero.StartsWith("✋", StringComparison.Ordinal), $"«hice 0 de 1» es un fallo y se pinta como fallo (salió «{cero[..Math.Min(20, cero.Length)]}»)");
+        string uno = T("hice los 1 paso(s): pulsé «Mensajes» y ahora estás en «web://instagram.com/direct/inbox».");
+        Debe(uno.StartsWith("✓", StringComparison.Ordinal), $"y «hice los 1 paso(s)» sigue siendo un logro (salió «{uno[..Math.Min(20, uno.Length)]}»)");
+        string parcial = T("hice 1 de 3 y paré en el paso 2: no pude pulsar «X».");
+        Debe(parcial.StartsWith("✋", StringComparison.Ordinal), "una tanda que paró a medias tampoco es un ✓");
+    }
+
     /// <summary>Lo que la conversación le manda al panel de costos, anotado. Genérico para no nombrar ConsumoVivo al compilar.</summary>
     private sealed class Reportes
     {
@@ -11197,6 +11376,1506 @@ internal static class Contrato
         var atras = (string[])deshacer.Invoke(null, new object[] { ids[1], ids[3], ids })!;
         Debe(atras.SequenceEqual(new[] { "mover", "cambiar:-2", "esperar" }),
             $"si no se llega, se deshace: las ventanas vuelven al origen y se vuelve a él, sin fijar nada; salió [{string.Join(" · ", atras)}]");
+    }
+
+    // ── Spec 035: el decisor se puede cambiar ────────────────────────────────────────────────────
+    //
+    // NINGUNA DE ESTAS PRUEBAS TOCA LA RED, y no es una comodidad: el contrato corre en CI sin
+    // escritorio y sin credenciales, y una prueba que llamara a api.typesafe.ai fallaría por no
+    // tener clave y diría «CONTRATO ROTO» — un fallo del arnés disfrazado de núcleo roto, que es lo
+    // peor que puede decir un juez (aprendizaje nº17). Por eso el transporte se inyecta.
+
+    /// <summary>Lo que el decisor ofrece por reflexión, o null si esta versión no lo trae.</summary>
+    private static (Type? cfg, Type? peticion, Type? politica, Type? decisor) PiezasDelDecisor() => (
+        Capacidad("U.WindowsClient.Decision.ConfiguracionDelDecisor"),
+        Capacidad("U.WindowsClient.Decision.PeticionASystemOne"),
+        Capacidad("U.WindowsClient.Decision.PoliticaDeReintento"),
+        Capacidad("U.WindowsClient.Decision.ElDecisor"));
+
+    private static object? PropDe(object o, string nombre) => o.GetType().GetProperty(nombre)?.GetValue(o);
+
+    /// <summary>Una respuesta de TypeSafe como la documenta su API, para dársela al transporte falso.</summary>
+    private static string RespuestaChoice(string id, string elegida, double confianza, params string[] opciones)
+    {
+        var probs = string.Join(",", opciones.Select(o =>
+            $"\"{o}\":{(o == elegida ? confianza : (1 - confianza) / Math.Max(1, opciones.Length - 1)).ToString(System.Globalization.CultureInfo.InvariantCulture)}"));
+        return "{\"model\":\"jev-1.13.0\",\"answers\":{\"" + id + "\":{\"type\":\"choice\",\"choice\":\"" + elegida
+             + "\",\"probabilities\":{" + probs + "},\"confidence\":"
+             + confianza.ToString(System.Globalization.CultureInfo.InvariantCulture)
+             + "}},\"usage\":{\"input_tokens\":312,\"output_tokens\":0}}";
+    }
+
+    private static void PorDefectoDecideLuna()
+    {
+        var (cfg, _, _, decisor) = PiezasDelDecisor();
+        var leer = cfg?.GetMethod("Leer");
+        var elegir = decisor?.GetMethod("Elegir");
+        if (cfg == null || decisor == null || leer == null || elegir == null)
+        {
+            Pendiente("Decision.ConfiguracionDelDecisor.Leer + Decision.ElDecisor.Elegir", "275", "035");
+            return;
+        }
+
+        // Un entorno vacío: ni interruptor, ni clave. Es la máquina del hospital tal cual está hoy.
+        var vacio = (Func<string, string?>)(_ => null);
+        var c = leer.Invoke(null, new object[] { vacio })!;
+        Debe((string)PropDe(c, "Quien")! == "luna", $"sin configuración decide Luna; salió «{PropDe(c, "Quien")}»");
+
+        // Y LO QUE DE VERDAD IMPORTA: que no se llame. Un decisor que pregunta a TypeSafe y luego
+        // descarta la respuesta ya gastó cupo, latencia y datos de pantalla del hospital.
+        int llamadas = 0;
+        var transporte = (Func<string, string>)(_ => { llamadas++; return RespuestaChoice("puerta", "Nuevo", 0.99, "Nuevo"); });
+        var d = elegir.Invoke(null, new object[] { "luna", "SAP/NWP1", "crear triage", new[] { "Nuevo", "Buscar" }, 0.7, transporte })!;
+        Debe(llamadas == 0, $"con Luna al mando no se llama a TypeSafe ni una vez; se llamó {llamadas}");
+        Debe(!(bool)PropDe(d, "Actuar")!, "y el decisor no se pronuncia: la puerta la sigue eligiendo Luna");
+    }
+
+    private static void ElInterruptorCambiaQuienDecide()
+    {
+        var (cfg, _, _, _) = PiezasDelDecisor();
+        var leer = cfg?.GetMethod("Leer");
+        if (cfg == null || leer == null) { Pendiente("Decision.ConfiguracionDelDecisor.Leer", "276", "035"); return; }
+
+        Func<string, string?> Entorno(string? decisor, string? clave) => n => n switch
+        {
+            "U_DECISOR" => decisor,
+            "TYPESAFE_API_KEY" => clave,
+            _ => null,
+        };
+        string Quien(string? d, string? k) => (string)PropDe(leer.Invoke(null, new object[] { Entorno(d, k) })!, "Quien")!;
+
+        Debe(Quien("jev", "sk-de-mentira") == "jev", "con U_DECISOR=jev y clave, decide Jev");
+        Debe(Quien("JEV", "sk-de-mentira") == "jev", "y da igual cómo se escriba: el interruptor no distingue mayúsculas");
+        Debe(Quien("luna", "sk-de-mentira") == "luna", "con U_DECISOR=luna decide Luna aunque haya clave");
+        Debe(Quien("simulado", null) == "simulado", "el modo simulado se pide por el mismo interruptor y no necesita clave");
+
+        // UN VALOR QUE NO SE ENTIENDE NO PUEDE DEJARLO A MEDIAS. Caer en Luna es la única salida que
+        // no cambia el comportamiento de una máquina donde alguien escribió mal la variable.
+        var raro = leer.Invoke(null, new object[] { Entorno("jeff", "sk-de-mentira") })!;
+        Debe((string)PropDe(raro, "Quien")! == "luna", "un valor que no se entiende cae en Luna");
+        Debe(((string)PropDe(raro, "Porque")!).Contains("jeff"),
+            $"y se dice qué se escribió, para que se pueda corregir; salió «{PropDe(raro, "Porque")}»");
+    }
+
+    private static void LaClaveNoViveEnElCodigo()
+    {
+        var (cfg, peticion, _, _) = PiezasDelDecisor();
+        var leer = cfg?.GetMethod("Leer");
+        var cuerpo = peticion?.GetMethod("CuerpoDeEleccion");
+        var variable = peticion?.GetField("VariableDeLaClave")?.GetValue(null) as string;
+        if (cfg == null || peticion == null || leer == null || cuerpo == null || variable == null)
+        {
+            Pendiente("Decision.PeticionASystemOne.CuerpoDeEleccion + VariableDeLaClave", "277", "035");
+            return;
+        }
+
+        Debe(variable == "TYPESAFE_API_KEY", $"la clave se pide por TYPESAFE_API_KEY; se pide por «{variable}»");
+
+        // PEDIR JEV SIN CLAVE NO PUEDE ACABAR EN UNA LLAMADA SIN CREDENCIAL: eso sería un 401 por
+        // cada paso, gastando el cupo de peticiones por minuto para no decidir nada.
+        var sinClave = (Func<string, string?>)(n => n == "U_DECISOR" ? "jev" : null);
+        var c = leer.Invoke(null, new object[] { sinClave })!;
+        Debe((string)PropDe(c, "Quien")! == "luna", "se pide Jev pero no hay clave: se queda en Luna, no se llama sin credencial");
+        Debe(((string)PropDe(c, "Porque")!).Contains("TYPESAFE_API_KEY"),
+            $"y se dice que lo que falta es la clave, con su nombre; salió «{PropDe(c, "Porque")}»");
+
+        // Y LA CLAVE NO VIAJA EN EL CUERPO. Va en la cabecera Authorization y en ningún otro sitio:
+        // el cuerpo se registra en el log cuando algo falla, y un secreto en el log ya se filtró.
+        var json = (string)cuerpo.Invoke(null, new object[] { "jev-latest", "en SAP/NWP1", "puerta", "¿qué puerta?", new[] { "Nuevo" } })!;
+        Debe(!json.Contains("TYPESAFE_API_KEY") && !json.Contains("Bearer") && !json.Contains("api_key"),
+            "el cuerpo de la petición no lleva la clave ni su nombre: eso va en la cabecera");
+    }
+
+    private static void JevSoloEligeEntreLasPuertasDadas()
+    {
+        var (_, _, _, decisor) = PiezasDelDecisor();
+        var elegir = decisor?.GetMethod("Elegir");
+        if (decisor == null || elegir == null) { Pendiente("Decision.ElDecisor.Elegir", "278", "035"); return; }
+
+        var puertas = new[] { "Crear Triage Administrativo", "Buscar pacientes" };
+
+        // ESTE ES EL PENDIENTE Nº2 DE CLAUDE.md, convertido en promesa: el puente consciente pulsó
+        // «Buscar pacientes» en vez de «Crear Triage Administrativo». Una puerta que no está en el
+        // inventario no se toma NUNCA, venga de donde venga.
+        var inventada = (Func<string, string>)(_ => RespuestaChoice("puerta", "Grabar", 0.99, "Grabar"));
+        var d = elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "crear triage", puertas, 0.7, inventada })!;
+        Debe(!(bool)PropDe(d, "Actuar")!, "una puerta que no se ofreció no se ejecuta, por segura que venga");
+        Debe(((string)PropDe(d, "Porque")!).Contains("Grabar"),
+            $"y se dice cuál vino, que es lo que distingue «contestó otra cosa» de «no contestó»; salió «{PropDe(d, "Porque")}»");
+
+        var buena = (Func<string, string>)(_ => RespuestaChoice("puerta", "Crear Triage Administrativo", 0.93, puertas));
+        var ok = elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "crear triage", puertas, 0.7, buena })!;
+        Debe((bool)PropDe(ok, "Actuar")!, "una puerta del inventario, con confianza de sobra, sí se toma");
+        Debe((string)PropDe(ok, "Puerta")! == "Crear Triage Administrativo", "y es exactamente la que Jev eligió");
+    }
+
+    private static void SinConfianzaNoSeActua()
+    {
+        var (_, _, _, decisor) = PiezasDelDecisor();
+        var elegir = decisor?.GetMethod("Elegir");
+        if (decisor == null || elegir == null) { Pendiente("Decision.ElDecisor.Elegir", "279", "035"); return; }
+
+        var puertas = new[] { "Crear Triage Administrativo", "Crear Triage Asistencial" };
+        // Dos puertas casi iguales: Jev elige una, pero su confianza dice que es un volado. Actuar
+        // aquí es el aprendizaje nº17 al revés — un juez que no puede juzgar diciendo «culpable».
+        var dudosa = (Func<string, string>)(_ => RespuestaChoice("puerta", "Crear Triage Administrativo", 0.51, puertas));
+        var d = elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "crear triage", puertas, 0.7, dudosa })!;
+        Debe(!(bool)PropDe(d, "Actuar")!, "por debajo del umbral no se actúa, aunque haya una opción más probable que la otra");
+        Debe(Math.Abs((double)PropDe(d, "Confianza")! - 0.51) < 0.001, "y se conserva la confianza que dio, para poder ajustar el umbral con datos");
+
+        var justa = (Func<string, string>)(_ => RespuestaChoice("puerta", "Crear Triage Administrativo", 0.70, puertas));
+        Debe((bool)PropDe(elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "x", puertas, 0.7, justa })!, "Actuar")!,
+            "justo en el umbral se actúa: el umbral es un mínimo exigido, no un listón que haya que superar");
+    }
+
+    private static void SiTypeSafeFallaSeCaeALuna()
+    {
+        var (_, _, _, decisor) = PiezasDelDecisor();
+        var elegir = decisor?.GetMethod("Elegir");
+        if (decisor == null || elegir == null) { Pendiente("Decision.ElDecisor.Elegir", "280", "035"); return; }
+
+        var puertas = new[] { "Nuevo", "Buscar" };
+        foreach (var (falla, como) in new (Func<string, string>, string)[]
+        {
+            (_ => throw new TimeoutException("se acabó el plazo"), "se agota el plazo"),
+            (_ => throw new System.Net.Http.HttpRequestException("no hay red"), "se cae la red"),
+            (_ => "{ esto no es json", "contesta algo que no es JSON"),
+            (_ => "{\"model\":\"jev-1.13.0\",\"answers\":{},\"usage\":{}}", "contesta sin la respuesta que se pidió"),
+            // «answers» con la forma equivocada: TryGetProperty sobre algo que no es objeto lanza
+            // InvalidOperationException, que NO es JsonException. Un catch estrecho la dejaría
+            // escapar y tumbaría el paso en vez de devolvérselo a Luna.
+            (_ => "{\"model\":\"jev-1.13.0\",\"answers\":\"hola\",\"usage\":{}}", "contesta con «answers» que no es un objeto"),
+            (_ => "{\"model\":\"jev-1.13.0\",\"answers\":{\"puerta\":{\"type\":\"choice\",\"choice\":7}},\"usage\":{}}", "contesta una puerta que no es texto"),
+        })
+        {
+            object d;
+            try { d = elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "x", puertas, 0.7, falla })!; }
+            catch (Exception e) { Debe(false, $"cuando {como}, la excepción sale de la pieza y tumba el paso: {e.InnerException?.GetType().Name ?? e.GetType().Name}"); continue; }
+            Debe(!(bool)PropDe(d, "Actuar")!, $"cuando {como}, no se actúa");
+            Debe(((string)PropDe(d, "Porque")!).Length > 0, $"cuando {como}, se dice por qué se devolvió el control");
+        }
+    }
+
+    private static void ElModoSimuladoNoTocaLaRed()
+    {
+        var (_, _, _, decisor) = PiezasDelDecisor();
+        var elegir = decisor?.GetMethod("Elegir");
+        if (decisor == null || elegir == null) { Pendiente("Decision.ElDecisor.Elegir", "281", "035"); return; }
+
+        int llamadas = 0;
+        var transporte = (Func<string, string>)(_ => { llamadas++; return RespuestaChoice("puerta", "Nuevo", 0.99, "Nuevo"); });
+        var puertas = new[] { "Nuevo", "Buscar" };
+        var a = elegir.Invoke(null, new object[] { "simulado", "SAP/NWP1", "crear", puertas, 0.7, transporte })!;
+        var b = elegir.Invoke(null, new object[] { "simulado", "SAP/NWP1", "crear", puertas, 0.7, transporte })!;
+
+        Debe(llamadas == 0, $"el modo simulado no llama a TypeSafe; se llamó {llamadas} vez(ces)");
+        Debe((string)PropDe(a, "Puerta")! == (string)PropDe(b, "Puerta")!,
+            "y decide igual dos veces seguidas: una prueba que depende del azar no prueba nada");
+        Debe(((string)PropDe(a, "Porque")!).Contains("simulad"),
+            $"y se dice que fue simulado, para que un verde no se confunda con haber hablado con TypeSafe; salió «{PropDe(a, "Porque")}»");
+
+        // CERO PALABRAS EN COMÚN NO ES UNA ELECCIÓN. Medido en el nivel 4 del 2026-09-18 sobre el
+        // Explorador: «abrir la carpeta Windows» no casaba con ninguna de las 61 puertas listadas y el
+        // simulado accionó igual «Detalles», la primera, con confianza 1,00 — el juez optimista que la
+        // spec prohíbe, y el contrato lo dejó pasar porque solo pedía repetibilidad.
+        Debe(!(bool)PropDe(a, "Actuar")!,
+            $"con «crear» y las puertas Nuevo/Buscar no hay palabra en común: NO se actúa (salió Actuar={PropDe(a, "Actuar")}, Puerta=«{PropDe(a, "Puerta")}»)");
+        var casa = elegir.Invoke(null, new object[] { "simulado", "SAP/NWP1", "crear el triage administrativo", new[] { "Buscar pacientes", "Crear Triage Administrativo" }, 0.7, transporte })!;
+        Debe((bool)PropDe(casa, "Actuar")! && (string)PropDe(casa, "Puerta")! == "Crear Triage Administrativo",
+            "y con palabras en común elige la puerta que más comparte");
+        Debe(Math.Abs((double)PropDe(casa, "Confianza")! - 1.0) < 0.001,
+            $"con la puerta explicada entera por el objetivo la confianza es 1,00; salió {PropDe(casa, "Confianza")}");
+        var aMedias = elegir.Invoke(null, new object[] { "simulado", "SAP/NWP1", "crear", new[] { "Crear Triage Administrativo" }, 0.7, transporte })!;
+        Debe(!(bool)PropDe(aMedias, "Actuar")! && (double)PropDe(aMedias, "Confianza")! < 0.7,
+            $"y con una sola palabra de tres la confianza baja (1/3) y no llega al umbral: no se actúa; salió {PropDe(aMedias, "Confianza")}");
+        Debe(llamadas == 0, "y en ningún caso se llamó a TypeSafe");
+    }
+
+    private static void LaPeticionCumpleElContratoDeTypeSafe()
+    {
+        var (_, peticion, _, _) = PiezasDelDecisor();
+        var cuerpo = peticion?.GetMethod("CuerpoDeEleccion");
+        var url = peticion?.GetField("Url")?.GetValue(null) as string;
+        if (peticion == null || cuerpo == null || url == null)
+        {
+            Pendiente("Decision.PeticionASystemOne.CuerpoDeEleccion + Url", "282", "035");
+            return;
+        }
+
+        Debe(url == "https://api.typesafe.ai/v1/systemone", $"el endpoint es el que documenta TypeSafe; está puesto «{url}»");
+
+        var opciones = new[] { "Crear Triage Administrativo", "Buscar pacientes", "Salir" };
+        var json = (string)cuerpo.Invoke(null, new object[] { "jev-latest", "estoy en SAP/NWP1", "puerta", "¿qué puerta lleva a crear el triage?", opciones })!;
+
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var raiz = doc.RootElement;
+        Debe(raiz.GetProperty("model").GetString() == "jev-latest", "el cuerpo nombra el modelo");
+        Debe(raiz.GetProperty("state").GetString() == "estoy en SAP/NWP1", "el cuerpo lleva el estado a juzgar");
+        var p = raiz.GetProperty("questions").GetProperty("puerta");
+        Debe(p.GetProperty("type").GetString() == "choice", "la pregunta es de tipo choice: elegir de una lista cerrada, no generar texto");
+        Debe(p.GetProperty("instructions").GetString()!.Length > 0, "la pregunta lleva sus instrucciones");
+        var criteria = p.GetProperty("criteria");
+        foreach (var o in opciones)
+            Debe(criteria.TryGetProperty(o, out _), $"«{o}» está entre las opciones ofrecidas: lo que no se ofrece, Jev no puede elegirlo");
+        Debe(criteria.EnumerateObject().Count() == opciones.Length, "y no hay más opciones que las puertas que hay en pantalla");
+    }
+
+    private static void LosReintentosDistinguenLoQueMejoraDeLoQueNo()
+    {
+        var (_, _, politica, _) = PiezasDelDecisor();
+        var seReintenta = politica?.GetMethod("SeReintenta");
+        var espera = politica?.GetMethod("EsperaMs");
+        if (politica == null || seReintenta == null || espera == null)
+        {
+            Pendiente("Decision.PoliticaDeReintento.SeReintenta/EsperaMs", "283", "035");
+            return;
+        }
+
+        bool R(int c) => (bool)seReintenta.Invoke(null, new object[] { c })!;
+        Debe(R(429), "429 (pasado de cupo) se reintenta: TypeSafe pide esperar, no rendirse");
+        Debe(R(529), "529 (sobrecargado) se reintenta");
+        Debe(!R(401), "401 no se reintenta: una clave mala no mejora insistiendo, y cada intento gasta cupo");
+        Debe(!R(422), "422 no se reintenta: un cuerpo inválido sale igual de inválido la segunda vez");
+        Debe(!R(200), "un 200 no se reintenta");
+
+        int e0 = (int)espera.Invoke(null, new object[] { 0 })!;
+        int e1 = (int)espera.Invoke(null, new object[] { 1 })!;
+        int e2 = (int)espera.Invoke(null, new object[] { 2 })!;
+        Debe(e0 > 0 && e1 > e0 && e2 > e1, $"la espera crece entre intentos; salió {e0} · {e1} · {e2}");
+    }
+
+    // ── Spec 035, fase 4: map_decidir ────────────────────────────────────────────────────────────
+
+    /// <summary>Un mapa sin pantalla: ubicación fija, puertas inyectadas, mano falsa que anota qué paso recibió.</summary>
+    // DESDE LA 287 LAS PUERTAS LLEVAN SELECTOR: la mano pulsa por él. Se fabrica uno por etiqueta y tipo.
+    private static (SurfaceMapTools mapa, Func<RecorrerSegunElNucleo.Paso?> visto, Func<int> leidas)? MapaParaDecidir(
+        PropertyInfo pPuertas, params (string Etiqueta, string Tipo)[] puertas)
+    {
+        var mapa = new SurfaceMapTools(() => new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation("uia://sap/NWP1", "sap", ""));
+        int leidas = 0;
+        var conSelector = puertas.Select(p => ($"uia:name={p.Etiqueta};ct={p.Tipo}", p.Etiqueta, p.Tipo)).ToArray();
+        pPuertas.SetValue(mapa, (Func<string, IReadOnlyList<(string, string, string)>>)(_ => { leidas++; return conSelector; }));
+        RecorrerSegunElNucleo.Paso? visto = null;
+        mapa.RecorrerPorElNucleo = pasos =>
+        {
+            visto = pasos[0];
+            // La mano real cuenta por ETIQUETA, no por selector (RecorrerSegunElNucleo: elegido.Que.Etiqueta).
+            string etiqueta = conSelector.FirstOrDefault(x => x.Item1 == pasos[0].Exit).Item2 ?? pasos[0].Exit;
+            return new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true,
+                $"hice los 1 paso(s): pulsé «{etiqueta}» y ahora estás en «uia://sap/NV2000».", true);
+        };
+        return (mapa, () => visto, () => leidas);
+    }
+
+    /// <summary>Fabrica una decisión con las factorías del decisor, por reflexión: son internas y existen desde la fase 3.</summary>
+    private static U.WindowsClient.Decision.DecisionDeUnPaso Decision(string factoria, params object[] args)
+    {
+        var t = typeof(U.WindowsClient.Decision.DecisionDeUnPaso);
+        var m = t.GetMethod(factoria, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)!;
+        return (U.WindowsClient.Decision.DecisionDeUnPaso)m.Invoke(null, args)!;
+    }
+
+    /// <summary>La forma del decisor de SurfaceMapTools: pantalla, objetivo, puertas → decisión. Es parte de la promesa.</summary>
+    private static Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso> Decide(
+        Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso> d) => d;
+
+    private static void MapDecidirSoloExisteConElDecisor()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var pCon = tc?.GetProperty("ConDecisor", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        var pInstr = tc?.GetProperty("InstruccionesNormales", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        if (pDecisor == null || pPuertas == null || pCon == null || pInstr == null)
+        {
+            Pendiente("SurfaceMapTools.Decisor/Puertas + ConversacionEnVivo.ConDecisor", "284", "035");
+            return;
+        }
+
+        bool antes = (bool)pCon.GetValue(null)!;
+        try
+        {
+            // APAGADO: el catálogo de Luna queda byte a byte como hoy. Eso es lo que hace que U_DECISOR
+            // ausente no cambie NADA en la máquina del hospital.
+            pCon.SetValue(null, false);
+            Debe(ArgumentosDe("map_decidir") == null, "apagado, map_decidir no está en el catálogo");
+            Debe(!((string)pInstr.GetValue(null)!).Contains("map_decidir", StringComparison.Ordinal),
+                "ni las instrucciones lo nombran: no se le pide a Luna una herramienta que no tiene");
+
+            var m = MapaParaDecidir(pPuertas, ("Nuevo", "Button"))!.Value;
+            string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "crear" });
+            Debe(r.StartsWith("todavía no sé decidir", StringComparison.Ordinal) && r.Contains("Luna", StringComparison.Ordinal),
+                $"y si alguien lo pide igual, contesta que decide Luna (dijo: «{r}»)");
+            Debe(m.leidas() == 0 && m.visto() == null, "sin leer la pantalla ni pulsar nada");
+            Debe(m.mapa.UltimaMano == null, "y no cuenta como mano: no hubo intento");
+            Debe(SurfaceMapTools.IsMapTool("map_decidir"), "aunque el despacho SÍ la conoce: es el catálogo el que la esconde, no el mapa");
+
+            // ENCENDIDO: está, pide el objetivo, y las instrucciones cambian quién elige.
+            pCon.SetValue(null, true);
+            var args = ArgumentosDe("map_decidir");
+            Debe(args != null && args.Contains("objetivo"), "encendido, map_decidir está en el catálogo y pide `objetivo`");
+            string desc = DescripcionDe("map_decidir") ?? "";
+            Debe(desc.Contains("map_take", StringComparison.Ordinal) && desc.Contains("objetivo", StringComparison.OrdinalIgnoreCase),
+                $"y su descripción dice que sustituye a elegir la puerta con map_take («{(desc.Length > 90 ? desc[..90] : desc)}»)");
+            string instr = (string)pInstr.GetValue(null)!;
+            Debe(instr.Contains("map_decidir", StringComparison.Ordinal),
+                "y las instrucciones mandan pedirlo con el objetivo en vez de elegir la puerta");
+            Debe(!instr.Contains("más de dos veces", StringComparison.OrdinalIgnoreCase),
+                "sin tocar la regla de intentos de la 206");
+        }
+        finally { pCon.SetValue(null, antes); }
+    }
+
+    private static void MapDecidirEligeEntreLoQueSeVeYPulsaComoMapTake()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var tDecision = Capacidad("U.WindowsClient.Decision.DecisionDeUnPaso");
+        if (pDecisor == null || pPuertas == null || tDecision == null)
+        {
+            Pendiente("SurfaceMapTools.Decisor/Puertas", "285", "035");
+            return;
+        }
+
+        var m = MapaParaDecidir(pPuertas, ("Buscar", "Edit"), ("Crear Triage Administrativo", "Button"), ("Salir", "Button"))!.Value;
+        string? pantalla = null;
+        IReadOnlyList<string>? ofrecidas = null;
+        // Se asigna con el tipo EXACTO que pide la propiedad: si la firma cambia, esto deja de compilar, y eso es parte de la promesa.
+        pDecisor.SetValue(m.mapa, Decide((p, o, puertas) =>
+        {
+            pantalla = p; ofrecidas = puertas;
+            return Decision("Si", "2) Crear Triage Administrativo (Button)", 0.93, "Jev eligió «2) Crear Triage Administrativo (Button)» con confianza 0.93.");
+        }));
+
+        string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "crear el triage" });
+        // LA MANO SE LEE AQUÍ, antes de cualquier otra llamada: cada Call dice SU resultado y resetea el
+        // anterior (spec 017). Leerla después de map_what_i_see daba null — y no era el código.
+        object? manoDeDecidir = m.mapa.UltimaMano;
+
+        // LAS MISMAS PUERTAS QUE map_what_i_see, y en su orden. Se comprueba contra la propia herramienta,
+        // no contra lo que se inyectó: si alguien pone un segundo camino para listar puertas, esto lo caza.
+        string veo = m.mapa.Call("map_what_i_see", new Dictionary<string, string>());
+        // Desde la 287 se ofrecen numeradas y con su tipo: mismo orden de lectura, y únicas.
+        Debe(ofrecidas != null && ofrecidas.SequenceEqual(new[] { "1) Buscar (Edit)", "2) Crear Triage Administrativo (Button)", "3) Salir (Button)" }),
+            $"el decisor recibe las puertas que hay ahora, en orden de lectura; recibió [{string.Join(" · ", ofrecidas ?? Array.Empty<string>())}]");
+        Debe(veo.IndexOf("«Buscar»", StringComparison.Ordinal) < veo.IndexOf("«Crear Triage Administrativo»", StringComparison.Ordinal)
+          && veo.IndexOf("«Crear Triage Administrativo»", StringComparison.Ordinal) < veo.IndexOf("«Salir»", StringComparison.Ordinal),
+            "y son las que map_what_i_see lista, en ese mismo orden");
+        Debe(pantalla == "uia://sap/NWP1", $"y sabe en qué pantalla está («{pantalla}»)");
+
+        // POR EL MISMO CAMINO QUE map_take: la mano recibe el paso, no otra cosa.
+        var paso = m.visto();
+        Debe(paso != null && paso.Exit == "uia:name=Crear Triage Administrativo;ct=Button",
+            $"la mano recibe exactamente ese paso, por su selector (recibió «{paso?.Exit}»)");
+        Debe(r.Contains("Crear Triage Administrativo", StringComparison.Ordinal) && r.Contains("0.93", StringComparison.Ordinal)
+          && r.Contains("ahora estás en «uia://sap/NV2000»", StringComparison.Ordinal),
+            $"la cuenta dice qué se eligió, con qué confianza, y qué pasó al pulsar (dijo: «{(r.Length > 120 ? r[..120] : r)}»)");
+        Debe(r.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), "y el acto cuenta lo que dejó delante, como cualquier acto (263)");
+        Debe(manoDeDecidir != null && (bool)PropDe(manoDeDecidir, "Logro")! && (bool)PropDe(manoDeDecidir, "Intento")!,
+            "y la mano lo cuenta como intento logrado, igual que map_take");
+    }
+
+    // ── Spec 036: las puertas son únicas ─────────────────────────────────────────────────────────
+
+    /// <summary>Una decisión con alternativas ordenadas, y opcionalmente cumplido/peligro, por reflexión sobre sus init.</summary>
+    private static U.WindowsClient.Decision.DecisionDeUnPaso DecisionCon(
+        U.WindowsClient.Decision.DecisionDeUnPaso d, (string Puerta, double Probabilidad)[]? alternativas = null, double? cumplido = null, double? peligro = null)
+    {
+        var t = d.GetType();
+        if (alternativas != null) t.GetProperty("Alternativas")?.SetValue(d, alternativas.ToList());
+        if (cumplido != null) t.GetProperty("Cumplido")?.SetValue(d, cumplido.Value);
+        if (peligro != null) t.GetProperty("Peligro")?.SetValue(d, peligro.Value);
+        return d;
+    }
+
+    /// <summary>¿La propiedad Puertas ya trae selector? Func&lt;string, IReadOnlyList&lt;(string,string,string)&gt;&gt;.</summary>
+    private static bool PuertasConSelector(PropertyInfo? pPuertas)
+    {
+        var lista = pPuertas?.PropertyType.GetGenericArguments().LastOrDefault();
+        var tupla = lista?.GetGenericArguments().FirstOrDefault();
+        return tupla != null && tupla.IsGenericType && tupla.GetGenericArguments().Length == 3;
+    }
+
+    private static void JevEligePorNumeroYSePulsaPorSelector()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        if (pDecisor == null || pPuertas == null || !PuertasConSelector(pPuertas))
+        {
+            Pendiente("SurfaceMapTools.Puertas con selector (Selector, Etiqueta, Tipo)", "287", "036");
+            return;
+        }
+
+        // EL CASO REAL DEL EXPLORADOR: dos «Detalles», un Button y un RadioButton. Con etiquetas, la mano
+        // contestaba «hay 2 puertas vivas» y el paso se perdía (03:33:18, 03:33:47, 03:34:28 del 2026-09-18).
+        var m = MapaParaDecidir(pPuertas, ("Detalles", "Button"), ("Detalles", "RadioButton"), ("Iconos grandes", "RadioButton"))!.Value;
+        IReadOnlyList<string>? ofrecidas = null;
+        pDecisor.SetValue(m.mapa, Decide((_, _, puertas) =>
+        {
+            ofrecidas = puertas;
+            return Decision("Si", "2) Detalles (RadioButton)", 0.9, "Jev eligió «2) Detalles (RadioButton)» con confianza 0.90.");
+        }));
+        string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "ver en detalle" });
+
+        Debe(ofrecidas != null && ofrecidas.SequenceEqual(new[] { "1) Detalles (Button)", "2) Detalles (RadioButton)", "3) Iconos grandes (RadioButton)" }),
+            $"las puertas se ofrecen numeradas y con su tipo, únicas aunque la etiqueta se repita; se ofrecieron [{string.Join(" · ", ofrecidas ?? Array.Empty<string>())}]");
+        Debe(ofrecidas != null && ofrecidas.Distinct().Count() == ofrecidas.Count, "y no hay dos ids iguales");
+        var paso = m.visto();
+        Debe(paso != null && paso.Exit == "uia:name=Detalles;ct=RadioButton",
+            $"la mano recibe el SELECTOR de la elegida, no su etiqueta (recibió «{paso?.Exit}»)");
+        Debe(r.Contains("«Detalles»", StringComparison.Ordinal) && r.Contains("2)", StringComparison.Ordinal) && !r.Contains("uia:name=", StringComparison.Ordinal),
+            $"y la cuenta la nombra por su etiqueta y su número, sin enseñar el selector (dijo: «{(r.Length > 120 ? r[..120] : r)}»)");
+    }
+
+    private static void LaSegundaMejorSinOtraLlamada()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var pAlt = typeof(U.WindowsClient.Decision.DecisionDeUnPaso).GetProperty("Alternativas");
+        if (pDecisor == null || pPuertas == null || pAlt == null || !PuertasConSelector(pPuertas))
+        {
+            Pendiente("DecisionDeUnPaso.Alternativas + la segunda mejor en map_decidir", "288", "036");
+            return;
+        }
+
+        // A no está viva; B sí. Jev dio A 0,60 · B 0,35 · C 0,05.
+        (SurfaceMapTools mapa, Func<RecorrerSegunElNucleo.Paso?> visto, Func<int> leidas) Mapa(
+            Func<RecorrerSegunElNucleo.Paso, RecorrerSegunElNucleo.Resultado> mano, out Func<int> llamadas, out Func<List<string>> pulsados)
+        {
+            var m = MapaParaDecidir(pPuertas, ("A", "Button"), ("B", "Button"), ("C", "Button"))!.Value;
+            int n = 0; var pulsos = new List<string>();
+            m.mapa.RecorrerPorElNucleo = pasos => { pulsos.Add(pasos[0].Exit); return mano(pasos[0]); };
+            pDecisor.SetValue(m.mapa, Decide((_, _, _) =>
+            {
+                n++;
+                return DecisionCon(Decision("Si", "1) A (Button)", 0.6, "Jev eligió «1) A (Button)» con confianza 0.60."),
+                    new[] { ("1) A (Button)", 0.60), ("2) B (Button)", 0.35), ("3) C (Button)", 0.05) });
+            }));
+            llamadas = () => n; pulsados = () => pulsos;
+            return m;
+        }
+        RecorrerSegunElNucleo.Resultado NoEsta(string exit) => new(0, 1, "uia://sap/NWP1", false, $"hice 0 de 1 y paré en el paso 1: no lo veo en «uia://sap/NWP1»: «{exit}»");
+        RecorrerSegunElNucleo.Resultado Pulsado(string exit) => new(1, 1, "uia://sap/NV2000", true, $"hice los 1 paso(s): pulsé «{exit}» y ahora estás en «uia://sap/NV2000».", true);
+
+        var m1 = Mapa(p => p.Exit.Contains("name=A;") ? NoEsta(p.Exit) : Pulsado(p.Exit), out var llamadas1, out var pulsados1);
+        string r1 = m1.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" });
+        Debe(pulsados1().Count == 2 && pulsados1()[0].Contains("name=A;") && pulsados1()[1].Contains("name=B;"),
+            $"A no estaba: se probó B, la segunda por probabilidad, y nada más (se pulsó [{string.Join(" · ", pulsados1())}])");
+        Debe(llamadas1() == 1, $"a Jev se le preguntó UNA sola vez; se le preguntó {llamadas1()}");
+        Debe(r1.Contains("B", StringComparison.Ordinal) && r1.Contains("no estaba", StringComparison.OrdinalIgnoreCase) && r1.Contains("ahora estás en", StringComparison.Ordinal),
+            $"y la cuenta dice que A no estaba y que se probó B (dijo: «{(r1.Length > 140 ? r1[..140] : r1)}»)");
+
+        // Ni A ni B: C está por debajo del mínimo y no se intenta; el control vuelve.
+        var m2 = Mapa(p => NoEsta(p.Exit), out var llamadas2, out var pulsados2);
+        string r2 = m2.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" });
+        Debe(pulsados2().Count == 2 && !pulsados2().Any(p => p.Contains("name=C;")), $"C (0,05) no se intenta: la tercera es adivinar (se pulsó [{string.Join(" · ", pulsados2())}])");
+        Debe(llamadas2() == 1 && r2.Contains("no estaba", StringComparison.OrdinalIgnoreCase), "y se dice que ninguna estaba, sin volver a preguntar");
+
+        // HOMÓNIMOS NO SON «NO ESTÁ»: la lista numerada de la mano es otra clase de respuesta, y probar la segunda
+        // sería pulsar otra puerta cuando lo que falta es elegir cuál de las iguales.
+        var m3 = Mapa(p => new RecorrerSegunElNucleo.Resultado(0, 1, "uia://sap/NWP1", false, "hice 0 de 1 y paré en el paso 1: hay 2 puertas vivas para «A»: 1) …; 2) …") { Ambiguo = true, Candidatos = new[] { "s1", "s2" } }, out var llamadas3, out var pulsados3);
+        m3.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" });
+        Debe(pulsados3().Count == 1, $"con homónimos no se prueba la segunda (se pulsó [{string.Join(" · ", pulsados3())}])");
+    }
+
+    private static void UnaLlamadaTresPreguntas()
+    {
+        var tP = Capacidad("U.WindowsClient.Decision.PeticionASystemOne");
+        var cuerpo = tP?.GetMethod("CuerpoDeEleccion");
+        var tD = typeof(U.WindowsClient.Decision.DecisionDeUnPaso);
+        var pCumplido = tD.GetProperty("Cumplido"); var pPeligro = tD.GetProperty("Peligro");
+        var elegir = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("Elegir");
+        if (cuerpo == null || pCumplido == null || pPeligro == null || elegir == null)
+        {
+            Pendiente("DecisionDeUnPaso.Cumplido/Peligro + las dos nouls en el cuerpo", "289", "036");
+            return;
+        }
+
+        string json = (string)cuerpo.Invoke(null, new object[] { "jev-latest", "en SAP/NWP1", "puerta", "¿qué puerta?", new[] { "1) Nuevo (Button)" } })!;
+        using (var doc = System.Text.Json.JsonDocument.Parse(json))
+        {
+            var q = doc.RootElement.GetProperty("questions");
+            Debe(q.TryGetProperty("puerta", out var pu) && pu.GetProperty("type").GetString() == "choice", "el cuerpo lleva la puerta como choice");
+            Debe(q.TryGetProperty("cumplido", out var cu) && cu.GetProperty("type").GetString() == "noul", "y «cumplido» como noul: ¿el objetivo ya está cumplido en esta pantalla?");
+            Debe(q.TryGetProperty("peligro", out var pe) && pe.GetProperty("type").GetString() == "noul", "y «peligro» como noul: ¿accionar la elegida es irreversible?");
+        }
+
+        string Respuesta(string elegida, double conf, double? cumplido, double? peligro)
+        {
+            var ic = System.Globalization.CultureInfo.InvariantCulture;
+            string nouls = "";
+            if (cumplido != null) nouls += ",\"cumplido\":{\"type\":\"noul\",\"noul\":" + cumplido.Value.ToString(ic) + "}";
+            if (peligro != null) nouls += ",\"peligro\":{\"type\":\"noul\",\"noul\":" + peligro.Value.ToString(ic) + "}";
+            return "{\"model\":\"jev-1.13.0\",\"answers\":{\"puerta\":{\"type\":\"choice\",\"choice\":\"" + elegida + "\",\"probabilities\":{\"" + elegida + "\":"
+                 + conf.ToString(ic) + "},\"confidence\":" + conf.ToString(ic) + "}" + nouls + "},\"usage\":{}}";
+        }
+        var puertas = new[] { "1) Nuevo (Button)", "2) Grabar (Button)" };
+        object D(string json2) => elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "crear", puertas, 0.7, (Func<string, string>)(_ => json2) })!;
+
+        var ya = D(Respuesta("1) Nuevo (Button)", 0.95, 0.9, 0.1));
+        Debe(!(bool)PropDe(ya, "Actuar")! && ((string)PropDe(ya, "Porque")!).Contains("cumplido", StringComparison.OrdinalIgnoreCase),
+            $"con cumplido 0,9 no se acciona y se dice que el objetivo ya está (dijo: «{PropDe(ya, "Porque")}»)");
+        Debe(Math.Abs((double)PropDe(ya, "Cumplido")! - 0.9) < 0.001, "y se conserva cuánto de cumplido dijo");
+
+        var peligroso = D(Respuesta("2) Grabar (Button)", 0.95, 0.1, 0.8));
+        Debe(!(bool)PropDe(peligroso, "Actuar")! && ((string)PropDe(peligroso, "Porque")!).Contains("irreversible", StringComparison.OrdinalIgnoreCase),
+            $"con peligro 0,8 no se acciona y se dice por qué (dijo: «{PropDe(peligroso, "Porque")}»)");
+
+        var normal = D(Respuesta("1) Nuevo (Button)", 0.95, 0.1, 0.1));
+        Debe((bool)PropDe(normal, "Actuar")!, "con las dos bajas se acciona");
+        var viejo = D(Respuesta("1) Nuevo (Button)", 0.95, null, null));
+        Debe((bool)PropDe(viejo, "Actuar")!, "y una respuesta sin las dos nouls sigue valiendo: un transporte viejo no rompe el paso");
+    }
+
+    // ── Spec 037: el tramo ───────────────────────────────────────────────────────────────────────
+    //
+    // EL TRAMO ES UN BUCLE QUE CORRE POR DETRÁS. Se juzga con delegados falsos sobre el mapa: el decisor, la
+    // mano (RecorrerPorElNucleo), las puertas, el freno (HayQueParar), el progreso y el aviso a la voz. El
+    // test espera al bucle con EsperarTramo, que existe para esto: un juez que duerme «por si acaso» es un
+    // juez que miente cuando la máquina va lenta.
+
+    private sealed class TramoDePrueba
+    {
+        public SurfaceMapTools Mapa = null!;
+        public List<string> Pulsados = new();
+        public List<string> Progreso = new();
+        public List<string> Avisos = new();
+        public int Decisiones;
+    }
+
+    /// <summary>Un mapa listo para tramos: puertas A/B/C con selector, mano falsa, decisor falso, sin freno real.</summary>
+    private static TramoDePrueba? MapaParaTramo(
+        Func<int, U.WindowsClient.Decision.DecisionDeUnPaso> decide,
+        Func<string, RecorrerSegunElNucleo.Resultado>? mano = null,
+        Func<bool>? hayQueParar = null,
+        int retrasoDelDecisorMs = 0)
+    {
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pParar = typeof(SurfaceMapTools).GetProperty("HayQueParar");
+        var pProgreso = typeof(SurfaceMapTools).GetProperty("Progreso");
+        var pAvisar = typeof(SurfaceMapTools).GetProperty("AvisarALaVoz");
+        var pFreno = typeof(SurfaceMapTools).GetProperty("PedirFreno");
+        if (pPuertas == null || pDecisor == null || pParar == null || pProgreso == null || pAvisar == null || pFreno == null) return null;
+
+        var t = new TramoDePrueba();
+        var m = MapaParaDecidir(pPuertas, ("A", "Button"), ("B", "Button"), ("C", "Button"))!.Value;
+        t.Mapa = m.mapa;
+        t.Mapa.RecorrerPorElNucleo = pasos =>
+        {
+            t.Pulsados.Add(pasos[0].Exit);
+            return mano != null ? mano(pasos[0].Exit)
+                : new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true, $"hice los 1 paso(s): pulsé «{pasos[0].Exit}» y ahora estás en «uia://sap/NV2000».", true);
+        };
+        pDecisor.SetValue(t.Mapa, Decide((_, _, _) =>
+        {
+            if (retrasoDelDecisorMs > 0) System.Threading.Thread.Sleep(retrasoDelDecisorMs);
+            return decide(++t.Decisiones);
+        }));
+        pParar.SetValue(t.Mapa, hayQueParar ?? (() => false));
+        pProgreso.SetValue(t.Mapa, (Action<string>)(l => { lock (t.Progreso) t.Progreso.Add(l); }));
+        pAvisar.SetValue(t.Mapa, (Action<string>)(l => { lock (t.Avisos) t.Avisos.Add(l); }));
+        pFreno.SetValue(t.Mapa, (Action<string>)(_ => { }));
+        t.Mapa.InventarioParaLosActos = () => "EN PANTALLA AHORA, en «uia://sap/NV2000» (3 elemento(s)):\n  «A» (Button)\n  «B» (Button)\n  «C» (Button)\n";
+        return t;
+    }
+
+    private static bool EsperarTramo(SurfaceMapTools mapa, int ms)
+    {
+        var m = typeof(SurfaceMapTools).GetMethod("EsperarTramo");
+        return m != null && (bool)m.Invoke(mapa, new object[] { ms })!;
+    }
+
+    private static Dictionary<string, string> Args(params (string k, string v)[] kv) => kv.ToDictionary(x => x.k, x => x.v);
+
+    private static void MapTramoContestaAlInstanteYCorrePorDetras()
+    {
+        var t = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "Jev eligió «1) A (Button)» con confianza 0.90."), retrasoDelDecisorMs: 400);
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var pCon = tc?.GetProperty("ConDecisor", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        if (t == null || pCon == null || !SurfaceMapTools.IsMapTool("map_tramo"))
+        {
+            Pendiente("SurfaceMapTools.map_tramo + HayQueParar/Progreso/AvisarALaVoz/PedirFreno + EsperarTramo", "291", "037");
+            return;
+        }
+
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        string r = t.Mapa.Call("map_tramo", Args(("objetivo", "llegar a B"), ("tope", "2")));
+        reloj.Stop();
+        Debe(reloj.ElapsedMilliseconds < 150 && r.Contains("en marcha", StringComparison.OrdinalIgnoreCase),
+            $"map_tramo contesta al instante «en marcha» aunque el decisor tarde 400 ms por paso (tardó {reloj.ElapsedMilliseconds} ms; dijo «{(r.Length > 100 ? r[..100] : r)}»)");
+        string r2 = t.Mapa.Call("map_tramo", Args(("objetivo", "otra cosa")));
+        Debe(r2.Contains("ya hay un tramo", StringComparison.OrdinalIgnoreCase) && r2.Contains("llegar a B", StringComparison.Ordinal),
+            $"pedir otro mientras corre no arranca un segundo y dice cuál corre (dijo «{(r2.Length > 100 ? r2[..100] : r2)}»)");
+        Debe(EsperarTramo(t.Mapa, 5000), "y el bucle termina solo");
+        Debe(t.Pulsados.Count == 2, $"corrió por detrás hasta su tope de 2 (pulsó {t.Pulsados.Count})");
+
+        string r3 = t.Mapa.Call("map_tramo", new Dictionary<string, string>());
+        Debe(r3.StartsWith("falta `objetivo`", StringComparison.Ordinal), $"sin objetivo dice qué falta (dijo «{r3}»)");
+
+        // APAGADO: ni en el catálogo ni en el mapa.
+        bool antes = (bool)pCon.GetValue(null)!;
+        try
+        {
+            pCon.SetValue(null, false);
+            Debe(ArgumentosDe("map_tramo") == null && ArgumentosDe("map_alto") == null, "con el decisor apagado, map_tramo y map_alto no están en el catálogo");
+            pCon.SetValue(null, true);
+            Debe(ArgumentosDe("map_tramo")?.Contains("objetivo") == true && ArgumentosDe("map_alto") != null, "encendido, están: map_tramo con objetivo, y map_alto");
+        }
+        finally { pCon.SetValue(null, antes); }
+        var sinDecisor = new SurfaceMapTools(() => null);
+        Debe(sinDecisor.Call("map_tramo", Args(("objetivo", "x"))).StartsWith("todavía no sé", StringComparison.Ordinal), "y sin decisor en el mapa contesta que todavía no sabe");
+    }
+
+    private static void ElTramoParaSoloYDicePorQue()
+    {
+        if (MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x")) == null || !SurfaceMapTools.IsMapTool("map_tramo_estado"))
+        { Pendiente("SurfaceMapTools.map_tramo/map_tramo_estado", "292", "037"); return; }
+
+        string Corre(TramoDePrueba t, int tope = 15)
+        {
+            t.Mapa.Call("map_tramo", Args(("objetivo", "el objetivo"), ("tope", tope.ToString())));
+            EsperarTramo(t.Mapa, 8000);
+            return t.Mapa.Call("map_tramo_estado", new Dictionary<string, string>());
+        }
+        var ids = new[] { "1) A (Button)", "2) B (Button)", "3) C (Button)" };
+
+        // 1. El objetivo ya está cumplido: el decisor lo dice y no se pulsa nada.
+        var cumplido = MapaParaTramo(_ => Decision("No", "Jev dice que el objetivo ya está cumplido en esta pantalla (0.90): no se acciona nada más. Decide Luna.", 0.9))!;
+        string c1 = Corre(cumplido);
+        Debe(cumplido.Pulsados.Count == 0 && c1.Contains("cumplido", StringComparison.OrdinalIgnoreCase), $"cumplido: 0 pulsos y la cuenta lo dice («{Recorte(c1)}»)");
+
+        // 2. El tope: el decisor siempre tiene una puerta distinta; se para en el tope.
+        var tope = MapaParaTramo(n => Decision("Si", ids[(n - 1) % 3], 0.9, "x"))!;
+        string c2 = Corre(tope, 3);
+        Debe(tope.Pulsados.Count == 3 && c2.Contains("tope", StringComparison.OrdinalIgnoreCase), $"tope 3: 3 pulsos y la cuenta lo dice («{Recorte(c2)}»)");
+
+        // 3. No se atreve: confianza baja.
+        var duda = MapaParaTramo(_ => Decision("No", "Jev eligió «1) A (Button)» con confianza 0.40, por debajo del mínimo exigido (0.70): no se acciona a medias. Decide Luna.", 0.4))!;
+        string c3 = Corre(duda);
+        Debe(duda.Pulsados.Count == 0 && c3.Contains("no se acciona", StringComparison.OrdinalIgnoreCase), $"duda: 0 pulsos y la cuenta trae el porqué del decisor («{Recorte(c3)}»)");
+
+        // 4. La mano no pudo (y sin alternativas no hay segunda).
+        var noPudo = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x"),
+            mano: exit => new RecorrerSegunElNucleo.Resultado(0, 1, "uia://sap/NWP1", false, $"hice 0 de 1 y paré en el paso 1: no lo veo en «uia://sap/NWP1»: «{exit}»"))!;
+        string c4 = Corre(noPudo);
+        Debe(noPudo.Pulsados.Count == 1 && c4.Contains("no lo veo", StringComparison.OrdinalIgnoreCase), $"mano no pudo: 1 intento y la cuenta trae lo que dijo la mano («{Recorte(c4)}»)");
+
+        // 5. El freno: se pide tras el primer paso.
+        int pasos = 0;
+        var freno = MapaParaTramo(n => Decision("Si", ids[(n - 1) % 3], 0.9, "x"), hayQueParar: () => pasos++ >= 1)!;
+        string c5 = Corre(freno);
+        Debe(freno.Pulsados.Count == 1 && c5.Contains("paraste", StringComparison.OrdinalIgnoreCase), $"freno: para en el paso en curso y lo dice («{Recorte(c5)}»)");
+
+        // 6. El bucle: la misma puerta tres veces y la pantalla no cambia.
+        var bucle = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x"),
+            mano: exit => new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NWP1", true, $"hice los 1 paso(s): pulsé «{exit}» y la pantalla no cambió.", false))!;
+        string c6 = Corre(bucle);
+        Debe(bucle.Pulsados.Count == 3 && c6.Contains("tres veces", StringComparison.OrdinalIgnoreCase), $"bucle: se para en la tercera repetición y lo dice («{Recorte(c6)}»)");
+        Debe(c6.Contains("3 paso", StringComparison.Ordinal) || c6.Contains("hice 3", StringComparison.Ordinal), "y cada paso cuenta, hecho o no");
+    }
+
+    private static string Recorte(string s) => s.Length > 110 ? s[..110].Replace("\n", " ") : s.Replace("\n", " ");
+
+    private static void MapAltoParaElTramoDondeVa()
+    {
+        var t = MapaParaTramo(n => Decision("Si", new[] { "1) A (Button)", "2) B (Button)", "3) C (Button)" }[(n - 1) % 3], 0.9, "x"), retrasoDelDecisorMs: 300);
+        if (t == null || !SurfaceMapTools.IsMapTool("map_alto")) { Pendiente("SurfaceMapTools.map_alto", "293", "037"); return; }
+
+        string nada = t.Mapa.Call("map_alto", new Dictionary<string, string>());
+        Debe(nada.Contains("no hay ningún tramo", StringComparison.OrdinalIgnoreCase), $"sin tramo en marcha lo dice («{Recorte(nada)}»)");
+
+        t.Mapa.Call("map_tramo", Args(("objetivo", "ir lejos"), ("tope", "10")));
+        System.Threading.Thread.Sleep(450);
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        string alto = t.Mapa.Call("map_alto", new Dictionary<string, string>());
+        reloj.Stop();
+        Debe(reloj.ElapsedMilliseconds < 200, $"map_alto contesta sin esperar al paso siguiente ({reloj.ElapsedMilliseconds} ms)");
+        Debe(EsperarTramo(t.Mapa, 5000), "y el tramo termina");
+        Debe(t.Pulsados.Count <= 2, $"paró en el paso en curso: pulsó {t.Pulsados.Count} de 10");
+        Debe(alto.Contains("paso", StringComparison.OrdinalIgnoreCase) && (alto.Contains("quedó", StringComparison.OrdinalIgnoreCase) || alto.Contains("paré", StringComparison.OrdinalIgnoreCase) || alto.Contains("paro", StringComparison.OrdinalIgnoreCase)),
+            $"y contesta dónde quedó («{Recorte(alto)}»)");
+        string estado = t.Mapa.Call("map_tramo_estado", new Dictionary<string, string>());
+        Debe(estado.Contains("paraste", StringComparison.OrdinalIgnoreCase) || estado.Contains("alto", StringComparison.OrdinalIgnoreCase), $"y la cuenta del tramo dice que lo pararon («{Recorte(estado)}»)");
+    }
+
+    private static void ElTramoCuentaCadaPasoYLoQueDejoDelante()
+    {
+        var t = MapaParaTramo(n => Decision("Si", new[] { "1) A (Button)", "2) B (Button)", "3) C (Button)" }[(n - 1) % 3], 0.85, "x"));
+        if (t == null) { Pendiente("SurfaceMapTools.Progreso + map_tramo_estado", "294", "037"); return; }
+
+        t.Mapa.Call("map_tramo", Args(("objetivo", "recorrer"), ("tope", "2")));
+        EsperarTramo(t.Mapa, 5000);
+        var pasos = t.Progreso.Where(l => l.Contains("«A»") || l.Contains("«B»")).ToList();
+        Debe(pasos.Count >= 2, $"el progreso cuenta cada paso ({t.Progreso.Count} línea(s): {string.Join(" | ", t.Progreso.Take(4))})");
+        Debe(pasos.All(l => l.Contains("1)") || l.Contains("2)")) && pasos.All(l => l.Contains("0.85", StringComparison.Ordinal)),
+            "y cada línea lleva el número de la puerta y la confianza");
+        string estado = t.Mapa.Call("map_tramo_estado", new Dictionary<string, string>());
+        Debe(estado.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), "y la cuenta final lleva lo que hay delante");
+        Debe(estado.Contains("2", StringComparison.Ordinal) && estado.Contains("tope", StringComparison.OrdinalIgnoreCase), $"y dice cuántos pasos y por qué paró («{Recorte(estado)}»)");
+    }
+
+    private static void LaVozSeEnteraSinPreguntar()
+    {
+        var t = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x"));
+        if (t == null) { Pendiente("SurfaceMapTools.AvisarALaVoz", "295", "037"); return; }
+
+        t.Mapa.Call("map_tramo", Args(("objetivo", "una cosa"), ("tope", "1")));
+        EsperarTramo(t.Mapa, 5000);
+        System.Threading.Thread.Sleep(100);
+        Debe(t.Avisos.Count == 1, $"al parar, la cuenta llega a la voz exactamente una vez ({t.Avisos.Count})");
+        Debe(t.Avisos.Count == 1 && t.Avisos[0].Contains("tope", StringComparison.OrdinalIgnoreCase) && t.Avisos[0].Contains("«A»", StringComparison.Ordinal),
+            $"y es la cuenta entera, con lo que se pulsó y por qué paró («{(t.Avisos.Count > 0 ? Recorte(t.Avisos[0]) : "")}»)");
+
+        // Sin voz: no se lanza nada y la cuenta queda para map_tramo_estado.
+        var sinVoz = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x"))!;
+        typeof(SurfaceMapTools).GetProperty("AvisarALaVoz")!.SetValue(sinVoz.Mapa, null);
+        sinVoz.Mapa.Call("map_tramo", Args(("objetivo", "otra"), ("tope", "1")));
+        EsperarTramo(sinVoz.Mapa, 5000);
+        Debe(sinVoz.Mapa.Call("map_tramo_estado", new Dictionary<string, string>()).Contains("«A»", StringComparison.Ordinal), "sin voz, la cuenta queda para map_tramo_estado");
+    }
+
+    private static void ElInterruptorEnVivo()
+    {
+        var t = Capacidad("U.WindowsClient.Decision.InterruptorDelDecisor");
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var pCon = tc?.GetProperty("ConDecisor", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        if (t == null || pCon == null || pDecisor == null)
+        {
+            Pendiente("Decision.InterruptorDelDecisor", "290", "036");
+            return;
+        }
+
+        string Catalogo() => string.Join("|", ((System.Collections.IEnumerable)tc!.GetMethod("Herramientas", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)!.Invoke(null, null)!)
+            .Cast<object>().Select(u => (string)u.GetType().GetProperty("Nombre")!.GetValue(u)!));
+
+        bool antes = (bool)pCon.GetValue(null)!;
+        try
+        {
+            var mapa = new SurfaceMapTools(() => null);
+            int reenviados = 0;
+            // ctor(SurfaceMapTools mapa, Func<Task> reenviarCatalogo, Action<string> log)
+            var interruptor = Activator.CreateInstance(t, mapa,
+                (Func<System.Threading.Tasks.Task>)(() => { reenviados++; return System.Threading.Tasks.Task.CompletedTask; }),
+                (Action<string>)(_ => { }))!;
+            var encender = t.GetMethod("Encender")!; var apagar = t.GetMethod("Apagar")!;
+            var estado = t.GetProperty("Estado")!; var encendido = t.GetProperty("Encendido")!;
+            Func<string, string?> Entorno(string? decisor, string? clave) => n => n switch { "U_DECISOR" => decisor, "TYPESAFE_API_KEY" => clave, _ => null };
+
+            pCon.SetValue(null, false);
+            string sinDecisor = Catalogo();
+
+            bool ok = (bool)encender.Invoke(interruptor, new object[] { Entorno("simulado", null) })!;
+            Debe(ok && (bool)encendido.GetValue(interruptor)! && (bool)pCon.GetValue(null)! && pDecisor.GetValue(mapa) != null,
+                "encender deja map_decidir en el catálogo y un decisor en el mapa");
+            Debe(ArgumentosDe("map_decidir") != null, "y el catálogo lo trae");
+            Debe(reenviados == 1, $"y se re-manda el catálogo a la voz ({reenviados})");
+
+            apagar.Invoke(interruptor, null);
+            Debe(!(bool)encendido.GetValue(interruptor)! && !(bool)pCon.GetValue(null)! && pDecisor.GetValue(mapa) == null,
+                "apagar deja el mapa sin decisor");
+            Debe(Catalogo() == sinDecisor, "y el catálogo byte a byte como sin decisor");
+            Debe(reenviados == 2, "y también re-manda el catálogo");
+
+            bool noPudo = (bool)encender.Invoke(interruptor, new object[] { Entorno("jev", null) })!;
+            string est = (string)estado.GetValue(interruptor)!;
+            Debe(!noPudo && !(bool)encendido.GetValue(interruptor)! && est.Contains("TYPESAFE_API_KEY"),
+                $"pedir Jev sin clave se queda apagado y el estado dice por qué («{est}»)");
+            Debe(est.Length > 0 && !est.Contains('\n'), "y el estado es una línea");
+        }
+        finally { pCon.SetValue(null, antes); }
+    }
+
+    private static void SiElDecisorNoActuaNadaSePulsa()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var tDecision = Capacidad("U.WindowsClient.Decision.DecisionDeUnPaso");
+        if (pDecisor == null || pPuertas == null || tDecision == null)
+        {
+            Pendiente("SurfaceMapTools.Decisor/Puertas", "286", "035");
+            return;
+        }
+
+        // DUDA, O PUERTA FUERA DE LISTA: es la palabra del decisor la que llega, no un resumen.
+        var m = MapaParaDecidir(pPuertas, ("Buscar", "Edit"), ("Crear Triage Administrativo", "Button"))!.Value;
+        pDecisor.SetValue(m.mapa, Decide((_, _, _) => Decision("No", "Jev contestó «Grabar», que no está entre las 2 puertas de esta pantalla: no se acciona. Decide Luna.", 0.99)));
+        string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "crear el triage" });
+        Debe(m.visto() == null, "no se pulsa nada");
+        Debe(r.StartsWith("no se acciona", StringComparison.Ordinal) && r.Contains("Grabar", StringComparison.Ordinal),
+            $"y se dice por qué con las palabras del decisor (dijo: «{(r.Length > 100 ? r[..100] : r)}»)");
+        Debe(r.Contains("EN PANTALLA AHORA", StringComparison.Ordinal) && r.Contains("«Buscar»", StringComparison.Ordinal),
+            "y el control vuelve con el inventario delante, para que Luna elija ella");
+        Debe(m.mapa.UltimaMano is { } mano && !(bool)PropDe(mano, "Intento")!,
+            "y la mano no lo cuenta como intento: no se pulsó nada, y contarlo frenaría el «pruebo otro» del tope de la 204");
+
+        // EL PROPIO DECISOR LANZA: tampoco tumba el paso. ElDecisor promete no lanzar (280), pero esto es
+        // la costura, y lo que promete otro se comprueba.
+        var m2 = MapaParaDecidir(pPuertas, ("Buscar", "Edit"))!.Value;
+        pDecisor.SetValue(m2.mapa, Decide((_, _, _) => throw new InvalidOperationException("se rompió el decisor")));
+        string r2;
+        try { r2 = m2.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" }); }
+        catch (Exception e) { Debe(false, $"si el decisor lanza, la excepción sale del despacho: {e.GetType().Name}"); return; }
+        Debe(m2.visto() == null && r2.StartsWith("no se acciona", StringComparison.Ordinal) && r2.Contains("InvalidOperationException", StringComparison.Ordinal),
+            $"si el decisor lanza no se pulsa nada y se dice qué lanzó (dijo: «{(r2.Length > 100 ? r2[..100] : r2)}»)");
+
+        // SIN OBJETIVO no hay decisión posible, y se dice qué falta — sin leer la pantalla.
+        var m3 = MapaParaDecidir(pPuertas, ("Buscar", "Edit"))!.Value;
+        pDecisor.SetValue(m3.mapa, Decide((_, _, _) => Decision("Si", "Buscar", 1.0, "x")));
+        string r3 = m3.mapa.Call("map_decidir", new Dictionary<string, string>());
+        Debe(r3.StartsWith("falta `objetivo`", StringComparison.Ordinal) && m3.leidas() == 0 && m3.visto() == null,
+            $"sin `objetivo` dice qué falta, y ni mira ni pulsa (dijo: «{r3}»)");
+    }
+
+    // ── Spec 038: leer es una llamada ────────────────────────────────────────────────────────────
+
+    /// <summary>Un nodo de mentira: lo que una petición con caché habría traído, con sus hijos ya dentro.</summary>
+    private sealed class NodoFalso
+    {
+        public string Nombre = "", Id = "", Ayuda = "", Tipo = "Button";
+        public bool Accionable = true, Fuera;
+        public System.Windows.Rect Caja = new(10, 10, 80, 24);
+        public List<NodoFalso> Hijos = new();
+    }
+
+    private static void LeerEsRecorrerLoQueUnaPeticionTrajo()
+    {
+        // MEDIDO EL 2026-09-18 CON UNA SONDA DE SOLO LECTURA, sobre las mismas ventanas y con el mismo resultado
+        // (mismos nodos, mismos accionables): Wikipedia en Chrome, 680 nodos → 3.400 ms nodo a nodo contra 270 ms con
+        // una petición con caché (12,5×); Configuración 800 → 155; el Explorador 1.050 → 420. UiaReader.Collect
+        // navegaba con TreeWalker y leía .Current: ~8 viajes entre procesos POR NODO, accionable o no.
+        var t = Capacidad("U.WindowsClient.Uia.UiaReader");
+        var recoge = t?.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(x => x.Name == "Recoge" && x.IsGenericMethodDefinition);
+        var respaldo = t?.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(x => x.Name == "LeeConRespaldo" && x.IsGenericMethodDefinition);
+        if (t == null || recoge == null || respaldo == null)
+        {
+            Pendiente("Uia.UiaReader.Recoge<T> + LeeConRespaldo<T>", "297", "038");
+            return;
+        }
+
+        // Recoge<T>(raiz, hijos, leer, topeElementos, topeProfundidad) → lista de (T Nodo, string Etiqueta, …).
+        // «leer» devuelve tipos básicos —(Nombre, Id, Ayuda, Tipo, Accionable, Fuera, Caja, ItemType)— para que el
+        // recorrido se pueda juzgar sin UI Automation delante.
+        var recogeDeFalsos = recoge.MakeGenericMethod(typeof(NodoFalso));
+        int lecturas = 0, bajadas = 0;
+        Func<NodoFalso, IEnumerable<NodoFalso>> hijos = n => { bajadas++; return n.Hijos; };
+        Func<NodoFalso, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer =
+            n => { lecturas++; return (n.Nombre, n.Id, n.Ayuda, n.Tipo, n.Accionable, n.Fuera, n.Caja, ""); };
+
+        List<string> Etiquetas(NodoFalso raiz, int tope = 400, int prof = 40)
+        {
+            var r = (System.Collections.IEnumerable)recogeDeFalsos.Invoke(null, new object[] { raiz, hijos, leer, tope, prof })!;
+            var salida = new List<string>();
+            foreach (var x in r) salida.Add((string)x!.GetType().GetField("Item2")!.GetValue(x)!);
+            return salida;
+        }
+
+        // 1. LO MISMO QUE ANTES: accionable, visible, con etiqueta y con geometría; en orden de lectura; y se baja también por lo que no se recoge.
+        var raiz = new NodoFalso { Nombre = "ventana", Accionable = false };
+        var panel = new NodoFalso { Nombre = "panel", Accionable = false };
+        panel.Hijos.Add(new NodoFalso { Nombre = "Dentro del panel" });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "Nuevo" });
+        raiz.Hijos.Add(panel);
+        raiz.Hijos.Add(new NodoFalso { Nombre = "Oculto", Fuera = true });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "Decorado", Accionable = false });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "", Id = "", Ayuda = "" });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "Sin caja", Caja = System.Windows.Rect.Empty });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "Aplastado", Caja = new System.Windows.Rect(0, 0, 0.5, 20) });
+        raiz.Hijos.Add(new NodoFalso { Nombre = "", Id = "btnGuardar" });
+        raiz.Hijos.Add(new NodoFalso { Nombre = " ", Id = "", Ayuda = "Ayuda del botón" });
+        lecturas = 0; bajadas = 0;
+        var e = Etiquetas(raiz);
+        Debe(e.SequenceEqual(new[] { "Nuevo", "Dentro del panel", "btnGuardar", "Ayuda del botón" }),
+            $"se recoge lo accionable, visible, con etiqueta (nombre → id → ayuda) y con geometría, en orden de lectura, bajando también por lo que no se recoge; salió [{string.Join(" · ", e)}]");
+
+        // 2. EL RECORRIDO NO NAVEGA: solo llama a «hijos» y a «leer» sobre lo que le dieron, una vez por nodo.
+        int nodos = 1 + raiz.Hijos.Count + panel.Hijos.Count;
+        Debe(lecturas == nodos - 1 && bajadas == nodos,
+            $"cada nodo se lee una vez y se baja una vez: {lecturas} lecturas y {bajadas} bajadas para {nodos} nodos (la raíz no se lee: es la ventana)");
+
+        // 3. LOS TOPES, LOS MISMOS QUE ANTES: 40 niveles; y el de elementos se mira AL ENTRAR en cada rama, no dentro.
+        // Medido el 2026-09-18 sobre `C:\`: el camino de siempre daba 411 y un corte estricto en 400 perdía once
+        // carpetas de verdad. Un corte de rendimiento no cambia lo que se ve.
+        var cadena = new NodoFalso { Accionable = false }; var cola = cadena;
+        for (int i = 1; i <= 45; i++) { var h = new NodoFalso { Nombre = "n" + i }; cola.Hijos.Add(h); cola = h; }
+        var hondos = Etiquetas(cadena);
+        Debe(hondos.Contains("n40") && !hondos.Contains("n43"), $"más allá de 40 niveles no se baja (llegó hasta «{hondos.LastOrDefault()}»)");
+        var ancha = new NodoFalso { Accionable = false };
+        foreach (var letra in new[] { "a", "b", "c" })
+        {
+            var rama = new NodoFalso { Nombre = "rama " + letra, Accionable = false };
+            for (int i = 0; i < 300; i++) rama.Hijos.Add(new NodoFalso { Nombre = letra + i });
+            ancha.Hijos.Add(rama);
+        }
+        var anchas = Etiquetas(ancha);
+        Debe(anchas.Count == 600 && anchas.Contains("b299") && !anchas.Contains("c0"),
+            $"una rama empezada se termina, y pasados los 400 no se entra en la siguiente: de tres ramas de 300 salen 600 ({anchas.Count}); ni se corta una lista a la mitad ni una página de miles infla el inventario");
+
+        // 4. EL RESPALDO, Y QUE SE DIGA. Un respaldo silencioso se confunde con el camino rápido (aprendizaje nº18).
+        var conRespaldo = respaldo.MakeGenericMethod(typeof(string));
+        object?[] a1 = { (Func<string>)(() => "rápido"), (Func<string>)(() => "lento"), null };
+        Debe((string)conRespaldo.Invoke(null, a1)! == "rápido" && ((string)a1[2]!).Contains("caché", StringComparison.OrdinalIgnoreCase),
+            $"si la petición con caché funciona, se usa y se dice («{a1[2]}»)");
+        object?[] a2 = { (Func<string>)(() => throw new InvalidOperationException("el proveedor no admite caché")), (Func<string>)(() => "lento"), null };
+        Debe((string)conRespaldo.Invoke(null, a2)! == "lento", "si falla, se lee nodo a nodo como antes");
+        Debe(((string)a2[2]!).Contains("nodo a nodo", StringComparison.OrdinalIgnoreCase) && ((string)a2[2]!).Contains("InvalidOperationException"),
+            $"y se dice que fue nodo a nodo y por qué («{a2[2]}»)");
+    }
+
+    // ── Spec 038, primer corte ───────────────────────────────────────────────────────────────────
+
+    private static void UnaPuertaQueLlevaAquiNoSeEnsayaNiSeRepite()
+    {
+        // MEDIDO EL 2026-09-18 A LAS 05:51, con el reloj por fase del tramo: estando YA en Descargas, pulsar
+        // el TreeItem «Descargas» costó 6.157 ms en «pulsar». El log, gesto a gesto: clic (:24), 1,8 s; el
+        // ENSAYO con doble clic FÍSICO (:26), 1,8 s; «no movió nada y el terreno sabe que lleva a algún sitio:
+        // lo repito una vez» (:28), 1,8 s. Tres pulsaciones y tres esperas por un cambio imposible: esa misma
+        // puerta, desde «Disco local», se acababa de aprender que lleva justo a donde ya estábamos.
+        var t = Capacidad("U.WindowsClient.Navigation.PulsarSegunElNucleo");
+        var llevaAqui = t?.GetMethod("LlevaAqui", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || llevaAqui == null)
+        {
+            Pendiente("Navigation.PulsarSegunElNucleo.LlevaAqui", "296", "038");
+            return;
+        }
+
+        var arbol = new Nucleo.Elemento("uia:name=Descargas;ct=TreeItem", "Descargas", "TreeItem");
+        var siguiente = new Nucleo.Elemento("uia:name=Siguiente;ct=Button", "Siguiente", "Button");
+        var redactar = new Nucleo.Elemento("uia:name=Compose;ct=Button", "Compose", "Button");
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x/raiz", new[] { arbol });
+        g.Observar("uia://x/descargas", new[] { arbol });
+        g.Observar("uia://x/otra", new[] { arbol });
+        g.Cruzar("uia://x/raiz", arbol.Selector, "uia://x/descargas");
+        // El saber viejo que disparaba la 248 en la corrida real: desde Descargas, esa puerta alguna vez llevó a otro sitio.
+        g.Cruzar("uia://x/descargas", arbol.Selector, "uia://x/otra");
+
+        bool L(string selector, string desde) => (bool)llevaAqui.Invoke(null, new object[] { g, selector, desde })!;
+        Debe(L(arbol.Selector, "uia://x/descargas"), "la regla pura: esa puerta, desde otro sitio, lleva justo a donde estamos");
+        Debe(!L(arbol.Selector, "uia://x/raiz"), "desde «raíz» no: ninguna arista suya lleva a «raíz»");
+        Debe(!L(siguiente.Selector, "uia://x/descargas"), "y de una puerta de la que no se sabe nada, tampoco");
+        Debe(!L("", "uia://x/descargas") && !L(arbol.Selector, ""), "vacío no es saber (patrón nº9)");
+
+        // EL COMPORTAMIENTO: un gesto y una espera, no tres y tres.
+        var gestos = new List<string>();
+        var pulsar = new PulsarSegunElNucleo(g, () => "uia://x/descargas",
+            (sel, et, gesto) => { gestos.Add(gesto.Length == 0 ? "clic" : gesto); return true; }) { EsperaMaximaMs = 200 };
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        var r = pulsar.Pulsa(arbol.Selector, "Descargas");
+        reloj.Stop();
+        Debe(gestos.Count == 1 && gestos[0] == "clic",
+            $"un solo gesto: ni el doble clic de ensayo ni la repetición de la 248 (hizo [{string.Join(" · ", gestos)}])");
+        Debe(reloj.ElapsedMilliseconds < 450, $"y una sola espera, no tres ({reloj.ElapsedMilliseconds} ms con un presupuesto de 200)");
+        Debe(r.SePudo && !r.CambioLaPantalla && r.Cuenta.Contains("ya estás", StringComparison.OrdinalIgnoreCase),
+            $"la cuenta dice que ya estás donde lleva, en vez de un «no cambió» a secas («{r.Cuenta}»)");
+
+        // LA 248 SIGUE EN PIE para lo suyo: una puerta que lleva a OTRO sitio y no movió nada, se repite una vez.
+        g.Observar("uia://x/correo", new[] { redactar });
+        g.Observar("uia://x/redaccion", new[] { redactar });
+        g.Cruzar("uia://x/correo", redactar.Selector, "uia://x/redaccion");
+        var gestos2 = new List<string>();
+        var pulsar2 = new PulsarSegunElNucleo(g, () => "uia://x/correo",
+            (sel, et, gesto) => { gestos2.Add(gesto.Length == 0 ? "clic" : gesto); return true; }) { EsperaMaximaMs = 120 };
+        pulsar2.Pulsa(redactar.Selector, "Compose");
+        Debe(gestos2.Count == 2, $"el «Compose» que se perdió se sigue repitiendo una vez ({gestos2.Count} gesto(s)): la 248 no se toca");
+
+        // Y SI LA PANTALLA SÍ CAMBIA, SE CUENTA COMO SIEMPRE. Un «Siguiente» vive en todas las páginas: desde la 1
+        // lleva a la 2, y en la 2 la regla diría «lleva aquí» — pero lo que manda es lo que pasa, no lo que se sabía.
+        g.Observar("uia://x/p1", new[] { siguiente });
+        g.Observar("uia://x/p2", new[] { siguiente });
+        g.Observar("uia://x/p3", new[] { siguiente });
+        g.Cruzar("uia://x/p1", siguiente.Selector, "uia://x/p2");
+        string pagina = "uia://x/p2";
+        var pulsar3 = new PulsarSegunElNucleo(g, () => pagina, (sel, et, gesto) => { pagina = "uia://x/p3"; return true; }) { EsperaMaximaMs = 240 };
+        var r3 = pulsar3.Pulsa(siguiente.Selector, "Siguiente");
+        Debe(r3.CambioLaPantalla && r3.Hasta == "uia://x/p3",
+            $"el «Siguiente» que sí navega se cuenta como navegación aunque el terreno dijera «lleva aquí» (quedó en «{r3.Hasta}»)");
+    }
+
+    private static void LoQueYaVinoNoSeVuelveAPedir()
+    {
+        // MEDIDO EL 2026-09-18 CON UNA SONDA DE SOLO LECTURA sobre el Explorador («Descargas», 133 nodos en la
+        // petición principal): las SEIS ventanas hijas que el lector pedía aparte —DirectUIHWND ×2, SysTreeView32,
+        // SHELLDLL_DefView, DesktopChildSiteBridge, InputSiteWindowClass— traían 279 nodos y los 279 YA VENÍAN en la
+        // principal, por RuntimeId. Costaban 1,0-1,8 s de 2,8-4,1, y dejaban cada elemento dos o tres veces en la
+        // lista: de ahí que `C:\` diera 411 «elementos» y el tope de 400 se comiera carpetas de verdad. La limitación
+        // que las justificaba («FromHandle(principal) + descenso da 1 solo nodo», 2026-07-31) era del TreeWalker; con
+        // la petición con caché ya no es cierta. Se conserva el camino para la hija que NO venga: otro Windows puede
+        // comportarse distinto, y eso se decide mirando, no suponiendo.
+        var t = Capacidad("U.WindowsClient.Uia.UiaReader");
+        var todo = t?.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(x => x.Name == "RecogeConHijas" && x.IsGenericMethodDefinition);
+        if (t == null || todo == null)
+        {
+            Pendiente("Uia.UiaReader.RecogeConHijas<T>", "298", "038");
+            return;
+        }
+
+        // RecogeConHijas<T>(principal, hijas: (identidad de su raíz, cómo pedirla), hijos, leer, identidad, topeElementos, topeProfundidad)
+        var m = todo.MakeGenericMethod(typeof(NodoFalso));
+        Func<NodoFalso, IEnumerable<NodoFalso>> hijos = n => n.Hijos;
+        Func<NodoFalso, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer =
+            n => (n.Nombre, n.Id, n.Ayuda, n.Tipo, n.Accionable, n.Fuera, n.Caja, "");
+        Func<NodoFalso, string> identidad = n => "rt:" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(n);
+
+        List<string> Etiquetas(NodoFalso principal, List<(string, Func<NodoFalso>)> hijas, int tope = 400)
+        {
+            var r = (System.Collections.IEnumerable)m.Invoke(null, new object[] { principal, hijas, hijos, leer, identidad, tope, 40 })!;
+            var salida = new List<string>();
+            foreach (var x in r) salida.Add((string)x!.GetType().GetField("Item2")!.GetValue(x)!);
+            return salida;
+        }
+
+        // La ventana: una barra con «Atrás», y una lista de archivos que es ADEMÁS una ventana hija con su propio HWND.
+        var lista = new NodoFalso { Nombre = "lista de archivos", Accionable = false };
+        lista.Hijos.Add(new NodoFalso { Nombre = "informe.pdf", Tipo = "ListItem" });
+        lista.Hijos.Add(new NodoFalso { Nombre = "fotos", Tipo = "ListItem" });
+        var ventana = new NodoFalso { Nombre = "ventana", Accionable = false };
+        ventana.Hijos.Add(new NodoFalso { Nombre = "Atrás" });
+        ventana.Hijos.Add(lista);
+
+        // 1. LA HIJA YA VENÍA: no se pide, y nada sale repetido.
+        int pedidas = 0;
+        var e1 = Etiquetas(ventana, new() { (identidad(lista), () => { pedidas++; return lista; }) });
+        Debe(pedidas == 0, $"una ventana hija cuya raíz ya venía en la petición principal no se pide: se pidió {pedidas} vez/veces");
+        Debe(e1.SequenceEqual(new[] { "Atrás", "informe.pdf", "fotos" }), $"y sus elementos no salen repetidos; salió [{string.Join(" · ", e1)}]");
+
+        // 2. LA HIJA NO VENÍA (el árbol de la principal no la alcanza): se pide UNA vez y lo suyo va detrás, como antes.
+        var aparte = new NodoFalso { Nombre = "panel aparte", Accionable = false };
+        aparte.Hijos.Add(new NodoFalso { Nombre = "Vista previa" });
+        pedidas = 0;
+        var e2 = Etiquetas(ventana, new() { (identidad(lista), () => { pedidas += 100; return lista; }), (identidad(aparte), () => { pedidas++; return aparte; }) });
+        Debe(pedidas == 1, $"una hija que NO venía se pide una vez, y la que sí venía ninguna (contador: {pedidas})");
+        Debe(e2.SequenceEqual(new[] { "Atrás", "informe.pdf", "fotos", "Vista previa" }), $"y sus elementos se añaden detrás; salió [{string.Join(" · ", e2)}]");
+
+        // 3. UNA HIJA QUE FALLA AL PEDIRSE no tumba la lectura: lo demás se entrega.
+        var e3 = Etiquetas(ventana, new() { ("rt:rota", () => throw new InvalidOperationException("el elemento ya no existe")), (identidad(aparte), () => aparte) });
+        Debe(e3.SequenceEqual(new[] { "Atrás", "informe.pdf", "fotos", "Vista previa" }), $"una hija que lanza al pedirse no tumba lo demás; salió [{string.Join(" · ", e3)}]");
+
+        // 4. EL TOPE SE GASTA EN ELEMENTOS DISTINTOS. 300 archivos en una lista que además es ventana hija: antes
+        // entraban 300 + 300 copias y el tope cortaba a la siguiente; ahora entran los 300 y cabe lo que venga detrás.
+        var grande = new NodoFalso { Nombre = "lista grande", Accionable = false };
+        for (int i = 0; i < 300; i++) grande.Hijos.Add(new NodoFalso { Nombre = "f" + i, Tipo = "ListItem" });
+        var v2 = new NodoFalso { Nombre = "ventana", Accionable = false };
+        v2.Hijos.Add(grande);
+        var e4 = Etiquetas(v2, new() { (identidad(grande), () => grande), (identidad(aparte), () => aparte) });
+        Debe(e4.Count == 301 && e4.Distinct().Count() == 301 && e4.Last() == "Vista previa",
+            $"300 archivos y un botón son 301 elementos distintos, no 600 copias que llenan el tope: salieron {e4.Count} ({e4.Distinct().Count()} distintos), el último «{e4.LastOrDefault()}»");
+    }
+
+    // ── Spec 040: la pantalla asentada no se espera ──────────────────────────────────────────────
+
+    private static void UnaPantallaAsentadaNoSeEspera()
+    {
+        // MEDIDO EL 2026-09-18 en dos sesiones de voz reales del dueño: 7 `map_take` pidieron una puerta que no
+        // estaba —«Dan Kost», «TypeSafe AI», «Enter»— y cada «no» costó 4,2-4,6 s, más del triple que pulsar
+        // (1,2 s). El log: dos miradas de 34 y 39 ms que ven LO MISMO (45 y 45 elementos) con cuatro segundos de
+        // espera pura en medio. La pantalla estaba quieta y la puerta no estaba: esperar no podía traerla.
+        var pAsentar = typeof(RecorrerSegunElNucleo).GetProperty("EsperaDeAsentarMs");
+        var pDiario = typeof(RecorrerSegunElNucleo).GetProperty("Diario");
+        var pMira = typeof(RecorrerSegunElNucleo).GetProperty("MiraOtraVez");
+        if (pAsentar == null || pDiario == null || pMira == null)
+        {
+            Pendiente("RecorrerSegunElNucleo.EsperaDeAsentarMs + Diario", "299", "040");
+            return;
+        }
+
+        const string A = "uia://x.exe/a";
+        const int Presupuesto = 1200, Asentar = 100;
+        var uno = new Nucleo.Elemento("s:1", "Uno", "Button");
+        var otro = new Nucleo.Elemento("s:o", "Otro", "Button");
+        var viejo = new Nucleo.Elemento("s:v", "Viejo", "Button");
+
+        // «Viejo» está RECORDADO aquí y la última observación no lo trae (el mundo de la 264).
+        Nucleo.Grafo Mundo()
+        {
+            var g = new Nucleo.Grafo();
+            g.Observar(A, new[] { uno, viejo });
+            g.Observar(A, new[] { uno });
+            return g;
+        }
+
+        (RecorrerSegunElNucleo Lote, List<string> Tocados, List<string> Diario) Lote(Nucleo.Grafo g, Func<int, Nucleo.Elemento[]?> loQueVeLaMirada)
+        {
+            var tocados = new List<string>();
+            var diario = new List<string>();
+            var pulsar = new PulsarSegunElNucleo(g, () => A, (sel, et) => { tocados.Add(et); return true; }) { EsperaMaximaMs = 120 };
+            var lote = new RecorrerSegunElNucleo(g, () => A, pulsar, hayQueParar: () => false) { EsperaMaximaMs = Presupuesto };
+            pAsentar.SetValue(lote, Asentar);
+            pDiario.SetValue(lote, (Action<string>)(l => diario.Add(l)));
+            int n = 0;
+            pMira.SetValue(lote, (Func<string, bool>)(aqui =>
+            {
+                var ve = loQueVeLaMirada(++n);
+                if (ve == null) return false;          // no se pudo mirar
+                g.Observar(aqui, ve);
+                return true;
+            }));
+            return (lote, tocados, diario);
+        }
+
+        (RecorrerSegunElNucleo.Resultado R, long Ms) Pide(RecorrerSegunElNucleo lote, string puerta)
+        {
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            var r = lote.Recorre(new[] { new RecorrerSegunElNucleo.Paso(puerta) });
+            return (r, crono.ElapsedMilliseconds);
+        }
+
+        // 1. ASENTADA, y la puerta es INVENTADA: dos miradas ven lo mismo → se rinde ya, diciendo lo de siempre.
+        var (l1, t1, d1) = Lote(Mundo(), _ => new[] { uno });
+        var (r1, ms1) = Pide(l1, "Dan Kost");
+        Debe(t1.Count == 0 && r1.Hechos == 0 && r1.Cuenta.Contains("no lo conozco"),
+            $"una puerta inventada no se pulsa y se dice «no lo conozco», como hasta hoy (pulsó {t1.Count}; dijo «{r1.Cuenta}»)");
+        Debe(ms1 < Presupuesto / 2,
+            $"y con la pantalla asentada —dos miradas que ven lo mismo— se rinde en el acto, no al agotar el presupuesto: tardó {ms1} ms con un presupuesto de {Presupuesto}");
+
+        // 2. ASENTADA, y la puerta es CONOCIDA pero no está (los resultados de OTRA búsqueda en la misma dirección).
+        var (l2, t2, _) = Lote(Mundo(), _ => new[] { uno });
+        var (r2, ms2) = Pide(l2, "Viejo");
+        Debe(t2.Count == 0 && r2.Hechos == 0 && r2.Cuenta.Contains("AHORA no lo veo") && ms2 < Presupuesto / 2,
+            $"lo mismo con lo que el terreno recuerda y ahora no está: no se pulsa, se dice «AHORA no lo veo», y en el acto ({ms2} ms; pulsó {t2.Count}; dijo «{r2.Cuenta}»)");
+
+        // 3. CARGANDO: entre la primera mirada y la segunda la pantalla CAMBIÓ → se espera, y lo que aparece se pulsa.
+        var (l3, t3, d3) = Lote(Mundo(), n => n == 1 ? new[] { uno } : n == 2 ? new[] { uno, otro } : new[] { uno, otro, viejo });
+        var (r3, ms3) = Pide(l3, "Viejo");
+        Debe(t3.Count == 1 && t3[0] == "Viejo" && r3.Hechos == 1,
+            $"si la pantalla cambió entre las dos miradas está cargando: se sigue esperando y la puerta que aparece se pulsa (pulsó {t3.Count}: {string.Join(",", t3)}; dijo «{r3.Cuenta}»)");
+
+        // 4. CARGANDO y no aparece: se agota el presupuesto ENTERO, como hoy. La regla no recorta la espera que sirve.
+        var (l4, t4, _) = Lote(Mundo(), n => n == 1 ? new[] { uno } : new[] { uno, otro });
+        var (r4, ms4) = Pide(l4, "Viejo");
+        Debe(t4.Count == 0 && r4.Hechos == 0 && ms4 >= Presupuesto - 50,
+            $"una pantalla que se movió se espera el presupuesto entero antes de decir que no: tardó {ms4} ms de {Presupuesto} (pulsó {t4.Count})");
+
+        // 5. SIN PODER MIRAR, NADA CAMBIA: sin miradas no se sabe si está asentada, y no se adivina.
+        var (l5, t5, _) = Lote(Mundo(), _ => null);
+        var (r5, ms5) = Pide(l5, "Viejo");
+        Debe(t5.Count == 0 && r5.Hechos == 0 && ms5 >= Presupuesto - 50,
+            $"si no se pudo mirar no se sabe si la pantalla está asentada: se espera como siempre ({ms5} ms de {Presupuesto})");
+
+        // 6. Y QUEDA DICHO. El 2026-09-18 no se pudo medir si esta espera había servido alguna vez, porque la
+        // compuerta no dejaba línea: «tardó mucho» no distinguía «esperó a la puerta» de «el clic era lento».
+        Debe(d1.Any(x => x.Contains("Dan Kost") && x.Contains("asentada") && x.Contains(" ms")),
+            $"al rendirse por pantalla asentada lo dice, con la puerta y los milisegundos: [{string.Join(" ¦ ", d1)}]");
+        Debe(d3.Any(x => x.Contains("Viejo") && x.Contains("apareció") && x.Contains(" ms")),
+            $"y cuando la espera SIRVE —la puerta apareció esperando— también lo dice, con cuánto esperó: [{string.Join(" ¦ ", d3)}]");
+    }
+
+    // ── Spec 045: las claves viven en el backend ─────────────────────────────────────────────────
+
+    private static void LasClavesVivenEnElBackend()
+    {
+        // POR QUÉ ESTA PROMESA EXISTE (2026-09-18). El instalador que se distribuye lleva embebidas la
+        // credencial de Graph y el token de actualizaciones, y NADA MÁS: la clave de la voz sale hoy de
+        // OPENAI_API_KEY en el equipo de quien desarrolla, y la de Jev de TYPESAFE_API_KEY. Una copia
+        // instalada en otra máquina se queda, por tanto, SIN VOZ Y SIN JEV, que es justo lo que se creía
+        // que el instalador ya resolvía. Embeberlas era la salida rápida y se descartó: un .exe que
+        // reparte claves de pago las reparte a quien lo reciba, y rotarlas obligaría a sacar instalador
+        // nuevo. Se piden al backend, que es donde ya viven como variables de entorno, con la MISMA
+        // credencial que el instalador ya lleva —así no viaja ni un secreto nuevo dentro del binario—.
+        var t = Capacidad("U.WindowsClient.Credenciales.ClavesDelBackend");
+        if (t == null) { Pendiente("Credenciales.ClavesDelBackend", "300", "045"); return; }
+        var ctor = t.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 3);
+        var traer = t.GetMethod("TraerAsync");
+        var resolver = t.GetMethod("Resolver");
+        var estado = t.GetProperty("Estado");
+        if (ctor == null || traer == null || resolver == null || estado == null)
+        {
+            Pendiente("ClavesDelBackend(entorno, pedir, log) + TraerAsync + Resolver + Estado", "300", "045");
+            return;
+        }
+
+        const string SecretoVoz = "sk-secreto-de-la-voz-que-no-debe-salir";
+        const string SecretoJev = "ts-secreto-de-jev-que-no-debe-salir";
+        string cuerpo = "{\"openai\":\"" + SecretoVoz + "\",\"typesafe\":\"" + SecretoJev + "\"}";
+
+        object Crear(Func<string, string?> entorno, Func<Task<string>> pedir, List<string> log)
+        {
+            Func<System.Threading.CancellationToken, Task<string>> pedirCt = _ => pedir();
+            return ctor.Invoke(new object[] { entorno, pedirCt, (Action<string>)(l => log.Add(l)) });
+        }
+        int Traer(object c) => (int)((Task<int>)traer.Invoke(c, new object[] { System.Threading.CancellationToken.None })!).GetAwaiter().GetResult();
+        string Resolver(object c, string nombre) => (string)resolver.Invoke(c, new object[] { nombre })!;
+        string Estado(object c) => (string)estado.GetValue(c)!;
+
+        // 1. LA DEL ENTORNO MANDA, Y ENTONCES NO SE PIDE NADA. La máquina de quien desarrolla sigue
+        //    funcionando exactamente igual que hoy, y no se paga un viaje para no usarlo.
+        int peticiones = 0;
+        var log1 = new List<string>();
+        var conEntorno = Crear(n => n == "OPENAI_API_KEY" ? "la-del-entorno" : null,
+                               () => { peticiones++; return Task.FromResult(cuerpo); }, log1);
+        Debe(Resolver(conEntorno, "OPENAI_API_KEY") == "la-del-entorno",
+            $"la clave del entorno manda sobre la del backend (salió «{Resolver(conEntorno, "OPENAI_API_KEY")}»)");
+        Debe(peticiones == 0, $"y con ella puesta no se le pide NADA al backend: se pidió {peticiones} vez/veces");
+
+        // 1b. Y CON TODAS PUESTAS, EL ARRANQUE TAMPOCO PIDE. Un viaje por arranque para no usar nada, y
+        //     dos claves de pago en memoria sin que nadie las vaya a usar.
+        var siFalta = t.GetMethod("TraerSiFaltaAlgunaAsync");
+        if (siFalta == null) { Pendiente("ClavesDelBackend.TraerSiFaltaAlgunaAsync", "300", "045"); return; }
+        int TraerSiFalta(object c) => (int)((Task<int>)siFalta.Invoke(c, new object[] { System.Threading.CancellationToken.None })!).GetAwaiter().GetResult();
+        peticiones = 0;
+        var todasPuestas = Crear(_ => "la-del-entorno", () => { peticiones++; return Task.FromResult(cuerpo); }, new List<string>());
+        Debe(TraerSiFalta(todasPuestas) == 0 && peticiones == 0,
+            $"con TODAS en el entorno, el arranque no pide nada: se pidió {peticiones} vez/veces");
+        peticiones = 0;
+        var faltaUna = Crear(n => n == "OPENAI_API_KEY" ? "la-del-entorno" : null, () => { peticiones++; return Task.FromResult(cuerpo); }, new List<string>());
+        Debe(TraerSiFalta(faltaUna) > 0 && peticiones == 1,
+            $"y si falta UNA, se piden: {peticiones} vez/veces");
+
+        // 2. SIN ENTORNO, SE PIDE UNA SOLA VEZ aunque se resuelvan varias claves y se llame varias veces.
+        peticiones = 0;
+        var log2 = new List<string>();
+        var sinEntorno = Crear(_ => null, () => { peticiones++; return Task.FromResult(cuerpo); }, log2);
+        int traidas = Traer(sinEntorno);
+        Traer(sinEntorno);
+        Debe(peticiones == 1, $"las claves se piden UNA sola vez, no una por clave ni una por llamada: se pidió {peticiones} vez/veces");
+        Debe(traidas == 2, $"y se dice cuántas llegaron ({traidas} de 2)");
+        Debe(Resolver(sinEntorno, "OPENAI_API_KEY") == SecretoVoz && Resolver(sinEntorno, "TYPESAFE_API_KEY") == SecretoJev,
+            "sin nada en el entorno, la voz y Jev usan lo que dio el backend");
+
+        // 3. NINGUNA CLAVE EN EL LOG NI EN EL ESTADO. Es la razón de ser de todo esto: un secreto que
+        //    acaba en %LOCALAPPDATA%\U\logs es un secreto repartido, y el log se pega en los PR.
+        string todoElLog = string.Join(" | ", log1.Concat(log2)) + " | " + Estado(conEntorno) + " | " + Estado(sinEntorno);
+        Debe(!todoElLog.Contains(SecretoVoz) && !todoElLog.Contains(SecretoJev) && !todoElLog.Contains("la-del-entorno"),
+            $"ninguna clave aparece en el log ni en el estado; salió «{todoElLog}»");
+        Debe(Estado(sinEntorno).Contains("2"), $"pero el estado sí dice CUÁNTAS hay, que es lo que sirve para diagnosticar («{Estado(sinEntorno)}»)");
+
+        // 4. LO QUE EL BACKEND NO DA DEJA SU FUNCIÓN APAGADA, Y SE DICE CUÁL FALTA. Un «no hay voz» sin
+        //    nombre manda la investigación al sitio equivocado (aprendizaje nº2).
+        var log4 = new List<string>();
+        var soloVoz = Crear(_ => null, () => Task.FromResult("{\"openai\":\"" + SecretoVoz + "\"}"), log4);
+        Debe(Traer(soloVoz) == 1, "un backend que solo da una clave trae una");
+        Debe(Resolver(soloVoz, "TYPESAFE_API_KEY").Length == 0, "la que no vino se queda vacía, no se inventa");
+        Debe(Estado(soloVoz).Contains("TYPESAFE_API_KEY"),
+            $"y el estado NOMBRA la que falta, en vez de decir «no se pudo» («{Estado(soloVoz)}»)");
+
+        // 5. UN BACKEND CAÍDO NO TUMBA LA APP NI SE REINTENTA EN BUCLE. Sin voz se puede trabajar; con
+        //    la app muerta, no. Y un bucle de reintentos contra un backend caído es el bucle del que ya
+        //    se salió una vez (pendiente nº3 de CLAUDE.md).
+        int intentos = 0;
+        var log5 = new List<string>();
+        var caido = Crear(_ => null, () => { intentos++; throw new InvalidOperationException("HTTP 503"); }, log5);
+        Debe(Traer(caido) == 0, "con el backend caído no se trae ninguna clave, y no se lanza hacia fuera");
+        Traer(caido);
+        Debe(intentos == 1, $"y no se reintenta en bucle: {intentos} intento(s) tras dos llamadas");
+        Debe(string.Join(" ", log5).Contains("503"), $"el log dice el motivo real, no «no se pudo» («{string.Join(" ", log5)}»)");
+    }
+
+    // ── Spec 041 ─────────────────────────────────────────────────────────────────────────────────
+
+    private static void ElEnterSoloSeDeshaceDondeEscribirEsRenombrar()
+    {
+        // MEDIDO EL 2026-09-18 en el log de la prueba del dueño: 11 veces `map_type` escribió, dio Enter, vio que la
+        // pantalla cambió y trató de DESHACERLO pulsando «Atrás» —10 en Google, 1 en el Bloc de notas—. La
+        // protección nació para renombrar una carpeta en el Explorador (2026-08-03) y se aplicaba a todo. El botón
+        // no se encontró ninguna vez (es el del Explorador), así que costó 3-4 s por búsqueda y nada más; en un
+        // navegador cuyo «volver» se llamara igual, cada búsqueda se habría deshecho sola diciendo «escribí y confirmé».
+        var t = typeof(U.WindowsClient.Mcp.SurfaceMapTools);
+        var seDeshace = t.GetMethod("ElEnterSeDeshace", BindingFlags.Public | BindingFlags.Static);
+        var relato = t.GetMethod("RelatoDeEscribir", BindingFlags.Public | BindingFlags.Static);
+        if (seDeshace == null || relato == null)
+        {
+            Pendiente("SurfaceMapTools.ElEnterSeDeshace + RelatoDeEscribir", "330", "041");
+            return;
+        }
+        bool Deshace(string antes, string ahora) => (bool)seDeshace.Invoke(null, new object[] { antes, ahora })!;
+        string Relato(string texto, string antes, string ahora) => (string)relato.Invoke(null, new object[] { texto, antes, ahora })!;
+
+        // DONDE NACIÓ: renombrar en el Explorador y que el Enter te meta dentro de la carpeta. Eso sí se deshace.
+        Debe(Deshace("uia://explorer.exe/documentos", "uia://explorer.exe/carpeta-nueva"),
+            "en el Explorador, si el Enter que confirma un nombre abre la carpeta, se vuelve: es el caso para el que nació");
+
+        // EN LA WEB, NAVEGAR ES LO QUE SE PIDIÓ.
+        Debe(!Deshace("web://google.com", "web://google.com/search"),
+            "buscar en Google y que el Enter lleve a los resultados no se deshace");
+        Debe(!Deshace("web://docs.google.com/document/d/abc/edit", "web://google.com/search"),
+            "escribir una dirección en la barra y que el Enter navegue no se deshace");
+        Debe(!Deshace("uia://Notepad.exe/sin-título-bloc-de-notas", "uia://Notepad.exe/sorpresa-encontrada-bloc-de-notas"),
+            "fuera del Explorador tampoco: en el Bloc de notas, que escribir le cambie el título a la pestaña no es haberse ido a ningún sitio");
+        Debe(!Deshace("sapgui://PRD/NWP1", "sapgui://PRD/NV2000"),
+            "ni en SAP, donde el Enter ES el botón de continuar");
+
+        // DOS FORMAS DE LA MISMA PANTALLA NO SON UN CAMBIO (aprendizaje nº16). La de hoy: con www y sin él.
+        Debe(!Deshace("web://www.google.com/search", "web://google.com/search"),
+            "«www.google.com/search» y «google.com/search» son la misma pantalla: no hay nada que deshacer");
+        Debe(!Deshace("uia://explorer.exe/documentos", "uia://explorer.exe/documentos") && !Deshace("", "uia://explorer.exe/x") && !Deshace("uia://explorer.exe/x", ""),
+            "sin cambio, o sin saber dónde se estaba o dónde se está, no se deshace nada");
+
+        // Y SE DICE A DÓNDE SE LLEGÓ: el modelo gastaba otra llamada en averiguarlo.
+        string r1 = Relato("fortify", "web://google.com", "web://google.com/search");
+        Debe(r1.Contains("escribí «fortify»") && r1.Contains("Enter") && r1.Contains("web://google.com/search"),
+            $"cuando el Enter cambió de pantalla, la respuesta dice dónde se está ahora: «{r1}»");
+        string r2 = Relato("hola", "web://x.com/a", "web://x.com/a");
+        Debe(r2.Contains("escribí «hola»") && !r2.Contains("ahora estás"),
+            $"y cuando no cambió, no inventa una llegada: «{r2}»");
+        string r3 = Relato("hola", "web://www.google.com/search", "web://google.com/search");
+        Debe(!r3.Contains("ahora estás"), $"la misma pantalla con otra forma tampoco es una llegada: «{r3}»");
+    }
+
+    private static void UnEspacioNoEscondeUnaPuerta()
+    {
+        // MEDIDO EL 2026-09-18: Chrome nombra su barra 'Barra de direcciones y de búsqueda ' —con un espacio al
+        // final—. El lector recorta las etiquetas, el selector guardado no lleva el espacio, y el resolvedor buscaba
+        // el nombre EXACTO: 9 `map_take` fallidos en dos pruebas, con cinco reintentos internos cada uno.
+        // typeof y no Capacidad(): UiaSelector vive en el ensamblado de windows-graph, y Capacidad() solo mira el del
+        // cliente. Pedirlo por nombre ahí da null SIEMPRE, y la promesa diría «pendiente» con el código ya escrito.
+        Type? t = typeof(U.Graph.Surfaces.UiaSelector);
+        var mismo = t?.GetMethod("MismoNombre", BindingFlags.Public | BindingFlags.Static);
+        var sinNombre = t?.GetMethod("CondicionSinNombre", BindingFlags.Public | BindingFlags.Static);
+        var parse = t?.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || mismo == null || sinNombre == null || parse == null)
+        {
+            Pendiente("UiaSelector.MismoNombre + CondicionSinNombre", "331", "041");
+            return;
+        }
+        bool Mismo(string guardado, string real) => (bool)mismo.Invoke(null, new object?[] { guardado, real })!;
+
+        Debe(Mismo("Barra de direcciones y de búsqueda", "Barra de direcciones y de búsqueda "),
+            "el espacio al final del nombre real no impide casar con la etiqueta guardada, que va recortada");
+        Debe(Mismo("Buscar", "  Buscar") && Mismo("Buscar", "Buscar\u00A0") && Mismo("Buscar", "\tBuscar \r\n"),
+            "ni al principio, ni el espacio duro de la web, ni tabuladores o saltos de línea");
+        Debe(Mismo("Buscar", "Buscar"), "el nombre exacto casa, claro");
+        Debe(!Mismo("Buscar", "Buscar en Google") && !Mismo("Buscar", "buscar") && !Mismo("Archivo nuevo", "Archivonuevo"),
+            "un nombre que de verdad es otro NO casa: ni un prefijo, ni otra capitalización, ni los espacios de dentro");
+        Debe(!Mismo("", "   ") && !Mismo("Buscar", "") && !Mismo("   ", "Buscar"),
+            "y vacío no casa con nada, ni con vacío (patrón nº9): un selector sin nombre no encuentra «lo que no tiene nombre»");
+
+        // EL RESPALDO BUSCA POR LO DEMÁS DEL SELECTOR —el tipo, el id— Y COMPARA EL NOMBRE A MANO. Sin nada más que el
+        // nombre no hay respaldo: sería recorrer la ventana entera comparando, y eso no es un respaldo, es otro lector.
+        object Partes(string selector) => parse.Invoke(null, new object[] { selector })!;
+        Debe(sinNombre.Invoke(null, new[] { Partes("uia:name=Barra de direcciones y de búsqueda;ct=Edit") }) is System.Windows.Automation.Condition,
+            "con nombre y tipo, el respaldo busca por tipo");
+        Debe(sinNombre.Invoke(null, new[] { Partes("uia:name=Solo un nombre") }) == null,
+            "con solo el nombre no hay por dónde buscar sin él: no hay respaldo, y se dice que no está como hasta hoy");
+        Debe(sinNombre.Invoke(null, new[] { Partes("uia:aid=btnOk;ct=Button") }) == null,
+            "y un selector sin nombre no necesita este respaldo: no se inventa una segunda búsqueda");
+    }
+
+    // ── Spec 042 ─────────────────────────────────────────────────────────────────────────────────
+
+    private static void PonerseDelanteVuelveLaVentanaLaDeTrabajo()
+    {
+        // MEDIDO EL 2026-09-18, cuatro veces en un día: `map_go_to` hacia una web que estaba abierta en OTRA ventana de
+        // Chrome tardó 11,4-11,7 s en decir «no hay ningún camino aprendido»… y en la misma respuesta, «EN PANTALLA
+        // AHORA, en docs.google.com». Traía la ventana al frente y sondeaba «¿dónde estoy?» 3 s + 8 s, pero ese
+        // «dónde» era el de la ventana de trabajo ANTERIOR, que solo se cambiaba al terminar el recorrido entero.
+        var pHook = typeof(PasoDelNucleo).GetProperty("AlPonerseDelante");
+        if (pHook == null) { Pendiente("PasoDelNucleo.AlPonerseDelante", "332", "042"); return; }
+
+        const int Delante = 500, Web = 1200;
+        (PasoDelNucleo Paso, Func<int> Pedidos, Action<string> Mover) Monta(string empieza, bool adopta, string? alPedirSeVa = null)
+        {
+            string trabajo = empieza, delante = empieza;
+            int pedidos = 0;
+            var paso = new PasoDelNucleo(new Nucleo.Grafo(), () => trabajo, (_, _) => false,
+                destino => { pedidos++; delante = alPedirSeVa ?? delante; return true; })
+            { EsperaDelanteMs = Delante, EsperaWebMs = Web };
+            // La adopción: lo que está DELANTE pasa a ser la ventana de trabajo. Sin ella, «dónde» no se entera.
+            if (adopta) pHook.SetValue(paso, (Action)(() => trabajo = delante));
+            return (paso, () => pedidos, _ => { });
+        }
+
+        // 1. ESTABA ABIERTO EN OTRA VENTANA: se trae, se adopta, y se llega en el acto.
+        var (p1, n1, _) = Monta("web://github.com", adopta: true, alPedirSeVa: "web://docs.google.com/document/d/abc/edit");
+        var c1 = System.Diagnostics.Stopwatch.StartNew();
+        var r1 = p1.Hacia("web://docs.google.com");
+        c1.Stop();
+        Debe(r1.Ok && r1.Llegado, $"ir a una web abierta en otra ventana LLEGA: la ventana traída al frente es ahora la de trabajo (dijo «{r1.Porque}»)");
+        Debe(c1.ElapsedMilliseconds < Delante, $"y en el acto, no al agotar los presupuestos mirando la ventana anterior: {c1.ElapsedMilliseconds} ms (los plazos eran {Delante} + {Web})");
+        Debe(n1() == 1, $"pidiéndolo una sola vez (se pidió {n1()})");
+
+        // 2. SIN ADOPTAR —el mundo de antes— se ve el fallo que se medía: por eso la promesa exige el aviso.
+        //    Y CON ADOPCIÓN PERO SIN LLEGAR: ponerse delante se pide UNA vez y se espera UN plazo, no dos.
+        var (p2, n2, _) = Monta("web://github.com", adopta: true, alPedirSeVa: "web://otra-cosa.com");
+        var c2 = System.Diagnostics.Stopwatch.StartNew();
+        var r2 = p2.Hacia("web://docs.google.com");
+        c2.Stop();
+        Debe(!r2.Ok && !r2.Llegado, "si de verdad no se llegó, se dice que no");
+        Debe(n2() == 1, $"ponerse delante se pide UNA vez por paso: pedirlo otra vez por la misma razón no cambia nada (se pidió {n2()})");
+        Debe(c2.ElapsedMilliseconds < Delante + Web - 150, $"y se espera UN plazo —el de una web cargando—, no los dos seguidos: {c2.ElapsedMilliseconds} ms con plazos de {Delante} y {Web}");
+        Debe(c2.ElapsedMilliseconds >= Web - 150, $"sin recortar el de la web, que es una página entera cargando: {c2.ElapsedMilliseconds} ms de {Web}");
+
+        // 3. LA 66 SIGUE EN PIE: mismo sitio, otra página, sin camino aprendido → se va directo por la dirección.
+        var (p3, n3, _) = Monta("web://es.wikipedia.org/wiki/Portal:Ajedrez", adopta: true, alPedirSeVa: "web://es.wikipedia.org/wiki/Ajedrez");
+        var r3 = p3.Hacia("web://es.wikipedia.org/wiki/Ajedrez");
+        Debe(r3.Ok && r3.Llegado && n3() == 1, $"dentro del mismo sitio se sigue yendo directo por la dirección, una vez (ok={r3.Ok} llegado={r3.Llegado} pedidos={n3()}; «{r3.Porque}»)");
+    }
+
+    private static void PedirUnSubdominioNoSeCumpleEnElPadre()
+    {
+        // MEDIDO EL 2026-09-18: `map_go_to web://scholar.google.com` con una pestaña de google.com/search delante →
+        // «scholar.google.com ya estaba activo en una ventana → al frente», no se navegó a ninguna parte, y 11,6 s
+        // después «no hay ningún camino aprendido». La regla era simétrica: «scholar.google.com» termina en «.google.com».
+        var t = Capacidad("U.WindowsClient.Uia.PestanasAbiertas");
+        var mismo = t?.GetMethod("MismoSitio", BindingFlags.Public | BindingFlags.Static);
+        if (t == null || mismo == null) { Pendiente("Uia.PestanasAbiertas.MismoSitio (pública y con dirección)", "333", "042"); return; }
+        bool Mismo(string hostReal, string pedido) => (bool)mismo.Invoke(null, new object[] { hostReal, pedido })!;
+
+        Debe(!Mismo("google.com", "scholar.google.com"), "pedí scholar.google.com y la pestaña está en google.com: NO es «ya estaba abierto»");
+        Debe(!Mismo("www.google.com", "scholar.google.com"), "ni con el www delante");
+        Debe(Mismo("scholar.google.com", "google.com") && Mismo("api.github.com", "github.com"),
+            "al revés sí, como hasta hoy: pedir el sitio a secas se cumple en un subdominio suyo");
+        Debe(Mismo("www.google.com", "google.com") && Mismo("google.com", "www.google.com") && Mismo("www.scholar.google.com", "scholar.google.com"),
+            "y «www.» no cuenta en ninguno de los dos lados: era la dirección inversa la que, de rebote, cubría este caso");
+        Debe(Mismo("github.com", "GitHub.com/") && !Mismo("notgithub.com", "github.com") && !Mismo("", "github.com") && !Mismo("github.com", ""),
+            "lo demás, como siempre: mayúsculas y barra final dan igual, un sufijo sin punto no es un subdominio, y vacío no casa con nada");
+    }
+
+    // ── Spec 043 ─────────────────────────────────────────────────────────────────────────────────
+
+    private static void UnCampoDeTextoNoNavega()
+    {
+        // MEDIDO EL 2026-09-18 en el log de tres pruebas del dueño: 50 pulsaciones, 16 sin cambio de pantalla, y de
+        // esas 7 eran campos de texto (4 ComboBox, 3 Edit). Los campos cambiaron de pantalla 0 VECES DE 7. Cada una
+        // costó 3,3-3,9 s: 1,8 s esperando un cambio que un campo no produce, más la consulta al terreno.
+        var pCampo = typeof(PulsarSegunElNucleo).GetProperty("EsperaDeCampoMs");
+        if (pCampo == null) { Pendiente("PulsarSegunElNucleo.EsperaDeCampoMs (un campo no navega)", "334", "043"); return; }
+
+        const string A = "web://google.com", B = "web://google.com/search";
+        const int Presupuesto = 1200;
+        Nucleo.Grafo Mundo()
+        {
+            var g = new Nucleo.Grafo();
+            g.Observar(A, new[]
+            {
+                new Nucleo.Elemento("uia:name=Search;ct=ComboBox", "Search", "ComboBox"),
+                new Nucleo.Elemento("uia:name=Rename;ct=Edit", "Rename", "Edit"),
+                new Nucleo.Elemento("uia:name=Guardar;ct=Button", "Guardar", "Button"),
+            });
+            return g;
+        }
+        (PulsarSegunElNucleo.Resultado R, long Ms, int Toques) Pulsa(Nucleo.Grafo g, string selector, string etiqueta, string? alTocarSeVa = null)
+        {
+            string donde = A; int toques = 0;
+            var pulsar = new PulsarSegunElNucleo(g, () => donde, (sel, et) => { toques++; if (alTocarSeVa != null) donde = alTocarSeVa; return true; })
+            { EsperaMaximaMs = Presupuesto };
+            pCampo.SetValue(pulsar, 150);
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            var r = pulsar.Pulsa(selector, etiqueta);
+            return (r, crono.ElapsedMilliseconds, toques);
+        }
+
+        // 1. UN CAMPO: se toca una vez, no se espera el presupuesto, y se dice lo que es.
+        foreach (var (sel, et) in new[] { ("uia:name=Search;ct=ComboBox", "Search"), ("uia:name=Rename;ct=Edit", "Rename") })
+        {
+            var (r, ms, toques) = Pulsa(Mundo(), sel, et);
+            Debe(r.SePudo && !r.CambioLaPantalla && toques == 1, $"«{et}» se toca UNA vez y no se cuenta como navegación (toques={toques}; «{r.Cuenta}»)");
+            Debe(ms < Presupuesto / 2, $"y no se espera el presupuesto de un cambio de pantalla que un campo no produce: «{et}» tardó {ms} ms de {Presupuesto}");
+            Debe(r.Cuenta.Contains("campo") && r.Cuenta.Contains("foco"), $"la respuesta dice que es un campo y que tiene el foco, para que lo siguiente sea escribir: «{r.Cuenta}»");
+        }
+
+        // 2. EL TIPO LO DICE EL SELECTOR SI EL TERRENO AÚN NO CONOCE EL ELEMENTO (la primera vez que se ve una pantalla).
+        var (r2, ms2, _) = Pulsa(new Nucleo.Grafo(), "uia:aid=ti6dpd;ct=ComboBox", "Buscar");
+        Debe(r2.SePudo && ms2 < Presupuesto / 2, $"un campo que el terreno todavía no conoce se reconoce por su selector ({ms2} ms; «{r2.Cuenta}»)");
+
+        // 3. SI AUN ASÍ LA PANTALLA CAMBIÓ, manda lo que pasó: es una navegación como cualquier otra.
+        var (r3, _, _) = Pulsa(Mundo(), "uia:name=Search;ct=ComboBox", "Search", alTocarSeVa: B);
+        Debe(r3.SePudo && r3.CambioLaPantalla && r3.Hasta == B, $"un campo que sí navega se cuenta como navegación (quedó en «{r3.Hasta}»; «{r3.Cuenta}»)");
+
+        // 4. LO QUE NO ES UN CAMPO ESPERA COMO SIEMPRE: un «Guardar» puede tardar en cambiar la pantalla.
+        var (r4, ms4, _) = Pulsa(Mundo(), "uia:name=Guardar;ct=Button", "Guardar");
+        Debe(r4.SePudo && ms4 >= Presupuesto - 100, $"un botón sigue esperando el presupuesto entero: {ms4} ms de {Presupuesto}");
+        Debe(!r4.Cuenta.Contains("campo"), $"y no se le llama campo a lo que no lo es: «{r4.Cuenta}»");
     }
 
     private static void Debe(bool condicion, string promesa)

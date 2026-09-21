@@ -86,6 +86,40 @@ public static class UiaSelector
         return conditions.Count == 1 ? conditions[0] : new AndCondition(conditions.ToArray());
     }
 
+    /// <summary>
+    /// ¿ES EL MISMO NOMBRE, salvo los espacios de los bordes? Promesa 331 (spec 041). Puro.
+    /// </summary>
+    /// <remarks>
+    /// MEDIDO EL 2026-09-18: Chrome nombra su barra 'Barra de direcciones y de búsqueda ' —con un espacio al final—.
+    /// El lector recorta las etiquetas, así que el selector guardado no lo lleva, y la búsqueda por
+    /// <see cref="PropertyCondition"/> es EXACTA: no casaba nunca. 9 `map_take` fallidos en dos pruebas del dueño.
+    /// Dos lados de una comparación que salen de funciones distintas (aprendizaje nº16).
+    ///
+    /// SOLO LOS BORDES, y respetando mayúsculas: «Buscar» no es «buscar» ni «Buscar en Google», y los espacios de
+    /// dentro son parte del nombre. Vacío no casa con nada, ni con vacío (patrón nº9).
+    /// </remarks>
+    public static bool MismoNombre(string? guardado, string? real)
+    {
+        string a = Recorta(guardado), b = Recorta(real);
+        return a.Length > 0 && b.Length > 0 && a.Equals(b, StringComparison.Ordinal);
+    }
+
+    // Trim() ya quita el espacio duro (U+00A0), los tabuladores y los saltos: todo lo que char.IsWhiteSpace reconoce.
+    private static string Recorta(string? v) => (v ?? "").Trim();
+
+    /// <summary>
+    /// LA BÚSQUEDA DE RESPALDO: lo demás del selector —el tipo, el id— SIN el nombre, para comparar el nombre a mano
+    /// con <see cref="MismoNombre"/>. Null si el selector no trae nombre (no hace falta respaldo) o si no trae nada
+    /// más que el nombre: recorrer la ventana entera comparando no es un respaldo, es otro lector.
+    /// </summary>
+    public static Condition? CondicionSinNombre(Dictionary<string, string> parts)
+    {
+        if (!parts.TryGetValue("name", out string? name) || string.IsNullOrWhiteSpace(name)) return null;
+        var sinNombre = new Dictionary<string, string>(parts, StringComparer.OrdinalIgnoreCase);
+        sinNombre.Remove("name");
+        return ConditionFor(sinNombre);
+    }
+
     /// <summary>El nombre de tipo que emite ControlTypeName (sin el «ControlType.») → el ControlType.</summary>
     private static ControlType? ControlTypePorNombre(string n) => n.Trim().ToLowerInvariant() switch
     {

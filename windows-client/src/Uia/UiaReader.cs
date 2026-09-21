@@ -84,6 +84,26 @@ public sealed class UiaReader
         string title = root?.Current.Name ?? "";
         state.Screen = string.IsNullOrWhiteSpace(title) ? proc : $"{proc} · {title}";
 
+        // LEER ES UNA LLAMADA (promesa 297). Con caché; y si el proveedor no la acepta, nodo a nodo como siempre.
+        var elements = LeeConRespaldo(
+            () => LeeConCache(hwnd),
+            () => LeeNodoANodo(hwnd, root),
+            out string como);
+        ComoLeyo = como;
+        if (!como.StartsWith("caché", StringComparison.Ordinal))
+            Diagnostics.LogBus.Log("lector", $"«{proc}» se leyó {como}");
+
+        Elements = elements;
+        state.UiContext = BuildContext(proc, title, elements);
+        return state;
+    }
+
+    /// <summary>Cómo se leyó la última vez: «caché» o «nodo a nodo: por qué». Un respaldo silencioso se confunde con el camino rápido.</summary>
+    public string ComoLeyo { get; private set; } = "";
+
+    /// <summary>El camino de siempre, entero: el árbol, las ventanas hijas y los menús. Es el respaldo de la 297.</summary>
+    private List<UiElement> LeeNodoANodo(IntPtr hwnd, AutomationElement? root)
+    {
         var elements = new List<UiElement>();
         if (root != null)
         {
@@ -98,11 +118,262 @@ public sealed class UiaReader
         // se quedaba paseando el panel izquierdo. Los duplicados por etiqueta se filtran abajo.
         try { CollectFromChildren(hwnd, elements); } catch { }
         try { CollectMenus(root, elements); } catch { }
+        return elements;
+    }
 
-        Elements = elements;
+    // ── Leer es una llamada (promesa 297, spec 038) ─────────────────────────────────────────────
 
-        state.UiContext = BuildContext(proc, title, elements);
-        return state;
+    /// <summary>
+    /// LO QUE SE PIDE DE UNA VEZ: el subárbol entero de la vista de control, con las propiedades que el lector usa.
+    /// </summary>
+    /// <remarks>
+    /// MEDIDO EL 2026-09-18 CON UNA SONDA DE SOLO LECTURA, sobre las mismas ventanas y con el mismo resultado —mismos
+    /// nodos, mismos accionables—: Wikipedia en Chrome (680 nodos, 161 accionables) 3.400 ms nodo a nodo contra 270 ms
+    /// con esta petición (12,5×); Configuración 800 → 155; el Explorador 1.050 → 420; el Bloc de notas 400 → 144.
+    ///
+    /// POR QUÉ ERA LENTO: <see cref="Collect"/> navega con TreeWalker y lee <c>.Current</c>, y en UI Automation cada
+    /// una de esas es un viaje entre procesos: GetFirstChild, GetNextSibling, y una por propiedad —ControlType,
+    /// IsOffscreen, Name, AutomationId, BoundingRectangle, ItemType—. Unos ocho viajes POR NODO, accionable o no.
+    /// Con CacheRequest el proveedor arma el subárbol de su lado y lo manda en una respuesta.
+    ///
+    /// MODO FULL, NO NONE: <see cref="UiElement.Native"/> tiene que seguir siendo una referencia viva, porque la mano
+    /// pide patrones sobre ella para pulsar. None sería más rápido y dejaría los elementos sin manos.
+    /// </remarks>
+    private static CacheRequest PeticionDeLectura()
+    {
+        var req = new CacheRequest();
+        req.Add(AutomationElement.ControlTypeProperty);
+        req.Add(AutomationElement.IsOffscreenProperty);
+        req.Add(AutomationElement.NameProperty);
+        req.Add(AutomationElement.AutomationIdProperty);
+        req.Add(AutomationElement.HelpTextProperty);
+        req.Add(AutomationElement.BoundingRectangleProperty);
+        req.Add(AutomationElement.ItemTypeProperty);
+        req.Add(AutomationElement.RuntimeIdProperty);   // la identidad: para saber si una ventana hija o un menú YA vino (298)
+        req.TreeScope = TreeScope.Element | TreeScope.Descendants;
+        req.TreeFilter = Automation.ControlViewCondition;
+        req.AutomationElementMode = AutomationElementMode.Full;
+        return req;
+    }
+
+    /// <summary>
+    /// La ventana en UNA petición; y después, solo lo que esa petición NO trajo. Lanza si el proveedor no la acepta.
+    /// </summary>
+    /// <remarks>
+    /// MEDIDO EL 2026-09-18 CON UNA SONDA DE SOLO LECTURA, sobre «Descargas» en el Explorador (133 nodos en la
+    /// principal). Las seis ventanas hijas que aquí se pedían aparte traían 279 nodos y LOS 279 YA VENÍAN, por
+    /// RuntimeId: costaban 1,0-1,8 s de un total de 2,8-4,1 y dejaban cada elemento dos o tres veces en la lista
+    /// —por eso la raíz del disco daba 411 «elementos» y el tope se comía carpetas de verdad—. Con el menú «Nuevo»
+    /// abierto, sus 13 opciones también venían ya. Y el FindAll de los menús volvía a pedir el árbol entero antes
+    /// de buscar: ~1 s para encontrar cero; sobre la raíz ya traída son ~150 ms.
+    ///
+    /// La limitación que justificaba las hijas («FromHandle(principal) + descenso da 1 solo nodo», 2026-07-31) era
+    /// del TreeWalker, no de UI Automation. NO SE BORRA EL CAMINO, SE CONDICIONA: la hija cuya raíz no venga se
+    /// sigue pidiendo, porque otro Windows puede comportarse distinto y eso se decide mirando, no suponiendo.
+    /// </remarks>
+    private List<UiElement> LeeConCache(IntPtr hwnd)
+    {
+        var req = PeticionDeLectura();
+        AutomationElement raiz;
+        using (req.Activate()) raiz = AutomationElement.FromHandle(hwnd);
+
+        var hijas = new List<(string, Func<AutomationElement>)>();
+        EnumChildWindows(hwnd, (h, _) =>
+        {
+            var sb = new System.Text.StringBuilder(128);
+            GetClassName(h, sb, sb.Capacity);
+            if (!ChildContentClasses.Contains(sb.ToString())) return true;
+            // La identidad de la raíz de la hija, SIN su subárbol: un viaje corto. Si no se deja leer, identidad
+            // vacía, que no casa con nada: se pide como antes.
+            string id = "";
+            try { id = string.Join(".", AutomationElement.FromHandle(h).GetRuntimeId() ?? Array.Empty<int>()); } catch { }
+            hijas.Add((id, () => { using (req.Activate()) return AutomationElement.FromHandle(h); }));
+            return true;
+        }, IntPtr.Zero);
+
+        var vistos = new HashSet<string>(StringComparer.Ordinal);
+        var acc = new List<UiElement>();
+        foreach (var (nodo, etiqueta, tipo, caja, itemType) in RecogeConHijasNucleo(raiz, hijas, HijosCacheados, LeeCacheado, IdentidadDe, 400, 40, vistos))
+            acc.Add(new UiElement(etiqueta, tipo, caja, nodo, itemType));
+
+        // LOS MENÚS ABIERTOS. El FindAll se conserva —el 2026-08-02 los menús eran invisibles y costó caro—, pero
+        // sobre la raíz YA TRAÍDA, y el que ya vino en el árbol no se añade otra vez.
+        try
+        {
+            AutomationElementCollection menus;
+            using (req.Activate())
+                menus = raiz.FindAll(TreeScope.Descendants,
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.MenuItem));
+            foreach (AutomationElement el in menus)
+            {
+                string id = IdentidadDe(el);
+                if (id.Length > 0 && vistos.Contains(id)) continue;
+                var l = LeeCacheado(el);
+                if (l.Item6) continue;
+                string etiqueta = EtiquetaDe(l.Item1, l.Item2, l.Item3);
+                if (etiqueta.Length == 0 || l.Item7.IsEmpty || l.Item7.Width < 1 || l.Item7.Height < 1) continue;
+                if (acc.Any(e => e.Label.Equals(etiqueta, StringComparison.OrdinalIgnoreCase)
+                              && e.ControlType.Equals("MenuItem", StringComparison.OrdinalIgnoreCase))) continue;
+                acc.Add(new UiElement(etiqueta, "MenuItem", l.Item7, el, l.Item8));
+            }
+        }
+        catch { }
+
+        return acc;
+    }
+
+    /// <summary>La identidad de un nodo, de lo que la petición trajo: su RuntimeId. Vacía si no vino.</summary>
+    private static string IdentidadDe(AutomationElement n)
+    {
+        try { return n.GetCachedPropertyValue(AutomationElement.RuntimeIdProperty) is int[] id ? string.Join(".", id) : ""; }
+        catch { return ""; }
+    }
+
+    private static IEnumerable<AutomationElement> HijosCacheados(AutomationElement n)
+    {
+        AutomationElementCollection hijos;
+        try { hijos = n.CachedChildren; } catch { yield break; }
+        foreach (AutomationElement h in hijos) yield return h;
+    }
+
+    /// <summary>Un nodo, leído de lo que la petición trajo: ningún viaje entre procesos.</summary>
+    private static (string, string, string, string, bool, bool, System.Windows.Rect, string) LeeCacheado(AutomationElement n)
+    {
+        try
+        {
+            var c = n.Cached;
+            var ct = c.ControlType;
+            string ayuda = n.GetCachedPropertyValue(AutomationElement.HelpTextProperty) as string ?? "";
+            string itemType = (n.GetCachedPropertyValue(AutomationElement.ItemTypeProperty) as string ?? "").Trim();
+            return (c.Name ?? "", c.AutomationId ?? "", ayuda, ControlTypeName(ct), Actionable.Contains(ct), c.IsOffscreen, c.BoundingRectangle, itemType);
+        }
+        catch { return ("", "", "", "", false, true, System.Windows.Rect.Empty, ""); }
+    }
+
+    /// <summary>La etiqueta con la que se identifica un elemento: nombre → id → ayuda. La misma regla que <see cref="LabelOf"/>.</summary>
+    private static string EtiquetaDe(string nombre, string id, string ayuda) =>
+        !string.IsNullOrWhiteSpace(nombre) ? nombre.Trim()
+        : !string.IsNullOrWhiteSpace(id) ? id.Trim()
+        : !string.IsNullOrWhiteSpace(ayuda) ? ayuda.Trim() : "";
+
+    /// <summary>
+    /// EL RECORRIDO, SOBRE UN ÁRBOL YA TRAÍDO. No navega ni pregunta a nadie: llama a <paramref name="hijos"/> y a
+    /// <paramref name="leer"/> sobre lo que le dieron, una vez por nodo. Genérico para que el contrato lo juzgue con
+    /// nodos de mentira, sin UI Automation delante.
+    /// </summary>
+    /// <remarks>
+    /// RECOGE LO MISMO QUE <see cref="Collect"/>: accionable, visible, con etiqueta y con geometría, en orden de lectura,
+    /// bajando también por lo que no se recoge, hasta 40 niveles.
+    ///
+    /// EL TOPE DE ELEMENTOS SE MIRA AL ENTRAR EN CADA NIVEL, NO DENTRO DEL BUCLE, Y ES A PROPÓSITO. Parece una fuga
+    /// —y la primera versión de este corte la «arregló» cortando en 400 exactos—, pero medido sobre `C:\` el
+    /// 2026-09-18 el camino de siempre daba 411 elementos y el corte estricto 400: las once que faltaban eran
+    /// carpetas de verdad, las últimas de la lista. Un corte de rendimiento no cambia lo que se ve; si el tope hay
+    /// que moverlo, es otra promesa.
+    /// </remarks>
+    /// <param name="leer">(Nombre, AutomationId, Ayuda, Tipo, Accionable, FueraDePantalla, Caja, ItemType).</param>
+    public static List<(T Nodo, string Etiqueta, string Tipo, System.Windows.Rect Caja, string ItemType)> Recoge<T>(
+        T raiz,
+        Func<T, IEnumerable<T>> hijos,
+        Func<T, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer,
+        int topeElementos = 400,
+        int topeProfundidad = 40)
+    {
+        return RecogeNucleo(raiz, hijos, leer, topeElementos, topeProfundidad, null);
+    }
+
+    private static List<(T Nodo, string Etiqueta, string Tipo, System.Windows.Rect Caja, string ItemType)> RecogeNucleo<T>(
+        T raiz,
+        Func<T, IEnumerable<T>> hijos,
+        Func<T, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer,
+        int topeElementos,
+        int topeProfundidad,
+        Action<T>? alVisitar)
+    {
+        var acc = new List<(T, string, string, System.Windows.Rect, string)>();
+        alVisitar?.Invoke(raiz);
+        Baja(raiz, 0);
+        return acc;
+
+        void Baja(T nodo, int profundidad)
+        {
+            if (profundidad > topeProfundidad || acc.Count > topeElementos) return;
+            foreach (var hijo in hijos(nodo))
+            {
+                alVisitar?.Invoke(hijo);
+                var (nombre, id, ayuda, tipo, accionable, fuera, caja, itemType) = leer(hijo);
+                if (!fuera && accionable)
+                {
+                    string etiqueta = EtiquetaDe(nombre, id, ayuda);
+                    // Sin geometría no hay dónde pulsar: un rect vacío acababa en un clic a (0,0) que el sistema
+                    // daba por bueno (2026-07-31). La misma guarda que el camino de siempre.
+                    if (etiqueta.Length > 0 && !caja.IsEmpty && caja.Width >= 1 && caja.Height >= 1)
+                        acc.Add((hijo, etiqueta, tipo, caja, itemType));
+                }
+                Baja(hijo, profundidad + 1);
+            }
+        }
+    }
+
+    /// <summary>
+    /// LA VENTANA Y SUS VENTANAS HIJAS, SIN PEDIR NI CONTAR DOS VECES LO MISMO (promesa 298). Se recoge la principal
+    /// anotando la identidad de todo lo que se visita; de cada hija se mira si su raíz YA se visitó: si sí, ni se
+    /// pide; si no, se pide una vez y lo suyo va detrás, como antes. Una hija que lanza al pedirse no tumba lo demás.
+    /// </summary>
+    /// <param name="hijas">Por cada ventana hija: la identidad de su raíz, y cómo pedirla (que es lo que cuesta).</param>
+    public static List<(T Nodo, string Etiqueta, string Tipo, System.Windows.Rect Caja, string ItemType)> RecogeConHijas<T>(
+        T principal,
+        IEnumerable<(string, Func<T>)> hijas,
+        Func<T, IEnumerable<T>> hijos,
+        Func<T, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer,
+        Func<T, string> identidad,
+        int topeElementos = 400,
+        int topeProfundidad = 40) =>
+        RecogeConHijasNucleo(principal, hijas, hijos, leer, identidad, topeElementos, topeProfundidad, new HashSet<string>(StringComparer.Ordinal));
+
+    private static List<(T Nodo, string Etiqueta, string Tipo, System.Windows.Rect Caja, string ItemType)> RecogeConHijasNucleo<T>(
+        T principal,
+        IEnumerable<(string, Func<T>)> hijas,
+        Func<T, IEnumerable<T>> hijos,
+        Func<T, (string, string, string, string, bool, bool, System.Windows.Rect, string)> leer,
+        Func<T, string> identidad,
+        int topeElementos,
+        int topeProfundidad,
+        HashSet<string> vistos)
+    {
+        void Anota(T n) { string id = identidad(n); if (!string.IsNullOrEmpty(id)) vistos.Add(id); }
+
+        var acc = RecogeNucleo(principal, hijos, leer, topeElementos, topeProfundidad, Anota);
+        foreach (var (idDeLaRaiz, pedir) in hijas)
+        {
+            if (acc.Count > topeElementos) break;                                             // lleno: no se paga una petición para no recoger nada
+            if (!string.IsNullOrEmpty(idDeLaRaiz) && vistos.Contains(idDeLaRaiz)) continue;   // ya vino: ni se pide
+            try { acc.AddRange(RecogeNucleo(pedir(), hijos, leer, topeElementos - acc.Count, topeProfundidad, Anota)); }
+            catch { /* una hija que ya no existe no tumba la lectura de la ventana */ }
+        }
+        return acc;
+    }
+
+    /// <summary>
+    /// Primero el camino rápido; si lanza, el de siempre — y SE DICE cuál fue y por qué. Un respaldo silencioso se
+    /// confunde con el camino rápido, y entonces «leer tarda» vuelve a no tener explicación (aprendizaje nº18).
+    /// </summary>
+    public static T LeeConRespaldo<T>(Func<T> conCache, Func<T> nodoANodo, out string como)
+    {
+        try
+        {
+            var r = conCache();
+            como = "caché: una petición por ventana";
+            return r;
+        }
+        catch (Exception e)
+        {
+            string causa = "";
+            for (var x = e; x != null; x = x.InnerException)
+                causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
+            como = $"nodo a nodo: la petición con caché falló ({causa})";
+            return nodoANodo();
+        }
     }
 
     /// <summary>Devuelve el punto (centro) donde tocar el primer elemento cuya etiqueta coincida.</summary>

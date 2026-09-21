@@ -85,8 +85,59 @@ public sealed class PulsarSegunElNucleo
     /// </summary>
     public int EsperaMaximaMs { get; init; } = 1800;
 
+    /// <summary>
+    /// LO QUE SE ESPERA TRAS PULSAR UN CAMPO DE TEXTO. Promesa 334 (spec 043): poco, porque un campo no navega.
+    /// </summary>
+    /// <remarks>
+    /// MEDIDO EL 2026-09-18 sobre las 50 pulsaciones con reloj de tres pruebas del dueño: 16 no cambiaron de
+    /// pantalla, y 7 de esas eran campos de texto (4 ComboBox, 3 Edit). LOS CAMPOS CAMBIARON DE PANTALLA 0 VECES DE 7.
+    /// Cada una costó 3,3-3,9 s: 1,8 s esperando un cambio que un campo no produce, y 0,3-0,5 s preguntándole al
+    /// terreno si esa «puerta» lleva a algún sitio. Un campo no es una puerta.
+    ///
+    /// NO ES CERO: si en este rato la pantalla cambia, manda lo que pasó y se cuenta como cualquier navegación.
+    /// </remarks>
+    public int EsperaDeCampoMs { get; init; } = 300;
+
     /// <summary>Para que el reintento de la 248 no se llame a sí mismo.</summary>
     private bool _yaRepeti;
+
+    /// <summary>Cuántas veces se preguntó «dónde» en la última espera: para el reloj del log.</summary>
+    private int _sondeos;
+
+    /// <summary>
+    /// ¿ESTA PUERTA, DESDE ALGÚN OTRO SITIO, LLEVA JUSTO A DONDE ESTAMOS? Promesa 296 (spec 038).
+    /// </summary>
+    /// <remarks>
+    /// SI LLEVA AQUÍ, DESDE AQUÍ NO NAVEGA. Medido el 2026-09-18 a las 05:51 con el reloj por fase del tramo:
+    /// estando YA en Descargas, pulsar el TreeItem «Descargas» costó 6.157 ms. El log, gesto a gesto: clic y
+    /// 1,8 s; el ENSAYO con doble clic FÍSICO y 1,8 s; la repetición de la 248 —«el terreno sabe que lleva a
+    /// algún sitio»— y 1,8 s. Tres pulsaciones, una de ellas un doble clic real sobre la pantalla de la
+    /// persona, esperando un cambio imposible: el paso anterior acababa de aprender que esa puerta, desde
+    /// «Disco local», lleva a la pantalla donde ya estábamos.
+    ///
+    /// NO ES «SU DESTINO ES DONDE ESTOY»: el grafo guarda el destino por pantalla y rechaza las aristas a sí
+    /// mismas, así que esa frase no se cumple nunca. Lo que el terreno sí sabe es lo de arriba: la MISMA
+    /// puerta, vista desde OTRA pantalla, lleva aquí.
+    ///
+    /// SOLO SE CONSULTA CUANDO YA NO CAMBIÓ NADA, fuera del camino rápido: recorre las pantallas conocidas, y
+    /// eso no se paga en cada clic.
+    /// </remarks>
+    public static bool LlevaAqui(Nucleo.Grafo grafo, string selector, string desde)
+    {
+        if (grafo == null || string.IsNullOrWhiteSpace(selector) || string.IsNullOrWhiteSpace(desde)) return false;
+        try
+        {
+            foreach (string u in grafo.Ubicaciones())
+            {
+                if (Superficies.MismaPantalla(u, desde)) continue;
+                foreach (var a in grafo.DesdeAqui(u))
+                    if (a.Que.Selector == selector && a.Destino.Length > 0 && Superficies.MismaPantalla(a.Destino, desde))
+                        return true;
+            }
+        }
+        catch { }
+        return false;
+    }
 
     public Resultado Pulsa(string selector, string etiqueta)
     {
@@ -98,11 +149,19 @@ public sealed class PulsarSegunElNucleo
         // la pantalla real (2026-08-26: tres clics físicos por visita, cada visita).
         string gesto = _grafo.GestoDe(desde, selector);
 
+        // EL RELOJ DE «PULSAR», POR PARTES (spec 038): la mano, la espera del cambio y la consulta al terreno. El
+        // reloj por fase del tramo dice cuánto cuesta «pulsar»; esto dice en qué se va.
+        var relojMano = System.Diagnostics.Stopwatch.StartNew();
         string? motivo = _mano(selector, etiqueta, gesto);
+        relojMano.Stop();
         if (motivo != null)
             return new(false, false, desde, desde, false,
                 motivo.Length > 0 ? $"no pude pulsar «{etiqueta}»: {motivo}" : $"no pude pulsar «{etiqueta}».");
-        string hasta = EsperarACambiar(desde);
+        bool esCampo = EsCampoDeTexto(desde, selector);
+        var relojEspera = System.Diagnostics.Stopwatch.StartNew();
+        string hasta = EsperarACambiar(desde, esCampo ? EsperaDeCampoMs : EsperaMaximaMs);
+        relojEspera.Stop();
+        Diagnostics.LogBus.Log("mano", $"⏱ pulsar «{etiqueta}»: la mano {relojMano.ElapsedMilliseconds} ms · esperar el cambio {relojEspera.ElapsedMilliseconds} ms ({_sondeos} sondeo(s) de «dónde») · {(hasta.Length > 0 && hasta != desde ? "cambió" : "no cambió")}");
         // LA VENTANA DE TRABAJO SE CERRÓ (promesa 233): «dónde» volvió al foco de la persona, y eso
         // no es haber ido allí. Se cuenta tal cual y no se aprende ninguna arista.
         string aviso = AvisoDeLaVentana?.Invoke() ?? "";
@@ -110,6 +169,27 @@ public sealed class PulsarSegunElNucleo
             return new(true, hasta != desde, desde, hasta, false,
                 $"pulsé «{etiqueta}» y {aviso}. Ahora estás en «{hasta}».");
         string gestoUsado = gesto;
+
+        // UN CAMPO DE TEXTO NO NAVEGA (promesa 334): ni se consulta el terreno ni se repite el clic —las dos son para
+        // puertas—, y se dice lo que es para que lo siguiente sea escribir.
+        if (esCampo && (hasta.Length == 0 || hasta == desde))
+            return new(true, false, desde, desde, false,
+                $"pulsé «{etiqueta}»: es un campo de texto y ya tiene el foco (la pantalla no cambió, que es lo normal). Para escribir en él, map_type.");
+
+        // UNA PUERTA QUE LLEVA AQUÍ NO SE ENSAYA NI SE REPITE (promesa 296). Va DESPUÉS de la primera espera a
+        // propósito: si la pantalla SÍ cambió —un «Siguiente» que vive en todas las páginas— manda lo que pasó,
+        // no lo que se sabía, y se cuenta como cualquier navegación.
+        var relojTerreno = System.Diagnostics.Stopwatch.StartNew();
+        bool llevaAqui = (hasta.Length == 0 || hasta == desde) && LlevaAqui(_grafo, selector, desde);
+        relojTerreno.Stop();
+        if (relojTerreno.ElapsedMilliseconds > 20)
+            Diagnostics.LogBus.Log("mano", $"⏱ consultar al terreno si «{etiqueta}» lleva aquí: {relojTerreno.ElapsedMilliseconds} ms");
+        if (llevaAqui)
+        {
+            Diagnostics.LogBus.Log("mano", $"«{etiqueta}» no movió nada y el terreno sabe que lleva justo a donde ya estamos: ni lo ensayo ni lo repito");
+            return new(true, false, desde, desde, false,
+                $"pulsé «{etiqueta}» y la pantalla no cambió: ya estás en «{desde}», que es a donde lleva.");
+        }
 
         // EL ENSAYO, y solo cuando toca: nada cambió, el gesto de esta arista aún no se conoce, y
         // lo tocado es CONTENIDO (promesa 83). Sobre un botón el doble no se ensaya jamás — «hacer
@@ -183,6 +263,23 @@ public sealed class PulsarSegunElNucleo
         return false;
     }
 
+    /// <summary>
+    /// ¿Lo tocado es un campo de texto? Lo dice el terreno, y si el terreno aún no conoce el elemento —la primera
+    /// vez que se ve una pantalla—, el selector, que siempre lleva el tipo (`;ct=Edit`).
+    /// </summary>
+    private bool EsCampoDeTexto(string ubicacion, string selector)
+    {
+        try
+        {
+            foreach (var a in _grafo.DesdeAqui(ubicacion))
+                if (a.Que.Selector == selector)
+                    return a.Que.Tipo is "Edit" or "ComboBox";
+        }
+        catch { }
+        return selector.EndsWith(";ct=Edit", StringComparison.OrdinalIgnoreCase)
+            || selector.EndsWith(";ct=ComboBox", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Cuántas cosas vivas hay aquí, según el núcleo. Gratis: no toca la pantalla (promesa 248).</summary>
     private int Vivos(string donde)
     {
@@ -197,14 +294,18 @@ public sealed class PulsarSegunElNucleo
         catch { return false; }
     }
 
-    private string EsperarACambiar(string desde)
+    private string EsperarACambiar(string desde) => EsperarACambiar(desde, EsperaMaximaMs);
+
+    private string EsperarACambiar(string desde, int presupuestoMs)
     {
         // EL RELOJ MANDA (promesa 245): antes esto sumaba 120 por vuelta y además pagaba _donde(), que
         // en la máquina del dueño costaba 2,8 s. Una espera de «1,8 s» duraba más de treinta.
-        var compas = new Compas(EsperaMaximaMs);
+        var compas = new Compas(presupuestoMs);
         string ahora = "";
+        _sondeos = 0;
         do
         {
+            _sondeos++;
             ahora = _donde() ?? "";
             if (ahora.Length > 0 && ahora != desde) return ahora;
         }

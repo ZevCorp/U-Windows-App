@@ -435,6 +435,47 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // pantalla, y quien lo sabe es este mismo objeto — no una copia con su propio lector.
             _mapaDeMano = mcp.Map;
 
+            // QUIÉN ELIGE LA PUERTA (spec 035, promesas 284-286). Con U_DECISOR ausente no cambia NADA:
+            // map_decidir ni aparece en el catálogo de Luna. Encendido, Luna pide el objetivo y el
+            // decisor elige entre las puertas de ahora; ante cualquier duda o fallo, ElDecisor cae a
+            // Luna (280). La clave sale del entorno y va a la cabecera: aquí no se lee ni se registra.
+            // Y SE PUEDE CAMBIAR EN VIVO (spec 036, promesa 290): el botón «Jev» del panel enciende y apaga
+            // por el mismo interruptor; la variable solo fija el estado inicial.
+            {
+                // LAS CLAVES DE PAGO NO VIAJAN DENTRO DEL .EXE (promesa 300, spec 045): la copia
+                // distribuida se las pide a Graph con la credencial que el instalador ya embebe. Se
+                // pide SIN esperar: bloquear el arranque en una llamada de red seria pagar el peor
+                // caso de la red en cada abrir. Los dos que las usan las piden mas tarde —la voz al
+                // abrir sesion, Jev al pulsar el boton— y para entonces ya estan.
+                Credenciales.ClavesDelBackend.Viva = Credenciales.ClavesDelBackend.DeGraph(
+                    _graphConfig.BaseUrl, _graphConfig.ApiKey, m => LogBus.Log("claves", m));
+                _ = Credenciales.ClavesDelBackend.Viva.TraerSiFaltaAlgunaAsync();
+
+                var cfgDecisor = Decision.ConfiguracionDelDecisor.DelSistema();
+                LogBus.Log("decisor", cfgDecisor.Porque);
+                _interruptorDelDecisor = new Decision.InterruptorDelDecisor(mcp.Map, ReenviarCatalogoALaVozAsync, m => LogBus.Log("decisor", m));
+                // EL TRAMO (spec 037): el freno es el de Escape, cada paso va al notch, y la cuenta final entra a la
+                // sesión de voz como un mensaje —la llamada de map_tramo ya se contestó al instante—.
+                mcp.Map.HayQueParar = () => Actions.Freno.Pidieron;
+                mcp.Map.PedirFreno = porque => Actions.Freno.Pide(porque);
+                mcp.Map.AlEmpezarTramo = tarea => Actions.Freno.Empezar(tarea);
+                mcp.Map.AlTerminarTramo = () => Actions.Freno.Termine();
+                mcp.Map.Progreso = linea => Dispatcher.BeginInvoke(() =>
+                {
+                    _acciones ??= new PanelDeAcciones();
+                    if (linea.StartsWith("tramo:", StringComparison.Ordinal)) _acciones.Termina(linea, !linea.Contains("no pud"));
+                    else { _acciones.Empieza(linea); SetStatus(linea); }
+                });
+                mcp.Map.AvisarALaVoz = cuenta =>
+                {
+                    var vivo = _vivo;
+                    if (vivo == null) { LogBus.Log("tramo", "sin sesión de voz: la cuenta queda para map_tramo_estado"); return; }
+                    _ = vivo.EnviarTextoAsync("[el tramo terminó] " + cuenta);
+                };
+                if (cfgDecisor.Quien != "luna") _interruptorDelDecisor.Encender(Credenciales.ClavesDelBackend.DeLaApp);
+                PintarBotonJev();
+            }
+
             // CORREGIR UN RECUERDO DESDE SU TARJETA entra por la misma puerta que enseñarlo de viva
             // voz, con sus mismas reglas. Y el narrador se entera de que hay alguien escribiendo,
             // para no pasar al siguiente y borrárselo a media frase.
@@ -705,7 +746,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     _mapaVivo!.Nucleo,
                     DondeTrabajo,
                     (sel, etq) => _mapaVivo?.Pulsar?.Invoke(sel, etq) ?? false,
-                    superficie => Uia.AppAligner.PonerDelante(superficie)).Hasta(destino);
+                    superficie => Uia.AppAligner.PonerDelante(superficie))
+                {
+                    // La ventana que quedó delante ES ya la de trabajo: si no, «dónde» sigue mirando la anterior (332).
+                    AlPonerseDelante = () => SeguirElFoco(antes),
+                }.Hasta(destino);
                 SeguirElFoco(antes);
                 return cuenta;
             };
@@ -837,6 +882,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 AccionableAunSinVerse = sel => sel.StartsWith("sap:", StringComparison.OrdinalIgnoreCase)
                     && (sel.Contains("#node=", StringComparison.Ordinal)
                         || sel.Contains("#row=", StringComparison.Ordinal)),
+                // LA COMPUERTA MIRA OTRA VEZ ANTES DE RENDIRSE (promesa 264): la ventana de trabajo, ahora, sin el
+                // freno de 800 ms de la observación de fondo.
+                MiraOtraVez = MirarOtraVezLaVentana,
+                Diario = linea => LogBus.Log("compuerta", linea),
             };
             // EL RASTRO (promesa 76): cada relato de batch queda en el anillo que sirve el 8792
             // para la pestaña «Terreno» del visor.
@@ -2793,6 +2842,52 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     // --- Enseñanza activa (grabar pantalla+voz) ---
 
+    /// <summary>El interruptor del decisor (spec 036). Nulo hasta que exista el mapa.</summary>
+    private Decision.InterruptorDelDecisor? _interruptorDelDecisor;
+
+    /// <summary>
+    /// Instrucciones y catálogo, otra vez a la sesión: lo mismo que hace Learn/Work al cambiar de modo. Sin
+    /// sesión de voz no hay nada que re-mandar; la próxima apertura ya lee el catálogo nuevo.
+    /// </summary>
+    private Task ReenviarCatalogoALaVozAsync() =>
+        _vivo != null
+            ? _vivo.CambiarModoAsync(Voice.ConversacionEnVivo.InstruccionesNormales, Voice.ConversacionEnVivo.Herramientas())
+            : Task.CompletedTask;
+
+    /// <summary>
+    /// EL BOTÓN «JEV»: enciende y apaga el decisor sin reiniciar. Encender pide Jev; sin clave se queda apagado
+    /// y el botón dice por qué (promesa 290). Si el entorno dice «luna» o no dice nada, el botón significa
+    /// «enciende Jev»: es lo que una persona espera de pulsarlo.
+    /// </summary>
+    private void OnToggleJev(object sender, RoutedEventArgs e)
+    {
+        if (_interruptorDelDecisor == null) return;
+        if (_interruptorDelDecisor.Encendido) _interruptorDelDecisor.Apagar();
+        else _interruptorDelDecisor.Encender(n =>
+        {
+            // POR EL RESOLUTOR Y NO POR EL ENTORNO PELADO (promesa 300): en una copia distribuida la
+            // clave de TypeSafe la dio Graph, y leyendo solo el entorno el boton diria que falta.
+            string? v = Credenciales.ClavesDelBackend.DeLaApp(n);
+            if (n == Decision.ConfiguracionDelDecisor.Interruptor && (string.IsNullOrWhiteSpace(v) || v.Trim().Equals("luna", StringComparison.OrdinalIgnoreCase)))
+                return "jev";
+            return v;
+        });
+        PintarBotonJev();
+    }
+
+    /// <summary>
+    /// El botón dice en qué estado está de verdad, y el porqué va a la línea de estado: NADA al pasar el
+    /// ratón (promesa 164). Un verde sin medir es peor que no tener botón.
+    /// </summary>
+    private void PintarBotonJev()
+    {
+        if (JevBtn == null) return;
+        bool on = _interruptorDelDecisor?.Encendido == true;
+        JevBtn.Content = on ? "Jev · on" : "Jev · off";
+        JevBtn.Opacity = on ? 1.0 : 0.7;
+        if (_interruptorDelDecisor != null) SetStatus("Jev " + _interruptorDelDecisor.Estado);
+    }
+
     private async void OnToggleTeach(object sender, RoutedEventArgs e)
     {
         if (_teaching) await StopTeachingAsync();
@@ -3318,7 +3413,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         var mano = _mapaDeMano!;
         recuerdo ??= ""; decir ??= ""; senalar ??= "";
         bool hayElemento = senalar.Length > 0 && mano.SenalarElemento(senalar, senalar);
-        var coreografia = Piloto.ElRecuerdoQueSeVe.Coreografia(hayElemento, recuerdo.Length > 0 && senalar.Length > 0, decir.Length > 0);
+        // FUERA DE UNA COMPROBACIÓN NO HAY TARJETA NI PAUSA (promesa 266): la coreografía de la 180 es para cuando la
+        // persona está viendo una lección; en un clic normal quería ver la carita al lado y el clic, en un solo gesto.
+        bool enComprobacion = mano.Llegue != null;
+        var coreografia = Piloto.ElRecuerdoQueSeVe.Coreografia(hayElemento, recuerdo.Length > 0 && senalar.Length > 0, decir.Length > 0, enComprobacion);
         if (!hayElemento && senalar.Length > 0) LogBus.Log("comprobar", $"paso · «{senalar}» no está en pantalla para señalarlo: va al ejecutor sin tarjeta");
         foreach (var gesto in coreografia)
         {
@@ -3358,6 +3456,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             if (gesto == Piloto.ElRecuerdoQueSeVe.Gesto.Cerrar) TarjetasDeRecuerdo.Cerrar();
             if (gesto == Piloto.ElRecuerdoQueSeVe.Gesto.Soltar) Senalador.Soltar();
+            // EL RECUERDO SE ESCRIBE DESPUÉS DE TOCAR fuera de una comprobación (promesa 266): lo que el modelo quiso
+            // recordar se guarda igual, pero no se paga antes de lo que la persona pidió.
+            if (gesto == Piloto.ElRecuerdoQueSeVe.Gesto.Escribir)
+            {
+                string r = mano.Call("map_esto_es", new Dictionary<string, string> { ["significado"] = recuerdo, ["sobre"] = senalar });
+                LogBus.Log("comprobar", $"paso · recuerdo tras tocar en «{senalar}»: {(r.Length > 120 ? r[..120] + "…" : r)}");
+            }
         }
         return res;
     }
@@ -5486,6 +5591,35 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     /// <summary>Cuándo se observó por última vez, para no releer la misma ventana dos veces seguidas.</summary>
     private long _ultimaObservacion;
+
+    /// <summary>
+    /// MIRAR OTRA VEZ, AHORA, la ventana en la que se va a pulsar. Promesa 264 (spec 030). Es la misma lectura que
+    /// hace la observación de fondo, sin su freno: se paga sólo cuando el mapa no tenía la puerta como viva, que es
+    /// justo cuando hoy se pagaban 4 s de espera y un «no lo conozco».
+    /// </summary>
+    private bool MirarOtraVezLaVentana(string aqui)
+    {
+        if (_mapaVivo == null || string.IsNullOrWhiteSpace(aqui)) return false;
+        if (aqui.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)) return false;   // SAP se lee por su API
+        try
+        {
+            IntPtr hwnd = _trabajo.Hay && U.Graph.Surfaces.UiaSurface.VentanaExiste(_trabajo.Hwnd)
+                ? _trabajo.Hwnd
+                : (_locator?.DondeEstoy()?.Hwnd ?? IntPtr.Zero);
+            if (hwnd == IntPtr.Zero) return false;
+            var lector = new Uia.UiaReader();
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            lector.Read(hwnd);
+            var crudos = lector.Elements
+                .Select(e => (Selector: Uia.Reconocedor.SelectorDe(e), Etiqueta: e.Label, Tipo: e.ControlType))
+                .ToList();
+            _mapaVivo.ObservarVentana(aqui, crudos);
+            _ultimaObservacion = Environment.TickCount64;
+            LogBus.Log("trabajo", $"miré otra vez «{aqui}» antes de rendirme: {crudos.Count} elemento(s) en {crono.ElapsedMilliseconds} ms");
+            return crudos.Count > 0;
+        }
+        catch (Exception e) { LogBus.Log("trabajo", $"no pude mirar otra vez: {e.Message}"); return false; }
+    }
 
     private void ObservarLaVentanaDeTrabajo()
     {
