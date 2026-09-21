@@ -1064,12 +1064,11 @@ public sealed class ConversacionEnVivo : IDisposable
             + "toda tu tarea aquí—. Y sigue HASTA EL ÚLTIMO: quedarse en el primero deja la pregunta "
             + "a medias.",
             ("cual", "Cuál contar, empezando en 1. Vacío = el primero.")),
-        Fn("map_esto_es", "CREA UN RECUERDO con lo que el usuario te está ENSEÑANDO. Es la ÚNICA "
-            + "forma de que algo se te quede: si no la llamas, no aprendiste nada por mucho que "
-            + "digas que lo tienes en mente. Úsala en cuanto oigas «esto es X», «aquí va X cuando "
-            + "Y», «este botón sirve para…», y TAMBIÉN con los imperativos de memoria: «recuerda "
-            + "que…», «recuérdalo», «toma nota», «no olvides», «siempre que…», «de ahora en "
-            + "adelante…». QUEDA GUARDADO PARA SIEMPRE, pegado a ese elemento en esa pantalla, CON "
+        Fn("map_esto_es", "CREA UN RECUERDO DE PANTALLA con lo que el usuario te está ENSEÑANDO. "
+            + "Úsala solo cuando explique qué es un elemento visible o para qué sirve: «esto es X», "
+            + "«aquí va X cuando Y», «este botón sirve para…». Los datos personales, preferencias y "
+            + "compromisos van SIEMPRE a memory_remember, aunque la frase empiece por «recuerda que». "
+            + "QUEDA GUARDADO PARA SIEMPRE, pegado a ese elemento en esa pantalla, CON "
             + "UNA FOTO del instante: map_where_am_i te lo recordará solo la próxima vez que "
             + "vuelvas, sin que nadie tenga que volver a explicarlo.",
             ("significado", "Lo que ha dicho que es, con sus palabras. No lo resumas: «aquí va el número "
@@ -2240,9 +2239,9 @@ public sealed class ConversacionEnVivo : IDisposable
             {
                 await EnviarTextoAlModeloAsync(
                     "[aviso del sistema] Lo último que te dijeron sonaba a una lección y no llamaste "
-                    + "a map_esto_es, así que no se guardó nada. Si de verdad era algo que debes "
-                    + "recordar, guárdalo AHORA con map_esto_es (usa `sobre` con el nombre del "
-                    + "elemento si no te lo señalaron). Si no lo era, sigue sin decir nada de esto.");
+                    + "a map_esto_es, así que no se guardó nada. Si de verdad era un dato personal, "
+                    + "guárdalo AHORA con memory_remember. Si era una explicación de algo visible, "
+                    + "usa map_esto_es con `sobre` si no te lo señalaron. Si no lo era, sigue sin decir nada de esto.");
             }
             catch (Exception e) { LogBus.Log("recuerdo", $"no pude avisar al modelo: {e.Message}"); }
         });
@@ -2267,7 +2266,9 @@ public sealed class ConversacionEnVivo : IDisposable
         try
         {
             using var limite = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            limite.CancelAfter(TimeSpan.FromSeconds(4));
+            // La primera consulta puede necesitar un reintento DNS al despertar Windows; dejar
+            // que termine evita abrir una sesión de voz sin la memoria personal disponible.
+            limite.CancelAfter(TimeSpan.FromSeconds(10));
             string contexto = await memoria.ContextoAsync(limite.Token);
             if (string.IsNullOrWhiteSpace(contexto)) return Instrucciones;
             return Instrucciones + "\n\nMEMORIA PERSONAL DISPONIBLE (úsala solo si es pertinente; no inventes):\n" + contexto;

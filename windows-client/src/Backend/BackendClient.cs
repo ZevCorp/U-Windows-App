@@ -147,7 +147,7 @@ public sealed class BackendClient
     /// <summary>Lee la memoria personal desde el servicio durable que conserva el contrato /api/memory.</summary>
     public async Task<T?> GetMemoryAsync<T>(string query, CancellationToken ct) where T : class
     {
-        using var res = await _memoryHttp.GetAsync($"{_memoryBaseUrl}/api/memory{query}", ct);
+        using var res = await MemoryRequestAsync(() => _memoryHttp.GetAsync($"{_memoryBaseUrl}/api/memory{query}", ct), ct);
         var text = await res.Content.ReadAsStringAsync(ct);
         if (IsAuthFailure(res.StatusCode))
             throw new InvalidOperationException("el servicio de memoria rechazó el ClientToken.");
@@ -160,14 +160,33 @@ public sealed class BackendClient
     public async Task<T?> PostMemoryAsync<T>(object req, CancellationToken ct) where T : class
     {
         var body = JsonSerializer.Serialize(req, Json);
-        using var content = new StringContent(body, Encoding.UTF8, "application/json");
-        using var res = await _memoryHttp.PostAsync($"{_memoryBaseUrl}/api/memory", content, ct);
+        using var res = await MemoryRequestAsync(async () =>
+        {
+            using var content = new StringContent(body, Encoding.UTF8, "application/json");
+            return await _memoryHttp.PostAsync($"{_memoryBaseUrl}/api/memory", content, ct);
+        }, ct);
         var text = await res.Content.ReadAsStringAsync(ct);
         if (IsAuthFailure(res.StatusCode))
             throw new InvalidOperationException("el servicio de memoria rechazó el ClientToken.");
         if (!res.IsSuccessStatusCode)
             throw new InvalidOperationException($"servicio de memoria HTTP {(int)res.StatusCode}: {text}");
         return JsonSerializer.Deserialize<T>(text, Json);
+    }
+
+    private static async Task<HttpResponseMessage> MemoryRequestAsync(
+        Func<Task<HttpResponseMessage>> request, CancellationToken ct)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { return await request(); }
+            catch (HttpRequestException) when (attempt < 2)
+            {
+                // Vercel puede devolver una resolución DNS transitoria al despertar el equipo.
+                // Reintentar aquí evita que una apertura de voz pierda todo el contexto por un
+                // fallo de resolución de menos de un segundo.
+                await Task.Delay(TimeSpan.FromMilliseconds(350 * (attempt + 1)), ct);
+            }
+        }
     }
 
     /// <summary>
