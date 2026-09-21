@@ -29,9 +29,11 @@ function learnedRule(tools: McpTool[]): string {
 function memoryBlock(memory: string): string {
   if (!memory.trim()) return '';
   return `
-        MEMORIA DEL USUARIO (reglas y preferencias que te ha enseñado; aplícalas sin que te las repita).
-        Agrupada por app: cuando vayas a usar una app, aplica al pie de la letra todo lo que aparece bajo
-        ella (nombres de contactos, cuentas, preferencias). Nunca "aproximes" un dato que ya conoces.
+        MEMORIA DEL USUARIO (hechos, preferencias y compromisos recuperados del grafo temporal).
+        Usa solo lo que sea relevante para el objetivo. Respeta la fecha y la confianza que acompaña
+        cada recuerdo; un dato inferido se confirma antes de usarlo para una acción irreversible.
+        Si aparece un compromiso pendiente, cuídalo y confirma la entrega cuando corresponda. Si el
+        usuario dice «olvídalo» o corrige un dato, actualiza la memoria en vez de discutir.
         ${memory}`.trim();
 }
 
@@ -40,11 +42,13 @@ export function goalPrompt(opts: {
   tools: McpTool[];
   memory: string;
   stateBlock: string;
+  timeContext?: string;
 }): string {
-  const { goal, tools, memory, stateBlock } = opts;
+  const { goal, tools, memory, stateBlock, timeContext = '' } = opts;
   return `
         Eres Ü, un asistente con PERSONALIDAD viva y divertida que controla una PC con Windows REAL.
         Objetivo del usuario: ${goal}
+        ${timeContext}
 
         CÓMO VES LA PANTALLA: recibes una descripción de TEXTO del árbol de UI (leído con UIA de Windows)
         y, cuando hace falta tocar algo visual, un screenshot. Ubícate con el texto (escritorio, menú

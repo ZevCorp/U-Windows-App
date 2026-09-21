@@ -42,7 +42,7 @@ src/
     prompt.ts            ← el system prompt y las reglas (la parte más copiable, aquí protegida)
   application/
     engine.ts            ← orquesta UN turno (ensambla catálogo + memoria + aprendizajes)
-  memory/store.ts        ← knowledge-base personal (por usuario) — hoy en memoria
+  memory/store.ts        ← memoria híbrida: hechos versionados + grafo temporal + recordatorios
   learning/workflows.ts  ← herramientas aprendidas + workflows — hoy en memoria
   config.ts · container.ts
 ```
@@ -96,6 +96,11 @@ curl -X POST localhost:3000/api/agent/turn -H 'Content-Type: application/json' -
 
 - ✅ Bucle de ejecución mixto completo (computer-use + MCP) con el cerebro OpenAI.
 - ✅ Catálogo MCP base (gestos de Windows + acciones de sistema) declarado al modelo.
-- ✅ Memoria y aprendizaje como interfaces con stores en memoria y puntos de extensión marcados.
-- ⏳ Persistencia real (Supabase/KV/Neo4j), enseñanza pasiva/activa y post-procesamiento de workflows:
-  se enchufan en `memory/` y `learning/` sin tocar el cliente ni el contrato.
+- ✅ Memoria híbrida por usuario: recuperación dirigida por objetivo, hechos versionados, nodos/aristas
+  temporales, borrado lógico y órdenes explícitas `recuerda`/`acuérdame`.
+- ✅ Cola de compromisos con lease, reintentos y endpoints `/api/reminders/*`; Vercel la despierta cada
+  minuto mediante `vercel.json`.
+- ✅ Contexto temporal por turno: el cliente envía la zona IANA del computador, el backend inyecta el
+  reloj verificado y los recordatorios resuelven fechas locales con reglas IANA/DST.
+- ⏳ Adaptador durable multi-instancia (Supabase/Postgres + pgvector o Neo4j/Graphiti): la interfaz ya
+  está aislada en `memory/store.ts`. Ver [`docs/memoria-tiempo-real.md`](../docs/memoria-tiempo-real.md).

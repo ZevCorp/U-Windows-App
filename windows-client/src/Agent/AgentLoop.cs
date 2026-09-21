@@ -6,6 +6,7 @@ using U.WindowsClient.Domain;
 using U.WindowsClient.Mcp;
 using U.WindowsClient.Telemetry;
 using U.WindowsClient.Uia;
+using System.Globalization;
 
 namespace U.WindowsClient.Agent;
 
@@ -113,6 +114,10 @@ public sealed class AgentLoop
                 State = state,
                 Results = results,
                 Inform = inform,
+                Timezone = ZonaIanaLocal(),
+                Locale = CultureInfo.CurrentCulture.Name.StartsWith("es", StringComparison.OrdinalIgnoreCase)
+                    ? CultureInfo.CurrentCulture.Name : "es-CO",
+                ClientNowUtc = DateTimeOffset.UtcNow.ToString("O"),
             };
             inform = null;
             TurnResponse resp;
@@ -190,6 +195,18 @@ public sealed class AgentLoop
 
     private static string Short(string? s, int max) =>
         string.IsNullOrEmpty(s) ? "" : (s.Length <= max ? s : s[..max] + "…");
+
+    private static string ZonaIanaLocal()
+    {
+        try
+        {
+            string windowsId = TimeZoneInfo.Local.Id;
+            if (TimeZoneInfo.TryConvertWindowsIdToIanaId(windowsId, out string? iana) && !string.IsNullOrWhiteSpace(iana))
+                return iana;
+            return windowsId;
+        }
+        catch { return "UTC"; }
+    }
 
     private async Task<ScreenState> ReadStateAsync(bool withScreenshot, string runId = "")
     {

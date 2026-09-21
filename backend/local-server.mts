@@ -19,6 +19,7 @@ for (const file of ['.env.local', '.env']) {
 }
 
 const { handleTurn } = await import('./src/http/handleTurn');
+const { handleDueReminders, handleForget, handleMemory, handleRemember, handleReminderMutation, handleScheduleReminder } = await import('./src/http/handleMemory');
 const { activeKey, activeModel, config } = await import('./src/config');
 
 function readBody(req: http.IncomingMessage): Promise<string> {
@@ -51,6 +52,30 @@ const server = http.createServer(async (req, res) => {
       res.statusCode = 500;
       res.end(JSON.stringify({ error: (e as Error).message }));
     }
+    return;
+  }
+
+  if (url.startsWith('/api/memory')) {
+    try {
+      const parsedUrl = new URL(url, 'http://localhost');
+      const query = Object.fromEntries(parsedUrl.searchParams.entries());
+      const body = { ...query, ...JSON.parse((await readBody(req)) || '{}') };
+      const result = req.method === 'GET' ? await handleMemory(body, req.headers.authorization as string | undefined)
+        : req.method === 'DELETE' ? await handleForget(body, req.headers.authorization as string | undefined)
+        : body.dueAt ? await handleScheduleReminder(body, req.headers.authorization as string | undefined)
+        : await handleRemember(body, req.headers.authorization as string | undefined);
+      res.statusCode = result.status; res.end(JSON.stringify(result.json));
+    } catch (e) { res.statusCode = 400; res.end(JSON.stringify({ error: (e as Error).message })); }
+    return;
+  }
+
+  if (url.startsWith('/api/reminders/due') || url.startsWith('/api/reminders/complete') || url.startsWith('/api/reminders/cancel')) {
+    try {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const result = url.startsWith('/api/reminders/due') ? await handleDueReminders(body, req.headers.authorization as string | undefined)
+        : await handleReminderMutation(body, url.includes('/cancel') ? 'cancel' : 'complete', req.headers.authorization as string | undefined);
+      res.statusCode = result.status; res.end(JSON.stringify(result.json));
+    } catch (e) { res.statusCode = 400; res.end(JSON.stringify({ error: (e as Error).message })); }
     return;
   }
 

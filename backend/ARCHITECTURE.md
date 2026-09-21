@@ -67,8 +67,9 @@ están separadas por la red, y solo la izquierda-de-ejecución (UIA/SendInput) v
 
 ## Puntos de extensión (fases siguientes)
 
-- **Persistencia**: sustituir `InMemoryMemoryStore`/`InMemoryLearningStore` por Supabase/KV/Neo4j en
-  `container.ts`. El cerebro y el cliente no cambian.
+- **Persistencia**: `GraphMemoryStore` ya separa hechos, nodos, aristas temporales y recordatorios.
+  `MEMORY_FILE` permite persistencia atómica local; producción debe inyectar un adaptador
+  Supabase/Postgres + pgvector o Neo4j/Graphiti en `container.ts`. El cerebro y el cliente no cambian.
 - **Enseñanza pasiva/activa**: el cliente ya envía el árbol de UI cada turno; añadir un endpoint
   `/api/learn` que reciba trazas y las post-procese (como `GeminiLearning`/`GeminiWorkflow`).
 - **Workflows encadenados**: hoy el catálogo los declara; el `WorkflowRunner` server-side que encadena

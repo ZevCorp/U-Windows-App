@@ -7,5 +7,11 @@
     "api/teach/process-video.ts": {
       "maxDuration": 300
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/reminders/due",
+      "schedule": "* * * * *"
+    }
+  ]
 }

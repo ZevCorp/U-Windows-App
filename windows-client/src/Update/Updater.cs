@@ -1,5 +1,8 @@
 using U.WindowsClient.Diagnostics;
 using Velopack;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text.Json;
 
 namespace U.WindowsClient.Update;
 
@@ -12,7 +15,7 @@ namespace U.WindowsClient.Update;
 /// lo reemplace a mano — insostenible mientras estemos iterando.
 ///
 /// Cómo funciona: sondea el feed al arrancar y cada <see cref="PollInterval"/>, descarga en segundo
-/// plano y avisa por <see cref="UpdateReady"/>. La carita muestra entonces una pastilla; si el usuario
+    /// plano y avisa por <see cref="UpdateReady"/>. La carita muestra entonces una pastilla; si el usuario
 /// la toca, reinicia ya (<see cref="ApplyAndRestart"/>); si la ignora, <see cref="ApplyOnExit"/> deja
 /// la versión nueva instalada al cerrar. Nunca interrumpe lo que el usuario esté haciendo.
 ///
@@ -21,14 +24,28 @@ namespace U.WindowsClient.Update;
 /// </summary>
 public sealed class Updater
 {
+    public sealed record ReleaseMessage(string Version, string Message, string? Locale, DateTimeOffset? PublishedAt)
+    {
+        public string Speech => string.IsNullOrWhiteSpace(Message)
+            ? $"Esta versión trae mejoras para que Ü sea más útil y confiable."
+            : Message.Trim();
+    }
+
+    public sealed record UpdateReadyInfo(string Version, ReleaseMessage Message);
     /// <summary>Cada cuánto se vuelve a mirar el feed. Igual que Android (RELEASING.md): ~30 min.</summary>
     public static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(30);
 
     private readonly UpdateManager _mgr;
+    private readonly string _feedUrl;
     private VelopackAsset? _ready;
+    private ReleaseMessage? _readyMessage;
 
-    /// <summary>Se dispara (con el número de versión) cuando hay una versión ya descargada y lista.</summary>
-    public event Action<string>? UpdateReady;
+    /// <summary>Se dispara con la versión y el mensaje humano cuando el paquete ya está descargado.</summary>
+    public event Action<UpdateReadyInfo>? UpdateReady;
+
+    public UpdateReadyInfo? ReadyInfo => _ready == null
+        ? null
+        : new UpdateReadyInfo(_ready.Version.ToString(), _readyMessage ?? new ReleaseMessage(_ready.Version.ToString(), "", null, null));
 
     /// <param name="feedUrl">
     /// De dónde se leen las versiones. Si apunta a un repositorio de GitHub se usan sus *releases*;
@@ -36,6 +53,7 @@ public sealed class Updater
     /// </param>
     public Updater(string feedUrl)
     {
+        _feedUrl = feedUrl.TrimEnd('/');
         // Sin canal explícito a propósito: Velopack usa el mismo con el que se empaquetó ("win"), y
         // pasarle uno distinto haría que pidiera un releases.<canal>.json que no existe → 404.
         //
@@ -124,8 +142,9 @@ public sealed class Updater
         await _mgr.DownloadUpdatesAsync(info);
 
         _ready = info.TargetFullRelease;
+        _readyMessage = await LeerMensajeAsync(version);
         LogBus.Log("update", $"versión {version} descargada y lista para aplicar");
-        UpdateReady?.Invoke(version);
+        UpdateReady?.Invoke(new UpdateReadyInfo(version, _readyMessage));
     }
 
     /// <summary>Cómo salió un «buscar actualizaciones» pedido a mano.</summary>
@@ -169,8 +188,9 @@ public sealed class Updater
             await _mgr.DownloadUpdatesAsync(info);
 
             _ready = info.TargetFullRelease;
+            _readyMessage = await LeerMensajeAsync(version);
             LogBus.Log("update", $"búsqueda a mano: {version} descargada y lista");
-            UpdateReady?.Invoke(version);
+            UpdateReady?.Invoke(new UpdateReadyInfo(version, _readyMessage));
             return (Busqueda.Descargada, version);
         }
         catch (Exception e)
@@ -205,5 +225,47 @@ public sealed class Updater
             // Fallar aquí solo significa que seguirá en la versión vieja y lo reintentará al arrancar.
             LogBus.Log("update", $"no se pudo dejar la actualización aplicándose al salir: {ex.Message}");
         }
+    }
+
+    /// <summary>Mensaje humano firmado por el release, para que la app narre la intención del cambio.</summary>
+    private async Task<ReleaseMessage> LeerMensajeAsync(string version)
+    {
+        string? url = UrlDelMensaje(version);
+        if (url == null) return new ReleaseMessage(version, "", null, null);
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            string? token = TokenDeLectura();
+            if (!string.IsNullOrWhiteSpace(token))
+                http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("U-Windows-App/1.0");
+            using var response = await http.GetAsync(url);
+            if (!response.IsSuccessStatusCode) return new ReleaseMessage(version, "", null, null);
+            await using var stream = await response.Content.ReadAsStreamAsync();
+            var data = await JsonSerializer.DeserializeAsync<ReleaseMessageDto>(stream,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return new ReleaseMessage(version, data?.Message ?? "", data?.Locale, data?.PublishedAt);
+        }
+        catch (Exception ex)
+        {
+            LogBus.Log("update", $"no se pudo leer el mensaje humano de {version}: {ex.Message}");
+            return new ReleaseMessage(version, "", null, null);
+        }
+    }
+
+    private string? UrlDelMensaje(string version)
+    {
+        if (EsRepositorioDeGithub(_feedUrl))
+            return $"{_feedUrl}/releases/download/v{version}/release-message.json";
+        if (Uri.TryCreate(_feedUrl + $"/release-message-{version}.json", UriKind.Absolute, out var uri))
+            return uri.ToString();
+        return null;
+    }
+
+    private sealed class ReleaseMessageDto
+    {
+        public string? Message { get; set; }
+        public string? Locale { get; set; }
+        public DateTimeOffset? PublishedAt { get; set; }
     }
 }

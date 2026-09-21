@@ -14,13 +14,13 @@ instalados. El equivalente de [`RELEASING.md`](RELEASING.md), que cubre la app A
 - Usa **[Velopack](https://velopack.io)**: al arrancar y cada ~30 min consulta el feed, y si hay versión
   nueva **la descarga en segundo plano** sin interrumpir al usuario.
 - Cuando está descargada, la carita muestra una pastilla azul: **"⬇ Versión X lista — reiniciar"**.
-  - Si el cliente la toca → se actualiza y reinicia en el momento.
+  - Si el cliente la toca, o dice **«actualízate»**, el halo se vuelve morado, Ü narra el mensaje humano de la release y reinicia en el momento.
   - Si la ignora → se instala sola **al cerrar Ü**. El siguiente arranque ya es la versión nueva.
 - El feed son las **releases de este repo** (`ZevCorp/U-Windows-App`). Publicar = lanzar el workflow.
 - Después de la primera versión, las descargas son **deltas** (KB, no los ~70 MB completos).
 
 Código relevante:
-- `windows-client/src/Update/Updater.cs` — el sondeo, la descarga y el aplicar.
+- `windows-client/src/Update/Updater.cs` — el sondeo, la descarga, el mensaje humano y el aplicar.
 - `windows-client/App.xaml.cs` — `VelopackApp.Build().Run()`, lo primero del proceso (obligatorio).
 - `windows-client/src/Ui/FaceWindow.xaml` — la pastilla (`UpdateBtn`).
 - `windows-client/src/Config.cs` — `UpdateFeedUrl`.
@@ -60,8 +60,15 @@ Desde la pestaña Actions → **Windows release** → *Run workflow*, con la ver
 la publicada) y un `request_id` cualquiera. O desde la terminal:
 
 ```bash
-gh workflow run windows-release.yml -f version=1.1.3 -f request_id=lo-que-sea
+gh workflow run windows-release.yml -f version=1.1.3 -f request_id=lo-que-sea \
+  -f user_message="Ahora Ü recuerda mejor lo que hacemos y retoma la experiencia con más continuidad."
 ```
+
+`user_message` es obligatorio. Es la promesa que recibe la persona: debe explicar en lenguaje
+humano la intención de la versión, no enumerar commits. El workflow lo guarda como
+`release-message.json` dentro de la release. Ü lo lee después de descargar el paquete y usa ese
+texto como fuente canónica para narrar la actualización; no intenta inventar un resumen de los
+cambios técnicos.
 
 El workflow compila, empaqueta, publica la release **y comprueba que el paquete anunciado esté de
 verdad subido**. Esa última comprobación existe porque una vez el paso salió en verde con el índice
@@ -88,8 +95,9 @@ tiene las líneas con tag `update`.
 ## 5. Checklist
 
 - [ ] Versión incrementada respecto a la publicada.
+- [ ] `user_message` escrito para la persona (obligatorio; se rechaza vacío).
 - [ ] El workflow terminó en verde (comprueba solo que el paquete esté publicado).
-- [ ] La release trae `releases.win.json` **y** el `.nupkg`.
+- [ ] La release trae `releases.win.json`, el `.nupkg` **y** `release-message.json`.
 - [ ] Las releases viejas **siguen** publicadas: son la base de los deltas.
 
 ---

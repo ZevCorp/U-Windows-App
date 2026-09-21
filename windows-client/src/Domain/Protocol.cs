@@ -39,6 +39,10 @@ public sealed class TurnRequest
     [JsonPropertyName("results")] public string[] Results { get; set; } = Array.Empty<string>();
     /// <summary>Respuesta del usuario a una pregunta (ask_user) del turno anterior. Null si no hubo.</summary>
     [JsonPropertyName("inform")] public string? Inform { get; set; }
+    /// <summary>Zona IANA del computador, para resolver días relativos y recordatorios.</summary>
+    [JsonPropertyName("timezone")] public string? Timezone { get; set; }
+    [JsonPropertyName("locale")] public string? Locale { get; set; }
+    [JsonPropertyName("clientNowUtc")] public string? ClientNowUtc { get; set; }
 }
 
 /// <summary>

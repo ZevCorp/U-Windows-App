@@ -19,6 +19,7 @@ export interface TurnRequest {
   session: SessionState;
   state: ScreenState;
   results: string[];
+  timeContext: string;
 }
 
 export interface TurnResult {
@@ -43,7 +44,8 @@ export async function resolveTurn(
 ): Promise<TurnResult> {
   const apps = req.state.apps ?? [];
   const tools = await assembleTools(req.userId, apps, deps.learning);
-  const memory = await deps.memory.forPrompt(req.userId);
+  // Recuperación dirigida por el objetivo: el prompt no recibe una lista infinita de notas.
+  const memory = await deps.memory.forPrompt(req.userId, req.session.goal);
 
   const { session, turn } = await runProviderTurn({
     session: req.session,
@@ -54,6 +56,7 @@ export async function resolveTurn(
     state: req.state,
     results: req.results,
     apiKey: activeKey(),
+    timeContext: req.timeContext,
   });
 
   return { session, turn };

@@ -46,7 +46,7 @@ public sealed class BackendClient
 
         // La detección por host es deliberadamente tonta: el modo legacy existe SOLO para volver al
         // backend viejo en emergencia, y ese backend tiene un único dominio conocido.
-        _legacy = _baseUrl.Contains("u-windows-backend", StringComparison.OrdinalIgnoreCase);
+        _legacy = EsBackendWindows(_baseUrl);
         _apiPrefix = _legacy ? "/api" : "/api/v1";
 
         if (_legacy)
@@ -68,6 +68,20 @@ public sealed class BackendClient
         _http.DefaultRequestHeaders.Add("X-Miracle-Feature", "conscious_bridge");
         if (!string.IsNullOrWhiteSpace(config.Email))
             _http.DefaultRequestHeaders.Add("X-Miracle-User-Email", config.Email);
+    }
+
+    /// <summary>
+    /// El backend Windows local conserva el contrato /api del servidor de memoria. Se reconoce por
+    /// localhost para que una sesión de desarrollo pueda probar los cambios reales sin tocar Graph
+    /// remoto; las URLs públicas de Graph siguen usando /api/v1.
+    /// </summary>
+    private static bool EsBackendWindows(string url)
+    {
+        if (url.Contains("u-windows-backend", StringComparison.OrdinalIgnoreCase)) return true;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)
+            || uri.Host.Equals("::1", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<TurnResponse> TurnAsync(TurnRequest req, CancellationToken ct)

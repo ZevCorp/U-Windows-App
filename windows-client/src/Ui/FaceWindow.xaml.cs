@@ -67,6 +67,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private readonly VideoLibrary _videoLibrary = new();
     private readonly GraphConfig _graphConfig = GraphConfig.Load();
     private Updater? _updater;
+    private bool _actualizando;
+    private Updater.ReleaseMessage? _mensajeDeActualizacion;
     private AgentLoop _loop = null!;
     private BackendClient? _backend;
     private CancellationTokenSource? _cts;
@@ -1449,14 +1451,59 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // UpdateReady llega desde un hilo del pool, no del Dispatcher: tocar la UI directo reventaría.
         // QUÉ versión es ya no se dice al pasar el ratón (promesa 164): el ⬇ dice que hay algo nuevo
         // y VersionText, dentro del panel, dice cuál — que es donde se lee sin tener que descubrirlo.
-        _updater.UpdateReady += _ => Dispatcher.Invoke(() => ShowUpdate(true));
+        _updater.UpdateReady += info => Dispatcher.Invoke(() =>
+        {
+            _mensajeDeActualizacion = info.Message;
+            ShowUpdate(true);
+            SetStatus($"Hay una actualización lista: {info.Version}.");
+        });
         _updater.Start();
     }
 
     private void OnApplyUpdate(object sender, RoutedEventArgs e)
     {
-        SetStatus("Actualizando Ü…");
-        _updater?.ApplyAndRestart(); // no retorna: reinicia el proceso
+        _ = AplicarActualizacionConNarrativaAsync();
+    }
+
+    /// <summary>Flujo visible y hablado: morado mientras se instala, mensaje del release y reinicio.</summary>
+    private async Task AplicarActualizacionConNarrativaAsync()
+    {
+        if (_actualizando || _updater == null) return;
+        _actualizando = true;
+        PintarHalo();
+        try
+        {
+            if (_updater.ReadyInfo == null)
+            {
+                SetStatus("Buscando una actualización…");
+                ShowTalk(MotivoDelGlobo.SoloEsProgreso);
+                var resultado = await _updater.BuscarAhoraAsync();
+                if (resultado.Que is not (Updater.Busqueda.Descargada or Updater.Busqueda.YaEstabaLista))
+                {
+                    _actualizando = false;
+                    PintarHalo();
+                    Speak(resultado.Que == Updater.Busqueda.AlDia
+                        ? "Ya estoy al día. No hay una actualización nueva para instalar."
+                        : $"No pude actualizarme: {resultado.Detalle}.");
+                    return;
+                }
+            }
+
+            _mensajeDeActualizacion = _updater.ReadyInfo?.Message ?? _mensajeDeActualizacion;
+            string mensaje = _mensajeDeActualizacion?.Speech
+                ?? "Traigo mejoras para que nuestra experiencia sea más útil y confiable.";
+            Speak($"Encontré una actualización. Esto es lo que trae: {mensaje} En un momento vuelvo.");
+            SetStatus("Actualizando Ü…");
+            await Task.Delay(TimeSpan.FromSeconds(2.2));
+            _updater.ApplyAndRestart(); // no retorna: el instalador relanza el proceso
+        }
+        catch (Exception ex)
+        {
+            _actualizando = false;
+            PintarHalo();
+            LogBus.Log("update", $"actualización pedida por voz falló: {ex.Message}");
+            Speak("No pude completar la actualización, pero sigo aquí. Puedes intentarlo de nuevo.");
+        }
     }
 
     /// <summary>
@@ -1482,7 +1529,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             SetStatus(que switch
             {
                 Updater.Busqueda.AlDia => $"Ya tienes la última versión ({detalle}).",
-                Updater.Busqueda.Descargada => $"Versión {detalle} descargada. Pulsa ⬇ para reiniciar, o se instala sola al cerrar.",
+                Updater.Busqueda.Descargada => $"Versión {detalle} descargada. Pulsa ⬇ para escuchar qué trae y reiniciar.",
                 Updater.Busqueda.YaEstabaLista => $"La versión {detalle} ya estaba lista. Pulsa ⬇ para reiniciar.",
                 Updater.Busqueda.NoAplica => $"No se puede actualizar: {detalle}.",
                 _ => $"No pude comprobarlo: {detalle}",
@@ -2345,7 +2392,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void PintarHalo()
     {
         bool viva = _vivo?.Viva == true;
-        if (!viva)
+        if (!viva && !_actualizando)
         {
             VoiceHalo.Opacity = 0;
             VoiceHaloEscala.ScaleX = VoiceHaloEscala.ScaleY = 1;
@@ -2355,9 +2402,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // La ventana no decide nada: pregunta. Cuánto crece y de qué color vive en ReglaDelHalo,
         // donde el contrato puede barrer el rango entero de voz y comprobar que el halo cabe en el
         // aire que la carita tiene (promesa 163).
-        VoiceHaloColor.Color = ReglaDelHalo.Color(_vivo!.PorElCollar);
-        VoiceHalo.Opacity = ReglaDelHalo.Opacidad(_vivo!.NivelVoz, _bocaPaso);
-        VoiceHaloEscala.ScaleX = VoiceHaloEscala.ScaleY = ReglaDelHalo.Escala(_vivo!.NivelVoz, _bocaPaso);
+        double nivel = viva ? _vivo!.NivelVoz : 0.18;
+        bool collar = viva && _vivo!.PorElCollar;
+        VoiceHaloColor.Color = ReglaDelHalo.ColorParaEstado(collar, _actualizando);
+        VoiceHalo.Opacity = ReglaDelHalo.Opacidad(nivel, _bocaPaso);
+        VoiceHaloEscala.ScaleX = VoiceHaloEscala.ScaleY = ReglaDelHalo.Escala(nivel, _bocaPaso);
     }
 
     // --- Temas de la carita: se alternan manteniéndola oprimida (claro → oscuro → transparente) ---
@@ -2698,6 +2747,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 cierre.Tick += (_, __) => { cierre.Stop(); Application.Current.Shutdown(); };
                 cierre.Start();
                 return "Cerrándome. Hasta luego.";
+
+            case "self_update":
+                _ = AplicarActualizacionConNarrativaAsync();
+                return "Voy a buscar la actualización. Verás el halo morado y te contaré qué trae antes de reiniciarme.";
 
             // No es autocontrol —no se acciona a sí misma— pero se despacha por aquí porque mira
             // ESTE equipo, y eso lo sabe la ventana y no el mapa de pantallas de otras apps.
@@ -5100,7 +5153,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // Y que el resto de la cara acompañe: en vivo se alterna entre hablar y escuchar sin que
             // nadie más lo avise. RefreshMood no hace nada si el estado no cambió, así que llamarla
             // en cada cuadro sale gratis.
-            if (_vivo?.Viva == true) { RefreshMood(); PintarHalo(); }
+            if (_vivo?.Viva == true || _actualizando) { RefreshMood(); PintarHalo(); }
         };
         _boca.Start();
     }
