@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using U.WindowsClient.Backend;
+using U.WindowsClient.Domain;
 
 namespace U.WindowsClient.Voice;
 
@@ -30,23 +31,40 @@ public sealed class MemoriaPersonal
             && !text.StartsWith("no olvides", StringComparison.OrdinalIgnoreCase))
             text = "recuerda que " + text;
 
-        var response = await _backend.PostAsync<Respuesta>("/memory", new
+        if (_backend.IsLegacyBackend)
+        {
+            var response = await _backend.PostAsync<Respuesta>("/memory", new
+            {
+                userId = _userId,
+                command = text,
+                timezone = _timezone,
+                locale = "es-CO",
+                clientNowUtc = DateTime.UtcNow.ToString("O"),
+            }, ct);
+            if (response == null) return new(false, "El backend no devolvió respuesta.", "", "");
+            return new(response.Ok, response.Response ?? "No pude guardar ese recuerdo.", response.Kind ?? "", response.MemoryId ?? "");
+        }
+
+        // Graph y la voz usan este mismo servicio durable para que apagar y volver a encender la
+        // sesión no borre el contexto. El contrato viejo recibe solo el dato limpio; no se guarda
+        // el verbo «recuerda» como parte del recuerdo.
+        var saved = await _backend.PostMemoryAsync<LegacySaved>(new
         {
             userId = _userId,
-            command = text,
-            timezone = _timezone,
-            locale = "es-CO",
-            clientNowUtc = DateTime.UtcNow.ToString("O"),
+            note = QuitarPrefijo(text),
+            app = "general",
         }, ct);
-        if (response == null) return new(false, "El backend no devolvió respuesta.", "", "");
-        return new(response.Ok, response.Response ?? "No pude guardar ese recuerdo.", response.Kind ?? "", response.MemoryId ?? "");
+        return new(!string.IsNullOrWhiteSpace(saved?.Id), "Lo recordaré para nuestras próximas conversaciones.", "remember", saved?.Id ?? "");
     }
 
     public async Task<string> ContextoAsync(CancellationToken ct, string query = "")
     {
+        // Graph y el backend de memoria son despliegues separados por ahora; se consulta la fuente
+        // durable directamente en lugar de pedirle al LLM que reconstruya los recuerdos.
         string path = $"/memory?userId={Uri.EscapeDataString(_userId)}";
         if (!string.IsNullOrWhiteSpace(query)) path += $"&query={Uri.EscapeDataString(query.Trim())}";
-        var snapshot = await _backend.GetAsync<Snapshot>(path, ct);
+        var raw = await _backend.GetMemoryAsync<SnapshotEnvelope>(path, ct);
+        var snapshot = raw?.Json ?? raw;
         if (snapshot?.Items == null && snapshot?.Reminders == null) return "";
 
         var lines = new List<string>();
@@ -69,7 +87,17 @@ public sealed class MemoriaPersonal
         [JsonPropertyName("memoryId")] public string? MemoryId { get; set; }
     }
 
-    private sealed class Snapshot
+    private sealed class LegacySaved
+    {
+        [JsonPropertyName("id")] public string? Id { get; set; }
+    }
+
+    private sealed class SnapshotEnvelope : Snapshot
+    {
+        [JsonPropertyName("json")] public Snapshot? Json { get; set; }
+    }
+
+    private class Snapshot
     {
         [JsonPropertyName("items")] public Item[]? Items { get; set; }
         [JsonPropertyName("memories")] public Hit[]? Memories { get; set; }
@@ -94,6 +122,14 @@ public sealed class MemoriaPersonal
         [JsonPropertyName("dueAt")] public string? DueAt { get; set; }
         [JsonPropertyName("timezone")] public string? Timezone { get; set; }
         [JsonPropertyName("status")] public string? Status { get; set; }
+    }
+
+    private static string QuitarPrefijo(string text)
+    {
+        string[] prefixes = { "recuerda que ", "recuérdame ", "recuérdalo ", "acuérdate de ", "acuérdalo ", "acuerda que ", "no olvides " };
+        foreach (var prefix in prefixes)
+            if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return text[prefix.Length..].Trim();
+        return text;
     }
 
     private static string ZonaIanaLocal()
