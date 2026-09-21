@@ -118,6 +118,17 @@ public sealed class BackendClient
         return JsonSerializer.Deserialize<T>(text, Json);
     }
 
+    public async Task<T?> GetAsync<T>(string path, CancellationToken ct) where T : class
+    {
+        using var res = await SendGet($"{_apiPrefix}{path}", ct);
+        var text = await res.Content.ReadAsStringAsync(ct);
+        if (IsAuthFailure(res.StatusCode))
+            throw new InvalidOperationException(AuthErrorMessage(res.StatusCode));
+        if (!res.IsSuccessStatusCode)
+            throw new InvalidOperationException($"backend HTTP {(int)res.StatusCode}: {text}");
+        return JsonSerializer.Deserialize<T>(text, Json);
+    }
+
     /// <summary>
     /// El POST de esta clase, con el semáforo de conexión anotado. Este es el SEGUNDO embudo hacia
     /// Graph —el primero es <c>GraphClient.SendAsync</c>—, y hay que contarlo: la telemetría hace
@@ -148,6 +159,32 @@ public sealed class BackendClient
             throw;
         }
         catch (OperationCanceledException) { throw; }  // la pidió quien llama: no dice nada del backend
+        catch (Exception e)
+        {
+            GraphHealth.Report(GraphLink.SinContacto, host, 0, e.Message);
+            throw;
+        }
+    }
+
+    private async Task<HttpResponseMessage> SendGet(string path, CancellationToken ct)
+    {
+        if (_legacy) return await _http.GetAsync($"{_baseUrl}{path}", ct);
+        string host = GraphHealth.HostOf(_baseUrl);
+        try
+        {
+            var res = await _http.GetAsync($"{_baseUrl}{path}", ct);
+            GraphHealth.Report(
+                res.IsSuccessStatusCode ? GraphLink.Ok
+                : (int)res.StatusCode is 401 or 403 ? GraphLink.KeyRechazada : GraphLink.ErrorDelServidor,
+                host, (int)res.StatusCode);
+            return res;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            GraphHealth.Report(GraphLink.SinRespuesta, host, 0, $"sin respuesta en {_http.Timeout.TotalMinutes:0} min");
+            throw;
+        }
+        catch (OperationCanceledException) { throw; }
         catch (Exception e)
         {
             GraphHealth.Report(GraphLink.SinContacto, host, 0, e.Message);

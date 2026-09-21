@@ -1,5 +1,7 @@
 import { config } from '../config.js';
 import { deps } from '../container.js';
+import { applyExplicitMemoryCommand } from '../memory/commands.js';
+import { buildTimeContext } from '../time/context.js';
 
 export interface HttpResult { status: number; json: unknown; }
 function auth(authHeader?: string): HttpResult | null {
@@ -29,6 +31,36 @@ export async function handleRemember(body: Record<string, unknown>, authHeader?:
     source: 'api',
   });
   return { status: 201, json: item };
+}
+
+/** Ejecuta una orden explícita de memoria con el mismo reloj que usa /api/agent/turn. */
+export async function handleMemoryCommand(body: Record<string, unknown>, authHeader?: string): Promise<HttpResult> {
+  const denied = auth(authHeader); if (denied) return denied;
+  const command = typeof body.command === 'string' ? body.command.trim() : '';
+  if (!command) return { status: 400, json: { error: 'falta `command`' } };
+
+  const time = buildTimeContext({
+    timezone: typeof body.timezone === 'string' ? body.timezone : undefined,
+    locale: typeof body.locale === 'string' ? body.locale : undefined,
+    clientNowUtc: typeof body.clientNowUtc === 'string' ? body.clientNowUtc : undefined,
+  });
+  const result = await applyExplicitMemoryCommand(deps().memory, user(body), command, {
+    timezone: time.timezone,
+    locale: time.locale,
+    now: new Date(time.nowUtc),
+    clientNowUtc: typeof body.clientNowUtc === 'string' ? body.clientNowUtc : undefined,
+  });
+  if (!result) return { status: 400, json: { error: 'la orden no contiene un recuerdo o recordatorio explícito', timeContext: time } };
+  return {
+    status: 200,
+    json: {
+      ok: result.kind !== 'clarify',
+      kind: result.kind,
+      response: result.response,
+      memoryId: result.kind === 'remember' ? result.item.id : result.kind === 'remind' ? result.reminder.id : undefined,
+      timeContext: time,
+    },
+  };
 }
 
 export async function handleForget(body: Record<string, unknown>, authHeader?: string): Promise<HttpResult> {

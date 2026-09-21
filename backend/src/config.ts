@@ -34,10 +34,16 @@ export const config = {
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   /** Bucket donde se archivan los mp4. Privado: son grabaciones de pantalla de sistemas clínicos. */
   supabaseVideoBucket: process.env.SUPABASE_VIDEO_BUCKET || 'teach-videos',
+  /** Bucket privado donde vive el estado durable de memoria, un JSON atómico del grafo. */
+  supabaseMemoryBucket: process.env.SUPABASE_MEMORY_BUCKET || 'u-memory',
 };
 
 /** ¿Está configurado el archivo de videos en Supabase Storage? */
 export function videoArchiveEnabled(): boolean {
+  return Boolean(config.supabaseUrl && config.supabaseServiceKey);
+}
+
+export function memoryArchiveEnabled(): boolean {
   return Boolean(config.supabaseUrl && config.supabaseServiceKey);
 }
 

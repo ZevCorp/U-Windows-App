@@ -36,6 +36,8 @@ public sealed class ConversacionEnVivo : IDisposable
     private readonly SurfaceMapTools _mapa;
     private readonly IProtocolo _protocolo;
     private readonly LiveAudio _audio;
+    /// <summary>Se conecta después de construir la ventana, porque el backend se inicializa más tarde.</summary>
+    public MemoriaPersonal? Memoria { get; set; }
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
     private readonly SemaphoreSlim _envio = new(1, 1);
@@ -420,7 +422,7 @@ public sealed class ConversacionEnVivo : IDisposable
             _ws.Options.CollectHttpResponseDetails = true;
             foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
             await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
-            foreach (string msg in _protocolo.Apertura(InstruccionesNormales, Herramientas(), ""))
+            foreach (string msg in _protocolo.Apertura(await InstruccionesConMemoriaAsync(_cts.Token), Herramientas(), ""))
                 await EnviarAsync(msg, _cts.Token);
 
             // Sesión nueva, cuentas nuevas: ni llamadas retiradas de antes, ni el pase de la
@@ -703,21 +705,21 @@ public sealed class ConversacionEnVivo : IDisposable
             seguidos sin que se encendiera nada (2026-08-24)—. Es la misma razón por la que «sí, lo
             veo» no vale sin map_show: quien pregunta qué sabes está comprobando que lo que
             aprendiste es lo que él tiene delante, y eso solo se comprueba VIÉNDOLO marcado.
-          · «TOMO NOTA» NO ES TOMAR NOTA. Lo único que hace que algo se te quede es LLAMAR a
-            map_esto_es. Decir «lo tengo en mente», «tomo nota», «lo recordaré» sin haberla llamado
-            es la peor respuesta posible: quien te enseña se queda tranquilo creyendo que aprendiste
-            y no hay nada guardado. Pasó de verdad — dos lecciones seguidas contestadas con «lo
-            tengo en mente» y cero recuerdos creados (2026-08-24). Si vas a decir que lo recuerdas,
-            GUÁRDALO PRIMERO y luego dilo.
+          · «TOMO NOTA» NO ES TOMAR NOTA. Si es un dato PERSONAL, una preferencia o un compromiso del
+            usuario, llama a memory_remember y espera su resultado antes de decir que lo guardaste.
+            Si incluye «mañana», «hoy», una hora o «en X minutos», usa memory_remember: el backend lo
+            convierte en un recordatorio con la zona horaria real del computador. Si vas a decir que lo
+            recuerdas, GUÁRDALO PRIMERO y luego dilo.
           · CUANDO TE EXPLIQUEN QUÉ ES ALGO O PARA QUÉ SIRVE —«esto es el número de factura», «aquí
             se radican los pacientes», «este botón sirve para X cuando Y»— eso es una lección, no
             una orden de acción: crea un RECUERDO con map_esto_es. No la resumas: «aquí va el
             número de factura, nunca el nombre» enseña más que «número de factura». Y AQUÍ SÍ TE
             LLEGA UNA FOTO —del instante en que se creó el recuerdo, no de cuando señalaste— así que
             además VES lo que rodeaba el elemento.
-          · LOS IMPERATIVOS DE MEMORIA TAMBIÉN SON LECCIONES, y son los que más se escapan porque no
-            tienen la forma «esto es X»: «recuerda que…», «recuérdalo», «toma nota», «no olvides»,
-            «siempre que… hay que…», «de ahora en adelante…». Todos ésos → map_esto_es, sin excepción.
+          · LOS IMPERATIVOS SE DIVIDEN EN DOS. «Recuerda que soy desarrollador», una preferencia,
+            una fecha o un compromiso personal → memory_remember. «Recuerda que en este botón se hace
+            clic para…» → map_esto_es porque enseña una pantalla. Nunca uses map_esto_es para guardar
+            datos personales: necesita un elemento visible y los rechazará sin uno.
           · SI TE ENSEÑAN ALGO QUE NO ESTÁN SEÑALANDO —«recuerda que para iniciar sesión se hace
             clic en Acceder al sistema»— pásale a map_esto_es el argumento `sobre` con el nombre del
             elemento tal como se lee. No hace falta que tengan la mano encima para que puedas
@@ -1130,7 +1132,17 @@ public sealed class ConversacionEnVivo : IDisposable
             + "Úsala cuando el usuario diga «encuéntrame X» o «¿dónde está X?» y no sepas dónde está. "
             + "Es del disco: no toca la caja de búsqueda del explorador ni deja la ventana en un estado raro.",
             ("query", "Parte del nombre que buscas."),
-            ("path", "Dónde buscar. Vacío = la carpeta abierta ahora.")),
+             ("path", "Dónde buscar. Vacío = la carpeta abierta ahora.")),
+
+        Fn("memory_remember", "GUARDA UN DATO PERSONAL, una preferencia o un compromiso del usuario. Úsala "
+            + "para «recuerda que soy…», «no olvides…», «toma nota de…» y cualquier cosa que deba sobrevivir "
+            + "al cierre de la voz. Si lleva «mañana», «hoy», una hora o «en X minutos», crea un recordatorio "
+            + "con la fecha y zona horaria del computador. ESPERA el resultado antes de afirmar que quedó guardado.",
+            ("text", "El dato o compromiso completo, sin resumirlo.")),
+        Fn("memory_recall", "CONSULTA LA MEMORIA PERSONAL que ya tienes del usuario. Úsala cuando pregunte qué "
+            + "sabes sobre él, cuando vuelva a abrir la voz o cuando necesites recuperar una preferencia o compromiso. "
+            + "No la uses para recuerdos ligados a una pantalla: para esos está map_recuerdos.",
+            ("query", "Qué quieres recordar. Vacío = contexto personal disponible.")),
 
         // SOBRE Ü MISMO, no sobre lo que hay en pantalla. Van aparte de las map_*/file_* —esas
         // accionan OTRAS aplicaciones; estas te accionan a TI— y por eso las ejecuta quien tiene la
@@ -1684,7 +1696,7 @@ public sealed class ConversacionEnVivo : IDisposable
             _ws.Options.CollectHttpResponseDetails = true;   // sin esto un 401 llega como estado 0 (ver ArrancarAsync)
             foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
             await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
-            foreach (string msg in _protocolo.Apertura(InstruccionesNormales, Herramientas(), _pase))
+            foreach (string msg in _protocolo.Apertura(await InstruccionesConMemoriaAsync(_cts.Token), Herramientas(), _pase))
                 await EnviarAsync(msg, _cts.Token);
 
             if (_protocolo.SabeVolver && _pase.Length > 0)
@@ -2037,6 +2049,9 @@ public sealed class ConversacionEnVivo : IDisposable
     /// <summary>Crear un recuerdo. Se vigila desde fuera porque el modelo se la saltaba.</summary>
     private const string HerramientaRecordar = "map_esto_es";
 
+    private const string HerramientaMemoriaGuardar = "memory_remember";
+    private const string HerramientaMemoriaConsultar = "memory_recall";
+
     /// <summary>
     /// Contar lo que ya se sabe. Llamarla PRUEBA que la frase era una pregunta, no una lección.
     /// </summary>
@@ -2044,6 +2059,33 @@ public sealed class ConversacionEnVivo : IDisposable
 
     /// <summary>Cuánto se espera a que guarde antes de dar la lección por perdida.</summary>
     private static readonly TimeSpan MargenParaGuardar = TimeSpan.FromSeconds(9);
+
+    private async Task<string> EjecutarMemoriaPersonalAsync(Llamada llamada, CancellationToken ct)
+    {
+        if (Memoria == null) return "la memoria personal todavía no está conectada al backend.";
+        try
+        {
+            using var limite = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limite.CancelAfter(TimeSpan.FromSeconds(15));
+            if (llamada.Nombre == HerramientaMemoriaConsultar)
+            {
+                string query = llamada.Args.TryGetValue("query", out var q) ? q : "";
+                string contexto = await Memoria.ContextoAsync(limite.Token, query);
+                if (string.IsNullOrWhiteSpace(contexto)) return "no tengo recuerdos personales guardados todavía.";
+                return string.IsNullOrWhiteSpace(query) ? contexto : contexto;
+            }
+
+            string texto = llamada.Args.TryGetValue("text", out var t) ? t : "";
+            var resultado = await Memoria.EjecutarAsync(texto, limite.Token);
+            LogBus.Log("memoria", $"voz: {(resultado.Ok ? "guardado" : "no guardado")} · {resultado.Kind} · {resultado.Response}");
+            return resultado.Response;
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("memoria", $"voz: no pude conectar con la memoria personal: {e.Message}");
+            return $"no pude guardar ese recuerdo porque el backend respondió con un error: {e.Message}";
+        }
+    }
 
     private readonly object _candadoLeccion = new();
     private string _leccionPendiente = "";
@@ -2218,6 +2260,25 @@ public sealed class ConversacionEnVivo : IDisposable
             await EnviarAsync(msg, ct);
     }
 
+    private async Task<string> InstruccionesConMemoriaAsync(CancellationToken ct)
+    {
+        var memoria = Memoria;
+        if (memoria == null) return Instrucciones;
+        try
+        {
+            using var limite = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limite.CancelAfter(TimeSpan.FromSeconds(4));
+            string contexto = await memoria.ContextoAsync(limite.Token);
+            if (string.IsNullOrWhiteSpace(contexto)) return Instrucciones;
+            return Instrucciones + "\n\nMEMORIA PERSONAL DISPONIBLE (úsala solo si es pertinente; no inventes):\n" + contexto;
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("memoria", $"no pude cargar la memoria personal al abrir la voz: {e.Message}");
+            return Instrucciones;
+        }
+    }
+
     private async Task EjecutarNucleoAsync(IReadOnlyList<Llamada> llamadas, CancellationToken ct)
     {
         var hechas = new List<(string Id, string Nombre, string Resultado)>();
@@ -2269,6 +2330,14 @@ public sealed class ConversacionEnVivo : IDisposable
                 }
                 relojMirar.Stop();
                 Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, relojMirar.ElapsedMilliseconds), true);
+            }
+            else if (f.Nombre is HerramientaMemoriaGuardar or HerramientaMemoriaConsultar)
+            {
+                Accion?.Invoke(EnCurso(f.Nombre, f.Args), false);
+                var relojPersonal = System.Diagnostics.Stopwatch.StartNew();
+                resultado = await EjecutarMemoriaPersonalAsync(f, ct);
+                relojPersonal.Stop();
+                Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, relojPersonal.ElapsedMilliseconds), true);
             }
             else if (HerramientasDeAutocontrol.Contains(f.Nombre))
             {
