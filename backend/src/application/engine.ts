@@ -6,13 +6,13 @@
 // decisión (brain.next) vive en el servidor; la ejecución (phone/mcp) vive en el cliente. El
 // contrato `Action[]`/`BrainTurn` es la costura.
 
-import { BrainTurn, ScreenState } from '../domain/actions';
-import { baseCatalog, catalogNames, McpTool } from '../domain/mcp';
-import { SessionState } from '../domain/session';
-import { runProviderTurn } from '../brain/provider';
-import { MemoryStore } from '../memory/store';
-import { LearningStore, learnedToMcp, workflowToMcp } from '../learning/workflows';
-import { activeKey } from '../config';
+import { BrainTurn, ScreenState } from '../domain/actions.js';
+import { baseCatalog, catalogNames, McpTool } from '../domain/mcp.js';
+import { SessionState } from '../domain/session.js';
+import { runProviderTurn } from '../brain/provider.js';
+import { MemoryStore } from '../memory/store.js';
+import { LearningStore, learnedToMcp, workflowToMcp } from '../learning/workflows.js';
+import { activeKey } from '../config.js';
 
 export interface TurnRequest {
   userId: string;

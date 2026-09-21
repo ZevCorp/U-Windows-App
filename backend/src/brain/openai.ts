@@ -12,12 +12,12 @@
 //  - Las acciones vienen en PÍXELES ABSOLUTOS del screenshot enviado; el cliente ya manda su tamaño
 //    real y aquí reescalamos screenshot→pantalla.
 
-import { Action, BrainTurn, ScreenState } from '../domain/actions';
-import { McpTool } from '../domain/mcp';
-import { PendingCall, SessionState } from '../domain/session';
-import { goalPrompt } from './prompt';
-import { ensureProxy } from '../net';
-import { TurnInput, TurnOutput } from './types';
+import { Action, BrainTurn, ScreenState } from '../domain/actions.js';
+import { McpTool } from '../domain/mcp.js';
+import { PendingCall, SessionState } from '../domain/session.js';
+import { goalPrompt } from './prompt.js';
+import { ensureProxy } from '../net.js';
+import { TurnInput, TurnOutput } from './types.js';
 
 const OA_BASE = 'https://api.openai.com';
 

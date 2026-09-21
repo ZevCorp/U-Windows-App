@@ -1,13 +1,13 @@
 // Lógica del endpoint /api/agent/turn, independiente del runtime (Vercel o servidor local). Así el
 // mismo código corre en producción (Vercel Function) y en desarrollo (node local-server.mts).
 
-import { activeModel, assertConfigured, config } from '../config';
-import { decodeSession, encodeSession, freshSession } from '../domain/session';
-import { ScreenState } from '../domain/actions';
-import { resolveTurn } from '../application/engine';
-import { deps } from '../container';
-import { applyExplicitMemoryCommand } from '../memory/commands';
-import { buildTimeContext, timePrompt } from '../time/context';
+import { activeModel, assertConfigured, config } from '../config.js';
+import { decodeSession, encodeSession, freshSession } from '../domain/session.js';
+import { ScreenState } from '../domain/actions.js';
+import { resolveTurn } from '../application/engine.js';
+import { deps } from '../container.js';
+import { applyExplicitMemoryCommand } from '../memory/commands.js';
+import { buildTimeContext, timePrompt } from '../time/context.js';
 
 export interface TurnBody {
   session?: string;

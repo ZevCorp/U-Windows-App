@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleForget, handleMemory, handleRemember, handleScheduleReminder } from '../src/http/handleMemory';
+import { handleForget, handleMemory, handleRemember, handleScheduleReminder } from '../src/http/handleMemory.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const body = { ...(req.query || {}), ...((req.body || {}) as Record<string, unknown>) } as Record<string, unknown>;

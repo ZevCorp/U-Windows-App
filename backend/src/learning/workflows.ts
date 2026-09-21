@@ -8,7 +8,7 @@
 // procesamiento LLM de la traza, reconexión MCP↔workflow, proyección a grafo) se enchufa aquí sin
 // tocar el cliente ni el contrato de acciones.
 
-import { McpTool, LEARNED_VIA, WORKFLOW_VIA } from '../domain/mcp';
+import { McpTool, LEARNED_VIA, WORKFLOW_VIA } from '../domain/mcp.js';
 
 /** Un mapa de UI aprendido de una app: nombre + documentación + catálogo de elementos + app. */
 export interface LearnedTool {

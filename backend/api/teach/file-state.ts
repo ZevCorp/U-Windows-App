@@ -3,7 +3,7 @@
 // corta y no dependemos del límite de duración de Vercel para esperar a Google.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleFileState, FileStateBody } from '../../src/http/handleTeach';
+import { handleFileState, FileStateBody } from '../../src/http/handleTeach.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {

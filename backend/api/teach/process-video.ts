@@ -4,7 +4,7 @@
 // video): ver `maxDuration` en vercel.json.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleProcessVideo, ProcessVideoBody } from '../../src/http/handleTeach';
+import { handleProcessVideo, ProcessVideoBody } from '../../src/http/handleTeach.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {

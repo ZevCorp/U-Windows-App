@@ -1,7 +1,7 @@
 // Tipos compartidos por todos los providers del cerebro (evita ciclos de import).
-import { BrainTurn, ScreenState } from '../domain/actions';
-import { McpTool } from '../domain/mcp';
-import { SessionState } from '../domain/session';
+import { BrainTurn, ScreenState } from '../domain/actions.js';
+import { McpTool } from '../domain/mcp.js';
+import { SessionState } from '../domain/session.js';
 
 export interface TurnInput {
   session: SessionState;
