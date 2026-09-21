@@ -11,7 +11,7 @@
   "crons": [
     {
       "path": "/api/reminders/due",
-      "schedule": "* * * * *"
+      "schedule": "0 9 * * *"
     }
   ]
 }
