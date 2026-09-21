@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleDueReminders } from '../../src/http/handleMemory';
+import { handleDueReminders } from '../../src/http/handleMemory.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST' && req.method !== 'GET') { res.status(405).json({ error: 'usa GET o POST' }); return; }

@@ -13,7 +13,7 @@
 //     4. `processVideo` — el backend hace el generateContent CON la key.
 //   Resultado: el video nunca toca Vercel y la key nunca toca el cliente.
 
-import { config } from '../config';
+import { config } from '../config.js';
 
 const BASE = 'https://generativelanguage.googleapis.com';
 

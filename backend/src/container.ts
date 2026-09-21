@@ -3,8 +3,8 @@
 // Primera construcción: stores en memoria (se pierden entre cold starts de Vercel). Para producción,
 // sustituir por Supabase/KV/Neo4j aquí — sin tocar el cerebro, el engine, ni el cliente.
 
-import { GraphMemoryStore, MemoryStore } from './memory/store';
-import { InMemoryLearningStore, LearningStore } from './learning/workflows';
+import { GraphMemoryStore, MemoryStore } from './memory/store.js';
+import { InMemoryLearningStore, LearningStore } from './learning/workflows.js';
 
 let memory: MemoryStore | null = null;
 let learning: LearningStore | null = null;

@@ -1,5 +1,5 @@
-import { MemoryStore, MemoryItem, Reminder } from './store';
-import { buildTimeContext, currentLocal, localDateFrom, localToUtc, weekdayIndex, LocalDateTime, TemporalResolutionError } from '../time/context';
+import { MemoryStore, MemoryItem, Reminder } from './store.js';
+import { buildTimeContext, currentLocal, localDateFrom, localToUtc, weekdayIndex, LocalDateTime, TemporalResolutionError } from '../time/context.js';
 
 export type MemoryCommandResult =
   | { kind: 'remember'; item: MemoryItem; response: string }

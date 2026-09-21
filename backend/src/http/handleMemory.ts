@@ -1,5 +1,5 @@
-import { config } from '../config';
-import { deps } from '../container';
+import { config } from '../config.js';
+import { deps } from '../container.js';
 
 export interface HttpResult { status: number; json: unknown; }
 function auth(authHeader?: string): HttpResult | null {

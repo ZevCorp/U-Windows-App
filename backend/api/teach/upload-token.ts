@@ -3,7 +3,7 @@
 // esta función (límite de 4.5 MB) y ninguna key sale del servidor.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleUploadToken, UploadTokenBody } from '../../src/http/handleTeach';
+import { handleUploadToken, UploadTokenBody } from '../../src/http/handleTeach.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {

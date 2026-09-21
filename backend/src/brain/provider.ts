@@ -5,11 +5,11 @@
 // Cada provider recibe el mismo input y devuelve {session, turn}. La forma del hilo (previous_id de
 // OpenAI vs historial acarreado de Gemini) vive dentro de la SessionState y la maneja cada adaptador.
 
-import { runBrainTurn } from './openai';
-import { runGeminiTurn } from './gemini';
-import { TurnInput, TurnOutput } from './types';
+import { runBrainTurn } from './openai.js';
+import { runGeminiTurn } from './gemini.js';
+import { TurnInput, TurnOutput } from './types.js';
 
-export type { TurnInput, TurnOutput } from './types';
+export type { TurnInput, TurnOutput } from './types.js';
 
 /** Despacha al adaptador del proveedor indicado en la sesión. */
 export function runProviderTurn(inp: TurnInput): Promise<TurnOutput> {

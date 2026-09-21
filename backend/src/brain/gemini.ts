@@ -8,12 +8,12 @@
 //    pedir ver la pantalla; el modelo pasa coordenadas en píxeles del screenshot (a resolución real).
 //  - Las herramientas MCP, ask_user, speak y list_apps se declaran igual que en OpenAI.
 
-import { Action, BrainTurn } from '../domain/actions';
-import { GeminiPending, SessionState } from '../domain/session';
-import { McpTool } from '../domain/mcp';
-import { goalPrompt } from './prompt';
-import { ensureProxy } from '../net';
-import { TurnInput, TurnOutput } from './types';
+import { Action, BrainTurn } from '../domain/actions.js';
+import { GeminiPending, SessionState } from '../domain/session.js';
+import { McpTool } from '../domain/mcp.js';
+import { goalPrompt } from './prompt.js';
+import { ensureProxy } from '../net.js';
+import { TurnInput, TurnOutput } from './types.js';
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 

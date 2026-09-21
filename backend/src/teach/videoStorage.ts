@@ -10,7 +10,7 @@
 // sistemas clínicos y pueden tener datos de pacientes visibles. Nadie con el link puede verlos; hay
 // que entrar al dashboard (o usar la service_role key).
 
-import { config, videoArchiveEnabled } from '../config';
+import { config, videoArchiveEnabled } from '../config.js';
 
 export interface SignedVideoUpload {
   /** URL absoluta a la que el cliente hace PUT con el mp4. Ya trae el token embebido. */

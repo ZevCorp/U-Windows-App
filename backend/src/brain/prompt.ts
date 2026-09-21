@@ -5,7 +5,7 @@
 // copiable si viviera en el ejecutable. Con la separación, la competencia que descompile el cliente
 // Windows no encuentra ni una línea de esto.
 
-import { McpTool, LEARNED_VIA, WORKFLOW_VIA } from '../domain/mcp';
+import { McpTool, LEARNED_VIA, WORKFLOW_VIA } from '../domain/mcp.js';
 
 function workflowRule(tools: McpTool[]): string {
   const wfs = tools.filter((t) => t.via.startsWith('workflow'));

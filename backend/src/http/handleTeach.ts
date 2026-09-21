@@ -6,10 +6,10 @@
 //   POST /api/teach/file-state    → ¿el video ya está ACTIVE en Gemini? El cliente consulta en bucle.
 //   POST /api/teach/process-video → generateContent con el prompt médico + guarda las notas.
 
-import { config } from '../config';
-import { fileState, processVideo, startUpload } from '../teach/geminiVideo';
-import { signVideoUpload } from '../teach/videoStorage';
-import { deps } from '../container';
+import { config } from '../config.js';
+import { fileState, processVideo, startUpload } from '../teach/geminiVideo.js';
+import { signVideoUpload } from '../teach/videoStorage.js';
+import { deps } from '../container.js';
 
 export interface HttpResult {
   status: number;

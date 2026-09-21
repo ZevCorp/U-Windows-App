@@ -7,7 +7,7 @@
 // servidor local de desarrollo). El cliente nunca ve prompt, catálogo MCP, memoria ni la key.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleTurn, TurnBody } from '../../src/http/handleTurn';
+import { handleTurn, TurnBody } from '../../src/http/handleTurn.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
