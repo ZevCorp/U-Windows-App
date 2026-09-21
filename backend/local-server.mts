@@ -57,7 +57,9 @@ const server = http.createServer(async (req, res) => {
 
   if (url.startsWith('/api/memory')) {
     try {
-      const body = JSON.parse((await readBody(req)) || '{}');
+      const parsedUrl = new URL(url, 'http://localhost');
+      const query = Object.fromEntries(parsedUrl.searchParams.entries());
+      const body = { ...query, ...JSON.parse((await readBody(req)) || '{}') };
       const result = req.method === 'GET' ? await handleMemory(body, req.headers.authorization as string | undefined)
         : req.method === 'DELETE' ? await handleForget(body, req.headers.authorization as string | undefined)
         : body.dueAt ? await handleScheduleReminder(body, req.headers.authorization as string | undefined)
