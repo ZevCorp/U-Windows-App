@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Cerebro (backend) del asistente Ü para Windows: computer-use + MCP + aprendizaje. Desplegable en Vercel, separado del cliente.",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit",
