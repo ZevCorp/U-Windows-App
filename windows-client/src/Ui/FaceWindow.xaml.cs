@@ -2355,7 +2355,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // aire que la carita tiene (promesa 163).
         double nivel = viva ? _vivo!.NivelVoz : 0.18;
         bool collar = viva && _vivo!.PorElCollar;
-        VoiceHaloColor.Color = ReglaDelHalo.Color(collar, _actualizando);
+        VoiceHaloColor.Color = ReglaDelHalo.ColorParaEstado(collar, _actualizando);
         VoiceHalo.Opacity = ReglaDelHalo.Opacidad(nivel, _bocaPaso);
         VoiceHaloEscala.ScaleX = VoiceHaloEscala.ScaleY = ReglaDelHalo.Escala(nivel, _bocaPaso);
     }

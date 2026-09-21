@@ -67,7 +67,7 @@ public static class ReglaDelHalo
             : System.Windows.Media.Color.FromRgb(0xA8, 0xA8, 0xAE);
 
     /// <summary>Morado reservado para una actualización en curso: estado global, no fuente de voz.</summary>
-    public static System.Windows.Media.Color Color(bool porElCollar, bool actualizando)
+    public static System.Windows.Media.Color ColorParaEstado(bool porElCollar, bool actualizando)
         => actualizando
             ? System.Windows.Media.Color.FromRgb(0xA9, 0x6B, 0xF6)
             : Color(porElCollar);
