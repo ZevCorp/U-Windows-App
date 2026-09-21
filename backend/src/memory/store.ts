@@ -54,7 +54,11 @@ export interface MemoryStore {
   snapshot(userId?: string): Promise<MemorySnapshot>;
 }
 
-interface PersistedState extends MemorySnapshot {}
+export interface PersistedState extends MemorySnapshot {}
+export interface MemoryStatePersistence {
+  load(): Promise<PersistedState | null>;
+  save(state: PersistedState): Promise<void>;
+}
 const STOP = new Set('el la los las un una unos unas de del al y o en con para por mi mis tu tus que es soy me se a lo no hoy ya muy más como'.split(' '));
 const WORDS = /[\p{L}\p{N}_@.-]+/gu;
 const id = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
@@ -82,11 +86,16 @@ export class GraphMemoryStore implements MemoryStore {
   private loaded = false;
   private writeChain: Promise<void> = Promise.resolve();
 
-  constructor(private readonly filePath = process.env.MEMORY_FILE || '') {}
+  constructor(private readonly filePath = process.env.MEMORY_FILE || '', private readonly durable?: MemoryStatePersistence) {}
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return;
     this.loaded = true;
+    if (this.durable) {
+      const persisted = await this.durable.load();
+      if (persisted) this.state = persisted;
+      return;
+    }
     if (!this.filePath) return;
     try {
       const raw = await fs.readFile(this.filePath, 'utf8');
@@ -103,6 +112,10 @@ export class GraphMemoryStore implements MemoryStore {
   }
 
   private async persist(): Promise<void> {
+    if (this.durable) {
+      await this.durable.save(this.state);
+      return;
+    }
     if (!this.filePath) return;
     this.writeChain = this.writeChain.then(async () => {
       await fs.mkdir(path.dirname(this.filePath), { recursive: true });

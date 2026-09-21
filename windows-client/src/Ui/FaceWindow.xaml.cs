@@ -1140,6 +1140,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // El backend es Graph: la credencial (X-API-Key) sale del MISMO GraphConfig que usa la
         // ventana de workflows — una sola fuente de key para toda la app.
         _backend = new BackendClient(_config, _graphConfig);
+        if (_vivo != null)
+            _vivo.Memoria = new MemoriaPersonal(_backend, _config.UserId);
         // "Windows Live": registra al usuario y empieza a emitir telemetría (pulsos consciente/
         // subconsciente + logs) al backend. No-op si el usuario no dio su correo.
         InitTelemetry();
