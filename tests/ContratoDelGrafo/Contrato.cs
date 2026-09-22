@@ -734,7 +734,9 @@ internal static class Contrato
         // días— los rechazaba nuestra propia compuerta: juzga si la puerta está viva contra la memoria del mapa vivo,
         // que va 1–2 s por detrás de la pantalla. Medido: map_pointing_at dijo «puedo pulsarlo ahora» y 26 s después
         // la compuerta esperó 4 s y contestó «no lo conozco» sobre el mismo botón. Dos jueces, dos criterios (nº16).
-        Prueba("264. vivo se juzga mirando AHORA: si el mapa no tiene una puerta como viva, antes de rendirse la compuerta vuelve a mirar la ventana; si al mirar aparece, se pulsa en el acto; si no aparece ni mirando, se dice que no se ve, como hasta hoy", LaCompuertaMiraOtraVezAntesDeRendirse);
+        // REESCRITA el 2026-09-22 (spec 048) sin reciclar el número: gana la cláusula «salvo que el paso traiga una
+        // observación». Su fixture sigue byte a byte (no inyecta Vista); el caso con Vista lo juzga el cuerpo de la 363.
+        Prueba("264. vivo se juzga mirando AHORA: si el mapa no tiene una puerta como viva, antes de rendirse la compuerta vuelve a mirar la ventana —salvo que el paso traiga una observación de ESTA pantalla más fresca que la vigencia, en cuyo caso esa observación cuenta como la mirada y se dice (2026-09-22: hasta hoy no había observación que traer)—; si al mirar aparece, se pulsa en el acto; si no aparece ni mirando, se dice que no se ve, como hasta hoy", LaCompuertaMiraOtraVezAntesDeRendirse);
         Prueba("265. un patrón que lanza no es un clic que falló: la escalera de pulsar termina siempre en el clic físico —tras el patrón, tras el mensaje— y sólo el físico decide que no se pudo", LaEscaleraTerminaEnElClicFisico);
         // LAS DOS TANDAS QUE SIENTE EL DUEÑO: la coreografía de la 014 —tarjeta y pausa de lectura de hasta 4 s— aplicada
         // a clics normales, porque el modelo pone decir/recuerdo en el 89% de ellos. Fuera de una comprobación sobra.
@@ -822,6 +824,20 @@ internal static class Contrato
         Prueba("341. dos recordatorios vencidos despiertan una sola sesión de voz", LosAvisosCompartenUnaSesionViva);
         Prueba("342. una petición personal explícita se puede guardar aunque el modelo no llame la herramienta", PeticionPersonalExplícitaSeGuarda);
         Prueba("343. cada proceso de Ü escribe en su propio archivo de log identificable", CadaInstanciaTieneSuLog);
+
+        // ── Spec 048: una lectura por ciclo (promesas 361-370; reescribe la 264) ────────────────
+        Prueba("361. leer la ventana en foco para el reproductor es UN barrido: ReadFields, ReadinessCount y StructureFingerprint salen del mismo recorrido —pedidos dentro de la vigencia del barrido, el árbol se recorre una vez y sirve a los tres— y recogen lo mismo que hoy: interactivos, visibles y habilitados, hasta 40 niveles y 300 elementos, con la huella por id o ruta más tipo y nunca por texto; la vigencia es menor que el paso del sondeo de carga, así que un sondeo nunca recibe el árbol del sondeo anterior; y el log dice cuántos barridos hubo, cuánto costó cada uno y a quién sirvió", LeerParaElReproductorEsUnBarrido);
+        Prueba("362. una lectura se comparte por la misma ventana que se leyó: leer para el mapa publica una observación con versión —la ventana que se leyó, dónde, cuándo, cuánto costó, cómo se leyó y sus elementos crudos con selector, etiqueta, tipo, caja e identidad, sin criba ni tope—; quien puede reutilizar la pide por esa misma ventana y ese mismo dónde, con una edad máxima, y la recibe sin leer; más vieja, de otra ventana o de otro dónde, o después de accionar, se lee de nuevo, la nueva reemplaza a la vieja y se dice por qué no se reutilizó; y el mapa cuenta por paso cuántas lecturas fueron nuevas y cuántas reutilizadas", UnaLecturaSeComparteporLaMismaVentana);
+        Prueba("363. lo que el paso acaba de leer, la compuerta no lo vuelve a mirar: si el paso lleva la observación completa de su pantalla, más fresca que la vigencia, la compuerta le cuenta al núcleo lo que esa observación vio —con la misma criba que el latido, sin leer— y da por viva la puerta que estaba en ella, con 0 miradas y diciéndolo; un texto suelto que el latido daba por vivo sigue vivo; si la puerta no estaba en la observación, o la observación es de otra pantalla o más vieja que la vigencia, mira como hoy; y nunca se mira más veces que antes (264 reescrita, 299 intacta)", LoQueElPasoAcabaDeLeerNoSeVuelveAMirar);
+        Prueba("364. un paso que ya trae el selector y cuya puerta el grafo no tiene viva no inventaría la ventana: se pregunta solo por ese elemento en la ventana de trabajo; si está, se pulsa con esa respuesta como observación de uno —sin leer la ventana entera y sin tocar la lista de vivos del núcleo—; si el grafo ya la tenía viva, no se pregunta ni se lee, como hoy; si no está, o el selector no es de UIA, o no hay ventana de trabajo, el paso no lee nada y la compuerta mira como hoy; y la cuenta y el log dicen cuál de los tres caminos se usó y cuántos ms costó preguntar", UnPasoConSelectorPreguntaYNoInventaria);
+        Prueba("365. las candidatas que van al decisor salen de esa misma lectura, con selector, etiqueta, tipo y caja; se ofrecen vivas —con nombre y con geometría leída— y sin duplicar por identidad: dentro de una lectura por su RuntimeId, y una identidad vacía nunca funde; con el terreno se funde como la 183 manda —por la etiqueta que UIA ya nombró, porque en SAP el mismo elemento llega por los dos caminos—; dos puertas de UIA con el mismo nombre y distinto selector son dos candidatas; una del terreno o de SAP sin caja leída se ofrece sin caja y se dice; los ids ofrecidos y la lista de map_what_i_see salen de la misma lista en el mismo orden (285); y el log dice cuántas se ofrecieron de cuántas, cuántas sin caja, cuántas sin identidad y cuánto costó", LasCandidatasSalenDeLaMismaLecturaConCaja);
+        Prueba("366. proyectar en Neo4j se mide y se dice: cada envío —los índices del arranque, desde la ubicación, desde el latido o desde un cruce— deja su coste y su resultado en un contador, y un resumen por minuto dice cuántos hubo, cuánto sumaron, cuál fue el más lento y cuántos fallaron; la única línea limitada es «Neo4j no responde», que se dice una vez por minuto y no una vez por proceso, también cuando cae en el arranque, porque quien lo cuenta entra por el constructor", ProyectarEnNeo4jSeMideYSeDice);
+        // 367: RESERVADA, condicionada al nivel 4 de la 366 (proyectar no bloquea el hilo de la ubicación). No se
+        // escribe hasta que la medida diga que hace falta; el número no se recicla.
+        Prueba("368. cada paso decidido se publica como un evento tipado —dónde, objetivo, las candidatas con su caja, los ids ofrecidos en su orden, la decisión tal como la devolvió el decisor, cuánto costó leer, decidir y pulsar, y el paso que contó el tramo—, también cuando no se acciona; sin suscriptor no cuesta nada ni cambia nada; y lo que el evento lleva es exactamente lo que se ofreció (285)", CadaPasoDecididoSePublicaComoEvento);
+        Prueba("369. dónde estoy se pregunta una vez por instante, y accionar lo olvida: mientras la ventana de delante y su título sean los mismos, la respuesta tenga menos de 400 ms y nadie haya accionado desde que se calculó, se sirve la última calculada sin volver a leer; cambia la ventana o el título, pasan los 400 ms, o se acciona, y se calcula de nuevo; con SAP delante se calcula siempre; en sombra se calcula siempre y solo se cuenta; y el log dice por minuto cuántas veces se calculó, cuántas se sirvieron de memoria y cuántas habrían salido de memoria en sombra", DondeEstoySePreguntaUnaVezPorInstante);
+        // 370: RESERVADA (lectores de fondo suscritos o pausados en tramo; campos del dynpro por pantalla). Requiere
+        // Ui/ y una sonda en el hospital. El número no se recicla.
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -13010,6 +13026,735 @@ internal static class Contrato
         var (r4, ms4, _) = Pulsa(Mundo(), "uia:name=Guardar;ct=Button", "Guardar");
         Debe(r4.SePudo && ms4 >= Presupuesto - 100, $"un botón sigue esperando el presupuesto entero: {ms4} ms de {Presupuesto}");
         Debe(!r4.Cuenta.Contains("campo"), $"y no se le llama campo a lo que no lo es: «{r4.Cuenta}»");
+    }
+
+    // ── Spec 048: una lectura por ciclo ──────────────────────────────────────────────────────────
+    //
+    // Todo lo que estas promesas piden todavía no existe (2026-09-22): se pide por NOMBRE y por
+    // reflexión para que el contrato compile contra el núcleo de hoy, y ausente = PENDIENTE (rojo),
+    // nunca «no aplicable». Los ayudantes de abajo construyen tipos que aún no existen por el nombre
+    // de sus parámetros y fabrican delegados de tipos que aún no existen: así el arnés no se ata a
+    // una firma que el implementador todavía no escribió, y sí a lo que la spec nombra.
+
+    /// <summary>Construye un tipo por su constructor más largo, rellenando los parámetros por NOMBRE (sin
+    /// distinguir mayúsculas); lo que no se nombra queda en su valor por defecto.</summary>
+    private static object Construye(Type t, params (string Nombre, object? Valor)[] valores)
+    {
+        var ctor = t.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+        var ps = ctor.GetParameters();
+        var args = new object?[ps.Length];
+        for (int i = 0; i < ps.Length; i++)
+        {
+            var dado = valores.FirstOrDefault(v => string.Equals(v.Nombre, ps[i].Name, StringComparison.OrdinalIgnoreCase));
+            args[i] = dado.Nombre != null ? dado.Valor
+                    : ps[i].HasDefaultValue ? ps[i].DefaultValue
+                    : ps[i].ParameterType.IsValueType ? Activator.CreateInstance(ps[i].ParameterType) : null;
+        }
+        return ctor.Invoke(args);
+    }
+
+    /// <summary>Un arreglo tipado (IReadOnlyList&lt;T&gt;) de un T que aún no existe.</summary>
+    private static Array Lista(Type tElemento, IEnumerable<object> items)
+    {
+        var lista = items.ToList();
+        var arr = Array.CreateInstance(tElemento, lista.Count);
+        for (int i = 0; i < lista.Count; i++) arr.SetValue(lista[i], i);
+        return arr;
+    }
+
+    private sealed class Fabrica0<T> { public Func<object?> Cuerpo = () => null; public T Llama() => (T)Cuerpo()!; }
+    private sealed class Fabrica1<A, T> { public Func<object?, object?> Cuerpo = _ => null; public T Llama(A a) => (T)Cuerpo(a)!; }
+    private sealed class Fabrica2<A, B, T> { public Func<object?, object?, object?> Cuerpo = (_, _) => null; public T Llama(A a, B b) => (T)Cuerpo(a, b)!; }
+    private sealed class Oidor<T> { public Action<object?> Cuerpo = _ => { }; public void Oye(T t) => Cuerpo(t); }
+
+    /// <summary>Un <c>Func&lt;…, T&gt;</c> del tipo exacto que pide una propiedad, con el cuerpo en objetos.</summary>
+    private static Delegate Devuelve(Type tFunc, Func<object?[], object?> cuerpo)
+    {
+        var g = tFunc.GetGenericArguments();
+        object f = g.Length switch
+        {
+            1 => Activator.CreateInstance(typeof(Fabrica0<>).MakeGenericType(g))!,
+            2 => Activator.CreateInstance(typeof(Fabrica1<,>).MakeGenericType(g))!,
+            3 => Activator.CreateInstance(typeof(Fabrica2<,,>).MakeGenericType(g))!,
+            _ => throw new NotSupportedException($"Devuelve: {tFunc} tiene {g.Length} argumentos genéricos"),
+        };
+        object cuerpoTipado = g.Length switch
+        {
+            1 => (Func<object?>)(() => cuerpo(Array.Empty<object?>())),
+            2 => (Func<object?, object?>)(a => cuerpo(new[] { a })),
+            _ => (Func<object?, object?, object?>)((a, b) => cuerpo(new[] { a, b })),
+        };
+        f.GetType().GetField("Cuerpo")!.SetValue(f, cuerpoTipado);
+        return Delegate.CreateDelegate(tFunc, f, "Llama");
+    }
+
+    /// <summary>Un <c>Action&lt;T&gt;</c> del tipo exacto de un evento cuyo T aún no existe.</summary>
+    private static Delegate Oye(Type tAction, Action<object?> cuerpo)
+    {
+        var o = Activator.CreateInstance(typeof(Oidor<>).MakeGenericType(tAction.GetGenericArguments()))!;
+        o.GetType().GetField("Cuerpo")!.SetValue(o, cuerpo);
+        return Delegate.CreateDelegate(tAction, o, "Oye");
+    }
+
+    /// <summary>Un miembro estático (campo, const o propiedad) por nombre, de un tipo que aún no existe.</summary>
+    private static object? Estatico(Type? t, string nombre)
+    {
+        const BindingFlags F = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+        return t?.GetField(nombre, F)?.GetValue(null) ?? t?.GetProperty(nombre, F)?.GetValue(null);
+    }
+
+    /// <summary>Todas las líneas que LogBus anotó mientras corría <paramref name="accion"/> (tag: mensaje).</summary>
+    private static List<string> AnotadoMientras(Action accion)
+    {
+        var lineas = new List<string>();
+        Action<string, string> oido = (tag, m) => lineas.Add($"{tag}: {m}");
+        U.WindowsClient.Diagnostics.LogBus.Anotado += oido;
+        try { accion(); }
+        finally { U.WindowsClient.Diagnostics.LogBus.Anotado -= oido; }
+        return lineas;
+    }
+
+    private static void LeerParaElReproductorEsUnBarrido()
+    {
+        // MEDIDO (spec 048, 2026-09-22): ReadFields (:470), ReadinessCount (:493) y StructureFingerprint (:510)
+        // hacen el MISMO recorrido nodo a nodo con TreeWalker + .Current, 3 sitios. El reproductor pide la huella
+        // y, en la compuerta, el recuento por sondeo de 120 ms. Lo que se promete: un barrido, inyectable, que
+        // sirve a los tres dentro de su vigencia, y que recoge lo mismo que hoy.
+        var tSup = typeof(U.Graph.Surfaces.UiaSurface);
+        const BindingFlags Est = BindingFlags.Public | BindingFlags.Static;
+        var pBarre = tSup.GetProperty("Barre", Est);
+        var pReloj = tSup.GetProperty("Reloj", Est);
+        var pLog = tSup.GetProperty("LogGlobal", Est);
+        var tBarrido = Grafico("U.Graph.Surfaces.BarridoUia");
+        var tNodo = tBarrido?.GetNestedType("Nodo", BindingFlags.Public | BindingFlags.NonPublic);
+        if (pBarre == null || pReloj == null || pLog == null || tBarrido == null || tNodo == null)
+        {
+            Pendiente("BarridoUia.Nodo + UiaSurface.Barre/Reloj (un barrido para los tres)", "361", "048");
+            return;
+        }
+        int vigencia = Convert.ToInt32(Estatico(tBarrido, "VigenciaMs") ?? -1);
+        var tReadiness = Grafico("U.Graph.SurfaceReadiness") ?? AppDominio().FirstOrDefault(x => x.Name == "SurfaceReadiness");
+        int poll = Convert.ToInt32(Estatico(tReadiness, "PollMs") ?? -1);
+
+        // EL ÁRBOL DE MENTIRA, tal como lo captura el barrido (crudo: el filtro de interactivo/visible/habilitado
+        // lo aplican los derivados, como hoy lo aplica Walk sobre .Current).
+        object Nodo(string nombre, string id, string tipo, bool visible = true, bool habilitado = true, params int[] ruta)
+            => Construye(tNodo, ("Nombre", nombre), ("AutomationId", id), ("Tipo", tipo), ("Visible", visible), ("Habilitado", habilitado), ("Ruta", ruta));
+        Array Arbol(string nombreDelPrimero, string tipoDelPrimero) => Lista(tNodo, new[]
+        {
+            Nodo(nombreDelPrimero, "b1", tipoDelPrimero, true, true, 0),
+            Nodo("Nombre", "", "ControlType.Edit", true, true, 0, 1),
+            Nodo("Fuera", "b3", "ControlType.Button", visible: false, habilitado: true, 0, 2),
+            Nodo("Gris", "b4", "ControlType.Button", visible: true, habilitado: false, 0, 3),
+            Nodo("Un texto", "t5", "ControlType.Text", true, true, 0, 4),
+        });
+        Array arbol = Arbol("Aceptar", "ControlType.Button");
+
+        long ahora = 1_000;
+        int barridos = 0;
+        var lineas = new List<string>();
+        object? logAntes = pLog.GetValue(null);
+        pReloj.SetValue(null, (Func<long>)(() => ahora));
+        pBarre.SetValue(null, Devuelve(pBarre.PropertyType, _ => { barridos++; return arbol; }));
+        pLog.SetValue(null, (Action<string>)(l => lineas.Add(l)));
+        try
+        {
+            var s = new U.Graph.Surfaces.UiaSurface();
+            var campos = s.ReadFields();
+            int cuantos = s.ReadinessCount();
+            string huella = s.StructureFingerprint();
+            Debe(barridos == 1, $"dentro de la vigencia, ReadFields + ReadinessCount + StructureFingerprint son UN barrido (hubo {barridos})");
+            Debe(cuantos == 2, $"un nodo IsOffscreen, uno deshabilitado y un Text no cuentan: quedan 2 interactivos visibles y habilitados (contó {cuantos})");
+            Debe(campos.Count == cuantos, $"y los tres son coherentes: tantos campos como cuenta ({campos.Count} campos, {cuantos} contados)");
+            Debe(huella.Length > 0, "y hay huella");
+
+            ahora += vigencia + 1;
+            int otra = s.ReadinessCount();
+            Debe(barridos == 2, $"pasada la vigencia se barre otra vez, no se sirve el árbol viejo (hubo {barridos})");
+            Debe(otra == cuantos, "y cuenta lo mismo sobre el mismo árbol");
+            Debe(vigencia > 0 && poll > 0 && vigencia < poll,
+                $"la vigencia es menor que el paso del sondeo de carga, así que un sondeo nunca recibe el árbol del anterior (vigencia {vigencia} ms, sondeo {poll} ms)");
+
+            // LA HUELLA ES POR ID O RUTA MÁS TIPO, NUNCA POR TEXTO: dos árboles que solo difieren en nombre, misma huella.
+            arbol = Arbol("Cancelar", "ControlType.Button");
+            ahora += vigencia + 1;
+            string mismaEstructura = s.StructureFingerprint();
+            Debe(mismaEstructura == huella, "dos árboles que solo difieren en el texto dan la misma huella: el texto es dato, no estructura");
+            arbol = Arbol("Aceptar", "ControlType.Hyperlink");
+            ahora += vigencia + 1;
+            string otroTipo = s.StructureFingerprint();
+            Debe(otroTipo != huella, "y con otro tipo en el mismo sitio la huella cambia");
+
+            Debe(lineas.Any(l => l.Contains("barrido nº1", StringComparison.Ordinal)) && lineas.Any(l => l.Contains("barrido nº2", StringComparison.Ordinal)),
+                $"el log dice cuántos barridos hubo («barrido nº1», «barrido nº2»; salieron {lineas.Count} línea(s))");
+            Debe(lineas.Any(l => l.Contains("servido a", StringComparison.Ordinal) && l.Contains(" ms", StringComparison.Ordinal)),
+                "y cuánto costó cada uno y a quién sirvió («… en N ms · servido a …»)");
+        }
+        finally
+        {
+            pBarre.SetValue(null, null);
+            pReloj.SetValue(null, null);
+            pLog.SetValue(null, logAntes);
+        }
+    }
+
+    /// <summary>Los tipos de la observación compartida (spec 048), o null si todavía no existen.</summary>
+    private static (Type Observacion, Type Elemento, Type Observatorio)? TiposDeLaObservacion()
+    {
+        var tObs = Capacidad("U.WindowsClient.Uia.Observacion");
+        var tEl = Capacidad("U.WindowsClient.Uia.ElementoVisto");
+        var tObservatorio = Capacidad("U.WindowsClient.Uia.Observatorio");
+        return tObs == null || tEl == null || tObservatorio == null ? null : (tObs, tEl, tObservatorio);
+    }
+
+    private static object ElementoVisto(Type tEl, string selector, string etiqueta, string tipo, System.Windows.Rect caja = default, string identidad = "")
+        => Construye(tEl, ("Selector", selector), ("Etiqueta", etiqueta), ("Tipo", tipo), ("Caja", caja), ("Identidad", identidad));
+
+    private static object Observacion(Type tObs, Type tEl, IntPtr hwnd, string donde, long leidaEn, bool completa, params object[] elementos)
+        => Construye(tObs, ("Hwnd", hwnd), ("Donde", donde), ("LeidaEn", leidaEn), ("Completa", completa),
+                     ("Elementos", Lista(tEl, elementos)), ("ComoSeLeyo", "de mentira"), ("Pantalla", ""), ("MsDeLectura", 0L));
+
+    private static void UnaLecturaSeComparteporLaMismaVentana()
+    {
+        // MEDIDO (spec 048): un paso del tramo puede pagar hasta 5 lecturas UIA de la misma ventana (PuertasDeAhora,
+        // señalar, el inventario pegado y dos en FaceWindow), 77-113 ms cada una el 21-09. Se promete UNA, publicada
+        // con versión y reutilizada por la MISMA ventana que se leyó y el MISMO dónde (aprendizaje nº16: los dos lados
+        // de la comparación salen del mismo camino).
+        var tipos = TiposDeLaObservacion();
+        var pLee = typeof(SurfaceMapTools).GetProperty("Lee");
+        var pVentana = typeof(SurfaceMapTools).GetProperty("VentanaQueLeeria");
+        if (tipos == null || pLee == null || pVentana == null)
+        {
+            Pendiente("Uia.Observacion/Observatorio + SurfaceMapTools.Lee/VentanaQueLeeria", "362", "048");
+            return;
+        }
+        var (tObs, tEl, tObservatorio) = tipos.Value;
+        const BindingFlags Est = BindingFlags.Public | BindingFlags.Static;
+        var pReloj = tObservatorio.GetProperty("Reloj", Est);
+        var mPublica = tObservatorio.GetMethod("Publica", Est);
+        var mReciente = tObservatorio.GetMethod("Reciente", Est);
+        var mInvalida = tObservatorio.GetMethod("Invalida", Est);
+        if (pReloj == null || mPublica == null || mReciente == null || mInvalida == null)
+        {
+            Pendiente("Observatorio.Reloj/Publica/Reciente/Invalida", "362", "048");
+            return;
+        }
+        int vigencia = Convert.ToInt32(Estatico(tObs, "VigenciaMs") ?? 1000);
+        long ahora = 10_000;
+        pReloj.SetValue(null, (Func<long>)(() => ahora));
+        try
+        {
+            mInvalida.Invoke(null, new object[] { "el juez empieza limpio" });
+            object? Reciente(IntPtr h, string donde, int edad) => mReciente.Invoke(null, new object[] { h, donde, edad });
+            long Version(object? o) => Convert.ToInt64(PropDe(o!, "Version"));
+
+            // 1. EL OBSERVATORIO, puro: publicar sube la versión; se recibe por la misma ventana y el mismo dónde, con edad.
+            var boton = ElementoVisto(tEl, "uia:name=Guardar;ct=Button", "Guardar", "Button", new System.Windows.Rect(1, 2, 30, 10), "7.1");
+            mPublica.Invoke(null, new[] { Observacion(tObs, tEl, (IntPtr)1, "uia://x.exe/a", ahora, true, boton) });
+            var v1 = Reciente((IntPtr)1, "uia://x.exe/a", 1000);
+            mPublica.Invoke(null, new[] { Observacion(tObs, tEl, (IntPtr)1, "uia://x.exe/a", ahora, true, boton) });
+            var v2 = Reciente((IntPtr)1, "uia://x.exe/a", 1000);
+            Debe(v1 != null && v2 != null && Version(v2) > Version(v1), $"publicar sube la versión ({(v1 == null ? "null" : Version(v1).ToString())} → {(v2 == null ? "null" : Version(v2).ToString())})");
+            Debe(v2 != null && ((System.Collections.IEnumerable)PropDe(v2, "Elementos")!).Cast<object>().Count() == 1
+                 && (bool)PropDe(v2, "Completa")! && Convert.ToInt64(PropDe(v2, "Hwnd")) == 1,
+                "y la observación lleva la ventana que se leyó, si es completa y sus elementos crudos");
+            Debe(Reciente((IntPtr)2, "uia://x.exe/a", 1000) == null, "pedida por OTRA ventana, no se sirve");
+            Debe(Reciente((IntPtr)1, "uia://x.exe/b", 1000) == null, "pedida por OTRO dónde, no se sirve");
+            ahora += 1001;
+            Debe(Reciente((IntPtr)1, "uia://x.exe/a", 1000) == null, "más vieja que la edad máxima, no se sirve");
+            Debe(Reciente((IntPtr)1, "uia://x.exe/a", 5000) != null, "y con una edad máxima mayor, sí: la edad la pone quien pide");
+            mInvalida.Invoke(null, new object[] { "accionar" });
+            Debe(Reciente((IntPtr)1, "uia://x.exe/a", 5000) == null, "invalidada (accionar), no se sirve aunque sea fresca");
+
+            // 2. EL MAPA la usa: lee por «Lee», pide por la ventana que leería y el dónde de ahora.
+            var loc = new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation("uia://x.exe/a", "x.exe", "");
+            var mapa = new SurfaceMapTools(() => loc);
+            IntPtr ventana = (IntPtr)1;
+            int lecturas = 0;
+            pVentana.SetValue(mapa, (Func<IntPtr>)(() => ventana));
+            pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => { lecturas++; return Observacion(tObs, tEl, ventana, loc.Id, ahora, true, boton); }));
+            mapa.RecorrerPorElNucleo = pasos => new RecorrerSegunElNucleo.Resultado(1, 1, loc.Id, true, "hice los 1 paso(s): pulsé «Guardar».", false);
+
+            string veo1 = mapa.Call("map_what_i_see", new Dictionary<string, string>());
+            var l2 = AnotadoMientras(() => mapa.Call("map_what_i_see", new Dictionary<string, string>()));
+            Debe(veo1.Contains("«Guardar»", StringComparison.Ordinal), $"lo que se lee se lista (dijo «{veo1.Replace("\n", " ")}»)");
+            Debe(lecturas == 1, $"dos map_what_i_see seguidos son UNA lectura (hubo {lecturas})");
+            Debe(l2.Any(l => l.Contains("reutilizada: sí", StringComparison.Ordinal)), $"y se dice que se reutilizó ({string.Join(" | ", l2)})");
+
+            ventana = (IntPtr)2;
+            var l3 = AnotadoMientras(() => mapa.Call("map_what_i_see", new Dictionary<string, string>()));
+            Debe(lecturas == 2, $"si la ventana que se leería es otra, se lee de nuevo (hubo {lecturas})");
+            Debe(l3.Any(l => l.Contains("reutilizada: no", StringComparison.Ordinal) && l.Contains("otra ventana 1 → 2", StringComparison.Ordinal)),
+                $"y se dice por qué: «reutilizada: no (otra ventana 1 → 2)» ({string.Join(" | ", l3)})");
+
+            loc = new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation("uia://x.exe/b", "x.exe", "");
+            var l4 = AnotadoMientras(() => mapa.Call("map_what_i_see", new Dictionary<string, string>()));
+            Debe(lecturas == 3, $"otro dónde, se lee de nuevo (hubo {lecturas})");
+            Debe(l4.Any(l => l.Contains("otro dónde", StringComparison.Ordinal)), $"y se dice «otro dónde» ({string.Join(" | ", l4)})");
+
+            ahora += vigencia + 100;
+            var l5 = AnotadoMientras(() => mapa.Call("map_what_i_see", new Dictionary<string, string>()));
+            Debe(lecturas == 4, $"más vieja que la vigencia ({vigencia} ms), se lee de nuevo (hubo {lecturas})");
+            Debe(l5.Any(l => l.Contains("vieja", StringComparison.Ordinal)), $"y se dice «vieja» ({string.Join(" | ", l5)})");
+
+            mapa.Call("map_take", new Dictionary<string, string> { ["exit"] = "Guardar" });
+            var l6 = AnotadoMientras(() => mapa.Call("map_what_i_see", new Dictionary<string, string>()));
+            Debe(lecturas == 5, $"después de accionar se lee de nuevo (hubo {lecturas})");
+            Debe(l6.Any(l => l.Contains("invalidada", StringComparison.Ordinal) && l.Contains("accionar", StringComparison.Ordinal)),
+                $"y se dice «invalidada: accionar» ({string.Join(" | ", l6)})");
+
+            // 3. EL PASO CUENTA sus lecturas: la de map_what_i_see fue nueva; la de map_decidir, reutilizada.
+            var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor")!;
+            pDecisor.SetValue(mapa, Decide((_, _, _) => Decision("Si", "1) Guardar (Button)", 0.9, "Jev eligió «1) Guardar (Button)» con confianza 0.90.")));
+            var mPaso = typeof(SurfaceMapTools).GetMethod("UnPasoDecidido", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var paso = (ElTramo.Paso)mPaso.Invoke(mapa, new object[] { "guardar", "", "" })!;
+            Debe(lecturas == 5, $"map_decidir reutiliza lo que map_what_i_see acaba de leer (hubo {lecturas})");
+            Debe(paso.Tiempos.Contains("lecturas: 1 nueva · 1 reutilizada", StringComparison.Ordinal),
+                $"y la cuenta del paso lleva «lecturas: 1 nueva · 1 reutilizada» (dijo «{paso.Tiempos}»)");
+        }
+        finally
+        {
+            mInvalida.Invoke(null, new object[] { "el juez termina" });
+            pReloj.SetValue(null, null);
+        }
+    }
+
+    private static void LoQueElPasoAcabaDeLeerNoSeVuelveAMirar()
+    {
+        // MEDIDO (spec 048): la compuerta, cuando el grafo no tiene la puerta viva, MIRA (MirarOtraVez: una lectura
+        // completa, «new UiaReader()» cada vez) aunque el paso acabe de leer esa misma pantalla. Se promete que la
+        // observación del paso cuenta como la mirada —con la criba del LATIDO, no la de la lista de candidatas—.
+        var tipos = TiposDeLaObservacion();
+        var pVista = typeof(RecorrerSegunElNucleo.Paso).GetProperty("Vista");
+        var pMira = typeof(RecorrerSegunElNucleo).GetProperty("MiraOtraVez");
+        var pDiario = typeof(RecorrerSegunElNucleo).GetProperty("Diario");
+        if (tipos == null || pVista == null || pMira == null || pDiario == null)
+        {
+            Pendiente("RecorrerSegunElNucleo.Paso.Vista (la observación que el paso trae)", "363", "048");
+            return;
+        }
+        var (tObs, tEl, tObservatorio) = tipos.Value;
+        var pReloj = tObservatorio.GetProperty("Reloj", BindingFlags.Public | BindingFlags.Static)!;
+        int vigencia = Convert.ToInt32(Estatico(tObs, "VigenciaMs") ?? 1000);
+        const string A = "uia://x.exe/a", B = "uia://x.exe/b", X = "uia:name=X;ct=Button";
+        long ahora = 50_000;
+        pReloj.SetValue(null, (Func<long>)(() => ahora));
+        try
+        {
+            // El grafo tiene vivos aquí un Text suelto «Total» y un «Guardar» (Button), pero NO la puerta X.
+            Nucleo.Grafo Mundo()
+            {
+                var g = MundoDeTres();
+                g.Observar(A, new[] { new Nucleo.Elemento("s:1", "Uno", "Button"), new Nucleo.Elemento("uia:name=Total;ct=Text", "Total", "Text"), new Nucleo.Elemento("uia:name=Guardar;ct=Button", "Guardar", "Button") });
+                return g;
+            }
+            object VistaCompleta(string donde, long leidaEn) => Observacion(tObs, tEl, (IntPtr)1, donde, leidaEn, true,
+                ElementoVisto(tEl, X, "X", "Button", new System.Windows.Rect(1, 1, 10, 10), "1.1"),
+                ElementoVisto(tEl, "uia:name=Total;ct=Text", "Total", "Text", new System.Windows.Rect(1, 20, 10, 10), "1.2"),
+                ElementoVisto(tEl, "uia:name=Guardar;ct=Button", "Guardar", "Button", new System.Windows.Rect(1, 40, 10, 10), "1.3"),
+                ElementoVisto(tEl, "uia:name=Guardar;ct=Text", "Guardar", "Text", new System.Windows.Rect(2, 41, 8, 8), "1.4"));
+
+            (int Miradas, List<string> Tocados, List<string> Diario, Nucleo.Grafo G, RecorrerSegunElNucleo.Resultado R) Corre(object? vista)
+            {
+                var g = Mundo();
+                var (b, _, t) = BatchCon(g, A, RutasDeTres);
+                int miradas = 0;
+                var diario = new List<string>();
+                pMira.SetValue(b, (Func<string, bool>)(_ => { miradas++; return false; }));
+                pDiario.SetValue(b, (Action<string>)(l => diario.Add(l)));
+                var paso = new RecorrerSegunElNucleo.Paso(X);
+                if (vista != null) pVista.SetValue(paso, vista);
+                var r = b.Recorre(new[] { paso });
+                return (miradas, t, diario, g, r);
+            }
+
+            // CON LA OBSERVACIÓN COMPLETA Y FRESCA: se pulsa X con 0 miradas, y se dice.
+            var con = Corre(VistaCompleta(A, ahora));
+            Debe(con.Tocados.Count == 1 && con.Tocados[0] == "X", $"la puerta que estaba en la observación se pulsa (se pulsaron {con.Tocados.Count}: {string.Join(",", con.Tocados)}; dijo «{con.R.Cuenta}»)");
+            Debe(con.Miradas == 0, $"con 0 miradas: lo que el paso acaba de leer no se vuelve a mirar (miró {con.Miradas})");
+            Debe(con.Diario.Any(l => l.Contains("acababa de leer", StringComparison.Ordinal) || l.Contains("acaba de leer", StringComparison.Ordinal)),
+                $"y el diario dice que usó lo que el paso acababa de leer ({string.Join(" | ", con.Diario)})");
+            var vivos = con.G.DesdeAqui(A).Where(a => a.Vivo).ToList();
+            Debe(vivos.Any(a => a.Que.Etiqueta == "Total" && a.Que.Tipo == "Text"), "un texto suelto que el latido daba por vivo sigue vivo: la criba es la del latido");
+            Debe(!vivos.Any(a => a.Que.Etiqueta == "Guardar" && a.Que.Tipo == "Text"), "y el Text que duplica a un control no entra, como en el latido");
+            Debe(vivos.Any(a => a.Que.Selector == X), "y X quedó viva en el núcleo: la observación se le contó");
+
+            // SIN VISTA: mira como hoy (la 264 y la 299 tal cual).
+            var sin = Corre(null);
+            Debe(sin.Miradas >= 1 && sin.Tocados.Count == 0, $"sin observación, la compuerta mira como hoy (miró {sin.Miradas}; pulsó {sin.Tocados.Count})");
+            // VISTA VIEJA: mira como hoy.
+            var vieja = Corre(VistaCompleta(A, ahora - vigencia - 1));
+            Debe(vieja.Miradas >= 1, $"una observación más vieja que la vigencia ({vigencia} ms) no cuenta: se mira (miró {vieja.Miradas})");
+            // VISTA DE OTRA PANTALLA: mira como hoy.
+            var otra = Corre(VistaCompleta(B, ahora));
+            Debe(otra.Miradas >= 1, $"una observación de otra pantalla no cuenta: se mira (miró {otra.Miradas})");
+            // PUERTA QUE NO ESTABA EN LA OBSERVACIÓN: mira como hoy.
+            var sinX = Corre(Observacion(tObs, tEl, (IntPtr)1, A, ahora, true, ElementoVisto(tEl, "uia:name=Total;ct=Text", "Total", "Text")));
+            Debe(sinX.Miradas >= 1 && sinX.Tocados.Count == 0, $"si la puerta no estaba en la observación, se mira como hoy (miró {sinX.Miradas})");
+            Debe(vieja.Miradas <= sin.Miradas && otra.Miradas <= sin.Miradas && sinX.Miradas <= sin.Miradas,
+                $"y nunca se mira más veces que antes (sin vista {sin.Miradas}; vieja {vieja.Miradas}; otra {otra.Miradas}; sin la puerta {sinX.Miradas})");
+        }
+        finally { pReloj.SetValue(null, null); }
+    }
+
+    private static void UnPasoConSelectorPreguntaYNoInventaria()
+    {
+        // MEDIDO (spec 048): preguntar por UN selector cuesta 7-126 ms; inventariar la ventana, 232-272 ms en Chrome.
+        // Y hoy Take no lee nada: la compuerta encuentra la puerta viva sin mirar (:436-438) y, si no está viva, mira
+        // la ventana ENTERA. Se promete preguntar solo cuando el grafo no la tiene viva, y contar cuál de los tres
+        // caminos se usó.
+        var tipos = TiposDeLaObservacion();
+        var pPregunta = typeof(SurfaceMapTools).GetProperty("PreguntaPorSelector");
+        var pLee = typeof(SurfaceMapTools).GetProperty("Lee");
+        var pVista = typeof(RecorrerSegunElNucleo.Paso).GetProperty("Vista");
+        if (tipos == null || pPregunta == null || pLee == null || pVista == null)
+        {
+            Pendiente("SurfaceMapTools.PreguntaPorSelector (+ Lee, Paso.Vista)", "364", "048");
+            return;
+        }
+        var (tObs, tEl, tObservatorio) = tipos.Value;
+        var pReloj = tObservatorio.GetProperty("Reloj", BindingFlags.Public | BindingFlags.Static)!;
+        const string A = "uia://x.exe/a", SelA = "uia:name=A;ct=Button";
+        long ahora = 70_000;
+        pReloj.SetValue(null, (Func<long>)(() => ahora));
+        try
+        {
+            (SurfaceMapTools Mapa, Func<int> Preguntas, Func<int> Lecturas, Func<RecorrerSegunElNucleo.Paso?> Visto) Mapa(
+                bool vivaEnElGrafo, bool esta, bool conVentana = true)
+            {
+                var loc = new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation(A, "x.exe", "");
+                var mapa = new SurfaceMapTools(() => loc);
+                int preguntas = 0, lecturas = 0;
+                RecorrerSegunElNucleo.Paso? visto = null;
+                mapa.VentanaDeTrabajo = conVentana ? (Func<IntPtr>)(() => (IntPtr)1) : null;
+                mapa.PuertasVivas = _ => vivaEnElGrafo ? new[] { (SelA, "A", "Button") } : Array.Empty<(string, string, string)>();
+                pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => { lecturas++; return Observacion(tObs, tEl, (IntPtr)1, A, ahora, true); }));
+                pPregunta.SetValue(mapa, Devuelve(pPregunta.PropertyType, args =>
+                {
+                    preguntas++;
+                    return esta ? Observacion(tObs, tEl, (IntPtr)args[0]!, A, ahora, false,
+                        ElementoVisto(tEl, (string)args[1]!, "A", "Button", new System.Windows.Rect(5, 5, 20, 10), "2.2")) : null;
+                }));
+                mapa.RecorrerPorElNucleo = pasos => { visto = pasos[0]; return new RecorrerSegunElNucleo.Resultado(1, 1, A, true, "hice los 1 paso(s): pulsé «A».", false); };
+                return (mapa, () => preguntas, () => lecturas, () => visto);
+            }
+            string Take(SurfaceMapTools mapa, string exit, out List<string> log)
+            {
+                string r = "";
+                log = AnotadoMientras(() => r = mapa.Call("map_take", new Dictionary<string, string> { ["exit"] = exit }));
+                return r;
+            }
+            string Todo(string r, List<string> log) => r + "\n" + string.Join("\n", log);
+
+            // (i) NO VIVA EN EL GRAFO, Y ESTÁ: se pregunta, no se lee, y la mano recibe la observación de uno.
+            var i = Mapa(vivaEnElGrafo: false, esta: true);
+            var ri = Take(i.Mapa, SelA, out var li);
+            Debe(i.Preguntas() == 1 && i.Lecturas() == 0, $"(i) sin la puerta viva se pregunta por ese elemento y no se inventaría la ventana (preguntas {i.Preguntas()}, lecturas {i.Lecturas()})");
+            var vistaI = i.Visto() == null ? null : pVista.GetValue(i.Visto());
+            Debe(vistaI != null && !(bool)PropDe(vistaI, "Completa")! && ((System.Collections.IEnumerable)PropDe(vistaI, "Elementos")!).Cast<object>().Count() == 1,
+                "y la mano recibe el paso con la respuesta como observación de UNO");
+            Debe(Todo(ri, li).Contains("pregunté por", StringComparison.Ordinal) && Todo(ri, li).Contains("está", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(Todo(ri, li), @"\d+ ms"),
+                $"y la cuenta o el log dicen «pregunté por … está · N ms» ({Todo(ri, li).Replace("\n", " | ")})");
+
+            // (ii) VIVA EN EL GRAFO: ni se pregunta ni se lee, como hoy.
+            var ii = Mapa(vivaEnElGrafo: true, esta: true);
+            var rii = Take(ii.Mapa, SelA, out var lii);
+            Debe(ii.Preguntas() == 0 && ii.Lecturas() == 0, $"(ii) si el grafo ya la tenía viva, no se pregunta ni se lee (preguntas {ii.Preguntas()}, lecturas {ii.Lecturas()})");
+            Debe(Todo(rii, lii).Contains("viva en el grafo", StringComparison.Ordinal), $"y se dice «viva en el grafo, sin preguntar» ({Todo(rii, lii).Replace("\n", " | ")})");
+
+            // (iii) NO ESTÁ: se preguntó, no se leyó, sin Vista; la compuerta mira como hoy.
+            var iii = Mapa(vivaEnElGrafo: false, esta: false);
+            var riii = Take(iii.Mapa, SelA, out var liii);
+            Debe(iii.Preguntas() == 1 && iii.Lecturas() == 0, $"(iii) si no está, se preguntó una vez y no se leyó nada (preguntas {iii.Preguntas()}, lecturas {iii.Lecturas()})");
+            Debe(iii.Visto() != null && pVista.GetValue(iii.Visto()) == null, "y el paso va sin observación: la compuerta mira como hoy");
+            Debe(Todo(riii, liii).Contains("no está", StringComparison.Ordinal) && Todo(riii, liii).Contains("compuerta", StringComparison.Ordinal),
+                $"y se dice «pregunté … no está · N ms; la compuerta mira» ({Todo(riii, liii).Replace("\n", " | ")})");
+
+            // (iv) ETIQUETA, (v) SAP, (vi) SIN VENTANA DE TRABAJO: 0 preguntas, 0 lecturas.
+            var iv = Mapa(false, true); Take(iv.Mapa, "A", out _);
+            Debe(iv.Preguntas() == 0 && iv.Lecturas() == 0, $"(iv) un paso por etiqueta no pregunta ni lee ({iv.Preguntas()}/{iv.Lecturas()})");
+            var v = Mapa(false, true); Take(v.Mapa, "sap:wnd[0]/tbar[1]/btn[8]", out _);
+            Debe(v.Preguntas() == 0 && v.Lecturas() == 0, $"(v) un selector que no es de UIA no pregunta ni lee ({v.Preguntas()}/{v.Lecturas()})");
+            var vi = Mapa(false, true, conVentana: false); Take(vi.Mapa, SelA, out _);
+            Debe(vi.Preguntas() == 0 && vi.Lecturas() == 0, $"(vi) sin ventana de trabajo no pregunta ni lee ({vi.Preguntas()}/{vi.Lecturas()})");
+
+            // Y EN LA COMPUERTA: la observación de uno da la puerta por viva (Recordar), 0 miradas, sin tocar los vivos.
+            var g = new Nucleo.Grafo();
+            g.Observar(A, new[] { new Nucleo.Elemento("s:1", "Uno", "Button") });
+            var (b, _, t) = BatchCon(g, A, RutasDeTres);
+            int miradas = 0;
+            typeof(RecorrerSegunElNucleo).GetProperty("MiraOtraVez")!.SetValue(b, (Func<string, bool>)(_ => { miradas++; return false; }));
+            var paso = new RecorrerSegunElNucleo.Paso(SelA);
+            pVista.SetValue(paso, Observacion(tObs, tEl, (IntPtr)1, A, ahora, false, ElementoVisto(tEl, SelA, "A", "Button", new System.Windows.Rect(5, 5, 20, 10), "2.2")));
+            var r = b.Recorre(new[] { paso });
+            Debe(t.Count == 1 && t[0] == "A" && miradas == 0, $"con la observación de uno la compuerta pulsa sin mirar (pulsó {t.Count}; miró {miradas}; dijo «{r.Cuenta}»)");
+            var vivos = g.DesdeAqui(A).Where(a => a.Vivo).Select(a => a.Que.Selector).ToList();
+            Debe(vivos.Contains("s:1"), $"y no toca la lista de vivos del núcleo: «Uno» sigue vivo (vivos: {string.Join(",", vivos)})");
+        }
+        finally { pReloj.SetValue(null, null); }
+    }
+
+    private static void LasCandidatasSalenDeLaMismaLecturaConCaja()
+    {
+        // MEDIDO (spec 048): lo que va al decisor no lleva caja (la rama D no tiene qué pintar) y se deduplica por
+        // texto solo en FundirPuertas —a propósito, promesa 183—. Se promete: caja e identidad en una lista paralela
+        // (la tupla de 284-292 no cambia), deduplicación por RuntimeId dentro de UIA, identidad vacía que nunca funde,
+        // y el terreno fundido como la 183 manda.
+        var tipos = TiposDeLaObservacion();
+        var pLee = typeof(SurfaceMapTools).GetProperty("Lee");
+        var pCandidatas = typeof(SurfaceMapTools).GetProperty("UltimasCandidatas");
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        if (tipos == null || pLee == null || pCandidatas == null || pDecisor == null)
+        {
+            Pendiente("SurfaceMapTools.UltimasCandidatas (candidatas con caja e identidad)", "365", "048");
+            return;
+        }
+        var (tObs, tEl, tObservatorio) = tipos.Value;
+        var pReloj = tObservatorio.GetProperty("Reloj", BindingFlags.Public | BindingFlags.Static)!;
+        var mInvalida = tObservatorio.GetMethod("Invalida", BindingFlags.Public | BindingFlags.Static)!;
+        const string A = "uia://x.exe/a";
+        long ahora = 90_000;
+        pReloj.SetValue(null, (Func<long>)(() => ahora));
+        mInvalida.Invoke(null, new object[] { "el juez empieza limpio" });
+        try
+        {
+            var caja = new System.Windows.Rect(10, 10, 40, 12);
+            var loc = new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation(A, "x.exe", "");
+            var mapa = new SurfaceMapTools(() => loc);
+            pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => Observacion(tObs, tEl, (IntPtr)1, A, ahora, true,
+                ElementoVisto(tEl, "uia:name=Detalles;ct=Button", "Detalles", "Button", caja, "1.2"),
+                ElementoVisto(tEl, "uia:name=Detalles;ct=Hyperlink", "Detalles", "Hyperlink", caja, "1.3"),
+                ElementoVisto(tEl, "uia:id=sinUno;ct=Button", "Sin identidad uno", "Button", caja, ""),
+                ElementoVisto(tEl, "uia:id=sinDos;ct=Button", "Sin identidad dos", "Button", caja, ""),
+                ElementoVisto(tEl, "uia:name=Repetido;ct=Button", "Repetido", "Button", caja, "7.7"),
+                ElementoVisto(tEl, "uia:name=Repetido;ct=Button", "Repetido", "Button", caja, "7.7"))));
+            mapa.PuertasVivas = _ => new[] { ("sap:wnd[0]/usr/radDET", "Detalles", "RadioButton"), ("sap:wnd[0]/tbar[0]/btn[11]", "Guardar", "Button") };
+            mapa.RecorrerPorElNucleo = pasos => new RecorrerSegunElNucleo.Resultado(1, 1, A, true, "hice los 1 paso(s).", false);
+            IReadOnlyList<string>? ofrecidas = null;
+            pDecisor.SetValue(mapa, Decide((_, _, puertas) => { ofrecidas = puertas; return Decision("No", "no me decido", 0.2); }));
+
+            var log = AnotadoMientras(() => mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "ver detalles" }));
+            var candidatas = ((System.Collections.IEnumerable?)pCandidatas.GetValue(mapa))?.Cast<object>().ToList() ?? new List<object>();
+            string Et(object c) => (string)PropDe(c, "Etiqueta")!;
+            string Sel(object c) => (string)PropDe(c, "Selector")!;
+            string Id(object c) => (string)PropDe(c, "Identidad")!;
+            System.Windows.Rect Caja(object c) => (System.Windows.Rect)PropDe(c, "Caja")!;
+
+            Debe(candidatas.Count(c => Et(c) == "Detalles" && Sel(c).StartsWith("uia:", StringComparison.Ordinal)) == 2,
+                $"dos puertas de UIA con el mismo nombre y distinto selector son dos candidatas (Detalles de UIA: {candidatas.Count(c => Et(c) == "Detalles" && Sel(c).StartsWith("uia:", StringComparison.Ordinal))})");
+            Debe(!candidatas.Any(c => Et(c) == "Detalles" && Sel(c).StartsWith("sap:", StringComparison.Ordinal)),
+                "el «Detalles» del terreno NO entra: UIA ya lo nombró, y la 183 manda");
+            var guardar = candidatas.FirstOrDefault(c => Et(c) == "Guardar");
+            Debe(guardar != null && Caja(guardar).IsEmpty, "«Guardar», del terreno, se ofrece sin caja leída");
+            Debe(candidatas.Count(c => Id(c).Length == 0) == 2, $"las dos con identidad vacía salen las dos: una identidad vacía nunca funde (salieron {candidatas.Count(c => Id(c).Length == 0)})");
+            Debe(candidatas.Count(c => Id(c) == "7.7") == 1, $"y la misma identidad dentro de una lectura sale una vez (7.7 salió {candidatas.Count(c => Id(c) == "7.7")})");
+            Debe(candidatas.Count == 6, $"en total 6 candidatas (salieron {candidatas.Count}: {string.Join(", ", candidatas.Select(Et))})");
+            Debe(candidatas.Where(c => Sel(c).StartsWith("uia:", StringComparison.Ordinal)).All(c => !Caja(c).IsEmpty), "y las de UIA llevan su caja leída");
+
+            // LOS IDS OFRECIDOS Y LA LISTA DE map_what_i_see SALEN DE LA MISMA LISTA, EN EL MISMO ORDEN (285).
+            string veo = mapa.Call("map_what_i_see", new Dictionary<string, string>());
+            var listadas = veo.Split('\n').Select(l => l.Trim()).Where(l => l.StartsWith("«", StringComparison.Ordinal))
+                .Select((l, k) => $"{k + 1}) {l.Substring(1, l.IndexOf('»') - 1)} {l[(l.IndexOf('»') + 2)..]}").ToList();
+            Debe(ofrecidas != null && ofrecidas.SequenceEqual(listadas),
+                $"los ids que recibe el decisor son los de map_what_i_see en su orden (decisor: [{string.Join(" · ", ofrecidas ?? Array.Empty<string>())}]; lista: [{string.Join(" · ", listadas)}])");
+            Debe(ofrecidas != null && ofrecidas.SequenceEqual(candidatas.Select((c, k) => $"{k + 1}) {Et(c)} ({PropDe(c, "Tipo")})")),
+                "y las candidatas con caja son esa misma lista, en ese mismo orden");
+
+            // Y EL LOG DICE cuántas se ofrecieron de cuántas, cuántas sin caja, sin identidad, y cuánto costó.
+            Debe(log.Any(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"candidatas: 6 de 8 \(5 con caja · 1 sin caja · 2 sin identidad\) en \d+ ms")),
+                $"el log dice «candidatas: 6 de 8 (5 con caja · 1 sin caja · 2 sin identidad) en N ms» ({string.Join(" | ", log.Where(l => l.Contains("candidatas", StringComparison.Ordinal)))})");
+        }
+        finally
+        {
+            mInvalida.Invoke(null, new object[] { "el juez termina" });
+            pReloj.SetValue(null, null);
+        }
+    }
+
+    private static void ProyectarEnNeo4jSeMideYSeDice()
+    {
+        // MEDIDO (spec 048): «Neo4j no responde» sale 0 veces en 17 logs porque el único aviso se gasta en el
+        // constructor (AsegurarIndices) cuando Cuenta todavía es null; y Proyectar es un POST síncrono de 2.023-2.121 ms
+        // por fallo en el hilo del latido y en el de la ubicación. Antes de moverlo (367, reservada), se mide.
+        var t = typeof(Nucleo.ProyectorNeo4j);
+        var ctor = t.GetConstructors().FirstOrDefault(c =>
+            c.GetParameters().Select(p => p.Name).SequenceEqual(new[] { "url", "cuenta", "reloj" }));
+        var mProyectar = t.GetMethod("Proyectar", new[] { typeof(Nucleo.Grafo), typeof(string) });
+        var pEnvios = t.GetProperty("Envios");
+        var pFallidos = t.GetProperty("Fallidos");
+        var pUltima = t.GetProperty("UltimaProyeccionMs");
+        var mResumen = t.GetMethod("Resumen", Type.EmptyTypes);
+        if (ctor == null || mProyectar == null || pEnvios == null || pFallidos == null || pUltima == null || mResumen == null)
+        {
+            Pendiente("ProyectorNeo4j(url, cuenta, reloj) + Proyectar(grafo, desde) + Envios/Fallidos/Resumen", "366", "048");
+            return;
+        }
+
+        var lineas = new List<string>();
+        long ahora = 0;
+        // 127.0.0.1:1 rechaza en el acto: el constructor (índices) cae, y ESO tiene que contarse y decirse.
+        using var p = (Nucleo.ProyectorNeo4j)ctor.Invoke(new object?[] { "http://127.0.0.1:1", (Action<string>)(l => lineas.Add(l)), (Func<long>)(() => ahora) });
+        int NoResponde() => lineas.Count(l => l.Contains("Neo4j no responde", StringComparison.Ordinal));
+        Debe(NoResponde() == 1 && lineas.Any(l => l.Contains("Neo4j no responde", StringComparison.Ordinal) && l.Contains("índices", StringComparison.Ordinal)),
+            $"la caída en el arranque se dice, y dice que fue desde los índices (líneas: {string.Join(" | ", lineas)})");
+
+        var g = new Nucleo.Grafo();
+        g.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:1", "Uno", "Button") });
+        mProyectar.Invoke(p, new object[] { g, "latido" });
+        Debe(NoResponde() == 1, $"dentro del mismo minuto, un segundo fallo NO deja otra línea: la línea es limitada (hay {NoResponde()})");
+        Debe(Convert.ToInt32(pEnvios.GetValue(p)) == 2 && Convert.ToInt32(pFallidos.GetValue(p)) == 2,
+            $"pero el contador sí lo cuenta: 2 envíos, 2 fallidos (envíos {pEnvios.GetValue(p)}, fallidos {pFallidos.GetValue(p)})");
+
+        // El grafo tiene que cambiar de versión (:170 corta si no, y :177 fija la versión antes de mandar).
+        g.Observar("uia://x.exe/b", new[] { new Nucleo.Elemento("s:2", "Dos", "Button") });
+        ahora += 61_000;
+        mProyectar.Invoke(p, new object[] { g, "ubicación" });
+        Debe(NoResponde() == 2, $"pasado un minuto se vuelve a decir: una vez por minuto, no una vez por proceso (hay {NoResponde()})");
+        string resumen = (string)mResumen.Invoke(p, null)!;
+        Debe(resumen.Contains("envíos: 3", StringComparison.Ordinal) && resumen.Contains("3 fallidos", StringComparison.Ordinal)
+             && resumen.Contains("más lento", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(resumen, @"\d+ ms"),
+            $"el resumen dice cuántos hubo, cuánto sumaron, cuál fue el más lento y cuántos fallaron (dijo «{resumen}»)");
+        Debe(Convert.ToInt64(pUltima.GetValue(p)) >= 0, $"y el coste de la última proyección se conoce ({pUltima.GetValue(p)} ms)");
+
+        Debe(t.GetConstructor(new[] { typeof(string), typeof(string), typeof(string) }) != null,
+            "y la firma vieja ProyectorNeo4j(url, usuario, clave) sigue construyendo: el contrato del núcleo, intacto");
+    }
+
+    private static void CadaPasoDecididoSePublicaComoEvento()
+    {
+        // La rama D (spec 049) pinta lo que se decide; hoy nadie publica nada: el tramo escribe prosa en el log. Se
+        // promete un evento tipado con lo que se ofreció (285), su caja, la decisión cruda y los tiempos.
+        var tipos = TiposDeLaObservacion();
+        var pLee = typeof(SurfaceMapTools).GetProperty("Lee");
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var evento = typeof(SurfaceMapTools).GetEvent("AlDecidir");
+        if (tipos == null || pLee == null || pDecisor == null || evento == null)
+        {
+            Pendiente("SurfaceMapTools.AlDecidir (el evento del paso decidido)", "368", "048");
+            return;
+        }
+        var (tObs, tEl, tObservatorio) = tipos.Value;
+        var pReloj = tObservatorio.GetProperty("Reloj", BindingFlags.Public | BindingFlags.Static)!;
+        var mInvalida = tObservatorio.GetMethod("Invalida", BindingFlags.Public | BindingFlags.Static)!;
+        const string A = "uia://sap/NWP1";
+        long ahora = 120_000;
+        pReloj.SetValue(null, (Func<long>)(() => ahora));
+        mInvalida.Invoke(null, new object[] { "el juez empieza limpio" });
+        try
+        {
+            SurfaceMapTools Mapa(Func<IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso> decide, Action<IReadOnlyList<string>>? alOfrecer = null)
+            {
+                var loc = new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation(A, "sap", "");
+                var mapa = new SurfaceMapTools(() => loc);
+                var caja = new System.Windows.Rect(3, 3, 50, 14);
+                pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => Observacion(tObs, tEl, (IntPtr)1, A, ahora, true,
+                    ElementoVisto(tEl, "uia:name=Buscar;ct=Edit", "Buscar", "Edit", caja, "1.1"),
+                    ElementoVisto(tEl, "uia:name=Crear Triage Administrativo;ct=Button", "Crear Triage Administrativo", "Button", caja, "1.2"),
+                    ElementoVisto(tEl, "uia:name=Salir;ct=Button", "Salir", "Button", caja, "1.3"))));
+                mapa.RecorrerPorElNucleo = pasos => new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true,
+                    "hice los 1 paso(s): pulsé «Crear Triage Administrativo» y ahora estás en «uia://sap/NV2000».", true);
+                pDecisor.SetValue(mapa, Decide((_, _, puertas) => { alOfrecer?.Invoke(puertas); return decide(puertas); }));
+                return mapa;
+            }
+            var args = new Dictionary<string, string> { ["objetivo"] = "crear el triage" };
+
+            // CON SUSCRIPTOR: el evento lleva exactamente lo que se ofreció, con caja, y la decisión cruda.
+            IReadOnlyList<string>? ofrecidas = null;
+            var mapa = Mapa(_ => Decision("Si", "2) Crear Triage Administrativo (Button)", 0.93, "Jev eligió «2) Crear Triage Administrativo (Button)» con confianza 0.93."), o => ofrecidas = o);
+            object? e = null;
+            evento.AddEventHandler(mapa, Oye(evento.EventHandlerType!, x => e = x));
+            string conEvento = mapa.Call("map_decidir", args);
+            Debe(e != null, "tras map_decidir, el suscriptor recibió el evento");
+            if (e == null) return;
+            var eOfrecidas = ((System.Collections.IEnumerable)PropDe(e, "Ofrecidas")!).Cast<string>().ToList();
+            Debe(ofrecidas != null && eOfrecidas.SequenceEqual(ofrecidas), $"e.Ofrecidas es lo que recibió el decisor, en su orden ([{string.Join(" · ", eOfrecidas)}])");
+            var eCand = ((System.Collections.IEnumerable)PropDe(e, "Candidatas")!).Cast<object>().ToList();
+            Debe(eCand.Count == 3 && eCand.All(c => !((System.Windows.Rect)PropDe(c, "Caja")!).IsEmpty), $"e.Candidatas son las 3, con sus cajas ({eCand.Count})");
+            Debe((string)PropDe(e, "Donde")! == A && (string)PropDe(e, "Objetivo")! == "crear el triage", "y el evento sabe dónde y para qué");
+            var decision = PropDe(e, "Decision");
+            Debe(decision != null && (string)PropDe(decision, "Puerta")! == "2) Crear Triage Administrativo (Button)", "y lleva la decisión tal como la devolvió el decisor");
+            var ms = PropDe(e, "Ms");
+            Debe(ms != null && Convert.ToInt64(PropDe(ms, "Leer")) >= 0 && Convert.ToInt64(PropDe(ms, "Decidir")) >= 0 && Convert.ToInt64(PropDe(ms, "Pulsar")) >= 0,
+                "y cuánto costó leer, decidir y pulsar");
+            var paso = PropDe(e, "Paso");
+            Debe(paso is ElTramo.Paso { Actuo: true }, "y el paso que contó el tramo, que aquí actuó");
+
+            // CUANDO NO SE ACCIONA, TAMBIÉN SALE.
+            object? eNo = null;
+            var mapaNo = Mapa(_ => Decision("No", "Jev eligió «1) Buscar (Edit)» con confianza 0.40, por debajo del mínimo exigido (0.70): no se acciona a medias. Decide Luna.", 0.4));
+            evento.AddEventHandler(mapaNo, Oye(evento.EventHandlerType!, x => eNo = x));
+            mapaNo.Call("map_decidir", args);
+            Debe(eNo != null && PropDe(eNo, "Paso") is ElTramo.Paso { Actuo: false }, "con un decisor que dice No, el evento también sale y su paso no actuó");
+
+            // SIN SUSCRIPTOR: la cuenta es byte a byte la de hoy.
+            var mapaSolo = Mapa(_ => Decision("Si", "2) Crear Triage Administrativo (Button)", 0.93, "Jev eligió «2) Crear Triage Administrativo (Button)» con confianza 0.93."));
+            string sinEvento = mapaSolo.Call("map_decidir", args);
+            string SinMs(string s) => System.Text.RegularExpressions.Regex.Replace(s, @"\d+ ms", "N ms");
+            Debe(SinMs(sinEvento) == SinMs(conEvento), $"sin suscriptor la cuenta no cambia (con: «{conEvento}»; sin: «{sinEvento}»)");
+        }
+        finally
+        {
+            mInvalida.Invoke(null, new object[] { "el juez termina" });
+            pReloj.SetValue(null, null);
+        }
+    }
+
+    private static void DondeEstoySePreguntaUnaVezPorInstante()
+    {
+        // MEDIDO (spec 048): 25 llamadas a DondeEstoy() sin memoria (24 en FaceWindow, 1 en SurfaceLocator), cada una
+        // 12-194 ms; DondeTrabajo sí recuerda 400 ms y olvida al accionar (:5679). Cuántas de las 25 caen dentro de
+        // 400 ms de otra NO está medido: por eso arranca en sombra y solo cuenta.
+        var t = Capacidad("U.WindowsClient.Uia.MemoriaDeUbicacion");
+        var mSirve = t?.GetMethod("Sirve");
+        var mOlvida = t?.GetMethod("Olvida", Type.EmptyTypes);
+        var pSombra = t?.GetProperty("EnSombra");
+        var mResumen = t?.GetMethod("Resumen", Type.EmptyTypes);
+        if (t == null || mSirve == null || mOlvida == null || pSombra == null || mResumen == null)
+        {
+            Pendiente("Uia.MemoriaDeUbicacion (Sirve/Olvida/EnSombra/Resumen)", "369", "048");
+            return;
+        }
+        long ahora = 0;
+        var memoria = Construye(t, ("reloj", (Func<long>)(() => ahora)));
+        int calculos = 0;
+        U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation? Calcula() { calculos++; return new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation("uia://x.exe/a", "x.exe", ""); }
+        object? Sirve(IntPtr h, string titulo, bool esSap)
+            => mSirve.Invoke(memoria, new object[] { h, titulo, esSap, (Func<U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation?>)Calcula });
+
+        Debe(Sirve((IntPtr)1, "t", false) != null && calculos == 1, $"la primera se calcula (cálculos {calculos})");
+        ahora += 200;
+        Sirve((IntPtr)1, "t", false);
+        Debe(calculos == 1, $"a los 200 ms, misma ventana y mismo título: de memoria, sin volver a leer (cálculos {calculos})");
+        mOlvida.Invoke(memoria, null);
+        ahora += 100;
+        Sirve((IntPtr)1, "t", false);
+        Debe(calculos == 2, $"tras accionar (Olvida) se calcula de nuevo aunque no hayan pasado los 400 ms (cálculos {calculos})");
+        ahora += 100;
+        Sirve((IntPtr)1, "otro título", false);
+        Debe(calculos == 3, $"cambia el título, se calcula (cálculos {calculos})");
+        ahora += 100;
+        Sirve((IntPtr)2, "otro título", false);
+        Debe(calculos == 4, $"cambia la ventana, se calcula (cálculos {calculos})");
+        ahora += 400;
+        Sirve((IntPtr)2, "otro título", false);
+        Debe(calculos == 5, $"pasados los 400 ms, se calcula (cálculos {calculos})");
+        ahora += 50;
+        Sirve((IntPtr)2, "otro título", true);
+        ahora += 50;
+        Sirve((IntPtr)2, "otro título", true);
+        Debe(calculos == 7, $"con SAP delante se calcula siempre (cálculos {calculos})");
+
+        // EN SOMBRA: cada llamada calcula, y se cuenta cuántas habrían salido de memoria.
+        pSombra.SetValue(memoria, true);
+        int antes = calculos;
+        Sirve((IntPtr)3, "s", false);
+        ahora += 100;
+        Sirve((IntPtr)3, "s", false);
+        Debe(calculos == antes + 2, $"en sombra cada llamada calcula (cálculos {calculos - antes} de 2)");
+        Debe(Convert.ToInt32(PropDe(memoria, "HabrianSidoDeMemoria")) >= 1, $"y se cuenta cuántas habrían salido de memoria ({PropDe(memoria, "HabrianSidoDeMemoria")})");
+        string resumen = (string)mResumen.Invoke(memoria, null)!;
+        Debe(System.Text.RegularExpressions.Regex.IsMatch(resumen, @"dónde: \d+ calculadas · \d+ de memoria · \d+ en sombra"),
+            $"y la cuenta dice «dónde: N calculadas · M de memoria · K en sombra» (dijo «{resumen}»)");
     }
 
     private static void Debe(bool condicion, string promesa)
