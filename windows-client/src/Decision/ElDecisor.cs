@@ -275,13 +275,39 @@ public static class ElDecisor
     /// <param name="puertas">El inventario de la pantalla. Fuera de aquí no se puede elegir nada.</param>
     /// <param name="umbral">Mínimo de confianza exigido. Se actúa si se alcanza, no solo si se supera.</param>
     /// <param name="transporte">Manda el cuerpo y devuelve la respuesta. Solo se llama con «jev».</param>
+    /// <remarks>
+    /// ES EL ÚNICO MÉTODO CON ESTE NOMBRE, Y NO ES ESTILO: el contrato lo pide con <c>GetMethod("Elegir")</c> sin
+    /// tipos en 6 sitios (275, 278–281, 289), y con una sobrecarga esa llamada lanza
+    /// <c>AmbiguousMatchException</c> —medido el 2026-09-22—. Por eso la larga se llama
+    /// <see cref="ElegirConModelo"/> y esta delega en ella con los valores por defecto (348).
+    /// </remarks>
     public static DecisionDeUnPaso Elegir(
         string quien,
         string pantalla,
         string objetivo,
         IReadOnlyList<string> puertas,
         double umbral,
-        Func<string, string> transporte)
+        Func<string, string> transporte) =>
+        ElegirConModelo(quien, pantalla, objetivo, puertas, umbral, transporte,
+            ConfiguracionDelDecisor.ModeloPorDefecto, PoliticaDeLoQueViaja.PorDefecto);
+
+    /// <summary>
+    /// Lo mismo que <see cref="Elegir"/>, con el modelo que se le pide a TypeSafe y la política de lo que viaja.
+    /// </summary>
+    /// <param name="modelo">El alias que va en <c>"model"</c> del cuerpo. Hasta el 2026-09-22 el interruptor leía
+    /// <c>U_TYPESAFE_MODELO</c>, lo enseñaba en el botón, y el cuerpo llevaba el alias por defecto de todos modos:
+    /// el estado nombraba un modelo y la petición pedía otro (348).</param>
+    /// <param name="politica">Qué superficies pueden mandar texto a Jev. La aplica la fase 6 (349); aquí ya viaja
+    /// para que la firma no cambie dos veces.</param>
+    public static DecisionDeUnPaso ElegirConModelo(
+        string quien,
+        string pantalla,
+        string objetivo,
+        IReadOnlyList<string> puertas,
+        double umbral,
+        Func<string, string> transporte,
+        string modelo,
+        PoliticaDeLoQueViaja politica)
     {
         if (puertas == null || puertas.Count == 0)
             return DecisionDeUnPaso.No("no hay ninguna puerta accionable en esta pantalla: no hay nada que elegir.");
@@ -289,7 +315,8 @@ public static class ElDecisor
         switch ((quien ?? "").Trim().ToLowerInvariant())
         {
             case "jev":
-                return ConJev(pantalla, objetivo, puertas, umbral, transporte);
+                return ConJev(pantalla, objetivo, puertas, umbral, transporte,
+                    string.IsNullOrWhiteSpace(modelo) ? ConfiguracionDelDecisor.ModeloPorDefecto : modelo.Trim());
 
             case "simulado":
                 return Simulado(objetivo, puertas, umbral);
@@ -302,7 +329,8 @@ public static class ElDecisor
     }
 
     private static DecisionDeUnPaso ConJev(
-        string pantalla, string objetivo, IReadOnlyList<string> puertas, double umbral, Func<string, string> transporte)
+        string pantalla, string objetivo, IReadOnlyList<string> puertas, double umbral, Func<string, string> transporte,
+        string modelo)
     {
         if (transporte == null)
             return DecisionDeUnPaso.No("se pidió Jev pero no hay transporte con el que hablarle.");
@@ -319,7 +347,7 @@ public static class ElDecisor
         try
         {
             string cuerpo = PeticionASystemOne.CuerpoDeEleccion(
-                ConfiguracionDelDecisor.ModeloPorDefecto,
+                modelo,
                 PeticionASystemOne.EstadoDeLaPantalla(pantalla, objetivo, puertas),
                 PeticionASystemOne.IdDeLaPuerta,
                 PeticionASystemOne.InstruccionesDeLaPuerta(objetivo),

@@ -51,11 +51,11 @@ internal static class Programa
 
         Titulo("5. UNA PUERTA QUE NO ESTA EN PANTALLA — el pendiente n2 de CLAUDE.md");
         _llamadas = 0;
-        Muestra(ElDecisor.Elegir("jev", Pantalla, Objetivo, Puertas, 0.7, _ => Respuesta("Grabar", 0.99)), _llamadas);
+        Muestra(ElDecisor.ElegirConModelo("jev", Pantalla, Objetivo, Puertas, 0.7, _ => Respuesta("Grabar", 0.99), ConfiguracionDelDecisor.ModeloPorDefecto, PoliticaDeLoQueViaja.PorDefecto), _llamadas);
 
         Titulo("6. JEV DUDA — dos puertas casi iguales");
         _llamadas = 0;
-        Muestra(ElDecisor.Elegir("jev", Pantalla, Objetivo, Puertas, 0.7, _ => Respuesta("Crear Triage Administrativo", 0.51)), _llamadas);
+        Muestra(ElDecisor.ElegirConModelo("jev", Pantalla, Objetivo, Puertas, 0.7, _ => Respuesta("Crear Triage Administrativo", 0.51), ConfiguracionDelDecisor.ModeloPorDefecto, PoliticaDeLoQueViaja.PorDefecto), _llamadas);
 
         Titulo("EL CUERPO QUE SE LE MANDARIA A TYPESAFE");
         string estado = PeticionASystemOne.EstadoDeLaPantalla(Pantalla, Objetivo, Puertas);
@@ -81,7 +81,7 @@ internal static class Programa
         var cfg = ConfiguracionDelDecisor.DelSistema();
         using var cliente = new ClienteTypeSafe(clave, Math.Max(cfg.TiempoMaximoMs, 5000), m => Console.WriteLine("    " + m));
         var reloj = Stopwatch.StartNew();
-        var d = ElDecisor.Elegir("jev", Pantalla, Objetivo, Puertas, cfg.Confianza, cliente.Pregunta);
+        var d = ElDecisor.ElegirConModelo("jev", Pantalla, Objetivo, Puertas, cfg.Confianza, cliente.Pregunta, cfg.Modelo, PoliticaDeLoQueViaja.PorDefecto);
         reloj.Stop();
         Console.WriteLine($"    tardo        : {reloj.ElapsedMilliseconds} ms");
         Muestra(d, null);
@@ -101,7 +101,7 @@ internal static class Programa
         Console.WriteLine($"    quien decide : {cfg.Quien}");
         Console.WriteLine($"    porque       : {cfg.Porque}");
         _llamadas = 0;
-        Muestra(ElDecisor.Elegir(cfg.Quien, Pantalla, Objetivo, Puertas, cfg.Confianza, transporte), _llamadas);
+        Muestra(ElDecisor.ElegirConModelo(cfg.Quien, Pantalla, Objetivo, Puertas, cfg.Confianza, transporte, cfg.Modelo, PoliticaDeLoQueViaja.PorDefecto), _llamadas);
     }
 
     private static void Muestra(DecisionDeUnPaso d, int? llamadas)
