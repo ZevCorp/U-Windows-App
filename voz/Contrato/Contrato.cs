@@ -180,6 +180,7 @@ internal static class Contrato
         // 118.000 bytes en un buzón de 32.768. El campo se llama image_url y acepta una referencia; medido
         // contra el servidor, describe bien tres imágenes seguidas sin vaciar nada.
         Prueba("54. GPT-Live SÍ mira, y su foto viaja por REFERENCIA: un input_image con el identificador del archivo y sin un solo byte de imagen dentro, que pesa menos de 300 bytes frente a los 118.000 de la forma incrustada; la forma incrustada sigue existiendo para Realtime, que es lo que su servidor acepta", GptLiveMiraPorReferencia);
+        Prueba("55. GPT-Live delega por intención las órdenes de apagar la voz: la voz entiende cualquier forma natural de pedir callarse, dejar de escuchar o apagar la voz, no responde que se calla y delega antes de hablar", LaVozDelegaApagarLaVoz);
         // «SESIÓN ABIERTA» NO ES «SOCKET CONECTADO» (2026-09-13, nivel 4 del 12). La línea salía al conectar, y con la
         // cuenta sin crédito salió en el mismo segundo que el error: el conductor la tomó por voz abierta. GPT-Live ya
         // confirmaba (la 49); GPT Realtime, el respaldo, no. Del 50 al 52 son de la rama de la apertura.
@@ -1546,6 +1547,23 @@ internal static class Contrato
                 $"y nombra las fórmulas que se oyen ({relleno}): «Dame un momento para revisarlo» es literal de la sonda");
         Debe(!voz.Contains("INSTRUCCIONES DEL DELEGADO", StringComparison.Ordinal),
             "y la regla va en la persona de la VOZ, no copiando las del delegado: la voz sigue sin las instrucciones de operar");
+    }
+
+    private static void LaVozDelegaApagarLaVoz()
+    {
+        var p = GptLive();
+        if (p == null) { Pendiente("Voz.Realtime.ProtocoloGptLive", "55"); return; }
+
+        string voz = Campo(Mensaje(p.Apertura("INSTRUCCIONES DEL DELEGADO", new List<Utensilio>(), "").First()),
+            "session", "instructions");
+        Debe(voz.Contains("DELEGA", StringComparison.Ordinal)
+             && voz.Contains("DEJES DE HABLAR", StringComparison.OrdinalIgnoreCase)
+             && voz.Contains("DEJES DE ESCUCHARLA", StringComparison.OrdinalIgnoreCase)
+             && voz.Contains("APAGUES LA VOZ", StringComparison.OrdinalIgnoreCase),
+            "la voz recibe la regla semántica de delegar cualquier petición de apagar la voz");
+        Debe(voz.Contains("NO respondas", StringComparison.OrdinalIgnoreCase)
+             || voz.Contains("no respondas", StringComparison.OrdinalIgnoreCase),
+            "la voz no puede resolverlo diciendo «me callo»: debe delegar antes de contestar");
     }
 
     /// <remarks>

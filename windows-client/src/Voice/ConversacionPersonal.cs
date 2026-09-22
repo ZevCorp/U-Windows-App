@@ -62,7 +62,7 @@ public sealed class ConversacionPersonal
         }
     }
 
-    public string Contexto(int maxTurnos = 28, int maxCaracteres = 9000)
+    public string Contexto(int maxTurnos = 56, int maxCaracteres = 18000)
     {
         lock (Candado)
         {
@@ -76,6 +76,21 @@ public sealed class ConversacionPersonal
             string contexto = string.Join("\n", turnos);
             if (contexto.Length <= maxCaracteres) return contexto;
             return contexto[^maxCaracteres..];
+        }
+    }
+
+    /// <summary>Turnos de texto para reconstruir la misma ventana de conversación al abrir la voz.</summary>
+    public IReadOnlyList<(string Role, string Text)> Historial(int maxTurnos = 56)
+    {
+        lock (Candado)
+        {
+            return Leer().Turnos
+                .Where(x => x.UserId == _userId)
+                .OrderByDescending(x => x.CreatedAt)
+                .Take(Math.Max(1, maxTurnos))
+                .Reverse()
+                .Select(x => (x.Role, x.Text))
+                .ToArray();
         }
     }
 
