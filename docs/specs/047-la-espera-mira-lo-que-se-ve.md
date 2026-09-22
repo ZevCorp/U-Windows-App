@@ -488,7 +488,7 @@ dé el presupuesto de redirección.
   - **El diario y la ubicación del clic**: la línea de la 355 dice «cambió a los N ms» cuando la ubicación
     cambió, con el instante que anota `EsperarACambiar` (`_msCambioUbicacion`); y sin huella dice «nadie miraba»
     dos veces (delante y asentada), para que el conteo (e) del nivel 4 no dependa de una sola palabra.
-  - **Las dos líneas de `FaceWindow`** (`:790-794`, hunk de `pulsar`) están puestas: `HuellaEnVivo` con el sitio
+  - **Las dos líneas de `FaceWindow`** (`:791-795`, hunk de `pulsar`) están puestas: `HuellaEnVivo` con el sitio
     sin memoria (`_dondeTrabajo.Olvida()` + `DondeTrabajo()`) y `VentanaObjetivo`. **Lo decide el dueño al abrir el
     PR**, como está escrito arriba; si dice que no, salen a una rama de UI propia y la 355 queda juzgada solo en el
     contrato.
