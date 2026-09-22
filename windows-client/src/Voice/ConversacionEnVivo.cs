@@ -43,6 +43,7 @@ public sealed class ConversacionEnVivo : IDisposable
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
     private readonly SemaphoreSlim _envio = new(1, 1);
+    private readonly SemaphoreSlim _apertura = new(1, 1);
 
     public ConversacionEnVivo(SurfaceMapTools mapa, IProtocolo? protocolo = null)
     {
@@ -383,18 +384,23 @@ public sealed class ConversacionEnVivo : IDisposable
     public async Task<bool> HablarConVozVivaAsync(string texto, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(texto)) return false;
-        if (!Viva) await ArrancarAsync();
-        if (!Viva) return false;
-
-        if (!_confirmada && _aperturaConfirmada != null)
+        await _apertura.WaitAsync(ct);
+        try
         {
-            try { await _aperturaConfirmada.Task.WaitAsync(TimeSpan.FromSeconds(15), ct); }
-            catch (TimeoutException) { LogBus.Log("voz-viva", "la sesión no confirmó a tiempo una frase pendiente"); return false; }
-            catch (OperationCanceledException) { return false; }
-        }
+            if (!Viva) await ArrancarAsync();
+            if (!Viva) return false;
 
-        await DiEstoAsync(texto);
-        return true;
+            if (!_confirmada && _aperturaConfirmada != null)
+            {
+                try { await _aperturaConfirmada.Task.WaitAsync(TimeSpan.FromSeconds(15), ct); }
+                catch (TimeoutException) { LogBus.Log("voz-viva", "la sesión no confirmó a tiempo una frase pendiente"); return false; }
+                catch (OperationCanceledException) { return false; }
+            }
+
+            await DiEstoAsync(texto);
+            return true;
+        }
+        finally { _apertura.Release(); }
     }
 
     /// <summary>
