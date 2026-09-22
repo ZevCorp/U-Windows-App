@@ -1,145 +1,127 @@
+using System.IO;
+using System.Text.Json;
 using System.Text.Json.Serialization;
-using U.WindowsClient.Backend;
-using U.WindowsClient.Domain;
 
 namespace U.WindowsClient.Voice;
 
-/// <summary>Puerta de voz a la memoria personal y a los recordatorios del backend.</summary>
+/// <summary>Memoria personal de la voz, persistida localmente para no depender de una ruta remota.</summary>
 public sealed class MemoriaPersonal
 {
-    private readonly BackendClient _backend;
+    private static readonly object Candado = new();
+    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+
     private readonly string _userId;
-    private readonly string _timezone;
+    private readonly string _archivo;
 
-    public MemoriaPersonal(BackendClient backend, string userId)
+    /// <param name="userId">Identidad estable del usuario de Windows.</param>
+    /// <param name="archivo">Ruta opcional, usada por el contrato y por pruebas aisladas.</param>
+    public MemoriaPersonal(string userId, string? archivo = null)
     {
-        _backend = backend;
-        _userId = string.IsNullOrWhiteSpace(userId) ? "anon" : userId;
-        _timezone = ZonaIanaLocal();
+        _userId = string.IsNullOrWhiteSpace(userId) ? "anon" : userId.Trim();
+        _archivo = archivo ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "U", "memoria-personal.json");
     }
 
-    public async Task<Resultado> EjecutarAsync(string command, CancellationToken ct)
+    public Task<Resultado> EjecutarAsync(string command, CancellationToken ct)
     {
-        string text = command.Trim();
-        if (text.Length == 0) return new(false, "Dime qué quieres que recuerde.", "", "");
-        if (!text.StartsWith("recuerda", StringComparison.OrdinalIgnoreCase)
-            && !text.StartsWith("recuérdame", StringComparison.OrdinalIgnoreCase)
-            && !text.StartsWith("recuérdalo", StringComparison.OrdinalIgnoreCase)
-            && !text.StartsWith("acuérda", StringComparison.OrdinalIgnoreCase)
-            && !text.StartsWith("acuérdate", StringComparison.OrdinalIgnoreCase)
-            && !text.StartsWith("acuerda", StringComparison.OrdinalIgnoreCase)
-            && !text.StartsWith("no olvides", StringComparison.OrdinalIgnoreCase))
-            text = "recuerda que " + text;
+        ct.ThrowIfCancellationRequested();
+        string text = QuitarPrefijo(command.Trim());
+        if (text.Length == 0)
+            return Task.FromResult(new Resultado(false, "Dime qué quieres que recuerde.", "", ""));
 
-        if (_backend.IsLegacyBackend)
+        lock (Candado)
         {
-            var response = await _backend.PostAsync<Respuesta>("/memory", new
+            var documento = Leer();
+            var existente = documento.Items.FirstOrDefault(x =>
+                x.UserId == _userId && string.Equals(x.Text, text, StringComparison.OrdinalIgnoreCase));
+            if (existente != null)
+                return Task.FromResult(new Resultado(true, "Ya lo tenía guardado para nuestras próximas conversaciones.", "remember", existente.Id));
+
+            var recuerdo = new Recuerdo
             {
-                userId = _userId,
-                command = text,
-                timezone = _timezone,
-                locale = "es-CO",
-                clientNowUtc = DateTime.UtcNow.ToString("O"),
-            }, ct);
-            if (response == null) return new(false, "El backend no devolvió respuesta.", "", "");
-            return new(response.Ok, response.Response ?? "No pude guardar ese recuerdo.", response.Kind ?? "", response.MemoryId ?? "");
+                Id = $"local_{Guid.NewGuid():N}",
+                UserId = _userId,
+                Text = text,
+                Kind = "fact",
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
+            documento.Items.Add(recuerdo);
+            Escribir(documento);
+            return Task.FromResult(new Resultado(true, "Lo recordaré para nuestras próximas conversaciones.", "remember", recuerdo.Id));
         }
-
-        // Graph y la voz usan este mismo servicio durable para que apagar y volver a encender la
-        // sesión no borre el contexto. El contrato viejo recibe solo el dato limpio; no se guarda
-        // el verbo «recuerda» como parte del recuerdo.
-        var saved = await _backend.PostMemoryAsync<LegacySaved>(new
-        {
-            userId = _userId,
-            note = QuitarPrefijo(text),
-            app = "general",
-        }, ct);
-        return new(!string.IsNullOrWhiteSpace(saved?.Id), "Lo recordaré para nuestras próximas conversaciones.", "remember", saved?.Id ?? "");
     }
 
-    public async Task<string> ContextoAsync(CancellationToken ct, string query = "")
+    public Task<string> ContextoAsync(CancellationToken ct, string query = "")
     {
-        // Graph y el backend de memoria son despliegues separados por ahora; se consulta la fuente
-        // durable directamente en lugar de pedirle al LLM que reconstruya los recuerdos.
-        string path = $"/memory?userId={Uri.EscapeDataString(_userId)}";
-        if (!string.IsNullOrWhiteSpace(query)) path += $"&query={Uri.EscapeDataString(query.Trim())}";
-        var raw = await _backend.GetMemoryAsync<SnapshotEnvelope>(path, ct);
-        var snapshot = raw?.Json ?? raw;
-        if (snapshot?.Items == null && snapshot?.Reminders == null) return "";
-
-        var lines = new List<string>();
-        var items = (snapshot.Items ?? Array.Empty<Item>()).ToList();
-        items.AddRange((snapshot.Memories ?? Array.Empty<Hit>()).Where(x => x.Item != null).Select(x => x.Item!));
-        foreach (var item in items.Where(x => string.IsNullOrWhiteSpace(x.SupersededBy)).Take(20))
-            lines.Add($"- [{item.Kind ?? "fact"}] {item.Text}");
-        foreach (var reminder in (snapshot.Reminders ?? Array.Empty<Reminder>()).Where(x => x.Status is not "cancelled" and not "delivered").Take(10))
-            lines.Add($"- [recordatorio] {reminder.Title} · {reminder.DueAt} · {reminder.Timezone}");
-        return lines.Count == 0 ? "" : string.Join("\n", lines);
+        ct.ThrowIfCancellationRequested();
+        lock (Candado)
+        {
+            var filtro = query.Trim();
+            var recuerdos = Leer().Items
+                .Where(x => x.UserId == _userId)
+                .Where(x => filtro.Length == 0 || x.Text.Contains(filtro, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(x => x.CreatedAt)
+                .Take(20)
+                .Select(x => $"- [{x.Kind}] {x.Text}")
+                .ToArray();
+            return Task.FromResult(string.Join("\n", recuerdos));
+        }
     }
 
     public readonly record struct Resultado(bool Ok, string Response, string Kind, string MemoryId);
 
-    private sealed class Respuesta
+    private Documento Leer()
     {
-        [JsonPropertyName("ok")] public bool Ok { get; set; }
-        [JsonPropertyName("response")] public string? Response { get; set; }
-        [JsonPropertyName("kind")] public string? Kind { get; set; }
-        [JsonPropertyName("memoryId")] public string? MemoryId { get; set; }
+        if (!File.Exists(_archivo)) return new Documento();
+        try
+        {
+            string json = File.ReadAllText(_archivo);
+            return JsonSerializer.Deserialize<Documento>(json, Json) ?? new Documento();
+        }
+        catch (IOException)
+        {
+            return new Documento();
+        }
+        catch (JsonException)
+        {
+            return new Documento();
+        }
     }
 
-    private sealed class LegacySaved
+    private void Escribir(Documento documento)
     {
-        [JsonPropertyName("id")] public string? Id { get; set; }
-    }
+        string? carpeta = Path.GetDirectoryName(_archivo);
+        if (!string.IsNullOrWhiteSpace(carpeta)) Directory.CreateDirectory(carpeta);
 
-    private sealed class SnapshotEnvelope : Snapshot
-    {
-        [JsonPropertyName("json")] public Snapshot? Json { get; set; }
-    }
-
-    private class Snapshot
-    {
-        [JsonPropertyName("items")] public Item[]? Items { get; set; }
-        [JsonPropertyName("memories")] public Hit[]? Memories { get; set; }
-        [JsonPropertyName("reminders")] public Reminder[]? Reminders { get; set; }
-    }
-
-    private sealed class Hit
-    {
-        [JsonPropertyName("item")] public Item? Item { get; set; }
-    }
-
-    private sealed class Item
-    {
-        [JsonPropertyName("kind")] public string? Kind { get; set; }
-        [JsonPropertyName("text")] public string? Text { get; set; }
-        [JsonPropertyName("supersededBy")] public string? SupersededBy { get; set; }
-    }
-
-    private sealed class Reminder
-    {
-        [JsonPropertyName("title")] public string? Title { get; set; }
-        [JsonPropertyName("dueAt")] public string? DueAt { get; set; }
-        [JsonPropertyName("timezone")] public string? Timezone { get; set; }
-        [JsonPropertyName("status")] public string? Status { get; set; }
+        string temporal = _archivo + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        File.WriteAllText(temporal, JsonSerializer.Serialize(documento, Json));
+        File.Move(temporal, _archivo, overwrite: true);
     }
 
     private static string QuitarPrefijo(string text)
     {
-        string[] prefixes = { "recuerda que ", "recuérdame ", "recuérdalo ", "acuérdate de ", "acuérdalo ", "acuerda que ", "no olvides " };
+        string[] prefixes =
+        {
+            "recuerda que ", "recuérdame ", "recuérdalo ", "acuérdate de ",
+            "acuérdalo ", "acuerda que ", "no olvides "
+        };
         foreach (var prefix in prefixes)
             if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return text[prefix.Length..].Trim();
         return text;
     }
 
-    private static string ZonaIanaLocal()
+    private sealed class Documento
     {
-        try
-        {
-            if (TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var iana)
-                && !string.IsNullOrWhiteSpace(iana)) return iana;
-            return TimeZoneInfo.Local.Id;
-        }
-        catch { return "UTC"; }
+        [JsonPropertyName("items")] public List<Recuerdo> Items { get; set; } = new();
+    }
+
+    private sealed class Recuerdo
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("userId")] public string UserId { get; set; } = "";
+        [JsonPropertyName("text")] public string Text { get; set; } = "";
+        [JsonPropertyName("kind")] public string Kind { get; set; } = "fact";
+        [JsonPropertyName("createdAt")] public DateTimeOffset CreatedAt { get; set; }
     }
 }

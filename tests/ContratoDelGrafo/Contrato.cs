@@ -14,6 +14,7 @@ using U.Graph;
 using U.WindowsClient.Actions;
 using U.WindowsClient.Mcp;
 using U.WindowsClient.Navigation;
+using U.WindowsClient.Voice;
 
 namespace ContratoDelGrafo;
 
@@ -810,6 +811,9 @@ internal static class Contrato
 
         // ── Spec 043: un campo de texto no navega ───────────────────────────────────────────────
         Prueba("334. un campo de texto no navega: al pulsar un Edit o un ComboBox no se espera el presupuesto de un cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el terreno ni se repite el clic, y la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta como cualquier navegación; y lo que no es un campo espera como siempre", UnCampoDeTextoNoNavega);
+
+        // ── Spec 044: memoria personal de voz ──────────────────────────────────────────────────
+        Prueba("335. la memoria personal de voz se guarda localmente y sobrevive a cerrar y volver a abrir la voz, sin depender de un backend legacy", MemoriaPersonalDeVozSobreviveALaSesion);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -818,6 +822,21 @@ internal static class Contrato
     }
 
     // ── Las promesas ─────────────────────────────────────────────────────────
+
+    private static void MemoriaPersonalDeVozSobreviveALaSesion()
+    {
+        string archivo = Path.Combine(_raiz, "memoria-personal.json");
+        var primeraSesion = new MemoriaPersonal("contrato-memoria", archivo);
+        var guardado = primeraSesion.EjecutarAsync("recuerda que soy desarrollador de 24 años", CancellationToken.None)
+            .GetAwaiter().GetResult();
+
+        var segundaSesion = new MemoriaPersonal("contrato-memoria", archivo);
+        string contexto = segundaSesion.ContextoAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        Debe(guardado.Ok, "guardar un dato personal confirma éxito sin red");
+        Debe(contexto.Contains("desarrollador de 24 años", StringComparison.OrdinalIgnoreCase),
+            "una sesión nueva recupera el dato personal desde el archivo persistente");
+    }
 
     private static void CadaMundoSeObservaPorSuPuerta()
     {
