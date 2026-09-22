@@ -545,7 +545,7 @@ public sealed class MapaVivo : IDisposable
             var crudos = _loQueVeo();
             PulsoDelMapeador.Actual.Costo("leer la pantalla", crono.ElapsedMilliseconds);
 
-            var visibles = SinEtiquetasDeControles(crudos)
+            var visibles = LoQueEsPuerta(crudos)
                 .Select(v => new Nucleo.Elemento(v.Selector, v.Etiqueta, v.Tipo))
                 .ToList();
             PulsoDelMapeador.Actual.Embudo(crudos.Count, visibles.Count);
@@ -617,13 +617,22 @@ public sealed class MapaVivo : IDisposable
     public void ObservarVentana(string ubicacion, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> crudos)
     {
         if (string.IsNullOrWhiteSpace(ubicacion) || crudos == null) return;
-        var visibles = SinEtiquetasDeControles(crudos)
+        var visibles = LoQueEsPuerta(crudos)
             .Select(v => new Nucleo.Elemento(v.Selector, v.Etiqueta, v.Tipo))
             .ToList();
         _grafo.Observar(ubicacion, visibles);
     }
 
-    private static List<(string Selector, string Etiqueta, string Tipo)> SinEtiquetasDeControles(
+    /// <summary>
+    /// LA CRIBA DEL LATIDO: qué es una puerta de entre lo crudo que se leyó. Con selector y con nombre, y sin
+    /// el Text que solo repite la etiqueta de un control que ya está en la lista. PÚBLICA desde la promesa 363
+    /// (spec 048): la compuerta, cuando el paso trae la observación de su pantalla, se la cuenta al núcleo con
+    /// ESTA criba y no con la de las candidatas —que quita todo Text y todo Image—, porque un Text suelto que el
+    /// latido daba por vivo tiene que seguir vivo o la huella de la 299 dejaría de coincidir con la del latido.
+    /// Son TRES cribas y a propósito: esta, la de la lista (<c>SurfaceMapTools.PuertasDeAhora</c>) y
+    /// <c>Actionable</c>; cada una con su propósito, las tres sobre los mismos crudos.
+    /// </summary>
+    public static List<(string Selector, string Etiqueta, string Tipo)> LoQueEsPuerta(
         IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> crudos)
     {
         var utiles = crudos.Where(v => v.Selector.Length > 0 && v.Etiqueta.Length > 0).ToList();

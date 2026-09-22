@@ -272,6 +272,27 @@ public sealed class SurfaceMapTools
             _lector.ComoLeyo.Length > 0 ? _lector.ComoLeyo : "lector", elementos, Completa: true);
     }
 
+    /// <summary>
+    /// LA VISTA QUE EL PASO LLEVA A LA COMPUERTA (promesa 363): la observación compartida si es de la ventana
+    /// que se leería y del dónde de ahora —los mismos dos caminos que <see cref="VistaReciente"/>—, sin leer
+    /// nada: si no la hay, el paso va sin ella y la compuerta mira como hoy, y el log dice por qué.
+    /// </summary>
+    private Uia.Observacion? VistaQueElPasoTrae()
+    {
+        string aqui = _where()?.Id ?? "";
+        if (aqui.Length == 0) { LogBus.Log("lectura", "el paso va sin observación (no sé dónde estoy): la compuerta mira como hoy"); return null; }
+        IntPtr ventana = (VentanaQueLeeria ?? AppAligner.VentanaDelUsuario)();
+        string? porQueNo = Uia.Observatorio.PorQueNoSirve(ventana, aqui, Uia.Observacion.VigenciaMs, out var vista);
+        if (vista == null)
+        {
+            LogBus.Log("lectura", $"el paso va sin observación ({porQueNo}): la compuerta mira como hoy");
+            return null;
+        }
+        LogBus.Log("lectura", $"el paso lleva la observación v{vista.Version} de «{aqui}» ({vista.EdadEn(Uia.Observatorio.Ahora())} ms de edad · "
+            + $"{vista.Elementos.Count} elemento(s) · {(vista.Completa ? "completa" : "de uno")}): la compuerta no vuelve a mirar");
+        return vista;
+    }
+
     /// <summary>La cuenta de lecturas desde el último accionar, para la línea de tiempos del paso.</summary>
     private string CuentaDeLecturas()
         => $"lecturas: {_lecturasNuevas} nueva{(_lecturasNuevas == 1 ? "" : "s")} · {_lecturasReutilizadas} reutilizada{(_lecturasReutilizadas == 1 ? "" : "s")}";
@@ -2688,7 +2709,7 @@ public sealed class SurfaceMapTools
         // «dime el selector». Los antiguos `action` y `at` no llegaban aquí desde e3c3ad8: el gesto lo
         // aprende la arista (spec 003), y ofrecerlos era la ilusión de controlarlo (promesa 206).
         int.TryParse(cual, out int n);
-        var paso = new Navigation.RecorrerSegunElNucleo.Paso(salida) { Cual = n, AntesDePulsar = _antesDePulsar };
+        var paso = new Navigation.RecorrerSegunElNucleo.Paso(salida) { Cual = n, AntesDePulsar = _antesDePulsar, Vista = VistaQueElPasoTrae() };
         try
         {
             // LA MISMA COREOGRAFÍA QUE EL PLAN (promesa 191): al comprobar, o cuando el piloto trae algo que
