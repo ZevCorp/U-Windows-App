@@ -47,6 +47,16 @@ public static class PeticionASystemOne
     public const string IdPeligro = "peligro";
 
     /// <summary>
+    /// LA OPCIÓN «NINGUNA» del choice (promesa 347, spec 046): viaja junto a TODAS las puertas ofrecidas para que
+    /// Jev pueda decir que nada de esta pantalla avanza hacia el objetivo, en vez de tener que elegir una puerta a
+    /// la fuerza. La añade quien pregunta (<see cref="ElDecisor"/>), no <see cref="CuerpoDeEleccion"/>: la 282 exige
+    /// que el cuerpo lleve exactamente las opciones que se le dan. El «0)» no choca con la numeración «1)…» de las
+    /// puertas del inventario. El texto es el que el contrato manda en sus fixtures: si difiere, la 344 rechaza la
+    /// respuesta por una clave que no viajó (2026-09-22).
+    /// </summary>
+    public const string IdNinguna = "0) ninguna: nada de esta pantalla avanza hacia el objetivo";
+
+    /// <summary>
     /// El cuerpo de una pregunta de tipo <c>choice</c>.
     /// </summary>
     /// <param name="modelo">El alias o la versión: <c>jev-latest</c>, <c>jev-1.13.0</c>.</param>

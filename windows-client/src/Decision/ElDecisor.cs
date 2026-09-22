@@ -132,6 +132,14 @@ public static class ElDecisor
         if (transporte == null)
             return DecisionDeUnPaso.No("se pidió Jev pero no hay transporte con el que hablarle.");
 
+        // LO QUE VIAJA EN EL CHOICE = las puertas ofrecidas + «ninguna» (347). Es la ÚNICA lista que viaja, y se
+        // construye aquí, no en CuerpoDeEleccion (la 282 exige que el cuerpo lleve exactamente lo que se le da) ni
+        // en el state (que lista puertas de la pantalla, y «ninguna» no es una). La 344 comparará las claves de la
+        // respuesta contra ESTA lista, por el mismo camino (aprendizaje nº16).
+        var queViaja = new List<string>(puertas.Count + 1);
+        queViaja.AddRange(puertas);
+        queViaja.Add(PeticionASystemOne.IdNinguna);
+
         string respuesta;
         try
         {
@@ -140,7 +148,7 @@ public static class ElDecisor
                 PeticionASystemOne.EstadoDeLaPantalla(pantalla, objetivo, puertas),
                 PeticionASystemOne.IdDeLaPuerta,
                 PeticionASystemOne.InstruccionesDeLaPuerta(objetivo),
-                puertas);
+                queViaja);
             respuesta = transporte(cuerpo);
         }
         catch (Exception e)
@@ -203,6 +211,14 @@ public static class ElDecisor
         bool ofrecida = false;
         foreach (var p in puertas)
             if (string.Equals(p, elegida, StringComparison.Ordinal)) { ofrecida = true; break; }
+
+        // «NINGUNA» VIAJÓ Y JEV LA ELIGIÓ (347): no es una puerta, así que no se acciona; se dice con su
+        // probabilidad para poder mirar, con cien pasos, si separa aciertos de pérdidas. No es compuerta
+        // calibrada: se registra y se devuelve a Luna.
+        if (!ofrecida && string.Equals(elegida, PeticionASystemOne.IdNinguna, StringComparison.Ordinal))
+            return DecisionDeUnPaso.No(
+                $"Jev eligió «ninguna» ({confianza.ToString("0.00", CultureInfo.InvariantCulture)}): no lo veo en esta pantalla "
+              + "—nada de lo que hay avanza hacia el objetivo—. No se acciona. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
 
         if (!ofrecida)
             return DecisionDeUnPaso.No(
