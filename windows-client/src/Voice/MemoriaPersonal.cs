@@ -76,7 +76,7 @@ public sealed class MemoriaPersonal
                 .Where(x => x.UserId == _userId)
                 .Where(x => filtro.Length == 0 || x.Text.Contains(filtro, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(x => x.CreatedAt)
-                .Take(20)
+                .Take(40)
                 .Select(x => x.DueAt.HasValue
                     ? $"- [recordatorio {x.DueAt.Value:yyyy-MM-dd HH:mm}] {x.Text}"
                     : $"- [{x.Kind}] {x.Text}")
