@@ -100,3 +100,12 @@ queda pendiente** y se dice como pendiente, no como hecho.
 - `map_tramo` (fase 3 del plan): aquí sigue siendo un paso por llamada; la segunda mejor y las tres
   preguntas son lo que el tramo va a usar por paso.
 - Medir con Jev real sobre SAP: exige el hospital.
+
+## Reescrituras posteriores
+
+- **2026-09-22 · la 289** se reescribe en la spec 046 (el número no se recicla). Su última cláusula —«una
+  respuesta sin esas dos sigue valiendo»— era exactamente la compuerta abierta: `Noul` devolvía 0 cuando
+  la noul faltaba y las compuertas cortan por arriba, así que 0 dejaba pasar (medido en la revisión del
+  21-09: con `peligro` fuera de [0,1] convertido a 0 se pulsaba «Grabar»). Desde la 046: «una respuesta
+  sin alguna de las dos, o con una fuera de [0,1], no se acciona y dice cuál falta». El fixture pasa a
+  mandar `probabilities` completas (Σ = 1) y el caso `viejo` invierte su aserción.
