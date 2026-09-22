@@ -10,7 +10,8 @@ namespace U.WindowsClient.Diagnostics;
 /// aquí, visible en <see cref="U.WindowsClient.Ui.LogWindow"/>, incluso después de que el globo de
 /// estado ya mostró otra cosa.
 ///
-/// Además, TODO se persiste a disco (%LOCALAPPDATA%\U\logs\u-AAAAMMDD.log): el ring de memoria son
+/// Además, TODO se persiste a disco en un archivo por instancia
+/// (%LOCALAPPDATA%\U\logs\u-AAAAMMDD-{worktree}-p{pid}-{hora}.log): el ring de memoria son
 /// 500 líneas — un solo run de workflow con polls de 120 ms lo desborda — y sin archivo era imposible
 /// reconstruir a posteriori sobre qué pantalla se ejecutó cada paso. El archivo es la evidencia.
 ///
@@ -23,7 +24,10 @@ public static class LogBus
     private static readonly object _lock = new();
 
     private static readonly string _logDir = Path.Combine(U.Graph.UserPaths.Local, "U", "logs");
+    private static readonly DateTime _inicio = DateTime.Now;
+    private static readonly string _instanceId = CrearIdDeInstancia();
     private static bool _fileBroken; // si el disco falla una vez, no insistir en cada línea
+    private static bool _cabeceraEscrita;
 
     public static event EventHandler<string>? Logged;
 
@@ -40,7 +44,7 @@ public static class LogBus
 
     public static void Log(string tag, string message)
     {
-        string line = $"[{DateTime.Now:HH:mm:ss}] {tag}: {message}";
+        string line = $"[{DateTime.Now:HH:mm:ss}] [{_instanceId}] {tag}: {message}";
         lock (_lock)
         {
             _entries.Add(line);
@@ -63,8 +67,11 @@ public static class LogBus
         lock (_lock) _entries.Clear();
     }
 
-    /// <summary>Ruta del archivo de hoy (para abrirlo desde la UI o adjuntarlo a un reporte).</summary>
-    public static string TodayFile() => Path.Combine(_logDir, $"u-{DateTime.Now:yyyyMMdd}.log");
+    /// <summary>Identidad estable durante la vida de este proceso, visible también en cada línea.</summary>
+    public static string InstanceId => _instanceId;
+
+    /// <summary>Ruta del archivo de esta instancia (para abrirlo desde la UI o adjuntarlo a un reporte).</summary>
+    public static string TodayFile() => Path.Combine(_logDir, $"u-{DateTime.Now:yyyyMMdd}-{_instanceId}.log");
 
     // Ya dentro del lock. El log jamás puede tumbar la app: cualquier fallo de disco apaga el sink
     // y la bitácora en memoria sigue como siempre.
@@ -74,8 +81,42 @@ public static class LogBus
         try
         {
             Directory.CreateDirectory(_logDir);
+            if (!_cabeceraEscrita)
+            {
+                _cabeceraEscrita = true;
+                File.AppendAllText(TodayFile(),
+                    $"[{_inicio:HH:mm:ss}] [{_instanceId}] instancia: pid={Environment.ProcessId} · ejecutable={Environment.ProcessPath ?? AppContext.BaseDirectory}"
+                    + Environment.NewLine);
+            }
             File.AppendAllText(TodayFile(), line + Environment.NewLine);
         }
         catch { _fileBroken = true; }
+    }
+
+    private static string CrearIdDeInstancia()
+    {
+        string origen = NombreDelOrigen();
+        string limpio = new(origen.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '-').ToArray());
+        limpio = limpio.Trim('-');
+        if (limpio.Length == 0) limpio = "u";
+        return $"{limpio}-p{Environment.ProcessId}-{_inicio:HHmmss}";
+    }
+
+    private static string NombreDelOrigen()
+    {
+        try
+        {
+            DirectoryInfo? actual = new(AppContext.BaseDirectory);
+            while (actual != null)
+            {
+                if (actual.Name.Equals("windows-client", StringComparison.OrdinalIgnoreCase)
+                    && actual.Parent != null) return actual.Parent.Name;
+                if (Directory.Exists(Path.Combine(actual.FullName, ".git"))
+                    || File.Exists(Path.Combine(actual.FullName, ".git"))) return actual.Name;
+                actual = actual.Parent;
+            }
+        }
+        catch { }
+        return "instalada";
     }
 }

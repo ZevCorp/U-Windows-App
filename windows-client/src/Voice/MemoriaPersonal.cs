@@ -153,7 +153,8 @@ public sealed class MemoriaPersonal
         string[] prefixes =
         {
             "recuerda que ", "recuérdame ", "recuérdalo ", "acuérdate de ",
-            "acuérdalo ", "acuerda que ", "no olvides "
+            "acuérdalo ", "acuerda que ", "no olvides ", "quiero que recuerdes que ",
+            "quiero que recuerdes "
         };
         foreach (var prefix in prefixes)
             if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return text[prefix.Length..].Trim();
