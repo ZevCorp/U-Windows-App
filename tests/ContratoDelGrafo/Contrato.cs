@@ -757,6 +757,15 @@ internal static class Contrato
         Prueba("337. al apagar la voz, el cambio a Viva=false retira el notch en ese mismo cambio y no espera la caducidad", ElNotchSeRetiraAlApagarLaVoz);
         Prueba("338. el botón de mensajes convierte el propio notch en chat y no activa la ventana vieja", ElBotonDelNotchAbreSuChat);
         Prueba("339. el chat viejo desaparece: no quedan TalkPanel, Bubble ni Input en la ventana de la carita", ElChatViejoDesaparece);
+        Prueba("340. escribir en el chat nunca llama al sintetizador de Windows", ElChatNoUsaSintetizador);
+        Prueba("341. una entrada de texto puede abrir la misma conversación sin abrir el micrófono y su respuesta no reproduce audio", ElChatEsTextoSinVoz);
+        Prueba("342. el historial del notch no pinta emojis ni prefijos de interlocutor", ElHistorialDelNotchLimpiaElLenguaje);
+        Prueba("343. el estado interno de Jev no se derrama a la línea visible para la persona", ElEstadoInternoNoSaleAlNotch);
+        Prueba("344. la frase corta del notch se centra en su zona, y solo la larga activa marquesina", LaFraseDelNotchSeCentra);
+        Prueba("345. el chat abierto mantiene su superficie mientras el cursor baja al campo y no se cierra por el detector del borde", ElChatAbiertoMantieneSuSuperficie);
+        Prueba("347. el resultado textual del delegado entra al historial aunque la respuesta haya llegado por el canal de voz", ElTextoDelDelegadoLlegaAlHistorial);
+        Prueba("348. el chat convierte Markdown técnico en texto conversacional sin perder contenido", ElChatEntregaTextoLegibleYCompleto);
+        Prueba("349. U toca el borde izquierdo, la persona el derecho y el último texto queda visible", CadaVozTocaSuBorde);
         // UN ASISTENTE POR ESCRITORIO (spec 031, 2026-09-17). El dueño: «quiero dejar un asistente en cada
         // escritorio virtual; incrustar la carita en el centro de la consulta, con las dimensiones del pantallazo;
         // y un botón debajo para llevarla a otro escritorio, con la aplicación quedándose enfrente mío». Todo lo
@@ -768,6 +777,7 @@ internal static class Contrato
         Prueba("272. la carita se guarda en la consulta igual que en el muelle: soltarla dentro la sienta en el centro, la flotante desaparece, y hay UNA silla ocupada a la vez —muelle o consulta, nunca las dos—; el anfitrión lo decide la caja donde se soltó, con el mismo margen de agarre, y tirar de ella la saca bajo el cursor como hoy", LaCaritaSeGuardaEnLaConsultaComoEnElMuelle);
         Prueba("273. debajo de la carita sentada en la consulta hay un botón para llevarla a otro escritorio, que ofrece los escritorios por su nombre —«Escritorio N» los que no lo tienen— menos el actual, y «Uno nuevo»; sin carita sentada el botón no está", ElBotonOfreceLosEscritoriosPorSuNombre);
         Prueba("274. llevar a otro escritorio deja al asistente trabajando allí: las ventanas del centro de operaciones acaban en el destino, el destino queda a la vista, su escritorio pasa a ser ese, y la carita se suelta de la consulta y se posa con su animación; durante el viaje la consulta se queda delante si el sistema deja fijarla, y si no, el log dice que faltó un instante; llegar lo dice el sistema, no el botón, y si no se llega en el plazo se dice, las ventanas vuelven y nada queda a medias", ElViajeLlegaCuandoElSistemaLoDice);
+        Prueba("346. abrir dos veces el mismo worktree en el mismo escritorio no crea otra carita, pero el mismo worktree sí puede vivir en dos escritorios", UnaCaritaPorWorktreeYEscritorio);
 
         // ── Spec 035: el decisor se puede cambiar ────────────────────────────────────────────────
         Prueba("275. el decisor por defecto es Luna: sin configuración se decide como hoy, y a TypeSafe no se le llama NUNCA — el transporte no se toca ni una vez", PorDefectoDecideLuna);
@@ -10413,6 +10423,126 @@ internal static class Contrato
             "la lógica vieja de abrir y cerrar el chat no queda escondida detrás de otro nombre");
     }
 
+    private static void ElChatNoUsaSintetizador()
+    {
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string fuente = Path.Combine(repo, "windows-client", "src", "Ui", "FaceWindow.xaml.cs");
+        Debe(File.Exists(fuente), "la carita tiene que poder comprobarse");
+        if (!File.Exists(fuente)) return;
+        string codigo = File.ReadAllText(fuente);
+        Debe(!codigo.Contains("_voice.Speak(", StringComparison.Ordinal),
+            "la respuesta visible no puede volver a salir por el sintetizador de Windows");
+    }
+
+    private static void ElChatEsTextoSinVoz()
+    {
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string fuente = Path.Combine(repo, "windows-client", "src", "Voice", "ConversacionEnVivo.cs");
+        Debe(File.Exists(fuente), "la conversación en vivo tiene que poder comprobarse");
+        if (!File.Exists(fuente)) return;
+        string codigo = File.ReadAllText(fuente);
+        Debe(codigo.Contains("ArrancarSoloTextoAsync", StringComparison.Ordinal)
+             && codigo.Contains("_respuestaDeTexto", StringComparison.Ordinal)
+             && codigo.Contains("if (_respuestaDeTexto) break;", StringComparison.Ordinal),
+            "el chat escrito conserva el contexto sin abrir micrófono y descarta el audio de la respuesta");
+    }
+
+    private static void ElHistorialDelNotchLimpiaElLenguaje()
+    {
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string fuente = Path.Combine(repo, "windows-client", "src", "Ui", "PanelDeAcciones.cs");
+        Debe(File.Exists(fuente), "el panel del notch tiene que poder comprobarse");
+        if (!File.Exists(fuente)) return;
+        string codigo = File.ReadAllText(fuente);
+        Debe(codigo.Contains("TextoSinEmojis", StringComparison.Ordinal)
+             && codigo.Contains("HorizontalAlignment = esDeU ? HorizontalAlignment.Left : HorizontalAlignment.Right", StringComparison.Ordinal),
+            "el historial limpia emojis y separa visualmente las dos voces por alineación");
+    }
+
+    private static void ElEstadoInternoNoSaleAlNotch()
+    {
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string fuente = Path.Combine(repo, "windows-client", "src", "Ui", "FaceWindow.xaml.cs");
+        Debe(File.Exists(fuente), "la carita tiene que poder comprobarse");
+        if (!File.Exists(fuente)) return;
+        string codigo = File.ReadAllText(fuente);
+        Debe(!codigo.Contains("SetStatus(\"Jev \"", StringComparison.Ordinal),
+            "el estado de implementación de Jev no se muestra como texto al usuario");
+    }
+
+    private static void LaFraseDelNotchSeCentra()
+    {
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string fuente = Path.Combine(repo, "windows-client", "src", "Ui", "PanelDeAcciones.cs");
+        Debe(File.Exists(fuente), "el panel del notch tiene que poder comprobarse");
+        if (!File.Exists(fuente)) return;
+        string codigo = File.ReadAllText(fuente);
+        Debe(codigo.Contains("HorizontalAlignment = HorizontalAlignment.Center", StringComparison.Ordinal)
+             && codigo.Contains("_texto.HorizontalAlignment = _excesoDeTexto > 1 ? HorizontalAlignment.Left : HorizontalAlignment.Center", StringComparison.Ordinal),
+            "el texto corto queda centrado y el largo solo se alinea a la izquierda al desplazarse");
+    }
+
+    private static void ElChatAbiertoMantieneSuSuperficie()
+    {
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string fuente = Path.Combine(repo, "windows-client", "src", "Ui", "PanelDeAcciones.cs");
+        Debe(File.Exists(fuente), "el panel del notch tiene que poder comprobarse");
+        if (!File.Exists(fuente)) return;
+        string codigo = File.ReadAllText(fuente);
+        Debe(codigo.Contains("if (ChatAbierto)", StringComparison.Ordinal)
+             && codigo.Contains("_dentroDeLaZona = true;", StringComparison.Ordinal)
+             && codigo.Contains("_cursorSobreLaPieza = true;", StringComparison.Ordinal),
+            "al abrir el chat, el detector de hover no puede retirarlo mientras se cruza hasta la entrada");
+    }
+
+    private static void ElTextoDelDelegadoLlegaAlHistorial()
+    {
+        const string json = "{\"type\":\"response.event\",\"event\":{\"type\":\"response.output_text.done\",\"text\":\"La investigación quedó hecha.\"}}";
+        var hechos = new Voz.Realtime.ProtocoloGptLive().Leer(JsonDocument.Parse(json).RootElement);
+        var texto = hechos.OfType<Voz.Realtime.Hecho.DiceU>().SingleOrDefault()?.Trozo;
+        Debe(texto == "La investigación quedó hecha.",
+            $"el resumen del delegado se traduce a texto de U para el notch (salió: «{texto ?? "nada"}»)");
+    }
+
+    private static void ElChatEntregaTextoLegibleYCompleto()
+    {
+        var panel = Cap004("U.WindowsClient.Ui.PanelDeAcciones");
+        var formatea = panel?.GetMethod("TextoParaChat", BindingFlags.NonPublic | BindingFlags.Static);
+        Debe(formatea != null, "el formato del chat debe vivir en una función pura que pueda comprobarse");
+        if (formatea == null) return;
+
+        const string entrada = "Investigué a **Eladio Carrión**.\n\n### Perfil\n- **Nacimiento:** 14 de noviembre.\n- [Spotify](https://spotify.com).";
+        string salida = (string)formatea.Invoke(null, new object[] { entrada })!;
+        const string esperada = "Investigué a Eladio Carrión.\n\nPerfil\n• Nacimiento: 14 de noviembre.\n• Spotify.";
+        Debe(salida == esperada,
+            $"el chat conserva todo el contenido y elimina la sintaxis de Markdown (salió: «{salida}»)");
+    }
+
+    private static void CadaVozTocaSuBorde()
+    {
+        var panel = Cap004("U.WindowsClient.Ui.PanelDeAcciones");
+        var margen = panel?.GetMethod("MargenDelMensaje", BindingFlags.NonPublic | BindingFlags.Static);
+        Debe(margen != null, "la alineación de cada interlocutor debe poder comprobarse sin abrir una ventana");
+        if (margen != null)
+        {
+            var deU = (System.Windows.Thickness)margen.Invoke(null, new object[] { true })!;
+            var deLaPersona = (System.Windows.Thickness)margen.Invoke(null, new object[] { false })!;
+            Debe(deU.Left == 0 && deU.Right > 0,
+                $"U queda pegado a la izquierda y deja aire a la derecha ({deU})");
+            Debe(deLaPersona.Right == 0 && deLaPersona.Left > 0,
+                $"la persona queda pegada a la derecha y deja aire a la izquierda ({deLaPersona})");
+        }
+
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string fuente = Path.Combine(repo, "windows-client", "src", "Ui", "PanelDeAcciones.cs");
+        Debe(File.Exists(fuente), "el panel del notch tiene que poder comprobarse");
+        if (!File.Exists(fuente)) return;
+        string codigo = File.ReadAllText(fuente);
+        Debe(codigo.Contains("_scrollChat.UpdateLayout();", StringComparison.Ordinal)
+             && codigo.Contains("CanContentScroll = false", StringComparison.Ordinal),
+            "el scroll mide el mensaje ya maquetado y se desplaza por píxeles hasta el final");
+    }
+
     private static void CadaEstadoTieneSuIcono()
     {
         var t = Capacidad("U.WindowsClient.Ui.IconosDelNotch");
@@ -11645,6 +11775,34 @@ internal static class Contrato
         var atras = (string[])deshacer.Invoke(null, new object[] { ids[1], ids[3], ids })!;
         Debe(atras.SequenceEqual(new[] { "mover", "cambiar:-2", "esperar" }),
             $"si no se llega, se deshace: las ventanas vuelven al origen y se vuelve a él, sin fijar nada; salió [{string.Join(" · ", atras)}]");
+    }
+
+    private static void UnaCaritaPorWorktreeYEscritorio()
+    {
+        var t = Capacidad("U.WindowsClient.Ui.GuardiaDeInstancia");
+        var iniciar = t?.GetMethod("IntentarIniciar");
+        var liberar = t?.GetMethod("Dispose");
+        if (t == null || iniciar == null || liberar == null)
+        {
+            Pendiente("GuardiaDeInstancia.IntentarIniciar/Dispose", "346", "036");
+            return;
+        }
+
+        string worktree = Path.Combine(Path.GetTempPath(), "u-worktree-" + Guid.NewGuid().ToString("N"), "U.exe");
+        Guid escritorioA = Guid.NewGuid(), escritorioB = Guid.NewGuid();
+        object?[] primeroArgs = { worktree, escritorioA, null };
+        Debe((bool)iniciar.Invoke(null, primeroArgs)!, "la primera carita adquiere su escritorio");
+        var primero = primeroArgs[2];
+        try
+        {
+            object?[] segundoArgs = { worktree, escritorioA, null };
+            Debe(!(bool)iniciar.Invoke(null, segundoArgs)!, "la segunda apertura del mismo worktree y escritorio se rechaza");
+
+            object?[] otroEscritorio = { worktree, escritorioB, null };
+            Debe((bool)iniciar.Invoke(null, otroEscritorio)!, "el mismo worktree sí puede abrirse en otro escritorio");
+            liberar.Invoke(otroEscritorio[2], null);
+        }
+        finally { liberar.Invoke(primero, null); }
     }
 
     // ── Spec 035: el decisor se puede cambiar ────────────────────────────────────────────────────

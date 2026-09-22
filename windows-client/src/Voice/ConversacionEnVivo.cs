@@ -370,6 +370,7 @@ public sealed class ConversacionEnVivo : IDisposable
 
     private readonly StringBuilder _fraseU = new();
     private readonly StringBuilder _fraseUsuario = new();
+    private bool _respuestaDeTexto;
     private int _parandoPorOrden;
 
     private string _sesionId = "";
@@ -402,6 +403,11 @@ public sealed class ConversacionEnVivo : IDisposable
             return true;
         }
         finally { _apertura.Release(); }
+
+    public async Task ArrancarSoloTextoAsync()
+    {
+        _respuestaDeTexto = true;
+        await ArrancarAsync(0, conMicrofono: false);
     }
 
     /// <summary>
@@ -429,7 +435,7 @@ public sealed class ConversacionEnVivo : IDisposable
     /// para que un corte de red pasajero no se le note al usuario, y para que tampoco se convierta
     /// en un bucle si la red no vuelve.
     /// </param>
-    public async Task ArrancarAsync(int intento = 0)
+    public async Task ArrancarAsync(int intento = 0, bool conMicrofono = true)
     {
         if (Viva) return;
         Interlocked.Exchange(ref _parandoPorOrden, 0);
@@ -471,16 +477,16 @@ public sealed class ConversacionEnVivo : IDisposable
             // «SESIÓN ABIERTA» YA NO SE ESCRIBE AQUÍ: aquí solo se sabe que el socket conectó (promesa 220).
             EmpiezaUnaConexion("Te escucho.");   // cuando el servidor lo confirme (49 con GPT-Live, 50 con GPT Realtime)
 
-            _audio.Capturado += MandarTrozo;
-            _audio.AbrirMicrofono();
-            // DE DONDE LO ELIGIÓ LA APP, no del micrófono del portátil por defecto (promesa 146).
-            // Si el médico eligió el collar en la ventana de la consulta, hablar con Ü y ENSEÑARLE
-            // entran por ahí — que es lo que se pidió: un aparato, una elección.
-            ObedecerAlMicrofonoDeLaApp();
-            if (_oyendoElCambioDeMicrofono == null)
+            if (conMicrofono)
             {
-                _oyendoElCambioDeMicrofono = () => { try { ObedecerAlMicrofonoDeLaApp(); } catch { } };
-                ElMicrofonoDeLaApp.Cambio += _oyendoElCambioDeMicrofono;
+                _audio.Capturado += MandarTrozo;
+                _audio.AbrirMicrofono();
+                ObedecerAlMicrofonoDeLaApp();
+                if (_oyendoElCambioDeMicrofono == null)
+                {
+                    _oyendoElCambioDeMicrofono = () => { try { ObedecerAlMicrofonoDeLaApp(); } catch { } };
+                    ElMicrofonoDeLaApp.Cambio += _oyendoElCambioDeMicrofono;
+                }
             }
 
             // NO HAY VÍDEO EN DIRECTO. Ver es ahora un GESTO, no un caño abierto: una foto sale al
@@ -501,7 +507,7 @@ public sealed class ConversacionEnVivo : IDisposable
             {
                 await Task.Delay(TimeSpan.FromSeconds(1 + intento));
                 LogBus.Log("voz-viva", $"reintentando abrir la voz ({intento + 2}/3)…");
-                await ArrancarAsync(intento + 1);
+                await ArrancarAsync(intento + 1, conMicrofono);
                 return;
             }
 
@@ -1467,9 +1473,16 @@ public sealed class ConversacionEnVivo : IDisposable
             + $"instrucciones de {instrucciones.Length} car." + (esperara ? " · solo habla cuando se le pide" : ""));
     }
 
-    public async Task EnviarTextoAsync(string texto)
+    public Task EnviarTextoAsync(string texto)
+        => EnviarTextoInternoAsync(texto, soloTexto: false);
+
+    public Task EnviarTextoSoloTextoAsync(string texto)
+        => EnviarTextoInternoAsync(texto, soloTexto: true);
+
+    private async Task EnviarTextoInternoAsync(string texto, bool soloTexto)
     {
         if (!SalidaAbierta || string.IsNullOrWhiteSpace(texto)) return;
+        if (soloTexto) _respuestaDeTexto = true;
         EmpiezaUnTurnoDelUsuario("texto");   // escribir también es pedir algo nuevo (spec 017)
         Conversacion?.Agregar("usuario", texto);
         Dice?.Invoke($"Tú: {texto}");
@@ -1886,6 +1899,7 @@ public sealed class ConversacionEnVivo : IDisposable
         switch (hecho)
         {
             case Hecho.Suena s:
+                if (_respuestaDeTexto) break;
                 // Tras una interrupción manual, el resto de la frase que ya venía en vuelo
                 // no debe resucitar la voz: se tira hasta que pase la ventana o hables tú.
                 if (Environment.TickCount64 < _silencioHastaMs) break;
@@ -1934,6 +1948,7 @@ public sealed class ConversacionEnVivo : IDisposable
                 bool hablo = _fraseU.Length > 0;
                 _fraseU.Clear();
                 _fraseUsuario.Clear();
+                _respuestaDeTexto = false;
                 _reintentos = 0;   // hay conversación de verdad: el contador de caídas seguidas vuelve a cero
                 Cerro?.Invoke();
                 if (hablo) SeguirContandoSiQuedan();

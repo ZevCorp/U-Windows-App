@@ -368,9 +368,15 @@ public sealed class ProtocoloGptLive : IProtocolo
             // eso se compara el tipo entero y no un prefijo. response.completed tampoco se atiende: es el
             // fin del trabajo del delegado, no del turno — la voz sigue hablando después.
             case "response.event":
-                if (m.TryGetProperty("event", out var ev) && Cadena(ev, "type") == "response.output_item.done"
-                    && ev.TryGetProperty("item", out var item) && Cadena(item, "type") == "function_call")
-                    hechos.Add(new Hecho.Pide(new[] { ProtocoloOpenAI.LaLlamada(item) }));
+                if (m.TryGetProperty("event", out var ev))
+                {
+                    if (Cadena(ev, "type") == "response.output_text.done"
+                        && Cadena(ev, "text") is { Length: > 0 } texto)
+                        hechos.Add(new Hecho.DiceU(texto));
+                    else if (Cadena(ev, "type") == "response.output_item.done"
+                        && ev.TryGetProperty("item", out var item) && Cadena(item, "type") == "function_call")
+                        hechos.Add(new Hecho.Pide(new[] { ProtocoloOpenAI.LaLlamada(item) }));
+                }
                 break;
 
             // LA SESIÓN ABRIÓ, dicho por el servidor y no por el socket: conectar y mandar session.start no es

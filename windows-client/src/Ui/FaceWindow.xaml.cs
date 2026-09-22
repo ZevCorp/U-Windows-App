@@ -1622,7 +1622,23 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _prevForeground = IntPtr.Zero;
     }
 
-    private void OnNotchTextoEnviado(string texto) => EnviarTexto(texto);
+    private void OnNotchTextoEnviado(string texto) => _ = EnviarTextoDesdeElNotchAsync(texto);
+
+    private async Task EnviarTextoDesdeElNotchAsync(string texto)
+    {
+        if (_pendingAnswer is { Task.IsCompleted: false })
+        {
+            _pendingAnswer.TrySetResult(texto);
+            return;
+        }
+        if (_vivo == null) return;
+        if (!_vivo.Viva)
+        {
+            try { await _vivo.ArrancarSoloTextoAsync(); }
+            catch (Exception ex) { SetStatus($"No pude abrir el chat: {ex.Message}"); return; }
+        }
+        await _vivo.EnviarTextoSoloTextoAsync(texto);
+    }
 
     /// <summary>
     /// Mantiene fija la esquina inferior derecha: si la ventana cambia de tamaño (Expander abierto,
@@ -2567,25 +2583,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     // --- Entrada del usuario ---
 
-    private void EnviarTexto(string text)
-    {
-        text = text.Trim();
-        if (text.Length == 0) return;
-
-        // Si el asistente está esperando una respuesta a su pregunta, esto la resuelve.
-        if (_pendingAnswer != null && !_pendingAnswer.Task.IsCompleted)
-        {
-            _pendingAnswer.TrySetResult(text);
-            return;
-        }
-
-        // Con la conversación viva abierta, escribir es SEGUIR HABLANDO, no empezar otra cosa.
-        // Arrancar aquí un objetivo aparte pondría dos cerebros a mover la misma pantalla a la vez.
-        if (_vivo?.Viva == true) { _ = _vivo.EnviarTextoAsync(text); return; }
-
-        _ = StartGoal(text);
-    }
-
     /// <summary>
     /// El micrófono. Con voz en vivo disponible, ABRE Y CIERRA una conversación; sin ella, cae al
     /// dictado de una frase de siempre.
@@ -2876,7 +2873,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         bool on = _interruptorDelDecisor?.Encendido == true;
         JevBtn.Content = on ? "Jev · on" : "Jev · off";
         JevBtn.Opacity = on ? 1.0 : 0.7;
-        if (_interruptorDelDecisor != null) SetStatus("Jev " + _interruptorDelDecisor.Estado);
     }
 
     private async void OnToggleTeach(object sender, RoutedEventArgs e)

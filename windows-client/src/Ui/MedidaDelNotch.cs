@@ -45,7 +45,7 @@ public static class MedidaDelNotch
     public const double LetraDelPaso = 11.5;
 
     /// <summary>Lo que le queda al texto después del icono y el aire.</summary>
-    public static double AnchoDelTexto => Ancho - AireIzquierda - AireDerecha - CajaDelIcono - AireDelIcono;
+    public static double AnchoDelTexto => Ancho - AireIzquierda - AireDerecha - CajaDelIcono - AireDelIcono - AireDelChat - CajaDelChat;
 
     /// <summary>
     /// El alto de la pieza. NO depende de lo que tenga dentro: ese es justo el punto de la promesa 249.

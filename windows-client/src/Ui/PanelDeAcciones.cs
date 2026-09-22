@@ -9,6 +9,8 @@ using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using System.Collections.ObjectModel;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace U.WindowsClient.Ui;
 
@@ -180,6 +182,8 @@ public sealed class PanelDeAcciones : Window
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.None,
             VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
             RenderTransform = _desplazamientoDelTexto,
             RenderTransformOrigin = new Point(0, 0.5),
             Text = _dice.Texto,
@@ -306,6 +310,13 @@ public sealed class PanelDeAcciones : Window
         var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
         var cursor = new Point(p.X / dpi.DpiScaleX, p.Y / dpi.DpiScaleY);
         var (libre, _) = LaBarraDeTareas.Mirar();
+        if (ChatAbierto)
+        {
+            _cursorSobreLaPieza = true;
+            _dentroDeLaZona = true;
+            return;
+        }
+
         var tamano = new Size(MedidaDelNotch.Ancho, MedidaDelNotch.Alto);
         bool dentro = ReglaDeLaBandeja.MantieneLaIntencion(libre, tamano, cursor, IsVisible);
         bool sobrePieza = IsVisible && ReglaDeLaBandeja.ActivaEscritura(libre, tamano, cursor);
@@ -353,21 +364,23 @@ public sealed class PanelDeAcciones : Window
     /// </summary>
     public void Habla(string texto, bool esDeU)
     {
-        if (esDeU) _dice.UDice(texto); else _dice.PersonaDice(texto);
-        ActualizaMensaje(texto, esDeU);
+        string limpio = TextoSinEmojis(texto);
+        if (limpio.Length == 0) return;
+        if (esDeU) _dice.UDice(limpio); else _dice.PersonaDice(limpio);
+        ActualizaMensaje(limpio, esDeU);
         Pintar();
     }
 
     public void Mensaje(string texto, bool esDeU)
     {
-        if (string.IsNullOrWhiteSpace(texto)) return;
-        ActualizaMensaje(texto, esDeU);
+        ActualizaMensaje(TextoSinEmojis(texto), esDeU);
     }
 
     public void Avisar(string texto)
     {
-        if (string.IsNullOrWhiteSpace(texto)) return;
-        _dice.UDice(texto);
+        string limpio = TextoSinEmojis(texto);
+        if (limpio.Length == 0) return;
+        _dice.UDice(limpio);
         Pintar();
     }
 
@@ -418,12 +431,12 @@ public sealed class PanelDeAcciones : Window
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Foreground = Pincel(PaletaDelNotch.Tinta),
-            ToolTip = "Abrir conversación",
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
             Cursor = System.Windows.Input.Cursors.Hand,
         };
         AutomationProperties.SetName(boton, "Abrir conversación");
+        EstilizarBoton(boton, 10);
         var glifo = new Path
         {
             Data = Geometry.Parse("M3,4 A2,2 0 0 1 5,2 H19 A2,2 0 0 1 21,4 V13 A2,2 0 0 1 19,15 H10 L6,19 V15 H5 A2,2 0 0 1 3,13 Z"),
@@ -449,13 +462,20 @@ public sealed class PanelDeAcciones : Window
             VerticalContentAlignment = VerticalAlignment.Center,
         };
         AutomationProperties.SetName(cerrar, "Cerrar conversación");
+        EstilizarBoton(cerrar, 10);
+        cerrar.Content = new Path
+        {
+            Data = Geometry.Parse("M7,7 L17,17 M17,7 L7,17"), Stroke = Pincel(PaletaDelNotch.Tinta),
+            StrokeThickness = 1.7, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            Width = 24, Height = 24,
+        };
         cerrar.Click += (_, __) => CerrarChat();
         var lista = new StackPanel { Orientation = Orientation.Vertical };
         var scroll = new ScrollViewer
         {
             Content = lista, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            PanningMode = PanningMode.VerticalOnly, CanContentScroll = true,
+            PanningMode = PanningMode.VerticalOnly, CanContentScroll = false,
             Margin = new Thickness(0, 10, 0, 10),
         };
         var entrada = new TextBox
@@ -465,7 +485,6 @@ public sealed class PanelDeAcciones : Window
             Foreground = Pincel(PaletaDelNotch.Tinta), CaretBrush = Pincel(PaletaDelNotch.Tinta),
             BorderThickness = new Thickness(0), FontFamily = Letra, FontSize = 14,
             VerticalContentAlignment = VerticalAlignment.Center,
-            ToolTip = "Escribe un mensaje",
         };
         entrada.KeyDown += (_, e) =>
         {
@@ -479,6 +498,13 @@ public sealed class PanelDeAcciones : Window
             Foreground = Pincel(PaletaDelNotch.Tinta), Cursor = System.Windows.Input.Cursors.Hand,
         };
         AutomationProperties.SetName(enviar, "Enviar mensaje");
+        EstilizarBoton(enviar, 10);
+        enviar.Content = new Path
+        {
+            Data = Geometry.Parse("M5,12 H19 M12,5 L19,12 L12,19"), Stroke = Pincel(PaletaDelNotch.Tinta),
+            StrokeThickness = 1.7, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round, Width = 22, Height = 22,
+        };
         enviar.Click += (_, __) => EnviarTexto();
         var entradaFila = new Grid { Margin = new Thickness(0, 0, 0, 2) };
         entradaFila.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -500,6 +526,34 @@ public sealed class PanelDeAcciones : Window
         return (vista, cerrar, entrada, scroll, lista);
     }
 
+    private static void EstilizarBoton(Button boton, double radio)
+    {
+        boton.FocusVisualStyle = null;
+        var plantilla = new ControlTemplate(typeof(Button));
+        var raiz = new FrameworkElementFactory(typeof(Grid));
+        var fondo = new FrameworkElementFactory(typeof(Border));
+        fondo.Name = "fondo";
+        fondo.SetValue(Border.CornerRadiusProperty, new CornerRadius(radio));
+        fondo.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+        fondo.SetValue(Border.BorderBrushProperty, Brushes.Transparent);
+        fondo.SetValue(Border.BorderThicknessProperty, new Thickness(0));
+        var contenido = new FrameworkElementFactory(typeof(ContentPresenter));
+        contenido.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        contenido.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+        contenido.SetValue(ContentPresenter.ContentSourceProperty, "Content");
+        raiz.AppendChild(fondo);
+        raiz.AppendChild(contenido);
+        plantilla.VisualTree = raiz;
+        var hover = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
+        hover.Setters.Add(new Setter(UIElement.OpacityProperty, 0.72, "fondo"));
+        plantilla.Triggers.Add(hover);
+        var foco = new Trigger { Property = Button.IsKeyboardFocusedProperty, Value = true };
+        foco.Setters.Add(new Setter(Border.BorderBrushProperty, Pincel(PaletaDelNotch.Filete), "fondo"));
+        foco.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(1), "fondo"));
+        plantilla.Triggers.Add(foco);
+        boton.Template = plantilla;
+    }
+
     private void EnviarTexto()
     {
         string texto = _entradaChat.Text.Trim();
@@ -511,6 +565,7 @@ public sealed class PanelDeAcciones : Window
 
     private void ActualizaMensaje(string texto, bool esDeU, bool nuevaLinea = false)
     {
+        texto = TextoParaChat(texto);
         if (string.IsNullOrWhiteSpace(texto)) return;
         if (!nuevaLinea && _mensajes.Count > 0 && _mensajes[^1].EsDeU == esDeU)
             _mensajes[^1] = (esDeU, texto);
@@ -518,6 +573,48 @@ public sealed class PanelDeAcciones : Window
         if (_mensajes.Count > 40) _mensajes.RemoveRange(0, _mensajes.Count - 40);
         PintarChat();
     }
+
+    private static string TextoSinEmojis(string texto)
+    {
+        if (string.IsNullOrEmpty(texto)) return "";
+        var limpio = new StringBuilder(texto.Length);
+        foreach (var rune in texto.EnumerateRunes())
+        {
+            int n = rune.Value;
+            bool emoji = n is >= 0x1F000 and <= 0x1FAFF
+                or >= 0x2600 and <= 0x27BF
+                or >= 0xFE0E and <= 0xFE0F
+                or 0x200D;
+            if (!emoji) limpio.Append(rune.ToString());
+        }
+        return limpio.ToString().Trim();
+    }
+
+    private static string TextoParaChat(string texto)
+    {
+        texto = TextoSinEmojis(texto).Replace("\r\n", "\n").Replace('\r', '\n');
+        var lineas = new List<string>();
+        bool lineaVacia = false;
+        foreach (string original in texto.Split('\n'))
+        {
+            string linea = Regex.Replace(original, @"^\s{0,3}#{1,6}\s*", "");
+            linea = Regex.Replace(linea, @"^\s*[-*+]\s+", "• ");
+            linea = Regex.Replace(linea, @"\[([^\]]+)\]\([^)]*\)", "$1");
+            linea = linea.Replace("**", "").Replace("__", "").Replace("`", "");
+            linea = Regex.Replace(linea, @"(?<!\*)\*([^*]+)\*", "$1").TrimEnd();
+            if (linea.Length == 0)
+            {
+                if (lineaVacia) continue;
+                lineaVacia = true;
+            }
+            else lineaVacia = false;
+            lineas.Add(linea);
+        }
+        return string.Join("\n", lineas).Trim();
+    }
+
+    private static Thickness MargenDelMensaje(bool esDeU) =>
+        esDeU ? new Thickness(0, 6, 44, 6) : new Thickness(44, 6, 0, 6);
 
     private void PintarChat()
     {
@@ -527,17 +624,18 @@ public sealed class PanelDeAcciones : Window
             var linea = new Border
             {
                 Background = new SolidColorBrush(esDeU
-                    ? Color.FromArgb(30, 255, 255, 255)
-                    : Color.FromArgb(18, 255, 255, 255)),
+                    ? Color.FromArgb(38, 255, 255, 255)
+                    : Color.FromArgb(24, 255, 255, 255)),
                 CornerRadius = new CornerRadius(14), Padding = new Thickness(12, 8, 12, 8),
-                Margin = new Thickness(esDeU ? 42 : 0, 3, esDeU ? 0 : 42, 3),
+                Margin = MargenDelMensaje(esDeU),
                 HorizontalAlignment = esDeU ? HorizontalAlignment.Left : HorizontalAlignment.Right,
-                MaxWidth = 330,
+                MaxWidth = 304,
                 Child = new TextBlock
                 {
                     Text = texto, TextWrapping = TextWrapping.Wrap,
                     Foreground = Pincel(PaletaDelNotch.Tinta), FontFamily = Letra,
-                    FontSize = 14, FontWeight = esDeU ? FontWeights.SemiBold : FontWeights.Normal,
+                    FontSize = 14, FontWeight = FontWeights.Normal, LineHeight = 20,
+                    LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
                 },
             };
             _listaChat.Children.Add(linea);
@@ -547,6 +645,7 @@ public sealed class PanelDeAcciones : Window
 
     private void BajarScrollChat()
     {
+        _scrollChat.UpdateLayout();
         double destino = Math.Max(0, _scrollChat.ExtentHeight - _scrollChat.ViewportHeight);
         _scrollChatTimer.Stop();
         if (destino <= _scrollChat.VerticalOffset + 1) { _scrollChat.ScrollToEnd(); return; }
@@ -616,6 +715,8 @@ public sealed class PanelDeAcciones : Window
                 ? _ventanaDelTexto.ActualWidth
                 : MedidaDelNotch.AnchoDelTexto;
             _excesoDeTexto = Math.Max(0, _texto.DesiredSize.Width - anchoVisible);
+            _texto.HorizontalAlignment = _excesoDeTexto > 1 ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+            _texto.TextAlignment = _excesoDeTexto > 1 ? TextAlignment.Left : TextAlignment.Center;
             if (_excesoDeTexto > 1) _marquesina.Start();
         }), DispatcherPriority.Loaded);
     }
@@ -648,7 +749,6 @@ public sealed class PanelDeAcciones : Window
         if (_texto.Text != _dice.Texto)
         {
             _texto.Text = _dice.Texto;
-            Restaña(_texto);
             PrepararMarquesina();
         }
 
