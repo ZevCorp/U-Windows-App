@@ -781,7 +781,10 @@ internal static class Contrato
         // ── Spec 036: las puertas son únicas ────────────────────────────────────────────────────
         Prueba("287. Jev elige entre puertas únicas y numeradas —«3) Investigación (Hyperlink)»— y lo elegido se acciona por su SELECTOR, nunca por su etiqueta: dos puertas con el mismo nombre no chocan, la mano recibe el selector de la elegida, y la cuenta la nombra por su etiqueta y su número", JevEligePorNumeroYSePulsaPorSelector);
         Prueba("288. la segunda mejor sin otra llamada: si la elegida no está viva al ir a pulsarla se prueba la siguiente por probabilidad si supera el mínimo, como mucho una vez más; a Jev se le preguntó UNA sola vez; la cuenta dice qué se probó y por qué; y un homónimo o un fallo que no sea «no está» no dispara la segunda", LaSegundaMejorSinOtraLlamada);
-        Prueba("289. una llamada, tres preguntas: el cuerpo lleva puerta (choice), cumplido (noul) y peligro (noul); con cumplido alto no se acciona y se dice que el objetivo ya está; con peligro alto no se acciona y se dice por qué; y una respuesta sin esas dos sigue valiendo", UnaLlamadaTresPreguntas);
+        // REESCRITA EL 2026-09-22 (spec 046; el número no se recicla). Su última cláusula decía «y una respuesta sin
+        // esas dos sigue valiendo», y era exactamente la compuerta abierta: Noul devolvía 0 cuando la noul faltaba y las
+        // compuertas cortan por arriba, así que 0 dejaba pasar. Su fixture lo EXIGÍA. Roja de la fase 0 a la 3 de la 046.
+        Prueba("289. una llamada, tres preguntas: el cuerpo lleva puerta (choice), cumplido (noul) y peligro (noul); con cumplido alto no se acciona y se dice que Jev cree que el objetivo ya está; con peligro alto no se acciona y se dice por qué; y una respuesta sin alguna de las dos, o con una fuera de [0,1], no se acciona y dice cuál falta (2026-09-22: hasta hoy «seguía valiendo» y 0 abría la compuerta)", UnaLlamadaTresPreguntas);
         // ── Spec 037: el tramo ──────────────────────────────────────────────────────────────────
         Prueba("291. map_tramo(objetivo, tope) contesta al instante «en marcha» y devuelve el turno: el bucle corre por detrás; pedir otro mientras uno corre no arranca un segundo y dice cuál corre; sin `objetivo` dice qué falta; y con el decisor apagado no existe, como map_decidir", MapTramoContestaAlInstanteYCorrePorDetras);
         Prueba("292. el tramo para solo y su cuenta dice por cuál: el decisor dice que el objetivo ya está cumplido; se agota el tope; el decisor no se atreve; la mano no pudo; se pidió el freno; o se repitió la misma puerta tres veces; y cada paso cuenta, hecho o no", ElTramoParaSoloYDicePorQue);
@@ -822,6 +825,21 @@ internal static class Contrato
         Prueba("341. dos recordatorios vencidos despiertan una sola sesión de voz", LosAvisosCompartenUnaSesionViva);
         Prueba("342. una petición personal explícita se puede guardar aunque el modelo no llame la herramienta", PeticionPersonalExplícitaSeGuarda);
         Prueba("343. cada proceso de Ü escribe en su propio archivo de log identificable", CadaInstanciaTieneSuLog);
+
+        // ── Spec 046: la decisión de Jev falla cerrada ──────────────────────────────────────────
+        // ESCRITAS ANTES QUE SU CÓDIGO (2026-09-22). Nacen de medir la rama del dueño: su «validar probabilidades»
+        // convertía en 0 lo que salía de [0,1] —también peligro y cumplido— y 0 abre la compuerta; y main hacía lo
+        // mismo con Noul cuando la noul no venía. Una respuesta que no se entiende NO acciona. Los números 344-350 y
+        // 386-387: 341-343 los gastó main el mismo día, y 351-385 son de las ramas B, C y D.
+        Prueba("344. la distribución de Jev se valida ENTERA antes de cualquier compuerta: cada probabilidad finita y en [0,1], la suma 1 (±0,02), las claves exactamente las que viajaron —ni una de más ni una de menos—, la elegida el máximo y sin empate, y la confianza finita y en [0,1]; cualquier cosa fuera de forma es «no sé»: no se acciona, el porqué nombra CADA regla que falló con su campo y su valor crudo —no solo la primera—, la decisión conserva la confianza cruda y no ofrece alternativas, y nada se convierte en 0 ni se satura; y un cuerpo de error que no se pudo leer dice por qué en vez de callarlo", LaDistribucionSeValidaEntera);
+        Prueba("345. «cumplido» y «peligro» fallan cerrados: si alguna falta, no es número, no es finita o está fuera de [0,1] se toma el caso peor —peligro 1, cumplido 0—, no se acciona, y el porqué dice cuál falta o cuál vino y con qué valor; un 0 solo abre la compuerta cuando Jev lo dijo", LasNoulsFallanCerradas);
+        Prueba("346. lo irreversible no se pulsa por decisión: una candidata cuya etiqueta es peligrosa —grabar, guardar, finalizar, borrar, eliminar, enviar, firmar— no se pulsa desde map_decidir ni desde el tramo, ni como elegida ni como segunda mejor, aunque Jev la dé con confianza 0,99 y peligro 0; la mano no la recibe, la cuenta dice cuál se vetó y por qué, el control vuelve con el inventario; y el cuerpo deja de pedirle a Jev «la que menos daño haga»", LoIrreversibleNoSePulsaPorDecision);
+        Prueba("347. «ninguna» es una opción de la pregunta: además de TODAS las puertas ofrecidas viaja «0) ninguna» —nada de esta pantalla avanza hacia el objetivo— como una opción más del choice; si Jev la elige no se acciona y se dice que no lo ve en esta pantalla, con su probabilidad; y la añade quien pregunta, no CuerpoDeEleccion, así que la 282 sigue tal cual", NingunaEsUnaOpcionDeLaPregunta);
+        Prueba("348. el modelo configurado llega al cuerpo: con U_TYPESAFE_MODELO=X el cuerpo que manda el interruptor lleva «model»:«X», sin la variable lleva el alias por defecto, y el estado del botón y el cuerpo nombran el mismo modelo; la firma Elegir de seis argumentos se conserva como el ÚNICO método con ese nombre y delega en ElegirConModelo con los valores por defecto", ElModeloConfiguradoLlegaAlCuerpo);
+        Prueba("349. a Jev solo viaja lo que la política permite: en sapgui:// sin U_DECISOR_SAP_TEXTO=si el transporte no se toca ni una vez y no se acciona —la decisión dice que no manda texto y que decide Luna, sin caer a ninguna regla local—; un origin vetado (los del portal clínico por defecto, más los de U_DECISOR_TEXTO_VETADO) tampoco viaja ni se decide; de la ubicación viaja solo el origin, nunca el título ni la ruta; y la política vive en un solo sitio y compara el prefijo por el mismo camino que el resto del código", AJevSoloViajaLoQueLaPoliticaPermite);
+        Prueba("350. las filas nunca viajan por su texto: GuiGridFila, GuiTreeFila y GuiTreeCarpeta llegan a Jev como «N) fila (tipo)», sin etiqueta, también con SAP habilitado; la respuesta se mapea por id a la puerta ofrecida y la mano sigue pulsando por selector; y lo que viajó no se registra por su texto: la línea «decisor:», el relato de map_decidir y la línea «paso k:» del tramo nombran una fila por número y tipo, y dicen cuántos ids viajaron de cuántos, cuántas filas fueron sin texto y cuántos caracteres se mandaron", LasFilasNuncaViajanPorSuTexto);
+        Prueba("386. «cumplido» solo con evidencia: un cumplido alto deja de accionar y el tramo para diciendo que Jev cree que ya está —con el porqué del decisor detrás— sin declarar el objetivo cumplido; lo decide el número, no el texto del porqué; y la cuenta del tramo devuelve el turno con lo que hay delante, para que lo compruebe quien sí puede —la llegada o la persona—", CumplidoSoloConEvidencia);
+        Prueba("387. la masa de los cinco mejores y los tokens son señal, no compuerta: la decisión lleva N, la masa de los 5 mejores y los input_tokens que usage trajo —sin usage, «sin medir»—; los tres salen en la cuenta y en la línea «decisor:», también cuando no se acciona; ninguna decisión cambia por ellos; y «absent» no se pregunta", LaMasaYLosTokensSonSenalNoCompuerta);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -11528,15 +11546,31 @@ internal static class Contrato
 
     private static object? PropDe(object o, string nombre) => o.GetType().GetProperty(nombre)?.GetValue(o);
 
+    /// <summary>
+    /// El id de la opción «ninguna» que viaja en el choice desde la 347 (spec 046). El ayudante de abajo la
+    /// manda desde la fase 0, y la 347 exige que <c>PeticionASystemOne.IdNinguna</c> sea EXACTAMENTE esta:
+    /// la 344 rechaza una respuesta cuyas claves no sean las que viajaron, así que si producción y contrato
+    /// discreparan en el texto, 278 y 279 caerían por una razón que no es la suya.
+    /// </summary>
+    private const string IdNinguna = "0) ninguna: nada de esta pantalla avanza hacia el objetivo";
+
     /// <summary>Una respuesta de TypeSafe como la documenta su API, para dársela al transporte falso.</summary>
+    /// <remarks>
+    /// DESDE LA 046 (2026-09-22) LLEVA LA CLAVE «NINGUNA» A 0 Y LAS DOS NOULS A 0,1: la 344 exige que la respuesta
+    /// traiga exactamente las claves que viajaron —y desde la 347 viaja «ninguna»—, y la 345 no acciona sin las
+    /// nouls. Sin esto, 278 («buena») y 279 («justa»), que afirman Actuar=true con este ayudante, caerían por una
+    /// razón ajena a su enunciado. Σ sigue siendo 1: «ninguna» pesa 0.
+    /// </remarks>
     private static string RespuestaChoice(string id, string elegida, double confianza, params string[] opciones)
     {
+        var ic = System.Globalization.CultureInfo.InvariantCulture;
         var probs = string.Join(",", opciones.Select(o =>
-            $"\"{o}\":{(o == elegida ? confianza : (1 - confianza) / Math.Max(1, opciones.Length - 1)).ToString(System.Globalization.CultureInfo.InvariantCulture)}"));
+            $"\"{o}\":{(o == elegida ? confianza : (1 - confianza) / Math.Max(1, opciones.Length - 1)).ToString(ic)}"))
+            + ",\"" + IdNinguna + "\":0";
         return "{\"model\":\"jev-1.13.0\",\"answers\":{\"" + id + "\":{\"type\":\"choice\",\"choice\":\"" + elegida
-             + "\",\"probabilities\":{" + probs + "},\"confidence\":"
-             + confianza.ToString(System.Globalization.CultureInfo.InvariantCulture)
-             + "}},\"usage\":{\"input_tokens\":312,\"output_tokens\":0}}";
+             + "\",\"probabilities\":{" + probs + "},\"confidence\":" + confianza.ToString(ic) + "}"
+             + ",\"cumplido\":{\"type\":\"noul\",\"noul\":0.1},\"peligro\":{\"type\":\"noul\",\"noul\":0.1}"
+             + "},\"usage\":{\"input_tokens\":312,\"output_tokens\":0}}";
     }
 
     private static void PorDefectoDecideLuna()
@@ -12034,21 +12068,27 @@ internal static class Contrato
             Debe(q.TryGetProperty("peligro", out var pe) && pe.GetProperty("type").GetString() == "noul", "y «peligro» como noul: ¿accionar la elegida es irreversible?");
         }
 
+        var puertas = new[] { "1) Nuevo (Button)", "2) Grabar (Button)" };
+        // LA RESPUESTA VA COMPLETA DESDE LA 046: Σ = 1 sobre las dos puertas más «ninguna». Hasta el 2026-09-22 mandaba
+        // solo la elegida (Σ = 0,95), el único Σ≠1 del contrato, y la 344 la rechazaría por la suma y por las claves.
         string Respuesta(string elegida, double conf, double? cumplido, double? peligro)
         {
             var ic = System.Globalization.CultureInfo.InvariantCulture;
+            string otra = puertas.First(p => p != elegida);
             string nouls = "";
             if (cumplido != null) nouls += ",\"cumplido\":{\"type\":\"noul\",\"noul\":" + cumplido.Value.ToString(ic) + "}";
             if (peligro != null) nouls += ",\"peligro\":{\"type\":\"noul\",\"noul\":" + peligro.Value.ToString(ic) + "}";
             return "{\"model\":\"jev-1.13.0\",\"answers\":{\"puerta\":{\"type\":\"choice\",\"choice\":\"" + elegida + "\",\"probabilities\":{\"" + elegida + "\":"
-                 + conf.ToString(ic) + "},\"confidence\":" + conf.ToString(ic) + "}" + nouls + "},\"usage\":{}}";
+                 + conf.ToString(ic) + ",\"" + otra + "\":" + (1 - conf).ToString(ic) + ",\"" + IdNinguna + "\":0},\"confidence\":" + conf.ToString(ic) + "}"
+                 + nouls + "},\"usage\":{}}";
         }
-        var puertas = new[] { "1) Nuevo (Button)", "2) Grabar (Button)" };
         object D(string json2) => elegir.Invoke(null, new object[] { "jev", "SAP/NWP1", "crear", puertas, 0.7, (Func<string, string>)(_ => json2) })!;
 
+        // «YA ESTÁ» es lo que las dos versiones del mensaje comparten («el objetivo ya está cumplido» hasta la fase 8 de
+        // la 046; «Jev cree que el objetivo ya está» desde ella). Que diga «Jev cree» lo juzga la 386, no esta.
         var ya = D(Respuesta("1) Nuevo (Button)", 0.95, 0.9, 0.1));
-        Debe(!(bool)PropDe(ya, "Actuar")! && ((string)PropDe(ya, "Porque")!).Contains("cumplido", StringComparison.OrdinalIgnoreCase),
-            $"con cumplido 0,9 no se acciona y se dice que el objetivo ya está (dijo: «{PropDe(ya, "Porque")}»)");
+        Debe(!(bool)PropDe(ya, "Actuar")! && ((string)PropDe(ya, "Porque")!).Contains("ya está", StringComparison.OrdinalIgnoreCase),
+            $"con cumplido 0,9 no se acciona y se dice que Jev cree que el objetivo ya está (dijo: «{PropDe(ya, "Porque")}»)");
         Debe(Math.Abs((double)PropDe(ya, "Cumplido")! - 0.9) < 0.001, "y se conserva cuánto de cumplido dijo");
 
         var peligroso = D(Respuesta("2) Grabar (Button)", 0.95, 0.1, 0.8));
@@ -12057,8 +12097,17 @@ internal static class Contrato
 
         var normal = D(Respuesta("1) Nuevo (Button)", 0.95, 0.1, 0.1));
         Debe((bool)PropDe(normal, "Actuar")!, "con las dos bajas se acciona");
+
+        // LA CLÁUSULA QUE SE INVIRTIÓ (2026-09-22): el cuerpo SIEMPRE pide las dos nouls (arriba se comprueba), así que
+        // una respuesta sin ellas no es «un transporte viejo»: es una respuesta malformada, y un 0 supuesto abría la
+        // compuerta de peligro. Ausente = no se acciona, y se dice cuál falta.
         var viejo = D(Respuesta("1) Nuevo (Button)", 0.95, null, null));
-        Debe((bool)PropDe(viejo, "Actuar")!, "y una respuesta sin las dos nouls sigue valiendo: un transporte viejo no rompe el paso");
+        Debe(!(bool)PropDe(viejo, "Actuar")!, $"una respuesta sin las dos nouls NO acciona: 0 supuesto abría la compuerta (salió Actuar={PropDe(viejo, "Actuar")})");
+        Debe(((string)PropDe(viejo, "Porque")!).Contains("falta", StringComparison.OrdinalIgnoreCase),
+            $"y se dice cuál falta (dijo: «{PropDe(viejo, "Porque")}»)");
+        var sinPeligro = D(Respuesta("1) Nuevo (Button)", 0.95, 0.1, null));
+        Debe(!(bool)PropDe(sinPeligro, "Actuar")! && ((string)PropDe(sinPeligro, "Porque")!).Contains("peligro", StringComparison.OrdinalIgnoreCase),
+            $"sin «peligro» tampoco, y se nombra la que falta (dijo: «{PropDe(sinPeligro, "Porque")}»)");
     }
 
     // ── Spec 037: el tramo ───────────────────────────────────────────────────────────────────────
@@ -12077,12 +12126,13 @@ internal static class Contrato
         public int Decisiones;
     }
 
-    /// <summary>Un mapa listo para tramos: puertas A/B/C con selector, mano falsa, decisor falso, sin freno real.</summary>
+    /// <summary>Un mapa listo para tramos: puertas A/B/C con selector (u otras, desde la 046), mano falsa, decisor falso, sin freno real.</summary>
     private static TramoDePrueba? MapaParaTramo(
         Func<int, U.WindowsClient.Decision.DecisionDeUnPaso> decide,
         Func<string, RecorrerSegunElNucleo.Resultado>? mano = null,
         Func<bool>? hayQueParar = null,
-        int retrasoDelDecisorMs = 0)
+        int retrasoDelDecisorMs = 0,
+        (string Etiqueta, string Tipo)[]? puertas = null)
     {
         var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
         var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
@@ -12093,7 +12143,7 @@ internal static class Contrato
         if (pPuertas == null || pDecisor == null || pParar == null || pProgreso == null || pAvisar == null || pFreno == null) return null;
 
         var t = new TramoDePrueba();
-        var m = MapaParaDecidir(pPuertas, ("A", "Button"), ("B", "Button"), ("C", "Button"))!.Value;
+        var m = MapaParaDecidir(pPuertas, puertas ?? new[] { ("A", "Button"), ("B", "Button"), ("C", "Button") })!.Value;
         t.Mapa = m.mapa;
         t.Mapa.RecorrerPorElNucleo = pasos =>
         {
@@ -12175,7 +12225,10 @@ internal static class Contrato
         var ids = new[] { "1) A (Button)", "2) B (Button)", "3) C (Button)" };
 
         // 1. El objetivo ya está cumplido: el decisor lo dice y no se pulsa nada.
-        var cumplido = MapaParaTramo(_ => Decision("No", "Jev dice que el objetivo ya está cumplido en esta pantalla (0.90): no se acciona nada más. Decide Luna.", 0.9))!;
+        // CON EL DATO, no solo con la palabra (spec 046, fase 0): hasta el 2026-09-22 este caso pasaba SOLO porque el
+        // porqué contenía «cumplido» —y esa palabra sale igual por las dos ramas del tramo—, así que no distinguía
+        // «cumplido» de «no se atrevió». Con Cumplido=0,9 el número elige la rama; la aserción cambia en la fase 8.
+        var cumplido = MapaParaTramo(_ => DecisionCon(Decision("No", "Jev dice que el objetivo ya está cumplido en esta pantalla (0.90): no se acciona nada más. Decide Luna.", 0.9), cumplido: 0.9))!;
         string c1 = Corre(cumplido);
         Debe(cumplido.Pulsados.Count == 0 && c1.Contains("cumplido", StringComparison.OrdinalIgnoreCase), $"cumplido: 0 pulsos y la cuenta lo dice («{Recorte(c1)}»)");
 
@@ -13010,6 +13063,632 @@ internal static class Contrato
         var (r4, ms4, _) = Pulsa(Mundo(), "uia:name=Guardar;ct=Button", "Guardar");
         Debe(r4.SePudo && ms4 >= Presupuesto - 100, $"un botón sigue esperando el presupuesto entero: {ms4} ms de {Presupuesto}");
         Debe(!r4.Cuenta.Contains("campo"), $"y no se le llama campo a lo que no lo es: «{r4.Cuenta}»");
+    }
+
+    // ── Spec 046: la decisión de Jev falla cerrada ───────────────────────────────────────────────
+    //
+    // TODO POR REFLEXIÓN, CON TRANSPORTE FALSO, como las 275-290: ni red, ni clave, ni pantalla. Lo que aún no
+    // existe se pide por nombre y cuenta como PENDIENTE (flujo-sdd.md). Cada caso afirma el TOKEN de su regla,
+    // no solo «no acciona»: así cada sabotaje de la spec tiene una aserción propia que ponerse roja, y una
+    // respuesta que rompe dos reglas tiene que nombrar las dos (revisión 2 de la spec, 2026-09-22).
+
+    private static readonly string[] Puertas046 = { "1) Nuevo (Button)", "2) Buscar (Button)" };
+
+    /// <summary>
+    /// Una respuesta de /v1/systemone armada con FRAGMENTOS CRUDOS de JSON, para poder mandar lo que la API real
+    /// podría mandar y un double no: 1e400, «alta», "NaN", una noul ausente. Las claves y la elegida se escapan.
+    /// </summary>
+    private static string Respuesta046(string elegida, IEnumerable<(string Id, string Valor)> probabilidades, string confidence,
+        string? cumplido = "0.1", string? peligro = "0.1", bool usage = true)
+    {
+        string J(string s) => System.Text.Json.JsonSerializer.Serialize(s);
+        string probs = string.Join(",", probabilidades.Select(p => $"{J(p.Id)}:{p.Valor}"));
+        string nouls = "";
+        if (cumplido != null) nouls += ",\"cumplido\":{\"type\":\"noul\",\"noul\":" + cumplido + "}";
+        if (peligro != null) nouls += ",\"peligro\":{\"type\":\"noul\",\"noul\":" + peligro + "}";
+        return "{\"model\":\"jev-1.13.0\",\"answers\":{\"puerta\":{\"type\":\"choice\",\"choice\":" + J(elegida)
+             + ",\"probabilities\":{" + probs + "},\"confidence\":" + confidence + "}" + nouls + "}"
+             + (usage ? ",\"usage\":{\"input_tokens\":312,\"output_tokens\":0}" : "") + "}";
+    }
+
+    /// <summary>La distribución en forma sobre <see cref="Puertas046"/>: Nuevo 0,9 · Buscar 0,1 · ninguna 0.</summary>
+    private static (string, string)[] EnForma046 => new[] { (Puertas046[0], "0.9"), (Puertas046[1], "0.1"), (IdNinguna, "0") };
+
+    /// <summary>
+    /// Lo que un cuerpo de /v1/systemone dice, DECODIFICADO: el state, las instrucciones y las claves de criteria.
+    /// Utf8JsonWriter escapa lo no ASCII («·» → ·), así que buscar «Historia clínica» o «fila de prueba · 000»
+    /// sobre el JSON crudo daría un falso «no lo lleva» — un criterio que no puede fallar con el bug presente (patrón nº7).
+    /// </summary>
+    private static string TextoDelCuerpo(string cuerpo)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(cuerpo);
+        var sb = new System.Text.StringBuilder();
+        if (doc.RootElement.TryGetProperty("state", out var st)) sb.AppendLine(st.GetString());
+        if (doc.RootElement.TryGetProperty("questions", out var qs) && qs.ValueKind == System.Text.Json.JsonValueKind.Object)
+            foreach (var q in qs.EnumerateObject())
+            {
+                if (q.Value.TryGetProperty("instructions", out var ins)) sb.AppendLine(ins.GetString());
+                if (q.Value.TryGetProperty("criteria", out var cr) && cr.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    foreach (var k in cr.EnumerateObject()) sb.AppendLine(k.Name);
+            }
+        return sb.ToString();
+    }
+
+    private static bool Actuar046(object d) => (bool)PropDe(d, "Actuar")!;
+    private static string Porque046(object d) => (string)PropDe(d, "Porque")!;
+    private static double Confianza046(object d) => (double)PropDe(d, "Confianza")!;
+
+    /// <summary>Fija propiedades <c>init</c> de una decisión falsa por reflexión (N, Masa5, InputTokens, Viajaron…).</summary>
+    private static U.WindowsClient.Decision.DecisionDeUnPaso Con046(U.WindowsClient.Decision.DecisionDeUnPaso d, params (string Prop, object? Valor)[] valores)
+    {
+        foreach (var (prop, valor) in valores)
+        {
+            var p = d.GetType().GetProperty(prop) ?? throw new MissingMemberException(d.GetType().Name, prop);
+            p.SetValue(d, valor);
+        }
+        return d;
+    }
+
+    /// <summary>Las líneas que LogBus emite mientras corre <paramref name="accion"/>, desde cualquier hilo.</summary>
+    private static List<string> LineasDelLog(Action accion, int esperaMs = 0)
+    {
+        var lineas = new List<string>();
+        EventHandler<string> oido = (_, l) => { lock (lineas) lineas.Add(l); };
+        U.WindowsClient.Diagnostics.LogBus.Logged += oido;
+        try { accion(); if (esperaMs > 0) System.Threading.Thread.Sleep(esperaMs); }
+        finally { U.WindowsClient.Diagnostics.LogBus.Logged -= oido; }
+        lock (lineas) return lineas.ToList();
+    }
+
+    private static void LaDistribucionSeValidaEntera()
+    {
+        var elegir = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("Elegir");
+        var pQue = typeof(U.WindowsClient.Decision.DecisionDeUnPaso).GetProperty("QueNoCuadro");
+        var detalle = Capacidad("U.WindowsClient.Decision.ClienteTypeSafe")?.GetMethod("DetalleDelError", BindingFlags.Public | BindingFlags.Static);
+        if (elegir == null || pQue == null || detalle == null)
+        {
+            Pendiente("DecisionDeUnPaso.QueNoCuadro + RespuestaDeJev.Validar + ClienteTypeSafe.DetalleDelError", "344", "046");
+            return;
+        }
+
+        const string N = "1) Nuevo (Button)", B = "2) Buscar (Button)";
+        object D(string json) => elegir.Invoke(null, new object[] { "jev", "uia://explorer.exe/Descargas", "abrir lo nuevo", Puertas046, 0.7, (Func<string, string>)(_ => json) })!;
+
+        // UN CASO QUE NO CUADRA: no acciona, nombra la regla con su campo y su valor crudo, no ofrece alternativas.
+        void NoCuadra(object d, string caso, string token, Func<double, bool>? confianza = null, string? token2 = null)
+        {
+            string que = (string)pQue.GetValue(d)!;
+            string porque = Porque046(d);
+            Debe(!Actuar046(d), $"{caso}: no se acciona (salió Actuar={Actuar046(d)})");
+            Debe(que.Contains(token, StringComparison.Ordinal), $"{caso}: QueNoCuadro nombra la regla con su campo y su valor crudo, «{token}»; dijo «{que}»");
+            Debe(porque.Contains(token, StringComparison.Ordinal), $"{caso}: y el porqué también lo dice; dijo «{porque}»");
+            if (token2 != null)
+                Debe(que.Contains(token2, StringComparison.Ordinal), $"{caso}: una respuesta que rompe dos reglas nombra las dos, también «{token2}»; dijo «{que}»");
+            var alternativas = (System.Collections.ICollection)PropDe(d, "Alternativas")!;
+            Debe(alternativas.Count == 0, $"{caso}: la segunda mejor de una distribución inválida no es una segunda mejor: {alternativas.Count} alternativa(s)");
+            if (confianza != null)
+                Debe(confianza(Confianza046(d)), $"{caso}: la confianza se conserva CRUDA, ni a 0 ni saturada; salió {Confianza046(d).ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        }
+
+        // confidence fuera de dominio: 95, 1,01, 1e400 (que .NET lee como Infinity), −0,01 y un texto.
+        NoCuadra(D(Respuesta046(N, EnForma046, "95")), "confidence 95", "confidence=95", c => Math.Abs(c - 95) < 1e-9);
+        NoCuadra(D(Respuesta046(N, EnForma046, "1.01")), "confidence 1,01", "confidence=1.01", c => Math.Abs(c - 1.01) < 1e-9);
+        var infinito = D(Respuesta046(N, EnForma046, "1e400"));
+        NoCuadra(infinito, "confidence 1e400", "confidence=", double.IsPositiveInfinity);
+        Debe(((string)pQue.GetValue(infinito)!).Contains("Infinity", StringComparison.Ordinal) || ((string)pQue.GetValue(infinito)!).Contains("∞", StringComparison.Ordinal),
+            $"confidence 1e400: se dice el valor tal como se leyó (Infinity); dijo «{pQue.GetValue(infinito)}»");
+        NoCuadra(D(Respuesta046(N, EnForma046, "-0.01")), "confidence −0,01", "confidence=-0.01", c => Math.Abs(c + 0.01) < 1e-9);
+        var texto = D(Respuesta046(N, EnForma046, "\"alta\""));
+        NoCuadra(texto, "confidence «alta»", "confidence=", double.IsNaN);
+        Debe(((string)pQue.GetValue(texto)!).Contains("alta", StringComparison.Ordinal), $"confidence «alta»: se dice lo que vino; dijo «{pQue.GetValue(texto)}»");
+
+        // una probabilidad que no es número (JSON no tiene NaN: llega como texto).
+        var nan = D(Respuesta046(N, new[] { (N, "\"NaN\""), (B, "0.1"), (IdNinguna, "0") }, "0.9"));
+        NoCuadra(nan, "probabilidad NaN", "NaN", c => Math.Abs(c - 0.9) < 1e-9);
+        Debe(((string)pQue.GetValue(nan)!).Contains(N, StringComparison.Ordinal), $"probabilidad NaN: se nombra la clave; dijo «{pQue.GetValue(nan)}»");
+
+        // la suma, con TODAS las claves presentes y en rango: es la ÚNICA regla que rompen (revisión 2 de la spec).
+        NoCuadra(D(Respuesta046(N, new[] { (N, "0.85"), (B, "0.10"), (IdNinguna, "0.00") }, "0.85")), "Σ=0,95", "Σ=0.95", c => Math.Abs(c - 0.85) < 1e-9);
+        NoCuadra(D(Respuesta046(N, new[] { (N, "0.90"), (B, "0.20"), (IdNinguna, "0.00") }, "0.90")), "Σ=1,10", "Σ=1.10");
+
+        // las claves: exactamente las que viajaron.
+        NoCuadra(D(Respuesta046(N, new[] { (N, "0.9"), (B, "0.1"), (IdNinguna, "0"), ("Grabar", "0") }, "0.9")), "una clave de más", "sobra «Grabar»");
+        NoCuadra(D(Respuesta046(N, new[] { (N, "1.0"), (IdNinguna, "0") }, "1.0")), "una clave de menos", $"falta «{B}»");
+
+        // la elegida tiene que ser el máximo, y sin empate.
+        NoCuadra(D(Respuesta046(N, new[] { (N, "0.31"), (B, "0.58"), (IdNinguna, "0.11") }, "0.31")), "choice no es el máximo", "0.31 < 0.58", c => Math.Abs(c - 0.31) < 1e-9);
+        NoCuadra(D(Respuesta046(N, new[] { (N, "0.45"), (B, "0.45"), (IdNinguna, "0.10") }, "0.45")), "empate", "empate");
+
+        // dos reglas a la vez: Σ=0,95 Y una clave de menos. Las dos se nombran (es lo que deja que cada sabotaje tenga su aserción).
+        NoCuadra(D(Respuesta046(N, new[] { (N, "0.85"), (IdNinguna, "0.10") }, "0.85")), "Σ=0,95 y clave de menos", "Σ=0.95", token2: $"falta «{B}»");
+
+        // CONTRASTE: en forma, con «ninguna» a 0, sí acciona; y 1,0000001 cae dentro de la tolerancia (≤ 1+1e-6): se lee como 1.
+        var bien = D(Respuesta046(N, EnForma046, "0.9"));
+        Debe(Actuar046(bien) && (string)PropDe(bien, "Puerta")! == N && ((string)pQue.GetValue(bien)!).Length == 0,
+            $"una respuesta en forma acciona y no tiene nada que no cuadre (Actuar={Actuar046(bien)}, QueNoCuadro=«{pQue.GetValue(bien)}»)");
+        var casiUno = D(Respuesta046(N, new[] { (N, "1.0"), (B, "0"), (IdNinguna, "0") }, "1.0000001"));
+        Debe(Actuar046(casiUno) && Math.Abs(Confianza046(casiUno) - 1) < 1e-6,
+            $"1,0000001 está dentro de la tolerancia declarada (≤ 1+1e-6) y se lee como 1: acciona (Actuar={Actuar046(casiUno)}, conf={Confianza046(casiUno).ToString("R", System.Globalization.CultureInfo.InvariantCulture)})");
+
+        // UN CATCH MUDO MENOS (patrón nº3): leer el cuerpo de un error puede fallar, y entonces se dice por qué.
+        string leido = (string)detalle.Invoke(null, new object[] { (Func<string>)(() => "422: «criteria» vacío") })!;
+        Debe(leido == "422: «criteria» vacío", $"cuando el cuerpo del error se puede leer, se devuelve tal cual; salió «{leido}»");
+        string roto = (string)detalle.Invoke(null, new object[] { (Func<string>)(() => throw new IOException("se cortó la conexión")) })!;
+        Debe(roto == "(no se pudo leer el cuerpo del error: IOException: se cortó la conexión)",
+            $"y cuando no se puede, se dice el tipo y el mensaje en vez de callarlo; salió «{roto}»");
+    }
+
+    private static void LasNoulsFallanCerradas()
+    {
+        var elegir = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("Elegir");
+        var pQue = typeof(U.WindowsClient.Decision.DecisionDeUnPaso).GetProperty("QueNoCuadro");
+        if (elegir == null || pQue == null)
+        {
+            Pendiente("DecisionDeUnPaso.QueNoCuadro + el caso peor de las nouls en ElDecisor (Noul → double?)", "345", "046");
+            return;
+        }
+
+        const string N = "1) Nuevo (Button)";
+        object D(string? cumplido, string? peligro) => elegir.Invoke(null, new object[]
+            { "jev", "uia://explorer.exe/Descargas", "abrir lo nuevo", Puertas046, 0.7, (Func<string, string>)(_ => Respuesta046(N, EnForma046, "0.9", cumplido, peligro)) })!;
+        double Peligro(object d) => (double)PropDe(d, "Peligro")!;
+        double Cumplido(object d) => (double)PropDe(d, "Cumplido")!;
+
+        // PELIGRO fuera de forma → el caso PEOR (1), no el crudo y nunca 0: 0 abre la compuerta, 1 la cierra.
+        foreach (var (crudo, caso, token) in new (string?, string, string?)[]
+        {
+            ("1.2", "peligro 1,2", "peligro=1.2"),
+            ("80", "peligro 80", "peligro=80"),
+            ("1e400", "peligro 1e400", "peligro="),
+            ("1.0000001", "peligro 1,0000001 (dentro de la tolerancia: se lee como 1)", null),
+            ("-0.01", "peligro −0,01", "peligro=-0.01"),
+            ("\"sí\"", "peligro «sí»", "peligro="),
+            (null, "peligro ausente", "falta «peligro»"),
+        })
+        {
+            var d = D("0.1", crudo);
+            Debe(!Actuar046(d), $"{caso}: no se acciona (salió Actuar={Actuar046(d)})");
+            Debe(Math.Abs(Peligro(d) - 1) < 1e-9, $"{caso}: Peligro toma el caso peor, 1; salió {Peligro(d).ToString("R", System.Globalization.CultureInfo.InvariantCulture)}");
+            if (token != null)
+                Debe(Porque046(d).Contains(token, StringComparison.Ordinal), $"{caso}: el porqué dice cuál vino o cuál falta, «{token}»; dijo «{Porque046(d)}»");
+            else
+                Debe(Porque046(d).Contains("peligro", StringComparison.OrdinalIgnoreCase) || Porque046(d).Contains("irreversible", StringComparison.OrdinalIgnoreCase),
+                    $"{caso}: y se dice por qué; dijo «{Porque046(d)}»");
+        }
+        var ochenta = D("0.1", "80");
+        Debe(((string)pQue.GetValue(ochenta)!).Contains("peligro=80", StringComparison.Ordinal), $"peligro 80: QueNoCuadro conserva el crudo; dijo «{pQue.GetValue(ochenta)}»");
+
+        // CUMPLIDO fuera de forma → el caso peor (0): no se declara «ya está» con un número que no se entiende.
+        foreach (var (crudo, caso, token) in new (string?, string, string)[] { ("1.5", "cumplido 1,5", "cumplido=1.5"), (null, "cumplido ausente", "falta «cumplido»") })
+        {
+            var d = D(crudo, "0.1");
+            Debe(!Actuar046(d), $"{caso}: no se acciona (salió Actuar={Actuar046(d)})");
+            Debe(Math.Abs(Cumplido(d)) < 1e-9, $"{caso}: Cumplido toma el caso peor, 0; salió {Cumplido(d).ToString("R", System.Globalization.CultureInfo.InvariantCulture)}");
+            Debe(Porque046(d).Contains(token, StringComparison.Ordinal), $"{caso}: el porqué lo dice, «{token}»; dijo «{Porque046(d)}»");
+        }
+
+        // CON LAS DOS EN [0,1] Y BAJAS SE ACCIONA (289); y un 0 vale cuando Jev lo dijo.
+        var bien = D("0.1", "0.1");
+        Debe(Actuar046(bien), $"con las dos en forma y bajas se acciona (salió Actuar={Actuar046(bien)}: «{Porque046(bien)}»)");
+        var cero = D("0", "0");
+        Debe(Actuar046(cero) && Math.Abs(Peligro(cero)) < 1e-9 && Math.Abs(Cumplido(cero)) < 1e-9,
+            $"un 0 que Jev dijo abre la compuerta: acciona con Peligro=0 y Cumplido=0 (salió Actuar={Actuar046(cero)}, peligro={Peligro(cero)}, cumplido={Cumplido(cero)})");
+    }
+
+    private static void LoIrreversibleNoSePulsaPorDecision()
+    {
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var instrucciones = Capacidad("U.WindowsClient.Decision.PeticionASystemOne")?.GetMethod("InstruccionesDeLaPuerta");
+        if (pDecisor == null || pPuertas == null || !PuertasConSelector(pPuertas) || instrucciones == null || MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x")) == null)
+        {
+            Pendiente("SurfaceMapTools.Decisor/Puertas + PeticionASystemOne.InstruccionesDeLaPuerta + map_tramo", "346", "046");
+            return;
+        }
+
+        // EL CUERPO YA NO PIDE «LA QUE MENOS DAÑO HAGA»: es el «clicking best guess» del vídeo, en español.
+        string instr = (string)instrucciones.Invoke(null, new object[] { "guardar el triage" })!;
+        Debe(!instr.Contains("menos daño", StringComparison.OrdinalIgnoreCase), $"las instrucciones no piden elegir «la que menos daño haga»; dicen «{instr}»");
+
+        RecorrerSegunElNucleo.Resultado NoEsta(string exit) => new(0, 1, "uia://sap/NWP1", false, $"hice 0 de 1 y paré en el paso 1: no lo veo en «uia://sap/NWP1»: «{exit}»");
+        RecorrerSegunElNucleo.Resultado Pulsado(string exit) => new(1, 1, "uia://sap/NV2000", true, $"hice los 1 paso(s): pulsé «{exit}» y ahora estás en «uia://sap/NV2000».", true);
+
+        // 1. LA ELEGIDA ES «GRABAR» CON 0,99 Y PELIGRO 0: ni así. La lista determinista manda sobre el modelo.
+        var m = MapaParaDecidir(pPuertas, ("Nuevo", "Button"), ("Grabar", "Button"), ("Buscar", "Button"))!.Value;
+        var pulsos = new List<string>();
+        m.mapa.RecorrerPorElNucleo = pasos => { pulsos.Add(pasos[0].Exit); return Pulsado(pasos[0].Exit); };
+        pDecisor.SetValue(m.mapa, Decide((_, _, _) => DecisionCon(
+            Decision("Si", "2) Grabar (Button)", 0.99, "Jev eligió «2) Grabar (Button)» con confianza 0.99."),
+            new[] { ("2) Grabar (Button)", 0.99), ("1) Nuevo (Button)", 0.01) }, cumplido: 0.1, peligro: 0.0)));
+        string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "guardar el triage" });
+        Debe(pulsos.Count == 0, $"«Grabar» elegida con 0,99 y peligro 0: la mano no la recibe; se pulsó [{string.Join(" · ", pulsos)}]");
+        Debe(r.Contains("Grabar", StringComparison.Ordinal) && r.Contains("no se puede deshacer", StringComparison.Ordinal),
+            $"y la cuenta dice cuál se vetó y por qué (dijo: «{Recorte(r)}»)");
+        Debe(r.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), "y el control vuelve con el inventario");
+        Debe(m.mapa.UltimaMano is { } mano && !(bool)PropDe(mano, "Intento")!, "y la mano no lo cuenta como intento");
+
+        // 2. LA SEGUNDA MEJOR TAMPOCO: A no está viva y la segunda es «Guardar» a 0,40. Se pulsa A, no Guardar.
+        var m2 = MapaParaDecidir(pPuertas, ("A", "Button"), ("Guardar", "Button"), ("Buscar", "Button"))!.Value;
+        var pulsos2 = new List<string>();
+        m2.mapa.RecorrerPorElNucleo = pasos => { pulsos2.Add(pasos[0].Exit); return pasos[0].Exit.Contains("name=A;") ? NoEsta(pasos[0].Exit) : Pulsado(pasos[0].Exit); };
+        pDecisor.SetValue(m2.mapa, Decide((_, _, _) => DecisionCon(
+            Decision("Si", "1) A (Button)", 0.6, "Jev eligió «1) A (Button)» con confianza 0.60."),
+            new[] { ("1) A (Button)", 0.60), ("2) Guardar (Button)", 0.40) }, cumplido: 0.1, peligro: 0.0)));
+        string r2 = m2.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" });
+        Debe(pulsos2.Count == 1 && pulsos2[0].Contains("name=A;"), $"A se pulsa y «Guardar» (segunda, 0,40) NO: se pulsó [{string.Join(" · ", pulsos2)}]");
+        Debe(r2.Contains("Guardar", StringComparison.Ordinal) && r2.Contains("no se puede deshacer", StringComparison.Ordinal),
+            $"y la cuenta dice que se vetó la segunda y por qué (dijo: «{Recorte(r2)}»)");
+
+        // 3. POR EL TRAMO, IGUAL: el mismo paso, 0 pulsos, y para.
+        var t = MapaParaTramo(_ => DecisionCon(Decision("Si", "2) Grabar (Button)", 0.99, "Jev eligió «2) Grabar (Button)» con confianza 0.99."), cumplido: 0.1, peligro: 0.0),
+            puertas: new[] { ("Nuevo", "Button"), ("Grabar", "Button"), ("Buscar", "Button") })!;
+        t.Mapa.Call("map_tramo", Args(("objetivo", "guardar el triage"), ("tope", "3")));
+        EsperarTramo(t.Mapa, 8000);
+        string estado = t.Mapa.Call("map_tramo_estado", new Dictionary<string, string>());
+        Debe(t.Pulsados.Count == 0, $"por el tramo tampoco se pulsa «Grabar»: se pulsó [{string.Join(" · ", t.Pulsados)}]");
+        Debe(estado.Contains("Grabar", StringComparison.Ordinal) && estado.Contains("no se puede deshacer", StringComparison.Ordinal),
+            $"y el tramo para diciendo cuál se vetó (dijo: «{Recorte(estado)}»)");
+    }
+
+    private static void NingunaEsUnaOpcionDeLaPregunta()
+    {
+        var tP = Capacidad("U.WindowsClient.Decision.PeticionASystemOne");
+        var fNinguna = tP?.GetField("IdNinguna");
+        var cuerpoDeEleccion = tP?.GetMethod("CuerpoDeEleccion");
+        var elegir = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("Elegir");
+        if (fNinguna == null || cuerpoDeEleccion == null || elegir == null)
+        {
+            Pendiente("PeticionASystemOne.IdNinguna + «ninguna» en lo que ElDecisor manda", "347", "046");
+            return;
+        }
+
+        Debe((string)fNinguna.GetValue(null)! == IdNinguna,
+            $"el id de «ninguna» es el que el contrato manda en sus fixtures desde la fase 0; producción tiene «{fNinguna.GetValue(null)}»");
+
+        string? cuerpo = null;
+        var transporte = (Func<string, string>)(c =>
+        {
+            cuerpo = c;
+            return Respuesta046(IdNinguna, new[] { (Puertas046[0], "0.15"), (Puertas046[1], "0.05"), (IdNinguna, "0.80") }, "0.80");
+        });
+        var d = elegir.Invoke(null, new object[] { "jev", "uia://explorer.exe/Descargas", "firmar el acta", Puertas046, 0.7, transporte })!;
+
+        Debe(cuerpo != null, "el transporte recibió un cuerpo");
+        using (var doc = System.Text.Json.JsonDocument.Parse(cuerpo ?? "{}"))
+        {
+            var criteria = doc.RootElement.GetProperty("questions").GetProperty("puerta").GetProperty("criteria");
+            var claves = criteria.EnumerateObject().Select(p => p.Name).ToList();
+            Debe(claves.Count == 3 && claves.Contains(Puertas046[0]) && claves.Contains(Puertas046[1]) && claves.Contains(IdNinguna),
+                $"criteria = las ofrecidas + «0) ninguna», y ni una más; viajaron [{string.Join(" · ", claves)}]");
+            string state = doc.RootElement.GetProperty("state").GetString() ?? "";
+            Debe(!state.Contains(IdNinguna, StringComparison.Ordinal) && !state.Contains("ninguna", StringComparison.OrdinalIgnoreCase),
+                "y el state no lista «ninguna» como si fuera una puerta de la pantalla");
+        }
+        Debe(!Actuar046(d), $"si Jev elige «ninguna», no se acciona (salió Actuar={Actuar046(d)})");
+        Debe(Porque046(d).Contains("no lo veo en esta pantalla", StringComparison.Ordinal) && Porque046(d).Contains("0.80", StringComparison.Ordinal),
+            $"y se dice que no lo ve en esta pantalla, con su probabilidad (dijo: «{Porque046(d)}»)");
+
+        // LA AÑADE QUIEN PREGUNTA, NO CuerpoDeEleccion: con 3 opciones siguen saliendo 3 criterios (282, intacta).
+        string json = (string)cuerpoDeEleccion.Invoke(null, new object[] { "jev-latest", "en x", "puerta", "¿qué puerta?", new[] { "1) A (Button)", "2) B (Button)", "3) C (Button)" } })!;
+        using (var doc = System.Text.Json.JsonDocument.Parse(json))
+            Debe(doc.RootElement.GetProperty("questions").GetProperty("puerta").GetProperty("criteria").EnumerateObject().Count() == 3,
+                "CuerpoDeEleccion no la añade por su cuenta: 3 opciones dan 3 criterios");
+    }
+
+    private static void ElModeloConfiguradoLlegaAlCuerpo()
+    {
+        var tI = Capacidad("U.WindowsClient.Decision.InterruptorDelDecisor");
+        var pFabrica = tI?.GetProperty("FabricaDeTransporte");
+        var decisor = Capacidad("U.WindowsClient.Decision.ElDecisor");
+        var elegirConModelo = decisor?.GetMethod("ElegirConModelo");
+        var tPol = Capacidad("U.WindowsClient.Decision.PoliticaDeLoQueViaja");
+        var pPorDefecto = tPol?.GetProperty("PorDefecto", BindingFlags.Public | BindingFlags.Static);
+        var tc = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        var pCon = tc?.GetProperty("ConDecisor", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        if (tI == null || pFabrica == null || decisor == null || elegirConModelo == null || tPol == null || pPorDefecto == null || pCon == null || pDecisor == null)
+        {
+            Pendiente("InterruptorDelDecisor.FabricaDeTransporte + ElDecisor.ElegirConModelo + PoliticaDeLoQueViaja.PorDefecto", "348", "046");
+            return;
+        }
+
+        // UN SOLO «Elegir»: con dos métodos del mismo nombre, GetMethod sin tipos lanza AmbiguousMatchException, y el
+        // contrato lo pide así en 6 sitios (275, 278, 279, 280, 281, 289). Medido el 2026-09-22.
+        MethodInfo? elegir = null;
+        try { elegir = decisor.GetMethod("Elegir"); }
+        catch (AmbiguousMatchException) { Debe(false, "GetMethod(\"Elegir\") sin tipos lanza: hay más de un método con ese nombre, y 275-281 y 289 caerían a la vez"); }
+        Debe(elegir != null && elegir.GetParameters().Length == 6, $"la firma Elegir de seis argumentos se conserva (tiene {elegir?.GetParameters().Length})");
+
+        string modeloPorDefecto = (string)Capacidad("U.WindowsClient.Decision.ConfiguracionDelDecisor")!.GetField("ModeloPorDefecto")!.GetValue(null)!;
+        var puertas = new[] { "1) Nuevo (Button)", "2) Buscar (Button)" };
+        string? cuerpo = null;
+        // LA FÁBRICA SE FIJA, y el cuerpo que produce el interruptor se captura: es el cableado REAL lo que se juzga.
+        // Hoy (22-09) ConJev arma el cuerpo con ModeloPorDefecto aunque cfg.Modelo diga otro, y el botón enseña cfg.Modelo.
+        var fabrica = (Func<U.WindowsClient.Decision.ConfiguracionDelDecisor, Func<string, string?>, Func<string, string>?>)((_, _) =>
+            body => { cuerpo = body; return RespuestaChoice("puerta", "1) Nuevo (Button)", 0.9, puertas); });
+
+        bool antes = (bool)pCon.GetValue(null)!;
+        try
+        {
+            (string Modelo, string Estado) Encendiendo(string? variable)
+            {
+                cuerpo = null;
+                var mapa = new SurfaceMapTools(() => null);
+                var interruptor = Activator.CreateInstance(tI, mapa, (Func<System.Threading.Tasks.Task>)(() => System.Threading.Tasks.Task.CompletedTask), (Action<string>)(_ => { }))!;
+                pFabrica.SetValue(interruptor, fabrica);
+                Func<string, string?> entorno = n => n switch { "U_DECISOR" => "jev", "TYPESAFE_API_KEY" => "sk-de-mentira", "U_TYPESAFE_MODELO" => variable, _ => null };
+                bool ok = (bool)tI.GetMethod("Encender")!.Invoke(interruptor, new object[] { entorno })!;
+                Debe(ok, "con U_DECISOR=jev y clave, el interruptor enciende");
+                var decide = (Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso>?)pDecisor.GetValue(mapa);
+                Debe(decide != null, "y deja un decisor en el mapa");
+                decide?.Invoke("uia://explorer.exe/Descargas", "abrir lo nuevo", puertas);
+                string modelo = "";
+                if (cuerpo != null)
+                    using (var doc = System.Text.Json.JsonDocument.Parse(cuerpo)) modelo = doc.RootElement.GetProperty("model").GetString() ?? "";
+                return (modelo, (string)tI.GetProperty("Estado")!.GetValue(interruptor)!);
+            }
+
+            var (modelo, estado) = Encendiendo("jev-1.13.0");
+            Debe(modelo == "jev-1.13.0", $"con U_TYPESAFE_MODELO=jev-1.13.0 el cuerpo lleva \"model\":\"jev-1.13.0\"; llevó «{modelo}»");
+            Debe(estado.Contains("jev-1.13.0", StringComparison.Ordinal), $"y el estado del botón nombra el mismo modelo («{estado}»)");
+            var (sinVariable, estado2) = Encendiendo(null);
+            Debe(sinVariable == modeloPorDefecto, $"sin la variable el cuerpo lleva el alias por defecto «{modeloPorDefecto}»; llevó «{sinVariable}»");
+            Debe(estado2.Contains(modeloPorDefecto, StringComparison.Ordinal), $"y el estado también («{estado2}»)");
+        }
+        finally { pCon.SetValue(null, antes); }
+
+        // ELEGIR DE SEIS DELEGA EN ElegirConModelo con los valores por defecto: misma decisión.
+        if (elegir == null) return;
+        var transporte = (Func<string, string>)(_ => RespuestaChoice("puerta", "1) Nuevo (Button)", 0.9, puertas));
+        var a = elegir.Invoke(null, new object[] { "jev", "uia://explorer.exe/Descargas", "abrir lo nuevo", puertas, 0.7, transporte })!;
+        var b = elegirConModelo.Invoke(null, new object[] { "jev", "uia://explorer.exe/Descargas", "abrir lo nuevo", puertas, 0.7, transporte, modeloPorDefecto, pPorDefecto.GetValue(null)! })!;
+        Debe(Actuar046(a) == Actuar046(b) && (string)PropDe(a, "Puerta")! == (string)PropDe(b, "Puerta")!
+          && Math.Abs(Confianza046(a) - Confianza046(b)) < 1e-9 && Porque046(a) == Porque046(b),
+            $"Elegir de 6 argumentos da la misma decisión que ElegirConModelo con los valores por defecto («{Porque046(a)}» / «{Porque046(b)}»)");
+    }
+
+    private static void AJevSoloViajaLoQueLaPoliticaPermite()
+    {
+        var tPol = Capacidad("U.WindowsClient.Decision.PoliticaDeLoQueViaja");
+        var leer = tPol?.GetMethod("Leer", BindingFlags.Public | BindingFlags.Static);
+        var vetados = (MemberInfo?)tPol?.GetField("VetadosPorDefecto") ?? tPol?.GetProperty("VetadosPorDefecto");
+        var elegirConModelo = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("ElegirConModelo");
+        if (tPol == null || leer == null || vetados == null || elegirConModelo == null)
+        {
+            Pendiente("PoliticaDeLoQueViaja (Leer, PuedeViajar, VetadosPorDefecto) + ElDecisor.ElegirConModelo", "349", "046");
+            return;
+        }
+
+        // LA POLÍTICA VIVE EN UN SOLO SITIO: un único método público que decide si una ubicación puede mandar texto.
+        int puedeViajar = tPol.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static).Count(m => m.Name == "PuedeViajar");
+        Debe(puedeViajar == 1, $"PuedeViajar es un solo método público; hay {puedeViajar}");
+        object? vetadosValor = vetados is FieldInfo f ? f.GetValue(null) : ((PropertyInfo)vetados).GetValue(null);
+        var listaVetados = vetadosValor is string s ? new[] { s } : ((System.Collections.IEnumerable?)vetadosValor)?.Cast<object>().Select(o => o.ToString() ?? "").ToArray() ?? Array.Empty<string>();
+        Debe(listaVetados.Length > 0 && listaVetados.All(v => v.Length > 0), "VetadosPorDefecto es una constante NO vacía: un veto que dependa de una variable que nadie puso no es fallar cerrado");
+
+        string modeloPorDefecto = (string)Capacidad("U.WindowsClient.Decision.ConfiguracionDelDecisor")!.GetField("ModeloPorDefecto")!.GetValue(null)!;
+        Func<string, string?> Entorno(params (string k, string? v)[] kv) => n => kv.FirstOrDefault(x => x.k == n).v;
+        object Politica(Func<string, string?> entorno) => leer.Invoke(null, new object[] { entorno })!;
+        int llamadas = 0; string? cuerpo = null;
+        var transporte = (Func<string, string>)(c => { llamadas++; cuerpo = c; return RespuestaChoice("puerta", Puertas046[0], 0.9, Puertas046); });
+        object D(string pantalla, object politica) => elegirConModelo.Invoke(null, new object[] { "jev", pantalla, "abrir la historia", Puertas046, 0.7, transporte, modeloPorDefecto, politica })!;
+
+        // 1. SAP SIN HABILITAR: 0 llamadas, no se acciona, y NO se cae a la regla local (eso era cambiar de juez).
+        const string sap = "sapgui://QAS/NWP1/usr/cntlCUSTOM";
+        var d1 = D(sap, Politica(_ => null));
+        Debe(llamadas == 0, $"en sapgui:// sin U_DECISOR_SAP_TEXTO el transporte no se toca ni una vez; se llamó {llamadas}");
+        Debe(!Actuar046(d1), $"y no se acciona (salió Actuar={Actuar046(d1)})");
+        Debe(Porque046(d1).Contains("sapgui", StringComparison.OrdinalIgnoreCase) && Porque046(d1).Contains("U_DECISOR_SAP_TEXTO", StringComparison.Ordinal) && Porque046(d1).Contains("Decide Luna", StringComparison.Ordinal),
+            $"la decisión dice que no manda texto y que decide Luna (dijo: «{Porque046(d1)}»)");
+        Debe(!Porque046(d1).Contains("simulad", StringComparison.OrdinalIgnoreCase), $"sin caer a ninguna regla local (dijo: «{Porque046(d1)}»)");
+        // VACÍO NO ES HABILITADO (patrón nº9).
+        D(sap, Politica(Entorno(("U_DECISOR_SAP_TEXTO", ""))));
+        Debe(llamadas == 0, $"U_DECISOR_SAP_TEXTO vacía es ausente: sigue sin llamarse ({llamadas})");
+        // HABILITADO POR ESCRITO: 1 llamada.
+        D(sap, Politica(Entorno(("U_DECISOR_SAP_TEXTO", "si"))));
+        Debe(llamadas == 1, $"con U_DECISOR_SAP_TEXTO=si viaja: 1 llamada (se llamó {llamadas})");
+
+        // 2. UN ORIGIN VETADO POR DEFECTO —el portal clínico— con un entorno VACÍO: no depende de ninguna variable.
+        llamadas = 0;
+        var d2 = D("web://app.itsmiracleai.com/consulta", Politica(_ => null));
+        Debe(llamadas == 0 && !Actuar046(d2), $"web://app.itsmiracleai.com está vetado por defecto: 0 llamadas y no se acciona (llamadas={llamadas}, Actuar={Actuar046(d2)})");
+        Debe(Porque046(d2).Contains("itsmiracleai.com", StringComparison.OrdinalIgnoreCase), $"y el porqué nombra el origin vetado (dijo: «{Porque046(d2)}»)");
+        // Y LOS DE LA VARIABLE.
+        var d3 = D("web://historia/x", Politica(Entorno(("U_DECISOR_TEXTO_VETADO", "web://historia"))));
+        Debe(llamadas == 0 && !Actuar046(d3), $"un origin de U_DECISOR_TEXTO_VETADO tampoco viaja ni se decide (llamadas={llamadas})");
+
+        // 3. LO PERMITIDO VIAJA, pero de la ubicación solo el ORIGIN: en uia:// el pathname es el título vivo de la ventana.
+        llamadas = 0; cuerpo = null;
+        var d4 = D("uia://explorer.exe/Historia clínica de prueba", Politica(_ => null));
+        Debe(llamadas == 1 && cuerpo != null, $"uia://explorer.exe viaja: 1 llamada (se llamó {llamadas})");
+        string texto = TextoDelCuerpo(cuerpo ?? "{}");
+        Debe(texto.Contains("uia://explorer.exe", StringComparison.Ordinal), $"y el cuerpo lleva el origin («{Recorte(texto)}»)");
+        Debe(!texto.Contains("Historia clínica", StringComparison.Ordinal), $"pero NUNCA el título de la ventana ni la ruta («{Recorte(texto)}»)");
+        Debe(Actuar046(d4), $"y con una respuesta en forma acciona (salió Actuar={Actuar046(d4)}: «{Porque046(d4)}»)");
+    }
+
+    private static void LasFilasNuncaViajanPorSuTexto()
+    {
+        var tPol = Capacidad("U.WindowsClient.Decision.PoliticaDeLoQueViaja");
+        var leer = tPol?.GetMethod("Leer", BindingFlags.Public | BindingFlags.Static);
+        var elegirConModelo = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("ElegirConModelo");
+        var tD = typeof(U.WindowsClient.Decision.DecisionDeUnPaso);
+        var pViajaron = tD.GetProperty("Viajaron"); var pFilas = tD.GetProperty("FilasSinTexto"); var pCaracteres = tD.GetProperty("Caracteres");
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        if (tPol == null || leer == null || elegirConModelo == null || pViajaron == null || pFilas == null || pCaracteres == null || pDecisor == null || pPuertas == null)
+        {
+            Pendiente("PoliticaDeLoQueViaja.IdQueViaja + DecisionDeUnPaso.Viajaron/FilasSinTexto/Caracteres", "350", "046");
+            return;
+        }
+
+        const string Fila = "fila de prueba · 000";
+        var ofrecidas = new[] { "1) Nuevo (Button)", $"2) {Fila} (GuiGridFila)", "3) Triage/Urgencias (GuiTreeFila)", "4) Favoritos (GuiTreeCarpeta)" };
+        var viajan = new[] { "1) Nuevo (Button)", "2) fila (GuiGridFila)", "3) fila (GuiTreeFila)", "4) fila (GuiTreeCarpeta)" };
+
+        // 1. EL DECISOR, CON SAP HABILITADO: las filas viajan sin texto, y la respuesta vuelve mapeada a la ofrecida.
+        string modeloPorDefecto = (string)Capacidad("U.WindowsClient.Decision.ConfiguracionDelDecisor")!.GetField("ModeloPorDefecto")!.GetValue(null)!;
+        object politica = leer.Invoke(null, new object[] { (Func<string, string?>)(n => n == "U_DECISOR_SAP_TEXTO" ? "si" : null) })!;
+        string? cuerpo = null;
+        var transporte = (Func<string, string>)(c =>
+        {
+            cuerpo = c;
+            return Respuesta046(viajan[1], new[] { (viajan[0], "0.05"), (viajan[1], "0.85"), (viajan[2], "0.05"), (viajan[3], "0.05"), (IdNinguna, "0") }, "0.85");
+        });
+        var d = elegirConModelo.Invoke(null, new object[] { "jev", "sapgui://QAS/NWP1", "abrir la primera fila", ofrecidas, 0.7, transporte, modeloPorDefecto, politica })!;
+        Debe(cuerpo != null, "el transporte recibió un cuerpo");
+        string c = TextoDelCuerpo(cuerpo ?? "{}");
+        Debe(!c.Contains("fila de prueba", StringComparison.Ordinal) && !c.Contains("Triage/Urgencias", StringComparison.Ordinal) && !c.Contains("Favoritos", StringComparison.Ordinal),
+            $"el cuerpo no lleva el texto de ninguna fila: ni de rejilla, ni de árbol, ni de carpeta («{Recorte(c)}»)");
+        Debe(c.Contains("2) fila (GuiGridFila)", StringComparison.Ordinal) && c.Contains("3) fila (GuiTreeFila)", StringComparison.Ordinal) && c.Contains("4) fila (GuiTreeCarpeta)", StringComparison.Ordinal),
+            $"y sí lleva las filas por número y tipo («{Recorte(c)}»)");
+        Debe(c.Contains("1) Nuevo (Button)", StringComparison.Ordinal), "un botón sigue viajando con su etiqueta");
+        Debe(Actuar046(d) && (string)PropDe(d, "Puerta")! == ofrecidas[1],
+            $"la respuesta «2) fila (GuiGridFila)» se mapea por id a la ofrecida «{ofrecidas[1]}» (salió Actuar={Actuar046(d)}, Puerta=«{PropDe(d, "Puerta")}»)");
+        int largo = (cuerpo ?? "").Length;
+        Debe((int)pViajaron.GetValue(d)! == 4 && (int)pFilas.GetValue(d)! == 3 && (int)pCaracteres.GetValue(d)! == largo,
+            $"y la decisión cuenta 4 ids viajados, 3 filas sin texto y {largo} caracteres; salió {pViajaron.GetValue(d)} · {pFilas.GetValue(d)} · {pCaracteres.GetValue(d)}");
+
+        // 2. map_decidir: la línea «decisor:» y el relato nombran la fila por número y tipo, y dicen cuánto viajó.
+        var m = MapaParaDecidir(pPuertas, ("Nuevo", "Button"), (Fila, "GuiGridFila"), ("Triage/Urgencias", "GuiTreeFila"), ("Favoritos", "GuiTreeCarpeta"))!.Value;
+        var pulsos = new List<string>();
+        // LA MANO FALSA NO REPITE LA ETIQUETA: lo que la mano real escribe («mano:») es anterior a Jev y queda fuera de la 350.
+        m.mapa.RecorrerPorElNucleo = pasos => { pulsos.Add(pasos[0].Exit); return new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true, "hice los 1 paso(s) y ahora estás en «uia://sap/NV2000».", true); };
+        m.mapa.InventarioParaLosActos = () => "EN PANTALLA AHORA, en «uia://sap/NV2000» (1 elemento(s)):\n  «Nuevo» (Button)\n";
+        U.WindowsClient.Decision.DecisionDeUnPaso Elegida() => Con046(
+            DecisionCon(Decision("Si", ofrecidas[1], 0.85, "Jev eligió «2) fila (GuiGridFila)» con confianza 0.85."), cumplido: 0.1, peligro: 0.1),
+            ("Viajaron", 4), ("FilasSinTexto", 3), ("Caracteres", 1234));
+        pDecisor.SetValue(m.mapa, Decide((_, _, _) => Elegida()));
+        string r = "";
+        var lineas = LineasDelLog(() => r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "abrir la primera fila" }));
+        string? decisorLinea = lineas.FirstOrDefault(l => l.Contains("decisor:", StringComparison.Ordinal));
+        Debe(decisorLinea != null, $"hay una línea «decisor:» en el log ({lineas.Count} línea(s))");
+        Debe(decisorLinea != null && decisorLinea.Contains("viajan 4 de 4", StringComparison.Ordinal) && decisorLinea.Contains("3 filas sin texto", StringComparison.Ordinal) && decisorLinea.Contains("1234 caracteres", StringComparison.Ordinal),
+            $"y dice cuántos ids viajaron de cuántos, cuántas filas sin texto y cuántos caracteres («{Recorte(decisorLinea ?? "")}»)");
+        Debe(decisorLinea != null && !decisorLinea.Contains(Fila, StringComparison.Ordinal), $"y no lleva el texto de la fila («{Recorte(decisorLinea ?? "")}»)");
+        Debe(r.Contains("fila 2 (GuiGridFila)", StringComparison.Ordinal) && !r.Contains(Fila, StringComparison.Ordinal),
+            $"el relato de map_decidir nombra «fila 2 (GuiGridFila)» y no su texto (dijo: «{Recorte(r)}»)");
+        Debe(pulsos.Count == 1 && pulsos[0] == $"uia:name={Fila};ct=GuiGridFila", $"y la mano recibe el SELECTOR de la fila (recibió [{string.Join(" · ", pulsos)}])");
+
+        // 3. EL TRAMO: la línea «paso 1:», al log y al notch, tampoco lleva el texto.
+        var t = MapaParaTramo(_ => Elegida(),
+            mano: _ => new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true, "hice los 1 paso(s) y ahora estás en «uia://sap/NV2000».", true),
+            puertas: new[] { ("Nuevo", "Button"), (Fila, "GuiGridFila"), ("Triage/Urgencias", "GuiTreeFila"), ("Favoritos", "GuiTreeCarpeta") })!;
+        var lineasTramo = LineasDelLog(() => { t.Mapa.Call("map_tramo", Args(("objetivo", "abrir la primera fila"), ("tope", "1"))); EsperarTramo(t.Mapa, 8000); }, esperaMs: 100);
+        string? pasoLog = lineasTramo.FirstOrDefault(l => l.Contains("paso 1:", StringComparison.Ordinal));
+        string? pasoNotch; lock (t.Progreso) pasoNotch = t.Progreso.FirstOrDefault(l => l.Contains("paso 1:", StringComparison.Ordinal));
+        Debe(pasoLog != null && pasoLog.Contains("fila 2 (GuiGridFila)", StringComparison.Ordinal) && !pasoLog.Contains(Fila, StringComparison.Ordinal),
+            $"la línea «paso 1:» del log nombra la fila por número y tipo, no por su texto («{Recorte(pasoLog ?? "(no hay)")}»)");
+        Debe(pasoNotch != null && !pasoNotch.Contains(Fila, StringComparison.Ordinal),
+            $"y la del notch tampoco («{Recorte(pasoNotch ?? "(no hay)")}»)");
+        Debe(t.Pulsados.Count == 1 && t.Pulsados[0] == $"uia:name={Fila};ct=GuiGridFila", $"y la mano del tramo recibe el selector (recibió [{string.Join(" · ", t.Pulsados)}])");
+    }
+
+    private static void CumplidoSoloConEvidencia()
+    {
+        var elegir = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("Elegir");
+        if (elegir == null || MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x")) == null || !SurfaceMapTools.IsMapTool("map_tramo_estado"))
+        {
+            Pendiente("ElDecisor.Elegir + SurfaceMapTools.map_tramo/map_tramo_estado", "386", "046");
+            return;
+        }
+
+        string Corre(TramoDePrueba t)
+        {
+            t.Mapa.Call("map_tramo", Args(("objetivo", "el objetivo"), ("tope", "3")));
+            EsperarTramo(t.Mapa, 8000);
+            return t.Mapa.Call("map_tramo_estado", new Dictionary<string, string>());
+        }
+
+        // 1. LA PALABRA NO DECIDE: Cumplido=0,1 con «cumplido» en el porqué es «no se atrevió», no «ya está».
+        var palabra = MapaParaTramo(_ => DecisionCon(
+            Decision("No", "Jev eligió «1) A (Button)» con confianza 0.40 y el objetivo no parece cumplido: no se acciona a medias. Decide Luna.", 0.4),
+            cumplido: 0.1, peligro: 0.1))!;
+        string e1 = Corre(palabra);
+        Debe(palabra.Pulsados.Count == 0 && e1.Contains("no se atrevió", StringComparison.Ordinal),
+            $"con Cumplido=0,1 el tramo para por «no se atrevió» aunque el porqué diga «cumplido» («{Recorte(e1)}»)");
+        Debe(!e1.Contains("el objetivo ya está cumplido:", StringComparison.Ordinal) && !e1.Contains("Jev cree que ya está", StringComparison.Ordinal),
+            $"y no declara nada sobre el objetivo («{Recorte(e1)}»)");
+
+        // 2. EL NÚMERO SÍ: Cumplido=0,9 con un porqué SIN la palabra → «Jev cree que ya está», con el porqué detrás, sin declarar éxito.
+        const string porque = "Jev cree que el objetivo ya está en esta pantalla (0.90): no acciono más. Decide Luna.";
+        var numero = MapaParaTramo(_ => DecisionCon(Decision("No", porque, 0.9), cumplido: 0.9, peligro: 0.1))!;
+        string e2 = Corre(numero);
+        Debe(numero.Pulsados.Count == 0, $"con Cumplido=0,9 no se pulsa nada ({numero.Pulsados.Count})");
+        Debe(e2.Contains("paré: Jev cree que ya está", StringComparison.Ordinal), $"el motivo del tramo empieza por «Jev cree que ya está» («{Recorte(e2)}»)");
+        Debe(e2.Contains(porque, StringComparison.Ordinal), $"y lleva detrás el porqué del decisor («{Recorte(e2)}»)");
+        Debe(!e2.Contains("el objetivo ya está cumplido:", StringComparison.Ordinal), $"sin declarar el objetivo cumplido: eso lo dice la llegada, no el modelo («{Recorte(e2)}»)");
+        Debe(e2.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), "y la cuenta devuelve el turno con lo que hay delante");
+
+        // 3. Y EL DECISOR LO DICE ASÍ (289): con cumplido 0,9, «Jev cree».
+        var d = elegir.Invoke(null, new object[] { "jev", "uia://explorer.exe/Descargas", "abrir lo nuevo", Puertas046, 0.7,
+            (Func<string, string>)(_ => Respuesta046(Puertas046[0], EnForma046, "0.9", "0.9", "0.1")) })!;
+        Debe(!Actuar046(d) && Porque046(d).Contains("Jev cree", StringComparison.Ordinal),
+            $"con cumplido 0,9 el decisor dice que Jev CREE que ya está, no que lo esté (dijo: «{Porque046(d)}»)");
+    }
+
+    private static void LaMasaYLosTokensSonSenalNoCompuerta()
+    {
+        var elegir = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("Elegir");
+        var tD = typeof(U.WindowsClient.Decision.DecisionDeUnPaso);
+        var pN = tD.GetProperty("N"); var pMasa = tD.GetProperty("Masa5"); var pTokens = tD.GetProperty("InputTokens");
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        if (elegir == null || pN == null || pMasa == null || pTokens == null || pDecisor == null || pPuertas == null)
+        {
+            Pendiente("DecisionDeUnPaso.N/Masa5/InputTokens + la señal en la línea «decisor:»", "387", "046");
+            return;
+        }
+
+        // 6 claves: 5 puertas + «ninguna». Las 5 mayores suman 0,98.
+        var puertas = new[] { "1) A (Button)", "2) B (Button)", "3) C (Button)", "4) D (Button)", "5) E (Button)" };
+        var probs = new[] { (puertas[0], "0.58"), (puertas[1], "0.14"), (puertas[2], "0.13"), (puertas[3], "0.09"), (puertas[4], "0.04"), (IdNinguna, "0.02") };
+        string? cuerpo = null;
+        object D(double umbral, bool usage) => elegir.Invoke(null, new object[] { "jev", "uia://explorer.exe/Descargas", "abrir A", puertas, umbral,
+            (Func<string, string>)(c => { cuerpo = c; return Respuesta046(puertas[0], probs, "0.58", usage: usage); }) })!;
+        void Senal(object d, string caso)
+        {
+            Debe((int)pN.GetValue(d)! == 6, $"{caso}: N = 6 claves; salió {pN.GetValue(d)}");
+            Debe(Math.Abs((double)pMasa.GetValue(d)! - 0.98) < 0.001, $"{caso}: la masa de los 5 mejores es 0,98; salió {pMasa.GetValue(d)}");
+            Debe(pTokens.GetValue(d) is int tk && tk == 312, $"{caso}: InputTokens = 312, lo que usage trajo; salió «{pTokens.GetValue(d) ?? "null"}»");
+        }
+        var acciona = D(0.5, usage: true);
+        Debe(Actuar046(acciona), $"con umbral 0,5 y confianza 0,58 se acciona (salió Actuar={Actuar046(acciona)}: «{Porque046(acciona)}»)");
+        Senal(acciona, "accionando");
+        var noAcciona = D(0.99, usage: true);
+        Debe(!Actuar046(noAcciona), "con umbral 0,99 no se acciona");
+        Senal(noAcciona, "sin accionar");
+        var sinUsage = D(0.5, usage: false);
+        Debe(pTokens.GetValue(sinUsage) == null, $"sin usage, InputTokens es null («sin medir»), no 0; salió «{pTokens.GetValue(sinUsage) ?? "null"}»");
+        // «ABSENT» NO SE PREGUNTA: marcó 0,60 con la opción a la vista (t=127 del vídeo).
+        using (var doc = System.Text.Json.JsonDocument.Parse(cuerpo ?? "{}"))
+        {
+            var preguntas = doc.RootElement.GetProperty("questions").EnumerateObject().Select(q => q.Name).ToList();
+            Debe(!preguntas.Any(q => q.Contains("absent", StringComparison.OrdinalIgnoreCase) || q.Contains("ausente", StringComparison.OrdinalIgnoreCase)),
+                $"el cuerpo no pregunta «absent»/«ausente»; pregunta [{string.Join(" · ", preguntas)}]");
+        }
+
+        // LA LÍNEA «decisor:» LLEVA LOS TRES, Y NINGUNA COMPUERTA LOS MIRA: con masa5 0,23 y conf 0,99 se acciona igual.
+        (SurfaceMapTools mapa, List<string> pulsos) Mapa(int? tokens)
+        {
+            var m = MapaParaDecidir(pPuertas, ("A", "Button"), ("B", "Button"))!.Value;
+            var pulsos = new List<string>();
+            m.mapa.RecorrerPorElNucleo = pasos => { pulsos.Add(pasos[0].Exit); return new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true, "hice los 1 paso(s) y ahora estás en «uia://sap/NV2000».", true); };
+            pDecisor.SetValue(m.mapa, Decide((_, _, _) => Con046(
+                DecisionCon(Decision("Si", "1) A (Button)", 0.99, "Jev eligió «1) A (Button)» con confianza 0.99."), cumplido: 0.1, peligro: 0.1),
+                ("N", 3), ("Masa5", 0.23), ("InputTokens", tokens))));
+            return (m.mapa, pulsos);
+        }
+        var (conTokens, pulsos1) = Mapa(312);
+        var lineas = LineasDelLog(() => conTokens.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "abrir A" }));
+        string? linea = lineas.FirstOrDefault(l => l.Contains("decisor:", StringComparison.Ordinal));
+        Debe(linea != null && linea.Contains("masa5", StringComparison.OrdinalIgnoreCase) && linea.Contains("×", StringComparison.Ordinal) && linea.Contains("tokens 312", StringComparison.Ordinal),
+            $"la línea «decisor:» lleva masa5, «×» lo plano y los tokens («{Recorte(linea ?? "(no hay)")}»)");
+        Debe(pulsos1.Count == 1, $"y con masa5 0,23 y conf 0,99 se acciona igual: la masa es señal, no compuerta (pulsos={pulsos1.Count})");
+        var (sinTokens, _) = Mapa(null);
+        var lineas2 = LineasDelLog(() => sinTokens.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "abrir A" }));
+        string? linea2 = lineas2.FirstOrDefault(l => l.Contains("decisor:", StringComparison.Ordinal));
+        Debe(linea2 != null && linea2.Contains("tokens sin medir", StringComparison.Ordinal), $"y sin usage dice «tokens sin medir», no un número («{Recorte(linea2 ?? "(no hay)")}»)");
     }
 
     private static void Debe(bool condicion, string promesa)

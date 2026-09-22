@@ -111,7 +111,10 @@ política, señal— actúa sobre números que pueden no significar nada.
 
 Su fixture pasa a mandar `probabilities` completas (Σ = 1, con «0) ninguna») y el caso `viejo`
 **invierte su aserción**. Se anota en la spec 036, donde nació. Su cláusula de ausencia es la misma
-que la de la 345, y por eso **queda roja hasta la fase 3** (se dice en cada fase).
+que la de la 345, y por eso **queda roja hasta la fase 3** (se dice en cada fase). Su caso «cumplido
+alto» juzga «**ya está**», que es lo que comparten el mensaje de hoy («el objetivo ya está cumplido») y
+el de la fase 8 («Jev cree que el objetivo ya está»): así la 289 pasa a verde en la fase 3 y no espera
+a la 8. Que diga «Jev cree» lo juzga la 386, y solo ella.
 
 ### Fixtures ajenos que cambian, y sus enunciados no
 
@@ -132,7 +135,7 @@ cada caso del juez afirma el token de **su** regla: así cada sabotaje tiene una
 
 | # | Juez | Sabotaje de una línea (verificado por diff) |
 |---|---|---|
-| 344 | `Elegir("jev", …)` con nouls presentes y bajas en todos los casos, y un transporte que devuelve, uno por caso: `confidence` 95 · 1,0000001 · 1e400 · −0,01 · «alta» (texto); una probabilidad NaN; **Σ = 0,95 con TODAS las claves presentes y en rango** (0,85 · 0,10 · «0) ninguna» 0,00) y Σ = 1,10 (0,90 · 0,20 · 0,00); una clave de más («Grabar») y una de menos; la elegida con 0,31 cuando otra tiene 0,58; empate 0,45/0,45. **Todos**: `Actuar=false`, `Alternativas` vacía, `QueNoCuadro` y `Porque` llevan el token de **ese** caso («confidence=95», «Σ=0,95», «Σ=1,10», «sobra «Grabar»», «falta «…»», «choice 0,31 < 0,58», «empate»), `Confianza` conserva el crudo (95; `NaN` cuando no era número). Una respuesta que rompe dos reglas (Σ=0,95 **y** una clave de menos) nombra las dos. Y `ClienteTypeSafe.DetalleDelError(leer)` con un `leer` que lanza devuelve «(no se pudo leer el cuerpo del error: Tipo: mensaje)». Contraste: una respuesta en forma con «0) ninguna» a 0 sí acciona | en `Validar`, la tolerancia de la suma pasa de 0,02 a 10: el caso Σ=0,95 —que solo rompe esa regla— acciona y su `QueNoCuadro` pierde «Σ=0,95» |
+| 344 | `Elegir("jev", …)` con nouls presentes y bajas en todos los casos, y un transporte que devuelve, uno por caso: `confidence` 95 · 1,01 · 1e400 · −0,01 · «alta» (texto) —**1,0000001 es el contraste, no un fallo**: cae en la tolerancia ≤ 1+1e-6 de la tabla de diseño, se lee como 1 y acciona (fase 0, 2026-09-22)—; una probabilidad NaN (JSON no tiene NaN: llega como texto `"NaN"`); **Σ = 0,95 con TODAS las claves presentes y en rango** (0,85 · 0,10 · «0) ninguna» 0,00) y Σ = 1,10 (0,90 · 0,20 · 0,00); una clave de más («Grabar») y una de menos; la elegida con 0,31 cuando otra tiene 0,58; empate 0,45/0,45. **Todos**: `Actuar=false`, `Alternativas` vacía, `QueNoCuadro` y `Porque` llevan el token de **ese** caso («confidence=95», «Σ=0,95», «Σ=1,10», «sobra «Grabar»», «falta «…»», «choice 0,31 < 0,58», «empate»), `Confianza` conserva el crudo (95; `NaN` cuando no era número). Una respuesta que rompe dos reglas (Σ=0,95 **y** una clave de menos) nombra las dos. Y `ClienteTypeSafe.DetalleDelError(leer)` con un `leer` que lanza devuelve «(no se pudo leer el cuerpo del error: Tipo: mensaje)». Contraste: una respuesta en forma con «0) ninguna» a 0 sí acciona | en `Validar`, la tolerancia de la suma pasa de 0,02 a 10: el caso Σ=0,95 —que solo rompe esa regla— acciona y su `QueNoCuadro` pierde «Σ=0,95» |
 | 345 | `Elegir("jev", …)` con la distribución en forma y `peligro` 1,2 · 80 · 1e400 · 1,0000001 · −0,01 · «sí» · ausente, y `cumplido` 1,5 · ausente: `Actuar=false`, `Peligro=1`, `Cumplido=0`, `Porque` con «peligro=80» o «falta «peligro»». Con las dos en [0,1] y bajas, acciona (289). Con `peligro` 0 dicho por Jev, acciona: el 0 vale cuando Jev lo dijo | en `ConJev`, el caso peor deja de ser 1/0 y `Peligro` conserva el crudo (80): solo la 345 se pone roja (la 289 no afirma ese valor) |
 | 346 | `map_decidir` con puertas inyectadas «Nuevo»/«Grabar»/«Buscar» y un decisor falso que da «2) Grabar (Button)» con conf 0,99 y `Peligro=0`: **0 pulsos**, la cuenta lleva «Grabar» y «no se puede deshacer», y el inventario. Con la elegida «1) A» que no está viva y la segunda «2) Guardar» a 0,40: se pulsa A, **no** Guardar, y la cuenta dice que se vetó. `InstruccionesDeLaPuerta` no contiene «menos daño». Y por el tramo (`MapaParaTramo`) igual: 0 pulsos y para | quitar `PuertasPeligrosas.EsPeligrosa` del filtro de candidatas |
 | 347 | `Elegir("jev", …)` con transporte que **captura** el cuerpo: `criteria` = las ofrecidas + «0) ninguna…», y ni una más; `state` no lista «ninguna» como puerta; la respuesta con `choice` = ninguna a 0,80 → `Actuar=false`, `Porque` con «no lo veo en esta pantalla» y «0,80». `CuerpoDeEleccion` con 3 opciones sigue dando 3 criterios (282) | no añadir `IdNinguna` a la lista que viaja |
@@ -260,9 +263,10 @@ etiqueta de una `GuiGridFila` en el log: es anterior a Jev, queda fuera y se ano
 
 - `PeticionASystemOne.IdNinguna = "0) ninguna: nada de esta pantalla avanza hacia el objetivo"`. La añade
   `ConJev` a `criteria` (no al `state`, que lista puertas). El «0)» no choca con la numeración «1)…»
-  de `UnPasoDecidido`. Si Jev la elige, `No("Jev no ve en esta pantalla nada que avance hacia el
-  objetivo (0,80): no se acciona. Decide Luna.")`. **No es compuerta calibrada**: se registra, y con cien
-  pasos se mira si separa aciertos de pérdidas (arquitectura §2.4).
+  de `UnPasoDecidido`. Si Jev la elige, `No("Jev eligió «ninguna» (0,80): no lo veo en esta pantalla —nada
+  de lo que hay avanza hacia el objetivo—. No se acciona. Decide Luna.")` —la frase «no lo veo en esta
+  pantalla» es la que el juez de la 347 exige y la que D reutiliza—. **No es compuerta calibrada**: se
+  registra, y con cien pasos se mira si separa aciertos de pérdidas (arquitectura §2.4).
 - La instrucción «Si ninguna avanza hacia el objetivo, elige la que menos daño haga»
   (`PeticionASystemOne.cs:141`) **desaparece**: es el «clicking best guess» del vídeo, en español.
 - `Elegir(quien, pantalla, objetivo, puertas, umbral, transporte)` **se conserva y sigue siendo el único
@@ -337,6 +341,7 @@ dependencias: la «ninguna» tiene que viajar antes de que la 344 exija que la r
 | **Deja** | 344–350 y 386–387 escritas y `PENDIENTE`; la 289 reescrita con su fixture (Σ = 1, `viejo` invertido); `RespuestaChoice` con «0) ninguna» **y las dos nouls a 0,1**; el caso 1 de la 292 con `Cumplido=0,9` (su aserción nueva llega en la fase 8) |
 | **Toca** | `tests/ContratoDelGrafo/Contrato.cs` (registro bajo `// ── Spec 046`, cuerpos en su región antes de `Debe`), `docs/specs/036-…md` (nota de la 289) |
 | **Terminado** | `contrato-del-grafo.ps1` → **CONTRATO ROTO** exactamente por 344–350, 386–387 y la 289; 343 y anteriores intactas (la 292 sigue verde: `Cumplido=0,9` elige la misma rama que hoy elige la subcadena) |
+| **Hecho** | 2026-09-22. Veredicto literal: `CONTRATO ROTO: 23 promesa(s) incumplida(s). El cambio no puede entrar así.` Rojas **exactamente** 289, 344, 345, 346, 347, 348, 349, 350, 386, 387; **280 verdes**; 7 `PENDIENTE` (344, 345, 347, 348, 349, 350, 387) y 3 rojas por aserción contra el código de hoy (289: `viejo` acciona y no dice cuál falta; 346: pulsa «Grabar» elegida, pulsa «Guardar» como segunda, y el tramo pulsa «Grabar» tres veces; 386: la palabra «cumplido» del porqué elige la rama). El **23** es lo que el arnés cuenta desde siempre: aserciones fallidas, no promesas (16 aserciones + 7 pendientes) |
 
 ### Fase 1 — «ninguna» viaja en la pregunta
 
@@ -470,6 +475,18 @@ Se rellena durante la implementación. Lo encontrado al especificar, con fecha:
   `Pagina-web-clientes-final` y la ruta `/api/agent/values`, no el host). `VetadosPorDefecto` nace con
   los dominios de Miracle que sí aparecen (`itsmiracleai.com`, `itsmiracleai.com.co`, **D**); el host
   exacto se le pide al dueño en el PR y entra como constante, no como variable.
+- **2026-09-22, fase 0.** `Utf8JsonWriter` escapa lo no ASCII por defecto («·» → `·`, «í» →
+  `í`): una aserción «el cuerpo no contiene «fila de prueba · 000»» o «…«Historia clínica»» sobre el
+  JSON crudo habría salido verde **con la fuga presente** (patrón nº7: un criterio que no puede fallar con
+  el bug no es un criterio). Los jueces de la 349 y la 350 miran el cuerpo **decodificado**
+  (`TextoDelCuerpo`: `state`, `instructions` y las claves de `criteria`).
+- **2026-09-22, fase 0.** El primer juez de la 344 listaba 1,0000001 entre lo que no cuadra; la tabla de
+  diseño lo lee como 1 (tolerancia ≤ 1+1e-6). Manda la tabla: 1,0000001 es el caso de contraste que
+  acciona, y el «fuera de rango por arriba» se juzga con 1,01. Lo mismo vale para `peligro` 1,0000001 en
+  la 345: se lee como 1, que cierra la compuerta.
+- **2026-09-22, fase 0.** El veredicto del arnés cuenta **aserciones** (`_fallos` sube en cada `Debe`),
+  no promesas: «23 promesa(s) incumplida(s)» son 10 promesas. Es así desde el día que nació el contrato
+  y no se toca aquí; se deja dicho para que nadie lea 23 como «se rompieron trece de más».
 
 ## Revisiones
 
