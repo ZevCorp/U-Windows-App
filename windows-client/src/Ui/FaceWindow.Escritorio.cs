@@ -45,6 +45,7 @@ public partial class FaceWindow
             return;
         }
         _suEscritorio = leido;
+        App.Guardia?.CambiarEscritorio(leido);
         LogBus.Log("escritorio", $"vivo en «{EscritorioVirtual.Nombre(leido)}» ({porque})");
         TraerLasVentanasDelCentro();
     }
