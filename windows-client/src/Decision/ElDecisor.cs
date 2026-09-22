@@ -37,10 +37,10 @@ public sealed class DecisionDeUnPaso
     /// </summary>
     public IReadOnlyList<(string Puerta, double Probabilidad)> Alternativas { get; init; } = Array.Empty<(string, double)>();
 
-    /// <summary>Cuánto dice Jev que el objetivo YA está cumplido en esta pantalla (0-1). 0 si no se preguntó.</summary>
+    /// <summary>Cuánto dice Jev que el objetivo YA está cumplido en esta pantalla (0-1). Si no vino o no se entendió, el caso peor: 0, y <see cref="QueNoCuadro"/> lo dice (345).</summary>
     public double Cumplido { get; init; }
 
-    /// <summary>Cuánto dice Jev que accionar la elegida es irreversible o peligroso (0-1). 0 si no se preguntó.</summary>
+    /// <summary>Cuánto dice Jev que accionar la elegida es irreversible o peligroso (0-1). Si no vino o no se entendió, el caso peor: 1, y <see cref="QueNoCuadro"/> lo dice (345).</summary>
     public double Peligro { get; init; }
 
     /// <summary>
@@ -363,9 +363,16 @@ public static class ElDecisor
             confianza = leida.Confianza;
             alternativas = leida.Alternativas;
             queNoCuadro = leida.QueNoCuadro;
-            // LAS DOS NOULS, si vinieron (289). Un transporte viejo que no las trae sigue valiendo: 0 y 0.
-            cumplido = Noul(answers, PeticionASystemOne.IdCumplido);
-            peligro = Noul(answers, PeticionASystemOne.IdPeligro);
+            // LAS DOS NOULS FALLAN CERRADAS (345, y la 289 desde el 2026-09-22). Hasta hoy una noul ausente o que no
+            // era número valía 0, y 0 es justamente lo que ABRE la compuerta de peligro: una respuesta sin «peligro»
+            // accionaba con más soltura que una que lo traía. El cuerpo SIEMPRE pide las dos (289), así que ausente no
+            // es «transporte viejo»: es una respuesta malformada. Fuera de forma → el caso PEOR (peligro 1, cumplido 0)
+            // y lo que vino, crudo, se suma a lo que no cuadra; por ahí no se acciona.
+            var nouls = new List<string>(2);
+            cumplido = NoulCerrada(answers, PeticionASystemOne.IdCumplido, peor: 0, nouls);
+            peligro = NoulCerrada(answers, PeticionASystemOne.IdPeligro, peor: 1, nouls);
+            if (nouls.Count > 0)
+                queNoCuadro = queNoCuadro.Length > 0 ? queNoCuadro + " · " + string.Join(" · ", nouls) : string.Join(" · ", nouls);
         }
         catch (Exception e)
         {
@@ -431,11 +438,37 @@ public static class ElDecisor
             .Con(alternativas, cumplido, peligro);
     }
 
-    /// <summary>El valor de una noul de la respuesta, o 0 si no vino o no es número.</summary>
-    private static double Noul(JsonElement answers, string id) =>
-        answers.TryGetProperty(id, out var n) && n.ValueKind == JsonValueKind.Object
-        && n.TryGetProperty("noul", out var v) && v.ValueKind == JsonValueKind.Number
-            ? v.GetDouble() : 0;
+    /// <summary>
+    /// El valor de una noul de la respuesta, o <c>null</c> si no vino o no es número; <paramref name="crudo"/> lleva
+    /// el texto JSON tal cual llegó («80», «"sí"», «1e400»), o vacío si no vino. Hasta el 2026-09-22 devolvía 0 en
+    /// esos casos, y 0 abre la compuerta (promesa 345): quien la llama decide el caso peor, no esta función.
+    /// </summary>
+    private static double? Noul(JsonElement answers, string id, out string crudo)
+    {
+        crudo = "";
+        if (!answers.TryGetProperty(id, out var n) || n.ValueKind != JsonValueKind.Object
+            || !n.TryGetProperty("noul", out var v)) return null;
+        crudo = v.GetRawText();
+        // Utf8JsonReader lee «1e400» como Infinity sin lanzar (medido en la fase 2): es número, pero no finito.
+        return v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
+    }
+
+    /// <summary>
+    /// La noul en [0,1] si Jev la dijo bien; si falta, no es número, no es finita o se sale del rango, el caso
+    /// <paramref name="peor"/> —y la regla que falló, con el crudo, entra en <paramref name="violaciones"/> para que
+    /// no se accione y se diga cuál (345). Un 0 solo abre la compuerta cuando Jev lo dijo. ≤ 1 + 1e-6 se lee como 1,
+    /// la misma tolerancia que las probabilidades (<see cref="RespuestaDeJev"/>).
+    /// </summary>
+    private static double NoulCerrada(JsonElement answers, string id, double peor, List<string> violaciones)
+    {
+        double? leida = Noul(answers, id, out string crudo);
+        if (crudo.Length == 0) { violaciones.Add($"falta «{id}»"); return peor; }
+        if (leida == null) { violaciones.Add($"{id}={crudo} no es número"); return peor; }
+        double v = leida.Value;
+        if (!double.IsFinite(v)) { violaciones.Add($"{id}={crudo} no es finito"); return peor; }
+        if (v < 0 || v > 1 + 1e-6) { violaciones.Add($"{id}={crudo} fuera de [0,1]"); return peor; }
+        return v > 1 ? 1 : v;
+    }
 
     /// <summary>
     /// La regla fija: la puerta cuya etiqueta comparte más palabras con el objetivo; a igualdad, la
