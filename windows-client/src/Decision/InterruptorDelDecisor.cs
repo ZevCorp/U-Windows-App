@@ -50,7 +50,7 @@ public sealed class InterruptorDelDecisor
     /// </summary>
     /// <remarks>
     /// ES UNA PROPIEDAD Y NO UN CUARTO ARGUMENTO porque la 290 instancia el interruptor por reflexión con el
-    /// constructor de tres. Y existe porque la 348 tiene que juzgar EL CUERPO QUE PRODUCE ESTE INTERRUPTOR,
+    /// constructor de tres. Y existe porque la 392 tiene que juzgar EL CUERPO QUE PRODUCE ESTE INTERRUPTOR,
     /// no el del decisor a secas: lo que estaba roto era el cableado (el botón enseñaba <c>cfg.Modelo</c> y la
     /// petición pedía el alias por defecto), y una prueba que llamara al decisor directamente no lo vería.
     /// </remarks>
@@ -76,9 +76,9 @@ public sealed class InterruptorDelDecisor
 
         var transporte = (FabricaDeTransporte ?? ((c, e) => ClienteTypeSafe.TransporteSegun(c, e, _log)))(cfg, entorno)
             ?? (_ => throw new InvalidOperationException("no hay transporte con el que hablarle a TypeSafe"));
-        // EL MODELO QUE ENSEÑA EL BOTÓN ES EL QUE VIAJA EN EL CUERPO (348). Hasta el 2026-09-22 aquí se llamaba a
+        // EL MODELO QUE ENSEÑA EL BOTÓN ES EL QUE VIAJA EN EL CUERPO (392). Hasta el 2026-09-22 aquí se llamaba a
         // Elegir de seis, que armaba el cuerpo con ModeloPorDefecto: Estado decía «jev-1.13.0» y la petición pedía
-        // «jev-latest». La política es la de por defecto hasta que la fase 6 le dé la de cfg (349).
+        // «jev-latest». La política es la de por defecto hasta que la fase 6 le dé la de cfg (393).
         _mapa.Decisor = (pantalla, objetivo, puertas) =>
             ElDecisor.ElegirConModelo(cfg.Quien, pantalla, objetivo, puertas, cfg.Confianza, transporte,
                 cfg.Modelo, PoliticaDeLoQueViaja.PorDefecto);

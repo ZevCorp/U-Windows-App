@@ -37,10 +37,10 @@ public sealed class DecisionDeUnPaso
     /// </summary>
     public IReadOnlyList<(string Puerta, double Probabilidad)> Alternativas { get; init; } = Array.Empty<(string, double)>();
 
-    /// <summary>Cuánto dice Jev que el objetivo YA está cumplido en esta pantalla (0-1). Si no vino o no se entendió, el caso peor: 0, y <see cref="QueNoCuadro"/> lo dice (345).</summary>
+    /// <summary>Cuánto dice Jev que el objetivo YA está cumplido en esta pantalla (0-1). Si no vino o no se entendió, el caso peor: 0, y <see cref="QueNoCuadro"/> lo dice (389).</summary>
     public double Cumplido { get; init; }
 
-    /// <summary>Cuánto dice Jev que accionar la elegida es irreversible o peligroso (0-1). Si no vino o no se entendió, el caso peor: 1, y <see cref="QueNoCuadro"/> lo dice (345).</summary>
+    /// <summary>Cuánto dice Jev que accionar la elegida es irreversible o peligroso (0-1). Si no vino o no se entendió, el caso peor: 1, y <see cref="QueNoCuadro"/> lo dice (389).</summary>
     public double Peligro { get; init; }
 
     /// <summary>
@@ -84,7 +84,7 @@ public sealed class DecisionDeUnPaso
 /// deja que cada regla tenga su propio sabotaje con su propia aserción (revisión 2 de la spec), y lo que hace
 /// que el porqué describa lo que vino en vez de concluir «respuesta inválida».
 ///
-/// LAS NOULS («cumplido», «peligro») NO SE JUZGAN AQUÍ a propósito: son de la 345 y se leen en <see cref="ElDecisor"/>.
+/// LAS NOULS («cumplido», «peligro») NO SE JUZGAN AQUÍ a propósito: son de la 389 y se leen en <see cref="ElDecisor"/>.
 /// </remarks>
 internal sealed class RespuestaDeJev
 {
@@ -279,7 +279,7 @@ public static class ElDecisor
     /// ES EL ÚNICO MÉTODO CON ESTE NOMBRE, Y NO ES ESTILO: el contrato lo pide con <c>GetMethod("Elegir")</c> sin
     /// tipos en 6 sitios (275, 278–281, 289), y con una sobrecarga esa llamada lanza
     /// <c>AmbiguousMatchException</c> —medido el 2026-09-22—. Por eso la larga se llama
-    /// <see cref="ElegirConModelo"/> y esta delega en ella con los valores por defecto (348).
+    /// <see cref="ElegirConModelo"/> y esta delega en ella con los valores por defecto (392).
     /// </remarks>
     public static DecisionDeUnPaso Elegir(
         string quien,
@@ -296,8 +296,8 @@ public static class ElDecisor
     /// </summary>
     /// <param name="modelo">El alias que va en <c>"model"</c> del cuerpo. Hasta el 2026-09-22 el interruptor leía
     /// <c>U_TYPESAFE_MODELO</c>, lo enseñaba en el botón, y el cuerpo llevaba el alias por defecto de todos modos:
-    /// el estado nombraba un modelo y la petición pedía otro (348).</param>
-    /// <param name="politica">Qué superficies pueden mandar texto a Jev. La aplica la fase 6 (349); aquí ya viaja
+    /// el estado nombraba un modelo y la petición pedía otro (392).</param>
+    /// <param name="politica">Qué superficies pueden mandar texto a Jev. La aplica la fase 6 (393); aquí ya viaja
     /// para que la firma no cambie dos veces.</param>
     public static DecisionDeUnPaso ElegirConModelo(
         string quien,
@@ -335,7 +335,7 @@ public static class ElDecisor
         if (transporte == null)
             return DecisionDeUnPaso.No("se pidió Jev pero no hay transporte con el que hablarle.");
 
-        // LO QUE VIAJA EN EL CHOICE = las puertas ofrecidas + «ninguna» (347). Es la ÚNICA lista que viaja, y se
+        // LO QUE VIAJA EN EL CHOICE = las puertas ofrecidas + «ninguna» (391). Es la ÚNICA lista que viaja, y se
         // construye aquí, no en CuerpoDeEleccion (la 282 exige que el cuerpo lleve exactamente lo que se le da) ni
         // en el state (que lista puertas de la pantalla, y «ninguna» no es una). La 388 comparará las claves de la
         // respuesta contra ESTA lista, por el mismo camino (aprendizaje nº16).
@@ -391,7 +391,7 @@ public static class ElDecisor
             confianza = leida.Confianza;
             alternativas = leida.Alternativas;
             queNoCuadro = leida.QueNoCuadro;
-            // LAS DOS NOULS FALLAN CERRADAS (345, y la 289 desde el 2026-09-22). Hasta hoy una noul ausente o que no
+            // LAS DOS NOULS FALLAN CERRADAS (389, y la 289 desde el 2026-09-22). Hasta hoy una noul ausente o que no
             // era número valía 0, y 0 es justamente lo que ABRE la compuerta de peligro: una respuesta sin «peligro»
             // accionaba con más soltura que una que lo traía. El cuerpo SIEMPRE pide las dos (289), así que ausente no
             // es «transporte viejo»: es una respuesta malformada. Fuera de forma → el caso PEOR (peligro 1, cumplido 0)
@@ -430,7 +430,7 @@ public static class ElDecisor
         foreach (var p in puertas)
             if (string.Equals(p, elegida, StringComparison.Ordinal)) { ofrecida = true; break; }
 
-        // «NINGUNA» VIAJÓ Y JEV LA ELIGIÓ (347): no es una puerta, así que no se acciona; se dice con su
+        // «NINGUNA» VIAJÓ Y JEV LA ELIGIÓ (391): no es una puerta, así que no se acciona; se dice con su
         // probabilidad para poder mirar, con cien pasos, si separa aciertos de pérdidas. No es compuerta
         // calibrada: se registra y se devuelve a Luna.
         if (!ofrecida && string.Equals(elegida, PeticionASystemOne.IdNinguna, StringComparison.Ordinal))
@@ -469,7 +469,7 @@ public static class ElDecisor
     /// <summary>
     /// El valor de una noul de la respuesta, o <c>null</c> si no vino o no es número; <paramref name="crudo"/> lleva
     /// el texto JSON tal cual llegó («80», «"sí"», «1e400»), o vacío si no vino. Hasta el 2026-09-22 devolvía 0 en
-    /// esos casos, y 0 abre la compuerta (promesa 345): quien la llama decide el caso peor, no esta función.
+    /// esos casos, y 0 abre la compuerta (promesa 389): quien la llama decide el caso peor, no esta función.
     /// </summary>
     private static double? Noul(JsonElement answers, string id, out string crudo)
     {
@@ -484,7 +484,7 @@ public static class ElDecisor
     /// <summary>
     /// La noul en [0,1] si Jev la dijo bien; si falta, no es número, no es finita o se sale del rango, el caso
     /// <paramref name="peor"/> —y la regla que falló, con el crudo, entra en <paramref name="violaciones"/> para que
-    /// no se accione y se diga cuál (345). Un 0 solo abre la compuerta cuando Jev lo dijo. ≤ 1 + 1e-6 se lee como 1,
+    /// no se accione y se diga cuál (389). Un 0 solo abre la compuerta cuando Jev lo dijo. ≤ 1 + 1e-6 se lee como 1,
     /// la misma tolerancia que las probabilidades (<see cref="RespuestaDeJev"/>).
     /// </summary>
     private static double NoulCerrada(JsonElement answers, string id, double peor, List<string> violaciones)

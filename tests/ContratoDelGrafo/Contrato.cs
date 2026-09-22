@@ -846,14 +846,14 @@ internal static class Contrato
         // ── Spec 046: la decisión de Jev falla cerrada ──────────────────────────────────────────
         // ESCRITAS ANTES QUE SU CÓDIGO (2026-09-22). Nacen de medir la rama del dueño: su «validar probabilidades»
         // convertía en 0 lo que salía de [0,1] —también peligro y cumplido— y 0 abre la compuerta; y main hacía lo
-        // mismo con Noul cuando la noul no venía. Una respuesta que no se entiende NO acciona. Los números 345-350 y
-        // 386-388: 341-344 los gastó main el mismo día (la 344 fue de esta spec hasta el merge de 7380fd8), y 351-385 son de las ramas B, C y D.
+        // mismo con Noul cuando la noul no venía. Una respuesta que no se entiende NO acciona. Los números 350 y
+        // 386-393: 341-349 los gastó main el mismo día (la 344 fue de esta spec hasta el merge de 7380fd8, y 345-349 hasta el de 043addc), y 351-385 son de las ramas B, C y D.
         Prueba("388. la distribución de Jev se valida ENTERA antes de cualquier compuerta: cada probabilidad finita y en [0,1], la suma 1 (±0,02), las claves exactamente las que viajaron —ni una de más ni una de menos—, la elegida el máximo y sin empate, y la confianza finita y en [0,1]; cualquier cosa fuera de forma es «no sé»: no se acciona, el porqué nombra CADA regla que falló con su campo y su valor crudo —no solo la primera—, la decisión conserva la confianza cruda y no ofrece alternativas, y nada se convierte en 0 ni se satura; y un cuerpo de error que no se pudo leer dice por qué en vez de callarlo", LaDistribucionSeValidaEntera);
-        Prueba("345. «cumplido» y «peligro» fallan cerrados: si alguna falta, no es número, no es finita o está fuera de [0,1] se toma el caso peor —peligro 1, cumplido 0—, no se acciona, y el porqué dice cuál falta o cuál vino y con qué valor; un 0 solo abre la compuerta cuando Jev lo dijo", LasNoulsFallanCerradas);
-        Prueba("346. lo irreversible no se pulsa por decisión: una candidata cuya etiqueta es peligrosa —grabar, guardar, finalizar, borrar, eliminar, enviar, firmar— no se pulsa desde map_decidir ni desde el tramo, ni como elegida ni como segunda mejor, aunque Jev la dé con confianza 0,99 y peligro 0; la mano no la recibe, la cuenta dice cuál se vetó y por qué, el control vuelve con el inventario; y el cuerpo deja de pedirle a Jev «la que menos daño haga»", LoIrreversibleNoSePulsaPorDecision);
-        Prueba("347. «ninguna» es una opción de la pregunta: además de TODAS las puertas ofrecidas viaja «0) ninguna» —nada de esta pantalla avanza hacia el objetivo— como una opción más del choice; si Jev la elige no se acciona y se dice que no lo ve en esta pantalla, con su probabilidad; y la añade quien pregunta, no CuerpoDeEleccion, así que la 282 sigue tal cual", NingunaEsUnaOpcionDeLaPregunta);
-        Prueba("348. el modelo configurado llega al cuerpo: con U_TYPESAFE_MODELO=X el cuerpo que manda el interruptor lleva «model»:«X», sin la variable lleva el alias por defecto, y el estado del botón y el cuerpo nombran el mismo modelo; la firma Elegir de seis argumentos se conserva como el ÚNICO método con ese nombre y delega en ElegirConModelo con los valores por defecto", ElModeloConfiguradoLlegaAlCuerpo);
-        Prueba("349. a Jev solo viaja lo que la política permite: en sapgui:// sin U_DECISOR_SAP_TEXTO=si el transporte no se toca ni una vez y no se acciona —la decisión dice que no manda texto y que decide Luna, sin caer a ninguna regla local—; un origin vetado (los del portal clínico por defecto, más los de U_DECISOR_TEXTO_VETADO) tampoco viaja ni se decide; de la ubicación viaja solo el origin, nunca el título ni la ruta; y la política vive en un solo sitio y compara el prefijo por el mismo camino que el resto del código", AJevSoloViajaLoQueLaPoliticaPermite);
+        Prueba("389. «cumplido» y «peligro» fallan cerrados: si alguna falta, no es número, no es finita o está fuera de [0,1] se toma el caso peor —peligro 1, cumplido 0—, no se acciona, y el porqué dice cuál falta o cuál vino y con qué valor; un 0 solo abre la compuerta cuando Jev lo dijo", LasNoulsFallanCerradas);
+        Prueba("390. lo irreversible no se pulsa por decisión: una candidata cuya etiqueta es peligrosa —grabar, guardar, finalizar, borrar, eliminar, enviar, firmar— no se pulsa desde map_decidir ni desde el tramo, ni como elegida ni como segunda mejor, aunque Jev la dé con confianza 0,99 y peligro 0; la mano no la recibe, la cuenta dice cuál se vetó y por qué, el control vuelve con el inventario; y el cuerpo deja de pedirle a Jev «la que menos daño haga»", LoIrreversibleNoSePulsaPorDecision);
+        Prueba("391. «ninguna» es una opción de la pregunta: además de TODAS las puertas ofrecidas viaja «0) ninguna» —nada de esta pantalla avanza hacia el objetivo— como una opción más del choice; si Jev la elige no se acciona y se dice que no lo ve en esta pantalla, con su probabilidad; y la añade quien pregunta, no CuerpoDeEleccion, así que la 282 sigue tal cual", NingunaEsUnaOpcionDeLaPregunta);
+        Prueba("392. el modelo configurado llega al cuerpo: con U_TYPESAFE_MODELO=X el cuerpo que manda el interruptor lleva «model»:«X», sin la variable lleva el alias por defecto, y el estado del botón y el cuerpo nombran el mismo modelo; la firma Elegir de seis argumentos se conserva como el ÚNICO método con ese nombre y delega en ElegirConModelo con los valores por defecto", ElModeloConfiguradoLlegaAlCuerpo);
+        Prueba("393. a Jev solo viaja lo que la política permite: en sapgui:// sin U_DECISOR_SAP_TEXTO=si el transporte no se toca ni una vez y no se acciona —la decisión dice que no manda texto y que decide Luna, sin caer a ninguna regla local—; un origin vetado (los del portal clínico por defecto, más los de U_DECISOR_TEXTO_VETADO) tampoco viaja ni se decide; de la ubicación viaja solo el origin, nunca el título ni la ruta; y la política vive en un solo sitio y compara el prefijo por el mismo camino que el resto del código", AJevSoloViajaLoQueLaPoliticaPermite);
         Prueba("350. las filas nunca viajan por su texto: GuiGridFila, GuiTreeFila y GuiTreeCarpeta llegan a Jev como «N) fila (tipo)», sin etiqueta, también con SAP habilitado; la respuesta se mapea por id a la puerta ofrecida y la mano sigue pulsando por selector; y lo que viajó no se registra por su texto: la línea «decisor:», el relato de map_decidir y la línea «paso k:» del tramo nombran una fila por número y tipo, y dicen cuántos ids viajaron de cuántos, cuántas filas fueron sin texto y cuántos caracteres se mandaron", LasFilasNuncaViajanPorSuTexto);
         Prueba("386. «cumplido» solo con evidencia: un cumplido alto deja de accionar y el tramo para diciendo que Jev cree que ya está —con el porqué del decisor detrás— sin declarar el objetivo cumplido; lo decide el número, no el texto del porqué; y la cuenta del tramo devuelve el turno con lo que hay delante, para que lo compruebe quien sí puede —la llegada o la persona—", CumplidoSoloConEvidencia);
         Prueba("387. la masa de los cinco mejores y los tokens son señal, no compuerta: la decisión lleva N, la masa de los 5 mejores y los input_tokens que usage trajo —sin usage, «sin medir»—; los tres salen en la cuenta y en la línea «decisor:», también cuando no se acciona; ninguna decisión cambia por ellos; y «absent» no se pregunta", LaMasaYLosTokensSonSenalNoCompuerta);
@@ -11863,8 +11863,8 @@ internal static class Contrato
     private static object? PropDe(object o, string nombre) => o.GetType().GetProperty(nombre)?.GetValue(o);
 
     /// <summary>
-    /// El id de la opción «ninguna» que viaja en el choice desde la 347 (spec 046). El ayudante de abajo la
-    /// manda desde la fase 0, y la 347 exige que <c>PeticionASystemOne.IdNinguna</c> sea EXACTAMENTE esta:
+    /// El id de la opción «ninguna» que viaja en el choice desde la 391 (spec 046). El ayudante de abajo la
+    /// manda desde la fase 0, y la 391 exige que <c>PeticionASystemOne.IdNinguna</c> sea EXACTAMENTE esta:
     /// la 388 rechaza una respuesta cuyas claves no sean las que viajaron, así que si producción y contrato
     /// discreparan en el texto, 278 y 279 caerían por una razón que no es la suya.
     /// </summary>
@@ -11873,7 +11873,7 @@ internal static class Contrato
     /// <summary>Una respuesta de TypeSafe como la documenta su API, para dársela al transporte falso.</summary>
     /// <remarks>
     /// DESDE LA 046 (2026-09-22) LLEVA LA CLAVE «NINGUNA» A 0 Y LAS DOS NOULS A 0,1: la 388 exige que la respuesta
-    /// traiga exactamente las claves que viajaron —y desde la 347 viaja «ninguna»—, y la 345 no acciona sin las
+    /// traiga exactamente las claves que viajaron —y desde la 391 viaja «ninguna»—, y la 389 no acciona sin las
     /// nouls. Sin esto, 278 («buena») y 279 («justa»), que afirman Actuar=true con este ayudante, caerían por una
     /// razón ajena a su enunciado. Σ sigue siendo 1: «ninguna» pesa 0.
     /// </remarks>
@@ -13540,7 +13540,7 @@ internal static class Contrato
         var pQue = typeof(U.WindowsClient.Decision.DecisionDeUnPaso).GetProperty("QueNoCuadro");
         if (elegir == null || pQue == null)
         {
-            Pendiente("DecisionDeUnPaso.QueNoCuadro + el caso peor de las nouls en ElDecisor (Noul → double?)", "345", "046");
+            Pendiente("DecisionDeUnPaso.QueNoCuadro + el caso peor de las nouls en ElDecisor (Noul → double?)", "389", "046");
             return;
         }
 
@@ -13598,7 +13598,7 @@ internal static class Contrato
         var instrucciones = Capacidad("U.WindowsClient.Decision.PeticionASystemOne")?.GetMethod("InstruccionesDeLaPuerta");
         if (pDecisor == null || pPuertas == null || !PuertasConSelector(pPuertas) || instrucciones == null || MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x")) == null)
         {
-            Pendiente("SurfaceMapTools.Decisor/Puertas + PeticionASystemOne.InstruccionesDeLaPuerta + map_tramo", "346", "046");
+            Pendiente("SurfaceMapTools.Decisor/Puertas + PeticionASystemOne.InstruccionesDeLaPuerta + map_tramo", "390", "046");
             return;
         }
 
@@ -13654,7 +13654,7 @@ internal static class Contrato
         var elegir = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("Elegir");
         if (fNinguna == null || cuerpoDeEleccion == null || elegir == null)
         {
-            Pendiente("PeticionASystemOne.IdNinguna + «ninguna» en lo que ElDecisor manda", "347", "046");
+            Pendiente("PeticionASystemOne.IdNinguna + «ninguna» en lo que ElDecisor manda", "391", "046");
             return;
         }
 
@@ -13704,7 +13704,7 @@ internal static class Contrato
         var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
         if (tI == null || pFabrica == null || decisor == null || elegirConModelo == null || tPol == null || pPorDefecto == null || pCon == null || pDecisor == null)
         {
-            Pendiente("InterruptorDelDecisor.FabricaDeTransporte + ElDecisor.ElegirConModelo + PoliticaDeLoQueViaja.PorDefecto", "348", "046");
+            Pendiente("InterruptorDelDecisor.FabricaDeTransporte + ElDecisor.ElegirConModelo + PoliticaDeLoQueViaja.PorDefecto", "392", "046");
             return;
         }
 
@@ -13771,7 +13771,7 @@ internal static class Contrato
         var elegirConModelo = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("ElegirConModelo");
         if (tPol == null || leer == null || vetados == null || elegirConModelo == null)
         {
-            Pendiente("PoliticaDeLoQueViaja (Leer, PuedeViajar, VetadosPorDefecto) + ElDecisor.ElegirConModelo", "349", "046");
+            Pendiente("PoliticaDeLoQueViaja (Leer, PuedeViajar, VetadosPorDefecto) + ElDecisor.ElegirConModelo", "393", "046");
             return;
         }
 
