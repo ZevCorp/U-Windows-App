@@ -819,6 +819,7 @@ internal static class Contrato
         Prueba("338. el reloj local entrega un recordatorio aunque la voz esté apagada y lo marca una sola vez", RelojLocalEntregaRecordatorio);
         Prueba("339. las cantidades escritas en español también crean recordatorios", NumeroEscritoCreaRecordatorio);
         Prueba("340. ninguna respuesta hablada vuelve al sintetizador de Windows", LaSalidaHabladaUsaSoloVozViva);
+        Prueba("341. dos recordatorios vencidos despiertan una sola sesión de voz", LosAvisosCompartenUnaSesionViva);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -911,6 +912,22 @@ internal static class Contrato
         string fuente = File.ReadAllText(archivo);
         Debe(!fuente.Contains("_voice.Speak(", StringComparison.Ordinal),
             "la interfaz no usa System.Speech para responder ni para recordatorios");
+    }
+
+    private static void LosAvisosCompartenUnaSesionViva()
+    {
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string archivo = Path.Combine(repo, "windows-client", "src", "Voice", "ConversacionEnVivo.cs");
+        if (!File.Exists(archivo))
+        {
+            Console.WriteLine("   ⚠ NO PUDE JUZGARLA: falta U_REPO para leer ConversacionEnVivo.cs");
+            return;
+        }
+        string fuente = File.ReadAllText(archivo);
+        Debe(fuente.Contains("private readonly SemaphoreSlim _apertura", StringComparison.Ordinal)
+              && fuente.Contains("await _apertura.WaitAsync", StringComparison.Ordinal)
+              && fuente.Contains("_apertura.Release()", StringComparison.Ordinal),
+            "la apertura de la voz viva está serializada para avisos simultáneos");
     }
 
     private static void CadaMundoSeObservaPorSuPuerta()
