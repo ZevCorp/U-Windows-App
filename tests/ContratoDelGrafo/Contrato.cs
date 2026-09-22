@@ -77,6 +77,7 @@ internal static class Contrato
         // que Escape se vea de verdad no se puede probar sin un teclado, y meterlo aquí volvería
         // caprichoso a un juez que ahora es fiable — se comprueba a mano y se declara en el PR.
         Console.WriteLine();
+        ElArnesDiceSiMideXaml();
         Prueba("21. sin nada en marcha, pedir el alto no deja el freno armado", FrenoOciosoNoSeArma);
         Prueba("22. empezar desarma lo pedido antes: un Escape viejo no aborta lo siguiente", FrenoSeArmaAlEmpezar);
         Prueba("23. el alto se avisa UNA vez por tarea, aunque se pida diez", FrenoAvisaUnaSolaVez);
@@ -937,9 +938,14 @@ internal static class Contrato
     {
         string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
         string archivo = Path.Combine(repo, "windows-client", "src", "Ui", "FaceWindow.xaml.cs");
-        if (!File.Exists(archivo))
+        // repo.Length == 0 ANTES de File.Exists, y no es redundante: Path.Combine("", …) da una ruta
+        // RELATIVA que File.Exists resuelve contra el directorio actual del proceso. Medido el
+        // 2026-09-22 con U_REPO vacío: el juez leyó el FaceWindow.xaml.cs del checkout desde el que
+        // se lanzó —otro repo, otra rama— y dijo ✘ de un archivo que no era el suyo (aprendizaje nº16).
+        if (repo.Length == 0 || !File.Exists(archivo))
         {
-            Console.WriteLine("   ⚠ NO PUDE JUZGARLA: falta U_REPO para leer FaceWindow.xaml.cs");
+            // NI ✔ NI ✘: hasta la 049 esto era un return y la promesa salía inocente sin haber mirado nada.
+            NoPudeJuzgar("falta U_REPO para leer FaceWindow.xaml.cs", "340");
             return;
         }
         string fuente = File.ReadAllText(archivo);
@@ -951,9 +957,11 @@ internal static class Contrato
     {
         string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
         string archivo = Path.Combine(repo, "windows-client", "src", "Voice", "ConversacionEnVivo.cs");
-        if (!File.Exists(archivo))
+        // Mismo orden que en la 340, por la misma razón: sin U_REPO la ruta es relativa al cwd.
+        if (repo.Length == 0 || !File.Exists(archivo))
         {
-            Console.WriteLine("   ⚠ NO PUDE JUZGARLA: falta U_REPO para leer ConversacionEnVivo.cs");
+            // NI ✔ NI ✘ (spec 049, fase 0): antes era un return y salía inocente.
+            NoPudeJuzgar("falta U_REPO para leer ConversacionEnVivo.cs", "341");
             return;
         }
         string fuente = File.ReadAllText(archivo);
@@ -7940,10 +7948,10 @@ internal static class Contrato
         string fuentes = Path.Combine(repo, "windows-client", "src");
         if (repo.Length == 0 || !Directory.Exists(fuentes))
         {
-            _fallos++;
-            Console.WriteLine("   ⚠ NO PUDE JUZGARLA: sin U_REPO no hay fuentes que mirar "
-                            + "(lo pone scripts/contrato-del-grafo.ps1). No es que la promesa falle: "
-                            + "es que no llegué a probarla.");
+            // Hasta la 049 esto hacía _fallos++ y la promesa salía ✘ (culpable) sin haber mirado
+            // nada: justo lo que el comentario de arriba dice que no hay que hacer. Ahora cuenta
+            // aparte y el veredicto final es el tercero, con código 99 (fase 0 de la 049).
+            NoPudeJuzgar("sin U_REPO no hay fuentes que mirar (lo pone scripts/contrato-del-grafo.ps1)", "164");
             return;
         }
 
@@ -13152,6 +13160,62 @@ internal static class Contrato
         if (fallo != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(fallo).Throw();
     }
 
+    /// <summary>
+    /// La sonda que dice si WPF mide en este arnés: un TextBlock de Consolas 10 sin ventana. Da
+    /// 11,71 en la máquina donde se midió el panel (medir-panel.ps1, 2026-09-22); un 0 o una
+    /// excepción es «no puedo medir», y eso se dice, no se convierte en ✔ ni en ✘. Se llama SIEMPRE
+    /// desde un hilo STA (EnSta): WPF mide sin ventana, pero no sin apartamento.
+    /// </summary>
+    private static double AltoDeUnaLineaDeConsolas10()
+    {
+        var sonda = new System.Windows.Controls.TextBlock { Text = "0", FontFamily = new System.Windows.Media.FontFamily("Consolas"), FontSize = 10 };
+        sonda.Measure(new WSize(double.PositiveInfinity, double.PositiveInfinity));
+        if (sonda.DesiredSize.Height <= 0) throw new InvalidOperationException("un TextBlock de Consolas 10 midió 0 de alto");
+        return sonda.DesiredSize.Height;
+    }
+
+    /// <summary>
+    /// Parsea un XAML como texto y lo mide a un ancho dado, sin ventana. Devuelve la raíz ya
+    /// dispuesta, para que quien juzga pueda pintarle un estado, volver a medirla con
+    /// <see cref="Medir"/> y buscar hijos por nombre. Solo desde EnSta.
+    /// </summary>
+    private static System.Windows.FrameworkElement MedirXaml(string xaml, double ancho = 340)
+    {
+        var raiz = (System.Windows.FrameworkElement)System.Windows.Markup.XamlReader.Parse(xaml);
+        Medir(raiz, ancho);
+        return raiz;
+    }
+
+    /// <summary>Mide y dispone una raíz ya parseada a un ancho, y devuelve su alto real.</summary>
+    private static double Medir(System.Windows.FrameworkElement raiz, double ancho = 340)
+    {
+        raiz.Measure(new WSize(ancho, double.PositiveInfinity));
+        raiz.Arrange(new WRect(0, 0, ancho, raiz.DesiredSize.Height));
+        raiz.UpdateLayout();
+        return raiz.ActualHeight;
+    }
+
+    /// <summary>
+    /// No es una promesa: es el arnés diciendo de qué es capaz ANTES de juzgar, para que un ⚠ de
+    /// la 376 se pueda leer junto a su causa. Imprime lo medido con dos decimales o la cadena entera
+    /// de la excepción (patrón nº3), y nunca cuenta como ✔, ✘ ni ⚠.
+    /// </summary>
+    private static void ElArnesDiceSiMideXaml()
+    {
+        try
+        {
+            double alto = 0;
+            EnSta(() => alto = AltoDeUnaLineaDeConsolas10());
+            Console.WriteLine($"arnés · WPF mide sin pantalla: Consolas 10 → {alto:0.00} de alto (medir-panel.ps1 dio 11,71)");
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("arnés · WPF NO mide en este proceso; lo que dependa de XAML saldrá SIN JUZGAR:");
+            for (var x = e; x != null; x = x.InnerException)
+                Console.WriteLine($"   ✘ {x.GetType().Name}: {x.Message}");
+        }
+    }
+
     // ── Reflexión sobre un modelo que todavía no existe ──────────────────────────────────────────
 
     /// <summary>
@@ -13749,25 +13813,17 @@ internal static class Contrato
         var tp = tipos.Value;
         EnSta(() =>
         {
-            try
-            {
-                var sonda = new System.Windows.Controls.TextBlock { Text = "0", FontFamily = new System.Windows.Media.FontFamily("Consolas"), FontSize = 10 };
-                sonda.Measure(new WSize(double.PositiveInfinity, double.PositiveInfinity));
-                if (sonda.DesiredSize.Height <= 0) throw new InvalidOperationException("un TextBlock de Consolas 10 midió 0 de alto");
-            }
+            try { AltoDeUnaLineaDeConsolas10(); }
             catch (Exception e)
             {
                 NoPudeJuzgar($"WPF no mide en este arnés ({e.GetType().Name}: {e.Message})", "376");
                 return;
             }
-            var raiz = (System.Windows.FrameworkElement)System.Windows.Markup.XamlReader.Parse((string)xaml.GetValue(null)!);
+            var raiz = MedirXaml((string)xaml.GetValue(null)!, 340);
             double Mide(object loQuePinta)
             {
                 pintar.Invoke(null, new[] { raiz, loQuePinta });
-                raiz.Measure(new WSize(340, double.PositiveInfinity));
-                raiz.Arrange(new WRect(0, 0, 340, raiz.DesiredSize.Height));
-                raiz.UpdateLayout();
-                return raiz.ActualHeight;
+                return Medir(raiz, 340);
             }
             double h0 = Mide(Pinta(tp, new CicloDeMentira { Fase = "mirando", ConDecision = false, Etiquetas = Array.Empty<string>(), Tipos = Array.Empty<string>() }));
             Debe(Math.Abs(h0 - 64) < 0.5, $"el XAML sin resultados mide 64 (por el MinHeight del Border, citado como parte): {h0:0.0}");
