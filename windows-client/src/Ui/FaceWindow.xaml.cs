@@ -35,6 +35,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     /// <summary>La conversación en vivo, si el mapa está disponible. Ver <see cref="ConversacionEnVivo"/>.</summary>
     private ConversacionEnVivo? _vivo;
+    private RecordatoriosEnVivo? _recordatorios;
 
     /// <summary>El mapa vivo publicado en Neo4j. Ver <see cref="Navigation.MapaVivo"/>.</summary>
     private Navigation.MapaVivo? _mapaVivo;
@@ -1190,11 +1191,17 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // ventana de workflows — una sola fuente de key para toda la app.
         _backend = new BackendClient(_config, _graphConfig);
         if (_vivo != null)
-            _vivo.Memoria = new MemoriaPersonal(_config.UserId);
+        {
+            var memoriaPersonal = new MemoriaPersonal(_config.UserId);
+            _vivo.Memoria = memoriaPersonal;
+            _vivo.Conversacion = new ConversacionPersonal(_config.UserId);
+            _recordatorios = new RecordatoriosEnVivo(memoriaPersonal, AvisarRecordatorio);
+        }
         // "Windows Live": registra al usuario y empieza a emitir telemetría (pulsos consciente/
         // subconsciente + logs) al backend. No-op si el usuario no dio su correo.
         InitTelemetry();
         Closed += (_, __) => TelemetryBus.Shutdown();
+        Closed += (_, __) => _recordatorios?.Dispose();
 
         // ESC PARA LO QUE Ü ESTÉ HACIENDO. Va aquí y no en GlobalHotkeys porque aquel REGISTRA las
         // teclas —se las quita al resto del sistema— y Escape no se le puede quitar a nadie: es la
@@ -4902,6 +4909,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // el mismo asistente, que fue lo que el dueño oyó el 2026-09-03.
         if (_vivo is { Viva: true }) { _ = _vivo.DiEstoAsync(text); return; }
         _voice.Speak(text);
+    }
+
+    private void AvisarRecordatorio(string mensaje)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _vivo?.Conversacion?.Agregar("asistente", mensaje);
+            Speak(mensaje);
+        });
     }
 
     /// <summary>

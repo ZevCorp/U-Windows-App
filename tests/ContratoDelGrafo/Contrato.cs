@@ -814,6 +814,9 @@ internal static class Contrato
 
         // ── Spec 044: memoria personal de voz ──────────────────────────────────────────────────
         Prueba("335. la memoria personal de voz se guarda localmente y sobrevive a cerrar y volver a abrir la voz, sin depender de un backend legacy", MemoriaPersonalDeVozSobreviveALaSesion);
+        Prueba("336. el hilo conversacional sobrevive a apagar y volver a encender la voz", HiloConversacionalSobreviveALaSesion);
+        Prueba("337. un compromiso con hora produce un recordatorio pendiente sin depender de la voz abierta", RecordatorioLocalSeVuelvePendiente);
+        Prueba("338. el reloj local entrega un recordatorio aunque la voz esté apagada y lo marca una sola vez", RelojLocalEntregaRecordatorio);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -836,6 +839,52 @@ internal static class Contrato
         Debe(guardado.Ok, "guardar un dato personal confirma éxito sin red");
         Debe(contexto.Contains("desarrollador de 24 años", StringComparison.OrdinalIgnoreCase),
             "una sesión nueva recupera el dato personal desde el archivo persistente");
+    }
+
+    private static void HiloConversacionalSobreviveALaSesion()
+    {
+        string archivo = Path.Combine(_raiz, "conversacion.json");
+        var primeraSesion = new ConversacionPersonal("contrato-conversacion", archivo);
+        primeraSesion.Agregar("usuario", "Estamos diseñando la memoria de Ü.");
+        primeraSesion.Agregar("asistente", "Voy a conservar este hilo cuando cierres la voz.");
+
+        var segundaSesion = new ConversacionPersonal("contrato-conversacion", archivo);
+        string contexto = segundaSesion.Contexto();
+
+        Debe(contexto.Contains("diseñando la memoria", StringComparison.OrdinalIgnoreCase),
+            "la nueva sesión recupera lo dicho por el usuario");
+        Debe(contexto.Contains("conservar este hilo", StringComparison.OrdinalIgnoreCase),
+            "la nueva sesión recupera la respuesta del asistente");
+    }
+
+    private static void RecordatorioLocalSeVuelvePendiente()
+    {
+        string archivo = Path.Combine(_raiz, "memoria-recordatorio.json");
+        var memoria = new MemoriaPersonal("contrato-recordatorio", archivo);
+        var guardado = memoria.EjecutarAsync("recuérdame en 2 minutos preparar la demo", CancellationToken.None)
+            .GetAwaiter().GetResult();
+
+        Debe(guardado.Ok && guardado.ReminderDueAt.HasValue,
+            "un compromiso temporal confirma una hora local calculada");
+        var pendientes = memoria.Pendientes(guardado.ReminderDueAt!.Value.AddSeconds(1));
+        Debe(pendientes.Count == 1 && pendientes[0].Text.Contains("preparar la demo", StringComparison.OrdinalIgnoreCase),
+            "el recordatorio aparece pendiente aunque no haya voz abierta");
+    }
+
+    private static void RelojLocalEntregaRecordatorio()
+    {
+        string archivo = Path.Combine(_raiz, "memoria-reloj.json");
+        var memoria = new MemoriaPersonal("contrato-reloj", archivo);
+        memoria.EjecutarAsync("recuérdame en 0 minutos revisar la demo", CancellationToken.None)
+            .GetAwaiter().GetResult();
+        using var recibido = new ManualResetEventSlim();
+        string mensaje = "";
+        using var reloj = new RecordatoriosEnVivo(memoria, texto => { mensaje = texto; recibido.Set(); });
+
+        Debe(recibido.Wait(TimeSpan.FromSeconds(3)), "el reloj entrega el recordatorio sin sesión de voz");
+        Debe(mensaje.Contains("revisar la demo", StringComparison.OrdinalIgnoreCase),
+            "la entrega conserva el compromiso completo");
+        Debe(memoria.Pendientes(DateTimeOffset.Now).Count == 0, "un recordatorio entregado no vuelve a sonar");
     }
 
     private static void CadaMundoSeObservaPorSuPuerta()

@@ -38,6 +38,8 @@ public sealed class ConversacionEnVivo : IDisposable
     private readonly LiveAudio _audio;
     /// <summary>Se conecta después de construir la ventana, porque el backend se inicializa más tarde.</summary>
     public MemoriaPersonal? Memoria { get; set; }
+    /// <summary>Hilo durable que une sesiones de voz sucesivas del mismo usuario.</summary>
+    public ConversacionPersonal? Conversacion { get; set; }
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
     private readonly SemaphoreSlim _envio = new(1, 1);
@@ -580,6 +582,12 @@ public sealed class ConversacionEnVivo : IDisposable
             _oyendoElCambioDeMicrofono = null;
         }
         if (!Viva && _ws == null) return;
+        // Apagar la voz a mitad de un turno no debe cortar el hilo narrativo. El cierre normal ya
+        // guarda estas frases en CierraElTurno; aquí solo quedan las que aún no alcanzaron ese evento.
+        Conversacion?.Agregar("usuario", _fraseUsuario.ToString());
+        Conversacion?.Agregar("asistente", _fraseU.ToString());
+        _fraseUsuario.Clear();
+        _fraseU.Clear();
         ReportarConsumo();
         Viva = false;
         _audio.Capturado -= MandarTrozo;
@@ -711,6 +719,11 @@ public sealed class ConversacionEnVivo : IDisposable
             compromiso completo, incluyendo la referencia temporal. No afirmes que sonará una alarma
             a menos que exista una alarma confirmada. Si vas a decir que lo recuerdas, GUÁRDALO PRIMERO
             y luego dilo.
+          · LA MEMORIA PERSONAL ES PARTE DE LA CONVERSACIÓN, no una caja que el usuario tenga que abrir.
+            El hilo reciente y los recuerdos disponibles vienen en este contexto. Úsalos naturalmente
+            cuando una pregunta dependa de lo que ya hablamos, de quién es el usuario, de sus preferencias
+            o de un compromiso anterior. Si falta un dato pertinente, llama tú mismo a memory_recall:
+            el usuario no tiene que pedírtelo de forma explícita.
           · CUANDO TE EXPLIQUEN QUÉ ES ALGO O PARA QUÉ SIRVE —«esto es el número de factura», «aquí
             se radican los pacientes», «este botón sirve para X cuando Y»— eso es una lección, no
             una orden de acción: crea un RECUERDO con map_esto_es. No la resumas: «aquí va el
@@ -1140,9 +1153,10 @@ public sealed class ConversacionEnVivo : IDisposable
             + "compromiso completo con esa referencia temporal. No anuncies una alarma programada sin una "
             + "confirmación explícita del sistema. ESPERA el resultado antes de afirmar que quedó guardado.",
             ("text", "El dato o compromiso completo, sin resumirlo.")),
-        Fn("memory_recall", "CONSULTA LA MEMORIA PERSONAL que ya tienes del usuario. Úsala cuando pregunte qué "
-            + "sabes sobre él, cuando vuelva a abrir la voz o cuando necesites recuperar una preferencia o compromiso. "
-            + "No la uses para recuerdos ligados a una pantalla: para esos está map_recuerdos.",
+        Fn("memory_recall", "CONSULTA LA MEMORIA PERSONAL que ya tienes del usuario. Úsala de forma natural cuando "
+            + "una respuesta dependa de algo que hablaron antes, una preferencia, un dato personal o un compromiso, "
+            + "aunque el usuario no diga «ve a tu memoria». Al volver a abrir la voz, el hilo reciente ya viene "
+            + "cargado: continúa desde él. No la uses para recuerdos ligados a una pantalla: para esos está map_recuerdos.",
             ("query", "Qué quieres recordar. Vacío = contexto personal disponible.")),
 
         // SOBRE Ü MISMO, no sobre lo que hay en pantalla. Van aparte de las map_*/file_* —esas
@@ -1416,6 +1430,7 @@ public sealed class ConversacionEnVivo : IDisposable
     {
         if (!SalidaAbierta || string.IsNullOrWhiteSpace(texto)) return;
         EmpiezaUnTurnoDelUsuario("texto");   // escribir también es pedir algo nuevo (spec 017)
+        Conversacion?.Agregar("usuario", texto);
         Dice?.Invoke($"Tú: {texto}");
         var ct = _cts?.Token ?? CancellationToken.None;
         foreach (string msg in MensajesDeTexto(_protocolo, texto))   // promesa 208: lo escrito pide respuesta
@@ -1858,6 +1873,8 @@ public sealed class ConversacionEnVivo : IDisposable
                 TurnoCerrado?.Invoke();
                 if (_fraseU.Length > 0) LogBus.Log("voz-viva", $"Ü dijo: {_fraseU}");
                 if (_fraseUsuario.Length > 0) LogBus.Log("voz-viva", $"usuario dijo: {_fraseUsuario}");
+                Conversacion?.Agregar("usuario", _fraseUsuario.ToString());
+                Conversacion?.Agregar("asistente", _fraseU.ToString());
                 // LO QUE EL HUMANO DIJO, PARA QUIEN ESTÉ APRENDIENDO. Mientras se enseña con 🎓,
                 // cada frase completa del operador es candidata a explicar el paso que estaba
                 // dando: la frase se entrega al oyente y él la ancla por tiempo (promesa 105). Se
@@ -2264,16 +2281,22 @@ public sealed class ConversacionEnVivo : IDisposable
     private async Task<string> InstruccionesConMemoriaAsync(CancellationToken ct)
     {
         var memoria = Memoria;
-        if (memoria == null) return Instrucciones;
+        var conversacion = Conversacion;
+        if (memoria == null && conversacion == null) return Instrucciones;
         try
         {
             using var limite = CancellationTokenSource.CreateLinkedTokenSource(ct);
             // La primera consulta puede necesitar un reintento DNS al despertar Windows; dejar
             // que termine evita abrir una sesión de voz sin la memoria personal disponible.
             limite.CancelAfter(TimeSpan.FromSeconds(10));
-            string contexto = await memoria.ContextoAsync(limite.Token);
-            if (string.IsNullOrWhiteSpace(contexto)) return Instrucciones;
-            return Instrucciones + "\n\nMEMORIA PERSONAL DISPONIBLE (úsala solo si es pertinente; no inventes):\n" + contexto;
+            string contexto = memoria == null ? "" : await memoria.ContextoAsync(limite.Token);
+            string hilo = conversacion?.Contexto() ?? "";
+            string instrucciones = Instrucciones;
+            if (!string.IsNullOrWhiteSpace(contexto))
+                instrucciones += "\n\nMEMORIA PERSONAL DISPONIBLE (úsala solo si es pertinente; no inventes):\n" + contexto;
+            if (!string.IsNullOrWhiteSpace(hilo))
+                instrucciones += "\n\nHILO CONVERSACIONAL RECIENTE (continúa naturalmente desde aquí; no pidas al usuario que te repita esto):\n" + hilo;
+            return instrucciones;
         }
         catch (Exception e)
         {
