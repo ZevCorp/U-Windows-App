@@ -4856,9 +4856,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Dispatcher.Invoke(() =>
         {
             _vivo?.Conversacion?.Agregar("asistente", mensaje);
-            Bubble.Text = mensaje;
             SetStatus(mensaje);
-            ShowTalk(MotivoDelGlobo.SoloEsProgreso);
+            MostrarConversacion(MotivoDelGlobo.SoloEsProgreso);
         });
         _ = _vivo?.HablarConVozVivaAsync(mensaje);
     }
@@ -5776,6 +5775,3 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
 }
-
-
-

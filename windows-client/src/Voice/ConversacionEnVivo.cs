@@ -403,6 +403,7 @@ public sealed class ConversacionEnVivo : IDisposable
             return true;
         }
         finally { _apertura.Release(); }
+    }
 
     public async Task ArrancarSoloTextoAsync()
     {
@@ -2105,6 +2106,8 @@ public sealed class ConversacionEnVivo : IDisposable
         {
             LogBus.Log("memoria", $"voz: no pude guardar el detalle personal automático: {e.Message}");
         }
+    }
+
     /// Corta la entrada local cuando el modelo entiende una orden inequívoca de apagar la voz.
     /// Deja un respiro breve para que la confirmación mínima del modelo («Mmm.») pueda sonar;
     /// después termina la sesión y la salida que quedara encolada.
