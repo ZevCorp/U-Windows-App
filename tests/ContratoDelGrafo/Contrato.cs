@@ -13255,8 +13255,9 @@ internal static class Contrato
             mPublica.Invoke(null, new[] { Observacion(tObs, tEl, (IntPtr)1, "uia://x.exe/a", ahora, true, boton) });
             var v2 = Reciente((IntPtr)1, "uia://x.exe/a", 1000);
             Debe(v1 != null && v2 != null && Version(v2) > Version(v1), $"publicar sube la versión ({(v1 == null ? "null" : Version(v1).ToString())} → {(v2 == null ? "null" : Version(v2).ToString())})");
+            // IntPtr no es IConvertible: Convert.ToInt64 lanzaba y el juez decía «culpable» sin juzgar (aprendizaje nº17, 2026-09-22).
             Debe(v2 != null && ((System.Collections.IEnumerable)PropDe(v2, "Elementos")!).Cast<object>().Count() == 1
-                 && (bool)PropDe(v2, "Completa")! && Convert.ToInt64(PropDe(v2, "Hwnd")) == 1,
+                 && (bool)PropDe(v2, "Completa")! && PropDe(v2, "Hwnd") is IntPtr hv && hv == (IntPtr)1,
                 "y la observación lleva la ventana que se leyó, si es completa y sus elementos crudos");
             Debe(Reciente((IntPtr)2, "uia://x.exe/a", 1000) == null, "pedida por OTRA ventana, no se sirve");
             Debe(Reciente((IntPtr)1, "uia://x.exe/b", 1000) == null, "pedida por OTRO dónde, no se sirve");
@@ -13274,6 +13275,9 @@ internal static class Contrato
             pVentana.SetValue(mapa, (Func<IntPtr>)(() => ventana));
             pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => { lecturas++; return Observacion(tObs, tEl, ventana, loc.Id, ahora, true, boton); }));
             mapa.RecorrerPorElNucleo = pasos => new RecorrerSegunElNucleo.Resultado(1, 1, loc.Id, true, "hice los 1 paso(s): pulsé «Guardar».", false);
+            // SIN EL INVENTARIO PEGADO (263): tras un acto, el despacho pega «lo que hay delante» y ESA lectura sería la
+            // primera después de accionar. Aquí se juzga el observatorio, no la 263: se aísla como ya hace la 263 misma.
+            mapa.InventarioParaLosActos = () => "";
 
             string veo1 = mapa.Call("map_what_i_see", new Dictionary<string, string>());
             var l2 = AnotadoMientras(() => mapa.Call("map_what_i_see", new Dictionary<string, string>()));
@@ -13436,6 +13440,8 @@ internal static class Contrato
                         ElementoVisto(tEl, (string)args[1]!, "A", "Button", new System.Windows.Rect(5, 5, 20, 10), "2.2")) : null;
                 }));
                 mapa.RecorrerPorElNucleo = pasos => { visto = pasos[0]; return new RecorrerSegunElNucleo.Resultado(1, 1, A, true, "hice los 1 paso(s): pulsé «A».", false); };
+                // Sin el inventario pegado (263): esa lectura es del despacho, no de Take, y aquí se cuentan las de Take.
+                mapa.InventarioParaLosActos = () => "";
                 return (mapa, () => preguntas, () => lecturas, () => visto);
             }
             string Take(SurfaceMapTools mapa, string exit, out List<string> log)

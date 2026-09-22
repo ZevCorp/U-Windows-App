@@ -260,6 +260,13 @@ public sealed class MapaVivo : IDisposable
             if (aqui.Length == 0) return;
             if (aqui.Equals(_anterior, StringComparison.OrdinalIgnoreCase)) return;
 
+            // CAMBIAR DE SITIO INVALIDA LA OBSERVACIÓN COMPARTIDA (promesa 362, regla 4): lo leído en el sitio
+            // anterior no describe este. Y es aquí, en la misma rama, donde se atribuye el clic (abajo): una sola
+            // llamada cubre las dos causas de la spec. SALVO que lo publicado ya sea de aquí: este hilo nota el
+            // cambio 200-500 ms tarde (spec 040) y para entonces el acto que nos trajo puede haber leído ya la
+            // pantalla nueva; tirarla obligaría al siguiente paso a pagar la lectura otra vez (deducido, no medido).
+            Uia.Observatorio.InvalidaLoQueNoSeaDe(aqui, $"cambio de sitio {Corto(_anterior)} → {Corto(aqui)}");
+
             // UNA MIRADA POR CAMBIO DE SITIO (promesa 257). Aquí es donde consta que cambiamos, y es el
             // único punto del programa que lo sabe sin volver a preguntarle a la pantalla.
             GuardarLaMiradaDeEsteSitio(_anterior, aqui);

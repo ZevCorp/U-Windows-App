@@ -169,11 +169,14 @@ public sealed class SurfaceMapTools
         if (aqui.Length == 0) return ("", Array.Empty<(string, string, string)>(), 0);
         if (Puertas != null) { var inyectadas = Puertas(aqui); return (aqui, inyectadas, inyectadas.Count); }
 
-        _lector.Read();
-        var vivos = _lector.Elements
-            .Where(e => e.Label.Length > 0
-                     && !e.ControlType.Equals("text", StringComparison.OrdinalIgnoreCase)
-                     && !e.ControlType.Equals("image", StringComparison.OrdinalIgnoreCase))
+        // UNA LECTURA POR CICLO (promesa 362): se pide la observación compartida y solo se lee si no sirve.
+        // La criba de las candidatas —con nombre, ni text ni image— se aplica sobre los CRUDOS, aquí: la
+        // observación no criba, porque la compuerta aplica otra (la del latido) sobre los mismos crudos.
+        var vista = VistaReciente(aqui).Vista;
+        var vivos = vista.Elementos
+            .Where(e => e.Etiqueta.Length > 0
+                     && !e.Tipo.Equals("text", StringComparison.OrdinalIgnoreCase)
+                     && !e.Tipo.Equals("image", StringComparison.OrdinalIgnoreCase))
             .ToList();
         // LAS PUERTAS DEL TERRENO, no solo lo que ve UIA (promesa 183). UIA ve el Pane opaco de SAP:
         // botones y campos, pero NUNCA las filas de una rejilla ni las de un árbol. El piloto planeaba
@@ -184,16 +187,104 @@ public sealed class SurfaceMapTools
         // («Y0000000-ZTXTTASIS»); la persona y el piloto los llaman «Presión Arterial».
         var terreno = PuertasVivas?.Invoke(aqui) ?? Array.Empty<(string, string, string)>();
         var candidatos = ConLaEtiquetaQueSeLee(terreno, CamposDeSapComoPuertas());
-        var delTerreno = FundirPuertas(vivos.Select(v => v.Label), candidatos);
+        var delTerreno = FundirPuertas(vivos.Select(v => v.Etiqueta), candidatos);
         // EL TOPE ERA 40 PUERTAS DE SAP y el triage tiene 39 campos más 21 botones (2026-09-08): los
         // signos vitales quedaban fuera de la lista y el piloto no podía nombrarlos. Un formulario
         // entero cabe en 160; lo que pase de ahí se dice.
         // CON SU SELECTOR (promesa 287): es lo que la mano resuelve antes que el nombre, y lo que hace que
         // dos «Detalles» no choquen. El selector no viaja a Jev: Jev decide por lo que una persona lee.
-        var lista = vivos.Take(60).Select(v => (Selector: Uia.Reconocedor.SelectorDe(v), Etiqueta: v.Label, Tipo: v.ControlType))
+        var lista = vivos.Take(60).Select(v => (Selector: v.Selector, Etiqueta: v.Etiqueta, Tipo: v.Tipo))
             .Concat(delTerreno.Take(160).Select(p => (Selector: p.Selector, Etiqueta: p.Etiqueta, Tipo: p.Tipo)))
             .ToList();
         return (aqui, lista, vivos.Count + delTerreno.Count);
+    }
+
+    // ── La observación compartida (spec 048, promesa 362) ─────────────────────────────────────────
+    //
+    // MEDIDO (2026-09-21): un paso del tramo podía pagar hasta CINCO lecturas UIA de la misma ventana
+    // —PuertasDeAhora, señalar, el inventario pegado y dos en FaceWindow—, 77-113 ms cada una. Aquí
+    // viven las tres de este archivo: las tres pasan por VistaReciente, que pide antes de leer. Las dos
+    // de FaceWindow NO publican ni piden: Ui/ está vetado en este encargo y se dice en el commit.
+    //
+    // DECLARADO AQUÍ, junto a PuertasDeAhora, y no junto al despacho (:2147): ese hunk lo reescribe la
+    // rama de Jose (origin/jose/ir-devuelve-la-pagina-asentada) y cruzarse ahí es cruzarse de verdad.
+
+    /// <summary>
+    /// QUÉ VENTANA SE LEERÍA. Es la MISMA función con la que se pide la observación (aprendizaje nº16): si
+    /// quien lee eligiera la ventana por un camino y quien pide por otro, la comparación daría «otra
+    /// ventana» siempre y en silencio. Null = <see cref="AppAligner.VentanaDelUsuario"/>, que es lo que
+    /// <c>UiaReader.Read()</c> lee hoy.
+    /// </summary>
+    public Func<IntPtr>? VentanaQueLeeria { get; set; }
+
+    /// <summary>
+    /// LEER UNA VENTANA para el mapa: devuelve la observación con el hwnd que de verdad se leyó. Null = el
+    /// lector de UIA de siempre (<see cref="LeerDeVerdad"/>). El contrato pone uno que cuenta.
+    /// </summary>
+    public Func<IntPtr, Uia.Observacion>? Lee { get; set; }
+
+    /// <summary>Lecturas nuevas y reutilizadas desde el último accionar: es lo que la cuenta del paso lleva.</summary>
+    private int _lecturasNuevas, _lecturasReutilizadas;
+
+    /// <summary>
+    /// LA VISTA DE AHORA: la observación compartida si sirve para la ventana que se leería y el dónde de
+    /// ahora, y si no, se lee, se publica y se dice POR QUÉ no se reutilizó. Las tres lecturas de este
+    /// archivo pasan por aquí.
+    /// </summary>
+    private (Uia.Observacion Vista, bool Reutilizada) VistaReciente(string aqui)
+    {
+        IntPtr ventana = (VentanaQueLeeria ?? AppAligner.VentanaDelUsuario)();
+        string? porQueNo = Uia.Observatorio.PorQueNoSirve(ventana, aqui, Uia.Observacion.VigenciaMs, out var reciente);
+        if (porQueNo == null && reciente != null)
+        {
+            _lecturasReutilizadas++;
+            LogBus.Log("lectura", $"lectura v{reciente.Version} de «{aqui}» reutilizada: sí "
+                + $"({reciente.EdadEn(Uia.Observatorio.Ahora())} ms de edad · {reciente.Elementos.Count} elemento(s))");
+            return (reciente, true);
+        }
+        var crono = System.Diagnostics.Stopwatch.StartNew();
+        var leida = (Lee ?? LeerDeVerdad)(ventana);
+        crono.Stop();
+        if (leida.Donde.Length == 0) leida = leida with { Donde = aqui };
+        if (leida.MsDeLectura == 0) leida = leida with { MsDeLectura = crono.ElapsedMilliseconds };
+        var publicada = Uia.Observatorio.Publica(leida);
+        _lecturasNuevas++;
+        LogBus.Log("lectura", $"lectura v{publicada.Version} de «{aqui}» reutilizada: no ({porQueNo}) · "
+            + $"leí {publicada.Elementos.Count} elemento(s) en {publicada.MsDeLectura} ms ({publicada.ComoSeLeyo})");
+        return (publicada, false);
+    }
+
+    /// <summary>
+    /// El lector de UIA de siempre, y de su resultado la observación: selector por el mismo camino que la
+    /// mano (<see cref="Uia.Reconocedor.SelectorDe"/>), caja LEÍDA (<c>Bounds</c>) e identidad de lo que la
+    /// petición trajo. <c>UiaReader</c> no cambia: la 297/298 se quedan byte a byte.
+    /// </summary>
+    private Uia.Observacion LeerDeVerdad(IntPtr ventana)
+    {
+        long leidaEn = Uia.Observatorio.Ahora();
+        var crono = System.Diagnostics.Stopwatch.StartNew();
+        var estado = _lector.Read(ventana);
+        crono.Stop();
+        var elementos = _lector.Elements
+            .Select(e => new Uia.ElementoVisto(Uia.Reconocedor.SelectorDe(e), e.Label, e.ControlType, e.Bounds, Uia.ElementoVisto.IdentidadDe(e.Native)))
+            .ToList();
+        return new Uia.Observacion(0, ventana, "", estado.Screen ?? "", leidaEn, crono.ElapsedMilliseconds,
+            _lector.ComoLeyo.Length > 0 ? _lector.ComoLeyo : "lector", elementos, Completa: true);
+    }
+
+    /// <summary>La cuenta de lecturas desde el último accionar, para la línea de tiempos del paso.</summary>
+    private string CuentaDeLecturas()
+        => $"lecturas: {_lecturasNuevas} nueva{(_lecturasNuevas == 1 ? "" : "s")} · {_lecturasReutilizadas} reutilizada{(_lecturasReutilizadas == 1 ? "" : "s")}";
+
+    /// <summary>
+    /// ACCIONAR INVALIDA LA OBSERVACIÓN (regla 4 de la 048): en cuanto la mano vuelve de pulsar o escribir, lo
+    /// leído antes ya no describe lo que hay delante. El siguiente que pida, lee; y la cuenta vuelve a cero.
+    /// </summary>
+    private void InvalidarPorAccionar(string que)
+    {
+        Uia.Observatorio.Invalida($"accionar ({que})");
+        _lecturasNuevas = 0;
+        _lecturasReutilizadas = 0;
     }
 
     private string LoQueVeo()
@@ -258,6 +349,9 @@ public sealed class SurfaceMapTools
         var relojLeer = System.Diagnostics.Stopwatch.StartNew();
         var (aqui, puertas, total) = PuertasDeAhora();
         relojLeer.Stop();
+        // LA CUENTA DE LECTURAS SE TOMA AQUÍ (promesa 362), antes de pulsar: Take invalida la observación al
+        // volver y pone el contador a cero, así que leerlo después contaría siempre «0 · 0».
+        string lecturas = CuentaDeLecturas();
         if (aqui.Length == 0) return Sin("no sé en qué pantalla estoy, así que no hay nada entre lo que decidir.", "no sé en qué pantalla estoy");
         if (total == 0) return Sin($"en «{aqui}» no veo ningún elemento accionable ahora mismo: nada entre lo que decidir.", "no veo ningún elemento accionable");
         // PUERTAS ÚNICAS Y NUMERADAS (promesa 287): «2) Detalles (RadioButton)». Con etiquetas a secas, en
@@ -320,7 +414,7 @@ public sealed class SurfaceMapTools
             string cuenta = Take(puerta.Selector, "", decir, recuerdo);
             relojPulsar.Stop();
             var mano = _ultimaMano;
-            string tiempos = $"leer {relojLeer.ElapsedMilliseconds} ms · decidir {reloj.ElapsedMilliseconds} ms · pulsar {relojPulsar.ElapsedMilliseconds} ms";
+            string tiempos = $"leer {relojLeer.ElapsedMilliseconds} ms · decidir {reloj.ElapsedMilliseconds} ms · pulsar {relojPulsar.ElapsedMilliseconds} ms · {lecturas}";
             string medida = k == 0
                 ? $"con confianza {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}"
                 : $"con probabilidad {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}";
@@ -1176,16 +1270,18 @@ public sealed class SurfaceMapTools
             }
 
             var cronoLectura = System.Diagnostics.Stopwatch.StartNew();
-            _lector.Read();
-            // CUÁNTO CUESTA SEÑALAR (spec 030, nivel 4): esta lectura va ANTES de la compuerta y del clic, y en una
-            // página recién cargada de Chrome puede ser lo que la persona vive como «demora entre pulsando y el clic».
-            LogBus.Log("mano", $"señalar «{etiqueta}»: leí la ventana en {cronoLectura.ElapsedMilliseconds} ms ({_lector.Elements.Count} elemento(s))");
-            var visto = _lector.Elements.FirstOrDefault(
-                            e => Uia.Reconocedor.SelectorDe(e).Equals(selector, StringComparison.OrdinalIgnoreCase))
+            // POR LA OBSERVACIÓN COMPARTIDA (promesa 362): si el paso acaba de leer esta ventana, señalar no la
+            // vuelve a leer. CUÁNTO CUESTA SEÑALAR (spec 030, nivel 4): esta lectura va ANTES de la compuerta y del
+            // clic, y en una página recién cargada de Chrome puede ser lo que la persona vive como «demora entre
+            // pulsando y el clic».
+            var (vista, reutilizada) = VistaReciente(_where()?.Id ?? "");
+            LogBus.Log("mano", $"señalar «{etiqueta}»: {(reutilizada ? "reutilicé la lectura" : "leí la ventana")} en {cronoLectura.ElapsedMilliseconds} ms ({vista.Elementos.Count} elemento(s))");
+            var visto = vista.Elementos.FirstOrDefault(
+                            e => e.Selector.Equals(selector, StringComparison.OrdinalIgnoreCase))
                         // Por etiqueta como último recurso: un selector puede envejecer —cambia una
                         // ruta, se renombra un automation id— y el elemento seguir ahí con su nombre.
-                        ?? _lector.Elements.FirstOrDefault(
-                            e => e.Label.Equals(etiqueta, StringComparison.OrdinalIgnoreCase));
+                        ?? vista.Elementos.FirstOrDefault(
+                            e => e.Etiqueta.Equals(etiqueta, StringComparison.OrdinalIgnoreCase));
             if (visto == null)
             {
                 // UN CAMPO DE SAP NOMBRADO POR SU ETIQUETA (promesa 188): «Presión Arterial» no es un
@@ -1198,7 +1294,7 @@ public sealed class SurfaceMapTools
                     return IluminarUno(enSap.Selector, etiqueta.Length > 0 ? etiqueta : enSap.Etiqueta);
                 return false;
             }
-            Ui.Senalador.Senalar(visto.Bounds, etiqueta);
+            Ui.Senalador.Senalar(visto.Caja, etiqueta);
             return true;
         }
         catch (Exception e) { LogBus.Log("recuerdo", $"no pude iluminar «{etiqueta}»: {e.Message}"); }
@@ -2593,12 +2689,18 @@ public sealed class SurfaceMapTools
         // aprende la arista (spec 003), y ofrecerlos era la ilusión de controlarlo (promesa 206).
         int.TryParse(cual, out int n);
         var paso = new Navigation.RecorrerSegunElNucleo.Paso(salida) { Cual = n, AntesDePulsar = _antesDePulsar };
-        // LA MISMA COREOGRAFÍA QUE EL PLAN (promesa 191): al comprobar, o cuando el piloto trae algo que
-        // decir o un recuerdo, la mano señala, dice, cuelga y muestra, y solo después pulsa.
-        var r = DarUnPasoConCoreografia != null && (SenalarAlActuar || decir.Length > 0 || recuerdo.Length > 0)
-            ? DarUnPasoConCoreografia(salida, paso, recuerdo, decir)
-            : RecorrerPorElNucleo(new[] { paso });
-        return Anotar(r, escribe: false);
+        try
+        {
+            // LA MISMA COREOGRAFÍA QUE EL PLAN (promesa 191): al comprobar, o cuando el piloto trae algo que
+            // decir o un recuerdo, la mano señala, dice, cuelga y muestra, y solo después pulsa.
+            var r = DarUnPasoConCoreografia != null && (SenalarAlActuar || decir.Length > 0 || recuerdo.Length > 0)
+                ? DarUnPasoConCoreografia(salida, paso, recuerdo, decir)
+                : RecorrerPorElNucleo(new[] { paso });
+            return Anotar(r, escribe: false);
+        }
+        // EN CUANTO LA MANO VUELVE, la observación de antes ya no describe lo que hay delante (promesa 362).
+        // También si la mano lanzó: una excepción a medio pulsar es, si acaso, más motivo para releer.
+        finally { InvalidarPorAccionar($"map_take «{salida}»"); }
     }
 
     /// <summary>
@@ -2655,6 +2757,14 @@ public sealed class SurfaceMapTools
     private string Type(string texto, string target, string decir = "", string recuerdo = "")
     {
         if (texto.Length == 0) return "falta `text`: qué hay que escribir";
+        // EN CUANTO LA MANO VUELVE de escribir, la observación de antes ya no vale (promesa 362): un campo que
+        // cambió de valor, una edición en línea que se cerró, o el Enter que navegó.
+        try { return EscribirDeVerdad(texto, target, decir, recuerdo); }
+        finally { InvalidarPorAccionar($"map_type en «{(target.Length > 0 ? target : "el campo con el foco")}»"); }
+    }
+
+    private string EscribirDeVerdad(string texto, string target, string decir, string recuerdo)
+    {
 
         // EN SAP SE ESCRIBE CON LA MANO DE SAP (2026-09-07). Esta herramienta escribía SIEMPRE por
         // UIA, que dentro de SAP GUI ve un Pane opaco: «no se encontró el elemento» para cualquier
