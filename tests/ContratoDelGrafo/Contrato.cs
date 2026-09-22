@@ -820,6 +820,8 @@ internal static class Contrato
         Prueba("339. las cantidades escritas en español también crean recordatorios", NumeroEscritoCreaRecordatorio);
         Prueba("340. ninguna respuesta hablada vuelve al sintetizador de Windows", LaSalidaHabladaUsaSoloVozViva);
         Prueba("341. dos recordatorios vencidos despiertan una sola sesión de voz", LosAvisosCompartenUnaSesionViva);
+        Prueba("342. una petición personal explícita se puede guardar aunque el modelo no llame la herramienta", PeticionPersonalExplícitaSeGuarda);
+        Prueba("343. cada proceso de Ü escribe en su propio archivo de log identificable", CadaInstanciaTieneSuLog);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -928,6 +930,27 @@ internal static class Contrato
               && fuente.Contains("await _apertura.WaitAsync", StringComparison.Ordinal)
               && fuente.Contains("_apertura.Release()", StringComparison.Ordinal),
             "la apertura de la voz viva está serializada para avisos simultáneos");
+    }
+
+    private static void PeticionPersonalExplícitaSeGuarda()
+    {
+        string archivo = Path.Combine(_raiz, "memoria-peticion-explicita.json");
+        var memoria = new MemoriaPersonal("contrato-peticion", archivo);
+        var guardado = memoria.EjecutarAsync(
+            "Quiero que recuerdes que tengo dos empresas y un equipo de desarrolladores",
+            CancellationToken.None).GetAwaiter().GetResult();
+        string contexto = memoria.ContextoAsync(CancellationToken.None).GetAwaiter().GetResult();
+        Debe(guardado.Ok && contexto.Contains("tengo dos empresas", StringComparison.OrdinalIgnoreCase),
+            "la frase cotidiana queda persistida aunque el modelo haya omitido memory_remember");
+    }
+
+    private static void CadaInstanciaTieneSuLog()
+    {
+        string instancia = U.WindowsClient.Diagnostics.LogBus.InstanceId;
+        string archivo = U.WindowsClient.Diagnostics.LogBus.TodayFile();
+        Debe(instancia.Contains($"p{Environment.ProcessId}", StringComparison.Ordinal)
+              && Path.GetFileName(archivo).Contains(instancia, StringComparison.Ordinal),
+            "el nombre del log contiene el origen, el PID y la hora de arranque de esta instancia");
     }
 
     private static void CadaMundoSeObservaPorSuPuerta()
