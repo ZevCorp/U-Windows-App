@@ -42,7 +42,7 @@ public sealed class MemoriaPersonal
                     : "Ya lo tenía guardado para nuestras próximas conversaciones.",
                     existente.Kind, existente.Id, existente.DueAt));
 
-            DateTimeOffset? dueAt = ExtraerFecha(text);
+            DateTimeOffset? dueAt = ExtraerFecha(text, DateTimeOffset.Now);
             string kind = dueAt.HasValue ? "reminder" : "fact";
 
             var recuerdo = new Recuerdo
@@ -70,7 +70,9 @@ public sealed class MemoriaPersonal
         lock (Candado)
         {
             var filtro = query.Trim();
-            var recuerdos = Leer().Items
+            var documento = Leer();
+            if (NormalizarRecordatorios(documento)) Escribir(documento);
+            var recuerdos = documento.Items
                 .Where(x => x.UserId == _userId)
                 .Where(x => filtro.Length == 0 || x.Text.Contains(filtro, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(x => x.CreatedAt)
@@ -87,7 +89,10 @@ public sealed class MemoriaPersonal
     {
         lock (Candado)
         {
-            return Leer().Items
+            var documento = Leer();
+            bool normalizado = NormalizarRecordatorios(documento);
+            if (normalizado) Escribir(documento);
+            return documento.Items
                 .Where(x => x.UserId == _userId && x.DueAt.HasValue && !x.Delivered && x.DueAt.Value <= ahora)
                 .OrderBy(x => x.DueAt)
                 .Select(x => new Recordatorio(x.Id, x.Text, x.DueAt!.Value, x.TimeZone, x.Delivered))
@@ -155,6 +160,21 @@ public sealed class MemoriaPersonal
         return text;
     }
 
+    private static bool NormalizarRecordatorios(Documento documento)
+    {
+        bool cambio = false;
+        foreach (var item in documento.Items.Where(x => !x.Delivered && !x.DueAt.HasValue))
+        {
+            var due = ExtraerFecha(item.Text, item.CreatedAt.ToLocalTime());
+            if (!due.HasValue) continue;
+            item.DueAt = due;
+            item.Kind = "reminder";
+            if (string.IsNullOrWhiteSpace(item.TimeZone)) item.TimeZone = TimeZoneInfo.Local.Id;
+            cambio = true;
+        }
+        return cambio;
+    }
+
     private sealed class Documento
     {
         [JsonPropertyName("items")] public List<Recuerdo> Items { get; set; } = new();
@@ -172,12 +192,11 @@ public sealed class MemoriaPersonal
         [JsonPropertyName("delivered")] public bool Delivered { get; set; }
     }
 
-    private static DateTimeOffset? ExtraerFecha(string text)
+    private static DateTimeOffset? ExtraerFecha(string text, DateTimeOffset ahora)
     {
-        DateTimeOffset ahora = DateTimeOffset.Now;
-        var en = Regex.Match(text, @"\ben\s+(?<n>\d+)\s+(?<unidad>minuto|minutos|hora|horas)\b",
+        var en = Regex.Match(text, @"\b(?:en|dentro\s+de)\s+(?<n>\d+|cero|un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciséis|dieciseis|diecisiete|dieciocho|diecinueve|veinte|treinta|cuarenta|cincuenta|sesenta)\s+(?<unidad>minuto|minutos|hora|horas)\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-        if (en.Success && int.TryParse(en.Groups["n"].Value, out int cantidad))
+        if (en.Success && Numero(en.Groups["n"].Value) is int cantidad)
             return en.Groups["unidad"].Value.StartsWith("hora", StringComparison.OrdinalIgnoreCase)
                 ? ahora.AddHours(cantidad)
                 : ahora.AddMinutes(cantidad);
@@ -197,5 +216,20 @@ public sealed class MemoriaPersonal
         return !text.Contains("mañana", StringComparison.OrdinalIgnoreCase) && local <= ahora
             ? local.AddDays(1)
             : local;
+    }
+
+    private static int? Numero(string valor)
+    {
+        if (int.TryParse(valor, out int numero)) return numero;
+        return valor.ToLowerInvariant() switch
+        {
+            "cero" => 0, "un" or "uno" or "una" => 1, "dos" => 2, "tres" => 3,
+            "cuatro" => 4, "cinco" => 5, "seis" => 6, "siete" => 7, "ocho" => 8,
+            "nueve" => 9, "diez" => 10, "once" => 11, "doce" => 12, "trece" => 13,
+            "catorce" => 14, "quince" => 15, "dieciséis" or "dieciseis" => 16,
+            "diecisiete" => 17, "dieciocho" => 18, "diecinueve" => 19, "veinte" => 20,
+            "treinta" => 30, "cuarenta" => 40, "cincuenta" => 50, "sesenta" => 60,
+            _ => null
+        };
     }
 }
