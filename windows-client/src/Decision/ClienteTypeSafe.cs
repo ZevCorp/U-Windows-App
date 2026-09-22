@@ -79,8 +79,7 @@ public sealed class ClienteTypeSafe : IDisposable
 
                 // EL CUERPO DEL ERROR SE LEE Y SE CUENTA. Un 422 dice QUÉ campo está mal, y sin eso
                 // el mensaje sería «falló» — una conclusión disfrazada de hecho (patrón nº2).
-                string detalle = "";
-                try { detalle = r.Content.ReadAsStringAsync(reloj.Token).GetAwaiter().GetResult(); } catch { }
+                string detalle = DetalleDelError(() => r.Content.ReadAsStringAsync(reloj.Token).GetAwaiter().GetResult());
                 if (detalle.Length > 300) detalle = detalle.Substring(0, 300) + "…";
 
                 ultima = new HttpRequestException($"TypeSafe contestó {codigo}. {detalle}");
@@ -100,6 +99,23 @@ public sealed class ClienteTypeSafe : IDisposable
         }
 
         throw ultima ?? new TimeoutException($"TypeSafe no contestó en {_plazoMs} ms.");
+    }
+
+    /// <summary>
+    /// El cuerpo de un error de la API, o POR QUÉ no se pudo leer (promesa 344, patrón nº3). Hasta el
+    /// 2026-09-22 esto era un <c>catch { }</c> mudo: un 422 cuyo cuerpo no llegaba se contaba como «TypeSafe
+    /// contestó 422.» a secas, y «vino vacío» y «se cortó al leerlo» eran indistinguibles.
+    /// </summary>
+    public static string DetalleDelError(Func<string> leer)
+    {
+        try { return leer() ?? ""; }
+        catch (Exception e)
+        {
+            var cadena = "";
+            for (var x = e; x != null; x = x.InnerException)
+                cadena += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
+            return $"(no se pudo leer el cuerpo del error: {cadena})";
+        }
     }
 
     /// <summary>Saca el código que se metió en el mensaje, para poder decidir si se reintenta.</summary>

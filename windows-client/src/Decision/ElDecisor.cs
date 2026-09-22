@@ -43,6 +43,14 @@ public sealed class DecisionDeUnPaso
     /// <summary>Cuánto dice Jev que accionar la elegida es irreversible o peligroso (0-1). 0 si no se preguntó.</summary>
     public double Peligro { get; init; }
 
+    /// <summary>
+    /// Vacío si la respuesta de Jev estaba en forma. Si no, TODAS las reglas que falló, cada una con su campo
+    /// y su valor crudo, separadas por « · » (promesa 344). Es un dato, no una conclusión (patrón nº2): es lo
+    /// que se pinta y lo que se calibra. Con algo aquí, <see cref="Actuar"/> es falso y <see cref="Alternativas"/>
+    /// está vacía: la segunda mejor de una distribución inválida no es una segunda mejor.
+    /// </summary>
+    public string QueNoCuadro { get; init; } = "";
+
     private DecisionDeUnPaso(bool actuar, string puerta, double confianza, string porque)
     {
         Actuar = actuar;
@@ -57,8 +65,175 @@ public sealed class DecisionDeUnPaso
     internal static DecisionDeUnPaso No(string porque, double confianza = 0) =>
         new DecisionDeUnPaso(false, "", confianza, porque);
 
-    internal DecisionDeUnPaso Con(IReadOnlyList<(string, double)> alternativas, double cumplido, double peligro) =>
-        new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque) { Alternativas = alternativas, Cumplido = cumplido, Peligro = peligro };
+    internal DecisionDeUnPaso Con(IReadOnlyList<(string, double)> alternativas, double cumplido, double peligro, string queNoCuadro = "") =>
+        new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
+            { Alternativas = alternativas, Cumplido = cumplido, Peligro = peligro, QueNoCuadro = queNoCuadro };
+}
+
+/// <summary>
+/// LA RESPUESTA DE JEV, LEÍDA ENTERA ANTES DE JUZGARLA (promesa 344, spec 046).
+/// </summary>
+/// <remarks>
+/// HASTA EL 2026-09-22 la confianza y las probabilidades se leían sin rango: un <c>confidence</c> de 95 pasaba
+/// el umbral de 0,70 y accionaba, y una clave que no viajó entraba en <c>Alternativas</c> como segunda mejor.
+/// La rama del dueño (<c>3215466</c>) corregía a 0 lo que caía fuera de [0,1] — y 0 en una compuerta significa
+/// «adelante». Aquí un número que no se entiende es una respuesta que no se entiende, y lo que no se entiende
+/// NO ACCIONA: ni se convierte en 0, ni se satura, ni se toma «la más probable» de un empate.
+///
+/// SE REPORTAN TODAS LAS VIOLACIONES, no la primera: una respuesta que rompe dos reglas dice las dos. Es lo que
+/// deja que cada regla tenga su propio sabotaje con su propia aserción (revisión 2 de la spec), y lo que hace
+/// que el porqué describa lo que vino en vez de concluir «respuesta inválida».
+///
+/// LAS NOULS («cumplido», «peligro») NO SE JUZGAN AQUÍ a propósito: son de la 345 y se leen en <see cref="ElDecisor"/>.
+/// </remarks>
+internal sealed class RespuestaDeJev
+{
+    /// <summary>Por encima de 1 hasta aquí se lee como 1: 1,0000001 es redondeo del modelo, no un valor fuera de dominio.</summary>
+    public const double Tolerancia = 1e-6;
+
+    /// <summary>La suma de las probabilidades puede alejarse de 1 hasta aquí (jev-ultrafast <c>model.py:38</c>, que corre contra la API real).</summary>
+    public const double ToleranciaDeLaSuma = 0.02;
+
+    /// <summary>La clave que Jev eligió, tal como vino.</summary>
+    public string Elegida { get; }
+
+    /// <summary>
+    /// La confianza CRUDA: 95 si vino 95, <c>Infinity</c> si vino 1e400, <c>NaN</c> si no era número. Un 95
+    /// registrado como 0,00 se leería al calibrar como «Jev duda siempre». Con <see cref="EnForma"/> falso este
+    /// número no acciona nada. Dentro de la tolerancia (≤ 1+1e-6) se lee como 1.
+    /// </summary>
+    public double Confianza { get; }
+
+    /// <summary>Todas las claves con su probabilidad, de mayor a menor. VACÍA si la respuesta no cuadra.</summary>
+    public IReadOnlyList<(string Puerta, double Probabilidad)> Alternativas { get; }
+
+    /// <summary>Cada regla que falló, con su campo y su valor crudo. Vacía = en forma.</summary>
+    public IReadOnlyList<string> Violaciones { get; }
+
+    public bool EnForma => Violaciones.Count == 0;
+
+    /// <summary>Las violaciones en una línea, separadas por « · ». Vacío si está en forma.</summary>
+    public string QueNoCuadro => string.Join(" · ", Violaciones);
+
+    private RespuestaDeJev(string elegida, double confianza, IReadOnlyList<(string, double)> alternativas, IReadOnlyList<string> violaciones)
+    {
+        Elegida = elegida;
+        Confianza = confianza;
+        Alternativas = alternativas;
+        Violaciones = violaciones;
+    }
+
+    /// <summary>
+    /// Juzga la respuesta de la pregunta «puerta» contra la lista que viajó, y devuelve lo leído con TODAS las
+    /// reglas que no cuadran: cada probabilidad número, finita y en [0,1]; las claves exactamente las que
+    /// viajaron; Σ = 1 ± <see cref="ToleranciaDeLaSuma"/>; la elegida es el máximo y sin empate; la confianza
+    /// número, finita y en [0,1].
+    /// </summary>
+    /// <param name="puerta">El objeto <c>answers.puerta</c> de la respuesta (ya se comprobó que trae <c>choice</c> como texto).</param>
+    /// <param name="queViaja">Las claves que se mandaron en <c>criteria</c>, por el mismo camino con que se construyeron (aprendizaje nº16).</param>
+    public static RespuestaDeJev Validar(JsonElement puerta, IReadOnlyList<string> queViaja)
+    {
+        var ic = CultureInfo.InvariantCulture;
+        var violaciones = new List<string>();
+        string Crudo(double v) => v.ToString("R", ic);
+        string Dos(double v) => v.ToString("0.00", ic);
+
+        string elegida = puerta.TryGetProperty("choice", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() ?? "" : "";
+        if (elegida.Length == 0) violaciones.Add("falta «choice»");
+
+        // LA CONFIANZA: se conserva cruda aunque no cuadre. Solo se recorta lo que cae en la tolerancia.
+        double confianza = double.NaN;
+        if (!puerta.TryGetProperty("confidence", out var cf))
+            violaciones.Add("falta «confidence»");
+        else if (cf.ValueKind != JsonValueKind.Number)
+            violaciones.Add($"confidence={cf.GetRawText()} no es número");
+        else
+        {
+            confianza = cf.GetDouble();
+            if (EnRango(confianza, out var leida)) confianza = leida;
+            else violaciones.Add($"confidence={Crudo(confianza)} fuera de [0,1]");
+        }
+
+        // LAS PROBABILIDADES: cada una número, finita y en [0,1]; y las claves, exactamente las que viajaron.
+        var vistas = new HashSet<string>(StringComparer.Ordinal);
+        var leidas = new List<(string Puerta, double Probabilidad)>();
+        bool hayObjeto = puerta.TryGetProperty("probabilities", out var probs) && probs.ValueKind == JsonValueKind.Object;
+        if (!hayObjeto)
+            violaciones.Add(puerta.TryGetProperty("probabilities", out var raw) ? $"probabilities={Recorta(raw.GetRawText())} no es un objeto" : "falta «probabilities»");
+        else
+        {
+            foreach (var pr in probs.EnumerateObject())
+            {
+                vistas.Add(pr.Name);
+                if (pr.Value.ValueKind != JsonValueKind.Number)
+                {
+                    violaciones.Add($"probabilities[«{pr.Name}»]={pr.Value.GetRawText()} no es número");
+                    continue;
+                }
+                double v = pr.Value.GetDouble();
+                if (!EnRango(v, out var l)) { violaciones.Add($"probabilities[«{pr.Name}»]={Crudo(v)} fuera de [0,1]"); continue; }
+                leidas.Add((pr.Name, l));
+            }
+            foreach (var k in vistas)
+                if (!Contiene(queViaja, k)) violaciones.Add($"sobra «{k}»");
+            foreach (var k in queViaja)
+                if (!vistas.Contains(k)) violaciones.Add($"falta «{k}»");
+        }
+
+        // LA SUMA Y EL MÁXIMO solo se juzgan cuando cada valor que vino se pudo leer: la suma de un NaN no dice
+        // nada de la distribución, y ya se dijo arriba qué clave no era número.
+        bool todasLeidas = hayObjeto && leidas.Count == vistas.Count && leidas.Count > 0;
+        if (todasLeidas)
+        {
+            double suma = 0;
+            foreach (var (_, p) in leidas) suma += p;
+            if (Math.Abs(suma - 1) > ToleranciaDeLaSuma) violaciones.Add($"Σ={Dos(suma)}");
+
+            if (elegida.Length > 0)
+            {
+                int iElegida = leidas.FindIndex(x => string.Equals(x.Puerta, elegida, StringComparison.Ordinal));
+                if (iElegida < 0)
+                    violaciones.Add($"choice «{elegida}» no tiene probabilidad");
+                else
+                {
+                    double pElegida = leidas[iElegida].Probabilidad;
+                    var (quien, max) = leidas[0];
+                    foreach (var (k, p) in leidas) if (p > max) { max = p; quien = k; }
+                    if (pElegida < max - Tolerancia)
+                        violaciones.Add($"choice «{elegida}» {Dos(pElegida)} < {Dos(max)} («{quien}»)");
+                    else
+                        foreach (var (k, p) in leidas)
+                            if (!string.Equals(k, elegida, StringComparison.Ordinal) && p >= pElegida - Tolerancia)
+                            { violaciones.Add($"empate: «{elegida}» y «{k}» con {Dos(pElegida)}"); break; }
+                }
+            }
+        }
+
+        IReadOnlyList<(string, double)> alternativas = Array.Empty<(string, double)>();
+        if (violaciones.Count == 0)
+        {
+            leidas.Sort((x, y) => y.Probabilidad.CompareTo(x.Probabilidad));
+            alternativas = leidas;
+        }
+        return new RespuestaDeJev(elegida, confianza, alternativas, violaciones);
+    }
+
+    /// <summary>Finito y en [0, 1 + <see cref="Tolerancia"/>]; lo que pasa de 1 dentro de la tolerancia se devuelve como 1.</summary>
+    private static bool EnRango(double v, out double leida)
+    {
+        leida = v;
+        if (double.IsNaN(v) || double.IsInfinity(v) || v < 0 || v > 1 + Tolerancia) return false;
+        if (v > 1) leida = 1;
+        return true;
+    }
+
+    private static bool Contiene(IReadOnlyList<string> lista, string clave)
+    {
+        foreach (var x in lista) if (string.Equals(x, clave, StringComparison.Ordinal)) return true;
+        return false;
+    }
+
+    private static string Recorta(string s) => s.Length > 60 ? s.Substring(0, 60) + "…" : s;
 }
 
 /// <summary>
@@ -166,7 +341,8 @@ public static class ElDecisor
 
         string elegida;
         double confianza;
-        var alternativas = new List<(string Puerta, double Probabilidad)>();
+        IReadOnlyList<(string Puerta, double Probabilidad)> alternativas;
+        string queNoCuadro;
         double cumplido = 0, peligro = 0;
         try
         {
@@ -179,15 +355,14 @@ public static class ElDecisor
             if (!a.TryGetProperty("choice", out var c) || c.ValueKind != JsonValueKind.String)
                 return DecisionDeUnPaso.No("la respuesta no trae una elección. Decide Luna.");
 
-            elegida = c.GetString() ?? "";
-            confianza = a.TryGetProperty("confidence", out var cf) && cf.ValueKind == JsonValueKind.Number
-                ? cf.GetDouble()
-                : 0;
-            // LAS PROBABILIDADES DE TODAS, ordenadas: la segunda mejor viene en la misma respuesta (288).
-            if (a.TryGetProperty("probabilities", out var probs) && probs.ValueKind == JsonValueKind.Object)
-                foreach (var pr in probs.EnumerateObject())
-                    if (pr.Value.ValueKind == JsonValueKind.Number) alternativas.Add((pr.Name, pr.Value.GetDouble()));
-            alternativas.Sort((x, y) => y.Probabilidad.CompareTo(x.Probabilidad));
+            // LA DISTRIBUCIÓN ENTERA, contra la lista que viajó (344): confianza y probabilidades con rango, las
+            // claves exactas, la suma, y la elegida como máximo sin empate. Hasta el 2026-09-22 estas dos lecturas
+            // no tenían rango y un confidence de 95 accionaba. Las alternativas (288) salen de aquí, ordenadas.
+            var leida = RespuestaDeJev.Validar(a, queViaja);
+            elegida = leida.Elegida;
+            confianza = leida.Confianza;
+            alternativas = leida.Alternativas;
+            queNoCuadro = leida.QueNoCuadro;
             // LAS DOS NOULS, si vinieron (289). Un transporte viejo que no las trae sigue valiendo: 0 y 0.
             cumplido = Noul(answers, PeticionASystemOne.IdCumplido);
             peligro = Noul(answers, PeticionASystemOne.IdPeligro);
@@ -202,6 +377,14 @@ public static class ElDecisor
             return DecisionDeUnPaso.No(
                 $"no se pudo leer la respuesta de TypeSafe ({e.GetType().Name}: {e.Message}). Decide Luna.");
         }
+
+        // LO QUE NO CUADRA NO ACCIONA, y se dice TODO lo que no cuadró con su valor crudo (344). Ni se corrige
+        // a 0, ni se satura, ni se ofrece una segunda mejor: la de una distribución inválida no es una segunda
+        // mejor. La confianza va cruda para poder calibrar con ella; con Actuar=false no acciona nada.
+        if (queNoCuadro.Length > 0)
+            return DecisionDeUnPaso.No(
+                $"la respuesta de Jev no cuadra y no se acciona: {queNoCuadro}. Decide Luna.", confianza)
+                .Con(Array.Empty<(string, double)>(), cumplido, peligro, queNoCuadro);
 
         // LA COMPROBACIÓN QUE CIERRA EL PENDIENTE Nº2. Un choice solo puede devolver una de las
         // claves que se le dieron, pero eso lo promete el servidor y esto se ejecuta sobre SAP de un
