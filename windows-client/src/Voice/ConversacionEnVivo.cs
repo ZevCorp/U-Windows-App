@@ -362,6 +362,7 @@ public sealed class ConversacionEnVivo : IDisposable
     /// </remarks>
     private bool _confirmada;
     private string _fallaAntesDeAbrir = "";
+    private TaskCompletionSource<bool>? _aperturaConfirmada;
 
     /// <summary>Lo que se dirá cuando el servidor confirme: «Te escucho.» al arrancar, «Sigo…» al volver.</summary>
     private string _alConfirmar = "";
@@ -376,6 +377,24 @@ public sealed class ConversacionEnVivo : IDisposable
     {
         if (Viva) { await TerminarAsync(); return; }
         await ArrancarAsync();
+    }
+
+    /// <summary>Abre la sesión viva si hace falta y habla por el mismo canal GPT-Live de Ü.</summary>
+    public async Task<bool> HablarConVozVivaAsync(string texto, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(texto)) return false;
+        if (!Viva) await ArrancarAsync();
+        if (!Viva) return false;
+
+        if (!_confirmada && _aperturaConfirmada != null)
+        {
+            try { await _aperturaConfirmada.Task.WaitAsync(TimeSpan.FromSeconds(15), ct); }
+            catch (TimeoutException) { LogBus.Log("voz-viva", "la sesión no confirmó a tiempo una frase pendiente"); return false; }
+            catch (OperationCanceledException) { return false; }
+        }
+
+        await DiEstoAsync(texto);
+        return true;
     }
 
     /// <summary>
@@ -590,6 +609,8 @@ public sealed class ConversacionEnVivo : IDisposable
         _fraseU.Clear();
         ReportarConsumo();
         Viva = false;
+        _aperturaConfirmada?.TrySetResult(false);
+        _aperturaConfirmada = null;
         _audio.Capturado -= MandarTrozo;
         _audio.CerrarMicrofono();
         _audio.Callar();
@@ -715,14 +736,14 @@ public sealed class ConversacionEnVivo : IDisposable
             aprendiste es lo que él tiene delante, y eso solo se comprueba VIÉNDOLO marcado.
           · «TOMO NOTA» NO ES TOMAR NOTA. Si es un dato PERSONAL, una preferencia o un compromiso del
             usuario, llama a memory_remember y espera su resultado antes de decir que lo guardaste.
-            Si incluye «mañana», «hoy», una hora o «en X minutos», usa memory_remember y conserva el
+            Si incluye «mañana», «hoy», una hora o «en X minutos» (también «en dos minutos» o «dentro de dos minutos»), usa memory_remember y conserva el
             compromiso completo, incluyendo la referencia temporal. No afirmes que sonará una alarma
             a menos que exista una alarma confirmada. Si vas a decir que lo recuerdas, GUÁRDALO PRIMERO
             y luego dilo.
           · LA MEMORIA PERSONAL ES PARTE DE LA CONVERSACIÓN, no una caja que el usuario tenga que abrir.
             El hilo reciente y los recuerdos disponibles vienen en este contexto. Úsalos naturalmente
             cuando una pregunta dependa de lo que ya hablamos, de quién es el usuario, de sus preferencias
-            o de un compromiso anterior. Si falta un dato pertinente, llama tú mismo a memory_recall:
+            o de un compromiso anterior. Los recordatorios pendientes que aparecen en la memoria son contexto activo: si preguntan qué estábamos haciendo, inclúyelos sin decir que no constan. Si falta un dato pertinente, llama tú mismo a memory_recall:
             el usuario no tiene que pedírtelo de forma explícita.
           · CUANDO TE EXPLIQUEN QUÉ ES ALGO O PARA QUÉ SIRVE —«esto es el número de factura», «aquí
             se radican los pacientes», «este botón sirve para X cuando Y»— eso es una lección, no
@@ -1149,14 +1170,14 @@ public sealed class ConversacionEnVivo : IDisposable
 
         Fn("memory_remember", "GUARDA UN DATO PERSONAL, una preferencia o un compromiso del usuario. Úsala "
             + "para «recuerda que soy…», «no olvides…», «toma nota de…» y cualquier cosa que deba sobrevivir "
-            + "al cierre de la voz. Si lleva «mañana», «hoy», una hora o «en X minutos», conserva el "
+            + "al cierre de la voz. Si lleva «mañana», «hoy», una hora o «en X minutos» (incluidos números escritos como «dos»), conserva el "
             + "compromiso completo con esa referencia temporal. No anuncies una alarma programada sin una "
             + "confirmación explícita del sistema. ESPERA el resultado antes de afirmar que quedó guardado.",
             ("text", "El dato o compromiso completo, sin resumirlo.")),
         Fn("memory_recall", "CONSULTA LA MEMORIA PERSONAL que ya tienes del usuario. Úsala de forma natural cuando "
             + "una respuesta dependa de algo que hablaron antes, una preferencia, un dato personal o un compromiso, "
             + "aunque el usuario no diga «ve a tu memoria». Al volver a abrir la voz, el hilo reciente ya viene "
-            + "cargado: continúa desde él. No la uses para recuerdos ligados a una pantalla: para esos está map_recuerdos.",
+            + "cargado: continúa desde él y trata los recordatorios pendientes como contexto inmediato. No la uses para recuerdos ligados a una pantalla: para esos está map_recuerdos.",
             ("query", "Qué quieres recordar. Vacío = contexto personal disponible.")),
 
         // SOBRE Ü MISMO, no sobre lo que hay en pantalla. Van aparte de las map_*/file_* —esas
@@ -1755,6 +1776,10 @@ public sealed class ConversacionEnVivo : IDisposable
         _segundosDeConexionesAnteriores += _segundosDeLaConexion;
         _segundosDeLaConexion = 0;
         _confirmada = !_protocolo.ConfirmaQueAbrio;
+        _aperturaConfirmada = _confirmada
+            ? new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)
+            : new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (_confirmada) _aperturaConfirmada.TrySetResult(true);
         _fallaAntesDeAbrir = "";
         _porQueNoSeReintenta = _loQueDijoAlNoPoder = "";   // la causa era de la conexión anterior (224)
         _alConfirmar = _confirmada ? "" : alConfirmar;
@@ -1958,6 +1983,7 @@ public sealed class ConversacionEnVivo : IDisposable
             // LA SESIÓN ABRIÓ DE VERDAD (promesa 49): lo que se iba a decir al arrancar o al volver, se dice ahora.
             case Hecho.Abierta:
                 _confirmada = true;
+                _aperturaConfirmada?.TrySetResult(true);
                 LogBus.Log("voz-viva", $"sesión abierta con {QuienAbre}: el servidor la confirmó");   // la única que lo afirma (220)
                 if (_alConfirmar.Length > 0) { Dice?.Invoke(_alConfirmar); _alConfirmar = ""; }
                 break;
@@ -2293,7 +2319,7 @@ public sealed class ConversacionEnVivo : IDisposable
             string hilo = conversacion?.Contexto() ?? "";
             string instrucciones = Instrucciones;
             if (!string.IsNullOrWhiteSpace(contexto))
-                instrucciones += "\n\nMEMORIA PERSONAL DISPONIBLE (úsala solo si es pertinente; no inventes):\n" + contexto;
+                instrucciones += "\n\nMEMORIA PERSONAL DISPONIBLE (úsala solo si es pertinente; no inventes). Los [recordatorio ...] pendientes son compromisos activos y debes reconocerlos si el usuario pregunta por el hilo: \n" + contexto;
             if (!string.IsNullOrWhiteSpace(hilo))
                 instrucciones += "\n\nHILO CONVERSACIONAL RECIENTE (continúa naturalmente desde aquí; no pidas al usuario que te repita esto):\n" + hilo;
             return instrucciones;

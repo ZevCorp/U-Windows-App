@@ -817,6 +817,8 @@ internal static class Contrato
         Prueba("336. el hilo conversacional sobrevive a apagar y volver a encender la voz", HiloConversacionalSobreviveALaSesion);
         Prueba("337. un compromiso con hora produce un recordatorio pendiente sin depender de la voz abierta", RecordatorioLocalSeVuelvePendiente);
         Prueba("338. el reloj local entrega un recordatorio aunque la voz esté apagada y lo marca una sola vez", RelojLocalEntregaRecordatorio);
+        Prueba("339. las cantidades escritas en español también crean recordatorios", NumeroEscritoCreaRecordatorio);
+        Prueba("340. ninguna respuesta hablada vuelve al sintetizador de Windows", LaSalidaHabladaUsaSoloVozViva);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -885,6 +887,30 @@ internal static class Contrato
         Debe(mensaje.Contains("revisar la demo", StringComparison.OrdinalIgnoreCase),
             "la entrega conserva el compromiso completo");
         Debe(memoria.Pendientes(DateTimeOffset.Now).Count == 0, "un recordatorio entregado no vuelve a sonar");
+    }
+
+    private static void NumeroEscritoCreaRecordatorio()
+    {
+        string archivo = Path.Combine(_raiz, "memoria-dos-minutos.json");
+        var memoria = new MemoriaPersonal("contrato-dos", archivo);
+        var guardado = memoria.EjecutarAsync("recuérdame en dos minutos revisar la demo", CancellationToken.None)
+            .GetAwaiter().GetResult();
+        Debe(guardado.Ok && guardado.ReminderDueAt.HasValue,
+            "«en dos minutos» se entiende aunque el usuario lo diga con palabras");
+    }
+
+    private static void LaSalidaHabladaUsaSoloVozViva()
+    {
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string archivo = Path.Combine(repo, "windows-client", "src", "Ui", "FaceWindow.xaml.cs");
+        if (!File.Exists(archivo))
+        {
+            Console.WriteLine("   ⚠ NO PUDE JUZGARLA: falta U_REPO para leer FaceWindow.xaml.cs");
+            return;
+        }
+        string fuente = File.ReadAllText(archivo);
+        Debe(!fuente.Contains("_voice.Speak(", StringComparison.Ordinal),
+            "la interfaz no usa System.Speech para responder ni para recordatorios");
     }
 
     private static void CadaMundoSeObservaPorSuPuerta()

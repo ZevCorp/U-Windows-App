@@ -4907,8 +4907,15 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // estaba diciendo la conversación. En una comprobación no: quien decide qué se dice es el
         // piloto, y sin esta línea su frase salía por el sintetizador de Windows — dos voces para
         // el mismo asistente, que fue lo que el dueño oyó el 2026-09-03.
-        if (_vivo is { Viva: true }) { _ = _vivo.DiEstoAsync(text); return; }
-        _voice.Speak(text);
+        // Ü solo tiene una voz de salida: la sesión viva del modelo. Si está apagada,
+        // se abre y se espera la confirmación del servidor antes de hablar. El sintetizador
+        // local queda reservado para dictado de respaldo y nunca para responder al usuario.
+        if (_vivo != null)
+        {
+            _ = _vivo.HablarConVozVivaAsync(text);
+            return;
+        }
+        LogBus.Log("voz-viva", "se omitió una frase porque no existe una sesión de voz viva");
     }
 
     private void AvisarRecordatorio(string mensaje)
@@ -4916,8 +4923,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Dispatcher.Invoke(() =>
         {
             _vivo?.Conversacion?.Agregar("asistente", mensaje);
-            Speak(mensaje);
+            Bubble.Text = mensaje;
+            SetStatus(mensaje);
+            ShowTalk(MotivoDelGlobo.SoloEsProgreso);
         });
+        _ = _vivo?.HablarConVozVivaAsync(mensaje);
     }
 
     /// <summary>

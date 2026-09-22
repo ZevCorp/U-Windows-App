@@ -33,13 +33,25 @@ public sealed class ConversacionPersonal
         lock (Candado)
         {
             var documento = Leer();
-            documento.Turnos.Add(new Turno
+            var ultimo = documento.Turnos
+                .Where(x => x.UserId == _userId)
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefault();
+            if (ultimo != null && ultimo.Role == rol && DateTimeOffset.UtcNow - ultimo.CreatedAt <= TimeSpan.FromSeconds(15))
             {
-                UserId = _userId,
-                Role = rol,
-                Text = limpio,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
+                ultimo.Text = $"{ultimo.Text} {limpio}".Trim();
+                if (ultimo.Text.Length > MaxTextoPorTurno) ultimo.Text = ultimo.Text[^MaxTextoPorTurno..];
+            }
+            else
+            {
+                documento.Turnos.Add(new Turno
+                {
+                    UserId = _userId,
+                    Role = rol,
+                    Text = limpio,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            }
             var propios = documento.Turnos.Where(x => x.UserId == _userId).ToList();
             if (propios.Count > MaxTurnos)
             {
