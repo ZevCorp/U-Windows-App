@@ -156,6 +156,44 @@ public sealed class ProtocoloGptLive : IProtocolo
         });
     }
 
+    public IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Utensilio> utensilios, string pase,
+        IReadOnlyList<(string Role, string Text)> historial, bool soloCuandoSeLePide)
+    {
+        _instruccionesDeApertura = instrucciones ?? "";
+        var input = historial
+            .Where(x => !string.IsNullOrWhiteSpace(x.Text))
+            .Select(x => new
+            {
+                type = "message",
+                role = x.Role.Equals("usuario", StringComparison.OrdinalIgnoreCase) ? "user" : "assistant",
+                content = new[]
+                {
+                    new
+                    {
+                        type = x.Role.Equals("usuario", StringComparison.OrdinalIgnoreCase) ? "input_text" : "output_text",
+                        text = x.Text.Trim(),
+                    },
+                },
+            })
+            .ToArray();
+        yield return JsonSerializer.Serialize(new
+        {
+            type = "session.start",
+            session = new
+            {
+                model = Modelo,
+                input,
+                instructions = InstruccionesDeLaVoz,
+                audio = new
+                {
+                    format = new { type = "audio/pcm", rate = RitmoDeEntrada },
+                    output = new { voice = Voz },
+                },
+                delegation = Delegacion(instrucciones, utensilios),
+            },
+        });
+    }
+
     /// <summary>
     /// UN session.update CON LA DELEGACIÓN ENTERA, y detrás UN session.instructions.append A LA VOZ. La
     /// delegación es lo único que el servidor deja reemplazar a mitad de sesión; mandar otro session.start
