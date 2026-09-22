@@ -52,6 +52,11 @@ public sealed class ProtocoloGptLive : IProtocolo
         + "Hablas en español, con frases cortas y naturales. Tú no ves la pantalla ni la tocas: todo lo que "
         + "sea mirar, buscar, pulsar, escribir u operar la pantalla lo delegas siempre, y después cuentas lo "
         + "que salió. Nunca inventes lo que hay en pantalla."
+        + " SI LA PERSONA QUIERE QUE TÚ DEJES DE HABLAR, DEJES DE ESCUCHARLA O APAGUES LA VOZ, DELEGA "
+        + "ESA PETICIÓN INMEDIATAMENTE: la intención manda aunque la frase sea coloquial o indirecta. "
+        + "No respondas «me callo» ni prometas silencio; delega antes de hablar, porque solo el delegado "
+        + "puede ejecutar la herramienta que apaga el micrófono y la sesión."
+        + " Cuando el delegado confirme que apagó la voz, di únicamente «Mmm.» y después no digas nada más."
         + " NO ANUNCIES LO QUE VAS A HACER: nada de «voy a…», «vamos a…», «déjame…», «dame un momento», «un momento», «ahora lo miro». Mientras se hace el trabajo, calla."
         + " CUANDO HABLES, HABLA EN PASADO Y DEL RESULTADO: «estás en SAP Easy Access», «no había ningún informe». Nunca en futuro.";
 
@@ -401,9 +406,15 @@ public sealed class ProtocoloGptLive : IProtocolo
             // eso se compara el tipo entero y no un prefijo. response.completed tampoco se atiende: es el
             // fin del trabajo del delegado, no del turno — la voz sigue hablando después.
             case "response.event":
-                if (m.TryGetProperty("event", out var ev) && Cadena(ev, "type") == "response.output_item.done"
-                    && ev.TryGetProperty("item", out var item) && Cadena(item, "type") == "function_call")
-                    hechos.Add(new Hecho.Pide(new[] { ProtocoloOpenAI.LaLlamada(item) }));
+                if (m.TryGetProperty("event", out var ev))
+                {
+                    if (Cadena(ev, "type") == "response.output_text.done"
+                        && Cadena(ev, "text") is { Length: > 0 } texto)
+                        hechos.Add(new Hecho.DiceU(texto));
+                    else if (Cadena(ev, "type") == "response.output_item.done"
+                        && ev.TryGetProperty("item", out var item) && Cadena(item, "type") == "function_call")
+                        hechos.Add(new Hecho.Pide(new[] { ProtocoloOpenAI.LaLlamada(item) }));
+                }
                 break;
 
             // LA SESIÓN ABRIÓ, dicho por el servidor y no por el socket: conectar y mandar session.start no es

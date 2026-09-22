@@ -1,6 +1,17 @@
-# Plan de implementación: el notch se sube arriba y dice dos cosas
+# Plan de implementación: el notch se sube arriba y dice una sola cosa
 
-Estado: **implementado** (fase 1, PR #73) · **fase 2 en curso** · 2026-09-16 · Rama: `jose/el-notch-arriba`
+Estado: **implementado** (fase 1, PR #73) · **fase 2 en curso** · **refinamiento visual e interacción** · 2026-09-22 · Rama: `codex/notch`
+
+## Refinamiento de interacción y lectura (2026-09-22)
+
+La primera versión conservaba dos jerarquías visibles. La interfaz final las reduce a una sola frase
+grande y gruesa: durante una actividad se muestra el paso vivo; cuando queda libre, la misma pieza
+mantiene la última tarea. La memoria interna sigue separando tarea y actividad para no perder contexto.
+
+El ancho permanece compacto y la frase larga no se trunca con `…`: se desplaza con una marquesina
+pausada dentro del cristal, manteniendo el tamaño estable. La franja superior y la caja visible forman
+una única zona de intención; al cruzar hacia la pieza, el notch se mantiene y abre el campo de texto
+existente con el foco listo, sin activar la voz.
 
 > El dueño, con una imagen del diseño: «quiero que el notch esté arriba al centro. Donde dice "tarea
 > en ejecución" quiero que esté la MACRO TAREA: si le pedí crear un anuncio, que ahí esté "crear un
@@ -16,7 +27,7 @@ ver de un vistazo, que es **en qué está**.
 | | Hoy | Ahora |
 |---|---|---|
 | Sitio | apoyado en la barra de tareas, en la mitad que dejan los iconos | **arriba y al centro** |
-| Qué dice | tres frases del mismo peso | **la tarea** arriba y **lo que pasa** abajo |
+| Qué dice | tres frases del mismo peso | **una frase grande y gruesa**: el paso vivo mientras trabaja, o la última tarea cuando queda libre |
 | Cuánto dura una frase | hasta que la empujan otras dos | la tarea, hasta que pidas otra |
 | La marca | un punto de 6, o «Ü» / «Tú» | **un icono** por estado |
 
@@ -39,15 +50,16 @@ pieza se meta debajo de una barra puesta arriba.
 y siempre dentro del cristal. Si la barra de tareas está arriba, el área libre ya la excluye y la
 pieza queda justo debajo.
 
-**Dos líneas con dos pesos distintos, y eso es lo que hace que se lea de un vistazo:**
+**Una sola frase, con una jerarquía clara, y eso es lo que hace que se lea de un vistazo:**
 
-- **La tarea**, en negrita: lo último que pidió la persona, tal cual. Se queda hasta que pida otra
-  cosa. Mientras no haya pedido nada, dice «Ü».
-- **Lo que pasa ahora**, más ligero y más tenue: el paso que Ü está dando, lo que acaba de salir, o
-  lo que la persona está diciendo **mientras lo dice**. Es la línea que cambia.
+- Cuando Ü está trabajando, enseña el paso vivo: lo que está pasando ahora.
+- Cuando queda libre, enseña la última tarea. La memoria interna conserva tarea y paso separados,
+  pero la superficie no duplica el mensaje.
+- La frase usa una única escala grande y gruesa. Si no cabe, se desplaza despacio dentro del cristal;
+  nunca se reemplaza por `…` ni cambia el tamaño de la pieza.
 
-**Cómo se convierte lo dicho en tarea:** mientras la persona habla, su frase va en la línea de
-abajo, viva. Cuando cierra el turno, esa frase sube a ser la tarea. Nada que pedirle al modelo: la
+**Cómo se convierte lo dicho en tarea:** mientras la persona habla, su frase aparece como el mensaje
+vivo. Cuando cierra el turno, esa frase pasa a ser la tarea interna. Nada que pedirle al modelo: la
 tarea es, literalmente, lo que se pidió.
 
 **Los iconos.** Uno por estado, dibujados como vector en una caja de 24 con un solo grosor de trazo:
@@ -61,7 +73,7 @@ métrica, y se lee como un adorno pegado encima.
 | # | Promesa | Fase |
 |---|---|---|
 | 251 | el notch vive arriba y al centro del área libre: se centra en el hueco que deja el sistema, cuelga a una distancia fija del borde de arriba, y nunca se sale del cristal aunque no quepa | 1 |
-| 252 | el notch dice dos cosas y siempre las mismas dos: arriba LA TAREA —lo último que pidió la persona, que se queda hasta que pida otra— y abajo LO QUE PASA AHORA, que es el paso de Ü, su desenlace, o lo que la persona está diciendo mientras lo dice | 1 |
+| 252 | el notch enseña un solo texto con una jerarquía clara: mientras hay actividad muestra lo que está pasando, y cuando no la hay muestra la última tarea; la tarea y el paso siguen conservándose por separado para no perder contexto | 1 |
 | 253 | cada estado tiene su icono y todos salen del mismo juego: la misma caja, el mismo grosor de trazo y la forma dibujada como vector; no hay dos estados con el mismo dibujo, y ninguno es una letra ni un emoji | 1 |
 | 259 | el notch dice que lo pararon a mano: el paso pasa a decirlo, el icono es el de lo que se queda sin desenlace y no el del fallo ni el del éxito, y la tarea no se mueve | 2 |
 | 260 | acercar el cursor al borde de arriba, centrado donde vive el notch, cae dentro de la franja que lo asoma; lejos de esa franja no cae dentro, así que el gesto no dispara con cualquier paso del ratón por arriba | 2 |
@@ -69,13 +81,13 @@ métrica, y se lee como un adorno pegado encima.
 ### Con qué se juzga
 
 Sin pantalla: la regla del sitio con un área libre y una pieza más grande que ella (251); la máquina
-de estados de las dos líneas, frase a frase, incluida la que sube a tarea al cerrar el turno (252 y
+de estados del texto único, frase a frase, incluida la que pasa a tarea al cerrar el turno (252 y
 259); el juego de iconos, que devuelve un dibujo distinto por estado y ninguno es texto (253); y la
 geometría de la franja del borde de arriba, con puntos dentro y fuera (260).
 
-Sobre la máquina: abrirlo y verlo arriba al centro, con la tarea arriba y el paso abajo; pararlo con
-⏹ a media tarea y ver que el paso pasa a decirlo con el aro y la raya; y acercar el cursor al borde
-de arriba, en el centro, con el notch escondido, y verlo caer.
+Sobre la máquina: abrirlo y verlo arriba al centro, con una sola frase que cambia según el estado;
+pararlo con ⏹ a media tarea y ver que el texto pasa a decirlo con el aro y la raya; y acercar el
+cursor al borde de arriba, en el centro, con el notch escondido, y verlo caer.
 
 ### Límites dichos, no escondidos
 
@@ -92,7 +104,7 @@ de arriba, en el centro, con el notch escondido, y verlo caer.
 ### Fase 1 — sitio, contenido e iconos (251, 252, 253)
 
 `ReglaDeLaBandeja.ArribaAlCentro`, `Ui.LoQueDiceElNotch`, `Ui.IconosDelNotch`, y `PanelDeAcciones`
-dibujando icono, tarea y paso. **Implementada, PR #73.**
+dibujando icono y el texto único. **Implementada, PR #73; refinada el 2026-09-22.**
 
 ### Fase 2 — se detiene con memoria y asoma con el cursor (259, 260)
 
