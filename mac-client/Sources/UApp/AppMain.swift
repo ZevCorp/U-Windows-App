@@ -74,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for app in NSWorkspace.shared.runningApplications {
             guard app.processIdentifier != getpid(),
                   app.executableURL?.lastPathComponent == "U",
-                  app.bundleIdentifier == PermissionCenter.bundleIdentifier || app.bundleIdentifier == "com.zevcorp.u.mac.native"
+                  [PermissionCenter.bundleIdentifier, "com.zevcorp.u", "com.zevcorp.u.mac.native"].contains(app.bundleIdentifier)
             else { continue }
             // There must be one process even when `open -n` was used by an old launcher.
             // Prefer a graceful close, then force the stale copy if it ignores the request.

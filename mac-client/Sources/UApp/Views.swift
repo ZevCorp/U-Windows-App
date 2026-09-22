@@ -138,6 +138,8 @@ struct MainView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Bundle: \(Bundle.main.bundleIdentifier ?? "desconocido")\nRuta: \(Bundle.main.bundleURL.path)")
                     .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
+                Text("Firma: \(Bundle.main.object(forInfoDictionaryKey: "USigningMode") as? String ?? "desconocida"). Esta identidad no cambia al actualizar la app.")
+                    .font(.caption).foregroundStyle(.secondary)
             }.padding(20)
         }.id(model.permissionsVersion)
     }

@@ -30,9 +30,13 @@ Para probar el flujo como lo usará una persona instalada, compila y copia el bu
 ```
 
 Después abre `~/Applications/U.app`. No alternes entre el ejecutable suelto, `.artifacts/U.app` y
-otra copia en `~/Desktop/U/U-Mac/U.app`: macOS registra TCC por la identidad y el bundle concreto.
-La app muestra su bundle ID y ruta en Configuración para que la entrada autorizada siempre sea verificable.
-La primera apertura de esta versión limpia una sola vez los registros de las copias antiguas y cierra sus procesos.
+otra copia en `~/Desktop/U/U-Mac/U.app`: macOS registra TCC por el bundle y su firma. El instalador
+mueve esa copia heredada a la Papelera y verifica que la app final no use una firma ad hoc.
+
+Las compilaciones locales usan el certificado persistente `U Local Stable Signing`, guardado en un
+llavero local. Por tanto, recompilar no cambia su requisito TCC. La distribución a otras personas
+debe definir `CODE_SIGN_IDENTITY` con un certificado `Developer ID Application` y notarizar el ZIP,
+DMG o PKG resultante; una firma local no se debe distribuir.
 
 ## Permisos
 
@@ -45,7 +49,23 @@ En la pestaña **Configuración**:
 5. Regresa a Ü: los estados se vuelven a comprobar automáticamente durante 30 segundos.
 6. Si macOS no refleja un permiso hasta el siguiente arranque, pulsa **Reiniciar Ü para aplicar**.
 
+En la instalación nueva la app debe indicar `Bundle: com.zevcorp.u.mac` y `Firma: local-stable`.
+Esa combinación es la que se debe autorizar una única vez. No ejecutes `reparar-permisos.sh` después
+de una actualización normal: hacerlo borra deliberadamente la autorización para repetir el onboarding.
+
 El permiso de Accesibilidad es el que permite usar otras aplicaciones. Sin él, Ü solo puede mostrar la carita y hablar por texto.
+
+### Recuperar instalaciones antiguas
+
+Solo si una instalación anterior conservó un interruptor verde que Ü no reconoce, ejecuta una vez:
+
+```bash
+./mac-client/reparar-permisos.sh
+```
+
+Esto resetea únicamente Accesibilidad y Grabación de pantalla de `com.zevcorp.u.mac`; no se ejecuta
+desde la app ni durante actualizaciones normales. Vuelve a conceder ambos permisos y, desde entonces,
+actualiza siempre con `./mac-client/instalar.sh`.
 
 ## Configurar Graph
 
