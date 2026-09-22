@@ -30,6 +30,12 @@ dotnet build windows-client/WindowsClient.csproj -c Debug
 Release e instalador: ver `RELEASING-WINDOWS.md`. Runbook de producción: `PRODUCTION.md`.
 Arquitectura y decisiones: `WINDOWS.md`.
 
+## Flujo con Codex y Claude Code
+
+El repo incluye pstack portable para ambos agentes. Usa `$pstack ...` en Codex o
+`/pstack ...` en Claude Code. La instalación, actualización y la relación con las
+skills SDD existentes están documentadas en [`docs/pstack.md`](docs/pstack.md).
+
 ## Historial
 
 Este repo nace de la separación del monorepo `ZevCorp/Android` (2026-07). El

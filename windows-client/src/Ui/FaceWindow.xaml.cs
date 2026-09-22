@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
@@ -64,7 +64,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private Navigation.ServidorDelNucleo? _servidorNucleo;
 
     /// <summary>Hay una frase escribiéndose: los trozos que lleguen la actualizan, no la repiten.</summary>
-    private bool _turnoAbierto;
     private readonly VideoLibrary _videoLibrary = new();
     private readonly GraphConfig _graphConfig = GraphConfig.Load();
     private Updater? _updater;
@@ -194,6 +193,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // (pedido del dueño, 2026-09-17), también antes de que diga nada. Antes nacía perezoso, en
         // el primer Habla()/Empieza(), y hasta ese momento el gesto no tenía a quién asomar.
         _acciones ??= new PanelDeAcciones();
+        _acciones.TextoEnviado += OnNotchTextoEnviado;
+        Closed += (_, __) => _acciones.TextoEnviado -= OnNotchTextoEnviado;
 
         Closed += (_, __) =>
         {
@@ -1030,8 +1031,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // conteste. Con eso, `map_where_am_i` no llegaba ni a empezar —el modelo la pedía, se
             // quedaba colgada y a los 20 s llegaba «toolCallCancellation»— y desde fuera parecía que
             // el modelo no hacía nada (2026-08-04). Contar lo que haces no puede costarte hacerlo.
-            _vivo.Dice += t => Dispatcher.BeginInvoke(() => { AppendChat(t); SetStatus(t); });
-            _vivo.Cerro += () => Dispatcher.BeginInvoke(() => _turnoAbierto = false);
+            _vivo.Dice += t => Dispatcher.BeginInvoke(() => SetStatus(t));
             // La maquinaria va a su propio panel y NO a la burbuja: la burbuja reemplaza, así que un
             // «abriendo Descargas…» borraba la última frase de la conversación, y además solo dejaba
             // ver el último paso. En el panel se acumulan y se ve la secuencia entera.
@@ -1041,18 +1041,25 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // es «¿me oyó bien?» (2026-08-16, pedido por el usuario).
             _vivo.Transcribe += (texto, esDeU) => Dispatcher.BeginInvoke(() =>
             {
+                if (_vivo?.Viva != true) return;
                 _acciones ??= new PanelDeAcciones();
                 _acciones.Habla(texto, esDeU);
             });
-            _vivo.TurnoCerrado += () => Dispatcher.BeginInvoke(() => _acciones?.CierraTurno());
+            _vivo.TurnoCerrado += () => Dispatcher.BeginInvoke(() =>
+            {
+                if (_vivo?.Viva != true) return;
+                _acciones?.CierraTurno();
+            });
             _vivo.Accion += (texto, listo) => Dispatcher.BeginInvoke(() =>
             {
+                if (_vivo?.Viva != true) return;
                 _acciones ??= new PanelDeAcciones();
                 if (listo) _acciones.Termina(texto, !texto.StartsWith("✋"));
                 else { _acciones.Empieza(texto); SetStatus(texto); }
             });
             _vivo.Cambio += viva => Dispatcher.Invoke(() =>
             {
+                if (!viva) _acciones?.Limpiar();
                 // HABLAR POR VOZ NO ABRE EL CHAT (petición del dueño, 2026-09-05: «se me abre un
                 // chat que es superestorboso»). Abrir la conversación por voz es justo el momento
                 // en que NO hace falta leer nada: quien habla está mirando su trabajo, no el globo.
@@ -1289,7 +1296,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // botón: el operador no tiene que acordarse de activarlo para que su compañero pueda
         // exportar desde la web. Sin trabajo no hace nada más que una petición cada tres segundos.
         _exportador = new EjecutorDeExportaciones(_graphConfig, _rellenador, Dispatcher);
-        _exportador.Cuenta += m => Dispatcher.Invoke(() => { SetStatus(m); ShowTalk(MotivoDelGlobo.SoloEsProgreso); });
+        _exportador.Cuenta += m => Dispatcher.Invoke(() => { SetStatus(m); MostrarConversacion(MotivoDelGlobo.SoloEsProgreso); });
         _exportador.Arrancar();
         Closed += (_, __) => _exportador?.Dispose();
         // La superficie se PREGUNTA, igual que en el camino del mapa. Aquí se quedó el valor
@@ -1485,7 +1492,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             if (_updater.ReadyInfo == null)
             {
                 SetStatus("Buscando una actualización…");
-                ShowTalk(MotivoDelGlobo.SoloEsProgreso);
+                MostrarConversacion(MotivoDelGlobo.SoloEsProgreso);
                 var resultado = await _updater.BuscarAhoraAsync();
                 if (resultado.Que is not (Updater.Busqueda.Descargada or Updater.Busqueda.YaEstabaLista))
                 {
@@ -1527,11 +1534,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </remarks>
     private async void OnCheckUpdate(object sender, RoutedEventArgs e)
     {
-        if (_updater == null) { SetStatus("El actualizador no está disponible."); ShowTalk(MotivoDelGlobo.AlgoFallo); return; }
+        if (_updater == null) { SetStatus("El actualizador no está disponible."); MostrarConversacion(MotivoDelGlobo.AlgoFallo); return; }
 
         CheckUpdateBtn.IsEnabled = false;
         SetStatus("Buscando actualizaciones…");
-        ShowTalk(MotivoDelGlobo.SoloEsProgreso);
+        MostrarConversacion(MotivoDelGlobo.SoloEsProgreso);
         try
         {
             var (que, detalle) = await _updater.BuscarAhoraAsync();
@@ -1587,11 +1594,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void InvocarPorAtajo()
     {
         _prevForeground = GetForegroundWindow();   // para poder devolver el teclado con Esc
-        _muelle?.Desplegar("atajo: escribirle a Ü");
-        Show();
-        _muelle?.Show();
-        _muelle?.Activate();
-        ShowTalk(MotivoDelGlobo.LoPidioAlguien, focusInput: true);   // el mismo camino que ya usa AskAsync; no se duplica el foco
+        _acciones?.AbrirChat(true);
         if (!IsActive)
             // Si esto sale en el registro de la máquina del hospital, hará falta el rodeo de
             // SetForegroundWindow + AttachThreadInput. No se implementa por adelantado: que la
@@ -1618,6 +1621,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         try { SetForegroundWindow(_prevForeground); } catch { }
         _prevForeground = IntPtr.Zero;
     }
+
+    private void OnNotchTextoEnviado(string texto) => EnviarTexto(texto);
 
     /// <summary>
     /// Mantiene fija la esquina inferior derecha: si la ventana cambia de tamaño (Expander abierto,
@@ -2004,26 +2009,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         SepContexto.Background = Estudio.Borde;
         SepBarra.Background = Estudio.Borde;
 
-        // El globo de conversación y la píldora de estado, del mismo estudio: eran las dos únicas
-        // superficies que quedaban oscuras, y una interfaz con dos temas a la vez no se lee como
-        // dos temas, se lee como un fallo.
-        TalkPanel.Background = Estudio.Superficie;
-        TalkPanel.BorderBrush = Estudio.Borde;
-        TalkPanel.CornerRadius = new CornerRadius(Estudio.RadioPanel);
-        TalkPanel.Effect = Estudio.Sombra3;
-        var aireDelGlobo = Estudio.HolguraDe(Estudio.Sombra3);
-        // Por la derecha ya había 8 de separación con la barra; se conserva el mayor de los dos en
-        // vez de sumarlos, o el globo se despegaría el doble de lo que nadie pidió.
-        TalkPanel.Margin = new Thickness(aireDelGlobo.Left, aireDelGlobo.Top,
-            Math.Max(aireDelGlobo.Right, TalkPanel.Margin.Right), aireDelGlobo.Bottom);
-        Status.Foreground = Estudio.Tinta;
-        Bubble.Foreground = Estudio.TintaMedia;
-        Input.Background = Estudio.SuperficieSuave;
-        Input.Foreground = Estudio.Tinta;
-        Input.CaretBrush = Estudio.Tinta;
-        TalkCloseBtn.Background = Estudio.SuperficieSuave;
-        TalkCloseBtn.Foreground = Estudio.TintaMedia;
-
         StatusChip.Background = Estudio.Superficie;
         StatusChip.BorderBrush = Estudio.Borde;
         StatusChip.CornerRadius = new CornerRadius(Estudio.RadioChico);
@@ -2048,7 +2033,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // quedaba abierto toda la conversación — y desde que hablar ya no abre el chat, eso sería
         // exactamente el estorbo que el dueño pidió quitar (2026-09-05). Lo que no se puede cerrar
         // por debajo es lo que estás LEYENDO o ESCRIBIENDO; hablar no ocupa la pantalla.
-        _muelle = new Muelle(RootPanel, () => _talkOpen) { Hueco = SillaDelMuelle };
+        _muelle = new Muelle(RootPanel, () => _acciones?.ChatAbierto == true) { Hueco = SillaDelMuelle };
         _muelle.Cambio += AlCambiarElMuelle;
         Closed += (_, __) => { try { _muelle?.Close(); } catch { } };
     }
@@ -2369,14 +2354,14 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
     /// <summary>
-    /// Pulsar la línea abre el globo, que es lo que hacía la pastilla del chat. Por el camino de
-    /// main y sin tocarlo: <see cref="ShowTalk"/> ya sabe desplegar el muelle y pedir el foco.
+    /// Pulsar la línea abre la conversación dentro del notch.
     /// </summary>
     private void OnGhostClic(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         e.Handled = true;
         PlayTick();
-        if (_talkOpen) HideTalk(); else ShowTalk(MotivoDelGlobo.LoPidioAlguien, focusInput: true);
+        _acciones?.AbrirChat(true);
+        GhostPista.IsOpen = false;
     }
 
     /// <summary>
@@ -2582,11 +2567,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
     // --- Entrada del usuario ---
 
-    private void OnInputKey(object sender, KeyEventArgs e)
+    private void EnviarTexto(string text)
     {
-        if (e.Key != Key.Enter) return;
-        string text = Input.Text.Trim();
-        Input.Clear();
+        text = text.Trim();
         if (text.Length == 0) return;
 
         // Si el asistente está esperando una respuesta a su pregunta, esto la resuelve.
@@ -2738,7 +2721,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         {
             case "self_mute":
                 SetMuted(true);
-                return "Silenciado. Un clic en el altavoz para que vuelva a hablar.";
+                _vivo?.PararPorOrdenDeVoz();
+                return "Di exactamente «Mmm.» y después guarda silencio.";
 
             case "self_hide":
                 // Las DOS ventanas. Esconder solo la carita habría dejado la pestaña del muelle
@@ -2982,7 +2966,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
 
         SetTeachingUi(true); // el aura arranca TENUE aquí: enseñando, pero aún sin grabar
-        ShowTalk(MotivoDelGlobo.SoloEsProgreso); // el conteo regresivo y el estado de la grabación se ven ahí
+        MostrarConversacion(MotivoDelGlobo.SoloEsProgreso); // el conteo regresivo y el estado de la grabación se ven ahí
         try
         {
             // Título vacío: se autogenera al final desde lo aprendido (WorkflowLearner en Graph).
@@ -3106,7 +3090,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     {
         if (_comprobando) { SetStatus("Ya estoy comprobando una tarea."); return "ya estoy comprobando una tarea; espera a que termine."; }
         if (_teaching) { SetStatus("Termina de enseñar primero: pulsa 🎓 para cerrar la grabación."); return "termina de enseñar primero."; }
-        if (_loop == null || _mapaDeMano == null) { SetStatus("El piloto no está listo todavía."); ShowTalk(MotivoDelGlobo.AlgoFallo); return "el piloto no está listo todavía."; }
+        if (_loop == null || _mapaDeMano == null) { SetStatus("El piloto no está listo todavía."); MostrarConversacion(MotivoDelGlobo.AlgoFallo); return "el piloto no está listo todavía."; }
 
         // CUÁL SE COMPRUEBA: la última enseñada si sigue en memoria; si no, la primera pendiente del
         // catálogo. No se elige «la más nueva» a ciegas: se elige la que le falta el repaso, que es
@@ -3123,7 +3107,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (skill == null && !porElPiloto)
         {
             SetStatus("No hay ninguna tarea pendiente de comprobar. Enseña una con 🎓.");
-            ShowTalk(MotivoDelGlobo.AlgoFallo);
+            MostrarConversacion(MotivoDelGlobo.AlgoFallo);
             return "no hay ninguna tarea pendiente de comprobar.";
         }
 
@@ -3134,7 +3118,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // piloto recibe el OBJETIVO y todo el contexto, va hacia él por identidad y con la
         // compuerta, y cuelga un recuerdo de cada elemento que usa. Los pasos son pistas.
         _comprobando = true;
-        ShowTalk(MotivoDelGlobo.SoloEsProgreso);
+        MostrarConversacion(MotivoDelGlobo.SoloEsProgreso);
         var reloj = System.Diagnostics.Stopwatch.StartNew();
 
         // LA VOZ SE ABRE PARA COMPROBAR (promesa 142). Ü va a narrar todo el recorrido, y sin la
@@ -3267,7 +3251,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (leccion == null || _mapaDeMano == null)
         {
             SetStatus("La lección no se pudo leer: no hay nada que comprobar.");
-            ShowTalk(MotivoDelGlobo.AlgoFallo);
+            MostrarConversacion(MotivoDelGlobo.AlgoFallo);
             return "la lección no se pudo leer: no hay nada que comprobar.";
         }
         // EL JUEZ LEE LOS CAMPOS (promesa 175, enmendada): un campo tecleado está hecho si dice ahora lo
@@ -3552,7 +3536,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
         _vozAbiertaParaEnsenar = false;
         SetStatus("Cerrando la enseñanza y estructurando el workflow…");
-        ShowTalk(MotivoDelGlobo.SoloEsProgreso); // el cierre tarda y termina en un veredicto: que no pase en silencio
+        MostrarConversacion(MotivoDelGlobo.SoloEsProgreso); // el cierre tarda y termina en un veredicto: que no pase en silencio
 
         if (_teachSession != null)
         {
@@ -3728,7 +3712,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         }
         if (!RootPanel.Children.Contains(MenuPanel)) RootPanel.Children.Add(MenuPanel);
     }
-    private bool _talkOpen;
     private System.Windows.Threading.DispatcherTimer _menuOpenTimer = null!, _menuCloseTimer = null!;
 
     /// <summary>Conecta toda la coreografía del menú. Se llama una vez, desde OnLoaded.</summary>
@@ -3784,16 +3767,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         BarPanel.MouseEnter += (_, __) => _menuCloseTimer.Stop();
         BarPanel.MouseLeave += (_, __) => ScheduleMenuClose();
 
-        // Globo de conversación: ✕ lo cierra; abrirlo va por las pastillas de la carita.
-        TalkCloseBtn.Click += (_, __) => HideTalk();
-
-        // Esc cierra lo más volátil primero: menú, luego conversación. Y al cerrar la conversación
-        // devuelve el teclado a la aplicación desde la que se invocó a Ü con el atajo.
+        // Esc cierra lo más volátil primero: el menú. La conversación vive dentro del notch y tiene
+        // su propio cierre, sin activar ni traer la ventana de la carita.
         PreviewKeyDown += (_, e) =>
         {
             if (e.Key != Key.Escape) return;
             if (_menuOpen) { CloseMenu(); e.Handled = true; }
-            else if (_talkOpen) { HideTalk(); DevolverElFoco(); e.Handled = true; }
+            else if (_acciones?.ChatAbierto == true) { _acciones.CerrarChat(); e.Handled = true; }
         };
 
         // Clic fuera (en otra app estando esta ventana activa): el menú sin fijar se cierra.
@@ -3841,7 +3821,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         // En un DockPanel el orden de los hijos decide qué franja ocupa cada uno; invirtiendo los
         // Dock, el orden visual se invierte solo: [globo][píldora][barra] ↔ [barra][píldora][globo].
-        DockPanel.SetDock(TalkPanel, left ? Dock.Right : Dock.Left);
         DockPanel.SetDock(BarShell, left ? Dock.Left : Dock.Right);
         DockPanel.SetDock(StatusChip, left ? Dock.Left : Dock.Right);
 
@@ -3850,7 +3829,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
 
         // Y la píldora respira hacia el lado contrario a la barra.
         StatusChip.Margin = left ? new Thickness(8, 0, 0, 14) : new Thickness(0, 0, 8, 14);
-        TalkPanel.Margin = left ? new Thickness(8, 0, 0, 0) : new Thickness(0, 0, 8, 0);
     }
 
     private bool _sideApplied;
@@ -4027,51 +4005,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         UpdateChevron();
     }
 
-    // ── Globo de conversación (estado + narración + entrada de texto) ─────────────────────────
+    // ── Conversación embebida en el notch ─────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Muestra el globo de conversación. Se llama solo cuando hay algo que ver: una narración, una
-    /// pregunta del asistente, una ejecución en curso. Con la carita colapsada no hace nada (mismo
-    /// contrato de siempre: colapsado = solo la carita).
-    /// </summary>
-    /// <summary>
-    /// Pide el globo. Lo concede <see cref="ReglaDelGlobo"/>, no quien llama.
-    /// </summary>
-    /// <remarks>
-    /// TODA LLAMADA DECLARA SU MOTIVO, y no hay valor por defecto a propósito: el defecto sería
-    /// exactamente la decisión que aquí no se puede tomar de oficio. Veinte sitios abrían este
-    /// globo, ninguno se preguntaba si conversar era lo que tocaba, y el resultado fue un chat
-    /// saliendo encima del trabajo del dueño cada vez que Ü contaba algo (2026-09-06).
-    /// </remarks>
-    private void ShowTalk(MotivoDelGlobo motivo, bool focusInput = false)
+    private void MostrarConversacion(MotivoDelGlobo motivo, bool focusInput = false)
     {
-        // Un fallo saca el panel aunque no abra el globo: la píldora vive dentro.
-        if (_collapsed && ReglaDelGlobo.DespliegaElMuelle(motivo))
-            _muelle?.Desplegar(motivo == MotivoDelGlobo.AlgoFallo ? "algo falló" : "lo pidió alguien");
-
-        // El progreso deja su texto escrito y se va: quien abra el globo lo encontrará ahí.
-        if (!ReglaDelGlobo.SeAbre(motivo)) { UpdateChip(_mood); return; }
-
-        if (_muelle == null) return;
-        if (!_talkOpen)
-        {
-            _talkOpen = true;
-            FadeSlideIn(TalkPanel, TalkShift, fromY: 6);
-        }
-        UpdateChip(_mood);   // el globo lleva el texto largo: la píldora sobra mientras esté abierto
-        // El foco se pide DESPUÉS del pase de layout: si el globo acaba de hacerse visible,
-        // enfocar en el mismo instante puede caer en el vacío.
-        if (focusInput)
-            Dispatcher.BeginInvoke(new Action(() => Input.Focus()),
-                System.Windows.Threading.DispatcherPriority.Input);
-    }
-
-    private void HideTalk()
-    {
-        if (!_talkOpen) return;
-        _talkOpen = false;
-        FadeSlideOut(TalkPanel, TalkShift, toY: 6, () => { if (!_talkOpen) TalkPanel.Visibility = Visibility.Collapsed; });
-        UpdateChip(_mood);   // sin globo, la píldora vuelve a ser la que informa
+        if (motivo is MotivoDelGlobo.LoPidioAlguien or MotivoDelGlobo.HayQueContestar)
+            _acciones?.AbrirChat(focusInput);
     }
 
     // ── Microanimaciones compartidas: fundido + deslizamiento corto, sin rebotes ──────────────
@@ -4351,7 +4290,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         ShowStop(true);
         SetWorking(true);
         SetStatus($"Ejecutando «{wf.Nombre}»…");
-        ShowTalk(MotivoDelGlobo.SoloEsProgreso); // el progreso se narra ahí, y el ⏹ de la barra ya quedó visible
+        MostrarConversacion(MotivoDelGlobo.SoloEsProgreso); // el progreso se narra ahí, y el ⏹ de la barra ya quedó visible
         string? bridgeGoal = null; // puente subconsciente→consciente si el workflow se detiene
         bool paróElUsuario = false, falló = false;
         try
@@ -4872,7 +4811,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         ShowStop(true);
         SetWorking(true);
         SetStatus("Pensando…");
-        ShowTalk(MotivoDelGlobo.SoloEsProgreso); // que se vea el estado (y quede a mano el ⏹) desde el primer segundo
+        MostrarConversacion(MotivoDelGlobo.SoloEsProgreso); // que se vea el estado (y quede a mano el ⏹) desde el primer segundo
         bool paró = false, falló = false;
         try
         {
@@ -4885,12 +4824,10 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
     // --- IVoice ---
-    // Narrar y hablar abren el globo de conversación: en la barra compacta no hay texto permanente,
-    // así que lo que Ü dice tiene que traer su propia ventana.
+    // El progreso se refleja en el notch; la conversación completa vive dentro del mismo notch.
     public void Narrate(string text) => Dispatcher.Invoke(() =>
     {
-        Bubble.Text = text;
-        if (!string.IsNullOrWhiteSpace(text)) ShowTalk(MotivoDelGlobo.SoloEsProgreso);
+        if (!string.IsNullOrWhiteSpace(text)) _acciones?.Avisar(text);
         // MIENTRAS SE COMPRUEBA, LO QUE EL PILOTO NARRA SE OYE (promesa 142). Fuera de eso, narrar
         // es un estado y va escrito: un asistente que lee en voz cada «voy por el paso 3» cansa.
         if (_comprobando && !string.IsNullOrWhiteSpace(text) && _vivo is { Viva: true })
@@ -4898,7 +4835,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     });
     public void Speak(string text)
     {
-        Dispatcher.Invoke(() => { Bubble.Text = text; SetStatus(text); ShowTalk(MotivoDelGlobo.SoloEsProgreso); });
+        Dispatcher.Invoke(() => SetStatus(text));
         // Durante una conversación en vivo la voz de Ü la pone Gemini. Añadir encima el sintetizador
         // de Windows serían dos Ü hablando a la vez, cada una su frase: el texto se sigue viendo,
         // que es lo que hace falta, pero se oye una sola.
@@ -4930,81 +4867,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         _ = _vivo?.HablarConVozVivaAsync(mensaje);
     }
 
-    /// <summary>
-    /// El globo, línea a línea: quién la dijo y qué dijo. Vive aparte de lo pintado —antes se releía
-    /// de <c>Bubble.Text</c>, que es la trampa de que la pantalla sea también el estado (patrón
-    /// nº8: una caja que miente es peor que no tener caja, y aquí la caja era el propio texto)—.
-    /// De aquí sale tanto el reemplazo en vivo de una frase a medio decir como el peso de cada
-    /// línea: la etiqueta «Ü: »/«Tú: » hacía dos trabajos —decir quién habla, y decirle al código si
-    /// esta frase sigue el turno anterior—, y quitarla de la pantalla (pedido del dueño, 2026-09-17)
-    /// se habría llevado los dos si no queda guardada aquí.
-    /// </summary>
-    private readonly List<(string Quien, string Texto)> _globo = new();
-
-    /// <summary>
-    /// Añade una línea al globo sin borrar lo anterior.
-    ///
-    /// <see cref="Narrate"/> REEMPLAZA, que es lo correcto para un estado («voy por el paso 3»), y
-    /// justo lo contrario de lo que necesita una conversación: ahí lo dicho y lo hecho tienen que
-    /// quedarse a la vista. Cuando la voz mueve archivos de verdad, poder leer después qué se pidió
-    /// y qué herramienta se ejecutó no es un lujo.
-    /// </summary>
-    private void AppendChat(string linea)
-    {
-        if (string.IsNullOrWhiteSpace(linea)) return;
-
-        // Una frase que se está diciendo REEMPLAZA a su versión anterior en vez de añadirse: llega a
-        // trozos y añadirlos dejaba una columna de palabras sueltas. Se compara por quién habla, y
-        // solo mientras el turno sigue abierto: al cerrarse, `_turnoAbierto` cae y la siguiente
-        // frase del mismo interlocutor empieza línea nueva, que es lo que hace legible el historial.
-        //
-        // QUIÉN LO DICE VIENE EN EL PROPIO TEXTO (lo deciden `EnviarTextoAsync` y `Reaccionar` en
-        // ConversacionEnVivo), pero ya no se guarda ni se enseña tal cual: se lee aquí y se recorta.
-        string quien = linea.StartsWith("Ü: ", StringComparison.Ordinal) ? "Ü"
-            : linea.StartsWith("Tú: ", StringComparison.Ordinal) ? "Tú"
-            : "";
-        string texto = quien switch { "Ü" => linea[3..], "Tú" => linea[4..], _ => linea };
-
-        if (_turnoAbierto && quien.Length > 0 && _globo.Count > 0 && _globo[^1].Quien == quien)
-            _globo[^1] = (quien, texto);
-        else
-            _globo.Add((quien, texto));
-        _turnoAbierto = true;
-        if (_globo.Count > 40) _globo.RemoveRange(0, _globo.Count - 40);
-        PintarGlobo();
-        ShowTalk(MotivoDelGlobo.SoloEsProgreso);
-    }
-
-    /// <summary>
-    /// Pinta el globo entero a partir de <see cref="_globo"/>: un <see cref="Run"/> por línea, y lo
-    /// que dice Ü un poco más grueso que lo que dice la persona (pedido del dueño, 2026-09-17: sin
-    /// la etiqueta delante, el peso de la letra es lo único que sigue separando a los dos). Cada
-    /// repintado entra con un parpadeo breve —de 0,2 a 1 de opacidad en 160 ms— para que el texto no
-    /// cambie de golpe: el mismo lenguaje que ya usa el notch al aparecer.
-    /// </summary>
-    private void PintarGlobo()
-    {
-        Bubble.BeginAnimation(OpacityProperty, null);
-        Bubble.Inlines.Clear();
-        for (int i = 0; i < _globo.Count; i++)
-        {
-            var (quien, texto) = _globo[i];
-            Bubble.Inlines.Add(new Run(texto)
-            { FontWeight = quien == "Ü" ? FontWeights.SemiBold : FontWeights.Normal });
-            if (i < _globo.Count - 1) Bubble.Inlines.Add(new LineBreak());
-        }
-        Bubble.Opacity = 0.2;
-        Bubble.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(160))
-        { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-    }
-
     // --- IUserChannel ---
     public Task<string> AskAsync(string question, CancellationToken ct)
     {
         Dispatcher.Invoke(() =>
         {
             SetStatus(question);
-            ShowTalk(MotivoDelGlobo.HayQueContestar, focusInput: true); // la pregunta necesita la caja de texto delante
+            MostrarConversacion(MotivoDelGlobo.HayQueContestar, focusInput: true); // la pregunta necesita la caja de texto delante
         });
         _pendingAnswer = new TaskCompletionSource<string>();
         ct.Register(() => _pendingAnswer?.TrySetResult(""));
@@ -5014,7 +4883,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         return _pendingAnswer.Task;
     }
 
-    private void SetStatus(string s) => Dispatcher.Invoke(() => Status.Text = s.Length > 120 ? s[..120] + "…" : s);
+    private void SetStatus(string s) => Dispatcher.Invoke(() =>
+    {
+        if (!string.IsNullOrWhiteSpace(s)) _acciones?.Avisar(s);
+        UpdateChip(_mood);
+    });
 
     // ── La carita como semáforo ───────────────────────────────────────────────────────────────
     //
@@ -5907,4 +5780,6 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     }
 
 }
+
+
 

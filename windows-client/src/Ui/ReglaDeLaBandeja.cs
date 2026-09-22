@@ -134,4 +134,19 @@ public static class ReglaDeLaBandeja
 
     /// <summary>¿El cursor está en la franja que asoma el notch?</summary>
     public static bool Asoma(Rect libre, Size notch, Point cursor) => ZonaDeAsomo(libre, notch).Contains(cursor);
+
+    /// <summary>La zona de intención completa une el borde sensible con la pieza visible.</summary>
+    public static bool MantieneLaIntencion(Rect libre, Size notch, Point cursor, bool visible)
+    {
+        if (Asoma(libre, notch, cursor)) return true;
+        if (!visible) return false;
+        var pieza = ArribaAlCentro(libre, notch);
+        var puente = new Rect(pieza.Left - 12, libre.Top, pieza.Width + 24,
+            Math.Max(0, pieza.Bottom - libre.Top));
+        return puente.Contains(cursor);
+    }
+
+    /// <summary>¿El cursor ya está sobre la pieza visible y puede iniciar la escritura?</summary>
+    public static bool ActivaEscritura(Rect libre, Size notch, Point cursor) =>
+        ArribaAlCentro(libre, notch).Contains(cursor);
 }
