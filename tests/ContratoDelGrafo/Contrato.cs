@@ -822,6 +822,7 @@ internal static class Contrato
         Prueba("341. dos recordatorios vencidos despiertan una sola sesión de voz", LosAvisosCompartenUnaSesionViva);
         Prueba("342. una petición personal explícita se puede guardar aunque el modelo no llame la herramienta", PeticionPersonalExplícitaSeGuarda);
         Prueba("343. cada proceso de Ü escribe en su propio archivo de log identificable", CadaInstanciaTieneSuLog);
+        Prueba("344. los detalles cotidianos de una preferencia pueden convertirse en recuerdo", DetalleCotidianoPuedeGuardarse);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -951,6 +952,18 @@ internal static class Contrato
         Debe(instancia.Contains($"p{Environment.ProcessId}", StringComparison.Ordinal)
               && Path.GetFileName(archivo).Contains(instancia, StringComparison.Ordinal),
             "el nombre del log contiene el origen, el PID y la hora de arranque de esta instancia");
+    }
+
+    private static void DetalleCotidianoPuedeGuardarse()
+    {
+        string archivo = Path.Combine(_raiz, "memoria-detalle-cotidiano.json");
+        var memoria = new MemoriaPersonal("contrato-detalle", archivo);
+        var guardado = memoria.EjecutarAsync("Me encantan los relojes Cartier y prefiero el Santos",
+            CancellationToken.None).GetAwaiter().GetResult();
+        string contexto = memoria.ContextoAsync(CancellationToken.None).GetAwaiter().GetResult();
+        Debe(guardado.Ok && contexto.Contains("Cartier", StringComparison.OrdinalIgnoreCase)
+              && contexto.Contains("Santos", StringComparison.OrdinalIgnoreCase),
+            "una preferencia cotidiana queda disponible como recuerdo personal");
     }
 
     private static void CadaMundoSeObservaPorSuPuerta()
