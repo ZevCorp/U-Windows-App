@@ -42,10 +42,6 @@ public sealed class ConversacionEnVivo : IDisposable
     public ConversacionPersonal? Conversacion { get; set; }
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
-    // Contexto que se vuelve a insertar en el historial real de GPT-Live al confirmar una sesión
-    // nueva. Las instrucciones de la delegación son configuración, no una garantía de que el modelo
-    // las trate como conversación previa al reconectar.
-    private string _contextoInicial = "";
     private readonly SemaphoreSlim _envio = new(1, 1);
     private readonly SemaphoreSlim _apertura = new(1, 1);
 
@@ -2006,18 +2002,6 @@ public sealed class ConversacionEnVivo : IDisposable
                 _confirmada = true;
                 _aperturaConfirmada?.TrySetResult(true);
                 LogBus.Log("voz-viva", $"sesión abierta con {QuienAbre}: el servidor la confirmó");   // la única que lo afirma (220)
-                if (_contextoInicial.Length > 0)
-                {
-                    string contexto = _contextoInicial;
-                    _contextoInicial = "";
-                    // Las instrucciones de la delegación son configuración. Este mensaje reconstruye
-                    // además el hilo dentro del historial real que consulta GPT-Live, sin pedir una
-                    // respuesta ni hablarlo en voz alta.
-                    _ = EnviarTextoAlModeloAsync(
-                        "[CONTEXTO INTERNO — no lo leas en voz alta ni respondas a este mensaje. "
-                        + "Úsalo como continuidad de la conversación anterior.]\n" + contexto);
-                    LogBus.Log("memoria", "continuidad reinyectada en el historial de la sesión de voz");
-                }
                 if (_alConfirmar.Length > 0) { Dice?.Invoke(_alConfirmar); _alConfirmar = ""; }
                 break;
         }
@@ -2445,7 +2429,6 @@ public sealed class ConversacionEnVivo : IDisposable
 
             string resultado = continuidad + "\nREGLAS OPERATIVAS:\n" + Instrucciones
                 + "\n\nREGLA FINAL DE CONTINUIDAD: si la pregunta depende de algo anterior, usa primero la continuidad prioritaria o memory_recall y responde una sola vez con el resultado.";
-            _contextoInicial = continuidad.ToString();
             LogBus.Log("memoria", $"contexto de apertura: memoria={contexto.Length} caracteres · hilo={hilo.Length} caracteres · instrucciones delegadas={resultado.Length} caracteres");
             return resultado;
         }
