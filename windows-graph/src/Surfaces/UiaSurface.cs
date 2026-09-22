@@ -292,6 +292,38 @@ public sealed class UiaSurface : IUiSurface
     /// <summary>¿Esa ventana es la que tiene el foco del sistema ahora mismo?</summary>
     public static bool EstaDelante(IntPtr hwnd) => hwnd != IntPtr.Zero && GetForegroundWindow() == hwnd;
 
+    /// <summary>
+    /// LA VENTANA DE DELANTE, con su título, por Win32 y sin UIA (spec 047: la segunda parte de la huella de lo que se
+    /// ve). Salta las de Ü con la misma regla que <see cref="RealForegroundWindow"/> (promesa 230): la carita es un
+    /// overlay topmost que suele quedar como foreground, y contarla sería describir algo que la persona no está mirando.
+    /// </summary>
+    public static (IntPtr Hwnd, string Titulo) VentanaDelanteAhora()
+    {
+        IntPtr h = LaVentanaDeDelante(GetForegroundWindow());
+        return (h, h == IntPtr.Zero ? "" : TituloDe(h));
+    }
+
+    /// <summary>
+    /// LAS VENTANAS VISIBLES DE NIVEL SUPERIOR DEL MISMO PROCESO que <paramref name="ventanaDelProceso"/>, por Win32
+    /// (spec 047: la cuarta parte de la huella). Es la que ve un popup que NO cuelga de la ventana de trabajo: el
+    /// selector de perfiles de Chrome se abrió como OTRA ventana «(sin título)» de chrome.exe (log 21-09 :395) y una
+    /// lectura de la ventana de Gmail no lo veía. Sin título a propósito: ese popup no lo tenía.
+    /// </summary>
+    public static IReadOnlyList<IntPtr> VentanasDelProceso(IntPtr ventanaDelProceso)
+    {
+        var lista = new List<IntPtr>();
+        if (ventanaDelProceso == IntPtr.Zero) return lista;
+        GetWindowThreadProcessId(ventanaDelProceso, out uint pid);
+        if (pid == 0) return lista;
+        EnumWindows((h, _) =>
+        {
+            GetWindowThreadProcessId(h, out uint suyo);
+            if (suyo == pid && SeVe(h) && !IsOwnWindow(h)) lista.Add(h);
+            return true;
+        }, IntPtr.Zero);
+        return lista;
+    }
+
     /// <summary>¿Esa ventana es una consola? Ahí no hay campos: se teclea (promesa 235).</summary>
     public static bool EsTerminal(IntPtr hwnd)
     {

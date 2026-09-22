@@ -186,7 +186,7 @@ también ciega al contenido: pendiente nº6 de `CLAUDE.md`) tiene la misma cegue
 | `Navigation/RecorrerSegunElNucleo.cs` | tocada | `:412-413`: `Huella` local → `HuellaDeLoQueSeVe.MismaPantallaQueVe`; `LlegoDondeTocaba` (`:317-341`) consume la huella con `PresupuestoDeRedireccionMs` (punto 8); `Resultado` lleva `QueCambio` |
 | `Navigation/ElTramo.cs` | tocada | `Paso` gana `QueCambio` (por defecto: `Cambio ? DeSitio : Nada`); el detector cuenta `QueCambio == Nada`; `Cuenta` dice qué cambió |
 | `Mcp/SurfaceMapTools.cs` | tocada | **`:343`** (`UnPasoDecidido` construye el `Paso` con `cambio = mano?.Logro`: pasa a llevar `mano?.QueCambio`; sin esta línea el detector sigue contando `!Cambio` en el camino del operador —aprendizaje nº11— y la 353 saldría verde solo con manos falsas), **`:2614`** (`record struct Mano` gana `QueCambio`), `:2638-2645` (`Anotar` lo copia del `Resultado` de `Recorrer`), `:2865-2926` (`EsperarPantallaLista` sobre `EsperaAsentada` y `Compas`; `Llego` con `Compas`; `EsperarCambio` **se borra**: 0 llamadores) |
-| `windows-graph/src/Surfaces/UiaSurface.cs` | tocada, **2 métodos estáticos añadidos** junto a `VentanaExiste` (`:290`) | `VentanaDeDelante() → (Hwnd, Titulo)` y `VentanasDelProceso(pid) → hwnds`, los dos por Win32 (hoy 0 usos de `GW_OWNER`/`EnumThreadWindows` en el repo; `GetWindowThreadProcessId` ya se usa en 5 archivos). No toca `Walk` ni los `Sleep` de la mano: `Walk` es de la rama C |
+| `windows-graph/src/Surfaces/UiaSurface.cs` | tocada, **2 métodos estáticos añadidos** junto a `VentanaExiste` (`:290`) | `VentanaDelanteAhora() → (Hwnd, Titulo)` y `VentanasDelProceso(hwndDeTrabajo) → hwnds`, los dos por Win32 (hoy 0 usos de `GW_OWNER`/`EnumThreadWindows` en el repo; `GetWindowThreadProcessId` ya se usa en 5 archivos). **Se llama `VentanaDelanteAhora` y no `VentanaDeDelante`** porque `VentanaDeDelante` ya es una CLASE de `windows-graph` (la regla de la 230, `VentanaDeDelante.Elegir`) y el método con ese nombre no compilaba (CS0119, fase 0). Y recibe el hwnd de trabajo, no el pid: quien la llama tiene el hwnd y no el pid, y sacarlo sería un tercer estático. No toca `Walk` ni los `Sleep` de la mano: `Walk` es de la rama C |
 | `Ui/FaceWindow.xaml.cs:768-798` | **≤2 líneas** | `pulsar.Huella = new Navigation.HuellaEnVivo(SitioFresco, VentanaObjetivo).Tomar;` y `recorrer.Huella = pulsar.Huella;` — en el hunk de `pulsar`, que ni C ni D tocan (abajo) |
 
 **No se toca:** `EsperarloVivo` salvo las dos líneas de `Huella`; `MapaVivo`; `UiaReader` (297/298);
@@ -466,8 +466,50 @@ dé el presupuesto de redirección.
   El «341–385 libres» de `arquitectura-jev-en-u.md` §6 quedó viejo la misma mañana; la rama A renumeró a
   342–350 y vuelve a chocar en 342 y 343. Esta rama (351–359) no choca. Y con la 343 el log pasa a ser por
   instancia: `u-AAAAMMDD-<instancia>.log`.
-- *(Se rellena durante la implementación: las cuentas (a) y (b) de la fase 0, los valores de
-  `PrimeraHuellaMs`/`RespiroMs` y el techo mínimo, con fecha y con el log.)*
+- **2026-09-22, fase 0 escrita (355 verde).** Lo que entró y lo que no:
+  - **Contrato**: `CONTRATO ROTO: 18 promesa(s) incumplida(s)` —el 18 cuenta `Debe` fallidos, no promesas—:
+    282 ✔ / 8 ✘, y las 8 son 351–354 y 356–359 (M, `contrato-del-grafo.ps1`, tres corridas: base con las
+    nueve en PENDIENTE = 9; fase 0 = 18; sabotaje de la 355 = 21). 355, 44, 83, 245, 248, 292, 296, 299 y 334
+    en ✔. Las 351, 353, 354 y 357 pasan de PENDIENTE a rojas de verdad: ya existe `PulsarSegunElNucleo.Huella`
+    y sus casos corren, pero la espera sigue llegando al techo (fase 0, sin recortar), que es lo que tienen que
+    decir hasta la fase 2.
+  - **Sabotaje de la 355, verificado por diff**: quitar `MsAsentada = t;` en `EsperaAsentada.Sondea` → la línea
+    sale «nunca se asentó (se movió en 0 de 10 sondeo(s))» sin «asentada a los» → `✘ 355.` y `CONTRATO ROTO: 21`.
+    Restaurado con diff vacío → `✔ 355.` y 18 otra vez. **Trampa encontrada al restaurar**: `Copy-Item` conserva
+    la fecha del `.bak`, más vieja que el binario saboteado, y el build incremental **se quedó con la DLL
+    saboteada**: el diff era vacío y el juez seguía diciendo 355 roja. Un sabotaje «restaurado» con diff vacío y
+    veredicto rojo es la misma clase que el CRLF del 2026-08-21 (memoria `sabotaje-verificado-por-diff`): la
+    comprobación no es el diff solo, es **diff vacío Y veredicto de vuelta al de antes**, y si no vuelve, tocar la
+    fecha (`LastWriteTime = Get-Date`) antes de dudar del código.
+  - **Sitios**: «cambió» se sigue calculando en los 11 sitios de `arquitectura-jev-en-u.md` §3.2; la fase 0 no
+    recorta ninguno: añade la sombra en **1** (`EsperarACambiar` del clic, `:162`) y la línea de la 355 en ese
+    mismo sitio. Las líneas «mano» de `PulsarSegunElNucleo` pasan por un solo `Anota` (**4** sitios: el ⏱, el
+    terreno, «lleva aquí» y «lo repito») para que el `Diario` inyectado las vea; la 357 las contará.
+  - **El diario y la ubicación del clic**: la línea de la 355 dice «cambió a los N ms» cuando la ubicación
+    cambió, con el instante que anota `EsperarACambiar` (`_msCambioUbicacion`); y sin huella dice «nadie miraba»
+    dos veces (delante y asentada), para que el conteo (e) del nivel 4 no dependa de una sola palabra.
+  - **Las dos líneas de `FaceWindow`** (`:790-794`, hunk de `pulsar`) están puestas: `HuellaEnVivo` con el sitio
+    sin memoria (`_dondeTrabajo.Olvida()` + `DondeTrabajo()`) y `VentanaObjetivo`. **Lo decide el dueño al abrir el
+    PR**, como está escrito arriba; si dice que no, salen a una rama de UI propia y la 355 queda juzgada solo en el
+    contrato.
+  - **Nivel 4: NO medido.** El encargo de esta rama prohíbe ejecutar `U.exe`, y el nivel 4 de la fase 0 es
+    exactamente eso: tres pantallas con nombre, ≥30 clics que no navegan, ≥10 que sí, ≥3 con redirección, y las
+    cuentas (a)–(e) leídas de las líneas `👀 tras «…»` del log por instancia. Queda **para el dueño, antes de la
+    fase 2**: es la condición que la 043 dejó escrita y esta rama no la puede saltar. Lo que la línea trae para
+    esas cuentas: (a) «cambió dentro (lo vio: dentro | ventanas del proceso)» / «cambió delante» / «nada cambió»
+    junto a «no cambió en el techo»; (b) «asentada a los N ms» con «sitio fresco cambió a los M ms» y «se movió K
+    vez/veces DESPUÉS: asentada falsa»; (c) «coste por sondeo (media/máx ms): sitio · delante · dentro · ventanas»
+    y «sitio fresco a/b ms × n», más «huella de antes N ms»; (d) los «cambió a los N ms» de las navegaciones con
+    redirección (`map_go_to` no pasa por aquí: (d) se mide con la 356, en `Recorrer`); (e) `grep "nadie miraba"`
+    sobre el log de la corrida: tiene que dar **0**. Con eso se fijan `PrimeraHuellaMs` (hoy 400, el de la
+    compuerta) y `RespiroMs` (hoy 250, jkudish), que hasta entonces son **metas, no datos**.
+  - **Lo que la huella barata lee** (`HuellaEnVivo.HuellaBarata`): un `FindAll(Descendants)` con `CacheRequest`
+    de `RuntimeId` + `ControlType` en modo `None` sobre 14 tipos (Button, ListItem, MenuItem, TreeItem, TabItem,
+    Hyperlink, Edit, ComboBox, CheckBox, RadioButton, SplitButton, DataItem, Menu, Window). **Coste sin medir**
+    (D: una llamada entre procesos). Lo de dentro se paga como mucho cada respiro y solo si delante y ventanas no
+    cambiaron; el sitio fresco, como mucho cada respiro. Un `hwnd` de trabajo a cero o una raíz UIA nula **lanzan**
+    con la causa, y la espera lo anota como «no pude mirar: …» y sigue como hoy: aquí un catch mudo convertiría
+    «la ventana se cerró» en «no cambió nada» (patrón nº3).
 
 ## Revisiones
 
@@ -491,7 +533,8 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 
 ## Cierre
 
-- [ ] Fase 0 medida en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba»
+- [x] Fase 0 **escrita**: 355 verde, sabotaje verificado por diff (2026-09-22)
+- [ ] Fase 0 **medida** en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba» — la corre el dueño: esta rama no ejecuta `U.exe`
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C
 - [ ] 351–359 verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO), 360 reservada fuera del contrato
