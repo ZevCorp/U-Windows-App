@@ -1,7 +1,7 @@
 # La distribución se valida entera: la decisión de Jev falla cerrada
 
 Estado: **en construcción** · Spec 046 · 2026-09-22 · Rama `jero/jev-la-distribucion-se-valida-entera` ·
-promesas **344–350 y 386–387** · reescribe la **289** (su última cláusula era la compuerta abierta)
+promesas **345–350 y 386–388** · reescribe la **289** (su última cláusula era la compuerta abierta)
 
 > Rama A de las cuatro que siguen `arquitectura-jev-en-u.md` (22-09), todas desde `main`. Nace de la
 > revisión de `experimento/reemplazo-jeff` (`informe-jev-rapido.md`, 21-09) y de cómo está hecho Jev de
@@ -13,12 +13,12 @@ promesas **344–350 y 386–387** · reescribe la **289** (su última cláusula
 > `5574148` (Felipe, entró a esta rama con el merge `db0cd41`) la **342** («una petición personal
 > explícita se puede guardar…») y la **343** («cada proceso de Ü escribe en su propio archivo de
 > log…»). Comprobado con `git grep` sobre las 45 refs `origin/*` tras `fetch` **(M)**: 344–352 y
-> 384–390 libres. Los nueve de esta spec son **344–350** y, como 351–385 son de las ramas B, C y D,
+> 384–390 libres. Los nueve de esta spec son **345–350 y 386–388** (la 344 la gastó `7380fd8` de `main` la misma tarde; ver Hallazgos) y, como 351–385 son de las ramas B, C y D,
 > **386–387** —los dos siguientes libres después de D—. Nueve números, nueve promesas: lo que la
 > arquitectura numeraba 350 (el clic físico que no cae en Ü) queda fuera, y se dice abajo por qué.
 > Aparte: el checkout principal tiene sin commitear `docs/specs/046-el-decisor-lleva-todo-el-computer-use.md`
 > reservando 335–343 —números que en `main` ya gastaron la 044 (335–340), `f811796` (341) y
-> `5574148` (342–343)—. Propuesta: ese documento pasa a **050** y sus promesas a **388+**; si el
+> `5574148` (342–343)—. Propuesta: ese documento pasa a **050** y sus promesas a **389+**; si el
 > dueño prefiere lo contrario, esta corre a 050 y las promesas se desplazan sin reciclar ninguna. Se
 > le pregunta al abrir el PR.
 >
@@ -89,7 +89,7 @@ El enunciado es el que va **literalmente** en `tests/ContratoDelGrafo/Contrato.c
 
 | # | Promesa | Fase |
 |---|---|---|
-| **344** | la distribución de Jev se valida ENTERA antes de cualquier compuerta: cada probabilidad finita y en [0,1], la suma 1 (±0,02), las claves exactamente las que viajaron —ni una de más ni una de menos—, la elegida el máximo y sin empate, y la confianza finita y en [0,1]; cualquier cosa fuera de forma es «no sé»: no se acciona, el porqué nombra CADA regla que falló con su campo y su valor crudo —no solo la primera—, la decisión conserva la confianza cruda y no ofrece alternativas, y nada se convierte en 0 ni se satura; y un cuerpo de error que no se pudo leer dice por qué en vez de callarlo | 2 |
+| **388** | la distribución de Jev se valida ENTERA antes de cualquier compuerta: cada probabilidad finita y en [0,1], la suma 1 (±0,02), las claves exactamente las que viajaron —ni una de más ni una de menos—, la elegida el máximo y sin empate, y la confianza finita y en [0,1]; cualquier cosa fuera de forma es «no sé»: no se acciona, el porqué nombra CADA regla que falló con su campo y su valor crudo —no solo la primera—, la decisión conserva la confianza cruda y no ofrece alternativas, y nada se convierte en 0 ni se satura; y un cuerpo de error que no se pudo leer dice por qué en vez de callarlo | 2 |
 | **345** | «cumplido» y «peligro» fallan cerrados: si alguna falta, no es número, no es finita o está fuera de [0,1] se toma el caso peor —peligro 1, cumplido 0—, no se acciona, y el porqué dice cuál falta o cuál vino y con qué valor; un 0 solo abre la compuerta cuando Jev lo dijo | 3 |
 | **346** | lo irreversible no se pulsa por decisión: una candidata cuya etiqueta es peligrosa —grabar, guardar, finalizar, borrar, eliminar, enviar, firmar— no se pulsa desde map_decidir ni desde el tramo, ni como elegida ni como segunda mejor, aunque Jev la dé con confianza 0,99 y peligro 0; la mano no la recibe, la cuenta dice cuál se vetó y por qué, el control vuelve con el inventario; y el cuerpo deja de pedirle a Jev «la que menos daño haga» | 5 |
 | **347** | «ninguna» es una opción de la pregunta: además de TODAS las puertas ofrecidas viaja «0) ninguna» —nada de esta pantalla avanza hacia el objetivo— como una opción más del choice; si Jev la elige no se acciona y se dice que no lo ve en esta pantalla, con su probabilidad; y la añade quien pregunta, no CuerpoDeEleccion, así que la 282 sigue tal cual | 1 |
@@ -99,7 +99,7 @@ El enunciado es el que va **literalmente** en `tests/ContratoDelGrafo/Contrato.c
 | **386** | «cumplido» solo con evidencia: un cumplido alto deja de accionar y el tramo para diciendo que Jev cree que ya está —con el porqué del decisor detrás— sin declarar el objetivo cumplido; lo decide el número, no el texto del porqué; y la cuenta del tramo devuelve el turno con lo que hay delante, para que lo compruebe quien sí puede —la llegada o la persona— | 8 |
 | **387** | la masa de los cinco mejores y los tokens son señal, no compuerta: la decisión lleva N, la masa de los 5 mejores y los input_tokens que usage trajo —sin usage, «sin medir»—; los tres salen en la cuenta y en la línea «decisor:», también cuando no se acciona; ninguna decisión cambia por ellos; y «absent» no se pregunta | 9 |
 
-**La que cierra el asunto es la 344**: mientras la respuesta no se lea entera, todo lo demás —vetos,
+**La que cierra el asunto es la 388**: mientras la respuesta no se lea entera, todo lo demás —vetos,
 política, señal— actúa sobre números que pueden no significar nada.
 
 ### La 289, reescrita (el número no se recicla)
@@ -120,7 +120,7 @@ a la 8. Que diga «Jev cree» lo juzga la 386, y solo ella.
 
 | Promesa | Qué cambia en el fixture | Por qué | Enunciado |
 |---|---|---|---|
-| 278, 279, 280 | `RespuestaChoice` (el ayudante común) añade la clave «0) ninguna» con 0 **y las dos nouls a 0,1** | desde la 347 esa clave viaja y la 344 exige que la respuesta traiga **exactamente** las que viajaron; desde la 345 una respuesta sin nouls no acciona, y 278 («buena», `:11642`) y 279 («justa», `:11661`) exigen `Actuar=true` | intacto |
+| 278, 279, 280 | `RespuestaChoice` (el ayudante común) añade la clave «0) ninguna» con 0 **y las dos nouls a 0,1** | desde la 347 esa clave viaja y la 388 exige que la respuesta traiga **exactamente** las que viajaron; desde la 345 una respuesta sin nouls no acciona, y 278 («buena», `:11642`) y 279 («justa», `:11661`) exigen `Actuar=true` | intacto |
 | 292, caso 1 | la decisión falsa lleva `Cumplido = 0,9` (por `DecisionCon`) desde la fase 0; en la fase 8, en el mismo commit que el motivo nuevo, su aserción pasa de `Contains("cumplido")` a `Contains("Jev cree que ya está")` | hoy el caso pasa por la **palabra**, que viene del `Porque` del fixture y sale igual por las dos ramas del tramo (`:299` la relee; el motivo la relaya): no distingue «cumplido» de «no se atrevió». Desde la 386 el número elige la rama y la aserción juzga la rama | intacto: «el decisor dice que el objetivo ya está cumplido» sigue siendo lo que pasa (`Cumplido=0,9`), y la cuenta lo dice como «Jev cree que ya está» |
 | 282 | ninguno | «ninguna» la añade `ElDecisor`, no `CuerpoDeEleccion`; su `criteria.Count == opciones.Length` sigue verde | intacto |
 | 287, 294 | ninguno | sus fixtures pulsan Button/Hyperlink, no filas; «fila 2 (GuiGridFila)» solo sustituye a la etiqueta cuando el tipo es fila (350) | intacto: «la cuenta la nombra por su etiqueta y su número» |
@@ -135,7 +135,7 @@ cada caso del juez afirma el token de **su** regla: así cada sabotaje tiene una
 
 | # | Juez | Sabotaje de una línea (verificado por diff) |
 |---|---|---|
-| 344 | `Elegir("jev", …)` con nouls presentes y bajas en todos los casos, y un transporte que devuelve, uno por caso: `confidence` 95 · 1,01 · 1e400 · −0,01 · «alta» (texto) —**1,0000001 es el contraste, no un fallo**: cae en la tolerancia ≤ 1+1e-6 de la tabla de diseño, se lee como 1 y acciona (fase 0, 2026-09-22)—; una probabilidad NaN (JSON no tiene NaN: llega como texto `"NaN"`); **Σ = 0,95 con TODAS las claves presentes y en rango** (0,85 · 0,10 · «0) ninguna» 0,00) y Σ = 1,10 (0,90 · 0,20 · 0,00); una clave de más («Grabar») y una de menos; la elegida con 0,31 cuando otra tiene 0,58; empate 0,45/0,45. **Todos**: `Actuar=false`, `Alternativas` vacía, `QueNoCuadro` y `Porque` llevan el token de **ese** caso («confidence=95», «Σ=0,95», «Σ=1,10», «sobra «Grabar»», «falta «…»», «choice 0,31 < 0,58», «empate»), `Confianza` conserva el crudo (95; `NaN` cuando no era número). Una respuesta que rompe dos reglas (Σ=0,95 **y** una clave de menos) nombra las dos. Y `ClienteTypeSafe.DetalleDelError(leer)` con un `leer` que lanza devuelve «(no se pudo leer el cuerpo del error: Tipo: mensaje)». Contraste: una respuesta en forma con «0) ninguna» a 0 sí acciona | en `Validar`, la tolerancia de la suma pasa de 0,02 a 10: el caso Σ=0,95 —que solo rompe esa regla— acciona y su `QueNoCuadro` pierde «Σ=0,95» |
+| 388 | `Elegir("jev", …)` con nouls presentes y bajas en todos los casos, y un transporte que devuelve, uno por caso: `confidence` 95 · 1,01 · 1e400 · −0,01 · «alta» (texto) —**1,0000001 es el contraste, no un fallo**: cae en la tolerancia ≤ 1+1e-6 de la tabla de diseño, se lee como 1 y acciona (fase 0, 2026-09-22)—; una probabilidad NaN (JSON no tiene NaN: llega como texto `"NaN"`); **Σ = 0,95 con TODAS las claves presentes y en rango** (0,85 · 0,10 · «0) ninguna» 0,00) y Σ = 1,10 (0,90 · 0,20 · 0,00); una clave de más («Grabar») y una de menos; la elegida con 0,31 cuando otra tiene 0,58; empate 0,45/0,45. **Todos**: `Actuar=false`, `Alternativas` vacía, `QueNoCuadro` y `Porque` llevan el token de **ese** caso («confidence=95», «Σ=0,95», «Σ=1,10», «sobra «Grabar»», «falta «…»», «choice 0,31 < 0,58», «empate»), `Confianza` conserva el crudo (95; `NaN` cuando no era número). Una respuesta que rompe dos reglas (Σ=0,95 **y** una clave de menos) nombra las dos. Y `ClienteTypeSafe.DetalleDelError(leer)` con un `leer` que lanza devuelve «(no se pudo leer el cuerpo del error: Tipo: mensaje)». Contraste: una respuesta en forma con «0) ninguna» a 0 sí acciona | en `Validar`, la tolerancia de la suma pasa de 0,02 a 10: el caso Σ=0,95 —que solo rompe esa regla— acciona y su `QueNoCuadro` pierde «Σ=0,95» |
 | 345 | `Elegir("jev", …)` con la distribución en forma y `peligro` 1,2 · 80 · 1e400 · 1,0000001 · −0,01 · «sí» · ausente, y `cumplido` 1,5 · ausente: `Actuar=false`, `Peligro=1`, `Cumplido=0`, `Porque` con «peligro=80» o «falta «peligro»». Con las dos en [0,1] y bajas, acciona (289). Con `peligro` 0 dicho por Jev, acciona: el 0 vale cuando Jev lo dijo | en `ConJev`, el caso peor deja de ser 1/0 y `Peligro` conserva el crudo (80): solo la 345 se pone roja (la 289 no afirma ese valor) |
 | 346 | `map_decidir` con puertas inyectadas «Nuevo»/«Grabar»/«Buscar» y un decisor falso que da «2) Grabar (Button)» con conf 0,99 y `Peligro=0`: **0 pulsos**, la cuenta lleva «Grabar» y «no se puede deshacer», y el inventario. Con la elegida «1) A» que no está viva y la segunda «2) Guardar» a 0,40: se pulsa A, **no** Guardar, y la cuenta dice que se vetó. `InstruccionesDeLaPuerta` no contiene «menos daño». Y por el tramo (`MapaParaTramo`) igual: 0 pulsos y para | quitar `PuertasPeligrosas.EsPeligrosa` del filtro de candidatas |
 | 347 | `Elegir("jev", …)` con transporte que **captura** el cuerpo: `criteria` = las ofrecidas + «0) ninguna…», y ni una más; `state` no lista «ninguna» como puerta; la respuesta con `choice` = ninguna a 0,80 → `Actuar=false`, `Porque` con «no lo veo en esta pantalla» y «0,80». `CuerpoDeEleccion` con 3 opciones sigue dando 3 criterios (282) | no añadir `IdNinguna` a la lista que viaja |
@@ -161,7 +161,7 @@ FILTRAR  PoliticaDeLoQueViaja (349): sapgui:// sin habilitar u origin vetado ─
    ▼
 DECIDIR  Jev: 1 POST = puerta(choice, + «0) ninguna») + cumplido(noul) + peligro(noul)
    ▼
-VALIDAR  RespuestaDeJev.Validar(json, idsQueViajaron): la distribución ENTERA (344), TODAS las violaciones nombradas
+VALIDAR  RespuestaDeJev.Validar(json, idsQueViajaron): la distribución ENTERA (388), TODAS las violaciones nombradas
    │     las nouls las juzga Noul → double? y el caso peor (345)
    │     fuera de forma ──▶ DecisionDeUnPaso.No con QueNoCuadro=«campo=valor · campo=valor», sin Alternativas
    │     en forma ──▶ compuertas, todas cerradas: ofrecida · ninguna (347) · cumplido≥0,70 (386: «Jev cree»)
@@ -208,7 +208,7 @@ entiende, y lo que no se entiende no acciona.
 
 | Campo | Regla | Tolerancia | Quién |
 |---|---|---|---|
-| cada `probabilities[k]` | número, finito, en [0,1] | ≤ 1 + 1e-6 se lee como 1 | `RespuestaDeJev.Validar` (344) |
+| cada `probabilities[k]` | número, finito, en [0,1] | ≤ 1 + 1e-6 se lee como 1 | `RespuestaDeJev.Validar` (388) |
 | claves de `probabilities` | **exactamente** las que viajaron (ofrecidas que viajan + «0) ninguna») | ordinal, por el mismo camino con que se construyó la lista que viajó (aprendizaje nº16); el porqué nombra la clave que sobra o falta (la 278 exige ver «Grabar») | ídem |
 | `Σ probabilities` | 1 | ± 0,02 (jev-ultrafast `model.py:38`, que corre contra la API real) | ídem |
 | `choice` | = la clave de mayor probabilidad | ≥ máximo − 1e-6; si **otra** clave también alcanza el máximo, empate → no se acciona | ídem |
@@ -330,7 +330,7 @@ Tipo: mensaje)». Es la única línea de la rama en el único sitio que toca la 
 ## Las fases
 
 Una fase = un commit que pone verde **una** promesa sin romper las anteriores. El orden lo dictan las
-dependencias: la «ninguna» tiene que viajar antes de que la 344 exija que la respuesta la traiga. La
+dependencias: la «ninguna» tiene que viajar antes de que la 388 exija que la respuesta la traiga. La
 289 reescrita **está roja desde la fase 0 hasta la 3** por su cláusula de ausencia, que vive en
 `Noul` (fase 3); cada fase lo dice.
 
@@ -338,10 +338,10 @@ dependencias: la «ninguna» tiene que viajar antes de que la 344 exija que la r
 
 | | |
 |---|---|
-| **Deja** | 344–350 y 386–387 escritas y `PENDIENTE`; la 289 reescrita con su fixture (Σ = 1, `viejo` invertido); `RespuestaChoice` con «0) ninguna» **y las dos nouls a 0,1**; el caso 1 de la 292 con `Cumplido=0,9` (su aserción nueva llega en la fase 8) |
+| **Deja** | 345–350 y 386–388 escritas y `PENDIENTE`; la 289 reescrita con su fixture (Σ = 1, `viejo` invertido); `RespuestaChoice` con «0) ninguna» **y las dos nouls a 0,1**; el caso 1 de la 292 con `Cumplido=0,9` (su aserción nueva llega en la fase 8) |
 | **Toca** | `tests/ContratoDelGrafo/Contrato.cs` (registro bajo `// ── Spec 046`, cuerpos en su región antes de `Debe`), `docs/specs/036-…md` (nota de la 289) |
-| **Terminado** | `contrato-del-grafo.ps1` → **CONTRATO ROTO** exactamente por 344–350, 386–387 y la 289; 343 y anteriores intactas (la 292 sigue verde: `Cumplido=0,9` elige la misma rama que hoy elige la subcadena) |
-| **Hecho** | 2026-09-22. Veredicto literal: `CONTRATO ROTO: 23 promesa(s) incumplida(s). El cambio no puede entrar así.` Rojas **exactamente** 289, 344, 345, 346, 347, 348, 349, 350, 386, 387; **280 verdes**; 7 `PENDIENTE` (344, 345, 347, 348, 349, 350, 387) y 3 rojas por aserción contra el código de hoy (289: `viejo` acciona y no dice cuál falta; 346: pulsa «Grabar» elegida, pulsa «Guardar» como segunda, y el tramo pulsa «Grabar» tres veces; 386: la palabra «cumplido» del porqué elige la rama). El **23** es lo que el arnés cuenta desde siempre: aserciones fallidas, no promesas (16 aserciones + 7 pendientes) |
+| **Terminado** | `contrato-del-grafo.ps1` → **CONTRATO ROTO** exactamente por 345–350 y 386–388 y la 289; 343 y anteriores intactas (la 292 sigue verde: `Cumplido=0,9` elige la misma rama que hoy elige la subcadena) |
+| **Hecho** | 2026-09-22. Veredicto literal: `CONTRATO ROTO: 23 promesa(s) incumplida(s). El cambio no puede entrar así.` Rojas **exactamente** 289, 388, 345, 346, 347, 348, 349, 350, 386, 387; **280 verdes**; 7 `PENDIENTE` (388, 345, 347, 348, 349, 350, 387) y 3 rojas por aserción contra el código de hoy (289: `viejo` acciona y no dice cuál falta; 346: pulsa «Grabar» elegida, pulsa «Guardar» como segunda, y el tramo pulsa «Grabar» tres veces; 386: la palabra «cumplido» del porqué elige la rama). El **23** es lo que el arnés cuenta desde siempre: aserciones fallidas, no promesas (16 aserciones + 7 pendientes) |
 
 ### Fase 1 — «ninguna» viaja en la pregunta
 
@@ -351,17 +351,17 @@ dependencias: la «ninguna» tiene que viajar antes de que la 344 exija que la r
 | **Toca** | `Decision/PeticionASystemOne.cs` (`IdNinguna`; sin «menos daño» lo hace la fase 5), `Decision/ElDecisor.cs` (la añade a lo que viaja; la acepta en la respuesta) |
 | **Terminado** | 347 verde; 282 intacta byte a byte; 278–280 intactas con el ayudante ya cambiado; 289 roja (fase 3) |
 | **Sitios** | 1 lista que viaja (`ConJev`); `CuerpoDeEleccion` no cambia |
-| **Hecho** | 2026-09-22. `grep CuerpoDeEleccion(` en `windows-client/src`: **1** llamador de producción (`ElDecisor.cs:146`), y es el que ahora manda `puertas + IdNinguna`; el `state` sigue recibiendo solo `puertas`. La sonda `sondas/DelDecisor/Programa.cs:62` arma su propio cuerpo sin «ninguna» —mide latencia, no decisión— y queda fuera. Veredicto literal: `CONTRATO ROTO: 22 promesa(s) incumplida(s). El cambio no puede entrar así.` — rojas exactamente 289, 344, 345, 346, 348, 349, 350, 386, 387 (las de las fases que siguen); 347 ✔, 282 ✔ sin tocarla, 278–280 ✔. Voz: `VOZ ÍNTEGRA: el collar promete lo que dice prometer.` **Sabotaje** (M): quitar `queViaja.Add(PeticionASystemOne.IdNinguna)` (diff contra copia: distinto) → `CONTRATO ROTO: 23 promesa(s)`, con 347 roja por «criteria = las ofrecidas + «0) ninguna», y ni una más; viajaron [1) Nuevo (Button) · 2) Buscar (Button)]»; restaurada (diff idéntico), recompilada: 22 otra vez. El contrato corrió con `TEMP` propio porque `%TEMP%\u-contrato` estaba bloqueado por un `contrato-del-grafo` de otro worktree (MSB3027): el scratch del script es compartido entre worktrees, y eso es un hallazgo aparte |
+| **Hecho** | 2026-09-22. `grep CuerpoDeEleccion(` en `windows-client/src`: **1** llamador de producción (`ElDecisor.cs:146`), y es el que ahora manda `puertas + IdNinguna`; el `state` sigue recibiendo solo `puertas`. La sonda `sondas/DelDecisor/Programa.cs:62` arma su propio cuerpo sin «ninguna» —mide latencia, no decisión— y queda fuera. Veredicto literal: `CONTRATO ROTO: 22 promesa(s) incumplida(s). El cambio no puede entrar así.` — rojas exactamente 289, 388, 345, 346, 348, 349, 350, 386, 387 (las de las fases que siguen); 347 ✔, 282 ✔ sin tocarla, 278–280 ✔. Voz: `VOZ ÍNTEGRA: el collar promete lo que dice prometer.` **Sabotaje** (M): quitar `queViaja.Add(PeticionASystemOne.IdNinguna)` (diff contra copia: distinto) → `CONTRATO ROTO: 23 promesa(s)`, con 347 roja por «criteria = las ofrecidas + «0) ninguna», y ni una más; viajaron [1) Nuevo (Button) · 2) Buscar (Button)]»; restaurada (diff idéntico), recompilada: 22 otra vez. El contrato corrió con `TEMP` propio porque `%TEMP%\u-contrato` estaba bloqueado por un `contrato-del-grafo` de otro worktree (MSB3027): el scratch del script es compartido entre worktrees, y eso es un hallazgo aparte |
 
 ### Fase 2 — la distribución se valida entera
 
 | | |
 |---|---|
-| **Promesa** | 344 |
+| **Promesa** | 388 |
 | **Toca** | `Decision/ElDecisor.cs` (`RespuestaDeJev.Validar` con todas las violaciones, `QueNoCuadro`, `Confianza` cruda, sin alternativas), `Decision/ClienteTypeSafe.cs:80-84` (`DetalleDelError`) |
-| **Terminado** | 344 verde; 278, 279, 280 intactas; **289 sigue ROJA hasta la fase 3** (su caso `viejo` es la cláusula de ausencia, y `Validar` no la toca) |
+| **Terminado** | 388 verde; 278, 279, 280 intactas; **289 sigue ROJA hasta la fase 3** (su caso `viejo` es la cláusula de ausencia, y `Validar` no la toca) |
 | **Sitios** | 2 lecturas numéricas sin rango hoy (`confidence` :175-177, `probabilities` :181) → 1 validador; 1 catch mudo. `Noul` (:236-239) es de la fase 3 |
-| **Hecho** | 2026-09-22. `RespuestaDeJev.Validar(JsonElement puerta, queViaja)` en `ElDecisor.cs`: lee `choice`, `confidence` y `probabilities` y devuelve `Violaciones` (todas), `Confianza` cruda (`NaN` si no era número, `Infinity` si vino `1e400` —**(M)** sonda: `Utf8JsonReader` lee `1e400` como `Infinity` sin lanzar—) y `Alternativas` vacía si no cuadra; la suma y el máximo solo se juzgan cuando cada valor se pudo leer (la suma de un `NaN` no dice nada de la distribución, y esa clave ya se nombró). `ConJev` devuelve `No(«la respuesta de Jev no cuadra y no se acciona: …»)` con `QueNoCuadro` antes de cualquier compuerta. `ClienteTypeSafe.DetalleDelError(Func<string>)` sustituye el `catch { }`. **Sitios (M)**: `grep "confidence"\|"probabilities"` en producción → solo `Validar` (`windows-graph/src/Contracts.cs:389` es el contrato de Graph, no Jev); `catch { }` en `Decision/` → 0. Veredicto literal: `CONTRATO ROTO: 41 promesa(s) incumplida(s). El cambio no puede entrar así.` — rojas exactamente 289, 345, 346, 348, 349, 350, 386, 387; **282 verdes**; 344 ✔, 347 ✔, 278–280 ✔, 282 ✔. El salto 22 → 41 es la 345: dejó de ser `PENDIENTE` (existe `QueNoCuadro`) y corre sus 21 aserciones contra el `Noul` de hoy — está roja por su razón y la 289 por la suya (`viejo` acciona: `Validar` no toca las nouls). Voz: `VOZ ÍNTEGRA: el collar promete lo que dice prometer.` **Sabotaje** (M): `ToleranciaDeLaSuma` 0,02 → 10 (diff contra copia: `95c95`, una línea) → `CONTRATO ROTO: 51`, 344 roja con «Σ=0,95: no se acciona (salió Actuar=True)», «QueNoCuadro … dijo «»», «Σ=1,10: no se acciona» y el caso doble conservando «falta «2) Buscar (Button)»» pero sin «Σ=0.95» — lo que la revisión 2 anticipó. Restaurada (`fc /B`: sin diferencias), recompilada y juzgada: 41 otra vez, 344 ✔. **Dos trampas del arnés que se pisaron y se dicen**: (1) `sed -i` de Git Bash pasó el archivo de CRLF a LF —el diff daba `1,507c1,507`, no una línea— y se restauró desde la copia antes de aplicar el sabotaje con una edición que conserva bytes; (2) restaurar con `Copy-Item` conserva la **fecha** del `.bak`, anterior al sabotaje, así que el build incremental no recompiló y el primer veredicto «restaurado» seguía siendo el saboteado (51, 344 roja) con `fc` diciendo «sin diferencias»; se comprobó con las fechas (`.cs` 11:03:54 < `U.dll` 11:04:37) y se resolvió tocando la fecha del archivo. **Un diff idéntico no basta: hay que ver que el binario se rehizo.** |
+| **Hecho** | 2026-09-22. `RespuestaDeJev.Validar(JsonElement puerta, queViaja)` en `ElDecisor.cs`: lee `choice`, `confidence` y `probabilities` y devuelve `Violaciones` (todas), `Confianza` cruda (`NaN` si no era número, `Infinity` si vino `1e400` —**(M)** sonda: `Utf8JsonReader` lee `1e400` como `Infinity` sin lanzar—) y `Alternativas` vacía si no cuadra; la suma y el máximo solo se juzgan cuando cada valor se pudo leer (la suma de un `NaN` no dice nada de la distribución, y esa clave ya se nombró). `ConJev` devuelve `No(«la respuesta de Jev no cuadra y no se acciona: …»)` con `QueNoCuadro` antes de cualquier compuerta. `ClienteTypeSafe.DetalleDelError(Func<string>)` sustituye el `catch { }`. **Sitios (M)**: `grep "confidence"\|"probabilities"` en producción → solo `Validar` (`windows-graph/src/Contracts.cs:389` es el contrato de Graph, no Jev); `catch { }` en `Decision/` → 0. Veredicto literal: `CONTRATO ROTO: 41 promesa(s) incumplida(s). El cambio no puede entrar así.` — rojas exactamente 289, 345, 346, 348, 349, 350, 386, 387; **282 verdes**; 388 ✔, 347 ✔, 278–280 ✔, 282 ✔. El salto 22 → 41 es la 345: dejó de ser `PENDIENTE` (existe `QueNoCuadro`) y corre sus 21 aserciones contra el `Noul` de hoy — está roja por su razón y la 289 por la suya (`viejo` acciona: `Validar` no toca las nouls). Voz: `VOZ ÍNTEGRA: el collar promete lo que dice prometer.` **Sabotaje** (M): `ToleranciaDeLaSuma` 0,02 → 10 (diff contra copia: `95c95`, una línea) → `CONTRATO ROTO: 51`, 388 roja con «Σ=0,95: no se acciona (salió Actuar=True)», «QueNoCuadro … dijo «»», «Σ=1,10: no se acciona» y el caso doble conservando «falta «2) Buscar (Button)»» pero sin «Σ=0.95» — lo que la revisión 2 anticipó. Restaurada (`fc /B`: sin diferencias), recompilada y juzgada: 41 otra vez, 388 ✔. **Dos trampas del arnés que se pisaron y se dicen**: (1) `sed -i` de Git Bash pasó el archivo de CRLF a LF —el diff daba `1,507c1,507`, no una línea— y se restauró desde la copia antes de aplicar el sabotaje con una edición que conserva bytes; (2) restaurar con `Copy-Item` conserva la **fecha** del `.bak`, anterior al sabotaje, así que el build incremental no recompiló y el primer veredicto «restaurado» seguía siendo el saboteado (51, 388 roja) con `fc` diciendo «sin diferencias»; se comprobó con las fechas (`.cs` 11:03:54 < `U.dll` 11:04:37) y se resolvió tocando la fecha del archivo. **Un diff idéntico no basta: hay que ver que el binario se rehizo.** |
 
 ### Fase 3 — las nouls fallan cerradas
 
@@ -369,7 +369,7 @@ dependencias: la «ninguna» tiene que viajar antes de que la 344 exija que la r
 |---|---|
 | **Promesa** | 345 (y la 289 reescrita pasa a verde) |
 | **Toca** | `Decision/ElDecisor.cs` (`Noul` → `double?`, deja de devolver 0 por ausencia; caso peor 1/0 en `ConJev` con el crudo en `QueNoCuadro`) |
-| **Terminado** | 345 y 289 verdes; 344 intacta; 278, 279 intactas (el ayudante ya manda nouls) |
+| **Terminado** | 345 y 289 verdes; 388 intacta; 278, 279 intactas (el ayudante ya manda nouls) |
 | **Sitios** | 1 (`Noul`), 2 llamadores (cumplido, peligro) |
 
 ### Fase 4 — el modelo configurado llega al cuerpo
@@ -423,7 +423,7 @@ dependencias: la «ninguna» tiene que viajar antes de que la 344 exija que la r
 |---|---|
 | **Promesa** | 387 |
 | **Toca** | `Decision/ElDecisor.cs` (`N`, `Masa5`, `InputTokens` al parsear), `Mcp/SurfaceMapTools.cs:293-295, 340-343` (una composición para la línea y la cuenta) |
-| **Terminado** | 387 verde; 344–350 y 386 intactas; `contrato-del-grafo.ps1` → **CONTRATO INTACTO** |
+| **Terminado** | 387 verde; 345–350, 386 y 388 intactas; `contrato-del-grafo.ps1` → **CONTRATO INTACTO** |
 | **Sitios** | 1 lectura de `usage` (hoy 0); 1 composición para 2 salidas |
 
 **¿Núcleo congelado?** No: nada de `nucleo/`. `PuertasPeligrosas`, `Nombres` y `SurfacePlace` no cambian.
@@ -457,6 +457,11 @@ Se rellena durante la implementación. Lo encontrado al especificar, con fecha:
   mediodía: la spec pasa a 344–350 y 386–387. Dos veces en un día el número reservado en un documento
   de scratchpad dejó de estar libre: **reservar no es gastar**; se comprueba con `git grep` en el
   momento de escribir el registro, no antes.
+- **2026-09-22, tarde.** Tercera vez: `7380fd8` (`main`, memoria de voz) gastó la **344** mientras esta rama
+  ya la tenía escrita, commiteada y verde (fase 2). Al traer `main` el conflicto fue literal: dos `Prueba("344.`.
+  Como `main` no se toca, la de esta spec pasa a **388** (libre en las 45 refs `origin/*`, **(M)**) y los
+  commits `f1d0743`, `3317a06` la siguen citando como 344: lo que dicen esos mensajes es la promesa que hoy
+  se llama 388. La propuesta para el documento del dueño (§ arriba) pasa de 388+ a 389+.
 - **2026-09-22.** `arquitectura-jev-en-u.md` §2.1 exigía `confidence = probabilities[choice] ± 0,02`;
   el ejemplo documentado (0,91 / 0,93) y la definición de TypeSafe lo desmienten. No se exige.
 - **2026-09-22.** La 282 asegura `criteria.Count == opciones.Length`: «ninguna» la tiene que añadir
@@ -466,7 +471,7 @@ Se rellena durante la implementación. Lo encontrado al especificar, con fecha:
   (`Contrato.cs:12180`: el `Cumplido` no se pone), y esa palabra sale por las dos ramas del tramo: el
   caso no distinguía nada. Quitar la subcadena sin tocar ese fixture la rompe; tocarlo solo con el
   dato la deja verde por la razón equivocada.
-- **2026-09-22.** `RespuestaChoice` (`Contrato.cs:11532`) es el ayudante de 275–281: con la 344 y la
+- **2026-09-22.** `RespuestaChoice` (`Contrato.cs:11532`) es el ayudante de 275–281: con la 388 y la
   347 tiene que mandar la clave «ninguna», y con la 345 **las dos nouls**, o 278 y 279 caen (afirman
   `Actuar=true`). La primera versión de esta spec vio la clave y no las nouls.
 - **2026-09-22.** `GetMethod("Elegir")` sin tipos, 6 sitios: una sobrecarga de `Elegir` habría puesto
@@ -482,7 +487,7 @@ Se rellena durante la implementación. Lo encontrado al especificar, con fecha:
   JSON crudo habría salido verde **con la fuga presente** (patrón nº7: un criterio que no puede fallar con
   el bug no es un criterio). Los jueces de la 349 y la 350 miran el cuerpo **decodificado**
   (`TextoDelCuerpo`: `state`, `instructions` y las claves de `criteria`).
-- **2026-09-22, fase 0.** El primer juez de la 344 listaba 1,0000001 entre lo que no cuadra; la tabla de
+- **2026-09-22, fase 0.** El primer juez de la 388 listaba 1,0000001 entre lo que no cuadra; la tabla de
   diseño lo lee como 1 (tolerancia ≤ 1+1e-6). Manda la tabla: 1,0000001 es el caso de contraste que
   acciona, y el «fuera de rango por arriba» se juzga con 1,01. Lo mismo vale para `peligro` 1,0000001 en
   la 345: se lee como 1, que cierra la compuerta.
@@ -498,13 +503,13 @@ medido está en la tabla del diagnóstico. **Ninguna resultó falsa.**
 | # | Decía la spec | Refutación | Comprobado | Qué cambió |
 |---|---|---|---|---|
 | 1 | la larga era una sobrecarga `Elegir(…, modelo, politica)` y «275–281 y 290 intactas» en la fase 4 | `GetMethod("Elegir")` sin tipos lanza `AmbiguousMatchException` con dos métodos del mismo nombre | **(M)** sonda en PowerShell; 6 sitios en el contrato; la excepción cae en `Prueba` y cuenta como fallo; la rama del dueño usa `ElegirConModelo` | la larga se llama `ElegirConModelo`; la 348 lo dice en su enunciado («el ÚNICO método con ese nombre»); fase 4 y fixtures ajenos |
-| 2 | el sabotaje de la 344 era «tolerancia 0,02 → 10 (el caso Σ=0,95 acciona)» y el caso se construía «solo con la elegida» | ese caso rompe dos reglas (suma y claves exactas); con la tolerancia saboteada la clave que falta sigue rechazando: el sabotaje no se aplica y el contrato queda INTACTO —el sabotaje fantasma del 2026-08-21— | **(M)** el único Σ=0,95 del contrato es `Respuesta()` de la 289 con una sola clave (`:12037-12045`) | el caso de suma lleva **todas** las claves en rango (0,85 · 0,10 · 0,00); `Validar` reporta **cada** violación y cada caso afirma su token; la 344 lo dice en su enunciado |
+| 2 | el sabotaje de la 388 era «tolerancia 0,02 → 10 (el caso Σ=0,95 acciona)» y el caso se construía «solo con la elegida» | ese caso rompe dos reglas (suma y claves exactas); con la tolerancia saboteada la clave que falta sigue rechazando: el sabotaje no se aplica y el contrato queda INTACTO —el sabotaje fantasma del 2026-08-21— | **(M)** el único Σ=0,95 del contrato es `Respuesta()` de la 289 con una sola clave (`:12037-12045`) | el caso de suma lleva **todas** las claves en rango (0,85 · 0,10 · 0,00); `Validar` reporta **cada** violación y cada caso afirma su token; la 388 lo dice en su enunciado |
 | 3 | las nouls se validaban en `Validar` (fase 2) y la fase 2 terminaba con «289 intacta» mientras la fase 3 decía «289 pasa a verde» | las dos frases no pueden ser verdad a la vez; y si `Validar` rechaza la ausencia, `Noul` nunca corre con una ausente y su sabotaje queda verde | **(M)** líneas 135-136, 184, 113, 301, 308-310 de la primera versión | la ausencia vive en `Noul` → `double?` (fase 3); **289 roja de la fase 0 a la 3**, dicho en cada fase; sabotaje de la 345 = el caso peor vuelve al crudo (solo la 345); el de `Noul` es el de la 289 y pone rojas 289 y 345, declarado |
 | 4 | el tramo paraba con «Jev cree que ya está ({c})…» sin el porqué, la 386 decía «nunca que el objetivo está cumplido», y «292 intacta» | el caso 1 de la 292 juzga la **palabra** (`c1.Contains("cumplido")`), que solo puede venir del motivo; el motivo nuevo la borra y la 292 se pone roja; y el «nunca» choca con el propio mensaje del decisor | **(M)** `Contrato.cs:12178-12180`; `ElTramo.cs:157-159, 186-188, 210` | el motivo lleva el porqué detrás («Jev cree que ya está: {p.Porque}»); la 386 promete que el **tramo no declara éxito**, sin el «nunca»; el caso 1 de la 292 pasa a afirmar la rama (fase 8, fixtures ajenos) |
 | 5 | en `sapgui://` sin habilitar «decide la regla local diciendo por qué», y eso era fallar cerrado | es cambiar de juez: `Simulado` acciona con 1,00 por una palabra (y ya accionó «Detalles» sobre el Explorador), mientras el interruptor dice «encendido: jev» | **(M)** `ElDecisor.cs:251-259, 283-297`; `InterruptorDelDecisor.cs:70` | `No("sapgui:// sin U_DECISOR_SAP_TEXTO: no se manda texto a Jev y no decido por regla local. Decide Luna.")`; `Simulado` solo con `quien == "simulado"`; desviación declarada frente a la arquitectura §1/§2.6; la 349 lo dice en su enunciado |
 | 6 | la política miraba solo el prefijo de la ubicación; «SAP no manda, sin vetos» por defecto; el portal se vetaba solo si el dueño rellenaba una variable | el cuerpo lleva la ubicación entera (en `uia://` el pathname es el título vivo), el objetivo, y las etiquetas de cualquier app; un veto por defecto vacío no es fallar cerrado | **(M)** `PeticionASystemOne.cs:130-131, 140`; `UiaSurface.cs:245`; `SurfacePlace.cs:21`. Que lleven nombres es **(D)** | de la ubicación viaja solo el **origin** (`SurfacePlace.OriginOf`); `VetadosPorDefecto` es una constante no vacía; el objetivo se anota como riesgo aceptado; la tabla dice que en `uia://`/`web://` las etiquetas **sí salen** para que el dueño lo acepte por escrito; la 349 lo dice en su enunciado |
 | 7 | la 350 limpiaba la línea `decisor:` y solo reconocía las `mano:` de `map_take` como hallazgo | la etiqueta elegida sale igual por el relato de `map_decidir` y por la línea `paso k:` del tramo (log y notch), exigidas por 287 y 294 | **(M)** `SurfaceMapTools.cs:334-340`; `ElTramo.cs:203-208`; `Contrato.cs:782, :789` | la 350 cubre las tres líneas: una fila se nombra «fila N (Tipo)» en el relato y en el `Paso` del tramo, desde **1 sitio** (`UnPasoDecidido`); 287 y 294 en fixtures ajenos (sin filas: intactas) |
-| — | promesas 342–350 | (no era una refutación) el merge de `origin/main` gastó 342 y 343 | **(M)** `git grep` sobre 45 refs | 344–350 y 386–387 |
+| — | promesas 342–350 | (no era una refutación) el merge de `origin/main` gastó 342 y 343 | **(M)** `git grep` sobre 45 refs | 345–350 y 386–388 |
 | — | `RespuestaChoice` añadía «ninguna» | (encontrado al comprobar la 3) 278 y 279 afirman `Actuar=true` con ese ayudante, que no manda nouls | **(M)** `Contrato.cs:11532-11540, :11642, :11661` | el ayudante añade también las dos nouls a 0,1 |
 
 ## Nivel 4, pendiente (no lo corre esta sesión: no se ejecuta U.exe ni se llama a TypeSafe)

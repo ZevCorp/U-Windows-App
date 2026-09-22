@@ -62,7 +62,7 @@ public sealed class ConversacionPersonal
         }
     }
 
-    public string Contexto(int maxTurnos = 28, int maxCaracteres = 9000)
+    public string Contexto(int maxTurnos = 56, int maxCaracteres = 18000)
     {
         lock (Candado)
         {

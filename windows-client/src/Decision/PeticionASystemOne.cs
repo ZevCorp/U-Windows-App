@@ -51,7 +51,7 @@ public static class PeticionASystemOne
     /// Jev pueda decir que nada de esta pantalla avanza hacia el objetivo, en vez de tener que elegir una puerta a
     /// la fuerza. La añade quien pregunta (<see cref="ElDecisor"/>), no <see cref="CuerpoDeEleccion"/>: la 282 exige
     /// que el cuerpo lleve exactamente las opciones que se le dan. El «0)» no choca con la numeración «1)…» de las
-    /// puertas del inventario. El texto es el que el contrato manda en sus fixtures: si difiere, la 344 rechaza la
+    /// puertas del inventario. El texto es el que el contrato manda en sus fixtures: si difiere, la 388 rechaza la
     /// respuesta por una clave que no viajó (2026-09-22).
     /// </summary>
     public const string IdNinguna = "0) ninguna: nada de esta pantalla avanza hacia el objetivo";

@@ -751,6 +751,12 @@ public sealed class ConversacionEnVivo : IDisposable
             cuando una pregunta dependa de lo que ya hablamos, de quién es el usuario, de sus preferencias
             o de un compromiso anterior. Los recordatorios pendientes que aparecen en la memoria son contexto activo: si preguntan qué estábamos haciendo, inclúyelos sin decir que no constan. Si falta un dato pertinente, llama tú mismo a memory_recall:
             el usuario no tiene que pedírtelo de forma explícita.
+          · PREGUNTAS DE MEMORIA: ante «qué sabes de mí», «qué recuerdas», «¿te acuerdas de…?»,
+            «¿de qué hablábamos?» o una pregunta equivalente, tu PRIMERA ACCIÓN es consultar
+            memory_recall o usar el hilo durable que ya está cargado. No emitas una respuesta provisional
+            como «no recuerdo», «solo sé lo de este chat» o «no me consta» antes de recibir el resultado.
+            Espera la herramienta y responde una sola vez con lo que sí encontraste; si no hay nada,
+            dilo después de haber comprobado la memoria.
           · CUANDO TE EXPLIQUEN QUÉ ES ALGO O PARA QUÉ SIRVE —«esto es el número de factura», «aquí
             se radican los pacientes», «este botón sirve para X cuando Y»— eso es una lección, no
             una orden de acción: crea un RECUERDO con map_esto_es. No la resumas: «aquí va el
@@ -1183,7 +1189,10 @@ public sealed class ConversacionEnVivo : IDisposable
         Fn("memory_recall", "CONSULTA LA MEMORIA PERSONAL que ya tienes del usuario. Úsala de forma natural cuando "
             + "una respuesta dependa de algo que hablaron antes, una preferencia, un dato personal o un compromiso, "
             + "aunque el usuario no diga «ve a tu memoria». Al volver a abrir la voz, el hilo reciente ya viene "
-            + "cargado: continúa desde él y trata los recordatorios pendientes como contexto inmediato. No la uses para recuerdos ligados a una pantalla: para esos está map_recuerdos.",
+            + "cargado: continúa desde él y trata los recordatorios pendientes como contexto inmediato. Ante "
+            + "«qué sabes de mí», «qué recuerdas» o «de qué hablábamos», LLÁMALA ANTES DE HABLAR y espera "
+            + "el resultado: nunca digas que no recuerdas como respuesta provisional. No la uses para recuerdos "
+            + "ligados a una pantalla: para esos está map_recuerdos.",
             ("query", "Qué quieres recordar. Vacío = contexto personal disponible.")),
 
         // SOBRE Ü MISMO, no sobre lo que hay en pantalla. Van aparte de las map_*/file_* —esas
@@ -1905,6 +1914,7 @@ public sealed class ConversacionEnVivo : IDisposable
                 if (_fraseU.Length > 0) LogBus.Log("voz-viva", $"Ü dijo: {_fraseU}");
                 if (_fraseUsuario.Length > 0) LogBus.Log("voz-viva", $"usuario dijo: {_fraseUsuario}");
                 GuardarPeticionPersonalSiLaPidio(_fraseUsuario.ToString());
+                GuardarDetallePersonalSiEsRelevante(_fraseUsuario.ToString());
                 Conversacion?.Agregar("usuario", _fraseUsuario.ToString());
                 Conversacion?.Agregar("asistente", _fraseU.ToString());
                 // LO QUE EL HUMANO DIJO, PARA QUIEN ESTÉ APRENDIENDO. Mientras se enseña con 🎓,
@@ -2027,6 +2037,53 @@ public sealed class ConversacionEnVivo : IDisposable
         catch (Exception e)
         {
             LogBus.Log("memoria", $"voz: no pude guardar la petición personal automática: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Guarda detalles personales de alta confianza aunque no lleven el verbo «recordar»: gustos,
+    /// preferencias, sueños, relaciones de trabajo y datos que el usuario cuenta espontáneamente.
+    /// El modelo puede enriquecerlos después, pero la captura inicial no depende de que decida llamar
+    /// una herramienta a tiempo.
+    /// </summary>
+    private void GuardarDetallePersonalSiEsRelevante(string texto)
+    {
+        if (Memoria == null || string.IsNullOrWhiteSpace(texto)) return;
+        string bajo = texto.Trim().ToLowerInvariant();
+        if (bajo.Length < 12 || bajo.Length > 900) return;
+        if (bajo.Contains("recuerda", StringComparison.Ordinal)
+            || bajo.Contains("recuérd", StringComparison.Ordinal)
+            || bajo.Contains("busca en memoria", StringComparison.Ordinal)
+            || bajo.Contains("¿", StringComparison.Ordinal)
+            || bajo.StartsWith("qué ", StringComparison.Ordinal)
+            || bajo.StartsWith("como ", StringComparison.Ordinal)
+            || bajo.StartsWith("cómo ", StringComparison.Ordinal)) return;
+
+        bool datoPersonal = bajo.Contains("me gusta", StringComparison.Ordinal)
+            || bajo.Contains("me encant", StringComparison.Ordinal)
+            || bajo.Contains("prefiero", StringComparison.Ordinal)
+            || bajo.Contains("mi sueño", StringComparison.Ordinal)
+            || bajo.Contains("quisiera comprar", StringComparison.Ordinal)
+            || bajo.Contains("quiero comprar", StringComparison.Ordinal)
+            || bajo.Contains("tengo un ", StringComparison.Ordinal)
+            || bajo.Contains("tengo una ", StringComparison.Ordinal)
+            || bajo.Contains("tengo dos ", StringComparison.Ordinal)
+            || bajo.Contains("soy ", StringComparison.Ordinal)
+            || bajo.Contains("vivo en ", StringComparison.Ordinal)
+            || bajo.Contains("trabajo en ", StringComparison.Ordinal)
+            || bajo.Contains("mi equipo", StringComparison.Ordinal)
+            || bajo.Contains("mi empresa", StringComparison.Ordinal)
+            || bajo.Contains("mi agencia", StringComparison.Ordinal);
+        if (!datoPersonal) return;
+
+        try
+        {
+            var resultado = Memoria.EjecutarAsync(texto.Trim(), CancellationToken.None).GetAwaiter().GetResult();
+            LogBus.Log("memoria", $"voz: {(resultado.Ok ? "detalle automático guardado" : "detalle no guardado")} · {resultado.Kind} · {resultado.Response}");
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("memoria", $"voz: no pude guardar el detalle personal automático: {e.Message}");
         }
     }
 
@@ -2361,7 +2418,7 @@ public sealed class ConversacionEnVivo : IDisposable
             if (!string.IsNullOrWhiteSpace(contexto))
                 instrucciones += "\n\nMEMORIA PERSONAL DISPONIBLE (úsala solo si es pertinente; no inventes). Los [recordatorio ...] pendientes son compromisos activos y debes reconocerlos si el usuario pregunta por el hilo: \n" + contexto;
             if (!string.IsNullOrWhiteSpace(hilo))
-                instrucciones += "\n\nHILO CONVERSACIONAL RECIENTE (continúa naturalmente desde aquí; no pidas al usuario que te repita esto):\n" + hilo;
+                instrucciones += "\n\nHILO CONVERSACIONAL DURABLE (continúa naturalmente desde aquí, incluso después de apagar y volver a encender el micrófono; no pidas al usuario que te repita esto):\n" + hilo;
             return instrucciones;
         }
         catch (Exception e)

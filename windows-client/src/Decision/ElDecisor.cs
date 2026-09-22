@@ -45,7 +45,7 @@ public sealed class DecisionDeUnPaso
 
     /// <summary>
     /// Vacío si la respuesta de Jev estaba en forma. Si no, TODAS las reglas que falló, cada una con su campo
-    /// y su valor crudo, separadas por « · » (promesa 344). Es un dato, no una conclusión (patrón nº2): es lo
+    /// y su valor crudo, separadas por « · » (promesa 388). Es un dato, no una conclusión (patrón nº2): es lo
     /// que se pinta y lo que se calibra. Con algo aquí, <see cref="Actuar"/> es falso y <see cref="Alternativas"/>
     /// está vacía: la segunda mejor de una distribución inválida no es una segunda mejor.
     /// </summary>
@@ -71,7 +71,7 @@ public sealed class DecisionDeUnPaso
 }
 
 /// <summary>
-/// LA RESPUESTA DE JEV, LEÍDA ENTERA ANTES DE JUZGARLA (promesa 344, spec 046).
+/// LA RESPUESTA DE JEV, LEÍDA ENTERA ANTES DE JUZGARLA (promesa 388, spec 046).
 /// </summary>
 /// <remarks>
 /// HASTA EL 2026-09-22 la confianza y las probabilidades se leían sin rango: un <c>confidence</c> de 95 pasaba
@@ -309,7 +309,7 @@ public static class ElDecisor
 
         // LO QUE VIAJA EN EL CHOICE = las puertas ofrecidas + «ninguna» (347). Es la ÚNICA lista que viaja, y se
         // construye aquí, no en CuerpoDeEleccion (la 282 exige que el cuerpo lleve exactamente lo que se le da) ni
-        // en el state (que lista puertas de la pantalla, y «ninguna» no es una). La 344 comparará las claves de la
+        // en el state (que lista puertas de la pantalla, y «ninguna» no es una). La 388 comparará las claves de la
         // respuesta contra ESTA lista, por el mismo camino (aprendizaje nº16).
         var queViaja = new List<string>(puertas.Count + 1);
         queViaja.AddRange(puertas);
@@ -355,7 +355,7 @@ public static class ElDecisor
             if (!a.TryGetProperty("choice", out var c) || c.ValueKind != JsonValueKind.String)
                 return DecisionDeUnPaso.No("la respuesta no trae una elección. Decide Luna.");
 
-            // LA DISTRIBUCIÓN ENTERA, contra la lista que viajó (344): confianza y probabilidades con rango, las
+            // LA DISTRIBUCIÓN ENTERA, contra la lista que viajó (388): confianza y probabilidades con rango, las
             // claves exactas, la suma, y la elegida como máximo sin empate. Hasta el 2026-09-22 estas dos lecturas
             // no tenían rango y un confidence de 95 accionaba. Las alternativas (288) salen de aquí, ordenadas.
             var leida = RespuestaDeJev.Validar(a, queViaja);
@@ -378,7 +378,7 @@ public static class ElDecisor
                 $"no se pudo leer la respuesta de TypeSafe ({e.GetType().Name}: {e.Message}). Decide Luna.");
         }
 
-        // LO QUE NO CUADRA NO ACCIONA, y se dice TODO lo que no cuadró con su valor crudo (344). Ni se corrige
+        // LO QUE NO CUADRA NO ACCIONA, y se dice TODO lo que no cuadró con su valor crudo (388). Ni se corrige
         // a 0, ni se satura, ni se ofrece una segunda mejor: la de una distribución inválida no es una segunda
         // mejor. La confianza va cruda para poder calibrar con ella; con Actuar=false no acciona nada.
         if (queNoCuadro.Length > 0)

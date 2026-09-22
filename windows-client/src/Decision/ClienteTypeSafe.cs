@@ -102,7 +102,7 @@ public sealed class ClienteTypeSafe : IDisposable
     }
 
     /// <summary>
-    /// El cuerpo de un error de la API, o POR QUÉ no se pudo leer (promesa 344, patrón nº3). Hasta el
+    /// El cuerpo de un error de la API, o POR QUÉ no se pudo leer (promesa 388, patrón nº3). Hasta el
     /// 2026-09-22 esto era un <c>catch { }</c> mudo: un 422 cuyo cuerpo no llegaba se contaba como «TypeSafe
     /// contestó 422.» a secas, y «vino vacío» y «se cortó al leerlo» eran indistinguibles.
     /// </summary>

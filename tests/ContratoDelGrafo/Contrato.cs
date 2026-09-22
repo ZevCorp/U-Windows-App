@@ -825,13 +825,14 @@ internal static class Contrato
         Prueba("341. dos recordatorios vencidos despiertan una sola sesión de voz", LosAvisosCompartenUnaSesionViva);
         Prueba("342. una petición personal explícita se puede guardar aunque el modelo no llame la herramienta", PeticionPersonalExplícitaSeGuarda);
         Prueba("343. cada proceso de Ü escribe en su propio archivo de log identificable", CadaInstanciaTieneSuLog);
+        Prueba("344. los detalles cotidianos de una preferencia pueden convertirse en recuerdo", DetalleCotidianoPuedeGuardarse);
 
         // ── Spec 046: la decisión de Jev falla cerrada ──────────────────────────────────────────
         // ESCRITAS ANTES QUE SU CÓDIGO (2026-09-22). Nacen de medir la rama del dueño: su «validar probabilidades»
         // convertía en 0 lo que salía de [0,1] —también peligro y cumplido— y 0 abre la compuerta; y main hacía lo
-        // mismo con Noul cuando la noul no venía. Una respuesta que no se entiende NO acciona. Los números 344-350 y
-        // 386-387: 341-343 los gastó main el mismo día, y 351-385 son de las ramas B, C y D.
-        Prueba("344. la distribución de Jev se valida ENTERA antes de cualquier compuerta: cada probabilidad finita y en [0,1], la suma 1 (±0,02), las claves exactamente las que viajaron —ni una de más ni una de menos—, la elegida el máximo y sin empate, y la confianza finita y en [0,1]; cualquier cosa fuera de forma es «no sé»: no se acciona, el porqué nombra CADA regla que falló con su campo y su valor crudo —no solo la primera—, la decisión conserva la confianza cruda y no ofrece alternativas, y nada se convierte en 0 ni se satura; y un cuerpo de error que no se pudo leer dice por qué en vez de callarlo", LaDistribucionSeValidaEntera);
+        // mismo con Noul cuando la noul no venía. Una respuesta que no se entiende NO acciona. Los números 345-350 y
+        // 386-388: 341-344 los gastó main el mismo día (la 344 fue de esta spec hasta el merge de 7380fd8), y 351-385 son de las ramas B, C y D.
+        Prueba("388. la distribución de Jev se valida ENTERA antes de cualquier compuerta: cada probabilidad finita y en [0,1], la suma 1 (±0,02), las claves exactamente las que viajaron —ni una de más ni una de menos—, la elegida el máximo y sin empate, y la confianza finita y en [0,1]; cualquier cosa fuera de forma es «no sé»: no se acciona, el porqué nombra CADA regla que falló con su campo y su valor crudo —no solo la primera—, la decisión conserva la confianza cruda y no ofrece alternativas, y nada se convierte en 0 ni se satura; y un cuerpo de error que no se pudo leer dice por qué en vez de callarlo", LaDistribucionSeValidaEntera);
         Prueba("345. «cumplido» y «peligro» fallan cerrados: si alguna falta, no es número, no es finita o está fuera de [0,1] se toma el caso peor —peligro 1, cumplido 0—, no se acciona, y el porqué dice cuál falta o cuál vino y con qué valor; un 0 solo abre la compuerta cuando Jev lo dijo", LasNoulsFallanCerradas);
         Prueba("346. lo irreversible no se pulsa por decisión: una candidata cuya etiqueta es peligrosa —grabar, guardar, finalizar, borrar, eliminar, enviar, firmar— no se pulsa desde map_decidir ni desde el tramo, ni como elegida ni como segunda mejor, aunque Jev la dé con confianza 0,99 y peligro 0; la mano no la recibe, la cuenta dice cuál se vetó y por qué, el control vuelve con el inventario; y el cuerpo deja de pedirle a Jev «la que menos daño haga»", LoIrreversibleNoSePulsaPorDecision);
         Prueba("347. «ninguna» es una opción de la pregunta: además de TODAS las puertas ofrecidas viaja «0) ninguna» —nada de esta pantalla avanza hacia el objetivo— como una opción más del choice; si Jev la elige no se acciona y se dice que no lo ve en esta pantalla, con su probabilidad; y la añade quien pregunta, no CuerpoDeEleccion, así que la 282 sigue tal cual", NingunaEsUnaOpcionDeLaPregunta);
@@ -969,6 +970,18 @@ internal static class Contrato
         Debe(instancia.Contains($"p{Environment.ProcessId}", StringComparison.Ordinal)
               && Path.GetFileName(archivo).Contains(instancia, StringComparison.Ordinal),
             "el nombre del log contiene el origen, el PID y la hora de arranque de esta instancia");
+    }
+
+    private static void DetalleCotidianoPuedeGuardarse()
+    {
+        string archivo = Path.Combine(_raiz, "memoria-detalle-cotidiano.json");
+        var memoria = new MemoriaPersonal("contrato-detalle", archivo);
+        var guardado = memoria.EjecutarAsync("Me encantan los relojes Cartier y prefiero el Santos",
+            CancellationToken.None).GetAwaiter().GetResult();
+        string contexto = memoria.ContextoAsync(CancellationToken.None).GetAwaiter().GetResult();
+        Debe(guardado.Ok && contexto.Contains("Cartier", StringComparison.OrdinalIgnoreCase)
+              && contexto.Contains("Santos", StringComparison.OrdinalIgnoreCase),
+            "una preferencia cotidiana queda disponible como recuerdo personal");
     }
 
     private static void CadaMundoSeObservaPorSuPuerta()
@@ -11549,14 +11562,14 @@ internal static class Contrato
     /// <summary>
     /// El id de la opción «ninguna» que viaja en el choice desde la 347 (spec 046). El ayudante de abajo la
     /// manda desde la fase 0, y la 347 exige que <c>PeticionASystemOne.IdNinguna</c> sea EXACTAMENTE esta:
-    /// la 344 rechaza una respuesta cuyas claves no sean las que viajaron, así que si producción y contrato
+    /// la 388 rechaza una respuesta cuyas claves no sean las que viajaron, así que si producción y contrato
     /// discreparan en el texto, 278 y 279 caerían por una razón que no es la suya.
     /// </summary>
     private const string IdNinguna = "0) ninguna: nada de esta pantalla avanza hacia el objetivo";
 
     /// <summary>Una respuesta de TypeSafe como la documenta su API, para dársela al transporte falso.</summary>
     /// <remarks>
-    /// DESDE LA 046 (2026-09-22) LLEVA LA CLAVE «NINGUNA» A 0 Y LAS DOS NOULS A 0,1: la 344 exige que la respuesta
+    /// DESDE LA 046 (2026-09-22) LLEVA LA CLAVE «NINGUNA» A 0 Y LAS DOS NOULS A 0,1: la 388 exige que la respuesta
     /// traiga exactamente las claves que viajaron —y desde la 347 viaja «ninguna»—, y la 345 no acciona sin las
     /// nouls. Sin esto, 278 («buena») y 279 («justa»), que afirman Actuar=true con este ayudante, caerían por una
     /// razón ajena a su enunciado. Σ sigue siendo 1: «ninguna» pesa 0.
@@ -12070,7 +12083,7 @@ internal static class Contrato
 
         var puertas = new[] { "1) Nuevo (Button)", "2) Grabar (Button)" };
         // LA RESPUESTA VA COMPLETA DESDE LA 046: Σ = 1 sobre las dos puertas más «ninguna». Hasta el 2026-09-22 mandaba
-        // solo la elegida (Σ = 0,95), el único Σ≠1 del contrato, y la 344 la rechazaría por la suma y por las claves.
+        // solo la elegida (Σ = 0,95), el único Σ≠1 del contrato, y la 388 la rechazaría por la suma y por las claves.
         string Respuesta(string elegida, double conf, double? cumplido, double? peligro)
         {
             var ic = System.Globalization.CultureInfo.InvariantCulture;
@@ -13147,7 +13160,7 @@ internal static class Contrato
         var detalle = Capacidad("U.WindowsClient.Decision.ClienteTypeSafe")?.GetMethod("DetalleDelError", BindingFlags.Public | BindingFlags.Static);
         if (elegir == null || pQue == null || detalle == null)
         {
-            Pendiente("DecisionDeUnPaso.QueNoCuadro + RespuestaDeJev.Validar + ClienteTypeSafe.DetalleDelError", "344", "046");
+            Pendiente("DecisionDeUnPaso.QueNoCuadro + RespuestaDeJev.Validar + ClienteTypeSafe.DetalleDelError", "388", "046");
             return;
         }
 
