@@ -1904,6 +1904,7 @@ public sealed class ConversacionEnVivo : IDisposable
                 TurnoCerrado?.Invoke();
                 if (_fraseU.Length > 0) LogBus.Log("voz-viva", $"Ü dijo: {_fraseU}");
                 if (_fraseUsuario.Length > 0) LogBus.Log("voz-viva", $"usuario dijo: {_fraseUsuario}");
+                GuardarPeticionPersonalSiLaPidio(_fraseUsuario.ToString());
                 Conversacion?.Agregar("usuario", _fraseUsuario.ToString());
                 Conversacion?.Agregar("asistente", _fraseU.ToString());
                 // LO QUE EL HUMANO DIJO, PARA QUIEN ESTÉ APRENDIENDO. Mientras se enseña con 🎓,
@@ -1993,6 +1994,39 @@ public sealed class ConversacionEnVivo : IDisposable
                 LogBus.Log("voz-viva", $"sesión abierta con {QuienAbre}: el servidor la confirmó");   // la única que lo afirma (220)
                 if (_alConfirmar.Length > 0) { Dice?.Invoke(_alConfirmar); _alConfirmar = ""; }
                 break;
+        }
+    }
+
+    /// <summary>
+    /// El usuario no debería depender de que el modelo recuerde llamar una herramienta para una
+    /// petición explícita de memoria personal. La voz ya cerró la frase completa, así que esta
+    /// compuerta guarda localmente expresiones inequívocas como «quiero que recuerdes que…» antes
+    /// de que el turno se pierda. Las instrucciones sobre botones o pantallas siguen siendo lecciones.
+    /// </summary>
+    private void GuardarPeticionPersonalSiLaPidio(string texto)
+    {
+        if (Memoria == null || string.IsNullOrWhiteSpace(texto)) return;
+        string bajo = texto.ToLowerInvariant();
+        bool pideMemoria = bajo.Contains("recuerda que", StringComparison.Ordinal)
+            || bajo.Contains("recuérdame", StringComparison.Ordinal)
+            || bajo.Contains("acuérdate", StringComparison.Ordinal)
+            || bajo.Contains("no olvides", StringComparison.Ordinal)
+            || bajo.Contains("quiero que recuerdes", StringComparison.Ordinal)
+            || bajo.Contains("ten presente", StringComparison.Ordinal);
+        bool esLeccionVisual = bajo.Contains("botón", StringComparison.Ordinal)
+            || bajo.Contains("pantalla", StringComparison.Ordinal)
+            || bajo.Contains("campo", StringComparison.Ordinal)
+            || bajo.Contains("haz clic", StringComparison.Ordinal);
+        if (!pideMemoria || esLeccionVisual) return;
+
+        try
+        {
+            var resultado = Memoria.EjecutarAsync(texto, CancellationToken.None).GetAwaiter().GetResult();
+            LogBus.Log("memoria", $"voz: {(resultado.Ok ? "guardado automático" : "no guardado")} · {resultado.Kind} · {resultado.Response}");
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("memoria", $"voz: no pude guardar la petición personal automática: {e.Message}");
         }
     }
 
