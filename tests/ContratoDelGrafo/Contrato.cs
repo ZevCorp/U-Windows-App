@@ -823,6 +823,7 @@ internal static class Contrato
         Prueba("342. una petición personal explícita se puede guardar aunque el modelo no llame la herramienta", PeticionPersonalExplícitaSeGuarda);
         Prueba("343. cada proceso de Ü escribe en su propio archivo de log identificable", CadaInstanciaTieneSuLog);
         Prueba("344. los detalles cotidianos de una preferencia pueden convertirse en recuerdo", DetalleCotidianoPuedeGuardarse);
+        Prueba("345. GPT-Live recibe el hilo anterior como historial inicial y no como un mensaje que dispare una respuesta", HistorialInicialDeGptLiveEsPasivo);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -964,6 +965,28 @@ internal static class Contrato
         Debe(guardado.Ok && contexto.Contains("Cartier", StringComparison.OrdinalIgnoreCase)
               && contexto.Contains("Santos", StringComparison.OrdinalIgnoreCase),
             "una preferencia cotidiana queda disponible como recuerdo personal");
+    }
+
+    private static void HistorialInicialDeGptLiveEsPasivo()
+    {
+        var protocolo = new Voz.Realtime.ProtocoloGptLive();
+        var historial = new (string Role, string Text)[]
+        {
+            ("usuario", "Estamos hablando del edificio de veintisiete pisos."),
+            ("asistente", "Sí, ese es tu sueño.")
+        };
+        string json = protocolo.Apertura("reglas", Array.Empty<Voz.Realtime.Utensilio>(), "", historial, false).Single();
+        using var documento = System.Text.Json.JsonDocument.Parse(json);
+        var input = documento.RootElement.GetProperty("session").GetProperty("input");
+        Debe(input.GetArrayLength() == 2, "la sesión arranca con los dos turnos previos");
+        Debe(input[0].GetProperty("role").GetString() == "user"
+            && input[1].GetProperty("role").GetString() == "assistant",
+            "el historial conserva los roles usuario y asistente");
+        Debe(input[0].GetProperty("content")[0].GetProperty("type").GetString() == "input_text"
+            && input[1].GetProperty("content")[0].GetProperty("type").GetString() == "output_text",
+            "el historial usa texto de entrada para el usuario y salida para el asistente");
+        Debe(!json.Contains("response.create", StringComparison.Ordinal),
+            "cargar el historial no pide una respuesta automática");
     }
 
     private static void CadaMundoSeObservaPorSuPuerta()
