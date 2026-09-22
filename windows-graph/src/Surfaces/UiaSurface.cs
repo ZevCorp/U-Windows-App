@@ -459,21 +459,65 @@ public sealed class UiaSurface : IUiSurface
 
     // ── Lectura ──────────────────────────────────────────────────────────────
 
-    public IReadOnlyList<DetectedField> ReadFields()
+    // UN BARRIDO PARA LOS TRES (promesa 361, spec 048). Hasta el 2026-09-22 ReadFields, ReadinessCount y
+    // StructureFingerprint recorrían cada uno el árbol entero —3 sitios con el mismo Walk—. Ahora los tres
+    // piden la captura a BarridoUia.Toma, que barre una vez y la sirve mientras dure la vigencia (100 ms,
+    // menor que el sondeo de carga de 120). Quién barre y qué hora es se pueden inyectar para que el
+    // contrato juzgue estos tres métodos reales con un árbol de mentira.
+
+    /// <summary>El recorrido. null = el Walk real sobre la ventana dada. Lo inyecta el contrato.</summary>
+    public static Func<IntPtr, IReadOnlyList<BarridoUia.Nodo>?>? Barre { get; set; }
+
+    /// <summary>El reloj de la vigencia del barrido, en ms. null = <c>Environment.TickCount64</c>.</summary>
+    public static Func<long>? Reloj { get; set; }
+
+    private BarridoUia.Captura? _barrido;
+
+    private BarridoUia.Captura TomaBarrido(string paraQuien)
     {
-        var fields = new List<DetectedField>();
         IntPtr hwnd = GetForegroundWindow();
+        _barrido = BarridoUia.Toma(hwnd, _barrido, Barre ?? BarreDeVerdad, Reloj ?? (() => Environment.TickCount64), paraQuien, L);
+        return _barrido;
+    }
+
+    /// <summary>El Walk de siempre, capturando por nodo lo que los tres consumidores leían de <c>.Current</c>.</summary>
+    private static IReadOnlyList<BarridoUia.Nodo> BarreDeVerdad(IntPtr hwnd)
+    {
+        var nodos = new List<BarridoUia.Nodo>();
         AutomationElement? root = hwnd == IntPtr.Zero ? null : Root(hwnd);
-        if (root == null) return fields;
+        if (root == null) return nodos;
 
         var found = new List<(AutomationElement El, List<int> Path)>();
         try { Walk(root, found, new List<int>(), 0); }
-        catch { /* UIA lanza en árboles que cambian mientras se recorren */ }
+        catch { /* UIA lanza en árboles que cambian mientras se recorren: se sirve lo recorrido */ }
 
-        int order = 1;
         foreach (var (el, path) in found)
         {
-            var field = Describe(el, path, order);
+            try
+            {
+                var info = el.Current;
+                string help = "";
+                if (string.IsNullOrWhiteSpace(info.Name) && string.IsNullOrWhiteSpace(info.AutomationId))
+                {
+                    try { help = el.GetCurrentPropertyValue(AutomationElement.HelpTextProperty) as string ?? ""; }
+                    catch { }
+                }
+                nodos.Add(new BarridoUia.Nodo(info.Name ?? "", info.AutomationId ?? "", info.ControlType.ProgrammaticName,
+                                              !info.IsOffscreen, info.IsEnabled, path, info.BoundingRectangle, help, el));
+            }
+            catch { /* nodo muerto entre la enumeración y la lectura */ }
+        }
+        return nodos;
+    }
+
+    public IReadOnlyList<DetectedField> ReadFields()
+    {
+        var fields = new List<DetectedField>();
+        var captura = TomaBarrido("ReadFields");
+        int order = 1;
+        foreach (var nodo in BarridoUia.Interactivos(captura))
+        {
+            var field = Describe(nodo, order);
             if (field != null) { fields.Add(field); order++; }
         }
         return fields;
@@ -485,14 +529,7 @@ public sealed class UiaSurface : IUiSurface
     /// Al grabar es la "meta" (100%); al ejecutar se compara el actual para saber el % cargado.
     /// </summary>
     public int ReadinessCount()
-    {
-        IntPtr hwnd = GetForegroundWindow();
-        AutomationElement? root = hwnd == IntPtr.Zero ? null : Root(hwnd);
-        if (root == null) return 0;
-        var found = new List<(AutomationElement, List<int>)>();
-        try { Walk(root, found, new List<int>(), 0); } catch { }
-        return found.Count;
-    }
+        => BarridoUia.Interactivos(TomaBarrido("ReadinessCount")).Count();
 
     /// <summary>
     /// Huella estructural: AutomationId + tipo de cada elemento interactivo de la ventana en foco. El
@@ -501,29 +538,7 @@ public sealed class UiaSurface : IUiSurface
     /// por lo demás idénticos. Nunca el texto: eso es dato, y cambiaría en cada corrida.
     /// </summary>
     public string StructureFingerprint()
-    {
-        IntPtr hwnd = GetForegroundWindow();
-        AutomationElement? root = hwnd == IntPtr.Zero ? null : Root(hwnd);
-        if (root == null) return "";
-
-        var found = new List<(AutomationElement El, List<int> Path)>();
-        try { Walk(root, found, new List<int>(), 0); } catch { return ""; }
-
-        var ids = new List<string>();
-        foreach (var (el, path) in found)
-        {
-            try
-            {
-                var info = el.Current;
-                string aid = info.AutomationId ?? "";
-                ids.Add(aid.Length > 0
-                    ? $"{aid}|{info.ControlType.ProgrammaticName}"
-                    : $"@{string.Join(".", path)}|{info.ControlType.ProgrammaticName}");
-            }
-            catch { /* nodo muerto entre la enumeración y la lectura */ }
-        }
-        return Fingerprints.Of(ids);
-    }
+        => BarridoUia.Huella(TomaBarrido("StructureFingerprint"));
 
     /// <summary>
     /// Corto-circuito del motor de carga: ¿el elemento del paso ya está presente Y habilitado? Si sí, se
@@ -594,30 +609,49 @@ public sealed class UiaSurface : IUiSurface
         }
     }
 
-    private DetectedField? Describe(AutomationElement el, List<int> path, int order)
+    /// <summary>
+    /// Describe un elemento LEYENDO LO CAPTURADO por el barrido (361): etiqueta, tipo y selectores salen
+    /// del nodo; valor, opciones y multilínea se siguen leyendo del elemento vivo, que un árbol de
+    /// mentira no trae (y entonces salen vacíos, como saldrían de un control sin patrones).
+    /// </summary>
+    private static DetectedField? Describe(BarridoUia.Nodo nodo, int order)
     {
         try
         {
-            var info = el.Current;
-            string label = LabelOf(el, info);
+            string label = LabelOf(nodo);
             if (string.IsNullOrWhiteSpace(label)) return null;
 
-            string ct = ControlTypeName(info.ControlType);
-            var selectors = SelectorsFor(info, path, ct);
+            string ct = nodo.TipoCorto;
+            var selectors = SelectorsFor(nodo.AutomationId, nodo.Nombre, nodo.Ruta.ToList(), ct);
             if (selectors.Count == 0) return null;
 
+            var el = nodo.Elemento;
+            var tipo = TipoDeUia(nodo.Tipo);
             return new DetectedField
             {
                 StepOrder = order,
-                ActionType = ActionTypeFor(info.ControlType),
+                ActionType = ActionTypeFor(tipo),
                 Selector = selectors[0],
                 Label = label,
-                ControlType = GraphControlType(info.ControlType, el),
-                CurrentValue = ValueOf(el),
-                AllowedOptions = OptionsOf(el, info.ControlType),
+                ControlType = GraphControlType(tipo, el),
+                CurrentValue = el == null ? null : ValueOf(el),
+                AllowedOptions = el == null ? null : OptionsOf(el, tipo),
             };
         }
         catch { return null; }
+    }
+
+    /// <summary>Del nombre programático («ControlType.Button») al ControlType; Custom si no se conoce.</summary>
+    private static ControlType TipoDeUia(string programatico)
+        => Interactive.FirstOrDefault(c => c.ProgrammaticName == programatico)
+           ?? (programatico == ControlType.Text.ProgrammaticName ? ControlType.Text : ControlType.Custom);
+
+    /// <summary>Name → AutomationId → HelpText, sobre lo capturado.</summary>
+    private static string LabelOf(BarridoUia.Nodo n)
+    {
+        if (!string.IsNullOrWhiteSpace(n.Nombre)) return n.Nombre.Trim();
+        if (!string.IsNullOrWhiteSpace(n.AutomationId)) return n.AutomationId.Trim();
+        return n.HelpText.Trim();
     }
 
     /// <summary>Los selectores de un elemento, del más estable al más frágil.</summary>
@@ -802,10 +836,13 @@ public sealed class UiaSurface : IUiSurface
 
     private static List<string> SelectorsFor(
         AutomationElement.AutomationElementInformation info, List<int> path, string ct)
+        => SelectorsFor(info.AutomationId ?? "", info.Name ?? "", path, ct);
+
+    private static List<string> SelectorsFor(string automationId, string nombre, List<int> path, string ct)
     {
         var list = new List<string>();
-        string aid = (info.AutomationId ?? "").Trim();
-        string name = (info.Name ?? "").Trim();
+        string aid = automationId.Trim();
+        string name = nombre.Trim();
 
         // Un AutomationId NUMÉRICO no es una identidad: es una POSICIÓN. En la lista del
         // explorador de Windows cada fila lleva su índice («0», «1», «2»…), así que
@@ -897,9 +934,9 @@ public sealed class UiaSurface : IUiSurface
     }
 
     /// <summary>Traduce el ControlType de UIA al vocabulario que ya usa Graph (nacido del DOM).</summary>
-    private static string GraphControlType(ControlType ct, AutomationElement el)
+    private static string GraphControlType(ControlType ct, AutomationElement? el)
     {
-        if (ct == ControlType.Edit) return IsMultiline(el) ? "textarea" : "text";
+        if (ct == ControlType.Edit) return el != null && IsMultiline(el) ? "textarea" : "text";
         if (ct == ControlType.Document) return "textarea";
         if (ct == ControlType.ComboBox || ct == ControlType.List) return "select";
         if (ct == ControlType.CheckBox) return "checkbox";
