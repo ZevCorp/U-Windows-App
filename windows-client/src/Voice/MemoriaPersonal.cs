@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace U.WindowsClient.Voice;
 
@@ -36,19 +37,30 @@ public sealed class MemoriaPersonal
             var existente = documento.Items.FirstOrDefault(x =>
                 x.UserId == _userId && string.Equals(x.Text, text, StringComparison.OrdinalIgnoreCase));
             if (existente != null)
-                return Task.FromResult(new Resultado(true, "Ya lo tenía guardado para nuestras próximas conversaciones.", "remember", existente.Id));
+                return Task.FromResult(new Resultado(true, existente.DueAt.HasValue
+                    ? "Ya tenía ese recordatorio guardado."
+                    : "Ya lo tenía guardado para nuestras próximas conversaciones.",
+                    existente.Kind, existente.Id, existente.DueAt));
+
+            DateTimeOffset? dueAt = ExtraerFecha(text);
+            string kind = dueAt.HasValue ? "reminder" : "fact";
 
             var recuerdo = new Recuerdo
             {
                 Id = $"local_{Guid.NewGuid():N}",
                 UserId = _userId,
                 Text = text,
-                Kind = "fact",
+                Kind = kind,
                 CreatedAt = DateTimeOffset.UtcNow,
+                DueAt = dueAt,
+                TimeZone = TimeZoneInfo.Local.Id,
             };
             documento.Items.Add(recuerdo);
             Escribir(documento);
-            return Task.FromResult(new Resultado(true, "Lo recordaré para nuestras próximas conversaciones.", "remember", recuerdo.Id));
+            string respuesta = dueAt.HasValue
+                ? $"Te lo recordaré a las {dueAt.Value:HH:mm} de tu hora local."
+                : "Lo recordaré para nuestras próximas conversaciones.";
+            return Task.FromResult(new Resultado(true, respuesta, kind, recuerdo.Id, dueAt));
         }
     }
 
@@ -63,13 +75,45 @@ public sealed class MemoriaPersonal
                 .Where(x => filtro.Length == 0 || x.Text.Contains(filtro, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(x => x.CreatedAt)
                 .Take(20)
-                .Select(x => $"- [{x.Kind}] {x.Text}")
+                .Select(x => x.DueAt.HasValue
+                    ? $"- [recordatorio {x.DueAt.Value:yyyy-MM-dd HH:mm}] {x.Text}"
+                    : $"- [{x.Kind}] {x.Text}")
                 .ToArray();
             return Task.FromResult(string.Join("\n", recuerdos));
         }
     }
 
-    public readonly record struct Resultado(bool Ok, string Response, string Kind, string MemoryId);
+    public IReadOnlyList<Recordatorio> Pendientes(DateTimeOffset ahora)
+    {
+        lock (Candado)
+        {
+            return Leer().Items
+                .Where(x => x.UserId == _userId && x.DueAt.HasValue && !x.Delivered && x.DueAt.Value <= ahora)
+                .OrderBy(x => x.DueAt)
+                .Select(x => new Recordatorio(x.Id, x.Text, x.DueAt!.Value, x.TimeZone, x.Delivered))
+                .ToArray();
+        }
+    }
+
+    public bool MarcarEntregado(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return false;
+        lock (Candado)
+        {
+            var documento = Leer();
+            var recuerdo = documento.Items.FirstOrDefault(x => x.UserId == _userId && x.Id == id);
+            if (recuerdo == null || recuerdo.Delivered) return false;
+            recuerdo.Delivered = true;
+            Escribir(documento);
+            return true;
+        }
+    }
+
+    public readonly record struct Resultado(bool Ok, string Response, string Kind, string MemoryId,
+        DateTimeOffset? ReminderDueAt = null);
+
+    public readonly record struct Recordatorio(string Id, string Text, DateTimeOffset DueAt,
+        string TimeZone, bool Delivered);
 
     private Documento Leer()
     {
@@ -123,5 +167,35 @@ public sealed class MemoriaPersonal
         [JsonPropertyName("text")] public string Text { get; set; } = "";
         [JsonPropertyName("kind")] public string Kind { get; set; } = "fact";
         [JsonPropertyName("createdAt")] public DateTimeOffset CreatedAt { get; set; }
+        [JsonPropertyName("dueAt")] public DateTimeOffset? DueAt { get; set; }
+        [JsonPropertyName("timeZone")] public string TimeZone { get; set; } = "";
+        [JsonPropertyName("delivered")] public bool Delivered { get; set; }
+    }
+
+    private static DateTimeOffset? ExtraerFecha(string text)
+    {
+        DateTimeOffset ahora = DateTimeOffset.Now;
+        var en = Regex.Match(text, @"\ben\s+(?<n>\d+)\s+(?<unidad>minuto|minutos|hora|horas)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (en.Success && int.TryParse(en.Groups["n"].Value, out int cantidad))
+            return en.Groups["unidad"].Value.StartsWith("hora", StringComparison.OrdinalIgnoreCase)
+                ? ahora.AddHours(cantidad)
+                : ahora.AddMinutes(cantidad);
+
+        var hora = Regex.Match(text, @"\ba\s+las\s+(?<h>\d{1,2})(?:[:.](?<m>\d{2}))?\s*(?<ampm>a\.?\s*m\.?|p\.?\s*m\.?)?(?=\s|$|[,.;])",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.IgnorePatternWhitespace);
+        if (!hora.Success || !int.TryParse(hora.Groups["h"].Value, out int hour)) return null;
+        int minute = int.TryParse(hora.Groups["m"].Value, out int m) ? m : 0;
+        if (hour > 23 || minute > 59) return null;
+        string ampm = hora.Groups["ampm"].Value.Replace(".", "", StringComparison.Ordinal).ToLowerInvariant();
+        if (ampm == "pm" && hour < 12) hour += 12;
+        if (ampm == "am" && hour == 12) hour = 0;
+
+        DateTime fecha = ahora.Date;
+        if (text.Contains("mañana", StringComparison.OrdinalIgnoreCase)) fecha = fecha.AddDays(1);
+        var local = new DateTimeOffset(fecha.AddHours(hour).AddMinutes(minute), ahora.Offset);
+        return !text.Contains("mañana", StringComparison.OrdinalIgnoreCase) && local <= ahora
+            ? local.AddDays(1)
+            : local;
     }
 }
