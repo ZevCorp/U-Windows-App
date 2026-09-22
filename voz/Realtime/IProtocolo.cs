@@ -72,6 +72,14 @@ public interface IProtocolo
         => Apertura(instrucciones, utensilios, pase);
 
     /// <summary>
+    /// Historial de texto que debe existir al abrir una sesión nueva. Los protocolos que no tienen
+    /// una conversación inicial explícita conservan su apertura original.
+    /// </summary>
+    IEnumerable<string> Apertura(string instrucciones, IReadOnlyList<Utensilio> utensilios, string pase,
+        IReadOnlyList<(string Role, string Text)> historial, bool soloCuandoSeLePide)
+        => Apertura(instrucciones, utensilios, pase, soloCuandoSeLePide);
+
+    /// <summary>
     /// Si el servidor avisa de que el usuario empezó a hablar y de que un turno acabó (<see
     /// cref="Hecho.HablaronEncima"/> y <see cref="Hecho.CierraElTurno"/>). Si no, quien conversa los
     /// tiene que marcar por su cuenta.

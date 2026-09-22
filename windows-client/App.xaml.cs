@@ -6,12 +6,15 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using U.WindowsClient.Diagnostics;
+using U.WindowsClient.Ui;
+using U.Graph.Surfaces;
 using Velopack;
 
 namespace U.WindowsClient;
 
 public partial class App : Application
 {
+    internal static GuardiaDeInstancia? Guardia { get; private set; }
     /// <summary>
     /// Entry point manual (ver StartupObject en WindowsClient.csproj). Existe por Velopack: cuando el
     /// updater instala o desinstala una versión relanza este mismo .exe con argumentos de hook y espera
@@ -41,9 +44,17 @@ public partial class App : Application
                 .OnFirstRun(_ => CrearAccesoDirectoDeConsulta())
                 .Run();
 
+            string identidad = GuardiaDeInstancia.IdentidadDelProceso();
+            Guid escritorio = EscritorioVirtual.Actual();
+            if (escritorio == Guid.Empty)
+                escritorio = EscritorioVirtual.EscritorioDe(GetForegroundWindow());
+            if (!GuardiaDeInstancia.IntentarIniciar(identidad, escritorio, out var guardia)) return;
+            Guardia = guardia;
+
             var app = new App();
             app.InitializeComponent();
             app.Run();
+            Guardia?.Dispose();
         }
         catch (Exception ex)
         {
@@ -51,6 +62,9 @@ public partial class App : Application
             MessageBox.Show($"Ü no pudo arrancar: {ex.Message}", "Ü", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
 
     protected override void OnStartup(StartupEventArgs e)
     {
