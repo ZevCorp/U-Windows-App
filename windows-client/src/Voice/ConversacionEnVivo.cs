@@ -449,7 +449,9 @@ public sealed class ConversacionEnVivo : IDisposable
             _ws.Options.CollectHttpResponseDetails = true;
             foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
             await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
-            foreach (string msg in _protocolo.Apertura(await InstruccionesConMemoriaAsync(_cts.Token), Herramientas(), ""))
+            string instrucciones = await InstruccionesConMemoriaAsync(_cts.Token);
+            var historial = Conversacion?.Historial() ?? Array.Empty<(string Role, string Text)>();
+            foreach (string msg in _protocolo.Apertura(instrucciones, Herramientas(), "", historial, false))
                 await EnviarAsync(msg, _cts.Token);
 
             // Sesión nueva, cuentas nuevas: ni llamadas retiradas de antes, ni el pase de la
@@ -1748,7 +1750,9 @@ public sealed class ConversacionEnVivo : IDisposable
             _ws.Options.CollectHttpResponseDetails = true;   // sin esto un 401 llega como estado 0 (ver ArrancarAsync)
             foreach (var (k, v) in _protocolo.Cabeceras(clave)) _ws.Options.SetRequestHeader(k, v);
             await _ws.ConnectAsync(_protocolo.Direccion(), _cts.Token);
-            foreach (string msg in _protocolo.Apertura(await InstruccionesConMemoriaAsync(_cts.Token), Herramientas(), _pase))
+            string instrucciones = await InstruccionesConMemoriaAsync(_cts.Token);
+            var historial = Conversacion?.Historial() ?? Array.Empty<(string Role, string Text)>();
+            foreach (string msg in _protocolo.Apertura(instrucciones, Herramientas(), _pase, historial, false))
                 await EnviarAsync(msg, _cts.Token);
 
             if (_protocolo.SabeVolver && _pase.Length > 0)
