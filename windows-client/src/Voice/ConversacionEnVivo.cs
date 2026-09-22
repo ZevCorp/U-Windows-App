@@ -42,6 +42,10 @@ public sealed class ConversacionEnVivo : IDisposable
     public ConversacionPersonal? Conversacion { get; set; }
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
+    // Contexto que se vuelve a insertar en el historial real de GPT-Live al confirmar una sesión
+    // nueva. Las instrucciones de la delegación son configuración, no una garantía de que el modelo
+    // las trate como conversación previa al reconectar.
+    private string _contextoInicial = "";
     private readonly SemaphoreSlim _envio = new(1, 1);
     private readonly SemaphoreSlim _apertura = new(1, 1);
 
@@ -2002,6 +2006,18 @@ public sealed class ConversacionEnVivo : IDisposable
                 _confirmada = true;
                 _aperturaConfirmada?.TrySetResult(true);
                 LogBus.Log("voz-viva", $"sesión abierta con {QuienAbre}: el servidor la confirmó");   // la única que lo afirma (220)
+                if (_contextoInicial.Length > 0)
+                {
+                    string contexto = _contextoInicial;
+                    _contextoInicial = "";
+                    // Las instrucciones de la delegación son configuración. Este mensaje reconstruye
+                    // además el hilo dentro del historial real que consulta GPT-Live, sin pedir una
+                    // respuesta ni hablarlo en voz alta.
+                    _ = EnviarTextoAlModeloAsync(
+                        "[CONTEXTO INTERNO — no lo leas en voz alta ni respondas a este mensaje. "
+                        + "Úsalo como continuidad de la conversación anterior.]\n" + contexto);
+                    LogBus.Log("memoria", "continuidad reinyectada en el historial de la sesión de voz");
+                }
                 if (_alConfirmar.Length > 0) { Dice?.Invoke(_alConfirmar); _alConfirmar = ""; }
                 break;
         }
@@ -2414,12 +2430,24 @@ public sealed class ConversacionEnVivo : IDisposable
             limite.CancelAfter(TimeSpan.FromSeconds(10));
             string contexto = memoria == null ? "" : await memoria.ContextoAsync(limite.Token);
             string hilo = conversacion?.Contexto() ?? "";
-            string instrucciones = Instrucciones;
+
+            // GPT-Live acepta la sesión aunque el bloque de instrucciones sea grande, pero el delegado
+            // deja de atender lo que queda al final cuando tiene que razonar y usar herramientas. La
+            // continuidad no puede vivir detrás de las reglas operativas: debe ser lo primero que vea
+            // al abrir una nueva sesión después de apagar y volver a encender la voz.
+            var continuidad = new StringBuilder();
+            continuidad.AppendLine("CONTINUIDAD PRIORITARIA DE ESTA MISMA CONVERSACIÓN:");
+            continuidad.AppendLine("No es una conversación nueva. Usa estos recuerdos y este hilo antes de responder; no digas que no recuerdas ni que solo sabes lo de esta sesión sin haberlos comprobado.");
             if (!string.IsNullOrWhiteSpace(contexto))
-                instrucciones += "\n\nMEMORIA PERSONAL DISPONIBLE (úsala solo si es pertinente; no inventes). Los [recordatorio ...] pendientes son compromisos activos y debes reconocerlos si el usuario pregunta por el hilo: \n" + contexto;
+                continuidad.AppendLine("MEMORIA PERSONAL VERIFICADA (los recordatorios pendientes son compromisos activos):\n" + contexto);
             if (!string.IsNullOrWhiteSpace(hilo))
-                instrucciones += "\n\nHILO CONVERSACIONAL DURABLE (continúa naturalmente desde aquí, incluso después de apagar y volver a encender el micrófono; no pidas al usuario que te repita esto):\n" + hilo;
-            return instrucciones;
+                continuidad.AppendLine("HILO CONVERSACIONAL DURABLE (continúa naturalmente desde aquí, incluso después de apagar y volver a encender el micrófono):\n" + hilo);
+
+            string resultado = continuidad + "\nREGLAS OPERATIVAS:\n" + Instrucciones
+                + "\n\nREGLA FINAL DE CONTINUIDAD: si la pregunta depende de algo anterior, usa primero la continuidad prioritaria o memory_recall y responde una sola vez con el resultado.";
+            _contextoInicial = continuidad.ToString();
+            LogBus.Log("memoria", $"contexto de apertura: memoria={contexto.Length} caracteres · hilo={hilo.Length} caracteres · instrucciones delegadas={resultado.Length} caracteres");
+            return resultado;
         }
         catch (Exception e)
         {
