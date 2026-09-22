@@ -707,9 +707,10 @@ public sealed class ConversacionEnVivo : IDisposable
             aprendiste es lo que él tiene delante, y eso solo se comprueba VIÉNDOLO marcado.
           · «TOMO NOTA» NO ES TOMAR NOTA. Si es un dato PERSONAL, una preferencia o un compromiso del
             usuario, llama a memory_remember y espera su resultado antes de decir que lo guardaste.
-            Si incluye «mañana», «hoy», una hora o «en X minutos», usa memory_remember: el backend lo
-            convierte en un recordatorio con la zona horaria real del computador. Si vas a decir que lo
-            recuerdas, GUÁRDALO PRIMERO y luego dilo.
+            Si incluye «mañana», «hoy», una hora o «en X minutos», usa memory_remember y conserva el
+            compromiso completo, incluyendo la referencia temporal. No afirmes que sonará una alarma
+            a menos que exista una alarma confirmada. Si vas a decir que lo recuerdas, GUÁRDALO PRIMERO
+            y luego dilo.
           · CUANDO TE EXPLIQUEN QUÉ ES ALGO O PARA QUÉ SIRVE —«esto es el número de factura», «aquí
             se radican los pacientes», «este botón sirve para X cuando Y»— eso es una lección, no
             una orden de acción: crea un RECUERDO con map_esto_es. No la resumas: «aquí va el
@@ -1135,8 +1136,9 @@ public sealed class ConversacionEnVivo : IDisposable
 
         Fn("memory_remember", "GUARDA UN DATO PERSONAL, una preferencia o un compromiso del usuario. Úsala "
             + "para «recuerda que soy…», «no olvides…», «toma nota de…» y cualquier cosa que deba sobrevivir "
-            + "al cierre de la voz. Si lleva «mañana», «hoy», una hora o «en X minutos», crea un recordatorio "
-            + "con la fecha y zona horaria del computador. ESPERA el resultado antes de afirmar que quedó guardado.",
+            + "al cierre de la voz. Si lleva «mañana», «hoy», una hora o «en X minutos», conserva el "
+            + "compromiso completo con esa referencia temporal. No anuncies una alarma programada sin una "
+            + "confirmación explícita del sistema. ESPERA el resultado antes de afirmar que quedó guardado.",
             ("text", "El dato o compromiso completo, sin resumirlo.")),
         Fn("memory_recall", "CONSULTA LA MEMORIA PERSONAL que ya tienes del usuario. Úsala cuando pregunte qué "
             + "sabes sobre él, cuando vuelva a abrir la voz o cuando necesites recuperar una preferencia o compromiso. "
@@ -2061,7 +2063,7 @@ public sealed class ConversacionEnVivo : IDisposable
 
     private async Task<string> EjecutarMemoriaPersonalAsync(Llamada llamada, CancellationToken ct)
     {
-        if (Memoria == null) return "la memoria personal todavía no está conectada al backend.";
+        if (Memoria == null) return "la memoria personal todavía no está conectada.";
         try
         {
             using var limite = CancellationTokenSource.CreateLinkedTokenSource(ct);

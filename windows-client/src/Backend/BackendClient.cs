@@ -28,15 +28,10 @@ public sealed class BackendClient
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     private readonly string _userId;
-    private readonly HttpClient _memoryHttp;
-    private readonly string _memoryBaseUrl;
 
     /// <summary>"/api/v1" contra Graph, "/api" contra el backend viejo. Ver comentario de la clase.</summary>
     private readonly string _apiPrefix;
     private readonly bool _legacy;
-
-    /// <summary>Indica si esta instancia habla con el backend Windows antiguo.</summary>
-    public bool IsLegacyBackend => _legacy;
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -48,12 +43,6 @@ public sealed class BackendClient
         _baseUrl = config.BackendUrl.TrimEnd('/');
         _userId = config.UserId;
         _http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-        _memoryBaseUrl = _baseUrl.Contains("u-windows-backend", StringComparison.OrdinalIgnoreCase)
-            || _baseUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase)
-            || _baseUrl.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase)
-            ? _baseUrl
-            : Config.LegacyBackendUrl;
-        _memoryHttp = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
 
         // La detección por host es deliberadamente tonta: el modo legacy existe SOLO para volver al
         // backend viejo en emergencia, y ese backend tiene un único dominio conocido.
@@ -65,15 +54,11 @@ public sealed class BackendClient
             // Contrato viejo: Bearer con el ClientToken de config.json.
             if (!string.IsNullOrWhiteSpace(config.ClientToken))
                 _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", config.ClientToken);
-            if (!string.IsNullOrWhiteSpace(config.ClientToken))
-                _memoryHttp.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", config.ClientToken);
         }
         else if (!string.IsNullOrWhiteSpace(graphConfig.ApiKey))
         {
             // Contrato Graph: la misma X-API-Key (miracle_…) que ya usa windows-graph.
             _http.DefaultRequestHeaders.Add("X-API-Key", graphConfig.ApiKey);
-            if (!string.IsNullOrWhiteSpace(config.ClientToken))
-                _memoryHttp.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", config.ClientToken);
         }
 
         // Atribución del consumo de IA del puente consciente (computer-use).
@@ -142,51 +127,6 @@ public sealed class BackendClient
         if (!res.IsSuccessStatusCode)
             throw new InvalidOperationException($"backend HTTP {(int)res.StatusCode}: {text}");
         return JsonSerializer.Deserialize<T>(text, Json);
-    }
-
-    /// <summary>Lee la memoria personal desde el servicio durable que conserva el contrato /api/memory.</summary>
-    public async Task<T?> GetMemoryAsync<T>(string query, CancellationToken ct) where T : class
-    {
-        using var res = await MemoryRequestAsync(() => _memoryHttp.GetAsync($"{_memoryBaseUrl}/api/memory{query}", ct), ct);
-        var text = await res.Content.ReadAsStringAsync(ct);
-        if (IsAuthFailure(res.StatusCode))
-            throw new InvalidOperationException("el servicio de memoria rechazó el ClientToken.");
-        if (!res.IsSuccessStatusCode)
-            throw new InvalidOperationException($"servicio de memoria HTTP {(int)res.StatusCode}: {text}");
-        return JsonSerializer.Deserialize<T>(text, Json);
-    }
-
-    /// <summary>Escribe la memoria personal en el servicio durable que conserva el contrato /api/memory.</summary>
-    public async Task<T?> PostMemoryAsync<T>(object req, CancellationToken ct) where T : class
-    {
-        var body = JsonSerializer.Serialize(req, Json);
-        using var res = await MemoryRequestAsync(async () =>
-        {
-            using var content = new StringContent(body, Encoding.UTF8, "application/json");
-            return await _memoryHttp.PostAsync($"{_memoryBaseUrl}/api/memory", content, ct);
-        }, ct);
-        var text = await res.Content.ReadAsStringAsync(ct);
-        if (IsAuthFailure(res.StatusCode))
-            throw new InvalidOperationException("el servicio de memoria rechazó el ClientToken.");
-        if (!res.IsSuccessStatusCode)
-            throw new InvalidOperationException($"servicio de memoria HTTP {(int)res.StatusCode}: {text}");
-        return JsonSerializer.Deserialize<T>(text, Json);
-    }
-
-    private static async Task<HttpResponseMessage> MemoryRequestAsync(
-        Func<Task<HttpResponseMessage>> request, CancellationToken ct)
-    {
-        for (int attempt = 0; ; attempt++)
-        {
-            try { return await request(); }
-            catch (HttpRequestException) when (attempt < 2)
-            {
-                // Vercel puede devolver una resolución DNS transitoria al despertar el equipo.
-                // Reintentar aquí evita que una apertura de voz pierda todo el contexto por un
-                // fallo de resolución de menos de un segundo.
-                await Task.Delay(TimeSpan.FromMilliseconds(350 * (attempt + 1)), ct);
-            }
-        }
     }
 
     /// <summary>
