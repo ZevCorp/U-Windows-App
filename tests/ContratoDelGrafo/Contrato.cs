@@ -822,6 +822,19 @@ internal static class Contrato
         Prueba("341. dos recordatorios vencidos despiertan una sola sesión de voz", LosAvisosCompartenUnaSesionViva);
         Prueba("342. una petición personal explícita se puede guardar aunque el modelo no llame la herramienta", PeticionPersonalExplícitaSeGuarda);
         Prueba("343. cada proceso de Ü escribe en su propio archivo de log identificable", CadaInstanciaTieneSuLog);
+        // ── Spec 047: la espera mira lo que se ve ──────────────────────────────────────────────
+        Prueba("351. pulsar no espera a una pantalla que ya se asentó: si la ubicación de trabajo no cambió y dos huellas de lo que se ve, tomadas con un respiro en medio, coinciden, la espera termina en ese instante y no al agotar el techo; el sitio se relee fresco antes de dar la pantalla por asentada, y si cambió manda el cambio de sitio y se aprende, aunque las dos huellas coincidieran; si entre huella y huella algo cambia, la pantalla se está moviendo y se espera hasta el techo; si el terreno ya sabe que esa puerta lleva a algún sitio, o la ubicación es de SAP, o nadie inyectó una huella, se espera como hoy; y en todos los casos queda dicho a los cuántos milisegundos dejó de esperar y por qué", PulsarNoEsperaAUnaPantallaAsentada);
+        Prueba("352. hay una sola definición de «cambió»: la huella de lo que se ve —el sitio de trabajo, la ventana de delante, lo que se ve dentro y las ventanas del proceso de trabajo— se construye y se compara por un solo camino, y la compuerta de vida y la espera tras pulsar lo usan las dos; dos huellas con las mismas partes son iguales aunque las identidades lleguen en otro orden; una parte distinta las separa y dice cuál, y el sitio manda sobre las otras tres; y la compuerta sigue juzgando solo el sitio y lo de dentro, así que la 299 dice lo mismo que decía", HayUnaSolaDefinicionDeCambio);
+        Prueba("353. cambiar de sitio, cambiar por dentro y cambiar la ventana de delante son tres veredictos distintos, y «nada cambió» es el cuarto: el resultado de pulsar dice cuál fue y a los cuántos milisegundos; solo el cambio de sitio acuña una arista, como exige la 44; un cambio por dentro o de delante no aprende nada y la cuenta lo dice con esas palabras; y el detector de bucle del tramo solo cuenta las repeticiones en las que nada cambió —también cuando el paso llega por el mapa, que es el camino del operador—, así que una puerta que abre un menú tres veces no es un bucle y una que no hace nada tres veces sí lo es, como exige la 292", CuatroVeredictosYElBucleSoloCuentaNada);
+        Prueba("354. un botón que no navega no espera el techo cuando la pantalla se asentó: con una huella que ve lo mismo dos veces, pulsar «Guardar» contesta en menos de la mitad del techo, dice que la pantalla no cambió y no aprende nada; sin huella inyectada espera el techo entero, que es lo que la 334 exige hoy y sigue exigiendo; y un campo de texto sigue con su espera corta y su respuesta de campo", UnBotonQueNoNavegaNoEsperaElTecho);
+        Prueba("355. cada pulsación deja en el log la medida de su espera: la ubicación de trabajo y la ventana de delante antes y después, si lo que se ve dentro cambió y qué parte lo vio, cuánto costó cada parte de la huella, a los cuántos milisegundos se habría dado la pantalla por asentada —o que nunca se asentó—, y a los cuántos cambió la ubicación o que no cambió en el techo; la línea sale aunque la espera no se recorte; y sin huella inyectada dice que nadie miraba", CadaPulsacionDejaLaMedidaDeSuEspera);
+        Prueba("356. comprobar la llegada no agota el techo mirando ni declara el desvío en el acto: cuando lo que se ve se asentó en OTRA pantalla —ni la esperada ni la de partida— se sigue mirando durante el presupuesto de redirección, porque una web pasa a menudo por una pantalla intermedia que se asienta y salta; si al agotarlo sigue allí se declara el desvío nombrando las dos, y si en ese plazo llega a la esperada es una llegada; si se asentó en la de partida se sigue esperando hasta el techo, porque una página que aún no empezó a pintarse parece asentada; llegar a la esperada contesta en cuanto la ubicación coincide, como hoy; y sin huella se espera como hoy", ComprobarLaLlegadaNoAgotaElTechoNiDeclaraEnElActo);
+        Prueba("357. las tres esperas de pulsar —tras el clic, tras el ensayo del doble y tras la repetición— consumen la misma huella y la misma regla: con una huella que se asienta, un elemento de lista sin gesto aprendido se ensaya con el doble y esa segunda espera sale en cuanto se asienta en vez de agotar el techo; la repetición de una puerta con destino sigue esperando el techo las dos veces, porque solo se repite lo que se sabe que navega; y la 83, la 248 y la 296 dicen lo mismo que decían", LasTresEsperasDePulsarConsumenLaMismaHuella);
+        Prueba("358. esperar a que la pantalla esté lista en las herramientas del mapa gasta del reloj y no cuenta vueltas —con un sondeo lento, una espera de N milisegundos termina en N y no en N por el número de vueltas—, y decide «lista» con la misma huella de lo que se ve, dos iguales con un respiro, en vez de contar botones de la ventana de delante; comprobar la vuelta tras un Enter deshecho gasta del mismo reloj; y la espera de un cambio que nadie llamaba deja de existir", LasHerramientasDelMapaGastanDelRelojYMiranLaHuella);
+        Prueba("359. el techo de una espera sale de la espera normal medida y no de un número a ojo: es el triple de la mediana de lo que tardaron en asentarse o cambiar las últimas esperas que terminaron por condición, nunca menos que el techo mínimo; las esperas que llegaron al techo no lo alimentan; y al agotarlo la cuenta dice cuál de las causas fue: que la pantalla no paró de moverse, que nadie miraba, que el terreno sabía que la puerta lleva a algún sitio, o que no se pudo mirar y por qué", ElTechoSaleDeLaMedidaYDiceSuCausa);
+        // 360: RESERVADA (SAP asentada = !Busy ×3 + dos StructureFingerprint iguales). No entra al contrato hasta la
+        // sonda de solo lectura en el hospital (aprendizaje nº13: 0 líneas sapgui:// en 23 logs de esta máquina).
+        // El número no se recicla (spec 047).
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -13010,6 +13023,482 @@ internal static class Contrato
         var (r4, ms4, _) = Pulsa(Mundo(), "uia:name=Guardar;ct=Button", "Guardar");
         Debe(r4.SePudo && ms4 >= Presupuesto - 100, $"un botón sigue esperando el presupuesto entero: {ms4} ms de {Presupuesto}");
         Debe(!r4.Cuenta.Contains("campo"), $"y no se le llama campo a lo que no lo es: «{r4.Cuenta}»");
+    }
+
+    // ── Spec 047: la espera mira lo que se ve ────────────────────────────────────────────────────
+    //
+    // MEDIDO EL 2026-09-21 (u-20260921.log, 16:34-16:39, ChatGPT.exe y Gmail en Chrome): 13 de 13 clics que no
+    // navegaron esperaron 1.797-1.825 ms a un cambio de UBICACIÓN que no llegaba (13-18 sondeos de «dónde» cada
+    // uno), y en al menos 2 de esos 13 algo SÍ había cambiado —el selector de perfiles de Chrome abrió OTRA ventana
+    // del proceso; «Minimizar» cambió la ventana de delante— y el veredicto dijo «no cambió» porque solo mira la
+    // ubicación. Estas promesas se juzgan SIN PANTALLA: la huella de lo que se ve se INYECTA como una función que
+    // contesta según la llamada, el sitio fresco es otra función, la mano cuenta gestos y el diario acumula líneas.
+    // Presupuestos pequeños (techo 1.200, respiro 100, primera 100) para que el contrato corra en segundos, como la
+    // 299. Lo que aún no existe se pide por nombre y cuenta PENDIENTE (flujo-sdd.md): ausente = rojo, no «no aplica».
+
+    private static Type? TipoHuella047 => Capacidad("U.WindowsClient.Navigation.HuellaDeLoQueSeVe");
+
+    /// <summary>Una huella construida por el ÚNICO camino que la 352 permite: <c>HuellaDeLoQueSeVe.De</c>.</summary>
+    private static object? Huella047(string sitio, string delante, string[] dentro, string[]? ventanas = null)
+    {
+        var de = TipoHuella047?.GetMethod("De", BindingFlags.Public | BindingFlags.Static);
+        return de?.Invoke(null, new object[] { sitio, delante, dentro, ventanas ?? Array.Empty<string>() });
+    }
+
+    /// <summary>
+    /// Envuelve una función de objetos en el <c>Func&lt;HuellaDeLoQueSeVe?&gt;</c> que piden las propiedades
+    /// <c>Huella</c>: el contrato no conoce el tipo en tiempo de compilación (aún no existe), así que el
+    /// delegado se fabrica contra el tipo de la propiedad que encuentre.
+    /// </summary>
+    private sealed class EnvoltorioDeHuella047<T> where T : class
+    {
+        public Func<object?> F = () => null;
+        public T? Dame() => (T?)F();
+    }
+
+    private static Delegate? DelegadoDeHuella047(Type tipoDelegado, Func<object?> f)
+    {
+        var tHuella = TipoHuella047;
+        if (tHuella == null) return null;
+        var envoltorio = Activator.CreateInstance(typeof(EnvoltorioDeHuella047<>).MakeGenericType(tHuella))!;
+        envoltorio.GetType().GetField("F")!.SetValue(envoltorio, f);
+        return Delegate.CreateDelegate(tipoDelegado, envoltorio, "Dame");
+    }
+
+    private sealed class Pulso047
+    {
+        public PulsarSegunElNucleo.Resultado R;
+        public long Ms;
+        public List<string> Gestos = new();
+        public List<string> Diario = new();
+        public string QueCambio => PropDe(R, "QueCambio")?.ToString() ?? "";
+        public string Parte => PropDe(R, "Parte")?.ToString() ?? "";
+        public long MsHastaElVeredicto => PropDe(R, "MsHastaElVeredicto") is var v && v != null ? Convert.ToInt64(v) : -1;
+        public string DiarioJunto => string.Join(" ¦ ", Diario);
+    }
+
+    /// <summary>
+    /// Pulsa con huella, sitio fresco y diario inyectados. <c>null</c> = el núcleo aún no tiene las propiedades
+    /// (quien llama dice PENDIENTE). <paramref name="huella"/> recibe el número de llamada (1 = la de ANTES de
+    /// tocar); null = nadie mira. <paramref name="alTocar"/> recibe el gesto y dice si la mano pudo.
+    /// </summary>
+    private static Pulso047? Pulsa047(Nucleo.Grafo g, Func<string> donde, string selector, string etiqueta,
+        Func<int, object?>? huella, Func<string>? sitioFresco = null, int techo = 1200,
+        Func<string, bool>? alTocar = null, int? esperaDeCampoMs = null)
+    {
+        var t = typeof(PulsarSegunElNucleo);
+        var pHuella = t.GetProperty("Huella"); var pFresco = t.GetProperty("SitioFresco"); var pDiario = t.GetProperty("Diario");
+        var pRespiro = t.GetProperty("RespiroMs"); var pPrimera = t.GetProperty("PrimeraHuellaMs");
+        if (pHuella == null || pFresco == null || pDiario == null || pRespiro == null || pPrimera == null) return null;
+        var p = new Pulso047();
+        var pulsar = new PulsarSegunElNucleo(g, donde, (sel, et, gesto) =>
+        {
+            string nombre = gesto.Length == 0 ? "clic" : gesto;
+            lock (p.Gestos) p.Gestos.Add(nombre);
+            return alTocar == null || alTocar(nombre);
+        }) { EsperaMaximaMs = techo };
+        pRespiro.SetValue(pulsar, 100);
+        pPrimera.SetValue(pulsar, 100);
+        if (esperaDeCampoMs != null) t.GetProperty("EsperaDeCampoMs")!.SetValue(pulsar, esperaDeCampoMs.Value);
+        int n = 0;
+        if (huella != null) pHuella.SetValue(pulsar, DelegadoDeHuella047(pHuella.PropertyType, () => huella(Interlocked.Increment(ref n))));
+        if (sitioFresco != null) pFresco.SetValue(pulsar, sitioFresco);
+        pDiario.SetValue(pulsar, (Action<string>)(l => { lock (p.Diario) p.Diario.Add(l); }));
+        var crono = System.Diagnostics.Stopwatch.StartNew();
+        p.R = pulsar.Pulsa(selector, etiqueta);
+        p.Ms = crono.ElapsedMilliseconds;
+        return p;
+    }
+
+    private const int Techo047 = 1200;
+    private const string A047 = "web://x/a", B047 = "web://x/b";
+    private static readonly Nucleo.Elemento Ir047 = new("uia:name=Ir;ct=Button", "Ir", "Button");
+
+    /// <summary>«Ir» observado en A. Si <paramref name="conDestino"/>, el terreno ya sabe que lleva a B (SabeQueLleva).</summary>
+    private static Nucleo.Grafo Mundo047(bool conDestino = false)
+    {
+        var g = new Nucleo.Grafo();
+        g.Observar(A047, new[] { Ir047 });
+        if (conDestino) { g.Observar(B047, new[] { Ir047 }); g.Cruzar(A047, Ir047.Selector, B047); }
+        return g;
+    }
+
+    private static void PulsarNoEsperaAUnaPantallaAsentada()
+    {
+        if (Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null) == null)
+        { Pendiente("PulsarSegunElNucleo.Huella (la espera mira lo que se ve)", "351", "047"); return; }
+
+        // 1. ASENTADA: dos huellas iguales con un respiro en medio → se sale en ese instante, y queda dicho cuándo.
+        var quieta = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", _ => Huella047(A047, "w", new[] { "b1", "b2" }))!;
+        Debe(quieta.Ms < Techo047 / 2 && quieta.QueCambio == "Nada",
+            $"con la pantalla asentada la espera termina en el acto, no al agotar el techo: {quieta.Ms} ms de {Techo047} ({quieta.QueCambio})");
+        Debe(quieta.Diario.Any(l => l.Contains("asentada a los") && l.Contains(" ms")),
+            $"y el diario dice a los cuántos ms se asentó: [{quieta.DiarioJunto}]");
+
+        // 2. SE MUEVE: cada huella distinta de la anterior → está cargando, se espera hasta el techo (lado seguro, como la 299).
+        var moviendose = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, "w", new[] { "b" + n }))!;
+        Debe(moviendose.Ms >= Techo047 - 100 && moviendose.Diario.Any(l => l.Contains("no paró de moverse")),
+            $"una pantalla que no para de moverse espera el techo y lo dice: {moviendose.Ms} ms de {Techo047} [{moviendose.DiarioJunto}]");
+
+        // 3. EL TERRENO SABE QUE LLEVA A ALGÚN SITIO: es la puerta cuyo clic perdido repite la 248; una «asentada» falsa
+        // ahí dispararía una segunda navegación. Se espera como hoy, y se dice.
+        var conDestino = Pulsa047(Mundo047(conDestino: true), () => A047, Ir047.Selector, "Ir", _ => Huella047(A047, "w", new[] { "b" }))!;
+        Debe(conDestino.Ms >= Techo047 - 100 && conDestino.Diario.Any(l => l.Contains("lleva a algún sitio")),
+            $"con destino aprendido la primera espera llega al techo y el diario lo dice: {conDestino.Ms} ms [{conDestino.DiarioJunto}]");
+
+        // 4. SAP: desde UIA no se puede mirar (360, reservada). Se espera como hoy.
+        const string Sap = "sapgui://QAS/NV2000";
+        var gSap = new Nucleo.Grafo(); gSap.Observar(Sap, new[] { Ir047 });
+        var sap = Pulsa047(gSap, () => Sap, Ir047.Selector, "Ir", _ => Huella047(Sap, "w", new[] { "b" }))!;
+        Debe(sap.Ms >= Techo047 - 100, $"en sapgui:// la huella no manda: se espera el techo ({sap.Ms} ms de {Techo047})");
+
+        // 5. NADIE MIRA: sin huella inyectada, como hoy. Es lo que mantiene verdes la 245, 248, 296 y 334 tal como están.
+        var ciego = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null)!;
+        Debe(ciego.Ms >= Techo047 - 100 && ciego.Diario.Any(l => l.Contains("nadie miraba")),
+            $"sin huella se espera como hoy y el diario dice que nadie miraba: {ciego.Ms} ms [{ciego.DiarioJunto}]");
+
+        // 6. EL SITIO TARDÍO (refutación 1 de la spec). «Dónde» sale de una memoria de 400 ms (MemoriaCorta, FaceWindow
+        // :5577-5583): el sitio fresco pasa a B a los 300 ms, pero la memoria sigue sirviendo A hasta los 700. La
+        // huella se asienta desde los 300. Sin releer el sitio FRESCO antes de declarar «asentada», el veredicto sería
+        // «asentada / nada» con Hasta == A, y Cruzar no aprendería la puerta: el mapa aprendería menos de lo que cree
+        // (aprendizaje nº16), y en silencio.
+        var crono = System.Diagnostics.Stopwatch.StartNew();
+        var g6 = Mundo047();
+        var tardio = Pulsa047(g6, () => crono.ElapsedMilliseconds < 700 ? A047 : B047, Ir047.Selector, "Ir",
+            n => Huella047(A047, "w", new[] { crono.ElapsedMilliseconds < 300 ? "cargando" + n : "quieta" }),
+            sitioFresco: () => crono.ElapsedMilliseconds < 300 ? A047 : B047)!;
+        Debe(tardio.QueCambio == "DeSitio" && tardio.R.Hasta == B047 && tardio.R.Aprendido,
+            $"el sitio se relee fresco antes de dar la pantalla por asentada, y si cambió manda y se aprende: {tardio.QueCambio}, hasta «{tardio.R.Hasta}», aprendido={tardio.R.Aprendido} a los {tardio.Ms} ms");
+        Debe(!tardio.Diario.Any(l => l.Contains("asentada") && l.Contains("dentro")),
+            $"y ninguna línea declara «asentada / dentro» sobre el sitio viejo: [{tardio.DiarioJunto}]");
+    }
+
+    private static void HayUnaSolaDefinicionDeCambio()
+    {
+        var t = TipoHuella047;
+        var comparar = t?.GetMethod("Comparar", BindingFlags.Public | BindingFlags.Static);
+        var misma = t?.GetMethod("MismaPantallaQueVe", BindingFlags.Public | BindingFlags.Static);
+        var a = Huella047("s", "w", new[] { "x", "y" }, new[] { "h1", "h2" });
+        if (t == null || comparar == null || misma == null || a == null)
+        { Pendiente("Navigation.HuellaDeLoQueSeVe (De, Comparar, MismaPantallaQueVe)", "352", "047"); return; }
+
+        (string Que, string Parte) C(object antes, object ahora)
+        {
+            var v = comparar.Invoke(null, new[] { antes, ahora })!;
+            return (PropDe(v, "QueCambio")?.ToString() ?? "", PropDe(v, "Parte")?.ToString() ?? "");
+        }
+        bool M(object x, object y) => (bool)misma.Invoke(null, new[] { x, y })!;
+
+        var mismoOtroOrden = Huella047("s", "w", new[] { "y", "x" }, new[] { "h2", "h1" })!;
+        var otraDelante = Huella047("s", "w2", new[] { "x", "y" }, new[] { "h1", "h2" })!;
+        var otroDentro = Huella047("s", "w", new[] { "x", "y", "menu" }, new[] { "h1", "h2" })!;
+        var otrasVentanas = Huella047("s", "w", new[] { "x", "y" }, new[] { "h1", "h2", "popup" })!;
+        var otroSitio = Huella047("s2", "w2", new[] { "z" }, new[] { "h9" })!;
+
+        Debe(C(a, mismoOtroOrden).Que == "Nada", $"las mismas partes en otro orden son la misma huella: {C(a, mismoOtroOrden)}");
+        Debe(C(a, otraDelante).Que == "Delante", $"solo la ventana de delante distinta → «Delante»: {C(a, otraDelante)}");
+        Debe(C(a, otroDentro) == ("Dentro", "Dentro"), $"solo lo de dentro distinto → «Dentro», y la parte dice «Dentro»: {C(a, otroDentro)}");
+        Debe(C(a, otrasVentanas) == ("Dentro", "Ventanas"), $"una ventana nueva del proceso de trabajo → «Dentro» con la parte «Ventanas» (el selector de perfiles de Chrome, log 21-09 :395): {C(a, otrasVentanas)}");
+        Debe(C(a, otroSitio).Que == "DeSitio", $"el sitio manda sobre las otras tres: {C(a, otroSitio)}");
+        Debe(M(a, otraDelante) && M(a, otrasVentanas) && !M(a, otroDentro) && !M(a, otroSitio),
+            "la compuerta sigue juzgando solo el sitio y lo de dentro (MismaPantallaQueVe ignora «delante» y «ventanas»): la 299 dice lo mismo que decía");
+
+        // Y QUE LA COMPUERTA LO USE DE VERDAD: se lee el código, como la 341 de la voz. Sin U_REPO no se adivina
+        // (aprendizaje nº17: «no pude» no es «culpable»).
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string archivo = Path.Combine(repo, "windows-client", "src", "Navigation", "RecorrerSegunElNucleo.cs");
+        if (!File.Exists(archivo)) { Console.WriteLine("   ⚠ NO PUDE JUZGARLA: falta U_REPO para leer RecorrerSegunElNucleo.cs"); return; }
+        string fuente = File.ReadAllText(archivo);
+        Debe(fuente.Contains("HuellaDeLoQueSeVe", StringComparison.Ordinal) && !fuente.Contains("string Huella(", StringComparison.Ordinal),
+            "la compuerta de vida (299) construye y compara su huella por HuellaDeLoQueSeVe y ya no define su propio «string Huella(»");
+        // El inventario pegado de la 044/335 de Jose (ComoSeContesta.InventarioAsentado) queda FUERA de esta promesa por
+        // escrito: compara el texto de una cabecera, no la pantalla; converge en su rama, con su promesa.
+    }
+
+    private static void CuatroVeredictosYElBucleSoloCuentaNada()
+    {
+        if (Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null) == null)
+        { Pendiente("PulsarSegunElNucleo.Huella + Resultado.QueCambio (los cuatro veredictos)", "353", "047"); return; }
+
+        // DENTRO: la huella de antes no tenía el menú; las de después sí, y se asientan. No es llegada ni acuña arista (44).
+        var dentro = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, "w", n == 1 ? new[] { "b" } : new[] { "b", "menu" }))!;
+        Debe(dentro.QueCambio == "Dentro" && !dentro.R.CambioLaPantalla && !dentro.R.Aprendido && dentro.R.Cuenta.Contains("dentro"),
+            $"un menú que se abre es «cambió dentro»: no es llegada, no aprende nada y la cuenta lo dice ({dentro.QueCambio}, cambió={dentro.R.CambioLaPantalla}, aprendido={dentro.R.Aprendido}; «{dentro.R.Cuenta}»)");
+        Debe(dentro.MsHastaElVeredicto >= 0 && dentro.MsHastaElVeredicto <= dentro.Ms,
+            $"y dice a los cuántos milisegundos ({dentro.MsHastaElVeredicto} de {dentro.Ms})");
+
+        // DELANTE: otra ventana al frente (lo de «Minimizar», log 21-09 :506-507).
+        var delante = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, n == 1 ? "gmail" : "escritorio", new[] { "b" }))!;
+        Debe(delante.QueCambio == "Delante" && !delante.R.CambioLaPantalla && !delante.R.Aprendido && delante.R.Cuenta.Contains("delante"),
+            $"otra ventana delante es «cambió delante»: ni llegada ni arista, y la cuenta lo dice ({delante.QueCambio}; «{delante.R.Cuenta}»)");
+
+        // DE SITIO: la única que acuña arista, como exige la 44.
+        string donde = A047;
+        var deSitio = Pulsa047(Mundo047(), () => donde, Ir047.Selector, "Ir", _ => Huella047(donde, "w", new[] { "b" }), alTocar: _ => { donde = B047; return true; })!;
+        Debe(deSitio.QueCambio == "DeSitio" && deSitio.R.CambioLaPantalla && deSitio.R.Aprendido && deSitio.R.Hasta == B047,
+            $"solo el cambio de sitio es llegada y acuña arista ({deSitio.QueCambio}; aprendido={deSitio.R.Aprendido}; hasta «{deSitio.R.Hasta}»)");
+
+        // NADA: el cuarto.
+        var nada = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", _ => Huella047(A047, "w", new[] { "b" }))!;
+        Debe(nada.QueCambio == "Nada" && !nada.R.CambioLaPantalla && !nada.R.Aprendido, $"y «nada cambió» es el cuarto ({nada.QueCambio})");
+
+        // EL DETECTOR DE BUCLE, (i) con manos falsas: el Paso del tramo lleva QueCambio (12 parámetros; hoy 11).
+        var ctor = typeof(ElTramo.Paso).GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 12);
+        if (ctor == null) { Pendiente("ElTramo.Paso con QueCambio (constructor de 12 parámetros)", "353", "047"); return; }
+        var tipoQue = ctor.GetParameters()[11].ParameterType;
+        ElTramo.Paso PasoCon(string que) => (ElTramo.Paso)ctor.Invoke(new object[]
+            { true, true, false, "s:A", "A", "1) A (Button)", 0.9, "pulsé «A»", "porque", false, "", Enum.Parse(tipoQue, que) });
+        (string Estado, int Pasos) Corre(string que, int tope)
+        {
+            int pasos = 0;
+            var tramo = new ElTramo(new ElTramo.Manos(() => A047, _ => { Interlocked.Increment(ref pasos); return PasoCon(que); },
+                () => false, _ => { }, () => "", null, _ => { }));
+            tramo.Arrancar("el objetivo", tope);
+            tramo.Esperar(8000);
+            return (tramo.Estado, pasos);
+        }
+        var (eDentro, nDentro) = Corre("Dentro", 4);
+        Debe(nDentro == 4 && eDentro.Contains("tope", StringComparison.OrdinalIgnoreCase) && !eDentro.Contains("tres veces", StringComparison.OrdinalIgnoreCase),
+            $"una puerta que abre un menú cuatro veces NO es un bucle: para por el tope ({nDentro} pasos; «{Recorte(eDentro)}»)");
+        var (eNada, nNada) = Corre("Nada", 6);
+        Debe(nNada == 3 && eNada.Contains("tres veces", StringComparison.OrdinalIgnoreCase),
+            $"y una que no hace nada tres veces sí lo es, como exige la 292 ({nNada} pasos; «{Recorte(eNada)}»)");
+
+        // (ii) EL CAMINO DEL OPERADOR (refutación 2): Anotar → Mano → SurfaceMapTools.cs:343 → Paso. Sin esa línea el
+        // detector seguiría contando !Cambio en el mapa, y (i) saldría verde solo con manos falsas (aprendizaje nº11).
+        var pQue = typeof(RecorrerSegunElNucleo.Resultado).GetProperty("QueCambio");
+        if (pQue == null) { Pendiente("RecorrerSegunElNucleo.Resultado.QueCambio", "353", "047"); return; }
+        RecorrerSegunElNucleo.Resultado DentroSinCambio(string exit)
+        {
+            object r = new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NWP1", true, $"hice los 1 paso(s): pulsé «{exit}» y cambió dentro (se abrió un menú).", false);
+            pQue.SetValue(r, Enum.Parse(pQue.PropertyType, "Dentro"));
+            return (RecorrerSegunElNucleo.Resultado)r;
+        }
+        var mapa = MapaParaTramo(_ => Decision("Si", "1) A (Button)", 0.9, "x"), mano: DentroSinCambio);
+        if (mapa == null || !SurfaceMapTools.IsMapTool("map_tramo_estado")) { Pendiente("SurfaceMapTools.map_tramo (el arnés de la 292)", "353", "047"); return; }
+        mapa.Mapa.Call("map_tramo", Args(("objetivo", "el objetivo"), ("tope", "4")));
+        EsperarTramo(mapa.Mapa, 8000);
+        string cuenta = mapa.Mapa.Call("map_tramo_estado", new Dictionary<string, string>());
+        Debe(mapa.Pulsados.Count == 4 && !cuenta.Contains("tres veces", StringComparison.OrdinalIgnoreCase),
+            $"por el mapa —el camino del operador— un desplegable abierto cuatro veces tampoco para por bucle ({mapa.Pulsados.Count} pulsados; «{Recorte(cuenta)}»)");
+    }
+
+    private static void UnBotonQueNoNavegaNoEsperaElTecho()
+    {
+        // EL MUNDO DE LA 334 («Search», «Rename», «Guardar»). Su caso 4 —«un botón sigue esperando el presupuesto
+        // entero», Contrato.cs, UnCampoDeTextoNoNavega— se calca aquí SIN huella, y sigue exigiéndose.
+        const string G = "web://google.com";
+        var search = new Nucleo.Elemento("uia:name=Search;ct=ComboBox", "Search", "ComboBox");
+        var guardar = new Nucleo.Elemento("uia:name=Guardar;ct=Button", "Guardar", "Button");
+        Nucleo.Grafo Mundo() { var g = new Nucleo.Grafo(); g.Observar(G, new[] { search, new Nucleo.Elemento("uia:name=Rename;ct=Edit", "Rename", "Edit"), guardar }); return g; }
+        if (Pulsa047(Mundo(), () => G, guardar.Selector, "Guardar", null, esperaDeCampoMs: 150) == null)
+        { Pendiente("PulsarSegunElNucleo.Huella (un botón que no navega no espera el techo)", "354", "047"); return; }
+
+        var conHuella = Pulsa047(Mundo(), () => G, guardar.Selector, "Guardar", _ => Huella047(G, "w", new[] { "b" }), esperaDeCampoMs: 150)!;
+        Debe(conHuella.Ms < Techo047 / 2 && conHuella.R.SePudo && !conHuella.R.CambioLaPantalla && !conHuella.R.Aprendido,
+            $"«Guardar» con la pantalla asentada contesta en menos de la mitad del techo, sin llegada ni arista: {conHuella.Ms} ms de {Techo047} (cambió={conHuella.R.CambioLaPantalla}, aprendido={conHuella.R.Aprendido})");
+        Debe(conHuella.R.Cuenta.Contains("no cambió") && !conHuella.R.Cuenta.Contains("campo"),
+            $"y dice que la pantalla no cambió, sin llamarle campo: «{conHuella.R.Cuenta}»");
+
+        var sinHuella = Pulsa047(Mundo(), () => G, guardar.Selector, "Guardar", null, esperaDeCampoMs: 150)!;
+        Debe(sinHuella.R.SePudo && sinHuella.Ms >= Techo047 - 100,
+            $"sin huella inyectada «Guardar» espera el techo entero, que es lo que la 334 exige hoy y sigue exigiendo: {sinHuella.Ms} ms de {Techo047}");
+
+        foreach (var huella in new Func<int, object?>?[] { _ => Huella047(G, "w", new[] { "b" }), null })
+        {
+            var campo = Pulsa047(Mundo(), () => G, search.Selector, "Search", huella, esperaDeCampoMs: 150)!;
+            Debe(campo.Ms < Techo047 / 2 && campo.R.Cuenta.Contains("campo") && campo.R.Cuenta.Contains("foco"),
+                $"un campo de texto sigue con su espera corta y su respuesta de campo, {(huella == null ? "sin" : "con")} huella: {campo.Ms} ms; «{campo.R.Cuenta}»");
+        }
+    }
+
+    private static void CadaPulsacionDejaLaMedidaDeSuEspera()
+    {
+        if (Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null) == null)
+        { Pendiente("PulsarSegunElNucleo.Huella + SitioFresco + Diario (la medida de la espera)", "355", "047"); return; }
+
+        static List<string> LineasDeMedida(Pulso047 p) => p.Diario.Where(l => l.Contains("antes") && l.Contains("después")).ToList();
+        static bool DiceLaParte(string l) => l.Contains("dentro") || l.Contains("delante") || l.Contains("ventanas") || l.Contains("nada");
+
+        // 1. CON HUELLA QUE SE ASIENTA: una sola línea con las dos ubicaciones, la ventana de delante, la parte que vio el
+        // cambio, el coste de cada parte y el instante de la asentada. (n==1 es la huella de ANTES de tocar: el menú
+        // aparece después, para que la línea tenga un cambio que contar.)
+        var asentada = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, "w", n == 1 ? new[] { "b" } : new[] { "b", "menu" }))!;
+        var lineas = LineasDeMedida(asentada);
+        Debe(lineas.Count == 1, $"tras pulsar hay UNA línea de medida (hay {lineas.Count}): [{asentada.DiarioJunto}]");
+        string l1 = lineas.FirstOrDefault() ?? "";
+        Debe(l1.Contains("delante") && l1.Contains("ubicación") && l1.Contains("asentada a los") && l1.Contains(" ms") && DiceLaParte(l1) && l1.Contains("coste"),
+            $"y lleva la ubicación y la ventana de delante antes y después, la parte que vio el cambio, a los cuántos ms se asentó y el coste por parte: «{l1}»");
+        // FASE 0, SOLO REGISTRO: la espera sigue llegando al techo también con huella. Esta aserción SE RETIRA en la fase 2,
+        // con la 351, y el commit lo dice. Hasta entonces la línea es medida, no recorte.
+        Debe(asentada.Ms >= Techo047 - 100, $"en la fase 0 la línea sale sin recortar la espera: {asentada.Ms} ms de {Techo047} (se retira en la fase 2, con la 351)");
+
+        // 2. NUNCA SE ASIENTA: lo dice.
+        var inquieta = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, "w", new[] { "b" + n }))!;
+        var l2 = LineasDeMedida(inquieta);
+        Debe(l2.Count == 1 && l2[0].Contains("nunca se asentó"), $"con una huella que nunca coincide la línea dice «nunca se asentó»: [{inquieta.DiarioJunto}]");
+
+        // 3. NADIE MIRA: lo dice, con esas palabras. En el nivel 4 estas líneas tienen que ser 0, o la huella no llegó a
+        // inyectarse y la medida no vale (refutación 7).
+        var ciega = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null)!;
+        var l3 = LineasDeMedida(ciega);
+        Debe(l3.Count == 1 && l3[0].Contains("nadie miraba"), $"sin huella inyectada la línea sale igual y dice que nadie miraba: [{ciega.DiarioJunto}]");
+    }
+
+    private static void ComprobarLaLlegadaNoAgotaElTechoNiDeclaraEnElActo()
+    {
+        var tR = typeof(RecorrerSegunElNucleo);
+        var pHuella = tR.GetProperty("Huella");
+        var pPresupuesto = tR.GetProperty("PresupuestoDeRedireccionMs");
+        if (pHuella == null || pPresupuesto == null)
+        { Pendiente("RecorrerSegunElNucleo.Huella + PresupuestoDeRedireccionMs (la llegada mira lo que se ve)", "356", "047"); return; }
+
+        const string A = "web://x/a", B = "web://x/b", C = "web://x/c";
+        const int Presupuesto = 400;
+        var campo = new Nucleo.Elemento("uia:name=q;ct=Edit", "q", "Edit");
+
+        (RecorrerSegunElNucleo.Resultado R, long Ms) Escribe(Func<long, string> dondeSegunMs, Func<int, object?>? huella)
+        {
+            var g = new Nucleo.Grafo(); g.Observar(A, new[] { campo });
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            Func<string> donde = () => dondeSegunMs(crono.ElapsedMilliseconds);
+            var pulsar = new PulsarSegunElNucleo(g, donde, (sel, et) => true) { EsperaMaximaMs = 120 };
+            var lote = new RecorrerSegunElNucleo(g, donde, pulsar, escribir: (c, t) => true, hayQueParar: () => false) { EsperaMaximaMs = Techo047 };
+            pPresupuesto.SetValue(lote, Presupuesto);
+            tR.GetProperty("EsperaDeAsentarMs")?.SetValue(lote, 100);
+            tR.GetProperty("RespiroMs")?.SetValue(lote, 100);
+            int n = 0;
+            if (huella != null) pHuella.SetValue(lote, DelegadoDeHuella047(pHuella.PropertyType, () => huella(Interlocked.Increment(ref n))));
+            var r = lote.Recorre(new[] { new RecorrerSegunElNucleo.Paso(campo.Selector, Texto: "hola", Llegada: B) });
+            return (r, crono.ElapsedMilliseconds);
+        }
+        object? Quieta(int _) => Huella047("(la de la huella)", "w", new[] { "b" });
+
+        // 1. ASENTADA EN OTRA (C ≠ A ≠ B): se agota el presupuesto de redirección mirando, y solo entonces el desvío, con las dos.
+        var (r1, ms1) = Escribe(_ => C, Quieta);
+        Debe(!r1.Termino && r1.Cuenta.Contains(B) && r1.Cuenta.Contains(C) && ms1 >= Presupuesto && ms1 < Techo047 / 2,
+            $"asentada en OTRA pantalla se declara el desvío al agotar el presupuesto de redirección ({Presupuesto}), no en el acto ni al techo: {ms1} ms; «{Recorte(r1.Cuenta)}»");
+
+        // 2. LA REDIRECCIÓN (refutación 5; docs.google.com → /document/u/0, spec 044 de Jose, 18-09): C a los 200 y B a los 700.
+        var (r2, ms2) = Escribe(ms => ms < 200 ? A : ms < 700 ? C : B, Quieta);
+        Debe(r2.Termino && r2.Hechos == 1 && ms2 < Techo047,
+            $"una intermedia que se asienta y salta a la esperada dentro del presupuesto es una llegada, no un desvío: {ms2} ms; «{Recorte(r2.Cuenta)}»");
+
+        // 3. ASENTADA EN LA DE PARTIDA: una página que aún no empezó a pintarse parece asentada. Se espera el techo.
+        var (r3, ms3) = Escribe(_ => A, Quieta);
+        Debe(!r3.Termino && ms3 >= Techo047 - 100, $"asentada en la de partida se sigue esperando hasta el techo: {ms3} ms de {Techo047}");
+
+        // 4. LLEGA: en cuanto la ubicación coincide, como hoy.
+        var (r4, ms4) = Escribe(ms => ms < 200 ? A : B, Quieta);
+        Debe(r4.Termino && ms4 < Techo047 / 2, $"llegar a la esperada contesta en cuanto la ubicación coincide: {ms4} ms");
+
+        // 5. SIN HUELLA: como hoy (el techo entero mirando la ubicación).
+        var (r5, ms5) = Escribe(_ => C, null);
+        Debe(!r5.Termino && ms5 >= Techo047 - 100, $"sin huella se espera como hoy: {ms5} ms de {Techo047}");
+    }
+
+    private static void LasTresEsperasDePulsarConsumenLaMismaHuella()
+    {
+        if (Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null) == null)
+        { Pendiente("PulsarSegunElNucleo.Huella (las tres esperas)", "357", "047"); return; }
+
+        var fila = new Nucleo.Elemento("uia:name=Descargas;ct=TreeItem", "Descargas", "TreeItem");
+        var boton = new Nucleo.Elemento("uia:name=Compose;ct=Button", "Compose", "Button");
+        Nucleo.Grafo Mundo()
+        {
+            var g = new Nucleo.Grafo();
+            g.Observar(A047, new[] { fila, boton });
+            g.Observar(B047, new[] { boton });
+            g.Cruzar(A047, boton.Selector, B047);   // el terreno sabe que «Compose» lleva a B: la 248 lo repite
+            return g;
+        }
+
+        // EL ENSAYO DEL DOBLE (83): un TreeItem sin gesto aprendido se ensaya con el doble, y ESA espera también sale al asentarse.
+        var arbol = Pulsa047(Mundo(), () => A047, fila.Selector, "Descargas", _ => Huella047(A047, "w", new[] { "b" }))!;
+        Debe(arbol.Gestos.SequenceEqual(new[] { "clic", "doubleclick" }) && arbol.Ms < Techo047,
+            $"la fila se ensaya con el doble y las dos esperas salen al asentarse, ninguna al techo: [{string.Join(" · ", arbol.Gestos)}] en {arbol.Ms} ms con techo {Techo047}");
+
+        // LA REPETICIÓN (248): solo se repite lo que se sabe que navega, y eso espera el techo las dos veces.
+        var puerta = Pulsa047(Mundo(), () => A047, boton.Selector, "Compose", _ => Huella047(A047, "w", new[] { "b" }))!;
+        Debe(puerta.Gestos.SequenceEqual(new[] { "clic", "clic" }) && puerta.Ms >= 2 * Techo047 - 200,
+            $"una puerta con destino se repite una vez y espera el techo las dos veces: [{string.Join(" · ", puerta.Gestos)}] en {puerta.Ms} ms (≥ {2 * Techo047 - 200})");
+        Debe(puerta.Diario.Count(l => l.Contains("lleva a algún sitio")) == 2,
+            $"y el diario lo dice las dos veces: [{puerta.DiarioJunto}]");
+        // Los fixtures de la 83, la 248 y la 296 no se tocan: siguen construyendo PulsarSegunElNucleo sin huella.
+    }
+
+    private static void LasHerramientasDelMapaGastanDelRelojYMiranLaHuella()
+    {
+        var tEspera = Capacidad("U.WindowsClient.Navigation.EsperaAsentada");
+        var espera = tEspera?.GetMethod("Espera", BindingFlags.Public | BindingFlags.Static);
+        var antes = Huella047("s", "w", new[] { "b" });
+        if (tEspera == null || espera == null || antes == null || espera.GetParameters().Length != 7)
+        { Pendiente("Navigation.EsperaAsentada.Espera(huella, sitioFresco, antes, compas, respiroMs, primeraMs, cadenciaMs)", "358", "047"); return; }
+
+        (long Ms, string PorQue, long Dicho) Corre(Func<int, object?> huella, int techo)
+        {
+            int n = 0;
+            var f = DelegadoDeHuella047(espera.GetParameters()[0].ParameterType, () => huella(Interlocked.Increment(ref n)));
+            var crono = System.Diagnostics.Stopwatch.StartNew();
+            var v = espera.Invoke(null, new object?[] { f, (Func<string>)(() => "s"), antes, new Compas(techo), 100, 100, 120 })!;
+            return (crono.ElapsedMilliseconds, PropDe(v, "PorQueDejoDeEsperar")?.ToString() ?? "", Convert.ToInt64(PropDe(v, "MsHastaElVeredicto") ?? -1L));
+        }
+
+        // 1. EL RELOJ MANDA (la forma de la 245): con una huella que cuesta 400 ms y no para de cambiar, el techo de 1.200
+        // se agota en ~1.200 y no en 1.200 × vueltas.
+        var lenta = Corre(n => { Thread.Sleep(400); return Huella047("s", "w", new[] { "b" + n }); }, Techo047);
+        Debe(lenta.Ms < Techo047 + 3 * 400, $"con un sondeo lento la espera termina en el techo más un sondeo, no en techo × vueltas: {lenta.Ms} ms (techo {Techo047}, sondeo 400)");
+        // 2. Asentada: dos iguales con un respiro.
+        var quieta = Corre(_ => Huella047("s", "w", new[] { "b" }), Techo047);
+        Debe(quieta.Ms < Techo047 / 2 && quieta.PorQue == "Asentada" && quieta.Dicho >= 0,
+            $"dos huellas iguales con un respiro = lista, en {quieta.Ms} ms ({quieta.PorQue}, dicho a los {quieta.Dicho})");
+        // 3. Cambiante: el techo, y la causa.
+        var inquieta = Corre(n => Huella047("s", "w", new[] { "b" + n }), Techo047);
+        Debe(inquieta.Ms >= Techo047 - 100 && inquieta.PorQue == "TechoSeMovia", $"una huella que no para llega al techo y lo dice: {inquieta.Ms} ms ({inquieta.PorQue})");
+
+        // Y QUE LAS HERRAMIENTAS DEL MAPA LO USEN: se lee el código (mismo camino que la 341 de la voz).
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        string archivo = Path.Combine(repo, "windows-client", "src", "Mcp", "SurfaceMapTools.cs");
+        if (!File.Exists(archivo)) { Console.WriteLine("   ⚠ NO PUDE JUZGARLA: falta U_REPO para leer SurfaceMapTools.cs"); return; }
+        string fuente = File.ReadAllText(archivo);
+        Debe(!fuente.Contains("EsperarCambio(", StringComparison.Ordinal), "la espera de un cambio que nadie llamaba (EsperarCambio, 0 llamadores el 22-09) deja de existir");
+        Debe(!fuente.Contains("CuantosAccionables(", StringComparison.Ordinal), "ya no se cuentan botones de la ventana de delante (CuantosAccionables: tres FindAll sobre el primer plano)");
+        Debe(fuente.Contains("EsperaAsentada", StringComparison.Ordinal), "EsperarPantallaLista decide «lista» con EsperaAsentada, la misma huella de lo que se ve");
+    }
+
+    private static void ElTechoSaleDeLaMedidaYDiceSuCausa()
+    {
+        var tTecho = Capacidad("U.WindowsClient.Navigation.TechoDeLaEspera");
+        var registra = tTecho?.GetMethod("Registra");
+        var techo = tTecho?.GetMethod("Techo");
+        if (tTecho == null || registra == null || techo == null)
+        { Pendiente("Navigation.TechoDeLaEspera (Registra, Techo)", "359", "047"); return; }
+
+        object Nuevo() => Activator.CreateInstance(tTecho)!;
+        void R(object t, int ms, bool porCondicion) => registra.Invoke(t, new object[] { ms, porCondicion });
+        int T(object t, int minimo) => Convert.ToInt32(techo.Invoke(t, new object[] { minimo }));
+
+        var corto = Nuevo(); for (int i = 0; i < 5; i++) R(corto, 300, true);
+        Debe(T(corto, 1800) == 1800, $"con esperas normales de 300 ms el techo no baja del mínimo: {T(corto, 1800)} (mínimo 1.800)");
+        var largo = Nuevo(); for (int i = 0; i < 5; i++) R(largo, 900, true);
+        Debe(T(largo, 1800) == 2700, $"con esperas normales de 900 ms el techo es el triple de la mediana: {T(largo, 1800)} (esperado 2.700)");
+        for (int i = 0; i < 5; i++) R(largo, 5000, false);
+        Debe(T(largo, 1800) == 2700, $"las esperas que llegaron al techo no lo alimentan (se alimentaría a sí mismo): {T(largo, 1800)} sigue en 2.700");
+        var vacio = Nuevo();
+        Debe(T(vacio, 1800) == 1800, $"sin medida, el mínimo: {T(vacio, 1800)}");
+
+        // LAS CUATRO CAUSAS al agotar el techo, en la cuenta de pulsar (patrón nº2: un mensaje distingue sus causas).
+        if (Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null) == null)
+        { Pendiente("PulsarSegunElNucleo.Huella (las causas del techo)", "359", "047"); return; }
+        var seMovia = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, "w", new[] { "b" + n }))!;
+        Debe(seMovia.R.Cuenta.Contains("no paró de moverse"), $"la pantalla no paró de moverse: «{seMovia.R.Cuenta}»");
+        var nadie = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null)!;
+        Debe(nadie.R.Cuenta.Contains("nadie miraba"), $"nadie miraba: «{nadie.R.Cuenta}»");
+        var sabe = Pulsa047(Mundo047(conDestino: true), () => A047, Ir047.Selector, "Ir", _ => Huella047(A047, "w", new[] { "b" }))!;
+        Debe(sabe.R.Cuenta.Contains("lleva a algún sitio"), $"el terreno sabía que la puerta lleva a algún sitio: «{sabe.R.Cuenta}»");
+        var rota = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", _ => throw new InvalidOperationException("la ventana de trabajo se cerró a mitad de la huella"))!;
+        Debe(rota.R.SePudo && rota.R.Cuenta.Contains("no pude mirar") && rota.R.Cuenta.Contains("la ventana de trabajo se cerró"),
+            $"no se pudo mirar, y por qué —la excepción entera, patrón nº3—: «{rota.R.Cuenta}»");
     }
 
     private static void Debe(bool condicion, string promesa)

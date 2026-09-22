@@ -305,8 +305,10 @@ pequeños (techo 1.200, respiro 100, primera 100) para que el contrato corra en 
   100` y «no paró de moverse»; grafo con la arista «Ir» → otro sitio (`SabeQueLleva`) y huella constante →
   `≥ Techo − 100` en la primera espera y el diario dice «lleva a algún sitio»; ubicación `sapgui://…` y
   huella constante → `≥ Techo − 100`; sin huella → `≥ Techo − 100` y «nadie miraba»; y **el sitio tardío**:
-  huella constante desde los 100 ms y un `_donde` con memoria falsa que sirve A hasta los 300 ms y B después
-  (`SitioFresco` inyectado da B desde los 300) → `QueCambio == DeSitio`, `Hasta == B`, `Aprendido == true`, y
+  huella que se asienta desde los 300 ms (antes cambia en cada llamada) y un `_donde` con memoria falsa que sirve A
+  hasta los 700 ms —300 más los 400 de `MemoriaCorta`— y B después (`SitioFresco` inyectado da B desde los 300; con
+  primera 100 y respiro 100 las dos huellas coinciden a los ~400, y ahí el sitio fresco ya dice B mientras la memoria
+  aún dice A: es justo la ventana de la refutación 1) → `QueCambio == DeSitio`, `Hasta == B`, `Aprendido == true`, y
   ninguna línea «asentada» con veredicto «dentro». **Sabotajes (dos, los dos por diff):** en `EsperaAsentada`,
   la comparación de las dos huellas devuelve siempre «distintas» (cae el caso 1 y ninguna otra promesa); y
   servir el sitio de la memoria en vez de `SitioFresco` al declarar «asentada» (cae solo el caso del sitio
