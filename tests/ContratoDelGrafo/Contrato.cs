@@ -13408,12 +13408,15 @@ internal static class Contrato
     /// </summary>
     private static Pulso047? Pulsa047(Nucleo.Grafo g, Func<string> donde, string selector, string etiqueta,
         Func<int, object?>? huella, Func<string>? sitioFresco = null, int techo = 1200,
-        Func<string, bool>? alTocar = null, int? esperaDeCampoMs = null)
+        Func<string, bool>? alTocar = null, int? esperaDeCampoMs = null, object? techoMedido = null)
     {
         var t = typeof(PulsarSegunElNucleo);
         var pHuella = t.GetProperty("Huella"); var pFresco = t.GetProperty("SitioFresco"); var pDiario = t.GetProperty("Diario");
         var pRespiro = t.GetProperty("RespiroMs"); var pPrimera = t.GetProperty("PrimeraHuellaMs");
         if (pHuella == null || pFresco == null || pDiario == null || pRespiro == null || pPrimera == null) return null;
+        // EL TECHO MEDIDO (359, fase 8): solo si el caso lo pide; sin él, cada pulsar trae el suyo, vacío.
+        var pTechoMedido = techoMedido == null ? null : t.GetProperty("Techo");
+        if (techoMedido != null && pTechoMedido == null) return null;
         var p = new Pulso047();
         var pulsar = new PulsarSegunElNucleo(g, donde, (sel, et, gesto) =>
         {
@@ -13424,6 +13427,7 @@ internal static class Contrato
         pRespiro.SetValue(pulsar, 100);
         pPrimera.SetValue(pulsar, 100);
         if (esperaDeCampoMs != null) t.GetProperty("EsperaDeCampoMs")!.SetValue(pulsar, esperaDeCampoMs.Value);
+        pTechoMedido?.SetValue(pulsar, techoMedido);
         int n = 0;
         if (huella != null) pHuella.SetValue(pulsar, DelegadoDeHuella047(pHuella.PropertyType, () => huella(Interlocked.Increment(ref n))));
         if (sitioFresco != null) pFresco.SetValue(pulsar, sitioFresco);
@@ -13906,6 +13910,11 @@ internal static class Contrato
         Debe(T(largo, 1800) == 2700, $"las esperas que llegaron al techo no lo alimentan (se alimentaría a sí mismo): {T(largo, 1800)} sigue en 2.700");
         var vacio = Nuevo();
         Debe(T(vacio, 1800) == 1800, $"sin medida, el mínimo: {T(vacio, 1800)}");
+        // LAS ÚLTIMAS, NO TODAS (la spec: «guarda las últimas 20»; añadida en la fase 8, en rojo antes de su código): una
+        // sesión cambia de app y de pantalla, y un techo que recordara toda la historia no seguiría a la de ahora. Con las 45
+        // la mediana sería 900; con las últimas 20, 300. Mínimo 0 para que se vea el triple desnudo.
+        var viejo = Nuevo(); for (int i = 0; i < 25; i++) R(viejo, 900, true); for (int i = 0; i < 20; i++) R(viejo, 300, true);
+        Debe(T(viejo, 0) == 900, $"cuentan las últimas 20: tras veinticinco esperas de 900 y veinte de 300 el techo es 3 × 300 = 900, no {T(viejo, 0)}");
 
         // LAS CUATRO CAUSAS al agotar el techo, en la cuenta de pulsar (patrón nº2: un mensaje distingue sus causas).
         if (Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null) == null)
@@ -13919,6 +13928,33 @@ internal static class Contrato
         var rota = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", _ => throw new InvalidOperationException("la ventana de trabajo se cerró a mitad de la huella"))!;
         Debe(rota.R.SePudo && rota.R.Cuenta.Contains("no pude mirar") && rota.R.Cuenta.Contains("la ventana de trabajo se cerró"),
             $"no se pudo mirar, y por qué —la excepción entera, patrón nº3—: «{rota.R.Cuenta}»");
+
+        // EL TECHO DE PULSAR ES EL MEDIDO, Y LO ALIMENTA PULSAR. Añadidas en la fase 8, las dos en rojo antes de su código.
+        // Las cuatro primeras aserciones juzgan la aritmética de TechoDeLaEspera SOLA: con ellas en verde, Pulsa podría seguir
+        // esperando EsperaMaximaMs sin registrar nada, y la 359 certificaría una clase que nadie usa —la 358 juzgó un bucle
+        // con 0 llamadores hasta la fase 7—. Es el verde que no prueba el camino del operador (aprendizaje nº11).
+        var pTechoDePulsar = typeof(PulsarSegunElNucleo).GetProperty("Techo");
+        var pMediana = tTecho.GetProperty("Mediana");
+        if (pTechoDePulsar == null || pMediana == null)
+        { Pendiente("PulsarSegunElNucleo.Techo y TechoDeLaEspera.Mediana (el techo medido, en el camino de pulsar)", "359", "047"); return; }
+        int Med(object t) => Convert.ToInt32(pMediana.GetValue(t));
+
+        // (e) Cinco esperas de 600 ms que terminaron por condición: 3 × 600 = 1.800, por encima del mínimo (EsperaMaximaMs,
+        // aquí 1.200). Una pantalla que no para de moverse espera ESE techo y no el mínimo, y la línea de la 355 dice de
+        // dónde sale.
+        var medido = Nuevo(); for (int i = 0; i < 5; i++) R(medido, 600, true);
+        var alto = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, "w", new[] { "b" + n }), techoMedido: medido)!;
+        Debe(alto.Ms >= 1800 - 100 && alto.Ms < 1800 + 400 && alto.Diario.Any(l => l.Contains("3 × mediana 600 ms")),
+            $"pulsar espera el techo medido y no el mínimo: con cinco esperas de 600 ms es 3 × 600 = 1.800, no {Techo047}: {alto.Ms} ms [{alto.DiarioJunto}]");
+
+        // (f) Y PULSAR LO ALIMENTA: una espera que se asentó entra; una que llegó al techo, no (se alimentaría a sí misma).
+        var alimentado = Nuevo();
+        var seAsento = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", _ => Huella047(A047, "w", new[] { "b" }), techoMedido: alimentado)!;
+        int trasAsentarse = Med(alimentado);
+        var alTecho = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, "w", new[] { "b" + n }), techoMedido: alimentado)!;
+        int trasElTecho = Med(alimentado);
+        Debe(trasAsentarse >= 0 && trasAsentarse < Techo047 / 2 && trasElTecho == trasAsentarse,
+            $"pulsar alimenta el techo con lo que tardó en asentarse ({seAsento.MsHastaElVeredicto} ms → mediana {trasAsentarse}; sin medida es −1) y no con lo que tardó en llegar al techo ({alTecho.Ms} ms → mediana {trasElTecho}; tenía que seguir en {trasAsentarse})");
     }
 
     private static void Debe(bool condicion, string promesa)

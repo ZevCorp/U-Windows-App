@@ -180,9 +180,9 @@ también ciega al contenido: pendiente nº6 de `CLAUDE.md`) tiene la misma cegue
 |---|---|---|
 | `Navigation/HuellaDeLoQueSeVe.cs` | **nueva**, pura | `record Huella(Sitio, Delante, Dentro, Ventanas)`; `De(sitio, delante, identidades, ventanas)` ordena; `Comparar(antes, ahora) → (QueCambio { Nada, Dentro, Delante, DeSitio }, Parte)` con esa prioridad —una ventana nueva del proceso es `Dentro` con `Parte = Ventanas`—; `MismaPantallaQueVe(a, b)` = sitio y dentro (el criterio de la 299) |
 | `Navigation/EsperaAsentada.cs` | **nueva** | el bucle: `Espera(Func<Huella?> huella, Func<string> sitioFresco, Huella antes, Compas, respiroMs, primeraMs, cadenciaMs) → Veredicto(QueCambio, Parte, MsHastaElVeredicto, PorQueDejoDeEsperar)`; relee `sitioFresco` una vez por respiro y antes de declarar `Asentada` (punto 2b). `PorQueDejoDeEsperar`: `Asentada`, `CambioDeSitio`, `TechoSeMovia`, `TechoNadieMiraba`, `TechoSabeQueLleva`, `TechoNoSePudoMirar(causa)` |
-| `Navigation/TechoDeLaEspera.cs` | **nueva**, pura | `Registra(ms, porCondicion)`, `Mediana`, `Techo(minimoMs) = máx(3 × Mediana, minimoMs)`; guarda las últimas 20 |
+| `Navigation/TechoDeLaEspera.cs` | **nueva**, pura | `Registra(ms, porCondicion)`, `Mediana`, `Techo(minimoMs) = máx(3 × Mediana, minimoMs)`; guarda las últimas 20. **Fase 8**: más `Calcula(minimoMs) → (Ms, DeDondeSale)`, el techo y su porqué sacados de una sola foto (Pulsa se llama desde dos hilos) |
 | `Navigation/HuellaEnVivo.cs` | **nueva** | la huella real: `SitioFresco` (`_dondeTrabajo.Olvida()` + `DondeTrabajo()`), `UiaSurface.VentanaDeDelante()` (ignorando las ventanas de Ü por `Propio.EsVentana`, el mismo camino que `SeguirElFoco`), `HuellaBarata(hwnd)` (el `FindAll` con `CacheRequest` de `RuntimeId` + `ControlType`, aquí y no en `UiaReader`, para no tocar 297/298; cuando exista `Observatorio.Reciente(hwnd)` de la 362, lo consume y no lee) y `UiaSurface.VentanasDelProceso(pid)`. Cada parte deja su coste en ms para la línea de la 355 |
-| `Navigation/PulsarSegunElNucleo.cs` | tocada | `Huella` (nulo = nadie mira), `SitioFresco`, `Diario` (nulo = `LogBus`), `RespiroMs`, `PrimeraHuellaMs`, `TechoMinimoMs`, `Techo`; `EsperarACambiar` consume `EsperaAsentada`; `Resultado` gana `QueCambio`, `Parte`, `MsHastaElVeredicto` y `PorQueDejoDeEsperar` con valores por defecto (los `new(...)` de hoy siguen compilando) |
+| `Navigation/PulsarSegunElNucleo.cs` | tocada | `Huella` (nulo = nadie mira), `SitioFresco`, `Diario` (nulo = `LogBus`), `RespiroMs`, `PrimeraHuellaMs`, `TechoMinimoMs`, `Techo`; `EsperarACambiar` consume `EsperaAsentada`; `Resultado` gana `QueCambio`, `Parte`, `MsHastaElVeredicto` y `PorQueDejoDeEsperar` con valores por defecto (los `new(...)` de hoy siguen compilando). **Fase 8, dicho en «Hallazgos»**: ni `TechoMinimoMs` (lo es `EsperaMaximaMs`) ni `Resultado.PorQueDejoDeEsperar` (la cuenta lo dice; nadie lo leería) |
 | `Navigation/RecorrerSegunElNucleo.cs` | tocada | `:412-413`: `Huella` local → `HuellaDeLoQueSeVe.MismaPantallaQueVe`; `LlegoDondeTocaba` (`:317-341`) consume la huella con `PresupuestoDeRedireccionMs` (punto 8); `Resultado` lleva `QueCambio` |
 | `Navigation/ElTramo.cs` | tocada | `Paso` gana `QueCambio` (por defecto: `Cambio ? DeSitio : Nada`); el detector cuenta `QueCambio == Nada`; `Cuenta` dice qué cambió |
 | `Mcp/SurfaceMapTools.cs` | tocada | **`:343`** (`UnPasoDecidido` construye el `Paso` con `cambio = mano?.Logro`: pasa a llevar `mano?.QueCambio`; sin esta línea el detector sigue contando `!Cambio` en el camino del operador —aprendizaje nº11— y la 353 saldría verde solo con manos falsas), **`:2614`** (`record struct Mano` gana `QueCambio`), `:2638-2645` (`Anotar` lo copia del `Resultado` de `Recorrer`), `:2865-2926` (`EsperarPantallaLista` sobre `EsperaAsentada` y `Compas`; `Llego` con `Compas`; `EsperarCambio` **se borra**: 0 llamadores) |
@@ -392,7 +392,13 @@ pequeños (techo 1.200, respiro 100, primera 100) para que el contrato corra en 
   mediana. Y las cuatro causas en la cuenta de `Pulsa` al agotar el techo: huella cambiante → «no paró de
   moverse»; sin huella → «nadie miraba»; `SabeQueLleva` → «lleva a algún sitio»; huella que lanza → «no
   pude mirar» + el mensaje de la excepción (patrón nº3). **Sabotaje:** `Techo` devuelve `minimoMs` a
-  secas: cae el caso de 2.700.
+  secas: cae el caso de 2.700. **Añadido en la fase 8** (el porqué, en «Hallazgos»): tres aserciones, en rojo antes de
+  su código. (g) «las últimas 20»: tras 25 esperas de 900 y 20 de 300, `Techo(0) == 900` (con las 45 serían 2.700). (e)
+  el techo de `Pulsa` es el medido: con un `TechoDeLaEspera` de cinco `Registra(600, true)` inyectado en
+  `PulsarSegunElNucleo.Techo` y `EsperaMaximaMs = 1.200`, una huella que no para espera `[1.700, 2.200)` ms y la línea
+  de la 355 dice «3 × mediana 600 ms». (f) `Pulsa` lo alimenta: tras una pulsación que se asienta la mediana pasa de
+  −1 a lo que tardó (< techo/2), y tras una que llega al techo no se mueve. Sus sabotajes: `Pulsa` deja de anotar
+  (cae solo (f)); `Pulsa` espera `EsperaMaximaMs` y no el techo medido (cae solo (e)).
 
 ## Las fases
 
@@ -934,6 +940,90 @@ dé el presupuesto de redirección.
     el Explorador (358)»). Lo que cambia en la app: tras el Enter se deja de mirar cuando la pantalla se asienta, nunca
     antes de los 400 ms de la primera huella (D: respiro 250, sondeo cada 120), o en cuanto cambia de sitio, en vez de
     recontar botones del primer plano durante diez vueltas de coste sin medir.
+- **2026-09-23, fase 8 escrita (359 verde): el techo sale de la medida y dice su causa.**
+  - **Qué entró**:
+    - `Navigation/TechoDeLaEspera.cs`, nueva y pura:
+      - `Registra(ms, porCondicion)` descarta lo que llegó al techo, y también los −1 (vacío no es ausente, nº9). Guarda
+        las últimas 20.
+      - `Mediana` vale −1 cuando no hay medida.
+      - `Techo(minimo) = máx(3 × Mediana, minimo)`.
+      - `Calcula(minimo)` da el techo y la frase de dónde sale, sacados de UNA sola foto de lo anotado. Hace falta porque
+        `Pulsa` se llama desde el hilo del MCP y desde el del tramo, sobre el mismo pulsar.
+    - `PulsarSegunElNucleo.Techo`: por defecto, uno nuevo y vacío por pulsar. `Pulsa` lo calcula una vez por pulsación y
+      sus tres esperas lo usan. Los 3 sitios que usaban `EsperaMaximaMs` como techo (el clic, `EsperarOtraVez` y la línea
+      de `LaOtraEspera`) usan ahora el medido. `EsperaMaximaMs` queda en 1 sitio, como mínimo.
+    - Lo alimenta UN solo sitio. `EsperarACambiar` es ahora una envoltura del bucle (`MirarHastaElVeredicto`) que
+      entrega lo que tardó cada espera, con `porCondicion` = «no salió por el techo». Por ahí pasan las tres esperas. El
+      campo de texto no alimenta: su espera corta censura a los 300 ms todo lo que tarde más, y sesgaría la mediana hacia
+      abajo.
+    - Al agotar el techo, la cuenta dice por qué, con las MISMAS palabras que la línea de la 355: sale de
+      `PorQueDejoDeEsperar`, una sola definición de cada causa (nº16). Dice «Dejé de esperar a los N ms: llegó al
+      techo[, como hoy]: <causa>.». Va en `Con`, por donde pasan las cinco salidas de después de la mano. El campo no la
+      lleva, porque su espera no es el techo (334).
+    - La línea de la 355 gana «techo …» con de dónde sale. Sin esto, en el log un techo medido no se distingue de uno a
+      ojo. Lo juzga (e).
+  - **Lo mínimo que exigió el código, y lo que no entró, dicho**:
+    - **Sin `TechoMinimoMs`.** La tabla lo nombraba, pero `EsperaMaximaMs` ya es el techo mínimo: la propia spec dice que
+      «pasa a ser el techo mínimo». Una segunda propiedad con el mismo 1.800 sería una segunda definición del número
+      (nº16), y el contrato instancia `EsperaMaximaMs` por su nombre (245, 296, 334…).
+    - **Sin `Resultado.PorQueDejoDeEsperar`.** La fase 4 lo aplazó a esta. No lo juzga ninguna aserción y no lo leería
+      nadie: la UI de D lee `QueCambio`, `Parte` y `MsHastaElVeredicto`. La causa viaja en la cuenta, que es lo que
+      promete la 359.
+    - **Sin línea en `FaceWindow`.** El pulsar de la app nace una vez, en `OnLoaded`, y trae su techo. La sesión se mide
+      sin tocar el cableado de la fase 0.
+  - **Hallazgo: la 359 tal como estaba escrita juzgaba solo la aritmética** (M, leído). Sus cuatro primeras aserciones
+    llaman a `TechoDeLaEspera` y ninguna a `Pulsa`. Con ellas en verde, `Pulsa` podía seguir esperando `EsperaMaximaMs`
+    sin anotar nada: el verde que no prueba el camino del operador (aprendizaje nº11), lo mismo que la 358 con 0
+    llamadores hasta la fase 7. Se añaden tres aserciones, las tres en rojo antes de su código:
+    - (e) el techo de `Pulsa` es el medido;
+    - (f) `Pulsa` lo alimenta;
+    - (g) «las últimas 20», que el enunciado dice («las últimas esperas») y nada juzgaba.
+
+    La corrida roja dio `CONTRATO ROTO: 5`: las cuatro causas en rojo (la cuenta decía «pulsé «Ir» y la pantalla no
+    cambió.», sin causa) y `PENDIENTE: PulsarSegunElNucleo.Techo y TechoDeLaEspera.Mediana`. La aritmética y (g) ya
+    estaban en verde sobre `TechoDeLaEspera` sola.
+  - **Hallazgo: el sabotaje literal de la spec no llega a `Pulsa`** (M). «`Techo` devuelve `minimoMs` a secas» tumba las
+    tres aserciones de aritmética y deja (e) en verde. Es porque `Pulsa` pide `Calcula` (el techo y su frase, de una
+    misma foto) y `Techo` delega en `Calcula`. Romper `Calcula` tumbaría las dos cosas; por eso (e) lleva su propio
+    sabotaje.
+  - **Visto y no tocado** (D, sin medir):
+    - **Un techo para todas las apps del pulsar.** En la app hay uno por sesión, así que una app lenta sube el techo de
+      las rápidas. Por ejemplo SAP, cuyas esperas son «como hoy» y salen por cambio de ubicación. Separarlo por app no lo
+      pide ninguna promesa; lo decide el nivel 4.
+    - **Solo `Pulsa` tiene techo medido.** En `windows-client/src` hay 10 esperas acotadas por un `Compas` y 1 lo usa: la
+      de `Pulsa`, que sirve a sus 3 esperas. Quedan 9 con techo fijo:
+      - 4 dentro del alcance de esta spec: la llegada (`Recorrer :453`) y la compuerta (`:623`), las dos con
+        `EsperaMaximaMs` (4.000 en la app), y `EsperarPantallaLista` (900) y `Llego` (2.000) del mapa;
+      - 5 fuera por alcance: `Abrir` ×2 y `PasoDelNucleo` ×3.
+
+      La tabla de fases solo llevaba `Pulsa` a la fase 8, pero el enunciado dice «una espera». Queda pendiente, con su
+      promesa.
+    - Las 3 esperas de `Pulsa` comparten un techo calculado una vez por pulsación: si el clic se asienta, el doble no ve
+      ese dato hasta la pulsación siguiente. Es a propósito, para que la cuenta y el log digan un solo techo.
+  - **Contrato** (M, con `TEMP` propio):
+    - **Antes**, con las aserciones nuevas y `TechoDeLaEspera` escrita: `CONTRATO ROTO: 5` (306 ✔ / 1 ✘: la 359). Los
+      307 veredictos, iguales a la fase 7.
+    - **Después**: **`CONTRATO INTACTO: el grafo se comporta como el día que se congeló.`** (307 ✔ / 0 ✘). Solo cambia
+      `✘ 359.` → `✔ 359.`.
+    - Siguen en ✔: 44, 83, 103, 226, 245, 248, 292, 296, 299, 334 y 351-358.
+    - Voz: `VOZ ÍNTEGRA` (46 ✔, 0 ✘), igual línea a línea que en la fase 7. Compila con 0 errores y los mismos 36
+      warnings.
+  - **Sabotajes, verificados por diff.** Cada uno es 1+/1− contra su copia. Los dos archivos son CRLF (medido con
+    `git ls-files --eol`), así que el ancla lleva `\r\n` y tiene una sola coincidencia. Los tres compilan con 0 errores:
+    - (a) **El de la spec**: `Techo` devuelve `minimoMs` a secas. **`CONTRATO ROTO: 3`**, solo la 359: caen el caso de
+      2.700 (da 1.800), «no lo alimentan» (1.800) y «las últimas 20» (0). (e) sigue en verde (hallazgo de arriba).
+    - (b) **El de (f)**: `EsperarACambiar` deja de anotar (`_ = alimentaElTecho;`). **`CONTRATO ROTO: 1`**, solo (f):
+      «125 ms → mediana -1».
+    - (c) **El de (e)**: `Pulsa` espera `EsperaMaximaMs` y no el techo medido. **`CONTRATO ROTO: 1`**, solo (e): 1.191
+      ms, con la línea diciendo «techo 1800 ms = 3 × mediana 600 ms». (e) atrapa por el reloj una línea que miente.
+    - Restaurados los tres: `fc /b` sin diferencias (md5 `FEECE8FD…` y `F8521746…`), fecha tocada y recompilado.
+      Después, `CONTRATO INTACTO` veredicto a veredicto.
+  - **Sin nivel 4**: esta rama no ejecuta `U.exe`. Lo que cambia en la app:
+    - Las esperas que llegaban al techo (nadie miraba, SAP, la puerta con destino y la pantalla que no para) esperan
+      `máx(3 × mediana, 1.800)`. Con la mediana del cambio de sitio de 405-510 ms (18-09, M), el triple da 1.215-1.530 y
+      el techo sigue en 1.800 (D).
+    - La respuesta al modelo dice por qué esperó.
+    - En el nivel 4 de cierre: contar las líneas «techo …», y cuántas dicen «= 3 × mediana …» por encima del mínimo.
 
 ## Revisiones
 
@@ -966,10 +1056,11 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 - [x] Fase 5: la 357 verde; 83, 248 y 296 intactas; las 3 esperas de `Pulsa` con una sola huella y una sola regla (de los 11 sitios quedan 8); el sabotaje de la spec y uno más, verificados por diff (2026-09-22)
 - [x] Fase 6: la 356 verde; 103 intacta; la llegada no recorta nada mientras el presupuesto sea el techo; los dos sabotajes de la spec y uno de la línea (d), verificados por diff; `FaceWindow` sin tocar (2026-09-22)
 - [x] Fase 7: la 358 verde; `EsperarPantallaLista` con la huella y el compás, `Llego` con el compás, `EsperarCambio` y `CuantosAccionables` borrados (3 sitios, 1 borrado; de los 11 quedan 5); el sabotaje de la spec y uno de la aserción nueva, verificados por diff (2026-09-22)
+- [x] Fase 8: la 359 verde; 245 intacta; `TechoDeLaEspera` nueva y el techo de las 3 esperas de `Pulsa` sale de la medida, alimentado desde 1 sitio; la cuenta dice la causa al agotarlo; sin `TechoMinimoMs` ni `Resultado.PorQueDejoDeEsperar` (dicho en «Hallazgos»); el sabotaje de la spec y uno por cada aserción nueva de `Pulsa`, verificados por diff (2026-09-23)
 - [ ] Fase 0 **medida** en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba» — la corre el dueño: esta rama no ejecuta `U.exe`
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C
-- [ ] 351–359 verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO), 360 reservada fuera del contrato
+- [x] 351–359 verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO, 307 ✔ / 0 ✘, M), 360 reservada fuera del contrato (2026-09-23, fase 8; la fase 2 sigue sin entrar sin el nivel 4 de la fase 0)
 - [ ] Un sabotaje por promesa, verificado por diff, con el veredicto literal en el PR
 - [x] La 334 reescrita en el registro y anotada en la spec 043; la 299 y la 040 sin tocar (2026-09-22, fase 3)
 - [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`

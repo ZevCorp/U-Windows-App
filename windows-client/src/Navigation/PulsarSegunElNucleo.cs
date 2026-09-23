@@ -95,11 +95,28 @@ public sealed class PulsarSegunElNucleo
     }
 
     /// <summary>
-    /// Cuánto se espera a que la pantalla reaccione. No es un tiempo fijo elegido a ojo: se
-    /// pregunta cada poco y se sale en cuanto cambia, así que una pantalla rápida no paga la espera
-    /// de una lenta.
+    /// EL TECHO MÍNIMO de la espera tras pulsar (359): el techo medido (<see cref="Techo"/>) nunca baja de aquí, y sin
+    /// medida es este. Hasta la fase 8 de la 047 era el techo a secas. No es un tiempo fijo elegido a ojo: se pregunta
+    /// cada poco y se sale en cuanto cambia o se asienta, así que una pantalla rápida no paga la espera de una lenta.
     /// </summary>
+    /// <remarks>
+    /// NO HAY UN «TechoMinimoMs» APARTE, aunque la tabla de la spec lo nombraba: sería una segunda propiedad con el mismo
+    /// 1.800, y el día que la medida mueva una, la otra juzgaría con el número viejo (aprendizaje nº16). La spec ya decía
+    /// que esta «pasa a ser el techo mínimo»; el contrato la instancia por su nombre (245, 296, 334…), y el nombre se queda.
+    /// </remarks>
     public int EsperaMaximaMs { get; init; } = 1800;
+
+    /// <summary>
+    /// EL TECHO MEDIDO (359). Cada espera de <c>Pulsa</c> que termina por condición lo alimenta, y cada pulsación espera como
+    /// mucho el triple de la mediana de las últimas, nunca menos que <see cref="EsperaMaximaMs"/>. Nulo = sin medida: el
+    /// techo es <see cref="EsperaMaximaMs"/>, como hasta la fase 8.
+    /// </summary>
+    /// <remarks>
+    /// CADA PULSAR TRAE EL SUYO, VACÍO, y no uno de la clase. En la app, FaceWindow construye un pulsar por sesión (en
+    /// <c>OnLoaded</c>), así que la sesión se mide sin tocar FaceWindow; en el contrato cada caso construye el suyo, y un caso
+    /// no le sube el techo a otro. Uno estático compartiría la medida entre todas las promesas que pulsan.
+    /// </remarks>
+    public TechoDeLaEspera? Techo { get; set; } = new();
 
     /// <summary>
     /// LO QUE SE ESPERA TRAS PULSAR UN CAMPO DE TEXTO. Promesa 334 (spec 043): poco, porque un campo no navega.
@@ -128,6 +145,8 @@ public sealed class PulsarSegunElNucleo
     // FASE 5 (357): las otras dos esperas de Pulsa —el ensayo del doble y la repetición— consumen la misma huella y la misma
     // regla, y cada una deja su línea con a los cuántos ms dejó de esperar y por qué. La repetición cae siempre en el caso 4
     // (solo se repite lo que se sabe que navega) y espera el techo, como hoy.
+    // FASE 8 (359): el techo deja de ser el 1.800 a ojo y sale de la medida —el triple de la mediana de las esperas que
+    // terminaron por condición, nunca menos que EsperaMaximaMs—, y al agotarlo la CUENTA, no solo el log, dice por qué.
     //
     // SIN MEDIR TODAVÍA, y es la condición que la spec 043 dejó escrita («acortar esa espera sin medir es la spec 038,
     // aparcada por el dueño»): RespiroMs y PrimeraHuellaMs son METAS, no datos, hasta el nivel 4 de la fase 0. Esta
@@ -240,8 +259,12 @@ public sealed class PulsarSegunElNucleo
             return new(false, false, desde, desde, false,
                 motivo.Length > 0 ? $"no pude pulsar «{etiqueta}»: {motivo}" : $"no pude pulsar «{etiqueta}».");
         bool esCampo = EsCampoDeTexto(desde, selector);
-        int presupuesto = esCampo ? EsperaDeCampoMs : EsperaMaximaMs;
+        // EL TECHO SALE DE LA MEDIDA (359), UNA VEZ POR PULSACIÓN: las tres esperas de Pulsa miden contra el mismo, y la cuenta
+        // y el log dicen uno solo. El campo sigue con su espera corta (334), que no es el techo.
+        var (techo, deDondeSaleElTecho) = Techo?.Calcula(EsperaMaximaMs) ?? (EsperaMaximaMs, $"{EsperaMaximaMs} ms: sin techo medido (Techo nulo)");
+        int presupuesto = esCampo ? EsperaDeCampoMs : techo;
         var espera = NuevaEspera(antes);
+        EsperaAsentada? ultimaEspera = espera;   // la de la última espera que se hizo: con ella se dice por qué llegó al techo
         // LA REGLA DE LA 351 MANDA salvo en los casos de la regla 4 de la spec; entonces la huella mira en sombra y se
         // espera como hoy, y el porqué queda dicho en la línea de la 355.
         string comoHoy = PorQueSeEsperaComoHoy(desde, selector, esCampo, antes, causaAntes);
@@ -254,15 +277,21 @@ public sealed class PulsarSegunElNucleo
         var desdeLaMano = System.Diagnostics.Stopwatch.StartNew();
         long msVeredicto;
         var relojEspera = System.Diagnostics.Stopwatch.StartNew();
-        string hasta = EsperarACambiar(desde, presupuesto, espera, decide: comoHoy.Length == 0);
+        string hasta = EsperarACambiar(desde, presupuesto, espera, decide: comoHoy.Length == 0, alimentaElTecho: !esCampo);
         relojEspera.Stop();
         msVeredicto = desdeLaMano.ElapsedMilliseconds;
         Anota($"⏱ pulsar «{etiqueta}»: la mano {relojMano.ElapsedMilliseconds} ms · esperar el cambio {relojEspera.ElapsedMilliseconds} ms ({_sondeos} sondeo(s) de «dónde») · {(hasta.Length > 0 && hasta != desde ? "cambió" : "no cambió")}");
-        Anota(LaMedidaDeLaEspera(etiqueta, desde, hasta, presupuesto, antes, causaAntes, msAntes, espera, comoHoy));
+        Anota(LaMedidaDeLaEspera(etiqueta, desde, hasta, presupuesto, antes, causaAntes, msAntes, espera, comoHoy, esCampo ? "" : deDondeSaleElTecho));
         var queCambio = LoQueCambioAlPulsar(desde, hasta, antes, espera);
-        // LOS CUATRO VEREDICTOS VIAJAN EN CADA SALIDA (353): las cinco de después de la mano pasan por aquí.
+        // AL AGOTAR EL TECHO, LA CUENTA DICE POR QUÉ (359), con las mismas palabras que la línea de la 355: una sola definición
+        // de cada causa. Hasta la fase 8 solo lo decía el log, y el modelo leía «la pantalla no cambió» igual si la pantalla no
+        // paró de moverse que si nadie miraba (patrón nº2). El campo no: su espera corta no es el techo (334).
+        string SiAgotoElTecho() => esCampo || _salioPor != Salida.Techo ? ""
+            : $" Dejé de esperar a los {_msDejoDeEsperar} ms: {PorQueDejoDeEsperar(false, techo, ultimaEspera, comoHoy)}.";
+        // LOS CUATRO VEREDICTOS VIAJAN EN CADA SALIDA (353), y la causa del techo con ellos (359): las cinco de después de la
+        // mano pasan por aquí.
         Resultado Con(Resultado r, HuellaDeLoQueSeVe.Diferencia d) =>
-            r with { QueCambio = d.QueCambio, Parte = d.Parte, MsHastaElVeredicto = msVeredicto };
+            r with { QueCambio = d.QueCambio, Parte = d.Parte, MsHastaElVeredicto = msVeredicto, Cuenta = r.Cuenta + SiAgotoElTecho() };
         // LA VENTANA DE TRABAJO SE CERRÓ (promesa 233): «dónde» volvió al foco de la persona, y eso
         // no es haber ido allí. Se cuenta tal cual y no se aprende ninguna arista.
         string aviso = AvisoDeLaVentana?.Invoke() ?? "";
@@ -312,9 +341,10 @@ public sealed class PulsarSegunElNucleo
                 Anota($"↻ quise ensayar «{etiqueta}» con el doble (83) y la mano no pudo{(motivoDoble.Length > 0 ? ": " + motivoDoble : ", sin decir por qué")}");
             else
             {
-                var (tras, esperaDoble) = EsperarOtraVez(desde, antes, comoHoy);
+                var (tras, esperaDoble) = EsperarOtraVez(desde, antes, comoHoy, techo);
                 msVeredicto = desdeLaMano.ElapsedMilliseconds;
-                Anota(LaOtraEspera($"↻ ensayé «{etiqueta}» con el doble (83: es contenido y su gesto aún no se conoce)", desde, tras, esperaDoble, comoHoy));
+                ultimaEspera = esperaDoble;
+                Anota(LaOtraEspera($"↻ ensayé «{etiqueta}» con el doble (83: es contenido y su gesto aún no se conoce)", desde, tras, esperaDoble, comoHoy, techo));
                 if (esperaDoble?.Ultima != null) queCambio = LoQueCambioAlPulsar(desde, tras, antes, esperaDoble);
                 if (tras.Length > 0 && tras != desde)
                 {
@@ -346,9 +376,10 @@ public sealed class PulsarSegunElNucleo
                     Anota($"↻ quise repetir «{etiqueta}» una vez (248) y la mano no pudo{(motivoOtra.Length > 0 ? ": " + motivoOtra : ", sin decir por qué")}");
                 else
                 {
-                    var (tras, esperaOtra) = EsperarOtraVez(desde, antes, comoHoy);
+                    var (tras, esperaOtra) = EsperarOtraVez(desde, antes, comoHoy, techo);
                     msVeredicto = desdeLaMano.ElapsedMilliseconds;
-                    Anota(LaOtraEspera($"↻ «{etiqueta}» no movió nada y el terreno sabe que lleva a algún sitio: lo repetí una vez (248)", desde, tras, esperaOtra, comoHoy));
+                    ultimaEspera = esperaOtra;
+                    Anota(LaOtraEspera($"↻ «{etiqueta}» no movió nada y el terreno sabe que lleva a algún sitio: lo repetí una vez (248)", desde, tras, esperaOtra, comoHoy, techo));
                     if (esperaOtra?.Ultima != null) queCambio = LoQueCambioAlPulsar(desde, tras, antes, esperaOtra);
                     if (tras.Length > 0 && tras != desde) { hasta = tras; gestoUsado = gesto; }
                 }
@@ -494,10 +525,10 @@ public sealed class PulsarSegunElNucleo
     /// TreeItem del contrato, 1.325 ms de un techo de 1.200 para dos esperas, cuando la del clic ya había salido a los 125.
     /// Esa sobrecarga se borró: 0 llamadores.
     /// </remarks>
-    private (string Hasta, EsperaAsentada? Espera) EsperarOtraVez(string desde, HuellaDeLoQueSeVe? antes, string comoHoy)
+    private (string Hasta, EsperaAsentada? Espera) EsperarOtraVez(string desde, HuellaDeLoQueSeVe? antes, string comoHoy, int techo)
     {
         var espera = NuevaEspera(antes);
-        return (EsperarACambiar(desde, EsperaMaximaMs, espera, decide: comoHoy.Length == 0), espera);
+        return (EsperarACambiar(desde, techo, espera, decide: comoHoy.Length == 0, alimentaElTecho: true), espera);
     }
 
     /// <summary>
@@ -505,17 +536,28 @@ public sealed class PulsarSegunElNucleo
     /// qué, con las mismas palabras que la de la 355. No es otra línea de medida («antes → después»): esa es UNA por pulsación
     /// y la cuenta el nivel 4; esta dice cómo terminó cada espera de más, que hasta la fase 5 se agotaba sin decirlo.
     /// </summary>
-    private string LaOtraEspera(string que, string desde, string hasta, EsperaAsentada? espera, string comoHoy)
+    private string LaOtraEspera(string que, string desde, string hasta, EsperaAsentada? espera, string comoHoy, int techo)
     {
         bool cambio = hasta.Length > 0 && hasta != desde;
         string medida = espera == null ? "" : " · " + espera.Resumen();
-        return $"{que}{medida} · dejó de esperar a los {_msDejoDeEsperar} ms: {PorQueDejoDeEsperar(cambio, EsperaMaximaMs, espera, comoHoy)}";
+        return $"{que}{medida} · dejó de esperar a los {_msDejoDeEsperar} ms: {PorQueDejoDeEsperar(cambio, techo, espera, comoHoy)}";
+    }
+
+    /// <param name="alimentaElTecho">Si lo que tardó esta espera cuenta para el techo medido (359). No en un campo de texto:
+    /// su espera corta corta a los 300 ms todo lo que tarde más, y meterla sesgaría la mediana hacia abajo.</param>
+    private string EsperarACambiar(string desde, int presupuestoMs, EsperaAsentada? espera, bool decide, bool alimentaElTecho)
+    {
+        string hasta = MirarHastaElVeredicto(desde, presupuestoMs, espera, decide);
+        // UNA SOLA ANOTACIÓN PARA LAS TRES ESPERAS DE PULSA —el clic, el doble y la repetición pasan por aquí (patrón nº5)—. Las
+        // que llegaron al techo se entregan igual, y TechoDeLaEspera las descarta: lo decide un solo sitio.
+        if (alimentaElTecho) Techo?.Registra((int)_msDejoDeEsperar, porCondicion: _salioPor != Salida.Techo);
+        return hasta;
     }
 
     /// <param name="espera">La espera que mira lo que se ve; se sondea en cada vuelta. Nulo = nadie mira.</param>
     /// <param name="decide">Si la regla de la 351 manda. Con <c>false</c> la huella mira EN SOMBRA —se anota para la línea
     /// de la 355 y no decide— y se espera como hoy, al cambio de ubicación o al techo.</param>
-    private string EsperarACambiar(string desde, int presupuestoMs, EsperaAsentada? espera, bool decide)
+    private string MirarHastaElVeredicto(string desde, int presupuestoMs, EsperaAsentada? espera, bool decide)
     {
         // EL RELOJ MANDA (promesa 245): antes esto sumaba 120 por vuelta y además pagaba _donde(), que
         // en la máquina del dueño costaba 2,8 s. Una espera de «1,8 s» duraba más de treinta.
@@ -598,9 +640,12 @@ public sealed class PulsarSegunElNucleo
     /// asentado (o que nunca), a los cuántos cambió la ubicación (o que no en el techo), y lo que costó cada parte.
     /// </summary>
     private string LaMedidaDeLaEspera(string etiqueta, string desde, string hasta, int presupuestoMs,
-        HuellaDeLoQueSeVe? antes, string causaAntes, long msAntes, EsperaAsentada? sombra, string comoHoy)
+        HuellaDeLoQueSeVe? antes, string causaAntes, long msAntes, EsperaAsentada? sombra, string comoHoy, string deDondeSaleElTecho)
     {
         bool cambio = hasta.Length > 0 && hasta != desde;
+        // DE DÓNDE SALE EL TECHO (359): sin esto, en el log un techo de 2.700 medido no se distingue de uno escrito a mano. Vacío
+        // en un campo de texto, cuya espera corta no es el techo.
+        string techo = deDondeSaleElTecho.Length > 0 ? $" · techo {deDondeSaleElTecho}" : "";
         string ubicacion = cambio
             ? $"ubicación antes «{desde}» → después «{hasta}» (cambió a los {_msCambioUbicacion} ms)"
             : _salioPor == Salida.Asentada
@@ -610,9 +655,9 @@ public sealed class PulsarSegunElNucleo
         // lea de un golpe en el log.
         string dejo = $"dejó de esperar a los {_msDejoDeEsperar} ms: {PorQueDejoDeEsperar(cambio, presupuestoMs, sombra, comoHoy)}";
         if (Huella == null)
-            return $"👀 tras «{etiqueta}»: {ubicacion} · delante: nadie miraba (sin huella inyectada) · nunca se asentó: nadie miraba · {dejo}";
+            return $"👀 tras «{etiqueta}»: {ubicacion} · delante: nadie miraba (sin huella inyectada) · nunca se asentó: nadie miraba{techo} · {dejo}";
         if (antes == null || sombra == null)
-            return $"👀 tras «{etiqueta}»: {ubicacion} · delante: no pude mirar antes de tocar ({causaAntes}; {msAntes} ms) · nunca se asentó: no había huella de antes · {dejo}";
+            return $"👀 tras «{etiqueta}»: {ubicacion} · delante: no pude mirar antes de tocar ({causaAntes}; {msAntes} ms) · nunca se asentó: no había huella de antes{techo} · {dejo}";
 
         var ultima = sombra.Ultima;
         string delante = ultima == null
@@ -636,6 +681,6 @@ public sealed class PulsarSegunElNucleo
         string sitioFresco = sombra.MsCambioDeSitio >= 0
             ? $"sitio fresco cambió a los {sombra.MsCambioDeSitio} ms («{sombra.SitioAhora}»)"
             : "sitio fresco no cambió";
-        return $"👀 tras «{etiqueta}»: {ubicacion} · {delante} · {dentro} · {sombra.Resumen()} · {sitioFresco} · huella de antes {msAntes} ms · {dejo}";
+        return $"👀 tras «{etiqueta}»: {ubicacion} · {delante} · {dentro} · {sombra.Resumen()} · {sitioFresco} · huella de antes {msAntes} ms{techo} · {dejo}";
     }
 }
