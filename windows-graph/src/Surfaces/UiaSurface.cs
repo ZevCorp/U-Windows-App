@@ -1393,6 +1393,91 @@ public sealed class UiaSurface : IUiSurface
         return hallado;
     }
 
+    // ── Preguntar por UN selector (spec 048, promesa 364) ─────────────────────────────────────────
+    //
+    // MEDIDO (arquitectura de Jev §4.2 y bench-uia-3): preguntar por un selector cuesta 7-126 ms según dónde
+    // esté el elemento, y en Chrome preguntar Y FALLAR 60-107 ms, frente a 232-272 ms de inventariar la
+    // ventana entera —que es lo que pagaba la compuerta (MirarOtraVez) cuando el grafo no tenía la puerta
+    // viva—. Se pregunta con el MISMO selector y por el MISMO camino que Resolve (UiaSelector: condición,
+    // ruta y, si el nombre exacto no aparece, el nombre recortado de la 331), para que «está» signifique lo
+    // que la mano va a encontrar un instante después.
+
+    /// <summary>
+    /// LO QUE CONTESTA preguntar por UN selector: si está —en esa ventana y a la vista—, lo que se leyó de él en
+    /// UNA petición (nombre, tipo, caja LEÍDA y el elemento con su caché, del que el cliente saca la identidad
+    /// por su camino de siempre) y CÓMO se buscó, para que el log diga qué camino costó cuánto.
+    /// </summary>
+    public sealed record RespuestaDeUno(bool Esta, string Nombre, string Tipo, System.Windows.Rect Caja,
+        AutomationElement? Elemento, string ComoBusco, long Ms);
+
+    /// <summary>
+    /// ¿ESTÁ ESTE ELEMENTO, AHORA, EN ESTA VENTANA? Una pregunta, no un inventario: <c>FindFirst</c> por la
+    /// condición del selector —solo lo que no está fuera de la vista, que es lo que el lector da por vivo— con
+    /// nombre, tipo, caja, visibilidad e identidad en la misma petición. Ninguna otra ventana: la que se da es
+    /// la de trabajo, y buscar en otra es el barrido que dejó a Paint sin pulsar (promesa 233).
+    /// </summary>
+    /// <remarks>
+    /// No lanza: una ventana que no se deja leer o un UIA que lanza a media búsqueda contestan «no está» CON su
+    /// causa en <see cref="RespuestaDeUno.ComoBusco"/> (patrón nº3), y la compuerta mira como hoy.
+    /// </remarks>
+    public static RespuestaDeUno Preguntar(IntPtr hwnd, string selector)
+    {
+        var crono = Stopwatch.StartNew();
+        RespuestaDeUno No(string como) => new(false, "", "", System.Windows.Rect.Empty, null, como, crono.ElapsedMilliseconds);
+        if (hwnd == IntPtr.Zero) return No("sin ventana: no se preguntó");
+        if (!UiaSelector.Owns(selector)) return No("no es un selector de UIA: no se preguntó");
+
+        var parts = UiaSelector.Parse(selector);
+        bool porRuta = parts.TryGetValue("path", out string? ruta) && !string.IsNullOrWhiteSpace(ruta);
+        Condition? condicion = porRuta ? null : UiaSelector.ConditionFor(parts);
+        if (!porRuta && condicion == null) return No("el selector no trae con qué buscar");
+
+        var peticion = new CacheRequest { AutomationElementMode = AutomationElementMode.Full };
+        peticion.Add(AutomationElement.NameProperty);
+        peticion.Add(AutomationElement.ControlTypeProperty);
+        peticion.Add(AutomationElement.BoundingRectangleProperty);
+        peticion.Add(AutomationElement.IsOffscreenProperty);
+        peticion.Add(AutomationElement.RuntimeIdProperty);
+
+        AutomationElement? hallado;
+        string como;
+        try
+        {
+            var raiz = Root(hwnd);
+            if (raiz == null) return No("la ventana no se deja leer por UIA");
+            if (porRuta)
+            {
+                como = "por ruta";
+                hallado = ByPath(raiz, ruta!)?.GetUpdatedCache(peticion);
+            }
+            else
+            {
+                como = "FindFirst";
+                var aLaVista = new AndCondition(condicion!, new PropertyCondition(AutomationElement.IsOffscreenProperty, false));
+                using (peticion.Activate()) hallado = raiz.FindFirst(TreeScope.Descendants, aLaVista);
+                if (hallado == null)
+                {
+                    // EL NOMBRE RECORTADO, COMO RESOLVE (promesa 331): solo si el exacto no apareció.
+                    hallado = PorNombreRecortado(raiz, parts)?.GetUpdatedCache(peticion);
+                    if (hallado != null) como = "FindFirst, y el nombre recortado (331)";
+                }
+            }
+            if (hallado == null) return No($"{como}: sin coincidencias a la vista");
+            var c = hallado.Cached;
+            if (c.IsOffscreen) return No($"{como}: solo fuera de la vista");
+            return new RespuestaDeUno(true, (c.Name ?? "").Trim(), ControlTypeName(c.ControlType), c.BoundingRectangle,
+                hallado, como, crono.ElapsedMilliseconds);
+        }
+        catch (Exception e)
+        {
+            // LA CADENA ENTERA (patrón nº3): «no está» y «UIA lanzó» no pueden sonar igual en el log.
+            var causa = new System.Text.StringBuilder();
+            for (var x = e; x != null; x = x.InnerException)
+                causa.Append(causa.Length > 0 ? " ← " : "").Append($"{x.GetType().Name}: {x.Message}");
+            return No($"UIA lanzó al preguntar: {causa}");
+        }
+    }
+
     /// <summary>
     /// De todos los elementos que casan con el selector, el que SE PUEDE USAR: visible y con
     /// geometría. Coger el primero era el error.

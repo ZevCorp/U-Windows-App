@@ -275,22 +275,140 @@ public sealed class SurfaceMapTools
     /// <summary>
     /// LA VISTA QUE EL PASO LLEVA A LA COMPUERTA (promesa 363): la observación compartida si es de la ventana
     /// que se leería y del dónde de ahora —los mismos dos caminos que <see cref="VistaReciente"/>—, sin leer
-    /// nada: si no la hay, el paso va sin ella y la compuerta mira como hoy, y el log dice por qué.
+    /// nada: si no la hay, el log dice por qué, y <see cref="PreguntarSiHaceFalta"/> decide cómo sigue el paso.
     /// </summary>
-    private Uia.Observacion? VistaQueElPasoTrae()
+    private Uia.Observacion? VistaQueElPasoTrae(string aqui)
     {
-        string aqui = _where()?.Id ?? "";
-        if (aqui.Length == 0) { LogBus.Log("lectura", "el paso va sin observación (no sé dónde estoy): la compuerta mira como hoy"); return null; }
+        // SIN CONCLUIR «la compuerta mira como hoy» (patrón nº2): desde la 364 el paso puede ir con la respuesta
+        // de preguntar por su selector, y quien lo decide (PreguntarSiHaceFalta) es quien dice cómo sigue.
+        if (aqui.Length == 0) { LogBus.Log("lectura", "el paso no lleva la observación compartida (no sé dónde estoy)"); return null; }
         IntPtr ventana = (VentanaQueLeeria ?? AppAligner.VentanaDelUsuario)();
         string? porQueNo = Uia.Observatorio.PorQueNoSirve(ventana, aqui, Uia.Observacion.VigenciaMs, out var vista);
         if (vista == null)
         {
-            LogBus.Log("lectura", $"el paso va sin observación ({porQueNo}): la compuerta mira como hoy");
+            LogBus.Log("lectura", $"el paso no lleva la observación compartida ({porQueNo})");
             return null;
         }
         LogBus.Log("lectura", $"el paso lleva la observación v{vista.Version} de «{aqui}» ({vista.EdadEn(Uia.Observatorio.Ahora())} ms de edad · "
-            + $"{vista.Elementos.Count} elemento(s) · {(vista.Completa ? "completa" : "de uno")}): la compuerta no vuelve a mirar");
+            + $"{vista.Elementos.Count} elemento(s) · {(vista.Completa ? "completa" : "de uno")}): cuenta como la primera mirada de la compuerta");
         return vista;
+    }
+
+    // ── Selector primero, solo sin puerta viva (spec 048, promesa 364) ─────────────────────────────
+    //
+    // MEDIDO: Take no leía nada; si el grafo no tenía la puerta viva, la compuerta MIRABA la ventana entera
+    // (MirarOtraVez, 232-272 ms en Chrome) aunque el paso ya trajera el selector exacto de lo que iba a pulsar.
+    // Preguntar por ese elemento cuesta 7-126 ms, y fallar 60-107. Tres caminos, y la cuenta dice cuál:
+    //  · viva en el grafo → ni se pregunta ni se lee, como hoy (la compuerta la encuentra por selector, sin mirar);
+    //  · no viva, selector de UIA y ventana de trabajo → se pregunta; si está, el paso la lleva como
+    //    observación DE UNO y la compuerta la recuerda sin mirar ni tocar la lista de vivos;
+    //  · no está, no es de UIA, o no hay ventana → Take no lee nada, y la compuerta mira como hoy.
+
+    /// <summary>
+    /// PREGUNTAR POR UN SELECTOR en una ventana: la respuesta como observación DE UNO (con el elemento si está,
+    /// vacía si no), o null si no está. Null = <see cref="UiaSurface.Preguntar"/>. El contrato pone uno que cuenta.
+    /// </summary>
+    public Func<IntPtr, string, Uia.Observacion?>? PreguntaPorSelector { get; set; }
+
+    /// <summary>Cómo fue lo de preguntar en el último map_take, para la línea de tiempos del paso.</summary>
+    private string _ultimaPregunta = "";
+
+    /// <summary>
+    /// La pregunta de verdad: <see cref="UiaSurface.Preguntar"/>, y de su respuesta la observación de uno. El
+    /// selector del elemento es EL PREGUNTADO, literal, porque la compuerta lo compara con el del paso por
+    /// ordinal; la identidad sale por el mismo camino que la del lector (<see cref="Uia.ElementoVisto.IdentidadDe"/>).
+    /// </summary>
+    private static Uia.Observacion PreguntarDeVerdad(IntPtr ventana, string selector)
+    {
+        long preguntadaEn = Uia.Observatorio.Ahora();
+        var r = UiaSurface.Preguntar(ventana, selector);
+        var elementos = r.Esta
+            ? new[] { new Uia.ElementoVisto(selector, r.Nombre, r.Tipo, r.Caja, Uia.ElementoVisto.IdentidadDe(r.Elemento)) }
+            : Array.Empty<Uia.ElementoVisto>();
+        return new Uia.Observacion(0, ventana, "", "", preguntadaEn, r.Ms, r.ComoBusco, elementos, Completa: false);
+    }
+
+    /// <summary>
+    /// LA VISTA QUE EL PASO LLEVA: la respuesta de preguntar por su selector si hizo falta y el elemento está;
+    /// si no, la observación compartida (363), que puede no haber.
+    /// </summary>
+    private Uia.Observacion? VistaDelPaso(string salida)
+    {
+        // UN SOLO «DÓNDE» para las dos decisiones (aprendizaje nº16): la observación compartida y las puertas
+        // vivas se piden por el mismo valor, y DondeEstoy no se paga dos veces (25 llamadas sin memoria, spec 048).
+        string aqui = _where()?.Id ?? "";
+        var compartida = VistaQueElPasoTrae(aqui);
+        var (deUno, comoFue) = PreguntarSiHaceFalta(salida, aqui, compartida);
+        _ultimaPregunta = comoFue;
+        return deUno ?? compartida;
+    }
+
+    /// <summary>
+    /// ¿HACE FALTA PREGUNTAR? Solo si el selector es de UIA, hay ventana de trabajo y el grafo NO tiene esa
+    /// puerta viva. Devuelve la observación de uno si se preguntó y está, y la frase corta para la cuenta del
+    /// paso; la larga, con el camino y los ms, va al log en cada caso.
+    /// </summary>
+    private (Uia.Observacion? DeUno, string ComoFue) PreguntarSiHaceFalta(string salida, string aqui, Uia.Observacion? compartida)
+    {
+        (Uia.Observacion?, string) Sin(string linea, string corta) { LogBus.Log("lectura", linea); return (null, corta); }
+
+        if (!UiaSelector.Owns(salida))
+            return Sin($"«{salida}»: sin preguntar (no es un selector de UIA); la compuerta decide como hoy", "sin preguntar: no es de UIA");
+        if (aqui.Length == 0)
+            return Sin($"«{salida}»: sin preguntar (no sé dónde estoy); la compuerta mira como hoy", "sin preguntar: no sé dónde estoy");
+        // SAP NO ENTRA (spec 048, regla 6): sus selectores resuelven por su API y su compuerta ya no mira
+        // (MirarOtraVezLaVentana devuelve false en sapgui://). Preguntar por UIA dentro del Pane opaco sería
+        // un camino nuevo que nadie ha medido en el hospital.
+        if (aqui.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
+            return Sin($"«{salida}»: sin preguntar (en SAP se resuelve por su API); la compuerta decide como hoy", "sin preguntar: SAP");
+        IntPtr ventana = VentanaDeTrabajo?.Invoke() ?? IntPtr.Zero;
+        if (ventana == IntPtr.Zero)
+            return Sin($"«{salida}»: sin preguntar (no hay ventana de trabajo); la compuerta mira como hoy", "sin preguntar: sin ventana de trabajo");
+
+        // VIVA EN EL GRAFO: la MISMA lista y la MISMA comparación que la compuerta —las vivas de DesdeAqui, por
+        // selector y por ordinal— (aprendizaje nº16): si aquí se dijera «viva» y allí no, se saltaría la pregunta
+        // que hacía falta.
+        var vivas = PuertasVivas?.Invoke(aqui) ?? Array.Empty<(string Selector, string Etiqueta, string Tipo)>();
+        if (vivas.Any(p => p.Selector.Equals(salida, StringComparison.Ordinal)))
+            return Sin($"«{salida}» viva en el grafo, sin preguntar ni leer: la compuerta la encuentra como hoy", "viva en el grafo, sin preguntar");
+
+        // YA LEÍDA POR EL PASO (363): si la observación que el paso acaba de leer la tiene, la compuerta la cuenta
+        // como su mirada sin pagar nada. Preguntar sería pagar 60-107 ms por lo que ya se sabe.
+        if (compartida is { Completa: true } && compartida.Elementos.Any(e => e.Selector.Equals(salida, StringComparison.Ordinal)))
+            return Sin($"«{salida}» está en la observación v{compartida.Version} que el paso acaba de leer: sin preguntar, la compuerta la cuenta como su mirada",
+                "en la observación del paso, sin preguntar");
+
+        var crono = System.Diagnostics.Stopwatch.StartNew();
+        Uia.Observacion? respuesta;
+        try { respuesta = (PreguntaPorSelector ?? PreguntarDeVerdad)(ventana, salida); }
+        catch (Exception e)
+        {
+            crono.Stop();
+            string causa = "";
+            for (var x = e; x != null; x = x.InnerException)
+                causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
+            return Sin($"no pude preguntar por «{salida}» en la ventana de trabajo ({causa}) · {crono.ElapsedMilliseconds} ms; la compuerta mira como hoy",
+                $"no pude preguntar · {crono.ElapsedMilliseconds} ms");
+        }
+        crono.Stop();
+        long ms = crono.ElapsedMilliseconds;
+        string como = string.IsNullOrWhiteSpace(respuesta?.ComoSeLeyo) ? "sin decir cómo" : respuesta!.ComoSeLeyo;
+        var suyo = respuesta?.Elementos.Where(e => e.Selector.Equals(salida, StringComparison.Ordinal)).ToList() ?? new List<Uia.ElementoVisto>();
+        if (suyo.Count == 0)
+            return Sin($"pregunté por «{salida}» en la ventana de trabajo ({como}): no está · {ms} ms; la compuerta mira como hoy",
+                $"pregunté: no está · {ms} ms");
+
+        var deUno = respuesta! with
+        {
+            Hwnd = respuesta.Hwnd != IntPtr.Zero ? respuesta.Hwnd : ventana,
+            Donde = respuesta.Donde.Length > 0 ? respuesta.Donde : aqui,
+            MsDeLectura = respuesta.MsDeLectura > 0 ? respuesta.MsDeLectura : ms,
+            Elementos = suyo,
+            Completa = false,
+        };
+        LogBus.Log("lectura", $"pregunté por «{salida}» en la ventana de trabajo ({como}): está · {ms} ms; "
+            + "el paso la lleva como observación de uno, sin leer la ventana entera");
+        return (deUno, $"pregunté: está · {ms} ms");
     }
 
     /// <summary>La cuenta de lecturas desde el último accionar, para la línea de tiempos del paso.</summary>
@@ -435,7 +553,9 @@ public sealed class SurfaceMapTools
             string cuenta = Take(puerta.Selector, "", decir, recuerdo);
             relojPulsar.Stop();
             var mano = _ultimaMano;
-            string tiempos = $"leer {relojLeer.ElapsedMilliseconds} ms · decidir {reloj.ElapsedMilliseconds} ms · pulsar {relojPulsar.ElapsedMilliseconds} ms · {lecturas}";
+            // Y CÓMO FUE PREGUNTAR (promesa 364): cuál de los tres caminos tomó Take y cuántos ms costó.
+            string tiempos = $"leer {relojLeer.ElapsedMilliseconds} ms · decidir {reloj.ElapsedMilliseconds} ms · pulsar {relojPulsar.ElapsedMilliseconds} ms · {lecturas}"
+                + (_ultimaPregunta.Length > 0 ? $" · {_ultimaPregunta}" : "");
             string medida = k == 0
                 ? $"con confianza {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}"
                 : $"con probabilidad {prob.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}";
@@ -2702,6 +2822,7 @@ public sealed class SurfaceMapTools
 
     private string Take(string salida, string cual = "", string decir = "", string recuerdo = "")
     {
+        _ultimaPregunta = "";   // la del map_take anterior no describe este (patrón nº10: sin rastro viejo)
         if (salida.Length == 0) return "falta `exit`: qué puerta tomar (su nombre tal como se ve, o su selector)";
         if (RecorrerPorElNucleo == null) return "todavía no sé pulsar: el núcleo no está conectado.";
         // CUÁL DE VARIOS (promesa 203): si el batch contestó con una lista numerada, `which` elige en ESE
@@ -2709,7 +2830,7 @@ public sealed class SurfaceMapTools
         // «dime el selector». Los antiguos `action` y `at` no llegaban aquí desde e3c3ad8: el gesto lo
         // aprende la arista (spec 003), y ofrecerlos era la ilusión de controlarlo (promesa 206).
         int.TryParse(cual, out int n);
-        var paso = new Navigation.RecorrerSegunElNucleo.Paso(salida) { Cual = n, AntesDePulsar = _antesDePulsar, Vista = VistaQueElPasoTrae() };
+        var paso = new Navigation.RecorrerSegunElNucleo.Paso(salida) { Cual = n, AntesDePulsar = _antesDePulsar, Vista = VistaDelPaso(salida) };
         try
         {
             // LA MISMA COREOGRAFÍA QUE EL PLAN (promesa 191): al comprobar, o cuando el piloto trae algo que
