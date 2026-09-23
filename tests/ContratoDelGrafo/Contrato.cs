@@ -13433,23 +13433,23 @@ internal static class Contrato
         // 1. ENVUELTO EN ``` Y CON TEXTO ALREDEDOR, fuera de orden y con una foto de la que no volvió nada.
         var r = Emparejar("Aquí tienes:\n```json\n{\"resultados\":[{\"id\":\"c\",\"cardiologia\":true,\"tipo\":\"ECG\"},"
                           + "{\"id\":\"a\",\"cardiologia\":false,\"motivo_omision\":\"selfie\"}]}\n```\nListo.", "a", "b", "c");
-        Debe(r.Count == 3, $"un resultado por foto, ni más ni menos: salieron {r.Count} de 3");
+        Debe((bool)(r.Count == 3), $"un resultado por foto, ni más ni menos: salieron {r.Count} de 3");
         if (r.Count != 3) return;
-        Debe((string)r[0].Id == "a" && (string)r[1].Id == "b" && (string)r[2].Id == "c",
+        Debe((bool)((string)r[0].Id == "a" && (string)r[1].Id == "b" && (string)r[2].Id == "c"),
             $"en el orden de las fotos, no en el del modelo: [{string.Join(", ", r.Select(x => (string)x.Id))}]");
-        Debe(r[2].Estado.ToString() == "Cardiologia" && (string)r[2].Tipo == "ECG", $"«c» se empareja por su id: {r[2].Estado} «{r[2].Tipo}»");
-        Debe(r[0].Estado.ToString() == "Omitida", $"«a» es la omitida: {r[0].Estado}");
-        Debe(r[1].Estado.ToString() == "SinLeer",
+        Debe((bool)(r[2].Estado.ToString() == "Cardiologia" && (string)r[2].Tipo == "ECG"), $"«c» se empareja por su id: {r[2].Estado} «{r[2].Tipo}»");
+        Debe((bool)(r[0].Estado.ToString() == "Omitida"), $"«a» es la omitida: {r[0].Estado}");
+        Debe((bool)(r[1].Estado.ToString() == "SinLeer"),
             $"de «b» no volvió nada, y eso es «sin leer» —ni cardiológica ni omitida—: {r[1].Estado}");
 
         // 2. SI LOS IDS NO CASAN, POR ORDEN. El modelo a veces devuelve «imagen 1» en vez del id.
         var p = Emparejar("{\"resultados\":[{\"id\":\"imagen 1\",\"cardiologia\":true,\"tipo\":\"Eco\"},{\"id\":\"imagen 2\",\"cardiologia\":false}]}", "x", "y");
-        Debe(p.Count == 2 && p[0].Estado.ToString() == "Cardiologia" && (string)p[0].Tipo == "Eco" && p[1].Estado.ToString() == "Omitida",
+        Debe((bool)(p.Count == 2 && p[0].Estado.ToString() == "Cardiologia" && (string)p[0].Tipo == "Eco" && p[1].Estado.ToString() == "Omitida"),
             $"con ids que no casan se empareja por orden: [{string.Join(", ", p.Select(x => $"{x.Id}={x.Estado}"))}]");
 
         // 3. BASURA NO TUMBA NADA: todas quedan sin leer y se pueden reintentar.
         var b = Emparejar("Lo siento, no puedo ayudar con eso.", "m", "n");
-        Debe(b.Count == 2 && b.All(x => x.Estado.ToString() == "SinLeer"),
+        Debe((bool)(b.Count == 2 && b.All(x => x.Estado.ToString() == "SinLeer")),
             $"una respuesta sin JSON deja las fotos sin leer, sin excepción: [{string.Join(", ", b.Select(x => (string)x.Estado.ToString()))}]");
     }
 
@@ -13476,11 +13476,11 @@ internal static class Contrato
 
         // 1. DE LA OMITIDA SOLO QUEDA EL MOTIVO, aunque el modelo haya devuelto su contenido.
         var a = r[0];
-        Debe((string)a.Tipo == "" && ((System.Collections.ICollection)a.Hallazgos).Count == 0
-             && ((System.Collections.ICollection)a.Valores).Count == 0 && ((System.Collections.ICollection)a.Alertas).Count == 0,
+        Debe((bool)((string)a.Tipo == "" && ((System.Collections.ICollection)a.Hallazgos).Count == 0
+             && ((System.Collections.ICollection)a.Valores).Count == 0 && ((System.Collections.ICollection)a.Alertas).Count == 0),
             $"de una no cardiológica no se guarda tipo, hallazgos, valores ni alertas (tipo «{a.Tipo}», {((System.Collections.ICollection)a.Hallazgos).Count} hallazgo(s))");
-        Debe((string)a.Motivo == "foto personal", $"y sí su motivo: «{a.Motivo}»");
-        Debe(!string.IsNullOrWhiteSpace((string)r[1].Motivo), $"sin motivo del modelo, se pone uno: «{r[1].Motivo}»");
+        Debe((bool)((string)a.Motivo == "foto personal"), $"y sí su motivo: «{a.Motivo}»");
+        Debe((bool)(!string.IsNullOrWhiteSpace((string)r[1].Motivo)), $"sin motivo del modelo, se pone uno: «{r[1].Motivo}»");
 
         // 2. Y AUNQUE ALGUIEN LLENE A MANO UNA OMITIDA, no viaja ni al resumen ni a la pregunta.
         a.Tipo = "Selfie en Cartagena";
@@ -13492,8 +13492,8 @@ internal static class Contrato
         foreach (var (nombre, cuerpo) in new[] { ("el resumen", cuerpoResumen), ("la pregunta", cuerpoPregunta) })
         {
             var fuga = new[] { "Cartagena", "Juan", "PLAYA", "rodilla", "Gonartrosis" }.Where(x => cuerpo.Contains(x)).ToList();
-            Debe(fuga.Count == 0, $"nada de las omitidas llega a {nombre}; se coló: [{string.Join(", ", fuga)}]");
-            Debe(cuerpo.Contains("FEVI") && cuerpo.Contains("Ecocardiograma"), $"y lo cardiológico sí llega a {nombre}");
+            Debe((bool)(fuga.Count == 0), $"nada de las omitidas llega a {nombre}; se coló: [{string.Join(", ", fuga)}]");
+            Debe((bool)(cuerpo.Contains("FEVI") && cuerpo.Contains("Ecocardiograma")), $"y lo cardiológico sí llega a {nombre}");
         }
     }
 
@@ -13517,14 +13517,14 @@ internal static class Contrato
 
         // 1. LOTES DE 3, con cada imagen anunciada por su id.
         var conFotos = cuerpos.Select(LoQueLleva).Where(x => x.Imagenes > 0).ToList();
-        Debe(conFotos.Select(x => x.Imagenes).SequenceEqual(new[] { 3, 3, 1 }),
+        Debe((bool)(conFotos.Select(x => x.Imagenes).SequenceEqual(new[] { 3, 3, 1 })),
             $"7 fotos viajan en lotes de 3: [{string.Join(", ", conFotos.Select(x => x.Imagenes))}]");
-        Debe(conFotos.All(x => x.Ids.Count == x.Imagenes)
-             && conFotos.SelectMany(x => x.Ids).SequenceEqual(Enumerable.Range(1, 7).Select(i => "f" + i)),
+        Debe((bool)(conFotos.All(x => x.Ids.Count == x.Imagenes)
+             && conFotos.SelectMany(x => x.Ids).SequenceEqual(Enumerable.Range(1, 7).Select(i => "f" + i))),
             $"cada imagen va precedida de «Imagen n — id: X»: [{string.Join(", ", conFotos.SelectMany(x => x.Ids))}]");
-        Debe(cuerpos.All(c => JsonDocument.Parse(c).RootElement.TryGetProperty("store", out var st) && st.ValueKind == JsonValueKind.False),
+        Debe((bool)(cuerpos.All(c => JsonDocument.Parse(c).RootElement.TryGetProperty("store", out var st) && st.ValueKind == JsonValueKind.False)),
             "todas las peticiones piden store:false");
-        Debe(cuerpos.Count == 4 && LoQueLleva(cuerpos[3]).Imagenes == 0,
+        Debe((bool)(cuerpos.Count == 4 && LoQueLleva(cuerpos[3]).Imagenes == 0),
             $"el resumen es una llamada más y SIN imágenes: {cuerpos.Count} llamada(s)");
 
         // 2. LA PREGUNTA NO REENVÍA IMÁGENES y lleva solo las últimas 10 vueltas.
@@ -13537,14 +13537,14 @@ internal static class Contrato
         }
         cuerpos.Clear();
         string respuesta = ((Task<string>)preguntar.Invoke(cliente, new object[] { s, "¿Qué frecuencia cardiaca tiene?", CancellationToken.None })!).GetAwaiter().GetResult();
-        Debe(cuerpos.Count == 1 && LoQueLleva(cuerpos[0]).Imagenes == 0, "una pregunta es UNA llamada y no lleva ninguna imagen");
+        Debe((bool)(cuerpos.Count == 1 && LoQueLleva(cuerpos[0]).Imagenes == 0), "una pregunta es UNA llamada y no lleva ninguna imagen");
         string cp = cuerpos.FirstOrDefault() ?? "";
-        Debe(cp.Contains("frecuencia cardiaca") && cp.Contains("Ritmo sinusal") && cp.Contains("Estudios revisados"),
+        Debe((bool)(cp.Contains("frecuencia cardiaca") && cp.Contains("Ritmo sinusal") && cp.Contains("Estudios revisados")),
             "lleva la pregunta, las extracciones y el resumen");
-        Debe(!cp.Contains("turno-01") && !cp.Contains("turno-02") && cp.Contains("turno-03") && cp.Contains("turno-12"),
+        Debe((bool)(!cp.Contains("turno-01") && !cp.Contains("turno-02") && cp.Contains("turno-03") && cp.Contains("turno-12")),
             "del chat viajan solo las últimas 10 vueltas");
-        Debe(!cp.Contains("data:image"), "ni rastro de una imagen en la pregunta");
-        Debe(!string.IsNullOrWhiteSpace(respuesta) && s.Chat.Count == 13, $"la vuelta queda en el historial: {s.Chat.Count} de 13");
+        Debe((bool)(!cp.Contains("data:image")), "ni rastro de una imagen en la pregunta");
+        Debe((bool)(!string.IsNullOrWhiteSpace(respuesta) && s.Chat.Count == 13), $"la vuelta queda en el historial: {s.Chat.Count} de 13");
     }
 
     private static void UnaFotoSePreparaYUnaIlegibleSeNombra()
@@ -13570,25 +13570,25 @@ internal static class Contrato
 
         // 1. GRANDE → LADO MAYOR 1600, JPEG, FONDO BLANCO.
         var g = Preparar("captura.png", Png(3200, 800));
-        Debe((bool)g.Ok, $"una captura grande se prepara: «{g.Error}»");
+        Debe((bool)((bool)g.Ok), $"una captura grande se prepara: «{g.Error}»");
         if (!(bool)g.Ok) return;
-        Debe((int)g.Ancho == 1600 && (int)g.Alto == 400, $"a lado mayor 1600 px, con su proporción: {g.Ancho}×{g.Alto}");
+        Debe((bool)((int)g.Ancho == 1600 && (int)g.Alto == 400), $"a lado mayor 1600 px, con su proporción: {g.Ancho}×{g.Alto}");
         byte[] jpeg = g.Jpeg;
-        Debe(jpeg.Length > 3 && jpeg[0] == 0xFF && jpeg[1] == 0xD8, "y sale en JPEG");
+        Debe((bool)(jpeg.Length > 3 && jpeg[0] == 0xFF && jpeg[1] == 0xD8), "y sale en JPEG");
         var decod = System.Windows.Media.Imaging.BitmapDecoder.Create(new MemoryStream(jpeg),
             System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad).Frames[0];
         var bgr = new System.Windows.Media.Imaging.FormatConvertedBitmap(decod, System.Windows.Media.PixelFormats.Bgr32, null, 0);
         var pixel = new byte[4];
         bgr.CopyPixels(new System.Windows.Int32Rect(10, 10, 1, 1), pixel, 4, 0);
-        Debe(pixel[0] > 240 && pixel[1] > 240 && pixel[2] > 240, $"lo transparente queda BLANCO, no negro: ({pixel[2]},{pixel[1]},{pixel[0]})");
+        Debe((bool)(pixel[0] > 240 && pixel[1] > 240 && pixel[2] > 240), $"lo transparente queda BLANCO, no negro: ({pixel[2]},{pixel[1]},{pixel[0]})");
 
         // 2. PEQUEÑA → NO SE AGRANDA.
         var c = Preparar("chica.png", Png(800, 600));
-        Debe((bool)c.Ok && (int)c.Ancho == 800 && (int)c.Alto == 600, $"una foto pequeña no se agranda: {c.Ancho}×{c.Alto}");
+        Debe((bool)((bool)c.Ok && (int)c.Ancho == 800 && (int)c.Alto == 600), $"una foto pequeña no se agranda: {c.Ancho}×{c.Alto}");
 
         // 3. ILEGIBLE → SE NOMBRA Y NO LANZA.
         var h = Preparar("IMG_0001.HEIC", new byte[] { 0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63 });
-        Debe(!(bool)h.Ok && (string)h.Error == "No se pudo leer IMG_0001.HEIC. Expórtala como JPG",
+        Debe((bool)(!(bool)h.Ok && (string)h.Error == "No se pudo leer IMG_0001.HEIC. Expórtala como JPG"),
             $"una ilegible se nombra y se dice qué hacer: «{h.Error}»");
     }
 
@@ -13613,7 +13613,7 @@ internal static class Contrato
         tarde.Nombre = "tarde.jpg";
         tarde.Jpeg = Encoding.UTF8.GetBytes("JPEG-MARCADOR-DE-LA-FOTO");
         s.Agregar(tarde, t0.AddHours(20));
-        Debe((DateTime)s.PrimeraFotoUtc == t0, $"la caducidad cuenta desde la PRIMERA foto: {s.PrimeraFotoUtc:o}");
+        Debe((bool)((DateTime)s.PrimeraFotoUtc == t0), $"la caducidad cuenta desde la PRIMERA foto: {s.PrimeraFotoUtc:o}");
         s.Resumen = "RESUMEN-SECRETO FEVI 45 %";
         dynamic v = Activator.CreateInstance(tVuelta)!;
         v.Pregunta = "PREGUNTA-SECRETA";
@@ -13627,31 +13627,31 @@ internal static class Contrato
 
         // 2. EN DISCO NO SE LEE COMO TEXTO CLARO.
         var archivos = Directory.Exists(carpeta) ? Directory.GetFiles(carpeta, "*", SearchOption.AllDirectories) : Array.Empty<string>();
-        Debe(archivos.Length > 0, "la sesión se guarda en disco para sobrevivir a un reinicio");
+        Debe((bool)(archivos.Length > 0), "la sesión se guarda en disco para sobrevivir a un reinicio");
         var claros = archivos.Where(f =>
         {
             string txt = Encoding.UTF8.GetString(File.ReadAllBytes(f));
             return txt.Contains("RESUMEN-SECRETO") || txt.Contains("PREGUNTA-SECRETA") || txt.Contains("JPEG-MARCADOR");
         }).ToList();
-        Debe(claros.Count == 0, $"nada de lo guardado se lee como texto claro: [{string.Join(", ", claros.Select(Path.GetFileName))}]");
+        Debe((bool)(claros.Count == 0), $"nada de lo guardado se lee como texto claro: [{string.Join(", ", claros.Select(Path.GetFileName))}]");
 
         // 3. ANTES DE LAS 24 H VUELVE ENTERA.
         ahora = t0.AddHours(23).AddMinutes(59);
         dynamic? leida = cargar.Invoke(almacen, Array.Empty<object>());
-        Debe(leida != null && leida!.Fotos.Count == 2 && (string)leida.Resumen == "RESUMEN-SECRETO FEVI 45 %" && leida.Chat.Count == 1,
+        Debe((bool)(leida != null && leida!.Fotos.Count == 2 && (string)leida.Resumen == "RESUMEN-SECRETO FEVI 45 %" && leida.Chat.Count == 1),
             "a las 23 h 59 min la sesión vuelve entera: fotos, resumen y chat");
         if (leida != null)
         {
             byte[] j = ((IEnumerable<dynamic>)leida.Fotos).Cast<dynamic>().First(f => (string)f.Id == "tarde").Jpeg;
-            Debe(Encoding.UTF8.GetString(j) == "JPEG-MARCADOR-DE-LA-FOTO", "con los bytes de cada foto intactos");
+            Debe((bool)(Encoding.UTF8.GetString(j) == "JPEG-MARCADOR-DE-LA-FOTO"), "con los bytes de cada foto intactos");
         }
 
         // 4. PASADAS LAS 24 H DESDE LA PRIMERA, SE BORRA ENTERA.
         ahora = t0.AddHours(24).AddMinutes(1);
         dynamic? caducada = cargar.Invoke(almacen, Array.Empty<object>());
-        Debe(caducada == null, "a las 24 h desde la primera foto la sesión ya no se devuelve");
+        Debe((bool)(caducada == null), "a las 24 h desde la primera foto la sesión ya no se devuelve");
         int quedan = Directory.Exists(carpeta) ? Directory.GetFiles(carpeta, "*", SearchOption.AllDirectories).Length : 0;
-        Debe(quedan == 0, $"y no queda NADA en disco: {quedan} archivo(s)");
+        Debe((bool)(quedan == 0), $"y no queda NADA en disco: {quedan} archivo(s)");
     }
 
     private static void ElResumenSePintaSinEjecutarMarcado()
@@ -13662,17 +13662,17 @@ internal static class Contrato
         const string md = "## Hallazgos clave\n- **FEVI** 45 %\n<script>alert(1)</script> y <b>x</b>\n* otra **sin cerrar\n\n";
         var b = ((System.Collections.IEnumerable)bloques.Invoke(null, new object[] { md })!).Cast<dynamic>().ToList();
         string Texto(dynamic bloque) => string.Concat(((System.Collections.IEnumerable)bloque.Trozos).Cast<dynamic>().Select(x => (string)x.Texto));
-        Debe(b.Count == 4, $"cuatro bloques, las líneas vacías no cuentan: salieron {b.Count}");
+        Debe((bool)(b.Count == 4), $"cuatro bloques, las líneas vacías no cuentan: salieron {b.Count}");
         if (b.Count != 4) return;
-        Debe(b[0].Tipo.ToString() == "Titulo" && Texto(b[0]) == "Hallazgos clave", $"«## …» es un título: {b[0].Tipo} «{Texto(b[0])}»");
+        Debe((bool)(b[0].Tipo.ToString() == "Titulo" && Texto(b[0]) == "Hallazgos clave"), $"«## …» es un título: {b[0].Tipo} «{Texto(b[0])}»");
         var trozos = ((System.Collections.IEnumerable)b[1].Trozos).Cast<dynamic>().ToList();
-        Debe(b[1].Tipo.ToString() == "Vineta" && trozos.Count == 2 && (string)trozos[0].Texto == "FEVI" && (bool)trozos[0].Negrita
-             && (string)trozos[1].Texto == " 45 %" && !(bool)trozos[1].Negrita,
+        Debe((bool)(b[1].Tipo.ToString() == "Vineta" && trozos.Count == 2 && (string)trozos[0].Texto == "FEVI" && (bool)trozos[0].Negrita
+             && (string)trozos[1].Texto == " 45 %" && !(bool)trozos[1].Negrita),
             $"«- **FEVI** 45 %» es una viñeta con «FEVI» en negrita: {b[1].Tipo} [{string.Join("|", trozos.Select(x => $"{x.Texto}:{x.Negrita}"))}]");
-        Debe(b[2].Tipo.ToString() == "Parrafo" && Texto(b[2]) == "<script>alert(1)</script> y <b>x</b>"
-             && ((System.Collections.IEnumerable)b[2].Trozos).Cast<dynamic>().All(x => !(bool)x.Negrita),
+        Debe((bool)(b[2].Tipo.ToString() == "Parrafo" && Texto(b[2]) == "<script>alert(1)</script> y <b>x</b>"
+             && ((System.Collections.IEnumerable)b[2].Trozos).Cast<dynamic>().All(x => !(bool)x.Negrita)),
             $"el marcado ajeno es texto literal, no se interpreta: «{Texto(b[2])}»");
-        Debe(b[3].Tipo.ToString() == "Vineta" && Texto(b[3]) == "otra **sin cerrar",
+        Debe((bool)(b[3].Tipo.ToString() == "Vineta" && Texto(b[3]) == "otra **sin cerrar"),
             $"un ** sin cerrar se queda como está: «{Texto(b[3])}»");
     }
 
@@ -13695,22 +13695,22 @@ internal static class Contrato
         string Progreso(int a, int b, int total) => (string)progreso.Invoke(null, new object[] { a, b, total })!;
         bool Cambios() => (bool)hayCambios.Invoke(null, new object[] { s })!;
 
-        Debe(Etiqueta(12, false, true) == "Generar resumen (12)", $"sin resumen: «{Etiqueta(12, false, true)}»");
-        Debe(Etiqueta(12, true, true) == "Actualizar resumen", $"con resumen y fotos cambiadas: «{Etiqueta(12, true, true)}»");
-        Debe(Etiqueta(12, true, false) == "Resumen al día", $"con resumen y nada nuevo: «{Etiqueta(12, true, false)}»");
-        Debe(Progreso(4, 6, 12) == "Leyendo fotos 4–6 de 12…", $"«{Progreso(4, 6, 12)}»");
-        Debe(Progreso(7, 7, 7) == "Leyendo foto 7 de 7…", $"una sola foto se dice en singular: «{Progreso(7, 7, 7)}»");
+        Debe((bool)(Etiqueta(12, false, true) == "Generar resumen (12)"), $"sin resumen: «{Etiqueta(12, false, true)}»");
+        Debe((bool)(Etiqueta(12, true, true) == "Actualizar resumen"), $"con resumen y fotos cambiadas: «{Etiqueta(12, true, true)}»");
+        Debe((bool)(Etiqueta(12, true, false) == "Resumen al día"), $"con resumen y nada nuevo: «{Etiqueta(12, true, false)}»");
+        Debe((bool)(Progreso(4, 6, 12) == "Leyendo fotos 4–6 de 12…"), $"«{Progreso(4, 6, 12)}»");
+        Debe((bool)(Progreso(7, 7, 7) == "Leyendo foto 7 de 7…"), $"una sola foto se dice en singular: «{Progreso(7, 7, 7)}»");
 
         // EL PROGRESO REAL CUENTA SOBRE EL PLAN (patrón nº10): 7 fotos son «de 7» en cada lote.
         var lineas = new List<string>();
         var cliente = ctor.Invoke(new object[] { ModeloDeMentira(new List<string>()), "modelo-x" });
-        Debe(Cambios(), "antes de generar, hay cambios");
+        Debe((bool)(Cambios()), "antes de generar, hay cambios");
         ((Task)generar.Invoke(cliente, new object[] { s, (Action<string>)(l => lineas.Add(l)), CancellationToken.None })!).GetAwaiter().GetResult();
-        Debe(lineas.SequenceEqual(new[] { "Leyendo fotos 1–3 de 7…", "Leyendo fotos 4–6 de 7…", "Leyendo foto 7 de 7…", "Generando resumen…" }),
+        Debe((bool)(lineas.SequenceEqual(new[] { "Leyendo fotos 1–3 de 7…", "Leyendo fotos 4–6 de 7…", "Leyendo foto 7 de 7…", "Generando resumen…" })),
             $"el progreso dice lo que pasa, sobre el plan: [{string.Join(" ¦ ", lineas)}]");
-        Debe(!Cambios(), "recién generado, no hay cambios");
+        Debe((bool)(!Cambios()), "recién generado, no hay cambios");
         s.Quitar("f3");
-        Debe(Cambios(), "quitar una foto cuenta como cambio: el resumen ya no describe lo que hay");
+        Debe((bool)(Cambios()), "quitar una foto cuenta como cambio: el resumen ya no describe lo que hay");
     }
 
     private static void SiElModeloFallaLoLeidoSeConserva()
@@ -13731,21 +13731,21 @@ internal static class Contrato
         string error = "";
         try { ((Task)generar.Invoke(roto, new object[] { s, (Action<string>)(_ => { }), CancellationToken.None })!).GetAwaiter().GetResult(); }
         catch (Exception e) { error = e.Message; }
-        Debe(error.Contains("4–6") && error.Contains("503"),
+        Debe((bool)(error.Contains("4–6") && error.Contains("503")),
             $"el error dice QUÉ lote falló y por qué, no «algo falló»: «{error}»");
         var fotos = ((IEnumerable<dynamic>)s.Fotos).Cast<dynamic>().ToList();
         bool Leida(dynamic f) => f.Resultado != null && f.Resultado.Estado.ToString() != "SinLeer";
-        Debe(fotos.Take(3).All(Leida), "lo leído antes del fallo se conserva");
-        Debe(fotos.Skip(3).All(f => !Leida(f)), "lo que no se leyó queda por leer, no omitido");
-        Debe(string.IsNullOrEmpty((string)s.Resumen), "y sin todas las fotos leídas no se inventa un resumen a medias");
+        Debe((bool)(fotos.Take(3).All(Leida)), "lo leído antes del fallo se conserva");
+        Debe((bool)(fotos.Skip(3).All(f => !Leida(f))), "lo que no se leyó queda por leer, no omitido");
+        Debe((bool)(string.IsNullOrEmpty((string)s.Resumen)), "y sin todas las fotos leídas no se inventa un resumen a medias");
 
         // 2. REINTENTAR LEE SOLO LO QUE FALTÓ.
         cuerpos.Clear();
         var sano = ctor.Invoke(new object[] { ModeloDeMentira(cuerpos), "modelo-x" });
         ((Task)generar.Invoke(sano, new object[] { s, (Action<string>)(_ => { }), CancellationToken.None })!).GetAwaiter().GetResult();
         var releidas = cuerpos.Select(LoQueLleva).SelectMany(x => x.Ids).ToList();
-        Debe(releidas.SequenceEqual(new[] { "f4", "f5", "f6", "f7" }), $"el reintento lee solo lo que faltó: [{string.Join(", ", releidas)}]");
-        Debe(!string.IsNullOrEmpty((string)s.Resumen), "y ahora sí hay resumen");
+        Debe((bool)(releidas.SequenceEqual(new[] { "f4", "f5", "f6", "f7" })), $"el reintento lee solo lo que faltó: [{string.Join(", ", releidas)}]");
+        Debe((bool)(!string.IsNullOrEmpty((string)s.Resumen)), "y ahora sí hay resumen");
     }
 
     private static void Debe(bool condicion, string promesa)
