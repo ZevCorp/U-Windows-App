@@ -18,8 +18,9 @@ namespace U.WindowsClient.Navigation;
 /// puerta: el mapa aprendería menos de lo que cree, y en silencio (aprendizaje nº16).
 ///
 /// SE USA DE DOS FORMAS: <see cref="Espera"/> es el bucle entero, acotado por el <see cref="Compas"/> (gasta del reloj,
-/// no cuenta vueltas: promesa 245); y el sondeo suelto (<see cref="Sondea"/>) para correr EN SOMBRA dentro de una
-/// espera que todavía decide por la ubicación —la fase 0 de la 047, que solo mide y no recorta nada—.
+/// no cuenta vueltas: promesa 245); y el sondeo suelto (<see cref="Sondea"/>) dentro de la espera de <c>Pulsa</c>, que
+/// además mira la ubicación: desde la fase 2 decide con él (351), y en los casos de la regla 4 de la spec lo corre EN
+/// SOMBRA, solo para la línea de la 355.
 /// </remarks>
 public sealed class EsperaAsentada
 {

@@ -13487,6 +13487,18 @@ internal static class Contrato
             $"el sitio se relee fresco antes de dar la pantalla por asentada, y si cambió manda y se aprende: {tardio.QueCambio}, hasta «{tardio.R.Hasta}», aprendido={tardio.R.Aprendido} a los {tardio.Ms} ms");
         Debe(!tardio.Diario.Any(l => l.Contains("asentada") && l.Contains("dentro")),
             $"y ninguna línea declara «asentada / dentro» sobre el sitio viejo: [{tardio.DiarioJunto}]");
+
+        // 7. EN TODOS LOS CASOS QUEDA DICHO a los cuántos ms dejó de esperar y por qué (la última cláusula de la promesa).
+        // Los casos 4 y 6 no lo miraban. La causa va en palabras que la distinguen de las otras (patrón nº2): «no cambió»
+        // a secas cubría cuatro situaciones el 21-09.
+        foreach (var (caso, p, causa) in new[] { ("asentada", quieta, "asentada"), ("se mueve", moviendose, "no paró de moverse"),
+                     ("con destino", conDestino, "lleva a algún sitio"), ("SAP", sap, "SAP"), ("sin huella", ciego, "nadie miraba"),
+                     ("sitio tardío", tardio, "cambió de sitio") })
+        {
+            string linea = p.Diario.FirstOrDefault(l => l.Contains("dejó de esperar a los")) ?? "";
+            Debe(System.Text.RegularExpressions.Regex.IsMatch(linea, @"dejó de esperar a los \d+ ms: [^·]*" + System.Text.RegularExpressions.Regex.Escape(causa)),
+                $"caso «{caso}»: queda dicho a los cuántos ms dejó de esperar y por qué («{causa}»): [{p.DiarioJunto}]");
+        }
     }
 
     private static void HayUnaSolaDefinicionDeCambio()
@@ -13645,9 +13657,8 @@ internal static class Contrato
         string l1 = lineas.FirstOrDefault() ?? "";
         Debe(l1.Contains("delante") && l1.Contains("ubicación") && l1.Contains("asentada a los") && l1.Contains(" ms") && DiceLaParte(l1) && l1.Contains("coste"),
             $"y lleva la ubicación y la ventana de delante antes y después, la parte que vio el cambio, a los cuántos ms se asentó y el coste por parte: «{l1}»");
-        // FASE 0, SOLO REGISTRO: la espera sigue llegando al techo también con huella. Esta aserción SE RETIRA en la fase 2,
-        // con la 351, y el commit lo dice. Hasta entonces la línea es medida, no recorte.
-        Debe(asentada.Ms >= Techo047 - 100, $"en la fase 0 la línea sale sin recortar la espera: {asentada.Ms} ms de {Techo047} (se retira en la fase 2, con la 351)");
+        // (Hasta la fase 2 aquí se exigía que la espera llegara al techo TAMBIÉN con huella: la fase 0 solo medía. Se retiró
+        // con la 351, que la hace salir al asentarse; lo dice su commit.)
 
         // 2. NUNCA SE ASIENTA: lo dice.
         var inquieta = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, "w", new[] { "b" + n }))!;

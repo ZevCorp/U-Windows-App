@@ -566,9 +566,58 @@ dé el presupuesto de redirección.
     el arnés dice «no pude juzgarla»). Tras el arreglo `CONTRATO ROTO: 17`, veredicto a veredicto igual que la fase 1.
     Dos sabotajes por diff, uno por línea, cada uno pone roja solo su aserción (`CONTRATO ROTO: 18`); restaurados
     con hash idéntico → 17. Voz: `VOZ ÍNTEGRA` (46 ✔).
-  - **Para el nivel 4 de la fase 0**: se corre sobre **este commit**, no sobre la fase 2. Sin este arreglo la primera pulsación de cada sesión mediría un cambio de
-    sitio falso y la relectura del sitio no se mediría en las pantallas que no se asientan; y con la fase 2 la espera
-    deja de mirar al asentarse, así que ya no puede contar las «asentadas falsas» de la cuenta (b).
+  - **Para el nivel 4 de la fase 0**: se corre sobre **este commit** (`3d22018`), no sobre la fase 2. Sin este
+    arreglo la primera pulsación de cada sesión mediría un cambio de sitio falso y la relectura del sitio no se mediría
+    en las pantallas que no se asientan; y con la fase 2 la espera deja de mirar al asentarse, así que ya no puede
+    contar las «asentadas falsas» de la cuenta (b).
+- **2026-09-22, fase 2 escrita (351 verde) SIN su condición previa.** El nivel 4 de la fase 0 **no está medido**: en
+  `%LOCALAPPDATA%\U\logs` de esta máquina hay 0 líneas «asentada a los» o «nadie miraba» y ningún log por instancia (M,
+  `grep` del 22-09), y esta rama no ejecuta `U.exe`. Así que la fase entra **como `wip`**: escrita y juzgada en el
+  contrato, y **no llega a `main` hasta que el dueño corra el nivel 4 sobre `3d22018`** y de él salgan
+  `PrimeraHuellaMs` y `RespiroMs`. Hoy valen **400 y 250, metas y no datos**. Y el riesgo queda dicho (D): la mediana
+  del cambio de sitio tras un clic que sí navega fue 405–510 ms el 18-09, y hasta que cambia la página vieja sigue
+  quieta. Con 400, una navegación más lenta puede darse por asentada ANTES de cambiar de sitio: la relectura fresca solo
+  la salva si el sitio ya cambió. Sobre una fila de lista eso sería peor, porque el ensayo del doble caería sobre la
+  página nueva y aprendería el gesto equivocado. Es la cuenta (b), y es la razón de la condición.
+  - **Qué cambió**: un archivo de producción, `PulsarSegunElNucleo.cs`, más una línea de comentario en `EsperaAsentada`.
+    La primera espera de `Pulsa` (la del clic) **decide con la huella**: sale en el instante en que `Sondea` dice
+    `Asentada`, o sale con el sitio fresco si dice `CambioDeSitio` y ese sitio no es el de partida (entonces `Pulsa`
+    aprende la puerta). Se espera **como hoy**, con la huella en sombra, en los casos de la regla 4: nadie mira, no se
+    pudo tomar la huella de antes, un campo de texto (su espera corta de la 334), `sapgui://` (por `Mundos.EsSap`, el
+    sitio único de «de qué mundo es una URL») y `SabeQueLleva`. `Resultado` gana `QueCambio` (`init`, por defecto
+    `Nada`; los `new(...)` de siempre compilan igual). El sitio lo decide la ubicación de trabajo, por el mismo camino
+    con el que `Pulsa` decide aprender (nº16), y lo demás lo decide la huella. La línea de la 355 termina con «dejó de
+    esperar a los N ms: <causa>», y cada causa tiene sus propias palabras (patrón nº2): cambió de sitio (y qué lo vio),
+    asentada, «llegó al techo, como hoy: <cuál de los cinco casos>», no pude mirar, no paró de moverse, el sitio fresco
+    no cuadra con la ubicación, o el techo no dio para juzgarla.
+  - **Sitios** (M, `grep`): `EsperarACambiar` tiene **3** llamadas en `Pulsa`. Esta fase cambia **1**, la del clic
+    (`:239`). Las del ensayo del doble (`:280`) y la repetición (`:304`) siguen al techo: son la fase 5 (357). De los 11
+    sitios que calculan «cambió» por ubicación o recuento quedan **10** así; el del clic mira primero la ubicación y
+    después la huella.
+  - **Contrato** (M, con `TEMP` propio): antes, con las aserciones nuevas de la 351 y sin código, `CONTRATO ROTO: 23`
+    (300 ✔ / 7 ✘). La 351 estaba roja por sus tres casos de siempre y por seis nuevos: su última cláusula, «en todos los
+    casos queda dicho a los cuántos milisegundos dejó de esperar y por qué», no la juzgaba ningún caso de SAP ni del
+    sitio tardío, y ahora se exige en los seis. Después, `CONTRATO ROTO: 10` (302 ✔ / 5 ✘: 353, 356, 357, 358, 359,
+    todas de fases posteriores). Solo cambian dos veredictos: `✘ 351.` → `✔ 351.` y **`✘ 354.` → `✔ 354.`**. La 354 se
+    pone verde **aquí y no en la fase 3**: su caso nuevo («Guardar» con huella asentada contesta en menos de la mitad
+    del techo) es esta misma regla sobre un botón. A la fase 3 le queda reescribir el enunciado de la 334 y su sabotaje
+    propio, que no puede separarse de la 351 porque las dos juzgan la misma línea. La 355 pierde la aserción «también
+    con huella llega al techo», retirada como se dijo en la fase 0. 44, 83, 245, 248, 292, 296, 299, 334, 352 y 355 en
+    ✔. Voz: `VOZ ÍNTEGRA` (46 ✔). 0 errores; los mismos 60 warnings.
+  - **Sabotajes de la 351, los dos de la spec, verificados por diff** (1+/1− cada uno, restaurados con hash idéntico,
+    y al volver `CONTRATO ROTO: 10` veredicto a veredicto):
+    - (a) En `EsperaAsentada.Sondea`, la comparación de las dos huellas pasa a decir siempre «distintas»
+      (`!Iguales(_referencia, null)`). Resultado: `CONTRATO ROTO: 16`. Caen el caso 1 de la 351 y su «asentada», y
+      **también la 354 y la 355**. La spec decía «ninguna otra promesa», y lo medido la corrige: las tres juzgan la
+      misma `EsperaAsentada`, que es justo lo que pide la 352 (una sola definición).
+    - (b) Servir el sitio de la memoria en vez de `SitioFresco` (`new EsperaAsentada(Huella, _donde, …)`). Resultado:
+      `CONTRATO ROTO: 13`, **solo la 351** y solo el sitio tardío: «Dentro, hasta «web://x/a»», una línea «asentada /
+      dentro» y ningún «cambió de sitio». Es la refutación 1, reproducida.
+  - **Lo que deja hecho para otras fases, dicho para que no se lea como suyo**: la 353 ya ve `QueCambio` correcto en
+    sus cuatro casos. Le faltan la cuenta con «dentro»/«delante», `MsHastaElVeredicto` y `ElTramo` (fase 4). La 357
+    ya cumple «el diario lo dice las dos veces», porque la línea de la primera espera dice «lleva a algún sitio» y la
+    de la repetición también. Si la fase 5 hace que la espera de la repetición escriba su propia línea, serán tres, y
+    esa aserción (`== 2`) tendrá que decidir qué cuenta.
 
 ## Revisiones
 
@@ -594,6 +643,8 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 
 - [x] Fase 0 **escrita**: 355 verde, sabotaje verificado por diff (2026-09-22)
 - [x] Fase 1: 352 verde, 299 intacta, sabotaje de la spec verificado por diff y uno extra sobre la compuerta (2026-09-22)
+- [x] Antes de la fase 2: los dos «aún no» restados a `long.MinValue` (2 de 4 sitios), juzgados por la 355 (2026-09-22)
+- [ ] Fase 2 **escrita** (351 verde, y la 354 con ella; dos sabotajes por diff; 2026-09-22) — **no entra** hasta el nivel 4 de la fase 0: `PrimeraHuellaMs`/`RespiroMs` siguen siendo metas
 - [ ] Fase 0 **medida** en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba» — la corre el dueño: esta rama no ejecuta `U.exe`
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C

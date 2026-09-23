@@ -76,7 +76,14 @@ public sealed class PulsarSegunElNucleo
 
     /// <summary>Qué pasó al pulsar. <paramref name="Aprendido"/> = el grafo se quedó con el tramo.</summary>
     public readonly record struct Resultado(
-        bool SePudo, bool CambioLaPantalla, string Desde, string Hasta, bool Aprendido, string Cuenta);
+        bool SePudo, bool CambioLaPantalla, string Desde, string Hasta, bool Aprendido, string Cuenta)
+    {
+        /// <summary>
+        /// Qué cambió (spec 047). Por defecto «nada», así que los <c>new(...)</c> de siempre siguen diciendo lo que decían.
+        /// El SITIO lo decide la ubicación de trabajo —la misma con la que se decide aprender—; lo demás, la huella.
+        /// </summary>
+        public HuellaDeLoQueSeVe.QueCambio QueCambio { get; init; }
+    }
 
     /// <summary>
     /// Cuánto se espera a que la pantalla reaccione. No es un tiempo fijo elegido a ojo: se
@@ -105,10 +112,15 @@ public sealed class PulsarSegunElNucleo
     // cambiado (el selector de perfiles de Chrome abrió OTRA ventana del proceso; «Minimizar» cambió la ventana
     // de delante) y el veredicto dijo «no cambió», porque solo se miraba la ubicación.
     //
-    // FASE 0, SOLO REGISTRO: la espera sigue decidiendo por la ubicación hasta el techo, y ADEMÁS toma la huella
-    // en sombra para dejar en el log a los cuántos ms se habría asentado y qué parte vio cambiar (promesa 355).
-    // La regla que recorta (351) entra cuando la fase 0 haya medido: es la condición que la spec 043 dejó escrita
-    // («acortar esa espera sin medir es la spec 038, aparcada por el dueño»).
+    // FASE 0 (355): la huella se toma en cada sondeo y la línea dice a los cuántos ms se habría asentado.
+    // FASE 2 (351): tras el clic, DOS HUELLAS IGUALES CON UN RESPIRO EN MEDIO terminan la espera en ese instante. Se
+    // espera como hoy —y la huella sigue mirando en sombra— cuando nadie mira, cuando el terreno sabe que la puerta lleva
+    // a algún sitio, en SAP y en un campo de texto (regla 4 de la spec). Las otras dos esperas de Pulsa —el ensayo del
+    // doble y la repetición— siguen esperando el techo: son la fase 5 (357).
+    //
+    // SIN MEDIR TODAVÍA, y es la condición que la spec 043 dejó escrita («acortar esa espera sin medir es la spec 038,
+    // aparcada por el dueño»): RespiroMs y PrimeraHuellaMs son METAS, no datos, hasta el nivel 4 de la fase 0. Esta
+    // fase está escrita y juzgada en el contrato; no entra a main sin esa medida.
 
     /// <summary>
     /// Quién mira lo que se ve. Nulo = nadie mira: se espera como hoy, y la línea de la 355 lo dice. Es lo que
@@ -125,10 +137,16 @@ public sealed class PulsarSegunElNucleo
     /// <summary>Dónde se cuenta lo que pasó al pulsar. Nulo = el log de la app («mano»). El contrato lo inyecta para leerlo.</summary>
     public Action<string>? Diario { get; set; }
 
-    /// <summary>Cuánto tienen que separarse dos huellas iguales para dar la pantalla por asentada. Sale de la fase 0; 250 = jkudish.</summary>
+    /// <summary>Cuánto tienen que separarse dos huellas iguales para dar la pantalla por asentada. META, no dato: 250 = jkudish; lo fija el nivel 4 de la fase 0.</summary>
     public int RespiroMs { get; set; } = 250;
 
     /// <summary>Antes de esto no se declara nada: una página que aún no empezó a pintarse parece asentada (el 400 de la compuerta, 299).</summary>
+    /// <remarks>
+    /// META, NO DATO, y el riesgo se dice (D): la mediana del cambio de sitio tras un clic que SÍ navega fue 405-510 ms el
+    /// 18-09, y hasta que cambia la página vieja sigue quieta. Con 400, una navegación más lenta que eso puede darse por
+    /// asentada antes de cambiar de sitio —la relectura fresca solo la salva si el sitio ya cambió—. Es exactamente la
+    /// cuenta (b) del nivel 4 de la fase 0, y de ella sale este número.
+    /// </remarks>
     public int PrimeraHuellaMs { get; set; } = 400;
 
     private void Anota(string linea)
@@ -145,6 +163,13 @@ public sealed class PulsarSegunElNucleo
 
     /// <summary>A los cuántos ms cambió la ubicación en la última espera; -1 = no cambió en el techo.</summary>
     private long _msCambioUbicacion = -1;
+
+    /// <summary>Por dónde salió la última espera. <see cref="Salida.Techo"/> = no salió: se agotó.</summary>
+    private enum Salida { Techo, Ubicacion, SitioFresco, Asentada }
+    private Salida _salioPor;
+
+    /// <summary>A los cuántos ms dejó de esperar la última espera, saliera por donde saliera (351).</summary>
+    private long _msDejoDeEsperar = -1;
 
     /// <summary>
     /// ¿ESTA PUERTA, DESDE ALGÚN OTRO SITIO, LLEVA JUSTO A DONDE ESTAMOS? Promesa 296 (spec 038).
@@ -205,26 +230,30 @@ public sealed class PulsarSegunElNucleo
                 motivo.Length > 0 ? $"no pude pulsar «{etiqueta}»: {motivo}" : $"no pude pulsar «{etiqueta}».");
         bool esCampo = EsCampoDeTexto(desde, selector);
         int presupuesto = esCampo ? EsperaDeCampoMs : EsperaMaximaMs;
-        var sombra = antes == null || Huella == null ? null
+        var espera = antes == null || Huella == null ? null
             : new EsperaAsentada(Huella, SitioFresco ?? _donde, antes, RespiroMs, PrimeraHuellaMs);
+        // LA REGLA DE LA 351 MANDA salvo en los casos de la regla 4 de la spec; entonces la huella mira en sombra y se
+        // espera como hoy, y el porqué queda dicho en la línea de la 355.
+        string comoHoy = PorQueSeEsperaComoHoy(desde, selector, esCampo, antes, causaAntes);
         var relojEspera = System.Diagnostics.Stopwatch.StartNew();
-        string hasta = EsperarACambiar(desde, presupuesto, sombra);
+        string hasta = EsperarACambiar(desde, presupuesto, espera, decide: comoHoy.Length == 0);
         relojEspera.Stop();
         Anota($"⏱ pulsar «{etiqueta}»: la mano {relojMano.ElapsedMilliseconds} ms · esperar el cambio {relojEspera.ElapsedMilliseconds} ms ({_sondeos} sondeo(s) de «dónde») · {(hasta.Length > 0 && hasta != desde ? "cambió" : "no cambió")}");
-        Anota(LaMedidaDeLaEspera(etiqueta, desde, hasta, presupuesto, antes, causaAntes, msAntes, sombra));
+        Anota(LaMedidaDeLaEspera(etiqueta, desde, hasta, presupuesto, antes, causaAntes, msAntes, espera, comoHoy));
+        var queCambio = QueCambioAlPulsar(desde, hasta, antes, espera);
         // LA VENTANA DE TRABAJO SE CERRÓ (promesa 233): «dónde» volvió al foco de la persona, y eso
         // no es haber ido allí. Se cuenta tal cual y no se aprende ninguna arista.
         string aviso = AvisoDeLaVentana?.Invoke() ?? "";
         if (aviso.Length > 0)
             return new(true, hasta != desde, desde, hasta, false,
-                $"pulsé «{etiqueta}» y {aviso}. Ahora estás en «{hasta}».");
+                $"pulsé «{etiqueta}» y {aviso}. Ahora estás en «{hasta}».") { QueCambio = queCambio };
         string gestoUsado = gesto;
 
         // UN CAMPO DE TEXTO NO NAVEGA (promesa 334): ni se consulta el terreno ni se repite el clic —las dos son para
         // puertas—, y se dice lo que es para que lo siguiente sea escribir.
         if (esCampo && (hasta.Length == 0 || hasta == desde))
             return new(true, false, desde, desde, false,
-                $"pulsé «{etiqueta}»: es un campo de texto y ya tiene el foco (la pantalla no cambió, que es lo normal). Para escribir en él, map_type.");
+                $"pulsé «{etiqueta}»: es un campo de texto y ya tiene el foco (la pantalla no cambió, que es lo normal). Para escribir en él, map_type.") { QueCambio = queCambio };
 
         // UNA PUERTA QUE LLEVA AQUÍ NO SE ENSAYA NI SE REPITE (promesa 296). Va DESPUÉS de la primera espera a
         // propósito: si la pantalla SÍ cambió —un «Siguiente» que vive en todas las páginas— manda lo que pasó,
@@ -238,7 +267,7 @@ public sealed class PulsarSegunElNucleo
         {
             Anota($"«{etiqueta}» no movió nada y el terreno sabe que lleva justo a donde ya estamos: ni lo ensayo ni lo repito");
             return new(true, false, desde, desde, false,
-                $"pulsé «{etiqueta}» y la pantalla no cambió: ya estás en «{desde}», que es a donde lleva.");
+                $"pulsé «{etiqueta}» y la pantalla no cambió: ya estás en «{desde}», que es a donde lleva.") { QueCambio = queCambio };
         }
 
         // EL ENSAYO, y solo cuando toca: nada cambió, el gesto de esta arista aún no se conoce, y
@@ -281,7 +310,7 @@ public sealed class PulsarSegunElNucleo
 
         if (hasta.Length == 0 || hasta == desde)
             return new(true, false, desde, desde, false,
-                $"pulsé «{etiqueta}» y la pantalla no cambió.");
+                $"pulsé «{etiqueta}» y la pantalla no cambió.") { QueCambio = queCambio };
 
         // EL TERRENO MANDA SOBRE EL MAPA: se aprende a dónde llevó DE VERDAD — y CON QUÉ GESTO,
         // que es la mitad del saber que antes se tiraba (promesa 21).
@@ -289,7 +318,38 @@ public sealed class PulsarSegunElNucleo
 
         return new(true, true, desde, hasta, aprendido,
             $"pulsé «{etiqueta}» y ahora estás en «{hasta}»."
-            + (aprendido ? " Queda aprendido." : ""));
+            + (aprendido ? " Queda aprendido." : "")) { QueCambio = HuellaDeLoQueSeVe.QueCambio.DeSitio };
+    }
+
+    /// <summary>
+    /// POR QUÉ LA REGLA DE LA 351 NO DECIDE en esta pulsación, en palabras que distinguen cada causa (patrón nº2); vacío =
+    /// sí decide. Son los casos de la regla 4 de la spec 047, más el campo de texto, que tiene su propia espera corta (334).
+    /// </summary>
+    private string PorQueSeEsperaComoHoy(string desde, string selector, bool esCampo, HuellaDeLoQueSeVe? antes, string causaAntes)
+    {
+        if (Huella == null) return "nadie miraba (sin huella inyectada)";
+        if (antes == null) return $"no pude mirar antes de tocar ({causaAntes})";
+        if (esCampo) return $"es un campo de texto, con su espera corta de {EsperaDeCampoMs} ms (334)";
+        // SAP: desde UIA una sesión es un Pane opaco; la huella de dentro no cambiaría nunca y toda espera saldría
+        // «asentada». Su asentada es otra (!Busy ×3 + StructureFingerprint): la 360, reservada.
+        if (Teach.Mundos.EsSap(desde)) return "la ubicación es de SAP (sapgui://), que desde UIA no se puede mirar (360, reservada)";
+        // LA PUERTA CON DESTINO: es la que repite la 248 cuando su clic se pierde; una espera cortada aquí haría repetir
+        // el clic sobre una navegación que aún estaba en camino.
+        if (SabeQueLleva(desde, selector)) return "el terreno sabe que esta puerta lleva a algún sitio, y cortar aquí haría repetir el clic (248) sobre una navegación en camino";
+        return "";
+    }
+
+    /// <summary>
+    /// Qué cambió al pulsar. El SITIO lo decide la ubicación de trabajo —la misma con la que <c>Pulsa</c> decide aprender:
+    /// se compara por un solo camino (aprendizaje nº16)—; lo demás, la huella de antes contra la última que se tomó.
+    /// </summary>
+    private static HuellaDeLoQueSeVe.QueCambio QueCambioAlPulsar(string desde, string hasta, HuellaDeLoQueSeVe? antes, EsperaAsentada? espera)
+    {
+        if (hasta.Length > 0 && hasta != desde) return HuellaDeLoQueSeVe.QueCambio.DeSitio;
+        if (antes == null || espera?.Ultima is not HuellaDeLoQueSeVe ultima) return HuellaDeLoQueSeVe.QueCambio.Nada;
+        // La ubicación no cambió: el sitio de la huella no manda aquí, y se compara lo demás con el sitio de antes.
+        var sinSitio = HuellaDeLoQueSeVe.De(antes.Sitio, ultima.Delante, ultima.Dentro, ultima.Ventanas);
+        return HuellaDeLoQueSeVe.Comparar(antes, sinSitio).QueCambio;
     }
 
     /// <summary>
@@ -344,11 +404,12 @@ public sealed class PulsarSegunElNucleo
         catch { return false; }
     }
 
-    private string EsperarACambiar(string desde) => EsperarACambiar(desde, EsperaMaximaMs, null);
+    private string EsperarACambiar(string desde) => EsperarACambiar(desde, EsperaMaximaMs, null, decide: false);
 
-    /// <param name="sombra">La espera que mira lo que se ve, EN SOMBRA (fase 0 de la 047): se sondea en cada vuelta
-    /// y se anota; no decide nada todavía. Nulo = nadie mira.</param>
-    private string EsperarACambiar(string desde, int presupuestoMs, EsperaAsentada? sombra)
+    /// <param name="espera">La espera que mira lo que se ve; se sondea en cada vuelta. Nulo = nadie mira.</param>
+    /// <param name="decide">Si la regla de la 351 manda. Con <c>false</c> la huella mira EN SOMBRA —se anota para la línea
+    /// de la 355 y no decide— y se espera como hoy, al cambio de ubicación o al techo.</param>
+    private string EsperarACambiar(string desde, int presupuestoMs, EsperaAsentada? espera, bool decide)
     {
         // EL RELOJ MANDA (promesa 245): antes esto sumaba 120 por vuelta y además pagaba _donde(), que
         // en la máquina del dueño costaba 2,8 s. Una espera de «1,8 s» duraba más de treinta.
@@ -356,15 +417,54 @@ public sealed class PulsarSegunElNucleo
         string ahora = "";
         _sondeos = 0;
         _msCambioUbicacion = -1;
+        _msDejoDeEsperar = -1;
+        _salioPor = Salida.Techo;
         do
         {
             _sondeos++;
             ahora = _donde() ?? "";
-            if (ahora.Length > 0 && ahora != desde) { _msCambioUbicacion = compas.Transcurrido; return ahora; }
-            sombra?.Sondea(compas.Transcurrido);
+            if (ahora.Length > 0 && ahora != desde)
+            {
+                _msCambioUbicacion = _msDejoDeEsperar = compas.Transcurrido; _salioPor = Salida.Ubicacion;
+                return ahora;
+            }
+            var paso = espera?.Sondea(compas.Transcurrido) ?? EsperaAsentada.Paso.Sigue;
+            // ASENTADA (351): dos huellas iguales con un respiro en medio, y el sitio releído fresco justo antes sigue siendo
+            // el de partida. Se sale en ese instante: esperar más no puede traer un cambio que la pantalla ya no está haciendo.
+            if (decide && paso == EsperaAsentada.Paso.Asentada)
+            {
+                _msDejoDeEsperar = espera!.MsAsentada; _salioPor = Salida.Asentada;
+                return desde;
+            }
+            // EL SITIO FRESCO CAMBIÓ (regla 2b): «dónde» sale de una memoria de 400 ms y aún puede decir el viejo; manda el
+            // fresco, y Pulsa aprende la puerta. Si el fresco dice lo mismo que «desde», no es un cambio que Pulsa pueda
+            // aprender: se sigue esperando, que es el lado seguro.
+            if (decide && paso == EsperaAsentada.Paso.CambioDeSitio && espera!.SitioAhora.Length > 0 && espera.SitioAhora != desde)
+            {
+                _msCambioUbicacion = _msDejoDeEsperar = espera.MsCambioDeSitio; _salioPor = Salida.SitioFresco;
+                return espera.SitioAhora;
+            }
         }
         while (compas.Respira(120));
+        _msDejoDeEsperar = compas.Transcurrido;
         return ahora.Length > 0 ? ahora : (_donde() ?? "");
+    }
+
+    /// <summary>Por qué dejó de esperar la primera espera de <c>Pulsa</c>, en palabras que distinguen cada causa (patrón nº2).</summary>
+    private string PorQueDejoDeEsperar(bool cambioLaUbicacion, int presupuestoMs, EsperaAsentada? espera, string comoHoy)
+    {
+        if (cambioLaUbicacion)
+            return _salioPor == Salida.SitioFresco ? "cambió de sitio (lo vio el sitio releído fresco)" : "cambió de sitio (lo vio la ubicación de trabajo)";
+        if (_salioPor == Salida.Asentada)
+            return $"asentada (dos huellas iguales con {RespiroMs} ms de respiro, desde los {PrimeraHuellaMs} ms, y el sitio fresco sin cambiar)";
+        if (comoHoy.Length > 0) return "llegó al techo, como hoy: " + comoHoy;
+        if (espera == null) return "llegó al techo: no había huella con la que mirar";
+        if (espera.Causa.Length > 0) return "llegó al techo: " + espera.Causa;
+        if (espera.MsCambioDeSitio >= 0)
+            return $"llegó al techo: el sitio releído fresco («{espera.SitioAhora}») no es el de la huella de antes, pero la ubicación de trabajo dice que no cambió";
+        if (espera.VecesQueSeMovio > 0)
+            return $"llegó al techo: la pantalla no paró de moverse (se movió en {espera.VecesQueSeMovio} de {espera.Sondeos} sondeo(s))";
+        return $"llegó al techo sin poder juzgarla: {presupuestoMs} ms no dan para la primera huella ({PrimeraHuellaMs} ms) más un respiro ({RespiroMs} ms)";
     }
 
     /// <summary>La huella de antes de tocar, o por qué no se pudo (la cadena entera: patrón nº3), y lo que costó.</summary>
@@ -392,15 +492,21 @@ public sealed class PulsarSegunElNucleo
     /// asentado (o que nunca), a los cuántos cambió la ubicación (o que no en el techo), y lo que costó cada parte.
     /// </summary>
     private string LaMedidaDeLaEspera(string etiqueta, string desde, string hasta, int presupuestoMs,
-        HuellaDeLoQueSeVe? antes, string causaAntes, long msAntes, EsperaAsentada? sombra)
+        HuellaDeLoQueSeVe? antes, string causaAntes, long msAntes, EsperaAsentada? sombra, string comoHoy)
     {
-        string ubicacion = hasta.Length > 0 && hasta != desde
+        bool cambio = hasta.Length > 0 && hasta != desde;
+        string ubicacion = cambio
             ? $"ubicación antes «{desde}» → después «{hasta}» (cambió a los {_msCambioUbicacion} ms)"
-            : $"ubicación antes «{desde}» → después «{hasta}» (no cambió en el techo de {presupuestoMs} ms)";
+            : _salioPor == Salida.Asentada
+                ? $"ubicación antes «{desde}» → después «{hasta}» (no cambió en los {_msDejoDeEsperar} ms que se esperó, de un techo de {presupuestoMs})"
+                : $"ubicación antes «{desde}» → después «{hasta}» (no cambió en el techo de {presupuestoMs} ms)";
+        // EN TODOS LOS CASOS, a los cuántos ms dejó de esperar y por qué (351). Va la ÚLTIMA y sin «·» dentro, para que se
+        // lea de un golpe en el log.
+        string dejo = $"dejó de esperar a los {_msDejoDeEsperar} ms: {PorQueDejoDeEsperar(cambio, presupuestoMs, sombra, comoHoy)}";
         if (Huella == null)
-            return $"👀 tras «{etiqueta}»: {ubicacion} · delante: nadie miraba (sin huella inyectada) · nunca se asentó: nadie miraba";
+            return $"👀 tras «{etiqueta}»: {ubicacion} · delante: nadie miraba (sin huella inyectada) · nunca se asentó: nadie miraba · {dejo}";
         if (antes == null || sombra == null)
-            return $"👀 tras «{etiqueta}»: {ubicacion} · delante: no pude mirar antes de tocar ({causaAntes}; {msAntes} ms) · nunca se asentó: no había huella de antes";
+            return $"👀 tras «{etiqueta}»: {ubicacion} · delante: no pude mirar antes de tocar ({causaAntes}; {msAntes} ms) · nunca se asentó: no había huella de antes · {dejo}";
 
         var ultima = sombra.Ultima;
         string delante = ultima == null
@@ -424,6 +530,6 @@ public sealed class PulsarSegunElNucleo
         string sitioFresco = sombra.MsCambioDeSitio >= 0
             ? $"sitio fresco cambió a los {sombra.MsCambioDeSitio} ms («{sombra.SitioAhora}»)"
             : "sitio fresco no cambió";
-        return $"👀 tras «{etiqueta}»: {ubicacion} · {delante} · {dentro} · {sombra.Resumen()} · {sitioFresco} · huella de antes {msAntes} ms";
+        return $"👀 tras «{etiqueta}»: {ubicacion} · {delante} · {dentro} · {sombra.Resumen()} · {sitioFresco} · huella de antes {msAntes} ms · {dejo}";
     }
 }
