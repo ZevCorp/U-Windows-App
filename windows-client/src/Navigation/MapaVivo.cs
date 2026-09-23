@@ -26,7 +26,13 @@ namespace U.WindowsClient.Navigation;
 public sealed class MapaVivo : IDisposable
 {
     private readonly Nucleo.Grafo _grafo = new();
-    private readonly Nucleo.ProyectorNeo4j _proyector = new();
+    /// <summary>
+    /// QUIEN LO CUENTA ENTRA POR EL CONSTRUCTOR (spec 048, promesa 366). Se asignaba en el constructor del mapa,
+    /// una línea DESPUÉS de construir el proyector, y el proyector ya había intentado sus índices: con Neo4j
+    /// caído gastaba ahí su único aviso sin que nadie lo oyera, y «Neo4j no responde» salió 0 veces en 17 logs.
+    /// </summary>
+    private readonly Nucleo.ProyectorNeo4j _proyector =
+        new(url: null, cuenta: m => LogBus.Log("mapa-vivo", m), reloj: null);
     private readonly Func<string> _donde;
     private readonly Func<IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>> _loQueVeo;
     private System.Threading.Timer? _reloj;
@@ -188,7 +194,6 @@ public sealed class MapaVivo : IDisposable
     {
         _donde = donde;
         _loQueVeo = loQueVeo;
-        _proyector.Cuenta = m => LogBus.Log("mapa-vivo", m);
     }
 
     /// <summary>
@@ -260,6 +265,13 @@ public sealed class MapaVivo : IDisposable
             if (aqui.Length == 0) return;
             if (aqui.Equals(_anterior, StringComparison.OrdinalIgnoreCase)) return;
 
+            // CAMBIAR DE SITIO INVALIDA LA OBSERVACIÓN COMPARTIDA (promesa 362, regla 4): lo leído en el sitio
+            // anterior no describe este. Y es aquí, en la misma rama, donde se atribuye el clic (abajo): una sola
+            // llamada cubre las dos causas de la spec. SALVO que lo publicado ya sea de aquí: este hilo nota el
+            // cambio 200-500 ms tarde (spec 040) y para entonces el acto que nos trajo puede haber leído ya la
+            // pantalla nueva; tirarla obligaría al siguiente paso a pagar la lectura otra vez (deducido, no medido).
+            Uia.Observatorio.InvalidaLoQueNoSeaDe(aqui, $"cambio de sitio {Corto(_anterior)} → {Corto(aqui)}");
+
             // UNA MIRADA POR CAMBIO DE SITIO (promesa 257). Aquí es donde consta que cambiamos, y es el
             // único punto del programa que lo sabe sin volver a preguntarle a la pantalla.
             GuardarLaMiradaDeEsteSitio(_anterior, aqui);
@@ -293,7 +305,7 @@ public sealed class MapaVivo : IDisposable
                     PulsoDelMapeador.Actual.NoEraNavegacion(global::Nucleo.Grafo.AppDe(_anterior));
                     _anterior = aqui; _llegadaAlAnterior = cuando;
                     _grafo.Estoy(aqui);
-                    _proyector.Proyectar(_grafo);
+                    _proyector.Proyectar(_grafo, "ubicación");
                     return;
                 }
 
@@ -436,7 +448,7 @@ public sealed class MapaVivo : IDisposable
             // que dejar constancia de que se pasó: si no, la ubicación intermedia no existiría y el
             // camino quedaría grabado como si fuera directo.
             _grafo.Estoy(aqui);
-            _proyector.Proyectar(_grafo);
+            _proyector.Proyectar(_grafo, "ubicación");
         }
         catch (Exception e)
         {
@@ -538,7 +550,7 @@ public sealed class MapaVivo : IDisposable
             var crudos = _loQueVeo();
             PulsoDelMapeador.Actual.Costo("leer la pantalla", crono.ElapsedMilliseconds);
 
-            var visibles = SinEtiquetasDeControles(crudos)
+            var visibles = LoQueEsPuerta(crudos)
                 .Select(v => new Nucleo.Elemento(v.Selector, v.Etiqueta, v.Tipo))
                 .ToList();
             PulsoDelMapeador.Actual.Embudo(crudos.Count, visibles.Count);
@@ -566,7 +578,7 @@ public sealed class MapaVivo : IDisposable
             }
 
             crono.Restart();
-            _proyector.Proyectar(_grafo);
+            _proyector.Proyectar(_grafo, "latido");
             PulsoDelMapeador.Actual.Costo("proyectar", crono.ElapsedMilliseconds);
         }
         catch (Exception e)
@@ -583,7 +595,7 @@ public sealed class MapaVivo : IDisposable
     public void Cruzado(string desde, string selector, string hasta)
     {
         _grafo.Cruzar(desde, selector, hasta);
-        _proyector.Proyectar(_grafo);
+        _proyector.Proyectar(_grafo, "cruce");
     }
 
     /// <summary>
@@ -610,13 +622,22 @@ public sealed class MapaVivo : IDisposable
     public void ObservarVentana(string ubicacion, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> crudos)
     {
         if (string.IsNullOrWhiteSpace(ubicacion) || crudos == null) return;
-        var visibles = SinEtiquetasDeControles(crudos)
+        var visibles = LoQueEsPuerta(crudos)
             .Select(v => new Nucleo.Elemento(v.Selector, v.Etiqueta, v.Tipo))
             .ToList();
         _grafo.Observar(ubicacion, visibles);
     }
 
-    private static List<(string Selector, string Etiqueta, string Tipo)> SinEtiquetasDeControles(
+    /// <summary>
+    /// LA CRIBA DEL LATIDO: qué es una puerta de entre lo crudo que se leyó. Con selector y con nombre, y sin
+    /// el Text que solo repite la etiqueta de un control que ya está en la lista. PÚBLICA desde la promesa 363
+    /// (spec 048): la compuerta, cuando el paso trae la observación de su pantalla, se la cuenta al núcleo con
+    /// ESTA criba y no con la de las candidatas —que quita todo Text y todo Image—, porque un Text suelto que el
+    /// latido daba por vivo tiene que seguir vivo o la huella de la 299 dejaría de coincidir con la del latido.
+    /// Son TRES cribas y a propósito: esta, la de la lista (<c>SurfaceMapTools.PuertasDeAhora</c>) y
+    /// <c>Actionable</c>; cada una con su propósito, las tres sobre los mismos crudos.
+    /// </summary>
+    public static List<(string Selector, string Etiqueta, string Tipo)> LoQueEsPuerta(
         IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> crudos)
     {
         var utiles = crudos.Where(v => v.Selector.Length > 0 && v.Etiqueta.Length > 0).ToList();

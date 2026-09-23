@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -46,7 +47,6 @@ public sealed class ProyectorNeo4j : IDisposable
     private readonly string _auth;
     private int _ultimaVersion = -1;
     private string _ultimaHuella = "";
-    private bool _yaAvise;
 
     /// <summary>
     /// Lo último que se escribió de CADA ubicación. Es lo que permite escribir solo lo que cambió
@@ -67,10 +67,36 @@ public sealed class ProyectorNeo4j : IDisposable
     private int _escribiendo;
 
     /// <summary>Lo que se dice cuando algo va mal. Se inyecta para no atar el núcleo a ningún log.</summary>
+    /// <remarks>
+    /// Se puede dar DESPUÉS de construir —el contrato del núcleo lo hace así—, pero entonces lo que pase en
+    /// el constructor no lo oye nadie. Quien quiera enterarse de la caída del arranque la pasa por el
+    /// constructor (spec 048, promesa 366): ver <see cref="ProyectorNeo4j(string?, Action{string}?, Func{long}?)"/>.
+    /// </remarks>
     public Action<string>? Cuenta { get; set; }
 
+    /// <summary>
+    /// El reloj que decide cuándo se cumple un minuto, en milisegundos. Solo eso: el COSTE de cada envío se mide
+    /// con <see cref="Stopwatch"/>, porque un reloj falso puede mover el minuto pero no puede medir un POST.
+    /// </summary>
+    private readonly Func<long> _reloj;
+
+    /// <summary>La firma de siempre. La usa el contrato del núcleo y se conserva tal cual (spec 048).</summary>
     public ProyectorNeo4j(string? url = null, string? usuario = null, string? clave = null)
+        : this(url, usuario, clave, cuenta: null, reloj: null) { }
+
+    /// <summary>
+    /// QUIEN LO CUENTA ENTRA POR LA PUERTA, NO DESPUÉS. «Neo4j no responde» salía 0 veces en 17 logs aunque
+    /// Neo4j estuvo caído días enteros: <see cref="AsegurarIndices"/> corre en el constructor, fallaba ahí, y
+    /// gastaba el ÚNICO aviso del proceso cuando <see cref="Cuenta"/> todavía era null, porque el mapa vivo
+    /// lo asignaba una línea más tarde (spec 048, medido el 2026-09-22). El aviso existía y no lo oía nadie.
+    /// </summary>
+    public ProyectorNeo4j(string? url, Action<string>? cuenta, Func<long>? reloj)
+        : this(url, usuario: null, clave: null, cuenta, reloj) { }
+
+    private ProyectorNeo4j(string? url, string? usuario, string? clave, Action<string>? cuenta, Func<long>? reloj)
     {
+        Cuenta = cuenta;
+        _reloj = reloj ?? (() => Environment.TickCount64);
         _url = (url ?? Environment.GetEnvironmentVariable("U_NEO4J_HTTP") ?? "http://127.0.0.1:7474")
                .TrimEnd('/') + "/db/neo4j/tx/commit";
         _auth = Convert.ToBase64String(Encoding.UTF8.GetBytes(
@@ -109,7 +135,7 @@ public sealed class ProyectorNeo4j : IDisposable
             new { statement = "CREATE CONSTRAINT ubicacion_id IF NOT EXISTS FOR (u:Ubicacion) REQUIRE u.id IS UNIQUE" },
             new { statement = "CREATE CONSTRAINT elemento_id IF NOT EXISTS FOR (e:Elemento) REQUIRE e.id IS UNIQUE" },
         },
-    }));
+    }), "índices", out _);
 
     /// <summary>
     /// ¿Están puestas las restricciones que hacen que proyectar sea barato? Devuelve lo que falta,
@@ -165,13 +191,22 @@ public sealed class ProyectorNeo4j : IDisposable
     /// restos de una pasada anterior es exactamente la clase de mentira que este visor existe para
     /// hacer imposible.
     /// </remarks>
-    public bool Proyectar(Grafo grafo)
+    public bool Proyectar(Grafo grafo) => Proyectar(grafo, "sin decir desde dónde");
+
+    /// <summary>
+    /// Lo mismo, diciendo DESDE DÓNDE se proyecta —«ubicación», «latido», «cruce»—, que es lo que el contador
+    /// apunta junto al coste de cada envío (spec 048, promesa 366). Sin el origen, «el más lento tardó 2 s» no
+    /// dice qué hilo se quedó esperando.
+    /// </summary>
+    public bool Proyectar(Grafo grafo, string desde)
     {
         if (grafo.Version == _ultimaVersion) return false;
 
         // UNA A LA VEZ. Si hay otra escribiendo, esta se descarta: el siguiente latido recogerá el
         // estado igual, y encolarlas solo serviría para pintar con retraso una foto ya caducada.
-        if (Interlocked.Exchange(ref _escribiendo, 1) == 1) return false;
+        // Pero se CUENTA: un envío que no se hizo deja rastro (patrón nº10), y cuántos se descartan
+        // por otro en vuelo es justo lo que decide si la 367 hace falta.
+        if (Interlocked.Exchange(ref _escribiendo, 1) == 1) { Descartado(desde); return false; }
         try
         {
             _ultimaVersion = grafo.Version;
@@ -289,7 +324,9 @@ public sealed class ProyectorNeo4j : IDisposable
             }
 
             _ultimaHuella = HuellaDeContenido(grafo);
-            return Mandar(JsonSerializer.Serialize(new { statements = declaraciones }));
+            bool ok = Mandar(JsonSerializer.Serialize(new { statements = declaraciones }), desde, out long ms);
+            Interlocked.Exchange(ref _ultimaProyeccionMs, ms);
+            return ok;
         }
         finally { Interlocked.Exchange(ref _escribiendo, 0); }
     }
@@ -445,7 +482,7 @@ public sealed class ProyectorNeo4j : IDisposable
             {
                 new { statement = "MATCH (n) WHERE n:Ubicacion OR n:Elemento DETACH DELETE n" },
             },
-        }));
+        }), "vaciar", out _);
     }
 
     /// <summary>
@@ -464,7 +501,7 @@ public sealed class ProyectorNeo4j : IDisposable
         // volver a escribirlo todo.
         _huellaPorUbicacion.Clear();
         _ultimaHuella = "";
-        Mandar(JsonSerializer.Serialize(new { statements = new object[] { new { statement = cypher } } }));
+        Mandar(JsonSerializer.Serialize(new { statements = new object[] { new { statement = cypher } } }), "sabotaje", out _);
     }
 
     /// <summary>
@@ -620,8 +657,14 @@ public sealed class ProyectorNeo4j : IDisposable
         }
     }
 
-    private bool Mandar(string cuerpo)
+    /// <summary>
+    /// Un ENVÍO: un POST que escribe. Cada uno, salga bien o mal, deja su coste, su origen y su resultado en el
+    /// contador (<see cref="Apuntar"/>). Las lecturas (<see cref="Pedir"/>) no son envíos y no entran: ocurren
+    /// al arrancar o cuando alguien pregunta, no en el hilo del latido ni en el de la ubicación.
+    /// </summary>
+    private bool Mandar(string cuerpo, string desde, out long ms)
     {
+        long inicio = Stopwatch.GetTimestamp();
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Post, _url)
@@ -635,24 +678,172 @@ public sealed class ProyectorNeo4j : IDisposable
             // dejaría pasar una consulta rota como si hubiera escrito algo.
             if (texto.Contains("\"errors\":[{", StringComparison.Ordinal))
             {
-                Cuenta?.Invoke("Neo4j rechazó la consulta: " + texto[..Math.Min(400, texto.Length)]);
+                ms = Apuntar(desde, inicio, Resultado.Rechazado, null);
+                Cuenta?.Invoke($"Neo4j rechazó la consulta (desde {desde}): " + texto[..Math.Min(400, texto.Length)]);
                 return false;
             }
+            ms = Apuntar(desde, inicio, Resultado.Ok, null);
             return true;
         }
         catch (Exception e)
         {
-            if (!_yaAvise)
-            {
-                _yaAvise = true;
-                Cuenta?.Invoke($"Neo4j no responde en {_url} ({e.Message}). El núcleo sigue funcionando; solo no se ve.");
-            }
+            ms = Apuntar(desde, inicio, Resultado.SinRespuesta, e);
             return false;
         }
     }
 
+    // ─── LO QUE CUESTA PROYECTAR, MEDIDO (spec 048, promesa 366) ───────────────────────────────────────────
+    //
+    // Proyectar es un POST síncrono en el hilo del latido y en el de la ubicación. Con Neo4j rechazando en
+    // 127.0.0.1:7474 cada fallo costaba 2.023–2.121 ms (sonda del 2026-09-21; contra 127.0.0.1:1, que rechaza en
+    // el acto, este mismo contador midió 2.024–2.144 ms el 2026-09-22, así que «caído» no es barato ni en local;
+    // el porqué —que Windows reintenta la conexión rechazada antes de rendirse— es deducido, no medido), y el
+    // mapa vivo perdía entre el 30 % y el 90 % de sus latidos por aviso mientras estuvo caído. Pero hasta aquí
+    // nadie podía decir cuánto de eso era Neo4j y cuánto la lectura: el proyector no contaba nada, y su único
+    // aviso se gastaba mudo en el constructor. Antes de sacarlo del hilo (la 367, reservada), se MIDE.
+    //
+    // Dos cosas distintas, y a propósito: el CONTADOR, que apunta cada envío sin escribir una línea por fallo
+    // (con el latido a 900 ms serían 60 líneas por minuto diciendo lo mismo), y la ÚNICA LÍNEA LIMITADA,
+    // «Neo4j no responde», que se dice una vez por minuto y no una vez por proceso: la versión de una vez por
+    // proceso callaba para siempre en cuanto se gastaba, y si se gastaba en el arranque no la oía nadie.
+
+    private enum Resultado { Ok, Rechazado, SinRespuesta }
+
+    /// <summary>Lo contado en un tramo de tiempo: el minuto en curso, o todo desde el arranque.</summary>
+    private sealed class Tramo
+    {
+        public int Envios, SinRespuesta, Rechazados, Descartados;
+        public long Ms, MasLentoMs;
+        public string MasLentoDesde = "";
+        public int Fallidos => SinRespuesta + Rechazados;
+    }
+
+    private readonly object _cerrojoDeLaCuenta = new();
+    private readonly Tramo _desdeElArranque = new();
+    private Tramo _minuto = new();
+    private long _inicioDelMinuto;
+    private long? _ultimoAvisoDeNoResponde;
+    private int _calladosDesdeElAviso;
+    private long _ultimaProyeccionMs = -1;
+
+    /// <summary>Cuántos envíos se hicieron desde el arranque, los índices incluidos.</summary>
+    public int Envios { get { lock (_cerrojoDeLaCuenta) return _desdeElArranque.Envios; } }
+
+    /// <summary>Cuántos de esos envíos fallaron: sin respuesta o rechazados por Neo4j.</summary>
+    public int Fallidos { get { lock (_cerrojoDeLaCuenta) return _desdeElArranque.Fallidos; } }
+
+    /// <summary>Lo que tardó el último envío de <see cref="Proyectar(Grafo, string)"/>; -1 si todavía no hubo ninguno.</summary>
+    public long UltimaProyeccionMs => Interlocked.Read(ref _ultimaProyeccionMs);
+
+    /// <summary>
+    /// Todo lo contado desde el arranque: cuántos envíos, cuánto sumaron, cuál fue el más lento y desde dónde, y
+    /// cuántos fallaron. El resumen POR MINUTO lo dice el propio proyector por <see cref="Cuenta"/>.
+    /// </summary>
+    public string Resumen()
+    {
+        lock (_cerrojoDeLaCuenta) return "proyectar a Neo4j, desde el arranque: " + Decir(_desdeElArranque);
+    }
+
+    private static string Decir(Tramo t)
+    {
+        if (t.Envios == 0)
+            return t.Descartados > 0 ? $"envíos: 0 · {t.Descartados} descartado(s) por otro en vuelo" : "envíos: 0";
+        string s = $"envíos: {t.Envios} · {t.Ms} ms · más lento {t.MasLentoMs} ms ({t.MasLentoDesde}) · "
+                   + $"{t.Fallidos} {(t.Fallidos == 1 ? "fallido" : "fallidos")}";
+        if (t.Fallidos > 0) s += $" ({t.SinRespuesta} sin respuesta · {t.Rechazados} rechazado(s) por Neo4j)";
+        if (t.Descartados > 0) s += $" · {t.Descartados} descartado(s) por otro en vuelo";
+        return s;
+    }
+
+    /// <summary>
+    /// Apunta un envío en los dos tramos y decide qué hay que decir. Las líneas se dicen FUERA del cerrojo: quien
+    /// escucha puede tardar, y el hilo de la ubicación no tiene por qué esperar al log del latido.
+    /// </summary>
+    private long Apuntar(string desde, long inicio, Resultado resultado, Exception? e)
+    {
+        long ms = (long)Stopwatch.GetElapsedTime(inicio).TotalMilliseconds;
+        long ahora = _reloj();
+        var decir = new List<string>(2);
+        lock (_cerrojoDeLaCuenta)
+        {
+            CerrarElMinutoSiToca(ahora, decir);
+            foreach (var t in new[] { _desdeElArranque, _minuto })
+            {
+                t.Envios++;
+                t.Ms += ms;
+                if (resultado == Resultado.SinRespuesta) t.SinRespuesta++;
+                if (resultado == Resultado.Rechazado) t.Rechazados++;
+                if (t.Envios == 1 || ms > t.MasLentoMs) { t.MasLentoMs = ms; t.MasLentoDesde = desde; }
+            }
+
+            if (resultado == Resultado.SinRespuesta)
+            {
+                if (_ultimoAvisoDeNoResponde is long antes && ahora - antes < 60_000)
+                    _calladosDesdeElAviso++;
+                else
+                {
+                    string callados = _calladosDesdeElAviso == 0 ? ""
+                        : $" Desde el aviso anterior fallaron {_calladosDesdeElAviso} envío(s) más sin decirlo: los cuenta el resumen por minuto.";
+                    decir.Add($"Neo4j no responde en {_url} · desde {desde} · tras {ms} ms ({CadenaDe(e!)}). "
+                              + "El núcleo sigue funcionando; solo no se ve." + callados);
+                    _ultimoAvisoDeNoResponde = ahora;
+                    _calladosDesdeElAviso = 0;
+                }
+            }
+        }
+        foreach (var l in decir) Cuenta?.Invoke(l);
+        return ms;
+    }
+
+    /// <summary>Un envío que no se hizo porque había otro en vuelo. No es un envío, pero deja rastro.</summary>
+    private void Descartado(string desde)
+    {
+        long ahora = _reloj();
+        var decir = new List<string>(1);
+        lock (_cerrojoDeLaCuenta)
+        {
+            CerrarElMinutoSiToca(ahora, decir);
+            _desdeElArranque.Descartados++;
+            _minuto.Descartados++;
+        }
+        foreach (var l in decir) Cuenta?.Invoke(l);
+    }
+
+    /// <summary>
+    /// EL RESUMEN POR MINUTO. Se dice al llegar el primer envío después de cumplirse el minuto, con lo que pasó
+    /// ANTES de ese envío, y dice cuánto duró de verdad el tramo: tras un rato sin cambios en el grafo no hay
+    /// envíos, y un «último minuto» que en realidad fueron diez sería una cifra que miente. Un minuto sin
+    /// envíos no dice nada: no hay nada que contar.
+    /// </summary>
+    private void CerrarElMinutoSiToca(long ahora, List<string> decir)
+    {
+        bool vacio = _minuto.Envios == 0 && _minuto.Descartados == 0;
+        if (vacio) { _inicioDelMinuto = ahora; return; }
+        if (ahora - _inicioDelMinuto < 60_000) return;
+        decir.Add($"proyectar a Neo4j, en los últimos {(ahora - _inicioDelMinuto) / 1000} s: " + Decir(_minuto));
+        _minuto = new Tramo();
+        _inicioDelMinuto = ahora;
+    }
+
+    /// <summary>La cadena ENTERA de la excepción (patrón nº3): el motivo útil suele estar en la de dentro.</summary>
+    private static string CadenaDe(Exception e)
+    {
+        var partes = new List<string>();
+        for (var x = e; x != null; x = x.InnerException)
+            if (!partes.Any(p => p.Contains(x.Message, StringComparison.Ordinal)))
+                partes.Add($"{x.GetType().Name}: {x.Message}");
+        return string.Join(" ← ", partes);
+    }
+
     public void Dispose()
     {
+        // LO QUE QUEDA DEL ÚLTIMO MINUTO se dice al cerrar: si no, una sesión de menos de un minuto —justo
+        // las corridas cortas del nivel 4— no dejaría ningún resumen en el log.
+        string? ultimo = null;
+        lock (_cerrojoDeLaCuenta)
+            if (_minuto.Envios > 0 || _minuto.Descartados > 0)
+                ultimo = $"proyectar a Neo4j, al cerrar, en los últimos {(_reloj() - _inicioDelMinuto) / 1000} s: " + Decir(_minuto);
+        if (ultimo != null) Cuenta?.Invoke(ultimo);
         _http.Dispose();
         _paraLeerLaMemoria.Dispose();
     }

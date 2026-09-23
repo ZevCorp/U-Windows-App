@@ -632,6 +632,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // (2026-08-22, medido sobre 26 días de log).
             var aqui = new Navigation.AquiSegunElNucleo(_mapaVivo.Nucleo, DondeTrabajo);
             if (mcp.Map != null) mcp.Map.VentanaDeTrabajo = VentanaObjetivo;
+            // EL DÓNDE DE LA 364 ES EL DE LA COMPUERTA (spec 048, aprendizaje nº16): el mismo DondeTrabajo que recibe el recorrido.
+            if (mcp.Map != null) mcp.Map.DondeDeTrabajo = DondeTrabajo;
             if (mcp.Map != null) mcp.Map.Situarse = () =>
             {
                 // SITUARSE ES SITUAR A Ü (promesa 233), y decir si la persona está en otra parte o si

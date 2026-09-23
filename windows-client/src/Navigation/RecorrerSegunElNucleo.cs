@@ -50,6 +50,14 @@ public sealed class RecorrerSegunElNucleo
         /// null si puede; si no, el motivo, y el paso no se pulsa (promesa 204). La trae el paso porque
         /// solo aquí se sabe qué botón es, se haya pedido como se haya pedido.</summary>
         public Func<string, string?>? AntesDePulsar { get; init; }
+
+        /// <summary>
+        /// LO QUE EL PASO ACABA DE LEER de su pantalla (promesa 363, spec 048): la observación completa que el
+        /// mapa ya pagó en este mismo ciclo —o la respuesta de preguntar por este selector (364)—. Si es de
+        /// esta pantalla y más fresca que <see cref="Uia.Observacion.VigenciaMs"/>, la compuerta la cuenta como
+        /// su primera mirada y no vuelve a leer la ventana. Null = como hasta hoy.
+        /// </summary>
+        public Uia.Observacion? Vista { get; init; }
     }
 
     /// <summary>Qué pasó: cuántos se hicieron, de cuántos, dónde quedamos, y el relato honesto.</summary>
@@ -175,7 +183,10 @@ public sealed class RecorrerSegunElNucleo
             {
                 if (_escribir == null)
                     return Parcial(i, pasos.Count, "todavía no sé escribir dentro de un batch.", conVivos: false);
-                if (!_escribir(paso.Exit, paso.Texto))
+                bool escrito;
+                try { escrito = _escribir(paso.Exit, paso.Texto); }
+                finally { LaManoVolvio($"escribir en «{(paso.Exit.Length > 0 ? paso.Exit : "el campo con el foco")}»"); }
+                if (!escrito)
                     return Parcial(i, pasos.Count,
                         $"no pude escribir «{paso.Texto}»"
                         + (paso.Exit.Length > 0 ? $" en «{paso.Exit}»." : "."), conVivos: true);
@@ -204,7 +215,7 @@ public sealed class RecorrerSegunElNucleo
             // LA COMPUERTA: el paso solo se pulsa si su elemento está VIVO aquí, y se le da tiempo a
             // la pantalla nueva a pintarse y a ser leída — declarar «no está» sin esperar la lectura
             // sería juzgar la pantalla de ANTES, que es justo el desfase que la compuerta evita.
-            var (elegido, homonimos, motivo, aqui) = EsperarloVivo(paso.Exit);
+            var (elegido, homonimos, motivo, aqui) = EsperarloVivo(paso);
 
             if (aqui.Length == 0)
                 return Parcial(i, pasos.Count, "no sé dónde estoy, y sin eso no pulso nada.", conVivos: false);
@@ -250,7 +261,9 @@ public sealed class RecorrerSegunElNucleo
             if (paso.AntesDePulsar?.Invoke(elegido.Que.Selector) is string frenado)
                 return Parcial(i, pasos.Count, frenado, conVivos: false);
             alPulsar(elegido.Que.Selector);
-            var r = _pulsar.Pulsa(elegido.Que.Selector, elegido.Que.Etiqueta);
+            PulsarSegunElNucleo.Resultado r;
+            try { r = _pulsar.Pulsa(elegido.Que.Selector, elegido.Que.Etiqueta); }
+            finally { LaManoVolvio($"pulsar «{elegido.Que.Etiqueta}» en el recorrido"); }
             if (!r.SePudo)
                 return Parcial(i, pasos.Count, r.Cuenta, conVivos: true);
             ultimoPulso = r;
@@ -304,10 +317,25 @@ public sealed class RecorrerSegunElNucleo
             porque = $"el paso pide pulsar «{tecla}» y en este montaje no sé teclear.";
             return false;
         }
-        if (!_teclear(tecla)) { porque = $"no pude pulsar «{tecla}»."; return false; }
+        bool entro;
+        try { entro = _teclear(tecla); }
+        finally { LaManoVolvio($"teclear «{tecla}»"); }
+        if (!entro) { porque = $"no pude pulsar «{tecla}»."; return false; }
         porque = "";
         return true;
     }
+
+    /// <summary>
+    /// LA MANO ACABA DE VOLVER: lo leído antes ya no describe lo que hay delante (regla 4 de la 048, promesa 362).
+    /// </summary>
+    /// <remarks>
+    /// AQUÍ Y NO EN CADA HERRAMIENTA, porque por aquí pasan todas las manos del núcleo: el batch, las skills (con y sin
+    /// coreografía), el plan de una comprobación, los pasos del tramo y map_take. Hasta el 2026-09-22 solo Take y Type
+    /// invalidaban, al volver de la tanda ENTERA: un batch o una skill dejaban viva la observación de antes, y el señalar
+    /// del paso 2 reutilizaba la lectura de antes del paso 1 (hallazgo sobre la rama C). También cuando la mano lanza.
+    /// Invalida, además, la memoria del dónde (369): es la misma llamada.
+    /// </remarks>
+    private static void LaManoVolvio(string que) => Uia.Observatorio.Invalida($"accionar ({que})");
 
     /// <summary>
     /// ¿Aterrizó donde la demostración aterrizaba? La misma exigencia de la promesa 103, ahora
@@ -396,13 +424,16 @@ public sealed class RecorrerSegunElNucleo
     /// conozco», porque al modelo le sirven distinto (promesa 15 del núcleo, hablando por el batch).
     /// </summary>
     private (Nucleo.Alcanzable? Elegido, IReadOnlyList<Nucleo.Alcanzable> Homonimos, string? Motivo, string Aqui)
-        EsperarloVivo(string exit)
+        EsperarloVivo(Paso paso)
     {
+        string exit = paso.Exit;
         var nada = Array.Empty<Nucleo.Alcanzable>();
         // EL RELOJ MANDA (promesa 245). Esta es la compuerta que costó 28,8 s en la máquina del dueño:
         // cada vuelta lee la pantalla, y el presupuesto se contaba como si leerla fuera gratis.
         var compasVida = new Compas(EsperaMaximaMs);
-        int miradas = 0, vueltas = 0;
+        // `miradas` es el ESTADO del recorrido (cuál toca); `pagadas` es cuántas veces se leyó la ventana de verdad.
+        // Se separan desde la 363: la observación que trae el paso cuenta como la primera mirada sin pagarla.
+        int miradas = 0, pagadas = 0, vueltas = 0;
 
         // LA PANTALLA ASENTADA NO SE ESPERA (promesa 299). La huella es lo que una mirada deja en el grafo: dónde
         // estamos y qué puertas están vivas. Dos miradas con la misma huella = nada se está pintando.
@@ -414,6 +445,7 @@ public sealed class RecorrerSegunElNucleo
         bool Mira(string donde)
         {
             var crono = System.Diagnostics.Stopwatch.StartNew();
+            pagadas++;
             bool vio = MiraOtraVez!(donde);
             msDeLaUltimaMirada = crono.ElapsedMilliseconds;
             return vio;
@@ -421,8 +453,60 @@ public sealed class RecorrerSegunElNucleo
         // La espera que SIRVIÓ también se dice: es el dato que faltaba para saber cuánta espera hace falta.
         (Nucleo.Alcanzable?, IReadOnlyList<Nucleo.Alcanzable>, string?, string) Hallado(Nucleo.Alcanzable a, string donde, int ido)
         {
-            if (vueltas > 0) Diario?.Invoke($"«{exit}» no estaba al pedirla y apareció tras {ido} ms ({miradas} mirada(s))");
+            if (vueltas > 0) Diario?.Invoke($"«{exit}» no estaba al pedirla y apareció tras {ido} ms ({pagadas} mirada(s))");
             return (a, nada, null, donde);
+        }
+
+        // LO QUE EL PASO ACABA DE LEER, LA COMPUERTA NO LO VUELVE A MIRAR (promesa 363, spec 048). MEDIDO el
+        // 2026-09-21: el paso pagaba una lectura de la ventana para la lista de candidatas y, si el grafo no
+        // tenía la puerta viva, MirarOtraVez pagaba OTRA de la misma ventana —77-113 ms— sin que nada hubiera
+        // cambiado entre las dos. Si el paso trae su observación, de ESTA pantalla y más fresca que la vigencia:
+        //  · completa → se le cuenta al núcleo con la criba del LATIDO (no la de las candidatas: un Text suelto
+        //    que el latido daba por vivo sigue vivo, y la huella de la 299 coincide con la que el latido dejaría),
+        //    y cuenta como la primera mirada; el camino de siempre la encuentra viva sin pagar nada;
+        //  · de uno (la respuesta de preguntar por este selector, 364) → se RECUERDA sin tocar la lista de vivos,
+        //    y se pulsa esa.
+        // Vieja, de otra pantalla o sin ella: la 264 y la 299 tal cual, y se dice por qué no contó (patrón nº2).
+        {
+            string aquiAhora = _donde() ?? "";
+            string? porQueNoCuenta = PorQueLaVistaNoCuenta(paso.Vista, aquiAhora, out var vista);
+            if (vista != null)
+            {
+                long edad = vista.EdadEn(Uia.Observatorio.Ahora());
+                if (vista.Completa)
+                {
+                    var crudos = vista.Elementos.Select(e => (e.Selector, e.Etiqueta, e.Tipo)).ToList();
+                    var puertas = MapaVivo.LoQueEsPuerta(crudos)
+                        .Select(p => new Nucleo.Elemento(p.Selector, p.Etiqueta, p.Tipo)).ToList();
+                    _grafo.Observar(aquiAhora, puertas);
+                    miradas = 1;
+                    huellaDeLaPrimera = Huella(aquiAhora);
+                    Diario?.Invoke($"«{exit}»: usé lo que el paso acababa de leer (observación v{vista.Version} de «{aquiAhora}», "
+                        + $"{edad} ms de edad, {crudos.Count} crudo(s) → {puertas.Count} puerta(s) con la criba del latido): 0 miradas pagadas");
+                }
+                else
+                {
+                    var deUno = vista.Elementos
+                        .Where(e => e.Selector.Equals(exit, StringComparison.Ordinal))
+                        .Select(e => new Nucleo.Elemento(e.Selector, e.Etiqueta, e.Tipo)).ToList();
+                    if (deUno.Count > 0)
+                    {
+                        _grafo.Recordar(aquiAhora, deUno);
+                        var recordada = _grafo.DesdeAqui(aquiAhora)
+                            .FirstOrDefault(a => a.Que.Selector.Equals(exit, StringComparison.Ordinal));
+                        if (recordada != null)
+                        {
+                            Diario?.Invoke($"«{exit}»: usé lo que el paso acababa de leer (pregunté por este selector en «{aquiAhora}», "
+                                + $"{edad} ms de edad): la doy por viva sin tocar la lista de vivos, 0 miradas pagadas");
+                            return (recordada, nada, null, aquiAhora);
+                        }
+                    }
+                    else
+                        Diario?.Invoke($"«{exit}»: el paso traía la respuesta de preguntar por un selector, pero no era este ({string.Join(",", vista.Elementos.Select(e => e.Selector))}); miro como hoy");
+                }
+            }
+            else if (paso.Vista != null)
+                Diario?.Invoke($"«{exit}»: el paso traía una observación pero no cuenta ({porQueNoCuenta}); miro como hoy");
         }
 
         for (int ido = 0; ; ido = (int)compasVida.Transcurrido, vueltas++)
@@ -507,7 +591,7 @@ public sealed class RecorrerSegunElNucleo
 
                     Diario?.Invoke(asentada
                         ? $"«{exit}» no está y la pantalla está asentada (dos miradas vieron las mismas puertas vivas): me rindo a los {ido} ms, sin agotar los {EsperaMaximaMs}"
-                        : $"«{exit}» no apareció en {ido} ms ({(seMovio ? "la pantalla se movió entre miradas: se esperó entero" : miradas == 0 ? "sin poder mirar" : "sin saber si estaba asentada")}; {miradas} mirada(s))");
+                        : $"«{exit}» no apareció en {ido} ms ({(seMovio ? "la pantalla se movió entre miradas: se esperó entero" : MiraOtraVez == null ? "sin poder mirar" : "sin saber si estaba asentada")}; {pagadas} mirada(s) pagada(s))");
                     // LA FILA DESPLAZADA SE INTENTA (promesa 80): conocida y accionable por
                     // identidad —lo dice el delegado, no el batch—, se pulsa aunque no se vea;
                     // la consecuencia juzga. El atasco real: tras un relogin el árbol de NWP1
@@ -577,4 +661,32 @@ public sealed class RecorrerSegunElNucleo
             $"hice {hechos} de {total} y paré en el paso {hechos + 1}: {motivo}"
             + (aqui.Length > 0 ? $" Estás en «{aqui}»." : "") + vivos);
     }
+
+    /// <summary>
+    /// POR QUÉ la observación que trae el paso NO cuenta como mirada —o null si cuenta, y entonces
+    /// <paramref name="vista"/> la trae—. Los dos lados de cada comparación salen del mismo camino
+    /// (aprendizaje nº16): el dónde es el de <c>_donde()</c>, que es el que la compuerta usa para todo lo
+    /// demás, y la edad se mide con el reloj del observatorio, que es el que puso la fecha de lectura.
+    /// </summary>
+    /// <remarks>
+    /// EN SAP NO CUENTA (hallazgo del 2026-09-22, deducido del código). Dentro de SAP GUI UIA ve un Pane opaco, y las
+    /// puertas de SAP las lee el latido por su Scripting API: contarle al núcleo lo que UIA vio SUSTITUÍA esa lista de
+    /// vivos, y «sap:…#tbbtn=NV44» quedaba muerta en cada paso del hospital. La guarda es la de MirarOtraVezLaVentana
+    /// y ObservarLaVentanaDeTrabajo: los tres sitios que podían volcar una lectura de UIA sobre una ubicación de SAP
+    /// dicen ahora lo mismo (el latido elige el sentido por mundo, y es el cuarto).
+    /// </remarks>
+    private static string? PorQueLaVistaNoCuenta(Uia.Observacion? traida, string aqui, out Uia.Observacion? vista)
+    {
+        vista = null;
+        if (traida == null) return "sin observación";
+        if (aqui.Length == 0) return "no sé dónde estoy";
+        if (aqui.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)) return "SAP se lee por su API";
+        if (!string.Equals(traida.Donde, aqui, StringComparison.OrdinalIgnoreCase))
+            return $"de otra pantalla «{traida.Donde}» → «{aqui}»";
+        long edad = traida.EdadEn(Uia.Observatorio.Ahora());
+        if (edad > Uia.Observacion.VigenciaMs) return $"vieja {edad} ms (> {Uia.Observacion.VigenciaMs})";
+        vista = traida;
+        return null;
+    }
+
 }
