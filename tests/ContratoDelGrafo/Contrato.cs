@@ -14759,6 +14759,30 @@ internal static class Contrato
         if (flecha != null)
             Debe(LineasDeCodigo(flecha, ".PosicionEn(") >= 1 && LineasDeCodigo(flecha, ".Duracion") >= 1,
                 $"FlechaDeJev.cs mueve la flecha con .PosicionEn( del plan y cuenta el tiempo con su .Duracion, en líneas de código: {LineasDeCodigo(flecha, ".PosicionEn(")} y {LineasDeCodigo(flecha, ".Duracion")}");
+        // AÑADIDA EN LA FASE 9, ANTES QUE SU CÓDIGO: todo lo de arriba vuela solo si alguien le dice a la vista que la
+        // mano pulsó. El aviso existe (UiaSurface.Pulso, en físicos, al pulsar) y el parcial es quien lo engancha.
+        var parcial = FuenteDelRepo("windows-client/src/Ui/FaceWindow.Jev.cs", "381");
+        if (parcial != null)
+            Debe(GanchoLlevaA(parcial, "UiaSurface.Pulso +=", ".AlPulsar("), "FaceWindow.Jev.cs engancha UiaSurface.Pulso += en código que lleva a .AlPulsar( de la vista");
+    }
+
+    /// <summary>
+    /// Si alguna línea de CÓDIGO con <paramref name="gancho"/> lleva a <paramref name="llamada"/> en los 240 caracteres
+    /// de código que empiezan en él: el gancho y lo que hace, juntos. Se descarta lo que va detrás de <c>//</c>, como en
+    /// <see cref="LineasDeCodigo"/>. Nace en la fase 9 de la 049: la (b) de la 383 buscaba el gancho por subcadena en el
+    /// texto entero, y un comentario la satisfacía (hallazgo del 8a).
+    /// </summary>
+    private static bool GanchoLlevaA(string fuente, string gancho, string llamada)
+    {
+        var codigo = fuente.Split('\n').Select(l => { int c = l.IndexOf("//", StringComparison.Ordinal); return c >= 0 ? l.Substring(0, c) : l; }).ToArray();
+        for (int i = 0; i < codigo.Length; i++)
+        {
+            int j = codigo[i].IndexOf(gancho, StringComparison.Ordinal);
+            if (j < 0) continue;
+            string desde = string.Join("\n", codigo.Skip(i)).Substring(j);
+            if (desde.Substring(0, Math.Min(240, desde.Length)).Contains(llamada, StringComparison.Ordinal)) return true;
+        }
+        return false;
     }
 
     /// <summary>Promesa 382.</summary>
@@ -14944,6 +14968,12 @@ internal static class Contrato
             int llamadas = adaptador == null ? 0 : LineasDeCodigo(adaptador, "BeginInvoke(");
             Debe(llamadas == 1, $"y en DespachadorDeWpf.cs esa aparición es una llamada, BeginInvoke( en una línea de código: hay {llamadas}");
         }
+        // AÑADIDA EN LA FASE 9, ANTES QUE SU CÓDIGO: el puente provisional hasta que C entre (spec 049 §El puente). El
+        // envoltorio juzgado arriba no ve nada si nadie lo pone alrededor del Decisor del mapa, y lo que publica tiene
+        // que llegar a la vista.
+        var parcial = FuenteDelRepo("windows-client/src/Ui/FaceWindow.Jev.cs", "382");
+        if (parcial != null)
+            Debe(GanchoLlevaA(parcial, "ObservadorDelDecisor.Envolver(", "Publicar"), "FaceWindow.Jev.cs envuelve el Decisor con ObservadorDelDecisor.Envolver( en código, y lo que decide va a Publicar de la vista");
     }
 
     /// <summary>La máquina de la vista con una pantalla de mentira puesta: área de trabajo, escala, tamaño del panel y ancla.</summary>
@@ -15022,6 +15052,30 @@ internal static class Contrato
                 if (i >= 0)
                     Debe(parcial.Substring(i, Math.Min(240, parcial.Length - i)).Contains(".Suelta()", StringComparison.Ordinal), $"y desde {gancho} llama .Suelta() en la máquina de la vista");
             }
+
+        // AÑADIDAS EN LA FASE 9, ANTES QUE SU CÓDIGO. (1) Lo de arriba busca por subcadena en el texto entero, y un
+        // comentario lo satisface (hallazgo del 8a): los dos ganchos tienen que ser CÓDIGO que lleva a .Suelta(). (2)
+        // Apagar Jev cierra las tres porque el botón llega a la vista: PintarBotonJev corre DESPUÉS del interruptor, en
+        // el arranque y en cada pulsación, y su cuerpo sincroniza; el parcial llama .Sincronizar(. (3) Cerrar Ü las
+        // cierra también: fuera del arranque la app sale con la última ventana (OnLastWindowClose, App.xaml.cs:111), y
+        // tres ventanas de Jev abiertas la dejarían viva sin carita.
+        if (parcial != null)
+        {
+            foreach (var gancho in new[] { "Senalador.Suelta +=", "Freno.SePulso +=" })
+                Debe(GanchoLlevaA(parcial, gancho, ".Suelta()"), $"y {gancho} es código que lleva a .Suelta(), no un comentario");
+            Debe(LineasDeCodigo(parcial, ".Sincronizar(") >= 1, "FaceWindow.Jev.cs llama .Sincronizar( en la vista, en una línea de código");
+            Debe(GanchoLlevaA(parcial, "Closed +=", ".Sincronizar(false)"), "y al cerrarse Ü, Closed += lleva a .Sincronizar(false): las tres se cierran con la carita");
+        }
+        var grande = FuenteDelRepo("windows-client/src/Ui/FaceWindow.xaml.cs", "383");
+        if (grande != null)
+        {
+            int inicio = grande.IndexOf("private void PintarBotonJev()", StringComparison.Ordinal);
+            int fin = inicio >= 0 ? grande.IndexOf("\n    }", inicio, StringComparison.Ordinal) : -1;
+            string cuerpo = inicio >= 0 && fin > inicio ? grande.Substring(inicio, fin - inicio) : "";
+            Debe(LineasDeCodigo(cuerpo, "Sincronizar") >= 1,
+                cuerpo.Length == 0 ? "no encontré el cuerpo de private void PintarBotonJev() en FaceWindow.xaml.cs"
+                                   : "el cuerpo de PintarBotonJev sincroniza la vista en una línea de código: no hay ninguna con «Sincronizar»");
+        }
     }
 
     /// <summary>Promesa 384.</summary>
@@ -15066,8 +15120,22 @@ internal static class Contrato
         // (b) LAS DOS LLAMADAS EN FaceWindow SE CUENTAN EN EL FUENTE: OnAutomationCursorMoved e IrJuntoA con alClic.
         var fuente = FuenteDelRepo("windows-client/src/Ui/FaceWindow.xaml.cs", "384");
         if (fuente != null)
+        {
             Debe(Lineas(fuente, "ReglaDeQuienVuela.LaCaritaViaja(") == 2,
                 $"FaceWindow.xaml.cs consulta ReglaDeQuienVuela.LaCaritaViaja( en exactamente 2 líneas —seguir al cursor y viajar al clic—: hay {Lineas(fuente, "ReglaDeQuienVuela.LaCaritaViaja(")}");
+            // AÑADIDA EN LA FASE 9, ANTES QUE SU CÓDIGO: la cuenta de arriba se cumple con LaCaritaViaja(false), que deja
+            // viajar siempre. Las dos le pasan lo que dice la vista.
+            var conRegla = fuente.Split('\n').Where(l => l.Contains("ReglaDeQuienVuela.LaCaritaViaja(", StringComparison.Ordinal)).ToList();
+            Debe(conRegla.Count > 0 && conRegla.All(l => l.Contains("EnTramo", StringComparison.Ordinal)),
+                $"y todas le pasan EnTramo de la vista, no una constante: {conRegla.Count(l => l.Contains("EnTramo", StringComparison.Ordinal))} de {conRegla.Count}");
+        }
+        // AÑADIDA EN LA FASE 9, ANTES QUE SU CÓDIGO: EnTramo solo es cierto si el tramo llega a la vista. Sin estas dos,
+        // las líneas de arriba consultarían una máquina que nunca está en tramo, y la carita viajaría siempre con la (b)
+        // en verde.
+        var parcial = FuenteDelRepo("windows-client/src/Ui/FaceWindow.Jev.cs", "384");
+        if (parcial != null)
+            foreach (var aviso in new[] { ".AlEmpezarTramo(", ".AlTerminarTramo(" })
+                Debe(LineasDeCodigo(parcial, aviso) >= 1, $"FaceWindow.Jev.cs le pasa el tramo a la vista con {aviso}, en una línea de código");
     }
 
     /// <summary>Promesa 385.</summary>

@@ -303,6 +303,22 @@ en el archivo grande, y va contado en el commit de la fase 9 (**≤ 7 líneas**)
 `768-798`, C `434, 508-565, 5570-5684`; ninguna de las líneas de arriba está a menos de 10 de esas. D entra después
 de C y rebasa.
 
+**Así quedó en la fase 9: 4 líneas añadidas y 0 editadas** (M, `git diff --numstat`: `4 0`), no 7. Las tres de los
+avisos del tramo (`AlEmpezarTramo`, `AlTerminarTramo`, `Progreso`) no se tocan: `NacerLaVistaDeJev` las **encadena**
+desde el parcial —primero lo que había, el freno y el notch; después la vista—, porque `ElTramo` lee esas propiedades
+en cada aviso (`SurfaceMapTools.cs:1751-1756`, L). Por eso la línea que nace va **después** de ellas (junto a `:477`,
+no en `:457`), y lo dice en su comentario. `PintarBotonJev` no escribe en la línea de estado: la vista lo lleva al log
+(`jev-vista: Jev encendido · …`), y su línea va **antes** del `if (JevBtn == null) return;`, para que un botón sin
+pintar no deje la vista sin sincronizar. Lo que se paga, y se dice: quien reasigne uno de los tres avisos después de
+esa línea deja a la vista sin él (hoy nadie: 3 asignaciones, en `:463-465`, M).
+
+| Dónde (líneas de la fase 9) | Qué | Líneas |
+|---|---|---|
+| `:477` | `NacerLaVistaDeJev(mcp.Map);` —después de los avisos del tramo, que encadena— | +1 |
+| `:1906` (`OnAutomationCursorMoved`, dentro del `BeginInvoke`) | `if (!Jev.ReglaDeQuienVuela.LaCaritaViaja(_vistaDeJev?.EnTramo == true)) return;` | +1 |
+| `:2874` (`PintarBotonJev`) | `SincronizarLaVistaDeJev(_interruptorDelDecisor?.Encendido == true);` | +1 |
+| `:4606` (`IrJuntoA`) | `if (alClic && !Jev.ReglaDeQuienVuela.LaCaritaViaja(_vistaDeJev?.EnTramo == true)) return;` | +1 |
+
 ## Las fases
 
 Una fase = un commit que pone verde sus promesas sin romper las anteriores. Antes de la fase 1 va la etapa
@@ -410,10 +426,11 @@ incumplida(s)» pegado en el commit `test(jev-vista): …`.
 | | |
 |---|---|
 | **Promesa que pone verde** | 383 (b), 384 (b), 385 (b) |
-| **Qué toca** | `Ui/FaceWindow.Jev.cs` (nuevo, parcial); `Ui/FaceWindow.xaml.cs` (**≤ 7 líneas**, contadas en el commit; `InvocarPorAtajo` intacto) |
+| **Qué toca** | `Ui/FaceWindow.Jev.cs` (nuevo, parcial); `Ui/FaceWindow.xaml.cs` (**≤ 7 líneas**, contadas en el commit; `InvocarPorAtajo` intacto); `Contrato.cs`: **10 comprobaciones más** dentro de la 381 (1), la 382 (1), la 383 (5) y la 384 (3), escritas antes que el código que juzgan, y el ayudante `GanchoLlevaA` (Hallazgos, fase 9) |
 | **¿Núcleo congelado?** | no (la UI no está congelada, pero es zona de choque alta: aviso en `#miracle-updates` al abrir) |
 | **Terminado** | contrato intacto (15/15, 0 sin juzgar); sabotajes por diff de las 15; nivel 4 **con D sola** (tabla de abajo, ≥ 2 pantallas con nombre y el log pegado); el nivel 4 de las cajas verdes queda expresamente pendiente de C |
-| **Sitios con esta clase de error** | ganchos que tocan el archivo grande cuando cabían en un parcial: 0 después de esta fase (todo lo de Jev vive en el parcial salvo las ≤ 7 líneas) |
+| **Sitios con esta clase de error** | ganchos que tocan el archivo grande cuando cabían en un parcial: 0 después de esta fase (todo lo de Jev vive en el parcial salvo las ≤ 7 líneas); **medido al cerrarla** (grep, M): líneas de Jev en `FaceWindow.xaml.cs`, **4 añadidas y 0 editadas**, y las 4 no caben en el parcial —nacer necesita el `mcp` local del arranque, sincronizar va dentro de `PintarBotonJev` y las dos de la regla dentro de sus métodos—; sitios donde la carita viaja al clic o sigue al cursor sintético, **2 de 2** con la regla (`IrJuntoA` con `alClic`, que es la única llamada a `ViajarAlClic`, y `OnAutomationCursorMoved`, el único suscriptor de `UiaSurface.CursorMoved`); asignaciones de los tres avisos del tramo, 3 en `FaceWindow.xaml.cs` (`:463-465`) y 3 en el parcial que las encadenan, ninguna después; suscripciones: `UiaSurface.Pulso` 2 (la carita y la vista), `Senalador.Suelta` 3 (dos de la carita y la vista), `Freno.SePulso` 2 (la carita y la vista); `.Decisor =` 4 (encender y apagar en `InterruptorDelDecisor`, envolver y desenvolver en el parcial); catches nuevos, **2** (cerrar Ü y sincronizar), los dos con la cadena entera y ninguno mudo |
+| **Estado al cerrarla** | ver Hallazgos, fase 9. **El nivel 4 no se hizo** —en esta fase no se ejecuta `U.exe`—: queda escrito en §Nivel 4 pendiente, con las dos pantallas y las líneas de log que existen de verdad |
 
 ## Lo que NO entra
 
@@ -470,6 +487,59 @@ cambian de forma al implementarse, lo que se adapta es el parcial, no el modelo,
 | CPU de la ventana en capas | 60 s con el pulso animado y el ratón quieto frente a 60 s sin overlay, contador de CPU del proceso | tabla en el PR | sí |
 | **Dos escalas de DPI** | **no se puede aquí: un solo monitor.** Se dice en el PR y queda para una máquina con dos | — | no: máquina |
 | El vuelo en la costura entre monitores | ídem | — | no: máquina |
+
+### Lo que tiene que mirar el dueño, y en qué dos pantallas (escrito en la fase 9, sin correr: aquí no se ejecuta `U.exe`)
+
+La fase 9 deja todo cableado y el contrato intacto, pero **ninguna de estas filas se ha visto**: el contrato no toca la
+pantalla. Lo que sigue es la corrida a mano, con las líneas de log que **existen de verdad** en el código de la rama
+(M, grep del 2026-09-23; el formato es `[hh:mm:ss] [id] etiqueta: mensaje`). Donde la tabla de arriba nombraba una
+línea que no existe, se dice aquí y se da la forma de medirlo.
+
+**Las dos pantallas: el Explorador de archivos en «Descargas» y Chrome** (cualquier página con enlaces y botones).
+Las dos son UIA —dentro de SAP, UIA no ve nada y hasta que A entre Jev manda allí filas con nombre—, y son distintas a
+propósito: una ventana clásica de Win32 y un navegador (aprendizaje nº9).
+
+Preparación, una vez:
+
+1. Compilar la rama en Release y arrancar **ese** `U.exe` (`windows-client\bin\x64\Release\net8.0-windows10.0.19041.0\`),
+   no el instalado. Sin `U_JEV_OVERLAY` la primera vez.
+2. Con qué decide Jev, y es decisión del dueño porque cuesta: **(a)** el botón «Jev · on» con la clave de TypeSafe
+   —Jev de verdad, el único camino con barras—, o **(b)** `U_DECISOR=simulado` al arrancar —sin barras (373), gratis—.
+   El «transporte falso» de la primera fila **no existe como opción del binario**: `ClienteTypeSafe.TransporteSegun`
+   solo construye el cliente real (L); para verlo con barras sin TypeSafe haría falta una fase que lo añada con su
+   promesa.
+
+Qué mirar, en orden, en cada una de las dos pantallas:
+
+| # | Qué se hace | Qué tiene que decir el log (o cómo se mide) | Si no |
+|---|---|---|---|
+| 1 | Arrancar sin `U_JEV_OVERLAY` | `jev-vista: vista de Jev creada · overlay: apagado (sin U_JEV_OVERLAY)` | la vista no nació: falta la línea `NacerLaVistaDeJev` o lanzó antes |
+| 2 | Encender Jev (botón o `U_DECISOR`) | `jev-vista: Jev encendido · overlay: apagado (…) · panel en x,y,w,h · 0 overlay(s) · flecha escondida…`, y el panel se ve junto a la carita | `jev-vista: ✘ abrir las ventanas de Jev lanzó …` dice el paso; `el panel nace sin sitio calculado` si Windows no dio el monitor |
+| 3 | Un tramo por voz sobre la pantalla («abre la carpeta X», «pulsa el enlace Y») | el panel enseña el objetivo y «Mirando la pantalla»; con Jev real, cabecera, medidores y cinco barras; coste «—» | sin decisiones en el panel: `Jev encendido con el Decisor del mapa en null` |
+| 4 | La mano pulsa | `jev-flecha: vuela de … a … (lo pulsado en …) en N s` y después `posada en … tras N fotograma(s)`; si no vuela, `jev-vista: la flecha no vuela a …: <lo que contestó Windows>` | la línea dice cuál de los dos handles no casó |
+| 5 | Durante el tramo con Jev | **0** líneas `ui-anim: viaje al clic:` entre `tramo:` y el fin; fuera de tramo (un `map_take` o Jev apagado) y con la carita plegada, **≥ 1** —plegada, porque `IrJuntoA` no viaja con el panel abierto— | si hay viajes en tramo, la regla no recibe `EnTramo` (384) |
+| 6 | Escape a mitad de tramo | el overlay vacío y la flecha escondida **en el acto**; el panel sigue, sin corrida | a ojo: no hay línea propia de `Suelta` |
+| 7 | «Jev · off» | `jev-vista: Jev apagado: cerrados el panel, la flecha y N overlay(s)` y las tres ventanas desaparecen | — |
+| 8 | Repetir 1–7 con `U_JEV_OVERLAY=si` | la 1 dice `overlay: encendido (U_JEV_OVERLAY=si)`; la 2, `jev-overlay: N overlay(s) para N monitor(es): […]`; al pulsar, la rosa sobre lo pulsado | — |
+| 9 | Con la rosa puesta, Alt+Tab a otra app | `jev-overlay: cajas caducadas en el overlay de …: cambió la ventana de delante (hwnd 0x…); había N pintada(s)` | la tabla de arriba decía `overlay: caducó (…)`: **esa línea no existe**; es esta |
+| 10 | Con la rosa puesta, una captura (`Screenshotter`, o Win+Shift+S) | la rosa **no** sale en el PNG | `jev-overlay: no se pudo excluir de la captura …` |
+| 11 | Orden en Z, a los 10 s, a los 60 s y tras esconder y enseñar el panel | **no hay línea `orden Z:` en U** (la tabla de arriba la nombraba): se mide desde fuera, con `EnumWindows` sobre las ventanas del proceso, y tiene que salir flecha, panel, notch, muelle y overlays, de arriba abajo | `SiempreDelante`: línea con el paso, la capa y el handle que no subió |
+| 12 | Con Jev encendido, el atajo de invocar a Ü | el chat del notch con el foco en su campo, como hoy; **no hay línea `atajo:` de éxito** (solo la de fallo, `Activate() no trajo la ventana al frente`): se mide con `GetForegroundWindow` desde fuera y no puede ser ninguna ventana de Jev | — |
+| 13 | Cerrar Ü con Jev encendido | el proceso termina; no queda ningún `U.exe` de la carpeta de la rama | `jev-vista: ✘ al cerrarse Ü, cerrar las ventanas de Jev lanzó …` |
+
+**Lo que NO se va a ver con D sola, y no es un fallo de la corrida:**
+
+- **«la 1.ª no estaba: pulsé la 2.ª …»** (segunda fila de la tabla de arriba): el ticker lo dice cuando el ciclo trae
+  `Pulsada`, y el puente todavía **no lee el número** de la línea `paso k: «x» (n)` (hallazgo (b) del 8c, sigue
+  abierto). El panel resalta la elegida.
+- **El primer objetivo sale con «tramo: » delante**: `ElTramo` avisa con `tramo: {objetivo}` (`ElTramo.cs:132`, L) y el
+  decisor recibe el objetivo pelado (`:146`, L), así que el panel dice «tramo: abre X» hasta la primera decisión y
+  «abre X» después. Quitar el prefijo es una línea con su comprobación, no del cableado.
+- Las cajas verdes (con C) y el «$» con número (con A), como dice la tabla.
+- Dos escalas de DPI y la costura entre monitores: esta máquina tiene uno.
+
+Lo que se pega en el PR: las líneas de arriba con su hora, por pantalla, y las dos fotos del panel (Explorador y
+Chrome).
 
 ## Revisiones
 
@@ -829,10 +899,46 @@ anotan. Lo que cambió en cada promesa está aplicado arriba; aquí queda por qu
   `.PosicionEn(`, que está en una sola línea. (h) El vuelo en la costura entre monitores de escala distinta, sin probar:
   aquí hay un solo monitor. (i) `DespachadorDeWpf.Encolar` lanza si WPF devuelve la operación abortada, para que el
   conector baje su marca y lo diga; sin juez, porque cerrar el `Dispatcher` en el arnés lo rompería.
+- **2026-09-23 (fase 9: el cableado mínimo; el nivel 4, escrito y sin correr).** `Ui/FaceWindow.Jev.cs` nace y
+  `FaceWindow.xaml.cs` gana **4 líneas, 0 editadas** (M, `git diff --numstat`), y la 383 y la 384 pasan a ✔:
+  «CONTRATO INTACTO», 313 ✔, 0 SIN JUZGAR, y de las 313 marcas solo cambian la 383 y la 384, ✘ → ✔, respecto a la
+  final del 8c (M, `diff`). **Diez comprobaciones nuevas, escritas antes que su código**, con un ayudante nuevo,
+  `GanchoLlevaA`, que busca el gancho en líneas de código y exige lo que hace en los 240 caracteres de código que le
+  siguen: (381) el parcial engancha `UiaSurface.Pulso +=` a `.AlPulsar(`; (382) envuelve el `Decisor` con
+  `ObservadorDelDecisor.Envolver(` hacia `Publicar`; (383) `Senalador.Suelta +=` y `Freno.SePulso +=` son código que
+  lleva a `.Suelta()`, el parcial llama `.Sincronizar(`, `Closed +=` lleva a `.Sincronizar(false)` y el cuerpo de
+  `PintarBotonJev` sincroniza; (384) las dos líneas de la regla le pasan `EnTramo` y el parcial le pasa el tramo a la
+  vista con `.AlEmpezarTramo(` y `.AlTerminarTramo(`. **Rojo antes del código, con el archivo presente** (M): contra una
+  versión ingenua —el parcial con solo el campo y los dos ganchos en un comentario, y las dos líneas de la regla con
+  `LaCaritaViaja(false)`— «CONTRATO ROTO: 10», las diez `✘`, y de las 313 marcas solo cambiaron la 381 y la 382, ✔ →
+  ✘. **Y esa ingenua pasaba las dos (b) que ya había** (M: ni un `✘` de «se suscribe a …» ni de «en exactamente 2
+  líneas»): la de la 383 busca el gancho por subcadena y se satisfizo con el comentario —el hallazgo del 8a, otra
+  vez—, y la cuenta de la 384 se cumple con una constante. **Sabotajes por diff**, uno por promesa, cada uno de una
+  línea y restaurado con `cmp` idéntico (el parcial es LF, 8.531 bytes; `FaceWindow.xaml.cs` es CRLF, 328.527 bytes,
+  con `sed -b`); cada uno da «ROTO: 1» con solo su promesa en ✘ (M, `diff` de marcas): (381) la suscripción a `Pulso`
+  con el cuerpo vacío, 8.501 bytes, «engancha UiaSurface.Pulso += en código que lleva a .AlPulsar(»; (382)
+  `mapa.Decisor = decisor` en vez de envolverlo, 8.484, «envuelve el Decisor con ObservadorDelDecisor.Envolver(…»;
+  (383) la suscripción a `Freno.SePulso` comentada, 8.534, «y Freno.SePulso += es código que lleva a .Suelta(), no un
+  comentario», **y la comprobación vieja siguió verde**; (384) borrar la línea de la regla en `IrJuntoA`, 328.391, «…en
+  exactamente 2 líneas…: hay 1»; (385) `_vistaDeJev?.Suelta();` dentro de `InvocarPorAtajo`, 328.550, «y su cuerpo no
+  nombra a Jev ni a _vistaDeJev» —la (b) de la 385 no se había visto roja nunca con el archivo presente (fase 6: «una
+  ausencia que ya es cierta»)—. Restaurado todo, la corrida final da marcas y motivos idénticos a la verde (M).
+  **Desviación del diseño, y dicha** (§El cableado): 4 líneas y no 7, porque los tres avisos del tramo se encadenan
+  desde el parcial. **Sin juez, y dicho; para el nivel 4:** (a) el encadenado depende del orden: quien reasigne un
+  aviso después de `NacerLaVistaDeJev` deja a la vista sin él, y ninguna comprobación lo vería (hoy hay 3 asignaciones
+  y todas van antes, M); (b) la pulsada por número de la línea de progreso sigue sin leerse (hallazgo (b) del 8c), así
+  que el «la 1.ª no estaba» no se va a ver con D sola; (c) el primer ciclo lleva el objetivo con «tramo: » delante
+  (`ElTramo.cs:132`, L) y los decididos sin él (`:146`, L); (d) `AnclaDeLaCarita` pregunta a `GetWindowRect` por la
+  carita o, si está guardada, por el muelle, y lanza si Windows no contesta; `SincronizarLaVistaDeJev` lo recoge y lo
+  dice entero, la carita sigue y la vista queda apagada; (e) cerrar Ü cierra las tres (`Closed`), porque fuera del
+  arranque la app sale con la última ventana (`App.xaml.cs:111`, L): que el proceso termine de verdad es la fila 13
+  del nivel 4; (f) cuatro filas de la tabla del nivel 4 nombraban cosas que no existen —el transporte falso, la línea
+  `overlay: caducó`, la línea `orden Z:` y una línea `atajo:` de éxito— y se corrigen en §Lo que tiene que mirar el
+  dueño; (g) **el nivel 4 no se hizo**: en esta fase no se ejecuta `U.exe`.
 
 ## Cierre
 
-- [ ] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO, 0 SIN JUZGAR)
+- [x] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO, 0 SIN JUZGAR) — fase 9, 313 ✔ (M)
 - [ ] Un sabotaje por promesa verificado por diff (copia, rompe, diff, compila sin silenciar, ROTO nombrando esa promesa, restaura, diff idéntico, INTACTO)
 - [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
 - [ ] Nivel 4 **con D sola** en ≥ 2 pantallas, con nombre: …
