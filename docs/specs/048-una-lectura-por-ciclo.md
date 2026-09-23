@@ -211,6 +211,14 @@ accionar invalida las dos memorias.** En concreto:
     en sombra» por minuto— decide si se enciende por defecto en el PR o si la 369 se queda en sombra; si se
     queda, el PR lo dice con el número. Lo que no se sabe hoy es cuántas de las 25 llamadas caen dentro de
     400 ms de otra: sin ese dato, encenderla sería una promesa que no compra nada.
+    **Cómo quedó (fase 8, 2026-09-22):** «nadie ha accionado» es un número, no un evento:
+    `Observatorio.Invalida` sube `Observatorio.Invalidaciones` y la memoria sirve solo si sigue siendo el que
+    había al calcular (y si nadie llamó a su `Olvida()`); los dos se toman ANTES de calcular, así que un cálculo
+    en vuelo cuando se acciona nace caducado. `InvalidaLoQueNoSeaDe` no lo sube: la llama el mapa vivo al notar un
+    cambio de sitio, y para notarlo acaba de calcular la ubicación nueva. **En sombra se cuenta además cuántas de
+    las que habrían salido de memoria traían otra respuesta** («K en sombra (J con otra respuesta)»), y lo
+    recordado no se renueva en sombra —la memoria encendida tampoco lo habría renovado—: sin J, K no dice si
+    encenderla compra lecturas o sitios viejos (patrón nº8).
 
 ## Las promesas
 
@@ -247,7 +255,7 @@ que es justo lo que la 285 prohíbe). Y **la 183 no se toca**: la 365 la cita co
 | 365 | `Lee` falso con «Detalles» (Button, caja, id `1.2`), «Detalles» (Hyperlink, caja, id `1.3`), dos elementos con id «» y distinto selector, y dos con el mismo id `7.7`; `PuertasVivas` con «Detalles» (RadioButton, `sap:`) y «Guardar» (Button, `sap:`): los dos «Detalles» de UIA salen (distinto selector); el «Detalles» del terreno **no** (183, y `ElTerrenoCompletaLoQueUiaNoVe` sigue verde); «Guardar» sale con `Caja.IsEmpty`; las dos con identidad «» salen **las dos**; el `7.7` sale una vez; los ids que recibe el decisor son los de `map_what_i_see` en su orden; el log trae «candidatas: 6 de 8 (5 con caja · 1 sin caja · 2 sin identidad) en N ms» (recontado al escribir el juez, 2026-09-22: 6 crudos de UIA + 2 del terreno = 8 vistas; sale 1 «Repetido» de los 2 con `7.7` y no sale el «Detalles» del terreno = 6 ofrecidas, 5 con caja) | tratar la identidad «» como clave al deduplicar: «las dos con «» salen» falla |
 | 366 | `new ProyectorNeo4j("http://127.0.0.1:1", cuenta: captura, reloj: falso)`: el constructor (índices) falla y deja **1** línea «Neo4j no responde … · desde índices» —arranca el minuto—; `g.Observar(…)`; `Proyectar(g, "latido")` → 0 líneas nuevas, `Envios == 2`, `Fallidos == 2`; `g.Observar(…)` otra vez (el grafo tiene que cambiar de versión: `:170` corta si no); reloj +61 s; `Proyectar(g, "ubicación")` → 1 línea más; `Resumen()` trae «envíos: 3 · N ms · más lento M ms (índices) · 3 fallidos»; `UltimaProyeccionMs ≥ 0`; y `new ProyectorNeo4j(url, usuario, clave)` sigue construyendo | volver a `_yaAvise` una vez por proceso: «+61 s → 1 más» falla |
 | 368 | `MapaParaDecidir` + `AlDecidir += e => …`: tras `map_decidir`, `e.Ofrecidas` es lo que recibió el decisor, `e.Candidatas.Count == 3` con sus cajas, `e.Decision.Puerta == "2) …"`, `e.Ms.Leer/Decidir/Pulsar ≥ 0`, `e.Paso.Actuo`; con un decisor que dice No, el evento también sale y `e.Paso.Actuo == false`; sin suscriptor, la cuenta de `map_decidir` es byte a byte la de hoy | disparar el evento solo cuando se acciona: «decisor que dice No» falla |
-| 369 | `MemoriaDeUbicacion` pura con reloj inyectado: `Sirve(h, "t", esSap:false)` calcula la primera; +200 ms con el mismo `(h, "t")` → de memoria; **`Olvida()` (accionar) y +200 ms con el mismo `(h, "t")` → calcula**; cambia el título → calcula; +400 ms → calcula; `esSap:true` → calcula siempre; con `EnSombra = true` cada llamada calcula y `HabrianSidoDeMemoria` sube; el `Cuenta` capturado trae «dónde: N calculadas · M de memoria · K en sombra» | no olvidar al accionar (`Olvida` vacío): «tras accionar se calcula» falla |
+| 369 | `MemoriaDeUbicacion` pura con reloj inyectado: `Sirve(h, "t", esSap:false)` calcula la primera; +200 ms con el mismo `(h, "t")` → de memoria; **`Olvida()` (accionar) y +200 ms con el mismo `(h, "t")` → calcula**; cambia el título → calcula; +400 ms → calcula; `esSap:true` → calcula siempre; con `EnSombra = true` cada llamada calcula y `HabrianSidoDeMemoria` sube; el `Cuenta` capturado trae «dónde: N calculadas · M de memoria · K en sombra»; **(añadido en la fase 8, antes que su código)** en sombra, si lo recién calculado difiere de lo que habría servido, se devuelve lo calculado y la cuenta dice «1 con otra respuesta»; y `Observatorio.Invalida` —la llamada de `Take` y `Type` al volver la mano— también la olvida (con control: sin accionar, a los 100 ms sale de memoria) | no olvidar al accionar (`Olvida` vacío): «tras accionar se calcula» falla |
 
 ### Qué juzga el contrato y qué solo la máquina
 
@@ -361,8 +369,11 @@ nombre) y **fuera de SAP**. Cada punto nombra la línea del log que el PR pega, 
 4. **El reproductor**: un workflow UIA de la biblioteca sobre el Explorador (paso a paso), contando
    «barrido nº» por paso; se espera **≤1 barrido menos por paso** y ninguno menos en el caso común, y así se
    dice. Sin SAP en esta máquina, el lado SAP de 361 queda **sin probar** y se dice en el PR.
-5. **La memoria del dónde, en sombra**: «dónde: N calculadas · M de memoria · K en sombra» por minuto en
-   reposo y durante un tramo. Si K/N es pequeño, la 369 se queda en sombra y el PR lo dice con el número.
+5. **La memoria del dónde, en sombra**: «dónde: N calculadas · M de memoria · K en sombra (J con otra
+   respuesta)» por minuto (tag `donde`) en reposo y durante un tramo; al arrancar, la línea «memoria del dónde en
+   sombra…» dice el modo. Si K/N es pequeño, la 369 se queda en sombra y el PR lo dice con el número. **Si J no es
+   ~0, tampoco se enciende**, aunque K/N sea grande: serían sitios viejos servidos como nuevos (ver hallazgo
+   «accionar sin olvidar», abajo).
 6. **Cuántas veces `VentanaDelUsuario()` ≠ `DondeEstoy().Hwnd`**: la causa «otra ventana h1 → h2» de la
    línea de reutilización, contada por sesión. Es el dato que hoy es D.
 
@@ -394,6 +405,22 @@ nombre) y **fuera de SAP**. Cada punto nombra la línea del log que el PR pega, 
   (la que lee `UiaReader.Read()`) y `SurfaceLocator.Ahora()` (la de `_where()`), con reglas distintas cuando
   Ü está delante o una hija tiene el foco. Aprendizaje nº16 en potencia; esta spec compara siempre por el
   mismo lado y lo cuenta en el nivel 4 (punto 6).
+- **2026-09-22 · fase 8 · accionar sin olvidar la ubicación: la memoria del dónde NO se puede encender tal como
+  está.** Contados los sitios donde se acciona y después se pregunta «dónde»: **2** pasan por
+  `Observatorio.Invalida` (`Take` y `Type`, en su `finally`: cuando el tramo ENTERO ya terminó); **no pasan**
+  (a) `SeguirElFoco` (`FaceWindow.xaml.cs:5545`, `Ui/` vetado), que olvida `_dondeTrabajo` y pregunta
+  `DondeEstoy()` en el acto desde **5** sitios (`:687`, `:754`, `:756`, `:797`, `:901`) —el de `:901` corre
+  dentro de `RecorrerPorElNucleo`, o sea ANTES del `finally` de `Take`— y (b) cada pulsación dentro de un tramo,
+  cuya espera sondea `DondeTrabajo`, que sin ventana de trabajo fijada cae a `DondeEstoy()`
+  (`VentanaDeTrabajo.Resolver`, `:49-52`). Con la memoria encendida, en esos sitios una pulsación que cambia la
+  pantalla sin cambiar ventana ni título (Configuración, SAP no: SAP se calcula siempre) vería el sitio de antes
+  hasta 400 ms —la refutación nº5, que la fase 8 cierra para `Take`/`Type` y no para estos—. En sombra no hace
+  daño y lo MIDE: es «J con otra respuesta». Para encenderla: que la pulsación (B, `PulsarSegunElNucleo`) y
+  `SeguirElFoco` (`Ui/`) llamen a `Observatorio.Invalida` al volver la mano. No es de esta rama.
+- **2026-09-22 · fase 8 · el juez de la 369 no alcanzaba el cableado.** Juzgaba `Olvida()` sobre la clase pura,
+  pero en producción nadie llama a `Olvida()`: lo que dice «accioné» es `Observatorio.Invalida`. Una `Olvida()`
+  verde que nadie llama es el guardia que se cree puesto (aprendizaje nº18). Se añadieron al juez, antes que su
+  código, dos comprobaciones (la de `Observatorio.Invalida` y la de «con otra respuesta»); el enunciado no cambió.
 
 ## Revisiones
 

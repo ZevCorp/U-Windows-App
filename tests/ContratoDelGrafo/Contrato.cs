@@ -14077,6 +14077,44 @@ internal static class Contrato
         string resumen = (string)mResumen.Invoke(memoria, null)!;
         Debe(System.Text.RegularExpressions.Regex.IsMatch(resumen, @"dónde: \d+ calculadas · \d+ de memoria · \d+ en sombra"),
             $"y la cuenta dice «dónde: N calculadas · M de memoria · K en sombra» (dijo «{resumen}»)");
+
+        // EN SOMBRA SE CUENTA TAMBIÉN CUÁNTAS HABRÍAN MENTIDO (fase 8, 2026-09-22). «Habría salido de memoria» no
+        // dice si lo recordado seguía siendo verdad, y eso es lo que decide encenderla: tras un clic que cambia la
+        // pantalla SIN cambiar ni la ventana ni el título (Configuración, una pestaña de la misma app) la memoria
+        // serviría el sitio de antes (refutación nº5 de la spec). Se compara lo recién calculado con lo que habría
+        // servido; y en sombra lo recordado NO se renueva, porque la memoria encendida tampoco lo habría renovado.
+        string idQueDa = "uia://x.exe/a";
+        Func<U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation?> calculaLaDeAhora = () =>
+        {
+            calculos++;
+            return new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation(idQueDa, "x.exe", "");
+        };
+        ahora += 1000;
+        mSirve.Invoke(memoria, new object[] { (IntPtr)5, "m", false, calculaLaDeAhora });
+        idQueDa = "uia://x.exe/b";   // la pantalla cambió por dentro: misma ventana, mismo título
+        ahora += 100;
+        var fresca = mSirve.Invoke(memoria, new object[] { (IntPtr)5, "m", false, calculaLaDeAhora });
+        Debe(fresca is U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation { Id: "uia://x.exe/b" },
+            "en sombra se devuelve siempre lo recién calculado, no lo recordado");
+        var otraRespuesta = System.Text.RegularExpressions.Regex.Match((string)mResumen.Invoke(memoria, null)!, @"(\d+) con otra respuesta");
+        Debe(otraRespuesta.Success && otraRespuesta.Groups[1].Value == "1",
+            $"y la cuenta dice cuántas de las que habrían salido de memoria traían otra respuesta (dijo «{mResumen.Invoke(memoria, null)}»)");
+
+        // ACCIONAR COMO ACCIONA LA MANO. Take y Type no llaman a Olvida(): al volver llaman a Observatorio.Invalida
+        // (regla 4 de la 048: «esa misma llamada olvida también la ubicación memorizada»). Una Olvida() que nadie
+        // llama sería un guardia que se cree puesto (aprendizaje nº18), así que se juzga la llamada de verdad.
+        var mAccionar = Capacidad("U.WindowsClient.Uia.Observatorio")?.GetMethod("Invalida", new[] { typeof(string) });
+        var encendida = Construye(t, ("reloj", (Func<long>)(() => ahora)));
+        int c0 = calculos;
+        mSirve.Invoke(encendida, new object[] { (IntPtr)6, "k", false, (Func<U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation?>)Calcula });
+        ahora += 100;
+        mSirve.Invoke(encendida, new object[] { (IntPtr)6, "k", false, (Func<U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation?>)Calcula });
+        Debe(calculos == c0 + 1, $"(control) sin accionar, a los 100 ms sale de memoria (cálculos {calculos - c0} de 1)");
+        mAccionar?.Invoke(null, new object[] { "el juez acciona" });
+        ahora += 100;
+        mSirve.Invoke(encendida, new object[] { (IntPtr)6, "k", false, (Func<U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation?>)Calcula });
+        Debe(mAccionar != null && calculos == c0 + 2,
+            $"y accionar como acciona la mano —Observatorio.Invalida, la llamada de Take y Type al volver— también la olvida (cálculos {calculos - c0} de 2)");
     }
 
     private static void Debe(bool condicion, string promesa)

@@ -118,15 +118,33 @@ public static class Observatorio
         return null;
     }
 
-    /// <summary>Olvida la última observación. El siguiente que pida, lee; y se le dirá por qué.</summary>
+    /// <summary>
+    /// Olvida la última observación. El siguiente que pida, lee; y se le dirá por qué.
+    ///
+    /// Y con la misma llamada se olvida también la UBICACIÓN memorizada (regla 4 de la 048, promesa 369): lo que la
+    /// hace caducar es <see cref="Invalidaciones"/>, que sube aquí y que <see cref="MemoriaDeUbicacion"/> compara con
+    /// el número que había al calcular. Es la llamada con la que Take y Type dicen que la mano acaba de volver; un
+    /// número y no un evento, para que la memoria no tenga que suscribirse (ni quedar colgada de un estático) y para
+    /// que un cálculo en vuelo cuando se acciona nazca ya caducado.
+    /// </summary>
     public static void Invalida(string porque)
     {
         lock (_cerrojo)
         {
             _ultima = null;
             _porQueNoHay = $"invalidada: {porque}";
+            _invalidaciones++;
         }
     }
+
+    private static long _invalidaciones;
+
+    /// <summary>
+    /// Cuántas veces se llamó a <see cref="Invalida"/> —cuántas veces se accionó— desde que arrancó el proceso. No
+    /// cuenta <see cref="InvalidaLoQueNoSeaDe"/>: esa la llama el mapa vivo al NOTAR un cambio de sitio, y para
+    /// notarlo acaba de calcular la ubicación nueva.
+    /// </summary>
+    public static long Invalidaciones { get { lock (_cerrojo) return _invalidaciones; } }
 
     /// <summary>
     /// Olvida la última observación SALVO que ya sea de <paramref name="donde"/>. Es lo que llama el mapa vivo al
