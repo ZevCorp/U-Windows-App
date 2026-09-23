@@ -1,6 +1,6 @@
 # La distribución se valida entera: la decisión de Jev falla cerrada
 
-Estado: **en construcción** —las nueve promesas y la 289 en verde desde la fase 9, y endurecidas en la fase 10 (revisión: siete hallazgos, seis ciertos); faltan `/verifica` y el nivel 4— · Spec 046 · 2026-09-22 · Rama `jero/jev-la-distribucion-se-valida-entera` ·
+Estado: **verificada, sin nivel 4** —las nueve promesas y la 289 en verde desde la fase 9, endurecidas en la fase 10 (revisión: siete hallazgos, seis ciertos); `verificar.ps1` pasa (2026-09-22 23:19: 307/307 y voz 46/46); falta el nivel 4, que corre el dueño— · Spec 046 · 2026-09-22 · Rama `jero/jev-la-distribucion-se-valida-entera` ·
 promesas **350 y 386–393** · reescribe la **289** (su última cláusula era la compuerta abierta)
 
 > Rama A de las cuatro que siguen `arquitectura-jev-en-u.md` (22-09), todas desde `main`. Nace de la
@@ -697,6 +697,7 @@ medido está en la tabla del diagnóstico. **Ninguna resultó falsa.**
 
 - [x] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO, 307 verdes, 2026-09-22, fase 9; y otra vez tras la fase 10, con los jueces endurecidos)
 - [x] Un sabotaje por promesa, verificado por diff, con el veredicto literal pegado aquí (en la fila **Hecho** de cada fase, 1 a 10)
-- [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
-- [ ] Probado en ≥2 pantallas, con nombre: …
+- [x] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md` (2026-09-22 23:19, sobre `b38a9e3`, `main` = `043addc` sin nada nuevo que traer: Compila OK · Contrato 307/307, 0 pendientes · Contrato voz 46/46, 0 pendientes · Escenarios y A mano NO CORRIDO)
+- [ ] Probado en ≥2 pantallas, con nombre: … (nivel 4 de la sección de arriba; lo corre el dueño, esta sesión no ejecuta U.exe ni llama a TypeSafe)
+- **Choques medidos con las otras tres ramas** (`git merge-tree` contra sus cabezas del 22-09 23:2x, **(M)**): con B (`22d23f5`) 2 bloques en `Contrato.cs` —los dos registros apendizados en el mismo sitio: se conservan los dos— y 1 en `SurfaceMapTools.cs` (la construcción del `ElTramo.Paso` en `UnPasoDecidido`); con C (`8da3336`) los mismos 2 de `Contrato.cs` y 2 en `UnPasoDecidido` (`Nombre`/`SinTextoDeFilas` y la rama `noEstaba` con la señal); con D (`6c705e0`) solo los 2 de `Contrato.cs`. `ElTramo.cs` y `SurfaceLocator.cs` se funden solos. Orden: **A ∥ B → C → D**; quien entre segundo de A y B resuelve su bloque de `UnPasoDecidido`
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)
