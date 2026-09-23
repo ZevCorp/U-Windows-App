@@ -490,6 +490,21 @@
                              botones». Si esto sigue así dentro de unos días, se quita. -->
                         <Button x:Name="WorkBtn" Content="Work" Height="38" Margin="0,8,0,0"
                                 AutomationProperties.Name="Trabajar (sin función todavía)"/>
+                        <!-- SUBIR (spec 046): fotos de estudios de cardiología → resumen y preguntas.
+                             Del mismo grupo que Learn y Work, y vestido igual (VestirElPanelConElEstudio).
+                             Abre su panel pegado a la izquierda del óvalo y, si todavía no hay fotos,
+                             el explorador de Windows en el MISMO clic: sin ese segundo paso, «subir»
+                             sería «abrir un panel que te pide subir». -->
+                        <Button x:Name="SubirBtn" Height="38" Margin="0,8,0,0" Click="OnSubirEstudios"
+                                AutomationProperties.Name="Subir fotos de estudios">
+                            <StackPanel Orientation="Horizontal">
+                                <!-- Upload de Segoe MDL2, y no un emoji: un emoji trae su propio color
+                                     y rompe la tira (2026-08-07). -->
+                                <TextBlock Text="&#xE898;" FontFamily="Segoe MDL2 Assets"
+                                           FontSize="13" VerticalAlignment="Center" Margin="0,1,8,0"/>
+                                <TextBlock Text="Subir" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
                         <!-- JEV (spec 036, promesa 290): enciende y apaga el decisor de TypeSafe sin
                              reiniciar. Dice su estado real en el texto y el motivo en el tooltip. Se
                              llama Jev y no «Live» porque Live ya significa la consulta clinica. -->
