@@ -1,8 +1,10 @@
 # Una lectura por ciclo
 
 > Spec 048 · 2026-09-22 · rama `jero/jev-una-lectura-por-ciclo` · promesas **361–370** · reescribe la **264**
-> · Estado: **en construcción** (2026-09-22, noche): fases 1–8 y 10 hechas, 306/306 y `CONTRATO INTACTO`; falta
-> `verificar.ps1` con su evidencia (fase 9) y todo el nivel 4, que no se ha corrido (U.exe no se ejecuta en este encargo).
+> · Estado: **compuerta automática pasada, nivel 4 pendiente** (2026-09-22, 23:11): fases 1–10 hechas;
+> `verificar.ps1` → Compila OK · Contrato OK 306/306, 0 pendientes (`CONTRATO INTACTO`) · Contrato voz OK 46/46
+> (`VOZ ÍNTEGRA`) · Escenarios y A mano NO CORRIDO. El nivel 4 no se ha corrido (U.exe no se ejecuta en este
+> encargo): lo hace el dueño, en ≥2 pantallas, con las líneas de la sección «Nivel 4, pendiente».
 >
 > Es la rama **C** de la nueva arquitectura de Jev (`scratchpad/jev/arquitectura-jev-en-u.md`, §4 y §7).
 > Nace desde `main` `dde8c40` y trae por merge `f811796` (voz: la **341**) y `5574148` (Felipe, 22-09 09:58:
@@ -474,12 +476,17 @@ código ya decía la línea del minuto (sus sabotajes prueban que ahora sí pued
 
 ## Cierre
 
-- [ ] Todas las promesas escritas verdes (`.\scripts\contrato-del-grafo.ps1` → `CONTRATO INTACTO`), la 264
-      reescrita incluida
-- [ ] Un sabotaje por promesa, comprobado por diff (copia, rompe, diff, compila sin silenciar, `ROTO`
-      nombrándola, restaura, diff idéntico, recompila, `INTACTO`)
-- [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
-- [ ] Probado en ≥2 pantallas, con nombre: …
-- [ ] Jose avisado del cruce en `SurfaceMapTools.cs:2147` antes del PR
-- [ ] Merge de `origin/main` antes del push; A y B ya dentro
-- [ ] Estado de este documento: **implementada** (AAAA-MM-DD)
+- [x] Todas las promesas escritas verdes (`.\scripts\contrato-del-grafo.ps1` → `CONTRATO INTACTO`), la 264
+      reescrita incluida — 306/306, 0 pendientes (2026-09-22 23:11)
+- [x] Un sabotaje por promesa, comprobado por diff (copia, rompe, diff, compila sin silenciar, `ROTO`
+      nombrándola, restaura, diff idéntico, recompila, `INTACTO`) — 361–366, 368 y 369, en el commit de cada
+      fase; 361–364, 366 y 369 otra vez sobre el código de la fase 10. La cláusula nueva de la 264 la juzga y la
+      sabotea la 363 (el cuerpo de la 264 no cambió)
+- [x] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md` (niveles 1–2; 3 y 4 NO CORRIDO)
+- [ ] Probado en ≥2 pantallas, con nombre: **sin correr** — lo hace el dueño
+- [ ] Jose avisado del cruce en `SurfaceMapTools.cs:2147` antes del PR — **sin hacer**: desde este encargo no hay
+      canal; medido con `git merge-tree` (2026-09-22): con `origin/jose/ir-devuelve-la-pagina-asentada`
+      `SurfaceMapTools.cs` se funde solo y solo choca `Contrato.cs`
+- [x] Merge de `origin/main` antes del push (`043addc`, «Already up to date» el 2026-09-22, antes de las 23:08) — [ ] A y B
+      ya dentro: **no**, ninguna está en `origin`; el PR se abre sin mergear y dice el orden A ∥ B → C → D
+- [ ] Estado de este documento: **implementada** (AAAA-MM-DD) — cuando el nivel 4 esté hecho
