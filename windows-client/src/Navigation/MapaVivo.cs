@@ -26,7 +26,13 @@ namespace U.WindowsClient.Navigation;
 public sealed class MapaVivo : IDisposable
 {
     private readonly Nucleo.Grafo _grafo = new();
-    private readonly Nucleo.ProyectorNeo4j _proyector = new();
+    /// <summary>
+    /// QUIEN LO CUENTA ENTRA POR EL CONSTRUCTOR (spec 048, promesa 366). Se asignaba en el constructor del mapa,
+    /// una línea DESPUÉS de construir el proyector, y el proyector ya había intentado sus índices: con Neo4j
+    /// caído gastaba ahí su único aviso sin que nadie lo oyera, y «Neo4j no responde» salió 0 veces en 17 logs.
+    /// </summary>
+    private readonly Nucleo.ProyectorNeo4j _proyector =
+        new(url: null, cuenta: m => LogBus.Log("mapa-vivo", m), reloj: null);
     private readonly Func<string> _donde;
     private readonly Func<IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>> _loQueVeo;
     private System.Threading.Timer? _reloj;
@@ -188,7 +194,6 @@ public sealed class MapaVivo : IDisposable
     {
         _donde = donde;
         _loQueVeo = loQueVeo;
-        _proyector.Cuenta = m => LogBus.Log("mapa-vivo", m);
     }
 
     /// <summary>
@@ -300,7 +305,7 @@ public sealed class MapaVivo : IDisposable
                     PulsoDelMapeador.Actual.NoEraNavegacion(global::Nucleo.Grafo.AppDe(_anterior));
                     _anterior = aqui; _llegadaAlAnterior = cuando;
                     _grafo.Estoy(aqui);
-                    _proyector.Proyectar(_grafo);
+                    _proyector.Proyectar(_grafo, "ubicación");
                     return;
                 }
 
@@ -443,7 +448,7 @@ public sealed class MapaVivo : IDisposable
             // que dejar constancia de que se pasó: si no, la ubicación intermedia no existiría y el
             // camino quedaría grabado como si fuera directo.
             _grafo.Estoy(aqui);
-            _proyector.Proyectar(_grafo);
+            _proyector.Proyectar(_grafo, "ubicación");
         }
         catch (Exception e)
         {
@@ -573,7 +578,7 @@ public sealed class MapaVivo : IDisposable
             }
 
             crono.Restart();
-            _proyector.Proyectar(_grafo);
+            _proyector.Proyectar(_grafo, "latido");
             PulsoDelMapeador.Actual.Costo("proyectar", crono.ElapsedMilliseconds);
         }
         catch (Exception e)
@@ -590,7 +595,7 @@ public sealed class MapaVivo : IDisposable
     public void Cruzado(string desde, string selector, string hasta)
     {
         _grafo.Cruzar(desde, selector, hasta);
-        _proyector.Proyectar(_grafo);
+        _proyector.Proyectar(_grafo, "cruce");
     }
 
     /// <summary>
