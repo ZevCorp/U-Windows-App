@@ -13450,6 +13450,20 @@ internal static class Contrato
 
     private static int Lineas(string fuente, string aguja) => fuente.Split('\n').Count(l => l.Contains(aguja, StringComparison.Ordinal));
 
+    /// <summary>
+    /// Líneas donde la aguja es CÓDIGO: se descarta lo que va detrás de <c>//</c> —comentarios y documentación— y la
+    /// declaración <c>extern</c> de un DllImport. Nace en el paso 8c de la 049 porque una comprobación por subcadena
+    /// se satisface con un comentario (hallazgo del 8a). Límite dicho: un <c>//</c> dentro de una cadena corta la línea
+    /// ahí, y un comentario <c>/* */</c> no se descarta. En <c>Ui/Jev</c> no hay ningún <c>/*</c>, y los únicos
+    /// <c>//</c> dentro de una cadena son los dos <c>xmlns</c> del XAML del panel, sin ninguna aguja (grep, 2026-09-23).
+    /// </summary>
+    private static int LineasDeCodigo(string fuente, string aguja) => fuente.Split('\n').Count(l =>
+    {
+        int corte = l.IndexOf("//", StringComparison.Ordinal);
+        string codigo = corte >= 0 ? l.Substring(0, corte) : l;
+        return codigo.Contains(aguja, StringComparison.Ordinal) && !codigo.Contains(" extern ", StringComparison.Ordinal);
+    });
+
     private static int Apariciones(string fuente, string aguja)
     {
         int n = 0, i = 0;
@@ -14489,6 +14503,17 @@ internal static class Contrato
             Debe(Apariciones(siempre, "new DispatcherTimer") == 1,
                 $"un solo reloj: Ui/SiempreDelante.cs crea exactamente 1 DispatcherTimer, y crea {Apariciones(siempre, "new DispatcherTimer")}");
         }
+        // AÑADIDA EN LA FASE 8 (paso 8c), ANTES QUE SU CÓDIGO: LAS TRES VENTANAS DE JEV ENTRAN AL GRUPO, CADA UNA CON SU
+        // CAPA. El enunciado nombra overlays, panel y flecha, y lo de arriba juzga al vigilante, no a quién se apunta:
+        // una flecha que no entrara —o que entrara como panel— cruzaría por debajo del panel a mitad de vuelo y ninguna
+        // comprobación lo vería.
+        foreach (var (archivo, capa) in new[] { ("OverlayDeJev.cs", "Capa.Overlays"), ("PanelDeJev.cs", "Capa.PanelDeJev"), ("FlechaDeJev.cs", "Capa.Flecha") })
+        {
+            var deJev = FuenteDelRepo("windows-client/src/Ui/Jev/" + archivo, "378");
+            if (deJev == null) continue;
+            int entra = LineasDeCodigo(deJev, $"SiempreDelante.EntraAlGrupo(this, {capa})");
+            Debe(entra == 1, $"Ui/Jev/{archivo} entra al grupo como {capa} en una línea de código: hay {entra}");
+        }
         // Y NINGUNA, NO SOLO ESTAS DOS (patrón nº5: se cuentan todos los sitios, no los que se conocían): ningún
         // fuente del cliente llama a .Vigilar().
         var cliente = FuentesBajo("windows-client/src", "378");
@@ -14723,7 +14748,17 @@ internal static class Contrato
         {
             Debe(vista.Contains("GetForegroundWindow", StringComparison.Ordinal), "VistaDeJev.cs pregunta GetForegroundWindow antes de volar");
             Debe(!vista.Contains("appDelante: true", StringComparison.Ordinal), "y nunca pasa appDelante: true a secas");
+            // AÑADIDAS EN LA FASE 8 (paso 8c), ANTES QUE SU CÓDIGO. La de arriba se cumple con el nombre en un
+            // comentario o en su DllImport (hallazgo del 8a: una (b) por subcadena se satisface con un comentario): se
+            // exige la LLAMADA en una línea de código, y que el plan lo calcule la vista, que es quien pregunta.
+            Debe(LineasDeCodigo(vista, "GetForegroundWindow()") >= 1, $"VistaDeJev.cs LLAMA a GetForegroundWindow() en una línea de código que no es su extern: hay {LineasDeCodigo(vista, "GetForegroundWindow()")}");
+            Debe(LineasDeCodigo(vista, "PlanDeVuelo.Calcular(") >= 1, "y calcula el vuelo con PlanDeVuelo.Calcular( en una línea de código");
         }
+        // LA VENTANA VUELA CON EL PLAN: su duración y su curva, que son las juzgadas arriba, y no unas suyas.
+        var flecha = FuenteDelRepo("windows-client/src/Ui/Jev/FlechaDeJev.cs", "381");
+        if (flecha != null)
+            Debe(LineasDeCodigo(flecha, ".PosicionEn(") >= 1 && LineasDeCodigo(flecha, ".Duracion") >= 1,
+                $"FlechaDeJev.cs mueve la flecha con .PosicionEn( del plan y cuenta el tiempo con su .Duracion, en líneas de código: {LineasDeCodigo(flecha, ".PosicionEn(")} y {LineasDeCodigo(flecha, ".Duracion")}");
     }
 
     /// <summary>Promesa 382.</summary>
@@ -14903,6 +14938,11 @@ internal static class Contrato
                 $"bajo Ui/Jev hay exactamente 1 BeginInvoke y está en DespachadorDeWpf.cs: hay {total} en [{string.Join(", ", conBegin.Select(x => x.Archivo))}]");
             var conInvoke = fuentes.Where(x => x.Texto.Contains("Dispatcher.Invoke(", StringComparison.Ordinal)).Select(x => x.Archivo).ToList();
             Debe(conInvoke.Count == 0, $"y ningún Dispatcher.Invoke( síncrono: hay en [{string.Join(", ", conInvoke)}]");
+            // AÑADIDA EN LA FASE 8 (paso 8c), ANTES QUE SU CÓDIGO: la cuenta de arriba es de texto, y un adaptador que lo
+            // nombrara en un comentario y ejecutara en el acto la pasaría. Esa única aparición es una llamada.
+            var adaptador = fuentes.FirstOrDefault(x => x.Archivo == "DespachadorDeWpf.cs").Texto;
+            int llamadas = adaptador == null ? 0 : LineasDeCodigo(adaptador, "BeginInvoke(");
+            Debe(llamadas == 1, $"y en DespachadorDeWpf.cs esa aparición es una llamada, BeginInvoke( en una línea de código: hay {llamadas}");
         }
     }
 

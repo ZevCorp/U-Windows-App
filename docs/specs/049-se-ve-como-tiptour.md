@@ -403,6 +403,7 @@ incumplida(s)» pegado en el commit `test(jev-vista): …`.
 | **¿Núcleo congelado?** | no |
 | **Terminado** | compila en Release; el XAML real mide 64/198,6 en el arnés; contrato intacto; las ventanas solo llaman al modelo (grep: ni `OrderBy` ni `Contains(` sobre etiquetas dentro de las tres ventanas); exactamente 1 `BeginInvoke` bajo `Ui/Jev/` |
 | **Sitios con esta clase de error** | ventanas de Ü que cubren solo la primaria: 2 (`InspectorOverlay.cs:86-89`, `AuraDeAprendizaje.cs:122-124`); `OverlayDeJev` no repite el patrón |
+| **Estado al cerrarla** | en tres pasos (8a overlay, 8b panel, 8c flecha, vista y despachador; §Revisiones): **375, 376, 379, 380, 381 y 382 ✔ enteras**, y 377, 378 y 385 siguen ✔. «CONTRATO ROTO: 2» —solo la 383 y la 384, que son de la fase 9—, 311 ✔, 0 SIN JUZGAR (M). Compila en Release; exactamente 1 `BeginInvoke` bajo `Ui/Jev/`, en `DespachadorDeWpf.cs`; ni `OrderBy` ni `Contains(` en las tres ventanas (M, grep). Las ventanas que cubren solo la primaria resultaron 3, no 2 (hallazgo del 8a) |
 
 ### Fase 9 — el cableado mínimo, y el nivel 4
 
@@ -780,6 +781,54 @@ anotan. Lo que cambió en cada promesa está aplicado arriba; aquí queda por qu
   valor 0 no se rellena, donde el plano dice `max(2, …)` siempre: el modelo da relleno 0 para un medidor «—», y dos
   DIP ahí enseñarían un dato que no vino (desviación declarada); (h) el divisor `#80373B39` no es un token de la 371
   sino `BordeDelPanel` a la mitad de alfa; (i) el objetivo va en un `TextBlock`: sin campo de texto (§Lo que NO entra).
+- **2026-09-23 (fase 8, paso 8c: la ventana de la flecha, y se cierra la fase 8).** `Ui/Jev/FlechaDeJev.cs`,
+  `VistaDeJev.cs` y `DespachadorDeWpf.cs` nacen y ponen en verde las (b) que faltaban: **379 ✔, 381 ✔ y 382 ✔**, así
+  que la fase 8 queda entera en verde. «CONTRATO ROTO: 2» (antes 5) —solo la 383 y la 384, de la fase 9—, 311 ✔, 0
+  SIN JUZGAR, y las marcas de las 313 idénticas a las del 8b salvo 379, 381 y 382, ✘ → ✔ (M, `diff`). **Cinco
+  comprobaciones nuevas, escritas antes que su código**, porque una (b) por subcadena se satisface con un comentario o
+  con un `DllImport` (hallazgo del 8a), y esta vez se vio: (378) las tres ventanas de Jev entran al grupo, cada una con
+  su capa, en una línea de código —el enunciado nombra la flecha, y lo de antes juzgaba al vigilante, no a quién se
+  apunta—; (381) `VistaDeJev.cs` **llama** a `GetForegroundWindow()` en una línea que no es su `extern` y calcula el
+  vuelo con `PlanDeVuelo.Calcular(`, y `FlechaDeJev.cs` mueve la flecha con `.PosicionEn(` y cuenta con `.Duracion`;
+  (382) el único `BeginInvoke` bajo `Ui/Jev` es una llamada. Para eso nace en el contrato `LineasDeCodigo`, que
+  descarta lo que va detrás de `//` y las líneas `extern`. **Rojo antes del código** (M): «CONTRATO ROTO: 8» —378 por
+  «falta el fuente FlechaDeJev.cs», 379 y 381 por `VistaDeJev.cs`, 381 también por la flecha, 382 con «hay 0 en []» y
+  «hay 0», 383 y 384 como estaban—, y de las 313 marcas solo cambió la 378, ✔ → ✘. **De método, medido:** la primera
+  corrida roja salió **contaminada**: se escribió `DespachadorDeWpf.cs` mientras el contrato juzgaba, la 382 lo leyó y
+  salió ✔. Se apartó el archivo y se repitió. Un fuente escrito durante una corrida entra en sus (b) aunque el binario
+  ya esté compilado: mientras corre el contrato no se escribe en el árbol. **Sabotajes por diff** (archivos LF, `sed
+  -b`, cada uno restaurado con `cmp` idéntico; cada uno «ROTO: 3» y solo su promesa pasa a ✘): (378) la flecha entra
+  como `Capa.PanelDeJev`, 19.647 → 19.651 bytes, «entra al grupo como Capa.Flecha…: hay 0»; (379) la vista arma la
+  configuración por reflexión con «si» fijo, sin leer el entorno, 18.334 → 18.411, «lee la configuración con
+  ConfiguracionDeLaVista.Leer(»; (381) `deDelante` sale de `WindowFromPoint` en vez de `GetForegroundWindow()`, 18.334
+  → 18.404, «LLAMA a GetForegroundWindow()…: hay 0», **y la comprobación de antes siguió verde** porque el nombre seguía
+  en el `DllImport` y en un comentario, que es justo el caso que la nueva existe para ver; (381, segunda, porque la de la
+  ventana solo se había visto roja por ausencia) la flecha vuela en línea recta con su propia interpolación, 19.647 →
+  19.689, «mueve la flecha con .PosicionEn(…: 0 y 3»; (382) el adaptador ejecuta en el acto y nombra el método solo en
+  un comentario, 3.502 → 3.525, «esa aparición es una llamada…: hay 0», **y la cuenta de texto de antes siguió en 1 y
+  verde**. Restaurado todo, «ROTO: 2» con marcas y motivos idénticos a la corrida verde (M). **Sitios** (patrón nº5,
+  grep, M): ventanas que entran al grupo, 5 en todo el cliente (muelle, notch, overlay, panel y flecha), y ningún
+  `.Vigilar()`; `BeginInvoke` bajo `Ui/Jev`, 1; `CompositionTarget.Rendering +=` en el cliente, 4 (la flecha, `Vuelo.cs`
+  ×2 y `LanzarConScroll.cs`); llamadas a `GetForegroundWindow()` en el cliente, 22, y la de la vista es la única que
+  decide si vuela la flecha. **Sin juez, y dicho; para la fase 9 y el nivel 4:** (a) **nadie crea la vista todavía**:
+  `new VistaDeJev(Dispatcher, ancla)`, `Sincronizar` desde `PintarBotonJev`, `Publicar` como `alDecidir` de
+  `ObservadorDelDecisor.Envolver`, `AlPulsar` desde `UiaSurface.Pulso`, `Suelta` desde Escape y el señalador, y
+  `EnTramo` para la regla de la 384 son del parcial. (b) **La pulsada por número de la línea de progreso** («paso k:
+  «x» (n)») no se lee todavía: `Progreso` pone la línea sobre el último decidido sin `Pulsada`, así que el panel resalta
+  la elegida hasta que el puente la lea, con su comprobación. (c) **La ventana de trabajo es la que está en el centro de
+  lo pulsado** (`WindowFromPoint` subida a su raíz) y está delante si coincide con la raíz de `GetForegroundWindow()`.
+  Que `WindowFromPoint` salte nuestras ventanas transparentes al ratón es D; la carita, que no lo es, encima de lo
+  pulsado daría «detrás» (D; con la 384 cableada, en un tramo con Jev no viaja al clic). (d) **`FlechaVisible` no baja
+  cuando la flecha se esconde sola** tras señalar 3 s: la máquina no tiene con qué (`Suelta` también vacía cajas y
+  corrida). La ventana se esconde y la máquina la sigue contando hasta Escape, soltar o apagar. (e) **El coste se
+  acumula en el pintor**: con el coalescing, un ciclo decidido que no llega a pintarse no suma sus tokens. Hoy no se ve
+  —el puente no trae tokens y el coste dice «—»—; cuando A y C los traigan, hay que acumular en `Publicar`. (f)
+  **Modos**: volando y señalando. «Siguiendo», el asentamiento de 0,22 s, el spinner y la escala de entrada de la
+  píldora no están; el radio de los `BlurEffect` (16 y 6), sin medir. (g) `.Duracion` aparece también en dos líneas de
+  log de la flecha, así que esa mitad de su comprobación se cumple sin contar el tiempo con ella; la mitad fuerte es
+  `.PosicionEn(`, que está en una sola línea. (h) El vuelo en la costura entre monitores de escala distinta, sin probar:
+  aquí hay un solo monitor. (i) `DespachadorDeWpf.Encolar` lanza si WPF devuelve la operación abortada, para que el
+  conector baje su marca y lo diga; sin juez, porque cerrar el `Dispatcher` en el arnés lo rompería.
 
 ## Cierre
 
